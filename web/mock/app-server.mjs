@@ -21,10 +21,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const CLI_MODELS = {
   claude: "claude-opus-5-5", codex: "gpt-6-sol", pi: "pi-3", kiro: "kiro-2",
   cursor: "cursor-auto", gemini: "gemini-3-pro", opencode: "claude-opus-5-5",
+  qoder: "qoder-auto", qwen: "qwen3-coder", kimi: "kimi-k3", goose: "goose", copilot: "copilot",
+  auggie: "auggie", codebuddy: "codebuddy", kilo: "kilo", cline: "cline", grok: "grok-5",
 };
 const CLI_VERSIONS = {
   claude: "2.1.240", codex: "0.52.0", pi: "1.8.0", kiro: "0.4.2",
   cursor: "0.48.0", gemini: "0.12.0", opencode: "0.6.1",
+  qoder: "0.3.0", qwen: "0.9.0", kimi: "1.2.0", goose: "1.9.0", copilot: "0.0.400",
+  auggie: "0.8.0", codebuddy: "1.1.0", kilo: "1.0.0", cline: "1.0.0", grok: "0.2.0",
 };
 
 function makeAgent(over) {
@@ -232,7 +236,7 @@ const officialFiles = (name) => {
   return out;
 };
 const templateFiles = new Map();
-const officialOrder = ["table", "base", "doc", "slides", "code", "devtools", "todo", "poll", "ledger", "habit", "whiteboard", "mindmap", "gomoku", "sudoku"];
+const officialOrder = ["table", "base", "doc", "slides", "code", "devtools", "todo", "poll", "ledger", "habit", "whiteboard", "mindmap", "video", "gomoku", "sudoku"];
 const mockTemplates = officialOrder.filter((name) => existsSync(new URL(`${name}/myco.json`, officialRoot))).map((name) => {
   const files = officialFiles(name);
   const m = JSON.parse(files["myco.json"]);
@@ -385,12 +389,48 @@ const sshHosts = [
   { name: "bastion", user: "glenn", host: "bastion.example.com", port: 22 },
 ];
 const connectJobs = new Map();
+// How agents this computer starts sign in to Claude (ClaudeAuthFix).
+const claudeAuth = {
+  account: "signed_out",
+  cc_switch: [{ ref: "cc-switch:kimi", id: "kimi", name: "Kimi", host: "api.moonshot.cn", current: true }],
+  shell: ["ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN"], shell_host: "api.magpie.example",
+  using: "",
+};
+// Setting up a workspace over SSH: log in (0.8 s), install (2 s), add (0.8 s).
+function hubJobView(job) {
+  const t = Date.now() - job.started;
+  const steps = [{ key: "login", state: "running" }, { key: "install", state: "pending" }, { key: "add", state: "pending" }];
+  const view = { id: job.id, route: job.route, steps, done: false };
+  const name = job.route.target.replace(/^[^@]*@/, "");
+  if (t < 800) return view;
+  if (name === "old-pi") {
+    steps[0].state = "failed";
+    return { ...view, done: true, error: { code: "needs_sudo", message: "installing needs root, and sudo asks for a password there",
+      command: "ssh -t old-pi 'curl -fsSL https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-hub.sh | sudo bash -s -- --domain auto'" } };
+  }
+  steps[0].state = "done";
+  view.found = { os: "Linux", host: name, root: "yes", hub: "no" };
+  view.log = ["==> installing myco hub v0.20.19", "==> Caddy: certificate for 203-0-113-7.sslip.io"];
+  if (t < 2800) { steps[1].state = "running"; return view; }
+  steps[1].state = "done";
+  if (t < 3600) { steps[2].state = "running"; return view; }
+  steps[2].state = "done";
+  if (!job.hub) {
+    state.counter += 1;
+    job.hub = { id: `hub_ssh_${state.counter}`, name: `${name}`, url: "https://203-0-113-7.sslip.io", token: "myco_console_mock",
+      ok: true, hub_version: "0.20.19", update_available: false, agents: [], threads: {}, recent: [] };
+    state.hubs.push(job.hub);
+  }
+  return { ...view, done: true, hub_id: job.hub.id };
+}
+
 // How the App reaches each computer ("<hub>/<machine>") and what a check-up finds.
 const machineReach = new Map([["hub_studio/m_vps", { via: "ssh", target: "tokyo-vps" }]]);
 const machineHealth = new Map();
 // What a job shows at this moment: log in (0.8 s), install (2 s), show up
 // (1 s); old-pi fails to log in. Once done, the computer is on the workspace.
 function connectView(job) {
+  if (job.kind === "hub") return hubJobView(job);
   const t = Date.now() - job.started;
   const steps = [{ key: "login", state: "running" }, { key: "install", state: "pending" }, { key: "online", state: "pending" }];
   const view = { id: job.id, hub: job.hub, route: job.route, steps, done: false };
@@ -928,6 +968,15 @@ function consoleReply() {
 const replyTimers = new Map();
 // Agents waiting on a question they asked, by agent name: the task.
 const askingBy = new Map();
+// Myco (Grok) holds a task PM (Codex) gave it, waiting on a question it
+// asked PM: open, but not a decision of yours. Only while the smoke test
+// that looks at it runs (/app/mock/held-for-other {on}).
+let heldForOtherOn = false;
+const heldForOther = makeMessage({
+  id: "msg_grok_held", thread_id: "th_grok_held", from: "pm-codex", to: "grok-agent-7c2e", type: "task",
+  status: "held", asking: "msg_grok_q", body: "给官网首页写三条 slogan 候选。",
+  created_at: iso(3 * 3600), updated_at: iso(2 * 3600),
+});
 function scheduleReply(hub, threadId, agent, taskId, restart = false) {
   const had = replyTimers.get(taskId);
   if (had && !restart) return;
@@ -1382,18 +1431,31 @@ function agentStatus(a) {
   const atWork = working
     ? [stuck || makeMessage({ thread_id: a.current_thread || "th_release", from: a.current_from || "glenn", to: a.name, status: "acked", body: a.status_text || "处理中…" })]
     : [];
+  if (heldForOtherOn && a.name === heldForOther.to && heldForOther.status === "held" && !dismissed.has(heldForOther.id)) {
+    return { agent: a, state: a.online ? "pending" : "offline", queued: 0, in_progress: 0, held: 1, asking: 1, receiving: a.online ? "session" : undefined, current: [heldForOther] };
+  }
   const asking = askingBy.get(a.name);
   if (asking) {
     return { agent: a, state: "pending", queued: 0, in_progress: 0, held: 1, asking: 1, receiving: "runner", current: [asking] };
   }
+  const receiving = a.receiving ?? (!a.online || a.kind === "human" ? undefined : /cloud/.test(a.binding?.harness || "") ? "session" : "runner");
+  // As the hub (v0.20.28): an acked task with no life in it (the agent is
+  // away, or quiet for 5 minutes under a runner, 30 in a session) is open
+  // but not work in progress.
+  const limit = receiving === "runner" ? 5 * 60_000 : 30 * 60_000;
+  const quiet = atWork.filter((m) => m.status === "acked" && !dismissed.has(m.id)
+    && (!a.online || Date.now() - new Date(m.active_at || m.updated_at).getTime() >= limit));
+  const live = atWork.filter((m) => m.status === "acked" && !dismissed.has(m.id)).length - quiet.length;
   return {
-    agent: a, state,
+    agent: a, state: working && live <= 0 ? (a.online ? (stale.length ? "pending" : "idle") : "offline") : state,
     queued: (a.queued ?? (working ? 1 + stale.length : 0)) + delivered.length,
-    in_progress: working ? 1 : 0,
+    in_progress: working ? Math.max(0, live) : 0,
+    stale: quiet.length,
+    stale_tasks: quiet.map((m) => m.id),
     held: 0,
-    receiving: a.receiving ?? (!a.online || a.kind === "human" ? undefined : /cloud/.test(a.binding?.harness || "") ? "session" : "runner"),
+    receiving,
     session_in_use: a.session_in_use || undefined,
-    current: atWork.length || delivered.length ? [...atWork, ...delivered, ...stale] : [],
+    current: atWork.length || delivered.length ? [...atWork.filter((m) => !dismissed.has(m.id)), ...delivered, ...stale] : [],
   };
 }
 
@@ -1603,6 +1665,9 @@ const server = http.createServer(async (req, res) => {
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "stuck" && parts.length === 3) {
     if (method !== "POST") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
     localSessions.forEach((x, k) => { if (localJoinedAtStart[k]) x.joined = localJoinedAtStart[k]; else delete x.joined; });
+    heldForOther.status = "held";
+    delete heldForOther.error;
+    dismissed.delete(heldForOther.id);
     projects.forEach((p, k) => { if (projectMembersAtStart[k]) p.members = JSON.parse(projectMembersAtStart[k]); });
     const hub = state.hubs.find((h) => h.id === "hub_studio") || state.hubs[0];
     stuckTask.status = "acked";
@@ -1703,6 +1768,37 @@ const server = http.createServer(async (req, res) => {
       ...state.hubs.filter((h) => !h.id.startsWith("hub_local")),
       ...JSON.parse(JSON.stringify(localAppHubsAtStart)),
     ];
+    return send(res, 200, { ok: true });
+  }
+
+  // /app/mock/forks — the smoke test forks PM (Codex); its copies go away
+  // between widths and themes.
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "forks" && parts.length === 3) {
+    if (method !== "POST") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
+    const hub = state.hubs.find((h) => h.id === "hub_studio");
+    if (hub) hub.agents = hub.agents.filter((a) => !/^pm-codex-\d+$/.test(a.name));
+    projects.forEach((p) => { p.members = p.members.filter((m) => !/^pm-codex-\d+$/.test(m.name)); });
+    return send(res, 200, { ok: true });
+  }
+
+  // /app/mock/held-for-other {on} — Myco (Grok) waits on PM's answer.
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "held-for-other" && parts.length === 3) {
+    if (method !== "POST") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
+    const body = await readBody(req);
+    heldForOtherOn = !!body?.on;
+    heldForOther.status = "held";
+    delete heldForOther.error;
+    dismissed.delete(heldForOther.id);
+    return send(res, 200, { ok: true });
+  }
+
+  // /app/mock/no-spawn {on} — this computer's part of myco that starts
+  // sessions is (not) connected (the smoke test fixes it from the App).
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "no-spawn" && parts.length === 3) {
+    if (method !== "POST") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
+    const body = await readBody(req);
+    const studio = state.hubs.find((h) => h.id === "hub_studio")?.machines?.find((m) => m.id === "m_studio");
+    if (studio) studio.can_spawn = !body.on;
     return send(res, 200, { ok: true });
   }
 
@@ -1973,7 +2069,7 @@ const server = http.createServer(async (req, res) => {
   // A file a page saved to Downloads (what the smoke test checks).
   if (parts[0] === "app" && parts[1] === "page-download" && method === "POST") {
     const name = url.searchParams.get("name") || "";
-    if (!/\.(csv|tsv|xlsx|xls|pdf|docx|pptx|json|md|txt|html|png|jpe?g|svg|gif|webp|zip|ics)$/i.test(name)) return fail(res, 400, "invalid_argument", "a page saves documents and pictures");
+    if (!/\.(csv|tsv|xlsx|xls|pdf|docx|pptx|json|md|txt|html|png|jpe?g|svg|gif|webp|zip|ics|mp4|webm|mov|m4a|mp3|wav)$/i.test(name)) return fail(res, 400, "invalid_argument", "a page saves documents, pictures, video and sound");
     const chunks = [];
     for await (const c of req) chunks.push(c);
     const buf = Buffer.concat(chunks);
@@ -2185,6 +2281,28 @@ const server = http.createServer(async (req, res) => {
       await sleep(300);
       return send(res, 200, { hosts: sshHosts.map((h) => ({ ...h, connected: h.name === "tokyo-vps" ? "m_vps" : undefined })) });
     }
+    // /app/local/hub-over-ssh: set up a workspace on a server (ConnectOver,
+    // purpose hub); old-pi has no passwordless sudo.
+    if (parts.length === 3 && parts[2] === "hub-over-ssh" && method === "POST") {
+      const body = await readBody(req);
+      const target = String(body.target || "").trim();
+      if (!target || /^-|[\s'"`;|&$<>]/.test(target)) return fail(res, 400, "invalid_argument", "give the server as an SSH name or user@host");
+      state.counter += 1;
+      const job = { id: `cj_${state.counter}`, kind: "hub", route: { via: "ssh", target }, started: Date.now() };
+      connectJobs.set(job.id, job);
+      return send(res, 200, connectView(job));
+    }
+    // /app/local/claude-auth: how agents started here sign in to Claude.
+    if (parts.length === 3 && parts[2] === "claude-auth") {
+      if (method === "POST") {
+        const body = await readBody(req);
+        if (body.use === "shell") { claudeAuth.using = "shell"; claudeAuth.using_name = "api.magpie.example"; }
+        else if (body.use === "account") { claudeAuth.using = ""; delete claudeAuth.using_name; }
+        else if (String(body.use || "").startsWith("cc-switch:")) { claudeAuth.using = body.use; claudeAuth.using_name = "Kimi"; }
+        else return fail(res, 400, "invalid_argument", "use is account, shell or cc-switch:<id>");
+      }
+      return send(res, 200, claudeAuth);
+    }
     if (parts.length === 3 && parts[2] === "wsl" && method === "GET") {
       return send(res, 200, { supported: true, distros: [
         { name: "Ubuntu-22.04", default: true, running: true, version: 2 },
@@ -2243,6 +2361,15 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, local.myco);
     }
 
+    // /app/local/myco/upgrade — myco brought up to date here and its runner
+    // restarted: this computer starts sessions again.
+    if (parts.length === 4 && parts[2] === "myco" && parts[3] === "upgrade" && method === "POST") {
+      await sleep(1200);
+      const studio = state.hubs.find((h) => h.id === "hub_studio")?.machines?.find((m) => m.id === "m_studio");
+      if (studio) studio.can_spawn = true;
+      return send(res, 200, { from: "v0.20.19", version: "v0.20.24", restarted: ["runner", "hub"] });
+    }
+
     if (parts.length === 3 && parts[2] === "runner" && method === "POST") {
       await new Promise((r) => setTimeout(r, 600));
       return send(res, 200, { runner: "running" });
@@ -2258,7 +2385,9 @@ const server = http.createServer(async (req, res) => {
       }
       const hostname = typeof body.hostname === "string" ? body.hostname.trim() : "";
       if (tunnel === "cloudflare" && !local.tools.cloudflared) {
-        return fail(res, 409, "cloudflared_missing", "没有找到 cloudflared。", "在终端运行 brew install cloudflared。");
+        // The App gets cloudflared itself (cloudflared.go).
+        await sleep(1500);
+        local.tools.cloudflared = { path: "/Users/glenn/.local/bin/cloudflared" };
       }
       if (tunnel === "tailscale" && !local.tools.tailscale) {
         return fail(res, 409, "tailscale_missing", "没有找到 Tailscale。", "先安装 Tailscale 并为这台设备开启 Funnel。");
@@ -2591,6 +2720,7 @@ const server = http.createServer(async (req, res) => {
       // (the terminal lists it from the recipient's current work).
       let task = Object.values(hub.threads || {}).flat().find((m) => m.id === parts[4]);
       if (!task) task = [...stuckCurrent.values()].find((m) => m.id === parts[4]);
+      if (!task && parts[4] === heldForOther.id) task = heldForOther;
       if (!task) return fail(res, 404, "not_found", "没有这条消息");
       // Who sent it, or someone who manages the hub.
       if (!task.from.startsWith("@console:") && !whoami(hub)?.can_manage) {
@@ -3213,6 +3343,12 @@ const server = http.createServer(async (req, res) => {
       if (!dir) return fail(res, 400, "invalid_request", "dir 为必填项。");
       if (dir === "/etc" || dir.startsWith("/etc/")) {
         return fail(res, 403, "dir_not_allowed", "目录不在允许范围内。");
+      }
+      // This computer's Claude account sign-in has expired until a way is
+      // picked (ClaudeAuthFix): the terminal uses an API set by Magpie.
+      if (machine.id === "m_studio" && body.cli === "claude" && !claudeAuth.using) {
+        await sleep(600);
+        return fail(res, 502, "spawn_failed", "starting the claude session failed: claude reported an error: Failed to authenticate: OAuth session expired and could not be refreshed");
       }
       if (machine.id === "m_vps" && !/^(~|\/home\/glenn)\/code\/myco-team(\/|$)/.test(dir)) {
         return fail(res, 403, "permission_denied", `directory ${dir} is outside the folders this computer allows (~/code/myco-team); its owner can change spawn.dirs in ~/.myco/machine.yaml there`);

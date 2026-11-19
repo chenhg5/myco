@@ -132,10 +132,15 @@ export function Markdown({ text }: { text: string }) {
     if (!el) return;
     const replace = (img: EventTarget | null) => {
       if (!(img instanceof HTMLImageElement)) return;
-      const note = document.createElement("span");
+      // A slow or dropped load: tried again twice, a little later each time,
+      // before saying so.
+      if (retryImage(img)) return;
+      const note = document.createElement("button");
+      note.type = "button";
       note.className = "md-img-missing";
-      note.textContent = img.alt ? L(`图片加载不了：${img.alt}`, `Image didn't load: ${img.alt}`) : L("图片加载不了", "Image didn't load");
+      note.textContent = img.alt ? L(`图片没加载出来：${img.alt} · 点一下重试`, `Image didn't load: ${img.alt} · click to retry`) : L("图片没加载出来 · 点一下重试", "Image didn't load · click to retry");
       note.title = img.currentSrc || img.src;
+      note.onclick = (e) => { e.stopPropagation(); img.dataset.tries = "0"; img.src = withRetry(img.dataset.src0 || img.src, Date.now()); note.replaceWith(img); };
       img.replaceWith(note);
     };
     const onError = (e: Event) => replace(e.target);
@@ -278,4 +283,19 @@ export function MessageContent({ body, foldId }: { body: string; foldId?: string
       </button>
     </div>
   );
+}
+
+/** An image URL loaded afresh (http and the App's own only). */
+export function withRetry(src: string, n: number): string {
+  if (!/^(https?:|\/|app\/)/.test(src) && !src.startsWith(location.origin)) return src;
+  return `${src}${src.includes("?") ? "&" : "?"}_r=${n}`;
+}
+/** Tries a failed image again (twice, after 1.2s then 2.4s): true while it does. */
+export function retryImage(img: HTMLImageElement): boolean {
+  const tries = Number(img.dataset.tries || "0");
+  if (tries >= 2) return false;
+  if (!img.dataset.src0) img.dataset.src0 = img.src;
+  img.dataset.tries = String(tries + 1);
+  window.setTimeout(() => { img.src = withRetry(img.dataset.src0!, tries + 1); }, 1200 * (tries + 1));
+  return true;
 }

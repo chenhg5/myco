@@ -155,7 +155,9 @@ func Build(o Options) (*Hub, error) {
 		latest = o.UpdateCheck.Latest
 	}
 	srv.SetVersion(o.Version, latest)
-	srv.SetOverview(app.NewOverviewService(agentsRepo, msgRepo, clock, o.OnlineWindow))
+	overview := app.NewOverviewService(agentsRepo, msgRepo, clock, o.OnlineWindow)
+	overview.SetPresence(messages.Presence())
+	srv.SetOverview(overview)
 	machineSvc := app.NewMachineService(sqlite.NewMachineRepo(db), agentsRepo, messages, ids, clock, o.OnlineWindow)
 	machineSvc.SetRemovalDeps(agents, enroll)
 	srv.SetMachines(machineSvc)

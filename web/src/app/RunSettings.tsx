@@ -3,7 +3,7 @@ import { appApi, isOldHub } from "@/appapi";
 import type { RuntimeAccess } from "@/api";
 import type { AgentRow } from "@/app/types";
 import { accessLabel, agentKind, canManage, isCloud, isInbox, machineOfRow, modelSourceLabel } from "@/app/nodes";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Shield, ShieldOff } from "lucide-react";
 import { hubAfter0194 } from "@/app/hubVersion";
 import { ConfirmDialog, ErrorText } from "@/app/dialogs";
 import { LocalShellAccess } from "@/app/LocalShellAccess";
@@ -384,6 +384,113 @@ export function RunPill({ row, onRefresh }: { row: AgentRow; onRefresh: () => Pr
           </div>
         </>
       )}
+    </span>
+  );
+}
+
+const ACCESS_SAYS: Record<RuntimeAccess, [string, string]> = {
+  readonly: ["只能看文件，不改动", "Reads files, changes nothing"],
+  workspace: ["改它文件夹里的文件，能联网；别处不碰", "Changes files in its folder, uses the network; nothing else"],
+  full: ["没有沙箱：这台电脑上的什么都能动", "No sandbox: anything on that computer"],
+};
+
+/**
+ * Its access beside the model (as Codex shows its sandbox under the input):
+ * what it may touch when it runs, switched here by its owner from its next
+ * run, up to what its computer allows (this computer can allow more right
+ * there). An agent in its own session or in the cloud shows nothing.
+ */
+export function AccessPill({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promise<void> }) {
+  const ag = row.st.agent;
+  const rt = ag.runtime;
+  const cli = rt?.cli || ag.binding.harness || "";
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const [old, setOld] = useState(false);
+  const [confirmFull, setConfirmFull] = useState(false);
+  const runner = agentKind(ag) === "agent" && !isCloud(ag) && !isInbox(ag) && (cli === "claude" || cli === "codex");
+  const member = row.hub.me?.member;
+  const owns = !!member && (ag.owner_id ? ag.owner_id === member.id
+    : ag.owner ? ag.owner === member.name : member.role === "owner");
+  const editable = runner && owns && !!rt?.max_access && !old && hubAfter0194(row.hub.hub_version);
+  if (!runner || !rt?.access) return null;
+  const chosen = ag.run_settings?.access || "";
+  const cap = ACCESS[Math.max(ACCESS.indexOf(rt.max_access as RuntimeAccess), ACCESS.indexOf(rt.access as RuntimeAccess), 0)];
+  const shown = (chosen || rt.access) as RuntimeAccess;
+  const pending = !!chosen && chosen !== rt.access;
+  const label = shown === "full" ? L("完全权限", "Full access") : shown === "readonly" ? L("只读", "Read-only") : L("工作区权限", "Workspace access");
+  const title = editable
+    ? L(`权限：${label}（点一下切换，下次唤醒时生效）`, `Access: ${label} (click to switch; from its next run)`)
+    : L(`权限：${label}`, `Access: ${label}`);
+  const save = async (access: RuntimeAccess | "") => {
+    setBusy(true); setError(null);
+    try {
+      await appApi.setRunSettings(row.hub.id, ag.name, { model: ag.run_settings?.model || "", effort: ag.run_settings?.effort || "", access });
+      await onRefresh();
+      setOpen(false);
+      setConfirmFull(false);
+    } catch (e) {
+      if (isOldHub(e)) setOld(true); else setError(e);
+    } finally { setBusy(false); }
+  };
+  const pick = (next: RuntimeAccess | "") => {
+    if (!editable || (next && ACCESS.indexOf(next) > ACCESS.indexOf(cap))) return;
+    if (next === "full" && chosen !== "full") { setOpen(false); setConfirmFull(true); return; }
+    void save(next);
+  };
+  return (
+    <span className="run-pill-wrap">
+      <button type="button" className={cn("run-pill", editable && "is-editable", pending && "is-pending", shown === "full" && "is-full")} title={title} aria-label={title}
+        aria-expanded={open} onClick={() => setOpen((o) => !o)} onMouseDown={(e) => e.preventDefault()} data-testid="access-pill">
+        {shown === "full" ? <ShieldOff className="run-pill-icon" aria-hidden /> : <Shield className="run-pill-icon" aria-hidden />}
+        <span className="run-pill-text">{label}</span>
+        {editable && <ChevronDown className="run-pill-chev" aria-hidden />}
+      </button>
+      {open && (
+        <>
+          <span className="run-pill-scrim" onClick={() => setOpen(false)} />
+          <div className="run-pill-menu" role="menu" onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}>
+            {editable ? (
+              <>
+                <div className="run-pill-group">{L("它运行时能动什么", "What it may touch when it runs")}</div>
+                {(["", ...ACCESS] as (RuntimeAccess | "")[]).map((level) => {
+                  const over = !!level && ACCESS.indexOf(level) > ACCESS.indexOf(cap);
+                  return (
+                    <button key={`a:${level}`} type="button" role="menuitemradio" aria-checked={chosen === level} className={cn("run-pill-item run-pill-access", chosen === level && "is-on")}
+                      disabled={busy || over} onClick={() => pick(level)}>
+                      <span>{level ? accessLabel(level) : L("跟随电脑设置", "Follow this computer")}</span>
+                      <span className="run-pill-sub">{level ? L(ACCESS_SAYS[level][0], ACCESS_SAYS[level][1]) : accessLabel(rt.access as RuntimeAccess)}</span>
+                    </button>
+                  );
+                })}
+                <p className="run-pill-note">
+                  {L("现在是：", "In use: ")}{accessLabel(rt.access as RuntimeAccess)}{L("。切换后下次唤醒时生效。", ". A switch applies from its next run.")}
+                </p>
+                {cap !== "full" && (
+                  <div className="run-pill-note">
+                    {L(`那台电脑最多允许「${accessLabel(cap)}」。`, `That computer allows at most ${accessLabel(cap)}. `)}
+                    <LocalShellAccess machine={machineOfRow(row)} hub={row.hub} what="full" onlyLocal onChange={onRefresh} />
+                  </div>
+                )}
+              </>
+            ) : (
+              <p className="run-pill-note">
+                <b>{label}</b><br />
+                {L(ACCESS_SAYS[shown]?.[0] || "", ACCESS_SAYS[shown]?.[1] || "")}
+                {!owns ? L("。只有它的主人能改。", ". Only its owner can change it.")
+                  : !rt.max_access ? L("。升级那台电脑上的 myco 后才能在这里改。", ". Upgrade myco on that computer to change it here.") : "。"}
+              </p>
+            )}
+            <ErrorText error={error} />
+          </div>
+        </>
+      )}
+      <ConfirmDialog open={confirmFull} onOpenChange={(o) => { if (!busy) setConfirmFull(o); }}
+        title={L("使用完全权限？", "Use full access?")}
+        description={L("完全权限下，它运行时没有沙箱，可以读写这台电脑上的任何文件。确定吗？", "With full access, it runs without a sandbox and can read and write any file on this computer. Continue?")}
+        confirmLabel={L("使用完全权限", "Use full access")} busy={busy} error={error ? <ErrorText error={error} /> : undefined}
+        onConfirm={() => void save("full")} />
     </span>
   );
 }

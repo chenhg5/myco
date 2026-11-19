@@ -20,6 +20,17 @@ const CLI_META: Record<string, { label: string; icon: IconType }> = {
   cursor: { label: "Cursor", icon: IconPointer },
   gemini: { label: "Gemini CLI", icon: IconStar },
   opencode: { label: "OpenCode", icon: IconTerminal },
+  qoder: { label: "Qoder CLI", icon: IconBot },
+  qwen: { label: "Qwen Code", icon: IconBot },
+  kimi: { label: "Kimi Code", icon: IconBot },
+  goose: { label: "goose", icon: IconBot },
+  copilot: { label: "GitHub Copilot", icon: IconBot },
+  auggie: { label: "Auggie", icon: IconBot },
+  codebuddy: { label: "CodeBuddy Code", icon: IconBot },
+  kilo: { label: "Kilo Code", icon: IconBot },
+  cline: { label: "Cline", icon: IconBot },
+  grok: { label: "Grok", icon: IconBot },
+
   shell: { label: "Shell", icon: IconPrompt },
   exec: { label: "Exec", icon: IconTerminal },
   // Any agent joined from a session without a runner it can wake: it receives
@@ -277,11 +288,13 @@ export function receivesInSession(a?: Agent, receiving?: string): boolean {
  * cannot finish the task while it is away.
  */
 export function possiblyStuck(
-  m: { status: string; active_at?: string; updated_at: string },
+  m: { status: string; active_at?: string; updated_at: string; asking?: string },
   node: { agent?: Agent; receiving?: string; offline?: boolean } | undefined,
   now: number,
 ): boolean {
   if (m.status !== "acked" && m.status !== "held") return false;
+  // Held on a question to its sender: it waits for an answer, it is not stuck.
+  if (m.status === "held" && m.asking) return false;
   if (node?.offline) return true;
   const wait = receivesInSession(node?.agent, node?.receiving) ? STUCK_AFTER_SESSION_MS : STUCK_AFTER_MS;
   const at = lastActivityAt(m);
@@ -412,4 +425,13 @@ export function thisComputerId(hub: AgentRow["hub"], local: { machines?: string[
   const ms = machinesOfHub(hub);
   return (ms.find((m) => (local.machines || []).includes(m.name))
     || ms.find((m) => !!local.hostname && m.hostname === local.hostname))?.id;
+}
+
+/** The name a session joins with: its title (its own, or its first
+ *  request), on one line and short; undefined when it has none. */
+export function sessionDisplayName(title?: string): string | undefined {
+  const t = (title || "").replace(/\s+/g, " ").trim().replace(/…$/, "");
+  if (!t) return undefined;
+  const chars = Array.from(t);
+  return chars.length > 24 ? chars.slice(0, 24).join("").trim() + "…" : t;
 }

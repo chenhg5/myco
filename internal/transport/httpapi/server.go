@@ -1179,7 +1179,8 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 		if !see.Sees(a.Agent) {
 			continue
 		}
-		st := api.AgentStatus{Agent: s.agentDTO(a.Agent), State: string(a.State), Queued: a.Queued, InProgress: a.InProgress, Held: a.Held, Asking: a.Asking}
+		st := api.AgentStatus{Agent: s.agentDTO(a.Agent), State: string(a.State), Queued: a.Queued, InProgress: a.InProgress, Held: a.Held, Asking: a.Asking,
+			Stale: a.Stale, StaleTasks: a.StaleIDs}
 		if viewer != nil {
 			if viewer.Name == a.Agent.Name && s.resume != nil {
 				if c, err := s.resume.Get(r.Context(), a.Agent.Name); err == nil {

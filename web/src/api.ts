@@ -270,6 +270,11 @@ export type State = "working" | "pending" | "idle" | "offline";
 export interface AgentStatus { agent: Agent; state: State; queued: number; in_progress: number; held: number;
   /** held tasks waiting on a question to their sender (absent on older hubs) */
   asking?: number;
+  /** acked tasks that show no life (the agent is away, or none was touched
+   *  for 5 min under a runner / 30 in a session): open, not in in_progress,
+   *  and not making it "working". Absent on hubs before v0.20.28. */
+  stale?: number;
+  stale_tasks?: string[];
   current?: Message[];
   /** how it receives right now: a session keeps `inbox wait` running, or a runner wakes the session per message */
   receiving?: "session" | "runner";

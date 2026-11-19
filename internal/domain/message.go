@@ -109,6 +109,19 @@ type Message struct {
 	Automation string
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
+	// ActiveAt is when its recipient last showed it is working on it (read
+	// it, reported progress, uploaded its trace); zero when never. Kept
+	// apart from UpdatedAt, which orders conversations.
+	ActiveAt time.Time
+}
+
+// LastActive is when the task last showed life: its last activity, or its
+// last change of state.
+func (m *Message) LastActive() time.Time {
+	if m.ActiveAt.After(m.UpdatedAt) {
+		return m.ActiveAt
+	}
+	return m.UpdatedAt
 }
 
 // NewMessage builds a queued message. An empty threadID starts a new thread.

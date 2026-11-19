@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ArrowUpDown, ChevronRight, LayoutGrid, Monitor, MoreHorizontal, Pin, Plus, Search, WifiOff, Zap } from "lucide-react";
+import { ArrowLeft, ArrowUpDown, ChevronRight, LayoutGrid, Monitor, MoreHorizontal, Pin, Plus, Search, WifiOff, X, Zap } from "lucide-react";
 import { ComputerSettings } from "@/app/ComputerSettings";
 import { AutomationsPage } from "@/app/Automations";
 import { TemplatesPage } from "@/app/Templates";
@@ -28,7 +28,7 @@ import { isLocalUrl, localWorkspaces } from "@/app/localHubs";
 import { NewWorkspaceDialog } from "@/app/NewWorkspaceDialog";
 import { ComputersPage } from "@/app/Computers";
 import { Avatar, isWorkspace, rememberAgentHubs, rememberMachines, whereOf } from "@/app/persona";
-import { agentKind, machinesOfHub, nodeName, stuckCounts } from "@/app/nodes";
+import { agentKind, isMe, machinesOfHub, nodeName, stuckCounts } from "@/app/nodes";
 import { prefetchMachineInfos } from "@/app/machineInfoCache";
 import { LogoWordmark } from "@/components/brand";
 import { IconSidebar } from "@/components/icons";
@@ -47,6 +47,7 @@ import { VoiceChip } from "@/app/VoiceBar";
 import { modKey } from "@/app/ConversationDetail";
 import { useSidebarWidth } from "@/app/sidebarWidth";
 import { HandoverDialog, type HandoverTarget } from "@/app/Handover";
+import { ForkDialog, forkItem, type ForkTarget } from "@/app/Fork";
 
 const POLL_MS = 5000;
 const SIDEBAR_KEY = "myco-app-sidebar";
@@ -121,7 +122,16 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [error, setError] = useState<unknown>(null);
   const [now, setNow] = useState(Date.now());
   const [localTick, setLocalTick] = useState(0);
-  const [page, setPage] = useState<Page>("space");
+  const [page, setPageRaw] = useState<Page>("space");
+  // Settings is a dialog over the page you are on (like Kettu's): asking
+  // for the "settings" page opens it and leaves the page as it is; any
+  // other page closes it.
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const setPage = (p: Page) => {
+    if (p === "settings") { setSettingsOpen(true); return; }
+    setSettingsOpen(false);
+    setPageRaw(p);
+  };
   // The workspace on show, chosen at the bottom of the sidebar. Workspaces
   // are kept apart: everything shown and done is in this one.
   const [hubPick, setHubPickState] = useState<string>(() => { try { return localStorage.getItem(HUB_KEY) || ""; } catch { return ""; } });
@@ -169,7 +179,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
   // Settings › Voice, from a chat's voice button (VoiceBar).
   useEffect(() => {
     const on = (e: Event) => {
-      if ((e as CustomEvent<{ section?: string }>).detail?.section === "voice") openSettingsSection("voice");
+      const s = (e as CustomEvent<{ section?: string }>).detail?.section;
+      if (s === "voice" || s === "hubs") openSettingsSection(s);
       setPage("settings");
     };
     window.addEventListener("myco-open-settings", on);
@@ -200,6 +211,27 @@ export default function AppMode({ initialHubs, initialInfo }: {
     const on = (e: Event) => { const d = (e as CustomEvent<HandoverTarget>).detail; if (d) setHandover(d); };
     window.addEventListener("myco-handover", on);
     return () => window.removeEventListener("myco-handover", on);
+  }, []);
+  // An agent's profile (its open work), from anywhere: { hubId, name }.
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<{ hubId: string; name: string }>).detail;
+      if (!d) return;
+      setNavChat(null);
+      setPage("members");
+      // Its details open: where its open work is.
+      setProfile({ hubId: d.hubId, name: d.name, details: true });
+      window.setTimeout(() => document.getElementById("agent-current-work")?.scrollIntoView({ block: "start", behavior: "smooth" }), 300);
+    };
+    window.addEventListener("myco-open-profile", on);
+    return () => window.removeEventListener("myco-open-profile", on);
+  }, []);
+  // 复制一份 (Fork.tsx): the dialog, from any menu.
+  const [fork, setFork] = useState<ForkTarget | null>(null);
+  useEffect(() => {
+    const on = (e: Event) => { const d = (e as CustomEvent<ForkTarget>).detail; if (d) setFork(d); };
+    window.addEventListener("myco-fork", on);
+    return () => window.removeEventListener("myco-fork", on);
   }, []);
   // Members open a chat: the space to show it in, and with whom.
   const [chatWith, setChatWith] = useState<{ space: SpaceRef; agent: string; n: number; focus?: string; reveal?: boolean } | null>(null);
@@ -529,7 +561,11 @@ export default function AppMode({ initialHubs, initialInfo }: {
     const read = () => appApi.automations(hubId).then((r) => { if (!off) setAutoCount((r.automations || []).length); }, () => undefined);
     void read();
     const t = window.setInterval(read, 60_000);
-    return () => { off = true; window.clearInterval(t); };
+    // The automations page says how many there are each time it reads
+    // them (after one is made, at once).
+    const on = (e: Event) => { const d = (e as CustomEvent<{ hubId: string; count: number }>).detail; if (d?.hubId === hubId && !off) setAutoCount(d.count); };
+    window.addEventListener("myco-automations", on);
+    return () => { off = true; window.clearInterval(t); window.removeEventListener("myco-automations", on); };
   }, [hubId, page]);
   // 准备这台电脑 (Prepare.tsx): after a new install's first workspace
   // starts, until done or skipped; Settings › About opens it again.
@@ -631,7 +667,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
     const at = preparing;
     return (
       <div key={lang()} className={cn("app-shell welcome-shell", isMac && "shell-mac")}>
-        <Prepare hubId={at} now={now} onDone={(joined) => {
+        <Prepare hubId={at} hubName={namedHubs.find((h) => h.id === at)?.name || ""} hubUrl={hubs.find((h) => h.id === at)?.url || ""} now={now} onDone={(joined) => {
           setPreparePending(null);
           setPreparing(null);
           void refresh();
@@ -656,6 +692,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
     { key: "task", title: L("交给它第一件事", "Give it something to do"), hint: L("在对话里说一句要做什么，回车发出去", "Say what you want done in its chat and press Enter"),
       done: !!hereOv?.recent?.some((m) => m.type === "task" && m.from.startsWith("@console:")) || myAgents.some((r) => r.st.in_progress + r.st.queued > 0),
       go: () => { if (myAgents[0]) chatWithMember(myAgents[0]); else addAgentHere(); } },
+    { key: "workspace", title: L("认识你的工作区", "Meet your workspace"), hint: L("agent 在这里碰头；看看怎么让别的电脑和同事加入", "Where agents meet; see how other computers and people join"),
+      done: false, seen: "workspaces", go: () => window.dispatchEvent(new CustomEvent("myco-open-settings", { detail: { section: "hubs" } })) },
     { key: "project", title: L("让两个 agent 一起做一件事", "Have two agents work together"), hint: L("建一个项目，把它们拉进来", "Start a project and bring them in"),
       done: hubProjects.some((x) => !x.p.archived && x.p.members.length >= 2), go: () => setNewProjectOpen(true) },
     { key: "automation", title: L("设一个自动化", "Set up an automation"), hint: L("让它每天到点自己干活", "Have it work on its own, on a schedule"),
@@ -679,16 +717,32 @@ export default function AppMode({ initialHubs, initialInfo }: {
   // amber when all the work in progress may be stuck (it was picked up, but
   // nothing is moving). A node with both reads as working: something is live.
   // An agent waiting on your decision comes first: amber, saying so.
-  const workDot = (rs: AgentRow[]): "asking" | "busy" | "stuck" | null => {
-    if (rs.some((r) => (r.st.asking || 0) > 0)) return "asking";
+  // Tasks left open with no life in them (the hub says so: stale) only get a
+  // quiet ring: nothing is running; their chat says which and offers to
+  // close them.
+  const askingYou = (r: AgentRow): boolean => {
+    if (!(r.st.asking || 0)) return false;
+    const held = (r.st.current || []).filter((m) => m.status === "held" && !!m.asking);
+    // Not told which (a member who cannot see its messages): as before.
+    if (held.length === 0) return true;
+    return held.some((m) => isMe(m.from, r.hub));
+  };
+  const workDot = (rs: AgentRow[]): "asking" | "busy" | "stuck" | "open" | null => {
+    // Amber "needs your decision" only for a question to you: a task you
+    // gave it, held on a question back to you. One to another agent (it
+    // asked whoever gave it the task) only leaves something open.
+    if (rs.some((r) => askingYou(r))) return "asking";
     let busy = false;
     let stuck = false;
+    let open = false;
     for (const r of rs) {
+      if ((r.st.stale || 0) > 0 || (r.st.asking || 0) > 0) open = true;
       if (r.st.state !== "working" || r.st.in_progress <= 0) continue;
-      if (r.st.in_progress > stuckCounts(r.st, now).in_progress) busy = true;
+      // A hub that tells live from stale: what it calls in progress runs.
+      if (r.st.stale !== undefined || r.st.in_progress > stuckCounts(r.st, now).in_progress) busy = true;
       else stuck = true;
     }
-    return busy ? "busy" : stuck ? "stuck" : null;
+    return busy ? "busy" : stuck ? "stuck" : open ? "open" : null;
   };
 
   return (
@@ -751,8 +805,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
                     title={x.p.goal || x.p.title}>
                     <span className="app-nav-label">{x.p.title || x.p.name}</span>
                     {dot && (
-                      <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck", dot === "asking" && "is-asking")}
-                        title={dot === "asking" ? L("有 agent 在等你决定", "Someone needs your decision") : dot === "stuck" ? L("有成员可能卡住", "Someone may be stuck") : L("有成员在干活", "Someone is at work")} />
+                      <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck", dot === "asking" && "is-asking", dot === "open" && "is-open")}
+                        title={dot === "asking" ? L("有 agent 在等你决定", "Someone needs your decision") : dot === "stuck" ? L("有成员可能卡住", "Someone may be stuck") : dot === "open" ? L("有任务没收尾", "Some tasks were left open") : L("有成员在干活", "Someone is at work")} />
                     )}
                   </button>
                 );
@@ -803,13 +857,14 @@ export default function AppMode({ initialHubs, initialInfo }: {
                         ...(page === "space" ? [{ label: L("在新的一栏打开", "Open in a new pane"), onSelect: () => window.dispatchEvent(new CustomEvent("myco-open-pane", { detail: { hubId: r.hub.id, agent: r.st.agent.name } })) }] : []),
                         { label: isPinned ? L("取消置顶", "Unpin") : L("置顶", "Pin to the top"), onSelect: () => pinChat(r.st.agent.name, !isPinned) },
                         { label: L("看它的资料", "Its profile"), onSelect: () => { setNavChat(null); setPage("members"); setProfile({ hubId: r.hub.id, name: r.st.agent.name }); } },
+                        ...forkItem(r),
                       ])}
                       title={[nodeName(r.st.agent, r.hub), r.st.agent.description].filter(Boolean).join(" · ")}>
                       <Avatar agent={r.st.agent} size={20} badge={false} />
                       <span className="app-nav-label">{nodeName(r.st.agent, r.hub)}</span>
                       {dot ? (
-                        <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck", dot === "asking" && "is-asking")}
-                          title={dot === "asking" ? L("在等你决定", "Needs your decision") : dot === "stuck" ? L("可能卡住", "May be stuck") : L("在干活", "At work")} />
+                        <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck", dot === "asking" && "is-asking", dot === "open" && "is-open")}
+                          title={dot === "asking" ? L("在等你决定", "Needs your decision") : dot === "stuck" ? L("可能卡住", "May be stuck") : dot === "open" ? L("有任务没做完：没在干活（没收尾，或在等别的 agent），点开对话看是哪些", "Tasks still open: nothing is running (left open, or waiting on another agent); open the chat to see which") : L("在干活", "At work")} />
                       ) : isPinned && <Pin className="sp-nav-pinned" aria-label={L("已置顶", "Pinned")} />}
                     </button>
                   );
@@ -846,8 +901,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
                         <Avatar agent={r.st.agent} size={20} badge={false} />
                         <span className="app-nav-label">{nodeName(r.st.agent, r.hub)}</span>
                         {dot && (
-                          <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck", dot === "asking" && "is-asking")}
-                            title={dot === "asking" ? L("有 agent 在等你决定", "Someone needs your decision") : dot === "stuck" ? L("可能卡住", "May be stuck") : L("正在跑命令", "Running a command")} />
+                          <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck", dot === "asking" && "is-asking", dot === "open" && "is-open")}
+                            title={dot === "asking" ? L("有 agent 在等你决定", "Someone needs your decision") : dot === "stuck" ? L("可能卡住", "May be stuck") : dot === "open" ? L("有命令没收尾", "Commands left open") : L("正在跑命令", "Running a command")} />
                         )}
                       </button>
                       <button type="button" className="sp-nav-more" aria-label={L(`${nodeName(r.st.agent, r.hub)}：设置`, `${nodeName(r.st.agent, r.hub)}: settings`)}
@@ -998,9 +1053,10 @@ export default function AppMode({ initialHubs, initialInfo }: {
           </div>
         )}
 
-        {page === "settings" && (
-          <div className="app-scroll">
+        {settingsOpen && (
+          <SettingsDialog onClose={() => setSettingsOpen(false)}>
             <SettingsPage
+              titleId="settings-title"
               hubs={namedHubs}
               hubsOv={namedOv?.hubs}
               info={info}
@@ -1014,7 +1070,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
               onRefresh={refresh}
               onAddHub={() => setConnectOpen(true)}
             />
-          </div>
+          </SettingsDialog>
         )}
       </div>
 
@@ -1022,6 +1078,17 @@ export default function AppMode({ initialHubs, initialInfo }: {
       <ComputerSettings focus={pcSettings?.focus} row={pcSettings ? rows.find((r) => r.hub.id === pcSettings.hubId && r.st.agent.name === pcSettings.name) || null : null}
         rows={rows} projects={hubProjects} onClose={() => setPcSettings(null)} onChanged={() => { setProjectReload((n) => n + 1); void refresh(); void loadProjects(hubs.map((h) => h.id)); }}
         onOpenTerminal={(r) => chatWithMember(r)} />
+      <ForkDialog target={fork} rows={rows} onClose={() => setFork(null)} onDone={(hubId, agent, project) => {
+        setFork(null);
+        // Its chat opens (in the project it was put in); the overview catches up.
+        const sp: SpaceRef = project ? { hubId, name: project.name } : { hubId, loose: true };
+        setProfile(null);
+        setSpace(sp);
+        setPage("space");
+        setChatWith({ space: sp, agent, n: Date.now() });
+        setProjectReload((n) => n + 1);
+        void refresh();
+      }} />
       <HandoverDialog target={handover} rows={rows} onClose={() => setHandover(null)} onDone={() => void refresh()}
         onOpenProfile={(r) => setProfile({ hubId: r.hub.id, name: r.st.agent.name, details: true })} />
       <NamePrompt hubsOv={namedOv?.hubs} onRefresh={refresh} />
@@ -1132,5 +1199,30 @@ function NavHead({ label, active, className, title, onOpen, folded, onFold, coun
       )}
       {children && <span className="sp-nav-head-tools">{children}</span>}
     </div>
+  );
+}
+
+/** Settings, over the App (the page under it stays): a scrim, a large
+ *  panel with its nav on the left, ✕ at the top right. Esc or a click on
+ *  the scrim closes it, unless a dialog of its own is open on top. */
+function SettingsDialog({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      if (document.querySelector(".app-modal, .app-menu, .cp, .lightbox")) return;
+      e.preventDefault();
+      onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <>
+      <div className="set-scrim" onClick={onClose} aria-hidden />
+      <div className="set-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title" data-testid="settings-dialog">
+        <button type="button" className="set-close" onClick={onClose} aria-label={L("关闭设置", "Close settings")} title={L("关闭（Esc）", "Close (Esc)")}><X /></button>
+        {children}
+      </div>
+    </>
   );
 }

@@ -239,6 +239,9 @@ function watchPage(page, size, scheme) {
     if (msg.type() !== "error") return;
     const loc = msg.location();
     const where = loc.url ? `${loc.url}:${loc.lineNumber || 0}:${loc.columnNumber || 0}` : "";
+    // On purpose: Claude on this computer cannot sign in until a way is
+    // picked (添加 agent: the sign-in card, then it starts).
+    if (msg.text().includes("502") && where.includes("/machines/m_studio/spawn")) return;
     addProblem(r, "console", msg.text(), where);
   });
   page.on("pageerror", (err) => {
@@ -275,6 +278,8 @@ async function shot(page, size, scheme, slug) {
 }
 
 async function sidebar(page, open) {
+  // (under the Settings dialog nothing is clickable: it goes first)
+  await closeSettings(page);
   const visible = await page.locator(".app-sidebar").isVisible().catch(() => false);
   if (visible === open) return;
   await page.getByRole("button", { name: /显示边栏|隐藏边栏|Show sidebar|Hide sidebar/ }).first().click();
@@ -329,12 +334,14 @@ async function openMember(page, narrow, space, name) {
 }
 
 async function go(page, label, narrow) {
+  // Settings is a dialog over the page: closed first (as Esc does).
+  await closeSettings(page);
   await sidebar(page, true);
   if (label === "设置") {
     // Settings sit in the workspace menu at the bottom of the sidebar.
     await clickVisible(page, page.locator(".sp-switch .app-hub-trigger"));
     await clickVisible(page, page.locator(".app-hub-menu-item", { hasText: "设置" }));
-    if (narrow) await sidebar(page, false);
+    await page.locator("[data-testid=settings-dialog]").waitFor({ timeout: 10_000 });
     return;
   }
   // Computers is a heading over the computers listed in the sidebar;
@@ -353,6 +360,13 @@ async function go(page, label, narrow) {
   // At narrow widths the sidebar covers the window; show the page as a person
   // would after picking it, with the compact Hub pill in the crumb bar.
   if (narrow) await sidebar(page, false);
+}
+
+async function closeSettings(page) {
+  const dlg = page.locator("[data-testid=settings-dialog]");
+  if (!(await dlg.count())) return;
+  await page.locator(".set-close").click();
+  await dlg.waitFor({ state: "detached", timeout: 5_000 });
 }
 
 // Right-click a row and pick from its menu. Scrolling the row into view
@@ -499,7 +513,7 @@ async function runMatrix(browser, size, scheme) {
     // an agent a runner wakes (from its next run).
     await step("输入框 · 模型和推理强度", async () => {
       await go(page, "官网改版", narrow);
-      const pill = page.locator(".sp-home .conv-compose .run-pill");
+      const pill = page.locator(".sp-home .conv-compose .run-pill:not([data-testid=access-pill])");
       await pill.waitFor({ timeout: 10_000 });
       const text = compactText(await pill.innerText());
       if (!/GPT-6 Sol/.test(text) || !/高/.test(text)) throw new Error(`输入框旁应写着模型和推理强度，实际「${text}」`);
@@ -509,16 +523,30 @@ async function runMatrix(browser, size, scheme) {
       await settle(page, 150);
       await shot(page, size, scheme, "composer-model");
       await menu.getByRole("menuitemradio", { name: "中", exact: true }).click();
-      await page.waitForFunction(() => /中/.test(document.querySelector(".sp-home .conv-compose .run-pill")?.textContent || ""), null, { timeout: 10_000 });
+      await page.waitForFunction(() => /中/.test(document.querySelector(".sp-home .conv-compose .run-pill:not([data-testid=access-pill])")?.textContent || ""), null, { timeout: 10_000 });
       // (back as it was: the other windows share the mock)
       await pill.click();
       await page.locator(".sp-home .run-pill-menu").getByRole("menuitemradio", { name: "高", exact: true }).click();
-      await page.waitForFunction(() => /高/.test(document.querySelector(".sp-home .conv-compose .run-pill")?.textContent || ""), null, { timeout: 10_000 });
+      await page.waitForFunction(() => /高/.test(document.querySelector(".sp-home .conv-compose .run-pill:not([data-testid=access-pill])")?.textContent || ""), null, { timeout: 10_000 });
+      // Its access beside it (what it may touch), switched there by its owner.
+      const access = page.locator(".sp-home .conv-compose [data-testid=access-pill]");
+      await access.waitFor({ timeout: 10_000 });
+      if (compactText(await access.innerText()) !== "工作区权限") throw new Error(`输入框旁应写着权限，实际「${compactText(await access.innerText())}」`);
+      await access.click();
+      const accessMenu = page.locator(".sp-home .run-pill-menu");
+      await accessMenu.getByRole("menuitemradio", { name: /^只读/ }).waitFor({ timeout: 5_000 });
+      await settle(page, 150);
+      await shot(page, size, scheme, "composer-access");
+      await accessMenu.getByRole("menuitemradio", { name: /^只读/ }).click();
+      await page.waitForFunction(() => /只读/.test(document.querySelector(".sp-home [data-testid=access-pill]")?.textContent || ""), null, { timeout: 10_000 });
+      await access.click();
+      await page.locator(".sp-home .run-pill-menu").getByRole("menuitemradio", { name: /^跟随电脑设置/ }).click();
+      await page.waitForFunction(() => /工作区权限/.test(document.querySelector(".sp-home [data-testid=access-pill]")?.textContent || ""), null, { timeout: 10_000 });
       // In its own session and not said yet: 模型未知, and how it comes to be known.
       if (narrow) await clickVisible(page, page.locator('.sp-strip-face[title="Release (Claude 云端)"]'));
       else await clickVisible(page, page.locator(".sp-side .sp-member:visible", { hasText: "Release (Claude 云端)" }));
       const chat = page.locator(".sp-pane-right");
-      const unknown = chat.locator(".conv-compose .run-pill");
+      const unknown = chat.locator(".conv-compose .run-pill:not([data-testid=access-pill])");
       await unknown.waitFor({ timeout: 10_000 });
       const said = compactText(await unknown.innerText());
       if (said !== "模型未知") throw new Error(`没上报模型的 agent 应写「模型未知」，实际「${said}」`);
@@ -1303,9 +1331,76 @@ async function runMatrix(browser, size, scheme) {
       await settle(page, 300);
       await shot(page, size, scheme, "add-agent-new");
       await clickVisible(page, dialog.getByRole("button", { name: "开一个" }));
+      // Claude's account sign-in has expired here: the card says so in
+      // words and offers the ways this computer has; one tries again.
+      const fix = dialog.locator("[data-testid=claude-auth-fix]");
+      await fix.waitFor({ timeout: 10_000 });
+      if (!(await fix.innerText()).includes("用 cc-switch 的「Kimi」")) throw new Error("登录不上时应列出 cc-switch 里的服务商");
+      await settle(page, 300);
+      await shot(page, size, scheme, "add-agent-claude-auth");
+      await clickVisible(page, fix.getByRole("button", { name: /沿用终端里的 API 设置/ }));
       await dialog.locator(".add-arrived").nth(3).waitFor({ timeout: 20_000 });
       await clickVisible(page, dialog.getByRole("button", { name: "好了" }));
       await page.locator(".app-modal").waitFor({ state: "hidden" });
+    });
+
+    await step("会话 · 右键复制一份", async () => {
+      // A Claude Code or Codex agent: right-click, 复制一份, a name, and the
+      // copy's chat opens (the original carries on).
+      try {
+        await go(page, "官网改版", narrow);
+        const who = narrow ? page.locator('.sp-strip-face[title="PM (Codex)"]') : page.locator(".sp-nav-person", { hasText: "PM (Codex)" });
+        // (Scrolled into view first: a menu closes when the list scrolls.)
+        const forkMenu = page.locator(".conv-menu").getByRole("menuitem", { name: "复制一份", exact: true });
+        for (let i = 0; i < 3 && !(await forkMenu.isVisible()); i++) {
+          await who.first().scrollIntoViewIfNeeded();
+          await settle(page, 250);
+          await who.first().click({ button: "right" });
+          await forkMenu.waitFor({ timeout: 3_000 }).catch(() => {});
+        }
+        await clickVisible(page, page.locator(".conv-menu").getByRole("menuitem", { name: "复制一份", exact: true }));
+        const dialog = page.locator("[data-testid=fork-dialog]");
+        await dialog.waitFor({ timeout: 10_000 });
+        const name = dialog.locator("input.app-input");
+        if ((await name.inputValue()) !== "PM (Codex) 副本") throw new Error(`副本的名字默认应是「PM (Codex) 副本」，实际「${await name.inputValue()}」`);
+        await settle(page, 200);
+        await shot(page, size, scheme, "fork-dialog");
+        await name.fill("PM 试验版");
+        await clickVisible(page, dialog.getByRole("button", { name: "复制", exact: true }));
+        await dialog.waitFor({ state: "detached", timeout: 20_000 });
+        await page.getByText("PM 试验版").first().waitFor({ timeout: 20_000 });
+      } finally {
+        await page.evaluate(async () => { await fetch("/app/mock/forks", { method: "POST" }); });
+      }
+      // Back to the project as it was (the copy's chat closes with it).
+      await go(page, "官网改版", narrow);
+    });
+
+    await step("这台电脑 · 一键修复", async () => {
+      // This computer's part of myco that starts sessions is not connected:
+      // the dialog says so (not "too old") and fixes it from the App.
+      await page.evaluate(async () => { await fetch("/app/mock/no-spawn", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ on: true }) }); });
+      try {
+        if (narrow) await clickVisible(page, page.locator(".sp-strip-face.is-add"));
+        else await clickVisible(page, page.locator(".sp-side .sp-side-add").first());
+        const dialog = page.locator(".app-modal-add");
+        await dialog.waitFor();
+        await clickVisible(page, dialog.getByRole("tab", { name: "这台电脑" }));
+        await clickVisible(page, dialog.getByRole("tab", { name: "新开一个" }));
+        const fix = dialog.locator("[data-testid=info-no-spawn]");
+        await fix.waitFor({ timeout: 30_000 });
+        if ((await fix.innerText()).includes("myco upgrade")) throw new Error("这台电脑能在 App 里修，不该让人去终端");
+        await settle(page, 300);
+        await shot(page, size, scheme, "add-agent-fix-here");
+        await clickVisible(page, fix.getByRole("button", { name: "修复" }));
+        await fix.locator(".ca-text", { hasText: "已升级到 v0.20.24 并重启" }).waitFor({ timeout: 10_000 });
+        // Back once the overview says it can start sessions again.
+        await dialog.locator(".app-field-label", { hasText: "文件夹干活" }).waitFor({ timeout: 30_000 });
+        await clickVisible(page, dialog.getByRole("button", { name: "取消" }));
+        await page.locator(".app-modal").waitFor({ state: "hidden" });
+      } finally {
+        await page.evaluate(async () => { await fetch("/app/mock/no-spawn", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ on: false }) }); });
+      }
     });
 
     if (!narrow) {
@@ -1954,7 +2049,7 @@ async function runMatrix(browser, size, scheme) {
       const icons = await head.locator(".conv-head-actions > .conv-head-find:visible").evaluateAll((els) => els.map((e) => e.getAttribute("aria-label")));
       if (icons.join("|") !== "更多|在这段对话里找") throw new Error(`单聊顶栏右边应是「更多」「找」两个，实际 ${icons.join("、")}`);
       await clickVisible(page, head.locator("[data-testid=chat-more]"));
-      await clickVisible(page, page.locator(".conv-menu").getByRole("menuitem", { name: "图片和文件" }));
+      await clickVisible(page, page.locator(".conv-menu").getByRole("menuitem", { name: "文件和应用" }));
       const panel = page.locator(".cf-panel");
       await panel.waitFor({ timeout: 5_000 });
       const pics = panel.locator("[data-testid=chat-files-pictures] .cf-shot");
@@ -2370,7 +2465,7 @@ async function runMatrix(browser, size, scheme) {
       if (await sw.getAttribute("aria-checked") !== "false") throw new Error("已有工作区的用户默认不是简单模式");
       await sw.click();
       await page.locator('[data-setting="simple-mode"] [role=switch][aria-checked="true"]').waitFor({ timeout: 5_000 });
-      if (await page.locator(".app-settings-tab", { hasText: "工作区" }).count()) throw new Error("简单模式下设置里不该有「工作区」");
+      if (!(await page.locator(".app-settings-tab", { hasText: "工作区" }).count())) throw new Error("简单模式下设置里也该有「工作区」");
       if (await page.locator(".app-settings-tab", { hasText: "成员" }).count()) throw new Error("简单模式下设置里不该有「成员」");
       if (!narrow && await page.locator(".sp-nav-pcs").count()) throw new Error("简单模式下侧栏不该有「电脑」");
       await settle(page, 200);
@@ -2421,6 +2516,7 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, prep.getByRole("button", { name: "先跳过" }));
       await prep.waitFor({ state: "detached", timeout: 10_000 });
       await page.locator(".app-settings-head").waitFor({ timeout: 10_000 });
+      await closeSettings(page);
       // With it, the 上手清单 at the foot of the sidebar ticks what is done,
       // and pages say what they are for the first time.
       if (narrow) await sidebar(page, true);
@@ -2429,6 +2525,11 @@ async function runMatrix(browser, size, scheme) {
       await list.locator('.ob-step.is-done[data-step="agent"]').waitFor({ timeout: 10_000 });
       await settle(page, 300);
       await shot(page, size, scheme, "checklist");
+      // 认识你的工作区: Settings opens on 工作区, and it is ticked.
+      await clickVisible(page, list.locator('.ob-step[data-step="workspace"]'));
+      await page.locator(".app-settings-head h2", { hasText: "工作区" }).waitFor({ timeout: 10_000 });
+      if (narrow) await sidebar(page, true);
+      await list.locator('.ob-step.is-done[data-step="workspace"]').waitFor({ timeout: 10_000 });
       if (narrow) await sidebar(page, false);
       await go(page, "应用", narrow);
       const intro = page.locator("[data-testid=intro-apps]");
@@ -2805,6 +2906,42 @@ async function runMatrix(browser, size, scheme) {
     // A task the node accepted long ago and went quiet on may have lost its
     // result: the chat says so instead of spinning, and one click stops it
     // and sends the same message again.
+    // An agent holding a task on a question to another agent: not amber
+    // ("needs your decision") but a quiet ring; its chat says what waits on
+    // whom and leads to its open work, where it can be stopped.
+    await step("单聊 · 在等别的 agent 回答", async () => {
+      const held = (on) => page.evaluate(async (v) => { await fetch("/app/mock/held-for-other", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ on: v }) }); }, on);
+      await held(true);
+      try {
+      await sidebar(page, true);
+      const nav = page.locator(".sp-nav-person", { hasText: "Myco (Grok)" });
+      await nav.waitFor({ timeout: 10_000 });
+      if (await nav.locator(".sp-nav-busy.is-asking").count()) throw new Error("问题是问别的 agent 的，不该显示「在等你决定」");
+      await nav.locator(".sp-nav-busy.is-open").waitFor({ timeout: 10_000 });
+      await clickVisible(page, nav);
+      if (narrow) await sidebar(page, false);
+      const note = page.locator("[data-testid=open-elsewhere]");
+      await note.waitFor({ timeout: 20_000 });
+      const text = compactText(await note.innerText());
+      if (!text.includes("在等 PM (Codex) 回答")) throw new Error(`对话里应说明在等谁回答，实际「${text}」`);
+      await settle(page, 300);
+      await shot(page, size, scheme, "conversation-open-elsewhere");
+      await clickVisible(page, note.getByRole("button", { name: "查看并处理" }));
+      const row = page.locator(".app-msg-wrap", { hasText: "给官网首页写三条 slogan 候选" });
+      await row.waitFor({ timeout: 20_000 });
+      if (!compactText(await row.innerText()).includes("在等 PM (Codex) 回答")) throw new Error("当前工作里应写在等谁回答");
+      await row.hover();
+      await settle(page, 200);
+      await shot(page, size, scheme, "profile-open-work");
+      await clickVisible(page, row.getByRole("button", { name: "停止" }));
+      await row.waitFor({ state: "detached", timeout: 15_000 });
+      await clickVisible(page, page.locator(".ms-close"));
+      await page.locator(".ms-scrim").waitFor({ state: "detached", timeout: 10_000 });
+      } finally {
+        await held(false);
+      }
+    });
+
     await step("单聊 · 可能卡住", async () => {
       await openMember(page, narrow, "聊天", "legacy-codex");
       await page.waitForFunction(
@@ -2834,8 +2971,12 @@ async function runMatrix(browser, size, scheme) {
         return !!r && r.getBoundingClientRect().bottom <= el.getBoundingClientRect().top + 1;
       }, "整理到一半");
       if (!below) throw new Error("「可能卡住」那一行应在它的过程下面");
+      // Left open or stuck: close it as done, ask where it stands, stop or resend.
+      await note.getByRole("button", { name: "标记完成" }).waitFor({ timeout: 10_000 });
       await settle(page, 300);
       await shot(page, size, scheme, "conversation-stuck");
+      await clickVisible(page, note.getByRole("button", { name: "再催一下" }));
+      await note.getByRole("button", { name: "已经催了" }).waitFor({ timeout: 10_000 });
       const body = "把旧版 runner 的日志整理到 docs/legacy.md。";
       await clickVisible(page, note.getByRole("button", { name: "重发" }));
       await page.waitForFunction((t) => ![...document.querySelectorAll(".conv-stuck")].some((e) => (e.textContent || "").includes(t)), "分钟没有动静", { timeout: 10_000 });
@@ -3551,10 +3692,12 @@ async function runMatrix(browser, size, scheme) {
       await sidebar(page, true);
       const pc = page.locator(".sp-nav-pc", { hasText: "mac-exec" });
       await pc.waitFor({ timeout: 10_000 });
-      if (!(await pc.locator(".sp-nav-busy.is-stuck").count())) {
-        throw new Error("mac-exec 的侧栏小点应表示可能卡住（琥珀色）");
+      // The hub says the command shows no life: not "working", only a quiet
+      // ring (a command left open).
+      if (!(await pc.locator(".sp-nav-busy.is-open").count())) {
+        throw new Error("mac-exec 只剩没收尾的命令：侧栏应是一个空心圈");
       }
-      if (await pc.locator(".sp-nav-busy:not(.is-stuck)").count()) throw new Error("mac-exec 不该同时亮绿点");
+      if (await pc.locator(".sp-nav-busy:not(.is-open)").count()) throw new Error("mac-exec 不该亮绿点或琥珀点");
       await clickVisible(page, pc);
       if (narrow) await sidebar(page, false);
       await page.locator(".conv-detail").waitFor({ timeout: 20_000 });
@@ -3760,7 +3903,8 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, call.getByRole("button", { name: "静音" }));
       await call.getByRole("button", { name: "取消静音" }).waitFor({ timeout: 5_000 });
       const voiceOnNow = async () => (await (await fetch(`http://${HOST}:${mockPort()}/app/voice/events?after=-1`)).json()).on;
-      await go(page, "设置", narrow);
+      // (another page: Settings is a dialog over the chat, which stays)
+      await go(page, "自动化", narrow);
       const chip = page.locator(".vc-chip");
       await chip.waitFor({ timeout: 5_000 });
       if (!(await voiceOnNow())) throw new Error("切到别的页面不该挂断语音");
@@ -3786,7 +3930,6 @@ async function runMatrix(browser, size, scheme) {
       await call2.waitFor({ state: "detached", timeout: 5_000 });
       // Its settings.
       await go(page, "设置", narrow);
-      if (narrow) await sidebar(page, true);
       await clickVisible(page, page.locator("button", { hasText: /^语音$/ }).first());
       // The speech service is one of those the backend lists, not a fixed
       // one: the heading names none, and the service is a choice.
@@ -3932,8 +4075,21 @@ async function runMatrix(browser, size, scheme) {
       await sidebar(page, true);
       await clickVisible(page, page.locator(".app-nav-add"));
       await page.locator(".app-modal .np-input").waitFor();
+      // A name, a goal (optional) and its files (optional): listed before
+      // it is made, one taken away again.
+      const form = page.locator("[data-testid=new-project-form]");
+      await form.locator(".np-input").fill("官网改版");
+      await form.locator(".np-goal").fill("11 月底前上线新版官网：首页、文档站和下载页，中英双语。");
+      await form.locator("input[type=file]").setInputFiles([
+        { name: "需求.md", mimeType: "text/markdown", buffer: Buffer.from("# 需求\n") },
+        { name: "设计稿.png", mimeType: "image/png", buffer: Buffer.alloc(2048) },
+      ]);
+      await form.locator("[data-testid=new-project-files] .np-file").nth(1).waitFor({ timeout: 5_000 });
+      await form.getByRole("button", { name: "建好，并上传 2 个资料" }).waitFor({ timeout: 5_000 });
       await settle(page, 300);
       await shot(page, size, scheme, "dialog-new-project");
+      await clickVisible(page, form.getByRole("button", { name: "去掉 设计稿.png" }));
+      await form.getByRole("button", { name: "建好，并上传 1 个资料" }).waitFor({ timeout: 5_000 });
       await closeDialog(page);
       if (narrow) await sidebar(page, false);
     });
@@ -3962,14 +4118,49 @@ async function runMatrix(browser, size, scheme) {
         await clickVisible(page, add.first());
         const dlg = page.locator(".app-modal");
         await clickVisible(page, dlg.getByRole("button", { name: "还没有链接？" }));
+        // Over SSH first: the SSH hosts, one server picked at a time.
+        const hubSSH = dlg.locator("[data-testid=connect-ssh]");
+        await hubSSH.locator(".cx-row", { hasText: "hk-vps" }).waitFor({ timeout: 10_000 });
+        await settle(page, 200);
+        await shot(page, size, scheme, "connect-hub-ssh");
+        await clickVisible(page, dlg.getByRole("tab", { name: "复制命令" }));
         const way = dlg.locator("[data-testid=connect-agent-way] .add-sentence-text");
         await way.waitFor({ timeout: 5_000 });
         if (!(await way.innerText()).includes("agent-setup.md")) throw new Error("添加工作区里应有让 agent 帮你装的那句话");
         await settle(page, 200);
         await shot(page, size, scheme, "connect-agent");
-        await page.keyboard.press("Escape");
-        await dlg.waitFor({ state: "hidden", timeout: 5_000 });
+        // A server where sudo wants a password: what to run instead.
+        await clickVisible(page, dlg.getByRole("tab", { name: "用 SSH 装到服务器上" }));
+        await clickVisible(page, hubSSH.locator(".cx-row", { hasText: "old-pi" }));
+        await clickVisible(page, hubSSH.getByRole("button", { name: "装好并加进来" }));
+        await hubSSH.locator(".cx-error", { hasText: "sudo" }).waitFor({ timeout: 10_000 });
+        await hubSSH.locator(".cx-error .app-command code", { hasText: "install-hub.sh" }).waitFor({ timeout: 5_000 });
+        await settle(page, 200);
+        await shot(page, size, scheme, "connect-hub-ssh-error");
+        // One that works: installed, added, and the dialog closes.
+        await clickVisible(page, hubSSH.getByRole("button", { name: "再连别的" }));
+        await clickVisible(page, hubSSH.locator(".cx-row", { hasText: "hk-vps" }));
+        await clickVisible(page, hubSSH.getByRole("button", { name: "装好并加进来" }));
+        await hubSSH.locator(".cx-step.is-running").first().waitFor({ timeout: 10_000 });
+        await dlg.waitFor({ state: "hidden", timeout: 20_000 });
       }
+      // Opening a workspace of this computer to the internet can be
+      // cancelled while it opens (it used to hang there with no way out).
+      await clickVisible(page, page.getByRole("button", { name: "开放到公网" }));
+      const pub = page.locator(".app-modal", { hasText: "让不在同一局域网的电脑" });
+      // One click is the default, even before cloudflared is installed.
+      await pub.locator(".app-choice:not(.disabled)", { hasText: "一键开放" }).locator("input:checked").waitFor({ state: "attached", timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "open-to-internet");
+      await clickVisible(page, pub.getByRole("button", { name: "开放", exact: true }));
+      await pub.getByRole("button", { name: "正在开放…" }).waitFor({ timeout: 5_000 });
+      await pub.locator("[data-testid=opening] .pub-steps li").first().waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "open-to-internet-opening");
+      await clickVisible(page, pub.getByRole("button", { name: "取消" }));
+      await pub.locator("button.app-btn-primary:enabled", { hasText: "开放" }).waitFor({ timeout: 3_000 });
+      await clickVisible(page, pub.getByRole("button", { name: "取消" }));
+      await pub.waitFor({ state: "hidden", timeout: 5_000 });
     });
   } finally {
     await context.close().catch(() => undefined);

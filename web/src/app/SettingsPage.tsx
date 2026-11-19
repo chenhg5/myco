@@ -1,7 +1,9 @@
 import { clearAll, forgetHub, recall, remember } from "@/lib/memo";
+import { CopyButton } from "@/app/copy";
+import { IntroCard, introOf, noteDone } from "@/app/Onboard";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  AlertTriangle, AudioLines, Bot, Check, Cloud, Globe, Info, Languages, Monitor, Palette, Pencil, Plus, RotateCcw, ScrollText, Search, Server, Terminal, Users,
+  AlertTriangle, AudioLines, Bot, Check, Cloud, Globe, Info, Languages, Palette, Pencil, Plus, RotateCcw, ScrollText, Search, Server, Terminal, Users,
 } from "lucide-react";
 import {
   appApi, type AppInfo, type CacheStats, type AppUpdate, type Hub, type HubOverview, type LocalState,
@@ -189,7 +191,7 @@ const GROUPS: { title: () => string; keys: Section[] }[] = [
 
 /** Each section's one line, under its title. */
 const SECTION_ABOUT: Record<Section, () => string> = {
-  hubs: () => L("工作区是 agent 所在的服务器。连接后，所有页面只显示选中的工作区。", "A workspace is the server your agents live on. Once connected, every page shows only the selected workspace."),
+  hubs: () => L("工作区是你的 agent 碰头的地方，跑在某一台电脑或服务器上。所有页面只显示左下角选中的那个。", "A workspace is where your agents meet; it runs on a computer or a server. Every page shows the one picked at the bottom left."),
   agents: () => L("这台电脑上装了哪些 AI 命令行，能不能用，怎么装、怎么登录。", "The AI command lines on this computer: whether they work, and how to install or sign in."),
   members: () => L("谁在这个工作区里、能做什么；邀请新的人。", "Who is in this workspace and what they may do; invite someone."),
   audit: () => L("工作区里谁在什么时候做了什么。", "Who did what in this workspace, and when."),
@@ -223,7 +225,9 @@ const FINDABLE: { section: Section; key?: string; title: () => string; words: st
 ];
 
 /** What 简单模式 leaves out of Settings. */
-const SIMPLE_HIDDEN: Section[] = ["hubs", "members", "audit"];
+// (工作区 stays: even with only the one on this computer, opening it to the
+// internet, its name and stopping it are there)
+const SIMPLE_HIDDEN: Section[] = ["members", "audit"];
 function simpleModeNow(): boolean {
   try { return localStorage.getItem("myco-simple-mode") === "1"; } catch { return false; }
 }
@@ -250,11 +254,11 @@ const LANGS: { choice: LangChoice; label: string }[] = [
 /** A section another page asks Settings to open on (say, voice from the
  *  call button); taken once. */
 let nextSettingsSection: Section | null = null;
-export function openSettingsSection(s: "voice" | "about" | "agents") { nextSettingsSection = s; }
+export function openSettingsSection(s: "voice" | "about" | "agents" | "hubs") { nextSettingsSection = s; }
+/** (read as the page starts; cleared once it is up, so a second run of
+ *  its first render, as React's strict mode does, reads the same) */
 function takeSettingsSection(): Section | null {
-  const s = nextSettingsSection;
-  nextSettingsSection = null;
-  return s;
+  return nextSettingsSection;
 }
 
 /** The section to come back to when a language change remounts the page. */
@@ -271,9 +275,9 @@ function host(url: string) {
 const TUNNELS: { key: LocalTunnel; title: string; desc: string; needsDomain?: boolean; missing?: string }[] = [
   {
     key: "cloudflare",
-    get title() { return L("Cloudflare 临时地址", "Cloudflare temporary address"); },
-    get desc() { return L("不用账号，地址每次重启都会变，适合先试试。", "No account needed. The address changes on every restart, so it’s good for trying things out."); },
-    get missing() { return L("需要先安装 cloudflared。", "Install cloudflared first."); },
+    get title() { return L("一键开放", "One click"); },
+    get desc() { return L("不用账号，也不用装别的：一个 Cloudflare 临时地址。这台电脑重启后地址会变，到时再点一次就行。", "No account, nothing to install: a temporary Cloudflare address. It changes when this computer restarts; click again then."); },
+    get missing() { return L("不用账号：第一次会自动下载 Cloudflare 的小工具（cloudflared，约 20 MB）。这台电脑重启后地址会变。", "No account: the first time, Cloudflare's small tool (cloudflared, about 20 MB) is downloaded for you. The address changes when this computer restarts."); },
   },
   {
     key: "cloudflare",
@@ -293,7 +297,7 @@ const TUNNELS: { key: LocalTunnel; title: string; desc: string; needsDomain?: bo
 type TunnelChoice = 0 | 1 | 2;
 
 /** Settings: hubs (including the local one), appearance and about. */
-export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onTextSize, langChoice, onLangChoice, refreshKey, sectionRequest, onRefresh, onAddHub }: {
+export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onTextSize, langChoice, onLangChoice, refreshKey, sectionRequest, onRefresh, onAddHub, titleId }: {
   hubs: Hub[];
   hubsOv?: HubOverview[];
   info: AppInfo | null;
@@ -309,11 +313,28 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
   sectionRequest?: number;
   onRefresh: () => Promise<void>;
   onAddHub: () => void;
+  /** in a dialog: the title at the top of the nav (labels the dialog) */
+  titleId?: string;
 }) {
   const simple = useSimpleMode();
   const [section, setSection] = useState<Section>(() => takeSettingsSection() ?? langSwitchSection ?? (simpleModeNow() ? "agents" : "hubs"));
+  const askedFor = useRef<Section | null>(takeSettingsSection());
+  useEffect(() => { nextSettingsSection = null; }, []);
+  // Asked for a section while already here (the 上手清单, a chat's voice
+  // button): go to it.
+  useEffect(() => {
+    const on = (e: Event) => {
+      const s = (e as CustomEvent<{ section?: string }>).detail?.section;
+      if (s && SECTIONS.some((x) => x.key === s)) { askedFor.current = s as Section; setSection(s as Section); }
+    };
+    window.addEventListener("myco-open-settings", on);
+    return () => window.removeEventListener("myco-open-settings", on);
+  }, []);
+  // Being on 工作区 is the 上手清单's 认识你的工作区.
+  useEffect(() => { if (section === "hubs") noteDone("workspaces"); }, [section]);
   // Simple mode hides the workspace, people and audit sections.
-  const sections = SECTIONS.filter((s) => !simple || !SIMPLE_HIDDEN.includes(s.key));
+  // (简单模式 hides some; one asked for by name, as the 上手清单 does, shows while on it)
+  const sections = SECTIONS.filter((s) => !simple || !SIMPLE_HIDDEN.includes(s.key) || s.key === section);
   // Search: rows of any section, by their words (each word typed must be
   // there); picking one opens its section and points the row out.
   const [query, setQuery] = useState("");
@@ -359,7 +380,8 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
     window.addEventListener("keydown", on);
     return () => window.removeEventListener("keydown", on);
   }, []);
-  useEffect(() => { if (simple && SIMPLE_HIDDEN.includes(section)) setSection("agents"); }, [simple, section]);
+  // (one asked for by name stays: the 上手清单 opens 工作区 in 简单模式 too)
+  useEffect(() => { if (simple && SIMPLE_HIDDEN.includes(section) && section !== askedFor.current) setSection("agents"); }, [simple, section]);
   // After a language remount, the request that was already handled must not
   // pull the page back to the Hub section.
   const handledRequest = useRef(langSwitchSection !== null ? sectionRequest : undefined);
@@ -468,12 +490,14 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
   return (
     <div className="app-page app-settings">
       <div className="app-settings-nav" role="tablist" aria-label={L("设置", "Settings")}>
+        {titleId && <h2 id={titleId} className="app-settings-title">{L("设置", "Settings")}</h2>}
         <label className="app-settings-search">
           <Search />
           <input ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)} placeholder={L("搜索设置", "Search settings")}
             aria-label={L("搜索设置", "Search settings")}
             onKeyDown={(e) => {
-              if (e.key === "Escape") { setQuery(""); return; }
+              // (a search to clear takes Esc; an empty one leaves it to close Settings)
+              if (e.key === "Escape") { if (query) { e.preventDefault(); setQuery(""); } return; }
               if (e.key === "Enter" && found[0]) { e.preventDefault(); goTo(found[0]); }
             }} />
         </label>
@@ -515,6 +539,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
         </header>
         {section === "hubs" && (
           <>
+            <IntroCard id="workspaces" {...introOf("workspaces")} />
             <ErrorText error={localError} />
             <ErrorText error={actionError} />
 
@@ -802,7 +827,8 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
         onOpenChange={(o) => !o && setPublicTarget(null)}
         local={local}
         name={publicTarget?.name}
-        onDone={() => { setPublicTarget(null); void reloadLocal(); void onRefresh(); }}
+        // (stays open on its result: the address to copy; 完成 closes it)
+        onDone={() => { void reloadLocal(); void onRefresh(); }}
       />
 
       <ConfirmDialog
@@ -851,19 +877,40 @@ export function PublicAccessDialog({ open, onOpenChange, local, name, onDone }: 
 
   useEffect(() => {
     if (!open) return;
-    setChoice(cf ? 0 : ts ? 2 : 0);
+    setChoice(0);
     setHostname("");
     setBusy(false);
     setError(null);
     setResult(null);
   }, [open, cf, ts]);
 
+  // The one-click way gets cloudflared itself; the others need their tool.
   const disabled = (i: TunnelChoice) =>
-    i === 0 || i === 1 ? !cf : !ts;
+    i === 0 ? false : i === 1 ? !cf : !ts;
+
+  // Opening can take a minute or two (Funnel's certificate, a tunnel's
+  // DNS): say how long, and let it be cancelled.
+  const abort = useRef<AbortController | null>(null);
+  const [since, setSince] = useState(0);
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!busy) return;
+    const t = setInterval(() => tick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [busy]);
+  useEffect(() => () => abort.current?.abort(), []);
+  const cancel = () => {
+    abort.current?.abort();
+    abort.current = null;
+    setBusy(false);
+  };
 
   const submit = async () => {
     setBusy(true);
     setError(null);
+    setSince(Date.now());
+    const ctl = new AbortController();
+    abort.current = ctl;
     const which = name ? { name } : {};
     const input = choice === 1
       ? { tunnel: "cloudflare" as const, hostname: hostname.trim(), ...which }
@@ -871,16 +918,20 @@ export function PublicAccessDialog({ open, onOpenChange, local, name, onDone }: 
         ? { tunnel: "tailscale" as const, ...which }
         : { tunnel: "cloudflare" as const, ...which };
     try {
-      setResult(await appApi.startLocalHub(input));
+      setResult(await appApi.startLocalHub(input, ctl.signal));
       onDone();
     } catch (e) {
-      setError(e);
+      if (!ctl.signal.aborted) setError(e);
     } finally {
-      setBusy(false);
+      if (abort.current === ctl) {
+        abort.current = null;
+        setBusy(false);
+      }
     }
   };
 
-  const close = () => { if (!busy) onOpenChange(false); };
+  const close = () => { cancel(); onOpenChange(false); };
+  const waited = busy && since ? Math.floor((Date.now() - since) / 1000) : 0;
 
   return (
     <Modal
@@ -888,17 +939,23 @@ export function PublicAccessDialog({ open, onOpenChange, local, name, onDone }: 
       onOpenChange={(o) => { if (!o) close(); }}
       title={L("开放到公网", "Open to the internet")}
       description={L("让不在同一局域网的电脑也能连上这台电脑上的工作区。", "Let machines outside your local network reach the Hub on this computer.")}
+      className="pub-modal"
     >
       {result ? (
         <>
-          <div className="app-success">
-            <Check />
-            <span>{L("已开放", "Now public")}</span>
+          <div className="pub-done" data-testid="opened">
+            <span className="pub-done-icon"><Check /></span>
+            <span><b>{L("已开放到公网", "Open to the internet")}</b>
+              <small>{L("别的电脑和同事现在可以用下面的地址连上这个工作区。", "Other computers and people can now reach this workspace at the address below.")}</small></span>
           </div>
-          <div className="app-kv"><span className="app-kv-label">{L("公网地址", "Public address")}</span><span className="app-kv-value mono clip" title={result.public_url}>{result.public_url}</span></div>
-          {result.join_url && (
-            <div className="app-kv"><span className="app-kv-label">{L("入网链接", "Join link")}</span><span className="app-kv-value mono clip" title={result.join_url}>{result.join_url}</span></div>
-          )}
+          <div className="pub-links">
+            <div className="pub-link"><span className="pub-link-label">{L("公网地址", "Public address")}</span>
+              <code title={result.public_url}>{result.public_url}</code><CopyButton value={result.public_url} /></div>
+            {result.join_url && (
+              <div className="pub-link"><span className="pub-link-label">{L("入网链接", "Join link")}</span>
+                <code title={result.join_url}>{result.join_url}</code><CopyButton value={result.join_url} /></div>
+            )}
+          </div>
           {(result.warnings || []).map((w) => (
             <div className="app-notice" key={w}>
               <AlertTriangle />
@@ -911,54 +968,57 @@ export function PublicAccessDialog({ open, onOpenChange, local, name, onDone }: 
         </>
       ) : (
         <>
-          <div className="app-list">
-            {TUNNELS.map((t, i) => {
-              const off = disabled(i as TunnelChoice);
-              return (
-                <label key={t.title} className={cn("app-choice", off && "disabled")}>
-                  <input
-                    type="radio"
-                    name="tunnel"
-                    className="app-sr-only"
-                    checked={choice === i}
-                    disabled={off || busy}
-                    onChange={() => setChoice(i as TunnelChoice)}
-                  />
-                  <span className="app-radio" aria-hidden />
-                  <span className="app-choice-text">
-                    <span className="t">{t.title}</span>
-                    <span className="d">{off ? t.missing : t.desc}</span>
-                  </span>
-                </label>
-              );
-            })}
-          </div>
-          {choice === 1 && (
-            <label className="app-field">
-              <span className="app-field-label">{L("域名", "Domain")}</span>
-              <input
-                className="app-input mono"
-                value={hostname}
-                onChange={(e) => setHostname(e.target.value)}
-                placeholder="hub.example.com"
-                disabled={busy}
-              />
-            </label>
-          )}
-          {!cf && !ts && (
-            <div className="app-notice">
-              <Monitor />
-              <span>{L("没有找到 cloudflared 或 Tailscale。先安装其中一个，才能开放到公网。", "Neither cloudflared nor Tailscale was found. Install one of them to open the Hub to the internet.")}</span>
+          {busy ? (
+            <div className="pub-progress" data-testid="opening">
+              <div className="pub-progress-head">
+                <span className="app-spinner" />
+                <b>{choice === 2 ? L("正在用 Tailscale Funnel 开放…", "Opening with Tailscale Funnel…") : L("正在用 Cloudflare 开放…", "Opening with Cloudflare…")}</b>
+                <span className="pub-progress-time">{L(`${waited} 秒`, `${waited}s`)}</span>
+              </div>
+              <div className="pub-bar" aria-hidden><i /></div>
+              <ol className="pub-steps">
+                {(choice === 2
+                  ? [L("让 Tailscale 为这台电脑打开 Funnel", "Turn on Funnel for this computer"), L("第一次会申请 HTTPS 证书（可能要一两分钟）", "The first time, get an HTTPS certificate (a minute or two)"), L("拿到 xxx.ts.net 的公网地址", "Get the xxx.ts.net address")]
+                  : [!cf ? L("下载 Cloudflare 的小工具 cloudflared（约 20 MB，只有第一次）", "Download Cloudflare's cloudflared (about 20 MB, only the first time)") : L("启动 cloudflared", "Start cloudflared"),
+                    L("打通到 Cloudflare 的隧道", "Open the tunnel to Cloudflare"), L("拿到公网地址，并确认外面能连上", "Get the public address and check it is reachable")]
+                ).map((t) => <li key={t}>{t}</li>)}
+              </ol>
+              <p className="app-small-note" data-testid="opening-wait">{choice === 2
+                ? L("通常一两分钟。不想等可以「取消」，工作区照常在本机和局域网里能用。", "Usually a minute or two. Cancel if you would rather not wait: the workspace keeps working on this computer and its network.")
+                : L("通常 10–60 秒。不想等可以「取消」，工作区照常在本机和局域网里能用。", "Usually 10–60 seconds. Cancel if you would rather not wait: the workspace keeps working on this computer and its network.")}</p>
+            </div>
+          ) : (
+            <div className="pub-options" role="radiogroup" aria-label={L("怎么开放", "How")}>
+              {TUNNELS.map((t, i) => {
+                const off = disabled(i as TunnelChoice);
+                const on = choice === i;
+                return (
+                  <label key={t.title} className={cn("app-choice pub-option", on && "is-on", off && "disabled")}>
+                    <input type="radio" name="tunnel" className="app-sr-only" checked={on} disabled={off}
+                      onChange={() => setChoice(i as TunnelChoice)} />
+                    <span className="pub-option-text">
+                      <span className="t">{t.title}<em className="pub-badge">{i === 0 ? L("推荐", "Recommended") : L("地址固定", "Fixed address")}</em></span>
+                      <span className="d">{off || (i === 0 && !cf) ? t.missing : t.desc}</span>
+                      {i === 1 && on && (
+                        <input className="app-input mono pub-domain" value={hostname} onChange={(e) => setHostname(e.target.value)}
+                          placeholder="hub.example.com" aria-label={L("域名", "Domain")} autoFocus />
+                      )}
+                    </span>
+                    <span className="pub-check" aria-hidden>{on && <Check />}</span>
+                  </label>
+                );
+              })}
             </div>
           )}
+          {error && choice === 2 && <div className="app-small-note">{L("Tailscale 这一步没成功，原因和办法在下面（来自 Tailscale）。常见的是：这个 macOS 用户下没开 Tailscale App 或没登录、还没在 Tailscale 后台为这台设备打开 Funnel。", "Tailscale's step failed; why and what to do are below (from Tailscale). Usually: the Tailscale app is not open and signed in for this macOS user, or Funnel is not on for this device in the Tailscale admin console.")}</div>}
           <ErrorText error={error} />
           <div className="app-modal-actions">
-            <button type="button" className="app-btn" onClick={close} disabled={busy}>{L("取消", "Cancel")}</button>
+            <button type="button" className="app-btn" onClick={busy ? cancel : close}>{L("取消", "Cancel")}</button>
             <button
               type="button"
               className="app-btn app-btn-primary"
               onClick={() => void submit()}
-              disabled={busy || (!cf && !ts) || (choice === 1 && !hostname.trim())}
+              disabled={busy || disabled(choice) || (choice === 1 && !hostname.trim())}
             >
               {busy ? <><span className="app-spinner" />{L("正在开放…", "Opening…")}</> : <><Cloud />{L("开放", "Open")}</>}
             </button>

@@ -14,6 +14,11 @@ type pendingRun struct {
 	MessageID string    `json:"message_id"`
 	Agent     string    `json:"agent"`
 	StartedAt time.Time `json:"started_at"`
+	// Finish, once the harness is done but the hub could not be told:
+	// "reply" (Text is the reply), "fail" (Text is why) or "complete".
+	// Sent again until it lands (retryUndelivered, and at the next start).
+	Finish string `json:"finish,omitempty"`
+	Text   string `json:"text,omitempty"`
 }
 
 type runnerState struct {
@@ -69,6 +74,19 @@ func (r *Runner) markPending(id string) {
 	r.saveState()
 }
 
+// keepFinish remembers how task id is to be finished, for a later try.
+func (r *Runner) keepFinish(id, finish, text string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	p, ok := r.pending[id]
+	if !ok {
+		p = pendingRun{MessageID: id, Agent: r.opts.Self, StartedAt: r.opts.Now()}
+	}
+	p.Finish, p.Text = finish, text
+	r.pending[id] = p
+	r.saveState()
+}
+
 func (r *Runner) clearPending(id string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -77,10 +95,26 @@ func (r *Runner) clearPending(id string) {
 }
 
 func (r *Runner) recoverPending(ctx context.Context) {
+	r.finishPending(ctx, false)
+}
+
+// retryUndelivered sends again the results the hub could not be told
+// (it was down past the finish budget), while the runner runs: the task
+// would otherwise stay acked, "working", until the runner restarts.
+func (r *Runner) retryUndelivered(ctx context.Context) {
+	r.finishPending(ctx, true)
+}
+
+// finishPending closes the tasks in the state file: with their kept
+// result when there is one, else (the runner stopped mid-run) as failed.
+// onlyKept: only those with a kept result (the others are running).
+func (r *Runner) finishPending(ctx context.Context, onlyKept bool) {
 	r.mu.Lock()
 	items := make([]pendingRun, 0, len(r.pending))
 	for _, v := range r.pending {
-		items = append(items, v)
+		if !onlyKept || v.Finish != "" {
+			items = append(items, v)
+		}
 	}
 	r.mu.Unlock()
 	for _, item := range items {
@@ -95,7 +129,17 @@ func (r *Runner) recoverPending(ctx context.Context) {
 			return err
 		})
 		if err == nil && status == "acked" {
-			err, exhausted = r.retryFinish(finishCtx, log, "recover fail", func(c context.Context) error {
+			err, exhausted = r.retryFinish(finishCtx, log, "recover "+orStr(item.Finish, "fail"), func(c context.Context) error {
+				switch item.Finish {
+				case "reply":
+					_, err := r.hub.Reply(c, item.MessageID, item.Text, false)
+					return err
+				case "fail":
+					_, err := r.hub.Fail(c, item.MessageID, item.Text, false)
+					return err
+				case "complete":
+					return r.hub.Complete(c, item.MessageID)
+				}
 				_, err := r.hub.Fail(c, item.MessageID, "the runner restarted before this task finished; its result was lost — send it again", false)
 				return err
 			})
@@ -110,6 +154,10 @@ func (r *Runner) recoverPending(ctx context.Context) {
 			continue
 		}
 		r.clearPending(item.MessageID)
-		log.Info("recovered unfinished task", "previous_status", status)
+		if item.Finish != "" {
+			log.Info("delivered a result kept for later", "finish", item.Finish, "previous_status", status)
+		} else {
+			log.Info("recovered unfinished task", "previous_status", status)
+		}
 	}
 }

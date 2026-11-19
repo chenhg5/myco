@@ -132,7 +132,8 @@ export interface ProfileInput {
 
 /** CLIs that a machine can be asked to start a new session with. */
 /** An agent CLI to start a session with, or "exec": a shell node that runs the commands it is sent. */
-export type SpawnCli = "claude" | "codex" | "pi" | "kiro" | "cursor" | "gemini" | "opencode" | "exec";
+export type SpawnCli = "claude" | "codex" | "pi" | "kiro" | "cursor" | "gemini" | "opencode" | "exec"
+  | "qoder" | "qwen" | "kimi" | "goose" | "copilot" | "auggie" | "codebuddy" | "kilo" | "cline" | "grok";
 export interface SpawnInput {
   cli: SpawnCli;
   /** Directory on that machine; `~/...` is that machine's home directory. */
@@ -372,6 +373,8 @@ export interface LocalState {
   machine_nodes?: string[];
   /** This computer allows shell nodes and full-access sessions (spawn.max_access: full). */
   shell_allowed?: boolean;
+  /** this computer's own IP addresses (LAN, Tailscale…), loopback left out */
+  addrs?: string[];
 }
 export type LocalTunnel = "cloudflare" | "tailscale" | "none";
 export interface StartLocalHubInput { tunnel: LocalTunnel; hostname?: string; /** Another hub on this computer (`myco hub up --name`); omit for the default one. */ name?: string }
@@ -404,6 +407,9 @@ export class ApiError extends Error {
 export function isTransient(e: unknown): boolean {
   if (e instanceof ApiError) {
     if (e.code === "unavailable" || e.code === "timeout") return true;
+    // A timeout or a dropped connection, whatever code the console put on
+    // it ("context deadline exceeded" under "internal", say).
+    if (/deadline exceeded|timed? ?out|connection (refused|reset)|no such host|\bEOF\b/i.test(e.message)) return true;
     // An error with a code of its own (fork_failed, say) is that error,
     // whatever the status: not a hub that is down or slow.
     if (e.code) return false;
@@ -454,7 +460,16 @@ export interface Diagnosis {
   hubs: { url: string; mine?: boolean; direct?: string; proxy?: string }[];
   log?: string[];
 }
-export interface ConnectStep { key: "login" | "install" | "online"; state: "pending" | "running" | "done" | "failed"; detail?: string }
+/** How Claude Code signs in for agents this computer starts (names and hosts only, never keys). */
+export interface ClaudeAuth {
+  account: "ready" | "signed_out" | "unknown" | "missing";
+  cc_switch: { ref: string; id: string; name: string; host?: string; current?: boolean }[];
+  shell?: string[];
+  shell_host?: string;
+  using: string;
+  using_name?: string;
+}
+export interface ConnectStep { key: "login" | "install" | "online" | "add"; state: "pending" | "running" | "done" | "failed"; detail?: string }
 export interface ConnectJob {
   id: string;
   hub: string;
@@ -464,10 +479,12 @@ export interface ConnectJob {
   log?: string[];
   error?: RemoteError;
   machine_id?: string;
+  /** setting up a workspace: its id in this App once added */
+  hub_id?: string;
   done: boolean;
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function request<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" };
   const raw = body instanceof Blob;
   if (body !== undefined) headers["Content-Type"] = raw ? (body.type || "application/octet-stream") : "application/json";
@@ -476,6 +493,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     credentials: "same-origin",
     headers,
     body: body === undefined ? undefined : raw ? body : JSON.stringify(body),
+    signal,
   });
   const text = await r.text();
   let data: unknown = null;
@@ -739,6 +757,8 @@ export const appApi = {
   connectMachine: (hubId: string, route: RemoteRoute) =>
     request<ConnectJob>("POST", `app/hubs/${enc(hubId)}/machines/connect`, route),
   connectJob: (id: string) => request<ConnectJob>("GET", `app/connect/${enc(id)}`),
+  /** Sets up a workspace on a server over SSH (or adds the one there) and adds it to this App: answers the job at once. */
+  installHubOver: (route: RemoteRoute) => request<ConnectJob>("POST", "app/local/hub-over-ssh", route),
   /** How this App reaches a computer (null: it does not). */
   machineReach: (hubId: string, machineId: string) =>
     request<{ route: RemoteRoute | null }>("GET", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}/reach`),
@@ -787,6 +807,10 @@ export const appApi = {
   /** Opens a terminal that installs or signs in to an agent CLI; opened:false → show command. */
   agentTerminal: (cli: string, action: "install" | "install_mirror" | "login") =>
     request<{ opened: boolean; command: string }>("POST", `app/local/agents/${enc(cli)}/terminal`, { action }),
+  /** How Claude Code signs in for agents started here, and the ways this computer has. */
+  claudeAuth: () => request<ClaudeAuth>("GET", "app/local/claude-auth"),
+  /** use: "cc-switch:<id>", "shell" (the shell's API settings) or "account". */
+  setClaudeAuth: (use: string) => request<ClaudeAuth>("POST", "app/local/claude-auth", { use }),
   /** cc-switch's Claude providers on this computer (names and hosts only). */
   providers: (app: "claude" | "codex" = "claude") => request<ProviderList>("GET", `app/local/providers?app=${app}`),
   /** A node's provider setting, if the node runs on this computer. */
@@ -800,6 +824,8 @@ export const appApi = {
   shellAccess: (allow: boolean) => request<{ shell_allowed: boolean }>("POST", "app/local/shell-access", { allow }),
   /** Downloads and verifies the myco CLI; can take up to a minute. */
   installMyco: () => request<MycoInstall>("POST", "app/local/myco"),
+  /** Brings this computer's myco to the latest release and restarts its runner. */
+  upgradeMyco: () => request<{ from: string; version: string; restarted: string[] }>("POST", "app/local/myco/upgrade"),
   /** Starts a Hub on this machine (and adds it to the App); can take up to 90s. */
   // Voice chat with an agent (the Mac app; voice.go)
   voice: () => request<VoiceInfo>("GET", "app/voice"),
@@ -827,8 +853,9 @@ export const appApi = {
   pageChanges: (hubId: string, id: string, after: number) =>
     request<PageChanges>("GET", `app/hubs/${enc(hubId)}/pages/${enc(id)}/changes?after=${after}`),
   /** A file a page made, saved to Downloads and shown. */
-  pageDownload: (name: string, bytes: Uint8Array, type: string) =>
-    request<{ path: string }>("POST", `app/page-download?name=${encodeURIComponent(name)}`, new Blob([bytes], { type: type || "application/octet-stream" })),
+  pageDownload: (name: string, bytes: Uint8Array | Blob, type: string) =>
+    request<{ path: string }>("POST", `app/page-download?name=${encodeURIComponent(name)}`,
+      bytes instanceof Blob ? bytes : new Blob([bytes as BlobPart], { type: type || "application/octet-stream" })),
   // Pins (hubs from v0.20.3; older ones answer 404): what a conversation
   // keeps at hand, for both its parties. a: the first party (default you).
   pins: (hubId: string, withWhom: string, a?: string) =>
@@ -898,8 +925,9 @@ export const appApi = {
     request<{ machines: ServerMachine[] }>("GET", `app/hubs/${enc(hubId)}/server-machines`),
   addMachineFrom: (hubId: string, fromHub: string, machineId: string) =>
     request<{ joined: string; machine_node?: string }>("POST", `app/hubs/${enc(hubId)}/machines/add-from`, { from_hub: fromHub, machine_id: machineId }),
-  startLocalHub: (input: StartLocalHubInput) =>
-    request<StartLocalHubResult>("POST", "app/local/hub", input),
+  /** signal: cancelling stops it on this computer too (the request ends). */
+  startLocalHub: (input: StartLocalHubInput, signal?: AbortSignal) =>
+    request<StartLocalHubResult>("POST", "app/local/hub", input, signal),
   stopLocalHub: (name?: string) =>
     request<{ stopped: true }>("POST", "app/local/hub/stop", name ? { name } : undefined),
 };

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { retryImage } from "@/app/Markdown";
 import { Check, Download, Eye, FileText, Loader2 } from "lucide-react";
 import { appApi } from "@/appapi";
 import type { Attachment } from "@/api";
@@ -38,7 +39,8 @@ export function MessageAttachments({ hubId, items }: { hubId: string; items: Att
           {pictures.map((a, i) => (
             <button key={a.file_id} type="button" className="conv-attach is-image" onClick={() => setOpen(i)}
               title={L(`${a.name} · 点一下看大图`, `${a.name} · click to enlarge`)}>
-              <img src={appApi.attachmentUrl(hubId, a.file_id)} alt={a.name} loading="lazy" draggable={false} onError={() => fail(a.file_id)} />
+              <img src={appApi.attachmentUrl(hubId, a.file_id)} alt={a.name} loading="lazy" draggable={false}
+                onError={(e) => { if (!retryImage(e.currentTarget)) fail(a.file_id); }} />
             </button>
           ))}
         </div>

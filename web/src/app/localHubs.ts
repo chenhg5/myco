@@ -16,8 +16,20 @@ export function localWorkspaces(local: LocalState | null | undefined): LocalWork
 /** The hub on this computer that an App hub entry points at, if any. */
 export function localWorkspaceOf(local: LocalState | null | undefined, url: string): LocalWorkspace | undefined {
   const want = stripSlash(url);
-  return localWorkspaces(local).find((w) =>
+  const all = localWorkspaces(local);
+  const exact = all.find((w) =>
     [w.local_url, w.public_url].filter(Boolean).some((u) => stripSlash(u!) === want));
+  if (exact) return exact;
+  // Added by one of this computer's own addresses (its LAN address, say,
+  // when 127.0.0.1 is what the hub calls itself): the same port is the
+  // same hub.
+  let u: URL;
+  try { u = new URL(want); } catch { return undefined; }
+  const host = u.hostname.replace(/^\[|\]$/g, "");
+  const own = new Set(["localhost", "127.0.0.1", "::1", ...(local?.addrs || [])]);
+  if (!own.has(host)) return undefined;
+  const port = (x: URL) => x.port || (x.protocol === "https:" ? "443" : "80");
+  return all.find((w) => { try { return port(new URL(w.local_url)) === port(u); } catch { return false; } });
 }
 
 export function isLocalUrl(local: LocalState | null | undefined, url: string): boolean {

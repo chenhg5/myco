@@ -37,7 +37,8 @@ const Name = "machine"
 
 // SpawnableCLIs are the agent CLIs a machine node can start (they all keep
 // sessions, so the new agent resumes the same conversation every time).
-var SpawnableCLIs = []string{"claude", "codex", "pi", "kiro", "cursor", "gemini", "opencode"}
+var SpawnableCLIs = []string{"claude", "codex", "pi", "kiro", "cursor", "gemini", "opencode",
+	"qoder", "qwen", "kimi", "goose", "copilot", "auggie", "codebuddy", "kilo", "cline", "grok"}
 
 // ExecCLI adds a shell node (harness exec): each message from its allowed
 // senders is a command run in its folder. It has no session.
@@ -64,6 +65,9 @@ type Plan struct {
 
 // Deps are the effects a spawn needs, injected by the CLI layer.
 type Deps struct {
+	// ProviderFor is how a session of cli started here signs in (the
+	// machine node's pinned provider or env-file API settings); nil: none.
+	ProviderFor func(cli string) *harness.ProviderSettings
 	// NewHarness builds the agent CLI harness for the first turn.
 	NewHarness func(cli string, opts harness.Options) (harness.Harness, error)
 	// Installed reports whether the CLI can run here (its binary is found).
@@ -165,7 +169,7 @@ func (n *Node) spawn(ctx context.Context, req harness.Request) api.SpawnResult {
 		return failed(plan, "cannot prepare %s: %v", plan.CLI, err)
 	}
 	if sr.TakeOver != "" {
-		return n.takeOver(ctx, h, plan, sr, req.Env)
+		return n.takeOver(ctx, h, plan, sr, req.Env, n.providerFor(plan.CLI, req.Provider))
 	}
 	if _, ok := h.(harness.Forker); sr.ForkFrom != "" && !ok {
 		return denied("%v", harness.ErrForkUnsupported)
@@ -194,7 +198,9 @@ func (n *Node) spawn(ctx context.Context, req harness.Request) api.SpawnResult {
 	}
 	turnCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	first := harness.Request{Prompt: n.firstPrompt(req.From, plan, sr), Workdir: plan.Workdir, Env: req.Env}
+	// The machine node's provider (a pinned cc-switch provider, or API
+	// variables in its env file) is how sessions started here sign in.
+	first := harness.Request{Prompt: n.firstPrompt(req.From, plan, sr), Workdir: plan.Workdir, Env: req.Env, Provider: n.providerFor(plan.CLI, req.Provider)}
 	if sr.ForkFrom != "" {
 		first.SessionID, first.Fork = sr.ForkFrom, true
 	}
@@ -493,7 +499,7 @@ func (n *Node) firstPrompt(from string, p Plan, sr api.SpawnRequest) string {
 
 // takeOver starts (or, switching back, resumes) a session whose first prompt
 // is the handover note, then binds it to the node it takes over.
-func (n *Node) takeOver(ctx context.Context, h harness.Harness, plan Plan, sr api.SpawnRequest, env []string) api.SpawnResult {
+func (n *Node) takeOver(ctx context.Context, h harness.Harness, plan Plan, sr api.SpawnRequest, env []string, prov *harness.ProviderSettings) api.SpawnResult {
 	if n.Deps.TakeOver == nil {
 		return denied("this machine's myco cannot take nodes over; upgrade it (myco upgrade)")
 	}
@@ -509,7 +515,7 @@ func (n *Node) takeOver(ctx context.Context, h harness.Harness, plan Plan, sr ap
 	var b strings.Builder
 	b.WriteString(strings.TrimSpace(sr.Brief))
 	fmt.Fprintf(&b, "\n\n[myco] This session runs on machine %s, in %s. Do not start any work in this turn: your tasks arrive as messages next. Reply with one short line confirming you have read the handover note.\n", n.Machine, plan.Workdir)
-	first := harness.Request{Prompt: b.String(), Workdir: plan.Workdir, Env: env, SessionID: sr.ResumeSession}
+	first := harness.Request{Prompt: b.String(), Workdir: plan.Workdir, Env: env, Provider: prov, SessionID: sr.ResumeSession}
 	out, err := h.Run(turnCtx, first)
 	if err != nil {
 		if sr.ResumeSession != "" {
@@ -610,4 +616,15 @@ func SameServer(a, b string) bool {
 		return false
 	}
 	return strings.EqualFold(ua.Scheme, ub.Scheme) && strings.EqualFold(ua.Host, ub.Host)
+}
+
+// providerFor is the provider a session of cli starts with: the machine
+// node's own setting for that CLI, else what the runner passed.
+func (n *Node) providerFor(cli string, fallback *harness.ProviderSettings) *harness.ProviderSettings {
+	if n.Deps.ProviderFor != nil {
+		if p := n.Deps.ProviderFor(cli); p != nil {
+			return p
+		}
+	}
+	return fallback
 }

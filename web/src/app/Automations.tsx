@@ -90,7 +90,11 @@ export function AutomationsPage({ hubId, rows, now, onOpenMessage }: {
   const [stamp, setStamp] = useState(0);
   const menu = useContextMenu();
   const load = useCallback(() => {
-    appApi.automations(hubId).then((r) => { seen.set(hubId, r.automations || []); setList(r.automations || []); setUnsupported(false); }, (e) => {
+    appApi.automations(hubId).then((r) => {
+      seen.set(hubId, r.automations || []); setList(r.automations || []); setUnsupported(false);
+      // (the 上手清单 ticks 设一个自动化 from this, at once)
+      window.dispatchEvent(new CustomEvent("myco-automations", { detail: { hubId, count: (r.automations || []).length } }));
+    }, (e) => {
       if (e instanceof ApiError && e.status === 404) setUnsupported(true);
       else setError(e);
       setList([]);

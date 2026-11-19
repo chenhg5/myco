@@ -62,7 +62,7 @@ export function Welcome({ onStartLocal, onConnect, langChoice, onLang, theme, on
               {busy ? <><span className="app-spinner" />{L("正在启动…", "Starting…")}</> : <>{error ? L("重试", "Try again") : L("在这台电脑上开始", "Start on this computer")}<ArrowRight /></>}
             </button>
           </div>
-          <p className="wl-fine">{L("不需要服务器和账号，点一下就能用", "No server or account needed")}</p>
+          <p className="wl-fine">{L("会在这台电脑上开一个工作区，你的 agent 在那里碰头。不需要服务器和账号。", "It starts a workspace on this computer, where your agents meet. No server or account needed.")}</p>
           <ErrorText error={error} />
 
           <div className="wl-or"><span>{L("或者", "Or")}</span></div>

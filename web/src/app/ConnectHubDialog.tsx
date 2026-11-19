@@ -5,7 +5,9 @@ import { appApi, type Hub } from "@/appapi";
 import { CopyButton } from "@/app/copy";
 import { ErrorText, Modal } from "@/app/dialogs";
 import { setupPrompt } from "@/app/agentSetup";
+import { ConnectOver } from "@/app/ConnectOver";
 import { L, lang } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 
 const INSTALL_COMMAND =
   "curl -fsSL https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-hub.sh | sudo bash -s -- --domain auto";
@@ -41,6 +43,13 @@ export function ConnectHubDialog({ open, onOpenChange, prefill, onAdded }: {
   }, [open, prefill]);
 
   const close = () => { if (!busy) onOpenChange(false); };
+  // Set up over SSH: the server's workspace is in this App now.
+  const [how, setHow] = useState<"ssh" | "command">("ssh");
+  const added = async (hubId: string) => {
+    const hub = (await appApi.hubs().catch((): Hub[] => [])).find((h) => h.id === hubId);
+    if (hub) onAdded(hub);
+    onOpenChange(false);
+  };
 
   const connect = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -172,6 +181,15 @@ export function ConnectHubDialog({ open, onOpenChange, prefill, onAdded }: {
         </form>
       ) : (
         <>
+          <div className="seg seg-fill add-tabs" role="tablist" aria-label={L("怎么装", "How")}>
+            {([["ssh", L("用 SSH 装到服务器上", "Over SSH")], ["command", L("复制命令", "Copy a command")]] as const).map(([v, label]) => (
+              <button key={v} type="button" role="tab" aria-selected={how === v} className={cn("seg-btn", how === v && "active")} onClick={() => setHow(v)}>{label}</button>
+            ))}
+          </div>
+          {how === "ssh" ? (
+            <ConnectOver hubId="" via="ssh" purpose="hub" onConnected={(id) => void added(id)} />
+          ) : (
+          <>
           <div className="app-hint">
             {L("在你的服务器（Linux）上运行下面这行命令，装好后它会打印一个 App 连接链接，复制回来粘贴到上一步。", "Run this command on your server (Linux). When it’s done it prints an app link; copy it and paste it in the previous step.")}
           </div>
@@ -192,6 +210,8 @@ export function ConnectHubDialog({ open, onOpenChange, prefill, onAdded }: {
               <div className="add-sentence-actions"><CopyButton value={setupPrompt()} /></div>
             </div>
           </div>
+          </>
+          )}
           <div className="app-modal-actions">
             <button type="button" className="app-btn" onClick={() => { setScreen("link"); setError(null); }}>
               <ArrowLeft />{L("返回", "Back")}

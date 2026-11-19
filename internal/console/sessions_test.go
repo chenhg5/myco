@@ -299,3 +299,49 @@ func TestLocalSessionsCodexMessageItems(t *testing.T) {
 		t.Fatalf("sessions: %+v", got)
 	}
 }
+
+// A session's own title wins over its first request: Codex's thread name
+// (its last line in session_index.jsonl), Claude Code's /rename title over
+// the one it made.
+func TestLocalSessionsOwnTitles(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	t.Setenv("CODEX_HOME", "")
+	work := t.TempDir()
+	ask := func(text string) map[string]any {
+		return map[string]any{"type": "user", "cwd": work, "message": map[string]any{"content": text}}
+	}
+	claudeDir := filepath.Join(home, ".claude", "projects", "-work")
+	writeLines(t, filepath.Join(claudeDir, "11111111-2222-3333-4444-000000000001.jsonl"),
+		ask("帮我看看为什么登录失败"),
+		map[string]any{"type": "ai-title", "aiTitle": "登录失败排查"},
+		map[string]any{"type": "custom-title", "customTitle": "旧名字"},
+		map[string]any{"type": "custom-title", "customTitle": "登录 Bug"},
+		map[string]any{"type": "ai-title", "aiTitle": "后来生成的标题"},
+	)
+	writeLines(t, filepath.Join(claudeDir, "11111111-2222-3333-4444-000000000002.jsonl"),
+		ask("整理一下周报"), map[string]any{"type": "ai-title", "aiTitle": "周报整理"})
+	writeLines(t, filepath.Join(claudeDir, "11111111-2222-3333-4444-000000000003.jsonl"), ask("只有第一句"))
+	writeLines(t, filepath.Join(home, ".codex", "sessions", "2026", "11", "18", "rollout-a.jsonl"),
+		map[string]any{"type": "session_meta", "payload": map[string]any{"id": "019a-a", "cwd": work}},
+		map[string]any{"type": "event_msg", "payload": map[string]any{"type": "user_message", "message": "看看 WSL 为什么这么慢"}})
+	writeLines(t, filepath.Join(home, ".codex", "session_index.jsonl"),
+		map[string]any{"id": "019a-a", "thread_name": "WSL 网络"},
+		map[string]any{"id": "019a-other", "thread_name": "别的"},
+		map[string]any{"id": "019a-a", "thread_name": "排查 WSL 网络慢"})
+	titles := map[string]string{}
+	for _, s := range (&console.Local{Home: home}).LocalSessions(time.Now()) {
+		titles[s.SessionID] = s.Title
+	}
+	want := map[string]string{
+		"11111111-2222-3333-4444-000000000001": "登录 Bug",
+		"11111111-2222-3333-4444-000000000002": "周报整理",
+		"11111111-2222-3333-4444-000000000003": "只有第一句",
+		"019a-a":                               "排查 WSL 网络慢",
+	}
+	for id, w := range want {
+		if titles[id] != w {
+			t.Errorf("%s: title %q, want %q", id, titles[id], w)
+		}
+	}
+}

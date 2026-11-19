@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -37,6 +38,9 @@ type Local struct {
 	// Remote runs ssh or wsl.exe for reaching another computer (remote.go;
 	// tests replace it).
 	Remote remoteExec
+	// EnsureTool gets cloudflared when it is missing (tests replace it);
+	// default EnsureCloudflared.
+	EnsureTool func(ctx context.Context) (string, error)
 	// versions remembers agent CLIs' --version by file (agents.go).
 	versions sync.Map
 	// Install downloads the myco CLI into dir (tests replace it).
@@ -72,6 +76,8 @@ type Local struct {
 	appHubStarted map[string]bool
 
 	lanOnce sync.Once
+	// hubStarts: when a stopped hub service was last started (by name).
+	hubStarts sync.Map
 	// Remember which local hubs we already tried to join during this App run.
 	joinMu    sync.Mutex
 	joinRunMu sync.Mutex
@@ -287,6 +293,7 @@ func runCommand(ctx context.Context, env []string, name string, args ...string) 
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Env = env
 	hideWindow(cmd)
+	softCancel(cmd)
 	for _, kv := range env {
 		if d, ok := strings.CutPrefix(kv, "MYCO_APP_WORKDIR="); ok {
 			cmd.Dir = d // myco join takes the session's directory from its own
@@ -399,6 +406,26 @@ type LocalStatus struct {
 	// ShellAllowed: this computer allows shell nodes (spawn.max_access:
 	// full in machine.yaml).
 	ShellAllowed bool `json:"shell_allowed"`
+	// Addrs are this computer's own IP addresses (LAN, Tailscale…), so the
+	// app knows a hub reached at one of them is on this computer.
+	Addrs []string `json:"addrs,omitempty"`
+}
+
+// ownAddrs lists this computer's unicast IP addresses, loopback left out.
+func ownAddrs() []string {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, a := range addrs {
+		n, ok := a.(*net.IPNet)
+		if !ok || n.IP.IsLoopback() || n.IP.IsLinkLocalUnicast() || n.IP.IsMulticast() {
+			continue
+		}
+		out = append(out, n.IP.String())
+	}
+	return out
 }
 
 func toolAt(p string) *Tool {
@@ -413,6 +440,7 @@ func (b *Backend) localStatus(ctx context.Context) LocalStatus {
 	st := LocalStatus{Tools: map[string]*Tool{"cloudflared": toolAt(l.cloudflaredPath()), "tailscale": toolAt(l.tailscalePath())}, Device: l.Device}
 	st.Hostname, _ = os.Hostname()
 	st.Machines, st.MachineNodes, st.ShellAllowed = l.localMachine()
+	st.Addrs = ownAddrs()
 	if p := l.mycoPath(); p != "" {
 		st.Myco = &Tool{Path: p}
 		if out, err := l.run(ctx, "version", "--offline"); err == nil {
@@ -426,6 +454,10 @@ func (b *Backend) localStatus(ctx context.Context) LocalStatus {
 		}
 	}
 	st.Hubs = []LocalHub{}
+	if len(st.MachineNodes) > 0 {
+		// This computer's agents are offline while its runner is stopped.
+		l.startStopped(service.RunnerID)
+	}
 	stored, _ := b.Store.List()
 	for _, name := range l.hubNames() {
 		env := l.hubEnvFor(name)
@@ -439,6 +471,8 @@ func (b *Backend) localStatus(ctx context.Context) LocalStatus {
 			if hl, err := c.Health(cctx); err == nil {
 				h.Running, h.PublicURL, h.Version = true, hl.PublicURL, hl.ServerVersion
 				l.joinLocalHubOnceFor(name)
+			} else {
+				l.startStoppedHub(name)
 			}
 			cancel()
 		}
@@ -482,6 +516,52 @@ func (b *Backend) installMyco(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, Tool{Path: p})
+}
+
+// UpgradeResult is POST /app/local/myco/upgrade.
+type UpgradeResult struct {
+	From      string   `json:"from"`
+	Version   string   `json:"version"`
+	Restarted []string `json:"restarted"`
+}
+
+// upgradeMyco brings this computer's myco CLI to the latest release and
+// restarts its services (`myco upgrade`), so its nodes come back on the
+// new version: the App does it instead of sending people to a terminal.
+func (b *Backend) upgradeMyco(w http.ResponseWriter, r *http.Request) {
+	l := b.Local
+	if l.mycoPath() == "" {
+		b.installMyco(w, r)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Minute)
+	defer cancel()
+	out, err := l.run(ctx, "upgrade")
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	var up struct {
+		Current   string   `json:"current"`
+		Target    string   `json:"target"`
+		Restarted []string `json:"restarted"`
+	}
+	if err := json.Unmarshal(out, &up); err != nil {
+		writeErr(w, fmt.Errorf("unexpected output from myco upgrade: %s", lastLine(out)))
+		return
+	}
+	res := UpgradeResult{From: up.Current, Version: up.Target, Restarted: up.Restarted}
+	if len(res.Restarted) == 0 {
+		// Already the latest (an App update can replace the binary without
+		// restarting what runs it): the runner still has to restart onto it.
+		res.Restarted = []string{}
+		if st := l.restartRunner(ctx); st != "running" {
+			writeErr(w, &client.Error{Status: http.StatusBadGateway, Code: "runner_failed", Message: st})
+			return
+		}
+		res.Restarted = append(res.Restarted, "runner")
+	}
+	writeJSON(w, http.StatusOK, res)
 }
 
 func installLatest(ctx context.Context, dir string) (string, error) {
@@ -548,6 +628,19 @@ func (b *Backend) startLocal(w http.ResponseWriter, r *http.Request) {
 		if _, err := install(ctx, filepath.Join(l.Home, ".local", "bin")); err != nil {
 			writeErr(w, &client.Error{Status: http.StatusBadGateway, Code: "install_failed", Message: "cannot install the myco command line: " + err.Error(),
 				Suggestion: "check the network and try again"})
+			return
+		}
+	}
+	// The temporary Cloudflare address needs only cloudflared: get it now
+	// rather than send the person off to install it.
+	if in.Tunnel == "cloudflare" && l.cloudflaredPath() == "" {
+		ensure := l.EnsureTool
+		if ensure == nil {
+			ensure = l.EnsureCloudflared
+		}
+		if _, err := ensure(ctx); err != nil {
+			writeErr(w, &client.Error{Status: http.StatusBadGateway, Code: "cloudflared_missing",
+				Message: "could not get cloudflared: " + err.Error(), Suggestion: "brew install cloudflared, or download it from https://github.com/cloudflare/cloudflared/releases"})
 			return
 		}
 	}

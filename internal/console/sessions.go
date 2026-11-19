@@ -2,8 +2,10 @@ package console
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -24,7 +26,8 @@ type LocalSession struct {
 	SessionID  string    `json:"session_id"`
 	Workdir    string    `json:"workdir"`
 	LastActive time.Time `json:"last_active"`
-	// Title is the session's first request, shortened.
+	// Title is the session's own title (one given in Claude Code or Codex,
+	// or the one it made), else its first request; shortened.
 	Title string `json:"title,omitempty"`
 	// Joined is set when the session is already an agent here (the first,
 	// for older apps); JoinedAll is every workspace it joined.
@@ -119,6 +122,7 @@ func (l *Local) LocalSessions(now time.Time) []LocalSession {
 	}
 
 	joined := l.joinedSessions()
+	threadNames := codexThreadNames(codexDir)
 	var out []LocalSession
 	byID := map[string]int{}    // cli:session → index in out
 	byConv := map[string]int{}  // a conversation's first request → index in out
@@ -130,8 +134,14 @@ func (l *Local) LocalSessions(now time.Time) []LocalSession {
 		var ok bool
 		if f.cli == "claude" {
 			s, first, ok = readClaudeSession(f.path)
+			if t := shorten(claudeTitle(f.path)); ok && t != "" {
+				s.Title = t
+			}
 		} else {
 			s, first, ok = readCodexSession(f.path)
+			if t := shorten(threadNames[s.SessionID]); ok && t != "" {
+				s.Title = t
+			}
 		}
 		if !ok {
 			continue
@@ -307,6 +317,79 @@ func readCodexSession(path string) (s LocalSession, first string, ok bool) {
 	return s, first, s.SessionID != "" && s.Workdir != ""
 }
 
+// titleTail is how much of a transcript's end is read for its title.
+const titleTail = 1 << 20
+
+// claudeTitle is the title Claude Code keeps for a session: one given with
+// /rename (custom-title), else the one it made (ai-title, or summary in
+// older versions); "" when there is none. They are appended as the
+// session goes on, so the last of the file's end is the current one.
+func claudeTitle(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	if st, err := f.Stat(); err == nil && st.Size() > titleTail {
+		if _, err := f.Seek(st.Size()-titleTail, io.SeekStart); err != nil {
+			return ""
+		}
+	}
+	var custom, made string
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 64<<10), 4<<20)
+	for sc.Scan() {
+		line := sc.Bytes()
+		if !bytes.Contains(line, []byte(`title"`)) && !bytes.Contains(line, []byte(`"summary"`)) {
+			continue
+		}
+		var e struct {
+			Type        string `json:"type"`
+			CustomTitle string `json:"customTitle"`
+			AITitle     string `json:"aiTitle"`
+			Summary     string `json:"summary"`
+		}
+		if json.Unmarshal(line, &e) != nil {
+			continue
+		}
+		switch {
+		case e.Type == "custom-title" && strings.TrimSpace(e.CustomTitle) != "":
+			custom = e.CustomTitle
+		case e.Type == "ai-title" && strings.TrimSpace(e.AITitle) != "":
+			made = e.AITitle
+		case e.Type == "summary" && strings.TrimSpace(e.Summary) != "":
+			made = e.Summary
+		}
+	}
+	if custom != "" {
+		return custom
+	}
+	return made
+}
+
+// codexThreadNames are Codex's session titles by session id, from
+// session_index.jsonl (the last line for a session is its current name).
+func codexThreadNames(codexDir string) map[string]string {
+	out := map[string]string{}
+	f, err := os.Open(filepath.Join(codexDir, "session_index.jsonl"))
+	if err != nil {
+		return out
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 64<<10), 1<<20)
+	for sc.Scan() {
+		var e struct {
+			ID         string `json:"id"`
+			ThreadName string `json:"thread_name"`
+		}
+		if json.Unmarshal(sc.Bytes(), &e) == nil && e.ID != "" && strings.TrimSpace(e.ThreadName) != "" {
+			out[e.ID] = e.ThreadName
+		}
+	}
+	return out
+}
+
 // codexInputText is the text a person typed in a Codex message item.
 func codexInputText(raw json.RawMessage) string {
 	var parts []struct {
@@ -445,8 +528,13 @@ func (b *Backend) localJoin(w http.ResponseWriter, r *http.Request, c *client.Cl
 	device := orStr(b.Local.Device, "this-mac")
 	prefix := device + "-"
 	name := prefix + in.CLI + "-" + lastAlnum(in.SessionID, 4)
-	enr, err := c.CreateEnrollment(r.Context(), api.CreateEnrollmentRequest{NamePrefix: prefix, MaxUses: 1, TTLSeconds: 600,
-		Labels: []string{"machine=" + device}, Note: "myco app: local session"}, false)
+	enroll := api.CreateEnrollmentRequest{NamePrefix: prefix, MaxUses: 1, TTLSeconds: 600,
+		Labels: []string{"machine=" + device}, Note: "myco app: local session"}
+	enr, err := c.CreateEnrollment(r.Context(), enroll, false)
+	if refused(err) && b.Local.revivedHub(r.Context(), hub.URL) {
+		// This computer's own workspace had stopped: started again.
+		enr, err = c.CreateEnrollment(r.Context(), enroll, false)
+	}
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -457,8 +545,8 @@ func (b *Backend) localJoin(w http.ResponseWriter, r *http.Request, c *client.Cl
 		name += "-copy"
 		args = []string{"join", "--harness", in.CLI, "--session-id", in.SessionID, "--name", name, "--fork"}
 	}
-	if in.DisplayName != "" {
-		args = append(args, "--display-name", in.DisplayName)
+	if d := fitDisplayName(in.DisplayName); d != "" {
+		args = append(args, "--display-name", d)
 	}
 	if in.Description != "" {
 		args = append(args, "--description", in.Description)
@@ -477,6 +565,20 @@ func (b *Backend) localJoin(w http.ResponseWriter, r *http.Request, c *client.Cl
 		return
 	}
 	writeJSON(w, http.StatusOK, LocalJoinResult{Agent: j.Agent.Name, Created: j.Created, Runner: b.Local.ensureRunner(r.Context())})
+}
+
+// fitDisplayName is s on one line, cut to what a hub takes as a display
+// name (80 bytes), with "…" when cut.
+func fitDisplayName(s string) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if len(s) <= 80 {
+		return s
+	}
+	r := []rune(s)
+	for len(string(r))+len("…") > 80 {
+		r = r[:len(r)-1]
+	}
+	return strings.TrimSpace(string(r)) + "…"
 }
 
 // lastAlnum keeps the last n letters/digits of id, lowercased.

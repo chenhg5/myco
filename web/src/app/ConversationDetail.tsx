@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRightLeft, ArrowUp, ArrowUpRight, Check, ChevronRight, Copy, AudioLines, Download, Images, Loader2, Lock, MoreHorizontal, Paintbrush, Pin as PinIcon, PinOff, Search, Settings2, Square, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRightLeft, ArrowUp, ArrowUpRight, Check, ChevronRight, Copy, AudioLines, Download, Images, Loader2, Lock, MoreHorizontal, Paintbrush, Pin as PinIcon, PinOff, Search, Settings2, Square, Trash2, X } from "lucide-react";
 import { ExportChat } from "@/app/ExportChat";
 import { appApi, isTransient } from "@/appapi";
 import type { Agent, Message } from "@/api";
@@ -9,7 +9,8 @@ import { MessageContent } from "@/app/Markdown";
 import { PromptSign, STOPPED, Terminal } from "@/app/Terminal";
 import { TraceView } from "@/app/TraceView";
 import { WorkingLine } from "@/app/Working";
-import { RunPill } from "@/app/RunSettings";
+import { AccessPill, RunPill } from "@/app/RunSettings";
+import { forkAgent } from "@/app/Fork";
 import { HandoffCard, handoffsFrom } from "@/app/Handoff";
 import { TurnRail, type Turn } from "@/app/TurnRail";
 import { summarize } from "@/app/summary";
@@ -23,10 +24,10 @@ import { Avatar, whereOf, isWorkspace } from "@/app/persona";
 import { AttachButton, AttachList, dropFiles, pastedFiles, useAttachments } from "@/app/attach";
 import { useAutoGrow } from "@/app/autogrow";
 import { MessageAttachments } from "@/app/attachments";
-import { ChatFiles, type ChatFile } from "@/app/ChatFiles";
+import { ChatFiles, type ChatApp, type ChatFile } from "@/app/ChatFiles";
 import { ChatBgDialog } from "@/app/ChatBgDialog";
 import { chatKey, useChatBg } from "@/app/chatBg";
-import { PageCards, PagePinsContext, pageTargetOf, type PagePins } from "@/app/pages";
+import { PageCards, PagePinsContext, pageLinksIn, pageTargetOf, type PagePins } from "@/app/pages";
 import { VersionsContext, versionsOf } from "@/app/preview";
 import { sentTexts, useInputHistory } from "@/app/inputHistory";
 import { drafted, Reveal } from "@/app/Reveal";
@@ -165,10 +166,26 @@ function changedUntil(ms: Message[]): number {
   return t > 0 ? t - 2000 : 0;
 }
 
-/** Messages with changed ones put in (by id), in the order they were sent. */
+/** Whether a is a later copy of the same message than b. */
+function newerThan(a: Message, b: Message): boolean {
+  const ta = new Date(a.updated_at || a.created_at).getTime();
+  const tb = new Date(b.updated_at || b.created_at).getTime();
+  return ta > tb;
+}
+
+/** Messages with changed ones put in (by id), in the order they were sent.
+ *  Also how a message just sent goes in: the poll may have brought it
+ *  already, and a plain append would show it twice. */
 function mergeById(ms: Message[], changed: Message[]): Message[] {
   const by = new Map(ms.map((m) => [m.id, m]));
-  for (const m of changed) by.set(m.id, m);
+  // The newer of two copies stays: the answer to a send can come after a
+  // poll that already brought the same message further along (taken,
+  // answered); it must not put it back to 还没开始 and hide the reply.
+  for (const m of changed) {
+    const had = by.get(m.id);
+    if (had && newerThan(had, m)) continue;
+    by.set(m.id, m);
+  }
   const at = (m: Message) => new Date(m.created_at).getTime();
   return [...by.values()].sort((a, b) => at(a) - at(b) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
@@ -371,7 +388,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // Which answers came while you were looking (they grow in, Reveal.tsx):
   // not the ones there when the conversation opened, nor ones loaded in its
   // first moments.
-  const arrived = useRef<{ key: string; at: number }>({ key: "", at: 0 });
+  const arrived = useRef<{ key: string; at: number; first: Set<string> | null }>({ key: "", at: 0, first: null });
   /** Queued messages withdrawn here (a stopped one may still be polled back). */
   const [withdrawn, setWithdrawn] = useState<ReadonlySet<string>>(() => new Set());
   const [queueError, setQueueError] = useState<unknown>(null);
@@ -612,6 +629,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // makes the conversation taller above the bottom: at the bottom, it
   // stays at the bottom instead of the last lines being pushed down.
   const timelineRef = useRef<HTMLDivElement>(null);
+  // When something in the conversation was last opened by a click (see below).
+  const openedAt = useRef(0);
   // Each finished run's time, tokens and cost (from its trace), shown next
   // to its answer's time and copy instead of under the steps.
   const [usageOf, setUsageOf] = useState<Record<string, string>>({});
@@ -654,14 +673,25 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     const sc = scrollRef.current;
     if (!el || !sc || typeof ResizeObserver === "undefined") return;
     let h = el.offsetHeight;
+    // Something you opened in the conversation (展开, a run's steps, a
+    // fold): it grows where you are reading, so the view stays put instead
+    // of following the bottom, and is no longer at the bottom after it.
+    const onClick = (e: MouseEvent) => {
+      const t = e.target as Element | null;
+      if (t?.closest?.("button, summary, details, [role=button], [aria-expanded]")) openedAt.current = Date.now();
+    };
+    el.addEventListener("click", onClick, true);
     const ro = new ResizeObserver(() => {
       const nh = el.offsetHeight;
-      if (nh !== h && restoring()) putBack(sc);
+      if (nh > h && Date.now() - openedAt.current < 1000) {
+        atBottom.current = sc.scrollHeight - sc.scrollTop - sc.clientHeight < 80;
+        restoreBelow.current = 0;
+      } else if (nh !== h && restoring()) putBack(sc);
       else if (nh !== h && atBottom.current) sc.scrollTop = sc.scrollHeight;
       h = nh;
     });
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => { ro.disconnect(); el.removeEventListener("click", onClick, true); };
   }, [messages === null]);
 
   // Finding a message (ChatSearch): ⌘F in the chat last clicked in.
@@ -701,7 +731,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       }
       return;
     }
-    if (below >= 80 && atBottom.current && !yours) {
+    if (below >= 80 && atBottom.current && !yours && Date.now() - openedAt.current >= 1000) {
       // Not you: content moved the view. At the bottom it stays.
       el.scrollTop = el.scrollHeight;
       return;
@@ -807,17 +837,23 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     if (t > (saidAt.get(m.reply_to) || 0)) saidAt.set(m.reply_to, t);
   }
   const activeAt = (m: Message) => Math.max(lastActivityAt(m) || 0, saidAt.get(m.id) || 0, runActivity.get(m.id)?.at || 0);
+  // The hub says which tasks show no life (hubs from v0.20.28): left open
+  // after the work ended, or their worker went away.
+  const hubStale = new Set(row?.st.stale_tasks || []);
   const isStuck = (m: Message): boolean => {
     const offline = row?.st.state === "offline";
+    if (hubStale.has(m.id)) return true;
     if (!offline && runActivity.get(m.id)?.ended) return false;
     return possiblyStuck({ ...m, active_at: new Date(activeAt(m)).toISOString() }, { agent: row?.st.agent, receiving: row?.st.receiving, offline }, now);
   };
   const stuckLine = (m: Message): string => {
     const quiet = quietFor(now, activeAt(m));
-    return L(
-      `${quiet}没有动静，可能卡住了（结果可能没送回来）`,
-      `No activity for ${quiet}; it may be stuck (the result may not have made it back)`,
-    );
+    return row?.st.state === "offline"
+      ? L(`${quiet}没有动静，它也不在线：这条任务没收尾`, `No activity for ${quiet} and it is offline: this task was left open`)
+      : L(
+        `${quiet}没有动静：可能做完了没收尾，也可能卡住了`,
+        `No activity for ${quiet}: it may be done but left open, or stuck`,
+      );
   };
   // Every task of yours still open in this conversation, not only the newest:
   // an older one that went quiet may be stuck too. (One waiting behind the
@@ -890,7 +926,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             if (!it.threadId || (e as { code?: string }).code !== "not_found") throw e;
             m = await send(undefined);
           }
-          if (here()) setMessages((prev) => (prev ? [...prev, m] : [m]));
+          if (here()) setMessages((prev) => mergeById(prev || [], [m]));
         }
         keepQueue(flushKey, []);
         if (here()) setLocalQueue([]);
@@ -939,16 +975,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     setCopying(true);
     setCopyError(null);
     try {
-      const names = new Set((row.hub.overview?.agents || []).map((x) => x.agent.name));
-      let n = 2;
-      while (names.has(`${agent.name}-${n}`)) n++;
-      const r = await appApi.spawn(target.hubId, machine.id, {
-        cli: agent.binding.harness as "claude" | "codex", dir: agent.binding.workdir || "", fork_from: agent.binding.session_id,
-        name: `${agent.name}-${n}`, description: agent.description || undefined,
-        display_name: `${nodeName(agent, row.hub)} ${L("副本", "copy")}`,
-        ...(agent.runtime?.access ? { access: agent.runtime.access } : {}),
-      });
-      const copy = r.agent || `${agent.name}-${n}`;
+      const copy = await forkAgent(row);
       // The waiting task moves to the copy.
       if (openTask) {
         await appApi.stop(target.hubId, openTask.id).catch(() => {});
@@ -1366,6 +1393,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     setSending(true);
     setSendError(null);
     setQueueError(null);
+    const startedAt = Date.now();
     try {
       if (!target.peer && !target.threadId) {
         // The first message of a new conversation: then the whole one.
@@ -1429,7 +1457,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         onOpen(target.hubId, target.agent, m.from);
         return;
       }
-      setMessages((prev) => (prev ? [...prev, m] : [m]));
+      setMessages((prev) => mergeById(prev || [], [m]));
       writeDraft("");
       att.clear();
       histPos.current = -1;
@@ -1437,10 +1465,30 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       atBottom.current = true;
       inputRef.current?.focus();
     } catch (e) {
+      // Slow or dropped: it may have got there all the same. Look before
+      // saying it did not (and before anyone sends it twice).
+      if (isTransient(e)) {
+        const got = await landed(body, startedAt).catch(() => null);
+        if (got) {
+          setMessages((prev) => mergeById(prev || [], [got]));
+          writeDraft("");
+          att.clear();
+          histPos.current = -1;
+          chatHistory.reset();
+          return;
+        }
+      }
       setSendError(e);
     } finally {
       setSending(false);
     }
+  };
+  /** A message of yours with this text, sent since then, if the hub has it. */
+  const landed = async (body: string, since: number): Promise<Message | null> => {
+    await new Promise((r) => setTimeout(r, 1500));
+    const list = target.peer ? (await appApi.exchanges(target.hubId, target.agent, target.peer)).messages
+      : target.threadId ? (await appApi.thread(target.hubId, target.threadId)).messages : [];
+    return list.find((m) => m.body === body && isMe(m.from, row?.hub) && new Date(m.created_at).getTime() >= since - 10_000) || null;
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1494,6 +1542,48 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       setMessages((prev) => prev && prev.map((x) => (x.id === m.id ? m : x)));
     } catch (e) {
       setStopError(e);
+    }
+  };
+  // Its open tasks that are not in this conversation (other agents gave
+  // them, or other chats): said above the box, with a way to them, since
+  // nothing here would show them (a question it asked their sender, say).
+  const elsewhere = (row?.st.current || []).filter((m) => m.to === target.agent && m.type === "task"
+    && (m.status === "acked" || m.status === "held") && !(messages || []).some((x) => x.id === m.id));
+  const askingOthers = elsewhere.filter((m) => m.status === "held" && !!m.asking && !isMe(m.from, row?.hub));
+  const whoIs = (n: string) => {
+    const x = (row?.hub.overview?.agents || []).find((y) => y.agent.name === n);
+    return x ? nodeName(x.agent, row?.hub) : personLabel(n, row?.hub);
+  };
+  // A task left open: close it as done (nothing more to come), or ask its
+  // agent where it stands (a note in the task it reads with it).
+  const [nudged, setNudged] = useState<Set<string>>(new Set());
+  // Closing it for its recipient is for whoever manages that agent.
+  const canClose = !!row && canManage(row.hub, row.st.agent.owner_id);
+  const markDone = async (task: Message) => {
+    setStopError(null);
+    setResending(task.id);
+    try {
+      const m = await appApi.dismissMessage(target.hubId, task.id);
+      setMessages((prev) => prev && prev.map((x) => (x.id === m.id ? m : x)));
+      onRefresh?.();
+    } catch (e) {
+      setStopError(e);
+    } finally {
+      setResending(null);
+    }
+  };
+  const nudge = async (task: Message) => {
+    setStopError(null);
+    setResending(task.id);
+    try {
+      await appApi.steer(target.hubId, task.id, L(
+        "这条任务现在怎么样了？做完了就回复结果；还没做完就接着做，并发一下进度。",
+        "Where does this task stand? If it is done, reply with the result; if not, carry on and send your progress."));
+      setNudged((s) => new Set(s).add(task.id));
+    } catch (e) {
+      setStopError(e);
+    } finally {
+      setResending(null);
     }
   };
 
@@ -1553,7 +1643,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       const fresh = await appApi.sendMessage(target.hubId, { to: task.to, body: task.body, thread_id: task.thread_id });
       setMessages((prev) => {
         const next = prev ? prev.map((x) => (x.id === stopped.id ? stopped : x)) : [stopped];
-        return [...next, fresh];
+        return mergeById(next, [fresh]);
       });
       atBottom.current = true;
     } catch (e) {
@@ -1571,7 +1661,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     setResending(task.id);
     try {
       const fresh = await appApi.sendMessage(target.hubId, { to: task.to, body: task.body, thread_id: task.thread_id });
-      setMessages((prev) => [...(prev || []), fresh]);
+      setMessages((prev) => mergeById(prev || [], [fresh]));
       atBottom.current = true;
     } catch (e) {
       setStopError(e);
@@ -1615,7 +1705,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       resent.push(re);
       after = re.id;
     }
-    if (resent.length) setMessages((prev) => (prev ? [...prev, ...resent] : resent));
+    if (resent.length) setMessages((prev) => mergeById(prev || [], resent));
   };
   const withdrawQueueItem = async (item: QueueItem) => {
     setQueueError(null);
@@ -1706,7 +1796,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   }
   const answerAsk = (task: Message) => async (text: string) => {
     const m = await appApi.steer(target.hubId, task.id, text, undefined);
-    setMessages((prev) => (prev ? [...prev, m] : [m]));
+    setMessages((prev) => mergeById(prev || [], [m]));
     atBottom.current = true;
   };
   // A message queued behind a task joins the conversation when that task
@@ -1718,11 +1808,17 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     const end = answerOf.get(prev.id);
     return Math.max(t, end ? new Date(end.created_at).getTime() + 1 : !isOpen(prev.status) ? new Date(prev.updated_at).getTime() : t);
   };
-  if (arrived.current.key !== cacheKey(target)) arrived.current = { key: cacheKey(target), at: Date.now() };
+  if (arrived.current.key !== cacheKey(target)) arrived.current = { key: cacheKey(target), at: Date.now(), first: null };
   const now0 = Date.now();
   for (const m of messages || []) if (!firstSeen.has(m.id)) firstSeen.set(m.id, now0);
+  // What the first load brought (however long it took): already there, so
+  // it never grows in again.
+  if (messages && !arrived.current.first) arrived.current.first = new Set(messages.map((m) => m.id));
   const growsIn = (m: Message) => m.type === "reply" && !isMe(m.from, row?.hub) && !m.unreadable && !revealed.has(m.id)
     && !(m.reply_to && drafted.has(m.reply_to))
+    && !arrived.current.first?.has(m.id)
+    // (written before you opened the conversation: you are not watching it come)
+    && new Date(m.created_at).getTime() > arrived.current.at - 30_000
     && (firstSeen.get(m.id) ?? 0) - arrived.current.at > 2000;
   const visible = (shown || []).filter((m) => {
     if (m.type === "steer" && m.answers && answerTo.get(m.answers) === m) return false;
@@ -1918,6 +2014,16 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             <span className="dot pending" aria-hidden />
             <span className="conv-stuck-text">{stuckLine(m)}</span>
             <span className="conv-stuck-actions">
+              {canClose && (
+                <button type="button" className="conv-steer-btn" disabled={resending === m.id} onClick={() => void markDone(m)}
+                  title={L("已经做完了：关掉这条任务，不再算在干活", "It is done: close this task so it no longer counts as work")}>
+                  {L("标记完成", "Mark done")}
+                </button>
+              )}
+              <button type="button" className="conv-steer-btn" disabled={resending === m.id || nudged.has(m.id)} onClick={() => void nudge(m)}
+                title={L("问它这条任务怎么样了", "Ask it where this task stands")}>
+                {nudged.has(m.id) ? L("已经催了", "Asked") : L("再催一下", "Nudge")}
+              </button>
               <button type="button" className="conv-steer-btn" disabled={resending === m.id} onClick={() => void stop(m)}>
                 {L("停止", "Stop")}
               </button>
@@ -1954,7 +2060,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // The header's ⋯ menu: what is used now and then.
   const headMore: MenuItem[] = [
     ...(!termMode ? [
-      { label: L("图片和文件", "Pictures and files"), icon: Images, onSelect: () => setFilesOpen(true) },
+      { label: L("文件和应用", "Files and apps"), icon: Images, onSelect: () => setFilesOpen(true) },
       { label: L("聊天背景", "Chat background"), icon: Paintbrush, onSelect: () => setBgOpen(true) },
       "sep" as const,
     ] : []),
@@ -1962,10 +2068,15 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     ...(hoEntry.show ? [{ label: hoEntry.why ? L("换一个来接着做（现在不行）", "Hand over (not now)") : L("换一个来接着做", "Hand over to another session"), icon: ArrowRightLeft, disabled: !!hoEntry.why, onSelect: () => openHandover({ hubId: target.hubId, name: target.agent }) }] : []),
     ...(!observed && (shown?.length || 0) > 0 ? [{ label: L("导出这段对话", "Export this conversation"), icon: Download, onSelect: () => setExporting(true) }] : []),
   ].filter((it, i, all) => it !== "sep" || i < all.length - 1);
-  // Everything sent in the chat so far (what is loaded), for 图片和文件.
+  // Everything sent in the chat so far (what is loaded), for 文件和应用:
+  // files, and the apps (pages) linked in its messages.
   const chatFiles: ChatFile[] = filesOpen ? (shown || []).flatMap((m) => [
     ...(m.unreadable ? [] : (m.attachments || []).map((a) => ({ a, msg: m.id, from: m.from, at: m.created_at }))),
     ...(steersOf.get(m.id) || []).flatMap((x) => (x.unreadable ? [] : (x.attachments || []).map((a) => ({ a, msg: m.id, from: x.from, at: x.created_at })))),
+  ]) : [];
+  const chatApps: ChatApp[] = filesOpen ? (shown || []).flatMap((m) => [
+    ...(m.unreadable ? [] : pageLinksIn(m.body || "").map((p) => ({ ...p, msg: m.id, from: m.from, at: m.created_at }))),
+    ...(steersOf.get(m.id) || []).flatMap((x) => (x.unreadable ? [] : pageLinksIn(x.body || "").map((p) => ({ ...p, msg: m.id, from: x.from, at: x.created_at })))),
   ]) : [];
 
   return (
@@ -2048,7 +2159,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       {pinMenu.element}
       {headMenu.element}
       {!termMode && <ChatBgDialog open={bgOpen} onClose={() => setBgOpen(false)} chat={chatKey(target.hubId, target.agent)} name={agentName} />}
-      <ChatFiles open={filesOpen} onOpenChange={setFilesOpen} hubId={target.hubId} items={chatFiles} now={now}
+      <ChatFiles open={filesOpen} onOpenChange={setFilesOpen} hubId={target.hubId} items={chatFiles} apps={chatApps} now={now}
         nameOf={(n) => (isMe(n, row?.hub) ? L("你", "You") : nameOf(n))}
         more={exchange && more} loadingMore={loadingOlder} onMore={() => void loadOlder()} onJump={(id) => setSeek({ id, tries: 0 })} />
       <ExportChat open={exporting} onClose={() => setExporting(false)} hubId={target.hubId} withWhom={agentName}
@@ -2269,6 +2380,21 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           </div>
         )}
         {busy && <ErrorText error={copyError} />}
+        {elsewhere.length > 0 && (
+          <div className="conv-busy" data-testid="open-elsewhere">
+            <span className="dot idle" />
+            <span className="conv-busy-text">
+              {L(`它还有 ${elsewhere.length} 条别处来的任务没做完`, `It has ${elsewhere.length} more open task${elsewhere.length > 1 ? "s" : ""} from elsewhere`)}
+              {askingOthers.length > 0 && L(`，其中 ${askingOthers.length} 条在等 ${[...new Set(askingOthers.map((m) => whoIs(m.from)))].join("、")} 回答它的问题`,
+                `; ${askingOthers.length} wait${askingOthers.length > 1 ? "" : "s"} on ${[...new Set(askingOthers.map((m) => whoIs(m.from)))].join(", ")} to answer its question`)}
+              {L("。", ".")}
+            </span>
+            <button type="button" className="conv-steer-btn"
+              onClick={() => window.dispatchEvent(new CustomEvent("myco-open-profile", { detail: { hubId: target.hubId, name: target.agent } }))}>
+              {L("查看并处理", "See and handle")}
+            </button>
+          </div>
+        )}
         {!busy && offline && (
           <div className="conv-busy">
             <span className="dot idle" />
@@ -2303,6 +2429,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         {voiceOn && !shellMode && (
           <VoiceBar />
         )}
+        <SendTrouble error={sendError} stop={stopError} onRetry={sendError ? () => void send() : undefined}
+          onClose={() => { setSendError(null); setStopError(null); }} />
         <div className="conv-compose-box" onClick={() => inputRef.current?.focus()} {...dropFiles(att.add)}>
           <AttachList items={att.items} onRemove={att.remove} />
           <textarea
@@ -2336,6 +2464,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               <AttachButton onFiles={att.add} disabled={busy} />
               {/* its model and effort, small (RunSettings) */}
               {!shellMode && !observed && row && <RunPill row={row} onRefresh={async () => { await onRefresh?.(); }} />}
+              {!shellMode && !observed && row && <AccessPill row={row} onRefresh={async () => { await onRefresh?.(); }} />}
             </div>
             {/* Only what is not obvious: while it works, Enter adds to the
                 task and ⌘↩ queues the next one. */}
@@ -2383,7 +2512,6 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             )}
           </div>
         </div>
-        <ErrorText error={sendError || stopError} />
       </div>
       )}
     </div>
@@ -2399,5 +2527,27 @@ function CopyMessage({ text }: { text: string }) {
     <button type="button" className="conv-msg-copy" onClick={() => void copy()} title={L("复制", "Copy")} aria-label={L("复制", "Copy")}>
       {copied ? <Check /> : <Copy />}
     </button>
+  );
+}
+
+/** Why a message did not go (or a stop did not take), above the box: in
+ *  words, the text still in the box, 重试 and ✕; the raw error on hover. */
+function SendTrouble({ error, stop, onRetry, onClose }: { error: unknown; stop: unknown; onRetry?: () => void; onClose: () => void }) {
+  const e = error || stop;
+  if (!e) return null;
+  const transient = isTransient(e);
+  const raw = e instanceof Error ? e.message : String(e);
+  const said = (e as { suggestion?: string } | null)?.suggestion;
+  const head = error ? L("没发出去", "Not sent") : L("没能停下", "Did not stop");
+  const why = transient
+    ? L("工作区暂时连不上，或者响应太慢。", "The workspace can't be reached right now, or is answering too slowly.")
+    : raw;
+  return (
+    <div className="conv-trouble" role="alert" data-testid="send-trouble" title={transient ? raw : undefined}>
+      <AlertTriangle />
+      <span className="conv-trouble-text"><b>{head}</b>{why}{error ? L("内容还在输入框里。", " What you wrote is still in the box.") : ""}{said && !transient ? <small>{said}</small> : null}</span>
+      {onRetry && <button type="button" className="app-btn app-btn-small" onClick={onRetry}>{L("重试", "Retry")}</button>}
+      <button type="button" className="conv-trouble-x" onClick={onClose} aria-label={L("关掉", "Dismiss")}><X /></button>
+    </div>
   );
 }

@@ -11,12 +11,15 @@ import { cn } from "@/lib/utils";
  * computer's WSL: tick them, and each is logged into, set up and joined to
  * the workspace, step by step (docs/design/computers.md, "从 SSH 或 WSL 加电脑").
  */
-export function ConnectOver({ hubId, via, onConnected }: {
+export function ConnectOver({ hubId, via, onConnected, purpose = "machine" }: {
   hubId: string;
   via: "ssh" | "wsl";
-  /** one computer connected: show it */
-  onConnected: (machineId: string) => void;
+  /** one computer connected (its id), or with purpose "hub" the workspace set up (its id in this App) */
+  onConnected: (id: string) => void;
+  /** "hub": set up a workspace on one server (添加工作区) instead of connecting computers */
+  purpose?: "machine" | "hub";
 }) {
+  const forHub = purpose === "hub";
   const [hosts, setHosts] = useState<Item[] | null>(null);
   const [listError, setListError] = useState<unknown>(null);
   const [noSSH, setNoSSH] = useState<RemoteError | null>(null);
@@ -34,7 +37,11 @@ export function ConnectOver({ hubId, via, onConnected }: {
     setListError(null);
     const n = ++seq.current;
     const p: Promise<Item[]> = via === "ssh"
-      ? appApi.sshHosts(hubId).then((r) => { if (n === seq.current) setNoSSH(r.error || null); return r.hosts.map(sshItem); })
+      ? appApi.sshHosts(hubId).then((r) => {
+        if (n === seq.current) setNoSSH(r.error || null);
+        // "Connected" is about computers of a workspace: not shown when setting one up.
+        return r.hosts.map((h) => sshItem(forHub ? { ...h, connected: undefined } : h));
+      })
       : appApi.wslDistros(hubId).then((r) => r.distros.map(wslItem));
     p.then((h) => { if (n === seq.current) setHosts(h); })
       .catch((e) => { if (n === seq.current) { setHosts([]); setListError(e); } });
@@ -60,21 +67,24 @@ export function ConnectOver({ hubId, via, onConnected }: {
     return () => clearTimeout(t);
   }, [jobs]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // One computer asked for and connected: show it.
+  // One computer asked for and connected: show it. (The callback may be a
+  // new function on every render: keep the latest without restarting.)
+  const report = useRef(onConnected);
+  report.current = onConnected;
   useEffect(() => {
     const all = Object.values(jobs);
-    if (reported.current || all.length !== 1 || !all[0].done || !all[0].machine_id) return;
+    const done = all.length === 1 && all[0].done ? (forHub ? all[0].hub_id : all[0].machine_id) : undefined;
+    if (reported.current || !done) return;
     reported.current = true;
-    const id = all[0].machine_id;
-    const t = setTimeout(() => onConnected(id), 900);
+    const t = setTimeout(() => report.current(done), 900);
     return () => clearTimeout(t);
-  }, [jobs, onConnected]);
+  }, [jobs, forHub]);
 
   const start = async (routes: RemoteRoute[]) => {
     setStartError(null);
     for (const rt of routes) {
       try {
-        const j = await appApi.connectMachine(hubId, rt);
+        const j = forHub ? await appApi.installHubOver(rt) : await appApi.connectMachine(hubId, rt);
         setJobs((all) => ({ ...all, [keyOf(rt)]: j }));
       } catch (e) {
         setStartError(e);
@@ -87,9 +97,10 @@ export function ConnectOver({ hubId, via, onConnected }: {
     const q = filter.trim().toLowerCase();
     return (hosts || []).filter((h) => !q || `${h.name} ${h.sub}`.toLowerCase().includes(q));
   }, [hosts, filter]);
+  // A workspace goes on one server: picking another replaces the pick.
   const toggle = (k: string) => setPicked((s) => {
-    const n = new Set(s);
-    if (n.has(k)) n.delete(k); else n.add(k);
+    const n = new Set(forHub ? [] : s);
+    if (s.has(k)) n.delete(k); else n.add(k);
     return n;
   });
   const manualRoute = (): RemoteRoute | null => {
@@ -111,7 +122,7 @@ export function ConnectOver({ hubId, via, onConnected }: {
     <div className="cx" data-testid={`connect-${via}`}>
       {jobList.length > 0 ? (
         <div className="cx-jobs">
-          {jobList.map((j) => <JobRow key={j.id} job={j} onRetry={() => void start([j.route])} />)}
+          {jobList.map((j) => <JobRow key={j.id} job={j} forHub={forHub} onRetry={() => void start([j.route])} />)}
           {!busy && (
             <div className="cx-again">
               <button type="button" className="app-group-action" onClick={() => { setJobs({}); setPicked(new Set()); setManual(""); reported.current = false; load(); }}>
@@ -122,7 +133,9 @@ export function ConnectOver({ hubId, via, onConnected }: {
         </div>
       ) : (
         <>
-          <div className="add-note">{via === "ssh"
+          <div className="add-note">{forHub
+            ? L("选一台能用 SSH 登录的 Linux 服务器，App 会登录上去装好工作区（自动 HTTPS，地址是 <IP>.sslip.io，要能开 80、443 端口），再把它加进这个 App。已经装过的，直接加进来。只用你自己的 ssh 和 ssh-agent，不读、不存密钥。", "Pick a Linux server you can log in to with SSH: the App installs the workspace there (automatic HTTPS at <IP>.sslip.io; ports 80 and 443 must be open) and adds it to this App. If one is there already, it is just added. It uses your own ssh and ssh-agent, and never reads or keeps keys.")
+            : via === "ssh"
             ? L("勾上要连的电脑，App 会用你的 SSH 登录上去，装好 myco 并连上这个工作区。只用你自己的 ssh 和 ssh-agent，不读、不存密钥。", "Tick the computers to connect: the App logs in with your SSH, installs myco there and connects it to this workspace. It uses your own ssh and ssh-agent, and never reads or keeps keys.")
             : L("勾上要连的 WSL，App 会进去装好 myco 并连上这个工作区。", "Tick the WSL distributions to connect: the App installs myco inside and connects it to this workspace.")}</div>
           {hosts === null ? (
@@ -169,9 +182,9 @@ export function ConnectOver({ hubId, via, onConnected }: {
           )}
           <ErrorText error={startError} />
           <div className="app-modal-actions">
-            {chosen.length === 0 && hosts !== null && hosts.length > 0 && <span className="app-modal-hint">{L("先勾上要连的", "Tick one first")}</span>}
+            {chosen.length === 0 && hosts !== null && hosts.length > 0 && <span className="app-modal-hint">{forHub ? L("先选一台服务器", "Pick a server first") : L("先勾上要连的", "Tick one first")}</span>}
             <button type="button" className="app-btn app-btn-primary" disabled={chosen.length === 0} onClick={() => void start(chosen)}>
-              {chosen.length > 1 ? L(`连上这 ${chosen.length} 台`, `Connect these ${chosen.length}`) : L("连上", "Connect")}
+              {forHub ? L("装好并加进来", "Set it up") : chosen.length > 1 ? L(`连上这 ${chosen.length} 台`, `Connect these ${chosen.length}`) : L("连上", "Connect")}
             </button>
           </div>
         </>
@@ -204,9 +217,15 @@ const stepWords: Record<string, () => string> = {
   install: () => L("装好 myco，连上这个工作区", "Install myco and connect it"),
   online: () => L("等它出现在工作区里", "Wait for it on the workspace"),
 };
+const hubStepWords: Record<string, () => string> = {
+  login: () => L("登录，看看那台服务器", "Log in and look around"),
+  install: () => L("装好工作区（已经装过就跳过）", "Install the workspace (skipped if it is there)"),
+  add: () => L("加进这个 App", "Add it to this App"),
+};
 
 /** One computer being connected: its steps, and in words what went wrong. */
-function JobRow({ job, onRetry }: { job: ConnectJob; onRetry: () => void }) {
+function JobRow({ job, onRetry, forHub }: { job: ConnectJob; onRetry: () => void; forHub?: boolean }) {
+  const words = forHub ? hubStepWords : stepWords;
   const failed = job.error;
   const name = job.route.target + (job.route.port ? `:${job.route.port}` : "");
   return (
@@ -214,7 +233,7 @@ function JobRow({ job, onRetry }: { job: ConnectJob; onRetry: () => void }) {
       <div className="cx-job-name">
         {job.route.via === "ssh" ? <Server /> : <Monitor />}
         <span className="mono">{name}</span>
-        {job.done && !failed && <span className="cx-done"><Check />{L("连上了", "Connected")}</span>}
+        {job.done && !failed && <span className="cx-done"><Check />{forHub ? L("加好了", "Added") : L("连上了", "Connected")}</span>}
       </div>
       <ol className="cx-steps">
         {job.steps.map((s) => (
@@ -222,7 +241,7 @@ function JobRow({ job, onRetry }: { job: ConnectJob; onRetry: () => void }) {
             <span className="cx-step-mark">
               {s.state === "done" ? <Check /> : s.state === "failed" ? <X /> : s.state === "running" ? <span className="app-spinner" /> : <span className="cx-dot" />}
             </span>
-            <span>{stepWords[s.key]?.() || s.key}{s.key === "login" && s.state === "done" && job.found?.os && (
+            <span>{words[s.key]?.() || s.key}{s.key === "login" && s.state === "done" && job.found?.os && (
               <span className="cx-step-sub"> · {job.found.os} {job.found.arch}{job.found.myco ? ` · myco ${job.found.myco.replace(/^myco\s+/, "")}` : ""}</span>
             )}</span>
           </li>
@@ -263,6 +282,8 @@ export function remoteErrorText(e: RemoteError, rt: RemoteRoute): string {
     case "missing_bash": return L("那台电脑上没有 bash：先装上，再重试。", "It has no bash: install it and try again.");
     case "install_failed": return L("装的时候出错了，下面是它最后打印的几行。", "Installing failed; the last lines it printed are below.");
     case "not_online": return L("装好了，但它还没出现在工作区里：多半是那台电脑连不上这个工作区的地址。", "It is set up but has not shown up on the workspace: most likely it cannot reach the workspace's address.");
+    case "needs_sudo": return L("装工作区要 root 权限，而那台服务器上的 sudo 要输密码，App 替你输不了。在终端里运行下面这条（会问 sudo 密码），装好后用它最后打印的链接添加；或者用 root 登录。", "Installing the workspace needs root, and sudo there asks for a password the App cannot type. Run the line below in a terminal (it asks for the sudo password) and add the workspace with the link it prints last; or log in as root.");
+    case "hub_unreachable": return L("工作区装好了，但从这台电脑连不上它的地址：多半是服务器的防火墙或云服务商的安全组没放开 80、443 端口。放开后点「重试」（已经装好的会直接加进来）。", "The workspace is installed but this computer cannot reach its address: most likely the server's firewall or the cloud provider's security group blocks ports 80 and 443. Open them and try again (it is not installed twice).");
     case "no_service": return L("装好也连上了，但那台电脑上装不了 myco 后台服务（没有 systemd 用户服务，比如容器、没开 systemd 的 WSL）。在那台电脑上运行下面这条，并让它一直开着（比如放在 tmux 里）：", "Installed and joined, but the runner service cannot be installed there (no systemd user services: a container, or WSL without systemd). Run this there and keep it running (in tmux, say):");
     case "wsl_missing": return L("找不到这个 WSL：在 PowerShell 里运行 wsl -l -v 看看有哪些。", "No such WSL distribution: run wsl -l -v in PowerShell to see which there are.");
     case "ssh_missing": return L("这台电脑上没有 ssh 命令。", "This computer has no ssh command.");

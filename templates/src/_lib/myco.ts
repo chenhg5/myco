@@ -13,6 +13,8 @@ interface Bridge {
     on(f: (c: MycoChange) => void): () => void;
   };
   download(name: string, content: string | Blob | ArrayBuffer | Uint8Array, type?: string): Promise<{ path: string }>;
+  /** What the App's bridge can do (Apps from v0.20.27); missing in older ones. */
+  features?: string[];
 }
 
 export const myco = (window as unknown as { myco?: Bridge }).myco;

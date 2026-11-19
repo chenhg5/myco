@@ -34,9 +34,9 @@
      ```
 2. **第一次打开**，二选一：
    - **在这台电脑上开始**：一键在本机开一个 Hub，这台电脑自动作为第一台机器加入。
-   - **连接已有的 Hub**：粘贴别人发给你的邀请链接，或 Hub 管理员给你的 App 连接链接。
+   - **连接已有的 Hub**：粘贴别人发给你的邀请链接，或 Hub 管理员给你的 App 连接链接。还没有工作区、手上有一台能用 SSH 登录的 Linux 服务器时，点「还没有链接？」›「用 SSH 装到服务器上」：选一台，App 登录上去装好工作区（自动 HTTPS，地址是 `<IP>.sslip.io`，要能开 80、443 端口），再把它加进 App。要 root 登录，或者 sudo 不需要密码；已经装过的直接加进来，不改原来的设置。
 3. **添加节点**：「添加节点 → 本机的 agent」列出这台电脑上最近的 Claude Code、Codex 会话，点一下就加入；也可以生成邀请链接，接入其他电脑上的 agent，或者在已加入的机器上开新会话、加 Shell 节点。
-   - **云服务器（VPS）或别的电脑上的会话**：「添加 agent → 连一台电脑」。能用 SSH 登录的电脑选「用 SSH 连」：列出 `~/.ssh/config` 里的主机，勾上点「连上」，App 用你自己的 ssh 和 ssh-agent 登录上去装好 myco 并连上，每一步打勾，出错时说明原因并给出在终端里试的命令（App 不能替你输密码或密钥口令，要先 `ssh-add`；第一次连的主机先在终端里 `ssh` 一次接受指纹）；只支持 Linux 和 macOS。Windows 上还有「这台 Windows 里的 WSL」，勾上发行版就装进去。别的情况用「复制命令」：一条命令，在那台电脑上运行（工作区只在本机或局域网能连时，弹窗会先说明，并给「开放到公网」）。连上后弹窗切到那台电脑，列出它上面的 Claude Code、Codex 会话，点一下就复制一份加入；也能「新开一个」。这要那台电脑上的 myco 是 v0.20.14 或之后。
+   - **云服务器（VPS）或别的电脑上的会话**：「添加 agent → 连一台电脑」。能用 SSH 登录的电脑选「用 SSH 连」：列出 `~/.ssh/config` 里的主机，勾上点「连上」，App 用你自己的 ssh 和 ssh-agent 登录上去装好 myco 并连上，每一步打勾，出错时说明原因并给出在终端里试的命令（App 不能替你输密码或密钥口令，要先 `ssh-add`；第一次连的主机先在终端里 `ssh` 一次接受指纹）；只支持 Linux 和 macOS。Windows 上还有「这台 Windows 里的 WSL」，勾上发行版就装进去。别的情况用「复制命令」：一条命令，在那台电脑上运行（工作区只在本机或局域网能连时，弹窗会先说明，并给「开放到公网」）。连上后弹窗切到那台电脑，列出它上面的 Claude Code、Codex 会话，点一下就复制一份加入，名字用会话原来的标题（Claude Code 里 /rename 起的或它自己起的、Codex 的会话名，没有就用第一句话）；也能「新开一个」。这要那台电脑上的 myco 是 v0.20.14 或之后。那台电脑的 myco 太旧、或者负责开会话的后台没连上时，弹窗会说明是哪一种：这台电脑点「升级 myco」或「修复」就在 App 里升级并重启，不用开终端；别的电脑设好了 SSH 或 WSL 也能一键修，否则给出要在那台电脑上运行的命令。
 4. **对话**：在「对话」页给节点发任务，人和 agent、agent 之间、agent 调用 Shell 的往来都在这里；和 Shell 节点的对话就是一个终端。
 
 以后在 App 的「设置 → 关于」里一键更新。App 的完整说明见[第 9 节](#9-控制台-appmac--windows--linux)。
@@ -185,7 +185,7 @@ myco hub up --tunnel none                                    # 不穿透：只�
 | 方式 | 准备工作 | 地址 |
 |---|---|---|
 | Cloudflare 命名隧道 | 免费 Cloudflare 账号；域名托管在 Cloudflare；装好 `cloudflared` 并执行一次 `cloudflared tunnel login` | `https://hub.example.com`，固定 |
-| Tailscale Funnel | 免费 Tailscale 账号；装好 Tailscale 并登录；在 Tailscale 后台为这台设备开启 Funnel（第一次执行时会给出链接）；Linux 上可能要先执行一次 `sudo tailscale set --operator=$USER` | `https://<机器名>.<tailnet>.ts.net`，固定 |
+| Tailscale Funnel | 免费 Tailscale 账号；装好 Tailscale 并登录；在 Tailscale 后台为这台设备开启 Funnel（第一次执行时会给出链接）；Linux 上可能要先执行一次 `sudo tailscale set --operator=$USER`；Mac 上 Tailscale App 同一时间只给一个 macOS 用户用，最好在 Tailscale 菜单 › Settings 里装上它的命令行（Install CLI） | `https://<机器名>.<tailnet>.ts.net`，固定 |
 | Cloudflare 快速隧道 | 只需装好 `cloudflared` | `https://<随机>.trycloudflare.com`，**每次重启都会变** |
 
 - 执行时会先在前台检查隧道（没装、没登录、Funnel 没开都会直接告诉你怎么处理），然后安装后台服务（macOS 用 launchd，Linux 用 systemd --user），等 Hub 通过隧道能访问后，打印入网链接。可以重复执行。
@@ -197,7 +197,7 @@ myco hub up --tunnel none                                    # 不穿透：只�
 - claude.ai 云端环境如果使用网络白名单，要把 Hub 的域名加进允许访问的主机。
 - **只在局域网用**（`--tunnel none`，App 里"在这台电脑上开始"默认就是这个）：Hub 监听所有网卡，同一个局域网（同一个 Wi-Fi、同一个公司内网）里的电脑能直接连。在这台电脑上生成的邀请链接、入网链接会自动用本机的局域网地址（如 `http://192.168.1.20:7777/...`），而不是 `127.0.0.1`。注意：
   - 局域网里是明文 HTTP，令牌会在局域网里明文传输，只在信得过的网络里用；跨网络、给云端会话用，请用上面的穿透方式。
-  - 局域网地址由路由器分配，可能会变；变了以后，已加入的机器要用新地址重新加入。可以在路由器里给这台电脑固定 IP。电脑同时连了好几个网络时，用环境变量 `MYCO_LAN_ADDR=<地址>` 指定用哪个（`MYCO_LAN_ADDR=<地址> myco hub up --tunnel none`，它会带进服务里）。找不到局域网地址时，链接只能写成 `127.0.0.1`（只有本机能用）：`myco link create`、`myco console link`、`myco hub up` 这时会给出警告和这个办法。
+  - 局域网地址由路由器分配，可能会变；变了以后，别的电脑要用新地址重新加入（这台电脑自己不用：它的 runner 连不上旧地址时，会改从本机 `127.0.0.1` 连同一个工作区，先用令牌确认是同一个）。可以在路由器里给这台电脑固定 IP。电脑同时连了好几个网络时，用环境变量 `MYCO_LAN_ADDR=<地址>` 指定用哪个（`MYCO_LAN_ADDR=<地址> myco hub up --tunnel none`，它会带进服务里）。找不到局域网地址时，链接只能写成 `127.0.0.1`（只有本机能用）：`myco link create`、`myco console link`、`myco hub up` 这时会给出警告和这个办法。
   - Mac 第一次会弹出"是否允许 myco 接受传入的网络连接"，要选允许。
   - 只想给本机用：`myco hub up --tunnel none --local-only`（只监听 127.0.0.1）。
   - v0.18.2 及之前用 `--tunnel none` 开的 Hub 只监听 127.0.0.1。打开 v0.18.3 及以后的 App 时会自动处理一次：命令行工具太旧就先 `myco upgrade`，再重新执行 `myco hub up --tunnel none`（用了穿透、或者特意加了 `--local-only` 的不动）。不用 App 的话，自己执行这两条即可。
@@ -490,7 +490,7 @@ runner:
 
 `full` 就是跳过所有权限确认，runner 启动时会打印警告；只在隔离的机器上用，原因见第 7 节。
 
-无论哪个级别，被 runner 唤醒的 Claude Code 都允许执行 `myco` 开头的命令（`--allowedTools "Bash(myco:*)"`），这样它能自己回复、挂起任务、再派活给别的 agent；其他命令仍然受权限级别控制。Codex 在 `workspace` 级别下会打开沙箱的网络访问，否则 `myco` 连不上 Hub；代价是沙箱里的其他命令也能联网。另外 `runner.model`（或 `--model`）用来指定模型。也可以在 App 的 agent 卡片上直接选模型和推理强度（v0.19.5 起，存在 Hub 上，任何一台机器上的 agent 都能改，从下一次唤醒起生效，优先于这台机器的设置）；推理强度对应 Claude Code 的 `--effort` 和 Codex 的 `model_reasoning_effort`。runner 每次运行后还会上报这个账号的额度（Claude Code 的 5 小时、7 天窗口；Codex 的各个窗口），显示在 agent 卡片上。用 `myco inbox wait` 自己收消息的会话不经过 runner，myco 拿不到它的模型和额度，也改不了；Claude Code 和 Codex 的会话里，`myco inbox wait` 每次开始等时会从会话自己的记录里读出最近一轮用的模型（Claude Code 还有推理强度），自动报给 Hub，只用于显示；别的 CLI 可以用 `myco agent runtime set --model …` 报一下。
+无论哪个级别，被 runner 唤醒的 Claude Code 都允许执行 `myco` 开头的命令（`--allowedTools "Bash(myco:*)"`），这样它能自己回复、挂起任务、再派活给别的 agent；其他命令仍然受权限级别控制。Codex 在 `workspace` 级别下会打开沙箱的网络访问，否则 `myco` 连不上 Hub；代价是沙箱里的其他命令也能联网。另外 `runner.model`（或 `--model`）用来指定模型。也可以在 App 的 agent 卡片上直接选模型和推理强度（v0.19.5 起，存在 Hub 上，任何一台机器上的 agent 都能改，从下一次唤醒起生效，优先于这台机器的设置）；推理强度对应 Claude Code 的 `--effort` 和 Codex 的 `model_reasoning_effort`。权限也能在对话输入框旁边直接切换（只读、工作区、完全；只有 agent 的主人能改，最高到那台电脑允许的级别，这台电脑可以当场放开到「完全」），同样从下一次唤醒起生效。runner 每次运行后还会上报这个账号的额度（Claude Code 的 5 小时、7 天窗口；Codex 的各个窗口），显示在 agent 卡片上。用 `myco inbox wait` 自己收消息的会话不经过 runner，myco 拿不到它的模型和额度，也改不了；Claude Code 和 Codex 的会话里，`myco inbox wait` 每次开始等时会从会话自己的记录里读出最近一轮用的模型（Claude Code 还有推理强度），自动报给 Hub，只用于显示；别的 CLI 可以用 `myco agent runtime set --model …` 报一下。
 
 ### 注意事项（适用于 4.2 到 4.5）
 
@@ -716,6 +716,7 @@ spawn:
 ### 4.12.1 复制会话（fork）
 
 不想让 agent 接着用你正在用的会话时，可以复制一份再加入：新节点带着原会话的全部上下文，之后两边各干各的，原会话不受影响（Claude Code 和 Codex）。
+- 已经在工作区里的 Claude Code、Codex agent：在左边会话列表或右边成员上右键，选「复制一份」，起个名字就好（在项目里复制的，可以顺手放进这个项目）。副本在同一台电脑、同一个文件夹，之后自动打开和它的对话。
 - 加入本机会话：App 里"添加节点 → 本机的 agent"默认就是"复制一份加入"；命令行在会话里运行 `myco join --fork`。
 - 复制已有节点：节点详情 → "复制一个…"，在同一台机器、同一个目录里复制出一个新节点（需要那台机器能新建会话）。
 - 复制要跑一轮很短的对话，会消耗一次模型调用。
@@ -898,8 +899,8 @@ myco page data watch --page pg_xxx            # 等着看人在网页里改了�
 ```
 给 agent 的内容是一层层给的，应用再多也不会一下子塞给它：技能里只有一小段怎么用应用（不列应用）；`myco template list` 每个应用只有一行（叫什么、做什么用、分类，不带图标、数据结构和说明，可以按 `--category`、`--query` 筛）；选中一个再用 `myco template get` 或 `use` 拿到它自己的数据结构和说明（`agent.md`）。
 - **数据**：每条记录单独存、带版本号，同时改同一条时后到的会被拒，并拿到最新的那条；改不同的行互不影响。用应用建的网页会按应用的字段检查每条记录。一条最多 64KB，一个网页最多 2 万条。
-- **网页里**：myco 桥多了 `myco.data.list / get / put / remove / on`（读写记录、收到别人改的）和 `myco.download(文件名, 内容, 类型)`（导出的 CSV、Excel、PDF 等存到「下载」，在访达 / 资源管理器里显示出来）。
-- **官方应用**（Hub v0.20.5 起，每个工作区都有）：`myco/table` 表格（像飞书表格：列有类型，单选、多选是彩色标签；框选复制、从 Excel 粘贴、拖填充柄往下填；拖列宽、拖动行和列；筛选、排序、Ctrl+F 搜索；导出 Excel / CSV）、`myco/base` 多维表格（同一套表格，加上看板、日历、画廊、表单视图，点一条在右侧展开）、`myco/doc` 文档（像飞书文档：输入「/」插入标题、列表、待办、表格、代码块，选中文字改格式，拖动段落；每段单独保存，两个人改不同段落不冲突；导出 Markdown / 网页）、`myco/slides` 幻灯片（agent 写每页的版式和内容，网页按主题排好：封面、要点、图表、数字卡片、表格、引言；点哪改哪，拖动换顺序，全屏放映，导出能接着改的 PowerPoint）。Hub v0.20.6 起官方应用按类分栏，还有：编程开发的「代码编辑器」（VS Code 同款编辑器，文件树、多标签、HTML 预览、下载 zip）和「开发者工具箱」（JSON、Base64、URL、MD5/SHA、时间戳、UUID、JWT、正则、文本对比等）；效率工具的「待办清单」「投票」；生活的「记账本」「习惯打卡」；创意设计的「白板」「思维导图」；游戏的「五子棋」（能和 agent 下）「数独」。官方应用从 Hub v0.20.7 起单独发布：Hub 每天自己拉新的（`myco template sync` 或应用页的「检查官方应用更新」立刻拉），不用为了新应用升级 Hub；用应用建的网页在应用出新版本时会提示「升级」（`myco page upgrade --page <id>`），数据不变。表格里直接打字（英文、数字）就开始编辑；输入中文时先按回车或双击格子再打字。在 App 里点边栏的「应用」，选一个、起个名字就新建一份；agent 用 `myco template use --template myco/base --name 招聘进度 --sample`。
+- **网页里**：myco 桥多了 `myco.data.list / get / put / remove / on`（读写记录、收到别人改的）和 `myco.download(文件名, 内容, 类型)`（导出的 CSV、Excel、PDF、图片，以及视频剪辑导出的 mp4，存到「下载」，在访达 / 资源管理器里显示出来；存视频要新版本的 App）。
+- **官方应用**（Hub v0.20.5 起，每个工作区都有）：`myco/table` 表格（像飞书表格：列有类型，单选、多选是彩色标签；框选复制、从 Excel 粘贴、拖填充柄往下填；拖列宽、拖动行和列；筛选、排序、Ctrl+F 搜索；导出 Excel / CSV）、`myco/base` 多维表格（同一套表格，加上看板、日历、画廊、表单视图，点一条在右侧展开）、`myco/doc` 文档（像飞书文档：输入「/」插入标题、列表、待办、表格、代码块，选中文字改格式，拖动段落；每段单独保存，两个人改不同段落不冲突；导出 Markdown / 网页）、`myco/slides` 幻灯片（agent 写每页的版式和内容，网页按主题排好：封面、要点、图表、数字卡片、表格、引言；点哪改哪，拖动换顺序，全屏放映，导出能接着改的 PowerPoint）。Hub v0.20.6 起官方应用按类分栏，还有：编程开发的「代码编辑器」（VS Code 同款编辑器，文件树、多标签、HTML 预览、下载 zip）和「开发者工具箱」（JSON、Base64、URL、MD5/SHA、时间戳、UUID、JWT、正则、文本对比等）；效率工具的「待办清单」「投票」；生活的「记账本」「习惯打卡」；创意设计的「白板」「思维导图」「视频剪辑」（导入 mp4，时间线上分割、裁剪、调顺序、变速，加文字、模糊和马赛克，在本机导出 mp4；视频只存在这台电脑上，Hub 只存剪辑方案，agent 按备注帮你剪）；游戏的「五子棋」（能和 agent 下）「数独」。官方应用从 Hub v0.20.7 起单独发布：Hub 每天自己拉新的（`myco template sync` 或应用页的「检查官方应用更新」立刻拉），不用为了新应用升级 Hub；用应用建的网页在应用出新版本时会提示「升级」（`myco page upgrade --page <id>`），数据不变。表格里直接打字（英文、数字）就开始编辑；输入中文时先按回车或双击格子再打字。在 App 里点边栏的「应用」，选一个、起个名字就新建一份；agent 用 `myco template use --template myco/base --name 招聘进度 --sample`。
 - **谁能用**：工作区里的人和 agent 都能看到应用、用应用新建网页；发布应用的人（或同一个主人的 agent）和管理员能发新版本、删除。网页谁能看、谁能改数据，和普通网页一样。
 
 ## 5. 接入后的自检
@@ -991,7 +992,7 @@ myco upgrade --version v0.16.5        # 安装指定版本（也可以用来回�
     - 还不支持：语音、听写（只有 Mac 有），`myco://` 链接（和 Windows 一样，把链接粘贴进 App）。
 - **自己构建**：Mac 上 `make app` 生成 `bin/myco.app`（需要 Go 和 Xcode 命令行工具），`scripts/mac-sign.sh` 生成签名、公证后的通用版和 DMG；Windows 版 `GOOS=windows go build ./cmd/myco-app` 即可（不需要 cgo），Linux 版 `go build ./cmd/myco-app` 也一样。
 - **第一次打开**：两个选择。
-  - **在这台电脑上开始**：一键在本机启动 Hub（默认只在本机和局域网可用），App 自动接入它，这台电脑也作为第一台机器加入，可以直接在上面开新会话。之前已经启动过本机 Hub、但这台电脑还不在「机器」页的，v0.18.11 起 App 打开时会自动补上（不会重启正在运行的 runner）。
+  - **在这台电脑上开始**：一键在本机启动 Hub（默认只在本机和局域网可用），App 自动接入它，这台电脑也作为第一台机器加入，可以直接在上面开新会话。之前已经启动过本机 Hub、但这台电脑还不在「机器」页的，v0.18.11 起 App 打开时会自动补上（不会重启正在运行的 runner）。本机的工作区或 runner 服务装着却停了（不是在 App 里点「停止」停的，那会把服务删掉），App 发现后会把它重新启动，用原来的设置；更新 App 时，这台电脑上的 myco 命令行也会一起升级（后台服务下次重启时换成新版，可以在添加 agent 弹窗里点「修复」马上重启）。
   - **连接已有的 Hub**：粘贴 **App 连接链接**（`https://<hub>/c/<令牌>`，同时带了 Hub 地址和控制台令牌）。`install-hub.sh` 首次安装时会打印一条；以后在 Hub 机器上再生成：
     ```bash
     sudo /usr/local/bin/myco console link --name <设备名>

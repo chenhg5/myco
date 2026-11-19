@@ -1,5 +1,8 @@
 # 新用户完整流程：可能卡住的地方和实机测试清单
 
+**在自己的 Mac 上从头走一遍**：`bash scripts/mac-fresh-start.sh clean` 先退出 App、停掉 myco 的后台服务，再把 myco 在这台 Mac 上的东西都挪进 `~/myco-fresh-backup/<时间>/`（不删）：`~/.myco`、App 的设置和页面数据、后台服务、命令行，还有 `/Applications/myco.app`（加 `--keep-app` 保留 App）。这时这台 Mac 就像没装过 myco，下载 App 从头开始。走完运行 `bash scripts/mac-fresh-start.sh restore`：停掉试用时起的服务，把试用留下的文件挪到备份里的 `leftovers-<时间>/`，再把原来的放回去、重启服务。服务器上的工作区不受影响；清理期间这台 Mac 上的 agent 都离线。`status` 看现在的状态，`--dry-run` 只列出会做什么。
+
+
 给在一台**真正空白的机器**上从头试 myco 的人用（像 Mac mini 那位用户的情况）。按顺序做，每一步记下：用了多久、看到了什么、有没有卡住、卡住时「详细信息」里的原文（点「复制」）。
 
 一台机器只试一条路。建议至少试三台（或三次干净的环境）：

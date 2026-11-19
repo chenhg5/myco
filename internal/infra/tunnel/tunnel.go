@@ -72,17 +72,54 @@ func (e *Error) Error() string { return e.Msg }
 
 // run executes a command and returns its combined output.
 func run(ctx context.Context, name string, args ...string) (string, error) {
-	out, err := exec.CommandContext(ctx, name, args...).CombinedOutput()
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.WaitDelay = 2 * time.Second
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return string(out), fmt.Errorf("%s %s: %w: %s", name, strings.Join(args, " "), err, strings.TrimSpace(string(out)))
 	}
 	return string(out), nil
 }
 
+// runUntil runs a command, giving each output line (stdout and stderr) to
+// stop; when stop says so, the command is ended. It returns all output.
+func runUntil(ctx context.Context, name string, args []string, stop func(string) bool) (string, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.WaitDelay = 2 * time.Second
+	pr, pw := io.Pipe()
+	cmd.Stdout, cmd.Stderr = pw, pw
+	if err := cmd.Start(); err != nil {
+		return "", err
+	}
+	var all strings.Builder
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		sc := bufio.NewScanner(pr)
+		for sc.Scan() {
+			all.WriteString(sc.Text() + "\n")
+			if stop(sc.Text()) {
+				cancel()
+			}
+		}
+	}()
+	err := cmd.Wait()
+	pw.Close()
+	<-done
+	if err != nil {
+		return all.String(), fmt.Errorf("%s %s: %w: %s", name, strings.Join(args, " "), err, strings.TrimSpace(all.String()))
+	}
+	return all.String(), nil
+}
+
 // runSplit runs a command and returns its stdout and stderr apart.
 func runSplit(ctx context.Context, name string, args ...string) (stdout, stderr string, err error) {
 	var o, e strings.Builder
 	cmd := exec.CommandContext(ctx, name, args...)
+	// A child that keeps the output open must not keep us waiting.
+	cmd.WaitDelay = 2 * time.Second
 	cmd.Stdout, cmd.Stderr = &o, &e
 	err = cmd.Run()
 	return o.String(), e.String(), err

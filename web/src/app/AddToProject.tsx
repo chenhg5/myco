@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, Cloud, Globe, Info, Laptop, Plus, Users } from "lucide-react";
+import { Check, ChevronDown, Cloud, FileText, Globe, Info, Laptop, Plus, Upload, Users, X } from "lucide-react";
 import { ConnectOver } from "@/app/ConnectOver";
+import { ClaudeAuthFix, isClaudeAuthError } from "@/app/ClaudeAuthFix";
 import { appApi, type Hub, type JoinLink, type LocalSession, type LocalState, type MachineInfo, type MachineSession, type SpawnCli } from "@/appapi";
 import { IconAsterisk, IconCode } from "@/components/icons";
 import type { Machine, Project } from "@/api";
 import type { AgentRow } from "@/app/types";
-import { agentKind, machineShell, machinesOfHub, nodeName, osInfo, thisComputerId } from "@/app/nodes";
+import { agentKind, machineShell, machinesOfHub, nodeName, osInfo, sessionDisplayName, thisComputerId } from "@/app/nodes";
 import { Avatar, isWorkspace, whereOf } from "@/app/persona";
 import { CopyButton } from "@/app/copy";
 import { computerPrompt } from "@/app/agentSetup";
@@ -15,11 +16,13 @@ import { ErrorText, Modal } from "@/app/dialogs";
 import { LocalAgentLines } from "@/app/LocalAgents";
 import { EFFORTS, MODELS, effortLabel } from "@/app/RunSettings";
 import { machineMakesFolders, machineTellsInfo } from "@/app/hubVersion";
+import { ComputerFix } from "@/app/ComputerFix";
 import { askable, cachedMachineInfo, fetchMachineInfo, forgetMachineInfo } from "@/app/machineInfoCache";
 import { PublicAccessDialog } from "@/app/SettingsPage";
+import { localWorkspaceOf } from "@/app/localHubs";
 import type { RuntimeAccess } from "@/api";
 import { L } from "@/lib/i18n";
-import { cn, timeAgo } from "@/lib/utils";
+import { bytes, cn, timeAgo } from "@/lib/utils";
 
 /**
  * Lets a new member use the project's workspaces: each one's "who may run
@@ -85,6 +88,16 @@ const NEW_CLIS: { value: SpawnCli; label: string }[] = [
   { value: "opencode", label: "OpenCode" },
   { value: "kiro", label: "Kiro" },
   { value: "pi", label: "Pi" },
+  { value: "qoder", label: "Qoder CLI" },
+  { value: "qwen", label: "Qwen Code" },
+  { value: "kimi", label: "Kimi Code" },
+  { value: "goose", label: "goose" },
+  { value: "copilot", label: "GitHub Copilot" },
+  { value: "auggie", label: "Auggie" },
+  { value: "codebuddy", label: "CodeBuddy Code" },
+  { value: "kilo", label: "Kilo Code" },
+  { value: "cline", label: "Cline" },
+  { value: "grok", label: "Grok" },
 ];
 
 /** What a computer told about itself, as the dialog keeps it. */
@@ -251,7 +264,7 @@ export function AddAgentDialog({ open, hub, project, projects = [], rows, start,
     setJoining(s.session_id);
     setJoinError(null);
     try {
-      const r = await appApi.localJoin(hubId, { cli: s.cli, session_id: s.session_id, workdir: s.workdir, fork: true });
+      const r = await appApi.localJoin(hubId, { cli: s.cli, session_id: s.session_id, workdir: s.workdir, fork: true, display_name: sessionDisplayName(s.title) });
       await arrived(r.agent);
     } catch (e) {
       setJoinError(e);
@@ -264,7 +277,7 @@ export function AddAgentDialog({ open, hub, project, projects = [], rows, start,
     setJoining(s.session_id);
     setJoinError(null);
     try {
-      const r = await appApi.spawn(hubId, m.id, { cli: s.cli, dir: s.workdir, fork_from: s.session_id });
+      const r = await appApi.spawn(hubId, m.id, { cli: s.cli, dir: s.workdir, fork_from: s.session_id, display_name: sessionDisplayName(s.title) });
       await arrived(r.agent);
       loadInfo(m, true);
     } catch (e) {
@@ -415,7 +428,7 @@ export function AddAgentDialog({ open, hub, project, projects = [], rows, start,
       )}
 
       {where.startsWith("m:") && how === "existing" && picked && (
-        <RemoteSessions machine={picked} state={pickedInfo} joining={joining} joinError={joinError}
+        <RemoteSessions hubId={hubId} machine={picked} state={pickedInfo} joining={joining} joinError={joinError}
           onJoin={(s) => void joinRemote(picked, s)} onRetry={() => loadInfo(picked)} />
       )}
 
@@ -524,25 +537,9 @@ function ByProgram({ count, open, children }: { count: number; open: boolean; ch
   );
 }
 
-/** Says why a computer could not tell what it has. */
-function infoErrorText(error: unknown): React.ReactNode {
-  const code = (error as { code?: string })?.code;
-  if (code === "too_old") {
-    return (
-      <div className="app-notice" data-testid="info-too-old">
-        <Info />
-        <div>
-          <div>{L("那台电脑上的 myco 版本太旧，看不到它上面的会话和 AI。在那台电脑上运行下面这行升级，再回来：", "The myco on that computer is too old to list its sessions and AIs. Upgrade it there with this, then come back:")}</div>
-          <div className="app-command"><code>myco upgrade</code><CopyButton value="myco upgrade" /></div>
-        </div>
-      </div>
-    );
-  }
-  return <ErrorText error={error} />;
-}
-
 /** The sessions on another computer: a copy of one joins (it starts there). */
-function RemoteSessions({ machine, state, joining, joinError, onJoin, onRetry }: {
+function RemoteSessions({ hubId, machine, state, joining, joinError, onJoin, onRetry }: {
+  hubId: string;
   machine: Machine;
   state?: InfoState;
   joining: string;
@@ -555,13 +552,15 @@ function RemoteSessions({ machine, state, joining, joinError, onJoin, onRetry }:
     return <div className="add-pane"><div className="app-empty-note">{L(`「${machine.name}」现在不在线：它开机、myco 在运行时，这里会列出它上面的会话。`, `“${machine.name}” is away: once it is on and myco runs there, its sessions show here.`)}</div></div>;
   }
   if (!machine.can_spawn || !machineTellsInfo(machine.myco_version)) {
-    return <div className="add-pane">{infoErrorText({ code: "too_old" })}</div>;
+    return <div className="add-pane"><ComputerFix hubId={hubId} machine={machine} here={false} /></div>;
   }
   if (!state || state.loading) {
     return <div className="add-pane"><div className="add-waiting"><Mushroom /><span>{L(`正在问「${machine.name}」上有哪些会话…`, `Asking “${machine.name}” for its sessions…`)}</span></div></div>;
   }
   if (state.error || !state.info) {
-    return <div className="add-pane">{infoErrorText(state.error)}{(state.error as { code?: string })?.code !== "too_old" && <button type="button" className="app-btn app-btn-small" onClick={onRetry}>{L("再试一次", "Try again")}</button>}</div>;
+    return (state.error as { code?: string })?.code === "too_old"
+      ? <div className="add-pane"><ComputerFix hubId={hubId} machine={{ ...machine, myco_version: "" }} here={false} /></div>
+      : <div className="add-pane"><ErrorText error={state.error} /><button type="button" className="app-btn app-btn-small" onClick={onRetry}>{L("再试一次", "Try again")}</button></div>;
   }
   const info = state.info;
   const q = query.trim().toLowerCase();
@@ -643,29 +642,66 @@ function ReachNote({ url, hubUrl, local, onOpened, onRelink }: {
   const [open, setOpen] = useState(false);
   const reach = reachOf(url);
   if (reach === "public") return null;
-  const strip = (u: string) => u.replace(/\/+$/, "");
-  const mine = (local?.hubs || []).find((h) => [h.local_url, h.public_url].filter(Boolean).map((u) => strip(u!)).includes(strip(hubUrl)));
-  const text = reach === "local"
-    ? L("这个工作区现在只有这台电脑能连上：别的电脑（比如云服务器）运行这条命令会连不上。", "Only this computer can reach this workspace now: another computer (a cloud server, say) can't connect with this command.")
+  // On this computer (by any of its addresses): opened right here.
+  const mine = localWorkspaceOf(local, hubUrl);
+  const [title, detail] = reach === "local"
+    ? [L("只有这台电脑能连上这个工作区", "Only this computer can reach this workspace"),
+      L("别的电脑（比如云服务器）运行这条命令会连不上。", "Another computer (a cloud server, say) can't connect with this command.")]
     : reach === "tailnet"
-      ? L("这个工作区的地址在 Tailscale 网络里：只有同一个 Tailscale 网络里的电脑能连上。", "This workspace's address is on a Tailscale network: only computers on that network can connect.")
-      : L("这个工作区现在只在局域网里能连上：同一个网络里的电脑可以，云服务器（VPS）连不上。", "This workspace is reachable on the local network only: computers on the same network can connect, a cloud server (VPS) can't.");
+      ? [L("只有同一个 Tailscale 网络里的电脑能连上", "Only computers on the same Tailscale network can connect"),
+        L("这个工作区的地址在 Tailscale 网络里，不在这个网络里的电脑（比如云服务器）连不上。", "Its address is on a Tailscale network: computers outside it (a cloud server, say) can't connect.")]
+      : [L("只有同一个局域网里的电脑能连上", "Only computers on the same local network can connect"),
+        L("云服务器（VPS）运行这条命令会连不上。", "A cloud server (VPS) can't connect with this command.")];
   return (
-    <div className="app-notice" data-testid="reach-note">
-      <Info />
-      <div>
-        <div>{text}</div>
-        {mine ? (
-          <div className="app-notice-actions">
-            <button type="button" className="app-btn app-btn-small" onClick={() => setOpen(true)}><Globe />{L("开放到公网", "Open to the internet")}</button>
-          </div>
-        ) : (
-          <div className="app-small-note">{L("要让外面的电脑连上，请工作区的主人把它开放到公网（设置 › 工作区）。", "For computers outside to connect, the workspace's owner opens it to the internet (Settings › Workspaces).")}</div>
-        )}
+    <div className="reach-note" data-testid="reach-note" data-reach={reach}>
+      <div className="reach-note-text">
+        <b><i aria-hidden />{title}</b>
+        <span>{detail}{L("", " ")}{mine
+          ? L("开放到公网后，哪里的电脑都能连。", "Open it to the internet and computers anywhere can.")
+          : L("它在另一台电脑上，要在那台电脑上开放到公网。", "It runs on another computer: it is opened to the internet there.")}</span>
       </div>
-      {mine && <PublicAccessDialog open={open} onOpenChange={setOpen} local={local} name={mine.name || undefined}
-        onDone={() => { onOpened(); onRelink(); }} />}
+      <button type="button" className="app-btn app-btn-small reach-note-btn" onClick={() => setOpen(true)}><Globe />{L("开放到公网", "Open to the internet")}</button>
+      {mine
+        ? <PublicAccessDialog open={open} onOpenChange={setOpen} local={local} name={mine.name || undefined}
+          onDone={() => { onOpened(); onRelink(); }} />
+        : <OpenElsewhere open={open} onClose={() => setOpen(false)} hubUrl={hubUrl} onRelink={onRelink} />}
     </div>
+  );
+}
+
+/** Opening a workspace that runs on another computer to the internet:
+ *  there, in its App, or with one command (or by asking an agent on it).
+ *  Done, the command here is made again with the new address. */
+function OpenElsewhere({ open, onClose, hubUrl, onRelink }: { open: boolean; onClose: () => void; hubUrl: string; onRelink: () => void }) {
+  const [tunnel, setTunnel] = useState<"cloudflare" | "tailscale">("cloudflare");
+  let port = "";
+  try { port = new URL(hubUrl).port; } catch { /* default */ }
+  const cmd = `myco hub up --tunnel ${tunnel}`;
+  const ask = L(`帮我把这台电脑上的 myco 工作区开放到公网：运行 ${cmd}${port && port !== "7780" ? `（它在 ${port} 端口）` : ""}，完成后告诉我它给出的公网地址。`,
+    `Open the myco workspace on this computer to the internet: run ${cmd}${port && port !== "7780" ? ` (it is on port ${port})` : ""}, then tell me the public address it prints.`);
+  return (
+    <Modal open={open} onOpenChange={(o) => !o && onClose()} title={L("把工作区开放到公网", "Open the workspace to the internet")} className="reach-dialog"
+      description={L("这个工作区跑在另一台电脑上，开放要在那台电脑上做。开放以后，哪里的电脑都能连上它。", "This workspace runs on another computer, so it is opened there. Then computers anywhere can connect.")}>
+      <div className="seg seg-fill reach-tunnel" role="tablist" aria-label={L("用什么开放", "How")}>
+        <button type="button" role="tab" aria-selected={tunnel === "cloudflare"} className={cn("seg-btn", tunnel === "cloudflare" && "active")} onClick={() => setTunnel("cloudflare")}>Cloudflare</button>
+        <button type="button" role="tab" aria-selected={tunnel === "tailscale"} className={cn("seg-btn", tunnel === "tailscale" && "active")} onClick={() => setTunnel("tailscale")}>Tailscale</button>
+      </div>
+      <ol className="reach-ways">
+        <li><b>{L("在那台电脑的 myco App 里", "In the myco App on that computer")}</b>
+          <span>{L("设置 › 工作区 › 这个工作区 ›「开放到公网」，选 ", "Settings › Workspaces › this workspace › Open to the internet, pick ")}{tunnel === "cloudflare" ? "Cloudflare" : "Tailscale"}{L("。", ".")}</span></li>
+        <li><b>{L("或者在那台电脑的终端里运行", "Or run this in a terminal on that computer")}</b>
+          <div className="app-command"><code>{cmd}</code><CopyButton value={cmd} /></div></li>
+        <li><b>{L("或者把这句话发给那台电脑上的 agent", "Or send this to an agent on that computer")}</b>
+          <div className="app-command is-long"><code>{ask}</code><CopyButton value={ask} /></div></li>
+      </ol>
+      <p className="app-small-note">{tunnel === "cloudflare"
+        ? L("Cloudflare 免费，给一个 trycloudflare.com 的地址；那台电脑要装 cloudflared（myco 会提示怎么装）。", "Cloudflare is free and gives a trycloudflare.com address; that computer needs cloudflared (myco says how to install it).")
+        : L("Tailscale 只让你 Tailscale 网络里的电脑连上；两边都要装 Tailscale 并登录同一个账号。", "Tailscale lets only computers on your tailnet connect; both need Tailscale, signed in to the same account.")}</p>
+      <div className="app-modal-actions">
+        <button type="button" className="app-btn" onClick={onClose}>{L("关闭", "Close")}</button>
+        <button type="button" className="app-btn app-btn-primary" onClick={() => { onRelink(); onClose(); }}>{L("开放好了，重新生成命令", "Done: make the command again")}</button>
+      </div>
+    </Modal>
   );
 }
 
@@ -745,7 +781,7 @@ function ConnectComputer({ open, hub, machines, local, onConnected }: {
         <button type="button" role="tab" aria-selected={os === "ps"} className={cn("seg-btn", os === "ps" && "active")} onClick={() => setOs("ps")}>{L("Windows（PowerShell）", "Windows (PowerShell)")}</button>
       </div>
       {link ? (
-        <div className="app-command"><code>{command}</code><CopyButton value={command} /></div>
+        <div className="app-command is-long"><code>{command}</code><CopyButton value={command} /></div>
       ) : error ? (
         (error as { code?: string }).code === "permission_denied"
           ? <div className="app-small-note">{L("只有工作区的主人或管理员能连电脑：请他们来连。", "Only the workspace's owner or admins can connect a computer: ask one of them.")}</div>
@@ -839,12 +875,22 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
   const tooHigh = !!info && (ACCESS_RANK[access] || 2) > (ACCESS_RANK[info.max_access] || 2);
   // A computer that can say where folders may be is waited for, so the
   // folder made for an empty field is one it allows.
-  const asking = askable(machine) && !info && !state?.error;
+  // Not for long, though: after a few seconds without an answer it can be
+  // started anyway (the computer checks the folder again when it starts).
+  const [waitedLong, setWaitedLong] = useState(false);
+  const askingNow = askable(machine) && !info && !state?.error;
+  useEffect(() => {
+    setWaitedLong(false);
+    if (!askingNow) return;
+    const t = setTimeout(() => setWaitedLong(true), 8000);
+    return () => clearTimeout(t);
+  }, [askingNow, machine.id]);
+  const asking = askingNow && !waitedLong;
   const ready = machine.online && machine.can_spawn && (!!dir.trim() || autoDir) && !outside && !tooHigh && !asking;
   useEffect(() => { onState({ ready, busy: !!busy }); }, [ready, busy, onState]);
 
-  const start = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const start = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!ready || busy) return;
     setBusy(new Date().toISOString());
     setError(null);
@@ -872,7 +918,7 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
     return <div className="add-pane"><div className="app-empty-note">{L(`「${machine.name}」现在不在线，开不了新会话。`, `“${machine.name}” is away, so it cannot start a session now.`)}</div></div>;
   }
   if (!machine.can_spawn) {
-    return <div className="add-pane">{infoErrorText({ code: "too_old" })}</div>;
+    return <div className="add-pane"><ComputerFix hubId={hubId} machine={machine} here={here} /></div>;
   }
   return (
     <form id="add-new-agent" className="add-pane" onSubmit={start}>
@@ -908,6 +954,9 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
         <span className="app-field-label">{autoDir ? L("在哪个文件夹干活（可以不填）", "Which folder it works in (optional)") : L("在哪个文件夹干活", "Which folder it works in")}</span>
         <input className="app-input mono" value={dir} onChange={(e) => setDir(e.target.value)} disabled={!!busy} required={!autoDir}
           placeholder={autoDir ? L(`不填就新建 ${autoFolder(role, cli, base)}`, `Empty: a new ${autoFolder(role, cli, base)}`) : L("比如 ~/code/我的项目", "e.g. ~/code/my-project")} />
+        {askingNow && waitedLong && (
+          <span className="app-field-hint" data-testid="asking-slow">{L(`「${machine.name}」还没说允许在哪些文件夹开工；可以先开：不填文件夹会建在它允许的地方，开的时候它会再查一遍。`, `“${machine.name}” has not said which folders it allows yet; you can start anyway: with no folder, one is made where it allows, and it checks again when starting.`)}</span>
+        )}
         {asking && (
           <span className="app-field-hint" data-testid="asking-dirs">{L(`正在问「${machine.name}」允许在哪些文件夹开工…`, `Asking “${machine.name}” which folders it allows…`)}</span>
         )}
@@ -963,7 +1012,10 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
           </div>
         </div>
       </details>
-      <ErrorText error={error} />
+      {/* Claude could not sign in here: the ways this computer has, then again. */}
+      {cli === "claude" && here && isClaudeAuthError(error)
+        ? <ClaudeAuthFix onRetry={() => { setError(null); void start(); }} />
+        : <ErrorText error={error} />}
       {busy && <div className="app-convpick-starting"><Mushroom /><span>{L("正在开", "Starting it")} · <Elapsed since={busy} /></span></div>}
     </form>
   );
@@ -1314,7 +1366,8 @@ export function AddWorkspaceDialog({ open, hub, project, rows, workspace, pick, 
   );
 }
 
-/** Starts a project: just a name. */
+/** Starts a project: its name, what it is for (optional) and its files
+ *  (optional, uploaded once it exists). */
 export function NewProjectDialog({ open, hubs, defaultHubId, onClose, onCreated }: {
   open: boolean;
   hubs: Hub[];
@@ -1323,12 +1376,14 @@ export function NewProjectDialog({ open, hubs, defaultHubId, onClose, onCreated 
   onCreated: (ref: { hubId: string; name: string }) => void;
 }) {
   return (
-    <Modal open={open} onOpenChange={(o) => !o && onClose()} title={L("新建项目", "New project")}
-      description={L("一个项目就是一件事，和一起做这件事的 agent。", "A project is one thing to get done, and the agents doing it together.")}>
+    <Modal open={open} onOpenChange={(o) => !o && onClose()} title={L("新建项目", "New project")} className="np-modal"
+      description={L("一个项目就是一件事，和一起做这件事的 agent。写清楚目标、放上资料，协调者和成员一开始就知道要做什么。", "A project is one thing to get done, and the agents doing it together. A clear goal and its files tell the coordinator and members what to do from the start.")}>
       <NewProjectForm hubs={hubs} defaultHubId={defaultHubId} onCreated={onCreated} onCancel={onClose} />
     </Modal>
   );
 }
+
+const MAX_PROJECT_FILE = 20 << 20;
 
 export function NewProjectForm({ hubs, defaultHubId, onCreated, onCancel, big }: {
   hubs: Hub[];
@@ -1341,28 +1396,102 @@ export function NewProjectForm({ hubs, defaultHubId, onCreated, onCancel, big }:
   const usable = hubs.filter((h) => h.ok !== false);
   const [hubId, setHubId] = useState(defaultHubId && usable.some((h) => h.id === defaultHubId) ? defaultHubId : usable[0]?.id || "");
   const [title, setTitle] = useState(big ? L("我的项目", "My project") : "");
-  const [busy, setBusy] = useState(false);
+  const [goal, setGoal] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const [dragging, setDragging] = useState(false);
+  const [busy, setBusy] = useState<string>("");
   const [error, setError] = useState<unknown>(null);
+  // Made, but some files did not go up: in anyway, or try them again.
+  const [made, setMade] = useState<{ hubId: string; name: string; failed: File[] } | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const tooBig = files.filter((f) => f.size > MAX_PROJECT_FILE);
+  const addFiles = (fs: File[]) => setFiles((have) => [...have, ...fs.filter((f) => !have.some((h) => h.name === f.name && h.size === f.size))]);
+  const upload = async (target: { hubId: string; name: string }, list: File[]) => {
+    const failed: File[] = [];
+    for (let i = 0; i < list.length; i++) {
+      setBusy(L(`正在上传资料 ${i + 1}/${list.length}…`, `Uploading files ${i + 1}/${list.length}…`));
+      try { await appApi.uploadProjectFile(target.hubId, target.name, list[i]); } catch (err) { failed.push(list[i]); setError(err); }
+    }
+    return failed;
+  };
   const create = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!hubId || !title.trim() || busy) return;
-    setBusy(true);
+    if (!hubId || !title.trim() || busy || tooBig.length) return;
+    setBusy(L("正在创建…", "Creating…"));
     setError(null);
     try {
       const slug = title.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 32);
       const name = `${slug || "p"}-${Math.random().toString(36).slice(2, 6)}`;
-      const p = await appApi.createProject(hubId, { name, title: title.trim() });
+      const p = await appApi.createProject(hubId, { name, title: title.trim(), ...(goal.trim() ? { goal: goal.trim() } : {}) });
+      const failed = files.length ? await upload({ hubId, name: p.name }, files) : [];
+      if (failed.length) { setMade({ hubId, name: p.name, failed }); return; }
       onCreated({ hubId, name: p.name });
     } catch (err) {
       setError(err);
     } finally {
-      setBusy(false);
+      setBusy("");
     }
   };
+  const retry = async () => {
+    if (!made) return;
+    setError(null);
+    const failed = await upload(made, made.failed);
+    setBusy("");
+    if (failed.length) setMade({ ...made, failed });
+    else onCreated({ hubId: made.hubId, name: made.name });
+  };
+  if (made) {
+    return (
+      <div className="np np-made" data-testid="new-project-partial">
+        <p className="np-made-text">{L(`项目建好了，但有 ${made.failed.length} 个资料没传上去：`, `The project is made, but ${made.failed.length} file(s) did not go up:`)}</p>
+        <ul className="np-files">{made.failed.map((f) => <li key={f.name} className="np-file"><FileText /><span>{f.name}</span><small>{bytes(f.size)}</small></li>)}</ul>
+        <ErrorText error={error} />
+        <div className="app-modal-actions">
+          <button type="button" className="app-btn" onClick={() => onCreated({ hubId: made.hubId, name: made.name })} disabled={!!busy}>{L("先进去，稍后再传", "Go in; upload later")}</button>
+          <button type="button" className="app-btn app-btn-primary" onClick={() => void retry()} disabled={!!busy}>{busy || L("再传一次", "Try again")}</button>
+        </div>
+      </div>
+    );
+  }
   return (
-    <form onSubmit={create} className={cn("np", big && "is-big")}>
-      <input className="app-input np-input" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus
-        placeholder={L("项目叫什么？比如 官网改版", "What's it called? e.g. Website redesign")} aria-label={L("项目名", "Project name")} />
+    <form onSubmit={create} className={cn("np", big && "is-big")} data-testid="new-project-form">
+      <label className="app-field">
+        <span className="app-field-label">{L("项目名", "Name")}</span>
+        <input className="app-input np-input" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus maxLength={80}
+          placeholder={L("比如：官网改版", "e.g. Website redesign")} aria-label={L("项目名", "Project name")} />
+      </label>
+      <label className="app-field">
+        <span className="app-field-label">{L("目标", "Goal")}<small className="np-optional">{L("选填", "optional")}</small></span>
+        <textarea className="app-input np-goal" rows={3} value={goal} onChange={(e) => setGoal(e.target.value)} maxLength={2000}
+          placeholder={L("想做成什么、什么时候、做到什么程度算完成。比如：11 月底前上线新版官网：首页、文档站和下载页，中英双语。", "What should come out of it, by when, and what counts as done. E.g. ship the new website by the end of November: home, docs and downloads, in Chinese and English.")}
+          aria-label={L("目标", "Goal")} />
+        <span className="app-small-note">{L("协调者和成员都会看到；以后在「项目资料」里随时能改。", "The coordinator and members all see it; change it any time in Project notes.")}</span>
+      </label>
+      <div className="app-field">
+        <span className="app-field-label">{L("项目资料", "Files")}<small className="np-optional">{L("选填", "optional")}</small></span>
+        <div className={cn("np-drop", dragging && "is-over")} role="button" tabIndex={0}
+          onClick={() => fileInput.current?.click()} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInput.current?.click(); } }}
+          onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)}
+          onDrop={(e) => { e.preventDefault(); setDragging(false); addFiles(Array.from(e.dataTransfer.files)); }}
+          data-testid="new-project-drop">
+          <Upload />
+          <span><b>{L("把文件拖到这里，或点一下选择", "Drop files here, or click to choose")}</b>
+            <small>{L("需求文档、设计稿、约定、截图都可以，每个 20 MB 以内；成员 agent 能读到。", "Specs, designs, conventions, screenshots: up to 20 MB each; member agents can read them.")}</small></span>
+        </div>
+        <input ref={fileInput} type="file" multiple hidden onChange={(e) => { addFiles(Array.from(e.target.files || [])); e.target.value = ""; }} />
+        {files.length > 0 && (
+          <ul className="np-files" data-testid="new-project-files">
+            {files.map((f) => (
+              <li key={`${f.name}/${f.size}`} className={cn("np-file", f.size > MAX_PROJECT_FILE && "is-bad")}>
+                <FileText />
+                <span>{f.name}</span>
+                <small>{f.size > MAX_PROJECT_FILE ? L("超过 20 MB", "Over 20 MB") : bytes(f.size)}</small>
+                <button type="button" className="np-file-x" onClick={() => setFiles((fs) => fs.filter((x) => x !== f))} aria-label={L(`去掉 ${f.name}`, `Remove ${f.name}`)} disabled={!!busy}><X /></button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
       {usable.length > 1 && (
         <label className="app-field">
           <span className="app-field-label">{L("放在哪个工作区", "In which workspace")}</span>
@@ -1373,8 +1502,11 @@ export function NewProjectForm({ hubs, defaultHubId, onCreated, onCancel, big }:
       )}
       <ErrorText error={error} />
       <div className="app-modal-actions">
-        {onCancel && <button type="button" className="app-btn" onClick={onCancel}>{big ? L("先不建", "Not now") : L("取消", "Cancel")}</button>}
-        <button type="submit" className="app-btn app-btn-primary" disabled={!title.trim() || busy}>{busy ? L("正在创建…", "Creating…") : L("建好了", "Create")}</button>
+        {tooBig.length > 0 && <span className="app-modal-hint">{L("有文件超过 20 MB，去掉它再建", "A file is over 20 MB: remove it first")}</span>}
+        {onCancel && <button type="button" className="app-btn" onClick={onCancel} disabled={!!busy}>{big ? L("先不建", "Not now") : L("取消", "Cancel")}</button>}
+        <button type="submit" className="app-btn app-btn-primary" disabled={!title.trim() || !!busy || tooBig.length > 0}>
+          {busy || (files.length ? L(`建好，并上传 ${files.length} 个资料`, `Create, with ${files.length} file(s)`) : L("建好了", "Create"))}
+        </button>
       </div>
     </form>
   );

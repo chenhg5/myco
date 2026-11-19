@@ -589,15 +589,20 @@ or they are redelivered. Most agents use 'myco runner start' instead.`,
 			if err != nil {
 				return err
 			}
-			out := inboxResult{Messages: nonNilMsgs(msgs), Hint: inboxTaskHint(msgs)}
+			out := inboxResult{Messages: nonNilMsgs(msgs), Hint: inboxTaskHint(msgs), Open: openTasksOf(e.in.Ctx, c, msgs)}
+			if h := openHint(out.Open); h != "" {
+				out.Hint = strings.TrimSpace(out.Hint + " " + h)
+			}
 			return e.p.Print(out, func(w io.Writer) {
 				if len(msgs) == 0 {
 					fmt.Fprintln(w, "inbox empty")
-					return
 				}
 				for i := range msgs {
 					printMessage(w, &msgs[i])
 					fmt.Fprintln(w)
+				}
+				for _, t := range out.Open {
+					fmt.Fprintf(w, "still open: %s from %s (%s): %s\n", t.ID, t.From, t.Since.Local().Format("01-02 15:04"), t.Body)
 				}
 				if out.Hint != "" {
 					fmt.Fprintln(w, out.Hint)
@@ -666,6 +671,65 @@ type inboxResult struct {
 	Messages []api.Message `json:"messages"`
 	Hint     string        `json:"hint,omitempty"`
 	Timeout  string        `json:"timeout,omitempty"`
+	// Open are tasks this agent acked earlier and has not closed (not the
+	// ones just pulled): until it replies, fails or marks them done, the
+	// people who sent them see them as unfinished.
+	Open []openTask `json:"open,omitempty"`
+}
+
+// openTask is a task the agent acked and has not closed.
+type openTask struct {
+	ID    string    `json:"id"`
+	From  string    `json:"from"`
+	Since time.Time `json:"since"`
+	Body  string    `json:"body"`
+}
+
+// openTasksOf lists the agent's acked tasks that msgs does not hold (its
+// own overview; nothing on errors or older hubs).
+func openTasksOf(ctx context.Context, c *client.Client, msgs []api.Message) []openTask {
+	me, err := c.Me(ctx)
+	if err != nil {
+		return nil
+	}
+	ov, err := c.Overview(ctx, 0)
+	if err != nil {
+		return nil
+	}
+	pulled := map[string]bool{}
+	for _, m := range msgs {
+		pulled[m.ID] = true
+	}
+	var out []openTask
+	for _, a := range ov.Agents {
+		if a.Agent.Name != me.Name {
+			continue
+		}
+		for _, m := range a.Current {
+			if m.Type != "task" || m.Status != "acked" || pulled[m.ID] {
+				continue
+			}
+			body := []rune(strings.Join(strings.Fields(m.Body), " "))
+			if len(body) > 60 {
+				body = append(body[:60], '…')
+			}
+			out = append(out, openTask{ID: m.ID, From: m.From, Since: m.CreatedAt, Body: string(body)})
+		}
+	}
+	return out
+}
+
+// openHint asks the agent to close what it left open.
+func openHint(open []openTask) string {
+	if len(open) == 0 {
+		return ""
+	}
+	ids := make([]string, len(open))
+	for i, t := range open {
+		ids[i] = t.ID
+	}
+	return fmt.Sprintf("You still have %d task(s) you acked and never closed: %s. Their senders see them as unfinished. "+
+		"For each: myco message reply --id <id> (or done / fail) once it is finished; reply now if it already is.", len(open), strings.Join(ids, ", "))
 }
 
 // ackHint: said when work starts, the moment it is likeliest to be done:

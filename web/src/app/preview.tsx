@@ -251,9 +251,13 @@ export function DockPanel({ open, onOpenChange, onClose, closeLabel, keepMounted
 
   const fullLabel = full ? L("退出全屏", "Exit full screen") : L("全屏", "Full screen");
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange} modal={open && !docked}>
+    // Never modal: Radix draws a modal and a non-modal panel as different
+    // components, so switching between them (full screen, a window too
+    // narrow to dock) would mount it afresh and reload a page in it. The
+    // scrim is ours, and a click on it closes the panel as before.
+    <Dialog.Root open={open} onOpenChange={onOpenChange} modal={false}>
       <Dialog.Portal forceMount={keepMounted || undefined}>
-        {!docked && open && <Dialog.Overlay className="app-portal fp-scrim" />}
+        {!docked && open && <div className="app-portal fp-scrim" onClick={() => onOpenChange(false)} aria-hidden />}
         <Dialog.Content ref={setPanel} forceMount={keepMounted || undefined} className={cn("app-portal fp-panel", full && "is-full", docked && "is-docked", dragging && "is-dragging", className)}
           style={!full && width ? { width: `min(${width}px, calc(100% - 32px))` } : docked ? { width: dockWidth } : undefined}
           // Beside the chat, working in the chat does not close it; Esc

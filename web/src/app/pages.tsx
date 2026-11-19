@@ -168,7 +168,7 @@ export function PageCards({ body }: { body: string }) {
   );
 }
 
-function PageCard({ hubId, id, url }: { hubId: string; id: string; url: string }) {
+export function PageCard({ hubId, id, url }: { hubId: string; id: string; url: string }) {
   const [page, setPage] = useState<Page | null>(null);
   const [gone, setGone] = useState(false);
   const pins = useContext(PagePinsContext);
@@ -434,6 +434,8 @@ function PageView({ target, open, active, reload, onMeta }: {
           dataWatch.current = true;
           return true;
         case "download": {
+          // a Blob from the page (its bridge since the video app), or base64 (older pages' bridge)
+          if (args.blob instanceof Blob) return appApi.pageDownload(String(args.name || ""), args.blob, String(args.type || ""));
           const bin = atob(String(args.base64 || ""));
           const bytes = new Uint8Array(bin.length);
           for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);

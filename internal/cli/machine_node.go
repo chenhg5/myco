@@ -278,7 +278,7 @@ func (e *env) machineNode(hub string, me *api.Agent, c *client.Client, sh runner
 				// with `myco runner env capture --agent <machine node>`); later
 				// turns need the same, or the session cannot log in.
 				rc := config.Runner{Harness: p.CLI, Workdir: p.Workdir, Access: string(p.Access), Model: sr.Model,
-					EnvFile: machineEnvFile(e.defaultPath, me.Name)}
+					EnvFile: machineEnvFile(e.defaultPath, me.Name), Provider: machineProvider(e.defaultPath, me.Name, p.CLI)}
 				if p.CLI == machinenode.ExecCLI {
 					rc = config.Runner{Harness: p.CLI, Workdir: p.Workdir}
 				}
@@ -295,8 +295,19 @@ func (e *env) machineNode(hub string, me *api.Agent, c *client.Client, sh runner
 					return "", err
 				}
 				rc := config.Runner{Harness: p.CLI, Workdir: p.Workdir, Access: string(p.Access), Model: sr.Model,
-					EnvFile: machineEnvFile(e.defaultPath, me.Name)}
+					EnvFile: machineEnvFile(e.defaultPath, me.Name), Provider: machineProvider(e.defaultPath, me.Name, p.CLI)}
 				return res.Agent.Name, saveTakenProfile(e.defaultPath, m.Hub, res.Agent.Name, res.Token, b, rc)
+			},
+			ProviderFor: func(cli string) *harness.ProviderSettings {
+				cfg, err := config.Load(config.ProfilePath(e.defaultPath, me.Name))
+				if err != nil {
+					return nil
+				}
+				ref := cfg.Runner.Provider
+				if cli != "claude" {
+					ref = "" // a pinned provider is Claude's (set in the App)
+				}
+				return resolveProvider(cli, ref, cfg.Runner.EnvFile).settings
 			},
 			Machine: func(ctx context.Context) ([]api.MachineAI, []api.MachineSession) {
 				return console.MachineInventoryCached(ctx, home, m.Hub)
@@ -341,6 +352,19 @@ func (e *env) machineNode(hub string, me *api.Agent, c *client.Client, sh runner
 			},
 		},
 	}, nil
+}
+
+// machineProvider is the cc-switch provider pinned on the machine node (for
+// Claude Code, set in the App), which spawned Claude sessions keep.
+func machineProvider(defaultPath, machineNode, cli string) string {
+	if cli != "claude" {
+		return ""
+	}
+	cfg, err := config.Load(config.ProfilePath(defaultPath, machineNode))
+	if err != nil {
+		return ""
+	}
+	return cfg.Runner.Provider
 }
 
 // machineEnvFile is the machine node's runner.env_file, which spawned

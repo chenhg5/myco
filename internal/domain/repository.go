@@ -39,6 +39,12 @@ type EnrollmentRepository interface {
 // be stored atomically with the change.
 type MutateFunc func(m *Message) (created []*Message, err error)
 
+// Activity is when an open message last showed life.
+type Activity struct {
+	ID string
+	At time.Time
+}
+
 // MessageRepository persists messages. Mutations go through Mutate/ClaimDue so
 // that state transitions stay in the domain while atomicity stays in storage.
 type MessageRepository interface {
@@ -63,6 +69,12 @@ type MessageRepository interface {
 	OpenCounts(ctx context.Context) (map[AgentName]map[Status]int, error)
 	// ListOpen returns open (not queued, not closed) messages of recipient.
 	ListOpen(ctx context.Context, recipient AgentName, limit int) ([]*Message, error)
+	// TouchActive records that message id's recipient is working on it at
+	// at (never moving it back).
+	TouchActive(ctx context.Context, id string, at time.Time) error
+	// AckedActivity returns, per recipient, the acked messages with when
+	// each last showed life (Message.LastActive).
+	AckedActivity(ctx context.Context) (map[AgentName][]Activity, error)
 	// ListRecent returns the most recently updated messages; with agent set,
 	// only those it sent or received.
 	ListRecent(ctx context.Context, agent AgentName, limit int) ([]*Message, error)
