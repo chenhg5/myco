@@ -867,9 +867,29 @@ export function PublicAccessDialog({ open, onOpenChange, local, name, onDone }: 
   const disabled = (i: TunnelChoice) =>
     i === 0 || i === 1 ? !cf : !ts;
 
+  // Opening can take a minute or two (Funnel's certificate, a tunnel's
+  // DNS): say how long, and let it be cancelled.
+  const abort = useRef<AbortController | null>(null);
+  const [since, setSince] = useState(0);
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!busy) return;
+    const t = setInterval(() => tick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [busy]);
+  useEffect(() => () => abort.current?.abort(), []);
+  const cancel = () => {
+    abort.current?.abort();
+    abort.current = null;
+    setBusy(false);
+  };
+
   const submit = async () => {
     setBusy(true);
     setError(null);
+    setSince(Date.now());
+    const ctl = new AbortController();
+    abort.current = ctl;
     const which = name ? { name } : {};
     const input = choice === 1
       ? { tunnel: "cloudflare" as const, hostname: hostname.trim(), ...which }
@@ -877,16 +897,20 @@ export function PublicAccessDialog({ open, onOpenChange, local, name, onDone }: 
         ? { tunnel: "tailscale" as const, ...which }
         : { tunnel: "cloudflare" as const, ...which };
     try {
-      setResult(await appApi.startLocalHub(input));
+      setResult(await appApi.startLocalHub(input, ctl.signal));
       onDone();
     } catch (e) {
-      setError(e);
+      if (!ctl.signal.aborted) setError(e);
     } finally {
-      setBusy(false);
+      if (abort.current === ctl) {
+        abort.current = null;
+        setBusy(false);
+      }
     }
   };
 
-  const close = () => { if (!busy) onOpenChange(false); };
+  const close = () => { cancel(); onOpenChange(false); };
+  const waited = busy && since ? Math.floor((Date.now() - since) / 1000) : 0;
 
   return (
     <Modal
@@ -957,9 +981,17 @@ export function PublicAccessDialog({ open, onOpenChange, local, name, onDone }: 
               <span>{L("没有找到 cloudflared 或 Tailscale。先安装其中一个，才能开放到公网。", "Neither cloudflared nor Tailscale was found. Install one of them to open the Hub to the internet.")}</span>
             </div>
           )}
+          {busy && waited >= 15 && (
+            <div className="app-small-note" data-testid="opening-wait">
+              {choice === 2
+                ? L(`已经 ${waited} 秒：Tailscale 第一次开放要申请证书，可能要一两分钟。不想等就点「取消」。`, `${waited}s so far: the first time, Tailscale gets a certificate, which can take a minute or two. Cancel if you would rather not wait.`)
+                : L(`已经 ${waited} 秒：正在等隧道连通。不想等就点「取消」。`, `${waited}s so far: waiting for the tunnel to come up. Cancel if you would rather not wait.`)}
+            </div>
+          )}
+          {error && choice === 2 && <div className="app-small-note">{L("Tailscale 这一步没成功，原因和办法在下面（来自 Tailscale）。常见的是：这个 macOS 用户下没开 Tailscale App 或没登录、还没在 Tailscale 后台为这台设备打开 Funnel。", "Tailscale's step failed; why and what to do are below (from Tailscale). Usually: the Tailscale app is not open and signed in for this macOS user, or Funnel is not on for this device in the Tailscale admin console.")}</div>}
           <ErrorText error={error} />
           <div className="app-modal-actions">
-            <button type="button" className="app-btn" onClick={close} disabled={busy}>{L("取消", "Cancel")}</button>
+            <button type="button" className="app-btn" onClick={busy ? cancel : close}>{L("取消", "Cancel")}</button>
             <button
               type="button"
               className="app-btn app-btn-primary"

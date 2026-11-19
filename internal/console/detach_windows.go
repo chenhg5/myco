@@ -5,6 +5,7 @@ package console
 import (
 	"os/exec"
 	"syscall"
+	"time"
 )
 
 const (
@@ -28,3 +29,9 @@ func hideWindow(cmd *exec.Cmd) {
 
 // wslHost: WSL distributions can live on this computer.
 const wslHost = true
+
+// softCancel: Windows cannot interrupt another process; cancelling kills
+// it, and WaitDelay keeps a child holding its output from hanging us.
+func softCancel(cmd *exec.Cmd) {
+	cmd.WaitDelay = 5 * time.Second
+}
