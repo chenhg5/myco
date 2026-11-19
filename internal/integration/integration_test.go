@@ -547,6 +547,26 @@ func TestAgentSpawnEndToEnd(t *testing.T) {
 	if err != nil || node.Binding.Harness != "machine" || len(node.AllowFrom) != 1 || node.AllowFrom[0] != "lead" {
 		t.Fatalf("machine node: %v %+v", err, node)
 	}
+	// Joining again with a new link (the App connecting it once more) keeps
+	// it the same computer: no "box-2", no second machine node, and the new
+	// link is not used up.
+	again, err := h.admin().CreateEnrollment(c, api.CreateEnrollmentRequest{Kind: "link", MaxUses: 1, TTLSeconds: 3600}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out = box.must(c, "machine", "join", "--link", again.JoinURL, "--machine", "box", "--no-service")
+	if !strings.Contains(out, `"machine": "box"`) || !strings.Contains(out, `"machine_node": "box-machine"`) || strings.Contains(out, "box-2") {
+		t.Fatalf("joining again made another machine: %s", out)
+	}
+	if es, err := h.admin().ListEnrollments(c); err != nil {
+		t.Fatal(err)
+	} else {
+		for _, e := range es {
+			if e.ID == again.Enrollment.ID && e.Uses != 0 {
+				t.Fatalf("joining again used up the new link: %+v", e)
+			}
+		}
+	}
 
 	// Provider settings (like ANTHROPIC_BASE_URL / ANTHROPIC_API_KEY) are
 	// captured once for the machine node; spawned sessions use them on the

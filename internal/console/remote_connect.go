@@ -223,10 +223,14 @@ func (b *Backend) runConnect(id string, rt Route, joinURL string, c *client.Clie
 	// 2. Run the join command there.
 	step(1, "running", "")
 	var nodes []string
+	noService := false
 	_, code, err := b.Local.runScript(ctx, rt, installScript(joinURL), func(s string) {
 		if n, ok := strings.CutPrefix(s, "myco-node "); ok {
 			nodes = append(nodes, strings.TrimSpace(n))
 			return
+		}
+		if strings.Contains(s, "could not install the background service") {
+			noService = true
 		}
 		s = strings.ReplaceAll(s, joinURL, "<link>")
 		b.connects.update(id, func(j *ConnectJob) {
@@ -261,6 +265,12 @@ func (b *Backend) runConnect(id string, rt Route, joinURL string, c *client.Clie
 		case <-ctx.Done():
 		case <-time.After(2 * time.Second):
 		}
+	}
+	if noService {
+		// Joined, but nothing there keeps a runner going (no systemd user
+		// services: a container, WSL without systemd).
+		fail(2, &RemoteError{Code: "no_service", Message: "it joined, but the runner service could not be installed there", Command: "myco runner start --all"})
+		return
 	}
 	fail(2, &RemoteError{Code: "not_online", Message: "it was set up but has not shown up on this workspace", Command: rt.TerminalCommand()})
 }

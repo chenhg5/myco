@@ -874,6 +874,17 @@ func (e *env) joinHubAs(ctx context.Context, hub, tok, name string) (config.Mach
 	if err != nil {
 		return config.MachineHub{}, nil, err
 	}
+	// Already in this hub with working credentials (joining again with a new
+	// link, e.g. from the App): keep that membership instead of becoming a
+	// second machine "<name>-2". A shell-node link still adds its folder.
+	if mf, _ := config.LoadMachine(e.defaultPath); mf != nil {
+		if old, ok := mf.For(hub); ok && old.Harness != execnode.Name {
+			if peek, err := c.Join(ctx, name, true); err == nil && peek.Harness != execnode.Name && e.stillMember(ctx, old) {
+				return old, &api.JoinResponse{Machine: old.Machine, NamePrefix: old.NamePrefix, Harness: old.Harness,
+					AllowFrom: old.AllowFrom, Labels: []string{"machine=" + old.Machine}}, nil
+			}
+		}
+	}
 	res, err := c.Join(ctx, name, false)
 	if err != nil {
 		return config.MachineHub{}, nil, err
