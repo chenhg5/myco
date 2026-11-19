@@ -152,6 +152,20 @@ function App() {
   });
 
   // ---- export ----
+  /** Saves the mp4 to Downloads through the App; when that fails, the video
+   *  is kept here to try again (an older App saves no video). */
+  async function keepFile(name: string, bytes: Uint8Array, silent: boolean, secs: number) {
+    const blob = new Blob([bytes as BlobPart], { type: "video/mp4" });
+    try {
+      const where = (await save(name, blob, "video/mp4")).path;
+      setExporting({ stage: "done", where, size: bytes.length, silent, secs });
+    } catch (e) {
+      const err = e as { code?: string; message?: string };
+      const old = err.code === "invalid_argument" || err.code === "too_large" || /no such call|documents and pictures/.test(err.message || "");
+      setExporting({ stage: "unsaved", name, bytes, silent, secs,
+        error: old ? "这个版本的 myco App 还存不了视频：升级 App 后点「再存一次」。" : `没存上：${err.message || "不知道为什么"}` });
+    }
+  }
   async function doExport(opts: ExportOptions) {
     player.pause();
     cancelRef.current = false;
@@ -161,17 +175,7 @@ function App() {
     try {
       const { bytes, silent } = await render(opts, (p) => setExporting((x) => (x && x.stage === "run" ? { ...x, p } : x)), () => cancelRef.current);
       const name = `${(title.get("") || "视频").replace(/[\\/:*?"<>|]+/g, " ").trim() || "视频"}.mp4`;
-      let where = "";
-      try { where = (await save(name, bytes, "video/mp4")).path; }
-      catch {
-        // (an older App: the browser's own download)
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(new Blob([bytes as BlobPart], { type: "video/mp4" }));
-        a.download = name; a.click();
-        setTimeout(() => URL.revokeObjectURL(a.href), 60000);
-        where = name;
-      }
-      setExporting({ stage: "done", where, size: bytes.length, silent, secs: (performance.now() - at) / 1000 });
+      await keepFile(name, bytes, silent, (performance.now() - at) / 1000);
     } catch (e) {
       const msg = (e as Error).message;
       if (msg === "cancelled") setExporting(null);
@@ -243,6 +247,7 @@ function App() {
         </Popover>
       )}
       {exporting && <ExportDialog state={exporting} onStart={doExport}
+        onRetry={(x) => void keepFile(x.name, x.bytes, x.silent, x.secs)}
         onClose={() => { if (exporting.stage === "run") cancelRef.current = true; else setExporting(null); }} />}
       <Toast kit={kit} />
     </div>
@@ -250,7 +255,9 @@ function App() {
 }
 
 type Exp = { stage: "setup" } | { stage: "run"; p: Progress; at: number; opts: ExportOptions }
-  | { stage: "done"; where: string; size: number; silent: boolean; secs: number } | { stage: "error"; error: string };
+  | { stage: "done"; where: string; size: number; silent: boolean; secs: number } | { stage: "error"; error: string }
+  | Unsaved;
+type Unsaved = { stage: "unsaved"; name: string; bytes: Uint8Array; silent: boolean; secs: number; error: string };
 
 const SIZE_NAME: Record<number, string> = { 2160: "4K", 1440: "2K", 1080: "1080p", 720: "720p", 480: "480p" };
 function savedOptions(): ExportOptions {
@@ -263,12 +270,12 @@ function savedOptions(): ExportOptions {
 function keepOptions(o: ExportOptions) { try { localStorage.setItem("myco-video-export", JSON.stringify(o)); } catch { /* (a private window) */ } }
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
-function ExportDialog({ state, onStart, onClose }: { state: Exp; onStart: (o: ExportOptions) => void; onClose: () => void }) {
+function ExportDialog({ state, onStart, onRetry, onClose }: { state: Exp; onStart: (o: ExportOptions) => void; onRetry: (x: Unsaved) => void; onClose: () => void }) {
   const [opts, setOpts] = useState<ExportOptions>(savedOptions);
   const [, tick] = useState(0);
   useEffect(() => { if (state.stage !== "run") return; const t = setInterval(() => tick((n) => n + 1), 1000); return () => clearInterval(t); }, [state.stage]);
   const T = total();
-  const head = state.stage === "setup" ? "导出视频" : state.stage === "run" ? "正在导出" : state.stage === "done" ? "导出好了" : "没导出成功";
+  const head = state.stage === "setup" ? "导出视频" : state.stage === "run" ? "正在导出" : state.stage === "done" ? "导出好了" : state.stage === "unsaved" ? "做好了，还没存上" : "没导出成功";
   let body: JSX.Element;
   if (state.stage === "setup") {
     const est = estimate(opts);
@@ -329,6 +336,28 @@ function ExportDialog({ state, onStart, onClose }: { state: Exp; onStart: (o: Ex
         <p>已存到 <b>{state.where}</b>（{(state.size / 1024 / 1024).toFixed(1)} MB，用了 {mmss(state.secs)}）</p>
         {state.silent && <p className="modal-err">这个浏览器不能编码声音，导出的视频没有声音。换 Chrome 或 Edge 打开再导出一次。</p>}
         <div className="modal-foot"><span /><button type="button" className="btn btn-primary" onClick={onClose}>好</button></div>
+      </>
+    );
+  } else if (state.stage === "unsaved") {
+    const x = state;
+    const browser = () => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([x.bytes as BlobPart], { type: "video/mp4" }));
+      a.download = x.name; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 120000);
+    };
+    body = (
+      <>
+        <p>视频做好了（{(x.bytes.length / 1024 / 1024).toFixed(1)} MB，用了 {mmss(x.secs)}），但没存到「下载」：</p>
+        <p className="modal-err">{x.error}</p>
+        <p className="faint">关掉这个框之前它一直在，不用重新导出。</p>
+        <div className="modal-foot">
+          <button type="button" className="btn" onClick={browser}>用浏览器下载</button>
+          <span className="row">
+            <button type="button" className="btn" onClick={onClose}>不要了</button>
+            <button type="button" className="btn btn-primary" onClick={() => onRetry(x)}>再存一次</button>
+          </span>
+        </div>
       </>
     );
   } else {

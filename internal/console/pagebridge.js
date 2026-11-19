@@ -142,12 +142,12 @@
     // Saves a file the page made (an export: csv, xlsx, pdf…) to the
     // person's Downloads. content: a string, Blob, ArrayBuffer or bytes.
     download: function (name, content, type) {
-      return Promise.resolve(content instanceof Blob ? content.arrayBuffer() : content).then(function (c) {
-        var bytes = typeof c === "string" ? new TextEncoder().encode(c) : c instanceof ArrayBuffer ? new Uint8Array(c) : new Uint8Array(c.buffer || c);
-        var bin = "";
-        for (var i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-        return call("download", { name: String(name), type: type || "", base64: btoa(bin) }, 60000);
-      });
+      // A Blob goes to the App as it is (postMessage copies it without a
+      // string in between: a video can be hundreds of MB); bytes and text
+      // become one. Large files take a while to write: up to 10 minutes.
+      var blob = content instanceof Blob ? content
+        : new Blob([typeof content === "string" ? content : content instanceof ArrayBuffer ? new Uint8Array(content) : content], { type: type || "" });
+      return call("download", { name: String(name), type: type || blob.type || "", blob: blob }, 600000);
     },
     storage: {
       get: function (key) { return call("storage.get", { key: String(key) }); },

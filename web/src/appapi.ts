@@ -853,8 +853,9 @@ export const appApi = {
   pageChanges: (hubId: string, id: string, after: number) =>
     request<PageChanges>("GET", `app/hubs/${enc(hubId)}/pages/${enc(id)}/changes?after=${after}`),
   /** A file a page made, saved to Downloads and shown. */
-  pageDownload: (name: string, bytes: Uint8Array, type: string) =>
-    request<{ path: string }>("POST", `app/page-download?name=${encodeURIComponent(name)}`, new Blob([bytes], { type: type || "application/octet-stream" })),
+  pageDownload: (name: string, bytes: Uint8Array | Blob, type: string) =>
+    request<{ path: string }>("POST", `app/page-download?name=${encodeURIComponent(name)}`,
+      bytes instanceof Blob ? bytes : new Blob([bytes as BlobPart], { type: type || "application/octet-stream" })),
   // Pins (hubs from v0.20.3; older ones answer 404): what a conversation
   // keeps at hand, for both its parties. a: the first party (default you).
   pins: (hubId: string, withWhom: string, a?: string) =>
