@@ -3029,10 +3029,10 @@ const server = http.createServer(async (req, res) => {
       }
       if (method === "DELETE") {
         const dry = url.searchParams.get("dry_run") === "true" || url.searchParams.get("dry_run") === "1";
-        // The nodes shown to the user; the machine's own node goes too, but it
-        // is not a node anyone can see in the list.
+        // Like the hub: every node on it, the machine's own node included
+        // (the App leaves that one out of the list it shows).
         const removed = hub.agents
-          .filter((a) => a.machine_id === machine.id && a.kind !== "machine")
+          .filter((a) => a.machine_id === machine.id)
           .map((a) => a.name);
         if (!dry) {
           await sleep(400);

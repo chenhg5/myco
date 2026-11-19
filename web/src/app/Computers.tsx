@@ -386,14 +386,16 @@ function RemoveComputer({ machine, rows, onClose, onRemoved }: {
       setBusy(false);
     }
   };
-  const n = gone?.length || 0;
+  // The computer's own node goes with it but is not shown as an agent.
+  const shown = (gone || []).filter((name) => { const r = rowOf(name); return !r || agentKind(r.st.agent) !== "machine"; });
+  const n = shown.length;
   return (
     <Modal open onOpenChange={(o) => !o && !busy && onClose()} title={L(`移除「${machine.name}」？`, `Remove “${machine.name}”?`)}
       description={L("这台电脑会从工作区里拿掉，不能撤销。", "This computer leaves the workspace; this can't be undone.")}>
       {gone === null && !error && <div className="app-empty-note">{L("正在看会一起移除什么…", "Looking at what goes with it…")}</div>}
       {gone !== null && n > 0 && (
         <div className="pc-gone">
-          {gone.map((name) => {
+          {shown.map((name) => {
             const r = rowOf(name);
             return (
               <div key={name} className="pc-gone-row">

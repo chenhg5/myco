@@ -3466,6 +3466,9 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, view.locator(".pcd-danger").getByRole("button", { name: "移除" }));
       const dialog = page.locator(".app-modal");
       await dialog.locator(".pc-gone-row").nth(1).waitFor({ timeout: 10_000 });
+      // The computer's own node goes too, but is not listed as one of them.
+      const gone = await dialog.locator(".pc-gone-row").count();
+      if (gone !== 2) throw new Error(`移除电脑弹窗应列出它上面的 2 个，实际 ${gone} 个`);
       const dialogText = compactText(await dialog.innerText());
       for (const want of ["2 个 agent 和终端会一起移除", "聊过的内容都保留", "myco runner service uninstall"]) {
         if (!dialogText.includes(want)) throw new Error(`移除电脑弹窗里应提到「${want}」，实际是「${dialogText}」`);
