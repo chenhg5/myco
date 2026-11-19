@@ -2421,6 +2421,25 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, prep.getByRole("button", { name: "先跳过" }));
       await prep.waitFor({ state: "detached", timeout: 10_000 });
       await page.locator(".app-settings-head").waitFor({ timeout: 10_000 });
+      // With it, the 上手清单 at the foot of the sidebar ticks what is done,
+      // and pages say what they are for the first time.
+      if (narrow) await sidebar(page, true);
+      const list = page.locator("[data-testid=checklist]");
+      await list.waitFor({ timeout: 10_000 });
+      await list.locator('.ob-step.is-done[data-step="agent"]').waitFor({ timeout: 10_000 });
+      await settle(page, 300);
+      await shot(page, size, scheme, "checklist");
+      if (narrow) await sidebar(page, false);
+      await go(page, "应用", narrow);
+      const intro = page.locator("[data-testid=intro-apps]");
+      await intro.waitFor({ timeout: 10_000 });
+      await clickVisible(page, intro.getByRole("button", { name: "知道了" }));
+      await intro.waitFor({ state: "detached", timeout: 5_000 });
+      // Put away, for the steps after this one.
+      if (narrow) await sidebar(page, true);
+      await clickVisible(page, list.getByRole("button", { name: "不再显示上手清单" }));
+      await list.waitFor({ state: "detached", timeout: 5_000 });
+      await page.evaluate(() => { localStorage.removeItem("myco-onboard"); window.dispatchEvent(new CustomEvent("myco-onboard-changed")); });
       if (narrow) await sidebar(page, false);
     });
 

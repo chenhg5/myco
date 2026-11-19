@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { IntroCard, introOf } from "@/app/Onboard";
 import { ArrowLeft, ChevronRight, Info, Monitor, Pencil, Plus, Settings2, SquareTerminal, Trash2 } from "lucide-react";
 import { appApi, type LocalState, type MachineAI, type MachineInfo } from "@/appapi";
 import type { Machine, Project } from "@/api";
@@ -206,6 +207,7 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, on
         subtitle={L("agent 跑在这些电脑上：笔记本、云服务器、WSL 各算一台。点开一台看它上面的 agent 和终端。", "Your agents run on these: a laptop, a cloud server or WSL each counts as one. Open one for its agents and terminals.")}>
         <button type="button" className="app-btn app-btn-primary" onClick={onConnect}><Plus />{L("连一台电脑", "Connect a computer")}</button>
       </PageHero>
+      {machines.length > 0 && <IntroCard id="computers" {...introOf("computers")} action={{ label: L("连一台电脑", "Connect a computer"), onClick: onConnect }} />}
       {machines.length > 0 && (
         <div className="au-stats pcx-stats">
           <div className="au-stat"><span>{L("在线", "Online")}</span><b>{online}<small className="pcx-of">/ {machines.length}</small></b></div>

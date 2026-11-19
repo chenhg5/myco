@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { IntroCard, introOf } from "@/app/Onboard";
 import { FileText, KanbanSquare, LayoutTemplate, Plus, Presentation, RefreshCw, Search, Sparkles, Table2 } from "lucide-react";
 import { ApiError, appApi } from "@/appapi";
 import type { Page, Template } from "@/api";
@@ -104,6 +105,7 @@ export function TemplatesPage({ hubId, projects, now }: { hubId: string; project
           </>
         )}
       </PageHero>
+      {!unsupported && <IntroCard id="apps" {...introOf("apps")} />}
       {sync.text && <p className="tp-sync"><span className="tp-sync-note">{sync.text}</span><button type="button" className="tp-sync-x" aria-label={L("知道了", "Dismiss")} onClick={() => setSync({})}>×</button></p>}
       <ErrorText error={error} />
       {unsupported ? (

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { IntroCard, introOf } from "@/app/Onboard";
 import { Activity, ArrowLeft, ArrowUp, ChevronDown, AudioLines, Columns2, FileText, PanelRightClose, PanelRightOpen, Plus, Users } from "lucide-react";
 import { appApi, type RecentItem } from "@/appapi";
 import type { Message, Project } from "@/api";
@@ -755,6 +756,7 @@ function HomeView({ hubId, hubName, project, coordinator, peer, rows, now, items
           {fullToggle}
         </span>
       </header>
+      <div className="sp-intro"><IntroCard id="projects" {...introOf("projects")} /></div>
       {strip}
       <ConversationDetail
         target={{ hubId, hubName, threadId: "", agent: coordinator, peer, project: project.name }}
