@@ -1,6 +1,6 @@
 # 工作流：让接入的 agent 按固定流程干活
 
-状态：设计稿（2026-11-19），还没开始做。参考了 Glenn 之前做的 [agentflow](https://github.com/chenhg5/agentflow)。
+状态：第一期已实现（引擎、命令行、App 的工作流页），接口见 [api.md](../api.md#workflows)。下面是 2026-11-19 的设计稿，实现时改动的地方已经改过来。参考了 Glenn 之前做的 [agentflow](https://github.com/chenhg5/agentflow)。
 
 ![架构](../assets/workflow/architecture.svg)
 
@@ -32,11 +32,11 @@ agentflow 是一个单机的工作流运行器：一个 JSON 描述节点和边�
 | "只有运行器推进图"：节点自己不决定下一步 | 照搬，这是最重要的一条：agent 只交结果，下一步是谁由工作区决定 |
 | "能用程序就别开 agent" | 照搬：shell 步骤是一等公民，测试、构建、发消息都用它 |
 | `validate` / `apply` / `run --dry-run` 命令和一个教 agent 写流程的 skill | 照搬成 `myco workflow ...` 和 skill 里的一节 |
-| 中心编排，agent 之间不互相委派 | 照搬：工作流里的任务都由 `@workflow:<运行>` 发出 |
+| 中心编排，agent 之间不互相委派 | 照搬：工作流里的任务都由工作区发出（带着运行的 id） |
 
 **不照搬的**：agentflow 自己在本机起 CLI 进程、管理它们的工作目录和环境变量。myco 已经有一整套"把任务交给某台电脑上的某个会话"的东西（runner 唤醒、云端 `inbox wait`、心跳、过程记录、没收尾检测、ask / steer / stop、项目、权限），工作流应该**站在消息上面**，而不是再造一个执行器。所以：
 
-> 工作流的一个 agent 步骤 = 工作区以 `@workflow:<运行>` 的身份发给某个 agent 的**一条普通任务**；那个 agent 回复时附上结构化结果，工作区收到回复就推进下一步。
+> 工作流的一个 agent 步骤 = 工作区以**启动它的人**的名义（`@console:<成员>`，和自动化一样）发给某个 agent 的**一条普通任务**，任务上带着这次运行的 id；那个 agent 回复时附上结构化结果，工作区收到回复就推进下一步。
 
 这样带来的好处是不用额外做的：每一步在哪台电脑、哪个会话里跑都行；每一步点开就是那条任务的对话和过程；卡住了用现有的「再催一下」「停止」；权限按现有的发送规则走；用户也可以在这条任务里直接插话。
 
@@ -59,7 +59,7 @@ agentflow 是一个单机的工作流运行器：一个 JSON 描述节点和边�
   - `agent: "reviewer"`：项目里一个固定的 agent（最常用）。
   - `role: "后端"`：项目里分工写着"后端"的任意一个，挑空闲的（第二期）。
   - `spawn: { computer, harness }` / `fork: "reviewer"`：每次运行新开一个会话或复制一个（第三期），用于并行跑同一个角色、或者不想打扰常驻会话。
-- **电脑步骤**：在一台电脑（终端节点）上跑一条命令。结果是 `exit_code`、`stdout` 末尾、`stderr` 末尾；可以用 `parse: "json"` 把 stdout 当成结果。走现有的 exec 和 `allow_from`，工作流的发送身份要被允许。
+- **电脑步骤**：在一台电脑（终端节点）上跑一条命令。结果是 exec 的结果（`exit_code`、`stdout`、`stderr`）；退出码不是 0 就算这一步失败（`onError` 的边可以接住）；可以用 `parse: "json"` 把 stdout 读进 `output.json`。走现有的 exec，那台电脑要允许启动的人发命令。
 - **人步骤**：给某个人（默认是启动的人）发一张决定卡片：标题、说明（可以引用前面步骤的 summary 和附件）、几个选项、可选一句话。出现在 App 的「待你决定」、iPhone 推送里。超时走 `on_timeout` 指定的边，没写就当"不做"。
 
 ### 3.2 结果怎么回来
@@ -120,8 +120,8 @@ skill 里加一节"收到工作流任务时"：只做这一步要做的事，不
     { "from": "write", "to": "review" },
     { "from": "review", "to": "test",  "when": "output.approved" },
     { "from": "review", "to": "write", "when": "!output.approved", "maxIterations": 3, "else": "$fail" },
-    { "from": "test", "to": "approve", "when": "output.exit_code == 0" },
-    { "from": "test", "to": "write",   "when": "output.exit_code != 0", "maxIterations": 2, "else": "$fail" },
+    { "from": "test", "to": "approve" },
+    { "from": "test", "to": "write",   "onError": true, "maxIterations": 2, "else": "$fail" },
     { "from": "approve", "to": "merge", "when": "output.choice == '合并'" },
     { "from": "approve", "to": "$end",  "when": "output.choice != '合并'" }
   ]
@@ -157,7 +157,7 @@ sequenceDiagram
   participant A as agent（任意电脑）
   U->>W: 启动（输入）
   W->>W: 存运行、走到起点
-  W->>M: 以 @workflow:r_x 发任务给 coder
+  W->>M: 以启动者的名义发任务给 coder（带 run 的 id）
   M->>A: runner 唤醒 / inbox wait
   A->>M: reply --result {...}
   M-->>W: 事件：r_x 的任务有回复
@@ -167,7 +167,7 @@ sequenceDiagram
   W->>W: 走到 $end，运行完成
 ```
 
-- 消息服务在一条任务**被回复、失败、被取消、被关掉**时，如果发件人是 `@workflow:*`，就调一下 `WorkflowService.OnStep(...)`。这就是唯一的推进入口，外加一个定时器处理超时和人步骤过期。
+- 消息服务在一条带运行 id 的任务**被回复、失败、被停止、被关掉**时叫醒 `WorkflowService`（`Kick`），它马上看一遍在跑的运行；另外每 5 秒看一次，处理超时和过期的决定。推进只在这里发生。
 - 每次推进在一个 SQLite 事务里做：读运行 → 算下一步 → 写步骤和事件 → 发任务。重复的事件（同一条回复到两次）按任务 id 去重。
 - Hub 重启后对账一次：所有"在跑"的步骤，按它那条任务现在的状态补推进（任务已回复但没推进的，补推进；任务丢了的，标失败）。
 

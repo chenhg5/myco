@@ -252,6 +252,10 @@ type Message struct {
 	Suggest string `json:"suggest,omitempty"`
 	// Automation, on a task an automation sent, is its id (v0.19.22+).
 	Automation string `json:"automation,omitempty"`
+	// Workflow, on a task a workflow sent, is its run's id; Result, on a
+	// reply, is the structured result handed back with it (v0.21+).
+	Workflow string          `json:"workflow,omitempty"`
+	Result   json.RawMessage `json:"result,omitempty"`
 	// E2E: the body is end-to-end encrypted (an envelope only the
 	// message's readers can open; see docs/design/e2e-encryption.md).
 	E2E bool `json:"e2e,omitempty"`
@@ -478,6 +482,9 @@ type SuggestRequest struct {
 type ReplyRequest struct {
 	Body        string   `json:"body"`
 	Attachments []string `json:"attachments,omitempty"`
+	// Result (replies only, v0.21+): a JSON object, the structured result a
+	// workflow step reads. Older hubs refuse the field.
+	Result json.RawMessage `json:"result,omitempty"`
 	// Ask (progress only): the update asks the task's sender to decide, and
 	// the task waits (held) until they answer. Older hubs refuse the field.
 	Ask bool `json:"ask,omitempty"`
@@ -1641,4 +1648,151 @@ type TemplateUse struct {
 type TemplateUsed struct {
 	Page     Page     `json:"page"`
 	Template Template `json:"template"`
+}
+
+// Workflows (v0.21+): graphs the hub walks, handing each step to an agent,
+// a computer or a person (docs/design/workflow.md).
+
+// Workflow is a stored workflow. Definition is its JSON (on get and apply).
+type Workflow struct {
+	ID          string          `json:"id"`
+	Name        string          `json:"name"`
+	Description string          `json:"description,omitempty"`
+	Project     string          `json:"project,omitempty"`
+	Owner       string          `json:"owner,omitempty"`
+	Version     int             `json:"version"`
+	Enabled     bool            `json:"enabled"`
+	Steps       int             `json:"steps"`
+	Active      int             `json:"active"`
+	LastRun     *WorkflowRun    `json:"last_run,omitempty"`
+	Definition  json.RawMessage `json:"definition,omitempty"`
+	CreatedAt   time.Time       `json:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at"`
+}
+
+// WorkflowList answers GET /v1/workflows.
+type WorkflowList struct {
+	Workflows []Workflow `json:"workflows"`
+}
+
+// WorkflowApplyRequest is the body of POST /v1/workflows (create, or a
+// new version of the one with the same name) and /v1/workflows/validate.
+type WorkflowApplyRequest struct {
+	Definition json.RawMessage `json:"definition"`
+}
+
+// WorkflowApplyResponse answers POST /v1/workflows.
+type WorkflowApplyResponse struct {
+	Workflow Workflow `json:"workflow"`
+	Created  bool     `json:"created"`
+	Changed  bool     `json:"changed"`
+	Warnings []string `json:"warnings,omitempty"`
+	DryRun   bool     `json:"dry_run,omitempty"`
+}
+
+// WorkflowCheck answers POST /v1/workflows/validate.
+type WorkflowCheck struct {
+	Valid    bool     `json:"valid"`
+	Problems []string `json:"problems,omitempty"`
+	Warnings []string `json:"warnings,omitempty"`
+}
+
+// WorkflowUpdate is the body of PATCH /v1/workflows/{ref}.
+type WorkflowUpdate struct {
+	Enabled *bool `json:"enabled,omitempty"`
+}
+
+// WorkflowStart is the body of POST /v1/workflows/{ref}/runs.
+type WorkflowStart struct {
+	Inputs map[string]any `json:"inputs,omitempty"`
+}
+
+// WorkflowPreview answers a dry-run start: what the first step would get.
+type WorkflowPreview struct {
+	Inputs map[string]any `json:"inputs"`
+	Step   string         `json:"step"`
+	Target string         `json:"target"`
+	Body   string         `json:"body"`
+	DryRun bool           `json:"dry_run"`
+}
+
+// WorkflowRun is one run. Steps, Events and Definition come with GET
+// /v1/workflow-runs/{id}; Current (the steps open now) always.
+type WorkflowRun struct {
+	ID         string          `json:"id"`
+	WorkflowID string          `json:"workflow_id"`
+	Name       string          `json:"name"`
+	Version    int             `json:"version"`
+	Project    string          `json:"project,omitempty"`
+	Status     string          `json:"status"` // running waiting succeeded failed cancelled
+	Inputs     map[string]any  `json:"inputs,omitempty"`
+	Owner      string          `json:"owner,omitempty"`
+	By         string          `json:"by,omitempty"`
+	Trigger    string          `json:"trigger,omitempty"`
+	Error      string          `json:"error,omitempty"`
+	Current    []string        `json:"current,omitempty"`
+	Steps      []RunStep       `json:"steps,omitempty"`
+	Events     []RunEvent      `json:"events,omitempty"`
+	Definition json.RawMessage `json:"definition,omitempty"`
+	CreatedAt  time.Time       `json:"created_at"`
+	UpdatedAt  time.Time       `json:"updated_at"`
+	EndedAt    *time.Time      `json:"ended_at,omitempty"`
+}
+
+// RunStep is one start of a step in a run.
+type RunStep struct {
+	ID        string         `json:"id"`
+	Step      string         `json:"step"`
+	Title     string         `json:"title,omitempty"`
+	Kind      string         `json:"kind"` // agent computer human
+	Attempt   int            `json:"attempt"`
+	Status    string         `json:"status"` // running waiting done failed cancelled
+	Target    string         `json:"target,omitempty"`
+	MessageID string         `json:"message_id,omitempty"`
+	Input     string         `json:"input,omitempty"`
+	Output    map[string]any `json:"output,omitempty"`
+	Summary   string         `json:"summary,omitempty"`
+	Error     string         `json:"error,omitempty"`
+	Retries   int            `json:"retries,omitempty"`
+	Bounced   bool           `json:"bounced,omitempty"`
+	Options   []string       `json:"options,omitempty"`
+	StartedAt time.Time      `json:"started_at"`
+	EndedAt   *time.Time     `json:"ended_at,omitempty"`
+	DueAt     *time.Time     `json:"due_at,omitempty"`
+}
+
+// RunEvent is a line of a run's log.
+type RunEvent struct {
+	At   time.Time `json:"at"`
+	Kind string    `json:"kind"`
+	Step string    `json:"step,omitempty"`
+	Text string    `json:"text"`
+}
+
+// WorkflowRunList answers GET /v1/workflow-runs.
+type WorkflowRunList struct {
+	Runs []WorkflowRun `json:"runs"`
+}
+
+// WorkflowRetry is the body of POST /v1/workflow-runs/{id}/retry.
+type WorkflowRetry struct {
+	From string `json:"from,omitempty"`
+}
+
+// WorkflowDecide is the body of POST /v1/workflow-runs/{id}/decide.
+type WorkflowDecide struct {
+	Step   string `json:"step"`
+	Choice string `json:"choice"`
+	Note   string `json:"note,omitempty"`
+}
+
+// WorkflowDecision is a decision waiting for someone.
+type WorkflowDecision struct {
+	Run  WorkflowRun `json:"run"`
+	Step RunStep     `json:"step"`
+}
+
+// WorkflowDecisions answers GET /v1/workflow-decisions.
+type WorkflowDecisions struct {
+	Decisions []WorkflowDecision `json:"decisions"`
 }

@@ -146,6 +146,76 @@ CREATE TABLE IF NOT EXISTS automation_runs (
   error         TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_automation_runs ON automation_runs(automation_id, at DESC);
+CREATE TABLE IF NOT EXISTS workflows (
+  id         TEXT PRIMARY KEY,
+  name       TEXT NOT NULL UNIQUE,
+  project    TEXT NOT NULL DEFAULT '',
+  owner      TEXT NOT NULL DEFAULT '',
+  owner_id   TEXT NOT NULL DEFAULT '',
+  version    INTEGER NOT NULL,
+  def        TEXT NOT NULL,
+  enabled    INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS workflow_versions (
+  workflow_id TEXT NOT NULL,
+  version     INTEGER NOT NULL,
+  def         TEXT NOT NULL,
+  by_name     TEXT NOT NULL DEFAULT '',
+  created_at  INTEGER NOT NULL,
+  PRIMARY KEY (workflow_id, version)
+);
+CREATE TABLE IF NOT EXISTS workflow_runs (
+  id          TEXT PRIMARY KEY,
+  workflow_id TEXT NOT NULL,
+  name        TEXT NOT NULL,
+  version     INTEGER NOT NULL,
+  project     TEXT NOT NULL DEFAULT '',
+  status      TEXT NOT NULL,
+  inputs      TEXT NOT NULL DEFAULT '{}',
+  owner       TEXT NOT NULL DEFAULT '',
+  owner_id    TEXT NOT NULL DEFAULT '',
+  by_name     TEXT NOT NULL DEFAULT '',
+  run_trigger TEXT NOT NULL DEFAULT '',
+  error       TEXT NOT NULL DEFAULT '',
+  state       TEXT NOT NULL DEFAULT '{}',
+  created_at  INTEGER NOT NULL,
+  updated_at  INTEGER NOT NULL,
+  ended_at    INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_workflow_runs ON workflow_runs(workflow_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_workflow_runs_active ON workflow_runs(status) WHERE status IN ('running', 'waiting');
+CREATE TABLE IF NOT EXISTS run_steps (
+  id         TEXT PRIMARY KEY,
+  run_id     TEXT NOT NULL,
+  step_id    TEXT NOT NULL,
+  kind       TEXT NOT NULL,
+  attempt    INTEGER NOT NULL,
+  status     TEXT NOT NULL,
+  target     TEXT NOT NULL DEFAULT '',
+  message_id TEXT NOT NULL DEFAULT '',
+  input      TEXT NOT NULL DEFAULT '',
+  output     TEXT NOT NULL DEFAULT '',
+  summary    TEXT NOT NULL DEFAULT '',
+  error      TEXT NOT NULL DEFAULT '',
+  retries    INTEGER NOT NULL DEFAULT 0,
+  bounced    INTEGER NOT NULL DEFAULT 0,
+  started_at INTEGER NOT NULL,
+  ended_at   INTEGER NOT NULL DEFAULT 0,
+  due_at     INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_run_steps ON run_steps(run_id, started_at);
+CREATE INDEX IF NOT EXISTS idx_run_steps_message ON run_steps(message_id) WHERE message_id != '';
+CREATE TABLE IF NOT EXISTS run_events (
+  id     INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id TEXT NOT NULL,
+  at     INTEGER NOT NULL,
+  kind   TEXT NOT NULL,
+  step   TEXT NOT NULL DEFAULT '',
+  text   TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_run_events ON run_events(run_id, id);
 CREATE TABLE IF NOT EXISTS aliases (
   name       TEXT PRIMARY KEY,
   target     TEXT NOT NULL,
@@ -380,7 +450,10 @@ func Open(path string) (*sql.DB, error) {
 		// When its recipient last showed it is working on it (ms).
 		{"active_at", "INTEGER NOT NULL DEFAULT 0"},
 		// The automation that sent it (v0.19.22).
-		{"automation", "TEXT NOT NULL DEFAULT ''"}}); err != nil {
+		{"automation", "TEXT NOT NULL DEFAULT ''"},
+		// The workflow run that sent it, and a reply's structured result
+		// (v0.21).
+		{"workflow", "TEXT NOT NULL DEFAULT ''"}, {"result", "TEXT NOT NULL DEFAULT ''"}}); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}

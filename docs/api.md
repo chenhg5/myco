@@ -126,7 +126,7 @@ Agent detail and overview entries include `resume: {created_at, last_used_at?, l
 | `POST /v1/messages/{id}/ack` | recipient | Start work on a pulled task (stops redelivery and makes it `working` in overview); an inbox-wait session should ack before doing the work |
 | `POST /v1/messages/{id}/hold` | recipient | Accept, answer later |
 | `POST /v1/messages/{id}/done` | recipient | Close without reply; also works on a queued message (drop it without pulling) |
-| `POST /v1/messages/{id}/reply` | recipient | `{body}` → `{message: <reply>}`; closes the original |
+| `POST /v1/messages/{id}/reply` | recipient | `{body, attachments?, result?}` → `{message: <reply>}`; closes the original. `result` (v0.21+): a JSON object, the structured result a workflow step reads (at most 64 KiB; not end-to-end encrypted, the hub reads it). Older hubs refuse the field: the CLI then puts it at the end of the body as a `` ```json `` block, which workflows read the same way |
 | `POST /v1/messages/{id}/release` | recipient | `{delay_seconds, reason?}` (≤ 3600) — hand back for redelivery later; not counted as a failed attempt. `reason: "in_use"` marks the agent's session as in use, shown in the console |
 | `POST /v1/messages/{id}/fail` | recipient | `{reason}`; for tasks the sender gets an `event` |
 | `GET /v1/messages/{id}/reply?wait_seconds=&progress_since=` | sender | Long-poll for the reply → `{reply, timed_out}`; a returned reply is marked done. With `progress_since` (RFC 3339, or `0`) it also returns as soon as there are newer progress updates → `{reply, progress, timed_out}` |
@@ -262,6 +262,89 @@ Rules:
 - Limits: 200 automations per workspace, `name` 80 characters, `body` 8 KiB.
 - End-to-end encryption: the hub writes the message, so it is sent in plain text even when the hub has encryption on.
 
+## Workflows
+
+A workflow is a graph the hub walks (v0.21+; design: [design/workflow.md](design/workflow.md)). Each agent step is an ordinary task sent from the run's owner's console address (`@console:<member>`) with `workflow` set to the run's id; the agent answers with `myco message reply --result` and the hub moves on. Computer steps are commands for an exec node; human steps wait for a decision (`POST …/decide`). The hub alone decides what comes next. Older hubs answer `404` on these routes.
+
+Both people (a console or admin token) and agents (their own token, acting for the member who added them; on hubs without members, for the owner) may use them. Others' workflows and runs answer `404`; `…/decide` also takes the person the step names.
+
+| Endpoint | Notes |
+|---|---|
+| `GET /v1/workflows` | `{workflows: [workflow]}` (without `definition`): the caller's; everyone's for those who manage the hub |
+| `POST /v1/workflows/validate` | `{definition}` → `{valid, problems?, warnings?}`. Warnings (an agent that does not exist yet, a computer step to something that is not an exec node) do not block saving |
+| `POST /v1/workflows` | `{definition}` → `201 {workflow, created, changed, warnings?}` (or `200` when it exists): creates the workflow named in the definition, or gives it a new `version` when the definition differs. Runs going on keep the version they started with. `?dry_run=true` checks only. Someone else's name: `permission_denied` |
+| `GET /v1/workflows/{ref}` | `ref` is the id or the name → the workflow with `definition` |
+| `PATCH /v1/workflows/{ref}` | `{enabled}`: a workflow turned off cannot be started |
+| `DELETE /v1/workflows/{ref}` | `204`. Its runs go too (the ones going are cancelled first); the tasks they sent stay |
+| `POST /v1/workflows/{ref}/runs` | `{inputs?}` → `201` the run (with steps). Inputs are checked against the definition's `inputs` schema (text is turned into the numbers, booleans and lists it asks for; defaults filled). `?dry_run=true` → `{inputs, step, target, body, dry_run}`: the first step's task, unsent |
+| `GET /v1/workflow-runs?workflow=&active=true&limit=` | `{runs: [run]}` (without steps), newest first; `limit` default 50, at most 200 |
+| `GET /v1/workflow-runs/{id}` | The run with `steps`, `events` (its log, the last 500 lines) and the `definition` it follows |
+| `POST /v1/workflow-runs/{id}/cancel` | Stops it: open tasks are stopped, decisions withdrawn → the run |
+| `POST /v1/workflow-runs/{id}/retry` | `{from?}`: a failed or cancelled run starts again at that step (default: the step that failed), keeping earlier results → the run |
+| `POST /v1/workflow-runs/{id}/decide` | `{step, choice, note?}`: `choice` must be one of the step's `options` → the run |
+| `GET /v1/workflow-decisions` | `{decisions: [{run, step}]}`: decisions waiting for the caller |
+
+Saving and removing a workflow are audited (`workflow.*`).
+
+A workflow definition (all of it is checked; unknown fields are refused):
+
+```json
+{
+  "name": "写-审-改", "description": "", "project": "myco",
+  "inputs": {"required": ["task"], "properties": {"task": {"type": "string", "title": "要做什么", "format": "textarea"}}},
+  "steps": [
+    {"id": "write", "agent": "coder", "prompt": "完成：{{inputs.task}}",
+     "output": {"required": ["branch"], "properties": {"branch": {"type": "string"}}}, "timeout": "2h", "retry": 1},
+    {"id": "review", "agent": "reviewer", "prompt": "审一下 {{steps.write.output.branch}}",
+     "output": {"required": ["approved"], "properties": {"approved": {"type": "boolean"}, "comments": {"type": "array"}}}},
+    {"id": "test", "computer": "studio-mac", "run": "make test"},
+    {"id": "ok", "human": "$starter", "prompt": "合并吗？", "options": ["合并", "不合并"], "timeout": "1d"}
+  ],
+  "edges": [
+    {"from": "write", "to": "review"},
+    {"from": "review", "to": "test", "when": "output.approved"},
+    {"from": "review", "to": "write", "when": "!output.approved", "maxIterations": 3, "else": "$fail"},
+    {"from": "test", "to": "ok"},
+    {"from": "test", "to": "write", "onError": true, "maxIterations": 2},
+    {"from": "ok", "to": "$end", "when": "output.choice == '合并'"},
+    {"from": "ok", "to": "$fail", "when": "output.choice != '合并'"}
+  ]
+}
+```
+
+Rules:
+
+- A step sets exactly one of `agent` (with `prompt`, optional `output` schema), `computer` (an exec node, with `run`; `parse: "json"` reads stdout into `output.json`) or `human` (a member name or `$starter`, with `prompt` and at least two `options`). Ids: letters, digits, `_`, `-`, at most 40. At most 50 steps and 200 edges.
+- `timeout`: `30m`, `2h`, `1d`, `1d12h`. A step past it fails (its task is stopped). A decision with no timeout waits 3 days; one that expires counts as no answer (`output.choice` is `""`, `output.timed_out` is `true`), never as yes.
+- `retry` (0-5): a failed agent or computer step is sent again that many times.
+- An agent step's result: the reply's `result`, else the last `` ```json `` block of its body. With an `output` schema, a result that does not fit (or none) is sent back once with what is wrong; a second miss fails the step. The output always has `text` (the reply's body). `summary` is the result's `summary`, else the reply's first line.
+- A computer step's output is the exec result (`exit_code`, `stdout`, `stderr`, …); a non-zero exit fails it. A human step's output is `{choice, note, by}`.
+- Edges out of a step are tried in order and the first whose `when` holds is taken (all of them with `"dispatch": "all"` on the step). `onError` edges are tried only when the step failed, the others only when it succeeded; a failed step with no `onError` edge fails the run, and a step with edges none of which holds fails it too ("no way on"). A step with no edges ends its branch. With no `edges` at all, steps run in order.
+- An edge to the same or an earlier step (in `steps` order) needs `maxIterations`; once taken that many times, `else` is taken instead (`$fail` when unset). `else` cannot go back.
+- `"join": "all"` on a step: it starts once every step with an edge into it has arrived. The run fails if it ends with a join that never filled.
+- `$end` ends a branch; the run succeeds when nothing is open. `$fail` fails it. A run that has started 200 steps stops.
+- `when`, and `{{…}}` in `prompt`, `run`, `title`, `agent` and `computer`, are expressions over `inputs`, `steps.<id>.output|summary|status|error|attempt`, `run.id|name|by`, and (in `when`) `output`, `status`, `error`, `attempt` of the step that ended: paths (`a.b`, `a[0]`, `a["k"]`), literals, `== != < <= > >= && || !`, `len(x)`, `contains(x, y)`. Missing values are `null`; comparing different kinds is false. `{{#if expr}}…{{else}}…{{/if}}` keeps one part.
+- `inputs` and `output` use a JSON Schema subset: `type` (`object`, `string`, `number`, `integer`, `boolean`, `array`), `required`, `properties`, `items`, `enum`, `default`, `title`, `description`, `format`.
+
+A run:
+
+```json
+{
+  "id": "run_...", "workflow_id": "wf_...", "name": "写-审-改", "version": 2, "project": "myco",
+  "status": "running|waiting|succeeded|failed|cancelled", "inputs": {"task": "加导出按钮"},
+  "owner": "glenn", "by": "glenn", "trigger": "manual|agent|automation", "error": "",
+  "current": ["review"],
+  "steps": [{"id": "rs_...", "step": "write", "title": "", "kind": "agent", "attempt": 1, "status": "done",
+             "target": "coder", "message_id": "msg_...", "input": "…the task as sent…",
+             "output": {"branch": "feat/x", "summary": "加好了", "text": "…"}, "summary": "加好了",
+             "started_at": "...", "ended_at": "..."}],
+  "events": [{"at": "...", "kind": "started|step|done|failed|bounced|edge|decided|timeout|retry|finished", "step": "write", "text": "…"}],
+  "created_at": "...", "updated_at": "...", "ended_at": "..."
+}
+```
+
+`waiting`: only decisions are open. A step's `status` is `running`, `waiting` (a decision), `done`, `failed` or `cancelled`; `options` and `due_at` come with decisions.
+
 ## Message object
 
 ```json
@@ -271,12 +354,13 @@ Rules:
   "type": "task|note|reply|event",
   "body": "...",
   "status": "queued|delivered|acked|held|done|failed",
-  "attempts": 1, "error": "", "idempotency_key": "", "automation": "aut_...",
+  "attempts": 1, "error": "", "idempotency_key": "", "automation": "aut_...", "workflow": "run_...",
+  "result": {"approved": true},
   "lease_until": "...", "created_at": "...", "updated_at": "..."
 }
 ```
 
-`after` is optional and omitted when empty (from v0.19.2). `automation` names the automation that sent the message, omitted otherwise. Adding fields is non-breaking; renaming/removing fields requires `/v2`.
+`after` is optional and omitted when empty (from v0.19.2). `automation` names the automation that sent the message, omitted otherwise. `workflow` (v0.21+) is the workflow run that sent a task; `result` is the structured result on a reply that has one. Adding fields is non-breaking; renaming/removing fields requires `/v2`.
 
 ## Exec nodes
 

@@ -56,6 +56,7 @@ type Server struct {
 	resume      *app.ResumeService
 	traces      *app.TraceService
 	automations *app.AutomationService
+	workflows   *app.WorkflowService
 	pages       *app.PageService
 	tun         tunnels
 	handovers   *app.HandoverService
@@ -213,6 +214,7 @@ func (s *Server) routes() {
 	// A machine joins with a link; /j/{token} serves the link's script/page.
 	m.HandleFunc("POST /v1/join", s.join)
 	s.automationRoutes(m)
+	s.workflowRoutes(m)
 	s.pageRoutes(m)
 	s.pinRoutes(m)
 	s.pageDataRoutes(m)
@@ -1381,7 +1383,7 @@ func (s *Server) reply(w http.ResponseWriter, r *http.Request, a *domain.Agent) 
 		return
 	}
 	dry := dryRun(r)
-	m, err := s.messages.ReplyWith(r.Context(), a, r.PathValue("id"), req.Body, req.Attachments, dry)
+	m, err := s.messages.ReplyResult(r.Context(), a, r.PathValue("id"), req.Body, string(req.Result), req.Attachments, dry)
 	if err != nil {
 		writeError(w, err)
 		return

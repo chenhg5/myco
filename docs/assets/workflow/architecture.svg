@@ -55,7 +55,7 @@
   <text x="418" y="288" font-size="13" fill="#2a3446">· 超时 / 重试 / 取消；人工步骤带 lease token</text>
   <text x="418" y="310" font-size="13" fill="#2a3446">· 由事件驱动：任务回复、失败、到点</text>
   <text x="418" y="332" font-size="13" fill="#2a3446">· 重启后按任务的状态对账，接着走</text>
-  <text x="418" y="352" font-size="12" fill="#5b6475">发任务的身份：@workflow:&lt;运行&gt;（像 @console）</text>
+  <text x="418" y="352" font-size="12" fill="#5b6475">以启动者的名义发任务，带着运行的 id（像自动化）</text>
 
   <rect x="400" y="380" width="190" height="120" rx="12" fill="#f3f4f7" stroke="#cfd3dc"/>
   <text x="414" y="406" font-size="14" font-weight="700" fill="#1d2330">已有：自动化</text>

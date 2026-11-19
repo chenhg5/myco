@@ -495,13 +495,26 @@ func (c *Client) Reply(ctx context.Context, id, body string, dry bool) (*api.Mes
 
 // ReplyWith answers a message with attachments (file ids).
 func (c *Client) ReplyWith(ctx context.Context, id, body string, attachments []string, dry bool) (*api.Message, error) {
-	body, err := c.sealAbout(ctx, id, false, "reply", body, attachments)
+	return c.ReplyResult(ctx, id, body, nil, attachments, dry)
+}
+
+// ReplyResult answers a message with a structured result too (a JSON
+// object; nil for none). The result is not end-to-end encrypted: the hub
+// reads it to move a workflow along. Hubs before v0.21 refuse the field:
+// then it goes at the end of the body as a ```json block, which they read
+// the same way.
+func (c *Client) ReplyResult(ctx context.Context, id, body string, result json.RawMessage, attachments []string, dry bool) (*api.Message, error) {
+	sealed, err := c.sealAbout(ctx, id, false, "reply", body, attachments)
 	if err != nil {
 		return nil, err
 	}
 	var out api.MessageResult
-	if err := c.do(ctx, http.MethodPost, "/v1/messages/"+esc(id)+"/reply", dryQuery(dry),
-		api.ReplyRequest{Body: body, Attachments: attachments}, &out); err != nil {
+	err = c.do(ctx, http.MethodPost, "/v1/messages/"+esc(id)+"/reply", dryQuery(dry),
+		api.ReplyRequest{Body: sealed, Attachments: attachments, Result: result}, &out)
+	if err != nil && len(result) > 0 && strings.Contains(err.Error(), "unknown field") && strings.Contains(err.Error(), "result") {
+		return c.ReplyResult(ctx, id, strings.TrimRight(body, "\n")+"\n\n```json\n"+string(result)+"\n```\n", nil, attachments, dry)
+	}
+	if err != nil {
 		return &out.Message, err
 	}
 	c.open(ctx, &out.Message)
