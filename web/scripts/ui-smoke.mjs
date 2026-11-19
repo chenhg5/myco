@@ -1350,8 +1350,7 @@ async function runMatrix(browser, size, scheme) {
       try {
         await go(page, "官网改版", narrow);
         const who = narrow ? page.locator('.sp-strip-face[title="PM (Codex)"]') : page.locator(".sp-nav-person", { hasText: "PM (Codex)" });
-        await who.first().click({ button: "right" });
-        await clickVisible(page, page.locator(".conv-menu").getByRole("menuitem", { name: "复制一份", exact: true }));
+        await menuPick(page, who.first(), "复制一份");
         const dialog = page.locator("[data-testid=fork-dialog]");
         await dialog.waitFor({ timeout: 10_000 });
         const name = dialog.locator("input.app-input");
