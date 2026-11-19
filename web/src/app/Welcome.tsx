@@ -5,6 +5,7 @@ import { CopyButton } from "@/app/copy";
 import { ErrorText } from "@/app/dialogs";
 import { Logo } from "@/components/brand";
 import { L } from "@/lib/i18n";
+import { setSimpleMode } from "@/app/simpleMode";
 
 /** The whole window when the App has no hubs yet. */
 export function Welcome({ onStartLocal, onConnect }: {
@@ -20,6 +21,8 @@ export function Welcome({ onStartLocal, onConnect }: {
     setError(null);
     try {
       await onStartLocal();
+      // A new install, starting on this computer: one person, its own agents.
+      setSimpleMode(true);
     } catch (e) {
       setError(e);
     } finally {

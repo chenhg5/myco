@@ -126,6 +126,16 @@ type Runtime struct {
 	MaxAccess string `json:"max_access,omitempty"`
 	// Quota is the account's usage limits as the CLI last reported them.
 	Quota *Quota `json:"quota,omitempty"`
+	// Features are what the runner supports beyond the basics (e.g.
+	// "changes", "ask_access"); apps show a feature's controls only when it
+	// is listed. Absent from runners that predate it.
+	Features []string `json:"features,omitempty"`
+	// Away says why the runner went offline, sent as it stops: "stopped"
+	// (it was stopped: by hand, its service, logging out or shutting down).
+	// A runner that is running sends none. Env is where it runs when that
+	// explains going offline: "wsl" (Windows shuts WSL down when idle).
+	Away string `json:"away,omitempty"`
+	Env  string `json:"env,omitempty"`
 }
 
 // Quota is a CLI account's usage limits at one moment (from v0.19.5).
@@ -722,6 +732,61 @@ type SpawnResult struct {
 	// and MachineNode its machine node there.
 	Joined      string `json:"joined,omitempty"`
 	MachineNode string `json:"machine_node,omitempty"`
+	// Info answers a request with CLI InfoCLI: what the machine allows and
+	// has (older machines refuse it as an unknown CLI). Reply carries the
+	// same as JSON text, which hubs older than Info pass on.
+	Info *MachineInfo `json:"info,omitempty"`
+}
+
+// InfoCLI, as a spawn request's CLI, asks the machine node about its
+// machine instead of starting anything (SpawnResult.Info). It rides on the
+// spawn request so that hubs pass it on unchanged.
+const InfoCLI = "info"
+
+// MachineInfo is what a machine tells its owner: where sessions may start,
+// the agent CLIs on it, and its recent Claude Code and Codex sessions.
+type MachineInfo struct {
+	// Dirs are the folders sessions may start in, as configured
+	// ("~/code/x"); ["~"] when the machine does not limit them.
+	Dirs []string `json:"dirs"`
+	// NewDir is where a new conversation's folder goes when none is given
+	// (a missing folder directly inside it is made): "~/myco" when allowed.
+	NewDir string `json:"new_dir"`
+	// MaxAccess is the highest access a session there may get.
+	MaxAccess string           `json:"max_access"`
+	AIs       []MachineAI      `json:"ais"`
+	Sessions  []MachineSession `json:"sessions"`
+	Home      string           `json:"home,omitempty"`
+}
+
+// MachineAI is an agent CLI on the machine.
+type MachineAI struct {
+	CLI  string `json:"cli"`
+	Name string `json:"name"`
+	// State: missing, signed_out, ready, or unknown (installed; signed in
+	// or not cannot be told).
+	State   string `json:"state"`
+	Version string `json:"version,omitempty"`
+	// Install and Login are commands to run on that machine.
+	Install string `json:"install,omitempty"`
+	Login   string `json:"login,omitempty"`
+}
+
+// MachineSession is a recent Claude Code or Codex session on the machine;
+// a copy of it joins with a spawn request (ForkFrom: its id, Dir: its
+// folder).
+type MachineSession struct {
+	CLI        string    `json:"cli"`
+	SessionID  string    `json:"session_id"`
+	Workdir    string    `json:"workdir"`
+	LastActive time.Time `json:"last_active"`
+	Title      string    `json:"title,omitempty"`
+	// Joined names the agent it already is in this workspace; JoinedElsewhere
+	// says it joined another workspace.
+	Joined          string `json:"joined,omitempty"`
+	JoinedElsewhere bool   `json:"joined_elsewhere,omitempty"`
+	// Auto: a program ran it (claude -p, codex exec, myco), not a person.
+	Auto bool `json:"auto,omitempty"`
 }
 
 // ExecResult is the reply body of an exec node (harness "exec").

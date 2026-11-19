@@ -302,7 +302,7 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
   until?: string;
   /** earlier tasks still open whose steps since this one was sent (since)
    *  show here (an agent in one long session goes on under the first) */
-  borrow?: { ids: string[]; since: string };
+  borrow?: { ids: string[]; since: string; label?: string };
   /** what you added to the task (steer): in the run at the time you sent
    *  it, so what it did after is under it */
   steers?: Message[];
@@ -623,8 +623,12 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
   }
   const endsWithSay = segments[segments.length - 1]?.kind !== "steps";
 
+  // Not started on this one yet: what is here goes on with the one before
+  // (shown after your message, in time), and says so.
+  const carryOn = !!borrow?.label && !ownEvents?.length && extra.length > 0;
   return (
     <div className={cn("trace is-flow", movingHere && !asking && "is-live")} ref={body}>
+      {carryOn && <div className="trace-carry">{L(`接着做上一件：${borrow!.label}`, `Still on the one before: ${borrow!.label}`)}</div>}
       {plan && <PlanCard items={plan.items} live={moving} />}
       {segments.map((seg, i) => seg.kind === "say" ? (
         <div key={seg.key} className={cn("trace-say", seg.delta && "trace-delta")}>

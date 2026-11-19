@@ -4,7 +4,7 @@ import { Camera, MessageCircle, Plus, Search, X } from "lucide-react";
 import { appApi } from "@/appapi";
 import type { Project } from "@/api";
 import type { AgentRow } from "@/app/types";
-import { agentKind, cliName, cloudLabel, isCloud, isInbox, isMe, machineOfRow, nodeName } from "@/app/nodes";
+import { agentKind, cliName, cloudLabel, isCloud, isInbox, isMe, machineOfRow, nodeName, thisComputerId } from "@/app/nodes";
 import { shortDir } from "@/app/AddToProject";
 import { Avatar, isWorkspace, stateWords, whereOf } from "@/app/persona";
 import { shareWorkspaces } from "@/app/AddToProject";
@@ -67,7 +67,7 @@ export function MembersPage({ rows, projects, now, onOpen }: {
       </div>
       {people.length === 0 && <div className="app-empty-note">{L("还没有成员。到一个项目里点「添加 agent」。", "No members yet. Open a project and choose Add an agent.")}</div>}
       {agents.length > 0 && <Section title={L("agent", "Agents")} rows={agents} projects={projects} now={now} onOpen={onOpen} />}
-      {spaces.length > 0 && <Section title={L("电脑", "Computers")} rows={spaces} projects={projects} now={now} onOpen={onOpen} />}
+      {spaces.length > 0 && <Section title={L("终端", "Terminals")} rows={spaces} projects={projects} now={now} onOpen={onOpen} />}
       {asleep.length > 0 && (
         <>
           <button type="button" className="mb-rest-toggle" onClick={() => setShowResting((v) => !v)}>
@@ -279,7 +279,7 @@ function WhoItIs({ row, now }: { row: AgentRow; now: number }) {
     }
     return () => { off = true; };
   }, [a.name, a.binding.session_id]);
-  const here = !!machine && !!local && ((local.machines || []).includes(machine.name) || (!!local.hostname && machine.hostname === local.hostname));
+  const here = !!machine && thisComputerId(row.hub, local) === machine.id;
   const ws = isWorkspace(a);
   const where = isCloud(a) ? cloudLabel(a)
     : [machine ? (here ? L("这台电脑", "This computer") : machine.name) : "", a.binding.workdir ? shortDir(a.binding.workdir) : ""].filter(Boolean).join(" · ") || "—";

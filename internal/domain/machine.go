@@ -79,6 +79,14 @@ type Runtime struct {
 	// Quota is the account's usage limits as the CLI last reported them
 	// (nil until a run reported any).
 	Quota *Quota `json:"quota,omitempty"`
+	// Features are what the agent's runner supports beyond the basics
+	// (docs/design/client-plan.md section 4), space-separated, so that the
+	// struct stays comparable; "" from runners that predate them.
+	Features string `json:"features,omitempty"`
+	// Away is why the runner went offline ("stopped"), Env where it runs
+	// ("wsl"); see api.Runtime.
+	Away string `json:"away,omitempty"`
+	Env  string `json:"env,omitempty"`
 }
 
 // Quota is a CLI account's usage limits at one moment.
@@ -153,12 +161,44 @@ func orNone(h string) string {
 
 // Validate keeps runtime fields short single lines.
 func (r Runtime) Validate() error {
-	for _, s := range []string{r.CLI, r.CLIVersion, r.Model, r.ModelSource, r.Access, r.Provider, r.ProviderSource, r.Effort, r.EffortSource, r.MaxAccess} {
+	for _, s := range []string{r.CLI, r.CLIVersion, r.Model, r.ModelSource, r.Access, r.Provider, r.ProviderSource, r.Effort, r.EffortSource, r.MaxAccess, r.Away, r.Env} {
 		if len(s) > 120 || strings.ContainsAny(s, "\x00\n\r") {
 			return Errf(CodeInvalidArgument, "runtime fields must be single lines under 120 characters")
 		}
 	}
+	if len(r.Features) > 400 || strings.ContainsAny(r.Features, "\x00\n\r\t") {
+		return Errf(CodeInvalidArgument, "runtime features must be short names")
+	}
 	return nil
+}
+
+// FeatureList is the runtime's features as a list (nil when none).
+func (r Runtime) FeatureList() []string {
+	if r.Features == "" {
+		return nil
+	}
+	return strings.Fields(r.Features)
+}
+
+// JoinFeatures keeps the feature names that look like names (lower case
+// letters, digits and underscores, at most 40 characters), each once, in
+// order, joined by spaces.
+func JoinFeatures(names []string) string {
+	var out []string
+	seen := map[string]bool{}
+	for _, n := range names {
+		ok := n != "" && len(n) <= 40
+		for _, c := range n {
+			if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '_') {
+				ok = false
+			}
+		}
+		if ok && !seen[n] {
+			seen[n] = true
+			out = append(out, n)
+		}
+	}
+	return strings.Join(out, " ")
 }
 
 // Agent kinds, derived from the harness.

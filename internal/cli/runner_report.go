@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"runtime"
 	"strings"
@@ -59,7 +60,7 @@ func (e *env) reportToHub(c *client.Client, me *api.Agent, h harness.Harness, rc
 				log.Debug("machine report failed (older hub?)", "err", err)
 			}
 		}
-		rt := api.Runtime{CLI: h.Name(), Access: string(access), MaxAccess: string(maxAccess)}
+		rt := api.Runtime{CLI: h.Name(), Access: string(access), MaxAccess: string(maxAccess), Features: runnerFeatures(h), Env: runnerEnv()}
 		if m := cliConfigModel(h.Name(), e.in.Getenv); m != "" {
 			rt.Model, rt.ModelSource = m, "cli-config"
 		} else if h.Name() != "exec" && h.Name() != "shell" && h.Name() != "machine" {
@@ -202,7 +203,7 @@ func (r *runtimeReporter) flush(ctx context.Context) {
 	if r.maxAccess != "" {
 		rt.MaxAccess = r.maxAccess
 	}
-	if rt == r.last {
+	if reflect.DeepEqual(rt, r.last) {
 		r.mu.Unlock()
 		return
 	}
@@ -268,6 +269,53 @@ func cliConfigModel(cli string, getenv func(string) string) string {
 		if m := tomlModel.FindStringSubmatch(top); m != nil {
 			return m[1]
 		}
+	}
+	return ""
+}
+
+// runnerFeatures are what this runner supports for harness h beyond the
+// basics, reported with its runtime so apps can show the controls
+// (docs/design/client-plan.md section 4). Each capability adds its name
+// here when it lands.
+func runnerFeatures(h harness.Harness) []string {
+	var out []string
+	_ = h
+	return out
+}
+
+// Goodbye tells the hub this runner is stopping (best effort, a few
+// seconds at most), so the app can say why the agent is offline instead of
+// only that it is. The next start reports without it.
+func (r *runtimeReporter) Goodbye() {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	if r.base == nil {
+		r.mu.Unlock()
+		return
+	}
+	rt := r.last
+	if reflect.DeepEqual(rt, api.Runtime{}) {
+		rt = *r.base
+	}
+	r.mu.Unlock()
+	rt.Away = "stopped"
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := r.c.ReportRuntime(ctx, rt); err != nil {
+		r.log.Debug("goodbye report failed", "err", err)
+	}
+}
+
+// runnerEnv is where this runner runs when that explains going offline:
+// "wsl" inside Windows' WSL, which Windows shuts down when it is idle.
+func runnerEnv() string {
+	if runtime.GOOS != "linux" {
+		return ""
+	}
+	if b, err := os.ReadFile("/proc/sys/kernel/osrelease"); err == nil && strings.Contains(strings.ToLower(string(b)), "microsoft") {
+		return "wsl"
 	}
 	return ""
 }

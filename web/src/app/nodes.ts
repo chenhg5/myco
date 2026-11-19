@@ -395,3 +395,21 @@ export function machineShell(hub: AgentRow["hub"], machineId: string): "yes" | "
 export const ALLOW_SHELL_COMMAND = "myco machine shell-access --allow";
 /** And the one that stops new ones. */
 export const DENY_SHELL_COMMAND = "myco machine shell-access --deny";
+
+/**
+ * Which of a workspace's computers is the one this App runs on. Its
+ * machine node there names it exactly; host names do not (WSL and its
+ * Windows share one, and a workspace renames a clashing name). Without
+ * that, by the name it joined with, then by host name.
+ */
+export function thisComputerId(hub: AgentRow["hub"], local: { machines?: string[]; machine_nodes?: string[]; hostname?: string } | null): string | undefined {
+  if (!local) return undefined;
+  const nodes = local.machine_nodes || [];
+  if (nodes.length) {
+    const node = (hub.overview?.agents || []).find((s) => nodes.includes(s.agent.name) && !!s.agent.machine_id);
+    if (node) return node.agent.machine_id;
+  }
+  const ms = machinesOfHub(hub);
+  return (ms.find((m) => (local.machines || []).includes(m.name))
+    || ms.find((m) => !!local.hostname && m.hostname === local.hostname))?.id;
+}

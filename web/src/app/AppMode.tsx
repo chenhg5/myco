@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ArrowUpDown, ChevronRight, LayoutGrid, MoreHorizontal, Pin, Plus, Search, WifiOff, Zap } from "lucide-react";
+import { ArrowLeft, ArrowUpDown, ChevronRight, LayoutGrid, Monitor, MoreHorizontal, Pin, Plus, Search, WifiOff, Zap } from "lucide-react";
 import { ComputerSettings } from "@/app/ComputerSettings";
 import { AutomationsPage } from "@/app/Automations";
 import { TemplatesPage } from "@/app/Templates";
@@ -17,14 +17,17 @@ import { openSettingsSection, SettingsPage } from "@/app/SettingsPage";
 import { UpdateNotice } from "@/app/UpdateNotice";
 import { Welcome } from "@/app/Welcome";
 import { ProjectSpace, isLoose, looseRowsOf, type SpaceRef } from "@/app/ProjectSpace";
+import { dragAgent } from "@/app/Panes";
 import { AddAgentDialog, AddWorkspaceDialog, NewProjectDialog, isNobody } from "@/app/AddToProject";
 import { MemberSheet, MembersPage } from "@/app/Members";
 import { HubSwitcher } from "@/app/HubSwitcher";
+import { useSimpleMode } from "@/app/simpleMode";
 import { isLocalUrl, localWorkspaces } from "@/app/localHubs";
 import { NewWorkspaceDialog } from "@/app/NewWorkspaceDialog";
 import { ComputersPage } from "@/app/Computers";
 import { Avatar, isWorkspace, rememberAgentHubs, rememberMachines, whereOf } from "@/app/persona";
-import { agentKind, nodeName, stuckCounts } from "@/app/nodes";
+import { agentKind, machinesOfHub, nodeName, stuckCounts } from "@/app/nodes";
+import { prefetchMachineInfos } from "@/app/machineInfoCache";
 import { LogoWordmark } from "@/components/brand";
 import { IconSidebar } from "@/components/icons";
 import { recentChats } from "@/app/recentChats";
@@ -86,6 +89,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
 }) {
   const [theme, setTheme] = useThemeMode();
   const [textSize, setTextSize] = useTextSize();
+  const simple = useSimpleMode();
   const [langChoice, setLangChoiceState] = useState<LangChoice>(storedLangChoice());
   const chooseLang = (choice: LangChoice) => {
     setLangChoice(choice);
@@ -174,6 +178,10 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [serverWs, setServerWs] = useState<WorkspaceState | null>(null);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [addAgent, setAddAgent] = useState<SpaceRef | null>(null);
+  // Where adding an agent begins (the computers page: a computer, or connecting one).
+  const [addAgentStart, setAddAgentStart] = useState<string | undefined>();
+  // A computer to open a terminal on (the computers page).
+  const [addWorkspacePick, setAddWorkspacePick] = useState<string | undefined>();
   const [addWorkspace, setAddWorkspace] = useState<SpaceRef | null>(null);
   // A computer's settings: who may use it, its projects, removing it.
   const [pcSettings, setPcSettings] = useState<{ hubId: string; name: string; focus?: "name" | "remove" } | null>(null);
@@ -300,6 +308,14 @@ export default function AppMode({ initialHubs, initialInfo }: {
     return () => { off = true; };
   }, [hubId, hubUrl, hubIsLocal]);
   const rows = useMemo(() => allRows.filter((r) => r.hub.id === hubId), [allRows, hubId]);
+  // Ask this workspace's computers what they have ahead of need (at most
+  // once a minute each): adding an agent then shows their sessions at once.
+  const hubMachines = rows.find((r) => r.hub.id === hubId)?.hub;
+  const machinesKey = (hubMachines ? machinesOfHub(hubMachines) : []).map((m) => `${m.id}:${m.online}:${m.myco_version}`).join(",");
+  useEffect(() => {
+    if (hubMachines) prefetchMachineInfos(hubMachines.id, machinesOfHub(hubMachines));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hubId, machinesKey]);
   const hubProjects = useMemo(() => (projects || []).filter((x) => x.hubId === hubId), [projects, hubId]);
   // A project's computers are for every agent in it: one that joined by
   // itself (myco join --project) is let in here. Each pair is tried once.
@@ -635,6 +651,10 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 onClick={() => { setNavChat(null); setPage("templates"); }}>
                 <LayoutGrid /><span className="app-nav-label">{L("应用", "Apps")}</span>
               </button>
+              <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-computers", page === "computers" && "active")} aria-current={page === "computers" ? "page" : undefined}
+                onClick={() => { setNavChat(null); setPage("computers"); }}>
+                <Monitor /><span className="app-nav-label">{L("电脑", "Computers")}</span>
+              </button>
             </div>
             <div className="app-nav-group sp-nav-projects">
               <NavHead label={L("项目", "Projects")} folded={projFolded} onFold={() => foldProjects(!projFolded)} count={liveProjects.length}>
@@ -652,7 +672,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                     aria-current={active ? "page" : undefined} onClick={() => openSpace(ref)}
                     onContextMenu={(e) => navMenu.open(e, [
                       { label: L("添加 agent", "Add an agent"), onSelect: () => { openSpace(ref); setAddAgent(ref); } },
-                      { label: L("加一台电脑", "Add a computer"), onSelect: () => { openSpace(ref); setAddWorkspace(ref); } },
+                      { label: L("加一个终端", "Add a terminal"), onSelect: () => { openSpace(ref); setAddWorkspace(ref); } },
                       { label: L("项目资料", "Project notes"), onSelect: () => { setSpace(ref); setPage("about"); } },
                     ])}
                     title={x.p.goal || x.p.title}>
@@ -703,8 +723,11 @@ export default function AppMode({ initialHubs, initialInfo }: {
                   return (
                     <button key={key} type="button" className={cn("app-nav-item sp-nav sp-nav-person", r.st.state === "offline" && "is-away", isPinned && "is-pinned", page === "space" && navChat === key && "active")}
                       onClick={() => { setNavChat(key); chatWithMember(r); }}
+                      draggable onDragStart={(e) => dragAgent(e, { hubId: r.hub.id, agent: r.st.agent.name })}
                       onContextMenu={(e) => navMenu.open(e, [
                         { label: L("聊天", "Chat"), onSelect: () => { setNavChat(key); chatWithMember(r); } },
+                        // Beside what is open (a project, the chats): a pane of its own.
+                        ...(page === "space" ? [{ label: L("在新的一栏打开", "Open in a new pane"), onSelect: () => window.dispatchEvent(new CustomEvent("myco-open-pane", { detail: { hubId: r.hub.id, agent: r.st.agent.name } })) }] : []),
                         { label: isPinned ? L("取消置顶", "Unpin") : L("置顶", "Pin to the top"), onSelect: () => pinChat(r.st.agent.name, !isPinned) },
                         { label: L("看它的资料", "Its profile"), onSelect: () => { setNavChat(null); setPage("members"); setProfile({ hubId: r.hub.id, name: r.st.agent.name }); } },
                       ])}
@@ -725,10 +748,10 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 )}
               </div>}
             </div>
-            <div className="app-nav-group sp-nav-pcs">
-              <NavHead label={L("电脑", "Computers")} className="sp-nav-pcs-head" active={page === "computers"} title={L("管理电脑", "Manage computers")}
+            {!simple && <div className="app-nav-group sp-nav-pcs">
+              <NavHead label={L("终端", "Terminals")} className="sp-nav-pcs-head" active={page === "computers"} title={L("电脑和终端", "Computers and terminals")}
                 onOpen={() => { setNavChat(null); setPage("computers"); }} folded={pcFolded} onFold={() => foldPcs(!pcFolded)} count={computers.length}>
-                <button type="button" className="app-nav-add" aria-label={L("加一台电脑", "Add a computer")} title={L("加一台电脑", "Add a computer")}
+                <button type="button" className="app-nav-add" aria-label={L("加一个终端", "Add a terminal")} title={L("加一个终端", "Add a terminal")}
                   onClick={() => (shownProject && shown ? setAddWorkspace(shown) : hub && setAddWorkspace({ hubId: hub.id, loose: true }))}><Plus /></button>
               </NavHead>
               {!pcFolded && (<>
@@ -739,7 +762,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                     { label: L("打开终端", "Open the terminal"), onSelect: () => chatWithMember(r) },
                     { label: L("改名", "Rename"), onSelect: () => setPcSettings({ ...pc, focus: "name" as const }) },
                     { label: L("谁能用、项目", "Who can use it, projects"), onSelect: () => setPcSettings(pc) },
-                    { label: L("移除这台电脑", "Remove this computer"), onSelect: () => setPcSettings({ ...pc, focus: "remove" as const }) },
+                    { label: L("移除这个终端", "Remove this terminal"), onSelect: () => setPcSettings({ ...pc, focus: "remove" as const }) },
                   ];
                   return (
                     <div key={r.st.agent.name} className="sp-nav-pc-wrap">
@@ -772,7 +795,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                   </button>
                 )}
               </>)}
-            </div>
+            </div>}
           </nav>
 
           <div className="app-sidebar-foot">
@@ -786,6 +809,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 onNewOnServer={serverWs?.allowed ? () => setNewServerOpen(true) : undefined}
                 serverName={serverWs ? hostName(serverWs.server) : undefined}
                 isLocal={(h) => isLocalUrl(local, h.url)}
+                simple={simple}
                 onSettings={() => setPage("settings")} />
             </div>
           </div>
@@ -871,7 +895,9 @@ export default function AppMode({ initialHubs, initialInfo }: {
             <ComputersPage rows={rows} projects={hubProjects}
               onOpen={chatWithMember}
               onProfile={(r) => setProfile({ hubId: r.hub.id, name: r.st.agent.name })}
-              onAddComputer={() => hub && setAddWorkspace({ hubId: hub.id, loose: true })}
+              onConnect={() => { if (hub) { setAddAgentStart("connect"); setAddAgent({ hubId: hub.id, loose: true }); } }}
+              onAddAgentOn={(m) => { if (hub) { setAddAgentStart(`m:${m.id}`); setAddAgent({ hubId: hub.id, loose: true }); } }}
+              onAddTerminal={(m) => { if (hub) { setAddWorkspacePick(m?.id); setAddWorkspace({ hubId: hub.id, loose: true }); } }}
               onSettings={(r) => setPcSettings({ hubId: r.hub.id, name: r.st.agent.name })}
               onChanged={() => void refresh()} />
           </div>
@@ -928,10 +954,10 @@ export default function AppMode({ initialHubs, initialInfo }: {
 
       <NewProjectDialog open={newProjectOpen} hubs={hub ? [hub] : []} onClose={() => setNewProjectOpen(false)} onCreated={projectCreated} />
       <AddAgentDialog open={!!addAgent} hub={namedHubs.find((h) => h.id === addAgent?.hubId)} project={addAgentProject} projects={hubProjects.map((x) => x.p)} rows={rows}
-        onClose={() => setAddAgent(null)} onAdded={() => { setProjectReload((n) => n + 1); void refresh(); }} />
+        start={addAgentStart} onClose={() => { setAddAgent(null); setAddAgentStart(undefined); }} onAdded={() => { setProjectReload((n) => n + 1); void refresh(); }} />
       <AddWorkspaceDialog open={!!addWorkspace} hub={namedHubs.find((h) => h.id === addWorkspace?.hubId)} project={addWsProject} rows={rows}
-        workspace={namedOv?.hubs.find((h) => h.id === addWorkspace?.hubId)}
-        onClose={() => setAddWorkspace(null)} onAdded={() => void refresh()} />
+        workspace={namedOv?.hubs.find((h) => h.id === addWorkspace?.hubId)} pick={addWorkspacePick}
+        onClose={() => { setAddWorkspace(null); setAddWorkspacePick(undefined); }} onAdded={() => void refresh()} />
       <NewWorkspaceDialog open={newLocalOpen} onOpenChange={setNewLocalOpen}
         taken={localWorkspaces(local).map((w) => w.name)} onStart={startAnotherLocal} />
       <NewWorkspaceDialog open={newServerOpen} onOpenChange={setNewServerOpen} server={serverWs ? hostName(serverWs.server) : undefined}

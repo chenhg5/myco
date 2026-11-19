@@ -168,14 +168,14 @@ export function ComputerSettings({ row, focus, rows, projects, onClose, onChange
 
           <ErrorText error={error} />
           <div className="app-modal-actions">
-            <button type="button" className="app-btn app-btn-quiet pcs-remove" onClick={() => setRemoving(true)} disabled={busy}><Trash2 />{L("移除这台电脑", "Remove this computer")}</button>
+            <button type="button" className="app-btn app-btn-quiet pcs-remove" onClick={() => setRemoving(true)} disabled={busy}><Trash2 />{L("移除这个终端", "Remove this terminal")}</button>
             <button type="button" className="app-btn" onClick={() => { onOpenTerminal(row); onClose(); }}><Terminal />{L("打开终端", "Open the terminal")}</button>
             <button type="button" className="app-btn app-btn-primary" onClick={onClose} disabled={busy}>{L("好", "OK")}</button>
           </div>
         </div>
       </Modal>
       <ConfirmDialog open={removing} onOpenChange={(o) => { if (!o) { setRemoving(false); if (focus === "remove") onClose(); } }}
-        title={L("移除这台电脑？", "Remove this computer?")}
+        title={L("移除这个终端？", "Remove this terminal?")}
         subject={<><Avatar agent={a} size={24} badge={false} /><span>{nodeName(a, row.hub)}</span></>}
         description={L("agent 就不能再在这里跑命令了。文件夹里的东西不会动，聊过的内容都保留。", "Agents can no longer run commands here. Nothing in the folder is touched, and the conversations are kept.")}
         confirmLabel={L("移除", "Remove")} onConfirm={() => void remove()} busy={busy} error={error ? <ErrorText error={error} /> : undefined} />

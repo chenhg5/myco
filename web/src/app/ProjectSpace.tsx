@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Activity, ArrowLeft, ArrowUp, ChevronDown, AudioLines, FileText, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Plus, Users, X } from "lucide-react";
+import { Activity, ArrowLeft, ArrowUp, ChevronDown, AudioLines, Columns2, FileText, PanelRightClose, PanelRightOpen, Plus, Users } from "lucide-react";
 import { appApi, type RecentItem } from "@/appapi";
 import type { Message, Project } from "@/api";
 import type { AgentRow } from "@/app/types";
@@ -19,6 +19,7 @@ import { MessageContent } from "@/app/Markdown";
 import { ErrorText } from "@/app/dialogs";
 import { useContextMenu } from "@/app/ContextMenu";
 import { handoverItem } from "@/app/Handover";
+import { PaneGrid, dragAgent, leastShare, onePane, paneKeys, placePane, removePane, replacePane, soundLayout, PANE_MIN_W, type DragAgent, type DropAt, type PaneLayout, type PaneSlot } from "@/app/Panes";
 import { L } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
 import { recall, remember } from "@/lib/memo";
@@ -36,17 +37,37 @@ type Side = { agent: string; peer?: string; focus?: string; also?: string[] };
 /** The last request to open a chat (AppMode's openChat.n) that was done. */
 let openedChatN = 0;
 
-const SPLIT_KEY = "myco-space-split";
-// Per space: what was open (a chat, a pair, the activity), the pane beside
-// the coordinator and full width, for this run of the app (see
+// A member opened in a pane of its own (Panes.tsx), beside the space's own.
+type PaneSide = Side & { id: string };
+const MAIN = "main";
+const oneLayout = (): PaneLayout => onePane(MAIN);
+// Per space: what was open (a chat, a pair, the activity), the panes beside
+// it and which takes the whole room, for this run of the app (see
 // ProjectSpace): going to another space or workspace and back finds it so.
-type Panes = { side: Side | null; only: "" | "left" | "right"; view?: View; tap?: number };
+// The panes and how they share the room are also kept on this computer.
+type Panes = { sides: PaneSide[]; layout: PaneLayout; zoom: string; view?: View; tap?: number };
 const panes = new Map<string, Panes>();
+const PANES_KEY = "myco-panes:";
+function storedPanes(key: string): Pick<Panes, "sides" | "layout"> | null {
+  try {
+    const v = JSON.parse(localStorage.getItem(PANES_KEY + key) || "null") as Pick<Panes, "sides" | "layout"> | null;
+    const layout = soundLayout(v?.layout);
+    if (!v || !Array.isArray(v.sides) || !layout) return null;
+    // (only what is still consistent: every pane placed once, main among them)
+    const keys = paneKeys(layout.root);
+    if (!keys.includes(MAIN) || keys.length !== v.sides.length + 1 || new Set(keys).size !== keys.length || v.sides.some((x) => !keys.includes(x.id))) return null;
+    return { sides: v.sides, layout };
+  } catch {
+    return null;
+  }
+}
+let paneSeq = 0;
+const paneId = () => `p${Date.now().toString(36)}${(paneSeq += 1)}`;
 // The members column, and the least each pane needs.
 const SIDE_W = 248;
 const SIDE_FOLDED_W = 56;
 const FOLD_KEY = "myco-members-folded";
-const PANE_MIN = 320;
+const PANE_MIN = PANE_MIN_W;
 
 type View =
   | { kind: "home" }
@@ -142,7 +163,13 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
 
   // (kept per space: see panes)
   const paneKey = project ? `${hubId}\u0000${project.name}` : `${hubId}\u0000~loose`;
-  const keep = (part: Partial<Panes>) => panes.set(paneKey, { side: null, only: "", ...panes.get(paneKey), ...part });
+  const keep = (part: Partial<Panes>) => {
+    const next = { sides: [], layout: oneLayout(), zoom: "", ...panes.get(paneKey), ...part };
+    panes.set(paneKey, next);
+    if ("sides" in part || "layout" in part) {
+      try { localStorage.setItem(PANES_KEY + paneKey, JSON.stringify({ sides: next.sides.map((x) => ({ ...x, focus: undefined })), layout: next.layout })); } catch { /* not kept */ }
+    }
+  };
   // (picked again in the sidebar since: its home, as a chat app's list)
   const [view, setViewState] = useState<View>(() => {
     const kept = panes.get(paneKey);
@@ -195,20 +222,79 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
   // left, and the member you open (its work, or a computer's terminal) on
   // the right; either can take the whole width.
   const split = !!project && !!coordinator;
-  // What is open beside the coordinator, and whether one pane has the whole
-  // width, outlive this view being rebuilt (say, a workspace that did not
-  // answer for a moment): kept per space for this run of the app.
-  const [side, setSideState] = useState<Side | null>(() => panes.get(paneKey)?.side ?? null);
-  const [only, setOnlyState] = useState<"" | "left" | "right">(() => panes.get(paneKey)?.only ?? "");
-  const setSide = (v: Side | null | ((s: Side | null) => Side | null)) => setSideState((prev) => {
-    const next = typeof v === "function" ? v(prev) : v;
-    keep({ side: next && next.focus ? { ...next, focus: undefined } : next });
-    return next;
+  // The members open beside the space's own pane (up to three more), how
+  // they share the room, and whether one has it all, outlive this view
+  // being rebuilt (say, a workspace that did not answer for a moment):
+  // kept per space for this run of the app, and the panes on this computer.
+  const [grid, setGridState] = useState<Pick<Panes, "sides" | "layout" | "zoom">>(() => {
+    const kept = panes.get(paneKey);
+    if (kept) return { sides: kept.sides, layout: kept.layout, zoom: kept.zoom };
+    const stored = storedPanes(paneKey);
+    return stored ? { ...stored, zoom: "" } : { sides: [], layout: oneLayout(), zoom: "" };
   });
-  const setOnly = (v: "" | "left" | "right") => {
-    keep({ only: v });
-    setOnlyState(v);
+  const gridRef = useRef(grid);
+  gridRef.current = grid;
+  const setGrid = (f: (g: typeof grid) => typeof grid) => {
+    const next = f(gridRef.current);
+    gridRef.current = next;
+    keep({ sides: next.sides.map((x) => (x.focus ? { ...x, focus: undefined } : x)), layout: next.layout, zoom: next.zoom });
+    setGridState(next);
   };
+  const { sides, layout, zoom } = grid;
+  // The pane last clicked into: a member picked in the list opens there.
+  const [lastSide, setLastSide] = useState("");
+  const setZoom = (z: string) => setGrid((g) => ({ ...g, zoom: z }));
+  const sameSide = (a: Side, b: Side) => a.agent === b.agent && (a.peer || "") === (b.peer || "");
+  // A member picked in the list (beside the coordinator): its pane if it
+  // has one, else the pane last clicked into shows it instead (a first
+  // one opens beside). One pane with the whole room stays so: the member
+  // takes it.
+  const showSide = (next: Side) => setGrid((g) => {
+    const there = g.sides.find((x) => sameSide(x, next)) || g.sides.find((x) => x.agent === next.agent);
+    if (there) {
+      setLastSide(there.id);
+      return { ...g, sides: g.sides.map((x) => (x.id === there.id ? { ...x, ...next } : x)), zoom: g.zoom ? there.id : "" };
+    }
+    const id = paneId();
+    setLastSide(id);
+    const old = g.sides.find((x) => x.id === lastSide) || g.sides[g.sides.length - 1];
+    if (!old) return { sides: [{ ...next, id }], layout: placePane(oneLayout(), id) || oneLayout(), zoom: g.zoom ? id : "" };
+    return { sides: g.sides.map((x) => (x.id === old.id ? { ...next, id } : x)), layout: replacePane(g.layout, old.id, id), zoom: g.zoom ? id : "" };
+  });
+  // A member dragged in, or 「在新的一栏打开」: a pane of its own where it was
+  // dropped (in place of the one under it, dropped on its middle), or the
+  // next free place; with four already, in the pane last clicked into.
+  const addSide = (next: Side, at?: DropAt) => setGrid((g) => {
+    const there = g.sides.find((x) => sameSide(x, next));
+    if (there && (!at || at.key !== there.id)) {
+      setLastSide(there.id);
+      flashPane(there.id);
+      return { ...g, sides: g.sides.map((x) => (x.id === there.id ? { ...x, ...next } : x)), zoom: "" };
+    }
+    const id = paneId();
+    setLastSide(id);
+    const into = at?.edge === "center" ? g.sides.find((x) => x.id === at.key) : undefined;
+    if (into) return { sides: g.sides.map((x) => (x.id === into.id ? { ...next, id } : x)), layout: replacePane(g.layout, into.id, id), zoom: "" };
+    const placed = placePane(g.layout, id, at && at.key ? at : undefined);
+    if (placed) return { sides: [...g.sides, { ...next, id }], layout: placed, zoom: "" };
+    const old = g.sides.find((x) => x.id === lastSide) || g.sides[g.sides.length - 1];
+    if (!old) return g;
+    return { sides: g.sides.map((x) => (x.id === old.id ? { ...next, id } : x)), layout: replacePane(g.layout, old.id, id), zoom: "" };
+  });
+  const closeSide = (id: string) => setGrid((g) => ({ sides: g.sides.filter((x) => x.id !== id), layout: removePane(g.layout, id), zoom: g.zoom === id ? "" : g.zoom }));
+  const updateSide = (id: string, f: (s: PaneSide) => PaneSide) => setGrid((g) => ({ ...g, sides: g.sides.map((x) => (x.id === id ? f(x) : x)) }));
+  const flashPane = (id: string) => {
+    window.setTimeout(() => {
+      const el = spRef.current?.querySelector<HTMLElement>(`[data-pane="${id}"]`);
+      if (!el) return;
+      el.classList.remove("is-called");
+      void el.offsetWidth;
+      el.classList.add("is-called");
+      window.setTimeout(() => el.classList.remove("is-called"), 1200);
+    }, 0);
+  };
+  // The pane a picked member shows in (for the members list's highlight).
+  const focusedSide = sides.find((x) => x.id === lastSide) || sides[sides.length - 1];
   const chatWith = async (agent: string, focus?: string) => {
     // The coordinator is the home view.
     // One pane taking the whole width stays so: whoever you pick next
@@ -216,7 +302,7 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
     // you go back to two panes.
     if (agent === coordinator && !focus) {
       setView({ kind: "home" });
-      if (only === "right") setOnly("left");
+      if (zoom) setZoom(MAIN);
       return;
     }
     if (split) {
@@ -225,11 +311,10 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
       const known = peerIn(recall(pairsKey), agent);
       const next = { agent, peer: known || me, focus, also: project ? othersOf(agent) : undefined };
       setView({ kind: "home" });
-      setSide(next);
-      if (only === "left") setOnly("right");
+      showSide(next);
       if (!known) {
         void peerFor(agent).then((p) => {
-          if (p && p !== next.peer) setSide((s) => (s && s.agent === agent ? { ...s, peer: p } : s));
+          if (p && p !== next.peer) setGrid((g) => ({ ...g, sides: g.sides.map((x) => (x.agent === agent && x.peer === next.peer ? { ...x, peer: p } : x)) }));
         });
       }
       return;
@@ -240,8 +325,7 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
   // read-only, at that message; beside the coordinator when there is room.
   const openExchange = (agent: string, other: string, focus?: string) => {
     if (split && view.kind === "home") {
-      setSide({ agent, peer: other, focus });
-      if (only === "left") setOnly("right");
+      showSide({ agent, peer: other, focus });
       return;
     }
     setView({ kind: "pair", agent, peer: other, focus });
@@ -259,17 +343,44 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
     if (!isWorkspace(r.st.agent)) { void chatWith(name); return; }
     void peerFor(name).then((peer) => {
       if (!peer) return;
-      if (split) { setView({ kind: "home" }); setSide({ agent: name, peer }); if (only === "left") setOnly("right"); }
+      if (split) { setView({ kind: "home" }); showSide({ agent: name, peer }); }
       else setView({ kind: "pair", agent: name, peer });
     });
   };
+  // A member in a new pane (dragged in, or 「在新的一栏打开」): its chat with
+  // you, or a computer's terminal.
+  const openInPane = (name: string, at?: DropAt) => {
+    const r = rowOf(name);
+    const known = peerIn(recall(pairsKey), name);
+    const next: Side = { agent: name, peer: known || me, also: project && r && memberNames.has(name) && !isWorkspace(r.st.agent) ? othersOf(name) : undefined };
+    if (r && isWorkspace(r.st.agent)) {
+      void peerFor(name).then((peer) => { if (peer) addSide({ agent: name, peer }, at); });
+      return;
+    }
+    addSide(next, at);
+    if (!known) {
+      void peerFor(name).then((p) => {
+        if (p && p !== next.peer) setGrid((g) => ({ ...g, sides: g.sides.map((x) => (x.agent === name && x.peer === next.peer ? { ...x, peer: p } : x)) }));
+      });
+    }
+  };
+  const dropAgent = (a: DragAgent, at: DropAt) => { if (a.hubId === hubId && a.agent) openInPane(a.agent, at); };
+  // 「在新的一栏打开」 from the sidebar's list of chats.
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<DragAgent>).detail;
+      if (d?.hubId === hubId && d.agent) openInPane(d.agent);
+    };
+    window.addEventListener("myco-open-pane", on);
+    return () => window.removeEventListener("myco-open-pane", on);
+  });
   const spaceKey = loose ? `${hubId}\u0000*` : `${hubId}\u0000${(space as { name: string }).name}`;
   // Picking the space again in the sidebar brings it back to its home (not
   // on the first render: what was open stays across a rebuild).
   const firstHome = useRef(true);
   useEffect(() => {
     if (firstHome.current) { firstHome.current = false; return; }
-    setView({ kind: "home" }); setSide(null); setOnly("");
+    setView({ kind: "home" }); setGrid(() => ({ sides: [], layout: oneLayout(), zoom: "" }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spaceKey, home]);
   // Who you are to the coordinator (your chat with it is the home view).
@@ -291,9 +402,11 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
     if (openChat.reveal) {
       const agent = openChat.agent;
       const yours = (p?: string) => !p || p === me || isMe(p, hubRows[0]?.hub);
-      const pane = view.kind === "home" && side && side.agent === agent && yours(side.peer) && only !== "left" ? ".sp-pane-right"
-        : view.kind === "home" && agent === coordinator && only !== "right" ? ".sp-home"
-        : view.kind === "chat" && view.agent === agent && yours(view.peer) ? ".sp-main > .conv-detail"
+      const shown = (id: string) => !spRef.current?.querySelector(`[data-pane="${id}"]`)?.classList.contains("is-hidden");
+      const there = sides.find((x) => x.agent === agent && yours(x.peer) && shown(x.id));
+      const pane = there ? `[data-pane="${there.id}"]`
+        : view.kind === "home" && agent === coordinator && shown(MAIN) ? ".sp-home"
+        : view.kind === "chat" && view.agent === agent && yours(view.peer) && shown(MAIN) ? `[data-pane="${MAIN}"] > .conv-detail`
         : "";
       const el = pane ? spRef.current?.querySelector<HTMLElement>(pane) : null;
       if (el) {
@@ -335,26 +448,36 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
     return () => ro.disconnect();
   }, []);
   // Narrow windows have no members column: the faces in a row.
+  const stripMenu = useContextMenu();
   const strip = (
     <div className="sp-strip">
       {[...agents, ...workspaces].map((r) => (
         <button key={r.st.agent.name} type="button" className="sp-strip-face" title={nodeName(r.st.agent, r.hub)}
-          onClick={() => open(r)}>
+          onClick={() => open(r)} draggable onDragStart={(e) => dragAgent(e, { hubId, agent: r.st.agent.name })}
+          onContextMenu={(e) => stripMenu.open(e, [
+            { label: isWorkspace(r.st.agent) ? L("打开终端", "Open terminal") : L("打开", "Open"), onSelect: () => open(r) },
+            { label: L("在新的一栏打开", "Open in a new pane"), icon: Columns2, onSelect: () => openInPane(r.st.agent.name) },
+          ])}>
           <Avatar agent={r.st.agent} size={30} state={r.st.state} badge={false} />
         </button>
       ))}
       <button type="button" className="sp-strip-face is-add" onClick={onAddAgent} aria-label={L("添加 agent", "Add an agent")} title={L("添加 agent", "Add an agent")}><Plus /></button>
+      {stripMenu.element}
     </div>
   );
 
-  return (
-    // With a member open beside the coordinator, a window too small for two
-    // panes and the members column folds the column into the row of faces.
-    // (Only while both panes show: one pane alone has room for the column,
-    // and the row of faces would be out of sight with the left pane.)
-    <div ref={spRef} className={cn("sp", split && side && view.kind === "home" && only === "" && spWidth - (folded ? SIDE_FOLDED_W : SIDE_W) < 2 * PANE_MIN && "has-side")}>
-      <div className="sp-main">
-        {t ? (
+  // The space's own pane (your chat with the coordinator, the group, or a
+  // chat opened from it), then the members opened beside it.
+  const youPeer = (p?: string) => !p || p === me || isMe(p, hubRows[0]?.hub);
+  const mainTitle = t ? (t.peer && !youPeer(t.peer) ? `${nameOf(t.agent)} · ${nameOf(t.peer)}` : nameOf(t.agent))
+    : split && view.kind === "home" ? `${nameOf(coordinator!)} · ${L("协调者", "Coordinator")}`
+    : loose ? L("会话", "Conversations") : project?.title || project?.name || "";
+  const slots: PaneSlot[] = [
+    {
+      key: MAIN,
+      main: true,
+      title: mainTitle,
+      node: (actions) => (t ? (
           <ConversationDetail
             key={JSON.stringify(t)}
             target={t}
@@ -368,53 +491,30 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
             onOpen={(_h, agent, peer) => (peer ? setView({ kind: "pair", agent, peer }) : void chatWith(agent))}
             onOpenExchange={(agent, other, focus) => setView({ kind: "pair", agent, peer: other, focus })}
             onRefresh={onRefresh}
+            headActions={actions}
           />
-        ) : project && coordinator && view.kind === "home" ? (
-          <SplitPanes
-            side={side}
-            only={only}
-            cramped={spWidth > 0 && spWidth < 2 * PANE_MIN}
-            onOnly={setOnly}
-            onCloseSide={() => { setSide(null); setOnly(""); }}
-            left={(full) => (
-              <HomeView
-                key={`${spaceKey}\u0000${coordinator}\u0000${homePeer || ""}`}
-                hubId={hubId}
-                hubName={hubName}
-                project={project}
-                coordinator={coordinator}
-                peer={homePeer}
-                rows={rows}
-                now={now}
-                items={feed.items || []}
-                rowOf={rowOf}
-                nameOf={nameOf}
-                onOpenExchange={openExchange}
-                onActivity={() => setView({ kind: "activity" })}
-                onAbout={onAbout}
-                onRefresh={onRefresh}
-                onChat={(agent) => void chatWith(agent)}
-                strip={strip}
-                fullToggle={side ? full : undefined}
-              />
-            )}
-            right={(actions) => side && (
-              <ConversationDetail
-                key={JSON.stringify(side)}
-                target={{ hubId, hubName, threadId: "", agent: side.agent, peer: side.peer, project: project.name, focus: side.focus, also: side.also }}
-                rows={rows}
-                now={now}
-                showBack={false}
-                onBack={() => setSide(null)}
-                headActions={actions}
-                onNewConversation={(_h, agent) => void chatWith(agent)}
-                onOpen={(_h, agent) => void chatWith(agent)}
-                onOpenExchange={(agent, other, focus) => setSide({ agent, peer: other, focus })}
-                onRefresh={onRefresh}
-              />
-            )}
+      ) : project && coordinator && view.kind === "home" ? (
+          <HomeView
+            key={`${spaceKey}\u0000${coordinator}\u0000${homePeer || ""}`}
+            hubId={hubId}
+            hubName={hubName}
+            project={project}
+            coordinator={coordinator}
+            peer={homePeer}
+            rows={rows}
+            now={now}
+            items={feed.items || []}
+            rowOf={rowOf}
+            nameOf={nameOf}
+            onOpenExchange={openExchange}
+            onActivity={() => setView({ kind: "activity" })}
+            onAbout={onAbout}
+            onRefresh={onRefresh}
+            onChat={(agent) => void chatWith(agent)}
+            strip={strip}
+            fullToggle={actions}
           />
-        ) : (
+      ) : (
           <GroupView
             onCall={(agent) => void callWith(agent)}
             hubId={hubId}
@@ -462,19 +562,62 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
             onBack={() => setView({ kind: "home" })}
             strip={strip}
           />
-        )}
+      )),
+    },
+    ...sides.map((side): PaneSlot => ({
+      key: side.id,
+      title: side.peer && !youPeer(side.peer) ? `${nameOf(side.agent)} · ${nameOf(side.peer)}` : nameOf(side.agent),
+      node: (actions) => (
+          <ConversationDetail
+            key={`${side.id}\u0000${JSON.stringify({ ...side, id: undefined })}`}
+            target={{ hubId, hubName, threadId: "", agent: side.agent, peer: side.peer, project: project?.name, focus: side.focus, also: side.also }}
+            rows={rows}
+            now={now}
+            showBack={false}
+            onBack={() => closeSide(side.id)}
+            headActions={actions}
+            onNewConversation={(_h, agent) => void chatWith(agent)}
+            onOpen={(_h, agent) => void chatWith(agent)}
+            onOpenExchange={(agent, other, focus) => updateSide(side.id, (x) => ({ id: x.id, agent, peer: other, focus }))}
+            onRefresh={onRefresh}
+          />
+      ),
+    })),
+  ];
+  // (the least room the panes side by side need)
+  const cols = zoom ? 1 : 1 / leastShare(layout).w;
+
+  return (
+    // With members open beside, a window too small for the panes side by
+    // side and the members column folds the column into the row of faces.
+    <div ref={spRef} className={cn("sp", cols > 1.01 && spWidth - (folded ? SIDE_FOLDED_W : SIDE_W) < cols * PANE_MIN && "has-side")}>
+      <div className="sp-main">
+        <PaneGrid slots={slots} layout={layout} zoom={zoom}
+          onLayout={(l) => setGrid((g) => ({ ...g, layout: l }))}
+          onZoom={setZoom}
+          onClose={closeSide}
+          onDrop={dropAgent}
+          openIn={(a) => {
+            if (a.hubId !== hubId) return "";
+            const there = sides.find((x) => x.agent === a.agent && youPeer(x.peer));
+            if (there) return there.id;
+            if (t ? t.agent === a.agent && youPeer(t.peer) : split && view.kind === "home" && a.agent === coordinator) return MAIN;
+            return "";
+          }}
+          onFocus={(k) => { if (k !== MAIN) setLastSide(k); }} />
       </div>
 
       <MembersPanel
         agents={agents}
         workspaces={workspaces}
         loose={loose}
-        selected={side && view.kind === "home" && only !== "left" ? side.agent : view.kind === "chat" ? view.agent : view.kind === "pair" ? view.agent : view.kind === "home" ? coordinator || "" : ""}
+        selected={focusedSide && zoom !== MAIN ? focusedSide.agent : view.kind === "chat" ? view.agent : view.kind === "pair" ? view.agent : view.kind === "home" ? coordinator || "" : ""}
         coordinator={coordinator}
         nameOf={nameOf}
         now={now}
         onSetCoordinator={project ? (n) => void setCoordinator(n) : undefined}
         onChat={open}
+        onNewPane={(r) => openInPane(r.st.agent.name)}
         onProfile={onOpenMember}
         onAddAgent={onAddAgent}
         onAddWorkspace={onAddWorkspace}
@@ -625,81 +768,6 @@ function HomeView({ hubId, hubName, project, coordinator, peer, rows, now, items
   );
 }
 
-/**
- * Your chat with the coordinator and, beside it, the member you opened.
- * Drag the line between them to share the width; either can take all of
- * it, and the right one closes. Where two do not fit, the member's pane
- * takes the place (closing it brings the coordinator back).
- */
-function SplitPanes({ side, only, cramped, onOnly, onCloseSide, left, right }: {
-  side: Side | null;
-  /** two panes do not fit even with the members column folded away */
-  cramped: boolean;
-  only: "" | "left" | "right";
-  onOnly: (o: "" | "left" | "right") => void;
-  onCloseSide: () => void;
-  left: (fullToggle: React.ReactNode) => React.ReactNode;
-  right: (actions: React.ReactNode) => React.ReactNode;
-}) {
-  const box = useRef<HTMLDivElement>(null);
-  const [ratio, setRatio] = useState(() => {
-    try { const v = Number(localStorage.getItem(SPLIT_KEY)); return v >= 0.25 && v <= 0.75 ? v : 0.5; } catch { return 0.5; }
-  });
-  const latest = useRef(ratio);
-  // Dragging the line: from where it is, by how far the pointer moves
-  // (grabbing it a few pixels to one side must not make it jump there).
-  const dragFrom = useRef<{ x: number; ratio: number; width: number } | null>(null);
-  const dragStart = (e: React.PointerEvent<HTMLDivElement>) => {
-    const el = box.current;
-    if (!el) return;
-    e.preventDefault();
-    e.currentTarget.setPointerCapture(e.pointerId);
-    dragFrom.current = { x: e.clientX, ratio: latest.current, width: el.getBoundingClientRect().width };
-    document.body.classList.add("is-resizing");
-  };
-  const dragMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    const d = dragFrom.current;
-    if (!d) return;
-    const r = Math.min(0.75, Math.max(0.25, d.ratio + (e.clientX - d.x) / d.width));
-    latest.current = r;
-    setRatio(r);
-  };
-  const dragEnd = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragFrom.current) return;
-    dragFrom.current = null;
-    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
-    document.body.classList.remove("is-resizing");
-    try { localStorage.setItem(SPLIT_KEY, String(latest.current)); } catch { /* not kept */ }
-  };
-  const shown = !side ? "left" : cramped ? (only === "left" ? "left" : "right") : only || "both";
-  const toggle = (pane: "left" | "right") => (
-    <button type="button" className="app-btn app-btn-plain sp-pane-btn" onClick={() => onOnly(only === pane ? "" : pane)}
-      title={only === pane ? L("还原成两栏", "Back to two panes") : L("只看这一栏", "Show only this pane")}
-      aria-label={only === pane ? L("还原成两栏", "Back to two panes") : L("只看这一栏", "Show only this pane")}>
-      {only === pane ? <Minimize2 /> : <Maximize2 />}
-    </button>
-  );
-  return (
-    <div ref={box} className={cn("sp-split", `show-${shown}`)} style={{ ["--split" as string]: `${ratio * 100}%` }}>
-      <div className="sp-pane sp-pane-left">{left(side && !cramped ? toggle("left") : null)}</div>
-      {side && (
-        <>
-          <div className="sp-divider" role="separator" aria-orientation="vertical" aria-label={L("拖动调整宽度", "Drag to resize")}
-            onPointerDown={dragStart} onPointerMove={dragMove} onPointerUp={dragEnd} onPointerCancel={dragEnd} onDoubleClick={() => { setRatio(0.5); latest.current = 0.5; try { localStorage.setItem(SPLIT_KEY, "0.5"); } catch { /* not kept */ } }} />
-          <div className="sp-pane sp-pane-right">
-            {right(
-              <>
-                {!cramped && toggle("right")}
-                <button type="button" className="app-btn app-btn-plain sp-pane-btn" onClick={onCloseSide} title={L("关掉这一栏", "Close this pane")} aria-label={L("关掉这一栏", "Close this pane")}><X /></button>
-              </>,
-            )}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
 function GroupView({ hubId, project, loose, title, agents, memberNames, rowOf, nameOf, now, onOpenThread, onAddAgent, onAddWorkspace, onNewProject, onAbout, onSent, onCall, strip, feed, activity, onBack }: {
   hubId: string;
   project?: Project;
@@ -804,7 +872,7 @@ function EmptyProject({ loose, onAddAgent, onAddWorkspace, onNewProject }: { loo
         : L("用这台电脑上的会话，或者发一句话给任何 AI，它就会自己加入。也可以先把一台电脑交给它们用，顺序随你。", "Use a session on this computer, or send one sentence to any AI and it joins by itself. You can also hand them a computer first; any order works.")}</p>
       <div className="sp-empty-actions">
         <button type="button" className="app-btn app-btn-primary" onClick={onAddAgent}><Plus />{L("添加 agent", "Add an agent")}</button>
-        {!loose && onAddWorkspace && <button type="button" className="app-btn" onClick={onAddWorkspace}><Plus />{L("加一台电脑", "Add a computer")}</button>}
+        {!loose && onAddWorkspace && <button type="button" className="app-btn" onClick={onAddWorkspace}><Plus />{L("加一个终端", "Add a terminal")}</button>}
       </div>
       {loose && onNewProject && (
         <button type="button" className="sp-empty-alt" onClick={onNewProject}>
@@ -1057,7 +1125,7 @@ function liveLine(r: AgentRow, nameOf: (n: string) => string, now: number): { te
   return { text: a.description || stateWords(r.st.state) };
 }
 
-function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf, now, onSetCoordinator, onChat, onProfile, onAddAgent, onAddWorkspace, folded, onFold, projects = [], onPutIn }: {
+function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf, now, onSetCoordinator, onChat, onNewPane, onProfile, onAddAgent, onAddWorkspace, folded, onFold, projects = [], onPutIn }: {
   agents: AgentRow[];
   workspaces: AgentRow[];
   loose: boolean;
@@ -1067,6 +1135,8 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
   now: number;
   onSetCoordinator?: (name: string) => void;
   onChat: (r: AgentRow) => void;
+  /** in a pane of its own, beside what is open (also: drag it there) */
+  onNewPane: (r: AgentRow) => void;
   onProfile: (r: AgentRow) => void;
   onAddAgent: () => void;
   onAddWorkspace: () => void;
@@ -1096,6 +1166,7 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
     const ws = isWorkspace(a);
     return [
       { label: ws ? L("打开终端", "Open terminal") : a.name === coordinator ? L("和协调者聊", "Talk to the coordinator") : L("看它在做什么", "See its work"), onSelect: () => onChat(r) },
+      { label: L("在新的一栏打开", "Open in a new pane"), icon: Columns2, onSelect: () => onNewPane(r) },
       ...(!ws && onSetCoordinator && a.name !== coordinator ? [{ label: L("设为协调者", "Make it the coordinator"), onSelect: () => onSetCoordinator(a.name) }] : []),
       { label: L("资料", "Profile"), onSelect: () => onProfile(r) },
       ...(!ws ? handoverItem(r) : []),
@@ -1120,6 +1191,7 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
         className={cn("sp-face", selected === a.name && "active", r.st.state === "offline" && "is-away", a.name === coordinator && "is-coordinator")}
         onClick={() => onChat(r)}
         onContextMenu={(e) => menu.open(e, menuOf(r))}
+        draggable onDragStart={(e) => dragAgent(e, { hubId: r.hub.id, agent: a.name })}
         title={what ? `${name}\n${what}` : name}
         aria-label={name}
       >
@@ -1137,7 +1209,7 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
         <button type="button" className="sp-face is-add" onClick={onAddAgent} title={L("添加 agent", "Add an agent")} aria-label={L("添加 agent", "Add an agent")}><Plus /></button>
         <span className="sp-face-gap" aria-hidden />
         {workspaces.map(face)}
-        <button type="button" className="sp-face is-add" onClick={onAddWorkspace} title={L("加一台电脑", "Add a computer")} aria-label={L("加一台电脑", "Add a computer")}><Plus /></button>
+        <button type="button" className="sp-face is-add" onClick={onAddWorkspace} title={L("加一个终端", "Add a terminal")} aria-label={L("加一个终端", "Add a terminal")}><Plus /></button>
         {menu.element}
       </aside>
     );
@@ -1152,6 +1224,7 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
         className={cn("sp-member", selected === a.name && "active", r.st.state === "offline" && "is-away")}
         onClick={() => onChat(r)}
         onContextMenu={(e) => menu.open(e, menuOf(r))}
+        draggable onDragStart={(e) => dragAgent(e, { hubId: r.hub.id, agent: a.name })}
         title={a.description || nodeName(a, r.hub)}
       >
         <Avatar agent={a} size={32} state={r.st.state} />
@@ -1193,8 +1266,8 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
       </div>
       <div className="sp-side-group">
         <div className="sp-side-title">
-          <span>{L(`电脑 ${workspaces.length}`, `Computers ${workspaces.length}`)}</span>
-          <button type="button" className="sp-side-add" onClick={onAddWorkspace} title={L("加一台电脑", "Add a computer")} aria-label={L("加一台电脑", "Add a computer")}><Plus /></button>
+          <span>{L(`终端 ${workspaces.length}`, `Terminals ${workspaces.length}`)}</span>
+          <button type="button" className="sp-side-add" onClick={onAddWorkspace} title={L("加一个终端", "Add a terminal")} aria-label={L("加一个终端", "Add a terminal")}><Plus /></button>
         </div>
         {workspaces.map(row)}
         {workspaces.length === 0 && (

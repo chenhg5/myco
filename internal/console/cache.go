@@ -5,7 +5,6 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"database/sql"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,7 +16,6 @@ import (
 	"time"
 
 	"github.com/chenhg5/myco/internal/client"
-	"github.com/zalando/go-keyring"
 	_ "modernc.org/sqlite" // registers the "sqlite" driver
 )
 
@@ -63,27 +61,6 @@ func DefaultCachePath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(dir, "myco", "app-cache.db"), nil
-}
-
-// KeychainCacheKey returns the cache's 32-byte key from the system keychain,
-// creating it the first time.
-func KeychainCacheKey() ([]byte, error) {
-	const user = "app-cache-key"
-	if s, err := keyring.Get(keychainService, user); err == nil {
-		if k, err := base64.StdEncoding.DecodeString(s); err == nil && len(k) == 32 {
-			return k, nil
-		}
-	} else if !errors.Is(err, keyring.ErrNotFound) {
-		return nil, err
-	}
-	k := make([]byte, 32)
-	if _, err := rand.Read(k); err != nil {
-		return nil, err
-	}
-	if err := keyring.Set(keychainService, user, base64.StdEncoding.EncodeToString(k)); err != nil {
-		return nil, err
-	}
-	return k, nil
 }
 
 // OpenCache opens (or starts over) the cache at path with a 32-byte key.

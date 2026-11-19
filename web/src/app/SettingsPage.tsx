@@ -1,7 +1,7 @@
 import { clearAll, forgetHub, recall, remember } from "@/lib/memo";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  AlertTriangle, AudioLines, Check, Cloud, Globe, Info, Languages, Monitor, Palette, Pencil, Plus, RotateCcw, ScrollText, Server, Terminal, Users,
+  AlertTriangle, AudioLines, Bot, Check, Cloud, Globe, Info, Languages, Monitor, Palette, Pencil, Plus, RotateCcw, ScrollText, Server, Terminal, Users,
 } from "lucide-react";
 import {
   appApi, type AppInfo, type CacheStats, type AppUpdate, type Hub, type HubOverview, type LocalState,
@@ -15,14 +15,17 @@ import { PictureButton } from "@/app/AvatarPicker";
 import { ErrorText, Modal, ConfirmDialog } from "@/app/dialogs";
 import { accessLabel, localWorkspaceOf, localWorkspaces, type LocalWorkspace } from "@/app/localHubs";
 import { AuditSection, MembersSection } from "@/app/MembersSection";
+import { LocalAgentsSection } from "@/app/LocalAgents";
+import { setSimpleMode, useSimpleMode } from "@/app/simpleMode";
 import type { TextSize, ThemeMode } from "@/lib/theme";
 import { setReportsOnly, useReportsOnly } from "@/app/quietRuns";
 import { appTo, setAutoTranslate, setTranslateReady, useAutoTranslate, useTranslateReady } from "@/app/translate";
 import type { TranslateConfig } from "@/appapi";
 import { L, lang, type LangChoice } from "@/lib/i18n";
 import { bytes, cn } from "@/lib/utils";
+import { ChatBgDialog } from "@/app/ChatBgDialog";
 
-type Section = "hubs" | "members" | "audit" | "appearance" | "translate" | "voice" | "network" | "about";
+type Section = "hubs" | "agents" | "members" | "audit" | "appearance" | "translate" | "voice" | "network" | "about";
 
 type UpdateState =
   | { step: "checking" }
@@ -159,6 +162,7 @@ function CacheRow() {
 
 const SECTIONS: { key: Section; label: string; icon: typeof Server }[] = [
   { key: "hubs", get label() { return L("工作区", "Workspaces"); }, icon: Server },
+  { key: "agents", get label() { return L("本机 agent", "Agents"); }, icon: Bot },
   { key: "members", get label() { return L("成员", "People"); }, icon: Users },
   { key: "audit", get label() { return L("审计", "Audit"); }, icon: ScrollText },
   { key: "appearance", get label() { return L("外观", "Appearance"); }, icon: Palette },
@@ -167,6 +171,12 @@ const SECTIONS: { key: Section; label: string; icon: typeof Server }[] = [
   { key: "network", get label() { return L("代理", "Proxy"); }, icon: Globe },
   { key: "about", get label() { return L("关于", "About"); }, icon: Info },
 ];
+
+/** What 简单模式 leaves out of Settings. */
+const SIMPLE_HIDDEN: Section[] = ["hubs", "members", "audit"];
+function simpleModeNow(): boolean {
+  try { return localStorage.getItem("myco-simple-mode") === "1"; } catch { return false; }
+}
 
 const SIZES: { size: TextSize; label: string }[] = [
   { size: "small", get label() { return L("小", "Small"); } },
@@ -190,7 +200,7 @@ const LANGS: { choice: LangChoice; label: string }[] = [
 /** A section another page asks Settings to open on (say, voice from the
  *  call button); taken once. */
 let nextSettingsSection: Section | null = null;
-export function openSettingsSection(s: "voice" | "about") { nextSettingsSection = s; }
+export function openSettingsSection(s: "voice" | "about" | "agents") { nextSettingsSection = s; }
 function takeSettingsSection(): Section | null {
   const s = nextSettingsSection;
   nextSettingsSection = null;
@@ -250,7 +260,11 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
   onRefresh: () => Promise<void>;
   onAddHub: () => void;
 }) {
-  const [section, setSection] = useState<Section>(() => takeSettingsSection() ?? langSwitchSection ?? "hubs");
+  const simple = useSimpleMode();
+  const [section, setSection] = useState<Section>(() => takeSettingsSection() ?? langSwitchSection ?? (simpleModeNow() ? "agents" : "hubs"));
+  // Simple mode hides the workspace, people and audit sections.
+  const sections = SECTIONS.filter((s) => !simple || !SIMPLE_HIDDEN.includes(s.key));
+  useEffect(() => { if (simple && SIMPLE_HIDDEN.includes(section)) setSection("agents"); }, [simple, section]);
   // After a language remount, the request that was already handled must not
   // pull the page back to the Hub section.
   const handledRequest = useRef(langSwitchSection !== null ? sectionRequest : undefined);
@@ -359,7 +373,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
   return (
     <div className="app-page app-settings">
       <div className="app-settings-nav" role="tablist" aria-label={L("设置", "Settings")}>
-        {SECTIONS.map((s) => (
+        {sections.map((s) => (
           <button
             key={s.key}
             type="button"
@@ -549,6 +563,16 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
                   ))}
                 </div>
               </div>
+              <div className="app-setting-line" data-setting="simple-mode">
+                <div className="app-setting-line-text">
+                  <b>{L("简单模式", "Simple mode")}</b>
+                  <span>{L("一个人在这台电脑上用：只显示对话和 agent，工作区、成员、其他电脑这些先藏起来。关掉就是完整模式，什么都不会删。",
+                    "One person on this computer: only conversations and agents show; workspaces, people and other computers are hidden. Turn it off for everything; nothing is removed.")}</span>
+                </div>
+                <button type="button" role="switch" aria-checked={simple} aria-label={simple ? L("关掉简单模式", "Turn simple mode off") : L("打开简单模式", "Turn simple mode on")}
+                  title={simple ? L("关掉简单模式", "Turn simple mode off") : L("打开简单模式", "Turn simple mode on")}
+                  className={cn("app-switch", simple && "is-on")} onClick={() => setSimpleMode(!simple)}><span className="app-switch-knob" /></button>
+              </div>
               <div className="app-setting-line">
                 <div className="app-setting-line-text">
                   <b>{L("文字大小", "Text size")}</b>
@@ -570,6 +594,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
                 </div>
               </div>
               <ReportsOnlyLine />
+              <ChatBgLine />
               {info?.shell === "mac" && <IslandLine />}
               <div className="app-setting-line">
                 <div className="app-setting-line-text">
@@ -596,6 +621,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
         )}
 
         {section === "translate" && <TranslateSection />}
+        {section === "agents" && <LocalAgentsSection />}
         {section === "voice" && <VoiceSection />}
         {section === "network" && <ProxySection hubsOv={hubsOv} />}
         {section === "about" && <AboutSection info={info} local={local} />}
@@ -683,7 +709,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
 }
 
 /** Reconfigure the local hub behind a public tunnel. */
-function PublicAccessDialog({ open, onOpenChange, local, name, onDone }: {
+export function PublicAccessDialog({ open, onOpenChange, local, name, onDone }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   local: LocalState | null;
@@ -1362,3 +1388,19 @@ function VoiceSection() {
     </>
   );
 }
+
+/** 聊天背景: the default for every conversation (each can have its own). */
+function ChatBgLine() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="app-setting-line" data-setting="chat-bg">
+      <div className="app-setting-line-text">
+        <b>{L("聊天背景", "Chat background")}</b>
+        <span>{L("所有对话默认用的背景，只在这台电脑上。单个对话在它顶栏的「⋯」里换。", "The background every conversation uses, on this computer only. Change one conversation's in its header's ⋯.")}</span>
+      </div>
+      <button type="button" className="app-btn" onClick={() => setOpen(true)}>{L("选择…", "Choose…")}</button>
+      <ChatBgDialog open={open} onClose={() => setOpen(false)} />
+    </div>
+  );
+}
+

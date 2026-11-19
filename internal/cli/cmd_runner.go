@@ -330,6 +330,7 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 		},
 		OnRunSettings: rep.RunSettings,
 		OnQuota:       rep.Quota,
+		OnStop:        rep.Goodbye,
 		Access:        access,
 		MaxAccess:     maxAccess,
 	}, alog), nil

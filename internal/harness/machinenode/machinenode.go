@@ -82,6 +82,9 @@ type Deps struct {
 	// already checked to be on this node's server; it returns the machine
 	// node there ("" if none). Nil: joining is not offered.
 	JoinHub func(ctx context.Context, hub, token string) (string, error)
+	// Machine fills in the agent CLIs and the recent sessions on this
+	// machine for an info request (api.InfoCLI). Nil: they are left empty.
+	Machine func(ctx context.Context) (ais []api.MachineAI, sessions []api.MachineSession)
 }
 
 // Node is a machine node.
@@ -132,6 +135,13 @@ func (n *Node) spawn(ctx context.Context, req harness.Request) api.SpawnResult {
 		if p, err := n.LoadPolicy(); err == nil {
 			n.Policy = p // one request at a time per node: no concurrent reader
 		}
+	}
+	if strings.TrimSpace(sr.CLI) == api.InfoCLI {
+		info := n.info(ctx)
+		// Also as text in Reply: hubs older than Info re-encode the result
+		// and keep only the fields they know.
+		b, _ := json.Marshal(info)
+		return api.SpawnResult{CLI: api.InfoCLI, Info: info, Reply: string(b)}
 	}
 	plan, err := n.Check(sr)
 	if err != nil {
@@ -272,6 +282,99 @@ func (n *Node) access(requested string) (harness.Access, error) {
 	return a, nil
 }
 
+// AutoDirRoot is where new conversations get a folder when none is given:
+// ~/myco/<name>. Only a missing folder directly inside it is made.
+const AutoDirRoot = "myco"
+
+// autoDir: p is a new folder directly inside ~/myco, or directly inside
+// one of the allowed folders (no "..", not the folder itself, no dot
+// name): the places a missing working directory is made.
+func (n *Node) autoDir(p string) bool {
+	if n.Policy.Home == "" {
+		return false
+	}
+	clean := filepath.Clean(p)
+	base := filepath.Base(clean)
+	if base == "." || strings.HasPrefix(base, ".") {
+		return false
+	}
+	parent := filepath.Dir(clean)
+	if parent == filepath.Join(n.Policy.Home, AutoDirRoot) {
+		return true
+	}
+	for _, r := range n.Policy.Dirs {
+		if root := filepath.Clean(n.expand(r)); filepath.IsAbs(root) && parent == root {
+			return true
+		}
+	}
+	return false
+}
+
+// allowedPath says whether a folder not made yet would be inside an
+// allowed root (by its path, as written or with the root's links resolved).
+func (n *Node) allowedPath(p string) bool {
+	roots := n.Policy.Dirs
+	if len(roots) == 0 {
+		roots = []string{n.Policy.Home}
+	}
+	for _, r := range roots {
+		root := filepath.Clean(n.expand(r))
+		if osutil.Within(p, root) {
+			return true
+		}
+		if real, err := filepath.EvalSymlinks(root); err == nil && osutil.Within(p, real) {
+			return true
+		}
+	}
+	return false
+}
+
+// info answers an info request: the policy as the owner wrote it, and what
+// is on this machine.
+func (n *Node) info(ctx context.Context) *api.MachineInfo {
+	if n.LoadPolicy != nil {
+		if p, err := n.LoadPolicy(); err == nil {
+			n.Policy = p
+		}
+	}
+	dirs := slices.Clone(n.Policy.Dirs)
+	if len(dirs) == 0 {
+		dirs = []string{"~"}
+	}
+	limit := n.Policy.MaxAccess
+	if limit == "" {
+		limit = harness.AccessWorkspace
+	}
+	info := &api.MachineInfo{Dirs: dirs, NewDir: n.newDir(), MaxAccess: string(limit), Home: n.Policy.Home,
+		AIs: []api.MachineAI{}, Sessions: []api.MachineSession{}}
+	if n.Deps.Machine != nil {
+		ais, sessions := n.Deps.Machine(ctx)
+		if ais != nil {
+			info.AIs = ais
+		}
+		if sessions != nil {
+			info.Sessions = sessions
+		}
+	}
+	return info
+}
+
+// newDir is where a conversation started without a folder gets one:
+// ~/myco when it is allowed, else the first allowed folder.
+func (n *Node) newDir() string {
+	auto := "~/" + AutoDirRoot
+	if len(n.Policy.Dirs) == 0 || n.Policy.Home == "" {
+		return auto
+	}
+	p := filepath.Join(n.Policy.Home, AutoDirRoot)
+	for _, r := range n.Policy.Dirs {
+		if root := filepath.Clean(n.expand(r)); filepath.IsAbs(root) && osutil.Within(p, root) {
+			return auto
+		}
+	}
+	return n.Policy.Dirs[0]
+}
+
 func (n *Node) expand(p string) string {
 	return osutil.ExpandHome(strings.TrimSpace(p), n.Policy.Home)
 }
@@ -287,6 +390,23 @@ func (n *Node) dir(requested string) (string, error) {
 		return "", fmt.Errorf("directory %q must be absolute or start with ~/", requested)
 	}
 	real, err := filepath.EvalSymlinks(p)
+	if err != nil && n.autoDir(p) && !n.allowedPath(p) &&
+		filepath.Dir(filepath.Clean(p)) == filepath.Join(n.Policy.Home, AutoDirRoot) {
+		// A conversation started without a folder gets ~/myco/<name>; where
+		// ~/myco is not allowed, the same name goes in the first allowed
+		// folder instead (an App that did not know which folders are allowed).
+		if root := filepath.Clean(n.expand(n.newDir())); filepath.IsAbs(root) {
+			p = filepath.Join(root, filepath.Base(p))
+			real, err = filepath.EvalSymlinks(p)
+		}
+	}
+	if err != nil && n.autoDir(p) && n.allowedPath(p) {
+		// A new conversation the app named a folder for under ~/myco
+		// (docs/design/client-plan.md 5.2): make it, nothing else.
+		if mkErr := os.MkdirAll(p, 0o755); mkErr == nil {
+			real, err = filepath.EvalSymlinks(p)
+		}
+	}
 	if err != nil {
 		return "", fmt.Errorf("directory %s does not exist on machine %s", requested, n.Machine)
 	}
@@ -309,8 +429,8 @@ func (n *Node) dir(requested string) (string, error) {
 		}
 	}
 	if !inside {
-		return "", fmt.Errorf("directory %s is outside the allowed directories on machine %s (%s); the machine's owner can change spawn.dirs in ~/.myco/machine.yaml",
-			requested, n.Machine, strings.Join(roots, ", "))
+		return "", fmt.Errorf("directory %s is outside the folders this computer allows (%s); its owner can change spawn.dirs in ~/.myco/machine.yaml there",
+			requested, strings.Join(roots, ", "))
 	}
 	// By path component of the resolved directory, not by prefix of Home:
 	// Home may itself be a symlink (or an 8.3 short name on Windows), and

@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRightLeft, ArrowUp, Check, ChevronRight, Copy, AudioLines, Download, Images, Loader2, Lock, MoreHorizontal, Pin as PinIcon, PinOff, Search, Settings2, Square, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRightLeft, ArrowUp, Check, ChevronRight, Copy, AudioLines, Download, Images, Loader2, Lock, MoreHorizontal, Paintbrush, Pin as PinIcon, PinOff, Search, Settings2, Square, Trash2 } from "lucide-react";
 import { ExportChat } from "@/app/ExportChat";
 import { appApi, isTransient } from "@/appapi";
 import type { Agent, Message } from "@/api";
@@ -24,6 +24,8 @@ import { AttachButton, AttachList, dropFiles, pastedFiles, useAttachments } from
 import { useAutoGrow } from "@/app/autogrow";
 import { MessageAttachments } from "@/app/attachments";
 import { ChatFiles, type ChatFile } from "@/app/ChatFiles";
+import { ChatBgDialog } from "@/app/ChatBgDialog";
+import { chatKey, useChatBg } from "@/app/chatBg";
 import { PageCards, PagePinsContext, pageTargetOf, type PagePins } from "@/app/pages";
 import { VersionsContext, versionsOf } from "@/app/preview";
 import { sentTexts, useInputHistory } from "@/app/inputHistory";
@@ -293,6 +295,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // Exporting this conversation (Markdown or JSON Lines, to Downloads).
   const [exporting, setExporting] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
+  const [bgOpen, setBgOpen] = useState(false);
   const headMenu = useContextMenu();
   // (a reply done growing in shows its attachments: one more render)
   const [, setRevealedTick] = useState(0);
@@ -961,6 +964,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // Either way (typing at it, or reading what other nodes ran on it) the
   // pane is a terminal.
   const termMode = shellMode || !!execNode;
+  // 聊天背景: this conversation's own, else the default (not a terminal).
+  const chatBg = useChatBg(termMode ? "" : chatKey(target.hubId, target.agent));
 
   // 置顶 (pins.tsx): what this conversation keeps at hand, above it; the
   // same list for both parties (hubs from v0.20.3). Not in a terminal.
@@ -1134,17 +1139,22 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // message shows what the earlier ones still open got since (borrow).
   // (A runner's agent starts the next one only after the first is done.)
   const untilOf = new Map<string, string>();
-  const borrowOf = new Map<string, { ids: string[]; since: string }>();
+  const borrowOf = new Map<string, { ids: string[]; since: string; label?: string }>();
   {
+    // In time, always: what an earlier task still open gets after you sent
+    // your next message goes under that message, not above it (whether or
+    // not the agent has taken the next one up: until it has, it says it is
+    // still on the one before).
     const mine = (shown || []).filter((m) => m.type === "task" && !m.e2e && isMe(m.from, row?.hub))
       .sort((a, b) => a.created_at.localeCompare(b.created_at));
     mine.forEach((t, i) => {
       const st = traceStatuses.get(t.id) || t.status;
       const taken = (st !== "queued" && st !== "delivered") || !!progressOf.get(t.id)?.length;
-      if (!taken) return;
-      const ids = mine.slice(0, i).filter((p) => isOpen(p.status) && !answerOf.has(p.id)).map((p) => p.id);
+      const earlier = mine.slice(0, i).filter((p) => isOpen(p.status) && !answerOf.has(p.id));
+      const ids = earlier.map((p) => p.id);
       if (!ids.length) return;
-      borrowOf.set(t.id, { ids, since: t.created_at });
+      const last = earlier[earlier.length - 1];
+      borrowOf.set(t.id, { ids, since: t.created_at, label: taken ? undefined : titleOfMessage(last.body) || L("上一件", "the one before") });
       for (const id of ids) if (!untilOf.has(id)) untilOf.set(id, t.created_at);
       // (and this one's own window ends where a later one takes over)
       const next = mine[i + 1];
@@ -1194,8 +1204,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     if (st === "held") return { text: L("稍后回复", "Will answer later") };
     if (st === "acked" || progressOf.get(m.id)?.length) return null;
     if (waitingShort) return { text: waitingShort, title: waitingReason };
-    return { text: atWorkId && atWorkId !== m.id ? L("排在后面", "Queued behind the current one") : L("还没开始看", "Not opened yet") };
+    if (atWorkId && atWorkId !== m.id) return { text: L("排在后面", "Queued behind the current one"), title: L("它做完手上这件就看这条", "It reads this once it is done with the one at hand") };
+    return { text: L("还没开始看", "Not opened yet") };
   };
+
   // Messages under the run at work (tasks it handed out, your supplements):
   // its loading goes to the foot of the chat, under them, not above.
   const liveIndex = liveId && shown ? shown.findIndex((m) => m.id === liveId) : -1;
@@ -1645,8 +1657,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     if (m.type === "steer" && m.answers && byId.get(m.answers)) { answerTo.set(m.answers, m); continue; }
     if (m.type !== "steer" || !m.reply_to || !byId.get(m.reply_to)) continue;
     const task = byId.get(m.reply_to)!;
-    if (inRun(task)) { runSteers.set(task.id, [...(runSteers.get(task.id) || []), m]); continue; }
+    // (sent after something else came, its own task's answer too: where it
+    // was sent, in time, not back up inside that task's run)
     if (between(task, m)) continue;
+    if (inRun(task)) { runSteers.set(task.id, [...(runSteers.get(task.id) || []), m]); continue; }
     steersOf.set(m.reply_to, [...(steersOf.get(m.reply_to) || []), m]);
   }
   const answerAsk = (task: Message) => async (text: string) => {
@@ -1898,7 +1912,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
 
   // The header's ⋯ menu: what is used now and then.
   const headMore: MenuItem[] = [
-    ...(!termMode ? [{ label: L("图片和文件", "Pictures and files"), icon: Images, onSelect: () => setFilesOpen(true) }, "sep" as const] : []),
+    ...(!termMode ? [
+      { label: L("图片和文件", "Pictures and files"), icon: Images, onSelect: () => setFilesOpen(true) },
+      { label: L("聊天背景", "Chat background"), icon: Paintbrush, onSelect: () => setBgOpen(true) },
+      "sep" as const,
+    ] : []),
     ...(!termMode && pins ? [{ label: L("置顶一个网址", "Pin an address"), icon: PinIcon, onSelect: () => setPinAdding(true) }] : []),
     ...(hoEntry.show ? [{ label: hoEntry.why ? L("换一个来接着做（现在不行）", "Hand over (not now)") : L("换一个来接着做", "Hand over to another session"), icon: ArrowRightLeft, disabled: !!hoEntry.why, onSelect: () => openHandover({ hubId: target.hubId, name: target.agent }) }] : []),
     ...(!observed && (shown?.length || 0) > 0 ? [{ label: L("导出这段对话", "Export this conversation"), icon: Download, onSelect: () => setExporting(true) }] : []),
@@ -1912,7 +1930,14 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   return (
     <VersionsContext.Provider value={versions}>
     <PagePinsContext.Provider value={pagePins}>
-    <div className={cn("conv-detail", hasRail && "has-rail")} ref={rootRef} onPointerDown={() => markActivePane(rootRef.current)}>
+    <div className={cn("conv-detail", hasRail && "has-rail", chatBg && "has-bg")} ref={rootRef} onPointerDown={() => markActivePane(rootRef.current)}>
+      {/* 聊天背景 (chatBg.ts): this conversation's own, filling its pane */}
+      {chatBg && (
+        <div className="conv-bg" aria-hidden>
+          <div className="cbg-layer" style={{ background: chatBg.css }} />
+          {chatBg.veil > 0 && <div className="cbg-veil" style={{ opacity: chatBg.veil }} />}
+        </div>
+      )}
       {!bare && <header className="conv-head">
         {(showBack || target.returnTo) && (
           <button type="button" className="app-btn app-btn-plain" onClick={onBack}
@@ -1981,6 +2006,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       )}
       {pinMenu.element}
       {headMenu.element}
+      {!termMode && <ChatBgDialog open={bgOpen} onClose={() => setBgOpen(false)} chat={chatKey(target.hubId, target.agent)} name={agentName} />}
       <ChatFiles open={filesOpen} onOpenChange={setFilesOpen} hubId={target.hubId} items={chatFiles} now={now}
         nameOf={(n) => (isMe(n, row?.hub) ? L("你", "You") : nameOf(n))}
         more={exchange && more} loadingMore={loadingOlder} onMore={() => void loadOlder()} onJump={(id) => setSeek({ id, tries: 0 })} />
@@ -2143,12 +2169,24 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             })}
             {!shellMode && !execNode && trailing}
             {/* The run at work, when messages sit under it. */}
-            {liveFoot && liveRun && (
-              <WorkingLine key={liveRun.id} name={nameOf(liveRun.to)}
-                since={[liveRun.created_at, ...(runSteers.get(liveRun.id) || []).map((x) => x.created_at)]
-                  .reduce((a, b) => (new Date(b).getTime() > new Date(a).getTime() ? b : a))}
-                status={progressOf.get(liveRun.id)?.slice(-1)[0]?.body.split("\n")[0]} side="left" />
-            )}
+            {liveFoot && liveRun && (() => {
+              // What it is doing now, not what it said when it took this one
+              // up: an agent in one long session goes on answering newer
+              // messages while this task stays open. Its newest progress
+              // (any task), unless it has answered since (then what it says
+              // it is doing, or a word); the clock from the latest thing in
+              // the chat.
+              const by = liveRun.to;
+              const newest = (pred: (m: Message) => boolean) => (shown || []).filter(pred).reduce<Message | null>((x, m) => (!x || m.created_at > x.created_at ? m : x), null);
+              const said = newest((m) => m.type === "progress" && m.from === by);
+              const answered = newest((m) => (m.type === "reply" || m.type === "event") && m.from === by);
+              const status = said && (!answered || said.created_at > answered.created_at) ? said.body.split("\n")[0]
+                : rowOf(by)?.st.agent.status_text || undefined;
+              const since = [liveRun.created_at, ...(runSteers.get(liveRun.id) || []).map((x) => x.created_at),
+                ...(visible || []).filter((m) => m.type !== "progress").map((m) => m.created_at)]
+                .reduce((a, c) => (new Date(c).getTime() > new Date(a).getTime() ? c : a));
+              return <WorkingLine key={liveRun.id} name={nameOf(by)} since={since} status={status} side="left" />;
+            })()}
             {working && footLive && (
               <WorkingLine key={working.task.id} name={nameOf(working.task.to)} since={working.task.created_at}
                 status={working.status} behind={working.behind}

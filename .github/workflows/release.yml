@@ -104,10 +104,30 @@ jobs:
           rm -f "$p12"
           security set-key-partition-list -S apple-tool:,apple: -s -k "$kcpw" "$kc" >/dev/null
           security list-keychains -d user -s "$kc" $(security list-keychains -d user | tr -d '"')
+          # Apple's Developer ID intermediate certificate: without it in reach
+          # the identity's chain does not verify and it is not valid.
+          for ca in DeveloperIDG2CA DeveloperIDCA; do
+            curl -fsSL --retry 3 -o "$RUNNER_TEMP/$ca.cer" "https://www.apple.com/certificateauthority/$ca.cer" &&
+              security import "$RUNNER_TEMP/$ca.cer" -k "$kc" >/dev/null 2>&1 || true
+          done
           # Sign by the identity's hash, so its name stays out of the log.
           id=$(security find-identity -v -p codesigning "$kc" | awk '/Developer ID Application/ {print $2; exit}')
-          [ -n "$id" ] || { echo "::error::MAC_CERT_P12_BASE64 holds no Developer ID Application identity"; exit 1; }
-          xcrun notarytool store-credentials myco --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" \
+          if [ -z "$id" ]; then
+            # Say why, showing each identity's kind but not its name: none at
+            # all means the .p12 has the certificate without its private key;
+            # "Apple Development" means the wrong certificate was exported.
+            echo "identities in the .p12 (kind only):"
+            security find-identity "$kc" | sed -E 's/"([^:"]*):[^"]*"/[\1]/'
+            echo "::error::no valid Developer ID Application identity in MAC_CERT_P12_BASE64 (see above: 0 identities = exported without the private key; another kind = export the Developer ID Application certificate instead)"
+            exit 1
+          fi
+          # The team is the Developer ID certificate's OU; NOTARY_TEAM_ID is
+          # only the fallback (another ID in brackets is easy to copy instead).
+          team=$(security find-certificate -c "Developer ID Application" -p "$kc" |
+            openssl x509 -noout -subject -nameopt RFC2253 | grep -o 'OU=[A-Z0-9]\{10\}' | head -1 | cut -c4-)
+          team=${team:-$NOTARY_TEAM_ID}
+          echo "::add-mask::$team"
+          xcrun notarytool store-credentials myco --apple-id "$NOTARY_APPLE_ID" --team-id "$team" \
             --password "$NOTARY_PASSWORD" --keychain "$kc" >/dev/null
           MYCO_SIGN_IDENTITY="$id" MYCO_NOTARY_KEYCHAIN="$kc" scripts/mac-sign.sh ${{ needs.version.outputs.version }}
           mv dist/myco.dmg dist/myco-app-darwin-universal.zip out/
@@ -143,6 +163,16 @@ jobs:
           done
           wait
           ls bin/myco-app-windows-amd64.exe bin/myco-app-windows-arm64.exe
+      - name: the Linux console app (opens in the browser; no cgo needed)
+        if: matrix.goos == 'linux'
+        run: |
+          for arch in amd64 arm64; do
+            GOOS=linux GOARCH=$arch CGO_ENABLED=0 go build -tags production \
+              -ldflags "-s -w -X main.version=${{ needs.version.outputs.version }}" \
+              -o bin/myco-app-linux-$arch ./cmd/myco-app &
+          done
+          wait
+          bin/myco-app-linux-amd64 --version
       - name: Smoke-test the linux/amd64 release binary
         if: matrix.goos == 'linux'
         run: MYCO_BIN=$PWD/bin/myco-linux-amd64 scripts/smoke.sh
@@ -153,7 +183,9 @@ jobs:
 
   release:
     needs: [version, app, cross]
-    if: needs.version.outputs.skip != 'true' && !inputs.sign_only
+    # The Mac job may never get a runner (GitHub's macOS queue): publish the
+    # rest anyway, and a Mac adds the app afterwards (docs/release.md).
+    if: always() && needs.version.outputs.skip != 'true' && !inputs.sign_only && needs.cross.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -163,6 +195,7 @@ jobs:
           merge-multiple: true
           path: bin
       - uses: actions/download-artifact@v4
+        continue-on-error: true # no Mac build this time
         with:
           name: app
           path: bin

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -36,6 +37,9 @@ func (s *MachineService) SetRemovalDeps(agents *AgentService, enroll *Enrollment
 // Remove revokes the machine enrollment before deleting its nodes, then the
 // machine record. Retrying after a partial failure is safe.
 func (s *MachineService) Remove(ctx context.Context, id string, dry bool) (*domain.Machine, []string, error) {
+	if strings.HasPrefix(id, "env:") {
+		return s.removeLegacy(ctx, id, dry)
+	}
 	m, err := s.machines.Get(ctx, id)
 	if err != nil {
 		return nil, nil, err
@@ -114,6 +118,58 @@ func (s *MachineService) Remove(ctx context.Context, id string, dry bool) (*doma
 	return m, names, nil
 }
 
+// removeLegacy removes a machine the hub only knows from its agents (runners
+// older than machine reporting, grouped by host name as "env:<host>"): its
+// agents, and machine nodes of that host without a machine record. There
+// is no machine record or machine enrollment to remove.
+func (s *MachineService) removeLegacy(ctx context.Context, id string, dry bool) (*domain.Machine, []string, error) {
+	views, where, err := s.List(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	var view *MachineView
+	for _, v := range views {
+		if v.ID == id {
+			view = v
+		}
+	}
+	if view == nil {
+		return nil, nil, domain.Errf(domain.CodeNotFound, "machine %s not found", id).WithSuggestion("it has no agents left; refresh the list")
+	}
+	machines, err := s.machines.List(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	known := map[string]bool{}
+	for _, m := range machines {
+		known[m.ID] = true
+	}
+	all, err := s.agents.List(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	names := make([]string, 0)
+	for _, a := range all {
+		switch {
+		case where[a.Name] == id:
+			names = append(names, string(a.Name))
+		case a.Kind() == domain.KindMachine && !known[a.MachineID] && "env:"+hostKey(a.Binding.Environment) == id:
+			names = append(names, string(a.Name))
+		}
+	}
+	sort.Strings(names)
+	m := view.Machine
+	if dry {
+		return &m, names, nil
+	}
+	for _, name := range names {
+		if _, err := s.agentService.Remove(ctx, name, false); err != nil {
+			return nil, nil, err
+		}
+	}
+	return &m, names, nil
+}
+
 // NewMachineService wires the machine use cases.
 func NewMachineService(machines domain.MachineRepository, agents domain.AgentRepository, messages *MessageService, ids IDGenerator, clock Clock, onlineWindow time.Duration) *MachineService {
 	return &MachineService{machines: machines, agents: agents, messages: messages, ids: ids, clock: clock, window: onlineWindow}
@@ -132,7 +188,7 @@ func (s *MachineService) Report(ctx context.Context, a *domain.Agent, r domain.M
 	m, err := s.machines.GetByFingerprint(ctx, r.Fingerprint)
 	switch {
 	case domain.IsCode(err, domain.CodeNotFound):
-		m = &domain.Machine{ID: s.ids.New("mch"), FingerprintHash: r.Fingerprint, Name: defaultMachineName(r),
+		m = &domain.Machine{ID: s.ids.New("mch"), FingerprintHash: r.Fingerprint, Name: s.uniqueName(ctx, defaultMachineName(r)),
 			Hostname: r.Hostname, OS: r.OS, Arch: r.Arch, MycoVersion: r.MycoVersion, CreatedAt: now, LastSeenAt: now, Owner: a.Owner}
 		if err := s.machines.Create(ctx, m); err != nil {
 			if !domain.IsCode(err, domain.CodeConflict) {
@@ -148,7 +204,7 @@ func (s *MachineService) Report(ctx context.Context, a *domain.Agent, r domain.M
 	default:
 		m.Hostname, m.OS, m.Arch, m.MycoVersion, m.LastSeenAt = r.Hostname, r.OS, r.Arch, r.MycoVersion, now
 		if m.Name == "" {
-			m.Name = defaultMachineName(r)
+			m.Name = s.uniqueName(ctx, defaultMachineName(r))
 		}
 		if m.Owner == "" {
 			m.Owner = a.Owner
@@ -287,8 +343,41 @@ func (s *MachineService) Rename(ctx context.Context, id, name string) (*domain.M
 	if err != nil {
 		return nil, err
 	}
+	if other, _ := s.nameTaken(ctx, name, id); other {
+		return nil, domain.Errf(domain.CodeConflict, "another computer in this workspace is already called %q", name).
+			WithSuggestion("pick another name")
+	}
 	m.Name = name
 	return m, s.machines.Save(ctx, m)
+}
+
+// nameTaken says whether a machine other than except has this name
+// (letter case aside).
+func (s *MachineService) nameTaken(ctx context.Context, name, except string) (bool, error) {
+	all, err := s.machines.List(ctx)
+	if err != nil {
+		return false, err
+	}
+	for _, m := range all {
+		if m.ID != except && strings.EqualFold(strings.TrimSpace(m.Name), strings.TrimSpace(name)) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// uniqueName is name, or name-2, name-3… when another machine has it.
+func (s *MachineService) uniqueName(ctx context.Context, name string) string {
+	for i := 1; i < 100; i++ {
+		try := name
+		if i > 1 {
+			try = fmt.Sprintf("%s-%d", name, i)
+		}
+		if taken, err := s.nameTaken(ctx, try, ""); err != nil || !taken {
+			return try
+		}
+	}
+	return name
 }
 
 // Spawn starts a session on machine id for an administrator: the request

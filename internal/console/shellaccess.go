@@ -18,17 +18,21 @@ func (l *Local) configPath() string { return filepath.Join(l.Home, ".myco", "con
 
 // localMachine is this computer's machine names (one per hub it joined) and
 // whether it allows shell nodes.
-func (l *Local) localMachine() (names []string, shellAllowed bool) {
+func (l *Local) localMachine() (names, nodes []string, shellAllowed bool) {
 	m, err := config.LoadMachine(l.configPath())
 	if err != nil || m == nil {
-		return nil, false
+		return nil, nil, false
 	}
 	for _, h := range m.Hubs() {
 		if h.Machine != "" {
 			names = append(names, h.Machine)
 		}
+		if h.NamePrefix != "" {
+			// Its machine node there: <prefix>machine (machine_node.go).
+			nodes = append(nodes, h.NamePrefix+"machine")
+		}
 	}
-	return names, m.Spawn.MaxAccess == config.ShellAccessFull
+	return names, nodes, m.Spawn.MaxAccess == config.ShellAccessFull
 }
 
 // setShellAccess sets spawn.max_access in machine.yaml (config.SetShellAccess):
@@ -55,6 +59,6 @@ func (b *Backend) postShellAccess(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	_, allowed := b.Local.localMachine()
+	_, _, allowed := b.Local.localMachine()
 	writeJSON(w, http.StatusOK, map[string]bool{"shell_allowed": allowed})
 }

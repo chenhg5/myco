@@ -4,7 +4,8 @@ import type { Machine } from "@/api";
 import { appApi, type LocalState } from "@/appapi";
 import { ErrorText } from "@/app/dialogs";
 import { CopyButton } from "@/app/copy";
-import { ALLOW_SHELL_COMMAND, DENY_SHELL_COMMAND } from "@/app/nodes";
+import { ALLOW_SHELL_COMMAND, DENY_SHELL_COMMAND, thisComputerId } from "@/app/nodes";
+import type { AgentRow } from "@/app/types";
 import { L } from "@/lib/i18n";
 
 /**
@@ -13,8 +14,10 @@ import { L } from "@/lib/i18n";
  * computer, the app can switch that on here, after the person confirms;
  * for any other machine it says where to do it.
  */
-export function LocalShellAccess({ machine, what, onlyLocal, onChange, shell }: {
+export function LocalShellAccess({ machine, hub, what, onlyLocal, onChange, shell }: {
   machine?: Machine; what: "shell" | "full"; onlyLocal?: boolean; onChange?: () => Promise<void>;
+  /** the workspace the machine is in: tells exactly whether it is this computer */
+  hub?: AgentRow["hub"];
   /** whether that computer allows it, as it reported (machineShell) */
   shell?: "yes" | "no" | "unknown";
 }) {
@@ -29,8 +32,8 @@ export function LocalShellAccess({ machine, what, onlyLocal, onChange, shell }: 
     return () => { off = true; };
   }, []);
 
-  const here = !!machine && !!local &&
-    ((local.machines || []).includes(machine.name) || (!!local.hostname && machine.hostname === local.hostname));
+  const here = !!machine && !!local && (hub ? thisComputerId(hub, local) === machine.id
+    : (local.machines || []).includes(machine.name) || (!!local.hostname && machine.hostname === local.hostname));
   const risk = what === "shell"
     ? L("agent 在这台电脑上跑命令，就和你自己坐在电脑前一样。", "Agents running commands here is just like you sitting at that computer.")
     : L("完全权限可以让它读写那台电脑上的任何文件、运行任何命令。", "Full access lets it read and write any file and run any command on that computer.");

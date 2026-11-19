@@ -11,9 +11,9 @@ export function showcase(lang, { makeAgent, makeMessage, iso, CONSOLE }) {
   const infra = group("运维", "infra");
 
   const machines = [
-    { id: "m_mbp", name: "MacBook Pro", hostname: "glenns-mbp.local", os: "darwin", arch: "arm64", myco_version: "0.18.39", online: true, last_seen_at: iso(4), can_spawn: true },
-    { id: "m_build", name: T("构建服务器", "Build server"), hostname: "build-01", os: "linux", arch: "x86_64", myco_version: "0.18.39", online: true, last_seen_at: iso(9), can_spawn: true },
-    { id: "m_win", name: T("Windows 台式机", "Windows desktop"), hostname: "desk-win", os: "windows", arch: "amd64", myco_version: "0.18.39", online: false, last_seen_at: iso(3 * 3600), can_spawn: false },
+    { id: "m_mbp", name: "MacBook Pro", hostname: "glenns-mbp.local", os: "darwin", arch: "arm64", myco_version: "0.20.12", online: true, last_seen_at: iso(4), can_spawn: true },
+    { id: "m_build", name: T("构建服务器", "Build server"), hostname: "build-01", os: "linux", arch: "x86_64", myco_version: "0.20.12", online: true, last_seen_at: iso(9), can_spawn: true },
+    { id: "m_win", name: T("Windows 台式机", "Windows desktop"), hostname: "desk-win", os: "windows", arch: "amd64", myco_version: "0.20.12", online: false, last_seen_at: iso(3 * 3600), can_spawn: false },
   ];
 
   const agents = [
@@ -221,13 +221,13 @@ export function showcase(lang, { makeAgent, makeMessage, iso, CONSOLE }) {
   const hubs = [
     {
       id: "hub_home", name: T("本机 Hub", "Home hub"), url: "http://192.168.1.20:7780",
-      token: "myco_console_demo_home", ok: true, hub_version: "0.18.39", update_available: false,
+      token: "myco_console_demo_home", ok: true, hub_version: "0.20.12", update_available: false,
       threads, machines, agents, recent, projects,
     },
     {
       id: "hub_team", name: T("团队 VPS", "Team VPS"), url: "https://hub.example.com",
-      token: "myco_console_demo_team", ok: true, hub_version: "0.18.39", update_available: false,
-      threads: {}, machines: [{ id: "m_vps", name: "vps-1", hostname: "vps-1", os: "linux", arch: "x86_64", myco_version: "0.18.39", online: true, last_seen_at: iso(6), can_spawn: true }],
+      token: "myco_console_demo_team", ok: true, hub_version: "0.20.12", update_available: false,
+      threads: {}, machines: [{ id: "m_vps", name: "vps-1", hostname: "vps-1", os: "linux", arch: "x86_64", myco_version: "0.20.12", online: true, last_seen_at: iso(6), can_spawn: true }],
       agents: team.map((a) => ({ ...a, machine_id: "m_vps" })), recent: [],
     },
   ];

@@ -4,13 +4,13 @@
 
 - **最快：让你的 agent 帮你装**。把这句话发给 Claude Code、Codex 或任何能跑命令的 AI，它会照着[给 agent 的安装指南](docs/agent-setup.md)开 Hub、连 App、加电脑和 agent，并自己排查问题：
   > 帮我装好 myco：先读 https://raw.githubusercontent.com/chenhg5/myco/main/docs/agent-setup.md （打不开就读 https://cdn.jsdelivr.net/gh/chenhg5/myco@main/docs/agent-setup.md ），照着做。要我决定的先问我，用 sudo 或改系统设置前也先问我，装完告诉我结果。
-- **推荐：先装 App（Mac / Windows）**→ [下一节](#推荐先装-appmac--windows)。下载、打开、点一下就有自己的 Hub，本机的 Claude Code、Codex 会话点一下就能加入，不用敲命令。
+- **推荐：先装 App（Mac / Windows / Linux）**→ [下一节](#推荐先装-appmac--windows--linux)。下载、打开、点一下就有自己的 Hub，本机的 Claude Code、Codex 会话点一下就能加入，不用敲命令。
 - **没有图形界面的机器（服务器、云端 agent）：入网链接** → [第 0 节](#0-最简单的方式入网链接)，粘贴一行命令。
 - **服务端（Hub）**：部署一次，放在一台有公网 IP 的 Linux 机器上 → [第 1 节](#1-服务端部署-hub)；没有 VPS 时放在自己电脑上，用 Cloudflare 或 Tailscale 穿透 → [1.1 节](#11-没有-vps在自己的电脑上开-hub)
 - **管理员操作**：创建入网令牌、注册和删除 agent → [第 2 节](#2-管理员操作)
 - **客户端（agent 接入）**：每个要加入网络的 session 都做一次 → [第 3 节](#3-客户端安装-myco) 和 [第 4 节](#4-接入网络按你的类型选一节)
 - **升级与版本**：`myco version` 看版本，`myco upgrade` 升级 → [第 8 节](#8-升级与版本)
-- **App 的完整说明**：多个 Hub、机器、节点、对话 → [第 9 节](#9-控制台-appmac--windows)
+- **App 的完整说明**：多个 Hub、机器、节点、对话 → [第 9 节](#9-控制台-appmac--windows--linux)
 
 文档里的 `<HUB_URL>` 指 Hub 的地址，比如 `https://1-2-3-4.sslip.io`。
 
@@ -21,20 +21,25 @@
 
 ---
 
-## 推荐：先装 App（Mac / Windows）
+## 推荐：先装 App（Mac / Windows / Linux）
 
 大多数人从 App 开始：不用部署服务器，也不用记命令。
 
 1. **下载**（[最新发布](https://github.com/chenhg5/myco/releases/latest)）：
    - **Mac**：`myco.dmg`（Apple 芯片和 Intel 通用，已签名并经 Apple 公证），打开后拖进「应用程序」。
    - **Windows（预览）**：`myco-app-windows-amd64.exe`（ARM 电脑用 `-arm64`），下载后直接运行；还没有代码签名，SmartScreen 提示时点「更多信息 → 仍要运行」。
+   - **Linux**：`myco-app-linux-amd64`（ARM 用 `-arm64`）。App 在默认浏览器里打开，X11、Wayland 都能用；第一次运行后「应用程序」菜单里就有 myco：
+     ```bash
+     mkdir -p ~/.local/bin && curl -fL -o ~/.local/bin/myco-app https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-amd64 && chmod +x ~/.local/bin/myco-app && ~/.local/bin/myco-app
+     ```
 2. **第一次打开**，二选一：
    - **在这台电脑上开始**：一键在本机开一个 Hub，这台电脑自动作为第一台机器加入。
    - **连接已有的 Hub**：粘贴别人发给你的邀请链接，或 Hub 管理员给你的 App 连接链接。
 3. **添加节点**：「添加节点 → 本机的 agent」列出这台电脑上最近的 Claude Code、Codex 会话，点一下就加入；也可以生成邀请链接，接入其他电脑上的 agent，或者在已加入的机器上开新会话、加 Shell 节点。
+   - **云服务器（VPS）或别的电脑上的会话**：「添加 agent → 连一台电脑」给出一条命令，在那台电脑上运行（工作区只在本机或局域网能连时，弹窗会先说明，并给「开放到公网」）。连上后弹窗切到那台电脑，列出它上面的 Claude Code、Codex 会话，点一下就复制一份加入；也能「新开一个」。这要那台电脑上的 myco 是 v0.20.14 或之后。
 4. **对话**：在「对话」页给节点发任务，人和 agent、agent 之间、agent 调用 Shell 的往来都在这里；和 Shell 节点的对话就是一个终端。
 
-以后在 App 的「设置 → 关于」里一键更新。App 的完整说明见[第 9 节](#9-控制台-appmac--windows)。
+以后在 App 的「设置 → 关于」里一键更新。App 的完整说明见[第 9 节](#9-控制台-appmac--windows--linux)。
 
 下面几节写给命令行、服务器和 agent：没有图形界面的机器、要把 Hub 放在公网服务器上、或者你是被要求接入 myco 的 agent。
 
@@ -73,7 +78,7 @@ sudo /usr/local/bin/myco link create --exec --allow-from cloud-1 --uses 1
 ```
 在目标机器上**进到要给 agent 用的文件夹**，再执行这个链接的命令，这个文件夹就成为一个 shell 节点（App 里的一台「电脑」）：在家目录里执行叫 `<机器名>-shell`（和以前一样），在别的文件夹里叫 `<机器名>-<文件夹名>-shell`，同一台电脑上的不同文件夹各是一个节点。同一个链接在同一个文件夹里再执行一次是安全的；已经接入过这个 Hub 的电脑执行新的 exec 链接，只会多出这个文件夹的节点，原来的接入不变。用「当前文件夹」需要 Hub 升级到 v0.19.19 以上（`sudo myco upgrade`），更早的 Hub 生成的脚本仍用家目录。
 
-**在 App 里加一台电脑就是这一条命令**：点侧栏「电脑」的 +，弹窗给出一条命令（macOS / Linux / WSL 一条，Windows PowerShell 一条），在那台电脑的终端里 `cd` 到要用的文件夹，粘贴运行：它装好 myco、接入工作区，并把当前文件夹加成一台「电脑」，从项目里加的就给项目里的 agent 用。在那台电脑上、那个文件夹里运行它就算同意了，不用再改 `machine.yaml`，也不用在 App 里手写路径。只有工作区的主人或管理员能生成这种链接。
+**在 App 里开一个终端就是这一条命令**：点侧栏「终端」的 +，电脑还没连上时弹窗给出一条命令（macOS / Linux / WSL 一条，Windows PowerShell 一条），在那台电脑的终端里 `cd` 到要用的文件夹，粘贴运行：它装好 myco、接入工作区，并把当前文件夹加成一个「终端」，从项目里加的就给项目里的 agent 用。在那台电脑上、那个文件夹里运行它就算同意了，不用再改 `machine.yaml`，也不用在 App 里手写路径。只有工作区的主人或管理员能生成这种链接。
 
 **管理**：
 ```bash
@@ -967,14 +972,21 @@ myco upgrade --version v0.16.5        # 安装指定版本（也可以用来回�
 - Hub 和各台机器分别升级：Hub 所在机器执行 `sudo myco upgrade`（或 `myco upgrade`，如果是 `hub up` 开的），每台机器执行 `myco upgrade`。v0.16.6 之前的版本还没有这个命令，第一次请用原来的安装脚本升级。
 
 
-## 9. 控制台 App（Mac / Windows）
+## 9. 控制台 App（Mac / Windows / Linux）
 
-一个 Mac App，可以同时管理多个 Hub：查看所有节点和机器、改名、改 allow-from、踢下线、删除，在机器上开新会话（添加节点），生成入网命令（添加机器），还能在这台 Mac 上直接开一个本机 Hub。
+一个 App（Mac、Windows 是窗口，Linux 在浏览器里打开），可以同时管理多个 Hub：查看所有节点和机器、改名、改 allow-from、踢下线、删除，在机器上开新会话（添加节点），生成入网命令（添加机器），还能在这台 Mac 上直接开一个本机 Hub。
 
 - **下载**（[最新发布](https://github.com/chenhg5/myco/releases/latest)）：
   - Mac：`myco.dmg`，一个包同时支持 Apple 芯片和 Intel，已用 Developer ID 签名并经 Apple 公证，双击打开后拖进「应用程序」即可。以后在 App 的「设置 → 关于」里一键更新。
   - Windows（预览）：`myco-app-windows-amd64.exe`（ARM 电脑用 `-arm64`），下载后直接运行。还没有代码签名，第一次运行 SmartScreen 会提示，点「更多信息 → 仍要运行」。v0.18.6 起支持在「设置 → 关于」里一键更新：替换正在运行的 exe 并重新打开，这台电脑上的 myco 命令行工具也一起升级（v0.18.5 及之前的版本要手动下载一次新版）。还不支持 `myco://` 链接。App 用到的 myco 命令行工具可以在「设置 → Hub」里安装。
-- **自己构建**：Mac 上 `make app` 生成 `bin/myco.app`（需要 Go 和 Xcode 命令行工具），`scripts/mac-sign.sh` 生成签名、公证后的通用版和 DMG；Windows 版 `GOOS=windows go build ./cmd/myco-app` 即可（不需要 cgo）。
+  - Linux（v0.20.13 起）：`myco-app-linux-amd64`（ARM 用 `-arm64`），一个程序，放进 `~/.local/bin` 运行即可（命令见[开头](#推荐先装-appmac--windows--linux)）。
+    - **在浏览器里打开**：它在本机 `127.0.0.1` 上开一个端口，用默认浏览器打开（`$BROWSER`、`xdg-open`），不依赖任何窗口库，X11、Wayland、WSL 都一样。只有本机能访问，地址里带一个密钥，换成浏览器 cookie 后才能看页面；端口和密钥存在 `~/.config/myco/app-window.json`（0600），重启、更新后不变，开着的标签页可以接着用。
+    - **只运行一个**：第一次运行会把 myco 加进「应用程序」菜单（`~/.local/share/applications/myco.desktop` 和图标）。再从菜单或命令行打开，会打开正在运行的那个。关掉标签页 App 还在后台；要停掉就运行 `myco-app --quit`。
+    - **令牌**存在系统钥匙串（Secret Service：GNOME 钥匙串、KWallet）里；没有钥匙串的机器（服务器、精简的窗口管理器）存在 `~/.config/myco/console-secrets.json`（0600），和命令行工具自己的令牌文件一样。
+    - **更新**：「设置 → 关于」一键更新，替换程序并在原来的端口重启，标签页不用关（程序所在的目录要可写，比如 `~/.local/bin`）。
+    - **本机 Hub**：没有 `systemd --user` 的机器（部分 WSL、容器），App 自己运行本机 Hub；这时 runner 也没法装成服务，要在终端里运行 `myco runner start --all`。
+    - 还不支持：语音、听写（只有 Mac 有），`myco://` 链接（和 Windows 一样，把链接粘贴进 App）。
+- **自己构建**：Mac 上 `make app` 生成 `bin/myco.app`（需要 Go 和 Xcode 命令行工具），`scripts/mac-sign.sh` 生成签名、公证后的通用版和 DMG；Windows 版 `GOOS=windows go build ./cmd/myco-app` 即可（不需要 cgo），Linux 版 `go build ./cmd/myco-app` 也一样。
 - **第一次打开**：两个选择。
   - **在这台电脑上开始**：一键在本机启动 Hub（默认只在本机和局域网可用），App 自动接入它，这台电脑也作为第一台机器加入，可以直接在上面开新会话。之前已经启动过本机 Hub、但这台电脑还不在「机器」页的，v0.18.11 起 App 打开时会自动补上（不会重启正在运行的 runner）。
   - **连接已有的 Hub**：粘贴 **App 连接链接**（`https://<hub>/c/<令牌>`，同时带了 Hub 地址和控制台令牌）。`install-hub.sh` 首次安装时会打印一条；以后在 Hub 机器上再生成：

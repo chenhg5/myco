@@ -370,6 +370,46 @@ const grokExhaustedTask = makeMessage({
 
 // A machine the smoke test deletes, with two nodes and its own machine node.
 // POST /app/mock/machine puts them back between widths and themes.
+// A cloud server connected to the workspace: it limits sessions to one
+// folder, has Claude Code (not Codex), and a few sessions of its own.
+const vpsMachine = () => ({
+  id: "m_vps", name: "VPS 东京", hostname: "tokyo-vps", os: "linux", arch: "x86_64",
+  myco_version: "0.20.14", online: true, last_seen_at: iso(8), can_spawn: true,
+});
+const vpsInfo = {
+  dirs: ["~/code/myco-team"], new_dir: "~/code/myco-team", max_access: "workspace", home: "/home/glenn",
+  ais: [
+    { cli: "claude", name: "Claude Code", state: "ready", version: "2.1.3 (Claude Code)", install: "curl -fsSL https://claude.ai/install.sh | bash", login: "claude" },
+    { cli: "codex", name: "Codex", state: "missing", install: "npm install -g @openai/codex", login: "codex login" },
+    { cli: "gemini", name: "Gemini CLI", state: "missing", install: "npm install -g @google/gemini-cli", login: "gemini" },
+    { cli: "opencode", name: "OpenCode", state: "missing", install: "curl -fsSL https://opencode.ai/install | bash", login: "opencode auth login" },
+  ],
+  sessions: [
+    { cli: "claude", session_id: "7f3a2c10-1b2d-4e5f-8a9b-0c1d2e3f4a5b", workdir: "/home/glenn/code/myco-team/api", last_active: iso(12 * 60), title: "把订单接口的分页改成游标分页" },
+    { cli: "claude", session_id: "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f", workdir: "/home/glenn/code/myco-team/web", last_active: iso(3 * 3600), title: "修复登录页在 Safari 上的跳转" },
+    { cli: "claude", session_id: "9e8d7c6b-5a4f-4e3d-2c1b-0a9f8e7d6c5b", workdir: "/home/glenn/scratch", last_active: iso(26 * 3600), title: "试一下 bun 的启动速度" },
+    { cli: "claude", session_id: "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e", workdir: "/home/glenn/code/myco-team/ops", last_active: iso(2 * 86400), title: "给 nginx 加上 gzip", joined: "tokyo-vps-claude-ops" },
+    { cli: "codex", session_id: "019b0001-aaaa-7bbb-8ccc-000000000001", workdir: "/home/glenn/code/myco-team/api", last_active: iso(40 * 60), title: "跑一遍测试，把失败的列出来", auto: true },
+    { cli: "claude", session_id: "3c4d5e6f-7a8b-4c9d-8e0f-2a3b4c5d6e7f", workdir: "/home/glenn/code/myco-team/web", last_active: iso(5 * 3600), title: "生成本周的更新说明", auto: true },
+  ],
+};
+const versionBelow = (v, want) => {
+  const a = String(v || "0").replace(/^v/, "").split(/[.-]/).map(Number);
+  const b = want.split(".").map(Number);
+  for (let i = 0; i < 3; i++) if ((a[i] || 0) !== b[i]) return (a[i] || 0) < b[i];
+  return false;
+};
+const machineInfoOf = (m) => m.id === "m_vps" ? vpsInfo : {
+  dirs: ["~"], new_dir: "~/myco", max_access: m.id.startsWith("m_studio") ? "full" : "workspace", home: m.os === "darwin" ? "/Users/glenn" : "/home/glenn",
+  ais: [
+    { cli: "claude", name: "Claude Code", state: "ready", version: "2.1.3 (Claude Code)", login: "claude" },
+    { cli: "codex", name: "Codex", state: "ready", version: "codex-cli 0.52.0", login: "codex login" },
+    { cli: "gemini", name: "Gemini CLI", state: "missing", install: "npm install -g @google/gemini-cli", login: "gemini" },
+    { cli: "opencode", name: "OpenCode", state: "missing", install: "curl -fsSL https://opencode.ai/install | bash", login: "opencode auth login" },
+  ],
+  sessions: [],
+};
+
 const deletableMachine = () => ({
   id: "m_delete", name: "临时 Mac", hostname: "temp-mac.local", os: "darwin", arch: "arm64",
   myco_version: "0.18.39", online: true, last_seen_at: iso(5), can_spawn: true,
@@ -552,7 +592,7 @@ const state = {
       machines: [
         {
           id: "m_studio", name: "Studio Mac", hostname: "studio.local", os: "darwin", arch: "arm64",
-          myco_version: "0.19.23", online: true, last_seen_at: iso(5), can_spawn: true,
+          myco_version: "0.20.14", online: true, last_seen_at: iso(5), can_spawn: true,
         },
         {
           id: "m_bench", name: "Bench Linux", hostname: "bench-01", os: "linux", arch: "x86_64",
@@ -562,6 +602,7 @@ const state = {
           id: "m_office", name: "Office PC", hostname: "office-pc", os: "windows", arch: "amd64",
           myco_version: "0.16.6", online: true, last_seen_at: iso(90), can_spawn: true,
         },
+        vpsMachine(),
         deletableMachine(),
       ],
       agents: [
@@ -600,6 +641,7 @@ const state = {
           runtime: {
             cli: "claude", cli_version: "2.1.240", model: "claude-opus-5-5", model_source: "observed",
             effort: "low", effort_source: "app", access: "readonly", max_access: "workspace", provider: "DeepSeek", provider_source: "machine",
+            away: "stopped",
             quota: {
               source: "claude", at: iso(600),
               windows: [
@@ -1407,6 +1449,19 @@ function projectView(hub, p, bodies) {
   };
 }
 
+const npmMirror = " --registry=https://registry.npmmirror.com";
+const localAgents = [
+  { cli: "claude", name: "Claude Code", state: "ready", path: "/Users/me/.local/bin/claude", version: "2.1.30 (Claude Code)",
+    install: "curl -fsSL https://claude.ai/install.sh | bash", install_mirror: "npm install -g @anthropic-ai/claude-code" + npmMirror, login: "claude" },
+  // (the showcase: signed in, as on a computer people use)
+  { cli: "codex", name: "Codex", state: process.env.MOCK_SHOWCASE ? "ready" : "signed_out", path: "/opt/homebrew/bin/codex", version: "codex-cli 0.60.1",
+    install: "npm install -g @openai/codex", install_mirror: "npm install -g @openai/codex" + npmMirror, login: "codex login", needs: "npm" },
+  { cli: "gemini", name: "Gemini CLI", state: "missing",
+    install: "npm install -g @google/gemini-cli", install_mirror: "npm install -g @google/gemini-cli" + npmMirror, login: "gemini", needs: "npm" },
+  { cli: "opencode", name: "opencode", state: "missing",
+    install: "curl -fsSL https://opencode.ai/install | bash", install_mirror: "npm install -g opencode-ai" + npmMirror, login: "opencode auth login" },
+];
+
 function send(res, status, data) {
   const body = data === undefined ? "" : JSON.stringify(data);
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
@@ -1479,6 +1534,19 @@ const server = http.createServer(async (req, res) => {
     });
     hub.agents.push(agent);
     return send(res, 200, { agent: agent.name });
+  }
+
+  // /app/mock/run-connect — the UI smoke "runs" the last connect command on
+  // a computer: it shows up as a computer of the workspace.
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "run-connect" && parts.length === 3 && method === "POST") {
+    const j = state.pendingConnect;
+    const hub = j && state.hubs.find((h) => h.id === j.hubId);
+    if (!hub) return fail(res, 404, "not_found", "no connect command to run");
+    state.pendingConnect = null;
+    state.counter += 1;
+    const m = { ...vpsMachine(), id: `m_vps${state.counter}`, name: `新服务器 ${state.counter}`, hostname: `new-vps-${state.counter}`, last_seen_at: iso(0) };
+    hub.machines = [...(hub.machines || []), m];
+    return send(res, 200, { machine: m.id });
   }
 
   // /app/mock/stuck — the smoke test puts the stale demo task back: it stops
@@ -1733,7 +1801,7 @@ const server = http.createServer(async (req, res) => {
   }
   // /app/hubs/{id}/templates… — the template library (v0.20.5; MOCK_OLD_HUB: none).
   if (parts[0] === "app" && parts[1] === "hubs" && parts[3] === "templates") {
-    if (process.env.MOCK_OLD_HUB || parts[2] !== "hub_studio") return fail(res, 404, "", "404 page not found");
+    if (process.env.MOCK_OLD_HUB || (parts[2] !== "hub_studio" && !SHOWCASE)) return fail(res, 404, "", "404 page not found");
     if (parts.length === 4 && method === "GET") return send(res, 200, { templates: mockTemplates.map(({ guide, ...t }) => t) });
     // (fetching myco's apps: the mock has only the ones in the repo)
     if (parts.length === 5 && parts[4] === "sync" && method === "POST") return send(res, 200, { apps: mockTemplates.length, source: "built in" });
@@ -2060,6 +2128,22 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req);
       local.shell_allowed = !!body.allow;
       return send(res, 200, { shell_allowed: local.shell_allowed });
+    }
+
+    // /app/local/agents: the agent CLIs on this computer (LocalAgents.tsx).
+    if (parts.length === 3 && parts[2] === "agents" && method === "GET") {
+      return send(res, 200, { agents: localAgents });
+    }
+    if (parts.length === 5 && parts[2] === "agents" && parts[4] === "terminal" && method === "POST") {
+      const a = localAgents.find((x) => x.cli === decodeURIComponent(parts[3]));
+      if (!a) return send(res, 404, { error: "not_found", message: "no such agent CLI" });
+      const body = await readBody(req);
+      const command = { install: a.install, install_mirror: a.install_mirror, login: a.login }[body.action];
+      if (!command) return send(res, 400, { error: "invalid_argument", message: "action must be install, install_mirror or login" });
+      // The mock "finishes" right away: the next check shows it done.
+      if (body.action === "login") a.state = "ready";
+      else { a.state = a.cli === "codex" ? "signed_out" : "ready"; a.version = "1.0.0"; a.path = `/usr/local/bin/${a.cli}`; }
+      return send(res, 200, { opened: a.cli !== "opencode", command });
     }
 
     // /app/local/providers and /app/local/agents/{name}/provider (cc-switch)
@@ -2915,6 +2999,7 @@ const server = http.createServer(async (req, res) => {
       const joinUrl = `${hub.url.replace(/\/+$/, "")}/j/myco_enroll_demo${state.counter}x7k2m9q4w8`;
       // A shell-node link: the UI smoke "runs" it with /app/mock/run-join.
       if (body?.shell_node) state.pendingJoin = { hubId: hub.id, allow: Array.isArray(body.allow_from) ? body.allow_from : [] };
+      else if (uses === 1) state.pendingConnect = { hubId: hub.id };
       return send(res, 200, {
         join_url: joinUrl,
         command: body?.allow_shell && !body?.shell_node ? `curl -fsSL '${joinUrl}?shell=1' | bash` : `curl -fsSL ${joinUrl} | bash`,
@@ -2935,6 +3020,9 @@ const server = http.createServer(async (req, res) => {
         const body = await readBody(req);
         const name = typeof body?.name === "string" ? body.name.trim() : "";
         if (!name) return fail(res, 400, "invalid_request", "name 不能为空。");
+        if ((hub.machines || []).some((m) => m.id !== machine.id && m.name.toLowerCase() === name.toLowerCase())) {
+          return fail(res, 409, "conflict", `another computer in this workspace is already called "${name}"`, "pick another name");
+        }
         machine.name = name;
         const agents = hub.agents.filter((a) => a.kind !== "machine" && a.machine_id === machine.id).length;
         return send(res, 200, { ...machine, agents });
@@ -2953,6 +3041,19 @@ const server = http.createServer(async (req, res) => {
         }
         return send(res, 200, { machine, removed, dry_run: dry });
       }
+    }
+
+    // /app/hubs/{id}/machines/{mid}/info — what a computer allows and has.
+    if (parts.length === 6 && parts[3] === "machines" && parts[5] === "info" && method === "GET") {
+      if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
+      const machine = (hub.machines || []).find((m) => m.id === parts[4]);
+      if (!machine) return fail(res, 404, "not_found", "没有这台机器");
+      if (!machine.online) return fail(res, 409, "invalid_state", "the machine did not answer in time");
+      if (!machine.can_spawn || versionBelow(machine.myco_version, "0.20.14")) {
+        return fail(res, 409, "too_old", "that computer's myco is too old to say what it has", "run myco upgrade on it");
+      }
+      await sleep(600);
+      return send(res, 200, machineInfoOf(machine));
     }
 
     // /app/hubs/{id}/machines/{mid}/spawn — start a session on that machine.
@@ -2991,6 +3092,9 @@ const server = http.createServer(async (req, res) => {
       if (!dir) return fail(res, 400, "invalid_request", "dir 为必填项。");
       if (dir === "/etc" || dir.startsWith("/etc/")) {
         return fail(res, 403, "dir_not_allowed", "目录不在允许范围内。");
+      }
+      if (machine.id === "m_vps" && !/^(~|\/home\/glenn)\/code\/myco-team(\/|$)/.test(dir)) {
+        return fail(res, 403, "permission_denied", `directory ${dir} is outside the folders this computer allows (~/code/myco-team); its owner can change spawn.dirs in ~/.myco/machine.yaml there`);
       }
       const access = body.access === undefined ? "workspace" : body.access;
       if (!["readonly", "workspace", "full"].includes(access)) {

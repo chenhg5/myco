@@ -1664,6 +1664,10 @@ func (s *Server) spawnOnMachine(w http.ResponseWriter, r *http.Request) {
 	if !s.mayOwnMachine(w, r, r.PathValue("id"), "start sessions on") {
 		return
 	}
+	if strings.TrimSpace(in.CLI) == api.InfoCLI {
+		// Asking the machine about itself: nothing else goes with it.
+		in = api.SpawnRequest{CLI: api.InfoCLI}
+	}
 	if in.JoinLink != "" {
 		// Joining another workspace, nothing else: a machine whose myco
 		// predates join_link then refuses (no directory) instead of
@@ -1718,6 +1722,9 @@ func (s *Server) spawnOnMachine(w http.ResponseWriter, r *http.Request) {
 		writeError(w, domain.Errf(domain.CodePermissionDenied, "%s", res.Error))
 	case res.Error != "":
 		writeError(w, domain.Errf(domain.CodeInvalidState, "%s", res.Error))
+	case in.CLI == api.InfoCLI:
+		// Only looking: nothing to record.
+		writeJSON(w, http.StatusOK, res)
 	default:
 		kind := orNone(res.CLI)
 		if res.CLI == "exec" {
@@ -1758,7 +1765,8 @@ func (s *Server) reportRuntime(w http.ResponseWriter, r *http.Request, a *domain
 	}
 	if err := s.machines.SetRuntime(r.Context(), a, domain.Runtime{CLI: in.CLI, CLIVersion: in.CLIVersion, Model: in.Model,
 		ModelSource: in.ModelSource, Access: in.Access, Provider: in.Provider, ProviderSource: in.ProviderSource,
-		Effort: in.Effort, EffortSource: in.EffortSource, MaxAccess: in.MaxAccess, Quota: quotaFromAPI(in.Quota)}); err != nil {
+		Effort: in.Effort, EffortSource: in.EffortSource, MaxAccess: in.MaxAccess, Quota: quotaFromAPI(in.Quota),
+		Features: domain.JoinFeatures(in.Features), Away: in.Away, Env: in.Env}); err != nil {
 		writeError(w, err)
 		return
 	}

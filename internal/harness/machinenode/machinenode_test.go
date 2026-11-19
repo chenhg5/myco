@@ -150,8 +150,8 @@ func TestDirectoryPolicy(t *testing.T) {
 		{"", "pass the directory"},
 		{"code/app", "absolute"},
 		{"~/missing", "does not exist"},
-		{outside, "outside the allowed"},
-		{"~/code/escape", "outside the allowed"}, // symlink out of home
+		{outside, "outside the folders"},
+		{"~/code/escape", "outside the folders"}, // symlink out of home
 		{"~/.ssh/keys", "credentials directory"}, // inside home but a credentials dir
 		{"~/code/keys", "credentials directory"}, // symlink into one
 		{"~/.myco", "credentials directory"},
@@ -174,6 +174,59 @@ func TestDirectoryPolicy(t *testing.T) {
 	}
 	if len(r.enrolled) != 1 {
 		t.Fatalf("only the allowed request may enroll, got %d", len(r.enrolled))
+	}
+}
+
+// A missing folder directly inside ~/myco is made (a new conversation the
+// app named one for); anywhere else a missing folder is still refused.
+func TestAutoDir(t *testing.T) {
+	r := newRig(t)
+	if res := r.run(t, "lead", api.SpawnRequest{Dir: "~/myco/写周报"}); res.Denied {
+		t.Fatalf("~/myco/<name>: %+v", res)
+	}
+	if st, err := os.Stat(filepath.Join(r.home, "myco", "写周报")); err != nil || !st.IsDir() {
+		t.Fatalf("folder not made: %v", err)
+	}
+	for _, dir := range []string{"~/myco/a/b", "~/myco/../escape", "~/myco/.hidden", "~/elsewhere"} {
+		if res := r.run(t, "lead", api.SpawnRequest{Dir: dir}); !res.Denied || !strings.Contains(res.Error, "does not exist") {
+			t.Errorf("%s: %+v, want refused as missing", dir, res)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(r.home, "escape")); err == nil {
+		t.Fatal("made a folder outside ~/myco")
+	}
+}
+
+// A machine that limits folders: a new conversation's folder goes inside
+// the first one (~/myco is not allowed there), and nothing is made outside.
+func TestAutoDirInsideAllowedFolders(t *testing.T) {
+	r := newRig(t)
+	r.node.Policy.Dirs = []string{"~/code"}
+	res := r.run(t, "lead", api.SpawnRequest{CLI: api.InfoCLI})
+	if res.Denied || res.Info == nil || res.Info.NewDir != "~/code" || len(res.Info.Dirs) != 1 || res.Info.Dirs[0] != "~/code" || res.Info.MaxAccess != "workspace" {
+		t.Fatalf("info: %+v %+v", res, res.Info)
+	}
+	if res := r.run(t, "lead", api.SpawnRequest{Dir: "~/code/reviewer"}); res.Denied {
+		t.Fatalf("~/code/<name>: %+v", res)
+	}
+	if st, err := os.Stat(filepath.Join(r.home, "code", "reviewer")); err != nil || !st.IsDir() {
+		t.Fatalf("folder not made: %v", err)
+	}
+	// An App that did not know asks for ~/myco/<name>: it goes in the
+	// first allowed folder instead, and nothing is made in ~/myco.
+	want, _ := filepath.EvalSymlinks(filepath.Join(r.home, "code")) // as the machine resolves it (8.3 names on Windows)
+	if res := r.run(t, "lead", api.SpawnRequest{Dir: "~/myco/x"}); res.Denied || res.Workdir != filepath.Join(want, "x") {
+		t.Fatalf("~/myco/<name> where ~/myco is not allowed: %+v", res)
+	}
+	if _, err := os.Stat(filepath.Join(r.home, "myco", "x")); err == nil {
+		t.Fatal("made a folder outside the allowed ones")
+	}
+	if res := r.run(t, "lead", api.SpawnRequest{Dir: "~/elsewhere/x"}); !res.Denied {
+		t.Fatalf("any other folder outside stays refused: %+v", res)
+	}
+	r.node.Policy.Dirs = nil
+	if res := r.run(t, "lead", api.SpawnRequest{CLI: api.InfoCLI}); res.Info == nil || res.Info.NewDir != "~/myco" || res.Info.Dirs[0] != "~" {
+		t.Fatalf("unlimited: %+v", res.Info)
 	}
 }
 

@@ -49,6 +49,12 @@ export interface Runtime {
   provider_source?: ProviderSource;
   /** plan usage, when the CLI writes it on this computer */
   quota?: Quota;
+  /** what its runner supports beyond the basics (docs/design/client-plan.md section 4); absent from older runners */
+  features?: string[];
+  /** why its runner went offline, said as it stopped: "stopped" (absent from older runners and while it runs) */
+  away?: "stopped" | string;
+  /** where its runner runs when that explains going offline: "wsl" */
+  env?: "wsl" | string;
 }
 export interface Skill { name: string; summary?: string; examples?: string[] }
 

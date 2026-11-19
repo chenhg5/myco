@@ -7,21 +7,22 @@
   </picture>
 </h1>
 
-**The mycelium for your AI agents.**
+**All your AI agents, one app.**
 
-Let a cloud agent work on your own computer, hand tasks to your teammates' agents,<br>
-and connect every Claude Code, Codex and agent CLI you run — with one app to see it all.
+Use the Claude Code, Codex and other agents you already pay for — start a conversation, run several at once,<br>
+reach your other computers and your phone, put them on a schedule — all from one app.
 
 [![Release](https://img.shields.io/github/v/release/chenhg5/myco?style=flat-square&color=3a9a78)](https://github.com/chenhg5/myco/releases)
 [![Build](https://img.shields.io/github/actions/workflow/status/chenhg5/myco/release.yml?branch=main&label=release&style=flat-square)](https://github.com/chenhg5/myco/actions/workflows/release.yml)
 ![Platforms](https://img.shields.io/badge/macOS%20·%20Windows%20·%20Linux-grey?style=flat-square)
+[![LINUX DO](https://img.shields.io/badge/LINUX-DO-ffb003?style=flat-square&labelColor=3f3f46)](https://linux.do)
 
-**[Download for Mac](https://github.com/chenhg5/myco/releases/latest/download/myco.dmg)** · [Windows (preview)](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-amd64.exe) · [All downloads](https://github.com/chenhg5/myco/releases/latest)
+**[Download for Mac](https://github.com/chenhg5/myco/releases/latest/download/myco.dmg)** · [Windows (preview)](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-amd64.exe) · [Linux](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-amd64) · [All downloads](https://github.com/chenhg5/myco/releases/latest)
 
 **English** · [中文](README.zh-CN.md) · [Install Guide](INSTALL.md) · [Architecture](docs/architecture.md) · [HTTP API](docs/api.md)
 
 
-https://github.com/user-attachments/assets/0f6269ac-236f-4b65-b896-68b2a8562ced
+https://github.com/user-attachments/assets/76d235fc-1c4a-4f7c-88c1-ee058f4db1da
 
 
 </div>
@@ -61,7 +62,8 @@ The app's first screen has the same sentence (**Let my agent set it up**), and a
 |---|---|
 | **Mac** | **[myco.dmg](https://github.com/chenhg5/myco/releases/latest/download/myco.dmg)** — one download for Apple silicon and Intel, signed and notarized by Apple. Open it and drag myco into Applications. The app updates itself (Settings → About → Update and reopen). |
 | **Windows** (preview) | [myco-app-windows-amd64.exe](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-amd64.exe) ([ARM](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-arm64.exe)). Not code-signed yet: on first run choose *More info → Run anyway*. |
-| **Linux / servers** | The command-line tool — see [Prefer the command line?](#prefer-the-command-line) |
+| **Linux** | [myco-app-linux-amd64](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-amd64) ([ARM](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-arm64)): one program that opens the app in your browser (X11, Wayland, WSL). Make it executable and run it; it adds itself to the applications menu. See [INSTALL.md](INSTALL.md#9-控制台-appmac--windows--linux). |
+| **Servers** | The command-line tool — see [Prefer the command line?](#prefer-the-command-line) |
 
 ## Video tutorial
 
@@ -246,7 +248,7 @@ flowchart TB
     R2 -.-> S4["exec node: shell"]
   end
 
-  UI["myco app<br/>Mac / Windows"]
+  UI["myco app<br/>Mac / Windows / Linux"]
   EXT["Agents woken by push<br/>webhook, routine, GitHub Actions"]
 
   BOX <-->|"long-poll / reply"| R1
@@ -343,7 +345,7 @@ myco does the same for agents. It links agents on different machines into one ne
 - [x] Hub, CLI and runner, with long-polling, leases, idempotency and allow-lists
 - [x] Session binding, pluggable wakers, GitHub ingress
 - [x] Join links, self-enrollment for cloud sessions, dashboard, exec nodes
-- [x] The myco app for Mac and Windows: many hubs, conversations, groups and tags, one-click local agents
+- [x] The myco app for Mac, Windows and Linux: many hubs, conversations, groups and tags, one-click local agents
 - [ ] MCP endpoint (Streamable HTTP), so ChatGPT and Claude can join as connectors
 - [ ] Orchestrator templates and scheduling policies
 - [x] Teams: shared hubs with members, roles, invites and an audit log

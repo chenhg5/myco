@@ -17,6 +17,10 @@ python3 -c '
 import json, sys
 r = json.load(open(sys.argv[1]))
 print("draft" if r["draft"] else "published", len(r["assets"]), "files:", r["html_url"])
+names = {a["name"] for a in r["assets"]}
+missing = [n for n in ("myco-app-linux-amd64", "myco-app-linux-arm64", "myco-app-windows-amd64.exe") if n not in names]
+if missing:
+    sys.exit("missing: " + " ".join(missing))
 ' "$d/release.json"
 want=$("$here/changelog-section.sh" "$V" "$here/../CHANGELOG.md" | head -1)
 got=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["body"].splitlines()[0])' "$d/release.json")

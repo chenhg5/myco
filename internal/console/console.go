@@ -255,6 +255,8 @@ func (b *Backend) Handler() http.Handler {
 		m.HandleFunc("POST /app/local/hub/stop", b.stopLocal)
 		m.HandleFunc("POST /app/local/runner", b.postLocalRunner)
 		m.HandleFunc("POST /app/local/shell-access", b.postShellAccess)
+		m.HandleFunc("GET /app/local/agents", b.getLocalAgents)
+		m.HandleFunc("POST /app/local/agents/{cli}/terminal", b.postAgentTerminal)
 		m.HandleFunc("GET /app/local/providers", b.listProviders)
 		m.HandleFunc("GET /app/local/agents/{name}/provider", b.getAgentProvider)
 		m.HandleFunc("PUT /app/local/agents/{name}/provider", b.putAgentProvider)
@@ -728,6 +730,32 @@ func (b *Backend) Handler() http.Handler {
 			return
 		}
 		writeJSON(w, http.StatusOK, res)
+	}))
+	// What a computer allows and has: its folders, AIs and recent sessions
+	// (asked of its machine node; one older than this cannot say).
+	m.HandleFunc("GET /app/hubs/{id}/machines/{mid}/info", b.withHubTimeout(45*time.Second, func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		res, err := c.SpawnOnMachine(r.Context(), r.PathValue("mid"), api.SpawnRequest{CLI: api.InfoCLI}, 40*time.Second)
+		if err != nil {
+			if e, ok := client.AsError(err); ok && strings.Contains(e.Message, `cannot spawn "info"`) {
+				writeErr(w, &client.Error{Status: http.StatusConflict, Code: "too_old",
+					Message: "that computer's myco is too old to say what it has", Suggestion: "run myco upgrade on it"})
+				return
+			}
+			writeErr(w, err)
+			return
+		}
+		if res.Info == nil && res.CLI == api.InfoCLI && res.Reply != "" {
+			// A hub older than Info passes the answer on only as text.
+			var info api.MachineInfo
+			if json.Unmarshal([]byte(res.Reply), &info) == nil {
+				res.Info = &info
+			}
+		}
+		if res.Info == nil {
+			writeErr(w, &client.Error{Status: http.StatusConflict, Code: "too_old", Message: "that computer's myco is too old to say what it has", Suggestion: "run myco upgrade on it"})
+			return
+		}
+		writeJSON(w, http.StatusOK, res.Info)
 	}))
 	m.HandleFunc("POST /app/hubs/{id}/messages", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		var in api.SendRequest
