@@ -8,7 +8,7 @@ import "./video.css";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Bot, Download, Droplets, Film, Loader2, MessageSquareText, SlidersHorizontal, Type, X } from "lucide-react";
 import { Bar, Toast, mount, titleSaver, uid, useKit } from "../_lib/appkit";
-import { save } from "../_lib/myco";
+import { myco, save } from "../_lib/myco";
 import { Popover, rectOf } from "../_lib/ui";
 import { clips, frameSize, kit, media, notes, overlays, placed, project, total, RATIOS, clamp, sizeChoices } from "./model";
 import { addClip, change, patch, redo, removeClip, removeOverlay, setProject, split, undo, duplicateClip } from "./edit";
@@ -155,15 +155,22 @@ function App() {
   /** Saves the mp4 to Downloads through the App; when that fails, the video
    *  is kept here to try again (an older App saves no video). */
   async function keepFile(name: string, blob: Blob, silent: boolean, secs: number, drop: () => void) {
+    const OLD_APP = "这个版本的 myco App 还存不了视频：把 App 更新到 v0.20.27 或更新的版本，再导出一次。";
+    // (an App whose bridge cannot save video says so at once, rather than
+    // after a minute of turning the video into text)
+    if (!myco?.features?.includes("download-media")) {
+      setExporting({ stage: "unsaved", name, blob, silent, secs, drop, error: OLD_APP, retry: false });
+      return;
+    }
     try {
       const where = (await save(name, blob, "video/mp4")).path;
       drop();
       setExporting({ stage: "done", where, size: blob.size, silent, secs });
     } catch (e) {
       const err = e as { code?: string; message?: string };
-      const old = err.code === "invalid_argument" || err.code === "too_large" || /no such call|documents and pictures/.test(err.message || "");
-      setExporting({ stage: "unsaved", name, blob, silent, secs, drop,
-        error: old ? "这个版本的 myco App 还存不了视频：升级 App 后点「再存一次」。" : `没存上：${err.message || "不知道为什么"}` });
+      const old = err.code === "invalid_argument" || /no such call|documents and pictures/.test(err.message || "");
+      setExporting({ stage: "unsaved", name, blob, silent, secs, drop, retry: !old,
+        error: old ? OLD_APP : err.code === "too_large" ? "视频太大了（App 最多存 4 GB）：换低一点的分辨率或画质再导出。" : `没存上：${err.message || "不知道为什么"}` });
     }
   }
   async function doExport(opts: ExportOptions) {
@@ -261,7 +268,7 @@ function App() {
 type Exp = { stage: "setup" } | { stage: "run"; p: Progress; at: number; opts: ExportOptions }
   | { stage: "done"; where: string; size: number; silent: boolean; secs: number } | { stage: "error"; error: string }
   | Unsaved;
-type Unsaved = { stage: "unsaved"; name: string; blob: Blob; silent: boolean; secs: number; error: string; drop: () => void };
+type Unsaved = { stage: "unsaved"; name: string; blob: Blob; silent: boolean; secs: number; error: string; drop: () => void; retry: boolean };
 
 const SIZE_NAME: Record<number, string> = { 2160: "4K", 1440: "2K", 1080: "1080p", 720: "720p", 480: "480p" };
 function savedOptions(): ExportOptions {
@@ -309,6 +316,9 @@ function ExportDialog({ state, onStart, onRetry, onClose }: { state: Exp; onStar
         </div>
         <p className="export-sum"><b>{est.w}×{est.h}</b> · {opts.fps} 帧 · {mmss(T)} · 约 {est.mb < 10 ? est.mb.toFixed(1) : Math.round(est.mb)} MB</p>
         <p className="faint">分辨率和帧率越低导出越快；在这台电脑上完成，不上传。</p>
+        {myco && !myco.features?.includes("download-media") && (
+          <p className="modal-err">这个版本的 myco App 还存不了视频：先把 App 更新到 v0.20.27 或更新的版本再导出。</p>
+        )}
         <div className="modal-foot">
           <span />
           <span className="row">
@@ -354,12 +364,12 @@ function ExportDialog({ state, onStart, onRetry, onClose }: { state: Exp; onStar
       <>
         <p>视频做好了（{(x.blob.size / 1024 / 1024).toFixed(1)} MB，用了 {mmss(x.secs)}），但没存到「下载」：</p>
         <p className="modal-err">{x.error}</p>
-        <p className="faint">关掉这个框之前它一直在，不用重新导出。</p>
+        {x.retry && <p className="faint">关掉这个框之前它一直在，不用重新导出。</p>}
         <div className="modal-foot">
           <button type="button" className="btn" onClick={browser}>用浏览器下载</button>
           <span className="row">
             <button type="button" className="btn" onClick={onClose}>不要了</button>
-            <button type="button" className="btn btn-primary" onClick={() => onRetry(x)}>再存一次</button>
+            {x.retry && <button type="button" className="btn btn-primary" onClick={() => onRetry(x)}>再存一次</button>}
           </span>
         </div>
       </>

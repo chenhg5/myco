@@ -96,6 +96,9 @@
 
   window.myco = {
     ready: ready,
+    // What this App's bridge can do, for pages to check before trying:
+    // "download-media": myco.download saves video and sound too (mp4, …).
+    features: ["download-media"],
     get state() { return ctx ? ctx.state : null; },
     get version() { return ctx ? ctx.version : 0; },
     on: function (event, f) {
