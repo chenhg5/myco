@@ -31,6 +31,14 @@ func TestConnectOverSSH(t *testing.T) {
 		switch {
 		case target == "locked":
 			return "locked: Permission denied (publickey).", 255, nil
+		case strings.Contains(stdin, "myco-check"):
+			for _, l := range []string{"myco-check myco v0.20.17", "myco-check service active", "myco-check hub " + r.hubURL, "myco-check hub_direct " + r.hubURL + " 200", "myco-check end ok"} {
+				line(l)
+			}
+			return "", 0, nil
+		case strings.Contains(stdin, "runner service restart"):
+			line("restarted")
+			return "", 0, nil
 		case strings.Contains(stdin, "myco-probe"):
 			for _, l := range []string{"myco-probe os Linux", "myco-probe arch x86_64", "myco-probe host vps1", "myco-probe bash yes", "myco-probe curl yes", "myco-probe end ok"} {
 				line(l)
@@ -113,8 +121,29 @@ func TestConnectOverSSH(t *testing.T) {
 			t.Fatalf("port not passed: %s", c)
 		}
 	}
-	if !strings.Contains(scripts[len(scripts)-1], "| curl -fsSL --retry 3 -K - 2>&1)") {
-		t.Fatalf("install script: %s", scripts[len(scripts)-1])
+	mid := j["machine_id"].(string)
+	mu.Unlock()
+	// The App remembers how it got there: a check-up goes the same way.
+	if code, m, _ := r.do("GET", "/app/hubs/"+id+"/machines/"+mid+"/reach", nil); code != 200 || m["route"].(map[string]any)["target"] != "root@vps1" {
+		t.Fatalf("reach: %d %v", code, m)
+	}
+	if code, m, _ := r.do("POST", "/app/hubs/"+id+"/machines/"+mid+"/diagnose", nil); code != 200 || m["found"].(map[string]any)["service"] != "active" {
+		t.Fatalf("diagnose: %d %v", code, m)
+	} else if hs := m["hubs"].([]any); len(hs) != 1 || hs[0].(map[string]any)["mine"] != true {
+		t.Fatalf("hubs: %v", hs)
+	}
+	if code, m, _ := r.do("POST", "/app/hubs/"+id+"/machines/"+mid+"/fix", map[string]string{"action": "rm -rf"}); code != 400 {
+		t.Fatalf("an unknown fix must be refused: %d %v", code, m)
+	}
+	if code, m, _ := r.do("POST", "/app/hubs/"+id+"/machines/"+mid+"/fix", map[string]string{"action": "restart"}); code != 200 || m["ok"] != true {
+		t.Fatalf("restart: %d %v", code, m)
+	}
+	if code, m, _ := r.do("POST", "/app/hubs/"+id+"/machines/nope/diagnose", nil); code != 409 {
+		t.Fatalf("unknown route: %d %v", code, m)
+	}
+	mu.Lock()
+	if !strings.Contains(scripts[len(scripts)-1], "runner service restart") {
+		t.Fatalf("restart script: %s", scripts[len(scripts)-1])
 	}
 }
 

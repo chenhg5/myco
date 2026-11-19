@@ -8,6 +8,7 @@ import { shortDir } from "@/app/AddToProject";
 import { machineTellsInfo } from "@/app/hubVersion";
 import { cachedMachineInfo, fetchMachineInfo } from "@/app/machineInfoCache";
 import { LocalShellAccess } from "@/app/LocalShellAccess";
+import { ComputerCheck } from "@/app/ComputerCheck";
 import { agentQuotaHint } from "@/app/quota";
 import { Avatar, AvatarStack, isWorkspace, stateWords } from "@/app/persona";
 import { PageHero, SectionHead } from "@/app/PageHero";
@@ -179,6 +180,9 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, on
 
         <SectionHead title={L("它允许什么", "What it allows")} />
         <ComputerDetails hubId={hub.id} hub={hub} machine={m} onChanged={onChanged} />
+
+        <SectionHead title={L("检查和修复", "Check and fix")} />
+        <ComputerCheck hubId={hub.id} machine={m} />
 
         <div className="pcd-danger">
           <div>

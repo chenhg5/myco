@@ -447,6 +447,13 @@ export interface WSLDistro { name: string; default?: boolean; running?: boolean;
 export interface RemoteRoute { via: "ssh" | "wsl"; target: string; port?: number }
 /** Why reaching or setting up a computer failed, and what to try in a terminal. */
 export interface RemoteError { code: string; message: string; command?: string }
+/** What a check-up found on a computer (found: myco, myco_path, service, since, linger, running, proxy, no_proxy, os). */
+export interface Diagnosis {
+  route: RemoteRoute;
+  found: Record<string, string>;
+  hubs: { url: string; mine?: boolean; direct?: string; proxy?: string }[];
+  log?: string[];
+}
 export interface ConnectStep { key: "login" | "install" | "online"; state: "pending" | "running" | "done" | "failed"; detail?: string }
 export interface ConnectJob {
   id: string;
@@ -732,6 +739,16 @@ export const appApi = {
   connectMachine: (hubId: string, route: RemoteRoute) =>
     request<ConnectJob>("POST", `app/hubs/${enc(hubId)}/machines/connect`, route),
   connectJob: (id: string) => request<ConnectJob>("GET", `app/connect/${enc(id)}`),
+  /** How this App reaches a computer (null: it does not). */
+  machineReach: (hubId: string, machineId: string) =>
+    request<{ route: RemoteRoute | null }>("GET", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}/reach`),
+  setMachineReach: (hubId: string, machineId: string, route: RemoteRoute) =>
+    request<{ route: RemoteRoute }>("PUT", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}/reach`, route),
+  /** Looks at a computer over SSH or WSL: its myco, runner, linger, proxies, hubs, log. */
+  diagnoseMachine: (hubId: string, machineId: string) =>
+    request<Diagnosis>("POST", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}/diagnose`),
+  fixMachine: (hubId: string, machineId: string, action: "restart" | "upgrade") =>
+    request<{ ok: boolean; log: string[] }>("POST", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}/fix`, { action }),
   /** Creates a one-off enrollment link for adding another machine to this hub. */
   createJoinLink: (hubId: string, input: JoinLinkInput = {}) =>
     request<JoinLink>("POST", `app/hubs/${enc(hubId)}/links`, input),
