@@ -959,6 +959,7 @@ extension View {
                 case .exchange(let agent, let other, let focus): ExchangeScreen(agent: agent, other: other, focus: focus)
                 case .projectInfo(let name): ProjectInfoScreen(name: name)
                 case .automations: AutomationsScreen()
+                case .apps: AppsScreen()
                 }
             }
             // A pushed page takes the whole screen: no tab bar under its input.

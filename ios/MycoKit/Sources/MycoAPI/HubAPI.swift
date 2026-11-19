@@ -184,6 +184,19 @@ public protocol HubAPI: Sendable {
     func addPin(_ request: PinRequest) async throws -> Pin
     /// `DELETE /v1/pins/{id}?with=`
     func removePin(_ id: String, with agent: String) async throws
+    /// `GET /v1/templates`: the apps this workspace offers (myco's own,
+    /// and its own). A workspace from before v0.20.5 answers `not_found`.
+    func apps() async throws -> [AppTemplate]
+    /// `POST /v1/templates/{id}/use`: a page made from an app, with its
+    /// sample data when asked.
+    func useApp(_ id: String, name: String, project: String?, sample: Bool) async throws -> Page
+    /// `GET /v1/pages?project=`: the pages I may see, newest first.
+    func pages() async throws -> [Page]
+    /// One of a page's own calls under `/v1/pages/{id}/` (its state, its
+    /// records, its change feed), passed as JSON both ways: what the page
+    /// bridge needs. A conflict (409) comes back, not thrown: its body has
+    /// the latest.
+    func pageRequest(_ method: String, page: String, path: String, query: [String: String], body: Data?) async throws -> PageAnswer
     /// Where this workspace is: its links (a page's address) begin with it.
     var address: URL? { get }
     /// `GET /v1/pages/{id}`: a web page an agent published, with its

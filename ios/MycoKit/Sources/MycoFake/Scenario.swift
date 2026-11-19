@@ -35,6 +35,8 @@ public enum Scenario: Sendable {
         var handovers: [Handover] = []
         /// What each conversation keeps above its messages, by agent.
         var pins: [String: [Pin]] = [:]
+        /// Apps pages can be made from, with their files by path.
+        var apps: [(app: AppTemplate, files: [String: (type: String, text: String)])] = []
         /// Web pages agents published, with their files by path.
         var pages: [(page: Page, files: [String: (type: String, text: String)])] = []
     }
@@ -192,6 +194,44 @@ public enum Scenario: Sendable {
         world.pins[lead.name] = [
             Pin(id: "pin_repo", kind: "link", title: "仓库", target: "https://github.com/chenhg5/myco", addedBy: lead.name, at: ago(2_000)),
             Pin(id: "pin_nav", kind: "message", title: "定了：底部三个 Tab", target: "m2", addedBy: me, at: ago(1_900)),
+        ]
+        // Two of myco's apps: a checklist kept as records (the bridge's
+        // myco.data), and a counter kept as shared state (myco.update).
+        world.apps = [
+            (AppTemplate(id: "tp_list", slug: "myco/checklist", name: "清单", description: "一起勾的待办清单，agent 也能往里加",
+                         category: "office", version: "1.0.0", publisher: "myco", official: true), [
+                "index.html": ("text/html; charset=utf-8", """
+                <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+                <style>body{font:17px/1.6 -apple-system,sans-serif;margin:20px}li{list-style:none;margin:8px 0}ul{padding:0}#who{color:#85858d}</style></head>
+                <body><h1>清单</h1><p id="who">…</p><ul id="items"></ul>
+                <input id="text" placeholder="加一项"><button id="add">加</button>
+                <script>
+                const list = document.getElementById("items");
+                function draw(records) {
+                  list.innerHTML = "";
+                  for (const r of records) {
+                    const li = document.createElement("li");
+                    li.textContent = (r.data.done ? "☑ " : "☐ ") + r.data.text;
+                    li.className = "item";
+                    list.appendChild(li);
+                  }
+                }
+                async function load() { draw((await myco.data.list("items")).records); }
+                myco.ready.then((c) => { document.getElementById("who").textContent = "我是 " + c.me.name; load(); });
+                myco.data.on(() => load());
+                document.getElementById("add").onclick = async () => {
+                  const t = document.getElementById("text");
+                  if (!t.value) return;
+                  await myco.data.put("items", { text: t.value, done: false });
+                  t.value = ""; load();
+                };
+                </script></body></html>
+                """),
+            ]),
+            (AppTemplate(id: "tp_board", slug: "myco/whiteboard", name: "白板", description: "便签、形状和箭头", category: "creative",
+                         version: "1.2.0", publisher: "myco", official: true), [
+                "index.html": ("text/html; charset=utf-8", "<!doctype html><meta charset=utf-8><p>白板</p>"),
+            ]),
         ]
         // Two automations, except where the page with none is looked at.
         if self != .waiting {

@@ -616,11 +616,15 @@ public struct Page: Codable, Sendable, Hashable, Identifiable {
     /// serves it: no versions, no files; `online` says whether it is now.
     public var live: Bool?
     public var online: Bool?
+    /// The app it was made from, if any.
+    public var template: PageTemplate?
 
     public init(
         id: String, name: String, project: String? = nil, publisher: String, version: Int = 1, url: String? = nil,
-        versions: [PageVersion] = [], createdAt: Date? = nil, updatedAt: Date? = nil, live: Bool? = nil, online: Bool? = nil
+        versions: [PageVersion] = [], createdAt: Date? = nil, updatedAt: Date? = nil, live: Bool? = nil, online: Bool? = nil,
+        template: PageTemplate? = nil
     ) {
+        self.template = template
         self.id = id
         self.name = name
         self.project = project
@@ -798,5 +802,72 @@ public struct PinRequest: Codable, Sendable, Hashable {
         self.title = title
         self.target = target
         self.file = file
+    }
+}
+
+/// An app (a template): a page made from it is a tool people and agents
+/// use together, its data kept as records (hubs from v0.20.5).
+public struct AppTemplate: Codable, Sendable, Hashable, Identifiable {
+    public var id: String
+    /// "author/name", e.g. "myco/whiteboard".
+    public var slug: String
+    public var name: String
+    public var description: String?
+    /// table, records, doc, slides, or anything else.
+    public var kind: String?
+    /// office, dev, tools, life, creative, game, other (hubs from v0.20.6).
+    public var category: String?
+    /// Its icon, SVG markup (hubs from v0.20.7): its shape only.
+    public var icon: String?
+    public var version: String
+    public var publisher: String?
+    /// One of myco's own, in every workspace.
+    public var official: Bool?
+
+    public init(
+        id: String, slug: String, name: String, description: String? = nil, kind: String? = nil, category: String? = nil,
+        icon: String? = nil, version: String = "1.0.0", publisher: String? = nil, official: Bool? = nil
+    ) {
+        self.id = id
+        self.slug = slug
+        self.name = name
+        self.description = description
+        self.kind = kind
+        self.category = category
+        self.icon = icon
+        self.version = version
+        self.publisher = publisher
+        self.official = official
+    }
+}
+
+/// Which app a page was made from.
+public struct PageTemplate: Codable, Sendable, Hashable {
+    public var id: String?
+    public var slug: String?
+    public var name: String?
+    public var version: String?
+    /// The app's newer version, when there is one (hubs from v0.20.7).
+    public var latest: String?
+
+    public init(id: String? = nil, slug: String? = nil, name: String? = nil, version: String? = nil, latest: String? = nil) {
+        self.id = id
+        self.slug = slug
+        self.name = name
+        self.version = version
+        self.latest = latest
+    }
+}
+
+/// What the hub answered to a page's own call (its state, its records):
+/// the JSON as it came, and with what status (a conflict carries the
+/// latest in its body).
+public struct PageAnswer: Sendable, Hashable {
+    public var data: Data
+    public var status: Int
+
+    public init(data: Data, status: Int) {
+        self.data = data
+        self.status = status
     }
 }
