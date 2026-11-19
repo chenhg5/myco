@@ -612,6 +612,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // makes the conversation taller above the bottom: at the bottom, it
   // stays at the bottom instead of the last lines being pushed down.
   const timelineRef = useRef<HTMLDivElement>(null);
+  // When something in the conversation was last opened by a click (see below).
+  const openedAt = useRef(0);
   // Each finished run's time, tokens and cost (from its trace), shown next
   // to its answer's time and copy instead of under the steps.
   const [usageOf, setUsageOf] = useState<Record<string, string>>({});
@@ -654,14 +656,25 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     const sc = scrollRef.current;
     if (!el || !sc || typeof ResizeObserver === "undefined") return;
     let h = el.offsetHeight;
+    // Something you opened in the conversation (展开, a run's steps, a
+    // fold): it grows where you are reading, so the view stays put instead
+    // of following the bottom, and is no longer at the bottom after it.
+    const onClick = (e: MouseEvent) => {
+      const t = e.target as Element | null;
+      if (t?.closest?.("button, summary, details, [role=button], [aria-expanded]")) openedAt.current = Date.now();
+    };
+    el.addEventListener("click", onClick, true);
     const ro = new ResizeObserver(() => {
       const nh = el.offsetHeight;
-      if (nh !== h && restoring()) putBack(sc);
+      if (nh > h && Date.now() - openedAt.current < 1000) {
+        atBottom.current = sc.scrollHeight - sc.scrollTop - sc.clientHeight < 80;
+        restoreBelow.current = 0;
+      } else if (nh !== h && restoring()) putBack(sc);
       else if (nh !== h && atBottom.current) sc.scrollTop = sc.scrollHeight;
       h = nh;
     });
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => { ro.disconnect(); el.removeEventListener("click", onClick, true); };
   }, [messages === null]);
 
   // Finding a message (ChatSearch): ⌘F in the chat last clicked in.
@@ -701,7 +714,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       }
       return;
     }
-    if (below >= 80 && atBottom.current && !yours) {
+    if (below >= 80 && atBottom.current && !yours && Date.now() - openedAt.current >= 1000) {
       // Not you: content moved the view. At the bottom it stays.
       el.scrollTop = el.scrollHeight;
       return;
