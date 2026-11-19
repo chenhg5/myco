@@ -372,6 +372,8 @@ export interface LocalState {
   machine_nodes?: string[];
   /** This computer allows shell nodes and full-access sessions (spawn.max_access: full). */
   shell_allowed?: boolean;
+  /** this computer's own IP addresses (LAN, Tailscale…), loopback left out */
+  addrs?: string[];
 }
 export type LocalTunnel = "cloudflare" | "tailscale" | "none";
 export interface StartLocalHubInput { tunnel: LocalTunnel; hostname?: string; /** Another hub on this computer (`myco hub up --name`); omit for the default one. */ name?: string }

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -399,6 +400,26 @@ type LocalStatus struct {
 	// ShellAllowed: this computer allows shell nodes (spawn.max_access:
 	// full in machine.yaml).
 	ShellAllowed bool `json:"shell_allowed"`
+	// Addrs are this computer's own IP addresses (LAN, Tailscale…), so the
+	// app knows a hub reached at one of them is on this computer.
+	Addrs []string `json:"addrs,omitempty"`
+}
+
+// ownAddrs lists this computer's unicast IP addresses, loopback left out.
+func ownAddrs() []string {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, a := range addrs {
+		n, ok := a.(*net.IPNet)
+		if !ok || n.IP.IsLoopback() || n.IP.IsLinkLocalUnicast() || n.IP.IsMulticast() {
+			continue
+		}
+		out = append(out, n.IP.String())
+	}
+	return out
 }
 
 func toolAt(p string) *Tool {
@@ -413,6 +434,7 @@ func (b *Backend) localStatus(ctx context.Context) LocalStatus {
 	st := LocalStatus{Tools: map[string]*Tool{"cloudflared": toolAt(l.cloudflaredPath()), "tailscale": toolAt(l.tailscalePath())}, Device: l.Device}
 	st.Hostname, _ = os.Hostname()
 	st.Machines, st.MachineNodes, st.ShellAllowed = l.localMachine()
+	st.Addrs = ownAddrs()
 	if p := l.mycoPath(); p != "" {
 		st.Myco = &Tool{Path: p}
 		if out, err := l.run(ctx, "version", "--offline"); err == nil {

@@ -17,6 +17,7 @@ import { EFFORTS, MODELS, effortLabel } from "@/app/RunSettings";
 import { machineMakesFolders, machineTellsInfo } from "@/app/hubVersion";
 import { askable, cachedMachineInfo, fetchMachineInfo, forgetMachineInfo } from "@/app/machineInfoCache";
 import { PublicAccessDialog } from "@/app/SettingsPage";
+import { localWorkspaceOf } from "@/app/localHubs";
 import type { RuntimeAccess } from "@/api";
 import { L } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
@@ -643,8 +644,8 @@ function ReachNote({ url, hubUrl, local, onOpened, onRelink }: {
   const [open, setOpen] = useState(false);
   const reach = reachOf(url);
   if (reach === "public") return null;
-  const strip = (u: string) => u.replace(/\/+$/, "");
-  const mine = (local?.hubs || []).find((h) => [h.local_url, h.public_url].filter(Boolean).map((u) => strip(u!)).includes(strip(hubUrl)));
+  // On this computer (by any of its addresses): opened right here.
+  const mine = localWorkspaceOf(local, hubUrl);
   const [title, detail] = reach === "local"
     ? [L("只有这台电脑能连上这个工作区", "Only this computer can reach this workspace"),
       L("别的电脑（比如云服务器）运行这条命令会连不上。", "Another computer (a cloud server, say) can't connect with this command.")]
@@ -659,14 +660,50 @@ function ReachNote({ url, hubUrl, local, onOpened, onRelink }: {
         <b><i aria-hidden />{title}</b>
         <span>{detail}{L("", " ")}{mine
           ? L("开放到公网后，哪里的电脑都能连。", "Open it to the internet and computers anywhere can.")
-          : L("要让外面的电脑连上，请工作区的主人在 设置 › 工作区 里把它开放到公网。", "For computers outside, the workspace's owner opens it to the internet in Settings › Workspaces.")}</span>
+          : L("它在另一台电脑上，要在那台电脑上开放到公网。", "It runs on another computer: it is opened to the internet there.")}</span>
       </div>
-      {mine && (
-        <button type="button" className="app-btn app-btn-small reach-note-btn" onClick={() => setOpen(true)}><Globe />{L("开放到公网", "Open to the internet")}</button>
-      )}
-      {mine && <PublicAccessDialog open={open} onOpenChange={setOpen} local={local} name={mine.name || undefined}
-        onDone={() => { onOpened(); onRelink(); }} />}
+      <button type="button" className="app-btn app-btn-small reach-note-btn" onClick={() => setOpen(true)}><Globe />{L("开放到公网", "Open to the internet")}</button>
+      {mine
+        ? <PublicAccessDialog open={open} onOpenChange={setOpen} local={local} name={mine.name || undefined}
+          onDone={() => { onOpened(); onRelink(); }} />
+        : <OpenElsewhere open={open} onClose={() => setOpen(false)} hubUrl={hubUrl} onRelink={onRelink} />}
     </div>
+  );
+}
+
+/** Opening a workspace that runs on another computer to the internet:
+ *  there, in its App, or with one command (or by asking an agent on it).
+ *  Done, the command here is made again with the new address. */
+function OpenElsewhere({ open, onClose, hubUrl, onRelink }: { open: boolean; onClose: () => void; hubUrl: string; onRelink: () => void }) {
+  const [tunnel, setTunnel] = useState<"cloudflare" | "tailscale">("cloudflare");
+  let port = "";
+  try { port = new URL(hubUrl).port; } catch { /* default */ }
+  const cmd = `myco hub up --tunnel ${tunnel}`;
+  const ask = L(`帮我把这台电脑上的 myco 工作区开放到公网：运行 ${cmd}${port && port !== "7780" ? `（它在 ${port} 端口）` : ""}，完成后告诉我它给出的公网地址。`,
+    `Open the myco workspace on this computer to the internet: run ${cmd}${port && port !== "7780" ? ` (it is on port ${port})` : ""}, then tell me the public address it prints.`);
+  return (
+    <Modal open={open} onOpenChange={(o) => !o && onClose()} title={L("把工作区开放到公网", "Open the workspace to the internet")} className="reach-dialog"
+      description={L("这个工作区跑在另一台电脑上，开放要在那台电脑上做。开放以后，哪里的电脑都能连上它。", "This workspace runs on another computer, so it is opened there. Then computers anywhere can connect.")}>
+      <div className="seg seg-fill reach-tunnel" role="tablist" aria-label={L("用什么开放", "How")}>
+        <button type="button" role="tab" aria-selected={tunnel === "cloudflare"} className={cn("seg-btn", tunnel === "cloudflare" && "active")} onClick={() => setTunnel("cloudflare")}>Cloudflare</button>
+        <button type="button" role="tab" aria-selected={tunnel === "tailscale"} className={cn("seg-btn", tunnel === "tailscale" && "active")} onClick={() => setTunnel("tailscale")}>Tailscale</button>
+      </div>
+      <ol className="reach-ways">
+        <li><b>{L("在那台电脑的 myco App 里", "In the myco App on that computer")}</b>
+          <span>{L("设置 › 工作区 › 这个工作区 ›「开放到公网」，选 ", "Settings › Workspaces › this workspace › Open to the internet, pick ")}{tunnel === "cloudflare" ? "Cloudflare" : "Tailscale"}{L("。", ".")}</span></li>
+        <li><b>{L("或者在那台电脑的终端里运行", "Or run this in a terminal on that computer")}</b>
+          <div className="app-command"><code>{cmd}</code><CopyButton value={cmd} /></div></li>
+        <li><b>{L("或者把这句话发给那台电脑上的 agent", "Or send this to an agent on that computer")}</b>
+          <div className="app-command is-long"><code>{ask}</code><CopyButton value={ask} /></div></li>
+      </ol>
+      <p className="app-small-note">{tunnel === "cloudflare"
+        ? L("Cloudflare 免费，给一个 trycloudflare.com 的地址；那台电脑要装 cloudflared（myco 会提示怎么装）。", "Cloudflare is free and gives a trycloudflare.com address; that computer needs cloudflared (myco says how to install it).")
+        : L("Tailscale 只让你 Tailscale 网络里的电脑连上；两边都要装 Tailscale 并登录同一个账号。", "Tailscale lets only computers on your tailnet connect; both need Tailscale, signed in to the same account.")}</p>
+      <div className="app-modal-actions">
+        <button type="button" className="app-btn" onClick={onClose}>{L("关闭", "Close")}</button>
+        <button type="button" className="app-btn app-btn-primary" onClick={() => { onRelink(); onClose(); }}>{L("开放好了，重新生成命令", "Done: make the command again")}</button>
+      </div>
+    </Modal>
   );
 }
 
