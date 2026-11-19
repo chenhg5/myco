@@ -165,7 +165,7 @@ export function LocalAgentsSection() {
   return (
     <>
       <section className="app-setting-card app-setting-lines">
-        <div className="app-setting-line">
+        <div data-setting="local-agents" className="app-setting-line">
           <div className="app-setting-line-text">
             <b>{L("这台电脑上的 agent", "Agents on this computer")}</b>
             <span>{L("myco 用你自己装好、登录好的 Claude Code、Codex 这些 agent，用的是你已有的订阅，myco 不另外收费。没装或没登录的，点按钮会打开一个终端窗口帮你做。",

@@ -2348,6 +2348,30 @@ async function runMatrix(browser, size, scheme) {
       if (narrow) await sidebar(page, false);
     });
 
+    // Settings search: typing finds a row in any section; Enter opens its
+    // section and points the row out.
+    await step("设置 · 搜索", async () => {
+      await go(page, "设置", narrow);
+      await page.locator(".app-settings-head h2").waitFor({ timeout: 10_000 });
+      const box = page.locator(".app-settings-search input");
+      await box.fill("字号");
+      const hit = page.locator(".app-settings-result", { hasText: "文字大小" });
+      await hit.waitFor({ timeout: 5_000 });
+      if (await page.locator(".app-settings-tab").count()) throw new Error("搜索时导航应只显示结果");
+      await settle(page, 150);
+      await shot(page, size, scheme, "settings-search");
+      await box.press("Enter");
+      await page.locator('[data-setting="text-size"].is-found').waitFor({ timeout: 5_000 });
+      if (await page.locator(".app-settings-head h2").innerText() !== "外观") throw new Error("应换到「外观」");
+      if (await box.inputValue()) throw new Error("选了结果后搜索框应清空");
+      await box.fill("不存在的设置xyz");
+      await page.locator(".app-settings-none").waitFor({ timeout: 5_000 });
+      await box.press("Escape");
+      await page.locator(".app-settings-tab", { hasText: "外观" }).waitFor({ timeout: 5_000 });
+      if (!narrow && !(await page.locator(".app-settings-group-title", { hasText: "这台电脑" }).count())) throw new Error("导航应有「这台电脑」分组");
+      if (narrow) await sidebar(page, false);
+    });
+
     // Settings › Agents: the agent CLIs on this computer, installed or not,
     // signed in or not; a button opens a terminal for what is missing, or
     // shows the command when no terminal could be opened.

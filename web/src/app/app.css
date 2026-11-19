@@ -2284,10 +2284,113 @@ textarea.app-input {
   position: sticky;
   top: 0;
   flex: none;
-  width: 128px;
+  width: 148px;
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+/* Search, at the top of the nav: finds a row in any section. */
+.app-settings-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  margin-bottom: 8px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--muted);
+}
+.app-settings-search:focus-within {
+  border-color: var(--line-strong, var(--line));
+  box-shadow: 0 0 0 3px var(--ring);
+}
+.app-settings-search svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+.app-settings-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 12.5px;
+}
+.app-settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.app-settings-group + .app-settings-group {
+  margin-top: 12px;
+}
+.app-settings-group-title {
+  padding: 0 8px 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.app-settings-result {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: default;
+}
+.app-settings-result:hover,
+.app-settings-result:focus-visible {
+  outline: none;
+  background: var(--nav-hover);
+}
+.app-settings-result small {
+  font-size: 11px;
+  color: var(--muted);
+}
+.app-settings-none {
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+/* Each section's title and its one line. */
+.app-settings-head {
+  margin: 0 0 14px;
+}
+.app-settings-head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.app-settings-head p {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+/* The row a search went to: flashes once. */
+.is-found {
+  border-radius: 6px;
+  animation: app-highlight 0.8s ease-in-out 2;
+}
+@media (prefers-reduced-motion: reduce) {
+  .is-found {
+    animation: none;
+    background: var(--green-soft);
+  }
 }
 .app-settings-tab {
   display: flex;
@@ -2492,8 +2595,18 @@ textarea.app-input {
   .app-settings-nav {
     position: static;
     flex-direction: row;
+    flex-wrap: wrap;
     width: 100%;
-    overflow-x: auto;
+  }
+  .app-settings-search {
+    flex: 1 0 100%;
+    margin-bottom: 4px;
+  }
+  .app-settings-group {
+    display: contents;
+  }
+  .app-settings-group-title {
+    display: none;
   }
   .app-settings-tab {
     flex: none;
