@@ -59,16 +59,12 @@ func (e *env) ensureMachineNode(h config.MachineHub) (*api.Agent, error) {
 	if err != nil {
 		return nil, err
 	}
-	host, user := hostname(), orDefault(osutil.UserName(e.in.Getenv), "user")
-	b := api.Binding{Harness: machinenode.Name, Environment: host, Workdir: home,
-		SessionID: "machine:" + host + ":" + user}
+	req, b := e.machineNodeRequest(h, home)
 	c, err := client.New(h.Hub, h.EnrollToken)
 	if err != nil {
 		return nil, err
 	}
-	res, err := c.Enroll(e.in.Ctx, api.EnrollRequest{Name: domain.MachineNodeName(h.NamePrefix), Binding: b,
-		DisplayName: "machine " + h.Machine,
-		Description: "machine node of " + h.Machine + ": starts new agent sessions here (myco agent spawn)"}, false)
+	res, err := c.Enroll(e.in.Ctx, req, false)
 	if err != nil {
 		return nil, err
 	}
@@ -76,6 +72,35 @@ func (e *env) ensureMachineNode(h config.MachineHub) (*api.Agent, error) {
 		return nil, err
 	}
 	return &res.Agent, nil
+}
+
+// machineNodeRequest is how this machine's node on h enrolls.
+func (e *env) machineNodeRequest(h config.MachineHub, home string) (api.EnrollRequest, api.Binding) {
+	host, user := hostname(), orDefault(osutil.UserName(e.in.Getenv), "user")
+	b := api.Binding{Harness: machinenode.Name, Environment: host, Workdir: home,
+		SessionID: "machine:" + host + ":" + user}
+	return api.EnrollRequest{Name: domain.MachineNodeName(h.NamePrefix), Binding: b,
+		DisplayName: "machine " + h.Machine,
+		Description: "machine node of " + h.Machine + ": starts new agent sessions here (myco agent spawn)"}, b
+}
+
+// stillMember tells whether this machine's credentials on h still work (a
+// dry run of enrolling its node), so joining again keeps that membership.
+func (e *env) stillMember(ctx context.Context, h config.MachineHub) bool {
+	if h.EnrollToken == "" {
+		return false
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+	c, err := client.New(h.Hub, h.EnrollToken)
+	if err != nil {
+		return false
+	}
+	req, _ := e.machineNodeRequest(h, home)
+	_, err = c.Enroll(ctx, req, true)
+	return err == nil
 }
 
 // ensureMachineNodesLogged is ensureMachineNode for `runner --all`, on every

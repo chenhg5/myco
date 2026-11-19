@@ -156,8 +156,10 @@ func randomHex(n int) string {
 
 // Backend serves the /app/ API.
 type Backend struct {
-	Store   *Store
-	Secrets Secrets
+	// connects are computers being connected over SSH or WSL.
+	connects connectJobs
+	Store    *Store
+	Secrets  Secrets
 	// Timeout bounds each call to a hub (default 12s: a hub far away takes
 	// a few seconds a request; adding a hub 15s).
 	Timeout time.Duration
@@ -256,6 +258,7 @@ func (b *Backend) Handler() http.Handler {
 		m.HandleFunc("POST /app/local/runner", b.postLocalRunner)
 		m.HandleFunc("POST /app/local/shell-access", b.postShellAccess)
 		m.HandleFunc("GET /app/local/agents", b.getLocalAgents)
+		b.remoteRoutes(m)
 		m.HandleFunc("POST /app/local/agents/{cli}/terminal", b.postAgentTerminal)
 		m.HandleFunc("GET /app/local/providers", b.listProviders)
 		m.HandleFunc("GET /app/local/agents/{name}/provider", b.getAgentProvider)

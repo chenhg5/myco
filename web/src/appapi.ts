@@ -441,6 +441,32 @@ export function errorSuggestion(e: unknown): string | undefined {
   return e instanceof ApiError ? e.suggestion : undefined;
 }
 
+/** A host in the SSH config, as ssh -G resolves it. */
+export interface SSHHost { name: string; user?: string; host: string; port?: number; jump?: string; connected?: string }
+export interface WSLDistro { name: string; default?: boolean; running?: boolean; version?: number; connected?: string }
+export interface RemoteRoute { via: "ssh" | "wsl"; target: string; port?: number }
+/** Why reaching or setting up a computer failed, and what to try in a terminal. */
+export interface RemoteError { code: string; message: string; command?: string }
+/** What a check-up found on a computer (found: myco, myco_path, service, since, linger, running, proxy, no_proxy, os). */
+export interface Diagnosis {
+  route: RemoteRoute;
+  found: Record<string, string>;
+  hubs: { url: string; mine?: boolean; direct?: string; proxy?: string }[];
+  log?: string[];
+}
+export interface ConnectStep { key: "login" | "install" | "online"; state: "pending" | "running" | "done" | "failed"; detail?: string }
+export interface ConnectJob {
+  id: string;
+  hub: string;
+  route: RemoteRoute;
+  steps: ConnectStep[];
+  found?: Record<string, string>;
+  log?: string[];
+  error?: RemoteError;
+  machine_id?: string;
+  done: boolean;
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" };
   const raw = body instanceof Blob;
@@ -705,6 +731,24 @@ export const appApi = {
   /** Removes a machine and every node on it. dryRun lists them first. */
   removeMachine: (hubId: string, machineId: string, dryRun = false) =>
     request<MachineRemoval>("DELETE", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}${dryRun ? "?dry_run=true" : ""}`),
+  /** Hosts in this computer's SSH config; connected marks the ones this App connected to hubId. */
+  sshHosts: (hubId = "") => request<{ hosts: SSHHost[]; error?: RemoteError }>("GET", `app/local/ssh-hosts${hubId ? `?hub=${enc(hubId)}` : ""}`),
+  /** This Windows computer's WSL distributions (supported: false elsewhere). */
+  wslDistros: (hubId = "") => request<{ supported: boolean; distros: WSLDistro[] }>("GET", `app/local/wsl${hubId ? `?hub=${enc(hubId)}` : ""}`),
+  /** Connects a computer over SSH or into WSL from this App: answers the job at once. */
+  connectMachine: (hubId: string, route: RemoteRoute) =>
+    request<ConnectJob>("POST", `app/hubs/${enc(hubId)}/machines/connect`, route),
+  connectJob: (id: string) => request<ConnectJob>("GET", `app/connect/${enc(id)}`),
+  /** How this App reaches a computer (null: it does not). */
+  machineReach: (hubId: string, machineId: string) =>
+    request<{ route: RemoteRoute | null }>("GET", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}/reach`),
+  setMachineReach: (hubId: string, machineId: string, route: RemoteRoute) =>
+    request<{ route: RemoteRoute }>("PUT", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}/reach`, route),
+  /** Looks at a computer over SSH or WSL: its myco, runner, linger, proxies, hubs, log. */
+  diagnoseMachine: (hubId: string, machineId: string) =>
+    request<Diagnosis>("POST", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}/diagnose`),
+  fixMachine: (hubId: string, machineId: string, action: "restart" | "upgrade") =>
+    request<{ ok: boolean; log: string[] }>("POST", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}/fix`, { action }),
   /** Creates a one-off enrollment link for adding another machine to this hub. */
   createJoinLink: (hubId: string, input: JoinLinkInput = {}) =>
     request<JoinLink>("POST", `app/hubs/${enc(hubId)}/links`, input),
@@ -818,6 +862,7 @@ export const appApi = {
   createAutomation: (hubId: string, input: AutomationRequest) => request<AutomationResponse>("POST", `app/hubs/${enc(hubId)}/automations`, input),
   updateAutomation: (hubId: string, id: string, input: AutomationRequest) => request<AutomationResponse>("PATCH", `app/hubs/${enc(hubId)}/automations/${enc(id)}`, input),
   deleteAutomation: (hubId: string, id: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/automations/${enc(id)}`),
+  automationRun: (hubId: string, id: string, run: string) => request<AutomationRun>("GET", `app/hubs/${enc(hubId)}/automations/${enc(id)}/runs/${enc(run)}`),
   runAutomation: (hubId: string, id: string) => request<AutomationRun>("POST", `app/hubs/${enc(hubId)}/automations/${enc(id)}/run`, {}),
   /** Saves a conversation the app rendered (.md or .jsonl) to Downloads and shows it. */
   saveExport: (name: string, content: string) => request<{ path: string }>("POST", "app/export", { name, content }),

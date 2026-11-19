@@ -149,7 +149,11 @@ export interface AutomationRun {
   id: string; automation_id: string; at: string;
   trigger: "schedule" | "webhook" | "manual"; outcome: "sent" | "skipped" | "failed";
   message_id?: string; error?: string;
+  /** what a webhook call carried (hubs from v0.20.18); in a list of runs
+   *  without its body: appApi.automationRun has it */
+  request?: WebhookRequest;
 }
+export interface WebhookRequest { content_type?: string; headers?: Record<string, string>; body?: string; size: number }
 /** A web page published to a hub (hubs from v0.19.24): a folder of static
  *  files, in versions, opened in the App's page panel. */
 export interface PageVersion { n: number; entry: string; files: number; size: number; sha256: string; by: string; at: string }

@@ -1,6 +1,8 @@
 package service
 
 import (
+	"os"
+	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -12,6 +14,31 @@ type Systemd struct {
 	R    Runner
 	// ID names the service (default: the runner's).
 	ID ID
+	// User is the account the unit belongs to (default: the current one).
+	User string
+}
+
+func (s *Systemd) user() string {
+	if s.User != "" {
+		return s.User
+	}
+	if u, err := user.Current(); err == nil && u.Username != "" {
+		return u.Username
+	}
+	return os.Getenv("USER")
+}
+
+// Linger tells whether systemd keeps this user's services running while
+// they are logged out. Without it the runner stops a while after the last
+// session ends: closing the last SSH or WSL window.
+func (s *Systemd) Linger() bool {
+	out, err := s.R.Run("loginctl", "show-user", s.user(), "--property=Linger")
+	return err == nil && strings.Contains(out, "Linger=yes")
+}
+
+// LingerNote is what to run when Linger could not be turned on.
+func (s *Systemd) LingerNote() string {
+	return "the runner stops when you log out (closing the last SSH or WSL window): run sudo loginctl enable-linger " + s.user()
 }
 
 func (s *Systemd) unit() string { return s.ID.orDefault().Unit }
@@ -50,15 +77,17 @@ func (s *Systemd) Unit(sp Spec) string {
 }
 
 func (s *Systemd) PlanInstall(sp Spec) (Plan, error) {
-	return Plan{
-		Manager: s.Name(), File: s.file(), Content: s.Unit(sp),
-		Commands: [][]string{
-			{"systemctl", "--user", "daemon-reload"},
-			{"systemctl", "--user", "enable", s.unit()},
-			{"systemctl", "--user", "restart", s.unit()},
-		},
-		Notes: []string{"to keep it running after you log out: sudo loginctl enable-linger $USER"},
-	}, nil
+	cmds := [][]string{
+		{"systemctl", "--user", "daemon-reload"},
+		{"systemctl", "--user", "enable", s.unit()},
+		{"systemctl", "--user", "restart", s.unit()},
+	}
+	// Keep it running after logout. Turning linger on for yourself needs no
+	// password on most systems; when it does, the install says what to run.
+	if !s.Linger() {
+		cmds = append([][]string{{"-loginctl", "enable-linger", s.user()}}, cmds...)
+	}
+	return Plan{Manager: s.Name(), File: s.file(), Content: s.Unit(sp), Commands: cmds}, nil
 }
 
 func (s *Systemd) PlanUninstall() Plan {

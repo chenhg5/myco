@@ -248,6 +248,9 @@ func (e *env) installService(maxConcurrent int, logLevel string, dry bool) (*ser
 		return nil, errorf("service_failed", ExitError, "inspect with `myco runner service install --dry-run` and the system logs", "%v", err)
 	}
 	res.Status = waitRunning(m)
+	if sd, ok := m.(*service.Systemd); ok && !sd.Linger() {
+		res.Plan.Notes = append(res.Plan.Notes, sd.LingerNote())
+	}
 	return res, nil
 }
 

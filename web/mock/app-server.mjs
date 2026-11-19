@@ -376,6 +376,48 @@ const vpsMachine = () => ({
   id: "m_vps", name: "VPS 东京", hostname: "tokyo-vps", os: "linux", arch: "x86_64",
   myco_version: "0.20.14", online: true, last_seen_at: iso(8), can_spawn: true,
 });
+// Hosts in the mock SSH config, and computers being connected over SSH or WSL.
+const sshHosts = [
+  { name: "tokyo-vps", user: "glenn", host: "203.0.113.20", port: 22 },
+  { name: "gpu-box", user: "ubuntu", host: "10.0.4.12", port: 22, jump: "bastion" },
+  { name: "hk-vps", user: "root", host: "203.0.113.7", port: 2222 },
+  { name: "old-pi", user: "pi", host: "192.168.1.40", port: 22 },
+  { name: "bastion", user: "glenn", host: "bastion.example.com", port: 22 },
+];
+const connectJobs = new Map();
+// How the App reaches each computer ("<hub>/<machine>") and what a check-up finds.
+const machineReach = new Map([["hub_studio/m_vps", { via: "ssh", target: "tokyo-vps" }]]);
+const machineHealth = new Map();
+// What a job shows at this moment: log in (0.8 s), install (2 s), show up
+// (1 s); old-pi fails to log in. Once done, the computer is on the workspace.
+function connectView(job) {
+  const t = Date.now() - job.started;
+  const steps = [{ key: "login", state: "running" }, { key: "install", state: "pending" }, { key: "online", state: "pending" }];
+  const view = { id: job.id, hub: job.hub, route: job.route, steps, done: false };
+  const name = job.route.target.replace(/^[^@]*@/, "");
+  if (name === "old-pi") {
+    if (t < 700) return view;
+    steps[0].state = "failed";
+    return { ...view, done: true, error: { code: "auth", message: "pi@192.168.1.40: Permission denied (publickey,password).", command: "ssh old-pi" } };
+  }
+  if (t < 800) return view;
+  steps[0].state = "done";
+  view.found = { os: "Linux", arch: "x86_64", host: name, curl: "yes", bash: "yes" };
+  view.log = ["==> installing myco", "myco v0.20.17 installed to ~/.local/bin/myco"];
+  if (t < 2800) { steps[1].state = "running"; return view; }
+  steps[1].state = "done";
+  view.log.push("joined: this machine is on myco", "runner service installed (systemd)");
+  if (t < 3800) { steps[2].state = "running"; return view; }
+  steps[2].state = "done";
+  if (!job.machine) {
+    const hub = state.hubs.find((h) => h.id === job.hub);
+    state.counter += 1;
+    const wsl = job.route.via === "wsl";
+    job.machine = { ...vpsMachine(), id: `m_cx${state.counter}`, name: wsl ? `Glenn 的 Windows-wsl` : name, hostname: wsl ? "GLENN-PC" : name, last_seen_at: iso(0), myco_version: "0.20.17" };
+    if (hub) hub.machines = [...(hub.machines || []), job.machine];
+  }
+  return { ...view, done: true, machine_id: job.machine.id };
+}
 const vpsInfo = {
   dirs: ["~/code/myco-team"], new_dir: "~/code/myco-team", max_access: "workspace", home: "/home/glenn",
   ais: [
@@ -1536,6 +1578,13 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { agent: agent.name });
   }
 
+  // /app/connect/{job}: a computer being connected (see machines/connect).
+  if (parts[0] === "app" && parts[1] === "connect" && parts.length === 3 && method === "GET") {
+    const job = connectJobs.get(parts[2]);
+    if (!job) return fail(res, 404, "not_found", "no such connection");
+    return send(res, 200, connectView(job));
+  }
+
   // /app/mock/run-connect — the UI smoke "runs" the last connect command on
   // a computer: it shows up as a computer of the workspace.
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "run-connect" && parts.length === 3 && method === "POST") {
@@ -2130,6 +2179,19 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { shell_allowed: local.shell_allowed });
     }
 
+    // /app/local/ssh-hosts and /app/local/wsl: computers this one can reach
+    // (ConnectOver.tsx). tokyo-vps is the VPS already connected.
+    if (parts.length === 3 && parts[2] === "ssh-hosts" && method === "GET") {
+      await sleep(300);
+      return send(res, 200, { hosts: sshHosts.map((h) => ({ ...h, connected: h.name === "tokyo-vps" ? "m_vps" : undefined })) });
+    }
+    if (parts.length === 3 && parts[2] === "wsl" && method === "GET") {
+      return send(res, 200, { supported: true, distros: [
+        { name: "Ubuntu-22.04", default: true, running: true, version: 2 },
+        { name: "Debian", running: false, version: 2 },
+      ] });
+    }
+
     // /app/local/agents: the agent CLIs on this computer (LocalAgents.tsx).
     if (parts.length === 3 && parts[2] === "agents" && method === "GET") {
       return send(res, 200, { agents: localAgents });
@@ -2512,7 +2574,11 @@ const server = http.createServer(async (req, res) => {
       }
       const a = find();
       if (!a) return fail(res, 404, "not_found", "no such automation");
-      if (parts.length === 5 && method === "GET") return send(res, 200, { automation: view(a), runs: a.runs || [] });
+      if (parts.length === 5 && method === "GET") return send(res, 200, { automation: view(a), runs: (a.runs || []).map((r) => (r.request ? { ...r, request: { ...r.request, body: undefined } } : r)) });
+      if (parts.length === 7 && parts[5] === "runs" && method === "GET") {
+        const run = (a.runs || []).find((r) => r.id === parts[6]);
+        return run ? send(res, 200, run) : fail(res, 404, "not_found", "no such run");
+      }
       if (parts.length === 5 && method === "PATCH") { const secret = apply(a, await readBody(req)); return send(res, 200, { automation: view(a), ...(secret ? { webhook_secret: secret } : {}) }); }
       if (parts.length === 5 && method === "DELETE") { list.splice(list.indexOf(a), 1); res.writeHead(204); return res.end(); }
       if (parts.length === 6 && parts[5] === "run" && method === "POST") return send(res, 201, runOnce(a, "manual"));
@@ -3011,6 +3077,61 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
+    // /app/hubs/{id}/machines/{mid}/reach|diagnose|fix — a computer's
+    // check-up over SSH (ComputerCheck.tsx). VPS 东京 runs its runner through
+    // a proxy that no longer gets through (as a WSL did once).
+    if (parts.length === 6 && parts[3] === "machines" && ["reach", "diagnose", "fix"].includes(parts[5])) {
+      const mid = parts[4];
+      const key = `${hub.id}/${mid}`;
+      if (parts[5] === "reach" && method === "GET") return send(res, 200, { route: machineReach.get(key) || null });
+      if (parts[5] === "reach" && method === "PUT") {
+        const body = await readBody(req);
+        machineReach.set(key, { via: body.via, target: body.target });
+        return send(res, 200, { route: machineReach.get(key) });
+      }
+      const rt = machineReach.get(key);
+      if (!rt) return fail(res, 409, "not_configured", "this App does not know how to reach that computer");
+      const machine = (hub.machines || []).find((m) => m.id === mid);
+      const st = machineHealth.get(key) || { proxyBroken: mid === "m_vps", service: "active", version: (machine && machine.myco_version) || "0.20.14" };
+      machineHealth.set(key, st);
+      if (parts[5] === "diagnose" && method === "POST") {
+        await sleep(900);
+        if (rt.target === "old-pi") return fail(res, 502, "auth", "pi@192.168.1.40: Permission denied (publickey).", "ssh old-pi");
+        return send(res, 200, {
+          route: rt,
+          found: { os: "Linux", myco: `v${st.version}`, myco_path: "/home/glenn/.local/bin/myco", service: st.service, since: "Wed 2026-11-18 02:17:35 CST", linger: "yes", running: "yes", proxy: "http://127.0.0.1:7890" },
+          hubs: [{ url: "https://hub.example.com", mine: true, direct: "200", proxy: st.proxyBroken ? "000" : "200" }],
+          log: [
+            "time=2026-11-19T08:59:41.521+08:00 level=WARN msg=\"pull failed\" agent=vps-claude err=\"unavailable: cannot reach hub https://hub.example.com: Post \\\"https://hub.example.com/v1/inbox/pull\\\": EOF\" retry_in=30s",
+            "time=2026-11-19T09:00:14.476+08:00 level=WARN msg=\"pull failed\" agent=vps-claude err=\"unavailable: cannot reach hub https://hub.example.com: Post \\\"https://hub.example.com/v1/inbox/pull\\\": EOF\" retry_in=30s",
+          ],
+        });
+      }
+      if (parts[5] === "fix" && method === "POST") {
+        const body = await readBody(req);
+        await sleep(body.action === "upgrade" ? 1500 : 700);
+        if (body.action === "upgrade") { st.version = "0.20.17"; if (machine) machine.myco_version = "0.20.17"; }
+        st.service = "active";
+        return send(res, 200, { ok: true, log: body.action === "upgrade"
+          ? ["==> downloading https://github.com/chenhg5/myco/releases/latest/download/myco-linux-amd64", "==> checksum ok", "==> installed: /home/glenn/.local/bin/myco v0.20.17", "runner service restarted (systemd)"]
+          : ["runner service restarted (systemd)"] });
+      }
+    }
+
+    // /app/hubs/{id}/machines/connect — connect a computer over SSH or WSL:
+    // the job moves on with time; old-pi has a key the App cannot use.
+    if (parts.length === 5 && parts[3] === "machines" && parts[4] === "connect" && method === "POST") {
+      const body = await readBody(req);
+      const target = String(body.target || "").trim();
+      if (!["ssh", "wsl"].includes(body.via) || !target || /^-|[\s'"`;|&$<>]/.test(target)) {
+        return fail(res, 400, "invalid_argument", "say how to reach it: via ssh or wsl, and a plain name");
+      }
+      state.counter += 1;
+      const job = { id: `cj_${state.counter}`, hub: hub.id, route: { via: body.via, target, ...(body.port ? { port: body.port } : {}) }, started: Date.now() };
+      connectJobs.set(job.id, job);
+      return send(res, 200, connectView(job));
+    }
+
     // /app/hubs/{id}/machines/{mid}
     if (parts.length === 5 && parts[3] === "machines") {
       if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
@@ -3405,12 +3526,50 @@ function seedHandovers(name) {
 
 function seedAutomations(hub) {
   if (hub.id !== "hub_studio") return [];
+  // Each run that went out has its task in the chat with its agent, done
+  // (and answered), so 看对话 lands somewhere.
+  const task = (aid, to, at, body) => {
+    const threadId = `th_auto_seed_${msgSeq + 1}`;
+    const m = makeMessage({ thread_id: threadId, from: CONSOLE, to, type: "task", status: "done", body, automation: aid, created_at: iso(at), updated_at: iso(at - 300) });
+    const reply = makeMessage({ thread_id: threadId, from: to, to: CONSOLE, type: "reply", status: "done", body: "看过了，清单在这里：\n1. #212 登录在 Safari 上闪退（要紧）\n2. #215 文档链接坏了", reply_to: m.id, created_at: iso(at - 300), updated_at: iso(at - 300) });
+    (hub.threads ||= {})[threadId] = [m, reply];
+    return m.id;
+  };
+  const day = 86400;
+  const mk = (aid, to, i, at, trigger, outcome, extra = {}) => ({
+    id: `run_seed_${aid}_${i}`, automation_id: aid, at: iso(at), trigger, outcome,
+    ...(outcome === "sent" ? { message_id: task(aid, to, at, extra.body || "看一下昨天新开的 issue，挑出要紧的，在这里回我一份清单。") } : {}),
+    ...(extra.error ? { error: extra.error } : {}),
+    ...(extra.request ? { request: extra.request } : {}),
+  });
+  const morning = [
+    mk("aut_morning", "pm-codex", 1, 10 * 3600, "schedule", "sent"),
+    mk("aut_morning", "pm-codex", 2, 10 * 3600 + day, "schedule", "sent"),
+    mk("aut_morning", "pm-codex", 3, 10 * 3600 + 2 * day, "schedule", "skipped", { error: "the last task it sent is not finished" }),
+    mk("aut_morning", "pm-codex", 4, 10 * 3600 + 3 * day, "manual", "sent"),
+    mk("aut_morning", "pm-codex", 5, 10 * 3600 + 5 * day, "schedule", "sent"),
+  ];
+  const ci = (n, sha, job) => JSON.stringify({ action: "completed", workflow_run: { name: "CI", conclusion: "failure", head_branch: "main", head_sha: sha, run_number: n,
+    html_url: `https://github.com/acme/web/actions/runs/${n}`, failed_job: job } });
+  const hookReq = (body) => ({ content_type: "application/json", size: body.length,
+    headers: { "Content-Type": "application/json", "User-Agent": "GitHub-Hookshot/5c3a2e1", "X-Github-Event": "workflow_run", "X-Github-Delivery": "8f1c0d2e-77aa-11ef-9b6e-1d3c4f5a6b7c" }, body });
+  const ciBodies = [ci(4812, "9c1e7a2", "test (ubuntu, go 1.24)"), ci(4807, "41bd0f3", "lint"), ci(4801, "e07c55d", "test (windows)")];
+  const hooks = [
+    mk("aut_ci", "release-cloud", 1, 2 * 3600, "webhook", "sent", { body: `CI 构建失败了，看一下日志找出原因：\n${ciBodies[0]}`, request: hookReq(ciBodies[0]) }),
+    mk("aut_ci", "release-cloud", 2, 2 * 3600 + 400, "webhook", "skipped", { error: "the last task it sent is not finished", request: hookReq(ciBodies[1]) }),
+    mk("aut_ci", "release-cloud", 3, 3 * day, "webhook", "sent", { body: `CI 构建失败了，看一下日志找出原因：\n${ciBodies[2]}`, request: hookReq(ciBodies[2]) }),
+    mk("aut_ci", "release-cloud", 4, 6 * day, "webhook", "failed", { error: "release-cloud is not in this workspace any more", request: { content_type: "text/plain", size: 0, headers: { "User-Agent": "curl/8.7.1" } } }),
+  ];
   return [{
     id: "aut_morning", name: "每天早上汇总 issue", owner: "glenn", from: CONSOLE, to: "pm-codex",
     body: "看一下昨天新开的 issue，挑出要紧的，在这里回我一份清单。", schedule: { cron: "0 9 * * 1-5", tz: "Asia/Shanghai" },
     webhook: false, skip_if_busy: true, enabled: true, created_at: iso(7 * 86400), updated_at: iso(86400),
     next_run_at: new Date(Date.now() + 14 * 3600e3).toISOString(),
-    last_run: { id: "run_seed", automation_id: "aut_morning", at: iso(10 * 3600), trigger: "schedule", outcome: "sent", message_id: "msg_auto_seed" },
-    runs: [{ id: "run_seed", automation_id: "aut_morning", at: iso(10 * 3600), trigger: "schedule", outcome: "sent", message_id: "msg_auto_seed" }],
+    last_run: morning[0], runs: morning,
+  }, {
+    id: "aut_ci", name: "CI 失败时排查", owner: "glenn", from: CONSOLE, to: "release-cloud",
+    body: "CI 构建失败了，看一下日志找出原因，能修就修，修不了告诉我卡在哪：\n{{payload}}",
+    webhook: true, webhook_url: `${hub.url.replace(/\/+$/, "")}/hooks/aut_ci`, skip_if_busy: true, enabled: true, created_at: iso(10 * 86400), updated_at: iso(10 * 86400),
+    last_run: hooks[0], runs: hooks,
   }];
 }

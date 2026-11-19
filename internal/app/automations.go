@@ -278,13 +278,14 @@ func (s *AutomationService) RunNow(ctx context.Context, c Caller, id string) (*d
 	if err != nil {
 		return nil, err
 	}
-	return s.run(ctx, a, domain.TriggerManual, "")
+	return s.run(ctx, a, domain.TriggerManual, nil)
 }
 
-// Webhook runs one whose webhook was called with secret and payload. Any
-// reason not to (no such automation, wrong secret, turned off, no webhook)
-// is the same not_found, so a caller learns nothing.
-func (s *AutomationService) Webhook(ctx context.Context, id, secret, payload string) (*domain.AutomationRun, error) {
+// Webhook runs one whose webhook was called with secret and what the call
+// carried (its body goes into the message; all of it is kept with the
+// run). Any reason not to (no such automation, wrong secret, turned off,
+// no webhook) is the same not_found, so a caller learns nothing.
+func (s *AutomationService) Webhook(ctx context.Context, id, secret string, call *domain.WebhookRequest) (*domain.AutomationRun, error) {
 	notFound := domain.Errf(domain.CodeNotFound, "not found")
 	a, err := s.repo.Get(ctx, id)
 	if err != nil || !a.Enabled || a.WebhookHash == "" || secret == "" {
@@ -302,7 +303,19 @@ func (s *AutomationService) Webhook(ctx context.Context, id, secret, payload str
 		return nil, domain.Errf(domain.CodeRateLimited, "this webhook was called %d times in the last hour, the most it takes", WebhookRate).
 			WithSuggestion("call it less often; it takes %d calls an hour", WebhookRate)
 	}
-	return s.run(ctx, a, domain.TriggerWebhook, payload)
+	if call == nil {
+		call = &domain.WebhookRequest{}
+	}
+	return s.run(ctx, a, domain.TriggerWebhook, call)
+}
+
+// GetRun is one run of one the caller may see, with what its webhook call
+// carried.
+func (s *AutomationService) GetRun(ctx context.Context, c Caller, id, runID string) (*domain.AutomationRun, error) {
+	if _, err := s.get(ctx, c, id); err != nil {
+		return nil, err
+	}
+	return s.repo.Run(ctx, id, runID)
 }
 
 // RetryAfter is how long a rate-limited webhook should wait.
@@ -344,7 +357,7 @@ func (s *AutomationService) RunDue(ctx context.Context) {
 			s.log.Warn("automations: rescheduling failed", "automation", a.ID, "err", err)
 			continue
 		}
-		if _, err := s.run(ctx, a, domain.TriggerSchedule, ""); err != nil {
+		if _, err := s.run(ctx, a, domain.TriggerSchedule, nil); err != nil {
 			s.log.Warn("automations: run failed", "automation", a.ID, "err", err)
 		}
 	}
@@ -366,13 +379,13 @@ func (s *AutomationService) Run(ctx context.Context, tick time.Duration) {
 }
 
 // run sends the message (or records why not) and the run.
-func (s *AutomationService) run(ctx context.Context, a *domain.Automation, trigger, payload string) (*domain.AutomationRun, error) {
+func (s *AutomationService) run(ctx context.Context, a *domain.Automation, trigger string, call *domain.WebhookRequest) (*domain.AutomationRun, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if fresh, err := s.repo.Get(ctx, a.ID); err == nil {
 		a.LastTask = fresh.LastTask
 	}
-	r := &domain.AutomationRun{ID: s.ids.New("arun"), AutomationID: a.ID, At: s.clock.Now(), Trigger: trigger}
+	r := &domain.AutomationRun{ID: s.ids.New("arun"), AutomationID: a.ID, At: s.clock.Now(), Trigger: trigger, Request: call}
 	if a.SkipIfBusy && a.LastTask != "" {
 		if m, err := s.msgRepo.Get(ctx, a.LastTask); err == nil && !m.Status.Terminal() {
 			r.Outcome, r.Error = domain.RunSkipped, "the last task it sent is not finished"
@@ -380,8 +393,8 @@ func (s *AutomationService) run(ctx context.Context, a *domain.Automation, trigg
 	}
 	if r.Outcome == "" {
 		body := a.Body
-		if trigger == domain.TriggerWebhook {
-			body = domain.WithPayload(a.Body, payload)
+		if call != nil {
+			body = domain.WithPayload(a.Body, call.Body)
 		}
 		out, err := s.messages.SendFromMember(ctx, a.Owner, a.OwnerID, SendInput{
 			To: string(a.To), Type: string(domain.TypeTask), Body: body, Project: a.Project, Automation: a.ID,

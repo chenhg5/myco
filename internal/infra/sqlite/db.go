@@ -388,6 +388,8 @@ func Open(path string) (*sql.DB, error) {
 		"project_docs":   {{"content_type", "TEXT NOT NULL DEFAULT ''"}, {"size", "INTEGER NOT NULL DEFAULT 0"}, {"blob", "TEXT NOT NULL DEFAULT ''"}},
 		// A template's icon (v0.20.7).
 		"template_versions": {{"icon", "TEXT NOT NULL DEFAULT ''"}},
+		// What a webhook call carried (JSON; '' for other runs).
+		"automation_runs": {{"request", "TEXT NOT NULL DEFAULT ''"}},
 	} {
 		if err := addColumns(db, table, cols); err != nil {
 			db.Close()

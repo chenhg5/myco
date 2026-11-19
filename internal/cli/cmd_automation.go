@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -43,9 +44,10 @@ func automationCommands() *Command {
 	}
 	show := &Command{
 		Name:     "show",
-		Summary:  "Show an automation and its recent runs",
-		Examples: []string{"myco automation show --id aut_abc123"},
-		Flags:    []Flag{idFlag, adminFlag},
+		Summary:  "Show an automation and its recent runs, or one run with what its webhook call carried",
+		Examples: []string{"myco automation show --id aut_abc123", "myco automation show --id aut_abc123 --run arun_xyz789"},
+		Flags: []Flag{idFlag, adminFlag,
+			{Name: "run", Kind: String, Help: "One run (an id from the list): with a webhook call's content type, the headers kept and its body (hubs from v0.20.18)"}},
 		Run: handler(func(e *env) error {
 			if err := e.in.Require("id"); err != nil {
 				return err
@@ -53,6 +55,32 @@ func automationCommands() *Command {
 			c, err := e.adminClient()
 			if err != nil {
 				return err
+			}
+			if id := e.in.String("run"); id != "" {
+				r, err := c.AutomationRun(e.in.Ctx, e.in.String("id"), id)
+				if err != nil {
+					return err
+				}
+				return e.p.Print(r, func(w io.Writer) {
+					fmt.Fprintf(w, "%s  %s  %s %s%s\n", r.ID, r.At.Local().Format("2006-01-02 15:04:05"), r.Trigger, r.Outcome, sep(r.Error))
+					if r.MessageID != "" {
+						fmt.Fprintf(w, "task: %s\n", r.MessageID)
+					}
+					if q := r.Request; q != nil {
+						fmt.Fprintf(w, "\ncall: %s, %d bytes\n", q.ContentType, q.Size)
+						keys := make([]string, 0, len(q.Headers))
+						for k := range q.Headers {
+							keys = append(keys, k)
+						}
+						sort.Strings(keys)
+						for _, k := range keys {
+							fmt.Fprintf(w, "  %s: %s\n", k, q.Headers[k])
+						}
+						if q.Body != "" {
+							fmt.Fprintf(w, "\n%s\n", q.Body)
+						}
+					}
+				})
 			}
 			d, err := c.Automation(e.in.Ctx, e.in.String("id"))
 			if err != nil {
@@ -62,8 +90,12 @@ func automationCommands() *Command {
 				printAutomation(w, d.Automation, "")
 				if len(d.Runs) > 0 {
 					fmt.Fprintln(w, "\nruns (newest first):")
-					for _, r := range d.Runs {
-						fmt.Fprintf(w, "  %s  %-8s %-7s %s%s\n", r.At.Local().Format("2006-01-02 15:04"), r.Trigger, r.Outcome, r.MessageID, sep(r.Error))
+					for i, r := range d.Runs {
+						if i == 20 {
+							fmt.Fprintf(w, "  … %d older (--format json lists them all)\n", len(d.Runs)-i)
+							break
+						}
+						fmt.Fprintf(w, "  %s  %s  %-8s %-7s %s%s\n", r.ID, r.At.Local().Format("2006-01-02 15:04"), r.Trigger, r.Outcome, r.MessageID, sep(r.Error))
 					}
 				}
 			})

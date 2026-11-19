@@ -14,3 +14,6 @@ func detach(cmd *exec.Cmd) {
 
 // hideWindow is for Windows (console windows); nothing to do elsewhere.
 func hideWindow(*exec.Cmd) {}
+
+// wslHost: WSL distributions can live on this computer.
+const wslHost = false

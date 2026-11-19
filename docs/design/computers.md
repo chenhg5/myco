@@ -71,6 +71,44 @@ App 经 Hub 给那台电脑的 machine 节点发一个 `cli: "info"` 的请求�
 - Hub 不用升级。老 Hub 会把回答重新编码、丢掉不认识的 `info` 字段，所以 machine 节点在 `reply` 里放一份同样的 JSON 文字，App 后端两处都认。老 Hub 会把这次询问记成一条 `machine.spawn` 审计，新 Hub 不记。
 - 不填文件夹时新建：新文件夹可以建在 `~/myco` 下，也可以直接建在某个允许的文件夹下；不在允许范围里的一律不建（以前会先建好再报错，留下空文件夹）。App 还不知道那台电脑允许哪些文件夹时请求的是 `~/myco/<名字>`；`~/myco` 不在允许范围里的电脑会把同名文件夹建到第一个允许的文件夹里，而不是报"不存在"。App 那边也会等问到允许的文件夹再让「开一个」能点。
 
+## 从 SSH 或 WSL 加电脑
+
+现在连一台电脑要：复制命令 → 自己登录那台电脑 → 粘贴运行。能 SSH 上去的电脑、这台 Windows 里的 WSL，App 可以替你做完。思路参考了 Kettu（AGPL，只借思路），但我们的电脑自己连 Hub，不需要它那套 SSH 隧道。
+
+**入口**：「连一台电脑」里多两种方式，排在「复制命令」前面（App 后端：`GET /app/local/ssh-hosts`、`GET /app/local/wsl`、`POST /app/hubs/{id}/machines/connect`、`GET /app/connect/{job}`，`remote.go`、`remote_connect.go`）：
+
+- **从 SSH 配置里选**：列出 `~/.ssh/config` 里的主机（跟着 `Include` 读），每个用系统的 `ssh -G <名字>` 算出真正的用户、地址、端口和跳板，显示成「名字 · user@host:port · 经 跳板」。只拿 Git 用的主机（github.com、gitlab.com、gitee.com 等）不列。也可以手填 `user@host`、端口。
+- **这台 Windows 里的 WSL**（只在 Windows 上）：`wsl.exe -l -v` 列出发行版；已经连在这个工作区的标出来。
+
+可以勾几台一起加。每台一行，按步骤打勾：
+
+1. **登录**：`ssh -T -o BatchMode=yes -o ConnectTimeout=15 <名字> 'sh -s'`（WSL 用 `wsl.exe -d <发行版> -- sh -s`），从标准输入送一小段探测脚本：系统、架构、有没有 bash 和 curl、有没有装 myco、什么版本、是不是已经连在这个工作区。
+2. **安装并连上**：App 现生成一次性的加入链接（和「复制命令」那条一样，1 次、24 小时），从标准输入送过去执行 `curl -fsSL <链接> | bash`：装好或升级 myco、`machine join`、装后台服务（Linux 上会顺手开 linger）。链接只走 ssh 的标准输入，不出现在任何一台电脑的命令行参数和进程列表里。
+3. **等它出现**：等 Hub 上出现这台电脑（最多 60 秒），然后像现在一样切到它，列出它的会话。
+
+**为什么不用配对码**：能用你的 SSH 登录上去，就说明那台电脑是你的，这一步本身就是授权。App 不读、不存任何密钥，用的是你的 ssh 和 ssh-agent；`BatchMode` 让它在要输密码、口令时直接失败，不会卡住。
+
+**出错时**：按 ssh 的报错归类，每类一句话加一条能复制的命令：
+
+| 类别 | 说法 |
+| --- | --- |
+| 要密码或口令 | App 不能替你输密码或密钥口令。先 `ssh-add` 把密钥放进 ssh-agent，确认 `ssh <名字>` 不用输密码就能登录 |
+| 没见过的主机 | 第一次连这台：先在终端里运行 `ssh <名字>`，核对指纹并接受 |
+| 主机指纹变了 | 这台主机的指纹和上次不一样，可能换了系统，也可能被冒充：确认后再从 `~/.ssh/known_hosts` 里删掉旧的 |
+| 连不上 / 拒绝 / 超时 | 地址或端口不对，或者那台电脑没开、防火墙挡了 |
+| 没有 bash 或 curl | 那台电脑上先装 curl（或者 bash） |
+| 不支持的系统 | 只支持 Linux 和 macOS；Windows 用「复制命令」里的 PowerShell 那条 |
+| 安装或连接失败 | 折叠框里放它最后打印的 30 行 |
+
+**记住怎么连回去**：加成功后，App 在本机记下「这台电脑 ← SSH 名字 / WSL 发行版」（`~/.myco/app-reach.json`，只记名字，不记地址和密钥）。之后：
+
+- **检查**：电脑页「检查和修复」一块，通过同一条路跑一段只读脚本，逐项给结论（最坏的排最前）：myco 版本和位置；后台服务在不在跑、从什么时候起；linger（Linux）；服务配置里的代理；它所在的每个工作区经那个代理、和直连各连不连得上（问 `/v1/health`）；runner 日志最后 20 行。比如「经代理连不上工作区，直连是通的」，说清代理地址和怎么办。代理密码、令牌在离开那台电脑前就遮掉。
+- **重启后台**（`myco runner service restart`）、**升级 myco**（同一个安装脚本，用不了 sudo 时装到 `~/.local/bin`，再让服务用新的那个）：做完再自动检查一次；失败时展开它打印的最后几行。
+- 不是从 App 加的电脑：这一块先问「它是哪一个」，从 SSH 配置里的主机和这台 Windows 上的 WSL 里选（按名字、主机名先猜一个），记下来，之后一样能检查。
+- App 后端：`GET/PUT /app/hubs/{id}/machines/{mid}/reach`、`POST …/diagnose`、`POST …/fix {action: restart|upgrade}`（`remote_diag.go`）。
+
+**范围**：先做 SSH 到 Linux、macOS，和 Windows 上的 WSL。SSH 到 Windows 本身（PowerShell）先不做。App 后端只用系统自带的 `ssh`、`wsl.exe`，不引新依赖。Hub 和那台电脑的 myco 都不用升级。
+
 ## 还没做
 
 - 在 App 里改一台电脑允许的文件夹和最高权限（现在只显示，说明在那台电脑上改 `spawn.dirs`、`spawn.max_access`）。远程放宽权限要另外想清楚，暂时只能在那台电脑上改。

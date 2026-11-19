@@ -1262,6 +1262,19 @@ type AutomationRun struct {
 	MessageID string `json:"message_id,omitempty"`
 	// Why it was skipped or failed (short, English).
 	Error string `json:"error,omitempty"`
+	// What a webhook call carried (hubs from v0.20.18; webhook runs only).
+	Request *WebhookRequest `json:"request,omitempty"`
+}
+
+// WebhookRequest is what a webhook call carried: its content type, the
+// headers safe to show (never credentials, cookies or addresses) and its
+// body. A list of runs leaves the body out (size says how big it is);
+// GET /v1/console/automations/{id}/runs/{run} has it.
+type WebhookRequest struct {
+	ContentType string            `json:"content_type,omitempty"`
+	Headers     map[string]string `json:"headers,omitempty"`
+	Body        string            `json:"body,omitempty"`
+	Size        int               `json:"size"`
 }
 
 // Automation is GET /v1/console/automations' item.

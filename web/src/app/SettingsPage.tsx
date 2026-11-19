@@ -1,7 +1,7 @@
 import { clearAll, forgetHub, recall, remember } from "@/lib/memo";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  AlertTriangle, AudioLines, Bot, Check, Cloud, Globe, Info, Languages, Monitor, Palette, Pencil, Plus, RotateCcw, ScrollText, Server, Terminal, Users,
+  AlertTriangle, AudioLines, Bot, Check, Cloud, Globe, Info, Languages, Monitor, Palette, Pencil, Plus, RotateCcw, ScrollText, Search, Server, Terminal, Users,
 } from "lucide-react";
 import {
   appApi, type AppInfo, type CacheStats, type AppUpdate, type Hub, type HubOverview, type LocalState,
@@ -109,6 +109,13 @@ function AboutSection({ info, local }: { info: AppInfo | null; local: LocalState
           <span className="app-kv-value">{status}{action}</span>
         </div>
         <CacheRow />
+        <div className="app-kv app-about-update" data-setting="prepare">
+          <span className="app-kv-label">{L("上手引导", "Getting started")}</span>
+          <span className="app-kv-value">
+            <span className="app-about-status">{L("看看这台电脑上的 agent，把已有的会话加进来", "The agents on this computer, and sessions to bring in")}</span>
+            <button type="button" className="app-btn app-btn-quiet" onClick={() => window.dispatchEvent(new CustomEvent("myco-prepare"))}>{L("重新打开", "Open")}</button>
+          </span>
+        </div>
       </div>
       <ErrorText error={failure} />
       <p className="app-about-note">
@@ -170,6 +177,49 @@ const SECTIONS: { key: Section; label: string; icon: typeof Server }[] = [
   { key: "voice", get label() { return L("语音", "Voice"); }, icon: AudioLines },
   { key: "network", get label() { return L("代理", "Proxy"); }, icon: Globe },
   { key: "about", get label() { return L("关于", "About"); }, icon: Info },
+];
+
+/** The nav in groups: what is about this computer, what is about the
+ *  workspace (shared with the others in it), and About. */
+const GROUPS: { title: () => string; keys: Section[] }[] = [
+  { title: () => L("这台电脑", "This computer"), keys: ["appearance", "voice", "translate", "network", "agents"] },
+  { title: () => L("工作区", "Workspace"), keys: ["hubs", "members", "audit"] },
+  { title: () => "", keys: ["about"] },
+];
+
+/** Each section's one line, under its title. */
+const SECTION_ABOUT: Record<Section, () => string> = {
+  hubs: () => L("工作区是 agent 所在的服务器。连接后，所有页面只显示选中的工作区。", "A workspace is the server your agents live on. Once connected, every page shows only the selected workspace."),
+  agents: () => L("这台电脑上装了哪些 AI 命令行，能不能用，怎么装、怎么登录。", "The AI command lines on this computer: whether they work, and how to install or sign in."),
+  members: () => L("谁在这个工作区里、能做什么；邀请新的人。", "Who is in this workspace and what they may do; invite someone."),
+  audit: () => L("工作区里谁在什么时候做了什么。", "Who did what in this workspace, and when."),
+  appearance: () => L("主题、文字大小、语言，以及对话怎么显示。", "Theme, text size, language, and how chats look."),
+  translate: () => L("把 agent 说的话翻译成你的语言。", "Translate what agents say into your language."),
+  voice: () => L("和 agent 语音聊天，以及语音输入。", "Voice chat with agents, and dictation."),
+  network: () => L("这台电脑连外网时走的代理。", "The proxy this computer uses to reach the internet."),
+  about: () => L("版本、更新和这个 App。", "Version, updates and this app."),
+};
+
+/** What Settings can find (search at the top of its nav): a row of a
+ *  section (data-setting on it), its words in both languages. */
+const FINDABLE: { section: Section; key?: string; title: () => string; words: string }[] = [
+  { section: "appearance", key: "theme", title: () => L("外观（浅色 / 深色）", "Appearance (light / dark)"), words: "外观 主题 浅色 深色 跟随系统 theme dark light appearance" },
+  { section: "appearance", key: "simple-mode", title: () => L("简单模式", "Simple mode"), words: "简单模式 完整 simple mode" },
+  { section: "appearance", key: "text-size", title: () => L("文字大小", "Text size"), words: "文字大小 字号 缩放 放大 text size zoom font" },
+  { section: "appearance", key: "steps", title: () => L("对话里的过程（只看进度）", "Steps in chats"), words: "对话里的过程 只看进度 思考 命令 steps progress" },
+  { section: "appearance", key: "chat-bg", title: () => L("聊天背景", "Chat background"), words: "聊天背景 壁纸 背景图 chat background wallpaper" },
+  { section: "appearance", key: "island", title: () => L("灵动岛", "Notch island"), words: "灵动岛 刘海 island notch" },
+  { section: "appearance", key: "language", title: () => L("语言", "Language"), words: "语言 中文 英文 language english chinese" },
+  { section: "voice", key: "voice-chat", title: () => L("和 agent 语音聊天", "Voice chat with an agent"), words: "语音 聊天 麦克风 朗读 voice chat microphone speech tts" },
+  { section: "voice", key: "voice-keep", title: () => L("把语音设置存到工作区", "Keep voice settings on the workspaces"), words: "语音 设置 存到工作区 同步 voice sync" },
+  { section: "translate", key: "translate", title: () => L("自动翻译", "Translate automatically"), words: "翻译 自动翻译 密钥 api key translate deepl" },
+  { section: "network", key: "proxy", title: () => L("代理", "Proxy"), words: "代理 网络 http socks proxy network" },
+  { section: "agents", key: "local-agents", title: () => L("这台电脑上的 agent", "Agents on this computer"), words: "本机 agent claude code codex gemini 安装 登录 cli install sign in" },
+  { section: "hubs", title: () => L("工作区", "Workspaces"), words: "工作区 服务器 连接 加入 新建 停止 公网 cloudflare tailscale workspace hub server" },
+  { section: "members", title: () => L("成员", "People"), words: "成员 邀请 角色 管理员 权限 people invite role admin member" },
+  { section: "audit", title: () => L("审计", "Audit"), words: "审计 日志 记录 操作 audit log" },
+  { section: "about", title: () => L("关于", "About"), words: "关于 版本 更新 升级 about version update upgrade" },
+  { section: "about", key: "prepare", title: () => L("上手引导", "Getting started"), words: "上手 引导 新手 准备这台电脑 onboarding getting started setup guide" },
 ];
 
 /** What 简单模式 leaves out of Settings. */
@@ -264,6 +314,51 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
   const [section, setSection] = useState<Section>(() => takeSettingsSection() ?? langSwitchSection ?? (simpleModeNow() ? "agents" : "hubs"));
   // Simple mode hides the workspace, people and audit sections.
   const sections = SECTIONS.filter((s) => !simple || !SIMPLE_HIDDEN.includes(s.key));
+  // Search: rows of any section, by their words (each word typed must be
+  // there); picking one opens its section and points the row out.
+  const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [pointAt, setPointAt] = useState<{ key: string; n: number } | null>(null);
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const found = FINDABLE.filter((f) => sections.some((x) => x.key === f.section)
+    && words.every((w) => `${f.title()} ${f.words} ${SECTIONS.find((x) => x.key === f.section)?.label || ""}`.toLowerCase().includes(w)));
+  const goTo = (f: (typeof FINDABLE)[number]) => {
+    setSection(f.section);
+    setQuery("");
+    if (f.key) setPointAt((p) => ({ key: f.key!, n: (p?.n || 0) + 1 }));
+    else bodyRef.current?.scrollTo({ top: 0 });
+  };
+  useEffect(() => {
+    if (!pointAt) return;
+    // (its section may still be drawing: a few tries)
+    let tries = 0;
+    const t = window.setInterval(() => {
+      const el = bodyRef.current?.querySelector<HTMLElement>(`[data-setting="${pointAt.key}"]`);
+      if (el || ++tries > 20) {
+        window.clearInterval(t);
+        if (!el) return;
+        el.scrollIntoView({ block: "center", behavior: "smooth" });
+        el.classList.remove("is-found");
+        void el.offsetWidth;
+        el.classList.add("is-found");
+        window.setTimeout(() => el.classList.remove("is-found"), 1800);
+      }
+    }, 60);
+    return () => window.clearInterval(t);
+  }, [pointAt]);
+  // ⌘F (Ctrl+F) on Settings: its search.
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && (e.key === "f" || e.key === "F")) {
+        e.preventDefault();
+        searchRef.current?.focus();
+        searchRef.current?.select();
+      }
+    };
+    window.addEventListener("keydown", on);
+    return () => window.removeEventListener("keydown", on);
+  }, []);
   useEffect(() => { if (simple && SIMPLE_HIDDEN.includes(section)) setSection("agents"); }, [simple, section]);
   // After a language remount, the request that was already handled must not
   // pull the page back to the Hub section.
@@ -373,25 +468,53 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
   return (
     <div className="app-page app-settings">
       <div className="app-settings-nav" role="tablist" aria-label={L("设置", "Settings")}>
-        {sections.map((s) => (
-          <button
-            key={s.key}
-            type="button"
-            role="tab"
-            aria-selected={section === s.key}
-            className={cn("app-settings-tab", section === s.key && "active")}
-            onClick={() => setSection(s.key)}
-          >
-            <s.icon strokeWidth={1.75} />
-            <span>{s.label}</span>
-          </button>
-        ))}
+        <label className="app-settings-search">
+          <Search />
+          <input ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)} placeholder={L("搜索设置", "Search settings")}
+            aria-label={L("搜索设置", "Search settings")}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") { setQuery(""); return; }
+              if (e.key === "Enter" && found[0]) { e.preventDefault(); goTo(found[0]); }
+            }} />
+        </label>
+        {query.trim() ? (
+          found.length ? found.map((f) => (
+            <button key={`${f.section}/${f.key || ""}`} type="button" className="app-settings-result" onClick={() => goTo(f)}>
+              <span>{f.title()}</span>
+              <small>{SECTIONS.find((x) => x.key === f.section)?.label}</small>
+            </button>
+          )) : <div className="app-settings-none">{L("没有找到", "Nothing found")}</div>
+        ) : GROUPS.map((g, gi) => {
+          const items = g.keys.map((k) => sections.find((x) => x.key === k)).filter((x): x is (typeof sections)[number] => !!x);
+          if (!items.length) return null;
+          return (
+            <div key={gi} className="app-settings-group">
+              {g.title() && <div className="app-settings-group-title">{g.title()}</div>}
+              {items.map((s) => (
+                <button
+                  key={s.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={section === s.key}
+                  className={cn("app-settings-tab", section === s.key && "active")}
+                  onClick={() => setSection(s.key)}
+                >
+                  <s.icon strokeWidth={1.75} />
+                  <span>{s.label}</span>
+                </button>
+              ))}
+            </div>
+          );
+        })}
       </div>
 
-      <div className="app-settings-body">
+      <div className="app-settings-body" ref={bodyRef}>
+        <header className="app-settings-head">
+          <h2>{SECTIONS.find((x) => x.key === section)?.label}</h2>
+          <p>{SECTION_ABOUT[section]()}</p>
+        </header>
         {section === "hubs" && (
           <>
-            <p className="app-summary">{L("工作区是 agent 所在的服务器。连接后，所有页面只显示选中的工作区。", "A workspace is the server your nodes live on. Once connected, every page shows only the selected workspace.")}</p>
             <ErrorText error={localError} />
             <ErrorText error={actionError} />
 
@@ -543,7 +666,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
         {section === "appearance" && (
           <>
             <section className="app-setting-card app-setting-lines">
-              <div className="app-setting-line">
+              <div data-setting="theme" className="app-setting-line">
                 <div className="app-setting-line-text">
                   <b>{L("外观", "Appearance")}</b>
                   <span>{L("跟随系统时，App 会随 macOS 的浅色/深色切换。", "With System, the app follows macOS light and dark mode.")}</span>
@@ -573,7 +696,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
                   title={simple ? L("关掉简单模式", "Turn simple mode off") : L("打开简单模式", "Turn simple mode on")}
                   className={cn("app-switch", simple && "is-on")} onClick={() => setSimpleMode(!simple)}><span className="app-switch-knob" /></button>
               </div>
-              <div className="app-setting-line">
+              <div data-setting="text-size" className="app-setting-line">
                 <div className="app-setting-line-text">
                   <b>{L("文字大小", "Text size")}</b>
                   <span>{L("整个窗口一起放大或缩小。", "Scales the whole window up or down.")}</span>
@@ -596,7 +719,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
               <ReportsOnlyLine />
               <ChatBgLine />
               {info?.shell === "mac" && <IslandLine />}
-              <div className="app-setting-line">
+              <div data-setting="language" className="app-setting-line">
                 <div className="app-setting-line-text">
                   <b>语言 / Language</b>
                   <span>{L("跟随系统时，App 使用 macOS 的语言设置。", "With System, the app uses the macOS language.")}</span>
@@ -909,7 +1032,7 @@ function IslandLine() {
     try { localStorage.setItem("myco-island", v ? "on" : "off"); } catch { /* not kept */ }
   };
   return (
-    <div className="app-setting-line">
+    <div data-setting="island" className="app-setting-line">
       <div className="app-setting-line-text">
         <b>{L("灵动岛", "Notch island")}</b>
         <span>{L("有成员在干活时，屏幕顶部的刘海会长出一小截：小蘑菇在走，旁边是几个在干活；指上去看是谁在做什么。不喜欢可以关掉。", "While members work, the notch at the top of the screen grows a little: a walking mushroom and how many are at work; point at it to see who is doing what. Turn it off if you'd rather not.")}</span>
@@ -930,7 +1053,7 @@ function ReportsOnlyLine() {
     { on: true, label: L("只看进度", "Progress only") },
   ];
   return (
-    <div className="app-setting-line">
+    <div data-setting="steps" className="app-setting-line">
       <div className="app-setting-line-text">
         <b>{L("对话里的过程", "Steps in chats")}</b>
         <span>{L("只看进度时，只显示 agent 自己报的进度和计划，不显示它的思考和跑的命令；在不在干活照样看得到。",
@@ -996,7 +1119,7 @@ function TranslateSection() {
   return (
     <>
       <section className="app-setting-card app-setting-lines">
-        <div className="app-setting-line">
+        <div data-setting="translate" className="app-setting-line">
           <div className="app-setting-line-text">
             <b>{L("自动翻译", "Translate automatically")}</b>
             <span>{isReady
@@ -1112,7 +1235,7 @@ function ProxySection({ hubsOv }: { hubsOv?: HubOverview[] }) {
   ];
   return (
     <section className="app-setting-card app-setting-lines">
-      <div className="app-setting-line">
+      <div data-setting="proxy" className="app-setting-line">
         <div className="app-setting-line-text">
           <b>{L("代理", "Proxy")}</b>
           <span>{L("App 连工作区、检查更新、翻译和语音服务时走的代理。这台电脑和局域网里的地址（比如本机的工作区）总是直连。",
@@ -1280,7 +1403,7 @@ function VoiceSection() {
   return (
     <>
       <section className="app-setting-card app-setting-lines">
-        <div className="app-setting-line">
+        <div data-setting="voice-chat" className="app-setting-line">
           <div className="app-setting-line-text">
             <b>{L("和 agent 语音聊天", "Voice chat with an agent")}</b>
             <span>{info.available
@@ -1363,7 +1486,7 @@ function VoiceSection() {
       </section>
       <h4 className="app-setting-group">{L("多设备同步", "On your other devices")}</h4>
       <section className="app-setting-card app-setting-lines">
-        <div className="app-setting-line">
+        <div data-setting="voice-keep" className="app-setting-line">
           <div className="app-setting-line-text">
             <b>{L("把这些设置存到工作区", "Keep these settings on the workspaces")}</b>
             <span>{L("打开后，上面的设置和密钥存在你连着的工作区（Hub）里，你的手机和别的电脑不用再填一遍；哪台设备后改的算数。密钥只给你自己的设备，但 Hub 所在机器的管理员读得到它的数据库：不是你自己的 Hub，介意就关掉。",

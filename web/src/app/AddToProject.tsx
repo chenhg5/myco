@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, Cloud, Globe, Info, Laptop, Plus, Users } from "lucide-react";
+import { ConnectOver } from "@/app/ConnectOver";
 import { appApi, type Hub, type JoinLink, type LocalSession, type LocalState, type MachineInfo, type MachineSession, type SpawnCli } from "@/appapi";
 import { IconAsterisk, IconCode } from "@/components/icons";
 import type { Machine, Project } from "@/api";
@@ -683,6 +684,13 @@ function ConnectComputer({ open, hub, machines, local, onConnected }: {
   const [link, setLink] = useState<JoinLink | null>(null);
   const [error, setError] = useState<unknown>(null);
   const before = useRef<Set<string> | null>(null);
+  // From this App over SSH or into WSL, or a command to run there.
+  const [way, setWay] = useState<"ssh" | "wsl" | "command">(local ? "ssh" : "command");
+  const [wsl, setWsl] = useState(false);
+  useEffect(() => {
+    if (!open || !local) return;
+    appApi.wslDistros().then((r) => setWsl(r.supported && r.distros.length > 0)).catch(() => setWsl(false));
+  }, [open, local]);
   const make = () => {
     if (!hubId) return;
     setError(null);
@@ -692,9 +700,18 @@ function ConnectComputer({ open, hub, machines, local, onConnected }: {
     if (!open) return;
     before.current = new Set(machines.map((m) => m.id));
     setLink(null);
-    make();
+    if (way === "command") make();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, hubId]);
+  }, [open, hubId, way]);
+  // Connected over SSH or WSL: pick it once the workspace lists it.
+  const [pending, setPending] = useState("");
+  useEffect(() => {
+    if (pending && machines.some((m) => m.id === pending)) {
+      setPending("");
+      onConnected(pending);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pending, machines]);
   // It shows up: pick it.
   useEffect(() => {
     if (!open || !before.current) return;
@@ -703,8 +720,24 @@ function ConnectComputer({ open, hub, machines, local, onConnected }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, machines]);
   const command = link ? (os === "ps" ? link.ps_command || `irm '${link.join_url}?format=ps1' | iex` : link.command) : "";
+  const ways = local ? (
+    <div className="seg seg-fill add-tabs" role="tablist" aria-label={L("怎么连", "How")}>
+      {([["ssh", L("用 SSH 连", "Over SSH")], ...(wsl ? [["wsl", L("这台 Windows 里的 WSL", "WSL on this Windows")]] : []), ["command", L("复制命令", "Copy a command")]] as const).map(([v, label]) => (
+        <button key={v} type="button" role="tab" aria-selected={way === v} className={cn("seg-btn", way === v && "active")} onClick={() => setWay(v as typeof way)}>{label}</button>
+      ))}
+    </div>
+  ) : null;
+  if (way !== "command" && local) {
+    return (
+      <div className="add-pane ws-command" data-testid="connect-computer">
+        {ways}
+        <ConnectOver hubId={hubId} via={way} onConnected={setPending} />
+      </div>
+    );
+  }
   return (
     <div className="add-pane ws-command" data-testid="connect-computer">
+      {ways}
       <div className="add-note">{L("在要连的那台电脑（比如你的云服务器）上打开终端，运行下面这一行。它会装好 myco、连上这个工作区；连上以后，那台电脑上的 Claude Code、Codex 会话就会列在这里，点一下就能加入，也能在上面新开。", "On the computer to connect (your cloud server, say), open a terminal and run the line below. It installs myco and connects it to this workspace; then that computer's Claude Code and Codex sessions are listed here to add with a click, and you can start new ones there.")}</div>
       {link && <ReachNote url={link.join_url} hubUrl={hub?.url || ""} local={local} onOpened={() => setLink(null)} onRelink={make} />}
       <div className="seg ws-command-os" role="tablist" aria-label={L("那台电脑的系统", "That computer's system")}>

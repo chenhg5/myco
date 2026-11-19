@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRightLeft, ArrowUp, Check, ChevronRight, Copy, AudioLines, Download, Images, Loader2, Lock, MoreHorizontal, Paintbrush, Pin as PinIcon, PinOff, Search, Settings2, Square, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRightLeft, ArrowUp, ArrowUpRight, Check, ChevronRight, Copy, AudioLines, Download, Images, Loader2, Lock, MoreHorizontal, Paintbrush, Pin as PinIcon, PinOff, Search, Settings2, Square, Trash2 } from "lucide-react";
 import { ExportChat } from "@/app/ExportChat";
 import { appApi, isTransient } from "@/appapi";
 import type { Agent, Message } from "@/api";
@@ -189,17 +189,58 @@ const ASK_AGENT: [string, string][] = [
   ["今天想和 {n} 一起做点什么？", "What shall you and {n} do today?"],
 ];
 
-/** An empty chat: the agent's face, large, and a question to start with. */
-function EmptyChat({ agent, name, project }: { agent?: Agent; name: string; project?: string }) {
+/** Things to ask first (an empty chat offers three; 换一批 shows others). */
+const STARTERS_AGENT: [string, string][] = [
+  ["带我看看这个项目：它是做什么的，怎么跑起来", "Show me around this project: what it does and how to run it"],
+  ["看下我还没提交的改动，有没有问题", "Review my uncommitted changes for problems"],
+  ["给这个仓库写一份 AGENTS.md", "Write an AGENTS.md for this repository"],
+  ["跑一遍测试，挂了的告诉我为什么", "Run the tests and tell me why any fail"],
+  ["找出这个项目里最值得先修的三个问题", "Find the three things in this project most worth fixing first"],
+  ["看看最近一周的提交，写一段进展总结", "Read the last week's commits and sum up the progress"],
+  ["把 README 里过时的地方改一下", "Fix what is out of date in the README"],
+  ["列出依赖里该升级的，说说风险", "List the dependencies worth upgrading, and the risks"],
+];
+const STARTERS_PROJECT: [string, string][] = [
+  ["把这个项目要做的事拆成几步，分给大家", "Break this project into steps and hand them out"],
+  ["让每个成员说说自己现在在做什么", "Ask each member what they are working on"],
+  ["定一个这周的目标，排好谁先做什么", "Set a goal for this week and who does what first"],
+  ["看看大家的进展，有卡住的就帮一把", "Check everyone's progress and help whoever is stuck"],
+  ["整理一份这个项目的现状，发我看", "Write up where this project stands"],
+  ["找出成员之间重复或冲突的工作", "Find work members are duplicating or clashing on"],
+];
+const STARTERS_OFF = "myco-starters-off";
+const startersOff = () => { try { return localStorage.getItem(STARTERS_OFF) === "1"; } catch { return false; } };
+
+/** An empty chat: the agent's face, large, a question to start with, and
+ *  a few things to ask (a click puts one in the box, to send or change). */
+function EmptyChat({ agent, name, project, onStarter }: { agent?: Agent; name: string; project?: string; onStarter?: (text: string) => void }) {
   const [pick] = useState(() => Math.random());
   const list = project ? ASK_PROJECT : ASK_AGENT;
   const [zh, en] = list[Math.floor(pick * list.length) % list.length];
   const fill = (t: string) => t.replace("{n}", name).replace("{p}", project || "");
+  const starters = project ? STARTERS_PROJECT : STARTERS_AGENT;
+  const [page, setPage] = useState(() => Math.floor(pick * starters.length));
+  const [off, setOff] = useState(startersOff);
+  const shown = [0, 1, 2].map((i) => starters[(page + i) % starters.length]);
   return (
     <div className="conv-empty">
       {agent && <Avatar agent={agent} size={64} badge={false} />}
       <h3>{fill(L(zh, en))}</h3>
       <p>{L("一句话就行，它会自己想办法；在下面打字，回车发出去。", "A sentence is enough; it works out the rest. Type below and press Enter.")}</p>
+      {onStarter && !off && (
+        <div className="conv-starters" data-testid="chat-starters">
+          {shown.map(([z, e]) => (
+            <button key={z} type="button" className="conv-starter" onClick={() => onStarter(L(z, e))}>
+              <span>{L(z, e)}</span><ArrowUpRight />
+            </button>
+          ))}
+          <div className="conv-starters-foot">
+            <button type="button" onClick={() => setPage((n) => n + 3)}>{L("换一批", "Others")}</button>
+            <span aria-hidden>·</span>
+            <button type="button" onClick={() => { try { localStorage.setItem(STARTERS_OFF, "1"); } catch { /* not kept */ } setOff(true); }}>{L("不再显示", "Don't show again")}</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2104,7 +2145,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           ) : shown.length === 0 && !shellMode && trailing.length === 0 ? (
             observed
               ? <div className="app-empty-note">{L("它们还没说过话。", "They haven't talked yet.")}</div>
-              : <EmptyChat key={target.agent} agent={agent} name={agentName} project={projectTitle} />
+              : <EmptyChat key={target.agent} agent={agent} name={agentName} project={projectTitle}
+                onStarter={(t) => { writeDraft(t); window.setTimeout(() => { const el = inputRef.current; if (el) { el.focus(); el.setSelectionRange(t.length, t.length); } }, 0); }} />
           ) : (
             <>
             {exchange && more && !(shellMode && cleared) && (

@@ -91,6 +91,11 @@ func TestAutomations(t *testing.T) {
 		if secret != "" {
 			req.Header.Set("Authorization", "Bearer "+secret)
 		}
+		req.Header.Set("Content-Type", "text/plain")
+		req.Header.Set("X-GitHub-Event", "workflow_run")
+		req.Header.Set("X-Hub-Signature-256", "sha256=abc")
+		req.Header.Set("X-Forwarded-For", "203.0.113.9")
+		req.Header.Set("Cookie", "s=1")
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatal(err)
@@ -116,6 +121,30 @@ func TestAutomations(t *testing.T) {
 	}
 	if hooked == nil || hooked.Body != "CI 失败了，看一下：exit 1 in TestLogin" {
 		t.Fatalf("the webhook's task: %+v", pulled)
+	}
+	// What the call carried is kept with its run: the list without the
+	// body, the run itself with it; never the secret, signature or address.
+	det, err := admin.Automation(c, res2.Automation.ID)
+	if err != nil || len(det.Runs) != 1 || det.Runs[0].Request == nil {
+		t.Fatalf("runs: %v %+v", err, det)
+	}
+	if q := det.Runs[0].Request; q.Body != "" || q.Size != len("exit 1 in TestLogin") || q.ContentType != "text/plain" {
+		t.Fatalf("a listed run's request: %+v", q)
+	}
+	one, err := admin.AutomationRun(c, res2.Automation.ID, det.Runs[0].ID)
+	if err != nil || one.Request == nil || one.Request.Body != "exit 1 in TestLogin" || one.MessageID != hooked.ID {
+		t.Fatalf("the run: %v %+v", err, one)
+	}
+	if h := one.Request.Headers; h["X-Github-Event"] != "workflow_run" || h["Content-Type"] != "text/plain" || len(h) != 3 { // and User-Agent
+		t.Fatalf("headers kept: %+v", h)
+	}
+	for k := range one.Request.Headers {
+		if l := strings.ToLower(k); l == "authorization" || l == "cookie" || strings.Contains(l, "signature") || strings.Contains(l, "forwarded") {
+			t.Fatalf("kept %s", k)
+		}
+	}
+	if _, err := admin.AutomationRun(c, res2.Automation.ID, "arun_nope"); err == nil {
+		t.Fatal("a run that is not there")
 	}
 	if resp := call(res2.WebhookSecret, strings.Repeat("x", 17<<10)); resp.StatusCode != http.StatusRequestEntityTooLarge {
 		t.Fatalf("too large: %d", resp.StatusCode)

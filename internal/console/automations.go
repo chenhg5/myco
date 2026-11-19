@@ -17,6 +17,7 @@ import (
 //	PATCH  /app/hubs/{id}/automations/{aid}     AutomationRequest → {automation, webhook_secret?}
 //	DELETE /app/hubs/{id}/automations/{aid}
 //	POST   /app/hubs/{id}/automations/{aid}/run AutomationRun
+//	GET    /app/hubs/{id}/automations/{aid}/runs/{rid} AutomationRun, with what its webhook call carried
 func (b *Backend) automationRoutes(m *http.ServeMux) {
 	m.HandleFunc("GET /app/hubs/{id}/automations", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		list, err := c.Automations(r.Context())
@@ -43,6 +44,14 @@ func (b *Backend) automationRoutes(m *http.ServeMux) {
 	}))
 	m.HandleFunc("GET /app/hubs/{id}/automations/{aid}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		out, err := c.Automation(r.Context(), r.PathValue("aid"))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+	}))
+	m.HandleFunc("GET /app/hubs/{id}/automations/{aid}/runs/{rid}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		out, err := c.AutomationRun(r.Context(), r.PathValue("aid"), r.PathValue("rid"))
 		if err != nil {
 			writeErr(w, err)
 			return

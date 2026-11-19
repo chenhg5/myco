@@ -36,6 +36,16 @@ func (c *Client) Automation(ctx context.Context, id string) (*api.AutomationDeta
 	return &out, nil
 }
 
+// AutomationRun is one of an automation's runs, with what its webhook call
+// carried (hubs from v0.20.18; older ones: not found).
+func (c *Client) AutomationRun(ctx context.Context, id, run string) (*api.AutomationRun, error) {
+	var out api.AutomationRun
+	if err := c.do(ctx, http.MethodGet, "/v1/console/automations/"+esc(id)+"/runs/"+esc(run), nil, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // UpdateAutomation changes what in sets.
 func (c *Client) UpdateAutomation(ctx context.Context, id string, in api.AutomationRequest) (*api.AutomationResponse, error) {
 	var out api.AutomationResponse

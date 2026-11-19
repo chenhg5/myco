@@ -1235,6 +1235,29 @@ async function runMatrix(browser, size, scheme) {
       // network only (a VPS cannot reach it), gives the command, and picks
       // the computer once it connects.
       await clickVisible(page, dialog.getByRole("tab", { name: "连一台电脑" }));
+      // Over SSH (the default where the App runs): the hosts in the SSH
+      // config, the one already connected marked; a key the App cannot use
+      // is told in words with the command to try.
+      const ssh = dialog.locator("[data-testid=connect-ssh]");
+      await ssh.locator(".cx-row", { hasText: "gpu-box" }).waitFor({ timeout: 10_000 });
+      if (!(await ssh.locator(".cx-row", { hasText: "tokyo-vps" }).innerText()).includes("连过")) throw new Error("已经连过的 SSH 主机应标出来");
+      if (!(await ssh.locator(".cx-row", { hasText: "gpu-box" }).innerText()).includes("经 bastion")) throw new Error("经跳板机的主机应写出跳板");
+      if (await ssh.locator(".cx-row", { hasText: "github" }).count()) throw new Error("只给 git 用的主机不该列出来");
+      await settle(page, 300);
+      await shot(page, size, scheme, "add-agent-connect-ssh");
+      await clickVisible(page, ssh.locator(".cx-row", { hasText: "old-pi" }));
+      await clickVisible(page, ssh.getByRole("button", { name: "连上" }));
+      await ssh.locator(".cx-error", { hasText: "ssh-add" }).waitFor({ timeout: 10_000 });
+      await ssh.locator(".cx-error .app-command code", { hasText: "ssh old-pi" }).waitFor({ timeout: 5_000 });
+      await settle(page, 300);
+      await shot(page, size, scheme, "add-agent-connect-ssh-error");
+      await clickVisible(page, ssh.getByRole("button", { name: "再连别的" }));
+      // WSL on a Windows computer: its distributions, the default marked.
+      await clickVisible(page, dialog.getByRole("tab", { name: "这台 Windows 里的 WSL" }));
+      await dialog.locator("[data-testid=connect-wsl] .cx-row", { hasText: "Ubuntu-22.04" }).filter({ hasText: "默认" }).waitFor({ timeout: 10_000 });
+      await settle(page, 300);
+      await shot(page, size, scheme, "add-agent-connect-wsl");
+      await clickVisible(page, dialog.getByRole("tab", { name: "复制命令" }));
       await dialog.locator("[data-testid=reach-note]", { hasText: "局域网" }).waitFor({ timeout: 10_000 });
       await dialog.locator("[data-testid=connect-computer] .app-command code", { hasText: "| bash" }).waitFor({ timeout: 10_000 });
       await settle(page, 300);
@@ -1242,6 +1265,16 @@ async function runMatrix(browser, size, scheme) {
       const ran = await page.evaluate(async () => (await fetch("/app/mock/run-connect", { method: "POST" })).status);
       if (ran !== 200) throw new Error(`run-connect: ${ran}`);
       await dialog.getByRole("tab", { name: /新服务器/, selected: true }).waitFor({ timeout: 20_000 });
+
+      // Connecting one over SSH: each step ticks, then it is picked.
+      await clickVisible(page, dialog.getByRole("tab", { name: "连一台电脑" }));
+      await clickVisible(page, dialog.getByRole("tab", { name: "用 SSH 连" }));
+      await clickVisible(page, ssh.locator(".cx-row", { hasText: "hk-vps" }));
+      await clickVisible(page, ssh.getByRole("button", { name: "连上" }));
+      await ssh.locator(".cx-step.is-running").first().waitFor({ timeout: 10_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "add-agent-connect-ssh-steps");
+      await dialog.getByRole("tab", { name: "hk-vps", selected: true }).waitFor({ timeout: 30_000 });
 
       await clickVisible(page, dialog.getByRole("tab", { name: "云端或别处的 AI" }));
       await page.waitForFunction(() => {
@@ -2348,6 +2381,49 @@ async function runMatrix(browser, size, scheme) {
       if (narrow) await sidebar(page, false);
     });
 
+    // Settings search: typing finds a row in any section; Enter opens its
+    // section and points the row out.
+    await step("设置 · 搜索", async () => {
+      await go(page, "设置", narrow);
+      await page.locator(".app-settings-head h2").waitFor({ timeout: 10_000 });
+      const box = page.locator(".app-settings-search input");
+      await box.fill("字号");
+      const hit = page.locator(".app-settings-result", { hasText: "文字大小" });
+      await hit.waitFor({ timeout: 5_000 });
+      if (await page.locator(".app-settings-tab").count()) throw new Error("搜索时导航应只显示结果");
+      await settle(page, 150);
+      await shot(page, size, scheme, "settings-search");
+      await box.press("Enter");
+      await page.locator('[data-setting="text-size"].is-found').waitFor({ timeout: 5_000 });
+      if (await page.locator(".app-settings-head h2").innerText() !== "外观") throw new Error("应换到「外观」");
+      if (await box.inputValue()) throw new Error("选了结果后搜索框应清空");
+      await box.fill("不存在的设置xyz");
+      await page.locator(".app-settings-none").waitFor({ timeout: 5_000 });
+      await box.press("Escape");
+      await page.locator(".app-settings-tab", { hasText: "外观" }).waitFor({ timeout: 5_000 });
+      if (!narrow && !(await page.locator(".app-settings-group-title", { hasText: "这台电脑" }).count())) throw new Error("导航应有「这台电脑」分组");
+      if (narrow) await sidebar(page, false);
+    });
+
+    // 上手引导 again (Settings › About): this computer's agent CLIs and its
+    // sessions to bring in; skipping leaves things as they were.
+    await step("设置 · 上手引导", async () => {
+      await go(page, "设置", narrow);
+      const box = page.locator(".app-settings-search input");
+      await box.fill("上手引导");
+      await box.press("Enter");
+      await clickVisible(page, page.locator('[data-setting="prepare"]').getByRole("button", { name: "重新打开" }));
+      const prep = page.locator("[data-testid=prepare]");
+      await prep.waitFor({ timeout: 10_000 });
+      await prep.locator('[data-agent-cli="claude"]').waitFor({ timeout: 10_000 });
+      await settle(page, 300);
+      await shot(page, size, scheme, "prepare");
+      await clickVisible(page, prep.getByRole("button", { name: "先跳过" }));
+      await prep.waitFor({ state: "detached", timeout: 10_000 });
+      await page.locator(".app-settings-head").waitFor({ timeout: 10_000 });
+      if (narrow) await sidebar(page, false);
+    });
+
     // Settings › Agents: the agent CLIs on this computer, installed or not,
     // signed in or not; a button opens a terminal for what is missing, or
     // shows the command when no terminal could be opened.
@@ -3317,6 +3393,40 @@ async function runMatrix(browser, size, scheme) {
       await row.waitFor({ state: "detached", timeout: 10_000 });
     });
 
+    // An automation opened: its settings, then every run; a webhook run
+    // shows what the call carried, and 看对话 opens the task it sent.
+    await step("自动化 · 详情", async () => {
+      await go(page, "自动化", narrow);
+      const row = page.locator("[data-testid=automations] .au-row", { hasText: "CI 失败时排查" });
+      await row.waitFor({ timeout: 20_000 });
+      await clickVisible(page, row.locator(".au-row-main"));
+      const det = page.locator("[data-testid=automation-detail]");
+      await det.waitFor({ timeout: 10_000 });
+      const set = det.locator("[data-testid=automation-settings]");
+      for (const w of ["发给", "Webhook 地址", "让它做什么", "{{payload}}"]) if (!(await set.innerText()).includes(w)) throw new Error(`设置卡里应有「${w}」`);
+      const runs = det.locator("[data-testid=automation-run]");
+      await runs.first().waitFor({ timeout: 10_000 });
+      if ((await runs.count()) < 3) throw new Error("应列出每一次运行");
+      await settle(page, 200);
+      await shot(page, size, scheme, "automation-detail");
+      // Only the skipped ones.
+      await clickVisible(page, det.locator(".aud-filters .tp-chip", { hasText: "跳过" }));
+      if ((await runs.count()) !== 1 || !(await runs.first().innerText()).includes("跳过")) throw new Error("「跳过」只看跳过的");
+      await clickVisible(page, det.locator(".aud-filters .tp-chip", { hasText: "全部" }));
+      // What the newest call carried.
+      const first = runs.first();
+      await clickVisible(page, first.getByRole("button", { name: "调用内容" }));
+      const call = first.locator("[data-testid=automation-call]");
+      await call.locator("pre", { hasText: "workflow_run" }).waitFor({ timeout: 10_000 });
+      if (!(await call.innerText()).includes("X-Github-Event")) throw new Error("应显示记下的请求头");
+      await settle(page, 200);
+      await shot(page, size, scheme, "automation-call");
+      // Its chat, at the task it sent.
+      await clickVisible(page, first.getByRole("button", { name: "看对话" }));
+      await page.locator(".conv-detail", { hasText: "CI 构建失败了" }).first().waitFor({ timeout: 15_000 });
+      if (narrow) await sidebar(page, false);
+    });
+
     // A conversation is exported from its header: Markdown for people or
     // JSON Lines for programs, saved to Downloads.
     await step("单聊 · 导出对话", async () => {
@@ -3458,6 +3568,36 @@ async function runMatrix(browser, size, scheme) {
 
     // Removing a whole computer: a dry run lists the agent and folder on it,
     // the online one shows the uninstall command, and both are gone after.
+    // A computer's check-up over SSH: VPS 东京's runner goes through a proxy
+    // that no longer gets through; restarting says so; a computer the App
+    // did not connect asks which SSH host it is.
+    await step("电脑 · 检查", async () => {
+      await go(page, "电脑", narrow);
+      await clickVisible(page, page.locator(".pc-card", { hasText: "VPS 东京" }));
+      const check = page.locator("[data-testid=computer-check]");
+      await check.locator(".cc-route", { hasText: "tokyo-vps" }).waitFor({ timeout: 10_000 });
+      await clickVisible(page, check.getByRole("button", { name: "检查" }));
+      const bad = check.locator(".cc-row.is-bad").first();
+      await bad.waitFor({ timeout: 10_000 });
+      const badText = compactText(await bad.innerText());
+      if (!badText.includes("经代理连不上工作区，直连是通的") || !badText.includes("127.0.0.1:7890")) throw new Error(`检查应先说代理连不上、直连通，实际是「${badText}」`);
+      await check.locator(".cc-row.is-ok", { hasText: "myco 后台在运行" }).waitFor({ timeout: 5_000 });
+      await check.locator(".cc-row").last().scrollIntoViewIfNeeded();
+      await settle(page, 300);
+      await shot(page, size, scheme, "computer-check");
+      await clickVisible(page, check.getByRole("button", { name: "重启后台" }));
+      await check.locator(".cc-fixed", { hasText: "后台重启好了" }).waitFor({ timeout: 10_000 });
+      // One the App did not connect: which SSH host is it?
+      await clickVisible(page, page.locator(".pcd-back"));
+      await clickVisible(page, page.locator(".pc-card", { hasText: "临时 Mac" }));
+      await page.locator("[data-testid=computer-check] select.app-select-field").waitFor({ timeout: 10_000 });
+      await page.locator("[data-testid=computer-check]").scrollIntoViewIfNeeded();
+      await settle(page, 300);
+      await shot(page, size, scheme, "computer-check-pick");
+      await clickVisible(page, page.locator(".pcd-back"));
+      await page.locator(".pc-card", { hasText: "临时 Mac" }).waitFor({ timeout: 10_000 });
+    });
+
     await step("电脑 · 移除", async () => {
       await go(page, "电脑", narrow);
       await clickVisible(page, page.locator(".pc-card", { hasText: "临时 Mac" }));

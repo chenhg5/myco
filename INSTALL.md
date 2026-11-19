@@ -36,7 +36,7 @@
    - **在这台电脑上开始**：一键在本机开一个 Hub，这台电脑自动作为第一台机器加入。
    - **连接已有的 Hub**：粘贴别人发给你的邀请链接，或 Hub 管理员给你的 App 连接链接。
 3. **添加节点**：「添加节点 → 本机的 agent」列出这台电脑上最近的 Claude Code、Codex 会话，点一下就加入；也可以生成邀请链接，接入其他电脑上的 agent，或者在已加入的机器上开新会话、加 Shell 节点。
-   - **云服务器（VPS）或别的电脑上的会话**：「添加 agent → 连一台电脑」给出一条命令，在那台电脑上运行（工作区只在本机或局域网能连时，弹窗会先说明，并给「开放到公网」）。连上后弹窗切到那台电脑，列出它上面的 Claude Code、Codex 会话，点一下就复制一份加入；也能「新开一个」。这要那台电脑上的 myco 是 v0.20.14 或之后。
+   - **云服务器（VPS）或别的电脑上的会话**：「添加 agent → 连一台电脑」。能用 SSH 登录的电脑选「用 SSH 连」：列出 `~/.ssh/config` 里的主机，勾上点「连上」，App 用你自己的 ssh 和 ssh-agent 登录上去装好 myco 并连上，每一步打勾，出错时说明原因并给出在终端里试的命令（App 不能替你输密码或密钥口令，要先 `ssh-add`；第一次连的主机先在终端里 `ssh` 一次接受指纹）；只支持 Linux 和 macOS。Windows 上还有「这台 Windows 里的 WSL」，勾上发行版就装进去。别的情况用「复制命令」：一条命令，在那台电脑上运行（工作区只在本机或局域网能连时，弹窗会先说明，并给「开放到公网」）。连上后弹窗切到那台电脑，列出它上面的 Claude Code、Codex 会话，点一下就复制一份加入；也能「新开一个」。这要那台电脑上的 myco 是 v0.20.14 或之后。
 4. **对话**：在「对话」页给节点发任务，人和 agent、agent 之间、agent 调用 Shell 的往来都在这里；和 Shell 节点的对话就是一个终端。
 
 以后在 App 的「设置 → 关于」里一键更新。App 的完整说明见[第 9 节](#9-控制台-appmac--windows--linux)。
@@ -460,7 +460,7 @@ myco runner service uninstall          # 停止并删除
 ```
 安装时会记录当前的 `PATH`（以及设置了的 `CLAUDE_CONFIG_DIR`、`CODEX_HOME`、`MYCO_CONFIG`），这样服务能找到装在 nvm 等目录下的 claude 和 codex。这些变量变了之后，重新执行一次 `install` 即可。服务定义里不会写入任何令牌。
 
-**要走代理才能上网的机器**：后台服务不会读 `~/.zshrc`、`~/.bashrc`，代理只写在那里的话，runner 启动的 claude、codex 连不上模型（报 `Network unreachable`、`request timed out`）。在设置了代理的终端里重新执行一次 `myco runner service install`，就会把 `HTTPS_PROXY`、`HTTP_PROXY`、`ALL_PROXY`、`NO_PROXY`（大小写都算）一起写进服务定义。带用户名或密码的代理地址不会写进去（服务定义其他用户可读），会提示你改放到 agent 的 `env_file` 里。Linux 上如果希望注销后也继续运行，执行 `sudo loginctl enable-linger $USER`。
+**要走代理才能上网的机器**：后台服务不会读 `~/.zshrc`、`~/.bashrc`，代理只写在那里的话，runner 启动的 claude、codex 连不上模型（报 `Network unreachable`、`request timed out`）。在设置了代理的终端里重新执行一次 `myco runner service install`，就会把 `HTTPS_PROXY`、`HTTP_PROXY`、`ALL_PROXY`、`NO_PROXY`（大小写都算）一起写进服务定义。带用户名或密码的代理地址不会写进去（服务定义其他用户可读），会提示你改放到 agent 的 `env_file` 里。Linux 上安装时会顺手打开 linger（`loginctl enable-linger`），注销、关掉最后一个 SSH 或 WSL 窗口后 runner 也继续运行；系统不让你自己打开时，安装结果里会提示执行 `sudo loginctl enable-linger <用户名>`。
 
 **App 走代理**：桌面 App（和它连的工作区、更新检查、翻译、语音服务）的代理在 App 的「设置 › 代理」里设：跟系统环境（默认，读 `HTTPS_PROXY` 等环境变量）、不用代理，或者手动填 SOCKS5 / HTTP 代理（比如本机 Clash 的 `127.0.0.1:7890`），可以先「试一下」再保存。本机和局域网里的地址总是直连。这只管 App 自己；runner 启动的 agent 用上面说的服务环境。 iPhone 上的 App 也有「设置 › 代理」：默认跟 iPhone 自己的代理和 VPN 设置，也可以不用代理，或手动填一个 SOCKS5 / HTTP 代理（比如电脑上的 Clash，要填电脑在局域网里的地址，并在 Clash 里打开「允许局域网连接」）。
 
@@ -820,7 +820,8 @@ myco automation create --name 日报 --to pm --body "写今天的日报" --cron 
 # 一个 webhook：调用时请求体会替换消息里的 {{payload}}
 myco automation create --name "CI 失败" --to dev --body "CI 失败了，看一下原因：{{payload}}" --webhook
 myco automation list
-myco automation show --id <aut_...>      # 最近 50 次运行：发出 / 跳过 / 失败及原因
+myco automation show --id <aut_...>      # 运行记录（最多 200 次）：发出 / 跳过 / 失败及原因
+myco automation show --id <aut_...> --run <arun_...>   # 某一次运行；Webhook 调用时带来的内容和请求头
 myco automation run --id <aut_...>       # 马上跑一次
 myco automation update --id <aut_...> --disabled
 myco automation update --id <aut_...> --rotate-secret   # 换一个 webhook 密钥，旧的立即失效
@@ -832,6 +833,8 @@ myco automation remove --id <aut_...>    # 它发过的消息会保留
 ```bash
 curl -fsS -X POST "https://hub.example.com/hooks/aut_..." -H "Authorization: Bearer $MYCO_WEBHOOK_SECRET" --data-binary @failure.log
 ```
+
+每次调用都记在那次运行里（Hub v0.20.18 起）：内容类型、请求体（最多 16 KiB）和说明来源的请求头（`User-Agent`、`X-GitHub-Event` 这类）。密钥、签名、Cookie 和调用方的 IP 不记。App 里点开一个自动化，在运行记录里展开「调用内容」就能看到。
 
 - 请求体最多 16 KiB，原样放进消息（JSON 也照原样）；消息里没有 `{{payload}}` 时接在消息末尾。
 - 密钥不对、自动化已关闭或没有 webhook，一律返回 404；每个自动化每小时最多 30 次，超过返回 429，`Retry-After` 是要等的秒数。

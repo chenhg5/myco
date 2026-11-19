@@ -61,6 +61,18 @@ type AutomationRun struct {
 	Outcome      string
 	MessageID    string
 	Error        string
+	// Request is what a webhook call carried (webhook runs only).
+	Request *WebhookRequest
+}
+
+// WebhookRequest is what a webhook call carried, kept with its run so its
+// owner can see what came in: the body (at most 16 KiB) and the headers
+// that are safe to show (never credentials, cookies or addresses).
+type WebhookRequest struct {
+	ContentType string
+	Headers     map[string]string
+	Body        string
+	Size        int
 }
 
 // Limits.
@@ -89,6 +101,8 @@ type AutomationRepository interface {
 	AddRun(ctx context.Context, r *AutomationRun, keep int) error
 	// Runs lists an automation's runs, newest first.
 	Runs(ctx context.Context, automationID string, limit int) ([]*AutomationRun, error)
+	// Run is one of an automation's runs.
+	Run(ctx context.Context, automationID, id string) (*AutomationRun, error)
 	// RunsSince counts runs of one trigger since t (rate limits).
 	RunsSince(ctx context.Context, automationID, trigger string, since time.Time) (int, error)
 }
