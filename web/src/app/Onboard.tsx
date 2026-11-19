@@ -18,6 +18,7 @@ const NEW = "myco-onboard";
 const LIST_OFF = "myco-checklist-off";
 const LIST_OPEN = "myco-checklist-open";
 const SEEN = "myco-intro-seen";
+const DID = "myco-onboard-did";
 const EVENT = "myco-onboard-changed";
 
 const get = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
@@ -30,7 +31,14 @@ const set = (k: string, v: string | null) => {
 export function startOnboarding() {
   set(LIST_OFF, null);
   set(SEEN, null);
+  set(DID, null);
   set(NEW, "1");
+}
+
+/** A step done by going somewhere (Settings › 工作区 for 认识你的工作区). */
+export function noteDone(id: string) {
+  const did = (get(DID) || "").split(",").filter(Boolean);
+  if (!did.includes(id)) set(DID, [...did, id].join(","));
 }
 
 function useTick() {
@@ -53,7 +61,7 @@ export function Checklist({ steps }: { steps: ChecklistStep[] }) {
   useTick();
   const [open, setOpen] = useState(() => get(LIST_OPEN) !== "0");
   if (get(NEW) !== "1" || get(LIST_OFF) === "1" || !steps.length) return null;
-  const read = (get(SEEN) || "").split(",");
+  const read = [...(get(SEEN) || "").split(","), ...(get(DID) || "").split(",")];
   steps = steps.map((s) => (s.seen && read.includes(s.seen) ? { ...s, done: true } : s));
   const done = steps.filter((s) => s.done).length;
   const all = done === steps.length;

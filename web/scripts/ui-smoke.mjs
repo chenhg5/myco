@@ -2429,6 +2429,12 @@ async function runMatrix(browser, size, scheme) {
       await list.locator('.ob-step.is-done[data-step="agent"]').waitFor({ timeout: 10_000 });
       await settle(page, 300);
       await shot(page, size, scheme, "checklist");
+      // 认识你的工作区, clicked while Settings is open: there at once, ticked.
+      await clickVisible(page, list.locator('.ob-step[data-step="workspace"]'));
+      if (narrow) await sidebar(page, false);
+      await page.locator(".app-settings-head h2", { hasText: "工作区" }).waitFor({ timeout: 10_000 });
+      if (narrow) await sidebar(page, true);
+      await list.locator('.ob-step.is-done[data-step="workspace"]').waitFor({ timeout: 10_000 });
       if (narrow) await sidebar(page, false);
       await go(page, "应用", narrow);
       const intro = page.locator("[data-testid=intro-apps]");

@@ -1,5 +1,5 @@
 import { clearAll, forgetHub, recall, remember } from "@/lib/memo";
-import { IntroCard, introOf } from "@/app/Onboard";
+import { IntroCard, introOf, noteDone } from "@/app/Onboard";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertTriangle, AudioLines, Bot, Check, Cloud, Globe, Info, Languages, Monitor, Palette, Pencil, Plus, RotateCcw, ScrollText, Search, Server, Terminal, Users,
@@ -313,7 +313,20 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
 }) {
   const simple = useSimpleMode();
   const [section, setSection] = useState<Section>(() => takeSettingsSection() ?? langSwitchSection ?? (simpleModeNow() ? "agents" : "hubs"));
+  const askedFor = useRef<Section | null>(takeSettingsSection());
   useEffect(() => { nextSettingsSection = null; }, []);
+  // Asked for a section while already here (the 上手清单, a chat's voice
+  // button): go to it.
+  useEffect(() => {
+    const on = (e: Event) => {
+      const s = (e as CustomEvent<{ section?: string }>).detail?.section;
+      if (s && SECTIONS.some((x) => x.key === s)) { askedFor.current = s as Section; setSection(s as Section); }
+    };
+    window.addEventListener("myco-open-settings", on);
+    return () => window.removeEventListener("myco-open-settings", on);
+  }, []);
+  // Being on 工作区 is the 上手清单's 认识你的工作区.
+  useEffect(() => { if (section === "hubs") noteDone("workspaces"); }, [section]);
   // Simple mode hides the workspace, people and audit sections.
   // (简单模式 hides some; one asked for by name, as the 上手清单 does, shows while on it)
   const sections = SECTIONS.filter((s) => !simple || !SIMPLE_HIDDEN.includes(s.key) || s.key === section);
@@ -363,7 +376,6 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
     return () => window.removeEventListener("keydown", on);
   }, []);
   // (one asked for by name stays: the 上手清单 opens 工作区 in 简单模式 too)
-  const askedFor = useRef(takeSettingsSection());
   useEffect(() => { if (simple && SIMPLE_HIDDEN.includes(section) && section !== askedFor.current) setSection("agents"); }, [simple, section]);
   // After a language remount, the request that was already handled must not
   // pull the page back to the Hub section.
