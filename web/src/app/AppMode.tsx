@@ -17,6 +17,7 @@ import { openSettingsSection, SettingsPage } from "@/app/SettingsPage";
 import { UpdateNotice } from "@/app/UpdateNotice";
 import { Welcome } from "@/app/Welcome";
 import { Prepare, preparePending, setPreparePending } from "@/app/Prepare";
+import { Checklist, startOnboarding, type ChecklistStep } from "@/app/Onboard";
 import { ProjectSpace, isLoose, looseRowsOf, type SpaceRef } from "@/app/ProjectSpace";
 import { dragAgent } from "@/app/Panes";
 import { AddAgentDialog, AddWorkspaceDialog, NewProjectDialog, isNobody } from "@/app/AddToProject";
@@ -520,17 +521,28 @@ export default function AppMode({ initialHubs, initialInfo }: {
   // list, not the automation or computer opened): it is drawn afresh.
   const [again, setAgain] = useState(0);
   const toPage = (p: typeof page) => { if (page === p) setAgain((n) => n + 1); setPage(p); };
+  // 上手清单 (Onboard.tsx): ticks itself from what the workspace has.
+  const [autoCount, setAutoCount] = useState<number | null>(null);
+  useEffect(() => {
+    let off = false;
+    if (!hubId || (() => { try { return localStorage.getItem("myco-onboard") !== "1" || localStorage.getItem("myco-checklist-off") === "1"; } catch { return true; } })()) return;
+    const read = () => appApi.automations(hubId).then((r) => { if (!off) setAutoCount((r.automations || []).length); }, () => undefined);
+    void read();
+    const t = window.setInterval(read, 60_000);
+    return () => { off = true; window.clearInterval(t); };
+  }, [hubId, page]);
   // 准备这台电脑 (Prepare.tsx): after a new install's first workspace
   // starts, until done or skipped; Settings › About opens it again.
   const [preparing, setPreparing] = useState<string | null>(() => preparePending());
   useEffect(() => {
-    const on = () => { if (hubId) setPreparing(hubId); };
+    const on = () => { if (hubId) { startOnboarding(); setPreparing(hubId); } };
     window.addEventListener("myco-prepare", on);
     return () => window.removeEventListener("myco-prepare", on);
   }, [hubId]);
   const startLocal = async () => {
     const r = await appApi.startLocalHub({ tunnel: "none" });
     setPreparePending(r.hub.id);
+    startOnboarding();
     setPreparing(r.hub.id);
     await refresh();
   };
@@ -634,6 +646,23 @@ export default function AppMode({ initialHubs, initialInfo }: {
       </div>
     );
   }
+
+  const hereOv = namedOv?.hubs.find((h) => h.id === hubId)?.overview;
+  const myAgents = rows.filter((r) => r.hub.id === hubId && agentKind(r.st.agent) === "agent");
+  const addAgentHere = (start?: string) => { if (hub) { setAddAgentStart(start); setAddAgent({ hubId: hub.id, loose: true }); } };
+  const checklist: ChecklistStep[] = !hub ? [] : [
+    { key: "agent", title: L("连上第一个 agent", "Connect your first agent"), hint: L("把这台电脑上的 Claude Code、Codex 会话加进来", "Bring in a Claude Code or Codex session from this computer"),
+      done: myAgents.length > 0, go: () => addAgentHere() },
+    { key: "task", title: L("交给它第一件事", "Give it something to do"), hint: L("在对话里说一句要做什么，回车发出去", "Say what you want done in its chat and press Enter"),
+      done: !!hereOv?.recent?.some((m) => m.type === "task" && m.from.startsWith("@console:")) || myAgents.some((r) => r.st.in_progress + r.st.queued > 0),
+      go: () => { if (myAgents[0]) chatWithMember(myAgents[0]); else addAgentHere(); } },
+    { key: "project", title: L("让两个 agent 一起做一件事", "Have two agents work together"), hint: L("建一个项目，把它们拉进来", "Start a project and bring them in"),
+      done: hubProjects.some((x) => !x.p.archived && x.p.members.length >= 2), go: () => setNewProjectOpen(true) },
+    { key: "automation", title: L("设一个自动化", "Set up an automation"), hint: L("让它每天到点自己干活", "Have it work on its own, on a schedule"),
+      done: (autoCount ?? 0) > 0, go: () => toPage("automations") },
+    { key: "computer", title: L("再连一台电脑", "Connect another computer"), hint: L("让 agent 也能在服务器或另一台电脑上干活", "So agents can work on a server or another computer too"),
+      done: (hereOv?.machines?.length ?? 0) >= 2, go: () => addAgentHere("connect") },
+  ];
 
   const profileRow = profile ? rows.find((r) => r.hub.id === profile.hubId && r.st.agent.name === profile.name) || null : null;
   const addAgentProject = addAgent && !isLoose(addAgent) ? liveProjects.find((x) => x.hubId === addAgent.hubId && x.p.name === addAgent.name)?.p : undefined;
@@ -843,6 +872,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
           </nav>
 
           <div className="app-sidebar-foot">
+            <Checklist steps={checklist} />
             <UpdateNotice onOpenSettings={() => setPage("settings")} />
             {/* Which workspace the projects above are in: set once, seldom
                 switched, so it sits at the bottom. */}
