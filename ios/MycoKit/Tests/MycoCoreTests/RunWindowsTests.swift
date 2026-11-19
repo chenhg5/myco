@@ -254,5 +254,17 @@ struct RunWindowsTests {
         // A newer update, about any task: that is what it is doing now.
         messages.append(message("p2", 120, from: "coder", to: "me", type: "progress", replyTo: "t1", body: "now the second part\nmore"))
         #expect(foot(messages)?.saying == "now the second part")
+        // What it said between its steps since: that, not the older update
+        // (the run above goes on; the line goes with it).
+        func footSaying(_ words: (text: String, at: Date)?) -> String? {
+            ConversationBuilder.items(me: "me", agent: "coder", messages: messages, stepWords: words, status: { _ in agent }, now: at(130))
+                .first { $0.id == "t1.status" }?.saying
+        }
+        #expect(footSaying(("Implementing the editor changes: types\nand more", at(125))) == "Implementing the editor changes: types")
+        // Said before the update: the update stands.
+        #expect(footSaying(("Reading the editor", at(115))) == "now the second part")
+        // It answered after both: neither.
+        messages.append(message("r3", 128, from: "coder", to: "me", type: "reply", replyTo: "t1"))
+        #expect(footSaying(("Implementing the editor changes", at(125))) == nil)
     }
 }
