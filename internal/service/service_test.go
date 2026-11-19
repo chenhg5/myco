@@ -167,3 +167,17 @@ func TestReachableNeedsTheUsersSystemd(t *testing.T) {
 		t.Fatalf("launchd has no such check: %v", err)
 	}
 }
+
+// Start loads a booted-out LaunchAgent again (bootstrap fails harmlessly
+// when it is loaded) and starts it.
+func TestLaunchdStart(t *testing.T) {
+	home := t.TempDir()
+	r := &fakeRunner{fail: map[string]bool{"launchctl bootstrap gui/501 " + home + "/Library/LaunchAgents/ai.myco.hub.plist": true}}
+	l := &Launchd{Home: home, UID: 501, R: r, ID: HubID}
+	if err := l.Start(); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.calls) != 2 || strings.Join(r.calls[1], " ") != "launchctl kickstart gui/501/ai.myco.hub" {
+		t.Fatalf("calls: %v", r.calls)
+	}
+}

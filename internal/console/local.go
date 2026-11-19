@@ -76,6 +76,8 @@ type Local struct {
 	appHubStarted map[string]bool
 
 	lanOnce sync.Once
+	// hubStarts: when a stopped hub service was last started (by name).
+	hubStarts sync.Map
 	// Remember which local hubs we already tried to join during this App run.
 	joinMu    sync.Mutex
 	joinRunMu sync.Mutex
@@ -452,6 +454,10 @@ func (b *Backend) localStatus(ctx context.Context) LocalStatus {
 		}
 	}
 	st.Hubs = []LocalHub{}
+	if len(st.MachineNodes) > 0 {
+		// This computer's agents are offline while its runner is stopped.
+		l.startStopped(service.RunnerID)
+	}
 	stored, _ := b.Store.List()
 	for _, name := range l.hubNames() {
 		env := l.hubEnvFor(name)
@@ -465,6 +471,8 @@ func (b *Backend) localStatus(ctx context.Context) LocalStatus {
 			if hl, err := c.Health(cctx); err == nil {
 				h.Running, h.PublicURL, h.Version = true, hl.PublicURL, hl.ServerVersion
 				l.joinLocalHubOnceFor(name)
+			} else {
+				l.startStoppedHub(name)
 			}
 			cancel()
 		}

@@ -528,8 +528,13 @@ func (b *Backend) localJoin(w http.ResponseWriter, r *http.Request, c *client.Cl
 	device := orStr(b.Local.Device, "this-mac")
 	prefix := device + "-"
 	name := prefix + in.CLI + "-" + lastAlnum(in.SessionID, 4)
-	enr, err := c.CreateEnrollment(r.Context(), api.CreateEnrollmentRequest{NamePrefix: prefix, MaxUses: 1, TTLSeconds: 600,
-		Labels: []string{"machine=" + device}, Note: "myco app: local session"}, false)
+	enroll := api.CreateEnrollmentRequest{NamePrefix: prefix, MaxUses: 1, TTLSeconds: 600,
+		Labels: []string{"machine=" + device}, Note: "myco app: local session"}
+	enr, err := c.CreateEnrollment(r.Context(), enroll, false)
+	if refused(err) && b.Local.revivedHub(r.Context(), hub.URL) {
+		// This computer's own workspace had stopped: started again.
+		enr, err = c.CreateEnrollment(r.Context(), enroll, false)
+	}
 	if err != nil {
 		writeErr(w, err)
 		return
