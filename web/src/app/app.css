@@ -7621,6 +7621,24 @@ body.is-resizing {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.run-pill-icon {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin-right: 3px;
+}
+/* Full access (no sandbox): said in amber. */
+.run-pill.is-full {
+  color: var(--amber);
+}
+.run-pill-access {
+  flex-wrap: wrap;
+}
+.run-pill-access .run-pill-sub {
+  flex-basis: 100%;
+  margin-left: 18px;
+  white-space: normal;
+}
 .run-pill-chev {
   flex: none;
   width: 12px;
@@ -7680,8 +7698,11 @@ body.is-resizing {
   text-align: left;
   cursor: default;
 }
-.run-pill-item:hover {
+.run-pill-item:hover:not(:disabled) {
   background: var(--nav-hover);
+}
+.run-pill-item:disabled {
+  opacity: 0.45;
 }
 .run-pill-item.is-on {
   font-weight: 600;

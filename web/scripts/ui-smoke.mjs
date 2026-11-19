@@ -513,7 +513,7 @@ async function runMatrix(browser, size, scheme) {
     // an agent a runner wakes (from its next run).
     await step("输入框 · 模型和推理强度", async () => {
       await go(page, "官网改版", narrow);
-      const pill = page.locator(".sp-home .conv-compose .run-pill");
+      const pill = page.locator(".sp-home .conv-compose .run-pill:not([data-testid=access-pill])");
       await pill.waitFor({ timeout: 10_000 });
       const text = compactText(await pill.innerText());
       if (!/GPT-6 Sol/.test(text) || !/高/.test(text)) throw new Error(`输入框旁应写着模型和推理强度，实际「${text}」`);
@@ -523,16 +523,30 @@ async function runMatrix(browser, size, scheme) {
       await settle(page, 150);
       await shot(page, size, scheme, "composer-model");
       await menu.getByRole("menuitemradio", { name: "中", exact: true }).click();
-      await page.waitForFunction(() => /中/.test(document.querySelector(".sp-home .conv-compose .run-pill")?.textContent || ""), null, { timeout: 10_000 });
+      await page.waitForFunction(() => /中/.test(document.querySelector(".sp-home .conv-compose .run-pill:not([data-testid=access-pill])")?.textContent || ""), null, { timeout: 10_000 });
       // (back as it was: the other windows share the mock)
       await pill.click();
       await page.locator(".sp-home .run-pill-menu").getByRole("menuitemradio", { name: "高", exact: true }).click();
-      await page.waitForFunction(() => /高/.test(document.querySelector(".sp-home .conv-compose .run-pill")?.textContent || ""), null, { timeout: 10_000 });
+      await page.waitForFunction(() => /高/.test(document.querySelector(".sp-home .conv-compose .run-pill:not([data-testid=access-pill])")?.textContent || ""), null, { timeout: 10_000 });
+      // Its access beside it (what it may touch), switched there by its owner.
+      const access = page.locator(".sp-home .conv-compose [data-testid=access-pill]");
+      await access.waitFor({ timeout: 10_000 });
+      if (compactText(await access.innerText()) !== "工作区权限") throw new Error(`输入框旁应写着权限，实际「${compactText(await access.innerText())}」`);
+      await access.click();
+      const accessMenu = page.locator(".sp-home .run-pill-menu");
+      await accessMenu.getByRole("menuitemradio", { name: /^只读/ }).waitFor({ timeout: 5_000 });
+      await settle(page, 150);
+      await shot(page, size, scheme, "composer-access");
+      await accessMenu.getByRole("menuitemradio", { name: /^只读/ }).click();
+      await page.waitForFunction(() => /只读/.test(document.querySelector(".sp-home [data-testid=access-pill]")?.textContent || ""), null, { timeout: 10_000 });
+      await access.click();
+      await page.locator(".sp-home .run-pill-menu").getByRole("menuitemradio", { name: /^跟随电脑设置/ }).click();
+      await page.waitForFunction(() => /工作区权限/.test(document.querySelector(".sp-home [data-testid=access-pill]")?.textContent || ""), null, { timeout: 10_000 });
       // In its own session and not said yet: 模型未知, and how it comes to be known.
       if (narrow) await clickVisible(page, page.locator('.sp-strip-face[title="Release (Claude 云端)"]'));
       else await clickVisible(page, page.locator(".sp-side .sp-member:visible", { hasText: "Release (Claude 云端)" }));
       const chat = page.locator(".sp-pane-right");
-      const unknown = chat.locator(".conv-compose .run-pill");
+      const unknown = chat.locator(".conv-compose .run-pill:not([data-testid=access-pill])");
       await unknown.waitFor({ timeout: 10_000 });
       const said = compactText(await unknown.innerText());
       if (said !== "模型未知") throw new Error(`没上报模型的 agent 应写「模型未知」，实际「${said}」`);
