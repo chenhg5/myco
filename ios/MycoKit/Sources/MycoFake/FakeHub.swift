@@ -542,11 +542,18 @@ public actor FakeHub: HubAPI {
             return PageAnswer(data: Self.json(["state": data.state ?? NSNull(), "version": data.stateVersion]), status: 200)
         case ("GET", "changes", _):
             let after = Int(query["after"] ?? "0") ?? 0
-            return PageAnswer(data: Self.json(["changes": data.changes.filter { ($0["seq"] as? Int ?? 0) > after }, "seq": data.seq]), status: 200)
+            let changes = data.changes.filter { ($0["seq"] as? Int ?? 0) > after }
+            return PageAnswer(data: Self.json(["changes": changes, "seq": data.seq]), status: 200)
         case ("GET", "data", 1):
             let wanted = query["collection"].flatMap { $0.isEmpty ? nil : $0 }
-            let collections = wanted.map { [$0] } ?? Array(data.order.keys).sorted()
-            let records = collections.flatMap { collection in (data.order[collection] ?? []).compactMap { record(page, collection, $0) } }
+            let order = data.order
+            let collections = wanted.map { [$0] } ?? Array(order.keys).sorted()
+            var records: [[String: Any]] = []
+            for collection in collections {
+                for id in order[collection] ?? [] {
+                    if let one = record(page, collection, id) { records.append(one) }
+                }
+            }
             return PageAnswer(data: Self.json(["records": records, "seq": data.seq]), status: 200)
         case ("GET", "data", 3):
             guard let one = record(page, parts[1], parts[2]) else { throw HubError(error: "not_found", message: "no such record", status: 404) }
