@@ -24,7 +24,7 @@ var Order = []string{
 	"myco/code", "myco/devtools",
 	"myco/todo", "myco/poll",
 	"myco/ledger", "myco/habit",
-	"myco/whiteboard", "myco/mindmap",
+	"myco/whiteboard", "myco/mindmap", "myco/video",
 	"myco/gomoku", "myco/sudoku",
 }
 
