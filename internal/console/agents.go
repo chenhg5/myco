@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -97,18 +98,61 @@ func (l *Local) LocalAgents(ctx context.Context) []LocalAgent {
 
 func (l *Local) localAgent(ctx context.Context, a agentCLI) LocalAgent {
 	install, mirror, needs := a.commands()
-	la := LocalAgent{CLI: a.cli, Name: a.name, State: "missing", Install: install, InstallMirror: mirror, Login: a.login, Needs: needs}
+	la := LocalAgent{CLI: a.cli, Name: a.name, State: "missing", Install: install, InstallMirror: mirror, Login: a.loginHere(headless()), Needs: needs}
 	la.Path = l.findAgent(a.binary)
 	if la.Path == "" {
 		return la
 	}
-	vctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	if out, err := l.runAgent(vctx, la.Path, "--version"); err == nil {
-		la.Version = versionLine(out)
-	}
+	la.Version = l.version(ctx, la.Path)
 	la.State = l.signedIn(ctx, a.cli, la.Path)
 	return la
+}
+
+// loginHere is the sign-in command for this computer: where no browser can
+// open (a server, over SSH), Codex signs in with a code shown in the
+// terminal instead.
+func (a agentCLI) loginHere(headless bool) string {
+	if headless && a.cli == "codex" {
+		return "codex login --device-auth"
+	}
+	return a.login
+}
+
+// headless: no browser can open here (an SSH session, or Linux without a
+// display, as on a server).
+func headless() bool {
+	if os.Getenv("SSH_CONNECTION") != "" || os.Getenv("SSH_TTY") != "" {
+		return true
+	}
+	return runtime.GOOS == "linux" && os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == ""
+}
+
+// version is what the CLI at path says its version is, remembered while
+// the file stays the same (size and modification time): running --version
+// takes a second or more for some, and the list is asked for often.
+func (l *Local) version(ctx context.Context, path string) string {
+	key := ""
+	if real, err := filepath.EvalSymlinks(path); err == nil {
+		if fi, err := os.Stat(real); err == nil {
+			key = fmt.Sprintf("%s|%d|%d", real, fi.Size(), fi.ModTime().UnixNano())
+		}
+	}
+	if key != "" {
+		if v, ok := l.versions.Load(key); ok {
+			return v.(string)
+		}
+	}
+	vctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	out, err := l.runAgent(vctx, path, "--version")
+	if err != nil {
+		return ""
+	}
+	v := versionLine(out)
+	if key != "" && v != "" {
+		l.versions.Store(key, v)
+	}
+	return v
 }
 
 // findAgent looks for an agent CLI on PATH, in the login shell's PATH and

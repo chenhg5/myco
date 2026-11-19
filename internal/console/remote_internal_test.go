@@ -1,6 +1,7 @@
 package console
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -121,5 +122,33 @@ func TestParseDiagMasksSecrets(t *testing.T) {
 	}
 	if !sameHubURL("https://hub.example.com/w/team/", "https://hub.example.com") || sameHubURL("https://a.example", "https://b.example") {
 		t.Fatal("sameHubURL")
+	}
+}
+
+// --version runs once per CLI file: again only once the file changes.
+func TestVersionRemembered(t *testing.T) {
+	bin := filepath.Join(t.TempDir(), "codex")
+	_ = os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755)
+	runs := 0
+	l := &Local{Run: func(_ context.Context, _ []string, _ string, _ ...string) ([]byte, error) {
+		runs++
+		return []byte("codex-cli 0.166.0\n"), nil
+	}}
+	if v := l.version(context.Background(), bin); v != "codex-cli 0.166.0" {
+		t.Fatalf("version %q", v)
+	}
+	l.version(context.Background(), bin)
+	if runs != 1 {
+		t.Fatalf("ran --version %d times, want 1", runs)
+	}
+	_ = os.WriteFile(bin, []byte("#!/bin/sh\n# newer\n"), 0o755)
+	l.version(context.Background(), bin)
+	if runs != 2 {
+		t.Fatalf("a changed file must be asked again: %d runs", runs)
+	}
+	codex, _ := findAgentCLI("codex")
+	claude, _ := findAgentCLI("claude")
+	if codex.loginHere(true) != "codex login --device-auth" || codex.loginHere(false) != "codex login" || claude.loginHere(true) != "claude" {
+		t.Fatal("sign-in commands")
 	}
 }
