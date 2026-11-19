@@ -165,7 +165,9 @@ function changedUntil(ms: Message[]): number {
   return t > 0 ? t - 2000 : 0;
 }
 
-/** Messages with changed ones put in (by id), in the order they were sent. */
+/** Messages with changed ones put in (by id), in the order they were sent.
+ *  Also how a message just sent goes in: the poll may have brought it
+ *  already, and a plain append would show it twice. */
 function mergeById(ms: Message[], changed: Message[]): Message[] {
   const by = new Map(ms.map((m) => [m.id, m]));
   for (const m of changed) by.set(m.id, m);
@@ -903,7 +905,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             if (!it.threadId || (e as { code?: string }).code !== "not_found") throw e;
             m = await send(undefined);
           }
-          if (here()) setMessages((prev) => (prev ? [...prev, m] : [m]));
+          if (here()) setMessages((prev) => mergeById(prev || [], [m]));
         }
         keepQueue(flushKey, []);
         if (here()) setLocalQueue([]);
@@ -1442,7 +1444,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         onOpen(target.hubId, target.agent, m.from);
         return;
       }
-      setMessages((prev) => (prev ? [...prev, m] : [m]));
+      setMessages((prev) => mergeById(prev || [], [m]));
       writeDraft("");
       att.clear();
       histPos.current = -1;
@@ -1566,7 +1568,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       const fresh = await appApi.sendMessage(target.hubId, { to: task.to, body: task.body, thread_id: task.thread_id });
       setMessages((prev) => {
         const next = prev ? prev.map((x) => (x.id === stopped.id ? stopped : x)) : [stopped];
-        return [...next, fresh];
+        return mergeById(next, [fresh]);
       });
       atBottom.current = true;
     } catch (e) {
@@ -1584,7 +1586,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     setResending(task.id);
     try {
       const fresh = await appApi.sendMessage(target.hubId, { to: task.to, body: task.body, thread_id: task.thread_id });
-      setMessages((prev) => [...(prev || []), fresh]);
+      setMessages((prev) => mergeById(prev || [], [fresh]));
       atBottom.current = true;
     } catch (e) {
       setStopError(e);
@@ -1628,7 +1630,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       resent.push(re);
       after = re.id;
     }
-    if (resent.length) setMessages((prev) => (prev ? [...prev, ...resent] : resent));
+    if (resent.length) setMessages((prev) => mergeById(prev || [], resent));
   };
   const withdrawQueueItem = async (item: QueueItem) => {
     setQueueError(null);
@@ -1719,7 +1721,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   }
   const answerAsk = (task: Message) => async (text: string) => {
     const m = await appApi.steer(target.hubId, task.id, text, undefined);
-    setMessages((prev) => (prev ? [...prev, m] : [m]));
+    setMessages((prev) => mergeById(prev || [], [m]));
     atBottom.current = true;
   };
   // A message queued behind a task joins the conversation when that task
