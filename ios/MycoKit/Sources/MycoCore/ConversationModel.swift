@@ -667,6 +667,16 @@ public final class ConversationModel {
             if let at = events.compactMap(\.at).max() { activity[task.id] = at }
             if let last = events.last?.kind, last == "turn_end" || last == "usage" { ended.insert(task.id) }
         }
+        // What it last said between its steps, on any open task: the
+        // loading line follows it (and its updates), not only its updates.
+        var stepWords: (text: String, at: Date)?
+        for task in all.values where task.to == agent && task.isOpen {
+            let events = windows.activity(of: task.id, traces: traces)
+            guard let said = events.last(where: { $0.kind == "text" && !($0.data.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }),
+                  let at = said.at, at > (stepWords?.at ?? .distantPast)
+            else { continue }
+            stepWords = (said.data.text ?? "", at)
+        }
         var tracedPlans: [String: (items: [PlanItem], at: Date?)] = [:]
         for (taskID, process) in shownProcesses {
             if let plan = process.plan { tracedPlans[taskID] = (plan, process.planAt) }
@@ -689,6 +699,7 @@ public final class ConversationModel {
             takeovers: observed != nil ? [] : session.handovers(of: agent).done.map { handover in
                 (handover.id, handover.doneAt ?? handover.at, HandoverWords.line(handover, machines: session.machines, me: session.me))
             },
+            stepWords: stepWords,
             status: { self.session.status(of: $0) }, now: Date())
         let mine = Array(known.values).filter { shown($0) }
         let held = ConversationBuilder.queuedBehind(mine).filter { $0.from == me }
