@@ -278,6 +278,8 @@ async function shot(page, size, scheme, slug) {
 }
 
 async function sidebar(page, open) {
+  // (under the Settings dialog nothing is clickable: it goes first)
+  await closeSettings(page);
   const visible = await page.locator(".app-sidebar").isVisible().catch(() => false);
   if (visible === open) return;
   await page.getByRole("button", { name: /显示边栏|隐藏边栏|Show sidebar|Hide sidebar/ }).first().click();
@@ -332,12 +334,14 @@ async function openMember(page, narrow, space, name) {
 }
 
 async function go(page, label, narrow) {
+  // Settings is a dialog over the page: closed first (as Esc does).
+  await closeSettings(page);
   await sidebar(page, true);
   if (label === "设置") {
     // Settings sit in the workspace menu at the bottom of the sidebar.
     await clickVisible(page, page.locator(".sp-switch .app-hub-trigger"));
     await clickVisible(page, page.locator(".app-hub-menu-item", { hasText: "设置" }));
-    if (narrow) await sidebar(page, false);
+    await page.locator("[data-testid=settings-dialog]").waitFor({ timeout: 10_000 });
     return;
   }
   // Computers is a heading over the computers listed in the sidebar;
@@ -356,6 +360,13 @@ async function go(page, label, narrow) {
   // At narrow widths the sidebar covers the window; show the page as a person
   // would after picking it, with the compact Hub pill in the crumb bar.
   if (narrow) await sidebar(page, false);
+}
+
+async function closeSettings(page) {
+  const dlg = page.locator("[data-testid=settings-dialog]");
+  if (!(await dlg.count())) return;
+  await page.locator(".set-close").click();
+  await dlg.waitFor({ state: "detached", timeout: 5_000 });
 }
 
 // Right-click a row and pick from its menu. Scrolling the row into view
@@ -2432,6 +2443,7 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, prep.getByRole("button", { name: "先跳过" }));
       await prep.waitFor({ state: "detached", timeout: 10_000 });
       await page.locator(".app-settings-head").waitFor({ timeout: 10_000 });
+      await closeSettings(page);
       // With it, the 上手清单 at the foot of the sidebar ticks what is done,
       // and pages say what they are for the first time.
       if (narrow) await sidebar(page, true);
@@ -2440,9 +2452,8 @@ async function runMatrix(browser, size, scheme) {
       await list.locator('.ob-step.is-done[data-step="agent"]').waitFor({ timeout: 10_000 });
       await settle(page, 300);
       await shot(page, size, scheme, "checklist");
-      // 认识你的工作区, clicked while Settings is open: there at once, ticked.
+      // 认识你的工作区: Settings opens on 工作区, and it is ticked.
       await clickVisible(page, list.locator('.ob-step[data-step="workspace"]'));
-      if (narrow) await sidebar(page, false);
       await page.locator(".app-settings-head h2", { hasText: "工作区" }).waitFor({ timeout: 10_000 });
       if (narrow) await sidebar(page, true);
       await list.locator('.ob-step.is-done[data-step="workspace"]').waitFor({ timeout: 10_000 });
@@ -3777,7 +3788,8 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, call.getByRole("button", { name: "静音" }));
       await call.getByRole("button", { name: "取消静音" }).waitFor({ timeout: 5_000 });
       const voiceOnNow = async () => (await (await fetch(`http://${HOST}:${mockPort()}/app/voice/events?after=-1`)).json()).on;
-      await go(page, "设置", narrow);
+      // (another page: Settings is a dialog over the chat, which stays)
+      await go(page, "自动化", narrow);
       const chip = page.locator(".vc-chip");
       await chip.waitFor({ timeout: 5_000 });
       if (!(await voiceOnNow())) throw new Error("切到别的页面不该挂断语音");
@@ -3803,7 +3815,6 @@ async function runMatrix(browser, size, scheme) {
       await call2.waitFor({ state: "detached", timeout: 5_000 });
       // Its settings.
       await go(page, "设置", narrow);
-      if (narrow) await sidebar(page, true);
       await clickVisible(page, page.locator("button", { hasText: /^语音$/ }).first());
       // The speech service is one of those the backend lists, not a fixed
       // one: the heading names none, and the service is a choice.

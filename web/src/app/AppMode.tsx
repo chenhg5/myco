@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ArrowUpDown, ChevronRight, LayoutGrid, Monitor, MoreHorizontal, Pin, Plus, Search, WifiOff, Zap } from "lucide-react";
+import { ArrowLeft, ArrowUpDown, ChevronRight, LayoutGrid, Monitor, MoreHorizontal, Pin, Plus, Search, WifiOff, X, Zap } from "lucide-react";
 import { ComputerSettings } from "@/app/ComputerSettings";
 import { AutomationsPage } from "@/app/Automations";
 import { TemplatesPage } from "@/app/Templates";
@@ -121,7 +121,16 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [error, setError] = useState<unknown>(null);
   const [now, setNow] = useState(Date.now());
   const [localTick, setLocalTick] = useState(0);
-  const [page, setPage] = useState<Page>("space");
+  const [page, setPageRaw] = useState<Page>("space");
+  // Settings is a dialog over the page you are on (like Kettu's): asking
+  // for the "settings" page opens it and leaves the page as it is; any
+  // other page closes it.
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const setPage = (p: Page) => {
+    if (p === "settings") { setSettingsOpen(true); return; }
+    setSettingsOpen(false);
+    setPageRaw(p);
+  };
   // The workspace on show, chosen at the bottom of the sidebar. Workspaces
   // are kept apart: everything shown and done is in this one.
   const [hubPick, setHubPickState] = useState<string>(() => { try { return localStorage.getItem(HUB_KEY) || ""; } catch { return ""; } });
@@ -1001,9 +1010,10 @@ export default function AppMode({ initialHubs, initialInfo }: {
           </div>
         )}
 
-        {page === "settings" && (
-          <div className="app-scroll">
+        {settingsOpen && (
+          <SettingsDialog onClose={() => setSettingsOpen(false)}>
             <SettingsPage
+              titleId="settings-title"
               hubs={namedHubs}
               hubsOv={namedOv?.hubs}
               info={info}
@@ -1017,7 +1027,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
               onRefresh={refresh}
               onAddHub={() => setConnectOpen(true)}
             />
-          </div>
+          </SettingsDialog>
         )}
       </div>
 
@@ -1135,5 +1145,30 @@ function NavHead({ label, active, className, title, onOpen, folded, onFold, coun
       )}
       {children && <span className="sp-nav-head-tools">{children}</span>}
     </div>
+  );
+}
+
+/** Settings, over the App (the page under it stays): a scrim, a large
+ *  panel with its nav on the left, ✕ at the top right. Esc or a click on
+ *  the scrim closes it, unless a dialog of its own is open on top. */
+function SettingsDialog({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      if (document.querySelector(".app-modal, .app-menu, .cp, .lightbox")) return;
+      e.preventDefault();
+      onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <>
+      <div className="set-scrim" onClick={onClose} aria-hidden />
+      <div className="set-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title" data-testid="settings-dialog">
+        <button type="button" className="set-close" onClick={onClose} aria-label={L("关闭设置", "Close settings")} title={L("关闭（Esc）", "Close (Esc)")}><X /></button>
+        {children}
+      </div>
+    </>
   );
 }

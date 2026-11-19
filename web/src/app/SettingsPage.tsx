@@ -294,7 +294,7 @@ const TUNNELS: { key: LocalTunnel; title: string; desc: string; needsDomain?: bo
 type TunnelChoice = 0 | 1 | 2;
 
 /** Settings: hubs (including the local one), appearance and about. */
-export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onTextSize, langChoice, onLangChoice, refreshKey, sectionRequest, onRefresh, onAddHub }: {
+export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onTextSize, langChoice, onLangChoice, refreshKey, sectionRequest, onRefresh, onAddHub, titleId }: {
   hubs: Hub[];
   hubsOv?: HubOverview[];
   info: AppInfo | null;
@@ -310,6 +310,8 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
   sectionRequest?: number;
   onRefresh: () => Promise<void>;
   onAddHub: () => void;
+  /** in a dialog: the title at the top of the nav (labels the dialog) */
+  titleId?: string;
 }) {
   const simple = useSimpleMode();
   const [section, setSection] = useState<Section>(() => takeSettingsSection() ?? langSwitchSection ?? (simpleModeNow() ? "agents" : "hubs"));
@@ -485,12 +487,14 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
   return (
     <div className="app-page app-settings">
       <div className="app-settings-nav" role="tablist" aria-label={L("设置", "Settings")}>
+        {titleId && <h2 id={titleId} className="app-settings-title">{L("设置", "Settings")}</h2>}
         <label className="app-settings-search">
           <Search />
           <input ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)} placeholder={L("搜索设置", "Search settings")}
             aria-label={L("搜索设置", "Search settings")}
             onKeyDown={(e) => {
-              if (e.key === "Escape") { setQuery(""); return; }
+              // (a search to clear takes Esc; an empty one leaves it to close Settings)
+              if (e.key === "Escape") { if (query) { e.preventDefault(); setQuery(""); } return; }
               if (e.key === "Enter" && found[0]) { e.preventDefault(); goTo(found[0]); }
             }} />
         </label>
