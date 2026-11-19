@@ -1,0 +1,131 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" width="1200" height="760" font-family="-apple-system, 'PingFang SC', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#5b6475"/>
+    </marker>
+    <marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#2f8a5b"/>
+    </marker>
+    <marker id="o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#c07a12"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="760" fill="#f7f7f5"/>
+  <text x="40" y="46" font-size="24" font-weight="700" fill="#1d2330">myco 工作流：架构</text>
+  <text x="40" y="72" font-size="14" fill="#5b6475">工作区（Hub）推进流程；每个 agent 步骤就是一条普通任务，交给已经接入的 agent，结果按约定的 JSON 回来</text>
+
+  <!-- People and authors -->
+  <rect x="40" y="100" width="300" height="250" rx="14" fill="#ffffff" stroke="#d9dbe0"/>
+  <text x="60" y="130" font-size="16" font-weight="700" fill="#1d2330">人</text>
+  <rect x="60" y="146" width="260" height="88" rx="10" fill="#eef3fb" stroke="#c9d6ee"/>
+  <text x="76" y="172" font-size="14" font-weight="600" fill="#1d2330">App · 工作流（左上第二个导航）</text>
+  <text x="76" y="194" font-size="12.5" fill="#465063">列表 · 流程图 · 运行记录 · 启动表单</text>
+  <text x="76" y="214" font-size="12.5" fill="#465063">每一步点开就是那条任务的对话和过程</text>
+  <rect x="60" y="246" width="260" height="88" rx="10" fill="#fdf3e3" stroke="#efd6a8"/>
+  <text x="76" y="272" font-size="14" font-weight="600" fill="#1d2330">决定卡片（App / iPhone）</text>
+  <text x="76" y="294" font-size="12.5" fill="#465063">human 步骤：发布吗？选一个，写一句</text>
+  <text x="76" y="314" font-size="12.5" fill="#465063">过期走「不做」的边，从不默认批准</text>
+
+  <rect x="40" y="370" width="300" height="150" rx="14" fill="#ffffff" stroke="#d9dbe0"/>
+  <text x="60" y="400" font-size="16" font-weight="700" fill="#1d2330">谁来写流程</text>
+  <text x="60" y="426" font-size="13" fill="#465063">· 和协调者 agent 说清要什么，它写 JSON，</text>
+  <text x="60" y="446" font-size="13" fill="#465063">  myco workflow validate / apply（有 skill）</text>
+  <text x="60" y="470" font-size="13" fill="#465063">· App 里看图、改参数；可视化编辑以后再做</text>
+  <text x="60" y="494" font-size="13" fill="#465063">· 官方模板：写-审-改、发版、日报</text>
+
+  <rect x="40" y="540" width="300" height="180" rx="14" fill="#ffffff" stroke="#d9dbe0"/>
+  <text x="60" y="570" font-size="16" font-weight="700" fill="#1d2330">谁来启动</text>
+  <text x="60" y="596" font-size="13" fill="#465063">· 手动：App 里填表单「运行」</text>
+  <text x="60" y="620" font-size="13" fill="#465063">· 自动化：定时 / Webhook 的目标</text>
+  <text x="60" y="644" font-size="13" fill="#465063">  从「发给某个 agent」扩到「启动工作流」</text>
+  <text x="60" y="668" font-size="13" fill="#465063">· agent：myco workflow run（协调者把</text>
+  <text x="60" y="688" font-size="13" fill="#465063">  一件大事交给固定流程）</text>
+
+  <!-- Hub -->
+  <rect x="380" y="100" width="440" height="620" rx="16" fill="#ffffff" stroke="#9aa3b5" stroke-width="1.5"/>
+  <text x="400" y="132" font-size="17" font-weight="700" fill="#1d2330">工作区（Hub）</text>
+  <text x="560" y="132" font-size="12.5" fill="#5b6475">一个 Go 程序 · SQLite</text>
+
+  <rect x="400" y="150" width="400" height="214" rx="12" fill="#eaf6ef" stroke="#a9d8bd" stroke-width="1.5"/>
+  <text x="418" y="178" font-size="15" font-weight="700" fill="#1d2330">WorkflowService（新）</text>
+  <text x="418" y="202" font-size="13" fill="#2a3446">· 唯一推进流程的地方：节点结束 → 看边 → 下一步</text>
+  <text x="418" y="224" font-size="13" fill="#2a3446">· 边：when 条件（expr），map 改写输入，</text>
+  <text x="418" y="244" font-size="13" fill="#2a3446">  回边带 maxIterations，dispatch all + join 并行</text>
+  <text x="418" y="266" font-size="13" fill="#2a3446">· 输出按 outputSchema 校验，不对就退回一次</text>
+  <text x="418" y="288" font-size="13" fill="#2a3446">· 超时 / 重试 / 取消；人工步骤带 lease token</text>
+  <text x="418" y="310" font-size="13" fill="#2a3446">· 由事件驱动：任务回复、失败、到点</text>
+  <text x="418" y="332" font-size="13" fill="#2a3446">· 重启后按任务的状态对账，接着走</text>
+  <text x="418" y="352" font-size="12" fill="#5b6475">发任务的身份：@workflow:&lt;运行&gt;（像 @console）</text>
+
+  <rect x="400" y="380" width="190" height="120" rx="12" fill="#f3f4f7" stroke="#cfd3dc"/>
+  <text x="414" y="406" font-size="14" font-weight="700" fill="#1d2330">已有：自动化</text>
+  <text x="414" y="428" font-size="12.5" fill="#465063">定时（cron + 时区）</text>
+  <text x="414" y="448" font-size="12.5" fill="#465063">Webhook（密钥）</text>
+  <text x="414" y="468" font-size="12.5" fill="#465063">新：目标可以是工作流</text>
+  <text x="414" y="488" font-size="12.5" fill="#465063">输入从 payload 取</text>
+
+  <rect x="610" y="380" width="190" height="120" rx="12" fill="#f3f4f7" stroke="#cfd3dc"/>
+  <text x="624" y="406" font-size="14" font-weight="700" fill="#1d2330">已有：消息</text>
+  <text x="624" y="428" font-size="12.5" fill="#465063">任务 · 回复 · 线程</text>
+  <text x="624" y="448" font-size="12.5" fill="#465063">ask / steer / stop</text>
+  <text x="624" y="468" font-size="12.5" fill="#465063">心跳和「没收尾」</text>
+  <text x="624" y="488" font-size="12.5" fill="#465063">项目 · 过程记录</text>
+
+  <rect x="400" y="516" width="400" height="186" rx="12" fill="#f3f4f7" stroke="#cfd3dc"/>
+  <text x="414" y="542" font-size="14" font-weight="700" fill="#1d2330">SQLite（新表）</text>
+  <text x="414" y="566" font-size="12.5" fill="#465063">workflows：名字、描述、所属项目、当前版本</text>
+  <text x="414" y="588" font-size="12.5" fill="#465063">workflow_versions：每次 apply 的 JSON（运行用快照）</text>
+  <text x="414" y="610" font-size="12.5" fill="#465063">workflow_runs：输入、状态、谁启动、触发来源</text>
+  <text x="414" y="632" font-size="12.5" fill="#465063">run_steps：节点 · 第几次 · 任务 id · 输入 · 输出 · 状态</text>
+  <text x="414" y="654" font-size="12.5" fill="#465063">run_events：开始、边、等待、超时、人做的决定</text>
+  <text x="414" y="682" font-size="12" fill="#5b6475">一步的过程不另存：就在它那条任务的过程记录里</text>
+
+  <!-- Workers -->
+  <rect x="860" y="100" width="300" height="620" rx="14" fill="#ffffff" stroke="#d9dbe0"/>
+  <text x="880" y="132" font-size="16" font-weight="700" fill="#1d2330">干活的（已有，不用改）</text>
+  <rect x="880" y="150" width="260" height="128" rx="10" fill="#eef3fb" stroke="#c9d6ee"/>
+  <text x="896" y="176" font-size="14" font-weight="600" fill="#1d2330">agent 步骤</text>
+  <text x="896" y="198" font-size="12.5" fill="#465063">Claude Code · Codex · Qwen…</text>
+  <text x="896" y="218" font-size="12.5" fill="#465063">在哪台电脑都行（runner 唤醒）</text>
+  <text x="896" y="238" font-size="12.5" fill="#465063">云端会话（inbox wait）</text>
+  <text x="896" y="258" font-size="12.5" fill="#465063">按 JSON 交结果：reply --result</text>
+  <rect x="880" y="294" width="260" height="96" rx="10" fill="#eef3fb" stroke="#c9d6ee"/>
+  <text x="896" y="320" font-size="14" font-weight="600" fill="#1d2330">shell 步骤</text>
+  <text x="896" y="342" font-size="12.5" fill="#465063">发给终端节点的一条命令</text>
+  <text x="896" y="362" font-size="12.5" fill="#465063">输出 = exit_code / stdout（能用程序</text>
+  <text x="896" y="380" font-size="12.5" fill="#465063">就不用 agent）</text>
+  <rect x="880" y="406" width="260" height="110" rx="10" fill="#eef3fb" stroke="#c9d6ee"/>
+  <text x="896" y="432" font-size="14" font-weight="600" fill="#1d2330">新开一个（spawn）</text>
+  <text x="896" y="454" font-size="12.5" fill="#465063">每次运行在某台电脑上开新会话</text>
+  <text x="896" y="474" font-size="12.5" fill="#465063">或复制一个已有的（fork）：</text>
+  <text x="896" y="494" font-size="12.5" fill="#465063">并行跑同一个角色不抢会话</text>
+  <rect x="880" y="532" width="260" height="170" rx="10" fill="#f3f4f7" stroke="#cfd3dc"/>
+  <text x="896" y="558" font-size="14" font-weight="600" fill="#1d2330">一个 agent 步骤收到的任务</text>
+  <text x="896" y="582" font-size="12" fill="#465063" font-family="Menlo, monospace">[工作流 写-审-改 · 第 2 步 review]</text>
+  <text x="896" y="602" font-size="12" fill="#465063">渲染好的说明（inputs、上一步输出）</text>
+  <text x="896" y="622" font-size="12" fill="#465063">输入 JSON + 要回的 JSON 结构</text>
+  <text x="896" y="642" font-size="12" fill="#465063">「做完用 myco message reply --result</text>
+  <text x="896" y="662" font-size="12" fill="#465063">  交一个符合结构的 JSON」</text>
+  <text x="896" y="686" font-size="12" fill="#465063">每个结果都带 summary 和 reason</text>
+
+  <!-- arrows -->
+  <path d="M340 190 L398 220" stroke="#5b6475" stroke-width="1.6" fill="none" marker-end="url(#a)"/>
+  <text x="344" y="174" font-size="11" fill="#5b6475">启动</text>
+  <text x="344" y="188" font-size="11" fill="#5b6475">取消</text>
+  <path d="M398 300 L342 292" stroke="#c07a12" stroke-width="1.6" fill="none" marker-end="url(#o)"/>
+  <text x="342" y="322" font-size="11.5" fill="#c07a12">等人：卡片</text>
+  <path d="M340 610 L398 470" stroke="#5b6475" stroke-width="1.6" fill="none" marker-end="url(#a)"/>
+  <path d="M495 380 L495 366" stroke="#5b6475" stroke-width="1.6" fill="none" marker-end="url(#a)"/>
+  <text x="503" y="376" font-size="11" fill="#5b6475">开始运行</text>
+  <path d="M680 364 L680 378" stroke="#2f8a5b" stroke-width="1.6" fill="none" marker-end="url(#g)"/>
+  <text x="606" y="376" font-size="11" fill="#2f8a5b">发任务</text>
+  <path d="M740 380 L740 366" stroke="#2f8a5b" stroke-width="1.6" fill="none" stroke-dasharray="4 3" marker-end="url(#g)"/>
+  <text x="748" y="376" font-size="11" fill="#2f8a5b">回复 → 事件</text>
+  <path d="M800 400 C 840 400, 840 214, 878 214" stroke="#2f8a5b" stroke-width="1.8" fill="none" marker-end="url(#g)"/>
+  <path d="M800 420 C 845 420, 850 340, 878 340" stroke="#2f8a5b" stroke-width="1.4" fill="none" marker-end="url(#g)"/>
+  <path d="M800 440 C 845 440, 850 460, 878 460" stroke="#2f8a5b" stroke-width="1.4" fill="none" marker-end="url(#g)"/>
+  <path d="M878 256 C 860 300, 850 470, 802 476" stroke="#2f8a5b" stroke-width="1.6" fill="none" stroke-dasharray="6 4" marker-end="url(#g)"/>
+  <text x="826" y="530" font-size="11" fill="#2f8a5b">任务</text>
+  <text x="826" y="546" font-size="11" fill="#2f8a5b">─ 发出</text>
+  <text x="826" y="562" font-size="11" fill="#2f8a5b">┄ 回复</text>
+</svg>
