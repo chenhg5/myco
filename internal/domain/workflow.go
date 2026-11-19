@@ -72,6 +72,9 @@ type StepDef struct {
 	// Agent: the agent (or alias) the task goes to; Prompt is the task.
 	Agent  string `json:"agent,omitempty"`
 	Prompt string `json:"prompt,omitempty"`
+	// Role, instead of Agent: the task goes to an agent whose role (分工)
+	// matches, the least busy one when it starts (see MatchesRole).
+	Role string `json:"role,omitempty"`
 	// Computer: the exec node the command (Run) runs on. Parse "json"
 	// reads its stdout as JSON into output.json.
 	Computer string `json:"computer,omitempty"`
@@ -99,7 +102,7 @@ type StepDef struct {
 // Kind is the step's kind.
 func (s *StepDef) Kind() string {
 	switch {
-	case s.Agent != "":
+	case s.Agent != "" || s.Role != "":
 		return StepAgent
 	case s.Computer != "":
 		return StepComputer
@@ -225,13 +228,13 @@ func (d *WorkflowDef) Problems() []string {
 		}
 		ids[s.ID] = true
 		n := 0
-		for _, v := range []string{s.Agent, s.Computer, s.Human} {
+		for _, v := range []string{s.Agent, s.Role, s.Computer, s.Human} {
 			if v != "" {
 				n++
 			}
 		}
 		if n != 1 {
-			bad("%s: set exactly one of agent, computer, human", where)
+			bad("%s: set exactly one of agent, role, computer, human", where)
 		}
 		switch s.Kind() {
 		case StepAgent:
@@ -274,7 +277,10 @@ func (d *WorkflowDef) Problems() []string {
 		if s.Output != nil {
 			out = append(out, s.Output.problems(where+": output")...)
 		}
-		for _, t := range []string{s.Prompt, s.Run, s.Title, s.Agent, s.Computer} {
+		if len([]rune(s.Role)) > 40 {
+			bad("%s: role is longer than 40 characters", where)
+		}
+		for _, t := range []string{s.Prompt, s.Run, s.Title, s.Agent, s.Computer, s.Role} {
 			if err := CheckTemplate(t); err != nil {
 				bad("%s: %v", where, err)
 			}
@@ -598,4 +604,31 @@ type WorkflowRepository interface {
 
 	AddEvent(ctx context.Context, e *RunEvent) error
 	Events(ctx context.Context, runID string) ([]*RunEvent, error)
+}
+
+// MatchesRole reports whether an agent does role (分工): a label role=<x>
+// or <x>, a skill named <x>, or <x> in its name, display name or
+// description (or note, its role in a project). Case does not matter.
+func MatchesRole(a *Agent, role, note string) bool {
+	r := strings.ToLower(strings.TrimSpace(role))
+	if r == "" {
+		return false
+	}
+	for _, l := range a.Labels {
+		l = strings.ToLower(l)
+		if l == r || l == "role="+r {
+			return true
+		}
+	}
+	for _, sk := range a.Skills {
+		if strings.ToLower(sk.Name) == r {
+			return true
+		}
+	}
+	for _, text := range []string{string(a.Name), a.DisplayName, a.Description, note} {
+		if strings.Contains(strings.ToLower(text), r) {
+			return true
+		}
+	}
+	return false
 }

@@ -229,7 +229,7 @@ export interface WfSchema {
   properties?: Record<string, WfSchema>; items?: WfSchema; enum?: unknown[]; default?: unknown; format?: string;
 }
 export interface WfStepDef {
-  id: string; title?: string; agent?: string; prompt?: string; computer?: string; run?: string; parse?: string;
+  id: string; title?: string; agent?: string; role?: string; prompt?: string; computer?: string; run?: string; parse?: string;
   human?: string; options?: string[]; output?: WfSchema; timeout?: string; retry?: number; dispatch?: string; join?: string;
 }
 export interface WfEdgeDef { from: string; to: string; when?: string; maxIterations?: number; else?: string; onError?: boolean }

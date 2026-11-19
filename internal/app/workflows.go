@@ -93,7 +93,19 @@ type WorkflowCheck struct {
 func (s *WorkflowService) Check(ctx context.Context, def *domain.WorkflowDef) WorkflowCheck {
 	out := WorkflowCheck{Problems: def.Problems()}
 	r := aliasResolver{agents: s.messages.agents, aliases: s.messages.aliases}
+	var everyone []*domain.Agent
 	for _, st := range def.Steps {
+		if st.Role != "" {
+			if everyone == nil {
+				everyone, _ = s.messages.agents.List(ctx)
+			}
+			if !strings.Contains(st.Role, "{{") && !slices.ContainsFunc(everyone, func(a *domain.Agent) bool {
+				return a.Kind() == domain.KindAgent && domain.MatchesRole(a, st.Role, "")
+			}) {
+				out.Warnings = append(out.Warnings, fmt.Sprintf("step %s: no agent has the role %q yet", st.ID, st.Role))
+			}
+			continue
+		}
 		var name string
 		switch st.Kind() {
 		case domain.StepAgent:
@@ -631,6 +643,8 @@ type flow struct {
 	// quiet: do not tell the agent that started it that it ended (it
 	// cancelled the run itself).
 	quiet bool
+	// picked says why the last step by role went to whom.
+	picked string
 }
 
 func (f *flow) now() time.Time { return f.s.clock.Now() }
@@ -727,6 +741,10 @@ func (f *flow) activate(id string) {
 		f.failed(st, "发不出去："+errText(err))
 		return
 	}
+	if def.Role != "" {
+		f.event(domain.EvStep, id, fmt.Sprintf("按分工「%s」交给 %s（%s）", def.Role, target, f.picked))
+		return
+	}
 	f.event(domain.EvStep, id, "交给 "+target)
 }
 
@@ -753,7 +771,17 @@ func (f *flow) compose(def *domain.StepDef, attempt int) (body, target string, e
 		body, err = domain.RenderTemplate(def.Run, env)
 		return body, target, err
 	}
-	if target, err = domain.RenderTemplate(def.Agent, env); err != nil {
+	if def.Role != "" {
+		role, err := domain.RenderTemplate(def.Role, env)
+		if err != nil {
+			return "", "", err
+		}
+		pick, why, err := f.s.pickByRole(f.ctx, f.run, role)
+		if err != nil {
+			return "", "", err
+		}
+		target, f.picked = string(pick), why
+	} else if target, err = domain.RenderTemplate(def.Agent, env); err != nil {
 		return "", "", err
 	}
 	prompt, err := domain.RenderTemplate(def.Prompt, env)
@@ -823,6 +851,74 @@ func (f *flow) projectFor(thread string) string {
 		return ""
 	}
 	return f.run.Project
+}
+
+// RecentlySeen is how long after its last contact an agent counts as
+// around when picking one by role.
+const RecentlySeen = 10 * time.Minute
+
+// pickByRole chooses the agent for a step by role (分工): of the agents the
+// run's owner may give tasks to whose role matches (in the run's project
+// first, when some there do), the one with the fewest open tasks, then the
+// one seen most recently. why says how busy it is.
+func (s *WorkflowService) pickByRole(ctx context.Context, run *domain.WorkflowRun, role string) (domain.AgentName, string, error) {
+	all, err := s.messages.agents.List(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	notes := map[domain.AgentName]string{}
+	inProject := map[domain.AgentName]bool{}
+	if run.Project != "" && s.messages.projects != nil {
+		if p, err := s.messages.projects.Get(ctx, run.Project); err == nil {
+			if ms, err := s.messages.projects.Members(ctx, p.ID); err == nil {
+				for _, m := range ms {
+					notes[m.Agent], inProject[m.Agent] = m.Note, true
+				}
+			}
+		}
+	}
+	sender := &domain.Agent{Name: ConsoleSender(run.Owner), Owner: run.OwnerID}
+	var cands []*domain.Agent
+	for _, a := range all {
+		if a.Kind() == domain.KindAgent && domain.MaySendTo(sender, a) && domain.MatchesRole(a, role, notes[a.Name]) {
+			cands = append(cands, a)
+		}
+	}
+	if len(cands) == 0 {
+		return "", "", domain.Errf(domain.CodeNotFound, "没有分工是「%s」的 agent", role).
+			WithSuggestion("give one that role: a label role=%s, or say it in its description", role)
+	}
+	if slices.ContainsFunc(cands, func(a *domain.Agent) bool { return inProject[a.Name] }) {
+		cands = slices.DeleteFunc(cands, func(a *domain.Agent) bool { return !inProject[a.Name] })
+	}
+	open := map[domain.AgentName]int{}
+	if counts, err := s.msgRepo.OpenCounts(ctx); err == nil {
+		for name, by := range counts {
+			for _, n := range by {
+				open[name] += n
+			}
+		}
+	}
+	now := s.clock.Now()
+	around := func(a *domain.Agent) bool { return now.Sub(a.LastSeenAt) < RecentlySeen }
+	slices.SortStableFunc(cands, func(a, b *domain.Agent) int {
+		if open[a.Name] != open[b.Name] {
+			return open[a.Name] - open[b.Name]
+		}
+		if around(a) != around(b) {
+			if around(a) {
+				return -1
+			}
+			return 1
+		}
+		return strings.Compare(string(a.Name), string(b.Name))
+	})
+	best := cands[0]
+	why := "空闲"
+	if n := open[best.Name]; n > 0 {
+		why = fmt.Sprintf("手上还有 %d 件，已是最少的", n)
+	}
+	return best.Name, why, nil
 }
 
 // poll looks at every open step.

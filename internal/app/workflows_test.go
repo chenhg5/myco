@@ -25,6 +25,7 @@ type wfEnv struct {
 	agents map[string]*domain.Agent
 	glenn  app.Caller
 	aut    *app.AutomationService
+	reg    *app.AgentService
 }
 
 func newWF(t *testing.T, names ...string) *wfEnv {
@@ -42,7 +43,7 @@ func newWF(t *testing.T, names ...string) *wfEnv {
 	aut := app.NewAutomationService(sqlite.NewAutomationRepo(db), msgs, mr, security.Tokens{}, security.IDs{}, clock, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	aut.SetWorkflows(svc)
 	e := &wfEnv{t: t, ctx: context.Background(), clock: clock, svc: svc, msgs: msgs, agents: map[string]*domain.Agent{},
-		glenn: app.Caller{Name: "glenn", MemberID: "mem_1"}, aut: aut}
+		glenn: app.Caller{Name: "glenn", MemberID: "mem_1"}, aut: aut, reg: reg}
 	for _, n := range names {
 		in := app.RegisterInput{Name: n}
 		if strings.HasPrefix(n, "box") {
@@ -411,4 +412,42 @@ func TestWorkflowTellsTheAgentThatStartedIt(t *testing.T) {
 	e.start("one", nil)
 	e.reply("coder", e.task("coder"), "ok", nil)
 	e.noTask("lead")
+}
+
+func TestWorkflowStepByRolePicksTheLeastBusy(t *testing.T) {
+	e := newWF(t)
+	add := func(in app.RegisterInput) {
+		in.Binding = domain.Binding{Harness: "claude", SessionID: string(in.Name) + "-s"}
+		out, err := e.reg.Register(e.ctx, in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		e.agents[in.Name] = out.Agent
+	}
+	add(app.RegisterInput{Name: "rev-a", Description: "负责审查 Go 代码"})
+	add(app.RegisterInput{Name: "rev-b", Labels: []string{"role=审查"}})
+	add(app.RegisterInput{Name: "writer", Description: "写文档"})
+	chk := e.svc.Check(e.ctx, &domain.WorkflowDef{Name: "x", Steps: []domain.StepDef{{ID: "s", Role: "设计", Prompt: "p"}}})
+	if len(chk.Problems) != 0 || len(chk.Warnings) != 1 {
+		t.Fatalf("check: %+v", chk)
+	}
+	e.apply(`{"name": "r", "steps": [{"id": "rv", "title": "审", "role": "审查", "prompt": "看看"}]}`)
+	// rev-a is busy with something else: rev-b is free.
+	if _, err := e.msgs.SendFromMember(e.ctx, "glenn", "mem_1", app.SendInput{To: "rev-a", Body: "别的事"}); err != nil {
+		t.Fatal(err)
+	}
+	run := e.start("r", nil)
+	m := e.task("rev-b")
+	if m.Workflow != run.ID {
+		t.Fatalf("went to the wrong one: %+v", m)
+	}
+	d := e.run(run.ID)
+	if d.Steps[0].Target != "rev-b" || !strings.Contains(d.Events[len(d.Events)-1].Text, "按分工「审查」交给 rev-b（空闲）") {
+		t.Fatalf("step: %+v events: %+v", d.Steps[0], d.Events)
+	}
+	// No one does it: the step fails, saying so.
+	e.apply(`{"name": "none", "steps": [{"id": "x", "role": "设计", "prompt": "p"}]}`)
+	if d := e.run(e.start("none", nil).ID); d.Run.Status != domain.FlowFailed || !strings.Contains(d.Run.Error, "没有分工是「设计」的 agent") {
+		t.Fatalf("no one: %s %q", d.Run.Status, d.Run.Error)
+	}
 }

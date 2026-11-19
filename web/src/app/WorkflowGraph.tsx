@@ -211,7 +211,8 @@ export function WorkflowGraph({ def, hubId, rows, states, selected, onSelect }: 
           const r = rowOf(target);
           const who = n.kind === "human"
             ? (s.human === "$starter" ? L("你", "You") : s.human || "")
-            : r ? nodeName(r.st.agent, r.hub) : target || "";
+            : s.role ? L(`分工：${s.role}`, `Role: ${s.role}`)
+              : r ? nodeName(r.st.agent, r.hub) : target || "";
           const tone = !states ? "" : !st ? "is-todo" : `is-${st.status}`;
           return (
             <button key={n.id} type="button" className={cn("wf-node", tone, selected === n.id && "is-selected")}
