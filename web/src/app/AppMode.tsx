@@ -16,6 +16,7 @@ import { ProjectPage } from "@/app/ProjectPage";
 import { openSettingsSection, SettingsPage } from "@/app/SettingsPage";
 import { UpdateNotice } from "@/app/UpdateNotice";
 import { Welcome } from "@/app/Welcome";
+import { Prepare, preparePending, setPreparePending } from "@/app/Prepare";
 import { ProjectSpace, isLoose, looseRowsOf, type SpaceRef } from "@/app/ProjectSpace";
 import { dragAgent } from "@/app/Panes";
 import { AddAgentDialog, AddWorkspaceDialog, NewProjectDialog, isNobody } from "@/app/AddToProject";
@@ -515,8 +516,22 @@ export default function AppMode({ initialHubs, initialInfo }: {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // A top page picked again while on it goes back to its first view (the
+  // list, not the automation or computer opened): it is drawn afresh.
+  const [again, setAgain] = useState(0);
+  const toPage = (p: typeof page) => { if (page === p) setAgain((n) => n + 1); setPage(p); };
+  // 准备这台电脑 (Prepare.tsx): after a new install's first workspace
+  // starts, until done or skipped; Settings › About opens it again.
+  const [preparing, setPreparing] = useState<string | null>(() => preparePending());
+  useEffect(() => {
+    const on = () => { if (hubId) setPreparing(hubId); };
+    window.addEventListener("myco-prepare", on);
+    return () => window.removeEventListener("myco-prepare", on);
+  }, [hubId]);
   const startLocal = async () => {
-    await appApi.startLocalHub({ tunnel: "none" });
+    const r = await appApi.startLocalHub({ tunnel: "none" });
+    setPreparePending(r.hub.id);
+    setPreparing(r.hub.id);
     await refresh();
   };
 
@@ -594,8 +609,28 @@ export default function AppMode({ initialHubs, initialInfo }: {
   if (hubs.length === 0) {
     return (
       <div key={lang()} className={cn("app-shell welcome-shell", isMac && "shell-mac")}>
-        <Welcome onStartLocal={startLocal} onConnect={() => setConnectOpen(true)} langChoice={langChoice} onLang={chooseLang} />
+        <Welcome onStartLocal={startLocal} onConnect={() => setConnectOpen(true)} langChoice={langChoice} onLang={chooseLang} theme={theme} onTheme={setTheme} />
         <ConnectHubDialog open={connectOpen} onOpenChange={closeConnect} prefill={connectPrefill} onAdded={() => void hubAdded()} />
+      </div>
+    );
+  }
+
+  if (preparing && hubs.some((h) => h.id === preparing)) {
+    const at = preparing;
+    return (
+      <div key={lang()} className={cn("app-shell welcome-shell", isMac && "shell-mac")}>
+        <Prepare hubId={at} now={now} onDone={(joined) => {
+          setPreparePending(null);
+          setPreparing(null);
+          void refresh();
+          if (joined[0]) {
+            const s: SpaceRef = { hubId: at, loose: true };
+            setHubPick(at);
+            setSpace(s);
+            setPage("space");
+            setChatWith({ space: s, agent: joined[0], n: Date.now() });
+          }
+        }} />
       </div>
     );
   }
@@ -653,15 +688,15 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 The three lists fold. */}
             <div className="app-nav-group sp-nav-autos">
               <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-auto", page === "automations" && "active")} aria-current={page === "automations" ? "page" : undefined}
-                onClick={() => { setNavChat(null); setPage("automations"); }}>
+                onClick={() => { setNavChat(null); toPage("automations"); }}>
                 <Zap /><span className="app-nav-label">{L("自动化", "Automations")}</span>
               </button>
               <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-templates", page === "templates" && "active")} aria-current={page === "templates" ? "page" : undefined}
-                onClick={() => { setNavChat(null); setPage("templates"); }}>
+                onClick={() => { setNavChat(null); toPage("templates"); }}>
                 <LayoutGrid /><span className="app-nav-label">{L("应用", "Apps")}</span>
               </button>
               <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-computers", page === "computers" && "active")} aria-current={page === "computers" ? "page" : undefined}
-                onClick={() => { setNavChat(null); setPage("computers"); }}>
+                onClick={() => { setNavChat(null); toPage("computers"); }}>
                 <Monitor /><span className="app-nav-label">{L("电脑", "Computers")}</span>
               </button>
             </div>
@@ -759,7 +794,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
             </div>
             {!simple && <div className="app-nav-group sp-nav-pcs">
               <NavHead label={L("终端", "Terminals")} className="sp-nav-pcs-head" active={page === "computers"} title={L("电脑和终端", "Computers and terminals")}
-                onOpen={() => { setNavChat(null); setPage("computers"); }} folded={pcFolded} onFold={() => foldPcs(!pcFolded)} count={computers.length}>
+                onOpen={() => { setNavChat(null); toPage("computers"); }} folded={pcFolded} onFold={() => foldPcs(!pcFolded)} count={computers.length}>
                 <button type="button" className="app-nav-add" aria-label={L("加一个终端", "Add a terminal")} title={L("加一个终端", "Add a terminal")}
                   onClick={() => (shownProject && shown ? setAddWorkspace(shown) : hub && setAddWorkspace({ hubId: hub.id, loose: true }))}><Plus /></button>
               </NavHead>
@@ -889,20 +924,20 @@ export default function AppMode({ initialHubs, initialInfo }: {
 
         {page === "automations" && hub && (
           <div className="app-scroll">
-            <AutomationsPage key={hub.id} hubId={hub.id} rows={rows} now={now}
+            <AutomationsPage key={`${hub.id}/${again}`} hubId={hub.id} rows={rows} now={now}
               onOpenMessage={(agent, message) => { const r = rows.find((x) => x.hub.id === hub.id && x.st.agent.name === agent); if (r) openAtMessage(r, message); }} />
           </div>
         )}
 
         {page === "templates" && hub && (
           <div className="app-scroll">
-            <TemplatesPage key={hub.id} hubId={hub.id} now={now} projects={liveProjects.map((x) => ({ name: x.p.name, title: x.p.title || x.p.name }))} />
+            <TemplatesPage key={`${hub.id}/${again}`} hubId={hub.id} now={now} projects={liveProjects.map((x) => ({ name: x.p.name, title: x.p.title || x.p.name }))} />
           </div>
         )}
 
         {page === "computers" && (
           <div className="app-scroll">
-            <ComputersPage rows={rows} projects={hubProjects}
+            <ComputersPage key={again} rows={rows} projects={hubProjects}
               onOpen={chatWithMember}
               onProfile={(r) => setProfile({ hubId: r.hub.id, name: r.st.agent.name })}
               onConnect={() => { if (hub) { setAddAgentStart("connect"); setAddAgent({ hubId: hub.id, loose: true }); } }}

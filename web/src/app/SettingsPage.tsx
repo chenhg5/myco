@@ -109,6 +109,13 @@ function AboutSection({ info, local }: { info: AppInfo | null; local: LocalState
           <span className="app-kv-value">{status}{action}</span>
         </div>
         <CacheRow />
+        <div className="app-kv app-about-update" data-setting="prepare">
+          <span className="app-kv-label">{L("上手引导", "Getting started")}</span>
+          <span className="app-kv-value">
+            <span className="app-about-status">{L("看看这台电脑上的 agent，把已有的会话加进来", "The agents on this computer, and sessions to bring in")}</span>
+            <button type="button" className="app-btn app-btn-quiet" onClick={() => window.dispatchEvent(new CustomEvent("myco-prepare"))}>{L("重新打开", "Open")}</button>
+          </span>
+        </div>
       </div>
       <ErrorText error={failure} />
       <p className="app-about-note">
@@ -212,6 +219,7 @@ const FINDABLE: { section: Section; key?: string; title: () => string; words: st
   { section: "members", title: () => L("成员", "People"), words: "成员 邀请 角色 管理员 权限 people invite role admin member" },
   { section: "audit", title: () => L("审计", "Audit"), words: "审计 日志 记录 操作 audit log" },
   { section: "about", title: () => L("关于", "About"), words: "关于 版本 更新 升级 about version update upgrade" },
+  { section: "about", key: "prepare", title: () => L("上手引导", "Getting started"), words: "上手 引导 新手 准备这台电脑 onboarding getting started setup guide" },
 ];
 
 /** What 简单模式 leaves out of Settings. */

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowRight, Check, ChevronRight } from "lucide-react";
+import { ArrowRight, Check, ChevronRight, Monitor, Moon, Sun } from "lucide-react";
 import type { Agent } from "@/api";
 import { setupPrompt } from "@/app/agentSetup";
 import { CopyButton } from "@/app/copy";
@@ -8,6 +8,7 @@ import { Avatar } from "@/app/persona";
 import { Logo } from "@/components/brand";
 import { L, type LangChoice } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import type { ThemeMode } from "@/lib/theme";
 import { setSimpleMode } from "@/app/simpleMode";
 
 /*
@@ -18,12 +19,14 @@ import { setSimpleMode } from "@/app/simpleMode";
  * a hand-off), not a screenshot. No coloured icons: the picture carries
  * the colour. Narrow windows leave the picture out.
  */
-export function Welcome({ onStartLocal, onConnect, langChoice, onLang }: {
+export function Welcome({ onStartLocal, onConnect, langChoice, onLang, theme, onTheme }: {
   /** Starts a local hub (`tunnel: none`) and refreshes the hub list. */
   onStartLocal: () => Promise<void>;
   onConnect: () => void;
   langChoice?: LangChoice;
   onLang?: (c: LangChoice) => void;
+  theme?: ThemeMode;
+  onTheme?: (m: ThemeMode) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -85,13 +88,23 @@ export function Welcome({ onStartLocal, onConnect, langChoice, onLang }: {
         </div>
         <footer className="wl-foot">
           <span>{L("开源 · 数据和令牌都保存在这台电脑上", "Open source · Data and tokens stay on this computer")}</span>
-          {onLang && (
-            <div className="seg seg-sm wl-lang" role="tablist" aria-label="语言 / Language">
-              {([["system", L("跟随系统", "System")], ["zh", "中文"], ["en", "English"]] as [LangChoice, string][]).map(([c, label]) => (
-                <button key={c} type="button" role="tab" aria-selected={langChoice === c} className={cn("seg-btn", langChoice === c && "active")} onClick={() => onLang(c)}>{label}</button>
-              ))}
-            </div>
-          )}
+          <div className="wl-prefs">
+            {onTheme && (
+              <div className="seg seg-sm wl-theme" role="tablist" aria-label={L("外观", "Appearance")}>
+                {([["system", Monitor, L("跟随系统", "System")], ["light", Sun, L("浅色", "Light")], ["dark", Moon, L("深色", "Dark")]] as [ThemeMode, typeof Sun, string][]).map(([m, Icon, label]) => (
+                  <button key={m} type="button" role="tab" aria-selected={theme === m} aria-label={label} title={label}
+                    className={cn("seg-btn", theme === m && "active")} onClick={() => onTheme(m)}><Icon /></button>
+                ))}
+              </div>
+            )}
+            {onLang && (
+              <div className="seg seg-sm wl-lang" role="tablist" aria-label="语言 / Language">
+                {([["system", L("跟随系统", "System")], ["zh", "中文"], ["en", "English"]] as [LangChoice, string][]).map(([c, label]) => (
+                  <button key={c} type="button" role="tab" aria-selected={langChoice === c} className={cn("seg-btn", langChoice === c && "active")} onClick={() => onLang(c)}>{label}</button>
+                ))}
+              </div>
+            )}
+          </div>
         </footer>
       </section>
       <aside className="wl-stage" aria-hidden>

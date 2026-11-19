@@ -2405,6 +2405,25 @@ async function runMatrix(browser, size, scheme) {
       if (narrow) await sidebar(page, false);
     });
 
+    // 上手引导 again (Settings › About): this computer's agent CLIs and its
+    // sessions to bring in; skipping leaves things as they were.
+    await step("设置 · 上手引导", async () => {
+      await go(page, "设置", narrow);
+      const box = page.locator(".app-settings-search input");
+      await box.fill("上手引导");
+      await box.press("Enter");
+      await clickVisible(page, page.locator('[data-setting="prepare"]').getByRole("button", { name: "重新打开" }));
+      const prep = page.locator("[data-testid=prepare]");
+      await prep.waitFor({ timeout: 10_000 });
+      await prep.locator('[data-agent-cli="claude"]').waitFor({ timeout: 10_000 });
+      await settle(page, 300);
+      await shot(page, size, scheme, "prepare");
+      await clickVisible(page, prep.getByRole("button", { name: "先跳过" }));
+      await prep.waitFor({ state: "detached", timeout: 10_000 });
+      await page.locator(".app-settings-head").waitFor({ timeout: 10_000 });
+      if (narrow) await sidebar(page, false);
+    });
+
     // Settings › Agents: the agent CLIs on this computer, installed or not,
     // signed in or not; a button opens a terminal for what is missing, or
     // shows the command when no terminal could be opened.
