@@ -877,7 +877,17 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
   const tooHigh = !!info && (ACCESS_RANK[access] || 2) > (ACCESS_RANK[info.max_access] || 2);
   // A computer that can say where folders may be is waited for, so the
   // folder made for an empty field is one it allows.
-  const asking = askable(machine) && !info && !state?.error;
+  // Not for long, though: after a few seconds without an answer it can be
+  // started anyway (the computer checks the folder again when it starts).
+  const [waitedLong, setWaitedLong] = useState(false);
+  const askingNow = askable(machine) && !info && !state?.error;
+  useEffect(() => {
+    setWaitedLong(false);
+    if (!askingNow) return;
+    const t = setTimeout(() => setWaitedLong(true), 8000);
+    return () => clearTimeout(t);
+  }, [askingNow, machine.id]);
+  const asking = askingNow && !waitedLong;
   const ready = machine.online && machine.can_spawn && (!!dir.trim() || autoDir) && !outside && !tooHigh && !asking;
   useEffect(() => { onState({ ready, busy: !!busy }); }, [ready, busy, onState]);
 
@@ -946,6 +956,9 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
         <span className="app-field-label">{autoDir ? L("在哪个文件夹干活（可以不填）", "Which folder it works in (optional)") : L("在哪个文件夹干活", "Which folder it works in")}</span>
         <input className="app-input mono" value={dir} onChange={(e) => setDir(e.target.value)} disabled={!!busy} required={!autoDir}
           placeholder={autoDir ? L(`不填就新建 ${autoFolder(role, cli, base)}`, `Empty: a new ${autoFolder(role, cli, base)}`) : L("比如 ~/code/我的项目", "e.g. ~/code/my-project")} />
+        {askingNow && waitedLong && (
+          <span className="app-field-hint" data-testid="asking-slow">{L(`「${machine.name}」还没说允许在哪些文件夹开工；可以先开：不填文件夹会建在它允许的地方，开的时候它会再查一遍。`, `“${machine.name}” has not said which folders it allows yet; you can start anyway: with no folder, one is made where it allows, and it checks again when starting.`)}</span>
+        )}
         {asking && (
           <span className="app-field-hint" data-testid="asking-dirs">{L(`正在问「${machine.name}」允许在哪些文件夹开工…`, `Asking “${machine.name}” which folders it allows…`)}</span>
         )}

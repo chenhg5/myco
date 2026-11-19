@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -558,13 +557,15 @@ Safe to re-run: the same session gets the same agent back.`,
 			if fork && !e.in.Bool("dry-run") {
 				// The copy, not this session, becomes the agent: the person
 				// keeps using the original without the runner stepping in.
-				id, err := forkSession(e, b, e.in.String("name"))
-				if err != nil {
+				// It joins at once; its first task makes the copy (as a
+				// spawned copy does), instead of a turn of its own here that
+				// takes as long as any turn.
+				if err := canFork(b.Harness); err != nil {
 					return err
 				}
-				forkedFrom, b.SessionID = b.SessionID, id
+				forkedFrom, b.SessionID = b.SessionID, harness.ForkMarker(b.SessionID)
 				e.copyOf = forkedFrom
-				how += ", copied to a new session"
+				how += ", a copy of it (made on its first task)"
 			}
 			name := e.in.String("name")
 			if name == "" && prefix != "" {
@@ -830,39 +831,16 @@ func readCodexMeta(path string) (id, cwd string) {
 	return line.Payload.ID, line.Payload.Cwd
 }
 
-// forkSession copies session b into a new one with a short first turn and
-// returns the copy's id.
-func forkSession(e *env, b api.Binding, name string) (string, error) {
-	h, err := builtin.Registry().New(b.Harness, harness.Options{})
+// canFork says whether harness can copy sessions.
+func canFork(name string) error {
+	h, err := builtin.Registry().New(name, harness.Options{})
 	if err != nil {
-		return "", err
+		return err
 	}
 	if _, ok := h.(harness.Forker); !ok {
-		return "", errorf("invalid_argument", ExitUsage, "join without --fork", "%v", harness.ErrForkUnsupported)
+		return errorf("invalid_argument", ExitUsage, "join without --fork", "%v", harness.ErrForkUnsupported)
 	}
-	ctx, cancel := context.WithTimeout(e.in.Ctx, 5*time.Minute)
-	defer cancel()
-	prompt := "[myco] This session is a copy of session " + b.SessionID + ", made to join the myco network"
-	if name != "" {
-		prompt += " as agent " + name
-	}
-	prompt += ". You keep everything from the original conversation; the original continues separately with its owner. " +
-		"Other agents will send you tasks later, and each one resumes this copy.\nDo not start any work yet. Reply with one short line confirming you are ready.\n"
-	out, err := h.Run(ctx, harness.Request{Prompt: prompt, SessionID: b.SessionID, Fork: true, Workdir: b.Workdir})
-	if err != nil {
-		if errors.Is(err, exec.ErrNotFound) || strings.Contains(err.Error(), "executable file not found") {
-			// Not the copy failing: the CLI is not where this process looks
-			// (an app started outside a terminal has a short PATH).
-			return "", errorf("cli_not_found", ExitError,
-				"check that `which "+spawnBinary(b.Harness)+"` finds it in a terminal; if it does, update and reopen the myco app (newer versions read the terminal's PATH), or run this join in that terminal",
-				"copying session %s failed: %s is not on this PATH (%v)", b.SessionID, spawnBinary(b.Harness), err)
-		}
-		return "", errorf("fork_failed", ExitError, "join without --fork, or check that the CLI works here", "copying session %s failed: %v", b.SessionID, err)
-	}
-	if out.SessionID == "" || out.SessionID == b.SessionID {
-		return "", errorf("fork_failed", ExitError, "join without --fork", "%s did not report a new session id for the copy", b.Harness)
-	}
-	return out.SessionID, nil
+	return nil
 }
 
 // joinHubAs trades join token tok of hub for machine name's credentials

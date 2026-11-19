@@ -130,7 +130,7 @@ var errIdle = errors.New("no activity")
 // How often, and how far apart, a busy session is tried again before the
 // task goes back (tests shorten them).
 var (
-	busyRetries = 3
+	busyRetries = 6
 	busyPause   = 5 * time.Second
 )
 
