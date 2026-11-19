@@ -501,6 +501,51 @@ final class WalkthroughTests: XCTestCase {
     }
 
     @MainActor
+    func testAnAppMakesAPageThatTalksToTheWorkspace() {
+        // From the members page: the row under automations.
+        let app = launch(["-myco-route", "tab:members"])
+        let entry = app.buttons["members.apps"]
+        XCTAssertTrue(entry.waitForExistence(timeout: 15))
+        entry.tap()
+        let checklist = app.buttons["app.myco/checklist"]
+        XCTAssertTrue(checklist.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["app.myco/whiteboard"].exists)
+        XCTAssertTrue(app.staticTexts["apps.own.empty"].exists, "how to get one of the workspace's own is said")
+        shot("apps")
+        // A shelf shows only its own.
+        app.buttons["apps.shelf.creative"].tap()
+        XCTAssertTrue(app.buttons["app.myco/whiteboard"].waitForExistence(timeout: 5))
+        XCTAssertFalse(checklist.exists)
+        app.buttons["apps.shelf.all"].tap()
+        // Making one: its name, where, sample data.
+        XCTAssertTrue(checklist.waitForExistence(timeout: 5))
+        checklist.tap()
+        let name = app.textFields["app.use.name"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        name.tap()
+        name.typeText("Groceries")
+        shot("app-use")
+        app.buttons["app.use.make"].tap()
+        // It opens, and the page reads its records through the app.
+        XCTAssertTrue(app.descendants(matching: .any)["page.title"].waitForExistence(timeout: 10))
+        let web = app.webViews.firstMatch
+        XCTAssertTrue(web.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "买牛奶")).firstMatch.waitForExistence(timeout: 15), "the sample records came")
+        XCTAssertTrue(web.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "我是")).firstMatch.exists, "it knows who I am")
+        // What it writes comes back.
+        let field = web.textFields.firstMatch
+        field.tap()
+        field.typeText("Bread")
+        web.buttons["加"].tap()
+        XCTAssertTrue(web.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Bread")).firstMatch.waitForExistence(timeout: 10))
+        shot("app-page")
+        app.buttons["page.close"].tap()
+        // It is on top of the list, to open again.
+        let made = app.buttons.matching(identifier: "apps.made").firstMatch
+        XCTAssertTrue(made.waitForExistence(timeout: 10))
+        XCTAssertTrue(made.label.contains("Groceries"), made.label)
+    }
+
+    @MainActor
     func testAutomationsAreListedSwitchedAndWritten() {
         // From the members page: one row above the people.
         var app = launch(["-myco-route", "tab:members"])
