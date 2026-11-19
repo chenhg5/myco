@@ -78,7 +78,11 @@ rm dist/notarize.zip
 ditto -c -k --keepParent dist/myco.app dist/myco-app-darwin-universal.zip
 
 echo "==> making the DMG"
-scripts/mac-dmg.sh dist/myco.app dist/myco.dmg
+stage=$(mktemp -d)
+ditto dist/myco.app "$stage/myco.app"
+ln -s /Applications "$stage/Applications"
+hdiutil create -quiet -volname myco -srcfolder "$stage" -ov -format UDZO dist/myco.dmg
+rm -rf "$stage"
 codesign --force --timestamp --sign "$MYCO_SIGN_IDENTITY" dist/myco.dmg
 notarize dist/myco.dmg
 xcrun stapler staple dist/myco.dmg

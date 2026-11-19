@@ -64,7 +64,6 @@ myco exec --to mac-exec --cmd "~/code/myco-release.sh status"   # 每分钟查�
 - 通常 5–10 分钟；FAILED，或者公证卡在 In Progress 超过 30 分钟：停下来，把日志的最后几行报给维护者。
 - `mac-exec` 不在线（Mac 睡着了）：告诉维护者把 Mac 唤醒并解锁，等它在线再执行。
 - Release 里已经有 `myco.dmg` 时，Mac 的脚本不会覆盖它。
-- DMG 的窗口（`scripts/mac-dmg.sh`）：640×400，左边 myco、右边「应用程序」，中间箭头，背景上一行「把 myco 拖到「应用程序」文件夹」，没有工具栏和侧栏，卷的图标是 App 的图标。窗口由 Finder 排好（AppleScript）；Finder 不能被脚本控制的机器上（两分钟没回应或报错）照样出 DMG，只是普通窗口，日志里会写原因。背景图由 `scripts/dmg-background.swift` 画（`cmd/myco-app/build/darwin/dmg-background*.png`），改图标位置时两边一起改。背景用浅色：带背景图的 Finder 窗口里图标名字是深色的，深色模式也一样。
 
 ## 6. 核对
 
