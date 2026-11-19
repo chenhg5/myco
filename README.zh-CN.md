@@ -63,6 +63,7 @@ App 的第一屏也有这句话（**让 agent 帮我装**）；App 里出错时�
 | **Mac** | **[myco.dmg](https://github.com/chenhg5/myco/releases/latest/download/myco.dmg)** —— 一个安装包同时支持 Apple 芯片和 Intel，已签名并经 Apple 公证。打开后拖进「应用程序」即可。App 可以自己更新（设置 → 关于）。 |
 | **Windows**（预览） | [myco-app-windows-amd64.exe](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-amd64.exe)（[ARM 版](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-arm64.exe)）。还没有代码签名，第一次运行时选「更多信息 → 仍要运行」。 |
 | **Linux** | [myco-app-linux-amd64](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-amd64)（[ARM 版](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-arm64)）：一个程序，App 在浏览器里打开（X11、Wayland、WSL 都行）。加上可执行权限运行即可，它会把自己加进「应用程序」菜单。详见 [INSTALL.md](INSTALL.md#9-控制台-appmac--windows--linux)。 |
+| **iPhone**（测试版） | **[加入 TestFlight 测试](https://testflight.apple.com/join/XDKvU8Jp)**：在 iPhone 上打开这个链接，按提示先从 App Store 装 TestFlight，再装 myco。需要 iOS 17 或更新。新版本会在 TestFlight 里推送。 |
 | **服务器** | 用命令行工具，见[更喜欢命令行？](#更喜欢命令行) |
 
 ## 使用教程
