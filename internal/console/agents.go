@@ -72,11 +72,18 @@ func (a agentCLI) commands() (install, mirror, needs string) {
 	if runtime.GOOS == "windows" {
 		install = a.installWin
 	}
-	if install == "" {
-		install, needs = a.npm, "npm"
+	npm := a.npm
+	if npm != "" && runtime.GOOS != "windows" {
+		// Into this user's ~/.local (bin on the App's search path): npm's
+		// global folder often belongs to whoever installed Homebrew or Node,
+		// and another user of this Mac gets "EACCES: permission denied".
+		npm = strings.Replace(npm, "npm install -g ", `npm install -g --prefix "$HOME/.local" `, 1)
 	}
-	if a.npm != "" {
-		mirror = a.npm + npmMirror
+	if install == "" {
+		install, needs = npm, "npm"
+	}
+	if npm != "" {
+		mirror = npm + npmMirror
 	}
 	return install, mirror, needs
 }

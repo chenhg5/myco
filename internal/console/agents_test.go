@@ -67,8 +67,8 @@ func TestLocalAgents(t *testing.T) {
 	if c := got["claude"]; c.State != "signed_out" || c.Version != "claude 1.2.3" || c.Path == "" || c.Login != "claude" {
 		t.Fatalf("claude: %+v", c)
 	}
-	if c := got["codex"]; c.State != "signed_out" || c.Install != "npm install -g @openai/codex" || c.Needs != "npm" ||
-		c.InstallMirror != "npm install -g @openai/codex --registry=https://registry.npmmirror.com" {
+	if c := got["codex"]; c.State != "signed_out" || c.Install != npmCmd("@openai/codex") || c.Needs != "npm" ||
+		c.InstallMirror != npmCmd("@openai/codex")+" --registry=https://registry.npmmirror.com" {
 		t.Fatalf("codex: %+v", c)
 	}
 	if g := got["gemini"]; g.State != "missing" || g.Path != "" {
@@ -124,7 +124,7 @@ func TestAgentTerminal(t *testing.T) {
 		return resp.StatusCode, m
 	}
 	if code, m := post("/app/local/agents/codex/terminal", map[string]string{"action": "install_mirror"}); code != 200 || m["opened"] != true ||
-		m["command"] != "npm install -g @openai/codex --registry=https://registry.npmmirror.com" {
+		m["command"] != npmCmd("@openai/codex")+" --registry=https://registry.npmmirror.com" {
 		t.Fatalf("install: %d %v", code, m)
 	}
 	// No terminal could be opened: the app gets the command to show.
@@ -150,4 +150,13 @@ func TestAgentTerminal(t *testing.T) {
 	if len(list.Agents) != 4 || list.Agents[0].CLI != "claude" || list.Agents[0].State != "missing" {
 		t.Fatalf("list: %+v", list.Agents)
 	}
+}
+
+// npmCmd is how the App installs an npm package: into ~/.local off Windows
+// (npm's global folder may belong to another user of the computer).
+func npmCmd(pkg string) string {
+	if runtime.GOOS == "windows" {
+		return "npm install -g " + pkg
+	}
+	return `npm install -g --prefix "$HOME/.local" ` + pkg
 }

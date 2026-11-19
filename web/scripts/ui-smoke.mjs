@@ -3970,6 +3970,16 @@ async function runMatrix(browser, size, scheme) {
         await page.keyboard.press("Escape");
         await dlg.waitFor({ state: "hidden", timeout: 5_000 });
       }
+      // Opening a workspace of this computer to the internet can be
+      // cancelled while it opens (it used to hang there with no way out).
+      await clickVisible(page, page.getByRole("button", { name: "开放到公网" }));
+      const pub = page.locator(".app-modal", { hasText: "让不在同一局域网的电脑" });
+      await clickVisible(page, pub.getByRole("button", { name: "开放", exact: true }));
+      await pub.getByRole("button", { name: "正在开放…" }).waitFor({ timeout: 5_000 });
+      await clickVisible(page, pub.getByRole("button", { name: "取消" }));
+      await pub.locator("button.app-btn-primary:enabled", { hasText: "开放" }).waitFor({ timeout: 3_000 });
+      await clickVisible(page, pub.getByRole("button", { name: "取消" }));
+      await pub.waitFor({ state: "hidden", timeout: 5_000 });
     });
   } finally {
     await context.close().catch(() => undefined);

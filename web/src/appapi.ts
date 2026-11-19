@@ -469,7 +469,7 @@ export interface ConnectJob {
   done: boolean;
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function request<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" };
   const raw = body instanceof Blob;
   if (body !== undefined) headers["Content-Type"] = raw ? (body.type || "application/octet-stream") : "application/json";
@@ -478,6 +478,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     credentials: "same-origin",
     headers,
     body: body === undefined ? undefined : raw ? body : JSON.stringify(body),
+    signal,
   });
   const text = await r.text();
   let data: unknown = null;
@@ -900,8 +901,9 @@ export const appApi = {
     request<{ machines: ServerMachine[] }>("GET", `app/hubs/${enc(hubId)}/server-machines`),
   addMachineFrom: (hubId: string, fromHub: string, machineId: string) =>
     request<{ joined: string; machine_node?: string }>("POST", `app/hubs/${enc(hubId)}/machines/add-from`, { from_hub: fromHub, machine_id: machineId }),
-  startLocalHub: (input: StartLocalHubInput) =>
-    request<StartLocalHubResult>("POST", "app/local/hub", input),
+  /** signal: cancelling stops it on this computer too (the request ends). */
+  startLocalHub: (input: StartLocalHubInput, signal?: AbortSignal) =>
+    request<StartLocalHubResult>("POST", "app/local/hub", input, signal),
   stopLocalHub: (name?: string) =>
     request<{ stopped: true }>("POST", "app/local/hub/stop", name ? { name } : undefined),
 };

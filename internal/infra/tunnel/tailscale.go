@@ -27,19 +27,38 @@ func (t *Tailscale) Prepare(ctx context.Context, local string) (string, error) {
 			Fix: "install Tailscale (https://tailscale.com/download) and log in"}
 	}
 	t.bin = bin
+	// The Mac app's own binary, used as a command line, can hang when asked
+	// from a background process: never wait long for it.
+	appCLI := strings.Contains(bin, "Tailscale.app/")
+	cliFix := "open the Tailscale app and connect"
+	if appCLI {
+		cliFix = "install Tailscale's command line (Tailscale menu > Settings > Install CLI), open the Tailscale app and connect, then try again"
+	}
+	sctx, cancel := context.WithTimeout(ctx, statusTimeout)
+	defer cancel()
 	// stdout only: the CLI may warn on stderr (e.g. a client/daemon version
 	// mismatch), which must not spoil the JSON.
-	out, errOut, _ := runSplit(ctx, bin, "status", "--json")
+	out, errOut, _ := runSplit(sctx, bin, "status", "--json")
+	if sctx.Err() != nil && ctx.Err() == nil {
+		return "", &Error{Msg: "Tailscale did not answer within " + statusTimeout.String() + " (" + bin + " status)", Fix: cliFix}
+	}
 	state, dns := tailscaleStatus(out)
+	if state == "" && strings.Contains(errOut+out, "GUI failed to start") {
+		// The Mac app runs for one macOS user at a time.
+		return "", &Error{Msg: "the Tailscale app is not running for this macOS user",
+			Fix: "open the Tailscale app as this user and log in (on a Mac, only the user running the Tailscale app can use it)"}
+	}
 	if state == "" {
 		msg := strings.TrimSpace(errOut + "\n" + out)
 		if len(msg) > 400 {
 			msg = msg[:400] + "…"
 		}
-		return "", &Error{Msg: "cannot read Tailscale's status (" + bin + "): " + msg, Fix: "start Tailscale and log in: tailscale up (or open the Tailscale app)"}
+		return "", &Error{Msg: "cannot read Tailscale's status (" + bin + "): " + msg, Fix: cliFix}
 	}
 	if state != "Running" || dns == "" {
-		return "", &Error{Msg: "Tailscale is not connected (state " + state + ")", Fix: "log in: tailscale up (or open the Tailscale app)"}
+		// The app may show connected while its binary, asked from here,
+		// says otherwise.
+		return "", &Error{Msg: "Tailscale is not connected here (state " + state + ")", Fix: cliFix}
 	}
 	if err := t.funnel(ctx, local); err != nil {
 		return "", err
@@ -52,11 +71,28 @@ func (t *Tailscale) funnel(ctx context.Context, local string) error {
 	if err != nil || u.Port() == "" {
 		return fmt.Errorf("cannot publish %q: need a local URL with a port", local)
 	}
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, funnelTimeout)
 	defer cancel()
-	out, err := run(ctx, t.bin, "funnel", "--bg", u.Port())
+	// When Funnel (or HTTPS) is not enabled on the tailnet, the CLI prints a
+	// link to enable it and waits: stop at once and hand the link on.
+	var enable string
+	out, err := runUntil(ctx, t.bin, []string{"funnel", "--bg", u.Port()}, func(line string) bool {
+		if i := strings.Index(line, "https://login.tailscale.com/f/"); i >= 0 {
+			enable = strings.Fields(line[i:])[0]
+			return true
+		}
+		return false
+	})
+	if enable != "" {
+		return &Error{Msg: "Funnel is not enabled on this tailnet yet",
+			Fix: "open " + enable + " to enable it (and HTTPS certificates if asked), then try again"}
+	}
 	if err == nil {
 		return nil
+	}
+	if ctx.Err() == context.DeadlineExceeded {
+		return &Error{Msg: "Tailscale Funnel did not answer within " + funnelTimeout.String() + ": " + strings.TrimSpace(lastOf(out, 300)),
+			Fix: "check that Funnel is allowed for this device in the Tailscale admin console, then try again"}
 	}
 	low := strings.ToLower(out)
 	switch {
@@ -83,6 +119,19 @@ func (t *Tailscale) Run(ctx context.Context, local string, _ func(string)) error
 			}
 		}
 	}
+}
+
+// How long to wait for the Tailscale CLI (tests shorten them).
+var (
+	statusTimeout = 15 * time.Second
+	funnelTimeout = 90 * time.Second
+)
+
+func lastOf(s string, n int) string {
+	if len(s) > n {
+		return "…" + s[len(s)-n:]
+	}
+	return s
 }
 
 // tailscaleStatus extracts the backend state and this device's DNS name

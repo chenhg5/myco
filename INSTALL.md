@@ -185,7 +185,7 @@ myco hub up --tunnel none                                    # 不穿透：只�
 | 方式 | 准备工作 | 地址 |
 |---|---|---|
 | Cloudflare 命名隧道 | 免费 Cloudflare 账号；域名托管在 Cloudflare；装好 `cloudflared` 并执行一次 `cloudflared tunnel login` | `https://hub.example.com`，固定 |
-| Tailscale Funnel | 免费 Tailscale 账号；装好 Tailscale 并登录；在 Tailscale 后台为这台设备开启 Funnel（第一次执行时会给出链接）；Linux 上可能要先执行一次 `sudo tailscale set --operator=$USER` | `https://<机器名>.<tailnet>.ts.net`，固定 |
+| Tailscale Funnel | 免费 Tailscale 账号；装好 Tailscale 并登录；在 Tailscale 后台为这台设备开启 Funnel（第一次执行时会给出链接）；Linux 上可能要先执行一次 `sudo tailscale set --operator=$USER`；Mac 上 Tailscale App 同一时间只给一个 macOS 用户用，最好在 Tailscale 菜单 › Settings 里装上它的命令行（Install CLI） | `https://<机器名>.<tailnet>.ts.net`，固定 |
 | Cloudflare 快速隧道 | 只需装好 `cloudflared` | `https://<随机>.trycloudflare.com`，**每次重启都会变** |
 
 - 执行时会先在前台检查隧道（没装、没登录、Funnel 没开都会直接告诉你怎么处理），然后安装后台服务（macOS 用 launchd，Linux 用 systemd --user），等 Hub 通过隧道能访问后，打印入网链接。可以重复执行。
