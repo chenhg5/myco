@@ -91,14 +91,15 @@ func TestOneSessionTwoWorkspaces(t *testing.T) {
 	}
 	// The second workspace: a copy joins, and the output says why.
 	jb := join(session(&b))
-	if jb.Session != "copy" || len(jb.AlsoIn) != 1 || jb.AlsoIn[0].Agent != ja.Agent.Name || jb.Agent.Binding.SessionID != "copy-2222" || callCount() != 1 {
+	// It joins at once: the copy is made on its first task (no turn now).
+	if jb.Session != "copy" || len(jb.AlsoIn) != 1 || jb.AlsoIn[0].Agent != ja.Agent.Name || !strings.HasPrefix(jb.Agent.Binding.SessionID, "fork:sess-1111:") || callCount() != 0 {
 		t.Fatalf("second workspace: %+v (claude calls %d)", jb, callCount())
 	}
 	if code, out, _ := session(&b).run("join", "--format", "text"); code != 0 || !strings.Contains(out, "a copy of it joined this workspace") {
 		t.Fatalf("join text: %d %s", code, out)
 	}
 	// Again: the same copy, no new one.
-	if again := join(session(&b)); again.Agent.Name != jb.Agent.Name || again.Created || callCount() != 1 {
+	if again := join(session(&b)); again.Agent.Name != jb.Agent.Name || again.Created || callCount() != 0 {
 		t.Fatalf("join again: %+v (claude calls %d)", again, callCount())
 	}
 
