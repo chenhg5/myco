@@ -111,14 +111,71 @@ struct PageScreen: View {
     /// Asked for, and not there.
     @State private var gone = false
     @State private var copied = false
+    /// Answers the page's `window.myco`; made once the page is known.
+    @State private var bridge: PageBridge?
+    /// The page asks to send its agent a message as me.
+    @State private var asking: SendAsking?
+    /// A file the page handed over, to save or send on.
+    @State private var handed: HandedFile?
 
     private var page: Page? { session.pages.pages[id] }
+
+    private struct SendAsking: Identifiable {
+        let id = UUID()
+        let text: String
+        let to: String
+        let answer: Once
+    }
+
+    /// Answered once, whichever way the alert goes away.
+    @MainActor
+    private final class Once {
+        private var waiting: CheckedContinuation<Bool, Never>?
+
+        init(_ waiting: CheckedContinuation<Bool, Never>) {
+            self.waiting = waiting
+        }
+
+        func resume(returning allowed: Bool) {
+            waiting?.resume(returning: allowed)
+            waiting = nil
+        }
+    }
+
+    private struct HandedFile: Identifiable {
+        let id = UUID()
+        let url: URL
+    }
+
+    /// The bridge for this page, as me in this workspace.
+    private func makeBridge(for page: Page) -> PageBridge {
+        let doors = PageBridge.Doors(
+            askToSend: { text, to in
+                await withCheckedContinuation { answer in
+                    asking = SendAsking(text: text, to: to, answer: Once(answer))
+                }
+            },
+            save: { name, data, _ in
+                let folder = FileManager.default.temporaryDirectory.appendingPathComponent("page-files", isDirectory: true)
+                try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                let safe = name.replacingOccurrences(of: "/", with: "-").trimmingCharacters(in: .whitespaces)
+                let url = folder.appendingPathComponent(safe.isEmpty ? "file" : safe)
+                guard (try? data.write(to: url, options: .atomic)) != nil else { return }
+                handed = HandedFile(url: url)
+            },
+            send: { to, body, project in
+                try await session.hub.send(SendRequest(to: to, body: body, project: project)).id
+            })
+        return PageBridge(
+            hub: session.hub, page: page, me: session.me, workspace: session.id,
+            names: { session.displayName(of: $0) }, doors: doors)
+    }
 
     var body: some View {
         NavigationStack {
             Group {
-                if let page, page.live == true || shown != nil {
-                    PageWebView(id: id, version: page.live == true ? nil : shown, reloads: reloads, pages: session.pages)
+                if let page, let bridge, page.live == true || shown != nil {
+                    PageWebView(id: id, version: page.live == true ? nil : shown, reloads: reloads, pages: session.pages, bridge: bridge)
                         .ignoresSafeArea(edges: .bottom)
                 } else if gone {
                     EmptyState(
@@ -185,11 +242,32 @@ struct PageScreen: View {
                 }
             }
         }
+        .alert(
+            L("允许这个网页以你的名义发消息吗？", "Let this page send a message as you?"),
+            isPresented: Binding(get: { asking != nil }, set: { if !$0, let asking { asking.answer.resume(returning: false); self.asking = nil } }),
+            presenting: asking
+        ) { one in
+            Button(L("允许", "Allow")) {
+                one.answer.resume(returning: true)
+                asking = nil
+            }
+            Button(L("不允许", "Don't allow"), role: .cancel) {
+                one.answer.resume(returning: false)
+                asking = nil
+            }
+        } message: { one in
+            Text(L("它要给 \(one.to) 发：\(one.text.prefix(200))\n允许后，这次打开期间不再问。",
+                   "It wants to send \(one.to): \(one.text.prefix(200))\nOnce allowed, it won't ask again while open."))
+        }
+        .sheet(item: $handed) { file in
+            ActivityView(items: [file.url])
+        }
         // Reads it now, then now and then: a newer version is offered.
         .task {
             while !Task.isCancelled {
                 let read = await session.pages.read(id)
                 if let read {
+                    if let bridge { bridge.update(read) } else { bridge = makeBridge(for: read) }
                     gone = false
                     if shown == nil, read.live != true { shown = read.version }
                 } else if page == nil {
@@ -230,15 +308,29 @@ private struct PageWebView: UIViewRepresentable {
     let version: Int?
     let reloads: Int
     let pages: PagesModel
+    /// Answers the page's `window.myco` calls.
+    let bridge: PageBridge?
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(id: id, version: version, pages: pages)
+        Coordinator(id: id, version: version, pages: pages, bridge: bridge)
+    }
+
+    static func dismantleUIView(_ view: WKWebView, coordinator: Coordinator) {
+        coordinator.listening?.cancel()
+        view.configuration.userContentController.removeScriptMessageHandler(forName: "myco")
     }
 
     func makeUIView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.setURLSchemeHandler(context.coordinator, forURLScheme: PageLinks.scheme)
         configuration.allowsInlineMediaPlayback = true
+        // The bridge: `window.myco` before the page's own scripts, and the
+        // app answering it.
+        if bridge != nil {
+            configuration.userContentController.addUserScript(
+                WKUserScript(source: PageBridgeScript.source, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+            configuration.userContentController.add(WeakHandler(context.coordinator), name: "myco")
+        }
         let view = WKWebView(frame: .zero, configuration: configuration)
         view.navigationDelegate = context.coordinator
         view.uiDelegate = context.coordinator
@@ -247,7 +339,9 @@ private struct PageWebView: UIViewRepresentable {
         view.scrollView.contentInsetAdjustmentBehavior = .automatic
         view.accessibilityIdentifier = "page.web"
         context.coordinator.reloads = reloads
+        context.coordinator.view = view
         if let home = PageLinks.address(of: id) { view.load(URLRequest(url: home)) }
+        context.coordinator.listen()
         return view
     }
 
@@ -261,18 +355,63 @@ private struct PageWebView: UIViewRepresentable {
     }
 
     @MainActor
-    final class Coordinator: NSObject, WKURLSchemeHandler, WKNavigationDelegate, WKUIDelegate {
+    final class Coordinator: NSObject, WKURLSchemeHandler, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
         let id: String
         var version: Int?
         var reloads = 0
         let pages: PagesModel
+        let bridge: PageBridge?
+        weak var view: WKWebView?
+        /// What others change comes to the page while it is open.
+        var listening: Task<Void, Never>?
         /// The requests still wanted: one that was stopped must not be answered.
         private var open: [ObjectIdentifier: Task<Void, Never>] = [:]
 
-        init(id: String, version: Int?, pages: PagesModel) {
+        init(id: String, version: Int?, pages: PagesModel, bridge: PageBridge?) {
             self.id = id
             self.version = version
             self.pages = pages
+            self.bridge = bridge
+        }
+
+        /// A call from the page: answered back into it.
+        func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+            guard let bridge, let body = message.body as? [String: Any], let call = body["id"] as? Int, let method = body["method"] as? String,
+                  message.frameInfo.isMainFrame
+            else { return }
+            let args = body["args"] as? [String: Any] ?? [:]
+            Task {
+                var reply: [String: Any]
+                do {
+                    let value = try await bridge.answer(method, args)
+                    reply = ["value": (try? JSONSerialization.jsonObject(with: value, options: [.fragmentsAllowed])) ?? NSNull()]
+                } catch let refusal as PageBridge.Refusal {
+                    reply = ["error": refusal.message, "code": refusal.code ?? "error"]
+                    if let latest = refusal.latest, let object = try? JSONSerialization.jsonObject(with: latest, options: [.fragmentsAllowed]) {
+                        reply["latest"] = object
+                    }
+                } catch {
+                    reply = ["error": error.localizedDescription, "code": "error"]
+                }
+                guard let json = try? JSONSerialization.data(withJSONObject: reply, options: [.fragmentsAllowed]),
+                      let text = String(data: json, encoding: .utf8)
+                else { return }
+                _ = try? await view?.evaluateJavaScript("window.__mycoAnswer && window.__mycoAnswer(\(call), \(text))")
+            }
+        }
+
+        /// Every two seconds, while it is open: what others changed.
+        func listen() {
+            guard let bridge, listening == nil else { return }
+            listening = Task { [weak self] in
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(2))
+                    for event in await bridge.poll() {
+                        guard let text = String(data: event, encoding: .utf8) else { continue }
+                        _ = try? await self?.view?.evaluateJavaScript("window.__mycoEvent && window.__mycoEvent(\(text))")
+                    }
+                }
+            }
         }
 
         func webView(_ webView: WKWebView, start task: any WKURLSchemeTask) {
@@ -344,5 +483,19 @@ private struct PageWebView: UIViewRepresentable {
             }
             return nil
         }
+    }
+}
+
+/// The web view keeps its message handler strongly: this one does not
+/// keep the page's coordinator alive.
+private final class WeakHandler: NSObject, WKScriptMessageHandler {
+    weak var target: (any WKScriptMessageHandler)?
+
+    init(_ target: any WKScriptMessageHandler) {
+        self.target = target
+    }
+
+    func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+        target?.userContentController(controller, didReceive: message)
     }
 }

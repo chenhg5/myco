@@ -47,6 +47,8 @@ public actor FakeHub: HubAPI {
         silent = world.silent
         automationList = world.automations
         pageList = world.pages.map(\.page)
+        appList = world.apps.map(\.app)
+        appFiles = Dictionary(world.apps.map { ($0.app.id, $0.files) }, uniquingKeysWith: { first, _ in first })
         handoverList = world.handovers
         pinList = world.pins
         pageFiles = Dictionary(world.pages.map { ($0.page.id, $0.files) }, uniquingKeysWith: { first, _ in first })
@@ -445,6 +447,153 @@ public actor FakeHub: HubAPI {
         var handover = handoverList[place]
         take(over: index, with: &handover, cli: "claude-cloud", dir: "/home/user/myco", machine: nil)
         handoverList[place] = handover
+    }
+
+    // MARK: Apps, and a page's own data
+
+    /// A page's shared state, its records, and its change feed.
+    struct PageData {
+        var state: Any?
+        var stateVersion = 0
+        var records: [String: [String: (data: Any, version: Int)]] = [:]
+        var order: [String: [String]] = [:]
+        var changes: [[String: Any]] = []
+        var seq = 0
+    }
+
+    private var appList: [AppTemplate] = []
+    private var appFiles: [String: [String: (type: String, text: String)]] = [:]
+    private var pageData: [String: PageData] = [:]
+    private var tooOldForApps = false
+
+    public func setTooOldForApps(_ value: Bool) {
+        tooOldForApps = value
+    }
+
+    public func apps() async throws -> [AppTemplate] {
+        try await check()
+        if tooOldForApps { throw HubError(error: "not_found", message: "no route for GET /v1/templates", status: 404) }
+        return appList
+    }
+
+    public func useApp(_ id: String, name: String, project: String?, sample: Bool) async throws -> Page {
+        try await check()
+        guard let app = appList.first(where: { $0.id == id || $0.slug == id }) else {
+            throw HubError(error: "not_found", message: "template \(id) not found", status: 404)
+        }
+        seq += 1
+        let pageID = "pg_app\(seq)"
+        let page = Page(
+            id: pageID, name: name.isEmpty ? app.name : name, project: project, publisher: Self.me, version: 1,
+            url: Self.demoAddress.absoluteString + "/pages/" + pageID, versions: [PageVersion(n: 1, by: Self.me, at: Date())],
+            createdAt: Date(), updatedAt: Date(), template: PageTemplate(id: app.id, slug: app.slug, name: app.name, version: app.version))
+        pageList.insert(page, at: 0)
+        pageFiles[pageID] = appFiles[app.id] ?? [:]
+        var data = PageData()
+        if sample {
+            for (index, text) in ["买牛奶", "回邮件"].enumerated() {
+                let record = "r\(index + 1)"
+                data.records["items", default: [:]][record] = (["text": text, "done": index == 0], 1)
+                data.order["items", default: []].append(record)
+            }
+        }
+        pageData[pageID] = data
+        return page
+    }
+
+    public func pages() async throws -> [Page] {
+        try await check()
+        return pageList
+    }
+
+    private static func json(_ value: Any) -> Data {
+        (try? JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed])) ?? Data("null".utf8)
+    }
+
+    private func record(_ page: String, _ collection: String, _ id: String) -> [String: Any]? {
+        guard let one = pageData[page]?.records[collection]?[id] else { return nil }
+        return ["collection": collection, "id": id, "data": one.data, "version": one.version, "updated_by": Self.me,
+                "updated_at": ISO8601DateFormatter().string(from: Date())]
+    }
+
+    public func pageRequest(_ method: String, page: String, path: String, query: [String: String], body: Data?) async throws -> PageAnswer {
+        try await check()
+        guard pageList.contains(where: { $0.id == page }) else { throw HubError(error: "not_found", message: "page \(page) not found", status: 404) }
+        var data = pageData[page] ?? PageData()
+        defer { pageData[page] = data }
+        let sent = body.flatMap { try? JSONSerialization.jsonObject(with: $0, options: [.fragmentsAllowed]) } as? [String: Any] ?? [:]
+        let parts = path.split(separator: "/").map(String.init)
+        func change(_ collection: String, _ id: String, _ op: String, _ value: Any?, _ version: Int) {
+            data.seq += 1
+            var one: [String: Any] = ["seq": data.seq, "collection": collection, "record": id, "op": op, "version": version, "by": Self.me]
+            if let value { one["data"] = value }
+            data.changes.append(one)
+        }
+        switch (method, parts.first ?? "", parts.count) {
+        case ("GET", "state", _):
+            return PageAnswer(data: Self.json(["state": data.state ?? NSNull(), "version": data.stateVersion]), status: 200)
+        case ("PUT", "state", _):
+            let base = sent["if_version"] as? Int ?? 0
+            guard base == data.stateVersion else {
+                return PageAnswer(data: Self.json(["error": "conflict", "message": "the state changed", "latest": ["state": data.state ?? NSNull(), "version": data.stateVersion]]), status: 409)
+            }
+            data.state = sent["state"] ?? NSNull()
+            data.stateVersion += 1
+            return PageAnswer(data: Self.json(["state": data.state ?? NSNull(), "version": data.stateVersion]), status: 200)
+        case ("GET", "changes", _):
+            let after = Int(query["after"] ?? "0") ?? 0
+            return PageAnswer(data: Self.json(["changes": data.changes.filter { ($0["seq"] as? Int ?? 0) > after }, "seq": data.seq]), status: 200)
+        case ("GET", "data", 1):
+            let wanted = query["collection"].flatMap { $0.isEmpty ? nil : $0 }
+            let collections = wanted.map { [$0] } ?? Array(data.order.keys).sorted()
+            let records = collections.flatMap { collection in (data.order[collection] ?? []).compactMap { record(page, collection, $0) } }
+            return PageAnswer(data: Self.json(["records": records, "seq": data.seq]), status: 200)
+        case ("GET", "data", 3):
+            guard let one = record(page, parts[1], parts[2]) else { throw HubError(error: "not_found", message: "no such record", status: 404) }
+            return PageAnswer(data: Self.json(one), status: 200)
+        case ("POST", "data", 2), ("PUT", "data", 3):
+            let collection = parts[1]
+            var id = parts.count == 3 ? parts[2] : ""
+            if id.isEmpty {
+                seq += 1
+                id = "rec\(seq)"
+            }
+            let current = data.records[collection]?[id]
+            if let base = sent["if_version"] as? Int, base != (current?.version ?? 0) {
+                return PageAnswer(data: Self.json(["error": "conflict", "message": "the record changed", "latest": record(page, collection, id) ?? NSNull()]), status: 409)
+            }
+            let version = (current?.version ?? 0) + 1
+            data.records[collection, default: [:]][id] = (sent["data"] ?? [:], version)
+            if current == nil { data.order[collection, default: []].append(id) }
+            change(collection, id, "put", sent["data"] ?? [:], version)
+            pageData[page] = data
+            return PageAnswer(data: Self.json(record(page, collection, id) ?? [:]), status: current == nil ? 201 : 200)
+        case ("DELETE", "data", 3):
+            let (collection, id) = (parts[1], parts[2])
+            data.records[collection]?[id] = nil
+            data.order[collection]?.removeAll { $0 == id }
+            change(collection, id, "delete", nil, 0)
+            return PageAnswer(data: Data(), status: 204)
+        default:
+            throw HubError(error: "not_found", message: "no route for \(method) \(path)", status: 404)
+        }
+    }
+
+    /// Someone else (an agent) writes a record of a page: for tests of
+    /// what comes to a page that listens.
+    public func agentWrites(page: String, collection: String, id: String, data value: [String: Any]) {
+        var data = pageData[page] ?? PageData()
+        let version = (data.records[collection]?[id]?.version ?? 0) + 1
+        if data.records[collection]?[id] == nil { data.order[collection, default: []].append(id) }
+        data.records[collection, default: [:]][id] = (value, version)
+        data.seq += 1
+        data.changes.append(["seq": data.seq, "collection": collection, "record": id, "op": "put", "data": value, "version": version, "by": "studio-claude-55d0"])
+        pageData[page] = data
+    }
+
+    /// The messages sent to an agent (for tests of a page sending as me).
+    public func messages(to agent: String) -> [Message] {
+        messages.filter { $0.to == agent }
     }
 
     // MARK: Pins

@@ -158,6 +158,45 @@ public struct HubClient: HubAPI {
 
     public var address: URL? { baseURL }
 
+    public func apps() async throws -> [AppTemplate] {
+        let envelope: AppsEnvelope = try await get("/v1/templates", timeout: Self.pollTimeout)
+        return envelope.templates
+    }
+
+    public func useApp(_ id: String, name: String, project: String?, sample: Bool) async throws -> Page {
+        struct Request: Encodable {
+            var name: String
+            var project: String?
+            var sample: Bool
+        }
+        struct Made: Decodable { var page: Page }
+        let data = try await call(
+            "POST", "/v1/templates/\(Self.segment(id))/use", body: HubJSON.encoder().encode(Request(name: name, project: project, sample: sample)))
+        return try Self.decode(Made.self, from: data).page
+    }
+
+    public func pages() async throws -> [Page] {
+        let envelope: PagesEnvelope = try await get("/v1/pages", timeout: Self.pollTimeout)
+        return envelope.pages
+    }
+
+    public func pageRequest(_ method: String, page: String, path: String, query: [String: String], body: Data?) async throws -> PageAnswer {
+        // (only a page's own calls: its state, its records, its changes)
+        guard path == "state" || path == "changes" || path == "data" || path.hasPrefix("data/") else {
+            throw HubError(error: "invalid_argument", message: "not a page call: \(path)")
+        }
+        let (data, response) = try await answer(
+            method, "/v1/pages/\(Self.segment(page))/" + path, query: query, body: body, timeout: 70, anyStatus: true)
+        guard (200..<300).contains(response.statusCode) || response.statusCode == 409 else {
+            if var error = try? HubJSON.decoder().decode(HubError.self, from: data) {
+                error.status = response.statusCode
+                throw error
+            }
+            throw HubError(error: "http_\(response.statusCode)", message: "The workspace answered \(response.statusCode).", status: response.statusCode)
+        }
+        return PageAnswer(data: data, status: response.statusCode)
+    }
+
     public func pins(with agent: String) async throws -> [Pin] {
         let envelope: PinsEnvelope = try await get("/v1/pins", ["with": agent], timeout: Self.pollTimeout)
         return envelope.pins
@@ -348,6 +387,8 @@ extension HubClient {
     }
 }
 
+struct AppsEnvelope: Decodable { @LossyList var templates: [AppTemplate] }
+struct PagesEnvelope: Decodable { @LossyList var pages: [Page] }
 struct PinsEnvelope: Decodable { @LossyList var pins: [Pin] }
 struct HandoversEnvelope: Decodable { @LossyList var handovers: [Handover] }
 struct AutomationsEnvelope: Decodable { @LossyList var automations: [Automation] }
