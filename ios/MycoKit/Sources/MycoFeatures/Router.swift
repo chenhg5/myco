@@ -18,6 +18,8 @@ public enum Route: Hashable, Sendable {
     case projectInfo(String)
     /// What is sent for me on a schedule, or when something calls.
     case automations
+    /// 应用: ready-made pages to use with agents, and the ones made.
+    case apps
 }
 
 /// Something that rises from the bottom, over any tab.
@@ -122,7 +124,7 @@ public final class Router {
     /// Opens a place named in words, for UI tests and screenshots
     /// (`-myco-route project:myco-ios`): `tab:<name>`, `project:<name>`,
     /// `info:<project>`, `agent:<name>`, `member:<name>`, `sheet:workspace`,
-    /// `sheet:add`, `sheet:computer`, `page:automations`. Returns false for anything else.
+    /// `sheet:add`, `sheet:computer`, `page:automations`, `page:apps`. Returns false for anything else.
     @discardableResult
     public func open(spec: String) -> Bool {
         let parts = spec.split(separator: ":", maxSplits: 1).map(String.init)
@@ -139,8 +141,11 @@ public final class Router {
             show([], in: .members)
             sheet = .memberCard(name)
         case "page":
-            guard name == "automations" else { return false }
-            show([.automations], in: .members)
+            switch name {
+            case "automations": show([.automations], in: .members)
+            case "apps": show([.apps], in: .members)
+            default: return false
+            }
         case "sheet":
             switch name {
             case "workspace": sheet = .workspace

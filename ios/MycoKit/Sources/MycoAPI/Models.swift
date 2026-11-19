@@ -621,8 +621,10 @@ public struct Page: Codable, Sendable, Hashable, Identifiable {
 
     public init(
         id: String, name: String, project: String? = nil, publisher: String, version: Int = 1, url: String? = nil,
-        versions: [PageVersion] = [], createdAt: Date? = nil, updatedAt: Date? = nil, live: Bool? = nil, online: Bool? = nil
+        versions: [PageVersion] = [], createdAt: Date? = nil, updatedAt: Date? = nil, live: Bool? = nil, online: Bool? = nil,
+        template: PageTemplate? = nil
     ) {
+        self.template = template
         self.id = id
         self.name = name
         self.project = project
@@ -811,6 +813,8 @@ public struct AppTemplate: Codable, Sendable, Hashable, Identifiable {
     public var slug: String
     public var name: String
     public var description: String?
+    /// table, records, doc, slides, or anything else.
+    public var kind: String?
     /// office, dev, tools, life, creative, game, other (hubs from v0.20.6).
     public var category: String?
     /// Its icon, SVG markup (hubs from v0.20.7): its shape only.
@@ -821,13 +825,14 @@ public struct AppTemplate: Codable, Sendable, Hashable, Identifiable {
     public var official: Bool?
 
     public init(
-        id: String, slug: String, name: String, description: String? = nil, category: String? = nil, icon: String? = nil,
-        version: String = "1.0.0", publisher: String? = nil, official: Bool? = nil
+        id: String, slug: String, name: String, description: String? = nil, kind: String? = nil, category: String? = nil,
+        icon: String? = nil, version: String = "1.0.0", publisher: String? = nil, official: Bool? = nil
     ) {
         self.id = id
         self.slug = slug
         self.name = name
         self.description = description
+        self.kind = kind
         self.category = category
         self.icon = icon
         self.version = version
@@ -842,12 +847,15 @@ public struct PageTemplate: Codable, Sendable, Hashable {
     public var slug: String?
     public var name: String?
     public var version: String?
+    /// The app's newer version, when there is one (hubs from v0.20.7).
+    public var latest: String?
 
-    public init(id: String? = nil, slug: String? = nil, name: String? = nil, version: String? = nil) {
+    public init(id: String? = nil, slug: String? = nil, name: String? = nil, version: String? = nil, latest: String? = nil) {
         self.id = id
         self.slug = slug
         self.name = name
         self.version = version
+        self.latest = latest
     }
 }
 

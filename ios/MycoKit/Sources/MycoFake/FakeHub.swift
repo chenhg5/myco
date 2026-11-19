@@ -560,7 +560,7 @@ public actor FakeHub: HubAPI {
             }
             let current = data.records[collection]?[id]
             if let base = sent["if_version"] as? Int, base != (current?.version ?? 0) {
-                return PageAnswer(data: Self.json(["error": "conflict", "message": "the record changed", "latest": record(page, collection, id) ?? NSNull()]), status: 409)
+                return PageAnswer(data: Self.json(["error": "conflict", "message": "the record changed", "latest": record(page, collection, id).map { $0 as Any } ?? NSNull()]), status: 409)
             }
             let version = (current?.version ?? 0) + 1
             data.records[collection, default: [:]][id] = (sent["data"] ?? [:], version)

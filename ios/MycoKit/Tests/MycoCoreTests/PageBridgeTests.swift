@@ -119,3 +119,42 @@ struct PageBridgeTests {
         await #expect(throws: PageBridge.Refusal.self) { _ = try await one.answer("nope", [:]) }
     }
 }
+
+/// 应用: the apps on their shelves, and a page made from one.
+@MainActor
+struct AppsTests {
+    @Test func appsAreOnShelvesAndAPageIsMadeFromOne() async throws {
+        let hub = FakeHub()
+        let model = AppsModel(hub: hub)
+        await model.load()
+        #expect(model.official.map(\.slug) == ["myco/checklist", "myco/whiteboard"])
+        #expect(model.shelvesInUse.map(\.key) == ["office", "creative"])
+        #expect(model.made.isEmpty)
+        #expect(AppsModel.matches(model.official[0], "待办"))
+        #expect(!AppsModel.matches(model.official[1], "待办"))
+        // Hubs before categories: the office kinds go on the first shelf.
+        #expect(AppsModel.shelf(of: AppTemplate(id: "t", slug: "x/t", name: "表格", kind: "table")) == "office")
+        #expect(AppsModel.shelf(of: AppTemplate(id: "g", slug: "x/g", name: "游戏")) == "other")
+        let page = try #require(await model.use(model.official[0], name: " 买菜 ", project: "", sample: true))
+        #expect(page.name == "买菜")
+        #expect(page.project == nil)
+        #expect(model.made.first?.id == page.id)
+        #expect(model.app(of: page)?.slug == "myco/checklist")
+        // With its sample records, through the page's bridge.
+        let answer = try await hub.pageRequest("GET", page: page.id, path: "data", query: ["collection": "items"], body: nil)
+        let records = (try JSONSerialization.jsonObject(with: answer.data) as? [String: Any])?["records"] as? [[String: Any]]
+        #expect(records?.count == 2)
+        // Read again: the page made is listed.
+        await model.load()
+        #expect(model.made.map(\.id) == [page.id])
+    }
+
+    @Test func anOlderWorkspaceHasNoApps() async {
+        let hub = FakeHub()
+        await hub.setTooOldForApps(true)
+        let model = AppsModel(hub: hub)
+        await model.load()
+        #expect(model.unsupported)
+        #expect(model.list == [])
+    }
+}

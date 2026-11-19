@@ -89,6 +89,16 @@ public final class WorkspaceSession {
         return model
     }
 
+    @ObservationIgnored private var appsModel: AppsModel?
+
+    /// 应用: the apps of this workspace and the pages made from them.
+    public var apps: AppsModel {
+        if let appsModel { return appsModel }
+        let model = AppsModel(hub: hub)
+        appsModel = model
+        return model
+    }
+
     @ObservationIgnored private var handoverModels: [String: HandoversModel] = [:]
     @ObservationIgnored var pinModels: [String: PinsModel] = [:]
 

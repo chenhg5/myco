@@ -159,6 +159,25 @@ struct MembersScreen: View {
                 .listRowBackground(MycoColor.bg)
                 .listRowSeparator(.hidden)
                 .accessibilityIdentifier("members.automations")
+                Button {
+                    router.push(.apps)
+                } label: {
+                    HStack(spacing: 12) {
+                        AutomationIcon(symbol: "square.grid.2x2", hook: nil).frame(width: 40)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(L("应用", "Apps")).font(.body.weight(.medium)).foregroundStyle(MycoColor.fg)
+                            Text(appsNote).font(.footnote).foregroundStyle(MycoColor.muted).lineLimit(1)
+                        }
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(MycoColor.faint)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(RowButtonStyle())
+                .listRowInsets(EdgeInsets(top: 9, leading: 16, bottom: 9, trailing: 16))
+                .listRowBackground(MycoColor.bg)
+                .listRowSeparator(.hidden)
+                .accessibilityIdentifier("members.apps")
             }
             ForEach(groups.filter { !$0.1.isEmpty }, id: \.0) { title, members in
                 Section {
@@ -193,12 +212,23 @@ struct MembersScreen: View {
         }
         .workspaceChrome(title: L("成员", "Members"), add: true)
         // (how many there are, for the row above)
-        .task { await session.automations.load() }
+        .task {
+            await session.automations.load()
+            await session.apps.load()
+        }
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .automatic), prompt: L("搜索名字和分工", "Search names and roles"))
     }
 }
 
 extension MembersScreen {
+    /// Under "应用": the pages made from them, or what they are for.
+    fileprivate var appsNote: String {
+        let made = session.apps.made.count
+        return made > 0
+            ? L("表格、文档、白板 · 建了 \(made) 个", "Tables, documents, boards · \(made) made")
+            : L("和 agent 一起用的表格、文档、白板", "Tables, documents and boards with agents")
+    }
+
     /// Under "自动化": how many there are and how many are on, or what they are for.
     fileprivate var automationsNote: String {
         let model = session.automations
