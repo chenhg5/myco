@@ -10,6 +10,7 @@ import { PromptSign, STOPPED, Terminal } from "@/app/Terminal";
 import { TraceView } from "@/app/TraceView";
 import { WorkingLine } from "@/app/Working";
 import { AccessPill, RunPill } from "@/app/RunSettings";
+import { forkAgent } from "@/app/Fork";
 import { HandoffCard, handoffsFrom } from "@/app/Handoff";
 import { TurnRail, type Turn } from "@/app/TurnRail";
 import { summarize } from "@/app/summary";
@@ -968,16 +969,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     setCopying(true);
     setCopyError(null);
     try {
-      const names = new Set((row.hub.overview?.agents || []).map((x) => x.agent.name));
-      let n = 2;
-      while (names.has(`${agent.name}-${n}`)) n++;
-      const r = await appApi.spawn(target.hubId, machine.id, {
-        cli: agent.binding.harness as "claude" | "codex", dir: agent.binding.workdir || "", fork_from: agent.binding.session_id,
-        name: `${agent.name}-${n}`, description: agent.description || undefined,
-        display_name: `${nodeName(agent, row.hub)} ${L("副本", "copy")}`,
-        ...(agent.runtime?.access ? { access: agent.runtime.access } : {}),
-      });
-      const copy = r.agent || `${agent.name}-${n}`;
+      const copy = await forkAgent(row);
       // The waiting task moves to the copy.
       if (openTask) {
         await appApi.stop(target.hubId, openTask.id).catch(() => {});

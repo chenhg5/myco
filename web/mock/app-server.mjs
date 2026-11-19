@@ -236,7 +236,7 @@ const officialFiles = (name) => {
   return out;
 };
 const templateFiles = new Map();
-const officialOrder = ["table", "base", "doc", "slides", "code", "devtools", "todo", "poll", "ledger", "habit", "whiteboard", "mindmap", "gomoku", "sudoku"];
+const officialOrder = ["table", "base", "doc", "slides", "code", "devtools", "todo", "poll", "ledger", "habit", "whiteboard", "mindmap", "video", "gomoku", "sudoku"];
 const mockTemplates = officialOrder.filter((name) => existsSync(new URL(`${name}/myco.json`, officialRoot))).map((name) => {
   const files = officialFiles(name);
   const m = JSON.parse(files["myco.json"]);
@@ -1743,6 +1743,15 @@ const server = http.createServer(async (req, res) => {
       ...state.hubs.filter((h) => !h.id.startsWith("hub_local")),
       ...JSON.parse(JSON.stringify(localAppHubsAtStart)),
     ];
+    return send(res, 200, { ok: true });
+  }
+
+  // /app/mock/forks — the smoke test forks PM (Codex); its copies go away
+  // between widths and themes.
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "forks" && parts.length === 3) {
+    if (method !== "POST") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
+    const hub = state.hubs.find((h) => h.id === "hub_studio");
+    if (hub) hub.agents = hub.agents.filter((a) => !/^pm-codex-\d+$/.test(a.name));
     return send(res, 200, { ok: true });
   }
 

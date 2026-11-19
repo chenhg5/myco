@@ -8,6 +8,8 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -56,6 +58,10 @@ func TestPagesOpenOnTheirOwnOrigin(t *testing.T) {
 	u := o["url"].(string)
 	if !strings.HasPrefix(u, "http://127.0.0.1:") || !strings.HasSuffix(u, "/index.html") || strings.HasPrefix(u, r.app.URL) {
 		t.Fatalf("its own origin: %s (app %s)", u, r.app.URL)
+	}
+	// the port is remembered, so the next start keeps the pages' origin
+	if raw, err := os.ReadFile(filepath.Join(filepath.Dir(r.store), "page-port")); err != nil || !strings.HasPrefix(u, "http://127.0.0.1:"+strings.TrimSpace(string(raw))+"/") {
+		t.Fatalf("page port remembered: %q %v (url %s)", raw, err, u)
 	}
 	get := func(url, host string) (*http.Response, string) {
 		req, _ := http.NewRequest("GET", url, nil)
@@ -127,6 +133,42 @@ func TestPagesOpenOnTheirOwnOrigin(t *testing.T) {
 // A live page opened in the App: its own loopback port, the whole root
 // forwarded to the server on the agent's computer (through the hub), with
 // the helper put in; when nothing forwards it, a page that says so.
+// The App serves pages on the port they had before (when it is free), so
+// what pages keep in the browser stays theirs across restarts.
+func TestPagesKeepTheirPortAcrossRestarts(t *testing.T) {
+	r := newRig(t)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	ln.Close()
+	os.MkdirAll(filepath.Dir(r.store), 0o700)
+	if err := os.WriteFile(filepath.Join(filepath.Dir(r.store), "page-port"), []byte(strconv.Itoa(port)+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	reg, err := r.admin.Register(ctx, api.RegisterRequest{Name: "maker"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent, _ := client.New(r.hubURL, reg.Token)
+	var buf bytes.Buffer
+	z := zip.NewWriter(&buf)
+	w, _ := z.Create("index.html")
+	w.Write([]byte("<!doctype html><title>t</title>"))
+	z.Close()
+	p, err := agent.PublishPage(ctx, client.PageInput{Name: "p"}, bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, h, _ := r.do("POST", "/app/hubs", map[string]string{"name": "Main", "url": r.hubURL, "token": r.consoleToken("t")})
+	code, o, raw := r.do("POST", "/app/hubs/"+h["id"].(string)+"/pages/"+p.ID+"/open", nil)
+	if code != 200 || !strings.HasPrefix(o["url"].(string), "http://127.0.0.1:"+strconv.Itoa(port)+"/") {
+		t.Fatalf("open on port %d: %d %s", port, code, raw)
+	}
+}
+
 func TestLivePageOpensOnAPortOfItsOwn(t *testing.T) {
 	r := newRig(t)
 	ctx := context.Background()

@@ -13,6 +13,8 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -73,7 +75,7 @@ func (b *Backend) pageServer() (*pageServer, error) {
 	b.pagesOnce.Do(func() {
 		ps := &pageServer{keys: map[string]pageKey{}}
 		b.pages = ps
-		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		ln, err := b.listenPages()
 		if err != nil {
 			ps.err = err
 			return
@@ -83,6 +85,35 @@ func (b *Backend) pageServer() (*pageServer, error) {
 		go func() { _ = srv.Serve(ln) }()
 	})
 	return b.pages, b.pages.err
+}
+
+// listenPages listens on the port the pages had the last time, when it is
+// free. What a page keeps in the browser (IndexedDB, localStorage) belongs
+// to its origin, port included: the same port keeps it across restarts of
+// the App (视频剪辑 keeps the videos there). The port is remembered next to
+// the App's hubs.json; without a store it is any free port.
+func (b *Backend) listenPages() (net.Listener, error) {
+	file := ""
+	if b.Store != nil && b.Store.path != "" {
+		file = filepath.Join(filepath.Dir(b.Store.path), "page-port")
+	}
+	if file != "" {
+		if raw, err := os.ReadFile(file); err == nil {
+			if p, err := strconv.Atoi(strings.TrimSpace(string(raw))); err == nil && p > 1024 && p < 65536 {
+				if ln, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(p)); err == nil {
+					return ln, nil
+				}
+			}
+		}
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return nil, err
+	}
+	if file != "" && os.MkdirAll(filepath.Dir(file), 0o700) == nil {
+		_ = os.WriteFile(file, []byte(strconv.Itoa(ln.Addr().(*net.TCPAddr).Port)+"\n"), 0o600)
+	}
+	return ln, nil
 }
 
 func (ps *pageServer) add(k pageKey) string {
