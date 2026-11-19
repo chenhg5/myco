@@ -456,7 +456,7 @@ export interface Diagnosis {
   hubs: { url: string; mine?: boolean; direct?: string; proxy?: string }[];
   log?: string[];
 }
-export interface ConnectStep { key: "login" | "install" | "online"; state: "pending" | "running" | "done" | "failed"; detail?: string }
+export interface ConnectStep { key: "login" | "install" | "online" | "add"; state: "pending" | "running" | "done" | "failed"; detail?: string }
 export interface ConnectJob {
   id: string;
   hub: string;
@@ -466,6 +466,8 @@ export interface ConnectJob {
   log?: string[];
   error?: RemoteError;
   machine_id?: string;
+  /** setting up a workspace: its id in this App once added */
+  hub_id?: string;
   done: boolean;
 }
 
@@ -742,6 +744,8 @@ export const appApi = {
   connectMachine: (hubId: string, route: RemoteRoute) =>
     request<ConnectJob>("POST", `app/hubs/${enc(hubId)}/machines/connect`, route),
   connectJob: (id: string) => request<ConnectJob>("GET", `app/connect/${enc(id)}`),
+  /** Sets up a workspace on a server over SSH (or adds the one there) and adds it to this App: answers the job at once. */
+  installHubOver: (route: RemoteRoute) => request<ConnectJob>("POST", "app/local/hub-over-ssh", route),
   /** How this App reaches a computer (null: it does not). */
   machineReach: (hubId: string, machineId: string) =>
     request<{ route: RemoteRoute | null }>("GET", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}/reach`),

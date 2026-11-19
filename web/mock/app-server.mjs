@@ -385,12 +385,41 @@ const sshHosts = [
   { name: "bastion", user: "glenn", host: "bastion.example.com", port: 22 },
 ];
 const connectJobs = new Map();
+// Setting up a workspace over SSH: log in (0.8 s), install (2 s), add (0.8 s).
+function hubJobView(job) {
+  const t = Date.now() - job.started;
+  const steps = [{ key: "login", state: "running" }, { key: "install", state: "pending" }, { key: "add", state: "pending" }];
+  const view = { id: job.id, route: job.route, steps, done: false };
+  const name = job.route.target.replace(/^[^@]*@/, "");
+  if (t < 800) return view;
+  if (name === "old-pi") {
+    steps[0].state = "failed";
+    return { ...view, done: true, error: { code: "needs_sudo", message: "installing needs root, and sudo asks for a password there",
+      command: "ssh -t old-pi 'curl -fsSL https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-hub.sh | sudo bash -s -- --domain auto'" } };
+  }
+  steps[0].state = "done";
+  view.found = { os: "Linux", host: name, root: "yes", hub: "no" };
+  view.log = ["==> installing myco hub v0.20.19", "==> Caddy: certificate for 203-0-113-7.sslip.io"];
+  if (t < 2800) { steps[1].state = "running"; return view; }
+  steps[1].state = "done";
+  if (t < 3600) { steps[2].state = "running"; return view; }
+  steps[2].state = "done";
+  if (!job.hub) {
+    state.counter += 1;
+    job.hub = { id: `hub_ssh_${state.counter}`, name: `${name}`, url: "https://203-0-113-7.sslip.io", token: "myco_console_mock",
+      ok: true, hub_version: "0.20.19", update_available: false, agents: [], threads: {}, recent: [] };
+    state.hubs.push(job.hub);
+  }
+  return { ...view, done: true, hub_id: job.hub.id };
+}
+
 // How the App reaches each computer ("<hub>/<machine>") and what a check-up finds.
 const machineReach = new Map([["hub_studio/m_vps", { via: "ssh", target: "tokyo-vps" }]]);
 const machineHealth = new Map();
 // What a job shows at this moment: log in (0.8 s), install (2 s), show up
 // (1 s); old-pi fails to log in. Once done, the computer is on the workspace.
 function connectView(job) {
+  if (job.kind === "hub") return hubJobView(job);
   const t = Date.now() - job.started;
   const steps = [{ key: "login", state: "running" }, { key: "install", state: "pending" }, { key: "online", state: "pending" }];
   const view = { id: job.id, hub: job.hub, route: job.route, steps, done: false };
@@ -2184,6 +2213,17 @@ const server = http.createServer(async (req, res) => {
     if (parts.length === 3 && parts[2] === "ssh-hosts" && method === "GET") {
       await sleep(300);
       return send(res, 200, { hosts: sshHosts.map((h) => ({ ...h, connected: h.name === "tokyo-vps" ? "m_vps" : undefined })) });
+    }
+    // /app/local/hub-over-ssh: set up a workspace on a server (ConnectOver,
+    // purpose hub); old-pi has no passwordless sudo.
+    if (parts.length === 3 && parts[2] === "hub-over-ssh" && method === "POST") {
+      const body = await readBody(req);
+      const target = String(body.target || "").trim();
+      if (!target || /^-|[\s'"`;|&$<>]/.test(target)) return fail(res, 400, "invalid_argument", "give the server as an SSH name or user@host");
+      state.counter += 1;
+      const job = { id: `cj_${state.counter}`, kind: "hub", route: { via: "ssh", target }, started: Date.now() };
+      connectJobs.set(job.id, job);
+      return send(res, 200, connectView(job));
     }
     if (parts.length === 3 && parts[2] === "wsl" && method === "GET") {
       return send(res, 200, { supported: true, distros: [

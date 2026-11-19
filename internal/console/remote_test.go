@@ -2,6 +2,7 @@ package console_test
 
 import (
 	"context"
+	"fmt"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
@@ -153,4 +154,69 @@ func toStrings(v any) []string {
 		out = append(out, x.(string))
 	}
 	return out
+}
+
+// Setting up a workspace on a server over SSH: log in, install the hub,
+// make an App link there, and the workspace is in this App, with no link
+// in what the App shows. Without root or passwordless sudo it says so.
+func TestHubOverSSH(t *testing.T) {
+	r := newRig(t)
+	tok := r.consoleToken("server")
+	var scripts []string
+	remote := func(_ context.Context, name string, args []string, stdin string, line func(string)) (string, int, error) {
+		scripts = append(scripts, stdin)
+		target := args[len(args)-2]
+		switch {
+		case strings.Contains(stdin, "myco-probe"):
+			root := "yes"
+			if target == "plain" {
+				root = "no"
+			}
+			for _, l := range []string{"myco-probe os Linux", "myco-probe host srv", "myco-probe root " + root, "myco-probe sudo no",
+				"myco-probe curl yes", "myco-probe systemd yes", "myco-probe hub no", "myco-probe end ok"} {
+				line(l)
+			}
+			return "", 0, nil
+		case strings.Contains(stdin, "install-hub.sh"):
+			line("==> installing myco hub")
+			line("Add this hub to the myco app, paste this link: " + r.hubURL + "/c/" + tok)
+			line(`myco-applink {"link":"` + r.hubURL + `/c/` + tok + `"}`)
+			return "", 0, nil
+		}
+		return "unexpected", 1, nil
+	}
+	b := &console.Backend{Store: console.NewStore(filepath.Join(t.TempDir(), "app", "hubs.json")), Secrets: r.secrets, Timeout: 3 * time.Second,
+		Local: &console.Local{Home: t.TempDir(), Remote: remote}}
+	r.app = httptest.NewServer(b.Handler())
+	t.Cleanup(r.app.Close)
+	wait := func(id string) map[string]any {
+		t.Helper()
+		for i := 0; i < 100; i++ {
+			_, j, _ := r.do("GET", "/app/connect/"+id, nil)
+			if j["done"] == true {
+				return j
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+		t.Fatal("never finished")
+		return nil
+	}
+	_, m, _ := r.do("POST", "/app/local/hub-over-ssh", map[string]any{"target": "plain"})
+	if j := wait(m["id"].(string)); j["error"].(map[string]any)["code"] != "needs_sudo" {
+		t.Fatalf("no sudo: %v", j)
+	}
+	_, m, _ = r.do("POST", "/app/local/hub-over-ssh", map[string]any{"target": "root@srv"})
+	j := wait(m["id"].(string))
+	if j["error"] != nil || j["hub_id"] == nil {
+		t.Fatalf("set up: %v", j)
+	}
+	if strings.Contains(fmt.Sprint(j["log"]), tok) {
+		t.Fatalf("the App link showed in the log: %v", j["log"])
+	}
+	if code, _, raw := r.do("GET", "/app/hubs", nil); code != 200 || !strings.Contains(string(raw), r.hubURL) {
+		t.Fatalf("the workspace was not added: %d %s", code, raw)
+	}
+	if s := scripts[len(scripts)-1]; !strings.Contains(s, "| bash -s -- --domain auto --yes") || strings.Contains(s, "sudo -n bash") {
+		t.Fatalf("as root, no sudo: %s", s)
+	}
 }

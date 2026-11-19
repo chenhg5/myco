@@ -40,7 +40,9 @@ type ConnectJob struct {
 	Log       []string     `json:"log,omitempty"`
 	Error     *RemoteError `json:"error,omitempty"`
 	MachineID string       `json:"machine_id,omitempty"`
-	Done      bool         `json:"done"`
+	// HubID: setting up a workspace, the workspace it became in this App.
+	HubID string `json:"hub_id,omitempty"`
+	Done  bool   `json:"done"`
 }
 
 type connectJobs struct {
@@ -127,6 +129,7 @@ func (b *Backend) remoteRoutes(m *http.ServeMux) {
 	m.HandleFunc("GET /app/local/ssh-hosts", b.getSSHHosts)
 	m.HandleFunc("GET /app/local/wsl", b.getWSL)
 	b.diagRoutes(m)
+	b.hubRoutes(m)
 	m.HandleFunc("POST /app/hubs/{id}/machines/connect", b.withHub(b.postConnect))
 	m.HandleFunc("GET /app/connect/{job}", func(w http.ResponseWriter, r *http.Request) {
 		j, ok := b.connects.get(r.PathValue("job"))
