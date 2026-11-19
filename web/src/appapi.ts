@@ -456,6 +456,15 @@ export interface Diagnosis {
   hubs: { url: string; mine?: boolean; direct?: string; proxy?: string }[];
   log?: string[];
 }
+/** How Claude Code signs in for agents this computer starts (names and hosts only, never keys). */
+export interface ClaudeAuth {
+  account: "ready" | "signed_out" | "unknown" | "missing";
+  cc_switch: { ref: string; id: string; name: string; host?: string; current?: boolean }[];
+  shell?: string[];
+  shell_host?: string;
+  using: string;
+  using_name?: string;
+}
 export interface ConnectStep { key: "login" | "install" | "online" | "add"; state: "pending" | "running" | "done" | "failed"; detail?: string }
 export interface ConnectJob {
   id: string;
@@ -794,6 +803,10 @@ export const appApi = {
   /** Opens a terminal that installs or signs in to an agent CLI; opened:false → show command. */
   agentTerminal: (cli: string, action: "install" | "install_mirror" | "login") =>
     request<{ opened: boolean; command: string }>("POST", `app/local/agents/${enc(cli)}/terminal`, { action }),
+  /** How Claude Code signs in for agents started here, and the ways this computer has. */
+  claudeAuth: () => request<ClaudeAuth>("GET", "app/local/claude-auth"),
+  /** use: "cc-switch:<id>", "shell" (the shell's API settings) or "account". */
+  setClaudeAuth: (use: string) => request<ClaudeAuth>("POST", "app/local/claude-auth", { use }),
   /** cc-switch's Claude providers on this computer (names and hosts only). */
   providers: (app: "claude" | "codex" = "claude") => request<ProviderList>("GET", `app/local/providers?app=${app}`),
   /** A node's provider setting, if the node runs on this computer. */

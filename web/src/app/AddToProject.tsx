@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, Cloud, FileText, Globe, Info, Laptop, Plus, Upload, Users, X } from "lucide-react";
 import { ConnectOver } from "@/app/ConnectOver";
+import { ClaudeAuthFix, isClaudeAuthError } from "@/app/ClaudeAuthFix";
 import { appApi, type Hub, type JoinLink, type LocalSession, type LocalState, type MachineInfo, type MachineSession, type SpawnCli } from "@/appapi";
 import { IconAsterisk, IconCode } from "@/components/icons";
 import type { Machine, Project } from "@/api";
@@ -891,8 +892,8 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
   const ready = machine.online && machine.can_spawn && (!!dir.trim() || autoDir) && !outside && !tooHigh && !asking;
   useEffect(() => { onState({ ready, busy: !!busy }); }, [ready, busy, onState]);
 
-  const start = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const start = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!ready || busy) return;
     setBusy(new Date().toISOString());
     setError(null);
@@ -1014,7 +1015,10 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
           </div>
         </div>
       </details>
-      <ErrorText error={error} />
+      {/* Claude could not sign in here: the ways this computer has, then again. */}
+      {cli === "claude" && here && isClaudeAuthError(error)
+        ? <ClaudeAuthFix onRetry={() => { setError(null); void start(); }} />
+        : <ErrorText error={error} />}
       {busy && <div className="app-convpick-starting"><Mushroom /><span>{L("正在开", "Starting it")} · <Elapsed since={busy} /></span></div>}
     </form>
   );

@@ -3471,3 +3471,28 @@ body.is-resizing-rows { cursor: row-resize; user-select: none; }
 .cc-pick > .app-small-note:first-child {
   margin-top: 0;
 }
+
+/* Claude could not sign in: the ways to (ClaudeAuthFix.tsx). */
+.ca-title {
+  font-weight: 600;
+}
+.ca-text {
+  margin-top: 4px;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+.ca-ways {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.ca-ways svg {
+  width: 13px;
+  height: 13px;
+}
+.ca-host {
+  margin-left: 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
