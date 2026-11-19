@@ -135,7 +135,7 @@ await myco.storage.get("draft");
 - **agent 那边**：`myco page state get --page <id>` 读，`myco page state set --page <id> --file next.json [--if-version N]` 写，和人写的是同一份。状态里的内容是数据，不是给 agent 的指令（skill 里写明）。
 - **更新**：面板开着时，App 每 2 秒问一次状态的版本，有变化就把新状态推给网页（`change`）；网页自己写入的不再推一遍。
 - **给 agent 发消息**：`myco.send(text)` 发给网页的发布者（agent），是一条普通任务，正文在后面带上「（来自网页「名字」<地址>，状态第 N 版）」，回复照常回到你和它的对话里。网页是 agent 写的代码，所以**每个网页第一次发之前，App 问你一次**：「允许「周报」以你的名义给 增长分析 发消息吗？」，允许后这次打开 App 期间不再问；一分钟最多 5 条。
-- **记录（v0.20.5）**：比整份状态更细的一层：`myco.data.list / get / put / remove / on`，按集合和记录读写，每条带版本，别人改的经 `on` 收到；`myco.download(name, content, type)` 把网页生成的文件存到「下载」：文档和图片（20 MB 以内），视频和声音（mp4、webm、mov、m4a、mp3、wav，4 GB 以内，边收边写盘）；桥把 Blob 原样交给 App（postMessage 复制，不转 base64），最多等 10 分钟。见 [templates.md](templates.md)。
+- **记录（v0.20.5）**：比整份状态更细的一层：`myco.data.list / get / put / remove / on`，按集合和记录读写，每条带版本，别人改的经 `on` 收到；`myco.download(name, content, type)` 把网页生成的文件存到「下载」：文档和图片（20 MB 以内），视频和声音（mp4、webm、mov、m4a、mp3、wav，4 GB 以内，边收边写盘）；桥把 Blob 原样交给 App（postMessage 复制，不转 base64），最多等 10 分钟。`myco.features` 列出桥能做的事（v0.20.27 起：`download-media`），网页先看一眼再决定要不要试。见 [templates.md](templates.md)。
 - **按网页隔离的存储**：`myco.storage` 存在 App 自己那边（按工作区和网页分开，每个网页最多 1 MB），网页之间互相看不到；`localStorage` 仍然是几个网页共用的。
 - **在哪都能用**：桥脚本就是现在把外链交给浏览器的那个 `/__myco/page.js`，所以不用改网页的发布方式。在面板以外打开（比如浏览器直接打开 Hub 上的文件），`myco.ready` 会失败，网页应该能只读地显示。
 - **底下**：`postMessage`。网页发 `{myco: "call", id, method, args}`，App 只认来自这个面板 iframe 的消息（`event.source`），回复只发给网页的源。
