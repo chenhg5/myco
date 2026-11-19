@@ -2392,7 +2392,7 @@ async function runMatrix(browser, size, scheme) {
       if (await sw.getAttribute("aria-checked") !== "false") throw new Error("已有工作区的用户默认不是简单模式");
       await sw.click();
       await page.locator('[data-setting="simple-mode"] [role=switch][aria-checked="true"]').waitFor({ timeout: 5_000 });
-      if (await page.locator(".app-settings-tab", { hasText: "工作区" }).count()) throw new Error("简单模式下设置里不该有「工作区」");
+      if (!(await page.locator(".app-settings-tab", { hasText: "工作区" }).count())) throw new Error("简单模式下设置里也该有「工作区」");
       if (await page.locator(".app-settings-tab", { hasText: "成员" }).count()) throw new Error("简单模式下设置里不该有「成员」");
       if (!narrow && await page.locator(".sp-nav-pcs").count()) throw new Error("简单模式下侧栏不该有「电脑」");
       await settle(page, 200);
@@ -4034,11 +4034,14 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, page.getByRole("button", { name: "开放到公网" }));
       const pub = page.locator(".app-modal", { hasText: "让不在同一局域网的电脑" });
       // One click is the default, even before cloudflared is installed.
-      await pub.locator(".app-choice:not(.disabled)", { hasText: "一键开放（推荐）" }).locator("input:checked").waitFor({ state: "attached", timeout: 5_000 });
+      await pub.locator(".app-choice:not(.disabled)", { hasText: "一键开放" }).locator("input:checked").waitFor({ state: "attached", timeout: 5_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "open-to-internet");
       await clickVisible(page, pub.getByRole("button", { name: "开放", exact: true }));
       await pub.getByRole("button", { name: "正在开放…" }).waitFor({ timeout: 5_000 });
+      await pub.locator("[data-testid=opening] .pub-steps li").first().waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "open-to-internet-opening");
       await clickVisible(page, pub.getByRole("button", { name: "取消" }));
       await pub.locator("button.app-btn-primary:enabled", { hasText: "开放" }).waitFor({ timeout: 3_000 });
       await clickVisible(page, pub.getByRole("button", { name: "取消" }));

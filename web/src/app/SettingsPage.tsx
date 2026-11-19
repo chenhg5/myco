@@ -1,4 +1,5 @@
 import { clearAll, forgetHub, recall, remember } from "@/lib/memo";
+import { CopyButton } from "@/app/copy";
 import { IntroCard, introOf, noteDone } from "@/app/Onboard";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -224,7 +225,9 @@ const FINDABLE: { section: Section; key?: string; title: () => string; words: st
 ];
 
 /** What 简单模式 leaves out of Settings. */
-const SIMPLE_HIDDEN: Section[] = ["hubs", "members", "audit"];
+// (工作区 stays: even with only the one on this computer, opening it to the
+// internet, its name and stopping it are there)
+const SIMPLE_HIDDEN: Section[] = ["members", "audit"];
 function simpleModeNow(): boolean {
   try { return localStorage.getItem("myco-simple-mode") === "1"; } catch { return false; }
 }
@@ -272,7 +275,7 @@ function host(url: string) {
 const TUNNELS: { key: LocalTunnel; title: string; desc: string; needsDomain?: boolean; missing?: string }[] = [
   {
     key: "cloudflare",
-    get title() { return L("一键开放（推荐）", "One click (recommended)"); },
+    get title() { return L("一键开放", "One click"); },
     get desc() { return L("不用账号，也不用装别的：一个 Cloudflare 临时地址。这台电脑重启后地址会变，到时再点一次就行。", "No account, nothing to install: a temporary Cloudflare address. It changes when this computer restarts; click again then."); },
     get missing() { return L("不用账号：第一次会自动下载 Cloudflare 的小工具（cloudflared，约 20 MB）。这台电脑重启后地址会变。", "No account: the first time, Cloudflare's small tool (cloudflared, about 20 MB) is downloaded for you. The address changes when this computer restarts."); },
   },
@@ -824,7 +827,8 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
         onOpenChange={(o) => !o && setPublicTarget(null)}
         local={local}
         name={publicTarget?.name}
-        onDone={() => { setPublicTarget(null); void reloadLocal(); void onRefresh(); }}
+        // (stays open on its result: the address to copy; 完成 closes it)
+        onDone={() => { void reloadLocal(); void onRefresh(); }}
       />
 
       <ConfirmDialog
@@ -935,17 +939,23 @@ export function PublicAccessDialog({ open, onOpenChange, local, name, onDone }: 
       onOpenChange={(o) => { if (!o) close(); }}
       title={L("开放到公网", "Open to the internet")}
       description={L("让不在同一局域网的电脑也能连上这台电脑上的工作区。", "Let machines outside your local network reach the Hub on this computer.")}
+      className="pub-modal"
     >
       {result ? (
         <>
-          <div className="app-success">
-            <Check />
-            <span>{L("已开放", "Now public")}</span>
+          <div className="pub-done" data-testid="opened">
+            <span className="pub-done-icon"><Check /></span>
+            <span><b>{L("已开放到公网", "Open to the internet")}</b>
+              <small>{L("别的电脑和同事现在可以用下面的地址连上这个工作区。", "Other computers and people can now reach this workspace at the address below.")}</small></span>
           </div>
-          <div className="app-kv"><span className="app-kv-label">{L("公网地址", "Public address")}</span><span className="app-kv-value mono clip" title={result.public_url}>{result.public_url}</span></div>
-          {result.join_url && (
-            <div className="app-kv"><span className="app-kv-label">{L("入网链接", "Join link")}</span><span className="app-kv-value mono clip" title={result.join_url}>{result.join_url}</span></div>
-          )}
+          <div className="pub-links">
+            <div className="pub-link"><span className="pub-link-label">{L("公网地址", "Public address")}</span>
+              <code title={result.public_url}>{result.public_url}</code><CopyButton value={result.public_url} /></div>
+            {result.join_url && (
+              <div className="pub-link"><span className="pub-link-label">{L("入网链接", "Join link")}</span>
+                <code title={result.join_url}>{result.join_url}</code><CopyButton value={result.join_url} /></div>
+            )}
+          </div>
           {(result.warnings || []).map((w) => (
             <div className="app-notice" key={w}>
               <AlertTriangle />
@@ -958,47 +968,46 @@ export function PublicAccessDialog({ open, onOpenChange, local, name, onDone }: 
         </>
       ) : (
         <>
-          <div className="app-list">
-            {TUNNELS.map((t, i) => {
-              const off = disabled(i as TunnelChoice);
-              return (
-                <label key={t.title} className={cn("app-choice", off && "disabled")}>
-                  <input
-                    type="radio"
-                    name="tunnel"
-                    className="app-sr-only"
-                    checked={choice === i}
-                    disabled={off || busy}
-                    onChange={() => setChoice(i as TunnelChoice)}
-                  />
-                  <span className="app-radio" aria-hidden />
-                  <span className="app-choice-text">
-                    <span className="t">{t.title}</span>
-                    <span className="d">{off || (i === 0 && !cf) ? t.missing : t.desc}</span>
-                  </span>
-                </label>
-              );
-            })}
-          </div>
-          {choice === 1 && (
-            <label className="app-field">
-              <span className="app-field-label">{L("域名", "Domain")}</span>
-              <input
-                className="app-input mono"
-                value={hostname}
-                onChange={(e) => setHostname(e.target.value)}
-                placeholder="hub.example.com"
-                disabled={busy}
-              />
-            </label>
-          )}
-          {busy && waited >= 15 && (
-            <div className="app-small-note" data-testid="opening-wait">
-              {choice === 2
-                ? L(`已经 ${waited} 秒：Tailscale 第一次开放要申请证书，可能要一两分钟。不想等就点「取消」。`, `${waited}s so far: the first time, Tailscale gets a certificate, which can take a minute or two. Cancel if you would rather not wait.`)
-                : !cf && choice === 0
-                  ? L(`已经 ${waited} 秒：正在下载 cloudflared、等隧道连通。不想等就点「取消」。`, `${waited}s so far: downloading cloudflared and waiting for the tunnel. Cancel if you would rather not wait.`)
-                  : L(`已经 ${waited} 秒：正在等隧道连通。不想等就点「取消」。`, `${waited}s so far: waiting for the tunnel to come up. Cancel if you would rather not wait.`)}
+          {busy ? (
+            <div className="pub-progress" data-testid="opening">
+              <div className="pub-progress-head">
+                <span className="app-spinner" />
+                <b>{choice === 2 ? L("正在用 Tailscale Funnel 开放…", "Opening with Tailscale Funnel…") : L("正在用 Cloudflare 开放…", "Opening with Cloudflare…")}</b>
+                <span className="pub-progress-time">{L(`${waited} 秒`, `${waited}s`)}</span>
+              </div>
+              <div className="pub-bar" aria-hidden><i /></div>
+              <ol className="pub-steps">
+                {(choice === 2
+                  ? [L("让 Tailscale 为这台电脑打开 Funnel", "Turn on Funnel for this computer"), L("第一次会申请 HTTPS 证书（可能要一两分钟）", "The first time, get an HTTPS certificate (a minute or two)"), L("拿到 xxx.ts.net 的公网地址", "Get the xxx.ts.net address")]
+                  : [!cf ? L("下载 Cloudflare 的小工具 cloudflared（约 20 MB，只有第一次）", "Download Cloudflare's cloudflared (about 20 MB, only the first time)") : L("启动 cloudflared", "Start cloudflared"),
+                    L("打通到 Cloudflare 的隧道", "Open the tunnel to Cloudflare"), L("拿到公网地址，并确认外面能连上", "Get the public address and check it is reachable")]
+                ).map((t) => <li key={t}>{t}</li>)}
+              </ol>
+              <p className="app-small-note" data-testid="opening-wait">{choice === 2
+                ? L("通常一两分钟。不想等可以「取消」，工作区照常在本机和局域网里能用。", "Usually a minute or two. Cancel if you would rather not wait: the workspace keeps working on this computer and its network.")
+                : L("通常 10–60 秒。不想等可以「取消」，工作区照常在本机和局域网里能用。", "Usually 10–60 seconds. Cancel if you would rather not wait: the workspace keeps working on this computer and its network.")}</p>
+            </div>
+          ) : (
+            <div className="pub-options" role="radiogroup" aria-label={L("怎么开放", "How")}>
+              {TUNNELS.map((t, i) => {
+                const off = disabled(i as TunnelChoice);
+                const on = choice === i;
+                return (
+                  <label key={t.title} className={cn("app-choice pub-option", on && "is-on", off && "disabled")}>
+                    <input type="radio" name="tunnel" className="app-sr-only" checked={on} disabled={off}
+                      onChange={() => setChoice(i as TunnelChoice)} />
+                    <span className="pub-option-text">
+                      <span className="t">{t.title}<em className="pub-badge">{i === 0 ? L("推荐", "Recommended") : L("地址固定", "Fixed address")}</em></span>
+                      <span className="d">{off || (i === 0 && !cf) ? t.missing : t.desc}</span>
+                      {i === 1 && on && (
+                        <input className="app-input mono pub-domain" value={hostname} onChange={(e) => setHostname(e.target.value)}
+                          placeholder="hub.example.com" aria-label={L("域名", "Domain")} autoFocus />
+                      )}
+                    </span>
+                    <span className="pub-check" aria-hidden>{on && <Check />}</span>
+                  </label>
+                );
+              })}
             </div>
           )}
           {error && choice === 2 && <div className="app-small-note">{L("Tailscale 这一步没成功，原因和办法在下面（来自 Tailscale）。常见的是：这个 macOS 用户下没开 Tailscale App 或没登录、还没在 Tailscale 后台为这台设备打开 Funnel。", "Tailscale's step failed; why and what to do are below (from Tailscale). Usually: the Tailscale app is not open and signed in for this macOS user, or Funnel is not on for this device in the Tailscale admin console.")}</div>}

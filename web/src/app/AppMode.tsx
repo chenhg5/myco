@@ -539,7 +539,11 @@ export default function AppMode({ initialHubs, initialInfo }: {
     const read = () => appApi.automations(hubId).then((r) => { if (!off) setAutoCount((r.automations || []).length); }, () => undefined);
     void read();
     const t = window.setInterval(read, 60_000);
-    return () => { off = true; window.clearInterval(t); };
+    // The automations page says how many there are each time it reads
+    // them (after one is made, at once).
+    const on = (e: Event) => { const d = (e as CustomEvent<{ hubId: string; count: number }>).detail; if (d?.hubId === hubId && !off) setAutoCount(d.count); };
+    window.addEventListener("myco-automations", on);
+    return () => { off = true; window.clearInterval(t); window.removeEventListener("myco-automations", on); };
   }, [hubId, page]);
   // 准备这台电脑 (Prepare.tsx): after a new install's first workspace
   // starts, until done or skipped; Settings › About opens it again.
