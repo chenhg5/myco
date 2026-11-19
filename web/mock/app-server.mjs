@@ -2032,7 +2032,7 @@ const server = http.createServer(async (req, res) => {
   // A file a page saved to Downloads (what the smoke test checks).
   if (parts[0] === "app" && parts[1] === "page-download" && method === "POST") {
     const name = url.searchParams.get("name") || "";
-    if (!/\.(csv|tsv|xlsx|xls|pdf|docx|pptx|json|md|txt|html|png|jpe?g|svg|gif|webp|zip|ics)$/i.test(name)) return fail(res, 400, "invalid_argument", "a page saves documents and pictures");
+    if (!/\.(csv|tsv|xlsx|xls|pdf|docx|pptx|json|md|txt|html|png|jpe?g|svg|gif|webp|zip|ics|mp4|webm|mov|m4a|mp3|wav)$/i.test(name)) return fail(res, 400, "invalid_argument", "a page saves documents, pictures, video and sound");
     const chunks = [];
     for await (const c of req) chunks.push(c);
     const buf = Buffer.concat(chunks);
