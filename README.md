@@ -63,6 +63,7 @@ The app's first screen has the same sentence (**Let my agent set it up**), and a
 | **Mac** | **[myco.dmg](https://github.com/chenhg5/myco/releases/latest/download/myco.dmg)** — one download for Apple silicon and Intel, signed and notarized by Apple. Open it and drag myco into Applications. The app updates itself (Settings → About → Update and reopen). |
 | **Windows** (preview) | [myco-app-windows-amd64.exe](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-amd64.exe) ([ARM](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-arm64.exe)). Not code-signed yet: on first run choose *More info → Run anyway*. |
 | **Linux** | [myco-app-linux-amd64](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-amd64) ([ARM](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-arm64)): one program that opens the app in your browser (X11, Wayland, WSL). Make it executable and run it; it adds itself to the applications menu. See [INSTALL.md](INSTALL.md#9-控制台-appmac--windows--linux). |
+| **iPhone** (beta) | **[Join the TestFlight beta](https://testflight.apple.com/join/XDKvU8Jp)**: open the link on your iPhone, install TestFlight from the App Store if asked, then install myco. Needs iOS 17 or later. New versions arrive in TestFlight. |
 | **Servers** | The command-line tool — see [Prefer the command line?](#prefer-the-command-line) |
 
 ## Video tutorial
