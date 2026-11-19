@@ -2,17 +2,30 @@
 // it, encoded with WebCodecs (mediabunny); the sound of every clip mixed at
 // its speed (time-stretched, so voices keep their pitch) and volume.
 import {
-  ALL_FORMATS, AudioBufferSink, AudioBufferSource, BlobSource, BufferTarget, CanvasSink, CanvasSource, Input, Mp4OutputFormat, Output,
-  QUALITY_HIGH, getFirstEncodableAudioCodec, getFirstEncodableVideoCodec,
+  ALL_FORMATS, AudioBufferSink, AudioBufferSource, BlobSource, BufferTarget, Input, Mp4OutputFormat, Output, VideoSample, VideoSampleSink, VideoSampleSource,
+  QUALITY_HIGH, QUALITY_LOW, QUALITY_MEDIUM, QUALITY_VERY_HIGH, getFirstEncodableAudioCodec, getFirstEncodableVideoCodec,
 } from "mediabunny";
-import { FPS, frameSize, media, overlayList, placed, project, total, type Placed } from "./model";
-import { drawFrame, fit, type Picture } from "./render";
+import { frameSize, media, overlayList, placed, project, total, type Placed } from "./model";
+import { drawFrame, type Picture } from "./render";
 import { localFor } from "./media";
 
 export type Progress = { phase: "audio" | "video" | "finish"; done: number };
+/** What the person picks before exporting: the short side in pixels, frames
+ *  a second, and quality (the bitrate). */
+export type ExportOptions = { short: number; fps: number; quality: "best" | "high" | "medium" | "low" };
+export const QUALITIES: [ExportOptions["quality"], string][] = [["best", "最高"], ["high", "高"], ["medium", "标准"], ["low", "小文件"]];
+const QUALITY = { best: QUALITY_VERY_HIGH, high: QUALITY_HIGH, medium: QUALITY_MEDIUM, low: QUALITY_LOW };
+/** Rough bits a pixel a frame of each quality (H.264), for the size shown before exporting. */
+const BPP = { best: 0.16, high: 0.09, medium: 0.05, low: 0.025 };
+export function estimate(o: ExportOptions, list = placed()) {
+  const { w, h } = frameSize(list, o.short);
+  const mbits = (w * h * o.fps * BPP[o.quality] * Math.pow(1080 * 1920 / (w * h), 0.25) + 160_000) * total(list) / 1e6;
+  return { w, h, mb: mbits / 8 };
+}
 const RATE = 48000;
 
-export async function render(onProgress: (p: Progress) => void, cancelled: () => boolean): Promise<{ bytes: Uint8Array; silent: boolean }> {
+export async function render(opts: ExportOptions, onProgress: (p: Progress) => void, cancelled: () => boolean): Promise<{ bytes: Uint8Array; silent: boolean }> {
+  const FPS = opts.fps;
   const list = placed();
   if (!list.length) throw new Error("时间线上还没有视频");
   const files = new Map<string, Blob>();
@@ -23,7 +36,7 @@ export async function render(onProgress: (p: Progress) => void, cancelled: () =>
     files.set(c.id, l.file);
   }
   const T = total(list);
-  const { w: W, h: H } = frameSize(list);
+  const { w: W, h: H } = frameSize(list, opts.short);
   const vcodec = await getFirstEncodableVideoCodec(["avc", "hevc", "vp9", "av1"], { width: W, height: H });
   if (!vcodec) throw new Error("这个浏览器不能编码视频（需要 WebCodecs）");
   const loud = list.some((c) => !c.muted && c.volume > 0 && media.get(c.media)?.data.audio !== false);
@@ -48,7 +61,7 @@ export async function render(onProgress: (p: Progress) => void, cancelled: () =>
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext("2d", { willReadFrequently: false })!;
   const output = new Output({ format: new Mp4OutputFormat({ fastStart: "in-memory" }), target: new BufferTarget() });
-  const vsrc = new CanvasSource(canvas, { codec: vcodec, bitrate: QUALITY_HIGH, keyFrameInterval: 2 });
+  const vsrc = new VideoSampleSource({ codec: vcodec, bitrate: QUALITY[opts.quality], keyFrameInterval: 2 });
   output.addVideoTrack(vsrc, { frameRate: FPS });
   const asrc = mix && acodec ? new AudioBufferSource({ codec: acodec, bitrate: QUALITY_HIGH }) : null;
   if (asrc) output.addAudioTrack(asrc);
@@ -69,41 +82,55 @@ export async function render(onProgress: (p: Progress) => void, cancelled: () =>
       audioUpTo = b / RATE;
     }
   };
+  // Decoding the next frame overlaps encoding the last: the frame drawn is
+  // taken (a VideoSample of the canvas) before the next is drawn, and the
+  // encoder is waited for only when it falls behind.
+  let pending: Promise<void> | null = null;
+  const emit = async (k: number, pic: Picture) => {
+    drawFrame(ctx, W, H, pic, over, k / FPS, { background });
+    const sample = new VideoSample(canvas, { timestamp: k / FPS, duration: 1 / FPS });
+    if (pending) await pending;
+    pending = vsrc.add(sample).finally(() => sample.close());
+    frame++;
+    if (frame % 5 === 0) onProgress({ phase: "video", done: frame / frames });
+    if (frame % FPS === 0) await feedAudio(k / FPS + 1);
+  };
   try {
     for (const c of list) {
       const k0 = Math.ceil(c.start * FPS - 1e-6), k1 = Math.min(frames, Math.ceil(c.end * FPS - 1e-6));
       if (k1 <= k0) continue;
       const input = new Input({ source: new BlobSource(files.get(c.id)!), formats: ALL_FORMATS });
+      let last: VideoSample | null = null;
       try {
         const vt = await input.getPrimaryVideoTrack();
-        let sink: CanvasSink | null = null, sw = 0, sh = 0;
-        if (vt && (await vt.canDecode())) {
-          const r = fit(vt.displayWidth, vt.displayHeight, W, H);
-          sw = Math.max(2, Math.round(r.w)); sh = Math.max(2, Math.round(r.h));
-          sink = new CanvasSink(vt, { width: sw, height: sh, fit: "fill", poolSize: 2 });
-        }
-        const times = function* () { for (let k = k0; k < k1; k++) yield c.in + (k / FPS - c.start) * c.speed; };
-        let last: Picture = null;
-        const draw = async (k: number, pic: Picture) => {
-          drawFrame(ctx, W, H, pic, over, k / FPS, { background });
-          await vsrc.add(k / FPS, 1 / FPS);
-          frame++;
-          if (frame % 5 === 0) onProgress({ phase: "video", done: frame / frames });
-          await feedAudio(k / FPS + 1);
-        };
+        const sink = vt && (await vt.canDecode()) ? new VideoSampleSink(vt) : null;
+        const pic = (s: VideoSample | null): Picture => s ? {
+          w: s.displayWidth, h: s.displayHeight,
+          draw: (cx, x, y, w, h) => s.draw(cx, x, y, w, h),
+        } : null;
+        let k = k0;
         if (sink) {
-          let k = k0;
-          for await (const wc of sink.canvasesAtTimestamps(times())) {
+          // the decoded frames in order; each output frame shows the last
+          // one that has begun by its time
+          const it = sink.samples(c.in, c.out + 1 / FPS)[Symbol.asyncIterator]();
+          let next: VideoSample | null = (await it.next()).value || null;
+          for (; k < k1; k++) {
             if (cancelled()) throw new Error("cancelled");
-            if (wc) last = { image: wc.canvas as CanvasImageSource, w: sw, h: sh };
-            await draw(k++, last);
+            const at = c.in + (k / FPS - c.start) * c.speed;
+            while (next && next.timestamp <= at + 1e-4) {
+              last?.close(); last = next;
+              next = (await it.next()).value || null;
+            }
+            if (!last && next) { last = next; next = (await it.next()).value || null; }
+            await emit(k, pic(last));
           }
-          while (k < k1) await draw(k++, last);
-        } else {
-          for (let k = k0; k < k1; k++) { if (cancelled()) throw new Error("cancelled"); await draw(k, null); }
+          next?.close();
+          await it.return?.(undefined);
         }
-      } finally { input.dispose(); }
+        while (k < k1) { if (cancelled()) throw new Error("cancelled"); await emit(k++, pic(last)); }
+      } finally { last?.close(); input.dispose(); }
     }
+    if (pending) await pending;
     await feedAudio(T + 1);
     onProgress({ phase: "finish", done: 1 });
     await output.finalize();

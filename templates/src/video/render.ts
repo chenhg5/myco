@@ -10,7 +10,9 @@ const scratch = (which: 1 | 2) => {
   return (tmp2 ||= document.createElement("canvas"));
 };
 
-export type Picture = { image: CanvasImageSource; w: number; h: number } | null;
+/** A picture to fit into the frame: an image, or something that draws
+ *  itself (a decoded video sample). */
+export type Picture = { image?: CanvasImageSource; draw?: (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => void; w: number; h: number } | null;
 
 export function fit(sw: number, sh: number, W: number, H: number) {
   const k = Math.min(W / Math.max(1, sw), H / Math.max(1, sh));
@@ -27,7 +29,10 @@ export function drawFrame(ctx: CanvasRenderingContext2D, W: number, H: number, p
   ctx.fillRect(0, 0, W, H);
   if (pic) {
     const r = fit(pic.w, pic.h, W, H);
-    try { ctx.drawImage(pic.image, r.x, r.y, r.w, r.h); } catch { /* (not ready yet) */ }
+    try {
+      if (pic.draw) pic.draw(ctx, r.x, r.y, r.w, r.h);
+      else if (pic.image) ctx.drawImage(pic.image, r.x, r.y, r.w, r.h);
+    } catch { /* (not ready yet) */ }
   }
   const live = over.filter((o) => t >= o.start - 1e-6 && t < o.end - 1e-6);
   for (const o of live) if (o.type !== "text") censor(ctx, W, H, o);

@@ -1,7 +1,7 @@
 {
   "id": "myco/video",
   "name": "视频剪辑",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "kind": "custom",
   "category": "creative",
   "icon": "icon.svg",

@@ -10,14 +10,14 @@ import { Bot, Download, Droplets, Film, Loader2, MessageSquareText, SlidersHoriz
 import { Bar, Toast, mount, titleSaver, uid, useKit } from "../_lib/appkit";
 import { save } from "../_lib/myco";
 import { Popover, rectOf } from "../_lib/ui";
-import { clips, fmt, frameSize, kit, media, notes, overlays, placed, project, total, RATIOS, clamp } from "./model";
+import { clips, frameSize, kit, media, notes, overlays, placed, project, total, RATIOS, clamp, sizeChoices } from "./model";
 import { addClip, change, patch, redo, removeClip, removeOverlay, setProject, split, undo, duplicateClip } from "./edit";
 import { keep, keyOf, onLocal, probe, restore } from "./media";
 import { player } from "./player";
 import { Timeline, type Sel } from "./timeline";
 import { Stage } from "./stage";
 import { CensorPanel, Inspector, MediaPanel, NotesPanel, TextPanel, agentText, type Importing } from "./panels";
-import { render, type Progress } from "./export";
+import { QUALITIES, estimate, render, type ExportOptions, type Progress } from "./export";
 
 const title = titleSaver(kit, project);
 
@@ -41,7 +41,7 @@ function App() {
   const [pps, setPps] = useState(40);
   const [importing, setImporting] = useState<Importing[]>([]);
   const [noteFocus, setNoteFocus] = useState("");
-  const [exporting, setExporting] = useState<null | { p: Progress; error?: string; done?: string; size?: number; silent?: boolean }>(null);
+  const [exporting, setExporting] = useState<Exp | null>(null);
   const [agentAt, setAgentAt] = useState<null | ReturnType<typeof rectOf>>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const relinkFor = useRef("");
@@ -152,12 +152,14 @@ function App() {
   });
 
   // ---- export ----
-  async function doExport() {
+  async function doExport(opts: ExportOptions) {
     player.pause();
     cancelRef.current = false;
-    setExporting({ p: { phase: "audio", done: 0 } });
+    keepOptions(opts);
+    const at = performance.now();
+    setExporting({ stage: "run", p: { phase: "audio", done: 0 }, at, opts });
     try {
-      const { bytes, silent } = await render((p) => setExporting((x) => (x ? { ...x, p } : x)), () => cancelRef.current);
+      const { bytes, silent } = await render(opts, (p) => setExporting((x) => (x && x.stage === "run" ? { ...x, p } : x)), () => cancelRef.current);
       const name = `${(title.get("") || "视频").replace(/[\\/:*?"<>|]+/g, " ").trim() || "视频"}.mp4`;
       let where = "";
       try { where = (await save(name, bytes, "video/mp4")).path; }
@@ -169,11 +171,11 @@ function App() {
         setTimeout(() => URL.revokeObjectURL(a.href), 60000);
         where = name;
       }
-      setExporting({ p: { phase: "finish", done: 1 }, done: where, size: bytes.length, silent });
+      setExporting({ stage: "done", where, size: bytes.length, silent, secs: (performance.now() - at) / 1000 });
     } catch (e) {
       const msg = (e as Error).message;
       if (msg === "cancelled") setExporting(null);
-      else setExporting({ p: { phase: "finish", done: 0 }, error: msg || "导出失败" });
+      else setExporting({ stage: "error", error: msg || "导出失败" });
     }
   }
 
@@ -190,7 +192,7 @@ function App() {
           {RATIOS.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
         </select>
         <button type="button" className="btn" onClick={(e) => setAgentAt(rectOf(e.currentTarget))}><Bot className="ico" />交给 agent{open ? <span className="badge">{open}</span> : null}</button>
-        <button type="button" className="btn btn-primary" disabled={!list.length} onClick={doExport}><Download className="ico" />导出</button>
+        <button type="button" className="btn btn-primary" disabled={!list.length} onClick={() => setExporting({ stage: "setup" })}><Download className="ico" />导出</button>
       </Bar>
       <div className="ed">
         <aside className="side">
@@ -240,39 +242,111 @@ function App() {
           </div>
         </Popover>
       )}
-      {exporting && <ExportDialog state={exporting} onCancel={() => { cancelRef.current = true; if (exporting.done || exporting.error) setExporting(null); }} />}
+      {exporting && <ExportDialog state={exporting} onStart={doExport}
+        onClose={() => { if (exporting.stage === "run") cancelRef.current = true; else setExporting(null); }} />}
       <Toast kit={kit} />
     </div>
   );
 }
 
-function ExportDialog({ state, onCancel }: { state: { p: Progress; error?: string; done?: string; size?: number; silent?: boolean }; onCancel: () => void }) {
-  const { w, h } = frameSize();
-  const pct = state.p.phase === "audio" ? state.p.done * 8 : state.p.phase === "video" ? 8 + state.p.done * 90 : state.done ? 100 : 98;
-  const over = !!(state.done || state.error);
+type Exp = { stage: "setup" } | { stage: "run"; p: Progress; at: number; opts: ExportOptions }
+  | { stage: "done"; where: string; size: number; silent: boolean; secs: number } | { stage: "error"; error: string };
+
+const SIZE_NAME: Record<number, string> = { 2160: "4K", 1440: "2K", 1080: "1080p", 720: "720p", 480: "480p" };
+function savedOptions(): ExportOptions {
+  let o: Partial<ExportOptions> = {};
+  try { o = JSON.parse(localStorage.getItem("myco-video-export") || "{}"); } catch { /* (none kept) */ }
+  const sizes = sizeChoices();
+  const short = sizes.includes(Number(o.short)) ? Number(o.short) : sizes.find((s) => s <= 1080) || sizes[sizes.length - 1];
+  return { short, fps: [24, 30, 60].includes(Number(o.fps)) ? Number(o.fps) : 30, quality: QUALITIES.some(([q]) => q === o.quality) ? o.quality! : "high" };
+}
+function keepOptions(o: ExportOptions) { try { localStorage.setItem("myco-video-export", JSON.stringify(o)); } catch { /* (a private window) */ } }
+const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+
+function ExportDialog({ state, onStart, onClose }: { state: Exp; onStart: (o: ExportOptions) => void; onClose: () => void }) {
+  const [opts, setOpts] = useState<ExportOptions>(savedOptions);
+  const [, tick] = useState(0);
+  useEffect(() => { if (state.stage !== "run") return; const t = setInterval(() => tick((n) => n + 1), 1000); return () => clearInterval(t); }, [state.stage]);
+  const T = total();
+  const head = state.stage === "setup" ? "导出视频" : state.stage === "run" ? "正在导出" : state.stage === "done" ? "导出好了" : "没导出成功";
+  let body: JSX.Element;
+  if (state.stage === "setup") {
+    const est = estimate(opts);
+    body = (
+      <>
+        <div className="field">
+          <div className="field-label">分辨率</div>
+          <div className="seg" role="radiogroup" aria-label="分辨率" data-testid="export-res">
+            {sizeChoices().map((s) => (
+              <button key={s} type="button" role="radio" aria-checked={opts.short === s} className={opts.short === s ? "is-on" : ""} onClick={() => setOpts({ ...opts, short: s })}>
+                {SIZE_NAME[s] || "原始"}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="field">
+          <div className="field-label">帧率</div>
+          <div className="seg" role="radiogroup" aria-label="帧率">
+            {[24, 30, 60].map((f) => <button key={f} type="button" role="radio" aria-checked={opts.fps === f} className={opts.fps === f ? "is-on" : ""} onClick={() => setOpts({ ...opts, fps: f })}>{f} 帧</button>)}
+          </div>
+        </div>
+        <div className="field">
+          <div className="field-label">画质</div>
+          <div className="seg" role="radiogroup" aria-label="画质">
+            {QUALITIES.map(([q, n]) => <button key={q} type="button" role="radio" aria-checked={opts.quality === q} className={opts.quality === q ? "is-on" : ""} onClick={() => setOpts({ ...opts, quality: q })}>{n}</button>)}
+          </div>
+        </div>
+        <p className="export-sum"><b>{est.w}×{est.h}</b> · {opts.fps} 帧 · {mmss(T)} · 约 {est.mb < 10 ? est.mb.toFixed(1) : Math.round(est.mb)} MB</p>
+        <p className="faint">分辨率和帧率越低导出越快；在这台电脑上完成，不上传。</p>
+        <div className="modal-foot">
+          <span />
+          <span className="row">
+            <button type="button" className="btn" onClick={onClose}>取消</button>
+            <button type="button" className="btn btn-primary" data-testid="export-start" onClick={() => onStart(opts)}><Download className="ico" />开始导出</button>
+          </span>
+        </div>
+      </>
+    );
+  } else if (state.stage === "run") {
+    const p = state.p;
+    const pct = p.phase === "audio" ? p.done * 5 : p.phase === "video" ? 5 + p.done * 93 : 98;
+    const secs = (performance.now() - state.at) / 1000;
+    const left = pct > 6 ? (secs / pct) * (100 - pct) : 0;
+    const { w, h } = frameSize(placed(), state.opts.short);
+    body = (
+      <>
+        <p className="faint">{w}×{h} · {state.opts.fps} 帧 · {mmss(T)}。{p.phase === "audio" ? "先合成声音…" : p.phase === "video" ? "一帧一帧地画出来。" : "收尾…"}</p>
+        <div className="bar"><i style={{ width: `${pct}%` }} /></div>
+        <div className="modal-foot">
+          <span className="faint"><Loader2 className="ico spin" /> {Math.floor(pct)}% · 已用 {mmss(secs)}{left ? ` · 还要约 ${mmss(left)}` : ""}</span>
+          <button type="button" className="btn" onClick={onClose}>取消</button>
+        </div>
+      </>
+    );
+  } else if (state.stage === "done") {
+    body = (
+      <>
+        <p>已存到 <b>{state.where}</b>（{(state.size / 1024 / 1024).toFixed(1)} MB，用了 {mmss(state.secs)}）</p>
+        {state.silent && <p className="modal-err">这个浏览器不能编码声音，导出的视频没有声音。换 Chrome 或 Edge 打开再导出一次。</p>}
+        <div className="modal-foot"><span /><button type="button" className="btn btn-primary" onClick={onClose}>好</button></div>
+      </>
+    );
+  } else {
+    body = (
+      <>
+        <p className="modal-err">{state.error}</p>
+        <div className="modal-foot"><span /><button type="button" className="btn btn-primary" onClick={onClose}>好</button></div>
+      </>
+    );
+  }
   return (
     <div className="modal-back" role="dialog" aria-modal="true" aria-label="导出视频">
       <div className="modal">
         <div className="modal-head">
-          <b>{state.error ? "没导出成功" : state.done ? "导出好了" : "正在导出"}</b>
-          {over && <button type="button" className="icon-btn" aria-label="关闭" onClick={onCancel}><X className="ico" /></button>}
+          <b>{head}</b>
+          {state.stage !== "run" && <button type="button" className="icon-btn" aria-label="关闭" onClick={onClose}><X className="ico" /></button>}
         </div>
-        {state.error ? <p className="modal-err">{state.error}</p> : state.done ? (
-          <>
-            <p>已存到 <b>{state.done}</b>{state.size ? `（${(state.size / 1024 / 1024).toFixed(1)} MB）` : ""}</p>
-            {state.silent && <p className="modal-err">这个浏览器不能编码声音，导出的视频没有声音。换 Chrome 或 Edge 打开再导出一次。</p>}
-          </>
-        ) : (
-          <>
-            <p className="faint">{w}×{h} · {fmt(total(), true)} · mp4。{state.p.phase === "audio" ? "先合成声音…" : state.p.phase === "video" ? "一帧一帧地画出来，在这台电脑上完成，不上传。" : "收尾…"}</p>
-            <div className="bar"><i style={{ width: `${pct}%` }} /></div>
-            <div className="modal-foot">
-              <span className="faint"><Loader2 className="ico spin" /> {Math.floor(pct)}%</span>
-              <button type="button" className="btn" onClick={onCancel}>取消</button>
-            </div>
-          </>
-        )}
-        {over && <div className="modal-foot"><span /><button type="button" className="btn btn-primary" onClick={onCancel}>好</button></div>}
+        {body}
       </div>
     </div>
   );

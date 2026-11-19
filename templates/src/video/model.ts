@@ -96,17 +96,32 @@ export function clipAt(list: Placed[], t: number): Placed | null {
 }
 export const sourceTime = (c: Placed, t: number) => clamp(c.in + (t - c.start) * c.speed, c.in, c.out);
 
-/** The output frame's size: the ratio chosen, or the first clip's own. */
-export function frameSize(list = placed()) {
+/** The output frame's size: the ratio chosen, or the first clip's own, at
+ *  `short` pixels on the short side (never larger than the video itself
+ *  for the original ratio); even numbers for the encoder. */
+export function frameSize(list = placed(), short = 1080) {
+  const even = (v: number) => Math.max(2, Math.round(v / 2) * 2);
   const ratio = String(project.get("main")?.data.ratio || "source");
   const r = RATIOS.find((x) => x.id === ratio);
-  if (r && r.w) return { w: r.w, h: r.h };
+  if (r && r.w) { const k = short / Math.min(r.w, r.h); return { w: even(r.w * k), h: even(r.h * k) }; }
   const first = list.length ? media.get(list[0].media)?.data : null;
-  let w = num(first?.width, 1920), h = num(first?.height, 1080);
-  // at most 1080p on the short side; even numbers for the encoder
-  const k = Math.min(1, 1080 / Math.min(w, h));
-  w = Math.round((w * k) / 2) * 2; h = Math.round((h * k) / 2) * 2;
-  return { w: Math.max(2, w), h: Math.max(2, h) };
+  const w = num(first?.width, 1920), h = num(first?.height, 1080);
+  const k = Math.min(1, short / Math.max(1, Math.min(w, h)));
+  return { w: even(w * k), h: even(h * k) };
+}
+
+/** The short sides an export can have: up to the video's own (4K at most). */
+export function sizeChoices(list = placed()) {
+  const ratio = String(project.get("main")?.data.ratio || "source");
+  let own = 2160;
+  if (ratio === "source") {
+    const first = list.length ? media.get(list[0].media)?.data : null;
+    own = Math.min(num(first?.width, 1920), num(first?.height, 1080));
+  }
+  const all = [2160, 1440, 1080, 720, 480];
+  const out = all.filter((s) => s <= own);
+  if (ratio === "source" && own < 2160 && !all.includes(own) && own > 480) out.unshift(own);
+  return out.length ? out : [Math.max(2, own)];
 }
 
 export const fmt = (s: number, frames = false) => {
