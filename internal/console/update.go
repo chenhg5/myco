@@ -200,6 +200,11 @@ func (b *Backend) postUpdate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
+	// The myco CLI on this computer goes along, as on Windows (its
+	// services pick it up when they next restart).
+	if b.Local != nil {
+		b.Local.upgradeCLIDetached()
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"installed": latest, "relaunching": true})
 	// Let the answer reach the page before the app quits.
 	go func() {

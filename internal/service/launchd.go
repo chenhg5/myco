@@ -96,6 +96,13 @@ func (l *Launchd) Status() (Status, error) {
 	return st, nil
 }
 
+// Start loads the service when it is not (after a bootout) and starts it.
+func (l *Launchd) Start() error {
+	_, _ = l.R.Run("launchctl", "bootstrap", l.domain(), l.file()) // fails when already loaded
+	_, err := l.R.Run("launchctl", "kickstart", l.service())
+	return err
+}
+
 func (l *Launchd) Restart() error {
 	_, err := l.R.Run("launchctl", "kickstart", "-k", l.service())
 	return err
