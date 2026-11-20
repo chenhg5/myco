@@ -2463,7 +2463,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         <ApprovalStrip hubId={target.hubId} agent={target.agent} />
         <SendTrouble error={sendError} stop={stopError} onRetry={sendError ? () => void send() : undefined}
           onClose={() => { setSendError(null); setStopError(null); }} />
-        {behind && !sendError && !stopError && (
+        {/* Only while it is at work: a chat that has ended has nothing to
+            wait for, whatever the network. */}
+        {behind && !!atWorkId && !sendError && !stopError && (
           <div className="conv-trouble conv-behind" role="status" data-testid="chat-behind">
             <WifiOff />
             <span className="conv-trouble-text">

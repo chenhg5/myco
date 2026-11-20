@@ -1868,7 +1868,23 @@ async function runMatrix(browser, size, scheme) {
     // task stuck, and the notice goes once answers come again.
     await step("单聊 · 网络不好", async () => {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await noRound(page);
       const polls = /\/app\/hubs\/[^/]+\/(exchanges|thread)/;
+      // Nothing at work: however long the polls go unanswered, no notice
+      // (it has nothing more to say).
+      await page.route(polls, (route) => route.abort());
+      try {
+        await page.waitForTimeout(22_000);
+        if (await page.locator("[data-testid=chat-behind]").count()) throw new Error("没有在干活的任务时，不该提示网络不好");
+      } finally {
+        await page.unroute(polls);
+      }
+      // At work, then the polls go unanswered: it says the network is poor.
+      const box = page.locator(".conv-detail .conv-compose-input");
+      await box.fill("把发布分支同步一下 main");
+      await box.press("Enter");
+      // (at work: it has picked it up and said something)
+      await page.locator(".conv-detail .trace").last().locator(".trace-reports .trace-report", { hasText: "正在处理" }).waitFor({ timeout: 15_000 });
       await page.route(polls, (route) => route.abort());
       try {
         await page.locator("[data-testid=chat-behind]").waitFor({ timeout: 40_000 });
