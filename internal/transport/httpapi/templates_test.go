@@ -216,3 +216,30 @@ func TestPageUpgradesToItsAppsNewVersion(t *testing.T) {
 	h.do("POST", "/v1/pages/"+page+"/data/items", alice, map[string]any{"data": map[string]any{"title": "x", "owner": "Ann"}}).want(t, 201)
 	h.do("POST", "/v1/pages/"+page+"/upgrade", alice, nil).wantErr(t, 409, "conflict")
 }
+
+// A template's screenshots (pictures in shots/, x.webp with x.dark.webp)
+// are listed with it and fetched one by one; nothing else of its folder is.
+func TestTemplateScreenshots(t *testing.T) {
+	h := newHub(t, app.DefaultMessagePolicy())
+	alice := h.register("alice", nil)
+	bob := h.register("bob", nil)
+	zipHdr := map[string]string{"Content-Type": "application/zip"}
+	r := h.doReq("POST", "/v1/templates", alice, zipOf(t, map[string]string{
+		"myco.json": weeklyManifest, "index.html": "<h1>周报</h1>",
+		"shots/2.png": "\x89PNG two", "shots/1.webp": "RIFF one", "shots/1.dark.webp": "RIFF one dark",
+		"shots/notes.txt": "not a picture", "shots/deep/3.png": "too deep",
+	}), zipHdr).want(t, 201)
+	id := str(r.body, "id")
+	g := h.do("GET", "/v1/templates/"+id, bob, nil).want(t, 200)
+	shots, _ := g.body["shots"].([]any)
+	if len(shots) != 2 || str(shots[0], "src") != "shots/1.webp" || str(shots[0], "dark") != "shots/1.dark.webp" || str(shots[1], "src") != "shots/2.png" || str(shots[1], "dark") != "" {
+		t.Fatalf("shots: %s", g.raw)
+	}
+	f := h.do("GET", "/v1/templates/"+id+"/files/shots/1.dark.webp", bob, nil).want(t, 200)
+	if string(f.raw) != "RIFF one dark" || f.header.Get("Content-Type") != "image/webp" || f.header.Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatalf("shot: %q %v", f.raw, f.header)
+	}
+	h.do("GET", "/v1/templates/"+id+"/files/index.html", bob, nil).wantErr(t, 404, "not_found")
+	h.do("GET", "/v1/templates/"+id+"/files/shots/notes.txt", bob, nil).wantErr(t, 404, "not_found")
+	h.do("GET", "/v1/templates/"+id+"/files/shots/9.png", bob, nil).wantErr(t, 404, "not_found")
+}

@@ -127,6 +127,22 @@ func (b *Backend) pageDataRoutes(m *http.ServeMux) {
 		}
 		writeJSON(w, http.StatusOK, t)
 	}))
+	// One of an app's screenshots, for the App's new-page dialog (only
+	// pictures in its shots/; the hub checks).
+	m.HandleFunc("GET /app/hubs/{id}/templates/{tid}/files/{path...}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		res, err := c.TemplateShot(r.Context(), r.PathValue("tid"), r.PathValue("path"))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		defer res.Body.Close()
+		h := w.Header()
+		h.Set("Content-Type", res.Header.Get("Content-Type"))
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("Content-Security-Policy", "default-src 'none'; sandbox")
+		h.Set("Cache-Control", "private, max-age=3600")
+		_, _ = io.Copy(w, io.LimitReader(res.Body, 4<<20))
+	}))
 	m.HandleFunc("POST /app/hubs/{id}/templates/sync", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		res, err := c.SyncApps(r.Context())
 		if err != nil {
