@@ -21,6 +21,9 @@ func (s *Server) SetMembers(m *app.MemberService, audit *app.AuditService) {
 // actorOf is who makes an administrative request: the hub's admin token
 // (acting as the owner), or the member behind a console token.
 func (s *Server) actorOf(r *http.Request) app.Actor {
+	if c := superOf(r); c != nil {
+		return app.Actor{Member: c.member, Via: c.agent}
+	}
 	if s.isMasterAdmin(r) || s.console == nil {
 		return app.Actor{Admin: true}
 	}

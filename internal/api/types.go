@@ -2057,3 +2057,48 @@ type WorkflowDecision struct {
 type WorkflowDecisions struct {
 	Decisions []WorkflowDecision `json:"decisions"`
 }
+
+// Superagents (v0.21.1+): a person's own agent with the App's powers in
+// its workspace (docs/design/chief-of-staff.md).
+
+// Superagent answers GET /v1/console/superagent: the caller's superagent
+// (none: Agent absent) and how many of its requests wait for them.
+type Superagent struct {
+	Agent   *Agent `json:"agent,omitempty"`
+	Pending int    `json:"pending,omitempty"`
+}
+
+// SuperagentSet is the body of PUT /v1/console/superagent.
+type SuperagentSet struct {
+	Agent string `json:"agent"`
+}
+
+// MeSuperagent answers GET /v1/me/superagent: whether the calling agent is
+// a superagent, and whose.
+type MeSuperagent struct {
+	Superagent bool   `json:"superagent"`
+	Owner      string `json:"owner,omitempty"`
+}
+
+// Approval is a superagent's request held for its owner.
+type Approval struct {
+	ID         string     `json:"id"`
+	Agent      string     `json:"agent"`
+	What       string     `json:"what"`
+	Reason     string     `json:"reason,omitempty"`
+	Method     string     `json:"method"`
+	Path       string     `json:"path"`
+	Body       string     `json:"body,omitempty"`
+	Status     string     `json:"status"` // pending done denied expired withdrew
+	Result     int        `json:"result,omitempty"`
+	ResultBody string     `json:"result_body,omitempty"`
+	DecidedBy  string     `json:"decided_by,omitempty"`
+	CreatedAt  time.Time  `json:"created_at"`
+	ExpiresAt  time.Time  `json:"expires_at"`
+	DecidedAt  *time.Time `json:"decided_at,omitempty"`
+}
+
+// ApprovalList answers GET /v1/console/approvals and /v1/me/approvals.
+type ApprovalList struct {
+	Approvals []Approval `json:"approvals"`
+}
