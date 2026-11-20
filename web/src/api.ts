@@ -224,25 +224,32 @@ export interface AutomationResponse { automation: Automation; webhook_secret?: s
 
 /** Workflows (hubs from v0.21): steps the workspace hands to agents,
  *  computers and people, in order (docs/design/workflow.md). */
+/** A JSON Schema (draft 2020-12): all of it is kept and checked by the
+ *  hub; the App reads the common keywords. */
 export interface WfSchema {
-  type?: string; title?: string; description?: string; required?: string[];
+  type?: string | string[]; title?: string; description?: string; required?: string[];
   properties?: Record<string, WfSchema>; items?: WfSchema; enum?: unknown[]; default?: unknown; format?: string;
+  [keyword: string]: unknown;
 }
 export interface WfStepDef {
   id: string; title?: string; agent?: string; role?: string; prompt?: string; computer?: string; run?: string; parse?: string;
-  human?: string; options?: string[]; output?: WfSchema; timeout?: string; retry?: number; dispatch?: string; join?: string;
+  human?: string; options?: string[]; output?: WfSchema; outputSchema?: WfSchema; inputSchema?: WfSchema;
+  timeout?: string; retry?: number; dispatch?: "first" | "all"; join?: "all" | { from: string[] };
 }
-export interface WfEdgeDef { from: string; to: string; when?: string; maxIterations?: number; else?: string; onError?: boolean }
-export interface WorkflowDef { name: string; description?: string; project?: string; inputs?: WfSchema; steps: WfStepDef[]; edges?: WfEdgeDef[] }
+export interface WfEdgeDef { from: string; to: string; when?: string; maxIterations?: number; else?: string; onError?: boolean; map?: Record<string, unknown> }
+export interface WorkflowDef {
+  name: string; title?: string; description?: string; tags?: string[]; group?: string; project?: string;
+  inputs?: WfSchema; steps: WfStepDef[]; edges?: WfEdgeDef[]; entry?: string; allowUnboundedCycles?: boolean;
+}
 export interface Workflow {
-  id: string; name: string; description?: string; project?: string; owner?: string; version: number; enabled: boolean;
+  id: string; name: string; title?: string; tags?: string[]; group?: string; description?: string; project?: string; owner?: string; version: number; enabled: boolean;
   steps: number; active: number; last_run?: WorkflowRun; definition?: WorkflowDef; created_at: string; updated_at: string;
 }
 export type RunStatus = "running" | "waiting" | "succeeded" | "failed" | "cancelled";
 export type StepStatus = "running" | "waiting" | "done" | "failed" | "cancelled";
 export interface RunStep {
   id: string; step: string; title?: string; kind: "agent" | "computer" | "human"; attempt: number; status: StepStatus;
-  target?: string; message_id?: string; input?: string; output?: Record<string, unknown>; summary?: string; error?: string;
+  target?: string; message_id?: string; input?: string; payload?: unknown; output?: Record<string, unknown>; summary?: string; error?: string;
   retries?: number; bounced?: boolean; options?: string[]; started_at: string; ended_at?: string; due_at?: string;
 }
 export interface RunEvent { at: string; kind: string; step?: string; text: string }

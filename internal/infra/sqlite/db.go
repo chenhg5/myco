@@ -467,6 +467,8 @@ func Open(path string) (*sql.DB, error) {
 		"automation_runs": {{"request", "TEXT NOT NULL DEFAULT ''"},
 			// The workflow run a workflow automation started (v0.21).
 			{"workflow_run", "TEXT NOT NULL DEFAULT ''"}},
+		// A run step's input (JSON; v0.21).
+		"run_steps": {{"payload", "TEXT NOT NULL DEFAULT ''"}},
 		// A workflow an automation starts, and the run's inputs (v0.21).
 		"automations": {{"workflow", "TEXT NOT NULL DEFAULT ''"}, {"inputs", "TEXT NOT NULL DEFAULT ''"}},
 	} {

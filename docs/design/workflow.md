@@ -42,6 +42,23 @@ agentflow 是一个单机的工作流运行器：一个 JSON 描述节点和边�
 
 我也想过另一条路：把 agentflow 本身当成一个节点接进来（"agentflow 节点"）。没选它，因为那样流程里的每一步都在那台机器本地起进程，用不上已经接入的、在别的电脑和云端的 agent，状态也不在工作区里，App 看不到。
 
+### 2.1 和 agentflow 的 JSON 编排能力对齐（2026-11-20）
+
+| agentflow（workflow v3） | myco |
+| --- | --- |
+| `inputs`（类型、必填） | `inputs`：完整 JSON Schema，App 按它生成表单 |
+| 节点 `inputSchema` / `outputSchema`：JSON Schema draft 2020-12，同一个校验库（santhosh-tekuri/jsonschema） | `inputSchema` / `outputSchema`（或 `output`），同一个库、同一个版本，保存时编译，运行时校验 |
+| entry 收到运行输入；边默认把上一步结果交给下一步；`map` 组装输入 | 一样：`entry`、默认传结果、边上 `map`（`{{output.x}}` 单独写保留类型） |
+| `join.from`：按前一步 id 收齐 | `"join": {"from": [...]}` 或 `"all"`，输入是按步骤 id 的对象 |
+| `dispatch: first / all` | 一样 |
+| 回边 `maxIterations`；`allowUnboundedCycles` | 一样（myco 另外要求回边写 `else` 或默认失败） |
+| 引用 `input.*`、`output.*`、`inputs.*`、`nodes.<id>.result/input/status`，validate 时检查 | 一样（`nodes` 和 `steps` 都认，`result` 是 `output` 的别名），写错在保存时就报 |
+| Expr 条件 | myco 自己的表达式：比较、`and or not in`、算术、字符串函数；没有 Expr 的全部（如集合函数、三元） |
+| `retry.maxAttempts`、`timeoutMs` | `retry`、`timeout`（30m、2h、1d） |
+| `title`、`tags`、`group` | 一样 |
+| 执行器候选 + fallback、session new/fixed/inherit/fork、`resources` | 没有：myco 的一步交给一个 agent / 分工 / 电脑；新开会话和资源锁放在第三期 |
+| external 节点 + lease token | 人步骤（App / iPhone 里决定，过期当作不做） |
+
 ## 3. 概念
 
 界面上只多一个词：**工作流**。其余都是现有的词。

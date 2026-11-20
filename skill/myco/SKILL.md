@@ -267,9 +267,12 @@ workspace gives it to the least busy agent with that role (a label `role=审查`
 the word in its description). A run you start tells you when it ends: a note `[工作流「…」完成了]` (or 失败了) with each
 step's summary arrives in your inbox, so you can go on from there instead of waiting.
 
-When a task starts with `[工作流「…」· 第 N 步 …]`, it is one step of a workflow: do that step
-only, do not hand out the next one (the workspace does), and answer with the result it asks
-for, plus `summary` (one sentence) and `reason`:
+Each step gets an input (the run's inputs for the first, else what the step before handed
+back or what an edge's `map` builds) and may declare `inputSchema` and `outputSchema` (full
+JSON Schema). When a task starts with `[工作流「…」· 第 N 步 …]`, it is one step of a
+workflow: its input is in the task as JSON; do that step only, do not hand out the next one
+(the workspace does), and answer with the result it asks for, plus `summary` (one sentence)
+and `reason`:
 
 ```bash
 myco message reply --id <id> --body "审完了：两处要改" --result '{"approved": false, "comments": ["…"], "summary": "…", "reason": "…"}'

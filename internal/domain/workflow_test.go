@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -10,24 +11,31 @@ func TestWorkflowExpressions(t *testing.T) {
 	env := map[string]any{
 		"output": map[string]any{"approved": false, "score": float64(7), "tags": []any{"a", "b"}, "名字": "x", "exit_code": float64(0)},
 		"inputs": map[string]any{"task": "build"},
-		"steps":  map[string]any{"write-1": map[string]any{"output": map[string]any{"branch": "feat/x"}}},
+		"steps":  map[string]any{"write-a": map[string]any{"output": map[string]any{"branch": "feat/x"}}},
 	}
 	for expr, want := range map[string]bool{
-		"!output.approved":                                  true,
-		"output.approved == false":                          true,
-		"output.score >= 7 && output.score < 8":             true,
-		"output.score > 7 || inputs.task == 'build'":        true,
-		"output.missing == null":                            true,
-		"output.missing":                                    false,
-		"len(output.tags) == 2":                             true,
-		"contains(output.tags, 'b')":                        true,
-		"contains(steps['write-1'].output.branch, 'feat/')": true,
-		"steps.write-1.output.branch == \"feat/x\"":         true,
-		"output.名字 == 'x'":                                  true,
-		"output.tags[1] == 'b'":                             true,
-		"output.exit_code == 0":                             true,
-		"(output.score == 1) || !(output.score == 7)":       false,
-		"output.score < 'z'":                                false, // different kinds never compare
+		"!output.approved":                                                true,
+		"output.approved == false":                                        true,
+		"output.score >= 7 && output.score < 8":                           true,
+		"output.score > 7 || inputs.task == 'build'":                      true,
+		"output.missing == null":                                          true,
+		"output.missing":                                                  false,
+		"len(output.tags) == 2":                                           true,
+		"contains(output.tags, 'b')":                                      true,
+		"contains(steps['write-a'].output.branch, 'feat/')":               true,
+		"steps.write-a.output.branch == \"feat/x\"":                       true,
+		"output.score - 1 == 6 and output.score * 2 > 13":                 true,
+		"output.score % 2 == 1 && -output.score < 0":                      true,
+		"'a' in output.tags and not ('z' in output.tags)":                 true,
+		"'z' not in output.tags":                                          true,
+		"startsWith(inputs.task, 'bu') or false":                          true,
+		"upper(inputs.task) == 'BUILD' && matches(inputs.task, '^b.+d$')": true,
+		"inputs.task + '!' == 'build!'":                                   true,
+		"output.名字 == 'x'":                                                true,
+		"output.tags[1] == 'b'":                                           true,
+		"output.exit_code == 0":                                           true,
+		"(output.score == 1) || !(output.score == 7)":                     false,
+		"output.score < 'z'":                                              false, // different kinds never compare
 	} {
 		got, err := EvalBool(expr, env)
 		if err != nil || got != want {
@@ -128,5 +136,73 @@ func TestMatchesRole(t *testing.T) {
 	}
 	if !MatchesRole(&Agent{Name: "x"}, "前端", "这个项目里管前端") {
 		t.Error("a project member's note says its role there")
+	}
+}
+
+func TestWorkflowReferencesAreChecked(t *testing.T) {
+	for def, want := range map[string]string{
+		`{"name": "x", "inputs": {"properties": {"task": {"type": "string"}}}, "steps": [{"id": "a", "agent": "p", "prompt": "{{inputs.tsk}}"}]}`: "inputs.tsk is not one of the workflow's inputs",
+		`{"name": "x", "steps": [{"id": "a", "agent": "p", "prompt": "{{steps.b.output}}"}]}`:                                                     "there is no step b",
+		`{"name": "x", "steps": [{"id": "a", "agent": "p", "prompt": "{{steps.a.outptu}}"}]}`:                                                     "a step has output (result)",
+		`{"name": "x", "steps": [{"id": "a", "agent": "p", "prompt": "{{output.x}}"}]}`:                                                           "only known on an edge",
+		`{"name": "x", "steps": [{"id": "a", "agent": "p", "prompt": "{{foo}}"}]}`:                                                                `unknown name "foo"`,
+		`{"name": "x", "steps": [{"id": "a", "agent": "p", "prompt": "x"}, {"id": "b", "agent": "p", "prompt": "y"}],
+		  "edges": [{"from": "a", "to": "b", "map": {"v": "{{nodes.zz.result}}"}}]}`: "there is no step zz",
+		`{"name": "x", "entry": "nope", "steps": [{"id": "a", "agent": "p", "prompt": "x"}]}`:                  `entry "nope" is not a step`,
+		`{"name": "x", "steps": [{"id": "a", "agent": "p", "prompt": "x", "join": {"from": ["a"]}}]}`:          "join.from needs at least two",
+		`{"name": "x", "steps": [{"id": "a", "agent": "p", "prompt": "x", "output": {}, "outputSchema": {}}]}`: "output and outputSchema are the same",
+	} {
+		_, err := ParseWorkflowDef([]byte(def))
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s:\n got %v\nwant %q", def, err, want)
+		}
+	}
+	ok := `{"name": "x", "title": "X", "tags": ["a"], "group": "g", "entry": "a", "allowUnboundedCycles": true,
+	  "inputs": {"properties": {"task": {"type": "string"}}},
+	  "steps": [{"id": "a", "agent": "p", "prompt": "{{inputs.task}} {{input.task}}", "dispatch": "all", "inputSchema": {"required": ["task"]}},
+	            {"id": "b", "agent": "p", "prompt": "{{nodes.a.result.x}}"}, {"id": "c", "agent": "p", "prompt": "{{steps.a.summary}}"},
+	            {"id": "d", "agent": "p", "prompt": "{{input.b.x}}", "join": {"from": ["b", "c"]}}],
+	  "edges": [{"from": "a", "to": "b", "map": {"x": "{{output.y}}", "n": 1}}, {"from": "a", "to": "c"},
+	            {"from": "b", "to": "d"}, {"from": "c", "to": "d"}, {"from": "d", "to": "a", "when": "status == 'done' && output.again"}]}`
+	d, err := ParseWorkflowDef([]byte(ok))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Waits("d")[0] != "b" || d.EntryStep() != "a" {
+		t.Fatalf("%+v", d)
+	}
+	b, _ := json.Marshal(d.Steps[3].Join)
+	if string(b) != `{"from":["b","c"]}` {
+		t.Fatalf("join: %s", b)
+	}
+}
+
+func TestRenderValueKeepsTypes(t *testing.T) {
+	env := map[string]any{"output": map[string]any{"n": float64(3), "list": []any{"a"}}}
+	v, err := RenderValue(map[string]any{"n": "{{output.n}}", "list": "{{ output.list }}", "text": "n={{output.n}}", "gone": "{{output.zz}}", "k": true}, env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := v.(map[string]any)
+	if m["n"] != float64(3) || len(m["list"].([]any)) != 1 || m["text"] != "n=3" || m["gone"] != "" || m["k"] != true {
+		t.Fatalf("%v", m)
+	}
+}
+
+func TestSchemaKeepsTheWholeDefinition(t *testing.T) {
+	var s Schema
+	in := `{"type":["string","null"],"pattern":"^[a-z]+$","minLength":2,"oneOf":[{"const":"a"}]}`
+	if err := json.Unmarshal([]byte(in), &s); err != nil {
+		t.Fatal(err)
+	}
+	if s.Type != "string" {
+		t.Fatalf("type %q", s.Type)
+	}
+	b, _ := json.Marshal(&s)
+	var a, c map[string]any
+	_ = json.Unmarshal([]byte(in), &a)
+	_ = json.Unmarshal(b, &c)
+	if !equal(a, c) {
+		t.Fatalf("lost keywords: %s", b)
 	}
 }

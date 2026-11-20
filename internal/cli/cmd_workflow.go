@@ -29,38 +29,51 @@ func workflowCommands() *Command {
 		Summary: "Check a workflow's JSON (and that its agents exist) without saving it",
 		Long: `A workflow is JSON:
 
-  {"name": "写-审-改", "project": "myco",
-   "inputs": {"required": ["task"], "properties": {"task": {"type": "string", "title": "要做什么"}}},
+  {"name": "写-审-改", "title": "写、审、改", "tags": ["dev"], "project": "myco",
+   "inputs": {"type": "object", "required": ["task"], "properties": {"task": {"type": "string", "title": "要做什么", "minLength": 4}}},
    "steps": [
-     {"id": "write", "agent": "coder", "prompt": "完成：{{inputs.task}}",
-      "output": {"required": ["branch"], "properties": {"branch": {"type": "string"}}}, "timeout": "2h"},
-     {"id": "review", "agent": "reviewer", "prompt": "审一下 {{steps.write.output.branch}}",
-      "output": {"required": ["approved"], "properties": {"approved": {"type": "boolean"}, "comments": {"type": "array"}}}},
-     {"id": "test", "computer": "studio-mac", "run": "make test"},
+     {"id": "write", "agent": "coder", "prompt": "完成：{{input.task}}{{#if steps.review}}\n意见：{{steps.review.output.comments}}{{/if}}",
+      "outputSchema": {"type": "object", "required": ["branch"], "properties": {"branch": {"type": "string", "pattern": "^feat/"}}}, "timeout": "2h"},
+     {"id": "review", "role": "审查", "prompt": "审一下 {{input.branch}}",
+      "inputSchema": {"type": "object", "required": ["branch"]},
+      "outputSchema": {"type": "object", "required": ["approved"], "properties": {"approved": {"type": "boolean"}, "comments": {"type": "array", "items": {"type": "string"}}}}},
+     {"id": "test", "computer": "studio-mac", "run": "git checkout {{steps.write.output.branch}} && make test"},
      {"id": "ok", "human": "$starter", "prompt": "合并 {{steps.write.output.branch}} 吗？", "options": ["合并", "不合并"]}],
    "edges": [
-     {"from": "write", "to": "review"},
+     {"from": "write", "to": "review", "map": {"branch": "{{output.branch}}"}},
      {"from": "review", "to": "test", "when": "output.approved"},
-     {"from": "review", "to": "write", "when": "!output.approved", "maxIterations": 3, "else": "$fail"},
+     {"from": "review", "to": "write", "when": "!output.approved", "maxIterations": 3, "else": "$fail", "map": {"task": "{{inputs.task}}"}},
      {"from": "test", "to": "ok"},
-     {"from": "test", "to": "write", "onError": true, "maxIterations": 2},
+     {"from": "test", "to": "write", "onError": true, "maxIterations": 2, "map": {"task": "{{inputs.task}}"}},
      {"from": "ok", "to": "$end"}]}
 
-Steps: agent (a task; output is the JSON shape its result must have),
-computer (a command on an exec node; fails on a non-zero exit), human (a
-decision in the App; options are the choices; unanswered by its timeout,
-default 3d, it is a "no": choice is ""). Each step: title, timeout (30m, 2h,
-1d), retry (0-5), dispatch "all" (take every matching edge, in parallel),
-join "all" (start when every step leading here has arrived).
+Steps: agent (a task) or role (a task to the least busy agent whose role
+matches: a label role=<x>, a skill, the word in its description), computer
+(a command on an exec node; fails on a non-zero exit), human (a decision in
+the App; options are the choices; unanswered by its timeout, default 3d,
+it is a "no": choice is ""). Each step: title, timeout (30m, 2h, 1d), retry
+(0-5), dispatch "first" (default) or "all" (every matching edge, in
+parallel), join "all" or {"from": [ids]} (start when those have arrived).
 
-Edges: the first whose when holds is taken; when sees output (this step's
-result), inputs, steps.<id>.output/.summary, status. onError edges are taken
-only when the step failed. An edge back to an earlier step needs
-maxIterations; past it, else is taken ($fail when unset). With no edges at
-all, steps run in order. $end ends a branch, $fail fails the run.
+Inputs and outputs: a run's inputs are the entry step's input (entry:
+the first step unless set); a step's result goes to the next step as its
+input, or what an edge's map builds ("{{output.x}}" alone keeps x's type);
+a join's input is an object by step id. inputSchema and outputSchema
+(output for short) are full JSON Schema draft 2020-12 (oneOf, $ref,
+pattern, minimum, …): an input that does not fit fails the step; a result
+that does not fit is sent back once, then fails it.
 
-{{expr}} in prompt, run and title puts a value in; {{#if expr}}…{{else}}…{{/if}}.
-Expressions: paths, == != < <= > >= && || !, len(x), contains(x, y).`,
+Edges: the first whose when holds is taken; onError edges only when the
+step failed. An edge back to an earlier step needs maxIterations (past it,
+else; $fail when unset) unless allowUnboundedCycles is true. With no edges
+at all, steps run in order. $end ends a branch, $fail fails the run.
+
+{{expr}} in prompt, run, title, agent, role and computer puts a value in;
+{{#if expr}}…{{else}}…{{/if}}. Names: inputs, input, steps.<id> (or nodes.<id>)
+.output/.result/.input/.summary/.status/.error/.attempt, run; on an edge also
+output, status, error, attempt. Operators: == != < <= > >= && || ! and or
+not in + - * / %; functions len contains startsWith endsWith matches lower
+upper trim. Names that are not there are refused by validate.`,
 		Examples: []string{"myco workflow validate --file wf.json"},
 		Flags:    []Flag{fileFlag, adminFlag},
 		Run: handler(func(e *env) error {

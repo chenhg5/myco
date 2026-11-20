@@ -255,7 +255,7 @@ func (r *WorkflowRepo) ListRuns(ctx context.Context, f domain.RunFilter) ([]*dom
 	return out, internal(rows.Err())
 }
 
-const stepCols = `id, run_id, step_id, kind, attempt, status, target, message_id, input, output, summary, error, retries, bounced, started_at, ended_at, due_at`
+const stepCols = `id, run_id, step_id, kind, attempt, status, target, message_id, input, output, summary, error, retries, bounced, started_at, ended_at, due_at, payload`
 
 func (r *WorkflowRepo) SaveStep(ctx context.Context, s *domain.RunStep) error {
 	out := ""
@@ -263,24 +263,32 @@ func (r *WorkflowRepo) SaveStep(ctx context.Context, s *domain.RunStep) error {
 		b, _ := json.Marshal(s.Output)
 		out = string(b)
 	}
-	_, err := r.db.ExecContext(ctx, `INSERT INTO run_steps (`+stepCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+	payload := ""
+	if s.Payload != nil {
+		b, _ := json.Marshal(s.Payload)
+		payload = string(b)
+	}
+	_, err := r.db.ExecContext(ctx, `INSERT INTO run_steps (`+stepCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(id) DO UPDATE SET status=excluded.status, target=excluded.target, message_id=excluded.message_id, input=excluded.input,
 		output=excluded.output, summary=excluded.summary, error=excluded.error, retries=excluded.retries, bounced=excluded.bounced,
-		ended_at=excluded.ended_at, due_at=excluded.due_at`,
+		ended_at=excluded.ended_at, due_at=excluded.due_at, payload=excluded.payload`,
 		s.ID, s.RunID, s.StepID, s.Kind, s.Attempt, s.Status, s.Target, s.MessageID, s.Input, out, s.Summary, s.Error, s.Retries, s.Bounced,
-		ms(s.StartedAt), ms(s.EndedAt), ms(s.DueAt))
+		ms(s.StartedAt), ms(s.EndedAt), ms(s.DueAt), payload)
 	return internal(err)
 }
 
 func scanStep(sc scanner) (*domain.RunStep, error) {
 	var (
 		s                   domain.RunStep
-		out                 string
+		out, payload        string
 		started, ended, due int64
 	)
 	if err := sc.Scan(&s.ID, &s.RunID, &s.StepID, &s.Kind, &s.Attempt, &s.Status, &s.Target, &s.MessageID, &s.Input, &out, &s.Summary,
-		&s.Error, &s.Retries, &s.Bounced, &started, &ended, &due); err != nil {
+		&s.Error, &s.Retries, &s.Bounced, &started, &ended, &due, &payload); err != nil {
 		return nil, err
+	}
+	if payload != "" {
+		_ = json.Unmarshal([]byte(payload), &s.Payload)
 	}
 	if out != "" {
 		_ = json.Unmarshal([]byte(out), &s.Output)

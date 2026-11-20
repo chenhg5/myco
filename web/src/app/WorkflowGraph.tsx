@@ -52,6 +52,7 @@ function edgeLabel(e: WfEdgeDef): string {
   if (e.onError) parts.push(L("出错时", "on error"));
   if (e.when) parts.push(whenWords(e.when));
   if (e.maxIterations) parts.push(L(`最多 ${e.maxIterations} 次`, `≤${e.maxIterations}×`));
+  if (e.map) parts.push(`{${Object.keys(e.map).join(", ")}}`);
   return parts.join(" · ");
 }
 

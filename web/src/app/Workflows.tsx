@@ -10,6 +10,7 @@ import { PageHero, SectionHead, SectionSkeleton } from "@/app/PageHero";
 import { RowsSkeleton } from "@/app/Skeleton";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
 import { WorkflowGraph, stateWords, stepKind, stepStates } from "@/app/WorkflowGraph";
+import { ContractEditor, ContractsSection } from "@/app/WorkflowContracts";
 import { L } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
 
@@ -316,7 +317,7 @@ export function WorkflowsPage({ hubId, rows, now, open, onOpened, onOpenMessage 
                     <button type="button" className="au-row-main" onClick={() => setOpenId(w.id)} title={L("打开：流程和每一次运行", "Open: its steps and every run")}>
                       <span className="au-icon"><WorkflowIcon /></span>
                       <span className="au-row-text">
-                        <span className="au-row-name">{w.name}</span>
+                        <span className="au-row-name">{w.title || w.name}</span>
                         <span className="au-row-what">
                           <span>{L(`${w.steps} 步`, `${w.steps} steps`)}</span>
                           {w.description && <span>{w.description}</span>}
@@ -619,6 +620,8 @@ function EditDialog({ hubId, rows, wf, onClose, onSaved }: { hubId: string; rows
             <label className="app-field"><span className="app-field-label">{L("说明（可选）", "Description (optional)")}</span>
               <input className="app-input" value={def.description || ""} maxLength={200} disabled={busy}
                 onChange={(e) => setDef({ ...def, description: e.target.value })} placeholder={L("一句话说这个工作流做什么", "What it does, in a sentence")} /></label>
+            <ContractEditor schema={def.inputs} disabled={busy} label={L("运行时要填的", "What a run is given")} testid="workflow-edit-inputs"
+              onChange={(inputs) => setDef((d) => d && { ...d, inputs })} />
             {def.steps.map((s, i) => {
               const kind = stepKind(s);
               const pool = kind === "computer" ? computers : agents;
@@ -664,11 +667,17 @@ function EditDialog({ hubId, rows, wf, onClose, onSaved }: { hubId: string; rows
                         </select></label>
                     )}
                   </div>
+                  {kind === "agent" && (
+                    <ContractEditor schema={s.output || s.outputSchema} disabled={busy} label={L("交回什么（结果要符合的结构）", "What it hands back (the result's shape)")} testid="workflow-edit-output"
+                      onChange={(c) => setStep(i, s.output ? { output: c } : { outputSchema: c })} />
+                  )}
                   {kind !== "human" && (
                     <details className="app-advanced wf-edit-more">
-                      <summary>{kind === "computer" ? L("跑什么命令", "The command") : L("要它做什么", "What it is asked")}</summary>
+                      <summary>{kind === "computer" ? L("跑什么命令；收到什么", "The command; what it gets") : L("要它做什么；收到什么", "What it is asked; what it gets")}</summary>
                       <textarea className="app-input au-body" rows={kind === "computer" ? 2 : 4} disabled={busy} value={(kind === "computer" ? s.run : s.prompt) || ""}
                         onChange={(e) => setStep(i, kind === "computer" ? { run: e.target.value } : { prompt: e.target.value })} />
+                      <ContractEditor schema={s.inputSchema} disabled={busy} label={L("收到的输入要符合（可选）", "Its input must fit (optional)")}
+                        onChange={(c) => setStep(i, { inputSchema: c })} />
                     </details>
                   )}
                 </div>
@@ -721,9 +730,11 @@ function WorkflowDetail({ hubId, wf, rows, now, stamp, busy, error, onBack, onRu
       <header className={cn("pcd-head", !wf.enabled && "is-away")}>
         <span className="tp-icon pcd-icon"><WorkflowIcon /></span>
         <div className="pcd-titles">
-          <h1><span>{wf.name}</span></h1>
+          <h1><span>{wf.title || wf.name}</span></h1>
           <p className="pcd-sub">
             <span className={cn("pc-online", wf.enabled && "is-on")}>{wf.enabled ? L("在用", "On") : L("已停用", "Off")}</span>
+            {wf.title && wf.title !== wf.name && <span className="mono">{wf.name}</span>}
+            {(wf.tags || []).map((t) => <span key={t} className="app-label">{t}</span>)}
             <span>{L(`${wf.steps} 步`, `${wf.steps} steps`)}</span>
             <span>{L(`第 ${wf.version} 版`, `Version ${wf.version}`)}</span>
             {wf.project && <span>{L(`项目 ${wf.project}`, `Project ${wf.project}`)}</span>}
@@ -743,6 +754,9 @@ function WorkflowDetail({ hubId, wf, rows, now, stamp, busy, error, onBack, onRu
         {def ? <WorkflowGraph def={def} hubId={hubId} rows={rows} /> : <div className="wf-graph-skel"><span className="skel skel-line" style={{ width: "40%" }} /></div>}
       </div>
       <p className="app-small-note wf-edit-note">{L("「编辑」可以换人、改超时和轮数；要加减步骤，让写它的 agent 改了再存一次。正在跑的照旧用原来那版。", "Edit changes who does what, timeouts and rounds; to add or remove steps, have the agent that wrote it change it. Runs going on keep their version.")}</p>
+
+      <SectionHead title={L("输入和输出", "Inputs and outputs")} />
+      {def ? <ContractsSection def={def} hubId={hubId} rows={rows} /> : <RowsSkeleton rows={2} className="pc-list" />}
 
       <SectionHead title={L("运行记录", "Runs")} count={runs?.length} />
       {runs === null ? <RowsSkeleton rows={3} className="pc-list" /> : runs.length === 0 ? (
@@ -854,6 +868,7 @@ function RunDetail({ hubId, runId, wf, rows, now, stamp, onBack, onChanged, onOp
         <div className="pc-list wf-steps" data-testid="workflow-steps">
           {shown.map((s) => (
             <StepRow key={s.id} s={s} row={rowOf(s.target)} now={now} open={open === s.id} onToggle={() => setOpen((o) => (o === s.id ? null : s.id))}
+              contract={(() => { const d = run.definition?.steps.find((x) => x.id === s.step); return !!(d?.output || d?.outputSchema); })()}
               onChat={s.message_id && s.target && onOpenMessage ? () => onOpenMessage(s.target!, s.message_id!) : undefined} />
           ))}
           {shown.length === 0 && <div className="app-empty-note">{L("这一步还没走到。", "Not reached yet.")}</div>}
@@ -896,7 +911,11 @@ function RunDetail({ hubId, runId, wf, rows, now, stamp, onBack, onChanged, onOp
   );
 }
 
-function StepRow({ s, row, now, open, onToggle, onChat }: { s: RunStep; row?: AgentRow; now: number; open: boolean; onToggle: () => void; onChat?: () => void }) {
+function StepRow({ s, row, now, open, onToggle, onChat, contract }: {
+  s: RunStep; row?: AgentRow; now: number; open: boolean; onToggle: () => void; onChat?: () => void;
+  /** its result must fit a schema */
+  contract?: boolean;
+}) {
   const who = s.kind === "human" ? (s.target || L("你", "You")) : row ? nodeName(row.st.agent, row.hub) : s.target || "";
   const tone = s.status === "running" ? "is-ok" : s.status === "waiting" ? "is-wait" : s.status === "failed" ? "is-bad" : "";
   const text = s.status === "failed" ? s.error : s.summary || (s.status === "running" ? L("在做…", "Working…") : s.status === "waiting" ? L("等你决定", "Waiting for you") : s.error);
@@ -916,7 +935,7 @@ function StepRow({ s, row, now, open, onToggle, onChat }: { s: RunStep; row?: Ag
         </span>
         <span className="aud-run-when" title={new Date(s.started_at).toLocaleString()}>{timeAgo(s.started_at, now)}<small>{duration(s.started_at, s.ended_at, now)}</small></span>
         <span className="aud-run-actions wf-step-actions">
-          {(s.input || output) && (
+          {(s.input || output || s.payload !== undefined) && (
             <button type="button" className="app-btn app-btn-quiet app-btn-small" aria-expanded={open} onClick={onToggle}>
               {L("详情", "Details")}<ChevronDown className={cn("aud-chev", open && "is-open")} />
             </button>
@@ -926,9 +945,13 @@ function StepRow({ s, row, now, open, onToggle, onChat }: { s: RunStep; row?: Ag
       </div>
       {open && (
         <div className="aud-call wf-step-detail">
+          {s.payload !== undefined && s.payload !== null && !(typeof s.payload === "object" && Object.keys(s.payload as object).length === 0) && <>
+            <span className="wf-step-label">{L("收到的输入", "Its input")}</span>
+            <div className="aud-call-body"><pre>{JSON.stringify(s.payload, null, 2)}</pre></div></>}
           {s.input && <><span className="wf-step-label">{s.kind === "computer" ? L("跑的命令", "The command") : s.kind === "human" ? L("问你的", "The question") : L("交给它的任务", "The task it got")}</span>
             <div className="aud-call-body"><pre>{s.input}</pre></div></>}
-          {output && Object.keys(output).length > 0 && <><span className="wf-step-label">{L("交回来的结果", "What it handed back")}</span>
+          {output && Object.keys(output).length > 0 && <><span className="wf-step-label">{L("交回来的结果", "What it handed back")}
+            {contract && s.status === "done" && <span className="wfc-ok">{L("符合约定", "Fits its contract")}</span>}</span>
             <div className="aud-call-body"><pre>{JSON.stringify(output, null, 2)}</pre></div></>}
           {s.bounced && <p className="app-small-note">{L("第一次交的结果不符合要求，退回去重交过一次。", "Its first result did not fit and was sent back once.")}</p>}
         </div>

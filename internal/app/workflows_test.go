@@ -11,6 +11,7 @@ import (
 
 	"github.com/chenhg5/myco/internal/app"
 	"github.com/chenhg5/myco/internal/domain"
+	"github.com/chenhg5/myco/internal/infra/jsonschema"
 	"github.com/chenhg5/myco/internal/infra/notify"
 	"github.com/chenhg5/myco/internal/infra/security"
 	"github.com/chenhg5/myco/internal/infra/sqlite"
@@ -449,5 +450,74 @@ func TestWorkflowStepByRolePicksTheLeastBusy(t *testing.T) {
 	e.apply(`{"name": "none", "steps": [{"id": "x", "role": "设计", "prompt": "p"}]}`)
 	if d := e.run(e.start("none", nil).ID); d.Run.Status != domain.FlowFailed || !strings.Contains(d.Run.Error, "没有分工是「设计」的 agent") {
 		t.Fatalf("no one: %s %q", d.Run.Status, d.Run.Error)
+	}
+}
+
+// With the complete validator: inputs flow along edges (as they are, or
+// built by a map), a join gets an object by step, inputSchema and
+// outputSchema use all of JSON Schema.
+func TestWorkflowInputsMapsJoinsAndFullSchemas(t *testing.T) {
+	domain.CompleteContracts = jsonschema.New()
+	t.Cleanup(func() { domain.CompleteContracts = nil })
+	e := newWF(t, "a", "b", "c", "d")
+	e.apply(`{"name": "flow", "entry": "split",
+	  "inputs": {"type": "object", "required": ["title"], "properties": {"title": {"type": "string", "minLength": 3}}},
+	  "steps": [
+	    {"id": "split", "agent": "a", "prompt": "拆 {{input.title}}", "dispatch": "all",
+	     "outputSchema": {"type": "object", "required": ["parts"], "properties": {"parts": {"type": "array", "minItems": 2, "items": {"type": "string", "pattern": "^[a-z]+$"}}}}},
+	    {"id": "left", "agent": "b", "prompt": "做 {{input.part}}", "inputSchema": {"type": "object", "required": ["part"]}},
+	    {"id": "right", "agent": "c", "prompt": "做 {{input.parts[1]}}"},
+	    {"id": "merge", "agent": "d", "prompt": "合并 {{input.left.text}} 和 {{input.right.text}}，原题 {{nodes.split.input.title}}", "join": {"from": ["left", "right"]}}],
+	  "edges": [
+	    {"from": "split", "to": "left", "map": {"part": "{{output.parts[0]}}", "n": "{{len(output.parts)}}"}},
+	    {"from": "split", "to": "right"},
+	    {"from": "left", "to": "merge"}, {"from": "right", "to": "merge"}]}`)
+	if _, _, err := e.svc.Start(e.ctx, e.glenn, "flow", app.StartInput{Inputs: map[string]any{"title": "ab"}}); err == nil || !strings.Contains(err.Error(), "minLength") {
+		t.Fatalf("a title shorter than minLength was taken: %v", err)
+	}
+	run := e.start("flow", map[string]any{"title": "导出功能"})
+	m := e.task("a")
+	if !strings.Contains(m.Body, "拆 导出功能") || !strings.Contains(m.Body, `"title": "导出功能"`) {
+		t.Fatalf("entry input: %s", m.Body)
+	}
+	// Two parts but one is not lowercase: pattern fails, sent back once.
+	e.reply("a", m, "拆好了", map[string]any{"parts": []any{"ui", "API"}})
+	again := e.task("a")
+	if !strings.Contains(again.Body, "parts/1") {
+		t.Fatalf("bounce should point at /parts/1: %s", again.Body)
+	}
+	e.reply("a", again, "拆好了", map[string]any{"parts": []any{"ui", "api"}})
+	l, r := e.task("b"), e.task("c")
+	if !strings.Contains(l.Body, "做 ui") || !strings.Contains(l.Body, `"n": 2`) || !strings.Contains(r.Body, "做 api") {
+		t.Fatalf("left: %s\nright: %s", l.Body, r.Body)
+	}
+	e.reply("b", l, "左边", nil)
+	e.reply("c", r, "右边", nil)
+	mm := e.task("d")
+	if !strings.Contains(mm.Body, "合并 左边 和 右边，原题 导出功能") {
+		t.Fatalf("join input: %s", mm.Body)
+	}
+	e.reply("d", mm, "合好了", nil)
+	d := e.run(run.ID)
+	if d.Run.Status != domain.FlowSucceeded {
+		t.Fatalf("run: %s %q", d.Run.Status, d.Run.Error)
+	}
+	if in, ok := d.Steps[len(d.Steps)-1].Payload.(map[string]any); !ok || in["left"] == nil || in["right"] == nil {
+		t.Fatalf("join payload: %#v", d.Steps[len(d.Steps)-1].Payload)
+	}
+}
+
+func TestWorkflowInputSchemaStopsABadInput(t *testing.T) {
+	domain.CompleteContracts = jsonschema.New()
+	t.Cleanup(func() { domain.CompleteContracts = nil })
+	e := newWF(t, "a", "b")
+	e.apply(`{"name": "x", "steps": [
+	    {"id": "one", "agent": "a", "prompt": "p"},
+	    {"id": "two", "agent": "b", "prompt": "q", "inputSchema": {"type": "object", "required": ["score"], "properties": {"score": {"type": "number", "maximum": 10}}}}]}`)
+	run := e.start("x", nil)
+	e.reply("a", e.task("a"), "done", map[string]any{"score": 42})
+	e.noTask("b")
+	if d := e.run(run.ID); d.Run.Status != domain.FlowFailed || !strings.Contains(d.Run.Error, "输入不符合这一步的约定") || !strings.Contains(d.Run.Error, "/score") {
+		t.Fatalf("run: %s %q", d.Run.Status, d.Run.Error)
 	}
 }

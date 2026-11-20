@@ -861,6 +861,7 @@ myco workflow decisions                      # 等你决定的
 
 agent 收到工作流的任务时，用 `myco message reply --result '{"approved": true, "summary": "…", "reason": "…"}'` 交结构化结果（旧版 myco 没有 `--result`：把 JSON 放在回复最后的 ```json 代码块里，一样认）。结果不符合这一步要的结构会退回去重交一次。
 
+- 输入和输出：运行时填的是第一步的输入；之后每一步默认收到上一步交回的结果，也可以在边上用 `map` 组装（`{"branch": "{{output.branch}}"}`）；合流的那一步收到按步骤分的对象。每一步可以写 `inputSchema`、`outputSchema`，都是完整的 JSON Schema（draft 2020-12，和 agentflow 同一个校验库）：输入不符合这一步就失败，结果不符合退回重交一次。App 里工作流详情有「输入和输出」一节，编辑里能改字段或直接改 JSON。
 - 一步可以不指定哪个 agent，而是写分工：`{"id": "review", "role": "审查", "prompt": "…"}`。开始这一步时，Hub 在分工对得上的 agent 里（标签 `role=审查`、技能名、名字或描述里有「审查」、在项目里的说明）挑手上活最少的那个；项目里有对得上的就只在项目里挑。App 里编辑工作流时「交给谁」选「按分工挑空闲的…」。
 - 回到前面的步骤（比如审没过回去改）必须写 `maxIterations`，到了上限走 `else`（默认失败）。
 - 等你决定的步骤过期（默认 3 天）当作「不做」，从不默认同意。

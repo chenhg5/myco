@@ -3820,13 +3820,13 @@ function wfFill(text, r) {
     .replace(/\{\{\s*steps\.([\w-]+)\.summary\s*\}\}/g, (_, k) => [...r.steps].reverse().find((x) => x.step === k)?.summary || "")
     .replace(/\{\{[^}]*\}\}/g, "…");
 }
-function wfActivate(hub, r, id) {
+function wfActivate(hub, r, id, payload) {
   const def = r.def.steps.find((x) => x.id === id);
   if (!def || r.status === "failed" || r.status === "cancelled") return;
   const kind = def.computer ? "computer" : def.human ? "human" : "agent";
   const st = { id: `rs_${r.id}_${r.steps.length + 1}`, step: id, title: def.title, kind, attempt: r.steps.filter((x) => x.step === id).length + 1,
     status: kind === "human" ? "waiting" : "running", target: kind === "human" ? "glenn" : def.agent || def.computer || (def.role ? "docs-claude" : undefined), started_at: iso(0),
-    input: kind === "computer" ? wfFill(def.run, r) : wfFill(def.prompt || def.title, r) };
+    input: kind === "computer" ? wfFill(def.run, r) : wfFill(def.prompt || def.title, r), payload: payload ?? r.inputs };
   if (kind === "human") { st.options = def.options; st.due_at = iso(-20 * 3600); }
   r.steps.push(st);
   r.status = kind === "human" && !r.steps.some((x) => x.status === "running") ? "waiting" : "running";
@@ -3859,7 +3859,7 @@ function wfNext(hub, r, st) {
         const preds = [...new Set(wfEdges(r.def).filter((x) => x.to === e.to).map((x) => x.from))];
         if (!preds.every((p) => r.steps.some((x) => x.step === p && x.status === "done"))) continue;
       }
-      wfActivate(hub, r, e.to);
+      wfActivate(hub, r, e.to, e.map ? Object.fromEntries(Object.keys(e.map).map((k) => [k, st.output?.[k] ?? ""])) : st.output);
     }
   }
   if (!r.steps.some((x) => x.status === "running" || x.status === "waiting") && r.status !== "failed" && r.status !== "cancelled") wfEnd(r, "succeeded", "");
@@ -3874,14 +3874,17 @@ function seedWorkflows(hub) {
   if (hub.id !== "hub_studio") return { list: [], runs: [] };
   const review = {
     name: "写-审-改", description: "一个做、一个审，没过就改，最多 3 轮；最后你点头。",
-    inputs: { required: ["task"], properties: { task: { type: "string", title: "要做什么", format: "textarea" } } },
+    inputs: { type: "object", required: ["task"], properties: { task: { type: "string", title: "要做什么", format: "textarea", minLength: 4 } } },
     steps: [
-      { id: "write", title: "做", agent: "pm-codex", prompt: "完成这件事：{{inputs.task}}", output: { required: ["where"], properties: { where: { type: "string" } } } },
-      { id: "review", title: "审", role: "审查", prompt: "审一下这个改动：{{steps.write.summary}}", output: { required: ["approved"], properties: { approved: { type: "boolean" }, comments: { type: "array" } } } },
+      { id: "write", title: "做", agent: "pm-codex", prompt: "完成这件事：{{inputs.task}}",
+        output: { type: "object", required: ["where"], properties: { where: { type: "string", description: "改动在哪个分支", pattern: "^feat/" }, summary: { type: "string", maxLength: 200 } } } },
+      { id: "review", title: "审", role: "审查", prompt: "审一下 {{input.where}} 的改动：{{steps.write.summary}}",
+        inputSchema: { type: "object", required: ["where"], properties: { where: { type: "string", pattern: "^feat/" } } },
+        outputSchema: { type: "object", required: ["approved"], properties: { approved: { type: "boolean", description: "能不能合" }, comments: { type: "array", items: { type: "string" }, description: "要改的地方" } } } },
       { id: "ok", title: "你来定", human: "$starter", prompt: "「{{steps.write.summary}}」审过了。就这样吗？", options: ["就这样", "不要了"] },
     ],
     edges: [
-      { from: "write", to: "review" }, { from: "review", to: "ok", when: "output.approved" },
+      { from: "write", to: "review", map: { where: "{{output.where}}" } }, { from: "review", to: "ok", when: "output.approved" },
       { from: "review", to: "write", when: "!output.approved", maxIterations: 3, else: "$fail" },
       { from: "ok", to: "$end", when: "output.choice == '就这样'" }, { from: "ok", to: "$fail", when: "output.choice != '就这样'" },
     ],
@@ -3914,9 +3917,9 @@ function seedWorkflows(hub) {
     id: a, workflow_id: "wf_review", name: review.name, version: 2, status: "waiting", inputs: { task: "设置页加一个「导出对话」按钮" },
     owner: "glenn", by: "glenn", trigger: "manual", created_at: iso(5400), updated_at: iso(300), def: review,
     steps: [
-      st(a, 1, "write", "agent", 1, "done", "pm-codex", 5400, 1500, { title: "做", summary: "加好了导出按钮，放在设置 › 对话", output: { where: "feat/export-chat", summary: "加好了导出按钮，放在设置 › 对话" },
+      st(a, 1, "write", "agent", 1, "done", "pm-codex", 5400, 1500, { title: "做", summary: "加好了导出按钮，放在设置 › 对话", payload: { task: "设置页加一个「导出对话」按钮" }, output: { where: "feat/export-chat", summary: "加好了导出按钮，放在设置 › 对话" },
         input: "完成这件事：设置页加一个「导出对话」按钮", message_id: task("pm-codex", "[工作流「写-审-改」· 第 1 步 做]\n\n完成这件事：设置页加一个「导出对话」按钮", "加好了导出按钮，放在设置 › 对话。分支 feat/export-chat。", 5400, a) }),
-      st(a, 2, "review", "agent", 1, "done", "docs-claude", 3900, 600, { title: "审", summary: "少了导出失败时的提示", output: { approved: false, comments: ["导出失败时没有提示", "按钮文字和别处不一致"] },
+      st(a, 2, "review", "agent", 1, "done", "docs-claude", 3900, 600, { title: "审", summary: "少了导出失败时的提示", payload: { where: "feat/export-chat" }, output: { approved: false, comments: ["导出失败时没有提示", "按钮文字和别处不一致"] },
         input: "审一下这个改动：加好了导出按钮", message_id: task("docs-claude", "[工作流「写-审-改」· 第 2 步 审]\n\n审一下这个改动：加好了导出按钮", "两处要改：导出失败时没有提示；按钮文字和别处不一致。", 3900, a) }),
       st(a, 3, "write", "agent", 2, "done", "pm-codex", 3300, 1200, { title: "做", summary: "补上失败提示，按钮改成「导出这段对话」", output: { where: "feat/export-chat" },
         input: "完成这件事：设置页加一个「导出对话」按钮\n上一轮审查的意见：导出失败时没有提示；按钮文字和别处不一致", message_id: task("pm-codex", "[工作流「写-审-改」· 第 1 步 做 · 第 2 次]\n\n补上审查意见", "补上失败提示，按钮改成「导出这段对话」。", 3300, a) }),

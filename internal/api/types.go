@@ -1669,6 +1669,9 @@ type TemplateUsed struct {
 type Workflow struct {
 	ID          string          `json:"id"`
 	Name        string          `json:"name"`
+	Title       string          `json:"title,omitempty"`
+	Tags        []string        `json:"tags,omitempty"`
+	Group       string          `json:"group,omitempty"`
 	Description string          `json:"description,omitempty"`
 	Project     string          `json:"project,omitempty"`
 	Owner       string          `json:"owner,omitempty"`
@@ -1753,15 +1756,18 @@ type WorkflowRun struct {
 
 // RunStep is one start of a step in a run.
 type RunStep struct {
-	ID        string         `json:"id"`
-	Step      string         `json:"step"`
-	Title     string         `json:"title,omitempty"`
-	Kind      string         `json:"kind"` // agent computer human
-	Attempt   int            `json:"attempt"`
-	Status    string         `json:"status"` // running waiting done failed cancelled
-	Target    string         `json:"target,omitempty"`
-	MessageID string         `json:"message_id,omitempty"`
-	Input     string         `json:"input,omitempty"`
+	ID        string `json:"id"`
+	Step      string `json:"step"`
+	Title     string `json:"title,omitempty"`
+	Kind      string `json:"kind"` // agent computer human
+	Attempt   int    `json:"attempt"`
+	Status    string `json:"status"` // running waiting done failed cancelled
+	Target    string `json:"target,omitempty"`
+	MessageID string `json:"message_id,omitempty"`
+	Input     string `json:"input,omitempty"`
+	// Payload is the step's input as JSON (the run's inputs, the step
+	// before's result, an edge's map, or a join's object by step).
+	Payload   any            `json:"payload,omitempty"`
 	Output    map[string]any `json:"output,omitempty"`
 	Summary   string         `json:"summary,omitempty"`
 	Error     string         `json:"error,omitempty"`

@@ -70,7 +70,7 @@ func defBytes(d *domain.WorkflowDef) json.RawMessage {
 
 func workflowDTO(o *app.WorkflowOut, withDef bool) api.Workflow {
 	w := o.Workflow
-	out := api.Workflow{ID: w.ID, Name: w.Name, Description: w.Def.Description, Project: w.Project, Owner: w.Owner, Version: w.Version,
+	out := api.Workflow{ID: w.ID, Name: w.Name, Title: w.Def.Title, Tags: w.Def.Tags, Group: w.Def.Group, Description: w.Def.Description, Project: w.Project, Owner: w.Owner, Version: w.Version,
 		Enabled: w.Enabled, Steps: len(w.Def.Steps), Active: o.Active, CreatedAt: w.CreatedAt, UpdatedAt: w.UpdatedAt}
 	if o.LastRun != nil {
 		r := runDTO(o.LastRun, nil)
@@ -104,7 +104,7 @@ func runDTO(r *domain.WorkflowRun, d *app.RunDetail) api.WorkflowRun {
 
 func runStepDTO(st *domain.RunStep, def *domain.StepDef) api.RunStep {
 	out := api.RunStep{ID: st.ID, Step: st.StepID, Kind: st.Kind, Attempt: st.Attempt, Status: st.Status, Target: st.Target,
-		MessageID: st.MessageID, Input: st.Input, Output: st.Output, Summary: st.Summary, Error: st.Error, Retries: st.Retries,
+		MessageID: st.MessageID, Input: st.Input, Payload: st.Payload, Output: st.Output, Summary: st.Summary, Error: st.Error, Retries: st.Retries,
 		Bounced: st.Bounced, StartedAt: st.StartedAt, EndedAt: timePtr(st.EndedAt), DueAt: timePtr(st.DueAt)}
 	if def != nil {
 		out.Title = def.Title

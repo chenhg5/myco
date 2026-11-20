@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"regexp"
 	"strconv"
 	"strings"
 	"unicode"
@@ -15,11 +16,15 @@ import (
 //	steps.review.output.score  another step's latest result
 //	inputs.task                the run's inputs
 //	output.items[0], output["中文 key"]
-//	== != < <= > >=  && || !  ( )
+//	== != < <= > >=  && || !  and or not  in  ( )
+//	+ - * / %  (numbers; + also joins text)
 //	"text" 'text' 12 3.5 true false null
-//	len(x)  contains(x, y)  (y in a string, a list or an object's keys)
+//	len(x) contains(x, y) startsWith(s, p) endsWith(s, p) matches(s, re)
+//	lower(s) upper(s) trim(s)
 //
-// Nothing else: no assignments, no calls out, no loops.
+// Nothing else: no assignments, no calls out, no loops. A step id with a
+// dash reads as one name when a letter follows the dash (steps.write-a);
+// put spaces around a minus.
 
 // Expr is a parsed expression.
 type Expr struct{ root exprNode }
@@ -125,7 +130,8 @@ func (p *exprParser) lex() error {
 			i = j
 		case unicode.IsLetter(c) || c == '_' || c == '$':
 			j := i
-			for j < len(rs) && (unicode.IsLetter(rs[j]) || unicode.IsDigit(rs[j]) || rs[j] == '_' || rs[j] == '-' || rs[j] == '$') {
+			for j < len(rs) && (unicode.IsLetter(rs[j]) || unicode.IsDigit(rs[j]) || rs[j] == '_' || rs[j] == '$' ||
+				(rs[j] == '-' && j+1 < len(rs) && unicode.IsLetter(rs[j+1]))) {
 				j++
 			}
 			p.toks = append(p.toks, tok{kind: "ident", text: string(rs[i:j])})
@@ -141,7 +147,7 @@ func (p *exprParser) lex() error {
 				i += 2
 				continue
 			}
-			if strings.ContainsRune("<>!().[],", c) {
+			if strings.ContainsRune("<>!().[],+-*/%", c) {
 				p.toks = append(p.toks, tok{kind: "op", text: string(c)})
 				i++
 				continue
@@ -169,9 +175,18 @@ type binNode struct {
 	l, r exprNode
 }
 
+// word eats a keyword (and, or, not, in).
+func (p *exprParser) word(w string) bool {
+	if p.pos < len(p.toks) && p.toks[p.pos].kind == "ident" && p.toks[p.pos].text == w {
+		p.pos++
+		return true
+	}
+	return false
+}
+
 func (p *exprParser) or() (exprNode, error) {
 	l, err := p.and()
-	for err == nil && p.eat("||") {
+	for err == nil && (p.eat("||") || p.word("or")) {
 		var r exprNode
 		if r, err = p.and(); err == nil {
 			l = &binNode{"||", l, r}
@@ -182,7 +197,7 @@ func (p *exprParser) or() (exprNode, error) {
 
 func (p *exprParser) and() (exprNode, error) {
 	l, err := p.cmp()
-	for err == nil && p.eat("&&") {
+	for err == nil && (p.eat("&&") || p.word("and")) {
 		var r exprNode
 		if r, err = p.cmp(); err == nil {
 			l = &binNode{"&&", l, r}
@@ -192,20 +207,133 @@ func (p *exprParser) and() (exprNode, error) {
 }
 
 func (p *exprParser) cmp() (exprNode, error) {
-	l, err := p.unary()
+	l, err := p.sum()
 	if err != nil {
 		return nil, err
 	}
 	for _, op := range []string{"==", "!=", "<=", ">=", "<", ">"} {
 		if p.eat(op) {
-			r, err := p.unary()
+			r, err := p.sum()
 			if err != nil {
 				return nil, err
 			}
 			return &binNode{op, l, r}, nil
 		}
 	}
+	if p.word("in") {
+		r, err := p.sum()
+		if err != nil {
+			return nil, err
+		}
+		return &callNode{fn: "contains", args: []exprNode{r, l}}, nil
+	}
+	if p.pos+1 < len(p.toks) && p.toks[p.pos].text == "not" && p.toks[p.pos+1].text == "in" {
+		p.pos += 2
+		r, err := p.sum()
+		if err != nil {
+			return nil, err
+		}
+		return &notNode{&callNode{fn: "contains", args: []exprNode{r, l}}}, nil
+	}
 	return l, nil
+}
+
+func (p *exprParser) sum() (exprNode, error) {
+	l, err := p.product()
+	for err == nil {
+		op := ""
+		switch {
+		case p.eat("+"):
+			op = "+"
+		case p.eat("-"):
+			op = "-"
+		default:
+			return l, nil
+		}
+		var r exprNode
+		if r, err = p.product(); err == nil {
+			l = &arithNode{op, l, r}
+		}
+	}
+	return l, err
+}
+
+func (p *exprParser) product() (exprNode, error) {
+	l, err := p.unary()
+	for err == nil {
+		op := ""
+		switch {
+		case p.eat("*"):
+			op = "*"
+		case p.eat("/"):
+			op = "/"
+		case p.eat("%"):
+			op = "%"
+		default:
+			return l, nil
+		}
+		var r exprNode
+		if r, err = p.unary(); err == nil {
+			l = &arithNode{op, l, r}
+		}
+	}
+	return l, err
+}
+
+// arithNode: numbers; + also joins text (or text and a number).
+type arithNode struct {
+	op   string
+	l, r exprNode
+}
+
+func (n *arithNode) eval(env map[string]any) (any, error) {
+	l, err := n.l.eval(env)
+	if err != nil {
+		return nil, err
+	}
+	r, err := n.r.eval(env)
+	if err != nil {
+		return nil, err
+	}
+	lf, lok := l.(float64)
+	rf, rok := r.(float64)
+	if !lok || !rok {
+		if n.op == "+" {
+			_, ls := l.(string)
+			_, rs := r.(string)
+			if ls || rs {
+				return ValueText(l) + ValueText(r), nil
+			}
+		}
+		return nil, nil // not numbers: null
+	}
+	switch n.op {
+	case "+":
+		return lf + rf, nil
+	case "-":
+		return lf - rf, nil
+	case "*":
+		return lf * rf, nil
+	case "/":
+		if rf == 0 {
+			return nil, fmt.Errorf("division by zero")
+		}
+		return lf / rf, nil
+	}
+	if rf == 0 {
+		return nil, fmt.Errorf("division by zero")
+	}
+	return math.Mod(lf, rf), nil
+}
+
+type negNode struct{ x exprNode }
+
+func (n *negNode) eval(env map[string]any) (any, error) {
+	v, err := n.x.eval(env)
+	if f, ok := v.(float64); ok {
+		return -f, err
+	}
+	return nil, err
 }
 
 type notNode struct{ x exprNode }
@@ -216,7 +344,14 @@ func (n *notNode) eval(env map[string]any) (any, error) {
 }
 
 func (p *exprParser) unary() (exprNode, error) {
-	if p.eat("!") {
+	if p.eat("-") {
+		x, err := p.unary()
+		if err != nil {
+			return nil, err
+		}
+		return &negNode{x}, nil
+	}
+	if p.eat("!") || (p.pos+1 < len(p.toks) && p.toks[p.pos].kind == "ident" && p.toks[p.pos].text == "not" && p.toks[p.pos+1].text != "in" && p.word("not")) {
 		x, err := p.unary()
 		if err != nil {
 			return nil, err
@@ -306,10 +441,29 @@ func (n *callNode) eval(env map[string]any) (any, error) {
 		}
 		return false, nil
 	}
+	str := func(i int) string { s, _ := vs[i].(string); return s }
+	switch n.fn {
+	case "startsWith":
+		return strings.HasPrefix(str(0), str(1)), nil
+	case "endsWith":
+		return strings.HasSuffix(str(0), str(1)), nil
+	case "lower":
+		return strings.ToLower(str(0)), nil
+	case "upper":
+		return strings.ToUpper(str(0)), nil
+	case "trim":
+		return strings.TrimSpace(str(0)), nil
+	case "matches":
+		re, err := regexp.Compile(str(1))
+		if err != nil {
+			return nil, fmt.Errorf("matches: %v", err)
+		}
+		return re.MatchString(str(0)), nil
+	}
 	return nil, fmt.Errorf("unknown function %s", n.fn)
 }
 
-var exprFuncs = map[string]int{"len": 1, "contains": 2}
+var exprFuncs = map[string]int{"len": 1, "contains": 2, "startsWith": 2, "endsWith": 2, "matches": 2, "lower": 1, "upper": 1, "trim": 1}
 
 func (p *exprParser) primary() (exprNode, error) {
 	if p.pos >= len(p.toks) {
@@ -593,4 +747,108 @@ func ValueText(v any) string {
 	}
 	b, _ := json.Marshal(v)
 	return string(b)
+}
+
+// Refs lists the paths the expression reads, as their leading names
+// (output.items[0].x is [output items]; a computed key ends it).
+func (e *Expr) Refs() [][]string {
+	var out [][]string
+	collectRefs(e.root, &out)
+	return out
+}
+
+func collectRefs(n exprNode, out *[][]string) {
+	switch x := n.(type) {
+	case *pathNode:
+		p := []string{x.name}
+		for _, part := range x.parts {
+			lit, ok := part.(*litNode)
+			if !ok {
+				break
+			}
+			s, isStr := lit.v.(string)
+			if !isStr {
+				break
+			}
+			p = append(p, s)
+		}
+		for _, part := range x.parts {
+			if _, ok := part.(*litNode); !ok {
+				collectRefs(part, out)
+			}
+		}
+		*out = append(*out, p)
+	case *binNode:
+		collectRefs(x.l, out)
+		collectRefs(x.r, out)
+	case *arithNode:
+		collectRefs(x.l, out)
+		collectRefs(x.r, out)
+	case *notNode:
+		collectRefs(x.x, out)
+	case *negNode:
+		collectRefs(x.x, out)
+	case *callNode:
+		for _, a := range x.args {
+			collectRefs(a, out)
+		}
+	}
+}
+
+func tmplRefs(nodes []tmplNode) [][]string {
+	var out [][]string
+	for _, n := range nodes {
+		if n.expr != nil {
+			out = append(out, n.expr.Refs()...)
+		}
+		if n.cond != nil {
+			out = append(out, n.cond.Refs()...)
+		}
+		out = append(out, tmplRefs(n.then)...)
+		out = append(out, tmplRefs(n.other)...)
+	}
+	return out
+}
+
+// RenderValue fills a map value: text "{{expr}}" alone gives the value
+// itself (keeping its type; missing: ""), other text is a template, and
+// lists and objects are filled inside.
+func RenderValue(v any, env map[string]any) (any, error) {
+	switch x := v.(type) {
+	case string:
+		t := strings.TrimSpace(x)
+		if strings.HasPrefix(t, "{{") && strings.HasSuffix(t, "}}") && strings.Count(t, "{{") == 1 && !strings.HasPrefix(t, "{{#") {
+			e, err := ParseExpr(strings.TrimSpace(t[2 : len(t)-2]))
+			if err != nil {
+				return nil, err
+			}
+			r, err := e.Eval(env)
+			if r == nil {
+				r = ""
+			}
+			return r, err
+		}
+		return RenderTemplate(x, env)
+	case map[string]any:
+		out := map[string]any{}
+		for k, e := range x {
+			r, err := RenderValue(e, env)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", k, err)
+			}
+			out[k] = r
+		}
+		return out, nil
+	case []any:
+		out := make([]any, len(x))
+		for i, e := range x {
+			r, err := RenderValue(e, env)
+			if err != nil {
+				return nil, err
+			}
+			out[i] = r
+		}
+		return out, nil
+	}
+	return v, nil
 }

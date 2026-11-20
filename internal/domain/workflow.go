@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -41,6 +42,9 @@ const (
 	// MaxRunSteps bounds the step instances one run may start (loops
 	// included), so a mistake cannot spin forever.
 	MaxRunSteps = 200
+	// MaxRunStepsUnbounded is the same for a workflow that allows
+	// unbounded cycles.
+	MaxRunStepsUnbounded = 2000
 	// MaxRunEvents bounds what one run keeps in its log.
 	MaxRunEvents = 500
 	// DefaultHumanTimeout is how long a decision waits when the step names
@@ -50,14 +54,35 @@ const (
 
 // WorkflowDef is what people (usually an agent) write: JSON.
 type WorkflowDef struct {
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
-	Project     string `json:"project,omitempty"`
-	// Inputs is the start form: an object schema.
+	Name string `json:"name"`
+	// Title, Description, Tags and Group are for people (lists, the App);
+	// they do not change how it runs.
+	Title       string   `json:"title,omitempty"`
+	Description string   `json:"description,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
+	Group       string   `json:"group,omitempty"`
+	Project     string   `json:"project,omitempty"`
+	// Inputs is the start form: an object schema (JSON Schema).
 	Inputs *Schema    `json:"inputs,omitempty"`
 	Steps  []StepDef  `json:"steps"`
 	Edges  []EdgeDef  `json:"edges,omitempty"`
 	Layout *DefLayout `json:"layout,omitempty"`
+	// Entry is the step a run starts at ("" = the first).
+	Entry string `json:"entry,omitempty"`
+	// AllowUnboundedCycles lets an edge go back without maxIterations
+	// (the loop ends when a condition says so, or the run is cancelled).
+	AllowUnboundedCycles bool `json:"allowUnboundedCycles,omitempty"`
+}
+
+// EntryStep is the step a run starts at.
+func (d *WorkflowDef) EntryStep() string {
+	if d.Entry != "" {
+		return d.Entry
+	}
+	if len(d.Steps) > 0 {
+		return d.Steps[0].ID
+	}
+	return ""
 }
 
 // DefLayout is optional drawing hints for the App (unused by the engine).
@@ -84,19 +109,79 @@ type StepDef struct {
 	// Options are the choices.
 	Human   string   `json:"human,omitempty"`
 	Options []string `json:"options,omitempty"`
-	// Output is the shape an agent's result must have.
-	Output *Schema `json:"output,omitempty"`
+	// Output (or OutputSchema, the same) is the JSON Schema an agent's
+	// result must fit; InputSchema, the one its input must fit before it
+	// is sent (the run's inputs for the entry step, the step before's
+	// result, an edge's map, or a join's object keyed by step).
+	Output       *Schema `json:"output,omitempty"`
+	OutputSchema *Schema `json:"outputSchema,omitempty"`
+	InputSchema  *Schema `json:"inputSchema,omitempty"`
 	// Timeout: Go duration, or "<n>d" for days ("" = none; human steps
 	// wait DefaultHumanTimeout).
 	Timeout string `json:"timeout,omitempty"`
 	// Retry: how many more times a failed step is sent again.
 	Retry int `json:"retry,omitempty"`
 	// Dispatch "all": every matching edge out of it is taken (in
-	// parallel), not just the first.
+	// parallel); "first" (the default): only the first.
 	Dispatch string `json:"dispatch,omitempty"`
-	// Join "all": it starts only when every step with an edge into it has
-	// arrived.
-	Join string `json:"join,omitempty"`
+	// Join: it starts only when the steps it waits for have all arrived:
+	// "all" (every step with an edge into it) or {"from": [ids]}. Its
+	// input is an object keyed by those steps.
+	Join *JoinSpec `json:"join,omitempty"`
+}
+
+// Contract is the step's output schema (output or outputSchema).
+func (s *StepDef) Contract() *Schema {
+	if s.Output != nil {
+		return s.Output
+	}
+	return s.OutputSchema
+}
+
+// JoinSpec is "all" or {"from": [step ids]}.
+type JoinSpec struct {
+	All  bool
+	From []string
+}
+
+func (j *JoinSpec) UnmarshalJSON(b []byte) error {
+	var s string
+	if json.Unmarshal(b, &s) == nil {
+		if s != "all" {
+			return fmt.Errorf(`join must be "all" or {"from": [step ids]}`)
+		}
+		j.All = true
+		return nil
+	}
+	var o struct {
+		From []string `json:"from"`
+	}
+	dec := json.NewDecoder(strings.NewReader(string(b)))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&o); err != nil {
+		return fmt.Errorf(`join must be "all" or {"from": [step ids]}: %v`, err)
+	}
+	j.From = o.From
+	return nil
+}
+
+func (j JoinSpec) MarshalJSON() ([]byte, error) {
+	if j.All || len(j.From) == 0 {
+		return json.Marshal("all")
+	}
+	return json.Marshal(map[string]any{"from": j.From})
+}
+
+// Waits lists the steps a join waits for.
+func (d *WorkflowDef) Waits(id string) []string {
+	st := d.Step(id)
+	if st == nil || st.Join == nil {
+		return nil
+	}
+	if len(st.Join.From) > 0 {
+		return st.Join.From
+	}
+	return d.Preds(id)
 }
 
 // Kind is the step's kind.
@@ -144,6 +229,10 @@ type EdgeDef struct {
 	// OnError: taken only when From failed (other edges only when it
 	// succeeded).
 	OnError bool `json:"onError,omitempty"`
+	// Map builds the next step's input (an object; each value a template:
+	// "{{output.x}}" alone keeps x's type). Without it, the step's result
+	// is passed on as it is.
+	Map map[string]any `json:"map,omitempty"`
 }
 
 // ParseWorkflowDuration reads "90s", "2h", "1d", "1d12h" ("" = 0).
@@ -191,7 +280,9 @@ func ParseWorkflowDef(b []byte) (*WorkflowDef, error) {
 }
 
 // Problems lists everything wrong with the definition (none: valid).
+// Schemas are compiled completely when CompleteContracts is set.
 func (d *WorkflowDef) Problems() []string {
+	c := CompleteContracts
 	var out []string
 	bad := func(f string, a ...any) { out = append(out, fmt.Sprintf(f, a...)) }
 	d.Name = strings.TrimSpace(d.Name)
@@ -200,10 +291,27 @@ func (d *WorkflowDef) Problems() []string {
 	} else if len([]rune(d.Name)) > MaxWorkflowName {
 		bad("name is longer than %d characters", MaxWorkflowName)
 	}
-	if d.Inputs != nil {
-		if p := d.Inputs.problems("inputs"); len(p) > 0 {
-			out = append(out, p...)
+	if len([]rune(d.Title)) > 120 {
+		bad("title is longer than 120 characters")
+	}
+	if len([]rune(d.Description)) > 2000 {
+		bad("description is longer than 2000 characters")
+	}
+	if len([]rune(d.Group)) > 80 {
+		bad("group is longer than 80 characters")
+	}
+	if len(d.Tags) > 20 {
+		bad("tags: at most 20")
+	}
+	seenTag := map[string]bool{}
+	for _, t := range d.Tags {
+		if strings.TrimSpace(t) == "" || len([]rune(t)) > 40 || seenTag[t] {
+			bad("tag %q is empty, longer than 40 characters, or there twice", t)
 		}
+		seenTag[t] = true
+	}
+	if d.Inputs != nil {
+		out = append(out, d.Inputs.problems("inputs", c)...)
 	}
 	if len(d.Steps) == 0 {
 		bad("steps: a workflow needs at least one step")
@@ -216,6 +324,15 @@ func (d *WorkflowDef) Problems() []string {
 	}
 	ids := map[string]bool{}
 	for i := range d.Steps {
+		if id := d.Steps[i].ID; stepIDRe.MatchString(id) {
+			if ids[id] {
+				bad("step %s: id is used twice", id)
+			}
+			ids[id] = true
+		}
+	}
+	refs := refChecker{d: d, ids: ids}
+	for i := range d.Steps {
 		s := &d.Steps[i]
 		where := fmt.Sprintf("steps[%d]", i)
 		if s.ID != "" {
@@ -223,10 +340,7 @@ func (d *WorkflowDef) Problems() []string {
 		}
 		if !stepIDRe.MatchString(s.ID) {
 			bad("%s: id must be letters, digits, _ or - (starting with a letter), at most 40", where)
-		} else if ids[s.ID] {
-			bad("%s: id is used twice", where)
 		}
-		ids[s.ID] = true
 		n := 0
 		for _, v := range []string{s.Agent, s.Role, s.Computer, s.Human} {
 			if v != "" {
@@ -235,6 +349,9 @@ func (d *WorkflowDef) Problems() []string {
 		}
 		if n != 1 {
 			bad("%s: set exactly one of agent, role, computer, human", where)
+		}
+		if s.Output != nil && s.OutputSchema != nil {
+			bad("%s: output and outputSchema are the same; set one", where)
 		}
 		switch s.Kind() {
 		case StepAgent:
@@ -251,14 +368,14 @@ func (d *WorkflowDef) Problems() []string {
 			if s.Parse != "" && s.Parse != "json" {
 				bad(`%s: parse can only be "json"`, where)
 			}
-			if s.Output != nil || len(s.Options) > 0 || s.Prompt != "" {
-				bad("%s: prompt, output and options are for agent and human steps", where)
+			if len(s.Options) > 0 || s.Prompt != "" {
+				bad("%s: prompt and options are for agent and human steps", where)
 			}
 		case StepHuman:
 			if len(s.Options) < 2 {
 				bad(`%s: a human step needs at least two options, e.g. ["合并", "不合并"]`, where)
 			}
-			if s.Output != nil || s.Run != "" || s.Retry > 0 {
+			if s.Contract() != nil || s.Run != "" || s.Retry > 0 {
 				bad("%s: output, run and retry are for agent and computer steps", where)
 			}
 		}
@@ -268,14 +385,14 @@ func (d *WorkflowDef) Problems() []string {
 		if s.Retry < 0 || s.Retry > 5 {
 			bad("%s: retry must be 0 to 5", where)
 		}
-		if s.Dispatch != "" && s.Dispatch != "all" {
-			bad(`%s: dispatch can only be "all"`, where)
+		if s.Dispatch != "" && s.Dispatch != "all" && s.Dispatch != "first" {
+			bad(`%s: dispatch is "first" (the default) or "all"`, where)
 		}
-		if s.Join != "" && s.Join != "all" {
-			bad(`%s: join can only be "all"`, where)
+		if c := s.Contract(); c != nil {
+			out = append(out, c.problems(where+": output", CompleteContracts)...)
 		}
-		if s.Output != nil {
-			out = append(out, s.Output.problems(where+": output")...)
+		if s.InputSchema != nil {
+			out = append(out, s.InputSchema.problems(where+": inputSchema", c)...)
 		}
 		if len([]rune(s.Role)) > 40 {
 			bad("%s: role is longer than 40 characters", where)
@@ -283,7 +400,9 @@ func (d *WorkflowDef) Problems() []string {
 		for _, t := range []string{s.Prompt, s.Run, s.Title, s.Agent, s.Computer, s.Role} {
 			if err := CheckTemplate(t); err != nil {
 				bad("%s: %v", where, err)
+				continue
 			}
+			out = append(out, refs.template(where, t, false)...)
 		}
 	}
 	target := func(t string) bool { return t == EdgeEnd || t == EdgeFail || ids[t] }
@@ -302,18 +421,27 @@ func (d *WorkflowDef) Problems() []string {
 			bad("%s: maxIterations cannot be negative", where)
 		}
 		if e.When != "" {
-			if _, err := ParseExpr(e.When); err != nil {
+			x, err := ParseExpr(e.When)
+			if err != nil {
 				bad("%s: when: %v", where, err)
+			} else {
+				out = append(out, refs.paths(where+": when", x.Refs(), true)...)
 			}
 		}
+		for k, v := range e.Map {
+			out = append(out, refs.value(fmt.Sprintf("%s: map.%s", where, k), v)...)
+		}
+	}
+	if d.Entry != "" && !ids[d.Entry] {
+		bad("entry %q is not a step", d.Entry)
 	}
 	if len(out) > 0 {
 		return out
 	}
-	// Loops must be bounded; every step must be reachable; joins need
-	// several ways in.
-	// Every loop has an edge to the same or an earlier step (in steps
-	// order), so bounding those bounds every loop.
+	// Loops must be bounded (unless allowed not to be); every step must
+	// be reachable; joins need several ways in. Every loop has an edge to
+	// the same or an earlier step (in steps order), so bounding those
+	// bounds every loop.
 	g := d.graph()
 	pos := map[string]int{}
 	for i, s := range d.Steps {
@@ -324,17 +452,121 @@ func (d *WorkflowDef) Problems() []string {
 		if back(e.Else) {
 			bad("edges[%d] (%s → %s): else cannot go back to an earlier step (it is what happens when the loop is over)", i, e.From, e.To)
 		}
-		if back(e.To) && e.MaxIterations == 0 {
-			bad("edges[%d] (%s → %s) goes back to an earlier step: give it maxIterations (and else for what happens after)", i, e.From, e.To)
+		if back(e.To) && e.MaxIterations == 0 && !d.AllowUnboundedCycles {
+			bad("edges[%d] (%s → %s) goes back to an earlier step: give it maxIterations (and else for what happens after), or set allowUnboundedCycles", i, e.From, e.To)
 		}
 	}
-	seen := g.reachable(d.Steps[0].ID)
+	seen := g.reachable(d.EntryStep())
 	for _, s := range d.Steps {
 		if !seen[s.ID] {
-			bad("step %s: no edge leads to it from the first step", s.ID)
+			bad("step %s: no edge leads to it from the entry step", s.ID)
 		}
-		if s.Join == "all" && len(g.preds[s.ID]) < 2 {
-			bad("step %s: join all needs edges from at least two steps", s.ID)
+		if s.Join == nil {
+			continue
+		}
+		preds := g.preds[s.ID]
+		if len(s.Join.From) == 0 {
+			if len(preds) < 2 {
+				bad("step %s: join all needs edges from at least two steps", s.ID)
+			}
+			continue
+		}
+		if len(s.Join.From) < 2 {
+			bad("step %s: join.from needs at least two steps", s.ID)
+		}
+		for _, f := range s.Join.From {
+			if !slices.Contains(preds, f) {
+				bad("step %s: join.from %q has no edge into it", s.ID, f)
+			}
+		}
+		for _, p := range preds {
+			if !slices.Contains(s.Join.From, p) {
+				bad("step %s: %s has an edge into it but is not in join.from", s.ID, p)
+			}
+		}
+	}
+	return out
+}
+
+// CompleteContracts, when set (by the hub), checks every schema
+// completely: inputs, outputs, and the values they are given.
+var CompleteContracts Contracts
+
+// refChecker checks the paths templates and conditions read: a step's
+// fields exist, an input is declared.
+type refChecker struct {
+	d   *WorkflowDef
+	ids map[string]bool
+}
+
+var stepFields = map[string]bool{"output": true, "result": true, "input": true, "summary": true, "status": true, "error": true, "attempt": true}
+
+func (r refChecker) template(where, t string, edge bool) []string {
+	nodes, err := parseTemplate(t)
+	if err != nil {
+		return nil
+	}
+	return r.paths(where, tmplRefs(nodes), edge)
+}
+
+func (r refChecker) value(where string, v any) []string {
+	switch x := v.(type) {
+	case string:
+		if err := CheckTemplate(x); err != nil {
+			return []string{fmt.Sprintf("%s: %v", where, err)}
+		}
+		return r.template(where, x, true)
+	case map[string]any:
+		var out []string
+		for k, e := range x {
+			out = append(out, r.value(where+"."+k, e)...)
+		}
+		return out
+	case []any:
+		var out []string
+		for i, e := range x {
+			out = append(out, r.value(fmt.Sprintf("%s[%d]", where, i), e)...)
+		}
+		return out
+	}
+	return nil
+}
+
+// paths checks references; edge: output, status, error, attempt of the
+// step that ended may be read too.
+func (r refChecker) paths(where string, refs [][]string, edge bool) []string {
+	var out []string
+	declared := func(name string) bool {
+		in := r.d.Inputs
+		if in == nil || len(in.Properties) == 0 {
+			return true
+		}
+		if ap, ok := in.Raw["additionalProperties"]; ok && ap != false {
+			return true
+		}
+		_, ok := in.Properties[name]
+		return ok
+	}
+	for _, p := range refs {
+		root := p[0]
+		switch root {
+		case "inputs":
+			if len(p) > 1 && !declared(p[1]) {
+				out = append(out, fmt.Sprintf("%s: inputs.%s is not one of the workflow's inputs", where, p[1]))
+			}
+		case "steps", "nodes":
+			if len(p) > 1 && !r.ids[p[1]] {
+				out = append(out, fmt.Sprintf("%s: %s.%s: there is no step %s", where, root, p[1], p[1]))
+			} else if len(p) > 2 && !stepFields[p[2]] {
+				out = append(out, fmt.Sprintf("%s: %s.%s.%s: a step has output (result), input, summary, status, error, attempt", where, root, p[1], p[2]))
+			}
+		case "input", "run":
+		case "output", "status", "error", "attempt":
+			if !edge {
+				out = append(out, fmt.Sprintf("%s: %s is only known on an edge (when, map); in a step use steps.<id>.%s", where, root, root))
+			}
+		default:
+			out = append(out, fmt.Sprintf("%s: unknown name %q; use inputs, input, steps.<id>, nodes.<id>, run%s", where, root, map[bool]string{true: ", output, status, error, attempt"}[edge]))
 		}
 	}
 	return out
@@ -523,6 +755,8 @@ type WorkflowRun struct {
 type RunState struct {
 	Edges map[string]int      `json:"edges,omitempty"`
 	Joins map[string][]string `json:"joins,omitempty"`
+	// JoinIn is what each step that arrived at a join carried, by step.
+	JoinIn map[string]map[string]any `json:"join_in,omitempty"`
 }
 
 // RunStep is one start of a step in a run (a step in a loop runs several
@@ -537,6 +771,9 @@ type RunStep struct {
 	Target    string // agent or computer; the person for a decision
 	MessageID string
 	Input     string // the task or command as sent
+	// Payload is the step's input (JSON): the run's inputs, the step
+	// before's result, an edge's map, or a join's object by step.
+	Payload   any
 	Output    map[string]any
 	Summary   string
 	Error     string

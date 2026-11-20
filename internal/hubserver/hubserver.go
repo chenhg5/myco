@@ -19,6 +19,7 @@ import (
 	"github.com/chenhg5/myco/internal/app"
 	"github.com/chenhg5/myco/internal/domain"
 	"github.com/chenhg5/myco/internal/infra/blob"
+	"github.com/chenhg5/myco/internal/infra/jsonschema"
 	"github.com/chenhg5/myco/internal/infra/notify"
 	"github.com/chenhg5/myco/internal/infra/security"
 	"github.com/chenhg5/myco/internal/infra/sqlite"
@@ -217,6 +218,7 @@ func Build(o Options) (*Hub, error) {
 	srv.SetTraces(traces)
 	automations := app.NewAutomationService(sqlite.NewAutomationRepo(db), messages, msgRepo, security.Tokens{}, ids, clock, o.Log)
 	srv.SetAutomations(automations)
+	domain.CompleteContracts = jsonschema.New()
 	workflows := app.NewWorkflowService(sqlite.NewWorkflowRepo(db), messages, msgRepo, ids, clock, o.Log)
 	srv.SetWorkflows(workflows)
 	automations.SetWorkflows(workflows)

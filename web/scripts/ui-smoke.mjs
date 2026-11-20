@@ -3739,6 +3739,17 @@ async function runMatrix(browser, size, scheme) {
       await runs.first().waitFor({ timeout: 10_000 });
       await settle(page, 300);
       await shot(page, size, scheme, "workflow-detail");
+      // Inputs and outputs: what a run is given, what each step gets and hands back.
+      const io = det.locator("[data-testid=workflow-contracts]");
+      await io.scrollIntoViewIfNeeded();
+      const ioText = await io.innerText();
+      for (const w of ["运行时要填的", "task", "至少 4 个字", "收到", "交回", "approved", "格式 ^feat/", "选一个：就这样 / 不要了"]) {
+        if (!ioText.includes(w)) throw new Error(`「输入和输出」里应有「${w}」`);
+      }
+      await clickVisible(page, io.locator("[data-step=review] .wfc-json").last());
+      await io.locator("[data-step=review] .wfc-raw", { hasText: "\"approved\"" }).waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "workflow-contracts");
       await clickVisible(page, runs.filter({ hasText: "等你决定" }).first());
       const run = page.locator("[data-testid=workflow-run]");
       await run.waitFor({ timeout: 10_000 });
@@ -3748,6 +3759,7 @@ async function runMatrix(browser, size, scheme) {
       if (!(await steps.nth(2).innerText()).includes("第 2 次")) throw new Error("第二轮的「做」应写第 2 次");
       await clickVisible(page, steps.nth(1).getByRole("button", { name: "详情" }));
       await steps.nth(1).locator(".wf-step-detail pre", { hasText: "comments" }).waitFor({ timeout: 5_000 });
+      await steps.nth(1).locator(".wf-step-detail", { hasText: "收到的输入" }).locator("pre", { hasText: "feat/export-chat" }).waitFor({ timeout: 5_000 });
       await settle(page, 300);
       await shot(page, size, scheme, "workflow-run");
       // Only one step's times: click it in the drawing.
@@ -3789,6 +3801,14 @@ async function runMatrix(browser, size, scheme) {
       if (!(await ed.getByRole("button", { name: "保存新版本" }).isDisabled())) throw new Error("分工空着不该能保存");
       await ed.getByRole("textbox", { name: "第 2 步的分工" }).fill("审查");
       await ed.locator(".wf-edit-loop select").selectOption("5");
+      // What it hands back: fields, or the JSON (rules the form cannot show stay in JSON).
+      const outEd = ed.locator("[data-testid=workflow-edit-output]").nth(1);
+      if ((await outEd.locator(".wfc-row").count()) !== 2) throw new Error("「审」交回的应列出 approved 和 comments 两个字段");
+      await clickVisible(page, outEd.getByRole("button", { name: "加一个字段" }));
+      await outEd.locator(".wfc-row").nth(2).getByRole("textbox", { name: "字段名" }).fill("risk");
+      await outEd.locator(".wfc-row").nth(2).getByRole("combobox", { name: "类型" }).selectOption("number");
+      const inEd = ed.locator("[data-testid=workflow-edit-inputs]");
+      if (!(await inEd.getByRole("button", { name: "用表单改" }).count())) throw new Error("带 minLength 的输入应直接用 JSON 改");
       await clickVisible(page, ed.locator("[data-testid=workflow-edit-step]").first().locator("summary"));
       await settle(page, 200);
       await shot(page, size, scheme, "workflow-edit");

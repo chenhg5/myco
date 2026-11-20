@@ -8835,3 +8835,47 @@ body.is-resizing {
 .wf-edit-pick { display: flex; gap: 6px; min-width: 0; }
 .wf-edit-pick .app-select-field { flex: 1; min-width: 0; }
 .wf-edit-role { flex: 1; min-width: 0; height: 28px; background: var(--card); }
+/* inputs and outputs (WorkflowContracts.tsx): per step, what it gets and
+   what it hands back, each field a line */
+.wfc { padding: 4px 0; }
+.wfc-step { padding: 12px 16px; }
+.wfc-step + .wfc-step { border-top: 1px solid var(--line-2); }
+.wfc-step-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; }
+.wfc-step-head b { font-weight: 500; }
+.wfc-who { font-size: 12px; color: var(--muted); }
+.wfc-run .wf-step-icon { color: var(--fg-2); }
+.wfc-io { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; padding-left: 36px; }
+.wfc-side { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.wfc-label { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--muted); }
+.wfc-label svg { width: 12px; height: 12px; }
+.wfc-run .wfc-schema { padding-left: 36px; }
+.wfc-empty { font-size: 12.5px; color: var(--fg-2); line-height: 1.55; }
+.wfc-schema { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.wfc-field { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; font-size: 12.5px; }
+.wfc-name { font-size: 12px; color: var(--fg); font-weight: 500; }
+.wfc-type { font-size: 12px; color: var(--fg-2); }
+.wfc-req { font-size: 11px; color: var(--fg); padding: 0 6px; border-radius: 999px; background: var(--pill); }
+.wfc-opt { font-size: 11px; color: var(--muted); }
+.wfc-desc { font-size: 12px; color: var(--muted); }
+.wfc-chip { font-size: 11px; color: var(--fg-2); padding: 0 6px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--line); overflow-wrap: anywhere; }
+.wfc-more { display: flex; flex-wrap: wrap; gap: 4px; }
+.wfc-json { align-self: flex-start; padding: 0 6px; }
+.wfc-json svg { width: 12px; height: 12px; }
+.wfc-raw { margin: 0; max-height: 240px; overflow: auto; padding: 8px 10px; border-radius: 8px; background: var(--pill); font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11.5px; line-height: 1.5; color: var(--fg); white-space: pre-wrap; overflow-wrap: anywhere; }
+.wfc-ok { margin-left: 8px; padding: 0 6px; border-radius: 999px; background: var(--green-soft); color: var(--green); font-size: 11px; }
+@media (max-width: 760px) { .wfc-io { grid-template-columns: minmax(0, 1fr); padding-left: 0; } .wfc-run .wfc-schema { padding-left: 0; } }
+/* editing a contract */
+.wfc-edit { display: flex; flex-direction: column; gap: 6px; margin: 2px 0 10px; }
+.wf-edit-step .wfc-edit { margin: 0; }
+.wfc-edit-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11.5px; color: var(--muted); }
+.wfc-row { display: grid; grid-template-columns: minmax(0, 1.1fr) 92px auto minmax(0, 1.4fr) 26px; gap: 6px; align-items: center; }
+.wfc-row .app-input, .wfc-row .app-select-field { height: 28px; background: var(--card); }
+.wfc-edit > .app-input { background: var(--card); }
+.wfc-req-toggle { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.wfc-req-toggle.is-on { color: var(--fg); }
+.wfc-add { align-self: flex-start; }
+.wfc-add svg { width: 13px; height: 13px; }
+.wfc-text { font-size: 12px; line-height: 1.5; background: var(--card); }
+.wfc-bad { color: var(--red); }
+@media (max-width: 640px) { .wfc-row { grid-template-columns: minmax(0, 1fr) 92px auto 26px; } .wfc-row > .app-input:nth-of-type(2) { grid-column: 1 / -1; grid-row: 2; } }
