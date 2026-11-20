@@ -15,6 +15,7 @@ import { recall, remember } from "@/lib/memo";
 import { renameHub, useHubNames } from "@/app/hubNames";
 import { ProjectPage } from "@/app/ProjectPage";
 import { openSettingsSection, SettingsPage } from "@/app/SettingsPage";
+import { AgentSwitcher } from "@/app/AgentSwitcher";
 import { navBack, navForward, navRecord, navSub, onNavApply, useNavState, type NavPlace } from "@/app/nav";
 import { UpdateNotice } from "@/app/UpdateNotice";
 import { Welcome } from "@/app/Welcome";
@@ -1309,6 +1310,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
 
 
       <PageHost />
+      <AgentSwitcher hubId={hubId} rows={chatRows} current={navChatNow ? navChatNow.split("\u0000")[1] : undefined}
+        onPick={(r) => { setNavChat(`${r.hub.id}\u0000${r.st.agent.name}`); chatWithMember(r); }} />
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} rows={allRows} hubs={namedOv?.hubs || []} now={now}
         projects={(projects || []).filter((x) => !x.p.archived).map((x) => ({ hubId: x.hubId, name: x.p.name, title: x.p.title || x.p.name, goal: x.p.goal }))}
         onPick={(t) => {
