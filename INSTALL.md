@@ -316,6 +316,8 @@ myco version
 
 已经在跑的会话可能要重启才会加载新装的 skill；在那之前，让 agent 运行 `myco skill show` 读一遍就行。
 
+**常驻的几行**（v0.21.1 起）：skill 要 agent 自己想起来去读，所以 `myco join` 还会在 Claude Code 和 Codex 的**用户级**说明里（`~/.claude/CLAUDE.md`、`~/.codex/AGENTS.md`，不碰项目里的文件）加几行，每个会话都带着：别人在 myco App 里看着你干活；重要的进展用 `myco message progress` 报，值得看的配上截图（`--attach`）；有明显的下一步就 `--suggest`；要人拍板用 `myco message ask`，要别的 agent 帮忙先 `hold` 再 `send`；用 `inbox wait` 收消息的会话做完一条再挂上。这几行夹在 myco 的标记之间，文件里你自己写的内容不动；开头写明只在这个会话是 myco agent 时才适用。`myco upgrade` 和 runner 启动时会刷新它们。不想要：`myco join --no-memory`，或者事后 `myco skill memory --remove`（会留一个标记，以后不再加回来；`myco skill memory --add` 加回来，`myco skill memory` 看现在的状态）。另外，runner 交给 agent 的每个任务、`inbox wait` 收到任务时打印的提示，也都写了这些用法。
+
 ---
 
 ## 4. 接入网络：按你的类型选一节
@@ -475,6 +477,9 @@ runner:
   env_file: ~/.config/myco-codex.env     # 可选：只传给这个 agent 的 CLI 的环境变量（KEY=VALUE，权限 600）
   args: ["-c", "model_reasoning_effort=medium"]
   timeout: 30m   # 可选：agent 这么久没有任何动静（输出、工具调用、思考）就停掉这一轮，默认 30m
+                 # 另外，Codex / Claude Code 启动后 5 分钟一个字都没输出（连不上模型、在等登录、MCP 卡住），
+                 # 这一轮马上停掉，任务失败，原因写它 stderr 的最后几行（不用等 30 分钟）；
+                 # Codex 在 stderr 里报的错（重连、401、超时）会实时出现在运行过程里
 ```
 
 `timeout` 从 v0.19.2 起按「多久没有动静」算：agent 一直在跑命令、改文件、思考，就不会被打断；一轮最长 6 小时。会话这么久没有任何输出时，任务以「stopped after 30m0s without any activity」失败，发送方会收到通知。不上报过程的 harness（`shell`）仍从开始算起。

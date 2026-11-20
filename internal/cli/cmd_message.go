@@ -747,11 +747,14 @@ const ackHint = `Now send your plan as a checklist: myco message progress --id <
 // ackHintLive: for a session whose steps already show live (trace follow).
 const ackHintLive = `Your steps (thoughts, commands, results) show to the sender live, read from this session's file, and your own todo list shows as the plan. At milestones (cause found, change of direction, blocked, a big step done) send one line of progress: myco message progress --id <id> --body "found X; next Y". If you end your turn before answering (waiting for agents you handed work to), hold it first: myco message hold --id <id>, so the sender sees it waiting, not at work.`
 
-const taskProgressHint = `For each task: start with myco message ack --id <id>; while working, share findings and next steps with myco message progress --id <id> --body "..." (the sender sees updates live); for work with several steps, keep a plan (your CLI's own todo list shows as the plan in Claude Code and Codex; elsewhere send it as a checklist the same way: "- [x] done", "- [~] doing", "- [ ] next"); if the sender has to decide something, ask with myco message ask --id <id> --question "..." --option "..."; if you end your turn before answering (waiting for others), hold it first: myco message hold --id <id>; finish with myco message reply --id <id>. Skip progress for a one-line answer. More: myco skill show.`
+const taskProgressHint = `For each task: start with myco message ack --id <id>; while working, share findings and next steps with myco message progress --id <id> --body "..." (the sender follows you live in the myco app; add --attach shot.png when they would want to see it: a page, a chart, a draft); for work with several steps, keep a plan (your CLI's own todo list shows as the plan in Claude Code and Codex; elsewhere send it as a checklist the same way: "- [x] done", "- [~] doing", "- [ ] next"); if the sender has to decide something, ask with myco message ask --id <id> --question "..." --option "..."; if you end your turn before answering (waiting for others), hold it first: myco message hold --id <id>; finish with myco message reply --id <id> (add --suggest "..." when there is an obvious next step for them: one short line the app puts in their input). Skip progress for a one-line answer. More: myco skill show.`
 
 func inboxTaskHint(msgs []api.Message) string {
-	var task, steer bool
+	var task, steer, project bool
 	for _, m := range msgs {
+		if m.Project != "" {
+			project = true
+		}
 		switch m.Type {
 		case "task":
 			task = true
@@ -765,6 +768,9 @@ func inboxTaskHint(msgs []api.Message) string {
 	}
 	if steer {
 		hints = append(hints, "A steer is the sender's correction to the task named by reply_to. Read it and answer that original task together; it is not a new task.")
+	}
+	if project {
+		hints = append(hints, "A message's project field says which project it is for: work toward that project's goal (myco project get --name <project> shows it), keep each project's work apart, and a message without one is not part of a project.")
 	}
 	return strings.Join(hints, " ")
 }

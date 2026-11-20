@@ -63,8 +63,11 @@ func (p DefaultPrompt) Build(self string, m api.Message, files []LocalFile) stri
 	switch m.Type {
 	case "task":
 		b.WriteString("Your final answer will be sent back to the sender automatically as the reply.\n" +
-			"If the work takes a while, tell the sender how it is going with `myco message progress --body \"...\"` " +
-			"(it does not end the task), and optionally publish a one-line status for everyone with `myco agent status set --text \"...\"`.\n" +
+			"The sender follows your work in the myco app as it goes. If it takes a while, tell them how it is going with " +
+			"`myco message progress --body \"...\"` (it does not end the task); when they would want to see it (a page, a chart, a draft), " +
+			"add a screenshot: `--attach shot.png`. Optionally publish a one-line status for everyone with `myco agent status set --text \"...\"`.\n" +
+			"When there is an obvious next step for them, suggest it before you finish: `myco message suggest --text \"...\"` " +
+			"(one short line in their language; the app puts it in their input).\n" +
 			"If you need to delegate and answer later, run `myco message hold --id " + m.ID + "` now, " +
 			"send sub-tasks with `myco message send`, and later answer with `myco message reply --id " + m.ID + "`.\n" +
 			"If the sender really has to decide (a direction, something costly or hard to undo), ask with " +
@@ -131,6 +134,18 @@ const maxBriefInPrompt = 4 << 10
 
 // projectSection describes the project a message belongs to: its goal, who
 // does what, and the brief.
+// projectLine names the project of a message whose project was described
+// earlier in the session.
+func projectLine(name string) string {
+	return fmt.Sprintf("\n--- project ---\nThis message belongs to project %q: work toward that project's goal and keep what you send in this thread "+
+		"(its goal, members and brief were given earlier in this session; `myco project get --name %s` shows them again). "+
+		"Do not carry over decisions or files from another project unless the message asks.\n", name, name)
+}
+
+// noProjectLine: a message outside any project, in a session that did
+// project work.
+const noProjectLine = "\n--- project ---\nThis message is not part of a project: do not assume the goal of a project you worked on earlier in this session.\n"
+
 func projectSection(self string, p *api.Project) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "\n--- project ---\nThis message belongs to project %q", p.Name)

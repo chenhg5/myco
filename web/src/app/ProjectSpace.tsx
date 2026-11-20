@@ -15,7 +15,7 @@ import { addToProject } from "@/app/AddToProject";
 import { useAutoGrow } from "@/app/autogrow";
 import { draftOf, groupDraftKey, keepDraft } from "@/app/drafts";
 import { Mushroom, useVerb } from "@/app/Working";
-import { HandoffCard, handoffsOfHome } from "@/app/Handoff";
+import { HandoffCard, handoffsOfHome, withStale } from "@/app/Handoff";
 import { MessageContent } from "@/app/Markdown";
 import { ErrorText } from "@/app/dialogs";
 import { useContextMenu } from "@/app/ContextMenu";
@@ -734,7 +734,8 @@ function HomeView({ hubId, hubName, project, coordinator, peer, rows, now, items
   // (you: this App, or the member you talk to it as)
   // Only between agents: a person is someone you talk to, not a handoff.
   const person = (n: string) => { const r = rowOf(n); return !!r && agentKind(r.st.agent) === "human"; };
-  const inserts = handoffsOfHome(items, coordinator, (n) => isMe(n, you) || (!!peer && n === peer) || person(n)).map((h) => ({
+  const stale = (id: string) => rows.some((x) => x.hub.id === hubId && (x.st.stale_tasks || []).includes(id));
+  const inserts = withStale(handoffsOfHome(items, coordinator, (n) => isMe(n, you) || (!!peer && n === peer) || person(n)), stale).map((h) => ({
     id: h.id,
     at: h.at,
     node: <HandoffCard h={h} row={rowOf(h.other)} name={nameOf(h.other)} now={now}

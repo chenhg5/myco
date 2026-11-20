@@ -741,7 +741,17 @@ func (r *Runner) downloadAttachments(ctx context.Context, log *slog.Logger, m ap
 // agent has it in its context after that; `myco project show` has it all).
 func (r *Runner) projectContext(ctx context.Context, log *slog.Logger, key, sessionID string, m api.Message) string {
 	pr, ok := r.hub.(ProjectReader)
-	if m.Project == "" || !ok {
+	if !ok {
+		return ""
+	}
+	if m.Project == "" {
+		// After project work in this session, say this one is not part of it.
+		r.mu.Lock()
+		inProjects := r.projectSeen[key+"\x00"] && sessionID != ""
+		r.mu.Unlock()
+		if inProjects {
+			return noProjectLine
+		}
 		return ""
 	}
 	seen := key + "\x00" + m.Project
@@ -749,7 +759,10 @@ func (r *Runner) projectContext(ctx context.Context, log *slog.Logger, key, sess
 	done := r.projectSeen[seen] && sessionID != ""
 	r.mu.Unlock()
 	if done {
-		return ""
+		// Its goal and members were given earlier in this session; every
+		// message still says which project it is for (an agent in several
+		// projects gets them in one session).
+		return projectLine(m.Project)
 	}
 	p, err := pr.GetProject(ctx, m.Project, false)
 	if err != nil {
@@ -761,6 +774,7 @@ func (r *Runner) projectContext(ctx context.Context, log *slog.Logger, key, sess
 		r.projectSeen = map[string]bool{}
 	}
 	r.projectSeen[seen] = true
+	r.projectSeen[key+"\x00"] = true
 	r.mu.Unlock()
 	return projectSection(r.opts.Self, p)
 }

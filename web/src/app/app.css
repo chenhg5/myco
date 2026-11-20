@@ -9080,3 +9080,4 @@ body.is-resizing {
 .app-nav-arrows { display: inline-flex; align-items: center; gap: 0; margin-left: -2px; --wails-draggable: no-drag; }
 .app-nav-arrows .app-btn:disabled { opacity: 0.32; }
 .app-nav-arrows .app-btn svg { width: 17px; height: 17px; }
+.handoff-state.is-stale { color: var(--amber); background: var(--amber-soft); }

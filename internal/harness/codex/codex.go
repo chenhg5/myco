@@ -120,6 +120,19 @@ func (c *codex) Run(ctx context.Context, req harness.Request) (harness.Result, e
 
 	proc := harness.Process{
 		Binary: c.opts.Binary, Args: args, Stdin: req.Prompt, Workdir: req.Workdir, Env: env,
+		// Codex prints its first event (thread.started) at once; nothing at
+		// all for minutes means it is stuck before the turn (no network to
+		// its model, a login or keyring prompt, a hung MCP server).
+		SilentStart: SilentStart,
+	}
+	if req.OnEvent != nil {
+		// What goes wrong before or between events (reconnecting, a refused
+		// key, a timed-out MCP server) is only on stderr: show it as it comes.
+		proc.OnStderrLine = func(line []byte) {
+			if t, ok := stderrProblem(string(line)); ok {
+				req.OnEvent(harness.Event{Kind: "error", Text: "Codex: " + t})
+			}
+		}
 	}
 	if req.OnEvent != nil {
 		before, known := tokenTotal{}, true
@@ -389,4 +402,27 @@ func windowLabel(minutes int64) string {
 		return strconv.FormatInt(minutes/60, 10) + "h"
 	}
 	return strconv.FormatInt(minutes, 10) + "m"
+}
+
+// SilentStart is how long Codex may print nothing before its run is
+// stopped as stuck.
+var SilentStart = 5 * time.Minute
+
+var problemWords = []string{"error", "fail", "retry", "retrying", "reconnect", "timed out", "timeout", "unauthorized", "forbidden",
+	"401", "403", "429", "refused", "not logged in", "login", "rate limit", "stream disconnected", "proxy"}
+
+// stderrProblem picks the stderr lines that say something went wrong (Codex
+// also prints notes there, like "Reading prompt from stdin...").
+func stderrProblem(line string) (string, bool) {
+	t := strings.TrimSpace(line)
+	if t == "" || len(t) > 2000 {
+		return "", false
+	}
+	l := strings.ToLower(t)
+	for _, w := range problemWords {
+		if strings.Contains(l, w) {
+			return t, true
+		}
+	}
+	return "", false
 }
