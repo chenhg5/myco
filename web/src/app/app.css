@@ -9105,16 +9105,23 @@ body.is-resizing {
 /* ⌃Tab (AgentSwitcher.tsx): the agents in a row of large faces over the
    window, as ⌘Tab shows apps; the one picked framed, its name under the row. */
 .asw-layer { position: fixed; inset: 0; z-index: 72; display: flex; align-items: center; justify-content: center; }
-.asw { max-width: min(860px, calc(100vw - 48px)); padding: 16px 16px 12px; border-radius: 22px;
-  background: color-mix(in srgb, var(--card) 78%, transparent); backdrop-filter: blur(24px) saturate(1.4); -webkit-backdrop-filter: blur(24px) saturate(1.4);
-  box-shadow: 0 0 0 0.5px var(--line), 0 18px 60px rgba(0, 0, 0, 0.28); animation: app-pop 0.12s ease-out; }
+/* Frosted glass, as the Mac's own switcher: what is behind shows through,
+   blurred and a little brighter; a hairline light edge on top. */
+.asw { max-width: min(860px, calc(100vw - 48px)); padding: 16px 16px 12px; border-radius: 24px;
+  background: rgba(246, 246, 248, 0.42); backdrop-filter: blur(40px) saturate(1.8); -webkit-backdrop-filter: blur(40px) saturate(1.8);
+  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.55), 0 0 0 0.5px rgba(0, 0, 0, 0.12), 0 20px 60px rgba(0, 0, 0, 0.22);
+  animation: app-pop 0.12s ease-out; }
+.dark .asw { background: rgba(38, 38, 42, 0.42);
+  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.16), 0 0 0 0.5px rgba(0, 0, 0, 0.5), 0 20px 60px rgba(0, 0, 0, 0.45); }
 .asw-row { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding: 2px; }
 .asw-row::-webkit-scrollbar { display: none; }
 .asw-item { position: relative; flex: none; display: flex; align-items: center; justify-content: center; width: 84px; height: 84px;
   border: 0; border-radius: 18px; background: none; cursor: default; }
-.asw-item.is-on { background: color-mix(in srgb, var(--fg) 12%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fg) 14%, transparent); }
+.asw-item.is-on { background: rgba(0, 0, 0, 0.1); box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.08); }
+.dark .asw-item.is-on { background: rgba(255, 255, 255, 0.16); box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.12); }
 .asw-item.is-away { opacity: 0.45; }
-.asw-dot { position: absolute; right: 14px; bottom: 14px; width: 10px; height: 10px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 2px var(--card); }
+.asw-dot { position: absolute; right: 14px; bottom: 14px; width: 10px; height: 10px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9); }
+.dark .asw-dot { box-shadow: 0 0 0 2px rgba(30, 30, 34, 0.9); }
 .asw-dot.is-asking { background: var(--amber); }
 .asw-name { margin-top: 8px; text-align: center; font-size: 13.5px; font-weight: 600; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .asw-hint { margin-top: 2px; text-align: center; font-size: 11px; color: var(--muted); }
