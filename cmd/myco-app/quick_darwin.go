@@ -43,12 +43,14 @@ var qlog = log.New(os.Stderr, "myco quick: ", log.LstdFlags|log.Lmicroseconds)
 
 func newQuick(app *application.App, open func(hub, agent string, setup bool)) *quick {
 	win := app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Name:           "quick",
-		Title:          "myco quick",
-		Width:          quickW,
-		Height:         120,
-		Frameless:      true,
-		Hidden:         true,
+		Name:      "quick",
+		Title:     "myco quick",
+		Width:     quickW,
+		Height:    120,
+		Frameless: true,
+		Hidden:    true,
+		// (fixed size: the page sets the height)
+		DisableResize:  true,
 		BackgroundType: application.BackgroundTypeTransparent,
 		URL:            "/?quick=1",
 		Mac: application.MacWindow{

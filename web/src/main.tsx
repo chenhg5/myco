@@ -17,6 +17,13 @@ if (!/Mac|iPhone|iPad/.test(navigator.platform || "")) {
     timers.set(el, window.setTimeout(() => el.classList.remove("is-scrolling"), 900));
   }, { capture: true, passive: true });
 }
+// In the desktop app (Wails), JS the app sends a page (opening a chat from
+// the quick panel or the notch, the menu's commands) waits until the page
+// says it is ready, which only Wails' own npm runtime would say: we do not
+// load it, so say it when Wails' core arrives in the page.
+const wailsReady = () => (window as unknown as { _wails?: { invoke?: (m: string) => void } })._wails?.invoke?.("wails:runtime:ready");
+window.addEventListener("wails:runtime-config-ready", wailsReady);
+wailsReady();
 const root = ReactDOM.createRoot(document.getElementById("root")!);
 // The Mac app's notch island is its own little window with its own page;
 // loaded apart, so its styles (a transparent page) stay out of the app's.
