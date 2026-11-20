@@ -22,7 +22,7 @@ func TestScanFoldsSmallItems(t *testing.T) {
 	// one big file and fifty small ones: with min_fraction the small ones are folded
 	call(t, env, "fs.write", map[string]any{"path": "~/s/big.bin", "content": strings.Repeat("x", 400000)})
 	for i := 0; i < 50; i++ {
-		call(t, env, "fs.write", map[string]any{"path": fmt.Sprintf("~/s/small/f%02d", i), "content": "x"})
+		call(t, env, "fs.write", map[string]any{"path": fmt.Sprintf("~/s/small/f%02d", i), "content": strings.Repeat("x", 1000)})
 	}
 	js := &Jobs{Env: env}
 	j, _ := js.Start("fs.scan", json.RawMessage(`{"path":"~/s","depth":3,"min_fraction":0.05}`))
@@ -31,8 +31,10 @@ func TestScanFoldsSmallItems(t *testing.T) {
 	var v struct{ Roots []Node }
 	_ = json.Unmarshal(out, &v)
 	root := v.Roots[0]
-	// (on the disk the folder of small files takes a block each: a third
-	// of the whole, so it stays; each file in it is under 5% and is folded)
+	// (the folder of small files is over 5% of the whole, so it stays:
+	// 1 KB each, or a disk block each where blocks are counted; each file
+	// in it is under 5% and is folded. Windows counts no blocks, so files
+	// of a byte would fold the folder too.)
 	if root.Files != 51 || len(root.Children) != 2 || root.Children[0].Name != "big.bin" {
 		t.Fatalf("children: %s", out)
 	}
