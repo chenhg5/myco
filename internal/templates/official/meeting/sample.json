@@ -1,0 +1,130 @@
+{
+ "meetings": [
+  {
+   "id": "m1",
+   "title": "0.22 版发布对齐",
+   "started_at": "2026-11-20T07:30:00Z",
+   "seconds": 1984,
+   "status": "done",
+   "computer": "glenn-mbp",
+   "source_name": "腾讯会议",
+   "speakers": {
+    "me": "Glenn",
+    "them": "小周"
+   },
+   "sources": {
+    "me": "mic",
+    "them": "app:com.tencent.meeting"
+   },
+   "model": "sensevoice",
+   "by": "glenn",
+   "dir": "~/.myco/recordings/20261120-153000",
+   "files": {
+    "them": "~/.myco/recordings/20261120-153000/them.wav",
+    "me": "~/.myco/recordings/20261120-153000/me.wav"
+   }
+  },
+  {
+   "id": "m2",
+   "title": "周会",
+   "started_at": "2026-11-18T02:00:00Z",
+   "seconds": 2710,
+   "status": "done",
+   "computer": "glenn-mbp",
+   "source_name": "Zoom",
+   "speakers": {
+    "me": "Glenn",
+    "them": "对方"
+   },
+   "sources": {
+    "me": "mic",
+    "them": "app:us.zoom.xos"
+   },
+   "model": "sensevoice",
+   "by": "glenn"
+  }
+ ],
+ "segments": [
+  {
+   "id": "s1",
+   "meeting": "m1",
+   "track": "them",
+   "start": 2.1,
+   "end": 7.8,
+   "text": "好，人都到齐了，我们开始吧。今天主要对一下 0.22 版的发布计划。",
+   "edited": false
+  },
+  {
+   "id": "s2",
+   "meeting": "m1",
+   "track": "them",
+   "start": 8.4,
+   "end": 15.2,
+   "text": "先说时间，原定下周三发，现在桌面端还有两个问题没收尾。",
+   "edited": false
+  },
+  {
+   "id": "s3",
+   "meeting": "m1",
+   "track": "me",
+   "start": 16.0,
+   "end": 22.6,
+   "text": "录音和转写这边已经在 Mac 上跑通了，Windows 的系统声音还没接上。",
+   "edited": false
+  },
+  {
+   "id": "s4",
+   "meeting": "m1",
+   "track": "me",
+   "start": 23.1,
+   "end": 29.4,
+   "text": "我建议先发 Mac 和 Linux，Windows 放到下一个小版本。",
+   "edited": false
+  },
+  {
+   "id": "s5",
+   "meeting": "m1",
+   "track": "them",
+   "start": 30.2,
+   "end": 36.9,
+   "text": "可以，这样不卡整体进度。那安装包里要不要带上转写模型？",
+   "edited": false
+  },
+  {
+   "id": "s6",
+   "meeting": "m1",
+   "track": "me",
+   "start": 37.5,
+   "end": 45.0,
+   "text": "不带。模型一百六十兆，第一次用的时候再下载，走系统代理，国内也能下。",
+   "edited": false
+  },
+  {
+   "id": "s7",
+   "meeting": "m1",
+   "track": "them",
+   "start": 46.1,
+   "end": 52.3,
+   "text": "行。那文档和更新说明谁来写？",
+   "edited": false
+  },
+  {
+   "id": "s8",
+   "meeting": "m1",
+   "track": "me",
+   "start": 53.0,
+   "end": 58.8,
+   "text": "我来写，周二之前给大家看。",
+   "edited": false
+  },
+  {
+   "id": "s9",
+   "meeting": "m1",
+   "track": "them",
+   "start": 59.6,
+   "end": 66.4,
+   "text": "好，那就定下周三发 Mac 和 Linux，Windows 下周再说。",
+   "edited": false
+  }
+ ]
+}

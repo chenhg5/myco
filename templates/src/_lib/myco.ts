@@ -52,6 +52,11 @@ export type OSScan = {
 export type OSApp = { name: string; id?: string; version?: string; path?: string; publisher?: string; size?: number; modified?: number; system?: boolean };
 export type OSSettingsPane = "full_disk" | "screen_recording" | "accessibility" | "notifications" | "privacy" | "storage" | "network" | "display" | "sound" | "bluetooth";
 export type OSImage = { type: string; width: number; height: number; base64: string };
+export type OSAudioSource = { id: string; kind: "mic" | "system" | "app"; name: string; default?: boolean; playing?: boolean; bundle?: string };
+export type OSAudioLevel = { seconds: number; tracks: Record<string, { rms: number; peak: number }> };
+export type OSRecording = { dir: string; seconds: number; rate: number; ended: "stopped" | "cancelled" | "limit"; tracks: { id: string; source: string; path: string; seconds: number; bytes?: number; error?: string }[] };
+export type OSSpeechStatus = { ready: boolean; engine: boolean; engine_version: string; vad: boolean; dir: string; engine_size_mb: number; models: { id: string; name: string; languages: string[]; size_mb: number; installed: boolean }[] };
+export type OSSegment = { start: number; end: number; text: string };
 export type OSRun = { code: number; stdout: string; stderr: string; stdout_encoding?: "base64"; stderr_encoding?: "base64"; timed_out?: boolean; truncated?: boolean; ms: number };
 type ExecArgs = { argv?: string[]; shell?: string; cwd?: string; env?: Record<string, string>; stdin?: string; stdin_encoding?: "base64"; timeout_ms?: number; max_output?: number };
 type Paths = { path?: string; paths?: string[] };
@@ -64,6 +69,8 @@ export interface MycoOS {
   /** Any capability by name (a newer App may have more than this list). */
   call<T = unknown>(name: string, args?: object, opts?: { timeout?: number }): Promise<T>;
   start<T = unknown>(name: string, args?: object): OSJob<T>;
+  /** An address for <audio> of a recording in ~/.myco/recordings (seeks, any speed). */
+  mediaURL(path: string): string;
 
   system: {
     info(): Promise<{ os: string; name: string; version: string; arch: string; model?: string; hostname: string; user: string; home: string; cpus: number; cpu_model?: string; memory: number; uptime: number }>;
@@ -113,6 +120,21 @@ export interface MycoOS {
   notify(a: { title?: string; body?: string; subtitle?: string; sound?: boolean }): Promise<true>;
   screen: {
     capture(a?: { display?: number; region?: { x: number; y: number; width: number; height: number }; format?: "png" | "jpeg"; quality?: number }): Promise<OSImage & { bytes: number }>;
+  };
+  /** Recording: each source a track, a 16 kHz mono WAV of its own. */
+  audio: {
+    /** "mic", "system" (what the computer plays), "app:<id>" (one app's sound; macOS 14.2+, Linux). */
+    sources(): Promise<{ sources: OSAudioSource[] }>;
+    /** Events "started" {dir, files}, "level" (every 100 ms), "paused", "resumed". job.write("pause" | "resume" | "stop"): stop ends it with the files. */
+    record(a?: { tracks?: { id: string; source: string }[]; dir?: string; max_minutes?: number }): OSJob<OSRecording>;
+  };
+  /** Speech to text on this computer (sherpa-onnx; downloaded the first time). */
+  speech: {
+    status(): Promise<OSSpeechStatus>;
+    /** Events "progress" {step: engine | vad | model, received, total, unpacking?}. */
+    install(a?: { model?: string }): OSJob<OSSpeechStatus>;
+    /** Events "segment" (one sentence) and "progress" {done, total} (seconds). WAV, or other formats via afconvert / ffmpeg. */
+    transcribe(a: { path: string; model?: string; language?: string; offset?: number }): OSJob<{ segments: OSSegment[]; seconds: number; ms: number; model: string }>;
   };
   net: {
     fetch(a: { url: string; method?: string; headers?: Record<string, string>; body?: string; body_encoding?: "base64"; response?: "auto" | "text" | "base64"; timeout_ms?: number; max_bytes?: number; redirect?: boolean }): Promise<{

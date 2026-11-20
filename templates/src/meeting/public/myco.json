@@ -1,0 +1,49 @@
+{
+  "id": "myco/meeting",
+  "name": "会议记录",
+  "version": "1.0.0",
+  "kind": "custom",
+  "category": "office",
+  "icon": "icon.svg",
+  "description": "录下在 Zoom、腾讯会议、飞书里开的会：你的麦克风和别人的声音分成两条音轨，会后在这台电脑上转成文字（不上传），按人分段，点一句从那里播放，改字、改名字、搜索、导出。录音只存在这台电脑上，文字稿大家都能看，agent 能据此写纪要。要在 myco App 里录音。",
+  "data": {
+    "meetings": {
+      "fields": {
+        "title": "text",
+        "started_at": "datetime",
+        "seconds": "number",
+        "status": "text",
+        "computer": "text",
+        "dir": "text",
+        "files": "json",
+        "sources": "json",
+        "source_name": "text",
+        "speakers": "json",
+        "model": "text",
+        "by": "person",
+        "error": "text"
+      }
+    },
+    "segments": {
+      "fields": {
+        "meeting": "text",
+        "track": "text",
+        "start": "number",
+        "end": "number",
+        "text": "text",
+        "edited": "bool"
+      }
+    }
+  },
+  "permissions": [
+    "download"
+  ],
+  "export": [
+    "txt",
+    "md",
+    "srt"
+  ],
+  "requires": {
+    "hub": "0.20.7"
+  }
+}
