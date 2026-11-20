@@ -396,8 +396,9 @@ function PageView({ target, open, active, reload, onMeta }: {
   const dataWatch = useRef(false);
   const dataSeq = useRef(0);
   const [asking, setAsking] = useState<{ text: string; to: string; answer: (ok: boolean) => void } | null>(null);
+  // (while the page is there: tucked away, it still runs and is answered,
+  // and what it started on the computer goes on)
   useEffect(() => {
-    if (!open) return;
     known.current = 0;
     bridged.current = false;
     const on = (e: MessageEvent) => {
@@ -521,12 +522,16 @@ function PageView({ target, open, active, reload, onMeta }: {
           }
           if (b.done) break;
         } catch (e) {
+          // Gone (ended over 5 minutes ago, or the App restarted): say so.
+          // Anything else (the App asleep, a moment offline) passes: the
+          // job goes on in the App, so read it again, more slowly.
           const code = (e as ApiError).code;
-          if (code === "not_found" || ++fails > 5) {
-            toPage({ myco: "os.event", job: id, events: [], done: true, error: (e as Error).message || "the job is gone", code: code || "failed" });
+          if (code === "not_found") {
+            toPage({ myco: "os.event", job: id, events: [], done: true, error: (e as Error).message || "the job is gone", code });
             break;
           }
-          await new Promise((r) => window.setTimeout(r, 1000 * fails));
+          fails++;
+          await new Promise((r) => window.setTimeout(r, Math.min(5000, 500 * fails)));
         }
       }
       jobs.delete(id);
@@ -559,7 +564,7 @@ function PageView({ target, open, active, reload, onMeta }: {
       closed = true;
       for (const id of jobs) void appApi.osCancel(id).catch(() => undefined);
     };
-  }, [open, target]);
+  }, [target]);
 
   // While it is shown: what others (an agent, another person) change comes
   // to the page.

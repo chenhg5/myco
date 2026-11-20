@@ -66,6 +66,7 @@ type scanner struct {
 	skipped  []string
 	nskipped int
 	largest  []BigFile
+	tops     []*Node // the root's children read so far (for progress)
 	seen     map[[2]uint64]bool
 	last     time.Time
 	current  string
@@ -173,11 +174,30 @@ func clamp(v, def, lo, hi int) int {
 	return v
 }
 
+// progress says how far it is, and the largest of the root's folders read
+// to the end so far (a page can draw them as they come).
 func (s *scanner) progress() {
 	s.mu.Lock()
 	cur := s.current
+	top := make([]map[string]any, 0, 16)
+	sort.Slice(s.tops, func(a, b int) bool { return s.tops[a].Disk > s.tops[b].Disk })
+	for _, n := range s.tops {
+		if len(top) == 16 {
+			break
+		}
+		top = append(top, map[string]any{"name": n.Name, "path": n.Path, "dir": n.Dir, "disk": n.Disk, "files": n.Files})
+	}
 	s.mu.Unlock()
-	s.emit("progress", map[string]any{"files": s.files.Load(), "dirs": s.dirs.Load(), "bytes": s.bytes.Load(), "disk": s.disk.Load(), "current": cur})
+	s.emit("progress", map[string]any{"files": s.files.Load(), "dirs": s.dirs.Load(), "bytes": s.bytes.Load(), "disk": s.disk.Load(), "current": cur, "top": top})
+}
+
+func (s *scanner) done(level int, n *Node) {
+	if level != 0 || n == nil || n.Disk == 0 {
+		return
+	}
+	s.mu.Lock()
+	s.tops = append(s.tops, n)
+	s.mu.Unlock()
 }
 
 func (s *scanner) skip(p string) {
@@ -265,12 +285,14 @@ func (s *scanner) walk(p string, fi fs.FileInfo, dev uint64, level int) *Node {
 				go func(i int, cp string, cfi fs.FileInfo) {
 					defer func() { <-s.sem; wg.Done() }()
 					kids[i] = s.walk(cp, cfi, dev, level+1)
+					s.done(level, kids[i])
 				}(i, cp, cfi)
 				continue
 			default:
 			}
 		}
 		kids[i] = s.walk(cp, cfi, dev, level+1)
+		s.done(level, kids[i])
 	}
 	wg.Wait()
 	keep := kids[:0]
