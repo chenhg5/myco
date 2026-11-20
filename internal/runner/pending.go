@@ -161,3 +161,33 @@ func (r *Runner) finishPending(ctx context.Context, onlyKept bool) {
 		}
 	}
 }
+
+// MarkOwnRun records in a runner's state file that myco itself last wrote
+// sessionID, at at: a session another part of myco made for the agent (a
+// computer's first turn for a new agent). Its runner then does not take
+// that write for someone else using the session.
+func MarkOwnRun(path, sessionID string, at time.Time) error {
+	if path == "" || sessionID == "" {
+		return nil
+	}
+	st := runnerState{Runs: map[string]int64{}}
+	if b, err := os.ReadFile(path); err == nil {
+		_ = json.Unmarshal(b, &st)
+		if st.Runs == nil {
+			st.Runs = map[string]int64{}
+		}
+	}
+	st.Runs[sessionID] = at.UnixMilli()
+	b, err := json.Marshal(st)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}

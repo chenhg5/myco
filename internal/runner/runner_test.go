@@ -312,3 +312,28 @@ func TestBusyForAMomentIsRetried(t *testing.T) {
 		t.Fatalf("reply %q after %d tries, want hi after 2", hub.replies["t1"], tries)
 	}
 }
+
+// A computer's first turn makes a new agent's session; the agent's runner
+// starts right after. That write is myco's (MarkOwnRun), so the first task
+// runs at once instead of waiting for "someone else" to leave.
+func TestSpawnedSessionIsNotBusy(t *testing.T) {
+	now := time.Unix(9000, 0)
+	state := filepath.Join(t.TempDir(), "state.json")
+	h := probingHarness{fakeHarness: fakeHarness{fn: func(harness.Request) (harness.Result, error) {
+		return harness.Result{Output: "ok", SessionID: "s1"}, nil
+	}}, last: now.Add(-20 * time.Second)} // the first turn ended 20s ago
+	if err := MarkOwnRun(state, "s1", now.Add(-19*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	hub := newFakeHub(api.Message{ID: "t1", Type: "task", From: "coord", ThreadID: "th"})
+	New(hub, h, NewHubSessions(&fakeBinder{}, "s1"), nil, Options{Once: true, StatePath: state, Now: func() time.Time { return now }}, quiet()).Run(context.Background())
+	if hub.replies["t1"] != "ok" {
+		t.Fatalf("a session the computer just made must not read as in use: status=%s", hub.status["t1"])
+	}
+	// Without it, the same write reads as someone else's (as before).
+	hub2 := newFakeHub(api.Message{ID: "t2", Type: "task", From: "coord", ThreadID: "th"})
+	New(hub2, h, NewHubSessions(&fakeBinder{}, "s1"), nil, Options{Once: true, Now: func() time.Time { return now }}, quiet()).Run(context.Background())
+	if hub2.replies["t2"] == "ok" {
+		t.Fatal("an unmarked recent write should still count as someone else's")
+	}
+}

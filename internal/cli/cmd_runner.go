@@ -318,7 +318,7 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 	return runner.New(c, h, sessions, runner.DefaultPrompt{Owner: me.Owner}, runner.Options{
 		Self: me.Name, Timeout: timeout, PollWait: pollWait, Workdir: workdir, Once: sh.once, Scope: sh.scope,
 		BusyRetry: sh.busyRetry, BusyWindow: sh.busyWindow, Slots: sh.slots, Trace: sh.trace, SessionLocks: sh.locks,
-		StatePath:      filepath.Join(config.Dir(e.defaultPath), "state", me.Name+".json"),
+		StatePath:      runnerStatePath(e.defaultPath, me.Name),
 		HubURL:         cfg.Hub,
 		AttachmentsDir: filepath.Join(config.Dir(e.defaultPath), "attachments", me.Name),
 		// Lets the agent call `myco` as itself from inside the harness.

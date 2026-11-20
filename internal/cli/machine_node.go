@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -282,7 +283,11 @@ func (e *env) machineNode(hub string, me *api.Agent, c *client.Client, sh runner
 				if p.CLI == machinenode.ExecCLI {
 					rc = config.Runner{Harness: p.CLI, Workdir: p.Workdir}
 				}
-				return res.Agent.Name, saveProfile(e.defaultPath, m.Hub, res.Agent.Name, res.Token, b, rc)
+				if err := saveProfile(e.defaultPath, m.Hub, res.Agent.Name, res.Token, b, rc); err != nil {
+					return "", err
+				}
+				markSpawnedRun(e.defaultPath, res.Agent.Name, b.SessionID, p.CLI)
+				return res.Agent.Name, nil
 			},
 			TakeOver: func(ctx context.Context, p machinenode.Plan, sr api.SpawnRequest, sessionID string) (string, error) {
 				b := api.Binding{Harness: p.CLI, SessionID: sessionID, Environment: host, Workdir: p.Workdir}
@@ -296,7 +301,11 @@ func (e *env) machineNode(hub string, me *api.Agent, c *client.Client, sh runner
 				}
 				rc := config.Runner{Harness: p.CLI, Workdir: p.Workdir, Access: string(p.Access), Model: sr.Model,
 					EnvFile: machineEnvFile(e.defaultPath, me.Name), Provider: machineProvider(e.defaultPath, me.Name, p.CLI)}
-				return res.Agent.Name, saveTakenProfile(e.defaultPath, m.Hub, res.Agent.Name, res.Token, b, rc)
+				if err := saveTakenProfile(e.defaultPath, m.Hub, res.Agent.Name, res.Token, b, rc); err != nil {
+					return "", err
+				}
+				markSpawnedRun(e.defaultPath, res.Agent.Name, sessionID, p.CLI)
+				return res.Agent.Name, nil
 			},
 			ProviderFor: func(cli string) *harness.ProviderSettings {
 				cfg, err := config.Load(config.ProfilePath(e.defaultPath, me.Name))
@@ -377,4 +386,20 @@ func machineEnvFile(defaultPath, machineNode string) string {
 		return ""
 	}
 	return cfg.Runner.EnvFile
+}
+
+// markSpawnedRun tells the new agent's runner that the session's last write
+// was myco's own (this computer's first turn made it): otherwise its first
+// task found the transcript "changed by someone else" moments ago, waited,
+// and the App showed the session as in use elsewhere.
+func markSpawnedRun(defaultPath, agent, sessionID, cli string) {
+	if sessionID == "" || cli == machinenode.ExecCLI {
+		return
+	}
+	_ = runner.MarkOwnRun(runnerStatePath(defaultPath, agent), sessionID, time.Now())
+}
+
+// runnerStatePath is where an agent's runner keeps its state.
+func runnerStatePath(defaultPath, agent string) string {
+	return filepath.Join(config.Dir(defaultPath), "state", agent+".json")
 }
