@@ -52,4 +52,5 @@ If you were asked through myco: `myco message ack` first, then `myco message pro
 - Both apps have the same bundle id, so never quit or open one by name (`osascript -e 'quit app "myco-preview"'` quits the released app too): stop the preview by its path (`pkill -f ~/Applications/myco-preview.app/Contents/MacOS`), as the script does.
 - Both apps share `~/.myco` and the keychain: what the preview changes in settings, the released app sees too.
 - The preview is signed only on that Mac (ad hoc), not notarized; it is for that Mac only. For a build other people install, release (`myco-release`).
+- To see what the preview does (the App writes no log file of its own), start it with its log kept: `MYCO_PREVIEW_LOG=~/code/myco-preview-app.log ~/code/.myco-preview.sh`, then read that file through `mac-exec`.
 - If `mac-exec` is offline, ask the maintainer to wake and unlock the Mac.

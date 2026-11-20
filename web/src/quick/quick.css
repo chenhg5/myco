@@ -6,16 +6,18 @@ body,
   background: transparent !important;
   overflow: hidden;
 }
-/* The window is the card (AppKit rounds and shadows it): no margin round it. */
-.qp-root.app-shell { display: block; height: auto; padding: 0; background: transparent; overflow: visible; }
+/* The window is the card (AppKit rounds and shadows it): no margin round it,
+   and the card's colour fills the whole window, so a window a little taller
+   than the card (its size lags a frame behind) shows no white. The card
+   inside keeps its natural height: that is what the page reports. */
+.qp-root.app-shell { display: block; height: auto; min-height: 100vh; padding: 0; overflow: visible;
+  background: var(--card); border-radius: 16px; box-shadow: inset 0 0 0 1px var(--line); }
 .qp-card {
   display: flex;
   flex-direction: column;
   gap: 10px;
   padding: 12px 14px 10px;
-  border-radius: 16px;
   background: var(--card);
-  box-shadow: inset 0 0 0 1px var(--line);
   color: var(--fg);
   font-size: 13px;
 }
@@ -23,9 +25,9 @@ body,
 .qp-head button { --wails-draggable: no-drag; }
 .qp-name { font-weight: 600; }
 .qp-head .app-btn svg { width: 13px; height: 13px; }
-.qp-input { display: flex; align-items: flex-end; gap: 8px; padding: 8px 8px 8px 12px; border-radius: 12px;
+.qp-input { display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 12px; border-radius: 12px;
   background: var(--bg); box-shadow: inset 0 0 0 1px var(--line); }
-.qp-input textarea { flex: 1; min-height: 24px; max-height: 160px; resize: none; border: 0; outline: none; background: none;
+.qp-input textarea { display: block; flex: 1; margin: 0; padding: 0; min-height: 24px; max-height: 160px; resize: none; border: 0; outline: none; background: none;
   color: var(--fg); font: inherit; font-size: 15px; line-height: 24px; field-sizing: content; }
 .qp-send { flex: none; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 0; border-radius: 50%;
   background: var(--line); color: var(--muted); }

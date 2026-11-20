@@ -4,6 +4,7 @@ package main
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
@@ -32,6 +33,7 @@ type quick struct {
 	open  func(hub, agent string, setup bool)
 	h     int
 	watch sync.Once
+	log   *slog.Logger
 }
 
 func newQuick(app *application.App, open func(hub, agent string, setup bool)) *quick {
@@ -61,7 +63,7 @@ func newQuick(app *application.App, open func(hub, agent string, setup bool)) *q
 				application.MacWindowCollectionBehaviorIgnoresCycle,
 		},
 	})
-	q := &quick{win: win, open: open, h: 120}
+	q := &quick{win: win, open: open, h: 120, log: app.Logger}
 	// Clicking elsewhere puts it away, as Spotlight does.
 	win.OnWindowEvent(events.Common.WindowLostFocus, func(*application.WindowEvent) { q.hide() })
 	if err := app.GlobalShortcut.Register(quickKey, q.toggle); err != nil {
@@ -128,10 +130,12 @@ func (q *quick) handler(next http.Handler) http.Handler {
 				Hub, Agent string
 				Setup      bool
 			}
-			if json.NewDecoder(r.Body).Decode(&in) != nil {
+			if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+				q.log.Warn("quick panel: open: bad body", "error", err)
 				http.Error(w, "bad target", http.StatusBadRequest)
 				return
 			}
+			q.log.Info("quick panel: open the chat", "hub", in.Hub, "agent", in.Agent, "setup", in.Setup)
 			q.hide()
 			if q.open != nil {
 				q.open(in.Hub, in.Agent, in.Setup)
