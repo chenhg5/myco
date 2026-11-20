@@ -50,7 +50,7 @@
 .day.is-out .day-n { color: var(--faint); }
 .day-head { display: flex; align-items: center; justify-content: space-between; height: 24px; }
 .day-n { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 4px; border-radius: 11px; font-size: 12px; }
-.day.is-today .day-n { background: var(--accent); color: #fff; }
+.day.is-today .day-n { background: var(--accent); color: var(--on-accent); }
 .day-add { display: none; place-items: center; width: 22px; height: 22px; border: 0; border-radius: 5px; background: none; color: var(--muted); }
 .day:hover .day-add { display: inline-grid; }
 .day-add:hover { background: var(--hover); color: var(--accent); }

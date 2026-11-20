@@ -33,7 +33,7 @@
 .layout:hover .lay-ico { border-color: var(--faint); }
 .layout.is-on .lay-ico { border: 2px solid var(--accent); padding: 4px 6px; }
 .layout.is-on { color: var(--accent); }
-.lay-ico { --accent: #3370ff; display: flex; flex-direction: column; justify-content: center; gap: 3px; width: 100%; aspect-ratio: 16 / 9; padding: 5px 7px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); overflow: hidden; }
+.lay-ico { --bar: #8f959e; display: flex; flex-direction: column; justify-content: center; gap: 3px; width: 100%; aspect-ratio: 16 / 9; padding: 5px 7px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); overflow: hidden; }
 .lay-ico i { display: block; border-radius: 2px; background: color-mix(in srgb, var(--fg) 28%, transparent); flex: none; }
 .lay-ico.is-cover, .lay-ico.is-section, .lay-ico.is-end { background: #1f2a44; }
 .lay-ico.is-cover i, .lay-ico.is-section i, .lay-ico.is-end i { background: rgba(255, 255, 255, 0.55); }
@@ -44,7 +44,7 @@
 .lay-ico .c3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; flex: 1; }
 .lay-ico .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; flex: 1; }
 .lay-ico .bars { display: flex; align-items: flex-end; gap: 4px; flex: 1; padding: 0 10%; }
-.lay-ico .bars b { flex: 1; background: var(--accent); border-radius: 1px; }
+.lay-ico .bars b { flex: 1; background: var(--bar); border-radius: 1px; }
 .themes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .theme { display: flex; align-items: center; gap: 6px; height: 40px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; font-size: 12.5px; text-align: left; }
 .theme.is-on { outline: 2px solid var(--accent); outline-offset: 1px; }

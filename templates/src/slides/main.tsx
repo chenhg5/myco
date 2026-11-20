@@ -225,8 +225,8 @@ function LayoutIcon({ l }: { l: Layout }) {
   const bar = (w: string, h = 3, extra = {}) => <i style={{ width: w, height: h, ...extra }} />;
   return (
     <span className={`lay-ico is-${l}`}>
-      {l === "cover" && <>{bar("20%", 2, { background: "var(--accent)" })}{bar("60%", 5)}{bar("40%")}</>}
-      {l === "section" && <>{bar("15%", 4, { background: "var(--accent)" })}{bar("55%", 5)}</>}
+      {l === "cover" && <>{bar("20%", 2, { background: "var(--fg)" })}{bar("60%", 5)}{bar("40%")}</>}
+      {l === "section" && <>{bar("15%", 4, { background: "var(--fg)" })}{bar("55%", 5)}</>}
       {l === "end" && bar("40%", 6, { margin: "auto" })}
       {l === "quote" && <>{bar("70%", 5)}{bar("30%")}</>}
       {l === "points" && <>{bar("45%", 4)}{bar("80%")}{bar("70%")}{bar("75%")}</>}

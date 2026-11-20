@@ -12,7 +12,7 @@
 .hb-head { min-height: 48px; font-size: 12px; color: var(--muted); }
 .hb-day { display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .hb-day b { font-size: 15px; color: var(--fg); font-weight: 500; }
-.hb-day.is-today b { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #fff; }
+.hb-day.is-today b { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--on-accent); }
 .hb-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .hb-icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: var(--bg2); font-size: 18px; flex: none; border: 0; }
 .hb-icon.is-pick { cursor: pointer; }
@@ -21,7 +21,7 @@
 .hb-text small { font-size: 12px; }
 .hb-del { opacity: 0; margin-left: auto; } .hb-row:hover .hb-del { opacity: 1; }
 .hb-cell { position: relative; display: grid; place-items: center; }
-.hb-check { display: grid; place-items: center; width: 34px; height: 34px; border: 1.5px solid var(--line); border-radius: 50%; background: var(--bg); color: #fff; font-size: 16px; font-weight: 700; padding: 0; }
+.hb-check { display: grid; place-items: center; width: 34px; height: 34px; border: 1.5px solid var(--line); border-radius: 50%; background: var(--bg); color: var(--on-accent); font-size: 16px; font-weight: 700; padding: 0; }
 .hb-check:hover:not(:disabled) { border-color: var(--accent); }
 .hb-check.is-on { border-color: var(--accent); background: var(--accent); animation: pop 0.25s ease-out; }
 .hb-check.is-future { opacity: 0.35; border-style: dashed; }

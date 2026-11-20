@@ -23,7 +23,7 @@
 .td-check { width: 18px; height: 18px; flex: none; border: 1.5px solid var(--faint); border-radius: 50%; background: none; padding: 0; position: relative; }
 .td-check:hover { border-color: var(--accent); }
 .td-check.is-on { border-color: var(--accent); background: var(--accent); }
-.td-check.is-on::after { content: ""; position: absolute; left: 5px; top: 2px; width: 4px; height: 8px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.td-check.is-on::after { content: ""; position: absolute; left: 5px; top: 2px; width: 4px; height: 8px; border: solid var(--on-accent); border-width: 0 2px 2px 0; transform: rotate(45deg); }
 .td-title { flex: 1; min-width: 0; height: 32px; border: 0; outline: none; background: none; font-size: 14px; color: var(--fg); }
 .td-row.is-done .td-title { color: var(--faint); text-decoration: line-through; }
 .td-meta { display: inline-flex; align-items: center; gap: 8px; cursor: default; }

@@ -1,11 +1,14 @@
 /* 思维导图 (shares the whiteboard's floating bars) */
 @import "../whiteboard/wb.css";
+/* branches: one gray, black and white for the rest */
+:root { --branch: #8f959e; }
+@media (prefers-color-scheme: dark) { :root { --branch: #8a8a8a; } }
 .mm-stage { position: relative; flex: 1; min-height: 0; overflow: hidden; border-top: 1px solid var(--line2); background: var(--bg2); touch-action: none; }
 .mm-world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
 .mm-links { position: absolute; left: 0; top: 0; overflow: visible; }
 .mm-node { position: absolute; display: flex; align-items: center; padding: 6px 12px; border: 1.5px solid transparent; border-radius: 8px; background: var(--bg);
   color: var(--fg); user-select: none; box-sizing: border-box; }
-.mm-node.d0 { justify-content: center; padding: 10px 18px; border-radius: 12px; background: var(--accent); color: #fff; box-shadow: 0 2px 8px rgba(51, 112, 255, 0.25); }
+.mm-node.d0 { justify-content: center; padding: 10px 18px; border-radius: 12px; background: var(--accent); color: var(--on-accent); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18); }
 .mm-node.d1 { border-color: var(--c); }
 .mm-node.d2 { background: transparent; border-bottom: 2px solid var(--c); border-radius: 4px 4px 0 0; padding: 4px 6px; }
 .mm-node.is-on { outline: 2px solid var(--accent); outline-offset: 3px; }
