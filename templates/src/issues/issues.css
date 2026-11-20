@@ -1,5 +1,19 @@
 /* 任务追踪: a sidebar, the list or board, an issue's page beside it.
-   Black, white and gray; dense rows like Linear's. */
+   The frame is black, white and gray; priorities, statuses, labels and
+   people have muted colours of their own (low saturation, a little
+   lighter in the dark). Dense rows like Linear's. */
+:root {
+  --c-urgent: #c25a43; --c-high: #c4893a; --c-medium: #6f87a8; --c-low: #9aa0a8;
+  --c-progress: #c49a2c; --c-review: #4e977d; --c-done: #6673b4; --c-late: #c25a43;
+  --hue-0: #5f9a84; --hue-1: #6c86b2; --hue-2: #bd7558; --hue-3: #b8964a; --hue-4: #93719f; --hue-5: #4f949d;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --c-urgent: #df7f68; --c-high: #d9a25d; --c-medium: #8fa6c6; --c-low: #8a9099;
+    --c-progress: #d6b24f; --c-review: #6db599; --c-done: #8f9adb; --c-late: #df7f68;
+    --hue-0: #79b39d; --hue-1: #8aa2cc; --hue-2: #d48f73; --hue-3: #cfae66; --hue-4: #ae8dba; --hue-5: #6cadb6;
+  }
+}
 .is { flex-direction: row; font-size: 13px; }
 .btn:disabled, .tool:disabled, .icon-btn:disabled { opacity: 0.4; pointer-events: none; }
 kbd { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--faint);
@@ -63,10 +77,15 @@ kbd { display: inline-grid; place-items: center; min-width: 18px; height: 18px; 
 .is-date { min-width: 64px; text-align: right; font-size: 12px; }
 .chip { display: inline-flex; align-items: center; gap: 5px; height: 22px; max-width: 140px; padding: 0 8px; border: 1px solid var(--line); border-radius: 11px; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chip .ico { width: 12px; height: 12px; }
-.chip.is-late { border-color: var(--fg); color: var(--fg); font-weight: 600; }
-.st, .pr { flex: none; color: var(--muted); }
-.st-progress, .st-review, .st-done { color: var(--fg); }
-.pr-1, .pr-2 { color: var(--fg); }
+.chip.is-late { border-color: color-mix(in srgb, var(--c-late) 45%, var(--line)); color: var(--c-late); font-weight: 600; }
+.st, .pr { flex: none; color: var(--faint); }
+.st-progress { color: var(--c-progress); }
+.st-review { color: var(--c-review); }
+.st-done { color: var(--c-done); }
+.pr-1 { color: var(--c-urgent); }
+.pr-2 { color: var(--c-high); }
+.pr-3 { color: var(--c-medium); }
+.pr-4 { color: var(--c-low); }
 .av { display: inline-grid; place-items: center; flex: none; border-radius: 50%; background: var(--line); color: var(--fg); font-weight: 600; line-height: 1; }
 .av-none { color: var(--faint); }
 
@@ -134,7 +153,7 @@ kbd { display: inline-grid; place-items: center; min-width: 18px; height: 18px; 
 .is-proj-name { font-weight: 600; }
 .is-prog { display: flex; align-items: center; gap: 8px; font-size: 12px; }
 .is-prog-bar { position: relative; width: 90px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
-.is-prog-bar i { position: absolute; inset: 0 auto 0 0; background: var(--fg); }
+.is-prog-bar i { position: absolute; inset: 0 auto 0 0; background: var(--c-done); }
 .is-proj-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--line2); }
 .is-proj-title { min-width: 120px; height: 30px; padding: 0 6px; margin-left: -6px; border: 1px solid transparent; border-radius: 6px; background: none; font-size: 16px; font-weight: 600; outline: none; field-sizing: content; }
 .is-proj-title:hover { background: var(--hover); }
