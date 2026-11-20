@@ -163,8 +163,9 @@
   };
   // os.fs.list({path}), os.exec.spawn({shell}) …: the same, by name
   [
-    "system.info", "system.disks", "system.processes", "process.kill",
-    "fs.paths", "fs.list", "fs.stat", "fs.read", "fs.write", "fs.mkdir", "fs.move", "fs.copy", "fs.delete", "fs.trash", "fs.scan*", "fs.reveal", "fs.open",
+    "system.info", "system.disks", "system.processes", "system.usage", "system.apps", "system.settings", "process.kill",
+    "fs.paths", "fs.list", "fs.stat", "fs.read", "fs.write", "fs.mkdir", "fs.move", "fs.copy", "fs.delete", "fs.trash", "fs.scan*",
+    "fs.search*", "fs.watch*", "fs.thumbnail", "fs.pick", "fs.saveAs", "fs.reveal", "fs.open",
     "exec.run", "exec.spawn*", "clipboard.read", "clipboard.write", "notify", "screen.capture", "net.fetch",
   ].forEach(function (n) {
     var job = n.slice(-1) === "*";

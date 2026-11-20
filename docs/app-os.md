@@ -54,6 +54,42 @@ p.write("y\n"); p.end();                      // 写给它的标准输入
 - 关掉网页时，它起的任务都会停掉。
 - 类型定义在 `templates/src/_lib/myco.ts` 的 `MycoOS` 里。
 
+## 官方应用里用：SDK（`templates/src/_lib/os.ts`）
+
+官方应用（`templates/src/<app>`）用打包好的 SDK。它比直接调 `myco.os` 多几样东西：
+
+```ts
+import { os, osState, osStateText, OSError, has, useOS, useJob, follow, formatBytes, basename, imageSrc } from "../_lib/os";
+
+if (osState !== "ready") showNote(osStateText());  // 不在 App 里（"outside"），或 App 太旧（"old"）
+
+const disks = await os().system.disks();            // 出错一律是 OSError，看 err.code
+if (await has("fs.thumbnail")) { /* … */ }
+
+// React：一个任务的进度、结果、错误，组件卸载时自动停
+const scan = useJob(() => os().fs.scan({ path: "~", depth: 6, min_fraction: 0.001 }));
+// scan.start()  scan.progress  scan.value  scan.error  scan.running  scan.cancel()
+
+// 不用 React：follow(job, { onEvent, signal }) 等它跑完，AbortSignal 能停
+const ctl = new AbortController();
+const r = await follow(os().fs.search({ path: "~", name: "发票", ext: ["pdf"] }), { onEvent: (t, d) => t === "match" && add(d), signal: ctl.signal });
+```
+
+- `osState`：`"ready"`、`"old"` 或 `"outside"`。`osStateText()` 给出一句能直接给人看的话。
+- `os()`：和 `myco.os` 的用法一样，但出的错都是 `OSError`，任务的 `done` 也是。用不了时直接抛出 `unsupported`。
+- `has(name)` 和 `capabilities()`：这台电脑能做什么。只问一次，之后用记下的结果。
+- `useOS()`：在组件里拿到状态、系统信息和 `has`。
+- `useJob(make, onEvent?)`：在组件里跑一个任务。
+- `follow(job, {onEvent, signal})`：不用 React 时跟着一个任务。
+- 小工具：
+  - `formatBytes`：按 1000 进位，和 macOS、DaisyDisk 一样；`{binary: true}` 按 1024；
+  - `basename`、`dirname`、`join`、`extname`：认得 Windows 的路径；
+  - `fromBase64`、`toBase64`；
+  - `readText`、`readBytes`、`writeText`、`writeBytes`、`readJSON`、`writeJSON`；
+  - `imageSrc`：把截屏或缩略图变成 `<img>` 能用的地址。
+
+agent 写的普通网页不打包，直接用 `window.myco.os`，用法见上一节。
+
 ## 能力和各系统的做法
 
 | 能力 | 做什么 | macOS | Windows | Linux |
@@ -62,10 +98,17 @@ p.write("y\n"); p.end();                      // 写给它的标准输入
 | `system.disks` | 各磁盘的容量和剩余 | getfsstat（不列系统卷） | GetLogicalDrives | /proc/self/mounts + statfs |
 | `system.processes` | 进程：CPU、内存 | `ps` | Toolhelp（没有 CPU） | `ps` |
 | `process.kill` | 结束进程（`force` 立即结束） | SIGTERM / SIGKILL | 结束 | SIGTERM / SIGKILL |
+| `system.usage` | 此刻的 CPU（所有核的百分比）、内存（总量、已用、可用）、负载 | `top` 第二次采样（约 1 秒）、`vm_stat`（按「活动监视器」的算法）、sysctl | GetSystemTimes 采两次、GlobalMemoryStatusEx（没有负载） | `/proc/stat` 采两次、`/proc/meminfo`、`/proc/loadavg` |
+| `system.apps` | 装了哪些应用：名字、版本、ID、位置；`size: true` 再算每个占多大 | `/Applications` 等处的 .app，读 Info.plist | 「应用」设置里那份（注册表 Uninstall，带安装程序报的大小） | 菜单里的 .desktop（系统、Flatpak、Snap、自己的） |
+| `system.settings` | 打开系统设置的某一页：`full_disk`、`screen_recording`、`accessibility`、`notifications`、`privacy`、`storage`、`network`、`display`、`sound`、`bluetooth` | 「系统设置」对应的面板 | `ms-settings:` 对应的页 | GNOME 设置对应的页（没有对应的就 `unsupported`） |
 | `fs.paths` | 个人文件夹、桌面、文稿、下载、图片、临时、缓存、废纸篓… | 固定位置 | Known Folders | `user-dirs.dirs` |
 | `fs.list` `fs.stat` `fs.read` `fs.write` `fs.mkdir` `fs.move` `fs.copy` `fs.delete` | 文件 | 同 | 同 | 同 |
 | `fs.trash` | 移进废纸篓 / 回收站 | 系统的 `trash` 命令（macOS 15 起，能「放回原处」）；没有时移进 `~/.Trash` | 回收站（.NET FileSystem） | freedesktop 废纸篓（文件管理器能还原） |
-| `fs.scan`（任务） | 按占用汇总文件夹、找最大的文件；不进别的磁盘，硬链接只算一次 | 同 | 同 | 同 |
+| `fs.scan`（任务） | 按占用汇总文件夹、找最大的文件。并行读，不进别的磁盘，硬链接只算一次；`min_fraction` 把占整体太小的并成「更小的项目」（`more_*`），扫一整块盘也只有几千个节点。磁盘的 `scan_path` 是该扫哪里：Mac 的启动磁盘要扫它的 Data 卷 | 同 | 同 | 同 |
+| `fs.search`（任务） | 按名字（一部分，或 `report*.pdf` 这样的模式）、后缀、类型、大小、修改时间找；边找边推 `match` | 同 | 同 | 同 |
+| `fs.watch`（任务） | 盯着一个文件夹（可以连子文件夹），新建、改动、删除就推 `change`；直到停掉。每隔一段时间比一次，各系统一样 | 同 | 同 | 同 |
+| `fs.thumbnail` | 缩略图：图片（png、jpeg、gif）各系统都行 | 另外 PDF、视频、文档等用「快速查看」 | 只有图片 | 只有图片 |
+| `fs.pick` `fs.saveAs` | 系统的打开框（文件或文件夹，可多选，可限定后缀）、存储为框；关掉是 `cancelled` | AppleScript 的选择框 | Windows 的打开 / 另存为框 | zenity 或 kdialog |
 | `fs.reveal` `fs.open` | 在访达里显示，用默认程序打开（`app` 指定程序） | `open -R`、`open -a` | Explorer、默认程序 | 文件管理器、`xdg-open` |
 | `exec.run` | 跑命令（`argv`）或脚本（`shell`），跑完回退出码和输出（默认 60 秒、1 MB） | `/bin/sh` | PowerShell | `/bin/sh` |
 | `exec.spawn`（任务） | 起程序：输出实时推回来，能写入，能停（连同它起的子进程） | 同上 | 同上 | 同上 |

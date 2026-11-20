@@ -3,12 +3,14 @@ package oscap
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -381,4 +383,228 @@ func capture(ctx context.Context, env *Env, file string, _ int, _ *Region) (bool
 	}
 	_, err := runOut(ctx, env, nil, nil, argv...)
 	return false, err
+}
+
+func cpuTimes() (idle, total uint64, ok bool) {
+	b, err := os.ReadFile("/proc/stat")
+	if err != nil {
+		return 0, 0, false
+	}
+	line, _, _ := strings.Cut(string(b), "\n")
+	f := strings.Fields(line)
+	if len(f) < 5 || f[0] != "cpu" {
+		return 0, 0, false
+	}
+	for i, v := range f[1:] {
+		n, _ := strconv.ParseUint(v, 10, 64)
+		total += n
+		if i == 3 || i == 4 { // idle, iowait
+			idle += n
+		}
+	}
+	return idle, total, true
+}
+
+// usage: /proc/stat sampled twice, /proc/meminfo, /proc/loadavg.
+func usage(ctx context.Context, _ *Env) (Usage, error) {
+	u := Usage{}
+	i1, t1, ok := cpuTimes()
+	if ok {
+		select {
+		case <-time.After(300 * time.Millisecond):
+		case <-ctx.Done():
+			return u, ctx.Err()
+		}
+		if i2, t2, ok := cpuTimes(); ok && t2 > t1 {
+			u.CPU = 100 * (1 - float64(i2-i1)/float64(t2-t1))
+		}
+	}
+	if b, err := os.ReadFile("/proc/meminfo"); err == nil {
+		kv := map[string]uint64{}
+		for _, l := range strings.Split(string(b), "\n") {
+			k, v, ok := strings.Cut(l, ":")
+			if !ok {
+				continue
+			}
+			f := strings.Fields(v)
+			if len(f) > 0 {
+				n, _ := strconv.ParseUint(f[0], 10, 64)
+				kv[k] = n * 1024
+			}
+		}
+		u.MemoryTotal, u.MemoryAvailable = kv["MemTotal"], kv["MemAvailable"]
+		if u.MemoryTotal > u.MemoryAvailable {
+			u.MemoryUsed = u.MemoryTotal - u.MemoryAvailable
+		}
+	}
+	if b, err := os.ReadFile("/proc/loadavg"); err == nil {
+		for _, v := range strings.Fields(string(b))[:3] {
+			n, _ := strconv.ParseFloat(v, 64)
+			u.Load = append(u.Load, n)
+		}
+	}
+	return u, nil
+}
+
+// apps: the .desktop entries menus show (system, Flatpak, Snap, the person's own).
+func apps(ctx context.Context, env *Env) ([]AppInfo, error) {
+	var out []AppInfo
+	seen := map[string]bool{}
+	dirs := []string{filepath.Join(env.Home, ".local", "share", "applications"), "/usr/local/share/applications", "/usr/share/applications",
+		"/var/lib/flatpak/exports/share/applications", filepath.Join(env.Home, ".local", "share", "flatpak", "exports", "share", "applications"), "/var/lib/snapd/desktop/applications"}
+	for _, dir := range dirs {
+		des, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, de := range des {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			if !strings.HasSuffix(de.Name(), ".desktop") || seen[de.Name()] {
+				continue
+			}
+			seen[de.Name()] = true
+			p := filepath.Join(dir, de.Name())
+			b, err := os.ReadFile(p)
+			if err != nil {
+				continue
+			}
+			a := AppInfo{ID: strings.TrimSuffix(de.Name(), ".desktop"), Path: p, System: strings.HasPrefix(p, "/usr/")}
+			hidden, entry := false, false
+			for _, l := range strings.Split(string(b), "\n") {
+				l = strings.TrimSpace(l)
+				if strings.HasPrefix(l, "[") {
+					entry = l == "[Desktop Entry]"
+					continue
+				}
+				if !entry {
+					continue
+				}
+				k, v, _ := strings.Cut(l, "=")
+				switch k {
+				case "Name":
+					a.Name = v
+				case "NoDisplay", "Hidden":
+					hidden = hidden || v == "true"
+				case "Type":
+					hidden = hidden || v != "Application"
+				case "X-AppImage-Version", "Version":
+					if k != "Version" {
+						a.Version = v
+					}
+				}
+			}
+			if hidden || a.Name == "" {
+				continue
+			}
+			if fi, err := de.Info(); err == nil {
+				a.Modified = fi.ModTime().UnixMilli()
+			}
+			out = append(out, a)
+		}
+	}
+	return out, nil
+}
+
+var gnomePanels = map[string]string{"privacy": "privacy", "notifications": "notifications", "network": "network", "display": "display",
+	"sound": "sound", "bluetooth": "bluetooth", "accessibility": "universal-access", "storage": "privacy"}
+
+func openSettings(env *Env, pane string) error {
+	panel := gnomePanels[pane]
+	if panel == "" {
+		return errf(CodeUnsupported, "Linux has no settings page for %s: it is not asked for there", pane)
+	}
+	if firstOf(env, "gnome-control-center") != "" {
+		_, err := startDetached(env, "gnome-control-center", panel)
+		return err
+	}
+	if firstOf(env, "systemsettings") != "" {
+		_, err := startDetached(env, "systemsettings")
+		return err
+	}
+	return errf(CodeUnsupported, "no settings app found (GNOME or KDE)")
+}
+
+func thumbnail(context.Context, *Env, string, int) ([]byte, error) {
+	return nil, errf(CodeUnsupported, "on Linux only pictures (png, jpeg, gif) have thumbnails")
+}
+
+func dialogMissing(env *Env) string {
+	if firstOf(env, "zenity", "kdialog") == "" {
+		return "dialogs need zenity or kdialog"
+	}
+	return ""
+}
+
+// dialog: zenity, or kdialog.
+func dialog(ctx context.Context, env *Env, d Dialog) ([]string, error) {
+	var argv []string
+	start := d.Folder
+	if d.save && d.Name != "" {
+		start = filepath.Join(d.Folder, d.Name)
+	}
+	if firstOf(env, "zenity") != "" {
+		argv = []string{"zenity", "--file-selection", "--separator=\n"}
+		if d.Title != "" {
+			argv = append(argv, "--title="+d.Title)
+		}
+		if start != "" {
+			if !d.save {
+				start += "/"
+			}
+			argv = append(argv, "--filename="+start)
+		}
+		switch {
+		case d.save:
+			argv = append(argv, "--save", "--confirm-overwrite")
+		case d.Folders:
+			argv = append(argv, "--directory")
+		}
+		if d.Multiple && !d.save {
+			argv = append(argv, "--multiple")
+		}
+		if len(d.Types) > 0 && !d.Folders {
+			var pats []string
+			for _, t := range d.Types {
+				pats = append(pats, "*."+strings.TrimPrefix(t, "."))
+			}
+			argv = append(argv, "--file-filter="+strings.Join(pats, " "))
+		}
+	} else if firstOf(env, "kdialog") != "" {
+		if start == "" {
+			start = env.Home
+		}
+		switch {
+		case d.save:
+			argv = []string{"kdialog", "--getsavefilename", start}
+		case d.Folders:
+			argv = []string{"kdialog", "--getexistingdirectory", start}
+		default:
+			argv = []string{"kdialog", "--getopenfilename", start}
+			if d.Multiple {
+				argv = append(argv, "--multiple", "--separate-output")
+			}
+		}
+		if d.Title != "" {
+			argv = append(argv, "--title", d.Title)
+		}
+	} else {
+		return nil, errf(CodeUnsupported, "%s", dialogMissing(env))
+	}
+	out, err := runOutFor(ctx, env, 30*time.Minute, nil, nil, argv...)
+	if err != nil {
+		var ee *exec.ExitError
+		if errors.As(err, &ee) || strings.Contains(err.Error(), "exit status 1") {
+			return nil, nil // (cancelled)
+		}
+		return nil, err
+	}
+	var paths []string
+	for _, l := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if l = strings.TrimSpace(l); l != "" {
+			paths = append(paths, l)
+		}
+	}
+	return paths, nil
 }
