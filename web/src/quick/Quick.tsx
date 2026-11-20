@@ -13,7 +13,8 @@ import "@/app/app.css";
 import "@/app/space.css";
 import "./quick.css";
 
-// The workspace on show in the app (AppMode keeps it here).
+// The workspace on show in the app (AppMode keeps it here): the panel talks
+// to that workspace's superagent, as the app is on it (nothing to pick).
 const HUB_KEY = "myco-app-hub";
 
 const post = (path: string, body: unknown = {}) =>
@@ -84,7 +85,7 @@ export function Quick() {
     if (!el) return;
     let last = 0;
     const report = () => {
-      const h = Math.ceil(el.getBoundingClientRect().height) + 24;
+      const h = Math.ceil(el.getBoundingClientRect().height);
       if (h !== last) { last = h; void post("app/quick/size", { h }); }
     };
     report();
@@ -131,11 +132,6 @@ export function Quick() {
         <div className="qp-head">
           {agent ? <Avatar agent={agent} size={22} badge={false} /> : null}
           <span className="qp-name">{name}</span>
-          {hubs.filter((h) => h.ok).length > 1 ? (
-            <select className="qp-hub" value={hub?.id || ""} onChange={(e) => setHubId(e.target.value)} aria-label={L("工作区", "Workspace")}>
-              {hubs.filter((h) => h.ok).map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
-            </select>
-          ) : hub ? <span className="qp-hub-name">{hub.name}</span> : null}
           <span style={{ flex: 1 }} />
           {agent && (
             <button type="button" className="app-btn app-btn-small qp-open" onClick={() => openChat()} title={L("打开完整对话", "Open the full chat")}>

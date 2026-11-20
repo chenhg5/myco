@@ -19,6 +19,9 @@ const quickKey = "Cmd+Shift+Space"
 // quickW is the panel's width in points; its page reports the height.
 const quickW = 640
 
+// quickRadius is its corners' radius, as the page's card.
+const quickRadius = 16
+
 // quick is the small panel the shortcut calls up, Spotlight-like: one line
 // to hand the workspace's superagent (Shroom) a thing, its latest answer
 // under it, and a way into the full chat. A floating panel that does not
@@ -41,8 +44,12 @@ func newQuick(app *application.App, open func(hub, agent string, setup bool)) *q
 		BackgroundType: application.BackgroundTypeTransparent,
 		URL:            "/?quick=1",
 		Mac: application.MacWindow{
-			Backdrop:    application.MacBackdropTransparent,
-			WindowClass: application.MacWindowClassPanel,
+			Backdrop: application.MacBackdropTransparent,
+			// AppKit rounds the window itself: the page fills it edge to edge
+			// (the webview is not transparent without private APIs, so a
+			// card with a margin round it showed a white frame).
+			CornerRadius: quickRadius,
+			WindowClass:  application.MacWindowClassPanel,
 			PanelPreferences: application.MacPanelPreferences{
 				NonActivating: true,
 				FloatingPanel: true,
