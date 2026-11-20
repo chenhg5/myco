@@ -3308,12 +3308,15 @@ async function runMatrix(browser, size, scheme) {
       const effortSelect = body.locator(".app-kv", { hasText: "推理强度" }).first().locator("select");
       await modelSelect.waitFor({ timeout: 5_000 });
       await effortSelect.waitFor({ timeout: 5_000 });
-      await modelSelect.selectOption("gpt-6");
-      await lastBody((x) => x.agent === "pm-codex" && x.body.model === "gpt-6", "模型的修改");
-      await page.waitForFunction(() => (document.querySelector(".ms .ms-fold-body")?.textContent || "").includes("现在是：gpt-6（"), null, { timeout: 5_000 });
+      // The models are what the computer's Codex lists (its runner reports them).
+      const offered = await modelSelect.locator("option").allTextContents();
+      if (!offered.some((o) => o.includes("GPT-6.1 Sol"))) throw new Error(`模型应列出电脑上 Codex 给的，实际是「${offered.join("、")}」`);
+      await modelSelect.selectOption("gpt-6.1-sol");
+      await lastBody((x) => x.agent === "pm-codex" && x.body.model === "gpt-6.1-sol", "模型的修改");
+      await page.waitForFunction(() => (document.querySelector(".ms .ms-fold-body")?.textContent || "").includes("现在是：gpt-6.1-sol（"), null, { timeout: 5_000 });
       await effortSelect.selectOption("low");
       const effortBody = await lastBody((x) => x.agent === "pm-codex" && x.body.effort === "low", "推理强度的修改");
-      if (effortBody.body.model !== "gpt-6") {
+      if (effortBody.body.model !== "gpt-6.1-sol") {
         throw new Error(`改推理强度时应带上当前模型，实际是「${effortBody.body.model}」`);
       }
 
