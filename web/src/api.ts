@@ -342,6 +342,9 @@ export interface Message {
   workflow?: string;
   /** On a reply: the structured result handed back with it. */
   result?: Record<string, unknown>;
+  /** why the hub let it past its recipient's allow list ("project:<name>": a
+   *  project with a terminal on that computer; hubs from v0.21.2) */
+  granted_by?: string;
   /** the person behind the sender (member name) */
   from_owner?: string;
   /** a progress update asking the task's sender to decide (body: the

@@ -189,9 +189,16 @@ func (s *MessageService) send(ctx context.Context, sender *domain.Agent, in Send
 		return nil, domain.Errf(domain.CodePermissionDenied, "%s is private to its owner", to).
 			WithSuggestion("only its owner and the owner's own agents can give it tasks; ask them to make it visible to the team")
 	}
+	grant := ""
 	if !asAdmin && !recipient.Accepts(sender.Name) {
-		return nil, domain.Errf(domain.CodePermissionDenied, "agent %s does not accept messages from %s", to, sender.Name).
-			WithSuggestion("ask the hub admin to add %s to %s's allow-from list", sender.Name, to)
+		if grant = s.projectSpawnGrant(ctx, sender, recipient, typ, in.Body); grant == "" {
+			e := domain.Errf(domain.CodePermissionDenied, "agent %s does not accept messages from %s", to, sender.Name).
+				WithSuggestion("ask the hub admin to add %s to %s's allow-from list", sender.Name, to)
+			if recipient.Kind() == domain.KindMachine {
+				e = e.WithSuggestion("a project with a terminal on that computer lets its agents start sessions there, inside the terminal's folder: ask its owner to add the terminal to your project, or to add %s to %s's allow-from list", sender.Name, to)
+			}
+			return nil, e
+		}
 	}
 	project := ""
 	if in.ThreadID != "" {
@@ -210,6 +217,7 @@ func (s *MessageService) send(ctx context.Context, sender *domain.Agent, in Send
 		return nil, err
 	}
 	m.Project = project
+	m.GrantedBy = grant
 	m.Automation = in.Automation
 	m.Workflow = in.Workflow
 	m.After = in.After

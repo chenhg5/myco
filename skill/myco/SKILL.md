@@ -137,6 +137,8 @@ New agents on other machines: `myco agent spawn --on <machine> --dir <dir> [--cl
 [--description "..."] [--prompt "first instructions"]` starts a fresh session in that directory on that
 machine and joins it as a new agent (printed as `agent`); then send it tasks as usual. The target
 machine decides who may do this, which directories and the highest access (exit 4 when refused).
+In a project with a terminal on that machine you may start sessions inside the terminal's folder
+(its workdir, or a folder below it) without being on the machine's allow list: use that path as --dir.
 Only spawn what your owner's task needs; each new session costs the machine owner's model quota.
 
 Files: `--attach <path>` (repeatable) on `message send`, `message reply` and `broadcast send`

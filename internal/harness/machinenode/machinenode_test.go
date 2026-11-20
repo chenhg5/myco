@@ -119,6 +119,13 @@ func TestSendersFromAllowFrom(t *testing.T) {
 	if res := r.run(t, "stranger", api.SpawnRequest{Dir: "~/code/app"}); !res.Denied || !strings.Contains(res.Error, "allow_from") {
 		t.Fatalf("stranger: %+v", res)
 	}
+	// The hub let it through for a project with a terminal here (it checked
+	// the folder): the node starts it; the folder rules still apply.
+	b, _ := json.Marshal(api.SpawnRequest{Dir: "~/code/app", CLI: "claude"})
+	out, err := r.node.Run(context.Background(), harness.Request{From: "stranger", Body: string(b), Type: "task", GrantedBy: "project:cc"})
+	if err != nil || strings.Contains(out.Output, "allow_from") {
+		t.Fatalf("granted by a project: %v %s", err, out.Output)
+	}
 	// The live allow_from wins over the start-up copy (admin changed it).
 	r.node.CurrentSenders = func() ([]string, error) { return []string{"stranger"}, nil }
 	if res := r.run(t, "stranger", api.SpawnRequest{Dir: "~/code/app"}); res.Denied {
@@ -132,7 +139,7 @@ func TestSendersFromAllowFrom(t *testing.T) {
 	if res := r.run(t, "anyone", api.SpawnRequest{Dir: "~/code/app"}); res.Denied {
 		t.Fatalf("empty allow_from should admit any agent: %+v", res)
 	}
-	if len(r.enrolled) != 2 {
+	if len(r.enrolled) != 3 { // the project's, stranger's and anyone's
 		t.Fatalf("enrolled %d", len(r.enrolled))
 	}
 }

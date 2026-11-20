@@ -397,7 +397,7 @@ A route not listed treats it as the ordinary agent it also is. Nothing widens wh
 }
 ```
 
-`after` is optional and omitted when empty (from v0.19.2). `automation` names the automation that sent the message, omitted otherwise. `workflow` (v0.21+) is the workflow run that sent a task; `result` is the structured result on a reply that has one. Adding fields is non-breaking; renaming/removing fields requires `/v2`.
+`after` is optional and omitted when empty (from v0.19.2). `automation` names the automation that sent the message, omitted otherwise. `workflow` (v0.21+) is the workflow run that sent a task; `result` is the structured result on a reply that has one. `granted_by` (v0.21.2+), on a task, says why the hub let it past its recipient's `allow_from`: `project:<name>` for a spawn request (`myco agent spawn`) to a computer's machine node from an agent of an active project that has a terminal (shell node) on that computer, for a folder inside that terminal's workdir (not for new terminals or sealed bodies). The machine node accepts such a request; its own folder and access rules still apply. Adding fields is non-breaking; renaming/removing fields requires `/v2`.
 
 ## Exec nodes
 

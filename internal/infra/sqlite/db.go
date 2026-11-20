@@ -491,7 +491,9 @@ func Open(path string) (*sql.DB, error) {
 		{"automation", "TEXT NOT NULL DEFAULT ''"},
 		// The workflow run that sent it, and a reply's structured result
 		// (v0.21).
-		{"workflow", "TEXT NOT NULL DEFAULT ''"}, {"result", "TEXT NOT NULL DEFAULT ''"}}); err != nil {
+		{"workflow", "TEXT NOT NULL DEFAULT ''"}, {"result", "TEXT NOT NULL DEFAULT ''"},
+		// Why the hub admitted it past its recipient's allow list (v0.21.2).
+		{"granted_by", "TEXT NOT NULL DEFAULT ''"}}); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}

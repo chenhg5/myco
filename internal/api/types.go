@@ -269,6 +269,10 @@ type Message struct {
 	// reply, is the structured result handed back with it (v0.21+).
 	Workflow string          `json:"workflow,omitempty"`
 	Result   json.RawMessage `json:"result,omitempty"`
+	// GrantedBy, on a task, says why the hub let it past its recipient's
+	// allow_from: "project:<name>" (a spawn request from an agent of a
+	// project with a terminal on that computer; v0.21.2+).
+	GrantedBy string `json:"granted_by,omitempty"`
 	// E2E: the body is end-to-end encrypted (an envelope only the
 	// message's readers can open; see docs/design/e2e-encryption.md).
 	E2E bool `json:"e2e,omitempty"`

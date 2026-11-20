@@ -129,7 +129,10 @@ func (n *Node) Run(ctx context.Context, req harness.Request) (harness.Result, er
 }
 
 func (n *Node) spawn(ctx context.Context, req harness.Request) api.SpawnResult {
-	if !n.senderAllowed(req.From) {
+	// A project with a terminal on this computer lets its agents start
+	// sessions here, in that terminal's folder: the hub checked both and
+	// says so on the message. The rules below still apply.
+	if !n.senderAllowed(req.From) && !strings.HasPrefix(req.GrantedBy, "project:") {
 		return denied("sender %q may not start sessions on machine %s (not in the machine node's allow_from)", req.From, n.Machine)
 	}
 	var sr api.SpawnRequest

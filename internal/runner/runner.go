@@ -534,7 +534,7 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 			SessionID: runSession,
 			Fork:      fork,
 			Workdir:   r.opts.Workdir,
-			Body:      m.Body, From: m.From, Type: m.Type,
+			Body:      m.Body, From: m.From, Type: m.Type, GrantedBy: m.GrantedBy,
 			Env: append(r.env(),
 				"MYCO_MESSAGE_ID="+m.ID, "MYCO_THREAD_ID="+m.ThreadID, "MYCO_FROM="+m.From, "MYCO_MESSAGE_TYPE="+m.Type,
 				"MYCO_PROJECT="+m.Project),
