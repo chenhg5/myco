@@ -84,6 +84,9 @@ notes are never auto-answered. Logs go to stderr.`,
 				} else if len(written) > 0 {
 					log.Info("installed the myco skill", "version", Version, "paths", strings.Join(written, ", "))
 				}
+				if changed, _, err := installMemory(memoryTargets(e.in.Getenv), memoryRefresh); err == nil && len(changed) > 0 {
+					log.Info("updated the myco lines in the agent CLIs' instructions", "paths", strings.Join(changed, ", "))
+				}
 			}
 			if !e.in.Bool("all") {
 				r, err := e.buildRunner(e.cfgPath, e.cfg, shared, e.overrides(), log)

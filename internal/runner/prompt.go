@@ -63,8 +63,11 @@ func (p DefaultPrompt) Build(self string, m api.Message, files []LocalFile) stri
 	switch m.Type {
 	case "task":
 		b.WriteString("Your final answer will be sent back to the sender automatically as the reply.\n" +
-			"If the work takes a while, tell the sender how it is going with `myco message progress --body \"...\"` " +
-			"(it does not end the task), and optionally publish a one-line status for everyone with `myco agent status set --text \"...\"`.\n" +
+			"The sender follows your work in the myco app as it goes. If it takes a while, tell them how it is going with " +
+			"`myco message progress --body \"...\"` (it does not end the task); when they would want to see it (a page, a chart, a draft), " +
+			"add a screenshot: `--attach shot.png`. Optionally publish a one-line status for everyone with `myco agent status set --text \"...\"`.\n" +
+			"When there is an obvious next step for them, suggest it before you finish: `myco message suggest --text \"...\"` " +
+			"(one short line in their language; the app puts it in their input).\n" +
 			"If you need to delegate and answer later, run `myco message hold --id " + m.ID + "` now, " +
 			"send sub-tasks with `myco message send`, and later answer with `myco message reply --id " + m.ID + "`.\n" +
 			"If the sender really has to decide (a direction, something costly or hard to undo), ask with " +
