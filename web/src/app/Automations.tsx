@@ -338,7 +338,7 @@ function AutomationDetail({ hubId, a, row, now, stamp, busy, error, onEdit, onRu
             onClick={(e) => more.openUnder(e.currentTarget, [
               a.enabled ? { label: L("暂停", "Pause"), icon: Pause, onSelect: onToggle } : { label: L("启用", "Resume"), icon: Play, onSelect: onToggle },
               "sep",
-              { label: L("删除这个自动化…", "Delete this automation…"), icon: Trash2, danger: true, onSelect: onDelete },
+              { label: L("删除", "Delete"), icon: Trash2, danger: true, onSelect: onDelete },
             ])}><MoreHorizontal /></button>
         </div>
       </header>

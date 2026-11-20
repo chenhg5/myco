@@ -870,7 +870,7 @@ function WorkflowDetail({ hubId, wf, rows, now, stamp, busy, error, onRun, onTog
                 ? { label: L("停用", "Turn off"), icon: Pause, onSelect: onToggle }
                 : { label: L("启用", "Turn on"), icon: Play, onSelect: onToggle },
               "sep",
-              { label: L("删除这个工作流…", "Delete this workflow…"), icon: Trash2, danger: true, onSelect: onDelete },
+              { label: L("删除", "Delete"), icon: Trash2, danger: true, onSelect: onDelete },
             ])}><MoreHorizontal /></button>
         </div>
       </header>

@@ -3073,9 +3073,17 @@ textarea.app-input {
 .conv-menu-item:disabled:hover {
   background: transparent;
 }
-.conv-menu-item.danger,
-.conv-menu-item.danger svg {
+/* A destructive item (删除) looks like the others until pointed at or
+   chosen by key: then red, so it is not shouting from every menu. */
+.conv-menu-item.danger:hover,
+.conv-menu-item.danger:focus-visible,
+.conv-menu-item.danger:hover svg,
+.conv-menu-item.danger:focus-visible svg {
   color: var(--red);
+}
+.conv-menu-item.danger:hover,
+.conv-menu-item.danger:focus-visible {
+  background: color-mix(in srgb, var(--red) 9%, transparent);
 }
 .conv-menu-header {
   padding: 7px 10px 3px;
