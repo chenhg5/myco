@@ -175,6 +175,7 @@ function App() {
   const [palette, setPalette] = useState(false);
   const [filterAt, setFilterAt] = useState<Anchor | null>(null);
   const [folded, setFolded] = useState<Record<string, boolean>>({ canceled: true });
+  const [teamAt, setTeamAt] = useState<Anchor | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const setView = (v: View) => { setViewState(v); if (v.kind !== "project") store.set("view", v.kind); setFocus(null); };
@@ -241,8 +242,8 @@ function App() {
     <div className="app is">
       <aside className="is-side">
         <div className="is-team">
-          <span className="is-team-key">{teamKey().slice(0, 1)}</span>
-          <input className="is-team-name" value={teamTitle.get("")} placeholder="团队名" aria-label="团队名" onChange={(e) => teamTitle.set(e.target.value)} />
+          <button type="button" className="is-logo" title="名称和编号前缀" aria-label="名称和编号前缀" onClick={(e) => setTeamAt(rectOf(e.currentTarget))}><Logo /></button>
+          <input className="is-team-name" value={teamTitle.get("")} placeholder="任务追踪" aria-label="名称" onChange={(e) => teamTitle.set(e.target.value)} />
         </div>
         <button type="button" className="is-new" onClick={() => setCreating(view.kind === "project" ? { project: view.id } : {})}>
           <Plus className="ico" />新建问题<kbd>C</kbd>
@@ -314,6 +315,7 @@ function App() {
       </main>
 
       {menu && <PropMenu kind={menu.kind} ids={menu.ids} at={menu.at} me={me} onClose={() => setMenu(null)} />}
+      {teamAt && <TeamPop at={teamAt} onClose={() => setTeamAt(null)} />}
       {filterAt && <FilterPop at={filterAt} filters={filters} setFilters={setFilters} me={me} onClose={() => setFilterAt(null)} />}
       {creating && <Create init={creating} me={me} onClose={() => setCreating(null)} onMade={(id) => { setFocus(id); }} />}
       {palette && <Palette me={me} focus={focus || open} onClose={() => setPalette(false)}
@@ -329,6 +331,36 @@ function App() {
         }} />}
       <Toast kit={kit} />
     </div>
+  );
+}
+
+/** The app's mark: a circle half done, as its icon. */
+function Logo() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+      <circle cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.5" /><path d="M7 4a3 3 0 0 1 0 6z" fill="currentColor" />
+    </svg>
+  );
+}
+
+/** The tracker's name and the key its issues are numbered with (MYC-12). */
+function TeamPop({ at, onClose }: { at: Anchor; onClose: () => void }) {
+  const d = team.get("main")?.data || {};
+  const [key, setKey] = useState(teamKey());
+  const saveKey = () => {
+    const k = key.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6) || "TASK";
+    setKey(k);
+    if (k !== teamKey()) void kit.track(team.put({ ...d, key: k }, "main"));
+  };
+  return (
+    <Pop at={at} onClose={() => { saveKey(); onClose(); }} width={260}>
+      <div className="team-pop">
+        <label>名称<input className="inp" value={teamTitle.get("")} placeholder="任务追踪" onChange={(e) => teamTitle.set(e.target.value)} /></label>
+        <label>编号前缀<input className="inp" value={key} maxLength={6} onChange={(e) => setKey(e.target.value.toUpperCase())} onBlur={saveKey}
+          onKeyDown={(e) => { if (e.key === "Enter") { saveKey(); onClose(); } }} /></label>
+        <span className="faint">问题显示成 {key || "TASK"}-12；改了以后所有问题跟着变。</span>
+      </div>
+    </Pop>
   );
 }
 

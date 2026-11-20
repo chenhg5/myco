@@ -46,7 +46,7 @@ export const PROJECT_STATUSES = [
   { id: "planned", name: "计划中" }, { id: "started", name: "进行中" }, { id: "paused", name: "暂停" }, { id: "done", name: "已完成" },
 ] as const;
 
-export const teamKey = () => String(team.get("main")?.data.key || "MYC").toUpperCase();
+export const teamKey = () => String(team.get("main")?.data.key || "TASK").toUpperCase();
 export const keyOf = (r: IssueRec) => `${teamKey()}-${Number(r.data.n) || 0}`;
 export const num = (v: unknown, d: number) => (typeof v === "number" && Number.isFinite(v) ? v : d);
 
