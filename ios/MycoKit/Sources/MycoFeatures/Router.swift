@@ -20,6 +20,12 @@ public enum Route: Hashable, Sendable {
     case automations
     /// 应用: ready-made pages to use with agents, and the ones made.
     case apps
+    /// 工作流: decisions waiting for me, workflows and their runs.
+    case workflows
+    /// A workflow: what it does, run it, its runs.
+    case workflow(String)
+    /// A run of a workflow: its steps.
+    case workflowRun(String)
 }
 
 /// Something that rises from the bottom, over any tab.
@@ -147,6 +153,7 @@ public final class Router {
             switch name {
             case "automations": show([.automations], in: .members)
             case "apps": show([.apps], in: .members)
+            case "workflows": show([.workflows], in: .members)
             default: return false
             }
         case "sheet":

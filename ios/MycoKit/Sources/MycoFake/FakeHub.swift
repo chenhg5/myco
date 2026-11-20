@@ -53,6 +53,8 @@ public actor FakeHub: HubAPI {
         pinList = world.pins
         pageFiles = Dictionary(world.pages.map { ($0.page.id, $0.files) }, uniquingKeysWith: { first, _ in first })
         automationRuns = Dictionary(grouping: world.automations.compactMap(\.lastRun), by: { $0.automationId ?? "" })
+        workflowList = world.workflows
+        runList = world.runs
     }
 
     public func setLatency(_ value: Duration) {
@@ -300,6 +302,140 @@ public actor FakeHub: HubAPI {
             status: "done", project: task.project, createdAt: Date(), attachments: try attached(attachments)))
         // More to do: the answer comes a little later.
         if simulated[messageID] != nil { simulated[messageID] = Date().addingTimeInterval(-Self.ackAfter) }
+    }
+
+    // MARK: Workflows
+
+    private var workflowList: [Workflow] = []
+    private var runList: [WorkflowRun] = []
+    private var tooOldForWorkflows = false
+
+    public func setTooOldForWorkflows(_ value: Bool) {
+        tooOldForWorkflows = value
+    }
+
+    private func checkWorkflows() async throws {
+        try await check()
+        if tooOldForWorkflows { throw HubError(error: "not_found", message: "no route for GET /v1/workflows", status: 404) }
+    }
+
+    private func workflowIndex(_ ref: String) throws -> Int {
+        guard let i = workflowList.firstIndex(where: { $0.id == ref || $0.name == ref }) else {
+            throw HubError(error: "not_found", message: "workflow \(ref) not found", status: 404)
+        }
+        return i
+    }
+
+    private func runIndex(_ id: String) throws -> Int {
+        guard let i = runList.firstIndex(where: { $0.id == id }) else {
+            throw HubError(error: "not_found", message: "run \(id) not found", status: 404)
+        }
+        return i
+    }
+
+    /// A workflow as the list has it (no definition), with its last run.
+    private func listed(_ workflow: Workflow) -> Workflow {
+        var one = workflow
+        one.definition = nil
+        one.lastRun = runList.first { $0.workflowId == workflow.id }.map { var run = $0; run.steps = nil; return run }
+        one.active = runList.filter { $0.workflowId == workflow.id && $0.isGoing }.count
+        return one
+    }
+
+    public func workflows() async throws -> [Workflow] {
+        try await checkWorkflows()
+        return workflowList.map(listed)
+    }
+
+    public func workflow(_ ref: String) async throws -> Workflow {
+        try await checkWorkflows()
+        var one = listed(workflowList[try workflowIndex(ref)])
+        one.definition = workflowList[try workflowIndex(ref)].definition
+        return one
+    }
+
+    public func setWorkflow(_ ref: String, enabled: Bool) async throws {
+        try await checkWorkflows()
+        workflowList[try workflowIndex(ref)].enabled = enabled
+    }
+
+    public func startWorkflow(_ ref: String, inputs: [String: JSONValue]) async throws -> WorkflowRun {
+        try await checkWorkflows()
+        let workflow = workflowList[try workflowIndex(ref)]
+        guard workflow.enabled else { throw HubError(error: "invalid_state", message: "the workflow is turned off", status: 409) }
+        for key in workflow.definition?.inputs?.required ?? [] where (inputs[key]?.text ?? "").isEmpty {
+            throw HubError(error: "invalid_argument", message: "inputs: missing \(key)", status: 400)
+        }
+        seq += 1
+        let first = workflow.definition?.steps?.first
+        let run = WorkflowRun(
+            id: "run_\(seq)", workflowId: workflow.id, name: workflow.name, project: workflow.project, status: "running", inputs: inputs,
+            by: Self.me, current: first.map { [$0.id] }, steps: first.map {
+                [RunStep(id: "rs_new\(seq)", step: $0.id, title: $0.title, kind: "agent", status: "running", target: $0.agent)]
+            })
+        runList.insert(run, at: 0)
+        return run
+    }
+
+    public func workflowRuns(workflow: String?, limit: Int) async throws -> [WorkflowRun] {
+        try await checkWorkflows()
+        return Array(runList.filter { workflow == nil || $0.workflowId == workflow || $0.name == workflow }
+            .map { var run = $0; run.steps = nil; return run }.prefix(limit))
+    }
+
+    public func workflowRun(_ id: String) async throws -> WorkflowRun {
+        try await checkWorkflows()
+        return runList[try runIndex(id)]
+    }
+
+    public func cancelRun(_ id: String) async throws -> WorkflowRun {
+        try await checkWorkflows()
+        let i = try runIndex(id)
+        guard runList[i].isGoing else { throw HubError(error: "invalid_state", message: "the run has ended", status: 409) }
+        runList[i].status = "cancelled"
+        runList[i].endedAt = Date()
+        for j in (runList[i].steps ?? []).indices where ["running", "waiting"].contains(runList[i].steps![j].status) {
+            runList[i].steps![j].status = "cancelled"
+        }
+        return runList[i]
+    }
+
+    public func retryRun(_ id: String) async throws -> WorkflowRun {
+        try await checkWorkflows()
+        let i = try runIndex(id)
+        guard ["failed", "cancelled"].contains(runList[i].status) else {
+            throw HubError(error: "invalid_state", message: "only a failed or cancelled run starts again", status: 409)
+        }
+        runList[i].status = "running"
+        runList[i].endedAt = nil
+        return runList[i]
+    }
+
+    public func decide(run id: String, step: String, choice: String, note: String?) async throws -> WorkflowRun {
+        try await checkWorkflows()
+        let i = try runIndex(id)
+        guard let j = runList[i].steps?.firstIndex(where: { $0.step == step && $0.status == "waiting" }) else {
+            throw HubError(error: "invalid_state", message: "step \(step) is not waiting for a decision", status: 409)
+        }
+        let options = runList[i].steps![j].options ?? []
+        guard options.contains(choice) else {
+            throw HubError(error: "invalid_argument", message: "choice must be one of \(options)", status: 400)
+        }
+        runList[i].steps![j].status = "done"
+        runList[i].steps![j].summary = note.map { choice + "：" + $0 } ?? choice
+        runList[i].steps![j].endedAt = Date()
+        runList[i].status = choice == options.first ? "succeeded" : "failed"
+        if choice != options.first { runList[i].error = "decided: \(choice)" }
+        runList[i].current = []
+        runList[i].endedAt = Date()
+        return runList[i]
+    }
+
+    public func workflowDecisions() async throws -> [WorkflowDecision] {
+        try await checkWorkflows()
+        return runList.flatMap { run in
+            (run.steps ?? []).filter { $0.kind == "human" && $0.status == "waiting" }.map { WorkflowDecision(run: run, step: $0) }
+        }
     }
 
     // MARK: Superagents

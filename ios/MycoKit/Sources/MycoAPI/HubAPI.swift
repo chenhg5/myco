@@ -149,6 +149,28 @@ public protocol HubAPI: Sendable {
     /// someone who manages the workspace.
     func dismiss(_ messageID: String) async throws
 
+    // Workflows (v0.21+; older workspaces answer 404)
+    /// `GET /v1/workflows`
+    func workflows() async throws -> [Workflow]
+    /// `GET /v1/workflows/{ref}`: with its definition.
+    func workflow(_ ref: String) async throws -> Workflow
+    /// `PATCH /v1/workflows/{ref}` `{enabled}`.
+    func setWorkflow(_ ref: String, enabled: Bool) async throws
+    /// `POST /v1/workflows/{ref}/runs` `{inputs}`.
+    func startWorkflow(_ ref: String, inputs: [String: JSONValue]) async throws -> WorkflowRun
+    /// `GET /v1/workflow-runs?workflow=&limit=`, newest first.
+    func workflowRuns(workflow: String?, limit: Int) async throws -> [WorkflowRun]
+    /// `GET /v1/workflow-runs/{id}`: with its steps.
+    func workflowRun(_ id: String) async throws -> WorkflowRun
+    /// `POST /v1/workflow-runs/{id}/cancel`
+    func cancelRun(_ id: String) async throws -> WorkflowRun
+    /// `POST /v1/workflow-runs/{id}/retry`: at the step that failed.
+    func retryRun(_ id: String) async throws -> WorkflowRun
+    /// `POST /v1/workflow-runs/{id}/decide` `{step, choice, note}`.
+    func decide(run id: String, step: String, choice: String, note: String?) async throws -> WorkflowRun
+    /// `GET /v1/workflow-decisions`: the decisions waiting for me.
+    func workflowDecisions() async throws -> [WorkflowDecision]
+
     // Superagents (v0.21.1+; older workspaces answer 404)
     /// `GET /v1/console/superagent`
     func superagent() async throws -> SuperagentState

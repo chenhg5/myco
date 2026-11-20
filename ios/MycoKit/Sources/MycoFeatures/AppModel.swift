@@ -962,6 +962,9 @@ extension View {
                 case .projectInfo(let name): ProjectInfoScreen(name: name)
                 case .automations: AutomationsScreen()
                 case .apps: AppsScreen()
+                case .workflows: WorkflowsScreen()
+                case .workflow(let id): WorkflowScreen(id: id)
+                case .workflowRun(let id): WorkflowRunScreen(id: id)
                 }
             }
             // A pushed page takes the whole screen: no tab bar under its input.

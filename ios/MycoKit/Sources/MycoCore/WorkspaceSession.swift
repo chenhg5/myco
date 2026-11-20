@@ -89,6 +89,16 @@ public final class WorkspaceSession {
         return model
     }
 
+    @ObservationIgnored private var workflowsModel: WorkflowsModel?
+
+    /// 工作流: decisions waiting for me, the workflows and their runs.
+    public var workflows: WorkflowsModel {
+        if let workflowsModel { return workflowsModel }
+        let model = WorkflowsModel(hub: hub)
+        workflowsModel = model
+        return model
+    }
+
     @ObservationIgnored private var superagentModel: SuperagentModel?
 
     /// My superagent here and what it waits on me for.
