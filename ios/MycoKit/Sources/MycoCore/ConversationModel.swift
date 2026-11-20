@@ -1002,6 +1002,12 @@ public final class ConversationModel {
         return true
     }
 
+    /// The tasks from elsewhere it still holds (not in this conversation):
+    /// said in the conversation, handled in its profile.
+    public var elsewhere: [Message] {
+        OpenWork.elsewhere(session.status(of: agent), agent: agent, shown: Set(known.keys))
+    }
+
     /// Tasks I asked about with a nudge (once each).
     public private(set) var nudged: Set<String> = []
 

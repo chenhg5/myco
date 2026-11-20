@@ -253,13 +253,23 @@ public struct AgentStatus: Codable, Sendable, Hashable, Identifiable {
     public var receiving: String?
     public var sessionInUse: Bool?
     @LossyList public var current: [Message]
+    /// Held tasks waiting on a question to their sender (newer hubs).
+    public var asking: Int?
+    /// Tasks it took that show no life (left open): still open, not making
+    /// it "working" (newer hubs).
+    public var stale: Int?
+    public var staleTasks: [String]?
 
     public var id: String { agent.id }
 
     public init(
         agent: Agent, state: String, queued: Int = 0, inProgress: Int = 0, held: Int = 0,
-        receiving: String? = "runner", sessionInUse: Bool? = nil, current: [Message] = []
+        receiving: String? = "runner", sessionInUse: Bool? = nil, current: [Message] = [],
+        asking: Int? = nil, stale: Int? = nil, staleTasks: [String]? = nil
     ) {
+        self.asking = asking
+        self.stale = stale
+        self.staleTasks = staleTasks
         self.agent = agent
         self.state = state
         self.queued = queued

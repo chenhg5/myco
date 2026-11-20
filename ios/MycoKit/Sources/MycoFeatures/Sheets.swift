@@ -32,6 +32,12 @@ struct MemberCardSheet: View {
                         .buttonStyle(PrimaryButtonStyle())
                         .accessibilityIdentifier("member.chat")
 
+                    // What it holds open, each saying what it waits on:
+                    // above the rest, to be handled (the desktop's 当前工作).
+                    if !status.current.isEmpty {
+                        CurrentWork(status: status, manages: session.manages(agent))
+                    }
+
                     // Offline: why, as far as can be told, and what to do.
                     if let why = OfflineWhy.of(status, machines: session.machines) {
                         CardSection(title: L("为什么离线", "Why it is offline")) {
@@ -1209,6 +1215,76 @@ struct JoinSheet: View {
                 problem = Failure(L("没能加入，请再试一次。", "Could not join. Try again."))
             }
             working = false
+        }
+    }
+}
+
+/// An agent's open work: each task, what it waits on, from whom, how long
+/// ago it moved, what it says; and for whoever manages it, close it as done
+/// or stop it.
+private struct CurrentWork: View {
+    let status: AgentStatus
+    let manages: Bool
+    @Environment(WorkspaceSession.self) private var session
+    @State private var busy: String?
+    @State private var failure: Failure?
+
+    var body: some View {
+        CardSection(title: L("当前工作", "Current work")) {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(status.current) { task in
+                    row(task)
+                    if task.id != status.current.last?.id { Divider().overlay(MycoColor.line) }
+                }
+                if let failure {
+                    FailureLine(failure: failure).padding(.vertical, 8)
+                }
+            }
+        }
+        .accessibilityIdentifier("member.current")
+    }
+
+    private func row(_ task: Message) -> some View {
+        let line = OpenWork.line(of: task, in: status, name: session.displayName(of:))
+        let left = (status.staleTasks ?? []).contains(task.id)
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Text(line).font(.caption.weight(.semibold)).foregroundStyle(left ? MycoColor.amber : MycoColor.fg2)
+                Text(session.displayName(of: task.from) + " → " + session.displayName(of: task.to))
+                    .font(.caption).foregroundStyle(MycoColor.muted).lineLimit(1)
+                Spacer(minLength: 0)
+                Text(RelativeTime.short(task.activeAt ?? task.updatedAt)).font(.caption).foregroundStyle(MycoColor.faint)
+            }
+            Text(task.body).font(.subheadline).foregroundStyle(MycoColor.fg).lineLimit(2)
+            if manages {
+                HStack(spacing: 16) {
+                    Button(L("标记完成", "Mark done")) { act(task) { try await session.hub.dismiss(task.id) } }
+                        .accessibilityIdentifier("member.current.done")
+                    if task.status != "queued" {
+                        Button(L("停止", "Stop")) { act(task) { try await session.hub.stop(task.id) } }
+                            .accessibilityIdentifier("member.current.stop")
+                    }
+                }
+                .font(.footnote.weight(.medium)).tint(MycoColor.accent)
+                .disabled(busy != nil)
+                .padding(.top, 2)
+            }
+        }
+        .padding(.vertical, 10)
+        .accessibilityElement(children: .contain)
+    }
+
+    private func act(_ task: Message, _ run: @escaping @MainActor () async throws -> Void) {
+        busy = task.id
+        Task {
+            do {
+                try await run()
+                failure = nil
+            } catch {
+                failure = Failure.of(error)
+            }
+            await session.refresh()
+            busy = nil
         }
     }
 }

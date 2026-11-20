@@ -1149,6 +1149,17 @@ struct ConversationBody: View {
 
     private var bottom: some View {
         VStack(spacing: 0) {
+            // What else it holds, given by others and not done: said here,
+            // handled in its profile (the desktop app's 查看并处理).
+            let elsewhere = model.elsewhere
+            if !elsewhere.isEmpty {
+                NoticeLine(
+                    .idle,
+                    OpenWork.words(elsewhere, status: session.status(of: model.agent), me: session.me, name: session.displayName(of:)),
+                    actions: [.init(L("查看并处理", "See and handle")) { router.sheet = .memberCard(model.agent) }])
+                    .padding(.horizontal, Space.page).padding(.top, Space.s)
+                    .accessibilityIdentifier("conversation.elsewhere")
+            }
             // Only while it is at work: a conversation that has ended has
             // nothing to wait for, whatever the network.
             if model.unreachable != nil, model.openTask != nil, model.failure == nil {
