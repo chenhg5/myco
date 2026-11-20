@@ -2,9 +2,11 @@ package console
 
 import (
 	"context"
+	"os"
 	"sync"
 	"time"
 
+	"github.com/chenhg5/myco/internal/agenttools"
 	"github.com/chenhg5/myco/internal/api"
 	"github.com/chenhg5/myco/internal/config"
 	"github.com/chenhg5/myco/internal/harness/codex"
@@ -23,6 +25,10 @@ func MachineInventory(ctx context.Context, home, hub string) ([]api.MachineAI, [
 	ais := []api.MachineAI{}
 	for _, a := range l.LocalAgents(ctx) {
 		ai := api.MachineAI{CLI: a.CLI, Name: a.Name, State: a.State, Version: a.Version, Install: a.Install, Login: a.Login}
+		if a.State != "missing" && (a.CLI == "claude" || a.CLI == "codex") {
+			tools := agenttools.Scan(a.CLI, agenttools.Options{Home: home, ClaudeConfigDir: os.Getenv("CLAUDE_CONFIG_DIR"), CodexHome: os.Getenv("CODEX_HOME")})
+			ai.MCP, ai.Skills, ai.Plugins, ai.ToolWarnings = tools.MCP, tools.Skills, tools.Plugins, tools.Warnings
+		}
 		if a.CLI == "codex" && a.State != "missing" {
 			for _, m := range codex.ModelsIn(l.codexHome()) {
 				ai.Models = append(ai.Models, api.RuntimeModel{ID: m.ID, Name: m.Name, Efforts: m.Efforts})

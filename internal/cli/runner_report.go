@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chenhg5/myco/internal/agenttools"
 	"github.com/chenhg5/myco/internal/api"
 	"github.com/chenhg5/myco/internal/client"
 	"github.com/chenhg5/myco/internal/config"
@@ -48,7 +49,7 @@ type runtimeReporter struct {
 
 // reportToHub reports this machine (once) and the agent's runtime, and
 // returns the reporter for later provider changes.
-func (e *env) reportToHub(c *client.Client, me *api.Agent, h harness.Harness, rc config.Runner, access, maxAccess harness.Access, choice providerChoice, log *slog.Logger) *runtimeReporter {
+func (e *env) reportToHub(c *client.Client, me *api.Agent, h harness.Harness, rc config.Runner, access, maxAccess harness.Access, choice providerChoice, workdir string, log *slog.Logger) *runtimeReporter {
 	rep := &runtimeReporter{c: c, log: log, cfg: rc.Model, choice: choice, models: cliModels(h.Name())}
 	go func() {
 		ctx, cancel := context.WithTimeout(e.in.Ctx, 30*time.Second)
@@ -65,6 +66,10 @@ func (e *env) reportToHub(c *client.Client, me *api.Agent, h harness.Harness, rc
 			}
 		}
 		rt := api.Runtime{CLI: h.Name(), Access: string(access), MaxAccess: string(maxAccess), Features: runnerFeatures(h), Env: runnerEnv()}
+		if h.Name() == "claude" || h.Name() == "codex" {
+			tools := agenttools.Scan(h.Name(), agenttools.Options{Project: workdir, ClaudeConfigDir: e.in.Getenv("CLAUDE_CONFIG_DIR"), CodexHome: e.in.Getenv("CODEX_HOME")}).ProjectOnly(workdir)
+			rt.MCP, rt.Skills, rt.Plugins, rt.ToolWarnings = tools.MCP, tools.Skills, tools.Plugins, tools.Warnings
+		}
 		if m := cliConfigModel(h.Name(), e.in.Getenv); m != "" {
 			rt.Model, rt.ModelSource = m, "cli-config"
 		} else if h.Name() != "exec" && h.Name() != "shell" && h.Name() != "machine" {
@@ -301,9 +306,13 @@ func cliModels(cli string) func() []api.RuntimeModel {
 // (docs/design/client-plan.md section 4). Each capability adds its name
 // here when it lands.
 func runnerFeatures(h harness.Harness) []string {
-	var out []string
-	_ = h
-	return out
+	// Claude headless runs need an explicit allow rule for each MCP server.
+	// Codex MCP calls are not controlled by its shell sandbox flag, so this
+	// capability is advertised only for the harness whose flag we change.
+	if h.Name() == "claude" {
+		return []string{"mcp_tools"}
+	}
+	return nil
 }
 
 // Goodbye tells the hub this runner is stopping (best effort, a few

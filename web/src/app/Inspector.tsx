@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useCached } from "@/lib/memo";
 import { ArrowRightLeft, Check, ChevronRight, Copy, Pencil, Plus, Power, Trash2, UserCheck, X } from "lucide-react";
 import { IconChat } from "@/components/icons";
-import { appApi, isOldHub, type AgentProvider, type ProviderList } from "@/appapi";
+import { appApi, isOldHub, type AgentProvider, type ProviderList, type MachineInfo } from "@/appapi";
 import type { AgentRow } from "@/app/types";
 import type { AuditEntry, Member, Peer, Project, Runtime, Skill } from "@/api";
 import {
@@ -20,6 +20,9 @@ import { RowsSkeleton } from "@/app/Skeleton";
 import { Avatar } from "@/app/persona";
 import { ResumeRow } from "@/app/ResumeRow";
 import { RunRows } from "@/app/RunSettings";
+import { fetchMachineInfo, cachedMachineInfo } from "@/app/machineInfoCache";
+import { machineTellsInfo } from "@/app/hubVersion";
+import { hasTools, ToolInventory, type ToolLists } from "@/app/ToolInventory";
 import { HandoverHistory, handoverEntry, openHandover } from "@/app/Handover";
 
 type Action = null | "profile" | "skills" | "visibility" | "projects" | "allow" | "kick" | "delete" | "owner" | "copy";
@@ -76,7 +79,7 @@ const FIELD_LABEL: Record<string, () => string> = {
   display_name: () => L("显示名", "Display name"),
   description: () => L("介绍", "Description"),
   labels: () => L("分组和标签", "Group and tags"),
-  skills: () => L("技能", "Skills"),
+  skills: () => L("擅长", "Skills"),
   avatar: () => L("头像", "Face"),
 };
 
@@ -743,6 +746,19 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [row, action, onClose, embedded]);
+  const [toolMachineInfo, setToolMachineInfo] = useState<MachineInfo | null>(null);
+  // Only a computer that is on and can say (as on the computers page).
+  const toolMachine = row ? machineOfRow(row) : undefined;
+  const toolAsk = !!toolMachine?.online && !!toolMachine.can_spawn && machineTellsInfo(toolMachine.myco_version);
+  useEffect(() => {
+    const mid = ag?.machine_id;
+    if (!row || !mid || !toolAsk || !["claude", "codex"].includes(ag.runtime?.cli || "")) { setToolMachineInfo(null); return; }
+    let live = true;
+    setToolMachineInfo(cachedMachineInfo(row.hub.id, mid)?.info || null);
+    fetchMachineInfo(row.hub.id, mid).then((info) => { if (live) setToolMachineInfo(info); }).catch(() => {});
+    return () => { live = false; };
+  }, [row?.hub.id, ag?.machine_id, ag?.runtime?.cli, toolAsk]);
+
   const [more, setMore] = useState(openDetails);
   useEffect(() => { if (openDetails) setMore(true); }, [openDetails, row?.hub.id, ag?.name]);
 
@@ -754,6 +770,13 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
   const inbox = isInbox(ag);
   const Icon = nodeIcon(ag);
   const rt = ag.runtime;
+  const machineTools = toolMachineInfo?.ais.find((a) => a.cli === rt?.cli);
+  const agentTools: ToolLists = {
+    mcp: [...(machineTools?.mcp || []), ...(rt?.mcp || [])],
+    skills: [...(machineTools?.skills || []), ...(rt?.skills || [])],
+    plugins: [...(machineTools?.plugins || []), ...(rt?.plugins || [])],
+    tool_warnings: [...(machineTools?.tool_warnings || []), ...(rt?.tool_warnings || [])],
+  };
   const machine = machineLabel(row);
   const machineObj = machineOfRow(row);
   const mayManage = canManage(row.hub, ag.owner_id);
@@ -867,10 +890,10 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
           {kind !== "human" && (
             <section className="app-group">
               <div className="app-group-title">
-                <span className="name">{embedded ? L("技能", "Skills") : L("介绍与技能", "About and skills")}</span>
+                <span className="name">{embedded ? L("擅长", "Skills") : L("介绍与擅长", "About and skills")}</span>
                 {mayManage && (
                   <button type="button" className="app-group-action" onClick={openSkills}>
-                    <Pencil />{L("编辑技能", "Edit skills")}
+                    <Pencil />{L("编辑擅长", "Edit skills")}
                   </button>
                 )}
               </div>
@@ -885,7 +908,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
                 </div>}
                 {skillsOf(ag).length === 0 ? (
                   <div className="app-skill-empty">
-                    {L("还没有技能。技能告诉别的 agent 可以把什么活派给它；它自己也能用 myco agent skills add 添加。", "No skills yet. Skills tell other agents what work to hand it; it can add them itself with myco agent skills add.")}
+                    {L("还没写擅长什么。这里告诉别的 agent 可以把什么活派给它；它自己也能用 myco agent skills add 添加。", "No skills yet. Skills tell other agents what work to hand it; it can add them itself with myco agent skills add.")}
                   </div>
                 ) : skillsOf(ag).map((s) => (
                   <div className="app-skill" key={s.name}>
@@ -897,6 +920,10 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
               </div>
             </section>
           )}
+          {kind === "agent" && hasTools(agentTools) && <section className="app-group" data-testid="agent-tools">
+            <div className="app-group-title"><span className="name">{L("工具", "Tools")}</span></div>
+            <div className="app-list"><ToolInventory tools={agentTools} mcpBlocked={!!rt?.features?.includes("mcp_tools") && rt?.access !== "full" && !ag.run_settings?.mcp_tools} /></div>
+          </section>}
 
         </>
       );
@@ -1347,17 +1374,17 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
       <Modal
         open={action === "skills"}
         onOpenChange={(o) => !o && closeAction()}
-        title={L("技能", "Skills")}
-        description={L("别的 agent 按技能挑人派活。每个技能一个短名字、一句话说明，可以加几个例子。 agent 自己也能改，以后写的为准。", "Other agents pick who to hand work to by skill: a short name, one line on what it covers, and a few examples. The agent can change them too; the last change wins.")}
+        title={L("擅长", "Skills")}
+        description={L("别的 agent 按擅长的事挑人派活。每项写一个短名字、一句话说明，可以加几个例子。agent 自己也能改，以后写的为准。", "Other agents pick who to hand work to by skill: a short name, one line on what it covers, and a few examples. The agent can change them too; the last change wins.")}
       >
         <div className="app-skill-edit-list">
           {skillDrafts.map((d, i) => (
             <div className="app-skill-edit" key={i}>
               <div className="app-skill-edit-row">
                 <input className="app-input mono" value={d.name} placeholder={L("名字，如 ios-release", "name, e.g. ios-release")}
-                  onChange={(e) => editDraft(i, { name: e.target.value })} disabled={busy} aria-label={L("技能名", "Skill name")} />
+                  onChange={(e) => editDraft(i, { name: e.target.value })} disabled={busy} aria-label={L("擅长的事", "Skill name")} />
                 <button type="button" className="app-btn app-btn-plain" onClick={() => setSkillDrafts((ds) => ds.filter((_, j) => j !== i))}
-                  disabled={busy} aria-label={L("删除这个技能", "Remove this skill")} title={L("删除", "Remove")}><Trash2 /></button>
+                  disabled={busy} aria-label={L("删除这项擅长", "Remove this skill")} title={L("删除", "Remove")}><Trash2 /></button>
               </div>
               <input className="app-input" value={d.summary} placeholder={L("一句话说明它能做什么", "One line: what it covers")}
                 onChange={(e) => editDraft(i, { summary: e.target.value })} disabled={busy} aria-label={L("说明", "Summary")} />
@@ -1367,7 +1394,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
             </div>
           ))}
           <button type="button" className="app-btn app-skill-add" onClick={() => setSkillDrafts((ds) => [...ds, { name: "", summary: "", examples: "" }])}
-            disabled={busy || skillDrafts.length >= 20}><Plus />{L("添加技能", "Add a skill")}</button>
+            disabled={busy || skillDrafts.length >= 20}><Plus />{L("添加擅长", "Add a skill")}</button>
         </div>
         <ErrorText error={error} />
         <div className="app-modal-actions">

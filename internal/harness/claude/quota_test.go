@@ -69,3 +69,50 @@ func TestRunPassesModelAndEffort(t *testing.T) {
 		t.Fatalf("args: %s", joined)
 	}
 }
+
+func TestMCPToolsAllowConfiguredServersOnlyWhenEnabled(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("needs a POSIX shell")
+	}
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	if err := os.WriteFile(filepath.Join(dir, ".mcp.json"), []byte(`{"mcpServers":{"my.server":{"command":"echo","env":{"SECRET":"do-not-copy"}},"second":{"url":"https://example.com/?key=do-not-copy"}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	argsFile := filepath.Join(dir, "args")
+	bin := filepath.Join(dir, "claude")
+	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > " + argsFile + "\ncat >/dev/null\necho '{\"type\":\"result\",\"result\":\"ok\",\"session_id\":\"s1\"}'\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	h, err := New(harness.Options{Binary: bin, Access: harness.AccessWorkspace})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name    string
+		enabled bool
+		access  harness.Access
+		want    bool
+	}{
+		{"off", false, harness.AccessWorkspace, false},
+		{"workspace", true, harness.AccessWorkspace, true},
+		{"readonly", true, harness.AccessReadonly, true},
+		{"full", true, harness.AccessFull, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := h.Run(context.Background(), harness.Request{Prompt: "hi", Workdir: dir, MCPTools: tc.enabled, Access: tc.access}); err != nil {
+				t.Fatal(err)
+			}
+			b, err := os.ReadFile(argsFile)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := string(b)
+			if strings.Contains(got, "mcp__my_server\n") != tc.want || strings.Contains(got, "mcp__second\n") != tc.want || strings.Contains(got, "do-not-copy") || strings.Contains(got, "mcp__*\n") {
+				t.Fatalf("MCP args incorrect: %q", got)
+			}
+		})
+	}
+}
