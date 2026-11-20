@@ -4871,18 +4871,21 @@ html.fp-docked .app-main .sp-side {
   background: linear-gradient(to bottom, transparent, var(--md-fade, var(--card)));
   pointer-events: none;
 }
+/* 展开 / 收起 a long reply: grey, as quiet as the text around it (green
+   is kept for a dot or a tick here and there). */
 .md-fold-btn {
   margin-top: 4px;
   padding: 2px 0;
   border: 0;
   background: transparent;
-  color: var(--accent);
+  color: var(--muted);
   font: inherit;
   font-size: 11.5px;
+  font-weight: 500;
   cursor: default;
 }
 .md-fold-btn:hover {
-  text-decoration: underline;
+  color: var(--fg);
 }
 .md-exec {
   margin: 8px 0;
