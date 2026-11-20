@@ -481,4 +481,31 @@ struct RunStateAlignmentTests {
         let stopped = try #require(await hub.messages(to: "studio-claude-c41f").first { $0.id == sent.id })
         #expect(stopped.error == RunState.stoppedBySender)
     }
+
+    /// A task that may be stuck: it was done (close it), ask where it
+    /// stands (once), or stop that one, as on the desktop.
+    @Test func aStuckTaskCanBeMarkedDoneNudgedOrStopped() async throws {
+        let hub = FakeHub()
+        let now = Date()
+        let agent = "studio-claude-c41f"
+        for id in ["t_a", "t_b", "t_c"] {
+            await hub.add(Message(id: id, from: FakeHub.me, to: agent, body: id, status: "acked",
+                                  createdAt: now.addingTimeInterval(-4_000), updatedAt: now.addingTimeInterval(-3_900)))
+        }
+        let session = WorkspaceSession(id: "demo", name: "Demo", hub: hub)
+        await session.refresh()
+        let model = ConversationModel(session: session, agent: agent)
+        await model.reload()
+        #expect(model.canMarkDone, "it is mine")
+        await model.markDone("t_a")
+        #expect(await hub.messages(to: agent).first { $0.id == "t_a" }?.status == "done")
+        await model.nudge("t_b")
+        await model.nudge("t_b")
+        #expect(model.nudged == ["t_b"])
+        await model.submitStop("t_c")
+        let stopped = try #require(await hub.messages(to: agent).first { $0.id == "t_c" })
+        #expect(stopped.error == RunState.stoppedBySender)
+        // The others are untouched.
+        #expect(await hub.messages(to: agent).first { $0.id == "t_b" }?.isOpen == true)
+    }
 }

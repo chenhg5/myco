@@ -102,6 +102,10 @@ public struct HubClient: HubAPI {
         _ = try await call("POST", "/v1/console/messages/\(messageID)/stop")
     }
 
+    public func dismiss(_ messageID: String) async throws {
+        _ = try await call("POST", "/v1/console/messages/\(messageID)/dismiss")
+    }
+
     public func hidden() async throws -> [String] {
         let list: HiddenEnvelope = try await get("/v1/console/hidden")
         return list.ids

@@ -302,6 +302,16 @@ public actor FakeHub: HubAPI {
         if simulated[messageID] != nil { simulated[messageID] = Date().addingTimeInterval(-Self.ackAfter) }
     }
 
+    public func dismiss(_ messageID: String) async throws {
+        try await check()
+        guard let i = messages.firstIndex(where: { $0.id == messageID }), messages[i].isOpen else {
+            throw HubError(error: "invalid_state", message: "the message is not open")
+        }
+        messages[i].status = "done"
+        messages[i].updatedAt = Date()
+        simulated[messageID] = nil
+    }
+
     public func stop(_ messageID: String) async throws {
         try await check()
         guard let i = messages.firstIndex(where: { $0.id == messageID }), messages[i].isOpen else {

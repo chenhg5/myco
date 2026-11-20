@@ -539,7 +539,8 @@ struct ConversationBody: View {
         // The workspace does not answer: what is here is from before.
         .safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {
-                if model.unreachable != nil {
+                // (while it is at work, the line above the input says it)
+                if model.unreachable != nil, model.openTask == nil {
                     StaleBanner(
                         L("连不上工作区，这里可能不是最新的。往上拉可以再试。", "Cannot reach the workspace: this may not be the latest. Pull up to try again."),
                         details: .of(model.unreachableDetail))
@@ -984,8 +985,8 @@ struct ConversationBody: View {
             .accessibilityIdentifier("message.failed")
         case .stopped:
             NoticeLine(.idle, L("已停止", "Stopped"))
-        case .status(let state, _):
-            status(state, saying: item.saying)
+        case .status(let state, let taskID):
+            status(state, taskID: taskID, saying: item.saying)
         case .process(let taskID, let live):
             VStack(alignment: .leading, spacing: Space.s) {
                 // Not taken up yet: what shows here is the earlier task's,
@@ -1105,7 +1106,7 @@ struct ConversationBody: View {
         return date.formatted(.dateTime.month().day().locale(locale)) + " " + time
     }
 
-    @ViewBuilder private func status(_ state: RunState, saying: String? = nil) -> some View {
+    @ViewBuilder private func status(_ state: RunState, taskID: String, saying: String? = nil) -> some View {
         let look = MushroomLook.of(session.agent(model.agent))
         switch state {
         case .queued:
@@ -1126,14 +1127,34 @@ struct ConversationBody: View {
             NoticeLine(
                 .attention,
                 L("\(RelativeTime.elapsed(since: quietSince))没有动静，可能卡住了", "Quiet for \(RelativeTime.elapsed(since: quietSince)). It may be stuck."),
-                actions: [.init(L("停止", "Stop")) { Task { await model.submitStop() } }])
+                actions: stuckActions(taskID))
         case .done, .stopped, .failed:
             EmptyView()
         }
     }
 
+    /// What can be done about a task that may be stuck, as on the desktop:
+    /// it was done (close it), ask where it stands, or stop it.
+    private func stuckActions(_ taskID: String) -> [NoticeLine.Action] {
+        var actions: [NoticeLine.Action] = []
+        if model.canMarkDone {
+            actions.append(.init(L("标记完成", "Mark done")) { Task { await model.markDone(taskID) } })
+        }
+        actions.append(.init(model.nudged.contains(taskID) ? L("已经催了", "Asked") : L("再催一下", "Nudge")) {
+            Task { await model.nudge(taskID) }
+        })
+        actions.append(.init(L("停止", "Stop")) { Task { await model.submitStop(taskID) } })
+        return actions
+    }
+
     private var bottom: some View {
         VStack(spacing: 0) {
+            // Only while it is at work: a conversation that has ended has
+            // nothing to wait for, whatever the network.
+            if model.unreachable != nil, model.openTask != nil, model.failure == nil {
+                PoorNetworkLine(since: model.answeredAt) { Task { await model.refresh() } }
+                    .padding(.horizontal, Space.page).padding(.top, Space.s)
+            }
             if let failure = model.failure {
                 FailureLine(failure: failure)
                     .padding(.horizontal, Space.page).padding(.top, Space.s)
@@ -1429,5 +1450,47 @@ extension View {
     func solidTopBar() -> some View {
         toolbarBackground(MycoColor.bg, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
+    }
+}
+
+/// The workspace has not answered for a while, while the agent is at
+/// work: it may well be going on. The desktop app's 网络不太好.
+private struct PoorNetworkLine: View {
+    let since: Date?
+    let retry: () -> Void
+    @State private var retrying = false
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: Space.s) {
+            Image(systemName: "wifi.exclamationmark").font(.footnote).foregroundStyle(MycoColor.amber)
+            TimelineView(.periodic(from: .now, by: 15)) { context in
+                (Text(L("网络不太好 ", "Poor connection ")).fontWeight(.semibold) + Text(words(now: context.date)))
+                    .font(.footnote).foregroundStyle(MycoColor.fg2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+            Button(retrying ? L("正在重试…", "Retrying…") : L("重试", "Retry")) {
+                retrying = true
+                retry()
+                Task {
+                    try? await Task.sleep(for: .seconds(3))
+                    retrying = false
+                }
+            }
+            .font(.footnote.weight(.medium)).tint(MycoColor.accent)
+            .disabled(retrying)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 9)
+        .background(MycoColor.amberSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("conversation.poorNetwork")
+    }
+
+    private func words(now: Date) -> String {
+        guard let since, now.timeIntervalSince(since) >= 60 else {
+            return L("这里的消息有一会儿没更新了，agent 那边可能还在继续。正在自动重试。", "This chat hasn't updated for a little while; the agent may well be at work. Retrying by itself.")
+        }
+        let quiet = RelativeTime.elapsed(since: since)
+        return L("这里的消息 \(quiet)没更新了，agent 那边可能还在继续。正在自动重试。", "This chat hasn't updated for \(quiet); the agent may well be at work. Retrying by itself.")
     }
 }

@@ -141,6 +141,8 @@ public final class ConversationModel {
     private var newestPage: [Message] = []
     /// Looks at the workspace that failed, in a row.
     private var failures = 0
+    /// When the workspace last answered a look at this conversation.
+    public private(set) var answeredAt: Date?
 
     /// A member's colleagues' exchanges are asked for again every this many
     /// refreshes (mine with it: every time).
@@ -215,7 +217,7 @@ public final class ConversationModel {
         do {
             let sent = try await session.hub.send(SendRequest(
                 to: task.to, body: task.body, threadId: task.threadId, attachments: task.attachments.map(\.fileId)))
-            known[sent.id] = sent
+            keep(sent)
             failure = nil
             show(cards: cards)
         } catch {
@@ -388,9 +390,10 @@ public final class ConversationModel {
         do {
             let page = try await session.hub.exchanges(between: me, and: agent, before: nil)
             failures = 0
+            answeredAt = Date()
             unreachable = nil
             unreachableDetail = nil
-            for message in page.messages { known[message.id] = message }
+            for message in page.messages { keep(message) }
             if !wentBack { hasEarlier = page.more }
             newestPage = page.messages
             // What was said shows at once. (The first look shows the page
@@ -876,14 +879,22 @@ public final class ConversationModel {
             // The workspace has it: the real message takes the place of
             // the one shown as being sent (`show`), with no wait between.
             if let sent {
-                known[sent.id] = sent
+                keep(sent)
                 show(cards: cards)
             }
         } catch {
-            // Give it all back: nothing typed or picked is lost to a failed send.
-            outgoing.removeAll { $0.id == going }
-            if action != .stop { giveBack(text, files) }
-            failure = Failure.of(error)
+            // A send that took too long may have gone all the same: look
+            // for it in the workspace before saying it did not (the
+            // desktop app's way). Only then give it all back: nothing typed
+            // or picked is lost to a failed send.
+            let before = outgoing.first { $0.id == going }?.before ?? []
+            if action == .send, Failure.of(error).kind == .transient, await arrived(body, notIn: before) {
+                failure = nil
+            } else {
+                outgoing.removeAll { $0.id == going }
+                if action != .stop { giveBack(text, files) }
+                failure = Failure.of(error)
+            }
         }
         sending = false
         await reload()
@@ -891,6 +902,21 @@ public final class ConversationModel {
         // now. (When the page could not be read just now, it stays shown
         // as sent until the next look finds it.)
         if failures == 0 { outgoing.removeAll { $0.id == going } }
+    }
+
+    /// A message the workspace handed back, unless a newer copy is here
+    /// already: a send's late answer must not put back a message that a
+    /// look since found taken up or answered.
+    private func keep(_ message: Message) {
+        if let have = known[message.id], (have.updatedAt) > (message.updatedAt) { return }
+        known[message.id] = message
+    }
+
+    /// Whether a message of mine with this body reached the workspace (one
+    /// that was not here before it was sent), after a send that timed out.
+    private func arrived(_ body: String, notIn before: Set<String>) async -> Bool {
+        await reload()
+        return known.values.contains { $0.from == me && $0.to == agent && $0.body == body && !before.contains($0.id) }
     }
 
     /// A file that went up, as the message will carry it.
@@ -962,7 +988,7 @@ public final class ConversationModel {
         let sent = try await session.hub.send(request(body))
         // It is the open task from now on, before the page has read it
         // back: what is said next is added to it.
-        known[sent.id] = sent
+        keep(sent)
         show(cards: cards)
         Task { await reload() }
         return (sent.id, false)
@@ -976,12 +1002,54 @@ public final class ConversationModel {
         return true
     }
 
-    /// Stops the open task whatever is typed (the action on a stuck task).
-    public func submitStop() async {
-        guard let task = openTask, !sending else { return }
+    /// Tasks I asked about with a nudge (once each).
+    public private(set) var nudged: Set<String> = []
+
+    /// Whether I may close its tasks as done: its owner, or one who
+    /// manages the workspace.
+    public var canMarkDone: Bool {
+        session.agent(agent).map(session.manages) ?? false
+    }
+
+    /// Closes a task as done without an answer: it was done and its agent
+    /// never said (the desktop app's 标记完成).
+    public func markDone(_ taskID: String) async {
+        guard !sending else { return }
         sending = true
         do {
-            try await session.hub.stop(task.id)
+            try await session.hub.dismiss(taskID)
+            failure = nil
+        } catch {
+            failure = Failure.of(error)
+        }
+        sending = false
+        await reload()
+    }
+
+    /// Asks it where a task stands (the desktop app's 再催一下), once.
+    public func nudge(_ taskID: String) async {
+        guard !sending, !nudged.contains(taskID) else { return }
+        sending = true
+        do {
+            try await session.hub.steer(taskID, body: L(
+                "这条任务现在怎么样了？做完了就回复结果；还没做完就接着做，并发一下进度。",
+                "Where does this task stand? If it is done, reply with the result; if not, carry on and send your progress."), attachments: [])
+            nudged.insert(taskID)
+            failure = nil
+        } catch {
+            failure = Failure.of(error)
+        }
+        sending = false
+        await reload()
+    }
+
+    /// Stops a task whatever is typed (the action on a stuck task): that
+    /// one, else the open task.
+    public func submitStop(_ taskID: String? = nil) async {
+        guard let id = taskID ?? openTask?.id, !sending else { return }
+        sending = true
+        do {
+            try await session.hub.stop(id)
             failure = nil
         } catch {
             failure = Failure.of(error)

@@ -144,6 +144,10 @@ public protocol HubAPI: Sendable {
     func file(_ id: String) async throws -> Data
     /// `POST /v1/console/messages/{id}/stop`
     func stop(_ messageID: String) async throws
+    /// `POST /v1/console/messages/{id}/dismiss`: closes an open task for
+    /// its recipient without a reply (marked done). Its node's owner, or
+    /// someone who manages the workspace.
+    func dismiss(_ messageID: String) async throws
     /// `GET /v1/console/hidden`: the messages this person took out of
     /// their own view, on any of their devices. Nothing is deleted. A
     /// workspace from before v0.19.9 answers `not_found`.
