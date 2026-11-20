@@ -2,6 +2,13 @@
 
 每次发版在这里加一节（`## vX.Y.Z`，最新的在最上面）。发版时这一节会作为 GitHub Release 的说明。
 
+## v0.21.5
+
+- **superagent 可以一句话接入**：「superagent」弹窗里新加「一句话接入」，复制那句话发给任意 Claude Code 或 Codex 会话（包括 claude.ai 云端、用 `myco inbox wait` 收消息的那种），它加入后就成了你在这个工作区的 superagent，App 自动打开和它的对话。左下角菜单里这一项就叫「superagent」。
+- **修复 Codex agent 接活就失败**（「--skip-git-repo-check cannot be used multiple times」）：老的 Codex agent 配置里带了这个参数，新版 Codex 不许重复，现在 myco 只传一次（要在那台电脑上 `myco upgrade`）。
+- 官方应用「笔记」「任务追踪」在手机上字和菜单更大、好点；笔记不再显示「你是 你」。
+- 要升级工作区（「设置 › 工作区」一键升级，或服务器上 `sudo myco upgrade`）才能用 superagent 的一句话接入。
+
 ## v0.21.4
 
 - **新的官方应用：笔记**（像 Notion）：左边是页面树，可以嵌套、拖动排序、收藏，有回收站；页面用行内图标。
