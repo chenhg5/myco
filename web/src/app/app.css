@@ -9171,3 +9171,29 @@ html.os-other ::-webkit-scrollbar-thumb { border: 3px solid transparent; border-
 html.os-other :hover::-webkit-scrollbar-thumb, html.os-other .is-scrolling::-webkit-scrollbar-thumb { background-color: color-mix(in srgb, var(--fg, #888) 28%, transparent); }
 html.os-other ::-webkit-scrollbar-thumb:hover, html.os-other ::-webkit-scrollbar-thumb:active { background-color: color-mix(in srgb, var(--fg, #888) 45%, transparent); }
 
+
+/* 工作流 pages, one rhythm (2026-11-21): the header's buttons one size (⋯ as
+   square as the others), 24px between the header and the tabs, 16px
+   between the tabs and what they show, and the filter chips on the left
+   over the list they filter. */
+.wf .pcd-head { margin: 8px 0 6px; }
+.wf .pcd-head + .wf-desc { margin-top: 2px; }
+.wf > .app-error-text, .wf > .app-error { margin: 12px 0 0; }
+.wf-actions { gap: 8px; }
+.wf-actions .app-btn { height: 32px; }
+.wf-more { width: 32px; padding: 0; justify-content: center; }
+.wf-more svg { width: 16px; height: 16px; }
+.wf-tabs { margin: 24px 0 16px; }
+.wf-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+.wf-chip { height: 28px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--pill); font: inherit; font-size: 12.5px; color: var(--fg-2); cursor: default; }
+.wf-chip:hover { background: var(--pill-hover); color: var(--fg); }
+.wf-chip.is-on { background: var(--fg); color: var(--bg); }
+.wf-run-row { min-height: 60px; padding: 12px 16px; gap: 14px; }
+.wf .wfo-run-stats { margin-top: 16px; }
+.wf .wf-run-error { margin-top: 12px; }
+.wf [data-testid=workflow-decision] { margin-top: 16px; }
+.wf .ph-section { margin-top: 28px; margin-bottom: 12px; }
+/* A workflow in the list: 运行 and ⋯ (edit, turn off, delete), one size. */
+.wf-row-actions { flex: none; display: flex; align-items: center; gap: 6px; margin-right: 8px; }
+.wf-row-actions .wf-run-now { margin-right: 0; }
+.wf-row-actions .wf-more { width: 28px; height: 28px; }
