@@ -80,9 +80,11 @@
 .dk-body { display: flex; flex: 1; min-height: 0; border-top: 1px solid var(--line2); }
 .dk-map { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; min-width: 0; padding: 18px; }
 .sb { width: 100%; height: 100%; max-width: 620px; max-height: calc(100% - 28px); }
-.sb-seg { stroke: var(--bg); stroke-width: 1.4; transition: opacity 0.12s; }
+.sb-seg { stroke: var(--bg); stroke-width: 1.4; transition: opacity 0.14s, transform 0.16s ease-out, filter 0.16s; }
 .sb-seg.is-dim { opacity: 0.42; }
-.sb-seg.is-on { filter: brightness(1.06) saturate(1.1); }
+.sb-seg.is-out { filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.22)); }
+.sb-seg.is-on { filter: brightness(1.08) saturate(1.12) drop-shadow(0 4px 8px rgba(0, 0, 0, 0.26)); }
+@media (prefers-color-scheme: dark) { .sb-seg.is-out { filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.55)); } .sb-seg.is-on { filter: brightness(1.12) saturate(1.1) drop-shadow(0 4px 10px rgba(0, 0, 0, 0.6)); } }
 .sb.is-busy .sb-seg { opacity: 0.5; }
 .sb-mid { fill: var(--bg); stroke: var(--line2); stroke-width: 1; }
 .sb-mid.can-up:hover { fill: var(--hover); }

@@ -636,7 +636,8 @@ function PageView({ target, open, active, reload, onMeta }: {
       {local && <div className="pg-local-note"><Monitor />{L("这台电脑上正在运行的网页。是空白的话，可能这个端口没有在跑。", "A server running on this computer. Blank? Nothing may be running on this port.")}</div>}
       {error ? <p className="fp-note">{error}</p> : (
         <div className="pg-stage">
-          {src && <iframe ref={frame} key={`${src}#${reload}`} className={cn("fp-frame pg-frame", loadedKey !== `${src}#${reload}` && "is-loading")} title={title} src={src || undefined}
+          {/* (named by aria-label, not title: WebKit shows a frame's title as a tooltip over all of the page) */}
+          {src && <iframe ref={frame} key={`${src}#${reload}`} className={cn("fp-frame pg-frame", loadedKey !== `${src}#${reload}` && "is-loading")} aria-label={title} src={src || undefined}
             sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads allow-same-origin" referrerPolicy="no-referrer"
             allow="clipboard-write; fullscreen" onLoad={() => setLoadedKey(`${src}#${reload}`)} />}
           {loadedKey !== `${src}#${reload}` && (

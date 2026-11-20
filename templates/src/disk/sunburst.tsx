@@ -76,15 +76,19 @@ export function Sunburst({ node, levels, dark, hover, onHover, onOpen, onUp, can
     <svg className={`sb${busy ? " is-busy" : ""}`} viewBox={`0 0 ${SIZE} ${SIZE}`} role="img" aria-label={`${node.name} 的占用图`}
       onMouseLeave={() => onHover(null, null)}>
       <g>
-        {segs.map((s) => {
+        {/* (the one pointed at, with what is in it, drawn last: it comes out over the others) */}
+        {order(segs, shown).map((s) => {
           const r0 = R0 + (s.depth - 1) * ring + 1, r1 = R0 + s.depth * ring;
           const on = hover === s.key;
-          const dim = hover !== null && !on && !(shown && shown.node && s.key.startsWith(shown.key + "/"));
+          const inside = !!shown && (on || (!!shown.node && s.key.startsWith(shown.key + "/")));
+          const dim = hover !== null && !inside;
+          // what is pointed at comes out a little, along its own direction (as DaisyDisk does)
+          const out = inside && shown ? pop(shown) : null;
           return (
-            <path key={s.key} d={arc(r0, r1, s.a0, s.a1, C)} fill={colorOf(s, dark)} className={`sb-seg${on ? " is-on" : ""}${dim ? " is-dim" : ""}${s.node?.dir ? " is-dir" : ""}`}
-              onMouseEnter={() => onHover(s.key, s)} onClick={() => onOpen(s)}>
-              <title>{s.more ? `${s.parent.more} 个更小的项目` : s.node!.name}</title>
-            </path>
+            <path key={s.key} d={arc(r0, r1, s.a0, s.a1, C)} fill={colorOf(s, dark)}
+              className={`sb-seg${on ? " is-on" : ""}${inside ? " is-out" : ""}${dim ? " is-dim" : ""}${s.node?.dir ? " is-dir" : ""}`}
+              style={out ? { transform: `translate(${out.x}px, ${out.y}px)` } : undefined}
+              onMouseEnter={() => onHover(s.key, s)} onClick={() => onOpen(s)} />
           );
         })}
       </g>
@@ -94,6 +98,18 @@ export function Sunburst({ node, levels, dark, hover, onHover, onOpen, onUp, can
       <text x={C} y={C + 40} className="sb-hint">{shown ? (shown.node?.dir ? "点开看里面" : shown.more ? "太小，没有分开画" : `${label.files ? "文件" : ""}`) : canUp ? "点中间回上一层" : `${label.files.toLocaleString()} 个文件`}</text>
     </svg>
   );
+}
+
+// How far a segment comes out when pointed at (in the map's units: it is 600 across).
+const POP = 9;
+function pop(s: Seg) {
+  const mid = (s.a0 + s.a1) / 2;
+  return { x: +(POP * Math.sin(mid)).toFixed(2), y: +(-POP * Math.cos(mid)).toFixed(2) };
+}
+function order(segs: Seg[], shown: Seg | undefined) {
+  if (!shown) return segs;
+  const out = (s: Seg) => s.key === shown.key || (!!shown.node && s.key.startsWith(shown.key + "/"));
+  return [...segs.filter((s) => !out(s)), ...segs.filter(out)];
 }
 
 function clip(s: string, n: number) {
