@@ -33,6 +33,8 @@ export interface RunSettings {
   access?: RuntimeAccess | "";
 }
 /** What the node actually runs; absent on nodes reported by old runners. */
+/** A model a CLI offers: the id --model takes, a display name, the efforts it supports. */
+export interface RuntimeModel { id: string; name?: string; efforts?: string[] }
 export interface Runtime {
   cli: string;
   cli_version?: string;
@@ -55,6 +57,8 @@ export interface Runtime {
   away?: "stopped" | string;
   /** where its runner runs when that explains going offline: "wsl" */
   env?: "wsl" | string;
+  /** the models its CLI offers on that computer, in the CLI's order (Codex; runners from v0.21.1) */
+  models?: RuntimeModel[];
 }
 export interface Skill { name: string; summary?: string; examples?: string[] }
 

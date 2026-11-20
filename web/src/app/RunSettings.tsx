@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { appApi, isOldHub } from "@/appapi";
-import type { RuntimeAccess } from "@/api";
+import type { Runtime, RuntimeAccess, RuntimeModel } from "@/api";
 import type { AgentRow } from "@/app/types";
 import { accessLabel, agentKind, canManage, isCloud, isInbox, machineOfRow, modelSourceLabel } from "@/app/nodes";
 import { ChevronDown, Shield, ShieldOff } from "lucide-react";
@@ -11,8 +11,9 @@ import { quotaSpent, quotaStaleNote, quotaTight, quotaWindowLabel, quotaWindowTe
 import { cn } from "@/lib/utils";
 import { L, lang } from "@/lib/i18n";
 
-/** The models a node may be told to use: aliases for Claude Code, and the
- *  names Codex is commonly started with. */
+/** The models a node may be told to use when its computer does not say
+ *  (Claude Code's aliases; Codex on runners before v0.21.1, which do not
+ *  read the list Codex keeps): modelChoices prefers what it says. */
 export const MODELS: Record<string, string[]> = {
   claude: ["fable", "opus", "sonnet", "haiku"],
   codex: ["gpt-6-sol", "gpt-6", "gpt-5-codex", "o3"],
@@ -31,6 +32,30 @@ const EFFORT_LABELS: Record<string, [string, string]> = {
   xhigh: ["很高", "Very high"],
   max: ["最高", "Max"],
 };
+
+/** The models to offer for an agent or a computer's CLI: the list its
+ *  CLI offers there when it said (Codex's own, always current), else the
+ *  known names; the ones in use or chosen are added when missing. */
+export function modelChoices(cli: string, offered?: RuntimeModel[], ...keep: (string | undefined)[]): string[] {
+  const out = offered && offered.length ? offered.map((m) => m.id) : [...(MODELS[cli] || [])];
+  for (const v of keep) if (v && !out.includes(v)) out.unshift(v);
+  return out;
+}
+
+/** The efforts to offer: those the chosen model supports when its CLI
+ *  said, else the CLI's usual ones. */
+export function effortChoices(cli: string, offered: RuntimeModel[] | undefined, model: string | undefined, ...keep: (string | undefined)[]): string[] {
+  const m = offered?.find((x) => x.id === model) || (offered?.length && !model ? offered[0] : undefined);
+  const out = m?.efforts?.length ? [...m.efforts] : [...(EFFORTS[cli] || [])];
+  for (const v of keep) if (v && !out.includes(v)) out.unshift(v);
+  return out;
+}
+
+/** How a model is shown: the name its CLI gave it, else modelShort. */
+export function modelName(model: string | undefined, rt?: Pick<Runtime, "models">): string {
+  if (!model) return "";
+  return rt?.models?.find((m) => m.id === model)?.name || modelShort(model);
+}
 
 export function effortLabel(effort: string): string {
   const pair = EFFORT_LABELS[effort];
@@ -147,10 +172,8 @@ export function RunRows({ row, now, mayManage, onRefresh }: {
     </div>
   );
 
-  const models = [...(MODELS[cli] || [])];
-  for (const v of [rt?.model, model]) if (v && !models.includes(v)) models.unshift(v);
-  const efforts = [...(EFFORTS[cli] || [])];
-  for (const v of [rt?.effort, effort]) if (v && !efforts.includes(v)) efforts.unshift(v);
+  const models = modelChoices(cli, rt?.models, rt?.model, model);
+  const efforts = effortChoices(cli, rt?.models, model || rt?.model, rt?.effort, effort);
 
   // An agent that receives in its own session runs its CLI itself: myco can
   // neither read nor set its model and quota.
@@ -203,7 +226,7 @@ export function RunRows({ row, now, mayManage, onRefresh }: {
                 onChange={(e) => pickModel(e.target.value)}
               >
                 <option value="">{L("跟随电脑设置", "Follow this computer")}</option>
-                {models.map((m) => <option key={m} value={m}>{m}</option>)}
+                {models.map((m) => <option key={m} value={m}>{modelName(m, rt) === m ? m : `${modelName(m, rt)} (${m})`}</option>)}
                 <option value="__custom__">{L("自定义…", "Custom…")}</option>
               </select>
             )
@@ -309,7 +332,7 @@ export function RunPill({ row, onRefresh }: { row: AgentRow; onRefresh: () => Pr
   const unknown = !model && !editable && (isInbox(ag) || isCloud(ag));
   if (agentKind(ag) !== "agent" || (!model && !editable && !unknown)) return null;
   const label = unknown ? L("模型未知", "Model unknown")
-    : [modelShort(model) || L("默认模型", "Default model"), effort ? effortLabel(effort) : ""].filter(Boolean).join(" · ");
+    : [modelName(model, rt) || L("默认模型", "Default model"), effort ? effortLabel(effort) : ""].filter(Boolean).join(" · ");
   const save = async (next: { model: string; effort: string }) => {
     setBusy(true); setError(null);
     try {
@@ -320,10 +343,8 @@ export function RunPill({ row, onRefresh }: { row: AgentRow; onRefresh: () => Pr
       if (isOldHub(e)) setOld(true); else setError(e);
     } finally { setBusy(false); }
   };
-  const models = [...(MODELS[cli] || [])];
-  for (const v of [rt?.model, setModel]) if (v && !models.includes(v)) models.unshift(v);
-  const efforts = [...(EFFORTS[cli] || [])];
-  for (const v of [rt?.effort, setEffort]) if (v && !efforts.includes(v)) efforts.unshift(v);
+  const models = modelChoices(cli, rt?.models, rt?.model, setModel);
+  const efforts = effortChoices(cli, rt?.models, setModel || rt?.model, rt?.effort, setEffort);
   const pending = editable && ((setModel && setModel !== rt?.model) || (setEffort && setEffort !== rt?.effort));
   const title = editable
     ? L(`模型和推理强度：${label}（点一下切换，下次唤醒时生效）`, `Model and effort: ${label} (click to switch; from its next run)`)
@@ -346,8 +367,8 @@ export function RunPill({ row, onRefresh }: { row: AgentRow; onRefresh: () => Pr
                 {["", ...models].map((m) => (
                   <button key={`m:${m}`} type="button" role="menuitemradio" aria-checked={setModel === m} className={cn("run-pill-item", setModel === m && "is-on")}
                     disabled={busy} onClick={() => void save({ model: m, effort: setEffort })}>
-                    <span>{m ? modelShort(m) : L("跟随电脑设置", "Follow this computer")}</span>
-                    {m && m !== modelShort(m) && <span className="run-pill-sub">{m}</span>}
+                    <span>{m ? modelName(m, rt) : L("跟随电脑设置", "Follow this computer")}</span>
+                    {m && m !== modelName(m, rt) && <span className="run-pill-sub">{m}</span>}
                   </button>
                 ))}
                 <div className="run-pill-group">{L("推理强度", "Effort")}</div>
@@ -361,7 +382,7 @@ export function RunPill({ row, onRefresh }: { row: AgentRow; onRefresh: () => Pr
                   ))}
                 </div>
                 <p className="run-pill-note">
-                  {L("现在是：", "In use: ")}{modelShort(rt?.model) || "—"}{rt?.effort ? ` · ${effortLabel(rt.effort)}` : ""}
+                  {L("现在是：", "In use: ")}{modelName(rt?.model, rt) || "—"}{rt?.effort ? ` · ${effortLabel(rt.effort)}` : ""}
                   {L("。切换后下次唤醒时生效。", ". A switch applies from its next run.")}
                 </p>
               </>

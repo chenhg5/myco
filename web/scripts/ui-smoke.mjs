@@ -523,6 +523,9 @@ async function runMatrix(browser, size, scheme) {
       await pill.click();
       const menu = page.locator(".sp-home .run-pill-menu");
       await menu.waitFor({ timeout: 5_000 });
+      // The models its computer's Codex lists, by their names.
+      await menu.getByRole("menuitemradio", { name: /GPT-6\.1 Sol/ }).waitFor({ timeout: 5_000 });
+      if (await menu.getByRole("menuitemradio", { name: /O3/ }).count()) throw new Error("电脑报了它的模型列表，就不该再列内置的旧模型");
       await settle(page, 150);
       await shot(page, size, scheme, "composer-model");
       await menu.getByRole("menuitemradio", { name: "中", exact: true }).click();
@@ -1250,6 +1253,8 @@ async function runMatrix(browser, size, scheme) {
       await dialog.locator("[data-testid=remote-ai-missing] code", { hasText: "npm install -g @openai/codex" }).waitFor({ timeout: 5_000 });
       await vpsFolder.fill("~/elsewhere");
       await dialog.locator("[data-testid=allowed-dirs].is-bad").waitFor({ timeout: 5_000 });
+      // This App reaches it: it can allow that folder there at once.
+      await dialog.locator("[data-testid=allow-folder]", { hasText: "~/elsewhere" }).waitFor({ timeout: 10_000 });
       // (The footer's button follows a render later.)
       await page.waitForFunction(() => [...document.querySelectorAll(".app-modal-add button")].some((b) => b.textContent?.trim() === "开一个" && b.disabled), null, { timeout: 5_000 })
         .catch(() => { throw new Error("允许范围外的文件夹不能开"); });
@@ -3454,6 +3459,19 @@ async function runMatrix(browser, size, scheme) {
       await detail.locator("[data-testid=pc-details] .app-kv", { hasText: "Codex 没装" }).waitFor({ timeout: 10_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "computer-details");
+      // Its folders are its own rule; this App reaches it over SSH, so it
+      // changes them there (and puts them back: the other windows share the mock).
+      const dirsBox = detail.locator("[data-testid=machine-dirs]");
+      const folder = `~/code/tapnow-${size.width}-${scheme}`;
+      await dirsBox.getByRole("textbox", { name: "要允许的文件夹" }).fill(folder);
+      await clickVisible(page, dirsBox.getByRole("button", { name: "允许" }));
+      const chip = dirsBox.locator(".mdirs-chip", { hasText: folder });
+      await chip.waitFor({ timeout: 10_000 });
+      if (!(await dirsBox.locator(".mdirs-note").innerText()).includes("SSH tokyo-vps")) throw new Error("应说明是通过 SSH 在那台电脑上改的");
+      await settle(page, 200);
+      await shot(page, size, scheme, "computer-dirs");
+      await clickVisible(page, chip.getByRole("button", { name: `不再允许 ${folder}` }));
+      await chip.waitFor({ state: "detached", timeout: 10_000 });
       await back();
       // A computer that has not allowed terminals says how to allow it: on
       // that computer, never from here.

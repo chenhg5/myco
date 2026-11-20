@@ -1,4 +1,4 @@
-import type { Page, PageChanges, PageOpen, PageRecord, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
+import type { Page, PageChanges, PageOpen, PageRecord, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
 import { L } from "@/lib/i18n";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
@@ -175,6 +175,8 @@ export interface MachineAI {
   /** commands to run on that computer */
   install?: string;
   login?: string;
+  /** the models it offers there (Codex; computers from v0.21.1) */
+  models?: RuntimeModel[];
 }
 export interface MachineSession {
   cli: "claude" | "codex";
@@ -796,6 +798,12 @@ export const appApi = {
     request<{ route: RemoteRoute | null }>("GET", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}/reach`),
   setMachineReach: (hubId: string, machineId: string, route: RemoteRoute) =>
     request<{ route: RemoteRoute }>("PUT", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}/reach`, route),
+  /** Changes the folders agents may start in on a computer (spawn.dirs): here when it is this
+   *  computer, else over the SSH or WSL route this App reaches it by; 409 not_reachable with the
+   *  command to run there otherwise. */
+  setMachineDirs: (hubId: string, machineId: string, change: { add?: string[]; remove?: string[]; here?: boolean }) =>
+    request<{ dirs: string[]; changed: boolean; already_allowed?: string[]; not_listed?: string[]; via: string }>(
+      "POST", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}/dirs`, change),
   /** Looks at a computer over SSH or WSL: its myco, runner, linger, proxies, hubs, log. */
   diagnoseMachine: (hubId: string, machineId: string) =>
     request<Diagnosis>("POST", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}/diagnose`),

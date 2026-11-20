@@ -14,7 +14,8 @@ import { LocalShellAccess } from "@/app/LocalShellAccess";
 import { Elapsed, Mushroom } from "@/app/Working";
 import { ErrorText, Modal } from "@/app/dialogs";
 import { LocalAgentLines } from "@/app/LocalAgents";
-import { EFFORTS, MODELS, effortLabel } from "@/app/RunSettings";
+import { AllowFolder } from "@/app/MachineDirs";
+import { EFFORTS, MODELS, effortChoices, effortLabel, modelChoices, modelName } from "@/app/RunSettings";
 import { machineMakesFolders, machineTellsInfo } from "@/app/hubVersion";
 import { ComputerFix } from "@/app/ComputerFix";
 import { askable, cachedMachineInfo, fetchMachineInfo, forgetMachineInfo } from "@/app/machineInfoCache";
@@ -863,8 +864,14 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
   useEffect(() => { if (open) setError(null); }, [open, machine.id]);
   // A model or effort picked for one CLI means nothing to another.
   useEffect(() => { setModel(""); setEffort(""); }, [cli]);
-  const info = state?.info;
+  // Folders allowed from here (AllowFolder) show at once.
+  const [allowed, setAllowed] = useState<string[] | null>(null);
+  useEffect(() => setAllowed(null), [machine.id]);
+  const info = state?.info && allowed ? { ...state.info, dirs: allowed } : state?.info;
+  const hub = rows.find((r) => r.hub.id === hubId)?.hub;
   const aiOf = (c: string) => info?.ais.find((a) => a.cli === c);
+  /** the models its CLI offers on that computer (Codex), when it said */
+  const offered = aiOf(cli)?.models;
   const ai = aiOf(cli);
   const folders = usedFolders(rows, hubId, machine.id).filter((d) => !info || insideDirs(d, info));
   // Newer computers make a folder when none is given (where they say).
@@ -962,7 +969,8 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
         )}
         {info && limited && (
           <span className={cn("app-field-hint", outside && "is-bad")} data-testid="allowed-dirs">{outside
-            ? L(`这个文件夹不在「${machine.name}」允许的范围里。允许的：${info.dirs.join("、")}`, `That folder is outside what “${machine.name}” allows. Allowed: ${info.dirs.join(", ")}`)
+            ? <>{L(`这个文件夹不在「${machine.name}」允许的范围里。允许的：${info.dirs.join("、")}`, `That folder is outside what “${machine.name}” allows. Allowed: ${info.dirs.join(", ")}`)}
+              {hub && <AllowFolder hubId={hubId} hub={hub} machine={machine} dir={dir.trim()} onAllowed={setAllowed} />}</>
             : L(`「${machine.name}」只允许在这些文件夹里开工：${info.dirs.join("、")}`, `“${machine.name}” only allows these folders: ${info.dirs.join(", ")}`)}</span>
         )}
       </label>
@@ -978,20 +986,20 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
       <details className="app-advanced">
         <summary>{L("更多选项：模型、思考强度、权限", "More: model, effort, access")}<ChevronDown /></summary>
         <div className="app-advanced-body">
-          {MODELS[cli] && (
+          {(MODELS[cli] || offered?.length) && (
             <label className="app-field">
               <span className="app-field-label">{L("模型", "Model")}</span>
               <input className="app-input mono" list={`models-${cli}`} value={model} onChange={(e) => setModel(e.target.value.trim())} disabled={!!busy}
-                placeholder={L("不填就跟随电脑设置", "Empty: the computer's setting")} spellCheck={false} />
-              <datalist id={`models-${cli}`}>{MODELS[cli].map((m) => <option key={m} value={m} />)}</datalist>
+                placeholder={L("不填就跟随电脑设置", "Empty: the computer's setting")} spellCheck={false} data-testid="new-agent-model" />
+              <datalist id={`models-${cli}`}>{modelChoices(cli, offered).map((m) => <option key={m} value={m}>{modelName(m, { models: offered })}</option>)}</datalist>
             </label>
           )}
-          {EFFORTS[cli] && (
+          {(EFFORTS[cli] || offered?.length) && (
             <label className="app-field">
               <span className="app-field-label">{L("思考强度", "Reasoning effort")}</span>
               <select className="app-select-field" value={effort} onChange={(e) => setEffort(e.target.value)} disabled={!!busy}>
                 <option value="">{L("跟随电脑设置", "The computer's setting")}</option>
-                {EFFORTS[cli].map((x) => <option key={x} value={x}>{effortLabel(x)}</option>)}
+                {effortChoices(cli, offered, model, effort).map((x) => <option key={x} value={x}>{effortLabel(x)}</option>)}
               </select>
             </label>
           )}

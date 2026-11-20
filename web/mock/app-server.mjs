@@ -17,6 +17,15 @@ let pendingLink = process.env.MOCK_PENDING_LINK || "";
 const iso = (offsetSec = 0) => new Date(Date.now() - offsetSec * 1000).toISOString();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// The models a computer's Codex lists (its models cache), as runners from
+// v0.21.1 report them.
+const CODEX_MODELS = [
+  { id: "gpt-6.1-sol", name: "GPT-6.1 Sol", efforts: ["low", "medium", "high", "xhigh"] },
+  { id: "gpt-6-sol", name: "GPT-6 Sol", efforts: ["low", "medium", "high", "xhigh"] },
+  { id: "gpt-6.1-terra", name: "GPT-6.1 Terra", efforts: ["low", "medium", "high"] },
+  { id: "gpt-6-luna", name: "GPT-6 Luna", efforts: ["minimal", "low", "medium"] },
+];
+
 // CLI metadata used when a session is spawned from the App.
 const CLI_MODELS = {
   claude: "claude-opus-5-5", codex: "gpt-6-sol", pi: "pi-3", kiro: "kiro-2",
@@ -485,12 +494,14 @@ const machineInfoOf = (m) => m.id === "m_vps" ? vpsInfo : {
   dirs: ["~"], new_dir: "~/myco", max_access: m.id.startsWith("m_studio") ? "full" : "workspace", home: m.os === "darwin" ? "/Users/glenn" : "/home/glenn",
   ais: [
     { cli: "claude", name: "Claude Code", state: "ready", version: "2.1.3 (Claude Code)", login: "claude" },
-    { cli: "codex", name: "Codex", state: "ready", version: "codex-cli 0.52.0", login: "codex login" },
+    { cli: "codex", name: "Codex", state: "ready", version: "codex-cli 0.52.0", login: "codex login", models: CODEX_MODELS },
     { cli: "gemini", name: "Gemini CLI", state: "missing", install: "npm install -g @google/gemini-cli", login: "gemini" },
     { cli: "opencode", name: "OpenCode", state: "missing", install: "curl -fsSL https://opencode.ai/install | bash", login: "opencode auth login" },
   ],
   sessions: [],
 };
+// Folders allowed from the App (POST …/machines/{mid}/dirs), by machine.
+const machineDirs = new Map();
 
 const deletableMachine = () => ({
   id: "m_delete", name: "临时 Mac", hostname: "temp-mac.local", os: "darwin", arch: "arm64",
@@ -694,7 +705,7 @@ const state = {
           // Its 5-hour window is nearly used (amber), the weekly one is not.
           runtime: {
             cli: "codex", cli_version: "0.52.0", model: "gpt-6-sol", model_source: "app",
-            effort: "high", effort_source: "app", access: "workspace", max_access: "workspace",
+            effort: "high", effort_source: "app", access: "workspace", max_access: "workspace", models: CODEX_MODELS,
             quota: {
               source: "codex", at: iso(120),
               windows: [
@@ -3474,7 +3485,35 @@ const server = http.createServer(async (req, res) => {
         return fail(res, 409, "too_old", "that computer's myco is too old to say what it has", "run myco upgrade on it");
       }
       await sleep(600);
-      return send(res, 200, machineInfoOf(machine));
+      const info = machineInfoOf(machine);
+      return send(res, 200, machineDirs.has(machine.id) ? { ...info, dirs: machineDirs.get(machine.id) } : info);
+    }
+    // /app/hubs/{id}/machines/{mid}/dirs — the folders agents may start in:
+    // changed here (this computer) or over the SSH / WSL route the App knows.
+    if (parts.length === 6 && parts[3] === "machines" && parts[5] === "dirs" && method === "POST") {
+      const body = await readBody(req);
+      const machine = (hub.machines || []).find((m) => m.id === parts[4]);
+      if (!machine) return fail(res, 404, "not_found", "没有这台机器");
+      const rt = machineReach.get(`${hub.id}/${machine.id}`);
+      const q = (d) => `'${d}'`;
+      if (!body.here && !rt) {
+        return fail(res, 409, "not_reachable", "only that computer can change its folders, and this App does not reach it",
+          ["myco machine dirs", ...(body.add || []).map((d) => `--add ${q(d)}`), ...(body.remove || []).map((d) => `--remove ${q(d)}`)].join(" "));
+      }
+      await sleep(500);
+      let dirs = [...(machineDirs.get(machine.id) || machineInfoOf(machine).dirs)];
+      const covered = [];
+      const under = (d, r) => r === "~" || d === r || d.startsWith(r.replace(/\/$/, "") + "/");
+      for (const d of body.add || []) {
+        if (dirs.some((r) => under(d, r))) { covered.push(d); continue; }
+        dirs = [...dirs.filter((r) => !under(r, d)), d];
+      }
+      for (const d of body.remove || []) {
+        if (dirs.length === 1 && dirs[0] === d) return fail(res, 409, "invalid_state", "cannot remove the last allowed folder: with none, all of the home folder is allowed", "allow another folder first, then remove this one");
+        dirs = dirs.filter((r) => r !== d);
+      }
+      machineDirs.set(machine.id, dirs);
+      return send(res, 200, { dirs, changed: true, ...(covered.length ? { already_allowed: covered } : {}), via: body.here ? "here" : rt.via });
     }
 
     // /app/hubs/{id}/machines/{mid}/spawn — start a session on that machine.

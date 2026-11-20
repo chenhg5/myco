@@ -1810,7 +1810,7 @@ func (s *Server) reportRuntime(w http.ResponseWriter, r *http.Request, a *domain
 	if err := s.machines.SetRuntime(r.Context(), a, domain.Runtime{CLI: in.CLI, CLIVersion: in.CLIVersion, Model: in.Model,
 		ModelSource: in.ModelSource, Access: in.Access, Provider: in.Provider, ProviderSource: in.ProviderSource,
 		Effort: in.Effort, EffortSource: in.EffortSource, MaxAccess: in.MaxAccess, Quota: quotaFromAPI(in.Quota),
-		Features: domain.JoinFeatures(in.Features), Away: in.Away, Env: in.Env}); err != nil {
+		Features: domain.JoinFeatures(in.Features), Away: in.Away, Env: in.Env, Models: domain.EncodeModels(modelsFromAPI(in.Models))}); err != nil {
 		writeError(w, err)
 		return
 	}

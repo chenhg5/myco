@@ -34,10 +34,14 @@ public struct Runtime: Codable, Sendable, Hashable {
     public var away: String?
     /// Where it runs, when that explains going offline: "wsl".
     public var env: String?
+    /// The models its CLI offers on that computer, in the CLI's order
+    /// (Codex; runners from v0.21.1). Absent: use the known names.
+    public var models: [RuntimeModel]?
 
     public init(
         cli: String? = nil, cliVersion: String? = nil, model: String? = nil, modelSource: String? = nil,
-        effort: String? = nil, effortSource: String? = nil, away: String? = nil, env: String? = nil
+        effort: String? = nil, effortSource: String? = nil, away: String? = nil, env: String? = nil,
+        models: [RuntimeModel]? = nil
     ) {
         self.cli = cli
         self.cliVersion = cliVersion
@@ -47,6 +51,21 @@ public struct Runtime: Codable, Sendable, Hashable {
         self.effortSource = effortSource
         self.away = away
         self.env = env
+        self.models = models
+    }
+}
+
+/// A model a CLI offers: the id its --model takes, a display name, the
+/// reasoning efforts it supports.
+public struct RuntimeModel: Codable, Sendable, Hashable {
+    public var id: String
+    public var name: String?
+    public var efforts: [String]?
+
+    public init(id: String, name: String? = nil, efforts: [String]? = nil) {
+        self.id = id
+        self.name = name
+        self.efforts = efforts
     }
 }
 

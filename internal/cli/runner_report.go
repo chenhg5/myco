@@ -17,6 +17,7 @@ import (
 	"github.com/chenhg5/myco/internal/client"
 	"github.com/chenhg5/myco/internal/config"
 	"github.com/chenhg5/myco/internal/harness"
+	"github.com/chenhg5/myco/internal/harness/codex"
 	"github.com/chenhg5/myco/internal/machineid"
 )
 
@@ -40,12 +41,15 @@ type runtimeReporter struct {
 	maxAccess string
 	last      api.Runtime
 	sending   bool
+	// models lists the models the CLI offers, read again for each report
+	// (its list changes as the CLI updates); nil when it does not say.
+	models func() []api.RuntimeModel
 }
 
 // reportToHub reports this machine (once) and the agent's runtime, and
 // returns the reporter for later provider changes.
 func (e *env) reportToHub(c *client.Client, me *api.Agent, h harness.Harness, rc config.Runner, access, maxAccess harness.Access, choice providerChoice, log *slog.Logger) *runtimeReporter {
-	rep := &runtimeReporter{c: c, log: log, cfg: rc.Model, choice: choice}
+	rep := &runtimeReporter{c: c, log: log, cfg: rc.Model, choice: choice, models: cliModels(h.Name())}
 	go func() {
 		ctx, cancel := context.WithTimeout(e.in.Ctx, 30*time.Second)
 		defer cancel()
@@ -181,6 +185,9 @@ func (r *runtimeReporter) flush(ctx context.Context) {
 		return
 	}
 	rt := *r.base
+	if r.models != nil {
+		rt.Models = r.models()
+	}
 	ch := r.choice
 	switch {
 	case r.cfg != "":
@@ -271,6 +278,22 @@ func cliConfigModel(cli string, getenv func(string) string) string {
 		}
 	}
 	return ""
+}
+
+// cliModels reads the models a CLI offers on this computer: Codex keeps
+// the list it got from its provider (models_cache.json); Claude Code's
+// aliases are fixed, so it says nothing.
+func cliModels(cli string) func() []api.RuntimeModel {
+	if cli != "codex" {
+		return nil
+	}
+	return func() []api.RuntimeModel {
+		var out []api.RuntimeModel
+		for _, m := range codex.CachedModels() {
+			out = append(out, api.RuntimeModel{ID: m.ID, Name: m.Name, Efforts: m.Efforts})
+		}
+		return out
+	}
 }
 
 // runnerFeatures are what this runner supports for harness h beyond the
