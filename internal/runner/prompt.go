@@ -134,6 +134,18 @@ const maxBriefInPrompt = 4 << 10
 
 // projectSection describes the project a message belongs to: its goal, who
 // does what, and the brief.
+// projectLine names the project of a message whose project was described
+// earlier in the session.
+func projectLine(name string) string {
+	return fmt.Sprintf("\n--- project ---\nThis message belongs to project %q: work toward that project's goal and keep what you send in this thread "+
+		"(its goal, members and brief were given earlier in this session; `myco project get --name %s` shows them again). "+
+		"Do not carry over decisions or files from another project unless the message asks.\n", name, name)
+}
+
+// noProjectLine: a message outside any project, in a session that did
+// project work.
+const noProjectLine = "\n--- project ---\nThis message is not part of a project: do not assume the goal of a project you worked on earlier in this session.\n"
+
 func projectSection(self string, p *api.Project) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "\n--- project ---\nThis message belongs to project %q", p.Name)
