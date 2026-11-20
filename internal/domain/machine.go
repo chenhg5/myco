@@ -170,6 +170,9 @@ type QuotaWindow struct {
 type RunSettings struct {
 	Model  string `json:"model,omitempty"`
 	Effort string `json:"effort,omitempty"`
+	// MCPTools lets headless runs use configured MCP servers outside full access.
+	// Only the agent's owner may choose this; false preserves the old behavior.
+	MCPTools bool `json:"mcp_tools,omitempty"`
 	// Access is the permission level (readonly, workspace or full). Only the
 	// agent's owner sets it, and its machine caps it (spawn.max_access).
 	Access string `json:"access,omitempty"`

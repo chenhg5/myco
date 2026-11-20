@@ -60,7 +60,7 @@ func (s *Server) agentDTO(a *domain.Agent) api.Agent {
 			Features: rt.FeatureList(), Away: rt.Away, Env: rt.Env, Models: modelsDTO(rt.ModelList())}
 	}
 	if rs := a.RunSettings; rs != (domain.RunSettings{}) {
-		out.RunSettings = &api.RunSettings{Model: rs.Model, Effort: rs.Effort, Access: rs.Access}
+		out.RunSettings = &api.RunSettings{Model: rs.Model, Effort: rs.Effort, Access: rs.Access, MCPTools: &rs.MCPTools}
 	}
 	if a.Private() {
 		out.Visibility = string(domain.VisibilityPrivate)

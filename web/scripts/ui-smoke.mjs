@@ -3445,6 +3445,26 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".ms").waitFor({ state: "hidden" });
     });
 
+    await step("运行设置 · MCP 工具", async () => {
+      await go(page, "成员", narrow);
+      const card = page.locator(".mb-card", { hasText: "MCP Claude" }).first();
+      await card.scrollIntoViewIfNeeded(); await card.click();
+      await page.locator(".ms").waitFor({ timeout: 10000 });
+      await clickVisible(page, page.locator(".ms .ms-fold"));
+      const toggle = page.locator('.ms input[type="checkbox"][aria-label="允许 MCP 工具"]');
+      await toggle.waitFor({ timeout: 5000 });
+      if (await toggle.isChecked()) throw new Error("MCP 工具应默认关闭");
+      await toggle.check();
+      await page.waitForFunction(() => !!document.querySelector('.ms input[aria-label="允许 MCP 工具"]:checked'));
+      const enabled = await (await fetch(`http://${HOST}:${mockPort()}/app/mock/run-settings`)).json();
+      if (enabled.last?.agent !== "mcp-claude" || enabled.last.body.mcp_tools !== true) throw new Error("MCP 开关打开后未保存");
+      if (size.width === 1200 && scheme === "light") await shot(page, size, scheme, "member-mcp-tools-on");
+      await toggle.uncheck();
+      const disabled = await (await fetch(`http://${HOST}:${mockPort()}/app/mock/run-settings`)).json();
+      if (disabled.last?.body.mcp_tools !== false) throw new Error("MCP 开关关闭后未保存");
+      await page.keyboard.press("Escape"); await page.locator(".ms").waitFor({ state: "hidden" });
+    });
+
     await step("成员 · 修改权限", async () => {
       await go(page, "成员", narrow);
       const openRun = async (name) => {

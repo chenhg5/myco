@@ -29,6 +29,8 @@ export interface Quota {
 export interface RunSettings {
   model?: string;
   effort?: string;
+  /** Agent owner's choice; omitted on old hubs means disabled. */
+  mcp_tools?: boolean;
   /** permission level chosen by the node's owner ("" follows the machine); only its owner may change it */
   access?: RuntimeAccess | "";
 }

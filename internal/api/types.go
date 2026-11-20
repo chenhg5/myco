@@ -175,6 +175,9 @@ type QuotaWindow struct {
 type RunSettings struct {
 	Model  string `json:"model"`
 	Effort string `json:"effort"`
+	// MCPTools, when present in a request, changes whether configured MCP
+	// tools may run without a prompt outside full access.
+	MCPTools *bool `json:"mcp_tools,omitempty"`
 	// Access: readonly, workspace or full ("" follows the machine). Only the
 	// agent's owner may change it; left out of a request, it stays as it is.
 	Access string `json:"access,omitempty"`

@@ -301,9 +301,13 @@ func cliModels(cli string) func() []api.RuntimeModel {
 // (docs/design/client-plan.md section 4). Each capability adds its name
 // here when it lands.
 func runnerFeatures(h harness.Harness) []string {
-	var out []string
-	_ = h
-	return out
+	// Claude headless runs need an explicit allow rule for each MCP server.
+	// Codex MCP calls are not controlled by its shell sandbox flag, so this
+	// capability is advertised only for the harness whose flag we change.
+	if h.Name() == "claude" {
+		return []string{"mcp_tools"}
+	}
+	return nil
 }
 
 // Goodbye tells the hub this runner is stopping (best effort, a few

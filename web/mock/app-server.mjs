@@ -729,11 +729,17 @@ const state = {
           resume: { created_at: iso(86_400 * 5), last_used_at: iso(3_600), last_used_env: "codespaces-4f2a" },
         }),
         makeAgent({
+          name: "mcp-claude", owner: "glenn", owner_id: "mem_glenn", display_name: "MCP Claude", description: "用 Claude Code 处理文档和工具调用。",
+          kind: "agent", machine_id: "m_studio",
+          runtime: { cli: "claude", cli_version: "2.1.240", model: "sonnet", access: "workspace", max_access: "workspace", features: ["mcp_tools"] },
+          binding: { harness: "claude", environment: "macOS 26.1", workdir: "~/code/myco" },
+        }),
+        makeAgent({
           name: "docs-claude", owner: "laohu", owner_id: "mem_laohu", description: "保持 README 和 docs/ 与代码同步。", visibility: "private",
           kind: "agent", machine_id: "m_studio",
           runtime: {
             cli: "claude", cli_version: "2.1.240", model: "claude-opus-5-5", model_source: "observed",
-            effort: "low", effort_source: "app", access: "readonly", max_access: "workspace", provider: "DeepSeek", provider_source: "machine",
+            effort: "low", effort_source: "app", access: "readonly", max_access: "workspace", provider: "DeepSeek", provider_source: "machine", features: ["mcp_tools"],
             away: "stopped",
             quota: {
               source: "claude", at: iso(600),
@@ -3821,8 +3827,15 @@ const server = http.createServer(async (req, res) => {
           const cap = Math.max(levels.indexOf(rt.max_access), levels.indexOf(rt.access));
           if (access && levels.indexOf(access) > cap) return fail(res, 403, "permission_denied", "这台电脑不允许更高的权限，请在那台电脑上修改 spawn.max_access。");
         }
+        const mcpTools = body.mcp_tools === undefined ? !!agent.run_settings?.mcp_tools : !!body.mcp_tools;
+        if (body.mcp_tools !== undefined) {
+          const me = whoami(hub)?.member;
+          const owns = me && (agent.owner_id ? agent.owner_id === me.id : !agent.owner && me.role === "owner");
+          if (!owns && mcpTools !== !!agent.run_settings?.mcp_tools) return fail(res, 403, "permission_denied", "只有这个 agent 的主人能修改 MCP 工具权限。");
+        }
         agent.run_settings = {};
         if (access) agent.run_settings.access = access;
+        if (mcpTools) agent.run_settings.mcp_tools = true;
         if (body.model) agent.run_settings.model = body.model;
         if (body.effort) agent.run_settings.effort = body.effort;
         // What the runtime now reports, as a real hub's runner would.
