@@ -467,6 +467,7 @@ struct WorkflowRunScreen: View {
                             Text(RelativeTime.short(run.createdAt)).font(.caption).foregroundStyle(MycoColor.muted)
                         }
                         .modifier(PlainRow())
+                        .accessibilityElement(children: .combine)
                         .accessibilityIdentifier("run.status")
                         if let error = run.error, !error.isEmpty {
                             Text(error).font(.footnote).foregroundStyle(MycoColor.red).modifier(PlainRow())
