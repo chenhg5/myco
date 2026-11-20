@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/chenhg5/myco/internal/app"
 	"github.com/chenhg5/myco/internal/templates"
@@ -106,5 +107,49 @@ func TestCatalogFetchesPublishedApps(t *testing.T) {
 	_ = fresh.Load()
 	if r := fresh.Sync(context.Background()); r.Error == "" {
 		t.Fatal("an archive that does not match SHA256SUMS should be refused")
+	}
+}
+
+// Opening a page made from an official app has the hub look for newer apps
+// when it has not in a while: once, not on every open; never when offline.
+func TestCatalogFreshensWhenStale(t *testing.T) {
+	archive := appsZip(t, map[string]string{"todo": `{"id": "myco/todo", "name": "待办清单", "version": "9.0.0", "category": "tools"}`})
+	sum := sha256.Sum256(archive)
+	hits := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/apps/apps.zip":
+			hits++
+			w.Write(archive)
+		case "/apps/SHA256SUMS":
+			w.Write([]byte(hex.EncodeToString(sum[:]) + "  apps.zip\n"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	off := &templates.Catalog{Download: srv.URL, HubVersion: "v0.20.7", Offline: true}
+	off.Freshen(context.Background(), time.Hour)
+	if hits != 0 {
+		t.Fatalf("an offline hub fetched: %d", hits)
+	}
+	c := &templates.Catalog{Download: srv.URL, HubVersion: "v0.20.7"}
+	var got []app.OfficialTemplate
+	c.Attach(func(l []app.OfficialTemplate) { got = l })
+	c.Freshen(context.Background(), time.Hour)
+	if hits != 1 {
+		t.Fatalf("a hub that never fetched should fetch on open: %d", hits)
+	}
+	found := false
+	for _, o := range got {
+		found = found || (o.Manifest.ID == "myco/todo" && o.Manifest.Version == "9.0.0")
+	}
+	if !found {
+		t.Fatal("the fetched version was not offered")
+	}
+	c.Freshen(context.Background(), time.Hour)
+	if hits != 1 {
+		t.Fatalf("fetched again within the hour: %d", hits)
 	}
 }

@@ -22,6 +22,11 @@ func (s *Server) SetTemplates(t *app.TemplateService) { s.templates = t }
 // SetAppSync lets people ask the hub to fetch the official apps now.
 func (s *Server) SetAppSync(f func(context.Context) api.AppSync) { s.appSync = f }
 
+// SetAppFreshen has the hub check for newer official apps (when its last
+// check is old) as a page made from one is opened, so the page can offer
+// the update.
+func (s *Server) SetAppFreshen(f func(context.Context)) { s.appFreshen = f }
+
 // syncApps: POST /v1/templates/sync: fetch the official apps now (the
 // hub does once a day by itself; at most once a minute).
 func (s *Server) syncApps(w http.ResponseWriter, r *http.Request, c pageCall) {

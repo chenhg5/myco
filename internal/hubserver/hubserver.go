@@ -242,6 +242,7 @@ func Build(o Options) (*Hub, error) {
 			}
 			return out
 		})
+		srv.SetAppFreshen(func(ctx context.Context) { o.Apps.Freshen(ctx, time.Hour) })
 	} else if official, err := templates.Official(); err == nil {
 		templateSvc.SetOfficial(official)
 	} else {

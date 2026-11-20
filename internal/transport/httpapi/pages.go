@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/chenhg5/myco/internal/api"
 	"github.com/chenhg5/myco/internal/app"
@@ -95,6 +97,14 @@ func (s *Server) getPage(w http.ResponseWriter, r *http.Request, c pageCall) {
 	if err != nil {
 		writeError(w, err)
 		return
+	}
+	// A page made from an official app: when the hub has not looked for
+	// newer apps in an hour, it looks now (for a few seconds at most), so
+	// the page offers an update published since.
+	if s.appFreshen != nil && strings.HasPrefix(v.Page.Template, "tp_myco_") {
+		ctx, cancel := context.WithTimeout(r.Context(), 4*time.Second)
+		s.appFreshen(ctx)
+		cancel()
 	}
 	writeJSON(w, http.StatusOK, s.pageDTO(r, c.by, v))
 }
