@@ -141,7 +141,7 @@ function App() {
           <button type="button" className={`nt-side-item${view === "trash" ? " is-on" : ""}`} onClick={() => { setView("trash"); setNarrowSide(false); }}>
             <Trash2 className="ico" /><span>回收站</span>{trashed.length ? <span className="nt-n">{trashed.length}</span> : null}
           </button>
-          <div className="nt-state faint">{kit.pending ? "正在保存…" : kit.failed ? "没保存上" : "已保存"}{me ? ` · 你是 ${me}` : ""}</div>
+          <div className="nt-state faint">{kit.pending ? "正在保存…" : kit.failed ? "没保存上" : "已保存"}{me && me !== "你" ? ` · 你是 ${me}` : ""}</div>
         </div>
       </aside>
       <main className="nt-main">
