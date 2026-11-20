@@ -4,8 +4,9 @@ package main
 
 import (
 	"encoding/json"
-	"log/slog"
+	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 
@@ -33,8 +34,12 @@ type quick struct {
 	open  func(hub, agent string, setup bool)
 	h     int
 	watch sync.Once
-	log   *slog.Logger
 }
+
+// qlog notes what the panel does on stderr (a release build's app.Logger
+// discards everything): seen when the app is started with its output kept
+// (scripts/mac-preview.sh, MYCO_PREVIEW_LOG).
+var qlog = log.New(os.Stderr, "myco quick: ", log.LstdFlags|log.Lmicroseconds)
 
 func newQuick(app *application.App, open func(hub, agent string, setup bool)) *quick {
 	win := app.Window.NewWithOptions(application.WebviewWindowOptions{
@@ -63,7 +68,7 @@ func newQuick(app *application.App, open func(hub, agent string, setup bool)) *q
 				application.MacWindowCollectionBehaviorIgnoresCycle,
 		},
 	})
-	q := &quick{win: win, open: open, h: 120, log: app.Logger}
+	q := &quick{win: win, open: open, h: 120}
 	// Clicking elsewhere puts it away, as Spotlight does.
 	win.OnWindowEvent(events.Common.WindowLostFocus, func(*application.WindowEvent) { q.hide() })
 	if err := app.GlobalShortcut.Register(quickKey, q.toggle); err != nil {
@@ -105,6 +110,9 @@ func (q *quick) hide() {
 //	(setup) the dialog that sets a superagent up
 func (q *quick) handler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/quick") {
+			qlog.Printf("%s %s", r.Method, r.URL.Path)
+		}
 		if r.Method != http.MethodPost || !strings.HasPrefix(r.URL.Path, "/app/quick/") {
 			next.ServeHTTP(w, r)
 			return
@@ -131,11 +139,11 @@ func (q *quick) handler(next http.Handler) http.Handler {
 				Setup      bool
 			}
 			if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
-				q.log.Warn("quick panel: open: bad body", "error", err)
+				qlog.Printf("open: bad body: %v", err)
 				http.Error(w, "bad target", http.StatusBadRequest)
 				return
 			}
-			q.log.Info("quick panel: open the chat", "hub", in.Hub, "agent", in.Agent, "setup", in.Setup)
+			qlog.Printf("open the chat: hub=%s agent=%s setup=%v", in.Hub, in.Agent, in.Setup)
 			q.hide()
 			if q.open != nil {
 				q.open(in.Hub, in.Agent, in.Setup)
