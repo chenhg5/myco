@@ -9087,3 +9087,15 @@ body.is-resizing {
 .app-nav-arrows .app-btn:disabled { opacity: 0.32; }
 .app-nav-arrows .app-btn svg { width: 17px; height: 17px; }
 .handoff-state.is-stale { color: var(--amber); background: var(--amber-soft); }
+
+/* 允许谁派任务: room between the words and the picker, a line saying what
+   holds now, and names wide enough to read. */
+.allow-dlg .allow-now { margin-top: 14px; padding: 8px 12px; border-radius: 8px; font-size: 12.5px; color: var(--fg-2); background: var(--pill); }
+.allow-dlg .allow-now.is-limited { color: var(--fg); }
+.allow-dlg .app-picker { margin-top: 12px; margin-bottom: 4px; }
+.allow-dlg .app-tag-box { min-height: 36px; padding: 5px 10px; }
+.allow-dlg .app-picker-list { margin-top: 8px; max-height: 300px; padding: 4px; }
+.allow-dlg .app-picker-row { height: 36px; gap: 10px; padding: 0 10px; }
+.allow-dlg .app-picker-name { flex: none; max-width: 55%; }
+.allow-dlg .app-modal-actions { margin-top: 18px; }
+

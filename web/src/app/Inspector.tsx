@@ -1380,14 +1380,23 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
         open={action === "allow"}
         onOpenChange={(o) => !o && closeAction()}
         title={L("允许谁派任务", "Who can give tasks")}
-        description={L("只有选中的 agent 可以给它派任务。一个都不选表示任何 agent 都可以。你在 App 里发的消息不受这个限制。", "Only the selected nodes can give it tasks. Select none to allow any node. Messages you send from the app are not limited by this.")}
+        description={L("只有选中的 agent 可以给它派任务；一个都不选，就是任何 agent 都可以。你在 App 里发的消息不受这个限制。", "Only the selected nodes can give it tasks; with none selected, any node can. Messages you send from the app are not limited by this.")}
+        wide className="allow-dlg"
       >
+        {(() => {
+          const n = allowFrom.filter((x) => x !== "*").length;
+          return (
+            <div className={cn("allow-now", n > 0 && "is-limited")} data-testid="allow-now">
+              {n === 0 ? L("现在：任何 agent 都可以给它派任务", "Now: any node can give it tasks") : L(`现在：只有选中的 ${n} 个可以`, `Now: only the ${n} selected`)}
+            </div>
+          );
+        })()}
         <NodePicker
           nodes={(row.hub.overview?.agents || []).map((x) => x.agent)
             .filter((x) => x.name !== ag.name && agentKind(x) !== "machine")}
           value={allowFrom.filter((n) => n !== "*")}
           onChange={setAllowFrom}
-          emptyPlaceholder={anyNode ? L("现在任何 agent 都可以；选中 agent 后只允许它们", "Any node can now; pick nodes to allow only them") : undefined}
+          emptyPlaceholder={L("搜索 agent", "Search agents")}
           disabled={busy}
         />
         <ErrorText error={error} />
