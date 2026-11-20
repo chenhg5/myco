@@ -21,7 +21,7 @@ var files embed.FS
 // person would reach for them); shelves come first (domain.TemplateCategories).
 var Order = []string{
 	"myco/table", "myco/base", "myco/doc", "myco/slides",
-	"myco/code", "myco/devtools",
+	"myco/code", "myco/issues", "myco/devtools",
 	"myco/todo", "myco/poll",
 	"myco/ledger", "myco/habit",
 	"myco/whiteboard", "myco/mindmap", "myco/video",
