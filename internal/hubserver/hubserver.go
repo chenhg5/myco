@@ -184,6 +184,8 @@ func Build(o Options) (*Hub, error) {
 		return nil, err
 	}
 	srv.SetMembers(members, audit)
+	srv.SetSuperagents(app.NewSuperagentService(sqlite.NewSuperagentRepo(db), sqlite.NewApprovalRepo(db), agentsRepo,
+		sqlite.NewMemberRepo(db), messages, audit, ids, clock))
 	// New nodes of a plain member are private to them; the hub's owner and
 	// admins add nodes for the team.
 	defaultVisibility := func(ctx context.Context, owner string) domain.Visibility {

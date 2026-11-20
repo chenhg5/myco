@@ -46,6 +46,9 @@ type Client struct {
 	http  *http.Client
 	// Via marks this client's pulls (e.g. "runner"; see api.PullRequest.Via).
 	Via string
+	// Reason goes with each request (X-Myco-Reason): why a superagent asks
+	// for something its owner has to approve.
+	Reason string
 	// Sealer, when set, encrypts and decrypts message bodies on hubs with
 	// end-to-end encryption on (see e2e.go).
 	Sealer *Sealer
@@ -136,6 +139,9 @@ func (c *Client) auth(req *http.Request) {
 		req.Header.Set("Authorization", "Bearer "+c.token)
 	}
 	req.Header.Set("User-Agent", "myco-cli")
+	if c.Reason != "" {
+		req.Header.Set("X-Myco-Reason", strings.ReplaceAll(c.Reason, "\n", " "))
+	}
 }
 
 // send executes req and decodes a JSON response into out.

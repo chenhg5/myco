@@ -361,6 +361,27 @@ A run:
 
 `waiting`: only decisions are open. A step's `status` is `running`, `waiting` (a decision), `done`, `failed` or `cancelled`; `options` and `due_at` come with decisions.
 
+## Superagents
+
+A person's own agent with the App's powers in its workspace (v0.21.1+; design: [design/chief-of-staff.md](design/chief-of-staff.md)). Only the person names it; it uses its **own agent token** on the App's routes, and the hub acts as that person, marked as through it (the audit log names it: `glenn（经 superagent shroom）`). Each route the App uses is listed in `internal/transport/httpapi/superagent.go`:
+
+- **allowed**: reading what its owner sees (overview, conversations, traces, machines, members, audit, projects), and things that harm nothing that exists: creating projects and putting agents in them, project docs and files, starting an agent on its owner's computers (`POST /v1/machines/{id}/spawn`), run settings, running an automation once, renaming a computer;
+- **held for approval**: deleting or removing anything (projects, members of projects, docs, files, agents, computers), visibility and ownership, new or changed automations, stopping a task, upgrades and hub settings. The hub answers `409 {error: "approval_pending", message}` and keeps the request (with `X-Myco-Reason`, its why); the owner approves or denies it, and an approved one is carried out once, as it came. The agent gets a note from its owner either way. Pending ones lapse after 24 hours;
+- **never** (not listed): tokens, enrollments, pairing and devices, keys, members, handovers, the superagent itself and approvals, and anything that speaks as its owner (console messages, steers, uploads): it always speaks as itself.
+
+A route not listed treats it as the ordinary agent it also is. Nothing widens what its owner can do. One superagent per member in a workspace.
+
+| Endpoint | Auth | Notes |
+|---|---|---|
+| `GET /v1/console/superagent` | console | `{agent?, pending}`: the caller's superagent and how many of its requests wait |
+| `PUT /v1/console/superagent` | console (the person themselves) | `{agent}`: one of the caller's own agents (kind agent); replaces any before (whose pending requests are withdrawn). `?dry_run=true` |
+| `DELETE /v1/console/superagent` | console (the person themselves) | `204`: an ordinary agent again |
+| `GET /v1/console/approvals?status=pending` | console | `{approvals: [{id, agent, what, reason, method, path, body?, status, result?, result_body?, decided_by?, created_at, expires_at, decided_at?}]}`; `status` pending done denied expired withdrew |
+| `POST /v1/console/approvals/{id}/approve` | console (its owner, not the superagent) | carries it out once → the approval with `result` (the HTTP status) and the start of `result_body` |
+| `POST /v1/console/approvals/{id}/deny` | console (its owner) | → the approval |
+| `GET /v1/me/superagent` | agent | `{superagent, owner?}` |
+| `GET /v1/me/approvals` | agent | what it asked for |
+
 ## Message object
 
 ```json

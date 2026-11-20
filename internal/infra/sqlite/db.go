@@ -216,6 +216,31 @@ CREATE TABLE IF NOT EXISTS run_events (
   text   TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_run_events ON run_events(run_id, id);
+CREATE TABLE IF NOT EXISTS superagents (
+  member_id TEXT PRIMARY KEY,
+  agent     TEXT NOT NULL,
+  set_at    INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_superagents_agent ON superagents(agent);
+CREATE TABLE IF NOT EXISTS approvals (
+  id           TEXT PRIMARY KEY,
+  owner        TEXT NOT NULL,
+  agent        TEXT NOT NULL,
+  what         TEXT NOT NULL DEFAULT '',
+  reason       TEXT NOT NULL DEFAULT '',
+  method       TEXT NOT NULL,
+  path         TEXT NOT NULL,
+  body         BLOB,
+  content_type TEXT NOT NULL DEFAULT '',
+  status       TEXT NOT NULL,
+  result       INTEGER NOT NULL DEFAULT 0,
+  result_body  TEXT NOT NULL DEFAULT '',
+  decided_by   TEXT NOT NULL DEFAULT '',
+  created_at   INTEGER NOT NULL,
+  decided_at   INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_approvals_owner ON approvals(owner, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_approvals_agent ON approvals(agent, created_at DESC);
 CREATE TABLE IF NOT EXISTS run_evaluations (
   id        INTEGER PRIMARY KEY AUTOINCREMENT,
   run_id    TEXT NOT NULL,

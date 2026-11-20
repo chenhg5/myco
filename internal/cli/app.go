@@ -236,8 +236,14 @@ func (e *env) agentClient() (*client.Client, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Why, for what a superagent's owner has to approve.
+	c.Reason = strings.TrimSpace(e.in.Getenv(EnvApprovalReason))
 	return e.withSealer(c, e.cfgPath, e.cfg), nil
 }
+
+// EnvApprovalReason says why a superagent asks for something its owner has
+// to approve (sent as X-Myco-Reason; shown on the owner's card).
+const EnvApprovalReason = "MYCO_APPROVAL_REASON"
 
 // autoEnroll joins the network as the current session using
 // MYCO_ENROLL_TOKEN (idempotent: the same session gets the same agent back)
@@ -350,8 +356,19 @@ func (e *env) cardClient() (*client.Client, error) {
 }
 
 func (e *env) adminClient() (*client.Client, error) {
+	// Inside an agent's run (a superagent's, say), its own token: the hub
+	// decides what it may do as its owner, and holds what needs approval.
+	// Never a person's credential that happens to be on this computer.
+	if e.in.Getenv("MYCO_MESSAGE_ID") != "" && e.in.Getenv(config.EnvAdminToken) == "" && e.in.String("admin-token-file") == "" {
+		if c, err := e.agentClient(); err == nil {
+			return c, nil
+		}
+	}
 	hub, tok, err := e.adminCredentials()
 	if err != nil {
+		if c, aerr := e.agentClient(); aerr == nil {
+			return c, nil // an agent: the hub says whether it may
+		}
 		return nil, err
 	}
 	return client.New(hub, tok)

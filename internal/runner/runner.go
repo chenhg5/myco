@@ -105,6 +105,9 @@ type Runner struct {
 	busyStreak map[string]int        // session key -> consecutive busy releases
 	// projectSeen: session key + project whose context this run already gave.
 	projectSeen map[string]bool
+	// superOwner caches whose superagent this agent is ("" none), and when.
+	superOwner string
+	superAt    time.Time
 	// tasks are the tasks this runner has accepted and not finished; steers
 	// for them are routed here. pendingSteers hold steers for tasks that
 	// were still queued when the steer arrived.
@@ -476,7 +479,7 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 	deadline := start.Add(r.opts.MaxRun)
 	project := ""
 	if !executor {
-		project = r.projectContext(ctx, log, key, sessionID, m)
+		project = r.superagentContext(ctx, key, sessionID) + r.projectContext(ctx, log, key, sessionID, m)
 	}
 	build := func() string { return withProject(r.prompt.Build(r.opts.Self, m, files), project) }
 	prompt := build()
@@ -777,6 +780,46 @@ func (r *Runner) projectContext(ctx context.Context, log *slog.Logger, key, sess
 	r.projectSeen[key+"\x00"] = true
 	r.mu.Unlock()
 	return projectSection(r.opts.Self, p)
+}
+
+// superagentContext tells a superagent what it is: the brief the first time
+// in a session, a line after that (asked of the hub at most once a minute).
+func (r *Runner) superagentContext(ctx context.Context, key, sessionID string) string {
+	sr, ok := r.hub.(SuperagentReader)
+	if !ok {
+		return ""
+	}
+	r.mu.Lock()
+	owner, fresh := r.superOwner, time.Since(r.superAt) < time.Minute
+	r.mu.Unlock()
+	if !fresh {
+		me, err := sr.MeSuperagent(ctx)
+		if err != nil {
+			return "" // an older hub: not one
+		}
+		owner = ""
+		if me.Superagent {
+			owner = me.Owner
+		}
+		r.mu.Lock()
+		r.superOwner, r.superAt = owner, time.Now()
+		r.mu.Unlock()
+	}
+	if owner == "" {
+		return ""
+	}
+	seen := key + "\x00superagent:" + owner
+	r.mu.Lock()
+	if r.projectSeen == nil {
+		r.projectSeen = map[string]bool{}
+	}
+	done := r.projectSeen[seen] && sessionID != ""
+	r.projectSeen[seen] = true
+	r.mu.Unlock()
+	if done {
+		return superagentLine(owner)
+	}
+	return superagentBrief(owner)
 }
 
 func (r *Runner) sessionKey(m api.Message) string {
