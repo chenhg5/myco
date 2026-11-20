@@ -22,8 +22,8 @@ export type Theme = {
   coverBg: string; coverFg: string; coverMuted: string; chart: string[];
 };
 export const THEMES: Record<string, Theme> = {
-  light: { name: "简约白", bg: "#ffffff", fg: "#1f2329", muted: "#646a73", accent: "#3370ff", soft: "#eef3ff", card: "#f5f7fa", line: "#dee0e3",
-    coverBg: "#ffffff", coverFg: "#1f2329", coverMuted: "#646a73", chart: ["#3370ff", "#85a8ff", "#14c0a8", "#ffc60a", "#f54a45"] },
+  light: { name: "简约白", bg: "#ffffff", fg: "#1f2329", muted: "#646a73", accent: "#1f2329", soft: "#f2f3f5", card: "#f5f6f7", line: "#dee0e3",
+    coverBg: "#ffffff", coverFg: "#1f2329", coverMuted: "#646a73", chart: ["#1f2329", "#5b6068", "#8f959e", "#bfc3c9", "#dcdfe3"] },
   navy: { name: "深蓝", bg: "#ffffff", fg: "#1b2440", muted: "#5b6785", accent: "#2a4cc7", soft: "#e8edfb", card: "#f3f5fb", line: "#d9deeb",
     coverBg: "#16213e", coverFg: "#ffffff", coverMuted: "#aab4d4", chart: ["#2a4cc7", "#7d96e8", "#22a39f", "#f2a93b", "#d9534f"] },
   warm: { name: "暖色", bg: "#fffaf3", fg: "#3b2a1a", muted: "#8a7461", accent: "#e8710a", soft: "#fdebd3", card: "#fff1df", line: "#f0dcc4",

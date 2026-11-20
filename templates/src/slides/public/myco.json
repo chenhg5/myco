@@ -1,7 +1,7 @@
 {
   "id": "myco/slides",
   "name": "幻灯片",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "kind": "slides",
   "category": "office",
   "icon": "icon.svg",
