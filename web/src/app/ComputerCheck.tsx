@@ -239,8 +239,8 @@ function PickRoute({ hubId, machine, onPicked, onCancel }: { hubId: string; mach
             <option value="">{L("选一个", "Pick one")}</option>
             {options.map((o) => <option key={keyOf(o.route)} value={keyOf(o.route)}>{o.label} · {o.sub}</option>)}
           </select>
-          <button type="button" className="app-btn app-btn-small" onClick={save} disabled={!pick}>{L("用这个", "Use this")}</button>
-          {onCancel && <button type="button" className="app-btn app-btn-small" onClick={onCancel}>{L("取消", "Cancel")}</button>}
+          <button type="button" className="app-btn" onClick={save} disabled={!pick}>{L("用这个", "Use this")}</button>
+          {onCancel && <button type="button" className="app-btn" onClick={onCancel}>{L("取消", "Cancel")}</button>}
           <button type="button" className="app-group-action" onClick={load} title={L("重新读", "Read again")}><RefreshCw /></button>
         </div>
       )}

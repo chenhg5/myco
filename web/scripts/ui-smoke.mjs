@@ -380,6 +380,16 @@ async function closeSettings(page) {
 // Right-click a row and pick from its menu. Scrolling the row into view
 // fires a scroll a moment later, which closes a menu (as it should for a
 // person scrolling): so again, until the menu stays.
+// A computer's page: one of its tabs (Agent 和终端, 权限, AI 和工具, 检查和修复).
+async function pcTab(page, name) {
+  await clickVisible(page, page.locator("[data-testid=pc-tabs]").getByRole("tab", { name: new RegExp(`^${name}`) }));
+}
+// A computer's page: an item of its ⋯ (改名, 移除).
+async function pcMore(page, item) {
+  await clickVisible(page, page.locator("[data-testid=computer-more]"));
+  await clickVisible(page, page.locator(".conv-menu").getByRole("menuitem", { name: item, exact: true }));
+}
+
 async function menuPick(page, row, item) {
   for (let i = 0; ; i++) {
     await row.scrollIntoViewIfNeeded();
@@ -3484,6 +3494,7 @@ async function runMatrix(browser, size, scheme) {
     await step("电脑 · 工具清单", async () => {
       await go(page, "电脑", narrow);
       await clickVisible(page, page.locator(".pc-card", { hasText: "Studio Mac" }));
+      await pcTab(page, "AI 和工具");
       const tools = page.locator('[data-testid="computer-tools-claude"]');
       await tools.waitFor({ timeout: 10_000 });
       await tools.locator("summary").click();
@@ -3578,8 +3589,11 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "computer-detail");
       await back();
       await clickVisible(page, page.locator(".pc-card", { hasText: "VPS 东京" }));
-      await detail.locator("[data-testid=pc-details] .app-kv", { hasText: "~/code/myco-team" }).waitFor({ timeout: 10_000 });
-      await detail.locator("[data-testid=pc-details] .app-kv", { hasText: "Codex 没装" }).waitFor({ timeout: 10_000 });
+      // What it allows and its AIs are tabs of its page.
+      await pcTab(page, "AI 和工具");
+      await detail.locator("[data-testid=pc-ais] .pcd-line", { hasText: "Codex" }).filter({ hasText: "没装" }).waitFor({ timeout: 10_000 });
+      await pcTab(page, "权限");
+      await detail.locator("[data-testid=pc-details] .pcd-line", { hasText: "~/code/myco-team" }).waitFor({ timeout: 10_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "computer-details");
       // Its folders are its own rule; this App reaches it over SSH, so it
@@ -3599,13 +3613,14 @@ async function runMatrix(browser, size, scheme) {
       // A computer that has not allowed terminals says how to allow it: on
       // that computer, never from here.
       await clickVisible(page, page.locator(".pc-card", { hasText: "Office PC" }));
+      await pcTab(page, "权限");
       await detail.locator("[data-testid=shell-ask] code", { hasText: "myco machine shell-access --allow" }).waitFor({ timeout: 10_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "computer-permission");
       await back();
       // Renaming a computer, from its page: another computer's name is refused.
       await clickVisible(page, page.locator(".pc-card", { hasText: "Bench Linux" }));
-      await clickVisible(page, detail.getByRole("button", { name: "改名" }));
+      await pcMore(page, "改名");
       const form = page.locator(".pc-rename-form");
       const nameBox = form.getByRole("textbox", { name: "电脑的名字" });
       await nameBox.fill("office pc");
@@ -3617,7 +3632,7 @@ async function runMatrix(browser, size, scheme) {
       await nameBox.press("Enter");
       await detail.locator(".pcd-titles h1", { hasText: `测试机 ${size.width} ${scheme}` }).waitFor({ timeout: 10_000 });
       // Back to its name for the steps after this one.
-      await clickVisible(page, detail.getByRole("button", { name: "改名" }));
+      await pcMore(page, "改名");
       await nameBox.fill("Bench Linux");
       await nameBox.press("Enter");
       await detail.locator(".pcd-titles h1", { hasText: "Bench Linux" }).waitFor({ timeout: 10_000 });
@@ -4362,6 +4377,7 @@ async function runMatrix(browser, size, scheme) {
     await step("电脑 · 检查", async () => {
       await go(page, "电脑", narrow);
       await clickVisible(page, page.locator(".pc-card", { hasText: "VPS 东京" }));
+      await pcTab(page, "检查和修复");
       const check = page.locator("[data-testid=computer-check]");
       await check.locator(".cc-route", { hasText: "tokyo-vps" }).waitFor({ timeout: 10_000 });
       await clickVisible(page, check.getByRole("button", { name: "检查" }));
@@ -4378,6 +4394,7 @@ async function runMatrix(browser, size, scheme) {
       // One the App did not connect: which SSH host is it?
       await navBackClick(page);
       await clickVisible(page, page.locator(".pc-card", { hasText: "临时 Mac" }));
+      await pcTab(page, "检查和修复");
       await page.locator("[data-testid=computer-check] select.app-select-field").waitFor({ timeout: 10_000 });
       await page.locator("[data-testid=computer-check]").scrollIntoViewIfNeeded();
       await settle(page, 300);
@@ -4391,7 +4408,9 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, page.locator(".pc-card", { hasText: "临时 Mac" }));
       const view = page.locator("[data-testid=pc-detail]");
       await view.waitFor({ timeout: 10_000 });
-      await clickVisible(page, view.locator(".pcd-danger").getByRole("button", { name: "移除" }));
+      // Removing it is under ⋯, as a workflow's 删除 is.
+      if (await view.locator(".pcd-danger, .pcd-icon").count()) throw new Error("电脑页不该再有红色移除块或图标块");
+      await pcMore(page, "移除");
       const dialog = page.locator(".app-modal");
       await dialog.locator(".pc-gone-row").nth(1).waitFor({ timeout: 10_000 });
       // The computer's own node goes too, but is not listed as one of them.

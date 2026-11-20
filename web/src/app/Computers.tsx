@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
+import { useContextMenu } from "@/app/ContextMenu";
 import { useNavSub } from "@/app/nav";
 import { IntroCard, introOf } from "@/app/Onboard";
-import { ChevronRight, Info, Monitor, Pencil, Plus, Settings2, SquareTerminal, Trash2 } from "lucide-react";
+import { ChevronRight, Info, Monitor, MoreHorizontal, Pencil, Plus, Settings2, SquareTerminal, Trash2 } from "lucide-react";
 import { appApi, type LocalState, type MachineAI, type MachineInfo } from "@/appapi";
 import type { Machine, Project } from "@/api";
 import type { AgentRow } from "@/app/types";
@@ -24,6 +25,7 @@ import { L } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 type Projects = { hubId: string; p: Project }[];
+type PcTab = "work" | "access" | "ais" | "check";
 
 /** The tightest quota among the agents on a computer: out of quota first,
  *  then the most used; named in its title. */
@@ -73,6 +75,10 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, on
   // ← → at the top (nav.ts): the computer open is part of where you are.
   useNavSub("computers", { open: openKey }, { open: null }, (v) => { setRenaming(false); setOpenKey(v.open); });
   const [renaming, setRenaming] = useState(false);
+  // Which tab of the computer open: what runs on it, first, each time one opens.
+  const [tab, setTab] = useState<PcTab>("work");
+  useEffect(() => { setTab("work"); setRenaming(false); }, [openKey]);
+  const more = useContextMenu();
   useEffect(() => { appApi.local().then(setLocal).catch(() => setLocal(null)); }, []);
   const latest = useLatestRelease();
   const hubs = [...new Map(rows.map((r) => [r.hub.id, r.hub])).values()];
@@ -136,14 +142,21 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, on
   };
 
   // ── One computer, opened ──
+  // As every detail page (app-ui.md 6.15): its name and a line about it,
+  // the two things done most (开终端, 加 agent) and the rest under ⋯
+  // (改名, 移除); then tabs, what runs on it first.
   if (opened) {
     const { m, hub } = opened;
     const { agents, terminals } = split(hub.id, m);
-    const Icon = osInfo(m.os).icon;
+    const tabs: { key: PcTab; label: string; n?: number }[] = [
+      { key: "work", label: L("Agent 和终端", "Agents and terminals"), n: agents.length + terminals.length },
+      { key: "access", label: L("权限", "Access") },
+      { key: "ais", label: L("AI 和工具", "AIs and tools") },
+      { key: "check", label: L("检查和修复", "Check and fix") },
+    ];
     return (
-      <div className="pc pcd" data-testid="pc-detail">
+      <div className="pc pcd aud" data-testid="pc-detail">
         <header className={cn("pcd-head", !m.online && "is-away")}>
-          <span className="tp-icon pcd-icon"><Icon /></span>
           <div className="pcd-titles">
             {renaming ? (
               <RenameComputer hubId={hub.id} machine={m} taken={machines.filter((x) => x.hub.id === hub.id && x.m.id !== m.id).map((x) => x.m.name)}
@@ -152,7 +165,6 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, on
               <h1>
                 <span>{m.name}</span>
                 {isHere(m) && <span className="pc-machine-tag">{L("这台电脑", "This computer")}</span>}
-                <button type="button" className="app-btn app-btn-plain pc-rename" onClick={() => setRenaming(true)} aria-label={L("改名", "Rename")} title={L("改名", "Rename")}><Pencil /></button>
               </h1>
             )}
             <p className="pcd-sub">
@@ -162,44 +174,50 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, on
               {m.myco_version && <span>myco {ver(m.myco_version)}</span>}
             </p>
           </div>
-          <div className="ph-actions">
+          <div className="ph-actions wf-actions">
             <button type="button" className="app-btn" onClick={() => onAddTerminal(m)} disabled={!m.can_spawn}
-              title={m.can_spawn ? undefined : L("这台电脑还没允许开终端：见下面「它允许什么」", "This computer does not allow terminals yet: see below")}><SquareTerminal />{L("开终端", "Terminal")}</button>
+              title={m.can_spawn ? undefined : L("这台电脑还没允许开终端：见「权限」", "This computer does not allow terminals yet: see Access")}><SquareTerminal />{L("开终端", "Terminal")}</button>
             <button type="button" className="app-btn app-btn-primary" onClick={() => onAddAgentOn(m)}><Plus />{L("加 agent", "Add an agent")}</button>
+            <button type="button" className="app-btn wf-more" aria-label={L("更多", "More")} title={L("更多", "More")} data-testid="computer-more"
+              onClick={(e) => more.openUnder(e.currentTarget, [
+                { label: L("改名", "Rename"), icon: Pencil, onSelect: () => setRenaming(true) },
+                "sep",
+                { label: L("移除", "Remove"), icon: Trash2, danger: true, onSelect: () => setDropping(m) },
+              ])}><MoreHorizontal /></button>
           </div>
         </header>
 
         <MachineUpgrade hubId={hub.id} machine={m} here={isHere(m)} latest={latest} onDone={onChanged} />
 
-        <SectionHead title="Agent" count={agents.length} />
-        {agents.length ? <div className="pc-list">{agents.map(agentRow)}</div> : (
-          <div className="pcd-empty">
-            <span>{L("这台电脑上还没有 agent。可以把它上面已有的会话加进来，或者新开一个。", "No agents on it yet: add a session it already has, or start a new one.")}</span>
-            <button type="button" className="app-btn app-btn-small" onClick={() => onAddAgentOn(m)}><Plus />{L("加 agent", "Add an agent")}</button>
-          </div>
-        )}
-
-        <SectionHead title={L("终端", "Terminals")} count={terminals.length} />
-        {terminals.length ? <div className="pc-list">{terminals.map(terminalRow)}</div> : (
-          <div className="pcd-empty">
-            <span>{L("还没有终端：在它的一个文件夹里开一个，agent 就能在里面跑命令，你也能看着。", "No terminals yet: open one in a folder of it, for agents to run commands in while you watch.")}</span>
-            <button type="button" className="app-btn app-btn-small" onClick={() => onAddTerminal(m)} disabled={!m.can_spawn}><SquareTerminal />{L("开终端", "Terminal")}</button>
-          </div>
-        )}
-
-        <SectionHead title={L("它允许什么", "What it allows")} />
-        <ComputerDetails hubId={hub.id} hub={hub} machine={m} onChanged={onChanged} />
-
-        <SectionHead title={L("检查和修复", "Check and fix")} />
-        <ComputerCheck hubId={hub.id} machine={m} />
-
-        <div className="pcd-danger">
-          <div>
-            <b>{L("移除这台电脑", "Remove this computer")}</b>
-            <span>{L("它和上面的 agent、终端都从工作区里拿掉；聊过的内容保留。", "It leaves the workspace with its agents and terminals; conversations are kept.")}</span>
-          </div>
-          <button type="button" className="app-btn app-btn-danger-quiet" onClick={() => setDropping(m)}><Trash2 />{L("移除", "Remove")}</button>
+        <div className="wf-tabs" role="tablist" aria-label={L("看什么", "View")} data-testid="pc-tabs">
+          {tabs.map((t) => (
+            <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} className={cn("wf-tab", tab === t.key && "is-on")} onClick={() => setTab(t.key)}>
+              {t.label}{t.n !== undefined && t.n > 0 && <small>{t.n}</small>}
+            </button>
+          ))}
         </div>
+
+        {tab === "work" && (<>
+          <SectionHead title="Agent" count={agents.length} />
+          {agents.length ? <div className="pc-list">{agents.map(agentRow)}</div> : (
+            <div className="pcd-empty">
+              <span>{L("这台电脑上还没有 agent。可以把它上面已有的会话加进来，或者新开一个。", "No agents on it yet: add a session it already has, or start a new one.")}</span>
+              <button type="button" className="app-btn app-btn-small" onClick={() => onAddAgentOn(m)}><Plus />{L("加 agent", "Add an agent")}</button>
+            </div>
+          )}
+          <SectionHead title={L("终端", "Terminals")} count={terminals.length} />
+          {terminals.length ? <div className="pc-list">{terminals.map(terminalRow)}</div> : (
+            <div className="pcd-empty">
+              <span>{L("还没有终端：在它的一个文件夹里开一个，agent 就能在里面跑命令，你也能看着。", "No terminals yet: open one in a folder of it, for agents to run commands in while you watch.")}</span>
+              <button type="button" className="app-btn app-btn-small" onClick={() => onAddTerminal(m)} disabled={!m.can_spawn}><SquareTerminal />{L("开终端", "Terminal")}</button>
+            </div>
+          )}
+        </>)}
+        {tab === "access" && <ComputerAccess hubId={hub.id} hub={hub} machine={m} onChanged={onChanged} />}
+        {tab === "ais" && <ComputerAIs hubId={hub.id} machine={m} />}
+        {tab === "check" && <ComputerCheck hubId={hub.id} machine={m} />}
+
+        {more.element}
         <RemoveComputer machine={dropping} rows={rows} onClose={() => setDropping(null)} onRemoved={() => { setDropping(null); openComputer(null); onChanged(); }} />
       </div>
     );
@@ -317,16 +335,10 @@ const ACCESS_LABEL: Record<string, () => string> = {
   full: () => L("完全放开", "Full"),
 };
 
-/** A computer's details, asked of it: where agents may start, how much
- *  they may do, which AIs it has; whether terminals may be opened there;
- *  removing it. */
-function ComputerDetails({ hubId, hub, machine, onChanged }: {
-  hubId: string;
-  hub: AgentRow["hub"];
-  machine: Machine;
-  onChanged: () => void;
-}) {
-  // The last answer at once (the App asks ahead), a fresh one behind it.
+/** What a computer says of itself (asked of it, the last answer at once):
+ *  where agents may start, how much they may do, which AIs it has. Null
+ *  with why when it cannot say (away, too old, still asking). */
+function useMachineInfo(hubId: string, machine: Machine) {
   const [info, setInfo] = useState<MachineInfo | null>(() => cachedMachineInfo(hubId, machine.id)?.info || null);
   const [error, setError] = useState<unknown>(null);
   const asks = machine.online && machine.can_spawn && machineTellsInfo(machine.myco_version);
@@ -336,33 +348,74 @@ function ComputerDetails({ hubId, hub, machine, onChanged }: {
     fetchMachineInfo(hubId, machine.id).then((i) => { if (!off) setInfo(i); }, (e) => { if (!off) setError(e); });
     return () => { off = true; };
   }, [asks, hubId, machine.id]);
-  const aiText = (a: MachineAI) => a.state === "ready" ? L("可用", "Ready") : a.state === "signed_out" ? L("没登录", "Signed out") : a.state === "missing" ? L("没装", "Not installed") : L("已安装", "Installed");
+  const why = !machine.online
+    ? L("它现在不在线：开机、myco 在运行时才看得到。", "It is away: this shows once it is on and myco runs there.")
+    : !asks ? L("它上面的 myco 版本太旧，说不出这些。在那台电脑上运行 myco upgrade。", "Its myco is too old to say. Run myco upgrade on it.")
+      : null;
+  return { info, setInfo, error, why };
+}
+
+/** One line of a card: what it is (and a word on it) on the left, its value
+ *  or control on the right; `below` goes under both, full width. */
+function Line({ title, note, children, below, testid }: { title: string; note?: string; children?: React.ReactNode; below?: React.ReactNode; testid?: string }) {
   return (
-    <div className="pc-details" data-testid="pc-details">
-      {!machine.online ? (
-        <div className="app-small-note">{L("它现在不在线：开机、myco 在运行时才看得到它允许什么、装了哪些 AI。", "It is away: what it allows and which AIs it has show once it is on and myco runs there.")}</div>
-      ) : !asks ? (
-        <div className="app-small-note">{L("它上面的 myco 版本太旧，说不出它允许什么、装了哪些 AI。在那台电脑上运行 myco upgrade。", "Its myco is too old to say what it allows and which AIs it has. Run myco upgrade on it.")}</div>
-      ) : error ? <ErrorText error={error} /> : !info ? (
-        <div className="app-small-note">{L("正在问它…", "Asking it…")}</div>
-      ) : (
-        <div>
-          <div className="app-kv mdirs-kv"><span className="app-kv-label">{L("agent 能在哪里开工", "Where agents may start")}</span>
-            <span className="app-kv-value"><MachineDirs hubId={hubId} hub={hub} machine={machine} info={info} onChanged={(dirs) => setInfo({ ...info, dirs })} /></span></div>
-          <div className="app-kv"><span className="app-kv-label">{L("最高权限", "Highest access")}</span><span className="app-kv-value">{(ACCESS_LABEL[info.max_access] || (() => info.max_access))()}</span></div>
-          <div className="app-kv"><span className="app-kv-label">AI</span>
-            <span className="app-kv-value pcd-chips">{info.ais.map((a) => (
-              <span key={a.name} className={cn("pcd-chip pcd-ai", `is-${a.state}`)}>{`${a.name} ${aiText(a)}`}</span>
-            ))}</span></div>
-          {info.ais.filter(hasTools).map((a) => <details key={a.cli} className="app-tool-list" data-testid={`computer-tools-${a.cli}`}>
-            <summary>{a.name} · {L(`MCP ${a.mcp?.length || 0} · 技能 ${a.skills?.length || 0} · 插件 ${a.plugins?.length || 0}`, `MCP ${a.mcp?.length || 0} · Skills ${a.skills?.length || 0} · Plugins ${a.plugins?.length || 0}`)}</summary>
-            <ToolInventory tools={a} showSummary={false} />
-          </details>)}
-          <div className="app-small-note">{L("最高权限也由那台电脑自己决定（~/.myco/machine.yaml 的 spawn.max_access）。", "That computer decides its highest access itself (spawn.max_access in ~/.myco/machine.yaml).")}</div>
-        </div>
-      )}
-      <LocalShellAccess machine={machine} hub={hub} what="shell" shell={machineShell(hub, machine.id)} onChange={async () => onChanged()} />
+    <div className="app-setting-line pcd-line" data-testid={testid}>
+      <div className="pcd-line-top">
+        <div className="app-setting-line-text"><b>{title}</b>{note && <span>{note}</span>}</div>
+        {children !== undefined && <div className="pcd-line-value">{children}</div>}
+      </div>
+      {below}
     </div>
+  );
+}
+
+/** 权限: where agents may start, how much they may do, and whether they
+ *  may run commands there (terminals). */
+function ComputerAccess({ hubId, hub, machine, onChanged }: { hubId: string; hub: AgentRow["hub"]; machine: Machine; onChanged: () => void }) {
+  const { info, setInfo, error, why } = useMachineInfo(hubId, machine);
+  return (
+    <div data-testid="pc-details">
+      <section className="app-setting-card app-setting-lines">
+        <Line title={L("agent 能在哪里开工", "Where agents may start")} note={L("新开的 agent 只能开在这些文件夹（和里面的文件夹）里。", "New agents start only in these folders (and those inside them).")}
+          below={why ? <p className="app-small-note pcd-line-note">{why}</p> : error ? <ErrorText error={error} /> : !info ? <p className="app-small-note pcd-line-note">{L("正在问它…", "Asking it…")}</p>
+            : <MachineDirs hubId={hubId} hub={hub} machine={machine} info={info} onChanged={(dirs) => setInfo({ ...info, dirs })} />} />
+        <Line title={L("最高权限", "Highest access")} note={L("也是那台电脑自己定的（~/.myco/machine.yaml 的 spawn.max_access）。", "That computer decides it (spawn.max_access in ~/.myco/machine.yaml).")}>
+          {info ? <span className="pcd-value">{(ACCESS_LABEL[info.max_access] || (() => info.max_access))()}</span> : <span className="pcd-value is-quiet">—</span>}
+        </Line>
+        <Line title={L("让 agent 在这里跑命令", "Agents run commands here")} note={L("开终端要先允许。", "Terminals need it.")}
+          below={<LocalShellAccess machine={machine} hub={hub} what="shell" shell={machineShell(hub, machine.id)} onChange={async () => onChanged()} />} />
+      </section>
+    </div>
+  );
+}
+
+/** AI 和工具: each AI on it, whether it can be used, and its MCP servers,
+ *  skills and plugins (opened under its line). */
+function ComputerAIs({ hubId, machine }: { hubId: string; machine: Machine }) {
+  const { info, error, why } = useMachineInfo(hubId, machine);
+  const aiText = (a: MachineAI) => a.state === "ready" ? L("可用", "Ready") : a.state === "signed_out" ? L("没登录", "Signed out") : a.state === "missing" ? L("没装", "Not installed") : L("已安装", "Installed");
+  if (why || error || !info) {
+    return <div className="pcd-empty" data-testid="pc-ais">{why ? <span>{why}</span> : error ? <ErrorText error={error} /> : <span>{L("正在问它…", "Asking it…")}</span>}</div>;
+  }
+  return (
+    <section className="app-setting-card app-setting-lines" data-testid="pc-ais">
+      {info.ais.map((a) => {
+        const state = <span className={cn("pcd-chip pcd-ai", `is-${a.state}`)}>{aiText(a)}</span>;
+        const counts = L(`MCP ${a.mcp?.length || 0} · 技能 ${a.skills?.length || 0} · 插件 ${a.plugins?.length || 0}`, `MCP ${a.mcp?.length || 0} · Skills ${a.skills?.length || 0} · Plugins ${a.plugins?.length || 0}`);
+        if (!hasTools(a)) {
+          return <Line key={a.cli || a.name} title={a.name}>{state}</Line>;
+        }
+        return (
+          <details key={a.cli} className="app-setting-line pcd-line pcd-tools" data-testid={`computer-tools-${a.cli}`}>
+            <summary className="pcd-line-top">
+              <div className="app-setting-line-text"><b>{a.name}</b><span>{counts}</span></div>
+              <div className="pcd-line-value">{state}<ChevronRight className="pcd-tools-go" /></div>
+            </summary>
+            <ToolInventory tools={a} showSummary={false} />
+          </details>
+        );
+      })}
+    </section>
   );
 }
 
