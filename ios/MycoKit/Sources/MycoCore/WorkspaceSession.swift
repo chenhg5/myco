@@ -306,7 +306,8 @@ public final class WorkspaceSession {
     /// What an agent may touch when it runs, as its message box shows it.
     public func accessChoice(of name: String) -> AccessChoice? {
         guard let agent = agent(name) else { return nil }
-        let owns = whoami?.member?.id.map { !$0.isEmpty && agent.ownerId == $0 } ?? false
+        let mine = whoami?.member?.id ?? ""
+        let owns = !mine.isEmpty && agent.ownerId == mine
         return AccessChoice.of(agent, owns: owns, tooOld: runSettingsTooOld)
     }
 
