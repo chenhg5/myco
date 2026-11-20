@@ -17,7 +17,14 @@ import { cn } from "@/lib/utils";
  * Ctrl+Tab for its tabs, so ⌃` (the key above Tab) does the same.
  */
 
-const isSwitchKey = (e: KeyboardEvent) => e.ctrlKey && !e.metaKey && !e.altKey && (e.key === "Tab" || e.code === "Backquote");
+/** The key held to switch: ⌃ (Ctrl) with Tab or `; on a Mac ⌥ too, since
+ *  the Mac takes ⌃← and ⌃→ for its desktops and ← → are wanted here. */
+function switchKey(e: KeyboardEvent): "Control" | "Alt" | null {
+  if (e.metaKey || !(e.key === "Tab" || e.code === "Backquote")) return null;
+  if (e.ctrlKey && !e.altKey) return "Control";
+  if (e.altKey && !e.ctrlKey && isMacKeys()) return "Alt";
+  return null;
+}
 
 export function AgentSwitcher({ hubId, rows, current, project, onPick }: {
   hubId: string;
@@ -33,6 +40,7 @@ export function AgentSwitcher({ hubId, rows, current, project, onPick }: {
   const [at, setAt] = useState(0);
   const order = useRef<AgentRow[]>([]);
   const state = useRef({ open: false, at: 0 });
+  const opener = useRef<"Control" | "Alt">("Control");
   state.current = { open, at };
   const pickRef = useRef(onPick);
   pickRef.current = onPick;
@@ -69,9 +77,19 @@ export function AgentSwitcher({ hubId, rows, current, project, onPick }: {
     };
     const down = (e: KeyboardEvent) => {
       if (state.current.open) {
-        if (isSwitchKey(e) || (e.ctrlKey && (e.key === "ArrowRight" || e.key === "ArrowLeft"))) {
+        // Tab (⇧ back) and the arrow keys, whatever else is held.
+        if (switchKey(e) || e.key === "Tab") {
           e.preventDefault();
-          step(e.shiftKey || e.key === "ArrowLeft" ? -1 : 1);
+          step(e.shiftKey ? -1 : 1);
+        } else if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+          e.preventDefault();
+          step(1);
+        } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+          e.preventDefault();
+          step(-1);
+        } else if (e.key === "Home" || e.key === "End") {
+          e.preventDefault();
+          setAt(e.key === "Home" ? 0 : Math.max(0, order.current.length - 1));
         } else if (e.key === "Escape") {
           e.preventDefault();
           e.stopPropagation();
@@ -84,11 +102,13 @@ export function AgentSwitcher({ hubId, rows, current, project, onPick }: {
         }
         return;
       }
-      if (!isSwitchKey(e) || e.isComposing) return;
+      const held = switchKey(e);
+      if (!held || e.isComposing) return;
       if (document.querySelector(".app-modal, .cp")) return;
       const list = build();
       if (list.length < 1) return;
       e.preventDefault();
+      opener.current = held;
       order.current = list;
       const cur = currentNow();
       const first = cur && list[0]?.st.agent.name === cur ? 1 : 0;
@@ -96,7 +116,7 @@ export function AgentSwitcher({ hubId, rows, current, project, onPick }: {
       setOpen(true);
     };
     const up = (e: KeyboardEvent) => {
-      if (!state.current.open || e.key !== "Control") return;
+      if (!state.current.open || e.key !== opener.current) return;
       const r = order.current[state.current.at];
       setOpen(false);
       if (r) pickRef.current(r);
@@ -140,8 +160,8 @@ export function AgentSwitcher({ hubId, rows, current, project, onPick }: {
           })}
         </div>
         <div className="asw-name">{picked ? nodeName(picked.st.agent, picked.hub) : ""}</div>
-        <div className="asw-hint">{isMacKeys() ? L("按住 ⌃ 再按 Tab 换下一个，松开打开", "Hold ⌃ and press Tab for the next; let go to open")
-          : L("按住 Ctrl 再按 Tab 换下一个，松开打开", "Hold Ctrl and press Tab for the next; let go to open")}</div>
+        <div className="asw-hint">{isMacKeys() ? L("按住 ⌃ 或 ⌥ 不放，按 Tab 或 ← → 挑，松开打开", "Keep ⌃ or ⌥ held; Tab or ← → to pick, let go to open")
+          : L("按住 Ctrl 不放，按 Tab 或 ← → 挑，松开打开", "Keep Ctrl held; Tab or ← → to pick, let go to open")}</div>
       </div>
     </div>,
     document.body,

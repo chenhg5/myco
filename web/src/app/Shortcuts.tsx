@@ -34,8 +34,8 @@ const GROUPS: Group[] = [
     items: [
       { label: () => L("搜索：找对话、成员、项目和消息", "Search: chats, members, projects and messages"), keys: [["mod", "K"]] },
       { label: () => L("后退 / 前进", "Back / forward"), note: () => L("回到刚才看的页面，和顶上的 ‹ › 一样；鼠标侧键也行", "To where you were, as ‹ › at the top do; a mouse's side buttons too"), keys: [["mod", "["], ["mod", "]"]] },
-      { label: () => L("切换 agent（像 ⌘Tab 那样）", "Switch agents (as ⌘Tab does)"), note: () => L("按住不放、多按几下 Tab 往后挑，加 Shift 往回，松开就打开；网页版里用 ` 键代替 Tab", "Keep holding and press Tab again for the next, with Shift to go back; let go to open. In a browser, ` instead of Tab"),
-        keys: [["ctrl", "Tab"], ["ctrl", "`"]] },
+      { label: () => L("切换 agent（像 ⌘Tab 那样）", "Switch agents (as ⌘Tab does)"), note: () => L("按住不放，按 Tab 或 ← → 挑（⇧Tab 往回），松开就打开；Mac 上 ⌃← → 被系统用来切换桌面，要用方向键就按住 ⌥；网页版里用 ` 键代替 Tab", "Keep holding; Tab or ← → to pick (⇧Tab back), let go to open. On a Mac ⌃← → switch desktops: hold ⌥ to use the arrows. In a browser, ` instead of Tab"),
+        keys: [["ctrl", "Tab"], ["ctrl", "`"]], mac: [["ctrl", "Tab"], ["alt", "Tab"]] },
       { label: () => L("上一个 / 下一个对话", "Previous / next conversation"), note: () => L("按边栏里的顺序，项目和会话都算", "In the sidebar's order, projects and chats alike"), keys: [["alt", "↑"], ["alt", "↓"]] },
       { label: () => L("切换到第 1–9 个工作区", "Switch to workspace 1–9"), note: () => L("按左下角工作区列表的顺序", "In the order of the workspace list at the bottom left"), keys: [["mod", "1…9"]] },
       { label: () => L("新建项目", "New project"), keys: [["mod", "N"]] },

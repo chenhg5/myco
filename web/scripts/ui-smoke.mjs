@@ -4062,6 +4062,12 @@ async function runMatrix(browser, size, scheme) {
       if (!picked || picked === "Review (Codex 云端)") throw new Error("按一下 ⌃Tab 应选中另一个 agent");
       if (await sw.locator(".asw-item.is-away").count()) throw new Error("不在线的不该出现在切换框里");
       if (!(await sw.locator(".asw-item").first().getAttribute("title") || "").includes("Review")) throw new Error("正开着的对话应排第一");
+      // ← → pick too.
+      await page.keyboard.press("ArrowRight");
+      const next = (await sw.locator(".asw-name").innerText()).trim();
+      if (next === picked) throw new Error("→ 应换到下一个");
+      await page.keyboard.press("ArrowLeft");
+      if ((await sw.locator(".asw-name").innerText()).trim() !== picked) throw new Error("← 应回到上一个");
       await settle(page, 150);
       await shot(page, size, scheme, "agent-switcher");
       await page.keyboard.up("Control");
