@@ -17,7 +17,7 @@ import {
   STATUSES, PRIORITIES, PROJECT_STATUSES, allLabels, byOrder, byPriority, comments, createIssue, isClosed, issues, keyOf, kit, nowIso, num, people,
   priorityName, projects, statusName, statusOf, team, teamKey, timeAgo, type Issue, type IssueRec, type StatusId,
 } from "./model";
-import { Avatar, PriorityIcon, StatusIcon } from "./icons";
+import { Avatar, LabelDot, PriorityIcon, StatusIcon } from "./icons";
 
 const teamTitle = titleSaver(kit, team);
 
@@ -144,7 +144,7 @@ function PropMenu({ kind, ids, at, onClose, me }: { kind: MenuKind; ids: string[
         if (has.has(l)) cur.delete(l); else cur.add(l);
         save(id, { labels: [...cur] });
       })}
-      opts={allLabels().map((l) => ({ id: l, label: l, icon: <span className="dot" />, on: has.has(l) }))} />;
+      opts={allLabels().map((l) => ({ id: l, label: l, icon: <LabelDot l={l} />, on: has.has(l) }))} />;
   }
   if (kind === "project") return <Pick at={at} placeholder="放进项目…" onClose={onClose} onPick={(p) => setAll({ project: p === "\u0000" ? null : p })}
     opts={[{ id: "\u0000", label: "不放进项目", icon: <FolderKanban className="ico" />, on: !first.project },
@@ -417,7 +417,7 @@ function Row({ r, focus, open, me, onOpen, onMenu }: { r: IssueRec; focus: boole
       <button type="button" className="is-cell" title={`状态：${statusName(s)}`} onClick={m("status")}><StatusIcon s={s} /></button>
       <span className="is-title">{d.title || "（没有标题）"}</span>
       <span className="is-meta">
-        {(d.labels || []).slice(0, 3).map((l) => <span key={l} className="chip"><i className="dot" />{l}</span>)}
+        {(d.labels || []).slice(0, 3).map((l) => <span key={l} className="chip"><LabelDot l={l} />{l}</span>)}
         {proj && <span className="chip"><FolderKanban className="ico" />{String(proj.data.name || "项目")}</span>}
         {d.due && <span className={`chip${late ? " is-late" : ""}`}><Calendar className="ico" />{String(d.due).slice(5)}</span>}
         <span className="is-date faint">{timeAgo(String(d.created || ""))}</span>
@@ -474,7 +474,7 @@ function Board({ groups, focus, open, onOpen, onMenu, onAdd }: {
                   <div className="is-card-title">{d.title || "（没有标题）"}</div>
                   <div className="is-card-meta">
                     <button type="button" className="is-cell is-boxed" onClick={(e) => { e.stopPropagation(); onMenu("priority", r.id, rectOf(e.currentTarget)); }}><PriorityIcon p={num(d.priority, 0)} /></button>
-                    {(d.labels || []).slice(0, 2).map((l) => <span key={l} className="chip"><i className="dot" />{l}</span>)}
+                    {(d.labels || []).slice(0, 2).map((l) => <span key={l} className="chip"><LabelDot l={l} />{l}</span>)}
                     {d.due && <span className="chip"><Calendar className="ico" />{String(d.due).slice(5)}</span>}
                   </div>
                 </div>
@@ -640,7 +640,7 @@ function DraftMenu({ kind, at, d, setD, me, onClose }: { kind: MenuKind; at: Anc
   if (kind === "labels") return <Pick at={at} multi placeholder="标签…" onClose={onClose}
     create={(q) => ({ id: q, label: `新标签「${q}」`, icon: <Tag className="ico" /> })}
     onPick={(l) => { const s = new Set(d.labels || []); if (s.has(l)) s.delete(l); else s.add(l); setD({ ...d, labels: [...s] }); }}
-    opts={allLabels().map((l) => ({ id: l, label: l, icon: <span className="dot" />, on: (d.labels || []).includes(l) }))} />;
+    opts={allLabels().map((l) => ({ id: l, label: l, icon: <LabelDot l={l} />, on: (d.labels || []).includes(l) }))} />;
   return <Pick at={at} placeholder="项目…" onClose={onClose} onPick={(p) => setD({ ...d, project: p === "\u0000" ? null : p })}
     opts={[{ id: "\u0000", label: "不放进项目", icon: <FolderKanban className="ico" /> }, ...projects.rows.map((p) => ({ id: p.id, label: String(p.data.name || "项目"), icon: <FolderKanban className="ico" />, on: d.project === p.id }))]} />;
 }
@@ -665,7 +665,7 @@ function FilterPop({ at, filters, setFilters, me, onClose }: { at: Anchor; filte
         <Row on={filters.assignee.includes("")} icon={<Avatar name={null} />} label="未指派" onClick={() => toggle("assignee", "")} />
         {people(me).map((p) => <Row key={p} on={filters.assignee.includes(p)} icon={<Avatar name={p} />} label={p === me ? `${p}（我）` : p} onClick={() => toggle("assignee", p)} />)}
         {allLabels().length > 0 && <div className="filter-sec">标签</div>}
-        {allLabels().map((l) => <Row key={l} on={filters.labels.includes(l)} icon={<span className="dot" />} label={l} onClick={() => toggle("labels", l)} />)}
+        {allLabels().map((l) => <Row key={l} on={filters.labels.includes(l)} icon={<LabelDot l={l} />} label={l} onClick={() => toggle("labels", l)} />)}
         <div className="filter-foot"><button type="button" className="link-btn" onClick={() => setFilters(NO_FILTERS)}>清除筛选</button></div>
       </div>
     </Pop>

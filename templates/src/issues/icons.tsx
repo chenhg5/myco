@@ -1,6 +1,17 @@
-// Linear-style marks, in black, white and gray: a status is a circle that
-// fills as the work goes on; a priority is bars, or a filled square for
-// urgent; a person is their initial in a gray circle.
+// Linear-style marks: a status is a circle that fills as the work goes on;
+// a priority is bars, or a filled square for urgent; a person is their
+// initial in a tinted circle. Their colours are muted (issues.css): the
+// frame stays black, white and gray, the marks tell things apart.
+
+/** One of six quiet hues for a name (a label, a person), always the same. */
+export function hueOf(name: string) {
+  let h = 0;
+  for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return h % 6;
+}
+export function LabelDot({ l }: { l: string }) {
+  return <i className="dot" style={{ background: `var(--hue-${hueOf(l)})` }} />;
+}
 
 export function StatusIcon({ s, size = 14 }: { s: string; size?: number }) {
   const r = 6, c = 7;
@@ -44,5 +55,9 @@ export function Avatar({ name, size = 18 }: { name?: string | null; size?: numbe
     </svg>
   );
   const ch = Array.from(name.trim())[0]?.toUpperCase() || "?";
-  return <span className="av" style={{ width: size, height: size, fontSize: Math.round(size * 0.55) }} title={name}>{ch}</span>;
+  const hue = `var(--hue-${hueOf(name)})`;
+  return (
+    <span className="av" title={name}
+      style={{ width: size, height: size, fontSize: Math.round(size * 0.55), background: `color-mix(in srgb, ${hue} 24%, var(--bg))`, color: `color-mix(in srgb, ${hue} 75%, var(--fg))` }}>{ch}</span>
+  );
 }
