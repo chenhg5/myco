@@ -4333,6 +4333,36 @@ async function runMatrix(browser, size, scheme) {
       await card.waitFor({ state: "hidden", timeout: 10_000 });
     });
 
+    // The ⌘⇧Space panel (the Mac app's own window, /?quick=1): one line to
+    // hand Shroom a thing, its answer under it, the approval cards too.
+    await step("superagent · 快捷面板", async () => {
+      const qp = await page.context().newPage();
+      try {
+        await qp.setViewportSize({ width: 664, height: 760 });
+        await qp.goto(`${r.base}/?quick=1&lang=zh`, { waitUntil: "domcontentloaded" });
+        const panel = qp.locator("[data-testid=quick-panel]");
+        await panel.waitFor({ timeout: 15_000 });
+        await panel.locator(".qp-name", { hasText: "Shroom" }).waitFor({ timeout: 15_000 });
+        const ask = await fetch(`http://${HOST}:${mockPort()}/app/mock/superagent-ask`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ what: "停掉自动化「每晚跑测试」", reason: "它连着 5 天都失败在同一个地方，先停下来等修好。" }),
+        });
+        if (!ask.ok) throw new Error(`superagent 发起确认失败：HTTP ${ask.status}`);
+        const box = qp.locator("[data-testid=quick-input]");
+        await box.fill("帮我看看今天哪些任务卡住了");
+        await box.press("Enter");
+        await qp.locator(".qp-mine", { hasText: "哪些任务卡住了" }).waitFor({ timeout: 10_000 });
+        await qp.locator(".qp-answer").first().waitFor({ timeout: 20_000 });
+        await qp.locator(".sa-approval").first().waitFor({ timeout: 25_000 });
+        await settle(qp, 300);
+        const name = `${size.width}x${size.height}-${scheme}-superagent-quick.png`;
+        await panel.screenshot({ path: path.join(OUT, name) });
+        log(`    截图 ui-smoke/${name}`);
+      } finally {
+        await qp.close();
+      }
+    });
+
     // An agent offers the next step with its answer: the empty input shows
     // it, Tab fills it in.
     await step("单聊 · Tab 填入 agent 建议的下一步", async () => {

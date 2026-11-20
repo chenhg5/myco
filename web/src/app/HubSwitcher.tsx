@@ -62,12 +62,14 @@ function switchKey(n: number): string {
   return /Mac|iPhone|iPad/.test(p) ? `⌘${n}` : `Ctrl+${n}`;
 }
 
-export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, onNewOnServer, serverName, onSettings, onSuperagent, superagent, isLocal, variant = "sidebar", down = false, simple = false }: {
+export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, onNewOnServer, serverName, onSettings, onSuperagent, superagent, superagentKey, isLocal, variant = "sidebar", down = false, simple = false }: {
   /** opens your superagent (its chat, or setting one up); unset: the
    *  workspace has none to offer (an older hub) */
   onSuperagent?: () => void;
   /** your superagent here, if any, and how many approvals wait on you */
   superagent?: { name?: string; pending: number };
+  /** the shortcut that calls it up from anywhere (the Mac app) */
+  superagentKey?: string;
   /** 简单模式: no joining or making workspaces from here (Settings › 外观 turns it off) */
   simple?: boolean;
   hubs: Hub[];
@@ -286,6 +288,7 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, 
                             ? (superagent?.name ? "superagent" : L("配一个 superagent", "Set up a superagent"))
                             : L("设置", "Settings")}
                   </span>
+                  {e.kind === "superagent" && superagentKey && !superagent?.pending && <span className="app-hub-menu-key">{superagentKey}</span>}
                   {e.kind === "superagent" && !!superagent?.pending && (
                     <span className="app-hub-menu-badge" title={L(`${superagent.pending} 件事等你点头`, `${superagent.pending} waiting for you`)}>{superagent.pending}</span>
                   )}

@@ -584,6 +584,16 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const sa = useSuperagent(hubId || undefined);
   const [saSetup, setSaSetup] = useState(false);
   const openSuperagent = (name: string) => window.dispatchEvent(new CustomEvent("myco-open-member", { detail: { hubId, agent: name } }));
+  // The quick panel (Mac) sends you here to set one up.
+  useEffect(() => {
+    const on = (e: Event) => {
+      const h = (e as CustomEvent<{ hubId?: string }>).detail?.hubId;
+      if (h) setHubPick(h);
+      setSaSetup(true);
+    };
+    window.addEventListener("myco-superagent-setup", on);
+    return () => window.removeEventListener("myco-superagent-setup", on);
+  }, []);
   const onSuperagent = sa && !sa.off && hubId
     ? () => { const n = sa.state?.agent?.name; if (n) openSuperagent(n); else setSaSetup(true); }
     : undefined;
@@ -1124,6 +1134,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 isLocal={(h) => isLocalUrl(local, h.url)}
                 simple={simple}
                 onSuperagent={onSuperagent}
+                superagentKey={isMac ? "⌘⇧Space" : undefined}
                 superagent={sa?.state ? { name: sa.state.agent?.name, pending: sa.approvals.filter((a) => a.status === "pending").length } : undefined}
                 onSettings={() => setPage("settings")} />
             </div>
