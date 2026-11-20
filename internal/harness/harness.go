@@ -63,6 +63,8 @@ type Request struct {
 	// Access, when set, replaces the harness's configured access for this
 	// run (the owner's choice in the app, already capped by the machine).
 	Access Access
+	// MCPTools allows configured MCP servers in headless workspace/readonly runs.
+	MCPTools bool
 	// OnEvent, when set, gets the run's steps as they happen (what the
 	// agent says, thinks and does), for the live view in the app. Harnesses
 	// that cannot tell leave it uncalled. It may be called from several goroutines.

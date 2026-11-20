@@ -77,6 +77,10 @@ func (c *codex) CanFork() {}
 func (c *codex) AppliesProvider() {}
 
 func (c *codex) Run(ctx context.Context, req harness.Request) (harness.Result, error) {
+	// MCP tool approval is separate from the workspace-write shell sandbox.
+	// Do not turn off Codex approvals when MCPTools is set: that would also
+	// change approval for non-MCP actions. The App advertises this switch only
+	// for Claude until Codex offers a scoped, verified MCP approval override.
 	dir, err := os.MkdirTemp("", "myco-codex-")
 	if err != nil {
 		return harness.Result{}, err

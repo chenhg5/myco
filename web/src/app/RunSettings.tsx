@@ -45,7 +45,7 @@ const pickedSubs = new Set<() => void>();
 let pickedVersion = 0;
 const pickedKey = (row: AgentRow) => `${row.hub.id}\u0000${row.st.agent.name}`;
 const same = (a?: RunSettings, b?: RunSettings) =>
-  (a?.model || "") === (b?.model || "") && (a?.effort || "") === (b?.effort || "") && (a?.access || "") === (b?.access || "");
+  (a?.model || "") === (b?.model || "") && (a?.effort || "") === (b?.effort || "") && (a?.access || "") === (b?.access || "") && !!a?.mcp_tools === !!b?.mcp_tools;
 
 /** An agent's run settings as last picked here, else as the hub says. */
 function useRunSettings(row: AgentRow): RunSettings | undefined {
@@ -64,10 +64,11 @@ function useRunSettings(row: AgentRow): RunSettings | undefined {
 async function saveRunSettings(row: AgentRow, next: RunSettings, onRefresh: () => Promise<void>): Promise<void> {
   const key = pickedKey(row);
   const before = picked.get(key);
+  next = { ...(before || row.st.agent.run_settings), ...next };
   picked.set(key, next);
   pickedVersion += 1; pickedSubs.forEach((f) => f());
   try {
-    await appApi.setRunSettings(row.hub.id, row.st.agent.name, { model: next.model || "", effort: next.effort || "", access: next.access || "" });
+    await appApi.setRunSettings(row.hub.id, row.st.agent.name, { model: next.model || "", effort: next.effort || "", access: next.access || "", ...(next.mcp_tools !== undefined ? { mcp_tools: next.mcp_tools } : {}) });
     void onRefresh().catch(() => undefined);
   } catch (e) {
     if (before) picked.set(key, before); else picked.delete(key);
@@ -146,12 +147,13 @@ export function RunRows({ row, now, mayManage, onRefresh }: {
     : ag.owner ? ag.owner === member.name : member.role === "owner");
   const runner = agentKind(ag) === "agent" && !isCloud(ag) && !isInbox(ag);
   const accessEditable = owns && runner && !!rt?.max_access && !old && hubAfter0194(row.hub.hub_version);
+  const mcpAvailable = owns && runner && !!rt?.features?.includes("mcp_tools");
   const cap = ACCESS[Math.max(ACCESS.indexOf(rt?.max_access as RuntimeAccess), ACCESS.indexOf(rt?.access as RuntimeAccess), 0)];
   const rs = useRunSettings(row);
   const access = rs?.access || "";
   const model = rs?.model || "";
   const effort = rs?.effort || "";
-  const save = async (next: { model: string; effort: string; access?: RuntimeAccess | "" }) => {
+  const save = async (next: { model: string; effort: string; access?: RuntimeAccess | ""; mcp_tools?: boolean }) => {
     setBusy(true);
     setError(null);
     try {
@@ -211,6 +213,22 @@ export function RunRows({ row, now, mayManage, onRefresh }: {
       )}
     </div>
   );
+  const mcpFull = (access || rt?.access) === "full";
+  const mcpRow = mcpAvailable && (
+    <div className="app-kv has-help">
+      <span className="app-kv-label">{L("允许 MCP 工具", "Allow MCP tools")}</span>
+      <span className="app-kv-value">
+        <button type="button" role="switch" aria-checked={mcpFull || !!rs?.mcp_tools} aria-label={L("允许 MCP 工具", "Allow MCP tools")}
+          disabled={busy || old || mcpFull} className={cn("app-switch", (mcpFull || !!rs?.mcp_tools) && "is-on")}
+          onClick={() => void save({ model, effort, access, mcp_tools: !rs?.mcp_tools })}>
+          <span className="app-switch-knob" />
+        </button>
+      </span>
+      <span className="app-kv-help">{mcpFull
+        ? L("完全权限下本来就全部放行。", "Full access already allows all tools.")
+        : L("打开后，这个 agent 在工作区权限下也能用它电脑上配置的 MCP 工具（它们能做的事不受文件夹限制）。默认关。", "When on, this agent may use MCP tools configured on its computer even with workspace access. Their actions are not limited to its folder. Off by default.")}</span>
+    </div>
+  );
 
   const models = modelChoices(cli, rt?.models, rt?.model, model);
   const efforts = effortChoices(cli, rt?.models, model || rt?.model, rt?.effort, effort);
@@ -229,7 +247,7 @@ export function RunRows({ row, now, mayManage, onRefresh }: {
         <span className="app-kv-help">
           {L("模型和额度由它自己的会话管理，myco 拿不到也改不了。", "Its own session manages the model and quota; myco can't see or change them.")}
         </span>
-      </div>{accessRow}</>
+      </div>{accessRow}{mcpRow}</>
     );
   }
 
@@ -308,6 +326,7 @@ export function RunRows({ row, now, mayManage, onRefresh }: {
       )}
 
       {accessRow}
+      {mcpRow}
 
       {quota?.windows?.map((w) => (
         <div key={w.name} className={cn("app-kv app-quota", quotaSpent(w) ? "is-over" : quotaTight(w) && "is-tight")}>
@@ -475,6 +494,7 @@ export function AccessPill({ row, onRefresh }: { row: AgentRow; onRefresh: () =>
   const owns = !!member && (ag.owner_id ? ag.owner_id === member.id
     : ag.owner ? ag.owner === member.name : member.role === "owner");
   const editable = runner && owns && !!rt?.max_access && !old && hubAfter0194(row.hub.hub_version);
+  const mcpAvailable = runner && owns && !!rt?.features?.includes("mcp_tools");
   const rs = useRunSettings(row);
   if (!runner || !rt?.access) return null;
   const chosen = rs?.access || "";
@@ -491,6 +511,14 @@ export function AccessPill({ row, onRefresh }: { row: AgentRow; onRefresh: () =>
       setOpen(false);
       setConfirmFull(false);
       await saveRunSettings(row, { model: rs?.model || "", effort: rs?.effort || "", access }, onRefresh);
+    } catch (e) {
+      if (isOldHub(e)) setOld(true); else setError(e);
+    } finally { setBusy(false); }
+  };
+  const saveMCP = async () => {
+    setBusy(true); setError(null);
+    try {
+      await saveRunSettings(row, { model: rs?.model || "", effort: rs?.effort || "", access: chosen, mcp_tools: !rs?.mcp_tools }, onRefresh);
     } catch (e) {
       if (isOldHub(e)) setOld(true); else setError(e);
     } finally { setBusy(false); }
@@ -528,6 +556,15 @@ export function AccessPill({ row, onRefresh }: { row: AgentRow; onRefresh: () =>
                 <p className="run-pill-note">
                   {L("现在是：", "In use: ")}{accessLabel(rt.access as RuntimeAccess)}{L("。切换后下次唤醒时生效。", ". A switch applies from its next run.")}
                 </p>
+                {mcpAvailable && <button type="button" role="menuitemcheckbox" aria-checked={shown === "full" || !!rs?.mcp_tools}
+                  className={cn("run-pill-item", (shown === "full" || rs?.mcp_tools) && "is-on")}
+                  disabled={busy || shown === "full"}
+                  onClick={() => void saveMCP()}>
+                  <span>{L("允许 MCP 工具", "Allow MCP tools")}</span>
+                  <span className="run-pill-sub">{shown === "full"
+                    ? L("完全权限下本来就全部放行", "Full access already allows all tools")
+                    : L("工作区权限下也能用；MCP 不受文件夹限制。默认关。", "Available with workspace access; MCP is not folder-limited. Off by default.")}</span>
+                </button>}
                 {cap !== "full" && (
                   <div className="run-pill-note">
                     {L(`那台电脑最多允许「${accessLabel(cap)}」。`, `That computer allows at most ${accessLabel(cap)}. `)}

@@ -8484,6 +8484,10 @@ body.is-resizing {
 .pcd-ai.is-ready::before { background: var(--green); }
 .pcd-ai.is-signed_out::before { background: var(--amber); }
 .pcd-ai.is-missing { color: var(--muted); }
+.app-tool-list { margin: 8px 0 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.app-tool-list summary { cursor: pointer; color: var(--fg-2); font-size: 12px; }
+.app-tool-list .app-tool-inventory { margin-top: 8px; }
+.app-tool-inventory .app-small-note { margin: 4px 0; overflow-wrap: anywhere; }
 
 /* ---------- an automation opened (Automations.tsx AutomationDetail) ---------- */
 .aud .pcd-head .ph-actions { align-items: center; }

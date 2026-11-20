@@ -141,6 +141,34 @@ type Runtime struct {
 	// say (Claude Code: its aliases are fixed) or the runner predates it
 	// (v0.21.1).
 	Models []RuntimeModel `json:"models,omitempty"`
+	// Project-level tool inventory only; user-level tools come from MachineAI.
+	MCP          []MCPServer  `json:"mcp,omitempty"`
+	Skills       []ToolSkill  `json:"skills,omitempty"`
+	Plugins      []ToolPlugin `json:"plugins,omitempty"`
+	ToolWarnings []string     `json:"tool_warnings,omitempty"`
+}
+
+// Tool inventory contains labels and remote hostnames only: never env,
+// headers, argv, or URL paths and queries.
+type MCPServer struct {
+	Name      string `json:"name"`
+	Transport string `json:"transport"`
+	Host      string `json:"host,omitempty"`
+	Scope     string `json:"scope"`
+	Enabled   *bool  `json:"enabled,omitempty"`
+}
+
+type ToolSkill struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Scope       string `json:"scope"`
+	ManagedBy   string `json:"managed_by,omitempty"`
+}
+
+type ToolPlugin struct {
+	Name        string `json:"name"`
+	Marketplace string `json:"marketplace,omitempty"`
+	Enabled     bool   `json:"enabled"`
 }
 
 // RuntimeModel is a model a CLI offers: the id its --model takes, a
@@ -175,6 +203,9 @@ type QuotaWindow struct {
 type RunSettings struct {
 	Model  string `json:"model"`
 	Effort string `json:"effort"`
+	// MCPTools, when present in a request, changes whether configured MCP
+	// tools may run without a prompt outside full access.
+	MCPTools *bool `json:"mcp_tools,omitempty"`
 	// Access: readonly, workspace or full ("" follows the machine). Only the
 	// agent's owner may change it; left out of a request, it stays as it is.
 	Access string `json:"access,omitempty"`
@@ -837,7 +868,11 @@ type MachineAI struct {
 	Install string `json:"install,omitempty"`
 	Login   string `json:"login,omitempty"`
 	// Models are the models it offers there (Codex, v0.21.1+).
-	Models []RuntimeModel `json:"models,omitempty"`
+	Models       []RuntimeModel `json:"models,omitempty"`
+	MCP          []MCPServer    `json:"mcp,omitempty"`
+	Skills       []ToolSkill    `json:"skills,omitempty"`
+	Plugins      []ToolPlugin   `json:"plugins,omitempty"`
+	ToolWarnings []string       `json:"tool_warnings,omitempty"`
 }
 
 // MachineSession is a recent Claude Code or Codex session on the machine;

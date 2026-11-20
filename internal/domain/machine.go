@@ -92,6 +92,9 @@ type Runtime struct {
 	// (EncodeModels), so that the struct stays comparable; "" when it did
 	// not say (Claude Code, older runners).
 	Models string `json:"models,omitempty"`
+	// Tools is the secret-free project inventory as JSON; kept comparable
+	// like Models because Runtime is compared before database updates.
+	Tools string `json:"tools,omitempty"`
 }
 
 // RuntimeModel is a model a CLI offers: its id, display name and the
@@ -170,6 +173,9 @@ type QuotaWindow struct {
 type RunSettings struct {
 	Model  string `json:"model,omitempty"`
 	Effort string `json:"effort,omitempty"`
+	// MCPTools lets headless runs use configured MCP servers outside full access.
+	// Only the agent's owner may choose this; false preserves the old behavior.
+	MCPTools bool `json:"mcp_tools,omitempty"`
 	// Access is the permission level (readonly, workspace or full). Only the
 	// agent's owner sets it, and its machine caps it (spawn.max_access).
 	Access string `json:"access,omitempty"`
@@ -224,6 +230,9 @@ func (r Runtime) Validate() error {
 	}
 	if len(r.Features) > 400 || strings.ContainsAny(r.Features, "\x00\n\r\t") {
 		return Errf(CodeInvalidArgument, "runtime features must be short names")
+	}
+	if len(r.Tools) > 65536 {
+		return Errf(CodeInvalidArgument, "runtime tool inventory is too large")
 	}
 	return nil
 }

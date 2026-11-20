@@ -544,6 +544,7 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		var lastActive atomic.Int64
 		lastActive.Store(time.Now().UnixNano())
 		req.Model, req.Effort, req.Access = run.Model, run.Effort, harness.Access(run.Access)
+		req.MCPTools = run.MCPTools != nil && *run.MCPTools
 		req.OnEvent = func(ev harness.Event) {
 			lastActive.Store(time.Now().UnixNano())
 			if ev.Kind == "quota" { // not a step of the run: it goes with the runtime

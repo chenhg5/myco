@@ -9,6 +9,7 @@ import { agentKind, machineShell, machinesOfHub, nodeName, osInfo, thisComputerI
 import { shortDir } from "@/app/AddToProject";
 import { machineTellsInfo } from "@/app/hubVersion";
 import { cachedMachineInfo, fetchMachineInfo } from "@/app/machineInfoCache";
+import { hasTools, ToolInventory } from "@/app/ToolInventory";
 import { LocalShellAccess } from "@/app/LocalShellAccess";
 import { MachineDirs } from "@/app/MachineDirs";
 import { ComputerCheck } from "@/app/ComputerCheck";
@@ -353,6 +354,10 @@ function ComputerDetails({ hubId, hub, machine, onChanged }: {
             <span className="app-kv-value pcd-chips">{info.ais.map((a) => (
               <span key={a.name} className={cn("pcd-chip pcd-ai", `is-${a.state}`)}>{`${a.name} ${aiText(a)}`}</span>
             ))}</span></div>
+          {info.ais.filter(hasTools).map((a) => <details key={a.cli} className="app-tool-list" data-testid={`computer-tools-${a.cli}`}>
+            <summary>{a.name} · {L(`MCP ${a.mcp?.length || 0} · 技能 ${a.skills?.length || 0} · 插件 ${a.plugins?.length || 0}`, `MCP ${a.mcp?.length || 0} · Skills ${a.skills?.length || 0} · Plugins ${a.plugins?.length || 0}`)}</summary>
+            <ToolInventory tools={a} showSummary={false} />
+          </details>)}
           <div className="app-small-note">{L("最高权限也由那台电脑自己决定（~/.myco/machine.yaml 的 spawn.max_access）。", "That computer decides its highest access itself (spawn.max_access in ~/.myco/machine.yaml).")}</div>
         </div>
       )}

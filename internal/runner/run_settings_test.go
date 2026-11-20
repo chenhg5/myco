@@ -25,11 +25,13 @@ func (h *settingsHub) Me(context.Context) (*api.Agent, error) {
 
 func TestRunUsesTheAgentsRunSettingsAndReportsQuota(t *testing.T) {
 	m := api.Message{ID: "t1", Type: "task", From: "alice", ThreadID: "th"}
-	hub := &settingsHub{traceHub: &traceHub{fakeHub: newFakeHub(m)}, settings: &api.RunSettings{Model: "app-model", Effort: "high"}}
+	enabled := true
+	hub := &settingsHub{traceHub: &traceHub{fakeHub: newFakeHub(m)}, settings: &api.RunSettings{Model: "app-model", Effort: "high", MCPTools: &enabled}}
 	var gotModel, gotEffort, toldModel, toldEffort string
+	var gotMCP bool
 	var quotas []harness.Quota
 	h := fakeHarness{fn: func(req harness.Request) (harness.Result, error) {
-		gotModel, gotEffort = req.Model, req.Effort
+		gotModel, gotEffort, gotMCP = req.Model, req.Effort, req.MCPTools
 		req.OnEvent(harness.Event{Kind: "text", Text: "working"})
 		req.OnEvent(harness.Event{Kind: "quota", Quota: &harness.Quota{Source: "claude", Windows: []harness.QuotaWindow{{Name: "five_hour", Used: 0.4}}}})
 		return harness.Result{Output: "done"}, nil
@@ -39,7 +41,7 @@ func TestRunUsesTheAgentsRunSettingsAndReportsQuota(t *testing.T) {
 		OnQuota:       func(q harness.Quota) { quotas = append(quotas, q) },
 	}, quiet())
 	r.Handle(context.Background(), m)
-	if gotModel != "app-model" || gotEffort != "high" || toldModel != "app-model" || toldEffort != "high" {
+	if gotModel != "app-model" || gotEffort != "high" || !gotMCP || toldModel != "app-model" || toldEffort != "high" {
 		t.Fatalf("settings: run %q/%q, reported %q/%q", gotModel, gotEffort, toldModel, toldEffort)
 	}
 	if len(quotas) != 1 || quotas[0].Windows[0].Used != 0.4 {
@@ -58,9 +60,9 @@ func TestRunUsesTheAgentsRunSettingsAndReportsQuota(t *testing.T) {
 	hub.fail = true
 	m2 := api.Message{ID: "t2", Type: "task", From: "alice", ThreadID: "th"}
 	hub.fakeHub.status[m2.ID] = "delivered"
-	gotModel = ""
+	gotModel, gotMCP = "", false
 	r.Handle(context.Background(), m2)
-	if gotModel != "app-model" {
+	if gotModel != "app-model" || !gotMCP {
 		t.Fatalf("a failed read should keep the last settings, got %q", gotModel)
 	}
 }

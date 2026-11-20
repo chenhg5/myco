@@ -1,4 +1,4 @@
-import type { Page, PageChanges, PageOpen, PageRecord, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, SuperagentState, Approval, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
+import type { Page, PageChanges, PageOpen, PageRecord, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, MCPServer, ToolSkill, ToolPlugin, SuperagentState, Approval, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
 import { L } from "@/lib/i18n";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
@@ -177,6 +177,10 @@ export interface MachineAI {
   login?: string;
   /** the models it offers there (Codex; computers from v0.21.1) */
   models?: RuntimeModel[];
+  mcp?: MCPServer[];
+  skills?: ToolSkill[];
+  plugins?: ToolPlugin[];
+  tool_warnings?: string[];
 }
 export interface MachineSession {
   cli: "claude" | "codex";
@@ -716,7 +720,7 @@ export const appApi = {
     request<{ ok: boolean }>("DELETE", `app/hubs/${enc(hubId)}/agents/${enc(name)}/resume`),
   /** The model and effort this node runs with; "" follows the computer's
    *  setting. Hubs before the feature answer not_found. */
-  setRunSettings: (hubId: string, name: string, input: { model: string; effort: string; access?: RuntimeAccess | "" }) =>
+  setRunSettings: (hubId: string, name: string, input: { model: string; effort: string; access?: RuntimeAccess | ""; mcp_tools?: boolean }) =>
     request<Agent>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/run-settings`, input),
   // Projects
   projects: (hubId: string) => request<{ projects: Project[] }>("GET", `app/hubs/${enc(hubId)}/projects`),

@@ -216,17 +216,17 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 		return resolveProvider(h.Name(), ref, envFile)
 	}
 	initial := currentProvider()
-	var rep *runtimeReporter
-	if !sh.once {
-		rep = e.reportToHub(c, me, h, config.Runner{Model: first(ov.model, rc.Model)}, access, maxAccess, initial, log)
-		go rep.watchMaxAccess(e.in.Ctx, 20*time.Second, maxAccess, e.machineMaxAccess)
-	}
 	workdir, err := filepath.Abs(first(ov.workdir, rc.Workdir, "."))
 	if err != nil {
 		return nil, err
 	}
 	if st, err := os.Stat(workdir); err != nil || !st.IsDir() {
 		return nil, errorf("not_found", ExitNotFound, "create it or set runner.workdir", "workdir %s does not exist", workdir)
+	}
+	var rep *runtimeReporter
+	if !sh.once {
+		rep = e.reportToHub(c, me, h, config.Runner{Model: first(ov.model, rc.Model)}, access, maxAccess, initial, workdir, log)
+		go rep.watchMaxAccess(e.in.Ctx, 20*time.Second, maxAccess, e.machineMaxAccess)
 	}
 	timeout := ov.timeout
 	if timeout == 0 {

@@ -66,6 +66,28 @@ func TestRuntimeCarriesEffortAndQuota(t *testing.T) {
 	}
 }
 
+func TestRuntimeCarriesProjectToolInventory(t *testing.T) {
+	h := newHub(t, app.DefaultMessagePolicy())
+	coder := h.register("coder", map[string]any{"binding": map[string]any{"harness": "codex", "session_id": "s-coder"}})
+	h.do("PUT", "/v1/me/runtime", coder, map[string]any{"cli": "codex",
+		"mcp":           []any{map[string]any{"name": "docs", "transport": "http", "host": "docs.example", "scope": "project"}},
+		"skills":        []any{map[string]any{"name": "review", "description": "Review code", "scope": "project"}},
+		"plugins":       []any{map[string]any{"name": "writer", "enabled": true}},
+		"tool_warnings": []string{"/work/.codex/config.toml: invalid TOML"}}).want(t, 200)
+	got := h.do("GET", "/v1/agents/coder", adminToken, nil).want(t, 200)
+	for _, want := range []string{`"name":"docs"`, `"host":"docs.example"`, `"name":"review"`, `"name":"writer"`, `"tool_warnings"`} {
+		if !strings.Contains(string(got.raw), want) {
+			t.Fatalf("runtime lacks %s: %s", want, got.raw)
+		}
+	}
+	// Older runners clear their inventory when reporting an old-style runtime.
+	h.do("PUT", "/v1/me/runtime", coder, map[string]any{"cli": "codex"}).want(t, 200)
+	got = h.do("GET", "/v1/agents/coder", adminToken, nil).want(t, 200)
+	if strings.Contains(string(got.raw), `"mcp"`) {
+		t.Fatalf("stale tool inventory: %s", got.raw)
+	}
+}
+
 // A runner's features come back with its runtime, cleaned; a runner that
 // reports none shows none.
 func TestRuntimeCarriesFeatures(t *testing.T) {
