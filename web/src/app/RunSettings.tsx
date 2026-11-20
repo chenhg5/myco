@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { appApi, isOldHub } from "@/appapi";
-import type { Runtime, RuntimeAccess, RuntimeModel } from "@/api";
+import type { RunSettings, Runtime, RuntimeAccess, RuntimeModel } from "@/api";
 import type { AgentRow } from "@/app/types";
 import { accessLabel, agentKind, canManage, isCloud, isInbox, machineOfRow, modelSourceLabel } from "@/app/nodes";
 import { ChevronDown, Shield, ShieldOff } from "lucide-react";
@@ -36,6 +36,46 @@ const EFFORT_LABELS: Record<string, [string, string]> = {
 /** The models to offer for an agent or a computer's CLI: the list its
  *  CLI offers there when it said (Codex's own, always current), else the
  *  known names; the ones in use or chosen are added when missing. */
+// What was just picked, shown at once: the save and the App's refresh take
+// a moment (a refresh reads every workspace), and the picker should not wait
+// for them. Dropped once the agent's own run settings say the same, or put
+// back when the save fails.
+const picked = new Map<string, RunSettings>();
+const pickedSubs = new Set<() => void>();
+let pickedVersion = 0;
+const pickedKey = (row: AgentRow) => `${row.hub.id}\u0000${row.st.agent.name}`;
+const same = (a?: RunSettings, b?: RunSettings) =>
+  (a?.model || "") === (b?.model || "") && (a?.effort || "") === (b?.effort || "") && (a?.access || "") === (b?.access || "");
+
+/** An agent's run settings as last picked here, else as the hub says. */
+function useRunSettings(row: AgentRow): RunSettings | undefined {
+  useSyncExternalStore((f) => { pickedSubs.add(f); return () => { pickedSubs.delete(f); }; }, () => pickedVersion);
+  const key = pickedKey(row);
+  const own = row.st.agent.run_settings;
+  const mine = picked.get(key);
+  useEffect(() => {
+    if (mine && same(mine, own)) { picked.delete(key); pickedVersion += 1; }
+  }, [key, mine, own]);
+  return mine || own;
+}
+
+/** Saves an agent's run settings; the pick shows at once, the App's
+ *  refresh follows in the background. */
+async function saveRunSettings(row: AgentRow, next: RunSettings, onRefresh: () => Promise<void>): Promise<void> {
+  const key = pickedKey(row);
+  const before = picked.get(key);
+  picked.set(key, next);
+  pickedVersion += 1; pickedSubs.forEach((f) => f());
+  try {
+    await appApi.setRunSettings(row.hub.id, row.st.agent.name, { model: next.model || "", effort: next.effort || "", access: next.access || "" });
+    void onRefresh().catch(() => undefined);
+  } catch (e) {
+    if (before) picked.set(key, before); else picked.delete(key);
+    pickedVersion += 1; pickedSubs.forEach((f) => f());
+    throw e;
+  }
+}
+
 export function modelChoices(cli: string, offered?: RuntimeModel[], ...keep: (string | undefined)[]): string[] {
   const out = offered && offered.length ? offered.map((m) => m.id) : [...(MODELS[cli] || [])];
   for (const v of keep) if (v && !out.includes(v)) out.unshift(v);
@@ -107,15 +147,15 @@ export function RunRows({ row, now, mayManage, onRefresh }: {
   const runner = agentKind(ag) === "agent" && !isCloud(ag) && !isInbox(ag);
   const accessEditable = owns && runner && !!rt?.max_access && !old && hubAfter0194(row.hub.hub_version);
   const cap = ACCESS[Math.max(ACCESS.indexOf(rt?.max_access as RuntimeAccess), ACCESS.indexOf(rt?.access as RuntimeAccess), 0)];
-  const access = ag.run_settings?.access || "";
-  const model = ag.run_settings?.model || "";
-  const effort = ag.run_settings?.effort || "";
+  const rs = useRunSettings(row);
+  const access = rs?.access || "";
+  const model = rs?.model || "";
+  const effort = rs?.effort || "";
   const save = async (next: { model: string; effort: string; access?: RuntimeAccess | "" }) => {
     setBusy(true);
     setError(null);
     try {
-      await appApi.setRunSettings(row.hub.id, ag.name, next);
-      await onRefresh();
+      await saveRunSettings(row, next, onRefresh);
       return true;
     } catch (e) {
       if (isOldHub(e)) setOld(true);
@@ -324,8 +364,9 @@ export function RunPill({ row, onRefresh }: { row: AgentRow; onRefresh: () => Pr
   const [old, setOld] = useState(false);
   const runner = agentKind(ag) === "agent" && !isCloud(ag) && !isInbox(ag) && (cli === "claude" || cli === "codex");
   const editable = runner && canManage(row.hub, ag.owner_id) && !old && hubAfter0194(row.hub.hub_version);
-  const setModel = ag.run_settings?.model || "";
-  const setEffort = ag.run_settings?.effort || "";
+  const rs = useRunSettings(row);
+  const setModel = rs?.model || "";
+  const setEffort = rs?.effort || "";
   const model = setModel || rt?.model || "";
   const effort = setEffort || rt?.effort || "";
   // In its own session and not said yet: shown as unknown, and how it comes to be known.
@@ -335,10 +376,9 @@ export function RunPill({ row, onRefresh }: { row: AgentRow; onRefresh: () => Pr
     : [modelName(model, rt) || L("默认模型", "Default model"), effort ? effortLabel(effort) : ""].filter(Boolean).join(" · ");
   const save = async (next: { model: string; effort: string }) => {
     setBusy(true); setError(null);
+    setOpen(false);
     try {
-      await appApi.setRunSettings(row.hub.id, ag.name, next);
-      await onRefresh();
-      setOpen(false);
+      await saveRunSettings(row, { ...next, access: rs?.access || "" }, onRefresh);
     } catch (e) {
       if (isOldHub(e)) setOld(true); else setError(e);
     } finally { setBusy(false); }
@@ -435,8 +475,9 @@ export function AccessPill({ row, onRefresh }: { row: AgentRow; onRefresh: () =>
   const owns = !!member && (ag.owner_id ? ag.owner_id === member.id
     : ag.owner ? ag.owner === member.name : member.role === "owner");
   const editable = runner && owns && !!rt?.max_access && !old && hubAfter0194(row.hub.hub_version);
+  const rs = useRunSettings(row);
   if (!runner || !rt?.access) return null;
-  const chosen = ag.run_settings?.access || "";
+  const chosen = rs?.access || "";
   const cap = ACCESS[Math.max(ACCESS.indexOf(rt.max_access as RuntimeAccess), ACCESS.indexOf(rt.access as RuntimeAccess), 0)];
   const shown = (chosen || rt.access) as RuntimeAccess;
   const pending = !!chosen && chosen !== rt.access;
@@ -447,10 +488,9 @@ export function AccessPill({ row, onRefresh }: { row: AgentRow; onRefresh: () =>
   const save = async (access: RuntimeAccess | "") => {
     setBusy(true); setError(null);
     try {
-      await appApi.setRunSettings(row.hub.id, ag.name, { model: ag.run_settings?.model || "", effort: ag.run_settings?.effort || "", access });
-      await onRefresh();
       setOpen(false);
       setConfirmFull(false);
+      await saveRunSettings(row, { model: rs?.model || "", effort: rs?.effort || "", access }, onRefresh);
     } catch (e) {
       if (isOldHub(e)) setOld(true); else setError(e);
     } finally { setBusy(false); }
