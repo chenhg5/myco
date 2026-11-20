@@ -15,3 +15,5 @@ Each app shows what it looks like in the App's new-page dialog: pictures in
 its `public/shots/` (`1.webp` and its dark `1.dark.webp`, …). `shots.mjs`
 takes them with the sample data, light and dark (Playwright; ffmpeg for
 视频剪辑's clip): `node build.mjs && node shots.mjs [app…] && node build.mjs`.
+An app that uses the computer (`myco.os`) is shot on a made-up one,
+`shots-os.js` (a Mac's disk for 空间清理): give its plan `os: true`.
