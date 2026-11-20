@@ -305,7 +305,7 @@ type Message struct {
 	// project with a terminal on that computer; v0.21.2+).
 	GrantedBy string `json:"granted_by,omitempty"`
 	// E2E: the body is end-to-end encrypted (an envelope only the
-	// message's readers can open; see docs/design/e2e-encryption.md).
+	// message's readers can open).
 	E2E bool `json:"e2e,omitempty"`
 	// Unreadable says why a client could not decrypt an end-to-end
 	// encrypted body (set by the client, never by the hub).
@@ -1753,7 +1753,7 @@ type TemplateUsed struct {
 }
 
 // Workflows (v0.21+): graphs the hub walks, handing each step to an agent,
-// a computer or a person (docs/design/workflow.md).
+// a computer or a person.
 
 // Workflow is a stored workflow. Definition is its JSON (on get and apply).
 type Workflow struct {
@@ -2134,7 +2134,7 @@ type WorkflowDecisions struct {
 }
 
 // Superagents (v0.21.1+): a person's own agent with the App's powers in
-// its workspace (docs/design/chief-of-staff.md).
+// its workspace.
 
 // Superagent answers GET /v1/console/superagent: the caller's superagent
 // (none: Agent absent) and how many of its requests wait for them.

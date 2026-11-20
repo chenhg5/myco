@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-// Talking with an agent by voice (docs/design/voice.md), in the person's
+// Talking with an agent by voice, in the person's
 // chat with it: the phone hears the person (speech recognition), a fast
 // text model reads the chat and talks with them, passing what they want
 // done to the agent as they would type it, and answers out loud. It stops

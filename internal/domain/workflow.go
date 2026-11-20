@@ -14,7 +14,7 @@ import (
 // A workflow is a graph the hub walks: each step hands work to an agent
 // (a task), runs a command on a computer (an exec node), or asks a person
 // to decide; edges say which step comes next. Agents only hand back
-// results: the hub alone decides what happens next (docs/design/workflow.md).
+// results: the hub alone decides what happens next.
 
 // Step kinds.
 const (

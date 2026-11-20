@@ -24,8 +24,7 @@ import (
 	"github.com/chenhg5/myco/internal/client"
 )
 
-// pageCommands publish web pages to the hub for people to open in the App
-// (docs/design/browser.md).
+// pageCommands publish web pages to the hub for people to open in the App.
 func pageCommands() *Command {
 	adminFile := Flag{Name: "admin-token-file", Kind: String, Help: "File containing the admin token (people; agents use their own)"}
 	pageFlag := Flag{Name: "page", Kind: String, Required: true, Help: "Page id (pg_...)"}

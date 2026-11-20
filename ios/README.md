@@ -94,7 +94,7 @@ The microphone is in the input's lower left, beside the plus. It listens with Ap
 
 ## A voice chat
 
-Talking with an agent out loud, in its conversation: the desktop app's voice call ([docs/design/voice.md](../docs/design/voice.md)), with the same rules. Once it is set up in Settings, with nothing typed and nothing running the input's round button (a waveform) starts it; the call is a bar docked above the input with how it stands (listening, thinking, speaking, muted), the last few lines of the talk, mute and hang up. The conversation scrolls and the input types as always.
+Talking with an agent out loud, in its conversation: the desktop app's voice call, with the same rules. Once it is set up in Settings, with nothing typed and nothing running the input's round button (a waveform) starts it; the call is a bar docked above the input with how it stands (listening, thinking, speaking, muted), the last few lines of the talk, mute and hang up. The conversation scrolls and the input types as always.
 
 - **What is said goes to the agent as if typed.** A fast model hears the person and passes on what they want with `tell_agent`: added to the agent's open task, else a new one, with no confirmation (`ConversationModel.tell`, the rule of the send button). What it passes on ends with the desktop's trailer (`ViaVoice`), which the page shows as a small "By voice" mark; a tap shows the words as heard. Questions about progress it answers itself from the conversation (`VoiceContext`); `stop_agent` stops the open task, `check_agent` reads the conversation again.
 - **It can be cut off.** Real words while it talks stop it at once (not an "嗯", not its own voice coming back); what the person heard of its answer is kept as said, marked as cut off.

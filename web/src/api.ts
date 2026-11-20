@@ -56,7 +56,7 @@ export interface Runtime {
   provider_source?: ProviderSource;
   /** plan usage, when the CLI writes it on this computer */
   quota?: Quota;
-  /** what its runner supports beyond the basics (docs/design/client-plan.md section 4); absent from older runners */
+  /** what its runner supports beyond the basics; absent from older runners */
   features?: string[];
   /** why its runner went offline, said as it stopped: "stopped" (absent from older runners and while it runs) */
   away?: "stopped" | string;
@@ -242,7 +242,7 @@ export interface AutomationRequest {
 export interface AutomationResponse { automation: Automation; webhook_secret?: string }
 
 /** Workflows (hubs from v0.21): steps the workspace hands to agents,
- *  computers and people, in order (docs/design/workflow.md). */
+ *  computers and people, in order. */
 /** A JSON Schema (draft 2020-12): all of it is kept and checked by the
  *  hub; the App reads the common keywords. */
 export interface WfSchema {

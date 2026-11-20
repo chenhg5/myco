@@ -9,7 +9,7 @@ import (
 )
 
 // SuperagentService: a person's own agent with the App's powers in its
-// workspace (docs/design/chief-of-staff.md). Only its owner names it, and
+// workspace. Only its owner names it, and
 // approves what it asks to do that is hard to undo.
 type SuperagentService struct {
 	repo      domain.SuperagentRepository

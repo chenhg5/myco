@@ -1,5 +1,5 @@
-// The script every html file of a page opened in the myco App starts with
-// (docs/design/browser.md). Two things:
+// The script every html file of a page opened in the myco App starts
+// with. Two things:
 //
 // 1. A link to elsewhere opens in the system's browser (the App is asked),
 //    not in the page panel.

@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
  * is its runner running (and kept running after logout), can it reach the
  * workspace directly and through the proxy its service uses, and its last
  * log lines; then restart the runner or upgrade myco
- * (docs/design/computers.md).
+ *.
  */
 export function ComputerCheck({ hubId, machine }: { hubId: string; machine: Machine }) {
   const [route, setRoute] = useState<RemoteRoute | null | undefined>(undefined);

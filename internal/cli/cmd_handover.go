@@ -19,7 +19,7 @@ import (
 const EnvTakeOver = "MYCO_TAKEOVER"
 
 // Handing a node over (「换一个来接着做」): another session answers for the
-// same name; see docs/design/agent-handover.md.
+// same name
 func agentHandoverCommands() []*Command {
 	adminFlag := Flag{Name: "admin-token-file", Kind: String, Help: "File containing the admin token (instead of MYCO_ADMIN_TOKEN)"}
 	nameFlag := Flag{Name: "name", Kind: String, Required: true, Help: "The node to hand over"}

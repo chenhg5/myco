@@ -20,7 +20,7 @@ import (
 	"github.com/chenhg5/myco/internal/domain"
 )
 
-// Live pages (docs/design/browser.md, step 3): a server on an agent's
+// Live pages: a server on an agent's
 // computer (a dev server on localhost:5173), forwarded through the hub.
 // The agent's `myco page serve` keeps a WebSocket to
 // /v1/pages/{id}/tunnel; on it, yamux carries one stream per connection

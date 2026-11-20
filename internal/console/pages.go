@@ -24,7 +24,7 @@ import (
 	"github.com/chenhg5/myco/internal/client"
 )
 
-// Pages (docs/design/browser.md): web pages agents publish to a hub, opened
+// Pages: web pages agents publish to a hub, opened
 // in the App's page panel.
 //
 //	GET  /app/hubs/{id}/pages?project=          {pages}

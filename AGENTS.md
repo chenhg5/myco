@@ -13,7 +13,7 @@ One Go module ships three things:
 - **App**: a React console (`web/`), wrapped as a desktop app with Wails (`cmd/myco-app`, macOS and Windows).
 
 Read [docs/architecture.md](docs/architecture.md) for concepts and layering, [docs/api.md](docs/api.md) for the HTTP API, [docs/delivery.md](docs/delivery.md) for wake modes, and [INSTALL.md](INSTALL.md) for setup.
-Before changing the App's interface, read [docs/design/app-ui.md](docs/design/app-ui.md): layout, colours, type, components, interaction and copy rules, with a checklist. Why the App is organised around workspaces, projects, agents and computers is in [docs/design/app-redesign.md](docs/design/app-redesign.md).
+Before changing the App's interface, read [docs/design/app-ui.md](docs/design/app-ui.md): layout, colours, type, components, interaction and copy rules, with a checklist.
 
 ## Layout
 
@@ -65,8 +65,7 @@ Before you finish a change, run `make vet` and `make test`. Run `make smoke` whe
 - **App UI.** New pages, components and dialogs in `web/src/app` follow `docs/design/app-ui.md`: use the existing classes and components it lists, and run its checklist (`npm run test:ui`, light and dark, two widths) before you finish.
 - **Releases.** Do not touch `VERSION`. Bumping it on `main` publishes a release. Only maintainers do that, and only when they ask for it.
   When a release is asked for, add its section to `CHANGELOG.md` (`## vX.Y.Z`, newest first, user-facing changes in English, then the same in Chinese under a `**中文**` line) in the same commit as `VERSION`: the release workflow publishes that section as the release notes.
-  The steps are in [docs/release.md](docs/release.md) and the `myco-release` skill (`.claude/skills/myco-release/SKILL.md`).
-  A Mac preview (no release: main built on the maintainer's Mac as `myco-preview`, beside the released app) is the `myco-preview` skill (`.claude/skills/myco-preview/SKILL.md`, `scripts/mac-preview.sh`).
+  The steps (and the Mac preview build) are in the maintainers' internal repository, chenhg5/myco-harness: its `myco-release` and `myco-preview` skills and `context/runbooks/release.md`.
 - **Windows.** CI builds and tests on native Windows too. Keep OS-specific code in `_unix.go`, `_windows.go` or `_other.go` files. Tests that need a POSIX shell must skip themselves on Windows.
 - **CLI design.**
   - Commands are `noun verb` with long flags.

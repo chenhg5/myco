@@ -797,7 +797,7 @@ myco agent handover-link --name docs-claude
   - 每个节点和每台 App 设备在本机生成自己的密钥（节点的在 `~/.myco/agents/<名字>.yaml`，App 的在钥匙串），Hub 只存公钥；升级后自动生成，不用重新加入。
   - App 里加密的消息带锁标；读不了的（不是当事人）显示"已加密"；还没升级的节点只能收发明文，标"未加密"。打开前的消息不会被加密。
   - 第一次见到某个节点的公钥会记下来（`~/.myco/known_keys.json`）。之后它的公钥变了，发送会被拒绝、收到的消息也不会被执行，确认对方确实重新生成了密钥（在对方机器上 `myco keys show` 核对指纹）后：`myco keys trust --who <节点>`。
-  - 打开后对话搜索在 App 本地进行；用浏览器直接打开 Hub 网页只能看到"已加密"。设计和已知限制见 `docs/design/e2e-encryption.md`。
+  - 打开后对话搜索在 App 本地进行；用浏览器直接打开 Hub 网页只能看到"已加密"。
 - **转交**：节点详情里点"主人"可以把节点转给别人（所有者和管理员）；`myco agent owner --name <节点> --owner <成员>`。
 - **审计**：设置 → 审计（所有者和管理员）记录谁在什么时候做了什么：邀请、移除、生成链接、在机器上新建、删除或踢下线节点、从 App 派任务等，不记录消息内容；`myco audit`。
 - agent 收到消息时会知道是谁的：自己主人发的、其他成员从 App 发的、自己主人的其他 agent，还是别人的 agent。要不要先问主人由 agent 自己判断。
@@ -883,7 +883,7 @@ agent 收到工作流的任务时，用 `myco message reply --result '{"approved
 - 看它跑得怎么样（Hub v0.21.1 起）：工作流详情的「运行情况」是跑了几次、成功率、用时（中位数和慢的时候 p95，干活和等人决定分开）、每次花多少钱、最近每次的用时；「每一步」一张表：每一步跑了几次、失败几次、重发和退回几次、用时、花费，最近一次失败的原因（点了打开那次运行）；有评分的话每个分数的平均和范围；可以只看某一版。运行记录可以只看失败的、完成的、在跑的。打开一次运行：总用时、干活多久、等人决定多久、发了几个任务、花了多少；「每一步」可以切成时间线；每一步有「日志」（交给它的任务、它报的进展和截图、回复和结构化结果、它用了哪些工具和想了什么、电脑步骤的 stdout/stderr）；「产物」是 agent 交回的文件和最后交回的结果；「评分」可以给这次打分（测试脚本、负责检查的 agent 用 `myco workflow run evaluate`）；「对比」和另一次并排看每一步用时、花费和分数。花费来自 agent 的运行记录（Claude Code 报 token 和金额）。
 - 自动化可以启动工作流：App 里编辑自动化选「启动一个工作流」；命令行 `myco automation create --name 新issue --workflow 写-审-改 --input 'task=修 issue：{{payload.issue.title}}' --webhook`。Webhook 调用的内容整段是 `{{payload}}`，JSON 里的字段用 `{{payload.字段}}` 取。
 
-格式和接口见 [docs/api.md](docs/api.md#workflows)，设计见 [docs/design/workflow.md](docs/design/workflow.md)。
+格式和接口见 [docs/api.md](docs/api.md#workflows)。
 
 ### 4.16.2 superagent：替你管工作区的 Shroom
 
@@ -908,7 +908,7 @@ myco superagent guide                  # superagent 自己读的说明
 - 要你点头的请求 Hub 先存下，24 小时没人处理就作废；同意后 Hub 替它执行一次，并告诉它结果。它调用时用 `MYCO_APPROVAL_REASON` 写一句为什么，卡片上会显示。
 - 审计里它做的事记成「glenn（经 superagent shroom）」。
 
-接口和权限表见 [docs/api.md](docs/api.md#superagents)，设计见 [docs/design/chief-of-staff.md](docs/design/chief-of-staff.md)。
+接口和权限表见 [docs/api.md](docs/api.md#superagents)。
 
 ### 4.17 网页：把结果做成网页，在 App 里打开
 
@@ -949,7 +949,7 @@ myco pin rm --with @console:ann --pin pin_xxx
 
 ### 4.19 应用：人和 agent 一起用的表格、文档、幻灯片
 
-需要 Hub v0.20.5 或更新。App 里叫「应用」，命令行和 API 里叫 template（模板），是同一个东西。一个应用是一个文件夹：网页文件 + `myco.json`（名字、版本、数据有哪些集合和字段）+ `agent.md`（告诉 agent 怎么填）+ `sample.json`（示例数据）。用应用新建出来的就是一个网页，人在 App 里打开、改，agent 用命令行读写同一份数据，两边都能马上看到对方改了什么（设计见 docs/design/templates.md）。
+需要 Hub v0.20.5 或更新。App 里叫「应用」，命令行和 API 里叫 template（模板），是同一个东西。一个应用是一个文件夹：网页文件 + `myco.json`（名字、版本、数据有哪些集合和字段）+ `agent.md`（告诉 agent 怎么填）+ `sample.json`（示例数据）。用应用新建出来的就是一个网页，人在 App 里打开、改，agent 用命令行读写同一份数据，两边都能马上看到对方改了什么。
 ```bash
 myco template init --dir ./weekly --name 周报 --id glenn/weekly   # 起一个能用的模板：一张能编辑的表
 myco template publish --dir ./weekly                              # 发布到工作区的模板库（改了 version 再发就是新版本）

@@ -12,7 +12,7 @@ import { L } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
 
 /*
- * Web pages agents publish (docs/design/browser.md). A link to one,
+ * Web pages agents publish. A link to one,
  * <hub>/pages/<id>, shows under its message as a card; it opens in the page
  * panel (the panel files open in: beside the chat when there is room). Its
  * files come from this App's own loopback port, not the App's origin, in a

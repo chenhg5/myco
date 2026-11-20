@@ -431,7 +431,7 @@ func (n *Node) dir(requested string) (string, error) {
 	}
 	if err != nil && n.autoDir(p) && n.allowedPath(p) {
 		// A new conversation the app named a folder for under ~/myco
-		// (docs/design/client-plan.md 5.2): make it, nothing else.
+		//: make it, nothing else.
 		if mkErr := os.MkdirAll(p, 0o755); mkErr == nil {
 			real, err = filepath.EvalSymlinks(p)
 		}

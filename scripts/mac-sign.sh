@@ -9,7 +9,7 @@
 #
 # The release workflow runs it too, on GitHub's macOS runner, with the
 # identity and the notarytool profile in a keychain of its own
-# (MYCO_NOTARY_KEYCHAIN); see docs/release.md.
+# (MYCO_NOTARY_KEYCHAIN).
 #
 # Output in dist/: myco.app (stapled), myco-app-darwin-universal.zip, myco.dmg.
 # With MYCO_UPLOAD=1 it waits for the GitHub release <version> (made by

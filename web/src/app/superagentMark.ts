@@ -4,7 +4,7 @@ import type { Agent } from "@/api";
 // Which agents are superagents (yours, one per workspace), for marks drawn
 // anywhere an agent shows (its crown, the sidebar leaving it out). Kept
 // apart from Superagent.tsx so the avatar does not pull in its dialogs.
-/** The superagent's fixed name (docs/design/chief-of-staff.md): whatever
+/** The superagent's fixed name: whatever
  *  it called itself when it joined, the App calls it this. */
 export const SHROOM = "Shroom";
 

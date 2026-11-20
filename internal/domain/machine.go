@@ -81,7 +81,7 @@ type Runtime struct {
 	// (nil until a run reported any).
 	Quota *Quota `json:"quota,omitempty"`
 	// Features are what the agent's runner supports beyond the basics
-	// (docs/design/client-plan.md section 4), space-separated, so that the
+	//, space-separated, so that the
 	// struct stays comparable; "" from runners that predate them.
 	Features string `json:"features,omitempty"`
 	// Away is why the runner went offline ("stopped"), Env where it runs

@@ -797,7 +797,7 @@ A Hub can have several people, each using their own identity in their own App:
   - Each node and each App device creates its own key locally (a node's is in `~/.myco/agents/<name>.yaml`, the App's in the keychain); the Hub stores only public keys. Keys are created automatically after upgrading; no need to rejoin.
   - In the App, encrypted messages have a lock icon. Messages you can't read (you're not a party) show "Encrypted". Nodes that haven't upgraded can only send and receive plain text and are marked "Not encrypted". Messages from before encryption was turned on are not encrypted.
   - The first time a node's public key is seen, it is recorded (`~/.myco/known_keys.json`). If its public key changes later, sending is refused and received messages are not acted on. After confirming that the other side really made a new key (compare the fingerprint with `myco keys show` on their machine): `myco keys trust --who <node>`.
-  - Once on, conversation search runs locally in the App; opening the Hub's web page directly in a browser only shows "Encrypted". The design and known limits are in `docs/design/e2e-encryption.md`.
+  - Once on, conversation search runs locally in the App; opening the Hub's web page directly in a browser only shows "Encrypted".
 - **Transferring**: in node details, click "Owner" to transfer the node to someone else (owner and admins); `myco agent owner --name <node> --owner <member>`.
 - **Audit**: Settings → Audit (owner and admins) records who did what and when: invites, removals, making links, creating on a machine, deleting or kicking nodes, sending tasks from the App, and so on. Message content is not recorded. `myco audit`.
 - When an agent receives a message, it knows whose it is: its own owner's, another member's from the App, another agent of its owner's, or someone else's agent. The agent decides for itself whether to ask its owner first.
@@ -883,7 +883,7 @@ When an agent receives a workflow task, it hands in a structured result with `my
 - Seeing how it goes (since Hub v0.21.1): "How it goes" in a workflow's details shows the number of runs, success rate, time (median, and p95 for the slow ones, with working and waiting for decisions shown apart), cost per run, and the time of each recent run. "Each step" is a table: how many times each step ran, failed, was resent or sent back, its time and cost, and the reason for the latest failure (click it to open that run). If there are scores, it shows the average and range of each. You can look at just one version. The run history can be filtered to failed, finished or running. Open a run to see: total time, time spent working, time waiting for decisions, how many tasks were sent, and how much it cost. "Each step" can switch to a timeline. Each step has a "Log" (the task given to it, the progress and screenshots it reported, the reply and structured result, which tools it used and what it thought, a computer step's stdout/stderr). "What it produced" holds the files the agents handed in and the final result. "Scores" lets you score this run (test scripts and checking agents use `myco workflow run evaluate`). "Compare" puts it side by side with another run to compare each step's time, cost and scores. Costs come from the agents' run records (Claude Code reports tokens and amounts).
 - Automations can start workflows: when editing an automation in the App, choose "Start a workflow"; on the command line, `myco automation create --name new-issue --workflow write-review-revise --input 'task=Fix the issue: {{payload.issue.title}}' --webhook`. The whole body of a webhook call is `{{payload}}`; fields in JSON are `{{payload.field}}`.
 
-The format and API are in [docs/api.md](docs/api.md#workflows); the design is in [docs/design/workflow.md](docs/design/workflow.md).
+The format and API are in [docs/api.md](docs/api.md#workflows).
 
 ### 4.16.2 superagent: Shroom, who manages the workspace for you
 
@@ -908,7 +908,7 @@ myco superagent guide                  # instructions the superagent reads itsel
 - Requests that need your approval are stored by the Hub first and cancelled if no one handles them within 24 hours. When you approve, the Hub carries it out once for it and tells it the result. It explains why in one sentence with `MYCO_APPROVAL_REASON`, which is shown on the card.
 - The audit log records what it does as "alice (via superagent shroom)".
 
-The API and permission table are in [docs/api.md](docs/api.md#superagents); the design is in [docs/design/chief-of-staff.md](docs/design/chief-of-staff.md).
+The API and permission table are in [docs/api.md](docs/api.md#superagents).
 
 ### 4.17 Pages: publish results as web pages and open them in the App
 
@@ -949,7 +949,7 @@ myco pin rm --with @console:ann --pin pin_xxx
 
 ### 4.19 Apps: tables, docs and slides shared by people and agents
 
-Needs Hub v0.20.5 or newer. In the App they're called "Apps"; on the command line and in the API they're called templates. They're the same thing. An app is a folder: web files + `myco.json` (name, version, and the data's collections and fields) + `agent.md` (tells agents how to fill it in) + `sample.json` (sample data). Creating from an app gives you a page: people open and edit it in the App, agents read and write the same data from the command line, and both sides see each other's changes at once (the design is in docs/design/templates.md).
+Needs Hub v0.20.5 or newer. In the App they're called "Apps"; on the command line and in the API they're called templates. They're the same thing. An app is a folder: web files + `myco.json` (name, version, and the data's collections and fields) + `agent.md` (tells agents how to fill it in) + `sample.json` (sample data). Creating from an app gives you a page: people open and edit it in the App, agents read and write the same data from the command line, and both sides see each other's changes at once.
 ```bash
 myco template init --dir ./weekly --name "Weekly report" --id alice/weekly   # start a working template: one editable table
 myco template publish --dir ./weekly                              # publish to the workspace's template library (change version and publish again for a new version)

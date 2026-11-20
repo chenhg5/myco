@@ -14,7 +14,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
-// quickKey calls up the quick panel from anywhere (docs/design/chief-of-staff.md):
+// quickKey calls up the quick panel from anywhere:
 // ⌥Space is already hold-to-talk, ⌘Space Spotlight.
 const quickKey = "Cmd+Shift+Space"
 
@@ -38,7 +38,7 @@ type quick struct {
 
 // qlog notes what the panel does on stderr (a release build's app.Logger
 // discards everything): seen when the app is started with its output kept
-// (scripts/mac-preview.sh, MYCO_PREVIEW_LOG).
+// (a preview started with its log kept).
 var qlog = log.New(os.Stderr, "myco quick: ", log.LstdFlags|log.Lmicroseconds)
 
 func newQuick(app *application.App, open func(hub, agent string, setup bool)) *quick {

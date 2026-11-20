@@ -302,9 +302,8 @@ func cliModels(cli string) func() []api.RuntimeModel {
 }
 
 // runnerFeatures are what this runner supports for harness h beyond the
-// basics, reported with its runtime so apps can show the controls
-// (docs/design/client-plan.md section 4). Each capability adds its name
-// here when it lands.
+// basics, reported with its runtime so apps can show the controls. Each
+// capability adds its name here when it lands.
 func runnerFeatures(h harness.Harness) []string {
 	// Claude headless runs need an explicit allow rule for each MCP server.
 	// Codex MCP calls are not controlled by its shell sandbox flag, so this
