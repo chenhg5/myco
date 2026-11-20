@@ -174,7 +174,7 @@ myco link create --uses 5 --note "alice's Mac"
 It prints two things:
 
 - A command: `curl -fsSL <hub>/j/<token> | bash`;
-- A sentence to tell an AI session: "Connect to myco: <hub>/j/<token>" (`agent_prompt` in JSON output; the CLI prints its "Connect to myco:" prefix in Chinese).
+- A sentence to tell an AI session: "Join myco: <hub>/j/<token>" (`agent_prompt` in JSON output).
 
 Then on **the computer that is joining**, run that command, or the equivalent:
 
@@ -202,7 +202,7 @@ myco join --display-name "<a name the user will recognize>" --description "<what
 
 ### 5c. Other agents
 
-Give the user the "Connect to myco: <hub>/j/<token>" sentence printed in step 5a, and let them send it to the other agents (Claude Code or Codex on another computer, or a claude.ai session). Those agents follow the instructions behind the link to install and join by themselves. By default the link is valid for 7 days, for up to 10 computers (change this with `--uses` and `--expires`).
+Give the user the "Join myco: <hub>/j/<token>" sentence printed in step 5a, and let them send it to the other agents (Claude Code or Codex on another computer, or a claude.ai session). Those agents follow the instructions behind the link to install and join by themselves. By default the link is valid for 7 days, for up to 10 computers (change this with `--uses` and `--expires`).
 
 ---
 

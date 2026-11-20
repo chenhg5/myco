@@ -1249,6 +1249,7 @@ echo
 [[ -n "${CADDY_FAILED:-}" ]] && echo "WARNING: HTTPS is not up yet (see Caddy errors above)."
 if [[ "$MODE" == http ]]; then
   echo "!! ================================================================"
+  echo "!! Plain HTTP: tokens and messages cross the network unencrypted; use it only on networks you trust."
   echo "!! 明文 HTTP：令牌和消息不加密地在网络上传输，只在信得过的网络里用。"
   echo "!! Plain HTTP: tokens and messages cross the network unencrypted."
   echo "!! Use it only on networks you trust, or for a test."
@@ -1257,6 +1258,8 @@ if [[ "$MODE" == http ]]; then
 fi
 if [[ "$MODE" == tunnel && "$TUNNEL" == cloudflare && -z "$TUNNEL_HOST" ]]; then
   echo "!! ================================================================"
+  echo "!! Temporary address: the tunnel gets a new address each time it restarts (server restarts too),"
+  echo "!! and links and computers that joined before can no longer connect. Only for trying it out."
   echo "!! 临时地址：隧道每次重启（包括服务器重启）都会换一个新地址，"
   echo "!! 之前的链接和已经加入的电脑就连不上了。只适合试一试。"
   echo "!! Temporary address: it CHANGES whenever the tunnel restarts (also"
@@ -1291,7 +1294,7 @@ if [[ -n "$JOIN_URL" ]]; then
   echo "  curl -fsSL $JOIN_URL | bash"
   echo
   echo "Connect an AI session (Claude Code, Codex, claude.ai), tell it:"
-  echo "  接入 myco：$JOIN_URL"
+  echo "  Join myco: $JOIN_URL"
   echo
   echo "The link works for 7 days / 10 machines. Make another one any time:"
 else
@@ -1300,5 +1303,5 @@ fi
 echo "  sudo /usr/local/bin/myco link create ${HUB_NAME_ARGS[*]}"
 echo
 echo "Next, your own agent (Claude Code, Codex…) can add computers and agents for you. Tell it:"
-echo "接下来可以让你的 agent 帮你加电脑和 agent，把这句话发给它："
-echo "  帮我把电脑和 agent 加进这个 myco 工作区：读 https://raw.githubusercontent.com/chenhg5/myco/main/docs/agent-setup.md ，照着做，要我决定的先问我。"
+echo "Next, your agent can add computers and agents for you. Send it this sentence:"
+echo "  Add my computers and agents to this myco workspace: read https://raw.githubusercontent.com/chenhg5/myco/main/docs/agent-setup.md and follow it; ask me first about anything I need to decide."

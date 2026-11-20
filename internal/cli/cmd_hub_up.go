@@ -282,7 +282,7 @@ URL (add its host to the environment's allowed network hosts if it uses an allow
 				}
 				if l, ok := out["join_url"].(string); ok {
 					fmt.Fprintf(w, "\nAdd a computer or server (macOS / Linux / WSL), run this on it:\n  curl -fsSL %s | bash\n", l)
-					fmt.Fprintf(w, "\nConnect an AI session (Claude Code, Codex, claude.ai), tell it:\n  接入 myco：%s\n", l)
+					fmt.Fprintf(w, "\nConnect an AI session (Claude Code, Codex, claude.ai), tell it:\n  Join myco: %s\n", l)
 				}
 				fmt.Fprintf(w, "\nNext, your own agent (Claude Code, Codex…) can add computers and agents for you. Tell it:\n  %s\n", agentSetupSentence)
 				if name == "" {
