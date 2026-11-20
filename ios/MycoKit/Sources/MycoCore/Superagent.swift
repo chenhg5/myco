@@ -14,7 +14,8 @@ public final class SuperagentModel {
     public private(set) var agent: String?
     /// How many of its requests wait for me.
     public private(set) var pending = 0
-    /// Its requests that wait for me, oldest first.
+    /// The requests that wait for me (its, and other agents' such as a
+    /// project's coordinator asking for a computer), oldest first.
     public private(set) var approvals: [Approval] = []
     /// Read at least once.
     public private(set) var loaded = false
@@ -39,7 +40,9 @@ public final class SuperagentModel {
             agent = state.agent?.name
             pending = state.pending ?? 0
             unsupported = false
-            approvals = agent == nil || pending == 0 ? [] : try await hub.approvals().sorted { $0.createdAt < $1.createdAt }
+            // (all that wait for me: a coordinator asking for a computer
+            // too, not only my superagent)
+            approvals = try await hub.approvals().sorted { $0.createdAt < $1.createdAt }
             failure = nil
         } catch let error as HubError where error.status == 404 || Failure.isTooOld(error) {
             unsupported = true

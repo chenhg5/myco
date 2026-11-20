@@ -171,6 +171,12 @@ public protocol HubAPI: Sendable {
     /// `GET /v1/workflow-decisions`: the decisions waiting for me.
     func workflowDecisions() async throws -> [WorkflowDecision]
 
+    /// `GET /v1/projects/{name}/machines`: the workspace's computers, and
+    /// which the project's coordinators may start agents on (v0.21.2+).
+    func projectMachines(_ project: String) async throws -> [ProjectMachine]
+    /// `PUT` (allowed) or `DELETE` `/v1/projects/{name}/machines/{machine}`.
+    func setProjectMachine(_ project: String, machine: String, allowed: Bool) async throws
+
     // Superagents (v0.21.1+; older workspaces answer 404)
     /// `GET /v1/console/superagent`
     func superagent() async throws -> SuperagentState

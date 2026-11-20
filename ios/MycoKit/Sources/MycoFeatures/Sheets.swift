@@ -187,6 +187,7 @@ struct ProjectInfoScreen: View {
                             .buttonStyle(.plain)
                         }
                     }
+                    ProjectComputers(project: project)
                     if !project.links.isEmpty {
                         CardSection(title: L("链接", "Links")) {
                             ForEach(project.links, id: \.url) { link in
@@ -1462,5 +1463,130 @@ struct SuperagentSetupSheet: View {
         }
         .presentationDetents([.large])
         .interactiveDismissDisabled(model.busy != nil)
+    }
+}
+
+/// The workspace's computers, as a project sees them: which its
+/// coordinators may start agents on (a switch each, for whoever manages the
+/// project), and, for whoever manages the workspace, myco brought up to
+/// date on one. Nothing on workspaces from before this.
+private struct ProjectComputers: View {
+    let project: Project
+    @Environment(WorkspaceSession.self) private var session
+    @State private var list: [ProjectMachine]?
+    @State private var busy: String?
+    @State private var failure: Failure?
+    @State private var upgrading: ProjectMachine?
+    @State private var upgraded: String?
+
+    private var manages: Bool { project.canManage == true || session.whoami?.canManage == true }
+    private var admin: Bool { session.whoami?.canManage == true }
+
+    var body: some View {
+        Group {
+            if let list, !list.isEmpty {
+                CardSection(title: L("协调者能开 agent 的电脑", "Computers its coordinators may start agents on")) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(list) { machine in
+                            row(machine)
+                            if machine.id != list.last?.id { Divider().overlay(MycoColor.line) }
+                        }
+                        Text(L("打开后，项目的协调者可以在那台电脑上开新的 agent 来干活；那台电脑自己的文件夹和权限规则照样管用。",
+                               "When on, the project's coordinators may start new agents on that computer; its own folder and access rules still apply."))
+                            .font(.caption).foregroundStyle(MycoColor.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.vertical, 8)
+                        if let failure { FailureLine(failure: failure).padding(.bottom, 8) }
+                    }
+                }
+                .accessibilityIdentifier("project.computers")
+            }
+        }
+        .task { await load() }
+        .confirmationDialog(
+            L("升级 \(upgrading?.name ?? "") 上的 myco？", "Upgrade myco on \(upgrading?.name ?? "")?"),
+            isPresented: SwiftUI.Binding(get: { upgrading != nil }, set: { if !$0 { upgrading = nil } }), titleVisibility: .visible, presenting: upgrading
+        ) { machine in
+            Button(L("升级到最新版", "Upgrade to the latest")) { upgrade(machine) }
+            Button(L("取消", "Cancel"), role: .cancel) {}
+        } message: { _ in
+            Text(L("升级后它的 runner 会在几秒后重启，那台电脑上正在跑的任务会被打断。", "Its runner restarts a few seconds later: tasks running on that computer are cut short."))
+        }
+        .alert(L("升级", "Upgrade"), isPresented: SwiftUI.Binding(get: { upgraded != nil }, set: { if !$0 { upgraded = nil } })) {
+            Button(L("好", "OK")) { upgraded = nil }
+        } message: {
+            Text(upgraded ?? "")
+        }
+    }
+
+    private func row(_ machine: ProjectMachine) -> some View {
+        let version = session.machines.first { $0.id == machine.id }?.mycoVersion
+        return HStack(spacing: 10) {
+            StatusDot(machine.online ? .working : .away, size: 7)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(machine.name).font(.subheadline).foregroundStyle(MycoColor.fg)
+                Text([machine.online ? L("在线", "Online") : L("不在线", "Offline"), version.map { "myco " + $0 }, machine.canSpawn == false ? L("不能开 agent", "Cannot start agents") : nil]
+                    .compactMap { $0 }.joined(separator: " · "))
+                    .font(.caption).foregroundStyle(MycoColor.muted)
+            }
+            Spacer(minLength: 0)
+            if busy == machine.id { ProgressView().controlSize(.small) }
+            Toggle("", isOn: SwiftUI.Binding(get: { machine.allowed }, set: { set(machine, $0) }))
+                .labelsHidden().tint(MycoColor.green)
+                .disabled(!manages || busy != nil || machine.canSpawn == false)
+                .accessibilityLabel(machine.name)
+                .accessibilityIdentifier("project.computer.allowed")
+        }
+        .padding(.vertical, 8)
+        .contextMenu {
+            if admin, machine.online {
+                Button(L("升级这台电脑上的 myco", "Upgrade myco on this computer"), systemImage: "arrow.up.circle") { upgrading = machine }
+            }
+        }
+    }
+
+    private func load() async {
+        do {
+            list = try await session.hub.projectMachines(project.name)
+        } catch {
+            // (older workspaces have none of this: nothing shown)
+            list = []
+        }
+    }
+
+    private func set(_ machine: ProjectMachine, _ allowed: Bool) {
+        busy = machine.id
+        Task {
+            do {
+                try await session.hub.setProjectMachine(project.name, machine: machine.id, allowed: allowed)
+                failure = nil
+            } catch {
+                failure = Failure.of(error)
+            }
+            await load()
+            busy = nil
+        }
+    }
+
+    private func upgrade(_ machine: ProjectMachine) {
+        busy = machine.id
+        Task {
+            do {
+                let result = try await session.hub.spawn(on: machine.id, SpawnRequest(cli: "upgrade"))
+                if let upgrade = result.upgrade {
+                    let to = upgrade.to ?? ""
+                    upgraded = to.isEmpty
+                        ? L("\(machine.name) 上已经是最新的 \(upgrade.from)。", "\(machine.name) runs the latest already (\(upgrade.from)).")
+                        : L("\(machine.name) 从 \(upgrade.from) 升到了 \(to)，几秒后它的 runner 会重启。", "\(machine.name) went from \(upgrade.from) to \(to); its runner restarts in a few seconds.")
+                } else {
+                    upgraded = result.error ?? L("那台电脑上的 myco 太旧，不会在这里升级：在它上面运行 myco upgrade。", "myco on that computer is too old to upgrade from here: run myco upgrade on it.")
+                }
+                failure = nil
+            } catch {
+                failure = Failure.of(error)
+            }
+            busy = nil
+            await session.refresh()
+        }
     }
 }

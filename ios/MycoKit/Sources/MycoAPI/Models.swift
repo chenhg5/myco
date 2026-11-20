@@ -348,6 +348,8 @@ public struct Project: Codable, Sendable, Hashable, Identifiable {
     @LossyList public var links: [ProjectLink]
     @LossyList public var members: [ProjectMember]
     @LossyList public var docs: [ProjectDoc]
+    /// I may change who is in it and what it may use (its owner, an admin).
+    public var canManage: Bool? = nil
 
     public var id: String { name }
 

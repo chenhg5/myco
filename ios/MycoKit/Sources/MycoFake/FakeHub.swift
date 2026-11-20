@@ -438,6 +438,25 @@ public actor FakeHub: HubAPI {
         }
     }
 
+    // MARK: A project's computers
+
+    private var projectMachineList: [String: Set<String>] = [:]
+
+    public func projectMachines(_ project: String) async throws -> [ProjectMachine] {
+        try await check()
+        guard projectList.contains(where: { $0.name == project }) else {
+            throw HubError(error: "not_found", message: "project \(project) not found", status: 404)
+        }
+        let allowed = projectMachineList[project] ?? []
+        return machines.map { ProjectMachine(id: $0.id, name: $0.name, os: $0.os, online: $0.online, canSpawn: $0.canSpawn, allowed: allowed.contains($0.id)) }
+    }
+
+    public func setProjectMachine(_ project: String, machine: String, allowed: Bool) async throws {
+        try await check()
+        guard machines.contains(where: { $0.id == machine }) else { throw HubError(error: "not_found", message: "machine \(machine) not found", status: 404) }
+        if allowed { projectMachineList[project, default: []].insert(machine) } else { projectMachineList[project]?.remove(machine) }
+    }
+
     // MARK: Superagents
 
     private var superagentName: String?

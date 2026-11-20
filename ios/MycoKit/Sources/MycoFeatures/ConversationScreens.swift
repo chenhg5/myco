@@ -1160,9 +1160,10 @@ struct ConversationBody: View {
 
     private var bottom: some View {
         VStack(spacing: 0) {
-            // My superagent's requests that wait for me, to approve or deny.
-            if !model.readOnly, session.superagent.agent == model.agent {
-                ApprovalStrip(model: session.superagent, name: session.displayName(of: model.agent))
+            // What it asks of me (my superagent, a coordinator wanting a
+            // computer), to approve or deny.
+            if !model.readOnly, session.superagent.agent == model.agent || session.superagent.approvals.contains(where: { $0.agent == model.agent }) {
+                ApprovalStrip(model: session.superagent, agent: model.agent, name: session.displayName(of: model.agent))
                     .padding(.horizontal, Space.page).padding(.top, Space.s)
             }
             // What else it holds, given by others and not done: said here,
@@ -1529,11 +1530,12 @@ private struct PoorNetworkLine: View {
 /// while the conversation is open.
 private struct ApprovalStrip: View {
     let model: SuperagentModel
+    let agent: String
     let name: String
 
     var body: some View {
         VStack(spacing: Space.s) {
-            ForEach(model.approvals) { approval in
+            ForEach(model.approvals.filter { $0.agent == agent }) { approval in
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Image(systemName: "checkmark.shield").font(.footnote).foregroundStyle(MycoColor.amber)

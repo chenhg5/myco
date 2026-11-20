@@ -160,6 +160,16 @@ public struct HubClient: HubAPI {
         return envelope.decisions
     }
 
+    public func projectMachines(_ project: String) async throws -> [ProjectMachine] {
+        struct Envelope: Decodable { @LossyList var machines: [ProjectMachine] }
+        let envelope: Envelope = try await get("/v1/projects/\(Self.segment(project))/machines", timeout: Self.pollTimeout)
+        return envelope.machines
+    }
+
+    public func setProjectMachine(_ project: String, machine: String, allowed: Bool) async throws {
+        _ = try await call(allowed ? "PUT" : "DELETE", "/v1/projects/\(Self.segment(project))/machines/\(Self.segment(machine))")
+    }
+
     public func superagent() async throws -> SuperagentState {
         try await get("/v1/console/superagent", timeout: Self.pollTimeout)
     }
