@@ -345,7 +345,7 @@ struct WorkspaceSheet: View {
     /// one up. Not on workspaces from before superagents.
     @ViewBuilder private var superagentSection: some View {
         let model = session.superagent
-        if model.loaded, !model.unsupported, !inDemo {
+        if model.loaded, !model.unsupported {
             Section {
                 if let agent = model.agent {
                     Button {

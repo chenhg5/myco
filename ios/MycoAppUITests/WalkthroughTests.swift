@@ -501,6 +501,77 @@ final class WalkthroughTests: XCTestCase {
     }
 
     @MainActor
+    func testAWorkflowDecisionIsMadeAndAWorkflowRun() {
+        // From the members page: the row under apps, with what waits for me.
+        let app = launch(["-myco-route", "tab:members"])
+        let entry = app.buttons["members.workflows"]
+        XCTAssertTrue(entry.waitForExistence(timeout: 15))
+        expectation(for: NSPredicate(format: "label CONTAINS %@", "1 decision"), evaluatedWith: entry)
+        waitForExpectations(timeout: 10)
+        entry.tap()
+        let decision = app.descendants(matching: .any)["decision"]
+        XCTAssertTrue(decision.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["合并"].exists && app.buttons["不合并"].exists, "its choices")
+        shot("workflows")
+        // A choice, with a word.
+        let note = app.textFields["decision.note"]
+        note.tap()
+        note.typeText("OK")
+        app.buttons["合并"].tap()
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: decision)
+        waitForExpectations(timeout: 10)
+        // A workflow: its steps; run it with what it asks for.
+        app.buttons.matching(identifier: "workflow.row").firstMatch.tap()
+        let start = app.buttons["workflow.start"]
+        XCTAssertTrue(start.waitForExistence(timeout: 10))
+        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: start)
+        waitForExpectations(timeout: 10)
+        shot("workflow")
+        start.tap()
+        let task = app.textViews["workflow.input.task"].exists ? app.textViews["workflow.input.task"] : app.textFields["workflow.input.task"]
+        XCTAssertTrue(task.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["workflow.run.go"].isEnabled, "what it needs is not filled in yet")
+        task.tap()
+        task.typeText("Add a share button")
+        app.buttons["workflow.run.go"].tap()
+        // The run: going, step by step.
+        let status = app.descendants(matching: .any)["run.status"]
+        XCTAssertTrue(status.waitForExistence(timeout: 10))
+        XCTAssertTrue(status.label.contains("Running"), status.label)
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "run.step").firstMatch.exists)
+        shot("workflow-run")
+        app.buttons["run.cancel"].tap()
+        app.buttons["Cancel the run"].tap()
+        expectation(for: NSPredicate(format: "label CONTAINS %@", "Cancelled"), evaluatedWith: status)
+        waitForExpectations(timeout: 10)
+    }
+
+    @MainActor
+    func testASuperagentIsNamedAndItsRequestApproved() {
+        let app = launch(["-myco-route", "sheet:workspace"])
+        let setup = app.buttons["workspace.superagent.setup"]
+        XCTAssertTrue(setup.waitForExistence(timeout: 15))
+        setup.tap()
+        // One of my agents.
+        let how = app.segmentedControls["superagent.how"]
+        XCTAssertTrue(how.waitForExistence(timeout: 5))
+        shot("superagent-setup")
+        how.buttons["Use one of your agents"].tap()
+        let pick = app.buttons.matching(identifier: "superagent.pick").firstMatch
+        XCTAssertTrue(pick.waitForExistence(timeout: 5))
+        pick.tap()
+        app.buttons["superagent.go"].tap()
+        // Its conversation: what it asks for waits above the input.
+        let approval = app.descendants(matching: .any)["approval"]
+        XCTAssertTrue(approval.waitForExistence(timeout: 20), "its request")
+        XCTAssertTrue(approval.label.contains("旧官网") || app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "旧官网")).firstMatch.exists)
+        shot("superagent-approval")
+        app.buttons["approval.approve"].tap()
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: approval)
+        waitForExpectations(timeout: 10)
+    }
+
+    @MainActor
     func testAnAppMakesAPageThatTalksToTheWorkspace() {
         // From the members page: the row under automations.
         let app = launch(["-myco-route", "tab:members"])

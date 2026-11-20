@@ -106,6 +106,8 @@ struct MycoApp: App {
         // to see what loading looks like on a slow connection.
         let latency = Duration.milliseconds(UserDefaults.standard.integer(forKey: "myco-latency"))
         let hub = FakeHub(scenario: scenario, latency: latency)
+        // (the demo's superagent asks for something once it is named)
+        Task { await hub.setDemoApprovals(true) }
         // `-myco-trouble links`: the demo's first join link fails as a
         // gateway in front of the workspace would, to see what is said.
         if UserDefaults.standard.string(forKey: "myco-trouble") == "links" {

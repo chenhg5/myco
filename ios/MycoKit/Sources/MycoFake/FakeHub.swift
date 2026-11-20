@@ -443,6 +443,13 @@ public actor FakeHub: HubAPI {
     private var superagentName: String?
     private var approvalList: [Approval] = []
     private var tooOldForSuperagents = false
+    /// The demo's superagent asks for something as soon as it is named
+    /// (tests that count requests turn it off).
+    public var demoApprovals = false
+
+    public func setDemoApprovals(_ value: Bool) {
+        demoApprovals = value
+    }
 
     public func setTooOldForSuperagents(_ value: Bool) {
         tooOldForSuperagents = value
@@ -472,6 +479,10 @@ public actor FakeHub: HubAPI {
             for i in approvalList.indices where approvalList[i].status == "pending" { approvalList[i].status = "withdrew" }
         }
         superagentName = agent
+        // (the demo's: once there is one, it has asked for something)
+        if agent != nil, approvalList.isEmpty, demoApprovals {
+            addApproval(what: "删除项目「旧官网」", reason: "它的内容已经合并进 myco-web，留着容易让人找错地方。")
+        }
     }
 
     public func approvals() async throws -> [Approval] {
