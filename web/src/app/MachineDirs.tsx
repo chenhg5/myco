@@ -77,7 +77,9 @@ export function MachineDirs({ hubId, hub, machine, info, onChanged, prefill }: {
         </form>
       ) : route === null && local ? (
         <div className="mdirs-far">
-          <span>{L("这个 App 连不到那台电脑，要在它上面改：", "This App does not reach that computer; change it there:")}</span>
+          <span>{machine.online
+            ? L("它在线，但这项只能在它自己那里改；这个 App 不在它上面，也没用 SSH / WSL 连它。在它上面运行：", "It is online, but this is changed on that computer itself; this App is not on it and has no SSH / WSL link to it. Run there:")
+            : L("要在那台电脑上改，运行：", "Change it on that computer; run there:")}</span>
           <code className="mono">{command(value || "~/code/项目")}</code>
           <CopyButton value={command(value || "~/code/项目")} />
         </div>
@@ -88,8 +90,8 @@ export function MachineDirs({ hubId, hub, machine, info, onChanged, prefill }: {
         {can
           ? L(`在${whereZh}上的 ~/.myco/machine.yaml 里改（spawn.dirs），下一个新建的 agent 就按新的来，不用重启。${homeAll ? "现在整个用户目录都允许。" : ""}`,
             `Changed in ~/.myco/machine.yaml on ${where} (spawn.dirs); the next agent started there follows it, no restart.${homeAll ? " All of home is allowed now." : ""}`)
-          : L("这是那台电脑自己的规定，工作区改不了：在那台电脑上运行上面的命令，或在它的 myco App 里改；用 SSH 或 WSL 连上它之后，这里也能改。",
-            "That computer's own rule; the workspace cannot change it. Run the command there or use its myco app; once this App reaches it over SSH or WSL, it can change it here too.")}
+          : L("「在线」是说它连着工作区；允许哪些文件夹是那台电脑自己的规定，工作区替它改不了，这样别人拿到工作区的权限也放不开你的电脑。在它上面运行上面的命令，或用它上面的 myco App 改（WSL 的话，用同一台 Windows 上的 App）；这个 App 用 SSH 或 WSL 连上它之后，这里也能改。",
+            "Online means it is connected to the workspace; which folders it allows is that computer's own rule, which the workspace cannot change for it, so access to the workspace cannot open up your computer. Run the command there or use the myco app on it (for WSL, the app on the same Windows PC); once this App reaches it over SSH or WSL, it can change it here too.")}
       </p>
     </div>
   );
