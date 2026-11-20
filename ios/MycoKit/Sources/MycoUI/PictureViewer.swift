@@ -28,7 +28,11 @@ struct PictureViewer: View {
 
     var body: some View {
         ZStack {
+            // (named here, not on the whole: a name on the whole would
+            // hide its buttons' own)
             Color.black.opacity(dim).ignoresSafeArea()
+                .accessibilityElement()
+                .accessibilityIdentifier("picture.viewer")
             TabView(selection: $index) {
                 ForEach(urls.indices, id: \.self) { i in
                     ZoomingPicture(url: urls[i], zoomed: i == index ? $zoomed : .constant(false)) {
@@ -63,7 +67,6 @@ struct PictureViewer: View {
             }
         }
         .statusBarHidden(!chrome)
-        .accessibilityIdentifier("picture.viewer")
         .accessibilityAction(.escape) { close() }
     }
 
