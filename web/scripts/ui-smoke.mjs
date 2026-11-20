@@ -242,6 +242,8 @@ function watchPage(page, size, scheme) {
     // On purpose: Claude on this computer cannot sign in until a way is
     // picked (添加 agent: the sign-in card, then it starts).
     if (msg.text().includes("502") && where.includes("/machines/m_studio/spawn")) return;
+    // On purpose: 单聊 · 网络不好 cuts the chat's polls off.
+    if (msg.text().includes("ERR_FAILED") && /\/(exchanges|thread)\b/.test(where)) return;
     addProblem(r, "console", msg.text(), where);
   });
   page.on("pageerror", (err) => {
