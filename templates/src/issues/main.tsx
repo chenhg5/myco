@@ -277,7 +277,9 @@ function App() {
 
       <main className="is-main">
         <header className="is-head">
-          <h1>{title}</h1>
+          {view.kind === "project"
+            ? <h1 className="is-crumb"><button type="button" onClick={() => setView({ kind: "projects" })}>项目</button><ChevronRight className="ico" /><span>{title}</span></h1>
+            : <h1>{title}</h1>}
           {view.kind !== "projects" && <span className="is-count">{shown.length}</span>}
           <span className="top-gap" />
           {view.kind !== "projects" && (

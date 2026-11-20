@@ -4,6 +4,7 @@
 .btn:disabled, .tool:disabled, .icon-btn:disabled { opacity: 0.4; pointer-events: none; }
 kbd { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--faint);
   font: 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.row { display: flex; align-items: center; gap: 8px; }
 .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex: none; }
 
 /* sidebar */
@@ -160,7 +161,8 @@ kbd { display: inline-grid; place-items: center; min-width: 18px; height: 18px; 
 .modal { width: min(640px, 100%); display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; border-radius: 12px; background: var(--menu); box-shadow: var(--shadow); }
 .modal-head { display: flex; align-items: center; gap: 8px; font-size: 12px; }
 .modal-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 6px; }
-.modal-foot .btn kbd { margin-left: 4px; border-color: transparent; background: rgba(255, 255, 255, 0.18); color: inherit; }
+.modal-foot .btn kbd { margin-left: 4px; border-color: transparent; background: color-mix(in srgb, var(--on-accent) 18%, transparent); color: inherit; }
+.modal-head .is-key { min-width: 0; }
 .is-create-title { height: 34px; padding: 0; border: 0; background: none; outline: none; font-size: 18px; font-weight: 600; }
 .is-create-desc { min-height: 80px; padding: 0; border: 0; background: none; outline: none; resize: vertical; font-size: 14px; line-height: 1.6; }
 .is-more { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
@@ -184,3 +186,8 @@ kbd { display: inline-grid; place-items: center; min-width: 18px; height: 18px; 
 .team-pop label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
 .team-pop .inp { width: 100%; }
 .is-team-name::placeholder { color: var(--fg); opacity: 1; }
+.is-crumb { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.is-crumb button { padding: 0; border: 0; background: none; color: var(--muted); font-size: 15px; font-weight: 600; }
+.is-crumb button:hover { color: var(--fg); }
+.is-crumb .ico { color: var(--faint); }
+.is-crumb span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
