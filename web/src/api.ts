@@ -194,6 +194,9 @@ export interface Template {
   /** its icon, SVG markup (hubs from v0.20.7): shown as a mask, tinted */
   icon?: string;
   official?: boolean; can_manage: boolean; guide?: string; permissions?: string[]; export?: string[];
+  /** its screenshots (hubs from v0.21.5): paths in its folder, a dark one
+   *  beside when there is one; a workspace's own list them when got alone */
+  shots?: { src: string; dark?: string }[];
   data?: Record<string, { fields: Record<string, string>; single?: boolean }>;
   versions: { version: string; files: number; size: number; by: string; at: string }[];
   created_at: string; updated_at: string;

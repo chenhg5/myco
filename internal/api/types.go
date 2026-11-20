@@ -1687,11 +1687,22 @@ type Template struct {
 	// Guide is its agent's guide (agent.md): how to fill its data.
 	Guide string `json:"guide,omitempty"`
 	// Official: one of myco's, in every workspace (hubs from v0.20.5).
-	Official  bool              `json:"official,omitempty"`
+	Official bool `json:"official,omitempty"`
+	// Shots are its screenshots (hubs from v0.21.5): pictures in its
+	// folder's shots/, each with its dark one when there is one; fetch them
+	// with GET /v1/templates/{id}/files/{path}. A workspace's own templates
+	// list theirs when got one by one, not in the list.
+	Shots     []TemplateShot    `json:"shots,omitempty"`
 	Versions  []TemplateVersion `json:"versions"`
 	CanManage bool              `json:"can_manage"`
 	CreatedAt time.Time         `json:"created_at"`
 	UpdatedAt time.Time         `json:"updated_at"`
+}
+
+// TemplateShot is one screenshot of a template: paths in its folder.
+type TemplateShot struct {
+	Src  string `json:"src"`
+	Dark string `json:"dark,omitempty"`
 }
 
 // AppSync is what POST /v1/templates/sync found: how many official apps

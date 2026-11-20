@@ -245,6 +245,14 @@ const officialFiles = (name) => {
   return out;
 };
 const templateFiles = new Map();
+// An app's screenshots, as the hub lists them: pictures right in shots/,
+// x.webp with x.dark.webp (undefined when there are none).
+const shotOK = (n) => /^shots\/[^/]+\.(png|jpe?g|webp)$/i.test(n);
+const shotsOf = (names) => {
+  const light = names.filter((n) => shotOK(n) && !/\.dark\.[a-z]+$/i.test(n)).sort();
+  const out = light.map((src) => ({ src, ...(names.includes(src.replace(/(\.[a-z]+)$/i, ".dark$1")) ? { dark: src.replace(/(\.[a-z]+)$/i, ".dark$1") } : {}) }));
+  return out.length ? out : undefined;
+};
 const officialOrder = ["table", "base", "doc", "slides", "code", "issues", "devtools", "todo", "notes", "poll", "ledger", "habit", "whiteboard", "mindmap", "video", "gomoku", "sudoku"];
 const mockTemplates = officialOrder.filter((name) => existsSync(new URL(`${name}/myco.json`, officialRoot))).map((name) => {
   const files = officialFiles(name);
@@ -253,7 +261,7 @@ const mockTemplates = officialOrder.filter((name) => existsSync(new URL(`${name}
   templateFiles.set(id, files);
   return { id, slug: m.id, name: m.name, description: m.description, kind: m.kind, category: m.category, icon: m.icon ? String(files[m.icon] || "") : undefined, version: m.version, publisher: "myco", official: true, can_manage: false,
     data: m.data, permissions: m.permissions, export: m.export, guide: files["agent.md"], versions: [{ version: m.version, files: Object.keys(files).length, size: 40000, by: "myco", at: iso(0) }],
-    created_at: iso(0), updated_at: iso(0) };
+    shots: shotsOf(Object.keys(files)), created_at: iso(0), updated_at: iso(0) };
 });
 {
   const files = { ...tableFiles, "agent.md": kit("agent.md"), "sample.json": kit("sample.json") };
@@ -2033,6 +2041,13 @@ const server = http.createServer(async (req, res) => {
     const t = mockTemplates.find((x) => x.id === decodeURIComponent(parts[4]) || x.slug === decodeURIComponent(parts[4]));
     if (!t) return fail(res, 404, "not_found", `template ${parts[4]} not found`);
     if (parts.length === 5 && method === "GET") return send(res, 200, t);
+    if (parts[5] === "files" && method === "GET") {
+      const name = parts.slice(6).map(decodeURIComponent).join("/");
+      const body = shotOK(name) ? templateFiles.get(t.id)?.[name] : undefined;
+      if (!body) return fail(res, 404, "not_found", `${name} is not a screenshot of ${t.slug}`);
+      res.writeHead(200, { "Content-Type": /\.png$/i.test(name) ? "image/png" : /\.webp$/i.test(name) ? "image/webp" : "image/jpeg", "Cache-Control": "private, max-age=3600" });
+      return res.end(body);
+    }
     if (parts.length === 6 && parts[5] === "use" && method === "POST") {
       const body = (await readBody(req)) || {};
       const files = templateFiles.get(t.id);

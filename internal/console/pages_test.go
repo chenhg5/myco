@@ -262,3 +262,44 @@ func TestLivePageOpensOnAPortOfItsOwn(t *testing.T) {
 		t.Fatalf("again: %v", o2)
 	}
 }
+
+// The App shows an app's screenshots in its new-page dialog: they come
+// through the App's backend, pictures in shots/ only.
+func TestTemplateShotsThroughTheApp(t *testing.T) {
+	r := newRig(t)
+	ctx := context.Background()
+	reg, err := r.admin.Register(ctx, api.RegisterRequest{Name: "maker"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent, _ := client.New(r.hubURL, reg.Token)
+	var buf bytes.Buffer
+	z := zip.NewWriter(&buf)
+	for name, body := range map[string]string{"myco.json": `{"id": "maker/board", "name": "看板", "version": "1.0.0", "kind": "board", "data": {"cards": {"fields": {"title": "text"}}}}`,
+		"index.html": "<h1>看板</h1>", "shots/1.png": "\x89PNG one"} {
+		w, _ := z.Create(name)
+		w.Write([]byte(body))
+	}
+	z.Close()
+	tp, err := agent.PublishTemplate(ctx, bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, h, _ := r.do("POST", "/app/hubs", map[string]string{"name": "Main", "url": r.hubURL, "token": r.consoleToken("t")})
+	hub := h["id"].(string)
+	if code, o, raw := r.do("GET", "/app/hubs/"+hub+"/templates/"+tp.ID, nil); code != 200 || len(o["shots"].([]any)) != 1 {
+		t.Fatalf("template: %d %s", code, raw)
+	}
+	res, err := http.Get(r.app.URL + "/app/hubs/" + hub + "/templates/" + tp.ID + "/files/shots/1.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != 200 || string(b) != "\x89PNG one" || res.Header.Get("Content-Type") != "image/png" {
+		t.Fatalf("shot: %d %q %v", res.StatusCode, b, res.Header)
+	}
+	if code, _, _ := r.do("GET", "/app/hubs/"+hub+"/templates/"+tp.ID+"/files/index.html", nil); code != 404 {
+		t.Fatalf("not a shot: %d", code)
+	}
+}

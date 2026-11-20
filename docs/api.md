@@ -215,7 +215,8 @@ From v0.20.5 ([design](design/templates.md)). A page's data can be **records**: 
 | --- | --- |
 | `POST /v1/templates` | The body is a zip of the folder → the template (`201` new, `200` a new version; the version must be higher). 200 templates, 10 versions each |
 | `GET /v1/templates` | `{templates: [...]}`: `{id, slug, name, description, kind, category, icon (SVG markup: show it as a mask or an image, never as HTML), version, publisher, data, permissions, export, versions, can_manage, created_at, updated_at}` |
-| `GET /v1/templates/{id}` | One, by `tp_…` or its slug (URL-escaped), with `guide` (agent.md) |
+| `GET /v1/templates/{id}` | One, by `tp_…` or its slug (URL-escaped), with `guide` (agent.md) and, from v0.21.5, `shots`: its screenshots, `[{src, dark?}]` (paths of pictures in its folder's `shots/`: `x.webp` and its dark `x.dark.webp`; png, jpg or webp, up to 8). The list (`GET /v1/templates`) has them for myco's own apps only |
+| `GET /v1/templates/{id}/files/{path}` | From v0.21.5: one of its screenshots (`shots/…` pictures only; anything else is `404`), with its image type, `X-Content-Type-Options: nosniff` and `Cache-Control: private, max-age=3600`. Older hubs answer 404 |
 | `DELETE /v1/templates/{id}` | `204`; pages made from it stay |
 | `POST /v1/templates/sync` | From v0.20.7: fetch myco's official apps now (the hub does once a day; at most once a minute) → `{apps, updated?, source, fetched_at?, error?}` |
 | `POST /v1/pages/{id}/upgrade` | From v0.20.7: a page made from an app takes the app's newest version (new files, new data structure; its records stay) → the page; `409` when it is already at it. A page's `template.latest` says when there is one |

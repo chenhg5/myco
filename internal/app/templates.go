@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"path"
 	"sort"
 	"strings"
 	"sync"
@@ -97,7 +98,11 @@ func (s *TemplateService) officialView(o *OfficialTemplate) *TemplateView {
 	if m.Icon != "" {
 		t.Icon = string(o.Files[m.Icon])
 	}
-	return &TemplateView{Template: t, Manifest: m, Guide: string(o.Files[m.Agent]),
+	names := make([]string, 0, len(o.Files))
+	for n := range o.Files {
+		names = append(names, n)
+	}
+	return &TemplateView{Template: t, Manifest: m, Guide: string(o.Files[m.Agent]), Shots: shotsOf(names),
 		Versions: []*domain.TemplateVersion{{Template: t.ID, Version: m.Version, Size: size, Files: len(o.Files), By: "myco"}}}
 }
 
@@ -113,6 +118,61 @@ type TemplateView struct {
 	Versions []*domain.TemplateVersion
 	Manifest *domain.Manifest
 	Guide    string
+	// Shots are its screenshots (shots/ in its folder), for people to see
+	// what it looks like before they make one.
+	Shots []Shot
+}
+
+// Shot is one screenshot of a template: a picture (Src) and, when the
+// folder has one, the same in the dark (Dark). Both are paths in the
+// template's folder: shots/1.webp and shots/1.dark.webp.
+type Shot struct{ Src, Dark string }
+
+// shotTypes are the pictures a template may show of itself.
+var shotTypes = map[string]string{".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}
+
+const (
+	maxShots    = 8
+	maxShotSize = 2 << 20
+)
+
+// ShotType is the content type of a template's screenshot, "" when the
+// path is not one (only pictures right in shots/ are).
+func ShotType(name string) string {
+	if !strings.HasPrefix(name, "shots/") || strings.Count(name, "/") != 1 || strings.Contains(name, "..") {
+		return ""
+	}
+	return shotTypes[strings.ToLower(path.Ext(name))]
+}
+
+// shotsOf pairs a folder's screenshots: x.webp with x.dark.webp, in the
+// order of their names (1, 2, … or anything that sorts).
+func shotsOf(names []string) []Shot {
+	light, dark := map[string]string{}, map[string]string{}
+	for _, n := range names {
+		if ShotType(n) == "" {
+			continue
+		}
+		base := strings.TrimSuffix(n, path.Ext(n))
+		if strings.HasSuffix(base, ".dark") {
+			dark[strings.TrimSuffix(base, ".dark")] = n
+		} else {
+			light[base] = n
+		}
+	}
+	keys := make([]string, 0, len(light))
+	for k := range light {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var out []Shot
+	for _, k := range keys {
+		if len(out) == maxShots {
+			break
+		}
+		out = append(out, Shot{Src: light[k], Dark: dark[k]})
+	}
+	return out
 }
 
 func (s *TemplateService) manages(by Actor, t *domain.Template) bool {
@@ -185,7 +245,60 @@ func (s *TemplateService) Get(ctx context.Context, by Actor, idOrSlug string) (*
 	if err != nil {
 		return nil, err
 	}
-	return s.view(ctx, t)
+	tv, err := s.view(ctx, t)
+	if err != nil || len(tv.Versions) == 0 {
+		return tv, err
+	}
+	// (a workspace's own template: its screenshots, from its newest version)
+	if z, closer, err := s.pages.openZip(ctx, tv.Versions[0].Blob); err == nil {
+		names := make([]string, 0, len(z.File))
+		for _, f := range z.File {
+			names = append(names, f.Name)
+		}
+		closer()
+		tv.Shots = shotsOf(names)
+	}
+	return tv, nil
+}
+
+// Shot returns one of a template's screenshots (its newest version's) and
+// its content type. Anyone who sees the library may look.
+func (s *TemplateService) Shot(ctx context.Context, by Actor, idOrSlug, name string) ([]byte, string, error) {
+	typ := ShotType(name)
+	if typ == "" {
+		return nil, "", domain.Errf(domain.CodeNotFound, "%s is not a screenshot (pictures in shots/ only)", name)
+	}
+	if o := s.officialOf(idOrSlug); o != nil {
+		b, ok := o.Files[name]
+		if !ok {
+			return nil, "", domain.Errf(domain.CodeNotFound, "%s has no %s", o.Manifest.ID, name)
+		}
+		return b, typ, nil
+	}
+	t, err := s.find(ctx, idOrSlug)
+	if err != nil {
+		return nil, "", err
+	}
+	vs, err := s.repo.Versions(ctx, t.ID)
+	if err != nil {
+		return nil, "", err
+	}
+	if len(vs) == 0 {
+		return nil, "", domain.Errf(domain.CodeNotFound, "%s has no version", t.Slug)
+	}
+	z, closer, err := s.pages.openZip(ctx, vs[0].Blob)
+	if err != nil {
+		return nil, "", err
+	}
+	defer closer()
+	b, ok, err := readZipFile(z, name, maxShotSize)
+	if err != nil {
+		return nil, "", err
+	}
+	if !ok {
+		return nil, "", domain.Errf(domain.CodeNotFound, "%s has no %s", t.Slug, name)
+	}
+	return b, typ, nil
 }
 
 func readZipFile(z *zip.Reader, name string, max int64) ([]byte, bool, error) {

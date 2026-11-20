@@ -101,6 +101,27 @@ func (c *Client) Template(ctx context.Context, id string) (*api.Template, error)
 	return &out, c.do(ctx, http.MethodGet, "/v1/templates/"+esc(id), nil, nil, &out)
 }
 
+// TemplateShot opens one of a template's screenshots (hubs from v0.21.5;
+// older ones answer 404). The caller closes the body.
+func (c *Client) TemplateShot(ctx context.Context, id, path string) (*http.Response, error) {
+	u := c.urlFor("/v1/templates/" + esc(id) + "/files/" + escPath(path))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	c.auth(req)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, &Error{Code: CodeUnavailable, Message: err.Error(), Retryable: true}
+	}
+	if resp.StatusCode >= 300 {
+		defer resp.Body.Close()
+		data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		return nil, decodeError(resp.StatusCode, data)
+	}
+	return resp, nil
+}
+
 // PublishTemplate uploads a zip of a template's folder.
 func (c *Client) PublishTemplate(ctx context.Context, zip io.Reader, size int64) (*api.Template, error) {
 	u := c.urlFor("/v1/templates")

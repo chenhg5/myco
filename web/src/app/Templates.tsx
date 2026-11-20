@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { IntroCard, introOf } from "@/app/Onboard";
 import { FileText, KanbanSquare, LayoutTemplate, Plus, Presentation, RefreshCw, Search, Sparkles, Table2 } from "lucide-react";
 import { ApiError, appApi } from "@/appapi";
@@ -213,7 +214,8 @@ function UseTemplate({ hubId, template, projects, onClose, onMade }: {
   };
   return (
     <Modal open={!!template} onOpenChange={(o) => !o && !busy && onClose()} title={template ? L(`新建一份${template.name}`, `New ${template.name}`) : ""}
-      description={template?.description}>
+      description={template?.description} wide className="tp-use">
+      {template && <Shots hubId={hubId} template={template} />}
       <form onSubmit={make} className="pin-edit">
         <label className="app-field">
           <span className="app-field-label">{L("叫什么", "Name")}</span>
@@ -237,5 +239,65 @@ function UseTemplate({ hubId, template, projects, onClose, onMade }: {
         </div>
       </form>
     </Modal>
+  );
+}
+
+/** Whether the App is dark now (it can change while a dialog is open). */
+function useDark() {
+  const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
+  useEffect(() => {
+    const o = new MutationObserver(() => setDark(document.documentElement.classList.contains("dark")));
+    o.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => o.disconnect();
+  }, []);
+  return dark;
+}
+
+/** What an app looks like: its screenshots (the dark ones in the dark),
+ *  one at a time, with dots and arrows when there are more. Nothing when
+ *  it has none (an older hub, or an app made without). */
+function Shots({ hubId, template }: { hubId: string; template: Template }) {
+  const [shots, setShots] = useState(template.shots || []);
+  const [i, setI] = useState(0);
+  const [ready, setReady] = useState<Record<string, boolean>>({});
+  const dark = useDark();
+  useEffect(() => {
+    setI(0);
+    setShots(template.shots || []);
+    // (a workspace's own app lists its screenshots when got on its own)
+    if (template.shots || template.official) return;
+    let live = true;
+    appApi.template(hubId, template.id).then((t) => { if (live) setShots(t.shots || []); }, () => undefined);
+    return () => { live = false; };
+  }, [hubId, template.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const url = (s: { src: string; dark?: string }) => appApi.templateShotURL(hubId, template.id, dark && s.dark ? s.dark : s.src);
+  // the others load while the first is looked at
+  useEffect(() => { for (const s of shots) { const im = new Image(); im.src = url(s); } }, [shots, dark]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!shots.length) return null;
+  const cur = shots[Math.min(i, shots.length - 1)];
+  const src = url(cur);
+  const go = (d: number) => setI((x) => (x + d + shots.length) % shots.length);
+  return (
+    <div className="tp-shots" data-testid="template-shots">
+      <div className={cn("tp-shot", !ready[src] && "is-loading")}
+        onKeyDown={(e) => { if (e.key === "ArrowLeft") { e.preventDefault(); go(-1); } else if (e.key === "ArrowRight") { e.preventDefault(); go(1); } }}>
+        <img key={src} src={src} alt={L(`${template.name}的样子（第 ${i + 1} 张）`, `${template.name}, screenshot ${i + 1}`)} draggable={false}
+          onLoad={() => setReady((r) => ({ ...r, [src]: true }))} onError={() => setReady((r) => ({ ...r, [src]: true }))} />
+        {shots.length > 1 && (
+          <>
+            <button type="button" className="tp-shot-nav is-prev" aria-label={L("上一张", "Previous")} onClick={() => go(-1)}><ChevronLeft /></button>
+            <button type="button" className="tp-shot-nav is-next" aria-label={L("下一张", "Next")} onClick={() => go(1)}><ChevronRight /></button>
+          </>
+        )}
+      </div>
+      {shots.length > 1 && (
+        <div className="tp-shot-dots" role="tablist" aria-label={L("截图", "Screenshots")}>
+          {shots.map((s, k) => (
+            <button key={s.src} type="button" role="tab" aria-selected={k === i} aria-label={L(`第 ${k + 1} 张`, `Screenshot ${k + 1}`)}
+              className={cn("tp-shot-dot", k === i && "is-on")} onClick={() => setI(k)} />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

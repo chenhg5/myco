@@ -30,6 +30,10 @@ func TestOfficialTemplatesAreWhole(t *testing.T) {
 				t.Errorf("%s has no %s", m.ID, f)
 			}
 		}
+		// The App shows what it looks like: a screenshot, light and dark.
+		if len(o.Files["shots/1.webp"]) == 0 || len(o.Files["shots/1.dark.webp"]) == 0 {
+			t.Errorf("%s has no screenshots (node templates/shots.mjs %s)", m.ID, strings.TrimPrefix(m.ID, "myco/"))
+		}
 		// Its page loads what is in it, nothing from the internet.
 		page := string(o.Files[m.Entry])
 		if !strings.Contains(page, "<script") || strings.Contains(page, "http://") || strings.Contains(page, "https://") {

@@ -9239,3 +9239,23 @@ html.os-other ::-webkit-scrollbar-thumb:hover, html.os-other ::-webkit-scrollbar
 .pcd-tools[open] .pcd-tools-go { transform: rotate(90deg); }
 .pcd-tools > summary:hover .pcd-tools-go { color: var(--fg); }
 .pcd-tools > .app-tool-inventory { margin-top: 10px; }
+
+/* An app's screenshots in its new-page dialog (Templates.tsx): one picture
+   at a time, 16:10, a thin line and a soft shadow; dots and arrows when
+   there are more. The dark ones in the dark. */
+.app-modal.tp-use { max-width: 620px; }
+.tp-shots { display: flex; flex-direction: column; align-items: center; gap: 10px; margin: 2px 0 6px; }
+.tp-shot { position: relative; width: 100%; aspect-ratio: 16 / 10; border-radius: 10px; overflow: hidden; background: var(--nav-hover);
+  box-shadow: 0 0 0 1px var(--line), 0 6px 20px color-mix(in srgb, var(--fg) 10%, transparent); }
+.tp-shot img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: top left; }
+.tp-shot.is-loading img { visibility: hidden; }
+.tp-shot-nav { position: absolute; top: 50%; display: grid; place-items: center; width: 30px; height: 30px; margin-top: -15px; padding: 0; border: 0; border-radius: 999px;
+  background: color-mix(in srgb, var(--card) 88%, transparent); box-shadow: 0 0 0 1px var(--line), var(--pop-shadow); color: var(--fg); opacity: 0; }
+.tp-shot-nav svg { width: 16px; height: 16px; }
+.tp-shot-nav.is-prev { left: 10px; }
+.tp-shot-nav.is-next { right: 10px; }
+.tp-shot:hover .tp-shot-nav, .tp-shot-nav:focus-visible { opacity: 1; }
+.tp-shot-dots { display: flex; gap: 6px; }
+.tp-shot-dot { width: 6px; height: 6px; padding: 0; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--fg) 22%, transparent); }
+.tp-shot-dot.is-on { width: 18px; background: var(--fg); }
+@media (pointer: coarse) { .tp-shot-nav { opacity: 1; } .tp-shot-dot { width: 8px; height: 8px; } .tp-shot-dot.is-on { width: 22px; } }

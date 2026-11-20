@@ -49,6 +49,7 @@ func (s *Server) pageDataRoutes(m *http.ServeMux) {
 	m.HandleFunc("POST /v1/templates", s.templateCaller(s.publishTemplate))
 	m.HandleFunc("POST /v1/templates/sync", s.templateCaller(s.syncApps))
 	m.HandleFunc("GET /v1/templates/{id}", s.templateCaller(s.getTemplate))
+	m.HandleFunc("GET /v1/templates/{id}/files/{path...}", s.templateCaller(s.templateShot))
 	m.HandleFunc("DELETE /v1/templates/{id}", s.templateCaller(s.deleteTemplate))
 	m.HandleFunc("POST /v1/templates/{id}/use", s.templateCaller(s.useTemplate))
 	m.HandleFunc("POST /v1/pages/{id}/upgrade", s.pageCaller(s.upgradePage))
@@ -233,6 +234,9 @@ func (s *Server) templateDTO(by app.Actor, tv *app.TemplateView) api.Template {
 		out.Data, out.Permissions, out.Export = collectionsDTO(tv.Manifest.Data), tv.Manifest.Permissions, tv.Manifest.Export
 		out.Category = tv.Manifest.Category
 	}
+	for _, sh := range tv.Shots {
+		out.Shots = append(out.Shots, api.TemplateShot{Src: sh.Src, Dark: sh.Dark})
+	}
 	for _, v := range tv.Versions {
 		out.Versions = append(out.Versions, api.TemplateVersion{Version: v.Version, Files: v.Files, Size: v.Size, By: v.By, At: v.At})
 	}
@@ -261,6 +265,22 @@ func (s *Server) getTemplate(w http.ResponseWriter, r *http.Request, c pageCall)
 		return
 	}
 	writeJSON(w, http.StatusOK, s.templateDTO(c.by, tv))
+}
+
+// templateShot: GET /v1/templates/{id}/files/{path}, one of a template's
+// screenshots (pictures in shots/; nothing else of its folder).
+func (s *Server) templateShot(w http.ResponseWriter, r *http.Request, c pageCall) {
+	b, typ, err := s.templates.Shot(r.Context(), c.by, r.PathValue("id"), r.PathValue("path"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	h := w.Header()
+	h.Set("Content-Type", typ)
+	h.Set("X-Content-Type-Options", "nosniff")
+	h.Set("Content-Security-Policy", "default-src 'none'; sandbox")
+	h.Set("Cache-Control", "private, max-age=3600")
+	w.Write(b)
 }
 
 // publishTemplate: POST /v1/templates; the body is a zip of the template's
