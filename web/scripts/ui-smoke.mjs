@@ -1483,7 +1483,7 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".app-page").first().waitFor({ timeout: 20_000 });
       await settle(page);
       await shot(page, size, scheme, "project-notes");
-      await clickVisible(page, page.getByRole("button", { name: "返回项目" }));
+      await navBackClick(page);
       await page.locator(".sp-home").waitFor({ timeout: 10_000 });
     });
 
