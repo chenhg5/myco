@@ -55,3 +55,12 @@ func capture(context.Context, *Env, string, int, *Region) (bool, error) {
 }
 
 func exeNames(p string) []string { return []string{p} }
+
+func usage(context.Context, *Env) (Usage, error)    { return Usage{}, unsupported("system.usage") }
+func apps(context.Context, *Env) ([]AppInfo, error) { return nil, unsupported("system.apps") }
+func openSettings(*Env, string) error               { return unsupported("system.settings") }
+func thumbnail(context.Context, *Env, string, int) ([]byte, error) {
+	return nil, unsupported("fs.thumbnail")
+}
+func dialogMissing(*Env) string                              { return "not available on this system" }
+func dialog(context.Context, *Env, Dialog) ([]string, error) { return nil, unsupported("fs.pick") }

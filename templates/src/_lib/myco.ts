@@ -38,8 +38,20 @@ export interface OSJob<T> {
 }
 
 export type OSEntry = { name: string; path: string; type: "file" | "dir" | "link" | "other"; size: number; modified: number; mode: string; hidden?: boolean; target?: string };
-export type OSDisk = { mount: string; device?: string; fs?: string; label?: string; total: number; free: number; available: number; removable?: boolean; network?: boolean; read_only?: boolean };
-export type OSScanNode = { path: string; name: string; dir: boolean; size: number; disk: number; files: number; modified?: number; children?: OSScanNode[]; more?: number };
+/** scan_path: where to scan to see its files when not mount (macOS: the startup disk's Data volume). */
+export type OSDisk = { mount: string; device?: string; fs?: string; label?: string; total: number; free: number; available: number; scan_path?: string; removable?: boolean; network?: boolean; read_only?: boolean };
+/** A folder or file in a scan; children largest first (by disk), smaller ones folded into more*. */
+export type OSScanNode = {
+  path: string; name: string; dir: boolean; size: number; disk: number; files: number; modified?: number; children?: OSScanNode[];
+  more?: number; more_size?: number; more_disk?: number; more_files?: number; unreadable?: boolean;
+};
+export type OSScan = {
+  roots: OSScanNode[]; largest: { path: string; size: number; disk: number; modified: number }[];
+  files: number; dirs: number; bytes: number; disk: number; skipped: number; skipped_paths: string[]; ms: number;
+};
+export type OSApp = { name: string; id?: string; version?: string; path?: string; publisher?: string; size?: number; modified?: number; system?: boolean };
+export type OSSettingsPane = "full_disk" | "screen_recording" | "accessibility" | "notifications" | "privacy" | "storage" | "network" | "display" | "sound" | "bluetooth";
+export type OSImage = { type: string; width: number; height: number; base64: string };
 export type OSRun = { code: number; stdout: string; stderr: string; stdout_encoding?: "base64"; stderr_encoding?: "base64"; timed_out?: boolean; truncated?: boolean; ms: number };
 type ExecArgs = { argv?: string[]; shell?: string; cwd?: string; env?: Record<string, string>; stdin?: string; stdin_encoding?: "base64"; timeout_ms?: number; max_output?: number };
 type Paths = { path?: string; paths?: string[] };
@@ -57,6 +69,12 @@ export interface MycoOS {
     info(): Promise<{ os: string; name: string; version: string; arch: string; model?: string; hostname: string; user: string; home: string; cpus: number; cpu_model?: string; memory: number; uptime: number }>;
     disks(): Promise<OSDisk[]>;
     processes(): Promise<{ pid: number; ppid: number; name: string; path?: string; user?: string; cpu: number; memory: number }[]>;
+    /** CPU (percent of all cores), memory, load; takes a short sample (macOS about a second). */
+    usage(): Promise<{ cpu: number; memory_total: number; memory_used: number; memory_available: number; load?: number[] }>;
+    /** Installed apps; size: true adds up each one's files (seconds). */
+    apps(a?: { size?: boolean }): Promise<OSApp[]>;
+    /** Opens a page of the system's settings (to grant 完全磁盘访问, 屏幕录制…). */
+    settings(a: { pane: OSSettingsPane }): Promise<true>;
   };
   process: { kill(a: { pid: number; force?: boolean }): Promise<true> };
   fs: {
@@ -72,9 +90,17 @@ export interface MycoOS {
     copy(a: { from: string; to: string; overwrite?: boolean }): Promise<OSEntry>;
     delete(a: Paths & { recursive?: boolean }): Promise<Batch>;
     trash(a: Paths): Promise<Batch>;
-    scan(a: Paths & { depth?: number; top?: number; min_size?: number; per_level?: number; one_filesystem?: boolean }): OSJob<{
-      roots: OSScanNode[]; largest: { path: string; size: number; modified: number }[]; files: number; dirs: number; bytes: number; skipped: number; skipped_paths: string[]; ms: number;
-    }>;
+    /** By size; min_fraction (0.001 = 0.1%) folds what is smaller into "more", so a whole disk stays small. */
+    scan(a: Paths & { depth?: number; top?: number; min_size?: number; min_fraction?: number; per_level?: number; one_filesystem?: boolean }): OSJob<OSScan>;
+    /** Events "match" (OSEntry[]) and "progress" {scanned, found}. name: a part of the name, or a pattern (report*.pdf). */
+    search(a: Paths & { name?: string; ext?: string[]; type?: "file" | "dir" | "any"; min_size?: number; max_size?: number; modified_after?: number; modified_before?: number; hidden?: boolean; limit?: number }): OSJob<{ matches: OSEntry[]; scanned: number; truncated: boolean }>;
+    /** Runs until cancelled; events "ready" and "change" ({type: created | modified | removed, path, dir?, size?}[]). */
+    watch(a: { path: string; recursive?: boolean; interval_ms?: number; max_entries?: number }): OSJob<{ stopped: boolean }>;
+    thumbnail(a: { path: string; size?: number; format?: "png" | "jpeg" }): Promise<OSImage>;
+    /** The system's open dialog; err.code "cancelled" when closed. */
+    pick(a?: { title?: string; multiple?: boolean; folders?: boolean; types?: string[]; folder?: string }): Promise<{ paths: string[] }>;
+    /** The system's save dialog: where to write (then fs.write it). */
+    saveAs(a?: { title?: string; name?: string; folder?: string }): Promise<{ path: string }>;
     reveal(a: { path: string }): Promise<true>;
     open(a: { path: string; app?: string }): Promise<true>;
   };
@@ -86,7 +112,7 @@ export interface MycoOS {
   clipboard: { read(): Promise<{ text: string }>; write(a: { text: string }): Promise<true> };
   notify(a: { title?: string; body?: string; subtitle?: string; sound?: boolean }): Promise<true>;
   screen: {
-    capture(a?: { display?: number; region?: { x: number; y: number; width: number; height: number }; format?: "png" | "jpeg"; quality?: number }): Promise<{ type: string; width: number; height: number; bytes: number; base64: string }>;
+    capture(a?: { display?: number; region?: { x: number; y: number; width: number; height: number }; format?: "png" | "jpeg"; quality?: number }): Promise<OSImage & { bytes: number }>;
   };
   net: {
     fetch(a: { url: string; method?: string; headers?: Record<string, string>; body?: string; body_encoding?: "base64"; response?: "auto" | "text" | "base64"; timeout_ms?: number; max_bytes?: number; redirect?: boolean }): Promise<{

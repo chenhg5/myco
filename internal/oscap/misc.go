@@ -33,11 +33,16 @@ func init() {
 
 // runOut runs a helper program and returns its output (stderr in the error).
 func runOut(ctx context.Context, env *Env, stdin []byte, extraEnv map[string]string, argv ...string) ([]byte, error) {
+	return runOutFor(ctx, env, 30*time.Second, stdin, extraEnv, argv...)
+}
+
+// runOutFor is runOut with its own time limit (a dialog waits for the person).
+func runOutFor(ctx context.Context, env *Env, limit time.Duration, stdin []byte, extraEnv map[string]string, argv ...string) ([]byte, error) {
 	prog, err := env.LookPath(argv[0])
 	if err != nil {
 		return nil, errf(CodeUnsupported, "%s is not installed", argv[0])
 	}
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, limit)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, prog, argv[1:]...)
 	cmd.Env = env.Environ(extraEnv)

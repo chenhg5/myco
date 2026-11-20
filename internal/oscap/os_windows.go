@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -399,4 +400,153 @@ func exeNames(p string) []string {
 		}
 	}
 	return out
+}
+
+var procGetSystemTimes = kernel32.NewProc("GetSystemTimes")
+
+func systemTimes() (idle, total uint64, ok bool) {
+	var i, k, u windows.Filetime
+	if r, _, _ := procGetSystemTimes.Call(uintptr(unsafe.Pointer(&i)), uintptr(unsafe.Pointer(&k)), uintptr(unsafe.Pointer(&u))); r == 0 {
+		return 0, 0, false
+	}
+	ft := func(f windows.Filetime) uint64 { return uint64(f.HighDateTime)<<32 | uint64(f.LowDateTime) }
+	// (kernel time includes idle time)
+	return ft(i), ft(k) + ft(u), true
+}
+
+// usage: GetSystemTimes sampled twice, GlobalMemoryStatusEx.
+func usage(ctx context.Context, _ *Env) (Usage, error) {
+	u := Usage{}
+	if i1, t1, ok := systemTimes(); ok {
+		select {
+		case <-time.After(300 * time.Millisecond):
+		case <-ctx.Done():
+			return u, ctx.Err()
+		}
+		if i2, t2, ok := systemTimes(); ok && t2 > t1 {
+			u.CPU = 100 * (1 - float64(i2-i1)/float64(t2-t1))
+		}
+	}
+	var m memoryStatusEx
+	m.Length = uint32(unsafe.Sizeof(m))
+	if r, _, _ := procGlobalMemoryStatusEx.Call(uintptr(unsafe.Pointer(&m))); r != 0 {
+		u.MemoryTotal, u.MemoryAvailable = m.TotalPhys, m.AvailPhys
+		u.MemoryUsed = m.TotalPhys - m.AvailPhys
+	}
+	return u, nil
+}
+
+// apps: what Settings › Apps lists (the Uninstall keys, for the machine
+// and for this person).
+func apps(ctx context.Context, _ *Env) ([]AppInfo, error) {
+	var out []AppInfo
+	seen := map[string]bool{}
+	for _, src := range []struct {
+		root registry.Key
+		path string
+	}{
+		{registry.LOCAL_MACHINE, `SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall`},
+		{registry.LOCAL_MACHINE, `SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall`},
+		{registry.CURRENT_USER, `SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall`},
+	} {
+		k, err := registry.OpenKey(src.root, src.path, registry.ENUMERATE_SUB_KEYS)
+		if err != nil {
+			continue
+		}
+		names, _ := k.ReadSubKeyNames(-1)
+		k.Close()
+		for _, n := range names {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			sk, err := registry.OpenKey(src.root, src.path+`\`+n, registry.QUERY_VALUE)
+			if err != nil {
+				continue
+			}
+			str := func(name string) string { v, _, _ := sk.GetStringValue(name); return v }
+			a := AppInfo{Name: str("DisplayName"), ID: n, Version: str("DisplayVersion"), Publisher: str("Publisher"), Path: str("InstallLocation")}
+			if kb, _, err := sk.GetIntegerValue("EstimatedSize"); err == nil {
+				a.Size = int64(kb) * 1024
+			}
+			sysComp, _, _ := sk.GetIntegerValue("SystemComponent")
+			parent := str("ParentKeyName")
+			sk.Close()
+			if a.Name == "" || sysComp == 1 || parent != "" || seen[a.Name+a.Version] {
+				continue
+			}
+			seen[a.Name+a.Version] = true
+			out = append(out, a)
+		}
+	}
+	return out, nil
+}
+
+var settingsURIs = map[string]string{
+	"full_disk": "ms-settings:privacy-broadfilesystemaccess", "screen_recording": "ms-settings:privacy-graphicsCaptureProgrammatic",
+	"accessibility": "ms-settings:easeofaccess", "privacy": "ms-settings:privacy", "notifications": "ms-settings:notifications",
+	"storage": "ms-settings:storagesense", "network": "ms-settings:network-status", "display": "ms-settings:display",
+	"sound": "ms-settings:sound", "bluetooth": "ms-settings:bluetooth",
+}
+
+func openSettings(_ *Env, pane string) error {
+	cmd := exec.Command("explorer.exe", settingsURIs[pane])
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go func() { _ = cmd.Wait() }() // (explorer exits 1 even when it worked)
+	return nil
+}
+
+func thumbnail(context.Context, *Env, string, int) ([]byte, error) {
+	return nil, errf(CodeUnsupported, "on Windows only pictures (png, jpeg, gif) have thumbnails for now")
+}
+
+func dialogMissing(*Env) string { return "" }
+
+// dialog: Windows Forms' dialogs, on top, from PowerShell.
+func dialog(ctx context.Context, env *Env, d Dialog) ([]string, error) {
+	var filter string
+	if len(d.Types) > 0 {
+		var pats []string
+		for _, t := range d.Types {
+			pats = append(pats, "*."+strings.TrimPrefix(t, "."))
+		}
+		filter = strings.Join(pats, ";")
+	}
+	in, _ := json.Marshal(map[string]any{"title": d.Title, "multiple": d.Multiple, "folders": d.Folders, "save": d.save, "name": d.Name, "folder": d.Folder, "filter": filter})
+	script := `[Console]::OutputEncoding=[Text.Encoding]::UTF8; [Console]::InputEncoding=[Text.Encoding]::UTF8; $ErrorActionPreference='Stop'
+$a = [Console]::In.ReadToEnd() | ConvertFrom-Json
+Add-Type -AssemblyName System.Windows.Forms
+$owner = New-Object System.Windows.Forms.Form -Property @{ TopMost = $true; ShowInTaskbar = $false; WindowState = 'Minimized' }
+if ($a.folders) {
+  $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
+  if ($a.title) { $dlg.Description = $a.title }
+  if ($a.folder) { $dlg.SelectedPath = $a.folder }
+  if ($dlg.ShowDialog($owner) -eq 'OK') { $dlg.SelectedPath }
+} elseif ($a.save) {
+  $dlg = New-Object System.Windows.Forms.SaveFileDialog
+  if ($a.title) { $dlg.Title = $a.title }
+  if ($a.folder) { $dlg.InitialDirectory = $a.folder }
+  if ($a.name) { $dlg.FileName = $a.name }
+  if ($a.filter) { $dlg.Filter = "$($a.filter)|$($a.filter)" }
+  if ($dlg.ShowDialog($owner) -eq 'OK') { $dlg.FileName }
+} else {
+  $dlg = New-Object System.Windows.Forms.OpenFileDialog
+  if ($a.title) { $dlg.Title = $a.title }
+  if ($a.folder) { $dlg.InitialDirectory = $a.folder }
+  if ($a.filter) { $dlg.Filter = "$($a.filter)|$($a.filter)" }
+  $dlg.Multiselect = [bool]$a.multiple
+  if ($dlg.ShowDialog($owner) -eq 'OK') { $dlg.FileNames }
+}`
+	out, err := runOutFor(ctx, env, 30*time.Minute, in, nil, "powershell.exe", "-NoProfile", "-NonInteractive", "-STA", "-ExecutionPolicy", "Bypass", "-Command", script)
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	for _, l := range strings.Split(strings.ReplaceAll(strings.TrimSpace(string(out)), "\r", ""), "\n") {
+		if l = strings.TrimSpace(l); l != "" {
+			paths = append(paths, l)
+		}
+	}
+	return paths, nil
 }

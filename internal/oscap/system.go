@@ -64,6 +64,9 @@ type Disk struct {
 	Total     uint64 `json:"total"`
 	Free      uint64 `json:"free"`
 	Available uint64 `json:"available"`
+	// ScanPath: where to scan to see what is on it, when not Mount (macOS:
+	// the startup disk's files are on its Data volume).
+	ScanPath  string `json:"scan_path,omitempty"`
 	Removable bool   `json:"removable,omitempty"`
 	Network   bool   `json:"network,omitempty"`
 	ReadOnly  bool   `json:"read_only,omitempty"`
