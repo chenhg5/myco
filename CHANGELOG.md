@@ -4,6 +4,20 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.21.7
+
+- **New official app: Disk Cleanup (空间清理)**, after DaisyDisk: your disks with their free room, one click to scan (or only your home folder, or a folder you pick), a map of rings beside a list of what takes the room, largest first, and a basket at the bottom for what to clean; it goes to the trash, so it can be put back. The scan keeps going when the page panel is tucked away, and you can watch it fill.
+- **Apps can use the computer the App runs on** (`myco.os`): system information and disks, processes, files and the trash, a scan of folders by size, commands, the clipboard, notifications and screenshots. Only pages opened in the App on that same computer can, and each call is logged to `~/.myco/logs/app-os.jsonl`. There are no permission prompts yet: open only apps you trust.
+- **English first**: the install guide, the agent setup guide and the other docs are in English (the Chinese install guide is `INSTALL.zh-CN.md`), and the release notes are in English and Chinese. The pages a join link or an App link opens are in English, or Chinese when your browser prefers it, and the sentence to give an AI session is "Join myco: <link>".
+- The sentence the App gives your agent when something fails points to the guide's "Troubleshooting" section.
+
+**中文**
+
+- **新的官方应用：空间清理**（像 DaisyDisk）：列出各个磁盘和剩余空间，一键扫描（或只扫用户目录、选一个文件夹），左边环形图、右边按大小排的清单，底部一个待清理的篮子；清理是移到废纸篓，可以放回。收起网页面板时扫描不会停，扫描过程看得见。
+- **应用可以使用 App 所在的这台电脑**（`myco.os`）：系统信息和磁盘、进程、文件和废纸篓、按大小扫描文件夹、运行命令、剪贴板、通知、截图。只有在这台电脑的 App 里打开的网页能用，每次调用都记在 `~/.myco/logs/app-os.jsonl`。目前还没有授权弹窗：只打开你信得过的应用。
+- **以英文为主**：安装指南、给 agent 的安装指南和其他文档改成英文（中文安装指南是 `INSTALL.zh-CN.md`），发版说明中英双语。入网链接和 App 链接打开的网页默认英文，浏览器偏好中文时显示中文；给 AI 会话的那句话是「Join myco: <链接>」。
+- App 出错时让你发给 agent 的那句话，指向安装指南的「Troubleshooting」一节。
+
 ## v0.21.6
 
 - **The ⌘⇧Space quick panel works now**: press Return to send; the panel closes and the App opens your chat with Shroom, where you read the answer. "Open chat" at the top right takes you there too. Before, commands the App sent to the page were held back and never arrived (this also broke opening a member from the notch island and refreshing when the panel pops up); all of that is fixed. The panel has no white edge and no workspace picker: it follows the App's current workspace. When something is waiting for your OK, one line shows "See".
