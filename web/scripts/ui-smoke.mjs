@@ -1848,6 +1848,24 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, page.locator(".conv-head button").first());
     });
 
+    // A poor network: the chat's polls get no answer. After a few polls
+    // it says so (the agent may well be at work) instead of calling a
+    // task stuck, and the notice goes once answers come again.
+    await step("单聊 · 网络不好", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      const polls = /\/app\/hubs\/[^/]+\/(exchanges|thread)/;
+      await page.route(polls, (route) => route.abort());
+      try {
+        await page.locator("[data-testid=chat-behind]").waitFor({ timeout: 40_000 });
+        if (await page.locator(".conv-detail .conv-stuck").count()) throw new Error("网络不好时不该说任务卡住");
+        await settle(page, 150);
+        await shot(page, size, scheme, "chat-behind");
+      } finally {
+        await page.unroute(polls);
+      }
+      await page.locator("[data-testid=chat-behind]").waitFor({ state: "detached", timeout: 20_000 });
+    });
+
     // Two messages before either is answered: each answer that does not
     // follow its question quotes it; a run's time and cost sit with its
     // answer, not under the steps.

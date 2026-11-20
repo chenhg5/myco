@@ -427,7 +427,7 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, onInspe
     if (!task) return false;
     const node = rows.find((x) => x.hub.id === r.hubId && x.st.agent.name === task.to);
     return possiblyStuck(task, node
-      ? { agent: node.st.agent, receiving: node.st.receiving, offline: node.st.state === "offline" }
+      ? { agent: node.st.agent, receiving: node.st.receiving, offline: node.st.state === "offline", seenAt: node.hub.seen_at }
       : undefined, now);
   };
   const matching = items.filter((r) => matchesState(r.item, filters.state, stuckOf(r)) && onSide(r));

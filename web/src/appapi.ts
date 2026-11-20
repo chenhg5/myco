@@ -106,6 +106,10 @@ export interface HubOverview {
   /** set by the App: the hub could not be reached, and this is what it
    *  showed last (at: when; error: why it is unreachable now) */
   stale?: { at: string; error?: string };
+  /** set by the App: when what this shows was last fetched (unix ms).
+   *  How long a task has been quiet is only known up to then: on a poor
+   *  network the answer may simply not have come through. */
+  seen_at?: number;
 }
 
 export interface AppOverview {
@@ -484,18 +488,46 @@ export interface ConnectJob {
   done: boolean;
 }
 
-async function request<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+/** How long a read may take before it is given up (a later poll asks
+ *  again). On a poor network a request can hang with no answer at all;
+ *  one that never ends must not hold up the polls behind it (they skip
+ *  while one is out), or the window shows old news until it restarts.
+ *  The console bounds its own calls to a hub (12 s; 45 s for a computer's
+ *  details), so this is only for a request that went missing. Writes are
+ *  not cut short: some take minutes (a session starting, an upload). */
+const READ_TIMEOUT_MS = 60_000;
+
+async function request<T>(method: string, path: string, body?: unknown, signal?: AbortSignal, timeoutMs?: number): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" };
   const raw = body instanceof Blob;
   if (body !== undefined) headers["Content-Type"] = raw ? (body.type || "application/octet-stream") : "application/json";
-  const r = await fetch(path, {
-    method,
-    credentials: "same-origin",
-    headers,
-    body: body === undefined ? undefined : raw ? body : JSON.stringify(body),
-    signal,
-  });
-  const text = await r.text();
+  const limit = timeoutMs ?? (method === "GET" ? READ_TIMEOUT_MS : 0);
+  // (by hand, not AbortSignal.any: older Mac web views lack it)
+  const ctl = limit > 0 ? new AbortController() : null;
+  let timedOut = false;
+  const timer = ctl ? window.setTimeout(() => { timedOut = true; ctl.abort(); }, limit) : 0;
+  const onAbort = () => ctl?.abort();
+  if (ctl && signal) {
+    if (signal.aborted) ctl.abort();
+    else signal.addEventListener("abort", onAbort, { once: true });
+  }
+  let r: Response;
+  let text: string;
+  try {
+    r = await fetch(path, {
+      method,
+      credentials: "same-origin",
+      headers,
+      body: body === undefined ? undefined : raw ? body : JSON.stringify(body),
+      signal: ctl ? ctl.signal : signal,
+    });
+    text = await r.text();
+  } catch (e) {
+    if (timedOut) throw new ApiError(L("等了太久没有回应", "No answer in time"), 0, "timeout");
+    throw e;
+  } finally {
+    if (ctl) { window.clearTimeout(timer); signal?.removeEventListener("abort", onAbort); }
+  }
   let data: unknown = null;
   try { data = text ? JSON.parse(text) : null; } catch { /* non-JSON */ }
   if (!r.ok) {
@@ -859,7 +891,7 @@ export const appApi = {
   deletePageRecord: (hubId: string, id: string, collection: string, rid: string, ifVersion = 0) =>
     request<void>("DELETE", `app/hubs/${enc(hubId)}/pages/${enc(id)}/data/${enc(collection)}/${enc(rid)}${ifVersion ? `?if_version=${ifVersion}` : ""}`),
   pageChanges: (hubId: string, id: string, after: number) =>
-    request<PageChanges>("GET", `app/hubs/${enc(hubId)}/pages/${enc(id)}/changes?after=${after}`),
+    request<PageChanges>("GET", `app/hubs/${enc(hubId)}/pages/${enc(id)}/changes?after=${after}`, undefined, undefined, 100_000),
   /** A file a page made, saved to Downloads and shown. */
   pageDownload: (name: string, bytes: Uint8Array | Blob, type: string) =>
     request<{ path: string }>("POST", `app/page-download?name=${encodeURIComponent(name)}`,

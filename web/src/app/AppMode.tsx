@@ -322,7 +322,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
       // version it is. The conversation needs both (what the hub can do).
       const versionOf = new Map(h.map((x) => [x.id, x.hub_version]));
       const withVersions = { ...o, hubs: o.hubs.map((x) => ({ ...x, hub_version: versionOf.get(x.id) ?? x.hub_version })) };
-      setOv(remember("overview", keepOffline(withVersions, recall<AppOverview>("overview"))));
+      setOv(remember("overview", seenNow(keepOffline(withVersions, recall<AppOverview>("overview")), Date.now())));
       await loadProjects(o.hubs.filter((x) => x.ok).map((x) => x.id), o.hubs.map((x) => x.id));
       setError(null);
       setNow(Date.now());
@@ -333,6 +333,9 @@ export default function AppMode({ initialHubs, initialInfo }: {
       }
     } catch (e) {
       setError(e);
+      // Nothing came back (this computer's network, say): what shows is
+      // marked as old, as for a workspace that cannot be reached.
+      setOv((o) => (o ? unreached(o, e) : o));
     } finally {
       refreshing.current = false;
     }
@@ -866,7 +869,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
       if ((r.st.stale || 0) > 0 || (r.st.asking || 0) > 0) open = true;
       if (r.st.state !== "working" || r.st.in_progress <= 0) continue;
       // A hub that tells live from stale: what it calls in progress runs.
-      if (r.st.stale !== undefined || r.st.in_progress > stuckCounts(r.st, now).in_progress) busy = true;
+      if (r.st.stale !== undefined || r.st.in_progress > stuckCounts(r.st, now, r.hub.seen_at).in_progress) busy = true;
       else stuck = true;
     }
     return busy ? "busy" : stuck ? "stuck" : open ? "open" : null;
@@ -1298,6 +1301,23 @@ export function keepOffline(fresh: AppOverview, prev: AppOverview | undefined): 
       if (!before?.ok || !before.overview) return h;
       return { ...before, name: h.name, stale: { at: before.stale?.at ?? prev.generated_at, error: h.error } };
     }),
+  };
+}
+
+/** The workspaces that answered now carry when (seen_at); those showing
+ *  what they said before keep when that was. */
+export function seenNow(ov: AppOverview, at: number): AppOverview {
+  return { ...ov, hubs: ov.hubs.map((h) => (h.ok && !h.stale ? { ...h, seen_at: at } : h)) };
+}
+
+/** No answer at all this time: every workspace shows what it said last,
+ *  marked so (as keepOffline does for one that could not be reached). */
+export function unreached(ov: AppOverview, e: unknown): AppOverview {
+  const error = e instanceof Error ? e.message : String(e);
+  return {
+    ...ov,
+    hubs: ov.hubs.map((h) => (h.stale || !h.ok ? h
+      : { ...h, stale: { at: h.seen_at ? new Date(h.seen_at).toISOString() : ov.generated_at, error } })),
   };
 }
 

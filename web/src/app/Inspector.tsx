@@ -851,9 +851,9 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
   const current = row.st.current || [];
   // Tasks picked up and quiet since: their results may never come back, so
   // they are counted apart from the ones still moving.
-  const stuck = stuckCounts(row.st, now);
+  const stuck = stuckCounts(row.st, now, row.hub.seen_at);
   const isStuck = (m: { status: string; active_at?: string; updated_at: string }) =>
-    possiblyStuck(m, { agent: row.st.agent, receiving: row.st.receiving, offline: row.st.state === "offline" }, now);
+    possiblyStuck(m, { agent: row.st.agent, receiving: row.st.receiving, offline: row.st.state === "offline", seenAt: row.hub.seen_at }, now);
 
   const sec_state = (
         <>
