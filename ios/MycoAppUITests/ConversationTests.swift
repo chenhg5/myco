@@ -385,10 +385,9 @@ final class ConversationTests: XCTestCase {
         let preview = app.descendants(matching: .any)["QLPreviewControllerView"]
         XCTAssertTrue(preview.waitForExistence(timeout: 5))
         sleep(1)
-        snap("files-look-before-swipe")
-        app.swipeDown(velocity: .fast)
-        sleep(1)
-        snap("files-look-after-swipe")
+        // (a finger's drag down the screen, not a flick in place)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35))
+            .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.95)), withVelocity: .fast, thenHoldForDuration: 0)
         expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: submit)
         waitForExpectations(timeout: 10)
     }
