@@ -64,7 +64,7 @@ Before you finish a change, run `make vet` and `make test`. Run `make smoke` whe
 - **Web changes.** If you change `web/src`, run `make web` and commit the regenerated `internal/web/dist`. Go builds never run Node, so a stale `dist` ships a stale UI. Never hand-edit `dist`.
 - **App UI.** New pages, components and dialogs in `web/src/app` follow `docs/design/app-ui.md`: use the existing classes and components it lists, and run its checklist (`npm run test:ui`, light and dark, two widths) before you finish.
 - **Releases.** Do not touch `VERSION`. Bumping it on `main` publishes a release. Only maintainers do that, and only when they ask for it.
-  When a release is asked for, add its section to `CHANGELOG.md` (`## vX.Y.Z`, newest first, user-facing changes in Chinese) in the same commit as `VERSION`: the release workflow publishes that section as the release notes.
+  When a release is asked for, add its section to `CHANGELOG.md` (`## vX.Y.Z`, newest first, user-facing changes in English, then the same in Chinese under a `**中文**` line) in the same commit as `VERSION`: the release workflow publishes that section as the release notes.
   The steps are in [docs/release.md](docs/release.md) and the `myco-release` skill (`.claude/skills/myco-release/SKILL.md`).
   A Mac preview (no release: main built on the maintainer's Mac as `myco-preview`, beside the released app) is the `myco-preview` skill (`.claude/skills/myco-preview/SKILL.md`, `scripts/mac-preview.sh`).
 - **Windows.** CI builds and tests on native Windows too. Keep OS-specific code in `_unix.go`, `_windows.go` or `_other.go` files. Tests that need a POSIX shell must skip themselves on Windows.
@@ -86,5 +86,6 @@ Before you finish a change, run `make vet` and `make test`. Run `make smoke` whe
 - **Secrets.** Never log or print tokens, API keys or provider settings. Tokens and pairing codes appear in URLs only where the design requires it.
 - **Docs.**
   - User-facing behaviour changes go into `INSTALL.md` or `docs/`.
-  - `README.md` and `README.zh-CN.md` are kept in sync.
-  - Most of `docs/` is in Chinese.
+  - Write docs, comments and commit messages in English: most users read English.
+  - `README.md`/`README.zh-CN.md` and `INSTALL.md`/`INSTALL.zh-CN.md` are kept in sync (English first).
+  - The design notes in `docs/design/` are still largely in Chinese; new ones are in English.

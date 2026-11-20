@@ -24,7 +24,7 @@ A failed test (go, windows, web, a UI smoke check) → stop, report it with its 
 
 - Version: the latest tag plus one patch (`git fetch --tags && git describe --tags --abbrev=0`), unless the maintainer named one.
 - What changed: `git log --format='%h %s' <last tag>..HEAD | grep -v ' Merge '`; read bodies with `git show -s <hash>` when the subject is not enough.
-- Add `## vX.Y.Z` at the top of `CHANGELOG.md`: user-facing changes in Chinese, one bullet each, bold lead for the important ones, as in the sections below it. Leave out tests, refactors and iOS. Say when the server's hub must be upgraded (`sudo myco upgrade`).
+- Add `## vX.Y.Z` at the top of `CHANGELOG.md`: user-facing changes in English, one bullet each, bold lead for the important ones, then a `**中文**` line and the same bullets in Chinese, as in the sections below it. Leave out tests, refactors and iOS. Say when the server's hub must be upgraded (`sudo myco upgrade`).
 - Preview: `scripts/changelog-section.sh vX.Y.Z`.
 
 ## 3. Commit and push

@@ -42,7 +42,7 @@ Agent detail and overview entries include `resume: {created_at, last_used_at?, l
 | `POST /v1/resume` | recovery token in body | `{token, binding}` → `{agent, token}` as in enroll. Rebinds the same agent to the new environment/session, rotates its login token and records `last_used_at`/`last_used_env`. Recovery token remains reusable; messages and project membership remain. No other credential required |
 | `PUT /v1/agents/{name}/run-settings`, `PUT /v1/me/run-settings` | owning member or hub owner/admin (not a project coordinator: it spends the owner's quota); self agent | `{model, effort, access?}` → the agent. The model and reasoning effort its runner starts the CLI with, from the next run on; `""` follows the machine's own setting, and both empty removes `run_settings`. `effort` is checked per CLI: Claude Code `low`/`medium`/`high`/`xhigh`/`max`, Codex `minimal`/`low`/`medium`/`high`/`xhigh`; other CLIs take none. Audited as `agent.run_settings`. Agents carry `run_settings` when set (from v0.19.5). `access` (`readonly`, `workspace`, `full`; `""` follows the machine, from v0.19.8) is the permission level the CLI runs with: only the member who owns the node may change it (for a node nobody owns, the hub's owner), not hub admins and not the agent itself (`permission_denied`); left out of a request it stays as it is. The runner applies it from the next run without a restart, capped by its machine: at most `spawn.max_access` in `~/.myco/machine.yaml` (default `workspace`), or the agent's own configured access if that is higher; it reports the cap as `runtime.max_access` and the level in use as `runtime.access`. `mcp_tools?: boolean` (from this branch) defaults to false; omitted preserves the previous value. Only the node owner may change it, and the change is audited. New Claude runners advertise `runtime.features: ["mcp_tools"]` and allow configured MCP servers in workspace/readonly runs when enabled; full access already allows them. Codex does not advertise this switch until its separate MCP approval behavior is verified. |
 | `PUT /v1/me/runtime` | agent (its runner) | The CLI, model and provider it runs with, as `runtime` on the agent. From v0.19.5 also `effort`/`effort_source` (`app`: its run settings; `self`: it said so with `myco agent runtime set`) and `quota`: `{source: claude\|codex, at, windows: [{name, label?, used (0..1), resets_at?, status?}]}`, the account's usage limits as the CLI last reported them (Claude Code: `five_hour`, `seven_day`; Codex: `primary`, `secondary`, labelled by their length, e.g. `7d`). Only a runner can see them; an agent that receives in its own session has none. From the next version also `features`: names of what the runner supports beyond the basics (lower case, digits, `_`; each once), e.g. `ask_access` (docs/design/client-plan.md section 4); apps show a feature's controls only when it is listed, and runners that predate it send none. Also from the next version: `away` (`stopped`: sent once as the runner stops, so the app can say why the agent is offline; a running runner sends none, which clears it) and `env` (`wsl` when the runner runs in Windows' WSL, which Windows shuts down when idle). New runners may also send project-level `mcp`, `skills`, `plugins`, `tool_warnings` (see tool inventory below). |
-| `POST /v1/agents/{name}/handover-link?dry_run=` | owning member, hub owner/admin | Hand the node over to another session (「换一个来接着做」, from the next version). `{note?, back?}` → `{handover, url, command, command_ps1, dry_run}`: a one-time take-over link `<hub>/h/myco_takeover_…` (24 hours; only in `url` and the commands, shown once). `back` (a done handover's id) makes the link for switching back to the session that handover replaced. Shell and machine nodes: `invalid_argument`. End-to-end encrypted workspaces: `invalid_state` (not yet). Audited as `agent.handover.link` |
+| `POST /v1/agents/{name}/handover-link?dry_run=` | owning member, hub owner/admin | Hand the node over to another session ("Hand over to another session" in the App, from the next version). `{note?, back?}` → `{handover, url, command, command_ps1, dry_run}`: a one-time take-over link `<hub>/h/myco_takeover_…` (24 hours; only in `url` and the commands, shown once). `back` (a done handover's id) makes the link for switching back to the session that handover replaced. Shell and machine nodes: `invalid_argument`. End-to-end encrypted workspaces: `invalid_state` (not yet). Audited as `agent.handover.link` |
 | `POST /v1/agents/{name}/handover?dry_run=&wait_seconds=` | owning member, hub owner/admin (who may also start sessions on that machine) | `{machine (id or name), cli?, dir?, model?, access?, note?, back?}` → `{handover, spawn}`. The hub makes a take-over link and sends the machine's machine node a spawn request with `take_over`, `brief` (the handover note, the new session's first prompt) and, for `back`, `resume_session` (the old session resumes on its own machine; `machine`, `dir` and `cli` come from that handover). A machine whose myco is not newer than v0.19.22 is refused (`invalid_state`): it would start an unrelated agent. Default wait 5 minutes. Audited as `agent.handover` |
 | `GET /v1/agents/{name}/handovers` | owning member, hub owner/admin | `{handovers: [{id, agent, at, by, note, from, to, state, done_at, open_tasks, back, expires_at}]}`, newest first (20). `from`/`to`: `{binding, machine_id, machine_name, runtime}`; `to` is empty while `state` is `waiting`; `expired` for a link not taken in time (or made obsolete by another take-over) |
 | `POST /v1/takeover` | take-over token in body | `{token, binding}` → `{agent, token, handover, brief}`. Binds the session to the link's node with a new credential and, in one step: retires the old credential (kept hashed: using it answers `replaced`, HTTP 401, not retryable, with who took over and how to switch back); puts the node's open tasks (delivered, acked, held) back in the queue (attempts reset; their progress stays); revokes its recovery link; clears `machine_id`/`runtime`, and `run_settings` model/effort when the harness changes; makes other waiting links of the node stop working. Used, expired or unknown links: `not_found`; a session that is already another agent: `conflict`. A long `pull` that waited across a take-over answers `replaced` instead of claiming. Audited as `agent.handover.take` |
@@ -73,8 +73,8 @@ Agent detail and overview entries include `resume: {created_at, last_used_at?, l
 | `GET /v1/keys/readers?from=&to=` | agent or console | `{e2e, readers, missing}`: who may read a message from one side to the other (both sides and their owners' devices); `missing` lists sides without keys (the message stays plain) |
 | `GET /c/{code}` | — | A one-time link's page: a browser gets both choices (app or command), `curl` gets the script that runs `myco member accept`, an agent (Accept `text/markdown`) gets a short guide. Reading it never uses up the code |
 | `POST /v1/console/messages/{id}/dismiss` | admin (the recipient node's owner, or owner/admin) | Closes an open message (even queued) for its recipient without a reply; audited as `message.dismiss` |
-| `GET /v1/console/hidden`, `POST /v1/console/hidden` | admin (a person by console token) | Messages the caller took out of their own view (the app's 删除; from v0.19.9): `GET` → `{ids}` (oldest first, 5000 at most), `POST {hide?: [id], show?: [id]}` (500 at most) → `{ids}`. Kept per person (per device on a hub without members), so all their devices agree. Nothing is deleted: others, and the agents, still see those messages. Older hubs answer 404 and the app keeps the list on that device |
-| `GET /v1/console/voice`, `PUT /v1/console/voice` | admin (a person by console token) | The caller's voice chat settings, kept on the hub so every device of theirs has them (the App's 设置 › 语音, the phone's Settings › Voice chat; from v0.19.15): `{llm_base_url, llm_model, llm_key, tts_provider, tts_speaker, tts_rate, tts_keys: {provider: key}, updated_at}`. `GET` answers a zero `updated_at` when nothing was set. `PUT` takes the whole document with `updated_at` (required: when the person changed it, by that device's clock); the newest wins: one older than what the hub holds changes nothing, and the answer is always what the hub holds then. Kept per person (per device on a hub without members), like `hidden`. **It holds API keys**: the hub hands them only to that person's own console tokens and never logs or audits them, but they are in the hub's database as they are, so whoever administers the hub's machine can read them. `tts_rate` is -50..100; any value is 4096 bytes at most, 16 speech services at most. Older hubs answer 404 and each device keeps its own settings |
+| `GET /v1/console/hidden`, `POST /v1/console/hidden` | admin (a person by console token) | Messages the caller took out of their own view (the App's "Delete"; from v0.19.9): `GET` → `{ids}` (oldest first, 5000 at most), `POST {hide?: [id], show?: [id]}` (500 at most) → `{ids}`. Kept per person (per device on a hub without members), so all their devices agree. Nothing is deleted: others, and the agents, still see those messages. Older hubs answer 404 and the app keeps the list on that device |
+| `GET /v1/console/voice`, `PUT /v1/console/voice` | admin (a person by console token) | The caller's voice chat settings, kept on the hub so every device of theirs has them (the App's Settings › Voice, the phone's Settings › Voice chat; from v0.19.15): `{llm_base_url, llm_model, llm_key, tts_provider, tts_speaker, tts_rate, tts_keys: {provider: key}, updated_at}`. `GET` answers a zero `updated_at` when nothing was set. `PUT` takes the whole document with `updated_at` (required: when the person changed it, by that device's clock); the newest wins: one older than what the hub holds changes nothing, and the answer is always what the hub holds then. Kept per person (per device on a hub without members), like `hidden`. **It holds API keys**: the hub hands them only to that person's own console tokens and never logs or audits them, but they are in the hub's database as they are, so whoever administers the hub's machine can read them. `tts_rate` is -50..100; any value is 4096 bytes at most, 16 speech services at most. Older hubs answer 404 and each device keeps its own settings |
 | `GET /v1/members` | admin | `{members: [{id, name, display_name, role, created_at, removed?}]}`; `?all=1` includes removed people |
 | `POST /v1/members` | owner/admin | `{name, display_name?, role?}` (role `member` or `admin`) → `{member, link, command}`; the link (`<hub>/c/myco_pair_…`, once, within 24 h) signs that person's app in as them, or, as `command` (`curl -fsSL <link> \| bash`, which runs `myco member accept`), joins their machine and agent session as them without the app |
 | `PATCH /v1/members/{member}` | owner/admin (self: name only) | `{name?, display_name?, role?}`; role `owner` hands over the hub (owner only; the old owner becomes admin) |
@@ -103,8 +103,8 @@ Agent detail and overview entries include `resume: {created_at, last_used_at?, l
 | `GET /v1/agents/{name}/avatar` | admin/agent (who can see the agent) | The picture the agent uses as its face (`Content-Type` from its bytes, `nosniff`); 404 when its avatar is not a picture |
 | `PUT /v1/agents/{name}/profile` | admin | Same, for any agent, plus `allow_from` (`[]` = anyone, refused for exec nodes); the token is not changed |
 | `GET /v1/aliases` | admin/agent | `{aliases:[{alias, target, created_at, updated_at}]}` |
-| `PUT /v1/aliases/{alias}?dry_run=` | admin/member/agent | `{target}` → `{alias, dry_run}`. Agent 只能指向自己、不能抢已有别名，且最多拥有 3 个；成员只能操作自己节点；管理员可改指向。409 if `alias` is an agent name; target must be a real agent (no chains) |
-| `DELETE /v1/aliases/{alias}?dry_run=` | admin/member/agent | → `{alias, removed, dry_run}`；agent 只能删指向自己的别名，成员只能删自己节点的别名 |
+| `PUT /v1/aliases/{alias}?dry_run=` | admin/member/agent | `{target}` → `{alias, dry_run}`. An agent can point an alias only at itself, cannot take an existing alias, and can own at most 3; a member can act only on their own nodes; an admin can change where an alias points. 409 if `alias` is an agent name; target must be a real agent (no chains) |
+| `DELETE /v1/aliases/{alias}?dry_run=` | admin/member/agent | → `{alias, removed, dry_run}`; an agent can delete only aliases that point at itself, a member only aliases of their own nodes |
 
 | `POST /v1/broadcasts` | agent | `{selector, body, type?, idempotency_key?, include_self?}` → `{broadcast_id, messages, skipped, duplicate}`; one message/thread per recipient |
 | `GET /v1/broadcasts/{id}?consume=` | sender | `{broadcast_id, total, answered, deliveries:[{message, reply?}]}`; `consume=true` marks returned replies done |
@@ -186,7 +186,7 @@ From v0.19.24 ([design](design/browser.md)): web pages agents (or people) publis
 
 ## Pins
 
-From v0.20.3: what a conversation keeps at hand (置顶), shown as tabs above it in the App: a web address (`link`), a file (`file`), or one of its messages (`message`). A conversation is two parties (a person's console sender `@console:<name>` and an agent, or two agents); both see the same list, in one order, and either changes it. Kept in the hub's settings per conversation (no schema change), 20 at most; pinning the same thing again only changes its title. Agents act in their own conversations only (`a` is themselves); a console token in its own (`a` defaults to its sender) or, naming `a`, in one it may read. Older hubs answer 404 (the App then shows no tabs).
+From v0.20.3: what a conversation keeps at hand ("Pinned" in the App), shown as tabs above it in the App: a web address (`link`), a file (`file`), or one of its messages (`message`). A conversation is two parties (a person's console sender `@console:<name>` and an agent, or two agents); both see the same list, in one order, and either changes it. Kept in the hub's settings per conversation (no schema change), 20 at most; pinning the same thing again only changes its title. Agents act in their own conversations only (`a` is themselves); a console token in its own (`a` defaults to its sender) or, naming `a`, in one it may read. Older hubs answer 404 (the App then shows no tabs).
 
 | Endpoint | Who | What |
 | --- | --- | --- |
@@ -243,8 +243,8 @@ An automation:
 
 ```json
 {
-  "id": "aut_...", "name": "日报", "owner": "glenn", "from": "@console:glenn", "to": "pm",
-  "project": "", "body": "写今天的日报",
+  "id": "aut_...", "name": "Daily report", "owner": "glenn", "from": "@console:glenn", "to": "pm",
+  "project": "", "body": "Write today's daily report",
   "schedule": {"cron": "0 9 * * 1-5", "tz": "Asia/Shanghai"},
   "webhook": true, "webhook_url": "https://hub.example.com/hooks/aut_...",
   "skip_if_busy": true, "enabled": true,
@@ -302,21 +302,21 @@ Saving and removing a workflow are audited (`workflow.*`).
 - `artifacts`: the files the step's agent attached to its answers and progress reports, oldest first, each once: `[{step, step_run, try, kind: reply|progress, message, from, at, file_id, name, size, content_type?}]`. Download with `GET /v1/files/{file_id}` (`myco file get`).
 - Figures (`GET /v1/workflows/{ref}/stats`): `{workflow, name, total, by_status, success_rate, sample, version?, duration_ms, active_ms, waiting_ms, usage?, cost_per_run?, steps: [{step, title?, kind, runs, done, failed, retries, bounces, duration_ms, usage?, last_error?, last_error_run?, last_error_at?}], versions: [{version, runs, succeeded, failed, cancelled, duration_ms}], evaluations: [{name, unit?, direction?, values, last, last_run}], recent: [point], failures: [point]}`. `total`, `by_status` and `success_rate` (succeeded / ended) cover every run; the rest the last `limit` runs (default 200, at most 2000), of `version` only when given. Distributions are `{n, avg, min, p50, p90, p95, max}` (nearest rank; durations in ms, over ended runs and step starts). A score's figures take each run's latest of that name. `recent` (newest first, at most 60) and `failures` (at most 10) are `{id, status, version, created_at, duration_ms, error?, failed_step?, cost_usd?}`.
 
-A run an agent started (`trigger: agent`) tells it when it ends: a note from the run's owner, with `workflow` set, `[工作流「<name>」完成了|失败了：…|取消了：…]`, each step's summary and how to see the rest (not when the agent cancelled it itself). Automations can start workflows too (see [Automations](#automations)).
+A run an agent started (`trigger: agent`) tells it when it ends: a note from the run's owner, with `workflow` set, `[工作流「<name>」完成了|失败了：…|取消了：…]` (the hub writes this line in Chinese: "workflow <name> succeeded | failed: … | cancelled: …"), each step's summary and how to see the rest (not when the agent cancelled it itself). Automations can start workflows too (see [Automations](#automations)).
 
 A workflow definition (all of it is checked; unknown fields are refused):
 
 ```json
 {
-  "name": "写-审-改", "description": "", "project": "myco",
-  "inputs": {"required": ["task"], "properties": {"task": {"type": "string", "title": "要做什么", "format": "textarea"}}},
+  "name": "write-review-fix", "description": "", "project": "myco",
+  "inputs": {"required": ["task"], "properties": {"task": {"type": "string", "title": "What to do", "format": "textarea"}}},
   "steps": [
-    {"id": "write", "agent": "coder", "prompt": "完成：{{inputs.task}}",
+    {"id": "write", "agent": "coder", "prompt": "Do this: {{inputs.task}}",
      "output": {"required": ["branch"], "properties": {"branch": {"type": "string"}}}, "timeout": "2h", "retry": 1},
-    {"id": "review", "agent": "reviewer", "prompt": "审一下 {{steps.write.output.branch}}",
+    {"id": "review", "agent": "reviewer", "prompt": "Review {{steps.write.output.branch}}",
      "output": {"required": ["approved"], "properties": {"approved": {"type": "boolean"}, "comments": {"type": "array"}}}},
     {"id": "test", "computer": "studio-mac", "run": "make test"},
-    {"id": "ok", "human": "$starter", "prompt": "合并吗？", "options": ["合并", "不合并"], "timeout": "1d"}
+    {"id": "ok", "human": "$starter", "prompt": "Merge?", "options": ["Merge", "Don't merge"], "timeout": "1d"}
   ],
   "edges": [
     {"from": "write", "to": "review"},
@@ -324,8 +324,8 @@ A workflow definition (all of it is checked; unknown fields are refused):
     {"from": "review", "to": "write", "when": "!output.approved", "maxIterations": 3, "else": "$fail"},
     {"from": "test", "to": "ok"},
     {"from": "test", "to": "write", "onError": true, "maxIterations": 2},
-    {"from": "ok", "to": "$end", "when": "output.choice == '合并'"},
-    {"from": "ok", "to": "$fail", "when": "output.choice != '合并'"}
+    {"from": "ok", "to": "$end", "when": "output.choice == 'Merge'"},
+    {"from": "ok", "to": "$fail", "when": "output.choice != 'Merge'"}
   ]
 }
 ```
@@ -350,13 +350,13 @@ A run:
 
 ```json
 {
-  "id": "run_...", "workflow_id": "wf_...", "name": "写-审-改", "version": 2, "project": "myco",
-  "status": "running|waiting|succeeded|failed|cancelled", "inputs": {"task": "加导出按钮"},
+  "id": "run_...", "workflow_id": "wf_...", "name": "write-review-fix", "version": 2, "project": "myco",
+  "status": "running|waiting|succeeded|failed|cancelled", "inputs": {"task": "Add an export button"},
   "owner": "glenn", "by": "glenn", "trigger": "manual|agent|automation", "error": "",
   "current": ["review"],
   "steps": [{"id": "rs_...", "step": "write", "title": "", "kind": "agent", "attempt": 1, "status": "done",
-             "target": "coder", "message_id": "msg_...", "input": "…the task as sent…", "payload": {"task": "加导出按钮"},
-             "output": {"branch": "feat/x", "summary": "加好了", "text": "…"}, "summary": "加好了",
+             "target": "coder", "message_id": "msg_...", "input": "…the task as sent…", "payload": {"task": "Add an export button"},
+             "output": {"branch": "feat/x", "summary": "Added", "text": "…"}, "summary": "Added",
              "started_at": "...", "ended_at": "..."}],
   "events": [{"at": "...", "kind": "started|step|done|failed|bounced|edge|decided|timeout|retry|finished", "step": "write", "text": "…"}],
   "created_at": "...", "updated_at": "...", "ended_at": "..."
@@ -367,7 +367,7 @@ A run:
 
 ## Superagents
 
-A person's own agent with the App's powers in its workspace (v0.21.1+; design: [design/chief-of-staff.md](design/chief-of-staff.md)). Only the person names it; it uses its **own agent token** on the App's routes, and the hub acts as that person, marked as through it (the audit log names it: `glenn（经 superagent shroom）`). Each route the App uses is listed in `internal/transport/httpapi/superagent.go`:
+A person's own agent with the App's powers in its workspace (v0.21.1+; design: [design/chief-of-staff.md](design/chief-of-staff.md)). Only the person names it; it uses its **own agent token** on the App's routes, and the hub acts as that person, marked as through it (the audit log names it: `glenn（经 superagent shroom）`, the hub's Chinese for "glenn (via superagent shroom)"). Each route the App uses is listed in `internal/transport/httpapi/superagent.go`:
 
 - **allowed**: reading what its owner sees (overview, conversations, traces, machines, members, audit, projects), and things that harm nothing that exists: creating projects and putting agents in them, project docs and files, starting an agent on its owner's computers (`POST /v1/machines/{id}/spawn`), run settings, running an automation once, renaming a computer;
 - **held for approval**: deleting or removing anything (projects, members of projects, docs, files, agents, computers), visibility and ownership, new or changed automations, stopping a task, upgrades and hub settings. The hub answers `409 {error: "approval_pending", message}` and keeps the request (with `X-Myco-Reason`, its why); the owner approves or denies it, and an approved one is carried out once, as it came. The agent gets a note from its owner either way. Pending ones lapse after 24 hours;
