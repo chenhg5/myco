@@ -289,6 +289,10 @@ func (b *Backend) pageHandler(ps *pageServer) http.Handler {
 			http.Redirect(w, r, "/p/"+key+"/", http.StatusFound)
 			return
 		}
+		if file == "__myco/media" {
+			b.serveMedia(w, r)
+			return
+		}
 		hub, err := b.find(k.hub)
 		if err != nil {
 			writeErr(w, err)
@@ -490,4 +494,66 @@ func (b *Backend) liveHandler(hubID, pageID string, port int) http.Handler {
 		}
 		rp.ServeHTTP(w, r)
 	})
+}
+
+// Recordings an app made (myco.os audio.record) play in the page as they
+// are, by an address on the page's own origin (myco.os.mediaURL):
+// <audio> seeks in them (ranges) and changes speed without changing the
+// voice, which reading them through the bridge could not do. Only files in
+// ~/.myco/recordings, and only in the App on this computer.
+var mediaTypes = map[string]string{".wav": "audio/wav", ".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".ogg": "audio/ogg", ".opus": "audio/ogg", ".webm": "audio/webm"}
+
+// mediaPath is the recording a page asks for, when it may have it.
+func mediaPath(home, p string) (string, bool) {
+	if home == "" || p == "" {
+		return "", false
+	}
+	if strings.HasPrefix(p, "~/") || strings.HasPrefix(p, `~\`) {
+		p = filepath.Join(home, p[2:])
+	}
+	if !filepath.IsAbs(p) {
+		return "", false
+	}
+	p = filepath.Clean(p)
+	root := filepath.Join(home, ".myco", "recordings") + string(filepath.Separator)
+	if !strings.HasPrefix(p, root) || mediaTypes[strings.ToLower(filepath.Ext(p))] == "" {
+		return "", false
+	}
+	if real, err := filepath.EvalSymlinks(p); err != nil || !strings.HasPrefix(real, root) && !strings.HasPrefix(real, evalOr(root)) {
+		return "", false
+	}
+	return p, true
+}
+
+func evalOr(p string) string {
+	if r, err := filepath.EvalSymlinks(strings.TrimSuffix(p, string(filepath.Separator))); err == nil {
+		return r + string(filepath.Separator)
+	}
+	return p
+}
+
+func (b *Backend) serveMedia(w http.ResponseWriter, r *http.Request) {
+	if b.Local == nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	p, ok := mediaPath(b.Local.Home, r.URL.Query().Get("path"))
+	if !ok {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	f, err := os.Open(p)
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	defer f.Close()
+	fi, err := f.Stat()
+	if err != nil || !fi.Mode().IsRegular() {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", mediaTypes[strings.ToLower(filepath.Ext(p))])
+	w.Header().Set("Cache-Control", "no-cache")
+	http.ServeContent(w, r, filepath.Base(p), fi.ModTime(), f)
 }

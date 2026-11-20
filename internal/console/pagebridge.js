@@ -160,6 +160,12 @@
     },
     call: osCall,
     start: function (name, args) { return new Job(name, args); },
+    // An address for <audio> / <video> of a recording an app made (a file
+    // in ~/.myco/recordings): it seeks and plays at any speed.
+    mediaURL: function (path) {
+      var m = /^\/p\/[^\/]+\//.exec(location.pathname);
+      return (m ? m[0] : "/") + "__myco/media?path=" + encodeURIComponent(path);
+    },
   };
   // os.fs.list({path}), os.exec.spawn({shell}) …: the same, by name
   [
@@ -167,6 +173,7 @@
     "fs.paths", "fs.list", "fs.stat", "fs.read", "fs.write", "fs.mkdir", "fs.move", "fs.copy", "fs.delete", "fs.trash", "fs.scan*",
     "fs.search*", "fs.watch*", "fs.thumbnail", "fs.pick", "fs.saveAs", "fs.reveal", "fs.open",
     "exec.run", "exec.spawn*", "clipboard.read", "clipboard.write", "notify", "screen.capture", "net.fetch",
+    "audio.sources", "audio.record*", "speech.status", "speech.install*", "speech.transcribe*",
   ].forEach(function (n) {
     var job = n.slice(-1) === "*";
     var name = job ? n.slice(0, -1) : n;

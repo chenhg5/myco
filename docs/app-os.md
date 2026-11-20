@@ -116,6 +116,10 @@ agent 写的普通网页不打包，直接用 `window.myco.os`，用法见上一
 | `notify` | 系统通知 | osascript | PowerShell 的通知 | notify-send |
 | `screen.capture` | 截屏：全部、某个显示器（`display`）或一块区域（`region`）；PNG 或 JPEG，回 base64 | `screencapture` | .NET 截屏（按真实像素） | grim、gnome-screenshot、spectacle、import 或 scrot |
 | `net.fetch` | 从 App 发 HTTP 请求（网页自己不能上网）；文本回文字，其他回 base64 | 同 | 同 | 同 |
+| `audio.sources` | 能录的声音：麦克风（`mic`）、电脑放出的声音（`system`）、某个出过声音的应用（`app:…`） | 麦克风；macOS 14.2 起有电脑的声音和各个应用（Core Audio 的进程列表） | 还没有 | PulseAudio / PipeWire：默认麦克风、默认输出的 monitor、正在放声音的流 |
+| `audio.record`（任务） | 录音：每个来源一条音轨，各存一个 16 kHz 单声道 WAV（`~/.myco/recordings/<时间>/<轨>.wav`），每 100 毫秒推一次音量；写入 `pause`、`resume`、`stop` 来暂停、继续、结束 | 要在 myco App 里：麦克风用 AVAudioEngine，电脑的声音用 Core Audio process tap（macOS 14.2+，第一次会问「系统录音」权限） | 还没有 | `parec` |
+| `speech.status` `speech.install`（任务） | 本机转写的引擎和模型：sherpa-onnx 官方编好的程序（约 20 MB）和 SenseVoice 模型（约 160 MB，中英粤日韩），第一次用时下载到 `~/.myco/speech`（`MYCO_SPEECH_MIRROR` 换下载地址） | arm64、x64 | x64 | x64 |
+| `speech.transcribe`（任务） | 把录音转成文字：一句一段，带开始和结束时间，边转边推 `segment`；长录音按四分钟左右在最安静处切开转 | WAV；别的格式用 `afconvert` 转 | WAV；装了 ffmpeg 时别的格式也行 | 同 Windows |
 
 命令在 App 那边跑，环境和登录 shell 一样（PATH 里有 Homebrew、nvm 等），起点是个人文件夹，环境变量里没有 myco 的令牌。
 
@@ -123,7 +127,8 @@ agent 写的普通网页不打包，直接用 `window.myco.os`，用法见上一
 
 - macOS：
   - 截屏要「屏幕录制」，没有时只能截到桌面背景；
-  - 读 `~/Library` 下的一部分文件夹要「完全磁盘访问」，扫描时没权限的地方记进 `skipped`。
+  - 读 `~/Library` 下的一部分文件夹要「完全磁盘访问」，扫描时没权限的地方记进 `skipped`；
+  - 录麦克风要「麦克风」权限，录电脑的声音要「屏幕与系统录音」里的「仅系统录音」权限（第一次录时系统会问）。
 - Linux：剪贴板、通知、截屏要装上表里对应的程序，没有时 `os.list()` 里会写出缺什么。
 
 ## 在开发时试

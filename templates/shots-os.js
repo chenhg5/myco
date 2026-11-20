@@ -1,6 +1,7 @@
-// A made-up computer for screenshots of apps that use myco.os (空间清理):
-// a Mac's disk with the usual suspects, scanned in a second. shots.mjs
-// puts it in the bridge for the apps that ask for it.
+// A made-up computer for screenshots of apps that use myco.os: a Mac's disk
+// with the usual suspects, scanned in a second (空间清理); a microphone, the
+// Mac's sound and a meeting app to record, and speech to text (会议记录).
+// shots.mjs puts it in the bridge for the apps that ask for it.
 (() => {
   const G = 1e9, M = 1e6;
   // name: size in bytes (a file), or { … } (a folder); "*": smaller items folded together [count, bytes]
@@ -67,8 +68,66 @@
     return { on: (t, f) => { (subs[t] ||= []).push(f); return () => {}; }, done, cancel: async () => true, write: async () => true, end: async () => true };
   };
   const call = (v) => Promise.resolve(JSON.parse(JSON.stringify(v)));
+  // a job that sends events on a timer; write("stop") ends it with value()
+  const timed = (every, onTick, value, opts = {}) => {
+    const subs = {};
+    const emit = (t, d) => [...(subs[t] || []), ...(subs["*"] || [])].forEach((f) => f(d, { n: 0, type: t }));
+    let resolve, timer, i = 0;
+    const done = new Promise((r) => { resolve = r; });
+    const finish = () => { clearInterval(timer); resolve(value(i)); };
+    setTimeout(() => {
+      if (opts.first) opts.first(emit);
+      timer = setInterval(() => { i++; if (onTick(i, emit) === false) finish(); }, every);
+    }, 30);
+    return { on: (t, f) => { (subs[t] ||= []).push(f); return () => {}; }, done, cancel: async () => { finish(); return true; },
+      write: async (d) => { if (d === "stop") finish(); if (d === "pause") emit("paused", {}); if (d === "resume") emit("resumed", {}); return true; }, end: async () => true };
+  };
+  const REC = "/Users/glenn/.myco/recordings/20261120-153000";
+  const SAID = [
+    [2.1, 7.8, "好，人都到齐了，我们开始吧。今天主要对一下 0.22 版的发布计划。"],
+    [8.4, 15.2, "先说时间，原定下周三发，现在桌面端还有两个问题没收尾。"],
+    [30.2, 36.9, "可以，这样不卡整体进度。那安装包里要不要带上转写模型？"],
+  ];
   window.__FAKE_OS__ = {
-    list: () => call({ os: "darwin", arch: "arm64", caps: ["system.info", "system.disks", "system.settings", "fs.scan", "fs.trash", "fs.reveal", "fs.pick"].map((name) => ({ name, about: "", available: true })) }),
+    list: () => call({ os: "darwin", arch: "arm64", caps: ["system.info", "system.disks", "system.settings", "fs.scan", "fs.trash", "fs.reveal", "fs.pick", "fs.stat",
+      "audio.sources", "audio.record", "speech.status", "speech.install", "speech.transcribe"].map((name) => ({ name, about: "", available: true, job: /scan|record|install|transcribe/.test(name) })) }),
+    mediaURL: (p) => "/__media/" + encodeURIComponent(p),
+    audio: {
+      sources: () => call({ sources: [
+        { id: "mic", kind: "mic", name: "麦克风", default: true },
+        { id: "system", kind: "system", name: "电脑的声音" },
+        { id: "app:com.tencent.meeting", kind: "app", name: "腾讯会议", bundle: "com.tencent.meeting", playing: true },
+        { id: "app:us.zoom.xos", kind: "app", name: "zoom.us", bundle: "us.zoom.xos" },
+        { id: "app:com.electron.lark", kind: "app", name: "Feishu", bundle: "com.electron.lark" },
+        { id: "app:com.google.Chrome", kind: "app", name: "Google Chrome", bundle: "com.google.Chrome" },
+      ] }),
+      record: (a) => {
+        const ids = (a.tracks || []).map((t) => t.id);
+        const t0 = window.__REC_AT__ || 0;
+        return timed(100, (i, emit) => {
+          const s = t0 + i / 10;
+          const tracks = {};
+          // two people taking turns, with pauses
+          for (const id of ids) {
+            const talking = id === "them" ? Math.sin(s / 3.1) > -0.2 : Math.sin(s / 3.1) < -0.4;
+            tracks[id] = { rms: 0, peak: talking ? 0.08 + 0.5 * Math.abs(Math.sin(s * 7.3 + (id === "me" ? 1 : 0)) * Math.sin(s * 2.1)) : 0.003 };
+          }
+          emit("level", { seconds: s, tracks });
+        }, (i) => ({ dir: REC, seconds: t0 + i / 10, rate: 16000, ended: "stopped", tracks: ids.map((id) => ({ id, source: "", path: REC + "/" + id + ".wav", seconds: t0 + i / 10 })) }),
+        { first: (emit) => emit("started", { dir: REC, files: Object.fromEntries(ids.map((id) => [id, REC + "/" + id + ".wav"])), rate: 16000 }) });
+      },
+    },
+    speech: {
+      status: () => call({ ready: !window.__NO_SPEECH__, engine: true, engine_version: "v2.0.2", vad: true, dir: "/Users/glenn/.myco/speech", engine_size_mb: window.__NO_SPEECH__ ? 25 : 0,
+        models: [{ id: "sensevoice", name: "SenseVoice", languages: ["zh", "en"], size_mb: 158, installed: !window.__NO_SPEECH__ }] }),
+      install: () => timed(200, (i, emit) => { emit("progress", { step: "model", received: i * 16e6, total: 165e6 }); return i < 10; }, () => ({ ready: true })),
+      transcribe: () => timed(150, (i, emit) => {
+        const s = SAID[i - 1];
+        if (s) emit("segment", { start: s[0], end: s[1], text: s[2] });
+        emit("progress", { done: i * 20, total: 60 });
+        return i < SAID.length;
+      }, () => ({ segments: [], seconds: 60, ms: 900, model: "sensevoice" })),
+    },
     has: async () => true,
     system: {
       info: () => call({ os: "darwin", name: "macOS", version: "15.1", arch: "arm64", model: "Mac15,6", hostname: "glenn-mbp", user: "glenn", home: "/Users/glenn", cpus: 12, cpu_model: "Apple M3 Pro", memory: 36 * G, uptime: 400000 }),
@@ -83,6 +142,7 @@
       trash: (a) => call({ done: a.paths || [], failed: [] }),
       reveal: () => call(true),
       pick: () => Promise.reject(Object.assign(new Error("cancelled"), { code: "cancelled" })),
+      stat: (a) => call({ name: a.path.split("/").pop(), path: a.path, type: "file", size: 63e6, modified: Date.now(), mode: "-rw-------" }),
     },
   };
 })();

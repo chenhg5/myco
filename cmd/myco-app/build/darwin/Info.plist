@@ -34,7 +34,9 @@
 		</dict>
 	</array>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>myco listens only while you have the microphone or a voice call on: to turn what you say into a message, or to talk with your agents. 只在你打开麦克风或语音聊天时听：把你说的话变成消息，或者和 agent 们语音聊天。</string>
+	<string>myco listens only while you have the microphone, a voice call or a recording on: to turn what you say into a message, to talk with your agents, or to record a meeting. 只在你打开麦克风、语音聊天或录音时听：把你说的话变成消息，和 agent 们语音聊天，或者录会议。</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>An app in myco (会议记录) records what your Mac plays, such as a Zoom or Tencent Meeting call, only while you record. The recording stays on this Mac. myco 里的应用（会议记录）只在你录音时录下 Mac 放出的声音，比如 Zoom、腾讯会议里别人说的话；录音只存在这台 Mac 上。</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>myco turns what you say into text, for your message box or a voice call with your agents, in the language you chose for the app. 把你说的话转成文字，用在输入框或和 agent 们的语音聊天里，用你在 App 里选的语言。</string>
 	<key>NSHumanReadableCopyright</key>
