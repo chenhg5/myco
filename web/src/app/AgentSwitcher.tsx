@@ -41,8 +41,13 @@ export function AgentSwitcher({ hubId, rows, current, onPick }: {
   useEffect(() => {
     // Last talked to first (this workspace), then the rest as listed; the
     // open chat first of all, so one press goes to the one before it.
+    // The chat open now: the one AppMode opened, or else (one opened from a
+    // project's members) the last one noted while a chat shows.
+    const currentNow = () => rowsRef.current.current
+      || (document.querySelector(".conv-detail") ? recentChats().find((c) => c.hubId === rowsRef.current.hubId)?.agent : undefined);
     const build = () => {
-      const { rows, current, hubId } = rowsRef.current;
+      const { rows, hubId } = rowsRef.current;
+      const current = currentNow();
       const seen = recentChats().filter((c) => c.hubId === hubId).map((c) => c.agent);
       const rank = (r: AgentRow) => (r.st.agent.name === current ? -1 : seen.indexOf(r.st.agent.name) < 0 ? 1e6 : seen.indexOf(r.st.agent.name));
       return [...rows].sort((a, b) => rank(a) - rank(b));
@@ -75,7 +80,8 @@ export function AgentSwitcher({ hubId, rows, current, onPick }: {
       if (list.length < 1) return;
       e.preventDefault();
       order.current = list;
-      const first = rowsRef.current.current && list[0]?.st.agent.name === rowsRef.current.current ? 1 : 0;
+      const cur = currentNow();
+      const first = cur && list[0]?.st.agent.name === cur ? 1 : 0;
       setAt(Math.min(list.length - 1, e.shiftKey ? list.length - 1 : first));
       setOpen(true);
     };

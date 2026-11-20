@@ -4047,6 +4047,32 @@ async function runMatrix(browser, size, scheme) {
       if ((await det.locator(".pcd-sub").innerText()) === before) throw new Error("保存后应是新的一版");
     });
 
+    // ⌃Tab: the agents as large faces, last talked to first; letting go of
+    // ⌃ opens the one picked (the one before, after a single press).
+    await step("切换 agent · ⌃Tab", async () => {
+      await openMember(page, narrow, "聊天", "Myco (Grok)");
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      if (narrow) await sidebar(page, false);
+      await page.keyboard.down("Control");
+      await page.keyboard.press("Tab");
+      const sw = page.locator("[data-testid=agent-switcher]");
+      await sw.waitFor({ timeout: 5_000 });
+      if ((await sw.locator(".asw-name").innerText()).trim() !== "Myco (Grok)") throw new Error("按一下 ⌃Tab 应选中上一个聊过的");
+      await settle(page, 150);
+      await shot(page, size, scheme, "agent-switcher");
+      await page.keyboard.up("Control");
+      await sw.waitFor({ state: "detached", timeout: 5_000 });
+      await page.locator(".conv-detail .conv-head", { hasText: "Myco (Grok)" }).first().waitFor({ timeout: 10_000 });
+      // Esc puts it away, nothing opened.
+      await page.keyboard.down("Control");
+      await page.keyboard.press("Backquote");
+      await sw.waitFor({ timeout: 5_000 });
+      await page.keyboard.press("Escape");
+      await page.keyboard.up("Control");
+      await sw.waitFor({ state: "detached", timeout: 5_000 });
+      if (!(await page.locator(".conv-detail .conv-head", { hasText: "Myco (Grok)" }).count())) throw new Error("Esc 收起时不该换对话");
+    });
+
     // ‹ › at the top: back to where you were and forward again, pages and
     // what they had open; no back buttons on the pages themselves.
     await step("导航 · 后退前进", async () => {
