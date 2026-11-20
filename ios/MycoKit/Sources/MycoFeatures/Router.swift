@@ -30,6 +30,8 @@ public enum SheetRoute: Hashable, Identifiable, Sendable {
     /// A command that makes a folder on a computer one agents can use;
     /// `project`: the project it is added from, if any.
     case addComputer(project: String?)
+    /// Naming my superagent, or starting one.
+    case superagent
     /// Writing a conversation out as a file: with this agent, in this
     /// project's page or its own.
     case export(agent: String, project: String?)

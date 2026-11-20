@@ -148,6 +148,19 @@ public protocol HubAPI: Sendable {
     /// its recipient without a reply (marked done). Its node's owner, or
     /// someone who manages the workspace.
     func dismiss(_ messageID: String) async throws
+
+    // Superagents (v0.21.1+; older workspaces answer 404)
+    /// `GET /v1/console/superagent`
+    func superagent() async throws -> SuperagentState
+    /// `PUT /v1/console/superagent` (`nil`: `DELETE`, an ordinary agent again).
+    func setSuperagent(_ agent: String?) async throws
+    /// `GET /v1/console/approvals?status=pending`
+    func approvals() async throws -> [Approval]
+    /// `POST /v1/console/approvals/{id}/approve` or `/deny`.
+    func decide(approval id: String, approve: Bool) async throws -> Approval
+    /// `POST /v1/machines/{id}/spawn`: a session on a computer, or its myco
+    /// brought up to date (`cli: "upgrade"`).
+    func spawn(on machine: String, _ request: SpawnRequest) async throws -> SpawnResult
     /// `GET /v1/console/hidden`: the messages this person took out of
     /// their own view, on any of their devices. Nothing is deleted. A
     /// workspace from before v0.19.9 answers `not_found`.

@@ -302,6 +302,78 @@ public actor FakeHub: HubAPI {
         if simulated[messageID] != nil { simulated[messageID] = Date().addingTimeInterval(-Self.ackAfter) }
     }
 
+    // MARK: Superagents
+
+    private var superagentName: String?
+    private var approvalList: [Approval] = []
+    private var tooOldForSuperagents = false
+
+    public func setTooOldForSuperagents(_ value: Bool) {
+        tooOldForSuperagents = value
+    }
+
+    /// A request of the superagent held for me (for tests and the demo).
+    public func addApproval(what: String, reason: String? = nil, at: Date = Date()) {
+        seq += 1
+        approvalList.append(Approval(
+            id: "apr_\(seq)", agent: superagentName ?? "", what: what, reason: reason, method: "DELETE", path: "/v1/projects/x",
+            createdAt: at, expiresAt: at.addingTimeInterval(86_400)))
+    }
+
+    public func superagent() async throws -> SuperagentState {
+        try await check()
+        if tooOldForSuperagents { throw HubError(error: "not_found", message: "no route for GET /v1/console/superagent", status: 404) }
+        let agent = superagentName.flatMap { name in agents.first { $0.agent.name == name }?.agent }
+        return SuperagentState(agent: agent, pending: approvalList.filter { $0.status == "pending" }.count)
+    }
+
+    public func setSuperagent(_ agent: String?) async throws {
+        try await check()
+        if let agent, !agents.contains(where: { $0.agent.name == agent }) {
+            throw HubError(error: "not_found", message: "agent \(agent) not found", status: 404)
+        }
+        if agent != superagentName {
+            for i in approvalList.indices where approvalList[i].status == "pending" { approvalList[i].status = "withdrew" }
+        }
+        superagentName = agent
+    }
+
+    public func approvals() async throws -> [Approval] {
+        try await check()
+        return approvalList.filter { $0.status == "pending" }
+    }
+
+    public func decide(approval id: String, approve: Bool) async throws -> Approval {
+        try await check()
+        guard let i = approvalList.firstIndex(where: { $0.id == id && $0.status == "pending" }) else {
+            throw HubError(error: "invalid_state", message: "approval \(id) is not pending", status: 409)
+        }
+        approvalList[i].status = approve ? "done" : "denied"
+        if approve { approvalList[i].result = 204 }
+        return approvalList[i]
+    }
+
+    /// The computers it started sessions on, and what (for tests).
+    public private(set) var spawned: [(machine: String, request: SpawnRequest)] = []
+
+    public func spawn(on machine: String, _ request: SpawnRequest) async throws -> SpawnResult {
+        try await check()
+        guard let host = machines.first(where: { $0.id == machine }) else {
+            throw HubError(error: "not_found", message: "machine \(machine) not found", status: 404)
+        }
+        spawned.append((machine, request))
+        if request.cli == "upgrade" {
+            return SpawnResult(upgrade: .init(from: "v0.20.0", to: "v0.21.2", restarting: true))
+        }
+        seq += 1
+        let name = "\(host.name.lowercased())-\(request.cli)-\(String(format: "%04x", seq))"
+        let agent = Agent(
+            id: "agt_new\(seq)", name: name, displayName: request.displayName, description: "", binding: Binding(harness: request.cli, workdir: request.dir),
+            createdAt: Date(), owner: "glenn", machineId: machine, runtime: Runtime(cli: request.cli))
+        agents.append(AgentStatus(agent: agent, state: "idle"))
+        return SpawnResult(agent: name)
+    }
+
     public func dismiss(_ messageID: String) async throws {
         try await check()
         guard let i = messages.firstIndex(where: { $0.id == messageID }), messages[i].isOpen else {

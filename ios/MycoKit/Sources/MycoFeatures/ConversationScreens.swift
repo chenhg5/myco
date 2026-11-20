@@ -1149,6 +1149,11 @@ struct ConversationBody: View {
 
     private var bottom: some View {
         VStack(spacing: 0) {
+            // My superagent's requests that wait for me, to approve or deny.
+            if !model.readOnly, session.superagent.agent == model.agent {
+                ApprovalStrip(model: session.superagent, name: session.displayName(of: model.agent))
+                    .padding(.horizontal, Space.page).padding(.top, Space.s)
+            }
             // What else it holds, given by others and not done: said here,
             // handled in its profile (the desktop app's 查看并处理).
             let elsewhere = model.elsewhere
@@ -1300,6 +1305,8 @@ struct ConversationBody: View {
         .background(.bar)
         .sensoryFeedback(.impact(weight: .light), trigger: commits)
         .sensoryFeedback(.selection, trigger: micState == .listening)
+        // (who my superagent is: its conversation shows what waits for me)
+        .task { if !session.superagent.loaded { await session.superagent.load() } }
     }
 
     private var submitLabel: String {
@@ -1503,5 +1510,60 @@ private struct PoorNetworkLine: View {
         }
         let quiet = RelativeTime.elapsed(since: since)
         return L("这里的消息 \(quiet)没更新了，agent 那边可能还在继续。正在自动重试。", "This chat hasn't updated for \(quiet); the agent may well be at work. Retrying by itself.")
+    }
+}
+
+/// What my superagent waits on me for, above its input: each request, why,
+/// how long it may still wait, and 同意 or 不同意. Read again now and then
+/// while the conversation is open.
+private struct ApprovalStrip: View {
+    let model: SuperagentModel
+    let name: String
+
+    var body: some View {
+        VStack(spacing: Space.s) {
+            ForEach(model.approvals) { approval in
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Image(systemName: "checkmark.shield").font(.footnote).foregroundStyle(MycoColor.amber)
+                        (Text(L("\(name) 想：", "\(name) wants to: ")).foregroundStyle(MycoColor.fg2) + Text(approval.what).foregroundStyle(MycoColor.fg))
+                            .font(.subheadline)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if let reason = approval.reason, !reason.isEmpty {
+                        Text(reason).font(.footnote).foregroundStyle(MycoColor.fg2).fixedSize(horizontal: false, vertical: true)
+                    }
+                    HStack(spacing: 12) {
+                        Text(SuperagentModel.left(approval)).font(.caption).foregroundStyle(MycoColor.muted)
+                        Spacer(minLength: 0)
+                        Button(L("不同意", "Deny")) { Task { await model.decide(approval, approve: false) } }
+                            .buttonStyle(.bordered).tint(MycoColor.fg2)
+                            .accessibilityIdentifier("approval.deny")
+                        Button {
+                            Task { await model.decide(approval, approve: true) }
+                        } label: {
+                            if model.busy == approval.id { ProgressView() } else { Text(L("同意", "Approve")) }
+                        }
+                        .buttonStyle(.borderedProminent).tint(MycoColor.accent)
+                        .accessibilityIdentifier("approval.approve")
+                    }
+                    .font(.footnote.weight(.medium))
+                    .disabled(model.busy != nil)
+                }
+                .padding(12)
+                .background(MycoColor.amberSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("approval")
+            }
+            if let failure = model.failure {
+                FailureLine(failure: failure)
+            }
+        }
+        .task {
+            while !Task.isCancelled {
+                await model.load()
+                try? await Task.sleep(for: .seconds(20))
+            }
+        }
     }
 }

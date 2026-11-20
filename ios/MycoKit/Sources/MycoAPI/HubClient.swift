@@ -106,6 +106,36 @@ public struct HubClient: HubAPI {
         _ = try await call("POST", "/v1/console/messages/\(messageID)/dismiss")
     }
 
+    public func superagent() async throws -> SuperagentState {
+        try await get("/v1/console/superagent", timeout: Self.pollTimeout)
+    }
+
+    public func setSuperagent(_ agent: String?) async throws {
+        struct Body: Encodable { var agent: String }
+        if let agent {
+            _ = try await call("PUT", "/v1/console/superagent", body: HubJSON.encoder().encode(Body(agent: agent)))
+        } else {
+            _ = try await call("DELETE", "/v1/console/superagent")
+        }
+    }
+
+    public func approvals() async throws -> [Approval] {
+        struct Envelope: Decodable { @LossyList var approvals: [Approval] }
+        let envelope: Envelope = try await get("/v1/console/approvals", ["status": "pending"], timeout: Self.pollTimeout)
+        return envelope.approvals
+    }
+
+    public func decide(approval id: String, approve: Bool) async throws -> Approval {
+        let data = try await call("POST", "/v1/console/approvals/\(Self.segment(id))/\(approve ? "approve" : "deny")", timeout: 60)
+        return try Self.decode(Approval.self, from: data)
+    }
+
+    public func spawn(on machine: String, _ request: SpawnRequest) async throws -> SpawnResult {
+        let data = try await call(
+            "POST", "/v1/machines/\(Self.segment(machine))/spawn", body: HubJSON.encoder().encode(request), timeout: 330)
+        return try Self.decode(SpawnResult.self, from: data)
+    }
+
     public func hidden() async throws -> [String] {
         let list: HiddenEnvelope = try await get("/v1/console/hidden")
         return list.ids
