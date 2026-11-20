@@ -13,6 +13,7 @@ import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
 import { WorkflowGraph, stateWords, stepKind, stepStates } from "@/app/WorkflowGraph";
 import { ContractEditor, ContractsSection } from "@/app/WorkflowContracts";
 import { CompareButton, CompareDialog, LogButton, RunArtifacts, RunMetricsStrip, RunScores, RunTimeline, StepLogDialog, WorkflowStatsSection, costWords, msWords, type RunsFilter } from "@/app/WorkflowObserve";
+import { soonLabel } from "@/app/schedule";
 import { L } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
 
@@ -797,13 +798,40 @@ const BASIC = "$basic";
 
 /* ---------- one workflow: its runs, how it goes, its steps, its contracts ---------- */
 
-/** What a run is about, in a line: what it was given (the first text). */
+/** A value that names a thing to work on rather than saying what to do: a
+ *  path, a link, a file name or an id (no spaces, and a slash or an
+ *  extension). Such a value makes a poor title for a run. */
+function isRef(v: string): boolean {
+  const t = v.trim();
+  if (/\s/.test(t)) return false;
+  return /[/\\]/.test(t) || /^[\w.-]+\.[a-z0-9]{1,6}$/i.test(t) || /^[\w-]{20,}$/.test(t);
+}
+
+/** What a run was given to do, as its title: the first text it was given
+ *  (one named task, title, goal… first), not a path, link or id. Empty when
+ *  it was given only those (runTitle then names it by when it started). */
 export function runSubject(r: Pick<WorkflowRun, "inputs">): string {
-  const vals = Object.entries(r.inputs || {});
-  const pick = vals.find(([k, v]) => typeof v === "string" && v.trim() && /^(task|what|title|goal|request)$/i.test(k))
-    || vals.find(([, v]) => typeof v === "string" && v.trim());
+  const vals = Object.entries(r.inputs || {}).filter(([, v]) => typeof v === "string" && v.trim() && !isRef(v));
+  const pick = vals.find(([k]) => /^(task|what|title|goal|request|summary|topic|subject|prompt|description)$/i.test(k)) || vals[0];
   const text = pick ? String(pick[1]).replace(/\s+/g, " ").trim() : "";
   return text.length > 90 ? `${text.slice(0, 89)}…` : text;
+}
+
+/** The thing a run worked on, when it was given one (a path, a link…):
+ *  short (a file's name, a link's host and last part) and in full. */
+export function runRef(r: Pick<WorkflowRun, "inputs">): { short: string; full: string } | null {
+  const v = Object.values(r.inputs || {}).find((x) => typeof x === "string" && x.trim() && isRef(x));
+  if (typeof v !== "string") return null;
+  const full = v.trim();
+  const parts = full.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").split(/[/\\]/).filter(Boolean);
+  const short = /^[a-z][a-z0-9+.-]*:\/\//i.test(full) && parts.length > 1 ? `${parts[0]}/…/${parts[parts.length - 1]}` : parts[parts.length - 1] || full;
+  return { short, full };
+}
+
+/** A run's title: what it was given to do, or else when it started. */
+export function runTitle(r: Pick<WorkflowRun, "inputs" | "created_at">, now: number): string {
+  const t = soonLabel(new Date(r.created_at), new Date(now));
+  return runSubject(r) || L(`${t} 的运行`, `Run · ${t}`);
 }
 
 /** Where a run is now, in words: the steps going (by their names). */
@@ -898,17 +926,18 @@ function WorkflowDetail({ hubId, wf, rows, now, stamp, busy, error, onRun, onTog
           ) : (
             <div className="pc-list wf-runs" data-testid="workflow-runs">
               {runs.map((r) => {
-                const subject = runSubject(r);
+                const ref = runRef(r);
                 const where = runWhere(r, def);
                 return (
                   <button key={r.id} type="button" className="wf-run-row" onClick={() => onOpenRun(r.id)} data-status={r.status}>
                     <RunMark status={r.status} />
                     <span className="wf-run-text">
-                      <span className="wf-run-subject">{subject || L("（没有填内容）", "(nothing given)")}</span>
+                      <span className="wf-run-subject">{runTitle(r, now)}</span>
                       <span className="wf-run-meta">
                         <span className={cn("wf-run-state", runTone(r.status))}>{runWords(r.status)}</span>
                         {where && (r.status === "running" || r.status === "waiting") && <span>{L(`在「${where}」`, `at ${where}`)}</span>}
                         {r.status === "failed" && r.error && <span className="wf-run-why" title={r.error}>{r.error}</span>}
+                        {ref && <span className="wf-run-ref mono" title={ref.full}>{ref.short}</span>}
                         {r.by && <span>{L(`${r.by} 启动`, `by ${r.by}`)}</span>}
                       </span>
                     </span>
@@ -995,12 +1024,12 @@ function RunDetail({ hubId, runId, wf, rows, now, stamp, onBack, onChanged, onOp
   const inputs = Object.entries(run?.inputs || {});
   // The title says what this run is about (what it was given); its state
   // is the first thing under it.
-  const subject = run ? runSubject(run) : "";
+  const subject = run ? runTitle(run, now) : "";
   return (
     <>
       <header className="pcd-head">
         <div className="pcd-titles">
-          <h1><span title={subject || undefined}>{subject || (run ? L(`「${wf.title || wf.name}」的一次运行`, `A run of "${wf.title || wf.name}"`) : L("运行", "Run"))}</span></h1>
+          <h1><span title={subject || undefined}>{subject || L("运行", "Run")}</span></h1>
           {run && (
             <p className="pcd-sub">
               <button type="button" className="wf-link" onClick={onBack} title={L("打开这个工作流", "Open this workflow")}>{wf.title || wf.name}</button>
