@@ -55,6 +55,7 @@ public enum SheetRoute: Hashable, Identifiable, Sendable {
         case .files(let agent, let project): return "files:" + agent + ":" + (project ?? "")
         case .pinAddress(let agent): return "pin:" + agent
         case .background(let key): return "background:" + (key ?? "")
+        case .superagent: return "superagent"
         }
     }
 }
