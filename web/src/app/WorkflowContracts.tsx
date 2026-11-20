@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowDownToLine, ArrowUpFromLine, Bot, Braces, Monitor, Plus, UserCheck, X } from "lucide-react";
 import type { WfSchema, WfStepDef, WorkflowDef } from "@/api";
 import type { AgentRow } from "@/app/types";
@@ -172,34 +172,53 @@ function schemaOf(fields: Field[]): WfSchema | undefined {
 }
 
 /**
- * A contract's fields as rows (name, type, required, what it is for), or
- * the whole JSON Schema as text when it uses more than the form shows
- * (oneOf, pattern, …) or when asked.
+ * A contract's fields as rows (name, type, required, what it is for). One
+ * that uses more than the form shows (oneOf, pattern, …) is shown as it
+ * reads (SchemaView), with 用 JSON 改 to change it; the JSON only when asked.
  */
 export function ContractEditor({ schema, onChange, disabled, label, testid }: {
   schema?: WfSchema; onChange: (s: WfSchema | undefined) => void; disabled?: boolean; label: string; testid?: string;
 }) {
-  const [json, setJson] = useState(() => !isSimple(schema));
+  const [json, setJson] = useState(false);
+  // more than the form shows, and the JSON not asked for: read it
+  const [view, setView] = useState(() => !isSimple(schema));
+  const [shown, setShown] = useState<WfSchema | undefined>(schema);
   const [fields, setFields] = useState<Field[]>(() => fieldsOf(schema));
   const [text, setText] = useState(() => (schema ? JSON.stringify(schema, null, 2) : ""));
   const [bad, setBad] = useState("");
-  useEffect(() => { if (!json) onChange(schemaOf(fields)); }, [fields]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Only a change is one (not the form first showing what it was given).
+  const sent = useRef(JSON.stringify(schemaOf(fieldsOf(schema)) ?? null));
+  useEffect(() => {
+    if (json || view) return;
+    const next = schemaOf(fields);
+    const key = JSON.stringify(next ?? null);
+    if (key === sent.current) return;
+    sent.current = key;
+    onChange(next);
+  }, [fields]); // eslint-disable-line react-hooks/exhaustive-deps
   const set = (i: number, patch: Partial<Field>) => setFields((fs) => fs.map((f, j) => (j === i ? { ...f, ...patch } : f)));
-  const toJSON = () => { setText(JSON.stringify(schemaOf(fields) || {}, null, 2)); setJson(true); };
+  const toJSON = () => { setText(JSON.stringify(view ? shown || {} : schemaOf(fields) || {}, null, 2)); setJson(true); setView(false); };
+  const parsed = (): { ok: boolean; s?: WfSchema } => { try { return { ok: true, s: text.trim() ? JSON.parse(text) : undefined }; } catch { return { ok: false }; } };
+  const back = parsed();
+  const formFits = back.ok && isSimple(back.s);
   const toForm = () => {
-    try {
-      const s = text.trim() ? JSON.parse(text) : undefined;
-      if (!isSimple(s)) { setBad(L("它用到了表单写不了的规则（比如 oneOf、pattern），只能在 JSON 里改", "It uses rules the form cannot show (oneOf, pattern…): edit the JSON")); return; }
-      setFields(fieldsOf(s)); setBad(""); setJson(false);
-    } catch { setBad(L("不是有效的 JSON", "Not valid JSON")); }
+    if (!back.ok) { setBad(L("不是有效的 JSON", "Not valid JSON")); return; }
+    if (!isSimple(back.s)) { setShown(back.s); setBad(""); setJson(false); setView(true); return; }
+    setFields(fieldsOf(back.s)); setBad(""); setJson(false);
   };
   return (
     <div className="wfc-edit" data-testid={testid}>
       <div className="wfc-edit-head">
         <span>{label}</span>
-        <button type="button" className="app-group-action" disabled={disabled} onClick={() => (json ? toForm() : toJSON())}>{json ? L("用表单改", "Use the form") : L("用 JSON 改", "Edit as JSON")}</button>
+        <button type="button" className="app-group-action" disabled={disabled} onClick={() => (json ? toForm() : toJSON())}>
+          {!json ? L("用 JSON 改", "Edit as JSON") : formFits ? L("用表单改", "Use the form") : L("收起 JSON", "Hide the JSON")}</button>
       </div>
-      {json ? (
+      {view ? (
+        <>
+          <SchemaView schema={shown} empty={L("没有约定", "No contract")} />
+          <span className="app-small-note">{L("用到了表单写不了的规则（上面带框的小字），要改就「用 JSON 改」。", "It uses rules the form cannot show (the boxed words above): change it with Edit as JSON.")}</span>
+        </>
+      ) : json ? (
         <>
           <textarea className="app-input mono wfc-text" rows={6} value={text} disabled={disabled} spellCheck={false}
             aria-label={`${label} JSON`} placeholder={'{"type": "object", "required": ["approved"], "properties": {"approved": {"type": "boolean"}}}'}

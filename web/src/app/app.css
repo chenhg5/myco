@@ -8749,6 +8749,10 @@ body.is-resizing {
 .wf-node.is-selected.is-running, .wf-node.is-selected.is-waiting, .wf-node.is-selected.is-failed { box-shadow: 0 0 0 1.5px var(--fg-2); }
 @keyframes wf-breathe { 50% { opacity: 0.35; } }
 @media (prefers-reduced-motion: reduce) { .wf-node.is-running .wf-node-state > i { animation: none; } }
+/* A way out of a step that fails the run: said beside it, in red, not drawn
+   as a line to the end. */
+.wf-fail-note { position: absolute; transform: translateY(-50%); max-width: 128px; font-size: 10.5px; line-height: 1.3; text-align: right;
+  color: color-mix(in srgb, var(--red) 80%, var(--muted)); }
 .wf-term { position: absolute; width: 80px; height: 26px; display: flex; align-items: center; justify-content: center; border-radius: 999px;
   background: var(--pill); font-size: 11.5px; color: var(--fg-2); }
 .wf-term.is-fail { color: var(--red); background: color-mix(in srgb, var(--red) 9%, transparent); }
@@ -8782,8 +8786,41 @@ body.is-resizing {
   font-size: 13px; line-height: 1.55; color: var(--fg); }
 .wf-run-error.is-quiet { background: var(--pill); color: var(--fg-2); }
 .au-last.is-wait > i { background: var(--amber); }
-.wf-run-row { display: block; width: 100%; border: 0; background: none; font: inherit; text-align: left; color: var(--fg); cursor: default; }
+/* A workflow opened: tabs under its header (runs, how it goes, its steps,
+   its contracts), one shown at a time. */
+.wf-tabs { display: flex; gap: 2px; margin: 14px 0 12px; border-bottom: 1px solid var(--line-2); }
+.wf-tab { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border: 0; background: none;
+  font: inherit; font-size: 13px; color: var(--muted); cursor: default; }
+.wf-tab:hover { color: var(--fg); }
+.wf-tab.is-on { color: var(--fg); font-weight: 600; }
+.wf-tab.is-on::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px; border-radius: 2px; background: var(--fg); }
+.wf-tab small { font-size: 11px; font-weight: 400; color: var(--muted); }
+.wf-tab-tools { display: flex; justify-content: flex-end; margin: 0 0 10px; }
+/* A run, in a list: what it is about, its state, when. */
+.wf-run-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 54px; padding: 8px 14px; border: 0; background: none;
+  font: inherit; text-align: left; color: var(--fg); cursor: default; }
+.wf-run-row + .wf-run-row { border-top: 1px solid var(--line-2); }
 .wf-run-row:hover { background: var(--nav-hover); }
+.wf-run-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.wf-run-subject { font-size: 13.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wf-run-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; font-size: 12px; color: var(--muted); }
+.wf-run-state { font-weight: 500; color: var(--fg-2); }
+.wf-run-state.is-ok { color: var(--green); }
+.wf-run-state.is-wait { color: var(--amber); }
+.wf-run-state.is-bad { color: var(--red); }
+.wf-run-why { max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: color-mix(in srgb, var(--red) 75%, var(--muted)); }
+/* A run's (or a step's) state at a glance. */
+.wf-mark { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--pill); color: var(--muted); }
+.wf-mark svg { width: 12px; height: 12px; stroke-width: 2.5; }
+.wf-mark i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.wf-mark.is-done { background: color-mix(in srgb, var(--green) 14%, transparent); color: var(--green); }
+.wf-mark.is-bad { background: color-mix(in srgb, var(--red) 12%, transparent); color: var(--red); }
+.wf-mark.is-ok { color: var(--green); }
+.wf-mark.is-ok i { animation: wf-pulse 1.6s ease-in-out infinite; }
+.wf-mark.is-wait { background: color-mix(in srgb, var(--amber) 14%, transparent); color: var(--amber); }
+@keyframes wf-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .wf-mark.is-ok i { animation: none; } }
 .wf-steps { border-radius: 14px; }
 .wf-step-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 8px;
   background: color-mix(in srgb, var(--fg) 6%, transparent); color: var(--fg-2); }
@@ -8793,9 +8830,10 @@ body.is-resizing {
 .wf-step-name b { font-weight: 500; }
 .wf-step-name small { font-size: 11.5px; color: var(--muted); }
 .wf-step-who { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wf-step-summary { font-size: 12.5px; color: var(--fg-2); min-width: 0; }
-.wf-step-summary > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.au-last.is-bad.wf-step-summary { color: var(--red); }
+.wf-step-summary { font-size: 12.5px; color: var(--fg-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wf-step-summary.is-bad { color: var(--red); }
+.wf-step-summary.is-wait { color: var(--amber); }
+.wf-run-inputs { margin: 6px 0 4px; }
 .wf-step-actions { min-width: 0; }
 .wf-step-detail { margin-top: 0; }
 .wf-step-label { font-size: 11.5px; color: var(--muted); }
@@ -8982,3 +9020,41 @@ body.is-resizing {
 .wfo-inline-icon { width: 13px; height: 13px; color: var(--amber); }
 .wfo-cmp .wfo-step { flex-direction: row; align-items: center; gap: 5px; }
 .wfo-stats.wfo-run-stats { margin: 6px 0 14px; }
+
+/* 工作流 list: a row's last run (its mark, state, what it was about, when),
+   and 运行 always there. */
+.wf-row-last { gap: 6px; }
+.wf-row-last .wf-mark { width: 16px; height: 16px; }
+.wf-row-last .wf-mark svg { width: 10px; height: 10px; }
+.wf-row-last .wf-mark i { width: 6px; height: 6px; }
+.wf-row-subject { min-width: 0; max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-2); }
+.wf-run-now { flex: none; margin-right: 6px; }
+/* 新建工作流: the ready-made ones in a dialog. */
+.app-modal.wf-new-dlg { width: min(720px, calc(100vw - 32px)); max-width: none; }
+.wf-new-dlg .au-templates { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.wf-new-dlg [data-testid=workflow-new] { margin-top: 14px; }
+
+/* Editing a workflow: a page. The steps drawn on the left (click one), the
+   one picked edited on the right; one column when narrow. */
+.wf-ed-head { align-items: flex-start; }
+.wf-ed-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 420px); gap: 16px; align-items: start; margin-top: 12px; }
+.wf-ed-map { min-width: 0; position: sticky; top: 0; display: flex; flex-direction: column; gap: 8px; }
+.wf-ed-map .wf-graph-card { margin: 0; }
+.wf-ed-pick { display: flex; flex-wrap: wrap; gap: 6px; }
+.wf-ed-chip { height: 26px; padding: 0 10px; border: 0; border-radius: 999px; background: var(--pill); font: inherit; font-size: 12.5px; color: var(--fg-2); cursor: default; }
+.wf-ed-chip:hover { background: var(--pill-hover); color: var(--fg); }
+.wf-ed-chip.is-on { background: var(--fg); color: var(--bg); }
+.wf-ed-panel { min-width: 0; display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 12px; background: var(--card); box-shadow: var(--panel-shadow); }
+.wf-ed-panel h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.wf-ed-panel .wf-edit-row { grid-template-columns: 1fr 1fr; }
+.wf-ed-panel .wf-edit-grow, .wf-ed-panel .wf-edit-who { grid-column: 1 / -1; }
+.wf-ed-panel .wf-edit-n { font-family: inherit; font-size: 11.5px; }
+@media (max-width: 980px) {
+  .wf-ed-body { grid-template-columns: minmax(0, 1fr); }
+  .wf-ed-map { position: static; }
+}
+/* (on the white panel the fields stand out as on any form) */
+.wf-ed-panel .wf-edit-cell .app-select-field, .wf-ed-panel .wfc-row .app-input, .wf-ed-panel .wfc-row .app-select-field,
+.wf-ed-panel .wf-edit-title, .wf-ed-panel .wf-edit-role { background: var(--pill); }
+.wf-ed-side { min-width: 0; scroll-margin-top: 12px; }
+.wf-steps-anchor { scroll-margin-top: 12px; }
