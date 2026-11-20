@@ -163,15 +163,35 @@ kbd { display: inline-grid; place-items: center; min-width: 18px; height: 18px; 
 .pop.is-pick { display: flex; flex-direction: column; max-height: 360px; overflow: hidden; padding: 0; }
 .pick-q { height: 38px; padding: 0 12px; border: 0; border-bottom: 1px solid var(--line2); background: none; outline: none; font-size: 13px; }
 .pick-list { display: flex; flex-direction: column; padding: 4px; overflow: auto; }
-.pick-item { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px; border: 0; border-radius: 5px; background: none; font-size: 13px; text-align: left; }
+.pick-item { display: flex; align-items: center; gap: 8px; height: 34px; flex: none; padding: 0 8px; border: 0; border-radius: 5px; background: none; font-size: 14px; text-align: left; }
 .pick-item.is-cur, .pick-item:hover { background: var(--hover); }
 .pick-ico { display: grid; place-items: center; width: 18px; flex: none; color: var(--muted); }
 .pick-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pick-on { color: var(--fg); }
 .pick-empty { padding: 10px; color: var(--faint); font-size: 12px; text-align: center; }
-.filter-pop { display: flex; flex-direction: column; padding: 4px; overflow: auto; }
-.filter-sec { padding: 8px 8px 4px; font-size: 11px; color: var(--faint); }
-.filter-foot { padding: 6px 4px 2px; border-top: 1px solid var(--line2); margin-top: 4px; }
+.filter-pop { display: flex; flex-direction: column; min-height: 0; max-height: min(460px, 70vh); }
+.filter-tabs { display: flex; gap: 2px; padding: 8px 8px 0; border-bottom: 1px solid var(--line2); flex: none; }
+.filter-tabs button { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted); font-size: 13px; }
+.filter-tabs button:hover { color: var(--fg); }
+.filter-tabs button.is-on { color: var(--fg); border-bottom-color: var(--fg); font-weight: 600; }
+.filter-n { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--fg); color: var(--bg); font-size: 11px; line-height: 18px; text-align: center; }
+.filter-list { display: flex; flex-direction: column; gap: 1px; padding: 6px; overflow: auto; min-height: 0; }
+.filter-row { display: flex; align-items: center; gap: 10px; height: 36px; flex: none; padding: 0 10px; border: 0; border-radius: 6px; background: none; color: var(--fg); font-size: 14px; text-align: left; }
+.filter-row:hover { background: var(--hover); }
+.filter-box { display: grid; place-items: center; width: 16px; height: 16px; flex: none; border: 1.5px solid var(--faint); border-radius: 4px; color: var(--bg); }
+.filter-row.is-on .filter-box { border-color: var(--fg); background: var(--fg); }
+.filter-box .ico { width: 12px; height: 12px; stroke-width: 3; }
+.filter-ico { display: grid; place-items: center; width: 18px; flex: none; }
+.filter-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.filter-count { color: var(--faint); font-size: 12px; font-variant-numeric: tabular-nums; }
+.filter-foot { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border-top: 1px solid var(--line2); flex: none; }
+.filter-foot .link-btn:disabled { color: var(--faint); text-decoration: none; }
+.filter-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--line2); }
+.filter-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; max-width: 100%; padding: 0 4px 0 10px; border: 1px solid var(--line); border-radius: 14px; font-size: 13px; }
+.filter-chip > span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.filter-chip button { display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--faint); }
+.filter-chip button:hover { background: var(--hover); color: var(--fg); }
+.filter-chip button .ico { width: 13px; height: 13px; }
 .due-pop { display: flex; gap: 6px; padding: 8px; }
 .due-pop .inp { flex: 1; }
 
@@ -239,3 +259,9 @@ kbd { display: inline-grid; place-items: center; min-width: 18px; height: 18px; 
   .is-count { display: none; }
   .is-search { width: 96px; }
 }
+@media (pointer: coarse) {
+  .filter-row { height: 46px; font-size: 16px; }
+  .filter-tabs button { height: 40px; font-size: 15px; }
+  .filter-chip { height: 32px; font-size: 14px; }
+}
+.pop.is-pick:has(.filter-pop) { max-height: none; }
