@@ -5625,6 +5625,11 @@ button.app-label:hover { filter: brightness(0.95); }
 /* Adding a computer: one command, run in the folder on that computer. */
 .ws-command { display: flex; flex-direction: column; gap: 10px; }
 .ws-command-os { align-self: flex-start; }
+/* The superagent by a sentence: what to send, then the note; waiting
+   for it to join is said left of the buttons. */
+.sa-link .add-sentence { margin-top: 0; }
+.sa-link-note { margin: 8px 0 0; line-height: 1.6; }
+.sa-wait { display: inline-flex; align-items: center; gap: 8px; }
 .ws-command-wait { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); }
 .ws-command-done { display: flex; align-items: flex-start; gap: 6px; font-size: 13px; color: var(--fg); }
 .ws-command-done svg { flex: none; width: 15px; height: 15px; margin-top: 2px; color: var(--green); }
@@ -9203,6 +9208,7 @@ html.os-other ::-webkit-scrollbar-thumb:hover, html.os-other ::-webkit-scrollbar
 /* A workflow in the list: 运行 and ⋯ (edit, turn off, delete), one size. */
 .wf-row-actions { flex: none; display: flex; align-items: center; gap: 6px; margin-right: 8px; }
 .wf-row-actions .wf-run-now { margin-right: 0; }
-.wf-row-actions .wf-more { width: 28px; height: 28px; }
+.wf-row-actions .wf-more { width: 22px; height: 22px; }
+.wf-row-actions .wf-more svg { width: 13px; height: 13px; }
 .aud-runs .aud-run-line { min-height: 56px; }
 .wf-chip .aud-filter-n { margin-left: 5px; font-size: 11px; opacity: 0.6; }

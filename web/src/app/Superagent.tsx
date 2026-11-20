@@ -180,17 +180,17 @@ export function SuperagentSetup({ open, onOpenChange, hubId, rows, current, onRe
           <button type="button" role="tab" aria-selected={how === "link"} className={cn("seg-btn", how === "link" && "active")} onClick={() => setHow("link")} disabled={busy} data-testid="superagent-link-tab">{L("一句话接入", "By a sentence")}</button>
         </div>
         {how === "link" ? (
-          <div className="add-agent-way" data-testid="superagent-link">
-            <div className="app-field-label">{L("把这句话发给一个 Claude Code、Codex 会话（本机、别的电脑或 claude.ai 云端都行），它加入后就是你的 superagent：", "Send this to a Claude Code or Codex session (here, on another computer or in the cloud); once it joins, it is your superagent:")}</div>
+          <div className="add-pane sa-link" data-testid="superagent-link">
+            <div className="app-field-label">{L("把这句话发给一个 Claude Code 或 Codex 会话", "Send this to a Claude Code or Codex session")}</div>
             {link ? (
               <div className="add-sentence">
                 <p className="add-sentence-text">{sentence}</p>
                 <div className="add-sentence-actions"><CopyButton value={sentence} /></div>
               </div>
             ) : linkError ? <ErrorText error={linkError} /> : (
-              <div className="app-command"><span className="app-spinner" /><code>{L("正在生成…", "Making it…")}</code></div>
+              <div className="add-sentence"><p className="add-sentence-text is-loading">{L("正在生成…", "Making it…")}</p></div>
             )}
-            {link && <div className="ws-command-wait"><span className="app-spinner" />{L("等它加入…加入后这里会自动打开和它的对话。这句话 24 小时内有效，只能用一次，等同凭据，只发给你自己的会话。", "Waiting for it to join… its chat opens here once it has. The sentence works once, for 24 hours; it is a credential, so send it only to your own session.")}</div>}
+            <p className="app-small-note sa-link-note">{L("本机、别的电脑或 claude.ai 云端的会话都行，它加入后就是你的 superagent。这句话 24 小时内有效、只能用一次；它等同凭据，只发给你自己的会话。", "Here, on another computer or in the cloud; once it joins, it is your superagent. It works once, for 24 hours; it is a credential, so send it only to your own session.")}</p>
           </div>
         ) : how === "new" ? (
           machines.length === 0 ? (
@@ -236,7 +236,9 @@ export function SuperagentSetup({ open, onOpenChange, hubId, rows, current, onRe
         <ErrorText error={error} />
         <div className="app-modal-actions">
           {current && <button type="button" className="app-btn app-btn-plain app-btn-danger-quiet" onClick={() => void remove()} disabled={busy} data-testid="superagent-remove">{L("不要 superagent 了", "Remove superagent")}</button>}
-          <span style={{ flex: 1 }} />
+          {how === "link" && link ? (
+            <span className="app-modal-hint sa-wait" data-testid="superagent-wait"><span className="app-spinner" />{L("等它加入，加入后会自动打开和它的对话", "Waiting for it to join; its chat opens then")}</span>
+          ) : <span style={{ flex: 1 }} />}
           <button type="button" className="app-btn" onClick={close} disabled={busy}>{L("取消", "Cancel")}</button>
           {how !== "link" && <button type="submit" className="app-btn app-btn-primary" disabled={busy || !ready}>
             {busy ? <><span className="app-spinner" />{L("正在配…", "Setting up…")}</> : how === "new" ? L(`开一个 ${SHROOM}`, `Start ${SHROOM}`) : L("就用它", "Use it")}
