@@ -54,6 +54,9 @@ type Catalog struct {
 	subs    []func([]app.OfficialTemplate)
 	fetched time.Time
 	from    string
+	// a Freshen's fetch: when the last began, and whether one is running
+	tried    time.Time
+	fetching bool
 }
 
 // SyncResult says what a sync found.
@@ -168,6 +171,37 @@ func (c *Catalog) result(updated []string, errText string) SyncResult {
 		src += " (fetching is off)"
 	}
 	return SyncResult{Apps: len(c.current), Updated: updated, Source: src, At: c.fetched, Error: errText}
+}
+
+// Freshen fetches the published apps when what the hub has is older than
+// maxAge: someone opening a page made from an official app then sees an
+// update the same hour it is published, not the next day. One fetch at a
+// time; after one (failed or not) it waits maxAge/6 before trying again.
+// It waits for the fetch as long as ctx allows.
+func (c *Catalog) Freshen(ctx context.Context, maxAge time.Duration) {
+	c.mu.Lock()
+	stale := time.Since(c.fetched) > maxAge && time.Since(c.tried) > maxAge/6
+	if c.Offline || !stale || c.fetching {
+		c.mu.Unlock()
+		return
+	}
+	c.fetching, c.tried = true, time.Now()
+	c.mu.Unlock()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer func() { c.mu.Lock(); c.fetching = false; c.mu.Unlock() }()
+		// (on its own clock: a page answered early does not cut it short)
+		fctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		if r := c.Sync(fctx); r.Error != "" && c.Log != nil {
+			c.Log.Debug("official apps: fetch on open failed", "err", r.Error)
+		}
+	}()
+	select {
+	case <-done:
+	case <-ctx.Done():
+	}
 }
 
 // Run fetches shortly after start and then every Interval.
