@@ -9176,9 +9176,9 @@ html.os-other ::-webkit-scrollbar-thumb:hover, html.os-other ::-webkit-scrollbar
    square as the others), 24px between the header and the tabs, 16px
    between the tabs and what they show, and the filter chips on the left
    over the list they filter. */
-.wf .pcd-head { margin: 8px 0 6px; }
+.aud .pcd-head { margin: 8px 0 6px; }
 .wf .pcd-head + .wf-desc { margin-top: 2px; }
-.wf > .app-error-text, .wf > .app-error { margin: 12px 0 0; }
+.aud > .app-error-text, .aud > .app-error { margin: 12px 0 0; }
 .wf-actions { gap: 8px; }
 .wf-actions .app-btn { height: 32px; }
 .wf-more { width: 32px; padding: 0; justify-content: center; }
@@ -9192,8 +9192,10 @@ html.os-other ::-webkit-scrollbar-thumb:hover, html.os-other ::-webkit-scrollbar
 .wf .wfo-run-stats { margin-top: 16px; }
 .wf .wf-run-error { margin-top: 12px; }
 .wf [data-testid=workflow-decision] { margin-top: 16px; }
-.wf .ph-section { margin-top: 28px; margin-bottom: 12px; }
+.aud .ph-section { margin-top: 28px; margin-bottom: 12px; }
 /* A workflow in the list: 运行 and ⋯ (edit, turn off, delete), one size. */
 .wf-row-actions { flex: none; display: flex; align-items: center; gap: 6px; margin-right: 8px; }
 .wf-row-actions .wf-run-now { margin-right: 0; }
 .wf-row-actions .wf-more { width: 28px; height: 28px; }
+.aud-runs .aud-run-line { min-height: 56px; }
+.wf-chip .aud-filter-n { margin-left: 5px; font-size: 11px; opacity: 0.6; }

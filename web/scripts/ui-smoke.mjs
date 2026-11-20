@@ -3677,14 +3677,16 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, sec.getByRole("button", { name: "好了" }));
       const row = list.locator(".au-row", { hasText: name });
       await row.waitFor({ timeout: 10_000 });
-      await row.hover();
-      await clickVisible(page, row.getByRole("button", { name: "立即运行" }));
+      await clickVisible(page, row.getByRole("button", { name: "运行", exact: true }));
       await row.locator(".au-row-status", { hasText: "已发送" }).waitFor({ timeout: 10_000 });
-      // Off and on again: a switch.
-      await clickVisible(page, row.getByRole("switch", { name: "暂停" }));
+      // Off and on again: under ⋯ (no switch beside the buttons).
+      if (await row.getByRole("switch").count()) throw new Error("行上不该再有开关");
+      await clickVisible(page, row.locator(".wf-more"));
+      await clickVisible(page, page.locator(".conv-menu").getByRole("menuitem", { name: "暂停" }));
       await row.locator(".au-row-status", { hasText: "已暂停" }).waitFor({ timeout: 10_000 });
-      await clickVisible(page, row.getByRole("switch", { name: "启用" }));
-      await row.getByRole("switch", { name: "暂停" }).waitFor({ timeout: 10_000 });
+      await clickVisible(page, row.locator(".wf-more"));
+      await clickVisible(page, page.locator(".conv-menu").getByRole("menuitem", { name: "启用" }));
+      await row.locator(".au-row-status", { hasText: "已暂停" }).waitFor({ state: "detached", timeout: 10_000 });
       // Right-click: the same, and delete.
       await row.click({ button: "right", position: { x: 120, y: 12 } });
       await clickVisible(page, page.getByRole("menuitem", { name: "删除" }));
@@ -3709,9 +3711,9 @@ async function runMatrix(browser, size, scheme) {
       await settle(page, 200);
       await shot(page, size, scheme, "automation-detail");
       // Only the skipped ones.
-      await clickVisible(page, det.locator(".aud-filters .tp-chip", { hasText: "跳过" }));
+      await clickVisible(page, det.locator(".aud-filters .wf-chip", { hasText: "跳过" }));
       if ((await runs.count()) !== 1 || !(await runs.first().innerText()).includes("跳过")) throw new Error("「跳过」只看跳过的");
-      await clickVisible(page, det.locator(".aud-filters .tp-chip", { hasText: "全部" }));
+      await clickVisible(page, det.locator(".aud-filters .wf-chip", { hasText: "全部" }));
       // What the newest call carried.
       const first = runs.first();
       await clickVisible(page, first.getByRole("button", { name: "调用内容" }));
