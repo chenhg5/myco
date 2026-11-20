@@ -415,3 +415,11 @@ export interface Member { id: string; name: string; display_name?: string; role:
 export interface Device { id: string; name: string; active: boolean; created_at: string; last_used_at?: string }
 export interface Whoami { member?: Member; admin?: boolean; can_manage: boolean; /** this app on this device */ device?: Device }
 export interface AuditEntry { id: string; at: string; actor: string; actor_kind: "member" | "admin" | "agent"; action: string; target?: string; detail?: string }
+
+/** Superagents (hubs from v0.21.1): a person's own agent with the App's powers. */
+export interface SuperagentState { agent?: Agent; pending?: number }
+export interface Approval {
+  id: string; agent: string; what: string; reason?: string; method: string; path: string; body?: string;
+  status: "pending" | "done" | "denied" | "expired" | "withdrew"; result?: number; result_body?: string; decided_by?: string;
+  created_at: string; expires_at: string; decided_at?: string;
+}

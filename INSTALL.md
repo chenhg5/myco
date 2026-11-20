@@ -883,6 +883,29 @@ agent 收到工作流的任务时，用 `myco message reply --result '{"approved
 
 格式和接口见 [docs/api.md](docs/api.md#workflows)，设计见 [docs/design/workflow.md](docs/design/workflow.md)。
 
+### 4.16.2 superagent：替你管工作区的 Shroom
+
+每个人在每个工作区可以配一个 superagent，它固定叫 Shroom。它是一个普通的 agent（Claude Code / Codex 会话），但能做 App 能做的事：看全工作区、建项目、把 agent 拉进项目、在你的电脑上开 agent、跑工作流、派活、盯进度。删东西、停东西、改别人的权限、改自动化这类事，它会先来问你。它永远以自己的名义说话，不能冒充你。需要 Hub v0.21.1 或更新。
+
+App 里：点左下角的工作区那一行，菜单里有「配一个 superagent」：在你的一台电脑上新开一个 Shroom（在那台电脑的 `~/myco/shroom` 里干活），或者把你已有的一个 agent 设成它。配好后这一项叫「superagent」，点了打开和它的对话；它在等你点头的事数在旁边，卡片在它对话的输入框上方，点「同意」或「不同意」。
+
+命令行：
+
+```bash
+myco superagent set --agent <名字>     # 把你的一个 agent 设成 superagent（只有你本人能设）
+myco superagent show
+myco superagent unset                  # 变回普通 agent，它在等的确认都作废
+myco approval list                     # 它在等你点头的事
+myco approval approve --id <apr_...>   # 或 deny
+myco superagent guide                  # superagent 自己读的说明
+```
+
+- 它用自己的 agent 令牌调用 App 的接口，Hub 按每个接口登记的级别放行：直接做、要你点头、不能做（令牌、邀请、成员角色、认定 superagent 等）。没登记的接口它还是普通 agent。
+- 要你点头的请求 Hub 先存下，24 小时没人处理就作废；同意后 Hub 替它执行一次，并告诉它结果。它调用时用 `MYCO_APPROVAL_REASON` 写一句为什么，卡片上会显示。
+- 审计里它做的事记成「glenn（经 superagent shroom）」。
+
+接口和权限表见 [docs/api.md](docs/api.md#superagents)，设计见 [docs/design/chief-of-staff.md](docs/design/chief-of-staff.md)。
+
 ### 4.17 网页：把结果做成网页，在 App 里打开
 
 agent 可以把一个文件夹（报告、幻灯片、原型、小工具）发到 Hub 上，人在 App 里点开就能看（需要 Hub v0.19.24 或更新）：

@@ -1,4 +1,4 @@
-import type { Page, PageChanges, PageOpen, PageRecord, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
+import type { Page, PageChanges, PageOpen, PageRecord, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, SuperagentState, Approval, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
 import { L } from "@/lib/i18n";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
@@ -962,6 +962,14 @@ export const appApi = {
   decideWorkflowRun: (hubId: string, id: string, step: string, choice: string, note?: string) =>
     request<WorkflowRun>("POST", `app/hubs/${enc(hubId)}/workflow-runs/${enc(id)}/decide`, { step, choice, ...(note ? { note } : {}) }),
   workflowDecisions: (hubId: string) => request<{ decisions: WorkflowDecision[] }>("GET", `app/hubs/${enc(hubId)}/workflow-decisions`),
+  /** hubs from v0.21.1: your superagent, and what it asks you to approve */
+  superagent: (hubId: string) => request<SuperagentState>("GET", `app/hubs/${enc(hubId)}/superagent`),
+  setSuperagent: (hubId: string, agent: string) => request<SuperagentState>("PUT", `app/hubs/${enc(hubId)}/superagent`, { agent }),
+  clearSuperagent: (hubId: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/superagent`),
+  approvals: (hubId: string, status = "pending") =>
+    request<{ approvals: Approval[] }>("GET", `app/hubs/${enc(hubId)}/approvals${status ? `?status=${enc(status)}` : ""}`),
+  decideApproval: (hubId: string, id: string, approve: boolean) =>
+    request<Approval>("POST", `app/hubs/${enc(hubId)}/approvals/${enc(id)}/${approve ? "approve" : "deny"}`, {}),
   /** hubs from v0.21.1: figures over the last runs, a step's log, scores, two runs side by side */
   workflowStats: (hubId: string, ref: string, opts: { limit?: number; version?: number } = {}) => {
     const q = new URLSearchParams();

@@ -50,6 +50,7 @@ import { modKey } from "@/app/ConversationDetail";
 import { useSidebarWidth } from "@/app/sidebarWidth";
 import { HandoverDialog, type HandoverTarget } from "@/app/Handover";
 import { ForkDialog, forkItem, type ForkTarget } from "@/app/Fork";
+import { SuperagentSetup, useSuperagent } from "@/app/Superagent";
 
 const POLL_MS = 5000;
 const SIDEBAR_KEY = "myco-app-sidebar";
@@ -578,6 +579,14 @@ export default function AppMode({ initialHubs, initialInfo }: {
   // The notch's island opens the app at a member: its workspace first,
   // then (once its rows are there) its chat.
   const [toOpen, setToOpen] = useState<{ hubId: string; agent: string; project?: string } | null>(null);
+  // Your superagent in the workspace on show (bottom-left menu): its chat,
+  // or setting one up.
+  const sa = useSuperagent(hubId || undefined);
+  const [saSetup, setSaSetup] = useState(false);
+  const openSuperagent = (name: string) => window.dispatchEvent(new CustomEvent("myco-open-member", { detail: { hubId, agent: name } }));
+  const onSuperagent = sa && !sa.off && hubId
+    ? () => { const n = sa.state?.agent?.name; if (n) openSuperagent(n); else setSaSetup(true); }
+    : undefined;
   useEffect(() => {
     const on = (e: Event) => {
       const d = (e as CustomEvent<{ hubId: string; agent: string; project?: string }>).detail;
@@ -1114,6 +1123,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 serverName={serverWs ? hostName(serverWs.server) : undefined}
                 isLocal={(h) => isLocalUrl(local, h.url)}
                 simple={simple}
+                onSuperagent={onSuperagent}
+                superagent={sa?.state ? { name: sa.state.agent?.name, pending: sa.approvals.filter((a) => a.status === "pending").length } : undefined}
                 onSettings={() => setPage("settings")} />
             </div>
           </div>
@@ -1279,6 +1290,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
       <AddWorkspaceDialog open={!!addWorkspace} hub={namedHubs.find((h) => h.id === addWorkspace?.hubId)} project={addWsProject} rows={rows}
         workspace={namedOv?.hubs.find((h) => h.id === addWorkspace?.hubId)} pick={addWorkspacePick}
         onClose={() => { setAddWorkspace(null); setAddWorkspacePick(undefined); }} onAdded={() => void refresh()} />
+      {hubId && <SuperagentSetup open={saSetup} onOpenChange={setSaSetup} hubId={hubId} rows={allRows} current={sa?.state?.agent} onReady={openSuperagent} />}
       <NewWorkspaceDialog open={newLocalOpen} onOpenChange={setNewLocalOpen}
         taken={localWorkspaces(local).map((w) => w.name)} onStart={startAnotherLocal} />
       <NewWorkspaceDialog open={newServerOpen} onOpenChange={setNewServerOpen} server={serverWs ? hostName(serverWs.server) : undefined}

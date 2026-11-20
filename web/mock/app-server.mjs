@@ -1749,6 +1749,31 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { ok: true });
   }
 
+  // /app/mock/superagent-ask — the superagent asks to do something that
+  // needs your approval (body: { hub, what, reason }); DELETE: none again.
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "superagent-ask" && parts.length === 3) {
+    state.superagents ||= {};
+    state.approvals ||= {};
+    if (method === "DELETE") {
+      for (const h of state.hubs) {
+        const name = state.superagents[h.id];
+        delete state.superagents[h.id];
+        state.approvals[h.id] = [];
+        if (name) h.agents = (h.agents || []).filter((a) => a.name !== name);
+      }
+      return send(res, 200, { ok: true });
+    }
+    const body = await readBody(req);
+    const hub = state.hubs.find((h) => h.id === (body?.hub || state.hubs[0]?.id));
+    const agent = hub && state.superagents[hub.id];
+    if (!agent) return fail(res, 404, "not_found", "no superagent there");
+    state.counter += 1;
+    const a = { id: `apr_${state.counter}`, agent, what: body.what || "删除项目 old-site", reason: body.reason || "", method: "DELETE", path: "/v1/projects/old-site",
+      status: "pending", created_at: iso(0), expires_at: new Date(Date.now() + 24 * 3600_000).toISOString() };
+    (state.approvals[hub.id] ||= []).push(a);
+    return send(res, 201, a);
+  }
+
   // /app/mock/run-settings — the smoke test changes a node's model and
   // effort; put the demo ones back between widths and themes. GET returns
   // the last body the App sent there.
@@ -2678,6 +2703,53 @@ const server = http.createServer(async (req, res) => {
       return send(res, 201, msg);
     }
 
+    // /app/hubs/{id}/superagent and /approvals… — your superagent (v0.21.1)
+    // and what it asks you to approve. /app/mock/superagent-ask adds one.
+    if (parts[3] === "superagent" || parts[3] === "approvals") {
+      if (hub.id === "hub_lab") return fail(res, 404, "not_found", "no such route"); // an older hub
+      state.superagents ||= {};
+      state.approvals ||= {};
+      const list = (state.approvals[hub.id] ||= []);
+      const cur = () => (hub.agents || []).find((a) => a.name === state.superagents[hub.id]);
+      if (parts[3] === "superagent" && parts.length === 4) {
+        if (method === "GET") {
+          const a = cur();
+          return send(res, 200, a ? { agent: a, pending: list.filter((x) => x.status === "pending").length } : {});
+        }
+        if (method === "PUT") {
+          const body = await readBody(req);
+          const a = (hub.agents || []).find((x) => x.name === body?.agent);
+          if (!a) return fail(res, 404, "not_found", `no agent ${body?.agent}`);
+          if (a.owner_id !== "mem_glenn") return fail(res, 403, "permission_denied", `${a.name} is not your agent; a superagent must be one you added`);
+          if (state.superagents[hub.id] && state.superagents[hub.id] !== a.name) {
+            for (const x of list) if (x.status === "pending") x.status = "withdrew";
+          }
+          state.superagents[hub.id] = a.name;
+          return send(res, 200, { agent: a });
+        }
+        if (method === "DELETE") {
+          for (const x of list) if (x.status === "pending") x.status = "withdrew";
+          delete state.superagents[hub.id];
+          return send(res, 204);
+        }
+      }
+      if (parts[3] === "approvals" && parts.length === 4 && method === "GET") {
+        const status = url.searchParams.get("status") || "pending";
+        return send(res, 200, { approvals: list.filter((x) => status === "all" || x.status === status) });
+      }
+      if (parts[3] === "approvals" && parts.length === 6 && method === "POST") {
+        const a = list.find((x) => x.id === parts[4]);
+        if (!a) return fail(res, 404, "not_found", "no such approval");
+        if (a.status !== "pending") return fail(res, 409, "conflict", `already ${a.status}`);
+        a.status = parts[5] === "approve" ? "done" : "denied";
+        a.decided_by = "glenn";
+        a.decided_at = iso(0);
+        if (a.status === "done") a.result = 200;
+        return send(res, 200, a);
+      }
+      return fail(res, 404, "not_found", "no such route");
+    }
+
     // /app/hubs/{id}/workflows… and /workflow-runs… — workflows (v0.21):
     // the mock keeps them per hub; a run walks its steps on timers (each
     // agent or computer step done after a moment, the first edge taken),
@@ -3579,7 +3651,7 @@ const server = http.createServer(async (req, res) => {
       const model = typeof body.model === "string" ? body.model.trim() : "";
       const osLabel = { darwin: "macOS", linux: "Linux", windows: "Windows", cloud: "云端" }[machine.os] || machine.os;
       const agent = makeAgent({ ...(typeof body.display_name === "string" && body.display_name ? { display_name: body.display_name } : {}),
-        name,
+        name, owner: "glenn", owner_id: "mem_glenn",
         description: typeof body.description === "string" ? body.description : "",
         kind: "agent",
         machine_id: machine.id,

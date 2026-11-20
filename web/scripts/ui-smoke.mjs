@@ -421,6 +421,9 @@ async function runMatrix(browser, size, scheme) {
   // The run step changes a node's model and effort; put the demo ones back.
   const resetRun = await fetch(`http://${HOST}:${mockPort()}/app/mock/run-settings`, { method: "POST" });
   if (!resetRun.ok) throw new Error(`重置模型设置失败：HTTP ${resetRun.status}`);
+  // The superagent step sets up a Shroom; none again for the next run.
+  const resetSuper = await fetch(`http://${HOST}:${mockPort()}/app/mock/superagent-ask`, { method: "DELETE" });
+  if (!resetSuper.ok) throw new Error(`重置 superagent 失败：HTTP ${resetSuper.status}`);
   const resetHandovers = await fetch(`http://${HOST}:${mockPort()}/app/mock/handovers`, { method: "POST" });
   if (!resetHandovers.ok) throw new Error(`重置接手记录失败：HTTP ${resetHandovers.status}`);
   const context = await browser.newContext({
@@ -4282,6 +4285,52 @@ async function runMatrix(browser, size, scheme) {
         if (narrow) await sidebar(page, false);
         await page.locator(".conv-detail .conv-head h2", { hasText: "Review" }).waitFor({ timeout: 10_000 });
       } else if (narrow) await sidebar(page, false);
+    });
+
+    // Superagent: set up from the bottom-left menu (a new Shroom on a
+    // computer of yours), its chat opens; what it asks you shows above the
+    // composer, with 同意 / 不同意; the menu counts what waits.
+    await step("superagent · 配一个、确认卡片", async () => {
+      await sidebar(page, true);
+      await clickVisible(page, page.locator(".sp-switch .app-hub-trigger"));
+      await page.locator(".app-hub-menu").waitFor();
+      const entry = page.locator("[data-testid=menu-superagent]");
+      await entry.waitFor({ timeout: 10_000 });
+      const label = compactText(await entry.innerText());
+      if (!label.includes("配一个 superagent")) throw new Error(`没有 superagent 时菜单应写「配一个 superagent」，实际「${label}」`);
+      await clickVisible(page, entry);
+      const dialog = page.locator("[data-testid=superagent-setup]");
+      await dialog.waitFor({ timeout: 10_000 });
+      await clickVisible(page, dialog.locator(".ws-computer", { hasText: "Office PC" }));
+      await clickVisible(page, dialog.getByRole("tab", { name: "Codex" }));
+      await settle(page, 200);
+      await shot(page, size, scheme, "superagent-setup");
+      await clickVisible(page, dialog.getByRole("button", { name: "开一个 Shroom" }));
+      await page.locator(".app-modal").waitFor({ state: "hidden", timeout: 30_000 });
+      await page.locator(".conv-detail .conv-head h2", { hasText: "Shroom" }).waitFor({ timeout: 20_000 });
+      const ask = await fetch(`http://${HOST}:${mockPort()}/app/mock/superagent-ask`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ what: "删除项目 old-site", reason: "这个项目三个月没动了，文档已经并进 website。" }),
+      });
+      if (!ask.ok) throw new Error(`superagent 发起确认失败：HTTP ${ask.status}`);
+      const card = page.locator("[data-testid=approvals] .sa-approval");
+      await card.waitFor({ timeout: 25_000 });
+      const text = compactText(await card.innerText());
+      if (!text.includes("删除项目 old-site") || !text.includes("三个月没动")) throw new Error(`确认卡片应写明要做什么和为什么，实际「${text}」`);
+      await settle(page, 200);
+      await shot(page, size, scheme, "superagent-approval");
+      await sidebar(page, true);
+      await clickVisible(page, page.locator(".sp-switch .app-hub-trigger"));
+      const badge = page.locator("[data-testid=menu-superagent] .app-hub-menu-badge");
+      await badge.waitFor({ timeout: 10_000 });
+      if ((await badge.innerText()).trim() !== "1") throw new Error(`菜单应标出 1 件等你点头的事，实际「${await badge.innerText()}」`);
+      await settle(page, 200);
+      await shot(page, size, scheme, "superagent-menu");
+      await page.keyboard.press("Escape");
+      await page.locator(".app-hub-menu").waitFor({ state: "hidden" }).catch(() => undefined);
+      if (narrow) await sidebar(page, false);
+      await clickVisible(page, card.getByRole("button", { name: "同意" }));
+      await card.waitFor({ state: "hidden", timeout: 10_000 });
     });
 
     // An agent offers the next step with its answer: the empty input shows

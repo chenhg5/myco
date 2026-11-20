@@ -50,6 +50,7 @@ import { chatDraftKey, draftOf, keepDraft } from "@/app/drafts";
 import { chatQueueKey, keepQueue, queueOf, queuedId, type Queued } from "@/app/queued";
 import { hubAtLeast, hubHasHandover } from "@/app/hubVersion";
 import { HandoverDivider, handoverEntry, openHandover, useHandovers } from "@/app/Handover";
+import { ApprovalStrip } from "@/app/Superagent";
 
 export interface ConversationTarget {
   hubId: string;
@@ -2459,6 +2460,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         {voiceOn && !shellMode && (
           <VoiceBar />
         )}
+        <ApprovalStrip hubId={target.hubId} agent={target.agent} />
         <SendTrouble error={sendError} stop={stopError} onRetry={sendError ? () => void send() : undefined}
           onClose={() => { setSendError(null); setStopError(null); }} />
         {behind && !sendError && !stopError && (
