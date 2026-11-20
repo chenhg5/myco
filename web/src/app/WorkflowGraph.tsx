@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { Fragment, useMemo } from "react";
 import { Bot, Check, Monitor, UserCheck } from "lucide-react";
 import type { RunStep, WfEdgeDef, WfStepDef, WorkflowDef } from "@/api";
 import type { AgentRow } from "@/app/types";
@@ -23,7 +23,9 @@ const PAD = 8;
 
 type Kind = "agent" | "computer" | "human" | "end" | "fail";
 type GNode = { id: string; step?: WfStepDef; kind: Kind; layer: number; x: number; y: number };
-type GEdge = { from: string; to: string; back: boolean; skip?: boolean; label: string; onError?: boolean; outK?: number; outN?: number; inK?: number; inN?: number };
+type GEdge = { from: string; to: string; back: boolean; skip?: boolean; label: string; onError?: boolean; outK?: number; outN?: number; inK?: number; inN?: number;
+  /** what the edge hands on (map), for its hover text: not on the drawing */
+  carries?: string };
 
 export function edgesOf(def: WorkflowDef): WfEdgeDef[] {
   if (def.edges && def.edges.length) return def.edges;
@@ -47,12 +49,26 @@ function whenWords(when: string): string {
   return short.length > 22 ? `${short.slice(0, 21)}…` : short;
 }
 
+/** What an edge says on the drawing: when it is taken, in words. What
+ *  it hands on (map) is for its hover text, not the drawing. */
 function edgeLabel(e: WfEdgeDef): string {
   const parts: string[] = [];
   if (e.onError) parts.push(L("出错时", "on error"));
   if (e.when) parts.push(whenWords(e.when));
   if (e.maxIterations) parts.push(L(`最多 ${e.maxIterations} 次`, `≤${e.maxIterations}×`));
   return parts.join(" · ");
+}
+
+function carries(e: WfEdgeDef): string | undefined {
+  return e.map ? L(`交给下一步：${Object.keys(e.map).join("、")}`, `Hands on: ${Object.keys(e.map).join(", ")}`) : undefined;
+}
+
+/** A way out of a step that ends the run as failed: a short red note
+ *  beside the step, not a line across the drawing to a 失败 at the end. */
+function failWords(e: WfEdgeDef, viaElse: boolean): string {
+  if (viaElse) return e.maxIterations ? L(`${e.maxIterations} 次还不行就失败`, `fails after ${e.maxIterations}`) : L("不行就失败", "else fails");
+  const why = edgeLabel(e);
+  return why ? L(`${why}就失败`, `${why}: fails`) : L("失败", "fails");
 }
 
 function layout(def: WorkflowDef) {
@@ -68,12 +84,14 @@ function layout(def: WorkflowDef) {
     }
     layer.set(s.id, l);
   }
+  // Ways to 失败 are notes on their step (failNotes), so only 完成 is drawn.
+  const fails = new Map<string, string[]>();
+  const noteFail = (from: string, text: string) => fails.set(from, [...(fails.get(from) || []), text]);
   const ends: Kind[] = [];
   for (const e of edges) {
-    for (const t of [e.to, e.else]) {
-      if (t === "$end" && !ends.includes("end")) ends.push("end");
-      if (t === "$fail" && !ends.includes("fail")) ends.push("fail");
-    }
+    if (e.to === "$end" || e.else === "$end") { if (!ends.includes("end")) ends.push("end"); }
+    if (e.to === "$fail") noteFail(e.from, failWords(e, false));
+    if (e.else === "$fail") noteFail(e.from, failWords(e, true));
   }
   const last = Math.max(0, ...layer.values());
   const nodes: GNode[] = def.steps.map((s) => ({ id: s.id, step: s, kind: stepKind(s), layer: layer.get(s.id) ?? 0, x: 0, y: 0 }));
@@ -81,9 +99,10 @@ function layout(def: WorkflowDef) {
   const layerOf = (id: string) => (id === "$end" || id === "$fail" ? last + 1 : layer.get(id) ?? 0);
   const gedges: GEdge[] = [];
   for (const e of edges) {
+    if (e.to === "$fail") continue;
     const back = idx.has(e.to) && (idx.get(e.to) ?? 0) <= (idx.get(e.from) ?? 0);
-    gedges.push({ from: e.from, to: e.to, back, label: edgeLabel(e), onError: e.onError });
-    if (e.else) gedges.push({ from: e.from, to: e.else, back: false, label: L("到上限后", "after the limit") });
+    gedges.push({ from: e.from, to: e.to, back, label: edgeLabel(e), onError: e.onError, carries: carries(e) });
+    if (e.else && e.else !== "$fail") gedges.push({ from: e.from, to: e.else, back: false, label: L("到上限后", "after the limit") });
   }
   // Several edges out of (or into) one card leave (arrive) side by side;
   // one that skips a row goes round the left (so it does not count here).
@@ -97,7 +116,7 @@ function layout(def: WorkflowDef) {
   for (const n of nodes) rows.set(n.layer, [...(rows.get(n.layer) || []), n]);
   const widest = Math.max(...[...rows.values()].map((r) => r.length));
   const backs = gedges.filter((e) => e.back).length;
-  const left = skips ? 76 : 0;
+  const left = Math.max(skips ? 76 : 0, fails.size ? 136 : 0);
   const inner = widest * (W + GX) - GX;
   const width = left + inner + PAD * 2 + (backs ? 40 + backs * 14 : 0);
   for (const [l, row] of rows) {
@@ -118,7 +137,7 @@ function layout(def: WorkflowDef) {
   for (const e of outs) { e.outK = count.get(`o${e.from}`) || 0; count.set(`o${e.from}`, e.outK + 1); }
   for (const e of ins) { e.inK = count.get(`i${e.to}`) || 0; count.set(`i${e.to}`, e.inK + 1); }
   for (const e of fwd) { e.outN = count.get(`o${e.from}`) || 1; e.inN = count.get(`i${e.to}`) || 1; }
-  return { nodes, edges: gedges, width, height, right };
+  return { nodes, edges: gedges, width, height, right, fails };
 }
 
 export type StepState = { status: RunStep["status"]; attempts: number };
@@ -191,7 +210,7 @@ export function WorkflowGraph({ def, hubId, rows, states, selected, onSelect }: 
             }
             return (
               <g key={i} className={cn("wf-edge", e.back && "is-back", e.onError && "is-error", e.to === "$fail" && "is-fail")}>
-                <path d={d} markerEnd="url(#wf-arrow)" />
+                <path d={d} markerEnd="url(#wf-arrow)">{e.carries && <title>{e.carries}</title>}</path>
                 {e.label && <text x={lx} y={ly} textAnchor={e.back || e.skip ? "end" : "middle"} dominantBaseline="middle">{e.label}</text>}
               </g>
             );
@@ -214,8 +233,15 @@ export function WorkflowGraph({ def, hubId, rows, states, selected, onSelect }: 
             : s.role ? L(`分工：${s.role}`, `Role: ${s.role}`)
               : r ? nodeName(r.st.agent, r.hub) : target || "";
           const tone = !states ? "" : !st ? "is-todo" : `is-${st.status}`;
+          const fail = g.fails.get(n.id);
           return (
-            <button key={n.id} type="button" className={cn("wf-node", tone, selected === n.id && "is-selected")}
+            <Fragment key={n.id}>
+            {fail && (
+              <span className="wf-fail-note" style={{ right: g.width - n.x + 8, top: n.y + H / 2 }} title={fail.join("；")}>
+                {fail.join("；")}
+              </span>
+            )}
+            <button type="button" className={cn("wf-node", tone, selected === n.id && "is-selected")}
               style={{ left: n.x, top: n.y, width: W, height: H }} onClick={() => onSelect?.(n.id)} disabled={!onSelect}
               title={s.title ? `${s.title} (${s.id})` : s.id} data-step={n.id}>
               <span className="wf-node-icon">
@@ -233,6 +259,7 @@ export function WorkflowGraph({ def, hubId, rows, states, selected, onSelect }: 
                 </span>
               )}
             </button>
+            </Fragment>
           );
         })}
       </div>

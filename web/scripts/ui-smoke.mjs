@@ -242,6 +242,8 @@ function watchPage(page, size, scheme) {
     // On purpose: Claude on this computer cannot sign in until a way is
     // picked (添加 agent: the sign-in card, then it starts).
     if (msg.text().includes("502") && where.includes("/machines/m_studio/spawn")) return;
+    // On purpose: 单聊 · 网络不好 cuts the chat's polls off.
+    if (msg.text().includes("ERR_FAILED") && /\/(exchanges|thread)\b/.test(where)) return;
     addProblem(r, "console", msg.text(), where);
   });
   page.on("pageerror", (err) => {
@@ -363,6 +365,11 @@ async function go(page, label, narrow) {
   if (narrow) await sidebar(page, false);
 }
 
+// The ‹ at the top (back to where you were: nav.ts).
+async function navBackClick(page) {
+  await clickVisible(page, page.locator("[data-testid=nav-arrows]").getByRole("button", { name: "后退" }));
+}
+
 async function closeSettings(page) {
   const dlg = page.locator("[data-testid=settings-dialog]");
   if (!(await dlg.count())) return;
@@ -414,6 +421,9 @@ async function runMatrix(browser, size, scheme) {
   // The run step changes a node's model and effort; put the demo ones back.
   const resetRun = await fetch(`http://${HOST}:${mockPort()}/app/mock/run-settings`, { method: "POST" });
   if (!resetRun.ok) throw new Error(`重置模型设置失败：HTTP ${resetRun.status}`);
+  // The superagent step sets up a Shroom; none again for the next run.
+  const resetSuper = await fetch(`http://${HOST}:${mockPort()}/app/mock/superagent-ask`, { method: "DELETE" });
+  if (!resetSuper.ok) throw new Error(`重置 superagent 失败：HTTP ${resetSuper.status}`);
   const resetHandovers = await fetch(`http://${HOST}:${mockPort()}/app/mock/handovers`, { method: "POST" });
   if (!resetHandovers.ok) throw new Error(`重置接手记录失败：HTTP ${resetHandovers.status}`);
   const context = await browser.newContext({
@@ -521,6 +531,9 @@ async function runMatrix(browser, size, scheme) {
       await pill.click();
       const menu = page.locator(".sp-home .run-pill-menu");
       await menu.waitFor({ timeout: 5_000 });
+      // The models its computer's Codex lists, by their names.
+      await menu.getByRole("menuitemradio", { name: /GPT-6\.1 Sol/ }).waitFor({ timeout: 5_000 });
+      if (await menu.getByRole("menuitemradio", { name: /O3/ }).count()) throw new Error("电脑报了它的模型列表，就不该再列内置的旧模型");
       await settle(page, 150);
       await shot(page, size, scheme, "composer-model");
       await menu.getByRole("menuitemradio", { name: "中", exact: true }).click();
@@ -1248,6 +1261,8 @@ async function runMatrix(browser, size, scheme) {
       await dialog.locator("[data-testid=remote-ai-missing] code", { hasText: "npm install -g @openai/codex" }).waitFor({ timeout: 5_000 });
       await vpsFolder.fill("~/elsewhere");
       await dialog.locator("[data-testid=allowed-dirs].is-bad").waitFor({ timeout: 5_000 });
+      // This App reaches it: it can allow that folder there at once.
+      await dialog.locator("[data-testid=allow-folder]", { hasText: "~/elsewhere" }).waitFor({ timeout: 10_000 });
       // (The footer's button follows a render later.)
       await page.waitForFunction(() => [...document.querySelectorAll(".app-modal-add button")].some((b) => b.textContent?.trim() === "开一个" && b.disabled), null, { timeout: 5_000 })
         .catch(() => { throw new Error("允许范围外的文件夹不能开"); });
@@ -1471,7 +1486,48 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".app-page").first().waitFor({ timeout: 20_000 });
       await settle(page);
       await shot(page, size, scheme, "project-notes");
-      await clickVisible(page, page.getByRole("button", { name: "返回项目" }));
+      await navBackClick(page);
+      await page.locator(".sp-home").waitFor({ timeout: 10_000 });
+    });
+
+    // Which computers the project's coordinator may start agents on: a
+    // setting of the project (项目资料), apart from its terminals; the
+    // coordinator asks for another, and you approve it in its chat.
+    await step("项目 · 可以开 agent 的电脑", async () => {
+      await go(page, "官网改版", narrow);
+      await clickVisible(page, page.locator(".sp-head").getByRole("button", { name: "项目资料" }));
+      const section = page.locator("[data-testid=project-machines]");
+      await section.waitFor({ timeout: 20_000 });
+      const studio = section.locator(".app-row", { hasText: "Studio Mac" }).getByRole("switch");
+      if ((await studio.getAttribute("aria-checked")) !== "false") throw new Error("项目一开始不该允许任何电脑");
+      await clickVisible(page, studio);
+      await page.waitForFunction(() => document.querySelector("[data-testid=project-machines] .app-row [role=switch][aria-checked=true]"), null, { timeout: 10_000 });
+      await section.scrollIntoViewIfNeeded();
+      await settle(page, 200);
+      await shot(page, size, scheme, "project-machines");
+      // The coordinator asks for another computer: a card in its chat.
+      const ask = await fetch(`http://${HOST}:${mockPort()}/app/mock/superagent-ask`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agent: "pm-codex", what: "让项目「website」能在「Office PC」上开 agent", reason: "要在 Windows 上开一个 Codex 测安装包。",
+          method: "PUT", path: "/v1/projects/website/machines/m_office" }),
+      });
+      if (!ask.ok) throw new Error(`协调者申请电脑失败：HTTP ${ask.status}`);
+      await navBackClick(page);
+      await page.locator(".sp-home .conv-detail").waitFor({ timeout: 10_000 });
+      const card = page.locator(".sp-home [data-testid=approvals] .sa-approval");
+      await card.waitFor({ timeout: 25_000 });
+      const text = compactText(await card.innerText());
+      if (!text.includes("PM (Codex) 想") || !text.includes("Office PC")) throw new Error(`申请卡片应写明谁、要哪台电脑，实际「${text}」`);
+      await settle(page, 200);
+      await shot(page, size, scheme, "project-machine-request");
+      await clickVisible(page, card.getByRole("button", { name: "同意", exact: true }));
+      await card.waitFor({ state: "hidden", timeout: 10_000 });
+      await clickVisible(page, page.locator(".sp-head").getByRole("button", { name: "项目资料" }));
+      const office = page.locator("[data-testid=project-machines] .app-row", { hasText: "Office PC" }).getByRole("switch");
+      await page.waitForFunction(() => [...document.querySelectorAll("[data-testid=project-machines] .app-row")]
+        .some((r) => r.textContent?.includes("Office PC") && r.querySelector("[role=switch]")?.getAttribute("aria-checked") === "true"), null, { timeout: 15_000 });
+      if ((await office.getAttribute("aria-checked")) !== "true") throw new Error("同意后，项目应能在 Office PC 上开 agent");
+      await navBackClick(page);
       await page.locator(".sp-home").waitFor({ timeout: 10_000 });
     });
 
@@ -1846,6 +1902,44 @@ async function runMatrix(browser, size, scheme) {
       });
       if (wrongOrder) throw new Error("“捣鼓中”应在进展下面");
       await clickVisible(page, page.locator(".conv-head button").first());
+    });
+
+    // A poor network: the chat's polls get no answer. After a few polls
+    // it says so (the agent may well be at work) instead of calling a
+    // task stuck, and the notice goes once answers come again.
+    await step("单聊 · 网络不好", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await noRound(page);
+      const polls = /\/app\/hubs\/[^/]+\/(exchanges|thread)/;
+      // Nothing at work: however long the polls go unanswered, no notice
+      // (it has nothing more to say).
+      await page.route(polls, (route) => route.abort());
+      try {
+        await page.waitForTimeout(22_000);
+        if (await page.locator("[data-testid=chat-behind]").count()) throw new Error("没有在干活的任务时，不该提示网络不好");
+      } finally {
+        await page.unroute(polls);
+      }
+      // At work, then the polls go unanswered: it says the network is poor.
+      const box = page.locator(".conv-detail .conv-compose-input");
+      const said = page.locator(".conv-detail .trace-reports .trace-report", { hasText: "正在处理" });
+      const before = await said.count();
+      await box.fill("把发布分支同步一下 main");
+      await box.press("Enter");
+      // (at work: it has picked this one up and said something; an earlier
+      // task's progress does not count)
+      await page.waitForFunction((n) => document.querySelectorAll(".conv-detail .trace-reports .trace-report").length > 0
+        && [...document.querySelectorAll(".conv-detail .trace-reports .trace-report")].filter((e) => e.textContent?.includes("正在处理")).length > n, before, { timeout: 20_000 });
+      await page.route(polls, (route) => route.abort());
+      try {
+        await page.locator("[data-testid=chat-behind]").waitFor({ timeout: 40_000 });
+        if (await page.locator(".conv-detail .conv-stuck").count()) throw new Error("网络不好时不该说任务卡住");
+        await settle(page, 150);
+        await shot(page, size, scheme, "chat-behind");
+      } finally {
+        await page.unroute(polls);
+      }
+      await page.locator("[data-testid=chat-behind]").waitFor({ state: "detached", timeout: 20_000 });
     });
 
     // Two messages before either is answered: each answer that does not
@@ -3278,12 +3372,15 @@ async function runMatrix(browser, size, scheme) {
       const effortSelect = body.locator(".app-kv", { hasText: "推理强度" }).first().locator("select");
       await modelSelect.waitFor({ timeout: 5_000 });
       await effortSelect.waitFor({ timeout: 5_000 });
-      await modelSelect.selectOption("gpt-6");
-      await lastBody((x) => x.agent === "pm-codex" && x.body.model === "gpt-6", "模型的修改");
-      await page.waitForFunction(() => (document.querySelector(".ms .ms-fold-body")?.textContent || "").includes("现在是：gpt-6（"), null, { timeout: 5_000 });
+      // The models are what the computer's Codex lists (its runner reports them).
+      const offered = await modelSelect.locator("option").allTextContents();
+      if (!offered.some((o) => o.includes("GPT-6.1 Sol"))) throw new Error(`模型应列出电脑上 Codex 给的，实际是「${offered.join("、")}」`);
+      await modelSelect.selectOption("gpt-6.1-sol");
+      await lastBody((x) => x.agent === "pm-codex" && x.body.model === "gpt-6.1-sol", "模型的修改");
+      await page.waitForFunction(() => (document.querySelector(".ms .ms-fold-body")?.textContent || "").includes("现在是：gpt-6.1-sol（"), null, { timeout: 5_000 });
       await effortSelect.selectOption("low");
       const effortBody = await lastBody((x) => x.agent === "pm-codex" && x.body.effort === "low", "推理强度的修改");
-      if (effortBody.body.model !== "gpt-6") {
+      if (effortBody.body.model !== "gpt-6.1-sol") {
         throw new Error(`改推理强度时应带上当前模型，实际是「${effortBody.body.model}」`);
       }
 
@@ -3420,7 +3517,7 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".pc-card .pc-quota", { hasText: "额度 95%" }).first().waitFor({ timeout: 10_000 });
       await settle(page);
       await shot(page, size, scheme, "computers");
-      const back = () => clickVisible(page, page.locator(".pcd-back"));
+      const back = () => navBackClick(page);
       // A card opens the computer: its agents and terminals, and what it
       // allows and its AIs (asked of it).
       await clickVisible(page, page.locator(".pc-card", { hasText: "Studio Mac" }));
@@ -3434,6 +3531,19 @@ async function runMatrix(browser, size, scheme) {
       await detail.locator("[data-testid=pc-details] .app-kv", { hasText: "Codex 没装" }).waitFor({ timeout: 10_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "computer-details");
+      // Its folders are its own rule; this App reaches it over SSH, so it
+      // changes them there (and puts them back: the other windows share the mock).
+      const dirsBox = detail.locator("[data-testid=machine-dirs]");
+      const folder = `~/code/tapnow-${size.width}-${scheme}`;
+      await dirsBox.getByRole("textbox", { name: "要允许的文件夹" }).fill(folder);
+      await clickVisible(page, dirsBox.getByRole("button", { name: "允许" }));
+      const chip = dirsBox.locator(".mdirs-chip", { hasText: folder });
+      await chip.waitFor({ timeout: 10_000 });
+      if (!(await dirsBox.locator(".mdirs-note").innerText()).includes("SSH tokyo-vps")) throw new Error("应说明是通过 SSH 在那台电脑上改的");
+      await settle(page, 200);
+      await shot(page, size, scheme, "computer-dirs");
+      await clickVisible(page, chip.getByRole("button", { name: `不再允许 ${folder}` }));
+      await chip.waitFor({ state: "detached", timeout: 10_000 });
       await back();
       // A computer that has not allowed terminals says how to allow it: on
       // that computer, never from here.
@@ -3672,8 +3782,15 @@ async function runMatrix(browser, size, scheme) {
       if (!narrow && !(await badge.count())) throw new Error("工作流导航上应标出有几个决定在等你");
       await settle(page, 300);
       await shot(page, size, scheme, "workflows");
-      // A ready-made one: pick who does what, see it drawn, save it.
-      await clickVisible(page, page.locator("[data-testid=workflow-templates] .au-template", { hasText: "改完跑测试" }));
+      // A ready-made one (新建工作流 offers them): pick who does what, see it drawn, save it.
+      if (await page.locator(".wf-row-last").count() < 1) throw new Error("每个工作流应写出最近一次运行");
+      if (!(await list.locator(".au-row", { hasText: "写-审-改" }).getByRole("button", { name: "运行" }).isVisible())) throw new Error("每行应有看得见的「运行」");
+      if (await page.locator(".pc > [data-testid=workflow-templates]").count()) throw new Error("有工作流时列表页不该再列一遍模板");
+      await clickVisible(page, page.locator(".ph").getByRole("button", { name: "新建工作流" }));
+      await page.locator("[data-testid=workflow-new]").waitFor({ timeout: 10_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "workflow-new");
+      await clickVisible(page, page.locator("[data-testid=workflow-new] .au-template", { hasText: "改完跑测试" }));
       const mk = page.locator("[data-testid=workflow-make]");
       await mk.waitFor({ timeout: 10_000 });
       await mk.locator("[data-testid=workflow-graph] .wf-node").first().waitFor({ timeout: 5_000 });
@@ -3686,10 +3803,13 @@ async function runMatrix(browser, size, scheme) {
       const det = page.locator("[data-testid=workflow-detail]");
       await det.waitFor({ timeout: 10_000 });
       await det.locator("h1", { hasText: name }).waitFor({ timeout: 10_000 });
-      await det.locator("[data-testid=workflow-no-runs]").waitFor({ timeout: 10_000 });
+      // A new one opens on how it goes; its runs are a tab away.
       await det.locator("[data-testid=workflow-graph] .wf-node", { hasText: "跑测试" }).waitFor({ timeout: 10_000 });
+      if (!(await det.locator(".wf-fail-note").count())) throw new Error("走向失败的出口应写在那一步旁边");
       await settle(page, 200);
       await shot(page, size, scheme, "workflow-made");
+      await clickVisible(page, det.locator("[data-testid=workflow-tabs]").getByRole("tab", { name: /运行记录/ }));
+      await det.locator("[data-testid=workflow-no-runs]").waitFor({ timeout: 10_000 });
       // Run it: the form asks for what it takes; the run opens at once.
       await clickVisible(page, det.locator(".pcd-head").getByRole("button", { name: "运行" }));
       const form = page.locator("[data-testid=workflow-start]");
@@ -3704,8 +3824,10 @@ async function runMatrix(browser, size, scheme) {
       await run.waitFor({ timeout: 10_000 });
       await run.locator(".wf-node.is-running").waitFor({ timeout: 10_000 });
       // Back, and remove it again (right-click).
-      await clickVisible(page, run.locator(".pcd-back"));
-      await clickVisible(page, page.locator("[data-testid=workflow-detail] .pcd-back"));
+      // Back (the ‹ at the top) to the workflow, and again to the list.
+      await navBackClick(page);
+      await page.locator("[data-testid=workflow-detail]").waitFor({ timeout: 10_000 });
+      await navBackClick(page);
       const row = list.locator(".au-row", { hasText: name });
       await row.waitFor({ timeout: 10_000 });
       await row.click({ button: "right", position: { x: 120, y: 12 } });
@@ -3714,6 +3836,7 @@ async function runMatrix(browser, size, scheme) {
       await row.waitFor({ state: "detached", timeout: 10_000 });
       // Have an agent write one: it goes to that agent as a task.
       await clickVisible(page, page.locator(".ph").getByRole("button", { name: "新建工作流" }));
+      await clickVisible(page, page.locator("[data-testid=workflow-new] .au-template", { hasText: "让 agent 写一个" }));
       const ask = page.locator("[data-testid=workflow-ask]");
       await ask.waitFor({ timeout: 10_000 });
       await ask.locator("textarea").fill("先让 PM 写方案，再审，审过了问我");
@@ -3732,22 +3855,45 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, row.locator(".au-row-main"));
       const det = page.locator("[data-testid=workflow-detail]");
       await det.waitFor({ timeout: 10_000 });
-      await det.locator("[data-testid=workflow-graph] .wf-node", { hasText: "审" }).waitFor({ timeout: 10_000 });
-      if (!(await det.locator(".wf-edge.is-back").count())) throw new Error("审没过回到做的那条边应画成回去的虚线");
-      if (!(await det.locator(".wf-node", { hasText: "审" }).innerText()).includes("分工：审查")) throw new Error("按分工挑人的一步应写出分工");
+      const tab = (name) => clickVisible(page, det.locator("[data-testid=workflow-tabs]").getByRole("tab", { name }));
+      // One that has run opens on its runs: each says what it was about.
       const runs = det.locator("[data-testid=workflow-runs] .wf-run-row");
       await runs.first().waitFor({ timeout: 10_000 });
+      if (!(await runs.first().innerText()).includes("导出对话")) throw new Error("运行记录每条应写这次做的是什么");
       await settle(page, 300);
       await shot(page, size, scheme, "workflow-detail");
+      await tab("流程");
+      await det.locator("[data-testid=workflow-graph] .wf-node", { hasText: "审" }).waitFor({ timeout: 10_000 });
+      if (!(await det.locator(".wf-edge.is-back").count())) throw new Error("审没过回到做的那条边应画成回去的虚线");
+      if (await det.locator(".wf-edge text", { hasText: "{" }).count()) throw new Error("流程图的边上不该露出数据怎么传的模板");
+      if (!(await det.locator(".wf-node", { hasText: "审" }).innerText()).includes("分工：审查")) throw new Error("按分工挑人的一步应写出分工");
+      await settle(page, 200);
+      await shot(page, size, scheme, "workflow-flow");
+      // Inputs and outputs: what a run is given, what each step gets and hands back.
+      await tab("输入和输出");
+      const io = det.locator("[data-testid=workflow-contracts]");
+      await io.scrollIntoViewIfNeeded();
+      const ioText = await io.innerText();
+      for (const w of ["运行时要填的", "task", "至少 4 个字", "收到", "交回", "approved", "格式 ^feat/", "选一个：就这样 / 不要了"]) {
+        if (!ioText.includes(w)) throw new Error(`「输入和输出」里应有「${w}」`);
+      }
+      await clickVisible(page, io.locator("[data-step=review] .wfc-json").last());
+      await io.locator("[data-step=review] .wfc-raw", { hasText: "\"approved\"" }).waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "workflow-contracts");
+      await tab(/运行记录/);
       await clickVisible(page, runs.filter({ hasText: "等你决定" }).first());
       const run = page.locator("[data-testid=workflow-run]");
       await run.waitFor({ timeout: 10_000 });
       const steps = run.locator("[data-testid=workflow-step]");
       await steps.nth(4).waitFor({ timeout: 10_000 });
+      if (!(await run.locator("h1").innerText()).includes("导出对话")) throw new Error("一次运行的标题应是这次做的事");
+      if ((await run.locator("[data-testid=workflow-step] .wf-mark.is-done").count()) < 4) throw new Error("做完的步骤应打勾");
       if (!(await run.locator(".wf-node.is-waiting").count())) throw new Error("等你决定的那一步应标出来");
       if (!(await steps.nth(2).innerText()).includes("第 2 次")) throw new Error("第二轮的「做」应写第 2 次");
       await clickVisible(page, steps.nth(1).getByRole("button", { name: "详情" }));
       await steps.nth(1).locator(".wf-step-detail pre", { hasText: "comments" }).waitFor({ timeout: 5_000 });
+      await steps.nth(1).locator(".wf-step-detail", { hasText: "收到的输入" }).locator("pre", { hasText: "feat/export-chat" }).waitFor({ timeout: 5_000 });
       await settle(page, 300);
       await shot(page, size, scheme, "workflow-run");
       // Only one step's times: click it in the drawing.
@@ -3757,7 +3903,7 @@ async function runMatrix(browser, size, scheme) {
       // Decide; the run is done.
       const card = run.locator("[data-testid=workflow-decision]");
       await clickVisible(page, card.getByRole("button", { name: "就这样" }));
-      await run.locator("h1", { hasText: "完成了" }).waitFor({ timeout: 10_000 });
+      await run.locator("[data-testid=workflow-run-state]", { hasText: "完成了" }).waitFor({ timeout: 10_000 });
       if (await card.count()) throw new Error("决定之后卡片应收起");
       await settle(page, 200);
       await shot(page, size, scheme, "workflow-run-done");
@@ -3765,6 +3911,91 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, steps.first().getByRole("button", { name: "看对话" }));
       await page.locator(".conv-detail", { hasText: "导出对话" }).first().waitFor({ timeout: 15_000 });
       await page.locator("[data-testid=via-workflow]").first().waitFor({ timeout: 10_000 });
+      if (narrow) await sidebar(page, false);
+    });
+
+    // Watching how a workflow goes: its figures, its runs by state; a run's
+    // metrics, timeline, files, scores, a step's log, two runs side by side.
+    await step("工作流 · 观测", async () => {
+      await go(page, "工作流", narrow);
+      const row = page.locator("[data-testid=workflows] .au-row", { hasText: "写-审-改" });
+      await row.waitFor({ timeout: 20_000 });
+      await clickVisible(page, row.locator(".au-row-main"));
+      const det = page.locator("[data-testid=workflow-detail]");
+      const tab = (name) => clickVisible(page, det.locator("[data-testid=workflow-tabs]").getByRole("tab", { name }));
+      await tab("运行情况");
+      const stats = det.locator("[data-testid=workflow-stats]");
+      await stats.waitFor({ timeout: 10_000 });
+      const statsText = await stats.innerText();
+      for (const w of ["跑了", "成功率", "用时", "每次花费", "$"]) if (!statsText.includes(w)) throw new Error(`运行情况里应有「${w}」`);
+      if ((await det.locator("[data-testid=workflow-recent] .wfo-bar").count()) < 8) throw new Error("最近几次的用时应画成一排柱子");
+      const table = det.locator("[data-testid=workflow-step-stats]");
+      if (!(await table.innerText()).includes("最近一次失败")) throw new Error("每一步的表里应写出最近一次失败");
+      await stats.scrollIntoViewIfNeeded();
+      await settle(page, 300);
+      await shot(page, size, scheme, "workflow-stats");
+      await table.scrollIntoViewIfNeeded();
+      await settle(page, 200);
+      await shot(page, size, scheme, "workflow-step-stats");
+      // Only the failed runs.
+      await tab(/运行记录/);
+      await clickVisible(page, det.locator("[data-testid=workflow-runs-filter]").getByRole("tab", { name: "失败的" }));
+      await page.waitForFunction(() => {
+        const rows = [...document.querySelectorAll("[data-testid=workflow-runs] .wf-run-row")];
+        return rows.length > 0 && rows.every((r) => r.textContent.includes("失败了"));
+      }, null, { timeout: 10_000 });
+      await clickVisible(page, det.locator("[data-testid=workflow-runs-filter]").getByRole("tab", { name: "全部" }));
+      // The run with the latest score: the export button.
+      await tab("运行情况");
+      await clickVisible(page, det.locator("[data-testid=workflow-score-stats]").getByRole("button", { name: /最近/ }).first());
+      const run = page.locator("[data-testid=workflow-run]");
+      const metrics = run.locator("[data-testid=workflow-run-metrics]");
+      await metrics.waitFor({ timeout: 10_000 });
+      for (const w of ["总用时", "干活", "发了", "$"]) if (!(await metrics.innerText()).includes(w)) throw new Error(`运行的指标里应有「${w}」`);
+      const arts = run.locator("[data-testid=workflow-artifacts]");
+      await arts.locator("img[alt='设置页截图.png']").first().waitFor({ timeout: 10_000 });
+      if (!(await arts.innerText()).includes("改动说明.md")) throw new Error("产物里应有交回的文件");
+      await run.locator("[data-testid=workflow-run-scores]", { hasText: "quality" }).waitFor({ timeout: 5_000 });
+      await settle(page, 300);
+      await shot(page, size, scheme, "workflow-run-metrics");
+      await arts.scrollIntoViewIfNeeded();
+      await settle(page, 300);
+      await shot(page, size, scheme, "workflow-artifacts");
+      // The timeline.
+      await clickVisible(page, run.locator("[data-testid=workflow-steps-view]").getByRole("tab", { name: "时间线" }));
+      const tl = run.locator("[data-testid=workflow-timeline]");
+      await tl.waitFor({ timeout: 5_000 });
+      if ((await tl.locator(".wfo-tl-row").count()) < 5) throw new Error("时间线上每一步应有一条");
+      await tl.scrollIntoViewIfNeeded();
+      await settle(page, 300);
+      await shot(page, size, scheme, "workflow-timeline");
+      // A step's log, from its bar.
+      await clickVisible(page, tl.locator(".wfo-tl-row").first());
+      const log = page.locator("[data-testid=workflow-step-log]");
+      await log.locator(".wfo-log-line", { hasText: "Read web/src/app/Settings.tsx" }).waitFor({ timeout: 10_000 });
+      const logText = await log.innerText();
+      for (const w of ["交给它", "进展", "回复", "用工具", "用量", "退回"]) if (!logText.includes(w)) throw new Error(`步骤日志里应有「${w}」`);
+      await settle(page, 300);
+      await shot(page, size, scheme, "workflow-step-log");
+      await page.keyboard.press("Escape");
+      await log.waitFor({ state: "detached", timeout: 5_000 });
+      // A score.
+      await clickVisible(page, run.getByRole("button", { name: "打个分" }));
+      const form = page.locator("[data-testid=workflow-score]");
+      await form.locator("input[inputmode=decimal]").fill("5");
+      await form.getByPlaceholder("分").fill("分");
+      await clickVisible(page, form.getByRole("button", { name: "记下" }));
+      await form.waitFor({ state: "detached", timeout: 5_000 });
+      await run.locator("[data-testid=workflow-run-scores] .wfo-score", { hasText: "5分" }).waitFor({ timeout: 10_000 });
+      // Side by side with the run before.
+      await clickVisible(page, run.getByRole("button", { name: "对比" }));
+      const cmp = page.locator("[data-testid=workflow-compare]");
+      await cmp.locator(".wfo-tr", { hasText: "总用时" }).waitFor({ timeout: 10_000 });
+      if (!(await cmp.innerText()).includes("quality")) throw new Error("对比里应有两次的分数");
+      await settle(page, 300);
+      await shot(page, size, scheme, "workflow-compare");
+      await page.keyboard.press("Escape");
+      await cmp.waitFor({ state: "detached", timeout: 5_000 });
       if (narrow) await sidebar(page, false);
     });
 
@@ -3780,22 +4011,107 @@ async function runMatrix(browser, size, scheme) {
       const before = await det.locator(".pcd-sub").innerText();
       await clickVisible(page, det.locator(".pcd-head").getByRole("button", { name: "编辑" }));
       const ed = page.locator("[data-testid=workflow-edit]");
-      await ed.locator("[data-testid=workflow-edit-step]").nth(2).waitFor({ timeout: 10_000 });
-      // Step 2 goes by role; make it a named agent, then back to a role.
-      if ((await ed.getByRole("textbox", { name: "第 2 步的分工" }).inputValue()) !== "审查") throw new Error("按分工的一步应带出分工");
-      await ed.getByRole("combobox", { name: "第 2 步交给谁" }).selectOption({ index: 0 });
-      await ed.getByRole("textbox", { name: "第 2 步的分工" }).waitFor({ state: "detached", timeout: 5_000 });
-      await ed.getByRole("combobox", { name: "第 2 步交给谁" }).selectOption("@role");
-      if (!(await ed.getByRole("button", { name: "保存新版本" }).isDisabled())) throw new Error("分工空着不该能保存");
-      await ed.getByRole("textbox", { name: "第 2 步的分工" }).fill("审查");
+      await ed.locator("[data-testid=workflow-edit-basic]").waitFor({ timeout: 10_000 });
+      if (!(await ed.getByRole("button", { name: "保存新版本" }).isDisabled())) throw new Error("没改什么时不该能保存");
+      // What a run is given uses a rule the form cannot show: read as words, JSON only when asked.
+      const inEd = ed.locator("[data-testid=workflow-edit-inputs]");
+      if (!(await inEd.innerText()).includes("至少 4 个字")) throw new Error("表单写不了的规则应写成看得懂的样子");
+      if (await inEd.locator("textarea").count()) throw new Error("不该一打开就是 JSON");
+      if (!(await inEd.getByRole("button", { name: "用 JSON 改" }).count())) throw new Error("应能「用 JSON 改」");
       await ed.locator(".wf-edit-loop select").selectOption("5");
-      await clickVisible(page, ed.locator("[data-testid=workflow-edit-step]").first().locator("summary"));
+      // Step 2 (picked in the drawing) goes by role; make it a named agent, then back to a role.
+      await clickVisible(page, ed.locator(".wf-node", { hasText: "审" }));
+      const st = ed.locator("[data-testid=workflow-edit-step][data-step=review]");
+      await st.waitFor({ timeout: 5_000 });
+      if ((await st.getByRole("textbox", { name: "第 2 步的分工" }).inputValue()) !== "审查") throw new Error("按分工的一步应带出分工");
+      await st.getByRole("combobox", { name: "第 2 步交给谁" }).selectOption({ index: 0 });
+      await st.getByRole("textbox", { name: "第 2 步的分工" }).waitFor({ state: "detached", timeout: 5_000 });
+      await st.getByRole("combobox", { name: "第 2 步交给谁" }).selectOption("@role");
+      if (!(await ed.getByRole("button", { name: "保存新版本" }).isDisabled())) throw new Error("分工空着不该能保存");
+      await st.getByRole("textbox", { name: "第 2 步的分工" }).fill("审查");
+      // What it hands back: fields.
+      const outEd = st.locator("[data-testid=workflow-edit-output]");
+      if ((await outEd.locator(".wfc-row").count()) !== 2) throw new Error("「审」交回的应列出 approved 和 comments 两个字段");
+      await clickVisible(page, outEd.getByRole("button", { name: "加一个字段" }));
+      await outEd.locator(".wfc-row").nth(2).getByRole("textbox", { name: "字段名" }).fill("risk");
+      await outEd.locator(".wfc-row").nth(2).getByRole("combobox", { name: "类型" }).selectOption("number");
       await settle(page, 200);
       await shot(page, size, scheme, "workflow-edit");
+      // The chips above the drawing pick too.
+      await clickVisible(page, ed.locator(".wf-ed-chip", { hasText: "1. 做" }));
+      await ed.locator("[data-testid=workflow-edit-step][data-step=write]").waitFor({ timeout: 5_000 });
       await clickVisible(page, ed.getByRole("button", { name: "保存新版本" }));
       await ed.waitFor({ state: "detached", timeout: 10_000 });
+      await clickVisible(page, det.locator("[data-testid=workflow-tabs]").getByRole("tab", { name: "流程" }));
       await det.locator(".wf-edge text", { hasText: "最多 5 次" }).waitFor({ timeout: 10_000 });
       if ((await det.locator(".pcd-sub").innerText()) === before) throw new Error("保存后应是新的一版");
+    });
+
+    // ⌃Tab: the agents as large faces, last talked to first; letting go of
+    // ⌃ opens the one picked (the one before, after a single press).
+    await step("切换 agent · ⌃Tab", async () => {
+      await openMember(page, narrow, "聊天", "Myco (Grok)");
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      if (narrow) await sidebar(page, false);
+      await page.keyboard.down("Control");
+      await page.keyboard.press("Tab");
+      const sw = page.locator("[data-testid=agent-switcher]");
+      await sw.waitFor({ timeout: 5_000 });
+      // The open chat first; one press picks the next (at work first).
+      const picked = (await sw.locator(".asw-name").innerText()).trim();
+      if (!picked || picked === "Review (Codex 云端)") throw new Error("按一下 ⌃Tab 应选中另一个 agent");
+      if (await sw.locator(".asw-item.is-away").count()) throw new Error("不在线的不该出现在切换框里");
+      if (!(await sw.locator(".asw-item").first().getAttribute("title") || "").includes("Review")) throw new Error("正开着的对话应排第一");
+      // ← → pick too.
+      await page.keyboard.press("ArrowRight");
+      const next = (await sw.locator(".asw-name").innerText()).trim();
+      if (next === picked) throw new Error("→ 应换到下一个");
+      await page.keyboard.press("ArrowLeft");
+      if ((await sw.locator(".asw-name").innerText()).trim() !== picked) throw new Error("← 应回到上一个");
+      await settle(page, 150);
+      await shot(page, size, scheme, "agent-switcher");
+      await page.keyboard.up("Control");
+      await sw.waitFor({ state: "detached", timeout: 5_000 });
+      // (its chat: highlighted in the sidebar; a coordinator's is its project's home)
+      await sidebar(page, true);
+      await page.locator(".app-sidebar .sp-nav-person.active", { hasText: picked }).first().waitFor({ state: "attached", timeout: 10_000 });
+      if (narrow) await sidebar(page, false);
+      // Esc puts it away, nothing opened.
+      await page.keyboard.down("Control");
+      await page.keyboard.press("Backquote");
+      await sw.waitFor({ timeout: 5_000 });
+      await page.keyboard.press("Escape");
+      await page.keyboard.up("Control");
+      await sw.waitFor({ state: "detached", timeout: 5_000 });
+      await sidebar(page, true);
+      if (!(await page.locator(".app-sidebar .sp-nav-person.active", { hasText: picked }).count())) throw new Error("Esc 收起时不该换对话");
+      if (narrow) await sidebar(page, false);
+    });
+
+    // ‹ › at the top: back to where you were and forward again, pages and
+    // what they had open; no back buttons on the pages themselves.
+    await step("导航 · 后退前进", async () => {
+      await go(page, "工作流", narrow);
+      const row = page.locator("[data-testid=workflows] .au-row", { hasText: "写-审-改" });
+      await clickVisible(page, row.locator(".au-row-main"));
+      const det = page.locator("[data-testid=workflow-detail]");
+      await det.waitFor({ timeout: 10_000 });
+      if (await page.locator(".pcd-back").count()) throw new Error("页面里不该再有返回按钮");
+      await clickVisible(page, det.locator("[data-testid=workflow-runs] .wf-run-row").first());
+      await page.locator("[data-testid=workflow-run]").waitFor({ timeout: 10_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "nav-arrows");
+      await navBackClick(page);
+      await det.waitFor({ timeout: 10_000 });
+      await navBackClick(page);
+      await page.locator("[data-testid=workflows]").waitFor({ timeout: 10_000 });
+      await clickVisible(page, page.locator("[data-testid=nav-arrows]").getByRole("button", { name: "前进" }));
+      await det.waitFor({ timeout: 10_000 });
+      await page.keyboard.press("Control+BracketRight");
+      await page.locator("[data-testid=workflow-run]").waitFor({ timeout: 10_000 });
+      await page.keyboard.press("Control+BracketLeft");
+      await det.waitFor({ timeout: 10_000 });
+      if (narrow) await sidebar(page, false);
     });
 
     // A conversation is exported from its header: Markdown for people or
@@ -4007,13 +4323,13 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, check.getByRole("button", { name: "重启后台" }));
       await check.locator(".cc-fixed", { hasText: "后台重启好了" }).waitFor({ timeout: 10_000 });
       // One the App did not connect: which SSH host is it?
-      await clickVisible(page, page.locator(".pcd-back"));
+      await navBackClick(page);
       await clickVisible(page, page.locator(".pc-card", { hasText: "临时 Mac" }));
       await page.locator("[data-testid=computer-check] select.app-select-field").waitFor({ timeout: 10_000 });
       await page.locator("[data-testid=computer-check]").scrollIntoViewIfNeeded();
       await settle(page, 300);
       await shot(page, size, scheme, "computer-check-pick");
-      await clickVisible(page, page.locator(".pcd-back"));
+      await navBackClick(page);
       await page.locator(".pc-card", { hasText: "临时 Mac" }).waitFor({ timeout: 10_000 });
     });
 
@@ -4071,6 +4387,82 @@ async function runMatrix(browser, size, scheme) {
         if (narrow) await sidebar(page, false);
         await page.locator(".conv-detail .conv-head h2", { hasText: "Review" }).waitFor({ timeout: 10_000 });
       } else if (narrow) await sidebar(page, false);
+    });
+
+    // Superagent: set up from the bottom-left menu (a new Shroom on a
+    // computer of yours), its chat opens; what it asks you shows above the
+    // composer, with 同意 / 不同意; the menu counts what waits.
+    await step("superagent · 配一个、确认卡片", async () => {
+      await sidebar(page, true);
+      await clickVisible(page, page.locator(".sp-switch .app-hub-trigger"));
+      await page.locator(".app-hub-menu").waitFor();
+      const entry = page.locator("[data-testid=menu-superagent]");
+      await entry.waitFor({ timeout: 10_000 });
+      const label = compactText(await entry.innerText());
+      if (!label.includes("配一个 superagent")) throw new Error(`没有 superagent 时菜单应写「配一个 superagent」，实际「${label}」`);
+      await clickVisible(page, entry);
+      const dialog = page.locator("[data-testid=superagent-setup]");
+      await dialog.waitFor({ timeout: 10_000 });
+      await clickVisible(page, dialog.locator(".ws-computer", { hasText: "Office PC" }));
+      await clickVisible(page, dialog.getByRole("tab", { name: "Codex" }));
+      await settle(page, 200);
+      await shot(page, size, scheme, "superagent-setup");
+      await clickVisible(page, dialog.getByRole("button", { name: "开一个 Shroom" }));
+      await page.locator(".app-modal").waitFor({ state: "hidden", timeout: 30_000 });
+      await page.locator(".conv-detail .conv-head h2", { hasText: "Shroom" }).waitFor({ timeout: 20_000 });
+      const ask = await fetch(`http://${HOST}:${mockPort()}/app/mock/superagent-ask`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ what: "删除项目 old-site", reason: "这个项目三个月没动了，文档已经并进 website。" }),
+      });
+      if (!ask.ok) throw new Error(`superagent 发起确认失败：HTTP ${ask.status}`);
+      const card = page.locator("[data-testid=approvals] .sa-approval");
+      await card.waitFor({ timeout: 25_000 });
+      const text = compactText(await card.innerText());
+      if (!text.includes("删除项目 old-site") || !text.includes("三个月没动")) throw new Error(`确认卡片应写明要做什么和为什么，实际「${text}」`);
+      await settle(page, 200);
+      await shot(page, size, scheme, "superagent-approval");
+      await sidebar(page, true);
+      await clickVisible(page, page.locator(".sp-switch .app-hub-trigger"));
+      const badge = page.locator("[data-testid=menu-superagent] .app-hub-menu-badge");
+      await badge.waitFor({ timeout: 10_000 });
+      if ((await badge.innerText()).trim() !== "1") throw new Error(`菜单应标出 1 件等你点头的事，实际「${await badge.innerText()}」`);
+      await settle(page, 200);
+      await shot(page, size, scheme, "superagent-menu");
+      await page.keyboard.press("Escape");
+      await page.locator(".app-hub-menu").waitFor({ state: "hidden" }).catch(() => undefined);
+      if (narrow) await sidebar(page, false);
+      await clickVisible(page, card.getByRole("button", { name: "同意", exact: true }));
+      await card.waitFor({ state: "hidden", timeout: 10_000 });
+    });
+
+    // The ⌘⇧Space panel (the Mac app's own window, /?quick=1): one line to
+    // hand Shroom a thing, its answer under it, the approval cards too.
+    await step("superagent · 快捷面板", async () => {
+      const qp = await page.context().newPage();
+      try {
+        await qp.setViewportSize({ width: 664, height: 760 });
+        await qp.goto(`${r.base}/?quick=1&lang=zh`, { waitUntil: "domcontentloaded" });
+        const panel = qp.locator("[data-testid=quick-panel]");
+        await panel.waitFor({ timeout: 15_000 });
+        await panel.locator(".qp-name", { hasText: "Shroom" }).waitFor({ timeout: 15_000 });
+        const ask = await fetch(`http://${HOST}:${mockPort()}/app/mock/superagent-ask`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ what: "停掉自动化「每晚跑测试」", reason: "它连着 5 天都失败在同一个地方，先停下来等修好。" }),
+        });
+        if (!ask.ok) throw new Error(`superagent 发起确认失败：HTTP ${ask.status}`);
+        const box = qp.locator("[data-testid=quick-input]");
+        await box.fill("帮我看看今天哪些任务卡住了");
+        await box.press("Enter");
+        await qp.locator(".qp-mine", { hasText: "哪些任务卡住了" }).waitFor({ timeout: 10_000 });
+        await qp.locator(".qp-answer").first().waitFor({ timeout: 20_000 });
+        await qp.locator(".sa-approval").first().waitFor({ timeout: 25_000 });
+        await settle(qp, 300);
+        const name = `${size.width}x${size.height}-${scheme}-superagent-quick.png`;
+        await panel.screenshot({ path: path.join(OUT, name) });
+        log(`    截图 ui-smoke/${name}`);
+      } finally {
+        await qp.close();
+      }
     });
 
     // An agent offers the next step with its answer: the empty input shows

@@ -616,3 +616,41 @@ func (s *ProjectService) Sees(ctx context.Context, by Actor, name string) bool {
 	_, err := s.Get(ctx, by, name)
 	return err == nil
 }
+
+// SetMachine lets the project's coordinators start agents on a computer
+// (allow), or no longer (people who manage the project only; a superagent
+// for its owner, or an approved request).
+func (s *ProjectService) SetMachine(ctx context.Context, by Actor, name, machine string, allow bool) (*ProjectView, error) {
+	v, err := s.Get(ctx, by, name)
+	if err != nil {
+		return nil, err
+	}
+	if !s.manages(by, v) {
+		return nil, denied("choose the computers project " + v.Project.Name + " may start agents on")
+	}
+	machine = strings.TrimSpace(machine)
+	if machine == "" {
+		return nil, domain.Errf(domain.CodeInvalidArgument, "machine is required")
+	}
+	has := slices.Contains(v.Project.Machines, machine)
+	switch {
+	case allow && !has:
+		v.Project.Machines = append(v.Project.Machines, machine)
+	case !allow && has:
+		v.Project.Machines = slices.DeleteFunc(slices.Clone(v.Project.Machines), func(m string) bool { return m == machine })
+	default:
+		return v, nil
+	}
+	v.Project.UpdatedAt = s.clock.Now()
+	return v, s.projects.Save(ctx, v.Project)
+}
+
+// Coordinates reports whether agent coordinates the (active) project, and
+// returns it.
+func (s *ProjectService) Coordinates(ctx context.Context, agent *domain.Agent, name string) (*ProjectView, bool, error) {
+	v, err := s.load(ctx, name)
+	if err != nil {
+		return nil, false, err
+	}
+	return v, !v.Project.Archived && v.coordinates(agent), nil
+}

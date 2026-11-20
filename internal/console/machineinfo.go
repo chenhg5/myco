@@ -7,6 +7,7 @@ import (
 
 	"github.com/chenhg5/myco/internal/api"
 	"github.com/chenhg5/myco/internal/config"
+	"github.com/chenhg5/myco/internal/harness/codex"
 )
 
 // machineSessionsMax bounds the sessions a machine reports at a time.
@@ -21,7 +22,13 @@ func MachineInventory(ctx context.Context, home, hub string) ([]api.MachineAI, [
 	l := &Local{Home: home, ShellPath: LoginShellPath}
 	ais := []api.MachineAI{}
 	for _, a := range l.LocalAgents(ctx) {
-		ais = append(ais, api.MachineAI{CLI: a.CLI, Name: a.Name, State: a.State, Version: a.Version, Install: a.Install, Login: a.Login})
+		ai := api.MachineAI{CLI: a.CLI, Name: a.Name, State: a.State, Version: a.Version, Install: a.Install, Login: a.Login}
+		if a.CLI == "codex" && a.State != "missing" {
+			for _, m := range codex.ModelsIn(l.codexHome()) {
+				ai.Models = append(ai.Models, api.RuntimeModel{ID: m.ID, Name: m.Name, Efforts: m.Efforts})
+			}
+		}
+		ais = append(ais, ai)
 	}
 	sessions := []api.MachineSession{}
 	for _, s := range l.LocalSessions(time.Now()) {

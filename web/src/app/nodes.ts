@@ -289,7 +289,7 @@ export function receivesInSession(a?: Agent, receiving?: string): boolean {
  */
 export function possiblyStuck(
   m: { status: string; active_at?: string; updated_at: string; asking?: string },
-  node: { agent?: Agent; receiving?: string; offline?: boolean } | undefined,
+  node: { agent?: Agent; receiving?: string; offline?: boolean; seenAt?: number } | undefined,
   now: number,
 ): boolean {
   if (m.status !== "acked" && m.status !== "held") return false;
@@ -298,15 +298,25 @@ export function possiblyStuck(
   if (node?.offline) return true;
   const wait = receivesInSession(node?.agent, node?.receiving) ? STUCK_AFTER_SESSION_MS : STUCK_AFTER_MS;
   const at = lastActivityAt(m);
-  return Number.isFinite(at) && now - at >= wait;
+  return Number.isFinite(at) && seenNow(now, node?.seenAt) - at >= wait;
 }
 
-/** Possibly-stuck tasks among a node's current work, split as its counts are. */
-export function stuckCounts(st: AgentStatus, now: number): { in_progress: number; held: number; total: number } {
+/** How far what is shown reaches: now, or, when the last answer (seenAt)
+ *  is older than a few polls, then. Quiet is only known up to the last
+ *  answer: on a poor network the news may not have come through, and the
+ *  work may be going on all the same. */
+export const SEEN_SLACK_MS = 20_000;
+export function seenNow(now: number, seenAt?: number): number {
+  return seenAt && now - seenAt > SEEN_SLACK_MS ? seenAt : now;
+}
+
+/** Possibly-stuck tasks among a node's current work, split as its counts are.
+ *  seenAt: when they were fetched (the workspace's seen_at). */
+export function stuckCounts(st: AgentStatus, now: number, seenAt?: number): { in_progress: number; held: number; total: number } {
   let in_progress = 0;
   let held = 0;
   for (const m of st.current || []) {
-    if (!possiblyStuck(m, { agent: st.agent, receiving: st.receiving, offline: st.state === "offline" }, now)) continue;
+    if (!possiblyStuck(m, { agent: st.agent, receiving: st.receiving, offline: st.state === "offline", seenAt }, now)) continue;
     if (m.status === "held") held += 1;
     else in_progress += 1;
   }

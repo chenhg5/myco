@@ -13,7 +13,7 @@
 .pl-opt.is-on { border-color: var(--accent); }
 .pl-bar { position: absolute; left: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--fg) 5%, transparent); transition: width 0.4s ease; }
 .pl-opt.is-lead .pl-bar { background: color-mix(in srgb, var(--accent) 12%, transparent); }
-.pl-mark { position: relative; display: grid; place-items: center; width: 20px; height: 20px; flex: none; border: 1.5px solid var(--faint); border-radius: 50%; color: #fff; }
+.pl-mark { position: relative; display: grid; place-items: center; width: 20px; height: 20px; flex: none; border: 1.5px solid var(--faint); border-radius: 50%; color: var(--on-accent); }
 .pl-mark.is-box { border-radius: 5px; }
 .pl-opt.is-on .pl-mark { border-color: var(--accent); background: var(--accent); }
 .pl-mark .ico { width: 13px; height: 13px; stroke-width: 3; }

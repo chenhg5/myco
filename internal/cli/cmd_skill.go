@@ -119,7 +119,8 @@ installed there by myco join and myco skill install.`,
 		Mutating: true,
 		Long: `Writes skills/myco/SKILL.md under ~/.claude (CLAUDE_CONFIG_DIR) and ~/.codex (CODEX_HOME), for
 each that exists. myco join, myco upgrade and the runner (when it starts) do this too, so the
-skill follows the installed version; a SKILL.md you wrote yourself is never replaced. A session that is already running may need a restart to see a new skill.`,
+skill follows the installed version; a SKILL.md you wrote yourself is never replaced. It also
+updates the myco lines in CLAUDE.md / AGENTS.md where they are (see myco skill memory). A session that is already running may need a restart to see a new skill.`,
 		Examples: []string{"myco skill install", "myco skill install --dir ~/.config/agent/skills/myco"},
 		Flags: []Flag{
 			{Name: "dir", Kind: String, Help: "Install into this folder instead (the file is <dir>/SKILL.md)"},
@@ -137,6 +138,10 @@ skill follows the installed version; a SKILL.md you wrote yourself is never repl
 			if err != nil {
 				return errorf("skill_install_failed", ExitError, "check the folder's permissions, or pass --dir", "%v", err)
 			}
+			if strings.TrimSpace(e.in.String("dir")) == "" {
+				// The myco lines in the CLIs' instructions follow this version too.
+				_, _, _ = installMemory(memoryTargets(e.in.Getenv), memoryRefresh)
+			}
 			return e.p.Print(map[string]any{"version": Version, "written": nonNilStrings(written), "skipped": nonNilStrings(skipped), "targets": nonNilStrings(targets)}, func(w io.Writer) {
 				if len(targets) == 0 {
 					fmt.Fprintln(w, "no agent CLI skills folder here (~/.claude or ~/.codex); read the skill with: myco skill show")
@@ -153,7 +158,77 @@ skill follows the installed version; a SKILL.md you wrote yourself is never repl
 			})
 		}),
 	}
-	return (&Command{Name: "skill", Summary: "The guide that teaches an agent to use myco (built into this version)"}).Add(show, install)
+	memory := &Command{
+		Name:     "memory",
+		Summary:  "Show, add or remove the myco lines in your agent CLIs' own instructions (~/.claude/CLAUDE.md, ~/.codex/AGENTS.md)",
+		Mutating: true,
+		Long: `A few lines that stay in every session's context, so an agent that joined myco keeps using it
+well: progress with screenshots, a suggested next step, asking, delegating, waiting again. They go
+in the user-level instruction files of Claude Code (CLAUDE_CONFIG_DIR or ~/.claude/CLAUDE.md) and
+Codex (CODEX_HOME or ~/.codex/AGENTS.md), never a project's own files, between myco markers: the
+rest of the file is left as it is, and they say they apply only when the session is a myco agent.
+myco join adds them (unless --no-memory); myco upgrade and the runner keep them current. --remove
+takes them out and leaves a marker, so they are not added again; --add puts them back.`,
+		Examples: []string{"myco skill memory", "myco skill memory --remove", "myco skill memory --add"},
+		Flags: []Flag{
+			{Name: "add", Kind: Bool, Help: "Add the lines (also where they were removed before)"},
+			{Name: "remove", Kind: Bool, Help: "Take the lines out, and keep them out"},
+		},
+		Run: handler(func(e *env) error {
+			targets := memoryTargets(e.in.Getenv)
+			add, remove := e.in.Bool("add"), e.in.Bool("remove")
+			if add && remove {
+				return errorf("invalid_usage", ExitUsage, "pass --add or --remove, not both", "--add and --remove together")
+			}
+			if !add && !remove {
+				state := map[string]string{}
+				for _, t := range targets {
+					b, _ := os.ReadFile(t)
+					switch s := string(b); {
+					case strings.Contains(s, memoryBegin):
+						state[t] = "on"
+					case strings.Contains(s, memoryOff):
+						state[t] = "off"
+					default:
+						state[t] = "none"
+					}
+				}
+				return e.p.Print(map[string]any{"files": state, "lines": memoryBody}, func(w io.Writer) {
+					if len(targets) == 0 {
+						fmt.Fprintln(w, "no agent CLI folder here (~/.claude or ~/.codex)")
+					}
+					for _, t := range targets {
+						fmt.Fprintf(w, "%s: %s\n", t, state[t])
+					}
+					fmt.Fprintln(w, "\nthe lines:\n"+memoryBody)
+				})
+			}
+			mode := memoryForce
+			if remove {
+				mode = memoryRemove
+			}
+			if e.in.Bool("dry-run") {
+				return e.dryRun(map[string]any{"action": "skill_memory", "remove": remove, "targets": nonNilStrings(targets)})
+			}
+			changed, _, err := installMemory(targets, mode)
+			if err != nil {
+				return errorf("skill_memory_failed", ExitError, "check the file's permissions", "%v", err)
+			}
+			return e.p.Print(map[string]any{"changed": nonNilStrings(changed), "removed": remove}, func(w io.Writer) {
+				for _, p := range changed {
+					if remove {
+						fmt.Fprintf(w, "took the myco lines out of %s\n", p)
+					} else {
+						fmt.Fprintf(w, "added the myco lines to %s (new sessions read them)\n", p)
+					}
+				}
+				if len(changed) == 0 {
+					fmt.Fprintln(w, "nothing to change")
+				}
+			})
+		}),
+	}
+	return (&Command{Name: "skill", Summary: "The guide that teaches an agent to use myco (built into this version)"}).Add(show, install, memory)
 }
 
 func nonNilStrings(s []string) []string {

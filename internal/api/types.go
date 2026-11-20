@@ -136,6 +136,19 @@ type Runtime struct {
 	// explains going offline: "wsl" (Windows shuts WSL down when idle).
 	Away string `json:"away,omitempty"`
 	Env  string `json:"env,omitempty"`
+	// Models are the models its CLI offers on that computer, in the CLI's
+	// own order (Codex: its models cache). Absent when the CLI does not
+	// say (Claude Code: its aliases are fixed) or the runner predates it
+	// (v0.21.1).
+	Models []RuntimeModel `json:"models,omitempty"`
+}
+
+// RuntimeModel is a model a CLI offers: the id its --model takes, a
+// display name, and the reasoning efforts it supports.
+type RuntimeModel struct {
+	ID      string   `json:"id"`
+	Name    string   `json:"name,omitempty"`
+	Efforts []string `json:"efforts,omitempty"`
 }
 
 // Quota is a CLI account's usage limits at one moment (from v0.19.5).
@@ -256,6 +269,10 @@ type Message struct {
 	// reply, is the structured result handed back with it (v0.21+).
 	Workflow string          `json:"workflow,omitempty"`
 	Result   json.RawMessage `json:"result,omitempty"`
+	// GrantedBy, on a task, says why the hub let it past its recipient's
+	// allow_from: "project:<name>" (a spawn request from an agent of a
+	// project with a terminal on that computer; v0.21.2+).
+	GrantedBy string `json:"granted_by,omitempty"`
 	// E2E: the body is end-to-end encrypted (an envelope only the
 	// message's readers can open; see docs/design/e2e-encryption.md).
 	E2E bool `json:"e2e,omitempty"`
@@ -816,6 +833,8 @@ type MachineAI struct {
 	// Install and Login are commands to run on that machine.
 	Install string `json:"install,omitempty"`
 	Login   string `json:"login,omitempty"`
+	// Models are the models it offers there (Codex, v0.21.1+).
+	Models []RuntimeModel `json:"models,omitempty"`
 }
 
 // MachineSession is a recent Claude Code or Codex session on the machine;
@@ -1153,10 +1172,32 @@ type Project struct {
 	UpdatedAt  time.Time       `json:"updated_at"`
 	Members    []ProjectMember `json:"members"`
 	Docs       []ProjectDoc    `json:"docs"`
+	// Machines are the computers (ids) its coordinators may start agents
+	// on (v0.21.2+; absent on older hubs).
+	Machines []string `json:"machines"`
 	// What the caller may do: edit the content (owner, admins,
 	// coordinators), manage it (people: roles, visibility, archive, delete).
 	CanEdit   bool `json:"can_edit"`
 	CanManage bool `json:"can_manage"`
+}
+
+// ProjectMachine is a computer of the workspace, as a project sees it:
+// whether its coordinators may start agents there (GET
+// /v1/projects/{name}/machines).
+type ProjectMachine struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	OS        string `json:"os,omitempty"`
+	Online    bool   `json:"online"`
+	CanSpawn  bool   `json:"can_spawn"`
+	SpawnNode string `json:"spawn_node,omitempty"`
+	Allowed   bool   `json:"allowed"`
+}
+
+// ProjectMachineList answers GET /v1/projects/{name}/machines.
+type ProjectMachineList struct {
+	Project  string           `json:"project"`
+	Machines []ProjectMachine `json:"machines"`
 }
 
 // ProjectLink points at material kept elsewhere.
@@ -1669,6 +1710,9 @@ type TemplateUsed struct {
 type Workflow struct {
 	ID          string          `json:"id"`
 	Name        string          `json:"name"`
+	Title       string          `json:"title,omitempty"`
+	Tags        []string        `json:"tags,omitempty"`
+	Group       string          `json:"group,omitempty"`
 	Description string          `json:"description,omitempty"`
 	Project     string          `json:"project,omitempty"`
 	Owner       string          `json:"owner,omitempty"`
@@ -1746,31 +1790,262 @@ type WorkflowRun struct {
 	Steps      []RunStep       `json:"steps,omitempty"`
 	Events     []RunEvent      `json:"events,omitempty"`
 	Definition json.RawMessage `json:"definition,omitempty"`
-	CreatedAt  time.Time       `json:"created_at"`
-	UpdatedAt  time.Time       `json:"updated_at"`
-	EndedAt    *time.Time      `json:"ended_at,omitempty"`
+	// DurationMS is from start to end, or to now (v0.21.1+).
+	DurationMS int64 `json:"duration_ms"`
+	// Metrics, Artifacts and Evaluations come with GET
+	// /v1/workflow-runs/{id} (v0.21.1+).
+	Metrics     *RunMetrics     `json:"metrics,omitempty"`
+	Artifacts   []RunArtifact   `json:"artifacts,omitempty"`
+	Evaluations []RunEvaluation `json:"evaluations,omitempty"`
+	CreatedAt   time.Time       `json:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at"`
+	EndedAt     *time.Time      `json:"ended_at,omitempty"`
+}
+
+// Usage is what agents' runs cost: tokens and money, as their CLIs report
+// them.
+type Usage struct {
+	InputTokens  int64   `json:"input_tokens,omitempty"`
+	OutputTokens int64   `json:"output_tokens,omitempty"`
+	CostUSD      float64 `json:"cost_usd,omitempty"`
+}
+
+// RunMetrics are a run's runtime facts (v0.21.1+). Active is the time an
+// agent or computer step was at work; waiting, the time a decision waited
+// for someone while nothing else was.
+type RunMetrics struct {
+	DurationMS int64  `json:"duration_ms"`
+	ActiveMS   int64  `json:"active_ms"`
+	WaitingMS  int64  `json:"waiting_ms"`
+	Steps      int    `json:"steps"`
+	Done       int    `json:"done"`
+	Failed     int    `json:"failed"`
+	Attempts   int    `json:"attempts"`
+	Retries    int    `json:"retries"`
+	Bounces    int    `json:"bounces"`
+	Usage      *Usage `json:"usage,omitempty"`
+}
+
+// RunArtifact is a file an agent handed back on a step's task (v0.21.1+).
+// Download it from /v1/files/{file_id} (or the App's files route).
+type RunArtifact struct {
+	Step        string    `json:"step"`
+	StepRun     string    `json:"step_run"`
+	Try         int       `json:"try"`
+	Kind        string    `json:"kind"` // reply progress
+	Message     string    `json:"message"`
+	From        string    `json:"from"`
+	At          time.Time `json:"at"`
+	FileID      string    `json:"file_id"`
+	Name        string    `json:"name"`
+	Size        int64     `json:"size"`
+	ContentType string    `json:"content_type,omitempty"`
+}
+
+// RunEvaluation is a score given to a run or one of its steps (v0.21.1+).
+type RunEvaluation struct {
+	ID        int64     `json:"id"`
+	Run       string    `json:"run"`
+	Step      string    `json:"step,omitempty"`
+	Name      string    `json:"name"`
+	Value     float64   `json:"value"`
+	Unit      string    `json:"unit,omitempty"`
+	Direction string    `json:"direction,omitempty"` // higher lower
+	Note      string    `json:"note,omitempty"`
+	By        string    `json:"by,omitempty"`
+	At        time.Time `json:"at"`
+}
+
+// RunEvaluate is the body of POST /v1/workflow-runs/{id}/evaluations.
+type RunEvaluate struct {
+	Step      string  `json:"step,omitempty"`
+	Name      string  `json:"name"`
+	Value     float64 `json:"value"`
+	Unit      string  `json:"unit,omitempty"`
+	Direction string  `json:"direction,omitempty"`
+	Note      string  `json:"note,omitempty"`
+}
+
+// StepLogEntry is a line of a step's log.
+type StepLogEntry struct {
+	At time.Time `json:"at"`
+	// Kind: task progress reply failure event stdout stderr trace.
+	Kind        string       `json:"kind"`
+	Sub         string       `json:"sub,omitempty"`
+	Try         int          `json:"try,omitempty"`
+	From        string       `json:"from,omitempty"`
+	Text        string       `json:"text,omitempty"`
+	Attachments []Attachment `json:"attachments,omitempty"`
+}
+
+// StepLog answers GET /v1/workflow-runs/{id}/steps/{step}/log (v0.21.1+).
+type StepLog struct {
+	Run     string         `json:"run"`
+	Step    RunStep        `json:"step"`
+	Entries []StepLogEntry `json:"entries"`
+	Clipped bool           `json:"clipped,omitempty"`
+}
+
+// Dist summarizes values: durations in ms, or scores.
+type Dist struct {
+	N   int     `json:"n"`
+	Avg float64 `json:"avg"`
+	Min float64 `json:"min"`
+	P50 float64 `json:"p50"`
+	P90 float64 `json:"p90"`
+	P95 float64 `json:"p95"`
+	Max float64 `json:"max"`
+}
+
+// WorkflowStepStats are one step's figures in WorkflowStats.
+type WorkflowStepStats struct {
+	Step         string     `json:"step"`
+	Title        string     `json:"title,omitempty"`
+	Kind         string     `json:"kind"`
+	Runs         int        `json:"runs"`
+	Done         int        `json:"done"`
+	Failed       int        `json:"failed"`
+	Retries      int        `json:"retries"`
+	Bounces      int        `json:"bounces"`
+	Duration     Dist       `json:"duration_ms"`
+	Usage        *Usage     `json:"usage,omitempty"`
+	LastError    string     `json:"last_error,omitempty"`
+	LastErrorRun string     `json:"last_error_run,omitempty"`
+	LastErrorAt  *time.Time `json:"last_error_at,omitempty"`
+}
+
+// WorkflowRunPoint is a run in WorkflowStats.
+type WorkflowRunPoint struct {
+	ID         string    `json:"id"`
+	Status     string    `json:"status"`
+	Version    int       `json:"version"`
+	CreatedAt  time.Time `json:"created_at"`
+	DurationMS int64     `json:"duration_ms"`
+	Error      string    `json:"error,omitempty"`
+	FailedStep string    `json:"failed_step,omitempty"`
+	CostUSD    float64   `json:"cost_usd,omitempty"`
+}
+
+// WorkflowVersionStats are one version's figures in WorkflowStats.
+type WorkflowVersionStats struct {
+	Version   int  `json:"version"`
+	Runs      int  `json:"runs"`
+	Succeeded int  `json:"succeeded"`
+	Failed    int  `json:"failed"`
+	Cancelled int  `json:"cancelled"`
+	Duration  Dist `json:"duration_ms"`
+}
+
+// WorkflowEvalStats summarize a score over runs (each run's latest).
+type WorkflowEvalStats struct {
+	Name      string  `json:"name"`
+	Unit      string  `json:"unit,omitempty"`
+	Direction string  `json:"direction,omitempty"`
+	Values    Dist    `json:"values"`
+	Last      float64 `json:"last"`
+	LastRun   string  `json:"last_run"`
+}
+
+// WorkflowStats answers GET /v1/workflows/{ref}/stats (v0.21.1+): counts
+// over all runs; distributions over the latest Sample runs.
+type WorkflowStats struct {
+	Workflow    string                 `json:"workflow"`
+	Name        string                 `json:"name"`
+	Total       int                    `json:"total"`
+	ByStatus    map[string]int         `json:"by_status"`
+	SuccessRate float64                `json:"success_rate"`
+	Sample      int                    `json:"sample"`
+	Version     int                    `json:"version,omitempty"`
+	Duration    Dist                   `json:"duration_ms"`
+	Active      Dist                   `json:"active_ms"`
+	Waiting     Dist                   `json:"waiting_ms"`
+	Usage       *Usage                 `json:"usage,omitempty"`
+	CostPerRun  float64                `json:"cost_per_run,omitempty"`
+	Steps       []WorkflowStepStats    `json:"steps"`
+	Versions    []WorkflowVersionStats `json:"versions"`
+	Evaluations []WorkflowEvalStats    `json:"evaluations"`
+	Recent      []WorkflowRunPoint     `json:"recent"`
+	Failures    []WorkflowRunPoint     `json:"failures"`
+}
+
+// RunCompareSide is one run in a RunComparison.
+type RunCompareSide struct {
+	Run     WorkflowRun `json:"run"`
+	Metrics RunMetrics  `json:"metrics"`
+}
+
+// RunCompareStep is a step's figures in one run of a comparison.
+type RunCompareStep struct {
+	Status     string `json:"status"`
+	Runs       int    `json:"runs"`
+	Attempts   int    `json:"attempts"`
+	DurationMS int64  `json:"duration_ms"`
+	Usage      *Usage `json:"usage,omitempty"`
+	Summary    string `json:"summary,omitempty"`
+	Error      string `json:"error,omitempty"`
+}
+
+// RunCompareStepDelta compares a step in two runs.
+type RunCompareStepDelta struct {
+	Step      string          `json:"step"`
+	Title     string          `json:"title,omitempty"`
+	A         *RunCompareStep `json:"a,omitempty"`
+	B         *RunCompareStep `json:"b,omitempty"`
+	FasterIn  string          `json:"faster_in,omitempty"` // a b
+	DeltaMS   int64           `json:"delta_ms"`
+	DeltaCost float64         `json:"delta_cost_usd,omitempty"`
+}
+
+// RunCompareEval compares a score in two runs.
+type RunCompareEval struct {
+	Name      string   `json:"name"`
+	Unit      string   `json:"unit,omitempty"`
+	Direction string   `json:"direction,omitempty"`
+	A         *float64 `json:"a,omitempty"`
+	B         *float64 `json:"b,omitempty"`
+	Delta     float64  `json:"delta"`
+	Better    string   `json:"better,omitempty"` // a b
+}
+
+// RunComparison answers GET /v1/workflow-runs/compare?a=&b= (v0.21.1+).
+type RunComparison struct {
+	A           RunCompareSide        `json:"a"`
+	B           RunCompareSide        `json:"b"`
+	SameVersion bool                  `json:"same_version"`
+	Steps       []RunCompareStepDelta `json:"steps"`
+	Evaluations []RunCompareEval      `json:"evaluations"`
 }
 
 // RunStep is one start of a step in a run.
 type RunStep struct {
-	ID        string         `json:"id"`
-	Step      string         `json:"step"`
-	Title     string         `json:"title,omitempty"`
-	Kind      string         `json:"kind"` // agent computer human
-	Attempt   int            `json:"attempt"`
-	Status    string         `json:"status"` // running waiting done failed cancelled
-	Target    string         `json:"target,omitempty"`
-	MessageID string         `json:"message_id,omitempty"`
-	Input     string         `json:"input,omitempty"`
-	Output    map[string]any `json:"output,omitempty"`
-	Summary   string         `json:"summary,omitempty"`
-	Error     string         `json:"error,omitempty"`
-	Retries   int            `json:"retries,omitempty"`
-	Bounced   bool           `json:"bounced,omitempty"`
-	Options   []string       `json:"options,omitempty"`
-	StartedAt time.Time      `json:"started_at"`
-	EndedAt   *time.Time     `json:"ended_at,omitempty"`
-	DueAt     *time.Time     `json:"due_at,omitempty"`
+	ID        string `json:"id"`
+	Step      string `json:"step"`
+	Title     string `json:"title,omitempty"`
+	Kind      string `json:"kind"` // agent computer human
+	Attempt   int    `json:"attempt"`
+	Status    string `json:"status"` // running waiting done failed cancelled
+	Target    string `json:"target,omitempty"`
+	MessageID string `json:"message_id,omitempty"`
+	Input     string `json:"input,omitempty"`
+	// Payload is the step's input as JSON (the run's inputs, the step
+	// before's result, an edge's map, or a join's object by step).
+	Payload any            `json:"payload,omitempty"`
+	Output  map[string]any `json:"output,omitempty"`
+	Summary string         `json:"summary,omitempty"`
+	Error   string         `json:"error,omitempty"`
+	Retries int            `json:"retries,omitempty"`
+	Bounced bool           `json:"bounced,omitempty"`
+	Options []string       `json:"options,omitempty"`
+	// v0.21.1+: send-backs, how many times its task went out, the tasks,
+	// how long it took (to now while open) and what its agent's runs cost.
+	Bounces    int        `json:"bounces,omitempty"`
+	Attempts   int        `json:"attempts,omitempty"`
+	Tasks      []string   `json:"tasks,omitempty"`
+	DurationMS int64      `json:"duration_ms"`
+	Usage      *Usage     `json:"usage,omitempty"`
+	StartedAt  time.Time  `json:"started_at"`
+	EndedAt    *time.Time `json:"ended_at,omitempty"`
+	DueAt      *time.Time `json:"due_at,omitempty"`
 }
 
 // RunEvent is a line of a run's log.
@@ -1807,4 +2082,49 @@ type WorkflowDecision struct {
 // WorkflowDecisions answers GET /v1/workflow-decisions.
 type WorkflowDecisions struct {
 	Decisions []WorkflowDecision `json:"decisions"`
+}
+
+// Superagents (v0.21.1+): a person's own agent with the App's powers in
+// its workspace (docs/design/chief-of-staff.md).
+
+// Superagent answers GET /v1/console/superagent: the caller's superagent
+// (none: Agent absent) and how many of its requests wait for them.
+type Superagent struct {
+	Agent   *Agent `json:"agent,omitempty"`
+	Pending int    `json:"pending,omitempty"`
+}
+
+// SuperagentSet is the body of PUT /v1/console/superagent.
+type SuperagentSet struct {
+	Agent string `json:"agent"`
+}
+
+// MeSuperagent answers GET /v1/me/superagent: whether the calling agent is
+// a superagent, and whose.
+type MeSuperagent struct {
+	Superagent bool   `json:"superagent"`
+	Owner      string `json:"owner,omitempty"`
+}
+
+// Approval is a superagent's request held for its owner.
+type Approval struct {
+	ID         string     `json:"id"`
+	Agent      string     `json:"agent"`
+	What       string     `json:"what"`
+	Reason     string     `json:"reason,omitempty"`
+	Method     string     `json:"method"`
+	Path       string     `json:"path"`
+	Body       string     `json:"body,omitempty"`
+	Status     string     `json:"status"` // pending done denied expired withdrew
+	Result     int        `json:"result,omitempty"`
+	ResultBody string     `json:"result_body,omitempty"`
+	DecidedBy  string     `json:"decided_by,omitempty"`
+	CreatedAt  time.Time  `json:"created_at"`
+	ExpiresAt  time.Time  `json:"expires_at"`
+	DecidedAt  *time.Time `json:"decided_at,omitempty"`
+}
+
+// ApprovalList answers GET /v1/console/approvals and /v1/me/approvals.
+type ApprovalList struct {
+	Approvals []Approval `json:"approvals"`
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavSub } from "@/app/nav";
 import { IntroCard, introOf } from "@/app/Onboard";
-import { Activity, ArrowLeft, CalendarDays, ChevronDown, Clock, Coffee, MessageSquare, NotebookPen, Pause, Pencil, Play, Plus, Trash2, Webhook, Workflow as WorkflowIcon } from "lucide-react";
+import { Activity, CalendarDays, ChevronDown, Clock, Coffee, MessageSquare, NotebookPen, Pause, Pencil, Play, Plus, Trash2, Webhook, Workflow as WorkflowIcon } from "lucide-react";
 import { useContextMenu } from "@/app/ContextMenu";
 import type { Automation, AutomationRun, WebhookRequest, Workflow, WorkflowDef } from "@/api";
 import { ApiError, appApi } from "@/appapi";
@@ -89,6 +90,8 @@ export function AutomationsPage({ hubId, rows, now, onOpenMessage, onOpenRun }: 
   const [removing, setRemoving] = useState<Automation | null>(null);
   // The one opened (its page), and a count that makes it read its runs again.
   const [openId, setOpenId] = useState<string | null>(null);
+  // ← → at the top (nav.ts): the automation open is part of where you are.
+  useNavSub("automations", { open: openId }, { open: null }, (v) => setOpenId(v.open));
   const [stamp, setStamp] = useState(0);
   const menu = useContextMenu();
   const load = useCallback(() => {
@@ -286,7 +289,7 @@ function whenAt(iso: string, now: number): string {
 type RunFilter = "all" | "sent" | "skipped" | "failed";
 
 /** One automation: what it is set to, then every run (newest first). */
-function AutomationDetail({ hubId, a, row, now, stamp, busy, error, onBack, onEdit, onRun, onToggle, onDelete, onOpenMessage, onOpenRun }: {
+function AutomationDetail({ hubId, a, row, now, stamp, busy, error, onEdit, onRun, onToggle, onDelete, onOpenMessage, onOpenRun }: {
   hubId: string; a: Automation; row?: AgentRow; now: number; stamp: number; busy: boolean; error: unknown;
   onBack: () => void; onEdit: () => void; onRun: () => void; onToggle: () => void; onDelete: () => void;
   onOpenMessage?: (agent: string, messageId: string) => void;
@@ -315,7 +318,6 @@ function AutomationDetail({ hubId, a, row, now, stamp, busy, error, onBack, onEd
   ];
   return (
     <>
-      <button type="button" className="pcd-back" onClick={onBack}><ArrowLeft />{L("自动化", "Automations")}</button>
       <header className={cn("pcd-head", !a.enabled && "is-away")}>
         <span className={cn("tp-icon pcd-icon", !a.schedule && "is-hook")}><Icon /></span>
         <div className="pcd-titles">

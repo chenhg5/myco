@@ -84,6 +84,9 @@ notes are never auto-answered. Logs go to stderr.`,
 				} else if len(written) > 0 {
 					log.Info("installed the myco skill", "version", Version, "paths", strings.Join(written, ", "))
 				}
+				if changed, _, err := installMemory(memoryTargets(e.in.Getenv), memoryRefresh); err == nil && len(changed) > 0 {
+					log.Info("updated the myco lines in the agent CLIs' instructions", "paths", strings.Join(changed, ", "))
+				}
 			}
 			if !e.in.Bool("all") {
 				r, err := e.buildRunner(e.cfgPath, e.cfg, shared, e.overrides(), log)
@@ -315,7 +318,7 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 	return runner.New(c, h, sessions, runner.DefaultPrompt{Owner: me.Owner}, runner.Options{
 		Self: me.Name, Timeout: timeout, PollWait: pollWait, Workdir: workdir, Once: sh.once, Scope: sh.scope,
 		BusyRetry: sh.busyRetry, BusyWindow: sh.busyWindow, Slots: sh.slots, Trace: sh.trace, SessionLocks: sh.locks,
-		StatePath:      filepath.Join(config.Dir(e.defaultPath), "state", me.Name+".json"),
+		StatePath:      runnerStatePath(e.defaultPath, me.Name),
 		HubURL:         cfg.Hub,
 		AttachmentsDir: filepath.Join(config.Dir(e.defaultPath), "attachments", me.Name),
 		// Lets the agent call `myco` as itself from inside the harness.

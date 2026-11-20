@@ -33,6 +33,8 @@ type TraceRepository interface {
 	Append(ctx context.Context, events []*TraceEvent) error
 	// List returns a message's steps after seq, in order.
 	List(ctx context.Context, message string, after, limit int) ([]*TraceEvent, error)
+	// Last returns, by message, the latest step of kind (e.g. "usage").
+	Last(ctx context.Context, messages []string, kind string) (map[string]*TraceEvent, error)
 	// Bytes is the size of a message's trace so far.
 	Bytes(ctx context.Context, message string) (int64, error)
 	// DeleteBefore removes steps older than t; it returns how many.

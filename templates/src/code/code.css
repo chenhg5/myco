@@ -27,7 +27,7 @@
 .cd-monaco { flex: 1; min-width: 0; height: 100%; }
 .cd-blank { position: absolute; inset: 0; display: grid; place-items: center; color: var(--faint); font-size: 13px; }
 .cd-preview { width: 45%; min-width: 280px; height: 100%; border: 0; border-left: 1px solid var(--line2); background: #fff; }
-.cd-status { display: flex; align-items: center; gap: 16px; height: 24px; flex: none; padding: 0 12px; background: var(--accent); color: #fff; font-size: 12px; }
-.cd.is-dark .cd-status { background: #2b5bd6; }
+.cd-status { display: flex; align-items: center; gap: 16px; height: 24px; flex: none; padding: 0 12px; border-top: 1px solid var(--line2); background: var(--bg2); color: var(--muted); font-size: 12px; }
+.cd.is-dark .cd-status { border-top-color: #2e2e2e; background: #252526; color: #a6a6a6; }
 .btn.is-on { border-color: var(--accent); color: var(--accent); }
 @media (max-width: 640px) { .cd-tree { width: 150px; } .cd-preview { display: none; } }

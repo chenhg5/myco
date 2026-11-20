@@ -1,4 +1,4 @@
-import type { Page, PageChanges, PageOpen, PageRecord, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
+import type { Page, PageChanges, PageOpen, PageRecord, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, SuperagentState, Approval, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
 import { L } from "@/lib/i18n";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
@@ -106,6 +106,10 @@ export interface HubOverview {
   /** set by the App: the hub could not be reached, and this is what it
    *  showed last (at: when; error: why it is unreachable now) */
   stale?: { at: string; error?: string };
+  /** set by the App: when what this shows was last fetched (unix ms).
+   *  How long a task has been quiet is only known up to then: on a poor
+   *  network the answer may simply not have come through. */
+  seen_at?: number;
 }
 
 export interface AppOverview {
@@ -171,6 +175,8 @@ export interface MachineAI {
   /** commands to run on that computer */
   install?: string;
   login?: string;
+  /** the models it offers there (Codex; computers from v0.21.1) */
+  models?: RuntimeModel[];
 }
 export interface MachineSession {
   cli: "claude" | "codex";
@@ -484,18 +490,46 @@ export interface ConnectJob {
   done: boolean;
 }
 
-async function request<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+/** How long a read may take before it is given up (a later poll asks
+ *  again). On a poor network a request can hang with no answer at all;
+ *  one that never ends must not hold up the polls behind it (they skip
+ *  while one is out), or the window shows old news until it restarts.
+ *  The console bounds its own calls to a hub (12 s; 45 s for a computer's
+ *  details), so this is only for a request that went missing. Writes are
+ *  not cut short: some take minutes (a session starting, an upload). */
+const READ_TIMEOUT_MS = 60_000;
+
+async function request<T>(method: string, path: string, body?: unknown, signal?: AbortSignal, timeoutMs?: number): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" };
   const raw = body instanceof Blob;
   if (body !== undefined) headers["Content-Type"] = raw ? (body.type || "application/octet-stream") : "application/json";
-  const r = await fetch(path, {
-    method,
-    credentials: "same-origin",
-    headers,
-    body: body === undefined ? undefined : raw ? body : JSON.stringify(body),
-    signal,
-  });
-  const text = await r.text();
+  const limit = timeoutMs ?? (method === "GET" ? READ_TIMEOUT_MS : 0);
+  // (by hand, not AbortSignal.any: older Mac web views lack it)
+  const ctl = limit > 0 ? new AbortController() : null;
+  let timedOut = false;
+  const timer = ctl ? window.setTimeout(() => { timedOut = true; ctl.abort(); }, limit) : 0;
+  const onAbort = () => ctl?.abort();
+  if (ctl && signal) {
+    if (signal.aborted) ctl.abort();
+    else signal.addEventListener("abort", onAbort, { once: true });
+  }
+  let r: Response;
+  let text: string;
+  try {
+    r = await fetch(path, {
+      method,
+      credentials: "same-origin",
+      headers,
+      body: body === undefined ? undefined : raw ? body : JSON.stringify(body),
+      signal: ctl ? ctl.signal : signal,
+    });
+    text = await r.text();
+  } catch (e) {
+    if (timedOut) throw new ApiError(L("等了太久没有回应", "No answer in time"), 0, "timeout");
+    throw e;
+  } finally {
+    if (ctl) { window.clearTimeout(timer); signal?.removeEventListener("abort", onAbort); }
+  }
   let data: unknown = null;
   try { data = text ? JSON.parse(text) : null; } catch { /* non-JSON */ }
   if (!r.ok) {
@@ -691,6 +725,9 @@ export const appApi = {
   updateProject: (hubId: string, name: string, input: { title?: string; goal?: string; brief?: string; links?: ProjectLink[]; visibility?: "members" | "team"; archived?: boolean }) =>
     request<Project>("PATCH", `app/hubs/${enc(hubId)}/projects/${enc(name)}`, input),
   deleteProject: (hubId: string, name: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/projects/${enc(name)}`),
+  /** lets the project's coordinators start agents on a computer, or no longer (hubs from v0.21.2) */
+  setProjectMachine: (hubId: string, name: string, machine: string, allow: boolean) =>
+    request<Project>(allow ? "PUT" : "DELETE", `app/hubs/${enc(hubId)}/projects/${enc(name)}/machines/${enc(machine)}`),
   putProjectMember: (hubId: string, name: string, agent: string, input: { role?: "member" | "coordinator"; note?: string } = {}) =>
     request<Project>("PUT", `app/hubs/${enc(hubId)}/projects/${enc(name)}/members/${enc(agent)}`, input),
   removeProjectMember: (hubId: string, name: string, agent: string) =>
@@ -764,6 +801,12 @@ export const appApi = {
     request<{ route: RemoteRoute | null }>("GET", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}/reach`),
   setMachineReach: (hubId: string, machineId: string, route: RemoteRoute) =>
     request<{ route: RemoteRoute }>("PUT", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}/reach`, route),
+  /** Changes the folders agents may start in on a computer (spawn.dirs): here when it is this
+   *  computer, else over the SSH or WSL route this App reaches it by; 409 not_reachable with the
+   *  command to run there otherwise. */
+  setMachineDirs: (hubId: string, machineId: string, change: { add?: string[]; remove?: string[]; here?: boolean }) =>
+    request<{ dirs: string[]; changed: boolean; already_allowed?: string[]; not_listed?: string[]; via: string }>(
+      "POST", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}/dirs`, change),
   /** Looks at a computer over SSH or WSL: its myco, runner, linger, proxies, hubs, log. */
   diagnoseMachine: (hubId: string, machineId: string) =>
     request<Diagnosis>("POST", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}/diagnose`),
@@ -859,7 +902,7 @@ export const appApi = {
   deletePageRecord: (hubId: string, id: string, collection: string, rid: string, ifVersion = 0) =>
     request<void>("DELETE", `app/hubs/${enc(hubId)}/pages/${enc(id)}/data/${enc(collection)}/${enc(rid)}${ifVersion ? `?if_version=${ifVersion}` : ""}`),
   pageChanges: (hubId: string, id: string, after: number) =>
-    request<PageChanges>("GET", `app/hubs/${enc(hubId)}/pages/${enc(id)}/changes?after=${after}`),
+    request<PageChanges>("GET", `app/hubs/${enc(hubId)}/pages/${enc(id)}/changes?after=${after}`, undefined, undefined, 100_000),
   /** A file a page made, saved to Downloads and shown. */
   pageDownload: (name: string, bytes: Uint8Array | Blob, type: string) =>
     request<{ path: string }>("POST", `app/page-download?name=${encodeURIComponent(name)}`,
@@ -907,10 +950,11 @@ export const appApi = {
   setWorkflowEnabled: (hubId: string, ref: string, enabled: boolean) => request<Workflow>("PATCH", `app/hubs/${enc(hubId)}/workflows/${enc(ref)}`, { enabled }),
   deleteWorkflow: (hubId: string, ref: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/workflows/${enc(ref)}`),
   startWorkflow: (hubId: string, ref: string, inputs: Record<string, unknown>) => request<WorkflowRun>("POST", `app/hubs/${enc(hubId)}/workflows/${enc(ref)}/runs`, { inputs }),
-  workflowRuns: (hubId: string, opts: { workflow?: string; active?: boolean; limit?: number } = {}) => {
+  workflowRuns: (hubId: string, opts: { workflow?: string; active?: boolean; status?: RunStatus; limit?: number } = {}) => {
     const q = new URLSearchParams();
     if (opts.workflow) q.set("workflow", opts.workflow);
     if (opts.active) q.set("active", "true");
+    if (opts.status) q.set("status", opts.status);
     if (opts.limit) q.set("limit", String(opts.limit));
     const s = q.toString();
     return request<{ runs: WorkflowRun[] }>("GET", `app/hubs/${enc(hubId)}/workflow-runs${s ? `?${s}` : ""}`);
@@ -921,6 +965,28 @@ export const appApi = {
   decideWorkflowRun: (hubId: string, id: string, step: string, choice: string, note?: string) =>
     request<WorkflowRun>("POST", `app/hubs/${enc(hubId)}/workflow-runs/${enc(id)}/decide`, { step, choice, ...(note ? { note } : {}) }),
   workflowDecisions: (hubId: string) => request<{ decisions: WorkflowDecision[] }>("GET", `app/hubs/${enc(hubId)}/workflow-decisions`),
+  /** hubs from v0.21.1: your superagent, and what it asks you to approve */
+  superagent: (hubId: string) => request<SuperagentState>("GET", `app/hubs/${enc(hubId)}/superagent`),
+  setSuperagent: (hubId: string, agent: string) => request<SuperagentState>("PUT", `app/hubs/${enc(hubId)}/superagent`, { agent }),
+  clearSuperagent: (hubId: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/superagent`),
+  approvals: (hubId: string, status = "pending") =>
+    request<{ approvals: Approval[] }>("GET", `app/hubs/${enc(hubId)}/approvals${status ? `?status=${enc(status)}` : ""}`),
+  decideApproval: (hubId: string, id: string, approve: boolean) =>
+    request<Approval>("POST", `app/hubs/${enc(hubId)}/approvals/${enc(id)}/${approve ? "approve" : "deny"}`, {}),
+  /** hubs from v0.21.1: figures over the last runs, a step's log, scores, two runs side by side */
+  workflowStats: (hubId: string, ref: string, opts: { limit?: number; version?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (opts.limit) q.set("limit", String(opts.limit));
+    if (opts.version) q.set("version", String(opts.version));
+    const s = q.toString();
+    return request<WorkflowStats>("GET", `app/hubs/${enc(hubId)}/workflows/${enc(ref)}/stats${s ? `?${s}` : ""}`);
+  },
+  workflowStepLog: (hubId: string, run: string, step: string) =>
+    request<StepLog>("GET", `app/hubs/${enc(hubId)}/workflow-runs/${enc(run)}/steps/${enc(step)}/log`),
+  evaluateWorkflowRun: (hubId: string, run: string, ev: { name: string; value: number; unit?: string; direction?: string; note?: string; step?: string }) =>
+    request<RunEvaluation>("POST", `app/hubs/${enc(hubId)}/workflow-runs/${enc(run)}/evaluations`, ev),
+  compareWorkflowRuns: (hubId: string, a: string, b: string) =>
+    request<RunComparison>("GET", `app/hubs/${enc(hubId)}/workflow-runs/compare?a=${enc(a)}&b=${enc(b)}`),
   /** Saves a conversation the app rendered (.md or .jsonl) to Downloads and shows it. */
   saveExport: (name: string, content: string) => request<{ path: string }>("POST", "app/export", { name, content }),
   /** One line in that voice, as WAV audio, to try it before saving (the key typed, else the one kept). */

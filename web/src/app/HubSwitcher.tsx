@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Check, ChevronDown, ChevronUp, Laptop, Plus, Server, Settings,
+  Check, ChevronDown, ChevronUp, Laptop, Plus, Server, Settings, Sparkles,
 } from "lucide-react";
 import type { Hub, HubOverview } from "@/appapi";
 import { useHubLooks, type HubLook } from "@/app/hubLooks";
@@ -16,7 +16,8 @@ type Entry =
   | { key: string; kind: "add" }
   | { key: string; kind: "newLocal" }
   | { key: string; kind: "newOnServer" }
-  | { key: string; kind: "settings" };
+  | { key: string; kind: "settings" }
+  | { key: string; kind: "superagent" };
 
 function initial(name: string): string {
   const ch = Array.from(name.trim())[0] || "?";
@@ -61,7 +62,14 @@ function switchKey(n: number): string {
   return /Mac|iPhone|iPad/.test(p) ? `⌘${n}` : `Ctrl+${n}`;
 }
 
-export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, onNewOnServer, serverName, onSettings, isLocal, variant = "sidebar", down = false, simple = false }: {
+export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, onNewOnServer, serverName, onSettings, onSuperagent, superagent, superagentKey, isLocal, variant = "sidebar", down = false, simple = false }: {
+  /** opens your superagent (its chat, or setting one up); unset: the
+   *  workspace has none to offer (an older hub) */
+  onSuperagent?: () => void;
+  /** your superagent here, if any, and how many approvals wait on you */
+  superagent?: { name?: string; pending: number };
+  /** the shortcut that calls it up from anywhere (the Mac app) */
+  superagentKey?: string;
   /** 简单模式: no joining or making workspaces from here (Settings › 外观 turns it off) */
   simple?: boolean;
   hubs: Hub[];
@@ -97,8 +105,9 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, 
     ...(simple ? [] : [{ key: "add", kind: "add" as const }]),
     ...(onNewOnServer && !simple ? [{ key: "newOnServer", kind: "newOnServer" as const }] : []),
     ...(simple ? [] : [{ key: "newLocal", kind: "newLocal" as const }]),
+    ...(onSuperagent ? [{ key: "superagent", kind: "superagent" as const }] : []),
     { key: "settings", kind: "settings" },
-  ], [hubs, onNewOnServer, simple]);
+  ], [hubs, onNewOnServer, onSuperagent, simple]);
 
   const selectedIndex = (): number => {
     const i = entries.findIndex((e) => e.kind === "hub" && e.hub.id === value);
@@ -120,6 +129,7 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, 
     else if (e.kind === "newLocal") { close(); onNewLocal(); }
     else if (e.kind === "newOnServer") { close(); onNewOnServer?.(); }
     else if (e.kind === "settings") { close(); onSettings(); }
+    else if (e.kind === "superagent") { close(); onSuperagent?.(); }
   };
 
   const toggle = () => {
@@ -253,10 +263,10 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, 
                 </button>
               );
             }
-            const Icon = e.kind === "add" ? Plus : e.kind === "newLocal" ? Laptop : e.kind === "newOnServer" ? Server : Settings;
+            const Icon = e.kind === "add" ? Plus : e.kind === "newLocal" ? Laptop : e.kind === "newOnServer" ? Server : e.kind === "superagent" ? Sparkles : Settings;
             return (
               <Fragment key={e.key}>
-                {e.kind === "add" && <div className="app-hub-menu-sep" />}
+                {(e.kind === "add" || e.kind === "superagent") && <div className="app-hub-menu-sep" />}
                 <button
                   ref={(el) => { itemRefs.current[i] = el; }}
                   type="button"
@@ -264,6 +274,7 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, 
                   className={cn("app-hub-menu-item", active === i && "is-active")}
                   onMouseEnter={() => setActive(i)}
                   onClick={() => run(i)}
+                  data-testid={e.kind === "superagent" ? "menu-superagent" : undefined}
                 >
                   <span className="app-hub-menu-icon-wrap"><Icon /></span>
                   <span className="app-hub-menu-name">
@@ -273,8 +284,14 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, 
                         ? L("在这台电脑上新建工作区", "New workspace on this computer")
                         : e.kind === "newOnServer"
                           ? (serverName ? L(`在 ${serverName} 上新建工作区`, `New workspace on ${serverName}`) : L("在这台服务器上新建工作区", "New workspace on this server"))
-                          : L("设置", "Settings")}
+                          : e.kind === "superagent"
+                            ? (superagent?.name ? "superagent" : L("配一个 superagent", "Set up a superagent"))
+                            : L("设置", "Settings")}
                   </span>
+                  {e.kind === "superagent" && superagentKey && !superagent?.pending && <span className="app-hub-menu-key">{superagentKey}</span>}
+                  {e.kind === "superagent" && !!superagent?.pending && (
+                    <span className="app-hub-menu-badge" title={L(`${superagent.pending} 件事等你点头`, `${superagent.pending} waiting for you`)}>{superagent.pending}</span>
+                  )}
                 </button>
               </Fragment>
             );

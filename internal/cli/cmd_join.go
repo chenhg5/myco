@@ -238,7 +238,7 @@ node right away. --allow-shell also lets agents open a terminal (shell node) her
 			return e.joinMachine(hub, tok, nil)
 		}),
 	}
-	return (&Command{Name: "machine", Summary: "This machine's membership in the network"}).Add(join, machineShellCommand(), machineRemoveCommand())
+	return (&Command{Name: "machine", Summary: "This machine's membership in the network"}).Add(join, machineShellCommand(), machineDirsCommand(), machineRemoveCommand())
 }
 
 // joinMachine trades join link token tok of hub for this machine's
@@ -463,6 +463,7 @@ Safe to re-run: the same session gets the same agent back.`,
 			{Name: "session-id", Kind: String, Help: "Session id (default: detected)"},
 			{Name: "hub", Kind: String, Help: "Which hub to join, when this machine joined several (default: the first one it joined)"},
 			{Name: "fork", Kind: Bool, Help: "Join a copy of the session (keeps its context; the original stays yours and untouched). Claude Code and Codex"},
+			{Name: "no-memory", Kind: Bool, Help: "Do not add the myco lines to ~/.claude/CLAUDE.md and ~/.codex/AGENTS.md (see myco skill memory)"},
 			{Name: "same-session", Kind: Bool, Help: "When this session is already an agent of another workspace, join it as it is instead of a copy (default: a copy, so each workspace has its own session)"},
 			{Name: "project", Kind: String, Help: "Then join this project (one you can see, e.g. one its owner sent you the link for)"},
 			{Name: "take-over", Kind: String, Help: "Take a node over with a link from myco agent handover-link (its /h/ URL or token; default: MYCO_TAKEOVER, which keeps it out of the process list)"},
@@ -615,6 +616,13 @@ Safe to re-run: the same session gets the same agent back.`,
 			// (best effort: joining is done either way).
 			installedTo, _, _ := installSkill(skillTargets(e.in.Getenv), false)
 			out["skill"] = map[string]any{"read": "myco skill show", "installed": nonNilStrings(installedTo)}
+			// A few lines in the CLIs' own instructions, always in context
+			// (not in the project's files; myco skill memory --remove).
+			var memoryTo []string
+			if !e.in.Bool("no-memory") {
+				memoryTo, _, _ = installMemory(memoryTargets(e.in.Getenv), memoryAdd)
+				out["memory"] = nonNilStrings(memoryTo)
+			}
 			if project != "" && projectErr == "" {
 				out["project"] = project
 			} else if projectErr != "" {
@@ -650,6 +658,9 @@ Safe to re-run: the same session gets the same agent back.`,
 				}
 				for _, p := range installedTo {
 					fmt.Fprintf(w, "installed the myco skill: %s (a running session may need a restart to load it)\n", p)
+				}
+				for _, p := range memoryTo {
+					fmt.Fprintf(w, "added a few myco lines to %s (progress with screenshots, suggesting the next step; myco skill memory --remove takes them out)\n", p)
 				}
 				fmt.Fprintln(w, "Read the guide once now, for this version: myco skill show (receiving, progress, plans, asking, delegating)")
 				fmt.Fprintln(w, "Others can now reach it: myco message send --to "+res.Agent.Name+" --body \"...\"")

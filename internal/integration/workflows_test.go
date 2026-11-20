@@ -10,6 +10,7 @@ import (
 
 	"github.com/chenhg5/myco/internal/api"
 	"github.com/chenhg5/myco/internal/app"
+	clipkg "github.com/chenhg5/myco/internal/cli"
 )
 
 // A workflow saved with the CLI, started by an agent with its own token:
@@ -96,6 +97,44 @@ func TestWorkflowAcrossHubClientAndCLI(t *testing.T) {
 	}
 	if out := cli.must(c, "workflow", "list"); !strings.Contains(out, `"name": "写-审-改"`) {
 		t.Fatalf("list: %s", out)
+	}
+
+	// What it did and how it went: metrics, a step's log, scores (the
+	// reviewer agent gives one), figures, runs by state.
+	if done.Metrics == nil || done.Metrics.Steps != 3 || done.Metrics.Done != 3 {
+		t.Fatalf("metrics: %+v", done.Metrics)
+	}
+	var log api.StepLog
+	if err := json.Unmarshal([]byte(cli.must(c, "workflow", "run", "logs", "--id", run.ID, "--step", "write")), &log); err != nil {
+		t.Fatal(err)
+	}
+	if len(log.Entries) < 3 || log.Entries[0].Kind != "task" || !strings.Contains(log.Entries[0].Text, "做：加导出按钮") {
+		t.Fatalf("log: %+v", log.Entries)
+	}
+	if _, err := reviewer.EvaluateWorkflowRun(c, run.ID, api.RunEvaluate{Name: "quality", Value: 4, Direction: "higher"}, false); err != nil {
+		t.Fatal(err)
+	}
+	if code, out, _ := cli.run(c, "workflow", "run", "evaluate", "--id", run.ID, "--name", "quality", "--value", "5", "--dry-run"); code != clipkg.ExitDryRun ||
+		!strings.Contains(out, `"workflow_run_evaluate"`) {
+		t.Fatalf("dry run: %d %s", code, out)
+	}
+	if code, _, _ := cli.run(c, "workflow", "run", "evaluate", "--id", run.ID, "--name", "quality", "--value", "lots"); code == 0 {
+		t.Fatal("a score that is not a number was taken")
+	}
+	var st api.WorkflowStats
+	if err := json.Unmarshal([]byte(cli.must(c, "workflow", "stats", "--name", "写-审-改")), &st); err != nil {
+		t.Fatal(err)
+	}
+	if st.Total != 1 || st.SuccessRate != 1 || len(st.Steps) != 3 || len(st.Evaluations) != 1 || st.Evaluations[0].Last != 4 {
+		t.Fatalf("stats: %+v", st)
+	}
+	var cmp api.RunComparison
+	if err := json.Unmarshal([]byte(cli.must(c, "workflow", "run", "compare", "--a", run.ID, "--b", run.ID)), &cmp); err != nil || !cmp.SameVersion {
+		t.Fatalf("compare: %+v %v", cmp, err)
+	}
+	var none api.WorkflowRunList
+	if err := json.Unmarshal([]byte(cli.must(c, "workflow", "run", "list", "--status", "failed")), &none); err != nil || len(none.Runs) != 0 {
+		t.Fatalf("failed runs: %+v %v", none, err)
 	}
 
 	// An automation starts it: its inputs filled from the webhook call.

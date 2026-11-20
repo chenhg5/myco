@@ -19,6 +19,7 @@ import (
 	"github.com/chenhg5/myco/internal/app"
 	"github.com/chenhg5/myco/internal/domain"
 	"github.com/chenhg5/myco/internal/infra/blob"
+	"github.com/chenhg5/myco/internal/infra/jsonschema"
 	"github.com/chenhg5/myco/internal/infra/notify"
 	"github.com/chenhg5/myco/internal/infra/security"
 	"github.com/chenhg5/myco/internal/infra/sqlite"
@@ -183,6 +184,8 @@ func Build(o Options) (*Hub, error) {
 		return nil, err
 	}
 	srv.SetMembers(members, audit)
+	srv.SetSuperagents(app.NewSuperagentService(sqlite.NewSuperagentRepo(db), sqlite.NewApprovalRepo(db), agentsRepo,
+		sqlite.NewMemberRepo(db), messages, audit, ids, clock))
 	// New nodes of a plain member are private to them; the hub's owner and
 	// admins add nodes for the team.
 	defaultVisibility := func(ctx context.Context, owner string) domain.Visibility {
@@ -217,7 +220,9 @@ func Build(o Options) (*Hub, error) {
 	srv.SetTraces(traces)
 	automations := app.NewAutomationService(sqlite.NewAutomationRepo(db), messages, msgRepo, security.Tokens{}, ids, clock, o.Log)
 	srv.SetAutomations(automations)
+	domain.CompleteContracts = jsonschema.New()
 	workflows := app.NewWorkflowService(sqlite.NewWorkflowRepo(db), messages, msgRepo, ids, clock, o.Log)
+	workflows.SetTraces(sqlite.NewTraceRepo(db))
 	srv.SetWorkflows(workflows)
 	automations.SetWorkflows(workflows)
 	pages := app.NewPageService(sqlite.NewPageRepo(db), blob.FS{Dir: filesDir}, projectSvc, ids, clock)

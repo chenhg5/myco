@@ -24,20 +24,20 @@ const FONT = `-apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei
 
 export function gridTheme(dark: boolean): Partial<Theme> {
   return dark ? {
-    accentColor: "#4c88ff", accentFg: "#ffffff", accentLight: "rgba(76, 136, 255, 0.18)",
+    accentColor: "#e6e6e6", accentFg: "#1a1a1a", accentLight: "rgba(255, 255, 255, 0.12)",
     textDark: "#ebebeb", textMedium: "#a6a6a6", textLight: "#757575", textBubble: "#ebebeb", textHeader: "#a6a6a6", textHeaderSelected: "#ffffff",
     bgIconHeader: "#a6a6a6", fgIconHeader: "#262626",
-    bgCell: "#1f1f1f", bgCellMedium: "#262626", bgHeader: "#262626", bgHeaderHasFocus: "#2e3a52", bgHeaderHovered: "#2c2c2c",
+    bgCell: "#1f1f1f", bgCellMedium: "#262626", bgHeader: "#262626", bgHeaderHasFocus: "#3a3a3a", bgHeaderHovered: "#2c2c2c",
     bgBubble: "#2c2c2c", bgBubbleSelected: "#1f1f1f", bgSearchResult: "#5c4a12",
-    borderColor: "#373737", horizontalBorderColor: "#2e2e2e", drilldownBorder: "#373737", linkColor: "#6b9dff",
+    borderColor: "#373737", horizontalBorderColor: "#2e2e2e", drilldownBorder: "#373737", linkColor: "#d0d0d0",
     headerFontStyle: "500 13px", baseFontStyle: "14px", fontFamily: FONT, editorFontSize: "14px", cellHorizontalPadding: 10, roundingRadius: 6,
   } : {
-    accentColor: "#3370ff", accentFg: "#ffffff", accentLight: "rgba(51, 112, 255, 0.1)",
+    accentColor: "#1f2329", accentFg: "#ffffff", accentLight: "rgba(31, 35, 41, 0.08)",
     textDark: "#1f2329", textMedium: "#646a73", textLight: "#8f959e", textBubble: "#1f2329", textHeader: "#646a73", textHeaderSelected: "#ffffff",
     bgIconHeader: "#8f959e", fgIconHeader: "#ffffff",
-    bgCell: "#ffffff", bgCellMedium: "#f8f9fa", bgHeader: "#f5f6f7", bgHeaderHasFocus: "#e1eaff", bgHeaderHovered: "#eff0f1",
+    bgCell: "#ffffff", bgCellMedium: "#f8f9fa", bgHeader: "#f5f6f7", bgHeaderHasFocus: "#e8e9eb", bgHeaderHovered: "#eff0f1",
     bgBubble: "#eff0f1", bgBubbleSelected: "#ffffff", bgSearchResult: "#fff3c4",
-    borderColor: "#dee0e3", horizontalBorderColor: "#ebedf0", drilldownBorder: "#dee0e3", linkColor: "#3370ff",
+    borderColor: "#dee0e3", horizontalBorderColor: "#ebedf0", drilldownBorder: "#dee0e3", linkColor: "#1f2329",
     headerFontStyle: "500 13px", baseFontStyle: "14px", fontFamily: FONT, editorFontSize: "14px", cellHorizontalPadding: 10, roundingRadius: 6,
   };
 }

@@ -17,6 +17,15 @@ let pendingLink = process.env.MOCK_PENDING_LINK || "";
 const iso = (offsetSec = 0) => new Date(Date.now() - offsetSec * 1000).toISOString();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// The models a computer's Codex lists (its models cache), as runners from
+// v0.21.1 report them.
+const CODEX_MODELS = [
+  { id: "gpt-6.1-sol", name: "GPT-6.1 Sol", efforts: ["low", "medium", "high", "xhigh"] },
+  { id: "gpt-6-sol", name: "GPT-6 Sol", efforts: ["low", "medium", "high", "xhigh"] },
+  { id: "gpt-6.1-terra", name: "GPT-6.1 Terra", efforts: ["low", "medium", "high"] },
+  { id: "gpt-6-luna", name: "GPT-6 Luna", efforts: ["minimal", "low", "medium"] },
+];
+
 // CLI metadata used when a session is spawned from the App.
 const CLI_MODELS = {
   claude: "claude-opus-5-5", codex: "gpt-6-sol", pi: "pi-3", kiro: "kiro-2",
@@ -485,12 +494,14 @@ const machineInfoOf = (m) => m.id === "m_vps" ? vpsInfo : {
   dirs: ["~"], new_dir: "~/myco", max_access: m.id.startsWith("m_studio") ? "full" : "workspace", home: m.os === "darwin" ? "/Users/glenn" : "/home/glenn",
   ais: [
     { cli: "claude", name: "Claude Code", state: "ready", version: "2.1.3 (Claude Code)", login: "claude" },
-    { cli: "codex", name: "Codex", state: "ready", version: "codex-cli 0.52.0", login: "codex login" },
+    { cli: "codex", name: "Codex", state: "ready", version: "codex-cli 0.52.0", login: "codex login", models: CODEX_MODELS },
     { cli: "gemini", name: "Gemini CLI", state: "missing", install: "npm install -g @google/gemini-cli", login: "gemini" },
     { cli: "opencode", name: "OpenCode", state: "missing", install: "curl -fsSL https://opencode.ai/install | bash", login: "opencode auth login" },
   ],
   sessions: [],
 };
+// Folders allowed from the App (POST …/machines/{mid}/dirs), by machine.
+const machineDirs = new Map();
 
 const deletableMachine = () => ({
   id: "m_delete", name: "临时 Mac", hostname: "temp-mac.local", os: "darwin", arch: "arm64",
@@ -694,7 +705,7 @@ const state = {
           // Its 5-hour window is nearly used (amber), the weekly one is not.
           runtime: {
             cli: "codex", cli_version: "0.52.0", model: "gpt-6-sol", model_source: "app",
-            effort: "high", effort_source: "app", access: "workspace", max_access: "workspace",
+            effort: "high", effort_source: "app", access: "workspace", max_access: "workspace", models: CODEX_MODELS,
             quota: {
               source: "codex", at: iso(120),
               windows: [
@@ -1547,6 +1558,9 @@ const projectMembersAtStart = projects.map((p) => JSON.stringify(p.members));
 function projectView(hub, p, bodies) {
   return {
     ...p,
+    // The computers its coordinators may start agents on (hubs from v0.21.2;
+    // the lab hub is older and has none).
+    ...(hub.id === "hub_lab" ? {} : { machines: p.machines || [] }),
     members: p.members.map((m) => ({ ...m, agent: hub.agents.find((a) => a.name === m.name && a.visibility !== "private") })),
     docs: p.docs.map((d) => ({ name: d.name, size: d.size ?? d.body.length, content_type: d.content_type, binary: !!d.binary, updated_by: d.updated_by, updated_at: d.updated_at, ...(bodies && !d.binary ? { body: d.body } : {}) })),
     can_edit: true, can_manage: p.owner_id === "mem_" + meName || meName === "glenn",
@@ -1736,6 +1750,32 @@ const server = http.createServer(async (req, res) => {
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "handovers" && parts.length === 3 && method === "POST") {
     state.handovers = {};
     return send(res, 200, { ok: true });
+  }
+
+  // /app/mock/superagent-ask — the superagent asks to do something that
+  // needs your approval (body: { hub, what, reason }); DELETE: none again.
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "superagent-ask" && parts.length === 3) {
+    state.superagents ||= {};
+    state.approvals ||= {};
+    if (method === "DELETE") {
+      for (const pr of projects) delete pr.machines;
+      for (const h of state.hubs) {
+        const name = state.superagents[h.id];
+        delete state.superagents[h.id];
+        state.approvals[h.id] = [];
+        if (name) h.agents = (h.agents || []).filter((a) => a.name !== name);
+      }
+      return send(res, 200, { ok: true });
+    }
+    const body = await readBody(req);
+    const hub = state.hubs.find((h) => h.id === (body?.hub || state.hubs[0]?.id));
+    const agent = (hub && body?.agent) || (hub && state.superagents[hub.id]);
+    if (!agent) return fail(res, 404, "not_found", "no superagent there");
+    state.counter += 1;
+    const a = { id: `apr_${state.counter}`, agent, what: body.what || "删除项目 old-site", reason: body.reason || "", method: body.method || "DELETE", path: body.path || "/v1/projects/old-site",
+      status: "pending", created_at: iso(0), expires_at: new Date(Date.now() + 24 * 3600_000).toISOString() };
+    (state.approvals[hub.id] ||= []).push(a);
+    return send(res, 201, a);
   }
 
   // /app/mock/run-settings — the smoke test changes a node's model and
@@ -2667,6 +2707,60 @@ const server = http.createServer(async (req, res) => {
       return send(res, 201, msg);
     }
 
+    // /app/hubs/{id}/superagent and /approvals… — your superagent (v0.21.1)
+    // and what it asks you to approve. /app/mock/superagent-ask adds one.
+    if (parts[3] === "superagent" || parts[3] === "approvals") {
+      if (hub.id === "hub_lab") return fail(res, 404, "not_found", "no such route"); // an older hub
+      state.superagents ||= {};
+      state.approvals ||= {};
+      const list = (state.approvals[hub.id] ||= []);
+      const cur = () => (hub.agents || []).find((a) => a.name === state.superagents[hub.id]);
+      if (parts[3] === "superagent" && parts.length === 4) {
+        if (method === "GET") {
+          const a = cur();
+          return send(res, 200, a ? { agent: a, pending: list.filter((x) => x.status === "pending").length } : {});
+        }
+        if (method === "PUT") {
+          const body = await readBody(req);
+          const a = (hub.agents || []).find((x) => x.name === body?.agent);
+          if (!a) return fail(res, 404, "not_found", `no agent ${body?.agent}`);
+          if (a.owner_id !== "mem_glenn") return fail(res, 403, "permission_denied", `${a.name} is not your agent; a superagent must be one you added`);
+          if (state.superagents[hub.id] && state.superagents[hub.id] !== a.name) {
+            for (const x of list) if (x.status === "pending") x.status = "withdrew";
+          }
+          state.superagents[hub.id] = a.name;
+          return send(res, 200, { agent: a });
+        }
+        if (method === "DELETE") {
+          for (const x of list) if (x.status === "pending") x.status = "withdrew";
+          delete state.superagents[hub.id];
+          return send(res, 204);
+        }
+      }
+      if (parts[3] === "approvals" && parts.length === 4 && method === "GET") {
+        const status = url.searchParams.get("status") || "pending";
+        return send(res, 200, { approvals: list.filter((x) => status === "all" || x.status === status) });
+      }
+      if (parts[3] === "approvals" && parts.length === 6 && method === "POST") {
+        const a = list.find((x) => x.id === parts[4]);
+        if (!a) return fail(res, 404, "not_found", "no such approval");
+        if (a.status !== "pending") return fail(res, 409, "conflict", `already ${a.status}`);
+        a.status = parts[5] === "approve" ? "done" : "denied";
+        a.decided_by = "glenn";
+        a.decided_at = iso(0);
+        if (a.status === "done") a.result = 200;
+        // A coordinator's request for a computer: carried out as you.
+        const pm = a.status === "done" && a.method === "PUT" && /^\/v1\/projects\/([^/]+)\/machines\/([^/]+)$/.exec(a.path);
+        if (pm) {
+          const list = hub.id === "hub_studio" ? projects : (hub.projects ||= []);
+          const pr = list.find((x) => x.name === decodeURIComponent(pm[1]));
+          if (pr) pr.machines = [...(pr.machines || []).filter((x) => x !== pm[2]), decodeURIComponent(pm[2])];
+        }
+        return send(res, 200, a);
+      }
+      return fail(res, 404, "not_found", "no such route");
+    }
+
     // /app/hubs/{id}/workflows… and /workflow-runs… — workflows (v0.21):
     // the mock keeps them per hub; a run walks its steps on timers (each
     // agent or computer step done after a moment, the first edge taken),
@@ -2681,9 +2775,11 @@ const server = http.createServer(async (req, res) => {
         last_run: (() => { const r = wf.runs.find((x) => x.workflow_id === w.id); return r ? runView(r, false) : undefined; })(),
         ...(def ? { definition: w.def } : {}) });
       const runView = (r, full) => {
-        const { steps, events, def, ...rest } = r;
+        const { steps, events, def, artifacts, evaluations, ...rest } = r;
         const current = steps.filter((x) => x.status === "running" || x.status === "waiting").map((x) => x.step);
-        return full ? { ...rest, current, steps, events, definition: def } : { ...rest, current };
+        const duration_ms = wfMs(r.created_at, r.ended_at);
+        return full ? { ...rest, current, duration_ms, steps: steps.map(wfStepView), events, definition: def, metrics: wfMetrics(r), artifacts: artifacts || [], evaluations: evaluations || [] }
+          : { ...rest, current, duration_ms };
       };
       const findWf = (ref) => wf.list.find((w) => w.id === ref || w.name === ref);
       if (parts[3] === "workflow-decisions" && method === "GET") {
@@ -2710,6 +2806,10 @@ const server = http.createServer(async (req, res) => {
         if (parts.length === 5 && method === "GET") return send(res, 200, view(w, true));
         if (parts.length === 5 && method === "PATCH") { const b = await readBody(req); if (typeof b?.enabled === "boolean") w.enabled = b.enabled; return send(res, 200, view(w, true)); }
         if (parts.length === 5 && method === "DELETE") { wf.list.splice(wf.list.indexOf(w), 1); wf.runs = wf.runs.filter((r) => r.workflow_id !== w.id); res.writeHead(204); return res.end(); }
+        if (parts.length === 6 && parts[5] === "stats" && method === "GET") {
+          const q = new URL(req.url, "http://x").searchParams;
+          return send(res, 200, wfStats(wf, w, Number(q.get("version")) || 0));
+        }
         if (parts.length === 6 && parts[5] === "runs" && method === "POST") {
           if (!w.enabled) return fail(res, 409, "invalid_state", `workflow ${w.name} is turned off`);
           const b = await readBody(req);
@@ -2726,11 +2826,34 @@ const server = http.createServer(async (req, res) => {
         let runs = wf.runs;
         if (q.get("workflow")) { const w = findWf(q.get("workflow")); runs = runs.filter((r) => r.workflow_id === w?.id); }
         if (q.get("active") === "true") runs = runs.filter((r) => r.status === "running" || r.status === "waiting");
+        if (q.get("status")) runs = runs.filter((r) => r.status === q.get("status"));
         return send(res, 200, { runs: runs.slice(0, Number(q.get("limit")) || 50).map((r) => runView(r, false)) });
+      }
+      if (parts.length === 5 && parts[4] === "compare" && method === "GET") {
+        const q = new URL(req.url, "http://x").searchParams;
+        const ra = wf.runs.find((x) => x.id === q.get("a")), rb = wf.runs.find((x) => x.id === q.get("b"));
+        if (!ra || !rb) return fail(res, 404, "not_found", "workflow run not found");
+        return send(res, 200, wfCompare(ra, rb, (x) => runView(x, false)));
       }
       const r = wf.runs.find((x) => x.id === parts[4]);
       if (!r) return fail(res, 404, "not_found", "workflow run not found");
       if (parts.length === 5 && method === "GET") return send(res, 200, runView(r, true));
+      if (parts.length === 8 && parts[5] === "steps" && parts[7] === "log" && method === "GET") {
+        const id = decodeURIComponent(parts[6]);
+        const st = r.steps.find((x) => x.id === id) || [...r.steps].reverse().find((x) => x.step === id);
+        if (!st) return fail(res, 404, "not_found", `run ${r.id} has no step ${id}`);
+        return send(res, 200, { run: r.id, step: wfStepView(st), entries: wfStepLog(hub, r, st) });
+      }
+      if (parts.length === 6 && parts[5] === "evaluations" && method === "POST") {
+        const b = await readBody(req);
+        if (!/^[A-Za-z][A-Za-z0-9_.-]{0,63}$/.test(b?.name || "")) return fail(res, 400, "invalid_argument", `name "${b?.name || ""}": use letters, digits, _ . -`);
+        if (typeof b.value !== "number" || !Number.isFinite(b.value)) return fail(res, 400, "invalid_argument", "the value must be a number");
+        state.counter += 1;
+        const e = { id: state.counter, run: r.id, name: b.name, value: b.value, ...(b.unit ? { unit: b.unit } : {}), ...(b.direction ? { direction: b.direction } : {}),
+          ...(b.note ? { note: b.note } : {}), ...(b.step ? { step: b.step } : {}), by: "glenn", at: iso(0) };
+        (r.evaluations ||= []).push(e);
+        return send(res, 201, e);
+      }
       if (parts.length === 6 && method === "POST") {
         const b = await readBody(req).catch(() => ({}));
         if (parts[5] === "cancel") {
@@ -3117,6 +3240,14 @@ const server = http.createServer(async (req, res) => {
         }
         if (method === "DELETE") { p.members = p.members.filter((x) => x.name !== parts[6]); return send(res, 200, projectView(hub, p)); }
       }
+      if (parts.length === 7 && parts[5] === "machines" && (method === "PUT" || method === "DELETE")) {
+        if (hub.id === "hub_lab") return fail(res, 404, "not_found", "no such route");
+        const id = parts[6];
+        p.machines = (p.machines || []).filter((x) => x !== id);
+        if (method === "PUT") p.machines.push(id);
+        p.updated_at = iso();
+        return send(res, 200, projectView(hub, p));
+      }
       if (parts[5] === "files" && parts.length >= 7) {
         const i = p.docs.findIndex((d) => d.name === parts[6]);
         if (parts.length === 8 && parts[7] === "save" && method === "POST") {
@@ -3445,7 +3576,35 @@ const server = http.createServer(async (req, res) => {
         return fail(res, 409, "too_old", "that computer's myco is too old to say what it has", "run myco upgrade on it");
       }
       await sleep(600);
-      return send(res, 200, machineInfoOf(machine));
+      const info = machineInfoOf(machine);
+      return send(res, 200, machineDirs.has(machine.id) ? { ...info, dirs: machineDirs.get(machine.id) } : info);
+    }
+    // /app/hubs/{id}/machines/{mid}/dirs — the folders agents may start in:
+    // changed here (this computer) or over the SSH / WSL route the App knows.
+    if (parts.length === 6 && parts[3] === "machines" && parts[5] === "dirs" && method === "POST") {
+      const body = await readBody(req);
+      const machine = (hub.machines || []).find((m) => m.id === parts[4]);
+      if (!machine) return fail(res, 404, "not_found", "没有这台机器");
+      const rt = machineReach.get(`${hub.id}/${machine.id}`);
+      const q = (d) => `'${d}'`;
+      if (!body.here && !rt) {
+        return fail(res, 409, "not_reachable", "only that computer can change its folders, and this App does not reach it",
+          ["myco machine dirs", ...(body.add || []).map((d) => `--add ${q(d)}`), ...(body.remove || []).map((d) => `--remove ${q(d)}`)].join(" "));
+      }
+      await sleep(500);
+      let dirs = [...(machineDirs.get(machine.id) || machineInfoOf(machine).dirs)];
+      const covered = [];
+      const under = (d, r) => r === "~" || d === r || d.startsWith(r.replace(/\/$/, "") + "/");
+      for (const d of body.add || []) {
+        if (dirs.some((r) => under(d, r))) { covered.push(d); continue; }
+        dirs = [...dirs.filter((r) => !under(r, d)), d];
+      }
+      for (const d of body.remove || []) {
+        if (dirs.length === 1 && dirs[0] === d) return fail(res, 409, "invalid_state", "cannot remove the last allowed folder: with none, all of the home folder is allowed", "allow another folder first, then remove this one");
+        dirs = dirs.filter((r) => r !== d);
+      }
+      machineDirs.set(machine.id, dirs);
+      return send(res, 200, { dirs, changed: true, ...(covered.length ? { already_allowed: covered } : {}), via: body.here ? "here" : rt.via });
     }
 
     // /app/hubs/{id}/machines/{mid}/spawn — start a session on that machine.
@@ -3511,7 +3670,7 @@ const server = http.createServer(async (req, res) => {
       const model = typeof body.model === "string" ? body.model.trim() : "";
       const osLabel = { darwin: "macOS", linux: "Linux", windows: "Windows", cloud: "云端" }[machine.os] || machine.os;
       const agent = makeAgent({ ...(typeof body.display_name === "string" && body.display_name ? { display_name: body.display_name } : {}),
-        name,
+        name, owner: "glenn", owner_id: "mem_glenn",
         description: typeof body.description === "string" ? body.description : "",
         kind: "agent",
         machine_id: machine.id,
@@ -3820,13 +3979,13 @@ function wfFill(text, r) {
     .replace(/\{\{\s*steps\.([\w-]+)\.summary\s*\}\}/g, (_, k) => [...r.steps].reverse().find((x) => x.step === k)?.summary || "")
     .replace(/\{\{[^}]*\}\}/g, "…");
 }
-function wfActivate(hub, r, id) {
+function wfActivate(hub, r, id, payload) {
   const def = r.def.steps.find((x) => x.id === id);
   if (!def || r.status === "failed" || r.status === "cancelled") return;
   const kind = def.computer ? "computer" : def.human ? "human" : "agent";
   const st = { id: `rs_${r.id}_${r.steps.length + 1}`, step: id, title: def.title, kind, attempt: r.steps.filter((x) => x.step === id).length + 1,
     status: kind === "human" ? "waiting" : "running", target: kind === "human" ? "glenn" : def.agent || def.computer || (def.role ? "docs-claude" : undefined), started_at: iso(0),
-    input: kind === "computer" ? wfFill(def.run, r) : wfFill(def.prompt || def.title, r) };
+    input: kind === "computer" ? wfFill(def.run, r) : wfFill(def.prompt || def.title, r), payload: payload ?? r.inputs };
   if (kind === "human") { st.options = def.options; st.due_at = iso(-20 * 3600); }
   r.steps.push(st);
   r.status = kind === "human" && !r.steps.some((x) => x.status === "running") ? "waiting" : "running";
@@ -3859,7 +4018,7 @@ function wfNext(hub, r, st) {
         const preds = [...new Set(wfEdges(r.def).filter((x) => x.to === e.to).map((x) => x.from))];
         if (!preds.every((p) => r.steps.some((x) => x.step === p && x.status === "done"))) continue;
       }
-      wfActivate(hub, r, e.to);
+      wfActivate(hub, r, e.to, e.map ? Object.fromEntries(Object.keys(e.map).map((k) => [k, st.output?.[k] ?? ""])) : st.output);
     }
   }
   if (!r.steps.some((x) => x.status === "running" || x.status === "waiting") && r.status !== "failed" && r.status !== "cancelled") wfEnd(r, "succeeded", "");
@@ -3870,18 +4029,157 @@ function wfEnd(r, status, why) {
   r.status = status; r.error = why || undefined; r.ended_at = iso(0); r.updated_at = iso(0);
   r.events.push({ at: iso(0), kind: "finished", text: ({ succeeded: "完成了", failed: "失败了", cancelled: "取消了" })[status] + (why ? `：${why}` : "") });
 }
+/* observability (v0.21.1): metrics, step views, stats, comparison, logs */
+function wfMs(from, to) { return Math.max(0, (to ? Date.parse(to) : Date.now()) - Date.parse(from)); }
+function wfStepView(st) {
+  return { ...st, duration_ms: st.started_at ? wfMs(st.started_at, st.ended_at) : 0, attempts: st.attempts || 1 + (st.retries || 0) + (st.bounces || 0) };
+}
+function wfCover(spans) {
+  const sp = [...spans].sort((a, b) => a[0] - b[0]);
+  let total = 0, cur = null;
+  for (const s of sp) {
+    if (!cur || s[0] > cur[1]) { if (cur) total += cur[1] - cur[0]; cur = [...s]; } else if (s[1] > cur[1]) cur[1] = s[1];
+  }
+  return cur ? total + cur[1] - cur[0] : 0;
+}
+function wfMetrics(r) {
+  const work = [], wait = [];
+  const u = { input_tokens: 0, output_tokens: 0, cost_usd: 0 };
+  let done = 0, failed = 0, attempts = 0, retries = 0, bounces = 0;
+  for (const st of r.steps) {
+    const v = wfStepView(st);
+    if (st.status === "done") done++;
+    if (st.status === "failed") failed++;
+    attempts += v.attempts; retries += st.retries || 0; bounces += st.bounces || 0;
+    if (st.usage) { u.input_tokens += st.usage.input_tokens || 0; u.output_tokens += st.usage.output_tokens || 0; u.cost_usd += st.usage.cost_usd || 0; }
+    const from = Date.parse(st.started_at);
+    (st.kind === "human" ? wait : work).push([from, from + v.duration_ms]);
+  }
+  const active = wfCover(work);
+  return { duration_ms: wfMs(r.created_at, r.ended_at), active_ms: active, waiting_ms: wfCover([...work, ...wait]) - active, steps: r.steps.length, done, failed,
+    attempts, retries, bounces, ...(u.input_tokens || u.cost_usd ? { usage: u } : {}) };
+}
+function wfDist(xs) {
+  if (!xs.length) return { n: 0, avg: 0, min: 0, p50: 0, p90: 0, p95: 0, max: 0 };
+  const v = [...xs].sort((a, b) => a - b);
+  const rank = (p) => v[Math.max(0, Math.ceil(p * v.length) - 1)];
+  return { n: v.length, avg: v.reduce((a, b) => a + b, 0) / v.length, min: v[0], p50: rank(0.5), p90: rank(0.9), p95: rank(0.95), max: v[v.length - 1] };
+}
+function wfAddUsage(a, u) { if (!u) return a; a.input_tokens += u.input_tokens || 0; a.output_tokens += u.output_tokens || 0; a.cost_usd += u.cost_usd || 0; return a; }
+function wfStats(wf, w, version) {
+  const all = wf.runs.filter((r) => r.workflow_id === w.id);
+  const by = {};
+  for (const r of all) by[r.status] = (by[r.status] || 0) + 1;
+  const ended = (by.succeeded || 0) + (by.failed || 0) + (by.cancelled || 0);
+  const runs = all.filter((r) => !version || r.version === version).slice(0, 200);
+  const over = (r) => ["succeeded", "failed", "cancelled"].includes(r.status);
+  const ms = runs.map((r) => [r, wfMetrics(r)]);
+  const usage = { input_tokens: 0, output_tokens: 0, cost_usd: 0 };
+  for (const [, m] of ms) wfAddUsage(usage, m.usage);
+  const steps = new Map();
+  for (const r of runs) for (const st of r.steps) {
+    const a = steps.get(st.step) || { step: st.step, title: w.def.steps.find((x) => x.id === st.step)?.title, kind: st.kind, runs: 0, done: 0, failed: 0, retries: 0, bounces: 0, d: [], usage: { input_tokens: 0, output_tokens: 0, cost_usd: 0 } };
+    a.runs++; a.retries += st.retries || 0; a.bounces += st.bounces || 0; wfAddUsage(a.usage, st.usage);
+    if (st.status === "done") a.done++;
+    if (st.status === "failed") { a.failed++; if (!a.last_error_at || st.ended_at > a.last_error_at) Object.assign(a, { last_error: st.error, last_error_run: r.id, last_error_at: st.ended_at }); }
+    if (st.ended_at) a.d.push(wfMs(st.started_at, st.ended_at));
+    steps.set(st.step, a);
+  }
+  const order = w.def.steps.map((x) => x.id);
+  const stepList = [...steps.values()].sort((a, b) => order.indexOf(a.step) - order.indexOf(b.step))
+    .map(({ d, usage: u, ...a }) => ({ ...a, duration_ms: wfDist(d), ...(u.input_tokens || u.cost_usd ? { usage: u } : {}) }));
+  const vers = new Map();
+  for (const [r, m] of ms) {
+    const v = vers.get(r.version) || { version: r.version, runs: 0, succeeded: 0, failed: 0, cancelled: 0, d: [] };
+    v.runs++; if (v[r.status] !== undefined) v[r.status]++; if (over(r)) v.d.push(m.duration_ms);
+    vers.set(r.version, v);
+  }
+  const latest = new Map();
+  for (const r of runs) for (const e of r.evaluations || []) latest.set(`${r.id}|${e.name}`, e);
+  const evs = new Map();
+  for (const e of latest.values()) {
+    const x = evs.get(e.name) || { name: e.name, unit: e.unit, direction: e.direction, vals: [], last: e.value, last_run: e.run, at: "" };
+    x.vals.push(e.value); if (e.at >= x.at) Object.assign(x, { last: e.value, last_run: e.run, at: e.at });
+    evs.set(e.name, x);
+  }
+  const point = ([r, m]) => ({ id: r.id, status: r.status, version: r.version, created_at: r.created_at, duration_ms: m.duration_ms, ...(r.error ? { error: r.error } : {}),
+    ...(r.steps.some((x) => x.status === "failed") ? { failed_step: [...r.steps].reverse().find((x) => x.status === "failed").step } : {}), ...(m.usage?.cost_usd ? { cost_usd: m.usage.cost_usd } : {}) });
+  const fin = ms.filter(([r]) => over(r)).map(([, m]) => m);
+  return {
+    workflow: w.id, name: w.name, total: all.length, by_status: by, success_rate: ended ? (by.succeeded || 0) / ended : 0, sample: runs.length, ...(version ? { version } : {}),
+    duration_ms: wfDist(fin.map((m) => m.duration_ms)), active_ms: wfDist(fin.map((m) => m.active_ms)), waiting_ms: wfDist(fin.map((m) => m.waiting_ms)),
+    ...(usage.input_tokens || usage.cost_usd ? { usage, cost_per_run: usage.cost_usd / Math.max(1, runs.length) } : {}),
+    steps: stepList, versions: [...vers.values()].sort((a, b) => b.version - a.version).map(({ d, ...v }) => ({ ...v, duration_ms: wfDist(d) })),
+    evaluations: [...evs.values()].sort((a, b) => a.name.localeCompare(b.name)).map(({ vals, at, ...x }) => ({ ...x, values: wfDist(vals) })),
+    recent: ms.slice(0, 60).map(point), failures: ms.filter(([r]) => r.status === "failed").slice(0, 10).map(point),
+  };
+}
+function wfCompare(a, b, view) {
+  const side = (r, id) => {
+    const xs = r.steps.filter((x) => x.step === id);
+    if (!xs.length) return undefined;
+    const last = xs[xs.length - 1];
+    const u = xs.reduce((acc, x) => wfAddUsage(acc, x.usage), { input_tokens: 0, output_tokens: 0, cost_usd: 0 });
+    return { status: last.status, runs: xs.length, attempts: xs.reduce((n, x) => n + wfStepView(x).attempts, 0), duration_ms: xs.reduce((n, x) => n + wfStepView(x).duration_ms, 0),
+      ...(u.input_tokens || u.cost_usd ? { usage: u } : {}), summary: last.summary, error: last.error };
+  };
+  const ids = [...new Set([...a.def.steps, ...b.def.steps].map((x) => x.id))];
+  const steps = ids.map((id) => {
+    const sa = side(a, id), sb = side(b, id);
+    if (!sa && !sb) return null;
+    const d = { step: id, title: (b.def.steps.find((x) => x.id === id) || a.def.steps.find((x) => x.id === id))?.title, a: sa, b: sb, delta_ms: 0 };
+    if (sa && sb) { d.delta_ms = sb.duration_ms - sa.duration_ms; d.delta_cost_usd = (sb.usage?.cost_usd || 0) - (sa.usage?.cost_usd || 0); if (d.delta_ms) d.faster_in = d.delta_ms < 0 ? "b" : "a"; }
+    return d;
+  }).filter(Boolean);
+  const last = (r) => new Map((r.evaluations || []).map((e) => [e.name, e]));
+  const ea = last(a), eb = last(b);
+  const names = [...new Set([...ea.keys(), ...eb.keys()])].sort();
+  const evaluations = names.map((n) => {
+    const x = ea.get(n), y = eb.get(n);
+    const e = { name: n, unit: (y || x).unit, direction: (y || x).direction, ...(x ? { a: x.value } : {}), ...(y ? { b: y.value } : {}), delta: x && y ? y.value - x.value : 0 };
+    if (x && y && x.value !== y.value && e.direction) e.better = (e.direction === "higher") === (x.value > y.value) ? "a" : "b";
+    return e;
+  });
+  return { a: { run: view(a), metrics: wfMetrics(a) }, b: { run: view(b), metrics: wfMetrics(b) }, same_version: a.workflow_id === b.workflow_id && a.version === b.version, steps, evaluations };
+}
+function wfStepLog(hub, r, st) {
+  const out = [];
+  const shift = (t, s) => new Date(Date.parse(t) + s * 1000).toISOString();
+  if (st.message_id) {
+    for (const th of Object.values(hub.threads || {})) {
+      if (!th.some((m) => m.id === st.message_id)) continue;
+      for (const m of th) {
+        if (m.type === "task") out.push({ at: m.created_at, kind: "task", try: 1, from: m.from, text: m.body });
+        else if (m.type === "progress") out.push({ at: m.created_at, kind: "progress", try: 1, from: m.from, text: m.body, attachments: m.attachments });
+        else if (m.type === "reply") out.push({ at: m.created_at, kind: "reply", try: 1, from: m.from, text: m.body, attachments: m.attachments });
+      }
+    }
+  }
+  for (const t of st.trace || []) out.push({ at: shift(st.started_at, t[0]), kind: "trace", sub: t[1], try: 1, text: t[2] });
+  if (st.kind === "computer" && st.output) {
+    const at = st.ended_at || iso(0);
+    if (st.output.stdout) out.push({ at, kind: "stdout", text: st.output.stdout, from: st.target });
+    if (st.output.stderr) out.push({ at, kind: "stderr", text: st.output.stderr, from: st.target });
+    out.push({ at, kind: "event", sub: "exit", text: `退出码 ${st.output.exit_code ?? 0}` });
+  }
+  for (const e of r.events) if (e.step === st.step && e.at >= st.started_at && (!st.ended_at || e.at <= shift(st.ended_at, 1))) out.push({ at: e.at, kind: "event", sub: e.kind, text: e.text });
+  return out.sort((a, b) => a.at.localeCompare(b.at));
+}
 function seedWorkflows(hub) {
   if (hub.id !== "hub_studio") return { list: [], runs: [] };
   const review = {
     name: "写-审-改", description: "一个做、一个审，没过就改，最多 3 轮；最后你点头。",
-    inputs: { required: ["task"], properties: { task: { type: "string", title: "要做什么", format: "textarea" } } },
+    inputs: { type: "object", required: ["task"], properties: { task: { type: "string", title: "要做什么", format: "textarea", minLength: 4 } } },
     steps: [
-      { id: "write", title: "做", agent: "pm-codex", prompt: "完成这件事：{{inputs.task}}", output: { required: ["where"], properties: { where: { type: "string" } } } },
-      { id: "review", title: "审", role: "审查", prompt: "审一下这个改动：{{steps.write.summary}}", output: { required: ["approved"], properties: { approved: { type: "boolean" }, comments: { type: "array" } } } },
+      { id: "write", title: "做", agent: "pm-codex", prompt: "完成这件事：{{inputs.task}}",
+        output: { type: "object", required: ["where"], properties: { where: { type: "string", description: "改动在哪个分支", pattern: "^feat/" }, summary: { type: "string", maxLength: 200 } } } },
+      { id: "review", title: "审", role: "审查", prompt: "审一下 {{input.where}} 的改动：{{steps.write.summary}}",
+        inputSchema: { type: "object", required: ["where"], properties: { where: { type: "string", pattern: "^feat/" } } },
+        outputSchema: { type: "object", required: ["approved"], properties: { approved: { type: "boolean", description: "能不能合" }, comments: { type: "array", items: { type: "string" }, description: "要改的地方" } } } },
       { id: "ok", title: "你来定", human: "$starter", prompt: "「{{steps.write.summary}}」审过了。就这样吗？", options: ["就这样", "不要了"] },
     ],
     edges: [
-      { from: "write", to: "review" }, { from: "review", to: "ok", when: "output.approved" },
+      { from: "write", to: "review", map: { where: "{{output.where}}" } }, { from: "review", to: "ok", when: "output.approved" },
       { from: "review", to: "write", when: "!output.approved", maxIterations: 3, else: "$fail" },
       { from: "ok", to: "$end", when: "output.choice == '就这样'" }, { from: "ok", to: "$fail", when: "output.choice != '就这样'" },
     ],
@@ -3899,13 +4197,19 @@ function seedWorkflows(hub) {
     { id: "wf_review", name: review.name, def: review, version: 2, enabled: true, created_at: iso(9 * 86400), updated_at: iso(2 * 86400) },
     { id: "wf_test", name: test.name, def: test, version: 1, enabled: true, created_at: iso(6 * 86400), updated_at: iso(6 * 86400) },
   ];
-  const task = (to, body, reply, at, runId) => {
+  const task = (to, body, reply, at, runId, extra = {}) => {
     const threadId = `th_wf_seed_${msgSeq + 1}`;
     const m = makeMessage({ thread_id: threadId, from: CONSOLE, to, type: "task", status: "done", body, workflow: runId, created_at: iso(at), updated_at: iso(at - 60) });
-    const rep = makeMessage({ thread_id: threadId, from: to, to: CONSOLE, type: "reply", status: "done", body: reply, reply_to: m.id, created_at: iso(at - 60), updated_at: iso(at - 60) });
-    (hub.threads ||= {})[threadId] = [m, rep];
+    const replyAt = extra.replyAt ?? at - 60;
+    const rep = makeMessage({ thread_id: threadId, from: to, to: CONSOLE, type: "reply", status: "done", body: reply, reply_to: m.id, created_at: iso(replyAt), updated_at: iso(replyAt),
+      ...(extra.files ? { attachments: extra.files } : {}) });
+    const progress = extra.progress ? [makeMessage({ thread_id: threadId, from: to, to: CONSOLE, type: "progress", status: "done", body: extra.progress.body, reply_to: m.id,
+      created_at: iso(extra.progress.at), updated_at: iso(extra.progress.at), ...(extra.progress.files ? { attachments: extra.progress.files } : {}) })] : [];
+    (hub.threads ||= {})[threadId] = [m, ...progress, rep];
     return m.id;
   };
+  const shot = { file_id: "f_demo_shot_wf1", name: "设置页截图.png", size: 48213, sha256: "", content_type: "image/png" };
+  const notes = { file_id: "f_demo_md_2", name: "改动说明.md", size: 1840, sha256: "", content_type: "text/markdown" };
   const st = (runId, i, step, kind, attempt, status, target, at, took, extra = {}) => ({
     id: `rs_${runId}_${i}`, step, kind, attempt, status, target, started_at: iso(at), ...(status === "running" || status === "waiting" ? {} : { ended_at: iso(at - took) }), ...extra,
   });
@@ -3914,13 +4218,19 @@ function seedWorkflows(hub) {
     id: a, workflow_id: "wf_review", name: review.name, version: 2, status: "waiting", inputs: { task: "设置页加一个「导出对话」按钮" },
     owner: "glenn", by: "glenn", trigger: "manual", created_at: iso(5400), updated_at: iso(300), def: review,
     steps: [
-      st(a, 1, "write", "agent", 1, "done", "pm-codex", 5400, 1500, { title: "做", summary: "加好了导出按钮，放在设置 › 对话", output: { where: "feat/export-chat", summary: "加好了导出按钮，放在设置 › 对话" },
-        input: "完成这件事：设置页加一个「导出对话」按钮", message_id: task("pm-codex", "[工作流「写-审-改」· 第 1 步 做]\n\n完成这件事：设置页加一个「导出对话」按钮", "加好了导出按钮，放在设置 › 对话。分支 feat/export-chat。", 5400, a) }),
-      st(a, 2, "review", "agent", 1, "done", "docs-claude", 3900, 600, { title: "审", summary: "少了导出失败时的提示", output: { approved: false, comments: ["导出失败时没有提示", "按钮文字和别处不一致"] },
+      st(a, 1, "write", "agent", 1, "done", "pm-codex", 5400, 1500, { title: "做", summary: "加好了导出按钮，放在设置 › 对话", payload: { task: "设置页加一个「导出对话」按钮" }, output: { where: "feat/export-chat", summary: "加好了导出按钮，放在设置 › 对话" },
+        bounces: 1, usage: { input_tokens: 182400, output_tokens: 9100, cost_usd: 0.84 },
+        trace: [[20, "text", "先看看设置页现在的结构，再决定按钮放哪。"], [45, "tool", "Read web/src/app/Settings.tsx"], [130, "tool", "Grep \"导出\" web/src"], [260, "thinking", "放在「对话」一组最合适，和清空记录挨着。"],
+          [420, "tool", "Edit web/src/app/Settings.tsx"], [700, "tool", "Bash npm run typecheck"], [760, "tool_result", "> tsc -b\n(no errors)"], [1100, "tool", "Bash npm run test:ui -- --only 设置"], [1380, "tool_result", "✓ 设置 · 1200-light (3.2s)"],
+          [1490, "usage", "输入 182.4k / 输出 9.1k tokens · $0.84 · 24m50s"]],
+        input: "完成这件事：设置页加一个「导出对话」按钮", message_id: task("pm-codex", "[工作流「写-审-改」· 第 1 步 做]\n\n完成这件事：设置页加一个「导出对话」按钮", "加好了导出按钮，放在设置 › 对话。分支 feat/export-chat。", 5400, a,
+          { replyAt: 3910, files: [shot, notes], progress: { at: 4600, body: "按钮放好了，正在跑 UI 检查。截图先给你看看位置。", files: [shot] } }) }),
+      st(a, 2, "review", "agent", 1, "done", "docs-claude", 3900, 600, { title: "审", summary: "少了导出失败时的提示", payload: { where: "feat/export-chat" }, output: { approved: false, comments: ["导出失败时没有提示", "按钮文字和别处不一致"] },
+        usage: { input_tokens: 64000, output_tokens: 2400, cost_usd: 0.31 },
         input: "审一下这个改动：加好了导出按钮", message_id: task("docs-claude", "[工作流「写-审-改」· 第 2 步 审]\n\n审一下这个改动：加好了导出按钮", "两处要改：导出失败时没有提示；按钮文字和别处不一致。", 3900, a) }),
-      st(a, 3, "write", "agent", 2, "done", "pm-codex", 3300, 1200, { title: "做", summary: "补上失败提示，按钮改成「导出这段对话」", output: { where: "feat/export-chat" },
+      st(a, 3, "write", "agent", 2, "done", "pm-codex", 3300, 1200, { title: "做", summary: "补上失败提示，按钮改成「导出这段对话」", output: { where: "feat/export-chat" }, usage: { input_tokens: 121000, output_tokens: 5200, cost_usd: 0.52 },
         input: "完成这件事：设置页加一个「导出对话」按钮\n上一轮审查的意见：导出失败时没有提示；按钮文字和别处不一致", message_id: task("pm-codex", "[工作流「写-审-改」· 第 1 步 做 · 第 2 次]\n\n补上审查意见", "补上失败提示，按钮改成「导出这段对话」。", 3300, a) }),
-      st(a, 4, "review", "agent", 2, "done", "docs-claude", 2000, 500, { title: "审", summary: "通过", output: { approved: true }, input: "审一下这个改动：补上失败提示",
+      st(a, 4, "review", "agent", 2, "done", "docs-claude", 2000, 500, { title: "审", summary: "通过", output: { approved: true }, input: "审一下这个改动：补上失败提示", usage: { input_tokens: 58000, output_tokens: 1100, cost_usd: 0.24 },
         message_id: task("docs-claude", "[工作流「写-审-改」· 第 2 步 审 · 第 2 次]\n\n审一下这个改动", "通过，没有别的问题。", 2000, a) }),
       st(a, 5, "ok", "human", 1, "waiting", "glenn", 1500, 0, { title: "你来定", input: "「补上失败提示，按钮改成「导出这段对话」」审过了。就这样吗？", options: ["就这样", "不要了"], due_at: iso(-20 * 3600) }),
     ],
@@ -3930,19 +4240,58 @@ function seedWorkflows(hub) {
       { at: iso(3300), kind: "done", step: "review", text: "少了导出失败时的提示" }, { at: iso(3300), kind: "edge", step: "review", text: "review → write" },
       { at: iso(2000), kind: "done", step: "write", text: "补上失败提示，按钮改成「导出这段对话」" },
       { at: iso(1500), kind: "done", step: "review", text: "通过" }, { at: iso(1500), kind: "step", step: "ok", text: "等 glenn 决定" },
-    ],
+      { at: iso(4700), kind: "bounced", step: "write", text: "结果不符合，退回重交：where is missing" },
+    ].sort((x, y) => x.at.localeCompare(y.at)),
+    artifacts: [
+      { step: "write", step_run: `rs_${a}_1`, try: 1, kind: "progress", message: "m", from: "pm-codex", at: iso(4600), ...shot },
+      { step: "write", step_run: `rs_${a}_1`, try: 2, kind: "reply", message: "m", from: "pm-codex", at: iso(3910), ...shot },
+      { step: "write", step_run: `rs_${a}_1`, try: 2, kind: "reply", message: "m", from: "pm-codex", at: iso(3910), ...notes },
+    ].map(({ sha256, ...x }) => x).filter((x, i, all) => all.findIndex((y) => y.file_id === x.file_id && y.step_run === x.step_run) === i),
+    evaluations: [{ id: 1, run: a, name: "quality", value: 4, unit: "分", direction: "higher", note: "失败提示加得好", by: "glenn", at: iso(1200) },
+      { id: 2, run: a, step: "review", name: "comments", value: 2, unit: "条", direction: "lower", by: "docs-claude", at: iso(3300) }],
   };
   const b = "run_seed_b";
   const runB = {
     id: b, workflow_id: "wf_review", name: review.name, version: 1, status: "succeeded", inputs: { task: "README 补上 Windows 安装说明" },
     owner: "glenn", by: "pm-codex", trigger: "agent", created_at: iso(30 * 3600), updated_at: iso(28 * 3600), ended_at: iso(28 * 3600), def: review,
     steps: [
-      st(b, 1, "write", "agent", 1, "done", "pm-codex", 30 * 3600, 1800, { title: "做", summary: "写好了 Windows 安装一节", input: "完成这件事：README 补上 Windows 安装说明" }),
-      st(b, 2, "review", "agent", 1, "done", "docs-claude", 29.4 * 3600, 900, { title: "审", summary: "通过", output: { approved: true } }),
+      st(b, 1, "write", "agent", 1, "done", "pm-codex", 30 * 3600, 1800, { title: "做", summary: "写好了 Windows 安装一节", input: "完成这件事：README 补上 Windows 安装说明", usage: { input_tokens: 96000, output_tokens: 6100, cost_usd: 0.46 } }),
+      st(b, 2, "review", "agent", 1, "done", "docs-claude", 29.4 * 3600, 900, { title: "审", summary: "通过", output: { approved: true }, usage: { input_tokens: 41000, output_tokens: 900, cost_usd: 0.17 } }),
       st(b, 3, "ok", "human", 1, "done", "glenn", 29 * 3600, 3600, { title: "你来定", summary: "就这样", output: { choice: "就这样", by: "glenn" }, options: ["就这样", "不要了"] }),
     ],
     events: [{ at: iso(30 * 3600), kind: "started", text: "pm-codex 启动了（第 1 版）" }, { at: iso(28 * 3600), kind: "finished", text: "完成了" }],
+    evaluations: [{ id: 3, run: b, name: "quality", value: 5, unit: "分", direction: "higher", by: "glenn", at: iso(28 * 3600) },
+      { id: 4, run: b, step: "review", name: "comments", value: 0, unit: "条", direction: "lower", by: "docs-claude", at: iso(29 * 3600) }],
   };
+  // Earlier runs: enough for the figures to say something.
+  const tasks = ["首页加载慢，排查一下", "登录页适配深色模式", "导出 CSV 加上表头", "修复搜索结果重复", "设置页加快捷键说明", "通知改成可以静音",
+    "README 加上 FAQ", "清理没用的依赖", "错误提示统一文案", "列表加分页", "上传加进度条", "修 Windows 路径问题"];
+  const history = tasks.map((t, i) => {
+    const id = `run_seed_h${i + 1}`;
+    const at = (2 + i * 1.6) * 86400 + (i % 3) * 3600;
+    const v = i < 6 ? 2 : 1;
+    const w1 = 900 + ((i * 397) % 1500), r1 = 300 + ((i * 211) % 600), d1 = 600 + ((i * 733) % 5400);
+    const status = i === 3 || i === 9 ? "failed" : i === 6 ? "cancelled" : "succeeded";
+    const cost = (x) => ({ input_tokens: Math.round(x * 210000), output_tokens: Math.round(x * 9000), cost_usd: Math.round(x * 100) / 100 });
+    const steps = [st(id, 1, "write", "agent", 1, "done", "pm-codex", at, w1, { title: "做", summary: `${t}：做好了`, usage: cost(0.3 + (i % 5) * 0.11), ...(i % 4 === 1 ? { bounces: 1 } : {}) })];
+    if (status === "failed" && i === 3) {
+      steps.push(st(id, 2, "review", "agent", 1, "failed", "docs-claude", at - w1, r1, { title: "审", error: "交的结果不符合要求：approved is missing", bounces: 1, usage: cost(0.15) }));
+    } else if (status === "failed") {
+      steps.push(st(id, 2, "review", "agent", 1, "failed", "docs-claude", at - w1, 1800, { title: "审", error: "超时了（30m）", retries: 1, usage: cost(0.2) }));
+    } else {
+      steps.push(st(id, 2, "review", "agent", 1, "done", "docs-claude", at - w1, r1, { title: "审", summary: "通过", output: { approved: true }, usage: cost(0.12 + (i % 3) * 0.05) }));
+      steps.push(st(id, 3, "ok", "human", 1, status === "cancelled" ? "cancelled" : "done", "glenn", at - w1 - r1, d1, { title: "你来定", summary: status === "cancelled" ? undefined : "就这样", options: ["就这样", "不要了"] }));
+    }
+    const last = steps[steps.length - 1];
+    const ended = last.ended_at;
+    return {
+      id, workflow_id: "wf_review", name: review.name, version: v, status, inputs: { task: t }, owner: "glenn", by: i % 3 === 0 ? "pm-codex" : "glenn",
+      trigger: i % 3 === 0 ? "agent" : "manual", created_at: iso(at), updated_at: ended, ended_at: ended, def: review, steps,
+      ...(status === "failed" ? { error: last.error } : status === "cancelled" ? { error: "glenn 取消了" } : {}),
+      events: [{ at: iso(at), kind: "started", text: `glenn 启动了（第 ${v} 版）` }],
+      evaluations: status === "succeeded" ? [{ id: 100 + i, run: id, name: "quality", value: [4, 3, 5, 4, 4, 3, 5, 4, 5, 4, 3, 4][i], unit: "分", direction: "higher", by: "glenn", at: ended }] : [],
+    };
+  });
   const c = "run_seed_c";
   const runC = {
     id: c, workflow_id: "wf_test", name: test.name, version: 1, status: "failed", inputs: { task: "修 Safari 上登录闪退", command: "make test" },
@@ -3955,7 +4304,7 @@ function seedWorkflows(hub) {
     ]).slice(0, 8),
     events: [{ at: iso(3 * 86400), kind: "started", text: "glenn 启动了（第 1 版）" }, { at: iso(3 * 86400 - 3000), kind: "finished", text: "失败了：test → fix 到了最多 3 次" }],
   };
-  return { list, runs: [runA, runB, runC] };
+  return { list, runs: [runA, runB, ...history, runC].sort((x, y) => y.created_at.localeCompare(x.created_at)) };
 }
 
 function seedAutomations(hub) {

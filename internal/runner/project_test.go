@@ -21,13 +21,15 @@ func (h *projectHub) GetProject(_ context.Context, name string, _ bool) (*api.Pr
 		Docs:    []api.ProjectDoc{{Name: "conventions"}}}, nil
 }
 
-// A project task gets the project's context once per session; a message
-// without a project gets none.
+// A project task gets the project's context once per session, and after
+// that a line naming its project (an agent in several projects gets them in
+// one session); a message without a project, after project work, says so.
 func TestProjectContextInPrompt(t *testing.T) {
 	hub := &projectHub{fakeHub: newFakeHub(
 		api.Message{ID: "t1", Type: "task", From: "lead", ThreadID: "th1", Project: "myco", Body: "add the filter"},
 		api.Message{ID: "t2", Type: "task", From: "lead", ThreadID: "th2", Project: "myco", Body: "and docs"},
 		api.Message{ID: "t3", Type: "task", From: "lead", ThreadID: "th3", Body: "unrelated"},
+		api.Message{ID: "t4", Type: "task", From: "lead", ThreadID: "th4", Project: "site", Body: "new landing page"},
 	)}
 	var prompts []string
 	h := fakeHarness{fn: func(r harness.Request) (harness.Result, error) {
@@ -35,10 +37,10 @@ func TestProjectContextInPrompt(t *testing.T) {
 		return harness.Result{Output: "ok", SessionID: "s"}, nil
 	}}
 	r := New(hub, h, NewHubSessions(&fakeBinder{}, ""), nil, Options{Self: "me", Once: true, Concurrency: 1}, quiet())
-	for range 3 {
+	for range 4 {
 		r.Run(context.Background())
 	}
-	if len(prompts) != 3 {
+	if len(prompts) != 4 {
 		t.Fatalf("runs: %d", len(prompts))
 	}
 	first := prompts[0]
@@ -51,10 +53,16 @@ func TestProjectContextInPrompt(t *testing.T) {
 	if strings.Index(first, "--- project ---") > strings.Index(first, "--- message body ---") {
 		t.Fatalf("the project goes before the body:\n%s", first)
 	}
-	if strings.Contains(prompts[1], "--- project ---") || strings.Contains(prompts[2], "--- project ---") {
-		t.Fatalf("project context repeated in the same session or given without a project:\n%s\n%s", prompts[1], prompts[2])
+	if strings.Contains(prompts[1], "Goal:") || !strings.Contains(prompts[1], `This message belongs to project "myco"`) {
+		t.Fatalf("a later message of the project: the line naming it, not the whole context again:\n%s", prompts[1])
 	}
-	if hub.reads != 1 {
+	if !strings.Contains(prompts[2], "not part of a project") {
+		t.Fatalf("a message outside projects after project work should say so:\n%s", prompts[2])
+	}
+	if !strings.Contains(prompts[3], `project "site"`) || !strings.Contains(prompts[3], "Goal:") {
+		t.Fatalf("another project gets its own context:\n%s", prompts[3])
+	}
+	if hub.reads != 2 {
 		t.Fatalf("project read %d times", hub.reads)
 	}
 }

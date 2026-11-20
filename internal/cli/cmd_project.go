@@ -468,8 +468,9 @@ Uploading the same name again replaces it (your own files, or any file for the p
 	}
 	doc := (&Command{Name: "doc", Summary: "A project's shared documents written as text (see also: project file)"}).Add(docShow, docPut, docRemove)
 	file := (&Command{Name: "file", Summary: "A project's files: upload, download, remove"}).Add(filePut, fileGet, fileRemove)
+	machines, machine := projectMachineCommands()
 	return (&Command{Name: "project", Summary: "Projects: nodes working together on a goal, with a shared brief and files"}).
-		Add(list, show, pull, create, update, memberCmd("add"), memberCmd("remove"), file, doc, del)
+		Add(list, show, pull, create, update, memberCmd("add"), memberCmd("remove"), file, doc, machines, machine, del)
 }
 
 // projectMarkdown is a project as Markdown (PROJECT.md, myco project show).

@@ -17,7 +17,15 @@ func NewProjectRepo(db *sql.DB) *ProjectRepo { return &ProjectRepo{db: db} }
 
 var _ domain.ProjectRepository = (*ProjectRepo)(nil)
 
-const projectCols = `id, name, title, goal, brief, links, visibility, owner, archived, created_at, updated_at`
+const projectCols = `id, name, title, goal, brief, links, visibility, owner, archived, created_at, updated_at, machines`
+
+func machinesJSON(m []string) string {
+	if len(m) == 0 {
+		return "[]"
+	}
+	b, _ := json.Marshal(m)
+	return string(b)
+}
 
 func linksJSON(l []domain.ProjectLink) string {
 	if len(l) == 0 {
@@ -28,8 +36,8 @@ func linksJSON(l []domain.ProjectLink) string {
 }
 
 func (r *ProjectRepo) Create(ctx context.Context, p *domain.Project) error {
-	_, err := r.db.ExecContext(ctx, `INSERT INTO projects (`+projectCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-		p.ID, p.Name, p.Title, p.Goal, p.Brief, linksJSON(p.Links), string(p.Visibility), p.Owner, p.Archived, ms(p.CreatedAt), ms(p.UpdatedAt))
+	_, err := r.db.ExecContext(ctx, `INSERT INTO projects (`+projectCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+		p.ID, p.Name, p.Title, p.Goal, p.Brief, linksJSON(p.Links), string(p.Visibility), p.Owner, p.Archived, ms(p.CreatedAt), ms(p.UpdatedAt), machinesJSON(p.Machines))
 	if isUniqueViolation(err) {
 		return domain.Errf(domain.CodeConflict, "a project named %s already exists", p.Name)
 	}
@@ -37,8 +45,8 @@ func (r *ProjectRepo) Create(ctx context.Context, p *domain.Project) error {
 }
 
 func (r *ProjectRepo) Save(ctx context.Context, p *domain.Project) error {
-	res, err := r.db.ExecContext(ctx, `UPDATE projects SET title=?, goal=?, brief=?, links=?, visibility=?, owner=?, archived=?, updated_at=? WHERE id=?`,
-		p.Title, p.Goal, p.Brief, linksJSON(p.Links), string(p.Visibility), p.Owner, p.Archived, ms(p.UpdatedAt), p.ID)
+	res, err := r.db.ExecContext(ctx, `UPDATE projects SET title=?, goal=?, brief=?, links=?, visibility=?, owner=?, archived=?, updated_at=?, machines=? WHERE id=?`,
+		p.Title, p.Goal, p.Brief, linksJSON(p.Links), string(p.Visibility), p.Owner, p.Archived, ms(p.UpdatedAt), machinesJSON(p.Machines), p.ID)
 	if err != nil {
 		return internal(err)
 	}
@@ -51,13 +59,14 @@ func (r *ProjectRepo) Save(ctx context.Context, p *domain.Project) error {
 func scanProject(s scanner) (*domain.Project, error) {
 	var (
 		p                domain.Project
-		links, vis       string
+		links, vis, mach string
 		created, updated int64
 	)
-	if err := s.Scan(&p.ID, &p.Name, &p.Title, &p.Goal, &p.Brief, &links, &vis, &p.Owner, &p.Archived, &created, &updated); err != nil {
+	if err := s.Scan(&p.ID, &p.Name, &p.Title, &p.Goal, &p.Brief, &links, &vis, &p.Owner, &p.Archived, &created, &updated, &mach); err != nil {
 		return nil, err
 	}
 	_ = json.Unmarshal([]byte(links), &p.Links)
+	_ = json.Unmarshal([]byte(mach), &p.Machines)
 	p.Visibility = domain.ProjectVisibility(vis)
 	p.CreatedAt, p.UpdatedAt = fromMS(created), fromMS(updated)
 	return &p, nil

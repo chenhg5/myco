@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/chenhg5/myco/internal/harness"
 )
@@ -202,6 +203,9 @@ func (c *claude) Run(ctx context.Context, req harness.Request) (harness.Result, 
 	proc := harness.Process{
 		Binary: c.opts.Binary, Args: args, Stdin: req.Prompt, Workdir: req.Workdir,
 		Env: req.Env, UnsetEnv: inheritedSessionEnv(os.Environ()),
+		// stream-json starts with its init event at once: nothing at all
+		// for minutes means it is stuck before the turn.
+		SilentStart: SilentStart,
 	}
 	if req.OnEvent != nil {
 		var live liveParser
@@ -295,3 +299,7 @@ func firstOf(vs ...string) string {
 	}
 	return ""
 }
+
+// SilentStart is how long Claude Code may print nothing before its run is
+// stopped as stuck.
+var SilentStart = 5 * time.Minute

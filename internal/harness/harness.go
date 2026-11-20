@@ -48,6 +48,9 @@ type Request struct {
 	Body string
 	From string
 	Type string
+	// GrantedBy is the message's: why the hub admitted a sender its
+	// recipient does not list ("project:<name>"; "" otherwise).
+	GrantedBy string
 	// Provider, when set, pins the model provider for this run: variables
 	// that must win over the CLI's own configuration (Claude Code's
 	// settings.json env beats the process environment). Harnesses without a

@@ -32,6 +32,12 @@ type ProjectReader interface {
 	GetProject(ctx context.Context, name string, bodies bool) (*api.Project, error)
 }
 
+// SuperagentReader says whether this agent is someone's superagent (hubs
+// from v0.21.1).
+type SuperagentReader interface {
+	MeSuperagent(ctx context.Context) (*api.MeSuperagent, error)
+}
+
 // SessionStore resolves which harness session a message runs in. The key is
 // chosen by the runner's SessionScope ("agent" for the agent's single bound
 // session, or a thread ID).

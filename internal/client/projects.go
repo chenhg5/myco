@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
@@ -112,4 +113,40 @@ func (c *Client) OpenProjectFile(ctx context.Context, project, name string) (io.
 		return nil, "", decodeError(resp.StatusCode, data)
 	}
 	return resp.Body, resp.Header.Get("Content-Type"), nil
+}
+
+// ProjectMachines lists the workspace's computers and which the project's
+// coordinators may start agents on (hubs from v0.21.2).
+func (c *Client) ProjectMachines(ctx context.Context, project string) (*api.ProjectMachineList, error) {
+	var out api.ProjectMachineList
+	return &out, c.do(ctx, http.MethodGet, "/v1/projects/"+esc(project)+"/machines", nil, nil, &out)
+}
+
+// SetProjectMachine lets (or no longer lets) the project's coordinators
+// start agents on a computer (id or name): people who manage the project.
+func (c *Client) SetProjectMachine(ctx context.Context, project, machine string, allow bool) (*api.Project, error) {
+	method := http.MethodPut
+	if !allow {
+		method = http.MethodDelete
+	}
+	var out api.Project
+	return &out, c.do(ctx, method, "/v1/projects/"+esc(project)+"/machines/"+esc(machine), nil, nil, &out)
+}
+
+// RequestProjectMachine asks the project's owner to let it start agents on
+// a computer (a coordinator); the answer is the approval waiting for them,
+// or allowed when it already may.
+func (c *Client) RequestProjectMachine(ctx context.Context, project, machine, reason string) (*api.Approval, bool, error) {
+	var raw json.RawMessage
+	if err := c.do(ctx, http.MethodPost, "/v1/projects/"+esc(project)+"/machines/"+esc(machine)+"/request", nil, map[string]string{"reason": reason}, &raw); err != nil {
+		return nil, false, err
+	}
+	var already struct {
+		Allowed bool `json:"allowed"`
+	}
+	if json.Unmarshal(raw, &already) == nil && already.Allowed {
+		return nil, true, nil
+	}
+	var ap api.Approval
+	return &ap, false, json.Unmarshal(raw, &ap)
 }

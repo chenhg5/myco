@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ArrowUpDown, ChevronRight, LayoutGrid, Monitor, MoreHorizontal, Pin, Plus, Search, WifiOff, Workflow, X, Zap } from "lucide-react";
+import { ArrowUpDown, ChevronLeft, ChevronRight, LayoutGrid, Monitor, MoreHorizontal, Pin, Plus, Search, WifiOff, Workflow, X, Zap } from "lucide-react";
 import { ComputerSettings } from "@/app/ComputerSettings";
 import { AutomationsPage } from "@/app/Automations";
 import { WorkflowsPage } from "@/app/Workflows";
@@ -15,6 +15,8 @@ import { recall, remember } from "@/lib/memo";
 import { renameHub, useHubNames } from "@/app/hubNames";
 import { ProjectPage } from "@/app/ProjectPage";
 import { openSettingsSection, SettingsPage } from "@/app/SettingsPage";
+import { AgentSwitcher } from "@/app/AgentSwitcher";
+import { navBack, navForward, navRecord, navSub, onNavApply, useNavState, type NavPlace } from "@/app/nav";
 import { UpdateNotice } from "@/app/UpdateNotice";
 import { Welcome } from "@/app/Welcome";
 import { Prepare, preparePending, setPreparePending } from "@/app/Prepare";
@@ -49,6 +51,7 @@ import { modKey } from "@/app/ConversationDetail";
 import { useSidebarWidth } from "@/app/sidebarWidth";
 import { HandoverDialog, type HandoverTarget } from "@/app/Handover";
 import { ForkDialog, forkItem, type ForkTarget } from "@/app/Fork";
+import { SuperagentSetup, useSuperagent } from "@/app/Superagent";
 
 const POLL_MS = 5000;
 const SIDEBAR_KEY = "myco-app-sidebar";
@@ -322,7 +325,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
       // version it is. The conversation needs both (what the hub can do).
       const versionOf = new Map(h.map((x) => [x.id, x.hub_version]));
       const withVersions = { ...o, hubs: o.hubs.map((x) => ({ ...x, hub_version: versionOf.get(x.id) ?? x.hub_version })) };
-      setOv(remember("overview", keepOffline(withVersions, recall<AppOverview>("overview"))));
+      setOv(remember("overview", seenNow(keepOffline(withVersions, recall<AppOverview>("overview")), Date.now())));
       await loadProjects(o.hubs.filter((x) => x.ok).map((x) => x.id), o.hubs.map((x) => x.id));
       setError(null);
       setNow(Date.now());
@@ -333,6 +336,9 @@ export default function AppMode({ initialHubs, initialInfo }: {
       }
     } catch (e) {
       setError(e);
+      // Nothing came back (this computer's network, say): what shows is
+      // marked as old, as for a workspace that cannot be reached.
+      setOv((o) => (o ? unreached(o, e) : o));
     } finally {
       refreshing.current = false;
     }
@@ -496,6 +502,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const openSpace = (s: SpaceRef) => {
     setSpace(s);
     setPage("space");
+    setChatWith(null);
     setSpaceTap((t) => ({ ...t, [spaceKey(s)]: (t[spaceKey(s)] || 0) + 1 }));
   };
   const projectCreated = (ref: { hubId: string; name: string }) => {
@@ -515,6 +522,36 @@ export default function AppMode({ initialHubs, initialInfo }: {
     setPage("space");
     setChatWith({ space: s, agent: r.st.agent.name, n: Date.now(), reveal });
   };
+  // ← → (nav.ts): where you are, recorded on each move; going back or
+  // forward puts it back. The chat is the one opened from the sidebar, or
+  // else the one asked for (a search, a workflow's step) in what is shown.
+  const shownKey = shown ? spaceKey(shown) : "";
+  const navChatNow = page !== "space" ? null
+    : navChat || (chatWith && spaceKey(chatWith.space) === shownKey ? `${chatWith.space.hubId}\u0000${chatWith.agent}` : null);
+  useEffect(() => {
+    if (!hubId) return;
+    navRecord({ hub: hubId, page, space: page === "space" || page === "about" ? shownKey : undefined, chat: navChatNow });
+  }, [hubId, page, shownKey, navChatNow]);
+  const navApply = useRef<(p: NavPlace) => void>(() => undefined);
+  navApply.current = (p) => {
+    if (p.hub !== hubId && hubs.some((h) => h.id === p.hub)) setHubPick(p.hub);
+    setProfile(null);
+    const [sh, sn] = (p.space || "").split("\u0000");
+    const ref: SpaceRef | null = !p.space ? null : sn === "*" ? { hubId: sh, loose: true } : { hubId: sh, name: sn };
+    if (p.page === "space" && p.chat) {
+      const [ch, ca] = p.chat.split("\u0000");
+      const r = allRows.find((x) => x.hub.id === ch && x.st.agent.name === ca);
+      setNavChat(p.chat);
+      if (r) { chatWithMember(r, ref || undefined); return; }
+    }
+    setNavChat(null);
+    if (p.page === "space" && ref) { openSpace(ref); return; }
+    if (ref) setSpace(ref);
+    setChatWith(null);
+    setPage(p.page as Page);
+  };
+  useEffect(() => onNavApply((p) => navApply.current(p)), []);
+
   // A message in its conversation (search, an automation's run).
   const openAtMessage = (r: AgentRow, message: string) => {
     const p = (projects || []).find((x) => !x.p.archived && x.hubId === r.hub.id && x.p.members.some((m) => m.name === r.st.agent.name));
@@ -543,6 +580,24 @@ export default function AppMode({ initialHubs, initialInfo }: {
   // The notch's island opens the app at a member: its workspace first,
   // then (once its rows are there) its chat.
   const [toOpen, setToOpen] = useState<{ hubId: string; agent: string; project?: string } | null>(null);
+  // Your superagent in the workspace on show (bottom-left menu): its chat,
+  // or setting one up.
+  const sa = useSuperagent(hubId || undefined);
+  const [saSetup, setSaSetup] = useState(false);
+  const openSuperagent = (name: string) => window.dispatchEvent(new CustomEvent("myco-open-member", { detail: { hubId, agent: name } }));
+  // The quick panel (Mac) sends you here to set one up.
+  useEffect(() => {
+    const on = (e: Event) => {
+      const h = (e as CustomEvent<{ hubId?: string }>).detail?.hubId;
+      if (h) setHubPick(h);
+      setSaSetup(true);
+    };
+    window.addEventListener("myco-superagent-setup", on);
+    return () => window.removeEventListener("myco-superagent-setup", on);
+  }, []);
+  const onSuperagent = sa && !sa.off && hubId
+    ? () => { const n = sa.state?.agent?.name; if (n) openSuperagent(n); else setSaSetup(true); }
+    : undefined;
   useEffect(() => {
     const on = (e: Event) => {
       const d = (e as CustomEvent<{ hubId: string; agent: string; project?: string }>).detail;
@@ -639,6 +694,12 @@ export default function AppMode({ initialHubs, initialInfo }: {
       } else if (e.code === "KeyU") {
         if (overlay()) return;
         if (pickFiles()) e.preventDefault();
+      } else if (e.key === "[" || e.code === "BracketLeft") {
+        e.preventDefault();
+        navBack();
+      } else if (e.key === "]" || e.code === "BracketRight") {
+        e.preventDefault();
+        navForward();
       } else if (e.key === "r" || e.key === "R") {
         e.preventDefault();
         void refreshRef.current();
@@ -655,7 +716,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   // A top page picked again while on it goes back to its first view (the
   // list, not the automation or computer opened): it is drawn afresh.
   const [again, setAgain] = useState(0);
-  const toPage = (p: typeof page) => { if (page === p) setAgain((n) => n + 1); setPage(p); };
+  const toPage = (p: typeof page) => { if (page === p) { setAgain((n) => n + 1); navSub(p, null); } setPage(p); };
   // 上手清单 (Onboard.tsx): ticks itself from what the workspace has.
   const [autoCount, setAutoCount] = useState<number | null>(null);
   useEffect(() => {
@@ -743,6 +804,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
       case "add-computer": if (hub) setAddWorkspace({ hubId: hub.id, loose: true }); break;
       case "refresh": void refreshRef.current(); break;
       case "shortcuts": openShortcuts(settingsOpen); setPage("settings"); break;
+      case "back": navBack(); break;
+      case "forward": navForward(); break;
       case "text-bigger": setTextSize((s) => (s === "small" ? "standard" : "large")); break;
       case "text-smaller": setTextSize((s) => (s === "large" ? "standard" : "small")); break;
       case "text-standard": setTextSize("standard"); break;
@@ -866,7 +929,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
       if ((r.st.stale || 0) > 0 || (r.st.asking || 0) > 0) open = true;
       if (r.st.state !== "working" || r.st.in_progress <= 0) continue;
       // A hub that tells live from stale: what it calls in progress runs.
-      if (r.st.stale !== undefined || r.st.in_progress > stuckCounts(r.st, now).in_progress) busy = true;
+      if (r.st.stale !== undefined || r.st.in_progress > stuckCounts(r.st, now, r.hub.seen_at).in_progress) busy = true;
       else stuck = true;
     }
     return busy ? "busy" : stuck ? "stuck" : open ? "open" : null;
@@ -1071,6 +1134,9 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 serverName={serverWs ? hostName(serverWs.server) : undefined}
                 isLocal={(h) => isLocalUrl(local, h.url)}
                 simple={simple}
+                onSuperagent={onSuperagent}
+                superagentKey={isMac ? "⌘⇧Space" : undefined}
+                superagent={sa?.state ? { name: sa.state.agent?.name, pending: sa.approvals.filter((a) => a.status === "pending" && a.agent === sa.state?.agent?.name).length } : undefined}
                 onSettings={() => setPage("settings")} />
             </div>
           </div>
@@ -1084,11 +1150,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
             title={collapsed ? L("显示边栏", "Show sidebar") : L("隐藏边栏", "Hide sidebar")}>
             <IconSidebar />
           </button>
-          {page === "about" && (
-            <button type="button" className="app-btn app-btn-plain" onClick={() => setPage("space")} aria-label={L("返回项目", "Back to the project")} title={L("返回项目", "Back to the project")}>
-              <ArrowLeft />
-            </button>
-          )}
+          <NavArrows />
           <h1 className="app-title">{title}</h1>
           <VoiceChip />
           <PageToggle />
@@ -1240,6 +1302,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
       <AddWorkspaceDialog open={!!addWorkspace} hub={namedHubs.find((h) => h.id === addWorkspace?.hubId)} project={addWsProject} rows={rows}
         workspace={namedOv?.hubs.find((h) => h.id === addWorkspace?.hubId)} pick={addWorkspacePick}
         onClose={() => { setAddWorkspace(null); setAddWorkspacePick(undefined); }} onAdded={() => void refresh()} />
+      {hubId && <SuperagentSetup open={saSetup} onOpenChange={setSaSetup} hubId={hubId} rows={allRows} current={sa?.state?.agent} onReady={openSuperagent} />}
       <NewWorkspaceDialog open={newLocalOpen} onOpenChange={setNewLocalOpen}
         taken={localWorkspaces(local).map((w) => w.name)} onStart={startAnotherLocal} />
       <NewWorkspaceDialog open={newServerOpen} onOpenChange={setNewServerOpen} server={serverWs ? hostName(serverWs.server) : undefined}
@@ -1247,6 +1310,9 @@ export default function AppMode({ initialHubs, initialInfo }: {
 
 
       <PageHost />
+      <AgentSwitcher hubId={hubId} rows={chatRows} current={navChatNow ? navChatNow.split("\u0000")[1] : undefined}
+        project={page === "space" && shownProject ? shownProject.members.map((m) => m.name) : undefined}
+        onPick={(r) => { setNavChat(`${r.hub.id}\u0000${r.st.agent.name}`); chatWithMember(r); }} />
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} rows={allRows} hubs={namedOv?.hubs || []} now={now}
         projects={(projects || []).filter((x) => !x.p.archived).map((x) => ({ hubId: x.hubId, name: x.p.name, title: x.p.title || x.p.name, goal: x.p.goal }))}
         onPick={(t) => {
@@ -1298,6 +1364,23 @@ export function keepOffline(fresh: AppOverview, prev: AppOverview | undefined): 
       if (!before?.ok || !before.overview) return h;
       return { ...before, name: h.name, stale: { at: before.stale?.at ?? prev.generated_at, error: h.error } };
     }),
+  };
+}
+
+/** The workspaces that answered now carry when (seen_at); those showing
+ *  what they said before keep when that was. */
+export function seenNow(ov: AppOverview, at: number): AppOverview {
+  return { ...ov, hubs: ov.hubs.map((h) => (h.ok && !h.stale ? { ...h, seen_at: at } : h)) };
+}
+
+/** No answer at all this time: every workspace shows what it said last,
+ *  marked so (as keepOffline does for one that could not be reached). */
+export function unreached(ov: AppOverview, e: unknown): AppOverview {
+  const error = e instanceof Error ? e.message : String(e);
+  return {
+    ...ov,
+    hubs: ov.hubs.map((h) => (h.stale || !h.ok ? h
+      : { ...h, stale: { at: h.seen_at ? new Date(h.seen_at).toISOString() : ov.generated_at, error } })),
   };
 }
 
@@ -1364,5 +1447,27 @@ function SettingsDialog({ onClose, children }: { onClose: () => void; children: 
         {children}
       </div>
     </>
+  );
+}
+
+/** ← → in the crumb bar: back to where you were, forward again (nav.ts).
+ *  ⌘[ / ⌘] too, and a mouse's back and forward buttons. */
+function NavArrows() {
+  const { back, forward } = useNavState();
+  useEffect(() => {
+    const on = (e: MouseEvent) => {
+      if (e.button === 3) { e.preventDefault(); navBack(); } else if (e.button === 4) { e.preventDefault(); navForward(); }
+    };
+    window.addEventListener("mouseup", on);
+    return () => window.removeEventListener("mouseup", on);
+  }, []);
+  const mod = modKey();
+  return (
+    <span className="app-nav-arrows" data-testid="nav-arrows">
+      <button type="button" className="app-btn app-btn-plain" onClick={navBack} disabled={!back}
+        aria-label={L("后退", "Back")} title={L(`后退（${mod}[）`, `Back (${mod}[)`)}><ChevronLeft /></button>
+      <button type="button" className="app-btn app-btn-plain" onClick={navForward} disabled={!forward}
+        aria-label={L("前进", "Forward")} title={L(`前进（${mod}]）`, `Forward (${mod}])`)}><ChevronRight /></button>
+    </span>
   );
 }

@@ -23,6 +23,10 @@ import (
 //	GET    /app/hubs/{id}/workflow-runs/{rid}       WorkflowRun (steps, events, definition)
 //	POST   /app/hubs/{id}/workflow-runs/{rid}/cancel|retry|decide
 //	GET    /app/hubs/{id}/workflow-decisions        {decisions}
+//	GET    /app/hubs/{id}/workflows/{ref}/stats?limit=&version=   WorkflowStats (hubs v0.21.1+)
+//	GET    /app/hubs/{id}/workflow-runs/compare?a=&b=             RunComparison
+//	GET    /app/hubs/{id}/workflow-runs/{rid}/steps/{step}/log    StepLog
+//	POST   /app/hubs/{id}/workflow-runs/{rid}/evaluations         {name, value, …} → RunEvaluation
 func (b *Backend) workflowRoutes(m *http.ServeMux) {
 	m.HandleFunc("GET /app/hubs/{id}/workflows", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		list, err := c.Workflows(r.Context())
@@ -105,7 +109,8 @@ func (b *Backend) workflowRoutes(m *http.ServeMux) {
 	m.HandleFunc("GET /app/hubs/{id}/workflow-runs", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		q := r.URL.Query()
 		limit, _ := strconv.Atoi(q.Get("limit"))
-		runs, err := c.WorkflowRuns(r.Context(), q.Get("workflow"), q.Get("active") == "true", limit)
+		runs, err := c.WorkflowRunsWhere(r.Context(), client.RunQuery{Workflow: q.Get("workflow"), Active: q.Get("active") == "true",
+			Status: q.Get("status"), Limit: limit})
 		if err != nil {
 			writeErr(w, err)
 			return
@@ -164,5 +169,44 @@ func (b *Backend) workflowRoutes(m *http.ServeMux) {
 			ds = []api.WorkflowDecision{}
 		}
 		writeJSON(w, http.StatusOK, api.WorkflowDecisions{Decisions: ds})
+	}))
+	m.HandleFunc("GET /app/hubs/{id}/workflows/{ref}/stats", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		q := r.URL.Query()
+		limit, _ := strconv.Atoi(q.Get("limit"))
+		version, _ := strconv.Atoi(q.Get("version"))
+		out, err := c.WorkflowStats(r.Context(), r.PathValue("ref"), limit, version)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+	}))
+	m.HandleFunc("GET /app/hubs/{id}/workflow-runs/compare", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		out, err := c.CompareWorkflowRuns(r.Context(), r.URL.Query().Get("a"), r.URL.Query().Get("b"))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+	}))
+	m.HandleFunc("GET /app/hubs/{id}/workflow-runs/{rid}/steps/{step}/log", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		out, err := c.WorkflowStepLog(r.Context(), r.PathValue("rid"), r.PathValue("step"), r.URL.Query().Get("trace") != "false")
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+	}))
+	m.HandleFunc("POST /app/hubs/{id}/workflow-runs/{rid}/evaluations", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in api.RunEvaluate
+		if !decode(w, r, &in) {
+			return
+		}
+		out, err := c.EvaluateWorkflowRun(r.Context(), r.PathValue("rid"), in, false)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, out)
 	}))
 }

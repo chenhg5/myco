@@ -63,6 +63,8 @@ func appMenu(app *application.App, zh trayText, send func(cmd string)) *applicat
 	// View
 	view := m.AddSubmenu(zh.s("显示", "View"))
 	view.Add(zh.s("搜索…", "Search…")).SetAccelerator("CmdOrCtrl+k").OnClick(do("search"))
+	view.Add(zh.s("后退", "Back")).SetAccelerator("CmdOrCtrl+[").OnClick(do("back"))
+	view.Add(zh.s("前进", "Forward")).SetAccelerator("CmdOrCtrl+]").OnClick(do("forward"))
 	view.Add(zh.s("显示 / 隐藏侧栏", "Show / Hide Sidebar")).SetAccelerator("CmdOrCtrl+\\").OnClick(do("sidebar"))
 	view.AddSeparator()
 	view.Add(zh.s("放大文字", "Larger Text")).SetAccelerator("CmdOrCtrl+=").OnClick(do("text-bigger"))

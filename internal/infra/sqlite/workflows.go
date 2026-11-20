@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"sort"
+	"strings"
 
 	"github.com/chenhg5/myco/internal/domain"
 )
@@ -234,6 +236,10 @@ func (r *WorkflowRepo) ListRuns(ctx context.Context, f domain.RunFilter) ([]*dom
 	if f.Active {
 		q += ` AND status IN ('running', 'waiting')`
 	}
+	if f.Status != "" {
+		q += ` AND status=?`
+		args = append(args, f.Status)
+	}
 	q += ` ORDER BY created_at DESC`
 	if f.Limit > 0 {
 		q += ` LIMIT ?`
@@ -255,7 +261,7 @@ func (r *WorkflowRepo) ListRuns(ctx context.Context, f domain.RunFilter) ([]*dom
 	return out, internal(rows.Err())
 }
 
-const stepCols = `id, run_id, step_id, kind, attempt, status, target, message_id, input, output, summary, error, retries, bounced, started_at, ended_at, due_at`
+const stepCols = `id, run_id, step_id, kind, attempt, status, target, message_id, input, output, summary, error, retries, bounced, started_at, ended_at, due_at, payload, bounces, tasks, usage`
 
 func (r *WorkflowRepo) SaveStep(ctx context.Context, s *domain.RunStep) error {
 	out := ""
@@ -263,24 +269,52 @@ func (r *WorkflowRepo) SaveStep(ctx context.Context, s *domain.RunStep) error {
 		b, _ := json.Marshal(s.Output)
 		out = string(b)
 	}
-	_, err := r.db.ExecContext(ctx, `INSERT INTO run_steps (`+stepCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+	payload := ""
+	if s.Payload != nil {
+		b, _ := json.Marshal(s.Payload)
+		payload = string(b)
+	}
+	tasks, usage := "", ""
+	if len(s.Tasks) > 0 {
+		b, _ := json.Marshal(s.Tasks)
+		tasks = string(b)
+	}
+	if s.Usage != nil {
+		b, _ := json.Marshal(s.Usage)
+		usage = string(b)
+	}
+	_, err := r.db.ExecContext(ctx, `INSERT INTO run_steps (`+stepCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(id) DO UPDATE SET status=excluded.status, target=excluded.target, message_id=excluded.message_id, input=excluded.input,
 		output=excluded.output, summary=excluded.summary, error=excluded.error, retries=excluded.retries, bounced=excluded.bounced,
-		ended_at=excluded.ended_at, due_at=excluded.due_at`,
+		ended_at=excluded.ended_at, due_at=excluded.due_at, payload=excluded.payload, bounces=excluded.bounces, tasks=excluded.tasks,
+		usage=excluded.usage`,
 		s.ID, s.RunID, s.StepID, s.Kind, s.Attempt, s.Status, s.Target, s.MessageID, s.Input, out, s.Summary, s.Error, s.Retries, s.Bounced,
-		ms(s.StartedAt), ms(s.EndedAt), ms(s.DueAt))
+		ms(s.StartedAt), ms(s.EndedAt), ms(s.DueAt), payload, s.Bounces, tasks, usage)
 	return internal(err)
 }
 
 func scanStep(sc scanner) (*domain.RunStep, error) {
 	var (
 		s                   domain.RunStep
-		out                 string
+		out, payload        string
+		tasks, usage        string
 		started, ended, due int64
 	)
 	if err := sc.Scan(&s.ID, &s.RunID, &s.StepID, &s.Kind, &s.Attempt, &s.Status, &s.Target, &s.MessageID, &s.Input, &out, &s.Summary,
-		&s.Error, &s.Retries, &s.Bounced, &started, &ended, &due); err != nil {
+		&s.Error, &s.Retries, &s.Bounced, &started, &ended, &due, &payload, &s.Bounces, &tasks, &usage); err != nil {
 		return nil, err
+	}
+	if tasks != "" {
+		_ = json.Unmarshal([]byte(tasks), &s.Tasks)
+	}
+	if usage != "" {
+		var u domain.Usage
+		if json.Unmarshal([]byte(usage), &u) == nil {
+			s.Usage = &u
+		}
+	}
+	if payload != "" {
+		_ = json.Unmarshal([]byte(payload), &s.Payload)
 	}
 	if out != "" {
 		_ = json.Unmarshal([]byte(out), &s.Output)
@@ -345,4 +379,114 @@ func (r *WorkflowRepo) Events(ctx context.Context, runID string) ([]*domain.RunE
 		out = append(out, &e)
 	}
 	return out, internal(rows.Err())
+}
+
+func (r *WorkflowRepo) RunCounts(ctx context.Context, workflowID string) (map[string]int, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT status, COUNT(*) FROM workflow_runs WHERE workflow_id=? GROUP BY status`, workflowID)
+	if err != nil {
+		return nil, internal(err)
+	}
+	defer rows.Close()
+	out := map[string]int{}
+	for rows.Next() {
+		var (
+			st string
+			n  int
+		)
+		if err := rows.Scan(&st, &n); err != nil {
+			return nil, internal(err)
+		}
+		out[st] = n
+	}
+	return out, internal(rows.Err())
+}
+
+// inIDs is " IN (?,?,…)" for ids, with its arguments.
+func inIDs(ids []string) (string, []any) {
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	return " IN (?" + strings.Repeat(",?", len(ids)-1) + ")", args
+}
+
+// chunks splits ids into SQLite-sized pieces.
+func chunks(ids []string, n int) [][]string {
+	var out [][]string
+	for len(ids) > n {
+		out = append(out, ids[:n])
+		ids = ids[n:]
+	}
+	if len(ids) > 0 {
+		out = append(out, ids)
+	}
+	return out
+}
+
+func (r *WorkflowRepo) StepsOf(ctx context.Context, runIDs []string) (map[string][]*domain.RunStep, error) {
+	out := map[string][]*domain.RunStep{}
+	for _, part := range chunks(runIDs, 400) {
+		in, args := inIDs(part)
+		rows, err := r.db.QueryContext(ctx, `SELECT `+stepCols+` FROM run_steps WHERE run_id`+in+` ORDER BY started_at, rowid`, args...)
+		if err != nil {
+			return nil, internal(err)
+		}
+		for rows.Next() {
+			s, err := scanStep(rows)
+			if err != nil {
+				rows.Close()
+				return nil, internal(err)
+			}
+			out[s.RunID] = append(out[s.RunID], s)
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return nil, internal(err)
+		}
+	}
+	return out, nil
+}
+
+func (r *WorkflowRepo) AddEvaluation(ctx context.Context, e *domain.RunEvaluation) error {
+	res, err := r.db.ExecContext(ctx, `INSERT INTO run_evaluations (run_id, step, name, value, unit, direction, note, by_name, at) VALUES (?,?,?,?,?,?,?,?,?)`,
+		e.RunID, e.Step, e.Name, e.Value, e.Unit, e.Direction, e.Note, e.By, ms(e.At))
+	if err != nil {
+		return internal(err)
+	}
+	e.ID, _ = res.LastInsertId()
+	_, err = r.db.ExecContext(ctx, `DELETE FROM run_evaluations WHERE run_id=? AND id NOT IN
+		(SELECT id FROM run_evaluations WHERE run_id=? ORDER BY id DESC LIMIT ?)`, e.RunID, e.RunID, domain.MaxRunEvaluations)
+	return internal(err)
+}
+
+func (r *WorkflowRepo) Evaluations(ctx context.Context, runIDs []string) ([]*domain.RunEvaluation, error) {
+	var out []*domain.RunEvaluation
+	for _, part := range chunks(runIDs, 400) {
+		in, args := inIDs(part)
+		rows, err := r.db.QueryContext(ctx, `SELECT id, run_id, step, name, value, unit, direction, note, by_name, at
+			FROM run_evaluations WHERE run_id`+in+` ORDER BY id`, args...)
+		if err != nil {
+			return nil, internal(err)
+		}
+		for rows.Next() {
+			var (
+				e  domain.RunEvaluation
+				at int64
+			)
+			if err := rows.Scan(&e.ID, &e.RunID, &e.Step, &e.Name, &e.Value, &e.Unit, &e.Direction, &e.Note, &e.By, &at); err != nil {
+				rows.Close()
+				return nil, internal(err)
+			}
+			e.At = fromMS(at)
+			out = append(out, &e)
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return nil, internal(err)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out, nil
 }

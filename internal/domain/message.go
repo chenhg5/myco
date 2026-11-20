@@ -111,7 +111,11 @@ type Message struct {
 	Workflow string
 	// Result, on a reply, is the structured result its sender handed back
 	// with it (JSON; "" for none): what a workflow step reads.
-	Result    string
+	Result string
+	// GrantedBy says why the hub let a sender its recipient does not list
+	// send it: "project:<name>" when a project lets its agents start
+	// sessions on a computer it has a terminal on ("" otherwise).
+	GrantedBy string
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	// ActiveAt is when its recipient last showed it is working on it (read

@@ -18,7 +18,7 @@ import { cn, timeAgo } from "@/lib/utils";
  * what they give it).
  */
 
-export type HandoffState = "queued" | "working" | "done" | "failed" | "note";
+export type HandoffState = "queued" | "working" | "stale" | "done" | "failed" | "note";
 
 export type Handoff = {
   /** the first message of the exchange (its key, and where it opens) */
@@ -55,6 +55,12 @@ const stateOf = (task?: Message): HandoffState => {
 /** The cards for what `self` and the others said to each other (the
  *  messages between them, as loaded): one per task, the notes around it
  *  folded into it, a note on its own its own card. */
+/** A working task the workspace says shows no life (an agent's
+ *  stale_tasks) reads 没动静, not 在做. */
+export function withStale(hs: Handoff[], stale: (taskId: string) => boolean): Handoff[] {
+  return hs.map((h) => (h.task && h.state === "working" && stale(h.id) ? { ...h, state: "stale" } : h));
+}
+
 export function handoffsFrom(messages: Message[], self: string): Handoff[] {
   const byThread = new Map<string, Message[]>();
   for (const m of messages) {
@@ -126,6 +132,8 @@ function stateWord(h: Handoff): string {
     case "note": return L("备注", "Note");
     case "queued": return L("排队中", "Queued");
     case "working": return L("在做", "Working");
+    // accepted, but no life for a while (the workspace's stale tasks)
+    case "stale": return L("没动静", "No activity");
     case "failed": return L("没做成", "Didn't work");
     default: return h.dir === "out" ? L("交回了", "Handed back") : L("做完了", "Done");
   }

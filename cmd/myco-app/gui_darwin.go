@@ -35,12 +35,16 @@ func runGUI(h http.Handler, onLink func(string), setRelaunch func(func())) error
 	// The notch's island (made once the app exists) answers a few requests
 	// of its own page; everything else goes to the app's backend.
 	var isl *island
+	var qp *quick
 	assets := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if isl != nil {
-			isl.handler(h).ServeHTTP(w, r)
-			return
+		next := h
+		if qp != nil {
+			next = qp.handler(next)
 		}
-		h.ServeHTTP(w, r)
+		if isl != nil {
+			next = isl.handler(next)
+		}
+		next.ServeHTTP(w, r)
 	})
 	app := application.New(application.Options{
 		Name:        "myco",
@@ -109,6 +113,19 @@ func runGUI(h http.Handler, onLink func(string), setRelaunch func(func())) error
 		show()
 		activateApp()
 		detail, _ := json.Marshal(map[string]string{"hubId": hub, "agent": agent, "project": project})
+		window.ExecJS(fmt.Sprintf(`window.dispatchEvent(new CustomEvent("myco-open-member",{detail:%s}))`, detail))
+	})
+	// ⌘⇧Space, from anywhere: the quick panel for the workspace's superagent;
+	// "open the chat" (or set one up) goes on in the app.
+	qp = newQuick(app, func(hub, agent string, setup bool) {
+		show()
+		activateApp()
+		if setup {
+			detail, _ := json.Marshal(map[string]string{"hubId": hub})
+			window.ExecJS(fmt.Sprintf(`window.dispatchEvent(new CustomEvent("myco-superagent-setup",{detail:%s}))`, detail))
+			return
+		}
+		detail, _ := json.Marshal(map[string]string{"hubId": hub, "agent": agent})
 		window.ExecJS(fmt.Sprintf(`window.dispatchEvent(new CustomEvent("myco-open-member",{detail:%s}))`, detail))
 	})
 	// myco://add-hub?link=… (an app link's "open in the app" button): the

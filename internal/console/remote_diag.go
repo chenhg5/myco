@@ -156,6 +156,7 @@ func parseDiag(lines []string) (map[string]string, []DiagHub, []string) {
 }
 
 func (b *Backend) diagRoutes(m *http.ServeMux) {
+	m.HandleFunc("POST /app/hubs/{id}/machines/{mid}/dirs", b.postMachineDirs)
 	// GET: how this App reaches that computer (null: it does not).
 	m.HandleFunc("GET /app/hubs/{id}/machines/{mid}/reach", func(w http.ResponseWriter, r *http.Request) {
 		rt, ok := b.reachOf(r.PathValue("id"), r.PathValue("mid"))

@@ -57,6 +57,7 @@ type Server struct {
 	traces      *app.TraceService
 	automations *app.AutomationService
 	workflows   *app.WorkflowService
+	superagents *app.SuperagentService
 	pages       *app.PageService
 	tun         tunnels
 	handovers   *app.HandoverService
@@ -138,6 +139,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		limit = domain.MaxPageSize + 1 // a page's or a template's zip; their handlers limit it themselves
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, limit)
+	if r = s.superagentGate(w, r); r == nil {
+		return // held for its owner's approval
+	}
 	s.mux.ServeHTTP(w, r)
 }
 
@@ -215,6 +219,7 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /v1/join", s.join)
 	s.automationRoutes(m)
 	s.workflowRoutes(m)
+	s.superagentRoutes(m)
 	s.pageRoutes(m)
 	s.pinRoutes(m)
 	s.pageDataRoutes(m)
@@ -311,6 +316,9 @@ func bearer(r *http.Request) string {
 
 // isAdmin accepts the hub's admin token or an active console token.
 func (s *Server) isAdmin(r *http.Request) bool {
+	if superOf(r) != nil {
+		return true // a superagent, acting for its owner on a route it may use
+	}
 	if s.isMasterAdmin(r) {
 		return true
 	}
@@ -1810,7 +1818,7 @@ func (s *Server) reportRuntime(w http.ResponseWriter, r *http.Request, a *domain
 	if err := s.machines.SetRuntime(r.Context(), a, domain.Runtime{CLI: in.CLI, CLIVersion: in.CLIVersion, Model: in.Model,
 		ModelSource: in.ModelSource, Access: in.Access, Provider: in.Provider, ProviderSource: in.ProviderSource,
 		Effort: in.Effort, EffortSource: in.EffortSource, MaxAccess: in.MaxAccess, Quota: quotaFromAPI(in.Quota),
-		Features: domain.JoinFeatures(in.Features), Away: in.Away, Env: in.Env}); err != nil {
+		Features: domain.JoinFeatures(in.Features), Away: in.Away, Env: in.Env, Models: domain.EncodeModels(modelsFromAPI(in.Models))}); err != nil {
 		writeError(w, err)
 		return
 	}
@@ -1820,6 +1828,9 @@ func (s *Server) reportRuntime(w http.ResponseWriter, r *http.Request, a *domain
 // consoleDevice names the caller for console messages: the console token's
 // device, or "admin" for the hub's own admin token.
 func (s *Server) consoleDevice(r *http.Request) string {
+	if c := superOf(r); c != nil {
+		return "superagent " + string(c.agent.Name)
+	}
 	if s.console != nil && !s.isMasterAdmin(r) {
 		if t, ok := s.console.Authenticate(r.Context(), bearer(r)); ok {
 			return t.Name

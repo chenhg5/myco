@@ -33,6 +33,8 @@ export interface RunSettings {
   access?: RuntimeAccess | "";
 }
 /** What the node actually runs; absent on nodes reported by old runners. */
+/** A model a CLI offers: the id --model takes, a display name, the efforts it supports. */
+export interface RuntimeModel { id: string; name?: string; efforts?: string[] }
 export interface Runtime {
   cli: string;
   cli_version?: string;
@@ -55,6 +57,8 @@ export interface Runtime {
   away?: "stopped" | string;
   /** where its runner runs when that explains going offline: "wsl" */
   env?: "wsl" | string;
+  /** the models its CLI offers on that computer, in the CLI's order (Codex; runners from v0.21.1) */
+  models?: RuntimeModel[];
 }
 export interface Skill { name: string; summary?: string; examples?: string[] }
 
@@ -69,6 +73,9 @@ export interface Project {
   docs: ProjectDoc[];
   /** edit the content (owner, admins, coordinators); manage it (people) */
   can_edit: boolean; can_manage: boolean;
+  /** the computers (ids) its coordinators may start agents on (hubs from
+   *  v0.21.2; absent before) */
+  machines?: string[];
 }
 export interface ProjectLink { title?: string; url: string }
 export interface ProjectMember {
@@ -224,32 +231,84 @@ export interface AutomationResponse { automation: Automation; webhook_secret?: s
 
 /** Workflows (hubs from v0.21): steps the workspace hands to agents,
  *  computers and people, in order (docs/design/workflow.md). */
+/** A JSON Schema (draft 2020-12): all of it is kept and checked by the
+ *  hub; the App reads the common keywords. */
 export interface WfSchema {
-  type?: string; title?: string; description?: string; required?: string[];
+  type?: string | string[]; title?: string; description?: string; required?: string[];
   properties?: Record<string, WfSchema>; items?: WfSchema; enum?: unknown[]; default?: unknown; format?: string;
+  [keyword: string]: unknown;
 }
 export interface WfStepDef {
   id: string; title?: string; agent?: string; role?: string; prompt?: string; computer?: string; run?: string; parse?: string;
-  human?: string; options?: string[]; output?: WfSchema; timeout?: string; retry?: number; dispatch?: string; join?: string;
+  human?: string; options?: string[]; output?: WfSchema; outputSchema?: WfSchema; inputSchema?: WfSchema;
+  timeout?: string; retry?: number; dispatch?: "first" | "all"; join?: "all" | { from: string[] };
 }
-export interface WfEdgeDef { from: string; to: string; when?: string; maxIterations?: number; else?: string; onError?: boolean }
-export interface WorkflowDef { name: string; description?: string; project?: string; inputs?: WfSchema; steps: WfStepDef[]; edges?: WfEdgeDef[] }
+export interface WfEdgeDef { from: string; to: string; when?: string; maxIterations?: number; else?: string; onError?: boolean; map?: Record<string, unknown> }
+export interface WorkflowDef {
+  name: string; title?: string; description?: string; tags?: string[]; group?: string; project?: string;
+  inputs?: WfSchema; steps: WfStepDef[]; edges?: WfEdgeDef[]; entry?: string; allowUnboundedCycles?: boolean;
+}
 export interface Workflow {
-  id: string; name: string; description?: string; project?: string; owner?: string; version: number; enabled: boolean;
+  id: string; name: string; title?: string; tags?: string[]; group?: string; description?: string; project?: string; owner?: string; version: number; enabled: boolean;
   steps: number; active: number; last_run?: WorkflowRun; definition?: WorkflowDef; created_at: string; updated_at: string;
 }
 export type RunStatus = "running" | "waiting" | "succeeded" | "failed" | "cancelled";
 export type StepStatus = "running" | "waiting" | "done" | "failed" | "cancelled";
 export interface RunStep {
   id: string; step: string; title?: string; kind: "agent" | "computer" | "human"; attempt: number; status: StepStatus;
-  target?: string; message_id?: string; input?: string; output?: Record<string, unknown>; summary?: string; error?: string;
+  target?: string; message_id?: string; input?: string; payload?: unknown; output?: Record<string, unknown>; summary?: string; error?: string;
   retries?: number; bounced?: boolean; options?: string[]; started_at: string; ended_at?: string; due_at?: string;
+  /** hubs from v0.21.1: send-backs, tasks sent, time taken (to now while open), cost */
+  bounces?: number; attempts?: number; tasks?: string[]; duration_ms?: number; usage?: Usage;
 }
 export interface RunEvent { at: string; kind: string; step?: string; text: string }
+/** What agents' runs cost, as their CLIs report it. */
+export interface Usage { input_tokens?: number; output_tokens?: number; cost_usd?: number }
+export interface RunMetrics {
+  duration_ms: number; active_ms: number; waiting_ms: number; steps: number; done: number; failed: number;
+  attempts: number; retries: number; bounces: number; usage?: Usage;
+}
+export interface RunArtifact {
+  step: string; step_run: string; try: number; kind: "reply" | "progress"; message: string; from: string; at: string;
+  file_id: string; name: string; size: number; content_type?: string;
+}
+export interface RunEvaluation {
+  id: number; run: string; step?: string; name: string; value: number; unit?: string; direction?: "higher" | "lower" | "";
+  note?: string; by?: string; at: string;
+}
 export interface WorkflowRun {
   id: string; workflow_id: string; name: string; version: number; project?: string; status: RunStatus;
   inputs?: Record<string, unknown>; owner?: string; by?: string; trigger?: string; error?: string; current?: string[];
   steps?: RunStep[]; events?: RunEvent[]; definition?: WorkflowDef; created_at: string; updated_at: string; ended_at?: string;
+  /** hubs from v0.21.1 */
+  duration_ms?: number; metrics?: RunMetrics; artifacts?: RunArtifact[]; evaluations?: RunEvaluation[];
+}
+export interface StepLogEntry {
+  at: string; kind: "task" | "progress" | "reply" | "failure" | "event" | "stdout" | "stderr" | "trace" | string;
+  sub?: string; try?: number; from?: string; text?: string; attachments?: Attachment[];
+}
+export interface StepLog { run: string; step: RunStep; entries: StepLogEntry[]; clipped?: boolean }
+export interface Dist { n: number; avg: number; min: number; p50: number; p90: number; p95: number; max: number }
+export interface WorkflowStepStats {
+  step: string; title?: string; kind: string; runs: number; done: number; failed: number; retries: number; bounces: number;
+  duration_ms: Dist; usage?: Usage; last_error?: string; last_error_run?: string; last_error_at?: string;
+}
+export interface WorkflowRunPoint {
+  id: string; status: RunStatus; version: number; created_at: string; duration_ms: number; error?: string; failed_step?: string; cost_usd?: number;
+}
+export interface WorkflowStats {
+  workflow: string; name: string; total: number; by_status: Partial<Record<RunStatus, number>>; success_rate: number; sample: number;
+  version?: number; duration_ms: Dist; active_ms: Dist; waiting_ms: Dist; usage?: Usage; cost_per_run?: number;
+  steps: WorkflowStepStats[];
+  versions: { version: number; runs: number; succeeded: number; failed: number; cancelled: number; duration_ms: Dist }[];
+  evaluations: { name: string; unit?: string; direction?: string; values: Dist; last: number; last_run: string }[];
+  recent: WorkflowRunPoint[]; failures: WorkflowRunPoint[];
+}
+export interface RunCompareStep { status: StepStatus; runs: number; attempts: number; duration_ms: number; usage?: Usage; summary?: string; error?: string }
+export interface RunComparison {
+  a: { run: WorkflowRun; metrics: RunMetrics }; b: { run: WorkflowRun; metrics: RunMetrics }; same_version: boolean;
+  steps: { step: string; title?: string; a?: RunCompareStep; b?: RunCompareStep; faster_in?: "a" | "b"; delta_ms: number; delta_cost_usd?: number }[];
+  evaluations: { name: string; unit?: string; direction?: string; a?: number; b?: number; delta: number; better?: "a" | "b" }[];
 }
 export interface WorkflowApplyResponse { workflow: Workflow; created: boolean; changed: boolean; warnings?: string[] }
 export interface WorkflowCheck { valid: boolean; problems?: string[]; warnings?: string[] }
@@ -286,6 +345,9 @@ export interface Message {
   workflow?: string;
   /** On a reply: the structured result handed back with it. */
   result?: Record<string, unknown>;
+  /** why the hub let it past its recipient's allow list ("project:<name>": a
+   *  project with a terminal on that computer; hubs from v0.21.2) */
+  granted_by?: string;
   /** the person behind the sender (member name) */
   from_owner?: string;
   /** a progress update asking the task's sender to decide (body: the
@@ -359,3 +421,11 @@ export interface Member { id: string; name: string; display_name?: string; role:
 export interface Device { id: string; name: string; active: boolean; created_at: string; last_used_at?: string }
 export interface Whoami { member?: Member; admin?: boolean; can_manage: boolean; /** this app on this device */ device?: Device }
 export interface AuditEntry { id: string; at: string; actor: string; actor_kind: "member" | "admin" | "agent"; action: string; target?: string; detail?: string }
+
+/** Superagents (hubs from v0.21.1): a person's own agent with the App's powers. */
+export interface SuperagentState { agent?: Agent; pending?: number }
+export interface Approval {
+  id: string; agent: string; what: string; reason?: string; method: string; path: string; body?: string;
+  status: "pending" | "done" | "denied" | "expired" | "withdrew"; result?: number; result_body?: string; decided_by?: string;
+  created_at: string; expires_at: string; decided_at?: string;
+}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
+import { useNavSub } from "@/app/nav";
 import { IntroCard, introOf } from "@/app/Onboard";
-import { ArrowLeft, ChevronRight, Info, Monitor, Pencil, Plus, Settings2, SquareTerminal, Trash2 } from "lucide-react";
+import { ChevronRight, Info, Monitor, Pencil, Plus, Settings2, SquareTerminal, Trash2 } from "lucide-react";
 import { appApi, type LocalState, type MachineAI, type MachineInfo } from "@/appapi";
 import type { Machine, Project } from "@/api";
 import type { AgentRow } from "@/app/types";
@@ -9,6 +10,7 @@ import { shortDir } from "@/app/AddToProject";
 import { machineTellsInfo } from "@/app/hubVersion";
 import { cachedMachineInfo, fetchMachineInfo } from "@/app/machineInfoCache";
 import { LocalShellAccess } from "@/app/LocalShellAccess";
+import { MachineDirs } from "@/app/MachineDirs";
 import { ComputerCheck } from "@/app/ComputerCheck";
 import { MachineUpgrade, UpgradeAll, useLatestRelease } from "@/app/MycoUpgrade";
 import { agentQuotaHint } from "@/app/quota";
@@ -67,6 +69,8 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, on
   // The computer opened (coming to the page again shows them all).
   const [openKey, setOpenKey] = useState<string | null>(null);
   const openComputer = (k: string | null) => setOpenKey(k);
+  // ← → at the top (nav.ts): the computer open is part of where you are.
+  useNavSub("computers", { open: openKey }, { open: null }, (v) => { setRenaming(false); setOpenKey(v.open); });
   const [renaming, setRenaming] = useState(false);
   useEffect(() => { appApi.local().then(setLocal).catch(() => setLocal(null)); }, []);
   const latest = useLatestRelease();
@@ -137,7 +141,6 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, on
     const Icon = osInfo(m.os).icon;
     return (
       <div className="pc pcd" data-testid="pc-detail">
-        <button type="button" className="pcd-back" onClick={() => { setRenaming(false); openComputer(null); }}><ArrowLeft />{L("电脑", "Computers")}</button>
         <header className={cn("pcd-head", !m.online && "is-away")}>
           <span className="tp-icon pcd-icon"><Icon /></span>
           <div className="pcd-titles">
@@ -343,14 +346,14 @@ function ComputerDetails({ hubId, hub, machine, onChanged }: {
         <div className="app-small-note">{L("正在问它…", "Asking it…")}</div>
       ) : (
         <div>
-          <div className="app-kv"><span className="app-kv-label">{L("agent 能在哪里开工", "Where agents may start")}</span>
-            <span className="app-kv-value pcd-chips">{info.dirs.map((d) => <span key={d} className="pcd-chip mono">{d}</span>)}</span></div>
+          <div className="app-kv mdirs-kv"><span className="app-kv-label">{L("agent 能在哪里开工", "Where agents may start")}</span>
+            <span className="app-kv-value"><MachineDirs hubId={hubId} hub={hub} machine={machine} info={info} onChanged={(dirs) => setInfo({ ...info, dirs })} /></span></div>
           <div className="app-kv"><span className="app-kv-label">{L("最高权限", "Highest access")}</span><span className="app-kv-value">{(ACCESS_LABEL[info.max_access] || (() => info.max_access))()}</span></div>
           <div className="app-kv"><span className="app-kv-label">AI</span>
             <span className="app-kv-value pcd-chips">{info.ais.map((a) => (
               <span key={a.name} className={cn("pcd-chip pcd-ai", `is-${a.state}`)}>{`${a.name} ${aiText(a)}`}</span>
             ))}</span></div>
-          <div className="app-small-note">{L("这些由那台电脑自己决定，只能在它上面改（~/.myco/machine.yaml 的 spawn.dirs、spawn.max_access）。", "That computer decides these itself; they are changed on it only (spawn.dirs and spawn.max_access in ~/.myco/machine.yaml).")}</div>
+          <div className="app-small-note">{L("最高权限也由那台电脑自己决定（~/.myco/machine.yaml 的 spawn.max_access）。", "That computer decides its highest access itself (spawn.max_access in ~/.myco/machine.yaml).")}</div>
         </div>
       )}
       <LocalShellAccess machine={machine} hub={hub} what="shell" shell={machineShell(hub, machine.id)} onChange={async () => onChanged()} />

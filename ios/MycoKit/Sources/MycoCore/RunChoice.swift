@@ -36,6 +36,11 @@ public struct RunChoice: Sendable, Hashable {
     public var effortInUse = ""
     /// A switch was made that is not in use yet: it applies from its next run.
     public var pending = false
+    /// Display names its CLI gave the models, by id.
+    public var names: [String: String] = [:]
+
+    /// How a model is shown: the name its CLI gave it, else short.
+    public func name(of model: String) -> String { names[model] ?? RunChoice.short(model) }
 
     static let knownModels: [String: [String]] = [
         "claude": ["fable", "opus", "sonnet", "haiku"],
@@ -73,8 +78,14 @@ public struct RunChoice: Sendable, Hashable {
         choice.modelInUse = inUseModel
         choice.effortInUse = inUseEffort
         if editable {
-            choice.models = with([inUseModel, chosenModel], before: knownModels[cli] ?? [])
-            choice.efforts = with([inUseEffort, chosenEffort], before: knownEfforts[cli] ?? [])
+            // What its computer's CLI offers when it said (Codex keeps its
+            // own list, always current), else the known names.
+            let offered = runtime?.models ?? []
+            choice.models = with([inUseModel, chosenModel], before: offered.isEmpty ? (knownModels[cli] ?? []) : offered.map(\.id))
+            let current = offered.first { $0.id == (chosenModel.isEmpty ? inUseModel : chosenModel) }
+            let efforts = current?.efforts ?? []
+            choice.efforts = with([inUseEffort, chosenEffort], before: efforts.isEmpty ? (knownEfforts[cli] ?? []) : efforts)
+            choice.names = Dictionary(offered.compactMap { m in m.name.map { (m.id, $0) } }, uniquingKeysWith: { a, _ in a })
             choice.pending = (!chosenModel.isEmpty && chosenModel != inUseModel) || (!chosenEffort.isEmpty && chosenEffort != inUseEffort)
         }
         return choice

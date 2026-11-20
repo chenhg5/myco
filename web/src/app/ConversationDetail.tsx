@@ -1,17 +1,17 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRightLeft, ArrowUp, ArrowUpRight, Check, ChevronRight, Copy, AudioLines, Download, Images, Loader2, Lock, MoreHorizontal, Paintbrush, Pin as PinIcon, PinOff, Search, Settings2, Square, Trash2, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRightLeft, ArrowUp, ArrowUpRight, Check, ChevronRight, Copy, AudioLines, Download, Images, Loader2, Lock, MoreHorizontal, Paintbrush, Pin as PinIcon, PinOff, Search, Settings2, Square, Trash2, WifiOff, X } from "lucide-react";
 import { ExportChat } from "@/app/ExportChat";
 import { appApi, isTransient } from "@/appapi";
 import type { Agent, Message } from "@/api";
 import type { AgentRow } from "@/app/types";
-import { agentKind, canManage, isInbox, isMe, lastActivityAt, machineOfRow, personLabel, possiblyStuck, quietFor, runnerAway, sessionBusy, nodeName } from "@/app/nodes";
+import { agentKind, canManage, isInbox, isMe, lastActivityAt, machineOfRow, personLabel, possiblyStuck, quietFor, runnerAway, SEEN_SLACK_MS, seenNow, sessionBusy, nodeName } from "@/app/nodes";
 import { MessageContent } from "@/app/Markdown";
 import { PromptSign, STOPPED, Terminal } from "@/app/Terminal";
 import { TraceView } from "@/app/TraceView";
 import { WorkingLine } from "@/app/Working";
 import { AccessPill, RunPill } from "@/app/RunSettings";
 import { forkAgent } from "@/app/Fork";
-import { HandoffCard, handoffsFrom } from "@/app/Handoff";
+import { HandoffCard, handoffsFrom, withStale } from "@/app/Handoff";
 import { TurnRail, type Turn } from "@/app/TurnRail";
 import { summarize } from "@/app/summary";
 import { ErrorText } from "@/app/dialogs";
@@ -50,6 +50,7 @@ import { chatDraftKey, draftOf, keepDraft } from "@/app/drafts";
 import { chatQueueKey, keepQueue, queueOf, queuedId, type Queued } from "@/app/queued";
 import { hubAtLeast, hubHasHandover } from "@/app/hubVersion";
 import { HandoverDivider, handoverEntry, openHandover, useHandovers } from "@/app/Handover";
+import { ApprovalStrip } from "@/app/Superagent";
 
 export interface ConversationTarget {
   hubId: string;
@@ -458,8 +459,19 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const [more, setMore] = useState(() => recall<SeenConversation>(cacheKey(target))?.more ?? false);
   const [loadingOlder, setLoadingOlder] = useState(false);
 
+  // When the hub last answered this conversation's poll (and when it was
+  // opened, until it does). On a poor network polls fail or hang without a
+  // word: what shows is then older than it looks, and a task that seems
+  // quiet may well be at work. Quiet is counted only up to the last answer,
+  // and the chat says it is behind instead of calling the task stuck.
+  const syncedAt = useRef(0);
+  const syncOpened = useRef(Date.now());
+  const repoll = useRef<() => Promise<void>>(async () => undefined);
+  const [repolling, setRepolling] = useState(false);
   useEffect(() => {
     let cancelled = false;
+    syncedAt.current = 0;
+    syncOpened.current = Date.now();
     // Seen before in this window: show it at once, refresh behind it.
     const key = cacheKey(target);
     const hit = recall<SeenConversation>(key);
@@ -526,6 +538,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           });
           const r = await appApi.exchanges(target.hubId, target.agent, target.peer, undefined, delta ? since : undefined);
           if (cancelled) return;
+          syncedAt.current = Date.now();
           if (delta && r.since) {
             // Many changes at once: the whole page next time.
             if (r.more) polls = FULL_EVERY - 1;
@@ -545,6 +558,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         }
         const r = await appApi.thread(target.hubId, target.threadId, delta ? since : undefined);
         if (cancelled) return;
+        syncedAt.current = Date.now();
         if (delta && r.since) {
           if (r.messages.length) show(mergeById(current, r.messages), false);
           return;
@@ -556,6 +570,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       }
     };
     void run(false);
+    repoll.current = () => run(true);
     const poll = window.setInterval(() => {
       if (document.visibilityState === "visible") void run(true);
     }, POLL_MS);
@@ -789,7 +804,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     ? [...older.filter((o) => !messages.some((m) => m.id === o.id)), ...messages]
     : messages).filter((m) => !hiddenMessage(m));
   const shown: Message[] | null = loaded && (alsoSet.size ? loaded.filter((m) => !sideOf(m)) : loaded);
-  const handoffs = alsoSet.size && loaded ? handoffsFrom(loaded.filter(sideOf), target.agent) : [];
+  const handoffs = alsoSet.size && loaded
+    ? withStale(handoffsFrom(loaded.filter(sideOf), target.agent), (id) => rows.some((x) => x.hub.id === target.hubId && (x.st.stale_tasks || []).includes(id)))
+    : [];
 
   const consoleTasks = (messages || []).filter((m) => m.type === "task" && isMe(m.from, row?.hub) && !hiddenMessage(m));
   const lastTask = consoleTasks[consoleTasks.length - 1];
@@ -840,14 +857,17 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // The hub says which tasks show no life (hubs from v0.20.28): left open
   // after the work ended, or their worker went away.
   const hubStale = new Set(row?.st.stale_tasks || []);
+  // (what shows reaches as far as the last answer: see syncedAt)
+  const seenAt = syncedAt.current || syncOpened.current;
+  const behind = !!(target.peer || target.threadId) && now - seenAt > SEEN_SLACK_MS;
   const isStuck = (m: Message): boolean => {
     const offline = row?.st.state === "offline";
     if (hubStale.has(m.id)) return true;
     if (!offline && runActivity.get(m.id)?.ended) return false;
-    return possiblyStuck({ ...m, active_at: new Date(activeAt(m)).toISOString() }, { agent: row?.st.agent, receiving: row?.st.receiving, offline }, now);
+    return possiblyStuck({ ...m, active_at: new Date(activeAt(m)).toISOString() }, { agent: row?.st.agent, receiving: row?.st.receiving, offline, seenAt }, now);
   };
   const stuckLine = (m: Message): string => {
-    const quiet = quietFor(now, activeAt(m));
+    const quiet = quietFor(seenNow(now, seenAt), activeAt(m));
     return row?.st.state === "offline"
       ? L(`${quiet}没有动静，它也不在线：这条任务没收尾`, `No activity for ${quiet} and it is offline: this task was left open`)
       : L(
@@ -1184,7 +1204,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       if (!observed && alsoSet.has(m.from) && m.to === target.agent) return false;
       const w = rowOf(m.to);
       return Date.now() - new Date(m.created_at).getTime() < OPEN_FOR_MS && w?.st.state !== "offline"
-        && !possiblyStuck(m, { agent: w?.st.agent, receiving: w?.st.receiving, offline: false }, now);
+        && !possiblyStuck(m, { agent: w?.st.agent, receiving: w?.st.receiving, offline: false, seenAt: w?.hub.seen_at }, now);
     });
     if (!open.length) return null;
     // Only an acknowledged task is at work: queued, pulled-but-not-acked
@@ -1547,8 +1567,14 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // Its open tasks that are not in this conversation (other agents gave
   // them, or other chats): said above the box, with a way to them, since
   // nothing here would show them (a question it asked their sender, say).
+  // Not: one shown here as a handoff card (a member's task to it, which
+  // says how it goes), unless it shows no life; nor one that just came (its
+  // card follows with the conversation's next read).
+  const staleTasks = new Set(row?.st.stale_tasks || []);
   const elsewhere = (row?.st.current || []).filter((m) => m.to === target.agent && m.type === "task"
-    && (m.status === "acked" || m.status === "held") && !(messages || []).some((x) => x.id === m.id));
+    && (m.status === "acked" || m.status === "held") && !(messages || []).some((x) => x.id === m.id)
+    && !((alsoSet.has(m.from) && !staleTasks.has(m.id)) || (now - new Date(m.created_at).getTime() < 90_000 && !staleTasks.has(m.id))));
+  const elsewhereStale = elsewhere.filter((m) => staleTasks.has(m.id)).length;
   const askingOthers = elsewhere.filter((m) => m.status === "held" && !!m.asking && !isMe(m.from, row?.hub));
   const whoIs = (n: string) => {
     const x = (row?.hub.overview?.agents || []).find((y) => y.agent.name === n);
@@ -1599,7 +1625,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const [stoppingStuck, setStoppingStuck] = useState(false);
   const shellStuck = (shellRow?.st.current || []).filter((m) =>
     m.type === "task" && m.to === shellRow?.st.agent.name && !isMe(m.from, shellRow?.hub) && !stoppedShell.has(m.id)
-    && possiblyStuck(m, { agent: shellRow?.st.agent, receiving: shellRow?.st.receiving, offline: shellRow?.st.state === "offline" }, now));
+    && possiblyStuck(m, { agent: shellRow?.st.agent, receiving: shellRow?.st.receiving, offline: shellRow?.st.state === "offline", seenAt: shellRow?.hub.seen_at }, now));
   const canStopShell = canManage(shellRow?.hub, shellRow?.st.agent.owner_id);
   const shellFrom = [...new Set(shellStuck.map((m) => nameOf(m.from)))];
   const stoppedShellNow = (ids: string[]) => setStoppedShell((prev) => new Set([...prev, ...ids]));
@@ -2193,7 +2219,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             <ul className="shell-stuck-list">
               {shellStuck.map((m) => {
                 const cmd = (m.body || "").split("\n")[0].trim();
-                const quiet = quietFor(now, lastActivityAt(m));
+                const quiet = quietFor(seenNow(now, shellRow?.hub.seen_at), lastActivityAt(m));
                 return (
                   <li key={m.id} className="shell-stuck-row">
                     <span className="shell-stuck-cmd" title={m.body}>{cmd || nameOf(m.from)}</span>
@@ -2385,7 +2411,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           <div className="conv-busy" data-testid="open-elsewhere">
             <span className="dot idle" />
             <span className="conv-busy-text">
-              {L(`它还有 ${elsewhere.length} 条别处来的任务没做完`, `It has ${elsewhere.length} more open task${elsewhere.length > 1 ? "s" : ""} from elsewhere`)}
+              {elsewhereStale > 0
+                ? elsewhereStale === elsewhere.length
+                  ? L(`它有 ${elsewhere.length} 条别处来的任务好一阵没有动静`, `It has ${elsewhere.length} open task${elsewhere.length > 1 ? "s" : ""} from elsewhere with no activity for a while`)
+                  : L(`它还有 ${elsewhere.length} 条别处来的任务没做完，其中 ${elsewhereStale} 条好一阵没有动静`, `It has ${elsewhere.length} more open tasks from elsewhere, ${elsewhereStale} with no activity for a while`)
+                : L(`它还有 ${elsewhere.length} 条别处来的任务没做完`, `It has ${elsewhere.length} more open task${elsewhere.length > 1 ? "s" : ""} from elsewhere`)}
               {askingOthers.length > 0 && L(`，其中 ${askingOthers.length} 条在等 ${[...new Set(askingOthers.map((m) => whoIs(m.from)))].join("、")} 回答它的问题`,
                 `; ${askingOthers.length} wait${askingOthers.length > 1 ? "" : "s"} on ${[...new Set(askingOthers.map((m) => whoIs(m.from)))].join(", ")} to answer its question`)}
               {L("。", ".")}
@@ -2430,8 +2460,27 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         {voiceOn && !shellMode && (
           <VoiceBar />
         )}
+        <ApprovalStrip hubId={target.hubId} agent={target.agent} name={agentName} />
         <SendTrouble error={sendError} stop={stopError} onRetry={sendError ? () => void send() : undefined}
           onClose={() => { setSendError(null); setStopError(null); }} />
+        {/* Only while it is at work: a chat that has ended has nothing to
+            wait for, whatever the network. */}
+        {behind && !!atWorkId && !sendError && !stopError && (
+          <div className="conv-trouble conv-behind" role="status" data-testid="chat-behind">
+            <WifiOff />
+            <span className="conv-trouble-text">
+              <b>{L("网络不太好", "Poor connection")}</b>
+              {now - seenAt < 60_000
+                ? L("这里的消息有一会儿没更新了，", "This chat hasn't updated for a little while; ")
+                : L(`这里的消息 ${quietFor(now, seenAt)}没更新了，`, `this chat hasn't updated for ${quietFor(now, seenAt)}; `)}
+              {L("agent 那边可能还在继续。正在自动重试。", "the agent may well be at work. Retrying by itself.")}
+            </span>
+            <button type="button" className="app-btn app-btn-small" disabled={repolling}
+              onClick={() => { setRepolling(true); void repoll.current().finally(() => setRepolling(false)); }}>
+              {repolling ? L("正在重试…", "Retrying…") : L("重试", "Retry")}
+            </button>
+          </div>
+        )}
         <div className="conv-compose-box" onClick={() => inputRef.current?.focus()} {...dropFiles(att.add)}>
           <AttachList items={att.items} onRemove={att.remove} />
           <textarea

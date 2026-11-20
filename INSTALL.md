@@ -316,6 +316,8 @@ myco version
 
 已经在跑的会话可能要重启才会加载新装的 skill；在那之前，让 agent 运行 `myco skill show` 读一遍就行。
 
+**常驻的几行**（v0.21.1 起）：skill 要 agent 自己想起来去读，所以 `myco join` 还会在 Claude Code 和 Codex 的**用户级**说明里（`~/.claude/CLAUDE.md`、`~/.codex/AGENTS.md`，不碰项目里的文件）加几行，每个会话都带着：别人在 myco App 里看着你干活；重要的进展用 `myco message progress` 报，值得看的配上截图（`--attach`）；有明显的下一步就 `--suggest`；要人拍板用 `myco message ask`，要别的 agent 帮忙先 `hold` 再 `send`；用 `inbox wait` 收消息的会话做完一条再挂上。这几行夹在 myco 的标记之间，文件里你自己写的内容不动；开头写明只在这个会话是 myco agent 时才适用。`myco upgrade` 和 runner 启动时会刷新它们。不想要：`myco join --no-memory`，或者事后 `myco skill memory --remove`（会留一个标记，以后不再加回来；`myco skill memory --add` 加回来，`myco skill memory` 看现在的状态）。另外，runner 交给 agent 的每个任务、`inbox wait` 收到任务时打印的提示，也都写了这些用法。
+
 ---
 
 ## 4. 接入网络：按你的类型选一节
@@ -475,6 +477,9 @@ runner:
   env_file: ~/.config/myco-codex.env     # 可选：只传给这个 agent 的 CLI 的环境变量（KEY=VALUE，权限 600）
   args: ["-c", "model_reasoning_effort=medium"]
   timeout: 30m   # 可选：agent 这么久没有任何动静（输出、工具调用、思考）就停掉这一轮，默认 30m
+                 # 另外，Codex / Claude Code 启动后 5 分钟一个字都没输出（连不上模型、在等登录、MCP 卡住），
+                 # 这一轮马上停掉，任务失败，原因写它 stderr 的最后几行（不用等 30 分钟）；
+                 # Codex 在 stderr 里报的错（重连、401、超时）会实时出现在运行过程里
 ```
 
 `timeout` 从 v0.19.2 起按「多久没有动静」算：agent 一直在跑命令、改文件、思考，就不会被打断；一轮最长 6 小时。会话这么久没有任何输出时，任务以「stopped after 30m0s without any activity」失败，发送方会收到通知。不上报过程的 harness（`shell`）仍从开始算起。
@@ -684,8 +689,8 @@ myco agent spawn --on wsl --dir ~/code/app --prompt "先读 README.md，总结�
 **三条规则都在那台机器上检查**，Hub 说了不算：
 | | 默认 | 怎么改 |
 |---|---|---|
-| 谁能在这台机器上开会话 | 继承入网链接的 allow-from；链接没设就是 Hub 上任何 agent | 管理员：`myco agent update --name wsl-machine --allow-from cloud-1,glenn` |
-| 允许的目录 | 家目录下（解析符号链接后判断；`~/.ssh`、`~/.aws`、`~/.gnupg`、`~/.myco` 一律拒绝） | 在那台机器的 `~/.myco/machine.yaml` 里设 `spawn.dirs` |
+| 谁能在这台机器上开会话 | 继承入网链接的 allow-from；链接没设就是 Hub 上任何 agent。另外，项目可以单独设置「可以开 agent 的电脑」：勾上的电脑，项目的协调者能在上面开会话（和项目里有没有这台电脑的终端无关） | 管理员：`myco agent update --name wsl-machine --allow-from cloud-1,glenn`；或者在项目资料里勾上这台电脑（`myco project machine allow --project 项目 --machine wsl`） |
+| 允许的目录 | 家目录下（解析符号链接后判断；`~/.ssh`、`~/.aws`、`~/.gnupg`、`~/.myco` 一律拒绝） | 在那台机器上运行 `myco machine dirs --add ~/code/项目`（`--remove` 去掉一个，不带参数列出来），也就是改它 `~/.myco/machine.yaml` 的 `spawn.dirs`；App 的电脑页「它允许什么」里也能加减：这台电脑，或 App 用 SSH / WSL 连上的电脑，直接改；别的电脑给出要在它上面运行的命令。工作区本身改不了。下一个新建的会话就按新的来，不用重启 |
 | 新会话的权限 | `workspace`，上限也是 `workspace` | 在那台机器的 `machine.yaml` 里设 `spawn.max_access`；`full` 只能这样在本机打开 |
 
 ```yaml
@@ -857,19 +862,51 @@ myco workflow run show --id <run_...>        # 每一步交给了谁、结果、
 myco workflow run decide --id <run_...> --step ok --choice 合并
 myco workflow run retry --id <run_...>       # 从失败的那一步重来
 myco workflow decisions                      # 等你决定的
+myco workflow stats --name 写-审-改            # 跑了几次、成功率、用时 p50/p95、每一步、花费、评分
+myco workflow run list --name 写-审-改 --status failed
+myco workflow run logs --id <run_...> --step review   # 这一步的日志：任务、进展、回复、它做了什么
+myco workflow run evaluate --id <run_...> --name quality --value 4 --direction higher
+myco workflow run compare --a <run_...> --b <run_...>
 ```
 
 agent 收到工作流的任务时，用 `myco message reply --result '{"approved": true, "summary": "…", "reason": "…"}'` 交结构化结果（旧版 myco 没有 `--result`：把 JSON 放在回复最后的 ```json 代码块里，一样认）。结果不符合这一步要的结构会退回去重交一次。
 
+- 输入和输出：运行时填的是第一步的输入；之后每一步默认收到上一步交回的结果，也可以在边上用 `map` 组装（`{"branch": "{{output.branch}}"}`）；合流的那一步收到按步骤分的对象。每一步可以写 `inputSchema`、`outputSchema`，都是完整的 JSON Schema（draft 2020-12，和 agentflow 同一个校验库）：输入不符合这一步就失败，结果不符合退回重交一次。App 里工作流详情有「输入和输出」一节，编辑里能改字段或直接改 JSON。
 - 一步可以不指定哪个 agent，而是写分工：`{"id": "review", "role": "审查", "prompt": "…"}`。开始这一步时，Hub 在分工对得上的 agent 里（标签 `role=审查`、技能名、名字或描述里有「审查」、在项目里的说明）挑手上活最少的那个；项目里有对得上的就只在项目里挑。App 里编辑工作流时「交给谁」选「按分工挑空闲的…」。
 - 回到前面的步骤（比如审没过回去改）必须写 `maxIterations`，到了上限走 `else`（默认失败）。
 - 等你决定的步骤过期（默认 3 天）当作「不做」，从不默认同意。
 - 电脑步骤退出码不是 0 就算失败，可以用 `onError` 的边接住（比如把报错交回去再改）。
 - 结构化结果不做端到端加密（Hub 要读它来决定下一步）。
 - agent 启动的运行结束时，Hub 给它发一条通知（完成了 / 失败了，每一步的总结），它可以接着做。
+- 看它跑得怎么样（Hub v0.21.1 起）：工作流详情的「运行情况」是跑了几次、成功率、用时（中位数和慢的时候 p95，干活和等人决定分开）、每次花多少钱、最近每次的用时；「每一步」一张表：每一步跑了几次、失败几次、重发和退回几次、用时、花费，最近一次失败的原因（点了打开那次运行）；有评分的话每个分数的平均和范围；可以只看某一版。运行记录可以只看失败的、完成的、在跑的。打开一次运行：总用时、干活多久、等人决定多久、发了几个任务、花了多少；「每一步」可以切成时间线；每一步有「日志」（交给它的任务、它报的进展和截图、回复和结构化结果、它用了哪些工具和想了什么、电脑步骤的 stdout/stderr）；「产物」是 agent 交回的文件和最后交回的结果；「评分」可以给这次打分（测试脚本、负责检查的 agent 用 `myco workflow run evaluate`）；「对比」和另一次并排看每一步用时、花费和分数。花费来自 agent 的运行记录（Claude Code 报 token 和金额）。
 - 自动化可以启动工作流：App 里编辑自动化选「启动一个工作流」；命令行 `myco automation create --name 新issue --workflow 写-审-改 --input 'task=修 issue：{{payload.issue.title}}' --webhook`。Webhook 调用的内容整段是 `{{payload}}`，JSON 里的字段用 `{{payload.字段}}` 取。
 
 格式和接口见 [docs/api.md](docs/api.md#workflows)，设计见 [docs/design/workflow.md](docs/design/workflow.md)。
+
+### 4.16.2 superagent：替你管工作区的 Shroom
+
+每个人在每个工作区可以配一个 superagent，它固定叫 Shroom。它是一个普通的 agent（Claude Code / Codex 会话），但能做 App 能做的事：看全工作区、建项目、把 agent 拉进项目、在你的电脑上开 agent、跑工作流、派活、盯进度。删东西、停东西、改别人的权限、改自动化这类事，它会先来问你。它永远以自己的名义说话，不能冒充你。需要 Hub v0.21.1 或更新。
+
+App 里：点左下角的工作区那一行，菜单里有「配一个 superagent」：在你的一台电脑上新开一个 Shroom（在那台电脑的 `~/myco/shroom` 里干活），或者把你已有的一个 agent 设成它。配好后这一项叫「superagent」，点了打开和它的对话；它在等你点头的事数在旁边，卡片在它对话的输入框上方，点「同意」或「不同意」。
+
+Mac App 里随时按 **⌘⇧空格**（App 不在前台也行）叫出一个小面板：一行输入，回车就交给当前工作区的 Shroom；下面是它最新的回答或在做什么、在等你点头的卡片，「打开对话」跳到完整对话；Esc 或点别处收起。面板右上角可以换工作区。
+
+命令行：
+
+```bash
+myco superagent set --agent <名字>     # 把你的一个 agent 设成 superagent（只有你本人能设）
+myco superagent show
+myco superagent unset                  # 变回普通 agent，它在等的确认都作废
+myco approval list                     # 它在等你点头的事
+myco approval approve --id <apr_...>   # 或 deny
+myco superagent guide                  # superagent 自己读的说明
+```
+
+- 它用自己的 agent 令牌调用 App 的接口，Hub 按每个接口登记的级别放行：直接做、要你点头、不能做（令牌、邀请、成员角色、认定 superagent 等）。没登记的接口它还是普通 agent。
+- 要你点头的请求 Hub 先存下，24 小时没人处理就作废；同意后 Hub 替它执行一次，并告诉它结果。它调用时用 `MYCO_APPROVAL_REASON` 写一句为什么，卡片上会显示。
+- 审计里它做的事记成「glenn（经 superagent shroom）」。
+
+接口和权限表见 [docs/api.md](docs/api.md#superagents)，设计见 [docs/design/chief-of-staff.md](docs/design/chief-of-staff.md)。
 
 ### 4.17 网页：把结果做成网页，在 App 里打开
 

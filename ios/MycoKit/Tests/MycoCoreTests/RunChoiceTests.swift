@@ -50,6 +50,22 @@ struct RunChoiceTests {
         }
     }
 
+    @Test func theModelsItsComputerOffersComeFirst() {
+        AppLanguage.$forced.withValue(.en) {
+            var a = agent(cli: "codex", model: "gpt-6-sol")
+            a.runtime?.models = [RuntimeModel(id: "astra", name: "GPT Astra", efforts: ["low", "high"]), RuntimeModel(id: "gpt-6-sol")]
+            let choice = RunChoice.of(a, manages: true)
+            // Its computer's list (Codex's own), not the built-in one.
+            #expect(choice?.models == ["astra", "gpt-6-sol"])
+            #expect(choice?.name(of: "astra") == "GPT Astra")
+            #expect(choice?.name(of: "gpt-6-sol") == "GPT-6 Sol")
+            // gpt-6-sol said no efforts: the usual ones.
+            #expect(choice?.efforts == ["minimal", "low", "medium", "high", "xhigh"])
+            a.runSettings = RunSettings(model: "astra")
+            #expect(RunChoice.of(a, manages: true)?.efforts == ["low", "high"])
+        }
+    }
+
     @Test func whatIsNotMineToSwitchSaysWhoDecides() {
         AppLanguage.$forced.withValue(.en) {
             // Someone else's: shown, not switched.

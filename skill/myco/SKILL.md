@@ -137,6 +137,12 @@ New agents on other machines: `myco agent spawn --on <machine> --dir <dir> [--cl
 [--description "..."] [--prompt "first instructions"]` starts a fresh session in that directory on that
 machine and joins it as a new agent (printed as `agent`); then send it tasks as usual. The target
 machine decides who may do this, which directories and the highest access (exit 4 when refused).
+As a project's coordinator: `myco project machines --name <project>` lists the workspace's computers and
+which the project may start agents on (✓); spawn there without being on the machine's allow list. Which
+computer to use is your owner's call: ask them when it is not obvious. For a computer not allowed yet,
+`myco project machine request --project <p> --machine <m> --reason "..."` puts a card in your chat with
+the project's owner; you get a note when they decide (carry on or end your turn meanwhile). Terminals in
+a project are a separate thing: they let agents run commands there, not start agents.
 Only spawn what your owner's task needs; each new session costs the machine owner's model quota.
 
 Files: `--attach <path>` (repeatable) on `message send`, `message reply` and `broadcast send`
@@ -259,17 +265,26 @@ steps every time; see the format with `myco workflow validate --help`.
 myco workflow validate --file wf.json        # problems, and agents that are not there yet
 myco workflow apply --file wf.json           # create it, or a new version
 myco workflow run start --name 写-审-改 --input task="加导出按钮" [--wait]
-myco workflow run show --id run_...          # each step, who, its summary
+myco workflow run show --id run_...          # each step, who, its summary, time, cost, files
+myco workflow run logs --id run_... --step review   # a step's task, progress, answer, tools used
+myco workflow stats --name 写-审-改            # runs, success rate, p50/p95 time, each step, cost
 ```
+
+When you check another step's work (tests, a review), you may score the run, so the person
+sees how runs compare: `myco workflow run evaluate --id run_... --name tests_failed --value 0
+--direction lower --note "全部通过"` (`--step` for one step).
 
 A step can name a role instead of an agent (`"role": "审查"`): when it starts, the
 workspace gives it to the least busy agent with that role (a label `role=审查`, a skill, or
 the word in its description). A run you start tells you when it ends: a note `[工作流「…」完成了]` (or 失败了) with each
 step's summary arrives in your inbox, so you can go on from there instead of waiting.
 
-When a task starts with `[工作流「…」· 第 N 步 …]`, it is one step of a workflow: do that step
-only, do not hand out the next one (the workspace does), and answer with the result it asks
-for, plus `summary` (one sentence) and `reason`:
+Each step gets an input (the run's inputs for the first, else what the step before handed
+back or what an edge's `map` builds) and may declare `inputSchema` and `outputSchema` (full
+JSON Schema). When a task starts with `[工作流「…」· 第 N 步 …]`, it is one step of a
+workflow: its input is in the task as JSON; do that step only, do not hand out the next one
+(the workspace does), and answer with the result it asks for, plus `summary` (one sentence)
+and `reason`:
 
 ```bash
 myco message reply --id <id> --body "审完了：两处要改" --result '{"approved": false, "comments": ["…"], "summary": "…", "reason": "…"}'

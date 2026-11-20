@@ -44,3 +44,9 @@
 .lg-chart li .faint { font-size: 12px; }
 .lg-chart li b { margin-left: auto; font-weight: 500; font-variant-numeric: tabular-nums; }
 @media (max-width: 760px) { .lg-cards { grid-template-columns: repeat(2, 1fr); } .lg-body { grid-template-columns: 1fr; } }
+
+/* the categories' grays, strongest first */
+:root { --shade-0: #1f2329; --shade-1: #3d4148; --shade-2: #5b6068; --shade-3: #787d85; --shade-4: #959aa2; --shade-5: #adb1b8; --shade-6: #c3c7cd; --shade-7: #d6d9de; --shade-8: #e3e5e8; --shade-9: #eceef0; }
+@media (prefers-color-scheme: dark) {
+  :root { --shade-0: #ebebeb; --shade-1: #cfcfcf; --shade-2: #b3b3b3; --shade-3: #979797; --shade-4: #7d7d7d; --shade-5: #686868; --shade-6: #565656; --shade-7: #474747; --shade-8: #3c3c3c; --shade-9: #333333; }
+}

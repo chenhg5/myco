@@ -19,6 +19,8 @@ type Actor struct {
 	Member *domain.Member // nil for the admin token and agents
 	Admin  bool           // the hub's own admin token: acts as the owner
 	Agent  *domain.Agent
+	// Via is the member's superagent acting for them (Member is set).
+	Via *domain.Agent
 }
 
 // Manages reports whether the actor may manage the hub (owner or admin).
@@ -47,6 +49,8 @@ func (a Actor) MemberID() string {
 // Name is how the actor appears in the audit log.
 func (a Actor) Name() string {
 	switch {
+	case a.Member != nil && a.Via != nil:
+		return a.Member.Name + "（经 superagent " + string(a.Via.Name) + "）"
 	case a.Member != nil:
 		return a.Member.Name
 	case a.Agent != nil:

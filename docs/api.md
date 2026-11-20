@@ -145,12 +145,15 @@ A project groups the nodes that work on one thing, with a shared goal, a brief, 
 
 | Endpoint | Who | Notes |
 |---|---|---|
-| `GET /v1/projects?mine=true` | anyone | `{projects: [project]}`: the projects you can see (`mine`: only those you or your nodes are in). A project: `{name, title, goal, brief, links: [{title, url}], visibility, owner, owner_id, archived, created_at, updated_at, members: [{name, role, note, added_by, added_at, agent?}], docs: [{name, size, updated_by, updated_at}], can_edit, can_manage}`; `agent` is the node's card when you can see it |
+| `GET /v1/projects?mine=true` | anyone | `{projects: [project]}`: the projects you can see (`mine`: only those you or your nodes are in). A project: `{name, title, goal, brief, links: [{title, url}], visibility, owner, owner_id, archived, created_at, updated_at, members: [{name, role, note, added_by, added_at, agent?}], docs: [{name, size, updated_by, updated_at}], can_edit, can_manage, machines}`; `agent` is the node's card when you can see it; `machines` (v0.21.2+) are the computers (ids) its coordinators may start agents on |
 | `POST /v1/projects` | people (not agents) | `{name, title?, goal?, visibility?}`; `name` is a short lowercase address; you become its owner |
 | `GET /v1/projects/{name}?docs=body` | who can see it | One project; `docs=body` includes the documents' text |
 | `PATCH /v1/projects/{name}` | editors: its owner, the hub's owner/admins, its coordinators | `{title?, goal?, brief?, links?}`. `visibility` (`members`\|`team`) and `archived`: its owner and hub owner/admins only |
 | `DELETE /v1/projects/{name}` | its owner, hub owner/admins | Deletes members, documents and links; nodes stay |
 | `PUT /v1/projects/{name}/members/{agent}` | see below | `{role?, note?}`. Adding: a person adds nodes they own (admins any), an agent adds itself, a coordinator adds nodes of its own owner. `role` (`member`\|`coordinator`): its owner and hub owner/admins only. `note` (what it does here): editors or the node's owner |
+| `GET /v1/projects/{name}/machines` | anyone who sees it | `{project, machines: [{id, name, os, online, can_spawn, spawn_node?, allowed}]}`: the workspace's computers, and which the project's coordinators may start agents on (`allowed`; v0.21.2+) |
+| `PUT /v1/projects/{name}/machines/{machine}` | who manages it | Let its coordinators start agents on a computer (`{machine}`: id, name or machine node). A spawn request from a coordinator to that computer's machine node then passes without being on the node's `allow_from` (the message carries `granted_by: "project:<name>"`); the computer's own folder and access rules still apply. Not related to the terminals (shell nodes) in the project. `DELETE` takes it back. Both answer the project, with `machines` (ids) |
+| `POST /v1/projects/{name}/machines/{machine}/request` | a coordinator (agent) | `{reason?}` → `202` approval (`pending`): a card for the project's owner, shown in the coordinator's chat; approving carries out the `PUT` above as the owner, and the agent gets a note either way. Asking again while it waits gives the same approval; an allowed computer answers `200 {allowed: true}` |
 | `DELETE /v1/projects/{name}/members/{agent}` | editors, the node's owner | A coordinator cannot remove another coordinator |
 | `GET/PUT/DELETE /v1/projects/{name}/docs/{doc}` | read: who can see it; write: editors | `{body}` (Markdown, up to 64 KB) — documents written as text |
 | `PUT /v1/projects/{name}/files/{file}` | anyone involved (member agents, people whose nodes are in it, editors); replacing someone else's file: editors | Upload a file (from v0.18.29): the body is its content, `Content-Type` its type; up to 20 MB, 100 files a project. Text up to 64 KB (Markdown, txt, json, …) comes with the project like a document (`body`, read by agents); anything else has `binary: true`. Names are plain file names (no folders) |
@@ -277,14 +280,26 @@ Both people (a console or admin token) and agents (their own token, acting for t
 | `PATCH /v1/workflows/{ref}` | `{enabled}`: a workflow turned off cannot be started |
 | `DELETE /v1/workflows/{ref}` | `204`. Its runs go too (the ones going are cancelled first); the tasks they sent stay |
 | `POST /v1/workflows/{ref}/runs` | `{inputs?}` → `201` the run (with steps). Inputs are checked against the definition's `inputs` schema (text is turned into the numbers, booleans and lists it asks for; defaults filled). `?dry_run=true` → `{inputs, step, target, body, dry_run}`: the first step's task, unsent |
-| `GET /v1/workflow-runs?workflow=&active=true&limit=` | `{runs: [run]}` (without steps), newest first; `limit` default 50, at most 200 |
-| `GET /v1/workflow-runs/{id}` | The run with `steps`, `events` (its log, the last 500 lines) and the `definition` it follows |
+| `GET /v1/workflow-runs?workflow=&active=true&status=&limit=` | `{runs: [run]}` (without steps), newest first; `status` (v0.21.1+) is one of `running waiting succeeded failed cancelled`; `limit` default 50, at most 200. Each run has `duration_ms` (to now while it goes; v0.21.1+) |
+| `GET /v1/workflow-runs/{id}` | The run with `steps`, `events` (its log, the last 500 lines) and the `definition` it follows. From v0.21.1 also `metrics`, `artifacts` and `evaluations` (below); each step has `duration_ms`, `attempts` (tasks sent: the first, retries, send-backs), `bounces`, `tasks` (their ids) and `usage` |
+| `GET /v1/workflow-runs/{id}/steps/{step}/log?trace=false` | v0.21.1+. `step` is a step start's id (`rs_…`) or a step id (its latest start) → `{run, step, entries: [{at, kind, sub?, try?, from?, text?, attachments?}], clipped?}`, in time order. `kind`: `task` (what was sent; each retry or send-back is another `try`), `progress`, `reply` (with its structured result), `failure`, `event` (the run's log for this step), `stdout` / `stderr` (a computer step), `trace` (what the agent did, from its trace: `sub` is `text`, `thinking`, `tool`, `tool_result`, `tool_error`, `error`, `usage`, `output:<stream>`; left out with `trace=false`). At most 3000 lines (the last) |
+| `GET /v1/workflow-runs/{id}/evaluations` | v0.21.1+. `{evaluations: [evaluation]}` |
+| `POST /v1/workflow-runs/{id}/evaluations` | v0.21.1+. `{name, value, unit?, direction?, step?, note?}` → `201` the evaluation (`{id, run, step?, name, value, unit?, direction?, note?, by, at}`). `name`: letters, digits, `_ . -`, starting with a letter; `value` a number; `direction` `higher` or `lower` (which is better; empty: neither); `step` a step id of the workflow. Those who may see the run, and the agents its steps went to (an agent step that checks the work), may score it. A run keeps its last 200. `?dry_run=true` checks only |
+| `GET /v1/workflow-runs/compare?a=&b=` | v0.21.1+. Two runs side by side → `{a: {run, metrics}, b: {run, metrics}, same_version, steps: [{step, title?, a?, b?, faster_in?, delta_ms, delta_cost_usd?}], evaluations: [{name, unit?, direction?, a?, b?, delta, better?}]}`. A step's side (`{status, runs, attempts, duration_ms, usage?, summary?, error?}`) adds up all its starts in that run; deltas are B − A; a score is each run's latest of that name |
+| `GET /v1/workflows/{ref}/stats?limit=&version=` | v0.21.1+. A workflow's figures (below) |
 | `POST /v1/workflow-runs/{id}/cancel` | Stops it: open tasks are stopped, decisions withdrawn → the run |
 | `POST /v1/workflow-runs/{id}/retry` | `{from?}`: a failed or cancelled run starts again at that step (default: the step that failed), keeping earlier results → the run |
 | `POST /v1/workflow-runs/{id}/decide` | `{step, choice, note?}`: `choice` must be one of the step's `options` → the run |
 | `GET /v1/workflow-decisions` | `{decisions: [{run, step}]}`: decisions waiting for the caller |
 
 Saving and removing a workflow are audited (`workflow.*`).
+
+**Observability (v0.21.1+).** What a run did, cost and produced, worked out by the hub:
+
+- `metrics`: `{duration_ms, active_ms, waiting_ms, steps, done, failed, attempts, retries, bounces, usage?}`. `active_ms` is the time some agent or computer step was at work (parallel steps counted once); `waiting_ms` the time a decision waited while nothing else was at work.
+- `usage` (on a run, a step, the figures): `{input_tokens?, output_tokens?, cost_usd?}`, the last `usage` step of each of the step's tasks' traces as the agent's CLI reports it (Claude Code reports tokens and cost; others what they have). Kept on the step once it is over, since traces are dropped after a week.
+- `artifacts`: the files the step's agent attached to its answers and progress reports, oldest first, each once: `[{step, step_run, try, kind: reply|progress, message, from, at, file_id, name, size, content_type?}]`. Download with `GET /v1/files/{file_id}` (`myco file get`).
+- Figures (`GET /v1/workflows/{ref}/stats`): `{workflow, name, total, by_status, success_rate, sample, version?, duration_ms, active_ms, waiting_ms, usage?, cost_per_run?, steps: [{step, title?, kind, runs, done, failed, retries, bounces, duration_ms, usage?, last_error?, last_error_run?, last_error_at?}], versions: [{version, runs, succeeded, failed, cancelled, duration_ms}], evaluations: [{name, unit?, direction?, values, last, last_run}], recent: [point], failures: [point]}`. `total`, `by_status` and `success_rate` (succeeded / ended) cover every run; the rest the last `limit` runs (default 200, at most 2000), of `version` only when given. Distributions are `{n, avg, min, p50, p90, p95, max}` (nearest rank; durations in ms, over ended runs and step starts). A score's figures take each run's latest of that name. `recent` (newest first, at most 60) and `failures` (at most 10) are `{id, status, version, created_at, duration_ms, error?, failed_step?, cost_usd?}`.
 
 A run an agent started (`trigger: agent`) tells it when it ends: a note from the run's owner, with `workflow` set, `[工作流「<name>」完成了|失败了：…|取消了：…]`, each step's summary and how to see the rest (not when the agent cancelled it itself). Automations can start workflows too (see [Automations](#automations)).
 
@@ -319,14 +334,16 @@ Rules:
 - A step sets exactly one of `agent` (with `prompt`, optional `output` schema), `role` (the same, but the task goes to an agent whose role matches — a label `role=<x>` or `<x>`, a skill named `<x>`, or `<x>` in its name, display name, description, or its note in the run's project — preferring the run's project members, then the one with the fewest open tasks, then the one seen in the last 10 minutes; none: the step fails), `computer` (an exec node, with `run`; `parse: "json"` reads stdout into `output.json`) or `human` (a member name or `$starter`, with `prompt` and at least two `options`). Ids: letters, digits, `_`, `-`, at most 40. At most 50 steps and 200 edges.
 - `timeout`: `30m`, `2h`, `1d`, `1d12h`. A step past it fails (its task is stopped). A decision with no timeout waits 3 days; one that expires counts as no answer (`output.choice` is `""`, `output.timed_out` is `true`), never as yes.
 - `retry` (0-5): a failed agent or computer step is sent again that many times.
-- An agent step's result: the reply's `result`, else the last `` ```json `` block of its body. With an `output` schema, a result that does not fit (or none) is sent back once with what is wrong; a second miss fails the step. The output always has `text` (the reply's body). `summary` is the result's `summary`, else the reply's first line.
+- Inputs and outputs: a run's inputs are the entry step's input (`entry`, default the first step). When a step ends, the edge taken passes its result to the next step as that step's input, or, with `map`, an object it builds (`{"branch": "{{output.branch}}", "task": "{{inputs.task}}"}`; a value that is one `{{…}}` alone keeps its type, a missing one is `""`). A join's input is an object keyed by the steps it waited for. The task an agent gets shows its input as JSON.
+- `inputSchema` and `outputSchema` (`output` is the same; set one) are full JSON Schema draft 2020-12 (`oneOf`, `anyOf`, `$ref`/`$defs`, `pattern`, `minimum`, `minItems`, `additionalProperties`, …), compiled when the workflow is saved. An input that does not fit fails the step before it is sent. An agent step's result: the reply's `result`, else the last `` ```json `` block of its body; one that does not fit (or none) is sent back once with each place that is wrong (`/parts/1: 'API' does not match pattern '^[a-z]+$'`); a second miss fails the step. The output always has `text` (the reply's body). `summary` is the result's `summary`, else the reply's first line. The run's `inputs` are checked against `inputs` the same way.
 - A computer step's output is the exec result (`exit_code`, `stdout`, `stderr`, …); a non-zero exit fails it. A human step's output is `{choice, note, by}`.
 - Edges out of a step are tried in order and the first whose `when` holds is taken (all of them with `"dispatch": "all"` on the step). `onError` edges are tried only when the step failed, the others only when it succeeded; a failed step with no `onError` edge fails the run, and a step with edges none of which holds fails it too ("no way on"). A step with no edges ends its branch. With no `edges` at all, steps run in order.
 - An edge to the same or an earlier step (in `steps` order) needs `maxIterations`; once taken that many times, `else` is taken instead (`$fail` when unset). `else` cannot go back.
-- `"join": "all"` on a step: it starts once every step with an edge into it has arrived. The run fails if it ends with a join that never filled.
+- `"join": "all"` on a step: it starts once every step with an edge into it has arrived; `"join": {"from": ["a", "b"]}` names them (at least two, and every edge into it must come from one of them). Its input is `{"a": …, "b": …}`. The run fails if it ends with a join that never filled. `"dispatch": "first"` (the default) or `"all"`.
+- `allowUnboundedCycles: true` lets an edge go back without `maxIterations` (a run stops after 2000 steps instead of 200).
+- `title`, `tags` (at most 20) and `group` are for people; `name` stays the identifier.
 - `$end` ends a branch; the run succeeds when nothing is open. `$fail` fails it. A run that has started 200 steps stops.
-- `when`, and `{{…}}` in `prompt`, `run`, `title`, `agent` and `computer`, are expressions over `inputs`, `steps.<id>.output|summary|status|error|attempt`, `run.id|name|by`, and (in `when`) `output`, `status`, `error`, `attempt` of the step that ended: paths (`a.b`, `a[0]`, `a["k"]`), literals, `== != < <= > >= && || !`, `len(x)`, `contains(x, y)`. Missing values are `null`; comparing different kinds is false. `{{#if expr}}…{{else}}…{{/if}}` keeps one part.
-- `inputs` and `output` use a JSON Schema subset: `type` (`object`, `string`, `number`, `integer`, `boolean`, `array`), `required`, `properties`, `items`, `enum`, `default`, `title`, `description`, `format`.
+- `when`, `map`, and `{{…}}` in `prompt`, `run`, `title`, `agent`, `role` and `computer`, are expressions over `inputs` (the run's), `input` (this step's), `steps.<id>` or `nodes.<id>` `.output` (or `.result`), `.input`, `.summary`, `.status`, `.error`, `.attempt` (the latest finished time of that step), `run.id|name|by`, and on an edge (`when`, `map`) `output`, `status`, `error`, `attempt` of the step that ended: paths (`a.b`, `a[0]`, `a["k"]`), literals, `== != < <= > >= && || ! and or not in`, `+ - * / %` (`+` also joins text), `len contains startsWith endsWith matches lower upper trim`. Missing values are `null`; comparing different kinds is false. `{{#if expr}}…{{else}}…{{/if}}` keeps one part. Saving refuses a reference to a step that is not there, a field a step does not have, or an input `inputs` does not declare.
 
 A run:
 
@@ -337,7 +354,7 @@ A run:
   "owner": "glenn", "by": "glenn", "trigger": "manual|agent|automation", "error": "",
   "current": ["review"],
   "steps": [{"id": "rs_...", "step": "write", "title": "", "kind": "agent", "attempt": 1, "status": "done",
-             "target": "coder", "message_id": "msg_...", "input": "…the task as sent…",
+             "target": "coder", "message_id": "msg_...", "input": "…the task as sent…", "payload": {"task": "加导出按钮"},
              "output": {"branch": "feat/x", "summary": "加好了", "text": "…"}, "summary": "加好了",
              "started_at": "...", "ended_at": "..."}],
   "events": [{"at": "...", "kind": "started|step|done|failed|bounced|edge|decided|timeout|retry|finished", "step": "write", "text": "…"}],
@@ -346,6 +363,27 @@ A run:
 ```
 
 `waiting`: only decisions are open. A step's `status` is `running`, `waiting` (a decision), `done`, `failed` or `cancelled`; `options` and `due_at` come with decisions.
+
+## Superagents
+
+A person's own agent with the App's powers in its workspace (v0.21.1+; design: [design/chief-of-staff.md](design/chief-of-staff.md)). Only the person names it; it uses its **own agent token** on the App's routes, and the hub acts as that person, marked as through it (the audit log names it: `glenn（经 superagent shroom）`). Each route the App uses is listed in `internal/transport/httpapi/superagent.go`:
+
+- **allowed**: reading what its owner sees (overview, conversations, traces, machines, members, audit, projects), and things that harm nothing that exists: creating projects and putting agents in them, project docs and files, starting an agent on its owner's computers (`POST /v1/machines/{id}/spawn`), run settings, running an automation once, renaming a computer;
+- **held for approval**: deleting or removing anything (projects, members of projects, docs, files, agents, computers), visibility and ownership, new or changed automations, stopping a task, upgrades and hub settings. The hub answers `409 {error: "approval_pending", message}` and keeps the request (with `X-Myco-Reason`, its why); the owner approves or denies it, and an approved one is carried out once, as it came. The agent gets a note from its owner either way. Pending ones lapse after 24 hours;
+- **never** (not listed): tokens, enrollments, pairing and devices, keys, members, handovers, the superagent itself and approvals, and anything that speaks as its owner (console messages, steers, uploads): it always speaks as itself.
+
+A route not listed treats it as the ordinary agent it also is. Nothing widens what its owner can do. One superagent per member in a workspace.
+
+| Endpoint | Auth | Notes |
+|---|---|---|
+| `GET /v1/console/superagent` | console | `{agent?, pending}`: the caller's superagent and how many of its requests wait |
+| `PUT /v1/console/superagent` | console (the person themselves) | `{agent}`: one of the caller's own agents (kind agent); replaces any before (whose pending requests are withdrawn). `?dry_run=true` |
+| `DELETE /v1/console/superagent` | console (the person themselves) | `204`: an ordinary agent again |
+| `GET /v1/console/approvals?status=pending` | console | `{approvals: [{id, agent, what, reason, method, path, body?, status, result?, result_body?, decided_by?, created_at, expires_at, decided_at?}]}`; `status` pending done denied expired withdrew |
+| `POST /v1/console/approvals/{id}/approve` | console (its owner, not the superagent) | carries it out once → the approval with `result` (the HTTP status) and the start of `result_body` |
+| `POST /v1/console/approvals/{id}/deny` | console (its owner) | → the approval |
+| `GET /v1/me/superagent` | agent | `{superagent, owner?}` |
+| `GET /v1/me/approvals` | agent | what it asked for |
 
 ## Message object
 
@@ -362,7 +400,7 @@ A run:
 }
 ```
 
-`after` is optional and omitted when empty (from v0.19.2). `automation` names the automation that sent the message, omitted otherwise. `workflow` (v0.21+) is the workflow run that sent a task; `result` is the structured result on a reply that has one. Adding fields is non-breaking; renaming/removing fields requires `/v2`.
+`after` is optional and omitted when empty (from v0.19.2). `automation` names the automation that sent the message, omitted otherwise. `workflow` (v0.21+) is the workflow run that sent a task; `result` is the structured result on a reply that has one. `granted_by` (v0.21.2+), on a task, says why the hub let it past its recipient's `allow_from`: `project:<name>` for a spawn request (`myco agent spawn`) to a computer's machine node from a coordinator of an active project that allows that computer (see [Projects](#projects): `machines`); not for new terminals or sealed bodies. The machine node accepts such a request; its own folder and access rules still apply. Adding fields is non-breaking; renaming/removing fields requires `/v2`.
 
 ## Exec nodes
 

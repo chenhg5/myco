@@ -28,6 +28,7 @@ type WorkflowService struct {
 	ids      IDGenerator
 	clock    Clock
 	log      *slog.Logger
+	traces   domain.TraceRepository
 	// One advance at a time: runs are small and few.
 	mu   sync.Mutex
 	kick chan struct{}
@@ -45,6 +46,9 @@ func NewWorkflowService(repo domain.WorkflowRepository, messages *MessageService
 	messages.SetWorkflowHook(func(string) { s.Kick() })
 	return s
 }
+
+// SetTraces lets runs show what their agents' steps cost and did.
+func (s *WorkflowService) SetTraces(t domain.TraceRepository) { s.traces = t }
 
 // Kick asks the loop to look at runs now (a workflow task was answered).
 func (s *WorkflowService) Kick() {
@@ -300,12 +304,16 @@ func (s *WorkflowService) Delete(ctx context.Context, c Caller, ref string) erro
 	return s.repo.Delete(ctx, w.ID)
 }
 
-// RunDetail is a run with its steps, log and the definition it follows.
+// RunDetail is a run with its steps, log and the definition it follows,
+// and what it produced and measured.
 type RunDetail struct {
-	Run    *domain.WorkflowRun
-	Def    *domain.WorkflowDef
-	Steps  []*domain.RunStep
-	Events []*domain.RunEvent
+	Run         *domain.WorkflowRun
+	Def         *domain.WorkflowDef
+	Steps       []*domain.RunStep
+	Events      []*domain.RunEvent
+	Metrics     domain.RunMetrics
+	Artifacts   []Artifact
+	Evaluations []*domain.RunEvaluation
 }
 
 // StartInput starts a run.
@@ -336,7 +344,7 @@ func (s *WorkflowService) Start(ctx context.Context, c Caller, ref string, in St
 	}
 	inputs := w.Def.Inputs.Coerce(in.Inputs)
 	if w.Def.Inputs != nil {
-		if p := w.Def.Inputs.Check(inputs); len(p) > 0 {
+		if p := w.Def.Inputs.CheckWith(domain.CompleteContracts, inputs); len(p) > 0 {
 			return nil, nil, domain.Errf(domain.CodeInvalidArgument, "the inputs do not fit: %s", strings.Join(p, "; ")).
 				WithSuggestion("see what it takes with: myco workflow get --name %q", w.Name)
 		}
@@ -354,8 +362,8 @@ func (s *WorkflowService) Start(ctx context.Context, c Caller, ref string, in St
 		CreatedAt: now, UpdatedAt: now}
 	if in.DryRun {
 		f := &flow{s: s, ctx: ctx, run: run, def: w.Def}
-		first := &w.Def.Steps[0]
-		body, target, err := f.compose(first, 1)
+		first := w.Def.Step(w.Def.EntryStep())
+		body, target, err := f.compose(first, 1, inputs)
 		if err != nil {
 			return nil, nil, domain.Errf(domain.CodeInvalidArgument, "step %s: %v", first.ID, err)
 		}
@@ -368,7 +376,7 @@ func (s *WorkflowService) Start(ctx context.Context, c Caller, ref string, in St
 	}
 	f := &flow{s: s, ctx: ctx, run: run, def: w.Def, dirty: map[*domain.RunStep]bool{}}
 	f.event(domain.EvStarted, "", fmt.Sprintf("%s 启动了（第 %d 版）", c.who(), w.Version))
-	f.activate(w.Def.Steps[0].ID)
+	f.activate(w.Def.EntryStep(), inputs)
 	f.settle()
 	if err := f.save(); err != nil {
 		return nil, nil, err
@@ -394,7 +402,9 @@ func (s *WorkflowService) runDetail(ctx context.Context, run *domain.WorkflowRun
 	if err != nil {
 		return nil, err
 	}
-	return &RunDetail{Run: run, Def: def, Steps: steps, Events: events}, nil
+	d := &RunDetail{Run: run, Def: def, Steps: steps, Events: events}
+	s.observe(ctx, d)
+	return d, nil
 }
 
 func (s *WorkflowService) defOf(ctx context.Context, run *domain.WorkflowRun) (*domain.WorkflowDef, error) {
@@ -431,7 +441,17 @@ func (s *WorkflowService) GetRun(ctx context.Context, c Caller, id string) (*Run
 // Runs lists runs the caller may see: of one workflow (ref) or all, the
 // newest first.
 func (s *WorkflowService) Runs(ctx context.Context, c Caller, ref string, active bool, limit int) ([]*domain.WorkflowRun, error) {
-	f := domain.RunFilter{Active: active, Limit: limit}
+	return s.RunsWhere(ctx, c, ref, domain.RunFilter{Active: active, Limit: limit})
+}
+
+// RunsWhere lists runs the caller may see that match f (WorkflowID is set
+// from ref).
+func (s *WorkflowService) RunsWhere(ctx context.Context, c Caller, ref string, f domain.RunFilter) ([]*domain.WorkflowRun, error) {
+	switch f.Status {
+	case "", domain.FlowRunning, domain.FlowWaiting, domain.FlowSucceeded, domain.FlowFailed, domain.FlowCancelled:
+	default:
+		return nil, domain.Errf(domain.CodeInvalidArgument, "status %q: use running, waiting, succeeded, failed or cancelled", f.Status)
+	}
 	if ref != "" {
 		w, err := s.find(ctx, c, ref)
 		if err != nil {
@@ -535,9 +555,9 @@ func (s *WorkflowService) Retry(ctx context.Context, c Caller, id, from string) 
 		return nil, domain.Errf(domain.CodeNotFound, "the workflow has no step %s", from)
 	}
 	f.run.Status, f.run.Error, f.run.EndedAt = domain.FlowRunning, "", time.Time{}
-	f.run.State.Joins = nil
+	f.run.State.Joins, f.run.State.JoinIn = nil, nil
 	f.event(domain.EvRetry, from, c.who()+" 从这一步重新开始")
-	f.activate(from)
+	f.activate(from, f.inputOf(from))
 	f.settle()
 	return f.run, f.save()
 }
@@ -670,16 +690,23 @@ func (f *flow) save() error {
 
 // env is what conditions and templates see. With st, output and status
 // are that step's.
-func (f *flow) env(st *domain.RunStep) map[string]any {
+// input is the step's input (the step starting, or the one that ended).
+// steps.<id> and nodes.<id> (agentflow's name; result is output) are the
+// latest finished time of each step.
+func (f *flow) env(st *domain.RunStep, input any) map[string]any {
 	steps := map[string]any{}
 	for _, x := range f.steps {
 		if x.Status == domain.StepDone || x.Status == domain.StepFailed {
-			steps[x.StepID] = map[string]any{"output": anyMap(x.Output), "summary": x.Summary, "status": x.Status, "attempt": float64(x.Attempt), "error": x.Error}
+			out := anyMap(x.Output)
+			steps[x.StepID] = map[string]any{"output": out, "result": out, "input": x.Payload, "summary": x.Summary, "status": x.Status,
+				"attempt": float64(x.Attempt), "error": x.Error}
 		}
 	}
 	env := map[string]any{
 		"inputs": anyMap(f.run.Inputs),
 		"steps":  steps,
+		"nodes":  steps,
+		"input":  input,
 		"run":    map[string]any{"id": f.run.ID, "name": f.run.Name, "by": f.run.By},
 	}
 	if st != nil {
@@ -687,8 +714,30 @@ func (f *flow) env(st *domain.RunStep) map[string]any {
 		env["status"] = st.Status
 		env["attempt"] = float64(st.Attempt)
 		env["error"] = st.Error
+		env["input"] = st.Payload
 	}
 	return env
+}
+
+// inputOf is what a step started again gets: what it got last time, or
+// the run's inputs for the entry step.
+func (f *flow) inputOf(id string) any {
+	for i := len(f.steps) - 1; i >= 0; i-- {
+		if f.steps[i].StepID == id {
+			return f.steps[i].Payload
+		}
+	}
+	if id == f.def.EntryStep() {
+		return f.run.Inputs
+	}
+	return map[string]any{}
+}
+
+func (f *flow) maxSteps() int {
+	if f.def.AllowUnboundedCycles {
+		return domain.MaxRunStepsUnbounded
+	}
+	return domain.MaxRunSteps
 }
 
 func anyMap(m map[string]any) map[string]any {
@@ -709,24 +758,30 @@ func (f *flow) count(stepID string) int {
 }
 
 // activate starts a step.
-func (f *flow) activate(id string) {
+func (f *flow) activate(id string, input any) {
 	if domain.FlowOver(f.run.Status) {
 		return
 	}
-	if len(f.steps) >= domain.MaxRunSteps {
-		f.end(domain.FlowFailed, fmt.Sprintf("这次运行已经走了 %d 步，停下来了（是不是有个没完的循环？）", domain.MaxRunSteps))
+	if max := f.maxSteps(); len(f.steps) >= max {
+		f.end(domain.FlowFailed, fmt.Sprintf("这次运行已经走了 %d 步，停下来了（是不是有个没完的循环？）", max))
 		return
 	}
 	def := f.def.Step(id)
 	now := f.now()
 	st := &domain.RunStep{ID: f.s.ids.New("rs"), RunID: f.run.ID, StepID: id, Kind: def.Kind(), Attempt: f.count(id) + 1,
-		Status: domain.StepRunning, StartedAt: now}
+		Status: domain.StepRunning, StartedAt: now, Payload: input}
 	if d := def.TimeoutDur(); d > 0 {
 		st.DueAt = now.Add(d)
 	}
 	f.steps = append(f.steps, st)
 	f.touch(st)
-	body, target, err := f.compose(def, st.Attempt)
+	if def.InputSchema != nil {
+		if problems := def.InputSchema.CheckWith(domain.CompleteContracts, input); len(problems) > 0 {
+			f.failed(st, "输入不符合这一步的约定："+strings.Join(problems, "；"))
+			return
+		}
+	}
+	body, target, err := f.compose(def, st.Attempt, input)
 	st.Input, st.Target = body, target
 	if err != nil {
 		f.failed(st, fmt.Sprintf("写不出这一步的内容：%v", err))
@@ -750,8 +805,8 @@ func (f *flow) activate(id string) {
 
 // compose renders a step: the task (or command, or question) and who it
 // goes to.
-func (f *flow) compose(def *domain.StepDef, attempt int) (body, target string, err error) {
-	env := f.env(nil)
+func (f *flow) compose(def *domain.StepDef, attempt int, input any) (body, target string, err error) {
+	env := f.env(nil, input)
 	switch def.Kind() {
 	case domain.StepHuman:
 		target = def.Human
@@ -796,11 +851,15 @@ func (f *flow) compose(def *domain.StepDef, attempt int) (body, target string, e
 	b.WriteString("]\n\n")
 	b.WriteString(strings.TrimSpace(prompt))
 	b.WriteString("\n\n---\n这是工作流里的一步：只做这一步，不要自己安排下一步，工作流会接着走。\n")
-	if def.Output != nil {
-		ex, _ := json.MarshalIndent(withSummary(def.Output.Example()), "", "  ")
+	if m, ok := input.(map[string]any); ok && len(m) > 0 {
+		in, _ := json.MarshalIndent(m, "", "  ")
+		b.WriteString("这一步的输入（JSON）：\n```json\n" + string(in) + "\n```\n")
+	}
+	if c := def.Contract(); c != nil {
+		ex, _ := json.MarshalIndent(withSummary(c.Example()), "", "  ")
 		b.WriteString("做完后交一个结构化结果（JSON 对象）：\n  myco message reply --id <这条任务的 id> --body \"给人看的说明\" --result result.json\n")
 		b.WriteString("result.json 像这样：\n" + string(ex) + "\n")
-		if req := def.Output.Required; len(req) > 0 {
+		if req := c.Required; len(req) > 0 {
 			b.WriteString("必须有：" + strings.Join(req, "、") + "。")
 		}
 		b.WriteString("summary 一句话说做了什么，reason 说为什么。旧版 myco 没有 --result：把这个 JSON 放在回复最后的 ```json 代码块里。\n")
@@ -841,7 +900,11 @@ func (f *flow) send(st *domain.RunStep, body, thread string) error {
 	if err != nil {
 		return err
 	}
+	if len(st.Tasks) == 0 && st.MessageID != "" {
+		st.Tasks = []string{st.MessageID} // a step started before v0.21.1
+	}
 	st.MessageID = out.Message.ID
+	st.Tasks = append(st.Tasks, out.Message.ID)
 	f.touch(st)
 	return nil
 }
@@ -984,7 +1047,7 @@ func (f *flow) pollTask(st *domain.RunStep, now time.Time) {
 func (f *flow) collect(st *domain.RunStep, reply *domain.Message) {
 	def := f.def.Step(st.StepID)
 	if reply == nil {
-		if def.Output != nil {
+		if def.Contract() != nil {
 			f.failed(st, "任务被关掉了，没有交结果")
 			return
 		}
@@ -999,15 +1062,15 @@ func (f *flow) collect(st *domain.RunStep, reply *domain.Message) {
 	var out map[string]any
 	if reply.Result != "" {
 		_ = json.Unmarshal([]byte(reply.Result), &out)
-	} else if def.Output != nil {
+	} else if def.Contract() != nil {
 		out = lastJSONBlock(reply.Body)
 	}
-	if def.Output != nil {
+	if c := def.Contract(); c != nil {
 		var v any = out
 		if out == nil {
 			v = map[string]any{} // nothing handed back: say what is missing
 		}
-		if problems := def.Output.Check(v); len(problems) > 0 {
+		if problems := c.CheckWith(domain.CompleteContracts, v); len(problems) > 0 {
 			if !st.Bounced {
 				f.bounce(st, def, reply, problems)
 				return
@@ -1056,7 +1119,7 @@ func (f *flow) collectCommand(st *domain.RunStep, def *domain.StepDef, reply *do
 
 // bounce sends the task back once: the result did not fit.
 func (f *flow) bounce(st *domain.RunStep, def *domain.StepDef, reply *domain.Message, problems []string) {
-	ex, _ := json.MarshalIndent(withSummary(def.Output.Example()), "", "  ")
+	ex, _ := json.MarshalIndent(withSummary(def.Contract().Example()), "", "  ")
 	body := "交的结果不符合这一步要的结构：\n- " + strings.Join(problems, "\n- ") +
 		"\n\n请按这个结构重新交（myco message reply --id <这条任务的 id> --body \"...\" --result result.json）：\n" + string(ex)
 	thread := reply.ThreadID
@@ -1065,6 +1128,7 @@ func (f *flow) bounce(st *domain.RunStep, def *domain.StepDef, reply *domain.Mes
 		return
 	}
 	st.Bounced = true
+	st.Bounces++
 	f.touch(st)
 	f.event(domain.EvBounced, st.StepID, "结果不符合，退回重交："+strings.Join(problems, "；"))
 }
@@ -1137,7 +1201,7 @@ func (f *flow) after(st *domain.RunStep) {
 		f.end(domain.FlowFailed, fmt.Sprintf("步骤 %s 失败了：%s", def.Label(), st.Error))
 		return
 	}
-	env := f.env(st)
+	env := f.env(st, nil)
 	taken := 0
 	for _, e := range edges {
 		if e.Edge.When != "" {
@@ -1193,24 +1257,43 @@ func (f *flow) take(st *domain.RunStep, ie domain.IndexedEdge) {
 		return
 	}
 	f.event(domain.EvEdge, st.StepID, st.StepID+" → "+to)
-	target := f.def.Step(to)
-	if target.Join == "all" {
+	// What the next step gets: the map, or this step's result as it is.
+	var payload any = anyMap(st.Output)
+	if e.Map != nil && to == e.To {
+		v, err := domain.RenderValue(e.Map, f.env(st, nil))
+		if err != nil {
+			f.end(domain.FlowFailed, fmt.Sprintf("%s → %s 的 map 算不出来：%v", e.From, e.To, err))
+			return
+		}
+		payload = v
+	}
+	if waits := f.def.Waits(to); len(waits) > 0 {
 		if f.run.State.Joins == nil {
 			f.run.State.Joins = map[string][]string{}
+		}
+		if f.run.State.JoinIn == nil {
+			f.run.State.JoinIn = map[string]map[string]any{}
 		}
 		arrived := f.run.State.Joins[to]
 		if !slices.Contains(arrived, st.StepID) {
 			arrived = append(arrived, st.StepID)
 		}
-		for _, p := range f.def.Preds(to) {
+		in := f.run.State.JoinIn[to]
+		if in == nil {
+			in = map[string]any{}
+		}
+		in[st.StepID] = payload
+		for _, p := range waits {
 			if !slices.Contains(arrived, p) {
-				f.run.State.Joins[to] = arrived
+				f.run.State.Joins[to], f.run.State.JoinIn[to] = arrived, in
 				return
 			}
 		}
 		delete(f.run.State.Joins, to)
+		delete(f.run.State.JoinIn, to)
+		payload = in
 	}
-	f.activate(to)
+	f.activate(to, payload)
 }
 
 // settle sets the run's state from its steps: done when nothing is open.
@@ -1235,7 +1318,7 @@ func (f *flow) settle() {
 	default:
 		for to, arrived := range f.run.State.Joins {
 			var missing []string
-			for _, p := range f.def.Preds(to) {
+			for _, p := range f.def.Waits(to) {
 				if !slices.Contains(arrived, p) {
 					missing = append(missing, p)
 				}

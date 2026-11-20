@@ -216,6 +216,44 @@ CREATE TABLE IF NOT EXISTS run_events (
   text   TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_run_events ON run_events(run_id, id);
+CREATE TABLE IF NOT EXISTS superagents (
+  member_id TEXT PRIMARY KEY,
+  agent     TEXT NOT NULL,
+  set_at    INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_superagents_agent ON superagents(agent);
+CREATE TABLE IF NOT EXISTS approvals (
+  id           TEXT PRIMARY KEY,
+  owner        TEXT NOT NULL,
+  agent        TEXT NOT NULL,
+  what         TEXT NOT NULL DEFAULT '',
+  reason       TEXT NOT NULL DEFAULT '',
+  method       TEXT NOT NULL,
+  path         TEXT NOT NULL,
+  body         BLOB,
+  content_type TEXT NOT NULL DEFAULT '',
+  status       TEXT NOT NULL,
+  result       INTEGER NOT NULL DEFAULT 0,
+  result_body  TEXT NOT NULL DEFAULT '',
+  decided_by   TEXT NOT NULL DEFAULT '',
+  created_at   INTEGER NOT NULL,
+  decided_at   INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_approvals_owner ON approvals(owner, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_approvals_agent ON approvals(agent, created_at DESC);
+CREATE TABLE IF NOT EXISTS run_evaluations (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id    TEXT NOT NULL,
+  step      TEXT NOT NULL DEFAULT '',
+  name      TEXT NOT NULL,
+  value     REAL NOT NULL,
+  unit      TEXT NOT NULL DEFAULT '',
+  direction TEXT NOT NULL DEFAULT '',
+  note      TEXT NOT NULL DEFAULT '',
+  by_name   TEXT NOT NULL DEFAULT '',
+  at        INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_run_evaluations ON run_evaluations(run_id, id);
 CREATE TABLE IF NOT EXISTS aliases (
   name       TEXT PRIMARY KEY,
   target     TEXT NOT NULL,
@@ -453,12 +491,16 @@ func Open(path string) (*sql.DB, error) {
 		{"automation", "TEXT NOT NULL DEFAULT ''"},
 		// The workflow run that sent it, and a reply's structured result
 		// (v0.21).
-		{"workflow", "TEXT NOT NULL DEFAULT ''"}, {"result", "TEXT NOT NULL DEFAULT ''"}}); err != nil {
+		{"workflow", "TEXT NOT NULL DEFAULT ''"}, {"result", "TEXT NOT NULL DEFAULT ''"},
+		// Why the hub admitted it past its recipient's allow list (v0.21.2).
+		{"granted_by", "TEXT NOT NULL DEFAULT ''"}}); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 	for table, cols := range map[string][][2]string{
-		"machines":       {{"owner", "TEXT NOT NULL DEFAULT ''"}},
+		"machines": {{"owner", "TEXT NOT NULL DEFAULT ''"}},
+		// The computers a project's coordinators may start agents on (v0.21.2).
+		"projects":       {{"machines", "TEXT NOT NULL DEFAULT '[]'"}},
 		"console_tokens": {{"member_id", "TEXT NOT NULL DEFAULT ''"}},
 		"project_docs":   {{"content_type", "TEXT NOT NULL DEFAULT ''"}, {"size", "INTEGER NOT NULL DEFAULT 0"}, {"blob", "TEXT NOT NULL DEFAULT ''"}},
 		// A template's icon (v0.20.7).
@@ -467,6 +509,10 @@ func Open(path string) (*sql.DB, error) {
 		"automation_runs": {{"request", "TEXT NOT NULL DEFAULT ''"},
 			// The workflow run a workflow automation started (v0.21).
 			{"workflow_run", "TEXT NOT NULL DEFAULT ''"}},
+		// A run step's input (JSON; v0.21).
+		"run_steps": {{"payload", "TEXT NOT NULL DEFAULT ''"},
+			// Send-backs, the tasks sent, and what they cost (v0.21.1).
+			{"bounces", "INTEGER NOT NULL DEFAULT 0"}, {"tasks", "TEXT NOT NULL DEFAULT ''"}, {"usage", "TEXT NOT NULL DEFAULT ''"}},
 		// A workflow an automation starts, and the run's inputs (v0.21).
 		"automations": {{"workflow", "TEXT NOT NULL DEFAULT ''"}, {"inputs", "TEXT NOT NULL DEFAULT ''"}},
 	} {

@@ -1577,6 +1577,9 @@ textarea.app-input {
   line-height: 1.55;
   color: var(--muted);
 }
+/* The words under a dialog's title stand apart from what follows (a field,
+   a list, a note): 14px at least, whatever comes next. */
+.app-modal > p { margin-bottom: 14px; }
 .app-modal-actions {
   display: flex;
   justify-content: flex-end;
@@ -4871,18 +4874,21 @@ html.fp-docked .app-main .sp-side {
   background: linear-gradient(to bottom, transparent, var(--md-fade, var(--card)));
   pointer-events: none;
 }
+/* 展开 / 收起 a long reply: grey, as quiet as the text around it (green
+   is kept for a dot or a tick here and there). */
 .md-fold-btn {
   margin-top: 4px;
   padding: 2px 0;
   border: 0;
   background: transparent;
-  color: var(--accent);
+  color: var(--muted);
   font: inherit;
   font-size: 11.5px;
+  font-weight: 500;
   cursor: default;
 }
 .md-fold-btn:hover {
-  text-decoration: underline;
+  color: var(--fg);
 }
 .md-exec {
   margin: 8px 0;
@@ -5521,7 +5527,10 @@ button.app-label:hover { filter: brightness(0.95); }
 @media (max-width: 640px) { .au-templates { grid-template-columns: minmax(0, 1fr); } }
 
 /* The editor: to whom, what, when; its buttons stay in sight. */
-.au-edit { max-width: 480px; padding-bottom: 0; }
+.au-edit { max-width: 480px; }
+/* With its buttons in a bar stuck to the bottom (au-actions): the bar has
+   the room under them, the dialog none of its own. */
+.au-edit:has(.au-actions) { padding-bottom: 0; }
 .au-edit .app-field + .app-field, .au-edit .app-field + .au-skip { margin-top: 12px; }
 .au-to { display: flex; align-items: center; gap: 8px; }
 .au-to .pa { flex: none; }
@@ -8749,6 +8758,10 @@ body.is-resizing {
 .wf-node.is-selected.is-running, .wf-node.is-selected.is-waiting, .wf-node.is-selected.is-failed { box-shadow: 0 0 0 1.5px var(--fg-2); }
 @keyframes wf-breathe { 50% { opacity: 0.35; } }
 @media (prefers-reduced-motion: reduce) { .wf-node.is-running .wf-node-state > i { animation: none; } }
+/* A way out of a step that fails the run: said beside it, in red, not drawn
+   as a line to the end. */
+.wf-fail-note { position: absolute; transform: translateY(-50%); max-width: 128px; font-size: 10.5px; line-height: 1.3; text-align: right;
+  color: color-mix(in srgb, var(--red) 80%, var(--muted)); }
 .wf-term { position: absolute; width: 80px; height: 26px; display: flex; align-items: center; justify-content: center; border-radius: 999px;
   background: var(--pill); font-size: 11.5px; color: var(--fg-2); }
 .wf-term.is-fail { color: var(--red); background: color-mix(in srgb, var(--red) 9%, transparent); }
@@ -8782,8 +8795,41 @@ body.is-resizing {
   font-size: 13px; line-height: 1.55; color: var(--fg); }
 .wf-run-error.is-quiet { background: var(--pill); color: var(--fg-2); }
 .au-last.is-wait > i { background: var(--amber); }
-.wf-run-row { display: block; width: 100%; border: 0; background: none; font: inherit; text-align: left; color: var(--fg); cursor: default; }
+/* A workflow opened: tabs under its header (runs, how it goes, its steps,
+   its contracts), one shown at a time. */
+.wf-tabs { display: flex; gap: 2px; margin: 14px 0 12px; border-bottom: 1px solid var(--line-2); }
+.wf-tab { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border: 0; background: none;
+  font: inherit; font-size: 13px; color: var(--muted); cursor: default; }
+.wf-tab:hover { color: var(--fg); }
+.wf-tab.is-on { color: var(--fg); font-weight: 600; }
+.wf-tab.is-on::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px; border-radius: 2px; background: var(--fg); }
+.wf-tab small { font-size: 11px; font-weight: 400; color: var(--muted); }
+.wf-tab-tools { display: flex; justify-content: flex-end; margin: 0 0 10px; }
+/* A run, in a list: what it is about, its state, when. */
+.wf-run-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 54px; padding: 8px 14px; border: 0; background: none;
+  font: inherit; text-align: left; color: var(--fg); cursor: default; }
+.wf-run-row + .wf-run-row { border-top: 1px solid var(--line-2); }
 .wf-run-row:hover { background: var(--nav-hover); }
+.wf-run-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.wf-run-subject { font-size: 13.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wf-run-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; font-size: 12px; color: var(--muted); }
+.wf-run-state { font-weight: 500; color: var(--fg-2); }
+.wf-run-state.is-ok { color: var(--green); }
+.wf-run-state.is-wait { color: var(--amber); }
+.wf-run-state.is-bad { color: var(--red); }
+.wf-run-why { max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: color-mix(in srgb, var(--red) 75%, var(--muted)); }
+/* A run's (or a step's) state at a glance. */
+.wf-mark { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--pill); color: var(--muted); }
+.wf-mark svg { width: 12px; height: 12px; stroke-width: 2.5; }
+.wf-mark i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.wf-mark.is-done { background: color-mix(in srgb, var(--green) 14%, transparent); color: var(--green); }
+.wf-mark.is-bad { background: color-mix(in srgb, var(--red) 12%, transparent); color: var(--red); }
+.wf-mark.is-ok { color: var(--green); }
+.wf-mark.is-ok i { animation: wf-pulse 1.6s ease-in-out infinite; }
+.wf-mark.is-wait { background: color-mix(in srgb, var(--amber) 14%, transparent); color: var(--amber); }
+@keyframes wf-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .wf-mark.is-ok i { animation: none; } }
 .wf-steps { border-radius: 14px; }
 .wf-step-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 8px;
   background: color-mix(in srgb, var(--fg) 6%, transparent); color: var(--fg-2); }
@@ -8793,9 +8839,10 @@ body.is-resizing {
 .wf-step-name b { font-weight: 500; }
 .wf-step-name small { font-size: 11.5px; color: var(--muted); }
 .wf-step-who { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wf-step-summary { font-size: 12.5px; color: var(--fg-2); min-width: 0; }
-.wf-step-summary > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.au-last.is-bad.wf-step-summary { color: var(--red); }
+.wf-step-summary { font-size: 12.5px; color: var(--fg-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wf-step-summary.is-bad { color: var(--red); }
+.wf-step-summary.is-wait { color: var(--amber); }
+.wf-run-inputs { margin: 6px 0 4px; }
 .wf-step-actions { min-width: 0; }
 .wf-step-detail { margin-top: 0; }
 .wf-step-label { font-size: 11.5px; color: var(--muted); }
@@ -8835,3 +8882,250 @@ body.is-resizing {
 .wf-edit-pick { display: flex; gap: 6px; min-width: 0; }
 .wf-edit-pick .app-select-field { flex: 1; min-width: 0; }
 .wf-edit-role { flex: 1; min-width: 0; height: 28px; background: var(--card); }
+/* inputs and outputs (WorkflowContracts.tsx): per step, what it gets and
+   what it hands back, each field a line */
+.wfc { padding: 4px 0; }
+.wfc-step { padding: 12px 16px; }
+.wfc-step + .wfc-step { border-top: 1px solid var(--line-2); }
+.wfc-step-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; }
+.wfc-step-head b { font-weight: 500; }
+.wfc-who { font-size: 12px; color: var(--muted); }
+.wfc-run .wf-step-icon { color: var(--fg-2); }
+.wfc-io { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; padding-left: 36px; }
+.wfc-side { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.wfc-label { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--muted); }
+.wfc-label svg { width: 12px; height: 12px; }
+.wfc-run .wfc-schema { padding-left: 36px; }
+.wfc-empty { font-size: 12.5px; color: var(--fg-2); line-height: 1.55; }
+.wfc-schema { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.wfc-field { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; font-size: 12.5px; }
+.wfc-name { font-size: 12px; color: var(--fg); font-weight: 500; }
+.wfc-type { font-size: 12px; color: var(--fg-2); }
+.wfc-req { font-size: 11px; color: var(--fg); padding: 0 6px; border-radius: 999px; background: var(--pill); }
+.wfc-opt { font-size: 11px; color: var(--muted); }
+.wfc-desc { font-size: 12px; color: var(--muted); }
+.wfc-chip { font-size: 11px; color: var(--fg-2); padding: 0 6px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--line); overflow-wrap: anywhere; }
+.wfc-more { display: flex; flex-wrap: wrap; gap: 4px; }
+.wfc-json { align-self: flex-start; padding: 0 6px; }
+.wfc-json svg { width: 12px; height: 12px; }
+.wfc-raw { margin: 0; max-height: 240px; overflow: auto; padding: 8px 10px; border-radius: 8px; background: var(--pill); font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11.5px; line-height: 1.5; color: var(--fg); white-space: pre-wrap; overflow-wrap: anywhere; }
+.wfc-ok { margin-left: 8px; padding: 0 6px; border-radius: 999px; background: var(--green-soft); color: var(--green); font-size: 11px; }
+@media (max-width: 760px) { .wfc-io { grid-template-columns: minmax(0, 1fr); padding-left: 0; } .wfc-run .wfc-schema { padding-left: 0; } }
+/* editing a contract */
+.wfc-edit { display: flex; flex-direction: column; gap: 6px; margin: 2px 0 10px; }
+.wf-edit-step .wfc-edit { margin: 0; }
+.wfc-edit-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11.5px; color: var(--muted); }
+.wfc-row { display: grid; grid-template-columns: minmax(0, 1.1fr) 92px auto minmax(0, 1.4fr) 26px; gap: 6px; align-items: center; }
+.wfc-row .app-input, .wfc-row .app-select-field { height: 28px; background: var(--card); }
+.wfc-edit > .app-input { background: var(--card); }
+.wfc-req-toggle { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.wfc-req-toggle.is-on { color: var(--fg); }
+.wfc-add { align-self: flex-start; }
+.wfc-add svg { width: 13px; height: 13px; }
+.wfc-text { font-size: 12px; line-height: 1.5; background: var(--card); }
+.wfc-bad { color: var(--red); }
+@media (max-width: 640px) { .wfc-row { grid-template-columns: minmax(0, 1fr) 92px auto 26px; } .wfc-row > .app-input:nth-of-type(2) { grid-column: 1 / -1; grid-row: 2; } }
+
+/* ── 工作流的观测 (WorkflowObserve.tsx): figures, timeline, files, scores, logs, comparison ── */
+.wfo-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 4px; }
+.wfo-foot { font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wfo-note { margin: 8px 2px 0; }
+@media (max-width: 900px) { .wfo-stats { grid-template-columns: 1fr 1fr; } .wfo-stats .au-stat:last-child { grid-column: auto; } }
+/* status swatches: done / working / waiting / failed / cancelled */
+.wfo-swatch, .wfo-bar, .wfo-tl-bar { background: var(--faint); }
+.is-good.wfo-swatch, .is-good.wfo-bar, .is-good.wfo-tl-bar { background: color-mix(in srgb, var(--green) 78%, transparent); }
+.is-run.wfo-swatch, .is-run.wfo-bar, .is-run.wfo-tl-bar { background: color-mix(in srgb, var(--green) 34%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--green) 70%, transparent); }
+.is-wait.wfo-swatch, .is-wait.wfo-bar, .is-wait.wfo-tl-bar { background: color-mix(in srgb, var(--amber) 70%, transparent); }
+.is-bad.wfo-swatch, .is-bad.wfo-bar, .is-bad.wfo-tl-bar { background: color-mix(in srgb, var(--red) 75%, transparent); }
+.is-off.wfo-swatch, .is-off.wfo-bar, .is-off.wfo-tl-bar { background: color-mix(in srgb, var(--fg) 22%, transparent); }
+.wfo-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 10px; font-size: 11.5px; color: var(--muted); }
+.wfo-legend > span { display: inline-flex; align-items: center; gap: 5px; }
+.wfo-swatch { width: 9px; height: 9px; border-radius: 3px; }
+/* the last runs as bars */
+.wfo-recent { margin-top: 10px; padding: 12px 14px; }
+.wfo-recent-head { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+.wfo-recent-max { font-variant-numeric: tabular-nums; }
+.wfo-bars { display: flex; align-items: flex-end; gap: 2px; height: 72px; margin-top: 8px; border-bottom: 1px solid var(--line); }
+.wfo-bar-hit { flex: 1 1 0; max-width: 26px; height: 100%; display: flex; align-items: flex-end; padding: 0; border: 0; background: none; cursor: pointer; }
+.wfo-bar-hit:hover { background: color-mix(in srgb, var(--fg) 5%, transparent); }
+.wfo-bar-hit:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.wfo-bar { display: block; width: 100%; border-radius: 4px 4px 0 0; }
+/* each step's figures */
+.wfo-table { padding: 4px 0; overflow-x: auto; }
+.wfo-tr { display: grid; grid-template-columns: minmax(140px, 2fr) repeat(6, minmax(64px, 1fr)); align-items: center; gap: 8px; padding: 7px 14px;
+  font-size: 12.5px; color: var(--fg-2); font-variant-numeric: tabular-nums; }
+.wfo-th { font-size: 11.5px; color: var(--muted); border-bottom: 1px solid var(--line); }
+.wfo-trow + .wfo-trow { border-top: 1px solid var(--line); }
+.wfo-step { display: flex; flex-direction: column; min-width: 0; }
+.wfo-step b { font-weight: 500; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wfo-step small { font-size: 11px; color: var(--muted); }
+.wfo-bad { color: var(--red); }
+.wfo-good { color: var(--green); }
+.wfo-faint { color: var(--faint); }
+.wfo-err { display: flex; align-items: baseline; gap: 8px; width: 100%; margin: -2px 0 0; padding: 0 14px 8px; border: 0; background: none; font: inherit;
+  font-size: 12px; text-align: left; color: var(--red); cursor: pointer; }
+.wfo-err > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wfo-err small { flex: none; color: var(--muted); }
+.wfo-err:hover > span { text-decoration: underline; }
+@media (max-width: 640px) { .wfo-tr { grid-template-columns: minmax(110px, 2fr) repeat(6, minmax(52px, 1fr)); padding: 7px 10px; } .wfo-table .wfo-tr { min-width: 520px; } }
+/* scores */
+.wfo-scores { border-radius: 14px; }
+.wfo-score { display: flex; align-items: center; gap: 14px; padding: 9px 14px; font-size: 12.5px; color: var(--fg-2); }
+.wfo-score-name { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 0 1 220px; }
+.wfo-score-name svg { width: 14px; height: 14px; color: var(--amber); flex: none; }
+.wfo-score-name b { font-weight: 500; color: var(--fg); }
+.wfo-score-name small, .wfo-score-avg small { font-size: 11.5px; color: var(--muted); }
+.wfo-score-avg b { font-size: 14px; font-weight: 650; color: var(--fg); font-variant-numeric: tabular-nums; }
+.wfo-score-range, .wfo-score-n { color: var(--muted); font-variant-numeric: tabular-nums; }
+.wfo-score-note { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wfo-score-n { margin-left: auto; }
+.wfo-score-fields { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+@media (max-width: 640px) { .wfo-score-fields { grid-template-columns: 1fr 1fr; } .wfo-score-fields > :first-child { grid-column: 1 / -1; } .wfo-score { flex-wrap: wrap; gap: 6px 12px; } }
+/* a run's timeline */
+.wfo-timeline { padding: 10px 14px 12px; }
+.wfo-tl-row { display: grid; grid-template-columns: minmax(90px, 180px) minmax(0, 1fr) 72px; align-items: center; gap: 10px; width: 100%; padding: 4px 0;
+  border: 0; background: none; font: inherit; font-size: 12.5px; color: var(--fg-2); text-align: left; cursor: pointer; border-radius: 6px; }
+.wfo-tl-row:hover { background: var(--nav-hover); }
+.wfo-tl-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wfo-tl-name small { margin-left: 4px; color: var(--muted); }
+.wfo-tl-track { position: relative; height: 14px; border-radius: 4px; background: color-mix(in srgb, var(--fg) 4%, transparent); }
+.wfo-tl-bar { position: absolute; top: 2px; bottom: 2px; border-radius: 4px; }
+.wfo-tl-bar.is-human { background-image: repeating-linear-gradient(135deg, transparent 0 4px, color-mix(in srgb, var(--card) 45%, transparent) 4px 6px); }
+.wfo-tl-bar.is-run { animation: wf-breathe 1.6s ease-in-out infinite; }
+.wfo-tl-time { font-size: 11.5px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.wfo-tl-axis { display: flex; justify-content: space-between; margin: 4px 82px 0 calc(min(180px, 30%) + 10px); font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+@media (max-width: 640px) { .wfo-tl-row { grid-template-columns: 90px minmax(0, 1fr) 56px; } .wfo-tl-axis { margin: 4px 66px 0 100px; } }
+@media (prefers-reduced-motion: reduce) { .wfo-tl-bar.is-run { animation: none; } }
+/* files handed back */
+.wfo-artifacts { display: flex; flex-direction: column; gap: 12px; padding: 12px 14px; }
+.wfo-art-group { display: flex; flex-direction: column; gap: 6px; }
+.wfo-art-group .wf-step-label small { color: var(--faint); }
+/* a step's log */
+.app-modal.wfo-log-modal { width: min(820px, calc(100vw - 32px)); max-width: none; }
+.wfo-log-toggle { display: flex; align-items: center; gap: 6px; margin: 2px 0 10px; font-size: 12.5px; color: var(--fg-2); }
+.wfo-log { display: flex; flex-direction: column; max-height: min(62vh, 640px); overflow-y: auto; border-radius: 10px; background: var(--pill); padding: 6px 12px; }
+.wfo-log-line { display: grid; grid-template-columns: 62px 72px minmax(0, 1fr); gap: 8px; padding: 4px 0; font-size: 12.5px; line-height: 1.5; color: var(--fg-2); }
+.wfo-log-line + .wfo-log-line { border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
+.wfo-log-kind { color: var(--muted); font-size: 11.5px; padding-top: 1px; }
+.wfo-log-kind small { margin-left: 3px; color: var(--faint); }
+.wfo-log-line.is-task .wfo-log-kind, .wfo-log-line.is-reply .wfo-log-kind { color: var(--fg); font-weight: 500; }
+.wfo-log-line.is-failure .wfo-log-kind, .wfo-log-line.is-stderr .wfo-log-kind, .wfo-log-line.is-tool_error .wfo-log-kind { color: var(--red); }
+.wfo-log-body { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.wfo-log-body pre { margin: 0; font-family: inherit; white-space: pre-wrap; overflow-wrap: anywhere; }
+.wfo-log-body pre.is-block { padding: 6px 8px; border-radius: 6px; background: var(--card); }
+.wfo-log-line.is-stdout pre, .wfo-log-line.is-stderr pre, .wfo-log-line.is-tool pre, .wfo-log-line.is-tool_result pre { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11.5px; }
+.wfo-log-body pre.is-bad { color: var(--red); }
+.wfo-log-more { display: flex; align-items: center; gap: 4px; min-width: 0; padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.wfo-log-more span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wfo-log-more svg { flex: none; width: 13px; height: 13px; color: var(--muted); }
+@media (max-width: 640px) { .wfo-log-line { grid-template-columns: 56px minmax(0, 1fr); } .wfo-log-line .wfo-log-body { grid-column: 1 / -1; } }
+/* two runs side by side */
+.app-modal.wfo-compare-modal { width: min(720px, calc(100vw - 32px)); max-width: none; }
+.wfo-cmp { margin-top: 6px; border-radius: 10px; background: var(--pill); }
+.wfo-cmp .wfo-tr { grid-template-columns: minmax(120px, 1.6fr) repeat(3, minmax(80px, 1fr)); }
+.wfo-cmp .wfo-tr.is-total { font-weight: 500; color: var(--fg); }
+.wfo-cmp small { color: var(--muted); }
+.wfo-inline-icon { width: 13px; height: 13px; color: var(--amber); }
+.wfo-cmp .wfo-step { flex-direction: row; align-items: center; gap: 5px; }
+.wfo-stats.wfo-run-stats { margin: 6px 0 14px; }
+
+/* 工作流 list: a row's last run (its mark, state, what it was about, when),
+   and 运行 always there. */
+.wf-row-last { gap: 6px; }
+.wf-row-last .wf-mark { width: 16px; height: 16px; }
+.wf-row-last .wf-mark svg { width: 10px; height: 10px; }
+.wf-row-last .wf-mark i { width: 6px; height: 6px; }
+.wf-row-subject { min-width: 0; max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-2); }
+.wf-run-now { flex: none; margin-right: 6px; }
+/* 新建工作流: the ready-made ones in a dialog. */
+.app-modal.wf-new-dlg { width: min(720px, calc(100vw - 32px)); max-width: none; }
+.wf-new-dlg .au-templates { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.wf-new-dlg [data-testid=workflow-new] { margin-top: 14px; }
+
+/* Editing a workflow: a page. The steps drawn on the left (click one), the
+   one picked edited on the right; one column when narrow. */
+.wf-ed-head { align-items: flex-start; }
+.wf-ed-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 420px); gap: 16px; align-items: start; margin-top: 12px; }
+.wf-ed-map { min-width: 0; position: sticky; top: 0; display: flex; flex-direction: column; gap: 8px; }
+.wf-ed-map .wf-graph-card { margin: 0; }
+.wf-ed-pick { display: flex; flex-wrap: wrap; gap: 6px; }
+.wf-ed-chip { height: 26px; padding: 0 10px; border: 0; border-radius: 999px; background: var(--pill); font: inherit; font-size: 12.5px; color: var(--fg-2); cursor: default; }
+.wf-ed-chip:hover { background: var(--pill-hover); color: var(--fg); }
+.wf-ed-chip.is-on { background: var(--fg); color: var(--bg); }
+.wf-ed-panel { min-width: 0; display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 12px; background: var(--card); box-shadow: var(--panel-shadow); }
+.wf-ed-panel h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.wf-ed-panel .wf-edit-row { grid-template-columns: 1fr 1fr; }
+.wf-ed-panel .wf-edit-grow, .wf-ed-panel .wf-edit-who { grid-column: 1 / -1; }
+.wf-ed-panel .wf-edit-n { font-family: inherit; font-size: 11.5px; }
+@media (max-width: 980px) {
+  .wf-ed-body { grid-template-columns: minmax(0, 1fr); }
+  .wf-ed-map { position: static; }
+}
+/* (on the white panel the fields stand out as on any form) */
+.wf-ed-panel .wf-edit-cell .app-select-field, .wf-ed-panel .wfc-row .app-input, .wf-ed-panel .wfc-row .app-select-field,
+.wf-ed-panel .wf-edit-title, .wf-ed-panel .wf-edit-role { background: var(--pill); }
+.wf-ed-side { min-width: 0; scroll-margin-top: 12px; }
+.wf-steps-anchor { scroll-margin-top: 12px; }
+/* ── 电脑允许开工的文件夹 (MachineDirs.tsx) ── */
+.mdirs-kv { align-items: flex-start; }
+.mdirs { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; min-width: 0; width: 100%; }
+.mdirs-list { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.mdirs-chip { padding-right: 4px; }
+.mdirs-chip:not(:has(.mdirs-x)) { padding-right: 9px; }
+.mdirs-x { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%;
+  background: none; color: var(--muted); cursor: pointer; }
+.mdirs-x:hover { background: color-mix(in srgb, var(--fg) 10%, transparent); color: var(--fg); }
+.mdirs-x svg { width: 12px; height: 12px; }
+.mdirs-add { display: flex; gap: 6px; width: min(420px, 100%); }
+.mdirs-add .app-input { flex: 1; min-width: 0; height: 30px; }
+.mdirs-far { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; font-size: 12px; color: var(--muted); }
+.mdirs-far code { padding: 2px 6px; border-radius: 6px; background: var(--pill); color: var(--fg-2); font-size: 11.5px; }
+.mdirs-note { margin: 0; text-align: right; max-width: 460px; }
+.mdirs-allow { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-top: 6px; }
+.app-field-hint .mdirs-far { justify-content: flex-start; margin-top: 6px; }
+
+/* ← → in the crumb bar (nav.ts): back to where you were, forward again. */
+.app-nav-arrows { display: inline-flex; align-items: center; gap: 0; margin-left: -2px; --wails-draggable: no-drag; }
+.app-nav-arrows .app-btn:disabled { opacity: 0.32; }
+.app-nav-arrows .app-btn svg { width: 17px; height: 17px; }
+.handoff-state.is-stale { color: var(--amber); background: var(--amber-soft); }
+
+/* 允许谁派任务: room between the words and the picker, a line saying what
+   holds now, and names wide enough to read. */
+.allow-dlg .allow-now { margin-top: 14px; padding: 8px 12px; border-radius: 8px; font-size: 12.5px; color: var(--fg-2); background: var(--pill); }
+.allow-dlg .allow-now.is-limited { color: var(--fg); }
+.allow-dlg .app-picker { margin-top: 12px; margin-bottom: 4px; }
+.allow-dlg .app-tag-box { min-height: 36px; padding: 5px 10px; }
+.allow-dlg .app-picker-list { margin-top: 8px; max-height: 300px; padding: 4px; }
+.allow-dlg .app-picker-row { height: 36px; gap: 10px; padding: 0 10px; }
+.allow-dlg .app-picker-name { flex: none; max-width: 55%; }
+.allow-dlg .app-modal-actions { margin-top: 18px; }
+
+/* ⌃Tab (AgentSwitcher.tsx): the agents in a row of large faces over the
+   window, as ⌘Tab shows apps; the one picked framed, its name under the row. */
+.asw-layer { position: fixed; inset: 0; z-index: 72; display: flex; align-items: center; justify-content: center; }
+/* Frosted glass, as the Mac's own switcher: what is behind shows through,
+   blurred and a little brighter; a hairline light edge on top. */
+.asw { max-width: min(860px, calc(100vw - 48px)); padding: 16px 16px 12px; border-radius: 24px;
+  background: rgba(246, 246, 248, 0.42); backdrop-filter: blur(40px) saturate(1.8); -webkit-backdrop-filter: blur(40px) saturate(1.8);
+  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.55), 0 0 0 0.5px rgba(0, 0, 0, 0.12), 0 20px 60px rgba(0, 0, 0, 0.22);
+  animation: asw-in 0.12s ease-out; }
+/* (in place: app-pop is for dialogs centred by a transform) */
+@keyframes asw-in { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: none; } }
+.dark .asw { background: rgba(38, 38, 42, 0.42);
+  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.16), 0 0 0 0.5px rgba(0, 0, 0, 0.5), 0 20px 60px rgba(0, 0, 0, 0.45); }
+.asw-row { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding: 2px; }
+.asw-row::-webkit-scrollbar { display: none; }
+.asw-item { position: relative; flex: none; display: flex; align-items: center; justify-content: center; width: 84px; height: 84px;
+  border: 0; border-radius: 18px; background: none; cursor: default; }
+.asw-item.is-on { background: rgba(0, 0, 0, 0.1); box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.08); }
+.dark .asw-item.is-on { background: rgba(255, 255, 255, 0.16); box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.12); }
+.asw-item.is-away { opacity: 0.45; }
+.asw-dot { position: absolute; right: 14px; bottom: 14px; width: 10px; height: 10px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9); }
+.dark .asw-dot { box-shadow: 0 0 0 2px rgba(30, 30, 34, 0.9); }
+.asw-dot.is-asking { background: var(--amber); }
+.asw-name { margin-top: 8px; text-align: center; font-size: 13.5px; font-weight: 600; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.asw-hint { margin-top: 2px; text-align: center; font-size: 11px; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .asw { animation: none; } }
+

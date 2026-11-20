@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Bot, ChevronDown, FlaskConical, MessageSquare, Monitor, Pause, Pencil, Play, Plus, Rocket, RotateCcw, Sparkles, Split, Square, Trash2, UserCheck, Workflow as WorkflowIcon } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavSub } from "@/app/nav";
+import { Bot, Check, ChevronDown, FlaskConical, MessageSquare, Minus, Monitor, MoreHorizontal, Pause, Pencil, Play, Plus, Rocket, RotateCcw, Sparkles, Split, Square, Trash2, UserCheck, Workflow as WorkflowIcon, X } from "lucide-react";
 import type { RunStep, WfEdgeDef, WfSchema, WfStepDef, Workflow, WorkflowDecision, WorkflowDef, WorkflowRun } from "@/api";
 import { ApiError, appApi } from "@/appapi";
 import type { AgentRow } from "@/app/types";
@@ -10,6 +11,8 @@ import { PageHero, SectionHead, SectionSkeleton } from "@/app/PageHero";
 import { RowsSkeleton } from "@/app/Skeleton";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
 import { WorkflowGraph, stateWords, stepKind, stepStates } from "@/app/WorkflowGraph";
+import { ContractEditor, ContractsSection } from "@/app/WorkflowContracts";
+import { CompareButton, CompareDialog, LogButton, RunArtifacts, RunMetricsStrip, RunScores, RunTimeline, RunsFilterSeg, StepLogDialog, WorkflowStatsSection, costWords, msWords, type RunsFilter } from "@/app/WorkflowObserve";
 import { L } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
 
@@ -171,6 +174,8 @@ export function WorkflowsPage({ hubId, rows, now, open, onOpened, onOpenMessage 
   const [runId, setRunId] = useState<string | null>(null);
   const [starting, setStarting] = useState<Workflow | null>(null);
   const [making, setMaking] = useState<Ready | "agent" | null>(null);
+  // 新建工作流: the ready-made ones and 让 agent 写一个, in a dialog.
+  const [choosing, setChoosing] = useState(false);
   const [removing, setRemoving] = useState<Workflow | null>(null);
   const [editing, setEditing] = useState<Workflow | null>(null);
   const [stamp, setStamp] = useState(0);
@@ -190,6 +195,11 @@ export function WorkflowsPage({ hubId, rows, now, open, onOpened, onOpenMessage 
   }, [hubId]);
   useEffect(() => { setList(seen.get(hubId) ?? null); load(); const t = setInterval(load, 5_000); return () => clearInterval(t); }, [hubId, load]);
   const refresh = () => { load(); setStamp((n) => n + 1); };
+  // ← → at the top (nav.ts): what is open here is part of where you are.
+  useNavSub("workflows", { open: openId, run: runId, edit: editing?.id ?? null }, { open: null, run: null, edit: null }, (v) => {
+    setOpenId(v.open); setRunId(v.run);
+    setEditing(v.edit ? (list || []).find((w) => w.id === v.edit) || null : null);
+  });
   useEffect(() => { if (open) { setOpenId(open.workflow); setRunId(open.run || null); onOpened?.(); } }, [open?.at]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggle = async (w: Workflow) => {
@@ -201,13 +211,37 @@ export function WorkflowsPage({ hubId, rows, now, open, onOpened, onOpenMessage 
     try { await appApi.deleteWorkflow(hubId, w.id); setRemoving(null); if (openId === w.id) setOpenId(null); refresh(); } catch (e) { setError(e); setRemoving(null); } finally { setBusy(""); }
   };
 
+  const gallery = (picked?: () => void) => (
+    <div className="au-templates" data-testid="workflow-templates">
+      {readyMade().map((t) => (
+        <button key={t.id} type="button" className="au-template" onClick={() => { picked?.(); setMaking(t); }}>
+          <span className="tp-icon"><t.icon /></span>
+          <span className="au-template-text">
+            <span className="au-template-name">{t.name}</span>
+            <span className="au-template-hint">{t.hint}</span>
+          </span>
+        </button>
+      ))}
+      <button type="button" className="au-template is-blank" onClick={() => { picked?.(); setMaking("agent"); }}>
+        <span className="tp-icon"><Sparkles /></span>
+        <span className="au-template-text">
+          <span className="au-template-name">{L("让 agent 写一个", "Have an agent write one")}</span>
+          <span className="au-template-hint">{L("用一句话说清要怎么走，它写好、检查好再存进来", "Say how it should go; it writes, checks and saves it")}</span>
+        </span>
+      </button>
+    </div>
+  );
+
   const dialogs = (
     <>
+      <Modal open={choosing} onOpenChange={setChoosing} title={L("新建工作流", "New workflow")} className="wf-new-dlg"
+        description={L("挑一个现成的，只选谁来做；或者用一句话说清楚，让 agent 写。", "Pick a ready-made one and choose who does what, or say how it goes and have an agent write it.")}>
+        <div data-testid="workflow-new">{gallery(() => setChoosing(false))}</div>
+      </Modal>
       <StartDialog hubId={hubId} wf={starting} onClose={() => setStarting(null)} onStarted={(r) => { setStarting(null); refresh(); setOpenId(r.workflow_id); setRunId(r.id); }} />
       <MakeDialog hubId={hubId} rows={rows} making={making} onClose={() => setMaking(null)}
         onMade={(w) => { setMaking(null); refresh(); setOpenId(w.id); }}
         onAsked={(agent, msg) => { setMaking(null); onOpenMessage?.(agent, msg); }} />
-      <EditDialog hubId={hubId} rows={rows} wf={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); refresh(); }} />
       <ConfirmDialog open={!!removing} onOpenChange={(o) => !o && setRemoving(null)} title={L("删除这个工作流？", "Delete this workflow?")}
         description={L("它的运行记录一起删除，还在跑的会先停下。它发出去的任务和 agent 的回复都保留。", "Its runs go too; the ones going are stopped first. The tasks it sent and the answers stay.")}
         confirmLabel={L("删除", "Delete")} onConfirm={() => removing && void remove(removing)} busy={!!removing && busy === removing.id} />
@@ -216,11 +250,20 @@ export function WorkflowsPage({ hubId, rows, now, open, onOpened, onOpenMessage 
   );
 
   const opened = openId ? (list || []).find((w) => w.id === openId) : undefined;
+  if (editing) {
+    return (
+      <div className="pc au pcd aud wf">
+        <WorkflowEditor hubId={hubId} rows={rows} wf={editing} onClose={() => setEditing(null)}
+          onSaved={() => { setOpenId(editing.id); setRunId(null); setEditing(null); refresh(); }} />
+        {dialogs}
+      </div>
+    );
+  }
   if (opened && runId) {
     return (
       <div className="pc au pcd aud wf" data-testid="workflow-run">
         <RunDetail hubId={hubId} runId={runId} wf={opened} rows={rows} now={now} stamp={stamp} onBack={() => setRunId(null)}
-          onChanged={refresh} onOpenMessage={onOpenMessage} />
+          onChanged={refresh} onOpenMessage={onOpenMessage} onOpenRun={setRunId} />
         {dialogs}
       </div>
     );
@@ -237,32 +280,11 @@ export function WorkflowsPage({ hubId, rows, now, open, onOpened, onOpenMessage 
     );
   }
 
-  const gallery = (
-    <div className="au-templates" data-testid="workflow-templates">
-      {readyMade().map((t) => (
-        <button key={t.id} type="button" className="au-template" onClick={() => setMaking(t)}>
-          <span className="tp-icon"><t.icon /></span>
-          <span className="au-template-text">
-            <span className="au-template-name">{t.name}</span>
-            <span className="au-template-hint">{t.hint}</span>
-          </span>
-        </button>
-      ))}
-      <button type="button" className="au-template is-blank" onClick={() => setMaking("agent")}>
-        <span className="tp-icon"><Sparkles /></span>
-        <span className="au-template-text">
-          <span className="au-template-name">{L("让 agent 写一个", "Have an agent write one")}</span>
-          <span className="au-template-hint">{L("用一句话说清要怎么走，它写好、检查好再存进来", "Say how it should go; it writes, checks and saves it")}</span>
-        </span>
-      </button>
-    </div>
-  );
-
   return (
     <div className="pc au wf">
       <PageHero title={L("工作流", "Workflows")}
         subtitle={L("把固定的做法写成流程：每一步交给一个 agent、一台电脑，或者等你决定。工作区按顺序往下走，电脑关着也照常。", "A fixed way of working: each step goes to an agent, a computer, or waits for you. The workspace walks it in order, while your computers are off too.")}>
-        {!unsupported && <button type="button" className="app-btn app-btn-primary" onClick={() => setMaking("agent")}><Plus />{L("新建工作流", "New workflow")}</button>}
+        {!unsupported && <button type="button" className="app-btn app-btn-primary" onClick={() => setChoosing(true)}><Plus />{L("新建工作流", "New workflow")}</button>}
       </PageHero>
       <ErrorText error={error} />
       {unsupported ? (
@@ -316,34 +338,40 @@ export function WorkflowsPage({ hubId, rows, now, open, onOpened, onOpenMessage 
                     <button type="button" className="au-row-main" onClick={() => setOpenId(w.id)} title={L("打开：流程和每一次运行", "Open: its steps and every run")}>
                       <span className="au-icon"><WorkflowIcon /></span>
                       <span className="au-row-text">
-                        <span className="au-row-name">{w.name}</span>
+                        <span className="au-row-name">{w.title || w.name}</span>
                         <span className="au-row-what">
                           <span>{L(`${w.steps} 步`, `${w.steps} steps`)}</span>
                           {w.description && <span>{w.description}</span>}
                           {w.project && <span>{L(`项目 ${w.project}`, `Project ${w.project}`)}</span>}
                         </span>
-                        <span className="au-row-status">
-                          {!w.enabled ? <span>{L("已停用", "Off")}</span>
-                            : w.active > 0 ? <span className="au-last is-ok"><i aria-hidden />{L(`${w.active} 个在跑`, `${w.active} running`)}</span> : null}
-                          {w.last_run && w.active === 0 && (
-                            <span className={cn("au-last", w.last_run.status === "failed" && "is-bad", w.last_run.status === "succeeded" && "is-ok")}>
-                              <i aria-hidden />{L(`上次 ${timeAgo(w.last_run.created_at, now)} · `, `Last ${timeAgo(w.last_run.created_at, now)} · `)}{runWords(w.last_run.status)}
-                            </span>
-                          )}
-                          {!w.last_run && w.enabled && <span>{L("还没跑过", "Not run yet")}</span>}
+                        <span className="au-row-status wf-row-last">
+                          {!w.enabled && <span>{L("已停用", "Off")}</span>}
+                          {w.enabled && w.active > 1 && <span className="wf-run-state is-ok">{L(`${w.active} 个在跑`, `${w.active} running`)}</span>}
+                          {w.last_run ? (
+                            <>
+                              <RunMark status={w.last_run.status} />
+                              <span className={cn("wf-run-state", runTone(w.last_run.status))}>{runWords(w.last_run.status)}</span>
+                              {runSubject(w.last_run) && <span className="wf-row-subject">{runSubject(w.last_run)}</span>}
+                              <span>{timeAgo(w.last_run.created_at, now)}</span>
+                            </>
+                          ) : w.enabled && <span>{L("还没跑过", "Not run yet")}</span>}
                         </span>
                       </span>
                     </button>
-                    <button type="button" className="app-btn app-btn-plain au-run-now" disabled={!w.enabled} onClick={() => setStarting(w)}
-                      title={L("运行一次", "Run it")} aria-label={L("运行", "Run")}><Play /></button>
+                    <button type="button" className="app-btn app-btn-small wf-run-now" disabled={!w.enabled} onClick={() => setStarting(w)}
+                      title={L("运行一次", "Run it")}><Play />{L("运行", "Run")}</button>
                     <Switch on={w.enabled} disabled={busy === w.id} onChange={() => void toggle(w)} label={w.enabled ? L("停用", "Turn off") : L("启用", "Turn on")} />
                   </div>
                 ))}
               </div>
             </>
           )}
-          <SectionHead title={L("新建一个", "Make one")} />
-          {gallery}
+          {list.length === 0 && (
+            <>
+              <SectionHead title={L("从这里开始", "Start here")} />
+              {gallery()}
+            </>
+          )}
         </>
       )}
       {dialogs}
@@ -534,7 +562,7 @@ function MakeDialog({ hubId, rows, making, onClose, onMade, onAsked }: {
             <textarea className="app-input au-body" rows={4} value={ask} onChange={(e) => setAsk(e.target.value)} disabled={busy}
               placeholder={L("比如：每次有新需求，先让 Claude 写方案，Codex 审；审过了 Claude 实现，在 Studio Mac 上跑测试，过了再问我要不要合并。", "e.g. For each new request, Claude writes a plan and Codex reviews it; once it passes Claude builds it, the tests run on Studio Mac, and if they pass I am asked whether to merge.")} /></label>
           <ErrorText error={error} />
-          <div className="app-modal-actions">
+          <div className="app-modal-actions au-actions">
             {!agents.length && <span className="app-modal-hint">{L("先加一个 agent", "Add an agent first")}</span>}
             <button type="button" className="app-btn" onClick={onClose} disabled={busy}>{L("取消", "Cancel")}</button>
             <button type="submit" className="app-btn app-btn-primary" disabled={busy || !r || !ask.trim()}><MessageSquare />{busy ? L("正在发…", "Sending…") : L("交给它写", "Ask it")}</button>
@@ -563,7 +591,7 @@ function MakeDialog({ hubId, rows, making, onClose, onMade, onAsked }: {
           <WorkflowGraph def={byRole(ready.make(who, name || ready.name))} hubId={hubId} rows={rows} />
         </div>
         <ErrorText error={error} />
-        <div className="app-modal-actions">
+        <div className="app-modal-actions au-actions">
           {lacking && <span className="app-modal-hint">{lacking.computer ? L("先连一台电脑", "Connect a computer first") : L("先加一个 agent", "Add an agent first")}</span>}
           <button type="button" className="app-btn" onClick={onClose} disabled={busy}>{L("取消", "Cancel")}</button>
           <button type="submit" className="app-btn app-btn-primary" disabled={busy || !!lacking || !name.trim()}>{busy ? L("正在保存…", "Saving…") : L("保存工作流", "Save workflow")}</button>
@@ -583,23 +611,39 @@ const timeouts = (): { v: string; label: string }[] => [
   { v: "2h", label: L("2 小时", "2 hours") }, { v: "4h", label: L("4 小时", "4 hours") }, { v: "1d", label: L("1 天", "1 day") }, { v: "3d", label: L("3 天", "3 days") },
 ];
 
-function EditDialog({ hubId, rows, wf, onClose, onSaved }: { hubId: string; rows: AgentRow[]; wf: Workflow | null; onClose: () => void; onSaved: () => void }) {
+/**
+ * Editing a workflow, a page of its own: the steps drawn on the left (click
+ * one), what is picked on the right — 基本 (its description, what a run is
+ * given, how many rounds a loop may go) or one step (who does it, timeout,
+ * retries, what it is asked, what it hands back). Saved as a new version;
+ * runs going on keep theirs. Steps are added and removed by the agent that
+ * wrote it.
+ */
+function WorkflowEditor({ hubId, rows, wf, onClose, onSaved }: { hubId: string; rows: AgentRow[]; wf: Workflow; onClose: () => void; onSaved: () => void }) {
   const [def, setDef] = useState<WorkflowDef | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const [picked, setPickedRaw] = useState<string>(BASIC);
+  const panelRef = useRef<HTMLDivElement>(null);
+  // One column (narrow): the panel is under the drawing; show it.
+  const setPicked = (v: string | ((p: string) => string)) => {
+    setPickedRaw(v);
+    if (window.matchMedia("(max-width: 980px)").matches) requestAnimationFrame(() => panelRef.current?.scrollIntoView({ block: "start", behavior: "smooth" }));
+  };
+  const [changed, setChanged] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   useEffect(() => {
-    if (!wf) return;
-    setDef(null); setError(null); setBusy(false);
+    setDef(null); setError(null); setBusy(false); setChanged(false); setPickedRaw(BASIC);
     let off = false;
     appApi.workflow(hubId, wf.id).then((w) => { if (!off && w.definition) setDef(structuredClone(w.definition)); }, (e) => { if (!off) setError(e); });
     return () => { off = true; };
-  }, [hubId, wf]);
-  if (!wf) return null;
+  }, [hubId, wf.id]);
   const mine = rows.filter((r) => r.hub.id === hubId);
   const agents = mine.filter((r) => agentKind(r.st.agent) === "agent");
   const computers = mine.filter((r) => r.st.agent.binding.harness === "exec");
-  const setStep = (i: number, patch: Partial<WfStepDef>) => setDef((d) => d && { ...d, steps: d.steps.map((x, j) => (j === i ? { ...x, ...patch } : x)) });
-  const setEdge = (i: number, patch: Partial<WfEdgeDef>) => setDef((d) => d && { ...d, edges: (d.edges || []).map((x, j) => (j === i ? { ...x, ...patch } : x)) });
+  const edit = (f: (d: WorkflowDef) => WorkflowDef) => { setDef((d) => d && f(d)); setChanged(true); };
+  const setStep = (i: number, patch: Partial<WfStepDef>) => edit((d) => ({ ...d, steps: d.steps.map((x, j) => (j === i ? { ...x, ...patch } : x)) }));
+  const setEdge = (i: number, patch: Partial<WfEdgeDef>) => edit((d) => ({ ...d, edges: (d.edges || []).map((x, j) => (j === i ? { ...x, ...patch } : x)) }));
   const idx = new Map((def?.steps || []).map((x, i) => [x.id, i]));
   const loops = (def?.edges || []).map((e, i) => ({ e, i })).filter(({ e }) => idx.has(e.to) && (idx.get(e.to) ?? 0) <= (idx.get(e.from) ?? 0));
   const noRole = def?.steps.find((s) => s.role !== undefined && !s.role.trim());
@@ -608,122 +652,205 @@ function EditDialog({ hubId, rows, wf, onClose, onSaved }: { hubId: string; rows
     setBusy(true); setError(null);
     try { await appApi.applyWorkflow(hubId, def); onSaved(); } catch (e) { setError(e); } finally { setBusy(false); }
   };
+  const close = () => (changed ? setLeaving(true) : onClose());
   const label = (s: WfStepDef) => s.title || s.id;
-  return (
-    <Modal open onOpenChange={(o) => !o && !busy && onClose()} title={L(`编辑「${wf.name}」`, `Edit "${wf.name}"`)} className="au-edit wf-edit"
-      description={L("改好保存成新的一版；正在跑的照旧用原来那版。要加减步骤，让写它的 agent 改。", "Saved as a new version; runs going on keep theirs. To add or remove steps, have the agent that wrote it change it.")}>
-      <form data-testid="workflow-edit" onSubmit={(e) => { e.preventDefault(); void save(); }}>
-        {!def && !error && <span className="skel skel-line" style={{ width: "60%" }} />}
-        {def && (
-          <>
-            <label className="app-field"><span className="app-field-label">{L("说明（可选）", "Description (optional)")}</span>
-              <input className="app-input" value={def.description || ""} maxLength={200} disabled={busy}
-                onChange={(e) => setDef({ ...def, description: e.target.value })} placeholder={L("一句话说这个工作流做什么", "What it does, in a sentence")} /></label>
-            {def.steps.map((s, i) => {
-              const kind = stepKind(s);
-              const pool = kind === "computer" ? computers : agents;
-              const who = kind === "computer" ? s.computer : s.agent;
-              const r = pool.find((x) => x.st.agent.name === who);
-              return (
-                <div key={s.id} className="wf-edit-step" data-testid="workflow-edit-step">
-                  <div className="wf-edit-step-head">
-                    <span className="wf-step-icon">{kind === "agent" && r ? <Avatar agent={r.st.agent} size={20} badge={false} /> : kind === "computer" ? <Monitor /> : kind === "human" ? <UserCheck /> : <Bot />}</span>
-                    <input className="app-input wf-edit-title" value={s.title || ""} placeholder={s.id} maxLength={40} disabled={busy}
-                      aria-label={L(`第 ${i + 1} 步的名字`, `Step ${i + 1} name`)} onChange={(e) => setStep(i, { title: e.target.value || undefined })} />
-                    <span className="wf-edit-n mono">{s.id}</span>
-                  </div>
-                  <div className="wf-edit-row">
-                    {kind === "human" ? (
-                      <span className="wf-edit-who">{s.human === "$starter" ? L("启动它的人来决定", "Whoever starts it decides") : L(`${s.human} 来决定`, `${s.human} decides`)}</span>
-                    ) : (
-                      <label className="wf-edit-cell wf-edit-grow"><span>{kind === "computer" ? L("在哪台电脑", "On which computer") : L("交给谁", "Who does it")}</span>
-                        <span className="wf-edit-pick">
-                          <select className="app-select-field" value={s.role !== undefined ? ROLE : who || ""} disabled={busy} aria-label={L(`第 ${i + 1} 步交给谁`, `Who does step ${i + 1}`)}
-                            onChange={(e) => setStep(i, kind === "computer" ? { computer: e.target.value }
-                              : e.target.value === ROLE ? { agent: undefined, role: s.role || "" } : { agent: e.target.value, role: undefined })}>
-                            {who && !pool.some((x) => x.st.agent.name === who) && <option value={who}>{who}</option>}
-                            {pool.map((x) => <option key={x.st.agent.name} value={x.st.agent.name}>{nodeName(x.st.agent, x.hub)}</option>)}
-                            {kind === "agent" && <option value={ROLE}>{L("按分工挑空闲的…", "Whoever is free with a role…")}</option>}
-                          </select>
-                          {s.role !== undefined && (
-                            <input className="app-input wf-edit-role" value={s.role} maxLength={40} disabled={busy} placeholder={L("分工，比如 审查", "Role, e.g. review")}
-                              aria-label={L(`第 ${i + 1} 步的分工`, `Role for step ${i + 1}`)} onChange={(e) => setStep(i, { role: e.target.value })} />
-                          )}
-                        </span></label>
-                    )}
-                    <label className="wf-edit-cell"><span>{kind === "human" ? L("多久没人决定算不做", "Expires after") : L("超时", "Timeout")}</span>
-                      <select className="app-select-field" value={s.timeout || ""} disabled={busy} onChange={(e) => setStep(i, { timeout: e.target.value || undefined })}>
-                        {s.timeout && !timeouts().some((t) => t.v === s.timeout) && <option value={s.timeout}>{s.timeout}</option>}
-                        {timeouts().filter((t) => kind !== "human" || t.v).map((t) => <option key={t.v} value={t.v}>{t.label}</option>)}
-                        {kind === "human" && !s.timeout && <option value="">{L("3 天", "3 days")}</option>}
-                      </select></label>
-                    {kind !== "human" && (
-                      <label className="wf-edit-cell"><span>{L("失败了再试", "Retries")}</span>
-                        <select className="app-select-field" value={s.retry || 0} disabled={busy} onChange={(e) => setStep(i, { retry: +e.target.value || undefined })}>
-                          {[0, 1, 2, 3].map((n) => <option key={n} value={n}>{n ? L(`${n} 次`, `${n}`) : L("不试", "No")}</option>)}
-                        </select></label>
-                    )}
-                  </div>
-                  {kind !== "human" && (
-                    <details className="app-advanced wf-edit-more">
-                      <summary>{kind === "computer" ? L("跑什么命令", "The command") : L("要它做什么", "What it is asked")}</summary>
-                      <textarea className="app-input au-body" rows={kind === "computer" ? 2 : 4} disabled={busy} value={(kind === "computer" ? s.run : s.prompt) || ""}
-                        onChange={(e) => setStep(i, kind === "computer" ? { run: e.target.value } : { prompt: e.target.value })} />
-                    </details>
-                  )}
-                </div>
-              );
-            })}
-            {loops.length > 0 && (
-              <div className="wf-edit-loops">
-                {loops.map(({ e, i }) => (
-                  <label key={i} className="wf-edit-loop">
-                    <span>{L(`「${label(def.steps[idx.get(e.from)!])}」回到「${label(def.steps[idx.get(e.to)!])}」最多`, `"${label(def.steps[idx.get(e.from)!])}" back to "${label(def.steps[idx.get(e.to)!])}" at most`)}</span>
-                    <select className="app-select-field" value={e.maxIterations || 1} disabled={busy} onChange={(ev) => setEdge(i, { maxIterations: +ev.target.value })}>
-                      {[1, 2, 3, 4, 5, 8, 10].map((n) => <option key={n} value={n}>{L(`${n} 次`, `${n}×`)}</option>)}
-                    </select>
-                  </label>
-                ))}
-              </div>
-            )}
-          </>
-        )}
-        <ErrorText error={error} />
-        <div className="app-modal-actions">
-          <button type="button" className="app-btn" onClick={onClose} disabled={busy}>{L("取消", "Cancel")}</button>
-          {noRole && <span className="app-modal-hint">{L(`「${label(noRole)}」还没写分工`, `"${label(noRole)}" needs a role`)}</span>}
-          <button type="submit" className="app-btn app-btn-primary" disabled={busy || !def || !!noRole}>{busy ? L("正在保存…", "Saving…") : L("保存新版本", "Save a new version")}</button>
+  const i = def ? def.steps.findIndex((s) => s.id === picked) : -1;
+  const s = i >= 0 ? def!.steps[i] : null;
+
+  const basic = def && (
+    <div className="wf-ed-panel" data-testid="workflow-edit-basic">
+      <h3>{L("基本", "Basics")}</h3>
+      <label className="app-field"><span className="app-field-label">{L("说明（可选）", "Description (optional)")}</span>
+        <input className="app-input" value={def.description || ""} maxLength={200} disabled={busy}
+          onChange={(e) => edit((d) => ({ ...d, description: e.target.value }))} placeholder={L("一句话说这个工作流做什么", "What it does, in a sentence")} /></label>
+      <ContractEditor schema={def.inputs} disabled={busy} label={L("运行时要填的", "What a run is given")} testid="workflow-edit-inputs"
+        onChange={(inputs) => edit((d) => ({ ...d, inputs }))} />
+      {loops.length > 0 && (
+        <div className="wf-edit-loops">
+          <span className="app-field-label">{L("回去重来最多几次", "How many times a loop may go back")}</span>
+          {loops.map(({ e, i: k }) => (
+            <label key={k} className="wf-edit-loop">
+              <span>{L(`「${label(def.steps[idx.get(e.from)!])}」回到「${label(def.steps[idx.get(e.to)!])}」最多`, `"${label(def.steps[idx.get(e.from)!])}" back to "${label(def.steps[idx.get(e.to)!])}" at most`)}</span>
+              <select className="app-select-field" value={e.maxIterations || 1} disabled={busy} onChange={(ev) => setEdge(k, { maxIterations: +ev.target.value })}>
+                {[1, 2, 3, 4, 5, 8, 10].map((n) => <option key={n} value={n}>{L(`${n} 次`, `${n}×`)}</option>)}
+              </select>
+            </label>
+          ))}
         </div>
-      </form>
-    </Modal>
+      )}
+    </div>
+  );
+
+  const step = s && (() => {
+    const kind = stepKind(s);
+    const pool = kind === "computer" ? computers : agents;
+    const who = kind === "computer" ? s.computer : s.agent;
+    const n = i + 1;
+    return (
+      <div className="wf-ed-panel" data-testid="workflow-edit-step" data-step={s.id}>
+        <div className="wf-edit-step-head">
+          <span className="wf-step-icon">{kind === "computer" ? <Monitor /> : kind === "human" ? <UserCheck /> : <Bot />}</span>
+          <input className="app-input wf-edit-title" value={s.title || ""} placeholder={s.id} maxLength={40} disabled={busy}
+            aria-label={L(`第 ${n} 步的名字`, `Step ${n} name`)} onChange={(e) => setStep(i, { title: e.target.value || undefined })} />
+          <span className="wf-edit-n">{L(`第 ${n} 步`, `Step ${n}`)} · {kind === "computer" ? L("电脑", "computer") : kind === "human" ? L("你来定", "a decision") : "agent"}</span>
+        </div>
+        <div className="wf-edit-row">
+          {kind === "human" ? (
+            <span className="wf-edit-who">{s.human === "$starter" ? L("启动它的人来决定", "Whoever starts it decides") : L(`${s.human} 来决定`, `${s.human} decides`)}</span>
+          ) : (
+            <label className="wf-edit-cell wf-edit-grow"><span>{kind === "computer" ? L("在哪台电脑", "On which computer") : L("交给谁", "Who does it")}</span>
+              <span className="wf-edit-pick">
+                <select className="app-select-field" value={s.role !== undefined ? ROLE : who || ""} disabled={busy} aria-label={L(`第 ${n} 步交给谁`, `Who does step ${n}`)}
+                  onChange={(e) => setStep(i, kind === "computer" ? { computer: e.target.value }
+                    : e.target.value === ROLE ? { agent: undefined, role: s.role || "" } : { agent: e.target.value, role: undefined })}>
+                  {who && !pool.some((x) => x.st.agent.name === who) && <option value={who}>{who}</option>}
+                  {pool.map((x) => <option key={x.st.agent.name} value={x.st.agent.name}>{nodeName(x.st.agent, x.hub)}</option>)}
+                  {kind === "agent" && <option value={ROLE}>{L("按分工挑空闲的…", "Whoever is free with a role…")}</option>}
+                </select>
+                {s.role !== undefined && (
+                  <input className="app-input wf-edit-role" value={s.role} maxLength={40} disabled={busy} placeholder={L("分工，比如 审查", "Role, e.g. review")}
+                    aria-label={L(`第 ${n} 步的分工`, `Role for step ${n}`)} onChange={(e) => setStep(i, { role: e.target.value })} />
+                )}
+              </span></label>
+          )}
+          <label className="wf-edit-cell"><span>{kind === "human" ? L("多久没人决定算不做", "Expires after") : L("超时", "Timeout")}</span>
+            <select className="app-select-field" value={s.timeout || ""} disabled={busy} onChange={(e) => setStep(i, { timeout: e.target.value || undefined })}>
+              {s.timeout && !timeouts().some((t) => t.v === s.timeout) && <option value={s.timeout}>{s.timeout}</option>}
+              {timeouts().filter((t) => kind !== "human" || t.v).map((t) => <option key={t.v} value={t.v}>{t.label}</option>)}
+              {kind === "human" && !s.timeout && <option value="">{L("3 天", "3 days")}</option>}
+            </select></label>
+          {kind !== "human" && (
+            <label className="wf-edit-cell"><span>{L("失败了再试", "Retries")}</span>
+              <select className="app-select-field" value={s.retry || 0} disabled={busy} onChange={(e) => setStep(i, { retry: +e.target.value || undefined })}>
+                {[0, 1, 2, 3].map((k) => <option key={k} value={k}>{k ? L(`${k} 次`, `${k}`) : L("不试", "No")}</option>)}
+              </select></label>
+          )}
+        </div>
+        {kind !== "human" ? (
+          <label className="app-field"><span className="app-field-label">{kind === "computer" ? L("跑什么命令", "The command") : L("要它做什么", "What it is asked")}</span>
+            <textarea className={cn("app-input au-body", kind === "computer" && "mono")} rows={kind === "computer" ? 2 : 5} disabled={busy} value={(kind === "computer" ? s.run : s.prompt) || ""}
+              aria-label={kind === "computer" ? L(`第 ${n} 步跑的命令`, `Step ${n} command`) : L(`第 ${n} 步要它做什么`, `What step ${n} is asked`)}
+              onChange={(e) => setStep(i, kind === "computer" ? { run: e.target.value } : { prompt: e.target.value })} />
+            <span className="app-small-note">{L("{{inputs.task}} 是运行时填的，{{steps.审.summary}} 是前面一步交回的；工作区按这些替换后交出去。", "{{inputs.task}} is what the run was given, {{steps.review.summary}} what a step before handed back; the workspace fills them in.")}</span>
+          </label>
+        ) : (
+          <label className="app-field"><span className="app-field-label">{L("问什么", "The question")}</span>
+            <textarea className="app-input au-body" rows={3} disabled={busy} value={s.prompt || ""} onChange={(e) => setStep(i, { prompt: e.target.value })} /></label>
+        )}
+        {kind === "agent" && (
+          <ContractEditor key={`out-${s.id}`} schema={s.output || s.outputSchema} disabled={busy} label={L("交回什么", "What it hands back")} testid="workflow-edit-output"
+            onChange={(c) => setStep(i, s.output ? { output: c } : { outputSchema: c })} />
+        )}
+        {kind !== "human" && (
+          <details className="app-advanced wf-edit-more">
+            <summary>{L("收到的输入要符合（可选）", "Its input must fit (optional)")}</summary>
+            <ContractEditor key={`in-${s.id}`} schema={s.inputSchema} disabled={busy} label={L("收到的输入", "Its input")}
+              onChange={(c) => setStep(i, { inputSchema: c })} />
+          </details>
+        )}
+      </div>
+    );
+  })();
+
+  return (
+    <div className="wf-ed" data-testid="workflow-edit">
+      <header className="pcd-head wf-ed-head">
+        <div className="pcd-titles">
+          <h1><span>{L(`编辑「${wf.title || wf.name}」`, `Edit "${wf.title || wf.name}"`)}</span></h1>
+          <p className="pcd-sub"><span>{L(`保存成第 ${wf.version + 1} 版；正在跑的照旧用第 ${wf.version} 版。加减步骤让写它的 agent 改。`, `Saved as version ${wf.version + 1}; runs going on keep version ${wf.version}. To add or remove steps, ask the agent that wrote it.`)}</span></p>
+        </div>
+        <div className="ph-actions">
+          {noRole && <span className="app-modal-hint">{L(`「${label(noRole)}」还没写分工`, `"${label(noRole)}" needs a role`)}</span>}
+          <button type="button" className="app-btn" onClick={close} disabled={busy}>{L("取消", "Cancel")}</button>
+          <button type="button" className="app-btn app-btn-primary" onClick={() => void save()} disabled={busy || !def || !!noRole || !changed}>{busy ? L("正在保存…", "Saving…") : L("保存新版本", "Save a new version")}</button>
+        </div>
+      </header>
+      <ErrorText error={error} />
+      {!def ? (!error && <RowsSkeleton rows={3} className="pc-list" />) : (
+        <div className="wf-ed-body">
+          <div className="wf-ed-map">
+            <div className="wf-ed-pick" role="tablist" aria-label={L("改哪里", "What to edit")}>
+              <button type="button" role="tab" aria-selected={picked === BASIC} className={cn("wf-ed-chip", picked === BASIC && "is-on")} onClick={() => setPicked(BASIC)}>{L("基本", "Basics")}</button>
+              {def.steps.map((x, k) => (
+                <button key={x.id} type="button" role="tab" aria-selected={picked === x.id} className={cn("wf-ed-chip", picked === x.id && "is-on")} onClick={() => setPicked(x.id)}
+                  data-step={x.id}>{k + 1}. {label(x)}</button>
+              ))}
+            </div>
+            <div className="aud-card wf-graph-card">
+              <WorkflowGraph def={def} hubId={hubId} rows={rows} selected={picked === BASIC ? undefined : picked} onSelect={(id) => setPicked((p) => (p === id ? BASIC : id))} />
+            </div>
+            <p className="app-small-note">{L("点图里的一步来改它。", "Click a step in the drawing to edit it.")}</p>
+          </div>
+          <div ref={panelRef} className="wf-ed-side">{picked === BASIC || !step ? basic : step}</div>
+        </div>
+      )}
+      <ConfirmDialog open={leaving} onOpenChange={setLeaving} title={L("不保存就离开？", "Leave without saving?")}
+        description={L("改的这些会丢掉。", "What you changed is lost.")} confirmLabel={L("离开", "Leave")} onConfirm={() => { setLeaving(false); onClose(); }} />
+    </div>
   );
 }
 
-/* ---------- one workflow: its steps, its runs ---------- */
+const BASIC = "$basic";
 
-function WorkflowDetail({ hubId, wf, rows, now, stamp, busy, error, onBack, onRun, onToggle, onDelete, onEdit, onOpenRun }: {
+/* ---------- one workflow: its runs, how it goes, its steps, its contracts ---------- */
+
+/** What a run is about, in a line: what it was given (the first text). */
+export function runSubject(r: Pick<WorkflowRun, "inputs">): string {
+  const vals = Object.entries(r.inputs || {});
+  const pick = vals.find(([k, v]) => typeof v === "string" && v.trim() && /^(task|what|title|goal|request)$/i.test(k))
+    || vals.find(([, v]) => typeof v === "string" && v.trim());
+  const text = pick ? String(pick[1]).replace(/\s+/g, " ").trim() : "";
+  return text.length > 90 ? `${text.slice(0, 89)}…` : text;
+}
+
+/** Where a run is now, in words: the steps going (by their names). */
+function runWhere(r: WorkflowRun, def?: WorkflowDef | null): string {
+  if (!r.current?.length) return "";
+  const name = (id: string) => def?.steps.find((s) => s.id === id)?.title || id;
+  return r.current.map(name).join("、");
+}
+
+type DetailTab = "runs" | "stats" | "flow" | "io";
+
+function WorkflowDetail({ hubId, wf, rows, now, stamp, busy, error, onRun, onToggle, onDelete, onEdit, onOpenRun }: {
   hubId: string; wf: Workflow; rows: AgentRow[]; now: number; stamp: number; busy: boolean; error: unknown;
   onBack: () => void; onRun: () => void; onToggle: () => void; onDelete: () => void; onEdit: () => void; onOpenRun: (id: string) => void;
 }) {
   const [def, setDef] = useState<WorkflowDef | null>(null);
   const [runs, setRuns] = useState<WorkflowRun[] | null>(null);
+  const [filter, setFilter] = useState<RunsFilter>("");
+  // A workflow that has run opens on its runs; a new one on how it goes.
+  const [tab, setTab] = useState<DetailTab>(() => (wf.last_run || wf.active ? "runs" : "flow"));
+  const more = useContextMenu();
   useEffect(() => {
     let off = false;
     appApi.workflow(hubId, wf.id).then((w) => { if (!off) setDef(w.definition || null); }, () => undefined);
-    const read = () => appApi.workflowRuns(hubId, { workflow: wf.id, limit: 50 }).then((r) => { if (!off) setRuns(r.runs || []); }, () => { if (!off) setRuns((x) => x ?? []); });
+    return () => { off = true; };
+  }, [hubId, wf.id, wf.version, stamp]);
+  useEffect(() => {
+    let off = false;
+    setRuns(null);
+    const opts = filter === "active" ? { active: true } : filter ? { status: filter } : {};
+    const read = () => appApi.workflowRuns(hubId, { workflow: wf.id, limit: 50, ...opts }).then((r) => { if (!off) setRuns(r.runs || []); }, () => { if (!off) setRuns((x) => x ?? []); });
     read();
     const t = setInterval(read, 5_000);
     return () => { off = true; clearInterval(t); };
-  }, [hubId, wf.id, wf.version, stamp]);
+  }, [hubId, wf.id, wf.version, stamp, filter]);
+  const tabs: { key: DetailTab; label: string; n?: number }[] = [
+    { key: "runs", label: L("运行记录", "Runs"), n: runs && !filter ? runs.length : undefined },
+    { key: "stats", label: L("运行情况", "How it goes") },
+    { key: "flow", label: L("流程", "Steps") },
+    { key: "io", label: L("输入和输出", "Inputs and outputs") },
+  ];
   return (
     <>
-      <button type="button" className="pcd-back" onClick={onBack}><ArrowLeft />{L("工作流", "Workflows")}</button>
       <header className={cn("pcd-head", !wf.enabled && "is-away")}>
-        <span className="tp-icon pcd-icon"><WorkflowIcon /></span>
         <div className="pcd-titles">
-          <h1><span>{wf.name}</span></h1>
+          <h1><span>{wf.title || wf.name}</span></h1>
           <p className="pcd-sub">
             <span className={cn("pc-online", wf.enabled && "is-on")}>{wf.enabled ? L("在用", "On") : L("已停用", "Off")}</span>
+            {wf.title && wf.title !== wf.name && <span className="mono">{wf.name}</span>}
+            {(wf.tags || []).map((t) => <span key={t} className="app-label">{t}</span>)}
             <span>{L(`${wf.steps} 步`, `${wf.steps} steps`)}</span>
             <span>{L(`第 ${wf.version} 版`, `Version ${wf.version}`)}</span>
             {wf.project && <span>{L(`项目 ${wf.project}`, `Project ${wf.project}`)}</span>}
@@ -733,53 +860,97 @@ function WorkflowDetail({ hubId, wf, rows, now, stamp, busy, error, onBack, onRu
           <Switch on={wf.enabled} disabled={busy} onChange={onToggle} label={wf.enabled ? L("停用", "Turn off") : L("启用", "Turn on")} />
           <button type="button" className="app-btn" onClick={onEdit}><Pencil />{L("编辑", "Edit")}</button>
           <button type="button" className="app-btn app-btn-primary" onClick={onRun} disabled={!wf.enabled}><Play />{L("运行", "Run")}</button>
+          <button type="button" className="app-btn app-btn-plain" aria-label={L("更多", "More")} title={L("更多", "More")} data-testid="workflow-more"
+            onClick={(e) => more.openUnder(e.currentTarget, [
+              { label: L("删除这个工作流…", "Delete this workflow…"), icon: Trash2, danger: true, onSelect: onDelete },
+            ])}><MoreHorizontal /></button>
         </div>
       </header>
       {wf.description && <p className="wf-desc">{wf.description}</p>}
       <ErrorText error={error} />
 
-      <SectionHead title={L("怎么走", "How it goes")} />
-      <div className="aud-card wf-graph-card">
-        {def ? <WorkflowGraph def={def} hubId={hubId} rows={rows} /> : <div className="wf-graph-skel"><span className="skel skel-line" style={{ width: "40%" }} /></div>}
+      <div className="wf-tabs" role="tablist" aria-label={L("看什么", "View")} data-testid="workflow-tabs">
+        {tabs.map((t) => (
+          <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} className={cn("wf-tab", tab === t.key && "is-on")} onClick={() => setTab(t.key)}>
+            {t.label}{t.n !== undefined && t.n > 0 && <small>{t.n}</small>}
+          </button>
+        ))}
       </div>
-      <p className="app-small-note wf-edit-note">{L("「编辑」可以换人、改超时和轮数；要加减步骤，让写它的 agent 改了再存一次。正在跑的照旧用原来那版。", "Edit changes who does what, timeouts and rounds; to add or remove steps, have the agent that wrote it change it. Runs going on keep their version.")}</p>
 
-      <SectionHead title={L("运行记录", "Runs")} count={runs?.length} />
-      {runs === null ? <RowsSkeleton rows={3} className="pc-list" /> : runs.length === 0 ? (
-        <div className="pcd-empty" data-testid="workflow-no-runs">
-          <span>{L("还没运行过。点「运行」开始一次，每一步交给谁、做得怎么样都会记在这里。", "It has not run yet. Run it once: who each step went to and how it went is kept here.")}</span>
-          <button type="button" className="app-btn app-btn-small" onClick={onRun} disabled={!wf.enabled}><Play />{L("运行", "Run")}</button>
-        </div>
-      ) : (
-        <div className="pc-list aud-runs" data-testid="workflow-runs">
-          {runs.map((r) => (
-            <button key={r.id} type="button" className="aud-run wf-run-row" onClick={() => onOpenRun(r.id)}>
-              <span className="aud-run-line">
-                <span className={cn("au-last aud-run-what", runTone(r.status))}><i aria-hidden /><span>{runWords(r.status)}{r.error ? ` · ${r.error}` : ""}</span></span>
-                {r.current && r.current.length > 0 && <span className="aud-run-trigger">{r.current.join("、")}</span>}
-                <span className="aud-run-when" title={new Date(r.created_at).toLocaleString()}>{timeAgo(r.created_at, now)}<small>{L(`用了 ${duration(r.created_at, r.ended_at, now)}`, `took ${duration(r.created_at, r.ended_at, now)}`)}</small></span>
-              </span>
-            </button>
-          ))}
+      {tab === "runs" && (
+        <>
+          {(filter || (runs && runs.length > 0)) && <div className="wf-tab-tools"><RunsFilterSeg value={filter} onChange={setFilter} /></div>}
+          {runs === null ? <RowsSkeleton rows={3} className="pc-list" /> : runs.length === 0 && filter ? (
+            <div className="app-empty-note">{L("没有这样的运行。", "No runs like that.")}</div>
+          ) : runs.length === 0 ? (
+            <div className="pcd-empty" data-testid="workflow-no-runs">
+              <span>{L("还没运行过。点「运行」开始一次，每一步交给谁、做得怎么样都会记在这里。", "It has not run yet. Run it once: who each step went to and how it went is kept here.")}</span>
+              <button type="button" className="app-btn app-btn-small" onClick={onRun} disabled={!wf.enabled}><Play />{L("运行", "Run")}</button>
+            </div>
+          ) : (
+            <div className="pc-list wf-runs" data-testid="workflow-runs">
+              {runs.map((r) => {
+                const subject = runSubject(r);
+                const where = runWhere(r, def);
+                return (
+                  <button key={r.id} type="button" className="wf-run-row" onClick={() => onOpenRun(r.id)} data-status={r.status}>
+                    <RunMark status={r.status} />
+                    <span className="wf-run-text">
+                      <span className="wf-run-subject">{subject || L("（没有填内容）", "(nothing given)")}</span>
+                      <span className="wf-run-meta">
+                        <span className={cn("wf-run-state", runTone(r.status))}>{runWords(r.status)}</span>
+                        {where && (r.status === "running" || r.status === "waiting") && <span>{L(`在「${where}」`, `at ${where}`)}</span>}
+                        {r.status === "failed" && r.error && <span className="wf-run-why" title={r.error}>{r.error}</span>}
+                        {r.by && <span>{L(`${r.by} 启动`, `by ${r.by}`)}</span>}
+                      </span>
+                    </span>
+                    <span className="aud-run-when" title={new Date(r.created_at).toLocaleString()}>{timeAgo(r.created_at, now)}<small>{L(`用了 ${r.duration_ms !== undefined && r.ended_at ? msWords(r.duration_ms) : duration(r.created_at, r.ended_at, now)}`, `took ${r.duration_ms !== undefined && r.ended_at ? msWords(r.duration_ms) : duration(r.created_at, r.ended_at, now)}`)}</small></span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+
+      {tab === "stats" && (
+        <div data-testid="workflow-stats-tab">
+          <WorkflowStatsSection hubId={hubId} wf={wf} stamp={stamp} now={now} onOpenRun={onOpenRun} />
+          {runs !== null && runs.length === 0 && !filter && <div className="app-empty-note">{L("跑过几次之后，这里会有成功率、用时和花费。", "After a few runs: success rate, timing and cost.")}</div>}
         </div>
       )}
 
-      <div className="pcd-danger">
-        <div>
-          <b>{L("删除这个工作流", "Delete this workflow")}</b>
-          <span>{L("运行记录一起删除，还在跑的会先停下。发出去的任务和回复都保留。", "Its runs go too; the ones going are stopped first. The tasks and answers stay.")}</span>
-        </div>
-        <button type="button" className="app-btn app-btn-danger-quiet" onClick={onDelete}><Trash2 />{L("删除", "Delete")}</button>
-      </div>
+      {tab === "flow" && (
+        <>
+          <div className="aud-card wf-graph-card">
+            {def ? <WorkflowGraph def={def} hubId={hubId} rows={rows} /> : <div className="wf-graph-skel"><span className="skel skel-line" style={{ width: "40%" }} /></div>}
+          </div>
+          <p className="app-small-note wf-edit-note">{L("「编辑」可以换人、改超时和轮数。", "Edit changes who does what, timeouts and rounds.")}</p>
+        </>
+      )}
+
+      {tab === "io" && (def ? <ContractsSection def={def} hubId={hubId} rows={rows} /> : <RowsSkeleton rows={2} className="pc-list" />)}
+      {more.element}
     </>
+  );
+}
+
+/** A run's state at a glance: a tick when done, a cross when failed, a
+ *  dot when going or waiting. */
+function RunMark({ status }: { status: WorkflowRun["status"] | RunStep["status"] }) {
+  const t = status === "succeeded" || status === "done" ? "is-done" : status === "failed" ? "is-bad" : status === "running" ? "is-ok" : status === "waiting" ? "is-wait" : "is-off";
+  return (
+    <span className={cn("wf-mark", t)} aria-hidden>
+      {t === "is-done" ? <Check /> : t === "is-bad" ? <X /> : t === "is-off" ? <Minus /> : <i />}
+    </span>
   );
 }
 
 /* ---------- one run: how each step went ---------- */
 
-function RunDetail({ hubId, runId, wf, rows, now, stamp, onBack, onChanged, onOpenMessage }: {
+function RunDetail({ hubId, runId, wf, rows, now, stamp, onBack, onChanged, onOpenMessage, onOpenRun }: {
   hubId: string; runId: string; wf: Workflow; rows: AgentRow[]; now: number; stamp: number;
-  onBack: () => void; onChanged: () => void; onOpenMessage?: (agent: string, messageId: string) => void;
+  onBack: () => void; onChanged: () => void; onOpenMessage?: (agent: string, messageId: string) => void; onOpenRun: (id: string) => void;
 }) {
   const [run, setRun] = useState<WorkflowRun | null>(null);
   const [error, setError] = useState<unknown>(null);
@@ -787,6 +958,11 @@ function RunDetail({ hubId, runId, wf, rows, now, stamp, onBack, onChanged, onOp
   const [picked, setPicked] = useState<string | undefined>();
   const [open, setOpen] = useState<string | null>(null);
   const [logOpen, setLogOpen] = useState(false);
+  const [logOf, setLogOf] = useState<RunStep | null>(null);
+  const [comparing, setComparing] = useState(false);
+  const [view, setView] = useState<"steps" | "timeline">("steps");
+  const [mapOpen, setMapOpen] = useState(true);
+  const stepsRef = useRef<HTMLDivElement>(null);
   const [n, setN] = useState(0);
   useEffect(() => {
     let off = false;
@@ -809,15 +985,18 @@ function RunDetail({ hubId, runId, wf, rows, now, stamp, onBack, onChanged, onOp
   const shown = picked ? steps.filter((s) => s.step === picked) : steps;
   const waiting = steps.filter((s) => s.status === "waiting");
   const inputs = Object.entries(run?.inputs || {});
+  // The title says what this run is about (what it was given); its state
+  // is the first thing under it.
+  const subject = run ? runSubject(run) : "";
   return (
     <>
-      <button type="button" className="pcd-back" onClick={onBack}><ArrowLeft />{wf.name}</button>
       <header className="pcd-head">
-        <span className={cn("tp-icon pcd-icon wf-run-icon", run && runTone(run.status))}><WorkflowIcon /></span>
         <div className="pcd-titles">
-          <h1><span>{run ? runWords(run.status) : L("运行", "Run")}</span></h1>
+          <h1><span title={subject || undefined}>{subject || (run ? L(`「${wf.title || wf.name}」的一次运行`, `A run of "${wf.title || wf.name}"`) : L("运行", "Run"))}</span></h1>
           {run && (
             <p className="pcd-sub">
+              <button type="button" className="wf-link" onClick={onBack} title={L("打开这个工作流", "Open this workflow")}>{wf.title || wf.name}</button>
+              <span className={cn("wf-run-state", runTone(run.status))} data-testid="workflow-run-state">{runWords(run.status)}</span>
               <span title={new Date(run.created_at).toLocaleString()}>{L(`${timeAgo(run.created_at, now)}开始`, `Started ${timeAgo(run.created_at, now)}`)}</span>
               <span>{L(`用了 ${duration(run.created_at, run.ended_at, now)}`, `Took ${duration(run.created_at, run.ended_at, now)}`)}</span>
               {run.by && <span>{run.trigger === "agent" ? L(`${run.by} 启动的`, `Started by ${run.by}`) : L(`${run.by} 启动的`, `Started by ${run.by}`)}</span>}
@@ -826,6 +1005,7 @@ function RunDetail({ hubId, runId, wf, rows, now, stamp, onBack, onChanged, onOp
           )}
         </div>
         <div className="ph-actions">
+          {run?.metrics && <CompareButton onClick={() => setComparing(true)} />}
           {going && <button type="button" className="app-btn" disabled={!!busy} onClick={() => void act("cancel")}><Square />{busy === "cancel" ? L("正在停…", "Stopping…") : L("取消运行", "Cancel run")}</button>}
           {run && (run.status === "failed" || run.status === "cancelled") && (
             <button type="button" className="app-btn app-btn-primary" disabled={!!busy} onClick={() => void act("retry")}
@@ -834,43 +1014,59 @@ function RunDetail({ hubId, runId, wf, rows, now, stamp, onBack, onChanged, onOp
         </div>
       </header>
       <ErrorText error={error} />
+      {inputs.length > 1 && (
+        <div className="aud-card wf-run-inputs" data-testid="workflow-run-inputs">
+          {inputs.map(([k, v]) => (
+            <div key={k} className="app-kv"><span className="app-kv-label">{run?.definition?.inputs?.properties?.[k]?.title || k}</span>
+              <span className="app-kv-value wf-input-value">{typeof v === "string" ? v : JSON.stringify(v)}</span></div>
+          ))}
+        </div>
+      )}
       {run?.error && <div className={cn("wf-run-error", run.status === "cancelled" && "is-quiet")}>{run.error}</div>}
+      {run && <RunMetricsStrip run={run} />}
 
       {waiting.map((s) => (
         <DecisionCard key={s.id} hubId={hubId} d={{ run: run!, step: s }} now={now} onDone={() => { setN((x) => x + 1); onChanged(); }} />
       ))}
 
-      <SectionHead title={L("走到哪了", "Where it is")} />
-      <div className="aud-card wf-graph-card">
-        {run?.definition ? <WorkflowGraph def={run.definition} hubId={hubId} rows={rows} states={states} selected={picked}
-          onSelect={(id) => setPicked((p) => (p === id ? undefined : id))} />
-          : <div className="wf-graph-skel"><span className="skel skel-line" style={{ width: "40%" }} /></div>}
-      </div>
-
+      <div ref={stepsRef} className="wf-steps-anchor" />
       <SectionHead title={picked ? L(`第 ${(run?.definition?.steps.findIndex((s) => s.id === picked) ?? 0) + 1} 步的每一次`, "Each time of this step") : L("每一步", "Each step")} count={shown.length}>
         {picked && <button type="button" className="app-group-action" onClick={() => setPicked(undefined)}>{L("看全部", "Show all")}</button>}
+        {!picked && run?.metrics && steps.length > 0 && (
+          <div className="seg seg-sm" role="tablist" aria-label={L("怎么看", "View")} data-testid="workflow-steps-view">
+            <button type="button" role="tab" aria-selected={view === "steps"} className={cn("seg-btn", view === "steps" && "active")} onClick={() => setView("steps")}>{L("列表", "List")}</button>
+            <button type="button" role="tab" aria-selected={view === "timeline"} className={cn("seg-btn", view === "timeline" && "active")} onClick={() => setView("timeline")}>{L("时间线", "Timeline")}</button>
+          </div>
+        )}
       </SectionHead>
-      {run === null ? <RowsSkeleton rows={3} className="pc-list" /> : (
+      {run && !picked && view === "timeline" && run.metrics ? <RunTimeline run={run} now={now} onPick={setLogOf} /> : run === null ? <RowsSkeleton rows={3} className="pc-list" /> : (
         <div className="pc-list wf-steps" data-testid="workflow-steps">
           {shown.map((s) => (
             <StepRow key={s.id} s={s} row={rowOf(s.target)} now={now} open={open === s.id} onToggle={() => setOpen((o) => (o === s.id ? null : s.id))}
+              contract={(() => { const d = run.definition?.steps.find((x) => x.id === s.step); return !!(d?.output || d?.outputSchema); })()}
+              onLog={run.metrics && s.kind !== "human" ? () => setLogOf(s) : undefined}
               onChat={s.message_id && s.target && onOpenMessage ? () => onOpenMessage(s.target!, s.message_id!) : undefined} />
           ))}
           {shown.length === 0 && <div className="app-empty-note">{L("这一步还没走到。", "Not reached yet.")}</div>}
         </div>
       )}
 
-      {inputs.length > 0 && (
-        <>
-          <SectionHead title={L("这次填的", "What it was given")} />
-          <div className="aud-card">
-            {inputs.map(([k, v]) => (
-              <div key={k} className="app-kv"><span className="app-kv-label">{run?.definition?.inputs?.properties?.[k]?.title || k}</span>
-                <span className="app-kv-value wf-input-value">{typeof v === "string" ? v : JSON.stringify(v)}</span></div>
-            ))}
-          </div>
-        </>
+      <SectionHead title={L("流程图", "The steps, drawn")}>
+        <button type="button" className="app-group-action" aria-expanded={mapOpen} onClick={() => setMapOpen((o) => !o)}>
+          {mapOpen ? L("收起", "Hide") : L("展开", "Show")}<ChevronDown className={cn("aud-chev", mapOpen && "is-open")} />
+        </button>
+      </SectionHead>
+      {mapOpen && (
+        <div className="aud-card wf-graph-card">
+          {run?.definition ? <WorkflowGraph def={run.definition} hubId={hubId} rows={rows} states={states} selected={picked}
+            onSelect={(id) => { setPicked((p) => (p === id ? undefined : id)); requestAnimationFrame(() => stepsRef.current?.scrollIntoView({ block: "start", behavior: "smooth" })); }} />
+            : <div className="wf-graph-skel"><span className="skel skel-line" style={{ width: "40%" }} /></div>}
+        </div>
       )}
+      {mapOpen && <p className="app-small-note wf-edit-note">{L("点图里的一步，上面只看它的每一次。", "Click a step in the drawing to see only its times above.")}</p>}
+
+      {run && <RunArtifacts hubId={hubId} run={run} />}
+      {run && <RunScores hubId={hubId} run={run} onAdded={() => setN((x) => x + 1)} />}
 
       {run?.events && run.events.length > 0 && (
         <>
@@ -892,11 +1088,17 @@ function RunDetail({ hubId, runId, wf, rows, now, stamp, onBack, onChanged, onOp
           )}
         </>
       )}
+      {logOf && <StepLogDialog hubId={hubId} runId={runId} step={logOf} onClose={() => setLogOf(null)} />}
+      {comparing && run && <CompareDialog hubId={hubId} run={run} onClose={() => setComparing(false)} onOpenRun={onOpenRun} />}
     </>
   );
 }
 
-function StepRow({ s, row, now, open, onToggle, onChat }: { s: RunStep; row?: AgentRow; now: number; open: boolean; onToggle: () => void; onChat?: () => void }) {
+function StepRow({ s, row, now, open, onToggle, onChat, onLog, contract }: {
+  s: RunStep; row?: AgentRow; now: number; open: boolean; onToggle: () => void; onChat?: () => void; onLog?: () => void;
+  /** its result must fit a schema */
+  contract?: boolean;
+}) {
   const who = s.kind === "human" ? (s.target || L("你", "You")) : row ? nodeName(row.st.agent, row.hub) : s.target || "";
   const tone = s.status === "running" ? "is-ok" : s.status === "waiting" ? "is-wait" : s.status === "failed" ? "is-bad" : "";
   const text = s.status === "failed" ? s.error : s.summary || (s.status === "running" ? L("在做…", "Working…") : s.status === "waiting" ? L("等你决定", "Waiting for you") : s.error);
@@ -904,6 +1106,7 @@ function StepRow({ s, row, now, open, onToggle, onChat }: { s: RunStep; row?: Ag
   return (
     <div className={cn("aud-run wf-step", open && "is-open")} data-testid="workflow-step">
       <div className="aud-run-line">
+        <RunMark status={s.status} />
         <span className="wf-step-icon">
           {s.kind === "agent" && row ? <Avatar agent={row.st.agent} size={22} badge={false} /> : s.kind === "computer" ? <Monitor /> : s.kind === "human" ? <UserCheck /> : <Bot />}
         </span>
@@ -912,25 +1115,31 @@ function StepRow({ s, row, now, open, onToggle, onChat }: { s: RunStep; row?: Ag
             <b>{s.title || s.step}</b>{s.attempt > 1 && <small>{L(` 第 ${s.attempt} 次`, ` #${s.attempt}`)}</small>}
             <span className="wf-step-who">{who}</span>
           </span>
-          <span className={cn("au-last wf-step-summary", tone)}><i aria-hidden /><span>{text || stateWords(s.status)}</span></span>
+          <span className={cn("wf-step-summary", tone)}>{text || stateWords(s.status)}</span>
         </span>
-        <span className="aud-run-when" title={new Date(s.started_at).toLocaleString()}>{timeAgo(s.started_at, now)}<small>{duration(s.started_at, s.ended_at, now)}</small></span>
+        <span className="aud-run-when" title={new Date(s.started_at).toLocaleString()}>{timeAgo(s.started_at, now)}
+          <small>{s.duration_ms !== undefined && s.ended_at ? msWords(s.duration_ms) : duration(s.started_at, s.ended_at, now)}{(s.attempts || 1) > 1 && L(` · ${s.attempts} 次`, ` · ×${s.attempts}`)}{s.usage && ` · ${costWords(s.usage)}`}</small></span>
         <span className="aud-run-actions wf-step-actions">
-          {(s.input || output) && (
+          {(s.input || output || s.payload !== undefined) && (
             <button type="button" className="app-btn app-btn-quiet app-btn-small" aria-expanded={open} onClick={onToggle}>
               {L("详情", "Details")}<ChevronDown className={cn("aud-chev", open && "is-open")} />
             </button>
           )}
+          {onLog && <LogButton onClick={onLog} />}
           {onChat && <button type="button" className="app-btn app-btn-quiet app-btn-small" onClick={onChat}><MessageSquare />{L("看对话", "Chat")}</button>}
         </span>
       </div>
       {open && (
         <div className="aud-call wf-step-detail">
+          {s.payload !== undefined && s.payload !== null && !(typeof s.payload === "object" && Object.keys(s.payload as object).length === 0) && <>
+            <span className="wf-step-label">{L("收到的输入", "Its input")}</span>
+            <div className="aud-call-body"><pre>{JSON.stringify(s.payload, null, 2)}</pre></div></>}
           {s.input && <><span className="wf-step-label">{s.kind === "computer" ? L("跑的命令", "The command") : s.kind === "human" ? L("问你的", "The question") : L("交给它的任务", "The task it got")}</span>
             <div className="aud-call-body"><pre>{s.input}</pre></div></>}
-          {output && Object.keys(output).length > 0 && <><span className="wf-step-label">{L("交回来的结果", "What it handed back")}</span>
+          {output && Object.keys(output).length > 0 && <><span className="wf-step-label">{L("交回来的结果", "What it handed back")}
+            {contract && s.status === "done" && <span className="wfc-ok">{L("符合约定", "Fits its contract")}</span>}</span>
             <div className="aud-call-body"><pre>{JSON.stringify(output, null, 2)}</pre></div></>}
-          {s.bounced && <p className="app-small-note">{L("第一次交的结果不符合要求，退回去重交过一次。", "Its first result did not fit and was sent back once.")}</p>}
+          {(s.bounces || (s.bounced ? 1 : 0)) > 0 && <p className="app-small-note">{L(`交的结果不符合要求，退回去重交过 ${s.bounces || 1} 次。`, `Its result did not fit and was sent back ${s.bounces || 1} time(s).`)}</p>}
         </div>
       )}
     </div>

@@ -55,6 +55,37 @@ func (r *TraceRepo) List(ctx context.Context, message string, after, limit int) 
 	return out, internal(rows.Err())
 }
 
+func (r *TraceRepo) Last(ctx context.Context, messages []string, kind string) (map[string]*domain.TraceEvent, error) {
+	out := map[string]*domain.TraceEvent{}
+	for _, part := range chunks(messages, 400) {
+		in, args := inIDs(part)
+		rows, err := r.db.QueryContext(ctx, `SELECT t.message, t.seq, t.kind, t.data, t.at FROM message_traces t
+			JOIN (SELECT message, MAX(seq) AS seq FROM message_traces WHERE kind=? AND message`+in+` GROUP BY message) last
+			ON t.message=last.message AND t.seq=last.seq`, append([]any{kind}, args...)...)
+		if err != nil {
+			return nil, internal(err)
+		}
+		for rows.Next() {
+			var (
+				e  domain.TraceEvent
+				at int64
+			)
+			if err := rows.Scan(&e.Message, &e.Seq, &e.Kind, &e.Data, &at); err != nil {
+				rows.Close()
+				return nil, internal(err)
+			}
+			e.At = fromMS(at)
+			out[e.Message] = &e
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return nil, internal(err)
+		}
+	}
+	return out, nil
+}
+
 func (r *TraceRepo) Bytes(ctx context.Context, message string) (int64, error) {
 	var n sql.NullInt64
 	err := r.db.QueryRowContext(ctx, `SELECT SUM(LENGTH(data)) FROM message_traces WHERE message=?`, message).Scan(&n)
