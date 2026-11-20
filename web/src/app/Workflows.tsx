@@ -6,13 +6,13 @@ import { ApiError, appApi } from "@/appapi";
 import type { AgentRow } from "@/app/types";
 import { agentKind, nodeName } from "@/app/nodes";
 import { Avatar } from "@/app/persona";
-import { useContextMenu } from "@/app/ContextMenu";
+import { useContextMenu, type MenuItem } from "@/app/ContextMenu";
 import { PageHero, SectionHead, SectionSkeleton } from "@/app/PageHero";
 import { RowsSkeleton } from "@/app/Skeleton";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
 import { WorkflowGraph, stateWords, stepKind, stepStates } from "@/app/WorkflowGraph";
 import { ContractEditor, ContractsSection } from "@/app/WorkflowContracts";
-import { CompareButton, CompareDialog, LogButton, RunArtifacts, RunMetricsStrip, RunScores, RunTimeline, RunsFilterSeg, StepLogDialog, WorkflowStatsSection, costWords, msWords, type RunsFilter } from "@/app/WorkflowObserve";
+import { CompareButton, CompareDialog, LogButton, RunArtifacts, RunMetricsStrip, RunScores, RunTimeline, StepLogDialog, WorkflowStatsSection, costWords, msWords, type RunsFilter } from "@/app/WorkflowObserve";
 import { L } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
 
@@ -323,18 +323,17 @@ export function WorkflowsPage({ hubId, rows, now, open, onOpened, onOpenMessage 
             <>
               <SectionHead title={L("我的工作流", "Your workflows")} count={list.length} />
               <div className="pc-list" data-testid="workflows">
-                {list.map((w) => (
-                  <div key={w.id} className={cn("au-row", !w.enabled && "is-off")} onContextMenu={(e) => {
-                    e.preventDefault();
-                    menu.open(e, [
-                      { label: L("打开", "Open"), icon: WorkflowIcon, onSelect: () => setOpenId(w.id) },
-                      { label: L("运行", "Run"), icon: Play, onSelect: () => setStarting(w), disabled: !w.enabled },
-                      { label: L("编辑", "Edit"), icon: Pencil, onSelect: () => setEditing(w) },
-                      { label: w.enabled ? L("停用", "Turn off") : L("启用", "Turn on"), icon: w.enabled ? Pause : Play, onSelect: () => void toggle(w), disabled: busy === w.id },
-                      "sep",
-                      { label: L("删除", "Delete"), icon: Trash2, danger: true, onSelect: () => setRemoving(w) },
-                    ]);
-                  }}>
+                {list.map((w) => {
+                  // (right-click, or ⋯: the same menu)
+                  const items: MenuItem[] = [
+                    { label: L("打开", "Open"), icon: WorkflowIcon, onSelect: () => setOpenId(w.id) },
+                    { label: L("编辑", "Edit"), icon: Pencil, onSelect: () => setEditing(w) },
+                    { label: w.enabled ? L("停用", "Turn off") : L("启用", "Turn on"), icon: w.enabled ? Pause : Play, onSelect: () => void toggle(w), disabled: busy === w.id },
+                    "sep",
+                    { label: L("删除", "Delete"), icon: Trash2, danger: true, onSelect: () => setRemoving(w) },
+                  ];
+                  return (
+                  <div key={w.id} className={cn("au-row", !w.enabled && "is-off")} onContextMenu={(e) => { e.preventDefault(); menu.open(e, items); }}>
                     <button type="button" className="au-row-main" onClick={() => setOpenId(w.id)} title={L("打开：流程和每一次运行", "Open: its steps and every run")}>
                       <span className="au-icon"><WorkflowIcon /></span>
                       <span className="au-row-text">
@@ -358,11 +357,15 @@ export function WorkflowsPage({ hubId, rows, now, open, onOpened, onOpenMessage 
                         </span>
                       </span>
                     </button>
-                    <button type="button" className="app-btn app-btn-small wf-run-now" disabled={!w.enabled} onClick={() => setStarting(w)}
-                      title={L("运行一次", "Run it")}><Play />{L("运行", "Run")}</button>
-                    <Switch on={w.enabled} disabled={busy === w.id} onChange={() => void toggle(w)} label={w.enabled ? L("停用", "Turn off") : L("启用", "Turn on")} />
+                    <span className="wf-row-actions">
+                      <button type="button" className="app-btn app-btn-small wf-run-now" disabled={!w.enabled} onClick={() => setStarting(w)}
+                        title={L("运行一次", "Run it")}><Play />{L("运行", "Run")}</button>
+                      <button type="button" className="app-btn app-btn-small wf-more" aria-label={L(`${w.title || w.name}：更多`, `${w.title || w.name}: more`)}
+                        title={L("编辑、停用、删除", "Edit, turn off, delete")} onClick={(e) => menu.openUnder(e.currentTarget, items)}><MoreHorizontal /></button>
+                    </span>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </>
           )}
@@ -759,7 +762,7 @@ function WorkflowEditor({ hubId, rows, wf, onClose, onSaved }: { hubId: string; 
           <h1><span>{L(`编辑「${wf.title || wf.name}」`, `Edit "${wf.title || wf.name}"`)}</span></h1>
           <p className="pcd-sub"><span>{L(`保存成第 ${wf.version + 1} 版；正在跑的照旧用第 ${wf.version} 版。加减步骤让写它的 agent 改。`, `Saved as version ${wf.version + 1}; runs going on keep version ${wf.version}. To add or remove steps, ask the agent that wrote it.`)}</span></p>
         </div>
-        <div className="ph-actions">
+        <div className="ph-actions wf-actions">
           {noRole && <span className="app-modal-hint">{L(`「${label(noRole)}」还没写分工`, `"${label(noRole)}" needs a role`)}</span>}
           <button type="button" className="app-btn" onClick={close} disabled={busy}>{L("取消", "Cancel")}</button>
           <button type="button" className="app-btn app-btn-primary" onClick={() => void save()} disabled={busy || !def || !!noRole || !changed}>{busy ? L("正在保存…", "Saving…") : L("保存新版本", "Save a new version")}</button>
@@ -856,13 +859,18 @@ function WorkflowDetail({ hubId, wf, rows, now, stamp, busy, error, onRun, onTog
             {wf.project && <span>{L(`项目 ${wf.project}`, `Project ${wf.project}`)}</span>}
           </p>
         </div>
-        <div className="ph-actions">
-          <Switch on={wf.enabled} disabled={busy} onChange={onToggle} label={wf.enabled ? L("停用", "Turn off") : L("启用", "Turn on")} />
+        {/* Three buttons of one size: what is done most (运行), what is
+            done now and then (编辑), and the rest under ⋯ (停用, 删除). */}
+        <div className="ph-actions wf-actions">
           <button type="button" className="app-btn" onClick={onEdit}><Pencil />{L("编辑", "Edit")}</button>
           <button type="button" className="app-btn app-btn-primary" onClick={onRun} disabled={!wf.enabled}><Play />{L("运行", "Run")}</button>
-          <button type="button" className="app-btn app-btn-plain" aria-label={L("更多", "More")} title={L("更多", "More")} data-testid="workflow-more"
+          <button type="button" className="app-btn wf-more" aria-label={L("更多", "More")} title={L("更多", "More")} data-testid="workflow-more" disabled={busy}
             onClick={(e) => more.openUnder(e.currentTarget, [
-              { label: L("删除这个工作流…", "Delete this workflow…"), icon: Trash2, danger: true, onSelect: onDelete },
+              wf.enabled
+                ? { label: L("停用", "Turn off"), icon: Pause, onSelect: onToggle }
+                : { label: L("启用", "Turn on"), icon: Play, onSelect: onToggle },
+              "sep",
+              { label: L("删除", "Delete"), icon: Trash2, danger: true, onSelect: onDelete },
             ])}><MoreHorizontal /></button>
         </div>
       </header>
@@ -879,7 +887,7 @@ function WorkflowDetail({ hubId, wf, rows, now, stamp, busy, error, onRun, onTog
 
       {tab === "runs" && (
         <>
-          {(filter || (runs && runs.length > 0)) && <div className="wf-tab-tools"><RunsFilterSeg value={filter} onChange={setFilter} /></div>}
+          {(filter || (runs && runs.length > 0)) && <RunsFilterChips value={filter} onChange={setFilter} />}
           {runs === null ? <RowsSkeleton rows={3} className="pc-list" /> : runs.length === 0 && filter ? (
             <div className="app-empty-note">{L("没有这样的运行。", "No runs like that.")}</div>
           ) : runs.length === 0 ? (
@@ -1004,7 +1012,7 @@ function RunDetail({ hubId, runId, wf, rows, now, stamp, onBack, onChanged, onOp
             </p>
           )}
         </div>
-        <div className="ph-actions">
+        <div className="ph-actions wf-actions">
           {run?.metrics && <CompareButton onClick={() => setComparing(true)} />}
           {going && <button type="button" className="app-btn" disabled={!!busy} onClick={() => void act("cancel")}><Square />{busy === "cancel" ? L("正在停…", "Stopping…") : L("取消运行", "Cancel run")}</button>}
           {run && (run.status === "failed" || run.status === "cancelled") && (
@@ -1146,13 +1154,16 @@ function StepRow({ s, row, now, open, onToggle, onChat, onLog, contract }: {
   );
 }
 
-/** An on/off switch; its label says what a click does. */
-function Switch({ on, disabled, onChange, label }: { on: boolean; disabled?: boolean; onChange: () => void; label: string }) {
+
+/** Which runs to see: small chips on the left, over the list they filter. */
+function RunsFilterChips({ value, onChange }: { value: RunsFilter; onChange: (v: RunsFilter) => void }) {
+  const opts: [RunsFilter, string][] = [["", L("全部", "All")], ["active", L("在跑的", "Going")], ["failed", L("失败的", "Failed")], ["succeeded", L("完成的", "Done")]];
   return (
-    <button type="button" role="switch" aria-checked={on} aria-label={label} title={label} disabled={disabled}
-      className={cn("app-switch", on && "is-on")} onClick={onChange}>
-      <span className="app-switch-knob" />
-    </button>
+    <div className="wf-chips" role="tablist" aria-label={L("看哪些", "Which runs")} data-testid="workflow-runs-filter">
+      {opts.map(([v, label]) => (
+        <button key={v || "all"} type="button" role="tab" aria-selected={value === v} className={cn("wf-chip", value === v && "is-on")} onClick={() => onChange(v)}>{label}</button>
+      ))}
+    </div>
   );
 }
 

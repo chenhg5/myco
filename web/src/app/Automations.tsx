@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavSub } from "@/app/nav";
 import { IntroCard, introOf } from "@/app/Onboard";
-import { Activity, CalendarDays, ChevronDown, Clock, Coffee, MessageSquare, NotebookPen, Pause, Pencil, Play, Plus, Trash2, Webhook, Workflow as WorkflowIcon } from "lucide-react";
-import { useContextMenu } from "@/app/ContextMenu";
+import { Activity, CalendarDays, ChevronDown, Clock, Coffee, MessageSquare, MoreHorizontal, NotebookPen, Pause, Pencil, Play, Plus, Trash2, Webhook, Workflow as WorkflowIcon } from "lucide-react";
+import { useContextMenu, type MenuItem } from "@/app/ContextMenu";
 import type { Automation, AutomationRun, WebhookRequest, Workflow, WorkflowDef } from "@/api";
 import { ApiError, appApi } from "@/appapi";
 import type { AgentRow } from "@/app/types";
@@ -214,19 +214,19 @@ export function AutomationsPage({ hubId, rows, now, onOpenMessage, onOpenRun }: 
         <div className="pc-list" data-testid="automations">
           {list.map((a) => {
             const r = rowOf(a.to);
+            const rowMenu = (x: Automation): MenuItem[] => [
+              { label: L("查看运行记录", "Runs"), icon: Activity, onSelect: () => setOpenId(x.id) },
+              { label: L("编辑", "Edit"), icon: Pencil, onSelect: () => setEditing(x) },
+              { label: x.enabled ? L("暂停", "Pause") : L("启用", "Resume"), icon: x.enabled ? Pause : Play, onSelect: () => void toggle(x), disabled: busy === x.id },
+              "sep",
+              { label: L("删除", "Delete"), icon: Trash2, danger: true, onSelect: () => setRemoving(x) },
+            ];
             const when = [a.schedule ? describe(a.schedule.cron) : "", a.webhook ? L("Webhook 调用时", "On webhook") : ""].filter(Boolean).join(L("，或", ", or "));
             const Icon = a.schedule ? Clock : Webhook;
             return (
               <div key={a.id} className={cn("au-row", !a.enabled && "is-off")} onContextMenu={(e) => {
                 e.preventDefault();
-                menu.open(e, [
-                  { label: L("查看运行记录", "Runs"), icon: Activity, onSelect: () => setOpenId(a.id) },
-                  { label: L("编辑", "Edit"), icon: Pencil, onSelect: () => setEditing(a) },
-                  { label: L("立即运行", "Run now"), icon: Play, onSelect: () => void runNow(a), disabled: busy === a.id },
-                  { label: a.enabled ? L("暂停", "Pause") : L("启用", "Resume"), icon: a.enabled ? Pause : Play, onSelect: () => void toggle(a), disabled: busy === a.id },
-                  "sep",
-                  { label: L("删除", "Delete"), icon: Trash2, danger: true, onSelect: () => setRemoving(a) },
-                ]);
+                menu.open(e, rowMenu(a));
               }}>
                 <button type="button" className="au-row-main" onClick={() => setOpenId(a.id)} title={L("打开：设置和每一次运行", "Open: its settings and every run")}>
                   <span className={cn("au-icon", !a.schedule && "is-hook")}><Icon /></span>
@@ -256,10 +256,13 @@ export function AutomationsPage({ hubId, rows, now, onOpenMessage, onOpenRun }: 
                     </span>
                   </span>
                 </button>
-                <button type="button" className="app-btn app-btn-plain au-run-now" disabled={busy === a.id} onClick={() => void runNow(a)}
-                  title={L("立即运行：现在就发一次", "Run now: send it once now")} aria-label={L("立即运行", "Run now")}><Play /></button>
-                <Switch on={a.enabled} disabled={busy === a.id} onChange={() => void toggle(a)}
-                  label={a.enabled ? L("暂停", "Pause") : L("启用", "Resume")} />
+                {/* 运行 and ⋯ (edit, pause, delete), as a workflow's row */}
+                <span className="wf-row-actions">
+                  <button type="button" className="app-btn app-btn-small wf-run-now" disabled={busy === a.id} onClick={() => void runNow(a)}
+                    title={L("立即运行：现在就发一次", "Run now: send it once now")}><Play />{L("运行", "Run")}</button>
+                  <button type="button" className="app-btn app-btn-small wf-more" aria-label={L(`${a.name}：更多`, `${a.name}: more`)}
+                    title={L("编辑、暂停、删除", "Edit, pause, delete")} onClick={(e) => menu.openUnder(e.currentTarget, rowMenu(a))}><MoreHorizontal /></button>
+                </span>
               </div>
             );
           })}
@@ -298,6 +301,7 @@ function AutomationDetail({ hubId, a, row, now, stamp, busy, error, onEdit, onRu
   const [runs, setRuns] = useState<AutomationRun[] | null>(null);
   const [filter, setFilter] = useState<RunFilter>("all");
   const [open, setOpen] = useState<string | null>(null);
+  const more = useContextMenu();
   useEffect(() => {
     let off = false;
     const read = () => appApi.automation(hubId, a.id).then((d) => { if (!off) setRuns(d.runs || []); }, () => { if (!off) setRuns((r) => r ?? []); });
@@ -305,7 +309,6 @@ function AutomationDetail({ hubId, a, row, now, stamp, busy, error, onEdit, onRu
     const t = setInterval(read, 20_000);
     return () => { off = true; clearInterval(t); };
   }, [hubId, a.id, stamp]);
-  const Icon = a.schedule ? Clock : Webhook;
   const when = [a.schedule ? describe(a.schedule.cron) : "", a.webhook ? L("Webhook 调用时", "On webhook") : ""].filter(Boolean).join(L("，或", ", or "));
   const counts = { sent: 0, skipped: 0, failed: 0 };
   for (const r of runs || []) counts[r.outcome] += 1;
@@ -319,7 +322,6 @@ function AutomationDetail({ hubId, a, row, now, stamp, busy, error, onEdit, onRu
   return (
     <>
       <header className={cn("pcd-head", !a.enabled && "is-away")}>
-        <span className={cn("tp-icon pcd-icon", !a.schedule && "is-hook")}><Icon /></span>
         <div className="pcd-titles">
           <h1><span>{a.name}</span></h1>
           <p className="pcd-sub">
@@ -328,10 +330,16 @@ function AutomationDetail({ hubId, a, row, now, stamp, busy, error, onEdit, onRu
             {a.enabled && a.next_run_at && <span>{L(`下次 ${soonLabel(new Date(a.next_run_at), new Date(now))}`, `Next ${soonLabel(new Date(a.next_run_at), new Date(now))}`)}</span>}
           </p>
         </div>
-        <div className="ph-actions">
-          <Switch on={a.enabled} disabled={busy} onChange={onToggle} label={a.enabled ? L("暂停", "Pause") : L("启用", "Resume")} />
+        {/* As a workflow's: 编辑, 立即运行 and a square ⋯ (pause, delete). */}
+        <div className="ph-actions wf-actions">
           <button type="button" className="app-btn" onClick={onEdit}><Pencil />{L("编辑", "Edit")}</button>
           <button type="button" className="app-btn app-btn-primary" onClick={onRun} disabled={busy} title={L("现在就发一次", "Send it once now")}><Play />{L("立即运行", "Run now")}</button>
+          <button type="button" className="app-btn wf-more" aria-label={L("更多", "More")} title={L("更多", "More")} data-testid="automation-more" disabled={busy}
+            onClick={(e) => more.openUnder(e.currentTarget, [
+              a.enabled ? { label: L("暂停", "Pause"), icon: Pause, onSelect: onToggle } : { label: L("启用", "Resume"), icon: Play, onSelect: onToggle },
+              "sep",
+              { label: L("删除", "Delete"), icon: Trash2, danger: true, onSelect: onDelete },
+            ])}><MoreHorizontal /></button>
         </div>
       </header>
       <ErrorText error={error} />
@@ -370,9 +378,9 @@ function AutomationDetail({ hubId, a, row, now, stamp, busy, error, onEdit, onRu
       ) : (
         <>
           {(counts.skipped > 0 || counts.failed > 0) && (
-            <div className="tp-chips aud-filters" role="tablist" aria-label={L("只看", "Show")}>
+            <div className="wf-chips aud-filters" role="tablist" aria-label={L("只看", "Show")}>
               {filters.filter((f) => f.key === "all" || f.n > 0).map((f) => (
-                <button key={f.key} type="button" role="tab" aria-selected={filter === f.key} className={cn("tp-chip", filter === f.key && "is-on")} onClick={() => setFilter(f.key)}>
+                <button key={f.key} type="button" role="tab" aria-selected={filter === f.key} className={cn("wf-chip", filter === f.key && "is-on")} onClick={() => setFilter(f.key)}>
                   {f.label}<span className="aud-filter-n">{f.n}</span>
                 </button>
               ))}
@@ -389,13 +397,7 @@ function AutomationDetail({ hubId, a, row, now, stamp, busy, error, onEdit, onRu
         </>
       )}
 
-      <div className="pcd-danger">
-        <div>
-          <b>{L("删除这个自动化", "Delete this automation")}</b>
-          <span>{L("它不会再发消息了，Webhook 地址也失效。已经发出去的消息和 agent 的回复都保留。", "It sends nothing more, and its webhook address stops working. What it sent and the answers stay.")}</span>
-        </div>
-        <button type="button" className="app-btn app-btn-danger-quiet" onClick={onDelete}><Trash2 />{L("删除", "Delete")}</button>
-      </div>
+      {more.element}
     </>
   );
 }
@@ -465,15 +467,6 @@ function CallContent({ hubId, r }: { hubId: string; r: AutomationRun }) {
   );
 }
 
-/** An on/off switch; its label says what a click does. */
-function Switch({ on, disabled, onChange, label }: { on: boolean; disabled?: boolean; onChange: () => void; label: string }) {
-  return (
-    <button type="button" role="switch" aria-checked={on} aria-label={label} title={label} disabled={disabled}
-      className={cn("app-switch", on && "is-on")} onClick={onChange}>
-      <span className="app-switch-knob" />
-    </button>
-  );
-}
 
 type Mode = "daily" | "weekdays" | "weekly" | "hours" | "cron";
 const modes = (): { mode: Mode; label: string }[] => [

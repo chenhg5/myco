@@ -210,3 +210,32 @@ kbd { display: inline-grid; place-items: center; min-width: 18px; height: 18px; 
 .is-crumb button:hover { color: var(--fg); }
 .is-crumb .ico { color: var(--faint); }
 .is-crumb span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* phones and tablets (a finger, not a mouse): a size to read and to tap */
+@media (pointer: coarse) {
+  .is-nav-item, .is-new { height: 44px; font-size: 16px; }
+  .is-head { height: 52px; }
+  .is-head h1, .is-crumb button { font-size: 17px; }
+  .is-group { height: 42px; font-size: 15px; }
+  .is-row { height: 52px; font-size: 16px; }
+  .is-key { font-size: 13px; }
+  .is-cell { width: 32px; height: 32px; }
+  .is-card { padding: 12px 14px; font-size: 15px; }
+  .is-prop { height: 36px; font-size: 14px; }
+  .is-panel-title { font-size: 22px; }
+  .pick-item { height: 44px; font-size: 16px; }
+  .pick-q, .is-search input { font-size: 16px; }
+  .chip { height: 26px; font-size: 13px; }
+  kbd { display: none; }
+}
+@media (pointer: coarse) and (max-width: 860px) {
+  .is-new { font-size: 0; }
+  .is-head { gap: 6px; padding: 0 10px; }
+  .is-search { width: 112px; }
+  .is-head .tool[title^="命令"] { display: none; }
+}
+@media (pointer: coarse) and (max-width: 860px) {
+  .is-head .tool { font-size: 0; gap: 0; padding: 0 6px; }
+  .is-count { display: none; }
+  .is-search { width: 96px; }
+}

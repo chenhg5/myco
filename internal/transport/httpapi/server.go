@@ -66,6 +66,7 @@ type Server struct {
 	pageData    *app.PageDataService
 	templates   *app.TemplateService
 	appSync     func(context.Context) api.AppSync
+	appFreshen  func(context.Context)
 	voice       *app.VoiceSettingsService
 	activity    sync.Map   // message id -> time.Time; transient task heartbeat
 	aliasesMu   sync.Mutex // serialize alias permission checks with writes
