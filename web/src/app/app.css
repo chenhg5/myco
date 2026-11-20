@@ -7640,6 +7640,7 @@ body.is-resizing {
 .handoff-state.is-done { color: var(--green); background: color-mix(in srgb, var(--green) 12%, transparent); }
 .handoff-state.is-failed { color: var(--red); background: var(--red-soft); }
 .handoff-state.is-working { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.handoff-state.is-waiting { color: var(--amber); background: var(--amber-soft); }
 .handoff-time {
   flex: none;
   font-size: 10.5px;

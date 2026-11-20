@@ -18,7 +18,7 @@ import { cn, timeAgo } from "@/lib/utils";
  * what they give it).
  */
 
-export type HandoffState = "queued" | "working" | "stale" | "done" | "failed" | "note";
+export type HandoffState = "queued" | "working" | "waiting" | "stale" | "done" | "failed" | "note";
 
 export type Handoff = {
   /** the first message of the exchange (its key, and where it opens) */
@@ -47,7 +47,9 @@ const stateOf = (task?: Message): HandoffState => {
   switch (task.status) {
     case "done": return "done";
     case "failed": return "failed";
-    case "acked": case "held": return "working";
+    // set aside: it waits on an answer (asking) or on others, not working
+    case "held": return "waiting";
+    case "acked": return task.asking ? "waiting" : "working";
     default: return "queued";
   }
 };
@@ -120,7 +122,8 @@ export function handoffsOfHome(items: RecentItem[], coordinator: string, isYou: 
       id: m.id, at: m.created_at, updated: it.updated_at,
       dir, other: dir === "out" ? m.to : m.from, task: isTask,
       text: firstLine(m.body),
-      state: !isTask ? "note" : it.state === "done" ? "done" : it.state === "failed" ? "failed" : it.state === "working" ? "working" : it.state === "queued" ? "queued" : stateOf(m),
+      state: !isTask ? "note" : it.state === "done" ? "done" : it.state === "failed" ? "failed"
+        : it.state === "working" ? (stateOf(m) === "waiting" ? "waiting" : "working") : it.state === "queued" ? "queued" : stateOf(m),
       result: back ? firstLine(back.body) : undefined,
     });
   }
@@ -132,6 +135,8 @@ function stateWord(h: Handoff): string {
     case "note": return L("备注", "Note");
     case "queued": return L("排队中", "Queued");
     case "working": return L("在做", "Working");
+    // it set the task aside: asked something, or waits on others
+    case "waiting": return L("在等回复", "Waiting");
     // accepted, but no life for a while (the workspace's stale tasks)
     case "stale": return L("没动静", "No activity");
     case "failed": return L("没做成", "Didn't work");
