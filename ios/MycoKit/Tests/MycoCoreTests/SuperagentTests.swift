@@ -25,7 +25,7 @@ struct SuperagentTests {
         await model.decide(model.approvals[0], approve: false)
         #expect(model.approvals.isEmpty)
         #expect(model.pending == 0)
-        #expect(await hub.approvals().isEmpty)
+        #expect(try await hub.approvals().isEmpty)
         // None any more.
         #expect(await model.set(nil))
         #expect(model.agent == nil)
