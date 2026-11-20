@@ -1922,10 +1922,14 @@ async function runMatrix(browser, size, scheme) {
       }
       // At work, then the polls go unanswered: it says the network is poor.
       const box = page.locator(".conv-detail .conv-compose-input");
+      const said = page.locator(".conv-detail .trace-reports .trace-report", { hasText: "正在处理" });
+      const before = await said.count();
       await box.fill("把发布分支同步一下 main");
       await box.press("Enter");
-      // (at work: it has picked it up and said something)
-      await page.locator(".conv-detail .trace").last().locator(".trace-reports .trace-report", { hasText: "正在处理" }).waitFor({ timeout: 15_000 });
+      // (at work: it has picked this one up and said something; an earlier
+      // task's progress does not count)
+      await page.waitForFunction((n) => document.querySelectorAll(".conv-detail .trace-reports .trace-report").length > 0
+        && [...document.querySelectorAll(".conv-detail .trace-reports .trace-report")].filter((e) => e.textContent?.includes("正在处理")).length > n, before, { timeout: 20_000 });
       await page.route(polls, (route) => route.abort());
       try {
         await page.locator("[data-testid=chat-behind]").waitFor({ timeout: 40_000 });
