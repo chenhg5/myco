@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chenhg5/myco/internal/agenttools"
 	"github.com/chenhg5/myco/internal/api"
 	"github.com/chenhg5/myco/internal/client"
 	"github.com/chenhg5/myco/internal/config"
@@ -48,7 +49,7 @@ type runtimeReporter struct {
 
 // reportToHub reports this machine (once) and the agent's runtime, and
 // returns the reporter for later provider changes.
-func (e *env) reportToHub(c *client.Client, me *api.Agent, h harness.Harness, rc config.Runner, access, maxAccess harness.Access, choice providerChoice, log *slog.Logger) *runtimeReporter {
+func (e *env) reportToHub(c *client.Client, me *api.Agent, h harness.Harness, rc config.Runner, access, maxAccess harness.Access, choice providerChoice, workdir string, log *slog.Logger) *runtimeReporter {
 	rep := &runtimeReporter{c: c, log: log, cfg: rc.Model, choice: choice, models: cliModels(h.Name())}
 	go func() {
 		ctx, cancel := context.WithTimeout(e.in.Ctx, 30*time.Second)
@@ -65,6 +66,10 @@ func (e *env) reportToHub(c *client.Client, me *api.Agent, h harness.Harness, rc
 			}
 		}
 		rt := api.Runtime{CLI: h.Name(), Access: string(access), MaxAccess: string(maxAccess), Features: runnerFeatures(h), Env: runnerEnv()}
+		if h.Name() == "claude" || h.Name() == "codex" {
+			tools := agenttools.Scan(h.Name(), agenttools.Options{Project: workdir, ClaudeConfigDir: e.in.Getenv("CLAUDE_CONFIG_DIR"), CodexHome: e.in.Getenv("CODEX_HOME")}).ProjectOnly(workdir)
+			rt.MCP, rt.Skills, rt.Plugins, rt.ToolWarnings = tools.MCP, tools.Skills, tools.Plugins, tools.Warnings
+		}
 		if m := cliConfigModel(h.Name(), e.in.Getenv); m != "" {
 			rt.Model, rt.ModelSource = m, "cli-config"
 		} else if h.Name() != "exec" && h.Name() != "shell" && h.Name() != "machine" {

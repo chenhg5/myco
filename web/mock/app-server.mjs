@@ -493,8 +493,14 @@ const versionBelow = (v, want) => {
 const machineInfoOf = (m) => m.id === "m_vps" ? vpsInfo : {
   dirs: ["~"], new_dir: "~/myco", max_access: m.id.startsWith("m_studio") ? "full" : "workspace", home: m.os === "darwin" ? "/Users/glenn" : "/home/glenn",
   ais: [
-    { cli: "claude", name: "Claude Code", state: "ready", version: "2.1.3 (Claude Code)", login: "claude" },
-    { cli: "codex", name: "Codex", state: "ready", version: "codex-cli 0.52.0", login: "codex login", models: CODEX_MODELS },
+    { cli: "claude", name: "Claude Code", state: "ready", version: "2.1.3 (Claude Code)", login: "claude",
+      mcp: [{ name: "filesystem", transport: "stdio", scope: "user" }, { name: "figma", transport: "http", host: "mcp.figma.com", scope: "user" }],
+      skills: [{ name: "myco", description: "Talk to agents", scope: "user", managed_by: "myco" }],
+      plugins: [{ name: "review", marketplace: "official", enabled: true }],
+      tool_warnings: ["/Users/glenn/.claude/plugins/extra.json: invalid JSON"] },
+    { cli: "codex", name: "Codex", state: "ready", version: "codex-cli 0.52.0", login: "codex login", models: CODEX_MODELS,
+      mcp: [{ name: "search", transport: "http", host: "search.example.com", scope: "user" }],
+      skills: [{ name: "audit", description: "Review code", scope: "user" }], plugins: [] },
     { cli: "gemini", name: "Gemini CLI", state: "missing", install: "npm install -g @google/gemini-cli", login: "gemini" },
     { cli: "opencode", name: "OpenCode", state: "missing", install: "curl -fsSL https://opencode.ai/install | bash", login: "opencode auth login" },
   ],
@@ -731,7 +737,9 @@ const state = {
         makeAgent({
           name: "mcp-claude", owner: "glenn", owner_id: "mem_glenn", display_name: "MCP Claude", description: "用 Claude Code 处理文档和工具调用。",
           kind: "agent", machine_id: "m_studio",
-          runtime: { cli: "claude", cli_version: "2.1.240", model: "sonnet", access: "workspace", max_access: "workspace", features: ["mcp_tools"] },
+          runtime: { cli: "claude", cli_version: "2.1.240", model: "sonnet", access: "workspace", max_access: "workspace", features: ["mcp_tools"],
+            mcp: [{ name: "project-docs", transport: "stdio", scope: "project", enabled: true }],
+            skills: [{ name: "release-check", description: "Check release notes", scope: "project" }] },
           binding: { harness: "claude", environment: "macOS 26.1", workdir: "~/code/myco" },
         }),
         makeAgent({

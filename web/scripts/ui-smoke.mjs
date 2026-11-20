@@ -3465,6 +3465,34 @@ async function runMatrix(browser, size, scheme) {
       await page.keyboard.press("Escape"); await page.locator(".ms").waitFor({ state: "hidden" });
     });
 
+    await step("成员 · 工具", async () => {
+      await go(page, "成员", narrow);
+      const card = page.locator(".mb-card", { hasText: "MCP Claude" }).first();
+      await card.scrollIntoViewIfNeeded(); await card.click();
+      await clickVisible(page, page.locator(".ms .ms-fold"));
+      const tools = page.locator('[data-testid="agent-tools"]');
+      await tools.waitFor({ timeout: 10_000 });
+      for (const want of ["filesystem", "project-docs", "release-check", "工作区权限下用不了"]) {
+        if (!(await tools.innerText()).includes(want)) throw new Error(`成员工具缺少 ${want}`);
+      }
+      await tools.scrollIntoViewIfNeeded();
+      if ((size.width === 1200 && scheme === "light") || (size.width === 760 && scheme === "dark")) await shot(page, size, scheme, "member-tools");
+      await page.keyboard.press("Escape"); await page.locator(".ms").waitFor({ state: "hidden" });
+    });
+
+    await step("电脑 · 工具清单", async () => {
+      await go(page, "电脑", narrow);
+      await clickVisible(page, page.locator(".pc-card", { hasText: "Studio Mac" }));
+      const tools = page.locator('[data-testid="computer-tools-claude"]');
+      await tools.waitFor({ timeout: 10_000 });
+      await tools.locator("summary").click();
+      for (const want of ["filesystem", "figma", "myco 装的", "配置文件没读懂"]) {
+        if (!(await tools.innerText()).includes(want)) throw new Error(`电脑工具清单缺少 ${want}`);
+      }
+      if ((size.width === 1200 && scheme === "light") || (size.width === 760 && scheme === "dark")) await shot(page, size, scheme, "computer-tools");
+      await go(page, "成员", narrow);
+    });
+
     await step("成员 · 修改权限", async () => {
       await go(page, "成员", narrow);
       const openRun = async (name) => {

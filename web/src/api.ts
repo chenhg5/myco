@@ -37,6 +37,9 @@ export interface RunSettings {
 /** What the node actually runs; absent on nodes reported by old runners. */
 /** A model a CLI offers: the id --model takes, a display name, the efforts it supports. */
 export interface RuntimeModel { id: string; name?: string; efforts?: string[] }
+export interface MCPServer { name: string; transport: string; host?: string; scope: "user" | "project" | "plugin"; enabled?: boolean }
+export interface ToolSkill { name: string; description?: string; scope: "user" | "project"; managed_by?: string }
+export interface ToolPlugin { name: string; marketplace?: string; enabled: boolean }
 export interface Runtime {
   cli: string;
   cli_version?: string;
@@ -61,6 +64,10 @@ export interface Runtime {
   env?: "wsl" | string;
   /** the models its CLI offers on that computer, in the CLI's order (Codex; runners from v0.21.1) */
   models?: RuntimeModel[];
+  mcp?: MCPServer[];
+  skills?: ToolSkill[];
+  plugins?: ToolPlugin[];
+  tool_warnings?: string[];
 }
 export interface Skill { name: string; summary?: string; examples?: string[] }
 

@@ -509,3 +509,6 @@ npm run test:ui -- --serial                 # 一种接一种地跑，日志好�
 界面在 Mac 上的真实效果（红绿灯对齐、字体、右键菜单位置）要用预览包看，做法见团队文档「开发测试与发版」。
 
 运行设置中的「允许 MCP 工具」仅对拥有节点、且 runner 报 `mcp_tools` feature 的人显示；默认关。完全权限时显示为已打开但不能更改，并解释已放行。
+# Tool inventory
+
+Computer details show each CLI's MCP, skill, and plugin counts with an expandable list. Agent profiles combine that computer's user-level tools with project-level tools reported by the runner. When MCP tools are blocked by workspace access, the profile points to the run setting. Missing inventory from older runners is hidden.

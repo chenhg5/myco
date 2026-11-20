@@ -1098,3 +1098,6 @@ myco upgrade --version v0.16.5        # 安装指定版本（也可以用来回�
   - claude.ai、Codex cloud 等云端会话跑在临时 sandbox 里，不算机器。
   - 节点分为 AI 和 shell 两类（App 不再单独列出"人"节点）；每个节点显示它用的 CLI 和模型（runner 上报：节点配置的 `runner.model`，或 CLI 自己设置里的默认模型）。
 - **在机器上开新会话**：App 里选机器 → 类型（某个 CLI，或 Shell 节点）→ 目录。以管理员身份发起，不受那台机器节点 allow-from 的限制；目录范围和权限上限仍由那台机器的 `machine.yaml` 决定。需要那台机器是用入网链接接入的、myco 是 v0.16.5 以上，且 runner 在运行。
+# MCP, skills, and plugins in the App
+
+The computer details show the MCP servers, CLI skills, and plugins installed for Claude Code and Codex. An agent's profile also shows tools from its work directory. These lists are read only and contain names and public metadata, never MCP keys, headers, command arguments, or URL queries. Older runners do not report a list until upgraded.

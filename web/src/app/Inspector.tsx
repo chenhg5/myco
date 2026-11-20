@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useCached } from "@/lib/memo";
 import { ArrowRightLeft, Check, ChevronRight, Copy, Pencil, Plus, Power, Trash2, UserCheck, X } from "lucide-react";
 import { IconChat } from "@/components/icons";
-import { appApi, isOldHub, type AgentProvider, type ProviderList } from "@/appapi";
+import { appApi, isOldHub, type AgentProvider, type ProviderList, type MachineInfo } from "@/appapi";
 import type { AgentRow } from "@/app/types";
 import type { AuditEntry, Member, Peer, Project, Runtime, Skill } from "@/api";
 import {
@@ -20,6 +20,8 @@ import { RowsSkeleton } from "@/app/Skeleton";
 import { Avatar } from "@/app/persona";
 import { ResumeRow } from "@/app/ResumeRow";
 import { RunRows } from "@/app/RunSettings";
+import { fetchMachineInfo, cachedMachineInfo } from "@/app/machineInfoCache";
+import { hasTools, ToolInventory, type ToolLists } from "@/app/ToolInventory";
 import { HandoverHistory, handoverEntry, openHandover } from "@/app/Handover";
 
 type Action = null | "profile" | "skills" | "visibility" | "projects" | "allow" | "kick" | "delete" | "owner" | "copy";
@@ -743,6 +745,16 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [row, action, onClose, embedded]);
+  const [toolMachineInfo, setToolMachineInfo] = useState<MachineInfo | null>(null);
+  useEffect(() => {
+    const mid = ag?.machine_id;
+    if (!row || !mid || !["claude", "codex"].includes(ag.runtime?.cli || "")) { setToolMachineInfo(null); return; }
+    let live = true;
+    setToolMachineInfo(cachedMachineInfo(row.hub.id, mid)?.info || null);
+    fetchMachineInfo(row.hub.id, mid).then((info) => { if (live) setToolMachineInfo(info); }).catch(() => {});
+    return () => { live = false; };
+  }, [row?.hub.id, ag?.machine_id, ag?.runtime?.cli]);
+
   const [more, setMore] = useState(openDetails);
   useEffect(() => { if (openDetails) setMore(true); }, [openDetails, row?.hub.id, ag?.name]);
 
@@ -754,6 +766,13 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
   const inbox = isInbox(ag);
   const Icon = nodeIcon(ag);
   const rt = ag.runtime;
+  const machineTools = toolMachineInfo?.ais.find((a) => a.cli === rt?.cli);
+  const agentTools: ToolLists = {
+    mcp: [...(machineTools?.mcp || []), ...(rt?.mcp || [])],
+    skills: [...(machineTools?.skills || []), ...(rt?.skills || [])],
+    plugins: [...(machineTools?.plugins || []), ...(rt?.plugins || [])],
+    tool_warnings: [...(machineTools?.tool_warnings || []), ...(rt?.tool_warnings || [])],
+  };
   const machine = machineLabel(row);
   const machineObj = machineOfRow(row);
   const mayManage = canManage(row.hub, ag.owner_id);
@@ -897,6 +916,10 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
               </div>
             </section>
           )}
+          {kind === "agent" && hasTools(agentTools) && <section className="app-group" data-testid="agent-tools">
+            <div className="app-group-title"><span className="name">{L("工具", "Tools")}</span></div>
+            <div className="app-list"><ToolInventory tools={agentTools} mcpBlocked={rt?.access !== "full" && !ag.run_settings?.mcp_tools} /></div>
+          </section>}
 
         </>
       );

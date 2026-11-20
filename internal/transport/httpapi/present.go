@@ -58,6 +58,17 @@ func (s *Server) agentDTO(a *domain.Agent) api.Agent {
 		out.Runtime = &api.Runtime{CLI: rt.CLI, CLIVersion: rt.CLIVersion, Model: rt.Model, ModelSource: rt.ModelSource, Access: rt.Access,
 			Provider: rt.Provider, ProviderSource: rt.ProviderSource, Effort: rt.Effort, EffortSource: rt.EffortSource, MaxAccess: rt.MaxAccess, Quota: quotaDTO(rt.Quota),
 			Features: rt.FeatureList(), Away: rt.Away, Env: rt.Env, Models: modelsDTO(rt.ModelList())}
+		if rt.Tools != "" {
+			var tools struct {
+				MCP      []api.MCPServer  `json:"mcp"`
+				Skills   []api.ToolSkill  `json:"skills"`
+				Plugins  []api.ToolPlugin `json:"plugins"`
+				Warnings []string         `json:"tool_warnings"`
+			}
+			if json.Unmarshal([]byte(rt.Tools), &tools) == nil {
+				out.Runtime.MCP, out.Runtime.Skills, out.Runtime.Plugins, out.Runtime.ToolWarnings = tools.MCP, tools.Skills, tools.Plugins, tools.Warnings
+			}
+		}
 	}
 	if rs := a.RunSettings; rs != (domain.RunSettings{}) {
 		out.RunSettings = &api.RunSettings{Model: rs.Model, Effort: rs.Effort, Access: rs.Access, MCPTools: &rs.MCPTools}
