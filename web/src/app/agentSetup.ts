@@ -17,12 +17,12 @@ export function setupPrompt(): string {
   );
 }
 
-/** Look into an error the App showed: its raw words, and the guide's 排错 section. */
+/** Look into an error the App showed: its raw words, and the guide's Troubleshooting section. */
 export function debugPrompt(detail: string): string {
   const raw = detail.trim().replace(/\s+/g, " ").slice(0, 600);
   return L(
-    `myco 出错了：「${raw}」。读 ${SETUP_GUIDE} （打不开就读 ${SETUP_GUIDE_MIRROR} ）里「排错」一节，帮我查原因并修好；用 sudo 或改系统设置前先问我。`,
-    `myco shows an error: "${raw}". Read the 排错 (troubleshooting) section of ${SETUP_GUIDE} (if it does not load, ${SETUP_GUIDE_MIRROR}), find the cause and fix it; ask me before using sudo or changing system settings.`,
+    `myco 出错了：「${raw}」。读 ${SETUP_GUIDE} （打不开就读 ${SETUP_GUIDE_MIRROR} ）里「Troubleshooting」（排错）一节，帮我查原因并修好；用 sudo 或改系统设置前先问我。`,
+    `myco shows an error: "${raw}". Read the Troubleshooting section of ${SETUP_GUIDE} (if it does not load, ${SETUP_GUIDE_MIRROR}), find the cause and fix it; ask me before using sudo or changing system settings.`,
   );
 }
 

@@ -15,11 +15,11 @@ public enum AgentSetup {
           "Set up myco for me: read \(guide) (if it does not load, \(mirror)) and follow it. Ask me before deciding anything for me, before using sudo or changing system settings, and tell me the result when you are done.")
     }
 
-    /// Look into an error the app showed: its raw words, and the guide's 排错 section.
+    /// Look into an error the app showed: its raw words, and the guide's Troubleshooting section.
     public static func debug(_ detail: String) -> String {
         let raw = String(detail.split(whereSeparator: \.isWhitespace).joined(separator: " ").prefix(600))
-        return L("myco 出错了：「\(raw)」。读 \(guide) （打不开就读 \(mirror) ）里「排错」一节，帮我查原因并修好；用 sudo 或改系统设置前先问我。",
-                 "myco shows an error: \"\(raw)\". Read the 排错 (troubleshooting) section of \(guide) (if it does not load, \(mirror)), find the cause and fix it; ask me before using sudo or changing system settings.")
+        return L("myco 出错了：「\(raw)」。读 \(guide) （打不开就读 \(mirror) ）里「Troubleshooting」（排错）一节，帮我查原因并修好；用 sudo 或改系统设置前先问我。",
+                 "myco shows an error: \"\(raw)\". Read the Troubleshooting section of \(guide) (if it does not load, \(mirror)), find the cause and fix it; ask me before using sudo or changing system settings.")
     }
 
     /// Add a computer with one's agent: the agent there runs the one-line
