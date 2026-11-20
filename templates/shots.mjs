@@ -88,6 +88,17 @@ function clip() {
   return out;
 }
 
+/** A photo for 修图 to show: MYCO_SHOTS_PHOTO, or a landscape from Unsplash
+ *  (free to use), kept in the temp folder. */
+function photo() {
+  if (process.env.MYCO_SHOTS_PHOTO) return process.env.MYCO_SHOTS_PHOTO;
+  const out = path.join(tmpdir(), "myco-shots-photo.jpg");
+  if (!existsSync(out)) {
+    execFileSync("curl", ["-sSfL", "--max-time", "60", "-o", out, "https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=2400&q=85&fm=jpg"]);
+  }
+  return out;
+}
+
 // What to show of each app: one or more shots, each after some steps (the
 // sample data is there before the first).
 const wait = (p, ms = 400) => p.waitForTimeout(ms);
@@ -112,6 +123,28 @@ const plans = {
     await p.locator(".dk-row", { hasText: "glenn" }).click();
     await p.locator(".dk-row", { hasText: "Library" }).hover();
     await wait(p, 400);
+  }] },
+  // 修图: a landscape with a filter and a title, then in a polaroid frame with a sticker
+  photo: { sample: false, steps: [async (p) => {
+    // (named here: a path that is not ASCII does not reach the page)
+    await p.setInputFiles("input[type=file]", { name: "山谷.jpg", mimeType: "image/jpeg", buffer: readFileSync(photo()) });
+    await p.waitForSelector(".ph-canvas", { timeout: 30000 });
+    await p.click('.ph-tool:has-text("滤镜")'); await wait(p, 1500);
+    await p.click('.ph-filter:has-text("日系")');
+    await p.click('.ph-tool:has-text("文字")'); await p.click('.ph-chip:has-text("标题")');
+    await p.locator(".ph-text").fill("周末的山谷");
+    await p.locator(".ph-text").blur();
+    await wait(p, 1200);
+  }, async (p) => {
+    await p.keyboard.press("Escape");
+    await p.click('.ph-tool:has-text("贴纸")'); await p.click('.ph-sticker:has-text("🌈")');
+    // (up to the right, off the title)
+    const b = await p.locator(".ph-sel").boundingBox();
+    await p.mouse.move(b.x + b.width / 2, b.y + b.height / 2); await p.mouse.down();
+    await p.mouse.move(b.x + b.width / 2 + 230, b.y + b.height / 2 - 70, { steps: 8 }); await p.mouse.up();
+    await p.keyboard.press("Escape");
+    await p.click('.ph-tool:has-text("边框")'); await p.click('.ph-frame:has-text("拍立得")');
+    await wait(p, 1500);
   }] },
   video: { sample: false, steps: [async (p) => {
     await p.setInputFiles("input[type=file]", clip());
