@@ -28,6 +28,7 @@ type WorkflowService struct {
 	ids      IDGenerator
 	clock    Clock
 	log      *slog.Logger
+	traces   domain.TraceRepository
 	// One advance at a time: runs are small and few.
 	mu   sync.Mutex
 	kick chan struct{}
@@ -45,6 +46,9 @@ func NewWorkflowService(repo domain.WorkflowRepository, messages *MessageService
 	messages.SetWorkflowHook(func(string) { s.Kick() })
 	return s
 }
+
+// SetTraces lets runs show what their agents' steps cost and did.
+func (s *WorkflowService) SetTraces(t domain.TraceRepository) { s.traces = t }
 
 // Kick asks the loop to look at runs now (a workflow task was answered).
 func (s *WorkflowService) Kick() {
@@ -300,12 +304,16 @@ func (s *WorkflowService) Delete(ctx context.Context, c Caller, ref string) erro
 	return s.repo.Delete(ctx, w.ID)
 }
 
-// RunDetail is a run with its steps, log and the definition it follows.
+// RunDetail is a run with its steps, log and the definition it follows,
+// and what it produced and measured.
 type RunDetail struct {
-	Run    *domain.WorkflowRun
-	Def    *domain.WorkflowDef
-	Steps  []*domain.RunStep
-	Events []*domain.RunEvent
+	Run         *domain.WorkflowRun
+	Def         *domain.WorkflowDef
+	Steps       []*domain.RunStep
+	Events      []*domain.RunEvent
+	Metrics     domain.RunMetrics
+	Artifacts   []Artifact
+	Evaluations []*domain.RunEvaluation
 }
 
 // StartInput starts a run.
@@ -394,7 +402,9 @@ func (s *WorkflowService) runDetail(ctx context.Context, run *domain.WorkflowRun
 	if err != nil {
 		return nil, err
 	}
-	return &RunDetail{Run: run, Def: def, Steps: steps, Events: events}, nil
+	d := &RunDetail{Run: run, Def: def, Steps: steps, Events: events}
+	s.observe(ctx, d)
+	return d, nil
 }
 
 func (s *WorkflowService) defOf(ctx context.Context, run *domain.WorkflowRun) (*domain.WorkflowDef, error) {
@@ -431,7 +441,17 @@ func (s *WorkflowService) GetRun(ctx context.Context, c Caller, id string) (*Run
 // Runs lists runs the caller may see: of one workflow (ref) or all, the
 // newest first.
 func (s *WorkflowService) Runs(ctx context.Context, c Caller, ref string, active bool, limit int) ([]*domain.WorkflowRun, error) {
-	f := domain.RunFilter{Active: active, Limit: limit}
+	return s.RunsWhere(ctx, c, ref, domain.RunFilter{Active: active, Limit: limit})
+}
+
+// RunsWhere lists runs the caller may see that match f (WorkflowID is set
+// from ref).
+func (s *WorkflowService) RunsWhere(ctx context.Context, c Caller, ref string, f domain.RunFilter) ([]*domain.WorkflowRun, error) {
+	switch f.Status {
+	case "", domain.FlowRunning, domain.FlowWaiting, domain.FlowSucceeded, domain.FlowFailed, domain.FlowCancelled:
+	default:
+		return nil, domain.Errf(domain.CodeInvalidArgument, "status %q: use running, waiting, succeeded, failed or cancelled", f.Status)
+	}
 	if ref != "" {
 		w, err := s.find(ctx, c, ref)
 		if err != nil {
@@ -880,7 +900,11 @@ func (f *flow) send(st *domain.RunStep, body, thread string) error {
 	if err != nil {
 		return err
 	}
+	if len(st.Tasks) == 0 && st.MessageID != "" {
+		st.Tasks = []string{st.MessageID} // a step started before v0.21.1
+	}
 	st.MessageID = out.Message.ID
+	st.Tasks = append(st.Tasks, out.Message.ID)
 	f.touch(st)
 	return nil
 }
@@ -1104,6 +1128,7 @@ func (f *flow) bounce(st *domain.RunStep, def *domain.StepDef, reply *domain.Mes
 		return
 	}
 	st.Bounced = true
+	st.Bounces++
 	f.touch(st)
 	f.event(domain.EvBounced, st.StepID, "结果不符合，退回重交："+strings.Join(problems, "；"))
 }

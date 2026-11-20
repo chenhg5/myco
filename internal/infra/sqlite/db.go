@@ -216,6 +216,19 @@ CREATE TABLE IF NOT EXISTS run_events (
   text   TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_run_events ON run_events(run_id, id);
+CREATE TABLE IF NOT EXISTS run_evaluations (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id    TEXT NOT NULL,
+  step      TEXT NOT NULL DEFAULT '',
+  name      TEXT NOT NULL,
+  value     REAL NOT NULL,
+  unit      TEXT NOT NULL DEFAULT '',
+  direction TEXT NOT NULL DEFAULT '',
+  note      TEXT NOT NULL DEFAULT '',
+  by_name   TEXT NOT NULL DEFAULT '',
+  at        INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_run_evaluations ON run_evaluations(run_id, id);
 CREATE TABLE IF NOT EXISTS aliases (
   name       TEXT PRIMARY KEY,
   target     TEXT NOT NULL,
@@ -468,7 +481,9 @@ func Open(path string) (*sql.DB, error) {
 			// The workflow run a workflow automation started (v0.21).
 			{"workflow_run", "TEXT NOT NULL DEFAULT ''"}},
 		// A run step's input (JSON; v0.21).
-		"run_steps": {{"payload", "TEXT NOT NULL DEFAULT ''"}},
+		"run_steps": {{"payload", "TEXT NOT NULL DEFAULT ''"},
+			// Send-backs, the tasks sent, and what they cost (v0.21.1).
+			{"bounces", "INTEGER NOT NULL DEFAULT 0"}, {"tasks", "TEXT NOT NULL DEFAULT ''"}, {"usage", "TEXT NOT NULL DEFAULT ''"}},
 		// A workflow an automation starts, and the run's inputs (v0.21).
 		"automations": {{"workflow", "TEXT NOT NULL DEFAULT ''"}, {"inputs", "TEXT NOT NULL DEFAULT ''"}},
 	} {

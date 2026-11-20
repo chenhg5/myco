@@ -857,6 +857,11 @@ myco workflow run show --id <run_...>        # 每一步交给了谁、结果、
 myco workflow run decide --id <run_...> --step ok --choice 合并
 myco workflow run retry --id <run_...>       # 从失败的那一步重来
 myco workflow decisions                      # 等你决定的
+myco workflow stats --name 写-审-改            # 跑了几次、成功率、用时 p50/p95、每一步、花费、评分
+myco workflow run list --name 写-审-改 --status failed
+myco workflow run logs --id <run_...> --step review   # 这一步的日志：任务、进展、回复、它做了什么
+myco workflow run evaluate --id <run_...> --name quality --value 4 --direction higher
+myco workflow run compare --a <run_...> --b <run_...>
 ```
 
 agent 收到工作流的任务时，用 `myco message reply --result '{"approved": true, "summary": "…", "reason": "…"}'` 交结构化结果（旧版 myco 没有 `--result`：把 JSON 放在回复最后的 ```json 代码块里，一样认）。结果不符合这一步要的结构会退回去重交一次。
@@ -868,6 +873,7 @@ agent 收到工作流的任务时，用 `myco message reply --result '{"approved
 - 电脑步骤退出码不是 0 就算失败，可以用 `onError` 的边接住（比如把报错交回去再改）。
 - 结构化结果不做端到端加密（Hub 要读它来决定下一步）。
 - agent 启动的运行结束时，Hub 给它发一条通知（完成了 / 失败了，每一步的总结），它可以接着做。
+- 看它跑得怎么样（Hub v0.21.1 起）：工作流详情的「运行情况」是跑了几次、成功率、用时（中位数和慢的时候 p95，干活和等人决定分开）、每次花多少钱、最近每次的用时；「每一步」一张表：每一步跑了几次、失败几次、重发和退回几次、用时、花费，最近一次失败的原因（点了打开那次运行）；有评分的话每个分数的平均和范围；可以只看某一版。运行记录可以只看失败的、完成的、在跑的。打开一次运行：总用时、干活多久、等人决定多久、发了几个任务、花了多少；「每一步」可以切成时间线；每一步有「日志」（交给它的任务、它报的进展和截图、回复和结构化结果、它用了哪些工具和想了什么、电脑步骤的 stdout/stderr）；「产物」是 agent 交回的文件和最后交回的结果；「评分」可以给这次打分（测试脚本、负责检查的 agent 用 `myco workflow run evaluate`）；「对比」和另一次并排看每一步用时、花费和分数。花费来自 agent 的运行记录（Claude Code 报 token 和金额）。
 - 自动化可以启动工作流：App 里编辑自动化选「启动一个工作流」；命令行 `myco automation create --name 新issue --workflow 写-审-改 --input 'task=修 issue：{{payload.issue.title}}' --webhook`。Webhook 调用的内容整段是 `{{payload}}`，JSON 里的字段用 `{{payload.字段}}` 取。
 
 格式和接口见 [docs/api.md](docs/api.md#workflows)，设计见 [docs/design/workflow.md](docs/design/workflow.md)。

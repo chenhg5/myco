@@ -27,6 +27,8 @@ type wfEnv struct {
 	glenn  app.Caller
 	aut    *app.AutomationService
 	reg    *app.AgentService
+	files  *sqlite.FileRepo
+	traces *sqlite.TraceRepo
 }
 
 func newWF(t *testing.T, names ...string) *wfEnv {
@@ -43,8 +45,11 @@ func newWF(t *testing.T, names ...string) *wfEnv {
 	svc := app.NewWorkflowService(sqlite.NewWorkflowRepo(db), msgs, mr, security.IDs{}, clock, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	aut := app.NewAutomationService(sqlite.NewAutomationRepo(db), msgs, mr, security.Tokens{}, security.IDs{}, clock, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	aut.SetWorkflows(svc)
+	files, traces := sqlite.NewFileRepo(db), sqlite.NewTraceRepo(db)
+	msgs.SetFiles(files)
+	svc.SetTraces(traces)
 	e := &wfEnv{t: t, ctx: context.Background(), clock: clock, svc: svc, msgs: msgs, agents: map[string]*domain.Agent{},
-		glenn: app.Caller{Name: "glenn", MemberID: "mem_1"}, aut: aut, reg: reg}
+		glenn: app.Caller{Name: "glenn", MemberID: "mem_1"}, aut: aut, reg: reg, files: files, traces: traces}
 	for _, n := range names {
 		in := app.RegisterInput{Name: n}
 		if strings.HasPrefix(n, "box") {
@@ -519,5 +524,176 @@ func TestWorkflowInputSchemaStopsABadInput(t *testing.T) {
 	e.noTask("b")
 	if d := e.run(run.ID); d.Run.Status != domain.FlowFailed || !strings.Contains(d.Run.Error, "输入不符合这一步的约定") || !strings.Contains(d.Run.Error, "/score") {
 		t.Fatalf("run: %s %q", d.Run.Status, d.Run.Error)
+	}
+}
+
+// file stores an uploaded file owned by agent.
+func (e *wfEnv) file(agent, id, name string) {
+	e.t.Helper()
+	if err := e.files.Create(e.ctx, &domain.File{ID: id, Name: name, Size: 2048, Owner: domain.AgentName(agent), CreatedAt: e.clock.Now()}); err != nil {
+		e.t.Fatal(err)
+	}
+}
+
+// usage records what agent's run on task m cost (as its runner uploads it).
+func (e *wfEnv) usage(m *domain.Message, in, out int64, cost float64) {
+	e.t.Helper()
+	data, _ := json.Marshal(map[string]any{"kind": "usage", "input_tokens": in, "output_tokens": out, "cost_usd": cost})
+	tool, _ := json.Marshal(map[string]any{"kind": "tool", "tool": "Bash", "input": "go test ./..."})
+	if err := e.traces.Append(e.ctx, []*domain.TraceEvent{
+		{Message: m.ID, Seq: 1, Kind: "tool", Data: string(tool), At: e.clock.Now()},
+		{Message: m.ID, Seq: 2, Kind: "usage", Data: string(data), At: e.clock.Now()}}); err != nil {
+		e.t.Fatal(err)
+	}
+}
+
+func TestWorkflowObservability(t *testing.T) {
+	e := newWF(t, "coder", "reviewer")
+	e.apply(writeReview)
+	start := e.clock.Now()
+	run := e.start("写-审-改", map[string]any{"task": "导出"})
+
+	// write: a progress report with a screenshot, a reply that is sent
+	// back once, then one that fits (with a file).
+	m := e.task("coder")
+	e.file("coder", "f_shot", "shot.png")
+	if _, err := e.msgs.ProgressWith(e.ctx, e.agents["coder"], m.ID, "做了一半", []string{"f_shot"}, false); err != nil {
+		t.Fatal(err)
+	}
+	e.usage(m, 1000, 200, 0.05)
+	e.clock.t = start.Add(2 * time.Minute)
+	e.reply("coder", m, "done", nil) // no result: sent back
+	again := e.task("coder")
+	e.usage(again, 500, 100, 0.02)
+	e.file("coder", "f_patch", "fix.patch")
+	e.clock.t = start.Add(3 * time.Minute)
+	if _, err := e.msgs.ReplyResult(e.ctx, e.agents["coder"], again.ID, "补上了", `{"branch": "feat/x"}`, []string{"f_patch"}, false); err != nil {
+		t.Fatal(err)
+	}
+	e.svc.Tick(e.ctx)
+	// review: approves after a minute; the decision waits ten.
+	r := e.task("reviewer")
+	e.clock.t = start.Add(4 * time.Minute)
+	e.reply("reviewer", r, "好", map[string]any{"approved": true})
+	e.clock.t = start.Add(14 * time.Minute)
+	if _, err := e.svc.Decide(e.ctx, e.glenn, run.ID, "approve", "合并", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	d := e.run(run.ID)
+	if d.Run.Status != domain.FlowSucceeded {
+		t.Fatalf("run: %s %q", d.Run.Status, d.Run.Error)
+	}
+	mt := d.Metrics
+	if mt.DurationMS != (14*time.Minute).Milliseconds() || mt.ActiveMS != (4*time.Minute).Milliseconds() ||
+		mt.WaitingMS != (10*time.Minute).Milliseconds() {
+		t.Fatalf("times: %+v", mt)
+	}
+	if mt.Steps != 3 || mt.Done != 3 || mt.Bounces != 1 || mt.Attempts != 4 {
+		t.Fatalf("counts: %+v", mt)
+	}
+	if mt.Usage.InputTokens != 1500 || mt.Usage.OutputTokens != 300 || mt.Usage.CostUSD < 0.069 || mt.Usage.CostUSD > 0.071 {
+		t.Fatalf("usage: %+v", mt.Usage)
+	}
+	if w := d.Steps[0]; len(w.Tasks) != 2 || w.Bounces != 1 || w.Usage == nil {
+		t.Fatalf("write step: %+v", w)
+	}
+	// Files handed back: the screenshot (progress, first try) and the patch.
+	if len(d.Artifacts) != 2 || d.Artifacts[0].File.Name != "shot.png" || d.Artifacts[0].Kind != "progress" || d.Artifacts[0].Try != 1 ||
+		d.Artifacts[1].File.Name != "fix.patch" || d.Artifacts[1].Kind != "reply" || d.Artifacts[1].Try != 2 {
+		t.Fatalf("artifacts: %+v", d.Artifacts)
+	}
+
+	// The write step's log: what was sent, said, done and handed back.
+	l, err := e.svc.StepLog(e.ctx, e.glenn, run.ID, "write", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kinds := map[string]int{}
+	for _, x := range l.Entries {
+		kinds[x.Kind+":"+x.Sub]++
+	}
+	if kinds["task:"] != 2 || kinds["progress:"] != 1 || kinds["reply:"] != 2 || kinds["trace:tool"] != 2 || kinds["trace:usage"] != 2 ||
+		kinds["event:bounced"] != 1 || kinds["event:done"] != 1 {
+		t.Fatalf("log: %v", kinds)
+	}
+	if _, err := e.svc.StepLog(e.ctx, app.Caller{Name: "bob", MemberID: "mem_2"}, run.ID, "write", true); err == nil {
+		t.Fatal("someone else read the log")
+	}
+
+	// Scores: by the person, and by an agent the run went to.
+	if _, err := e.svc.Evaluate(e.ctx, e.glenn, run.ID, app.EvaluateInput{Name: "quality", Value: 4, Unit: "分", Direction: "higher"}); err != nil {
+		t.Fatal(err)
+	}
+	rev := app.Caller{Name: "glenn", MemberID: "mem_9", Agent: "reviewer"}
+	if _, err := e.svc.Evaluate(e.ctx, rev, run.ID, app.EvaluateInput{Name: "tests_failed", Value: 0, Direction: "lower", Step: "review"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.Evaluate(e.ctx, e.glenn, run.ID, app.EvaluateInput{Name: "bad name!", Value: 1}); err == nil {
+		t.Fatal("a bad score name was taken")
+	}
+	if _, err := e.svc.Evaluate(e.ctx, e.glenn, run.ID, app.EvaluateInput{Name: "x", Value: 1, Step: "nope"}); err == nil {
+		t.Fatal("a score for a step the workflow does not have was taken")
+	}
+
+	// A second run fails at review.
+	e.clock.t = start.Add(time.Hour)
+	run2 := e.start("写-审-改", map[string]any{"task": "导入"})
+	e.clock.t = start.Add(time.Hour + time.Minute)
+	e.reply("coder", e.task("coder"), "ok", map[string]any{"branch": "feat/y"})
+	e.reply("reviewer", e.task("reviewer"), "hmm", nil)
+	e.clock.t = start.Add(time.Hour + 5*time.Minute)
+	e.reply("reviewer", e.task("reviewer"), "still prose", nil)
+	if _, err := e.svc.Evaluate(e.ctx, e.glenn, run2.ID, app.EvaluateInput{Name: "quality", Value: 2, Unit: "分", Direction: "higher"}); err != nil {
+		t.Fatal(err)
+	}
+
+	st, err := e.svc.Stats(e.ctx, e.glenn, "写-审-改", 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Total != 2 || st.ByStatus[domain.FlowSucceeded] != 1 || st.ByStatus[domain.FlowFailed] != 1 || st.SuccessRate != 0.5 || st.Sample != 2 {
+		t.Fatalf("stats: %+v", st)
+	}
+	if st.Duration.N != 2 || st.Duration.Max != float64((14*time.Minute).Milliseconds()) {
+		t.Fatalf("duration: %+v", st.Duration)
+	}
+	if len(st.Steps) != 3 || st.Steps[0].Step != "write" || st.Steps[0].Runs != 2 || st.Steps[0].Bounces != 1 ||
+		st.Steps[1].Step != "review" || st.Steps[1].Failed != 1 || !strings.Contains(st.Steps[1].LastError, "approved is missing") ||
+		st.Steps[1].LastErrorRun != run2.ID {
+		t.Fatalf("steps: %+v", st.Steps)
+	}
+	if len(st.Failures) != 1 || st.Failures[0].ID != run2.ID || st.Failures[0].FailedStep != "review" {
+		t.Fatalf("failures: %+v", st.Failures)
+	}
+	if len(st.Evaluations) != 2 || st.Evaluations[0].Name != "quality" || st.Evaluations[0].Values.Avg != 3 || st.Evaluations[0].Values.N != 2 {
+		t.Fatalf("scores: %+v", st.Evaluations)
+	}
+	if st.Usage.CostUSD < 0.069 || len(st.Versions) != 1 || st.Versions[0].Runs != 2 {
+		t.Fatalf("usage/versions: %+v %+v", st.Usage, st.Versions)
+	}
+
+	// Side by side: the first run scored better on quality.
+	cmp, err := e.svc.Compare(e.ctx, e.glenn, run.ID, run2.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cmp.SameVersion || len(cmp.Steps) != 3 || cmp.Steps[2].B != nil || cmp.Steps[1].B.Status != domain.StepFailed {
+		t.Fatalf("compare steps: %+v", cmp.Steps)
+	}
+	var q *app.EvalDelta
+	for i := range cmp.Evaluations {
+		if cmp.Evaluations[i].Name == "quality" {
+			q = &cmp.Evaluations[i]
+		}
+	}
+	if q == nil || q.Better != "a" || q.Delta != -2 {
+		t.Fatalf("compare scores: %+v", cmp.Evaluations)
+	}
+
+	// Runs by state.
+	failed, err := e.svc.RunsWhere(e.ctx, e.glenn, "写-审-改", domain.RunFilter{Status: domain.FlowFailed})
+	if err != nil || len(failed) != 1 || failed[0].ID != run2.ID {
+		t.Fatalf("failed runs: %v %v", failed, err)
 	}
 }

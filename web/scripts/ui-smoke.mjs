@@ -3800,6 +3800,87 @@ async function runMatrix(browser, size, scheme) {
       if (narrow) await sidebar(page, false);
     });
 
+    // Watching how a workflow goes: its figures, its runs by state; a run's
+    // metrics, timeline, files, scores, a step's log, two runs side by side.
+    await step("工作流 · 观测", async () => {
+      await go(page, "工作流", narrow);
+      const row = page.locator("[data-testid=workflows] .au-row", { hasText: "写-审-改" });
+      await row.waitFor({ timeout: 20_000 });
+      await clickVisible(page, row.locator(".au-row-main"));
+      const det = page.locator("[data-testid=workflow-detail]");
+      const stats = det.locator("[data-testid=workflow-stats]");
+      await stats.waitFor({ timeout: 10_000 });
+      const statsText = await stats.innerText();
+      for (const w of ["跑了", "成功率", "用时", "每次花费", "$"]) if (!statsText.includes(w)) throw new Error(`运行情况里应有「${w}」`);
+      if ((await det.locator("[data-testid=workflow-recent] .wfo-bar").count()) < 8) throw new Error("最近几次的用时应画成一排柱子");
+      const table = det.locator("[data-testid=workflow-step-stats]");
+      if (!(await table.innerText()).includes("最近一次失败")) throw new Error("每一步的表里应写出最近一次失败");
+      await stats.scrollIntoViewIfNeeded();
+      await settle(page, 300);
+      await shot(page, size, scheme, "workflow-stats");
+      await table.scrollIntoViewIfNeeded();
+      await settle(page, 200);
+      await shot(page, size, scheme, "workflow-step-stats");
+      // Only the failed runs.
+      await clickVisible(page, det.locator("[data-testid=workflow-runs-filter]").getByRole("tab", { name: "失败的" }));
+      await page.waitForFunction(() => {
+        const rows = [...document.querySelectorAll("[data-testid=workflow-runs] .wf-run-row")];
+        return rows.length > 0 && rows.every((r) => r.textContent.includes("失败了"));
+      }, null, { timeout: 10_000 });
+      await clickVisible(page, det.locator("[data-testid=workflow-runs-filter]").getByRole("tab", { name: "全部" }));
+      // The run with the latest score: the export button.
+      await clickVisible(page, det.locator("[data-testid=workflow-score-stats]").getByRole("button", { name: /最近/ }).first());
+      const run = page.locator("[data-testid=workflow-run]");
+      const metrics = run.locator("[data-testid=workflow-run-metrics]");
+      await metrics.waitFor({ timeout: 10_000 });
+      for (const w of ["总用时", "干活", "发了", "$"]) if (!(await metrics.innerText()).includes(w)) throw new Error(`运行的指标里应有「${w}」`);
+      const arts = run.locator("[data-testid=workflow-artifacts]");
+      await arts.locator("img[alt='设置页截图.png']").first().waitFor({ timeout: 10_000 });
+      if (!(await arts.innerText()).includes("改动说明.md")) throw new Error("产物里应有交回的文件");
+      await run.locator("[data-testid=workflow-run-scores]", { hasText: "quality" }).waitFor({ timeout: 5_000 });
+      await settle(page, 300);
+      await shot(page, size, scheme, "workflow-run-metrics");
+      await arts.scrollIntoViewIfNeeded();
+      await settle(page, 300);
+      await shot(page, size, scheme, "workflow-artifacts");
+      // The timeline.
+      await clickVisible(page, run.locator("[data-testid=workflow-steps-view]").getByRole("tab", { name: "时间线" }));
+      const tl = run.locator("[data-testid=workflow-timeline]");
+      await tl.waitFor({ timeout: 5_000 });
+      if ((await tl.locator(".wfo-tl-row").count()) < 5) throw new Error("时间线上每一步应有一条");
+      await tl.scrollIntoViewIfNeeded();
+      await settle(page, 300);
+      await shot(page, size, scheme, "workflow-timeline");
+      // A step's log, from its bar.
+      await clickVisible(page, tl.locator(".wfo-tl-row").first());
+      const log = page.locator("[data-testid=workflow-step-log]");
+      await log.locator(".wfo-log-line", { hasText: "Read web/src/app/Settings.tsx" }).waitFor({ timeout: 10_000 });
+      const logText = await log.innerText();
+      for (const w of ["交给它", "进展", "回复", "用工具", "用量", "退回"]) if (!logText.includes(w)) throw new Error(`步骤日志里应有「${w}」`);
+      await settle(page, 300);
+      await shot(page, size, scheme, "workflow-step-log");
+      await page.keyboard.press("Escape");
+      await log.waitFor({ state: "detached", timeout: 5_000 });
+      // A score.
+      await clickVisible(page, run.getByRole("button", { name: "打个分" }));
+      const form = page.locator("[data-testid=workflow-score]");
+      await form.locator("input[inputmode=decimal]").fill("5");
+      await form.getByPlaceholder("分").fill("分");
+      await clickVisible(page, form.getByRole("button", { name: "记下" }));
+      await form.waitFor({ state: "detached", timeout: 5_000 });
+      await run.locator("[data-testid=workflow-run-scores] .wfo-score", { hasText: "5分" }).waitFor({ timeout: 10_000 });
+      // Side by side with the run before.
+      await clickVisible(page, run.getByRole("button", { name: "对比" }));
+      const cmp = page.locator("[data-testid=workflow-compare]");
+      await cmp.locator(".wfo-tr", { hasText: "总用时" }).waitFor({ timeout: 10_000 });
+      if (!(await cmp.innerText()).includes("quality")) throw new Error("对比里应有两次的分数");
+      await settle(page, 300);
+      await shot(page, size, scheme, "workflow-compare");
+      await page.keyboard.press("Escape");
+      await cmp.waitFor({ state: "detached", timeout: 5_000 });
+      if (narrow) await sidebar(page, false);
+    });
+
     // Editing a workflow: who does each step, timeouts, retries, rounds;
     // saved as a new version.
     await step("工作流 · 编辑", async () => {

@@ -220,6 +220,7 @@ func Build(o Options) (*Hub, error) {
 	srv.SetAutomations(automations)
 	domain.CompleteContracts = jsonschema.New()
 	workflows := app.NewWorkflowService(sqlite.NewWorkflowRepo(db), messages, msgRepo, ids, clock, o.Log)
+	workflows.SetTraces(sqlite.NewTraceRepo(db))
 	srv.SetWorkflows(workflows)
 	automations.SetWorkflows(workflows)
 	pages := app.NewPageService(sqlite.NewPageRepo(db), blob.FS{Dir: filesDir}, projectSvc, ids, clock)

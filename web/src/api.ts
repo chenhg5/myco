@@ -251,12 +251,57 @@ export interface RunStep {
   id: string; step: string; title?: string; kind: "agent" | "computer" | "human"; attempt: number; status: StepStatus;
   target?: string; message_id?: string; input?: string; payload?: unknown; output?: Record<string, unknown>; summary?: string; error?: string;
   retries?: number; bounced?: boolean; options?: string[]; started_at: string; ended_at?: string; due_at?: string;
+  /** hubs from v0.21.1: send-backs, tasks sent, time taken (to now while open), cost */
+  bounces?: number; attempts?: number; tasks?: string[]; duration_ms?: number; usage?: Usage;
 }
 export interface RunEvent { at: string; kind: string; step?: string; text: string }
+/** What agents' runs cost, as their CLIs report it. */
+export interface Usage { input_tokens?: number; output_tokens?: number; cost_usd?: number }
+export interface RunMetrics {
+  duration_ms: number; active_ms: number; waiting_ms: number; steps: number; done: number; failed: number;
+  attempts: number; retries: number; bounces: number; usage?: Usage;
+}
+export interface RunArtifact {
+  step: string; step_run: string; try: number; kind: "reply" | "progress"; message: string; from: string; at: string;
+  file_id: string; name: string; size: number; content_type?: string;
+}
+export interface RunEvaluation {
+  id: number; run: string; step?: string; name: string; value: number; unit?: string; direction?: "higher" | "lower" | "";
+  note?: string; by?: string; at: string;
+}
 export interface WorkflowRun {
   id: string; workflow_id: string; name: string; version: number; project?: string; status: RunStatus;
   inputs?: Record<string, unknown>; owner?: string; by?: string; trigger?: string; error?: string; current?: string[];
   steps?: RunStep[]; events?: RunEvent[]; definition?: WorkflowDef; created_at: string; updated_at: string; ended_at?: string;
+  /** hubs from v0.21.1 */
+  duration_ms?: number; metrics?: RunMetrics; artifacts?: RunArtifact[]; evaluations?: RunEvaluation[];
+}
+export interface StepLogEntry {
+  at: string; kind: "task" | "progress" | "reply" | "failure" | "event" | "stdout" | "stderr" | "trace" | string;
+  sub?: string; try?: number; from?: string; text?: string; attachments?: Attachment[];
+}
+export interface StepLog { run: string; step: RunStep; entries: StepLogEntry[]; clipped?: boolean }
+export interface Dist { n: number; avg: number; min: number; p50: number; p90: number; p95: number; max: number }
+export interface WorkflowStepStats {
+  step: string; title?: string; kind: string; runs: number; done: number; failed: number; retries: number; bounces: number;
+  duration_ms: Dist; usage?: Usage; last_error?: string; last_error_run?: string; last_error_at?: string;
+}
+export interface WorkflowRunPoint {
+  id: string; status: RunStatus; version: number; created_at: string; duration_ms: number; error?: string; failed_step?: string; cost_usd?: number;
+}
+export interface WorkflowStats {
+  workflow: string; name: string; total: number; by_status: Partial<Record<RunStatus, number>>; success_rate: number; sample: number;
+  version?: number; duration_ms: Dist; active_ms: Dist; waiting_ms: Dist; usage?: Usage; cost_per_run?: number;
+  steps: WorkflowStepStats[];
+  versions: { version: number; runs: number; succeeded: number; failed: number; cancelled: number; duration_ms: Dist }[];
+  evaluations: { name: string; unit?: string; direction?: string; values: Dist; last: number; last_run: string }[];
+  recent: WorkflowRunPoint[]; failures: WorkflowRunPoint[];
+}
+export interface RunCompareStep { status: StepStatus; runs: number; attempts: number; duration_ms: number; usage?: Usage; summary?: string; error?: string }
+export interface RunComparison {
+  a: { run: WorkflowRun; metrics: RunMetrics }; b: { run: WorkflowRun; metrics: RunMetrics }; same_version: boolean;
+  steps: { step: string; title?: string; a?: RunCompareStep; b?: RunCompareStep; faster_in?: "a" | "b"; delta_ms: number; delta_cost_usd?: number }[];
+  evaluations: { name: string; unit?: string; direction?: string; a?: number; b?: number; delta: number; better?: "a" | "b" }[];
 }
 export interface WorkflowApplyResponse { workflow: Workflow; created: boolean; changed: boolean; warnings?: string[] }
 export interface WorkflowCheck { valid: boolean; problems?: string[]; warnings?: string[] }

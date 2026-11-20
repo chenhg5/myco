@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -13,6 +15,7 @@ import (
 	"github.com/chenhg5/myco/internal/api"
 	. "github.com/chenhg5/myco/internal/cli/cmdkit"
 	"github.com/chenhg5/myco/internal/client"
+	"github.com/chenhg5/myco/internal/domain"
 )
 
 // workflowCommands: workflows the hub walks, handing each step to an agent,
@@ -300,21 +303,24 @@ upper trim. Names that are not there are refused by validate.`,
 		Flags: []Flag{adminFlag,
 			{Name: "name", Kind: String, Help: "Only this workflow's runs"},
 			{Name: "active", Kind: Bool, Help: "Only runs still going (or waiting for a decision)"},
+			{Name: "status", Kind: Enum, Values: []string{"", "running", "waiting", "succeeded", "failed", "cancelled"}, Help: "Only runs in this state"},
 			{Name: "limit", Kind: Int, Default: "20", Help: "At most this many"}},
 		Run: handler(func(e *env) error {
 			c, err := e.projectClient()
 			if err != nil {
 				return err
 			}
-			rs, err := c.WorkflowRuns(e.in.Ctx, e.in.String("name"), e.in.Bool("active"), e.in.Int("limit"))
+			rs, err := c.WorkflowRunsWhere(e.in.Ctx, client.RunQuery{Workflow: e.in.String("name"), Active: e.in.Bool("active"),
+				Status: e.in.String("status"), Limit: e.in.Int("limit")})
 			if err != nil {
 				return err
 			}
 			return e.p.Print(api.WorkflowRunList{Runs: rs}, func(w io.Writer) {
 				tw := tabwriter.NewWriter(w, 0, 2, 2, ' ', 0)
-				fmt.Fprintln(tw, "ID\tWORKFLOW\tSTATUS\tSTARTED\tBY\tERROR")
+				fmt.Fprintln(tw, "ID\tWORKFLOW\tSTATUS\tSTARTED\tTOOK\tBY\tERROR")
 				for _, r := range rs {
-					fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", r.ID, r.Name, r.Status, r.CreatedAt.Local().Format("01-02 15:04"), r.By, oneLine(r.Error, 60))
+					fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.ID, r.Name, r.Status, r.CreatedAt.Local().Format("01-02 15:04"),
+						took(r.DurationMS), r.By, oneLine(r.Error, 60))
 				}
 				tw.Flush()
 			})
@@ -403,11 +409,113 @@ upper trim. Names that are not there are refused by validate.`,
 			})
 		}),
 	}
-	runCmd := &Command{Name: "run", Summary: "Start, follow, cancel and retry runs; answer decisions"}
-	runCmd.Add(start, runs, show, cancel, retry, decide)
+	logs := &Command{
+		Name:    "logs",
+		Summary: "Show a step's log in a run: the task sent, progress, the answer, what the agent did, a computer's output",
+		Examples: []string{"myco workflow run logs --id run_abc123 --step review",
+			"myco workflow run logs --id run_abc123 --step review --no-trace"},
+		Flags: []Flag{runFlag, adminFlag,
+			{Name: "step", Kind: String, Required: true, Help: "The step's id (its latest start), or a step start's id (rs_...)"},
+			{Name: "no-trace", Kind: Bool, Help: "Leave out what the agent did (its trace)"}},
+		Run: handler(func(e *env) error {
+			if err := e.in.Require("step"); err != nil {
+				return err
+			}
+			c, err := e.projectClient()
+			if err != nil {
+				return err
+			}
+			l, err := c.WorkflowStepLog(e.in.Ctx, e.in.String("id"), e.in.String("step"), !e.in.Bool("no-trace"))
+			if err != nil {
+				return err
+			}
+			return e.p.Print(l, func(w io.Writer) { printStepLog(w, l) })
+		}),
+	}
+	evaluate := &Command{
+		Name:     "evaluate",
+		Summary:  "Give a run (or one of its steps) a score: by hand, from a test script, or by an agent that checked the work",
+		Mutating: true,
+		Examples: []string{"myco workflow run evaluate --id run_abc123 --name quality --value 4 --unit 分 --direction higher",
+			`myco workflow run evaluate --id run_abc123 --name tests_failed --value 0 --direction lower --note "全部通过"`},
+		Flags: []Flag{runFlag, adminFlag,
+			{Name: "name", Kind: String, Required: true, Help: "What is measured (letters, digits, _ . -)"},
+			{Name: "value", Kind: String, Required: true, Help: "A number"},
+			{Name: "unit", Kind: String, Help: "Its unit, shown after it (%, 分, 个 …)"},
+			{Name: "direction", Kind: Enum, Values: []string{"", "higher", "lower"}, Help: "Whether more is better (higher) or less (lower)"},
+			{Name: "step", Kind: String, Help: "The step it is about (default: the whole run)"},
+			{Name: "note", Kind: String, Help: "Why"}},
+		Run: handler(func(e *env) error {
+			if err := e.in.Require("name", "value"); err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(strings.TrimSpace(e.in.String("value")), 64)
+			if err != nil {
+				return &UsageError{Message: fmt.Sprintf("--value %q is not a number", e.in.String("value")),
+					Suggestion: "pass a number, e.g. --value 4.5", Command: e.in.Cmd.Path()}
+			}
+			c, err := e.projectClient()
+			if err != nil {
+				return err
+			}
+			in := api.RunEvaluate{Step: e.in.String("step"), Name: e.in.String("name"), Value: v, Unit: e.in.String("unit"),
+				Direction: e.in.String("direction"), Note: e.in.String("note")}
+			ev, err := c.EvaluateWorkflowRun(e.in.Ctx, e.in.String("id"), in, e.in.Bool("dry-run"))
+			if err != nil {
+				return err
+			}
+			if e.in.Bool("dry-run") {
+				return e.dryRun(map[string]any{"action": "workflow_run_evaluate", "id": e.in.String("id"), "evaluation": ev})
+			}
+			return e.p.Print(ev, func(w io.Writer) { fmt.Fprintf(w, "%s: %s = %s\n", ev.Run, ev.Name, scoreText(ev.Value, ev.Unit)) })
+		}),
+	}
+	compare := &Command{
+		Name:     "compare",
+		Summary:  "Set two runs side by side: time, attempts and cost per step, and their scores",
+		Examples: []string{"myco workflow run compare --a run_abc123 --b run_def456"},
+		Flags: []Flag{adminFlag,
+			{Name: "a", Kind: String, Required: true, Help: "One run's id"},
+			{Name: "b", Kind: String, Required: true, Help: "The other run's id"}},
+		Run: handler(func(e *env) error {
+			if err := e.in.Require("a", "b"); err != nil {
+				return err
+			}
+			c, err := e.projectClient()
+			if err != nil {
+				return err
+			}
+			cmp, err := c.CompareWorkflowRuns(e.in.Ctx, e.in.String("a"), e.in.String("b"))
+			if err != nil {
+				return err
+			}
+			return e.p.Print(cmp, func(w io.Writer) { printCompare(w, cmp) })
+		}),
+	}
+	runCmd := &Command{Name: "run", Summary: "Start, follow, cancel and retry runs; answer decisions; logs, scores, comparisons"}
+	runCmd.Add(start, runs, show, logs, cancel, retry, decide, evaluate, compare)
+	stats := &Command{
+		Name:     "stats",
+		Summary:  "A workflow's figures: runs, success rate, time (p50/p95), each step's time, failures, retries and cost; scores",
+		Examples: []string{"myco workflow stats --name 写-审-改", "myco workflow stats --name 写-审-改 --limit 50 --version 3"},
+		Flags: []Flag{nameFlag, adminFlag,
+			{Name: "limit", Kind: Int, Default: "200", Help: "Work out times over the last this many runs"},
+			{Name: "version", Kind: Int, Help: "Only runs of this version"}},
+		Run: handler(func(e *env) error {
+			c, err := e.projectClient()
+			if err != nil {
+				return err
+			}
+			st, err := c.WorkflowStats(e.in.Ctx, e.in.String("name"), e.in.Int("limit"), e.in.Int("version"))
+			if err != nil {
+				return err
+			}
+			return e.p.Print(st, func(w io.Writer) { printStats(w, st) })
+		}),
+	}
 	root := &Command{Name: "workflow", Summary: "Workflows: steps the workspace hands to agents, computers and people, in order"}
 	root.Add(validate, apply, list, get, toggle("enable", true, "Turn a workflow on (it can be started)"),
-		toggle("disable", false, "Turn a workflow off (it cannot be started; runs going on go on)"), remove, runCmd, decisions)
+		toggle("disable", false, "Turn a workflow off (it cannot be started; runs going on go on)"), remove, stats, runCmd, decisions)
 	return root
 }
 
@@ -501,14 +609,31 @@ func waitRun(e *env, c *client.Client, id string, timeout time.Duration) (*api.W
 }
 
 func printRun(w io.Writer, r *api.WorkflowRun) {
-	fmt.Fprintf(w, "%s  %s v%d  %s  (by %s, %s)\n", r.ID, r.Name, r.Version, r.Status, r.By, r.CreatedAt.Local().Format("2006-01-02 15:04"))
+	fmt.Fprintf(w, "%s  %s v%d  %s  (by %s, %s, took %s)\n", r.ID, r.Name, r.Version, r.Status, r.By, r.CreatedAt.Local().Format("2006-01-02 15:04"),
+		took(r.DurationMS))
 	if r.Error != "" {
 		fmt.Fprintln(w, "  "+r.Error)
 	}
+	if m := r.Metrics; m != nil {
+		line := fmt.Sprintf("  at work %s · waiting for decisions %s · %d steps, %d attempts", took(m.ActiveMS), took(m.WaitingMS), m.Steps, m.Attempts)
+		if m.Retries > 0 {
+			line += fmt.Sprintf(", %d retries", m.Retries)
+		}
+		if m.Bounces > 0 {
+			line += fmt.Sprintf(", %d sent back", m.Bounces)
+		}
+		if u := usageText(m.Usage); u != "" {
+			line += " · " + u
+		}
+		fmt.Fprintln(w, line)
+	}
 	for _, s := range r.Steps {
-		line := fmt.Sprintf("  %-9s %s", s.Status, s.Step)
+		line := fmt.Sprintf("  %-9s %-8s %s", s.Status, took(s.DurationMS), s.Step)
 		if s.Attempt > 1 {
 			line += fmt.Sprintf(" (#%d)", s.Attempt)
+		}
+		if s.Attempts > 1 {
+			line += fmt.Sprintf(" ×%d", s.Attempts)
 		}
 		if s.Target != "" {
 			line += " → " + s.Target
@@ -523,6 +648,224 @@ func printRun(w io.Writer, r *api.WorkflowRun) {
 		}
 		if s.MessageID != "" {
 			line += "  (" + s.MessageID + ")"
+		}
+		fmt.Fprintln(w, line)
+	}
+	if len(r.Artifacts) > 0 {
+		fmt.Fprintln(w, "files handed back:")
+		for _, a := range r.Artifacts {
+			fmt.Fprintf(w, "  %s  %s (%s)  from %s · %s  (myco file get --id %s)\n", a.Step, a.Name, sizeText(a.Size), a.From, a.Kind, a.FileID)
+		}
+	}
+	if len(r.Evaluations) > 0 {
+		fmt.Fprintln(w, "scores:")
+		for _, e := range r.Evaluations {
+			line := fmt.Sprintf("  %s = %s", e.Name, scoreText(e.Value, e.Unit))
+			if e.Step != "" {
+				line += " (" + e.Step + ")"
+			}
+			line += "  by " + e.By
+			if e.Note != "" {
+				line += ": " + oneLine(e.Note, 60)
+			}
+			fmt.Fprintln(w, line)
+		}
+	}
+}
+
+// took writes a duration in ms for people ("1m05s"; "-" for none).
+func took(ms int64) string {
+	if ms <= 0 {
+		return "-"
+	}
+	return domain.HumanMS(ms)
+}
+
+func usageText(u *api.Usage) string {
+	if u == nil {
+		return ""
+	}
+	var parts []string
+	if u.InputTokens+u.OutputTokens > 0 {
+		parts = append(parts, fmt.Sprintf("%s in / %s out tokens", countText(u.InputTokens), countText(u.OutputTokens)))
+	}
+	if u.CostUSD > 0 {
+		parts = append(parts, fmt.Sprintf("$%.2f", u.CostUSD))
+	}
+	return strings.Join(parts, ", ")
+}
+
+func countText(n int64) string {
+	switch {
+	case n >= 1_000_000:
+		return fmt.Sprintf("%.1fM", float64(n)/1e6)
+	case n >= 1000:
+		return fmt.Sprintf("%.1fk", float64(n)/1e3)
+	}
+	return strconv.FormatInt(n, 10)
+}
+
+func sizeText(n int64) string {
+	switch {
+	case n >= 1<<20:
+		return fmt.Sprintf("%.1f MB", float64(n)/(1<<20))
+	case n >= 1<<10:
+		return fmt.Sprintf("%.1f KB", float64(n)/(1<<10))
+	}
+	return fmt.Sprintf("%d B", n)
+}
+
+func scoreText(v float64, unit string) string {
+	return strconv.FormatFloat(v, 'f', -1, 64) + unit
+}
+
+func printStepLog(w io.Writer, l *api.StepLog) {
+	s := l.Step
+	fmt.Fprintf(w, "%s · %s  %s  took %s", l.Run, s.Step, s.Status, took(s.DurationMS))
+	if s.Target != "" {
+		fmt.Fprintf(w, "  → %s", s.Target)
+	}
+	if u := usageText(s.Usage); u != "" {
+		fmt.Fprintf(w, "  (%s)", u)
+	}
+	fmt.Fprintln(w)
+	if l.Clipped {
+		fmt.Fprintf(w, "(only the last %d lines)\n", len(l.Entries))
+	}
+	for _, e := range l.Entries {
+		head := e.Kind
+		if e.Sub != "" {
+			head += ":" + e.Sub
+		}
+		if e.Try > 1 {
+			head += fmt.Sprintf(" #%d", e.Try)
+		}
+		fmt.Fprintf(w, "%s  %-18s", e.At.Local().Format("15:04:05"), head)
+		text := strings.TrimRight(e.Text, "\n")
+		switch e.Kind {
+		case "stdout", "stderr", "task", "reply", "progress":
+			fmt.Fprintln(w)
+			for _, line := range strings.Split(text, "\n") {
+				fmt.Fprintln(w, "    "+line)
+			}
+		default:
+			fmt.Fprintln(w, oneLine(text, 160))
+		}
+		for _, a := range e.Attachments {
+			fmt.Fprintf(w, "    📎 %s (%s)  myco file get --id %s\n", a.Name, sizeText(a.Size), a.FileID)
+		}
+	}
+}
+
+func distText(d api.Dist) string {
+	if d.N == 0 {
+		return "-"
+	}
+	return fmt.Sprintf("p50 %s · p95 %s · avg %s", took(int64(d.P50)), took(int64(d.P95)), took(int64(d.Avg)))
+}
+
+func printStats(w io.Writer, st *api.WorkflowStats) {
+	fmt.Fprintf(w, "%s: %d runs", st.Name, st.Total)
+	for _, k := range []string{"succeeded", "failed", "cancelled", "running", "waiting"} {
+		if n := st.ByStatus[k]; n > 0 {
+			fmt.Fprintf(w, " · %s %d", k, n)
+		}
+	}
+	if st.Total > 0 {
+		fmt.Fprintf(w, " · success %.0f%%", st.SuccessRate*100)
+	}
+	fmt.Fprintln(w)
+	if st.Sample == 0 {
+		return
+	}
+	scope := fmt.Sprintf("last %d runs", st.Sample)
+	if st.Version > 0 {
+		scope += fmt.Sprintf(" of version %d", st.Version)
+	}
+	fmt.Fprintf(w, "time (%s): %s\n", scope, distText(st.Duration))
+	fmt.Fprintf(w, "  at work %s\n  waiting for decisions %s\n", distText(st.Active), distText(st.Waiting))
+	if u := usageText(st.Usage); u != "" {
+		fmt.Fprintf(w, "cost: %s (about $%.2f a run)\n", u, st.CostPerRun)
+	}
+	tw := tabwriter.NewWriter(w, 0, 2, 2, ' ', 0)
+	fmt.Fprintln(tw, "STEP\tRUNS\tFAILED\tRETRIES\tSENT BACK\tP50\tP95\tCOST\tLAST ERROR")
+	for _, x := range st.Steps {
+		cost := "-"
+		if x.Usage != nil && x.Usage.CostUSD > 0 {
+			cost = fmt.Sprintf("$%.2f", x.Usage.CostUSD)
+		}
+		fmt.Fprintf(tw, "%s\t%d\t%d\t%d\t%d\t%s\t%s\t%s\t%s\n", x.Step, x.Runs, x.Failed, x.Retries, x.Bounces,
+			took(int64(x.Duration.P50)), took(int64(x.Duration.P95)), cost, oneLine(x.LastError, 50))
+	}
+	tw.Flush()
+	if len(st.Versions) > 1 {
+		fmt.Fprintln(w, "by version:")
+		for _, v := range st.Versions {
+			fmt.Fprintf(w, "  v%d  %d runs, %d succeeded, %d failed  %s\n", v.Version, v.Runs, v.Succeeded, v.Failed, distText(v.Duration))
+		}
+	}
+	if len(st.Evaluations) > 0 {
+		fmt.Fprintln(w, "scores:")
+		for _, e := range st.Evaluations {
+			fmt.Fprintf(w, "  %s  avg %s · min %s · max %s · %d runs\n", e.Name, scoreText(round2(e.Values.Avg), e.Unit),
+				scoreText(e.Values.Min, e.Unit), scoreText(e.Values.Max, e.Unit), e.Values.N)
+		}
+	}
+	if len(st.Failures) > 0 {
+		fmt.Fprintln(w, "latest failures:")
+		for _, f := range st.Failures {
+			fmt.Fprintf(w, "  %s  %s  %s: %s\n", f.ID, f.CreatedAt.Local().Format("01-02 15:04"), f.FailedStep, oneLine(f.Error, 80))
+		}
+	}
+}
+
+func round2(f float64) float64 { return math.Round(f*100) / 100 }
+
+func printCompare(w io.Writer, c *api.RunComparison) {
+	a, b := c.A, c.B
+	fmt.Fprintf(w, "A %s  %s v%d  %s  took %s\n", a.Run.ID, a.Run.Name, a.Run.Version, a.Run.Status, took(a.Metrics.DurationMS))
+	fmt.Fprintf(w, "B %s  %s v%d  %s  took %s\n", b.Run.ID, b.Run.Name, b.Run.Version, b.Run.Status, took(b.Metrics.DurationMS))
+	if !c.SameVersion {
+		fmt.Fprintln(w, "(not the same version of the workflow)")
+	}
+	tw := tabwriter.NewWriter(w, 0, 2, 2, ' ', 0)
+	fmt.Fprintln(tw, "STEP\tA\tB\tΔ (B−A)")
+	side := func(x *api.RunCompareStep) string {
+		if x == nil {
+			return "—"
+		}
+		t := x.Status + " " + took(x.DurationMS)
+		if x.Attempts > 1 {
+			t += fmt.Sprintf(" ×%d", x.Attempts)
+		}
+		return t
+	}
+	for _, d := range c.Steps {
+		delta := ""
+		if d.A != nil && d.B != nil {
+			sign := "+"
+			ms := d.DeltaMS
+			if ms < 0 {
+				sign, ms = "-", -ms
+			}
+			delta = sign + took(ms)
+			if ms == 0 {
+				delta = "0"
+			}
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", d.Step, side(d.A), side(d.B), delta)
+	}
+	tw.Flush()
+	for _, e := range c.Evaluations {
+		val := func(v *float64) string {
+			if v == nil {
+				return "—"
+			}
+			return scoreText(*v, e.Unit)
+		}
+		line := fmt.Sprintf("score %s: A %s · B %s", e.Name, val(e.A), val(e.B))
+		if e.Better != "" {
+			line += " · better: " + strings.ToUpper(e.Better)
 		}
 		fmt.Fprintln(w, line)
 	}

@@ -773,12 +773,19 @@ type RunStep struct {
 	Input     string // the task or command as sent
 	// Payload is the step's input (JSON): the run's inputs, the step
 	// before's result, an edge's map, or a join's object by step.
-	Payload   any
-	Output    map[string]any
-	Summary   string
-	Error     string
-	Retries   int
-	Bounced   bool
+	Payload any
+	Output  map[string]any
+	Summary string
+	Error   string
+	Retries int
+	Bounced bool
+	// Bounces counts the times its result was sent back (v0.21.1).
+	Bounces int
+	// Tasks are the tasks it sent, oldest first: the first, retries and
+	// send-backs (v0.21.1; MessageID is the latest).
+	Tasks []string
+	// Usage is what its agent's runs cost (from their traces).
+	Usage     *Usage
 	StartedAt time.Time
 	EndedAt   time.Time
 	DueAt     time.Time // timeout (zero: none)
@@ -812,7 +819,8 @@ const (
 // RunFilter narrows run lists.
 type RunFilter struct {
 	WorkflowID string
-	Active     bool // running or waiting only
+	Active     bool   // running or waiting only
+	Status     string // one state only
 	Limit      int
 }
 
@@ -841,6 +849,16 @@ type WorkflowRepository interface {
 
 	AddEvent(ctx context.Context, e *RunEvent) error
 	Events(ctx context.Context, runID string) ([]*RunEvent, error)
+
+	// RunCounts counts a workflow's runs by state.
+	RunCounts(ctx context.Context, workflowID string) (map[string]int, error)
+	// StepsOf returns the steps of runs, by run id.
+	StepsOf(ctx context.Context, runIDs []string) (map[string][]*RunStep, error)
+	// AddEvaluation stores a score, dropping the run's oldest past
+	// MaxRunEvaluations.
+	AddEvaluation(ctx context.Context, e *RunEvaluation) error
+	// Evaluations returns the scores of runs, oldest first.
+	Evaluations(ctx context.Context, runIDs []string) ([]*RunEvaluation, error)
 }
 
 // MatchesRole reports whether an agent does role (分工): a label role=<x>

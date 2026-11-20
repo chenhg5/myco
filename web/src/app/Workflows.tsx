@@ -11,6 +11,7 @@ import { RowsSkeleton } from "@/app/Skeleton";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
 import { WorkflowGraph, stateWords, stepKind, stepStates } from "@/app/WorkflowGraph";
 import { ContractEditor, ContractsSection } from "@/app/WorkflowContracts";
+import { CompareButton, CompareDialog, LogButton, RunArtifacts, RunMetricsStrip, RunScores, RunTimeline, RunsFilterSeg, StepLogDialog, WorkflowStatsSection, costWords, msWords, type RunsFilter } from "@/app/WorkflowObserve";
 import { L } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
 
@@ -221,7 +222,7 @@ export function WorkflowsPage({ hubId, rows, now, open, onOpened, onOpenMessage 
     return (
       <div className="pc au pcd aud wf" data-testid="workflow-run">
         <RunDetail hubId={hubId} runId={runId} wf={opened} rows={rows} now={now} stamp={stamp} onBack={() => setRunId(null)}
-          onChanged={refresh} onOpenMessage={onOpenMessage} />
+          onChanged={refresh} onOpenMessage={onOpenMessage} onOpenRun={setRunId} />
         {dialogs}
       </div>
     );
@@ -716,14 +717,21 @@ function WorkflowDetail({ hubId, wf, rows, now, stamp, busy, error, onBack, onRu
 }) {
   const [def, setDef] = useState<WorkflowDef | null>(null);
   const [runs, setRuns] = useState<WorkflowRun[] | null>(null);
+  const [filter, setFilter] = useState<RunsFilter>("");
   useEffect(() => {
     let off = false;
     appApi.workflow(hubId, wf.id).then((w) => { if (!off) setDef(w.definition || null); }, () => undefined);
-    const read = () => appApi.workflowRuns(hubId, { workflow: wf.id, limit: 50 }).then((r) => { if (!off) setRuns(r.runs || []); }, () => { if (!off) setRuns((x) => x ?? []); });
+    return () => { off = true; };
+  }, [hubId, wf.id, wf.version, stamp]);
+  useEffect(() => {
+    let off = false;
+    setRuns(null);
+    const opts = filter === "active" ? { active: true } : filter ? { status: filter } : {};
+    const read = () => appApi.workflowRuns(hubId, { workflow: wf.id, limit: 50, ...opts }).then((r) => { if (!off) setRuns(r.runs || []); }, () => { if (!off) setRuns((x) => x ?? []); });
     read();
     const t = setInterval(read, 5_000);
     return () => { off = true; clearInterval(t); };
-  }, [hubId, wf.id, wf.version, stamp]);
+  }, [hubId, wf.id, wf.version, stamp, filter]);
   return (
     <>
       <button type="button" className="pcd-back" onClick={onBack}><ArrowLeft />{L("工作流", "Workflows")}</button>
@@ -758,8 +766,14 @@ function WorkflowDetail({ hubId, wf, rows, now, stamp, busy, error, onBack, onRu
       <SectionHead title={L("输入和输出", "Inputs and outputs")} />
       {def ? <ContractsSection def={def} hubId={hubId} rows={rows} /> : <RowsSkeleton rows={2} className="pc-list" />}
 
-      <SectionHead title={L("运行记录", "Runs")} count={runs?.length} />
-      {runs === null ? <RowsSkeleton rows={3} className="pc-list" /> : runs.length === 0 ? (
+      <WorkflowStatsSection hubId={hubId} wf={wf} stamp={stamp} now={now} onOpenRun={onOpenRun} />
+
+      <SectionHead title={L("运行记录", "Runs")} count={runs?.length}>
+        {(filter || (runs && runs.length > 0)) && <RunsFilterSeg value={filter} onChange={setFilter} />}
+      </SectionHead>
+      {runs === null ? <RowsSkeleton rows={3} className="pc-list" /> : runs.length === 0 && filter ? (
+        <div className="app-empty-note">{L("没有这样的运行。", "No runs like that.")}</div>
+      ) : runs.length === 0 ? (
         <div className="pcd-empty" data-testid="workflow-no-runs">
           <span>{L("还没运行过。点「运行」开始一次，每一步交给谁、做得怎么样都会记在这里。", "It has not run yet. Run it once: who each step went to and how it went is kept here.")}</span>
           <button type="button" className="app-btn app-btn-small" onClick={onRun} disabled={!wf.enabled}><Play />{L("运行", "Run")}</button>
@@ -771,7 +785,7 @@ function WorkflowDetail({ hubId, wf, rows, now, stamp, busy, error, onBack, onRu
               <span className="aud-run-line">
                 <span className={cn("au-last aud-run-what", runTone(r.status))}><i aria-hidden /><span>{runWords(r.status)}{r.error ? ` · ${r.error}` : ""}</span></span>
                 {r.current && r.current.length > 0 && <span className="aud-run-trigger">{r.current.join("、")}</span>}
-                <span className="aud-run-when" title={new Date(r.created_at).toLocaleString()}>{timeAgo(r.created_at, now)}<small>{L(`用了 ${duration(r.created_at, r.ended_at, now)}`, `took ${duration(r.created_at, r.ended_at, now)}`)}</small></span>
+                <span className="aud-run-when" title={new Date(r.created_at).toLocaleString()}>{timeAgo(r.created_at, now)}<small>{L(`用了 ${r.duration_ms !== undefined && r.ended_at ? msWords(r.duration_ms) : duration(r.created_at, r.ended_at, now)}`, `took ${r.duration_ms !== undefined && r.ended_at ? msWords(r.duration_ms) : duration(r.created_at, r.ended_at, now)}`)}</small></span>
               </span>
             </button>
           ))}
@@ -791,9 +805,9 @@ function WorkflowDetail({ hubId, wf, rows, now, stamp, busy, error, onBack, onRu
 
 /* ---------- one run: how each step went ---------- */
 
-function RunDetail({ hubId, runId, wf, rows, now, stamp, onBack, onChanged, onOpenMessage }: {
+function RunDetail({ hubId, runId, wf, rows, now, stamp, onBack, onChanged, onOpenMessage, onOpenRun }: {
   hubId: string; runId: string; wf: Workflow; rows: AgentRow[]; now: number; stamp: number;
-  onBack: () => void; onChanged: () => void; onOpenMessage?: (agent: string, messageId: string) => void;
+  onBack: () => void; onChanged: () => void; onOpenMessage?: (agent: string, messageId: string) => void; onOpenRun: (id: string) => void;
 }) {
   const [run, setRun] = useState<WorkflowRun | null>(null);
   const [error, setError] = useState<unknown>(null);
@@ -801,6 +815,9 @@ function RunDetail({ hubId, runId, wf, rows, now, stamp, onBack, onChanged, onOp
   const [picked, setPicked] = useState<string | undefined>();
   const [open, setOpen] = useState<string | null>(null);
   const [logOpen, setLogOpen] = useState(false);
+  const [logOf, setLogOf] = useState<RunStep | null>(null);
+  const [comparing, setComparing] = useState(false);
+  const [view, setView] = useState<"steps" | "timeline">("steps");
   const [n, setN] = useState(0);
   useEffect(() => {
     let off = false;
@@ -840,6 +857,7 @@ function RunDetail({ hubId, runId, wf, rows, now, stamp, onBack, onChanged, onOp
           )}
         </div>
         <div className="ph-actions">
+          {run?.metrics && <CompareButton onClick={() => setComparing(true)} />}
           {going && <button type="button" className="app-btn" disabled={!!busy} onClick={() => void act("cancel")}><Square />{busy === "cancel" ? L("正在停…", "Stopping…") : L("取消运行", "Cancel run")}</button>}
           {run && (run.status === "failed" || run.status === "cancelled") && (
             <button type="button" className="app-btn app-btn-primary" disabled={!!busy} onClick={() => void act("retry")}
@@ -849,6 +867,7 @@ function RunDetail({ hubId, runId, wf, rows, now, stamp, onBack, onChanged, onOp
       </header>
       <ErrorText error={error} />
       {run?.error && <div className={cn("wf-run-error", run.status === "cancelled" && "is-quiet")}>{run.error}</div>}
+      {run && <RunMetricsStrip run={run} />}
 
       {waiting.map((s) => (
         <DecisionCard key={s.id} hubId={hubId} d={{ run: run!, step: s }} now={now} onDone={() => { setN((x) => x + 1); onChanged(); }} />
@@ -863,17 +882,27 @@ function RunDetail({ hubId, runId, wf, rows, now, stamp, onBack, onChanged, onOp
 
       <SectionHead title={picked ? L(`第 ${(run?.definition?.steps.findIndex((s) => s.id === picked) ?? 0) + 1} 步的每一次`, "Each time of this step") : L("每一步", "Each step")} count={shown.length}>
         {picked && <button type="button" className="app-group-action" onClick={() => setPicked(undefined)}>{L("看全部", "Show all")}</button>}
+        {!picked && run?.metrics && steps.length > 0 && (
+          <div className="seg seg-sm" role="tablist" aria-label={L("怎么看", "View")} data-testid="workflow-steps-view">
+            <button type="button" role="tab" aria-selected={view === "steps"} className={cn("seg-btn", view === "steps" && "active")} onClick={() => setView("steps")}>{L("列表", "List")}</button>
+            <button type="button" role="tab" aria-selected={view === "timeline"} className={cn("seg-btn", view === "timeline" && "active")} onClick={() => setView("timeline")}>{L("时间线", "Timeline")}</button>
+          </div>
+        )}
       </SectionHead>
-      {run === null ? <RowsSkeleton rows={3} className="pc-list" /> : (
+      {run && !picked && view === "timeline" && run.metrics ? <RunTimeline run={run} now={now} onPick={setLogOf} /> : run === null ? <RowsSkeleton rows={3} className="pc-list" /> : (
         <div className="pc-list wf-steps" data-testid="workflow-steps">
           {shown.map((s) => (
             <StepRow key={s.id} s={s} row={rowOf(s.target)} now={now} open={open === s.id} onToggle={() => setOpen((o) => (o === s.id ? null : s.id))}
               contract={(() => { const d = run.definition?.steps.find((x) => x.id === s.step); return !!(d?.output || d?.outputSchema); })()}
+              onLog={run.metrics && s.kind !== "human" ? () => setLogOf(s) : undefined}
               onChat={s.message_id && s.target && onOpenMessage ? () => onOpenMessage(s.target!, s.message_id!) : undefined} />
           ))}
           {shown.length === 0 && <div className="app-empty-note">{L("这一步还没走到。", "Not reached yet.")}</div>}
         </div>
       )}
+
+      {run && <RunArtifacts hubId={hubId} run={run} />}
+      {run && <RunScores hubId={hubId} run={run} onAdded={() => setN((x) => x + 1)} />}
 
       {inputs.length > 0 && (
         <>
@@ -907,12 +936,14 @@ function RunDetail({ hubId, runId, wf, rows, now, stamp, onBack, onChanged, onOp
           )}
         </>
       )}
+      {logOf && <StepLogDialog hubId={hubId} runId={runId} step={logOf} onClose={() => setLogOf(null)} />}
+      {comparing && run && <CompareDialog hubId={hubId} run={run} onClose={() => setComparing(false)} onOpenRun={onOpenRun} />}
     </>
   );
 }
 
-function StepRow({ s, row, now, open, onToggle, onChat, contract }: {
-  s: RunStep; row?: AgentRow; now: number; open: boolean; onToggle: () => void; onChat?: () => void;
+function StepRow({ s, row, now, open, onToggle, onChat, onLog, contract }: {
+  s: RunStep; row?: AgentRow; now: number; open: boolean; onToggle: () => void; onChat?: () => void; onLog?: () => void;
   /** its result must fit a schema */
   contract?: boolean;
 }) {
@@ -933,13 +964,15 @@ function StepRow({ s, row, now, open, onToggle, onChat, contract }: {
           </span>
           <span className={cn("au-last wf-step-summary", tone)}><i aria-hidden /><span>{text || stateWords(s.status)}</span></span>
         </span>
-        <span className="aud-run-when" title={new Date(s.started_at).toLocaleString()}>{timeAgo(s.started_at, now)}<small>{duration(s.started_at, s.ended_at, now)}</small></span>
+        <span className="aud-run-when" title={new Date(s.started_at).toLocaleString()}>{timeAgo(s.started_at, now)}
+          <small>{s.duration_ms !== undefined && s.ended_at ? msWords(s.duration_ms) : duration(s.started_at, s.ended_at, now)}{(s.attempts || 1) > 1 && L(` · ${s.attempts} 次`, ` · ×${s.attempts}`)}{s.usage && ` · ${costWords(s.usage)}`}</small></span>
         <span className="aud-run-actions wf-step-actions">
           {(s.input || output || s.payload !== undefined) && (
             <button type="button" className="app-btn app-btn-quiet app-btn-small" aria-expanded={open} onClick={onToggle}>
               {L("详情", "Details")}<ChevronDown className={cn("aud-chev", open && "is-open")} />
             </button>
           )}
+          {onLog && <LogButton onClick={onLog} />}
           {onChat && <button type="button" className="app-btn app-btn-quiet app-btn-small" onClick={onChat}><MessageSquare />{L("看对话", "Chat")}</button>}
         </span>
       </div>
@@ -953,7 +986,7 @@ function StepRow({ s, row, now, open, onToggle, onChat, contract }: {
           {output && Object.keys(output).length > 0 && <><span className="wf-step-label">{L("交回来的结果", "What it handed back")}
             {contract && s.status === "done" && <span className="wfc-ok">{L("符合约定", "Fits its contract")}</span>}</span>
             <div className="aud-call-body"><pre>{JSON.stringify(output, null, 2)}</pre></div></>}
-          {s.bounced && <p className="app-small-note">{L("第一次交的结果不符合要求，退回去重交过一次。", "Its first result did not fit and was sent back once.")}</p>}
+          {(s.bounces || (s.bounced ? 1 : 0)) > 0 && <p className="app-small-note">{L(`交的结果不符合要求，退回去重交过 ${s.bounces || 1} 次。`, `Its result did not fit and was sent back ${s.bounces || 1} time(s).`)}</p>}
         </div>
       )}
     </div>

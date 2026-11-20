@@ -143,6 +143,10 @@ MYCO_ADMIN_TOKEN="$ADMIN" myco workflow apply --file "$T/wf.json" >/dev/null 2>>
 OUT="$(MYCO_ADMIN_TOKEN="$ADMIN" myco workflow run start --name smoke-flow --wait --timeout 60s 2>>"$T/cli.log")" || fail "workflow run: $OUT"
 grep -q '"status": *"succeeded"' <<<"$OUT" || fail "workflow did not succeed: $OUT"
 grep -q 'THEN \[工作流' <<<"$OUT" || fail "the second step did not get the first one's summary: $OUT"
+RID="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<<"$OUT")" || fail "workflow run id"
+MYCO_ADMIN_TOKEN="$ADMIN" myco workflow run logs --id "$RID" --step two | grep -q '"kind": *"reply"' || fail "workflow step log"
+MYCO_ADMIN_TOKEN="$ADMIN" myco workflow run evaluate --id "$RID" --name quality --value 4 --direction higher >/dev/null || fail "workflow evaluate"
+MYCO_ADMIN_TOKEN="$ADMIN" myco workflow stats --name smoke-flow | grep -q '"success_rate": *1' || fail "workflow stats"
 ok
 
 step "handover: another session takes a node over"

@@ -1,4 +1,4 @@
-import type { Page, PageChanges, PageOpen, PageRecord, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
+import type { Page, PageChanges, PageOpen, PageRecord, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
 import { L } from "@/lib/i18n";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
@@ -939,10 +939,11 @@ export const appApi = {
   setWorkflowEnabled: (hubId: string, ref: string, enabled: boolean) => request<Workflow>("PATCH", `app/hubs/${enc(hubId)}/workflows/${enc(ref)}`, { enabled }),
   deleteWorkflow: (hubId: string, ref: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/workflows/${enc(ref)}`),
   startWorkflow: (hubId: string, ref: string, inputs: Record<string, unknown>) => request<WorkflowRun>("POST", `app/hubs/${enc(hubId)}/workflows/${enc(ref)}/runs`, { inputs }),
-  workflowRuns: (hubId: string, opts: { workflow?: string; active?: boolean; limit?: number } = {}) => {
+  workflowRuns: (hubId: string, opts: { workflow?: string; active?: boolean; status?: RunStatus; limit?: number } = {}) => {
     const q = new URLSearchParams();
     if (opts.workflow) q.set("workflow", opts.workflow);
     if (opts.active) q.set("active", "true");
+    if (opts.status) q.set("status", opts.status);
     if (opts.limit) q.set("limit", String(opts.limit));
     const s = q.toString();
     return request<{ runs: WorkflowRun[] }>("GET", `app/hubs/${enc(hubId)}/workflow-runs${s ? `?${s}` : ""}`);
@@ -953,6 +954,20 @@ export const appApi = {
   decideWorkflowRun: (hubId: string, id: string, step: string, choice: string, note?: string) =>
     request<WorkflowRun>("POST", `app/hubs/${enc(hubId)}/workflow-runs/${enc(id)}/decide`, { step, choice, ...(note ? { note } : {}) }),
   workflowDecisions: (hubId: string) => request<{ decisions: WorkflowDecision[] }>("GET", `app/hubs/${enc(hubId)}/workflow-decisions`),
+  /** hubs from v0.21.1: figures over the last runs, a step's log, scores, two runs side by side */
+  workflowStats: (hubId: string, ref: string, opts: { limit?: number; version?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (opts.limit) q.set("limit", String(opts.limit));
+    if (opts.version) q.set("version", String(opts.version));
+    const s = q.toString();
+    return request<WorkflowStats>("GET", `app/hubs/${enc(hubId)}/workflows/${enc(ref)}/stats${s ? `?${s}` : ""}`);
+  },
+  workflowStepLog: (hubId: string, run: string, step: string) =>
+    request<StepLog>("GET", `app/hubs/${enc(hubId)}/workflow-runs/${enc(run)}/steps/${enc(step)}/log`),
+  evaluateWorkflowRun: (hubId: string, run: string, ev: { name: string; value: number; unit?: string; direction?: string; note?: string; step?: string }) =>
+    request<RunEvaluation>("POST", `app/hubs/${enc(hubId)}/workflow-runs/${enc(run)}/evaluations`, ev),
+  compareWorkflowRuns: (hubId: string, a: string, b: string) =>
+    request<RunComparison>("GET", `app/hubs/${enc(hubId)}/workflow-runs/compare?a=${enc(a)}&b=${enc(b)}`),
   /** Saves a conversation the app rendered (.md or .jsonl) to Downloads and shows it. */
   saveExport: (name: string, content: string) => request<{ path: string }>("POST", "app/export", { name, content }),
   /** One line in that voice, as WAV audio, to try it before saving (the key typed, else the one kept). */

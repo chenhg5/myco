@@ -58,6 +58,11 @@ agentflow 是一个单机的工作流运行器：一个 JSON 描述节点和边�
 | `title`、`tags`、`group` | 一样 |
 | 执行器候选 + fallback、session new/fixed/inherit/fork、`resources` | 没有：myco 的一步交给一个 agent / 分工 / 电脑；新开会话和资源锁放在第三期 |
 | external 节点 + lease token | 人步骤（App / iPhone 里决定，过期当作不做） |
+| 运行事实：用时、活跃 / 等待时间、执行者、尝试次数、结构化失败、每次尝试的产物、字节数 | 一样（v0.21.1）：运行的 `metrics`（总用时、干活、等人决定、步骤、任务数、重试、退回），每步的用时、任务列表、花费；产物是 agent 回复和进展里带的文件；agentflow 没有的：token 和金额（来自 agent 的过程记录） |
+| `run evaluate`（measurement：值、单位、方向） | `myco workflow run evaluate`：名字、值、单位、`higher` / `lower`，可以给某一步；人、脚本、做检查的 agent 都能记 |
+| `run compare`（运行事实 + 评分的差） | `myco workflow run compare`、App 的「对比」：每一步用时、次数、花费，分数谁更好 |
+| `run stats`（p50 / p95、节点指标、`--by-version`） | `myco workflow stats`、App 的「运行情况」：次数、成功率、用时 p50 / p95、每一步、最近的失败、花费、评分；`--version` 只看一版 |
+| 节点日志 | `myco workflow run logs`、App 每一步的「日志」：交出的任务、进展、回复、它用的工具和想法（过程记录）、电脑的 stdout / stderr、流程事件 |
 
 ## 3. 概念
 
@@ -200,7 +205,7 @@ sequenceDiagram
 | `run_steps` | 运行 id、步骤 id、第几次（循环）、对应任务 id、渲染后的输入、结果、状态、开始 / 结束时间 |
 | `run_events` | 运行 id、时间、类型（走边、退回重交、超时、人做了决定、取消）、说明 |
 
-一步里 agent 干了什么**不另存**：就在那条任务的过程记录里，点开步骤就是那条任务。
+一步里 agent 干了什么**不另存**：就在那条任务的过程记录里，点开步骤就是那条任务。v0.21.1 起 `run_steps` 多记三样：这一步发过的所有任务（第一次、重试、退回）、退回次数、花费（从任务的过程记录里最后一条 usage 读出来，步骤结束后存下，因为过程记录一周后就删了）；评分存在 `run_evaluations`（运行、步骤、名字、值、单位、方向、说明、谁、时间）。统计、日志、产物、对比都是读的时候算，不另建表。
 
 ### 5.4 状态
 
@@ -279,6 +284,8 @@ API：`/v1/workflows`、`/v1/workflows/{id}/versions`、`/v1/workflow-runs`、`/
 - 自动化可以启动工作流（定时、Webhook payload 映射）。——已做
 - 模板库（发版、日报、issue 分诊）；「新建工作流」对话框（交给 agent 写）。——已做（写-审-改、改完跑测试、分头做再汇总、发布前问你一句；让 agent 写一个）
 - App 里改参数（已做：换人、超时、重试、轮数、任务文字）；运行结束通知启动它的 agent（已做）；`role:` 按分工挑空闲的 agent（已做：标签、技能、名字、描述、项目里的说明对得上的，挑手上活最少的）。
+
+**观测**（v0.21.1）——已做：每次运行的指标、每一步的日志、产物、评分、两次对比、工作流的统计（见 2.1 末尾几行和 [api.md](../api.md#workflows)）。
 
 **第三期：规模**
 

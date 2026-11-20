@@ -76,15 +76,31 @@ func (c *Client) StartWorkflow(ctx context.Context, ref string, inputs map[strin
 
 // WorkflowRuns lists runs, newest first (of one workflow when ref is set).
 func (c *Client) WorkflowRuns(ctx context.Context, ref string, active bool, limit int) ([]api.WorkflowRun, error) {
+	return c.WorkflowRunsWhere(ctx, RunQuery{Workflow: ref, Active: active, Limit: limit})
+}
+
+// RunQuery selects runs.
+type RunQuery struct {
+	Workflow string
+	Active   bool
+	Status   string // running waiting succeeded failed cancelled (hubs v0.21.1+)
+	Limit    int
+}
+
+// WorkflowRunsWhere lists the runs q selects, newest first.
+func (c *Client) WorkflowRunsWhere(ctx context.Context, rq RunQuery) ([]api.WorkflowRun, error) {
 	q := url.Values{}
-	if ref != "" {
-		q.Set("workflow", ref)
+	if rq.Workflow != "" {
+		q.Set("workflow", rq.Workflow)
 	}
-	if active {
+	if rq.Active {
 		q.Set("active", "true")
 	}
-	if limit > 0 {
-		q.Set("limit", strconv.Itoa(limit))
+	if rq.Status != "" {
+		q.Set("status", rq.Status)
+	}
+	if rq.Limit > 0 {
+		q.Set("limit", strconv.Itoa(rq.Limit))
 	}
 	var out api.WorkflowRunList
 	if err := c.do(ctx, http.MethodGet, "/v1/workflow-runs", q, nil, &out); err != nil {
@@ -133,4 +149,65 @@ func (c *Client) WorkflowDecisions(ctx context.Context) ([]api.WorkflowDecision,
 		return nil, err
 	}
 	return out.Decisions, nil
+}
+
+// WorkflowStats returns a workflow's figures over its last limit runs (of
+// one version when version is not 0). Hubs from v0.21.1.
+func (c *Client) WorkflowStats(ctx context.Context, ref string, limit, version int) (*api.WorkflowStats, error) {
+	q := url.Values{}
+	if limit > 0 {
+		q.Set("limit", strconv.Itoa(limit))
+	}
+	if version > 0 {
+		q.Set("version", strconv.Itoa(version))
+	}
+	var out api.WorkflowStats
+	if err := c.do(ctx, http.MethodGet, "/v1/workflows/"+esc(ref)+"/stats", q, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// WorkflowStepLog returns a step's log in a run: step is a step instance
+// id, or a step id (its latest start). Hubs from v0.21.1.
+func (c *Client) WorkflowStepLog(ctx context.Context, id, step string, trace bool) (*api.StepLog, error) {
+	q := url.Values{}
+	if !trace {
+		q.Set("trace", "false")
+	}
+	var out api.StepLog
+	if err := c.do(ctx, http.MethodGet, "/v1/workflow-runs/"+esc(id)+"/steps/"+esc(step)+"/log", q, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// EvaluateWorkflowRun gives a run a score. Hubs from v0.21.1.
+func (c *Client) EvaluateWorkflowRun(ctx context.Context, id string, in api.RunEvaluate, dry bool) (*api.RunEvaluation, error) {
+	if dry {
+		var out struct {
+			Evaluation api.RunEvaluation `json:"evaluation"`
+		}
+		if err := c.do(ctx, http.MethodPost, "/v1/workflow-runs/"+esc(id)+"/evaluations", dryQuery(true), in, &out); err != nil {
+			return nil, err
+		}
+		return &out.Evaluation, nil
+	}
+	var out api.RunEvaluation
+	if err := c.do(ctx, http.MethodPost, "/v1/workflow-runs/"+esc(id)+"/evaluations", nil, in, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// CompareWorkflowRuns sets two runs side by side. Hubs from v0.21.1.
+func (c *Client) CompareWorkflowRuns(ctx context.Context, a, b string) (*api.RunComparison, error) {
+	q := url.Values{}
+	q.Set("a", a)
+	q.Set("b", b)
+	var out api.RunComparison
+	if err := c.do(ctx, http.MethodGet, "/v1/workflow-runs/compare", q, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }

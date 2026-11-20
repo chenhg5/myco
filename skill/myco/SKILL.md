@@ -259,8 +259,14 @@ steps every time; see the format with `myco workflow validate --help`.
 myco workflow validate --file wf.json        # problems, and agents that are not there yet
 myco workflow apply --file wf.json           # create it, or a new version
 myco workflow run start --name 写-审-改 --input task="加导出按钮" [--wait]
-myco workflow run show --id run_...          # each step, who, its summary
+myco workflow run show --id run_...          # each step, who, its summary, time, cost, files
+myco workflow run logs --id run_... --step review   # a step's task, progress, answer, tools used
+myco workflow stats --name 写-审-改            # runs, success rate, p50/p95 time, each step, cost
 ```
+
+When you check another step's work (tests, a review), you may score the run, so the person
+sees how runs compare: `myco workflow run evaluate --id run_... --name tests_failed --value 0
+--direction lower --note "全部通过"` (`--step` for one step).
 
 A step can name a role instead of an agent (`"role": "审查"`): when it starts, the
 workspace gives it to the least busy agent with that role (a label `role=审查`, a skill, or

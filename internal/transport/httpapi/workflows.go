@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/chenhg5/myco/internal/api"
 	"github.com/chenhg5/myco/internal/app"
@@ -22,7 +23,12 @@ func (s *Server) workflowRoutes(m *http.ServeMux) {
 	m.HandleFunc("PATCH /v1/workflows/{ref}", s.flow(s.updateWorkflow))
 	m.HandleFunc("DELETE /v1/workflows/{ref}", s.flow(s.deleteWorkflow))
 	m.HandleFunc("POST /v1/workflows/{ref}/runs", s.flow(s.startWorkflow))
+	m.HandleFunc("GET /v1/workflows/{ref}/stats", s.flow(s.workflowStats))
 	m.HandleFunc("GET /v1/workflow-runs", s.flow(s.listRuns))
+	m.HandleFunc("GET /v1/workflow-runs/compare", s.flow(s.compareRuns))
+	m.HandleFunc("GET /v1/workflow-runs/{id}/steps/{step}/log", s.flow(s.stepLog))
+	m.HandleFunc("GET /v1/workflow-runs/{id}/evaluations", s.flow(s.listEvaluations))
+	m.HandleFunc("POST /v1/workflow-runs/{id}/evaluations", s.flow(s.evaluateRun))
 	m.HandleFunc("GET /v1/workflow-runs/{id}", s.flow(s.getRun))
 	m.HandleFunc("POST /v1/workflow-runs/{id}/cancel", s.flow(s.cancelRun))
 	m.HandleFunc("POST /v1/workflow-runs/{id}/retry", s.flow(s.retryRun))
@@ -86,10 +92,29 @@ func runDTO(r *domain.WorkflowRun, d *app.RunDetail) api.WorkflowRun {
 	out := api.WorkflowRun{ID: r.ID, WorkflowID: r.WorkflowID, Name: r.Name, Version: r.Version, Project: r.Project, Status: r.Status,
 		Inputs: r.Inputs, Owner: r.Owner, By: r.By, Trigger: r.Trigger, Error: r.Error, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
 		EndedAt: timePtr(r.EndedAt)}
+	end := r.EndedAt
+	if end.IsZero() {
+		end = time.Now()
+	}
+	if end.After(r.CreatedAt) {
+		out.DurationMS = end.Sub(r.CreatedAt).Milliseconds()
+	}
 	if d == nil {
 		return out
 	}
 	out.Definition = defBytes(d.Def)
+	m := metricsDTO(d.Metrics)
+	out.Metrics = &m
+	out.DurationMS = m.DurationMS
+	out.Artifacts = []api.RunArtifact{}
+	for _, a := range d.Artifacts {
+		out.Artifacts = append(out.Artifacts, api.RunArtifact{Step: a.Step, StepRun: a.StepRun, Try: a.Try, Kind: a.Kind, Message: a.Message,
+			From: string(a.From), At: a.At, FileID: a.File.FileID, Name: a.File.Name, Size: a.File.Size, ContentType: a.File.ContentType})
+	}
+	out.Evaluations = []api.RunEvaluation{}
+	for _, e := range d.Evaluations {
+		out.Evaluations = append(out.Evaluations, evaluationDTO(e))
+	}
 	for _, st := range d.Steps {
 		out.Steps = append(out.Steps, runStepDTO(st, d.Def.Step(st.StepID)))
 		if !domain.StepOver(st.Status) {
@@ -105,7 +130,8 @@ func runDTO(r *domain.WorkflowRun, d *app.RunDetail) api.WorkflowRun {
 func runStepDTO(st *domain.RunStep, def *domain.StepDef) api.RunStep {
 	out := api.RunStep{ID: st.ID, Step: st.StepID, Kind: st.Kind, Attempt: st.Attempt, Status: st.Status, Target: st.Target,
 		MessageID: st.MessageID, Input: st.Input, Payload: st.Payload, Output: st.Output, Summary: st.Summary, Error: st.Error, Retries: st.Retries,
-		Bounced: st.Bounced, StartedAt: st.StartedAt, EndedAt: timePtr(st.EndedAt), DueAt: timePtr(st.DueAt)}
+		Bounced: st.Bounced, StartedAt: st.StartedAt, EndedAt: timePtr(st.EndedAt), DueAt: timePtr(st.DueAt),
+		Bounces: st.BounceCount(), Attempts: st.Attempts(), Tasks: st.TaskIDs(), DurationMS: domain.StepDurationMS(st, time.Now()), Usage: usageDTO(st.Usage)}
 	if def != nil {
 		out.Title = def.Title
 		out.Options = def.Options
@@ -243,7 +269,7 @@ func (s *Server) listRuns(w http.ResponseWriter, r *http.Request, c app.Caller) 
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	runs, err := s.workflows.Runs(r.Context(), c, q.Get("workflow"), q.Get("active") == "true", limit)
+	runs, err := s.workflows.RunsWhere(r.Context(), c, q.Get("workflow"), domain.RunFilter{Active: q.Get("active") == "true", Status: q.Get("status"), Limit: limit})
 	if err != nil {
 		writeError(w, err)
 		return
@@ -304,6 +330,161 @@ func (s *Server) listDecisions(w http.ResponseWriter, r *http.Request, c app.Cal
 	out := api.WorkflowDecisions{Decisions: []api.WorkflowDecision{}}
 	for _, d := range ds {
 		out.Decisions = append(out.Decisions, api.WorkflowDecision{Run: runDTO(d.Run, nil), Step: runStepDTO(d.Step, d.Def)})
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func usageDTO(u *domain.Usage) *api.Usage {
+	if u.Zero() {
+		return nil
+	}
+	return &api.Usage{InputTokens: u.InputTokens, OutputTokens: u.OutputTokens, CostUSD: u.CostUSD}
+}
+
+func metricsDTO(m domain.RunMetrics) api.RunMetrics {
+	return api.RunMetrics{DurationMS: m.DurationMS, ActiveMS: m.ActiveMS, WaitingMS: m.WaitingMS, Steps: m.Steps, Done: m.Done, Failed: m.Failed,
+		Attempts: m.Attempts, Retries: m.Retries, Bounces: m.Bounces, Usage: usageDTO(&m.Usage)}
+}
+
+func evaluationDTO(e *domain.RunEvaluation) api.RunEvaluation {
+	return api.RunEvaluation{ID: e.ID, Run: e.RunID, Step: e.Step, Name: e.Name, Value: e.Value, Unit: e.Unit, Direction: e.Direction,
+		Note: e.Note, By: e.By, At: e.At}
+}
+
+func distDTO(d domain.Dist) api.Dist {
+	return api.Dist{N: d.N, Avg: d.Avg, Min: d.Min, P50: d.P50, P90: d.P90, P95: d.P95, Max: d.Max}
+}
+
+func pointDTO(p app.RunPoint) api.WorkflowRunPoint {
+	return api.WorkflowRunPoint{ID: p.ID, Status: p.Status, Version: p.Version, CreatedAt: p.CreatedAt, DurationMS: p.DurationMS, Error: p.Error,
+		FailedStep: p.FailedStep, CostUSD: p.Usage.CostUSD}
+}
+
+func (s *Server) workflowStats(w http.ResponseWriter, r *http.Request, c app.Caller) {
+	q := r.URL.Query()
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	version, _ := strconv.Atoi(q.Get("version"))
+	st, err := s.workflows.Stats(r.Context(), c, r.PathValue("ref"), limit, version)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	out := api.WorkflowStats{Workflow: st.Workflow, Name: st.Name, Total: st.Total, ByStatus: st.ByStatus, SuccessRate: st.SuccessRate,
+		Sample: st.Sample, Version: st.Version, Duration: distDTO(st.Duration), Active: distDTO(st.Active), Waiting: distDTO(st.Waiting),
+		Usage: usageDTO(&st.Usage), CostPerRun: st.CostPerRun, Steps: []api.WorkflowStepStats{}, Versions: []api.WorkflowVersionStats{},
+		Evaluations: []api.WorkflowEvalStats{}, Recent: []api.WorkflowRunPoint{}, Failures: []api.WorkflowRunPoint{}}
+	for _, x := range st.Steps {
+		out.Steps = append(out.Steps, api.WorkflowStepStats{Step: x.Step, Title: x.Title, Kind: x.Kind, Runs: x.Runs, Done: x.Done, Failed: x.Failed,
+			Retries: x.Retries, Bounces: x.Bounces, Duration: distDTO(x.Duration), Usage: usageDTO(&x.Usage), LastError: x.LastError,
+			LastErrorRun: x.LastErrorRun, LastErrorAt: timePtr(x.LastErrorAt)})
+	}
+	for _, v := range st.Versions {
+		out.Versions = append(out.Versions, api.WorkflowVersionStats{Version: v.Version, Runs: v.Runs, Succeeded: v.Succeeded, Failed: v.Failed,
+			Cancelled: v.Cancelled, Duration: distDTO(v.Duration)})
+	}
+	for _, e := range st.Evaluations {
+		out.Evaluations = append(out.Evaluations, api.WorkflowEvalStats{Name: e.Name, Unit: e.Unit, Direction: e.Direction, Values: distDTO(e.Values),
+			Last: e.Last, LastRun: e.LastRun})
+	}
+	for _, p := range st.Recent {
+		out.Recent = append(out.Recent, pointDTO(p))
+	}
+	for _, p := range st.Failures {
+		out.Failures = append(out.Failures, pointDTO(p))
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) stepLog(w http.ResponseWriter, r *http.Request, c app.Caller) {
+	l, err := s.workflows.StepLog(r.Context(), c, r.PathValue("id"), r.PathValue("step"), r.URL.Query().Get("trace") != "false")
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	var def *domain.StepDef
+	if d, err := s.workflows.GetRun(r.Context(), c, l.Run.ID); err == nil {
+		def = d.Def.Step(l.Step.StepID)
+	}
+	out := api.StepLog{Run: l.Run.ID, Step: runStepDTO(l.Step, def), Entries: []api.StepLogEntry{}, Clipped: l.Clipped}
+	for _, e := range l.Entries {
+		x := api.StepLogEntry{At: e.At, Kind: e.Kind, Sub: e.Sub, Try: e.Try, From: e.From, Text: e.Text}
+		for _, a := range e.Attachments {
+			x.Attachments = append(x.Attachments, api.Attachment{FileID: a.FileID, Name: a.Name, Size: a.Size, SHA256: a.SHA256, ContentType: a.ContentType})
+		}
+		out.Entries = append(out.Entries, x)
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) listEvaluations(w http.ResponseWriter, r *http.Request, c app.Caller) {
+	d, err := s.workflows.GetRun(r.Context(), c, r.PathValue("id"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	out := []api.RunEvaluation{}
+	for _, e := range d.Evaluations {
+		out = append(out, evaluationDTO(e))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"evaluations": out})
+}
+
+func (s *Server) evaluateRun(w http.ResponseWriter, r *http.Request, c app.Caller) {
+	var req api.RunEvaluate
+	if !decode(w, r, &req) {
+		return
+	}
+	if dryRun(r) {
+		e := &domain.RunEvaluation{Name: req.Name, Value: req.Value, Unit: req.Unit, Direction: req.Direction, Note: req.Note}
+		if err := e.Validate(); err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"dry_run": true, "evaluation": api.RunEvaluation{Run: r.PathValue("id"), Step: req.Step,
+			Name: req.Name, Value: req.Value, Unit: req.Unit, Direction: req.Direction, Note: req.Note}})
+		return
+	}
+	e, err := s.workflows.Evaluate(r.Context(), c, r.PathValue("id"), app.EvaluateInput{Step: req.Step, Name: req.Name, Value: req.Value,
+		Unit: req.Unit, Direction: req.Direction, Note: req.Note})
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, evaluationDTO(e))
+}
+
+func compareSide(x app.RunSide) api.RunCompareSide {
+	return api.RunCompareSide{Run: runDTO(x.Run, nil), Metrics: metricsDTO(x.Metrics)}
+}
+
+func compareStep(x *app.StepSide) *api.RunCompareStep {
+	if x == nil {
+		return nil
+	}
+	return &api.RunCompareStep{Status: x.Status, Runs: x.Runs, Attempts: x.Attempts, DurationMS: x.DurationMS, Usage: usageDTO(&x.Usage),
+		Summary: x.Summary, Error: x.Error}
+}
+
+func (s *Server) compareRuns(w http.ResponseWriter, r *http.Request, c app.Caller) {
+	q := r.URL.Query()
+	if q.Get("a") == "" || q.Get("b") == "" {
+		writeError(w, domain.Errf(domain.CodeInvalidArgument, "name the two runs: ?a=<run>&b=<run>"))
+		return
+	}
+	cmp, err := s.workflows.Compare(r.Context(), c, q.Get("a"), q.Get("b"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	out := api.RunComparison{A: compareSide(cmp.A), B: compareSide(cmp.B), SameVersion: cmp.SameVersion,
+		Steps: []api.RunCompareStepDelta{}, Evaluations: []api.RunCompareEval{}}
+	for _, d := range cmp.Steps {
+		out.Steps = append(out.Steps, api.RunCompareStepDelta{Step: d.Step, Title: d.Title, A: compareStep(d.A), B: compareStep(d.B),
+			FasterIn: d.FasterIn, DeltaMS: d.DeltaMS, DeltaCost: d.DeltaCost})
+	}
+	for _, e := range cmp.Evaluations {
+		out.Evaluations = append(out.Evaluations, api.RunCompareEval{Name: e.Name, Unit: e.Unit, Direction: e.Direction, A: e.A, B: e.B,
+			Delta: e.Delta, Better: e.Better})
 	}
 	writeJSON(w, http.StatusOK, out)
 }
