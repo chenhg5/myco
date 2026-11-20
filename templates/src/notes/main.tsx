@@ -16,6 +16,7 @@ import {
   COVERS, ICONS, blocks, childrenOf, kit, nowIso, num, orderAt, pages, pathOf, space, subtree, titleOf, within, type PageRec,
 } from "./model";
 import { Editor, pageBlocks } from "./editor";
+import { GLYPHS, IconView, TINTS, parseIcon } from "./icons";
 
 const spaceTitle = titleSaver(kit, space);
 const store = {
@@ -155,7 +156,43 @@ function App() {
 }
 
 function PageIcon({ p, size = 16 }: { p: PageRec; size?: number }) {
-  return p.data.icon ? <span className="nt-emoji" style={{ fontSize: size - 1, width: size, height: size }}>{String(p.data.icon)}</span> : <FileText className="ico nt-doc" />;
+  return <IconView v={p.data.icon} size={size} />;
+}
+
+/** Choosing a page's icon: a line icon in a quiet colour, or an emoji. */
+function IconPicker({ at, value, onPick, onClose }: { at: Anchor; value: string; onPick: (v: string) => void; onClose: () => void }) {
+  const cur = parseIcon(value);
+  const [tab, setTab] = useState<"glyph" | "emoji">(cur?.kind === "emoji" ? "emoji" : "glyph");
+  const [tint, setTint] = useState<string>(cur?.kind === "glyph" ? cur.tint : "gray");
+  return (
+    <Pop at={at} onClose={onClose} width={316} className="nt-icons">
+      <div className="nt-icon-head">
+        <div className="seg">
+          <button type="button" className={tab === "glyph" ? "is-on" : ""} onClick={() => setTab("glyph")}>图标</button>
+          <button type="button" className={tab === "emoji" ? "is-on" : ""} onClick={() => setTab("emoji")}>Emoji</button>
+        </div>
+        {value && <button type="button" className="link-btn" onClick={() => { onPick(""); onClose(); }}>去掉</button>}
+      </div>
+      {tab === "glyph" ? (
+        <>
+          <div className="nt-tints" role="radiogroup" aria-label="颜色">
+            {TINTS.map((t) => <button key={t} type="button" role="radio" aria-checked={tint === t} aria-label={t} className={tint === t ? "is-on" : ""} style={{ background: `var(--tint-${t})` }} onClick={() => setTint(t)} />)}
+          </div>
+          <div className="nt-icon-grid">
+            {Object.entries(GLYPHS).map(([name, G]) => (
+              <button key={name} type="button" title={name} className={cur?.kind === "glyph" && cur.name === name ? "is-on" : ""} onClick={() => { onPick(`i:${name}:${tint}`); onClose(); }}>
+                <G width={18} height={18} strokeWidth={1.8} style={{ color: `var(--tint-${tint})` }} />
+              </button>
+            ))}
+          </div>
+        </>
+      ) : (
+        <div className="nt-icon-grid is-emoji">
+          {ICONS.map((ic) => <button key={ic} type="button" onClick={() => { onPick(ic); onClose(); }}>{ic}</button>)}
+        </div>
+      )}
+    </Pop>
+  );
 }
 
 // ---- the tree, with dragging (onto a page: inside it; at its top or bottom edge: before or after) ----
@@ -314,9 +351,9 @@ function PageView({ id, me, theme, onOpen, onSide }: { id: string; me: string; t
           </div>
         )}
         <div className={`nt-page${d.cover ? " has-cover" : ""}`}>
-          {d.icon && <button type="button" className="nt-big-icon" title="换图标" onClick={(e) => setIconAt(rectOf(e.currentTarget))}>{String(d.icon)}</button>}
+          {parseIcon(d.icon) && <button type="button" className="nt-big-icon" title="换图标" onClick={(e) => setIconAt(rectOf(e.currentTarget))}><IconView v={d.icon} size={60} /></button>}
           <div className="nt-page-acts">
-            {!d.icon && <button type="button" className="nt-ghost" onClick={(e) => setIconAt(rectOf(e.currentTarget))}><Smile className="ico" />添加图标</button>}
+            {!parseIcon(d.icon) && <button type="button" className="nt-ghost" onClick={(e) => setIconAt(rectOf(e.currentTarget))}><Smile className="ico" />添加图标</button>}
             {!d.cover && <button type="button" className="nt-ghost" onClick={(e) => setCoverAt(rectOf(e.currentTarget))}><ImageIcon className="ico" />添加封面</button>}
           </div>
           <textarea ref={titleRef} className="nt-title" rows={1} value={shown} placeholder="无标题" aria-label="标题"
@@ -333,14 +370,7 @@ function PageView({ id, me, theme, onOpen, onSide }: { id: string; me: string; t
           </div>
         </div>
       </div>
-      {iconAt && (
-        <Pop at={iconAt} onClose={() => setIconAt(null)} width={292} className="nt-icons">
-          <div className="nt-icon-grid">
-            {ICONS.map((ic) => <button key={ic} type="button" onClick={() => { patchPage(id, { icon: ic }); setIconAt(null); }}>{ic}</button>)}
-          </div>
-          {d.icon && <button type="button" className="link-btn" onClick={() => { patchPage(id, { icon: "" }); setIconAt(null); }}>去掉图标</button>}
-        </Pop>
-      )}
+      {iconAt && <IconPicker at={iconAt} value={String(d.icon || "")} onPick={(v) => patchPage(id, { icon: v })} onClose={() => setIconAt(null)} />}
       {coverAt && (
         <Pop at={coverAt} onClose={() => setCoverAt(null)} width={292} className="nt-covers">
           <div className="nt-cover-grid">

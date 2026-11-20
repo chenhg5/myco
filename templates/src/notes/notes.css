@@ -6,6 +6,12 @@ kbd { display: inline-grid; place-items: center; min-width: 18px; height: 18px; 
 .btn.is-danger { color: var(--red); }
 .modal-back { position: fixed; inset: 0; z-index: 2000; display: flex; align-items: flex-start; justify-content: center; padding: 12vh 16px 16px; background: rgba(0, 0, 0, 0.32); }
 
+:root { --tint-gray: #787d85; --tint-stone: #9a8b78; --tint-sage: #5f9a84; --tint-mist: #6c86b2; --tint-clay: #bd7558; --tint-ochre: #b8964a; --tint-plum: #93719f; }
+@media (prefers-color-scheme: dark) {
+  :root { --tint-gray: #a6a6a6; --tint-stone: #b8a995; --tint-sage: #79b39d; --tint-mist: #8aa2cc; --tint-clay: #d48f73; --tint-ochre: #cfae66; --tint-plum: #ae8dba; }
+}
+.nt-glyph { flex: none; }
+
 /* sidebar */
 .nt-side { display: flex; flex-direction: column; gap: 1px; width: 248px; flex: none; padding: 0 8px 8px; border-right: 1px solid var(--line); background: var(--bg2); overflow: auto; }
 .nt-space { display: flex; align-items: center; gap: 6px; height: 48px; flex: none; margin: 0 -8px 8px; padding: 0 10px 0 14px; border-bottom: 1px solid var(--line); }
@@ -67,9 +73,10 @@ kbd { display: inline-grid; place-items: center; min-width: 18px; height: 18px; 
 .nt-cover:hover .nt-cover-btn { opacity: 1; }
 .nt-page { max-width: 820px; margin: 0 auto; padding: 56px 0 160px; }
 .nt-page.has-cover { padding-top: 0; }
-.nt-big-icon { display: block; margin: 0 0 4px 54px; padding: 0 4px; border: 0; border-radius: 8px; background: none; font-size: 64px; line-height: 1.15; }
+.nt-big-icon { display: grid; place-items: center; width: 78px; height: 78px; margin: 0 0 4px 48px; padding: 0; border: 0; border-radius: 10px; background: none; font-size: 60px; line-height: 1; }
 .nt-big-icon:hover { background: var(--hover); }
-.nt-page.has-cover .nt-big-icon { margin-top: -38px; position: relative; }
+.nt-page.has-cover .nt-big-icon { margin-top: -40px; position: relative; }
+.nt-page.has-cover .nt-big-icon:has(.nt-glyph) { background: var(--bg); box-shadow: 0 0 0 1px var(--line2); }
 .nt-page-acts { display: flex; gap: 4px; height: 30px; margin: 8px 0 0 50px; opacity: 0; transition: opacity 0.15s; }
 .nt-page:hover .nt-page-acts, .nt-page-acts:focus-within { opacity: 1; }
 .nt-ghost { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px; border: 0; border-radius: 6px; background: none; color: var(--faint); font-size: 13px; }
@@ -100,13 +107,17 @@ kbd { display: inline-grid; place-items: center; min-width: 18px; height: 18px; 
 .nt-editor .bn-editor .bn-block-content[data-content-type="codeBlock"] code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13.5px; color: inherit; background: none; }
 
 /* pickers */
-.nt-icon-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; padding: 8px; }
-.nt-icon-grid button { display: grid; place-items: center; height: 32px; padding: 0; border: 0; border-radius: 6px; background: none; font-size: 20px; }
-.nt-icon-grid button:hover { background: var(--hover); }
+.nt-icon-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px 0; }
+.nt-tints { display: flex; gap: 8px; padding: 10px 12px 2px; }
+.nt-tints button { width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%; }
+.nt-tints button.is-on { outline: 2px solid var(--fg); outline-offset: 2px; }
+.nt-icon-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; padding: 8px; max-height: 260px; overflow: auto; }
+.nt-icon-grid button { display: grid; place-items: center; height: 34px; padding: 0; border: 0; border-radius: 6px; background: none; font-size: 20px; }
+.nt-icon-grid button:hover, .nt-icon-grid button.is-on { background: var(--hover); }
 .nt-cover-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 10px; }
 .nt-cover-grid button { height: 44px; padding: 0; border: 1px solid var(--line2); border-radius: 6px; }
 .nt-cover-grid button.is-on { outline: 2px solid var(--accent); outline-offset: 1px; }
-.nt-icons .link-btn, .nt-covers .link-btn { margin: 0 6px 6px; }
+.nt-covers .link-btn { margin: 0 6px 6px; }
 
 /* the trash */
 .nt-trash { max-width: 760px; margin: 0 auto; padding: 24px 24px 80px; display: flex; flex-direction: column; gap: 4px; }
@@ -133,7 +144,7 @@ kbd { display: inline-grid; place-items: center; min-width: 18px; height: 18px; 
   .nt-side-toggle { display: grid; }
   .nt-title, .nt-editor .bn-editor { padding-inline: 24px; }
   .nt-kids { margin-inline: 24px; }
-  .nt-big-icon { margin-left: 24px; }
+  .nt-big-icon { margin-left: 18px; }
   .nt-page-acts { margin-left: 20px; opacity: 1; }
   .nt-title { font-size: 30px; }
 }

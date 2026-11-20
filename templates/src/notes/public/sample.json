@@ -9,7 +9,7 @@
   {
    "id": "home",
    "title": "团队手册",
-   "icon": "🏠",
+   "icon": "i:home:stone",
    "cover": "stone",
    "parent": null,
    "order": 1,
@@ -21,7 +21,7 @@
   {
    "id": "onboard",
    "title": "新人上手",
-   "icon": "👋",
+   "icon": "i:hand:sage",
    "cover": "",
    "parent": "home",
    "order": 1,
@@ -33,7 +33,7 @@
   {
    "id": "process",
    "title": "发版流程",
-   "icon": "🚀",
+   "icon": "i:rocket:clay",
    "cover": "",
    "parent": "home",
    "order": 2,
@@ -45,7 +45,7 @@
   {
    "id": "meet",
    "title": "会议记录",
-   "icon": "🗒️",
+   "icon": "i:notebook:mist",
    "cover": "",
    "parent": null,
    "order": 2,
@@ -57,7 +57,7 @@
   {
    "id": "m1",
    "title": "11 月 18 日 周会",
-   "icon": "📅",
+   "icon": "i:calendar:mist",
    "cover": "",
    "parent": "meet",
    "order": 1,
@@ -69,7 +69,7 @@
   {
    "id": "ideas",
    "title": "想法收集",
-   "icon": "💡",
+   "icon": "i:lightbulb:ochre",
    "cover": "sage",
    "parent": null,
    "order": 3,
