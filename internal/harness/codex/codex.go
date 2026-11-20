@@ -104,7 +104,7 @@ func (c *codex) Run(ctx context.Context, req harness.Request) (harness.Result, e
 		args = append(args, p.ConfigArgs...)
 		env = append(p.EnvList(), env...)
 	}
-	args = append(args, c.opts.Args...)
+	args = append(args, extraArgs(c.opts.Args)...)
 	// After the runner's own args: the effort chosen in the app wins over
 	// a model_reasoning_effort set there (the last -c of a key wins).
 	if req.Effort != "" {
@@ -425,4 +425,21 @@ func stderrProblem(line string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// ownFlags are the switches this harness always passes: Codex (0.16x on)
+// refuses one given twice, and older agent profiles carry
+// --skip-git-repo-check in their own args from before the harness added it.
+var ownFlags = map[string]bool{"--json": true, "--skip-git-repo-check": true}
+
+// extraArgs drops from a profile's own args the switches already passed.
+func extraArgs(in []string) []string {
+	out := make([]string, 0, len(in))
+	for _, a := range in {
+		if ownFlags[a] {
+			continue
+		}
+		out = append(out, a)
+	}
+	return out
 }
