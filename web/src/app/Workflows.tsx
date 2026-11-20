@@ -845,7 +845,6 @@ function WorkflowDetail({ hubId, wf, rows, now, stamp, busy, error, onRun, onTog
   return (
     <>
       <header className={cn("pcd-head", !wf.enabled && "is-away")}>
-        <span className="tp-icon pcd-icon"><WorkflowIcon /></span>
         <div className="pcd-titles">
           <h1><span>{wf.title || wf.name}</span></h1>
           <p className="pcd-sub">
@@ -992,7 +991,6 @@ function RunDetail({ hubId, runId, wf, rows, now, stamp, onBack, onChanged, onOp
   return (
     <>
       <header className="pcd-head">
-        <span className={cn("tp-icon pcd-icon wf-run-icon", run && runTone(run.status))}><WorkflowIcon /></span>
         <div className="pcd-titles">
           <h1><span title={subject || undefined}>{subject || (run ? L(`「${wf.title || wf.name}」的一次运行`, `A run of "${wf.title || wf.name}"`) : L("运行", "Run"))}</span></h1>
           {run && (
