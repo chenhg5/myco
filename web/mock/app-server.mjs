@@ -245,7 +245,7 @@ const officialFiles = (name) => {
   return out;
 };
 const templateFiles = new Map();
-const officialOrder = ["table", "base", "doc", "slides", "code", "issues", "devtools", "todo", "poll", "ledger", "habit", "whiteboard", "mindmap", "video", "gomoku", "sudoku"];
+const officialOrder = ["table", "base", "doc", "slides", "code", "issues", "devtools", "todo", "notes", "poll", "ledger", "habit", "whiteboard", "mindmap", "video", "gomoku", "sudoku"];
 const mockTemplates = officialOrder.filter((name) => existsSync(new URL(`${name}/myco.json`, officialRoot))).map((name) => {
   const files = officialFiles(name);
   const m = JSON.parse(files["myco.json"]);
