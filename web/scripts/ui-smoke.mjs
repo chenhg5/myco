@@ -4066,7 +4066,10 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "agent-switcher");
       await page.keyboard.up("Control");
       await sw.waitFor({ state: "detached", timeout: 5_000 });
-      await page.locator(".conv-detail .conv-head", { hasText: picked }).first().waitFor({ timeout: 10_000 });
+      // (its chat: highlighted in the sidebar; a coordinator's is its project's home)
+      await sidebar(page, true);
+      await page.locator(".app-sidebar .sp-nav-person.active", { hasText: picked }).first().waitFor({ state: "attached", timeout: 10_000 });
+      if (narrow) await sidebar(page, false);
       // Esc puts it away, nothing opened.
       await page.keyboard.down("Control");
       await page.keyboard.press("Backquote");
@@ -4074,7 +4077,9 @@ async function runMatrix(browser, size, scheme) {
       await page.keyboard.press("Escape");
       await page.keyboard.up("Control");
       await sw.waitFor({ state: "detached", timeout: 5_000 });
-      if (!(await page.locator(".conv-detail .conv-head", { hasText: picked }).count())) throw new Error("Esc 收起时不该换对话");
+      await sidebar(page, true);
+      if (!(await page.locator(".app-sidebar .sp-nav-person.active", { hasText: picked }).count())) throw new Error("Esc 收起时不该换对话");
+      if (narrow) await sidebar(page, false);
     });
 
     // ‹ › at the top: back to where you were and forward again, pages and
