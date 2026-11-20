@@ -4482,8 +4482,12 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, dialog.getByRole("button", { name: "开一个 Shroom" }));
       await page.locator(".app-modal").waitFor({ state: "hidden", timeout: 30_000 });
       await page.locator(".conv-detail .conv-head h2", { hasText: "Shroom" }).waitFor({ timeout: 20_000 });
-      // It wears a crown, and is not one of the sidebar's chats.
+      // It wears a crown, and is not one of the sidebar's chats. Its empty
+      // chat says what it is (no things to ask), and there is no way back.
       await page.locator(".conv-detail .pa-crown").first().waitFor({ timeout: 10_000 });
+      await page.locator(".conv-detail [data-testid=superagent-intro]").waitFor({ timeout: 10_000 });
+      if (await page.locator(".conv-detail [data-testid=chat-starters]").count()) throw new Error("superagent 的空对话不该有「想问的」建议");
+      if (await page.locator(".conv-detail .conv-head > button[aria-label]", { has: page.locator("svg.lucide-arrow-left") }).count()) throw new Error("superagent 的对话左上角不该有返回");
       await sidebar(page, true);
       await page.waitForFunction(() => ![...document.querySelectorAll(".sp-nav-chat-list .sp-nav-person")].some((b) => b.textContent?.includes("Shroom")), null, { timeout: 10_000 })
         .catch(() => { throw new Error("superagent 不应出现在侧栏的会话列表里"); });
@@ -4530,6 +4534,8 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, dialog.locator("[data-testid=superagent-link-tab]"));
       const sentence = dialog.locator("[data-testid=superagent-link] .add-sentence-text");
       await sentence.waitFor({ timeout: 10_000 });
+      // (the link is made when the tab opens: "正在生成…" until then)
+      await page.waitForFunction(() => (document.querySelector("[data-testid=superagent-link] .add-sentence-text")?.textContent || "").includes("/j/"), null, { timeout: 15_000 }).catch(() => undefined);
       const text = compactText(await sentence.innerText());
       if (!text.includes("myco superagent guide") || !text.includes("/j/")) throw new Error(`那句话应带加入命令和 superagent 说明，实际「${text}」`);
       await settle(page, 200);
@@ -4539,7 +4545,8 @@ async function runMatrix(browser, size, scheme) {
     });
 
     // The ⌘⇧Space panel (the Mac app's own window, /?quick=1): one line to
-    // hand Shroom a thing, its answer under it, the approval cards too.
+    // hand Shroom a thing; sent, the app opens the chat (its answer is
+    // there). What waits on you shows as one line.
     await step("superagent · 快捷面板", async () => {
       const qp = await page.context().newPage();
       try {
@@ -4553,16 +4560,22 @@ async function runMatrix(browser, size, scheme) {
           body: JSON.stringify({ what: "停掉自动化「每晚跑测试」", reason: "它连着 5 天都失败在同一个地方，先停下来等修好。" }),
         });
         if (!ask.ok) throw new Error(`superagent 发起确认失败：HTTP ${ask.status}`);
+        await fetch(`http://${HOST}:${mockPort()}/app/mock/quick`, { method: "DELETE" });
+        const waiting = qp.locator("[data-testid=quick-waiting]");
+        await waiting.waitFor({ timeout: 25_000 });
+        if (!compactText(await waiting.innerText()).includes("1 件事等你点头")) throw new Error(`应写明有几件事等你点头，实际「${await waiting.innerText()}」`);
+        if (await qp.locator(".qp-answer, .qp-mine, .sa-approval").count()) throw new Error("面板里不该再显示对话内容或确认卡片：那些在对话页");
         const box = qp.locator("[data-testid=quick-input]");
         await box.fill("帮我看看今天哪些任务卡住了");
-        await box.press("Enter");
-        await qp.locator(".qp-mine", { hasText: "哪些任务卡住了" }).waitFor({ timeout: 10_000 });
-        await qp.locator(".qp-answer").first().waitFor({ timeout: 20_000 });
-        await qp.locator(".sa-approval").first().waitFor({ timeout: 25_000 });
         await settle(qp, 300);
         const name = `${size.width}x${size.height}-${scheme}-superagent-quick.png`;
         await panel.screenshot({ path: path.join(OUT, name) });
         log(`    截图 ui-smoke/${name}`);
+        // Sent: the message goes, the input empties, and the app is asked to open the chat.
+        await box.press("Enter");
+        await qp.waitForFunction(() => (document.querySelector("[data-testid=quick-input]")?.value || "") === "", null, { timeout: 10_000 });
+        const opened = await (await fetch(`http://${HOST}:${mockPort()}/app/mock/quick`)).json();
+        if (!opened.open?.agent || !opened.open?.hub) throw new Error(`发出去后应打开对话，实际 ${JSON.stringify(opened.open)}`);
       } finally {
         await qp.close();
       }

@@ -27,10 +27,11 @@ const quickRadius = 16
 // under it, and a way into the full chat. A floating panel that does not
 // bring the app forward; it goes away on Esc or when you click elsewhere.
 type quick struct {
-	mu   sync.Mutex
-	win  *application.WebviewWindow
-	open func(hub, agent string, setup bool)
-	h    int
+	mu    sync.Mutex
+	win   *application.WebviewWindow
+	open  func(hub, agent string, setup bool)
+	h     int
+	watch sync.Once
 }
 
 func newQuick(app *application.App, open func(hub, agent string, setup bool)) *quick {
@@ -77,6 +78,7 @@ func (q *quick) toggle() {
 			q.hide()
 			return
 		}
+		q.watch.Do(q.watchClicks)
 		q.win.Center()
 		q.win.Show()
 		q.win.Focus()
