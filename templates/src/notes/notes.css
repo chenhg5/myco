@@ -148,3 +148,32 @@ kbd { display: inline-grid; place-items: center; min-width: 18px; height: 18px; 
   .nt-page-acts { margin-left: 20px; opacity: 1; }
   .nt-title { font-size: 30px; }
 }
+
+/* phones and tablets (a finger, not a mouse): menus a size to read and to tap */
+@media (pointer: coarse) {
+  .nt-side { width: min(320px, 86vw); }
+  .nt-space { height: 56px; }
+  .nt-space-name { font-size: 17px; }
+  .nt-side-item, .nt-row { height: 44px; font-size: 16px; gap: 10px; }
+  .nt-side-item .ico, .nt-row .nt-glyph, .nt-row .nt-doc { width: 19px; height: 19px; }
+  .nt-row .nt-emoji { font-size: 18px !important; width: 20px !important; height: 20px !important; }
+  .nt-caret { width: 26px; height: 26px; }
+  .nt-caret .ico { width: 16px; height: 16px; }
+  .nt-sec { height: 36px; font-size: 14px; }
+  .nt-sec .icon-btn, .nt-row.is-on .nt-row-acts { opacity: 1; display: flex; }
+  .nt-row-acts .icon-btn { width: 32px; height: 32px; }
+  .nt-side-item kbd { display: none; }
+  .nt-state { font-size: 13px; }
+  .nt-top { height: 52px; }
+  .nt-crumbs { font-size: 15px; }
+  .nt-crumb button { height: 32px; }
+  .menu-item { height: 44px; font-size: 16px; }
+  .nt-find-q input { font-size: 17px; }
+  .nt-find-item { padding: 12px 10px; }
+  .nt-find-title { font-size: 16px; }
+  .nt-find-snip { font-size: 14px; }
+  .nt-kid { height: 42px; font-size: 16px; }
+  .nt-ghost { height: 36px; font-size: 15px; }
+  .nt-icon-grid button { height: 42px; }
+  .nt-trash-row { min-height: 52px; font-size: 16px; }
+}
