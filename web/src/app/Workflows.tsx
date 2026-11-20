@@ -57,7 +57,7 @@ function untilWords(ms: number): string {
 
 /* ---------- ready-made ones: you pick who does what ---------- */
 
-type Role = { key: string; label: string; computer?: boolean };
+type Role = { key: string; label: string; computer?: boolean; role?: string };
 const typed = (s: WfStepDef[]) => s;
 type Ready = { id: string; icon: typeof Rocket; name: string; hint: string; roles: Role[]; make: (who: Record<string, string>, name: string) => WorkflowDef };
 
@@ -65,7 +65,7 @@ const readyMade = (): Ready[] => [
   {
     id: "review", icon: WorkflowIcon, name: L("写-审-改", "Write, review, revise"),
     hint: L("一个 agent 做，另一个审；没过就带着意见改，最多 3 轮；最后你点头", "One does it, another reviews; back with the comments if not, up to 3 rounds; you have the last word"),
-    roles: [{ key: "writer", label: L("谁来做", "Who does it") }, { key: "reviewer", label: L("谁来审", "Who reviews") }],
+    roles: [{ key: "writer", label: L("谁来做", "Who does it"), role: L("开发", "developer") }, { key: "reviewer", label: L("谁来审", "Who reviews"), role: L("审查", "review") }],
     make: (w, name) => ({
       name,
       inputs: { required: ["task"], properties: { task: { type: "string", title: L("要做什么", "What to do"), format: "textarea" } } },
@@ -145,6 +145,11 @@ const readyMade = (): Ready[] => [
     }),
   },
 ];
+
+/** A step given "@role:<x>" for its agent goes by role instead. */
+function byRole(def: WorkflowDef): WorkflowDef {
+  return { ...def, steps: def.steps.map((s) => (s.agent?.startsWith(`${ROLE}:`) ? { ...s, agent: undefined, role: s.agent.slice(ROLE.length + 1) } : s)) };
+}
 
 /* ---------- the page ---------- */
 
@@ -496,9 +501,10 @@ function MakeDialog({ hubId, rows, making, onClose, onMade, onAsked }: {
       <label key={role.key} className="app-field"><span className="app-field-label">{role.label}</span>
         <span className="au-to">
           {r ? <Avatar agent={r.st.agent} size={20} badge={false} /> : role.computer ? <Monitor className="wf-pick-icon" /> : <Bot className="wf-pick-icon" />}
-          <select className="app-select-field" value={who[role.key] || ""} disabled={busy || !pool.length} onChange={(e) => setWho((w) => ({ ...w, [role.key]: e.target.value }))}>
+          <select className="app-select-field" value={who[role.key] || ""} disabled={busy || (!pool.length && !!role.computer)} onChange={(e) => setWho((w) => ({ ...w, [role.key]: e.target.value }))}>
             {!pool.length && <option value="">{role.computer ? L("还没有电脑", "No computers yet") : L("还没有 agent", "No agents yet")}</option>}
             {pool.map((x) => <option key={x.st.agent.name} value={x.st.agent.name}>{nodeName(x.st.agent, x.hub)}</option>)}
+            {!role.computer && role.role && <option value={`${ROLE}:${role.role}`}>{L(`按分工「${role.role}」挑空闲的`, `Whoever is free with role "${role.role}"`)}</option>}
           </select>
         </span></label>
     );
@@ -543,7 +549,7 @@ function MakeDialog({ hubId, rows, making, onClose, onMade, onAsked }: {
   const save = async () => {
     setBusy(true); setError(null);
     try {
-      const out = await appApi.applyWorkflow(hubId, ready.make(who, name.trim() || ready.name));
+      const out = await appApi.applyWorkflow(hubId, byRole(ready.make(who, name.trim() || ready.name)));
       onMade(out.workflow);
     } catch (e) { setError(e); } finally { setBusy(false); }
   };
@@ -554,7 +560,7 @@ function MakeDialog({ hubId, rows, making, onClose, onMade, onAsked }: {
           <input className="app-input" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} disabled={busy} /></label>
         {ready.roles.map(picker)}
         <div className="wf-make-preview">
-          <WorkflowGraph def={ready.make(who, name || ready.name)} hubId={hubId} rows={rows} />
+          <WorkflowGraph def={byRole(ready.make(who, name || ready.name))} hubId={hubId} rows={rows} />
         </div>
         <ErrorText error={error} />
         <div className="app-modal-actions">
@@ -568,6 +574,9 @@ function MakeDialog({ hubId, rows, making, onClose, onMade, onAsked }: {
 }
 
 /* ---------- edit one: who does each step, how long, how many rounds ---------- */
+
+/** In the who-does-it list: pick by role (分工) instead of one agent. */
+const ROLE = "@role";
 
 const timeouts = (): { v: string; label: string }[] => [
   { v: "", label: L("不限", "None") }, { v: "30m", label: L("30 分钟", "30 min") }, { v: "1h", label: L("1 小时", "1 hour") },
@@ -593,8 +602,9 @@ function EditDialog({ hubId, rows, wf, onClose, onSaved }: { hubId: string; rows
   const setEdge = (i: number, patch: Partial<WfEdgeDef>) => setDef((d) => d && { ...d, edges: (d.edges || []).map((x, j) => (j === i ? { ...x, ...patch } : x)) });
   const idx = new Map((def?.steps || []).map((x, i) => [x.id, i]));
   const loops = (def?.edges || []).map((e, i) => ({ e, i })).filter(({ e }) => idx.has(e.to) && (idx.get(e.to) ?? 0) <= (idx.get(e.from) ?? 0));
+  const noRole = def?.steps.find((s) => s.role !== undefined && !s.role.trim());
   const save = async () => {
-    if (!def) return;
+    if (!def || noRole) return;
     setBusy(true); setError(null);
     try { await appApi.applyWorkflow(hubId, def); onSaved(); } catch (e) { setError(e); } finally { setBusy(false); }
   };
@@ -627,11 +637,19 @@ function EditDialog({ hubId, rows, wf, onClose, onSaved }: { hubId: string; rows
                       <span className="wf-edit-who">{s.human === "$starter" ? L("启动它的人来决定", "Whoever starts it decides") : L(`${s.human} 来决定`, `${s.human} decides`)}</span>
                     ) : (
                       <label className="wf-edit-cell wf-edit-grow"><span>{kind === "computer" ? L("在哪台电脑", "On which computer") : L("交给谁", "Who does it")}</span>
-                        <select className="app-select-field" value={who || ""} disabled={busy} aria-label={L(`第 ${i + 1} 步交给谁`, `Who does step ${i + 1}`)}
-                          onChange={(e) => setStep(i, kind === "computer" ? { computer: e.target.value } : { agent: e.target.value })}>
-                          {who && !pool.some((x) => x.st.agent.name === who) && <option value={who}>{who}</option>}
-                          {pool.map((x) => <option key={x.st.agent.name} value={x.st.agent.name}>{nodeName(x.st.agent, x.hub)}</option>)}
-                        </select></label>
+                        <span className="wf-edit-pick">
+                          <select className="app-select-field" value={s.role !== undefined ? ROLE : who || ""} disabled={busy} aria-label={L(`第 ${i + 1} 步交给谁`, `Who does step ${i + 1}`)}
+                            onChange={(e) => setStep(i, kind === "computer" ? { computer: e.target.value }
+                              : e.target.value === ROLE ? { agent: undefined, role: s.role || "" } : { agent: e.target.value, role: undefined })}>
+                            {who && !pool.some((x) => x.st.agent.name === who) && <option value={who}>{who}</option>}
+                            {pool.map((x) => <option key={x.st.agent.name} value={x.st.agent.name}>{nodeName(x.st.agent, x.hub)}</option>)}
+                            {kind === "agent" && <option value={ROLE}>{L("按分工挑空闲的…", "Whoever is free with a role…")}</option>}
+                          </select>
+                          {s.role !== undefined && (
+                            <input className="app-input wf-edit-role" value={s.role} maxLength={40} disabled={busy} placeholder={L("分工，比如 审查", "Role, e.g. review")}
+                              aria-label={L(`第 ${i + 1} 步的分工`, `Role for step ${i + 1}`)} onChange={(e) => setStep(i, { role: e.target.value })} />
+                          )}
+                        </span></label>
                     )}
                     <label className="wf-edit-cell"><span>{kind === "human" ? L("多久没人决定算不做", "Expires after") : L("超时", "Timeout")}</span>
                       <select className="app-select-field" value={s.timeout || ""} disabled={busy} onChange={(e) => setStep(i, { timeout: e.target.value || undefined })}>
@@ -673,7 +691,8 @@ function EditDialog({ hubId, rows, wf, onClose, onSaved }: { hubId: string; rows
         <ErrorText error={error} />
         <div className="app-modal-actions">
           <button type="button" className="app-btn" onClick={onClose} disabled={busy}>{L("取消", "Cancel")}</button>
-          <button type="submit" className="app-btn app-btn-primary" disabled={busy || !def}>{busy ? L("正在保存…", "Saving…") : L("保存新版本", "Save a new version")}</button>
+          {noRole && <span className="app-modal-hint">{L(`「${label(noRole)}」还没写分工`, `"${label(noRole)}" needs a role`)}</span>}
+          <button type="submit" className="app-btn app-btn-primary" disabled={busy || !def || !!noRole}>{busy ? L("正在保存…", "Saving…") : L("保存新版本", "Save a new version")}</button>
         </div>
       </form>
     </Modal>

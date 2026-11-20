@@ -3734,6 +3734,7 @@ async function runMatrix(browser, size, scheme) {
       await det.waitFor({ timeout: 10_000 });
       await det.locator("[data-testid=workflow-graph] .wf-node", { hasText: "审" }).waitFor({ timeout: 10_000 });
       if (!(await det.locator(".wf-edge.is-back").count())) throw new Error("审没过回到做的那条边应画成回去的虚线");
+      if (!(await det.locator(".wf-node", { hasText: "审" }).innerText()).includes("分工：审查")) throw new Error("按分工挑人的一步应写出分工");
       const runs = det.locator("[data-testid=workflow-runs] .wf-run-row");
       await runs.first().waitFor({ timeout: 10_000 });
       await settle(page, 300);
@@ -3780,7 +3781,13 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, det.locator(".pcd-head").getByRole("button", { name: "编辑" }));
       const ed = page.locator("[data-testid=workflow-edit]");
       await ed.locator("[data-testid=workflow-edit-step]").nth(2).waitFor({ timeout: 10_000 });
+      // Step 2 goes by role; make it a named agent, then back to a role.
+      if ((await ed.getByRole("textbox", { name: "第 2 步的分工" }).inputValue()) !== "审查") throw new Error("按分工的一步应带出分工");
       await ed.getByRole("combobox", { name: "第 2 步交给谁" }).selectOption({ index: 0 });
+      await ed.getByRole("textbox", { name: "第 2 步的分工" }).waitFor({ state: "detached", timeout: 5_000 });
+      await ed.getByRole("combobox", { name: "第 2 步交给谁" }).selectOption("@role");
+      if (!(await ed.getByRole("button", { name: "保存新版本" }).isDisabled())) throw new Error("分工空着不该能保存");
+      await ed.getByRole("textbox", { name: "第 2 步的分工" }).fill("审查");
       await ed.locator(".wf-edit-loop select").selectOption("5");
       await clickVisible(page, ed.locator("[data-testid=workflow-edit-step]").first().locator("summary"));
       await settle(page, 200);

@@ -3825,12 +3825,12 @@ function wfActivate(hub, r, id) {
   if (!def || r.status === "failed" || r.status === "cancelled") return;
   const kind = def.computer ? "computer" : def.human ? "human" : "agent";
   const st = { id: `rs_${r.id}_${r.steps.length + 1}`, step: id, title: def.title, kind, attempt: r.steps.filter((x) => x.step === id).length + 1,
-    status: kind === "human" ? "waiting" : "running", target: kind === "human" ? "glenn" : def.agent || def.computer, started_at: iso(0),
+    status: kind === "human" ? "waiting" : "running", target: kind === "human" ? "glenn" : def.agent || def.computer || (def.role ? "docs-claude" : undefined), started_at: iso(0),
     input: kind === "computer" ? wfFill(def.run, r) : wfFill(def.prompt || def.title, r) };
   if (kind === "human") { st.options = def.options; st.due_at = iso(-20 * 3600); }
   r.steps.push(st);
   r.status = kind === "human" && !r.steps.some((x) => x.status === "running") ? "waiting" : "running";
-  r.events.push({ at: iso(0), kind: "step", step: id, text: kind === "human" ? "等 glenn 决定" : `交给 ${st.target}` });
+  r.events.push({ at: iso(0), kind: "step", step: id, text: kind === "human" ? "等 glenn 决定" : def.role ? `按分工「${def.role}」交给 ${st.target}（空闲）` : `交给 ${st.target}` });
   if (kind === "human") return;
   const threadId = `th_wf_${r.id}_${r.steps.length}`;
   const m = makeMessage({ thread_id: threadId, from: CONSOLE, to: st.target, type: "task", status: "acked", body: `[工作流「${r.name}」· ${def.title || id}]\n\n${st.input}`, workflow: r.id, created_at: iso(0), updated_at: iso(0) });
@@ -3877,7 +3877,7 @@ function seedWorkflows(hub) {
     inputs: { required: ["task"], properties: { task: { type: "string", title: "要做什么", format: "textarea" } } },
     steps: [
       { id: "write", title: "做", agent: "pm-codex", prompt: "完成这件事：{{inputs.task}}", output: { required: ["where"], properties: { where: { type: "string" } } } },
-      { id: "review", title: "审", agent: "docs-claude", prompt: "审一下这个改动：{{steps.write.summary}}", output: { required: ["approved"], properties: { approved: { type: "boolean" }, comments: { type: "array" } } } },
+      { id: "review", title: "审", role: "审查", prompt: "审一下这个改动：{{steps.write.summary}}", output: { required: ["approved"], properties: { approved: { type: "boolean" }, comments: { type: "array" } } } },
       { id: "ok", title: "你来定", human: "$starter", prompt: "「{{steps.write.summary}}」审过了。就这样吗？", options: ["就这样", "不要了"] },
     ],
     edges: [

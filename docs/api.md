@@ -316,7 +316,7 @@ A workflow definition (all of it is checked; unknown fields are refused):
 
 Rules:
 
-- A step sets exactly one of `agent` (with `prompt`, optional `output` schema), `computer` (an exec node, with `run`; `parse: "json"` reads stdout into `output.json`) or `human` (a member name or `$starter`, with `prompt` and at least two `options`). Ids: letters, digits, `_`, `-`, at most 40. At most 50 steps and 200 edges.
+- A step sets exactly one of `agent` (with `prompt`, optional `output` schema), `role` (the same, but the task goes to an agent whose role matches — a label `role=<x>` or `<x>`, a skill named `<x>`, or `<x>` in its name, display name, description, or its note in the run's project — preferring the run's project members, then the one with the fewest open tasks, then the one seen in the last 10 minutes; none: the step fails), `computer` (an exec node, with `run`; `parse: "json"` reads stdout into `output.json`) or `human` (a member name or `$starter`, with `prompt` and at least two `options`). Ids: letters, digits, `_`, `-`, at most 40. At most 50 steps and 200 edges.
 - `timeout`: `30m`, `2h`, `1d`, `1d12h`. A step past it fails (its task is stopped). A decision with no timeout waits 3 days; one that expires counts as no answer (`output.choice` is `""`, `output.timed_out` is `true`), never as yes.
 - `retry` (0-5): a failed agent or computer step is sent again that many times.
 - An agent step's result: the reply's `result`, else the last `` ```json `` block of its body. With an `output` schema, a result that does not fit (or none) is sent back once with what is wrong; a second miss fails the step. The output always has `text` (the reply's body). `summary` is the result's `summary`, else the reply's first line.

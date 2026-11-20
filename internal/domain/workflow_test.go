@@ -78,6 +78,7 @@ func TestWorkflowDefProblems(t *testing.T) {
 		`{"name": "x", "steps": []}`: "at least one step",
 		`{"name": "x", "steps": [{"id": "a", "agent": "p", "computer": "q", "prompt": "x"}]}`:   "exactly one of",
 		`{"name": "x", "steps": [{"id": "a", "agent": "p"}]}`:                                   "needs a prompt",
+		`{"name": "x", "steps": [{"id": "a", "agent": "p", "role": "审查", "prompt": "x"}]}`:      "exactly one of",
 		`{"name": "x", "steps": [{"id": "a", "human": "$starter", "options": ["ok"]}]}`:         "at least two options",
 		`{"name": "x", "steps": [{"id": "a", "agent": "p", "prompt": "x", "timeout": "soon"}]}`: "not a duration",
 		`{"name": "x", "steps": [{"id": "a", "agent": "p", "prompt": "x"}, {"id": "b", "agent": "p", "prompt": "x"}],
@@ -115,5 +116,17 @@ func TestWorkflowDurations(t *testing.T) {
 	}
 	if (&StepDef{Human: "x"}).TimeoutDur() != DefaultHumanTimeout {
 		t.Error("decisions wait by default")
+	}
+}
+
+func TestMatchesRole(t *testing.T) {
+	a := &Agent{Name: "rev", DisplayName: "Reviewer", Description: "负责审查 Go 代码", Labels: []string{"role=qa", "team=web"}, Skills: []Skill{{Name: "release"}}}
+	for role, want := range map[string]bool{"审查": true, "QA": true, "release": true, "reviewer": true, "设计": false, "web": false, "": false} {
+		if got := MatchesRole(a, role, ""); got != want {
+			t.Errorf("%q: %v", role, got)
+		}
+	}
+	if !MatchesRole(&Agent{Name: "x"}, "前端", "这个项目里管前端") {
+		t.Error("a project member's note says its role there")
 	}
 }
