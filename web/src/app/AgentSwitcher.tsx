@@ -19,12 +19,14 @@ import { cn } from "@/lib/utils";
 
 const isSwitchKey = (e: KeyboardEvent) => e.ctrlKey && !e.metaKey && !e.altKey && (e.key === "Tab" || e.code === "Backquote");
 
-export function AgentSwitcher({ hubId, rows, current, onPick }: {
+export function AgentSwitcher({ hubId, rows, current, project, onPick }: {
   hubId: string;
   /** the agents to switch between (this workspace's chats) */
   rows: AgentRow[];
   /** the agent whose chat is open, if any */
   current?: string;
+  /** the members of the project shown, if one is */
+  project?: string[];
   onPick: (r: AgentRow) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -34,8 +36,8 @@ export function AgentSwitcher({ hubId, rows, current, onPick }: {
   state.current = { open, at };
   const pickRef = useRef(onPick);
   pickRef.current = onPick;
-  const rowsRef = useRef({ rows, current, hubId });
-  rowsRef.current = { rows, current, hubId };
+  const rowsRef = useRef({ rows, current, hubId, project });
+  rowsRef.current = { rows, current, hubId, project };
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -45,12 +47,20 @@ export function AgentSwitcher({ hubId, rows, current, onPick }: {
     // project's members) the last one noted while a chat shows.
     const currentNow = () => rowsRef.current.current
       || (document.querySelector(".conv-detail") ? recentChats().find((c) => c.hubId === rowsRef.current.hubId)?.agent : undefined);
+    // Who comes first: the open chat (one press goes past it), then this
+    // project's members at work, its other members, those at work
+    // elsewhere, the rest; within each, the last talked to first. One that
+    // is offline is left out (there is nothing to switch to).
     const build = () => {
-      const { rows, hubId } = rowsRef.current;
+      const { rows, hubId, project } = rowsRef.current;
       const current = currentNow();
       const seen = recentChats().filter((c) => c.hubId === hubId).map((c) => c.agent);
-      const rank = (r: AgentRow) => (r.st.agent.name === current ? -1 : seen.indexOf(r.st.agent.name) < 0 ? 1e6 : seen.indexOf(r.st.agent.name));
-      return [...rows].sort((a, b) => rank(a) - rank(b));
+      const inProject = new Set(project || []);
+      const busy = (r: AgentRow) => r.st.state === "working" || (r.st.asking || 0) > 0;
+      const group = (r: AgentRow) => (r.st.agent.name === current ? 0 : inProject.has(r.st.agent.name) ? (busy(r) ? 1 : 2) : busy(r) ? 3 : 4);
+      const recent = (r: AgentRow) => (seen.indexOf(r.st.agent.name) < 0 ? 1e6 : seen.indexOf(r.st.agent.name));
+      return rows.filter((r) => r.st.state !== "offline" || r.st.agent.name === current)
+        .sort((a, b) => group(a) - group(b) || recent(a) - recent(b));
     };
     const step = (by: number) => {
       const n = order.current.length;

@@ -4057,12 +4057,16 @@ async function runMatrix(browser, size, scheme) {
       await page.keyboard.press("Tab");
       const sw = page.locator("[data-testid=agent-switcher]");
       await sw.waitFor({ timeout: 5_000 });
-      if ((await sw.locator(".asw-name").innerText()).trim() !== "Myco (Grok)") throw new Error("按一下 ⌃Tab 应选中上一个聊过的");
+      // The open chat first; one press picks the next (at work first).
+      const picked = (await sw.locator(".asw-name").innerText()).trim();
+      if (!picked || picked === "Review (Codex 云端)") throw new Error("按一下 ⌃Tab 应选中另一个 agent");
+      if (await sw.locator(".asw-item.is-away").count()) throw new Error("不在线的不该出现在切换框里");
+      if (!(await sw.locator(".asw-item").first().getAttribute("title") || "").includes("Review")) throw new Error("正开着的对话应排第一");
       await settle(page, 150);
       await shot(page, size, scheme, "agent-switcher");
       await page.keyboard.up("Control");
       await sw.waitFor({ state: "detached", timeout: 5_000 });
-      await page.locator(".conv-detail .conv-head", { hasText: "Myco (Grok)" }).first().waitFor({ timeout: 10_000 });
+      await page.locator(".conv-detail .conv-head", { hasText: picked }).first().waitFor({ timeout: 10_000 });
       // Esc puts it away, nothing opened.
       await page.keyboard.down("Control");
       await page.keyboard.press("Backquote");
@@ -4070,7 +4074,7 @@ async function runMatrix(browser, size, scheme) {
       await page.keyboard.press("Escape");
       await page.keyboard.up("Control");
       await sw.waitFor({ state: "detached", timeout: 5_000 });
-      if (!(await page.locator(".conv-detail .conv-head", { hasText: "Myco (Grok)" }).count())) throw new Error("Esc 收起时不该换对话");
+      if (!(await page.locator(".conv-detail .conv-head", { hasText: picked }).count())) throw new Error("Esc 收起时不该换对话");
     });
 
     // ‹ › at the top: back to where you were and forward again, pages and
