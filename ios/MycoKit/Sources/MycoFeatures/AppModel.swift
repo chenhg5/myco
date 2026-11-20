@@ -114,6 +114,7 @@ public final class AppModel {
     /// - Parameter session: a workspace to show at once (the demo, in tests);
     ///   nil looks for the ones joined earlier.
     public init(session: WorkspaceSession? = nil, doors: Doors) {
+        FilePreview.words = { (L("关闭", "Close"), L("分享或存储", "Share or save")) }
         self.session = session
         self.doors = doors
         started = session != nil
