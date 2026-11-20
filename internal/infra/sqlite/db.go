@@ -468,7 +468,9 @@ func Open(path string) (*sql.DB, error) {
 	}
 	if err := addColumns(db, "enrollments", [][2]string{{"labels", "TEXT NOT NULL DEFAULT '[]'"},
 		{"kind", "TEXT NOT NULL DEFAULT ''"}, {"parent_id", "TEXT NOT NULL DEFAULT ''"}, {"machine", "TEXT NOT NULL DEFAULT ''"},
-		{"owner", "TEXT NOT NULL DEFAULT ''"}}); err != nil {
+		{"owner", "TEXT NOT NULL DEFAULT ''"},
+		// A link whose agent becomes its owner's superagent (v0.21.5).
+		{"superagent", "INTEGER NOT NULL DEFAULT 0"}}); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}

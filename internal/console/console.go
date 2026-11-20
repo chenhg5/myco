@@ -1173,6 +1173,9 @@ func (b *Backend) Handler() http.Handler {
 			// on that computer needs allowing.
 			ShellNode bool     `json:"shell_node"`
 			AllowFrom []string `json:"allow_from"`
+			// Superagent: the agent that joins through it becomes this
+			// person's superagent (hubs from v0.21.5).
+			Superagent bool `json:"superagent"`
 		}
 		if !decode(w, r, &in) {
 			return
@@ -1192,6 +1195,8 @@ func (b *Backend) Handler() http.Handler {
 			TTLSeconds: int64(in.ExpiresHours) * 3600, Note: "myco console"}
 		if in.ShellNode {
 			req.Harness, req.AllowFrom, req.Note = execnode.Name, in.AllowFrom, "myco console: a folder as a computer"
+		} else if in.Superagent {
+			req.Superagent, req.Note = true, "myco console: superagent"
 		}
 		res, err := c.CreateEnrollment(r.Context(), req, false)
 		if err != nil {

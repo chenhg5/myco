@@ -599,6 +599,9 @@ type CreateEnrollmentRequest struct {
 	Note         string   `json:"note,omitempty"`
 	MaxUses      int      `json:"max_uses,omitempty"`
 	TTLSeconds   int64    `json:"ttl_seconds,omitempty"`
+	// Superagent: the agent that joins through this link becomes the
+	// caller's superagent (a person's link; v0.21.5+, older hubs ignore it).
+	Superagent bool `json:"superagent,omitempty"`
 }
 
 // CreateEnrollmentResponse returns the enrollment and, once, its token.

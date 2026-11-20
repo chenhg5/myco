@@ -209,6 +209,8 @@ export interface JoinLinkInput {
    *  (exec node) that these agents may send commands to */
   shell_node?: boolean;
   allow_from?: string[];
+  /** the agent that joins through it becomes your superagent (hubs from v0.21.5) */
+  superagent?: boolean;
 }
 export interface JoinLink {
   join_url: string;

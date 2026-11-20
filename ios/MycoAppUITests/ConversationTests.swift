@@ -53,7 +53,13 @@ final class ConversationTests: XCTestCase {
             app.staticTexts["会议结论.md"].waitForExistence(timeout: 10) || app.navigationBars["会议结论.md"].exists
                 || app.staticTexts["会议结论"].exists,
             "the file opens")
+        // Markdown is laid out, not shown as plain text; its source is a tap away.
+        XCTAssertTrue(app.descendants(matching: .any)["markdown.rendered"].waitForExistence(timeout: 5), "laid out")
         snap("files-preview")
+        app.segmentedControls["markdown.mode"].buttons["Source"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["markdown.source"].waitForExistence(timeout: 5))
+        app.buttons["markdown.close"].tap()
+        XCTAssertFalse(app.descendants(matching: .any)["markdown.viewer"].waitForExistence(timeout: 2))
     }
 
     @MainActor

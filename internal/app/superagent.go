@@ -105,6 +105,32 @@ func (s *SuperagentService) Set(ctx context.Context, by Actor, name domain.Agent
 	return a, nil
 }
 
+// SetFor names agent memberID's superagent without a person calling: an
+// agent that joined through a superagent link that member made. The agent
+// is theirs (the link's owner owns what joins through it).
+func (s *SuperagentService) SetFor(ctx context.Context, memberID string, name domain.AgentName) error {
+	m, err := s.members.Get(ctx, memberID)
+	if err != nil {
+		return err
+	}
+	a, err := s.agents.Get(ctx, name)
+	if err != nil {
+		return err
+	}
+	if a.Owner != m.ID || a.Kind() != domain.KindAgent {
+		return domain.Errf(domain.CodeInvalidArgument, "%s cannot be %s's superagent", name, m.Name)
+	}
+	before, _ := s.repo.Of(ctx, m.ID)
+	if err := s.repo.Set(ctx, m.ID, name, s.clock.Now()); err != nil {
+		return err
+	}
+	if before != "" && before != name {
+		s.withdraw(ctx, before)
+	}
+	s.audit.Record(ctx, Actor{Member: m}, "superagent.set", string(name), "joined through a superagent link")
+	return nil
+}
+
 // Clear makes the actor's superagent an ordinary agent again.
 func (s *SuperagentService) Clear(ctx context.Context, by Actor) error {
 	m, err := person(by, "change the superagent")

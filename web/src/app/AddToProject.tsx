@@ -69,7 +69,7 @@ export async function addToProject(hubId: string, project: Project | undefined, 
 // (agent_guide) takes the project in the link, and its script ends with
 // the last step: the sentence is just the command. Older hubs need the
 // steps spelled out.
-function joinSentence(link: JoinLink, project?: string): string {
+export function joinSentence(link: JoinLink, project?: string): string {
   if (link.agent_guide) {
     const command = project ? `curl -fsSL ${link.join_url}/${project} | bash` : link.command;
     return L(`加入 myco：在终端运行 ${command} ，再照它最后的输出做完。`, `Join myco: run ${command} in a terminal, then do what its last lines say.`);

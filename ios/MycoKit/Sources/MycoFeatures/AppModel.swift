@@ -115,6 +115,7 @@ public final class AppModel {
     ///   nil looks for the ones joined earlier.
     public init(session: WorkspaceSession? = nil, doors: Doors) {
         FilePreview.words = { (L("关闭", "Close"), L("分享或存储", "Share or save")) }
+        FilePreview.markdownWords = { (L("排版", "Formatted"), L("原文", "Source")) }
         self.session = session
         self.doors = doors
         started = session != nil

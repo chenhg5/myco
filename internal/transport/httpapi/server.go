@@ -687,9 +687,15 @@ func (s *Server) createEnrollment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, domain.Errf(domain.CodePermissionDenied, "only the hub's owner or an admin can create links for exec nodes"))
 		return
 	}
+	owner := s.ownerIDFor(r.Context(), actor)
+	if req.Superagent && (actor.Member == nil || actor.Via != nil || owner == "" || req.Harness == "exec") {
+		writeError(w, domain.Errf(domain.CodePermissionDenied, "only a person makes a superagent link (their own)"))
+		return
+	}
 	e, tok, err := s.enroll.Create(r.Context(), app.CreateEnrollmentInput{
 		Kind: req.Kind, NamePrefix: req.NamePrefix, Harness: req.Harness, AllowFrom: req.AllowFrom, Capabilities: req.Capabilities, Labels: req.Labels,
-		Note: req.Note, MaxUses: req.MaxUses, TTL: time.Duration(req.TTLSeconds) * time.Second, DryRun: dry, Owner: s.ownerIDFor(r.Context(), actor),
+		Note: req.Note, MaxUses: req.MaxUses, TTL: time.Duration(req.TTLSeconds) * time.Second, DryRun: dry, Owner: owner,
+		Superagent: req.Superagent,
 	})
 	if err != nil {
 		writeError(w, err)
