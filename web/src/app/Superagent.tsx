@@ -26,7 +26,9 @@ const emit = () => { version += 1; subs.forEach((f) => f()); };
 export async function refreshSuperagent(hubId: string): Promise<void> {
   try {
     const state = await appApi.superagent(hubId);
-    const approvals = state.agent ? (await appApi.approvals(hubId).catch(() => ({ approvals: [] as Approval[] }))).approvals : [];
+    // What waits on you: your superagent's requests, and a project
+    // coordinator's (a computer for its project).
+    const approvals = (await appApi.approvals(hubId).catch(() => ({ approvals: [] as Approval[] }))).approvals;
     store.set(hubId, { state, approvals, at: Date.now() });
   } catch {
     store.set(hubId, { approvals: [], at: Date.now(), off: true });
@@ -199,13 +201,15 @@ function leftOf(expires: string, now: number): string {
   return L(`${Math.max(1, Math.round(ms / 60_000))} 分钟内有效`, `${Math.max(1, Math.round(ms / 60_000))}m left`);
 }
 
-/** What the superagent waits on you for, above its chat's composer:
- *  what, why, and 同意 / 不同意. */
-export function ApprovalStrip({ hubId, agent }: { hubId: string; agent: string }) {
+/** What an agent waits on you for, above its chat's composer (your
+ *  superagent's requests, a coordinator asking for a computer): what, why,
+ *  and 同意 / 不同意. */
+export function ApprovalStrip({ hubId, agent, name }: { hubId: string; agent: string; name?: string }) {
   const s = useSuperagent(hubId);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
-  const items = s?.state?.agent?.name === agent ? s.approvals.filter((a) => a.agent === agent && a.status === "pending") : [];
+  const items = (s?.approvals || []).filter((a) => a.agent === agent && a.status === "pending");
+  const who = name || (s?.state?.agent?.name === agent ? SHROOM : agent);
   if (!items.length) return null;
   const now = Date.now();
   const decide = async (a: Approval, ok: boolean) => {
@@ -226,7 +230,7 @@ export function ApprovalStrip({ hubId, agent }: { hubId: string; agent: string }
         <div className="sa-approval" key={a.id}>
           <ShieldQuestion className="sa-approval-icon" />
           <div className="sa-approval-text">
-            <div className="sa-approval-what">{L(`${SHROOM} 想：`, `${SHROOM} wants to: `)}{a.what}</div>
+            <div className="sa-approval-what">{L(`${who} 想：`, `${who} wants to: `)}{a.what}</div>
             {a.reason && <div className="sa-approval-why">{a.reason}</div>}
             <div className="sa-approval-meta">{leftOf(a.expires_at, now)}</div>
           </div>

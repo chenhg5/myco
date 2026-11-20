@@ -137,8 +137,12 @@ New agents on other machines: `myco agent spawn --on <machine> --dir <dir> [--cl
 [--description "..."] [--prompt "first instructions"]` starts a fresh session in that directory on that
 machine and joins it as a new agent (printed as `agent`); then send it tasks as usual. The target
 machine decides who may do this, which directories and the highest access (exit 4 when refused).
-In a project with a terminal on that machine you may start sessions inside the terminal's folder
-(its workdir, or a folder below it) without being on the machine's allow list: use that path as --dir.
+As a project's coordinator: `myco project machines --name <project>` lists the workspace's computers and
+which the project may start agents on (✓); spawn there without being on the machine's allow list. Which
+computer to use is your owner's call: ask them when it is not obvious. For a computer not allowed yet,
+`myco project machine request --project <p> --machine <m> --reason "..."` puts a card in your chat with
+the project's owner; you get a note when they decide (carry on or end your turn meanwhile). Terminals in
+a project are a separate thing: they let agents run commands there, not start agents.
 Only spawn what your owner's task needs; each new session costs the machine owner's model quota.
 
 Files: `--attach <path>` (repeatable) on `message send`, `message reply` and `broadcast send`

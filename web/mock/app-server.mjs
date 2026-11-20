@@ -1558,6 +1558,9 @@ const projectMembersAtStart = projects.map((p) => JSON.stringify(p.members));
 function projectView(hub, p, bodies) {
   return {
     ...p,
+    // The computers its coordinators may start agents on (hubs from v0.21.2;
+    // the lab hub is older and has none).
+    ...(hub.id === "hub_lab" ? {} : { machines: p.machines || [] }),
     members: p.members.map((m) => ({ ...m, agent: hub.agents.find((a) => a.name === m.name && a.visibility !== "private") })),
     docs: p.docs.map((d) => ({ name: d.name, size: d.size ?? d.body.length, content_type: d.content_type, binary: !!d.binary, updated_by: d.updated_by, updated_at: d.updated_at, ...(bodies && !d.binary ? { body: d.body } : {}) })),
     can_edit: true, can_manage: p.owner_id === "mem_" + meName || meName === "glenn",
@@ -1755,6 +1758,7 @@ const server = http.createServer(async (req, res) => {
     state.superagents ||= {};
     state.approvals ||= {};
     if (method === "DELETE") {
+      for (const pr of projects) delete pr.machines;
       for (const h of state.hubs) {
         const name = state.superagents[h.id];
         delete state.superagents[h.id];
@@ -1765,10 +1769,10 @@ const server = http.createServer(async (req, res) => {
     }
     const body = await readBody(req);
     const hub = state.hubs.find((h) => h.id === (body?.hub || state.hubs[0]?.id));
-    const agent = hub && state.superagents[hub.id];
+    const agent = (hub && body?.agent) || (hub && state.superagents[hub.id]);
     if (!agent) return fail(res, 404, "not_found", "no superagent there");
     state.counter += 1;
-    const a = { id: `apr_${state.counter}`, agent, what: body.what || "删除项目 old-site", reason: body.reason || "", method: "DELETE", path: "/v1/projects/old-site",
+    const a = { id: `apr_${state.counter}`, agent, what: body.what || "删除项目 old-site", reason: body.reason || "", method: body.method || "DELETE", path: body.path || "/v1/projects/old-site",
       status: "pending", created_at: iso(0), expires_at: new Date(Date.now() + 24 * 3600_000).toISOString() };
     (state.approvals[hub.id] ||= []).push(a);
     return send(res, 201, a);
@@ -2745,6 +2749,13 @@ const server = http.createServer(async (req, res) => {
         a.decided_by = "glenn";
         a.decided_at = iso(0);
         if (a.status === "done") a.result = 200;
+        // A coordinator's request for a computer: carried out as you.
+        const pm = a.status === "done" && a.method === "PUT" && /^\/v1\/projects\/([^/]+)\/machines\/([^/]+)$/.exec(a.path);
+        if (pm) {
+          const list = hub.id === "hub_studio" ? projects : (hub.projects ||= []);
+          const pr = list.find((x) => x.name === decodeURIComponent(pm[1]));
+          if (pr) pr.machines = [...(pr.machines || []).filter((x) => x !== pm[2]), decodeURIComponent(pm[2])];
+        }
         return send(res, 200, a);
       }
       return fail(res, 404, "not_found", "no such route");
@@ -3228,6 +3239,14 @@ const server = http.createServer(async (req, res) => {
           return send(res, 200, projectView(hub, p));
         }
         if (method === "DELETE") { p.members = p.members.filter((x) => x.name !== parts[6]); return send(res, 200, projectView(hub, p)); }
+      }
+      if (parts.length === 7 && parts[5] === "machines" && (method === "PUT" || method === "DELETE")) {
+        if (hub.id === "hub_lab") return fail(res, 404, "not_found", "no such route");
+        const id = parts[6];
+        p.machines = (p.machines || []).filter((x) => x !== id);
+        if (method === "PUT") p.machines.push(id);
+        p.updated_at = iso();
+        return send(res, 200, projectView(hub, p));
       }
       if (parts[5] === "files" && parts.length >= 7) {
         const i = p.docs.findIndex((d) => d.name === parts[6]);

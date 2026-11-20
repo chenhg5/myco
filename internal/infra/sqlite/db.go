@@ -498,7 +498,9 @@ func Open(path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 	for table, cols := range map[string][][2]string{
-		"machines":       {{"owner", "TEXT NOT NULL DEFAULT ''"}},
+		"machines": {{"owner", "TEXT NOT NULL DEFAULT ''"}},
+		// The computers a project's coordinators may start agents on (v0.21.2).
+		"projects":       {{"machines", "TEXT NOT NULL DEFAULT '[]'"}},
 		"console_tokens": {{"member_id", "TEXT NOT NULL DEFAULT ''"}},
 		"project_docs":   {{"content_type", "TEXT NOT NULL DEFAULT ''"}, {"size", "INTEGER NOT NULL DEFAULT 0"}, {"blob", "TEXT NOT NULL DEFAULT ''"}},
 		// A template's icon (v0.20.7).

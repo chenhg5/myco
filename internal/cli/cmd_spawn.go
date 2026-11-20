@@ -24,8 +24,8 @@ a new Claude Code, Codex or other agent CLI session in a directory there, enroll
 have that machine's runner serve it. Prints the new agent's name; send it work with message send.
 
 The machine decides, locally: who may ask (the machine node's allow_from, inherited from the join
-link; change it with agent update; also, when a project you are in has a terminal on that machine,
-you may start sessions inside that terminal's folder), which directories (spawn.dirs in its ~/.myco/machine.yaml,
+link; change it with agent update; also, a coordinator of a project that allows that computer may:
+see myco project machines), which directories (spawn.dirs in its ~/.myco/machine.yaml,
 default: its home directory) and the highest access (spawn.max_access, default workspace).`,
 		Examples: []string{
 			`myco agent spawn --on wsl --dir ~/code/app --description "reviews the web app"`,

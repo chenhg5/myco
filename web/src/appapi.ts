@@ -725,6 +725,9 @@ export const appApi = {
   updateProject: (hubId: string, name: string, input: { title?: string; goal?: string; brief?: string; links?: ProjectLink[]; visibility?: "members" | "team"; archived?: boolean }) =>
     request<Project>("PATCH", `app/hubs/${enc(hubId)}/projects/${enc(name)}`, input),
   deleteProject: (hubId: string, name: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/projects/${enc(name)}`),
+  /** lets the project's coordinators start agents on a computer, or no longer (hubs from v0.21.2) */
+  setProjectMachine: (hubId: string, name: string, machine: string, allow: boolean) =>
+    request<Project>(allow ? "PUT" : "DELETE", `app/hubs/${enc(hubId)}/projects/${enc(name)}/machines/${enc(machine)}`),
   putProjectMember: (hubId: string, name: string, agent: string, input: { role?: "member" | "coordinator"; note?: string } = {}) =>
     request<Project>("PUT", `app/hubs/${enc(hubId)}/projects/${enc(name)}/members/${enc(agent)}`, input),
   removeProjectMember: (hubId: string, name: string, agent: string) =>

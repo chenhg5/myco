@@ -30,6 +30,7 @@ func (s *Server) routeProjects(m *http.ServeMux) {
 	m.HandleFunc("PUT /v1/projects/{name}/files/{file}", s.projectCaller(s.putProjectFile))
 	m.HandleFunc("GET /v1/projects/{name}/files/{file}", s.projectCaller(s.getProjectFile))
 	m.HandleFunc("DELETE /v1/projects/{name}/files/{file}", s.projectCaller(s.deleteProjectDoc))
+	s.projectMachineRoutes(m)
 }
 
 // projectCall is who calls: a person (console/admin token) or an agent.
@@ -72,7 +73,7 @@ func (s *Server) recordAs(r *http.Request, by app.Actor, action, target, detail 
 func (s *Server) projectDTO(r *http.Request, c projectCall, v *app.ProjectView, bodies bool) api.Project {
 	p := v.Project
 	out := api.Project{Name: p.Name, Title: p.Title, Goal: p.Goal, Brief: p.Brief, Visibility: string(p.Visibility),
-		OwnerID: p.Owner, Archived: p.Archived, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
+		OwnerID: p.Owner, Archived: p.Archived, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt, Machines: append([]string{}, p.Machines...),
 		Links: make([]api.ProjectLink, 0, len(p.Links)), Members: make([]api.ProjectMember, 0, len(v.Members)), Docs: make([]api.ProjectDoc, 0, len(v.Docs))}
 	if p.Owner != "" && s.members != nil {
 		if m, err := s.members.Get(r.Context(), p.Owner); err == nil {

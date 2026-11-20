@@ -1172,10 +1172,32 @@ type Project struct {
 	UpdatedAt  time.Time       `json:"updated_at"`
 	Members    []ProjectMember `json:"members"`
 	Docs       []ProjectDoc    `json:"docs"`
+	// Machines are the computers (ids) its coordinators may start agents
+	// on (v0.21.2+; absent on older hubs).
+	Machines []string `json:"machines"`
 	// What the caller may do: edit the content (owner, admins,
 	// coordinators), manage it (people: roles, visibility, archive, delete).
 	CanEdit   bool `json:"can_edit"`
 	CanManage bool `json:"can_manage"`
+}
+
+// ProjectMachine is a computer of the workspace, as a project sees it:
+// whether its coordinators may start agents there (GET
+// /v1/projects/{name}/machines).
+type ProjectMachine struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	OS        string `json:"os,omitempty"`
+	Online    bool   `json:"online"`
+	CanSpawn  bool   `json:"can_spawn"`
+	SpawnNode string `json:"spawn_node,omitempty"`
+	Allowed   bool   `json:"allowed"`
+}
+
+// ProjectMachineList answers GET /v1/projects/{name}/machines.
+type ProjectMachineList struct {
+	Project  string           `json:"project"`
+	Machines []ProjectMachine `json:"machines"`
 }
 
 // ProjectLink points at material kept elsewhere.

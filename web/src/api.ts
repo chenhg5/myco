@@ -73,6 +73,9 @@ export interface Project {
   docs: ProjectDoc[];
   /** edit the content (owner, admins, coordinators); manage it (people) */
   can_edit: boolean; can_manage: boolean;
+  /** the computers (ids) its coordinators may start agents on (hubs from
+   *  v0.21.2; absent before) */
+  machines?: string[];
 }
 export interface ProjectLink { title?: string; url: string }
 export interface ProjectMember {

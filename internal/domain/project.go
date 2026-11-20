@@ -23,8 +23,12 @@ type Project struct {
 	Visibility ProjectVisibility
 	Owner      string // member id of whoever created it ("" on hubs without members)
 	Archived   bool
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	// Machines are the computers (machine ids) its coordinators may start
+	// agent sessions on: a permission of its own, set by its owner, apart
+	// from the terminals it has (v0.21.2).
+	Machines  []string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // ProjectLink points at material kept elsewhere (a repository, a document).

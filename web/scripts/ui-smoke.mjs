@@ -1490,6 +1490,47 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".sp-home").waitFor({ timeout: 10_000 });
     });
 
+    // Which computers the project's coordinator may start agents on: a
+    // setting of the project (项目资料), apart from its terminals; the
+    // coordinator asks for another, and you approve it in its chat.
+    await step("项目 · 可以开 agent 的电脑", async () => {
+      await go(page, "官网改版", narrow);
+      await clickVisible(page, page.locator(".sp-head").getByRole("button", { name: "项目资料" }));
+      const section = page.locator("[data-testid=project-machines]");
+      await section.waitFor({ timeout: 20_000 });
+      const studio = section.locator(".app-row", { hasText: "Studio Mac" }).getByRole("switch");
+      if ((await studio.getAttribute("aria-checked")) !== "false") throw new Error("项目一开始不该允许任何电脑");
+      await clickVisible(page, studio);
+      await page.waitForFunction(() => document.querySelector("[data-testid=project-machines] .app-row [role=switch][aria-checked=true]"), null, { timeout: 10_000 });
+      await section.scrollIntoViewIfNeeded();
+      await settle(page, 200);
+      await shot(page, size, scheme, "project-machines");
+      // The coordinator asks for another computer: a card in its chat.
+      const ask = await fetch(`http://${HOST}:${mockPort()}/app/mock/superagent-ask`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agent: "pm-codex", what: "让项目「website」能在「Office PC」上开 agent", reason: "要在 Windows 上开一个 Codex 测安装包。",
+          method: "PUT", path: "/v1/projects/website/machines/m_office" }),
+      });
+      if (!ask.ok) throw new Error(`协调者申请电脑失败：HTTP ${ask.status}`);
+      await navBackClick(page);
+      await page.locator(".sp-home .conv-detail").waitFor({ timeout: 10_000 });
+      const card = page.locator(".sp-home [data-testid=approvals] .sa-approval");
+      await card.waitFor({ timeout: 25_000 });
+      const text = compactText(await card.innerText());
+      if (!text.includes("PM (Codex) 想") || !text.includes("Office PC")) throw new Error(`申请卡片应写明谁、要哪台电脑，实际「${text}」`);
+      await settle(page, 200);
+      await shot(page, size, scheme, "project-machine-request");
+      await clickVisible(page, card.getByRole("button", { name: "同意", exact: true }));
+      await card.waitFor({ state: "hidden", timeout: 10_000 });
+      await clickVisible(page, page.locator(".sp-head").getByRole("button", { name: "项目资料" }));
+      const office = page.locator("[data-testid=project-machines] .app-row", { hasText: "Office PC" }).getByRole("switch");
+      await page.waitForFunction(() => [...document.querySelectorAll("[data-testid=project-machines] .app-row")]
+        .some((r) => r.textContent?.includes("Office PC") && r.querySelector("[role=switch]")?.getAttribute("aria-checked") === "true"), null, { timeout: 15_000 });
+      if ((await office.getAttribute("aria-checked")) !== "true") throw new Error("同意后，项目应能在 Office PC 上开 agent");
+      await navBackClick(page);
+      await page.locator(".sp-home").waitFor({ timeout: 10_000 });
+    });
+
     // Projects in the sidebar go where you drag them, and stay there.
     if (!narrow) await step("边栏 · 拖动排序", async () => {
       await sidebar(page, true);
@@ -4345,7 +4386,7 @@ async function runMatrix(browser, size, scheme) {
       await page.keyboard.press("Escape");
       await page.locator(".app-hub-menu").waitFor({ state: "hidden" }).catch(() => undefined);
       if (narrow) await sidebar(page, false);
-      await clickVisible(page, card.getByRole("button", { name: "同意" }));
+      await clickVisible(page, card.getByRole("button", { name: "同意", exact: true }));
       await card.waitFor({ state: "hidden", timeout: 10_000 });
     });
 

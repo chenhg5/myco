@@ -475,6 +475,24 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, p)
 	}))
+	// Which computers the project's coordinators may start agents on (hubs
+	// from v0.21.2): set with PUT, taken back with DELETE.
+	m.HandleFunc("PUT /app/hubs/{id}/projects/{name}/machines/{machine}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		p, err := c.SetProjectMachine(r.Context(), r.PathValue("name"), r.PathValue("machine"), true)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, p)
+	}))
+	m.HandleFunc("DELETE /app/hubs/{id}/projects/{name}/machines/{machine}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		p, err := c.SetProjectMachine(r.Context(), r.PathValue("name"), r.PathValue("machine"), false)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, p)
+	}))
 	m.HandleFunc("GET /app/hubs/{id}/projects/{name}/docs/{doc}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		d, err := c.GetProjectDoc(r.Context(), r.PathValue("name"), r.PathValue("doc"))
 		if err != nil {

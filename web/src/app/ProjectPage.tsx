@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { recall, remember } from "@/lib/memo";
-import { Check, ChevronDown, Download, ExternalLink, File as FileIcon, FileImage, FileText, Lock, MoreHorizontal, Pencil, Plus, Upload, Users } from "lucide-react";
+import { Check, ChevronDown, Download, ExternalLink, File as FileIcon, FileImage, FileText, Lock, Monitor, MoreHorizontal, Pencil, Plus, Upload, Users } from "lucide-react";
 import { IconChat, IconExchange, IconNewChat, IconNodes } from "@/components/icons";
 import { useContextMenu } from "@/app/ContextMenu";
 import { appApi, isOldHub, type RecentItem } from "@/appapi";
 import type { ConversationRow } from "@/app/ConversationsPage";
 import { summarize } from "@/app/summary";
-import type { Project, ProjectDoc, ProjectMember } from "@/api";
+import type { Machine, Project, ProjectDoc, ProjectMember } from "@/api";
 import type { AgentRow } from "@/app/types";
-import { agentKind, canManage, isMe, nodeIcon, nodeName } from "@/app/nodes";
+import { agentKind, canManage, isMe, machinesOfHub, nodeIcon, nodeName } from "@/app/nodes";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
 import { Markdown } from "@/app/Markdown";
 import { NodePicker } from "@/app/NodePicker";
@@ -286,6 +286,12 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
         </div>
       </section>
 
+      {p.machines && (
+        <ProjectMachines project={p} machines={hub ? machinesOfHub(hub).filter((m) => !m.legacy && m.os !== "cloud") : []} busy={busy}
+          onSet={(id, allow) => void run(() => appApi.setProjectMachine(target.hubId, p.name, id, allow), false)} />
+      )}
+      {p.machines && <ErrorText error={dialog ? null : actionError} />}
+
       {threads.length > 0 && (
         <section className="app-group">
           <div className="app-group-title">
@@ -545,6 +551,52 @@ function MemberDialog({ member, project, mayRemove, busy, error, onClose, onSave
           onClick={() => onSave({ ...(note !== (member.note || "") ? { note } : {}), ...(role !== member.role ? { role } : {}) })}>{L("保存", "Save")}</button>
       </div>
     </Modal>
+  );
+}
+
+/** Which computers the project's coordinators may start agents on: a
+ *  setting of its own, apart from its terminals. Its owner switches each
+ *  on or off; a coordinator asks for one (a card in its chat). */
+function ProjectMachines({ project, machines, busy, onSet }: {
+  project: Project; machines: Machine[]; busy: boolean; onSet: (id: string, allow: boolean) => void;
+}) {
+  const allowed = new Set(project.machines || []);
+  const shown = project.can_manage ? machines : machines.filter((m) => allowed.has(m.id));
+  return (
+    <section className="app-group" data-testid="project-machines">
+      <div className="app-group-title">
+        <span className="name">{L("可以开 agent 的电脑", "Computers it may start agents on")}</span>
+      </div>
+      <div className="app-list">
+        {shown.length === 0 ? (
+          <div className="app-empty-note">{project.can_manage
+            ? L("这个工作区还没有能开 agent 的电脑。", "This workspace has no computers to start agents on.")
+            : L("还没有。协调者可以向项目主人申请（myco project machine request）。", "None yet. A coordinator can ask the project's owner (myco project machine request).")}</div>
+        ) : shown.map((m) => {
+          const on = allowed.has(m.id);
+          const label = on ? L(`不让项目在「${m.name}」上开 agent`, `Stop starting agents on “${m.name}”`) : L(`让项目在「${m.name}」上开 agent`, `Let it start agents on “${m.name}”`);
+          return (
+            <div className="app-row" key={m.id}>
+              <span className="app-row-icon"><Monitor /></span>
+              <span className="app-row-main">
+                <span className="app-row-titleline">
+                  <span className="app-row-title">{m.name}</span>
+                  <span className={cn("dot", m.online ? "working" : "offline")} />
+                </span>
+                <span className="app-row-sub">{!m.can_spawn ? L("现在开不了 agent（myco 太旧或没在运行）", "Cannot start agents now (myco too old or not running)") : on ? L("协调者可以在这台电脑上开 agent", "Coordinators may start agents here") : L("不允许", "Not allowed")}</span>
+              </span>
+              {project.can_manage && (
+                <button type="button" role="switch" aria-checked={on} aria-label={label} title={label} disabled={busy || project.archived}
+                  className={cn("app-switch", on && "is-on")} onClick={() => onSet(m.id, !on)}>
+                  <span className="app-switch-knob" />
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div className="app-small-note">{L("协调者能在这些电脑上开新的 agent（文件夹和权限仍按那台电脑自己的设置）。和终端无关：终端是让 agent 在那里跑命令。", "Coordinators may start new agents on these computers (folders and access still follow each computer's own settings). Terminals are separate: they let agents run commands there.")}</div>
+    </section>
   );
 }
 

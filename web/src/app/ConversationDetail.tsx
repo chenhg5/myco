@@ -2460,7 +2460,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         {voiceOn && !shellMode && (
           <VoiceBar />
         )}
-        <ApprovalStrip hubId={target.hubId} agent={target.agent} />
+        <ApprovalStrip hubId={target.hubId} agent={target.agent} name={agentName} />
         <SendTrouble error={sendError} stop={stopError} onRetry={sendError ? () => void send() : undefined}
           onClose={() => { setSendError(null); setStopError(null); }} />
         {/* Only while it is at work: a chat that has ended has nothing to

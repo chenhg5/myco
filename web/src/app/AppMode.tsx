@@ -1135,7 +1135,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 simple={simple}
                 onSuperagent={onSuperagent}
                 superagentKey={isMac ? "⌘⇧Space" : undefined}
-                superagent={sa?.state ? { name: sa.state.agent?.name, pending: sa.approvals.filter((a) => a.status === "pending").length } : undefined}
+                superagent={sa?.state ? { name: sa.state.agent?.name, pending: sa.approvals.filter((a) => a.status === "pending" && a.agent === sa.state?.agent?.name).length } : undefined}
                 onSettings={() => setPage("settings")} />
             </div>
           </div>

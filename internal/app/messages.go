@@ -195,7 +195,7 @@ func (s *MessageService) send(ctx context.Context, sender *domain.Agent, in Send
 			e := domain.Errf(domain.CodePermissionDenied, "agent %s does not accept messages from %s", to, sender.Name).
 				WithSuggestion("ask the hub admin to add %s to %s's allow-from list", sender.Name, to)
 			if recipient.Kind() == domain.KindMachine {
-				e = e.WithSuggestion("a project with a terminal on that computer lets its agents start sessions there, inside the terminal's folder: ask its owner to add the terminal to your project, or to add %s to %s's allow-from list", sender.Name, to)
+				e = e.WithSuggestion("as a project's coordinator, see which computers it may start agents on with: myco project machines --name <project>; ask for another with: myco project machine request --project <project> --machine <machine> --reason \"...\"")
 			}
 			return nil, e
 		}
