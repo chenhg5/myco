@@ -3537,3 +3537,20 @@ body.is-resizing-rows { cursor: row-resize; user-select: none; }
 }
 .app-hub-menu-badge { flex: none; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--amber);
   color: #fff; font-size: 11px; font-weight: 600; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums; }
+
+/* Your superagent: a pixel crown on its tile and a thin gold edge. */
+.pa.is-super {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #e0a628 65%, transparent);
+}
+.pa-crown {
+  position: absolute;
+  z-index: 1;
+  top: -28%;
+  left: 50%;
+  width: 50%;
+  height: auto;
+  aspect-ratio: 9 / 7;
+  transform: translateX(-50%) rotate(-6deg);
+  filter: drop-shadow(0 0.5px 0 rgba(0, 0, 0, 0.35));
+  pointer-events: none;
+}

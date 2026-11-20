@@ -464,16 +464,21 @@ export default function AppMode({ initialHubs, initialInfo }: {
     setPinnedByHub((m) => ({ ...m, [pinKey]: next }));
     try { localStorage.setItem(pinKey, JSON.stringify(next)); } catch { /* not kept */ }
   };
+  // Your superagent in the workspace on show (bottom-left menu): its chat,
+  // or setting one up. It is not one of the chats in the sidebar: it is
+  // reached from that menu (and ⌘⇧Space).
+  const sa = useSuperagent(hubId || undefined);
+  const saName = sa?.state?.agent?.name;
   const chatRows = useMemo(() => {
     const at = new Map(recentChats().filter((c) => c.hubId === hubId).map((c) => [c.agent, c.at]));
     const name = (r: AgentRow) => nodeName(r.st.agent, r.hub);
     const busy = (r: AgentRow) => ((r.st.asking || 0) > 0 ? 0 : r.st.state === "working" ? 1 : r.st.state === "offline" ? 3 : 2);
     const pin = (r: AgentRow) => { const i = pinned.indexOf(r.st.agent.name); return i < 0 ? Infinity : i; };
-    return [...people].sort((a, b) => (pin(a) === pin(b) ? 0 : pin(a) < pin(b) ? -1 : 1) || (chatSort === "name" ? name(a).localeCompare(name(b))
+    return people.filter((r) => r.st.agent.name !== saName).sort((a, b) => (pin(a) === pin(b) ? 0 : pin(a) < pin(b) ? -1 : 1) || (chatSort === "name" ? name(a).localeCompare(name(b))
       : chatSort === "busy" ? busy(a) - busy(b) || name(a).localeCompare(name(b))
       : (at.get(b.st.agent.name) || 0) - (at.get(a.st.agent.name) || 0) || busy(a) - busy(b) || name(a).localeCompare(name(b))));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [people.map((r) => `${r.st.agent.name}:${r.st.state}:${r.st.asking || 0}`).join(","), chatSort, hubId, navChat, pinned.join(",")]);
+  }, [people.map((r) => `${r.st.agent.name}:${r.st.state}:${r.st.asking || 0}`).join(","), chatSort, hubId, navChat, pinned.join(","), saName]);
   useEffect(() => { if (page !== "space") setNavChat(null); }, [page]);
   // The sidebar's lists fold (kept on this computer).
   const [pcFolded, foldPcs] = useFold(PC_FOLD_KEY);
@@ -580,9 +585,6 @@ export default function AppMode({ initialHubs, initialInfo }: {
   // The notch's island opens the app at a member: its workspace first,
   // then (once its rows are there) its chat.
   const [toOpen, setToOpen] = useState<{ hubId: string; agent: string; project?: string } | null>(null);
-  // Your superagent in the workspace on show (bottom-left menu): its chat,
-  // or setting one up.
-  const sa = useSuperagent(hubId || undefined);
   const [saSetup, setSaSetup] = useState(false);
   const openSuperagent = (name: string) => window.dispatchEvent(new CustomEvent("myco-open-member", { detail: { hubId, agent: name } }));
   // The quick panel (Mac) sends you here to set one up.

@@ -206,6 +206,10 @@ func Build(o Options) (*Hub, error) {
 	messages.SetProjects(projectRepo)
 	projectSvc := app.NewProjectService(projectRepo, agentsRepo, ids, clock)
 	projectSvc.SetBlobs(blob.FS{Dir: filesDir})
+	projectSvc.SetSuperagents(func(ctx context.Context, n domain.AgentName) bool {
+		m, err := superagents.OwnerOf(ctx, n)
+		return err == nil && m != nil
+	})
 	srv.SetProjects(projectSvc)
 	enroll.SetDefaultVisibility(defaultVisibility)
 	srv.SetHidden(app.NewHiddenService(sqlite.NewSettingRepo(db)))

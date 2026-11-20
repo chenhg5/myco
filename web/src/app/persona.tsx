@@ -4,6 +4,7 @@ import { appApi } from "@/appapi";
 import type { AgentRow } from "@/app/types";
 import { agentKind, cliIcon } from "@/app/nodes";
 import { cn } from "@/lib/utils";
+import { useIsSuperagent } from "@/app/superagentMark";
 import { L } from "@/lib/i18n";
 
 /*
@@ -206,6 +207,25 @@ export function isWorkspace(a: Agent): boolean {
  * An agent's or a workspace's face. With state, a small dot says whether it
  * is at work (green), waiting (amber) or away (grey); idle shows none.
  */
+/** A superagent's crown: pixel gold, like the mushrooms, worn on the tile. */
+function Crown() {
+  return (
+    <svg className="pa-crown" viewBox="0 0 9 7" shapeRendering="crispEdges" aria-hidden="true">
+      <g fill="#f2b632">
+        <rect x="0" y="1" width="1" height="5" /><rect x="1" y="2" width="1" height="4" />
+        <rect x="2" y="3" width="1" height="3" /><rect x="3" y="1" width="1" height="5" />
+        <rect x="4" y="0" width="1" height="6" /><rect x="5" y="1" width="1" height="5" />
+        <rect x="6" y="3" width="1" height="3" /><rect x="7" y="2" width="1" height="4" />
+        <rect x="8" y="1" width="1" height="5" />
+      </g>
+      <rect x="0" y="6" width="9" height="1" fill="#c8861b" />
+      <rect x="2" y="4" width="1" height="1" fill="#e5484d" />
+      <rect x="4" y="4" width="1" height="1" fill="#3e9cf0" />
+      <rect x="6" y="4" width="1" height="1" fill="#e5484d" />
+    </svg>
+  );
+}
+
 export function Avatar({ agent, size = 32, state, badge = true, className }: {
   agent: Agent;
   size?: number;
@@ -215,6 +235,8 @@ export function Avatar({ agent, size = 32, state, badge = true, className }: {
   className?: string;
 }) {
   const ws = isWorkspace(agent);
+  // Your superagent wears a crown.
+  const isSuper = useIsSuperagent(agent);
   const l = looksOf(agent.id || agent.name, agent.avatar);
   const pic = pictureOf(agent);
   // A picture that will not load (an older workspace, gone) falls back.
@@ -234,10 +256,11 @@ export function Avatar({ agent, size = 32, state, badge = true, className }: {
   const cli = agent.runtime?.cli || agent.binding.harness || "";
   return (
     <span
-      className={cn("pa", ws && "is-workspace", picture && "has-pic", state === "offline" && "is-away", className)}
+      className={cn("pa", ws && "is-workspace", picture && "has-pic", state === "offline" && "is-away", isSuper && "is-super", className)}
       style={{ width: size, height: size, ["--av-cap" as string]: l.cap }}
       aria-hidden="true"
     >
+      {isSuper && <Crown />}
       {picture || (ws ? <WorkspaceFace os={agent.machine_id ? machineOs.get(agent.machine_id) : undefined} /> : <MushroomFace seed={agent.id || agent.name} avatar={agent.avatar} />)}
       {badge && !ws && size >= 28 && (
         <span className={cn("pa-badge", cli.startsWith("claude") && "is-claude", cli.startsWith("codex") && "is-codex")}>

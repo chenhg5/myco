@@ -24,6 +24,7 @@ import { localWorkspaceOf } from "@/app/localHubs";
 import type { RuntimeAccess } from "@/api";
 import { L } from "@/lib/i18n";
 import { bytes, cn, timeAgo } from "@/lib/utils";
+import { isSuperagent } from "@/app/superagentMark";
 
 /**
  * Lets a new member use the project's workspaces: each one's "who may run
@@ -160,7 +161,8 @@ export function AddAgentDialog({ open, hub, project, projects = [], rows, start,
   // online first.
   function others(): AgentRow[] {
     const inIt = new Set((project?.members || []).map((m) => m.name));
-    return rows.filter((r) => r.hub.id === hubId && agentKind(r.st.agent) === "agent" && !inIt.has(r.st.agent.name))
+    // (not a superagent: it works for you across the workspace, in no project)
+    return rows.filter((r) => r.hub.id === hubId && agentKind(r.st.agent) === "agent" && !inIt.has(r.st.agent.name) && !isSuperagent(r.st.agent))
       .sort((a, b) => Number(a.st.state === "offline") - Number(b.st.state === "offline") || nodeName(a.st.agent, a.hub).localeCompare(nodeName(b.st.agent, b.hub)));
   }
   // Who was already there when this opened: anyone new has just joined.

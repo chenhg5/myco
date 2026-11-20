@@ -4482,6 +4482,13 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, dialog.getByRole("button", { name: "开一个 Shroom" }));
       await page.locator(".app-modal").waitFor({ state: "hidden", timeout: 30_000 });
       await page.locator(".conv-detail .conv-head h2", { hasText: "Shroom" }).waitFor({ timeout: 20_000 });
+      // It wears a crown, and is not one of the sidebar's chats.
+      await page.locator(".conv-detail .pa-crown").first().waitFor({ timeout: 10_000 });
+      await sidebar(page, true);
+      await page.waitForFunction(() => ![...document.querySelectorAll(".sp-nav-chat-list .sp-nav-person")].some((b) => b.textContent?.includes("Shroom")), null, { timeout: 10_000 })
+        .catch(() => { throw new Error("superagent 不应出现在侧栏的会话列表里"); });
+      if (narrow) await sidebar(page, false);
+      if (size.width === 1200 && scheme === "light") await shot(page, size, scheme, "superagent-crown");
       const ask = await fetch(`http://${HOST}:${mockPort()}/app/mock/superagent-ask`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ what: "删除项目 old-site", reason: "这个项目三个月没动了，文档已经并进 website。" }),

@@ -9,6 +9,7 @@ import { ErrorText, Modal } from "@/app/dialogs";
 import { agentKind, machinesOfHub, nodeName } from "@/app/nodes";
 import { L } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { markSuperagent } from "@/app/superagentMark";
 
 /** The superagent's fixed name (docs/design/chief-of-staff.md). */
 export const SHROOM = "Shroom";
@@ -32,6 +33,7 @@ export async function refreshSuperagent(hubId: string): Promise<void> {
     // coordinator's (a computer for its project).
     const approvals = (await appApi.approvals(hubId).catch(() => ({ approvals: [] as Approval[] }))).approvals;
     store.set(hubId, { state, approvals, at: Date.now() });
+    markSuperagent(hubId, state.agent);
   } catch {
     store.set(hubId, { approvals: [], at: Date.now(), off: true });
   }

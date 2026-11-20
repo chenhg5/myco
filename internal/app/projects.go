@@ -29,6 +29,15 @@ type ProjectService struct {
 	ids      IDGenerator
 	clock    Clock
 	blobs    domain.BlobStore // nil: text files only
+	// superagent tells whether an agent is someone's superagent (nil:
+	// none are): a superagent works for its owner across the workspace and
+	// is in no project.
+	superagent func(ctx context.Context, agent domain.AgentName) bool
+}
+
+// SetSuperagents tells projects which agents are superagents.
+func (s *ProjectService) SetSuperagents(f func(ctx context.Context, agent domain.AgentName) bool) {
+	s.superagent = f
 }
 
 // SetBlobs lets projects keep uploaded files of any kind.
@@ -295,6 +304,10 @@ func (s *ProjectService) PutMember(ctx context.Context, by Actor, name string, a
 	}
 	m := v.member(a.Name)
 	if m == nil {
+		if s.superagent != nil && s.superagent(ctx, a.Name) {
+			return nil, nil, domain.Errf(domain.CodeInvalidArgument, "%s is a superagent: it works for its owner across the workspace and joins no project", a.Name).
+				WithSuggestion("add another agent, or make a different agent the superagent first")
+		}
 		if !s.mayAdd(by, v, a) {
 			return nil, nil, denied("add " + string(a.Name) + " to project " + v.Project.Name + " (a node joins through its owner)")
 		}

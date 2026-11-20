@@ -191,4 +191,14 @@ func TestSuperagentJoinsThroughALink(t *testing.T) {
 	if me, err := h.client(res.Token).MeSuperagent(c); err != nil || !me.Superagent || me.Owner != "glenn" {
 		t.Fatalf("the agent should know it is glenn's superagent: %+v %v", me, err)
 	}
+	// A superagent joins no project: it works for glenn across the workspace.
+	if _, err := glenn.CreateProject(c, api.CreateProjectRequest{Name: "site"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := glenn.PutProjectMember(c, "site", res.Agent.Name, api.ProjectMemberRequest{}); err == nil || !strings.Contains(err.Error(), "superagent") {
+		t.Fatalf("a superagent was added to a project: %v", err)
+	}
+	if _, err := h.client(res.Token).PutProjectMember(c, "site", res.Agent.Name, api.ProjectMemberRequest{}); err == nil {
+		t.Fatal("a superagent added itself to a project")
+	}
 }
