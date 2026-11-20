@@ -87,4 +87,4 @@ Before you finish a change, run `make vet` and `make test`. Run `make smoke` whe
   - User-facing behaviour changes go into `INSTALL.md` or `docs/`.
   - Write docs, comments and commit messages in English: most users read English.
   - `README.md`/`README.zh-CN.md` and `INSTALL.md`/`INSTALL.zh-CN.md` are kept in sync (English first).
-  - The design notes in `docs/design/` are still largely in Chinese; new ones are in English.
+  - `docs/design/app-ui.md` is the one design doc kept here (the UI spec); the team's other design notes live in the maintainers' internal repository.
