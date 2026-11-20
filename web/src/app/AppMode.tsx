@@ -600,9 +600,16 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const onSuperagent = sa && !sa.off && hubId
     ? () => { const n = sa.state?.agent?.name; if (n) openSuperagent(n); else setSaSetup(true); }
     : undefined;
+  // In the Mac app, opening a member from the notch or the quick panel is
+  // traced in the app's output (quick_darwin.go), to see where it stops.
+  const macRef = useRef(false);
+  const traceOpen = (what: Record<string, string>) => {
+    if (macRef.current) void fetch(`app/quick/seen?${new URLSearchParams(what)}`, { method: "POST" }).catch(() => undefined);
+  };
   useEffect(() => {
     const on = (e: Event) => {
       const d = (e as CustomEvent<{ hubId: string; agent: string; project?: string }>).detail;
+      traceOpen({ step: "event", hub: d?.hubId || "", agent: d?.agent || "" });
       if (!d?.hubId || !d.agent) return;
       setHubPick(d.hubId);
       setToOpen(d);
@@ -613,6 +620,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   useEffect(() => {
     if (!toOpen) return;
     const r = rows.find((x) => x.hub.id === toOpen.hubId && x.st.agent.name === toOpen.agent);
+    traceOpen({ step: r ? "found" : "waiting", rows: String(rows.filter((x) => x.hub.id === toOpen.hubId).length), page, hub: hubId || "" });
     if (!r) return;
     setToOpen(null);
     // Where: the space you are looking at, when it is in it (no jumping
@@ -825,6 +833,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   });
   const dragStyle = { "--wails-draggable": "drag" } as React.CSSProperties;
   const isMac = info?.shell === "mac";
+  macRef.current = isMac;
   // On the page's root too: what opens over the window (a picture, a file in
   // full screen) keeps clear of the traffic lights.
   useEffect(() => { document.documentElement.classList.toggle("shell-mac", isMac); }, [isMac]);

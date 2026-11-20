@@ -111,7 +111,7 @@ func (q *quick) hide() {
 func (q *quick) handler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.URL.Path, "/quick") {
-			qlog.Printf("%s %s", r.Method, r.URL.Path)
+			qlog.Printf("%s %s %s", r.Method, r.URL.Path, r.URL.RawQuery)
 		}
 		if r.Method != http.MethodPost || !strings.HasPrefix(r.URL.Path, "/app/quick/") {
 			next.ServeHTTP(w, r)
@@ -133,6 +133,8 @@ func (q *quick) handler(next http.Handler) http.Handler {
 			}
 		case "hide":
 			q.hide()
+		case "seen":
+			// the main page's trace of opening a member (logged above)
 		case "open":
 			var in struct {
 				Hub, Agent string
