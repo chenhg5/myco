@@ -102,6 +102,94 @@ public struct HubClient: HubAPI {
         _ = try await call("POST", "/v1/console/messages/\(messageID)/stop")
     }
 
+    public func dismiss(_ messageID: String) async throws {
+        _ = try await call("POST", "/v1/console/messages/\(messageID)/dismiss")
+    }
+
+    public func workflows() async throws -> [Workflow] {
+        struct Envelope: Decodable { @LossyList var workflows: [Workflow] }
+        let envelope: Envelope = try await get("/v1/workflows", timeout: Self.pollTimeout)
+        return envelope.workflows
+    }
+
+    public func workflow(_ ref: String) async throws -> Workflow {
+        try await get("/v1/workflows/\(Self.segment(ref))")
+    }
+
+    public func setWorkflow(_ ref: String, enabled: Bool) async throws {
+        struct Body: Encodable { var enabled: Bool }
+        _ = try await call("PATCH", "/v1/workflows/\(Self.segment(ref))", body: HubJSON.encoder().encode(Body(enabled: enabled)))
+    }
+
+    public func startWorkflow(_ ref: String, inputs: [String: JSONValue]) async throws -> WorkflowRun {
+        struct Body: Encodable { var inputs: [String: JSONValue] }
+        let data = try await call("POST", "/v1/workflows/\(Self.segment(ref))/runs", body: HubJSON.encoder().encode(Body(inputs: inputs)), timeout: 60)
+        return try Self.decode(WorkflowRun.self, from: data)
+    }
+
+    public func workflowRuns(workflow: String?, limit: Int) async throws -> [WorkflowRun] {
+        struct Envelope: Decodable { @LossyList var runs: [WorkflowRun] }
+        var query = ["limit": String(limit)]
+        if let workflow { query["workflow"] = workflow }
+        let envelope: Envelope = try await get("/v1/workflow-runs", query, timeout: Self.pollTimeout)
+        return envelope.runs
+    }
+
+    public func workflowRun(_ id: String) async throws -> WorkflowRun {
+        try await get("/v1/workflow-runs/\(Self.segment(id))", timeout: Self.pollTimeout)
+    }
+
+    public func cancelRun(_ id: String) async throws -> WorkflowRun {
+        try Self.decode(WorkflowRun.self, from: try await call("POST", "/v1/workflow-runs/\(Self.segment(id))/cancel", timeout: 60))
+    }
+
+    public func retryRun(_ id: String) async throws -> WorkflowRun {
+        try Self.decode(WorkflowRun.self, from: try await call("POST", "/v1/workflow-runs/\(Self.segment(id))/retry", body: Data("{}".utf8), timeout: 60))
+    }
+
+    public func decide(run id: String, step: String, choice: String, note: String?) async throws -> WorkflowRun {
+        struct Body: Encodable { var step: String; var choice: String; var note: String? }
+        let data = try await call(
+            "POST", "/v1/workflow-runs/\(Self.segment(id))/decide", body: HubJSON.encoder().encode(Body(step: step, choice: choice, note: note)), timeout: 60)
+        return try Self.decode(WorkflowRun.self, from: data)
+    }
+
+    public func workflowDecisions() async throws -> [WorkflowDecision] {
+        struct Envelope: Decodable { @LossyList var decisions: [WorkflowDecision] }
+        let envelope: Envelope = try await get("/v1/workflow-decisions", timeout: Self.pollTimeout)
+        return envelope.decisions
+    }
+
+    public func superagent() async throws -> SuperagentState {
+        try await get("/v1/console/superagent", timeout: Self.pollTimeout)
+    }
+
+    public func setSuperagent(_ agent: String?) async throws {
+        struct Body: Encodable { var agent: String }
+        if let agent {
+            _ = try await call("PUT", "/v1/console/superagent", body: HubJSON.encoder().encode(Body(agent: agent)))
+        } else {
+            _ = try await call("DELETE", "/v1/console/superagent")
+        }
+    }
+
+    public func approvals() async throws -> [Approval] {
+        struct Envelope: Decodable { @LossyList var approvals: [Approval] }
+        let envelope: Envelope = try await get("/v1/console/approvals", ["status": "pending"], timeout: Self.pollTimeout)
+        return envelope.approvals
+    }
+
+    public func decide(approval id: String, approve: Bool) async throws -> Approval {
+        let data = try await call("POST", "/v1/console/approvals/\(Self.segment(id))/\(approve ? "approve" : "deny")", timeout: 60)
+        return try Self.decode(Approval.self, from: data)
+    }
+
+    public func spawn(on machine: String, _ request: SpawnRequest) async throws -> SpawnResult {
+        let data = try await call(
+            "POST", "/v1/machines/\(Self.segment(machine))/spawn", body: HubJSON.encoder().encode(request), timeout: 330)
+        return try Self.decode(SpawnResult.self, from: data)
+    }
+
     public func hidden() async throws -> [String] {
         let list: HiddenEnvelope = try await get("/v1/console/hidden")
         return list.ids

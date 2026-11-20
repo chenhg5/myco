@@ -253,13 +253,23 @@ public struct AgentStatus: Codable, Sendable, Hashable, Identifiable {
     public var receiving: String?
     public var sessionInUse: Bool?
     @LossyList public var current: [Message]
+    /// Held tasks waiting on a question to their sender (newer hubs).
+    public var asking: Int?
+    /// Tasks it took that show no life (left open): still open, not making
+    /// it "working" (newer hubs).
+    public var stale: Int?
+    public var staleTasks: [String]?
 
     public var id: String { agent.id }
 
     public init(
         agent: Agent, state: String, queued: Int = 0, inProgress: Int = 0, held: Int = 0,
-        receiving: String? = "runner", sessionInUse: Bool? = nil, current: [Message] = []
+        receiving: String? = "runner", sessionInUse: Bool? = nil, current: [Message] = [],
+        asking: Int? = nil, stale: Int? = nil, staleTasks: [String]? = nil
     ) {
+        self.asking = asking
+        self.stale = stale
+        self.staleTasks = staleTasks
         self.agent = agent
         self.state = state
         self.queued = queued
@@ -888,5 +898,105 @@ public struct PageAnswer: Sendable, Hashable {
     public init(data: Data, status: Int) {
         self.data = data
         self.status = status
+    }
+}
+
+// MARK: Superagents
+
+/// `GET /v1/console/superagent`: my superagent here, if any, and how many
+/// of its requests wait for me (hubs from v0.21.1).
+public struct SuperagentState: Codable, Sendable, Hashable {
+    public var agent: Agent?
+    public var pending: Int?
+
+    public init(agent: Agent? = nil, pending: Int? = nil) {
+        self.agent = agent
+        self.pending = pending
+    }
+}
+
+/// A superagent's request held for its owner: approved, it is carried out
+/// once, as it came.
+public struct Approval: Codable, Sendable, Hashable, Identifiable {
+    public var id: String
+    public var agent: String
+    public var what: String
+    public var reason: String?
+    public var method: String
+    public var path: String
+    /// pending, done, denied, expired, withdrew
+    public var status: String
+    /// The HTTP status of carrying it out.
+    public var result: Int?
+    public var resultBody: String?
+    public var createdAt: Date
+    public var expiresAt: Date
+
+    public init(
+        id: String, agent: String, what: String, reason: String? = nil, method: String = "DELETE", path: String = "",
+        status: String = "pending", result: Int? = nil, resultBody: String? = nil, createdAt: Date, expiresAt: Date
+    ) {
+        self.id = id
+        self.agent = agent
+        self.what = what
+        self.reason = reason
+        self.method = method
+        self.path = path
+        self.status = status
+        self.result = result
+        self.resultBody = resultBody
+        self.createdAt = createdAt
+        self.expiresAt = expiresAt
+    }
+}
+
+// MARK: Starting on a computer
+
+/// `POST /v1/machines/{id}/spawn`: start a session on a computer, or (with
+/// `cli: "upgrade"`) bring its myco up to date.
+public struct SpawnRequest: Codable, Sendable, Hashable {
+    public var cli: String
+    public var dir: String
+    public var displayName: String?
+    public var access: String?
+    /// For `upgrade`: the version (empty: the latest).
+    public var version: String?
+
+    public init(cli: String, dir: String = "", displayName: String? = nil, access: String? = nil, version: String? = nil) {
+        self.cli = cli
+        self.dir = dir
+        self.displayName = displayName
+        self.access = access
+        self.version = version
+    }
+}
+
+public struct SpawnResult: Codable, Sendable, Hashable {
+    public struct Upgrade: Codable, Sendable, Hashable {
+        public var from: String
+        /// Empty: it runs that already.
+        public var to: String?
+        public var restarting: Bool?
+        public var note: String?
+
+        public init(from: String, to: String? = nil, restarting: Bool? = nil, note: String? = nil) {
+            self.from = from
+            self.to = to
+            self.restarting = restarting
+            self.note = note
+        }
+    }
+
+    /// The node it joined as.
+    public var agent: String?
+    public var denied: Bool?
+    public var error: String?
+    public var upgrade: Upgrade?
+
+    public init(agent: String? = nil, denied: Bool? = nil, error: String? = nil, upgrade: Upgrade? = nil) {
+        self.agent = agent
+        self.denied = denied
+        self.error = error
+        self.upgrade = upgrade
     }
 }

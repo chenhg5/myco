@@ -804,6 +804,7 @@ struct RootView: View {
             case .memberCard(let name): MemberCardSheet(name: name)
             case .addAgent: AddAgentSheet()
             case .addComputer(let project): AddComputerSheet(project: project)
+            case .superagent: SuperagentSetupSheet()
             case .export(let agent, let project): ExportSheet(agent: agent, project: project)
             case .handover(let agent, let back): HandoverSheet(agent: agent, backID: back)
             case .files(let agent, let project): ChatFilesSheet(agent: agent, project: project)
@@ -961,6 +962,9 @@ extension View {
                 case .projectInfo(let name): ProjectInfoScreen(name: name)
                 case .automations: AutomationsScreen()
                 case .apps: AppsScreen()
+                case .workflows: WorkflowsScreen()
+                case .workflow(let id): WorkflowScreen(id: id)
+                case .workflowRun(let id): WorkflowRunScreen(id: id)
                 }
             }
             // A pushed page takes the whole screen: no tab bar under its input.

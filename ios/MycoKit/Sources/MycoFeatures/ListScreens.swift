@@ -178,6 +178,32 @@ struct MembersScreen: View {
                 .listRowBackground(MycoColor.bg)
                 .listRowSeparator(.hidden)
                 .accessibilityIdentifier("members.apps")
+                if !session.workflows.unsupported {
+                    Button {
+                        router.push(.workflows)
+                    } label: {
+                        HStack(spacing: 12) {
+                            AutomationIcon(symbol: "point.3.connected.trianglepath.dotted", hook: nil).frame(width: 40)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(L("工作流", "Workflows")).font(.body.weight(.medium)).foregroundStyle(MycoColor.fg)
+                                Text(workflowsNote).font(.footnote)
+                                    .foregroundStyle(session.workflows.decisions.isEmpty ? MycoColor.muted : MycoColor.amber).lineLimit(1)
+                            }
+                            Spacer(minLength: 0)
+                            if !session.workflows.decisions.isEmpty {
+                                Text("\(session.workflows.decisions.count)").font(.caption.weight(.semibold)).foregroundStyle(.white)
+                                    .padding(.horizontal, 7).frame(minHeight: 20).background(MycoColor.amber, in: Capsule())
+                            }
+                            Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(MycoColor.faint)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(RowButtonStyle())
+                    .listRowInsets(EdgeInsets(top: 9, leading: 16, bottom: 9, trailing: 16))
+                    .listRowBackground(MycoColor.bg)
+                    .listRowSeparator(.hidden)
+                    .accessibilityIdentifier("members.workflows")
+                }
             }
             ForEach(groups.filter { !$0.1.isEmpty }, id: \.0) { title, members in
                 Section {
@@ -215,12 +241,24 @@ struct MembersScreen: View {
         .task {
             await session.automations.load()
             await session.apps.load()
+            await session.workflows.load()
         }
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .automatic), prompt: L("搜索名字和分工", "Search names and roles"))
     }
 }
 
 extension MembersScreen {
+    /// Under "工作流": what waits for me, or what they are for.
+    fileprivate var workflowsNote: String {
+        let model = session.workflows
+        if !model.decisions.isEmpty {
+            return L("\(model.decisions.count) 件事等你决定", model.decisions.count == 1 ? "1 decision waits for you" : "\(model.decisions.count) decisions wait for you")
+        }
+        let going = model.runs.filter(\.isGoing).count
+        if going > 0 { return L("\(going) 个在跑", "\(going) running") }
+        return L("让几个 agent 按步骤接力，要紧处问你", "Agents take turns, step by step; you decide where it matters")
+    }
+
     /// Under "应用": the pages made from them, or what they are for.
     fileprivate var appsNote: String {
         let made = session.apps.made.count

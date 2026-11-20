@@ -32,6 +32,12 @@ struct MemberCardSheet: View {
                         .buttonStyle(PrimaryButtonStyle())
                         .accessibilityIdentifier("member.chat")
 
+                    // What it holds open, each saying what it waits on:
+                    // above the rest, to be handled (the desktop's 当前工作).
+                    if !status.current.isEmpty {
+                        CurrentWork(status: status, manages: session.manages(agent))
+                    }
+
                     // Offline: why, as far as can be told, and what to do.
                     if let why = OfflineWhy.of(status, machines: session.machines) {
                         CardSection(title: L("为什么离线", "Why it is offline")) {
@@ -214,6 +220,7 @@ struct ProjectInfoScreen: View {
 struct WorkspaceSheet: View {
     @Environment(WorkspaceSession.self) private var session
     @Environment(AppModel.self) private var app
+    @Environment(Router.self) private var router
     @Environment(\.dismiss) private var dismiss
     @State private var joining = false
     /// The workspace being renamed, and the name being typed.
@@ -252,6 +259,7 @@ struct WorkspaceSheet: View {
                     Button(L("加入另一个工作区", "Join another workspace"), systemImage: "plus") { joining = true }
                         .accessibilityIdentifier("workspace.join")
                 }
+                superagentSection
                 Section {
                     NavigationLink {
                         SettingsScreen()
@@ -280,6 +288,7 @@ struct WorkspaceSheet: View {
             // What is new in the others is asked for when the list opens,
             // not only once a minute.
             .task { await app.refreshOthers() }
+            .task { await session.superagent.load() }
             .sheet(isPresented: $joining) { JoinSheet() }
             .alert(L("给工作区改名", "Rename the workspace"), isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
                 TextField(L("名字", "Name"), text: $newName)
@@ -332,6 +341,49 @@ struct WorkspaceSheet: View {
 
     /// One workspace: its face, its name, where it is or how it is doing,
     /// a dot when something new came there, a tick on the one on screen.
+    /// My superagent here: its chat (and what waits for me), or setting
+    /// one up. Not on workspaces from before superagents.
+    @ViewBuilder private var superagentSection: some View {
+        let model = session.superagent
+        if model.loaded, !model.unsupported {
+            Section {
+                if let agent = model.agent {
+                    Button {
+                        dismiss()
+                        router.chat(with: agent)
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "sparkles").frame(width: 24).foregroundStyle(MycoColor.accent)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Superagent · " + session.displayName(of: agent)).foregroundStyle(MycoColor.fg)
+                                Text(model.pending > 0
+                                     ? L("\(model.pending) 件事等你批准", model.pending == 1 ? "1 request waits for you" : "\(model.pending) requests wait for you")
+                                     : L("你在这个工作区的总管", "Runs this workspace for you"))
+                                    .font(.footnote).foregroundStyle(model.pending > 0 ? MycoColor.amber : MycoColor.muted)
+                            }
+                            Spacer(minLength: 0)
+                            if model.pending > 0 {
+                                Text("\(model.pending)").font(.caption.weight(.semibold)).foregroundStyle(.white)
+                                    .padding(.horizontal, 7).frame(minHeight: 20).background(MycoColor.amber, in: Capsule())
+                            }
+                        }
+                    }
+                    .accessibilityIdentifier("workspace.superagent")
+                    .contextMenu {
+                        Button(L("换一个 superagent", "Change your superagent"), systemImage: "arrow.triangle.2.circlepath") { router.sheet = .superagent }
+                    }
+                } else {
+                    Button {
+                        router.sheet = .superagent
+                    } label: {
+                        Label(L("配一个 superagent", "Set up your superagent"), systemImage: "sparkles")
+                    }
+                    .accessibilityIdentifier("workspace.superagent.setup")
+                }
+            }
+        }
+    }
+
     private func row(id: String, name: String, detail: String, current: Bool) -> some View {
         HStack(spacing: 12) {
             WorkspaceBadge(name: name, size: 34)
@@ -1210,5 +1262,205 @@ struct JoinSheet: View {
             }
             working = false
         }
+    }
+}
+
+/// An agent's open work: each task, what it waits on, from whom, how long
+/// ago it moved, what it says; and for whoever manages it, close it as done
+/// or stop it.
+private struct CurrentWork: View {
+    let status: AgentStatus
+    let manages: Bool
+    @Environment(WorkspaceSession.self) private var session
+    @State private var busy: String?
+    @State private var failure: Failure?
+
+    var body: some View {
+        CardSection(title: L("当前工作", "Current work")) {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(status.current) { task in
+                    row(task)
+                    if task.id != status.current.last?.id { Divider().overlay(MycoColor.line) }
+                }
+                if let failure {
+                    FailureLine(failure: failure).padding(.vertical, 8)
+                }
+            }
+        }
+        .accessibilityIdentifier("member.current")
+    }
+
+    private func row(_ task: Message) -> some View {
+        let line = OpenWork.line(of: task, in: status, name: session.displayName(of:))
+        let left = (status.staleTasks ?? []).contains(task.id)
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Text(line).font(.caption.weight(.semibold)).foregroundStyle(left ? MycoColor.amber : MycoColor.fg2)
+                Text(session.displayName(of: task.from) + " → " + session.displayName(of: task.to))
+                    .font(.caption).foregroundStyle(MycoColor.muted).lineLimit(1)
+                Spacer(minLength: 0)
+                Text(RelativeTime.short(task.activeAt ?? task.updatedAt)).font(.caption).foregroundStyle(MycoColor.faint)
+            }
+            Text(task.body).font(.subheadline).foregroundStyle(MycoColor.fg).lineLimit(2)
+            if manages {
+                HStack(spacing: 16) {
+                    Button(L("标记完成", "Mark done")) { act(task) { try await session.hub.dismiss(task.id) } }
+                        .accessibilityIdentifier("member.current.done")
+                    if task.status != "queued" {
+                        Button(L("停止", "Stop")) { act(task) { try await session.hub.stop(task.id) } }
+                            .accessibilityIdentifier("member.current.stop")
+                    }
+                }
+                .font(.footnote.weight(.medium)).tint(MycoColor.accent)
+                .disabled(busy != nil)
+                .padding(.top, 2)
+            }
+        }
+        .padding(.vertical, 10)
+        .accessibilityElement(children: .contain)
+    }
+
+    private func act(_ task: Message, _ run: @escaping @MainActor () async throws -> Void) {
+        busy = task.id
+        Task {
+            do {
+                try await run()
+                failure = nil
+            } catch {
+                failure = Failure.of(error)
+            }
+            await session.refresh()
+            busy = nil
+        }
+    }
+}
+
+/// Naming my superagent, or starting a Shroom for it on one of my
+/// computers (the desktop app's SuperagentSetup).
+struct SuperagentSetupSheet: View {
+    @Environment(WorkspaceSession.self) private var session
+    @Environment(Router.self) private var router
+    @Environment(\.dismiss) private var dismiss
+    @State private var startNew = true
+    @State private var machine = ""
+    @State private var cli = "claude"
+    @State private var pick = ""
+
+    private var computers: [Machine] {
+        session.machines.filter { $0.online && $0.canSpawn == true }
+    }
+
+    private var mine: [Agent] {
+        session.agentsByName.filter { $0.kind != "machine" && session.manages($0) }
+    }
+
+    var body: some View {
+        let model = session.superagent
+        NavigationStack {
+            Form {
+                Section {
+                    Text(L(
+                        "superagent 是你在这个工作区的总管，名字叫 \(SuperagentModel.shroom)：它能看全工作区，帮你开 agent、建项目、派活、盯进度。删东西、停东西、改别人的权限这类事，它会先来问你。它不能以你的名义说话。",
+                        "Your superagent, \(SuperagentModel.shroom), runs this workspace for you: it sees everything, starts agents, makes projects, hands out work and keeps track. Deleting, stopping or changing someone's access, it asks you first. It never speaks as you."))
+                        .font(.footnote).foregroundStyle(MycoColor.fg2)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Picker(L("怎么配", "How"), selection: $startNew) {
+                        Text(L("新开一个 \(SuperagentModel.shroom)", "Start a new \(SuperagentModel.shroom)")).tag(true)
+                        Text(L("用已有的 agent", "Use one of your agents")).tag(false)
+                    }
+                    .pickerStyle(.segmented)
+                    .accessibilityIdentifier("superagent.how")
+                }
+                if startNew {
+                    if computers.isEmpty {
+                        Section {
+                            Text(L("你还没有在线、能开 agent 的电脑。先在电脑上连一台，或者用已有的 agent。", "None of your computers is online and able to start agents. Connect one, or use one of your agents."))
+                                .font(.footnote).foregroundStyle(MycoColor.muted)
+                        }
+                    } else {
+                        Section {
+                            Picker(L("开在哪台电脑", "On which computer"), selection: $machine) {
+                                ForEach(computers) { one in Text(one.name).tag(one.id) }
+                            }
+                            Picker(L("用哪个 AI", "Which AI"), selection: $cli) {
+                                Text("Claude Code").tag("claude")
+                                Text("Codex").tag("codex")
+                            }
+                        } footer: {
+                            Text(L("它在那台电脑的 \(SuperagentModel.dir) 里干活。", "It works in \(SuperagentModel.dir) on that computer."))
+                        }
+                    }
+                } else if mine.isEmpty {
+                    Section {
+                        Text(L("你还没有自己的 agent。", "You have no agents of your own yet.")).font(.footnote).foregroundStyle(MycoColor.muted)
+                    }
+                } else {
+                    Section(L("让哪个 agent 当 superagent", "Which agent")) {
+                        ForEach(mine) { agent in
+                            Button {
+                                pick = agent.name
+                            } label: {
+                                HStack {
+                                    Text(session.displayName(of: agent.name)).foregroundStyle(MycoColor.fg)
+                                    if agent.name == model.agent {
+                                        Text(L("现在是它", "Current")).font(.caption).foregroundStyle(MycoColor.muted)
+                                    }
+                                    Spacer()
+                                    if pick == agent.name { Image(systemName: "checkmark").foregroundStyle(MycoColor.accent) }
+                                }
+                            }
+                            .accessibilityIdentifier("superagent.pick")
+                        }
+                    }
+                }
+                if let failure = model.failure {
+                    Section { FailureLine(failure: failure) }
+                }
+                if model.agent != nil {
+                    Section {
+                        Button(L("不要 superagent 了", "Remove superagent"), role: .destructive) {
+                            Task { if await model.set(nil) { dismiss() } }
+                        }
+                        .disabled(model.busy != nil)
+                    }
+                }
+            }
+            .navigationTitle(model.agent == nil ? L("配一个 superagent", "Set up your superagent") : L("换一个 superagent", "Change your superagent"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(L("取消", "Cancel")) { dismiss() }.disabled(model.busy != nil)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    if model.busy != nil {
+                        ProgressView()
+                    } else {
+                        Button(startNew ? L("开一个 \(SuperagentModel.shroom)", "Start \(SuperagentModel.shroom)") : L("就用它", "Use it")) {
+                            Task {
+                                let name: String? = startNew
+                                    ? await model.start(on: machine, cli: cli)
+                                    : (await model.set(pick) ? pick : nil)
+                                if let name {
+                                    dismiss()
+                                    try? await Task.sleep(for: .milliseconds(400))
+                                    await session.refresh()
+                                    router.chat(with: name)
+                                }
+                            }
+                        }
+                        .fontWeight(.semibold)
+                        .disabled(startNew ? machine.isEmpty : pick.isEmpty)
+                        .accessibilityIdentifier("superagent.go")
+                    }
+                }
+            }
+            .onAppear {
+                if machine.isEmpty { machine = computers.first?.id ?? "" }
+                if pick.isEmpty { pick = model.agent ?? "" }
+                if computers.isEmpty, !mine.isEmpty { startNew = false }
+            }
+        }
+        .presentationDetents([.large])
+        .interactiveDismissDisabled(model.busy != nil)
     }
 }

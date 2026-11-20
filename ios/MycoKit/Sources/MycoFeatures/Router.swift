@@ -20,6 +20,12 @@ public enum Route: Hashable, Sendable {
     case automations
     /// 应用: ready-made pages to use with agents, and the ones made.
     case apps
+    /// 工作流: decisions waiting for me, workflows and their runs.
+    case workflows
+    /// A workflow: what it does, run it, its runs.
+    case workflow(String)
+    /// A run of a workflow: its steps.
+    case workflowRun(String)
 }
 
 /// Something that rises from the bottom, over any tab.
@@ -30,6 +36,8 @@ public enum SheetRoute: Hashable, Identifiable, Sendable {
     /// A command that makes a folder on a computer one agents can use;
     /// `project`: the project it is added from, if any.
     case addComputer(project: String?)
+    /// Naming my superagent, or starting one.
+    case superagent
     /// Writing a conversation out as a file: with this agent, in this
     /// project's page or its own.
     case export(agent: String, project: String?)
@@ -53,6 +61,7 @@ public enum SheetRoute: Hashable, Identifiable, Sendable {
         case .files(let agent, let project): return "files:" + agent + ":" + (project ?? "")
         case .pinAddress(let agent): return "pin:" + agent
         case .background(let key): return "background:" + (key ?? "")
+        case .superagent: return "superagent"
         }
     }
 }
@@ -144,6 +153,7 @@ public final class Router {
             switch name {
             case "automations": show([.automations], in: .members)
             case "apps": show([.apps], in: .members)
+            case "workflows": show([.workflows], in: .members)
             default: return false
             }
         case "sheet":

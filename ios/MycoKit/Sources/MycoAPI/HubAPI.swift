@@ -144,6 +144,45 @@ public protocol HubAPI: Sendable {
     func file(_ id: String) async throws -> Data
     /// `POST /v1/console/messages/{id}/stop`
     func stop(_ messageID: String) async throws
+    /// `POST /v1/console/messages/{id}/dismiss`: closes an open task for
+    /// its recipient without a reply (marked done). Its node's owner, or
+    /// someone who manages the workspace.
+    func dismiss(_ messageID: String) async throws
+
+    // Workflows (v0.21+; older workspaces answer 404)
+    /// `GET /v1/workflows`
+    func workflows() async throws -> [Workflow]
+    /// `GET /v1/workflows/{ref}`: with its definition.
+    func workflow(_ ref: String) async throws -> Workflow
+    /// `PATCH /v1/workflows/{ref}` `{enabled}`.
+    func setWorkflow(_ ref: String, enabled: Bool) async throws
+    /// `POST /v1/workflows/{ref}/runs` `{inputs}`.
+    func startWorkflow(_ ref: String, inputs: [String: JSONValue]) async throws -> WorkflowRun
+    /// `GET /v1/workflow-runs?workflow=&limit=`, newest first.
+    func workflowRuns(workflow: String?, limit: Int) async throws -> [WorkflowRun]
+    /// `GET /v1/workflow-runs/{id}`: with its steps.
+    func workflowRun(_ id: String) async throws -> WorkflowRun
+    /// `POST /v1/workflow-runs/{id}/cancel`
+    func cancelRun(_ id: String) async throws -> WorkflowRun
+    /// `POST /v1/workflow-runs/{id}/retry`: at the step that failed.
+    func retryRun(_ id: String) async throws -> WorkflowRun
+    /// `POST /v1/workflow-runs/{id}/decide` `{step, choice, note}`.
+    func decide(run id: String, step: String, choice: String, note: String?) async throws -> WorkflowRun
+    /// `GET /v1/workflow-decisions`: the decisions waiting for me.
+    func workflowDecisions() async throws -> [WorkflowDecision]
+
+    // Superagents (v0.21.1+; older workspaces answer 404)
+    /// `GET /v1/console/superagent`
+    func superagent() async throws -> SuperagentState
+    /// `PUT /v1/console/superagent` (`nil`: `DELETE`, an ordinary agent again).
+    func setSuperagent(_ agent: String?) async throws
+    /// `GET /v1/console/approvals?status=pending`
+    func approvals() async throws -> [Approval]
+    /// `POST /v1/console/approvals/{id}/approve` or `/deny`.
+    func decide(approval id: String, approve: Bool) async throws -> Approval
+    /// `POST /v1/machines/{id}/spawn`: a session on a computer, or its myco
+    /// brought up to date (`cli: "upgrade"`).
+    func spawn(on machine: String, _ request: SpawnRequest) async throws -> SpawnResult
     /// `GET /v1/console/hidden`: the messages this person took out of
     /// their own view, on any of their devices. Nothing is deleted. A
     /// workspace from before v0.19.9 answers `not_found`.

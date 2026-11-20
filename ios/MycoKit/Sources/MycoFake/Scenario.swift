@@ -39,6 +39,9 @@ public enum Scenario: Sendable {
         var apps: [(app: AppTemplate, files: [String: (type: String, text: String)])] = []
         /// Web pages agents published, with their files by path.
         var pages: [(page: Page, files: [String: (type: String, text: String)])] = []
+        /// Workflows, and their runs (newest first).
+        var workflows: [Workflow] = []
+        var runs: [WorkflowRun] = []
     }
 
     func build(now: Date) -> World {
@@ -233,6 +236,40 @@ public enum Scenario: Sendable {
                 "index.html": ("text/html; charset=utf-8", "<!doctype html><meta charset=utf-8><p>白板</p>"),
             ]),
         ]
+        // A workflow: one writes, another reviews, I decide; one run waits
+        // for me, one went through.
+        let definition = WorkflowDefinition(
+            inputs: .init(required: ["task"], properties: [
+                "task": .init(type: "string", title: "要做什么", format: "textarea"),
+                "urgent": .init(type: "boolean", title: "加急", default: .bool(false)),
+            ]),
+            steps: [
+                .init(id: "write", title: "写", agent: backend.name), .init(id: "review", title: "审", agent: tester.name),
+                .init(id: "ok", title: "合并吗", human: "$starter"),
+            ])
+        func step(_ id: String, _ title: String, _ kind: String, _ target: String, _ status: String, summary: String? = nil, input: String? = nil,
+                  options: [String]? = nil, due: Date? = nil, at: TimeInterval) -> RunStep {
+            RunStep(id: "rs_\(id)\(Int(at))", step: id, title: title, kind: kind, status: status, target: target, input: input, summary: summary,
+                    options: options, durationMs: Int64(at * 100), startedAt: ago(at), endedAt: status == "done" ? ago(at - 60) : nil, dueAt: due)
+        }
+        let waiting = WorkflowRun(
+            id: "run_wait", workflowId: "wf_wri", name: "写-审-改", status: "waiting", inputs: ["task": .string("加一个导出按钮")], by: me,
+            current: ["ok"], steps: [
+                step("write", "写", "agent", backend.name, "done", summary: "加好了，在 feat/export", at: 3_000),
+                step("review", "审", "agent", tester.name, "done", summary: "通过，两处小意见已改", at: 1_800),
+                step("ok", "合并吗", "human", me, "waiting", input: "导出按钮写好也审过了，合并吗？", options: ["合并", "不合并"], due: ago(-80_000), at: 600),
+            ], durationMs: 3_000_000, createdAt: ago(3_000), updatedAt: ago(600))
+        let done = WorkflowRun(
+            id: "run_done", workflowId: "wf_wri", name: "写-审-改", status: "succeeded", inputs: ["task": .string("修登录页的错别字")], by: me,
+            steps: [
+                step("write", "写", "agent", backend.name, "done", summary: "改好了", at: 90_000),
+                step("review", "审", "agent", tester.name, "done", summary: "通过", at: 89_000),
+                step("ok", "合并吗", "human", me, "done", summary: "合并", at: 88_000),
+            ], durationMs: 2_400_000, createdAt: ago(90_000), updatedAt: ago(87_000), endedAt: ago(87_000))
+        world.workflows = [Workflow(
+            id: "wf_wri", name: "写-审-改", description: "一个写、一个审，审过了问我要不要合并", project: project, owner: "glenn", version: 2,
+            steps: 3, active: 1, lastRun: waiting, definition: definition, createdAt: ago(200_000), updatedAt: ago(100_000))]
+        world.runs = [waiting, done]
         // Two automations, except where the page with none is looked at.
         if self != .waiting {
             world.automations = [
