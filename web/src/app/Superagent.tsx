@@ -9,10 +9,9 @@ import { ErrorText, Modal } from "@/app/dialogs";
 import { agentKind, machinesOfHub, nodeName } from "@/app/nodes";
 import { L } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { markSuperagent } from "@/app/superagentMark";
+import { markSuperagent, SHROOM } from "@/app/superagentMark";
 
-/** The superagent's fixed name (docs/design/chief-of-staff.md). */
-export const SHROOM = "Shroom";
+export { SHROOM };
 
 // One shared copy per workspace: the bottom-left menu, the chat and the
 // approval cards read the same state, and only one poll runs per workspace.

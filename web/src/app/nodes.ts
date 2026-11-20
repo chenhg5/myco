@@ -6,6 +6,7 @@ import type { Agent, AgentStatus, Machine, ModelSource, RuntimeAccess } from "@/
 import type { AgentRow, NodeKind } from "@/app/types";
 import type { HubOverview } from "@/appapi";
 import { L } from "@/lib/i18n";
+import { isSuperagent, SHROOM } from "@/app/superagentMark";
 
 /** `machine` nodes (`xxx-machine`) are not nodes in the UI. */
 export type Kind = NodeKind | "machine";
@@ -330,6 +331,8 @@ export function stuckCounts(st: AgentStatus, now: number, seenAt?: number): { in
  * name is what agents and the CLI use; it stays visible in its details.
  */
 export function nodeName(a: Agent, hub?: HubOverview): string {
+  // Your superagent is Shroom, whatever it called itself.
+  if (isSuperagent(a)) return SHROOM;
   if (a.display_name) return a.display_name;
   const kind = agentKind(a);
   if (kind !== "agent" && kind !== "shell") return a.name;

@@ -1774,6 +1774,20 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { ok: true });
   }
 
+  // /app/quick/* — the Mac app's own routes for the ⌘⇧Space panel
+  // (quick_darwin.go): here they only note what the panel asked for, and
+  // GET /app/mock/quick returns the last "open the chat".
+  if (parts[0] === "app" && parts[1] === "quick" && parts.length === 3 && method === "POST") {
+    const body = await readBody(req);
+    if (parts[2] === "open") state.quickOpen = body;
+    return send(res, 200, { ok: true });
+  }
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "quick" && parts.length === 3) {
+    const last = state.quickOpen || null;
+    if (method === "DELETE") state.quickOpen = null;
+    return send(res, 200, { open: last });
+  }
+
   // /app/mock/superagent-ask — the superagent asks to do something that
   // needs your approval (body: { hub, what, reason }); DELETE: none again.
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "superagent-ask" && parts.length === 3) {
