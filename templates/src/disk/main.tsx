@@ -72,6 +72,9 @@ function App() {
   const [canPick, setCanPick] = useState(false);
   const [, setTick] = useState(0);
   const started = useRef(0);
+  // the note about places it could not read: closed once, closed for good
+  const [warnOff, setWarnOff] = useState(() => { try { return localStorage.getItem("myco-disk-warn-off") === "1"; } catch { return false; } });
+  const hideWarn = () => { setWarnOff(true); try { localStorage.setItem("myco-disk-warn-off", "1"); } catch { /* (a private window) */ } };
   const scanning = useRef<Target | null>(null);
 
   const loadDisks = () => os().system.disks().then((d) => { setDisks(d.filter((x) => !x.read_only || x.mount === "/")); setDiskErr(""); }, (e: OSError) => setDiskErr(e.message));
@@ -81,7 +84,7 @@ function App() {
     void has("fs.pick").then(setCanPick);
   }, []);
 
-  const job = useJob<OSScan, { files: number; disk: number; current: string }>(() =>
+  const job = useJob<OSScan, Progress>(() =>
     os().fs.scan({ path: scanning.current!.path, depth: DEPTH, min_fraction: FRACTION, top: 200 }));
   // (a clock for the time it has taken)
   useEffect(() => {
@@ -173,12 +176,25 @@ function App() {
   if (job.running || (target && !tree && !job.error)) {
     const p = job.progress;
     const secs = Math.max(0, Math.round((Date.now() - started.current) / 1000));
+    // a disk: how much of what is used on it has been read (an estimate: a
+    // disk holds a little more than its files)
+    const used = target?.disk ? target.disk.total - target.disk.available : 0;
+    const share = used ? Math.min(0.99, (p?.disk || 0) / used) : 0;
     return (
-      <div className="dk-scanning">
-        <svg className="dk-spin" viewBox="0 0 120 120" aria-hidden><circle cx="60" cy="60" r="52" /><circle cx="60" cy="60" r="52" className="dk-spin-arc" /></svg>
-        <div className="dk-scan-num">{formatBytes(p?.disk || 0)}</div>
-        <div className="dk-scan-sub">{(p?.files || 0).toLocaleString()} 个文件 · {secs} 秒</div>
+      <div className="dk-scanning" style={{ ["--glow" as string]: p?.top?.[0] ? scanColor(p, 0, used, dark) : "transparent" }}>
+        <ScanRing p={p} used={used} dark={dark} />
+        <div className="dk-scan-num">{used ? `${Math.floor(share * 100)}%` : formatBytes(p?.disk || 0)}</div>
+        <div className="dk-scan-sub">
+          {used ? `${formatBytes(p?.disk || 0)} / ${formatBytes(used)} · ` : ""}{(p?.files || 0).toLocaleString()} 个文件 · {secs < 60 ? `${secs} 秒` : `${Math.floor(secs / 60)} 分 ${secs % 60} 秒`}
+        </div>
         <div className="dk-scan-path" title={p?.current}>{ltr(p?.current || target?.path || "")}</div>
+        {!!p?.top?.length && (
+          <ul className="dk-scan-top" aria-label="目前最大的">
+            {p.top.slice(0, 5).map((t, i) => (
+              <li key={t.path}><i style={{ background: scanColor(p, i, used, dark) }} /><span>{t.name}</span><b>{formatBytes(t.disk)}</b></li>
+            ))}
+          </ul>
+        )}
         <button type="button" className="btn" onClick={() => { scanning.current = null; job.cancel(); setTarget(null); }}>停止</button>
       </div>
     );
@@ -192,6 +208,7 @@ function App() {
     const segOf = new Map(segs.map((s) => [s.key, s]));
     const hoverSeg = hover ? layout(at, LEVELS).find((s) => s.key === hover) || null : null;
     const onSeg = (s: Seg) => { if (s.node?.dir) void open(s.node); };
+    const biggest = scan.largest.find((f) => f.path.startsWith(at.path))?.disk || 0;
     const drag = (e: DragEvent, it: Item) => { e.dataTransfer.setData("text/x-myco-path", it.path); e.dataTransfer.effectAllowed = "copy"; dragged.current = it; };
     return (
       <div className="dk">
@@ -209,11 +226,12 @@ function App() {
           {target.disk && <span className="dk-free">可用 <b>{formatBytes(target.disk.available)}</b></span>}
           <button type="button" className="icon-btn" title="重新扫描" onClick={() => void start(target)}><RefreshCw className="ico" /></button>
         </header>
-        {scan.skipped > 0 && (
+        {scan.skipped > 0 && !warnOff && (
           <div className="dk-warn">
             <ShieldAlert className="ico" />
             <span>有 {scan.skipped.toLocaleString()} 处没读到（没有权限），实际占用会比这里多。</span>
             {sys.info?.os === "darwin" && <button type="button" className="link-btn" onClick={() => void os().system.settings({ pane: "full_disk" })}>给 myco「完全磁盘访问」</button>}
+            <button type="button" className="icon-btn dk-warn-x" title="不再提示" aria-label="不再提示" onClick={hideWarn}><X className="ico" /></button>
           </div>
         )}
         <div className="dk-body">
@@ -221,7 +239,8 @@ function App() {
             <Sunburst node={at} levels={LEVELS} dark={dark} hover={hover} busy={refining} canUp={chain.length > 1}
               onHover={(k) => setHover(k)} onOpen={onSeg} onUp={up} />
             <div className="dk-legend">
-              {hoverSeg ? (hoverSeg.more ? `${hoverSeg.parent.name} 里 ${hoverSeg.parent.more} 个更小的项目` : ltr(hoverSeg.node!.path)) : `扫了 ${scan.files.toLocaleString()} 个文件，用了 ${(scan.ms / 1000).toFixed(1)} 秒`}
+              {hoverSeg ? (hoverSeg.more ? `${hoverSeg.parent.name} 里 ${hoverSeg.parent.more} 个更小的项目` : ltr(hoverSeg.node!.path))
+                : `扫了 ${scan.files.toLocaleString()} 个文件，用了 ${(scan.ms / 1000).toFixed(1)} 秒${scan.skipped && warnOff ? `，${scan.skipped.toLocaleString()} 处没权限读` : ""}`}
             </div>
           </section>
           <aside className="dk-side">
@@ -238,22 +257,22 @@ function App() {
                   <div key={k.path} role="listitem" className={`dk-row${hover && (hover === k.path || hover.startsWith(k.path + "/")) ? " is-on" : ""}${taken ? " is-taken" : ""}`}
                     draggable onDragStart={(e) => drag(e, it)} onMouseEnter={() => setHover(k.path)} onMouseLeave={() => setHover(null)}
                     onDoubleClick={() => k.dir && void open(k)} onClick={() => k.dir && void open(k)}>
-                    <i className="dk-dot" style={{ background: s ? colorOf(s, dark) : "var(--line)" }} />
-                    {k.dir ? <Folder className="dk-ico" strokeWidth={1.6} /> : <File className="dk-ico" strokeWidth={1.6} />}
+                    <RowIcon dir={k.dir} color={s ? colorOf(s, dark) : ""} />
                     <span className="dk-name" title={k.path}>{k.name}</span>
+                    <Meter share={at.disk ? k.disk / at.disk : 0} color={s ? colorOf(s, dark) : "var(--faint)"} />
                     <span className="dk-size">{formatBytes(k.disk)}</span>
                     <span className="dk-acts">
                       <button type="button" className="icon-btn" title="在访达里显示" onClick={(e) => { e.stopPropagation(); void os().fs.reveal({ path: k.path }); }}><ExternalLink className="ico" /></button>
                       <button type="button" className="icon-btn" title={taken ? "已在待清理里" : "加到待清理"} disabled={taken} onClick={(e) => { e.stopPropagation(); add(it); }}><Plus className="ico" /></button>
                     </span>
-                    <i className="dk-bar" style={{ width: `${at.disk ? Math.max(0.5, (k.disk / at.disk) * 100) : 0}%` }} />
                   </div>
                 );
               })}
               {tab === "here" && (at.more || 0) > 0 && (
                 <div className="dk-row is-more" role="listitem">
-                  <i className="dk-dot" style={{ background: dark ? "hsl(220 6% 34%)" : "hsl(220 8% 80%)" }} />
+                  <span className="dk-more-ico" aria-hidden>⋯</span>
                   <span className="dk-name">{at.more} 个更小的项目</span>
+                  <Meter share={at.disk ? (at.more_disk || 0) / at.disk : 0} color={dark ? "hsl(220 6% 40%)" : "hsl(220 8% 74%)"} />
                   <span className="dk-size">{formatBytes(at.more_disk || 0)}</span>
                 </div>
               )}
@@ -263,8 +282,9 @@ function App() {
                 const taken = inBasket(f.path);
                 return (
                   <div key={f.path} role="listitem" className={`dk-row${taken ? " is-taken" : ""}`} draggable onDragStart={(e) => drag(e, it)}>
-                    <File className="dk-ico" strokeWidth={1.6} />
+                    <RowIcon dir={false} color="" />
                     <span className="dk-name" title={f.path}>{it.name}<small>{f.path.slice(at.path.length).replace(/[\\/][^\\/]*$/, "") || "/"}</small></span>
+                    <Meter share={it.disk / (biggest || 1)} color="var(--faint)" />
                     <span className="dk-size">{formatBytes(it.disk)}</span>
                     <span className="dk-acts">
                       <button type="button" className="icon-btn" title="在访达里显示" onClick={() => void os().fs.reveal({ path: f.path })}><ExternalLink className="ico" /></button>
@@ -362,6 +382,63 @@ function App() {
       )}
       <Toast kit={kit} />
     </div>
+  );
+}
+
+type Progress = { files: number; disk: number; current: string; top?: { name: string; path: string; dir: boolean; disk: number }[] };
+
+/** How much of the folder it takes: a short bar in its colour, before the size. */
+function Meter({ share, color }: { share: number; color: string }) {
+  return <span className="dk-meter-sm" aria-hidden><i style={{ width: `${Math.max(4, Math.min(100, share * 100))}%`, background: color }} /></span>;
+}
+
+/** A folder or file in the list: its icon in its colour on the map. */
+function RowIcon({ dir, color }: { dir: boolean; color: string }) {
+  const I = dir ? Folder : File;
+  return <I className="dk-ico" strokeWidth={1.7} style={color ? { color, fill: `color-mix(in srgb, ${color} 28%, transparent)` } : undefined} />;
+}
+
+/** The i-th folder read while scanning, coloured where it will be on the map. */
+function scanColor(p: Progress | null, i: number, used: number, dark: boolean) {
+  const top = p?.top || [];
+  const whole = used || top.reduce((s, t) => s + t.disk, 0) || 1;
+  let a = 0;
+  for (let j = 0; j < i; j++) a += (top[j].disk / whole) * Math.PI * 2;
+  const w = ((top[i]?.disk || 0) / whole) * Math.PI * 2;
+  return colorOf({ key: "", node: { dir: true } as OSScanNode, parent: {} as OSScanNode, depth: 1, a0: a, a1: a + w }, dark);
+}
+
+/** While scanning: a ring that fills as it goes (a disk: what is used on
+ *  it; a folder: what is found so far), the folders read to the end in
+ *  their colours, the rest of what is read in grey, and a light running
+ *  round the outside. */
+function ScanRing({ p, used, dark }: { p: Progress | null; used: number; dark: boolean }) {
+  const C = 150, R = 118, W = 22, TAU = Math.PI * 2;
+  const top = p?.top || [];
+  const done = top.reduce((s, t) => s + t.disk, 0);
+  const whole = used || Math.max(done, p?.disk || 0) || 1;
+  const arc = (a0: number, a1: number) => {
+    if (a1 - a0 < 0.002) return "";
+    a1 = Math.min(a1, a0 + TAU - 1e-4);
+    const pt = (a: number) => `${(C + R * Math.sin(a)).toFixed(2)},${(C - R * Math.cos(a)).toFixed(2)}`;
+    return `M${pt(a0)}A${R},${R} 0 ${a1 - a0 > Math.PI ? 1 : 0} 1 ${pt(a1)}`;
+  };
+  let a = 0;
+  const segs = top.map((t, i) => {
+    const w = (t.disk / whole) * TAU;
+    const d = arc(a + 0.004, a + w - 0.004);
+    a += w;
+    return d ? <path key={t.path} d={d} className="dk-ring-seg" style={{ stroke: scanColor(p, i, used, dark) }} /> : null;
+  });
+  // what is read but not yet in a finished folder
+  const reading = Math.min(TAU, ((p?.disk || 0) / whole) * TAU);
+  return (
+    <svg className="dk-ring" viewBox="0 0 300 300" aria-hidden>
+      <circle cx={C} cy={C} r={R} className="dk-ring-track" style={{ strokeWidth: W }} />
+      {reading > a && <path d={arc(a, reading)} className="dk-ring-reading" style={{ strokeWidth: W }} />}
+      <g style={{ strokeWidth: W }}>{segs}</g>
+      <circle cx={C} cy={C} r={R + W / 2 + 9} className="dk-ring-run" />
+    </svg>
   );
 }
 

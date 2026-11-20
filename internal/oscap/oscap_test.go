@@ -172,6 +172,11 @@ func TestScan(t *testing.T) {
 	if len(b.Events) == 0 || b.Events[len(b.Events)-1].Type != "progress" {
 		t.Fatalf("progress events: %+v", b.Events)
 	}
+	// the last progress has the root's folders read, largest first
+	top := b.Events[len(b.Events)-1].Data.(map[string]any)["top"].([]map[string]any)
+	if len(top) != 2 || top[0]["name"] != "big" || top[1]["name"] != "small" {
+		t.Fatalf("progress top: %v", top)
+	}
 }
 
 // wait reads a job's events until it ends.

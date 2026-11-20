@@ -56,8 +56,11 @@
       let i = 0;
       const tick = () => {
         i++;
-        emit("progress", { files: Math.round(tree.files * i / steps), disk: tree.disk * i / steps, current: ROOT + "/Users/glenn/Library/Caches" });
-        if (i >= steps) resolve(value); else setTimeout(tick, 120);
+        // (the root's folders finish one by one, the largest last)
+        const kids = [...tree.children].reverse();
+        const done = kids.slice(0, Math.floor(kids.length * i / steps)).map((k) => ({ name: k.name, path: k.path, dir: k.dir, disk: k.disk, files: k.files })).sort((a, b) => b.disk - a.disk);
+        emit("progress", { files: Math.round(tree.files * i / steps), disk: tree.disk * i / steps, current: ROOT + "/Users/glenn/Library/Caches/com.spotify.client", top: done });
+        if (i >= steps) resolve(value); else setTimeout(tick, window.__SCAN_MS__ || 120);
       };
       setTimeout(tick, 60);
     });
