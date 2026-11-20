@@ -179,22 +179,27 @@ export function TemplatesPage({ hubId, projects, now }: { hubId: string; project
         </>
       )}
       <UseTemplate hubId={hubId} template={using} projects={projects} onClose={() => setUsing(null)}
+        first={!!using && !made.some((p) => p.template?.id === using.id)}
         onMade={(p) => { setUsing(null); load(); openPage({ kind: "page", hubId, id: p.id }); }} />
     </div>
   );
 }
 
-/** Making a page from a template: its name, where it goes, sample data. */
-function UseTemplate({ hubId, template, projects, onClose, onMade }: {
+/** Making a page from a template: its name and where it goes. The first
+ *  one of a kind in this workspace comes with the template's sample data
+ *  (to see how it is used); later ones start empty. Not asked: every app
+ *  works empty, and a choice here is one more thing to read. */
+function UseTemplate({ hubId, template, projects, first, onClose, onMade }: {
   hubId: string;
   template: Template | null;
   projects: { name: string; title: string }[];
+  /** none of this kind made here yet: it gets the sample data */
+  first: boolean;
   onClose: () => void;
   onMade: (p: Page) => void;
 }) {
   const [name, setName] = useState("");
   const [project, setProject] = useState("");
-  const [sample, setSample] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   useEffect(() => { if (template) { setName(template.name); setError(null); setBusy(false); } }, [template]);
@@ -204,7 +209,7 @@ function UseTemplate({ hubId, template, projects, onClose, onMade }: {
     setBusy(true);
     setError(null);
     try {
-      const r = await appApi.useTemplate(hubId, template.id, { name: name.trim() || template.name, ...(project ? { project } : {}), sample });
+      const r = await appApi.useTemplate(hubId, template.id, { name: name.trim() || template.name, ...(project ? { project } : {}), sample: first });
       onMade(r.page);
     } catch (err) {
       setError(err);
@@ -228,10 +233,7 @@ function UseTemplate({ hubId, template, projects, onClose, onMade }: {
             {projects.map((p) => <option key={p.name} value={p.name}>{L(`项目「${p.title}」：项目里的人和 agent 都能用`, `Project ${p.title}: everyone in it`)}</option>)}
           </select>
         </label>
-        <label className="tp-sample">
-          <input type="checkbox" checked={sample} onChange={(e) => setSample(e.target.checked)} />
-          {L("先放一些示例数据，看看怎么用", "Start with some sample data")}
-        </label>
+        {first && <p className="app-small-note tp-sample-note" data-testid="template-sample-note">{L("这是你在这个工作区的第一份，会带上一些示例内容，看看怎么用；不要的直接删掉。", "Your first one here comes with some sample content, to show how it is used; delete what you don't need.")}</p>}
         <ErrorText error={error} />
         <div className="app-modal-actions">
           <button type="button" className="app-btn" onClick={onClose} disabled={busy}>{L("取消", "Cancel")}</button>

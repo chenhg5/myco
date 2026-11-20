@@ -8287,7 +8287,7 @@ body.is-resizing {
 .tp-own-empty { display: flex; align-items: center; gap: 14px; padding: 16px; border-radius: 14px; box-shadow: inset 0 0 0 1px var(--line); }
 .tp-own-empty p { margin: 0; font-size: 12.5px; line-height: 1.6; color: var(--muted); }
 @media (max-width: 640px) { .tp-search { width: auto; flex: 1; } }
-.tp-sample { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--fg-2); }
+.tp-sample-note { margin: 12px 0 0; line-height: 1.6; }
 
 /* ---------- a top-level page's head (PageHero.tsx): 自动化, 应用 ---------- */
 .ph { display: flex; align-items: center; gap: 14px; margin: 10px 0 22px; }

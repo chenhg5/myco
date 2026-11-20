@@ -896,6 +896,9 @@ async function runMatrix(browser, size, scheme) {
         await go(page, "应用", narrow);
         await clickVisible(page, page.locator(`[data-testid="template-${slug}"]`));
         await page.locator("[data-testid=template-name]").fill(name);
+        // No sample-data choice: the first of a kind comes with it, and says so.
+        if (await page.locator(".app-modal input[type=checkbox]").count()) throw new Error("新建应用的弹框不该再让人选要不要示例数据");
+        await page.locator("[data-testid=template-sample-note]").waitFor({ timeout: 5_000 });
         await clickVisible(page, page.getByRole("button", { name: "新建", exact: true }));
         const frame = page.locator(`.pg-frame[aria-label="${name}"]`);
         await frame.waitFor({ timeout: 15_000 });
