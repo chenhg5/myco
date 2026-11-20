@@ -539,7 +539,7 @@ function MemberDialog({ member, project, mayRemove, busy, error, onClose, onSave
           </label>
           <label className={cn("app-provider-opt", role === "coordinator" && "picked")}>
             <input type="radio" name="role" checked={role === "coordinator"} onChange={() => setRole("coordinator")} disabled={busy} />
-            <span><b>{L("协调者", "Coordinator")}</b><small>{L("还能改项目说明、文档、链接，改其他成员的介绍和技能，加入同一主人的 agent", "Also edits the brief, documents and links, other members' descriptions and skills, and adds nodes of its owner")}</small></span>
+            <span><b>{L("协调者", "Coordinator")}</b><small>{L("还能改项目说明、文档、链接，改其他成员的介绍和擅长，加入同一主人的 agent", "Also edits the brief, documents and links, other members' descriptions and skills, and adds nodes of its owner")}</small></span>
           </label>
         </div>
       )}
