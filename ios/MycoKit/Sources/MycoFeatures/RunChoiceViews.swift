@@ -23,7 +23,7 @@ struct RunChoiceButton: View {
                     // lists are too long to lay out one under the other.
                     Picker(selection: model) {
                         Text(L("跟随电脑设置", "Follow this computer")).tag("")
-                        ForEach(choice.models, id: \.self) { Text(RunChoice.short($0)).tag($0) }
+                        ForEach(choice.models, id: \.self) { Text(choice.name(of: $0)).tag($0) }
                     } label: {
                         Label(L("模型", "Model"), systemImage: "cpu")
                     }

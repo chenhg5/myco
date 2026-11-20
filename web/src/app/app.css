@@ -9058,3 +9058,20 @@ body.is-resizing {
 .wf-ed-panel .wf-edit-title, .wf-ed-panel .wf-edit-role { background: var(--pill); }
 .wf-ed-side { min-width: 0; scroll-margin-top: 12px; }
 .wf-steps-anchor { scroll-margin-top: 12px; }
+/* ── 电脑允许开工的文件夹 (MachineDirs.tsx) ── */
+.mdirs-kv { align-items: flex-start; }
+.mdirs { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; min-width: 0; width: 100%; }
+.mdirs-list { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.mdirs-chip { padding-right: 4px; }
+.mdirs-chip:not(:has(.mdirs-x)) { padding-right: 9px; }
+.mdirs-x { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%;
+  background: none; color: var(--muted); cursor: pointer; }
+.mdirs-x:hover { background: color-mix(in srgb, var(--fg) 10%, transparent); color: var(--fg); }
+.mdirs-x svg { width: 12px; height: 12px; }
+.mdirs-add { display: flex; gap: 6px; width: min(420px, 100%); }
+.mdirs-add .app-input { flex: 1; min-width: 0; height: 30px; }
+.mdirs-far { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; font-size: 12px; color: var(--muted); }
+.mdirs-far code { padding: 2px 6px; border-radius: 6px; background: var(--pill); color: var(--fg-2); font-size: 11.5px; }
+.mdirs-note { margin: 0; text-align: right; max-width: 460px; }
+.mdirs-allow { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-top: 6px; }
+.app-field-hint .mdirs-far { justify-content: flex-start; margin-top: 6px; }

@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"encoding/json"
 	"slices"
 	"strings"
 	"time"
@@ -87,6 +88,61 @@ type Runtime struct {
 	// ("wsl"); see api.Runtime.
 	Away string `json:"away,omitempty"`
 	Env  string `json:"env,omitempty"`
+	// Models are the models its CLI offers on that computer, as JSON
+	// (EncodeModels), so that the struct stays comparable; "" when it did
+	// not say (Claude Code, older runners).
+	Models string `json:"models,omitempty"`
+}
+
+// RuntimeModel is a model a CLI offers: its id, display name and the
+// reasoning efforts it supports.
+type RuntimeModel struct {
+	ID      string   `json:"id"`
+	Name    string   `json:"name,omitempty"`
+	Efforts []string `json:"efforts,omitempty"`
+}
+
+// MaxRuntimeModels bounds the models a runtime keeps.
+const MaxRuntimeModels = 40
+
+// EncodeModels keeps a sane list of models (ids and names of at most 80
+// characters, at most MaxRuntimeModels) as JSON; "" for none.
+func EncodeModels(ms []RuntimeModel) string {
+	var keep []RuntimeModel
+	seen := map[string]bool{}
+	for _, m := range ms {
+		m.ID, m.Name = strings.TrimSpace(m.ID), strings.TrimSpace(m.Name)
+		if m.ID == "" || len(m.ID) > 80 || len(m.Name) > 80 || seen[m.ID] {
+			continue
+		}
+		seen[m.ID] = true
+		var ef []string
+		for _, e := range m.Efforts {
+			if e != "" && len(e) <= 20 && len(ef) < 10 {
+				ef = append(ef, e)
+			}
+		}
+		m.Efforts = ef
+		keep = append(keep, m)
+		if len(keep) == MaxRuntimeModels {
+			break
+		}
+	}
+	if len(keep) == 0 {
+		return ""
+	}
+	b, _ := json.Marshal(keep)
+	return string(b)
+}
+
+// ModelList is Models decoded.
+func (r Runtime) ModelList() []RuntimeModel {
+	if r.Models == "" {
+		return nil
+	}
+	var out []RuntimeModel
+	_ = json.Unmarshal([]byte(r.Models), &out)
+	return out
 }
 
 // Quota is a CLI account's usage limits at one moment.

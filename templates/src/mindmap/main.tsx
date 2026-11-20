@@ -15,7 +15,8 @@ const nodes = new Store<Node & Record<string, unknown>>("nodes");
 const kit = new Kit([meta, nodes]);
 const title = titleSaver(kit, meta);
 
-const BRANCH = ["#3370ff", "#00b386", "#f77234", "#7f3bf5", "#e8478b", "#0fa6c2", "#d4a106", "#5b6b8c"];
+// one quiet gray for every branch (mm.css; lighter in the dark)
+const BRANCH = ["var(--branch)"];
 type Laid = { id: string; text: string; depth: number; x: number; y: number; w: number; h: number; color: string; kids: string[]; collapsed: boolean; hidden: number };
 
 const measure = (() => {
@@ -75,7 +76,7 @@ function layout(): { laid: Map<string, Laid>; roots: string[]; kids: Map<string,
   };
   let top = 0, width = 0;
   const seen = new Set<string>(), seen2 = new Set<string>();
-  for (const r of roots) { const h = measureTree(r, 0, seen); place(r, 0, 0, top, "#3370ff", seen2); top += h + 60; }
+  for (const r of roots) { const h = measureTree(r, 0, seen); place(r, 0, 0, top, "var(--branch)", seen2); top += h + 60; }
   for (const l of laid.values()) width = Math.max(width, l.x + l.w);
   return { laid, roots, kids, width, height: top };
 }
@@ -231,7 +232,7 @@ function App() {
       const c = laid.get(k);
       if (!c) continue;
       const x1 = l.x + l.w, y1 = l.y + l.h / 2, x2 = c.x, y2 = c.y + c.h / 2, mx = (x1 + x2) / 2;
-      edges.push(<path key={`${l.id}-${k}`} d={`M${x1} ${y1} C${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`} stroke={c.color} strokeWidth={l.depth === 0 ? 2.5 : 2} fill="none" opacity={0.8} />);
+      edges.push(<path key={`${l.id}-${k}`} d={`M${x1} ${y1} C${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`} style={{ stroke: c.color }} strokeWidth={l.depth === 0 ? 2.5 : 2} fill="none" opacity={0.8} />);
     }
   }
   return (

@@ -57,7 +57,7 @@ func (s *Server) agentDTO(a *domain.Agent) api.Agent {
 	if rt := a.Runtime; rt != (domain.Runtime{}) {
 		out.Runtime = &api.Runtime{CLI: rt.CLI, CLIVersion: rt.CLIVersion, Model: rt.Model, ModelSource: rt.ModelSource, Access: rt.Access,
 			Provider: rt.Provider, ProviderSource: rt.ProviderSource, Effort: rt.Effort, EffortSource: rt.EffortSource, MaxAccess: rt.MaxAccess, Quota: quotaDTO(rt.Quota),
-			Features: rt.FeatureList(), Away: rt.Away, Env: rt.Env}
+			Features: rt.FeatureList(), Away: rt.Away, Env: rt.Env, Models: modelsDTO(rt.ModelList())}
 	}
 	if rs := a.RunSettings; rs != (domain.RunSettings{}) {
 		out.RunSettings = &api.RunSettings{Model: rs.Model, Effort: rs.Effort, Access: rs.Access}
@@ -221,6 +221,22 @@ func quotaFromAPI(q *api.Quota) *domain.Quota {
 			break
 		}
 		out.Windows = append(out.Windows, domain.QuotaWindow{Name: w.Name, Label: w.Label, Used: w.Used, ResetsAt: w.ResetsAt, Status: w.Status})
+	}
+	return out
+}
+
+func modelsFromAPI(in []api.RuntimeModel) []domain.RuntimeModel {
+	var out []domain.RuntimeModel
+	for _, m := range in {
+		out = append(out, domain.RuntimeModel{ID: m.ID, Name: m.Name, Efforts: m.Efforts})
+	}
+	return out
+}
+
+func modelsDTO(in []domain.RuntimeModel) []api.RuntimeModel {
+	var out []api.RuntimeModel
+	for _, m := range in {
+		out = append(out, api.RuntimeModel{ID: m.ID, Name: m.Name, Efforts: m.Efforts})
 	}
 	return out
 }

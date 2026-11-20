@@ -136,6 +136,19 @@ type Runtime struct {
 	// explains going offline: "wsl" (Windows shuts WSL down when idle).
 	Away string `json:"away,omitempty"`
 	Env  string `json:"env,omitempty"`
+	// Models are the models its CLI offers on that computer, in the CLI's
+	// own order (Codex: its models cache). Absent when the CLI does not
+	// say (Claude Code: its aliases are fixed) or the runner predates it
+	// (v0.21.1).
+	Models []RuntimeModel `json:"models,omitempty"`
+}
+
+// RuntimeModel is a model a CLI offers: the id its --model takes, a
+// display name, and the reasoning efforts it supports.
+type RuntimeModel struct {
+	ID      string   `json:"id"`
+	Name    string   `json:"name,omitempty"`
+	Efforts []string `json:"efforts,omitempty"`
 }
 
 // Quota is a CLI account's usage limits at one moment (from v0.19.5).
@@ -816,6 +829,8 @@ type MachineAI struct {
 	// Install and Login are commands to run on that machine.
 	Install string `json:"install,omitempty"`
 	Login   string `json:"login,omitempty"`
+	// Models are the models it offers there (Codex, v0.21.1+).
+	Models []RuntimeModel `json:"models,omitempty"`
 }
 
 // MachineSession is a recent Claude Code or Codex session on the machine;

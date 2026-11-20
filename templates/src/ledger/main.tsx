@@ -21,7 +21,8 @@ const title = titleSaver(kit, book);
 const OUT = ["餐饮", "交通", "购物", "住房", "日用", "娱乐", "医疗", "学习", "人情", "其他"];
 const IN = ["工资", "奖金", "报销", "理财", "其他"];
 const EMOJI: Record<string, string> = { 餐饮: "🍜", 交通: "🚇", 购物: "🛍️", 住房: "🏠", 日用: "🧻", 娱乐: "🎬", 医疗: "💊", 学习: "📚", 人情: "🎁", 其他: "📦", 工资: "💰", 奖金: "🎉", 报销: "🧾", 理财: "📈" };
-const SHADES = ["#3370ff", "#5b8def", "#85a8f5", "#a9c1f7", "#c8d7fa", "#9aa5b8", "#b8c0cd", "#d0d5de", "#e1e4ea", "#eceef2"];
+// grays from strong to faint (ledger.css; reversed in the dark)
+const SHADES = Array.from({ length: 10 }, (_, i) => `var(--shade-${i})`);
 
 function App() {
   useKit(kit);
@@ -81,7 +82,7 @@ function App() {
     const d = byCat.length === 1 ? `M 10 80 A 70 70 0 1 1 150 80 A 70 70 0 1 1 10 80 M 34 80 A 46 46 0 1 0 126 80 A 46 46 0 1 0 34 80`
       : `M ${p(a0, R)} A ${R} ${R} 0 ${large} 1 ${p(a1, R)} L ${p(a1, r)} A ${r} ${r} 0 ${large} 0 ${p(a0, r)} Z`;
     a0 = a1;
-    return <path key={c} d={d} fill={SHADES[i]} fillRule="evenodd" />;
+    return <path key={c} d={d} style={{ fill: SHADES[i] }} fillRule="evenodd" />;
   });
   return (
     <div className="app lg">

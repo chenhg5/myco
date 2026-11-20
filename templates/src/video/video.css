@@ -1,14 +1,14 @@
 /* 视频剪辑: side panels, a stage in the middle, the timeline under them. */
 :root {
-  --stage: #eceef1; --panel: #fafafb; --clip: #3370ff; --clip-bg: #dbe6ff; --text-ov: #7f3bf5; --blur-ov: #14a3a3; --mosaic-ov: #f77234;
-  --play: #f54a45; --track: #f3f4f6; --track2: #ebedf0;
+  --stage: #eceef1; --panel: #fafafb; --clip: #8f959e; --clip-bg: #e6e8eb; --text-ov: #2f3338; --blur-ov: #555a62; --mosaic-ov: #7b8089; --ov-fg: #ffffff;
+  --play: var(--fg); --track: #f3f4f6; --track2: #ebedf0;
 }
 @media (prefers-color-scheme: dark) {
-  :root { --stage: #121212; --panel: #1b1b1b; --clip: #4c88ff; --clip-bg: #233457; --text-ov: #a77bff; --blur-ov: #2cc4c4; --mosaic-ov: #ff8f5a; --play: #ff6b66; --track: #232323; --track2: #2a2a2a; }
+  :root { --stage: #121212; --panel: #1b1b1b; --clip: #9a9a9a; --clip-bg: #2e2e2e; --text-ov: #e0e0e0; --blur-ov: #b4b4b4; --mosaic-ov: #8c8c8c; --ov-fg: #1a1a1a; --track: #232323; --track2: #2a2a2a; }
 }
 .vid .top { border-bottom: 1px solid var(--line); }
 .top-ratio { width: 120px; }
-.badge { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--red); color: #fff; font-size: 11px; line-height: 18px; text-align: center; }
+.badge { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--fg); color: var(--bg); font-size: 11px; line-height: 18px; text-align: center; }
 .btn:disabled, .tool:disabled, .icon-btn:disabled { opacity: 0.4; pointer-events: none; }
 .btn.is-danger { color: var(--red); }
 .spin { animation: spin 1s linear infinite; }
@@ -23,7 +23,7 @@
 .tab:hover { color: var(--fg); }
 .tab.is-on { color: var(--accent); border-bottom-color: var(--accent); }
 .tab .ico { width: 17px; height: 17px; }
-.tab .dot { position: absolute; top: 4px; right: calc(50% - 14px); width: 7px; height: 7px; border-radius: 50%; background: var(--red); }
+.tab .dot { position: absolute; top: 4px; right: calc(50% - 14px); width: 7px; height: 7px; border-radius: 50%; background: var(--fg); }
 .side-body { flex: 1; min-height: 0; overflow: auto; }
 .pane { display: flex; flex-direction: column; gap: 12px; padding: 12px; }
 .pane-hint { margin: 0; font-size: 12px; line-height: 1.6; color: var(--faint); }
@@ -39,9 +39,9 @@
 .media-dur, .media-used { position: absolute; bottom: 4px; padding: 0 5px; border-radius: 4px; background: rgba(0, 0, 0, 0.6); color: #fff; font-size: 11px; line-height: 17px; }
 .media-dur { right: 4px; }
 .media-used { left: 4px; }
-.media-add { position: absolute; top: 4px; right: 4px; display: grid; place-items: center; width: 24px; height: 24px; border: 0; border-radius: 6px; background: var(--accent); color: #fff; opacity: 0; transition: opacity 0.12s; }
+.media-add { position: absolute; top: 4px; right: 4px; display: grid; place-items: center; width: 24px; height: 24px; border: 0; border-radius: 6px; background: var(--accent); color: var(--on-accent); opacity: 0; transition: opacity 0.12s; }
 .media:hover .media-add, .media-add:focus-visible { opacity: 1; }
-.media-relink { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border: 0; border-radius: 12px; background: var(--accent); color: #fff; font-size: 11px; white-space: nowrap; }
+.media-relink { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border: 0; border-radius: 12px; background: var(--accent); color: var(--on-accent); font-size: 11px; white-space: nowrap; }
 .media-relink .ico { width: 12px; height: 12px; }
 .media-row { display: flex; align-items: center; gap: 2px; min-width: 0; }
 .media-name { flex: 1; min-width: 0; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -52,14 +52,14 @@
 /* 文字 / 打码 */
 .presets { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .preset { display: flex; flex-direction: column; gap: 6px; padding: 0; border: 0; background: none; text-align: center; }
-.preset-pic { display: grid; place-items: center; aspect-ratio: 16 / 10; border-radius: 8px; background: linear-gradient(135deg, #3a4a63, #1e2633); border: 1px solid var(--line2); overflow: hidden; font-weight: 700; font-size: 15px; color: #fff; }
+.preset-pic { display: grid; place-items: center; aspect-ratio: 16 / 10; border-radius: 8px; background: linear-gradient(135deg, #4a4e55, #222528); border: 1px solid var(--line2); overflow: hidden; font-weight: 700; font-size: 15px; color: #fff; }
 .preset:hover .preset-pic { outline: 2px solid var(--accent); outline-offset: 1px; }
 .preset.is-shadow .preset-pic span { text-shadow: 0 2px 6px rgba(0, 0, 0, 0.7); font-size: 18px; }
 .preset.is-box .preset-pic span { padding: 2px 8px; border-radius: 4px; background: rgba(0, 0, 0, 0.6); font-size: 12px; }
 .preset.is-outline .preset-pic span { -webkit-text-stroke: 1px #000; paint-order: stroke fill; font-size: 17px; }
-.preset-pic.is-blur { background: radial-gradient(circle at 40% 40%, #9fb6d8, #4f6585 60%, #2b3648); color: rgba(255, 255, 255, 0.9); }
+.preset-pic.is-blur { background: radial-gradient(circle at 40% 40%, #c3c7cd, #6b7079 60%, #33363b); color: rgba(255, 255, 255, 0.9); }
 .preset-pic.is-blur .ico, .preset-pic.is-mosaic .ico { width: 26px; height: 26px; }
-.preset-pic.is-mosaic { background: conic-gradient(from 90deg at 50% 50%, #5a6f8f 25%, #7d91ad 0 50%, #4c5f7c 0 75%, #8a9db8 0) 0 0 / 22px 22px; color: #fff; }
+.preset-pic.is-mosaic { background: conic-gradient(from 90deg at 50% 50%, #5b6068 25%, #868b93 0 50%, #4a4e55 0 75%, #9aa0a8 0) 0 0 / 22px 22px; color: #fff; }
 .preset-name { font-size: 12px; color: var(--muted); }
 
 /* 备注 */
@@ -99,7 +99,7 @@
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { height: 26px; min-width: 44px; padding: 0 8px; border: 1px solid var(--line); border-radius: 13px; background: var(--bg); font-size: 12px; font-variant-numeric: tabular-nums; }
 .chip:hover { border-color: var(--accent); }
-.chip.is-on { border-color: var(--accent); background: var(--accent); color: #fff; }
+.chip.is-on { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
 .seg { align-self: flex-start; }
 .swatches { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .swatch { width: 24px; height: 24px; padding: 0; border: 1px solid var(--line); border-radius: 50%; }
@@ -161,17 +161,17 @@ kbd { padding: 1px 6px; border: 1px solid var(--line); border-bottom-width: 2px;
 .tl-tick { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--line); }
 .tl-tick span { position: absolute; left: 4px; top: 5px; font-size: 10px; color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tl-minor { position: absolute; bottom: 0; height: 5px; border-left: 1px solid var(--line2); }
-.tl-note { position: absolute; bottom: 2px; width: 10px; height: 12px; margin-left: -5px; padding: 0; border: 0; background: #ffb020; clip-path: polygon(0 0, 100% 0, 100% 70%, 50% 100%, 0 70%); z-index: 2; }
+.tl-note { position: absolute; bottom: 2px; width: 10px; height: 12px; margin-left: -5px; padding: 0; border: 0; background: var(--fg); clip-path: polygon(0 0, 100% 0, 100% 70%, 50% 100%, 0 70%); z-index: 2; }
 .tl-note.is-done { background: var(--faint); }
 .tl-lanes { position: absolute; left: 0; right: 0; }
 .tl-lane { position: absolute; left: 0; right: 0; border-bottom: 1px solid var(--line2); }
-.tl-ov { position: absolute; display: flex; align-items: center; gap: 5px; padding: 0 9px; border-radius: 5px; color: #fff; font-size: 12px; overflow: hidden; white-space: nowrap; cursor: grab; }
+.tl-ov { position: absolute; display: flex; align-items: center; gap: 5px; padding: 0 9px; border-radius: 5px; color: var(--ov-fg); font-size: 12px; overflow: hidden; white-space: nowrap; cursor: grab; }
 .tl-ov .ico { width: 13px; height: 13px; flex: none; }
 .tl-ov span { overflow: hidden; text-overflow: ellipsis; }
 .tl-ov.is-text { background: var(--text-ov); }
 .tl-ov.is-blur { background: var(--blur-ov); }
 .tl-ov.is-mosaic { background: var(--mosaic-ov); }
-.tl-ov.is-sel, .tl-clip.is-sel { box-shadow: 0 0 0 2px var(--fg); z-index: 3; }
+.tl-ov.is-sel, .tl-clip.is-sel { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--fg); z-index: 3; }
 .tl-main { position: absolute; left: 0; right: 0; background: var(--track); border-radius: 6px; }
 .tl-empty { position: absolute; inset: 0; display: grid; place-items: center; font-size: 12px; color: var(--faint); border: 1px dashed var(--line); border-radius: 6px; pointer-events: none; }
 .tl-clip { position: absolute; top: 0; overflow: hidden; border-radius: 6px; background: var(--clip-bg); border: 1px solid color-mix(in srgb, var(--clip) 60%, transparent); cursor: grab; }

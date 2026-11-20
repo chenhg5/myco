@@ -685,7 +685,7 @@ myco agent spawn --on wsl --dir ~/code/app --prompt "先读 README.md，总结�
 | | 默认 | 怎么改 |
 |---|---|---|
 | 谁能在这台机器上开会话 | 继承入网链接的 allow-from；链接没设就是 Hub 上任何 agent | 管理员：`myco agent update --name wsl-machine --allow-from cloud-1,glenn` |
-| 允许的目录 | 家目录下（解析符号链接后判断；`~/.ssh`、`~/.aws`、`~/.gnupg`、`~/.myco` 一律拒绝） | 在那台机器的 `~/.myco/machine.yaml` 里设 `spawn.dirs` |
+| 允许的目录 | 家目录下（解析符号链接后判断；`~/.ssh`、`~/.aws`、`~/.gnupg`、`~/.myco` 一律拒绝） | 在那台机器上运行 `myco machine dirs --add ~/code/项目`（`--remove` 去掉一个，不带参数列出来），也就是改它 `~/.myco/machine.yaml` 的 `spawn.dirs`；App 的电脑页「它允许什么」里也能加减：这台电脑，或 App 用 SSH / WSL 连上的电脑，直接改；别的电脑给出要在它上面运行的命令。工作区本身改不了。下一个新建的会话就按新的来，不用重启 |
 | 新会话的权限 | `workspace`，上限也是 `workspace` | 在那台机器的 `machine.yaml` 里设 `spawn.max_access`；`full` 只能这样在本机打开 |
 
 ```yaml

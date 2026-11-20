@@ -238,7 +238,7 @@ node right away. --allow-shell also lets agents open a terminal (shell node) her
 			return e.joinMachine(hub, tok, nil)
 		}),
 	}
-	return (&Command{Name: "machine", Summary: "This machine's membership in the network"}).Add(join, machineShellCommand(), machineRemoveCommand())
+	return (&Command{Name: "machine", Summary: "This machine's membership in the network"}).Add(join, machineShellCommand(), machineDirsCommand(), machineRemoveCommand())
 }
 
 // joinMachine trades join link token tok of hub for this machine's

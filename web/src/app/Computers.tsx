@@ -9,6 +9,7 @@ import { shortDir } from "@/app/AddToProject";
 import { machineTellsInfo } from "@/app/hubVersion";
 import { cachedMachineInfo, fetchMachineInfo } from "@/app/machineInfoCache";
 import { LocalShellAccess } from "@/app/LocalShellAccess";
+import { MachineDirs } from "@/app/MachineDirs";
 import { ComputerCheck } from "@/app/ComputerCheck";
 import { MachineUpgrade, UpgradeAll, useLatestRelease } from "@/app/MycoUpgrade";
 import { agentQuotaHint } from "@/app/quota";
@@ -343,14 +344,14 @@ function ComputerDetails({ hubId, hub, machine, onChanged }: {
         <div className="app-small-note">{L("正在问它…", "Asking it…")}</div>
       ) : (
         <div>
-          <div className="app-kv"><span className="app-kv-label">{L("agent 能在哪里开工", "Where agents may start")}</span>
-            <span className="app-kv-value pcd-chips">{info.dirs.map((d) => <span key={d} className="pcd-chip mono">{d}</span>)}</span></div>
+          <div className="app-kv mdirs-kv"><span className="app-kv-label">{L("agent 能在哪里开工", "Where agents may start")}</span>
+            <span className="app-kv-value"><MachineDirs hubId={hubId} hub={hub} machine={machine} info={info} onChanged={(dirs) => setInfo({ ...info, dirs })} /></span></div>
           <div className="app-kv"><span className="app-kv-label">{L("最高权限", "Highest access")}</span><span className="app-kv-value">{(ACCESS_LABEL[info.max_access] || (() => info.max_access))()}</span></div>
           <div className="app-kv"><span className="app-kv-label">AI</span>
             <span className="app-kv-value pcd-chips">{info.ais.map((a) => (
               <span key={a.name} className={cn("pcd-chip pcd-ai", `is-${a.state}`)}>{`${a.name} ${aiText(a)}`}</span>
             ))}</span></div>
-          <div className="app-small-note">{L("这些由那台电脑自己决定，只能在它上面改（~/.myco/machine.yaml 的 spawn.dirs、spawn.max_access）。", "That computer decides these itself; they are changed on it only (spawn.dirs and spawn.max_access in ~/.myco/machine.yaml).")}</div>
+          <div className="app-small-note">{L("最高权限也由那台电脑自己决定（~/.myco/machine.yaml 的 spawn.max_access）。", "That computer decides its highest access itself (spawn.max_access in ~/.myco/machine.yaml).")}</div>
         </div>
       )}
       <LocalShellAccess machine={machine} hub={hub} what="shell" shell={machineShell(hub, machine.id)} onChange={async () => onChanged()} />
