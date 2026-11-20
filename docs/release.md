@@ -64,7 +64,7 @@ myco exec --to mac-exec --cmd "~/code/myco-release.sh status"   # 每分钟查�
 - 通常 5–10 分钟；FAILED，或者公证卡在 In Progress 超过 30 分钟：停下来，把日志的最后几行报给维护者。
 - `mac-exec` 不在线（Mac 睡着了）：告诉维护者把 Mac 唤醒并解锁，等它在线再执行。
 - Release 里已经有 `myco.dmg` 时，Mac 的脚本不会覆盖它。
-- DMG 的窗口（背景图、箭头、图标位置）由 `scripts/mac-dmg.sh` 用 dmgbuild 生成，背景在 `cmd/myco-app/build/darwin/dmg/`（`background.html` 是它的源，改了以后重新截 1x、2x 两张 PNG，凹槽位置和 `scripts/mac-dmg-settings.py` 里的图标坐标保持一致）。装不上 dmgbuild 时退回朴素的 DMG，不影响发版。只想看看效果：在 Mac 上 `make app` 后运行 `scripts/mac-dmg.sh bin/myco.app ~/Desktop/myco-preview.dmg`。
+- DMG 的窗口（背景图、箭头、图标位置）由 `scripts/mac-dmg.sh` 用 dmgbuild 生成，背景在 `cmd/myco-app/build/darwin/dmg/`（`background.html` 是它的源，改了以后重新截 1x、2x 两张 PNG，凹槽位置和 `scripts/mac-dmg-settings.py` 里的图标坐标保持一致）。装不上 dmgbuild 时退回朴素的 DMG，不影响发版。只想在 Mac 上先看看还没发版的 App（预览版）：用 `myco-preview` 技能，它在维护者的 Mac 上把 main 编成 `~/Applications/myco-preview.app` 并打开，和正式版并排，不动 `/Applications/myco.app`（`scripts/mac-preview.sh`）。只想看看 DMG 的效果：在 Mac 上 `make app` 后运行 `scripts/mac-dmg.sh bin/myco.app ~/Desktop/myco-preview.dmg`。
 
 ## 6. 核对
 
