@@ -897,9 +897,9 @@ async function runMatrix(browser, size, scheme) {
         await clickVisible(page, page.locator(`[data-testid="template-${slug}"]`));
         await page.locator("[data-testid=template-name]").fill(name);
         await clickVisible(page, page.getByRole("button", { name: "新建", exact: true }));
-        const frame = page.locator(`.pg-frame[title="${name}"]`);
+        const frame = page.locator(`.pg-frame[aria-label="${name}"]`);
         await frame.waitFor({ timeout: 15_000 });
-        return page.frameLocator(`.pg-frame[title="${name}"]`);
+        return page.frameLocator(`.pg-frame[aria-label="${name}"]`);
       };
       // 表格: a grid (canvas) with the sample rows.
       const sheet = await make("myco/table", `本周（${mark}）`);
