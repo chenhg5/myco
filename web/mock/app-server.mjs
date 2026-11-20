@@ -8,6 +8,8 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { showcase } from "./showcase.mjs";
 
 const PORT = Number(process.env.APP_MOCK_PORT || 7781);
+// MOCK_OS_URL: a real App backend for myco.os (see /app/os below).
+const OS_URL = (process.env.MOCK_OS_URL || "").replace(/\/$/, "");
 // MOCK_SHELL=mac reserves room for the macOS traffic lights; browser does not.
 const SHELL = process.env.MOCK_SHELL === "browser" ? "browser" : "mac";
 // MOCK_EMPTY=1 starts with no hubs, to see the welcome page.
@@ -272,6 +274,8 @@ const mockTemplates = officialOrder.filter((name) => existsSync(new URL(`${name}
     created_at: iso(17500), updated_at: iso(17500) });
 }
 const madeFiles = new Map();
+// 这台电脑: a page trying myco.os (only with MOCK_OS_URL).
+if (OS_URL) madeFiles.set("pg_os", { "index.html": readFileSync(new URL("./os-page.html", import.meta.url), "utf8") });
 const pageFilesOf = (id, n) => madeFiles.has(id) ? madeFiles.get(id) : (id === "pg_live" ? { "index.html": livePage } : id === "pg_checklist" ? { "index.html": checklistPage, "style.css": checklistCss, "app.js": checklistJs } : id === "pg_table" ? tableFiles : pageFiles(n));
 const pageFiles = (n) => ({
   "index.html": `<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>v0.16.8 发布说明</title><link rel="stylesheet" href="style.css"></head>
@@ -293,6 +297,11 @@ pages.set("pg_checklist", {
   id: "pg_checklist", name: "上线清单", project: "website", publisher: "release-cloud", version: 1, entry: "index.html",
   url: "http://192.168.1.20:7780/pages/pg_checklist", created_at: iso(18500), updated_at: iso(18500), can_manage: true,
   versions: [{ n: 1, entry: "index.html", files: 3, size: 3100, sha256: "c1", by: "release-cloud", at: iso(18500) }],
+});
+if (OS_URL) pages.set("pg_os", {
+  id: "pg_os", name: "这台电脑", project: "website", publisher: "release-cloud", version: 1, entry: "index.html",
+  url: "http://192.168.1.20:7780/pages/pg_os", created_at: iso(100), updated_at: iso(100), can_manage: true,
+  versions: [{ n: 1, entry: "index.html", files: 1, size: 4000, sha256: "o1", by: "release-cloud", at: iso(100) }],
 });
 pages.set("pg_live", {
   id: "pg_live", name: "下载页（实时）", project: "website", publisher: "release-cloud", version: 0, entry: "",
@@ -1622,6 +1631,15 @@ function readBody(req) {
   });
 }
 
+// The body as it came (what is passed on to MOCK_OS_URL).
+function rawBody(req) {
+  return new Promise((resolve) => {
+    const chunks = [];
+    req.on("data", (c) => chunks.push(c));
+    req.on("end", () => resolve(Buffer.concat(chunks)));
+  });
+}
+
 const cacheStore = new Map(); // key -> {key, hub, data}, oldest first
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
@@ -1989,6 +2007,18 @@ const server = http.createServer(async (req, res) => {
       return send(res, 204);
     }
     if (method === "DELETE") { cacheStore.clear(); return send(res, 204); }
+  }
+  // /app/os: a page using this computer (myco.os). Nothing to use in the
+  // mock, unless MOCK_OS_URL names a real App backend to pass it to (go run
+  // ./internal/console/devos), with a page to try it (这台电脑).
+  if (parts[0] === "app" && parts[1] === "os") {
+    if (OS_URL) {
+      const up = await fetch(OS_URL + req.url, { method, headers: { "Content-Type": "application/json" }, body: method === "GET" || method === "DELETE" ? undefined : await rawBody(req) });
+      res.writeHead(up.status, { "Content-Type": up.headers.get("Content-Type") || "application/json" });
+      return res.end(Buffer.from(await up.arrayBuffer()));
+    }
+    if (parts.length === 2 && method === "GET") return send(res, 200, { os: "mock", arch: "", caps: [] });
+    return fail(res, 501, "unsupported", "the mock App does not use this computer");
   }
   // /app/info
   if (parts[0] === "app" && parts[1] === "info" && parts.length === 2) {

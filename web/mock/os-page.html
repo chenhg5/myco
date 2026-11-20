@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>这台电脑</title>
+<style>
+  body { font: 14px/1.6 -apple-system, system-ui, sans-serif; margin: 0; color: #1c1c21; background: #fff; }
+  main { max-width: 720px; margin: 0 auto; padding: 24px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: #85858d; margin: 0 0 18px; }
+  section { border: 1px solid #e6e6ea; border-radius: 10px; padding: 12px 14px; margin: 10px 0; }
+  h2 { font-size: 14px; margin: 0 0 8px; }
+  button { font: inherit; padding: 4px 10px; border: 1px solid #d0d0d6; border-radius: 6px; background: #f6f6f8; margin-right: 6px; }
+  pre { margin: 6px 0 0; padding: 8px; background: #f6f6f8; border-radius: 6px; white-space: pre-wrap; word-break: break-all; max-height: 180px; overflow: auto; font-size: 12px; }
+  .bar { height: 8px; border-radius: 4px; background: #e6e6ea; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: #3a9a78; }
+  img { max-width: 100%; border: 1px solid #e6e6ea; border-radius: 6px; margin-top: 6px; }
+  @media (prefers-color-scheme: dark) { body { background: #17171a; color: #e8e8ec; } section { border-color: #2c2c31; } pre, button { background: #222226; color: inherit; border-color: #34343a; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>这台电脑</h1>
+  <p class="sub" id="who">在 myco App 里打开，看这个网页能用这台电脑的什么。</p>
+    <section><h2>磁盘</h2><div id="disks">…</div></section>
+  <section><h2>扫描个人文件夹（前三层、最大的 10 个文件）</h2>
+    <button id="scan">扫描</button><button id="stop">停</button>
+    <pre id="scanout"></pre></section>
+  <section><h2>命令</h2>
+    <button id="run">uname -a / ver</button><button id="spawn">数到 5（实时输出）</button>
+    <pre id="cmdout"></pre></section>
+  <section><h2>剪贴板、通知、截图、联网</h2>
+    <button id="clip">复制一句话再读回来</button><button id="notify">发个通知</button><button id="shot">截屏</button><button id="fetch">联网</button>
+    <pre id="miscout"></pre><img id="img" hidden alt="截屏"></section>
+  <section><h2>能力清单</h2><pre id="caps"></pre></section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const gb = (n) => (n / 1e9).toFixed(1) + " GB";
+const show = (id, v) => { $(id).textContent = typeof v === "string" ? v : JSON.stringify(v, null, 2); };
+const fail = (id) => (e) => show(id, "出错了：" + (e.code ? "[" + e.code + "] " : "") + e.message);
+const os = window.myco && window.myco.os;
+if (!os) {
+  $("who").textContent = "这个 App 还没有 myco.os";
+} else {
+  os.system.info().then((i) => { $("who").textContent = `${i.name} ${i.version} · ${i.cpu_model || i.arch} · 内存 ${gb(i.memory)} · ${i.user}@${i.hostname}`; }, (e) => { $("who").textContent = e.message; });
+  os.system.disks().then((ds) => {
+    $("disks").innerHTML = ds.map((d) => `<div>${d.label || d.mount}（${d.fs}）：剩 ${gb(d.available)} / 共 ${gb(d.total)}<div class="bar"><i style="width:${(100 * (d.total - d.available) / d.total).toFixed(1)}%"></i></div></div>`).join("") || "没有找到磁盘";
+  }, (e) => { $("disks").textContent = e.message; });
+  os.list().then((l) => show("caps", l.caps.map((c) => `${c.available ? "✓" : "✗"} ${c.name}${c.job ? "（任务）" : ""}  ${c.about}${c.missing ? "  — " + c.missing : ""}`).join("\n")), fail("caps"));
+  let job = null;
+  $("scan").onclick = () => {
+    job = os.fs.scan({ path: "~", depth: 3, top: 10 });
+    job.on("progress", (p) => show("scanout", `已扫 ${p.files} 个文件，${gb(p.bytes)}…\n${p.current}`));
+    job.done.then((r) => show("scanout", `共 ${r.files} 个文件、${gb(r.bytes)}，${r.ms} ms，${r.skipped} 处没权限\n\n最大的：\n` +
+      r.largest.map((f) => `${gb(f.size)}  ${f.path}`).join("\n") + "\n\n第一层：\n" + (r.roots[0].children || []).slice(0, 8).map((c) => `${gb(c.disk)}  ${c.name}`).join("\n")), fail("scanout"));
+  };
+  $("stop").onclick = () => job && job.cancel();
+  $("run").onclick = () => os.system.info().then((i) => os.exec.run(i.os === "windows" ? { shell: "$PSVersionTable.OS; ver" } : { argv: ["uname", "-a"] }))
+    .then((r) => show("cmdout", `退出码 ${r.code}，${r.ms} ms\n${r.stdout}${r.stderr}`), fail("cmdout"));
+  $("spawn").onclick = () => {
+    let out = "";
+    const j = os.exec.spawn({ shell: "for i in 1 2 3 4 5; do echo 第 $i 行; sleep 0.3; done" });
+    j.on("stdout", (t) => { out += t; show("cmdout", out); });
+    j.done.then((r) => show("cmdout", out + `（退出码 ${r.code}）`), fail("cmdout"));
+  };
+  $("clip").onclick = () => os.clipboard.write({ text: "myco 你好 " + new Date().toLocaleTimeString() })
+    .then(() => os.clipboard.read()).then((r) => show("miscout", "剪贴板里：" + r.text), fail("miscout"));
+  $("notify").onclick = () => os.notify({ title: "这台电脑", body: "来自 myco 网页的通知", sound: true }).then(() => show("miscout", "发了"), fail("miscout"));
+  $("shot").onclick = () => os.screen.capture({ format: "jpeg", quality: 70 }).then((s) => { show("miscout", `${s.width}×${s.height}，${(s.bytes / 1024).toFixed(0)} KB`); $("img").src = `data:${s.type};base64,${s.base64}`; $("img").hidden = false; }, fail("miscout"));
+  $("fetch").onclick = () => os.net.fetch({ url: "https://api.github.com/repos/chenhg5/myco" })
+    .then((r) => { const j = JSON.parse(r.body); show("miscout", `HTTP ${r.status}：${j.full_name} ★ ${j.stargazers_count}`); }, fail("miscout"));
+}
+</script>
+</body>
+</html>

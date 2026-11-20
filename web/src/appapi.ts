@@ -397,6 +397,24 @@ export interface StartLocalHubResult {
   warnings: string[];
 }
 
+/** myco.os: the capabilities there are, and which work on this computer. */
+export interface OsList {
+  os: string;
+  arch: string;
+  caps: { name: string; job?: boolean; about: string; available: boolean; missing?: string }[];
+}
+/** The page that uses them (for the App's log). */
+export interface OsPage { hub: string; id: string; name: string }
+/** What a job (fs.scan, exec.spawn) sent since the last read, and its end. */
+export interface OsBatch {
+  events: { n: number; type: string; data?: unknown }[] | null;
+  next: number;
+  dropped?: boolean;
+  done: boolean;
+  value?: unknown;
+  error?: { code: string; message: string };
+}
+
 /** An error returned by the App backend or a hub (same shape as the hub API). */
 export class ApiError extends Error {
   status: number;
@@ -916,6 +934,16 @@ export const appApi = {
   pageDownload: (name: string, bytes: Uint8Array | Blob, type: string) =>
     request<{ path: string }>("POST", `app/page-download?name=${encodeURIComponent(name)}`,
       bytes instanceof Blob ? bytes : new Blob([bytes as BlobPart], { type: type || "application/octet-stream" })),
+  // What a page (an app) uses of this computer: myco.os.* (App backend
+  // oscalls.go; only an App with a local install answers).
+  osList: () => request<OsList>("GET", "app/os"),
+  osCall: (name: string, args: unknown, page: OsPage) =>
+    request<{ value: unknown }>("POST", "app/os/call", { name, args, page }).then((r) => r.value),
+  osStart: (name: string, args: unknown, page: OsPage) => request<{ id: string }>("POST", "app/os/jobs", { name, args, page }).then((r) => r.id),
+  osJob: (id: string, after: number, waitMs: number) =>
+    request<OsBatch>("GET", `app/os/jobs/${enc(id)}?after=${after}&wait=${waitMs}`, undefined, undefined, waitMs + 15_000),
+  osInput: (id: string, data: string, close: boolean) => request<{ ok: boolean }>("POST", `app/os/jobs/${enc(id)}/input`, { data, close }),
+  osCancel: (id: string) => request<{ ok: boolean }>("DELETE", `app/os/jobs/${enc(id)}`),
   // Pins (hubs from v0.20.3; older ones answer 404): what a conversation
   // keeps at hand, for both its parties. a: the first party (default you).
   pins: (hubId: string, withWhom: string, a?: string) =>
