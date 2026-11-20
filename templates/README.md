@@ -7,7 +7,9 @@ it) and `sample.json`. `npm run build` (or `make templates`) writes them to
 workspace's library. Commit the built output; Go builds never run Node.
 
 The pages read and write their data with the myco bridge (`myco.data.*`, see
-docs/design/templates.md). They load nothing from the internet.
+docs/design/templates.md). They load nothing from the internet. An app that
+needs the computer it runs on (files, commands, the screen) uses `myco.os`
+(docs/app-os.md; types in `_lib/myco.ts`).
 
 Each app shows what it looks like in the App's new-page dialog: pictures in
 its `public/shots/` (`1.webp` and its dark `1.dark.webp`, …). `shots.mjs`

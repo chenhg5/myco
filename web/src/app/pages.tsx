@@ -496,10 +496,69 @@ function PageView({ target, open, active, reload, onMeta }: {
         }
       }
       if (method.startsWith("data.") || method === "download") return answerData(t, method, args);
+      if (method.startsWith("os.")) return answerOS(t, method, args);
+      throw new Error(`myco: no such call: ${method}`);
+    };
+    // What the page uses of this computer (myco.os): calls go to the App
+    // backend as they are; a job's events are read there and sent on to
+    // the page until it ends. Closing the page stops its jobs.
+    const jobs = new Set<string>();
+    let closed = false;
+    const toPage = (msg: Record<string, unknown>) => {
+      const win = frame.current?.contentWindow;
+      const origin = (() => { try { return new URL(frame.current?.src || "").origin; } catch { return ""; } })();
+      if (win && origin) win.postMessage(msg, origin);
+    };
+    const pump = async (id: string) => {
+      let after = 0, fails = 0;
+      while (!closed) {
+        try {
+          const b = await appApi.osJob(id, after, 15_000);
+          fails = 0;
+          after = b.next;
+          if ((b.events && b.events.length) || b.done) {
+            toPage({ myco: "os.event", job: id, events: b.events || [], dropped: !!b.dropped, done: b.done, value: b.value, error: b.error?.message, code: b.error?.code });
+          }
+          if (b.done) break;
+        } catch (e) {
+          const code = (e as ApiError).code;
+          if (code === "not_found" || ++fails > 5) {
+            toPage({ myco: "os.event", job: id, events: [], done: true, error: (e as Error).message || "the job is gone", code: code || "failed" });
+            break;
+          }
+          await new Promise((r) => window.setTimeout(r, 1000 * fails));
+        }
+      }
+      jobs.delete(id);
+    };
+    const answerOS = async (t: { hubId: string; id: string }, method: string, args: Record<string, unknown>): Promise<unknown> => {
+      const { page: p, opened: o } = live.current;
+      const who = { hub: t.hubId, id: t.id, name: o?.name || p?.name || "" };
+      switch (method) {
+        case "os.list":
+          return appApi.osList();
+        case "os.call":
+          return appApi.osCall(String(args.name || ""), args.args ?? {}, who);
+        case "os.start": {
+          const id = await appApi.osStart(String(args.name || ""), args.args ?? {}, who);
+          jobs.add(id);
+          // (after the page has the id: its job is waiting for these)
+          window.setTimeout(() => void pump(id), 0);
+          return { id };
+        }
+        case "os.input":
+          return appApi.osInput(String(args.job || ""), String(args.data ?? ""), !!args.close);
+        case "os.cancel":
+          return appApi.osCancel(String(args.job || ""));
+      }
       throw new Error(`myco: no such call: ${method}`);
     };
     window.addEventListener("message", on);
-    return () => window.removeEventListener("message", on);
+    return () => {
+      window.removeEventListener("message", on);
+      closed = true;
+      for (const id of jobs) void appApi.osCancel(id).catch(() => undefined);
+    };
   }, [open, target]);
 
   // While it is shown: what others (an agent, another person) change comes
