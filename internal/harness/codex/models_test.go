@@ -28,3 +28,16 @@ func TestCachedModelsKeepCodexOrderAndDropHidden(t *testing.T) {
 		t.Fatal("no cache, or a broken one, gives no list")
 	}
 }
+
+func TestStderrProblemsAreShown(t *testing.T) {
+	for _, l := range []string{"stream error: stream disconnected before completion; retrying 2/5 in 1.6s", "ERROR: unexpected status 401 Unauthorized"} {
+		if _, ok := stderrProblem(l); !ok {
+			t.Fatalf("%q should show", l)
+		}
+	}
+	for _, l := range []string{"Reading prompt from stdin...", "", "   "} {
+		if _, ok := stderrProblem(l); ok {
+			t.Fatalf("%q should not show", l)
+		}
+	}
+}

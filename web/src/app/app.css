@@ -9075,3 +9075,4 @@ body.is-resizing {
 .mdirs-note { margin: 0; text-align: right; max-width: 460px; }
 .mdirs-allow { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-top: 6px; }
 .app-field-hint .mdirs-far { justify-content: flex-start; margin-top: 6px; }
+.handoff-state.is-stale { color: var(--amber); background: var(--amber-soft); }

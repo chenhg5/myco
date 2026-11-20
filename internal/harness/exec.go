@@ -3,11 +3,13 @@ package harness
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -29,7 +31,15 @@ type Process struct {
 	OnStdoutLine func(line []byte)
 	// OnStderrLine is the same for stderr; the two may be called concurrently.
 	OnStderrLine func(line []byte)
+	// SilentStart, when set, stops a process that has written nothing to
+	// stdout this long after it started (an agent CLI stuck before its
+	// first event: no network to its model, a login prompt, a hung tool
+	// server). The error is ErrSilentStart with the end of its stderr.
+	SilentStart time.Duration
 }
+
+// ErrSilentStart: the process wrote nothing to stdout in Process.SilentStart.
+var ErrSilentStart = errors.New("it started but printed nothing")
 
 // ProcessResult holds captured output.
 type ProcessResult struct {
@@ -62,7 +72,9 @@ func Command(ctx context.Context, p Process) *exec.Cmd {
 }
 
 // Exec runs p, killing its whole process group when ctx is done.
-func Exec(ctx context.Context, p Process) (ProcessResult, error) {
+func Exec(parent context.Context, p Process) (ProcessResult, error) {
+	ctx, cancel := context.WithCancelCause(parent)
+	defer cancel(nil)
 	cmd := Command(ctx, p)
 	cmd.Stdin = strings.NewReader(p.Stdin)
 	var stdout, stderr limitedBuffer
@@ -80,6 +92,20 @@ func Exec(ctx context.Context, p Process) (ProcessResult, error) {
 		errLines = &lineTee{next: &stderr, fn: p.OnStderrLine}
 		cmd.Stderr = errLines
 	}
+	if p.SilentStart > 0 {
+		heard := make(chan struct{})
+		cmd.Stdout = &firstWrite{next: cmd.Stdout, heard: heard}
+		go func() {
+			t := time.NewTimer(p.SilentStart)
+			defer t.Stop()
+			select {
+			case <-heard:
+			case <-ctx.Done():
+			case <-t.C:
+				cancel(ErrSilentStart)
+			}
+		}()
+	}
 	err := cmd.Run()
 	if lines != nil {
 		lines.flush()
@@ -91,6 +117,13 @@ func Exec(ctx context.Context, p Process) (ProcessResult, error) {
 	if cmd.ProcessState != nil {
 		res.ExitCode, res.Started = cmd.ProcessState.ExitCode(), true
 	}
+	if errors.Is(context.Cause(ctx), ErrSilentStart) && parent.Err() == nil {
+		why := strings.TrimSpace(tail(errorLines(res.Stderr), 1500))
+		if why == "" {
+			why = "(nothing on stderr either)"
+		}
+		return res, fmt.Errorf("%s: %w in %s; stopped. Its stderr: %s", p.Binary, ErrSilentStart, p.SilentStart, why)
+	}
 	if ctx.Err() != nil {
 		return res, fmt.Errorf("%s: %w", p.Binary, ctx.Err())
 	}
@@ -98,6 +131,20 @@ func Exec(ctx context.Context, p Process) (ProcessResult, error) {
 		return res, fmt.Errorf("%s exited: %v: %s", p.Binary, err, tail(errorLines(res.Stderr), 2000))
 	}
 	return res, nil
+}
+
+// firstWrite closes heard on the first write, then passes writes on.
+type firstWrite struct {
+	next  io.Writer
+	heard chan struct{}
+	once  sync.Once
+}
+
+func (w *firstWrite) Write(p []byte) (int, error) {
+	if len(p) > 0 {
+		w.once.Do(func() { close(w.heard) })
+	}
+	return w.next.Write(p)
 }
 
 // lineTee passes writes on and calls fn for every complete line.

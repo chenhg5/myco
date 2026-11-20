@@ -11,7 +11,7 @@ import { TraceView } from "@/app/TraceView";
 import { WorkingLine } from "@/app/Working";
 import { AccessPill, RunPill } from "@/app/RunSettings";
 import { forkAgent } from "@/app/Fork";
-import { HandoffCard, handoffsFrom } from "@/app/Handoff";
+import { HandoffCard, handoffsFrom, withStale } from "@/app/Handoff";
 import { TurnRail, type Turn } from "@/app/TurnRail";
 import { summarize } from "@/app/summary";
 import { ErrorText } from "@/app/dialogs";
@@ -803,7 +803,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     ? [...older.filter((o) => !messages.some((m) => m.id === o.id)), ...messages]
     : messages).filter((m) => !hiddenMessage(m));
   const shown: Message[] | null = loaded && (alsoSet.size ? loaded.filter((m) => !sideOf(m)) : loaded);
-  const handoffs = alsoSet.size && loaded ? handoffsFrom(loaded.filter(sideOf), target.agent) : [];
+  const handoffs = alsoSet.size && loaded
+    ? withStale(handoffsFrom(loaded.filter(sideOf), target.agent), (id) => rows.some((x) => x.hub.id === target.hubId && (x.st.stale_tasks || []).includes(id)))
+    : [];
 
   const consoleTasks = (messages || []).filter((m) => m.type === "task" && isMe(m.from, row?.hub) && !hiddenMessage(m));
   const lastTask = consoleTasks[consoleTasks.length - 1];
@@ -1564,8 +1566,14 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // Its open tasks that are not in this conversation (other agents gave
   // them, or other chats): said above the box, with a way to them, since
   // nothing here would show them (a question it asked their sender, say).
+  // Not: one shown here as a handoff card (a member's task to it, which
+  // says how it goes), unless it shows no life; nor one that just came (its
+  // card follows with the conversation's next read).
+  const staleTasks = new Set(row?.st.stale_tasks || []);
   const elsewhere = (row?.st.current || []).filter((m) => m.to === target.agent && m.type === "task"
-    && (m.status === "acked" || m.status === "held") && !(messages || []).some((x) => x.id === m.id));
+    && (m.status === "acked" || m.status === "held") && !(messages || []).some((x) => x.id === m.id)
+    && !((alsoSet.has(m.from) && !staleTasks.has(m.id)) || (now - new Date(m.created_at).getTime() < 90_000 && !staleTasks.has(m.id))));
+  const elsewhereStale = elsewhere.filter((m) => staleTasks.has(m.id)).length;
   const askingOthers = elsewhere.filter((m) => m.status === "held" && !!m.asking && !isMe(m.from, row?.hub));
   const whoIs = (n: string) => {
     const x = (row?.hub.overview?.agents || []).find((y) => y.agent.name === n);
@@ -2402,7 +2410,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           <div className="conv-busy" data-testid="open-elsewhere">
             <span className="dot idle" />
             <span className="conv-busy-text">
-              {L(`它还有 ${elsewhere.length} 条别处来的任务没做完`, `It has ${elsewhere.length} more open task${elsewhere.length > 1 ? "s" : ""} from elsewhere`)}
+              {elsewhereStale > 0
+                ? elsewhereStale === elsewhere.length
+                  ? L(`它有 ${elsewhere.length} 条别处来的任务好一阵没有动静`, `It has ${elsewhere.length} open task${elsewhere.length > 1 ? "s" : ""} from elsewhere with no activity for a while`)
+                  : L(`它还有 ${elsewhere.length} 条别处来的任务没做完，其中 ${elsewhereStale} 条好一阵没有动静`, `It has ${elsewhere.length} more open tasks from elsewhere, ${elsewhereStale} with no activity for a while`)
+                : L(`它还有 ${elsewhere.length} 条别处来的任务没做完`, `It has ${elsewhere.length} more open task${elsewhere.length > 1 ? "s" : ""} from elsewhere`)}
               {askingOthers.length > 0 && L(`，其中 ${askingOthers.length} 条在等 ${[...new Set(askingOthers.map((m) => whoIs(m.from)))].join("、")} 回答它的问题`,
                 `; ${askingOthers.length} wait${askingOthers.length > 1 ? "" : "s"} on ${[...new Set(askingOthers.map((m) => whoIs(m.from)))].join(", ")} to answer its question`)}
               {L("。", ".")}
