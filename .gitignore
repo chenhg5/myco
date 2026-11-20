@@ -8,3 +8,5 @@
 runner.log
 /templates/node_modules/
 /dist/
+
+/templates/design-studio-shots/
