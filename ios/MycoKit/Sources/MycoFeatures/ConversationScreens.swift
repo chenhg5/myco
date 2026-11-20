@@ -1133,6 +1133,17 @@ struct ConversationBody: View {
         }
     }
 
+    /// Beside the send button: what it may touch, and its model and effort.
+    private var runAside: AnyView? {
+        let access = session.accessChoice(of: model.agent)
+        let run = session.runChoice(of: model.agent)
+        guard access != nil || run != nil else { return nil }
+        return AnyView(HStack(spacing: 0) {
+            if let access { AccessButton(agent: model.agent, choice: access) }
+            if let run { RunChoiceButton(agent: model.agent, choice: run) }
+        })
+    }
+
     /// What can be done about a task that may be stuck, as on the desktop:
     /// it was done (close it), ask where it stands, or stop it.
     private func stuckActions(_ taskID: String) -> [NoticeLine.Action] {
@@ -1273,7 +1284,7 @@ struct ConversationBody: View {
                 openLabel: L("看一下", "Look at"),
                 // The model and effort it runs with, switched here by
                 // whoever may. Out of the way while a call is on.
-                aside: call == nil ? session.runChoice(of: model.agent).map { AnyView(RunChoiceButton(agent: model.agent, choice: $0)) } : nil,
+                aside: call == nil ? runAside : nil,
                 onSubmit: {
                     commits += 1
                     if canCall {

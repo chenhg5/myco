@@ -588,14 +588,16 @@ public actor FakeHub: HubAPI {
         tooOldForRunSettings = value
     }
 
-    public func setRunSettings(of agent: String, model: String, effort: String) async throws -> Agent {
+    public func setRunSettings(of agent: String, model: String, effort: String, access: String?) async throws -> Agent {
         try await check()
         if tooOldForRunSettings { throw HubError(error: "not_found", message: "not found") }
         guard let index = agents.firstIndex(where: { $0.agent.name == agent }) else {
             throw HubError(error: "not_found", message: "agent \(agent) not found")
         }
         // Kept as chosen; what it runs with changes at its next run.
-        agents[index].agent.runSettings = model.isEmpty && effort.isEmpty ? nil : RunSettings(model: model, effort: effort)
+        let keep = access ?? agents[index].agent.runSettings?.access ?? ""
+        agents[index].agent.runSettings = model.isEmpty && effort.isEmpty && keep.isEmpty
+            ? nil : RunSettings(model: model, effort: effort, access: keep.isEmpty ? nil : keep)
         return agents[index].agent
     }
 

@@ -171,3 +171,60 @@ public struct RunChoice: Sendable, Hashable {
         }
     }
 }
+
+/// What an agent may touch when it runs (the desktop app's access pill):
+/// read-only, the workspace, or everything, from its next run, for its
+/// owner, up to what its computer allows.
+public struct AccessChoice: Sendable, Hashable {
+    public static let levels = ["readonly", "workspace", "full"]
+
+    /// In use now.
+    public var inUse: String
+    /// Chosen in the app ("": its computer's).
+    public var chosen: String
+    /// The most its computer allows.
+    public var cap: String
+    /// Its owner may switch it here.
+    public var editable: Bool
+    /// Why not, when not.
+    public var why: String?
+
+    /// What it shows: the chosen one when there is one.
+    public var shown: String { chosen.isEmpty ? inUse : chosen }
+    /// A switch not yet taken up (at its next run).
+    public var pending: Bool { !chosen.isEmpty && chosen != inUse }
+    /// The levels it may be switched to.
+    public var allowed: [String] { Array(Self.levels.prefix((Self.levels.firstIndex(of: cap) ?? 1) + 1)) }
+
+    public static func label(_ level: String) -> String {
+        switch level {
+        case "full": return L("完全权限", "Full access")
+        case "readonly": return L("只读", "Read-only")
+        default: return L("工作区权限", "Workspace access")
+        }
+    }
+
+    public static func says(_ level: String) -> String {
+        switch level {
+        case "full": return L("没有沙箱，能读写这台电脑上的任何文件", "No sandbox: any file on the computer")
+        case "readonly": return L("只能看，不能改文件、不能联网", "Looks only: no changes, no network")
+        default: return L("能改它的文件夹，别处只能看", "Changes its folder; reads elsewhere")
+        }
+    }
+
+    /// Shown for an agent a runner wakes that says what it runs with.
+    public static func of(_ agent: Agent, owns: Bool, tooOld: Bool) -> AccessChoice? {
+        guard Naming.kind(of: agent) == .agent, let runtime = agent.runtime, let inUse = runtime.access, !inUse.isEmpty else { return nil }
+        var cli = runtime.cli ?? ""
+        if cli.isEmpty { cli = agent.binding.harness ?? "" }
+        guard (cli == "claude" || cli == "codex"), !(agent.machineId ?? "").isEmpty else { return nil }
+        let max = runtime.maxAccess ?? ""
+        let capIndex = Swift.max(levels.firstIndex(of: max) ?? -1, levels.firstIndex(of: inUse) ?? -1, 0)
+        let editable = owns && !max.isEmpty && !tooOld
+        let why: String? = editable ? nil
+            : !owns ? L("只有它的主人能改。", "Only its owner can change it.")
+            : max.isEmpty ? L("升级那台电脑上的 myco 后才能在这里改。", "Upgrade myco on that computer to change it here.")
+            : L("这个工作区的版本太旧，改不了。", "This workspace is too old to change it.")
+        return AccessChoice(inUse: inUse, chosen: agent.runSettings?.access ?? "", cap: levels[capIndex], editable: editable, why: why)
+    }
+}

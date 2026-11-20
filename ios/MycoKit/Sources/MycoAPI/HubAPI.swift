@@ -201,7 +201,8 @@ public protocol HubAPI: Sendable {
     /// runner starts it with from its next run ("" follows its computer's
     /// setting). For whoever owns the agent or manages the workspace. A
     /// workspace from before v0.19.5 answers `not_found`.
-    func setRunSettings(of agent: String, model: String, effort: String) async throws -> Agent
+    /// `access` nil: left as it is.
+    func setRunSettings(of agent: String, model: String, effort: String, access: String?) async throws -> Agent
     /// `GET /v1/agents/{name}/handovers`: the times another session took
     /// this agent over, newest first. For whoever owns it or manages the
     /// workspace. A workspace from before v0.19.23 answers `not_found`.

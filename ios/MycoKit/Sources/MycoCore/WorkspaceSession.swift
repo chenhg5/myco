@@ -303,6 +303,13 @@ public final class WorkspaceSession {
         return agent.ownerId == mine
     }
 
+    /// What an agent may touch when it runs, as its message box shows it.
+    public func accessChoice(of name: String) -> AccessChoice? {
+        guard let agent = agent(name) else { return nil }
+        let owns = whoami?.member?.id.map { !$0.isEmpty && agent.ownerId == $0 } ?? false
+        return AccessChoice.of(agent, owns: owns, tooOld: runSettingsTooOld)
+    }
+
     /// The model and effort an agent runs with, as its message box shows them.
     public func runChoice(of name: String) -> RunChoice? {
         guard let agent = agent(name) else { return nil }
@@ -311,9 +318,9 @@ public final class WorkspaceSession {
 
     /// Switches an agent's model and effort, from its next run ("" follows
     /// its computer's setting). Answers why it could not, if it could not.
-    public func setRun(of name: String, model: String, effort: String) async -> String? {
+    public func setRun(of name: String, model: String, effort: String, access: String? = nil) async -> String? {
         do {
-            let agent = try await hub.setRunSettings(of: name, model: model, effort: effort)
+            let agent = try await hub.setRunSettings(of: name, model: model, effort: effort, access: access)
             if let index = statuses.firstIndex(where: { $0.agent.name == name }) { statuses[index].agent = agent }
             return nil
         } catch let error as HubError where error.error == "not_found" || error.error == "http_404" || error.error == "http_405" {
