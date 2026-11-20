@@ -1,0 +1,24 @@
+{
+  "id": "myco/disk",
+  "name": "空间清理",
+  "version": "1.0.0",
+  "kind": "custom",
+  "category": "tools",
+  "icon": "icon.svg",
+  "description": "看清这台电脑的磁盘被谁占了：一圈一圈的占用图，旁边是按大小排的清单，点进文件夹一层层往下看；把不要的拖进「待清理」，看一眼再移进废纸篓，放错了还能放回去。要在 myco App 里打开。",
+  "data": {
+    "cleanups": {
+      "fields": {
+        "at": "datetime",
+        "computer": "text",
+        "disk": "text",
+        "freed": "number",
+        "count": "number",
+        "by": "person"
+      }
+    }
+  },
+  "requires": {
+    "hub": "0.20.7"
+  }
+}

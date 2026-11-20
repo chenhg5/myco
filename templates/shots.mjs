@@ -42,8 +42,10 @@ const bridge = `(() => {
   const recs = {}; let seq = 0; const subs = [];
   const rid = () => "r" + Math.random().toString(36).slice(2, 9);
   for (const [c, list] of Object.entries(window.__SAMPLE__ || {})) for (const r of list) { const { id, ...data } = r; const k = id || rid(); recs[c + "/" + k] = { collection: c, id: k, data, version: 1 }; }
+  const fakeOS = window.__FAKE_OS__;
   window.myco = {
-    features: ["download-media"],
+    features: fakeOS ? ["download-media", "os"] : ["download-media"],
+    os: fakeOS,
     ready: Promise.resolve({ page: { id: "pg_shots", name: "shots" }, me: { name: "glenn" } }),
     data: {
       list: async (c) => ({ records: Object.values(recs).filter((r) => !c || r.collection === c).map((r) => ({ ...r })), seq }),
@@ -61,10 +63,15 @@ function serve() {
     let p = decodeURIComponent(new URL(req.url, "http://x").pathname);
     if (p.endsWith("/")) p += "index.html";
     if (p === "/__bridge.js") { res.writeHead(200, { "Content-Type": "text/javascript" }); res.end(bridge); return; }
+    if (p === "/__os.js") { res.writeHead(200, { "Content-Type": "text/javascript" }); res.end(readFileSync(path.join(here, "shots-os.js"))); return; }
     const f = path.join(official, p);
     if (!f.startsWith(official) || !existsSync(f)) { res.writeHead(404); res.end(); return; }
     let body = readFileSync(f);
-    if (f.endsWith(".html")) body = Buffer.from(String(body).replace("<head>", '<head><script src="/__bridge.js"></script>'));
+    if (f.endsWith(".html")) {
+      // (a made-up computer first, for the apps that use one)
+      const os = new URL(req.url, "http://x").searchParams.get("os") ? '<script src="/__os.js"></script>' : "";
+      body = Buffer.from(String(body).replace("<head>", `<head>${os}<script src="/__bridge.js"></script>`));
+    }
     res.writeHead(200, { "Content-Type": types[path.extname(f)] || "application/octet-stream" });
     res.end(body);
   });
@@ -88,6 +95,24 @@ const plans = {
   base: [null, async (p) => { await p.locator("text=看板").first().click(); await wait(p, 600); }],
   issues: [async (p) => { await p.locator(".is-row").nth(5).click(); await wait(p, 500); }, async (p) => { await p.keyboard.press("Escape"); await p.click('button[title="看板"]'); await wait(p, 500); }],
   notes: [null, async (p) => { await p.locator('.nt-kid:has-text("发版流程")').click(); await wait(p, 700); }],
+  // 空间清理: a made-up Mac (shots-os.js): the disks, then the map with two things to clean
+  disk: { os: true, steps: [null, async (p) => {
+    await p.locator(".dk-disk .btn-primary").first().click();
+    await p.waitForSelector(".sb-seg", { timeout: 10000 });
+    await p.locator(".dk-row", { hasText: "Applications" }).hover();
+    await p.locator(".dk-row", { hasText: "Applications" }).locator('button[title="加到待清理"]').click();
+    await p.locator(".dk-tabs button", { hasText: "最大的文件" }).click();
+    await p.locator(".dk-row", { hasText: "Xcode_16.1.xip" }).hover();
+    await p.locator(".dk-row", { hasText: "Xcode_16.1.xip" }).locator('button[title="加到待清理"]').click();
+    await p.locator(".dk-tabs button", { hasText: "这里有什么" }).click();
+    await p.locator(".dk-row", { hasText: "Users" }).hover();
+    await wait(p, 400);
+  }, async (p) => {
+    await p.locator(".dk-row", { hasText: "Users" }).click();
+    await p.locator(".dk-row", { hasText: "glenn" }).click();
+    await p.locator(".dk-row", { hasText: "Library" }).hover();
+    await wait(p, 400);
+  }] },
   video: { sample: false, steps: [async (p) => {
     await p.setInputFiles("input[type=file]", clip());
     await p.waitForSelector(".tl-clip", { timeout: 30000 });
@@ -107,7 +132,7 @@ const only = process.argv.slice(2);
 const apps = readdirSync(official).filter((a) => existsSync(path.join(official, a, "myco.json")) && (!only.length || only.includes(a)));
 for (const app of apps) {
   const plan = plans[app] || [null];
-  const { sample = true, steps = plan } = Array.isArray(plan) ? {} : plan;
+  const { sample = true, steps = plan, os: fakeOS = false } = Array.isArray(plan) ? {} : plan;
   const dir = path.join(here, "src", app, "public", "shots");
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
@@ -116,7 +141,7 @@ for (const app of apps) {
     const page = await ctx.newPage();
     const data = sample ? JSON.parse(readFileSync(path.join(official, app, "sample.json"), "utf8")) : {};
     await page.addInitScript((s) => { window.__SAMPLE__ = s; try { localStorage.clear(); } catch { /* (none) */ } }, data);
-    await page.goto(`${base}/${app}/`);
+    await page.goto(`${base}/${app}/${fakeOS ? "?os=1" : ""}`);
     await page.waitForTimeout(2500);
     for (let n = 0; n < steps.length; n++) {
       if (steps[n]) await steps[n](page);
