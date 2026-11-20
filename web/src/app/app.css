@@ -9129,3 +9129,34 @@ body.is-resizing {
 .asw-hint { margin-top: 2px; text-align: center; font-size: 11px; color: var(--muted); }
 @media (prefers-reduced-motion: reduce) { .asw { animation: none; } }
 
+/* A page on its way (pages.tsx PageLoading): a hopping mushroom over the
+   frame until it has loaded, not a black or blank screen. */
+.pg-stage { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.pg-stage .pg-frame { flex: 1; height: auto; min-height: 0; transition: opacity 0.2s ease-out; }
+.pg-stage .pg-frame.is-loading { opacity: 0; }
+.pg-loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  background: var(--bg); color: var(--fg); animation: pg-in 0.2s ease-out; overflow: hidden; }
+@keyframes pg-in { from { opacity: 0; } to { opacity: 1; } }
+.pg-loading-hop { position: relative; width: 64px; height: 84px; margin-bottom: 6px; }
+.pg-loading-mush { --av-stem: #efe3cc; --av-eye: #2f2a22; position: absolute; left: 4px; bottom: 14px; width: 56px; height: 56px; transform-origin: 50% 100%;
+  animation: pg-hop 1.1s cubic-bezier(0.3, 0, 0.3, 1) infinite; }
+.pg-loading-mush .pa-sprite { width: 100%; height: 100%; display: block; }
+.pg-loading-shadow { position: absolute; left: 14px; right: 14px; bottom: 6px; height: 6px; border-radius: 50%;
+  background: color-mix(in srgb, var(--fg) 16%, transparent); animation: pg-shadow 1.1s cubic-bezier(0.3, 0, 0.3, 1) infinite; }
+@keyframes pg-hop {
+  0%, 100% { transform: translateY(0) scale(1.06, 0.92); }
+  12% { transform: translateY(0) scale(0.96, 1.05); }
+  50% { transform: translateY(-22px) scale(1, 1); }
+  88% { transform: translateY(0) scale(0.98, 1.02); }
+}
+@keyframes pg-shadow { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(0.55); opacity: 0.45; } }
+.pg-loading-name { max-width: 80%; font-size: 14px; font-weight: 600; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pg-loading-tip { font-size: 12.5px; color: var(--muted); animation: pg-in 0.35s ease-out; }
+.pg-loading-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; overflow: hidden; }
+.pg-loading-bar i { position: absolute; top: 0; bottom: 0; width: 30%; border-radius: 2px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--fg) 45%, transparent), transparent); animation: pg-bar 1.4s ease-in-out infinite; }
+@keyframes pg-bar { from { left: -30%; } to { left: 100%; } }
+@media (prefers-reduced-motion: reduce) {
+  .pg-loading-mush, .pg-loading-shadow, .pg-loading-bar i { animation: none; }
+}
+

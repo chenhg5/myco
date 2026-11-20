@@ -5,6 +5,7 @@ import { ApiError, appApi, isOldHub } from "@/appapi";
 import { copyText } from "@/app/copy";
 import { useContextMenu, type MenuItem } from "@/app/ContextMenu";
 import { DockPanel } from "@/app/preview";
+import { looksOf, MushroomFace } from "@/app/persona";
 import { Modal } from "@/app/dialogs";
 import { openOutside, setInAppLinks } from "@/app/links";
 import { L } from "@/lib/i18n";
@@ -544,6 +545,8 @@ function PageView({ target, open, active, reload, onMeta }: {
     : opened ? [opened.latest > 1 || opened.version > 1 ? L(`第 ${opened.version} 版`, `Version ${opened.version}`) : "", page && target.kind === "page" ? L(`${nameOf(target.hubId, page.publisher)} 发布`, `by ${nameOf(target.hubId, page.publisher)}`) : "", page ? timeAgo(page.versions.find((v) => v.n === opened.version)?.at || page.updated_at) : ""].filter(Boolean).join(" · ")
       : "";
   const newer = opened && page && page.version > opened.version ? page.version : 0;
+  // Until the page has loaded: a loading scene over it, not a blank frame.
+  const [loadedKey, setLoadedKey] = useState("");
   const [upgrading, setUpgrading] = useState(false);
   const icon: PageMeta["icon"] = local ? "local" : opened?.live || page?.live ? "live" : "page";
   useEffect(() => {
@@ -567,11 +570,16 @@ function PageView({ target, open, active, reload, onMeta }: {
         </div>
       )}
       {local && <div className="pg-local-note"><Monitor />{L("这台电脑上正在运行的网页。是空白的话，可能这个端口没有在跑。", "A server running on this computer. Blank? Nothing may be running on this port.")}</div>}
-      {error ? <p className="fp-note">{error}</p>
-        : !src ? <p className="fp-note">{L("正在打开…", "Opening…")}</p>
-        : <iframe ref={frame} key={`${src}#${reload}`} className={cn("fp-frame pg-frame")} title={title} src={src || undefined}
+      {error ? <p className="fp-note">{error}</p> : (
+        <div className="pg-stage">
+          {src && <iframe ref={frame} key={`${src}#${reload}`} className={cn("fp-frame pg-frame", loadedKey !== `${src}#${reload}` && "is-loading")} title={title} src={src || undefined}
             sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads allow-same-origin" referrerPolicy="no-referrer"
-            allow="clipboard-write; fullscreen" />}
+            allow="clipboard-write; fullscreen" onLoad={() => setLoadedKey(`${src}#${reload}`)} />}
+          {loadedKey !== `${src}#${reload}` && (
+            <PageLoading key={`${src}#${reload}`} name={title} seed={page?.publisher || (target.kind === "local" ? target.url : target.hubId)} who={page && target.kind === "page" ? nameOf(target.hubId, page.publisher) : ""} />
+          )}
+        </div>
+      )}
     <Modal open={!!asking} onOpenChange={(o) => { if (!o) asking?.answer(false); }} className="pg-ask"
       title={L(`允许这个网页以你的名义给 ${asking?.to || ""} 发消息吗？`, `Let this page message ${asking?.to || ""} as you?`)}
       description={L("网页是 agent 写的。允许后，这次打开 App 期间它可以直接发，一分钟最多 5 条；发出的消息在你和它的对话里。", "An agent wrote this page. If you allow it, it may send messages until you quit the App, at most 5 a minute; they show in your chat with the agent.")}>
@@ -584,3 +592,38 @@ function PageView({ target, open, active, reload, onMeta }: {
     </div>
   );
 }
+
+/**
+ * A page on its way (PageView): instead of a blank or black frame, the
+ * mushroom of the agent that made it hops in place, its shadow with it,
+ * over a few words that change as the wait goes on, and a thin light runs
+ * along the bottom. It fades when the page has loaded.
+ */
+function PageLoading({ name, seed, who }: { name: string; seed: string; who: string }) {
+  const [t, setT] = useState(0);
+  useEffect(() => {
+    const started = Date.now();
+    const id = window.setInterval(() => setT(Date.now() - started), 600);
+    return () => window.clearInterval(id);
+  }, []);
+  const tips = [
+    L("正在把网页搬过来…", "Bringing the page over…"),
+    who ? L(`${who} 做的，马上就好`, `Made by ${who}; nearly there`) : L("马上就好", "Nearly there"),
+    L("第一次打开会慢一点", "The first time takes a little longer"),
+  ];
+  const tip = t > 15_000 ? L("还没打开？可以点右上角的刷新再试一次", "Still not here? Try reload at the top right")
+    : t > 8_000 ? L("大一点的网页要多等几秒", "A bigger page takes a few more seconds")
+      : tips[Math.floor(t / 2400) % tips.length];
+  return (
+    <div className="pg-loading" role="status" aria-live="polite" data-testid="page-loading">
+      <div className="pg-loading-hop" aria-hidden>
+        <span className="pg-loading-mush" style={{ ["--av-cap" as string]: looksOf(seed).cap }}><MushroomFace seed={seed} /></span>
+        <span className="pg-loading-shadow" />
+      </div>
+      <b className="pg-loading-name">{L(`正在打开「${name}」`, `Opening "${name}"`)}</b>
+      <span key={tip} className="pg-loading-tip">{tip}</span>
+      <span className="pg-loading-bar" aria-hidden><i /></span>
+    </div>
+  );
+}
+

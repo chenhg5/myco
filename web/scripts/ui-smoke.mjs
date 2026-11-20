@@ -594,6 +594,8 @@ async function runMatrix(browser, size, scheme) {
       await panel.waitFor({ timeout: 10_000 });
       const frame = page.frameLocator(".pg-frame");
       await frame.locator("h1", { hasText: "发布说明" }).waitFor({ timeout: 15_000 });
+      // The loading scene (a hopping mushroom) is gone once it has loaded.
+      await page.locator("[data-testid=page-loading]").waitFor({ state: "detached", timeout: 10_000 });
       if ((await frame.locator(".bar").count()) !== 3) throw new Error("网页里的脚本应该跑起来，画出三条");
       const src = await page.locator(".pg-frame").getAttribute("src");
       if (!src || new URL(src).origin === new URL(page.url()).origin) throw new Error(`网页应该在另一个源里打开：${src}`);
