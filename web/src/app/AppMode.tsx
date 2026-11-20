@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ArrowUpDown, ChevronRight, LayoutGrid, Monitor, MoreHorizontal, Pin, Plus, Search, WifiOff, Workflow, X, Zap } from "lucide-react";
+import { ArrowUpDown, ChevronLeft, ChevronRight, LayoutGrid, Monitor, MoreHorizontal, Pin, Plus, Search, WifiOff, Workflow, X, Zap } from "lucide-react";
 import { ComputerSettings } from "@/app/ComputerSettings";
 import { AutomationsPage } from "@/app/Automations";
 import { WorkflowsPage } from "@/app/Workflows";
@@ -15,6 +15,7 @@ import { recall, remember } from "@/lib/memo";
 import { renameHub, useHubNames } from "@/app/hubNames";
 import { ProjectPage } from "@/app/ProjectPage";
 import { openSettingsSection, SettingsPage } from "@/app/SettingsPage";
+import { navBack, navForward, navRecord, navSub, onNavApply, useNavState, type NavPlace } from "@/app/nav";
 import { UpdateNotice } from "@/app/UpdateNotice";
 import { Welcome } from "@/app/Welcome";
 import { Prepare, preparePending, setPreparePending } from "@/app/Prepare";
@@ -499,6 +500,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const openSpace = (s: SpaceRef) => {
     setSpace(s);
     setPage("space");
+    setChatWith(null);
     setSpaceTap((t) => ({ ...t, [spaceKey(s)]: (t[spaceKey(s)] || 0) + 1 }));
   };
   const projectCreated = (ref: { hubId: string; name: string }) => {
@@ -518,6 +520,36 @@ export default function AppMode({ initialHubs, initialInfo }: {
     setPage("space");
     setChatWith({ space: s, agent: r.st.agent.name, n: Date.now(), reveal });
   };
+  // ← → (nav.ts): where you are, recorded on each move; going back or
+  // forward puts it back. The chat is the one opened from the sidebar, or
+  // else the one asked for (a search, a workflow's step) in what is shown.
+  const shownKey = shown ? spaceKey(shown) : "";
+  const navChatNow = page !== "space" ? null
+    : navChat || (chatWith && spaceKey(chatWith.space) === shownKey ? `${chatWith.space.hubId}\u0000${chatWith.agent}` : null);
+  useEffect(() => {
+    if (!hubId) return;
+    navRecord({ hub: hubId, page, space: page === "space" || page === "about" ? shownKey : undefined, chat: navChatNow });
+  }, [hubId, page, shownKey, navChatNow]);
+  const navApply = useRef<(p: NavPlace) => void>(() => undefined);
+  navApply.current = (p) => {
+    if (p.hub !== hubId && hubs.some((h) => h.id === p.hub)) setHubPick(p.hub);
+    setProfile(null);
+    const [sh, sn] = (p.space || "").split("\u0000");
+    const ref: SpaceRef | null = !p.space ? null : sn === "*" ? { hubId: sh, loose: true } : { hubId: sh, name: sn };
+    if (p.page === "space" && p.chat) {
+      const [ch, ca] = p.chat.split("\u0000");
+      const r = allRows.find((x) => x.hub.id === ch && x.st.agent.name === ca);
+      setNavChat(p.chat);
+      if (r) { chatWithMember(r, ref || undefined); return; }
+    }
+    setNavChat(null);
+    if (p.page === "space" && ref) { openSpace(ref); return; }
+    if (ref) setSpace(ref);
+    setChatWith(null);
+    setPage(p.page as Page);
+  };
+  useEffect(() => onNavApply((p) => navApply.current(p)), []);
+
   // A message in its conversation (search, an automation's run).
   const openAtMessage = (r: AgentRow, message: string) => {
     const p = (projects || []).find((x) => !x.p.archived && x.hubId === r.hub.id && x.p.members.some((m) => m.name === r.st.agent.name));
@@ -642,6 +674,12 @@ export default function AppMode({ initialHubs, initialInfo }: {
       } else if (e.code === "KeyU") {
         if (overlay()) return;
         if (pickFiles()) e.preventDefault();
+      } else if (e.key === "[" || e.code === "BracketLeft") {
+        e.preventDefault();
+        navBack();
+      } else if (e.key === "]" || e.code === "BracketRight") {
+        e.preventDefault();
+        navForward();
       } else if (e.key === "r" || e.key === "R") {
         e.preventDefault();
         void refreshRef.current();
@@ -658,7 +696,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   // A top page picked again while on it goes back to its first view (the
   // list, not the automation or computer opened): it is drawn afresh.
   const [again, setAgain] = useState(0);
-  const toPage = (p: typeof page) => { if (page === p) setAgain((n) => n + 1); setPage(p); };
+  const toPage = (p: typeof page) => { if (page === p) { setAgain((n) => n + 1); navSub(p, null); } setPage(p); };
   // 上手清单 (Onboard.tsx): ticks itself from what the workspace has.
   const [autoCount, setAutoCount] = useState<number | null>(null);
   useEffect(() => {
@@ -746,6 +784,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
       case "add-computer": if (hub) setAddWorkspace({ hubId: hub.id, loose: true }); break;
       case "refresh": void refreshRef.current(); break;
       case "shortcuts": openShortcuts(settingsOpen); setPage("settings"); break;
+      case "back": navBack(); break;
+      case "forward": navForward(); break;
       case "text-bigger": setTextSize((s) => (s === "small" ? "standard" : "large")); break;
       case "text-smaller": setTextSize((s) => (s === "large" ? "standard" : "small")); break;
       case "text-standard": setTextSize("standard"); break;
@@ -1087,11 +1127,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
             title={collapsed ? L("显示边栏", "Show sidebar") : L("隐藏边栏", "Hide sidebar")}>
             <IconSidebar />
           </button>
-          {page === "about" && (
-            <button type="button" className="app-btn app-btn-plain" onClick={() => setPage("space")} aria-label={L("返回项目", "Back to the project")} title={L("返回项目", "Back to the project")}>
-              <ArrowLeft />
-            </button>
-          )}
+          <NavArrows />
           <h1 className="app-title">{title}</h1>
           <VoiceChip />
           <PageToggle />
@@ -1384,5 +1420,27 @@ function SettingsDialog({ onClose, children }: { onClose: () => void; children: 
         {children}
       </div>
     </>
+  );
+}
+
+/** ← → in the crumb bar: back to where you were, forward again (nav.ts).
+ *  ⌘[ / ⌘] too, and a mouse's back and forward buttons. */
+function NavArrows() {
+  const { back, forward } = useNavState();
+  useEffect(() => {
+    const on = (e: MouseEvent) => {
+      if (e.button === 3) { e.preventDefault(); navBack(); } else if (e.button === 4) { e.preventDefault(); navForward(); }
+    };
+    window.addEventListener("mouseup", on);
+    return () => window.removeEventListener("mouseup", on);
+  }, []);
+  const mod = modKey();
+  return (
+    <span className="app-nav-arrows" data-testid="nav-arrows">
+      <button type="button" className="app-btn app-btn-plain" onClick={navBack} disabled={!back}
+        aria-label={L("后退", "Back")} title={L(`后退（${mod}[）`, `Back (${mod}[)`)}><ChevronLeft /></button>
+      <button type="button" className="app-btn app-btn-plain" onClick={navForward} disabled={!forward}
+        aria-label={L("前进", "Forward")} title={L(`前进（${mod}]）`, `Forward (${mod}])`)}><ChevronRight /></button>
+    </span>
   );
 }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Bot, Check, ChevronDown, FlaskConical, MessageSquare, Minus, Monitor, MoreHorizontal, Pause, Pencil, Play, Plus, Rocket, RotateCcw, Sparkles, Split, Square, Trash2, UserCheck, Workflow as WorkflowIcon, X } from "lucide-react";
+import { useNavSub } from "@/app/nav";
+import { Bot, Check, ChevronDown, FlaskConical, MessageSquare, Minus, Monitor, MoreHorizontal, Pause, Pencil, Play, Plus, Rocket, RotateCcw, Sparkles, Split, Square, Trash2, UserCheck, Workflow as WorkflowIcon, X } from "lucide-react";
 import type { RunStep, WfEdgeDef, WfSchema, WfStepDef, Workflow, WorkflowDecision, WorkflowDef, WorkflowRun } from "@/api";
 import { ApiError, appApi } from "@/appapi";
 import type { AgentRow } from "@/app/types";
@@ -194,6 +195,11 @@ export function WorkflowsPage({ hubId, rows, now, open, onOpened, onOpenMessage 
   }, [hubId]);
   useEffect(() => { setList(seen.get(hubId) ?? null); load(); const t = setInterval(load, 5_000); return () => clearInterval(t); }, [hubId, load]);
   const refresh = () => { load(); setStamp((n) => n + 1); };
+  // ← → at the top (nav.ts): what is open here is part of where you are.
+  useNavSub("workflows", { open: openId, run: runId, edit: editing?.id ?? null }, { open: null, run: null, edit: null }, (v) => {
+    setOpenId(v.open); setRunId(v.run);
+    setEditing(v.edit ? (list || []).find((w) => w.id === v.edit) || null : null);
+  });
   useEffect(() => { if (open) { setOpenId(open.workflow); setRunId(open.run || null); onOpened?.(); } }, [open?.at]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggle = async (w: Workflow) => {
@@ -748,7 +754,6 @@ function WorkflowEditor({ hubId, rows, wf, onClose, onSaved }: { hubId: string; 
 
   return (
     <div className="wf-ed" data-testid="workflow-edit">
-      <button type="button" className="pcd-back" onClick={close}><ArrowLeft />{wf.title || wf.name}</button>
       <header className="pcd-head wf-ed-head">
         <div className="pcd-titles">
           <h1><span>{L(`编辑「${wf.title || wf.name}」`, `Edit "${wf.title || wf.name}"`)}</span></h1>
@@ -807,7 +812,7 @@ function runWhere(r: WorkflowRun, def?: WorkflowDef | null): string {
 
 type DetailTab = "runs" | "stats" | "flow" | "io";
 
-function WorkflowDetail({ hubId, wf, rows, now, stamp, busy, error, onBack, onRun, onToggle, onDelete, onEdit, onOpenRun }: {
+function WorkflowDetail({ hubId, wf, rows, now, stamp, busy, error, onRun, onToggle, onDelete, onEdit, onOpenRun }: {
   hubId: string; wf: Workflow; rows: AgentRow[]; now: number; stamp: number; busy: boolean; error: unknown;
   onBack: () => void; onRun: () => void; onToggle: () => void; onDelete: () => void; onEdit: () => void; onOpenRun: (id: string) => void;
 }) {
@@ -839,7 +844,6 @@ function WorkflowDetail({ hubId, wf, rows, now, stamp, busy, error, onBack, onRu
   ];
   return (
     <>
-      <button type="button" className="pcd-back" onClick={onBack}><ArrowLeft />{L("工作流", "Workflows")}</button>
       <header className={cn("pcd-head", !wf.enabled && "is-away")}>
         <span className="tp-icon pcd-icon"><WorkflowIcon /></span>
         <div className="pcd-titles">
@@ -987,13 +991,13 @@ function RunDetail({ hubId, runId, wf, rows, now, stamp, onBack, onChanged, onOp
   const subject = run ? runSubject(run) : "";
   return (
     <>
-      <button type="button" className="pcd-back" onClick={onBack}><ArrowLeft />{wf.title || wf.name}</button>
       <header className="pcd-head">
         <span className={cn("tp-icon pcd-icon wf-run-icon", run && runTone(run.status))}><WorkflowIcon /></span>
         <div className="pcd-titles">
           <h1><span title={subject || undefined}>{subject || (run ? L(`「${wf.title || wf.name}」的一次运行`, `A run of "${wf.title || wf.name}"`) : L("运行", "Run"))}</span></h1>
           {run && (
             <p className="pcd-sub">
+              <button type="button" className="wf-link" onClick={onBack} title={L("打开这个工作流", "Open this workflow")}>{wf.title || wf.name}</button>
               <span className={cn("wf-run-state", runTone(run.status))} data-testid="workflow-run-state">{runWords(run.status)}</span>
               <span title={new Date(run.created_at).toLocaleString()}>{L(`${timeAgo(run.created_at, now)}开始`, `Started ${timeAgo(run.created_at, now)}`)}</span>
               <span>{L(`用了 ${duration(run.created_at, run.ended_at, now)}`, `Took ${duration(run.created_at, run.ended_at, now)}`)}</span>

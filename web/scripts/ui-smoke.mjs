@@ -365,6 +365,11 @@ async function go(page, label, narrow) {
   if (narrow) await sidebar(page, false);
 }
 
+// The ‹ at the top (back to where you were: nav.ts).
+async function navBackClick(page) {
+  await clickVisible(page, page.locator("[data-testid=nav-arrows]").getByRole("button", { name: "后退" }));
+}
+
 async function closeSettings(page) {
   const dlg = page.locator("[data-testid=settings-dialog]");
   if (!(await dlg.count())) return;
@@ -3445,7 +3450,7 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".pc-card .pc-quota", { hasText: "额度 95%" }).first().waitFor({ timeout: 10_000 });
       await settle(page);
       await shot(page, size, scheme, "computers");
-      const back = () => clickVisible(page, page.locator(".pcd-back"));
+      const back = () => navBackClick(page);
       // A card opens the computer: its agents and terminals, and what it
       // allows and its AIs (asked of it).
       await clickVisible(page, page.locator(".pc-card", { hasText: "Studio Mac" }));
@@ -3752,8 +3757,10 @@ async function runMatrix(browser, size, scheme) {
       await run.waitFor({ timeout: 10_000 });
       await run.locator(".wf-node.is-running").waitFor({ timeout: 10_000 });
       // Back, and remove it again (right-click).
-      await clickVisible(page, run.locator(".pcd-back"));
-      await clickVisible(page, page.locator("[data-testid=workflow-detail] .pcd-back"));
+      // Back (the ‹ at the top) to the workflow, and again to the list.
+      await navBackClick(page);
+      await page.locator("[data-testid=workflow-detail]").waitFor({ timeout: 10_000 });
+      await navBackClick(page);
       const row = list.locator(".au-row", { hasText: name });
       await row.waitFor({ timeout: 10_000 });
       await row.click({ button: "right", position: { x: 120, y: 12 } });
@@ -3973,6 +3980,32 @@ async function runMatrix(browser, size, scheme) {
       if ((await det.locator(".pcd-sub").innerText()) === before) throw new Error("保存后应是新的一版");
     });
 
+    // ‹ › at the top: back to where you were and forward again, pages and
+    // what they had open; no back buttons on the pages themselves.
+    await step("导航 · 后退前进", async () => {
+      await go(page, "工作流", narrow);
+      const row = page.locator("[data-testid=workflows] .au-row", { hasText: "写-审-改" });
+      await clickVisible(page, row.locator(".au-row-main"));
+      const det = page.locator("[data-testid=workflow-detail]");
+      await det.waitFor({ timeout: 10_000 });
+      if (await page.locator(".pcd-back").count()) throw new Error("页面里不该再有返回按钮");
+      await clickVisible(page, det.locator("[data-testid=workflow-runs] .wf-run-row").first());
+      await page.locator("[data-testid=workflow-run]").waitFor({ timeout: 10_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "nav-arrows");
+      await navBackClick(page);
+      await det.waitFor({ timeout: 10_000 });
+      await navBackClick(page);
+      await page.locator("[data-testid=workflows]").waitFor({ timeout: 10_000 });
+      await clickVisible(page, page.locator("[data-testid=nav-arrows]").getByRole("button", { name: "前进" }));
+      await det.waitFor({ timeout: 10_000 });
+      await page.keyboard.press("Control+BracketRight");
+      await page.locator("[data-testid=workflow-run]").waitFor({ timeout: 10_000 });
+      await page.keyboard.press("Control+BracketLeft");
+      await det.waitFor({ timeout: 10_000 });
+      if (narrow) await sidebar(page, false);
+    });
+
     // A conversation is exported from its header: Markdown for people or
     // JSON Lines for programs, saved to Downloads.
     await step("单聊 · 导出对话", async () => {
@@ -4182,13 +4215,13 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, check.getByRole("button", { name: "重启后台" }));
       await check.locator(".cc-fixed", { hasText: "后台重启好了" }).waitFor({ timeout: 10_000 });
       // One the App did not connect: which SSH host is it?
-      await clickVisible(page, page.locator(".pcd-back"));
+      await navBackClick(page);
       await clickVisible(page, page.locator(".pc-card", { hasText: "临时 Mac" }));
       await page.locator("[data-testid=computer-check] select.app-select-field").waitFor({ timeout: 10_000 });
       await page.locator("[data-testid=computer-check]").scrollIntoViewIfNeeded();
       await settle(page, 300);
       await shot(page, size, scheme, "computer-check-pick");
-      await clickVisible(page, page.locator(".pcd-back"));
+      await navBackClick(page);
       await page.locator(".pc-card", { hasText: "临时 Mac" }).waitFor({ timeout: 10_000 });
     });
 

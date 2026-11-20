@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
+import { useNavSub } from "@/app/nav";
 import { IntroCard, introOf } from "@/app/Onboard";
-import { ArrowLeft, ChevronRight, Info, Monitor, Pencil, Plus, Settings2, SquareTerminal, Trash2 } from "lucide-react";
+import { ChevronRight, Info, Monitor, Pencil, Plus, Settings2, SquareTerminal, Trash2 } from "lucide-react";
 import { appApi, type LocalState, type MachineAI, type MachineInfo } from "@/appapi";
 import type { Machine, Project } from "@/api";
 import type { AgentRow } from "@/app/types";
@@ -68,6 +69,8 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, on
   // The computer opened (coming to the page again shows them all).
   const [openKey, setOpenKey] = useState<string | null>(null);
   const openComputer = (k: string | null) => setOpenKey(k);
+  // ← → at the top (nav.ts): the computer open is part of where you are.
+  useNavSub("computers", { open: openKey }, { open: null }, (v) => { setRenaming(false); setOpenKey(v.open); });
   const [renaming, setRenaming] = useState(false);
   useEffect(() => { appApi.local().then(setLocal).catch(() => setLocal(null)); }, []);
   const latest = useLatestRelease();
@@ -138,7 +141,6 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, on
     const Icon = osInfo(m.os).icon;
     return (
       <div className="pc pcd" data-testid="pc-detail">
-        <button type="button" className="pcd-back" onClick={() => { setRenaming(false); openComputer(null); }}><ArrowLeft />{L("电脑", "Computers")}</button>
         <header className={cn("pcd-head", !m.online && "is-away")}>
           <span className="tp-icon pcd-icon"><Icon /></span>
           <div className="pcd-titles">

@@ -9075,3 +9075,8 @@ body.is-resizing {
 .mdirs-note { margin: 0; text-align: right; max-width: 460px; }
 .mdirs-allow { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-top: 6px; }
 .app-field-hint .mdirs-far { justify-content: flex-start; margin-top: 6px; }
+
+/* ← → in the crumb bar (nav.ts): back to where you were, forward again. */
+.app-nav-arrows { display: inline-flex; align-items: center; gap: 0; margin-left: -2px; --wails-draggable: no-drag; }
+.app-nav-arrows .app-btn:disabled { opacity: 0.32; }
+.app-nav-arrows .app-btn svg { width: 17px; height: 17px; }
