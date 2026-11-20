@@ -1,0 +1,271 @@
+{
+ "space": [
+  {
+   "id": "main",
+   "title": "笔记"
+  }
+ ],
+ "pages": [
+  {
+   "id": "home",
+   "title": "团队手册",
+   "icon": "i:home:stone",
+   "cover": "stone",
+   "parent": null,
+   "order": 1,
+   "favorite": true,
+   "trashed": false,
+   "by": "glenn",
+   "created": "2026-11-10T10:00:00+08:00"
+  },
+  {
+   "id": "onboard",
+   "title": "新人上手",
+   "icon": "i:hand:sage",
+   "cover": "",
+   "parent": "home",
+   "order": 1,
+   "favorite": false,
+   "trashed": false,
+   "by": "glenn",
+   "created": "2026-11-11T10:00:00+08:00"
+  },
+  {
+   "id": "process",
+   "title": "发版流程",
+   "icon": "i:rocket:clay",
+   "cover": "",
+   "parent": "home",
+   "order": 2,
+   "favorite": false,
+   "trashed": false,
+   "by": "glenn",
+   "created": "2026-11-12T10:00:00+08:00"
+  },
+  {
+   "id": "meet",
+   "title": "会议记录",
+   "icon": "i:notebook:mist",
+   "cover": "",
+   "parent": null,
+   "order": 2,
+   "favorite": false,
+   "trashed": false,
+   "by": "glenn",
+   "created": "2026-11-13T10:00:00+08:00"
+  },
+  {
+   "id": "m1",
+   "title": "11 月 18 日 周会",
+   "icon": "i:calendar:mist",
+   "cover": "",
+   "parent": "meet",
+   "order": 1,
+   "favorite": false,
+   "trashed": false,
+   "by": "glenn",
+   "created": "2026-11-14T10:00:00+08:00"
+  },
+  {
+   "id": "ideas",
+   "title": "想法收集",
+   "icon": "i:lightbulb:ochre",
+   "cover": "sage",
+   "parent": null,
+   "order": 3,
+   "favorite": true,
+   "trashed": false,
+   "by": "glenn",
+   "created": "2026-11-15T10:00:00+08:00"
+  }
+ ],
+ "blocks": [
+  {
+   "id": "home-b1",
+   "page": "home",
+   "type": "p",
+   "text": "这里放团队都要知道的事：怎么上手、怎么发版、每周开会记了什么。",
+   "order": 1
+  },
+  {
+   "id": "home-b2",
+   "page": "home",
+   "type": "h2",
+   "text": "从哪里开始",
+   "order": 2
+  },
+  {
+   "id": "home-b3",
+   "page": "home",
+   "type": "li",
+   "text": "新人先看「新人上手」",
+   "order": 3
+  },
+  {
+   "id": "home-b4",
+   "page": "home",
+   "type": "li",
+   "text": "要发版看「发版流程」",
+   "order": 4
+  },
+  {
+   "id": "home-b5",
+   "page": "home",
+   "type": "quote",
+   "text": "不确定的事，在页面里留一句，agent 会帮你补全。",
+   "order": 5
+  },
+  {
+   "id": "onboard-b1",
+   "page": "onboard",
+   "type": "h2",
+   "text": "第一天",
+   "order": 1
+  },
+  {
+   "id": "onboard-b2",
+   "page": "onboard",
+   "type": "todo",
+   "text": "装好 myco App，加入工作区",
+   "order": 2,
+   "checked": true
+  },
+  {
+   "id": "onboard-b3",
+   "page": "onboard",
+   "type": "todo",
+   "text": "在「任务追踪」里认领一个问题",
+   "order": 3,
+   "checked": false
+  },
+  {
+   "id": "onboard-b4",
+   "page": "onboard",
+   "type": "h2",
+   "text": "第一周",
+   "order": 4
+  },
+  {
+   "id": "onboard-b5",
+   "page": "onboard",
+   "type": "todo",
+   "text": "跟一次发版",
+   "order": 5,
+   "checked": false
+  },
+  {
+   "id": "onboard-b6",
+   "page": "onboard",
+   "type": "p",
+   "text": "有问题直接问 agent，或者在这里留言。",
+   "order": 6
+  },
+  {
+   "id": "process-b1",
+   "page": "process",
+   "type": "ol",
+   "text": "确认 main 上的测试都过了",
+   "order": 1
+  },
+  {
+   "id": "process-b2",
+   "page": "process",
+   "type": "ol",
+   "text": "写 CHANGELOG 和 VERSION，在同一个提交里",
+   "order": 2
+  },
+  {
+   "id": "process-b3",
+   "page": "process",
+   "type": "ol",
+   "text": "推到 main，等 release 工作流跑完",
+   "order": 3
+  },
+  {
+   "id": "process-b4",
+   "page": "process",
+   "type": "ol",
+   "text": "在服务器上 sudo myco upgrade",
+   "order": 4
+  },
+  {
+   "id": "process-b5",
+   "page": "process",
+   "type": "code",
+   "text": "scripts/release-status.sh \"$(git rev-parse HEAD)\" release --wait",
+   "order": 5
+  },
+  {
+   "id": "meet-b1",
+   "page": "meet",
+   "type": "p",
+   "text": "每周一的周会记在这里，一次一页。",
+   "order": 1
+  },
+  {
+   "id": "m1-b1",
+   "page": "m1",
+   "type": "h3",
+   "text": "进展",
+   "order": 1
+  },
+  {
+   "id": "m1-b2",
+   "page": "m1",
+   "type": "li",
+   "text": "视频剪辑能导出了，存到下载",
+   "order": 2
+  },
+  {
+   "id": "m1-b3",
+   "page": "m1",
+   "type": "li",
+   "text": "任务追踪上线，颜色调得柔和一些",
+   "order": 3
+  },
+  {
+   "id": "m1-b4",
+   "page": "m1",
+   "type": "h3",
+   "text": "下周",
+   "order": 4
+  },
+  {
+   "id": "m1-b5",
+   "page": "m1",
+   "type": "todo",
+   "text": "做笔记应用",
+   "order": 5,
+   "checked": false
+  },
+  {
+   "id": "m1-b6",
+   "page": "m1",
+   "type": "todo",
+   "text": "官方应用打开时检查更新",
+   "order": 6,
+   "checked": false
+  },
+  {
+   "id": "ideas-b1",
+   "page": "ideas",
+   "type": "p",
+   "text": "随手记，想到什么写什么。",
+   "order": 1
+  },
+  {
+   "id": "ideas-b2",
+   "page": "ideas",
+   "type": "li",
+   "text": "应用之间能互相链接：任务追踪里的问题链接到笔记",
+   "order": 2
+  },
+  {
+   "id": "ideas-b3",
+   "page": "ideas",
+   "type": "li",
+   "text": "笔记里能嵌入表格",
+   "order": 3
+  }
+ ]
+}

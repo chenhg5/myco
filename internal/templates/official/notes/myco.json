@@ -1,0 +1,43 @@
+{
+  "id": "myco/notes",
+  "name": "笔记",
+  "version": "1.0.0",
+  "kind": "doc",
+  "category": "tools",
+  "icon": "icon.svg",
+  "description": "像 Notion 一样记笔记：左边是一层层的页面，每页有图标、封面和标题，「/」插入标题、列表、待办、表格、代码块；搜索、收藏、回收站；agent 能建页面、往页面里写东西，你这边实时看到。",
+  "data": {
+    "space": {
+      "single": true,
+      "fields": {
+        "title": "text"
+      }
+    },
+    "pages": {
+      "fields": {
+        "title": "text",
+        "icon": "text",
+        "cover": "text",
+        "parent": "text",
+        "order": "number",
+        "favorite": "bool",
+        "trashed": "bool",
+        "by": "person",
+        "created": "datetime"
+      }
+    },
+    "blocks": {
+      "fields": {
+        "page": "text",
+        "type": "text",
+        "text": "text",
+        "checked": "bool",
+        "block": "json",
+        "order": "number"
+      }
+    }
+  },
+  "requires": {
+    "hub": "0.20.7"
+  }
+}
