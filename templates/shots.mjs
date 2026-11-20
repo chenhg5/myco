@@ -127,7 +127,7 @@ const plans = {
   // 会议记录: a meeting's transcript (the sample), then recording one on a made-up Mac
   meeting: { os: true, steps: [async (p) => { await wait(p, 600); }, async (p) => {
     await p.evaluate(() => { window.__REC_AT__ = 1468; });
-    await p.click(".mt-new"); await wait(p, 600);
+    await p.click(".mt-item.is-new"); await wait(p, 600);
     await p.click(".mt-go"); await wait(p, 5200);
   }] },
   // 修图: a landscape with a filter and a title, then in a polaroid frame with a sticker
