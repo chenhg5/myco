@@ -301,6 +301,7 @@ function App() {
           )}
           <button type="button" className="tool" title="命令（⌘K）" onClick={() => setPalette(true)}><Command className="ico" /></button>
         </header>
+        {view.kind !== "projects" && <FilterBar filters={filters} setFilters={setFilters} me={me} />}
         {view.kind === "project" && <ProjectHead id={view.id} me={me} onGone={() => setView({ kind: "projects" })} />}
         {view.kind === "projects" ? <Projects onOpen={(id) => setView({ kind: "project", id })} /> : (
           <div className={`is-body${open ? " has-panel" : ""}`}>
@@ -646,29 +647,80 @@ function DraftMenu({ kind, at, d, setD, me, onClose }: { kind: MenuKind; at: Anc
 }
 
 // ---- filters ----
+type FKind = keyof Filters;
+const F_TABS: [FKind, string][] = [["status", "状态"], ["priority", "优先级"], ["assignee", "负责人"], ["labels", "标签"]];
+/** What can be picked in a filter, with how many issues each matches. */
+function filterOptions(k: FKind, me: string): { v: string | number; label: string; icon: ReactNode; n: number }[] {
+  const rows = issues.rows;
+  if (k === "status") return STATUSES.map((s) => ({ v: s.id, label: s.name, icon: <StatusIcon s={s.id} />, n: rows.filter((r) => statusOf(r) === s.id).length }));
+  if (k === "priority") return PRIORITIES.map((p) => ({ v: p.id, label: p.name, icon: <PriorityIcon p={p.id} />, n: rows.filter((r) => num(r.data.priority, 0) === p.id).length }));
+  if (k === "assignee") return [{ v: "", label: "未指派", icon: <Avatar name={null} />, n: rows.filter((r) => !r.data.assignee).length },
+    ...people(me).map((p) => ({ v: p, label: p === me ? `${p}（我）` : p, icon: <Avatar name={p} />, n: rows.filter((r) => r.data.assignee === p).length }))];
+  return allLabels().map((l) => ({ v: l, label: l, icon: <LabelDot l={l} />, n: rows.filter((r) => (r.data.labels || []).includes(l)).length }));
+}
+function toggleIn(filters: Filters, k: FKind, v: string | number): Filters {
+  const cur = filters[k] as (string | number)[];
+  return { ...filters, [k]: cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v] };
+}
+
 function FilterPop({ at, filters, setFilters, me, onClose }: { at: Anchor; filters: Filters; setFilters: (f: Filters) => void; me: string; onClose: () => void }) {
-  const toggle = <K extends keyof Filters>(k: K, v: Filters[K][number]) => {
-    const cur = filters[k] as unknown[];
-    setFilters({ ...filters, [k]: cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v] });
-  };
-  const Row = ({ on, icon, label, onClick }: { on: boolean; icon: ReactNode; label: string; onClick: () => void }) => (
-    <button type="button" className={`pick-item${on ? " is-sel" : ""}`} onClick={onClick}><span className="pick-ico">{icon}</span><span className="pick-label">{label}</span>{on && <Check className="ico pick-on" />}</button>
-  );
+  const [tab, setTab] = useState<FKind>("status");
+  const opts = filterOptions(tab, me);
+  const total = F_TABS.reduce((n, [k]) => n + filters[k].length, 0);
   return (
-    <Pop at={at} onClose={onClose} width={260}>
+    <Pop at={at} onClose={onClose} width={320}>
       <div className="filter-pop">
-        <div className="filter-sec">状态</div>
-        {STATUSES.map((s) => <Row key={s.id} on={filters.status.includes(s.id)} icon={<StatusIcon s={s.id} />} label={s.name} onClick={() => toggle("status", s.id)} />)}
-        <div className="filter-sec">优先级</div>
-        {PRIORITIES.map((p) => <Row key={p.id} on={filters.priority.includes(p.id)} icon={<PriorityIcon p={p.id} />} label={p.name} onClick={() => toggle("priority", p.id)} />)}
-        <div className="filter-sec">负责人</div>
-        <Row on={filters.assignee.includes("")} icon={<Avatar name={null} />} label="未指派" onClick={() => toggle("assignee", "")} />
-        {people(me).map((p) => <Row key={p} on={filters.assignee.includes(p)} icon={<Avatar name={p} />} label={p === me ? `${p}（我）` : p} onClick={() => toggle("assignee", p)} />)}
-        {allLabels().length > 0 && <div className="filter-sec">标签</div>}
-        {allLabels().map((l) => <Row key={l} on={filters.labels.includes(l)} icon={<LabelDot l={l} />} label={l} onClick={() => toggle("labels", l)} />)}
-        <div className="filter-foot"><button type="button" className="link-btn" onClick={() => setFilters(NO_FILTERS)}>清除筛选</button></div>
+        <div className="filter-tabs" role="tablist">
+          {F_TABS.map(([k, name]) => (
+            <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? "is-on" : ""} onClick={() => setTab(k)}>
+              {name}{filters[k].length ? <span className="filter-n">{filters[k].length}</span> : null}
+            </button>
+          ))}
+        </div>
+        <div className="filter-list" role="listbox" aria-multiselectable="true">
+          {opts.map((o) => {
+            const on = (filters[tab] as (string | number)[]).includes(o.v);
+            return (
+              <button key={String(o.v)} type="button" role="option" aria-selected={on} className={`filter-row${on ? " is-on" : ""}`} onClick={() => setFilters(toggleIn(filters, tab, o.v))}>
+                <span className="filter-box">{on && <Check className="ico" />}</span>
+                <span className="filter-ico">{o.icon}</span>
+                <span className="filter-label">{o.label}</span>
+                <span className="filter-count">{o.n}</span>
+              </button>
+            );
+          })}
+          {!opts.length && <div className="pick-empty">还没有{tab === "labels" ? "标签" : "可选的"}</div>}
+        </div>
+        <div className="filter-foot">
+          <button type="button" className="link-btn" disabled={!total} onClick={() => setFilters(NO_FILTERS)}>清除全部</button>
+          <button type="button" className="btn btn-primary" onClick={onClose}>完成</button>
+        </div>
       </div>
     </Pop>
+  );
+}
+
+/** The filters in use, under the header: one chip a kind, each removable. */
+function FilterBar({ filters, setFilters, me }: { filters: Filters; setFilters: (f: Filters) => void; me: string }) {
+  const used = F_TABS.filter(([k]) => filters[k].length);
+  if (!used.length) return null;
+  const nameOf = (k: FKind, v: string | number) => {
+    if (k === "status") return statusName(String(v));
+    if (k === "priority") return priorityName(Number(v));
+    if (k === "assignee") return v === "" ? "未指派" : v === me ? `${v}（我）` : String(v);
+    return String(v);
+  };
+  return (
+    <div className="filter-bar">
+      {used.map(([k, name]) => (
+        <span key={k} className="filter-chip">
+          <span className="faint">{name}</span>
+          <span>{(filters[k] as (string | number)[]).map((v) => nameOf(k, v)).join("、")}</span>
+          <button type="button" aria-label={`去掉「${name}」筛选`} onClick={() => setFilters({ ...filters, [k]: [] })}><X className="ico" /></button>
+        </span>
+      ))}
+      <button type="button" className="link-btn" onClick={() => setFilters(NO_FILTERS)}>清除</button>
+    </div>
   );
 }
 
