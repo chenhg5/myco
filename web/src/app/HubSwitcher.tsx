@@ -285,7 +285,7 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, 
                         : e.kind === "newOnServer"
                           ? (serverName ? L(`在 ${serverName} 上新建工作区`, `New workspace on ${serverName}`) : L("在这台服务器上新建工作区", "New workspace on this server"))
                           : e.kind === "superagent"
-                            ? (superagent?.name ? "superagent" : L("配一个 superagent", "Set up a superagent"))
+                            ? "superagent"
                             : L("设置", "Settings")}
                   </span>
                   {e.kind === "superagent" && superagentKey && !superagent?.pending && <span className="app-hub-menu-key">{superagentKey}</span>}

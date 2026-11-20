@@ -61,6 +61,9 @@ type Enrollment struct {
 	// Owner is the member who created it; agents and machines that join
 	// through it are theirs (machine enrollments inherit the link's owner).
 	Owner string
+	// Superagent: an agent that joins through this link (or a machine
+	// enrollment made from it) becomes its owner's superagent (v0.21.5).
+	Superagent bool
 }
 
 // EnrollmentSpec configures a new enrollment.
@@ -77,6 +80,7 @@ type EnrollmentSpec struct {
 	MaxUses      int
 	TTL          time.Duration
 	Owner        string
+	Superagent   bool
 }
 
 // NewEnrollment validates and builds an enrollment.
@@ -112,7 +116,7 @@ func NewEnrollment(id, tokenHash string, s EnrollmentSpec, now time.Time) (*Enro
 	}
 	e := &Enrollment{ID: id, TokenHash: tokenHash, NamePrefix: s.NamePrefix, Harness: s.Harness,
 		AllowFrom: s.AllowFrom, Capabilities: s.Capabilities, Labels: s.Labels, Note: s.Note, MaxUses: s.MaxUses, CreatedAt: now,
-		Kind: s.Kind, ParentID: s.ParentID, Machine: s.Machine, Owner: s.Owner}
+		Kind: s.Kind, ParentID: s.ParentID, Machine: s.Machine, Owner: s.Owner, Superagent: s.Superagent}
 	if s.TTL > 0 {
 		e.ExpiresAt = now.Add(s.TTL)
 	}

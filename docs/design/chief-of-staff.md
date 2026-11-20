@@ -8,7 +8,7 @@ Glenn 已定：按工作区隔离；入口用快捷键唤起，App 里放在左�
 - 命令是 `myco superagent show|set|unset|guide` 和 `myco approval list|approve|deny`，不是 `myco chief …`。
 - 要你点头的请求，Hub 回 `409 {"error":"approval_pending","approval":…}`（不是 202），命令行打印「已请主人确认」。理由用环境变量 `MYCO_APPROVAL_REASON` 带上（请求头 `X-Myco-Reason`）。
 - 认定存在 `superagents` 表里（每个成员每个工作区一个），不在 agent 上加字段。
-- App 里没有单独的设置页：左下角菜单的「superagent」一项，没配时叫「配一个 superagent」，点了弹出配置框（在你的一台电脑上新开一个 Shroom，或者把你已有的 agent 设成它）；配好后点了打开它的对话。确认卡片在它的对话里、输入框上方。
+- App 里没有单独的设置页：左下角菜单的「superagent」一项（一直叫这个），没配时点了弹出配置框：在你的一台电脑上新开一个 Shroom、把你已有的 agent 设成它，或者「一句话接入」（一次性加入链接带 `superagent` 标记，任何会话包括云端的照着做就加入并成为 superagent，和普通 agent 一样 `myco inbox wait` 收消息）；配好后点了打开它的对话。确认卡片在它的对话里、输入框上方。
 - 接口和权限表见 [api.md](../api.md) 的「Superagents」一节。
 - 快捷面板（Mac，⌘⇧空格，用 Wails 的全局快捷键）：一个浮动的小窗（`cmd/myco-app/quick_darwin.go`，页面 `web/src/quick`），不把 App 叫到前台；工作区跟着 App 里正在看的那个，面板里也能换。还没做：面板里按住说话、在设置里改快捷键、Windows 和 Linux。
 

@@ -86,7 +86,7 @@ Agent detail and overview entries include `resume: {created_at, last_used_at?, l
 | `PATCH /v1/machines/{id}` | owner/admin | `{name}` → the machine. 1–64 characters on one line; a name another machine of the hub has (letter case aside) is refused with `conflict` (from v0.20.16). Machines joining with a name already taken get `-2`, `-3`… |
 | `DELETE /v1/machines/{id}?dry_run=` | machine owner or owner/admin | `{machine, removed:[agent names], dry_run}`; revokes the machine enrollment, removes its nodes (including the machine node), aliases and project memberships, then the machine record. Message history stays. Dry-run only previews |
 | `GET /v1/audit?actor=&target=&before=&limit=` | owner/admin | `{entries: [{id, at, actor, actor_kind, action, target, detail}]}`, newest first; append-only; never message bodies |
-| `POST /v1/enrollments` | admin (any member; exec links owner/admin) | `{name_prefix, harness?, allow_from?, capabilities?, max_uses?, ttl_seconds?, note?}` → `{enrollment, token}` (token `myco_enroll_…`, returned once) |
+| `POST /v1/enrollments` | admin (any member; exec links owner/admin) | `{name_prefix, harness?, allow_from?, capabilities?, max_uses?, ttl_seconds?, note?, superagent?}` → `{enrollment, token}` (token `myco_enroll_…`, returned once) | `superagent` (v0.21.5+, a person's link only): the agent that joins through it (and the machine enrollment made from it) becomes the caller's superagent.
 | `GET /v1/enrollments` | admin | `{enrollments}` |
 | `DELETE /v1/enrollments/{id}` | admin | Revoke |
 | `POST /v1/enroll` | enrollment token | `{name?, display_name?, description?, capabilities?, binding}` → `{agent, token, created}`; same session → same agent (new token) |

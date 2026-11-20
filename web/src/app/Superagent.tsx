@@ -1,7 +1,9 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ShieldQuestion } from "lucide-react";
 import type { Agent, Approval, SuperagentState } from "@/api";
-import { appApi } from "@/appapi";
+import { appApi, type JoinLink } from "@/appapi";
+import { CopyButton } from "@/app/copy";
+import { joinSentence } from "@/app/AddToProject";
 import type { AgentRow } from "@/app/types";
 import { ErrorText, Modal } from "@/app/dialogs";
 import { agentKind, machinesOfHub, nodeName } from "@/app/nodes";
@@ -73,7 +75,16 @@ export function SuperagentSetup({ open, onOpenChange, hubId, rows, current, onRe
   const meId = hub?.me?.member?.id;
   const machines = hub ? machinesOfHub(hub).filter((m) => m.online && m.can_spawn && (!meId || !m.owner_id || m.owner_id === meId)) : [];
   const mine = rows.filter((r) => r.hub.id === hubId && agentKind(r.st.agent) === "agent" && (!meId || r.st.agent.owner_id === meId));
-  const [how, setHow] = useState<"new" | "pick">("new");
+  const [how, setHow] = useState<"new" | "pick" | "link">("new");
+  // 复制一句话: a one-use link whose agent becomes your superagent (the
+  // hub does it from v0.21.5; for older ones this dialog does, as it sees
+  // a new agent of yours appear while it waits).
+  const [link, setLink] = useState<JoinLink | null>(null);
+  const [linkError, setLinkError] = useState<unknown>(null);
+  const before = useRef<Set<string> | null>(null);
+  // who it was when this opened (current follows the same store, so it
+  // changes the moment the new one is named)
+  const was = useRef<string | undefined>(undefined);
   const [machine, setMachine] = useState("");
   const [cli, setCli] = useState<"claude" | "codex">("claude");
   const [pick, setPick] = useState("");
@@ -87,9 +98,39 @@ export function SuperagentSetup({ open, onOpenChange, hubId, rows, current, onRe
     setHow(machines.length || !mine.length ? "new" : "pick");
     setMachine(machines[0]?.id || "");
     setPick(current?.name || "");
+    setLink(null);
+    setLinkError(null);
+    before.current = null;
+    was.current = current?.name;
     // Only when it opens: the lists refresh while it is open.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  useEffect(() => {
+    if (!open || how !== "link" || link) return;
+    before.current = new Set(mine.map((r) => r.st.agent.name));
+    appApi.createJoinLink(hubId, { uses: 1, expires_hours: 24, superagent: true }).then(setLink).catch(setLinkError);
+    // (once per opening of this tab)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, how, link, hubId]);
+  // Waiting for it to join: poll, and when a new agent of yours shows up,
+  // it is the one (named superagent here if the hub has not already).
+  const s = useSuperagent(open && how === "link" ? hubId : undefined);
+  const joinedName = how === "link" && before.current ? mine.find((r) => !before.current?.has(r.st.agent.name))?.st.agent.name : undefined;
+  useEffect(() => {
+    if (!open || how !== "link" || !link) return;
+    const t = setInterval(() => void refreshSuperagent(hubId), 3000);
+    return () => clearInterval(t);
+  }, [open, how, link, hubId]);
+  useEffect(() => {
+    if (!open || how !== "link" || !link) return;
+    const named = s?.state?.agent?.name;
+    if (named && named !== was.current) { onOpenChange(false); onReady(named); return; }
+    if (joinedName && named !== joinedName) {
+      appApi.setSuperagent(hubId, joinedName).then(() => refreshSuperagent(hubId)).catch(setLinkError);
+    }
+  }, [open, how, link, s?.state?.agent?.name, joinedName, hubId, onOpenChange, onReady]);
+  const sentence = link ? `${joinSentence(link)}${L(" 加入后运行 myco superagent guide，照它说的做：你是我在这个工作区的 superagent。", " Once joined, run myco superagent guide and do as it says: you are my superagent in this workspace.")}` : "";
 
   const close = () => { if (!busy) onOpenChange(false); };
   const ready = how === "new" ? !!machine : !!pick && pick !== current?.name;
@@ -127,17 +168,31 @@ export function SuperagentSetup({ open, onOpenChange, hubId, rows, current, onRe
   };
 
   return (
-    <Modal open={open} onOpenChange={(o) => { if (!o) close(); }}
-      title={current ? L("换一个 superagent", "Change your superagent") : L("配一个 superagent", "Set up your superagent")}
+    <Modal open={open} onOpenChange={(o) => { if (!o) close(); }} wide
+      title={current ? L("换一个 superagent", "Change your superagent") : "superagent"}
       description={L(
         `superagent 是你在这个工作区的总管，名字叫 ${SHROOM}：它能看全工作区，帮你开 agent、建项目、派活、盯进度。删东西、停东西、改别人的权限这类事，它会先来问你。它不能以你的名义说话。`,
         `Your superagent, ${SHROOM}, runs this workspace for you: it sees everything, starts agents, makes projects, hands out work and keeps track. Deleting, stopping or changing someone's access, it asks you first. It never speaks as you.`)}>
       <form onSubmit={(e) => { e.preventDefault(); if (ready) void submit(); }} data-testid="superagent-setup">
         <div className="seg seg-fill add-tabs" role="tablist" aria-label={L("怎么配", "How")}>
-          <button type="button" role="tab" aria-selected={how === "new"} className={cn("seg-btn", how === "new" && "active")} onClick={() => setHow("new")} disabled={busy}>{L(`新开一个 ${SHROOM}`, `Start a new ${SHROOM}`)}</button>
-          <button type="button" role="tab" aria-selected={how === "pick"} className={cn("seg-btn", how === "pick" && "active")} onClick={() => setHow("pick")} disabled={busy}>{L("用已有的 agent", "Use one of your agents")}</button>
+          <button type="button" role="tab" aria-selected={how === "new"} className={cn("seg-btn", how === "new" && "active")} onClick={() => setHow("new")} disabled={busy}>{L(`新开 ${SHROOM}`, `New ${SHROOM}`)}</button>
+          <button type="button" role="tab" aria-selected={how === "pick"} className={cn("seg-btn", how === "pick" && "active")} onClick={() => setHow("pick")} disabled={busy}>{L("用已有的", "Use one")}</button>
+          <button type="button" role="tab" aria-selected={how === "link"} className={cn("seg-btn", how === "link" && "active")} onClick={() => setHow("link")} disabled={busy} data-testid="superagent-link-tab">{L("一句话接入", "By a sentence")}</button>
         </div>
-        {how === "new" ? (
+        {how === "link" ? (
+          <div className="add-agent-way" data-testid="superagent-link">
+            <div className="app-field-label">{L("把这句话发给一个 Claude Code、Codex 会话（本机、别的电脑或 claude.ai 云端都行），它加入后就是你的 superagent：", "Send this to a Claude Code or Codex session (here, on another computer or in the cloud); once it joins, it is your superagent:")}</div>
+            {link ? (
+              <div className="add-sentence">
+                <p className="add-sentence-text">{sentence}</p>
+                <div className="add-sentence-actions"><CopyButton value={sentence} /></div>
+              </div>
+            ) : linkError ? <ErrorText error={linkError} /> : (
+              <div className="app-command"><span className="app-spinner" /><code>{L("正在生成…", "Making it…")}</code></div>
+            )}
+            {link && <div className="ws-command-wait"><span className="app-spinner" />{L("等它加入…加入后这里会自动打开和它的对话。这句话 24 小时内有效，只能用一次，等同凭据，只发给你自己的会话。", "Waiting for it to join… its chat opens here once it has. The sentence works once, for 24 hours; it is a credential, so send it only to your own session.")}</div>}
+          </div>
+        ) : how === "new" ? (
           machines.length === 0 ? (
             <div className="app-empty-note">{L("你还没有在线、能开 agent 的电脑。先在「电脑」里连一台，或者用已有的 agent。", "None of your computers is online and able to start agents. Connect one under Computers, or use one of your agents.")}</div>
           ) : (<>
@@ -183,9 +238,9 @@ export function SuperagentSetup({ open, onOpenChange, hubId, rows, current, onRe
           {current && <button type="button" className="app-btn app-btn-plain app-btn-danger-quiet" onClick={() => void remove()} disabled={busy} data-testid="superagent-remove">{L("不要 superagent 了", "Remove superagent")}</button>}
           <span style={{ flex: 1 }} />
           <button type="button" className="app-btn" onClick={close} disabled={busy}>{L("取消", "Cancel")}</button>
-          <button type="submit" className="app-btn app-btn-primary" disabled={busy || !ready}>
+          {how !== "link" && <button type="submit" className="app-btn app-btn-primary" disabled={busy || !ready}>
             {busy ? <><span className="app-spinner" />{L("正在配…", "Setting up…")}</> : how === "new" ? L(`开一个 ${SHROOM}`, `Start ${SHROOM}`) : L("就用它", "Use it")}
-          </button>
+          </button>}
         </div>
       </form>
     </Modal>

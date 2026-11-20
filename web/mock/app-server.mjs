@@ -3450,6 +3450,18 @@ const server = http.createServer(async (req, res) => {
       state.counter += 1;
       const joinUrl = `${hub.url.replace(/\/+$/, "")}/j/myco_enroll_demo${state.counter}x7k2m9q4w8`;
       // A shell-node link: the UI smoke "runs" it with /app/mock/run-join.
+      // A superagent link: a cloud session "joins" a moment later and is
+      // your superagent (as the hub does from v0.21.5).
+      if (body?.superagent) {
+        setTimeout(() => {
+          state.counter += 1;
+          const name = `cloud-shroom-${state.counter}`;
+          hub.agents.push(makeAgent({ name, display_name: "Shroom", owner: "glenn", owner_id: "mem_glenn", kind: "agent",
+            binding: { harness: "claude-cloud", environment: "claude.ai" }, created_at: iso(0), last_seen_at: iso(0), status_text: "刚加入" }));
+          state.superagents ||= {};
+          state.superagents[hub.id] = name;
+        }, 2500);
+      }
       if (body?.shell_node) state.pendingJoin = { hubId: hub.id, allow: Array.isArray(body.allow_from) ? body.allow_from : [] };
       else if (uses === 1) state.pendingConnect = { hubId: hub.id };
       return send(res, 200, {

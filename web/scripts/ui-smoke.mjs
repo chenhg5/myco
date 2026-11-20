@@ -4402,8 +4402,8 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".app-hub-menu").waitFor();
       const entry = page.locator("[data-testid=menu-superagent]");
       await entry.waitFor({ timeout: 10_000 });
-      const label = compactText(await entry.innerText());
-      if (!label.includes("配一个 superagent")) throw new Error(`没有 superagent 时菜单应写「配一个 superagent」，实际「${label}」`);
+      const label = compactText(await entry.locator(".app-hub-menu-name").innerText());
+      if (label.trim() !== "superagent") throw new Error(`菜单里这一项应就叫「superagent」，实际「${label}」`);
       await clickVisible(page, entry);
       const dialog = page.locator("[data-testid=superagent-setup]");
       await dialog.waitFor({ timeout: 10_000 });
@@ -4437,6 +4437,30 @@ async function runMatrix(browser, size, scheme) {
       if (narrow) await sidebar(page, false);
       await clickVisible(page, card.getByRole("button", { name: "同意", exact: true }));
       await card.waitFor({ state: "hidden", timeout: 10_000 });
+    });
+
+    // A superagent from a sentence: copied to any session (a cloud one too),
+    // it joins and is your superagent; its chat opens.
+    await step("superagent · 复制一句话接入", async () => {
+      await fetch(`http://${HOST}:${mockPort()}/app/mock/superagent-ask`, { method: "DELETE" });
+      // (the App keeps what it knew for a while: start it afresh)
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await page.locator(".sp-home, .sp-group, .sp-first").first().waitFor({ timeout: 20_000 });
+      await sidebar(page, true);
+      await clickVisible(page, page.locator(".sp-switch .app-hub-trigger"));
+      await page.locator(".app-hub-menu").waitFor();
+      await clickVisible(page, page.locator("[data-testid=menu-superagent]"));
+      const dialog = page.locator("[data-testid=superagent-setup]");
+      await dialog.waitFor({ timeout: 10_000 });
+      await clickVisible(page, dialog.locator("[data-testid=superagent-link-tab]"));
+      const sentence = dialog.locator("[data-testid=superagent-link] .add-sentence-text");
+      await sentence.waitFor({ timeout: 10_000 });
+      const text = compactText(await sentence.innerText());
+      if (!text.includes("myco superagent guide") || !text.includes("/j/")) throw new Error(`那句话应带加入命令和 superagent 说明，实际「${text}」`);
+      await settle(page, 200);
+      await shot(page, size, scheme, "superagent-link");
+      await page.locator(".app-modal").waitFor({ state: "hidden", timeout: 30_000 });
+      await page.locator(".conv-detail .conv-head h2", { hasText: "Shroom" }).waitFor({ timeout: 20_000 });
     });
 
     // The ⌘⇧Space panel (the Mac app's own window, /?quick=1): one line to
