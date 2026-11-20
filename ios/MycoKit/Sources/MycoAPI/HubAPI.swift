@@ -171,6 +171,12 @@ public protocol HubAPI: Sendable {
     /// `GET /v1/workflow-decisions`: the decisions waiting for me.
     func workflowDecisions() async throws -> [WorkflowDecision]
 
+    /// `GET /v1/projects/{name}/machines`: the workspace's computers, and
+    /// which the project's coordinators may start agents on (v0.21.2+).
+    func projectMachines(_ project: String) async throws -> [ProjectMachine]
+    /// `PUT` (allowed) or `DELETE` `/v1/projects/{name}/machines/{machine}`.
+    func setProjectMachine(_ project: String, machine: String, allowed: Bool) async throws
+
     // Superagents (v0.21.1+; older workspaces answer 404)
     /// `GET /v1/console/superagent`
     func superagent() async throws -> SuperagentState
@@ -201,7 +207,8 @@ public protocol HubAPI: Sendable {
     /// runner starts it with from its next run ("" follows its computer's
     /// setting). For whoever owns the agent or manages the workspace. A
     /// workspace from before v0.19.5 answers `not_found`.
-    func setRunSettings(of agent: String, model: String, effort: String) async throws -> Agent
+    /// `access` nil: left as it is.
+    func setRunSettings(of agent: String, model: String, effort: String, access: String?) async throws -> Agent
     /// `GET /v1/agents/{name}/handovers`: the times another session took
     /// this agent over, newest first. For whoever owns it or manages the
     /// workspace. A workspace from before v0.19.23 answers `not_found`.

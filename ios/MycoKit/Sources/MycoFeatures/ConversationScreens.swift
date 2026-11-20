@@ -29,7 +29,7 @@ struct AgentScreen: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        Button(L("图片和文件", "Pictures and files"), systemImage: "photo.on.rectangle") {
+                        Button(L("文件和应用", "Files and apps"), systemImage: "photo.on.rectangle") {
                             router.sheet = .files(agent: name, project: nil)
                         }
                         if session.pins(with: name).supported {
@@ -131,7 +131,7 @@ struct ProjectScreen: View {
                         router.sheet = .addComputer(project: name)
                     }
                     if let project = session.project(name), let lead = session.coordinator(of: project) {
-                        Button(L("图片和文件", "Pictures and files"), systemImage: "photo.on.rectangle") {
+                        Button(L("文件和应用", "Files and apps"), systemImage: "photo.on.rectangle") {
                             router.sheet = .files(agent: lead, project: name)
                         }
                         if session.pins(with: lead).supported {
@@ -1133,6 +1133,17 @@ struct ConversationBody: View {
         }
     }
 
+    /// Beside the send button: what it may touch, and its model and effort.
+    private var runAside: AnyView? {
+        let access = session.accessChoice(of: model.agent)
+        let run = session.runChoice(of: model.agent)
+        guard access != nil || run != nil else { return nil }
+        return AnyView(HStack(spacing: 0) {
+            if let access { AccessButton(agent: model.agent, choice: access) }
+            if let run { RunChoiceButton(agent: model.agent, choice: run) }
+        })
+    }
+
     /// What can be done about a task that may be stuck, as on the desktop:
     /// it was done (close it), ask where it stands, or stop it.
     private func stuckActions(_ taskID: String) -> [NoticeLine.Action] {
@@ -1149,9 +1160,10 @@ struct ConversationBody: View {
 
     private var bottom: some View {
         VStack(spacing: 0) {
-            // My superagent's requests that wait for me, to approve or deny.
-            if !model.readOnly, session.superagent.agent == model.agent {
-                ApprovalStrip(model: session.superagent, name: session.displayName(of: model.agent))
+            // What it asks of me (my superagent, a coordinator wanting a
+            // computer), to approve or deny.
+            if !model.readOnly, session.superagent.agent == model.agent || session.superagent.approvals.contains(where: { $0.agent == model.agent }) {
+                ApprovalStrip(model: session.superagent, agent: model.agent, name: session.displayName(of: model.agent))
                     .padding(.horizontal, Space.page).padding(.top, Space.s)
             }
             // What else it holds, given by others and not done: said here,
@@ -1273,7 +1285,7 @@ struct ConversationBody: View {
                 openLabel: L("看一下", "Look at"),
                 // The model and effort it runs with, switched here by
                 // whoever may. Out of the way while a call is on.
-                aside: call == nil ? session.runChoice(of: model.agent).map { AnyView(RunChoiceButton(agent: model.agent, choice: $0)) } : nil,
+                aside: call == nil ? runAside : nil,
                 onSubmit: {
                     commits += 1
                     if canCall {
@@ -1518,11 +1530,12 @@ private struct PoorNetworkLine: View {
 /// while the conversation is open.
 private struct ApprovalStrip: View {
     let model: SuperagentModel
+    let agent: String
     let name: String
 
     var body: some View {
         VStack(spacing: Space.s) {
-            ForEach(model.approvals) { approval in
+            ForEach(model.approvals.filter { $0.agent == agent }) { approval in
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Image(systemName: "checkmark.shield").font(.footnote).foregroundStyle(MycoColor.amber)

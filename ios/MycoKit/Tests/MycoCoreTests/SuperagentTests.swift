@@ -63,4 +63,17 @@ struct SuperagentTests {
             #expect(SuperagentModel.left(approval(-1), now: now) == "已过期")
         }
     }
+
+    @Test func aProjectsCoordinatorsGetComputersAndMycoIsBroughtUpToDate() async throws {
+        let hub = FakeHub()
+        let computers = try await hub.projectMachines("myco-ios")
+        let computer = try #require(computers.first)
+        #expect(!computer.allowed)
+        try await hub.setProjectMachine("myco-ios", machine: computer.id, allowed: true)
+        #expect(try await hub.projectMachines("myco-ios").first { $0.id == computer.id }?.allowed == true)
+        try await hub.setProjectMachine("myco-ios", machine: computer.id, allowed: false)
+        #expect(try await hub.projectMachines("myco-ios").first { $0.id == computer.id }?.allowed == false)
+        let upgrade = try #require(try await hub.spawn(on: computer.id, SpawnRequest(cli: "upgrade")).upgrade)
+        #expect(upgrade.from == "v0.20.0" && upgrade.to == "v0.21.2")
+    }
 }

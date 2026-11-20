@@ -300,3 +300,23 @@ public struct WorkflowDecision: Codable, Sendable, Hashable, Identifiable {
 
     public var id: String { run.id + "/" + step.id }
 }
+
+/// A computer of the workspace, as a project sees it: whether its
+/// coordinators may start agents on it (hubs from v0.21.2).
+public struct ProjectMachine: Codable, Sendable, Hashable, Identifiable {
+    public var id: String
+    public var name: String
+    public var os: String?
+    public var online: Bool
+    public var canSpawn: Bool?
+    public var allowed: Bool
+
+    public init(id: String, name: String, os: String? = nil, online: Bool = true, canSpawn: Bool? = true, allowed: Bool = false) {
+        self.id = id
+        self.name = name
+        self.os = os
+        self.online = online
+        self.canSpawn = canSpawn
+        self.allowed = allowed
+    }
+}

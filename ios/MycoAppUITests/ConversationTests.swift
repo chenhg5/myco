@@ -659,7 +659,7 @@ final class ConversationTests: XCTestCase {
         let more = app.buttons["conversation.more"]
         XCTAssertTrue(more.waitForExistence(timeout: 20))
         more.tap()
-        app.buttons["Pictures and files"].tap()
+        app.buttons["Files and apps"].tap()
         let message = app.descendants(matching: .any).matching(identifier: "files.message").firstMatch
         XCTAssertTrue(message.waitForExistence(timeout: 10), "each message with files, with who sent it")
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "协调者 · ")).firstMatch.exists)

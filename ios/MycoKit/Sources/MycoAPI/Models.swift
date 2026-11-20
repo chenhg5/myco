@@ -20,6 +20,10 @@ public struct Binding: Codable, Sendable, Hashable {
 
 /// What a node actually runs; absent on nodes reported by old runners.
 public struct Runtime: Codable, Sendable, Hashable {
+    /// What it may touch when it runs, in use: readonly, workspace, full.
+    public var access: String? = nil
+    /// The most its computer allows (runners from v0.19.8).
+    public var maxAccess: String? = nil
     public var cli: String?
     public var cliVersion: String?
     public var model: String?
@@ -74,10 +78,13 @@ public struct RuntimeModel: Codable, Sendable, Hashable {
 public struct RunSettings: Codable, Sendable, Hashable {
     public var model: String?
     public var effort: String?
+    /// readonly, workspace or full ("" or nil: its computer's).
+    public var access: String?
 
-    public init(model: String? = nil, effort: String? = nil) {
+    public init(model: String? = nil, effort: String? = nil, access: String? = nil) {
         self.model = model
         self.effort = effort
+        self.access = access
     }
 }
 
@@ -341,6 +348,8 @@ public struct Project: Codable, Sendable, Hashable, Identifiable {
     @LossyList public var links: [ProjectLink]
     @LossyList public var members: [ProjectMember]
     @LossyList public var docs: [ProjectDoc]
+    /// I may change who is in it and what it may use (its owner, an admin).
+    public var canManage: Bool? = nil
 
     public var id: String { name }
 

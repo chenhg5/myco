@@ -438,6 +438,25 @@ public actor FakeHub: HubAPI {
         }
     }
 
+    // MARK: A project's computers
+
+    private var projectMachineList: [String: Set<String>] = [:]
+
+    public func projectMachines(_ project: String) async throws -> [ProjectMachine] {
+        try await check()
+        guard projectList.contains(where: { $0.name == project }) else {
+            throw HubError(error: "not_found", message: "project \(project) not found", status: 404)
+        }
+        let allowed = projectMachineList[project] ?? []
+        return machines.map { ProjectMachine(id: $0.id, name: $0.name, os: $0.os, online: $0.online, canSpawn: $0.canSpawn, allowed: allowed.contains($0.id)) }
+    }
+
+    public func setProjectMachine(_ project: String, machine: String, allowed: Bool) async throws {
+        try await check()
+        guard machines.contains(where: { $0.id == machine }) else { throw HubError(error: "not_found", message: "machine \(machine) not found", status: 404) }
+        if allowed { projectMachineList[project, default: []].insert(machine) } else { projectMachineList[project]?.remove(machine) }
+    }
+
     // MARK: Superagents
 
     private var superagentName: String?
@@ -588,14 +607,16 @@ public actor FakeHub: HubAPI {
         tooOldForRunSettings = value
     }
 
-    public func setRunSettings(of agent: String, model: String, effort: String) async throws -> Agent {
+    public func setRunSettings(of agent: String, model: String, effort: String, access: String?) async throws -> Agent {
         try await check()
         if tooOldForRunSettings { throw HubError(error: "not_found", message: "not found") }
         guard let index = agents.firstIndex(where: { $0.agent.name == agent }) else {
             throw HubError(error: "not_found", message: "agent \(agent) not found")
         }
         // Kept as chosen; what it runs with changes at its next run.
-        agents[index].agent.runSettings = model.isEmpty && effort.isEmpty ? nil : RunSettings(model: model, effort: effort)
+        let keep = access ?? agents[index].agent.runSettings?.access ?? ""
+        agents[index].agent.runSettings = model.isEmpty && effort.isEmpty && keep.isEmpty
+            ? nil : RunSettings(model: model, effort: effort, access: keep.isEmpty ? nil : keep)
         return agents[index].agent
     }
 
