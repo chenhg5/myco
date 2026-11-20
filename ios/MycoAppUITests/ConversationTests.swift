@@ -364,22 +364,53 @@ final class ConversationTests: XCTestCase {
         let submit = app.descendants(matching: .any)["composer.submit"]
         XCTAssertTrue(submit.isHittable)
         open.firstMatch.tap()
-        // The system's preview covers the page.
+        // The picture viewer covers the page.
         expectation(for: NSPredicate(format: "hittable == false"), evaluatedWith: submit)
         waitForExpectations(timeout: 10)
-        XCTAssertTrue(app.descendants(matching: .any)["QLPreviewControllerView"].waitForExistence(timeout: 5), "it is the system's preview")
+        let viewer = app.descendants(matching: .any)["picture.viewer"]
+        XCTAssertTrue(viewer.waitForExistence(timeout: 5), "it is the picture viewer")
+        XCTAssertTrue(app.buttons["picture.share"].exists, "it can be shared or saved")
         snap("files-look")
-        // Closed the way the system's preview is: a picture fills the
-        // screen, a tap brings its bar, and the bar has a close button.
-        let done = app.buttons["QLOverlayDoneButtonAccessibilityIdentifier"]
-        if !done.exists { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap() }
-        XCTAssertTrue(done.waitForExistence(timeout: 5), "the preview can be closed")
-        done.tap()
+        // Its close button closes it.
+        app.buttons["picture.close"].tap()
         // It is still waiting to go.
         expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: submit)
         waitForExpectations(timeout: 10)
         XCTAssertTrue(open.firstMatch.exists)
         XCTAssertTrue(submit.isEnabled)
+        // A drag down closes it too, as in chat apps.
+        open.firstMatch.tap()
+        XCTAssertTrue(viewer.waitForExistence(timeout: 5))
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35))
+            .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85)), withVelocity: .fast, thenHoldForDuration: 0)
+        expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: submit)
+        waitForExpectations(timeout: 10)
+        XCTAssertFalse(viewer.exists)
+    }
+
+    @MainActor
+    func testAMessagesPicturesOpenOverTheScreenAndCloseWithADragDown() {
+        // The coordinator's answer has three sketches.
+        let app = launch(["-myco-route", "agent:cloud-lead"])
+        let picture = app.buttons["attachment.picture"].firstMatch
+        XCTAssertTrue(picture.waitForExistence(timeout: 30))
+        picture.tap()
+        let viewer = app.descendants(matching: .any)["picture.viewer"]
+        XCTAssertTrue(viewer.waitForExistence(timeout: 10))
+        let count = app.staticTexts["picture.count"]
+        XCTAssertTrue(count.waitForExistence(timeout: 5))
+        XCTAssertEqual(count.label, "1 / 3")
+        snap("picture-viewer")
+        // Sideways: the next one.
+        app.swipeLeft()
+        expectation(for: NSPredicate(format: "label == %@", "2 / 3"), evaluatedWith: count)
+        waitForExpectations(timeout: 5)
+        // Down: back in the conversation.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35))
+            .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85)), withVelocity: .fast, thenHoldForDuration: 0)
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: viewer)
+        waitForExpectations(timeout: 10)
+        XCTAssertTrue(picture.isHittable)
     }
 
     @MainActor
