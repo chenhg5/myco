@@ -562,7 +562,7 @@ function MakeDialog({ hubId, rows, making, onClose, onMade, onAsked }: {
             <textarea className="app-input au-body" rows={4} value={ask} onChange={(e) => setAsk(e.target.value)} disabled={busy}
               placeholder={L("比如：每次有新需求，先让 Claude 写方案，Codex 审；审过了 Claude 实现，在 Studio Mac 上跑测试，过了再问我要不要合并。", "e.g. For each new request, Claude writes a plan and Codex reviews it; once it passes Claude builds it, the tests run on Studio Mac, and if they pass I am asked whether to merge.")} /></label>
           <ErrorText error={error} />
-          <div className="app-modal-actions">
+          <div className="app-modal-actions au-actions">
             {!agents.length && <span className="app-modal-hint">{L("先加一个 agent", "Add an agent first")}</span>}
             <button type="button" className="app-btn" onClick={onClose} disabled={busy}>{L("取消", "Cancel")}</button>
             <button type="submit" className="app-btn app-btn-primary" disabled={busy || !r || !ask.trim()}><MessageSquare />{busy ? L("正在发…", "Sending…") : L("交给它写", "Ask it")}</button>
@@ -591,7 +591,7 @@ function MakeDialog({ hubId, rows, making, onClose, onMade, onAsked }: {
           <WorkflowGraph def={byRole(ready.make(who, name || ready.name))} hubId={hubId} rows={rows} />
         </div>
         <ErrorText error={error} />
-        <div className="app-modal-actions">
+        <div className="app-modal-actions au-actions">
           {lacking && <span className="app-modal-hint">{lacking.computer ? L("先连一台电脑", "Connect a computer first") : L("先加一个 agent", "Add an agent first")}</span>}
           <button type="button" className="app-btn" onClick={onClose} disabled={busy}>{L("取消", "Cancel")}</button>
           <button type="submit" className="app-btn app-btn-primary" disabled={busy || !!lacking || !name.trim()}>{busy ? L("正在保存…", "Saving…") : L("保存工作流", "Save workflow")}</button>

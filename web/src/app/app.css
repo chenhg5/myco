@@ -5524,7 +5524,10 @@ button.app-label:hover { filter: brightness(0.95); }
 @media (max-width: 640px) { .au-templates { grid-template-columns: minmax(0, 1fr); } }
 
 /* The editor: to whom, what, when; its buttons stay in sight. */
-.au-edit { max-width: 480px; padding-bottom: 0; }
+.au-edit { max-width: 480px; }
+/* With its buttons in a bar stuck to the bottom (au-actions): the bar has
+   the room under them, the dialog none of its own. */
+.au-edit:has(.au-actions) { padding-bottom: 0; }
 .au-edit .app-field + .app-field, .au-edit .app-field + .au-skip { margin-top: 12px; }
 .au-to { display: flex; align-items: center; gap: 8px; }
 .au-to .pa { flex: none; }
