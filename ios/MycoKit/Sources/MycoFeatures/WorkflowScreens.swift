@@ -262,7 +262,7 @@ struct WorkflowScreen: View {
                         .disabled(!(listed?.enabled ?? shown.enabled) || workflow == nil)
                         .modifier(PlainRow())
                         .accessibilityIdentifier("workflow.start")
-                        Toggle(L("开着（关掉就不能运行）", "On (off: it cannot be run)"), isOn: Binding(
+                        Toggle(L("开着（关掉就不能运行）", "On (off: it cannot be run)"), isOn: SwiftUI.Binding(
                             get: { listed?.enabled ?? shown.enabled },
                             set: { on in Task { await model.setEnabled(shown, on) } }))
                             .tint(MycoColor.green)
@@ -414,8 +414,8 @@ private struct StartRunSheet: View {
         .interactiveDismissDisabled(model.busy != nil)
     }
 
-    private func binding(_ field: WorkflowsModel.Field) -> Binding<String> {
-        Binding(get: { values[field.id] ?? field.start }, set: { values[field.id] = $0 })
+    private func binding(_ field: WorkflowsModel.Field) -> SwiftUI.Binding<String> {
+        SwiftUI.Binding(get: { values[field.id] ?? field.start }, set: { values[field.id] = $0 })
     }
 
     @ViewBuilder private func input(_ field: WorkflowsModel.Field) -> some View {
@@ -427,7 +427,7 @@ private struct StartRunSheet: View {
         case .number:
             TextField(field.title, text: binding(field)).keyboardType(.decimalPad).accessibilityIdentifier("workflow.input." + field.id)
         case .toggle:
-            Toggle(field.title, isOn: Binding(get: { (values[field.id] ?? field.start) == "true" }, set: { values[field.id] = $0 ? "true" : "false" }))
+            Toggle(field.title, isOn: SwiftUI.Binding(get: { (values[field.id] ?? field.start) == "true" }, set: { values[field.id] = $0 ? "true" : "false" }))
                 .tint(MycoColor.green)
         case .choice(let options):
             Picker(field.title, selection: binding(field)) {
