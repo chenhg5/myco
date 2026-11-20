@@ -9,6 +9,9 @@ export class Player {
   private raf = 0;
   playing = false;
   rate = 1;
+  /** Skip what nobody says: gaps longer than this many seconds (0: off). */
+  skip = 0;
+  private speech: [number, number][] = [];
   time = 0;
   duration = 0;
 
@@ -52,6 +55,9 @@ export class Player {
     if (this.playing) for (const a of this.els) if (a.paused && (!a.duration || t < a.duration)) void a.play().catch(() => undefined);
     this.emit();
   }
+  /** When people speak (sorted), for skipping the silence between. */
+  setSpeech(spans: [number, number][]) { this.speech = spans; }
+  setSkip(on: boolean) { this.skip = on ? 1.5 : 0; this.emit(); }
   setRate(r: number) {
     this.rate = r;
     for (const a of this.els) a.playbackRate = r;
@@ -63,6 +69,15 @@ export class Player {
       const lead = this.lead;
       if (lead) {
         this.time = lead.currentTime;
+        if (this.skip && this.playing && this.speech.length) {
+          // in a long silence: on to the next one who speaks
+          const t = this.time;
+          const inside = this.speech.some(([a, b]) => t >= a - 0.3 && t <= b + 0.3);
+          if (!inside) {
+            const next = this.speech.find(([a]) => a > t);
+            if (next && next[0] - t > this.skip) this.seek(next[0] - 0.3);
+          }
+        }
         for (const a of this.els) {
           if (a !== lead && !a.ended && Math.abs(a.currentTime - lead.currentTime) > 0.12 && lead.currentTime < (a.duration || Infinity)) a.currentTime = lead.currentTime;
         }
