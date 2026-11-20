@@ -29,7 +29,7 @@ struct AgentScreen: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        Button(L("图片和文件", "Pictures and files"), systemImage: "photo.on.rectangle") {
+                        Button(L("文件和应用", "Files and apps"), systemImage: "photo.on.rectangle") {
                             router.sheet = .files(agent: name, project: nil)
                         }
                         if session.pins(with: name).supported {
@@ -131,7 +131,7 @@ struct ProjectScreen: View {
                         router.sheet = .addComputer(project: name)
                     }
                     if let project = session.project(name), let lead = session.coordinator(of: project) {
-                        Button(L("图片和文件", "Pictures and files"), systemImage: "photo.on.rectangle") {
+                        Button(L("文件和应用", "Files and apps"), systemImage: "photo.on.rectangle") {
                             router.sheet = .files(agent: lead, project: name)
                         }
                         if session.pins(with: lead).supported {

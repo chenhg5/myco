@@ -967,6 +967,21 @@ public final class ConversationModel {
     // MARK: For a voice call (ConversationVoice)
 
     /// Every message between me and the agent seen so far, oldest first.
+    /// The web pages (apps) linked in what is loaded here, once each,
+    /// newest first, with the message that linked each last.
+    public var linkedPages: [(id: String, message: String, at: Date)] {
+        let hidden = session.hidden
+        var seen = Set<String>()
+        var pages: [(id: String, message: String, at: Date)] = []
+        for message in known.values.sorted(by: { $0.createdAt > $1.createdAt })
+        where !withdrawn.contains(message.id) && !hidden.contains(message.id) {
+            for id in session.pages.ids(in: message.body) where seen.insert(id).inserted {
+                pages.append((id, message.id, message.createdAt))
+            }
+        }
+        return pages
+    }
+
     public var exchanged: [Message] {
         known.values.sorted { $0.createdAt < $1.createdAt }
     }
