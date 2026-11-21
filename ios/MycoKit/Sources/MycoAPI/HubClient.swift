@@ -50,6 +50,11 @@ public struct HubClient: HubAPI {
             query["project"] = name
         case .everything:
             break
+        case .search(let text):
+            query["group"] = "pair"
+            query["side"] = "me"
+            query["q"] = text
+            query["limit"] = "20"
         }
         let envelope: RecentEnvelope = try await get("/v1/console/recent", query, timeout: Self.pollTimeout)
         return envelope.items

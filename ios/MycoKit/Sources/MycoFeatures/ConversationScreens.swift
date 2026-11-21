@@ -29,6 +29,9 @@ struct AgentScreen: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
+                        Button(L("搜索这段对话", "Search this conversation"), systemImage: "magnifyingglass") {
+                            session.conversation(with: name, project: nil).finding = true
+                        }
                         Button(L("文件和应用", "Files and apps"), systemImage: "photo.on.rectangle") {
                             router.sheet = .files(agent: name, project: nil)
                         }
@@ -131,6 +134,9 @@ struct ProjectScreen: View {
                         router.sheet = .addComputer(project: name)
                     }
                     if let project = session.project(name), let lead = session.coordinator(of: project) {
+                        Button(L("搜索这段对话", "Search this conversation"), systemImage: "magnifyingglass") {
+                            session.conversation(with: lead, project: name).finding = true
+                        }
                         Button(L("文件和应用", "Files and apps"), systemImage: "photo.on.rectangle") {
                             router.sheet = .files(agent: lead, project: name)
                         }
@@ -248,6 +254,8 @@ struct ConversationBody: View {
     @State private var lookingAt: URL?
     /// A pinned message to scroll to.
     @State private var jumpTo: String?
+    /// Which of the places found is the one shown (nil: the newest).
+    @State private var findIndex: Int?
     /// What this conversation keeps above its messages (mine with the agent).
     private var pins: PinsModel? { model.readOnly ? nil : session.pins(with: model.agent) }
     /// The end was pulled up: the page is asking the workspace again.
@@ -326,8 +334,18 @@ struct ConversationBody: View {
                             }
                             .accessibilityIdentifier("conversation.earlier")
                     }
+                    let found = model.finding ? ConversationSearch.hits(in: model.items, query: model.findText) : []
+                    let current = found.isEmpty ? nil : found[min(findIndex ?? found.count - 1, found.count - 1)]
                     ForEach(Array(model.items.enumerated()), id: \.element.id) { index, item in
                         row(item, at: index)
+                            // Found by the search bar: marked, the one shown more.
+                            .background {
+                                if found.contains(item.id) {
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .fill(item.id == current ? MycoColor.amber.opacity(0.28) : MycoColor.amberSoft)
+                                        .padding(-6)
+                                }
+                            }
                             // What comes once the page is open arrives; what
                             // it opened with is simply there, and so is what
                             // was already shown while it was being sent.
@@ -539,6 +557,18 @@ struct ConversationBody: View {
         // The workspace does not answer: what is here is from before.
         .safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {
+                if model.finding {
+                    FindBar(
+                        text: $model.findText, found: ConversationSearch.hits(in: model.items, query: model.findText), index: $findIndex,
+                        canLookFurther: model.hasMoreEarlier,
+                        go: { id in jumpTo = id },
+                        lookFurther: { Task { _ = await model.loadEarlier() } },
+                        close: {
+                            model.finding = false
+                            model.findText = ""
+                            findIndex = nil
+                        })
+                }
                 // (while it is at work, the line above the input says it)
                 if model.unreachable != nil, model.openTask == nil {
                     StaleBanner(
@@ -1319,6 +1349,19 @@ struct ConversationBody: View {
         .sensoryFeedback(.selection, trigger: micState == .listening)
         // (who my superagent is: its conversation shows what waits for me)
         .task { if !session.superagent.loaded { await session.superagent.load() } }
+        // Opened from a search: finding those words, on that message.
+        .onAppear {
+            if let find = router.findOnOpen, find.message == focus {
+                model.findText = find.query
+                model.finding = true
+                router.findOnOpen = nil
+            }
+        }
+        .onChange(of: model.items.count, initial: true) {
+            guard model.finding, findIndex == nil, let focus,
+                  let at = ConversationSearch.hits(in: model.items, query: model.findText).firstIndex(of: focus) else { return }
+            findIndex = at
+        }
     }
 
     private var submitLabel: String {
@@ -1578,5 +1621,80 @@ private struct ApprovalStrip: View {
                 try? await Task.sleep(for: .seconds(20))
             }
         }
+    }
+}
+
+/// Finding words in a conversation (the desktop app's ⌘F): what is typed is
+/// looked for in what was said here; each place is marked, the one shown
+/// more; up goes to the one before, down to the one after. Older messages
+/// not loaded yet can be looked in too.
+private struct FindBar: View {
+    @Binding var text: String
+    let found: [String]
+    @Binding var index: Int?
+    let canLookFurther: Bool
+    let go: (String) -> Void
+    let lookFurther: () -> Void
+    let close: () -> Void
+    @FocusState private var typing: Bool
+
+    private var at: Int? { found.isEmpty ? nil : min(index ?? found.count - 1, found.count - 1) }
+
+    var body: some View {
+        VStack(spacing: 6) {
+            HStack(spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass").font(.footnote).foregroundStyle(MycoColor.muted)
+                    TextField(L("在这段对话里找", "Find in this conversation"), text: $text)
+                        .focused($typing)
+                        .submitLabel(.search)
+                        .onSubmit { step(-1) }
+                        .accessibilityIdentifier("find.text")
+                    if let at {
+                        Text("\(at + 1)/\(found.count)").font(.caption.monospacedDigit()).foregroundStyle(MycoColor.muted)
+                            .accessibilityIdentifier("find.count")
+                    } else if !text.trimmingCharacters(in: .whitespaces).isEmpty {
+                        Text(L("没找到", "None")).font(.caption).foregroundStyle(MycoColor.muted)
+                    }
+                }
+                .padding(.horizontal, 10).frame(height: 36)
+                .background(MycoColor.pill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                Button { step(-1) } label: { Image(systemName: "chevron.up") }
+                    .disabled(at == nil || at == 0)
+                    .accessibilityLabel(L("上一处", "Previous"))
+                    .accessibilityIdentifier("find.previous")
+                Button { step(1) } label: { Image(systemName: "chevron.down") }
+                    .disabled(at == nil || at == found.count - 1)
+                    .accessibilityLabel(L("下一处", "Next"))
+                    .accessibilityIdentifier("find.next")
+                Button(L("完成", "Done"), action: close).font(.subheadline.weight(.medium))
+                    .accessibilityIdentifier("find.done")
+            }
+            .tint(MycoColor.fg)
+            if canLookFurther, !text.trimmingCharacters(in: .whitespaces).isEmpty, at == nil || at == 0 {
+                Button(L("加载更早的消息，接着找", "Load older messages and look there too"), action: lookFurther)
+                    .font(.footnote).tint(MycoColor.accent)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("find.further")
+            }
+        }
+        .padding(.horizontal, Space.page).padding(.vertical, 8)
+        .background(.bar)
+        .onAppear { if text.isEmpty { typing = true } }
+        // A new search starts at the newest place.
+        .onChange(of: text) {
+            index = nil
+            if let last = found.last { go(last) }
+        }
+        .onChange(of: found) { _, now in
+            if let at, at < now.count, index == nil { go(now[at]) }
+        }
+    }
+
+    private func step(_ by: Int) {
+        guard let at else { return }
+        let next = max(0, min(found.count - 1, at + by))
+        index = next
+        go(found[next])
     }
 }
