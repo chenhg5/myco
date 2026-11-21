@@ -21,7 +21,7 @@ import { myco, save } from "../_lib/myco";
 import type { OSAudioSource } from "../_lib/myco";
 import { os, osState, osStateText, useOS, formatBytes } from "../_lib/os";
 import { Popover, rectOf } from "../_lib/ui";
-import { clock, kit, length, meetingList, meetingRank, meetings, num, segments, segmentsOf, shade, speakerKeys, speakerName, speakerOf, when, type Meeting, type Notes, type Track } from "./model";
+import { clock, kit, length, meetingList, meetingRank, meetings, num, segments, segmentsOf, hueOf, speakerKeys, speakerName, speakerOf, when, type Meeting, type Notes, type Track } from "./model";
 import {
   checkSpeech, clearRecordError, installError, installSpeech, installing, isWaiting, lastRecordError, pauseRecording, recording,
   speech, startRecording, stopRecording, stopTranscribing, transcribe, transcribing, useEngine, splitVoices, splitting, askForNotes, canAsk,
@@ -313,13 +313,11 @@ function TitleInput({ id, m, center }: { id: string; m: Meeting; center?: boolea
   );
 }
 
-/** A speaker's face: the first character of the name, in the speaker's grey. */
+/** A speaker's face: the first character of the name, in the speaker's quiet colour. */
 function Face({ m, t, size }: { m: Meeting; t: string; size?: number }) {
   const name = speakerName(m, t);
-  const g = shade(t);
   return (
-    <i className="mt-face" aria-hidden
-      style={{ background: `color-mix(in srgb, var(--fg) ${g}%, var(--bg))`, color: g >= 55 ? "var(--bg)" : "var(--fg)", ...(size ? { width: size, height: size, fontSize: size * 0.5 } : {}) }}>
+    <i className="mt-face" aria-hidden style={{ ["--h" as string]: hueOf(t), ...(size ? { width: size, height: size, fontSize: size * 0.5 } : {}) }}>
       {[...name][0] || "?"}
     </i>
   );
@@ -520,13 +518,15 @@ function MeetingView({ id, host, onDeleted }: { id: string; host: string; onDele
         )}
       </header>
 
-      {segs.length > 0 && (
-        <Timeline m={m} segs={segs} duration={duration} speakers={speakers} talk={talk} totalTalk={totalTalk} now={player ? player.time : -1}
-          hits={hits} hitId={hitId} only={only} setOnly={setOnly} onSeek={player ? (t) => player.seek(t) : undefined} />
-      )}
 
       <div className="mt-content">
       <div className="mt-body" ref={body}>
+        {segs.length > 0 && (
+          <div className="mt-tl-wrap">
+            <Timeline m={m} segs={segs} duration={duration} speakers={speakers} talk={talk} totalTalk={totalTalk} now={player ? player.time : -1}
+              hits={hits} hitId={hitId} only={only} setOnly={setOnly} onSeek={player ? (t) => player.seek(t) : undefined} />
+          </div>
+        )}
         <div className="mt-doc">
           {tx && <TranscribingRow />}
           {!tx && splitting === id && <div className="mt-alert"><Loader2 className="ico spin" /><span className="mt-alert-grow">正在分说话人</span><button type="button" className="btn" onClick={stopTranscribing}>停止</button></div>}
@@ -611,29 +611,32 @@ function Timeline({ m, segs, duration, speakers, talk, totalTalk, now, hits, hit
   const hitSet = new Set(hits);
   return (
     <div className="mt-timeline">
-      <div className="mt-tl-names">
-        {speakers.map((t) => (
-          <button key={t} type="button" className={`mt-tl-name${only === t ? " is-on" : ""}${only && only !== t ? " is-off" : ""}`} onClick={() => setOnly(only === t ? null : t)}
-            title={only === t ? "显示所有人" : `只看${speakerName(m, t)}说的`}>
-            <Face m={m} t={t} size={18} /><b>{speakerName(m, t)}</b><em>{totalTalk ? Math.round(((talk[t] || 0) / totalTalk) * 100) : 0}%</em>
-          </button>
-        ))}
+      <div className="mt-tl-faces">
+        {speakers.map((t) => <Face key={t} m={m} t={t} size={20} />)}
       </div>
       <div ref={lanes} className={`mt-tl-lanes${onSeek ? "" : " is-still"}`}
         onPointerDown={(e) => { if (!onSeek) return; (e.currentTarget as Element).setPointerCapture(e.pointerId); onSeek(at(e.clientX)); }}
         onPointerMove={(e) => { setHover(at(e.clientX)); if (onSeek && e.buttons) onSeek(at(e.clientX)); }}
         onPointerLeave={() => setHover(null)}>
         {speakers.map((t) => (
-          <div key={t} className={`mt-lane${only && only !== t ? " is-off" : ""}`}>
+          <div key={t} className={`mt-lane${only && only !== t ? " is-off" : ""}`} style={{ ["--h" as string]: hueOf(t) }}>
             {segs.filter((s) => speakerOf(s.data) === t).map((s) => {
               const a = pct(num(s.data.start)), b = pct(num(s.data.end));
-              return <i key={s.id} className="mt-lane-seg" style={{ left: `${a}%`, width: `max(2px, ${b - a}%)`, background: `color-mix(in srgb, var(--fg) ${Math.max(30, shade(t))}%, var(--bg))` }} />;
+              return <i key={s.id} className="mt-lane-seg" style={{ left: `${a}%`, width: `max(2px, ${b - a}%)` }} />;
             })}
           </div>
         ))}
         {segs.filter((s) => hitSet.has(s.id)).map((s) => <b key={s.id} className={`mt-tl-hit${s.id === hitId ? " is-on" : ""}`} style={{ left: `${pct(num(s.data.start))}%` }} />)}
         {now >= 0 && <span className="mt-tl-head" style={{ left: `${pct(now)}%` }} />}
         {hover !== null && <span className="mt-tl-tip" style={{ left: `${pct(hover)}%` }}>{clock(hover)}</span>}
+      </div>
+      <div className="mt-tl-names">
+        {speakers.map((t) => (
+          <button key={t} type="button" className={`mt-tl-name${only === t ? " is-on" : ""}${only && only !== t ? " is-off" : ""}`} onClick={() => setOnly(only === t ? null : t)}
+            title={only === t ? "显示所有人" : `只看${speakerName(m, t)}说的`}>
+            <b>{speakerName(m, t)}</b><em>{totalTalk ? Math.round(((talk[t] || 0) / totalTalk) * 100) : 0}%</em>
+          </button>
+        ))}
       </div>
     </div>
   );

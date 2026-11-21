@@ -68,13 +68,14 @@ export function speakerKeys(list: Segment[]) {
   return [...keys].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b, undefined, { numeric: true }));
 }
 
-/** A speaker's grey (me the darkest; the others lighter, each its own). */
-export function shade(key: string) {
-  if (key === "me") return 100;
-  if (key === "them") return 48;
-  if (key.startsWith("me:")) return [92, 84, 96, 88][(Number(key.slice(3)) - 1) % 4];
+/** A speaker's hue: quiet colours (a dusty blue for me, clay, sage, mauve,
+ *  sand, teal, rose, olive for the others), always the same for a speaker. */
+export function hueOf(key: string) {
+  if (key === "me") return 214;
+  if (key === "them") return 24;
+  if (key.startsWith("me:")) return [338, 168, 58][(Number(key.slice(3)) - 1) % 3];
   const n = Number(key.slice(5)) || 0;
-  return [48, 28, 66, 38, 78, 20, 58, 86][n % 8];
+  return [24, 148, 276, 42, 188, 352, 92, 250][n % 8];
 }
 
 /** 12:05 or 1:02:05. */
