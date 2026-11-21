@@ -1,0 +1,97 @@
+# 应用
+
+[English](apps.md) · **中文** · [README](../README.zh-CN.md)
+
+我们正在把 Mac、Windows 和手机上常用的应用改造成 **agent 也能用的**：你和 agent 用同一个页面，agent 帮你填、帮你改，你这边实时看到。在 myco App 的 **应用** 里打开，会随版本陆续上架。
+
+要用到电脑本身（文件、屏幕、麦克风、网络）的应用，通过 myco App 来用，见 [`myco.os`](app-os.md)。录音、照片和视频只留在打开它的那台电脑上。
+
+## 创意设计
+
+<table>
+<tr>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/motion-dark.webp"><img src="assets/apps/motion.webp" alt="动效视频"></picture><br><b>动效视频</b><br>做产品宣传、数据快报、竖版短视频这类动效视频：从模板开始改文字、图片和配色，或者说一句话让 agent 写好每个场景（HTML 加动画）；在时间点上批注让 agent 改，照一段参考视频重做；配上音乐和配音，场景切换对上节拍，配音转成字幕；存成模板给大家用；在本机导出 mp4。</td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/design-studio-dark.webp"><img src="assets/apps/design-studio.webp" alt="设计工作台"></picture><br><b>设计工作台</b><br>从设计需求到作品：网页、应用界面、海报、演示文稿、社交图片和数据看板。黑白灰工作空间，可编辑画布与图层、预览 HTML 原型、收集反馈、保存版本，和 agent 一起迭代，导出 SVG、PNG、HTML 或设计数据。</td>
+</tr>
+<tr>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/photo-dark.webp"><img src="assets/apps/photo.webp" alt="修图"></picture><br><b>修图</b><br>快速修照片：裁剪旋转、调色、十几种滤镜、磨皮美白、文字、贴纸、涂鸦、马赛克、边框，按住对比原图，导出 JPG 或 PNG。改了随时能退回去；照片只存在打开它的电脑上，修了什么大家都看得到，agent 也能按你说的帮你调。</td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/video-dark.webp"><img src="assets/apps/video.webp" alt="视频剪辑"></picture><br><b>视频剪辑</b><br>导入 mp4，在时间线上分割、裁剪、调顺序、变速，加文字，给人脸和车牌打模糊或马赛克，在本机导出 mp4。视频只存在打开它的电脑上，剪辑方案大家共用，agent 按备注帮你剪。</td>
+</tr>
+<tr>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/recorder-dark.webp"><img src="assets/apps/recorder.webp" alt="录屏工作台"></picture><br><b>录屏工作台</b><br>录下屏幕，直接裁剪、分割、加文字和重点放大，在本机导出 MP4。视频留在本机，剪辑方案可以交给 agent 协作。</td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/mindmap-dark.webp"><img src="assets/apps/mindmap.webp" alt="思维导图"></picture><br><b>思维导图</b><br>agent 写一份大纲，网页画成思维导图；Tab 加子主题、Enter 加同级、拖动换位置、折叠分支，导出 Markdown 大纲。</td>
+</tr>
+<tr>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/whiteboard-dark.webp"><img src="assets/apps/whiteboard.webp" alt="白板"></picture><br><b>白板</b><br>一块无限大的画布：便签、文字、矩形、椭圆、连线，拖动、缩放、改颜色；agent 能往上贴便签，适合头脑风暴、复盘、画流程。</td>
+<td width="50%"></td>
+</tr>
+</table>
+
+## 办公套件
+
+<table>
+<tr>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/doc-dark.webp"><img src="assets/apps/doc.webp" alt="文档"></picture><br><b>文档</b><br>像飞书文档一样一起写：「/」插入标题、列表、待办、表格、代码块，选中文字改格式，拖动调整段落；每段单独保存，导出 Markdown 和网页。</td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/table-dark.webp"><img src="assets/apps/table.webp" alt="表格"></picture><br><b>表格</b><br>像飞书表格一样一起填：列有类型（单选标签、日期、人员…），框选复制、从 Excel 粘贴、下拉填充，筛选、排序、搜索，导出 Excel 和 CSV。</td>
+</tr>
+<tr>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/base-dark.webp"><img src="assets/apps/base.webp" alt="多维表格"></picture><br><b>多维表格</b><br>像飞书多维表格：同一份记录，表格、看板、日历、画廊、表单几种视图，点一条在右侧展开；字段有类型，筛选、排序，导出 Excel。</td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/slides-dark.webp"><img src="assets/apps/slides.webp" alt="幻灯片"></picture><br><b>幻灯片</b><br>agent 写内容，网页按版式和主题排好：封面、要点、图表、数字卡片、表格、引言；点哪改哪，拖动换顺序，全屏放映，导出能接着改的 PowerPoint。</td>
+</tr>
+<tr>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/meeting-dark.webp"><img src="assets/apps/meeting.webp" alt="会议记录"></picture><br><b>会议记录</b><br>录下在 Zoom、腾讯会议、飞书里开的会：你的麦克风和别人的声音分开录，会后在这台电脑上转成文字（不上传），自动分出不同的人；点一句从那里播放，改字、改名字、搜索、导出；让 agent 写纪要（总结、决定、待办、章节）。录音只存在这台电脑上，要在 myco App 里录音。</td>
+<td width="50%"></td>
+</tr>
+</table>
+
+## 编程开发
+
+<table>
+<tr>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/code-dark.webp"><img src="assets/apps/code.webp" alt="代码编辑器"></picture><br><b>代码编辑器</b><br>VS Code 同款的编辑器：文件树、多标签、语法高亮、查找替换、多光标、小地图；agent 直接写文件，你在里面改；HTML 和 Markdown 能直接预览，整个项目能下载成 zip。</td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/issues-dark.webp"><img src="assets/apps/issues.webp" alt="任务追踪"></picture><br><b>任务追踪</b><br>像 Linear 那样管问题和项目：编号、状态、优先级、负责人、标签，列表和看板，键盘就能操作；问题可以指给 agent，它改状态、写评论，你这边马上看到。</td>
+</tr>
+<tr>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/devtools-dark.webp"><img src="assets/apps/devtools.webp" alt="开发者工具箱"></picture><br><b>开发者工具箱</b><br>常用小工具一页搞定：JSON 格式化、Base64、URL 编解码、MD5 和 SHA、时间戳、UUID、JWT 解析、正则测试、文本对比、命名、进制和颜色转换；全在本地算，收藏的大家都能用。</td>
+<td width="50%"></td>
+</tr>
+</table>
+
+## 效率工具
+
+<table>
+<tr>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/disk-dark.webp"><img src="assets/apps/disk.webp" alt="空间清理"></picture><br><b>空间清理</b><br>看清这台电脑的磁盘被谁占了：一圈一圈的占用图，旁边是按大小排的清单，点进文件夹一层层往下看；把不要的拖进「待清理」，看一眼再移进废纸篓，放错了还能放回去。要在 myco App 里打开。</td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/remote-desktop-dark.webp"><img src="assets/apps/remote-desktop.webp" alt="远程桌面"></picture><br><b>远程桌面</b><br>从电脑或 iPhone 连接同一工作区的 Mac 与 Windows，实时查看画面、操作键鼠。手机支持触控板和键盘；远控组件按需安装，默认关闭。局域网或 Tailscale 直连，暂不含声音、锁屏登录和公网中继。</td>
+</tr>
+<tr>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/notes-dark.webp"><img src="assets/apps/notes.webp" alt="笔记"></picture><br><b>笔记</b><br>像 Notion 一样记笔记：左边是一层层的页面，每页有图标、封面和标题，「/」插入标题、列表、待办、表格、代码块；搜索、收藏、回收站；agent 能建页面、往页面里写东西，你这边实时看到。</td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/todo-dark.webp"><img src="assets/apps/todo.webp" alt="待办清单"></picture><br><b>待办清单</b><br>一起记的待办：回车就加，认得「明天」「周五」「@名字」「!」；打勾完成，截止、负责人、备注，拖动排序；agent 能把会议里的待办整理进来。</td>
+</tr>
+<tr>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/stocks-dark.webp"><img src="assets/apps/stocks.webp" alt="行情工作台"></picture><br><b>行情工作台</b><br>在同一个工作台关注 A 股、港股、美股：共享自选与观察笔记，查看日周月 K 线、成交量和均线，导出行情。数据源可切换，支持接入自己的行情网关；行情由打开应用的电脑获取。</td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/proxy-console-dark.webp"><img src="assets/apps/proxy-console.webp" alt="代理工作台"></picture><br><b>代理工作台</b><br>管理本机 Mihomo 与 sing-box：实时流量、策略组切换、节点测速、连接查看与断开、运行配置摘要。控制密钥留在本机，不与工作区共享。需启用内核 Clash API，并使用支持 proxy.profile 的桌面 App。</td>
+</tr>
+</table>
+
+## 生活
+
+<table>
+<tr>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/ledger-dark.webp"><img src="assets/apps/ledger.webp" alt="记账本"></picture><br><b>记账本</b><br>记收入和支出：每月支出、收入、结余和预算剩余，按分类看钱花在哪，按天列出每一笔；家里或小团队一起记，agent 能把账单整理进来。</td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/habit-dark.webp"><img src="assets/apps/habit.webp" alt="习惯打卡"></picture><br><b>习惯打卡</b><br>一起养成好习惯：每人给自己打卡，看这周打了几天、连续了几天、别人打了没；家人、团队一起坚持，agent 能帮你提醒和统计。</td>
+</tr>
+<tr>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/cinema-dark.webp"><img src="assets/apps/cinema.webp" alt="影视"></picture><br><b>影视</b><br>用自己的影视源搜索电影与剧集、选集播放，收藏待看清单；观看进度保存在这台电脑，支持续播、倍速和跳过片头片尾。不内置影视源。</td>
+<td width="50%"></td>
+</tr>
+</table>
+
+## 游戏
+
+<table>
+<tr>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/gomoku-dark.webp"><img src="assets/apps/gomoku.webp" alt="五子棋"></picture><br><b>五子棋</b><br>和同事或 agent 下一局五子棋：谁执黑谁执白随便坐，网页管轮次、判输赢，能悔棋、认输、再来一局。</td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/sudoku-dark.webp"><img src="assets/apps/sudoku.webp" alt="数独"></picture><br><b>数独</b><br>大家一起填一道数独：每格单独保存，谁填的显示谁的颜色，冲突标红；简单、中等、困难三档新题，每道只有一个答案。</td>
+</tr>
+</table>
