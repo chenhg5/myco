@@ -28,8 +28,9 @@ five seconds. Intro/outro skip settings are per film, in seconds; zero disables
 skipping. Outro skipping advances only when there is another episode.
 
 The computer opening the myco App fetches catalogs, images and media through
-`myco.os.net.fetch`; sources must be reachable there. No separate web server or
-original qiaoqiao service is needed. Use an App with the OS bridge and a browser
+`myco.net.fetch` on iPhone, or `myco.os.net.fetch` on existing desktop Apps;
+sources must be reachable there. No separate web server or
+original qiaoqiao service is needed. Use an App with the network bridge and a browser
 engine supporting MediaSource/ManagedMediaSource and the source's codecs. HLS
 playlists, keys and segments may be up to 32 MB each. Small MP4/WebM files up to
 32 MB are supported as whole-file downloads; use HLS for full-length films.
@@ -41,3 +42,8 @@ fragments. The app adds MacCMS `ac=detail`, `pg`, `wd`, `t` and `ids` parameters
 The JSON response must have a `list` array; optional `class` and `pagecount`
 provide categories and pagination. The source's film metadata is displayed as
 plain text, and source scripts or web players are never executed.
+
+On iPhone, the native App must advertise the `net` bridge feature. Updating the
+Cinema page alone cannot add networking to an older iOS App. Cinema 1.0.1 uses
+this phone network bridge without requiring desktop OS access. The player turns
+off remote playback for iPhone ManagedMediaSource support.

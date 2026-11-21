@@ -60,8 +60,12 @@ enum PageBridgeScript {
   ready.catch(function () { /* (a page that does not use the bridge) */ });
   window.myco = {
     ready: ready,
-    features: ["preferences", "remote", "remote-controller"],
+    features: ["preferences", "remote", "remote-controller", "net"],
     get preferences() { return preferences; },
+    net: { fetch: function(args) {
+      var a = args || {};
+      return ready.then(function() { return call("net.fetch", a, Math.min(600000, a.timeout_ms || 30000) + 30000); });
+    } },
     remote: {
       call: function(action,args) { return ready.then(function(){ return call("remote.call",{action:action,args:args || {}},30000); }); },
       onDisconnect: function(f) { handlers.remote.push(f); return function(){ var i=handlers.remote.indexOf(f); if(i>=0) handlers.remote.splice(i,1); }; }

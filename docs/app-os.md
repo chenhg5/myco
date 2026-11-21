@@ -322,3 +322,22 @@ system at most once per process. A denied or pending grant therefore does not
 open repeated consent dialogs; changing permission in Settings is recognized
 when the system makes it effective (which can require quitting and reopening
 the App). Revoked access is never cached as granted.
+
+## Network access on iPhone
+
+The iOS page bridge exposes `myco.net.fetch(args)` and the `net` feature, without
+claiming support for desktop `myco.os` operations. Official apps should use the
+shared `templates/src/_lib/net.ts` adapter: it selects `myco.net` on iPhone and
+falls back to `myco.os.net` in existing desktop Apps. Test network availability
+separately from the `os` feature. A page-only update cannot add this native
+capability to an older installed iPhone App.
+
+The request/response shapes match desktop `net.fetch`, including custom headers,
+text/base64 bodies, byte caps, redirects and HTTP status/response headers. iOS
+supports GET, HEAD, POST, PUT, PATCH, DELETE and OPTIONS, through the phone's
+network/proxy settings. The default response cap is 16 MB, the maximum is 64 MB;
+responses over the cap set `truncated`. Requests have a bounded timeout (at most
+ten minutes) and are cancelled on navigation, reload, close or backgrounding.
+No workspace authorization, saved HTTP credentials or ambient cookies are
+attached, and cross-origin redirects strip credential headers. The sandbox's
+external connection policy is unchanged; all requests use this bridge.

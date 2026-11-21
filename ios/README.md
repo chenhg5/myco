@@ -4,6 +4,20 @@ The phone app: follow and direct your agents. Native SwiftUI, iOS 17 and later, 
 
 Status: the pages and the conversation, and joining a real workspace with a link (read and send). Checked in a simulator only, against a demo workspace and a throwaway local hub. Pictures and files go with a message and show in the ones that carry them; the microphone turns speech into text. Several workspaces can be joined at once. New messages are announced by local notifications (late while the app is not open). Not built yet: scanning a code, end-to-end encryption (sealed messages and their files show as encrypted), push through Apple's service.
 
+## Embedded app networking
+
+Pages can use `myco.net.fetch` on iPhone, independently of desktop computer
+access. The `net` bridge feature covers catalog searches, poster images and HLS
+playlists/segments through the phone's network and the App's proxy setting.
+Responses have the same status/headers/text-or-base64 shape as desktop
+`myco.os.net.fetch`, with a 16 MB default and 64 MB maximum response size.
+Workspace credentials, saved HTTP credentials and cookies are not attached.
+Reloading, closing or backgrounding a page cancels outstanding requests.
+The page sandbox continues to block direct external scripts and connections.
+
+An older iOS App without the `net` feature needs a new native build; updating an
+embedded app page alone cannot add the bridge to an installed iPhone App.
+
 ## Remote Desktop
 
 The **Apps → Remote Desktop** page can control an explicitly sharing Mac or

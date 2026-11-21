@@ -5,7 +5,7 @@ import "./cinema.css";
 import { useEffect, useRef, useState } from "react";
 import { Film, Search, Settings2, Star, X } from "lucide-react";
 import { Toast, mount, useKit } from "../_lib/appkit";
-import { osState, osStateText } from "../_lib/os";
+import { networkState, networkStateText } from "../_lib/net";
 import { t as uiText } from "../_lib/i18n";
 import { kit, sources, sourceName, watchlist } from "./model";
 import { catalog } from "./network";
@@ -65,7 +65,7 @@ function App() {
     if (
       tab !== "discover" ||
       !active ||
-      osState !== "ready" ||
+      networkState !== "ready" ||
       (active === "all" && !search)
     ) {
       setBusy(false);
@@ -275,9 +275,9 @@ function App() {
           {uiText("播放进度仅保存在这台电脑")}
         </span>
       </div>
-      {osState !== "ready" && (
+      {networkState !== "ready" && (
         <div className="ci-notice" role="status">
-          {osStateText()}
+          {networkStateText()}
         </div>
       )}
       <main className="ci-content">
@@ -340,7 +340,7 @@ function App() {
                 <button
                   className="btn"
                   type="submit"
-                  disabled={osState !== "ready" || busy}
+                  disabled={networkState !== "ready" || busy}
                 >
                   {uiText("搜索")}
                 </button>

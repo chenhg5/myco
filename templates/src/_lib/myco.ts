@@ -22,6 +22,8 @@ interface Bridge {
   /** This computer (the App's): files, commands, the screen… Each system
    *  does what it can; what it cannot answers err.code "unsupported". */
   os?: MycoOS;
+  /** Network-only bridge on iOS; independent of desktop computer access. */
+  net?: MycoOS["net"];
   remote?: {call<T>(action: string, args?: unknown): Promise<T>; onDisconnect?(handler:()=>void):()=>void};
 }
 

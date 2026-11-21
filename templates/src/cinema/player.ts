@@ -154,6 +154,8 @@ export function playStream(
         fail(uiText("这个文件无法载入或超过 32 MB，请选择 HLS 播放线路")),
       );
   } else if (Hls.isSupported()) {
+    // ManagedMediaSource on iPhone needs remote playback disabled.
+    video.disableRemotePlayback = true;
     hls = new Hls({
       loader: BridgeLoader,
       enableWorker: false,

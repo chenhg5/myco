@@ -39,8 +39,11 @@ History, episode labels, position/duration in seconds and per-film intro/outro
 skip settings (0–600 seconds, 0 disables) live only in local browser storage,
 scoped to the page and account. They are not accessible through page data commands
 and do not sync to another computer. Do not claim to read someone's local history.
-Streams and posters are fetched by the computer opening the App, via myco.os.net.fetch.
-Older Apps without that bridge can still manage sources and the watchlist.
+Streams and posters are fetched by the device opening the App: myco.net.fetch
+on iPhone (the net feature), or myco.os.net.fetch in existing desktop Apps.
+Older Apps without either network bridge can still manage sources and the watchlist.
+An old iPhone App needs a new native build; a Cinema page update alone cannot
+add native networking.
 
 ## Source contract and playback
 

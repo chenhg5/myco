@@ -1,6 +1,7 @@
 // The sandbox never contacts external hosts directly. Catalogs, images and
 // HLS requests use the App network bridge, with bounded response sizes.
-import { os, fromBase64 } from "../_lib/os";
+import { fromBase64 } from "../_lib/os";
+import { network } from "../_lib/net";
 import { t as uiText } from "../_lib/i18n";
 import { httpURL, parseCatalog, requestURL, type Source } from "./catalog";
 export async function request(
@@ -11,7 +12,7 @@ export async function request(
 ) {
   const address = httpURL(url);
   if (!address) throw new Error(uiText("这个播放地址不受支持"));
-  const result = await os().net.fetch({
+  const result = await network().fetch({
     url: address,
     headers,
     response: binary ? "base64" : "text",
