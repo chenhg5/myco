@@ -103,10 +103,39 @@ func TestCatalogFetchesPublishedApps(t *testing.T) {
 	tampered := append([]byte{}, archive...)
 	tampered[40] ^= 0xff
 	archive = tampered
-	fresh := &templates.Catalog{Download: srv.URL, HubVersion: "v0.20.7"}
+	fresh := &templates.Catalog{Download: srv.URL, HubVersion: "v0.20.7", RetryWait: time.Millisecond}
 	_ = fresh.Load()
-	if r := fresh.Sync(context.Background()); r.Error == "" {
-		t.Fatal("an archive that does not match SHA256SUMS should be refused")
+	if r := fresh.Sync(context.Background()); r.Error == "" || !strings.Contains(r.Error, "being published") {
+		t.Fatalf("an archive that does not match SHA256SUMS should be refused, saying why: %+v", r)
+	}
+}
+
+// Fetched while the release is being published (the new archive, the old
+// checksum): the hub waits and fetches again, and gets the new apps.
+func TestCatalogRetriesWhilePublishing(t *testing.T) {
+	archive := appsZip(t, map[string]string{"new": `{"id": "myco/new", "name": "新应用", "version": "1.0.0", "category": "life"}`})
+	sum := sha256.Sum256(archive)
+	sums := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/apps/apps.zip":
+			w.Write(archive)
+		case "/apps/SHA256SUMS":
+			sums++
+			if sums == 1 {
+				w.Write([]byte(strings.Repeat("ab", 32) + "  apps.zip\n"))
+				return
+			}
+			w.Write([]byte(hex.EncodeToString(sum[:]) + "  apps.zip\n"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	c := &templates.Catalog{Download: srv.URL, HubVersion: "v0.20.7", RetryWait: time.Millisecond}
+	_ = c.Load()
+	if r := c.Sync(context.Background()); r.Error != "" || sums != 2 || len(r.Updated) == 0 {
+		t.Fatalf("%d fetches of the checksums: %+v", sums, r)
 	}
 }
 
