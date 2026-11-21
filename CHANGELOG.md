@@ -4,6 +4,20 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.21.16
+
+- **New official app: Cinema (影视)**: watch movies and series from sources you add yourself (none are bundled): search catalogs, choose episodes, keep a shared watchlist, and resume where you left off on this computer, with playback speed and intro/outro skipping. It follows the App's language and appearance. See docs/cinema.md.
+- Recording Studio: screen recording on the Mac works again with the interactive area picker, and no longer waits for a permission prompt when recording is already allowed.
+- The App: what you add while an agent is working stays with its run when the agent hands work to others meanwhile, instead of dropping below what it did after.
+- Codex agents: Codex's own internal log lines (such as "failed to record rollout items") no longer show as red errors under a task; problems you can act on (a dropped connection it retries, a refused key) still do.
+
+**中文**
+
+- **新的官方应用：影视**：用你自己添加的影视源（不内置任何源）搜索电影和剧集、选集播放，收藏共享的待看清单，在这台电脑上续播，支持倍速和跳过片头片尾。跟随 App 的语言和外观。说明见 docs/cinema.md。
+- 录屏工作台：Mac 上用框选区域录屏又能用了；已经授权录屏时，不再等待权限弹窗。
+- App：agent 干活时你补充的话，即使它中途把活派给了别人，也会留在这次运行里，不会掉到它后面做的事情下面。
+- Codex agent：Codex 自己的内部日志（比如 "failed to record rollout items"）不再显示成任务下的红色错误；需要你处理的问题（断线重试、key 被拒）照常显示。
+
 ## v0.21.15
 
 - **New official app: Recording Studio (录屏工作台)**: record your screen from the App, then trim and split, add text and focus zooms (blurred areas follow the zoom), and export MP4, all on your computer; the footage and its thumbnails never leave it, and an agent can help with the edit. The Mac App asks for screen-recording permission first and offers a direct link to its setting.
