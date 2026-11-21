@@ -1602,7 +1602,8 @@ func (s *Server) threadAny(w http.ResponseWriter, r *http.Request) {
 			// here: the hub is local; the App's link may not be).
 			changed := out.Messages[:0]
 			for _, m := range out.Messages {
-				if m.UpdatedAt.UnixMilli() > since {
+				// (an open task its worker touched since: the work goes on)
+				if m.UpdatedAt.UnixMilli() > since || (m.ActiveAt != nil && m.ActiveAt.UnixMilli() > since) {
 					changed = append(changed, m)
 				}
 			}

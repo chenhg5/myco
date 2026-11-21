@@ -172,7 +172,10 @@ function changedUntil(ms: Message[]): number {
 function newerThan(a: Message, b: Message): boolean {
   const ta = new Date(a.updated_at || a.created_at).getTime();
   const tb = new Date(b.updated_at || b.created_at).getTime();
-  return ta > tb;
+  if (ta !== tb) return ta > tb;
+  // The same message, its worker seen on it since (a long, quiet command:
+  // the work goes on).
+  return new Date(a.active_at || 0).getTime() > new Date(b.active_at || 0).getTime();
 }
 
 /** Messages with changed ones put in (by id), in the order they were sent.
