@@ -84,12 +84,21 @@ export function useAttachments(hubId: string) {
     return [];
   });
   const ready = items.filter((x) => x.state === "done" && x.id);
+  /** The files ready to send, out of the box at once (a message shown as
+   *  sending): their previews kept, to show them and, if it does not go,
+   *  to put them back (restore). */
+  const take = () => {
+    const out = ready.map((x) => ({ id: x.id!, name: x.name, size: x.size, preview: x.preview }));
+    setItems([]);
+    return out;
+  };
   return {
     items,
     add,
     restore,
     remove,
     clear,
+    take,
     ids: ready.map((x) => x.id!),
     /** still uploading: wait before sending */
     busy: items.some((x) => x.state === "uploading"),

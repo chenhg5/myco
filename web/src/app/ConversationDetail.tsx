@@ -398,6 +398,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     keepDraft(draftKeyRef.current, v);
   };
   const [sending, setSending] = useState(false);
+  // The message on its way: shown at once at the end of the chat, faint,
+  // with 发送中, and the box empty again; the hub's copy takes its place.
+  const [pending, setPending] = useState<{ body: string; files: { id: string; name: string; size: number; preview?: string }[] } | null>(null);
   // Files going with the next message (pasted, dropped or picked).
   const att = useAttachments(target.hubId);
   // Messages put after the running one, while the workspace cannot hold
@@ -1441,12 +1444,28 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     setSendError(null);
     setQueueError(null);
     const startedAt = Date.now();
+    // Shown in the chat at once and out of the box (not a spinner in the
+    // box); put back in the box if it does not go. A queued one (kept here
+    // for an older hub) shows in the queue instead.
+    const files = att.take();
+    const localQueued = queuedNext && !queueOnHub;
+    if (!localQueued && !shellMode) setPending({ body: typed, files });
+    writeDraft("");
+    histPos.current = -1;
+    atBottom.current = true;
+    let putBackDone = false;
+    const putBack = () => {
+      putBackDone = true;
+      // (anything typed meanwhile stays, after it)
+      const now = inputRef.current?.value || "";
+      writeDraft(now.trim() ? `${typed}\n${now}` : typed);
+      att.restore(files);
+    };
     try {
       if (!target.peer && !target.threadId) {
         // The first message of a new conversation: then the whole one.
         const first = await appApi.sendMessage(target.hubId, { to: target.agent, body, attachments, ...(target.project ? { project: target.project } : {}) });
-        writeDraft("");
-        att.clear();
+        chatHistory.reset();
         if (onOpen) onOpen(target.hubId, target.agent, first.from);
         else setMessages([first]);
         return;
@@ -1486,9 +1505,6 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           // round ends (queued.ts).
           writeQueue([...localQueue, { id: queuedId(), body, attachments, threadId, at: Date.now() }]);
           setFlushStalled(false);
-          writeDraft("");
-          att.clear();
-          histPos.current = -1;
           chatHistory.reset();
           inputRef.current?.focus();
           return;
@@ -1499,15 +1515,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       // The hub signs your messages with your name there: when this view
       // assumed another, follow the one it used.
       if (exchange && m.from && target.peer && m.from !== target.peer && m.type !== "steer" && onOpen) {
-        writeDraft("");
-        att.clear();
         onOpen(target.hubId, target.agent, m.from);
         return;
       }
       setMessages((prev) => mergeById(prev || [], [m]));
-      writeDraft("");
-      att.clear();
-      histPos.current = -1;
       chatHistory.reset();
       atBottom.current = true;
       inputRef.current?.focus();
@@ -1518,15 +1529,16 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         const got = await landed(body, startedAt).catch(() => null);
         if (got) {
           setMessages((prev) => mergeById(prev || [], [got]));
-          writeDraft("");
-          att.clear();
-          histPos.current = -1;
           chatHistory.reset();
           return;
         }
       }
+      putBack();
       setSendError(e);
     } finally {
+      // Sent: the pictures' previews are not needed any more.
+      if (!putBackDone) files.forEach((f) => f.preview?.startsWith("blob:") && URL.revokeObjectURL(f.preview));
+      setPending(null);
       setSending(false);
     }
   };
@@ -1805,6 +1817,12 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     }
   };
 
+  // What you send shows at the end at once: the view goes there.
+  useEffect(() => {
+    if (!pending) return;
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [pending]);
   // The view stays at the bottom while something there grows (a live trace).
   const followBottom = () => {
     const el = scrollRef.current;
@@ -2376,6 +2394,17 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               return <Fragment key={"m" + m.id}>{before}{divider}{item}</Fragment>;
             })}
             {!shellMode && !execNode && trailing}
+            {/* What you just sent, until the workspace has it: drawn as
+                yours, but not one of yours yet (not .is-me). */}
+            {pending && (
+              <div className="conv-msg is-pending" data-testid="chat-sending">
+                <div className="conv-bubble">
+                  {pending.body && <MessageContent body={pending.body} />}
+                  {pending.files.length > 0 && <MessageAttachments hubId={target.hubId} items={pending.files.map((f) => ({ file_id: f.id, name: f.name, size: f.size, sha256: "" }))} />}
+                </div>
+                <div className="conv-msg-meta is-shown conv-sending"><Loader2 size={11} className="spin" />{L("发送中…", "Sending…")}</div>
+              </div>
+            )}
             {/* The run at work, when messages sit under it. */}
             {liveFoot && liveRun && (() => {
               // What it is doing now, not what it said when it took this one
@@ -2585,7 +2614,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                 title={supplementing ? L("补充给这条任务", "Add to this task") : L("发送", "Send")}
                 aria-label={supplementing ? L("补充给这条任务", "Add to this task") : L("发送", "Send")}
               >
-                {sending ? <Loader2 size={15} className="spin" /> : <ArrowUp size={16} strokeWidth={2.4} />}
+                <ArrowUp size={16} strokeWidth={2.4} />
               </button>
             )}
           </div>
