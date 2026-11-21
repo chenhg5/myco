@@ -4,6 +4,18 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.21.11
+
+- **Remote Desktop (preview, not installable yet)**: a new official app, Remote Desktop, to see and control another of your computers (Mac and Windows) from the App: encrypted WebRTC video at 720p, keyboard and mouse, a view-only mode, a one-time pairing code, and an explicit disconnect. It works between computers that can reach each other directly (the same network); a relay for other networks comes later. Capture and encoding run in a separate component that the App installs on demand; that component is not published yet, so "Install" shows it is unavailable for now. Needs an upgraded workspace (hub).
+- The App: a message you send shows in the chat at once, while it is being sent.
+- Upgrade the workspace (Settings › Workspace, or `sudo myco upgrade` on the server) for Remote Desktop.
+
+**中文**
+
+- **远程桌面（预览，暂时还装不上）**：新的官方应用「远程桌面」，在 App 里查看和控制你的另一台电脑（Mac、Windows）：加密的 WebRTC 720p 画面、键盘鼠标、仅查看模式、一次性配对码，可以随时断开。目前只支持能直接连通的两台电脑（同一网络），其他网络的中继以后再加。截屏和编码在一个单独的组件里，由 App 按需安装；这个组件还没有发布，所以现在「安装」会显示不可用。需要升级工作区（Hub）。
+- App：发出的消息会马上出现在对话里，不用等发送完成。
+- 升级工作区（设置 › 工作区，或在服务器上 `sudo myco upgrade`）才有远程桌面。
+
 ## v0.21.10
 
 - **Project memory**: a project now has a shared memory. Members add what everyone should keep in mind (decisions, conventions, the owner's preferences) with `myco project memory add --name <project> --text "..."`, and each entry records who wrote it and when. The runner gives member agents the memory with the project, and gives it again when it changes. In the App, the project notes have a Memory section where you add an entry or edit and tidy the whole memory. In a test with real Claude Code agents, a decision or preference told to one member reached the others in 5 of 5 runs (0 of 5 before).
