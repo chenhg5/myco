@@ -54,9 +54,10 @@ jobs:
           with zipfile.ZipFile(source) as z:
             assert sum(f.file_size for f in z.infolist()) <= 256*1024*1024
             for f in z.infolist():
-              assert '/' not in f.filename and '\\' not in f.filename and ':' not in f.filename
+              assert not any(ord(c) in (47,92,58) for c in f.filename)
               assert f.filename in {'myco-remote.exe','ffmpeg.exe'} or f.filename.startswith(('LICENSE','NOTICE'))
               (target/f.filename).write_bytes(z.read(f))
+          assert (target/'myco-remote.exe').is_file() and (target/'ffmpeg.exe').is_file()
       - name: Build the preview App and CLI
         shell: bash
         run: |

@@ -11,7 +11,7 @@ try {
     $env:MYCO_CONFIG = 'must-not-be-inherited'
     $expected = Join-Path $env:LOCALAPPDATA 'myco-remote-preview\desktop\profile'
     $launcher = Join-Path $root 'Start-preview.cmd'
-    $output = (& $env:ComSpec /d /c "`"`"$launcher`" --check`"") -join "`n"
+    $output = (& $launcher --check) -join "`n"
     if ($LASTEXITCODE -ne 0) { throw "Preview launcher failed: $output" }
     if (-not $output.Contains("USERPROFILE=$expected")) { throw 'Home was not isolated' }
     if (-not $output.Contains("APPDATA=$expected\AppData\Roaming")) { throw 'Config was not isolated' }
@@ -29,14 +29,14 @@ try {
     $previewProcess = Start-Process "$root\myco-app.exe" -ArgumentList '-t','127.0.0.1' -PassThru -WindowStyle Hidden
     $otherProcess = Start-Process "$other\myco-app.exe" -ArgumentList '-t','127.0.0.1' -PassThru -WindowStyle Hidden
     $stopper = Join-Path $root 'Stop-preview.cmd'
-    & $env:ComSpec /d /c "`"`"$stopper`"`""
+    & $stopper
     if ($LASTEXITCODE -ne 0) { throw 'Stop launcher failed' }
     if (-not $previewProcess.WaitForExit(5000)) { throw 'Preview process was not stopped' }
     $otherProcess.Refresh()
     if ($otherProcess.HasExited) { throw 'A different App path was stopped' }
     Write-Host 'PASS: Windows preview launcher, paths with spaces/ampersands, isolated config and staged encoder'
 } finally {
-    foreach ($p in @($previewProcess,$otherProcess)) { if ($null -ne $p) { Stop-Process -Id $p.Id -ErrorAction SilentlyContinue } }
+    foreach ($p in @($previewProcess,$otherProcess)) { if ($null -ne $p -and -not $p.HasExited) { Stop-Process -Id $p.Id -ErrorAction SilentlyContinue } }
     $env:LOCALAPPDATA = $originalLocal
     $env:MYCO_CONFIG = $originalConfig
     Remove-Item $root -Recurse -Force -ErrorAction SilentlyContinue
