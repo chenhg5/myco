@@ -135,7 +135,13 @@ func recordNativeMovie(ctx context.Context, a screenRecordArgs, path string, emi
 		clicks = 1
 	}
 	movie := C.mycoMovieStart(p, region, x, y, w, h, mic, clicks)
-	return waitScreenMovie(ctx, a.MaxSeconds, emit, screenMovieBackend{
+	return waitScreenMovie(ctx, a.MaxSeconds, func(kind string, data any) {
+		if kind == "started" {
+			emit(kind, map[string]any{"path": path})
+			return
+		}
+		emit(kind, data)
+	}, screenMovieBackend{
 		state: func() int { return int(C.mycoMovieState(movie)) },
 		failure: func() string {
 			message := C.mycoMovieError(movie)
