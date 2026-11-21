@@ -82,7 +82,7 @@ export function VideoApp({ recording = false }: { recording?: boolean }) {
           const p = await probe(f);
           if (!p.duration) throw new Error(uiText("「{0}」读不出来：换成 mp4（H.264）试试", f.name));
           const id = uid("m");
-          change([[media, id, { name: f.name, size: f.size, duration: Math.round(p.duration * 1000) / 1000, width: p.width, height: p.height, audio: p.audio, key, poster: p.poster.length < 40000 ? p.poster : "" }]]);
+          change([[media, id, { name: f.name, size: f.size, duration: Math.round(p.duration * 1000) / 1000, width: p.width, height: p.height, audio: p.audio, key, poster: !recording && p.poster.length < 40000 ? p.poster : "" }]]);
           rec = media.get(id)!;
         }
         if (at !== undefined || !clips.rows.length) {

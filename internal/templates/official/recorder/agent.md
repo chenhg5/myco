@@ -1,7 +1,7 @@
 # Recording studio
 
 Use this app for screen demonstrations and tutorials. Recording is always started
-by the person in the app with the system's screen picker. Never start recording
+by the person in the app, using a system picker where available. Never start recording
 silently. Footage and originals stay on that computer; workspace records contain
 only the edit. The agent cannot see the footage merely by reading these records.
 

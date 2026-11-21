@@ -67,6 +67,7 @@ try{
  await page.evaluate(()=>window.__deny=true);await page.getByRole('button',{name:choose,exact:true}).click();await page.getByRole('alert').waitFor();await page.evaluate(()=>window.__deny=false);
  await page.getByRole('button',{name:choose,exact:true}).click();await page.waitForTimeout(2600);await page.getByRole('button',{name:stop,exact:true}).last().click();
  await page.locator('.media').first().waitFor({timeout:30000});await page.getByRole('dialog').waitFor({state:'hidden',timeout:30000});assert.equal(await page.locator('.media').count(),1);
+ const media=await page.evaluate(()=>window.myco.data.list('media'));assert.equal(media.records[0].data.poster,'','screen pixels must never be uploaded in a poster');
  await page.getByRole('tab',{name:lang==='en'?'Focus zoom':'重点放大'}).click();await page.getByRole('button',{name:lang==='en'?'Add focus zoom':'添加重点放大',exact:true}).click();
  assert.equal(await page.locator('.stage-sel.is-zoom').count(),1);
  await page.getByRole('button',{name:lang==='en'?'Focus zoom':'重点放大',exact:false}).last().click().catch(()=>{});

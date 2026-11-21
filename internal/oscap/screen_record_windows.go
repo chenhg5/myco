@@ -28,6 +28,7 @@ func recordScreen(ctx context.Context, env *Env, a screenRecordArgs, path string
 		return errf(CodeUnsupported, "install FFmpeg on this computer before recording")
 	}
 	cmd := exec.Command(exe, "-hide_banner", "-loglevel", "error", "-nostats", "-f", "gdigrab", "-framerate", "30", "-draw_mouse", "1", "-i", "desktop", "-t", strconv.Itoa(a.MaxSeconds), "-c:v", "h264_mf", "-pix_fmt", "yuv420p", "-b:v", "6M", "-movflags", "+faststart", path)
+	hideWindow(cmd)
 	cmd.Env = env.Environ(nil)
 	// FFmpeg accepts q on stdin and flushes the movie before exiting. Sending
 	// an OS interrupt is not portable to a Windows GUI process.
