@@ -77,6 +77,12 @@ public actor FakeHub: HubAPI {
         automationRuns = Dictionary(grouping: world.automations.compactMap(\.lastRun), by: { $0.automationId ?? "" })
         workflowList = world.workflows
         runList = world.runs
+        if scenario == .remote {
+            remoteHosts = [RemoteComputer(machine: "app:fixture", name: "Fixture Mac", os: "darwin", control: true)]
+            let page = Page(id: "pg_remote", name: "Remote controller probe", publisher: FakeHub.me, url: FakeHub.demoAddress.absoluteString + "/pages/pg_remote", createdAt: now, updatedAt: now)
+            pageList.insert(page, at: 0)
+            pageFiles[page.id] = ["index.html": ("text/html; charset=utf-8", RemotePageFixture.html)]
+        }
     }
 
     public func setLatency(_ value: Duration) {

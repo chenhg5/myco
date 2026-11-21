@@ -718,8 +718,11 @@ p {
   .rd-session-bar strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .rd-session-actions { width: 100%; justify-content: flex-end; }
   .rd-session-actions > span { margin-right: auto; }
-  .rd-screen { min-height: 160px; height: clamp(180px, 38dvh, 360px); }
+  .rd-screen { min-height: 160px; height: auto; aspect-ratio: 16/9; max-height: 50dvh; }
   .rd-session-footer { flex-wrap: wrap; gap: 8px; font-size: 11px; }
   .rd-tabs button { min-height: 44px; }
   .rd-section-heading { gap: 8px; }
 }
+
+.rd-keyboard textarea:focus { outline:2px solid var(--rd-text); outline-offset:2px; }
+.rd-zoom { min-width:48px; text-align:center; font-variant-numeric:tabular-nums; color:var(--rd-muted); }

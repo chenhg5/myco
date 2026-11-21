@@ -826,4 +826,35 @@ final class ConversationTests: XCTestCase {
         XCTAssertTrue(app.buttons["handoff.d1"].exists)
         snap("project-handoffs")
     }
+    @MainActor
+    func testRemoteControllerHasWebRTCNativeConsentAndDisconnectsInBackground() {
+        let app = launch(["-myco-start", "remote", "-myco-route", "page:pg_remote"])
+        let web = app.webViews.firstMatch
+        XCTAssertTrue(web.buttons["Probe WebRTC"].waitForExistence(timeout: 20))
+        web.buttons["Probe WebRTC"].tap()
+        XCTAssertTrue(web.staticTexts["RTC ready"].waitForExistence(timeout: 20), "receive-only H.264/WebRTC must work in the actual App page origin")
+        web.buttons["Connect test computer"].tap()
+        let alert = app.alerts.firstMatch
+        XCTAssertTrue(alert.waitForExistence(timeout: 10))
+        XCTAssertTrue(alert.label.contains("Allow this remote connection?") || alert.staticTexts["Allow this remote connection?"].exists)
+        XCTAssertTrue(alert.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Fixture Mac")).firstMatch.exists)
+        alert.buttons["Don't allow"].tap()
+        XCTAssertTrue(web.staticTexts["Denied"].waitForExistence(timeout: 10))
+        web.buttons["Connect test computer"].tap()
+        XCTAssertTrue(alert.waitForExistence(timeout: 10))
+        alert.buttons["Connect"].tap()
+        XCTAssertTrue(web.staticTexts["Connected test session"].waitForExistence(timeout: 10))
+        snap("remote-native-consent")
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        XCTAssertTrue(web.staticTexts["Disconnected"].waitForExistence(timeout: 10))
+        web.buttons["Connect test computer"].tap()
+        XCTAssertTrue(alert.waitForExistence(timeout: 10))
+        alert.buttons["Connect"].tap()
+        XCTAssertTrue(web.staticTexts["Connected test session"].waitForExistence(timeout: 10))
+        web.buttons["Attempt host action"].tap()
+        XCTAssertTrue(web.staticTexts["Host refused"].waitForExistence(timeout: 10))
+        app.buttons["page.close"].tap()
+    }
+
 }

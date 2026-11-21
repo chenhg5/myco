@@ -25,3 +25,5 @@ runner.log
 /components/remote/myco-remote.exe
 /myco-remote_*.zip
 /myco-remote_*.sha256
+
+/templates/remote-mobile-shots/

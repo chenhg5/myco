@@ -102,6 +102,7 @@ function App() {
     [state, setState] = useState(""),
     [stats, setStats] = useState<RemoteStats | null>(null),
     [copied, setCopied] = useState(false);
+  const [zoom,setZoom]=useState(1);
   const [keyboardOpen,setKeyboardOpen]=useState(false),[draft,setDraft]=useState(""),[dragging,setDragging]=useState(false),[modifiers,setModifiers]=useState<string[]>([]),[cursor,setCursor]=useState({x:.5,y:.5}),[showCursor,setShowCursor]=useState(false),[,setLayout]=useState(0);
   const keyboard=useRef<HTMLTextAreaElement>(null),composing=useRef(false);
   const touchpad=useRef<Touchpad>();
@@ -227,7 +228,7 @@ function App() {
   };
   const disconnect = async () => {
     attempt.current++;
-    touchpad.current?.reset();setDragging(false);setModifiers([]);setKeyboardOpen(false);setDraft("");setShowCursor(false);
+    touchpad.current?.reset();if(touchpad.current)touchpad.current.point={x:.5,y:.5};setCursor({x:.5,y:.5});setZoom(1);setDragging(false);setModifiers([]);setKeyboardOpen(false);setDraft("");setShowCursor(false);
     const previous=session.current;
     session.current=null;pendingStream.current=null;
     setConnecting(false);setActive(null);setStats(null);setState("");
@@ -270,6 +271,7 @@ function App() {
                 ),
               ),
             );
+            attempt.current++;setConnecting(false);setSelected(null);
             pendingStream.current=null;setStats(null);setActive(null);
           }
         },
@@ -288,20 +290,29 @@ function App() {
   const releaseModifiers=()=>{for(const code of modifiers)input({kind:"key",code,down:false});setModifiers([]);};
   const specialKey=(code:string)=>{input({kind:"key",code,down:true});input({kind:"key",code,down:false});releaseModifiers();};
   const typed=(value:string)=>{
-    if(composing.current)return;
+    if(composing.current)return false;
     const events=textInput(value,!!session.current?.supportsText,modifiers);
-    if(events===null){setError(uiText("远端组件需要更新才能输入这段文字，文字已保留。"));return;}
-    if(!events.length)return;
-    for(const e of events)if(!input(e))return;
-    releaseModifiers();setDraft("");if(keyboard.current)keyboard.current.value="";
+    if(events===null){setError(uiText(modifiers.length?"先松开组合键，再输入这段文字。":([...value].length>256?"一次最多输入256个字符，文字已保留。":"远端组件需要更新才能输入这段文字，文字已保留。")));return false;}
+    if(!events.length)return true;
+    for(const e of events)if(!input(e))return false;
+    releaseModifiers();setDraft("");setError("");if(keyboard.current)keyboard.current.value="";return true;
   };
+  useEffect(()=>{
+    const el=keyboard.current;if(!keyboardOpen||!el)return;
+    const before=(e:InputEvent)=>{
+      if(e.isComposing||composing.current)return;
+      if(e.inputType==="deleteContentBackward"&&!el.value){e.preventDefault();specialKey("Backspace");}
+      if(e.inputType==="insertLineBreak"||e.inputType==="insertParagraph"){e.preventDefault();if(el.value&&!typed(el.value))return;specialKey("Enter");}
+    };
+    el.addEventListener("beforeinput",before);return()=>el.removeEventListener("beforeinput",before);
+  },[keyboardOpen,modifiers]);
   const touch=(e:React.PointerEvent,phase:"down"|"move"|"up")=>{
     if(e.pointerType!=="touch")return false;
     if(!control)return true;
     e.preventDefault();setShowCursor(true);
     const pad=touchpad.current!,box=e.currentTarget.getBoundingClientRect();
     if(phase==="down"){e.currentTarget.setPointerCapture(e.pointerId);pad.down(e.pointerId,e.clientX,e.clientY);}
-    else if(phase==="move")pad.move(e.pointerId,e.clientX,e.clientY,box.width,box.height);
+    else if(phase==="move")pad.move(e.pointerId,e.clientX,e.clientY,box.width*zoom,box.height*zoom);
     else pad.up(e.pointerId);
     return true;
   };
@@ -376,7 +387,7 @@ function App() {
                   <Keyboard size={14} />
                   {control ? uiText("可以操作") : uiText("仅查看")}
                 </span>
-                <button
+                {document.fullscreenEnabled && <button
                   className="rd-icon"
                   aria-label={uiText("全屏")}
                   onClick={() =>
@@ -384,7 +395,7 @@ function App() {
                   }
                 >
                   <Maximize2 size={17} />
-                </button>
+                </button>}
                 <button className="rd-btn" onClick={() => void disconnect()}>
                   <Unplug size={15} />
                   {uiText("断开")}
@@ -473,6 +484,7 @@ function App() {
             >
               <video
                 ref={video}
+                style={{transform:`scale(${zoom})`,transformOrigin:`${cursorPosition().left}${typeof cursorPosition().left==="number"?"px":""} ${cursorPosition().top}${typeof cursorPosition().top==="number"?"px":""}`}}
                 autoPlay
                 muted
                 playsInline
@@ -484,6 +496,11 @@ function App() {
             {control&&<div className="rd-touch-controls">
               <p>{uiText("触控板：单指移动，轻点单击，双指滚动。")}</p>
               <div className="rd-touch-row">
+                <button className="rd-btn" aria-label={uiText("缩小画面")} disabled={zoom<=1} onClick={()=>setZoom(n=>Math.max(1,n-.5))}>−</button>
+                <span className="rd-zoom" aria-label={uiText("画面缩放")}>{Math.round(zoom*100)}%</span>
+                <button className="rd-btn" aria-label={uiText("放大画面")} disabled={zoom>=3} onClick={()=>setZoom(n=>Math.min(3,n+.5))}>+</button>
+              </div>
+              <div className="rd-touch-row">
                 <button className="rd-btn" aria-pressed={keyboardOpen} onClick={()=>{flushSync(()=>setKeyboardOpen(!keyboardOpen));if(!keyboardOpen)keyboard.current?.focus();}}><Keyboard size={16}/>{uiText("键盘")}</button>
                 <button className="rd-btn" onClick={()=>touchpad.current?.click(2)}>{uiText("右键")}</button>
                 <button className="rd-btn" aria-pressed={dragging} onClick={()=>{touchpad.current?.drag(!dragging);setDragging(!dragging);}}>{dragging?uiText("结束拖动"):uiText("拖动")}</button>
@@ -494,7 +511,7 @@ function App() {
                 <textarea ref={keyboard} aria-label={uiText("输入文字到远端")} placeholder={uiText("键入或粘贴文字")} value={draft} rows={1} autoCapitalize="off" autoCorrect="off" spellCheck={false}
                   onChange={e=>{setDraft(e.target.value);if(!(e.nativeEvent as InputEvent).isComposing)typed(e.target.value);}}
                   onCompositionStart={()=>{composing.current=true;}} onCompositionEnd={e=>{composing.current=false;typed(e.currentTarget.value);}}
-                  onKeyDown={e=>{if(e.key==="Enter"&&!composing.current&&!(e.nativeEvent as KeyboardEvent).isComposing){e.preventDefault();if(draft)typed(draft);specialKey("Enter");}if(e.key==="Backspace"&&!draft&&!composing.current){e.preventDefault();specialKey("Backspace");}}}
+                  onKeyDown={e=>{if(e.key==="Enter"&&!composing.current&&!(e.nativeEvent as KeyboardEvent).isComposing){e.preventDefault();if(draft&&!typed(draft))return;specialKey("Enter");}if(e.key==="Backspace"&&!draft&&!composing.current){e.preventDefault();specialKey("Backspace");}}}
                 />
               </div>}
             </div>}
@@ -631,7 +648,7 @@ function App() {
                             "在需要连接的 Mac 或 Windows 上打开远程桌面，选择「共享这台电脑」。",
                           )}
                     </p>
-                    {!query && (
+                    {!query && !controllerOnly && (
                       <button
                         className="rd-btn"
                         onClick={() => setTab("share")}
@@ -809,7 +826,7 @@ function App() {
       </main>
       <footer className="rd-footer">
         <span>myco / {uiText("远程桌面")}</span>
-        <span>{uiText("按需安装 · 默认关闭 · 随时断开")}</span>
+        <span>{uiText(controllerOnly?"手机仅作为控制端，关闭页面即断开。":"按需安装 · 默认关闭 · 随时断开")}</span>
       </footer>
       {selected && (
         <div

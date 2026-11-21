@@ -1572,5 +1572,11 @@
   "拖动": "Drag",
   "结束拖动": "End drag",
   "输入文字到远端": "Type on the remote computer",
-  "键入或粘贴文字": "Type or paste text"
+  "键入或粘贴文字": "Type or paste text",
+  "先松开组合键，再输入这段文字。": "Release the modifier keys before entering this text.",
+  "一次最多输入256个字符，文字已保留。": "Enter up to 256 characters at a time. Your text has been kept.",
+  "放大画面": "Zoom in",
+  "缩小画面": "Zoom out",
+  "画面缩放": "Zoom",
+  "手机仅作为控制端，关闭页面即断开。": "This phone is a controller. Closing the page disconnects."
 }
