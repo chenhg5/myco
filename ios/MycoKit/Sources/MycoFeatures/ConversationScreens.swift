@@ -1629,9 +1629,9 @@ private struct ApprovalStrip: View {
 /// more; up goes to the one before, down to the one after. Older messages
 /// not loaded yet can be looked in too.
 private struct FindBar: View {
-    @Binding var text: String
+    @SwiftUI.Binding var text: String
     let found: [String]
-    @Binding var index: Int?
+    @SwiftUI.Binding var index: Int?
     let canLookFurther: Bool
     let go: (String) -> Void
     let lookFurther: () -> Void
