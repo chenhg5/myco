@@ -435,6 +435,9 @@ export interface Member { id: string; name: string; display_name?: string; role:
 /** Who this app is on a hub (absent on hubs without members). */
 /** One device (app) of a person on a hub: its own credential. */
 export interface Device { id: string; name: string; active: boolean; created_at: string; last_used_at?: string }
+/** A hub's backups (its owner; hubs from v0.21.12). */
+export interface Backup { name: string; size: number; created_at: string }
+export interface Backups { backups: Backup[]; keep: number; daily: boolean; restore?: string }
 export interface Whoami { member?: Member; admin?: boolean; can_manage: boolean; /** this app on this device */ device?: Device }
 export interface AuditEntry { id: string; at: string; actor: string; actor_kind: "member" | "admin" | "agent"; action: string; target?: string; detail?: string }
 

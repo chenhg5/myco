@@ -9299,3 +9299,9 @@ html.os-other ::-webkit-scrollbar-thumb:hover, html.os-other ::-webkit-scrollbar
 .tp-shot-dot { width: 6px; height: 6px; padding: 0; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--fg) 22%, transparent); }
 .tp-shot-dot.is-on { width: 18px; background: var(--fg); }
 @media (pointer: coarse) { .tp-shot-nav { opacity: 1; } .tp-shot-dot { width: 8px; height: 8px; } .tp-shot-dot.is-on { width: 22px; } }
+
+/* Workspace backups: how to restore, folded away. */
+.app-backup-restore { margin: 12px 0 4px; }
+.app-backup-restore > summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+.app-backup-restore > summary:hover { color: var(--fg); }
+.app-backup-restore .app-small-note { margin: 8px 0; }

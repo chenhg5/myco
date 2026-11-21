@@ -16,6 +16,16 @@ import { drafted, grown, Reveal } from "@/app/Reveal";
 
 /** When this App first had each thing an agent said in a run. */
 const sayFirstSeen = new Map<string, number>();
+// A running trace's steps, as last read, while the App is open: back in a
+// chat, they show at once (then only newer steps are asked for) instead of
+// an empty run for a second. Finished ones are kept on disk (remember).
+const liveTraces = new Map<string, TraceEvent[]>();
+const LIVE_TRACES_MAX = 60;
+function keepLive(key: string, events: TraceEvent[]) {
+  liveTraces.delete(key);
+  liveTraces.set(key, events);
+  if (liveTraces.size > LIVE_TRACES_MAX) liveTraces.delete(liveTraces.keys().next().value as string);
+}
 
 const POLL_MS = 1500;
 const isOpen = (s: string) => s === "queued" || s === "pending" || s === "delivered" || s === "acked" || s === "held";
@@ -320,7 +330,7 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
   // A finished run does not change: kept (and saved with the page data).
   const memoKey = `trace\u0000${hubId}\u0000${task.id}`;
   const [rawEvents, setEvents] = useState<TraceEvent[] | null>(() => {
-    if (running) return null;
+    if (running) return liveTraces.get(memoKey) || null;
     // (one kept before steps were taken once each may hold some twice)
     const kept = recall<TraceEvent[]>(memoKey);
     return kept ? kept.filter((e, i, all) => all.findIndex((x) => x.seq === e.seq) === i) : null;
@@ -412,13 +422,13 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
             const fresh = r.events.filter((e) => !have.has(e.seq));
             if (!fresh.length && prev) return prev;
             const next = [...(prev || []), ...fresh].sort((a, b) => a.seq - b.seq);
-            if (!running) remember(memoKey, next);
+            if (!running) { remember(memoKey, next); liveTraces.delete(memoKey); } else keepLive(memoKey, next);
             return next;
           });
         } else {
           setEvents((prev) => {
             const next = prev || [];
-            if (!running) remember(memoKey, next);
+            if (!running) { remember(memoKey, next); liveTraces.delete(memoKey); } else keepLive(memoKey, next);
             return next;
           });
         }

@@ -789,6 +789,25 @@ type SpawnRequest struct {
 // myco upgrade`) or "self" (the hub replaces its binary and its service
 // manager starts it again). Done in the background: watch /v1/health's
 // server_version.
+// Backups is GET /v1/admin/backups (from v0.21.12): the backups this hub
+// keeps of its own data (its database and files), newest first. A
+// workspace of a server keeps its own. Keep is how many it keeps; it makes
+// one a day by itself (Daily) when it has none from the last day.
+type Backups struct {
+	Backups []Backup `json:"backups"`
+	Keep    int      `json:"keep"`
+	Daily   bool     `json:"daily"`
+	// Restore is how to put one back (on the server, with the hub stopped).
+	Restore string `json:"restore,omitempty"`
+}
+
+// Backup is one backup: download it with GET /v1/admin/backups/{name}.
+type Backup struct {
+	Name      string    `json:"name"`
+	Size      int64     `json:"size"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 type HubUpgrade struct {
 	From string `json:"from"`
 	To   string `json:"to"`

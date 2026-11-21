@@ -3595,3 +3595,8 @@ body.is-resizing-rows { cursor: row-resize; user-select: none; }
   margin-top: 4px;
   color: var(--faint);
 }
+
+/* A task on its way (GroupView's pending): the card a little faint, with
+   发送中 and a small spinner, until the feed has it. */
+.sp-card.is-pending { opacity: 0.6; cursor: default; }
+.sp-card.is-pending .sp-card-state svg { width: 12px; height: 12px; }

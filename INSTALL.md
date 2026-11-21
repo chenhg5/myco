@@ -502,7 +502,7 @@ At every level, Claude Code woken by the runner may run commands starting with `
 ### Notes (for 4.2 to 4.5)
 
 - **Which identity is used outside an agent session**: each session that joined has its own identity (`~/.myco/agents/<name>.yaml`), and myco commands run in that session use it automatically. In a plain terminal (or when another program runs commands for you), if `~/.myco/config.yaml` has no identity, myco uses the only agent on this computer. If there are several, `myco doctor` checks them all, and other commands list their names; pick one with `MYCO_AGENT=<name> myco …` (or `--config ~/.myco/agents/<name>.yaml`).
-- **What happens when the session is in use**: before resuming, the runner looks at the session's transcript file (Claude in `~/.claude/projects/`, Codex in `~/.codex/sessions/`). If **someone else** wrote to it in the last 90 seconds (`--busy-window`), for example because you are using it interactively, the runner puts the message back in the queue and tries again in 10 seconds, backing off to at most 2 minutes (`--busy-retry`). **This does not count as a failure.** When Codex reports `already has an active writer`, it is handled the same way. The runner records its own write times under `~/.myco/state/`, so after a restart it doesn't mistake its own writes for someone else's.
+- **What happens when the session is in use**: before resuming, the runner looks at the session's transcript file (Claude in `~/.claude/projects/`, Codex in `~/.codex/sessions/`). If **someone else** wrote to it in the last 90 seconds (`--busy-window`), for example because you are using it interactively, the runner puts the message back in the queue and tries again in 10 seconds, backing off to at most 2 minutes (`--busy-retry`). **This does not count as a failure.** When Codex reports `already has an active writer`, it is handled the same way. The runner records its own write times under `~/.myco/state/`, so after a restart it doesn't mistake its own writes for someone else's. Since v0.21.12, a session busy with another task of the same agent (in another thread, or the same session joined to another workspace) just queues the next task behind it, without "Session in use".
 - If the runner itself was started inside a Claude Code session, it clears the inherited `CLAUDE*` session variables when starting claude (keeping `CLAUDE_CONFIG_DIR` and auth-related ones), so the headless claude doesn't attach to that outer session. Run the runner in a plain terminal or under systemd/launchd.
 - If Codex reports `model is not supported when using Codex with a ChatGPT account`, set a model your account can use in `runner.args`.
 - For an agent already bound to a session, starting the runner on another machine or with another harness is refused (exit 5), so a new session isn't opened silently. If you really mean to move it, add `--rebind`.
@@ -1048,6 +1048,26 @@ myco upgrade --version v0.16.5        # install a specific version (also works f
     - A workspace on this computer: the App upgrades it directly.
     - A workspace installed on a server with `install-hub.sh`: the server needs a root `myco-upgrade.path`. New servers have it; for older installs, run `sudo myco upgrade` on the server once to install it. When the workspace gets the request, it leaves a request file in its data directory; the service sees it and runs `myco upgrade`.
     - A workspace started with `myco hub up`: it replaces its own binary, then has the service manager (launchd or systemd --user) restart it.
+
+### 8.1 Backups
+
+A Hub backs up its own data once a day (from v0.21.12): a consistent snapshot of its database, taken while it runs, plus its files (attachments, pages, apps), checked before it is kept. It keeps the last 7 in `backups/` next to its database (on an `install-hub.sh` server: `/var/lib/myco/backups/`; `myco hub serve --backups N` keeps N, `0` none). Each workspace of a server keeps its own, in `workspaces/<name>/backups/`. A backup holds every conversation and file, so only the Hub's owner can make or download one.
+
+A backup on the server's disk does not survive that disk: keep copies elsewhere.
+
+- **In the App**: Settings › Workspaces › the workspace › Backups › Manage (its owner only). "Back up now and save here" makes one and saves it to `~/myco-backups/<workspace>/`; "Keep copies on this computer" does that every day while the App is open, keeping the last 3.
+- **On the server**: `sudo myco hub backup --db /var/lib/myco/hub.db --out /root/backups/` backs up the whole server (the Hub and its workspaces) into one file.
+- **From anywhere, as the owner**: `myco hub backup --download --out ~/myco-backups/ --admin-token-file hub.env` makes a new backup and downloads it (for a cron job on another machine).
+
+**Restoring** (on the server): copy the backup there and run
+
+```bash
+sudo myco hub restore --from myco-backup-hub-20261121-093000.tar.gz --db /var/lib/myco/hub.db
+```
+
+It checks the whole backup first (every entry against its checksum, every database's integrity), stops the Hub's service, puts the backup in place, and starts it again. What was there is moved to `before-restore-<time>/` next to the database, not deleted. A workspace's own backup goes back with `--db /var/lib/myco/workspaces/<name>/hub.db`; a whole-server backup (`myco hub backup --db`) restores the Hub and all its workspaces. Where the Hub does not run as a system service (`myco hub up`), stop it first (`myco hub down`) and add `--yes`. `--dry-run` checks the backup and says what would happen.
+
+On a new server after the old one is lost: install the Hub with `install-hub.sh` as before, restore the backup, then point the App and agents at the new address if it changed (agents: change `hub:` in `~/.myco/config.yaml` and `~/.myco/agents/*.yaml`, then `myco runner service restart`; the App: add the workspace again with a link from `sudo myco console link`).
 
 ## 9. The console App (Mac / Windows / Linux)
 

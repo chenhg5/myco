@@ -45,6 +45,7 @@ type Server struct {
 	version     string        // this hub's myco build
 	latest      func() string // newest known release ("" = unknown)
 	upgrade     func(ctx context.Context, version string) (api.HubUpgrade, error)
+	backups     Backups
 	mux         *http.ServeMux
 	ingress     map[string]Ingress
 	files       *app.FileService
@@ -164,6 +165,7 @@ func (s *Server) routes() {
 
 	// Administration (admin token).
 	m.HandleFunc("POST /v1/admin/upgrade", s.admin(s.upgradeHub))
+	s.routeBackups(m)
 	m.HandleFunc("POST /v1/agents", s.admin(s.register))
 	m.HandleFunc("DELETE /v1/agents/{name}", s.admin(s.removeAgent))
 	m.HandleFunc("POST /v1/agents/cleanup", s.admin(s.cleanupAgents))
