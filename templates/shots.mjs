@@ -154,6 +154,14 @@ const plans = {
     await p.click('.ph-tool:has-text("边框")'); await p.click('.ph-frame:has-text("拍立得")');
     await wait(p, 1500);
   }] },
+  // 动效视频: the numbers scene of the sample promo, then its image scene with the video's colours
+  motion: [async (p) => {
+    await wait(p, 1500);
+    await p.locator(".mo-card").nth(2).click(); await wait(p, 1800);
+  }, async (p) => {
+    await p.locator(".mo-card").nth(3).click(); await wait(p, 600);
+    await p.click('.mo-tabs button:has-text("视频")'); await wait(p, 1200);
+  }],
   video: { sample: false, steps: [async (p) => {
     await p.setInputFiles("input[type=file]", clip());
     await p.waitForSelector(".tl-clip", { timeout: 30000 });

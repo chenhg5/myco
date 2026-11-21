@@ -1,0 +1,117 @@
+{
+ "project": [
+  {
+   "id": "main",
+   "title": "myco 宣传片",
+   "ratio": "16:9",
+   "fps": 30,
+   "bg": "#0e0f12",
+   "fg": "#f4f4f5",
+   "accent": "#7c9cff",
+   "accent2": "#f5b971",
+   "font": "sans",
+   "motion": "## 1 标题（0–4 秒）\n「让 agent 一起做事」逐字升起，光晕慢慢放大。\n\n## 2 三个要点（4–9 秒）\n派活、盯进度、拿结果，三张卡片依次出现。\n\n## 3 数据（9–14 秒）\n12,800 条消息滚动出来，四个月的柱子长高。\n\n## 4 截图（14–19 秒）\nApp 截图从右边推进来。\n\n## 5 三步开始（19–24 秒）\n一条线连起三步。\n\n## 6 片尾（24–28 秒）\nLogo、myco、一句话。"
+  }
+ ],
+ "scenes": [
+  {
+   "id": "s1",
+   "name": "标题",
+   "order": 1,
+   "duration": 4,
+   "transition": "cut",
+   "transition_time": 0.6,
+   "template": "title",
+   "html": "<div class=\"glow\"></div>\n<div class=\"wrap\">\n  <div class=\"kicker\" data-field=\"kicker\" data-label=\"小标题\">NEW · 2026</div>\n  <h1 data-field=\"title\" data-label=\"标题\">让 agent 一起做事</h1>\n  <div class=\"line\"></div>\n  <p data-field=\"subtitle\" data-label=\"副标题\">一个地方，看见每个 agent 在做什么</p>\n</div>",
+   "css": ".glow { position: absolute; left: 50%; top: 50%; width: 110cqmin; height: 110cqmin; margin: -55cqmin 0 0 -55cqmin; border-radius: 50%;\n  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 30%, transparent), transparent 62%); }\n.wrap { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3.2cqmin; padding: 0 8cqw; text-align: center; }\n.kicker { font-size: 2.6cqmin; font-weight: 600; letter-spacing: .42em; color: var(--accent); }\nh1 { margin: 0; font-size: 11cqmin; font-weight: 800; line-height: 1.08; letter-spacing: -.02em; }\n.line { width: 14cqmin; height: .7cqmin; border-radius: 1cqmin; background: var(--accent); transform-origin: center; }\np { margin: 0; font-size: 3.8cqmin; color: var(--muted); }",
+   "script": "const chars = util.split(\"h1\", \"chars\");\ntl.from(\".glow\", { scale: 0.5, opacity: 0, duration: 1.8, ease: \"power2.out\" }, 0)\n  .from(\".kicker\", { y: 30, opacity: 0, duration: 0.6 }, 0.2)\n  .from(chars, { yPercent: 70, opacity: 0, duration: 0.7, stagger: 0.045, ease: \"back.out(1.7)\" }, 0.35)\n  .from(\".line\", { scaleX: 0, duration: 0.7, ease: \"power3.out\" }, \">-0.3\")\n  .from(\"p\", { y: 24, opacity: 0, duration: 0.7 }, \"<0.15\")\n  .to(\".wrap\", { scale: 1.04, duration: util.duration, ease: \"none\" }, 0);",
+   "fields": {}
+  },
+  {
+   "id": "s2",
+   "name": "三个要点",
+   "order": 2,
+   "duration": 5,
+   "transition": "slide",
+   "transition_time": 0.6,
+   "template": "features",
+   "html": "<div class=\"wrap\">\n  <h2 data-field=\"title\" data-label=\"标题\">三件事，一个地方</h2>\n  <div class=\"items\">\n    <div class=\"item\"><b>01</b><h3 data-field=\"t1\" data-label=\"第 1 条\">派活</h3><p data-field=\"d1\" data-label=\"第 1 条说明\">把任务发给最合适的 agent</p></div>\n    <div class=\"item\"><b>02</b><h3 data-field=\"t2\" data-label=\"第 2 条\">盯进度</h3><p data-field=\"d2\" data-label=\"第 2 条说明\">谁在做什么，做到哪了</p></div>\n    <div class=\"item\"><b>03</b><h3 data-field=\"t3\" data-label=\"第 3 条\">拿结果</h3><p data-field=\"d3\" data-label=\"第 3 条说明\">做完的东西直接能用</p></div>\n  </div>\n</div>",
+   "css": ".wrap { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; gap: 6cqmin; padding: 0 8cqw; }\nh2 { margin: 0; font-size: 7cqmin; font-weight: 800; letter-spacing: -.01em; }\n.items { display: flex; gap: 3cqmin; }\n.item { flex: 1; padding: 4.5cqmin 4cqmin; border-radius: 3cqmin; background: color-mix(in srgb, var(--fg) 6%, transparent);\n  box-shadow: inset 0 0 0 .15cqmin color-mix(in srgb, var(--fg) 10%, transparent); }\n.item b { display: block; font-size: 2.6cqmin; font-weight: 700; color: var(--accent); letter-spacing: .1em; margin-bottom: 2.4cqmin; }\n.item h3 { margin: 0 0 1.4cqmin; font-size: 4.6cqmin; font-weight: 700; }\n.item p { margin: 0; font-size: 2.8cqmin; line-height: 1.45; color: var(--muted); }\n@container (aspect-ratio < 1) {\n  .items { flex-direction: column; }\n  .item { padding: 4cqmin 5cqmin; }\n  h2 { font-size: 9cqmin; }\n}",
+   "script": "tl.from(\"h2\", { y: 40, opacity: 0, duration: 0.7, ease: \"power3.out\" }, 0.1)\n  .from(\".item\", { y: 80, opacity: 0, duration: 0.8, stagger: 0.18, ease: \"power3.out\" }, 0.45)\n  .from(\".item b\", { x: -20, opacity: 0, duration: 0.5, stagger: 0.18 }, 0.75);",
+   "fields": {}
+  },
+  {
+   "id": "s3",
+   "name": "数据",
+   "order": 3,
+   "duration": 5,
+   "transition": "fade",
+   "transition_time": 0.6,
+   "template": "stat",
+   "html": "<div class=\"wrap\">\n  <div class=\"head\">\n    <div class=\"big\"><span class=\"num\" data-field=\"value\" data-label=\"大数字\">12800</span><span class=\"unit\" data-field=\"unit\" data-label=\"单位\">+</span></div>\n    <p data-field=\"label\" data-label=\"说明\">条消息每天在 agent 之间往来</p>\n  </div>\n  <div class=\"bars\">\n    <div class=\"bar\"><span class=\"val\" data-field=\"v1\" data-label=\"第 1 项数值\">1200</span><i></i><em data-field=\"l1\" data-label=\"第 1 项\">1 月</em></div>\n    <div class=\"bar\"><span class=\"val\" data-field=\"v2\" data-label=\"第 2 项数值\">3400</span><i></i><em data-field=\"l2\" data-label=\"第 2 项\">2 月</em></div>\n    <div class=\"bar\"><span class=\"val\" data-field=\"v3\" data-label=\"第 3 项数值\">6100</span><i></i><em data-field=\"l3\" data-label=\"第 3 项\">3 月</em></div>\n    <div class=\"bar\"><span class=\"val\" data-field=\"v4\" data-label=\"第 4 项数值\">12800</span><i></i><em data-field=\"l4\" data-label=\"第 4 项\">4 月</em></div>\n  </div>\n</div>",
+   "css": ".wrap { position: absolute; inset: 0; display: flex; align-items: center; gap: 8cqmin; padding: 0 9cqw; }\n.head { flex: 1; }\n.big { font-size: 15cqmin; font-weight: 800; line-height: 1; letter-spacing: -.03em; }\n.unit { color: var(--accent); }\np { margin: 2.6cqmin 0 0; font-size: 3.6cqmin; color: var(--muted); }\n.bars { flex: 1; height: 52cqmin; display: flex; align-items: flex-end; gap: 3cqmin; }\n.bar { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 1.4cqmin; }\n.bar i { display: block; width: 100%; border-radius: 1.6cqmin 1.6cqmin .4cqmin .4cqmin; transform-origin: bottom;\n  background: linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 45%, transparent)); }\n.bar:last-child i { background: linear-gradient(180deg, var(--accent2), color-mix(in srgb, var(--accent2) 45%, transparent)); }\n.val { font-size: 2.6cqmin; font-weight: 600; }\nem { font-style: normal; font-size: 2.4cqmin; color: var(--muted); }\n@container (aspect-ratio < 1) {\n  .wrap { flex-direction: column; justify-content: center; align-items: stretch; gap: 10cqmin; }\n  .head { flex: none; }\n  .bars { flex: none; height: 60cqmin; }\n}",
+   "script": "const bars = util.$$(\".bar\");\nconst vals = bars.map((b) => parseFloat(b.querySelector(\".val\").textContent.replace(/[^\\d.]/g, \"\")) || 0);\nconst max = Math.max(1, ...vals);\n// (each bar as tall as its value; room left for the number and the label)\nbars.forEach((b, i) => { b.querySelector(\"i\").style.height = (vals[i] / max * 78) + \"%\"; });\ntl.from(\".big\", { y: 40, opacity: 0, duration: 0.6 }, 0.1)\n  .from(\".num\", { count: 0, duration: 1.8, ease: \"power2.out\" }, 0.2)\n  .from(\"p\", { y: 20, opacity: 0, duration: 0.6 }, 0.5)\n  .from(\".bar i\", { scaleY: 0, duration: 0.9, stagger: 0.12, ease: \"power3.out\" }, 0.5)\n  .from(\".val\", { count: 0, opacity: 0, duration: 0.9, stagger: 0.12, ease: \"power3.out\" }, 0.5)\n  .from(\"em\", { opacity: 0, duration: 0.4, stagger: 0.12 }, 0.6);",
+   "fields": {}
+  },
+  {
+   "id": "s4",
+   "name": "图片展示",
+   "order": 4,
+   "duration": 5,
+   "transition": "slide",
+   "transition_time": 0.6,
+   "template": "image",
+   "html": "<div class=\"wrap\">\n  <div class=\"cap\">\n    <span class=\"tag\" data-field=\"tag\" data-label=\"标签\">对话</span>\n    <h2 data-field=\"title\" data-label=\"标题\">所有 agent，一眼看清</h2>\n    <p data-field=\"text\" data-label=\"说明\">谁在做什么、卡在哪里、做完了什么，都在一页里</p>\n  </div>\n  <div class=\"pic\"><img data-field=\"image\" data-label=\"图片\" alt=\"\"></div>\n</div>",
+   "css": ".wrap { position: absolute; inset: 0; display: flex; align-items: center; gap: 6cqmin; padding: 0 7cqw; }\n.cap { flex: 0 0 34%; display: flex; flex-direction: column; align-items: flex-start; gap: 2.4cqmin; }\n.tag { padding: .8cqmin 2cqmin; border-radius: 99px; font-size: 2.4cqmin; font-weight: 600; color: var(--bg); background: var(--accent); }\nh2 { margin: 0; font-size: 6.4cqmin; font-weight: 800; line-height: 1.15; }\np { margin: 0; font-size: 3cqmin; line-height: 1.5; color: var(--muted); }\n.pic { flex: 1; height: 72cqh; border-radius: 2.4cqmin; overflow: hidden; background: color-mix(in srgb, var(--fg) 8%, transparent);\n  box-shadow: 0 3cqmin 8cqmin rgba(0,0,0,.35), 0 0 0 .15cqmin color-mix(in srgb, var(--fg) 12%, transparent); }\n.pic img { width: 100%; height: 100%; object-fit: cover; }\n@container (aspect-ratio < 1) {\n  .wrap { flex-direction: column-reverse; justify-content: center; align-items: stretch; gap: 6cqmin; padding: 0 7cqw; }\n  .pic { flex: none; height: 46cqh; }\n  .cap { flex: none; }\n  h2 { font-size: 8cqmin; }\n  p { font-size: 4cqmin; }\n}",
+   "script": "tl.from(\".pic\", { x: 120, opacity: 0, duration: 0.9, ease: \"power3.out\" }, 0)\n  .fromTo(\".pic img\", { scale: 1.12 }, { scale: 1, duration: util.duration, ease: \"power1.out\" }, 0)\n  .from(\".tag\", { y: 20, opacity: 0, duration: 0.5 }, 0.3)\n  .from(\"h2\", { y: 30, opacity: 0, duration: 0.6, ease: \"power3.out\" }, 0.4)\n  .from(\"p\", { y: 20, opacity: 0, duration: 0.6 }, 0.55);",
+   "fields": {
+    "image": "a1"
+   }
+  },
+  {
+   "id": "s5",
+   "name": "三个步骤",
+   "order": 5,
+   "duration": 5,
+   "transition": "fade",
+   "transition_time": 0.6,
+   "template": "steps",
+   "html": "<div class=\"wrap\">\n  <h2 data-field=\"title\" data-label=\"标题\">三步开始</h2>\n  <div class=\"steps\">\n    <div class=\"track\"></div>\n    <div class=\"step\"><i>1</i><div><h3 data-field=\"s1\" data-label=\"第 1 步\">装上 App</h3><p data-field=\"p1\" data-label=\"第 1 步说明\">Mac 和 Windows 都行</p></div></div>\n    <div class=\"step\"><i>2</i><div><h3 data-field=\"s2\" data-label=\"第 2 步\">连上 agent</h3><p data-field=\"p2\" data-label=\"第 2 步说明\">Claude Code、Codex 一条命令</p></div></div>\n    <div class=\"step\"><i>3</i><div><h3 data-field=\"s3\" data-label=\"第 3 步\">开始派活</h3><p data-field=\"p3\" data-label=\"第 3 步说明\">说一句话，它们就动起来</p></div></div>\n  </div>\n</div>",
+   "css": ".wrap { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; gap: 9cqmin; padding: 0 8cqw; }\nh2 { margin: 0; font-size: 7cqmin; font-weight: 800; text-align: center; }\n.steps { position: relative; display: flex; gap: 4cqmin; }\n.track { position: absolute; left: 8%; right: 8%; top: 4.5cqmin; height: .5cqmin; margin-top: -.25cqmin; border-radius: 1cqmin;\n  background: linear-gradient(90deg, var(--accent), var(--accent2)); }\n.step { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2.4cqmin; }\n.step i { display: flex; align-items: center; justify-content: center; width: 9cqmin; height: 9cqmin; border-radius: 50%;\n  font-style: normal; font-size: 4cqmin; font-weight: 800; color: var(--bg); background: var(--accent); box-shadow: 0 0 0 1.2cqmin var(--bg); }\n.step:last-child i { background: var(--accent2); }\nh3 { margin: 0 0 1cqmin; font-size: 4.2cqmin; font-weight: 700; }\np { margin: 0; font-size: 2.8cqmin; color: var(--muted); }\n@container (aspect-ratio < 1) {\n  .steps { flex-direction: column; gap: 8cqmin; }\n  .track { left: 4.5cqmin; right: auto; top: 4%; bottom: 4%; width: .5cqmin; height: auto; margin: 0 0 0 -.25cqmin; }\n  .step { flex-direction: row; text-align: left; gap: 4cqmin; }\n  h2 { text-align: left; font-size: 9cqmin; }\n}",
+   "script": "tl.from(\"h2\", { y: 30, opacity: 0, duration: 0.6 }, 0.1)\n  .fromTo(\".track\", { clipPath: \"inset(0% 100% 100% 0%)\" }, { clipPath: \"inset(0% 0% 0% 0%)\", duration: 1.8, ease: \"power1.inOut\" }, 0.5)\n  .from(\".step i\", { scale: 0, duration: 0.5, stagger: 0.6, ease: \"back.out(2.2)\" }, 0.5)\n  .from(\".step div\", { y: 24, opacity: 0, duration: 0.5, stagger: 0.6 }, 0.7);",
+   "fields": {}
+  },
+  {
+   "id": "s6",
+   "name": "片尾",
+   "order": 6,
+   "duration": 4,
+   "transition": "zoom",
+   "transition_time": 0.6,
+   "template": "end",
+   "html": "<div class=\"ring\"></div>\n<div class=\"wrap\">\n  <img class=\"logo\" data-field=\"logo\" data-label=\"Logo\" data-optional alt=\"\">\n  <h1 data-field=\"name\" data-label=\"名字\">myco</h1>\n  <p data-field=\"tagline\" data-label=\"一句话\">让你的 agent 们一起干活</p>\n  <div class=\"cta\" data-field=\"cta\" data-label=\"网址或按钮\">myco.dev</div>\n</div>",
+   "css": ".ring { position: absolute; left: 50%; top: 50%; width: 80cqmin; height: 80cqmin; margin: -40cqmin 0 0 -40cqmin; border-radius: 50%;\n  border: .3cqmin solid color-mix(in srgb, var(--accent) 40%, transparent); }\n.wrap { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2.6cqmin; text-align: center; padding: 0 8cqw; }\n.logo { width: 14cqmin; height: 14cqmin; object-fit: contain; margin-bottom: 1cqmin; }\nh1 { margin: 0; font-size: 13cqmin; font-weight: 800; letter-spacing: -.03em; line-height: 1; }\np { margin: 0; font-size: 3.8cqmin; color: var(--muted); }\n.cta { margin-top: 3cqmin; padding: 1.6cqmin 4.4cqmin; border-radius: 99px; font-size: 3.2cqmin; font-weight: 600; color: var(--bg); background: var(--fg); }",
+   "script": "tl.fromTo(\".ring\", { scale: 0.3, opacity: 0 }, { scale: 1.15, opacity: 1, duration: 1.6, ease: \"expo.out\" }, 0)\n  .from(\".logo\", { scale: 0.5, opacity: 0, duration: 0.7, ease: \"back.out(1.8)\" }, 0.15)\n  .from(\"h1\", { y: 40, opacity: 0, duration: 0.7, ease: \"power3.out\" }, 0.3)\n  .from(\"p\", { y: 20, opacity: 0, duration: 0.6 }, 0.55)\n  .from(\".cta\", { scale: 0.8, opacity: 0, duration: 0.6, ease: \"back.out(2)\" }, 0.8);",
+   "fields": {
+    "logo": "a2"
+   }
+  }
+ ],
+ "assets": [
+  {
+   "id": "a1",
+   "name": "app.svg",
+   "data": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMjgwIiBoZWlnaHQ9IjgwMCIgdmlld0JveD0iMCAwIDEyODAgODAwIiBmb250LWZhbWlseT0iLWFwcGxlLXN5c3RlbSwnUGluZ0ZhbmcgU0MnLHNhbnMtc2VyaWYiPgo8cmVjdCB3aWR0aD0iMTI4MCIgaGVpZ2h0PSI4MDAiIHJ4PSIxOCIgZmlsbD0iIzE3MTgxYyIvPgo8cmVjdCB4PSIwIiB5PSIwIiB3aWR0aD0iMjYwIiBoZWlnaHQ9IjgwMCIgZmlsbD0iIzEyMTMxNiIvPgo8Y2lyY2xlIGN4PSIyOCIgY3k9IjI2IiByPSI3IiBmaWxsPSIjZmY1ZjU3Ii8+PGNpcmNsZSBjeD0iNTAiIGN5PSIyNiIgcj0iNyIgZmlsbD0iI2ZlYmMyZSIvPjxjaXJjbGUgY3g9IjcyIiBjeT0iMjYiIHI9IjciIGZpbGw9IiMyOGM4NDAiLz4KPHJlY3QgeD0iMjAiIHk9IjY0IiB3aWR0aD0iMjIwIiBoZWlnaHQ9IjMwIiByeD0iOCIgZmlsbD0iIzIyMjQyYSIvPgo8ZyBmb250LXNpemU9IjE1IiBmaWxsPSIjOWE5Y2E0Ij48dGV4dCB4PSIyNCIgeT0iMTQwIj7pobnnm648L3RleHQ+PC9nPgo8ZyBmb250LXNpemU9IjE2IiBmaWxsPSIjZThlOGVhIj4KPHJlY3QgeD0iMTQiIHk9IjE1MiIgd2lkdGg9IjIzMiIgaGVpZ2h0PSIzNCIgcng9IjgiIGZpbGw9IiMyYTJjMzMiLz48dGV4dCB4PSIyOCIgeT0iMTc1Ij7lj5HluIMgdjAuMjI8L3RleHQ+PGNpcmNsZSBjeD0iMjI2IiBjeT0iMTY5IiByPSI1IiBmaWxsPSIjMzRjNzU5Ii8+Cjx0ZXh0IHg9IjI4IiB5PSIyMTUiPuWumOe9keaUueeJiDwvdGV4dD48dGV4dCB4PSIyOCIgeT0iMjUzIj7mlbDmja7nnIvmnb88L3RleHQ+PGNpcmNsZSBjeD0iMjI2IiBjeT0iMjQ4IiByPSI1IiBmaWxsPSIjZmY5ZjBhIi8+CjwvZz4KPGcgZm9udC1zaXplPSIxNSIgZmlsbD0iIzlhOWNhNCI+PHRleHQgeD0iMjQiIHk9IjMxMCI+5a+56K+dPC90ZXh0PjwvZz4KPGcgZm9udC1zaXplPSIxNiIgZmlsbD0iI2U4ZThlYSI+PGNpcmNsZSBjeD0iMzgiIGN5PSIzNDIiIHI9IjEyIiBmaWxsPSIjN2M5Y2ZmIi8+PHRleHQgeD0iNjAiIHk9IjM0OCI+Y2xhdWRlLWNvZGU8L3RleHQ+PGNpcmNsZSBjeD0iMzgiIGN5PSIzODQiIHI9IjEyIiBmaWxsPSIjZjViOTcxIi8+PHRleHQgeD0iNjAiIHk9IjM5MCI+Y29kZXg8L3RleHQ+PGNpcmNsZSBjeD0iMzgiIGN5PSI0MjYiIHI9IjEyIiBmaWxsPSIjYzc3ZGZmIi8+PHRleHQgeD0iNjAiIHk9IjQzMiI+c2hlbGw8L3RleHQ+PC9nPgo8dGV4dCB4PSIzMDAiIHk9IjU4IiBmb250LXNpemU9IjIwIiBmb250LXdlaWdodD0iNjAwIiBmaWxsPSIjZjRmNGY1Ij7lj5HluIMgdjAuMjI8L3RleHQ+CjxnPgo8cmVjdCB4PSIzMDAiIHk9Ijk2IiB3aWR0aD0iNTYwIiBoZWlnaHQ9Ijg0IiByeD0iMTQiIGZpbGw9IiMyMzI1MmIiLz48dGV4dCB4PSIzMjQiIHk9IjEzMCIgZm9udC1zaXplPSIxNiIgZmlsbD0iI2Y0ZjRmNSI+5oqKIFdpbmRvd3Mg5YyF5Lmf5omT5LiA5LiL77yM5omT5a6M6LeR5LiA6YGN5YaS54Of5rWL6K+VPC90ZXh0Pjx0ZXh0IHg9IjMyNCIgeT0iMTYwIiBmb250LXNpemU9IjEzIiBmaWxsPSIjOGE4ZDk2Ij7kvaAgwrcgMTA6MjE8L3RleHQ+CjxyZWN0IHg9IjQyMCIgeT0iMjAwIiB3aWR0aD0iNTYwIiBoZWlnaHQ9IjEyMCIgcng9IjE0IiBmaWxsPSIjMmIzMzUwIi8+PHRleHQgeD0iNDQ0IiB5PSIyMzYiIGZvbnQtc2l6ZT0iMTYiIGZpbGw9IiNmNGY0ZjUiPuWlveeahOOAgldpbmRvd3Mg5YyF5bey5omT5aW977yINDYgTULvvInvvIw8L3RleHQ+PHRleHQgeD0iNDQ0IiB5PSIyNjQiIGZvbnQtc2l6ZT0iMTYiIGZpbGw9IiNmNGY0ZjUiPuWGkueDn+a1i+ivlSAzOCDpobnlhajpg6jpgJrov4fjgII8L3RleHQ+PHRleHQgeD0iNDQ0IiB5PSIyOTgiIGZvbnQtc2l6ZT0iMTMiIGZpbGw9IiNhM2FjZDAiPmNsYXVkZS1jb2RlIMK3IDEwOjM0PC90ZXh0Pgo8cmVjdCB4PSIzMDAiIHk9IjM0MCIgd2lkdGg9IjQwMCIgaGVpZ2h0PSI2MCIgcng9IjEyIiBmaWxsPSIjMWYyYTIyIi8+PGNpcmNsZSBjeD0iMzI2IiBjeT0iMzcwIiByPSI2IiBmaWxsPSIjMzRjNzU5Ii8+PHRleHQgeD0iMzQ0IiB5PSIzNzYiIGZvbnQtc2l6ZT0iMTUiIGZpbGw9IiNjOWU4ZDAiPmNvZGV4IOato+WcqOWGmeabtOaWsOivtOaYjuKApjwvdGV4dD4KPC9nPgo8cmVjdCB4PSIxMDAwIiB5PSI4MCIgd2lkdGg9IjI1MCIgaGVpZ2h0PSI2OTAiIHJ4PSIxMiIgZmlsbD0iIzFkMWYyNCIvPgo8dGV4dCB4PSIxMDIwIiB5PSIxMTQiIGZvbnQtc2l6ZT0iMTUiIGZpbGw9IiM5YTljYTQiPuaIkOWRmDwvdGV4dD4KPGcgZm9udC1zaXplPSIxNSIgZmlsbD0iI2U4ZThlYSI+PGNpcmNsZSBjeD0iMTAzNCIgY3k9IjE1MCIgcj0iMTIiIGZpbGw9IiM3YzljZmYiLz48dGV4dCB4PSIxMDU2IiB5PSIxNTYiPmNsYXVkZS1jb2RlPC90ZXh0PjxjaXJjbGUgY3g9IjEwMzQiIGN5PSIxOTIiIHI9IjEyIiBmaWxsPSIjZjViOTcxIi8+PHRleHQgeD0iMTA1NiIgeT0iMTk4Ij5jb2RleDwvdGV4dD48Y2lyY2xlIGN4PSIxMDM0IiBjeT0iMjM0IiByPSIxMiIgZmlsbD0iI2M3N2RmZiIvPjx0ZXh0IHg9IjEwNTYiIHk9IjI0MCI+bWFjLWV4ZWM8L3RleHQ+PC9nPgo8cmVjdCB4PSIzMDAiIHk9IjcwMCIgd2lkdGg9IjY4MCIgaGVpZ2h0PSI2MCIgcng9IjE0IiBmaWxsPSIjMjMyNTJiIi8+PHRleHQgeD0iMzI0IiB5PSI3MzciIGZvbnQtc2l6ZT0iMTYiIGZpbGw9IiM2ZTcxN2EiPuivtOeCueS7gOS5iO+8jOaIluiAhSBAIOS4gOS4qiBhZ2VudDwvdGV4dD4KPC9zdmc+Cg==",
+   "width": 1280,
+   "height": 800
+  },
+  {
+   "id": "a2",
+   "name": "logo.svg",
+   "data": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjMyMS43IDM4MC44IDI2MC4wIDI1My4yIj48bWFzayBpZD0ibSIgbWFza1VuaXRzPSJ1c2VyU3BhY2VPblVzZSIgeD0iMzIxLjciIHk9IjM4MC44IiB3aWR0aD0iMjYwLjAiIGhlaWdodD0iMjUzLjIiPjxyZWN0IHg9IjMyMS43IiB5PSIzODAuOCIgd2lkdGg9IjI2MC4wIiBoZWlnaHQ9IjI1My4yIiBmaWxsPSIjZmZmIi8+PHBhdGggZD0ibTQ0Mi4yIDQyNC4yaDMzLjY2djM0LjgyaC0zMy42NnYtMzQuODJ6IiBmaWxsPSIjMDAwIi8+PHBhdGggZD0ibTM3My45IDQ2NS44aDMzLjI4djMzLjU0aC0zMy4yOHYtMzMuNTR6IiBmaWxsPSIjMDAwIi8+PHBhdGggZD0ibTQ4Ny43IDQ3MS44aDI5LjQ0djI3LjE0bC0yOS40NC0wLjUxMnYtMjYuNjJ6IiBmaWxsPSIjMDAwIi8+PHBhdGggZD0ibTQyNC40IDUwOC40djUyLjYxaC05LjcyOHYzMC4zNGgxMy4zMXYxMS4yNmg0Ni44NXYtMTIuMDNoMTIuNTR2LTMxLjc0aC05Ljk4NHYtNTEuODRsLTUyLjk5IDEuNDA4eiIgZmlsbD0iIzAwMCIvPjwvbWFzaz48ZyBmaWxsPSIjZjRmNGY1IiBtYXNrPSJ1cmwoI20pIj48cGF0aCBkPSJtNTUwLjUgNDcxLjh2LTE5LjJoLTE4LjE4di0xOC4xOGMtMC4zODQtMS4yOC0yMC4yMi0wLjY0LTIwLjQ4LTAuNjR2LTE5LjcxYy0wLjc2OC0wLjY0LTMzLjc5LTAuMjU2LTM0LjE4LTAuMjU2di0yMC45OWgtNTIuNzR2MjAuOTljLTAuODk2IDAtMzMuNTQgMC4yNTYtMzMuNjYgMC41MTJ2MTkuNDZjLTAuNjQgMC0xOS4wNy0wLjM4NC0xOS40NiAwLjM4NHYxOC40M2gtMTguNDN2MTkuMmgtMTkuNThjLTAuMjU2IDkuMjE2IDAuMTI4IDM0LjgyIDAuMjU2IDM4LjUzbDE5LjU4LTAuNTEyIDAuNjQgMjAuNjEgNTIuMjIgMC4zODQgMC4zODQgMTkuMzNoLTEwLjYydjUzLjEyaDE3LjY2djE4LjY5YzEwLjYyIDAuMTI4IDc0LjUtMC4xMjggNzUuMjYtMC4xMjh2LTE5LjA3aDE3LjU0di01My41aC0xMS42NXYtMTkuNDZoNTUuNDJ2LTE5Ljg0aDE5LjJ2LTM4LjE0aC0xOS4yeiIvPjwvZz48L3N2Zz4K",
+   "width": 260,
+   "height": 253
+  }
+ ],
+ "notes": []
+}
