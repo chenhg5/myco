@@ -567,3 +567,20 @@ layouts and neutral palettes; their controls, menus, hints and editor dictionari
 support Chinese and English. User content, chosen page names and stored enum keys
 are never translated. Template titles and descriptions use optional `locales.json`
 display metadata, falling back to the manifest when absent.
+
+### Remote Desktop app
+
+The entry lives in Apps, with no new Computers navigation. Use neutral surfaces,
+subtle borders and monochrome actions in both appearances. Two tabs: Connect to a
+computer (searchable available-host cards) and Share this computer (optional
+component installation, view-only default, explicit sharing, private temporary
+pairing code and Stop sharing). Settings offers component status and uninstall.
+Follow the App's language and theme. Never seed real-looking connection history,
+store credentials in records or claim that a fixture is a live connection.
+
+The embedded app cannot approve its own install/connect/share operation: a
+trusted App modal explains the requested access. Closing, reloading or changing
+the language ends the page's sessions; hiding a tab leaves it running. Show
+connection progress, errors, real media statistics and a visible Disconnect.
+The initial version explicitly labels its LAN/Tailscale, no-audio and unlocked-
+desktop limitations. Optional media dependencies do not link into core myco.

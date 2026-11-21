@@ -80,6 +80,7 @@ const host = await serve((req, res) => {
  case'data.watch':value=true;break;
  case'data.put':{window.__writes++;const id=a.id||'generated'+seq;const r={collection:a.collection,id,data:a.data,version:(records[a.collection+'/'+id]?.version||0)+1};records[a.collection+'/'+id]=r;seq++;value=r;break}
  case'data.remove':window.__writes++;delete records[a.collection+'/'+a.id];value=true;break;
+ case'remote.call':value=a.action==='devices'?[]:{protocol:1,version:'0.1.0',installed:false,supported:false,running:false};break;
  case'os.list':value={os:'linux',arch:'x64',caps:[]};break;
  case'os.call':error='This capability is unavailable in this test';code='unsupported';break;
  case'os.start':error='This capability is unavailable in this test';code='unsupported';break;

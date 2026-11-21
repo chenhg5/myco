@@ -466,3 +466,52 @@ stay unchanged. Select an exact language tag, then its base language, then the
 base metadata. Publishing rejects malformed or oversized sidecars (32 KiB,
 20 languages; name 80 characters, description 300). Old clients may ignore the
 field, and old Hubs can still install apps containing the sidecar.
+
+### Optional Remote Desktop signaling
+
+Remote Desktop is an **Apps** application. New endpoints require a console/member
+or Hub administrator credential; agent tokens are rejected. Every operation is
+limited to a computer the actor owns/manages. The host must independently opt in
+and validate a temporary pairing code; Hub authorization alone does not start
+capture. Existing clients remain unchanged. No database migration is needed:
+host registrations and signaling are in memory and disappear on Hub restart.
+
+- `GET /v1/remote/machines` → `{machines:[{machine,name,os,control}]}`: enabled,
+  authorized hosts whose last heartbeat was at most 30 seconds ago.
+  `machine` may be an existing machine ID or `app:<console-device-id>`. App-only
+  hosting creates no agent, machine record or runner service. Registering such an
+  ID requires that exact App device credential (or the Hub master administrator);
+  other operations use its registered member ownership plus the host capability.
+- `PUT /v1/remote/machines/{machine}` body `{name,os,control}` → `{host_key}`.
+  This replaces the previous registration and closes its negotiations.
+- `GET /v1/remote/machines/{machine}/requests` → `{sessions:[...]}`: host heartbeat
+  and pending offers / active or closed negotiations. Requires the registration's
+  `X-Myco-Remote-Host` capability in addition to ordinary authentication.
+- `DELETE /v1/remote/machines/{machine}`: stop advertising and close negotiations;
+  requires the host capability. Returns 204.
+- `POST /v1/remote/sessions` body `{machine,offer:{description:{type:"offer",sdp},
+  pairing_code,control}}` → `{id,machine,state:"pending"}`. Only one pending/active
+  negotiation per host. Controller responses never contain the pairing code.
+- `PUT /v1/remote/machines/{machine}/sessions/{session}` body
+  `{answer:{type:"answer",sdp}}` or `{error:"stable_error_code"}`: the host's result,
+  requiring its capability. Returns 204 and discards the stored offer/code.
+- `GET /v1/remote/sessions/{session}` → `{id,machine,state,answer?,error?}`:
+  only its creator's member identity may poll it; polling renews its 90-second
+  signaling lease. `state` is pending / connected / failed / closed. Connected
+  means an answer was supplied, not that media has arrived; use peer state for UI.
+- `DELETE /v1/remote/sessions/{session}`: cancel/stop the creator's session.
+
+The Hub carries SDP only, never pixels, audio or keyboard/mouse events. SDP and
+pairing codes are sensitive, short-lived signaling: never put them in page data,
+logs, traces or audit details. Audit actions are `remote.enable`, `remote.disable`,
+`remote.connect`, `remote.disconnect`. The Hub is trusted for signaling; this is
+not independent peer identity verification against an untrusted Hub.
+
+The local App proxies `POST /app/hubs/{id}/remote` with `{page,instance,action,args}`.
+The trusted App assigns a fresh `instance` on each page load. A closed instance
+is revoked, including requests which arrive out of order after `close`.
+Actions: status, devices, install, remove, enable (`{control}`), disable, connect
+(`{machine,offer}`), session / disconnect (`{id}`), close. Session handles and
+host pairing codes are scoped to their originating page. Closing a page also
+invalidates in-flight connection operations, preventing a late response from
+starting unattended sharing. `close` releases that page's host/session resources.

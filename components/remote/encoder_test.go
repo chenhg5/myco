@@ -1,0 +1,101 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"flag"
+	"net"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strconv"
+	"testing"
+	"time"
+
+	"github.com/pion/rtp"
+)
+
+var encoderSmoke = flag.String("encoder-smoke", "", "test the packaged native FFmpeg encoder using synthetic NV12 input")
+
+func TestPackagedEncoderSendsParameterSets(t *testing.T) {
+	if *encoderSmoke == "" {
+		t.Skip("opt in with -args -encoder-smoke <binary>")
+	}
+	if runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
+		t.Skip("native platform encoder")
+	}
+	bin, e := filepath.Abs(*encoderSmoke)
+	if e != nil {
+		t.Fatal(e)
+	}
+	// Test pixels only, never a screenshot or camera feed.
+	frame := append(bytes.Repeat([]byte{128}, 1280*720), bytes.Repeat([]byte{64, 192}, 1280*720/4)...)
+	input := filepath.Join(t.TempDir(), "test.nv12")
+	if e = os.WriteFile(input, bytes.Repeat(frame, 3), 0600); e != nil {
+		t.Fatal(e)
+	}
+	conn, e := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer conn.Close()
+	args := []string{"-hide_banner", "-loglevel", "error", "-nostdin", "-f", "rawvideo", "-pixel_format", "nv12", "-video_size", "1280x720", "-framerate", "30", "-i", input, "-an", "-vf", "scale=1280:720", "-frames:v", "3"}
+	args = append(args, h264EncoderArgs()...)
+	args = append(args, "-b:v", "1000k", "-bf", "0", "-g", "30", "-flags", "-global_header", "-bsf:v", "h264_mp4toannexb", "-payload_type", "96", "-f", "rtp", "rtp://127.0.0.1:"+strconv.Itoa(conn.LocalAddr().(*net.UDPAddr).Port)+"?pkt_size=1200")
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if out, e := exec.CommandContext(ctx, bin, args...).CombinedOutput(); e != nil {
+		t.Fatalf("packaged platform encoder failed: %v\n%s", e, out)
+	}
+	seen := map[byte]bool{}
+	level := byte(0)
+	observe := func(data []byte) {
+		if len(data) > 0 {
+			seen[data[0]&31] = true
+			if data[0]&31 == 7 && len(data) >= 4 {
+				level = data[3]
+				if data[1] != 66 {
+					t.Errorf("encoder must match negotiated baseline profile, got %d", data[1])
+				}
+			}
+		}
+	}
+	for {
+		_ = conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+		buf := make([]byte, 2048)
+		n, _, e := conn.ReadFromUDP(buf)
+		if e != nil {
+			break
+		}
+		var p rtp.Packet
+		if p.Unmarshal(buf[:n]) != nil || len(p.Payload) == 0 {
+			continue
+		}
+		switch p.Payload[0] & 31 {
+		case 24:
+			data := p.Payload[1:]
+			for len(data) >= 2 {
+				size := int(data[0])<<8 | int(data[1])
+				data = data[2:]
+				if size > len(data) {
+					break
+				}
+				observe(data[:size])
+				data = data[size:]
+			}
+		case 28:
+			if len(p.Payload) > 1 {
+				seen[p.Payload[1]&31] = true
+			}
+		default:
+			observe(p.Payload)
+		}
+	}
+	if level == 0 || level > 31 {
+		t.Fatalf("encoder exceeds negotiated H.264 level 3.1: %d", level)
+	}
+	if !seen[7] || !seen[8] || !seen[5] {
+		t.Fatalf("a browser needs in-band SPS, PPS and IDR, got NAL types %v", seen)
+	}
+}

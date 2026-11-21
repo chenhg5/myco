@@ -1119,3 +1119,24 @@ older Hubs. A desktop App with the `preferences` bridge feature is needed to
 follow its manual settings; older Apps retain system appearance and the template's
 original language. Template authors can add translated titles and descriptions
 in `locales.json`; see [the app SDK](docs/app-os.md#app-language-and-appearance).
+
+### Remote Desktop (optional app)
+
+In **Apps**, create **Remote Desktop** in the same workspace on both computers.
+Pairing the two Apps with the workspace is enough; no agent CLI or runner service
+is required. On the computer to control, choose **Share this computer**, install the optional
+component, then explicitly start sharing. On the other computer, choose it and
+enter its current pairing code. Connections are view-only unless both sides allow
+keyboard and mouse control. Mac needs Screen Recording and, for control,
+Accessibility permission. The UI follows the App's English/Chinese and light/dark
+settings, with no change to existing user content.
+
+The initial version supports unlocked Mac and Windows desktops over a LAN or
+Tailscale. Audio, lock/sign-in or administrator confirmation screens, unattended access, virtual displays and
+automatic public relay are not included. Both Apps and the hosting page must stay
+open. Closing/reloading the hosting page, stopping sharing or uninstalling the
+component ends its connections. Components install separately only on request;
+people who do not use remote control do not download or run the encoder.
+A compatible new App/Hub and published remote component assets are required;
+older installations show an update notice. See [component build and acceptance
+requirements](components/remote/README.md).
