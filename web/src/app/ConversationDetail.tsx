@@ -1868,10 +1868,14 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // supplement sent after other messages (an answer to another task, work
   // handed out) is drawn where it was sent, quoting its task.
   const at = (m: { created_at: string }) => new Date(m.created_at).getTime();
+  // (work the agent handed out while at it is part of its run, not
+  // something that came between: what you added still goes into the run,
+  // above what it did after, instead of to the foot under it)
+  const handedOut = new Set(handoffs.filter((h) => h.dir === "out").map((h) => h.id));
   const between = (task: Message, s: Message) => (shown || []).some((m) =>
     at(m) > at(task) && at(m) < at(s) && m.id !== task.id && m.type !== "progress"
       && !(m.type === "steer" && (m.reply_to === task.id || m.answers)))
-    || (allInserts || []).some((x) => new Date(x.at).getTime() > at(task) && new Date(x.at).getTime() < at(s));
+    || (allInserts || []).some((x) => !handedOut.has(x.id) && new Date(x.at).getTime() > at(task) && new Date(x.at).getTime() < at(s));
   // A task whose run is shown: what you added goes into the run at the time
   // you sent it, so what the agent did after it is under it (as in Claude
   // Code and Codex), and the loading stays last.
