@@ -43,6 +43,7 @@ func hubCommands() *Command {
 			{Name: "tunnel", Kind: Enum, Values: tunnel.Kinds, Help: "Publish the hub through cloudflare (cloudflared) or tailscale (Funnel); its URL becomes --public-url"},
 			{Name: "tunnel-hostname", Kind: String, Help: "cloudflare: your hostname, e.g. hub.example.com (empty = temporary trycloudflare.com URL)"},
 			{Name: "tunnel-name", Kind: String, Default: "myco", Help: "cloudflare: named tunnel to create or reuse"},
+			{Name: "backups", Kind: Int, Default: "7", Help: "Backups of its data to keep in <db dir>/backups, one made a day (0 = none)"},
 			{Name: "no-update-check", Kind: Bool, Help: "Do not look for new myco releases (default: once a day in the background; also MYCO_NO_UPDATE_CHECK=1)"},
 		},
 		Run: func(in *Invocation) error {
@@ -99,12 +100,21 @@ func hubCommands() *Command {
 				OnlineWindow: in.Duration("online-window"), Log: newLogger(in.String("log-level")),
 				Dispatch:            app.DispatchPolicy{Cooldown: in.Duration("wake-cooldown"), PublicURL: in.String("public-url")},
 				GitHubWebhookSecret: ghSecret, GitHubReplyFrom: in.List("github-reply-from"),
-				FilesDir: in.String("files-dir"),
-				Files:    app.FilePolicy{MaxSize: int64(in.Int("max-file-size")) << 20, TTL: in.Duration("file-ttl")},
+				FilesDir: in.String("files-dir"), Backups: backupsKeep(in.Int("backups")),
+				Files: app.FilePolicy{MaxSize: int64(in.Int("max-file-size")) << 20, TTL: in.Duration("file-ttl")},
 			})
 		},
 	}
-	return (&Command{Name: "hub", Summary: "Operate a hub server"}).Add(serve, hubUpCommand(), hubDownCommand(), hubListCommand(), hubSettingsCommand())
+	return (&Command{Name: "hub", Summary: "Operate a hub server"}).Add(serve, hubUpCommand(), hubDownCommand(), hubListCommand(), hubSettingsCommand(), hubBackupCommand(), hubRestoreCommand())
+}
+
+// backupsKeep maps --backups to hubserver.Options.Backups (0 there means
+// the default; here it means none).
+func backupsKeep(n int) int {
+	if n <= 0 {
+		return -1
+	}
+	return n
 }
 
 // tokenFromFile reads an admin token file: either just the token, or

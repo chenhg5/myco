@@ -1049,6 +1049,26 @@ myco upgrade --version v0.16.5        # 安装指定版本（也可以用来回�
     - 用 `install-hub.sh` 装在服务器上的工作区：服务器上要有一个 root 的 `myco-upgrade.path`。新装的服务器自带；以前装的，在服务器上 `sudo myco upgrade` 一次就会装上。工作区收到请求后在自己的数据目录里留一个请求，这个服务看到后执行 `myco upgrade`。
     - `myco hub up` 开的工作区：自己换掉程序，再让服务管理器（launchd 或 systemd --user）把它重新启动。
 
+### 8.1 备份
+
+Hub 每天自动备份一次自己的数据（v0.21.12 起）：运行中也能拍下数据库的一致快照，再加上它的文件（附件、网页、应用），检查无误后才保存。最近 7 份放在数据库旁边的 `backups/` 里（用 `install-hub.sh` 装的服务器是 `/var/lib/myco/backups/`；`myco hub serve --backups N` 保留 N 份，`0` 不备份）。服务器上的每个工作区各自备份，放在 `workspaces/<名字>/backups/`。备份里有所有对话和文件，所以只有 Hub 的主人能做备份和下载。
+
+备份留在服务器自己的磁盘上，磁盘坏了也就一起没了：要在别处另存一份。
+
+- **在 App 里**：设置 › 工作区 › 对应的工作区 › 备份 › 管理（只有主人看得到）。「立即备份并存到这台电脑」会做一份并存到 `~/myco-backups/<工作区>/`；打开「在这台电脑上也留一份」，App 开着时每天自动存一份，留最近 3 份。
+- **在服务器上**：`sudo myco hub backup --db /var/lib/myco/hub.db --out /root/backups/` 把整个服务器（Hub 和所有工作区）备份成一个文件。
+- **在任何地方、以主人身份**：`myco hub backup --download --out ~/myco-backups/ --admin-token-file hub.env` 会新做一份并下载下来（适合在另一台机器上用定时任务跑）。
+
+**恢复**（在服务器上）：把备份文件拷过去，然后运行
+
+```bash
+sudo myco hub restore --from myco-backup-hub-20261121-093000.tar.gz --db /var/lib/myco/hub.db
+```
+
+它会先完整检查备份（每个文件对校验和、每个数据库做完整性检查），再停掉 Hub 的服务、换上备份、重新启动。原来的数据挪到数据库旁边的 `before-restore-<时间>/`，不会删掉。工作区自己的备份用 `--db /var/lib/myco/workspaces/<名字>/hub.db` 恢复；整个服务器的备份（`myco hub backup --db` 做的）会恢复 Hub 和所有工作区。如果 Hub 不是系统服务（`myco hub up` 起的），先 `myco hub down` 停掉，再加 `--yes`。加 `--dry-run` 只检查备份、说明会做什么。
+
+旧服务器整个没了、换到新服务器：照常用 `install-hub.sh` 装好 Hub，恢复备份；如果地址变了，再让 App 和 agent 指向新地址（agent：改 `~/.myco/config.yaml` 和 `~/.myco/agents/*.yaml` 里的 `hub:`，再 `myco runner service restart`；App：用 `sudo myco console link` 生成的链接重新添加工作区）。
+
 ## 9. 控制台 App（Mac / Windows / Linux）
 
 一个 App（Mac、Windows 是窗口，Linux 在浏览器里打开），可以同时管理多个 Hub：查看所有节点和机器、改名、改 allow-from、踢下线、删除，在机器上开新会话（添加节点），生成入网命令（添加机器），还能在这台 Mac 上直接开一个本机 Hub。

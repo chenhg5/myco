@@ -4401,6 +4401,31 @@ async function runMatrix(browser, size, scheme) {
 
     // A workspace behind the latest myco: upgraded from Settings, which
     // waits for it to come back on the new version.
+    // A workspace's backups, for its owner: made daily on the server; a
+    // copy kept on this computer; backed up now and saved here.
+    await step("设置 · 工作区备份", async () => {
+      await go(page, "设置", narrow);
+      const dialog = page.locator("[data-testid=settings-dialog]");
+      await clickVisible(page, page.locator(".app-settings-tab", { hasText: "工作区" }).first());
+      const row = dialog.locator("[data-testid=backup-row]").first();
+      await row.waitFor({ timeout: 15_000 });
+      if (!(await row.innerText()).includes("最近一次")) throw new Error("备份一行应写最近一次是什么时候");
+      await row.scrollIntoViewIfNeeded();
+      await clickVisible(page, row.getByRole("button", { name: "管理" }));
+      const bd = page.locator("[data-testid=backup-dialog]");
+      await bd.waitFor();
+      const modal = page.getByRole("dialog", { name: "工作区备份" });
+      await clickVisible(page, modal.getByRole("switch"));
+      await modal.locator("[role=switch][aria-checked=true]").waitFor({ timeout: 10_000 });
+      await clickVisible(page, modal.getByRole("button", { name: "立即备份并存到这台电脑" }));
+      await modal.locator("[data-testid=backup-saved]", { hasText: "myco-backups" }).waitFor({ timeout: 15_000 });
+      await modal.getByRole("button", { name: "在文件夹中显示" }).waitFor({ timeout: 10_000 });
+      await settle(page, 300);
+      await shot(page, size, scheme, "settings-backups");
+      await clickVisible(page, modal.getByRole("button", { name: "关闭" }));
+      await closeSettings(page);
+    });
+
     await step("设置 · 升级工作区", async () => {
       const setVersion = (v) => page.evaluate(async (x) => { await fetch("/app/mock/hub-version", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ version: x }) }); }, v);
       await setVersion("0.16.9");

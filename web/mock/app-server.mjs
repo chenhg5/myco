@@ -3120,6 +3120,37 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, makeMessage({ id: parts[4], status: "done" }));
     }
 
+    // /app/hubs/{id}/backups — the workspace's backups (hubs from v0.21.12;
+    // the lab hub is older), and the copies kept on this computer.
+    if (parts[3] === "backups") {
+      if (hub.id === "hub_lab") return fail(res, 404, "not_found", "no route for GET /v1/admin/backups");
+      const bk = (hub.backupState ||= { server: [{ name: "myco-backup-hub-20261121-031502.tar.gz", size: 18_400_000, created_at: iso(5 * 3600) }], local: [], auto: false });
+      const dir = `/Users/glenn/myco-backups/${hub.name}`;
+      if (parts.length === 4 && method === "GET") {
+        return send(res, 200, { backups: bk.server, keep: 7, daily: true, restore: "on the server, with the hub stopped: myco hub restore --from <backup> --db /var/lib/myco/hub.db", local: bk.local, dir, auto: bk.auto });
+      }
+      if (parts.length === 4 && method === "POST") {
+        await sleep(600);
+        const b = { name: `myco-backup-hub-${Date.now()}.tar.gz`, size: 18_600_000, created_at: iso(0) };
+        bk.server.unshift(b);
+        bk.server = bk.server.slice(0, 7);
+        return send(res, 201, b);
+      }
+      if (parts.length === 5 && parts[4] === "save" && method === "POST") {
+        const body = await readBody(req);
+        const b = bk.server.find((x) => x.name === body.name) || bk.server[0];
+        if (!bk.local.some((x) => x.name === b.name)) bk.local.unshift({ ...b });
+        bk.local = bk.local.slice(0, 3);
+        return send(res, 200, { path: `${dir}/${b.name}`, dir });
+      }
+      if (parts.length === 5 && parts[4] === "auto" && method === "PUT") {
+        const body = await readBody(req);
+        bk.auto = !!body.on;
+        return send(res, 200, { auto: bk.auto });
+      }
+      if (parts.length === 5 && parts[4] === "reveal" && method === "POST") return send(res, 200, { dir });
+    }
+
     // /app/hubs/{id}/settings — end-to-end encryption (MOCK_E2E=1 starts it on).
     if (parts.length === 4 && parts[3] === "settings") {
       if (method === "PUT") { const body = await readBody(req); hub.e2e = !!body.e2e; }

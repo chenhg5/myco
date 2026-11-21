@@ -1049,6 +1049,26 @@ myco upgrade --version v0.16.5        # install a specific version (also works f
     - A workspace installed on a server with `install-hub.sh`: the server needs a root `myco-upgrade.path`. New servers have it; for older installs, run `sudo myco upgrade` on the server once to install it. When the workspace gets the request, it leaves a request file in its data directory; the service sees it and runs `myco upgrade`.
     - A workspace started with `myco hub up`: it replaces its own binary, then has the service manager (launchd or systemd --user) restart it.
 
+### 8.1 Backups
+
+A Hub backs up its own data once a day (from v0.21.12): a consistent snapshot of its database, taken while it runs, plus its files (attachments, pages, apps), checked before it is kept. It keeps the last 7 in `backups/` next to its database (on an `install-hub.sh` server: `/var/lib/myco/backups/`; `myco hub serve --backups N` keeps N, `0` none). Each workspace of a server keeps its own, in `workspaces/<name>/backups/`. A backup holds every conversation and file, so only the Hub's owner can make or download one.
+
+A backup on the server's disk does not survive that disk: keep copies elsewhere.
+
+- **In the App**: Settings › Workspaces › the workspace › Backups › Manage (its owner only). "Back up now and save here" makes one and saves it to `~/myco-backups/<workspace>/`; "Keep copies on this computer" does that every day while the App is open, keeping the last 3.
+- **On the server**: `sudo myco hub backup --db /var/lib/myco/hub.db --out /root/backups/` backs up the whole server (the Hub and its workspaces) into one file.
+- **From anywhere, as the owner**: `myco hub backup --download --out ~/myco-backups/ --admin-token-file hub.env` makes a new backup and downloads it (for a cron job on another machine).
+
+**Restoring** (on the server): copy the backup there and run
+
+```bash
+sudo myco hub restore --from myco-backup-hub-20261121-093000.tar.gz --db /var/lib/myco/hub.db
+```
+
+It checks the whole backup first (every entry against its checksum, every database's integrity), stops the Hub's service, puts the backup in place, and starts it again. What was there is moved to `before-restore-<time>/` next to the database, not deleted. A workspace's own backup goes back with `--db /var/lib/myco/workspaces/<name>/hub.db`; a whole-server backup (`myco hub backup --db`) restores the Hub and all its workspaces. Where the Hub does not run as a system service (`myco hub up`), stop it first (`myco hub down`) and add `--yes`. `--dry-run` checks the backup and says what would happen.
+
+On a new server after the old one is lost: install the Hub with `install-hub.sh` as before, restore the backup, then point the App and agents at the new address if it changed (agents: change `hub:` in `~/.myco/config.yaml` and `~/.myco/agents/*.yaml`, then `myco runner service restart`; the App: add the workspace again with a link from `sudo myco console link`).
+
 ## 9. The console App (Mac / Windows / Linux)
 
 One App (a window on Mac and Windows; opens in the browser on Linux) manages several Hubs at once: see all nodes and machines, rename, change allow-from, kick off, delete, start new sessions on machines (add nodes), make join commands (add machines), and start a local Hub right on this Mac.
