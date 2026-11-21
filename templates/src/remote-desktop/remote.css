@@ -806,3 +806,8 @@ p {
 .rd-session.is-immersive.keyboard-open .rd-touch-controls { display: none; }
 .rd-session.is-immersive.keyboard-open .rd-floating-tools { display: flex; top: 12px; transform: none; }
 .rd-input-toast { position: absolute; z-index: 8; top: 60px; left: 12px; right: 76px; padding: 12px; border-radius: 10px; background: var(--rd-panel); color: var(--rd-text); font-size: 14px; }
+
+.rd-input-toast { display: flex; align-items: center; gap: 12px; max-height: min(160px, calc(var(--rd-viewport-height,100lvh) - 72px)); overflow: auto; }
+.rd-input-toast > span { flex: 1; }
+.rd-input-toast > button { flex-shrink: 0; }
+.rd-update-help { margin-top: 16px; }

@@ -412,7 +412,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const [sending, setSending] = useState(false);
   // The message on its way: shown at once at the end of the chat, faint,
   // with 发送中, and the box empty again; the hub's copy takes its place.
-  const [pending, setPending] = useState<{ body: string; files: { id: string; name: string; size: number; preview?: string }[] } | null>(null);
+  // (One put after the running round, ⌘↩, shows in the queue above the box
+  // at once instead: it is queued, not sending.)
+  const [pending, setPending] = useState<{ body: string; files: { id: string; name: string; size: number; preview?: string }[]; queued?: boolean } | null>(null);
   // Files going with the next message (pasted, dropped or picked).
   const att = useAttachments(target.hubId);
   // Messages put after the running one, while the workspace cannot hold
@@ -1466,7 +1468,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     // for an older hub) shows in the queue instead.
     const files = att.take();
     const localQueued = queuedNext && !queueOnHub;
-    if (!localQueued && !shellMode) setPending({ body: typed, files });
+    if (!localQueued && !shellMode) setPending({ body: typed, files, queued: queuedNext });
     writeDraft("");
     histPos.current = -1;
     atBottom.current = true;
@@ -1754,10 +1756,12 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
 
   // Messages waiting behind this round, in order: on the hub (v0.19.2) or
   // here. Both are one list above the box, with edit and withdraw.
-  type QueueItem = { key: string; body: string; server?: Message; local?: Queued };
+  type QueueItem = { key: string; body: string; server?: Message; local?: Queued; sending?: boolean };
   const queueRows: QueueItem[] = [
     ...localQueue.map((q) => ({ key: q.id, body: q.body, local: q })),
     ...hubQueue.map((m) => ({ key: m.id, body: m.body, server: m })),
+    // (on its way to the hub's queue: in it at once, its buttons once it is there)
+    ...(pending?.queued ? [{ key: "pending", body: pending.body || pending.files.map((f) => f.name).join("、"), sending: true }] : []),
   ];
   const dropLocal = (id: string) => {
     writeQueue(localQueue.filter((x) => x.id !== id));
@@ -2413,7 +2417,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {!shellMode && !execNode && trailing}
             {/* What you just sent, until the workspace has it: drawn as
                 yours, but not one of yours yet (not .is-me). */}
-            {pending && (
+            {pending && !pending.queued && (
               <div className="conv-msg is-pending" data-testid="chat-sending">
                 <div className="conv-bubble">
                   {pending.body && <MessageContent body={pending.body} />}
@@ -2518,11 +2522,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                   <span className="conv-queue-label">{L("排队中：", "Queued: ")}</span>
                   {item.body.split("\n")[0].trim() || L("（附件）", "(files)")}
                 </span>
-                <button type="button" className="conv-queue-btn" disabled={queueBusy === item.key}
+                <button type="button" className="conv-queue-btn" disabled={queueBusy === item.key || item.sending}
                   onClick={(e) => { e.stopPropagation(); void editQueueItem(item); }}>
                   {L("编辑", "Edit")}
                 </button>
-                <button type="button" className="conv-queue-btn" disabled={queueBusy === item.key}
+                <button type="button" className="conv-queue-btn" disabled={queueBusy === item.key || item.sending}
                   onClick={(e) => { e.stopPropagation(); void withdrawQueueItem(item); }}>
                   {L("撤回", "Withdraw")}
                 </button>
