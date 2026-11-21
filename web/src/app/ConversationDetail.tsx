@@ -338,6 +338,15 @@ function failureWords(err: string): { short: string; long: string } {
   return { short: L("失败了", "Failed"), long: L(`失败了：${err}`, `Failed: ${err}`) };
 }
 
+/** What each run's trace last said (runActivity), across chats while the
+ *  App is open, the newest few hundred. */
+const knownActivity = new Map<string, { at: number; ended: boolean }>();
+function rememberActivity(taskId: string, a: { at: number; ended: boolean }) {
+  knownActivity.delete(taskId);
+  knownActivity.set(taskId, a);
+  if (knownActivity.size > 400) knownActivity.delete(knownActivity.keys().next().value as string);
+}
+
 export function ConversationDetail({ target, rows, now, onBack, onNewConversation, onOpen, onOpenExchange, onRefresh, showBack = true, backLabel, role, inserts, headActions, projectTitle, bare }: {
   target: ConversationTarget;
   /** the project this chat is the home of (its coordinator's): the empty
@@ -704,12 +713,17 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   };
   // What each run's trace says (TraceView's pausedRun): stopped (turn over,
   // set aside, silent) or at work. Not known until its trace is read.
-  const [runActivity, setRunActivity] = useState<ReadonlyMap<string, { at: number; ended: boolean }>>(() => new Map());
-  const onActivity = useCallback((taskId: string, at: number, ended: boolean) =>
+  // Kept while the App is open (knownActivity): back in a chat, a task that
+  // was at work a moment ago is not shown as quiet (可能卡住) for the second
+  // its trace takes to be read again.
+  const [runActivity, setRunActivity] = useState<ReadonlyMap<string, { at: number; ended: boolean }>>(() => new Map(knownActivity));
+  const onActivity = useCallback((taskId: string, at: number, ended: boolean) => {
+    rememberActivity(taskId, { at, ended });
     setRunActivity((s) => {
       const o = s.get(taskId);
       return o && o.at === at && o.ended === ended ? s : new Map(s).set(taskId, { at, ended });
-    }), []);
+    });
+  }, []);
   const [runPaused, setRunPaused] = useState<ReadonlyMap<string, boolean>>(() => new Map());
   const onPaused = useCallback((taskId: string, paused: boolean) =>
     setRunPaused((s) => (s.get(taskId) === paused ? s : new Map(s).set(taskId, paused))), []);

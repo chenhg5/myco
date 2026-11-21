@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { IntroCard, introOf } from "@/app/Onboard";
-import { Activity, ArrowLeft, ArrowUp, ChevronDown, AudioLines, Columns2, FileText, PanelRightClose, PanelRightOpen, Plus, Users } from "lucide-react";
+import { Activity, ArrowLeft, ArrowUp, ChevronDown, AudioLines, Columns2, FileText, Loader2, PanelRightClose, PanelRightOpen, Plus, Users } from "lucide-react";
 import { appApi, type RecentItem } from "@/appapi";
 import type { Message, Project } from "@/api";
 import type { AgentRow } from "@/app/types";
@@ -813,9 +813,16 @@ function GroupView({ hubId, project, loose, title, agents, memberNames, rowOf, n
     if (el && atBottom.current) el.scrollTop = el.scrollHeight;
   }, [items]);
 
-  const sent = () => {
+  // The task on its way (Composer): a faint card at the end of the feed,
+  // 发送中, until the feed has it (as a chat shows what you send).
+  const [pending, setPending] = useState<{ to: string; body: string } | null>(null);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (pending && el) el.scrollTop = el.scrollHeight;
+  }, [pending]);
+  const sent = async () => {
     atBottom.current = true;
-    void load();
+    await load().catch(() => undefined);
     onSent();
   };
 
@@ -863,10 +870,21 @@ function GroupView({ hubId, project, loose, title, agents, memberNames, rowOf, n
           {items?.map((it) => (
             <TaskCard key={`${it.kind}:${it.thread_id}:${it.node || ""}`} it={it} rowOf={rowOf} nameOf={nameOf} now={now} onOpen={() => onOpenThread(it)} />
           ))}
+          {pending && (
+            <div className="sp-card is-pending" data-testid="group-sending">
+              <div className="sp-card-who">
+                <Who name={L("你", "You")} />
+                <span className="sp-card-arrow">→</span>
+                <Who row={rowOf(pending.to)} name={nameOf(pending.to)} />
+              </div>
+              <div className="sp-card-body"><ClampText text={pending.body} lines={4} /></div>
+              <div className="sp-card-foot"><span className="sp-card-state"><Loader2 className="spin" />{L("发送中…", "Sending…")}</span></div>
+            </div>
+          )}
         </div>
       </div>
 
-      {agents.length > 0 && !activity && <Composer hubId={hubId} project={project} agents={agents} onSent={sent} onCall={onCall} />}
+      {agents.length > 0 && !activity && <Composer hubId={hubId} project={project} agents={agents} onSending={setPending} onSent={sent} onCall={onCall} />}
     </div>
   );
 }
@@ -970,11 +988,14 @@ const RECIPIENT_KEY = "myco-space-to";
 // The composer grows to this height, then scrolls.
 const COMPOSE_MAX = 220;
 
-function Composer({ hubId, project, agents, onSent, onCall }: {
+function Composer({ hubId, project, agents, onSending, onSent, onCall }: {
   hubId: string;
   project?: Project;
   agents: AgentRow[];
-  onSent: () => void;
+  /** the task on its way, shown in the feed (null when it is there, or did not go) */
+  onSending: (p: { to: string; body: string } | null) => void;
+  /** sent: the feed is read again (it resolves once it has) */
+  onSent: () => Promise<void>;
   /** a voice chat with this agent: its chat opens with the call on */
   onCall?: (agent: string) => void;
 }) {
@@ -1020,19 +1041,30 @@ function Composer({ hubId, project, agents, onSent, onCall }: {
     if ((!typed && !att.any) || att.busy || !recipient || busy) return;
     setBusy(true);
     setError(null);
+    // Shown in the feed at once and out of the box (not a spinner in the
+    // box); put back in the box if it does not go.
+    const body = att.body(typed);
+    const ids = att.ids;
+    const files = att.take();
+    onSending({ to: recipient, body });
+    setDraft("");
+    history.reset();
     try {
-      await appApi.sendMessage(hubId, { to: recipient, body: att.body(typed), ...(att.ids.length ? { attachments: att.ids } : {}), ...(project ? { project: project.name } : {}) });
+      await appApi.sendMessage(hubId, { to: recipient, body, ...(ids.length ? { attachments: ids } : {}), ...(project ? { project: project.name } : {}) });
       if (typed) {
         keepSent(sentKey, typed);
         setSent(keptSent(sentKey));
       }
-      history.reset();
-      setDraft("");
-      att.clear();
-      onSent();
+      files.forEach((f) => f.preview?.startsWith("blob:") && URL.revokeObjectURL(f.preview));
+      await onSent();
     } catch (e) {
+      // (anything typed meanwhile stays, after it)
+      const now = input.current?.value || "";
+      setDraft(now.trim() ? `${typed}\n${now}` : typed);
+      att.restore(files);
       setError(e);
     } finally {
+      onSending(null);
       setBusy(false);
     }
   };
