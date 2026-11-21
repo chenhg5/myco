@@ -11,6 +11,9 @@ package main
 // TCC must identify the App, not only a transient screencapture child. macOS
 // only prompts the first time; a previous denial must be changed in Settings.
 static int mycoRequestScreenRecording(void) {
+ if (CGPreflightScreenCaptureAccess()) return 1;
+ // A headless --serve process has no Cocoa event loop to show a prompt.
+ if (NSApp == nil) return 0;
  __block BOOL allowed = NO;
  void (^request)(void) = ^{
   allowed = CGPreflightScreenCaptureAccess();
