@@ -300,3 +300,11 @@ runs at a time. Cancelling requests a graceful stop to finalize the original;
 a stuck recorder is killed after eight seconds. The recording app cancels its
 job when leaving and warns before closing an active recording. No capture starts
 merely by opening the app, and no remote-desktop component is started.
+
+The recording app waits for capability discovery before enabling capture. On a
+Mac or Windows App without native recording support it does not silently fall
+back to browser display capture: an embedded WebView may reject that request
+without opening a picker. The UI explains whether the App needs updating or the
+Windows encoder is missing. On supported Macs it offers a button for System
+Settings → Privacy & Security → Screen & System Audio Recording, naming the
+currently used myco / myco-preview app; microphone permission is separate.

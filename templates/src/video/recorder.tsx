@@ -1,7 +1,7 @@
 // Capture is a source adapter; the editor only receives ordinary local Files.
 // No video bytes or local paths are written into workspace records.
 import { useEffect, useRef, useState } from "react";
-import { Circle, Square, X, Loader2 } from "lucide-react";
+import { Circle, Square, X, Loader2, Check } from "lucide-react";
 import { myco, save, type OSJob } from "../_lib/myco";
 import { t } from "../_lib/i18n";
 import "./recorder.css";
@@ -9,12 +9,15 @@ import "./recorder.css";
 type Recording = {path:string; bytes:number};
 export function Recorder({onRecorded, request = 0}:{request?:number; onRecorded:(file:File)=>Promise<boolean>}) {
  const [open,setOpen]=useState(false), [state,setState]=useState<"idle"|"selecting"|"recording"|"importing">("idle");
+ const [checked,setChecked]=useState(false), [probeFailed,setProbeFailed]=useState(false);
  const [platform,setPlatform]=useState(""), [native,setNative]=useState(false), [mic,setMic]=useState(false), [interactive,setInteractive]=useState(true);
  const [error,setError]=useState(""), [path,setPath]=useState(""), [elapsed,setElapsed]=useState(0);
  const [retained,setRetained]=useState<File|null>(null);
  const job=useRef<OSJob<Recording>|null>(null), stream=useRef<MediaStream|null>(null), recorder=useRef<MediaRecorder|null>(null);
  const starting=useRef(false), alive=useRef(true);
  const active=state!=="idle";
+ const needsApp=checked&&!native&&(platform==="darwin"||platform==="windows"||probeFailed);
+ const unavailable=platform==="windows"?t("这台 Windows 电脑还没有配置录屏所需的 FFmpeg。可以先导入已有视频进行剪辑。"):t("当前打开的 App 还不支持原生录屏。请在新版 myco 或 myco-preview 中重新打开本应用；这不是系统权限被拒绝。");
  useEffect(()=>{
   if(!open)return;
   const previous=document.activeElement as HTMLElement|null;
@@ -31,7 +34,9 @@ export function Recorder({onRecorded, request = 0}:{request?:number; onRecorded:
   window.addEventListener("keydown",key);return()=>{window.removeEventListener("keydown",key);previous?.focus();};
  },[open]);
  useEffect(()=>{if(request)setOpen(true);},[request]);
- useEffect(()=>{alive.current=true;void myco?.os?.list().then(v=>{setPlatform(v.os);setNative(v.caps.some(c=>c.name==="screen.record"&&c.available));}).catch(()=>{});const stop=()=>{void job.current?.cancel();stream.current?.getTracks().forEach(t=>t.stop());};window.addEventListener("pagehide",stop);return()=>{alive.current=false;stop();window.removeEventListener("pagehide",stop);};},[]);
+ useEffect(()=>{alive.current=true;
+ const detect=async()=>{try{if(myco?.os){const v=await myco.os.list();if(alive.current){setPlatform(v.os);setNative(v.caps.some(c=>c.name==="screen.record"&&c.available));}}}catch{if(alive.current){setProbeFailed(true);setError(t("无法连接这台电脑的录屏功能，请关闭应用页面后重新打开。"));}}finally{if(alive.current)setChecked(true);}};void detect();
+ const stop=()=>{void job.current?.cancel();stream.current?.getTracks().forEach(t=>t.stop());};window.addEventListener("pagehide",stop);return()=>{alive.current=false;stop();window.removeEventListener("pagehide",stop);};},[]);
  useEffect(()=>{if(state!=="recording")return;const at=Date.now();const id=setInterval(()=>setElapsed(Math.floor((Date.now()-at)/1000)),500);return()=>clearInterval(id);},[state]);
  useEffect(()=>{if(!active)return;const f=(e:BeforeUnloadEvent)=>{e.preventDefault();e.returnValue="";};window.addEventListener("beforeunload",f);return()=>window.removeEventListener("beforeunload",f);},[active]);
  async function importRecording(file:File) {
@@ -40,10 +45,10 @@ export function Recorder({onRecorded, request = 0}:{request?:number; onRecorded:
   if(await onRecorded(file)){setRetained(null);setOpen(false);}else setError(t("导入没完成，原片已保留，可以重试。"));
  }
  async function start() {
-  if(starting.current)return;starting.current=true;setError("");setPath("");setElapsed(0);setState("selecting");
+  if(starting.current||!checked||needsApp)return;starting.current=true;setError("");setPath("");setElapsed(0);setState("selecting");
   try {
    if(native && myco?.os) {
-    const j=myco.os.screen.record({interactive:platform==="darwin"&&interactive,microphone:platform==="darwin"&&mic,clicks:true,max_seconds:600});job.current=j;
+    const j=myco.os.start<Recording>("screen.record",{interactive:platform==="darwin"&&interactive,microphone:platform==="darwin"&&mic,clicks:true,max_seconds:600});job.current=j;
     j.on("started",(data:{path:string})=>{if(alive.current){setPath(data.path);setState("recording");}});
     const result=await j.done;job.current=null;
     if(!alive.current)return;setPath(result.path);setState("importing");
@@ -68,7 +73,7 @@ export function Recorder({onRecorded, request = 0}:{request?:number; onRecorded:
     const limit=setTimeout(()=>{if(m.state!=="inactive")m.stop();},600000);
     return;
    }
-  }catch(e){if(alive.current){setOpen(true);setError((e as Error).name==="NotAllowedError"?t("录屏未获允许或已取消，请重新选择。"):(e as Error).message);}}
+  }catch(e){if(alive.current){setOpen(true);setError((e as {code?:string}).code==="permission_denied"&&platform==="darwin"?t("请允许 myco-preview 的屏幕录制权限。点击下方“打开录屏权限设置”，打开当前 App 的开关；如系统要求，请退出并重新打开 App。"):(e as Error).name==="NotAllowedError"?t("屏幕选择器没有打开或已被取消。当前嵌入窗口可能不支持浏览器录屏；请在支持原生录屏的 myco App 中重试。"):(e as Error).message);}}
   finally{if(!recorder.current){starting.current=false;if(alive.current)setState("idle");}}
  }
  function stop(){if(job.current)void job.current.write("stop").catch(e=>setError(String(e.message)));const m=recorder.current;if(m&&m.state!=="inactive")m.stop();}
@@ -79,13 +84,14 @@ export function Recorder({onRecorded, request = 0}:{request?:number; onRecorded:
  <header><div><span className="rec-kicker">{t("录制 → 剪辑 → 导出")}</span><h2 id="rec-title">{t("录下你的下一次演示")}</h2></div><button className="btn" aria-label={t("关闭")} onClick={()=>setOpen(false)}><X className="ico"/></button></header>
  <p>{t("视频留在这台电脑。停止录制后会自动放进时间线，可以裁剪、加文字和重点放大。")}</p>
  {state==="idle"&&<>
- {native&&platform==="darwin"?<><label className="rec-option"><input type="checkbox" checked={interactive} onChange={e=>setInteractive(e.target.checked)}/><span>{t("由系统选择录制区域")}<small>{t("取消选择则录制主屏幕；系统工具栏也可以停止录制。")}</small></span></label><label className="rec-option"><input type="checkbox" checked={mic} onChange={e=>setMic(e.target.checked)}/><span>{t("同时录制麦克风")}<small>{t("默认不录声音；此版本不采集电脑内部声音。")}</small></span></label></>:native?<p className="rec-info">{t("此版本录制 Windows 整个桌面，不采集声音。")}</p>:<p className="rec-info">{t("由浏览器选择屏幕或窗口；声音是否可用取决于系统和你选择的共享选项。")}</p>}
+ {native&&platform==="darwin"?<><label className="rec-option"><input type="checkbox" checked={interactive} onChange={e=>setInteractive(e.target.checked)}/><span className="rec-check" aria-hidden="true"><Check/></span><span>{t("由系统选择录制区域")}<small>{t("取消选择则录制主屏幕；系统工具栏也可以停止录制。")}</small></span></label><label className="rec-option"><input type="checkbox" checked={mic} onChange={e=>setMic(e.target.checked)}/><span className="rec-check" aria-hidden="true"><Check/></span><span>{t("同时录制麦克风")}<small>{t("默认不录声音；此版本不采集电脑内部声音。")}</small></span></label></>:native?<p className="rec-info">{t("此版本录制 Windows 整个桌面，不采集声音。")}</p>:needsApp?<p className="rec-info" role="status">{unavailable}</p>:<p className="rec-info">{t("由浏览器选择屏幕或窗口；声音是否可用取决于系统和你选择的共享选项。")}</p>}
  <p className="rec-info">{t("单次最多 10 分钟，浏览器录制和自动导入最多 512 MB。请避免展示密码和私人信息。")}</p></>}
+ {native&&platform==="darwin"&&<div className="rec-permissions"><p className="rec-info">{t("首次使用：在系统设置 → 隐私与安全性 → 屏幕与系统音频录制中，允许当前使用的 myco-preview 或 myco。如系统要求退出并重新打开，请重开后再试。麦克风需另行允许。")}</p><button className="btn" onClick={()=>void myco?.os?.system.settings({pane:"screen_recording"}).catch(e=>setError(String(e.message)))}>{t("打开录屏权限设置")}</button></div>}
  {error&&<div className="rec-error" role="alert">{error}</div>}
  {path&&<button className="btn" onClick={()=>void myco?.os?.fs.reveal({path})}>{t("查看本机原片")}</button>}
  {retained&&state==="idle"&&<button className="btn" onClick={()=>void save(retained.name,retained,retained.type).then(()=>{setRetained(null);setError("");}).catch(e=>setError(String(e.message)))}>{t("保存原片")}</button>}
  {retained&&state==="idle"&&<button className="btn" onClick={()=>void importRecording(retained).finally(()=>setState("idle"))}>{t("重新导入原片")}</button>}
- <footer>{state==="idle"?<button className="btn btn-primary" disabled={!!retained} onClick={()=>void start()}><Circle className="ico"/>{t("选择画面并开始")}</button>:state==="importing"?<span><Loader2 className="ico spin"/>{t("正在导入原片…")}</span>:<><span role="status">{state==="selecting"?t("请在系统窗口中选择画面"):t("正在录制，可以切到其他窗口")}</span><button className="btn btn-primary" onClick={stop}><Square className="ico"/>{t("停止并剪辑")}</button></>}</footer>
+ <footer>{state==="idle"?<button className="btn btn-primary" disabled={!!retained||!checked||needsApp} onClick={()=>void start()}><Circle className="ico"/>{t("选择画面并开始")}</button>:state==="importing"?<span><Loader2 className="ico spin"/>{t("正在导入原片…")}</span>:<><span role="status">{state==="selecting"?t("请在系统窗口中选择画面"):t("正在录制，可以切到其他窗口")}</span><button className="btn btn-primary" onClick={stop}><Square className="ico"/>{t("停止并剪辑")}</button></>}</footer>
  </section></div>}
  </>;
 }

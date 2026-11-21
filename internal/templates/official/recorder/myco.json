@@ -1,7 +1,7 @@
 {
   "id": "myco/recorder",
   "name": "录屏工作台",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "kind": "custom",
   "category": "creative",
   "icon": "icon.svg",

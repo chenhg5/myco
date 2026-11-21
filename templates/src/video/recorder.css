@@ -5,3 +5,12 @@
 .vid input[type="range"]{accent-color:var(--accent)}
 
 .stage-empty>.btn{margin-bottom:20px;font-size:15px;min-height:44px;padding:0 24px}
+
+.rec-option{position:relative}
+.rec-option input[type="checkbox"]{position:absolute;left:0;width:22px;height:22px;opacity:0}
+.rec-check{display:grid;place-items:center;width:22px;height:22px;flex:none;border:1.5px solid var(--muted);border-radius:6px;background:var(--bg2);color:var(--bg)}
+.rec-check svg{width:16px;height:16px;stroke-width:2.5;visibility:hidden}
+.rec-option input:checked+.rec-check{background:var(--fg);border-color:var(--fg)}
+.rec-option input:checked+.rec-check svg{visibility:visible}
+.rec-option input:focus-visible+.rec-check{outline:2px solid var(--fg);outline-offset:3px}
+.rec-permissions{border-top:1px solid var(--line);padding-top:16px}

@@ -26,6 +26,12 @@ func screenRecordCommand(a screenRecordArgs, path string) []string {
 	return append(args, path)
 }
 func recordScreen(ctx context.Context, _ *Env, a screenRecordArgs, path string, emit Emit) error {
+	if err := requestScreenRecordingPermission(); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	cmd := exec.Command("/usr/sbin/screencapture", screenRecordCommand(a, path)...)
 	// Do not collect screen contents or command output in logs.
 	if err := cmd.Start(); err != nil {

@@ -1890,5 +1890,12 @@
   "未命名录屏": "Untitled recording",
   "录制屏幕，开始创作": "Record your screen. Start creating.",
   "单次最多 10 分钟，浏览器录制和自动导入最多 512 MB。请避免展示密码和私人信息。": "Up to 10 minutes. Browser recordings and automatic imports are limited to 512 MB. Keep private information off screen.",
-  "原片超过 512 MB，已保留在本机；请导入较短的视频。": "The original is over 512 MB and is kept on this computer. Import a shorter video."
+  "原片超过 512 MB，已保留在本机；请导入较短的视频。": "The original is over 512 MB and is kept on this computer. Import a shorter video.",
+  "无法连接这台电脑的录屏功能，请关闭应用页面后重新打开。": "Cannot reach this computer’s recording features. Close and reopen this app page.",
+  "这台 Windows 电脑还没有配置录屏所需的 FFmpeg。可以先导入已有视频进行剪辑。": "This Windows computer does not have FFmpeg configured for recording yet. You can import an existing video to edit.",
+  "当前打开的 App 还不支持原生录屏。请在新版 myco 或 myco-preview 中重新打开本应用；这不是系统权限被拒绝。": "This App does not support native screen recording yet. Reopen this app in an updated myco or myco-preview; this is not a system permission denial.",
+  "屏幕选择器没有打开或已被取消。当前嵌入窗口可能不支持浏览器录屏；请在支持原生录屏的 myco App 中重试。": "The screen picker did not open or was cancelled. This embedded window may not support browser recording. Try a myco App with native recording support.",
+  "首次使用：在系统设置 → 隐私与安全性 → 屏幕与系统音频录制中，允许当前使用的 myco-preview 或 myco。如系统要求退出并重新打开，请重开后再试。麦克风需另行允许。": "First use: in System Settings → Privacy & Security → Screen & System Audio Recording, allow the myco-preview or myco you are using. If macOS requests a restart, quit and reopen it before retrying. Microphone permission is separate.",
+  "打开录屏权限设置": "Open recording permissions",
+  "请允许 myco-preview 的屏幕录制权限。点击下方“打开录屏权限设置”，打开当前 App 的开关；如系统要求，请退出并重新打开 App。": "Allow screen recording for myco-preview. Use “Open recording permissions” below and enable the App you are using. Quit and reopen it if macOS requests it."
 }

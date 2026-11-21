@@ -33,12 +33,38 @@ if(!chromium)throw new Error("Playwright is not installed");
 const browser=await chromium.launch({headless:true,executablePath:process.env.UI_SMOKE_EXECUTABLE, args:['--no-sandbox']});
 const out=process.env.RECORDER_SHOTS||'/tmp/recorder-shots';fs.mkdirSync(out,{recursive:true});
 try{
+ for(const [native,theme] of [[false,"light"],[true,"light"],[true,"dark"]]){
+  const page=await browser.newPage({viewport:{width:1280,height:900},colorScheme:theme});
+  await page.addInitScript(({native})=>{
+   window.__SAMPLE__={};window.__settings=0;window.__nativeCalls=0;window.__browserCalls=0;
+   window.__FAKE_OS__={list:async()=>({os:'darwin',caps:native?[{name:'screen.record',available:true}]:[]}),system:{settings:async()=>{window.__settings++;}},start:(name)=>{window.__nativeCalls++;return {on:()=>()=>{},cancel:async()=>{},done:Promise.reject(Object.assign(new Error('macOS recording permission needed'),{code:'permission_denied'}))};}};
+   Object.defineProperty(navigator.mediaDevices,'getDisplayMedia',{value:async()=>{window.__browserCalls++;throw new Error('should not fall back');}});
+  },{native});
+  await page.goto(`http://127.0.0.1:${server.address().port}/recorder/?myco_lang=zh`);
+  await page.getByRole('button',{name:'开始录屏',exact:true}).click();
+  if(native){
+   const colors=await page.locator('.rec-check').first().evaluate(el=>({bg:getComputedStyle(el).backgroundColor,tick:getComputedStyle(el).color}));
+   assert.notEqual(colors.bg,colors.tick,'checked mark has contrast in '+theme);
+   await page.screenshot({path:path.join(out,'permissions-'+theme+'.png')});
+   await page.getByRole('button',{name:'打开录屏权限设置'}).click();
+   assert.equal(await page.evaluate(()=>window.__settings),1);
+   await page.getByRole('button',{name:'选择画面并开始'}).click();await page.getByRole('alert').waitFor();
+   assert.equal(await page.evaluate(()=>window.__nativeCalls),1,'generic start works with older bridge helpers');
+   assert.equal(await page.getByRole('button',{name:'打开录屏权限设置'}).count(),1);
+  }else{
+   await page.getByText('当前打开的 App 还不支持原生录屏。',{exact:false}).waitFor();
+   assert.equal(await page.getByRole('button',{name:'选择画面并开始'}).isDisabled(),true);
+  }
+  assert.equal(await page.evaluate(()=>window.__browserCalls),0,'desktop cannot silently fall back to blocked browser capture');
+  await page.close();
+ }
+ console.log('Native permission settings, generic start and legacy-App fallback guards passed');
  for(const [lang,theme,width] of [['zh','light',1400],['en','dark',1200]]){
  const page=await browser.newPage({viewport:{width,height:860},colorScheme:theme});const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.addInitScript(({lang})=>{
   document.addEventListener('DOMContentLoaded',()=>{document.documentElement.lang=lang;});
   window.__SAMPLE__={project:[{id:'main',title:lang==='en'?'Product walkthrough':'产品演示',ratio:'16:9',background:'#101010'}]};
-  window.__FAKE_OS__={list:async()=>({os:'windows',caps:[]})};
+  window.__FAKE_OS__={list:async()=>({os:'browser',caps:[]})};
   Object.defineProperty(navigator.mediaDevices,'getDisplayMedia',{value:async()=>{
    if(window.__deny)throw Object.assign(new Error('cancelled'),{name:'NotAllowedError'});
    const c=document.createElement('canvas');c.width=1280;c.height=720;const x=c.getContext('2d');let n=0;
