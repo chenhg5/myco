@@ -8,7 +8,7 @@ package main
 static int allowed(void){return AXIsProcessTrusted();}
 static void request_input(void){const void *keys[]={kAXTrustedCheckOptionPrompt};const void *values[]={kCFBooleanTrue};CFDictionaryRef opts=CFDictionaryCreate(NULL,keys,values,1,&kCFTypeDictionaryKeyCallBacks,&kCFTypeDictionaryValueCallBacks);AXIsProcessTrustedWithOptions(opts);CFRelease(opts);}
 static void pointer(double x,double y,int kind,int button,int down,int clicks){
- CGRect b=CGDisplayBounds(CGMainDisplayID());CGPoint p=CGPointMake(b.origin.x+x*b.size.width,b.origin.y+y*b.size.height);
+ CGRect b=CGDisplayBounds(CGMainDisplayID());CGPoint p=CGPointMake(b.origin.x+x*(b.size.width-1),b.origin.y+y*(b.size.height-1));
  if(kind==2){CGEventRef current=CGEventCreate(NULL);if(current){p=CGEventGetLocation(current);CFRelease(current);}}
  CGEventType t=kCGEventMouseMoved;
  CGMouseButton btn=button==2?kCGMouseButtonRight:button==1?kCGMouseButtonCenter:kCGMouseButtonLeft;
