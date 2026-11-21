@@ -27,6 +27,7 @@ func (s *Server) routeProjects(m *http.ServeMux) {
 	m.HandleFunc("GET /v1/projects/{name}/docs/{doc}", s.projectCaller(s.getProjectDoc))
 	m.HandleFunc("PUT /v1/projects/{name}/docs/{doc}", s.projectCaller(s.putProjectDoc))
 	m.HandleFunc("DELETE /v1/projects/{name}/docs/{doc}", s.projectCaller(s.deleteProjectDoc))
+	m.HandleFunc("POST /v1/projects/{name}/memory", s.projectCaller(s.addProjectMemory))
 	m.HandleFunc("PUT /v1/projects/{name}/files/{file}", s.projectCaller(s.putProjectFile))
 	m.HandleFunc("GET /v1/projects/{name}/files/{file}", s.projectCaller(s.getProjectFile))
 	m.HandleFunc("DELETE /v1/projects/{name}/files/{file}", s.projectCaller(s.deleteProjectDoc))
@@ -136,7 +137,16 @@ func (s *Server) getProject(w http.ResponseWriter, r *http.Request, c projectCal
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, s.projectDTO(r, c, v, r.URL.Query().Get("docs") == "body"))
+	out := s.projectDTO(r, c, v, r.URL.Query().Get("docs") == "body")
+	out.Memory = &api.ProjectDoc{Name: domain.ProjectMemoryDoc}
+	for _, d := range v.Docs {
+		if d.Name == domain.ProjectMemoryDoc && !d.IsBlob() {
+			m := docDTO(d)
+			m.Body = d.Body
+			out.Memory = &m
+		}
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) updateProject(w http.ResponseWriter, r *http.Request, c projectCall) {
@@ -309,6 +319,22 @@ func (s *Server) putProjectDoc(w http.ResponseWriter, r *http.Request, c project
 	}
 	s.recordAs(r, c.by, "project.doc", r.PathValue("name"), d.Name)
 	writeJSON(w, http.StatusOK, api.ProjectDoc{Name: d.Name, Size: len(d.Body), UpdatedBy: d.UpdatedBy, UpdatedAt: d.UpdatedAt})
+}
+
+func (s *Server) addProjectMemory(w http.ResponseWriter, r *http.Request, c projectCall) {
+	var req api.ProjectMemoryRequest
+	if !decode(w, r, &req) {
+		return
+	}
+	d, err := s.projects.AddMemory(r.Context(), c.by, r.PathValue("name"), req.Text, c.by.Name())
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	s.recordAs(r, c.by, "project.memory", r.PathValue("name"), "")
+	out := docDTO(d)
+	out.Body = d.Body
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) deleteProjectDoc(w http.ResponseWriter, r *http.Request, c projectCall) {

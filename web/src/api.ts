@@ -85,6 +85,9 @@ export interface Project {
   /** the computers (ids) its coordinators may start agents on (hubs from
    *  v0.21.2; absent before) */
   machines?: string[];
+  /** the project's memory document, with its body (hubs from v0.21.10;
+   *  absent before): what members learned and all keep in mind */
+  memory?: ProjectDoc;
 }
 export interface ProjectLink { title?: string; url: string }
 export interface ProjectMember {

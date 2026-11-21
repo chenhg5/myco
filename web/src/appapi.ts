@@ -766,6 +766,8 @@ export const appApi = {
     request<{ path: string }>("POST", `app/hubs/${enc(hubId)}/projects/${enc(name)}/files/${enc(file)}/save`),
   projectDoc: (hubId: string, name: string, doc: string) =>
     request<ProjectDoc>("GET", `app/hubs/${enc(hubId)}/projects/${enc(name)}/docs/${enc(doc)}`),
+  addProjectMemory: (hubId: string, name: string, text: string) =>
+    request<ProjectDoc>("POST", `app/hubs/${enc(hubId)}/projects/${enc(name)}/memory`, { text }),
   putProjectDoc: (hubId: string, name: string, doc: string, body: string) =>
     request<ProjectDoc>("PUT", `app/hubs/${enc(hubId)}/projects/${enc(name)}/docs/${enc(doc)}`, { body }),
   deleteProjectDoc: (hubId: string, name: string, doc: string) =>

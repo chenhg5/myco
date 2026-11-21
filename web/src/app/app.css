@@ -5333,6 +5333,8 @@ button.app-label:hover { filter: brightness(0.95); }
   white-space: nowrap;
   cursor: default;
 }
+/* Several actions sit together at the right. */
+.app-group-action + .app-group-action { margin-left: 0; }
 .app-group-action:hover:not(:disabled) { background: var(--nav-hover); color: var(--fg); }
 .app-group-action:active:not(:disabled) { background: color-mix(in srgb, var(--fg) 10%, transparent); }
 .app-group-action:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--ring); }

@@ -72,6 +72,13 @@ func (c *Client) PutProjectDoc(ctx context.Context, project, doc, body string) (
 	return &out, c.do(ctx, http.MethodPut, "/v1/projects/"+esc(project)+"/docs/"+esc(doc), nil, api.ProjectDocRequest{Body: body}, &out)
 }
 
+// AddProjectMemory adds an entry to a project's memory and returns the
+// memory document. Hubs before v0.21.10 answer 404.
+func (c *Client) AddProjectMemory(ctx context.Context, project, text string) (*api.ProjectDoc, error) {
+	var out api.ProjectDoc
+	return &out, c.do(ctx, http.MethodPost, "/v1/projects/"+esc(project)+"/memory", nil, api.ProjectMemoryRequest{Text: text}, &out)
+}
+
 // DeleteProjectDoc removes a shared document.
 func (c *Client) DeleteProjectDoc(ctx context.Context, project, doc string) error {
 	return c.do(ctx, http.MethodDelete, "/v1/projects/"+esc(project)+"/docs/"+esc(doc), nil, nil, nil)

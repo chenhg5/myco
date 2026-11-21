@@ -1575,6 +1575,7 @@ const projects = [
       { name: "design.md", body: "# 设计约定\n\n- 主色 #2f6feb\n- 圆角 12px\n", content_type: "text/markdown; charset=utf-8", updated_by: "pm-codex", updated_at: iso(7200) },
       { name: "首页设计稿.pdf", body: "", content_type: "application/pdf", binary: true, size: 2412032, updated_by: "glenn", updated_at: iso(5400) },
       { name: "copy-zh", body: "# 首页文案\n\n让你的 agent 互相派活。\n", updated_by: "docs-claude", updated_at: iso(86400) },
+      { name: "memory", body: "# Project memory\n- 下载页的安装命令以 INSTALL.md 为准，不要自己改写 (pm-codex, 2026-11-19)\n- glenn 希望汇报用中文、三条以内 (docs-claude, 2026-11-20)\n", updated_by: "docs-claude", updated_at: iso(86400) },
     ],
   },
   {
@@ -1586,12 +1587,18 @@ const projects = [
 // Each project's members as they start: the smoke test puts them back
 // between widths and themes (it adds members to a project).
 const projectMembersAtStart = projects.map((p) => JSON.stringify(p.members));
+function memoryOf(p) {
+  const d = p.docs.find((x) => x.name === "memory");
+  return d ? { name: d.name, body: d.body, size: d.body.length, updated_by: d.updated_by, updated_at: d.updated_at } : { name: "memory", size: 0, updated_at: "0001-01-01T00:00:00Z" };
+}
 function projectView(hub, p, bodies) {
   return {
     ...p,
     // The computers its coordinators may start agents on (hubs from v0.21.2;
     // the lab hub is older and has none).
     ...(hub.id === "hub_lab" ? {} : { machines: p.machines || [] }),
+    // The project's memory (hubs from v0.21.10; the lab hub is older).
+    ...(hub.id === "hub_lab" ? {} : { memory: memoryOf(p) }),
     members: p.members.map((m) => ({ ...m, agent: hub.agents.find((a) => a.name === m.name && a.visibility !== "private") })),
     docs: p.docs.map((d) => ({ name: d.name, size: d.size ?? d.body.length, content_type: d.content_type, binary: !!d.binary, updated_by: d.updated_by, updated_at: d.updated_at, ...(bodies && !d.binary ? { body: d.body } : {}) })),
     can_edit: true, can_manage: p.owner_id === "mem_" + meName || meName === "glenn",
@@ -3342,6 +3349,17 @@ const server = http.createServer(async (req, res) => {
           res.writeHead(200, { "Content-Type": d.content_type || "text/markdown" });
           return res.end(d.bytes || d.body);
         }
+      }
+      if (parts.length === 6 && parts[5] === "memory" && method === "POST") {
+        if (hub.id === "hub_lab") return fail(res, 404, "not_found", "no such route");
+        const b = await readBody(req);
+        const text = String(b.text || "").split(/\s+/).filter(Boolean).join(" ");
+        if (!text) return fail(res, 400, "invalid_argument", "the memory entry is empty");
+        let d = p.docs.find((x) => x.name === "memory");
+        if (!d) { d = { name: "memory", body: "# Project memory\n" }; p.docs.push(d); }
+        d.body = d.body.replace(/\n*$/, "\n") + `- ${text} (${meName}, ${iso().slice(0, 10)})\n`;
+        d.updated_by = meName; d.updated_at = iso();
+        return send(res, 200, { ...memoryOf(p) });
       }
       if (parts.length === 7 && parts[5] === "docs") {
         const i = p.docs.findIndex((d) => d.name === parts[6]);

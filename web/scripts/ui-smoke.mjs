@@ -1524,6 +1524,16 @@ async function runMatrix(browser, size, scheme) {
     await step("项目资料", async () => {
       await clickVisible(page, page.locator(".sp-head").getByRole("button", { name: "项目资料" }));
       await page.locator(".app-page").first().waitFor({ timeout: 20_000 });
+      // The project's memory: its own section (not a row among the files),
+      // and you add to it here.
+      const memory = page.locator("[data-testid=project-memory]");
+      await memory.getByText("汇报用中文").waitFor({ timeout: 10_000 });
+      if (await page.locator(".app-project-doc", { hasText: /^memory/ }).count()) throw new Error("项目记忆不该再出现在文件列表里");
+      await clickVisible(page, memory.getByRole("button", { name: "添加" }));
+      const add = page.getByRole("dialog", { name: "添加到项目记忆" });
+      await add.locator("textarea").fill("首页截图统一 2x");
+      await clickVisible(page, add.getByRole("button", { name: "添加" }));
+      await memory.getByText("首页截图统一 2x").waitFor({ timeout: 10_000 });
       await settle(page);
       await shot(page, size, scheme, "project-notes");
       await navBackClick(page);

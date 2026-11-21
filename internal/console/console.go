@@ -517,6 +517,18 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, d)
 	}))
+	m.HandleFunc("POST /app/hubs/{id}/projects/{name}/memory", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in api.ProjectMemoryRequest
+		if !decode(w, r, &in) {
+			return
+		}
+		d, err := c.AddProjectMemory(r.Context(), r.PathValue("name"), in.Text)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, d)
+	}))
 	m.HandleFunc("DELETE /app/hubs/{id}/projects/{name}/docs/{doc}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		if err := c.DeleteProjectDoc(r.Context(), r.PathValue("name"), r.PathValue("doc")); err != nil {
 			writeErr(w, err)

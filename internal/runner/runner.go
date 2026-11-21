@@ -103,8 +103,10 @@ type Runner struct {
 	ownRunEnd  map[string]time.Time  // session id -> when our last run ended
 	pending    map[string]pendingRun // acked tasks not yet durably finished
 	busyStreak map[string]int        // session key -> consecutive busy releases
-	// projectSeen: session key + project whose context this run already gave.
-	projectSeen map[string]bool
+	// projectSeen: session key + project whose context this run already
+	// gave, and which version of it (projectVersion); key alone: that
+	// session did project work.
+	projectSeen map[string]string
 	// superOwner caches whose superagent this agent is ("" none), and when.
 	superOwner string
 	superAt    time.Time
@@ -755,7 +757,7 @@ func (r *Runner) projectContext(ctx context.Context, log *slog.Logger, key, sess
 	if m.Project == "" {
 		// After project work in this session, say this one is not part of it.
 		r.mu.Lock()
-		inProjects := r.projectSeen[key+"\x00"] && sessionID != ""
+		inProjects := r.projectSeen[key+"\x00"] != "" && sessionID != ""
 		r.mu.Unlock()
 		if inProjects {
 			return noProjectLine
@@ -764,27 +766,38 @@ func (r *Runner) projectContext(ctx context.Context, log *slog.Logger, key, sess
 	}
 	seen := key + "\x00" + m.Project
 	r.mu.Lock()
-	done := r.projectSeen[seen] && sessionID != ""
+	last := r.projectSeen[seen]
+	if sessionID == "" {
+		last = ""
+	}
 	r.mu.Unlock()
-	if done {
+	p, err := pr.GetProject(ctx, m.Project, false)
+	if err != nil {
+		if last != "" {
+			return projectLine(m.Project)
+		}
+		log.Info("project not readable; prompt goes without it", "project", m.Project, "err", err)
+		return ""
+	}
+	version := projectVersion(p)
+	if last == version {
 		// Its goal and members were given earlier in this session; every
 		// message still says which project it is for (an agent in several
 		// projects gets them in one session).
 		return projectLine(m.Project)
 	}
-	p, err := pr.GetProject(ctx, m.Project, false)
-	if err != nil {
-		log.Info("project not readable; prompt goes without it", "project", m.Project, "err", err)
-		return ""
-	}
 	r.mu.Lock()
 	if r.projectSeen == nil {
-		r.projectSeen = map[string]bool{}
+		r.projectSeen = map[string]string{}
 	}
-	r.projectSeen[seen] = true
-	r.projectSeen[key+"\x00"] = true
+	r.projectSeen[seen] = version
+	r.projectSeen[key+"\x00"] = "yes"
 	r.mu.Unlock()
-	return projectSection(r.opts.Self, p)
+	section := projectSection(r.opts.Self, p)
+	if last != "" {
+		section = strings.Replace(section, "\n--- project ---\n", "\n--- project (updated since you last saw it) ---\n", 1)
+	}
+	return section
 }
 
 // superagentContext tells a superagent what it is: the brief the first time
@@ -816,10 +829,10 @@ func (r *Runner) superagentContext(ctx context.Context, key, sessionID string) s
 	seen := key + "\x00superagent:" + owner
 	r.mu.Lock()
 	if r.projectSeen == nil {
-		r.projectSeen = map[string]bool{}
+		r.projectSeen = map[string]string{}
 	}
-	done := r.projectSeen[seen] && sessionID != ""
-	r.projectSeen[seen] = true
+	done := r.projectSeen[seen] != "" && sessionID != ""
+	r.projectSeen[seen] = "yes"
 	r.mu.Unlock()
 	if done {
 		return superagentLine(owner)

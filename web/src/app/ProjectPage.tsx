@@ -38,6 +38,8 @@ type Dialog =
   | null
   | { kind: "about" }
   | { kind: "brief" }
+  | { kind: "memory-add" }
+  | { kind: "memory-edit" }
   | { kind: "links" }
   | { kind: "add" }
   | { kind: "member"; member: ProjectMember }
@@ -156,6 +158,8 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
   }
 
   const coordinators = p.members.filter((m) => m.role === "coordinator").length;
+  // The memory is a document too; it has its own section, not a row in the files.
+  const files = p.memory ? p.docs.filter((d) => d.name !== p.memory?.name) : p.docs;
   const threads = (recent || []).filter((it) => it.kind === "thread" || it.task);
   const count = (st: RecentItem["state"]) => threads.filter((it) => it.state === st).length;
   // What each member has on hand: open tasks addressed to it.
@@ -335,12 +339,27 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
         </div>
       </section>
 
+      {p.memory && (
+        <section className="app-group" data-testid="project-memory">
+          <div className="app-group-title">
+            <span className="name">{L("项目记忆", "Memory")}</span>
+            {!p.archived && <button type="button" className="app-group-action" onClick={() => open({ kind: "memory-add" })}><Plus />{L("添加", "Add")}</button>}
+            {p.can_edit && memoryBody(p.memory) && <button type="button" className="app-group-action" onClick={() => open({ kind: "memory-edit" })}><Pencil />{L("编辑", "Edit")}</button>}
+          </div>
+          <div className="app-list app-project-brief">
+            {memoryBody(p.memory) ? <Markdown text={memoryBody(p.memory)} /> : (
+              <div className="app-empty-note">{L("成员在干活中学到、大家都该记住的事：定下的决定、约定、你的偏好。成员 agent 会自己记（myco project memory add），每次干这个项目的活都会读到；你也可以在这里添加。", "What members learn and everyone should keep in mind: decisions, conventions, your preferences. Member agents add to it themselves (myco project memory add) and read it whenever they work on the project; you can add here too.")}</div>
+            )}
+          </div>
+        </section>
+      )}
+
       <section className={cn("app-group app-project-files", dragging && "is-dragging")}
         onDragOver={(e) => { if (!p.archived && e.dataTransfer.types.includes("Files")) { e.preventDefault(); setDragging(true); } }}
         onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false); }}
         onDrop={(e) => { e.preventDefault(); setDragging(false); if (!p.archived) void upload(Array.from(e.dataTransfer.files)); }}>
         <div className="app-group-title">
-          <span className="name">{L(`文件 ${p.docs.length || ""}`.trim(), `Files ${p.docs.length || ""}`.trim())}</span>
+          <span className="name">{L(`文件 ${files.length || ""}`.trim(), `Files ${files.length || ""}`.trim())}</span>
           <button type="button" className="app-group-action" onClick={() => fileInput.current?.click()} disabled={p.archived || uploading !== null}><Upload />{L("上传", "Upload")}</button>
           <input ref={fileInput} type="file" multiple hidden onChange={(e) => { const fs = Array.from(e.target.files || []); e.target.value = ""; void upload(fs); }} />
         </div>
@@ -352,10 +371,10 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
             </div>
           )}
           {uploadError !== null && <div className="app-project-upload-error"><ErrorText error={uploadError} /></div>}
-          {p.docs.length === 0 && uploading === null && (
+          {files.length === 0 && uploading === null && (
             <div className="app-empty-note">{L("把文件拖到这里，或点「上传」。设计稿、约定、截图都可以（20 MB 以内）；成员 agent 用 myco project file put 上传，用 myco project pull 拉到本地。", "Drop files here, or click Upload: designs, conventions, screenshots (up to 20 MB). Member agents upload with myco project file put and get them with myco project pull.")}</div>
           )}
-          {p.docs.map((d) => {
+          {files.map((d) => {
             const Icon = fileIcon(d);
             return (
               <button type="button" key={d.name} className="app-row app-project-doc" onClick={() => open({ kind: "doc", doc: d })}>
@@ -391,6 +410,12 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
 
       <AboutDialog open={dialog?.kind === "about"} project={p} busy={busy} error={actionError} onClose={() => setDialog(null)}
         onSave={(title, goal) => void run(() => appApi.updateProject(target.hubId, p.name, { title, goal }))} />
+      <MemoryAddDialog open={dialog?.kind === "memory-add"} busy={busy} error={actionError} onClose={() => setDialog(null)}
+        onSave={(text) => void run(() => appApi.addProjectMemory(target.hubId, p.name, text))} />
+      {p.memory && (
+        <MemoryEditDialog open={dialog?.kind === "memory-edit"} memory={p.memory} busy={busy} error={actionError} onClose={() => setDialog(null)}
+          onSave={(body) => void run(() => appApi.putProjectDoc(target.hubId, p.name, p.memory?.name || "memory", body))} />
+      )}
       <BriefDialog open={dialog?.kind === "brief"} project={p} busy={busy} error={actionError} onClose={() => setDialog(null)}
         onSave={(brief) => void run(() => appApi.updateProject(target.hubId, p.name, { brief }))} />
       <LinksDialog open={dialog?.kind === "links"} project={p} busy={busy} error={actionError} onClose={() => setDialog(null)}
@@ -471,12 +496,44 @@ function AboutDialog({ open, project, busy, error, onClose, onSave }: { open: bo
   );
 }
 
+/** The memory's entries, without the heading the hub starts it with. */
+function memoryBody(m?: ProjectDoc): string {
+  return (m?.body || "").replace(/^# Project memory\s*\n/, "").trim();
+}
+
+function MemoryAddDialog({ open, busy, error, onClose, onSave }: { open: boolean; busy: boolean; error: unknown; onClose: () => void; onSave: (text: string) => void }) {
+  const [text, setText] = useState("");
+  useOnOpen(open, () => setText(""));
+  return (
+    <Modal open={open} onOpenChange={(o) => !o && !busy && onClose()} title={L("添加到项目记忆", "Add to the memory")}
+      description={L("一两句话：一个决定、一条约定，或你的偏好。所有成员下次干这个项目的活时都会读到。", "A sentence or two: a decision, a convention, or your preference. Every member reads it the next time it works on the project.")}>
+      <textarea className="app-input" rows={3} value={text} onChange={(e) => setText(e.target.value)} disabled={busy} autoFocus
+        placeholder={L("例如：汇报用中文，三条以内", "e.g. Report in English, three bullets at most")} />
+      <ErrorText error={error} />
+      <Actions busy={busy} onCancel={onClose} onSave={() => onSave(text.trim())} saveLabel={L("添加", "Add")} disabled={!text.trim()} />
+    </Modal>
+  );
+}
+
+function MemoryEditDialog({ open, memory, busy, error, onClose, onSave }: { open: boolean; memory: ProjectDoc; busy: boolean; error: unknown; onClose: () => void; onSave: (body: string) => void }) {
+  const [body, setBody] = useState("");
+  useOnOpen(open, () => setBody(memory.body || ""));
+  return (
+    <Modal open={open} onOpenChange={(o) => !o && !busy && onClose()} title={L("项目记忆", "Memory")} wide
+      description={L("改掉过时的、合并重复的。成员下次干活时读到的就是这里的内容。", "Remove what is out of date and merge repeats. This is what members read the next time they work.")}>
+      <textarea className="app-input app-project-editor" rows={16} value={body} onChange={(e) => setBody(e.target.value)} disabled={busy} />
+      <ErrorText error={error} />
+      <Actions busy={busy} onCancel={onClose} onSave={() => onSave(body)} />
+    </Modal>
+  );
+}
+
 function BriefDialog({ open, project, busy, error, onClose, onSave }: { open: boolean; project: Project; busy: boolean; error: unknown; onClose: () => void; onSave: (brief: string) => void }) {
   const [brief, setBrief] = useState("");
   useOnOpen(open, () => setBrief(project.brief || ""));
   return (
     <Modal open={open} onOpenChange={(o) => !o && !busy && onClose()} title={L("项目说明", "Brief")} wide
-      description={L("所有成员都该知道的事（Markdown，8 KB 以内）。 agent 用 myco project show / pull 读取。", "What every member should know (Markdown, up to 8 KB). Agents read it with myco project show / pull.")}>
+      description={L("所有成员都该知道的事（Markdown，16000 字以内），成员每次干这个项目的活都会读到。", "What every member should know (Markdown, up to 16,000 characters); members read it whenever they work on the project.")}>
       <textarea className="app-input app-project-editor" rows={16} value={brief} onChange={(e) => setBrief(e.target.value)} disabled={busy}
         placeholder={L("## 仓库\n…\n\n## 规则\n…\n\n## 怎么测试\n…", "## Repository\n…\n\n## Rules\n…\n\n## Testing\n…")} />
       <ErrorText error={error} />

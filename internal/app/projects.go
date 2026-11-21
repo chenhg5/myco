@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"unicode/utf8"
 
 	"github.com/chenhg5/myco/internal/domain"
@@ -33,6 +34,7 @@ type ProjectService struct {
 	// none are): a superagent works for its owner across the workspace and
 	// is in no project.
 	superagent func(ctx context.Context, agent domain.AgentName) bool
+	memMu      sync.Mutex // one memory entry added at a time
 }
 
 // SetSuperagents tells projects which agents are superagents.
@@ -406,6 +408,41 @@ func (s *ProjectService) PutDoc(ctx context.Context, by Actor, name, doc, body, 
 			WithSuggestion("merge or remove some, or keep longer material in the repository")
 	}
 	d := &domain.ProjectDoc{Project: v.Project.ID, Name: n, Body: body, UpdatedBy: byName, UpdatedAt: s.clock.Now()}
+	return d, s.projects.PutDoc(ctx, d)
+}
+
+// AddMemory appends an entry to the project's memory: any member node may,
+// besides those who edit the project, and the people who see it.
+func (s *ProjectService) AddMemory(ctx context.Context, by Actor, name, text, byName string) (*domain.ProjectDoc, error) {
+	v, err := s.Get(ctx, by, name)
+	if err != nil {
+		return nil, err
+	}
+	may := s.edits(by, v)
+	if !may && !v.Project.Archived {
+		may = by.Agent == nil || v.member(by.Agent.Name) != nil
+	}
+	if !may {
+		return nil, denied("add to the memory of project " + v.Project.Name)
+	}
+	s.memMu.Lock()
+	defer s.memMu.Unlock()
+	body, exists := "", false
+	if d, err := s.projects.GetDoc(ctx, v.Project.ID, domain.ProjectMemoryDoc); err == nil {
+		body, exists = d.Body, true
+	} else if !domain.IsCode(err, domain.CodeNotFound) {
+		return nil, err
+	}
+	if !exists && len(v.Docs) >= domain.MaxProjectDocs {
+		return nil, domain.Errf(domain.CodeInvalidArgument, "project %s already has %d documents", v.Project.Name, domain.MaxProjectDocs).
+			WithSuggestion("remove a document to make room for the project memory")
+	}
+	now := s.clock.Now()
+	body, err = domain.AppendMemory(body, text, byName, now)
+	if err != nil {
+		return nil, err
+	}
+	d := &domain.ProjectDoc{Project: v.Project.ID, Name: domain.ProjectMemoryDoc, Body: body, UpdatedBy: byName, UpdatedAt: now}
 	return d, s.projects.PutDoc(ctx, d)
 }
 
