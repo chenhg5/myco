@@ -1104,3 +1104,7 @@ myco upgrade --version v0.16.5        # 安装指定版本（也可以用来回�
 ## MCP, skills, and plugins in the App
 
 The computer details show the MCP servers, CLI skills, and plugins installed for Claude Code and Codex. An agent's profile also shows tools from its work directory. These lists are read only and contain names and public metadata, never MCP keys, headers, command arguments, or URL queries. Older runners do not report a list until upgraded.
+
+### 本机代理工作台
+
+**代理工作台**（`myco/proxy-console`）管理已有的本机 Mihomo 或 sing-box（需启用 Clash API）：查看流量、切换策略、节点测速、查看并断开连接、检查配置摘要。需要支持 `proxy.profile` / `proxy.control` 的桌面 App。凭据留在本机 App 的凭据存储中，不修改系统代理、DNS 或 TUN。没有内核时可以先看明确标注的示例预览。参见[使用说明与范围](docs/proxy-console.md)。

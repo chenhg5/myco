@@ -3,7 +3,6 @@ package console
 import (
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -45,6 +44,7 @@ func (b *Backend) osInit() (*oscap.Env, *oscap.Jobs) {
 			path = b.Local.loginShellPath
 		}
 		s.env = oscap.NewEnv(path)
+		s.env.Secrets = b.Secrets
 		if b.Local != nil && b.Local.Home != "" {
 			s.env.Home = b.Local.Home
 		}
@@ -101,9 +101,15 @@ func (b *Backend) osRoutes(m *http.ServeMux) {
 		if !decode(w, r, &in) {
 			return
 		}
+		if (in.Name == "proxy.profile" || in.Name == "proxy.control") && (in.Page.ID == "" || in.Page.Hub == "") {
+			writeOSErr(w, &oscap.Error{Code: oscap.CodeInvalid, Message: "controller calls require a workspace and page"})
+			return
+		}
 		env, _ := b.osInit()
 		start := time.Now()
-		v, err := oscap.Call(r.Context(), env, in.Name, in.Args)
+		scoped := *env
+		scoped.Scope = in.Page.Hub + "\x00" + in.Page.ID
+		v, err := oscap.Call(r.Context(), &scoped, in.Name, in.Args)
 		b.osLog(in, "", start, err)
 		if err != nil {
 			writeOSErr(w, err)
@@ -190,16 +196,14 @@ func (b *Backend) osRoutes(m *http.ServeMux) {
 }
 
 // osLog writes a line for each call: which page, what, how it went. The
-// arguments are cut short (a file's content is not kept whole).
+// arguments are never recorded: even a short prefix can expose a credential.
 func (b *Backend) osLog(in osCallIn, job string, start time.Time, err *oscap.Error) {
 	if b.Local == nil || b.Local.Home == "" {
 		return
 	}
-	args := string(in.Args)
-	if len(args) > 300 {
-		args = args[:300] + fmt.Sprintf("… (%d bytes)", len(in.Args))
-	}
-	line := map[string]any{"at": start.UTC().Format(time.RFC3339Nano), "page": in.Page, "name": in.Name, "args": args, "ms": time.Since(start).Milliseconds()}
+	// Capability arguments can contain credentials, file contents and shell
+	// commands. Keep their size, never their contents, in the audit log.
+	line := map[string]any{"at": start.UTC().Format(time.RFC3339Nano), "page": in.Page, "name": in.Name, "args_bytes": len(in.Args), "ms": time.Since(start).Milliseconds()}
 	if job != "" {
 		line["job"] = job
 	}

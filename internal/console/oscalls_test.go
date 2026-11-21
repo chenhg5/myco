@@ -116,3 +116,58 @@ func TestPagesUseThisComputer(t *testing.T) {
 		t.Fatal("answered without a local install")
 	}
 }
+
+// Even short arguments can contain complete credentials. The local OS audit
+// records the operation and byte count, never a prefix of the arguments.
+func TestOSAuditDoesNotKeepArguments(t *testing.T) {
+	home := t.TempDir()
+	app := httptest.NewServer((&console.Backend{Local: &console.Local{Home: home}}).Handler())
+	defer app.Close()
+	secret := "audit-must-not-contain-this"
+	raw := `{"name":"system.info","args":{"secret":"` + secret + `","headers":{"Authorization":"Bearer ` + secret + `"}},"page":{"id":"test"}}`
+	res, err := http.Post(app.URL+"/app/os/call", "application/json", strings.NewReader(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	data, err := os.ReadFile(filepath.Join(home, ".myco", "logs", "app-os.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), secret) || !strings.Contains(string(data), "args_bytes") {
+		t.Fatalf("unsafe audit: %s", data)
+	}
+}
+
+func TestPageProxyProfilesStayLocalAndSeparate(t *testing.T) {
+	home := t.TempDir()
+	secrets := &memSecrets{m: map[string]string{}}
+	app := httptest.NewServer((&console.Backend{Local: &console.Local{Home: home}, Secrets: secrets}).Handler())
+	defer app.Close()
+	page := map[string]string{"hub": "hub-a", "id": "page-a"}
+	code, out := osPost(t, app.URL+"/app/os/call", map[string]any{"name": "proxy.profile", "page": page, "args": map[string]string{"action": "save", "endpoint": "http://127.0.0.1:9090", "engine": "mihomo", "secret": "page-private-secret"}})
+	if code != 200 {
+		t.Fatal(code, out)
+	}
+	raw, _ := json.Marshal(out)
+	if strings.Contains(string(raw), "page-private-secret") {
+		t.Fatal("profile exposed credential")
+	}
+	for _, p := range []map[string]string{{"hub": "hub-a", "id": "page-b"}, {"hub": "hub-b", "id": "page-a"}} {
+		code, out = osPost(t, app.URL+"/app/os/call", map[string]any{"name": "proxy.profile", "page": p, "args": map[string]string{"action": "get"}})
+		if code != 404 {
+			t.Fatal("profile crossed page/workspace boundary", code, out)
+		}
+	}
+	// A new backend (App restart) reuses the local credential store.
+	app2 := httptest.NewServer((&console.Backend{Local: &console.Local{Home: home}, Secrets: secrets}).Handler())
+	defer app2.Close()
+	code, out = osPost(t, app2.URL+"/app/os/call", map[string]any{"name": "proxy.profile", "page": page, "args": map[string]string{"action": "get"}})
+	if code != 200 {
+		t.Fatal("profile lost on restart", code, out)
+	}
+	raw, _ = os.ReadFile(filepath.Join(home, ".myco", "logs", "app-os.jsonl"))
+	if strings.Contains(string(raw), "page-private-secret") {
+		t.Fatal("audit exposed credential")
+	}
+}

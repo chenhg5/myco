@@ -97,8 +97,18 @@ type Cap struct {
 	Fn      Func
 }
 
+// Secrets keeps local app credentials in the system keychain.
+type Secrets interface {
+	Get(string) (string, error)
+	Set(string, string) error
+	Delete(string) error
+}
+
 // Env is what capabilities need from the App.
 type Env struct {
+	Secrets Secrets
+	// Scope separates controller profiles by workspace and page.
+	Scope string
 	// Home is the person's home folder ("~").
 	Home string
 	// Path is the PATH commands run with (a GUI app's own is minimal: the

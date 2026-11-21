@@ -253,3 +253,54 @@ export async function save(name: string, content: string | Uint8Array | Blob, ty
 export function dark() {
   return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
 }
+
+/** Local controller values from os.call("proxy.profile" / "proxy.control").
+ * Credentials are intentionally absent from return values. */
+export type OSProxyProfile = {
+  endpoint: string;
+  engine: "mihomo" | "sing-box";
+  has_secret: boolean;
+};
+export type OSProxyNode = {
+  name: string;
+  type: string;
+  now?: string;
+  all?: string[];
+  history?: { delay: number }[];
+};
+export type OSProxyConnection = {
+  id: string;
+  metadata: {
+    network: string;
+    host: string;
+    destinationIP: string;
+    destinationPort: string;
+    process: string;
+  };
+  upload: number;
+  download: number;
+  start: string;
+  chains: string[];
+  rule: string;
+};
+export type OSProxySnapshot = {
+  version: string;
+  config: {
+    mode: string;
+    "mode-list"?: string[];
+    "mixed-port": number;
+    port: number;
+    "socks-port": number;
+    "allow-lan"?: boolean;
+    "log-level": string;
+    tun?: { enable: boolean };
+  };
+  proxies: Record<string, OSProxyNode> | null;
+  traffic: {
+    downloadTotal: number;
+    uploadTotal: number;
+    connections: OSProxyConnection[] | null;
+  };
+  warnings: string[];
+  at: string;
+};

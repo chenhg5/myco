@@ -1104,3 +1104,7 @@ One App (a window on Mac and Windows; opens in the browser on Linux) manages sev
 ## MCP, skills, and plugins in the App
 
 The computer details show the MCP servers, CLI skills, and plugins installed for Claude Code and Codex. An agent's profile also shows tools from its work directory. These lists are read only and contain names and public metadata, never MCP keys, headers, command arguments, or URL queries. Older runners do not report a list until upgraded.
+
+### Local proxy console
+
+The **Proxy console** app (`myco/proxy-console`) manages an existing local Mihomo or sing-box core with Clash API enabled: traffic, policies, node delay tests, connections and a read-only configuration summary. It needs a desktop App with the `proxy.profile` / `proxy.control` capabilities. Credentials stay in the local App credential store; no system proxy, DNS or TUN settings are changed. An explicit demo works without a core. See [setup and limitations](docs/proxy-console.md).

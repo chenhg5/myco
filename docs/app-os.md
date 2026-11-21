@@ -13,7 +13,7 @@
 
 App 版本里有了这一项，桥的 `myco.features` 里会有 `"os"`。
 
-> **现在没有任何限制**：任何在 App 里打开的网页都能用这些能力，不会先问人。这一版先把能力做出来，授权和分级下一步再加。每次调用都记在 `~/.myco/logs/app-os.jsonl` 里（哪个网页、调了什么、结果怎样；参数只记前 300 个字）。
+> **现在没有任何限制**：任何在 App 里打开的网页都能用这些能力，不会先问人。这一版先把能力做出来，授权和分级下一步再加。每次调用都记在 `~/.myco/logs/app-os.jsonl` 里（哪个网页、调了什么、结果怎样；参数仅记字节数，不记录内容）。
 
 ## 怎么调
 
@@ -140,3 +140,42 @@ cd web && MOCK_OS_URL=http://127.0.0.1:7790 npm run dev:app
 ```
 
 模拟的 App 会把 `myco.os` 转给这台电脑，并多出一个网页「这台电脑」，上面把能力挨个试一遍。注意它是真的在用你的电脑。
+
+## Local proxy controller
+
+`proxy.profile` and `proxy.control` are optional single-call capabilities for an
+already running Mihomo or sing-box Clash API. Check `os.has("proxy.profile")`
+before offering a connection. Both require the App's local credential store.
+They never alter system proxy, DNS, services or TUN settings.
+
+```js
+const profile = await os.call("proxy.profile", {
+  action: "save", engine: "mihomo", endpoint: "http://127.0.0.1:9090",
+  secret: enteredPassword // never put this in shared page records
+}); // {endpoint, engine, has_secret}; never returns secret
+const state = await os.call("proxy.control", {action: "snapshot"});
+await os.call("proxy.control", {action: "select", group: "Proxy", name: "Node 1"});
+await os.call("proxy.control", {action: "mode", mode: "rule"});
+const probe = await os.call("proxy.control", {action: "delay", name: "Node 1"});
+await os.call("proxy.control", {action: "close", id: connectionID});
+await os.call("proxy.profile", {action: "forget"}); // does not stop the core
+```
+
+Profile actions: `get` (default), `save`, `forget`. `save` accepts `engine`
+(`mihomo`/`sing-box`), `endpoint`, optional `secret`; omitted secrets stay unchanged
+for the same endpoint, an empty string clears them, and endpoint changes clear
+the previous secret unless explicitly supplied. Profiles are scoped by the
+calling workspace and page. The system keychain (or configured Linux credential
+fallback) stores the entire profile.
+
+Control actions: `snapshot`, `mode`, `select`, `delay`, `close`. Snapshot returns
+`{version, config, proxies, traffic, warnings, at}`. `config` contains only mode, optional mode-list,
+ports, allow-lan, log-level, and tun.enable. `proxies` maps names to
+`{name,type,now?,all?,history?:[{delay}]}`. `traffic` contains `downloadTotal`,
+`uploadTotal` and connections with id, limited metadata, upload/download, start,
+chains and rule. Unsupported snapshot sections are warnings; callers must not
+present their empty values as live measurements. `delay` returns `{delay}` in ms.
+Mutations return `true`. Authentication failures are `permission_denied`, missing
+controller operations `unsupported`, unavailable/invalid controllers `failed`.
+Every request is deadline- and size-bounded, follows no redirects, and accepts
+only literal loopback addresses. See [Proxy console](proxy-console.md).
