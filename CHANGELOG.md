@@ -4,6 +4,16 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.21.13
+
+- Remote Desktop (preview): on a phone, what you type goes into a draft above the keyboard and is sent when you confirm (dictation and corrections no longer stream half-typed text to the computer); two fingers zoom and pan the view, and a short hold with two fingers scrolls the remote screen. Leaving a session asks first, and the controls and the keyboard switch are larger.
+- Remote Desktop (preview): after an App upgrade, a remote component already installed and still compatible keeps working instead of asking to be installed again; uninstalling removes every version the App installed.
+
+**中文**
+
+- 远程桌面（预览）：手机上输入的文字先放在键盘上方的草稿里，确认后才发送（语音输入和修改不再把打了一半的文字发到电脑上）；两指可以缩放、平移画面，两指按住片刻再滑动才是滚动远程屏幕。退出会话前会先确认；按钮和键盘开关做得更大了。
+- 远程桌面（预览）：App 升级后，已经装好、仍然兼容的远程组件可以继续用，不用重新安装；卸载时会删掉 App 装过的所有版本。
+
 ## v0.21.12
 
 - **Workspace backups**: every workspace backs up its own data once a day (a snapshot of its database taken while it runs, plus its files) and keeps the last 7 on its server. In the App, Settings › Workspaces › Backups › Manage (the workspace's owner only) backs up now and saves the copy to this computer, and can keep the newest one here every day (the last 3), so a failed server disk does not take the data with it. On the server, `myco hub backup` and `myco hub restore` (it checks the whole backup first, stops and starts the service, and keeps what was there aside). See INSTALL, section 8.1.
