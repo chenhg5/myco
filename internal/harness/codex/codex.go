@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -415,11 +416,18 @@ var SilentStart = 5 * time.Minute
 var problemWords = []string{"error", "fail", "retry", "retrying", "reconnect", "timed out", "timeout", "unauthorized", "forbidden",
 	"401", "403", "429", "refused", "not logged in", "login", "rate limit", "stream disconnected", "proxy"}
 
+// internalLog is a line of Codex's own tracing log ("2026-11-21T22:55:01Z
+// ERROR codex_core::session: ..."): its bookkeeping (recording the
+// rollout, a plugin it could not load), not something the person can act
+// on; what does matter (a dropped stream it retries, a refused key) Codex
+// also says in a plain line.
+var internalLog = regexp.MustCompile(`^\d{4}-\d\d-\d\dT[0-9:.]+Z?\s+(TRACE|DEBUG|INFO|WARN|ERROR)\s+[a-z_]+(::[a-z_]+)*:`)
+
 // stderrProblem picks the stderr lines that say something went wrong (Codex
 // also prints notes there, like "Reading prompt from stdin...").
 func stderrProblem(line string) (string, bool) {
 	t := strings.TrimSpace(line)
-	if t == "" || len(t) > 2000 {
+	if t == "" || len(t) > 2000 || internalLog.MatchString(t) {
 		return "", false
 	}
 	l := strings.ToLower(t)
