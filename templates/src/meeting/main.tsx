@@ -14,17 +14,17 @@ import "./meeting.css";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AppWindow, ArrowDown, ArrowUp, Check, ChevronsRight, CircleSlash, Download, FastForward, FileAudio, Loader2, Mic, Monitor, MoreHorizontal,
-  Pause, Play, Plus, RefreshCw, Rewind, Search, Square, Trash2, X, TextCursor, Repeat, Copy,
+  Pause, Play, Plus, RefreshCw, Rewind, Search, Square, Trash2, X, TextCursor, Repeat, Copy, Users, NotebookPen, PanelRight, ExternalLink,
 } from "lucide-react";
 import { Toast, mount, useKit } from "../_lib/appkit";
 import { save } from "../_lib/myco";
 import type { OSAudioSource } from "../_lib/myco";
 import { os, osState, osStateText, useOS, formatBytes } from "../_lib/os";
 import { Popover, rectOf } from "../_lib/ui";
-import { clock, kit, length, meetingList, meetingRank, meetings, num, segments, segmentsOf, speakerName, when, type Meeting, type Track } from "./model";
+import { clock, kit, length, meetingList, meetingRank, meetings, num, segments, segmentsOf, shade, speakerKeys, speakerName, speakerOf, when, type Meeting, type Notes, type Track } from "./model";
 import {
   checkSpeech, clearRecordError, installError, installSpeech, installing, isWaiting, lastRecordError, pauseRecording, recording,
-  speech, startRecording, stopRecording, stopTranscribing, transcribe, transcribing, useEngine,
+  speech, startRecording, stopRecording, stopTranscribing, transcribe, transcribing, useEngine, splitVoices, splitting, askForNotes, canAsk,
 } from "./engine";
 import { Player } from "./player";
 
@@ -208,7 +208,11 @@ function SpeechRow() {
     return (
       <div className="mt-row is-static">
         <span className="mt-row-ico"><Check className="ico" /></span>
-        <span className="mt-row-text"><b>本机转写</b><span>SenseVoice · 中文、英文、粤语、日语、韩语 · 录完自动转</span></span>
+        <span className="mt-row-text">
+          <b>本机转写</b>
+          <span>{speech.diarize ? "SenseVoice · 中英粤日韩 · 录完自动转，自动分出不同的人" : installError ? <em className="is-err">没下成：{installError}</em> : "SenseVoice · 中英粤日韩 · 分出不同的人还要再下载约 35 MB"}</span>
+        </span>
+        {!speech.diarize && <button type="button" className="btn" onClick={() => void installSpeech()}>下载</button>}
       </div>
     );
   }
@@ -304,20 +308,26 @@ function TitleInput({ id, m, center }: { id: string; m: Meeting; center?: boolea
   );
 }
 
-/** A speaker's face: the first character of the name, in grey (me darker). */
-function Face({ m, t, size }: { m: Meeting; t: Track; size?: number }) {
+/** A speaker's face: the first character of the name, in the speaker's grey. */
+function Face({ m, t, size }: { m: Meeting; t: string; size?: number }) {
   const name = speakerName(m, t);
-  return <i className={`mt-face is-${t}`} style={size ? { width: size, height: size, fontSize: size * 0.5 } : undefined} aria-hidden>{[...name][0] || "?"}</i>;
+  const g = shade(t);
+  return (
+    <i className="mt-face" aria-hidden
+      style={{ background: `color-mix(in srgb, var(--fg) ${g}%, var(--bg))`, color: g >= 55 ? "var(--bg)" : "var(--fg)", ...(size ? { width: size, height: size, fontSize: size * 0.5 } : {}) }}>
+      {[...name][0] || "?"}
+    </i>
+  );
 }
 
 // ---- a meeting ----
 
-type Para = { track: Track; ids: string[]; start: number; end: number };
+type Para = { track: string; ids: string[]; start: number; end: number };
 
-function paragraphs(list: { id: string; data: { track?: Track; start?: number; end?: number } }[]) {
+function paragraphs(list: { id: string; data: { track?: Track; start?: number; end?: number; speaker?: string } }[]) {
   const out: Para[] = [];
   for (const s of list) {
-    const t = (s.data.track || "them") as Track;
+    const t = speakerOf(s.data);
     const last = out[out.length - 1];
     if (last && last.track === t && num(s.data.start) - last.end < 20 && last.ids.length < 12) { last.ids.push(s.id); last.end = num(s.data.end); }
     else out.push({ track: t, ids: [s.id], start: num(s.data.start), end: num(s.data.end) });
@@ -345,7 +355,9 @@ function MeetingView({ id, host, onDeleted }: { id: string; host: string; onDele
   useEffect(() => player?.subscribe(() => setTick((n) => n + 1)), [player]);
   useEffect(() => { player?.setSpeech(segs.map((s) => [num(s.data.start), num(s.data.end)])); });
 
-  const [only, setOnly] = useState<Track | null>(null);
+  const [only, setOnly] = useState<string | null>(null);
+  const [notesOpen, setNotesOpen] = useState<boolean>(() => !!m.notes && (!!m.notes.summary || !!m.notes.asked));
+  const [split, setSplit] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [hit, setHit] = useState(0);
@@ -358,12 +370,12 @@ function MeetingView({ id, host, onDeleted }: { id: string; host: string; onDele
   const tx = transcribing?.meeting === id ? transcribing : null;
   const duration = Math.max(num(m.seconds), player?.duration || 0, segs.length ? num(segs[segs.length - 1].data.end) : 0);
 
-  const paras = useMemo(() => paragraphs(only ? segs.filter((s) => s.data.track === only) : segs), [segs, only]);
+  const paras = useMemo(() => paragraphs(only ? segs.filter((s) => speakerOf(s.data) === only) : segs), [segs, only]);
   const now = player?.time ?? -1;
   const playingId = player && (player.playing || now > 0) ? segs.find((s) => num(s.data.start) - 0.05 <= now && num(s.data.end) + 0.05 >= now)?.id || null : null;
 
   const q = query.trim().toLowerCase();
-  const hits = useMemo(() => (q ? segs.filter((s) => (!only || s.data.track === only) && String(s.data.text || "").toLowerCase().includes(q)).map((s) => s.id) : []), [segs, q, only]);
+  const hits = useMemo(() => (q ? segs.filter((s) => (!only || speakerOf(s.data) === only) && String(s.data.text || "").toLowerCase().includes(q)).map((s) => s.id) : []), [segs, q, only]);
   useEffect(() => { setHit(0); }, [q]);
   const hitId = hits.length ? hits[Math.min(hit, hits.length - 1)] : null;
   const scrollTo = useCallback((sid: string | null) => {
@@ -399,12 +411,12 @@ function MeetingView({ id, host, onDeleted }: { id: string; host: string; onDele
   });
 
   const talk = useMemo(() => {
-    const out: Partial<Record<Track, number>> = {};
-    for (const s of segs) { const t = (s.data.track || "them") as Track; out[t] = (out[t] || 0) + Math.max(0, num(s.data.end) - num(s.data.start)); }
+    const out: Record<string, number> = {};
+    for (const s of segs) { const t = speakerOf(s.data); out[t] = (out[t] || 0) + Math.max(0, num(s.data.end) - num(s.data.start)); }
     return out;
   }, [segs]);
   const totalTalk = Object.values(talk).reduce((a, b) => a + (b || 0), 0);
-  const speakers = TRACKS.filter((t) => talk[t]);
+  const speakers = useMemo(() => speakerKeys(segs.map((s) => s.data)), [segs]);
 
   const exportAs = async (kind: "txt" | "md" | "srt") => {
     setMenu(null);
@@ -415,7 +427,7 @@ function MeetingView({ id, host, onDeleted }: { id: string; host: string; onDele
         const ms = Math.round(s * 1000), p = (n: number, w = 2) => String(n).padStart(w, "0");
         return `${p(Math.floor(ms / 3600000))}:${p(Math.floor(ms / 60000) % 60)}:${p(Math.floor(ms / 1000) % 60)},${p(ms % 1000, 3)}`;
       };
-      out = segs.map((s, i) => `${i + 1}\n${t(num(s.data.start))} --> ${t(num(s.data.end))}\n${speakerName(m, s.data.track)}：${s.data.text}\n`).join("\n");
+      out = segs.map((s, i) => `${i + 1}\n${t(num(s.data.start))} --> ${t(num(s.data.end))}\n${speakerName(m, speakerOf(s.data))}：${s.data.text}\n`).join("\n");
     } else {
       const text = (p: Para) => p.ids.map((i) => segments.get(i)?.data.text || "").join("");
       const all = paragraphs(segs);
@@ -462,7 +474,20 @@ function MeetingView({ id, host, onDeleted }: { id: string; host: string; onDele
         ) : (
           <button type="button" className="icon-btn" aria-label="搜索" title="搜索（⌘F）" onClick={() => setSearching(true)}><Search className="ico" /></button>
         )}
+        <button type="button" className={`tool${notesOpen ? " is-on" : ""}`} aria-pressed={notesOpen} onClick={() => setNotesOpen(!notesOpen)} title="纪要"><PanelRight className="ico" />纪要</button>
         <button type="button" className="icon-btn" aria-label="更多" onClick={(e) => setMenu(rectOf(e.currentTarget))}><MoreHorizontal className="ico" /></button>
+        {split && (
+          <Popover at={split} onClose={() => setSplit(null)} align="right">
+            <div className="menu">
+              <div className="mt-menu-label">别人里有几个人？</div>
+              {[0, 2, 3, 4, 5, 6].map((n) => (
+                <button key={n} type="button" className="menu-item" onClick={() => { setSplit(null); void splitVoices(id, n); }}>
+                  {n ? `${n} 个人` : "自动判断"}{(n || 0) === 0 && !m.voices ? "" : n === m.voices ? <Check className="ico mt-menu-check" /> : null}
+                </button>
+              ))}
+            </div>
+          </Popover>
+        )}
         {menu && (
           <Popover at={menu} onClose={() => setMenu(null)} align="right">
             <div className="menu">
@@ -470,6 +495,9 @@ function MeetingView({ id, host, onDeleted }: { id: string; host: string; onDele
               <button type="button" className="menu-item" disabled={!segs.length} onClick={() => void exportAs("md")}><Download className="ico" />导出 Markdown</button>
               <button type="button" className="menu-item" disabled={!segs.length} onClick={() => void exportAs("srt")}><Download className="ico" />导出字幕（SRT）</button>
               {here && m.dir && <button type="button" className="menu-item" onClick={() => { setMenu(null); void os().fs.reveal({ path: m.dir! }); }}><FileAudio className="ico" />显示录音文件</button>}
+              {here && m.files?.them && segs.length > 0 && (speech?.diarize
+                ? <button type="button" className="menu-item" disabled={!!tx || !!splitting} onClick={(e) => { const r = rectOf(e.currentTarget); setMenu(null); setSplit(r); }}><Users className="ico" />重新分说话人</button>
+                : speech?.ready && <button type="button" className="menu-item" onClick={() => { setMenu(null); void installSpeech(); kit.flash("正在下载分说话人的模型（约 35 MB）"); }}><Users className="ico" />分说话人（先下载 35 MB）</button>)}
               {here && <button type="button" className="menu-item" disabled={!!tx} onClick={() => { setMenu(null); if (!segs.length || window.confirm("重新转写会换掉现在的文字稿，包括改过的字。")) void transcribe(id); }}><RefreshCw className="ico" />重新转写</button>}
               <div className="menu-sep" />
               <button type="button" className="menu-item is-danger" onClick={() => void remove()}><Trash2 className="ico" />删除</button>
@@ -483,9 +511,11 @@ function MeetingView({ id, host, onDeleted }: { id: string; host: string; onDele
           hits={hits} hitId={hitId} only={only} setOnly={setOnly} onSeek={player ? (t) => player.seek(t) : undefined} />
       )}
 
+      <div className="mt-content">
       <div className="mt-body" ref={body}>
         <div className="mt-doc">
           {tx && <TranscribingRow />}
+          {!tx && splitting === id && <div className="mt-alert"><Loader2 className="ico spin" /><span className="mt-alert-grow">正在分说话人</span><button type="button" className="btn" onClick={stopTranscribing}>停止</button></div>}
           {!tx && isWaiting(id) && <div className="mt-alert"><Loader2 className="ico spin" /><span className="mt-alert-grow">排队中：前一场转完就转这场</span></div>}
           {m.status === "failed" && !tx && <div className="mt-alert is-err"><span className="mt-alert-grow"><b>转写没成：</b>{m.error}</span>{here && <button type="button" className="btn" onClick={() => void transcribe(id)}>再试一次</button>}</div>}
           {!tx && !segs.length && <EmptyTranscript id={id} m={m} here={here} />}
@@ -516,18 +546,26 @@ function MeetingView({ id, host, onDeleted }: { id: string; host: string; onDele
           )}
         </div>
       </div>
+      {notesOpen && <NotesPanel id={id} m={m} hasText={segs.length > 0} onSeek={player ? (t) => playFrom(t) : undefined} onClose={() => setNotesOpen(false)} />}
+      </div>
 
       {ctx && (() => {
         const s = segments.get(ctx.sid)?.data;
         if (!s) return null;
-        const other: Track = s.track === "me" ? "them" : "me";
+        const mine = speakerOf(s);
+        const others = (speakers.length > 1 ? speakers : ["me", "them"]).filter((k) => k !== mine);
         const close = () => setCtx(null);
+        const moveTo = (k: string) => {
+          const data = { ...s, track: (k === "me" ? "me" : "them") as Track, speaker: k.startsWith("them:") ? k : undefined };
+          if (!data.speaker) delete (data as { speaker?: string }).speaker;
+          void kit.track(segments.put(data, ctx.sid)); kit.emit();
+        };
         return (
           <Popover at={{ x: ctx.x, y: ctx.y }} onClose={close}>
             <div className="menu">
               {player && <button type="button" className="menu-item" onClick={() => { close(); playFrom(num(s.start)); }}><Play className="ico" />从这里播放</button>}
               <button type="button" className="menu-item" onClick={() => { close(); setEditing(ctx.sid); }}><TextCursor className="ico" />改字</button>
-              <button type="button" className="menu-item" onClick={() => { close(); void kit.track(segments.put({ ...s, track: other }, ctx.sid)); kit.emit(); }}><Repeat className="ico" />改成{speakerName(m, other)}说的</button>
+              {others.map((k) => <button key={k} type="button" className="menu-item" onClick={() => { close(); moveTo(k); }}><Repeat className="ico" />改成{speakerName(m, k)}说的</button>)}
               <button type="button" className="menu-item" onClick={() => { close(); void navigator.clipboard?.writeText(String(s.text || "")).then(() => kit.flash("已复制"), () => kit.flash("复制不了")); }}><Copy className="ico" />复制</button>
               <div className="menu-sep" />
               <button type="button" className="menu-item is-danger" onClick={() => { close(); void kit.track(segments.remove(ctx.sid)); kit.emit(); kit.flash("已删掉这句"); }}><Trash2 className="ico" />删除这句</button>
@@ -545,9 +583,9 @@ function MeetingView({ id, host, onDeleted }: { id: string; host: string; onDele
 }
 
 function Timeline({ m, segs, duration, speakers, talk, totalTalk, now, hits, hitId, only, setOnly, onSeek }: {
-  m: Meeting; segs: { id: string; data: { track?: Track; start?: number; end?: number } }[]; duration: number; speakers: Track[];
-  talk: Partial<Record<Track, number>>; totalTalk: number; now: number; hits: string[]; hitId: string | null;
-  only: Track | null; setOnly: (t: Track | null) => void; onSeek?: (t: number) => void;
+  m: Meeting; segs: { id: string; data: { track?: Track; start?: number; end?: number; speaker?: string } }[]; duration: number; speakers: string[];
+  talk: Record<string, number>; totalTalk: number; now: number; hits: string[]; hitId: string | null;
+  only: string | null; setOnly: (t: string | null) => void; onSeek?: (t: number) => void;
 }) {
   const lanes = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<number | null>(null);
@@ -573,9 +611,9 @@ function Timeline({ m, segs, duration, speakers, talk, totalTalk, now, hits, hit
         onPointerLeave={() => setHover(null)}>
         {speakers.map((t) => (
           <div key={t} className={`mt-lane${only && only !== t ? " is-off" : ""}`}>
-            {segs.filter((s) => s.data.track === t).map((s) => {
+            {segs.filter((s) => speakerOf(s.data) === t).map((s) => {
               const a = pct(num(s.data.start)), b = pct(num(s.data.end));
-              return <i key={s.id} className={`mt-lane-seg is-${t}`} style={{ left: `${a}%`, width: `max(2px, ${b - a}%)` }} />;
+              return <i key={s.id} className="mt-lane-seg" style={{ left: `${a}%`, width: `max(2px, ${b - a}%)`, background: `color-mix(in srgb, var(--fg) ${Math.max(30, shade(t))}%, var(--bg))` }} />;
             })}
           </div>
         ))}
@@ -587,7 +625,7 @@ function Timeline({ m, segs, duration, speakers, talk, totalTalk, now, hits, hit
   );
 }
 
-function SpeakerName({ id, m, t }: { id: string; m: Meeting; t: Track }) {
+function SpeakerName({ id, m, t }: { id: string; m: Meeting; t: string }) {
   const [edit, setEdit] = useState<string | null>(null);
   const done = (v: string) => {
     setEdit(null);
@@ -672,7 +710,7 @@ function TranscribingRow() {
     <div className="mt-alert">
       <Loader2 className="ico spin" />
       <span className="mt-alert-grow">
-        正在转写{t.tracks.length > 1 ? ` · ${t.track === "me" ? "我说的" : "别人说的"}（${t.index + 1}/${t.tracks.length}）` : ""} · {pct}%
+        {t.voices ? "正在分说话人" : <>正在转写{t.tracks.length > 1 ? ` · ${t.track === "me" ? "我说的" : "别人说的"}（${t.index + 1}/${t.tracks.length}）` : ""} · {pct}%</>}
         <i className="mt-progress"><i style={{ width: `${pct}%` }} /></i>
       </span>
       <button type="button" className="btn" onClick={stopTranscribing}>停止</button>
@@ -684,7 +722,7 @@ function EmptyTranscript({ id, m, here }: { id: string; m: Meeting; here: boolea
   useEngine();
   if (m.status === "failed") return null;
   if (!here) {
-    return <div className="mt-empty"><b>还没有文字稿</b><span>{m.computer ? `录音在 ${m.computer} 上，在那台电脑上打开这个网页来转写。` : "录音不在这台电脑上。"}</span></div>;
+    return <div className="mt-empty"><b>还没有文字稿</b><span>{!m.files ? "这场会议没有录音。" : m.computer ? `录音在 ${m.computer} 上，在那台电脑上打开这个网页来转写。` : "录音不在这台电脑上。"}</span></div>;
   }
   if (!speech?.ready) return <div className="mt-empty"><b>还没有文字稿</b><span>转写要先下载模型。</span><div className="mt-empty-row"><SpeechRow /></div></div>;
   return (
@@ -722,3 +760,73 @@ function PlayerBar({ player, duration, follow, setFollow }: { player: Player; du
 }
 
 void mount(kit, App);
+
+// ---- the notes (an agent writes them; agent.md) ----
+
+function NotesPanel({ id, m, hasText, onSeek, onClose }: { id: string; m: Meeting; hasText: boolean; onSeek?: (t: number) => void; onClose: () => void }) {
+  const n: Notes = m.notes || {};
+  const has = !!(n.summary || n.decisions?.length || n.todos?.length || n.chapters?.length);
+  const [busy, setBusy] = useState(false);
+  const ask = async () => {
+    setBusy(true);
+    try { await askForNotes(id); kit.flash("已请 agent 写纪要，写好会出现在这里"); } catch (e) { kit.flash((e as Error).message || "没发出去"); }
+    setBusy(false);
+  };
+  const asked = n.asked && (!n.at || n.asked > n.at);
+  return (
+    <aside className="mt-notes" aria-label="纪要">
+      <div className="mt-notes-head">
+        <b>纪要</b>
+        {has && n.by && <span>{n.by} 写的{n.at ? ` · ${when(n.at)}` : ""}</span>}
+        <span className="mt-gap" />
+        <button type="button" className="icon-btn" aria-label="收起" onClick={onClose}><X className="ico" /></button>
+      </div>
+      <div className="mt-notes-body">
+        {!has && (
+          <div className="mt-notes-empty">
+            <NotebookPen className="mt-notes-ico" strokeWidth={1.5} />
+            {asked ? (
+              <><b>agent 正在写</b><span>{n.asked_by ? `${n.asked_by} ` : ""}{when(n.asked)} 请它写的，写好会出现在这里。</span></>
+            ) : (
+              <><b>让 agent 写纪要</b><span>它读完文字稿，写出总结、决定、待办（谁、什么、何时）和按话题分的章节，点章节就跳到那一段；内容多时再建一份文档和一张白板。</span></>
+            )}
+            {canAsk() && hasText && <button type="button" className={`btn${asked ? "" : " btn-primary"}`} disabled={busy} onClick={() => void ask()}>{busy ? <Loader2 className="ico spin" /> : null}{asked ? "再请一次" : "让 agent 写纪要"}</button>}
+            {!hasText && <span className="mt-hint">先转成文字。</span>}
+          </div>
+        )}
+        {n.summary && <section><h3>总结</h3><p className="mt-notes-text">{n.summary}</p></section>}
+        {!!n.chapters?.length && (
+          <section>
+            <h3>章节</h3>
+            <ol className="mt-chapters">
+              {n.chapters.map((c, i) => (
+                <li key={i}>
+                  <button type="button" className="mt-chapter" disabled={!onSeek} onClick={() => onSeek?.(num(c.start))}>
+                    <em>{clock(num(c.start))}</em><b>{c.title}</b>
+                  </button>
+                  {c.summary && <p>{c.summary}</p>}
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+        {!!n.decisions?.length && <section><h3>决定</h3><ul className="mt-bullets">{n.decisions.map((d, i) => <li key={i}>{d}</li>)}</ul></section>}
+        {!!n.todos?.length && (
+          <section>
+            <h3>待办</h3>
+            <ul className="mt-todos">
+              {n.todos.map((t, i) => <li key={i}><i /><span>{t.what}{(t.who || t.when) && <em>{[t.who, t.when].filter(Boolean).join(" · ")}</em>}</span></li>)}
+            </ul>
+          </section>
+        )}
+        {(n.doc || n.board) && (
+          <section className="mt-links">
+            {n.doc && <a href={n.doc} target="_blank" rel="noreferrer"><ExternalLink className="ico" />完整纪要（文档）</a>}
+            {n.board && <a href={n.board} target="_blank" rel="noreferrer"><ExternalLink className="ico" />白板</a>}
+          </section>
+        )}
+        {has && canAsk() && <button type="button" className="mt-link mt-notes-again" disabled={busy} onClick={() => void ask()}><RefreshCw className="ico" />请 agent 重写</button>}
+      </div>
+    </aside>
+  );
+}

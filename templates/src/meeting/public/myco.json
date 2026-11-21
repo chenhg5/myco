@@ -1,11 +1,11 @@
 {
   "id": "myco/meeting",
   "name": "会议记录",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "kind": "custom",
   "category": "office",
   "icon": "icon.svg",
-  "description": "录下在 Zoom、腾讯会议、飞书里开的会：你的麦克风和别人的声音分成两条音轨，会后在这台电脑上转成文字（不上传），按人分段，点一句从那里播放，改字、改名字、搜索、导出。录音只存在这台电脑上，文字稿大家都能看，agent 能据此写纪要。要在 myco App 里录音。",
+  "description": "录下在 Zoom、腾讯会议、飞书里开的会：你的麦克风和别人的声音分开录，会后在这台电脑上转成文字（不上传），自动分出不同的人；点一句从那里播放，改字、改名字、搜索、导出；让 agent 写纪要（总结、决定、待办、章节）。录音只存在这台电脑上，要在 myco App 里录音。",
   "data": {
     "meetings": {
       "fields": {
@@ -21,7 +21,9 @@
         "speakers": "json",
         "model": "text",
         "by": "person",
-        "error": "text"
+        "error": "text",
+        "voices": "number",
+        "notes": "json"
       }
     },
     "segments": {
@@ -31,11 +33,13 @@
         "start": "number",
         "end": "number",
         "text": "text",
-        "edited": "bool"
+        "edited": "bool",
+        "speaker": "text"
       }
     }
   },
   "permissions": [
+    "send",
     "download"
   ],
   "export": [

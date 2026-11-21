@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -49,6 +50,21 @@ var speechModels = []speechModel{
 }
 
 const vadFile = "asr-models/silero_vad.onnx"
+
+// Telling speakers apart (speech.diarize): pyannote's segmentation and a
+// 3D-Speaker voice model (CAM++), about 35 MB together.
+const (
+	segArchive = "speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2"
+	segDir     = "sherpa-onnx-pyannote-segmentation-3-0"
+	voiceFile  = "speaker-recongition-models/3dspeaker_speech_campplus_sv_zh-cn_16k-common.onnx"
+	diarizeMB  = 35
+)
+
+func diarizeReady(env *Env) bool {
+	m := filepath.Join(speechDir(env), "models")
+	return exists(filepath.Join(m, segDir, "model.onnx")) && exists(filepath.Join(m, filepath.Base(voiceFile))) &&
+		exists(engineProgram(env, "sherpa-onnx-offline-speaker-diarization"))
+}
 
 func speechModelOf(id string) (speechModel, bool) {
 	if id == "" {
@@ -103,6 +119,7 @@ func init() {
 		&Cap{Name: "speech.status", About: "本机转写：引擎和模型装好了没有", Missing: speechMissing, Fn: speechStatus},
 		&Cap{Name: "speech.install", Job: true, About: "下载转写引擎和模型（带进度）", Missing: speechMissing, Fn: speechInstall},
 		&Cap{Name: "speech.transcribe", Job: true, About: "把录音转成文字：一句一段，带时间（边转边出）", Missing: speechMissing, Fn: speechTranscribe},
+		&Cap{Name: "speech.diarize", Job: true, About: "分出录音里的不同说话人：谁在什么时候说话", Missing: speechMissing, Fn: speechDiarize},
 	)
 }
 
@@ -127,9 +144,13 @@ func speechStatus(_ context.Context, env *Env, _ json.RawMessage, _ Emit) (any, 
 	if !engine {
 		size += 25
 	}
+	diarize := diarizeReady(env)
+	if !diarize {
+		size += diarizeMB
+	}
 	return map[string]any{
 		"ready": engine && vad && ready, "engine": engine, "engine_version": sherpaVersion, "vad": vad,
-		"models": models, "dir": speechDir(env), "engine_size_mb": size,
+		"models": models, "dir": speechDir(env), "engine_size_mb": size, "diarize": diarize,
 	}, nil
 }
 
@@ -174,6 +195,16 @@ func speechInstall(ctx context.Context, env *Env, args json.RawMessage, emit Emi
 		}
 		// (the model's own test recordings are not needed)
 		os.RemoveAll(filepath.Join(dir, "models", m.dir, "test_wavs"))
+	}
+	if !exists(filepath.Join(dir, "models", segDir, "model.onnx")) {
+		if err := fetchArchive(ctx, emit, "speakers", releaseURL(segArchive), filepath.Join(dir, "models")); err != nil {
+			return nil, err
+		}
+	}
+	if voice := filepath.Join(dir, "models", filepath.Base(voiceFile)); !exists(voice) {
+		if err := fetchFile(ctx, emit, "voices", releaseURL(voiceFile), voice); err != nil {
+			return nil, err
+		}
 	}
 	return speechStatus(ctx, env, nil, emit)
 }
@@ -620,4 +651,147 @@ func convertWAV(src string, rate, ch int, off, n int64, dst string) (string, err
 		_ = w.Write(rs.push(block, rate))
 	}
 	return dst, w.Close()
+}
+
+// ---- who speaks when ----
+
+// Turn is a stretch of one speaker (numbered from 0, in the order they
+// first speak).
+type Turn struct {
+	Start   float64 `json:"start"`
+	End     float64 `json:"end"`
+	Speaker int     `json:"speaker"`
+}
+
+var (
+	turnLine     = regexp.MustCompile(`^\s*(\d+(?:\.\d+)?)\s*--\s*(\d+(?:\.\d+)?)\s+speaker_(\d+)\s*$`)
+	progressLine = regexp.MustCompile(`progress\s+(\d+(?:\.\d+)?)%`)
+)
+
+func speechDiarize(ctx context.Context, env *Env, args json.RawMessage, emit Emit) (any, error) {
+	var in struct {
+		Path string `json:"path"`
+		// Speakers: how many there are, when known (0: found from the voices).
+		Speakers int `json:"speakers"`
+		// Threshold: how different voices must be to be two people (0.5 by default; larger, fewer).
+		Threshold float64 `json:"threshold"`
+	}
+	if err := decode(args, &in); err != nil {
+		return nil, err
+	}
+	p, err := env.abs(in.Path)
+	if err != nil {
+		return nil, err
+	}
+	if !diarizeReady(env) {
+		return nil, errf(CodeNotFound, "telling speakers apart is not installed here: install it first (speech.install)")
+	}
+	if in.Speakers < 0 || in.Speakers > 20 {
+		return nil, errf(CodeInvalid, "speakers: 0 (find them) to 20")
+	}
+	if in.Threshold <= 0 {
+		in.Threshold = 0.5
+	}
+	work, err := os.MkdirTemp("", "myco-diarize-*")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(work)
+	wav, err := asWAV16k(ctx, env, p, work)
+	if err != nil {
+		return nil, err
+	}
+	threads := runtime.NumCPU() / 2
+	if threads < 2 {
+		threads = 2
+	} else if threads > 6 {
+		threads = 6
+	}
+	md := filepath.Join(speechDir(env), "models")
+	argv := []string{
+		"--segmentation.pyannote-model=" + filepath.Join(md, segDir, "model.onnx"),
+		"--embedding.model=" + filepath.Join(md, filepath.Base(voiceFile)),
+		"--segmentation.num-threads=" + strconv.Itoa(threads), "--embedding.num-threads=" + strconv.Itoa(threads),
+	}
+	if in.Speakers > 0 {
+		argv = append(argv, "--clustering.num-clusters="+strconv.Itoa(in.Speakers))
+	} else {
+		argv = append(argv, "--clustering.cluster-threshold="+strconv.FormatFloat(in.Threshold, 'f', 3, 64))
+	}
+	argv = append(argv, wav)
+	start := time.Now()
+	cmd := exec.CommandContext(ctx, engineProgram(env, "sherpa-onnx-offline-speaker-diarization"), argv...)
+	cmd.Env = engineEnv(env)
+	hideWindow(cmd)
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	var turns []Turn
+	sc := bufio.NewScanner(out)
+	sc.Buffer(make([]byte, 64<<10), 1<<20)
+	last := time.Time{}
+	for sc.Scan() {
+		line := sc.Text()
+		if m := progressLine.FindStringSubmatch(line); m != nil {
+			if time.Since(last) > 300*time.Millisecond {
+				v, _ := strconv.ParseFloat(m[1], 64)
+				emit("progress", map[string]any{"percent": v})
+				last = time.Now()
+			}
+			continue
+		}
+		if t, ok := parseTurn(line); ok {
+			turns = append(turns, t)
+		}
+	}
+	if err := cmd.Wait(); err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, errf(CodeFailed, "diarize: %s", lastLines(stderr.String(), 3))
+	}
+	turns = renumber(turns)
+	n := 0
+	for _, t := range turns {
+		if t.Speaker+1 > n {
+			n = t.Speaker + 1
+		}
+	}
+	if turns == nil {
+		turns = []Turn{}
+	}
+	return map[string]any{"turns": turns, "speakers": n, "ms": time.Since(start).Milliseconds()}, nil
+}
+
+func parseTurn(line string) (Turn, bool) {
+	m := turnLine.FindStringSubmatch(strings.TrimRight(line, "\r"))
+	if m == nil {
+		return Turn{}, false
+	}
+	a, _ := strconv.ParseFloat(m[1], 64)
+	b, _ := strconv.ParseFloat(m[2], 64)
+	k, _ := strconv.Atoi(m[3])
+	return Turn{Start: round3(a), End: round3(b), Speaker: k}, true
+}
+
+// renumber sorts the turns by time and numbers the speakers 0, 1, 2… in
+// the order they first speak.
+func renumber(turns []Turn) []Turn {
+	sort.Slice(turns, func(i, j int) bool { return turns[i].Start < turns[j].Start })
+	ids := map[int]int{}
+	for i := range turns {
+		k, ok := ids[turns[i].Speaker]
+		if !ok {
+			k = len(ids)
+			ids[turns[i].Speaker] = k
+		}
+		turns[i].Speaker = k
+	}
+	return turns
 }

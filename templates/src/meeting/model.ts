@@ -16,10 +16,26 @@ export type Meeting = {
   /** What each track recorded: mic, system, app:<id>. */
   sources?: Partial<Record<Track, string>>;
   source_name?: string;
-  speakers?: Partial<Record<Track, string>>;
+  /** Names: "me", "them", and "them:0", "them:1"… once the others are told apart. */
+  speakers?: Record<string, string>;
   model?: string; by?: string; error?: string;
+  /** The others told apart into this many (0: not yet). */
+  voices?: number;
+  notes?: Notes;
 };
-export type Segment = { meeting?: string; track?: Track; start?: number; end?: number; text?: string; edited?: boolean };
+/** The notes an agent writes (agent.md). */
+export type Notes = {
+  summary?: string; decisions?: string[];
+  todos?: { what: string; who?: string; when?: string }[];
+  chapters?: { start: number; title: string; summary?: string }[];
+  doc?: string; board?: string; by?: string; at?: string;
+  /** When someone asked an agent for them (they are on their way). */
+  asked?: string; asked_by?: string;
+};
+export type Segment = { meeting?: string; track?: Track; start?: number; end?: number; text?: string; edited?: boolean; speaker?: string };
+
+/** Who said it: "me", "them", or "them:N". */
+export const speakerOf = (s: Segment) => s.speaker || s.track || "them";
 
 export const meetings = new Store<Meeting & Record<string, unknown>>("meetings");
 export const segments = new Store<Segment & Record<string, unknown>>("segments");
@@ -35,13 +51,28 @@ export function segmentsOf(id: string) {
   return segments.rows.filter((r) => r.data.meeting === id).sort((a, b) => num(a.data.start) - num(b.data.start));
 }
 
-export function speakerName(m: Meeting, t: Track | undefined) {
-  const s = m.speakers?.[t || "them"];
+export function speakerName(m: Meeting, key: string | undefined) {
+  const k = key || "them";
+  const s = m.speakers?.[k];
   if (s) return s;
-  return t === "me" ? "我" : "对方";
+  if (k === "me") return "我";
+  if (k.startsWith("them:")) return `说话人 ${Number(k.slice(5)) + 1}`;
+  return "对方";
 }
 
-export const TRACK_COLOR: Record<Track, string> = { me: "#3370ff", them: "#f5813f" };
+/** The speakers of a meeting, in order: me first, then the others by number. */
+export function speakerKeys(list: Segment[]) {
+  const keys = new Set(list.map(speakerOf));
+  return [...keys].sort((a, b) => (a === "me" ? -1 : b === "me" ? 1 : a.localeCompare(b, undefined, { numeric: true })));
+}
+
+/** A speaker's grey (me the darkest; the others lighter, each its own). */
+export function shade(key: string) {
+  if (key === "me") return 100;
+  if (key === "them") return 48;
+  const n = Number(key.slice(5)) || 0;
+  return [48, 28, 66, 38, 78, 20, 58, 86][n % 8];
+}
 
 /** 12:05 or 1:02:05. */
 export function clock(sec: number) {

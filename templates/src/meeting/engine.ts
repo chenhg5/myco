@@ -6,6 +6,7 @@
 import { useSyncExternalStore } from "react";
 import type { OSAudioLevel, OSJob, OSRecording, OSSegment, OSSpeechStatus } from "../_lib/myco";
 import { os, toOSError } from "../_lib/os";
+import { myco } from "../_lib/myco";
 import { alike, kit, meetings, num, segments, segmentsOf, type Meeting, type Track } from "./model";
 
 type Listener = () => void;
@@ -133,7 +134,7 @@ export async function installSpeech() {
 
 // ---- transcribing ----
 
-export type Transcribing = { meeting: string; track: Track; done: number; total: number; tracks: Track[]; index: number };
+export type Transcribing = { meeting: string; track: Track; done: number; total: number; tracks: Track[]; index: number; voices?: boolean };
 export let transcribing: Transcribing | null = null;
 let transcribeJob: OSJob<unknown> | null = null;
 const waiting: string[] = [];
@@ -187,6 +188,13 @@ export async function transcribe(id: string) {
     }
   }
   await line;
+  // then who of the others said what
+  if (!failed && m.files.them && speech?.diarize) {
+    transcribing = { ...transcribing!, voices: true, done: transcribing!.total };
+    changed();
+    const err = await diarizeNow(id, 0);
+    if (err && err !== "已停止") kit.flash(`没分出说话人：${err}`);
+  }
   transcribeJob = null;
   transcribing = null;
   changed();
@@ -197,3 +205,75 @@ export async function transcribe(id: string) {
 
 export function stopTranscribing() { void transcribeJob?.cancel(); waiting.length = 0; }
 export const isWaiting = (id: string) => waiting.includes(id);
+
+// ---- telling the others apart ----
+
+/** Splits "them" into its voices (count: how many, 0 to find out); "" when done, or why not. */
+async function diarizeNow(id: string, count: number): Promise<string> {
+  const m = meetings.get(id)?.data;
+  const path = m?.files?.them;
+  if (!m || !path) return "没有别人的录音";
+  const job = os().speech.diarize({ path, speakers: count || undefined });
+  transcribeJob = job as OSJob<unknown>;
+  let v;
+  try { v = await job.done; } catch (e) { const err = toOSError(e); return err.code === "cancelled" ? "已停止" : err.message; }
+  // each sentence goes to the voice it overlaps most
+  const turns = v.turns;
+  const many = v.speakers > 1;
+  let line: Promise<unknown> = Promise.resolve();
+  for (const s of segmentsOf(id)) {
+    if (s.data.track !== "them") continue;
+    let best = -1, most = 0;
+    for (const t of turns) {
+      const o = Math.min(num(s.data.end), t.end) - Math.max(num(s.data.start), t.start);
+      if (o > most) { most = o; best = t.speaker; }
+    }
+    if (best < 0) {
+      // (no turn overlaps: the nearest one)
+      let gap = Infinity;
+      for (const t of turns) { const g = Math.min(Math.abs(t.start - num(s.data.end)), Math.abs(num(s.data.start) - t.end)); if (g < gap) { gap = g; best = t.speaker; } }
+    }
+    const speaker = many && best >= 0 ? `them:${best}` : undefined;
+    if ((s.data.speaker || undefined) === speaker) continue;
+    const data = { ...s.data, speaker };
+    if (!speaker) delete (data as { speaker?: string }).speaker;
+    line = line.then(() => kit.track(segments.put(data, s.id))).then(() => kit.emit());
+  }
+  await line;
+  await patchMeeting(id, { voices: many ? v.speakers : 1 });
+  return "";
+}
+
+export let splitting: string | null = null;
+/** Tells the others apart again (count: how many, 0 to find out). */
+export async function splitVoices(id: string, count: number) {
+  if (transcribing || splitting) return;
+  splitting = id;
+  changed();
+  const err = await diarizeNow(id, count);
+  transcribeJob = null;
+  splitting = null;
+  changed();
+  if (err) kit.flash(err === "已停止" ? "已停止" : `没分出说话人：${err}`);
+  else kit.flash(`已分成 ${meetings.get(id)?.data.voices || 1} 个人`);
+}
+
+// ---- notes, by an agent ----
+
+export const canAsk = () => !!(myco as unknown as { send?: unknown } | undefined)?.send;
+
+/** Asks the page's agent to write the notes of a meeting (as agent.md says). */
+export async function askForNotes(id: string) {
+  const m = meetings.get(id)?.data;
+  if (!m) return;
+  const text = [
+    `请给「会议记录」网页里的一场会议写纪要。`,
+    `网页 ${kit.page}，会议 ${id}「${m.title || "会议"}」（${m.started_at || ""}，${Math.round(num(m.seconds) / 60)} 分钟）。`,
+    `按这个网页的 agent.md：读 segments 里 meeting 是 ${id} 的句子，写好后放进这场会议记录的 notes（summary、decisions、todos、chapters，chapters 带开始的秒数）。`,
+    `内容多、有方案或流程时，再建一份文档和一张白板，把它们的链接写进 notes.doc、notes.board。写完回我一句。`,
+  ].join("\n");
+  const sender = myco as unknown as { send: (t: string) => Promise<{ id: string }> };
+  await sender.send(text);
+  const cur = meetings.get(id)?.data;
+  if (cur) await patchMeeting(id, { notes: { ...(cur.notes || {}), asked: new Date().toISOString(), asked_by: kit.me } });
+}
