@@ -251,20 +251,33 @@ struct RunWindowsTests {
         } else {
             Issue.record("it is at work")
         }
-        // A newer update, about any task: that is what it is doing now.
+        // A newer update: it is on the page above, not said again.
         messages.append(message("p2", 120, from: "coder", to: "me", type: "progress", replyTo: "t1", body: "now the second part\nmore"))
-        #expect(foot(messages)?.saying == "now the second part")
-        // What it said between its steps since: that, not the older update
-        // (the run above goes on; the line goes with it).
-        func footSaying(_ words: (text: String, at: Date)?) -> String? {
+        #expect(foot(messages)?.saying == nil)
+        // The step it is on since: that (a command, thinking).
+        func footSaying(_ words: (text: String?, at: Date)?) -> String? {
             ConversationBuilder.items(me: "me", agent: "coder", messages: messages, stepWords: words, status: { _ in agent }, now: at(130))
                 .first { $0.id == "t1.status" }?.saying
         }
-        #expect(footSaying(("Implementing the editor changes: types\nand more", at(125))) == "Implementing the editor changes: types")
-        // Said before the update: the update stands.
-        #expect(footSaying(("Reading the editor", at(115))) == "now the second part")
-        // It answered after both: neither.
+        #expect(footSaying(("Run npm test\nmore", at(125))) == "Run npm test")
+        // Words it said since (nil): on the page already, not repeated.
+        #expect(footSaying((nil, at(125))) == nil)
+        // A step before its update: the update came after it, so neither.
+        #expect(footSaying(("Read the editor", at(115))) == nil)
+        // It answered after the step: neither.
         messages.append(message("r3", 128, from: "coder", to: "me", type: "reply", replyTo: "t1"))
-        #expect(footSaying(("Implementing the editor changes", at(125))) == nil)
+        #expect(footSaying(("Run npm test", at(125))) == nil)
+    }
+
+    @Test func aStepSaysWhatItDoesNotWhatItSaid() {
+        func event(_ kind: String, tool: String? = nil, input: String? = nil, text: String? = nil) -> TraceEvent {
+            TraceEvent(seq: 1, kind: kind, data: TraceStep(text: text, tool: tool, input: input), at: at(1))
+        }
+        #expect(RunProcess.doing(event("tool", tool: "Bash", input: "npm test\n--watch")) == L("运行 npm test", "Run npm test"))
+        #expect(RunProcess.doing(event("thinking", text: "hmm")) == L("正在思考", "Thinking"))
+        #expect(RunProcess.doing(event("text", text: "I will look at the sources")) == nil)
+        #expect(RunProcess.isStep(event("text", text: "words")))
+        #expect(!RunProcess.isStep(event("tool", tool: "TodoWrite", input: "[]")))
+        #expect(!RunProcess.isStep(event("tool_result")))
     }
 }

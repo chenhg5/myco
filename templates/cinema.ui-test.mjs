@@ -119,7 +119,10 @@ const server = http.createServer((req, res) => {
               ? []
               : remote.searchParams.has("ids")
                 ? [movie(remote.searchParams.get("ids"))]
-                : [movie("1"), movie("2")],
+                : Array.from(
+                    { length: u.searchParams.has("long") ? 24 : 2 },
+                    (_, i) => movie(String(i + 1)),
+                  ),
         }),
       );
     else if (remote.pathname === "/poster.png") {
@@ -217,10 +220,13 @@ try {
     ["en", "light", 760],
     ["en", "dark", 1400],
     ["zh", "light", 393, true],
+    ["en", "dark", 393, true],
   ]) {
     const page = await browser.newPage({
       viewport: { width, height: 900 },
       colorScheme: theme,
+      hasTouch: !!phone,
+      isMobile: !!phone,
     });
     const errors = [],
       network = [];
@@ -243,7 +249,8 @@ try {
                 "/fixture?url=" +
                   encodeURIComponent(args.url) +
                   "&binary=" +
-                  (args.response === "base64" ? "1" : "0"),
+                  (args.response === "base64" ? "1" : "0") +
+                  (phone ? "&long=1" : ""),
               );
               return r.json();
             },
@@ -318,7 +325,40 @@ try {
       .getByRole("button", { name: L("关闭", "Close"), exact: true })
       .click();
     await page.locator(".ci-film").first().waitFor();
-    assert.equal(await page.locator(".ci-film").count(), 2);
+    assert.equal(await page.locator(".ci-film").count(), phone ? 24 : 2);
+    if (phone) {
+      const touch = await page.context().newCDPSession(page);
+      const swipe = async (from, to) => {
+        await touch.send("Input.dispatchTouchEvent", {
+          type: "touchStart",
+          touchPoints: [{ x: 100, y: from }],
+        });
+        for (let i = 1; i <= 12; i++) {
+          await touch.send("Input.dispatchTouchEvent", {
+            type: "touchMove",
+            touchPoints: [{ x: 100, y: from + ((to - from) * i) / 12 }],
+          });
+          await page.waitForTimeout(20);
+        }
+        await touch.send("Input.dispatchTouchEvent", {
+          type: "touchEnd",
+          touchPoints: [],
+        });
+        await page.waitForTimeout(500);
+      };
+      // Finger gestures on film buttons must scroll a long catalog in both
+      // directions; click() and scrollIntoView() bypass overflow:hidden.
+      await swipe(720, 250);
+      await page.waitForFunction(() => scrollY > 100, null, { timeout: 5000 });
+      const down = await page.evaluate(() => scrollY);
+      await swipe(250, 720);
+      await page.waitForFunction((down) => scrollY < down - 100, down, {
+        timeout: 5000,
+      });
+      await touch.detach();
+      await page.evaluate(() => scrollTo(0, 0));
+      console.log("PASS phone finger swipes scroll the catalog down and back up");
+    }
     await page.screenshot({
       path: path.join(out, `${lang}-${theme}-${width}-catalog.png`),
     });

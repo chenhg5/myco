@@ -670,15 +670,15 @@ public final class ConversationModel {
             if let at = events.compactMap(\.at).max() { activity[task.id] = at }
             if let last = events.last?.kind, last == "turn_end" || last == "usage" { ended.insert(task.id) }
         }
-        // What it last said between its steps, on any open task: the
-        // loading line follows it (and its updates), not only its updates.
-        var stepWords: (text: String, at: Date)?
+        // What it is doing now, on any open task: its newest step (words
+        // it said count too, so the line does not run behind them).
+        var stepWords: (text: String?, at: Date)?
         for task in all.values where task.to == agent && task.isOpen {
             let events = windows.activity(of: task.id, traces: traces)
-            guard let said = events.last(where: { $0.kind == "text" && !($0.data.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }),
-                  let at = said.at, at > (stepWords?.at ?? .distantPast)
+            guard let step = events.last(where: { RunProcess.isStep($0) }),
+                  let at = step.at, at > (stepWords?.at ?? .distantPast)
             else { continue }
-            stepWords = (said.data.text ?? "", at)
+            stepWords = (RunProcess.doing(step), at)
         }
         var tracedPlans: [String: (items: [PlanItem], at: Date?)] = [:]
         for (taskID, process) in shownProcesses {

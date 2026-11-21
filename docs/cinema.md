@@ -7,7 +7,8 @@ The interface follows the App's language and appearance.
 
 Choose a source to browse its catalog and categories. Search one source or choose
 **All sources** to search every enabled source. Open a title, choose a playback
-line and episode, and use the video controls to play. Add titles to **Watchlist**
+line and episode, and use the video controls to play. On a phone, swipe up or down
+over the posters to scroll the whole catalog. Add titles to **Watchlist**
 for later. Sources and the watchlist are shared by people opening this page;
 do not put credentials or API keys in source addresses. An agent can configure the
 same sources through page data commands; changes appear immediately in the app:
