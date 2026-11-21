@@ -26,6 +26,8 @@ struct SearchTests {
         #expect(snippet.contains("导出按钮放在右上角"))
         #expect(!snippet.contains("\n"))
         #expect(ConversationSearch.snippet("short", query: "x") == "short")
+        // As it reads: no Markdown marks.
+        #expect(ConversationSearch.snippet("## 结论\n底部三个 **Tab**，用 `TabView`", query: "Tab") == "结论 底部三个 Tab，用 TabView")
     }
 
     @Test func theWorkspaceIsSearchedForMembersProjectsAndMessages() async throws {

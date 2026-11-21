@@ -30,7 +30,11 @@ public enum ConversationSearch {
     /// A line of a message around the first place it says it: a little
     /// before, more after, on one line.
     public static func snippet(_ body: String, query: String) -> String {
-        let flat = body.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        // (as it reads, without Markdown's marks)
+        let plain = body.replacingOccurrences(of: "**", with: "").replacingOccurrences(of: "__", with: "")
+            .replacingOccurrences(of: "`", with: "")
+            .replacingOccurrences(of: #"(?m)^\s{0,3}#{1,6}\s+"#, with: "", options: .regularExpression)
+        let flat = plain.split(whereSeparator: \.isWhitespace).joined(separator: " ")
         guard let range = flat.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) else {
             return String(flat.prefix(90))
         }

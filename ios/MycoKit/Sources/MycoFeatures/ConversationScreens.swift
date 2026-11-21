@@ -342,7 +342,12 @@ struct ConversationBody: View {
                             .background {
                                 if found.contains(item.id) {
                                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                        .fill(item.id == current ? MycoColor.amber.opacity(0.28) : MycoColor.amberSoft)
+                                        .fill(MycoColor.amberSoft.opacity(item.id == current ? 1 : 0.55))
+                                        .overlay {
+                                            if item.id == current {
+                                                RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(MycoColor.amber, lineWidth: 1.5)
+                                            }
+                                        }
                                         .padding(-6)
                                 }
                             }
