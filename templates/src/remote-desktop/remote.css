@@ -751,3 +751,22 @@ p {
 .rd-session.is-immersive.show-tools .rd-touch-controls { display: block; }
 
 .rd-session.is-immersive .rd-touch-controls.has-keyboard > p, .rd-session.is-immersive .rd-touch-controls.has-keyboard > .rd-touch-row:first-of-type { display: none; }
+
+/* Keep the local editor above the software keyboard and reserve screen space
+   for it, instead of covering the remote field with stacked tool rows. */
+.rd-screen video { pointer-events: none; }
+.rd-composer-row { display: flex; align-items: center; gap: 8px; }
+.rd-composer-row textarea { flex: 1; min-width: 0; resize: none; height: 46px; max-height: 80px; }
+.rd-composer-row > button { flex-shrink: 0; min-height: 44px; }
+.rd-keyboard-options { padding-bottom: 0; margin-top: 4px; }
+.rd-live-input { display: inline-flex; align-items: center; flex-shrink: 0; gap: 6px; min-height: 32px; font-size: 12px; color: var(--rd-muted); }
+.rd-live-input input { accent-color: var(--rd-text); }
+.rd-input-hint { color: var(--rd-muted); font-size: 11px; white-space: nowrap; }
+.rd-input-error { font-size: 12px; margin: 6px 0 0; color: var(--rd-text); }
+.rd-session.is-immersive.keyboard-open .rd-touch-controls { position: relative; inset: auto; flex-shrink: 0; max-height: min(160px, 100%); margin: 0 max(8px, env(safe-area-inset-right)) 4px max(8px, env(safe-area-inset-left)); padding: 6px 8px; overflow: auto; }
+.rd-session.is-immersive.keyboard-open .rd-screen { flex: 1; height: auto; min-height: 0; }
+.rd-session.is-immersive.keyboard-open .rd-remote-keys { display: none; }
+.rd-session.is-immersive.keyboard-open .rd-floating-tools { display: none; }
+.rd-session.is-immersive.keyboard-open .rd-keyboard { min-width: 0; }
+
+.rd-scroll-mode { border: 0; border-radius: 10px; background: #fff; color: #171717; min-height: 44px; padding: 0 10px; font: inherit; font-size: 12px; }

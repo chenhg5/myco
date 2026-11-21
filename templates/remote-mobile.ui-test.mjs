@@ -49,6 +49,8 @@ try{
   await page.getByRole('button',{name:lang==='zh'?'工具':'Tools',exact:true}).click();
   const inputCount=await page.evaluate(()=>window.__inputs.length);
   await touch('touchStart',[{x:x-30,y,id:1},{x:x+30,y,id:2}]);
+  // A little parallel motion before a pinch must not lock it into remote scroll.
+  await touch('touchMove',[{x:x-30,y:y+12,id:1},{x:x+30,y:y+12,id:2}]);
   await touch('touchMove',[{x:x-65,y,id:1},{x:x+65,y,id:2}]);await touch('touchEnd',[]);
   assert(parseInt(await page.locator('.rd-zoom').innerText())>150,'pinch must zoom in any permission mode');
   assert(!(await page.evaluate(n=>window.__inputs.slice(n),inputCount)).some(e=>['scroll','move','button'].includes(e.kind)),'a pinch must not scroll or click on the host');
@@ -58,7 +60,11 @@ try{
   await touch('touchStart',[{x,y,id:1}]);await touch('touchEnd',[]);assert.equal(await page.evaluate(()=>window.__inputs.filter(x=>x.kind==='button').length),2);
   const old=await page.evaluate(()=>window.__inputs.length);await touch('touchStart',[{x,y,id:1}]);await touch('touchMove',[{x:x+45,y:y+15,id:1}]);await touch('touchEnd',[]);
   const moved=await page.evaluate(n=>window.__inputs.slice(n),old);assert(moved.some(x=>x.kind==='move'));assert(!moved.some(x=>x.kind==='button'),'moving is not dragging');
-  await touch('touchStart',[{x:x-20,y,id:1},{x:x+20,y,id:2}]);await touch('touchMove',[{x:x-20,y:y-20,id:1},{x:x+20,y:y-20,id:2}]);await touch('touchEnd',[]);assert(await page.evaluate(()=>window.__inputs.some(x=>x.kind==='scroll')));
+  const heldScroll=await page.evaluate(()=>window.__inputs.filter(e=>e.kind==='scroll').length);
+  await touch('touchStart',[{x:x-20,y,id:1},{x:x+20,y,id:2}]);await page.waitForTimeout(400);await touch('touchMove',[{x:x-20,y:y-20,id:1},{x:x+20,y:y-20,id:2}]);await touch('touchEnd',[]);
+  assert(await page.evaluate(n=>window.__inputs.filter(e=>e.kind==='scroll').length>n,heldScroll),'hold two fingers, then drag must scroll without a mode switch');
+  const scroll=page.getByRole('button',{name:lang==='zh'?'双指滚动':'Two-finger scroll',exact:true});await scroll.click();
+  await touch('touchStart',[{x:x-20,y,id:1},{x:x+20,y,id:2}]);await touch('touchMove',[{x:x-20,y:y-20,id:1},{x:x+20,y:y-20,id:2}]);await touch('touchEnd',[]);assert(await page.evaluate(()=>window.__inputs.some(x=>x.kind==='scroll')));await page.getByRole('button',{name:lang==='zh'?'切回双指缩放':'Switch back to pinch zoom',exact:true}).click();assert.equal(await scroll.getAttribute('aria-pressed'),'false');
   await page.getByRole('button',{name:lang==='zh'?'放大画面':'Zoom in',exact:true}).click();
   assert.equal(await page.locator('.rd-zoom').innerText(),'150%');
   assert.match(await page.locator('.rd-screen video').getAttribute('style'),/scale\(1.5\)/);
@@ -66,10 +72,36 @@ try{
   const drag=page.locator('.rd-touch-row button').filter({hasText:lang==='zh'?'拖动':'Drag'}).first();
   await drag.click();assert.equal(await drag.getAttribute('aria-pressed'),'true');
   await touch('touchStart',[{x,y,id:1}]);await touch('touchMove',[{x:x+10,y:y+10,id:1}]);await touch('touchEnd',[]);await drag.click();assert.equal(await drag.getAttribute('aria-pressed'),'false');
-  const keyboard=page.locator('.rd-touch-row button').filter({hasText:lang==='zh'?'键盘':'Keyboard'}).first();await keyboard.click();const field=page.locator('.rd-keyboard textarea');await field.fill('你好🙂');
-  assert(await page.evaluate(()=>window.__inputs.some(x=>x.kind==='text'&&x.text==='你好🙂')));
+  const keyboard=page.locator('.rd-touch-row button').filter({hasText:lang==='zh'?'键盘':'Keyboard'}).first();await keyboard.click();const field=page.locator('.rd-keyboard textarea');
+  const beforeDraft=await page.evaluate(()=>window.__inputs.length);
+  await field.fill('你好');await field.dispatchEvent('compositionstart');await field.fill('你好，语音听写后可以修改🙂');await field.dispatchEvent('compositionend',{data:'你好，语音听写后可以修改🙂'});
+  await field.press('Backspace');
+  assert.equal(await page.evaluate(()=>window.__inputs.length),beforeDraft,'local editing must not send partial text or Backspace to the host');
+  await field.fill('你好🙂');
+  // Approximate an iOS keyboard reducing/panning the visible WebView area.
+  const visibleHeight=Math.min(180,height),visibleTop=7;
+  await page.evaluate(({h,t})=>{Object.defineProperty(visualViewport,'height',{configurable:true,value:h});Object.defineProperty(visualViewport,'offsetTop',{configurable:true,value:t});visualViewport.dispatchEvent(new Event('resize'));visualViewport.dispatchEvent(new Event('scroll'));},{h:visibleHeight,t:visibleTop});
+  await page.waitForTimeout(60);
+  for(const locator of [field,page.getByRole('button',{name:lang==='zh'?'发送文字':'Send text',exact:true})]){const bounds=await locator.boundingBox();assert(bounds.y>=visibleTop&&bounds.y+bounds.height<=visibleTop+visibleHeight,'local editor and Send must fit above the software keyboard');}
+  await page.screenshot({path:path.join(out,`${width}-${height}-${lang}-${theme}-keyboard.png`),fullPage:true});
+  await page.getByRole('button',{name:lang==='zh'?'发送文字':'Send text',exact:true}).click();
+  assert.equal(await page.evaluate(()=>window.__inputs.filter(x=>x.kind==='text'&&x.text==='你好🙂').length),1,'buffered text must send exactly once');
+  assert(!await field.isVisible(),'sending should hide the keyboard and reveal the desktop');
+  assert(!await page.evaluate(n=>window.__inputs.slice(n).some(x=>x.kind==='key'&&x.code==='Enter'),beforeDraft),'Send text must not submit the remote form');
+  await page.evaluate(()=>{Object.defineProperty(visualViewport,'height',{configurable:true,value:innerHeight});Object.defineProperty(visualViewport,'offsetTop',{configurable:true,value:0});visualViewport.dispatchEvent(new Event('resize'));});
+  await page.getByRole('button',{name:lang==='zh'?'键盘':'Keyboard',exact:true}).click();
+  // Closing and reopening is a local draft operation, not a send.
+  await field.fill('keep draft');await page.getByRole('button',{name:lang==='zh'?'收起键盘':'Hide keyboard',exact:true}).click();
+  await page.getByRole('button',{name:lang==='zh'?'键盘':'Keyboard',exact:true}).click();assert.equal(await field.inputValue(),'keep draft');await field.fill('');
+  const live=page.getByRole('checkbox',{name:lang==='zh'?'即时输入':'Live typing',exact:true});await live.check();
+  await field.fill('live');assert(await page.evaluate(()=>window.__inputs.some(x=>x.kind==='text'&&x.text==='live')));
   await field.dispatchEvent('compositionstart');await field.evaluate(el=>{Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(el,'中文组合');el.dispatchEvent(new InputEvent('input',{bubbles:true,data:'中文组合',isComposing:true}));});await field.dispatchEvent('compositionend',{data:'中文组合'});
-  assert.equal(await page.evaluate(()=>window.__inputs.filter(x=>x.kind==='text'&&x.text==='中文组合').length),1,'composition must send once');
+  assert.equal(await page.evaluate(()=>window.__inputs.filter(x=>x.kind==='text'&&x.text==='中文组合').length),1,'live composition must send once');
+  await live.uncheck();await field.fill('x'.repeat(257));
+  await page.getByRole('button',{name:lang==='zh'?'发送文字':'Send text',exact:true}).click();
+  assert.equal((await field.inputValue()).length,257,'unsupported drafts must remain editable');assert(await page.locator('.rd-input-error').isVisible());
+  await field.fill('');await page.getByRole('button',{name:lang==='zh'?'收起键盘':'Hide keyboard',exact:true}).click();
+  await page.getByRole('button',{name:lang==='zh'?'工具':'Tools',exact:true}).click();
   }else {
     await page.getByRole('button',{name:lang==='zh'?'放大画面':'Zoom in',exact:true}).click();
     const before=await page.locator('video').getAttribute('style');

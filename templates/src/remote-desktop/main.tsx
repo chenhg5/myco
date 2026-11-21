@@ -108,15 +108,16 @@ function App() {
   const [expanded,setExpanded]=useState(false);
   const [toolsVisible,setToolsVisible]=useState(false);
   const touches=useRef(new Map<number,{x:number;y:number}>());
-  const gesture=useRef<{distance:number;center:{x:number;y:number};lastY:number;view:View;mode:"pending"|"pinch"|"scroll"}|null>(null);
+  const gesture=useRef<{distance:number;center:{x:number;y:number};lastY:number;view:View;at:number;mode:"pending"|"pinch"|"scroll"}|null>(null);
   const multiTouch=useRef(false);
   const updateView=(next:View)=>{viewRef.current=next;setView(next);};
   const zoomBy=(delta:number)=>{const box=stage.current?.getBoundingClientRect();if(box)updateView(zoomView(viewRef.current,viewRef.current.scale+delta,{x:box.width/2,y:box.height/2},box.width,box.height));};
   const [keyboardOpen,setKeyboardOpen]=useState(false),[draft,setDraft]=useState(""),[dragging,setDragging]=useState(false),[modifiers,setModifiers]=useState<string[]>([]),[,setCursor]=useState({x:.5,y:.5}),[showCursor,setShowCursor]=useState(false),[,setLayout]=useState(0);
+  const [liveInput,setLiveInput]=useState(false),[scrollMode,setScrollMode]=useState(false),[inputError,setInputError]=useState("");
   const keyboard=useRef<HTMLTextAreaElement>(null),composing=useRef(false);
   const touchpad=useRef<Touchpad>();
   if(!touchpad.current)touchpad.current=new Touchpad(e=>session.current?.input(e),p=>setCursor({...p}));
-  useEffect(()=>{const resize=()=>{document.documentElement.style.setProperty("--rd-viewport-height",`${window.visualViewport?.height??innerHeight}px`);document.documentElement.style.setProperty("--rd-viewport-top",`${window.visualViewport?.offsetTop??0}px`);setLayout(n=>n+1);};resize();window.addEventListener("resize",resize);window.visualViewport?.addEventListener("resize",resize);return()=>{window.removeEventListener("resize",resize);window.visualViewport?.removeEventListener("resize",resize);};},[]);
+  useEffect(()=>{const resize=()=>{document.documentElement.style.setProperty("--rd-viewport-height",`${window.visualViewport?.height??innerHeight}px`);document.documentElement.style.setProperty("--rd-viewport-top",`${window.visualViewport?.offsetTop??0}px`);setLayout(n=>n+1);};resize();window.addEventListener("resize",resize);window.visualViewport?.addEventListener("resize",resize);window.visualViewport?.addEventListener("scroll",resize);return()=>{window.removeEventListener("resize",resize);window.visualViewport?.removeEventListener("resize",resize);window.visualViewport?.removeEventListener("scroll",resize);};},[]);
   const motion = useRef<{ x: number; y: number } | null>(null),
     motionFrame = useRef(0);
   const clicks = useRef({ at: 0, x: 0, y: 0, button: 0, count: 0 });
@@ -238,7 +239,7 @@ function App() {
   };
   const disconnect = async () => {
     attempt.current++;
-    touchpad.current?.reset();if(touchpad.current)touchpad.current.point={x:.5,y:.5};setCursor({x:.5,y:.5});updateView({scale:1,x:0,y:0});setExpanded(false);setToolsVisible(false);touches.current.clear();gesture.current=null;multiTouch.current=false;setDragging(false);setModifiers([]);setKeyboardOpen(false);setDraft("");setShowCursor(false);
+    touchpad.current?.reset();if(touchpad.current)touchpad.current.point={x:.5,y:.5};setCursor({x:.5,y:.5});updateView({scale:1,x:0,y:0});setExpanded(false);setToolsVisible(false);touches.current.clear();gesture.current=null;multiTouch.current=false;setDragging(false);setModifiers([]);setKeyboardOpen(false);setDraft("");setInputError("");setLiveInput(false);setScrollMode(false);setShowCursor(false);
     const previous=session.current;
     session.current=null;pendingStream.current=null;
     setConnecting(false);setActive(null);setStats(null);setState("");
@@ -303,20 +304,20 @@ function App() {
   const typed=(value:string)=>{
     if(composing.current)return false;
     const events=textInput(value,!!session.current?.supportsText,modifiers);
-    if(events===null){setError(uiText(modifiers.length?"先松开组合键，再输入这段文字。":([...value].length>256?"一次最多输入256个字符，文字已保留。":"远端组件需要更新才能输入这段文字，文字已保留。")));return false;}
+    if(events===null){setInputError(uiText(modifiers.length?"先松开组合键，再输入这段文字。":([...value].length>256?"一次最多输入256个字符，文字已保留。":"远端组件需要更新才能输入这段文字，文字已保留。")));return false;}
     if(!events.length)return true;
-    for(const e of events)if(!input(e))return false;
-    releaseModifiers();setDraft("");setError("");if(keyboard.current)keyboard.current.value="";return true;
+    for(const e of events)if(!input(e)){setInputError(uiText("文字未能全部送出，请检查连接后再确认远端内容。"));return false;}
+    releaseModifiers();setDraft("");setInputError("");if(keyboard.current)keyboard.current.value="";return true;
   };
   useEffect(()=>{
-    const el=keyboard.current;if(!keyboardOpen||!el)return;
+    const el=keyboard.current;if(!keyboardOpen||!el||!liveInput)return;
     const before=(e:InputEvent)=>{
       if(e.isComposing||composing.current)return;
       if(e.inputType==="deleteContentBackward"&&!el.value){e.preventDefault();specialKey("Backspace");}
       if(e.inputType==="insertLineBreak"||e.inputType==="insertParagraph"){e.preventDefault();if(el.value&&!typed(el.value))return;specialKey("Enter");}
     };
     el.addEventListener("beforeinput",before);return()=>el.removeEventListener("beforeinput",before);
-  },[keyboardOpen,modifiers]);
+  },[keyboardOpen,liveInput,modifiers]);
   const touch=(e:React.PointerEvent,phase:"down"|"move"|"up")=>{
     if(e.pointerType!=="touch")return false;
     e.preventDefault();
@@ -327,15 +328,20 @@ function App() {
       if(points.size===1){multiTouch.current=false;if(control)pad.down(e.pointerId,e.clientX,e.clientY);}
       else if(points.size===2){
         multiTouch.current=true;pad.reset();setDragging(false);setModifiers([]);
-        const [a,b]=[...points.values()];gesture.current={distance:Math.max(1,Math.hypot(a.x-b.x,a.y-b.y)),center:{x:(a.x+b.x)/2,y:(a.y+b.y)/2},lastY:(a.y+b.y)/2,view:{...viewRef.current},mode:"pending"};
+        // Do not infer scroll from the first moving finger: a slow pinch often
+        // starts with parallel movement. Remote scrolling is an explicit mode.
+        const [a,b]=[...points.values()];gesture.current={distance:Math.max(1,Math.hypot(a.x-b.x,a.y-b.y)),center:{x:(a.x+b.x)/2,y:(a.y+b.y)/2},lastY:(a.y+b.y)/2,view:{...viewRef.current},at:performance.now(),mode:control&&scrollMode?"scroll":"pending"};
       }
     }else if(phase==="move"){
       const previous=points.get(e.pointerId);if(!previous)return true;points.set(e.pointerId,point);
       if(points.size===2&&gesture.current){
         const g=gesture.current,[a,b]=[...points.values()],distance=Math.hypot(a.x-b.x,a.y-b.y),center={x:(a.x+b.x)/2,y:(a.y+b.y)/2};
         if(g.mode==="pending"){
-          if(Math.abs(distance-g.distance)>Math.max(8,g.distance*.06))g.mode="pinch";
-          else if(Math.hypot(center.x-g.center.x,center.y-g.center.y)>6)g.mode=control?"scroll":"pinch";
+          // Like Windows App: hold two still fingers before dragging to scroll.
+          // Any early movement reserves this gesture for local zoom/pan, so a
+          // slightly asymmetric pinch can never get locked into remote scroll.
+          if(control&&performance.now()-g.at>=350)g.mode="scroll";
+          else if(Math.abs(distance-g.distance)>4||Math.hypot(center.x-g.center.x,center.y-g.center.y)>4)g.mode="pinch";
         }
         if(g.mode==="pinch")updateView(pinchView(g.view,distance/g.distance,g.center,center,box.width,box.height));
         if(g.mode==="scroll")input({kind:"scroll",delta:Math.max(-1200,Math.min(1200,-(center.y-g.lastY)*2))});
@@ -405,9 +411,10 @@ function App() {
           </div>
         )}
         {active ? (
-          <section className={`rd-session${expanded?" is-expanded":""}${controllerOnly?" is-immersive":""}${toolsVisible?" show-tools":""}`}>
+          <section className={`rd-session${expanded?" is-expanded":""}${controllerOnly?" is-immersive":""}${toolsVisible?" show-tools":""}${keyboardOpen?" keyboard-open":""}`}>
             {controllerOnly&&<div className="rd-floating-tools">
-              <button className="rd-icon" aria-label={uiText("工具")} aria-expanded={toolsVisible} onClick={()=>setToolsVisible(!toolsVisible)}><Settings2 size={19}/></button>
+              <button className="rd-icon" aria-label={uiText("工具")} aria-expanded={toolsVisible} onClick={()=>{setToolsVisible(!toolsVisible);if(toolsVisible){setKeyboardOpen(false);keyboard.current?.blur();releaseModifiers();}}}><Settings2 size={19}/></button>
+              {control&&scrollMode&&<button className="rd-scroll-mode" aria-label={uiText("切回双指缩放")} onClick={()=>setScrollMode(false)}>{uiText("双指滚动 · 点此缩放")}</button>}
               {control&&<button className="rd-icon" aria-label={uiText("键盘")} onClick={()=>{setToolsVisible(true);flushSync(()=>setKeyboardOpen(!keyboardOpen));if(!keyboardOpen)keyboard.current?.focus();}}><Keyboard size={19}/></button>}
             </div>}
             <div className="rd-session-bar">
@@ -528,26 +535,37 @@ function App() {
               {showCursor&&control&&<span className="rd-touch-cursor" aria-hidden="true" style={(()=>{const p=cursorPosition();return {left:typeof p.left==="number"?p.left*view.scale+view.x:p.left,top:typeof p.top==="number"?p.top*view.scale+view.y:p.top};})()}/>}
             </div>
             <div className={`rd-touch-controls${keyboardOpen?" has-keyboard":""}`}>
-              <p>{uiText(control?"单指移动指针，轻点单击；双指滚动，捏合缩放。":"仅查看：双指捏合缩放，放大后单指移动画面。")}</p>
+              <p>{uiText(control?(scrollMode?"双指滚动远端；要缩放请关闭滚动模式。":"双指捏合缩放；双指按住片刻再拖动，滚动远端。"):"仅查看：双指捏合缩放，放大后单指移动画面。")}</p>
               <div className="rd-touch-row">
                 <button className="rd-btn" aria-label={uiText("缩小画面")} disabled={view.scale<=1} onClick={()=>zoomBy(-.5)}>−</button>
                 <span className="rd-zoom" aria-label={uiText("画面缩放")}>{Math.round(view.scale*100)}%</span>
                 <button className="rd-btn" aria-label={uiText("放大画面")} disabled={view.scale>=5} onClick={()=>zoomBy(.5)}>+</button>
                 <button className="rd-btn" onClick={()=>updateView({scale:1,x:0,y:0})}>{uiText("适应画面")}</button>
               </div>
-              {control&&<div className="rd-touch-row">
+              {control&&<div className="rd-touch-row rd-remote-keys">
                 <button className="rd-btn" aria-pressed={keyboardOpen} onClick={()=>{flushSync(()=>setKeyboardOpen(!keyboardOpen));if(!keyboardOpen)keyboard.current?.focus();}}><Keyboard size={16}/>{uiText("键盘")}</button>
+                <button className="rd-btn" aria-pressed={scrollMode} onClick={()=>setScrollMode(!scrollMode)}>{uiText("双指滚动")}</button>
                 <button className="rd-btn" onClick={()=>touchpad.current?.click(2)}>{uiText("右键")}</button>
                 <button className="rd-btn" aria-pressed={dragging} onClick={()=>{touchpad.current?.drag(!dragging);setDragging(!dragging);}}>{dragging?uiText("结束拖动"):uiText("拖动")}</button>
                 {["Escape","Tab","Enter","Backspace"].map(code=><button key={code} className="rd-btn" aria-label={code} onClick={()=>specialKey(code)}>{({Escape:"Esc",Tab:"Tab",Enter:"↵",Backspace:"⌫"})[code as "Enter"]}</button>)}
               </div>}
               {control&&keyboardOpen&&<div className="rd-keyboard">
-                <div className="rd-touch-row">{[["ControlLeft","Ctrl"],["AltLeft","Alt"],["MetaLeft",active.os==="darwin"?"⌘":"Win"],["ShiftLeft","Shift"]].map(([code,label])=><button key={code} className="rd-btn" aria-pressed={modifiers.includes(code)} onClick={()=>{const down=!modifiers.includes(code);input({kind:"key",code,down});setModifiers(down?[...modifiers,code]:modifiers.filter(x=>x!==code));keyboard.current?.focus();}}>{label}</button>)}</div>
-                <textarea ref={keyboard} aria-label={uiText("输入文字到远端")} placeholder={uiText("键入或粘贴文字")} value={draft} rows={1} autoCapitalize="off" autoCorrect="off" spellCheck={false}
-                  onChange={e=>{setDraft(e.target.value);if(!(e.nativeEvent as InputEvent).isComposing)typed(e.target.value);}}
-                  onCompositionStart={()=>{composing.current=true;}} onCompositionEnd={e=>{composing.current=false;typed(e.currentTarget.value);}}
-                  onKeyDown={e=>{if(e.key==="Enter"&&!composing.current&&!(e.nativeEvent as KeyboardEvent).isComposing){e.preventDefault();if(draft&&!typed(draft))return;specialKey("Enter");}if(e.key==="Backspace"&&!draft&&!composing.current){e.preventDefault();specialKey("Backspace");}}}
-                />
+                <div className="rd-composer-row">
+                  <textarea ref={keyboard} aria-label={uiText("输入文字到远端")} placeholder={uiText(liveInput?"即时输入到远端":"先写好，再发送；也可用键盘麦克风听写")} value={draft} rows={1} autoCapitalize="off" autoCorrect={liveInput?"off":"on"} spellCheck={!liveInput}
+                    onChange={e=>{setDraft(e.target.value);setInputError("");if(liveInput&&!(e.nativeEvent as InputEvent).isComposing)typed(e.target.value);}}
+                    onCompositionStart={()=>{composing.current=true;}} onCompositionEnd={e=>{composing.current=false;if(liveInput)typed(e.currentTarget.value);}}
+                    onKeyDown={e=>{if(!liveInput)return;if(e.key==="Enter"&&!composing.current&&!(e.nativeEvent as KeyboardEvent).isComposing){e.preventDefault();if(draft&&!typed(draft))return;specialKey("Enter");}if(e.key==="Backspace"&&!draft&&!composing.current){e.preventDefault();specialKey("Backspace");}}}
+                  />
+                  {!liveInput&&<button className="rd-btn rd-primary" disabled={!draft} onClick={()=>{if(typed(draft)){setKeyboardOpen(false);setToolsVisible(false);keyboard.current?.blur();}}}>{uiText("发送文字")}</button>}
+                  <button className="rd-icon" aria-label={uiText("收起键盘")} onClick={()=>{setKeyboardOpen(false);setToolsVisible(false);keyboard.current?.blur();releaseModifiers();}}><ChevronLeft size={18}/></button>
+                </div>
+                <div className="rd-touch-row rd-keyboard-options">
+                  <label className="rd-live-input"><input type="checkbox" checked={liveInput} onChange={e=>{setLiveInput(e.target.checked);releaseModifiers();setInputError("");}}/>{uiText("即时输入")}</label>
+                  {liveInput&&[["ControlLeft","Ctrl"],["AltLeft","Alt"],["MetaLeft",active.os==="darwin"?"⌘":"Win"],["ShiftLeft","Shift"]].map(([code,label])=><button key={code} className="rd-btn" aria-pressed={modifiers.includes(code)} onClick={()=>{const down=!modifiers.includes(code);input({kind:"key",code,down});setModifiers(down?[...modifiers,code]:modifiers.filter(x=>x!==code));keyboard.current?.focus();}}>{label}</button>)}
+                  {liveInput&&["Escape","Tab","Enter","Backspace"].map(code=><button key={code} className="rd-btn" aria-label={code} onClick={()=>{specialKey(code);keyboard.current?.focus();}}>{({Escape:"Esc",Tab:"Tab",Enter:"↵",Backspace:"⌫"})[code as "Enter"]}</button>)}
+                  {!liveInput&&<span className="rd-input-hint">{uiText(session.current?.supportsText?"先点远端输入位置；发送文字不会额外按回车。":"远端组件较旧，只支持短英文；更新后可发送中文。") }</span>}
+                </div>
+                {inputError&&<p className="rd-input-error" role="alert">{inputError}</p>}
               </div>}
             </div>
             <footer className="rd-session-footer">

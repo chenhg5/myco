@@ -1584,5 +1584,19 @@
   "单指移动指针，轻点单击；双指滚动，捏合缩放。": "Slide to move the pointer, tap to click. Use two fingers to scroll or pinch to zoom.",
   "仅查看：双指捏合缩放，放大后单指移动画面。": "View only: pinch to zoom, then slide with one finger to pan.",
   "这台电脑只允许查看。要操作键鼠，请在电脑上停止共享，勾选「允许键盘和鼠标操作」，再重新共享并连接。Mac 还需允许辅助功能权限。": "This computer allows viewing only. On the computer, stop sharing, turn on “Allow keyboard and mouse”, then share and connect again. Mac also requires Accessibility permission.",
-  "仅查看画面，可捏合缩放": "View-only desktop, pinch to zoom"
+  "仅查看画面，可捏合缩放": "View-only desktop, pinch to zoom",
+  "文字未能全部送出，请检查连接后再确认远端内容。": "Text could not be fully sent. Check the connection and remote content before retrying.",
+  "单指移动指针，轻点单击；双指缩放和移画面。": "One finger moves the pointer; tap to click. Two fingers zoom and pan the view.",
+  "双指滚动": "Two-finger scroll",
+  "即时输入": "Live typing",
+  "即时输入到远端": "Type directly into the remote computer",
+  "先写好，再发送；也可用键盘麦克风听写": "Write, then send. You can also dictate with the keyboard microphone.",
+  "发送文字": "Send text",
+  "收起键盘": "Hide keyboard",
+  "先点远端输入位置；发送文字不会额外按回车。": "Focus the remote field first. Sending text does not add Enter.",
+  "切回双指缩放": "Switch back to pinch zoom",
+  "双指滚动 · 点此缩放": "Scroll mode · Tap to zoom",
+  "双指滚动远端；要缩放请关闭滚动模式。": "Two fingers scroll the remote computer. Turn scroll mode off to zoom.",
+  "双指捏合缩放；双指按住片刻再拖动，滚动远端。": "Pinch to zoom. Hold two fingers briefly, then drag to scroll remotely.",
+  "远端组件较旧，只支持短英文；更新后可发送中文。": "Older remote component: short ASCII text only. Update it for other languages."
 }

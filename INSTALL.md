@@ -1154,7 +1154,9 @@ settings, with no change to existing user content.
 The iPhone App can also control these computers: update the phone App, open
 **Apps → Remote Desktop** in the same workspace, select the sharing computer and
 enter its pairing code. A one-finger drag moves the pointer, a tap clicks and two
-fingers scroll. Use the keyboard button for text and modifier keys, or zoom in
+fingers pinch to zoom and move the local view. To scroll the remote computer,
+hold two still fingers briefly, then drag up or down. **Two-finger scroll** in
+Tools also allows immediate scrolling until switched off. Use the keyboard button for text and modifier keys, or zoom in
 for small controls. On the updated iPhone App, connecting enters a landscape
 full-screen desktop. App bars are hidden; a trusted exit button stays available.
 Tap the floating tools button for the keyboard and controls; disconnecting or
@@ -1165,6 +1167,15 @@ that computer, enable **Allow keyboard and mouse**, then share and connect again
 screen. Leaving the App or closing the page disconnects; reconnect explicitly
 when returning. Unicode typing requires remote component 0.2.0 or later on the
 computer; older components accept short ASCII text and physical keys.
+
+On phones, text is edited locally before **Send text**. The editor stays above
+the software keyboard; sending hides it to reveal the desktop. Focus the remote
+field first: the App cannot locate its text caret from video. Sending does not
+add an extra Enter. Use the iPhone keyboard microphone for system Dictation,
+review/correct the text, then send. Enable Dictation in iOS Settings if its
+microphone is missing. **Live typing** remains available for immediate input and
+modifier keys. Hiding the editor preserves an unsent draft for the current
+connection; disconnecting clears it. Unsupported text is kept for correction.
 
 The initial version supports unlocked Mac and Windows desktops over a LAN or
 Tailscale. Audio, lock/sign-in or administrator confirmation screens, unattended access, virtual displays and
