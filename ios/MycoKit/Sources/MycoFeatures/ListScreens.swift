@@ -12,6 +12,24 @@ struct ChatsScreen: View {
 
     var body: some View {
         let rows = session.chatRows.filter { query.isEmpty || $0.title.localizedCaseInsensitiveContains(query) }
+        Group {
+            if query.trimmingCharacters(in: .whitespaces).isEmpty {
+                list(rows)
+            } else {
+                SearchResults(query: query, chats: rows)
+            }
+        }
+        .workspaceChrome(title: L("聊天", "Chats"), add: true)
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .automatic), prompt: L("搜索聊天、成员、项目和消息", "Search chats, members, projects and messages"))
+        // (the workspace is asked a moment after typing stops)
+        .task(id: query) {
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            await session.search.search(query)
+        }
+    }
+
+    private func list(_ rows: [ChatRow]) -> some View {
         List(rows) { row in
             Button {
                 switch row.target {
@@ -59,8 +77,146 @@ struct ChatsScreen: View {
                 }
             }
         }
-        .workspaceChrome(title: L("聊天", "Chats"), add: true)
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .automatic), prompt: L("搜索名字", "Search names"))
+    }
+}
+
+/// What the chats page's search finds (the desktop app's ⌘K): the chats
+/// whose names say it, members, projects, and the messages of my
+/// conversations that say it, each opening where it was said.
+private struct SearchResults: View {
+    let query: String
+    let chats: [ChatRow]
+    @Environment(WorkspaceSession.self) private var session
+    @Environment(Router.self) private var router
+
+    var body: some View {
+        let search = session.search
+        let names = Set(chats.compactMap { row -> String? in if case .agent(let name) = row.target { return name } else { return nil } })
+        let members = search.members(query).filter { !names.contains($0.agent.name) }.prefix(6)
+        let projects = search.projects(query).prefix(6)
+        let found = search.query == query.trimmingCharacters(in: .whitespacesAndNewlines) ? search.messages : []
+        List {
+            if !chats.isEmpty {
+                Section {
+                    ForEach(chats.prefix(6)) { row in
+                        Button {
+                            switch row.target {
+                            case .project(let name): router.push(.project(name))
+                            case .agent(let name): router.push(.agent(name, focus: nil))
+                            }
+                        } label: {
+                            PersonRow(face: row.face.map(AvatarView.Face.of) ?? .computer, title: row.title, subtitle: row.subtitle)
+                        }
+                        .buttonStyle(RowButtonStyle()).modifier(ResultRow())
+                    }
+                } header: { header(L("聊天", "Chats")) }
+            }
+            if !members.isEmpty {
+                Section {
+                    ForEach(members) { status in
+                        Button {
+                            router.push(.agent(status.agent.name, focus: nil))
+                        } label: {
+                            PersonRow(face: AvatarView.Face.of(status.agent), title: session.displayName(of: status.agent.name), subtitle: status.agent.description)
+                        }
+                        .buttonStyle(RowButtonStyle()).modifier(ResultRow())
+                        .accessibilityIdentifier("search.member")
+                    }
+                } header: { header(L("成员", "Members")) }
+            }
+            if !projects.isEmpty {
+                Section {
+                    ForEach(projects) { project in
+                        Button {
+                            router.push(.project(project.name))
+                        } label: {
+                            PersonRow(face: .mushroom(MushroomLook(seed: project.name)), title: project.title.isEmpty ? project.name : project.title, subtitle: project.goal ?? "")
+                        }
+                        .buttonStyle(RowButtonStyle()).modifier(ResultRow())
+                        .accessibilityIdentifier("search.project")
+                    }
+                } header: { header(L("项目", "Projects")) }
+            }
+            Section {
+                if query.trimmingCharacters(in: .whitespaces).count < 2 {
+                    Text(L("再多打一个字，就会搜消息", "One more letter and messages are searched too"))
+                        .font(.footnote).foregroundStyle(MycoColor.muted).modifier(ResultRow())
+                } else if search.searching && found.isEmpty {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text(L("正在搜消息…", "Searching messages…")).font(.footnote).foregroundStyle(MycoColor.muted)
+                    }
+                    .modifier(ResultRow())
+                } else if let failure = search.failure {
+                    FailureLine(failure: failure, onRetry: { Task { await search.search(query) } }).modifier(ResultRow())
+                } else if found.isEmpty {
+                    Text(L("消息里没有搜到", "No messages say it")).font(.footnote).foregroundStyle(MycoColor.muted).modifier(ResultRow())
+                }
+                ForEach(found) { hit in
+                    Button {
+                        router.findOnOpen = (message: hit.id, query: query.trimmingCharacters(in: .whitespacesAndNewlines))
+                        router.push(.agent(hit.party, focus: hit.id))
+                    } label: {
+                        HStack(alignment: .top, spacing: 12) {
+                            AvatarView(session.agent(hit.party).map(AvatarView.Face.of) ?? .computer, size: 36)
+                            VStack(alignment: .leading, spacing: 3) {
+                                HStack {
+                                    Text(session.displayName(of: hit.party)).font(.subheadline.weight(.medium)).foregroundStyle(MycoColor.fg)
+                                    Spacer(minLength: 0)
+                                    Text(RelativeTime.short(hit.at)).font(.caption).foregroundStyle(MycoColor.faint)
+                                }
+                                Highlighted(text: (hit.from == session.me ? L("我：", "Me: ") : "") + hit.snippet, query: query)
+                                    .font(.footnote).foregroundStyle(MycoColor.fg2).lineLimit(3)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(RowButtonStyle()).modifier(ResultRow())
+                    .accessibilityIdentifier("search.message")
+                }
+            } header: { header(L("消息", "Messages")) }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(MycoColor.bg)
+        .accessibilityIdentifier("search.results")
+    }
+
+    private func header(_ text: String) -> some View {
+        Text(text).font(.footnote).foregroundStyle(MycoColor.muted)
+    }
+}
+
+private struct ResultRow: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+            .listRowBackground(MycoColor.bg)
+            .listRowSeparator(.hidden)
+    }
+}
+
+/// Text with every place it says what was looked for in bold, in the
+/// accent colour.
+struct Highlighted: View {
+    let text: String
+    let query: String
+
+    var body: some View {
+        Text(attributed)
+    }
+
+    private var attributed: AttributedString {
+        var string = AttributedString(text)
+        let wanted = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !wanted.isEmpty else { return string }
+        var from = string.startIndex
+        while let range = string[from...].range(of: wanted, options: [.caseInsensitive, .diacriticInsensitive]) {
+            string[range].font = .footnote.weight(.semibold)
+            string[range].foregroundColor = MycoColor.accent
+            from = range.upperBound
+        }
+        return string
     }
 }
 

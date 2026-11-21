@@ -1023,6 +1023,11 @@ public final class ConversationModel {
         OpenWork.elsewhere(session.status(of: agent), agent: agent, shown: Set(known.keys))
     }
 
+    /// Finding words in this conversation (its search bar is open), and
+    /// what is looked for.
+    public var finding = false
+    public var findText = ""
+
     /// Tasks I asked about with a nudge (once each).
     public private(set) var nudged: Set<String> = []
 

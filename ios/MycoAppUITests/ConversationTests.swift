@@ -420,6 +420,34 @@ final class ConversationTests: XCTestCase {
     }
 
     @MainActor
+    func testSearchFindsMessagesAndWordsInAConversation() {
+        // The chats page: what is typed is looked for in messages too.
+        let app = launch(["-myco-route", "tab:chats"])
+        let field = app.searchFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 20))
+        field.tap()
+        field.typeText("Tab")
+        let hit = app.buttons.matching(identifier: "search.message").firstMatch
+        XCTAssertTrue(hit.waitForExistence(timeout: 10), "a message that says it")
+        snap("search")
+        hit.tap()
+        // Its conversation opens on it, finding those words.
+        let count = app.staticTexts["find.count"]
+        XCTAssertTrue(count.waitForExistence(timeout: 15))
+        XCTAssertTrue(count.label.contains("/"), count.label)
+        snap("search-in-conversation")
+        app.buttons["find.done"].tap()
+        XCTAssertFalse(count.exists)
+        // From the conversation's menu.
+        app.buttons["conversation.more"].tap()
+        app.buttons["Search this conversation"].tap()
+        let text = app.textFields["find.text"]
+        XCTAssertTrue(text.waitForExistence(timeout: 5))
+        text.typeText("底部")
+        XCTAssertTrue(count.waitForExistence(timeout: 5))
+    }
+
+    @MainActor
     func testPullingUpAtTheEndReadsTheConversationAgain() {
         // (Every answer takes a while here, as on a slow connection: the
         // refresh is still going when the finger has let go.)

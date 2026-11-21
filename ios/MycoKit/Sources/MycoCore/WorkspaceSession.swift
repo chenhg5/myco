@@ -89,6 +89,16 @@ public final class WorkspaceSession {
         return model
     }
 
+    @ObservationIgnored private var searchModel: SearchModel?
+
+    /// What the chats page's search box finds.
+    public var search: SearchModel {
+        if let searchModel { return searchModel }
+        let model = SearchModel(session: self)
+        searchModel = model
+        return model
+    }
+
     @ObservationIgnored private var workflowsModel: WorkflowsModel?
 
     /// 工作流: decisions waiting for me, the workflows and their runs.

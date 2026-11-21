@@ -86,6 +86,8 @@ public enum RecentScope: Sendable, Hashable {
     case project(String)
     /// Every thread this device may read, newest first.
     case everything
+    /// What I talk to whose messages say it (`group=pair&side=me&q=`).
+    case search(String)
 }
 
 /// One page of a conversation, newest first; `more`: older ones exist.

@@ -157,6 +157,16 @@ public actor FakeHub: HubAPI {
         advance()
         var project: String?
         if case .project(let name) = scope { project = name }
+        // What I talk to whose messages say it: one row per party.
+        if case .search(let text) = scope {
+            let mine = messages.filter { ($0.from == Self.me || $0.to == Self.me) && $0.body.localizedCaseInsensitiveContains(text) }
+            let byParty = Dictionary(grouping: mine, by: { $0.from == Self.me ? $0.to : $0.from })
+            return byParty.compactMap { party, said -> RecentItem? in
+                guard let last = said.max(by: { $0.createdAt < $1.createdAt }) else { return nil }
+                return RecentItem(threadId: last.threadId, participants: [Self.me, party], updatedAt: last.updatedAt, last: last)
+            }
+            .sorted { $0.updatedAt > $1.updatedAt }
+        }
         let threads = Dictionary(grouping: messages.filter { project == nil || $0.project == project }, by: \.threadId)
         return threads.compactMap { id, all -> RecentItem? in
             let sorted = all.sorted { $0.createdAt < $1.createdAt }
