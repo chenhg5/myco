@@ -3544,6 +3544,11 @@ textarea.app-input {
 .conv-msg-meta.is-failed {
   color: var(--red);
 }
+/* Under an agent's reply (no bubble round it): a little air between the
+   last line and its time, tokens and buttons. */
+.conv-msg.is-agent .conv-msg-meta {
+  margin-top: 8px;
+}
 /* Under your own bubble the time floats, so the agent's turn follows the
    bubble closely. */
 .conv-msg.is-me .conv-msg-meta:not(.is-shown) {

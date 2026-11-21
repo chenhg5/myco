@@ -2,7 +2,8 @@ import SwiftUI
 import Observation
 
 public enum AppTab: String, Hashable, Sendable {
-    case chats, projects, members
+    /// 工作台: apps, automations and workflows.
+    case chats, projects, workbench
 }
 
 /// A page pushed inside a tab.
@@ -18,6 +19,8 @@ public enum Route: Hashable, Sendable {
     case projectInfo(String)
     /// What is sent for me on a schedule, or when something calls.
     case automations
+    /// Everyone here, like a phone's contacts (from the chats page).
+    case members
     /// 应用: ready-made pages to use with agents, and the ones made.
     case apps
     /// 工作流: decisions waiting for me, workflows and their runs.
@@ -38,6 +41,8 @@ public enum SheetRoute: Hashable, Identifiable, Sendable {
     case addComputer(project: String?)
     /// Naming my superagent, or starting one.
     case superagent
+    /// My superagent's conversation, over the page (as Siri comes up).
+    case superagentChat(String)
     /// Writing a conversation out as a file: with this agent, in this
     /// project's page or its own.
     case export(agent: String, project: String?)
@@ -62,6 +67,7 @@ public enum SheetRoute: Hashable, Identifiable, Sendable {
         case .pinAddress(let agent): return "pin:" + agent
         case .background(let key): return "background:" + (key ?? "")
         case .superagent: return "superagent"
+        case .superagentChat(let name): return "superagent:" + name
         }
     }
 }
@@ -74,7 +80,7 @@ public final class Router {
     public var tab: AppTab = .chats
     public var chatsPath: [Route] = []
     public var projectsPath: [Route] = []
-    public var membersPath: [Route] = []
+    public var workbenchPath: [Route] = []
     public var sheet: SheetRoute?
     /// A conversation opened from a search: it opens finding those words,
     /// on that message.
@@ -89,7 +95,7 @@ public final class Router {
         switch tab {
         case .chats: chatsPath.append(route)
         case .projects: projectsPath.append(route)
-        case .members: membersPath.append(route)
+        case .workbench: workbenchPath.append(route)
         }
     }
 
@@ -101,7 +107,7 @@ public final class Router {
         switch tab {
         case .chats: chatsPath = routes
         case .projects: projectsPath = routes
-        case .members: membersPath = routes
+        case .workbench: workbenchPath = routes
         }
     }
 
@@ -116,7 +122,7 @@ public final class Router {
         switch tab {
         case .chats: return chatsPath.last
         case .projects: return projectsPath.last
-        case .members: return membersPath.last
+        case .workbench: return workbenchPath.last
         }
     }
 
@@ -130,7 +136,7 @@ public final class Router {
         tab = .chats
         chatsPath = []
         projectsPath = []
-        membersPath = []
+        workbenchPath = []
     }
 
     /// Opens a place named in words, for UI tests and screenshots
@@ -144,19 +150,22 @@ public final class Router {
         let (what, name) = (parts[0], parts[1])
         switch what {
         case "tab":
+            // (members: the page that was a tab, now in chats)
+            if name == "members" { show([.members], in: .chats); return true }
             guard let tab = AppTab(rawValue: name) else { return false }
             show([], in: tab)
         case "project": show([.project(name)], in: .projects)
         case "info": show([.project(name), .projectInfo(name)], in: .projects)
         case "agent": show([.agent(name, focus: nil)], in: .chats)
         case "member":
-            show([], in: .members)
+            show([.members], in: .chats)
             sheet = .memberCard(name)
         case "page":
             switch name {
-            case "automations": show([.automations], in: .members)
-            case "apps": show([.apps], in: .members)
-            case "workflows": show([.workflows], in: .members)
+            case "automations": show([.automations], in: .workbench)
+            case "apps": show([.apps], in: .workbench)
+            case "workflows": show([.workflows], in: .workbench)
+            case "members": show([.members], in: .chats)
             default: return false
             }
         case "sheet":

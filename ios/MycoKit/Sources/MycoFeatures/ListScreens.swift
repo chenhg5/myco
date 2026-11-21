@@ -11,7 +11,9 @@ struct ChatsScreen: View {
     @State private var query = ""
 
     var body: some View {
-        let rows = session.chatRows.filter { query.isEmpty || $0.title.localizedCaseInsensitiveContains(query) }
+        // (my superagent is not one of the chats: it is the orb in the tab bar)
+        let rows = session.chatRows.filter { $0.party != session.superagent.agent }
+            .filter { query.isEmpty || $0.title.localizedCaseInsensitiveContains(query) }
         Group {
             if query.trimmingCharacters(in: .whitespaces).isEmpty {
                 list(rows)
@@ -19,7 +21,7 @@ struct ChatsScreen: View {
                 SearchResults(query: query, chats: rows)
             }
         }
-        .workspaceChrome(title: L("聊天", "Chats"), add: true)
+        .workspaceChrome(title: L("聊天", "Chats"), add: true, members: true)
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .automatic), prompt: L("搜索聊天、成员、项目和消息", "Search chats, members, projects and messages"))
         // (the workspace is asked a moment after typing stops)
         .task(id: query) {
@@ -274,28 +276,33 @@ struct ProjectsScreen: View {
     }
 }
 
-/// Members: everyone here, like a phone's contacts. Those at work come
-/// first; those away come last.
-struct MembersScreen: View {
+/// 工作台: what agents do with me besides talking: apps to use together,
+/// automations that run on their own, workflows that hand work along (and
+/// what waits for my decision). Members are on the chats page.
+struct WorkbenchScreen: View {
     @Environment(WorkspaceSession.self) private var session
     @Environment(Router.self) private var router
-    @State private var query = ""
 
     var body: some View {
-        let all = session.members.filter { status in
-            query.isEmpty || session.displayName(of: status.agent.name).localizedCaseInsensitiveContains(query)
-                || status.agent.description.localizedCaseInsensitiveContains(query)
-        }
-        let groups: [(String, [AgentStatus])] = [
-            (L("在干活", "At work"), all.filter { $0.state == "working" || $0.state == "pending" }),
-            (L("空闲", "Free"), all.filter { $0.state == "idle" }),
-            (L("不在线", "Away"), all.filter { $0.state == "offline" }),
-        ]
         List {
+            // What waits for me first: a decision is a tap here.
+            let decisions = session.workflows.decisions
+            if !decisions.isEmpty {
+                Section {
+                    ForEach(decisions.prefix(3)) { decision in
+                        DecisionCard(decision: decision, model: session.workflows, showRun: true)
+                            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                            .listRowBackground(MycoColor.bg)
+                            .listRowSeparator(.hidden)
+                    }
+                } header: {
+                    Text(L("等你决定", "Waiting for you")).font(.footnote).foregroundStyle(MycoColor.muted)
+                }
+            }
+            Section {
             // What agents do by themselves, on a schedule or on a call:
             // one row above the people (the desktop app has it under
             // Members too).
-            if query.isEmpty {
                 Button {
                     router.push(.automations)
                 } label: {
@@ -314,7 +321,7 @@ struct MembersScreen: View {
                 .listRowInsets(EdgeInsets(top: 9, leading: 16, bottom: 9, trailing: 16))
                 .listRowBackground(MycoColor.bg)
                 .listRowSeparator(.hidden)
-                .accessibilityIdentifier("members.automations")
+                .accessibilityIdentifier("workbench.automations")
                 Button {
                     router.push(.apps)
                 } label: {
@@ -333,7 +340,7 @@ struct MembersScreen: View {
                 .listRowInsets(EdgeInsets(top: 9, leading: 16, bottom: 9, trailing: 16))
                 .listRowBackground(MycoColor.bg)
                 .listRowSeparator(.hidden)
-                .accessibilityIdentifier("members.apps")
+                .accessibilityIdentifier("workbench.apps")
                 if !session.workflows.unsupported {
                     Button {
                         router.push(.workflows)
@@ -358,9 +365,43 @@ struct MembersScreen: View {
                     .listRowInsets(EdgeInsets(top: 9, leading: 16, bottom: 9, trailing: 16))
                     .listRowBackground(MycoColor.bg)
                     .listRowSeparator(.hidden)
-                    .accessibilityIdentifier("members.workflows")
+                    .accessibilityIdentifier("workbench.workflows")
                 }
             }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(MycoColor.bg)
+        .workspaceChrome(title: L("工作台", "Workbench"), add: false)
+        // (how many there are, for the rows)
+        .task {
+            await session.automations.load()
+            await session.apps.load()
+            await session.workflows.load()
+        }
+    }
+}
+
+/// Members: everyone here, like a phone's contacts. Those at work come
+/// first; those away come last.
+struct MembersScreen: View {
+    @Environment(WorkspaceSession.self) private var session
+    @Environment(Router.self) private var router
+    @State private var query = ""
+
+    var body: some View {
+        let all = session.members.filter { status in
+            status.agent.name != session.superagent.agent
+        }.filter { status in
+            query.isEmpty || session.displayName(of: status.agent.name).localizedCaseInsensitiveContains(query)
+                || status.agent.description.localizedCaseInsensitiveContains(query)
+        }
+        let groups: [(String, [AgentStatus])] = [
+            (L("在干活", "At work"), all.filter { $0.state == "working" || $0.state == "pending" }),
+            (L("空闲", "Free"), all.filter { $0.state == "idle" }),
+            (L("不在线", "Away"), all.filter { $0.state == "offline" }),
+        ]
+        List {
             ForEach(groups.filter { !$0.1.isEmpty }, id: \.0) { title, members in
                 Section {
                     ForEach(members) { status in
@@ -392,18 +433,21 @@ struct MembersScreen: View {
                 EmptyState(symbol: "person.2", title: query.isEmpty ? L("还没有成员", "No members yet") : L("没有匹配的成员", "No matching members"))
             }
         }
-        .workspaceChrome(title: L("成员", "Members"), add: true)
-        // (how many there are, for the row above)
-        .task {
-            await session.automations.load()
-            await session.apps.load()
-            await session.workflows.load()
+        .navigationTitle(L("成员", "Members"))
+        .navigationBarTitleDisplayMode(.inline)
+        .solidTopBar()
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { router.sheet = .addAgent } label: { Image(systemName: "person.badge.plus") }
+                    .accessibilityLabel(L("添加 agent", "Add an agent"))
+                    .accessibilityIdentifier("members.add")
+            }
         }
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .automatic), prompt: L("搜索名字和分工", "Search names and roles"))
     }
 }
 
-extension MembersScreen {
+extension WorkbenchScreen {
     /// Under "工作流": what waits for me, or what they are for.
     fileprivate var workflowsNote: String {
         let model = session.workflows
@@ -440,8 +484,8 @@ extension View {
     /// What every tab's list has: its title, the workspace at the top left,
     /// "add an agent" at the top right, and the strip that says the
     /// workspace cannot be reached.
-    func workspaceChrome(title: String, add: Bool) -> some View {
-        modifier(WorkspaceChrome(title: title, add: add))
+    func workspaceChrome(title: String, add: Bool, members: Bool = false) -> some View {
+        modifier(WorkspaceChrome(title: title, add: add, members: members))
     }
 }
 
@@ -451,6 +495,8 @@ private struct WorkspaceChrome: ViewModifier {
     @Environment(\.isSearching) private var isSearching
     let title: String
     let add: Bool
+    /// Everyone here, one tap away (the chats page).
+    var members = false
 
     func body(content: Content) -> some View {
         content
@@ -486,6 +532,13 @@ private struct WorkspaceChrome: ViewModifier {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { WorkspaceButton() }
+                if members {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button { router.push(.members) } label: { Image(systemName: "person.2") }
+                            .accessibilityLabel(L("成员", "Members"))
+                            .accessibilityIdentifier("chrome.members")
+                    }
+                }
                 if add {
                     ToolbarItem(placement: .topBarTrailing) {
                         // An agent to talk to, or a computer for agents to work on.
@@ -514,13 +567,18 @@ struct AppTabBar: View {
     @Environment(WorkspaceSession.self) private var session
 
     var body: some View {
+        let assistant = session.superagent.agent
         MycoTabBar(
             items: [
-                .init(id: AppTab.chats, title: L("聊天", "Chats"), symbol: "bubble.left.and.bubble.right", unread: session.unreadCount > 0, accessibilityID: "tab.chats"),
+                .init(id: AppTab.chats, title: L("聊天", "Chats"), symbol: "bubble.left.and.bubble.right",
+                      unread: session.chatRows.contains { $0.unread && $0.party != assistant }, accessibilityID: "tab.chats"),
                 .init(id: AppTab.projects, title: L("项目", "Projects"), symbol: "square.stack.3d.up", tone: projectsTone, accessibilityID: "tab.projects"),
-                .init(id: AppTab.members, title: L("成员", "Members"), symbol: "person.2", accessibilityID: "tab.members"),
+                .init(id: AppTab.workbench, title: L("工作台", "Workbench"), symbol: "square.grid.2x2",
+                      tone: session.workflows.decisions.isEmpty ? nil : .attention, accessibilityID: "tab.workbench"),
             ],
-            selection: router.tab
+            selection: router.tab,
+            // (on workspaces from before superagents, no orb)
+            center: session.superagent.unsupported || !session.superagent.loaded ? nil : AnyView(SuperagentOrb())
         ) { router.select($0) }
     }
 

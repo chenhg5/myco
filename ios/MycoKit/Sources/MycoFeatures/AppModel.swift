@@ -509,7 +509,7 @@ public final class AppModel {
         switch router.tab {
         case .chats: path = router.chatsPath
         case .projects: path = router.projectsPath
-        case .members: path = router.membersPath
+        case .workbench: path = router.workbenchPath
         }
         switch path.last {
         case .agent(let name, _):
@@ -793,10 +793,10 @@ struct RootView: View {
             }
             .tag(AppTab.projects)
 
-            NavigationStack(path: $router.membersPath) {
-                MembersScreen().routed()
+            NavigationStack(path: $router.workbenchPath) {
+                WorkbenchScreen().routed()
             }
-            .tag(AppTab.members)
+            .tag(AppTab.workbench)
         }
         .tint(MycoColor.fg)
         .sheet(item: $router.sheet) { sheet in
@@ -806,6 +806,18 @@ struct RootView: View {
             case .addAgent: AddAgentSheet()
             case .addComputer(let project): AddComputerSheet(project: project)
             case .superagent: SuperagentSetupSheet()
+            case .superagentChat(let name):
+                NavigationStack {
+                    AgentScreen(name: name).routed()
+                        .toolbar {
+                            ToolbarItem(placement: .topBarLeading) {
+                                Button { router.sheet = nil } label: { Image(systemName: "xmark") }
+                                    .accessibilityLabel(L("关闭", "Close"))
+                                    .accessibilityIdentifier("superagent.close")
+                            }
+                        }
+                }
+                .presentationDetents([.large])
             case .export(let agent, let project): ExportSheet(agent: agent, project: project)
             case .handover(let agent, let back): HandoverSheet(agent: agent, backID: back)
             case .files(let agent, let project): ChatFilesSheet(agent: agent, project: project)
@@ -815,6 +827,14 @@ struct RootView: View {
         }
         .fullScreenCover(item: $router.page) { page in
             PageScreen(id: page.id)
+        }
+        // Who my superagent is (the orb in the tab bar), and what waits
+        // for me, now and then.
+        .task(id: session.id) {
+            while !Task.isCancelled {
+                await session.superagent.load()
+                try? await Task.sleep(for: .seconds(60))
+            }
         }
         // A call that is on, while its own chat is not the page in front:
         // a strip across the top says how it goes, mutes, hangs up, and
@@ -963,6 +983,7 @@ extension View {
                 case .projectInfo(let name): ProjectInfoScreen(name: name)
                 case .automations: AutomationsScreen()
                 case .apps: AppsScreen()
+                case .members: MembersScreen()
                 case .workflows: WorkflowsScreen()
                 case .workflow(let id): WorkflowScreen(id: id)
                 case .workflowRun(let id): WorkflowRunScreen(id: id)

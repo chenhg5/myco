@@ -76,7 +76,7 @@ public final class SearchModel {
         let wanted = query.trimmingCharacters(in: .whitespaces)
         guard !wanted.isEmpty else { return [] }
         return session.members.filter { status in
-            [session.displayName(of: status.agent.name), status.agent.name, status.agent.description]
+            status.agent.name != session.superagent.agent && [session.displayName(of: status.agent.name), status.agent.name, status.agent.description]
                 .contains { $0.localizedCaseInsensitiveContains(wanted) }
         }
     }

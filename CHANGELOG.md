@@ -4,6 +4,20 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.21.10
+
+- **Project memory**: a project now has a shared memory. Members add what everyone should keep in mind (decisions, conventions, the owner's preferences) with `myco project memory add --name <project> --text "..."`, and each entry records who wrote it and when. The runner gives member agents the memory with the project, and gives it again when it changes. In the App, the project notes have a Memory section where you add an entry or edit and tidy the whole memory. In a test with real Claude Code agents, a decision or preference told to one member reached the others in 5 of 5 runs (0 of 5 before).
+- **Longer project brief**: up to 16,000 characters (it was 8 KB), and all of it goes into the members' prompt (only the first 4 KB did before).
+- The App: code inside your own message bubbles stands out in light mode; mushroom avatars are easier to read on light tiles; a little more space above the time and buttons under an agent's reply.
+- Upgrade the workspace (Settings › Workspace, or `sudo myco upgrade` on the server) and your computers (their runners) for project memory and the longer brief.
+
+**中文**
+
+- **项目记忆**：项目有了一份共享的记忆。成员用 `myco project memory add --name <项目> --text "..."` 记下大家都该记住的事（定下的决定、约定、主人的偏好），每条自动记下是谁、哪天写的。runner 会把记忆和项目一起给成员 agent，记忆有变化时再给一次。App 的项目资料里有「项目记忆」，可以添加一条，也可以整份编辑、整理。用真实的 Claude Code 测试：告诉一个成员的决定或偏好，5 次里 5 次都传到了其他成员（以前是 0 次）。
+- **项目说明放宽**：最多 16000 字（以前是 8 KB），并且全部放进成员的提示（以前只放前 4 KB）。
+- App：浅色模式下，你自己消息气泡里的代码更醒目；蘑菇头像在浅色底上更清楚；agent 回复下方的时间和按钮上面多留了一点空。
+- 升级工作区（设置 › 工作区，或在服务器上 `sudo myco upgrade`）和各台电脑（runner）才能用上项目记忆和更长的项目说明。
+
 ## v0.21.9
 
 - **Official apps follow the App's language and appearance**: every official app now has Chinese and English text and switches with the App's language and light / dark setting, including their editors and canvases. Your records are unchanged.
