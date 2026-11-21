@@ -380,11 +380,12 @@ func (r *Runner) Run(ctx context.Context) error {
 // Handle processes one pulled message end to end.
 func (r *Runner) Handle(ctx context.Context, m api.Message) {
 	log := r.log.With("message_id", m.ID, "from", m.From, "type", m.Type, "thread_id", m.ThreadID)
+	rerun := false
 	if m.Type == "task" {
 		// Before the ack: an ack can reach the hub while its answer is lost
 		// (network drop, the machine going to sleep). The task is then acked
 		// and never redelivered, so a restart must still close it.
-		r.markPending(m.ID)
+		rerun = r.markPending(m.ID)
 	}
 	ackCtx, cancel := r.finishContext(ctx)
 	ackErr, unreachable := r.retryFinish(ackCtx, log, "ack", func(c context.Context) error { return r.hub.Ack(c, m.ID) })
@@ -480,6 +481,9 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 	project := ""
 	if !executor {
 		project = r.superagentContext(ctx, key, sessionID) + r.projectContext(ctx, log, key, sessionID, m)
+	}
+	if rerun {
+		project += rerunNote
 	}
 	build := func() string { return withProject(r.prompt.Build(r.opts.Self, m, files), project) }
 	prompt := build()
@@ -1066,6 +1070,9 @@ func (r *Runner) steerSection(ctx context.Context, log *slog.Logger, steers []ap
 	}
 	return b.String(), dirs
 }
+
+// rerunNote tells an agent that its earlier run of the task was cut short.
+const rerunNote = "\n[myco] You started this task before, but the runner restarted (an upgrade or a restart of its service) before you finished, so it runs again. Some of the work may already be done: check the current state (files, branches, commits) before you redo anything.\n"
 
 func resumePrompt(m api.Message, section string) string {
 	var b strings.Builder

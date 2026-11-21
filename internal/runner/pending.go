@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/chenhg5/myco/internal/client"
+	"github.com/chenhg5/myco/internal/harness"
 )
 
 type pendingRun struct {
@@ -19,6 +20,9 @@ type pendingRun struct {
 	// Sent again until it lands (retryUndelivered, and at the next start).
 	Finish string `json:"finish,omitempty"`
 	Text   string `json:"text,omitempty"`
+	// Requeued: the runner restarted mid-run once already and put the task
+	// back in the queue; a second restart fails it.
+	Requeued bool `json:"requeued,omitempty"`
 }
 
 type runnerState struct {
@@ -67,10 +71,24 @@ func (r *Runner) saveState() {
 	}
 }
 
-func (r *Runner) markPending(id string) {
+// markPending records task id as running. It reports whether the task was
+// requeued after a restart cut its last run short.
+func (r *Runner) markPending(id string) (requeued bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.pending[id] = pendingRun{MessageID: id, Agent: r.opts.Self, StartedAt: r.opts.Now()}
+	requeued = r.pending[id].Requeued
+	r.pending[id] = pendingRun{MessageID: id, Agent: r.opts.Self, StartedAt: r.opts.Now(), Requeued: requeued}
+	r.saveState()
+	return requeued
+}
+
+// markRequeued keeps task id in the state file, marked as put back once.
+func (r *Runner) markRequeued(id string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	p := r.pending[id]
+	p.Requeued = true
+	r.pending[id] = p
 	r.saveState()
 }
 
@@ -106,7 +124,9 @@ func (r *Runner) retryUndelivered(ctx context.Context) {
 }
 
 // finishPending closes the tasks in the state file: with their kept
-// result when there is one, else (the runner stopped mid-run) as failed.
+// result when there is one. A task the runner stopped in the middle of
+// (an upgrade or restart) goes back in the queue once, so it runs again;
+// a command on an exec node, or a task cut short twice, fails.
 // onlyKept: only those with a kept result (the others are running).
 func (r *Runner) finishPending(ctx context.Context, onlyKept bool) {
 	r.mu.Lock()
@@ -128,6 +148,26 @@ func (r *Runner) finishPending(ctx context.Context, onlyKept bool) {
 			}
 			return err
 		})
+		_, executor := r.harness.(harness.CommandExecutor)
+		requeue := item.Finish == "" && !item.Requeued && !executor
+		if err == nil && status == "acked" && requeue {
+			err, exhausted = r.retryFinish(finishCtx, log, "recover requeue", func(c context.Context) error {
+				_, err := r.hub.Release(c, item.MessageID, 0, false)
+				return err
+			})
+			cancel()
+			if err == nil {
+				r.markRequeued(item.MessageID)
+				log.Info("put an interrupted task back in the queue", "previous_status", status)
+				continue
+			}
+			if e, ok := client.AsError(err); ok && e.Status == 404 {
+				r.clearPending(item.MessageID)
+			} else {
+				r.logFinishFailure(log, "recover task", err, exhausted, "")
+			}
+			continue
+		}
 		if err == nil && status == "acked" {
 			err, exhausted = r.retryFinish(finishCtx, log, "recover "+orStr(item.Finish, "fail"), func(c context.Context) error {
 				switch item.Finish {
@@ -140,7 +180,7 @@ func (r *Runner) finishPending(ctx context.Context, onlyKept bool) {
 				case "complete":
 					return r.hub.Complete(c, item.MessageID)
 				}
-				_, err := r.hub.Fail(c, item.MessageID, "the runner restarted before this task finished; its result was lost — send it again", false)
+				_, err := r.hub.Fail(c, item.MessageID, lostReason(executor), false)
 				return err
 			})
 		}
@@ -160,6 +200,14 @@ func (r *Runner) finishPending(ctx context.Context, onlyKept bool) {
 			log.Info("recovered unfinished task", "previous_status", status)
 		}
 	}
+}
+
+// lostReason is why a task the runner stopped in the middle of failed.
+func lostReason(executor bool) string {
+	if executor {
+		return "the runner restarted (an upgrade or a restart of its service) while this command ran; it may have finished in part. Check, then send it again if needed"
+	}
+	return "the runner restarted twice (an upgrade or a restart of its service) while this task ran; its result was lost. Send it again"
 }
 
 // MarkOwnRun records in a runner's state file that myco itself last wrote
