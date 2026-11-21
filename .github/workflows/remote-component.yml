@@ -23,7 +23,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: macos-14
+          - runner: macos-latest
             target: darwin_arm64
           - runner: macos-15-intel
             target: darwin_amd64
@@ -40,7 +40,7 @@ jobs:
         if: runner.os == 'Windows'
         with:
           msystem: MINGW64
-          install: make diffutils mingw-w64-x86_64-gcc mingw-w64-x86_64-pkgconf
+          install: git make diffutils mingw-w64-x86_64-gcc mingw-w64-x86_64-pkgconf
       - name: Build the Windows encoder
         if: runner.os == 'Windows'
         shell: msys2 {0}
