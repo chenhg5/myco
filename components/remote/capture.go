@@ -50,13 +50,19 @@ func captureArgs(ctx context.Context, bin string) ([]string, error) {
 	// Stay within the negotiated H.264 baseline level 3.1 (720p30), including
 	// on older WKWebView and WebView2 hardware decoders.
 	args = append(args, "-an", "-vf", "scale=1280:720:force_original_aspect_ratio=decrease:force_divisible_by=2", "-r", "30")
-	if runtime.GOOS == "darwin" {
-		args = append(args, "-c:v", "h264_videotoolbox", "-realtime", "1", "-allow_sw", "1")
-	} else {
-		args = append(args, "-c:v", "h264_mf")
-	}
-	return append(args, "-profile:v", "baseline", "-b:v", "4000k", "-g", "30", "-bf", "0", "-pix_fmt", "nv12", "-flags", "-global_header", "-bsf:v", "h264_mp4toannexb", "-payload_type", "96", "-f", "rtp"), nil
+	args = append(args, h264EncoderArgs()...)
+	return append(args, "-b:v", "4000k", "-g", "30", "-bf", "0", "-pix_fmt", "nv12", "-flags", "-global_header", "-bsf:v", "h264_mp4toannexb", "-payload_type", "96", "-f", "rtp"), nil
 }
+
+// Media Foundation does not register the named profile constants used by
+// VideoToolbox. 66 is AV_PROFILE_H264_BASELINE in the pinned FFmpeg source.
+func h264EncoderArgs() []string {
+	if runtime.GOOS == "windows" {
+		return []string{"-c:v", "h264_mf", "-profile:v", "66"}
+	}
+	return []string{"-c:v", "h264_videotoolbox", "-realtime", "1", "-allow_sw", "1", "-profile:v", "baseline"}
+}
+
 func capture(ctx context.Context, track *webrtc.TrackLocalStaticRTP) error {
 	bin := ffmpegPath()
 	if _, err := os.Stat(bin); err != nil {

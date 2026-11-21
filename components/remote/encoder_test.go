@@ -41,12 +41,8 @@ func TestPackagedEncoderSendsParameterSets(t *testing.T) {
 	}
 	defer conn.Close()
 	args := []string{"-hide_banner", "-loglevel", "error", "-nostdin", "-f", "rawvideo", "-pixel_format", "nv12", "-video_size", "1280x720", "-framerate", "30", "-i", input, "-an", "-vf", "scale=1280:720", "-frames:v", "3"}
-	if runtime.GOOS == "darwin" {
-		args = append(args, "-c:v", "h264_videotoolbox", "-allow_sw", "1", "-realtime", "1")
-	} else {
-		args = append(args, "-c:v", "h264_mf")
-	}
-	args = append(args, "-profile:v", "baseline", "-b:v", "1000k", "-bf", "0", "-g", "30", "-flags", "-global_header", "-bsf:v", "h264_mp4toannexb", "-payload_type", "96", "-f", "rtp", "rtp://127.0.0.1:"+strconv.Itoa(conn.LocalAddr().(*net.UDPAddr).Port)+"?pkt_size=1200")
+	args = append(args, h264EncoderArgs()...)
+	args = append(args, "-b:v", "1000k", "-bf", "0", "-g", "30", "-flags", "-global_header", "-bsf:v", "h264_mp4toannexb", "-payload_type", "96", "-f", "rtp", "rtp://127.0.0.1:"+strconv.Itoa(conn.LocalAddr().(*net.UDPAddr).Port)+"?pkt_size=1200")
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	if out, e := exec.CommandContext(ctx, bin, args...).CombinedOutput(); e != nil {
@@ -59,6 +55,9 @@ func TestPackagedEncoderSendsParameterSets(t *testing.T) {
 			seen[data[0]&31] = true
 			if data[0]&31 == 7 && len(data) >= 4 {
 				level = data[3]
+				if data[1] != 66 {
+					t.Errorf("encoder must match negotiated baseline profile, got %d", data[1])
+				}
 			}
 		}
 	}
