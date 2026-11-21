@@ -9156,7 +9156,8 @@ body.is-resizing {
   background: var(--bg); color: var(--fg); animation: pg-in 0.2s ease-out; overflow: hidden; }
 @keyframes pg-in { from { opacity: 0; } to { opacity: 1; } }
 .pg-loading-hop { position: relative; width: 64px; height: 84px; margin-bottom: 6px; }
-.pg-loading-mush { --av-stem: #efe3cc; --av-eye: #2f2a22; position: absolute; left: 4px; bottom: 14px; width: 56px; height: 56px; transform-origin: 50% 100%;
+.dark .pg-loading-mush { --av-stem: #efe3cc; --av-stem-shade: #d4c19b; }
+.pg-loading-mush { --av-stem: #dcc398; --av-stem-shade: #c09f6c; --av-eye: #2f2a22; position: absolute; left: 4px; bottom: 14px; width: 56px; height: 56px; transform-origin: 50% 100%;
   animation: pg-hop 1.1s cubic-bezier(0.3, 0, 0.3, 1) infinite; }
 .pg-loading-mush .pa-sprite { width: 100%; height: 100%; display: block; }
 .pg-loading-shadow { position: absolute; left: 14px; right: 14px; bottom: 6px; height: 6px; border-radius: 50%;
