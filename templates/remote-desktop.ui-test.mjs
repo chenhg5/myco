@@ -153,10 +153,13 @@ try {
         await page.screenshot({
           path: path.join(shots, `${width}-${lang}-${theme}-share.png`),
         });
+        await f.locator(".rd-header .rd-icon").click();
+        assert(await f.locator(".rd-component-update").isDisabled(), "updating must not interrupt active sharing");
+        await f.locator(".rd-dialog-close").click();
         await f.locator(".rd-pairing .rd-primary").click();
         await f.locator(".rd-enable-card").waitFor();
         await f.locator(".rd-header .rd-icon").click();
-        await f.locator(".rd-dialog .rd-full").click();
+        await f.locator(".rd-component-update").click();await f.locator(".rd-dialog button").filter({hasText:lang==="zh"?"卸载组件":"Uninstall component"}).click();
         await page.keyboard.press("Escape");
         await f.locator(".rd-install-card").waitFor();
         assert.deepEqual(errors, []);

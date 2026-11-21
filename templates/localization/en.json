@@ -1741,5 +1741,10 @@
   "竖版短视频": "Vertical short",
   "冲击字开头，适合抖音、视频号，约 17 秒": "Opens with punch words, for TikTok or Reels; about 17 seconds",
   "数据快报": "Data story",
-  "一个结论、一组数据、一句总结": "A headline, a set of numbers, a closing line"
+  "一个结论、一组数据、一句总结": "A headline, a set of numbers, a closing line",
+  "这段文字未输入。请在被控电脑更新远控组件，然后重新连接。": "Text was not entered. Update the remote component on the controlled computer, then reconnect.",
+  "清除并关闭": "Clear and dismiss",
+  "先停止共享，再更新组件。": "Stop sharing before updating the component.",
+  "按当前桌面 App 配套的版本安装，不是自动追踪最新组件；如仍不支持所需功能，请先更新桌面 App。更新失败不会卸载旧组件。": "Installs the component version paired with this desktop App, not the latest published version automatically. Update the desktop App first if a feature is missing. A failed download keeps the old component.",
+  "安装 App 配套版本": "Install App-compatible version"
 }

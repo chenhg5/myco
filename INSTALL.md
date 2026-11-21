@@ -1173,6 +1173,14 @@ screen. Leaving the App or closing the page disconnects; reconnect explicitly
 when returning. Unicode typing requires remote component 0.2.0 or later on the
 computer; older components accept short ASCII text and physical keys.
 
+Component releases are separate from App releases. Maintainers publish signed,
+notarized Mac archives, Windows archives and SHA256SUMS under the remote-v tag
+before an App is paired with that version. Users update the desktop App first
+when needed, stop sharing, then open Remote Desktop settings and choose **Install
+App-compatible version**. This installs the version supported by that App; it
+does not automatically follow arbitrary newer releases. Old compatible installs
+remain usable if a download fails. Controllers must reconnect after updating.
+
 App upgrades reuse a complete, explicitly compatible installed remote component
 when the preferred release is absent; they report the version actually selected.
 A newer component can enable extra features such as Unicode input. Fresh installs
