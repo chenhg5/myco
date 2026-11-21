@@ -37,7 +37,7 @@ try{
   const page=await browser.newPage({viewport:{width:1280,height:900},colorScheme:theme});
   await page.addInitScript(({native})=>{
    window.__SAMPLE__={};window.__settings=0;window.__nativeCalls=0;window.__browserCalls=0;
-   window.__FAKE_OS__={list:async()=>({os:'darwin',caps:native?[{name:'screen.record',available:true}]:[]}),system:{settings:async()=>{window.__settings++;}},start:(name)=>{window.__nativeCalls++;return {on:()=>()=>{},cancel:async()=>{},done:Promise.reject(Object.assign(new Error('macOS recording permission needed'),{code:'permission_denied'}))};}};
+   window.__FAKE_OS__={list:async()=>({os:'darwin',caps:native?[{name:'screen.record',available:true},{name:'screen.region',available:true}]:[]}),system:{settings:async()=>{window.__settings++;}},start:(name)=>{window.__nativeCalls++;return {on:()=>()=>{},cancel:async()=>{},done:Promise.reject(Object.assign(new Error('macOS recording permission needed'),{code:'permission_denied'}))};}};
    Object.defineProperty(navigator.mediaDevices,'getDisplayMedia',{value:async()=>{window.__browserCalls++;throw new Error('should not fall back');}});
   },{native});
   await page.goto(`http://127.0.0.1:${server.address().port}/recorder/?myco_lang=zh`);
@@ -59,6 +59,36 @@ try{
   await page.close();
  }
  console.log('Native permission settings, generic start and legacy-App fallback guards passed');
+ for(const picker of [true,false]){
+  const page=await browser.newPage({viewport:{width:1280,height:900}});
+  await page.addInitScript(({picker})=>{
+   window.__SAMPLE__={};window.__events={};
+   window.__FAKE_OS__={list:async()=>({os:'darwin',caps:[{name:'screen.record',available:true},...(picker?[{name:'screen.region',available:true}]:[])]}),start:(_name,args)=>{
+    window.__captureArgs=args;
+    return {on:(kind,fn)=>{window.__events[kind]=fn;return ()=>{}},write:async()=>{},cancel:async()=>{},done:new Promise((_resolve,reject)=>{window.__cancelSelection=()=>reject(Object.assign(new Error('cancelled'),{code:'cancelled'}));})};
+   }};
+  },{picker});
+  await page.goto(`http://127.0.0.1:${server.address().port}/recorder/?myco_lang=zh`);
+  await page.getByRole('button',{name:'开始录屏',exact:true}).click();
+  const region=page.getByRole('checkbox',{name:'框选录制区域'});
+  assert.equal(await region.isChecked(),picker);assert.equal(await region.isDisabled(),!picker);
+  await page.getByRole('button',{name:'选择画面并开始'}).click();
+  assert.equal(await page.evaluate(()=>window.__captureArgs.interactive),picker);
+  await page.getByText('请拖动框选区域，再点击开始录制',{exact:true}).waitFor();
+  assert.equal(await page.getByText('正在录制，可以切到其他窗口',{exact:true}).count(),0);
+  assert.equal(await page.getByRole('button',{name:'查看本机原片'}).count(),0);
+  if(picker){
+   await page.evaluate(()=>window.__events.started({path:'/private/not-yet-a-movie.mov'}));
+   await page.getByText('正在录制，可以切到其他窗口',{exact:true}).waitFor();
+   assert.equal(await page.getByRole('button',{name:'查看本机原片'}).count(),0);
+  }
+  await page.evaluate(()=>window.__cancelSelection());
+  await page.getByText('已取消选择，尚未生成视频。',{exact:true}).waitFor();
+  assert.equal(await page.getByRole('button',{name:'选择画面并开始'}).isEnabled(),true);
+  await page.close();
+ }
+ console.log('Native selecting/started/cancel phases and older-App main-screen fallback passed');
+
  for(const [lang,theme,width] of [['zh','light',1400],['en','dark',1200]]){
  const page=await browser.newPage({viewport:{width,height:860},colorScheme:theme});const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.addInitScript(({lang})=>{

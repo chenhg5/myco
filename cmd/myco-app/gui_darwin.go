@@ -148,6 +148,10 @@ func runGUI(h http.Handler, onLink func(string), setRelaunch func(func())) error
 	if l := readUILang(h); l != "" {
 		menuZh = l == "zh"
 	}
+	screenPickerChinese.Store(bool(menuZh))
+	if screenPickerInstall != nil {
+		screenPickerInstall()
+	}
 	app.Menu.Set(appMenu(app, menuZh, menuSend))
 
 	// Clicking the menu-bar icon opens its menu (the Mac way): the agents'
@@ -155,6 +159,7 @@ func runGUI(h http.Handler, onLink func(string), setRelaunch func(func())) error
 	menu := newTrayMenu(app, h, show, app.Quit)
 	trayLang := uiLangHook
 	uiLangHook = func(l string) {
+		screenPickerChinese.Store(l == "zh")
 		trayLang(l)
 		// The menu bar is the main thread's.
 		application.InvokeAsync(func() { app.Menu.Set(appMenu(app, trayText(l == "zh"), menuSend)) })

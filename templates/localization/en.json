@@ -2002,5 +2002,12 @@
   "已停用": "Disabled",
   "新线路没有同名集数，已选第一集": "No matching episode on this line. The first episode is selected.",
   "当前 myco App 尚不支持应用联网，请更新 App 后再试": "This myco App does not yet support network access for apps. Update the App and try again.",
-  "请在 myco App 中打开，才能让应用联网": "Open this page in the myco App to give it network access"
+  "请在 myco App 中打开，才能让应用联网": "Open this page in the myco App to give it network access",
+  "框选录制区域": "Choose a recording region",
+  "拖动框选后点击开始录制；App 会暂时隐藏，点击菜单栏“停止录制”返回剪辑。": "Drag a region, then start recording. The App hides temporarily; use “Stop Recording” in the menu bar to return to editing.",
+  "区域框选需要更新 myco App；当前可以取消此选项录制主屏幕。": "Region selection needs an updated myco App. You can record the main screen with this option off.",
+  "已取消选择，尚未生成视频。": "Selection cancelled; no video was recorded.",
+  "请拖动框选区域，再点击开始录制": "Drag a region, then click Start Recording",
+  "区域框选需要更新 myco App；当前将录制主屏幕。": "Update myco App to select a region; this App will record the main screen.",
+  "正在选择区域…": "Selecting a region…"
 }

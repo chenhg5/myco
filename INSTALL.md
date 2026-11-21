@@ -1214,7 +1214,10 @@ It follows the App's language and appearance. The original footage stays on the
 recording computer; agents collaborate on edit records, not uploaded footage.
 
 In the updated Mac App, choose a region or the main screen and optionally a
-microphone. This first version does not record internal Mac audio. On Windows,
+microphone. Drag a rectangle in the native selector, then click **Start Recording**.
+The App temporarily hides; click **Stop Recording** in the Mac menu bar to return
+to editing. Cancelling the selector does not start a recording. This first version
+does not record internal Mac audio. On Windows,
 native desktop recording requires separately installed FFmpeg with gdigrab and
 h264_mf; it is silent and records the whole desktop. Supported browser hosts can
 use their screen/window picker. Other hosts can import recordings. Each recording
