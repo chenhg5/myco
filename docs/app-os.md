@@ -224,3 +224,32 @@ template list/get results; old Apps ignore the new field. A page's chosen name
 and all its user content remain unchanged. The current App also bundles official
 catalog translations for Hubs that do not return `locales` yet; custom catalog
 translations need a Hub that supports this sidecar.
+
+## Optional Remote Desktop SDK
+
+`myco.features.includes("remote")` exposes `myco.remote.call(action, args)`.
+It is separate from `myco.os`, which operates on the App's local computer.
+The SDK uses the page's current workspace, not an arbitrary Hub URL. The trusted
+App asks before installation, removal, enabling hosting or connecting; an
+embedded app cannot approve its own request. These permissions do not inherit
+from a page's ability to run local commands.
+
+```ts
+const computers = await myco.remote.call("devices");
+const component = await myco.remote.call("status");
+// Both actions below need explicit App consent.
+await myco.remote.call("install");
+const sharing = await myco.remote.call("enable", {control: false});
+// sharing.pairing_code is private to this page: never write it to shared data.
+await myco.remote.call("disable");
+```
+
+`templates/src/_lib/remote.ts` provides the typed controller and browser media
+adapter. The host process, codec and input implementations live in the optional
+`components/remote` module. Core myco does not link its WebRTC dependency.
+Closing/reloading a host page stops sharing; changing language reloads the page,
+while theme changes update live. Hosts require Mac/Windows, system permissions
+and an unlocked desktop. The initial adapter supports direct LAN/Tailscale video
+and keyboard/mouse, without audio, automatic public relay or unattended service.
+The component is downloaded separately and may be uninstalled from the app's
+settings. It is not installed or started for people who do not use it.

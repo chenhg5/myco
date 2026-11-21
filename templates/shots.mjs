@@ -44,7 +44,8 @@ const bridge = `(() => {
   for (const [c, list] of Object.entries(window.__SAMPLE__ || {})) for (const r of list) { const { id, ...data } = r; const k = id || rid(); recs[c + "/" + k] = { collection: c, id: k, data, version: 1 }; }
   const fakeOS = window.__FAKE_OS__;
   window.myco = {
-    features: fakeOS ? ["download-media", "os"] : ["download-media"],
+    features: [...(fakeOS ? ["download-media", "os"] : ["download-media"]), ...(window.__REMOTE_FIXTURE__ ? ["remote"] : [])],
+    remote: window.__REMOTE_FIXTURE__ ? {call: async action => action === "devices" ? [{machine:"mac",name:"Studio Mac",os:"darwin",control:true},{machine:"win",name:"Windows 工作站",os:"windows",control:true},{machine:"mini",name:"Mac mini",os:"darwin",control:false}] : {protocol:1,version:"0.1.0",supported:true,installed:false,running:false}} : undefined,
     os: fakeOS,
     ready: Promise.resolve({ page: { id: "pg_shots", name: "shots" }, me: { name: "glenn" } }),
     data: {
@@ -103,6 +104,7 @@ function photo() {
 // sample data is there before the first).
 const wait = (p, ms = 400) => p.waitForTimeout(ms);
 const plans = {
+  "remote-desktop": [null, async (p) => { await p.locator(".rd-tabs button").nth(1).click(); await wait(p,300); }],
   base: [null, async (p) => { await p.locator("text=看板").first().click(); await wait(p, 600); }],
   issues: [async (p) => { await p.locator(".is-row").nth(5).click(); await wait(p, 500); }, async (p) => { await p.keyboard.press("Escape"); await p.click('button[title="看板"]'); await wait(p, 500); }],
   notes: [null, async (p) => { await p.locator('.nt-kid:has-text("发版流程")').click(); await wait(p, 700); }],
@@ -166,7 +168,7 @@ const plans = {
 const chromium = await playwright();
 const srv = await serve();
 const base = `http://127.0.0.1:${srv.address().port}`;
-const browser = await chromium.launch();
+const browser = await chromium.launch(process.env.UI_SMOKE_EXECUTABLE ? {executablePath:process.env.UI_SMOKE_EXECUTABLE} : {});
 const only = process.argv.slice(2);
 const apps = readdirSync(official).filter((a) => existsSync(path.join(official, a, "myco.json")) && (!only.length || only.includes(a)));
 for (const app of apps) {
@@ -179,7 +181,7 @@ for (const app of apps) {
     const ctx = await browser.newContext({ viewport: { width: 1040, height: 650 }, deviceScaleFactor: 2, colorScheme: scheme, locale: "zh-CN" });
     const page = await ctx.newPage();
     const data = sample ? JSON.parse(readFileSync(path.join(official, app, "sample.json"), "utf8")) : {};
-    await page.addInitScript((s) => { window.__SAMPLE__ = s; try { localStorage.clear(); } catch { /* (none) */ } }, data);
+    await page.addInitScript((s) => { window.__SAMPLE__ = s; window.__REMOTE_FIXTURE__ = location.pathname.includes("remote-desktop"); try { localStorage.clear(); } catch { /* (none) */ } }, data);
     await page.goto(`${base}/${app}/${fakeOS ? "?os=1" : ""}`);
     await page.waitForTimeout(2500);
     for (let n = 0; n < steps.length; n++) {

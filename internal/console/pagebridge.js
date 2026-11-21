@@ -213,8 +213,12 @@
     // What this App's bridge can do, for pages to check before trying:
     // "download-media": myco.download saves video and sound too (mp4, …);
     // "os": myco.os (this computer: files, commands, the screen…).
-    features: ["download-media", "os", "preferences"],
+    features: ["download-media", "os", "preferences", "remote"],
     os: os,
+    // Remote sessions are separate from local OS calls and need App consent.
+    remote: {call: function(action, args) {
+      return ready.then(function() { return call("remote.call", {action:action, args:args || {}}, action === "install" ? 600000 : 30000); });
+    }},
     get state() { return ctx ? ctx.state : null; },
     get version() { return ctx ? ctx.version : 0; },
     on: function (event, f) {

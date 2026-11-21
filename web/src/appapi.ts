@@ -938,6 +938,8 @@ export const appApi = {
       bytes instanceof Blob ? bytes : new Blob([bytes as BlobPart], { type: type || "application/octet-stream" })),
   // What a page (an app) uses of this computer: myco.os.* (App backend
   // oscalls.go; only an App with a local install answers).
+  remoteCall: <T = unknown>(hubId: string, page: string, action: string, args: unknown = {}, instance: string = "") =>
+    request<T>("POST", `app/hubs/${enc(hubId)}/remote`, {page, instance, action, args}, undefined, action === "install" ? 600_000 : 30_000),
   osList: () => request<OsList>("GET", "app/os"),
   osCall: (name: string, args: unknown, page: OsPage) =>
     request<{ value: unknown }>("POST", "app/os/call", { name, args, page }).then((r) => r.value),

@@ -1112,3 +1112,14 @@ The computer details show the MCP servers, CLI skills, and plugins installed for
 ### 应用语言与外观
 
 官方应用会跟随桌面 App 设置的语言和深浅色，包括与系统不同的手动设置，界面和编辑器菜单支持中文、英语。已有页面升级其应用版本即可获得这些改进，页面名称、记录和正文不变。新应用版本仍能安装在旧 Hub 上；跟随 App 的手动设置需要桌面 App 提供 `preferences` 桥接能力，旧 App 保持系统外观和模板原语言。应用作者可以通过 `locales.json` 提供多语言名称和描述，参见[应用 SDK](docs/app-os.md#app-language-and-appearance)。
+
+### 远程桌面（可选应用）
+
+两台 App 接入同一工作区即可，不要求安装 agent CLI 或运行 runner 服务。在 **Apps** 中新建「远程桌面」，被控电脑选择「共享这台电脑」，
+按需安装组件，再明确开启共享；控制端选择它并输入当前配对码。默认仅查看，双方都允许后
+才能操作键鼠。Mac 需授予屏幕录制及辅助功能权限。界面跟随 App 的中英文、深浅色设置。
+
+首版支持局域网或 Tailscale 中已解锁的 Mac、Windows；暂不含声音、锁屏登录及管理员确认窗口、无人值守、
+虚拟屏和自动公网中继。两边保持 App 打开，关闭或重载共享页面、停止共享、卸载组件都会
+结束连接。不使用远控的人不需要下载或运行编码器。需要新版 App、工作区服务和已发布的
+可选组件；旧版本会提示更新。组件构建与真机验收见 components/remote/README.md。

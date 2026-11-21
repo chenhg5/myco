@@ -445,3 +445,9 @@ export interface Approval {
   status: "pending" | "done" | "denied" | "expired" | "withdrew"; result?: number; result_body?: string; decided_by?: string;
   created_at: string; expires_at: string; decided_at?: string;
 }
+
+// Optional remote desktop signaling. No image, audio or input payloads use the Hub API.
+export type RemoteDevice = {machine:string; name:string; os:string; control:boolean};
+export type RemoteDescription = {type:"offer"|"answer"; sdp:string};
+export type RemoteOffer = {description:RemoteDescription; pairing_code?:string; control:boolean};
+export type RemoteSession = {id:string; machine:string; state:"pending"|"connected"|"failed"|"closed"; answer?:RemoteDescription; error?:string};
