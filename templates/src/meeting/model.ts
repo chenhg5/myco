@@ -16,11 +16,11 @@ export type Meeting = {
   /** What each track recorded: mic, system, app:<id>. */
   sources?: Partial<Record<Track, string>>;
   source_name?: string;
-  /** Names: "me", "them", and "them:0", "them:1"… once the others are told apart. */
+  /** Names: "me", "them", "them:0", "them:1"… (the others told apart) and "me:1", "me:2"… (others at the microphone). */
   speakers?: Record<string, string>;
   model?: string; by?: string; error?: string;
-  /** The others told apart into this many (0: not yet). */
-  voices?: number;
+  /** The others, and those at the microphone, told apart into this many (0: not yet). */
+  voices?: number; mic_voices?: number;
   notes?: Notes;
 };
 /** The notes an agent writes (agent.md). */
@@ -57,19 +57,22 @@ export function speakerName(m: Meeting, key: string | undefined) {
   if (s) return s;
   if (k === "me") return "我";
   if (k.startsWith("them:")) return `说话人 ${Number(k.slice(5)) + 1}`;
+  if (k.startsWith("me:")) return `现场 ${Number(k.slice(3))}`;
   return "对方";
 }
 
 /** The speakers of a meeting, in order: me first, then the others by number. */
 export function speakerKeys(list: Segment[]) {
   const keys = new Set(list.map(speakerOf));
-  return [...keys].sort((a, b) => (a === "me" ? -1 : b === "me" ? 1 : a.localeCompare(b, undefined, { numeric: true })));
+  const rank = (k: string) => (k === "me" ? 0 : k.startsWith("me:") ? 1 : 2);
+  return [...keys].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b, undefined, { numeric: true }));
 }
 
 /** A speaker's grey (me the darkest; the others lighter, each its own). */
 export function shade(key: string) {
   if (key === "me") return 100;
   if (key === "them") return 48;
+  if (key.startsWith("me:")) return [92, 84, 96, 88][(Number(key.slice(3)) - 1) % 4];
   const n = Number(key.slice(5)) || 0;
   return [48, 28, 66, 38, 78, 20, 58, 86][n % 8];
 }

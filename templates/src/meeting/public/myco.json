@@ -1,7 +1,7 @@
 {
   "id": "myco/meeting",
   "name": "会议记录",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "kind": "custom",
   "category": "office",
   "icon": "icon.svg",
@@ -23,7 +23,8 @@
         "by": "person",
         "error": "text",
         "voices": "number",
-        "notes": "json"
+        "notes": "json",
+        "mic_voices": "number"
       }
     },
     "segments": {
