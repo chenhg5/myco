@@ -64,7 +64,7 @@ export async function render(frame: SceneFrame, opts: ExportOptions, onProgress:
     : new Output({ format: new Mp4OutputFormat({ fastStart: "in-memory" }), target: new BufferTarget() });
   const src = new VideoSampleSource({ codec, bitrate: QUALITY[opts.quality], keyFrameInterval: 2 });
   output.addVideoTrack(src, { frameRate: opts.fps });
-  const asrc = sound.buffer && acodec ? new AudioBufferSource({ codec: acodec, bitrate: QUALITY_HIGH }) : null;
+  const asrc = sound.buffer && acodec ? new AudioBufferSource({ codec: acodec, bitrate: 160_000 }) : null;
   if (asrc) output.addAudioTrack(asrc);
   await output.start();
   // (the sound a second at a time, along with the frames)

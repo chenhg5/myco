@@ -3,6 +3,7 @@
 // its videos); the hub keeps only where each track plays. Here: keeping
 // and finding the files, their waveform and beats, playing them with the
 // preview, and mixing them for the mp4.
+import { ALL_FORMATS, AudioBufferSink, BlobSource, Input } from "mediabunny";
 import { clamp, num, tracks, type Track } from "./model";
 
 export type Local = { key: string; file: Blob; name: string; url: string; buffer: AudioBuffer | null; peaks: Float32Array | null; peakMax: number };
@@ -61,7 +62,6 @@ export async function decode(file: Blob): Promise<AudioBuffer> {
     return await ctx.decodeAudioData(await file.arrayBuffer());
   } catch (e) {
     // (what the browser's decoder cannot read: mediabunny's, piece by piece)
-    const { ALL_FORMATS, AudioBufferSink, BlobSource, Input } = await import("mediabunny");
     const input = new Input({ source: new BlobSource(file), formats: ALL_FORMATS });
     try {
       const at = await input.getPrimaryAudioTrack();

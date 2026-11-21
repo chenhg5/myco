@@ -25,17 +25,25 @@ async function seek(v: HTMLVideoElement, t: number) {
   return once(v, "seeked");
 }
 
-/** Which sample times start a new shot: the change from the sample before,
- *  above what is usual for this video. */
-export function cutsOf(diffs: number[], times: number[]) {
-  if (diffs.length < 3) return [0];
+/** Where the shots change: the difference between each sample and the one
+ *  `win` samples before (so a fade over half a second counts as much as a
+ *  cut), its peaks above what is usual for this video, at least `gap`
+ *  seconds apart. Returns the sample indexes where a new shot has begun. */
+export function cutsOf(sigs: Float32Array[], times: number[], win = 1, gap = 0.8, max = 20): { cuts: number[]; diffs: number[] } {
+  const n = sigs.length;
+  if (n < 3) return { cuts: [0], diffs: sigs.map(() => 0) };
+  const dist = (a: Float32Array, b: Float32Array) => { let d = 0; for (let i = 0; i < a.length; i++) d += Math.abs(a[i] - b[i]); return d / a.length; };
+  const diffs = sigs.map((s, i) => (i >= win ? dist(s, sigs[i - win]) : i > 0 ? dist(s, sigs[0]) : 0));
   const sorted = [...diffs].sort((a, b) => a - b);
-  const med = sorted[Math.floor(sorted.length / 2)];
-  const mad = sorted.map((d) => Math.abs(d - med)).sort((a, b) => a - b)[Math.floor(sorted.length / 2)];
-  const limit = Math.max(0.09, med + 6 * mad);
+  const med = sorted[Math.floor(n / 2)];
+  const mad = sorted.map((d) => Math.abs(d - med)).sort((a, b) => a - b)[Math.floor(n / 2)];
+  const limit = Math.max(0.03, med + 5 * mad);
+  // the peaks, strongest first, each keeping others `gap` away
+  const peaks = diffs.map((d, i) => ({ d, i })).filter((p) => p.d > limit && (p.i === 0 || p.d >= diffs[p.i - 1]) && (p.i === n - 1 || p.d >= diffs[p.i + 1]))
+    .sort((a, b) => b.d - a.d);
   const out = [0];
-  for (let i = 1; i < diffs.length; i++) if (diffs[i] > limit && times[i] - times[out[out.length - 1]] >= 0.6) out.push(i);
-  return out;
+  for (const p of peaks) if (out.length < max && out.every((j) => Math.abs(times[j] - times[p.i]) >= gap)) out.push(p.i);
+  return { cuts: out.sort((a, b) => a - b).map((i) => (i === 0 ? 0 : Math.max(0, i - Math.floor(win / 2)))), diffs };
 }
 
 export async function takeApart(file: File, onStage: (s: Stage) => void, signal: AbortSignal): Promise<Taken> {
@@ -53,28 +61,32 @@ export async function takeApart(file: File, onStage: (s: Stage) => void, signal:
     const small = document.createElement("canvas");
     small.width = sw; small.height = sh;
     const sg = small.getContext("2d", { willReadFrequently: true })!;
-    const times: number[] = [], diffs: number[] = [];
-    let prev: Float32Array | null = null;
+    const times: number[] = [], sigs: Float32Array[] = [];
     for (let t = 0; t < D - 0.05; t += step) {
       if (signal.aborted) throw new Error("cancelled");
       if (!(await seek(v, t))) continue;
       sg.drawImage(v, 0, 0, sw, sh);
       const px = sg.getImageData(0, 0, sw, sh).data;
-      const g = new Float32Array(sw * sh);
-      for (let i = 0; i < g.length; i++) g[i] = (px[i * 4] * 0.3 + px[i * 4 + 1] * 0.59 + px[i * 4 + 2] * 0.11) / 255;
-      let d = 0;
-      if (prev) { for (let i = 0; i < g.length; i++) d += Math.abs(g[i] - prev[i]); d /= g.length; }
-      times.push(t); diffs.push(d); prev = g;
+      // (colour too: two scenes as dark as each other still differ in it)
+      const g = new Float32Array(sw * sh * 3);
+      for (let i = 0; i < sw * sh; i++) { g[i * 3] = px[i * 4] / 255; g[i * 3 + 1] = px[i * 4 + 1] / 255; g[i * 3 + 2] = px[i * 4 + 2] / 255; }
+      times.push(t); sigs.push(g);
       onStage({ step: "frames", done: (t / D) * 0.7 });
     }
     // 2. the shots, the strongest changes when there are too many, and
     // more in long shots so the pacing shows
-    let cuts = cutsOf(diffs, times);
-    if (cuts.length > MAX_FRAMES) cuts = [0, ...cuts.slice(1).sort((a, b) => diffs[b] - diffs[a]).slice(0, MAX_FRAMES - 1)].sort((a, b) => a - b);
-    const starts = cuts.map((i) => times[i]);
-    let picks: number[] = starts.map((s, i) => {
-      const end = i + 1 < starts.length ? starts[i + 1] : D;
-      return Math.min(s + Math.min(0.5, (end - s) * 0.35), D - 0.05);
+    const { cuts, diffs } = cutsOf(sigs, times, Math.max(1, Math.round(0.6 / step)), 0.8, MAX_FRAMES);
+    // each shot's steadiest moment (the least change around it), later
+    // ones preferred: motion graphics settle after they build
+    let picks: number[] = cuts.map((c, k) => {
+      const end = k + 1 < cuts.length ? cuts[k + 1] : times.length;
+      let best = -1, bestScore = Infinity;
+      for (let i = c; i < end; i++) {
+        if (times[i] < times[c] + 0.3 && end - c > 3) continue;
+        const score = (diffs[i] + (diffs[i + 1] ?? diffs[i])) / 2 - (i - c) * 1e-4;
+        if (score <= bestScore) { bestScore = score; best = i; }
+      }
+      return Math.min(times[best >= 0 ? best : c], D - 0.05);
     });
     while (picks.length < Math.min(MAX_FRAMES, Math.max(6, Math.ceil(D / 4)))) {
       const all = [0, ...picks, D].sort((a, b) => a - b);
@@ -103,7 +115,7 @@ export async function takeApart(file: File, onStage: (s: Stage) => void, signal:
     let transcript = "", heard: Taken["heard"] = "skipped", why = "";
     const sp = await speechState();
     if (!sp.ready) why = sp.can ? uiText("本机还没有语音识别（在「声音」里下载后再试）") : sp.why;
-    else {
+    else try {
       onStage({ step: "sound", done: 0 });
       let sound: AudioBuffer | null = null;
       try { sound = await decode(file); } catch { heard = "silent"; }
@@ -116,6 +128,10 @@ export async function takeApart(file: File, onStage: (s: Stage) => void, signal:
           f.text = segs.filter((s) => s.end > f.time - 1.5 && s.start < f.time + 1.5).map((s) => s.text.trim()).join(" ").slice(0, 300);
         }
       }
+    } catch (e) {
+      // (the frames are kept: the lines are only missing)
+      if (signal.aborted) throw new Error("cancelled");
+      heard = "skipped"; why = (e as Error).message || uiText("没识别成");
     }
     return { name: file.name, duration: Math.round(D * 100) / 100, width: W, height: H, frames, transcript: transcript.slice(0, 40000), heard, why };
   } finally {

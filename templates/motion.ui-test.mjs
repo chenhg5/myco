@@ -188,6 +188,22 @@ try {
   } catch (e) {
     if (e.code !== "ENOENT") throw e; // (no ffprobe: the header check is enough)
   }
+  // the mp4 as a reference video: a frame of each of its scenes (fades and
+  // slides between dark scenes too), after each has settled
+  if (fs.existsSync(file)) {
+    const webm = path.join(tmp, "self.webm");
+    execFileSync("ffmpeg", ["-v", "error", "-i", file, "-vf", "scale=480:-2", "-c:v", "libvpx", "-b:v", "600k", "-an", webm]);
+    await page.getByRole("button", { name: "好" }).click();
+    await page.getByRole("tab", { name: "分镜" }).click();
+    await page.locator('input[type=file][accept="video/*"]').setInputFiles(webm);
+    await page.waitForFunction(() => /^00:0[0-1]\./.test(document.querySelector(".mo-ref-frames figcaption")?.textContent || "") && !document.querySelector(".mo-taking"), null, { timeout: 90000 });
+    const got = (await page.$$eval(".mo-ref-frames figcaption", (f) => f.map((x) => x.textContent))).map((x) => { const [m, s] = x.split(":"); return +m * 60 + +s; });
+    // (a frame of each scene once its transition is over)
+    const starts = [0, ...ends.slice(0, -1)];
+    for (let i = 0; i < starts.length; i++) {
+      assert.ok(got.some((t) => t >= starts[i] + 0.6 && t < ends[i]), `a frame of scene ${i + 1} (${starts[i]}–${ends[i]}): ${got}`);
+    }
+  }
   assert.deepEqual(errors, []);
   console.log(`PASS sample, sandboxed frame, motion at given times; a note, the shot plan, a reference video's shots; music at ${bpm} BPM, cuts on the beat, a caption; templates; ${(mp4.length / 1e6).toFixed(1)} MB 720p mp4 with sound`);
 } finally {
