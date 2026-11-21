@@ -22,7 +22,7 @@ import (
 	"time"
 )
 
-const ComponentVersion = "0.1.0"
+const ComponentVersion = "0.2.0"
 const ComponentRelease = "https://github.com/chenhg5/myco/releases/download/remote-v" + ComponentVersion
 
 // Component owns only the optional process and its private directory. A new

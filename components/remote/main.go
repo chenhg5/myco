@@ -21,7 +21,7 @@ import (
 )
 
 const protocol = 1
-const version = "0.1.0"
+const version = "0.2.0"
 
 type description struct {
 	Type string `json:"type"`
@@ -107,7 +107,7 @@ func (e *engine) handler() http.Handler {
 				states[id] = p.err
 			}
 		}
-		json.NewEncoder(w).Encode(map[string]any{"protocol": protocol, "version": version, "sessions": states, "control": e.controlAllowed()})
+		json.NewEncoder(w).Encode(map[string]any{"protocol": protocol, "version": version, "sessions": states, "control": e.controlAllowed(), "input_features": []string{"text"}})
 	})
 	m.HandleFunc("POST /sessions/{id}", e.connect)
 	m.HandleFunc("DELETE /sessions/{id}", func(w http.ResponseWriter, r *http.Request) {
@@ -242,6 +242,7 @@ func (e *engine) connect(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		inputAccepted = true
+		dc.OnOpen(func() { _ = dc.SendText(`{"type":"capabilities","input_features":["text"]}`) })
 		var count int
 		var window time.Time
 		var messageMu sync.Mutex

@@ -62,7 +62,13 @@ export class DesktopSession {
   private lastBytes = 0;
   private lastAt = 0;
   private polling = false;
-  constructor(private call: typeof remoteCall = remoteCall) {}
+  supportsText = false;
+  private stopListening?: () => void;
+  constructor(private call: typeof remoteCall = remoteCall) {
+    this.stopListening = myco?.remote?.onDisconnect?.(() => {
+      if (!this.ended) { this.stateCallback?.("connection_lost"); void this.close(); }
+    });
+  }
   async connect(
     device: RemoteDevice,
     pairingCode: string,
@@ -84,6 +90,10 @@ export class DesktopSession {
     pc.addTransceiver("video", { direction: "recvonly" });
     if (control)
       this.channel = pc.createDataChannel("input", { ordered: true });
+    if (this.channel) this.channel.onmessage = (event) => {
+      if (typeof event.data !== "string" || event.data.length > 2048) return;
+      try { const value = JSON.parse(event.data); if(value.type === "capabilities" && Array.isArray(value.input_features)) this.supportsText = value.input_features.includes("text"); } catch {}
+    };
     if (this.channel)
       this.channel.onclose = () => {
         if (!this.ended) {
@@ -202,7 +212,7 @@ export class DesktopSession {
     }
   }
   input(event: Record<string, unknown>) {
-    if (this.channel?.readyState !== "open") return;
+    if (this.channel?.readyState !== "open") return false;
     if (this.channel.bufferedAmount > 65536) {
       this.stateCallback?.("connection_lost");
       void this.close();
@@ -211,6 +221,7 @@ export class DesktopSession {
     if (this.channel.bufferedAmount > 16384 && event.kind === "move") return;
     try {
       this.channel.send(JSON.stringify(event));
+      return true;
     } catch {
       this.stateCallback?.("connection_lost");
       void this.close();
@@ -219,6 +230,7 @@ export class DesktopSession {
   async close() {
     if (this.ended) return;
     this.ended = true;
+    this.stopListening?.(); this.stopListening = undefined;
     if (
       this.channel?.readyState === "open" &&
       this.channel.bufferedAmount < 65536

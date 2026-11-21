@@ -74,10 +74,10 @@ reference. No GPL codec or full third-party desktop shell is bundled.
 Before publishing, sign the Mac executables, notarize their distribution and run
 interactive Mac/Windows acceptance checks. The workflow uploads build artifacts
 only, never releases automatically. A maintainer publishes the reviewed archives
-as `remote-v0.1.0` (a prerelease, never latest) with one combined `SHA256SUMS`.
+as `remote-v0.2.0` (a prerelease, never latest) with one combined `SHA256SUMS`.
 The App downloads the matching archive from the myco repository over HTTPS,
 checks its SHA-256, validates every archive entry and installs atomically into
-`~/.myco/components/remote/0.1.0`. Release archives contain only `myco-remote`,
+`~/.myco/components/remote/0.2.0`. Release archives contain only `myco-remote`,
 `ffmpeg` (`.exe` on Windows) and LICENSE/NOTICE text files. Until these assets are
 published, the UI reports installation unavailable; it does not silently download
 an arbitrary external program or fall back to an insecure connection.
@@ -92,3 +92,13 @@ claim these permissions were granted automatically. Check that closing the page,
 quitting/crashing the parent, stopping sharing and losing the Hub all terminate
 capture and release held input. Use LAN and Tailscale direct connections; a failed
 route must report a failure rather than falling back to an unencrypted stream.
+
+## Controller keyboard capabilities
+
+Protocol 1 remains compatible. On opening an approved control channel, a new
+component sends `{"type":"capabilities","input_features":["text"]}`. Controllers
+that recognize it may send `{"kind":"text","text":"…"}` (up to 256 Unicode
+scalars / 1024 UTF-8 bytes, no control characters). Text is entered using native
+Unicode keyboard events, never the clipboard. Older components omit this event;
+controllers keep physical key support and explain when non-ASCII text needs a
+component update. View-only sessions have no input channel.

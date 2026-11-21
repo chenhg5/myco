@@ -1564,5 +1564,13 @@
   "远控组件暂时无法下载，请稍后重试或使用已发布组件的新版 App。": "The remote component is unavailable for download. Try later or use an App build with published components.",
   "组件校验失败，安装已取消。请重试，不要手动运行下载文件。": "Component validation failed. Installation was cancelled. Try again; do not run downloaded files manually.",
   "这台电脑已停止共享，请刷新列表后重试。": "This computer stopped sharing. Refresh the list and try again.",
-  "Mac 首次使用要允许屏幕录制；锁屏、登录和管理员确认窗口暂不支持。": "On Mac, allow screen recording first. Lock, sign-in and administrator confirmation screens are not supported yet."
+  "Mac 首次使用要允许屏幕录制；锁屏、登录和管理员确认窗口暂不支持。": "On Mac, allow screen recording first. Lock, sign-in and administrator confirmation screens are not supported yet.",
+  "远端组件需要更新才能输入这段文字，文字已保留。": "Update the remote component to enter this text. Your text has been kept.",
+  "触控板：单指移动，轻点单击，双指滚动。": "Touchpad: slide to move, tap to click, use two fingers to scroll.",
+  "键盘": "Keyboard",
+  "右键": "Right click",
+  "拖动": "Drag",
+  "结束拖动": "End drag",
+  "输入文字到远端": "Type on the remote computer",
+  "键入或粘贴文字": "Type or paste text"
 }

@@ -169,3 +169,17 @@ func TestShutdownWaitsForEncoderCleanup(t *testing.T) {
 		t.Fatal("shutdown returned before cleanup")
 	}
 }
+
+func TestUnicodeTextInputValidation(t *testing.T) {
+	for _, text := range []string{"Hello", "你好", "A🙂é", ""} {
+		want := text != ""
+		if got := (inputEvent{Kind: "text", Text: text}).valid(); got != want {
+			t.Fatalf("valid Unicode text: %v", got)
+		}
+	}
+	for _, text := range []string{"secret\x00", "one\ntwo", "\t", string([]byte{0xff}), strings.Repeat("中", 257)} {
+		if (inputEvent{Kind: "text", Text: text}).valid() {
+			t.Fatal("invalid or oversized text accepted")
+		}
+	}
+}

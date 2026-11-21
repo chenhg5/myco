@@ -22,7 +22,7 @@ interface Bridge {
   /** This computer (the App's): files, commands, the screen… Each system
    *  does what it can; what it cannot answers err.code "unsupported". */
   os?: MycoOS;
-  remote?: {call<T>(action: string, args?: unknown): Promise<T>};
+  remote?: {call<T>(action: string, args?: unknown): Promise<T>; onDisconnect?(handler:()=>void):()=>void};
 }
 
 /** An error from myco.os: err.code is one of these. */

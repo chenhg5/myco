@@ -14,3 +14,5 @@ func nativeInput(inputEvent) error { return errors.New("unsupported_platform") }
 func hideProcess(*exec.Cmd)        {}
 
 func requestInputPermission() {}
+
+func nativeText(string) error { return errors.New("unsupported_platform") }

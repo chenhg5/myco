@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
+import { myco } from "../_lib/myco";
+import { Touchpad, textInput } from "../_lib/remote-input";
 import {
   Monitor,
   ArrowUpRight,
@@ -82,6 +85,7 @@ const errorMessage = (e: unknown) => {
   );
 };
 function App() {
+  const controllerOnly = !!myco?.features?.includes("remote-controller");
   const [devices, setDevices] = useState<RemoteDevice[]>([]),
     [status, setStatus] = useState<RemoteStatus | null>(null),
     [error, setError] = useState(""),
@@ -98,6 +102,11 @@ function App() {
     [state, setState] = useState(""),
     [stats, setStats] = useState<RemoteStats | null>(null),
     [copied, setCopied] = useState(false);
+  const [keyboardOpen,setKeyboardOpen]=useState(false),[draft,setDraft]=useState(""),[dragging,setDragging]=useState(false),[modifiers,setModifiers]=useState<string[]>([]),[cursor,setCursor]=useState({x:.5,y:.5}),[showCursor,setShowCursor]=useState(false),[,setLayout]=useState(0);
+  const keyboard=useRef<HTMLTextAreaElement>(null),composing=useRef(false);
+  const touchpad=useRef<Touchpad>();
+  if(!touchpad.current)touchpad.current=new Touchpad(e=>session.current?.input(e),p=>setCursor({...p}));
+  useEffect(()=>{const resize=()=>setLayout(n=>n+1);window.addEventListener("resize",resize);window.visualViewport?.addEventListener("resize",resize);return()=>{window.removeEventListener("resize",resize);window.visualViewport?.removeEventListener("resize",resize);};},[]);
   const motion = useRef<{ x: number; y: number } | null>(null),
     motionFrame = useRef(0);
   const clicks = useRef({ at: 0, x: 0, y: 0, button: 0, count: 0 });
@@ -218,6 +227,7 @@ function App() {
   };
   const disconnect = async () => {
     attempt.current++;
+    touchpad.current?.reset();setDragging(false);setModifiers([]);setKeyboardOpen(false);setDraft("");setShowCursor(false);
     const previous=session.current;
     session.current=null;pendingStream.current=null;
     setConnecting(false);setActive(null);setStats(null);setState("");
@@ -275,6 +285,31 @@ function App() {
     }
   };
   const input = (ev: Record<string, unknown>) => session.current?.input(ev);
+  const releaseModifiers=()=>{for(const code of modifiers)input({kind:"key",code,down:false});setModifiers([]);};
+  const specialKey=(code:string)=>{input({kind:"key",code,down:true});input({kind:"key",code,down:false});releaseModifiers();};
+  const typed=(value:string)=>{
+    if(composing.current)return;
+    const events=textInput(value,!!session.current?.supportsText,modifiers);
+    if(events===null){setError(uiText("远端组件需要更新才能输入这段文字，文字已保留。"));return;}
+    if(!events.length)return;
+    for(const e of events)if(!input(e))return;
+    releaseModifiers();setDraft("");if(keyboard.current)keyboard.current.value="";
+  };
+  const touch=(e:React.PointerEvent,phase:"down"|"move"|"up")=>{
+    if(e.pointerType!=="touch")return false;
+    if(!control)return true;
+    e.preventDefault();setShowCursor(true);
+    const pad=touchpad.current!,box=e.currentTarget.getBoundingClientRect();
+    if(phase==="down"){e.currentTarget.setPointerCapture(e.pointerId);pad.down(e.pointerId,e.clientX,e.clientY);}
+    else if(phase==="move")pad.move(e.pointerId,e.clientX,e.clientY,box.width,box.height);
+    else pad.up(e.pointerId);
+    return true;
+  };
+  const cursorPosition=()=>{
+    const v=video.current;if(!v||!v.videoWidth)return {left:"50%",top:"50%"};
+    const scale=Math.min(v.clientWidth/v.videoWidth,v.clientHeight/v.videoHeight),w=v.videoWidth*scale,h=v.videoHeight*scale;
+    return {left:(v.clientWidth-w)/2+cursor.x*w,top:(v.clientHeight-h)/2+cursor.y*h};
+  };
   const pointer = (e: React.PointerEvent) => {
     const v = video.current;
     if (!v) return null;
@@ -290,7 +325,7 @@ function App() {
     (d.name + " " + d.machine).toLowerCase().includes(query.toLowerCase()),
   );
   return (
-    <div className="rd-app">
+    <div className={`rd-app${controllerOnly?" is-controller":""}`}>
       <header className="rd-header">
         <div className="rd-brand">
           <span className="rd-mark">
@@ -301,13 +336,13 @@ function App() {
             <p>{uiText("连接你的电脑，接着手头的工作。")}</p>
           </div>
         </div>
-        <button
+        {!controllerOnly && <button
           className="rd-icon"
           aria-label={uiText("组件设置")}
           onClick={() => setSettings(true)}
         >
           <Settings2 size={18} />
-        </button>
+        </button>}
       </header>
       <main>
         {error && (
@@ -345,7 +380,7 @@ function App() {
                   className="rd-icon"
                   aria-label={uiText("全屏")}
                   onClick={() =>
-                    void stage.current?.requestFullscreen().catch(() => {})
+                    void stage.current?.requestFullscreen?.().catch(() => {})
                   }
                 >
                   <Maximize2 size={17} />
@@ -363,6 +398,7 @@ function App() {
               aria-label={uiText("远程画面，点击后使用键盘和鼠标")}
               onContextMenu={(e) => e.preventDefault()}
               onPointerMove={(e) => {
+                if(touch(e,"move"))return;
                 if (!control) return;
                 const p = pointer(e);
                 if (p) {
@@ -376,6 +412,7 @@ function App() {
                 }
               }}
               onPointerDown={(e) => {
+                if(touch(e,"down"))return;
                 if (!control) return;
                 const p = pointer(e);
                 if (p) {
@@ -406,6 +443,7 @@ function App() {
                 }
               }}
               onPointerUp={(e) => {
+                if(touch(e,"up"))return;
                 if (!control) return;
                 const p = pointer(e);
                 if (p)
@@ -418,7 +456,7 @@ function App() {
                   });
                 else input({ kind: "release" });
               }}
-              onPointerCancel={() => input({ kind: "release" })}
+              onPointerCancel={() => {touchpad.current?.reset();setDragging(false);setModifiers([]);}}
               onKeyDown={(e) => {
                 if (control && video.current?.videoWidth) {
                   input({ kind: "key", code: e.code, down: true });
@@ -431,16 +469,35 @@ function App() {
                   if (e.code !== "Escape") e.preventDefault();
                 }
               }}
-              onBlur={() => input({ kind: "release" })}
+              onBlur={() => {touchpad.current?.reset();setDragging(false);setModifiers([]);}}
             >
               <video
                 ref={video}
                 autoPlay
                 muted
                 playsInline
+                onLoadedMetadata={()=>setLayout(n=>n+1)}
                 aria-label={uiText("远程桌面画面")}
               />
+              {showCursor&&control&&<span className="rd-touch-cursor" aria-hidden="true" style={cursorPosition()}/>}
             </div>
+            {control&&<div className="rd-touch-controls">
+              <p>{uiText("触控板：单指移动，轻点单击，双指滚动。")}</p>
+              <div className="rd-touch-row">
+                <button className="rd-btn" aria-pressed={keyboardOpen} onClick={()=>{flushSync(()=>setKeyboardOpen(!keyboardOpen));if(!keyboardOpen)keyboard.current?.focus();}}><Keyboard size={16}/>{uiText("键盘")}</button>
+                <button className="rd-btn" onClick={()=>touchpad.current?.click(2)}>{uiText("右键")}</button>
+                <button className="rd-btn" aria-pressed={dragging} onClick={()=>{touchpad.current?.drag(!dragging);setDragging(!dragging);}}>{dragging?uiText("结束拖动"):uiText("拖动")}</button>
+                {["Escape","Tab","Enter","Backspace"].map(code=><button key={code} className="rd-btn" aria-label={code} onClick={()=>specialKey(code)}>{({Escape:"Esc",Tab:"Tab",Enter:"↵",Backspace:"⌫"})[code as "Enter"]}</button>)}
+              </div>
+              {keyboardOpen&&<div className="rd-keyboard">
+                <div className="rd-touch-row">{[["ControlLeft","Ctrl"],["AltLeft","Alt"],["MetaLeft",active.os==="darwin"?"⌘":"Win"],["ShiftLeft","Shift"]].map(([code,label])=><button key={code} className="rd-btn" aria-pressed={modifiers.includes(code)} onClick={()=>{const down=!modifiers.includes(code);input({kind:"key",code,down});setModifiers(down?[...modifiers,code]:modifiers.filter(x=>x!==code));keyboard.current?.focus();}}>{label}</button>)}</div>
+                <textarea ref={keyboard} aria-label={uiText("输入文字到远端")} placeholder={uiText("键入或粘贴文字")} value={draft} rows={1} autoCapitalize="off" autoCorrect="off" spellCheck={false}
+                  onChange={e=>{setDraft(e.target.value);if(!(e.nativeEvent as InputEvent).isComposing)typed(e.target.value);}}
+                  onCompositionStart={()=>{composing.current=true;}} onCompositionEnd={e=>{composing.current=false;typed(e.currentTarget.value);}}
+                  onKeyDown={e=>{if(e.key==="Enter"&&!composing.current&&!(e.nativeEvent as KeyboardEvent).isComposing){e.preventDefault();if(draft)typed(draft);specialKey("Enter");}if(e.key==="Backspace"&&!draft&&!composing.current){e.preventDefault();specialKey("Backspace");}}}
+                />
+              </div>}
+            </div>}
             <footer className="rd-session-footer">
               <span>
                 <LockKeyhole size={13} />
@@ -464,14 +521,14 @@ function App() {
                 <ArrowUpRight size={16} />
                 {uiText("连接电脑")}
               </button>
-              <button
+              {!controllerOnly && <button
                 className={tab === "share" ? "is-active" : ""}
                 onClick={() => setTab("share")}
               >
                 <Monitor size={16} />
                 {uiText("共享这台电脑")}
                 {status?.pairing_code && <i />}
-              </button>
+              </button>}
             </nav>
             {tab === "connect" ? (
               <section className="rd-connect">

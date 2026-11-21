@@ -16,6 +16,9 @@ static void pointer(double x,double y,int kind,int button,int down,int clicks){
  else {if(CGEventSourceButtonState(kCGEventSourceStateCombinedSessionState,kCGMouseButtonLeft))t=kCGEventLeftMouseDragged;else if(CGEventSourceButtonState(kCGEventSourceStateCombinedSessionState,kCGMouseButtonRight))t=kCGEventRightMouseDragged;}
  CGEventRef e=CGEventCreateMouseEvent(NULL,t,p,btn);if(e){if(kind)CGEventSetIntegerValueField(e,kCGMouseEventClickState,clicks);CGEventPost(kCGHIDEventTap,e);CFRelease(e);}
 }
+static void text_input(const UniChar *chars, unsigned long length){
+ for(int down=1;down>=0;down--){CGEventRef e=CGEventCreateKeyboardEvent(NULL,0,down);if(e){CGEventSetFlags(e,0);CGEventKeyboardSetUnicodeString(e,length,chars);CGEventPost(kCGHIDEventTap,e);CFRelease(e);}}
+}
 static void key(int code,int down,unsigned long long flags){CGEventRef e=CGEventCreateKeyboardEvent(NULL,(CGKeyCode)code,down);if(e){CGEventSetFlags(e,(CGEventFlags)flags);CGEventPost(kCGHIDEventTap,e);CFRelease(e);}}
 static void scroll(int delta){CGEventRef e=CGEventCreateScrollWheelEvent(NULL,kCGScrollEventUnitPixel,1,delta);if(e){CGEventPost(kCGHIDEventTap,e);CFRelease(e);}}
 */
@@ -23,6 +26,8 @@ import "C"
 import (
 	"os/exec"
 	"strconv"
+	"unicode/utf16"
+	"unsafe"
 )
 
 var keyCodes = map[string]uint16{"KeyA": 0, "KeyS": 1, "KeyD": 2, "KeyF": 3, "KeyH": 4, "KeyG": 5, "KeyZ": 6, "KeyX": 7, "KeyC": 8, "KeyV": 9, "KeyB": 11, "KeyQ": 12, "KeyW": 13, "KeyE": 14, "KeyR": 15, "KeyY": 16, "KeyT": 17, "Digit1": 18, "Digit2": 19, "Digit3": 20, "Digit4": 21, "Digit6": 22, "Digit5": 23, "Equal": 24, "Digit9": 25, "Digit7": 26, "Minus": 27, "Digit8": 28, "Digit0": 29, "BracketRight": 30, "KeyO": 31, "KeyU": 32, "BracketLeft": 33, "KeyI": 34, "KeyP": 35, "Enter": 36, "KeyL": 37, "KeyJ": 38, "Quote": 39, "KeyK": 40, "Semicolon": 41, "Backslash": 42, "Comma": 43, "Slash": 44, "KeyN": 45, "KeyM": 46, "Period": 47, "Tab": 48, "Space": 49, "Backquote": 50, "Backspace": 51, "Escape": 53, "MetaRight": 54, "MetaLeft": 55, "ShiftLeft": 56, "AltLeft": 58, "ControlLeft": 59, "ShiftRight": 60, "AltRight": 61, "ControlRight": 62, "Home": 115, "PageUp": 116, "Delete": 117, "End": 119, "PageDown": 121, "ArrowLeft": 123, "ArrowRight": 124, "ArrowDown": 125, "ArrowUp": 126}
@@ -68,4 +73,14 @@ func init() {
 	for i, code := range []uint16{122, 120, 99, 118, 96, 97, 98, 100, 101, 109, 103, 111} {
 		keyCodes["F"+strconv.Itoa(i+1)] = code
 	}
+}
+
+func nativeText(text string) error {
+	// One Unicode scalar per event preserves surrogate pairs and avoids long
+	// keyboard events being truncated by applications.
+	for _, r := range text {
+		units := utf16.Encode([]rune{r})
+		C.text_input((*C.UniChar)(unsafe.Pointer(&units[0])), C.ulong(len(units)))
+	}
+	return nil
 }

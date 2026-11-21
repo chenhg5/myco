@@ -1,9 +1,12 @@
 package main
 
 import (
+	"errors"
 	"os/exec"
 	"strconv"
 	"syscall"
+	"unicode/utf16"
+	"unsafe"
 )
 
 var user32 = syscall.NewLazyDLL("user32.dll")
@@ -57,3 +60,36 @@ func nativeInput(e inputEvent) error {
 func hideProcess(c *exec.Cmd) { c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true} }
 
 func requestInputPermission() {}
+
+// INPUT has a 32-byte union after its aligned type on Windows x64.
+type unicodeInput struct {
+	Kind      uint32
+	Pad       uint32
+	VK        uint16
+	Scan      uint16
+	Flags     uint32
+	Time      uint32
+	Pad2      uint32
+	Extra     uintptr
+	UnionTail [8]byte
+}
+
+func unicodeInputs(text string) []unicodeInput {
+	units := utf16.Encode([]rune(text))
+	out := make([]unicodeInput, 0, len(units)*2)
+	for _, unit := range units {
+		out = append(out, unicodeInput{Kind: 1, Scan: unit, Flags: 4}, unicodeInput{Kind: 1, Scan: unit, Flags: 6})
+	}
+	return out
+}
+func nativeText(text string) error {
+	events := unicodeInputs(text)
+	if len(events) == 0 {
+		return nil
+	}
+	n, _, _ := user32.NewProc("SendInput").Call(uintptr(len(events)), uintptr(unsafe.Pointer(&events[0])), unsafe.Sizeof(events[0]))
+	if n != uintptr(len(events)) {
+		return errors.New("input_blocked")
+	}
+	return nil
+}

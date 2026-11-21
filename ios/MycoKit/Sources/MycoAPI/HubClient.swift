@@ -18,6 +18,26 @@ public struct HubClient: HubAPI {
         self.session = session
     }
 
+    public func remoteComputers() async throws -> [RemoteComputer] {
+        struct Envelope: Decodable { var machines: [RemoteComputer] }
+        let result: Envelope = try await get("/v1/remote/machines", timeout: Self.pollTimeout)
+        return result.machines
+    }
+
+    public func connectRemote(machine: String, offer: RemoteOffer) async throws -> RemoteConnection {
+        struct Request: Encodable { var machine: String; var offer: RemoteOffer }
+        let data = try await call("POST", "/v1/remote/sessions", body: HubJSON.encoder().encode(Request(machine: machine, offer: offer)))
+        return try Self.decode(RemoteConnection.self, from: data)
+    }
+
+    public func remoteConnection(_ id: String) async throws -> RemoteConnection {
+        try await get("/v1/remote/sessions/\(Self.segment(id))", timeout: Self.pollTimeout)
+    }
+
+    public func disconnectRemote(_ id: String) async throws {
+        _ = try await call("DELETE", "/v1/remote/sessions/\(Self.segment(id))")
+    }
+
     public func whoami() async throws -> Whoami {
         try await get("/v1/console/me")
     }

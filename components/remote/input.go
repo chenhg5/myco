@@ -3,9 +3,12 @@ package main
 import (
 	"math"
 	"sync"
+	"unicode"
+	"unicode/utf8"
 )
 
 type inputEvent struct {
+	Text   string  `json:"text,omitempty"`
 	Kind   string  `json:"kind"`
 	X      float64 `json:"x"`
 	Y      float64 `json:"y"`
@@ -24,6 +27,16 @@ func (e inputEvent) valid() bool {
 		return false
 	}
 	switch e.Kind {
+	case "text":
+		if len(e.Text) == 0 || len(e.Text) > 1024 || !utf8.ValidString(e.Text) || utf8.RuneCountInString(e.Text) > 256 {
+			return false
+		}
+		for _, r := range e.Text {
+			if unicode.IsControl(r) {
+				return false
+			}
+		}
+		return true
 	case "move", "button":
 		return e.X >= 0 && e.X <= 1 && e.Y >= 0 && e.Y <= 1 && e.Button >= 0 && e.Button <= 2 && e.Clicks >= 0 && e.Clicks <= 3
 	case "key":
@@ -39,6 +52,9 @@ func (e inputEvent) valid() bool {
 func inject(e inputEvent) error {
 	keyMu.Lock()
 	defer keyMu.Unlock()
+	if e.Kind == "text" {
+		return nativeText(e.Text)
+	}
 	if e.Kind == "release" {
 		releaseLocked()
 		return nil

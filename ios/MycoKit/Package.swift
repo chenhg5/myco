@@ -30,6 +30,7 @@ let package = Package(
         .target(name: "MycoFeatures", dependencies: ["MycoCore", "MycoUI", "MycoAPI", "MycoStore"]),
         .testTarget(name: "MycoAPITests", dependencies: ["MycoAPI"], resources: [.copy("Fixtures")]),
         .testTarget(name: "MycoCoreTests", dependencies: ["MycoCore", "MycoFake"]),
+        .testTarget(name: "MycoFeatureTests", dependencies: ["MycoFeatures"]),
         .testTarget(name: "MycoUITests", dependencies: ["MycoUI"], resources: [.copy("Fixtures")]),
     ]
 )

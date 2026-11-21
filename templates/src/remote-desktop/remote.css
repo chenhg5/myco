@@ -698,3 +698,28 @@ p {
     transition: none;
   }
 }
+.rd-screen { position: relative; touch-action: none; }
+.rd-touch-cursor { position: absolute; pointer-events: none; width: 12px; height: 12px; border: 2px solid white; background: #111; border-radius: 50%; box-shadow: 0 0 0 1px #111, 0 1px 6px #0008; transform: translate(-50%,-50%); }
+.rd-touch-controls { display: none; padding: 12px 0; }
+.rd-touch-controls > p { color: var(--rd-muted); font-size: 12px; margin: 0 0 10px; }
+.rd-touch-row { display: flex; align-items: center; gap: 8px; overflow-x: auto; padding: 2px 0 6px; }
+.rd-touch-row .rd-btn { flex-shrink: 0; min-width: 44px; min-height: 44px; justify-content: center; }
+.rd-touch-row .rd-btn[aria-pressed="true"] { background: var(--rd-text); color: var(--rd-panel); }
+.rd-keyboard textarea { width: 100%; min-height: 46px; resize: vertical; border: 1px solid var(--rd-line); border-radius: 10px; background: var(--rd-panel); color: var(--rd-text); padding: 10px; font: inherit; font-size: 16px; }
+.rd-app.is-controller .rd-touch-controls { display: block; }
+@media (pointer: coarse) { .rd-touch-controls { display: block; } }
+@media (max-width: 520px) {
+  .rd-app { padding: 16px; }
+  .rd-header { gap: 8px; padding-bottom: 14px; }
+  .rd-header h1 { font-size: 21px; }
+  .rd-brand { gap: 10px; }
+  .rd-mark { width: 40px; height: 40px; border-radius: 12px; }
+  .rd-session-bar { gap: 8px; flex-wrap: wrap; }
+  .rd-session-bar strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .rd-session-actions { width: 100%; justify-content: flex-end; }
+  .rd-session-actions > span { margin-right: auto; }
+  .rd-screen { min-height: 160px; height: clamp(180px, 38dvh, 360px); }
+  .rd-session-footer { flex-wrap: wrap; gap: 8px; font-size: 11px; }
+  .rd-tabs button { min-height: 44px; }
+  .rd-section-heading { gap: 8px; }
+}
