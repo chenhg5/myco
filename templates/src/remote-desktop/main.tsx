@@ -117,7 +117,7 @@ function App() {
   const keyboard=useRef<HTMLTextAreaElement>(null),composing=useRef(false);
   const touchpad=useRef<Touchpad>();
   if(!touchpad.current)touchpad.current=new Touchpad(e=>session.current?.input(e),p=>setCursor({...p}));
-  useEffect(()=>{const resize=()=>{document.documentElement.style.setProperty("--rd-viewport-height",`${window.visualViewport?.height??innerHeight}px`);document.documentElement.style.setProperty("--rd-viewport-top",`${window.visualViewport?.offsetTop??0}px`);setLayout(n=>n+1);};resize();window.addEventListener("resize",resize);window.visualViewport?.addEventListener("resize",resize);window.visualViewport?.addEventListener("scroll",resize);return()=>{window.removeEventListener("resize",resize);window.visualViewport?.removeEventListener("resize",resize);window.visualViewport?.removeEventListener("scroll",resize);};},[]);
+  useEffect(()=>{const resize=()=>{document.documentElement.style.setProperty("--rd-viewport-height",`${window.visualViewport?.height??innerHeight}px`);document.documentElement.style.setProperty("--rd-viewport-top",`${window.visualViewport?.offsetTop??0}px`);document.documentElement.style.setProperty("--rd-keyboard-inset",`${Math.max(0,innerHeight-(window.visualViewport?.height??innerHeight)-(window.visualViewport?.offsetTop??0))}px`);setLayout(n=>n+1);};resize();window.addEventListener("resize",resize);window.visualViewport?.addEventListener("resize",resize);window.visualViewport?.addEventListener("scroll",resize);return()=>{window.removeEventListener("resize",resize);window.visualViewport?.removeEventListener("resize",resize);window.visualViewport?.removeEventListener("scroll",resize);};},[]);
   const motion = useRef<{ x: number; y: number } | null>(null),
     motionFrame = useRef(0);
   const clicks = useRef({ at: 0, x: 0, y: 0, button: 0, count: 0 });
@@ -414,7 +414,7 @@ function App() {
           <section className={`rd-session${expanded?" is-expanded":""}${controllerOnly?" is-immersive":""}${toolsVisible?" show-tools":""}${keyboardOpen?" keyboard-open":""}`}>
             {controllerOnly&&<div className="rd-floating-tools">
               <button className="rd-icon" aria-label={uiText("工具")} aria-expanded={toolsVisible} onClick={()=>{setToolsVisible(!toolsVisible);if(toolsVisible){setKeyboardOpen(false);keyboard.current?.blur();releaseModifiers();}}}><Settings2 size={19}/></button>
-              {control&&scrollMode&&<button className="rd-scroll-mode" aria-label={uiText("切回双指缩放")} onClick={()=>setScrollMode(false)}>{uiText("双指滚动 · 点此缩放")}</button>}
+              {control&&scrollMode&&<button className="rd-scroll-mode" aria-label={uiText("切回双指缩放")} onClick={()=>setScrollMode(false)} title={uiText("双指滚动 · 点此缩放")}>{uiText("滚动")}</button>}
               {control&&<button className="rd-icon" aria-label={uiText("键盘")} onClick={()=>{setToolsVisible(true);flushSync(()=>setKeyboardOpen(!keyboardOpen));if(!keyboardOpen)keyboard.current?.focus();}}><Keyboard size={19}/></button>}
             </div>}
             <div className="rd-session-bar">
@@ -535,6 +535,7 @@ function App() {
               {showCursor&&control&&<span className="rd-touch-cursor" aria-hidden="true" style={(()=>{const p=cursorPosition();return {left:typeof p.left==="number"?p.left*view.scale+view.x:p.left,top:typeof p.top==="number"?p.top*view.scale+view.y:p.top};})()}/>}
             </div>
             <div className={`rd-touch-controls${keyboardOpen?" has-keyboard":""}`}>
+              {controllerOnly&&!keyboardOpen&&<div className="rd-tool-heading"><strong>{uiText("操作与画面")}</strong><button className="rd-icon" aria-label={uiText("收起工具")} onClick={()=>setToolsVisible(false)}><X size={18}/></button></div>}
               <p>{uiText(control?(scrollMode?"双指滚动远端；要缩放请关闭滚动模式。":"双指捏合缩放；双指按住片刻再拖动，滚动远端。"):"仅查看：双指捏合缩放，放大后单指移动画面。")}</p>
               <div className="rd-touch-row">
                 <button className="rd-btn" aria-label={uiText("缩小画面")} disabled={view.scale<=1} onClick={()=>zoomBy(-.5)}>−</button>

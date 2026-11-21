@@ -281,6 +281,9 @@ struct PageScreen: View {
         } message: { one in
             Text(one.message)
         }
+        // The remote display is a fixed canvas. Its keyboard overlays the
+        // connection instead of resizing the NavigationStack and WebView.
+        .ignoresSafeArea(remoteActive ? .keyboard : [], edges: .bottom)
         .overlay(alignment: remoteKeyboardVisible ? .topLeading : .topTrailing) {
             if remoteActive {
                 Button { confirmingRemoteExit = true } label: {

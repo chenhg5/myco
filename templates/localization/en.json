@@ -1598,5 +1598,8 @@
   "双指滚动 · 点此缩放": "Scroll mode · Tap to zoom",
   "双指滚动远端；要缩放请关闭滚动模式。": "Two fingers scroll the remote computer. Turn scroll mode off to zoom.",
   "双指捏合缩放；双指按住片刻再拖动，滚动远端。": "Pinch to zoom. Hold two fingers briefly, then drag to scroll remotely.",
-  "远端组件较旧，只支持短英文；更新后可发送中文。": "Older remote component: short ASCII text only. Update it for other languages."
+  "远端组件较旧，只支持短英文；更新后可发送中文。": "Older remote component: short ASCII text only. Update it for other languages.",
+  "操作与画面": "Controls and display",
+  "收起工具": "Hide tools",
+  "滚动": "Scroll"
 }

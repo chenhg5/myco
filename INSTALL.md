@@ -1161,7 +1161,10 @@ for small controls. On the updated iPhone App, connecting enters a landscape
 full-screen desktop. App bars are hidden; a trusted exit button stays available. It moves to the
 left while the software keyboard is visible, away from Send, and asks before
 disconnecting; cancelling keeps the connection and local draft.
-Tap the floating tools button for the keyboard and controls; disconnecting or
+Use the right-edge toolbar for the keyboard and controls. The controls panel
+opens beside it, over the desktop. The software keyboard and local editor also
+overlay the full-size desktop; they do not shrink or push the remote picture.
+Closing the keyboard reveals the same view. Disconnecting or
 closing restores portrait. Pinch with two fingers to zoom (also in view-only mode);
 in view-only mode, slide one finger to pan the enlarged desktop. Desktop viewers can use **Expand desktop** to fill the available App panel. A disabled
 keyboard/mouse option means the computer allows viewing only: stop sharing on

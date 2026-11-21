@@ -44,9 +44,13 @@ try{
   await page.locator('.rd-dialog .rd-primary').click();
   await page.locator('.rd-screen video').waitFor();await page.waitForFunction(()=>document.querySelector('video')?.videoWidth>0);
   let box=await page.locator('.rd-screen').boundingBox(),x=Math.round(box.x+box.width/2),y=Math.round(box.y+box.height/2);
-  const cdp=await context.newCDPSession(page);const touch=(type,points)=>cdp.send('Input.dispatchTouchEvent',{type,touchPoints:points});
+  const tools=page.getByRole('button',{name:lang==='zh'?'工具':'Tools',exact:true});
+  const showTools=async()=>{if(!await page.locator('.rd-touch-controls').isVisible())await tools.click();};
+  const cdp=await context.newCDPSession(page);const touch=async(type,points)=>{if(type==='touchStart'&&await page.locator('.rd-touch-controls').isVisible())await tools.click();return cdp.send('Input.dispatchTouchEvent',{type,touchPoints:points});};
   await page.locator('.rd-session.is-expanded.is-immersive').waitFor();
+  const rail=await page.locator('.rd-floating-tools').boundingBox();assert(rail.x>width*.7,'phone controls belong on the right edge');
   await page.getByRole('button',{name:lang==='zh'?'工具':'Tools',exact:true}).click();
+  const panel=await page.locator('.rd-touch-controls').boundingBox();assert(panel.x+panel.width<=rail.x,'tools open beside the right rail, not over it');
   const inputCount=await page.evaluate(()=>window.__inputs.length);
   await touch('touchStart',[{x:x-30,y,id:1},{x:x+30,y,id:2}]);
   // A little parallel motion before a pinch must not lock it into remote scroll.
@@ -54,7 +58,7 @@ try{
   await touch('touchMove',[{x:x-65,y,id:1},{x:x+65,y,id:2}]);await touch('touchEnd',[]);
   assert(parseInt(await page.locator('.rd-zoom').innerText())>150,'pinch must zoom in any permission mode');
   assert(!(await page.evaluate(n=>window.__inputs.slice(n),inputCount)).some(e=>['scroll','move','button'].includes(e.kind)),'a pinch must not scroll or click on the host');
-  await page.getByRole('button',{name:lang==='zh'?'适应画面':'Fit to screen',exact:true}).click();
+  await showTools();await page.getByRole('button',{name:lang==='zh'?'适应画面':'Fit to screen',exact:true}).click();
   assert((await page.locator('.rd-session').boundingBox()).height>=height-2,'a phone connection must use the available height automatically');
   if(!readOnly){
   await touch('touchStart',[{x,y,id:1}]);await touch('touchEnd',[]);assert.equal(await page.evaluate(()=>window.__inputs.filter(x=>x.kind==='button').length),2);
@@ -63,17 +67,19 @@ try{
   const heldScroll=await page.evaluate(()=>window.__inputs.filter(e=>e.kind==='scroll').length);
   await touch('touchStart',[{x:x-20,y,id:1},{x:x+20,y,id:2}]);await page.waitForTimeout(400);await touch('touchMove',[{x:x-20,y:y-20,id:1},{x:x+20,y:y-20,id:2}]);await touch('touchEnd',[]);
   assert(await page.evaluate(n=>window.__inputs.filter(e=>e.kind==='scroll').length>n,heldScroll),'hold two fingers, then drag must scroll without a mode switch');
-  const scroll=page.getByRole('button',{name:lang==='zh'?'双指滚动':'Two-finger scroll',exact:true});await scroll.click();
-  await touch('touchStart',[{x:x-20,y,id:1},{x:x+20,y,id:2}]);await touch('touchMove',[{x:x-20,y:y-20,id:1},{x:x+20,y:y-20,id:2}]);await touch('touchEnd',[]);assert(await page.evaluate(()=>window.__inputs.some(x=>x.kind==='scroll')));await page.getByRole('button',{name:lang==='zh'?'切回双指缩放':'Switch back to pinch zoom',exact:true}).click();assert.equal(await scroll.getAttribute('aria-pressed'),'false');
-  await page.getByRole('button',{name:lang==='zh'?'放大画面':'Zoom in',exact:true}).click();
+  await showTools();const scroll=page.getByRole('button',{name:lang==='zh'?'双指滚动':'Two-finger scroll',exact:true});await scroll.click();
+  await touch('touchStart',[{x:x-20,y,id:1},{x:x+20,y,id:2}]);await touch('touchMove',[{x:x-20,y:y-20,id:1},{x:x+20,y:y-20,id:2}]);await touch('touchEnd',[]);assert(await page.evaluate(()=>window.__inputs.some(x=>x.kind==='scroll')));await page.getByRole('button',{name:lang==='zh'?'切回双指缩放':'Switch back to pinch zoom',exact:true}).click();await showTools();assert.equal(await scroll.getAttribute('aria-pressed'),'false');
+  await showTools();await page.getByRole('button',{name:lang==='zh'?'放大画面':'Zoom in',exact:true}).click();
   assert.equal(await page.locator('.rd-zoom').innerText(),'150%');
   assert.match(await page.locator('.rd-screen video').getAttribute('style'),/scale\(1.5\)/);
   await page.getByRole('button',{name:lang==='zh'?'缩小画面':'Zoom out',exact:true}).click();
   const drag=page.locator('.rd-touch-row button').filter({hasText:lang==='zh'?'拖动':'Drag'}).first();
   await drag.click();assert.equal(await drag.getAttribute('aria-pressed'),'true');
-  await touch('touchStart',[{x,y,id:1}]);await touch('touchMove',[{x:x+10,y:y+10,id:1}]);await touch('touchEnd',[]);await drag.click();assert.equal(await drag.getAttribute('aria-pressed'),'false');
+  await touch('touchStart',[{x,y,id:1}]);await touch('touchMove',[{x:x+10,y:y+10,id:1}]);await touch('touchEnd',[]);await showTools();await drag.click();assert.equal(await drag.getAttribute('aria-pressed'),'false');
   const keyboard=page.locator('.rd-touch-row button').filter({hasText:lang==='zh'?'键盘':'Keyboard'}).first();await keyboard.click();const field=page.locator('.rd-keyboard textarea');
   const beforeDraft=await page.evaluate(()=>window.__inputs.length);
+  const desktopBeforeKeyboard=await page.locator('.rd-screen').boundingBox();
+  const videoBeforeKeyboard=await page.locator('video').boundingBox();
   await field.fill('你好');await field.dispatchEvent('compositionstart');await field.fill('你好，语音听写后可以修改🙂');await field.dispatchEvent('compositionend',{data:'你好，语音听写后可以修改🙂'});
   await field.press('Backspace');
   assert.equal(await page.evaluate(()=>window.__inputs.length),beforeDraft,'local editing must not send partial text or Backspace to the host');
@@ -82,6 +88,10 @@ try{
   const visibleHeight=Math.min(180,height),visibleTop=7;
   await page.evaluate(({h,t})=>{Object.defineProperty(visualViewport,'height',{configurable:true,value:h});Object.defineProperty(visualViewport,'offsetTop',{configurable:true,value:t});visualViewport.dispatchEvent(new Event('resize'));visualViewport.dispatchEvent(new Event('scroll'));},{h:visibleHeight,t:visibleTop});
   await page.waitForTimeout(60);
+  const desktopWithKeyboard=await page.locator('.rd-screen').boundingBox();
+  const videoWithKeyboard=await page.locator('video').boundingBox();
+  assert.deepEqual(desktopWithKeyboard,desktopBeforeKeyboard,'keyboard must not resize or move the remote canvas');
+  assert.deepEqual(videoWithKeyboard,videoBeforeKeyboard,'the remote video must not shrink when typing');
   for(const locator of [field,page.getByRole('button',{name:lang==='zh'?'发送文字':'Send text',exact:true})]){const bounds=await locator.boundingBox();assert(bounds.y>=visibleTop&&bounds.y+bounds.height<=visibleTop+visibleHeight,'local editor and Send must fit above the software keyboard');}
   await page.screenshot({path:path.join(out,`${width}-${height}-${lang}-${theme}-keyboard.png`),fullPage:true});
   await page.getByRole('button',{name:lang==='zh'?'发送文字':'Send text',exact:true}).click();
@@ -89,6 +99,7 @@ try{
   assert(!await field.isVisible(),'sending should hide the keyboard and reveal the desktop');
   assert(!await page.evaluate(n=>window.__inputs.slice(n).some(x=>x.kind==='key'&&x.code==='Enter'),beforeDraft),'Send text must not submit the remote form');
   await page.evaluate(()=>{Object.defineProperty(visualViewport,'height',{configurable:true,value:innerHeight});Object.defineProperty(visualViewport,'offsetTop',{configurable:true,value:0});visualViewport.dispatchEvent(new Event('resize'));});
+  assert.deepEqual(await page.locator('.rd-screen').boundingBox(),desktopBeforeKeyboard,'dismissing the keyboard preserves the same canvas');
   await page.getByRole('button',{name:lang==='zh'?'键盘':'Keyboard',exact:true}).click();
   // Closing and reopening is a local draft operation, not a send.
   await field.fill('keep draft');await page.getByRole('button',{name:lang==='zh'?'收起键盘':'Hide keyboard',exact:true}).click();
@@ -103,13 +114,13 @@ try{
   await field.fill('');await page.getByRole('button',{name:lang==='zh'?'收起键盘':'Hide keyboard',exact:true}).click();
   await page.getByRole('button',{name:lang==='zh'?'工具':'Tools',exact:true}).click();
   }else {
-    await page.getByRole('button',{name:lang==='zh'?'放大画面':'Zoom in',exact:true}).click();
+    await showTools();await page.getByRole('button',{name:lang==='zh'?'放大画面':'Zoom in',exact:true}).click();
     const before=await page.locator('video').getAttribute('style');
     await touch('touchStart',[{x,y,id:1}]);await touch('touchMove',[{x:x+25,y:y+15,id:1}]);await touch('touchEnd',[]);
     assert.notEqual(await page.locator('video').getAttribute('style'),before,'one finger pans a zoomed view-only desktop');
     assert(!await page.evaluate(()=>window.__inputs.some(e=>['move','button','key','text','scroll'].includes(e.kind))),'view-only gestures must never reach the host');
   }
-  await page.screenshot({path:path.join(out,`${width}-${height}-${lang}-${theme}-tools.png`),fullPage:true});
+  await showTools();await page.screenshot({path:path.join(out,`${width}-${height}-${lang}-${theme}-tools.png`),fullPage:true});
   await page.getByRole('button',{name:lang==='zh'?'工具':'Tools',exact:true}).click();
   assert(!await page.locator('.rd-touch-controls').isVisible(),'tools must tuck away without shrinking the desktop');
   await page.screenshot({path:path.join(out,`${width}-${height}-${lang}-${theme}.png`),fullPage:true});

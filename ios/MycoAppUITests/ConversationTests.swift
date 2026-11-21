@@ -867,11 +867,14 @@ final class ConversationTests: XCTestCase {
         XCTAssertTrue(app.buttons["remote.exit"].waitForExistence(timeout: 10))
         let draft = web.textViews["Local draft"]
         XCTAssertTrue(draft.waitForExistence(timeout: 5))
+        let fullDesktop = web.frame
         draft.tap()
         draft.typeText("Unsent draft")
         let exit = app.buttons["remote.exit"]
         let moved = expectation(for: NSPredicate { _, _ in exit.frame.midX < web.frame.midX }, evaluatedWith: nil)
         wait(for: [moved], timeout: 5)
+        XCTAssertEqual(web.frame.height, fullDesktop.height, accuracy: 1, "the software keyboard overlays the full-height remote WebView")
+        XCTAssertEqual(web.frame.minY, fullDesktop.minY, accuracy: 1, "typing must not push the remote WebView upwards")
         snap("remote-keyboard-exit-away-from-send")
         exit.tap()
         XCTAssertTrue(alert.buttons["Stay connected"].waitForExistence(timeout: 5))
