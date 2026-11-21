@@ -20,7 +20,7 @@ func screenRecordMissing(env *Env) string {
 	return ""
 }
 func recordScreen(ctx context.Context, env *Env, a screenRecordArgs, path string, emit Emit) error {
-	if a.Microphone || a.Interactive {
+	if a.Microphone || a.Interactive || a.Region != nil {
 		return errf(CodeUnsupported, "Windows records the desktop only; microphone and region selection are not supported yet")
 	}
 	exe, err := env.LookPath("ffmpeg")

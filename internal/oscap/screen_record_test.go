@@ -10,7 +10,7 @@ import (
 )
 
 func TestScreenRecordOptions(t *testing.T) {
-	for _, raw := range []string{`{"max_seconds":-1}`, `{"max_seconds":3601}`, `{"max_seconds":"x"}`} {
+	for _, raw := range []string{`{"max_seconds":-1}`, `{"max_seconds":3601}`, `{"max_seconds":"x"}`, `{"region":{"w":0,"h":16}}`, `{"interactive":true,"region":{"w":16,"h":16}}`, `{"region":{"x":32769,"w":16,"h":16}}`} {
 		if _, err := decodeScreenRecord(json.RawMessage(raw)); err == nil {
 			t.Fatalf("accepted %s", raw)
 		}

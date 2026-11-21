@@ -308,3 +308,11 @@ without opening a picker. The UI explains whether the App needs updating or the
 Windows encoder is missing. On supported Macs it offers a button for System
 Settings → Privacy & Security → Screen & System Audio Recording, naming the
 currently used myco / myco-preview app; microphone permission is separate.
+
+On macOS, `screen.record` also accepts a non-interactive `region: {x,y,w,h}`
+(rectangle in screen coordinates; each side 16–16384 pixels). This is useful for
+bounded capture of a known region. `region` and `interactive` are mutually
+exclusive; Windows does not support regions yet. Interactive video uses the
+system tool's `-Jvideo` mode, never the incompatible `-i` still-image mode.
+Recorder failures preserve bounded diagnostic text rather than misreporting every
+failed launch as a permission problem.

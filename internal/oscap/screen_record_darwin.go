@@ -2,6 +2,7 @@ package oscap
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"strconv"
@@ -11,11 +12,16 @@ import (
 
 func screenRecordMissing(*Env) string { return "" }
 func screenRecordCommand(a screenRecordArgs, path string) []string {
-	args := []string{"-v", "-V", strconv.Itoa(a.MaxSeconds)}
+	args := []string{"-V", strconv.Itoa(a.MaxSeconds)}
+	// -i selects interactive *still image* capture and is rejected with -v.
+	// -Jvideo selects the system's interactive video capture instead.
 	if a.Interactive {
-		args = append(args, "-i", "-Jvideo")
+		args = append(args, "-Jvideo")
+	} else if a.Region != nil {
+		r := a.Region
+		args = append(args, "-v", "-R", fmt.Sprintf("%d,%d,%d,%d", r.X, r.Y, r.W, r.H))
 	} else {
-		args = append(args, "-m")
+		args = append(args, "-v", "-m")
 	}
 	if a.Microphone {
 		args = append(args, "-g")
@@ -33,7 +39,9 @@ func recordScreen(ctx context.Context, _ *Env, a screenRecordArgs, path string, 
 		return err
 	}
 	cmd := exec.Command("/usr/sbin/screencapture", screenRecordCommand(a, path)...)
-	// Do not collect screen contents or command output in logs.
+	// Keep bounded diagnostic text, never screen contents.
+	diagnostic := &capped{n: 4096}
+	cmd.Stderr = diagnostic
 	if err := cmd.Start(); err != nil {
 		return errf(CodeFailed, "could not open macOS screen recording: %v", err)
 	}
@@ -56,7 +64,7 @@ func recordScreen(ctx context.Context, _ *Env, a screenRecordArgs, path string, 
 		case err := <-done:
 			if err != nil {
 				if fi, e := os.Stat(path); e != nil || fi.Size() < 32 {
-					return errf(CodeCancelled, "recording was cancelled; allow Screen Recording in System Settings if needed")
+					return screenCaptureFailure(err, diagnostic.buf.String(), path)
 				}
 			}
 			return nil
