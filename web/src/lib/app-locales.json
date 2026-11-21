@@ -248,5 +248,15 @@
       "name": "录屏工作台",
       "description": "录下屏幕，直接裁剪、分割、加文字和重点放大，在本机导出 MP4。视频留在本机，剪辑方案可以交给 agent 协作。"
     }
+  },
+  "myco/cinema": {
+    "en": {
+      "name": "Cinema",
+      "description": "Watch movies and series from your own sources. Search catalogs, choose episodes, share a watchlist and resume locally, with playback speed and intro/outro skipping. No sources are bundled."
+    },
+    "zh": {
+      "name": "影视",
+      "description": "用自己的影视源搜索电影与剧集、选集播放，收藏待看清单；观看进度保存在这台电脑，支持续播、倍速和跳过片头片尾。不内置影视源。"
+    }
   }
 }

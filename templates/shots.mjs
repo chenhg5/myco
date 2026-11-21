@@ -104,6 +104,7 @@ function photo() {
 // sample data is there before the first).
 const wait = (p, ms = 400) => p.waitForTimeout(ms);
 const plans = {
+  cinema: [null, async (p) => { await p.getByRole("button", {name:"添加影视源", exact:true}).click(); await wait(p); }],
   "remote-desktop": [null, async (p) => { await p.locator(".rd-tabs button").nth(1).click(); await wait(p,300); }],
   base: [null, async (p) => { await p.locator("text=看板").first().click(); await wait(p, 600); }],
   issues: [async (p) => { await p.locator(".is-row").nth(5).click(); await wait(p, 500); }, async (p) => { await p.keyboard.press("Escape"); await p.click('button[title="看板"]'); await wait(p, 500); }],

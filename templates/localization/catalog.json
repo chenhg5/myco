@@ -98,5 +98,9 @@
   "recorder": [
     "Recording studio",
     "Record your screen, trim and split clips, add text and focus zooms, then export MP4 locally. Footage stays on your computer; agents can help with the edit."
+  ],
+  "cinema": [
+    "Cinema",
+    "Watch movies and series from your own sources. Search catalogs, choose episodes, share a watchlist and resume locally, with playback speed and intro/outro skipping. No sources are bundled."
   ]
 }
