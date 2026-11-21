@@ -1,0 +1,82 @@
+name: Remote Desktop Windows preview
+on:
+  push:
+    branches: [codex/remote-preview]
+    paths: ['scripts/remote-preview/**', '.github/workflows/remote-preview.yml']
+  workflow_dispatch:
+    inputs:
+      component_run:
+        description: Successful native component workflow run with matching component source
+        required: true
+        default: '44865682573'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    env:
+      COMPONENT_RUN: ${{ inputs.component_run || '44865682573' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Verify native artifacts match the component source
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [[ "$COMPONENT_RUN" =~ ^[0-9]+$ ]]
+          conclusion=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$COMPONENT_RUN" --jq .conclusion)
+          [[ "$conclusion" == success ]]
+          sha=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$COMPONENT_RUN" --jq .head_sha)
+          git diff --exit-code "$sha" HEAD -- components/remote
+          grep -q 'const ComponentVersion = "0.1.0"' internal/remotedesktop/component.go
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ env.COMPONENT_RUN }}
+          name: myco-remote_windows_amd64
+          path: native-artifact
+      - name: Verify and stage the optional engine
+        shell: python
+        run: |
+          import pathlib,hashlib,zipfile
+          source=pathlib.Path('native-artifact/myco-remote_windows_amd64.zip')
+          expected=pathlib.Path(str(source)+'.sha256').read_text().split()[0]
+          assert hashlib.sha256(source.read_bytes()).hexdigest()==expected, 'component checksum mismatch'
+          target=pathlib.Path('package/component/0.1.0')
+          target.mkdir(parents=True)
+          with zipfile.ZipFile(source) as z:
+            assert sum(f.file_size for f in z.infolist()) <= 256*1024*1024
+            for f in z.infolist():
+              assert '/' not in f.filename and '\\' not in f.filename and ':' not in f.filename
+              assert f.filename in {'myco-remote.exe','ffmpeg.exe'} or f.filename.startswith(('LICENSE','NOTICE'))
+              (target/f.filename).write_bytes(z.read(f))
+      - name: Build the preview App and CLI
+        shell: bash
+        run: |
+          version="remote-preview-${GITHUB_SHA:0:8}"
+          go build -tags production -trimpath -ldflags "-s -w -H windowsgui -X main.version=$version" -o package/myco-app.exe ./cmd/myco-app
+          go build -trimpath -ldflags "-s -w -X main.version=$version" -o package/myco.exe ./cmd/myco
+          cp scripts/remote-preview/{Start-preview.cmd,Stop-preview.cmd,README.md} package/
+          printf '%s\n' "$GITHUB_SHA" > package/SOURCE.txt
+      - name: Test preview isolation and launcher
+        shell: pwsh
+        run: ./scripts/remote-preview/check-windows.ps1
+      - name: Record preview file checksums
+        shell: python
+        run: |
+          import pathlib,hashlib
+          root=pathlib.Path('package')
+          lines=[hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.relative_to(root).as_posix() for p in sorted(root.rglob('*')) if p.is_file()]
+          (root/'SHA256SUMS').write_text('\n'.join(lines)+'\n')
+      - uses: actions/upload-artifact@v4
+        with:
+          name: myco-remote-preview-windows-amd64
+          path: package/
+          retention-days: 7
