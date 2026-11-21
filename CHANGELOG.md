@@ -4,6 +4,24 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.21.8
+
+- **New official app: Meeting Notes (会议记录)**: record a meeting from any app (your microphone as "me", the computer's sound or one meeting app as "them") and have it transcribed on this computer (SenseVoice: Chinese, English, Cantonese, Japanese, Korean; downloaded the first time). Sentences by speaker, played from where you click, corrected in place, speakers renamed, search, and export as text, Markdown or SRT; several people at one microphone are told apart, and an agent can write the notes. Recording works in the Mac App (macOS 14.2+ for the computer's sound) and on Linux; not on Windows yet.
+- **New official apps**: Photo Edit (修图: crop, adjustments, filters, portrait retouch, text, stickers, frames; photos stay on the computer that opened them), Design Studio (设计工作台: briefs, layers, HTML prototypes, feedback and snapshots), Market Watch (行情工作台: China, Hong Kong and US instruments with interchangeable data providers, watchlists and charts) and Proxy Console (代理工作台: manage existing Mihomo and sing-box cores; controller credentials stay in this computer's keychain).
+- Making a page from an app: the first one in a workspace comes with sample data, later ones start empty (no checkbox any more).
+- Official apps: when GitHub still hands out the old checksum right after the apps are published, the hub tries again instead of failing.
+- What apps do on this computer is logged without the raw arguments.
+- Upgrade the App for Meeting Notes (recording and speech to text) and the sample-data change; upgrade the workspace (Settings › Workspace, or `sudo myco upgrade` on the server) for the retry.
+
+**中文**
+
+- **新的官方应用：会议记录**：从任意应用录会议（麦克风算「我」，电脑播放的声音或某个会议软件算「对方」），在这台电脑上转成文字（SenseVoice：中、英、粤、日、韩，第一次用时下载）。按说话人分句，点哪句从哪播，就地改错、改说话人名字、搜索，导出文本、Markdown 或 SRT；一个麦克风前的几个人也能分开，agent 可以写纪要。Mac App 能录（录电脑声音要 macOS 14.2+），Linux 也能录；Windows 还不行。
+- **新的官方应用**：修图（裁剪、调色、滤镜、人像美化、文字、贴纸、相框；照片只存在打开它的那台电脑上）、设计工作台（需求、图层、HTML 原型、反馈和快照）、行情工作台（A 股、港股、美股，数据源可换，自选和图表）、代理工作台（管理已有的 Mihomo、sing-box 内核；控制器凭据存在本机钥匙串）。
+- 从应用新建网页：工作区里第一份自带示例数据，之后的从空的开始（不再有勾选框）。
+- 官方应用：刚发布、GitHub 还给出旧校验值时，Hub 会再试，不再直接报错。
+- 应用在这台电脑上做的事，日志里不再记录原始参数。
+- 要升级 App 才有会议记录（录音和转文字）和示例数据的改动；要升级工作区（「设置 › 工作区」一键升级，或服务器上 `sudo myco upgrade`）才有重试。
+
 ## v0.21.7
 
 - **New official app: Disk Cleanup (空间清理)**, after DaisyDisk: your disks with their free room, one click to scan (or only your home folder, or a folder you pick), a map of rings beside a list of what takes the room, largest first, and a basket at the bottom for what to clean; it goes to the trash, so it can be put back. The scan keeps going when the page panel is tucked away, and you can watch it fill.
