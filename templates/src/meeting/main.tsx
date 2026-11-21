@@ -14,7 +14,7 @@ import "./meeting.css";
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AppWindow, ArrowDown, ArrowUp, Check, ChevronsRight, CircleSlash, Download, FastForward, FileAudio, Loader2, Mic, Monitor, MoreHorizontal,
-  Pause, Play, Plus, RefreshCw, Rewind, Search, Square, Trash2, X, TextCursor, Repeat, Copy, Users, NotebookPen, PanelRight, ExternalLink,
+  Pause, Play, RefreshCw, Rewind, Search, Square, Trash2, X, TextCursor, Repeat, Copy, Users, NotebookPen, PanelRight, ExternalLink,
 } from "lucide-react";
 import { Toast, mount, useKit } from "../_lib/appkit";
 import { myco, save } from "../_lib/myco";
@@ -58,7 +58,6 @@ function App() {
       <aside className="mt-side">
         <div className="mt-side-head">
           <span className="mt-side-title">会议记录</span>
-          <button type="button" className="icon-btn" aria-label="新录音" title="新录音" onClick={() => setSel(live || "new")}><Plus className="ico" /></button>
         </div>
         <div className="mt-list" role="listbox" aria-label="会议">
           {!live && (
