@@ -1576,18 +1576,21 @@ private struct PoorNetworkLine: View {
 /// What my superagent waits on me for, above its input: each request, why,
 /// how long it may still wait, and 同意 or 不同意. Read again now and then
 /// while the conversation is open.
-private struct ApprovalStrip: View {
+struct ApprovalStrip: View {
     let model: SuperagentModel
-    let agent: String
+    /// Its requests only (nil: all that wait for me, each saying whose).
+    let agent: String?
     let name: String
+    @Environment(WorkspaceSession.self) private var session
 
     var body: some View {
         VStack(spacing: Space.s) {
-            ForEach(model.approvals.filter { $0.agent == agent }) { approval in
+            ForEach(model.approvals.filter { agent == nil || $0.agent == agent }) { approval in
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Image(systemName: "checkmark.shield").font(.footnote).foregroundStyle(MycoColor.amber)
-                        (Text(L("\(name) 想：", "\(name) wants to: ")).foregroundStyle(MycoColor.fg2) + Text(approval.what).foregroundStyle(MycoColor.fg))
+                        let who = agent == nil ? session.displayName(of: approval.agent) : name
+                        (Text(L("\(who) 想：", "\(who) wants to: ")).foregroundStyle(MycoColor.fg2) + Text(approval.what).foregroundStyle(MycoColor.fg))
                             .font(.subheadline)
                             .fixedSize(horizontal: false, vertical: true)
                     }

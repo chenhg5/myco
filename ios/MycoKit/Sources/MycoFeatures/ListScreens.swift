@@ -276,109 +276,273 @@ struct ProjectsScreen: View {
     }
 }
 
-/// 工作台: what agents do with me besides talking: apps to use together,
-/// automations that run on their own, workflows that hand work along (and
-/// what waits for my decision). Members are on the chats page.
+/// 工作台: what agents do with me besides talking, at a glance: what waits
+/// for me (decisions, requests to approve), the workflows going and one
+/// tap to run another, the pages made from apps and the apps to make one
+/// from, the automations with when they run next. Each part leads to its
+/// whole page. Members are on the chats page.
 struct WorkbenchScreen: View {
     @Environment(WorkspaceSession.self) private var session
     @Environment(Router.self) private var router
+    @Environment(\.scenePhase) private var scenePhase
+    /// An app a page is being made from.
+    @State private var using: AppTemplate?
 
     var body: some View {
-        List {
-            // What waits for me first: a decision is a tap here.
-            let decisions = session.workflows.decisions
-            if !decisions.isEmpty {
-                Section {
-                    ForEach(decisions.prefix(3)) { decision in
-                        DecisionCard(decision: decision, model: session.workflows, showRun: true)
-                            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
-                            .listRowBackground(MycoColor.bg)
-                            .listRowSeparator(.hidden)
-                    }
-                } header: {
-                    Text(L("等你决定", "Waiting for you")).font(.footnote).foregroundStyle(MycoColor.muted)
-                }
+        let front = scenePhase != .background
+        ScrollView {
+            VStack(alignment: .leading, spacing: 26) {
+                waiting
+                workflows
+                apps
+                automations
             }
-            Section {
-            // What agents do by themselves, on a schedule or on a call:
-            // one row above the people (the desktop app has it under
-            // Members too).
-                Button {
-                    router.push(.automations)
-                } label: {
-                    HStack(spacing: 12) {
-                        AutomationIcon(symbol: "clock", hook: false).frame(width: 40)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(L("自动化", "Automations")).font(.body.weight(.medium)).foregroundStyle(MycoColor.fg)
-                            Text(automationsNote).font(.footnote).foregroundStyle(MycoColor.muted).lineLimit(1)
-                        }
-                        Spacer(minLength: 0)
-                        Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(MycoColor.faint)
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(RowButtonStyle())
-                .listRowInsets(EdgeInsets(top: 9, leading: 16, bottom: 9, trailing: 16))
-                .listRowBackground(MycoColor.bg)
-                .listRowSeparator(.hidden)
-                .accessibilityIdentifier("workbench.automations")
-                Button {
-                    router.push(.apps)
-                } label: {
-                    HStack(spacing: 12) {
-                        AutomationIcon(symbol: "square.grid.2x2", hook: nil).frame(width: 40)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(L("应用", "Apps")).font(.body.weight(.medium)).foregroundStyle(MycoColor.fg)
-                            Text(appsNote).font(.footnote).foregroundStyle(MycoColor.muted).lineLimit(1)
-                        }
-                        Spacer(minLength: 0)
-                        Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(MycoColor.faint)
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(RowButtonStyle())
-                .listRowInsets(EdgeInsets(top: 9, leading: 16, bottom: 9, trailing: 16))
-                .listRowBackground(MycoColor.bg)
-                .listRowSeparator(.hidden)
-                .accessibilityIdentifier("workbench.apps")
-                if !session.workflows.unsupported {
-                    Button {
-                        router.push(.workflows)
-                    } label: {
-                        HStack(spacing: 12) {
-                            AutomationIcon(symbol: "point.3.connected.trianglepath.dotted", hook: nil).frame(width: 40)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(L("工作流", "Workflows")).font(.body.weight(.medium)).foregroundStyle(MycoColor.fg)
-                                Text(workflowsNote).font(.footnote)
-                                    .foregroundStyle(session.workflows.decisions.isEmpty ? MycoColor.muted : MycoColor.amber).lineLimit(1)
-                            }
-                            Spacer(minLength: 0)
-                            if !session.workflows.decisions.isEmpty {
-                                Text("\(session.workflows.decisions.count)").font(.caption.weight(.semibold)).foregroundStyle(.white)
-                                    .padding(.horizontal, 7).frame(minHeight: 20).background(MycoColor.amber, in: Capsule())
-                            }
-                            Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(MycoColor.faint)
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(RowButtonStyle())
-                    .listRowInsets(EdgeInsets(top: 9, leading: 16, bottom: 9, trailing: 16))
-                    .listRowBackground(MycoColor.bg)
-                    .listRowSeparator(.hidden)
-                    .accessibilityIdentifier("workbench.workflows")
-                }
-            }
+            .padding(.horizontal, Space.page)
+            .padding(.top, Space.m)
+            .padding(.bottom, 28)
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
         .background(MycoColor.bg)
         .workspaceChrome(title: L("工作台", "Workbench"), add: false)
-        // (how many there are, for the rows)
-        .task {
-            await session.automations.load()
-            await session.apps.load()
-            await session.workflows.load()
+        // Read now, and again now and then while it is in front.
+        .task(id: front) {
+            guard front else { return }
+            while !Task.isCancelled {
+                async let a: Void = session.automations.load()
+                async let b: Void = session.apps.load()
+                async let c: Void = session.workflows.load()
+                _ = await (a, b, c)
+                try? await Task.sleep(for: .seconds(20))
+            }
         }
+        .sheet(item: $using) { app in
+            UseAppSheet(app: app) { page in
+                using = nil
+                Task {
+                    try? await Task.sleep(for: .milliseconds(500))
+                    router.page = PageRoute(id: page.id)
+                }
+            }
+        }
+    }
+
+    // MARK: Parts
+
+    /// What waits for me: a workflow's decision, a request to approve.
+    @ViewBuilder private var waiting: some View {
+        let decisions = session.workflows.decisions
+        let approvals = session.superagent.approvals
+        if !decisions.isEmpty || !approvals.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                head(L("等你处理", "Waiting for you"), count: decisions.count + approvals.count)
+                ForEach(decisions) { decision in
+                    DecisionCard(decision: decision, model: session.workflows, showRun: true)
+                }
+                if !approvals.isEmpty {
+                    ApprovalStrip(model: session.superagent, agent: nil, name: "")
+                }
+            }
+            .accessibilityIdentifier("workbench.waiting")
+        }
+    }
+
+    /// The workflows: the runs going, step by step; one tap to run another.
+    @ViewBuilder private var workflows: some View {
+        let model = session.workflows
+        if !model.unsupported {
+            VStack(alignment: .leading, spacing: 10) {
+                head(L("工作流", "Workflows"), more: .workflows, id: "workbench.workflows")
+                let going = model.runs.filter(\.isGoing)
+                if !going.isEmpty {
+                    VStack(spacing: 0) {
+                        ForEach(going.prefix(4)) { run in
+                            Button { router.push(.workflowRun(run.id)) } label: { runLine(run) }
+                                .buttonStyle(RowButtonStyle())
+                            if run.id != going.prefix(4).last?.id { Divider().overlay(MycoColor.line).padding(.leading, 30) }
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .background(MycoColor.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                let list = model.list ?? []
+                if list.isEmpty {
+                    note(model.list == nil ? L("正在读…", "Reading…") : L("还没有工作流。在电脑上的「工作流」里挑一个现成的，或者让 agent 用 myco workflow 做一个。",
+                                                                       "No workflows yet. Pick a ready-made one on the desktop, or ask an agent to make one with myco workflow."))
+                } else {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(list) { workflow in
+                                Button { router.push(.workflow(workflow.id)) } label: {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "play.fill").font(.system(size: 10, weight: .bold))
+                                        Text(workflow.shownName).font(.subheadline.weight(.medium)).lineLimit(1)
+                                        if let run = workflow.lastRun {
+                                            StatusDot(run.status == "failed" ? .failed : run.isGoing ? .working : .idle, size: 6)
+                                        }
+                                    }
+                                    .foregroundStyle(workflow.enabled ? MycoColor.fg : MycoColor.muted)
+                                    .padding(.horizontal, 12).frame(minHeight: 34)
+                                    .background(MycoColor.card, in: Capsule())
+                                    .overlay(Capsule().strokeBorder(MycoColor.line))
+                                }
+                                .buttonStyle(PressScaleStyle())
+                                .accessibilityIdentifier("workbench.workflow")
+                            }
+                        }
+                    }
+                    .scrollClipDisabled()
+                }
+            }
+        }
+    }
+
+    private func runLine(_ run: WorkflowRun) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            StatusDot(run.status == "waiting" ? .attention : .working, size: 8).padding(.top, 6)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(run.name).font(.subheadline.weight(.medium)).foregroundStyle(MycoColor.fg)
+                let at = (run.current ?? []).joined(separator: "、")
+                Text([WorkflowsModel.words(of: run.status), at.isEmpty ? nil : L("在「\(at)」", "at \(at)"), RelativeTime.short(run.createdAt)]
+                    .compactMap { $0 }.joined(separator: " · "))
+                    .font(.caption).foregroundStyle(MycoColor.muted)
+                if let asked = WorkflowRunScreen.asked(run) {
+                    Text(asked).font(.footnote).foregroundStyle(MycoColor.fg2).lineLimit(1)
+                }
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(MycoColor.faint).padding(.top, 6)
+        }
+        .padding(.vertical, 10)
+        .contentShape(Rectangle())
+    }
+
+    /// The pages made from apps, to open; the apps, to make one.
+    @ViewBuilder private var apps: some View {
+        let model = session.apps
+        if !model.unsupported {
+            VStack(alignment: .leading, spacing: 10) {
+                head(L("应用", "Apps"), more: .apps, id: "workbench.apps")
+                if !model.made.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            ForEach(model.made.prefix(8)) { page in
+                                Button { router.page = PageRoute(id: page.id) } label: {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        AppIcon(app: model.app(of: page), size: 34)
+                                        Text(page.name).font(.subheadline.weight(.medium)).foregroundStyle(MycoColor.fg).lineLimit(1)
+                                        Text([page.template?.name ?? model.app(of: page)?.name, (page.updatedAt ?? page.createdAt).map { RelativeTime.short($0) }]
+                                            .compactMap { $0 }.joined(separator: " · "))
+                                            .font(.caption).foregroundStyle(MycoColor.muted).lineLimit(1)
+                                    }
+                                    .frame(width: 128, alignment: .leading)
+                                    .padding(12)
+                                    .background(MycoColor.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                }
+                                .buttonStyle(PressScaleStyle())
+                                .accessibilityIdentifier("workbench.page")
+                            }
+                        }
+                    }
+                    .scrollClipDisabled()
+                }
+                let official = model.official
+                if !official.isEmpty {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 8)], spacing: 8) {
+                        ForEach(official.prefix(6)) { app in
+                            Button { using = app } label: {
+                                HStack(spacing: 10) {
+                                    AppIcon(app: app, size: 30)
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(app.name).font(.subheadline).foregroundStyle(MycoColor.fg).lineLimit(1)
+                                        Text(L("新建一份", "Make one")).font(.caption).foregroundStyle(MycoColor.accent)
+                                    }
+                                    Spacer(minLength: 0)
+                                }
+                                .padding(10)
+                                .background(MycoColor.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            }
+                            .buttonStyle(PressScaleStyle())
+                            .accessibilityIdentifier("workbench.app")
+                        }
+                    }
+                } else if model.made.isEmpty {
+                    note(L("还没有应用。", "No apps yet."))
+                }
+            }
+        }
+    }
+
+    /// The automations: when each runs next, how the last went, on or off.
+    @ViewBuilder private var automations: some View {
+        let model = session.automations
+        if !model.unsupported {
+            VStack(alignment: .leading, spacing: 10) {
+                head(L("自动化", "Automations"), more: .automations, id: "workbench.automations")
+                let list = model.list ?? []
+                if list.isEmpty {
+                    note(L("让 agent 按时自己干活：比如每天早上汇总 issue、CI 失败时看日志。点「全部」从模板建一个。",
+                           "Let agents work on their own schedule: a morning summary of issues, a look at the log when CI fails. Tap All to start from a template."))
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(list.prefix(5)) { automation in
+                            automationLine(automation, model)
+                            if automation.id != list.prefix(5).last?.id { Divider().overlay(MycoColor.line).padding(.leading, 46) }
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .background(MycoColor.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+            }
+        }
+    }
+
+    private func automationLine(_ automation: Automation, _ model: AutomationsModel) -> some View {
+        HStack(spacing: 12) {
+            AutomationIcon(symbol: automation.webhook && automation.schedule == nil ? "bolt" : "clock", hook: nil)
+                .opacity(automation.enabled ? 1 : 0.5)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(automation.name).font(.subheadline.weight(.medium)).foregroundStyle(MycoColor.fg).lineLimit(1)
+                Text([AutomationWords.standing(automation, now: Date()), automation.lastRun.map(AutomationWords.outcome)]
+                    .compactMap { $0 }.joined(separator: " · "))
+                    .font(.caption).foregroundStyle(MycoColor.muted).lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            Toggle("", isOn: SwiftUI.Binding(get: { automation.enabled }, set: { on in Task { await model.setEnabled(automation, on) } }))
+                .labelsHidden().tint(MycoColor.green)
+                .accessibilityLabel(automation.name)
+                .accessibilityIdentifier("workbench.automation.switch")
+        }
+        .padding(.vertical, 10)
+        .contentShape(Rectangle())
+        .onTapGesture { router.push(.automations) }
+    }
+
+    private func head(_ title: String, count: Int? = nil, more: Route? = nil, id: String? = nil) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(title).font(.title3.weight(.semibold)).foregroundStyle(MycoColor.fg)
+            if let count, count > 0 {
+                Text("\(count)").font(.caption.weight(.semibold)).foregroundStyle(.white)
+                    .padding(.horizontal, 7).frame(minHeight: 20).background(MycoColor.amber, in: Capsule())
+            }
+            Spacer(minLength: 0)
+            if let more {
+                Button { router.push(more) } label: {
+                    HStack(spacing: 2) {
+                        Text(L("全部", "All"))
+                        Image(systemName: "chevron.right").font(.caption.weight(.semibold))
+                    }
+                    .font(.subheadline).foregroundStyle(MycoColor.muted)
+                }
+                .accessibilityIdentifier(id ?? "")
+            }
+        }
+    }
+
+    private func note(_ text: String) -> some View {
+        Text(text).font(.footnote).foregroundStyle(MycoColor.muted)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .background(MycoColor.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
 
@@ -447,39 +611,6 @@ struct MembersScreen: View {
     }
 }
 
-extension WorkbenchScreen {
-    /// Under "工作流": what waits for me, or what they are for.
-    fileprivate var workflowsNote: String {
-        let model = session.workflows
-        if !model.decisions.isEmpty {
-            return L("\(model.decisions.count) 件事等你决定", model.decisions.count == 1 ? "1 decision waits for you" : "\(model.decisions.count) decisions wait for you")
-        }
-        let going = model.runs.filter(\.isGoing).count
-        if going > 0 { return L("\(going) 个在跑", "\(going) running") }
-        return L("让几个 agent 按步骤接力，要紧处问你", "Agents take turns, step by step; you decide where it matters")
-    }
-
-    /// Under "应用": the pages made from them, or what they are for.
-    fileprivate var appsNote: String {
-        let made = session.apps.made.count
-        return made > 0
-            ? L("表格、文档、白板 · 建了 \(made) 个", "Tables, documents, boards · \(made) made")
-            : L("和 agent 一起用的表格、文档、白板", "Tables, documents and boards with agents")
-    }
-
-    /// Under "自动化": how many there are and how many are on, or what they are for.
-    fileprivate var automationsNote: String {
-        let model = session.automations
-        guard let list = model.list, !list.isEmpty, !model.unsupported else {
-            return L("让 agent 按时自己干活", "Let agents work on their own schedule")
-        }
-        let on = list.filter(\.enabled).count
-        return on == list.count
-            ? L("\(list.count) 个，都开着", list.count == 1 ? "1, on" : "\(list.count), all on")
-            : L("\(list.count) 个，\(on) 个开着", "\(list.count), \(on) on")
-    }
-}
-
 extension View {
     /// What every tab's list has: its title, the workspace at the top left,
     /// "add an agent" at the top right, and the strip that says the
@@ -532,6 +663,10 @@ private struct WorkspaceChrome: ViewModifier {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { WorkspaceButton() }
+                // My superagent, called up as Siri is (not on workspaces from before them).
+                if session.superagent.loaded, !session.superagent.unsupported {
+                    ToolbarItem(placement: .topBarTrailing) { SuperagentButton() }
+                }
                 if members {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button { router.push(.members) } label: { Image(systemName: "person.2") }
@@ -576,9 +711,7 @@ struct AppTabBar: View {
                 .init(id: AppTab.workbench, title: L("工作台", "Workbench"), symbol: "square.grid.2x2",
                       tone: session.workflows.decisions.isEmpty ? nil : .attention, accessibilityID: "tab.workbench"),
             ],
-            selection: router.tab,
-            // (on workspaces from before superagents, no orb)
-            center: session.superagent.unsupported || !session.superagent.loaded ? nil : AnyView(SuperagentOrb())
+            selection: router.tab
         ) { router.select($0) }
     }
 
