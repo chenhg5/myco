@@ -124,7 +124,7 @@ export interface MycoOS {
   notify(a: { title?: string; body?: string; subtitle?: string; sound?: boolean }): Promise<true>;
   screen: {
     /** macOS screen recording. Write "stop" to finalize; originals stay local. */
-    record(a?: { interactive?: boolean; microphone?: boolean; clicks?: boolean; max_seconds?: number }): OSJob<{path: string; bytes: number}>;
+    record(a?: { region?: {x:number; y:number; w:number; h:number}; interactive?: boolean; microphone?: boolean; clicks?: boolean; max_seconds?: number }): OSJob<{path: string; bytes: number}>;
     capture(a?: { display?: number; region?: { x: number; y: number; width: number; height: number }; format?: "png" | "jpeg"; quality?: number }): Promise<OSImage & { bytes: number }>;
   };
   /** Recording: each source a track, a 16 kHz mono WAV of its own. */

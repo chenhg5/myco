@@ -11,11 +11,18 @@ import (
 
 // Screen recording is separate from remote desktop: it never starts a remote
 // connection, loads a codec component or sends footage to the workspace.
+type screenRecordRegion struct {
+	X int `json:"x"`
+	Y int `json:"y"`
+	W int `json:"w"`
+	H int `json:"h"`
+}
 type screenRecordArgs struct {
-	Interactive bool `json:"interactive"`
-	Microphone  bool `json:"microphone"`
-	Clicks      bool `json:"clicks"`
-	MaxSeconds  int  `json:"max_seconds"`
+	Region      *screenRecordRegion `json:"region,omitempty"`
+	Interactive bool                `json:"interactive"`
+	Microphone  bool                `json:"microphone"`
+	Clicks      bool                `json:"clicks"`
+	MaxSeconds  int                 `json:"max_seconds"`
 }
 type screenRecording struct {
 	Path  string `json:"path"`
@@ -39,6 +46,11 @@ func decodeScreenRecord(raw json.RawMessage) (screenRecordArgs, error) {
 	}
 	if a.MaxSeconds < 1 || a.MaxSeconds > 3600 {
 		return a, errf(CodeInvalid, "max_seconds must be between 1 and 3600")
+	}
+	if r := a.Region; r != nil {
+		if a.Interactive || r.W < 16 || r.H < 16 || r.W > 16384 || r.H > 16384 || r.X < -32768 || r.X > 32768 || r.Y < -32768 || r.Y > 32768 {
+			return a, errf(CodeInvalid, "region needs non-interactive capture and a valid rectangle (16–16384 pixels per side)")
+		}
 	}
 	return a, nil
 }
