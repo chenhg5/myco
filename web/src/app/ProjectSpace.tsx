@@ -145,6 +145,17 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
     onRefresh();
   };
   const feed = useFeed(hubId, project, memberNames);
+  // When each member last took part in the space's conversations (as either
+  // side): the members column puts the recently active first.
+  const lastIn = useMemo(() => {
+    const at = new Map<string, number>();
+    for (const it of feed.items || []) {
+      const t = new Date(it.updated_at).getTime() || 0;
+      const who = it.participants.length ? it.participants : [it.first.from, it.first.to];
+      for (const n of [...who, it.node || ""]) if (n && t > (at.get(n) || 0)) at.set(n, t);
+    }
+    return at;
+  }, [feed.items]);
   // The members column can fold to a strip of faces (kept across projects).
   const [folded, setFoldedState] = useState(() => { try { return localStorage.getItem(FOLD_KEY) === "1"; } catch { return false; } });
   const setFolded = (v: boolean) => {
@@ -458,7 +469,7 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
   const stripMenu = useContextMenu();
   const strip = (
     <div className="sp-strip">
-      {[...agents, ...workspaces].map((r) => (
+      {[...orderMembers(agents, coordinator, lastIn), ...workspaces].map((r) => (
         <button key={r.st.agent.name} type="button" className="sp-strip-face" title={nodeName(r.st.agent, r.hub)}
           onClick={() => open(r)} draggable onDragStart={(e) => dragAgent(e, { hubId, agent: r.st.agent.name })}
           onContextMenu={(e) => stripMenu.open(e, [
@@ -617,6 +628,7 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
 
       <MembersPanel
         project={project}
+        lastIn={lastIn}
         agents={agents}
         workspaces={workspaces}
         loose={loose}
@@ -1168,7 +1180,35 @@ function liveLine(r: AgentRow, nameOf: (n: string) => string, now: number): { te
   return { text: a.description || stateWords(r.st.state) };
 }
 
-function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf, now, onSetCoordinator, onChat, onNewPane, onProfile, onAddAgent, onAddWorkspace, folded, onFold, projects = [], onPutIn, project }: {
+/** Who is in front: the coordinator always first, then whoever is at work
+ *  (the latest to start first), then those with work queued, the idle, and
+ *  last those not online; within each, the most recently active first
+ *  (what it last reported, its tasks, the space's conversations it took
+ *  part in, when an away one was last seen). The members column and the
+ *  narrow window's row of faces alike. */
+export function orderMembers(agents: AgentRow[], coordinator?: string, lastIn?: ReadonlyMap<string, number>): AgentRow[] {
+  const startedAt = (r: AgentRow) => {
+    const t = (r.st.current || []).filter((m) => m.to === r.st.agent.name && m.type === "task" && m.status === "acked")
+      .reduce((x, m) => Math.max(x, new Date(m.updated_at || m.created_at).getTime() || 0), 0);
+    return t || new Date(r.st.agent.status_at || 0).getTime() || 0;
+  };
+  const rank = (r: AgentRow) => r.st.agent.name === coordinator ? 0
+    : r.st.state === "working" ? 1
+    : r.st.queued > 0 ? 2
+    : r.st.state === "offline" ? 4 : 3;
+  const ms = (t?: string) => (t ? new Date(t).getTime() || 0 : 0);
+  const activeAt = (r: AgentRow) => Math.max(
+    startedAt(r), ms(r.st.agent.status_at), lastIn?.get(r.st.agent.name) || 0,
+    ...(r.st.current || []).filter((m) => m.to === r.st.agent.name || m.from === r.st.agent.name).map((m) => ms(m.updated_at || m.created_at)),
+    // (an online one is always "seen" now: only an away one's says when)
+    r.st.state === "offline" ? ms(r.st.agent.last_seen_at) : 0,
+  );
+  return [...agents].sort((a, b) => rank(a) - rank(b) || (rank(a) === 1 ? startedAt(b) - startedAt(a) : 0) || activeAt(b) - activeAt(a));
+}
+
+function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf, now, onSetCoordinator, onChat, onNewPane, onProfile, onAddAgent, onAddWorkspace, folded, onFold, projects = [], onPutIn, project, lastIn }: {
+  /** when each took part in the space's conversations last (ms) */
+  lastIn?: ReadonlyMap<string, number>;
   agents: AgentRow[];
   workspaces: AgentRow[];
   loose: boolean;
@@ -1193,19 +1233,7 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
   project?: Project;
 }) {
   const menu = useContextMenu();
-  // Who is in front: the coordinator always first, then whoever is at
-  // work (the latest to start first), then those with work queued, the
-  // idle, and last those not online.
-  const startedAt = (r: AgentRow) => {
-    const t = (r.st.current || []).filter((m) => m.to === r.st.agent.name && m.type === "task" && m.status === "acked")
-      .reduce((x, m) => Math.max(x, new Date(m.updated_at || m.created_at).getTime() || 0), 0);
-    return t || new Date(r.st.agent.status_at || 0).getTime() || 0;
-  };
-  const rank = (r: AgentRow) => r.st.agent.name === coordinator ? 0
-    : r.st.state === "working" ? 1
-    : r.st.queued > 0 ? 2
-    : r.st.state === "offline" ? 4 : 3;
-  const ordered = [...agents].sort((a, b) => rank(a) - rank(b) || (rank(a) === 1 ? startedAt(b) - startedAt(a) : 0));
+  const ordered = orderMembers(agents, coordinator, lastIn);
   const menuOf = (r: AgentRow) => {
     const a = r.st.agent;
     const ws = isWorkspace(a);
