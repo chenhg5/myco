@@ -4,6 +4,18 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.21.14
+
+- **New official app: Motion Videos (动效视频)**: product promos, data stories and vertical shorts made of scenes played in order. Each scene is HTML and an animation (written by an agent, or one of eight templates) with its words and pictures in a form; preview, a timeline, transitions, 16:9 / 9:16 / 1:1 / 4:5, colour sets and fonts, and "ask an agent". Export to MP4 happens in the page, on your computer.
+- Remote Desktop (preview) on phones: typing goes straight to the remote computer again (the system keyboard, with modifier keys in the side menu); the controls sit in a compact rail on the right and the keyboard no longer resizes the screen; a brief network drop (up to 10 seconds) no longer ends the session.
+- The App: opening or switching an agent in a pane no longer makes the chat or the line between panes jump sideways.
+
+**中文**
+
+- **新的官方应用：动效视频**：做产品宣传片、数据故事、竖屏短视频，由一个个场景依次播放组成。每个场景是 HTML 加动画（agent 写，或者从八个模板里选），文字和图片在表单里改；有预览、时间线、转场，支持 16:9 / 9:16 / 1:1 / 4:5，配色和字体可选，也可以「让 agent 来做」。导出 MP4 在网页里完成，就在你自己的电脑上。
+- 远程桌面（预览）手机端：打字又改回直接发到远程电脑（用系统键盘，修饰键在侧边菜单里）；控制按钮收成右侧一条窄栏，弹出键盘时画面大小不变；网络短暂断开（10 秒以内）不会再结束会话。
+- App：在分栏里打开或切换 agent 时，对话和分栏之间的分隔线不会再左右晃动。
+
 ## v0.21.13
 
 - Remote Desktop (preview): on a phone, what you type goes into a draft above the keyboard and is sent when you confirm (dictation and corrections no longer stream half-typed text to the computer); two fingers zoom and pan the view, and a short hold with two fingers scrolls the remote screen. Leaving a session asks first, and the controls and the keyboard switch are larger.
