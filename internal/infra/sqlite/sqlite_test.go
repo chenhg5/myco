@@ -999,3 +999,31 @@ func TestMessageRepoActivity(t *testing.T) {
 		t.Fatalf("after: %+v", acts)
 	}
 }
+
+// A delta of the messages between two agents includes an open task its
+// worker touched since (a long, quiet run), not only those updated.
+func TestListBetweenSinceIncludesTouchedOpenTasks(t *testing.T) {
+	ctx := context.Background()
+	db := openMem(t)
+	r := sqlite.NewMessageRepo(db)
+	t0 := time.Unix(1_800_000_000, 0)
+	m := newMsg(t, "task1", "alice", "bob", domain.TypeTask, t0)
+	mustNoErr(t, r.Create(ctx, m))
+	_, err := r.Mutate(ctx, "task1", func(x *domain.Message) ([]*domain.Message, error) {
+		x.Status, x.UpdatedAt = domain.StatusAcked, t0.Add(time.Second)
+		return nil, nil
+	})
+	mustNoErr(t, err)
+	since := t0.Add(time.Minute).UnixMilli()
+	got, err := r.ListBetweenSince(ctx, "alice", "bob", since, 10)
+	mustNoErr(t, err)
+	if len(got) != 0 {
+		t.Fatalf("nothing changed yet: %d", len(got))
+	}
+	mustNoErr(t, r.TouchActive(ctx, "task1", t0.Add(2*time.Minute)))
+	got, err = r.ListBetweenSince(ctx, "alice", "bob", since, 10)
+	mustNoErr(t, err)
+	if len(got) != 1 || got[0].ID != "task1" {
+		t.Fatalf("a touched open task belongs in the delta: %v", got)
+	}
+}

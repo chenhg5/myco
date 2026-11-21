@@ -585,8 +585,11 @@ func (r *MessageRepo) ListPeers(ctx context.Context, agent domain.AgentName, lim
 }
 
 func (r *MessageRepo) ListBetweenSince(ctx context.Context, a, b domain.AgentName, since int64, limit int) ([]*domain.Message, error) {
-	return r.many(ctx, r.db, `WHERE ((from_agent=? AND to_agent=?) OR (from_agent=? AND to_agent=?)) AND updated_at > ?
-		ORDER BY updated_at ASC, id ASC LIMIT ?`, a, b, b, a, since, limit)
+	// An open task its worker touched since (active_at) counts as changed:
+	// the App learns the work goes on during a long, quiet command.
+	return r.many(ctx, r.db, `WHERE ((from_agent=? AND to_agent=?) OR (from_agent=? AND to_agent=?))
+		AND (updated_at > ? OR (status IN ('acked','held') AND active_at > ?))
+		ORDER BY updated_at ASC, id ASC LIMIT ?`, a, b, b, a, since, since, limit)
 }
 
 func (r *MessageRepo) ListBetween(ctx context.Context, a, b domain.AgentName, before int64, limit int) ([]*domain.Message, error) {
