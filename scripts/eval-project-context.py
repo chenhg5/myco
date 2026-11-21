@@ -214,7 +214,7 @@ class Arm:
         if not mid:
             return None
         try:
-            req = urllib.request.Request(f"{self.hub}/v1/messages/{mid}/trace", headers={"Authorization": "Bearer " + self.admin})
+            req = urllib.request.Request(f"{self.hub}/v1/console/messages/{mid}/trace", headers={"Authorization": "Bearer " + self.admin})
             tr = json.load(urllib.request.urlopen(req, timeout=10))
         except Exception:
             return None
