@@ -32,9 +32,11 @@ jobs:
         working-directory: ios/MycoKit
         run: |
           # The documented timing-sensitive voice demo gets its own process;
-          # both invocations keep every assertion and every test enabled.
-          xcodebuild test -scheme MycoKit-Package -destination "platform=iOS Simulator,id=$MYCO_SIMULATOR" -derivedDataPath "$RUNNER_TEMP/myco-ios-derived" -skip-testing:MycoCoreTests/VoiceCallTests CODE_SIGNING_ALLOWED=NO
+          # all invocations keep every assertion and every test enabled.
+          # Run-state grace periods also need an unloaded main actor.
+          xcodebuild test -scheme MycoKit-Package -destination "platform=iOS Simulator,id=$MYCO_SIMULATOR" -derivedDataPath "$RUNNER_TEMP/myco-ios-derived" -skip-testing:MycoCoreTests/VoiceCallTests -skip-testing:MycoCoreTests/RunStateAlignmentTests CODE_SIGNING_ALLOWED=NO
           xcodebuild test -scheme MycoKit-Package -destination "platform=iOS Simulator,id=$MYCO_SIMULATOR" -derivedDataPath "$RUNNER_TEMP/myco-ios-derived" -only-testing:MycoCoreTests/VoiceCallTests CODE_SIGNING_ALLOWED=NO
+          xcodebuild test -scheme MycoKit-Package -destination "platform=iOS Simulator,id=$MYCO_SIMULATOR" -derivedDataPath "$RUNNER_TEMP/myco-ios-derived" -only-testing:MycoCoreTests/RunStateAlignmentTests CODE_SIGNING_ALLOWED=NO
       - name: Native App page and remote controller UI
         working-directory: ios
         run: |

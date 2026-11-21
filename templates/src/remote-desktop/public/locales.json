@@ -1,10 +1,10 @@
 {
   "en": {
     "name": "Remote Desktop",
-    "description": "View and control your Mac and Windows computers. Optional component, view-only mode, temporary pairing codes and instant disconnect. LAN or Tailscale; audio, lock screens and public relay are not included yet."
+    "description": "View and control your Mac and Windows computers from a computer or iPhone. Phone touchpad and keyboard, optional hosting component and temporary pairing codes. Direct LAN or Tailscale; no audio, lock screens or public relay yet."
   },
   "zh": {
     "name": "远程桌面",
-    "description": "连接同一工作区的 Mac 与 Windows，实时查看画面、操作键盘和鼠标。远控组件按需安装，默认关闭；支持仅查看、临时配对码与随时断开。首版用于局域网或 Tailscale，不含声音、锁屏登录和公网中继。"
+    "description": "从电脑或 iPhone 连接同一工作区的 Mac 与 Windows，实时查看画面、操作键鼠。手机支持触控板和键盘；远控组件按需安装，默认关闭。局域网或 Tailscale 直连，暂不含声音、锁屏登录和公网中继。"
   }
 }

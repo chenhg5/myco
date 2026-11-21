@@ -253,3 +253,21 @@ and an unlocked desktop. The initial adapter supports direct LAN/Tailscale video
 and keyboard/mouse, without audio, automatic public relay or unattended service.
 The component is downloaded separately and may be uninstalled from the app's
 settings. It is not installed or started for people who do not use it.
+
+The iOS page bridge advertises `remote-controller`: `devices`, `connect`,
+`session`, `disconnect` and `close` use the current workspace credential.
+`status` returns `reason: "controller_only"`; installation and hosting actions
+are refused. Native confirmation names the authorized computer and requested
+control mode. Each page can access only its own sessions. Backgrounding the App,
+reloading or closing a page revokes pending requests and active sessions.
+`myco.remote.onDisconnect(fn)` lets a page immediately clear its video and input
+state on backgrounding. Returning to the App requires an explicit new connection.
+No camera or microphone permission is needed for this receive-only video path.
+
+The shared controller implements a relative touchpad, two-finger scrolling,
+explicit drag mode, zoom and a keyboard. Component 0.2.0 sends an encrypted
+data-channel capability event `{type:"capabilities",input_features:["text"]}`.
+Only then may a controller send `{kind:"text",text:"…"}` (at most 256 Unicode
+scalars / 1,024 UTF-8 bytes; control characters are rejected). Text uses native
+Unicode key events, without the clipboard. Legacy components still accept
+physical keys; the UI retains unsupported text and asks for a component update.

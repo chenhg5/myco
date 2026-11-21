@@ -45,6 +45,13 @@ try{
   const old=await page.evaluate(()=>window.__inputs.length);await touch('touchStart',[{x,y,id:1}]);await touch('touchMove',[{x:x+45,y:y+15,id:1}]);await touch('touchEnd',[]);
   const moved=await page.evaluate(n=>window.__inputs.slice(n),old);assert(moved.some(x=>x.kind==='move'));assert(!moved.some(x=>x.kind==='button'),'moving is not dragging');
   await touch('touchStart',[{x:x-20,y,id:1},{x:x+20,y,id:2}]);await touch('touchMove',[{x:x-20,y:y-20,id:1},{x:x+20,y:y-20,id:2}]);await touch('touchEnd',[]);assert(await page.evaluate(()=>window.__inputs.some(x=>x.kind==='scroll')));
+  await page.getByRole('button',{name:lang==='zh'?'放大画面':'Zoom in',exact:true}).click();
+  assert.equal(await page.locator('.rd-zoom').innerText(),'150%');
+  assert.match(await page.locator('.rd-screen video').getAttribute('style'),/scale\(1.5\)/);
+  await page.getByRole('button',{name:lang==='zh'?'缩小画面':'Zoom out',exact:true}).click();
+  const drag=page.locator('.rd-touch-row button').filter({hasText:lang==='zh'?'拖动':'Drag'}).first();
+  await drag.click();assert.equal(await drag.getAttribute('aria-pressed'),'true');
+  await touch('touchStart',[{x,y,id:1}]);await touch('touchMove',[{x:x+10,y:y+10,id:1}]);await touch('touchEnd',[]);await drag.click();assert.equal(await drag.getAttribute('aria-pressed'),'false');
   const keyboard=page.locator('.rd-touch-row button').filter({hasText:lang==='zh'?'键盘':'Keyboard'}).first();await keyboard.click();const field=page.locator('.rd-keyboard textarea');await field.fill('你好🙂');
   assert(await page.evaluate(()=>window.__inputs.some(x=>x.kind==='text'&&x.text==='你好🙂')));
   await field.dispatchEvent('compositionstart');await field.evaluate(el=>{Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(el,'中文组合');el.dispatchEvent(new InputEvent('input',{bubbles:true,data:'中文组合',isComposing:true}));});await field.dispatchEvent('compositionend',{data:'中文组合'});

@@ -501,6 +501,12 @@ host registrations and signaling are in memory and disappear on Hub restart.
   means an answer was supplied, not that media has arrived; use peer state for UI.
 - `DELETE /v1/remote/sessions/{session}`: cancel/stop the creator's session.
 
+The iOS App uses these same controller endpoints; no phone-specific Hub
+endpoint or schema change is required. Its native page bridge owns the session
+handles and revokes them when the page closes or the App backgrounds. Text input
+capabilities are negotiated on the encrypted peer data channel, not through the
+Hub.
+
 The Hub carries SDP only, never pixels, audio or keyboard/mouse events. SDP and
 pairing codes are sensitive, short-lived signaling: never put them in page data,
 logs, traces or audit details. Audit actions are `remote.enable`, `remote.disable`,

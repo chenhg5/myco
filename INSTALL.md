@@ -1131,6 +1131,15 @@ keyboard and mouse control. Mac needs Screen Recording and, for control,
 Accessibility permission. The UI follows the App's English/Chinese and light/dark
 settings, with no change to existing user content.
 
+The iPhone App can also control these computers: update the phone App, open
+**Apps → Remote Desktop** in the same workspace, select the sharing computer and
+enter its pairing code. A one-finger drag moves the pointer, a tap clicks and two
+fingers scroll. Use the keyboard button for text and modifier keys, or zoom in
+for small controls. The phone does not install a hosting component or share its
+screen. Leaving the App or closing the page disconnects; reconnect explicitly
+when returning. Unicode typing requires remote component 0.2.0 or later on the
+computer; older components accept short ASCII text and physical keys.
+
 The initial version supports unlocked Mac and Windows desktops over a LAN or
 Tailscale. Audio, lock/sign-in or administrator confirmation screens, unattended access, virtual displays and
 automatic public relay are not included. Both Apps and the hosting page must stay
