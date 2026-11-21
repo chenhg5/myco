@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { myco } from "../_lib/myco";
+import { boundedView, zoomView, pinchView, followPointer, type View } from "../_lib/remote-viewport";
 import { Touchpad, textInput } from "../_lib/remote-input";
 import {
   Monitor,
@@ -102,12 +103,19 @@ function App() {
     [state, setState] = useState(""),
     [stats, setStats] = useState<RemoteStats | null>(null),
     [copied, setCopied] = useState(false);
-  const [zoom,setZoom]=useState(1);
-  const [keyboardOpen,setKeyboardOpen]=useState(false),[draft,setDraft]=useState(""),[dragging,setDragging]=useState(false),[modifiers,setModifiers]=useState<string[]>([]),[cursor,setCursor]=useState({x:.5,y:.5}),[showCursor,setShowCursor]=useState(false),[,setLayout]=useState(0);
+  const [view,setView]=useState<View>({scale:1,x:0,y:0});
+  const viewRef=useRef(view); viewRef.current=view;
+  const [expanded,setExpanded]=useState(false);
+  const touches=useRef(new Map<number,{x:number;y:number}>());
+  const gesture=useRef<{distance:number;center:{x:number;y:number};lastY:number;view:View;mode:"pending"|"pinch"|"scroll"}|null>(null);
+  const multiTouch=useRef(false);
+  const updateView=(next:View)=>{viewRef.current=next;setView(next);};
+  const zoomBy=(delta:number)=>{const box=stage.current?.getBoundingClientRect();if(box)updateView(zoomView(viewRef.current,viewRef.current.scale+delta,{x:box.width/2,y:box.height/2},box.width,box.height));};
+  const [keyboardOpen,setKeyboardOpen]=useState(false),[draft,setDraft]=useState(""),[dragging,setDragging]=useState(false),[modifiers,setModifiers]=useState<string[]>([]),[,setCursor]=useState({x:.5,y:.5}),[showCursor,setShowCursor]=useState(false),[,setLayout]=useState(0);
   const keyboard=useRef<HTMLTextAreaElement>(null),composing=useRef(false);
   const touchpad=useRef<Touchpad>();
   if(!touchpad.current)touchpad.current=new Touchpad(e=>session.current?.input(e),p=>setCursor({...p}));
-  useEffect(()=>{const resize=()=>setLayout(n=>n+1);window.addEventListener("resize",resize);window.visualViewport?.addEventListener("resize",resize);return()=>{window.removeEventListener("resize",resize);window.visualViewport?.removeEventListener("resize",resize);};},[]);
+  useEffect(()=>{const resize=()=>{document.documentElement.style.setProperty("--rd-viewport-height",`${window.visualViewport?.height??innerHeight}px`);document.documentElement.style.setProperty("--rd-viewport-top",`${window.visualViewport?.offsetTop??0}px`);setLayout(n=>n+1);};resize();window.addEventListener("resize",resize);window.visualViewport?.addEventListener("resize",resize);return()=>{window.removeEventListener("resize",resize);window.visualViewport?.removeEventListener("resize",resize);};},[]);
   const motion = useRef<{ x: number; y: number } | null>(null),
     motionFrame = useRef(0);
   const clicks = useRef({ at: 0, x: 0, y: 0, button: 0, count: 0 });
@@ -148,6 +156,7 @@ function App() {
       if (mounted.current) {
         setStatus(s);
         setDevices(list);
+        setSelected(current=>current?(list.find(d=>d.machine===current.machine)??current):null);
       }
     } catch (e) {
       if (mounted.current) setError(errorMessage(e));
@@ -228,7 +237,7 @@ function App() {
   };
   const disconnect = async () => {
     attempt.current++;
-    touchpad.current?.reset();if(touchpad.current)touchpad.current.point={x:.5,y:.5};setCursor({x:.5,y:.5});setZoom(1);setDragging(false);setModifiers([]);setKeyboardOpen(false);setDraft("");setShowCursor(false);
+    touchpad.current?.reset();if(touchpad.current)touchpad.current.point={x:.5,y:.5};setCursor({x:.5,y:.5});updateView({scale:1,x:0,y:0});setExpanded(false);touches.current.clear();gesture.current=null;multiTouch.current=false;setDragging(false);setModifiers([]);setKeyboardOpen(false);setDraft("");setShowCursor(false);
     const previous=session.current;
     session.current=null;pendingStream.current=null;
     setConnecting(false);setActive(null);setStats(null);setState("");
@@ -308,18 +317,43 @@ function App() {
   },[keyboardOpen,modifiers]);
   const touch=(e:React.PointerEvent,phase:"down"|"move"|"up")=>{
     if(e.pointerType!=="touch")return false;
-    if(!control)return true;
-    e.preventDefault();setShowCursor(true);
-    const pad=touchpad.current!,box=e.currentTarget.getBoundingClientRect();
-    if(phase==="down"){e.currentTarget.setPointerCapture(e.pointerId);pad.down(e.pointerId,e.clientX,e.clientY);}
-    else if(phase==="move")pad.move(e.pointerId,e.clientX,e.clientY,box.width*zoom,box.height*zoom);
-    else pad.up(e.pointerId);
+    e.preventDefault();
+    const pad=touchpad.current!,box=e.currentTarget.getBoundingClientRect(),points=touches.current;
+    const point={x:e.clientX-box.left,y:e.clientY-box.top};
+    if(phase==="down"){
+      e.currentTarget.setPointerCapture(e.pointerId);points.set(e.pointerId,point);
+      if(points.size===1){multiTouch.current=false;if(control)pad.down(e.pointerId,e.clientX,e.clientY);}
+      else if(points.size===2){
+        multiTouch.current=true;pad.reset();setDragging(false);setModifiers([]);
+        const [a,b]=[...points.values()];gesture.current={distance:Math.max(1,Math.hypot(a.x-b.x,a.y-b.y)),center:{x:(a.x+b.x)/2,y:(a.y+b.y)/2},lastY:(a.y+b.y)/2,view:{...viewRef.current},mode:"pending"};
+      }
+    }else if(phase==="move"){
+      const previous=points.get(e.pointerId);if(!previous)return true;points.set(e.pointerId,point);
+      if(points.size===2&&gesture.current){
+        const g=gesture.current,[a,b]=[...points.values()],distance=Math.hypot(a.x-b.x,a.y-b.y),center={x:(a.x+b.x)/2,y:(a.y+b.y)/2};
+        if(g.mode==="pending"){
+          if(Math.abs(distance-g.distance)>Math.max(8,g.distance*.06))g.mode="pinch";
+          else if(Math.hypot(center.x-g.center.x,center.y-g.center.y)>6)g.mode=control?"scroll":"pinch";
+        }
+        if(g.mode==="pinch")updateView(pinchView(g.view,distance/g.distance,g.center,center,box.width,box.height));
+        if(g.mode==="scroll")input({kind:"scroll",delta:Math.max(-1200,Math.min(1200,-(center.y-g.lastY)*2))});
+        g.lastY=center.y;
+      }else if(points.size===1&&!multiTouch.current){
+        if(control){setShowCursor(true);pad.move(e.pointerId,e.clientX,e.clientY,box.width*viewRef.current.scale,box.height*viewRef.current.scale);
+          const p=cursorPosition();if(typeof p.left==="number"&&typeof p.top==="number")updateView(followPointer(viewRef.current,{x:p.left,y:p.top},box.width,box.height));
+        }else updateView(boundedView({...viewRef.current,x:viewRef.current.x+point.x-previous.x,y:viewRef.current.y+point.y-previous.y},box.width,box.height));
+      }
+    }else{
+      points.delete(e.pointerId);if(control&&!multiTouch.current)pad.up(e.pointerId);
+      if(points.size<2)gesture.current=null;
+      if(!points.size)multiTouch.current=false;
+    }
     return true;
   };
   const cursorPosition=()=>{
     const v=video.current;if(!v||!v.videoWidth)return {left:"50%",top:"50%"};
     const scale=Math.min(v.clientWidth/v.videoWidth,v.clientHeight/v.videoHeight),w=v.videoWidth*scale,h=v.videoHeight*scale;
-    return {left:(v.clientWidth-w)/2+cursor.x*w,top:(v.clientHeight-h)/2+cursor.y*h};
+    return {left:(v.clientWidth-w)/2+touchpad.current!.point.x*w,top:(v.clientHeight-h)/2+touchpad.current!.point.y*h};
   };
   const pointer = (e: React.PointerEvent) => {
     const v = video.current;
@@ -369,7 +403,7 @@ function App() {
           </div>
         )}
         {active ? (
-          <section className="rd-session">
+          <section className={`rd-session${expanded?" is-expanded":""}`}>
             <div className="rd-session-bar">
               <button
                 className="rd-btn rd-quiet"
@@ -384,18 +418,12 @@ function App() {
               </span>
               <div className="rd-session-actions">
                 <span>
-                  <Keyboard size={14} />
+                  {control?<Keyboard size={14}/>:<Eye size={14}/>}
                   {control ? uiText("可以操作") : uiText("仅查看")}
                 </span>
-                {document.fullscreenEnabled && <button
-                  className="rd-icon"
-                  aria-label={uiText("全屏")}
-                  onClick={() =>
-                    void stage.current?.requestFullscreen?.().catch(() => {})
-                  }
-                >
-                  <Maximize2 size={17} />
-                </button>}
+                <button className="rd-icon" aria-label={uiText(expanded?"收起画面":"展开画面")} aria-pressed={expanded} onClick={()=>{setExpanded(!expanded);updateView({scale:1,x:0,y:0});}}>
+                  {expanded?<X size={17}/>:<Maximize2 size={17}/>}
+                </button>
                 <button className="rd-btn" onClick={() => void disconnect()}>
                   <Unplug size={15} />
                   {uiText("断开")}
@@ -406,7 +434,7 @@ function App() {
               className="rd-screen"
               ref={stage}
               tabIndex={0}
-              aria-label={uiText("远程画面，点击后使用键盘和鼠标")}
+              aria-label={uiText(control?"远程画面，点击后使用键盘和鼠标":"仅查看画面，可捏合缩放")}
               onContextMenu={(e) => e.preventDefault()}
               onPointerMove={(e) => {
                 if(touch(e,"move"))return;
@@ -467,7 +495,7 @@ function App() {
                   });
                 else input({ kind: "release" });
               }}
-              onPointerCancel={() => {touchpad.current?.reset();setDragging(false);setModifiers([]);}}
+              onPointerCancel={() => {touches.current.clear();gesture.current=null;multiTouch.current=false;touchpad.current?.reset();setDragging(false);setModifiers([]);}}
               onKeyDown={(e) => {
                 if (control && video.current?.videoWidth) {
                   input({ kind: "key", code: e.code, down: true });
@@ -484,29 +512,30 @@ function App() {
             >
               <video
                 ref={video}
-                style={{transform:`scale(${zoom})`,transformOrigin:`${cursorPosition().left}${typeof cursorPosition().left==="number"?"px":""} ${cursorPosition().top}${typeof cursorPosition().top==="number"?"px":""}`}}
+                style={{transform:`translate(${view.x}px, ${view.y}px) scale(${view.scale})`,transformOrigin:"0 0"}}
                 autoPlay
                 muted
                 playsInline
                 onLoadedMetadata={()=>setLayout(n=>n+1)}
                 aria-label={uiText("远程桌面画面")}
               />
-              {showCursor&&control&&<span className="rd-touch-cursor" aria-hidden="true" style={cursorPosition()}/>}
+              {showCursor&&control&&<span className="rd-touch-cursor" aria-hidden="true" style={(()=>{const p=cursorPosition();return {left:typeof p.left==="number"?p.left*view.scale+view.x:p.left,top:typeof p.top==="number"?p.top*view.scale+view.y:p.top};})()}/>}
             </div>
-            {control&&<div className="rd-touch-controls">
-              <p>{uiText("触控板：单指移动，轻点单击，双指滚动。")}</p>
+            <div className="rd-touch-controls">
+              <p>{uiText(control?"单指移动指针，轻点单击；双指滚动，捏合缩放。":"仅查看：双指捏合缩放，放大后单指移动画面。")}</p>
               <div className="rd-touch-row">
-                <button className="rd-btn" aria-label={uiText("缩小画面")} disabled={zoom<=1} onClick={()=>setZoom(n=>Math.max(1,n-.5))}>−</button>
-                <span className="rd-zoom" aria-label={uiText("画面缩放")}>{Math.round(zoom*100)}%</span>
-                <button className="rd-btn" aria-label={uiText("放大画面")} disabled={zoom>=3} onClick={()=>setZoom(n=>Math.min(3,n+.5))}>+</button>
+                <button className="rd-btn" aria-label={uiText("缩小画面")} disabled={view.scale<=1} onClick={()=>zoomBy(-.5)}>−</button>
+                <span className="rd-zoom" aria-label={uiText("画面缩放")}>{Math.round(view.scale*100)}%</span>
+                <button className="rd-btn" aria-label={uiText("放大画面")} disabled={view.scale>=5} onClick={()=>zoomBy(.5)}>+</button>
+                <button className="rd-btn" onClick={()=>updateView({scale:1,x:0,y:0})}>{uiText("适应画面")}</button>
               </div>
-              <div className="rd-touch-row">
+              {control&&<div className="rd-touch-row">
                 <button className="rd-btn" aria-pressed={keyboardOpen} onClick={()=>{flushSync(()=>setKeyboardOpen(!keyboardOpen));if(!keyboardOpen)keyboard.current?.focus();}}><Keyboard size={16}/>{uiText("键盘")}</button>
                 <button className="rd-btn" onClick={()=>touchpad.current?.click(2)}>{uiText("右键")}</button>
                 <button className="rd-btn" aria-pressed={dragging} onClick={()=>{touchpad.current?.drag(!dragging);setDragging(!dragging);}}>{dragging?uiText("结束拖动"):uiText("拖动")}</button>
                 {["Escape","Tab","Enter","Backspace"].map(code=><button key={code} className="rd-btn" aria-label={code} onClick={()=>specialKey(code)}>{({Escape:"Esc",Tab:"Tab",Enter:"↵",Backspace:"⌫"})[code as "Enter"]}</button>)}
-              </div>
-              {keyboardOpen&&<div className="rd-keyboard">
+              </div>}
+              {control&&keyboardOpen&&<div className="rd-keyboard">
                 <div className="rd-touch-row">{[["ControlLeft","Ctrl"],["AltLeft","Alt"],["MetaLeft",active.os==="darwin"?"⌘":"Win"],["ShiftLeft","Shift"]].map(([code,label])=><button key={code} className="rd-btn" aria-pressed={modifiers.includes(code)} onClick={()=>{const down=!modifiers.includes(code);input({kind:"key",code,down});setModifiers(down?[...modifiers,code]:modifiers.filter(x=>x!==code));keyboard.current?.focus();}}>{label}</button>)}</div>
                 <textarea ref={keyboard} aria-label={uiText("输入文字到远端")} placeholder={uiText("键入或粘贴文字")} value={draft} rows={1} autoCapitalize="off" autoCorrect="off" spellCheck={false}
                   onChange={e=>{setDraft(e.target.value);if(!(e.nativeEvent as InputEvent).isComposing)typed(e.target.value);}}
@@ -514,7 +543,7 @@ function App() {
                   onKeyDown={e=>{if(e.key==="Enter"&&!composing.current&&!(e.nativeEvent as KeyboardEvent).isComposing){e.preventDefault();if(draft&&!typed(draft))return;specialKey("Enter");}if(e.key==="Backspace"&&!draft&&!composing.current){e.preventDefault();specialKey("Backspace");}}}
                 />
               </div>}
-            </div>}
+            </div>
             <footer className="rd-session-footer">
               <span>
                 <LockKeyhole size={13} />
@@ -882,6 +911,7 @@ function App() {
               />
               <span>{uiText("操作键盘和鼠标")}</span>
             </label>
+            {!selected.control&&<p className="rd-control-help" role="note">{uiText("这台电脑只允许查看。要操作键鼠，请在电脑上停止共享，勾选「允许键盘和鼠标操作」，再重新共享并连接。Mac 还需允许辅助功能权限。")}</p>}
             {error && (
               <p className="rd-dialog-error" role="alert">
                 {error}

@@ -14,11 +14,11 @@ const server=http.createServer((req,res)=>{
  let content=fs.readFileSync(file);
  if(file.endsWith('.html'))content=String(content).replace('<head>',`<head><script>
  window.__mycoInitialPreferences={language:${JSON.stringify(url.searchParams.get('lang')||'en')},theme:${JSON.stringify(url.searchParams.get('theme')||'light')}};
- window.__inputs=[];window.__actions=[];window.__supportsText=true;
+ window.__inputs=[];window.__actions=[];window.__supportsText=true;window.__allowControl=${JSON.stringify(url.searchParams.get('control')!=='false')};
  window.webkit={messageHandlers:{myco:{postMessage(d){let value;const a=d.args||{};
   if(d.method==='ready')value={page:{id:'pg_test',name:'Remote fixture'},me:{name:'me'},state:null,version:1,preferences:window.__mycoInitialPreferences};
   else if(d.method==='data.list')value={records:[],seq:0};
-  else if(d.method==='remote.call'){window.__actions.push(a.action);if(a.action==='status')value={supported:false,installed:false,running:false,protocol:1,version:'controller',reason:'controller_only'};if(a.action==='devices')value=[{machine:'mac',name:'Studio Mac',os:'darwin',control:true}];if(a.action==='connect')value={id:'rd_test',machine:'mac',state:'connected',answer:{type:'answer',sdp:'v=0'}};if(a.action==='session')value={id:'rd_test',machine:'mac',state:'connected',answer:{type:'answer',sdp:'v=0'}};}
+  else if(d.method==='remote.call'){window.__actions.push(a.action);if(a.action==='status')value={supported:false,installed:false,running:false,protocol:1,version:'controller',reason:'controller_only'};if(a.action==='devices')value=[{machine:'mac',name:'Studio Mac',os:'darwin',control:window.__allowControl}];if(a.action==='connect')value={id:'rd_test',machine:'mac',state:'connected',answer:{type:'answer',sdp:'v=0'}};if(a.action==='session')value={id:'rd_test',machine:'mac',state:'connected',answer:{type:'answer',sdp:'v=0'}};}
   setTimeout(()=>window.__mycoAnswer(d.id,{value:value??true}),0);
  }}}};
  class TestChannel{readyState='open';bufferedAmount=0;send(s){window.__inputs.push(JSON.parse(s));}close(){this.readyState='closed';this.onclose?.();}}
@@ -31,16 +31,32 @@ await new Promise(r=>server.listen(0,'127.0.0.1',r));
 let chromium;try{({chromium}=createRequire(import.meta.url)('playwright'));}catch{({chromium}=createRequire('/usr/local/lib/node_modules/playwright/package.json')('.'));}
 const browser=await chromium.launch({headless:true,...(process.env.UI_SMOKE_EXECUTABLE?{executablePath:process.env.UI_SMOKE_EXECUTABLE}:{})});
 try{
- for(const [width,height,lang,theme] of [[390,844,'zh','light'],[390,844,'en','dark'],[844,390,'zh','dark'],[844,390,'en','light']]){
+ for(const [width,height,lang,theme] of [[390,844,'zh','light'],[390,844,'en','dark'],[844,390,'zh','dark'],[844,390,'en','light'],[390,844,'zh','dark'],[390,844,'en','light']]){
   const context=await browser.newContext({viewport:{width,height},hasTouch:true,isMobile:true,deviceScaleFactor:1});const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
-  await page.goto(`http://127.0.0.1:${server.address().port}/index.html?lang=${lang}&theme=${theme}`);
+  await page.goto(`http://127.0.0.1:${server.address().port}/index.html?lang=${lang}&theme=${theme}&control=${(width===390&&((lang==='zh'&&theme==='dark')||(lang==='en'&&theme==='light')))?'false':'true'}`);
   await page.locator('.rd-device').first().waitFor();
   assert.equal(await page.locator('.rd-tabs button').count(),1,'a phone must not offer host installation or sharing');
   assert.equal(await page.locator('[aria-label="组件设置"],[aria-label="Component settings"]').count(),0);
-  await page.locator('.rd-device').first().click();await page.locator('.rd-dialog .rd-field input').fill('a1b2c3d4');await page.locator('.rd-dialog input[type="checkbox"]').check();await page.locator('.rd-dialog .rd-primary').click();
+  const readOnly=width===390&&((lang==='zh'&&theme==='dark')||(lang==='en'&&theme==='light'));
+  await page.locator('.rd-device').first().click();await page.locator('.rd-dialog .rd-field input').fill('a1b2c3d4');
+  const permission=page.locator('.rd-dialog input[type="checkbox"]');
+  if(readOnly){assert(await permission.isDisabled());await page.locator('.rd-control-help').waitFor();}else await permission.check();
+  await page.locator('.rd-dialog .rd-primary').click();
   await page.locator('.rd-screen video').waitFor();await page.waitForFunction(()=>document.querySelector('video')?.videoWidth>0);
-  const box=await page.locator('.rd-screen').boundingBox(),x=Math.round(box.x+box.width/2),y=Math.round(box.y+box.height/2);
+  let box=await page.locator('.rd-screen').boundingBox(),x=Math.round(box.x+box.width/2),y=Math.round(box.y+box.height/2);
   const cdp=await context.newCDPSession(page);const touch=(type,points)=>cdp.send('Input.dispatchTouchEvent',{type,touchPoints:points});
+  const inputCount=await page.evaluate(()=>window.__inputs.length);
+  await touch('touchStart',[{x:x-30,y,id:1},{x:x+30,y,id:2}]);
+  await touch('touchMove',[{x:x-65,y,id:1},{x:x+65,y,id:2}]);await touch('touchEnd',[]);
+  assert(parseInt(await page.locator('.rd-zoom').innerText())>150,'pinch must zoom in any permission mode');
+  assert(!(await page.evaluate(n=>window.__inputs.slice(n),inputCount)).some(e=>['scroll','move','button'].includes(e.kind)),'a pinch must not scroll or click on the host');
+  await page.getByRole('button',{name:lang==='zh'?'适应画面':'Fit to screen',exact:true}).click();
+  await page.getByRole('button',{name:lang==='zh'?'展开画面':'Expand desktop',exact:true}).click();
+  await page.locator('.rd-session.is-expanded').waitFor();
+  assert((await page.locator('.rd-session').boundingBox()).height>=height-2,'expanded view must use the available height');
+  await page.getByRole('button',{name:lang==='zh'?'收起画面':'Collapse desktop',exact:true}).click();
+  await page.locator('.rd-screen').scrollIntoViewIfNeeded();box=await page.locator('.rd-screen').boundingBox();x=Math.round(box.x+box.width/2);y=Math.round(box.y+box.height/2);
+  if(!readOnly){
   await touch('touchStart',[{x,y,id:1}]);await touch('touchEnd',[]);assert.equal(await page.evaluate(()=>window.__inputs.filter(x=>x.kind==='button').length),2);
   const old=await page.evaluate(()=>window.__inputs.length);await touch('touchStart',[{x,y,id:1}]);await touch('touchMove',[{x:x+45,y:y+15,id:1}]);await touch('touchEnd',[]);
   const moved=await page.evaluate(n=>window.__inputs.slice(n),old);assert(moved.some(x=>x.kind==='move'));assert(!moved.some(x=>x.kind==='button'),'moving is not dragging');
@@ -56,6 +72,13 @@ try{
   assert(await page.evaluate(()=>window.__inputs.some(x=>x.kind==='text'&&x.text==='你好🙂')));
   await field.dispatchEvent('compositionstart');await field.evaluate(el=>{Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(el,'中文组合');el.dispatchEvent(new InputEvent('input',{bubbles:true,data:'中文组合',isComposing:true}));});await field.dispatchEvent('compositionend',{data:'中文组合'});
   assert.equal(await page.evaluate(()=>window.__inputs.filter(x=>x.kind==='text'&&x.text==='中文组合').length),1,'composition must send once');
+  }else {
+    await page.getByRole('button',{name:lang==='zh'?'放大画面':'Zoom in',exact:true}).click();
+    const before=await page.locator('video').getAttribute('style');
+    await touch('touchStart',[{x,y,id:1}]);await touch('touchMove',[{x:x+25,y:y+15,id:1}]);await touch('touchEnd',[]);
+    assert.notEqual(await page.locator('video').getAttribute('style'),before,'one finger pans a zoomed view-only desktop');
+    assert(!await page.evaluate(()=>window.__inputs.some(e=>['move','button','key','text','scroll'].includes(e.kind))),'view-only gestures must never reach the host');
+  }
   await page.screenshot({path:path.join(out,`${width}-${height}-${lang}-${theme}.png`),fullPage:true});
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'phone viewport overflows');
   await page.evaluate(()=>window.__mycoEvent({myco:'remote-disconnect'}));await page.locator('.rd-device').first().waitFor();assert(await page.evaluate(()=>window.__actions.includes('disconnect')));

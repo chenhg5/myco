@@ -1155,7 +1155,11 @@ The iPhone App can also control these computers: update the phone App, open
 **Apps → Remote Desktop** in the same workspace, select the sharing computer and
 enter its pairing code. A one-finger drag moves the pointer, a tap clicks and two
 fingers scroll. Use the keyboard button for text and modifier keys, or zoom in
-for small controls. The phone does not install a hosting component or share its
+for small controls. Pinch with two fingers to zoom (also in view-only mode);
+in view-only mode, slide one finger to pan the enlarged desktop. **Expand desktop**
+uses the available App panel, without requiring browser fullscreen. A disabled
+keyboard/mouse option means the computer allows viewing only: stop sharing on
+that computer, enable **Allow keyboard and mouse**, then share and connect again. The phone does not install a hosting component or share its
 screen. Leaving the App or closing the page disconnects; reconnect explicitly
 when returning. Unicode typing requires remote component 0.2.0 or later on the
 computer; older components accept short ASCII text and physical keys.

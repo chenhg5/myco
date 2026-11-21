@@ -20,3 +20,15 @@ const before=out.length;pad.down(1,20,20,3000);pad.down(2,40,20,3000);pad.move(1
 assert.deepEqual(out.slice(before),[{kind:'scroll',delta:-20}]);
 pad.drag(true);assert.equal(out.at(-1).down,true);pad.reset();assert.deepEqual(out.at(-1),{kind:'release'});assert.equal(pad.dragging,false);
 console.log('PASS touchpad gestures, drag release, legacy physical keys, Unicode and composition text planning');
+
+const viewport=fs.readFileSync(new URL('./src/_lib/remote-viewport.ts',import.meta.url),'utf8');
+const compiled=ts.transpileModule(viewport,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
+const {zoomView,pinchView,boundedView,followPointer}=await import('data:text/javascript;base64,'+Buffer.from(compiled).toString('base64'));
+const initial={scale:1,x:0,y:0};
+assert.deepEqual(zoomView(initial,2,{x:100,y:50},200,100),{scale:2,x:-100,y:-50});
+assert.deepEqual(pinchView(initial,2,{x:100,y:50},{x:110,y:55},200,100),{scale:2,x:-90,y:-45});
+assert.deepEqual(boundedView({scale:9,x:-9999,y:9999},200,100),{scale:5,x:-800,y:0});
+assert.deepEqual(zoomView({scale:2,x:-100,y:-50},1,{x:100,y:50},200,100),initial);
+const followed=followPointer({scale:2,x:-100,y:-50},{x:0,y:0},200,100);
+assert.equal(followed.x,0);assert.equal(followed.y,0);
+console.log('PASS anchored zoom, pinch pan, bounds, reset and pointer visibility');

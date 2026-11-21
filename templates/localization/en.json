@@ -649,7 +649,7 @@
   "子主题": "Subtopic",
   "同级主题": "Sibling topic",
   "删除（Delete）": "Delete (Delete)",
-  "适应画面": "Fit view",
+  "适应画面": "Fit to screen",
   "选中一个主题：Tab 加子主题，Enter 加同级，空格折叠，Delete 删除；拖到另一个主题上就挪过去": "Select a topic: Tab adds a child, Enter a sibling, Space folds, Delete removes. Drag it onto another topic to move it.",
   "{0} 刚改了这一页": "{0} just edited this page",
   "已移到回收站：{0}": "Moved to Trash: {0}",
@@ -1578,5 +1578,11 @@
   "放大画面": "Zoom in",
   "缩小画面": "Zoom out",
   "画面缩放": "Zoom",
-  "手机仅作为控制端，关闭页面即断开。": "This phone is a controller. Closing the page disconnects."
+  "手机仅作为控制端，关闭页面即断开。": "This phone is a controller. Closing the page disconnects.",
+  "展开画面": "Expand desktop",
+  "收起画面": "Collapse desktop",
+  "单指移动指针，轻点单击；双指滚动，捏合缩放。": "Slide to move the pointer, tap to click. Use two fingers to scroll or pinch to zoom.",
+  "仅查看：双指捏合缩放，放大后单指移动画面。": "View only: pinch to zoom, then slide with one finger to pan.",
+  "这台电脑只允许查看。要操作键鼠，请在电脑上停止共享，勾选「允许键盘和鼠标操作」，再重新共享并连接。Mac 还需允许辅助功能权限。": "This computer allows viewing only. On the computer, stop sharing, turn on “Allow keyboard and mouse”, then share and connect again. Mac also requires Accessibility permission.",
+  "仅查看画面，可捏合缩放": "View-only desktop, pinch to zoom"
 }
