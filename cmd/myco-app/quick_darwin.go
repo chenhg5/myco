@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -34,6 +35,9 @@ type quick struct {
 	open  func(hub, agent string, setup bool)
 	h     int
 	watch sync.Once
+	// up is whether it was called up (the shortcut): when it is not, it
+	// must not be on screen, whatever shows it (keepHidden).
+	up atomic.Bool
 }
 
 // qlog notes what the panel does on stderr (a release build's app.Logger
@@ -73,6 +77,12 @@ func newQuick(app *application.App, open func(hub, agent string, setup bool)) *q
 	q := &quick{win: win, open: open, h: 120}
 	// Clicking elsewhere puts it away, as Spotlight does.
 	win.OnWindowEvent(events.Common.WindowLostFocus, func(*application.WindowEvent) { q.hide() })
+	// It came up by itself when the app started (the page saying it is
+	// ready makes Wails change the panel's style, and the page sets its
+	// height): only the shortcut shows it, so anything else is undone.
+	for _, e := range []events.WindowEventType{events.Common.WindowRuntimeReady, events.Common.WindowShow, events.Common.WindowFocus} {
+		win.OnWindowEvent(e, func(*application.WindowEvent) { q.keepHidden() })
+	}
 	if err := app.GlobalShortcut.Register(quickKey, q.toggle); err != nil {
 		app.Logger.Warn("quick panel shortcut not registered", "key", quickKey, "error", err)
 	}
@@ -87,6 +97,7 @@ func (q *quick) toggle() {
 			q.hide()
 			return
 		}
+		q.up.Store(true)
 		q.watch.Do(q.watchClicks)
 		q.win.Center()
 		q.win.Show()
@@ -96,6 +107,7 @@ func (q *quick) toggle() {
 }
 
 func (q *quick) hide() {
+	q.up.Store(false)
 	application.InvokeAsync(func() {
 		if q.win.IsVisible() {
 			q.win.Hide()
@@ -131,7 +143,10 @@ func (q *quick) handler(next http.Handler) http.Handler {
 			q.h = in.H
 			q.mu.Unlock()
 			if changed {
-				application.InvokeAsync(func() { q.win.SetSize(quickW, in.H) })
+				application.InvokeAsync(func() {
+					q.win.SetSize(quickW, in.H)
+					q.keepHidden()
+				})
 			}
 		case "hide":
 			q.hide()
@@ -156,5 +171,19 @@ func (q *quick) handler(next http.Handler) http.Handler {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"ok":true}`))
+	})
+}
+
+// keepHidden puts the panel away again when something other than the
+// shortcut put it on screen (see newQuick).
+func (q *quick) keepHidden() {
+	if q.up.Load() {
+		return
+	}
+	application.InvokeAsync(func() {
+		if !q.up.Load() && q.win.IsVisible() {
+			qlog.Printf("on screen without the shortcut: hidden again")
+			q.win.Hide()
+		}
 	})
 }
