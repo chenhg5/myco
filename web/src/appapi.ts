@@ -1,4 +1,4 @@
-import type { Page, PageChanges, PageOpen, PageRecord, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, MCPServer, ToolSkill, ToolPlugin, SuperagentState, Approval, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
+import type { Page, PageChanges, PageOpen, PageRecord, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Backup, Backups, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, MCPServer, ToolSkill, ToolPlugin, SuperagentState, Approval, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
 import { L } from "@/lib/i18n";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
@@ -452,6 +452,9 @@ export function isTransient(e: unknown): boolean {
 /** The hub is older than the app and lacks this feature: it answers an
  *  unknown path with 404 ("no route for …", or Go's plain "404 page not
  *  found") or 405. A real "agent x not found" is not this. */
+/** A workspace's backups with the copies on this computer. */
+export interface BackupsView extends Backups { local: Backup[]; dir: string; auto: boolean }
+
 export function isOldHub(e: unknown): boolean {
   if (!(e instanceof ApiError)) return false;
   if (e.status === 405) return true;
@@ -768,6 +771,11 @@ export const appApi = {
     request<ProjectDoc>("GET", `app/hubs/${enc(hubId)}/projects/${enc(name)}/docs/${enc(doc)}`),
   addProjectMemory: (hubId: string, name: string, text: string) =>
     request<ProjectDoc>("POST", `app/hubs/${enc(hubId)}/projects/${enc(name)}/memory`, { text }),
+  backups: (hubId: string) => request<BackupsView>("GET", `app/hubs/${enc(hubId)}/backups`),
+  createBackup: (hubId: string) => request<Backup>("POST", `app/hubs/${enc(hubId)}/backups`),
+  saveBackup: (hubId: string, name?: string) => request<{ path: string; dir: string }>("POST", `app/hubs/${enc(hubId)}/backups/save`, { name: name || "" }),
+  setBackupAuto: (hubId: string, on: boolean) => request<{ auto: boolean }>("PUT", `app/hubs/${enc(hubId)}/backups/auto`, { on }),
+  revealBackups: (hubId: string) => request<{ dir: string }>("POST", `app/hubs/${enc(hubId)}/backups/reveal`),
   putProjectDoc: (hubId: string, name: string, doc: string, body: string) =>
     request<ProjectDoc>("PUT", `app/hubs/${enc(hubId)}/projects/${enc(name)}/docs/${enc(doc)}`, { body }),
   deleteProjectDoc: (hubId: string, name: string, doc: string) =>
@@ -938,6 +946,8 @@ export const appApi = {
       bytes instanceof Blob ? bytes : new Blob([bytes as BlobPart], { type: type || "application/octet-stream" })),
   // What a page (an app) uses of this computer: myco.os.* (App backend
   // oscalls.go; only an App with a local install answers).
+  remoteCall: <T = unknown>(hubId: string, page: string, action: string, args: unknown = {}, instance: string = "") =>
+    request<T>("POST", `app/hubs/${enc(hubId)}/remote`, {page, instance, action, args}, undefined, action === "install" ? 600_000 : 30_000),
   osList: () => request<OsList>("GET", "app/os"),
   osCall: (name: string, args: unknown, page: OsPage) =>
     request<{ value: unknown }>("POST", "app/os/call", { name, args, page }).then((r) => r.value),

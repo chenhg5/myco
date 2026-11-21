@@ -131,6 +131,26 @@ struct HubClientTests {
         return HubClient(baseURL: URL(string: "https://hub.example.com/base")!, token: "tok", session: URLSession(configuration: configuration))
     }
 
+    @Test func remoteSignalingUsesTheDeviceTokenAndKeepsPairingOutOfURLs() async throws {
+        let hub = client()
+        Stub.handler = { request in
+            if request.url?.path.hasSuffix("/machines") == true {
+                return (200, Data(#"{"machines":[{"machine":"app:mac","name":"Mac","os":"darwin","control":true}]}"#.utf8))
+            }
+            return (200, Data(#"{"id":"rd_one","machine":"app:mac","state":"pending"}"#.utf8))
+        }
+        #expect(try await hub.remoteComputers().first?.machine == "app:mac")
+        _ = try await hub.connectRemote(machine: "app:mac", offer: RemoteOffer(description: RemoteDescription(type: "offer", sdp: "v=0\r\n"), pairingCode: "pair-test-only", control: true))
+        _ = try await hub.remoteConnection("rd_one")
+        try await hub.disconnectRemote("rd_one")
+        #expect(Stub.seen.map { $0.httpMethod } == ["GET", "POST", "GET", "DELETE"])
+        #expect(Stub.seen.allSatisfy { $0.value(forHTTPHeaderField: "Authorization") == "Bearer tok" })
+        #expect(Stub.seen.allSatisfy { !($0.url?.absoluteString.contains("pair-test-only") ?? true) })
+        #expect(Stub.seen[1].url?.path == "/base/v1/remote/sessions")
+        Stub.handler = { _ in (404, Data(#"{"error":"not_found","message":"Upgrade the workspace"}"#.utf8)) }
+        await #expect(throws: HubError.self) { _ = try await hub.remoteComputers() }
+    }
+
     @Test func asksForMyPairsWithTheToken() async throws {
         let hub = client()
         Stub.handler = { _ in (200, try! RealAnswersTests.fixture("recent-pairs")) }

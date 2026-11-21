@@ -224,3 +224,55 @@ template list/get results; old Apps ignore the new field. A page's chosen name
 and all its user content remain unchanged. The current App also bundles official
 catalog translations for Hubs that do not return `locales` yet; custom catalog
 translations need a Hub that supports this sidecar.
+
+## Optional Remote Desktop SDK
+
+`myco.features.includes("remote")` exposes `myco.remote.call(action, args)`.
+It is separate from `myco.os`, which operates on the App's local computer.
+The SDK uses the page's current workspace, not an arbitrary Hub URL. The trusted
+App asks before installation, removal, enabling hosting or connecting; an
+embedded app cannot approve its own request. These permissions do not inherit
+from a page's ability to run local commands.
+
+```ts
+const computers = await myco.remote.call("devices");
+const component = await myco.remote.call("status");
+// Both actions below need explicit App consent.
+await myco.remote.call("install");
+const sharing = await myco.remote.call("enable", {control: false});
+// sharing.pairing_code is private to this page: never write it to shared data.
+await myco.remote.call("disable");
+```
+
+`templates/src/_lib/remote.ts` provides the typed controller and browser media
+adapter. The host process, codec and input implementations live in the optional
+`components/remote` module. Core myco does not link its WebRTC dependency.
+Closing/reloading a host page stops sharing; changing language reloads the page,
+while theme changes update live. Hosts require Mac/Windows, system permissions
+and an unlocked desktop. The initial adapter supports direct LAN/Tailscale video
+and keyboard/mouse, without audio, automatic public relay or unattended service.
+The component is downloaded separately and may be uninstalled from the app's
+settings. It is not installed or started for people who do not use it.
+
+The iOS page bridge advertises `remote-controller`: `devices`, `connect`,
+`session`, `disconnect` and `close` use the current workspace credential.
+`status` returns `reason: "controller_only"`; installation and hosting actions
+are refused. Native confirmation names the authorized computer and requested
+control mode. Each page can access only its own sessions. Backgrounding the App,
+reloading or closing a page revokes pending requests and active sessions.
+`myco.remote.onDisconnect(fn)` lets a page immediately clear its video and input
+state on backgrounding. Returning to the App requires an explicit new connection.
+No camera or microphone permission is needed for this receive-only video path.
+
+The shared controller implements a relative touchpad, two-finger scrolling,
+explicit drag mode, zoom and a keyboard. Component 0.2.0 sends an encrypted
+data-channel capability event `{type:"capabilities",input_features:["text"]}`.
+Only then may a controller send `{kind:"text",text:"…"}` (at most 256 Unicode
+scalars / 1,024 UTF-8 bytes; control characters are rejected). Text uses native
+Unicode key events, without the clipboard. Legacy components still accept
+physical keys; the UI retains unsupported text and asks for a component update.
+
+The iOS controller enters native landscape presentation only after an authorized
+connection exists. Its App toolbar and status bar are hidden; a native exit
+button remains above untrusted page content. Disconnect, page dismissal and
+background revocation restore the normal portrait presentation.

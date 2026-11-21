@@ -24,6 +24,7 @@ import (
 	"github.com/chenhg5/myco/internal/domain"
 	"github.com/chenhg5/myco/internal/osutil"
 	"github.com/chenhg5/myco/internal/release"
+	"github.com/chenhg5/myco/internal/remotedesktop"
 )
 
 // Server is the hub's HTTP adapter.
@@ -44,6 +45,7 @@ type Server struct {
 	version     string        // this hub's myco build
 	latest      func() string // newest known release ("" = unknown)
 	upgrade     func(ctx context.Context, version string) (api.HubUpgrade, error)
+	backups     Backups
 	mux         *http.ServeMux
 	ingress     map[string]Ingress
 	files       *app.FileService
@@ -59,6 +61,7 @@ type Server struct {
 	workflows   *app.WorkflowService
 	superagents *app.SuperagentService
 	pages       *app.PageService
+	remote      remotedesktop.Broker
 	tun         tunnels
 	handovers   *app.HandoverService
 	hidden      *app.HiddenService
@@ -162,6 +165,7 @@ func (s *Server) routes() {
 
 	// Administration (admin token).
 	m.HandleFunc("POST /v1/admin/upgrade", s.admin(s.upgradeHub))
+	s.routeBackups(m)
 	m.HandleFunc("POST /v1/agents", s.admin(s.register))
 	m.HandleFunc("DELETE /v1/agents/{name}", s.admin(s.removeAgent))
 	m.HandleFunc("POST /v1/agents/cleanup", s.admin(s.cleanupAgents))
@@ -225,6 +229,7 @@ func (s *Server) routes() {
 	s.pinRoutes(m)
 	s.pageDataRoutes(m)
 	s.liveRoutes(m)
+	s.remoteRoutes(m)
 	s.handoverRoutes(m)
 	m.HandleFunc("GET /j/{token}", s.joinPage)
 	m.HandleFunc("GET /j/{token}/{project}", s.joinPage)
@@ -1597,7 +1602,8 @@ func (s *Server) threadAny(w http.ResponseWriter, r *http.Request) {
 			// here: the hub is local; the App's link may not be).
 			changed := out.Messages[:0]
 			for _, m := range out.Messages {
-				if m.UpdatedAt.UnixMilli() > since {
+				// (an open task its worker touched since: the work goes on)
+				if m.UpdatedAt.UnixMilli() > since || (m.ActiveAt != nil && m.ActiveAt.UnixMilli() > since) {
 					changed = append(changed, m)
 				}
 			}

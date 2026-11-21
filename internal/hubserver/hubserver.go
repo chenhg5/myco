@@ -8,6 +8,7 @@ import (
 	"errors"
 	"github.com/chenhg5/myco/internal/templates"
 	"log/slog"
+	"math/rand/v2"
 	"net"
 	"net/http"
 	"os"
@@ -70,6 +71,10 @@ type Options struct {
 	// Upgrade, if set, brings the hub's myco to a release and restarts it
 	// (POST /v1/admin/upgrade).
 	Upgrade func(ctx context.Context, version string) (api.HubUpgrade, error)
+	// Backups is how many backups of its data the hub keeps in
+	// <db dir>/backups, making one a day (0: DefaultBackups; negative:
+	// none, and none on demand either).
+	Backups int
 }
 
 // AutomationTick is how often each workspace looks for automations due.
@@ -96,6 +101,8 @@ type Hub struct {
 	SetPublicURL func(string)
 	// SetLAN makes links created from this machine use its LAN address.
 	SetLAN func(bool)
+	// RunBackups makes the daily backups until ctx ends (nil: none).
+	RunBackups func(ctx context.Context)
 }
 
 // DefaultWakers are the push delivery modes shipped with myco.
@@ -161,6 +168,18 @@ func Build(o Options) (*Hub, error) {
 	srv.SetPublicURL(o.Dispatch.PublicURL)
 	srv.SetPathPrefix(o.PathPrefix)
 	srv.SetUpgrade(o.Upgrade)
+	keep := o.Backups
+	if keep == 0 {
+		keep = DefaultBackups
+	}
+	scope := "hub"
+	if o.PathPrefix != "" {
+		scope = strings.TrimPrefix(o.PathPrefix, "/w/")
+	}
+	bk := newBackups(o.DBPath, filesDir, scope, o.Version, keep, o.Log)
+	if bk != nil {
+		srv.SetBackups(bk)
+	}
 	var latest func() string
 	if o.UpdateCheck != nil {
 		latest = o.UpdateCheck.Latest
@@ -260,8 +279,15 @@ func Build(o Options) (*Hub, error) {
 	handovers.SetContext(projectRepo, sqlite.NewMachineRepo(db), messages)
 	srv.SetHandovers(handovers)
 	messages.SetCredentialCheck(handovers.StillCurrent)
-	return &Hub{Handler: srv, Server: srv, Dispatcher: dispatcher, Files: files, Traces: traces, Automations: automations, Workflows: workflows,
-		Close: db.Close, SetPublicURL: srv.SetPublicURL, SetLAN: srv.SetLAN}, nil
+	h := &Hub{Handler: srv, Server: srv, Dispatcher: dispatcher, Files: files, Traces: traces, Automations: automations, Workflows: workflows,
+		Close: db.Close, SetPublicURL: srv.SetPublicURL, SetLAN: srv.SetLAN}
+	if bk != nil {
+		// The first a few minutes after start, spread so that the
+		// workspaces of a server do not all copy at once.
+		first := 5*time.Minute + time.Duration(rand.Int64N(int64(10*time.Minute)))
+		h.RunBackups = func(ctx context.Context) { bk.daily(ctx, first) }
+	}
+	return h, nil
 }
 
 // Run serves until ctx is cancelled.
@@ -285,6 +311,9 @@ func Run(ctx context.Context, o Options) error {
 	go hub.Traces.Run(ctx, time.Hour)
 	go hub.Automations.Run(ctx, AutomationTick)
 	go hub.Workflows.Run(ctx, WorkflowTick)
+	if hub.RunBackups != nil {
+		go hub.RunBackups(ctx)
+	}
 	// The other workspaces this hub serves (under /w/<name>).
 	ws := newWorkspaces(ctx, o, hub)
 	if err := ws.load(); err != nil {

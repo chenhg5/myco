@@ -1,0 +1,156 @@
+name: Sign remote component release
+on:
+  workflow_dispatch:
+    inputs:
+      source_run:
+        description: Successful optional-component build run
+        required: true
+permissions:
+  contents: write
+  actions: read
+jobs:
+  sign:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify source provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN: ${{ inputs.source_run }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" > "$RUNNER_TEMP/source.json"
+          python3 - <<'PYCODE'
+          import json,os
+          r=json.load(open(os.environ['RUNNER_TEMP']+'/source.json'))
+          assert r['name']=='Optional remote desktop component' and r['conclusion']=='success'
+          assert r['head_repository']['full_name']==os.environ['GITHUB_REPOSITORY']
+          assert r['event']=='push' and r['head_branch']=='main'
+          assert r['path']=='.github/workflows/remote-component.yml'
+          PYCODE
+          source_sha=$(python3 -c 'import json,os;print(json.load(open(os.environ["RUNNER_TEMP"]+"/source.json"))["head_sha"])')
+          git diff --exit-code "$source_sha" HEAD -- components/remote
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ inputs.source_run }}
+          github-token: ${{ github.token }}
+          pattern: myco-remote_*
+          path: input
+      - name: Sign and notarize Mac executables
+        env:
+          MAC_CERT_P12_BASE64: ${{ secrets.MAC_CERT_P12_BASE64 }}
+          MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
+          NOTARY_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
+        run: |
+          kc="$RUNNER_TEMP/sign.keychain-db"
+          kcpw=$(openssl rand -hex 16)
+          security create-keychain -p "$kcpw" "$kc"
+          security set-keychain-settings -lut 21600 "$kc"
+          security unlock-keychain -p "$kcpw" "$kc"
+          p12="$RUNNER_TEMP/cert.p12"
+          printf '%s' "$MAC_CERT_P12_BASE64" | base64 --decode > "$p12"
+          if ! security import "$p12" -k "$kc" -P "$MAC_CERT_PASSWORD" -T /usr/bin/codesign >/dev/null; then
+            # A .p12 from a newer macOS can use algorithms this runner's
+            # import does not take: OpenSSL 3 reads it and packs it again in
+            # the older format. If OpenSSL cannot open it, the password is wrong.
+            ossl="$(brew --prefix openssl@3)/bin/openssl"
+            { "$ossl" pkcs12 -in "$p12" -passin env:MAC_CERT_PASSWORD -nodes -out "$RUNNER_TEMP/id.pem" 2>/dev/null ||
+              "$ossl" pkcs12 -legacy -in "$p12" -passin env:MAC_CERT_PASSWORD -nodes -out "$RUNNER_TEMP/id.pem" 2>/dev/null; } || {
+              echo "::error::MAC_CERT_PASSWORD does not open the .p12 in MAC_CERT_P12_BASE64: set the password again (or export and set both again)"
+              exit 1
+            }
+            "$ossl" pkcs12 -export -legacy -in "$RUNNER_TEMP/id.pem" -passout env:MAC_CERT_PASSWORD -out "$p12"
+            rm -f "$RUNNER_TEMP/id.pem"
+            security import "$p12" -k "$kc" -P "$MAC_CERT_PASSWORD" -T /usr/bin/codesign >/dev/null
+            echo "imported the identity after packing the .p12 in the older format"
+          fi
+          rm -f "$p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$kcpw" "$kc" >/dev/null
+          security list-keychains -d user -s "$kc" $(security list-keychains -d user | tr -d '"')
+          # Apple's Developer ID intermediate certificate: without it in reach
+          # the identity's chain does not verify and it is not valid.
+          for ca in DeveloperIDG2CA DeveloperIDCA; do
+            curl -fsSL --retry 3 -o "$RUNNER_TEMP/$ca.cer" "https://www.apple.com/certificateauthority/$ca.cer" &&
+              security import "$RUNNER_TEMP/$ca.cer" -k "$kc" >/dev/null 2>&1 || true
+          done
+          # Sign by the identity's hash, so its name stays out of the log.
+          id=$(security find-identity -v -p codesigning "$kc" | awk '/Developer ID Application/ {print $2; exit}')
+          if [ -z "$id" ]; then
+            # Say why, showing each identity's kind but not its name: none at
+            # all means the .p12 has the certificate without its private key;
+            # "Apple Development" means the wrong certificate was exported.
+            echo "identities in the .p12 (kind only):"
+            security find-identity "$kc" | sed -E 's/"([^:"]*):[^"]*"/[\1]/'
+            echo "::error::no valid Developer ID Application identity in MAC_CERT_P12_BASE64 (see above: 0 identities = exported without the private key; another kind = export the Developer ID Application certificate instead)"
+            exit 1
+          fi
+          # The team is the Developer ID certificate's OU; NOTARY_TEAM_ID is
+          # only the fallback (another ID in brackets is easy to copy instead).
+          team=$(security find-certificate -c "Developer ID Application" -p "$kc" |
+            openssl x509 -noout -subject -nameopt RFC2253 | grep -o 'OU=[A-Z0-9]\{10\}' | head -1 | cut -c4-)
+          team=${team:-$NOTARY_TEAM_ID}
+          echo "::add-mask::$team"
+          xcrun notarytool store-credentials myco --apple-id "$NOTARY_APPLE_ID" --team-id "$team" \
+            --password "$NOTARY_PASSWORD" --keychain "$kc" >/dev/null
+          mkdir -p mac-work output
+          python3 - <<'PYCODE'
+          import pathlib,zipfile,hashlib
+          for target in ('darwin_arm64','darwin_amd64','windows_amd64'):
+              name='myco-remote_'+target+'.zip'
+              p=pathlib.Path('input')/('myco-remote_'+target)/name
+              digest=(p.parent/(name+'.sha256')).read_text().split()[0]
+              assert hashlib.sha256(p.read_bytes()).hexdigest()==digest
+              if target.startswith('darwin'):
+                  dest=pathlib.Path('mac-work')/target
+                  with zipfile.ZipFile(p) as z:
+                      assert all(pathlib.PurePosixPath(n).name==n for n in z.namelist())
+                      z.extractall(dest)
+                  for n in ('myco-remote','ffmpeg'): (dest/n).chmod(0o755)
+              else: (pathlib.Path('output')/name).write_bytes(p.read_bytes())
+          PYCODE
+          for target in darwin_arm64 darwin_amd64; do
+            for binary in myco-remote ffmpeg; do
+              codesign --force --options runtime --timestamp --sign "$id" --keychain "$kc" "mac-work/$target/$binary" 2> "$RUNNER_TEMP/codesign.log"
+              codesign --verify --strict "mac-work/$target/$binary"
+            done
+          done
+          ditto -c -k --keepParent mac-work "$RUNNER_TEMP/remote-notarize.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/remote-notarize.zip" --keychain-profile myco --keychain "$kc" --wait --output-format json > "$RUNNER_TEMP/notary.json"
+          python3 - <<'PYCODE'
+          import json,os,pathlib,zipfile,hashlib
+          report=json.load(open(os.environ['RUNNER_TEMP']+'/notary.json'))
+          assert report['status']=='Accepted', 'Apple notarization was not accepted'
+          print('Apple notarization: Accepted')
+          for target in ('darwin_arm64','darwin_amd64'):
+              with zipfile.ZipFile('output/myco-remote_'+target+'.zip','w',zipfile.ZIP_DEFLATED) as z:
+                  for p in sorted((pathlib.Path('mac-work')/target).iterdir()): z.write(p,p.name)
+          root=pathlib.Path('output')
+          (root/'SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n' for p in sorted(root.glob('*.zip'))))
+          PYCODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: remote-components-signed
+          path: output/*
+      - name: Stage release for verification
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(sed -n 's/^const version = "\([0-9.]*\)"/\1/p' components/remote/main.go)
+          test -n "$version"
+          tag="remote-v$version"
+          cat > "$RUNNER_TEMP/notes.md" <<'NOTES'
+          Optional remote desktop component with negotiated Unicode text input for Mac and Windows. Protocol 1 remains compatible with older controllers. Mac executables are Developer ID signed and Apple notarized; all three archives have SHA-256 checksums.
+
+          **中文**
+          可选远控组件新增 Mac / Windows Unicode 文字输入，保留协议 1 的兼容性。Mac 程序已签名并通过 Apple 公证，三个平台的安装包均提供 SHA-256 校验。
+          NOTES
+          if gh release view "$tag" --json isDraft > "$RUNNER_TEMP/existing-release.json" 2>/dev/null; then
+            python3 -c 'import json,os; assert json.load(open(os.environ["RUNNER_TEMP"]+"/existing-release.json"))["isDraft"], "Published releases are immutable"'
+            gh release upload "$tag" output/* --clobber
+          else
+            gh release create "$tag" output/* --draft --prerelease --latest=false --target "$GITHUB_SHA" --title "Remote component $version" --notes-file "$RUNNER_TEMP/notes.md"
+          fi

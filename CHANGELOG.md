@@ -4,6 +4,46 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.21.13
+
+- Remote Desktop (preview): on a phone, what you type goes into a draft above the keyboard and is sent when you confirm (dictation and corrections no longer stream half-typed text to the computer); two fingers zoom and pan the view, and a short hold with two fingers scrolls the remote screen. Leaving a session asks first, and the controls and the keyboard switch are larger.
+- Remote Desktop (preview): after an App upgrade, a remote component already installed and still compatible keeps working instead of asking to be installed again; uninstalling removes every version the App installed.
+
+**中文**
+
+- 远程桌面（预览）：手机上输入的文字先放在键盘上方的草稿里，确认后才发送（语音输入和修改不再把打了一半的文字发到电脑上）；两指可以缩放、平移画面，两指按住片刻再滑动才是滚动远程屏幕。退出会话前会先确认；按钮和键盘开关做得更大了。
+- 远程桌面（预览）：App 升级后，已经装好、仍然兼容的远程组件可以继续用，不用重新安装；卸载时会删掉 App 装过的所有版本。
+
+## v0.21.12
+
+- **Workspace backups**: every workspace backs up its own data once a day (a snapshot of its database taken while it runs, plus its files) and keeps the last 7 on its server. In the App, Settings › Workspaces › Backups › Manage (the workspace's owner only) backs up now and saves the copy to this computer, and can keep the newest one here every day (the last 3), so a failed server disk does not take the data with it. On the server, `myco hub backup` and `myco hub restore` (it checks the whole backup first, stops and starts the service, and keeps what was there aside). See INSTALL, section 8.1.
+- **No more false "session open somewhere else"**: a task for a session busy with another task of the same agent (in another conversation, or the same session joined to another workspace) now just waits its turn; a task run again after a restart is no longer held back by its own earlier run.
+- **A long, quiet run no longer looks stuck**: during a long command with no new output (a build, a test run) the App now sees that the agent's runner is still on the task; the "may be stuck" note for runner tasks also waits 20 quiet minutes instead of 10.
+- Remote Desktop (preview): touch gestures on phones (zoom, drag, a touch keyboard); the component still is not published.
+- The App: in a project, the task you send shows in the feed at once while it is being sent.
+- Upgrade the workspace (Settings › Workspace, or `sudo myco upgrade` on the server) for backups and the quiet-run fix, and your computers (their runners) for the "session open somewhere else" fix.
+
+**中文**
+
+- **工作区备份**：每个工作区每天自动备份一次自己的数据（运行中给数据库拍快照，再加上文件），服务器上保留最近 7 份。App 里「设置 › 工作区 › 备份 › 管理」（只有工作区主人能看到）可以立即备份并存到这台电脑，也可以打开「每天在这台电脑上留一份」（留最近 3 份），服务器磁盘坏了数据也不会丢。服务器上可以用 `myco hub backup` 和 `myco hub restore`（恢复前会完整检查备份，自动停、启服务，原来的数据挪到旁边保留）。详见 INSTALL 第 8.1 节。
+- **不再误报「会话在别处打开」**：同一个 agent 的会话正在处理另一个任务时（另一个对话里的任务，或者同一个会话加入了另一个工作区），新任务只是排队等着；重启后重跑的任务，也不会再被它自己上一次运行挡住。
+- **长时间安静的运行不再像卡住了**：跑编译、测试这类长时间没有新输出的命令时，App 能看到 runner 还在处理这个任务；runner 任务的「可能卡住」提示也从安静 10 分钟改为 20 分钟。
+- 远程桌面（预览）：手机上支持触控手势（缩放、拖动、触控键盘）；组件仍未发布。
+- App：在项目里发的任务，会立刻出现在动态里，不用等发送完成。
+- 升级工作区（设置 › 工作区，或在服务器上 `sudo myco upgrade`）才有备份和「安静运行」的修复；升级各台电脑（runner）才有「会话在别处打开」的修复。
+
+## v0.21.11
+
+- **Remote Desktop (preview, not installable yet)**: a new official app, Remote Desktop, to see and control another of your computers (Mac and Windows) from the App: encrypted WebRTC video at 720p, keyboard and mouse, a view-only mode, a one-time pairing code, and an explicit disconnect. It works between computers that can reach each other directly (the same network); a relay for other networks comes later. Capture and encoding run in a separate component that the App installs on demand; that component is not published yet, so "Install" shows it is unavailable for now. Needs an upgraded workspace (hub).
+- The App: a message you send shows in the chat at once, while it is being sent.
+- Upgrade the workspace (Settings › Workspace, or `sudo myco upgrade` on the server) for Remote Desktop.
+
+**中文**
+
+- **远程桌面（预览，暂时还装不上）**：新的官方应用「远程桌面」，在 App 里查看和控制你的另一台电脑（Mac、Windows）：加密的 WebRTC 720p 画面、键盘鼠标、仅查看模式、一次性配对码，可以随时断开。目前只支持能直接连通的两台电脑（同一网络），其他网络的中继以后再加。截屏和编码在一个单独的组件里，由 App 按需安装；这个组件还没有发布，所以现在「安装」会显示不可用。需要升级工作区（Hub）。
+- App：发出的消息会马上出现在对话里，不用等发送完成。
+- 升级工作区（设置 › 工作区，或在服务器上 `sudo myco upgrade`）才有远程桌面。
+
 ## v0.21.10
 
 - **Project memory**: a project now has a shared memory. Members add what everyone should keep in mind (decisions, conventions, the owner's preferences) with `myco project memory add --name <project> --text "..."`, and each entry records who wrote it and when. The runner gives member agents the memory with the project, and gives it again when it changes. In the App, the project notes have a Memory section where you add an entry or edit and tidy the whole memory. In a test with real Claude Code agents, a decision or preference told to one member reached the others in 5 of 5 runs (0 of 5 before).

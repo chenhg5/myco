@@ -102,6 +102,9 @@ struct PageCards: View {
 /// system's browser. The desktop app's page panel.
 struct PageScreen: View {
     let id: String
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.scenePhase) private var scenePhase
+    @AppStorage(AppLanguage.defaultsKey) private var language = "system"
     @Environment(\.dismiss) private var dismiss
     @Environment(WorkspaceSession.self) private var session
 
@@ -114,16 +117,20 @@ struct PageScreen: View {
     /// Answers the page's `window.myco`; made once the page is known.
     @State private var bridge: PageBridge?
     /// The page asks to send its agent a message as me.
-    @State private var asking: SendAsking?
+    @State private var asking: PageAsking?
     /// A file the page handed over, to save or send on.
     @State private var handed: HandedFile?
+    @State private var remoteActive = false
+    @State private var remoteKeyboardVisible = false
+    @State private var confirmingRemoteExit = false
 
     private var page: Page? { session.pages.pages[id] }
 
-    private struct SendAsking: Identifiable {
+    private struct PageAsking: Identifiable {
         let id = UUID()
-        let text: String
-        let to: String
+        let title: String
+        let message: String
+        let accept: String
         let answer: Once
     }
 
@@ -152,7 +159,11 @@ struct PageScreen: View {
         let doors = PageBridge.Doors(
             askToSend: { text, to in
                 await withCheckedContinuation { answer in
-                    asking = SendAsking(text: text, to: to, answer: Once(answer))
+                    if asking != nil { answer.resume(returning: false); return }
+                    asking = PageAsking(
+                        title: L("允许这个网页以你的名义发消息吗？", "Let this page send a message as you?"),
+                        message: L("它要给 \(to) 发：\(text.prefix(200))\n允许后，这次打开期间不再问。", "It wants to send \(to): \(text.prefix(200))\nOnce allowed, it won't ask again while open."),
+                        accept: L("允许", "Allow"), answer: Once(answer))
                 }
             },
             save: { name, data, _ in
@@ -165,6 +176,21 @@ struct PageScreen: View {
             },
             send: { to, body, project in
                 try await session.hub.send(SendRequest(to: to, body: body, project: project)).id
+            },
+            askToConnect: { computer, control in
+                await withCheckedContinuation { answer in
+                    // Read the live application state; this retained closure must not
+                    // capture the scene phase from when the page was created.
+                    if asking != nil || UIApplication.shared.applicationState != .active { answer.resume(returning: false); return }
+                    let capability = control ? L("查看画面并操作键盘和鼠标", "view the screen and control its keyboard and mouse") : L("仅查看画面", "view its screen only")
+                    asking = PageAsking(
+                        title: L("允许连接这台电脑吗？", "Allow this remote connection?"),
+                        message: L("「\(page.name.prefix(80))」请求连接「\(computer.name.prefix(120))」：\(capability)。关闭页面或切到后台会断开。", "“\(page.name.prefix(80))” wants to connect to “\(computer.name.prefix(120))” and \(capability). Closing the page or moving the App to the background disconnects it."),
+                        accept: L("连接", "Connect"), answer: Once(answer))
+                }
+            }, remoteConnectionChanged: { active in
+                // Do not re-enter SwiftUI state while its bridge property is borrowed.
+                Task { @MainActor in remoteActive = active }
             })
         return PageBridge(
             hub: session.hub, page: page, me: session.me, workspace: session.id,
@@ -175,8 +201,8 @@ struct PageScreen: View {
         NavigationStack {
             Group {
                 if let page, let bridge, page.live == true || shown != nil {
-                    PageWebView(id: id, version: page.live == true ? nil : shown, reloads: reloads, pages: session.pages, bridge: bridge)
-                        .ignoresSafeArea(edges: .bottom)
+                    PageWebView(id: id, version: page.live == true ? nil : shown, reloads: reloads, pages: session.pages, bridge: bridge, language: AppLanguage.current.rawValue, theme: colorScheme == .dark ? "dark" : "light", active: scenePhase == .active)
+                        .ignoresSafeArea(edges: remoteActive ? .all : .bottom)
                 } else if gone {
                     EmptyState(
                         symbol: "macwindow", title: L("这个网页打不开了", "This page cannot be opened"),
@@ -188,11 +214,12 @@ struct PageScreen: View {
             }
             .background(MycoColor.bg)
             .safeAreaInset(edge: .top, spacing: 0) {
-                if let page, let shown, page.version > shown {
+                if !remoteActive, let page, let shown, page.version > shown {
                     HStack(spacing: Space.s) {
                         Text(L("有新版本：第 \(page.version) 版", "A newer version: \(page.version)")).font(.footnote).foregroundStyle(MycoColor.fg2)
                         Spacer(minLength: 0)
                         Button(L("看新版本", "Show it")) {
+                            cancelAsk()
                             self.shown = page.version
                             reloads += 1
                         }
@@ -205,6 +232,7 @@ struct PageScreen: View {
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar(remoteActive ? .hidden : .visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
@@ -222,7 +250,7 @@ struct PageScreen: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        Button(L("刷新", "Reload"), systemImage: "arrow.clockwise") { reloads += 1 }
+                        Button(L("刷新", "Reload"), systemImage: "arrow.clockwise") { cancelAsk(); reloads += 1 }
                         if let address = page?.url, !address.isEmpty {
                             Button(copied ? L("已复制", "Copied") : L("复制链接", "Copy link"), systemImage: "link") {
                                 UIPasteboard.general.string = address
@@ -238,11 +266,11 @@ struct PageScreen: View {
             }
         }
         .alert(
-            L("允许这个网页以你的名义发消息吗？", "Let this page send a message as you?"),
+            asking?.title ?? "",
             isPresented: Binding(get: { asking != nil }, set: { if !$0, let asking { asking.answer.resume(returning: false); self.asking = nil } }),
             presenting: asking
         ) { one in
-            Button(L("允许", "Allow")) {
+            Button(one.accept) {
                 one.answer.resume(returning: true)
                 asking = nil
             }
@@ -251,9 +279,43 @@ struct PageScreen: View {
                 asking = nil
             }
         } message: { one in
-            Text(L("它要给 \(one.to) 发：\(one.text.prefix(200))\n允许后，这次打开期间不再问。",
-                   "It wants to send \(one.to): \(one.text.prefix(200))\nOnce allowed, it won't ask again while open."))
+            Text(one.message)
         }
+        // The remote display is a fixed canvas. Its keyboard overlays the
+        // connection instead of resizing the NavigationStack and WebView.
+        .ignoresSafeArea(remoteActive ? .keyboard : [], edges: .bottom)
+        .overlay(alignment: remoteKeyboardVisible ? .topLeading : .topTrailing) {
+            if remoteActive {
+                Button { confirmingRemoteExit = true } label: {
+                    Image(systemName: "xmark").font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(.white).frame(width: 44, height: 44)
+                        .background(.black.opacity(0.65), in: Circle())
+                }
+                .accessibilityLabel(L("退出远程桌面", "Exit remote desktop"))
+                .accessibilityIdentifier("remote.exit")
+                .padding(.top, 8).padding(.horizontal, 12)
+            }
+        }
+        .alert(L("断开远程桌面？", "Disconnect remote desktop?"), isPresented: $confirmingRemoteExit) {
+            Button(L("继续连接", "Stay connected"), role: .cancel) { }
+            Button(L("断开并退出", "Disconnect and exit"), role: .destructive) { dismiss() }
+        } message: {
+            Text(L("这会结束当前连接。", "This ends the current connection."))
+        }
+        // Keep the trusted exit away from the page's Send button while typing.
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            remoteKeyboardVisible = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            remoteKeyboardVisible = false
+        }
+        .statusBarHidden(remoteActive)
+        .onChange(of: remoteActive) { _, active in RemotePresentation.setActive(active) }
+        .onDisappear { cancelAsk(); bridge?.closeRemote(); RemotePresentation.setActive(false) }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active { cancelAsk(); bridge?.suspendRemote() } else { bridge?.resumeRemote() }
+        }
+        .onChange(of: language) { _, _ in cancelAsk() }
         .sheet(item: $handed) { file in
             ActivityView(items: [file.url])
         }
@@ -272,6 +334,8 @@ struct PageScreen: View {
             }
         }
     }
+
+    private func cancelAsk() { asking?.answer.resume(returning: false); asking = nil }
 
     /// The version on screen, who published it and when.
     private func title(of page: Page) -> String {
@@ -305,12 +369,17 @@ private struct PageWebView: UIViewRepresentable {
     let pages: PagesModel
     /// Answers the page's `window.myco` calls.
     let bridge: PageBridge?
+    let language: String
+    let theme: String
+    let active: Bool
 
     func makeCoordinator() -> Coordinator {
         Coordinator(id: id, version: version, pages: pages, bridge: bridge)
     }
 
     static func dismantleUIView(_ view: WKWebView, coordinator: Coordinator) {
+        coordinator.invalidateDocument(closing: true)
+        view.stopLoading()
         coordinator.listening?.cancel()
         view.configuration.userContentController.removeScriptMessageHandler(forName: "myco")
     }
@@ -319,9 +388,14 @@ private struct PageWebView: UIViewRepresentable {
         let configuration = WKWebViewConfiguration()
         configuration.setURLSchemeHandler(context.coordinator, forURLScheme: PageLinks.scheme)
         configuration.allowsInlineMediaPlayback = true
+        configuration.mediaTypesRequiringUserActionForPlayback = []
         // The bridge: `window.myco` before the page's own scripts, and the
         // app answering it.
+        bridge?.setPreferences(language: language, theme: theme)
         if bridge != nil {
+            let raw = (try? JSONSerialization.data(withJSONObject: ["language": language, "theme": theme])) ?? Data("{}".utf8)
+            let json = String(data: raw, encoding: .utf8) ?? "{}"
+            configuration.userContentController.addUserScript(WKUserScript(source: "window.__mycoInitialPreferences = \(json);", injectionTime: .atDocumentStart, forMainFrameOnly: true))
             configuration.userContentController.addUserScript(
                 WKUserScript(source: PageBridgeScript.source, injectionTime: .atDocumentStart, forMainFrameOnly: true))
             configuration.userContentController.add(WeakHandler(context.coordinator), name: "myco")
@@ -334,6 +408,9 @@ private struct PageWebView: UIViewRepresentable {
         view.scrollView.contentInsetAdjustmentBehavior = .automatic
         view.accessibilityIdentifier = "page.web"
         context.coordinator.reloads = reloads
+        context.coordinator.language = language
+        context.coordinator.theme = theme
+        context.coordinator.active = active
         context.coordinator.view = view
         if let home = PageLinks.address(of: id) { view.load(URLRequest(url: home)) }
         context.coordinator.listen()
@@ -342,7 +419,26 @@ private struct PageWebView: UIViewRepresentable {
 
     func updateUIView(_ view: WKWebView, context: Context) {
         let coordinator = context.coordinator
-        guard coordinator.version != version || coordinator.reloads != reloads else { return }
+        coordinator.bridge?.setPreferences(language: language, theme: theme)
+        let prefsChanged = coordinator.language != language || coordinator.theme != theme
+        let reload = coordinator.version != version || coordinator.reloads != reloads || coordinator.language != language
+        if coordinator.active != active {
+            coordinator.active = active
+            if active { coordinator.bridge?.resumeRemote() } else { coordinator.endRemote(); coordinator.bridge?.suspendRemote() }
+        }
+        if prefsChanged {
+            let raw = (try? JSONSerialization.data(withJSONObject: ["language": language, "theme": theme])) ?? Data("{}".utf8)
+            let json = String(data: raw, encoding: .utf8) ?? "{}"
+            // This script also initializes a reloaded document before its own code.
+            let scripts = view.configuration.userContentController
+            scripts.removeAllUserScripts()
+            scripts.addUserScript(WKUserScript(source: "window.__mycoInitialPreferences = \(json);", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+            scripts.addUserScript(WKUserScript(source: PageBridgeScript.source, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+            view.evaluateJavaScript("window.__mycoPreferences && window.__mycoPreferences(\(json)); void 0", completionHandler: nil)
+        }
+        coordinator.language = language; coordinator.theme = theme
+        guard reload else { return }
+        coordinator.invalidateDocument()
         coordinator.version = version
         coordinator.reloads = reloads
         // Another version, or asked to: from its first file again.
@@ -354,6 +450,10 @@ private struct PageWebView: UIViewRepresentable {
         let id: String
         var version: Int?
         var reloads = 0
+        var language = ""
+        var theme = ""
+        var active = true
+        private var documentGeneration = 0
         let pages: PagesModel
         let bridge: PageBridge?
         weak var view: WKWebView?
@@ -369,12 +469,27 @@ private struct PageWebView: UIViewRepresentable {
             self.bridge = bridge
         }
 
-        /// A call from the page: answered back into it.
+        func endRemote() {
+            bridge?.resetRemote()
+            view?.evaluateJavaScript("window.__mycoEvent && window.__mycoEvent({myco:'remote-disconnect'}); void 0", completionHandler: nil)
+        }
+
+        func invalidateDocument(closing: Bool = false) {
+            documentGeneration += 1
+            if closing {
+                bridge?.closeRemote()
+                for task in open.values { task.cancel() }
+                open.removeAll()
+            } else { endRemote() }
+        }
+
+        /// A call from the page: answered back into the same document only.
         func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
             guard let bridge, let body = message.body as? [String: Any], let call = body["id"] as? Int, let method = body["method"] as? String,
                   message.frameInfo.isMainFrame
             else { return }
             let args = body["args"] as? [String: Any] ?? [:]
+            let generation = documentGeneration
             Task {
                 var reply: [String: Any]
                 do {
@@ -388,12 +503,16 @@ private struct PageWebView: UIViewRepresentable {
                 } catch {
                     reply = ["error": error.localizedDescription, "code": "error"]
                 }
-                guard let json = try? JSONSerialization.data(withJSONObject: reply, options: [.fragmentsAllowed]),
+                guard generation == documentGeneration, let json = try? JSONSerialization.data(withJSONObject: reply, options: [.fragmentsAllowed]),
                       let text = String(data: json, encoding: .utf8)
                 else { return }
                 // (the callback form: the async one traps on `undefined`)
                 view?.evaluateJavaScript("window.__mycoAnswer && window.__mycoAnswer(\(call), \(text)); void 0", completionHandler: nil)
             }
+        }
+
+        func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+            invalidateDocument()
         }
 
         /// Every two seconds, while it is open: what others changed.

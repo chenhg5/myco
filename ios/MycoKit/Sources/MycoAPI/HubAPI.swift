@@ -151,6 +151,12 @@ public protocol HubAPI: Sendable {
     /// someone who manages the workspace.
     func dismiss(_ messageID: String) async throws
 
+    // Remote Desktop (v0.21.11+; older hubs answer not_found).
+    func remoteComputers() async throws -> [RemoteComputer]
+    func connectRemote(machine: String, offer: RemoteOffer) async throws -> RemoteConnection
+    func remoteConnection(_ id: String) async throws -> RemoteConnection
+    func disconnectRemote(_ id: String) async throws
+
     // Workflows (v0.21+; older workspaces answer 404)
     /// `GET /v1/workflows`
     func workflows() async throws -> [Workflow]
@@ -296,4 +302,11 @@ extension HubAPI {
 extension HubFile {
     /// The largest file a workspace takes by default (its `--max-file-size`).
     public static let maxSize = 50 * 1024 * 1024
+}
+
+extension HubAPI {
+    public func remoteComputers() async throws -> [RemoteComputer] { throw HubError(error: "not_found", message: "Remote Desktop is unavailable on this workspace.") }
+    public func connectRemote(machine: String, offer: RemoteOffer) async throws -> RemoteConnection { throw HubError(error: "not_found", message: "Remote Desktop is unavailable on this workspace.") }
+    public func remoteConnection(_ id: String) async throws -> RemoteConnection { throw HubError(error: "not_found", message: "Remote Desktop is unavailable on this workspace.") }
+    public func disconnectRemote(_ id: String) async throws { throw HubError(error: "not_found", message: "Remote Desktop is unavailable on this workspace.") }
 }

@@ -86,5 +86,9 @@
   "sudoku": [
     "Sudoku",
     "Solve a puzzle together. Each cell saves separately with the player's color, conflicts are highlighted, and easy, medium or hard puzzles have one solution."
+  ],
+  "remote-desktop": [
+    "Remote Desktop",
+    "View and control your Mac and Windows computers. Optional component, view-only mode, temporary pairing codes and instant disconnect. LAN or Tailscale; audio, lock screens and public relay are not included yet."
   ]
 }

@@ -512,8 +512,20 @@ func TestVoiceCallSaysALongTaskIsStillGoing(t *testing.T) {
 	if !strings.Contains(first, "跑全部测试") || !strings.Contains(first, "在做") || !strings.Contains(first, "6 分钟") || !strings.Contains(first, "在跑集成测试") {
 		t.Fatalf("notice: %s", first)
 	}
+	// Its spoken reply ends (on a slow machine it may start only after
+	// this; so the playback ends again now and then while waiting).
 	c.Played()
-	waitFor(t, "a second word", func() bool { return len(notice()) > 1 })
+	deadline, played := time.Now().Add(8*time.Second), time.Now()
+	for len(notice()) < 2 {
+		if time.Now().After(deadline) {
+			t.Fatal("timed out waiting for a second word")
+		}
+		if time.Since(played) > time.Second {
+			c.Played()
+			played = time.Now()
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 	if strings.Contains(notice()[1], "在跑集成测试") {
 		t.Fatalf("the same progress note told twice: %s", notice()[1])
 	}

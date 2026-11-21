@@ -21,6 +21,9 @@ public final class PageBridge {
     public struct Doors {
         /// Asks me whether this page may send its agent (named) this text.
         public var askToSend: @MainActor (_ text: String, _ to: String) async -> Bool
+        /// Asks before connecting this page to an authorized computer.
+        public var askToConnect: @MainActor (_ computer: RemoteComputer, _ control: Bool) async -> Bool
+        public var remoteConnectionChanged: @MainActor (Bool) -> Void
         /// Hands a file the page made to the system (save, send).
         public var save: @MainActor (_ name: String, _ data: Data, _ type: String) async -> Void
         /// Sends a task as me; answers its id.
@@ -29,9 +32,13 @@ public final class PageBridge {
         public init(
             askToSend: @escaping @MainActor (String, String) async -> Bool,
             save: @escaping @MainActor (String, Data, String) async -> Void,
-            send: @escaping @MainActor (String, String, String?) async throws -> String
+            send: @escaping @MainActor (String, String, String?) async throws -> String,
+            askToConnect: @escaping @MainActor (RemoteComputer, Bool) async -> Bool = { _, _ in false },
+            remoteConnectionChanged: @escaping @MainActor (Bool) -> Void = { _ in }
         ) {
             self.askToSend = askToSend
+            self.askToConnect = askToConnect
+            self.remoteConnectionChanged = remoteConnectionChanged
             self.save = save
             self.send = send
         }
@@ -42,6 +49,8 @@ public final class PageBridge {
     private let me: String
     private let names: @MainActor (String) -> String
     private let doors: Doors
+    private let remote: PageRemoteDesktop
+    private var preferences = ["language": AppLanguage.current.rawValue, "theme": "light"]
     private let storage: UserDefaults
     private let storageKey: String
     /// The state's version the page has.
@@ -62,6 +71,7 @@ public final class PageBridge {
         self.me = me
         self.names = names
         self.doors = doors
+        self.remote = PageRemoteDesktop(hub: hub, ask: doors.askToConnect, changed: doors.remoteConnectionChanged)
         self.storage = storage
         storageKey = "myco-page-store:\(workspace):\(page.id)"
     }
@@ -110,7 +120,10 @@ public final class PageBridge {
                 "me": ["name": names(me)],
                 "state": state["state"] ?? NSNull(),
                 "version": known,
+                "preferences": preferences,
             ] as [String: Any])
+        case "remote.call":
+            return try await remote.answer((args["action"] as? String) ?? "", (args["args"] as? [String: Any]) ?? [:])
         case "update":
             let answer = try await call("PUT", "state", body: ["state": args["state"] ?? NSNull(), "if_version": args["version"] as? Int ?? 0])
             let body = Self.object(answer.data) as? [String: Any] ?? [:]
@@ -178,6 +191,14 @@ public final class PageBridge {
             throw Refusal(message: "myco: no such call: \(method)", code: "not_found")
         }
     }
+
+    public func setPreferences(language: String, theme: String) {
+        preferences = ["language": language == "zh" ? "zh" : "en", "theme": theme == "dark" ? "dark" : "light"]
+    }
+    public func resetRemote() { remote.resetNow() }
+    public func closeRemote() { remote.closeNow() }
+    public func suspendRemote() { remote.suspendNow() }
+    public func resumeRemote() { remote.resume() }
 
     private func stored() -> [String: Any] {
         storage.data(forKey: storageKey).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]

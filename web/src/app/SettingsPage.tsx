@@ -28,6 +28,7 @@ import { bytes, cn } from "@/lib/utils";
 import { ChatBgDialog } from "@/app/ChatBgDialog";
 import { ShortcutsSection } from "@/app/Shortcuts";
 import { HubUpgrade, useLatestRelease } from "@/app/MycoUpgrade";
+import { BackupRow } from "@/app/Backups";
 
 type Section = "hubs" | "agents" | "members" | "audit" | "appearance" | "translate" | "voice" | "network" | "shortcuts" | "about";
 
@@ -604,6 +605,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
                       </span>
                     </div>
                     {linked && <E2ERow hubId={linked.id} ov={hubsOv?.find((o) => o.id === linked.id)} onChanged={onRefresh} />}
+                    {linked && w.running && <BackupRow hubId={linked.id} me={hubsOv?.find((o) => o.id === linked.id)?.me} />}
                   </div>
                   {w.running && <HubUpgrade version={w.version || linked?.hub_version} local manages latest={latest} onDone={() => { void reloadLocal(); onRefresh(); }} />}
                   {!w.running && (
@@ -660,6 +662,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
                     </span>
                   </div>
                   <E2ERow hubId={h.id} ov={hubsOv?.find((o) => o.id === h.id)} onChanged={onRefresh} />
+                  {h.ok && <BackupRow hubId={h.id} me={hubsOv?.find((o) => o.id === h.id)?.me} />}
                 </div>
                 {h.ok && <HubUpgrade hubId={h.id} version={h.hub_version} local={false} manages={!!hubsOv?.find((o) => o.id === h.id)?.me?.can_manage} latest={latest} onDone={onRefresh} />}
 

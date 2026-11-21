@@ -502,7 +502,7 @@ runner:
 ### 注意事项（适用于 4.2 到 4.5）
 
 - **不在 agent 的会话里跑命令时用哪个身份**：每个加入的会话有自己的身份（`~/.myco/agents/<名字>.yaml`），在那个会话里跑 myco 命令自动用它。在普通终端里跑（或者别的程序替你跑）时，`~/.myco/config.yaml` 里没有身份就用这台电脑上唯一的那个 agent；有好几个时，`myco doctor` 全查一遍，其他命令会列出名字，用 `MYCO_AGENT=<名字> myco …` 指定（或 `--config ~/.myco/agents/<名字>.yaml`）。
-- **会话被占用时的行为**：runner 在续接前会查看这个会话的记录文件（Claude 在 `~/.claude/projects/`，Codex 在 `~/.codex/sessions/`）。如果最近 90 秒内有**别人**写过（`--busy-window`），比如你正在交互界面里用它，runner 就把消息放回队列，10 秒后再试，之后逐步加长到最多 2 分钟（`--busy-retry`），**不算失败**。Codex 报 `already has an active writer` 时也按同样的方式处理。runner 自己写入的时间记在 `~/.myco/state/` 下，重启后不会把自己的写入误判成别人在用。
+- **会话被占用时的行为**：runner 在续接前会查看这个会话的记录文件（Claude 在 `~/.claude/projects/`，Codex 在 `~/.codex/sessions/`）。如果最近 90 秒内有**别人**写过（`--busy-window`），比如你正在交互界面里用它，runner 就把消息放回队列，10 秒后再试，之后逐步加长到最多 2 分钟（`--busy-retry`），**不算失败**。Codex 报 `already has an active writer` 时也按同样的方式处理。runner 自己写入的时间记在 `~/.myco/state/` 下，重启后不会把自己的写入误判成别人在用。v0.21.12 起，同一个 agent 的会话正在处理另一个任务时（另一个对话里的任务，或者同一个会话加入了另一个工作区），下一个任务只是排在它后面，不再显示「会话被占用」。
 - runner 自己如果是在某个 Claude Code 会话里启动的，启动 claude 时会清掉继承来的 `CLAUDE*` 会话变量（保留 `CLAUDE_CONFIG_DIR` 和认证相关的），以免 headless claude 连到外层那个会话上。建议在普通终端或 systemd/launchd 里运行 runner。
 - Codex 如果报 `model is not supported when using Codex with a ChatGPT account`，就在 `runner.args` 里指定一个账号可用的模型。
 - 已经绑定了会话的 agent，换一台机器或换一个 harness 启动 runner 会被拒绝（exit 5），以免悄悄开出一个新会话。确实要迁移时加 `--rebind`。
@@ -1049,6 +1049,26 @@ myco upgrade --version v0.16.5        # 安装指定版本（也可以用来回�
     - 用 `install-hub.sh` 装在服务器上的工作区：服务器上要有一个 root 的 `myco-upgrade.path`。新装的服务器自带；以前装的，在服务器上 `sudo myco upgrade` 一次就会装上。工作区收到请求后在自己的数据目录里留一个请求，这个服务看到后执行 `myco upgrade`。
     - `myco hub up` 开的工作区：自己换掉程序，再让服务管理器（launchd 或 systemd --user）把它重新启动。
 
+### 8.1 备份
+
+Hub 每天自动备份一次自己的数据（v0.21.12 起）：运行中也能拍下数据库的一致快照，再加上它的文件（附件、网页、应用），检查无误后才保存。最近 7 份放在数据库旁边的 `backups/` 里（用 `install-hub.sh` 装的服务器是 `/var/lib/myco/backups/`；`myco hub serve --backups N` 保留 N 份，`0` 不备份）。服务器上的每个工作区各自备份，放在 `workspaces/<名字>/backups/`。备份里有所有对话和文件，所以只有 Hub 的主人能做备份和下载。
+
+备份留在服务器自己的磁盘上，磁盘坏了也就一起没了：要在别处另存一份。
+
+- **在 App 里**：设置 › 工作区 › 对应的工作区 › 备份 › 管理（只有主人看得到）。「立即备份并存到这台电脑」会做一份并存到 `~/myco-backups/<工作区>/`；打开「在这台电脑上也留一份」，App 开着时每天自动存一份，留最近 3 份。
+- **在服务器上**：`sudo myco hub backup --db /var/lib/myco/hub.db --out /root/backups/` 把整个服务器（Hub 和所有工作区）备份成一个文件。
+- **在任何地方、以主人身份**：`myco hub backup --download --out ~/myco-backups/ --admin-token-file hub.env` 会新做一份并下载下来（适合在另一台机器上用定时任务跑）。
+
+**恢复**（在服务器上）：把备份文件拷过去，然后运行
+
+```bash
+sudo myco hub restore --from myco-backup-hub-20261121-093000.tar.gz --db /var/lib/myco/hub.db
+```
+
+它会先完整检查备份（每个文件对校验和、每个数据库做完整性检查），再停掉 Hub 的服务、换上备份、重新启动。原来的数据挪到数据库旁边的 `before-restore-<时间>/`，不会删掉。工作区自己的备份用 `--db /var/lib/myco/workspaces/<名字>/hub.db` 恢复；整个服务器的备份（`myco hub backup --db` 做的）会恢复 Hub 和所有工作区。如果 Hub 不是系统服务（`myco hub up` 起的），先 `myco hub down` 停掉，再加 `--yes`。加 `--dry-run` 只检查备份、说明会做什么。
+
+旧服务器整个没了、换到新服务器：照常用 `install-hub.sh` 装好 Hub，恢复备份；如果地址变了，再让 App 和 agent 指向新地址（agent：改 `~/.myco/config.yaml` 和 `~/.myco/agents/*.yaml` 里的 `hub:`，再 `myco runner service restart`；App：用 `sudo myco console link` 生成的链接重新添加工作区）。
+
 ## 9. 控制台 App（Mac / Windows / Linux）
 
 一个 App（Mac、Windows 是窗口，Linux 在浏览器里打开），可以同时管理多个 Hub：查看所有节点和机器、改名、改 allow-from、踢下线、删除，在机器上开新会话（添加节点），生成入网命令（添加机器），还能在这台 Mac 上直接开一个本机 Hub。
@@ -1112,3 +1132,37 @@ The computer details show the MCP servers, CLI skills, and plugins installed for
 ### 应用语言与外观
 
 官方应用会跟随桌面 App 设置的语言和深浅色，包括与系统不同的手动设置，界面和编辑器菜单支持中文、英语。已有页面升级其应用版本即可获得这些改进，页面名称、记录和正文不变。新应用版本仍能安装在旧 Hub 上；跟随 App 的手动设置需要桌面 App 提供 `preferences` 桥接能力，旧 App 保持系统外观和模板原语言。应用作者可以通过 `locales.json` 提供多语言名称和描述，参见[应用 SDK](docs/app-os.md#app-language-and-appearance)。
+
+### 远程桌面（可选应用）
+
+两台 App 接入同一工作区即可，不要求安装 agent CLI 或运行 runner 服务。在 **Apps** 中新建「远程桌面」，被控电脑选择「共享这台电脑」，
+按需安装组件，再明确开启共享；控制端选择它并输入当前配对码。默认仅查看，双方都允许后
+才能操作键鼠。Mac 需授予屏幕录制及辅助功能权限。界面跟随 App 的中英文、深浅色设置。
+
+iPhone 也能控制这些电脑：更新手机 App，在同一工作区打开 **Apps → 远程桌面**，
+选择正在共享的电脑并输入配对码。单指滑动移动指针、轻点点击；双指默认缩放和移动画面，
+要滚动远端电脑时，双指按住片刻再上下拖动；也可在工具中打开「双指滚动」持续使用滚动模式。键盘按钮可输入
+文字和组合键，也可以双指捏合放大（仅查看时同样可用），放大后单指移动仅查看画面。
+新版 iPhone App 连接后自动横向全屏，隐藏 App 顶栏；右侧工具条可呼出键盘和操作菜单，
+菜单在工具条旁展开。系统键盘和本地输入框覆盖在画面上，不再压缩或上推远端桌面，收起后恢复完整视野。
+App 自己的退出按钮始终可用；键盘弹出时移到左侧，远离发送按钮。
+点击退出需要确认，取消会保留连接和未发送的草稿。断开或退出后恢复竖屏。电脑可点「展开画面」。
+键鼠选项不可选时，说明电脑只允许查看：在电脑端停止共享，
+勾选「允许键盘和鼠标操作」，再重新共享并连接。手机不用安装共享组件，也不会共享自身屏幕。切到后台
+或关闭页面会断开，返回后需重新连接。输入中文等 Unicode 文字需要电脑的远控组件
+0.2.0 或更新版本；旧组件支持短 ASCII 文字和物理按键。
+
+App 升级后，若首选组件尚未安装，会继续使用已安装、明确兼容的完整旧组件，
+显示实际使用的版本，不会仅因 App 升级就要求重装。新版组件可增加 Unicode 输入等能力；
+首次安装仍需组件安装包已发布，并通过校验。
+
+手机键盘直接输入到远端当前焦点，不再显示本地输入条或要求点发送。右侧键盘按钮可呼出、
+收起系统键盘，也可用系统听写输入；中文仍需要支持 Unicode 的远端组件。不支持的输入会明确提示。
+
+WebRTC 短暂断连会等待十秒恢复；单次工作区状态查询失败不会切断正常视频，连续三次失败才结束连接。
+远端主动结束或权限失效仍立即断开。
+
+首版支持局域网或 Tailscale 中已解锁的 Mac、Windows；暂不含声音、锁屏登录及管理员确认窗口、无人值守、
+虚拟屏和自动公网中继。两边保持 App 打开，关闭或重载共享页面、停止共享、卸载组件都会
+结束连接。不使用远控的人不需要下载或运行编码器。需要新版 App、工作区服务和已发布的
+可选组件；旧版本会提示更新。组件构建与真机验收见 components/remote/README.md。

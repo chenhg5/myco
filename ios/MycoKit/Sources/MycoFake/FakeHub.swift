@@ -8,6 +8,28 @@ import MycoAPI
 /// few seconds later, so adding to a running task and stopping it can be
 /// tried by hand.
 public actor FakeHub: HubAPI {
+    private var remoteHosts: [RemoteComputer] = []
+    private var remoteCalls: [String: RemoteConnection] = [:]
+    public private(set) var remoteOffers: [RemoteOffer] = []
+    public private(set) var remoteDisconnected: [String] = []
+    private var holdRemote = false
+    private var remoteGate: CheckedContinuation<Void, Never>?
+    public func seedRemote(_ computers: [RemoteComputer], hold: Bool = false) { remoteHosts = computers; holdRemote = hold }
+    public func releaseRemote() { remoteGate?.resume(); remoteGate = nil; holdRemote = false }
+    public func remoteComputers() async throws -> [RemoteComputer] { remoteHosts }
+    public func connectRemote(machine: String, offer: RemoteOffer) async throws -> RemoteConnection {
+        remoteOffers.append(offer)
+        let result = RemoteConnection(id: "rd_\(remoteOffers.count)", machine: machine, state: "pending")
+        if holdRemote { await withCheckedContinuation { remoteGate = $0 } }
+        remoteCalls[result.id] = result
+        return result
+    }
+    public func remoteConnection(_ id: String) async throws -> RemoteConnection {
+        guard let result = remoteCalls[id] else { throw HubError(error: "not_found", message: "Remote connection not found") }
+        return result
+    }
+    public func disconnectRemote(_ id: String) async throws { remoteCalls[id] = nil; remoteDisconnected.append(id) }
+
     public static let me = "@console:glenn"
 
     private var agents: [AgentStatus]
@@ -55,6 +77,12 @@ public actor FakeHub: HubAPI {
         automationRuns = Dictionary(grouping: world.automations.compactMap(\.lastRun), by: { $0.automationId ?? "" })
         workflowList = world.workflows
         runList = world.runs
+        if scenario == .remote {
+            remoteHosts = [RemoteComputer(machine: "app:fixture", name: "Fixture Mac", os: "darwin", control: true)]
+            let page = Page(id: "pg_remote", name: "Remote controller probe", publisher: FakeHub.me, url: FakeHub.demoAddress.absoluteString + "/pages/pg_remote", createdAt: now, updatedAt: now)
+            pageList.insert(page, at: 0)
+            pageFiles[page.id] = ["index.html": ("text/html; charset=utf-8", RemotePageFixture.html)]
+        }
     }
 
     public func setLatency(_ value: Duration) {

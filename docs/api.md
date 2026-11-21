@@ -82,6 +82,9 @@ Agent detail and overview entries include `resume: {created_at, last_used_at?, l
 | `PUT /v1/agents/{name}/owner`, `PUT /v1/machines/{id}/owner` | owner/admin | `{owner}` (member name or id) |
 | `POST /v1/machines/{id}/spawn?wait=` | machine owner or owner/admin | A spawn request (`api.SpawnRequest`) to the machine's machine node, answered with its `SpawnResult` (default wait 5m). With `join_link` (from v0.19.9) it starts no session: the machine joins another workspace of the same hub server with that workspace's join link (`<hub>/w/<name>/j/<token>`), through the connection it already has, and answers `{joined: <workspace URL>, machine_node}`. The hub sends only `join_link` on; the machine refuses a link to any other server (scheme, host and port must match its hub), and a myco older than v0.19.9 refuses the request (no directory). With `cli: "info"` (from v0.20.14) it starts nothing: the machine answers with `info` (`api.MachineInfo`: `dirs` sessions may start in as configured, `["~"]` when not limited; `new_dir`, where a folder given to no conversation goes; `max_access`; `ais`, each agent CLI's `state` missing/signed_out/ready/unknown with `version`, `install` and `login` commands; `sessions`, its Claude Code and Codex sessions of the last 180 days (at most 200) with `joined` naming the agent one already is in this workspace and `auto` marking one a program ran; `home`). The same JSON is in `reply` for hubs older than `info`, which re-encode the result; the hub sends nothing else with it and does not audit it. Older machines refuse it as an unknown CLI. A recent session joins as a copy with `fork_from: <session_id>` and `dir: <its workdir>` |
 | `POST /v1/machines/{id}/spawn` with `cli: "upgrade"` | owner/admin | (from v0.20.29) The machine brings its myco to `version` (`""` = the latest release) with `myco upgrade --no-restart` and answers `upgrade` (`api.MachineUpgrade`: `from`, `to` (`""` when it already runs it), `restarting`, `note`); a few seconds later its runner service restarts onto the new binary (tasks running there are cut short). Only the console's administrator sender may ask; the hub passes only `version` on and audits `machine.upgrade`. Older machines refuse it as an unknown CLI |
+| `GET /v1/admin/backups` | the hub's owner (or the admin token; not admins, not a superagent) | (from v0.21.12) `api.Backups`: `{backups: [{name, size, created_at}], keep, daily, restore}`, newest first. The hub keeps backups of its own data (a snapshot of its database, and its files) in `<db dir>/backups`, makes one a day by itself and keeps `keep` (`myco hub serve --backups`); each workspace of a server keeps its own. `restore` says how to put one back. A hub without backups: `invalid_state` |
+| `POST /v1/admin/backups` | the hub's owner | Make a backup now → 201 `api.Backup`. One at a time (`conflict` while one is being made). Audited as `hub.backup` |
+| `GET /v1/admin/backups/{name}` | the hub's owner | The backup file (`application/gzip`, a `.tar.gz` laid out like the data directory, with `BACKUP.json`: what it holds and the sha256 of every entry). Restore it on the server with `myco hub restore`. Audited as `hub.backup_download` |
 | `POST /v1/admin/upgrade` | owner/admin | (from v0.20.29) `{version?}` → 202 `api.HubUpgrade` (`from`, `to`, `via`): the hub brings its own myco to `version` (`""` = the latest; already the latest: `invalid_state`) and restarts. `via: "service"`: a server set up by `install-hub.sh` (or upgraded once with `sudo myco upgrade`) has a root path unit `myco-upgrade.path`; the hub leaves `upgrade.request` in its state directory and the unit runs `myco upgrade`. `via: "self"`: a hub under the user's own service manager (`myco hub up`: launchd, systemd --user) replaces its binary and stops; the service manager starts the new one. Otherwise `invalid_state` with the command to run on the server. Watch `GET /v1/health`'s `server_version` |
 | `PATCH /v1/machines/{id}` | owner/admin | `{name}` → the machine. 1–64 characters on one line; a name another machine of the hub has (letter case aside) is refused with `conflict` (from v0.20.16). Machines joining with a name already taken get `-2`, `-3`… |
 | `DELETE /v1/machines/{id}?dry_run=` | machine owner or owner/admin | `{machine, removed:[agent names], dry_run}`; revokes the machine enrollment, removes its nodes (including the machine node), aliases and project memberships, then the machine record. Message history stays. Dry-run only previews |
@@ -466,3 +469,58 @@ stay unchanged. Select an exact language tag, then its base language, then the
 base metadata. Publishing rejects malformed or oversized sidecars (32 KiB,
 20 languages; name 80 characters, description 300). Old clients may ignore the
 field, and old Hubs can still install apps containing the sidecar.
+
+### Optional Remote Desktop signaling
+
+Remote Desktop is an **Apps** application. New endpoints require a console/member
+or Hub administrator credential; agent tokens are rejected. Every operation is
+limited to a computer the actor owns/manages. The host must independently opt in
+and validate a temporary pairing code; Hub authorization alone does not start
+capture. Existing clients remain unchanged. No database migration is needed:
+host registrations and signaling are in memory and disappear on Hub restart.
+
+- `GET /v1/remote/machines` → `{machines:[{machine,name,os,control}]}`: enabled,
+  authorized hosts whose last heartbeat was at most 30 seconds ago.
+  `machine` may be an existing machine ID or `app:<console-device-id>`. App-only
+  hosting creates no agent, machine record or runner service. Registering such an
+  ID requires that exact App device credential (or the Hub master administrator);
+  other operations use its registered member ownership plus the host capability.
+- `PUT /v1/remote/machines/{machine}` body `{name,os,control}` → `{host_key}`.
+  This replaces the previous registration and closes its negotiations.
+- `GET /v1/remote/machines/{machine}/requests` → `{sessions:[...]}`: host heartbeat
+  and pending offers / active or closed negotiations. Requires the registration's
+  `X-Myco-Remote-Host` capability in addition to ordinary authentication.
+- `DELETE /v1/remote/machines/{machine}`: stop advertising and close negotiations;
+  requires the host capability. Returns 204.
+- `POST /v1/remote/sessions` body `{machine,offer:{description:{type:"offer",sdp},
+  pairing_code,control}}` → `{id,machine,state:"pending"}`. Only one pending/active
+  negotiation per host. Controller responses never contain the pairing code.
+- `PUT /v1/remote/machines/{machine}/sessions/{session}` body
+  `{answer:{type:"answer",sdp}}` or `{error:"stable_error_code"}`: the host's result,
+  requiring its capability. Returns 204 and discards the stored offer/code.
+- `GET /v1/remote/sessions/{session}` → `{id,machine,state,answer?,error?}`:
+  only its creator's member identity may poll it; polling renews its 90-second
+  signaling lease. `state` is pending / connected / failed / closed. Connected
+  means an answer was supplied, not that media has arrived; use peer state for UI.
+- `DELETE /v1/remote/sessions/{session}`: cancel/stop the creator's session.
+
+The iOS App uses these same controller endpoints; no phone-specific Hub
+endpoint or schema change is required. Its native page bridge owns the session
+handles and revokes them when the page closes or the App backgrounds. Text input
+capabilities are negotiated on the encrypted peer data channel, not through the
+Hub.
+
+The Hub carries SDP only, never pixels, audio or keyboard/mouse events. SDP and
+pairing codes are sensitive, short-lived signaling: never put them in page data,
+logs, traces or audit details. Audit actions are `remote.enable`, `remote.disable`,
+`remote.connect`, `remote.disconnect`. The Hub is trusted for signaling; this is
+not independent peer identity verification against an untrusted Hub.
+
+The local App proxies `POST /app/hubs/{id}/remote` with `{page,instance,action,args}`.
+The trusted App assigns a fresh `instance` on each page load. A closed instance
+is revoked, including requests which arrive out of order after `close`.
+Actions: status, devices, install, remove, enable (`{control}`), disable, connect
+(`{machine,offer}`), session / disconnect (`{id}`), close. Session handles and
+host pairing codes are scoped to their originating page. Closing a page also
+invalidates in-flight connection operations, preventing a late response from
+starting unattended sharing. `close` releases that page's host/session resources.

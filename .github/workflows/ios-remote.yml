@@ -1,0 +1,49 @@
+name: iOS Remote Desktop
+on:
+  push:
+    branches: [codex/remote-ios]
+    paths: ['ios/**', '.github/workflows/ios-remote.yml']
+  pull_request:
+    paths: ['ios/**', '.github/workflows/ios-remote.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ios-remote-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  simulator:
+    runs-on: macos-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select an available iPhone simulator
+        run: |
+          xcodebuild -version
+          xcrun simctl list devices available --json > /tmp/myco-simulators.json
+          python3 - <<'PY'
+          import json,os
+          devices=json.load(open('/tmp/myco-simulators.json'))['devices']
+          candidates=[d for runtime,items in devices.items() if 'iOS' in runtime for d in items if d.get('isAvailable') and d['name'].startswith('iPhone')]
+          assert candidates, 'No iPhone simulator installed'
+          with open(os.environ['GITHUB_ENV'],'a') as f:f.write('MYCO_SIMULATOR='+candidates[0]['udid']+'\n')
+          PY
+      - name: Swift API, core, and WebKit controller tests
+        working-directory: ios/MycoKit
+        run: |
+          # The documented timing-sensitive voice demo gets its own process;
+          # all invocations keep every assertion and every test enabled.
+          # Run-state grace periods also need an unloaded main actor.
+          xcodebuild test -scheme MycoKit-Package -destination "platform=iOS Simulator,id=$MYCO_SIMULATOR" -derivedDataPath "$RUNNER_TEMP/myco-ios-derived" -skip-testing:MycoCoreTests/VoiceCallTests -skip-testing:MycoCoreTests/RunStateAlignmentTests CODE_SIGNING_ALLOWED=NO
+          xcodebuild test -scheme MycoKit-Package -destination "platform=iOS Simulator,id=$MYCO_SIMULATOR" -derivedDataPath "$RUNNER_TEMP/myco-ios-derived" -only-testing:MycoCoreTests/VoiceCallTests CODE_SIGNING_ALLOWED=NO
+          xcodebuild test -scheme MycoKit-Package -destination "platform=iOS Simulator,id=$MYCO_SIMULATOR" -derivedDataPath "$RUNNER_TEMP/myco-ios-derived" -only-testing:MycoCoreTests/RunStateAlignmentTests CODE_SIGNING_ALLOWED=NO
+      - name: Native App page and remote controller UI
+        working-directory: ios
+        run: |
+          xcodebuild test -project Myco.xcodeproj -scheme Myco -destination "platform=iOS Simulator,id=$MYCO_SIMULATOR" -derivedDataPath "$RUNNER_TEMP/myco-ios-derived" -only-testing:MycoAppUITests/ConversationTests/testRemoteControllerHasWebRTCNativeConsentAndDisconnectsInBackground -only-testing:MycoAppUITests/ConversationTests/testAPageAnAgentPublishedIsACardThatOpensInTheApp -only-testing:MycoAppUITests/WalkthroughTests/testAnAppMakesAPageThatTalksToTheWorkspace CODE_SIGNING_ALLOWED=NO
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: ios-remote-test-results
+          path: ${{ runner.temp }}/myco-ios-derived/Logs/Test/*.xcresult
+          retention-days: 7

@@ -3440,7 +3440,8 @@ textarea.app-input {
   align-self: stretch;
   align-items: flex-start;
 }
-.conv-msg.is-me {
+.conv-msg.is-me,
+.conv-msg.is-pending {
   align-self: flex-end;
   align-items: flex-end;
   max-width: 78%;
@@ -3467,7 +3468,8 @@ textarea.app-input {
   line-height: 1.65;
   overflow-wrap: anywhere;
 }
-.conv-msg.is-me .conv-bubble {
+.conv-msg.is-me .conv-bubble,
+.conv-msg.is-pending .conv-bubble {
   --md-fade: var(--pill);
   padding: 8px 13px;
   border-radius: 16px;
@@ -3475,6 +3477,7 @@ textarea.app-input {
   line-height: 1.55;
 }
 .conv-msg.is-me .conv-bubble .md > :last-child,
+.conv-msg.is-pending .conv-bubble .md > :last-child,
 .conv-msg.is-agent .conv-bubble .md > :last-child {
   margin-bottom: 0;
 }
@@ -3546,6 +3549,16 @@ textarea.app-input {
 }
 /* Under an agent's reply (no bubble round it): a little air between the
    last line and its time, tokens and buttons. */
+/* A message on its way (ConversationDetail's pending): the bubble a little
+   faint, 发送中 and a small spinner under it, right-aligned. */
+.conv-msg.is-pending .conv-bubble {
+  opacity: 0.6;
+}
+.conv-msg-meta.conv-sending {
+  justify-content: flex-end;
+  gap: 5px;
+  color: var(--muted);
+}
 .conv-msg.is-agent .conv-msg-meta {
   margin-top: 8px;
 }
@@ -4835,15 +4848,19 @@ html.fp-docked .app-main .sp-side {
 /* On a grey surface (your own message's bubble) the grey of code is the
    bubble's own: there it is white with a hairline, as a card would be. */
 .conv-msg.is-me .conv-bubble .md-code,
-.conv-msg.is-me .conv-bubble .md :not(pre) > code {
+.conv-msg.is-me .conv-bubble .md :not(pre) > code,
+.conv-msg.is-pending .conv-bubble .md-code,
+.conv-msg.is-pending .conv-bubble .md :not(pre) > code {
   background: var(--card);
   box-shadow: 0 0 0 0.5px var(--line);
 }
-.dark .conv-msg.is-me .conv-bubble .md-code {
+.dark .conv-msg.is-me .conv-bubble .md-code,
+.dark .conv-msg.is-pending .conv-bubble .md-code {
   background: rgba(0, 0, 0, 0.28);
   box-shadow: none;
 }
-.dark .conv-msg.is-me .conv-bubble .md :not(pre) > code {
+.dark .conv-msg.is-me .conv-bubble .md :not(pre) > code,
+.dark .conv-msg.is-pending .conv-bubble .md :not(pre) > code {
   background: rgba(255, 255, 255, 0.08);
   box-shadow: none;
 }
@@ -9282,3 +9299,9 @@ html.os-other ::-webkit-scrollbar-thumb:hover, html.os-other ::-webkit-scrollbar
 .tp-shot-dot { width: 6px; height: 6px; padding: 0; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--fg) 22%, transparent); }
 .tp-shot-dot.is-on { width: 18px; background: var(--fg); }
 @media (pointer: coarse) { .tp-shot-nav { opacity: 1; } .tp-shot-dot { width: 8px; height: 8px; } .tp-shot-dot.is-on { width: 22px; } }
+
+/* Workspace backups: how to restore, folded away. */
+.app-backup-restore { margin: 12px 0 4px; }
+.app-backup-restore > summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+.app-backup-restore > summary:hover { color: var(--fg); }
+.app-backup-restore .app-small-note { margin: 8px 0; }

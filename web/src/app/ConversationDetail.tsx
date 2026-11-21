@@ -172,7 +172,10 @@ function changedUntil(ms: Message[]): number {
 function newerThan(a: Message, b: Message): boolean {
   const ta = new Date(a.updated_at || a.created_at).getTime();
   const tb = new Date(b.updated_at || b.created_at).getTime();
-  return ta > tb;
+  if (ta !== tb) return ta > tb;
+  // The same message, its worker seen on it since (a long, quiet command:
+  // the work goes on).
+  return new Date(a.active_at || 0).getTime() > new Date(b.active_at || 0).getTime();
 }
 
 /** Messages with changed ones put in (by id), in the order they were sent.
@@ -338,6 +341,15 @@ function failureWords(err: string): { short: string; long: string } {
   return { short: L("失败了", "Failed"), long: L(`失败了：${err}`, `Failed: ${err}`) };
 }
 
+/** What each run's trace last said (runActivity), across chats while the
+ *  App is open, the newest few hundred. */
+const knownActivity = new Map<string, { at: number; ended: boolean }>();
+function rememberActivity(taskId: string, a: { at: number; ended: boolean }) {
+  knownActivity.delete(taskId);
+  knownActivity.set(taskId, a);
+  if (knownActivity.size > 400) knownActivity.delete(knownActivity.keys().next().value as string);
+}
+
 export function ConversationDetail({ target, rows, now, onBack, onNewConversation, onOpen, onOpenExchange, onRefresh, showBack = true, backLabel, role, inserts, headActions, projectTitle, bare }: {
   target: ConversationTarget;
   /** the project this chat is the home of (its coordinator's): the empty
@@ -398,6 +410,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     keepDraft(draftKeyRef.current, v);
   };
   const [sending, setSending] = useState(false);
+  // The message on its way: shown at once at the end of the chat, faint,
+  // with 发送中, and the box empty again; the hub's copy takes its place.
+  const [pending, setPending] = useState<{ body: string; files: { id: string; name: string; size: number; preview?: string }[] } | null>(null);
   // Files going with the next message (pasted, dropped or picked).
   const att = useAttachments(target.hubId);
   // Messages put after the running one, while the workspace cannot hold
@@ -701,12 +716,17 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   };
   // What each run's trace says (TraceView's pausedRun): stopped (turn over,
   // set aside, silent) or at work. Not known until its trace is read.
-  const [runActivity, setRunActivity] = useState<ReadonlyMap<string, { at: number; ended: boolean }>>(() => new Map());
-  const onActivity = useCallback((taskId: string, at: number, ended: boolean) =>
+  // Kept while the App is open (knownActivity): back in a chat, a task that
+  // was at work a moment ago is not shown as quiet (可能卡住) for the second
+  // its trace takes to be read again.
+  const [runActivity, setRunActivity] = useState<ReadonlyMap<string, { at: number; ended: boolean }>>(() => new Map(knownActivity));
+  const onActivity = useCallback((taskId: string, at: number, ended: boolean) => {
+    rememberActivity(taskId, { at, ended });
     setRunActivity((s) => {
       const o = s.get(taskId);
       return o && o.at === at && o.ended === ended ? s : new Map(s).set(taskId, { at, ended });
-    }), []);
+    });
+  }, []);
   const [runPaused, setRunPaused] = useState<ReadonlyMap<string, boolean>>(() => new Map());
   const onPaused = useCallback((taskId: string, paused: boolean) =>
     setRunPaused((s) => (s.get(taskId) === paused ? s : new Map(s).set(taskId, paused))), []);
@@ -1441,12 +1461,28 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     setSendError(null);
     setQueueError(null);
     const startedAt = Date.now();
+    // Shown in the chat at once and out of the box (not a spinner in the
+    // box); put back in the box if it does not go. A queued one (kept here
+    // for an older hub) shows in the queue instead.
+    const files = att.take();
+    const localQueued = queuedNext && !queueOnHub;
+    if (!localQueued && !shellMode) setPending({ body: typed, files });
+    writeDraft("");
+    histPos.current = -1;
+    atBottom.current = true;
+    let putBackDone = false;
+    const putBack = () => {
+      putBackDone = true;
+      // (anything typed meanwhile stays, after it)
+      const now = inputRef.current?.value || "";
+      writeDraft(now.trim() ? `${typed}\n${now}` : typed);
+      att.restore(files);
+    };
     try {
       if (!target.peer && !target.threadId) {
         // The first message of a new conversation: then the whole one.
         const first = await appApi.sendMessage(target.hubId, { to: target.agent, body, attachments, ...(target.project ? { project: target.project } : {}) });
-        writeDraft("");
-        att.clear();
+        chatHistory.reset();
         if (onOpen) onOpen(target.hubId, target.agent, first.from);
         else setMessages([first]);
         return;
@@ -1486,9 +1522,6 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           // round ends (queued.ts).
           writeQueue([...localQueue, { id: queuedId(), body, attachments, threadId, at: Date.now() }]);
           setFlushStalled(false);
-          writeDraft("");
-          att.clear();
-          histPos.current = -1;
           chatHistory.reset();
           inputRef.current?.focus();
           return;
@@ -1499,15 +1532,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       // The hub signs your messages with your name there: when this view
       // assumed another, follow the one it used.
       if (exchange && m.from && target.peer && m.from !== target.peer && m.type !== "steer" && onOpen) {
-        writeDraft("");
-        att.clear();
         onOpen(target.hubId, target.agent, m.from);
         return;
       }
       setMessages((prev) => mergeById(prev || [], [m]));
-      writeDraft("");
-      att.clear();
-      histPos.current = -1;
       chatHistory.reset();
       atBottom.current = true;
       inputRef.current?.focus();
@@ -1518,15 +1546,16 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         const got = await landed(body, startedAt).catch(() => null);
         if (got) {
           setMessages((prev) => mergeById(prev || [], [got]));
-          writeDraft("");
-          att.clear();
-          histPos.current = -1;
           chatHistory.reset();
           return;
         }
       }
+      putBack();
       setSendError(e);
     } finally {
+      // Sent: the pictures' previews are not needed any more.
+      if (!putBackDone) files.forEach((f) => f.preview?.startsWith("blob:") && URL.revokeObjectURL(f.preview));
+      setPending(null);
       setSending(false);
     }
   };
@@ -1805,6 +1834,12 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     }
   };
 
+  // What you send shows at the end at once: the view goes there.
+  useEffect(() => {
+    if (!pending) return;
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [pending]);
   // The view stays at the bottom while something there grows (a live trace).
   const followBottom = () => {
     const el = scrollRef.current;
@@ -2376,6 +2411,17 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               return <Fragment key={"m" + m.id}>{before}{divider}{item}</Fragment>;
             })}
             {!shellMode && !execNode && trailing}
+            {/* What you just sent, until the workspace has it: drawn as
+                yours, but not one of yours yet (not .is-me). */}
+            {pending && (
+              <div className="conv-msg is-pending" data-testid="chat-sending">
+                <div className="conv-bubble">
+                  {pending.body && <MessageContent body={pending.body} />}
+                  {pending.files.length > 0 && <MessageAttachments hubId={target.hubId} items={pending.files.map((f) => ({ file_id: f.id, name: f.name, size: f.size, sha256: "" }))} />}
+                </div>
+                <div className="conv-msg-meta is-shown conv-sending"><Loader2 size={11} className="spin" />{L("发送中…", "Sending…")}</div>
+              </div>
+            )}
             {/* The run at work, when messages sit under it. */}
             {liveFoot && liveRun && (() => {
               // What it is doing now, not what it said when it took this one
@@ -2585,7 +2631,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                 title={supplementing ? L("补充给这条任务", "Add to this task") : L("发送", "Send")}
                 aria-label={supplementing ? L("补充给这条任务", "Add to this task") : L("发送", "Send")}
               >
-                {sending ? <Loader2 size={15} className="spin" /> : <ArrowUp size={16} strokeWidth={2.4} />}
+                <ArrowUp size={16} strokeWidth={2.4} />
               </button>
             )}
           </div>

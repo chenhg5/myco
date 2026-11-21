@@ -4,6 +4,24 @@ The phone app: follow and direct your agents. Native SwiftUI, iOS 17 and later, 
 
 Status: the pages and the conversation, and joining a real workspace with a link (read and send). Checked in a simulator only, against a demo workspace and a throwaway local hub. Pictures and files go with a message and show in the ones that carry them; the microphone turns speech into text. Several workspaces can be joined at once. New messages are announced by local notifications (late while the app is not open). Not built yet: scanning a code, end-to-end encryption (sealed messages and their files show as encrypted), push through Apple's service.
 
+## Remote Desktop
+
+The **Apps → Remote Desktop** page can control an explicitly sharing Mac or
+Windows computer in the same workspace. The native bridge verifies the target
+and asks for permission; WebKit receives H.264 video over WebRTC and sends input
+over its encrypted data channel. No hosting engine or extra codec is bundled
+with the phone App. The page follows the App language and theme, provides a
+touchpad, zoom and keyboard, and disconnects when backgrounded or closed.
+Authorized connections temporarily enter landscape with hidden navigation/status
+bars and a trusted native exit button; other App screens stay portrait. The page
+keeps tools in an overlay instead of shrinking the remote display.
+Direct LAN/Tailscale connectivity is required; public relay and audio are not
+included. Chinese and other Unicode input requires host component 0.2.0.
+
+The remote App UI test uses a demo workspace to exercise real WebKit offer
+creation, native consent, background revocation and controller-only permissions.
+A fixture is not a substitute for testing video and input against a real host.
+
 ## Layout
 
 ```

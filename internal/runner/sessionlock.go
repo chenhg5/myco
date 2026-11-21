@@ -28,8 +28,65 @@ type SessionLocks struct {
 	StaleAfter time.Duration // default 2m
 	Beat       time.Duration // default 30s
 
-	mu   sync.Mutex
-	held map[string]bool
+	mu    sync.Mutex
+	held  map[string]bool
+	ended map[string]time.Time
+}
+
+// Busy reports whether a turn of this machine's (any runner here) holds
+// key's lock now: the session is at work on one of our own tasks, not
+// open in someone's terminal.
+func (l *SessionLocks) Busy(key string) bool {
+	if l == nil || key == "" {
+		return false
+	}
+	l.mu.Lock()
+	held := l.held[key]
+	l.mu.Unlock()
+	if held || l.Dir == "" {
+		return held
+	}
+	st, err := os.Stat(l.path(key))
+	return err == nil && time.Since(st.ModTime()) < l.staleAfter()
+}
+
+// LastEnd is when a turn of this machine's last let go of key (zero if
+// none is known): writes to the session's transcript until then were ours.
+func (l *SessionLocks) LastEnd(key string) time.Time {
+	if l == nil || key == "" {
+		return time.Time{}
+	}
+	l.mu.Lock()
+	t := l.ended[key]
+	l.mu.Unlock()
+	if l.Dir != "" {
+		if st, err := os.Stat(l.path(key) + ".ended"); err == nil && st.ModTime().After(t) {
+			t = st.ModTime()
+		}
+	}
+	return t
+}
+
+func (l *SessionLocks) path(key string) string {
+	sum := sha256.Sum256([]byte(key))
+	return filepath.Join(l.Dir, hex.EncodeToString(sum[:8])+".lock")
+}
+
+// noteEnd records that a turn let go of key now.
+func (l *SessionLocks) noteEnd(key string) {
+	now := time.Now()
+	l.mu.Lock()
+	if l.ended == nil {
+		l.ended = map[string]time.Time{}
+	}
+	l.ended[key] = now
+	l.mu.Unlock()
+	if l.Dir != "" {
+		p := l.path(key) + ".ended"
+		if err := os.WriteFile(p, nil, 0o600); err == nil {
+			_ = os.Chtimes(p, now, now)
+		}
+	}
 }
 
 // NewSessionLocks returns locks kept in dir ("" = in this process only).
@@ -52,6 +109,7 @@ func (l *SessionLocks) TryLock(key string) (func(), bool) {
 	l.held[key] = true
 	l.mu.Unlock()
 	free := func() {
+		l.noteEnd(key)
 		l.mu.Lock()
 		delete(l.held, key)
 		l.mu.Unlock()
@@ -83,8 +141,7 @@ func (l *SessionLocks) take(key string) (string, error) {
 		// No place for a file lock: this process's lock still holds.
 		return "", nil
 	}
-	sum := sha256.Sum256([]byte(key))
-	path := filepath.Join(l.Dir, hex.EncodeToString(sum[:8])+".lock")
+	path := l.path(key)
 	for try := 0; try < 2; try++ {
 		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 		if err == nil {

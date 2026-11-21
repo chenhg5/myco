@@ -255,7 +255,7 @@ const shotsOf = (names) => {
   const out = light.map((src) => ({ src, ...(names.includes(src.replace(/(\.[a-z]+)$/i, ".dark$1")) ? { dark: src.replace(/(\.[a-z]+)$/i, ".dark$1") } : {}) }));
   return out.length ? out : undefined;
 };
-const officialOrder = ["table", "base", "doc", "slides", "meeting", "code", "issues", "devtools", "todo", "notes", "disk", "stocks", "proxy-console", "ledger", "habit", "design-studio", "whiteboard", "mindmap", "video", "photo", "gomoku", "sudoku"];
+const officialOrder = ["table", "base", "doc", "slides", "meeting", "code", "issues", "devtools", "todo", "notes", "disk", "stocks", "proxy-console", "remote-desktop", "ledger", "habit", "design-studio", "whiteboard", "mindmap", "video", "photo", "gomoku", "sudoku"];
 const mockTemplates = officialOrder.filter((name) => existsSync(new URL(`${name}/myco.json`, officialRoot))).map((name) => {
   const files = officialFiles(name);
   const m = JSON.parse(files["myco.json"]);
@@ -2015,6 +2015,14 @@ const server = http.createServer(async (req, res) => {
     }
     if (method === "DELETE") { cacheStore.clear(); return send(res, 204); }
   }
+  // Remote Desktop: a deterministic UI fixture, never a real host.
+  if (parts[0] === "app" && parts[1] === "hubs" && parts[3] === "remote" && method === "POST") {
+    const body = await readBody(req);
+    if (body.action === "devices") return send(res, 200, [{machine:"mac_studio",name:"Studio Mac",os:"darwin",control:true},{machine:"windows",name:"Windows 工作站",os:"windows",control:false}]);
+    if (body.action === "status") return send(res, 200, {protocol:1,version:"0.1.0",installed:false,supported:true,running:false});
+    if (["close","disable","disconnect"].includes(body.action)) return send(res, 200, true);
+    return fail(res, 501, "unsupported", "The UI preview never installs components or starts remote control.");
+  }
   // /app/os: a page using this computer (myco.os). Nothing to use in the
   // mock, unless MOCK_OS_URL names a real App backend to pass it to (go run
   // ./internal/console/devos), with a page to try it (这台电脑).
@@ -3110,6 +3118,37 @@ const server = http.createServer(async (req, res) => {
       if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
       dismissed.add(parts[4]);
       return send(res, 200, makeMessage({ id: parts[4], status: "done" }));
+    }
+
+    // /app/hubs/{id}/backups — the workspace's backups (hubs from v0.21.12;
+    // the lab hub is older), and the copies kept on this computer.
+    if (parts[3] === "backups") {
+      if (hub.id === "hub_lab") return fail(res, 404, "not_found", "no route for GET /v1/admin/backups");
+      const bk = (hub.backupState ||= { server: [{ name: "myco-backup-hub-20261121-031502.tar.gz", size: 18_400_000, created_at: iso(5 * 3600) }], local: [], auto: false });
+      const dir = `/Users/glenn/myco-backups/${hub.name}`;
+      if (parts.length === 4 && method === "GET") {
+        return send(res, 200, { backups: bk.server, keep: 7, daily: true, restore: "on the server, with the hub stopped: myco hub restore --from <backup> --db /var/lib/myco/hub.db", local: bk.local, dir, auto: bk.auto });
+      }
+      if (parts.length === 4 && method === "POST") {
+        await sleep(600);
+        const b = { name: `myco-backup-hub-${Date.now()}.tar.gz`, size: 18_600_000, created_at: iso(0) };
+        bk.server.unshift(b);
+        bk.server = bk.server.slice(0, 7);
+        return send(res, 201, b);
+      }
+      if (parts.length === 5 && parts[4] === "save" && method === "POST") {
+        const body = await readBody(req);
+        const b = bk.server.find((x) => x.name === body.name) || bk.server[0];
+        if (!bk.local.some((x) => x.name === b.name)) bk.local.unshift({ ...b });
+        bk.local = bk.local.slice(0, 3);
+        return send(res, 200, { path: `${dir}/${b.name}`, dir });
+      }
+      if (parts.length === 5 && parts[4] === "auto" && method === "PUT") {
+        const body = await readBody(req);
+        bk.auto = !!body.on;
+        return send(res, 200, { auto: bk.auto });
+      }
+      if (parts.length === 5 && parts[4] === "reveal" && method === "POST") return send(res, 200, { dir });
     }
 
     // /app/hubs/{id}/settings — end-to-end encryption (MOCK_E2E=1 starts it on).

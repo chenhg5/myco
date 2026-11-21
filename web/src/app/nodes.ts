@@ -254,7 +254,7 @@ export function stateLabel(st: { state: string; session_in_use?: boolean; receiv
 
 /** An accepted task quiet for this long may have lost its result: a runner
  *  touches the message every few seconds while the run goes on. */
-export const STUCK_AFTER_MS = 10 * 60_000;
+export const STUCK_AFTER_MS = 20 * 60_000;
 /** A session-only node works while its own session runs and may report less
  *  often; give it longer before saying the task looks stuck. */
 export const STUCK_AFTER_SESSION_MS = 30 * 60_000;

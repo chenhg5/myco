@@ -26,6 +26,7 @@ import MycoStore
 /// for a few seconds and says in the system's log what happened.
 @main
 struct MycoApp: App {
+    @UIApplicationDelegateAdaptor(MycoOrientationDelegate.self) private var orientationDelegate
     @State private var model: AppModel
     private let start: String
 
@@ -65,7 +66,7 @@ struct MycoApp: App {
             // The voice's keys live in the keychain, beside the device tokens.
             secrets: KeychainStore(),
             voice: Self.voice)
-        let scenarios: [String: Scenario] = ["demo": .team, "empty": .empty, "long": .long, "waiting": .waiting, "session": .session]
+        let scenarios: [String: Scenario] = ["demo": .team, "empty": .empty, "long": .long, "waiting": .waiting, "session": .session, "remote": .remote]
         _model = State(initialValue: AppModel(session: scenarios[start].map(Self.demo), doors: doors))
     }
 
@@ -216,5 +217,12 @@ actor DemoWorkspaces: WorkspaceBook {
         records.removeAll { $0.id == id }
         hubs[id] = nil
         if chosen == id { chosen = nil }
+    }
+}
+
+@MainActor
+final class MycoOrientationDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
+        RemotePresentation.orientations
     }
 }

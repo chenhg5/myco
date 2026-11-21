@@ -166,7 +166,9 @@ public final class Router {
             case "apps": show([.apps], in: .workbench)
             case "workflows": show([.workflows], in: .workbench)
             case "members": show([.members], in: .chats)
-            default: return false
+            default:
+                guard name.hasPrefix("pg_") else { return false }
+                page = PageRoute(id: name)
             }
         case "sheet":
             switch name {

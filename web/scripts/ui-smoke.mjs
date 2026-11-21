@@ -949,12 +949,67 @@ async function runMatrix(browser, size, scheme) {
       await doc.locator('[data-content-type="heading"]', { hasText: "风险" }).waitFor({ timeout: 5_000 });
       await settle(page, 1200);
       await shot(page, size, scheme, "template-doc");
+      // Remote Desktop stays in Apps. Installation and sharing need the
+      // trusted App's permission; the embedded page cannot grant it itself.
+      let remoteInstalled = false, remoteSharing = false, installs = 0;
+      const remoteRoute = "**/app/hubs/hub_studio/remote";
+      let stopped;
+      const stopSeen = new Promise((resolve) => { stopped = resolve; });
+      await page.route(remoteRoute, async route => {
+        const body = route.request().postDataJSON();
+        if (body.action === "devices") return route.continue();
+        if (body.action === "install") { installs++; remoteInstalled = true; }
+        if (body.action === "enable") remoteSharing = true;
+        if (body.action === "close") { remoteSharing = false; stopped(); }
+        if (body.action === "status" || body.action === "install" || body.action === "enable") {
+          return route.fulfill({json:{protocol:1,version:"0.1.0",installed:remoteInstalled,supported:true,running:remoteSharing,...(remoteSharing?{pairing_code:"a1b2c3d4"}:{})}});
+        }
+        return route.fulfill({json:true});
+      });
+      const remote = await make("myco/remote-desktop", `远程（${mark}）`);
+      await remote.locator(".rd-device").first().waitFor({timeout:15000});
+      // Chromium/Playwright disagree on cross-frame coordinates under CSS
+      // zoom. Convert the child viewport position to App viewport pixels so
+      // these remain real mouse clicks, including at the App's default 108%.
+      const remoteFrame = page.locator(`.pg-frame[aria-label="远程（${mark}）"]`);
+      const clickRemote = async (locator) => {
+        await locator.scrollIntoViewIfNeeded();
+        const point = await locator.evaluate(el => {const r=el.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};});
+        const frame = await remoteFrame.evaluate(el => {const r=el.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,cw:el.clientWidth,ch:el.clientHeight};});
+        await page.mouse.click(frame.x+point.x*frame.width/frame.cw,frame.y+point.y*frame.height/frame.ch);
+      };
+      await clickRemote(remote.locator(".rd-tabs button").nth(1));
+      await remote.locator(".rd-install-card").waitFor();
+      await clickRemote(remote.locator(".rd-install-card .rd-primary"));
+      const permission = page.locator(".pg-remote-ask");
+      await permission.waitFor();
+      if (installs !== 0) throw new Error("远控组件在用户授权前就安装了");
+      await clickVisible(page, permission.getByRole("button", {name:"不允许",exact:true}));
+      await remote.locator(".rd-error").waitFor();
+      if (installs !== 0) throw new Error("拒绝授权后仍安装了远控组件");
+      await clickRemote(remote.locator(".rd-install-card .rd-primary"));
+      await permission.waitFor();
+      await settle(page,200);
+      await shot(page,size,scheme,"remote-desktop-permission");
+      await clickVisible(page, permission.getByRole("button", {name:"允许",exact:true}));
+      await remote.locator(".rd-enable-card").waitFor();
+      if (installs !== 1) throw new Error("应只在授权后安装一次远控组件");
+      await clickRemote(remote.locator(".rd-enable-card .rd-primary"));
+      await permission.waitFor();
+      await clickVisible(page, permission.getByRole("button", {name:"允许",exact:true}));
+      await remote.locator(".rd-code", {hasText:"a1b2c3d4"}).waitFor();
+      await shot(page,size,scheme,"remote-desktop-sharing");
+      await clickVisible(page,page.locator(".pg-panel").getByRole("button",{name:/关闭/}).first());
+      await Promise.race([stopSeen,new Promise((_,reject)=>setTimeout(()=>reject(new Error("关闭网页后没有结束远控共享")),5000))]);
+      await page.unroute(remoteRoute);
       // The pages made are listed under the templates.
       await tuck();
       await go(page, "应用", narrow);
       await page.locator(".tp-made-row", { hasText: `计划（${mark}）` }).waitFor({ timeout: 10_000 });
-      await clickVisible(page, page.locator(".pg-toggle"));
-      await clickVisible(page, page.locator(".pg-panel").getByRole("button", { name: /关闭/ }).first());
+      if (await page.locator(".pg-toggle").count()) {
+        await clickVisible(page, page.locator(".pg-toggle"));
+        await clickVisible(page, page.locator(".pg-panel").getByRole("button", { name: /关闭/ }).first());
+      }
       // (back where the steps after this one start: the project)
       await go(page, "官网改版", narrow);
       await page.locator(".sp-home, .sp-group").first().waitFor({ timeout: 10_000 });
@@ -4346,6 +4401,31 @@ async function runMatrix(browser, size, scheme) {
 
     // A workspace behind the latest myco: upgraded from Settings, which
     // waits for it to come back on the new version.
+    // A workspace's backups, for its owner: made daily on the server; a
+    // copy kept on this computer; backed up now and saved here.
+    await step("设置 · 工作区备份", async () => {
+      await go(page, "设置", narrow);
+      const dialog = page.locator("[data-testid=settings-dialog]");
+      await clickVisible(page, page.locator(".app-settings-tab", { hasText: "工作区" }).first());
+      const row = dialog.locator("[data-testid=backup-row]").first();
+      await row.waitFor({ timeout: 15_000 });
+      if (!(await row.innerText()).includes("最近一次")) throw new Error("备份一行应写最近一次是什么时候");
+      await row.scrollIntoViewIfNeeded();
+      await clickVisible(page, row.getByRole("button", { name: "管理" }));
+      const bd = page.locator("[data-testid=backup-dialog]");
+      await bd.waitFor();
+      const modal = page.getByRole("dialog", { name: "工作区备份" });
+      await clickVisible(page, modal.getByRole("switch"));
+      await modal.locator("[role=switch][aria-checked=true]").waitFor({ timeout: 10_000 });
+      await clickVisible(page, modal.getByRole("button", { name: "立即备份并存到这台电脑" }));
+      await modal.locator("[data-testid=backup-saved]", { hasText: "myco-backups" }).waitFor({ timeout: 15_000 });
+      await modal.getByRole("button", { name: "在文件夹中显示" }).waitFor({ timeout: 10_000 });
+      await settle(page, 300);
+      await shot(page, size, scheme, "settings-backups");
+      await clickVisible(page, modal.getByRole("button", { name: "关闭" }));
+      await closeSettings(page);
+    });
+
     await step("设置 · 升级工作区", async () => {
       const setVersion = (v) => page.evaluate(async (x) => { await fetch("/app/mock/hub-version", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ version: x }) }); }, v);
       await setVersion("0.16.9");

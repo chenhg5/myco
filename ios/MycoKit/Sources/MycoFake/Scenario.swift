@@ -15,6 +15,8 @@ public enum Scenario: Sendable {
     /// message and goes on, its steps still filed under the first), and a
     /// message that was never delivered.
     case session
+    /// Native WebKit/controller consent probe, with no real computer or token.
+    case remote
     /// Joined, but nobody is here yet.
     case empty
 

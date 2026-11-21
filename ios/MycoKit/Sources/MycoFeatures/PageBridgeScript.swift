@@ -6,7 +6,7 @@ enum PageBridgeScript {
 (function () {
   if (window.myco) return;
   var post = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.myco;
-  var seq = 0, waiting = {}, handlers = { change: [], data: [] }, ctx = null;
+  var seq = 0, waiting = {}, handlers = { change: [], data: [], preferences: [], remote: [] }, ctx = null;
   function call(method, args, ms) {
     return new Promise(function (resolve, reject) {
       if (!post) { reject(new Error("myco: this page is not open in the myco App")); return; }
@@ -31,9 +31,22 @@ enum PageBridgeScript {
       w.reject(err);
     } else w.resolve(d ? d.value : null);
   };
+  var preferences = window.__mycoInitialPreferences || {language:"en",theme:"light"};
+  function applyPreferences(p) {
+    preferences = p;
+    if(document.documentElement) {
+      document.documentElement.lang = p.language;
+      document.documentElement.setAttribute("data-myco-theme",p.theme);
+      document.documentElement.style.colorScheme = p.theme;
+    }
+    handlers.preferences.slice().forEach(function(f){ f(p); });
+  }
+  window.__mycoPreferences = applyPreferences;
   window.__mycoEvent = function (d) {
     if (!d || typeof d !== "object") return;
-    if (d.myco === "data" && Array.isArray(d.changes)) {
+    if (d.myco === "remote-disconnect") {
+      handlers.remote.slice().forEach(function(f){ f(); });
+    } else if (d.myco === "data" && Array.isArray(d.changes)) {
       d.changes.forEach(function (c) {
         handlers.data.slice().forEach(function (f) { try { f(c); } catch (x) { setTimeout(function () { throw x; }); } });
       });
@@ -43,10 +56,16 @@ enum PageBridgeScript {
       handlers.change.slice().forEach(function (f) { try { f(c); } catch (x) { setTimeout(function () { throw x; }); } });
     }
   };
-  var ready = call("ready").then(function (v) { ctx = v; return v; });
+  var ready = call("ready").then(function (v) { ctx = v; if(v.preferences) applyPreferences(v.preferences); return v; });
   ready.catch(function () { /* (a page that does not use the bridge) */ });
   window.myco = {
     ready: ready,
+    features: ["preferences", "remote", "remote-controller"],
+    get preferences() { return preferences; },
+    remote: {
+      call: function(action,args) { return ready.then(function(){ return call("remote.call",{action:action,args:args || {}},30000); }); },
+      onDisconnect: function(f) { handlers.remote.push(f); return function(){ var i=handlers.remote.indexOf(f); if(i>=0) handlers.remote.splice(i,1); }; }
+    },
     get state() { return ctx ? ctx.state : null; },
     get version() { return ctx ? ctx.version : 0; },
     on: function (event, f) {
