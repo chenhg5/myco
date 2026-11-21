@@ -50,6 +50,7 @@ public final class PageBridge {
     private let names: @MainActor (String) -> String
     private let doors: Doors
     private let remote: PageRemoteDesktop
+    private let network: PageNetwork
     private var preferences = ["language": AppLanguage.current.rawValue, "theme": "light"]
     private let storage: UserDefaults
     private let storageKey: String
@@ -64,7 +65,7 @@ public final class PageBridge {
 
     public init(
         hub: any HubAPI, page: Page, me: String, workspace: String, names: @escaping @MainActor (String) -> String, doors: Doors,
-        storage: UserDefaults = .standard
+        storage: UserDefaults = .standard, network: PageNetwork? = nil
     ) {
         self.hub = hub
         self.page = page
@@ -72,6 +73,7 @@ public final class PageBridge {
         self.names = names
         self.doors = doors
         self.remote = PageRemoteDesktop(hub: hub, ask: doors.askToConnect, changed: doors.remoteConnectionChanged)
+        self.network = network ?? PageNetwork()
         self.storage = storage
         storageKey = "myco-page-store:\(workspace):\(page.id)"
     }
@@ -122,6 +124,8 @@ public final class PageBridge {
                 "version": known,
                 "preferences": preferences,
             ] as [String: Any])
+        case "net.fetch":
+            return try await network.answer(args)
         case "remote.call":
             return try await remote.answer((args["action"] as? String) ?? "", (args["args"] as? [String: Any]) ?? [:])
         case "update":
@@ -195,6 +199,7 @@ public final class PageBridge {
     public func setPreferences(language: String, theme: String) {
         preferences = ["language": language == "zh" ? "zh" : "en", "theme": theme == "dark" ? "dark" : "light"]
     }
+    public func cancelNetwork() { network.cancel() }
     public func resetRemote() { remote.resetNow() }
     public func closeRemote() { remote.closeNow() }
     public func suspendRemote() { remote.suspendNow() }

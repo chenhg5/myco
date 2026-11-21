@@ -55,6 +55,7 @@ const bridge = bridgeSource
     "seq++; return { ...r };",
     'seq++; for (const f of subs) f({seq,collection:c,record:id,op:"put",data,version:r.version}); return { ...r };',
   );
+const phoneBridge = `if (window.__PHONE_NETWORK__) { window.myco.net = window.myco.os.net; delete window.myco.os; window.myco.features = ["net", "preferences"]; }`;
 const csp =
   "default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' data: blob:; worker-src 'self' blob:; object-src 'none'";
 const source = {
@@ -154,7 +155,7 @@ const server = http.createServer((req, res) => {
   }
   if (p === "/bridge.js") {
     res.writeHead(200, { "Content-Type": "text/javascript" });
-    res.end(bridge);
+    res.end(bridge + phoneBridge);
     return;
   }
   const f = path.resolve(root, "." + (p === "/" ? "/index.html" : p));
@@ -210,11 +211,12 @@ const browser = await playwright.chromium.launch({
   args: ["--no-sandbox"],
 });
 try {
-  for (const [lang, theme, width] of [
+  for (const [lang, theme, width, phone] of [
     ["zh", "light", 1400],
     ["zh", "dark", 760],
     ["en", "light", 760],
     ["en", "dark", 1400],
+    ["zh", "light", 393, true],
   ]) {
     const page = await browser.newPage({
       viewport: { width, height: 900 },
@@ -228,7 +230,8 @@ try {
     });
     page.on("request", (r) => network.push(r.url()));
     await page.addInitScript(
-      ({ lang, theme }) => {
+      ({ lang, theme, phone }) => {
+        window.__PHONE_NETWORK__ = phone;
         window.__SAMPLE__ = {};
         window.__requests = [];
         window.__FAKE_OS__ = {
@@ -250,7 +253,7 @@ try {
           document.documentElement.setAttribute("data-myco-theme", theme);
         });
       },
-      { lang, theme },
+      { lang, theme, phone },
     );
     const L = (zh, en) => (lang === "zh" ? zh : en);
     await page.goto(
@@ -487,6 +490,14 @@ try {
       `PASS ${lang}/${theme}/${width}: empty defaults, setup, catalog, search, real HLS, watchlist, local resume, line/episode selection, sandbox and layout`,
     );
   }
+  const legacy = await browser.newPage({viewport:{width:393,height:852}});
+  await legacy.addInitScript(() => { window.__SAMPLE__ = {sources:[{id:"legacy",name:"My catalog",endpoint:"https://catalog.test/api",enabled:true,order:1}]}; });
+  await legacy.goto(`http://127.0.0.1:${server.address().port}/?myco_lang=zh`);
+  await legacy.getByText("当前 myco App 尚不支持应用联网，请更新 App 后再试",{exact:true}).waitFor();
+  assert.equal(await legacy.getByRole("button",{name:"搜索",exact:true}).isDisabled(),true);
+  assert.equal(await legacy.getByText("这个 myco App 还不能让应用用电脑：更新 App 后再试",{exact:true}).count(),0);
+  await legacy.close();
+  console.log("PASS old iPhone App shows a network update hint without claiming desktop OS access");
 } finally {
   await browser.close();
   await new Promise((r) => server.close(r));

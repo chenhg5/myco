@@ -424,7 +424,7 @@ private struct PageWebView: UIViewRepresentable {
         let reload = coordinator.version != version || coordinator.reloads != reloads || coordinator.language != language
         if coordinator.active != active {
             coordinator.active = active
-            if active { coordinator.bridge?.resumeRemote() } else { coordinator.endRemote(); coordinator.bridge?.suspendRemote() }
+            if active { coordinator.bridge?.resumeRemote() } else { coordinator.endRemote(); coordinator.bridge?.suspendRemote(); coordinator.bridge?.cancelNetwork() }
         }
         if prefsChanged {
             let raw = (try? JSONSerialization.data(withJSONObject: ["language": language, "theme": theme])) ?? Data("{}".utf8)
@@ -476,6 +476,7 @@ private struct PageWebView: UIViewRepresentable {
 
         func invalidateDocument(closing: Bool = false) {
             documentGeneration += 1
+            bridge?.cancelNetwork()
             if closing {
                 bridge?.closeRemote()
                 for task in open.values { task.cancel() }

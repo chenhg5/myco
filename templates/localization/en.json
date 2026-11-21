@@ -2000,5 +2000,7 @@
   "接口地址无效": "Invalid API address",
   "更多操作": "More actions",
   "已停用": "Disabled",
-  "新线路没有同名集数，已选第一集": "No matching episode on this line. The first episode is selected."
+  "新线路没有同名集数，已选第一集": "No matching episode on this line. The first episode is selected.",
+  "当前 myco App 尚不支持应用联网，请更新 App 后再试": "This myco App does not yet support network access for apps. Update the App and try again.",
+  "请在 myco App 中打开，才能让应用联网": "Open this page in the myco App to give it network access"
 }
