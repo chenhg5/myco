@@ -75,6 +75,10 @@
     "Video editor",
     "Import video, split and trim clips, change speed, add text and mask faces or number plates. Export MP4 locally. Media stays on this computer; the edit plan is shared with people and agents."
   ],
+  "motion": [
+    "Motion video",
+    "Make product promos, data stories and vertical shorts with motion: start from a template and change the words, pictures and colours, or ask an agent to write every scene (HTML with animation). Set lengths and transitions on the timeline and export an MP4 on this computer."
+  ],
   "photo": [
     "Photo editor",
     "Crop, adjust colors, filter, retouch, add text or stickers, draw, mask and frame your photos. Originals stay local; share edit instructions and undo any change."
