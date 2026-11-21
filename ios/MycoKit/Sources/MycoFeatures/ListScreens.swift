@@ -399,7 +399,10 @@ struct WorkbenchScreen: View {
             StatusDot(run.status == "waiting" ? .attention : .working, size: 8).padding(.top, 6)
             VStack(alignment: .leading, spacing: 2) {
                 Text(run.name).font(.subheadline.weight(.medium)).foregroundStyle(MycoColor.fg)
-                let at = (run.current ?? []).map { id in run.steps?.first { $0.step == id }?.shownName ?? id }.joined(separator: "、")
+                let decisions = session.workflows.decisions.filter { $0.run.id == run.id }
+                let at = (run.current ?? []).map { id in
+                    run.steps?.first { $0.step == id }?.shownName ?? decisions.first { $0.step.step == id }?.step.shownName ?? id
+                }.joined(separator: "、")
                 Text([WorkflowsModel.words(of: run.status), at.isEmpty ? nil : L("在「\(at)」", "at \(at)"), RelativeTime.short(run.createdAt)]
                     .compactMap { $0 }.joined(separator: " · "))
                     .font(.caption).foregroundStyle(MycoColor.muted)
