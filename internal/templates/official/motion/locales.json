@@ -1,10 +1,10 @@
 {
   "en": {
     "name": "Motion video",
-    "description": "Make product promos, data stories and vertical shorts with motion: start from a template and change the words, pictures and colours, or ask an agent to write every scene (HTML with animation). Set lengths and transitions on the timeline and export an MP4 on this computer."
+    "description": "Make product promos, data stories and vertical shorts with motion: start from a template and change the words, pictures and colours, or ask an agent to write every scene (HTML with animation). Leave notes on moments for the agent, or have it remake a reference video; add music and voice, cut on the beat, turn speech into captions, save templates for everyone, and export an MP4 on this computer."
   },
   "zh": {
     "name": "动效视频",
-    "description": "做产品宣传、数据快报、竖版短视频这类动效视频：从模板开始改文字、图片和配色，或者说一句话让 agent 写好每个场景（HTML 加动画）；时间轴上调时长和转场，在本机导出 mp4。"
+    "description": "做产品宣传、数据快报、竖版短视频这类动效视频：从模板开始改文字、图片和配色，或者说一句话让 agent 写好每个场景（HTML 加动画）；在时间点上批注让 agent 改，照一段参考视频重做；配上音乐和配音，场景切换对上节拍，配音转成字幕；存成模板给大家用；在本机导出 mp4。"
   }
 }
