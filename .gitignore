@@ -16,3 +16,12 @@ runner.log
 /templates/proxy-console-shots/
 
 /templates/localization-shots/
+
+/templates/remote-desktop-shots/
+
+/component-out/
+/ffmpeg-source/
+/components/remote/myco-remote
+/components/remote/myco-remote.exe
+/myco-remote_*.zip
+/myco-remote_*.sha256

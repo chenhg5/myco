@@ -398,11 +398,15 @@ function PageView({ target, open, active, reload, onMeta }: {
   const dataWatch = useRef(false);
   const dataSeq = useRef(0);
   const [asking, setAsking] = useState<{ text: string; to: string; answer: (ok: boolean) => void } | null>(null);
+  const [remoteAsking, setRemoteAsking] = useState<{text:string; answer:(ok:boolean)=>void} | null>(null);
+  const remoteConsent = useRef<((ok:boolean)=>void) | null>(null);
   // (while the page is there: tucked away, it still runs and is answered,
   // and what it started on the computer goes on)
   useEffect(() => {
     known.current = 0;
     bridged.current = false;
+    let remoteUsed = false;
+    const remoteInstance = Array.from(crypto.getRandomValues(new Uint8Array(16)), (n) => n.toString(16).padStart(2, "0")).join("");
     const on = (e: MessageEvent) => {
       const win = frame.current?.contentWindow;
       if (!win || e.source !== win) return;
@@ -411,8 +415,10 @@ function PageView({ target, open, active, reload, onMeta }: {
       if (d?.myco !== "call" || typeof d.id !== "number") return;
       const origin = (() => { try { return new URL(frame.current?.src || "").origin; } catch { return ""; } })();
       if (!origin || e.origin !== origin) return;
-      const reply = (value: unknown, error?: string, code?: string, latest?: unknown) =>
+      const reply = (value: unknown, error?: string, code?: string, latest?: unknown) => {
+        if (closed) return;
         win.postMessage(error ? { myco: "result", id: d.id, error, code, ...(latest ? { latest } : {}) } : { myco: "result", id: d.id, value }, origin);
+      };
       if (target.kind !== "page") { reply(null, L("这个网页不在 myco 上，没有桥", "This page is not on myco: no bridge"), "not_a_page"); return; }
       void answer(target, d.method || "", d.args || {}).then((v) => reply(v), (err: unknown) => reply(null, (err as Error).message || "error", (err as ApiError).code, (err as ApiError).latest));
     };
@@ -499,6 +505,37 @@ function PageView({ target, open, active, reload, onMeta }: {
         }
       }
       if (method.startsWith("data.") || method === "download") return answerData(t, method, args);
+      if (method === "remote.call") {
+        const action = String(args.action || "");
+        const remoteArgs = (args.args || {}) as Record<string, unknown>;
+        const explanations: Record<string, string> = {
+          install: L("下载并安装可选远控组件。它不会随 App 自动启动，不会自动开放远程连接。", "Download the optional remote component. It will not start with the App or enable incoming connections automatically."),
+          remove: L("卸载本机远控组件，并停止本机正在共享的画面。", "Uninstall the remote component and stop sharing this computer."),
+          enable: remoteArgs.control ? L("允许配对成功的连接查看画面、操作键盘和鼠标。请只把配对码交给你信任的人；关闭此应用即停止共享。", "Let paired connections see this screen and use its keyboard and mouse. Share the pairing code only with someone you trust. Closing this app stops sharing.") : L("允许配对成功的连接查看这台电脑的画面。不能操作键鼠；关闭此应用即停止共享。", "Let paired connections view this screen, without keyboard or mouse control. Closing this app stops sharing."),
+          connect: L("允许此应用建立远程桌面连接。远端画面只在当前应用中显示。", "Let this app establish a remote desktop connection and show the screen here."),
+        };
+        if (action === "connect") {
+          const devices = await appApi.remoteCall<{machine:string;name:string}[]>(t.hubId,t.id,"devices",{},remoteInstance);
+          if(closed) throw new Error("cancelled");
+          const device = devices.find(d=>d.machine===String(remoteArgs.machine||""));
+          if(!device) throw new Error(L("这台电脑已停止共享，请刷新后重试", "This computer stopped sharing. Refresh and try again."));
+          const mode = remoteArgs.offer && (remoteArgs.offer as {control?:boolean}).control;
+          explanations.connect = mode
+            ? L(`连接到「${device.name}」，查看它的画面并操作键盘和鼠标。`, `Connect to “${device.name}”, view its screen and use its keyboard and mouse.`)
+            : L(`连接到「${device.name}」，仅查看画面，不操作键鼠。`, `Connect to “${device.name}” to view its screen, without keyboard or mouse control.`);
+        }
+        if (explanations[action]) {
+          if (remoteConsent.current) throw new Error(L("请先处理当前的授权请求", "Finish the current permission request first"));
+          const ok = await new Promise<boolean>((resolve) => {
+            remoteConsent.current = resolve;
+            setRemoteAsking({text:explanations[action], answer:resolve});
+          });
+          remoteConsent.current = null;setRemoteAsking(null);
+          if (!ok || closed) throw Object.assign(new Error(L("你没有允许这个操作", "You did not allow this action")), {code:"permission_denied"});
+        }
+        if (action === "enable" || action === "connect") remoteUsed = true;
+        return appApi.remoteCall(t.hubId, t.id, action, remoteArgs, remoteInstance);
+      }
       if (method.startsWith("os.")) return answerOS(t, method, args);
       throw new Error(`myco: no such call: ${method}`);
     };
@@ -564,9 +601,12 @@ function PageView({ target, open, active, reload, onMeta }: {
     return () => {
       window.removeEventListener("message", on);
       closed = true;
+      remoteConsent.current?.(false);remoteConsent.current = null;
+      const t = target.kind === "page" ? target : null;
+      if (t && remoteUsed) void appApi.remoteCall(t.hubId, t.id, "close", {}, remoteInstance).catch(() => undefined);
       for (const id of jobs) void appApi.osCancel(id).catch(() => undefined);
     };
-  }, [target]);
+  }, [target, opened?.url, reload, preferences.language]);
 
   // While it is shown: what others (an agent, another person) change comes
   // to the page.
@@ -653,6 +693,13 @@ function PageView({ target, open, active, reload, onMeta }: {
           )}
         </div>
       )}
+    <Modal className="pg-remote-ask" open={!!remoteAsking} onOpenChange={(o) => {if (!o) remoteAsking?.answer(false);}}
+      title={L(`允许「${opened?.name || page?.name || "此应用"}」使用远程桌面？`, `Allow “${opened?.name || page?.name || "this app"}” to use Remote Desktop?`)} description={remoteAsking?.text || ""}>
+      <div className="app-modal-actions">
+        <button type="button" className="app-btn" onClick={() => remoteAsking?.answer(false)}>{L("不允许", "Don't allow")}</button>
+        <button type="button" className="app-btn app-btn-primary" onClick={() => remoteAsking?.answer(true)}>{L("允许", "Allow")}</button>
+      </div>
+    </Modal>
     <Modal open={!!asking} onOpenChange={(o) => { if (!o) asking?.answer(false); }} className="pg-ask"
       title={L(`允许这个网页以你的名义给 ${asking?.to || ""} 发消息吗？`, `Let this page message ${asking?.to || ""} as you?`)}
       description={L("网页是 agent 写的。允许后，这次打开 App 期间它可以直接发，一分钟最多 5 条；发出的消息在你和它的对话里。", "An agent wrote this page. If you allow it, it may send messages until you quit the App, at most 5 a minute; they show in your chat with the agent.")}>

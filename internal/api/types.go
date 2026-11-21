@@ -5,6 +5,7 @@ package api
 
 import (
 	"encoding/json"
+	"github.com/chenhg5/myco/internal/remotedesktop"
 	"time"
 )
 
@@ -2198,3 +2199,9 @@ type Approval struct {
 type ApprovalList struct {
 	Approvals []Approval `json:"approvals"`
 }
+
+// Remote desktop signaling is optional. Media never travels in these DTOs.
+type RemoteDevice = remotedesktop.Device
+type RemoteSession = remotedesktop.Session
+type RemoteOffer = remotedesktop.Offer
+type RemoteDescription = remotedesktop.Description

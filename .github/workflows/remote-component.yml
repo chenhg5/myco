@@ -1,0 +1,80 @@
+name: Optional remote desktop component
+on:
+  push:
+    paths: ['components/remote/**', '.github/workflows/remote-component.yml']
+  pull_request:
+    paths: ['components/remote/**', '.github/workflows/remote-component.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: components/remote/go.mod
+          cache-dependency-path: components/remote/go.sum
+      - run: go test -race ./...
+        working-directory: components/remote
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest
+            target: darwin_arm64
+          - runner: macos-15-intel
+            target: darwin_amd64
+          - runner: windows-latest
+            target: windows_amd64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: components/remote/go.mod
+          cache-dependency-path: components/remote/go.sum
+      - uses: msys2/setup-msys2@v2
+        if: runner.os == 'Windows'
+        with:
+          msystem: MINGW64
+          install: git make diffutils mingw-w64-x86_64-gcc mingw-w64-x86_64-pkgconf
+      - name: Build the Windows encoder
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: bash components/remote/scripts/build-ffmpeg.sh
+      - name: Build the Mac encoder
+        if: runner.os == 'macOS'
+        run: bash components/remote/scripts/build-ffmpeg.sh
+      - name: Build the optional engine
+        shell: bash
+        run: |
+          suffix=''
+          if [[ "$RUNNER_OS" == Windows ]]; then suffix=.exe; fi
+          cd components/remote
+          go vet ./...
+          go test ./... -args -encoder-smoke "../../component-out/ffmpeg${suffix}"
+          go build -trimpath -ldflags='-s -w' -o "../../component-out/myco-remote${suffix}" .
+          python scripts/licenses.py ../../component-out/NOTICE-dependencies.txt
+      - name: Package
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          cp LICENSE component-out/LICENSE-myco.txt
+          python - <<'PY'
+          import os,pathlib,zipfile,hashlib
+          root=pathlib.Path('component-out')
+          output=pathlib.Path('myco-remote_'+os.environ['TARGET']+'.zip')
+          with zipfile.ZipFile(output,'w',zipfile.ZIP_DEFLATED) as z:
+            for p in root.iterdir(): z.write(p,p.name)
+          pathlib.Path(output.name+'.sha256').write_text(hashlib.sha256(output.read_bytes()).hexdigest()+'  '+output.name+'\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: myco-remote_${{ matrix.target }}
+          path: |
+            myco-remote_*.zip
+            myco-remote_*.sha256

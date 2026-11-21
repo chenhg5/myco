@@ -156,6 +156,7 @@ func randomHex(n int) string {
 
 // Backend serves the /app/ API.
 type Backend struct {
+	remoteDesktop remoteDesktop
 	// connects are computers being connected over SSH or WSL.
 	connects connectJobs
 	// os: what pages use of this computer (myco.os, oscalls.go).
@@ -243,6 +244,7 @@ func (b *Backend) Handler() http.Handler {
 	b.cacheRoutes(m)
 	b.uiLangRoutes(m)
 	b.proxyRoutes(m)
+	b.remoteDesktopRoutes(m)
 	m.HandleFunc("GET /app/info", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"version": b.Version, "shell": orStr(b.Shell, "browser"), "dictation": b.Dictate != nil || b.Listen != nil, "pick_image": b.PickImage != nil, "open_url": b.OpenURL != nil})
 	})

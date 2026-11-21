@@ -24,6 +24,7 @@ import (
 	"github.com/chenhg5/myco/internal/domain"
 	"github.com/chenhg5/myco/internal/osutil"
 	"github.com/chenhg5/myco/internal/release"
+	"github.com/chenhg5/myco/internal/remotedesktop"
 )
 
 // Server is the hub's HTTP adapter.
@@ -59,6 +60,7 @@ type Server struct {
 	workflows   *app.WorkflowService
 	superagents *app.SuperagentService
 	pages       *app.PageService
+	remote      remotedesktop.Broker
 	tun         tunnels
 	handovers   *app.HandoverService
 	hidden      *app.HiddenService
@@ -225,6 +227,7 @@ func (s *Server) routes() {
 	s.pinRoutes(m)
 	s.pageDataRoutes(m)
 	s.liveRoutes(m)
+	s.remoteRoutes(m)
 	s.handoverRoutes(m)
 	m.HandleFunc("GET /j/{token}", s.joinPage)
 	m.HandleFunc("GET /j/{token}/{project}", s.joinPage)

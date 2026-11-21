@@ -255,7 +255,7 @@ const shotsOf = (names) => {
   const out = light.map((src) => ({ src, ...(names.includes(src.replace(/(\.[a-z]+)$/i, ".dark$1")) ? { dark: src.replace(/(\.[a-z]+)$/i, ".dark$1") } : {}) }));
   return out.length ? out : undefined;
 };
-const officialOrder = ["table", "base", "doc", "slides", "meeting", "code", "issues", "devtools", "todo", "notes", "disk", "stocks", "proxy-console", "ledger", "habit", "design-studio", "whiteboard", "mindmap", "video", "photo", "gomoku", "sudoku"];
+const officialOrder = ["table", "base", "doc", "slides", "meeting", "code", "issues", "devtools", "todo", "notes", "disk", "stocks", "proxy-console", "remote-desktop", "ledger", "habit", "design-studio", "whiteboard", "mindmap", "video", "photo", "gomoku", "sudoku"];
 const mockTemplates = officialOrder.filter((name) => existsSync(new URL(`${name}/myco.json`, officialRoot))).map((name) => {
   const files = officialFiles(name);
   const m = JSON.parse(files["myco.json"]);
@@ -2014,6 +2014,14 @@ const server = http.createServer(async (req, res) => {
       return send(res, 204);
     }
     if (method === "DELETE") { cacheStore.clear(); return send(res, 204); }
+  }
+  // Remote Desktop: a deterministic UI fixture, never a real host.
+  if (parts[0] === "app" && parts[1] === "hubs" && parts[3] === "remote" && method === "POST") {
+    const body = await readBody(req);
+    if (body.action === "devices") return send(res, 200, [{machine:"mac_studio",name:"Studio Mac",os:"darwin",control:true},{machine:"windows",name:"Windows 工作站",os:"windows",control:false}]);
+    if (body.action === "status") return send(res, 200, {protocol:1,version:"0.1.0",installed:false,supported:true,running:false});
+    if (["close","disable","disconnect"].includes(body.action)) return send(res, 200, true);
+    return fail(res, 501, "unsupported", "The UI preview never installs components or starts remote control.");
   }
   // /app/os: a page using this computer (myco.os). Nothing to use in the
   // mock, unless MOCK_OS_URL names a real App backend to pass it to (go run
