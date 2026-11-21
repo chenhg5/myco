@@ -968,15 +968,17 @@ async function runMatrix(browser, size, scheme) {
         await go(page,"应用",narrow);
         const table=page.locator('[data-testid="template-myco/table"]');
         await table.locator('.tp-card-name',{hasText:"Table"}).waitFor();
+        if(await page.locator('[data-testid="template-myco/poll"]').count())throw new Error("The retired Poll app must not be offered");
         await page.locator('[data-testid="template-myco/notes"] .tp-card-name',{hasText:"Notes"}).waitFor();
         await table.click();
         await page.locator('[data-testid="template-name"]').waitFor();
         if(await page.locator('[data-testid="template-name"]').inputValue()!=="Table")throw new Error("New app name must follow the App language");
         await clickVisible(page,page.getByRole("button",{name:"Cancel",exact:true}));
         await shot(page,size,scheme,"apps-english");
-        await page.route(pattern,async route=>{const response=await route.fetch();const data=await response.json();for(const t of data.templates||[])delete t.locales;await route.fulfill({response,json:data});});
+        await page.route(pattern,async route=>{const response=await route.fetch();const data=await response.json();for(const t of data.templates||[])delete t.locales;data.templates.push({...data.templates[0],id:"tp_retired_poll",slug:"myco/poll",name:"投票"});await route.fulfill({response,json:data});});
         await page.reload({waitUntil:"domcontentloaded"});await page.locator(".app-shell").waitFor();await go(page,"应用",narrow);
         await page.locator('[data-testid="template-myco/notes"] .tp-card-name',{hasText:"Notes"}).waitFor();
+        if(await page.locator('[data-testid="template-myco/poll"]').count())throw new Error("Legacy Hub returned a retired Poll app");
       } finally {
         await page.unroute(pattern);
         await page.goto(`${r.base}/?lang=zh`,{waitUntil:"domcontentloaded"});await page.locator(".app-shell").waitFor();

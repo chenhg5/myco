@@ -1,9 +1,0 @@
-{
-  "poll": [{ "id": "main", "question": "这周五的团建去哪？", "note": "下午三点出发，预算每人 200 以内", "options": ["爬山", "桌游", "密室逃脱", "吃火锅"], "multi": false, "anonymous": false, "closed": false }],
-  "votes": [
-    { "id": "v-ann", "voter": "Ann", "choices": [3] },
-    { "id": "v-bob", "voter": "Bob", "choices": [1] },
-    { "id": "v-pm", "voter": "PM (Codex)", "choices": [3] },
-    { "id": "v-lee", "voter": "Lee", "choices": [2] }
-  ]
-}

@@ -74,7 +74,7 @@ export function TemplatesPage({ hubId, projects, now }: { hubId: string; project
   const [shelf, setShelf] = useState("all");
   const [q, setQ] = useState("");
   const [allMade, setAllMade] = useState(false);
-  const displayList = list?.map(templateDisplay) ?? null;
+  const displayList = list?.filter(t => t.slug !== "myco/poll").map(templateDisplay) ?? null;
   const match = (source: Template) => {const t=templateDisplay(source);return !q.trim() || `${source.name} ${source.description||""} ${t.name} ${t.description || ""} ${t.slug} ${Object.values(t.locales || {}).map(v => `${v.name||""} ${v.description||""}`).join(" ")}`.toLowerCase().includes(q.trim().toLowerCase());};
   const official = (displayList || []).filter((t) => t.official && match(t));
   const own = (displayList || []).filter((t) => !t.official && match(t));
