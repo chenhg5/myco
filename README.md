@@ -106,11 +106,11 @@ We are rebuilding the apps we use every day on Mac, Windows and phone so that **
 <tr>
 <td width="33%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/apps/stocks-dark.webp"><img src="docs/assets/apps/stocks.webp" alt="Stock watch"></picture><br><b>Stock watch</b><br>A shared watchlist for China, Hong Kong and US stocks with candlestick charts and notes.</td>
 <td width="33%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/apps/photo-dark.webp"><img src="docs/assets/apps/photo.webp" alt="Photo editor"></picture><br><b>Photo editor</b><br>Crop, adjust, filters, text and stickers; the agent can make the edits you describe.</td>
-<td width="33%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/apps/issues-dark.webp"><img src="docs/assets/apps/issues.webp" alt="Issues"></picture><br><b>Issues</b><br>Track issues Linear-style, assign one to an agent, and watch it update the status and comment.</td>
+<td width="33%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/apps/issues-dark.webp"><img src="docs/assets/apps/issues.webp" alt="Issue tracker"></picture><br><b>Issue tracker</b><br>Track issues Linear-style, assign one to an agent, and watch it update the status and comment.</td>
 </tr>
 </table>
 
-Also: docs, notes, sheets, multi-view tables, slides, mind maps, a whiteboard, a code editor, developer tools, to-dos, habits, a ledger, video editing, and games like Gomoku and Sudoku. An app that needs your computer (files, the screen, the network) asks it through the myco app ([`myco.os`](docs/app-os.md)).
+**[See all 26 apps →](docs/apps.md)** (docs, notes, sheets, slides, a code editor, a whiteboard, video editing, games and more)
 
 ## 1. Let a cloud agent use your computer
 
@@ -282,37 +282,16 @@ Other ways to connect:
 | Doc | What it covers |
 |---|---|
 | [INSTALL.md](INSTALL.md) | Hub deployment, join links and per-agent setup |
+| [docs/apps.md](docs/apps.md) | Every app, with screenshots |
 | [docs/architecture.md](docs/architecture.md) | Concepts, message state machine, runner behavior and code layout |
 | [docs/delivery.md](docs/delivery.md) | Wake-up modes and enrollment for cloud sessions |
 | [docs/api.md](docs/api.md) | HTTP API |
 | [skill/myco/SKILL.md](skill/myco/SKILL.md) | Skill file that teaches agents how to use myco |
-
-## Development
-
-```bash
-make test     # go test -race ./...
-make build    # ./bin/myco
-make cross    # the CLI for linux/darwin/windows × amd64/arm64
-make app      # the Mac app (bin/myco.app), on macOS
-cd web && npm run dev:app   # the app's UI in a browser, with a mock backend
-```
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Building myco and contributing |
 
 ## Why "myco"
 
 *myco-* is Greek for fungus. Under a forest, fungal threads link trees into a "wood wide web" that carries nutrients and warnings between them. myco does the same for agents: it doesn't think for anyone, it only connects and delivers.
-
-## Roadmap
-
-- [x] Hub, CLI and runner, with long-polling, leases, idempotency and allow-lists
-- [x] Session binding, pluggable wakers, GitHub ingress
-- [x] Join links, self-enrollment for cloud sessions, dashboard, exec nodes
-- [x] The myco app for Mac, Windows and Linux: many hubs, conversations, groups and tags, one-click local agents
-- [ ] MCP endpoint (Streamable HTTP), so ChatGPT and Claude can join as connectors
-- [ ] Orchestrator templates and scheduling policies
-- [x] Teams: shared hubs with members, roles, invites and an audit log
-- [x] Fork a session into a new agent
-- [x] Optional end-to-end encryption for shared hubs
-- [ ] Reading and writing files on a shell node
 
 ## License
 

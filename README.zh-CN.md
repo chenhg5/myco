@@ -110,7 +110,7 @@ curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-h
 </tr>
 </table>
 
-还有：文档、笔记、表格、多维表格、幻灯片、思维导图、白板、代码编辑器、开发者工具箱、待办、习惯打卡、记账本、视频剪辑，以及五子棋、数独这样的小游戏。要用到电脑本身（文件、屏幕、网络）的应用，通过 myco App 来用（[`myco.os`](docs/app-os.md)）。
+**[查看全部 26 个应用 →](docs/apps.zh-CN.md)**（文档、笔记、表格、幻灯片、代码编辑器、白板、视频剪辑、小游戏等）
 
 ## 1. 让云端 agent 用你的电脑
 
@@ -282,37 +282,16 @@ flowchart TB
 | 文档 | 内容 |
 |---|---|
 | [INSTALL.zh-CN.md](INSTALL.zh-CN.md) | 部署 Hub、入网链接、各类 agent 的接入方法 |
+| [docs/apps.zh-CN.md](docs/apps.zh-CN.md) | 全部应用和截图 |
 | [docs/architecture.md](docs/architecture.md) | 概念、消息状态机、runner 的行为、代码分层 |
 | [docs/delivery.md](docs/delivery.md) | 唤醒方式、云端会话的入网令牌 |
 | [docs/api.md](docs/api.md) | HTTP API |
 | [skill/myco/SKILL.md](skill/myco/SKILL.md) | 教 agent 使用 myco 的 skill 文件 |
-
-## 开发
-
-```bash
-make test     # go test -race ./...
-make build    # ./bin/myco
-make cross    # 命令行工具：linux/darwin/windows × amd64/arm64
-make app      # Mac App（bin/myco.app），在 macOS 上
-cd web && npm run dev:app   # 在浏览器里开 App 界面，后端用模拟数据
-```
+| [CONTRIBUTING.md](CONTRIBUTING.md) | 构建和参与开发 |
 
 ## 名字的由来
 
 *myco-* 是希腊语里的「真菌」。森林地下，菌丝和树根把树连成一张「树木互联网」，在树之间传递养分和警报。myco 为 agent 做同一件事：它不替谁思考，只负责连接和投递。
-
-## 路线图
-
-- [x] Hub、CLI、runner；长轮询、租约、幂等、白名单
-- [x] session 绑定、可插拔的唤醒方式、GitHub ingress
-- [x] 入网链接、云端会话自助入网、可视化面板、exec 节点
-- [x] myco App（Mac / Windows / Linux）：多 Hub、对话、分组和标签、一键加入本机 agent
-- [ ] MCP 端点（Streamable HTTP），让 ChatGPT、Claude 以连接器方式接入
-- [ ] 主调度 agent 的模板和调度策略
-- [x] 团队：共享 Hub、成员、角色、邀请、审计日志
-- [x] 从已有会话复制出新的 agent（fork）
-- [x] 共享 Hub 可选的端到端加密
-- [ ] Shell 节点读写文件
 
 ## 许可证
 
