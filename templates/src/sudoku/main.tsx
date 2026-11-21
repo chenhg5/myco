@@ -1,3 +1,4 @@
+import { t as uiText } from "../_lib/i18n";
 // 数独: a puzzle everyone fills together. The puzzle (its given digits) is
 // one record; each filled cell is a record of its own, so two people
 // filling different cells never clash. Conflicts show in red; the page
@@ -45,7 +46,7 @@ function App() {
     kit.emit();
   };
   const fresh = (level: string) => {
-    if (filled.size && !done && !window.confirm("换一道新题？这道题填的会清掉。")) return;
+    if (filled.size && !done && !window.confirm(uiText("换一道新题？这道题填的会清掉。"))) return;
     const g = make(level);
     kit.track(puzzle.put({ ...(puzzle.get("main")?.data || {}), givens: show(g), level, round: round + 1 }, "main"));
     setAt(g.indexOf(0));
@@ -53,7 +54,7 @@ function App() {
   };
   const hint = () => {
     const sol = solve(givens);
-    if (!sol) { kit.flash("这道题没有答案"); return; }
+    if (!sol) { kit.flash(uiText("这道题没有答案")); return; }
     const i = !value(at) ? at : sol.findIndex((_, j) => !value(j));
     if (i < 0) return;
     write(i, sol[i]);
@@ -74,22 +75,22 @@ function App() {
   const left = 81 - Array.from({ length: 81 }, (_, i) => value(i)).filter(Boolean).length;
   return (
     <div className="app sd2">
-      <Bar kit={kit} title={title.get()} placeholder="数独" onTitle={title.set}>
-        <button type="button" className="btn" onClick={hint} disabled={done}><Lightbulb className="ico" />提示一格</button>
-        <select className="sel" value={level} onChange={(e) => setLevel(e.target.value)} aria-label="难度">
+      <Bar kit={kit} title={title.get()} placeholder={uiText("数独")} onTitle={title.set}>
+        <button type="button" className="btn" onClick={hint} disabled={done}><Lightbulb className="ico" />{uiText("提示一格")}</button>
+        <select className="sel" value={level} onChange={(e) => setLevel(e.target.value)} aria-label={uiText("难度")}>
           {LEVELS.map(([l, name]) => <option key={l} value={l}>{name}</option>)}
         </select>
-        <button type="button" className="btn btn-primary" onClick={() => fresh(level)}><RotateCcw className="ico" />换一道</button>
+        <button type="button" className="btn btn-primary" onClick={() => fresh(level)}><RotateCcw className="ico" />{uiText("换一道")}</button>
       </Bar>
       <div className="su-main">
-        <div className="su-board" role="grid" aria-label="数独">
+        <div className="su-board" role="grid" aria-label={uiText("数独")}>
           {Array.from({ length: 81 }, (_, i) => {
             const v = value(i), f = filled.get(i);
             const same = sel && v === sel, near = rowOf(i) === rowOf(at) || colOf(i) === colOf(at) || boxOf(i) === boxOf(at);
             return (
-              <button key={i} type="button" role="gridcell" aria-label={`第 ${rowOf(i) + 1} 行第 ${colOf(i) + 1} 列${v ? `：${v}` : ""}`}
+              <button key={i} type="button" role="gridcell" aria-label={uiText("第 {0} 行第 {1} 列{2}", rowOf(i) + 1, colOf(i) + 1, v ? `：${v}` : "")}
                 className={`su-cell${givens[i] ? " is-given" : ""}${i === at ? " is-at" : near ? " is-near" : ""}${same ? " is-same" : ""}${bad.has(i) ? " is-bad" : ""}${colOf(i) % 3 === 2 && colOf(i) < 8 ? " r3" : ""}${rowOf(i) % 3 === 2 && rowOf(i) < 8 ? " b3" : ""}`}
-                onClick={() => setAt(i)} title={f?.by ? `${f.by} 填的` : undefined}
+                onClick={() => setAt(i)} title={f?.by ? uiText("{0} 填的", f.by) : undefined}
                 style={f?.by && f.by !== kit.me ? { color: personColor(f.by) } : undefined}>
                 {v || ""}
               </button>
@@ -98,22 +99,22 @@ function App() {
         </div>
         <aside className="su-side">
           <div className={`su-status${done ? " is-done" : ""}`}>
-            {done ? <><Sparkles className="ico" />全部填对了！</> : !givens.some(Boolean) ? "还没有题：点上面的「换一道」" : `还差 ${left} 格${bad.size ? `，有 ${bad.size} 格冲突` : ""}`}
+            {done ? <><Sparkles className="ico" />{uiText("全部填对了！")}</> : !givens.some(Boolean) ? uiText("还没有题：点上面的「换一道」") : uiText("还差 {0} 格{1}", left, bad.size ? `，有 ${bad.size} 格冲突` : "")}
           </div>
           <div className="su-pad">
             {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => {
               const used = Array.from({ length: 81 }, (_, i) => value(i)).filter((x) => x === n).length;
               return <button key={n} type="button" disabled={done || used >= 9} onClick={() => write(at, n)}>{n}<small>{9 - used}</small></button>;
             })}
-            <button type="button" className="su-erase" onClick={() => write(at, null)} disabled={done}><Eraser className="ico" />擦掉</button>
+            <button type="button" className="su-erase" onClick={() => write(at, null)} disabled={done}><Eraser className="ico" />{uiText("擦掉")}</button>
           </div>
           {people.length > 0 && (
             <div className="su-people">
-              <div className="faint">谁填了几格</div>
-              {people.map(([name, n]) => <div key={name} className="su-person"><span className="person-dot" style={{ background: personColor(name) }}>{name.slice(0, 1).toUpperCase()}</span>{name}{name === kit.me ? "（你）" : ""}<b>{n}</b></div>)}
+              <div className="faint">{uiText("谁填了几格")}</div>
+              {people.map(([name, n]) => <div key={name} className="su-person"><span className="person-dot" style={{ background: personColor(name) }}>{name.slice(0, 1).toUpperCase()}</span>{name}{name === kit.me ? uiText("（你）") : ""}<b>{n}</b></div>)}
             </div>
           )}
-          <p className="su-help faint">点一格，按数字键或下面的数字填；方向键移动，退格擦掉。别人填的格子是他的颜色。</p>
+          <p className="su-help faint">{uiText("点一格，按数字键或下面的数字填；方向键移动，退格擦掉。别人填的格子是他的颜色。")}</p>
         </aside>
       </div>
       <Toast kit={kit} />

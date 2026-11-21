@@ -1,3 +1,4 @@
+import { t as uiText } from "./i18n";
 // What every app page shares: its stores followed in React, saving state,
 // a note at the bottom (with undo), the bar on top, and starting up.
 import { useSyncExternalStore, type ReactNode } from "react";
@@ -30,7 +31,7 @@ export class Kit {
     return p.then((v) => { this.pending--; this.failed = false; this.emit(); return v; }, (e: { code?: string; message?: string }) => {
       this.pending--;
       this.failed = e?.code !== "conflict";
-      this.flash(e?.code === "conflict" ? "别人刚改过，已显示最新的" : e?.message || "没保存上");
+      this.flash(e?.code === "conflict" ? uiText("别人刚改过，已显示最新的") : e?.message || uiText("没保存上"));
       return undefined;
     });
   }
@@ -43,7 +44,7 @@ export class Kit {
     listen(this.stores, (c) => {
       this.emit();
       onChange?.(c);
-      if (!this.opts.quiet && c.by && c.by !== this.me) this.flash(`${c.by} 刚改了`);
+      if (!this.opts.quiet && c.by && c.by !== this.me) this.flash(uiText("{0} 刚改了", c.by));
     });
   }
 }
@@ -61,11 +62,11 @@ export function Bar({ kit, title, placeholder, onTitle, children }: {
   const state = kit.pending ? "saving" : kit.failed ? "error" : "saved";
   return (
     <header className="top">
-      <input className="top-title" value={title} placeholder={placeholder} aria-label="标题" maxLength={120}
+      <input className="top-title" value={title} placeholder={placeholder} aria-label={uiText("标题")} maxLength={120}
         onChange={(e) => onTitle(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
-      <span className={`top-state is-${state}`}>{state === "saving" ? "正在保存…" : state === "error" ? "没保存上" : "已保存"}</span>
+      <span className={`top-state is-${state}`}>{state === "saving" ? uiText("正在保存…") : state === "error" ? uiText("没保存上") : uiText("已保存")}</span>
       <span className="top-gap" />
-      {kit.me && <span className="top-me">你是 {kit.me}</span>}
+      {kit.me && <span className="top-me">{uiText("你是")}{" "}{kit.me}</span>}
       {children}
     </header>
   );
@@ -73,7 +74,7 @@ export function Bar({ kit, title, placeholder, onTitle, children }: {
 
 export function Toast({ kit }: { kit: Kit }) {
   if (!kit.note) return null;
-  return <div className="note" role="status">{kit.note.text}{kit.note.undo && <button type="button" onClick={kit.note.undo}>撤销</button>}</div>;
+  return <div className="note" role="status">{kit.note.text}{kit.note.undo && <button type="button" onClick={kit.note.undo}>{uiText("撤销")}</button>}</div>;
 }
 
 /** A title kept in a single record, saved after a pause. */
@@ -95,7 +96,7 @@ export function titleSaver(kit: Kit, store: Store<any>, id = "main") {
 
 export async function mount(kit: Kit, App: () => JSX.Element, init?: () => Promise<unknown>, onChange?: (c: MycoChange) => void) {
   const root = createRoot(document.getElementById("root")!);
-  const outside = <div className="outside">在 myco App 里打开这个网页，才能读写它的内容。</div>;
+  const outside = <div className="outside">{uiText("在 myco App 里打开这个网页，才能读写它的内容。")}</div>;
   if (!myco) { root.render(outside); return; }
   try { await kit.start(init, onChange); } catch { root.render(outside); return; }
   root.render(<App />);

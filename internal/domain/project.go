@@ -89,7 +89,9 @@ func (d *ProjectDoc) IsBlob() bool { return d.Blob != "" }
 const (
 	maxProjectTitle = 80
 	maxProjectGoal  = 500
-	maxProjectBrief = 8 << 10
+	// MaxProjectBrief is the brief's length in characters (it all goes in
+	// every member's prompt); before v0.21.10 it was 8 KB.
+	MaxProjectBrief = 16000
 	maxProjectLinks = 20
 	maxProjectNote  = 200
 	maxProjectDoc   = 64 << 10
@@ -184,8 +186,8 @@ func (p *Project) Apply(e ProjectEdit, now time.Time) error {
 		p.Goal = g
 	}
 	if e.Brief != nil {
-		if len(*e.Brief) > maxProjectBrief {
-			return Errf(CodeInvalidArgument, "the brief is longer than %d bytes", maxProjectBrief).
+		if utf8.RuneCountInString(*e.Brief) > MaxProjectBrief || len(*e.Brief) > maxProjectDoc {
+			return Errf(CodeInvalidArgument, "the brief is longer than %d characters", MaxProjectBrief).
 				WithSuggestion("keep the brief short and put longer material in a project document")
 		}
 		p.Brief = strings.TrimSpace(*e.Brief)
@@ -227,6 +229,41 @@ func CheckDocBody(s string) error {
 			WithSuggestion("split it, or keep it in the repository and add a link")
 	}
 	return nil
+}
+
+// ProjectMemoryDoc names the project document (memory.md once pulled) that holds the project's
+// memory: what its members learned and should all keep in mind (decisions,
+// conventions, the owner's preferences). Any member may add an entry; its
+// editors change or tidy it like any document.
+const ProjectMemoryDoc = "memory"
+
+// maxMemoryEntry bounds one memory entry.
+const maxMemoryEntry = 1000
+
+// AppendMemory adds an entry to a memory document's body: one list item,
+// with who wrote it and when.
+func AppendMemory(body, text, by string, now time.Time) (string, error) {
+	text = strings.Join(strings.Fields(text), " ")
+	if text == "" {
+		return "", Errf(CodeInvalidArgument, "the memory entry is empty")
+	}
+	if utf8.RuneCountInString(text) > maxMemoryEntry {
+		return "", Errf(CodeInvalidArgument, "a memory entry is at most %d characters", maxMemoryEntry).
+			WithSuggestion("say it in a sentence or two; put details in a project document and mention its name")
+	}
+	if strings.TrimSpace(body) == "" {
+		body = "# Project memory\n"
+	}
+	entry := "- " + text
+	if by != "" {
+		entry += " (" + by + ", " + now.Format("2006-01-02") + ")"
+	}
+	out := strings.TrimRight(body, "\n") + "\n" + entry + "\n"
+	if len(out) > maxProjectDoc {
+		return "", Errf(CodeInvalidArgument, "the project memory is full (%d bytes)", maxProjectDoc).
+			WithSuggestion("ask a coordinator or the project's owner to tidy the memory document")
+	}
+	return out, nil
 }
 
 // ProjectRepository stores projects, their members and documents.

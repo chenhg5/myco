@@ -1,3 +1,4 @@
+import { locale, t as uiText } from "../_lib/i18n";
 // 会议记录's data: each meeting (when, how long, where its recording is on
 // the computer that made it, who the tracks are) and its transcript, one
 // record per sentence. The recording stays on that computer; the text is
@@ -68,13 +69,14 @@ export function speakerKeys(list: Segment[]) {
   return [...keys].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b, undefined, { numeric: true }));
 }
 
-/** A speaker's grey (me the darkest; the others lighter, each its own). */
-export function shade(key: string) {
-  if (key === "me") return 100;
-  if (key === "them") return 48;
-  if (key.startsWith("me:")) return [92, 84, 96, 88][(Number(key.slice(3)) - 1) % 4];
+/** A speaker's hue: quiet colours (a dusty blue for me, clay, sage, mauve,
+ *  sand, teal, rose, olive for the others), always the same for a speaker. */
+export function hueOf(key: string) {
+  if (key === "me") return 214;
+  if (key === "them") return 24;
+  if (key.startsWith("me:")) return [338, 168, 58][(Number(key.slice(3)) - 1) % 3];
   const n = Number(key.slice(5)) || 0;
-  return [48, 28, 66, 38, 78, 20, 58, 86][n % 8];
+  return [24, 148, 276, 42, 188, 352, 92, 250][n % 8];
 }
 
 /** 12:05 or 1:02:05. */
@@ -89,9 +91,9 @@ export function clock(sec: number) {
 export function length(sec: number) {
   sec = Math.round(sec);
   const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
-  if (h) return `${h} 小时 ${m} 分`;
-  if (m) return `${m} 分 ${s} 秒`;
-  return `${s} 秒`;
+  if (h) return uiText("{0} 小时 {1} 分", h, m);
+  if (m) return uiText("{0} 分 {1} 秒", m, s);
+  return uiText("{0} 秒", s);
 }
 
 export function when(at?: string) {
@@ -100,11 +102,11 @@ export function when(at?: string) {
   if (Number.isNaN(d.getTime())) return "";
   const today = new Date();
   const same = d.toDateString() === today.toDateString();
-  const hm = d.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
-  if (same) return `今天 ${hm}`;
+  const hm = d.toLocaleTimeString(locale(), { hour: "2-digit", minute: "2-digit" });
+  if (same) return uiText("今天 {0}", hm);
   const y = new Date(today.getTime() - 86400000);
-  if (d.toDateString() === y.toDateString()) return `昨天 ${hm}`;
-  return `${d.getMonth() + 1}月${d.getDate()}日 ${hm}`;
+  if (d.toDateString() === y.toDateString()) return uiText("昨天 {0}", hm);
+  return `${d.toLocaleDateString(locale(),{month:"short",day:"numeric"})} ${hm}`;
 }
 
 /** Apps people meet in, by bundle id or name: these go first in the list. */

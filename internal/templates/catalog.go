@@ -318,12 +318,21 @@ func (c *Catalog) read(b []byte) ([]app.OfficialTemplate, error) {
 // merge keeps, for each app, the newer of the binary's and the fetched.
 func merge(built, got []app.OfficialTemplate) ([]app.OfficialTemplate, []string) {
 	by := map[string]int{}
-	out := append([]app.OfficialTemplate{}, built...)
+	out := make([]app.OfficialTemplate, 0, len(built)+len(got))
+	for _, o := range built {
+		if o.Manifest.ID != "myco/poll" {
+			out = append(out, o)
+		}
+	}
 	for i, o := range out {
 		by[o.Manifest.ID] = i
 	}
 	var newer []string
 	for _, g := range got {
+		// Removed apps must not return from a previously fetched archive.
+		if g.Manifest.ID == "myco/poll" {
+			continue
+		}
 		if i, ok := by[g.Manifest.ID]; ok {
 			if domain.CompareVersions(g.Manifest.Version, out[i].Manifest.Version) > 0 {
 				out[i] = g

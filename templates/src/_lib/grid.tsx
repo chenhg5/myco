@@ -1,3 +1,4 @@
+import { t as uiText, locale } from "./i18n";
 // A table on Glide Data Grid, as 表格 shows it and 多维表格's table view:
 // columns are fields (resize, move, a menu each), rows are records (drag by
 // the number, a menu on right click), cells edit in place, select a range
@@ -47,7 +48,7 @@ function cellOf(f: Field, v: unknown, dark: boolean, people: string[]): GridCell
   switch (f.type) {
     case "number": {
       const n = typeof v === "number" ? v : s === "" ? undefined : Number(s);
-      return { kind: GridCellKind.Number, data: n !== undefined && isFinite(n) ? n : undefined, displayData: n !== undefined && isFinite(n) ? n.toLocaleString("zh-CN", { maximumFractionDigits: 6 }) : s, allowOverlay: true, contentAlign: "right" };
+      return { kind: GridCellKind.Number, data: n !== undefined && isFinite(n) ? n : undefined, displayData: n !== undefined && isFinite(n) ? n.toLocaleString(locale(), { maximumFractionDigits: 6 }) : s, allowOverlay: true, contentAlign: "right" };
     }
     case "check": return { kind: GridCellKind.Boolean, data: !!v, allowOverlay: false };
     case "url": return { kind: GridCellKind.Uri, data: s, allowOverlay: true, hoverEffect: true };
@@ -209,7 +210,7 @@ export function SheetGrid({ sheet, rows, dark, onOpen, search, setSearch, onSort
         }}
         rightElement={
           <div className="grid-add-col">
-            <button type="button" aria-label="添加字段" title="添加字段" onClick={(e) => addField(rectOf(e.currentTarget))}><Plus className="ico" /></button>
+            <button type="button" aria-label={uiText("添加字段")} title={uiText("添加字段")} onClick={(e) => addField(rectOf(e.currentTarget))}><Plus className="ico" /></button>
           </div>
         }
         rightElementProps={{ sticky: false, fill: false }}
@@ -224,12 +225,12 @@ export function SheetGrid({ sheet, rows, dark, onOpen, search, setSearch, onSort
         return (
           <Popover at={ctx.at} onClose={close}>
             <div className="menu">
-              {onOpen && <MenuItem icon={<Maximize2 className="ico" />} onClick={() => { close(); onOpen(row.id); }}>展开{word}</MenuItem>}
-              <MenuItem icon={<ArrowUpToLine className="ico" />} onClick={() => { close(); onAdded(sheet.add({}, { before: row.id })); }}>在上方插入{word === "行" ? "一行" : word}</MenuItem>
-              <MenuItem icon={<ArrowDownToLine className="ico" />} onClick={() => { close(); onAdded(sheet.add({}, { after: row.id })); }}>在下方插入{word === "行" ? "一行" : word}</MenuItem>
+              {onOpen && <MenuItem icon={<Maximize2 className="ico" />} onClick={() => { close(); onOpen(row.id); }}>{uiText("展开")}{word}</MenuItem>}
+              <MenuItem icon={<ArrowUpToLine className="ico" />} onClick={() => { close(); onAdded(sheet.add({}, { before: row.id })); }}>{uiText("在上方插入")}{word === "行" ? uiText("一行") : word}</MenuItem>
+              <MenuItem icon={<ArrowDownToLine className="ico" />} onClick={() => { close(); onAdded(sheet.add({}, { after: row.id })); }}>{uiText("在下方插入")}{word === "行" ? uiText("一行") : word}</MenuItem>
               <div className="menu-sep" />
               <MenuItem danger icon={<Trash2 className="ico" />} onClick={() => { close(); removeRows(many); }}>
-                {many.length > 1 ? `删除选中的 ${many.length} ${word === "行" ? "行" : "条"}` : `删除这${word === "行" ? "一行" : "条" + word}`}
+                {many.length > 1 ? uiText("删除选中的 {0} {1}", many.length, word === "行" ? "行" : "条") : uiText("删除这{0}", word === "行" ? "一行" : "条" + word)}
               </MenuItem>
             </div>
           </Popover>

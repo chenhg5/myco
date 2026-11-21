@@ -1,3 +1,4 @@
+import { t as uiText, language } from "../_lib/i18n";
 // A page's blocks in BlockNote (the Notion-like editor 文档 uses too). Each
 // top-level block is a record of `blocks` with the page's id: the edits of
 // a moment are written block by block, and what others write comes into
@@ -5,7 +6,7 @@
 import "@blocknote/mantine/style.css";
 import { useEffect, useRef } from "react";
 import { BlockNoteSchema, defaultBlockSpecs, type Block as BNBlock, type PartialBlock } from "@blocknote/core";
-import { zh } from "@blocknote/core/locales";
+import { zh, en } from "@blocknote/core/locales";
 import { useCreateBlockNote } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
 import type { MycoChange } from "../_lib/myco";
@@ -68,7 +69,7 @@ export function Editor({ page, theme, onState, editorRef }: {
   editorRef?: (e: { focusStart: () => void; markdown: () => Promise<string> } | null) => void;
 }) {
   const initial = pageBlocks(page).map((r) => toBlock(r.id, r.data));
-  const editor = useCreateBlockNote({ schema, dictionary: { ...zh, placeholders: { ...zh.placeholders, default: "输入文字，或者按「/」插入标题、列表、待办…" } }, initialContent: initial.length ? initial : undefined });
+  const editor = useCreateBlockNote({ schema, dictionary: { ...(language() === "en" ? en : zh), placeholders: { ...(language() === "en" ? en.placeholders : zh.placeholders), default: uiText("输入文字，或者按「/」插入标题、列表、待办…") } }, initialContent: initial.length ? initial : undefined });
   const sync = useRef({ saved: new Map<string, string>(), orders: new Map<string, number>(), remote: 0, timer: 0 });
 
   useEffect(() => {
@@ -108,8 +109,8 @@ export function Editor({ page, theme, onState, editorRef }: {
     });
     if (!writes.length) { onState("saved"); return; }
     Promise.all(writes).then(() => onState("saved"), (e: { code?: string; message?: string }) => {
-      if (e?.code === "conflict") { kit.flash("别人刚改过同一段，已换成最新的"); onState("saved"); }
-      else { onState("error"); kit.flash(e?.message || "没保存上"); }
+      if (e?.code === "conflict") { kit.flash(uiText("别人刚改过同一段，已换成最新的")); onState("saved"); }
+      else { onState("error"); kit.flash(e?.message || uiText("没保存上")); }
     });
   };
   useEffect(() => editor.onChange(() => {
@@ -159,7 +160,7 @@ export function Editor({ page, theme, onState, editorRef }: {
       } finally {
         s.remote--;
       }
-      if (c.by && c.by !== kit.me) kit.flash(`${c.by} 刚改了这一页`);
+      if (c.by && c.by !== kit.me) kit.flash(uiText("{0} 刚改了这一页", c.by));
     };
     return () => { current = null; };
   }, [editor, page]);

@@ -1,0 +1,10 @@
+{
+  "en": {
+    "name": "Habit tracker",
+    "description": "Build habits together. Check in each day, follow weekly progress and streaks, and see how family or teammates are doing."
+  },
+  "zh": {
+    "name": "习惯打卡",
+    "description": "一起养成好习惯：每人给自己打卡，看这周打了几天、连续了几天、别人打了没；家人、团队一起坚持，agent 能帮你提醒和统计。"
+  }
+}

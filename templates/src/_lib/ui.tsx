@@ -1,3 +1,5 @@
+import { themeMedia } from "./appearance";
+import { t as uiText } from "./i18n";
 // The pieces around a table: popovers, the bar on top, filters and sorts,
 // a field's menu, and an input for one value (in a record or a form).
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
@@ -61,13 +63,13 @@ export function TopBar({ sheet, onExport, children }: { sheet: Sheet; onExport: 
   const state = sheet.pending ? "saving" : sheet.failed ? "error" : "saved";
   return (
     <header className="top">
-      <input className="top-title" value={sheet.title} placeholder={`未命名${sheet.cfg.name}`} aria-label="标题" maxLength={120}
+      <input className="top-title" value={sheet.title} placeholder={uiText("未命名{0}", sheet.cfg.name)} aria-label={uiText("标题")} maxLength={120}
         onChange={(e) => sheet.setTitle(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
-      <span className={`top-state is-${state}`}>{state === "saving" ? "正在保存…" : state === "error" ? "没保存上" : "已保存"}</span>
+      <span className={`top-state is-${state}`}>{state === "saving" ? uiText("正在保存…") : state === "error" ? uiText("没保存上") : uiText("已保存")}</span>
       <span className="top-gap" />
       {children}
-      {sheet.me && <span className="top-me" title={`你在这里改的，别人看到是 ${sheet.me} 改的`}>你是 {sheet.me}</span>}
-      <button type="button" className="btn" onClick={(e) => setMenu(rectOf(e.currentTarget))} aria-expanded={!!menu}><Download className="ico" />导出</button>
+      {sheet.me && <span className="top-me" title={uiText("你在这里改的，别人看到是 {0} 改的", sheet.me)}>{uiText("你是")}{" "}{sheet.me}</span>}
+      <button type="button" className="btn" onClick={(e) => setMenu(rectOf(e.currentTarget))} aria-expanded={!!menu}><Download className="ico" />{uiText("导出")}</button>
       {menu && (
         <Popover at={menu} align="right" onClose={() => setMenu(null)}>
           <div className="menu">
@@ -85,7 +87,7 @@ export function Note({ sheet }: { sheet: Sheet }) {
   return (
     <div className="note" role="status">
       {sheet.note.text}
-      {sheet.note.undo && <button type="button" onClick={sheet.note.undo}>撤销</button>}
+      {sheet.note.undo && <button type="button" onClick={sheet.note.undo}>{uiText("撤销")}</button>}
     </div>
   );
 }
@@ -97,15 +99,15 @@ export function FilterButton({ fields, view, setView }: { fields: Field[]; view:
   const set = (i: number, c: Partial<Cond>) => setView({ ...view, conds: view.conds.map((x, j) => (j === i ? { ...x, ...c } : x)) });
   return (
     <>
-      <button type="button" className={`tool${n ? " is-on" : ""}`} onClick={(e) => setAt(rectOf(e.currentTarget))}><Filter className="ico" />{n ? `${n} 个筛选` : "筛选"}</button>
+      <button type="button" className={`tool${n ? " is-on" : ""}`} onClick={(e) => setAt(rectOf(e.currentTarget))}><Filter className="ico" />{n ? uiText("{0} 个筛选", n) : uiText("筛选")}</button>
       {at && (
         <Popover at={at} onClose={() => setAt(null)} width={520}>
           <div className="panel">
             <div className="panel-head">
-              <span>设置筛选条件</span>
+              <span>{uiText("设置筛选条件")}</span>
               {view.conds.length > 1 && (
-                <select className="sel" value={view.any ? "any" : "all"} onChange={(e) => setView({ ...view, any: e.target.value === "any" })} aria-label="符合">
-                  <option value="all">符合全部条件</option><option value="any">符合任一条件</option>
+                <select className="sel" value={view.any ? "any" : "all"} onChange={(e) => setView({ ...view, any: e.target.value === "any" })} aria-label={uiText("符合")}>
+                  <option value="all">{uiText("符合全部条件")}</option><option value="any">{uiText("符合任一条件")}</option>
                 </select>
               )}
             </div>
@@ -115,26 +117,25 @@ export function FilterButton({ fields, view, setView }: { fields: Field[]; view:
               const needValue = c.op !== "empty" && c.op !== "notempty";
               return (
                 <div className="cond" key={i}>
-                  <select className="sel" value={c.field} aria-label="字段" onChange={(e) => { const nf = fields.find((x) => x.id === e.target.value); set(i, { field: e.target.value, op: opsFor(nf)[0], value: "" }); }}>
+                  <select className="sel" value={c.field} aria-label={uiText("字段")} onChange={(e) => { const nf = fields.find((x) => x.id === e.target.value); set(i, { field: e.target.value, op: opsFor(nf)[0], value: "" }); }}>
                     {fields.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
                   </select>
-                  <select className="sel" value={c.op} aria-label="条件" onChange={(e) => set(i, { op: e.target.value as Cond["op"] })}>
+                  <select className="sel" value={c.op} aria-label={uiText("条件")} onChange={(e) => set(i, { op: e.target.value as Cond["op"] })}>
                     {ops.map((o) => <option key={o} value={o}>{opName(o, f)}</option>)}
                   </select>
                   {needValue && f?.type !== "check" ? (
                     f && (f.type === "select" || f.type === "multi") ? (
-                      <select className="sel cond-v" value={c.value} aria-label="值" onChange={(e) => set(i, { value: e.target.value })}>
-                        <option value="">请选择</option>{(f.options || []).map((o) => <option key={o}>{o}</option>)}
+                      <select className="sel cond-v" value={c.value} aria-label={uiText("值")} onChange={(e) => set(i, { value: e.target.value })}>
+                        <option value="">{uiText("请选择")}</option>{(f.options || []).map((o) => <option key={o}>{o}</option>)}
                       </select>
-                    ) : <input className="inp cond-v" type={f?.type === "date" ? "date" : "text"} value={c.value} placeholder="输入值" aria-label="值" onChange={(e) => set(i, { value: e.target.value })} />
+                    ) : <input className="inp cond-v" type={f?.type === "date" ? "date" : "text"} value={c.value} placeholder={uiText("输入值")} aria-label={uiText("值")} onChange={(e) => set(i, { value: e.target.value })} />
                   ) : <span className="cond-v" />}
-                  <button type="button" className="icon-btn" aria-label="去掉这个条件" onClick={() => setView({ ...view, conds: view.conds.filter((_, j) => j !== i) })}><X className="ico" /></button>
+                  <button type="button" className="icon-btn" aria-label={uiText("去掉这个条件")} onClick={() => setView({ ...view, conds: view.conds.filter((_, j) => j !== i) })}><X className="ico" /></button>
                 </div>
               );
             })}
             <button type="button" className="link-btn" onClick={() => fields[0] && setView({ ...view, conds: [...view.conds, { field: fields[0].id, op: opsFor(fields[0])[0], value: "" }] })}>
-              <Plus className="ico" />添加条件
-            </button>
+              <Plus className="ico" />{uiText("添加条件")}{" "}</button>
           </div>
         </Popover>
       )}
@@ -147,28 +148,28 @@ export function SortButton({ fields, view, setView }: { fields: Field[]; view: V
   const n = view.sorts.filter((s) => fields.some((f) => f.id === s.field)).length;
   return (
     <>
-      <button type="button" className={`tool${n ? " is-on" : ""}`} onClick={(e) => setAt(rectOf(e.currentTarget))}><ArrowUpDown className="ico" />{n ? `${n} 个排序` : "排序"}</button>
+      <button type="button" className={`tool${n ? " is-on" : ""}`} onClick={(e) => setAt(rectOf(e.currentTarget))}><ArrowUpDown className="ico" />{n ? uiText("{0} 个排序", n) : uiText("排序")}</button>
       {at && (
         <Popover at={at} onClose={() => setAt(null)} width={400}>
           <div className="panel">
-            <div className="panel-head"><span>设置排序条件</span></div>
+            <div className="panel-head"><span>{uiText("设置排序条件")}</span></div>
             {view.sorts.map((s, i) => (
               <div className="cond" key={i}>
                 <GripVertical className="ico faint" />
-                <select className="sel" value={s.field} aria-label="字段" onChange={(e) => setView({ ...view, sorts: view.sorts.map((x, j) => (j === i ? { ...x, field: e.target.value } : x)) })}>
+                <select className="sel" value={s.field} aria-label={uiText("字段")} onChange={(e) => setView({ ...view, sorts: view.sorts.map((x, j) => (j === i ? { ...x, field: e.target.value } : x)) })}>
                   {fields.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
                 </select>
                 <div className="seg">
-                  <button type="button" className={!s.desc ? "is-on" : ""} onClick={() => setView({ ...view, sorts: view.sorts.map((x, j) => (j === i ? { ...x, desc: false } : x)) })}>升序</button>
-                  <button type="button" className={s.desc ? "is-on" : ""} onClick={() => setView({ ...view, sorts: view.sorts.map((x, j) => (j === i ? { ...x, desc: true } : x)) })}>降序</button>
+                  <button type="button" className={!s.desc ? "is-on" : ""} onClick={() => setView({ ...view, sorts: view.sorts.map((x, j) => (j === i ? { ...x, desc: false } : x)) })}>{uiText("升序")}</button>
+                  <button type="button" className={s.desc ? "is-on" : ""} onClick={() => setView({ ...view, sorts: view.sorts.map((x, j) => (j === i ? { ...x, desc: true } : x)) })}>{uiText("降序")}</button>
                 </div>
-                <button type="button" className="icon-btn" aria-label="去掉这个排序" onClick={() => setView({ ...view, sorts: view.sorts.filter((_, j) => j !== i) })}><X className="ico" /></button>
+                <button type="button" className="icon-btn" aria-label={uiText("去掉这个排序")} onClick={() => setView({ ...view, sorts: view.sorts.filter((_, j) => j !== i) })}><X className="ico" /></button>
               </div>
             ))}
             <button type="button" className="link-btn" onClick={() => {
               const f = fields.find((x) => !view.sorts.some((s) => s.field === x.id)) || fields[0];
               if (f) setView({ ...view, sorts: [...view.sorts, { field: f.id, desc: false }] });
-            }}><Plus className="ico" />添加排序</button>
+            }}><Plus className="ico" />{uiText("添加排序")}</button>
           </div>
         </Popover>
       )}
@@ -177,7 +178,7 @@ export function SortButton({ fields, view, setView }: { fields: Field[]; view: V
 }
 
 export function SearchButton({ onClick }: { onClick: () => void }) {
-  return <button type="button" className="tool" onClick={onClick} title="搜索（Ctrl+F）" aria-label="搜索"><Search className="ico" /></button>;
+  return <button type="button" className="tool" onClick={onClick} title={uiText("搜索（Ctrl+F）")} aria-label={uiText("搜索")}><Search className="ico" /></button>;
 }
 
 // ---- a field's menu (from its header) ------------------------------------------------
@@ -225,12 +226,12 @@ export function FieldMenu({ sheet, field, at, onClose, onSort, first, dark }: {
   return (
     <Popover at={at} onClose={onClose} width={280}>
       <div className="menu field-menu">
-        <input className="inp" value={name} autoFocus aria-label="字段名" onChange={(e) => setName(e.target.value)}
+        <input className="inp" value={name} autoFocus aria-label={uiText("字段名")} onChange={(e) => setName(e.target.value)}
           onBlur={() => name.trim() && name.trim() !== field.name && put({ name: name.trim() })}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { if (name.trim()) put({ name: name.trim() }); onClose(); } }} />
         <label className="field-menu-type">
-          <span>类型</span>
-          <select className="sel" value={field.type} onChange={(e) => setType(e.target.value as FieldType)} aria-label="类型">
+          <span>{uiText("类型")}</span>
+          <select className="sel" value={field.type} onChange={(e) => setType(e.target.value as FieldType)} aria-label={uiText("类型")}>
             {FIELD_TYPES.map(([t, n]) => <option key={t} value={t}>{n}</option>)}
           </select>
         </label>
@@ -239,27 +240,27 @@ export function FieldMenu({ sheet, field, at, onClose, onSort, first, dark }: {
             {opts.map((o, i) => (
               <div className="opt" key={o + i}>
                 <span className="opt-dot" style={{ background: dark ? TAGS[i % TAGS.length].dfg : TAGS[i % TAGS.length].fg }} />
-                <input className="inp" defaultValue={o} aria-label="选项" onBlur={(e) => renameOption(i, e.target.value)}
+                <input className="inp" defaultValue={o} aria-label={uiText("选项")} onBlur={(e) => renameOption(i, e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
-                <button type="button" className="icon-btn" aria-label={`删除选项${o}`} onClick={() => put({ options: opts.filter((_, j) => j !== i) })}><X className="ico" /></button>
+                <button type="button" className="icon-btn" aria-label={uiText("删除选项{0}", o)} onClick={() => put({ options: opts.filter((_, j) => j !== i) })}><X className="ico" /></button>
               </div>
             ))}
-            <input className="inp" value={newOpt} placeholder="+ 添加选项" aria-label="添加选项" onChange={(e) => setNewOpt(e.target.value)}
+            <input className="inp" value={newOpt} placeholder={uiText("+ 添加选项")} aria-label={uiText("添加选项")} onChange={(e) => setNewOpt(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing && newOpt.trim() && !opts.includes(newOpt.trim())) { put({ options: [...opts, newOpt.trim()] }); setNewOpt(""); } }} />
           </div>
         )}
         <div className="menu-sep" />
-        {onSort && <MenuItem icon={<ArrowUpAZ className="ico" />} onClick={() => { onSort(false); onClose(); }}>升序排列</MenuItem>}
-        {onSort && <MenuItem icon={<ArrowDownAZ className="ico" />} onClick={() => { onSort(true); onClose(); }}>降序排列</MenuItem>}
-        <MenuItem icon={<ArrowLeftToLine className="ico" />} onClick={() => insert(0)}>在左边插入字段</MenuItem>
-        <MenuItem icon={<ArrowRightToLine className="ico" />} onClick={() => insert(1)}>在右边插入字段</MenuItem>
+        {onSort && <MenuItem icon={<ArrowUpAZ className="ico" />} onClick={() => { onSort(false); onClose(); }}>{uiText("升序排列")}</MenuItem>}
+        {onSort && <MenuItem icon={<ArrowDownAZ className="ico" />} onClick={() => { onSort(true); onClose(); }}>{uiText("降序排列")}</MenuItem>}
+        <MenuItem icon={<ArrowLeftToLine className="ico" />} onClick={() => insert(0)}>{uiText("在左边插入字段")}</MenuItem>
+        <MenuItem icon={<ArrowRightToLine className="ico" />} onClick={() => insert(1)}>{uiText("在右边插入字段")}</MenuItem>
         {!first && <>
           <div className="menu-sep" />
           <MenuItem danger icon={<Trash2 className="ico" />} onClick={() => {
-            if (!window.confirm(`删除字段「${field.name}」？这一列的内容也会看不到。`)) return;
+            if (!window.confirm(uiText("删除字段「{0}」？这一列的内容也会看不到。", field.name))) return;
             sheet.saveFields(fields.filter((f) => f.id !== field.id));
             onClose();
-          }}>删除字段</MenuItem>
+          }}>{uiText("删除字段")}</MenuItem>
         </>}
       </div>
     </Popover>
@@ -281,7 +282,7 @@ export function FieldInput({ field, value, onChange, people, dark, placeholder =
     return (
       <>
         <button type="button" className="fi fi-tags" onClick={(e) => setPick(rectOf(e.currentTarget))} aria-label={field.name}>
-          {vs.length ? vs.map((v) => <Tag key={v} value={v} options={field.options || []} dark={dark} />) : <span className="faint">{placeholder || "请选择"}</span>}
+          {vs.length ? vs.map((v) => <Tag key={v} value={v} options={field.options || []} dark={dark} />) : <span className="faint">{placeholder || uiText("请选择")}</span>}
           <ChevronDown className="ico faint fi-caret" />
         </button>
         {pick && (
@@ -314,7 +315,7 @@ export { typeName };
 
 /** Light or dark, following the system (and the App). */
 export function useDark() {
-  const q = typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+  const q = typeof window !== "undefined" ? themeMedia() : null;
   const [d, setD] = useState(!!q?.matches);
   useEffect(() => {
     if (!q) return;

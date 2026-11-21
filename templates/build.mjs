@@ -4,6 +4,7 @@
 // committed (as web/ builds into internal/web/dist).
 import { build } from "vite";
 import react from "@vitejs/plugin-react";
+import appThemeCSS from "./theme-css.mjs";
 import { readdirSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -30,6 +31,7 @@ for (const name of readdirSync(path.join(here, "src"))) {
     base: "./",
     logLevel: "warn",
     plugins: [react(), trimEmoji],
+    css: {postcss:{plugins:[appThemeCSS()]}},
     publicDir: path.join(root, "public"),
     build: {
       outDir: path.join(here, "..", "internal", "templates", "official", name),

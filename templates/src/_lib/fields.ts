@@ -1,11 +1,12 @@
+import { t as uiText, locale } from "./i18n";
 // Fields (a table's columns, a base's fields): their types, as people and
 // agents name them, and how values are told and compared.
 export type FieldType = "text" | "long" | "number" | "date" | "select" | "multi" | "check" | "person" | "url";
 export type Field = { id: string; name: string; type: FieldType; options?: string[]; width?: number };
 
 export const FIELD_TYPES: [FieldType, string][] = [
-  ["text", "文本"], ["long", "多行文本"], ["number", "数字"], ["select", "单选"], ["multi", "多选"],
-  ["date", "日期"], ["check", "勾选"], ["person", "人员"], ["url", "链接"],
+  ["text", uiText("文本")], ["long", uiText("多行文本")], ["number", uiText("数字")], ["select", uiText("单选")], ["multi", uiText("多选")],
+  ["date", uiText("日期")], ["check", uiText("勾选")], ["person", uiText("人员")], ["url", uiText("链接")],
 ];
 export const typeName = (t: string) => FIELD_TYPES.find((x) => x[0] === t)?.[1] || t;
 
@@ -39,7 +40,7 @@ export function compare(f: Field, a: unknown, b: unknown): number {
   if (f.type === "number") return Number(a) - Number(b);
   if (f.type === "check") return (a ? 0 : 1) - (b ? 0 : 1);
   if (f.type === "select") return (f.options || []).indexOf(String(a)) - (f.options || []).indexOf(String(b));
-  return display(f, a).localeCompare(display(f, b), "zh");
+  return display(f, a).localeCompare(display(f, b), locale());
 }
 /** A value pasted or typed in, as the field keeps it. */
 export function parse(f: Field, s: string): unknown {

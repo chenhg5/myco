@@ -3544,6 +3544,11 @@ textarea.app-input {
 .conv-msg-meta.is-failed {
   color: var(--red);
 }
+/* Under an agent's reply (no bubble round it): a little air between the
+   last line and its time, tokens and buttons. */
+.conv-msg.is-agent .conv-msg-meta {
+  margin-top: 8px;
+}
 /* Under your own bubble the time floats, so the agent's turn follows the
    bubble closely. */
 .conv-msg.is-me .conv-msg-meta:not(.is-shown) {
@@ -4827,6 +4832,21 @@ html.fp-docked .app-main .sp-side {
 .dark .md-code {
   background: rgba(0, 0, 0, 0.28);
 }
+/* On a grey surface (your own message's bubble) the grey of code is the
+   bubble's own: there it is white with a hairline, as a card would be. */
+.conv-msg.is-me .conv-bubble .md-code,
+.conv-msg.is-me .conv-bubble .md :not(pre) > code {
+  background: var(--card);
+  box-shadow: 0 0 0 0.5px var(--line);
+}
+.dark .conv-msg.is-me .conv-bubble .md-code {
+  background: rgba(0, 0, 0, 0.28);
+  box-shadow: none;
+}
+.dark .conv-msg.is-me .conv-bubble .md :not(pre) > code {
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: none;
+}
 .md-code pre {
   margin: 0;
   padding: 10px 12px;
@@ -5318,6 +5338,8 @@ button.app-label:hover { filter: brightness(0.95); }
   white-space: nowrap;
   cursor: default;
 }
+/* Several actions sit together at the right. */
+.app-group-action + .app-group-action { margin-left: 0; }
 .app-group-action:hover:not(:disabled) { background: var(--nav-hover); color: var(--fg); }
 .app-group-action:active:not(:disabled) { background: color-mix(in srgb, var(--fg) 10%, transparent); }
 .app-group-action:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--ring); }
@@ -9156,7 +9178,8 @@ body.is-resizing {
   background: var(--bg); color: var(--fg); animation: pg-in 0.2s ease-out; overflow: hidden; }
 @keyframes pg-in { from { opacity: 0; } to { opacity: 1; } }
 .pg-loading-hop { position: relative; width: 64px; height: 84px; margin-bottom: 6px; }
-.pg-loading-mush { --av-stem: #efe3cc; --av-eye: #2f2a22; position: absolute; left: 4px; bottom: 14px; width: 56px; height: 56px; transform-origin: 50% 100%;
+.dark .pg-loading-mush { --av-stem: #efe3cc; --av-stem-shade: #d4c19b; }
+.pg-loading-mush { --av-stem: #dcc398; --av-stem-shade: #c09f6c; --av-eye: #2f2a22; position: absolute; left: 4px; bottom: 14px; width: 56px; height: 56px; transform-origin: 50% 100%;
   animation: pg-hop 1.1s cubic-bezier(0.3, 0, 0.3, 1) infinite; }
 .pg-loading-mush .pa-sprite { width: 100%; height: 100%; display: block; }
 .pg-loading-shadow { position: absolute; left: 14px; right: 14px; bottom: 6px; height: 6px; border-radius: 50%;

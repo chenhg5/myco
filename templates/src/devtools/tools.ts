@@ -1,3 +1,4 @@
+import { t as uiText } from "../_lib/i18n";
 // The toolbox's sums: everything runs here, in the page.
 const enc = new TextEncoder(), dec = new TextDecoder();
 
@@ -49,7 +50,7 @@ export const uuid = () => crypto.randomUUID ? crypto.randomUUID() : "10000000-10
 
 export function jwt(token: string) {
   const parts = token.trim().split(".");
-  if (parts.length < 2) throw new Error("JWT 是用两个点隔开的三段");
+  if (parts.length < 2) throw new Error(uiText("JWT 是用两个点隔开的三段"));
   const part = (s: string) => JSON.parse(b64decode(s));
   return { header: part(parts[0]), payload: part(parts[1]), signed: !!parts[2] };
 }
@@ -57,7 +58,7 @@ export function jwt(token: string) {
 /** Line diff (longest common subsequence): each line kept, removed or added. */
 export function diff(a: string, b: string): { op: " " | "-" | "+"; text: string }[] {
   const x = a.split("\n"), y = b.split("\n"), n = x.length, m = y.length;
-  if (n * m > 4_000_000) throw new Error("太长了：两边各几千行以内");
+  if (n * m > 4_000_000) throw new Error(uiText("太长了：两边各几千行以内"));
   const L: Uint32Array[] = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
   for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = x[i] === y[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
   const out: { op: " " | "-" | "+"; text: string }[] = [];
@@ -88,7 +89,7 @@ export function color(s: string) {
   if (m) {
     let h = m[1];
     if (h.length === 3 || h.length === 4) h = h.split("").map((c) => c + c).join("");
-    if (h.length !== 6 && h.length !== 8) throw new Error("十六进制颜色是 3、4、6 或 8 位");
+    if (h.length !== 6 && h.length !== 8) throw new Error(uiText("十六进制颜色是 3、4、6 或 8 位"));
     r = parseInt(h.slice(0, 2), 16); g = parseInt(h.slice(2, 4), 16); b = parseInt(h.slice(4, 6), 16); if (h.length === 8) a = parseInt(h.slice(6, 8), 16) / 255;
   } else if ((m = /^rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)(?:[\s,/]+([\d.]+%?))?\s*\)$/i.exec(t))) {
     r = +m[1]; g = +m[2]; b = +m[3]; if (m[4]) a = m[4].endsWith("%") ? parseFloat(m[4]) / 100 : +m[4];
@@ -96,7 +97,7 @@ export function color(s: string) {
     const H = +m[1] / 360, S = +m[2] / 100, Lt = +m[3] / 100;
     const f = (n: number) => { const k = (n + H * 12) % 12, q = S * Math.min(Lt, 1 - Lt); return Math.round(255 * (Lt - q * Math.max(-1, Math.min(k - 3, 9 - k, 1)))); };
     r = f(0); g = f(8); b = f(4); if (m[4]) a = m[4].endsWith("%") ? parseFloat(m[4]) / 100 : +m[4];
-  } else throw new Error("认得 #3370ff、rgb(51 112 255)、hsl(222 100% 60%)");
+  } else throw new Error(uiText("认得 #3370ff、rgb(51 112 255)、hsl(222 100% 60%)"));
   const hex = `#${[r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("")}${a < 1 ? Math.round(a * 255).toString(16).padStart(2, "0") : ""}`;
   const R = r / 255, G = g / 255, B = b / 255, max = Math.max(R, G, B), min = Math.min(R, G, B), l = (max + min) / 2;
   let h = 0, s2 = 0;

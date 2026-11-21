@@ -1,3 +1,4 @@
+import { t as uiText, language } from "../_lib/i18n";
 /** Provider-neutral domain. Prices are never converted between currencies. */
 export type Market = "CN" | "HK" | "US";
 export type Interval = "1d" | "1wk" | "1mo";
@@ -34,9 +35,9 @@ export type MarketData = {
 };
 export type WatchItem = Instrument & { order: number; note?: string };
 export const marketNames: Record<Market, string> = {
-  CN: "A 股",
-  HK: "港股",
-  US: "美股",
+  CN: uiText("A 股"),
+  HK: uiText("港股"),
+  US: uiText("美股"),
 };
 export const timezone: Record<Market, string> = {
   CN: "Asia/Shanghai",
@@ -181,7 +182,7 @@ export function quoteFrom(
   market: Market,
 ): Quote {
   const p = finite(price);
-  if (p === undefined || p <= 0) throw new Error("数据源没有返回有效报价");
+  if (p === undefined || p <= 0) throw new Error(uiText("数据源没有返回有效报价"));
   const prev = finite(previous),
     validPrev = prev !== undefined && prev > 0 ? prev : undefined;
   const dt =
@@ -206,6 +207,11 @@ export function price(v?: number) {
 }
 export function compact(v?: number) {
   if (v === undefined) return "—";
+  if(language()==="en") {
+    if(v>=1e9)return (v/1e9).toFixed(2)+" B";
+    if(v>=1e6)return (v/1e6).toFixed(2)+" M";
+    if(v>=1e3)return (v/1e3).toFixed(2)+" K";
+  }
   if (v >= 1e8) return (v / 1e8).toFixed(2) + " 亿";
   if (v >= 1e4) return (v / 1e4).toFixed(2) + " 万";
   return v.toLocaleString("en-US");

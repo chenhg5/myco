@@ -162,7 +162,7 @@ the project no longer has are left alone.`,
 			`myco project update --name myco --visibility team`,
 		},
 		Flags: []Flag{nameFlag, {Name: "title", Kind: String, Help: "Display title"}, {Name: "goal", Kind: String, Help: "Goal"},
-			{Name: "brief-file", Kind: String, Help: "Read the brief (Markdown, up to 8 KB) from a file ('-' = stdin)"},
+			{Name: "brief-file", Kind: String, Help: "Read the brief (Markdown, up to 16,000 characters) from a file ('-' = stdin)"},
 			{Name: "link", Kind: List, Help: "title=url; repeatable; replaces all links (--link '' clears them)"},
 			{Name: "visibility", Kind: String, Help: "members or team (people)"},
 			{Name: "archive", Kind: Bool, Help: "Archive it (people)"}, {Name: "unarchive", Kind: Bool, Help: "Bring it back (people)"}, adminFile},
@@ -467,10 +467,79 @@ Uploading the same name again replaces it (your own files, or any file for the p
 		}),
 	}
 	doc := (&Command{Name: "doc", Summary: "A project's shared documents written as text (see also: project file)"}).Add(docShow, docPut, docRemove)
+	memAdd := &Command{
+		Name: "add", Summary: "Add an entry to the project's memory (any member)", Mutating: true,
+		Long: `The project's memory is what every member should keep in mind and would not find in the brief:
+decisions, conventions, the owner's preferences, lessons from a task. Each entry is one or two
+sentences; myco adds who wrote it and the date. Members are given the memory when they work on the
+project; it is the document "memory" (memory.md after myco project pull), which the project's
+owner and coordinators edit or tidy like any document.`,
+		Examples: []string{
+			`myco project memory add --name myco --text "Release only when glenn asks; VERSION and CHANGELOG go in one commit"`,
+			`myco project memory add --name myco --text "glenn wants progress reports in Chinese, at most three bullets"`,
+		},
+		Flags: []Flag{nameFlag, {Name: "text", Kind: String, Required: true, Help: "The entry: one or two sentences, up to 1000 characters"}, adminFile},
+		Run: handler(func(e *env) error {
+			if err := e.in.Require("name", "text"); err != nil {
+				return err
+			}
+			if e.in.Bool("dry-run") {
+				return e.dryRun(map[string]any{"action": "project_memory_add", "project": e.in.String("name"), "text": e.in.String("text")})
+			}
+			c, err := e.projectClient()
+			if err != nil {
+				return err
+			}
+			d, err := c.AddProjectMemory(e.in.Ctx, e.in.String("name"), e.in.String("text"))
+			if err != nil {
+				return memoryUpgradeHint(err)
+			}
+			return e.p.Print(d, func(w io.Writer) {
+				fmt.Fprintf(w, "added to the memory of %s (%d bytes)\n", e.in.String("name"), d.Size)
+			})
+		}),
+	}
+	memShow := &Command{
+		Name: "show", Summary: "Print the project's memory",
+		Examples: []string{"myco project memory show --name myco"},
+		Flags:    []Flag{nameFlag, adminFile},
+		Run: handler(func(e *env) error {
+			if err := e.in.Require("name"); err != nil {
+				return err
+			}
+			c, err := e.projectClient()
+			if err != nil {
+				return err
+			}
+			d, err := c.GetProjectDoc(e.in.Ctx, e.in.String("name"), api.ProjectMemory)
+			if ce, ok := client.AsError(err); ok && ce.Status == 404 && ce.Code != "" {
+				d, err = &api.ProjectDoc{Name: api.ProjectMemory}, nil // none yet
+			}
+			if err != nil {
+				return err
+			}
+			return e.p.Print(d, func(w io.Writer) {
+				if strings.TrimSpace(d.Body) == "" {
+					fmt.Fprintln(w, "(the project's memory is empty; add to it with: myco project memory add)")
+					return
+				}
+				fmt.Fprintln(w, d.Body)
+			})
+		}),
+	}
+	memory := (&Command{Name: "memory", Summary: "The project's memory: what its members learned and should all keep in mind"}).Add(memShow, memAdd)
 	file := (&Command{Name: "file", Summary: "A project's files: upload, download, remove"}).Add(filePut, fileGet, fileRemove)
 	machines, machine := projectMachineCommands()
 	return (&Command{Name: "project", Summary: "Projects: nodes working together on a goal, with a shared brief and files"}).
-		Add(list, show, pull, create, update, memberCmd("add"), memberCmd("remove"), file, doc, machines, machine, del)
+		Add(list, show, pull, create, update, memberCmd("add"), memberCmd("remove"), memory, file, doc, machines, machine, del)
+}
+
+// memoryUpgradeHint: hubs before v0.21.10 have no project memory.
+func memoryUpgradeHint(err error) error {
+	if e, ok := client.AsError(err); ok && e.Status == 404 && e.Code == "" {
+		return errorf("unsupported", ExitNotFound, "upgrade the workspace hub (Settings › Workspace in the App, or sudo myco upgrade on the server)", "this hub has no project memory")
+	}
+	return err
 }
 
 // projectMarkdown is a project as Markdown (PROJECT.md, myco project show).

@@ -1210,6 +1210,10 @@ type Project struct {
 	UpdatedAt  time.Time       `json:"updated_at"`
 	Members    []ProjectMember `json:"members"`
 	Docs       []ProjectDoc    `json:"docs"`
+	// Memory is the project's memory document, with its body (empty when
+	// nobody added to it yet), on GET /v1/projects/{name} from v0.21.10;
+	// nil from older hubs, which have no project memory.
+	Memory *ProjectDoc `json:"memory,omitempty"`
 	// Machines are the computers (ids) its coordinators may start agents
 	// on (v0.21.2+; absent on older hubs).
 	Machines []string `json:"machines"`
@@ -1303,6 +1307,17 @@ type ProjectMemberRequest struct {
 // ProjectDocRequest is the body of PUT /v1/projects/{name}/docs/{doc}.
 type ProjectDocRequest struct {
 	Body string `json:"body"`
+}
+
+// ProjectMemory is the name of the project document that holds the
+// project's memory (from v0.21.10).
+const ProjectMemory = "memory"
+
+// ProjectMemoryRequest is POST /v1/projects/{name}/memory: add one entry
+// to the project's memory (from v0.21.10). The answer is the memory
+// document, with its body.
+type ProjectMemoryRequest struct {
+	Text string `json:"text"`
 }
 
 // HiddenList is GET /v1/console/hidden: the messages the caller took out of
@@ -1667,12 +1682,18 @@ type PageChanges struct {
 }
 
 // Template is one template in the workspace's library (hubs from v0.20.5).
-type Template struct {
-	ID          string `json:"id"`
-	Slug        string `json:"slug"`
-	Name        string `json:"name"`
+type TemplateLocale struct {
+	Name        string `json:"name,omitempty"`
 	Description string `json:"description,omitempty"`
-	Kind        string `json:"kind"`
+}
+
+type Template struct {
+	Locales     map[string]TemplateLocale `json:"locales,omitempty"`
+	ID          string                    `json:"id"`
+	Slug        string                    `json:"slug"`
+	Name        string                    `json:"name"`
+	Description string                    `json:"description,omitempty"`
+	Kind        string                    `json:"kind"`
 	// Category is its shelf: office, dev, tools, life, creative, game or other
 	// (hubs from v0.20.6; empty before, and when the manifest has none).
 	Category string `json:"category,omitempty"`

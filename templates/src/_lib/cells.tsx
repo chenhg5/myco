@@ -1,3 +1,4 @@
+import { t as uiText } from "./i18n";
 // The grid's own cells (Glide Data Grid custom renderers): option tags,
 // dates and people, drawn on the canvas, each with its editor.
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -77,8 +78,8 @@ function DateEditor({ value, onChange, onFinishedEditing }: { value: DateCell; o
     <div className="cell-pop cell-date">
       <input ref={ref} type="date" value={value.data.value || ""} onChange={(e) => onChange(set(e.target.value))}
         onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); onFinishedEditing(set((e.target as HTMLInputElement).value)); } }} />
-      <button type="button" onClick={() => onFinishedEditing(set(new Date().toISOString().slice(0, 10)))}>今天</button>
-      <button type="button" onClick={() => onFinishedEditing(set(""))}>清除</button>
+      <button type="button" onClick={() => onFinishedEditing(set(new Date().toISOString().slice(0, 10)))}>{uiText("今天")}</button>
+      <button type="button" onClick={() => onFinishedEditing(set(""))}>{uiText("清除")}</button>
     </div>
   );
 }
@@ -120,7 +121,7 @@ function PersonEditor({ value, onFinishedEditing }: { value: PersonCell; onFinis
   const pick = (v: string) => onFinishedEditing({ ...value, data: { ...value.data, value: v }, copyData: v });
   return (
     <div className="cell-pop tag-menu">
-      <input className="tag-menu-q" autoFocus value={q} placeholder={value.data.value || "输入名字"} onChange={(e) => { setQ(e.target.value); setAt(0); }}
+      <input className="tag-menu-q" autoFocus value={q} placeholder={value.data.value || uiText("输入名字")} onChange={(e) => { setQ(e.target.value); setAt(0); }}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown") { e.preventDefault(); setAt((i) => Math.min(list.length - 1, i + 1)); }
           else if (e.key === "ArrowUp") { e.preventDefault(); setAt((i) => Math.max(0, i - 1)); }
@@ -131,10 +132,10 @@ function PersonEditor({ value, onFinishedEditing }: { value: PersonCell; onFinis
         {list.map((p, i) => (
           <button key={p} type="button" className={`tag-menu-item${i === at ? " is-at" : ""}`} onMouseEnter={() => setAt(i)} onClick={() => pick(p)}>
             <span className="person-dot" style={{ background: personColor(p) }}>{p.slice(0, 1).toUpperCase()}</span>
-            <span>{value.data.people.includes(p) ? p : `添加「${p}」`}</span>
+            <span>{value.data.people.includes(p) ? p : uiText("添加「{0}」", p)}</span>
           </button>
         ))}
-        {value.data.value && <button type="button" className="tag-menu-item is-muted" onClick={() => pick("")}>清除</button>}
+        {value.data.value && <button type="button" className="tag-menu-item is-muted" onClick={() => pick("")}>{uiText("清除")}</button>}
       </div>
     </div>
   );

@@ -1,3 +1,4 @@
+import { templateDisplay } from "@/lib/template-locale";
 import { useCallback, useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { IntroCard, introOf } from "@/app/Onboard";
@@ -73,11 +74,14 @@ export function TemplatesPage({ hubId, projects, now }: { hubId: string; project
   const [shelf, setShelf] = useState("all");
   const [q, setQ] = useState("");
   const [allMade, setAllMade] = useState(false);
-  const match = (t: Template) => !q.trim() || `${t.name} ${t.description || ""} ${t.slug}`.toLowerCase().includes(q.trim().toLowerCase());
-  const official = (list || []).filter((t) => t.official && match(t));
-  const own = (list || []).filter((t) => !t.official && match(t));
+  const displayList = list?.filter(t => t.slug !== "myco/poll").map(templateDisplay) ?? null;
+  const match = (source: Template) => {const t=templateDisplay(source);return !q.trim() || `${source.name} ${source.description||""} ${t.name} ${t.description || ""} ${t.slug} ${Object.values(t.locales || {}).map(v => `${v.name||""} ${v.description||""}`).join(" ")}`.toLowerCase().includes(q.trim().toLowerCase());};
+  const official = (displayList || []).filter((t) => t.official && match(t));
+  const own = (displayList || []).filter((t) => !t.official && match(t));
   const shelves = SHELVES.filter(([key]) => (list || []).some((t) => t.official && shelfOf(t) === key));
-  const card = (t: Template) => (
+  const card = (source: Template) => {
+    const t = templateDisplay(source);
+    return (
     <button key={t.id} type="button" className="tp-card" onClick={() => setUsing(t)} data-testid={`template-${t.slug}`}
       title={L(`新建一份${t.name}`, `New ${t.name}`)}>
       <span className={cn("tp-icon", `is-${t.kind} on-${shelfOf(t)}`)}><AppIcon t={t} /></span>
@@ -88,7 +92,8 @@ export function TemplatesPage({ hubId, projects, now }: { hubId: string; project
       </span>
       <span className="tp-card-new"><Plus />{L("新建", "New")}</span>
     </button>
-  );
+    );
+  };
   const shownMade = allMade ? made : made.slice(0, 6);
   const nothing = !!list && !official.length && !own.length;
 
@@ -136,7 +141,7 @@ export function TemplatesPage({ hubId, projects, now }: { hubId: string; project
                       <span className="tp-icon is-small"><AppIcon t={t} /></span>
                       <span className="tp-made-text">
                         <span className="tp-made-name">{p.name}</span>
-                        <span className="tp-made-meta">{[p.template?.name, p.project ? projects.find((x) => x.name === p.project)?.title || p.project : "", timeAgo(p.updated_at, now)].filter(Boolean).join(" · ")}</span>
+                        <span className="tp-made-meta">{[t ? templateDisplay(t).name : p.template?.name, p.project ? projects.find((x) => x.name === p.project)?.title || p.project : "", timeAgo(p.updated_at, now)].filter(Boolean).join(" · ")}</span>
                       </span>
                       {p.template?.latest && <span className="tp-made-new" title={L("有新版本", "A new version")} />}
                     </button>
@@ -202,14 +207,14 @@ function UseTemplate({ hubId, template, projects, first, onClose, onMade }: {
   const [project, setProject] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
-  useEffect(() => { if (template) { setName(template.name); setError(null); setBusy(false); } }, [template]);
+  useEffect(() => { if (template) { setName(templateDisplay(template).name); setError(null); setBusy(false); } }, [template]);
   const make = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!template || busy) return;
     setBusy(true);
     setError(null);
     try {
-      const r = await appApi.useTemplate(hubId, template.id, { name: name.trim() || template.name, ...(project ? { project } : {}), sample: first });
+      const r = await appApi.useTemplate(hubId, template.id, { name: name.trim() || templateDisplay(template).name, ...(project ? { project } : {}), sample: first });
       onMade(r.page);
     } catch (err) {
       setError(err);
@@ -218,8 +223,8 @@ function UseTemplate({ hubId, template, projects, first, onClose, onMade }: {
     }
   };
   return (
-    <Modal open={!!template} onOpenChange={(o) => !o && !busy && onClose()} title={template ? L(`新建一份${template.name}`, `New ${template.name}`) : ""}
-      description={template?.description} wide className="tp-use">
+    <Modal open={!!template} onOpenChange={(o) => !o && !busy && onClose()} title={template ? L(`新建一份${templateDisplay(template).name}`, `New ${templateDisplay(template).name}`) : ""}
+      description={template ? templateDisplay(template).description : undefined} wide className="tp-use">
       {template && <Shots hubId={hubId} template={template} />}
       <form onSubmit={make} className="pin-edit">
         <label className="app-field">
@@ -283,7 +288,7 @@ function Shots({ hubId, template }: { hubId: string; template: Template }) {
     <div className="tp-shots" data-testid="template-shots">
       <div className={cn("tp-shot", !ready[src] && "is-loading")}
         onKeyDown={(e) => { if (e.key === "ArrowLeft") { e.preventDefault(); go(-1); } else if (e.key === "ArrowRight") { e.preventDefault(); go(1); } }}>
-        <img key={src} src={src} alt={L(`${template.name}的样子（第 ${i + 1} 张）`, `${template.name}, screenshot ${i + 1}`)} draggable={false}
+        <img key={src} src={src} alt={L(`${templateDisplay(template).name}的样子（第 ${i + 1} 张）`, `${templateDisplay(template).name}, screenshot ${i + 1}`)} draggable={false}
           onLoad={() => setReady((r) => ({ ...r, [src]: true }))} onError={() => setReady((r) => ({ ...r, [src]: true }))} />
         {shots.length > 1 && (
           <>

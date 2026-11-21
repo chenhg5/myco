@@ -1,18 +1,63 @@
 {
   "id": "myco/design-studio",
   "name": "设计工作台",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "kind": "custom",
   "category": "creative",
   "icon": "icon.svg",
   "description": "从设计需求到作品：网页、应用界面、海报、演示文稿、社交图片和数据看板。黑白灰工作空间，可编辑画布与图层、预览 HTML 原型、收集反馈、保存版本，和 agent 一起迭代，导出 SVG、PNG、HTML 或设计数据。",
   "data": {
-    "workspace": { "single": true, "fields": { "title": "text", "design_notes": "text" } },
-    "artifacts": { "fields": { "title": "text", "kind": "text", "description": "text", "brief": "text", "status": "text", "frames": "json", "html": "text", "order": "number", "updated": "text" } },
-    "comments": { "fields": { "artifact": "text", "text": "text", "author": "text", "resolved": "bool", "at": "text", "order": "number" } },
-    "versions": { "fields": { "artifact": "text", "label": "text", "snapshot": "json", "at": "text", "order": "number" } }
+    "workspace": {
+      "single": true,
+      "fields": {
+        "title": "text",
+        "design_notes": "text"
+      }
+    },
+    "artifacts": {
+      "fields": {
+        "title": "text",
+        "kind": "text",
+        "description": "text",
+        "brief": "text",
+        "status": "text",
+        "frames": "json",
+        "html": "text",
+        "order": "number",
+        "updated": "text"
+      }
+    },
+    "comments": {
+      "fields": {
+        "artifact": "text",
+        "text": "text",
+        "author": "text",
+        "resolved": "bool",
+        "at": "text",
+        "order": "number"
+      }
+    },
+    "versions": {
+      "fields": {
+        "artifact": "text",
+        "label": "text",
+        "snapshot": "json",
+        "at": "text",
+        "order": "number"
+      }
+    }
   },
-  "permissions": ["download", "send"],
-  "export": ["svg", "png", "html", "json"],
-  "requires": { "hub": "0.20.7" }
+  "permissions": [
+    "download",
+    "send"
+  ],
+  "export": [
+    "svg",
+    "png",
+    "html",
+    "json"
+  ],
+  "requires": {
+    "hub": "0.20.7"
+  }
 }

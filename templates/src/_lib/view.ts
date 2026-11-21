@@ -1,3 +1,4 @@
+import { t as uiText } from "./i18n";
 // How one person looks at the rows: filters and sorts, kept in this browser
 // for this page (not shared, as a search is not).
 import { compare, display, type Field } from "./fields";
@@ -8,7 +9,7 @@ export type Cond = { field: string; op: Op; value: string };
 export type ViewState = { conds: Cond[]; any: boolean; sorts: { field: string; desc: boolean }[] };
 export const NO_VIEW: ViewState = { conds: [], any: false, sorts: [] };
 
-export const OPS: [Op, string][] = [["has", "包含"], ["nothas", "不包含"], ["is", "等于"], ["isnot", "不等于"], ["gt", "大于"], ["lt", "小于"], ["empty", "为空"], ["notempty", "不为空"]];
+export const OPS: [Op, string][] = [["has", uiText("包含")], ["nothas", uiText("不包含")], ["is", uiText("等于")], ["isnot", uiText("不等于")], ["gt", uiText("大于")], ["lt", uiText("小于")], ["empty", uiText("为空")], ["notempty", uiText("不为空")]];
 export const opsFor = (f?: Field): Op[] => !f ? ["has"] :
   f.type === "number" || f.type === "date" ? ["is", "isnot", "gt", "lt", "empty", "notempty"] :
   f.type === "check" ? ["notempty", "empty"] :

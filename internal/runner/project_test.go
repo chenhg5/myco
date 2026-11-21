@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/chenhg5/myco/internal/api"
 	"github.com/chenhg5/myco/internal/harness"
@@ -11,14 +12,22 @@ import (
 
 type projectHub struct {
 	*fakeHub
-	reads int
+	reads  int
+	brief  string
+	memory *api.ProjectDoc
 }
 
 func (h *projectHub) GetProject(_ context.Context, name string, _ bool) (*api.Project, error) {
 	h.reads++
-	return &api.Project{Name: name, Title: "myco 开发", Goal: "ship projects", Brief: "Run make check before pushing.",
+	p := &api.Project{Name: name, Title: "myco 开发", Goal: "ship projects", Brief: "Run make check before pushing." + h.brief,
 		Members: []api.ProjectMember{{Name: "lead", Role: "coordinator", Note: "splits work"}, {Name: "me", Note: "后端"}},
-		Docs:    []api.ProjectDoc{{Name: "conventions"}}}, nil
+		Docs:    []api.ProjectDoc{{Name: "conventions"}}}
+	if h.memory != nil {
+		m := *h.memory
+		p.Memory = &m
+		p.Docs = append(p.Docs, api.ProjectDoc{Name: m.Name})
+	}
+	return p, nil
 }
 
 // A project task gets the project's context once per session, and after
@@ -62,7 +71,50 @@ func TestProjectContextInPrompt(t *testing.T) {
 	if !strings.Contains(prompts[3], `project "site"`) || !strings.Contains(prompts[3], "Goal:") {
 		t.Fatalf("another project gets its own context:\n%s", prompts[3])
 	}
-	if hub.reads != 2 {
+	if hub.reads != 3 {
 		t.Fatalf("project read %d times", hub.reads)
+	}
+	if strings.Contains(first, "Project memory") {
+		t.Fatalf("an older hub has no project memory:\n%s", first)
+	}
+}
+
+// The project memory and the whole brief go in the prompt; when the memory
+// changes, the next message of the session gets the project again.
+func TestProjectMemoryInPrompt(t *testing.T) {
+	long := "\n" + strings.Repeat("背景资料。", 1500) + "\nThe staging port is 7443."
+	hub := &projectHub{brief: long, memory: &api.ProjectDoc{Name: "memory", Body: "# Project memory\n- glenn wants reports in Chinese (lead, 2026-11-21)\n"},
+		fakeHub: newFakeHub(
+			api.Message{ID: "t1", Type: "task", From: "lead", ThreadID: "th", Project: "myco", Body: "one"},
+			api.Message{ID: "t2", Type: "task", From: "lead", ThreadID: "th", Project: "myco", Body: "two"},
+			api.Message{ID: "t3", Type: "task", From: "lead", ThreadID: "th", Project: "myco", Body: "three"},
+		)}
+	var prompts []string
+	h := fakeHarness{fn: func(r harness.Request) (harness.Result, error) {
+		prompts = append(prompts, r.Prompt)
+		return harness.Result{Output: "ok", SessionID: "s"}, nil
+	}}
+	r := New(hub, h, NewHubSessions(&fakeBinder{}, ""), nil, Options{Self: "me", Once: true, Concurrency: 1}, quiet())
+	r.Run(context.Background())
+	r.Run(context.Background())
+	hub.memory.Body += "- use port 7443 for staging (me, 2026-11-21)\n"
+	hub.memory.UpdatedAt = hub.memory.UpdatedAt.Add(time.Minute)
+	r.Run(context.Background())
+	if len(prompts) != 3 {
+		t.Fatalf("runs: %d", len(prompts))
+	}
+	for _, want := range []string{"The staging port is 7443.", "Project memory", "glenn wants reports in Chinese", "myco project memory add --name myco"} {
+		if !strings.Contains(prompts[0], want) {
+			t.Fatalf("prompt lacks %q", want)
+		}
+	}
+	if strings.Contains(prompts[0], "Shared documents: conventions, memory") {
+		t.Fatal("the memory is not listed among the documents")
+	}
+	if strings.Contains(prompts[1], "Project memory") {
+		t.Fatalf("unchanged project: one line:\n%s", prompts[1])
+	}
+	if !strings.Contains(prompts[2], "updated since you last saw it") || !strings.Contains(prompts[2], "use port 7443 for staging") {
+		t.Fatalf("changed memory is given again:\n%s", prompts[2])
 	}
 }

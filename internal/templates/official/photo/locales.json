@@ -1,0 +1,10 @@
+{
+  "en": {
+    "name": "Photo editor",
+    "description": "Crop, adjust colors, filter, retouch, add text or stickers, draw, mask and frame your photos. Originals stay local; share edit instructions and undo any change."
+  },
+  "zh": {
+    "name": "修图",
+    "description": "快速修照片：裁剪旋转、调色、十几种滤镜、磨皮美白、文字、贴纸、涂鸦、马赛克、边框，按住对比原图，导出 JPG 或 PNG。改了随时能退回去；照片只存在打开它的电脑上，修了什么大家都看得到，agent 也能按你说的帮你调。"
+  }
+}

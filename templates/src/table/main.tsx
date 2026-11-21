@@ -1,3 +1,4 @@
+import { t as uiText } from "../_lib/i18n";
 // 表格: a table people and agents fill together, Feishu-like: columns with
 // types, edit in place, copy and paste blocks, fill down, filter, sort,
 // search, export to Excel and CSV. Data: sheet (one record, "main": title,
@@ -40,11 +41,11 @@ function App() {
     <div className="app">
       <TopBar sheet={sheet} onExport={(k) => void exportRows(sheet, rows, k)} />
       <div className="toolbar">
-        <button type="button" className="btn btn-primary" onClick={() => onAdded(sheet.add({}))}><Plus className="ico" />新增一行</button>
+        <button type="button" className="btn btn-primary" onClick={() => onAdded(sheet.add({}))}><Plus className="ico" />{uiText("新增一行")}</button>
         <FilterButton fields={fields} view={view} setView={setView} />
         <SortButton fields={fields} view={view} setView={setView} />
         <SearchButton onClick={() => setSearch(true)} />
-        <span className="toolbar-count">{filtered ? `${rows.length} / ${all.length} 行` : `共 ${all.length} 行`}</span>
+        <span className="toolbar-count">{filtered ? uiText("{0} / {1} 行", rows.length, all.length) : uiText("共 {0} 行", all.length)}</span>
       </div>
       <SheetGrid sheet={sheet} rows={rows} dark={dark} search={search} setSearch={setSearch} onAdded={onAdded}
         canMove={!view.sorts.length}
@@ -56,8 +57,8 @@ function App() {
 
 async function start() {
   const root = createRoot(document.getElementById("root")!);
-  if (!myco) { root.render(<div className="outside">在 myco App 里打开这个网页，才能读写它的内容。</div>); return; }
-  try { await sheet.start(); } catch { root.render(<div className="outside">在 myco App 里打开这个网页，才能读写它的内容。</div>); return; }
+  if (!myco) { root.render(<div className="outside">{uiText("在 myco App 里打开这个网页，才能读写它的内容。")}</div>); return; }
+  try { await sheet.start(); } catch { root.render(<div className="outside">{uiText("在 myco App 里打开这个网页，才能读写它的内容。")}</div>); return; }
   root.render(<App />);
 }
 void start();

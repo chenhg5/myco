@@ -1,3 +1,4 @@
+import { t as uiText } from "./i18n";
 // Picking options (单选, 多选): a search box that also makes new ones, the
 // options as coloured tags, the chosen ones ticked.
 import { useMemo, useState } from "react";
@@ -8,7 +9,7 @@ export function Tag({ value, options, dark, onRemove }: { value: string; options
   return (
     <span className="tag" style={{ background: dark ? t.dbg : t.bg, color: dark ? t.dfg : t.fg }}>
       {value}
-      {onRemove && <button type="button" className="tag-x" aria-label={`去掉${value}`} onClick={(e) => { e.stopPropagation(); onRemove(); }}>×</button>}
+      {onRemove && <button type="button" className="tag-x" aria-label={uiText("去掉{0}", value)} onClick={(e) => { e.stopPropagation(); onRemove(); }}>×</button>}
     </span>
   );
 }
@@ -34,7 +35,7 @@ export function TagMenu({ options, value, multi, dark, onChange, onDone }: {
     <div className="tag-menu" onMouseDown={(e) => e.stopPropagation()}>
       <div className="tag-menu-head">
         {multi && value.map((v) => <Tag key={v} value={v} options={all} dark={dark} onRemove={() => toggle(v)} />)}
-        <input className="tag-menu-q" autoFocus value={q} placeholder={all.length ? "搜索或新建选项" : "输入一个选项"}
+        <input className="tag-menu-q" autoFocus value={q} placeholder={all.length ? uiText("搜索或新建选项") : uiText("输入一个选项")}
           onChange={(e) => { setQ(e.target.value); setAt(0); }}
           onKeyDown={(e) => {
             if (e.key === "ArrowDown") { e.preventDefault(); setAt((i) => Math.min(list.length - 1, i + 1)); }
@@ -48,11 +49,11 @@ export function TagMenu({ options, value, multi, dark, onChange, onDone }: {
         {list.map((o, i) => (
           <button key={o} type="button" role="option" aria-selected={value.includes(o)} className={`tag-menu-item${i === at ? " is-at" : ""}`}
             onMouseEnter={() => setAt(i)} onClick={() => toggle(o)}>
-            {all.includes(o) ? <Tag value={o} options={all} dark={dark} /> : <span className="tag-menu-new">新建 <Tag value={o} options={[...all, o]} dark={dark} /></span>}
+            {all.includes(o) ? <Tag value={o} options={all} dark={dark} /> : <span className="tag-menu-new">{uiText("新建")}{" "}<Tag value={o} options={[...all, o]} dark={dark} /></span>}
             {value.includes(o) && <span className="tag-menu-tick">✓</span>}
           </button>
         ))}
-        {!list.length && <div className="tag-menu-empty">没有选项，输入一个新建</div>}
+        {!list.length && <div className="tag-menu-empty">{uiText("没有选项，输入一个新建")}</div>}
       </div>
     </div>
   );

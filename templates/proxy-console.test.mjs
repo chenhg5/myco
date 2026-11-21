@@ -1,3 +1,4 @@
+import { inlineI18n } from "./test-i18n.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import ts from "typescript";
@@ -12,7 +13,7 @@ const js = ts.transpileModule(source, {
   },
 }).outputText;
 const m = await import(
-  "data:text/javascript;base64," + Buffer.from(js).toString("base64")
+  "data:text/javascript;base64," + Buffer.from(inlineI18n(js)).toString("base64")
 );
 const prev = structuredClone(m.demoSnapshot),
   next = structuredClone(prev);

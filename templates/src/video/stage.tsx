@@ -1,3 +1,4 @@
+import { t as uiText } from "../_lib/i18n";
 // The player: the canvas the edit is drawn on, the boxes of the text and
 // regions under the playhead (drag to move, the corner to resize), and the
 // transport under it.
@@ -86,7 +87,7 @@ export function Stage({ sel, setSel, onImport }: { sel: Sel; setSel: (s: Sel) =>
     const el = box.current?.parentElement;
     if (!el) return;
     if (document.fullscreenElement) void document.exitFullscreen();
-    else void el.requestFullscreen?.().catch(() => kit.flash("这里不能全屏"));
+    else void el.requestFullscreen?.().catch(() => kit.flash(uiText("这里不能全屏")));
   };
   const T = total(list);
 
@@ -103,14 +104,14 @@ export function Stage({ sel, setSel, onImport }: { sel: Sel; setSel: (s: Sel) =>
           )}
         </div>
         {player.missing && list.length > 0 && (
-          <div className="stage-missing">本机没有「{player.missing}」，在左边「素材」里点「本机没有，选文件」选一下它</div>
+          <div className="stage-missing">{uiText("本机没有「")}{player.missing}{uiText("」，在左边「素材」里点「本机没有，选文件」选一下它")}</div>
         )}
         {!list.length && (
           <div className="stage-empty">
             <button type="button" className="stage-drop" onClick={onImport}>
               <Upload className="ico" />
-              <b>导入视频开始剪辑</b>
-              <span>点这里选文件，或者把 mp4 拖进来。视频只存在这台电脑上，剪辑方案存在 myco 里，agent 也能改。</span>
+              <b>{uiText("导入视频开始剪辑")}</b>
+              <span>{uiText("点这里选文件，或者把 mp4 拖进来。视频只存在这台电脑上，剪辑方案存在 myco 里，agent 也能改。")}</span>
             </button>
           </div>
         )}
@@ -118,17 +119,17 @@ export function Stage({ sel, setSel, onImport }: { sel: Sel; setSel: (s: Sel) =>
       <div className="transport">
         <span className="transport-time"><b>{fmt(t, true)}</b> / {fmt(T, true)}</span>
         <div className="transport-mid">
-          <button type="button" className="icon-btn" title="到开头 (Home)" aria-label="到开头" onClick={() => player.seek(0)}><ChevronFirst className="ico" /></button>
-          <button type="button" className="icon-btn" title="上一帧 (←)" aria-label="上一帧" onClick={() => player.step(-1)}><StepBack className="ico" /></button>
-          <button type="button" className="play-btn" title="播放 / 暂停 (空格)" aria-label={player.playing ? "暂停" : "播放"} disabled={!list.length} onClick={() => player.toggle()}>
+          <button type="button" className="icon-btn" title={uiText("到开头 (Home)")} aria-label={uiText("到开头")} onClick={() => player.seek(0)}><ChevronFirst className="ico" /></button>
+          <button type="button" className="icon-btn" title={uiText("上一帧 (←)")} aria-label={uiText("上一帧")} onClick={() => player.step(-1)}><StepBack className="ico" /></button>
+          <button type="button" className="play-btn" title={uiText("播放 / 暂停 (空格)")} aria-label={player.playing ? uiText("暂停") : uiText("播放")} disabled={!list.length} onClick={() => player.toggle()}>
             {player.playing ? <Pause className="ico" /> : <Play className="ico" />}
           </button>
-          <button type="button" className="icon-btn" title="下一帧 (→)" aria-label="下一帧" onClick={() => player.step(1)}><StepForward className="ico" /></button>
-          <button type="button" className="icon-btn" title="到结尾 (End)" aria-label="到结尾" onClick={() => player.seek(T)}><ChevronLast className="ico" /></button>
+          <button type="button" className="icon-btn" title={uiText("下一帧 (→)")} aria-label={uiText("下一帧")} onClick={() => player.step(1)}><StepForward className="ico" /></button>
+          <button type="button" className="icon-btn" title={uiText("到结尾 (End)")} aria-label={uiText("到结尾")} onClick={() => player.seek(T)}><ChevronLast className="ico" /></button>
         </div>
         <span className="transport-right">
           <span className="faint">{FW}×{FH}</span>
-          <button type="button" className="icon-btn" title="全屏" aria-label="全屏" onClick={full}><Expand className="ico" /></button>
+          <button type="button" className="icon-btn" title={uiText("全屏")} aria-label={uiText("全屏")} onClick={full}><Expand className="ico" /></button>
         </span>
       </div>
     </div>

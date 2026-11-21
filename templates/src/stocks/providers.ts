@@ -1,3 +1,4 @@
+import { t as uiText } from "../_lib/i18n";
 import {
   aggregate,
   cleanBars,
@@ -37,7 +38,7 @@ function result(
 ): MarketData {
   const clean = cleanBars(bars);
   if (!clean.length)
-    throw new Error("没有可用的 K 线数据，请核对代码或切换数据源");
+    throw new Error(uiText("没有可用的 K 线数据，请核对代码或切换数据源"));
   return {
     instrument: i,
     interval,
@@ -63,7 +64,7 @@ export function parseYahoo(
   interval: Interval,
 ): MarketData {
   const root = obj(obj(raw).chart);
-  if (root.error) throw new Error("Yahoo Finance 暂时没有这只股票的数据");
+  if (root.error) throw new Error(uiText("Yahoo Finance 暂时没有这只股票的数据"));
   const r = obj(arr(root.result)[0]),
     meta = obj(r.meta),
     q = obj(arr(obj(r.indicators).quote)[0]);
@@ -71,9 +72,9 @@ export function parseYahoo(
     !meta.symbol ||
     String(meta.symbol).toUpperCase() !== yahooSymbol(i).toUpperCase()
   )
-    throw new Error("数据源返回了不同的证券代码");
+    throw new Error(uiText("数据源返回了不同的证券代码"));
   if (meta.currency && meta.currency !== currency[i.market])
-    throw new Error("数据源币种与所选市场不一致");
+    throw new Error(uiText("数据源币种与所选市场不一致"));
   // Build ISO session dates from parts: locale display order varies across WebKit/Chromium versions.
   const formatter = new Intl.DateTimeFormat("en-CA", {
     timeZone: meta.exchangeTimezoneName || timezone[i.market],
@@ -145,9 +146,9 @@ export function parseTencent(
   interval: Interval,
 ): MarketData {
   if (i.market === "US")
-    throw new Error("腾讯历史行情适配器不支持美股，请选择 Yahoo 或自定义网关");
+    throw new Error(uiText("腾讯历史行情适配器不支持美股，请选择 Yahoo 或自定义网关"));
   const root = obj(raw);
-  if (Number(root.code) !== 0) throw new Error("腾讯行情暂时不可用");
+  if (Number(root.code) !== 0) throw new Error(uiText("腾讯行情暂时不可用"));
   const r = obj(obj(root.data)[tencentSymbol(i)]),
     q = arr(obj(r.qt)[tencentSymbol(i)]);
   const bars = arr(r.day).map((row) => {
@@ -180,7 +181,7 @@ export class TencentProvider implements MarketProvider {
   }
   async load(i: Instrument, interval: Interval) {
     if (!this.supports(i))
-      throw new Error("腾讯历史行情不支持美股，请切换数据源");
+      throw new Error(uiText("腾讯历史行情不支持美股，请切换数据源"));
     return parseTencent(
       await this.net(
         `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${encodeURIComponent(tencentSymbol(i) + ",day,,,1250,")}`,
@@ -195,7 +196,7 @@ export function gatewayURL(base: string): URL {
   try {
     u = new URL(base);
   } catch {
-    throw new Error("请填写有效的行情网关地址");
+    throw new Error(uiText("请填写有效的行情网关地址"));
   }
   if (
     (u.protocol !== "https:" &&
@@ -209,7 +210,7 @@ export function gatewayURL(base: string): URL {
     u.hash
   )
     throw new Error(
-      "网关需使用 HTTPS（本机可用 HTTP），地址不带凭证、查询参数或片段",
+      uiText("网关需使用 HTTPS（本机可用 HTTP），地址不带凭证、查询参数或片段"),
     );
   return u;
 }
@@ -226,15 +227,15 @@ export function parseGateway(
     ins.symbol !== i.symbol ||
     r.interval !== interval
   )
-    throw new Error("网关返回的证券或周期不匹配");
+    throw new Error(uiText("网关返回的证券或周期不匹配"));
   if (
     r.adjustment !== "unadjusted" ||
     r.volumeUnit !== "shares" ||
     q.currency !== currency[i.market]
   )
-    throw new Error("网关需返回不复权价格、股数成交量和正确币种");
+    throw new Error(uiText("网关需返回不复权价格、股数成交量和正确币种"));
   const bars = cleanBars(arr(r.bars));
-  if (!bars.length) throw new Error("网关没有返回有效 K 线");
+  if (!bars.length) throw new Error(uiText("网关没有返回有效 K 线"));
   const source =
     typeof r.source === "string" ? r.source.slice(0, 80) : "自定义网关";
   return {
@@ -332,7 +333,7 @@ export class MarketClient {
           await this.cache.set(k, data).catch(() => {});
           return data;
         } catch (e) {
-          error = e instanceof Error ? e : new Error("行情请求失败");
+          error = e instanceof Error ? e : new Error(uiText("行情请求失败"));
           failed++;
         }
       }
@@ -343,7 +344,7 @@ export class MarketClient {
           stale: true,
           warnings: ["刷新失败，显示上次缓存；不是最新行情", ...old.warnings],
         };
-      throw error || new Error("这个数据源不支持所选市场，请切换数据源");
+      throw error || new Error(uiText("这个数据源不支持所选市场，请切换数据源"));
     })();
     this.pending.set(k, job);
     try {

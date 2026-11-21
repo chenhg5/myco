@@ -4,6 +4,52 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.21.10
+
+- **Project memory**: a project now has a shared memory. Members add what everyone should keep in mind (decisions, conventions, the owner's preferences) with `myco project memory add --name <project> --text "..."`, and each entry records who wrote it and when. The runner gives member agents the memory with the project, and gives it again when it changes. In the App, the project notes have a Memory section where you add an entry or edit and tidy the whole memory. In a test with real Claude Code agents, a decision or preference told to one member reached the others in 5 of 5 runs (0 of 5 before).
+- **Longer project brief**: up to 16,000 characters (it was 8 KB), and all of it goes into the members' prompt (only the first 4 KB did before).
+- The App: code inside your own message bubbles stands out in light mode; mushroom avatars are easier to read on light tiles; a little more space above the time and buttons under an agent's reply.
+- Upgrade the workspace (Settings › Workspace, or `sudo myco upgrade` on the server) and your computers (their runners) for project memory and the longer brief.
+
+**中文**
+
+- **项目记忆**：项目有了一份共享的记忆。成员用 `myco project memory add --name <项目> --text "..."` 记下大家都该记住的事（定下的决定、约定、主人的偏好），每条自动记下是谁、哪天写的。runner 会把记忆和项目一起给成员 agent，记忆有变化时再给一次。App 的项目资料里有「项目记忆」，可以添加一条，也可以整份编辑、整理。用真实的 Claude Code 测试：告诉一个成员的决定或偏好，5 次里 5 次都传到了其他成员（以前是 0 次）。
+- **项目说明放宽**：最多 16000 字（以前是 8 KB），并且全部放进成员的提示（以前只放前 4 KB）。
+- App：浅色模式下，你自己消息气泡里的代码更醒目；蘑菇头像在浅色底上更清楚；agent 回复下方的时间和按钮上面多留了一点空。
+- 升级工作区（设置 › 工作区，或在服务器上 `sudo myco upgrade`）和各台电脑（runner）才能用上项目记忆和更长的项目说明。
+
+## v0.21.9
+
+- **Official apps follow the App's language and appearance**: every official app now has Chinese and English text and switches with the App's language and light / dark setting, including their editors and canvases. Your records are unchanged.
+- **A restart no longer loses a running task**: when the runner restarts (an upgrade restarts it too) in the middle of a task, it puts the task back in the queue once and runs it again, telling the agent to check what it already did. A shell command on an exec node, which may have run in part, still fails, with a clear reason.
+- The Poll app is no longer offered among the official apps; pages already made from it keep working.
+- Upgrade the App and your computers (their runners) for these; upgrade the workspace (Settings › Workspace, or `sudo myco upgrade` on the server) for the translated apps.
+
+**中文**
+
+- **官方应用跟随 App 的语言和外观**：所有官方应用都有中英文，随 App 的语言和浅色 / 深色设置切换，编辑器和画布也一样。原有数据不变。
+- **重启不再丢掉正在跑的任务**：任务进行中 runner 重启了（升级也会重启它），会把任务放回队列重新跑一次，并提醒 agent 先检查已经做过的部分。exec 节点上的 shell 命令可能已执行一半，仍标为失败，并写明原因。
+- 官方应用里不再提供「投票」；已经用它做的网页照常可用。
+- 升级 App 和各台电脑（runner）即可用上这些；升级工作区（设置 › 工作区，或在服务器上 `sudo myco upgrade`）才有翻译好的应用。
+
+## v0.21.8
+
+- **New official app: Meeting Notes (会议记录)**: record a meeting from any app (your microphone as "me", the computer's sound or one meeting app as "them") and have it transcribed on this computer (SenseVoice: Chinese, English, Cantonese, Japanese, Korean; downloaded the first time). Sentences by speaker, played from where you click, corrected in place, speakers renamed, search, and export as text, Markdown or SRT; several people at one microphone are told apart, and an agent can write the notes. Recording works in the Mac App (macOS 14.2+ for the computer's sound) and on Linux; not on Windows yet.
+- **New official apps**: Photo Edit (修图: crop, adjustments, filters, portrait retouch, text, stickers, frames; photos stay on the computer that opened them), Design Studio (设计工作台: briefs, layers, HTML prototypes, feedback and snapshots), Market Watch (行情工作台: China, Hong Kong and US instruments with interchangeable data providers, watchlists and charts) and Proxy Console (代理工作台: manage existing Mihomo and sing-box cores; controller credentials stay in this computer's keychain).
+- Making a page from an app: the first one in a workspace comes with sample data, later ones start empty (no checkbox any more).
+- Official apps: when GitHub still hands out the old checksum right after the apps are published, the hub tries again instead of failing.
+- What apps do on this computer is logged without the raw arguments.
+- Upgrade the App for Meeting Notes (recording and speech to text) and the sample-data change; upgrade the workspace (Settings › Workspace, or `sudo myco upgrade` on the server) for the retry.
+
+**中文**
+
+- **新的官方应用：会议记录**：从任意应用录会议（麦克风算「我」，电脑播放的声音或某个会议软件算「对方」），在这台电脑上转成文字（SenseVoice：中、英、粤、日、韩，第一次用时下载）。按说话人分句，点哪句从哪播，就地改错、改说话人名字、搜索，导出文本、Markdown 或 SRT；一个麦克风前的几个人也能分开，agent 可以写纪要。Mac App 能录（录电脑声音要 macOS 14.2+），Linux 也能录；Windows 还不行。
+- **新的官方应用**：修图（裁剪、调色、滤镜、人像美化、文字、贴纸、相框；照片只存在打开它的那台电脑上）、设计工作台（需求、图层、HTML 原型、反馈和快照）、行情工作台（A 股、港股、美股，数据源可换，自选和图表）、代理工作台（管理已有的 Mihomo、sing-box 内核；控制器凭据存在本机钥匙串）。
+- 从应用新建网页：工作区里第一份自带示例数据，之后的从空的开始（不再有勾选框）。
+- 官方应用：刚发布、GitHub 还给出旧校验值时，Hub 会再试，不再直接报错。
+- 应用在这台电脑上做的事，日志里不再记录原始参数。
+- 要升级 App 才有会议记录（录音和转文字）和示例数据的改动；要升级工作区（「设置 › 工作区」一键升级，或服务器上 `sudo myco upgrade`）才有重试。
+
 ## v0.21.7
 
 - **New official app: Disk Cleanup (空间清理)**, after DaisyDisk: your disks with their free room, one click to scan (or only your home folder, or a folder you pick), a map of rings beside a list of what takes the room, largest first, and a basket at the bottom for what to clean; it goes to the trash, so it can be put back. The scan keeps going when the page panel is tucked away, and you can watch it fill.

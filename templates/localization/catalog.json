@@ -1,0 +1,90 @@
+{
+  "base": [
+    "Database",
+    "One shared dataset with table, board, calendar, gallery and form views. Typed fields, filters, sorting, record details and Excel export."
+  ],
+  "table": [
+    "Table",
+    "A collaborative spreadsheet with typed columns, multi-cell copy and paste, fill down, sorting, filtering, search, and Excel or CSV export."
+  ],
+  "doc": [
+    "Document",
+    "Write together with headings, lists, tasks, tables and code blocks. Each paragraph saves independently. Export Markdown or a web page."
+  ],
+  "slides": [
+    "Slides",
+    "Create presentations with covers, key points, charts, cards, tables and quotes. Edit on the slide, reorder, present full screen and export editable PowerPoint."
+  ],
+  "meeting": [
+    "Meeting notes",
+    "Record your microphone and meeting audio separately, transcribe locally and identify speakers. Edit, search, replay and export transcripts; ask an agent for summaries, decisions and action items."
+  ],
+  "code": [
+    "Code editor",
+    "A VS Code-style editor with a file tree, tabs, syntax highlighting, find and replace, multiple cursors and a minimap. Preview HTML or Markdown and download the project as a ZIP."
+  ],
+  "issues": [
+    "Issue tracker",
+    "Track issues and projects with IDs, statuses, priorities, assignees and labels. Use list or board views and keyboard commands; assign work to agents and see their updates."
+  ],
+  "devtools": [
+    "Developer toolbox",
+    "JSON, Base64, URL encoding, hashes, timestamps, UUIDs, JWT inspection, regex, text diff, naming, number bases and colors. Everything runs locally; saved tools are shared."
+  ],
+  "todo": [
+    "To-do list",
+    "A shared list with due dates, assignees, notes, importance and drag ordering. Add tasks with Enter or ask an agent to organize your action items."
+  ],
+  "notes": [
+    "Notes",
+    "Nested pages with rich text, icons, covers, favorites, search and trash. Write with slash commands, organize your ideas and work with agents on shared pages."
+  ],
+  "disk": [
+    "Disk cleanup",
+    "Explore disk and folder usage, find large files and move selected items to Trash. Scans run on this computer; files can be restored until Trash is emptied."
+  ],
+  "stocks": [
+    "Stock watch",
+    "Follow A-shares, Hong Kong and US stocks in one workspace. Share watchlists and notes, inspect candlesticks, volume and moving averages, and switch market data providers or use your own gateway."
+  ],
+  "proxy-console": [
+    "Proxy console",
+    "Manage an existing local Mihomo or sing-box core: traffic, policies, node delay, connections and configuration summaries. Credentials stay local. Requires Clash API and a desktop App with proxy controller support."
+  ],
+  "ledger": [
+    "Budget book",
+    "Track income, expenses, balance and monthly budgets together. Review categories and daily entries, or ask an agent to organize your bills."
+  ],
+  "habit": [
+    "Habit tracker",
+    "Build habits together. Check in each day, follow weekly progress and streaks, and see how family or teammates are doing."
+  ],
+  "design-studio": [
+    "Design studio",
+    "Create websites, app interfaces, posters, presentations, social images and dashboards. Edit canvases and layers, preview HTML, collect feedback, save versions and export SVG, PNG or HTML with your agents."
+  ],
+  "whiteboard": [
+    "Whiteboard",
+    "An infinite canvas for sticky notes, text, shapes and connectors. Drag, zoom and color your ideas; work with agents on brainstorms, retrospectives and flows."
+  ],
+  "mindmap": [
+    "Mind map",
+    "Organize ideas as topics and branches. Edit, fold, reorder and drag topics, collaborate with agents, and export an outline or image."
+  ],
+  "video": [
+    "Video editor",
+    "Import video, split and trim clips, change speed, add text and mask faces or number plates. Export MP4 locally. Media stays on this computer; the edit plan is shared with people and agents."
+  ],
+  "photo": [
+    "Photo editor",
+    "Crop, adjust colors, filter, retouch, add text or stickers, draw, mask and frame your photos. Originals stay local; share edit instructions and undo any change."
+  ],
+  "gomoku": [
+    "Gomoku",
+    "Play five-in-a-row with another person or an agent. Choose black or white, take turns, undo moves, resign or start a new round."
+  ],
+  "sudoku": [
+    "Sudoku",
+    "Solve a puzzle together. Each cell saves separately with the player's color, conflicts are highlighted, and easy, medium or hard puzzles have one solution."
+  ]
+}

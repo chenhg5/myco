@@ -1,3 +1,4 @@
+import { t as uiText } from "../_lib/i18n";
 // 任务追踪's data: a team (its name and the key its issues are numbered
 // with, MYC-12), issues, projects, and comments. People and agents read and
 // write the same records; an issue's id is "i" and its number, so two
@@ -23,12 +24,12 @@ export const kit = new Kit([team, issues, projects, comments], { quiet: true });
 export type IssueRec = MycoRecord<Issue & Record<string, unknown>>;
 
 export const STATUSES = [
-  { id: "backlog", name: "待规划" },
-  { id: "todo", name: "待办" },
-  { id: "progress", name: "进行中" },
-  { id: "review", name: "评审中" },
-  { id: "done", name: "已完成" },
-  { id: "canceled", name: "已取消" },
+  { id: "backlog", name: uiText("待规划") },
+  { id: "todo", name: uiText("待办") },
+  { id: "progress", name: uiText("进行中") },
+  { id: "review", name: uiText("评审中") },
+  { id: "done", name: uiText("已完成") },
+  { id: "canceled", name: uiText("已取消") },
 ] as const;
 export type StatusId = (typeof STATUSES)[number]["id"];
 export const statusName = (s: string) => STATUSES.find((x) => x.id === s)?.name || "待办";
@@ -37,13 +38,13 @@ export const isClosed = (s: string) => s === "done" || s === "canceled";
 
 /** Priorities as Linear numbers them: 1 is the most urgent, 0 is none. */
 export const PRIORITIES = [
-  { id: 1, name: "紧急" }, { id: 2, name: "高" }, { id: 3, name: "中" }, { id: 4, name: "低" }, { id: 0, name: "无优先级" },
+  { id: 1, name: uiText("紧急") }, { id: 2, name: uiText("高") }, { id: 3, name: uiText("中") }, { id: 4, name: uiText("低") }, { id: 0, name: uiText("无优先级") },
 ] as const;
 export const priorityName = (p: number) => PRIORITIES.find((x) => x.id === p)?.name || "无优先级";
 const prioRank = (p: number) => (p >= 1 && p <= 4 ? p : 5);
 
 export const PROJECT_STATUSES = [
-  { id: "planned", name: "计划中" }, { id: "started", name: "进行中" }, { id: "paused", name: "暂停" }, { id: "done", name: "已完成" },
+  { id: "planned", name: uiText("计划中") }, { id: "started", name: uiText("进行中") }, { id: "paused", name: uiText("暂停") }, { id: "done", name: uiText("已完成") },
 ] as const;
 
 export const teamKey = () => String(team.get("main")?.data.key || "TASK").toUpperCase();

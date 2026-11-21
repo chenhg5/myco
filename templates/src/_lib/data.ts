@@ -1,3 +1,4 @@
+import { t as uiText } from "./i18n";
 // A table's data, as both 表格 and 多维表格 keep it: one record with the
 // title and the fields (columns), and one record a row with its values by
 // field id and an order. Changes are made here at once and saved behind.
@@ -44,7 +45,7 @@ export class Sheet {
     if (!this.meta.get("main")) await this.meta.put({ title: "", [this.cfg.fieldsKey]: this.cfg.defaults }, "main")?.catch(() => this.meta.load());
     listen([this.meta, this.rows], (c: MycoChange) => {
       this.emit();
-      if (c.by && c.by !== this.me) this.flash(`${c.by} 刚改了`);
+      if (c.by && c.by !== this.me) this.flash(uiText("{0} 刚改了", c.by));
     });
   }
   subscribe = (f: () => void) => { this.subs.add(f); return () => { this.subs.delete(f); }; };
@@ -62,7 +63,7 @@ export class Sheet {
     p.then(() => { this.pending--; this.failed = false; this.emit(); }, (e: { code?: string; message?: string }) => {
       this.pending--;
       this.failed = e?.code !== "conflict";
-      this.flash(e?.code === "conflict" ? "别人刚改过，已显示最新的" : e?.message || "没保存上");
+      this.flash(e?.code === "conflict" ? uiText("别人刚改过，已显示最新的") : e?.message || uiText("没保存上"));
     });
   }
 
@@ -141,7 +142,7 @@ export class Sheet {
   remove(ids: string[]) {
     const gone = ids.map((id) => this.rows.get(id)).filter(Boolean).map((r) => ({ id: r!.id, data: r!.data }));
     for (const g of gone) this.track(this.rows.remove(g.id));
-    this.flash(`删除了 ${gone.length} ${this.cfg.rowWord === "行" ? "行" : "条" + this.cfg.rowWord}`, () => {
+    this.flash(uiText("删除了 {0} {1}", gone.length, this.cfg.rowWord === "行" ? "行" : "条" + this.cfg.rowWord), () => {
       for (const g of gone) this.track(this.rows.put(g.data, g.id));
       this.note = null;
       this.emit();

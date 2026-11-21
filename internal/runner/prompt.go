@@ -3,6 +3,7 @@ package runner
 import (
 	"fmt"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/chenhg5/myco/internal/api"
@@ -128,9 +129,48 @@ func orStr(a, b string) string {
 	return b
 }
 
-// maxBriefInPrompt caps the project brief in a prompt; the rest is one
-// `myco project show` away.
-const maxBriefInPrompt = 4 << 10
+// maxBriefInPrompt caps the project brief in a prompt (in characters, as
+// hubs from v0.21.10 cap it); the rest is one `myco project show` away.
+const maxBriefInPrompt = 16000
+
+// maxMemoryInPrompt caps the project memory in a prompt (in characters):
+// the newest entries are kept, the rest is one `myco project memory show`
+// away.
+const maxMemoryInPrompt = 8000
+
+// projectVersion identifies what a project section says: it is given again
+// when the project or its memory changes.
+func projectVersion(p *api.Project) string {
+	v := p.UpdatedAt.UTC().Format(time.RFC3339Nano)
+	if p.Memory != nil {
+		v += "/" + p.Memory.UpdatedAt.UTC().Format(time.RFC3339Nano)
+	}
+	for _, m := range p.Members {
+		v += "/" + m.Name + ":" + m.Role + ":" + m.Note
+	}
+	return v
+}
+
+// headRunes is s cut to at most n characters.
+func headRunes(s string, n int) (string, bool) {
+	if utf8.RuneCountInString(s) <= n {
+		return s, false
+	}
+	return string([]rune(s)[:n]), true
+}
+
+// tailRunes is the end of s, at most n characters, from a line start.
+func tailRunes(s string, n int) (string, bool) {
+	r := []rune(s)
+	if len(r) <= n {
+		return s, false
+	}
+	t := string(r[len(r)-n:])
+	if i := strings.Index(t, "\n"); i >= 0 {
+		t = t[i+1:]
+	}
+	return t, true
+}
 
 // projectSection describes the project a message belongs to: its goal, who
 // does what, and the brief.
@@ -174,20 +214,33 @@ func projectSection(self string, p *api.Project) string {
 	}
 	if brief := strings.TrimSpace(p.Brief); brief != "" {
 		b.WriteString("Brief:\n")
-		if len(brief) > maxBriefInPrompt {
-			cut := maxBriefInPrompt
-			for cut > 0 && !utf8.RuneStart(brief[cut]) {
-				cut--
-			}
-			brief = brief[:cut] + "\n… (cut short; the rest: `myco project show --name " + p.Name + "`)"
+		if cut, short := headRunes(brief, maxBriefInPrompt); short {
+			brief = cut + "\n… (cut short; the rest: `myco project show --name " + p.Name + "`)"
 		}
 		b.WriteString(brief + "\n")
 	}
-	if len(p.Docs) > 0 {
-		names := make([]string, 0, len(p.Docs))
-		for _, d := range p.Docs {
-			names = append(names, d.Name)
+	if p.Memory != nil {
+		// A hub with project memory (v0.21.10 on).
+		b.WriteString("Project memory (what members learned and all keep in mind; it can be newer than the brief):\n")
+		if mem := strings.TrimSpace(p.Memory.Body); mem == "" {
+			b.WriteString("(empty)\n")
+		} else {
+			if cut, short := tailRunes(mem, maxMemoryInPrompt); short {
+				mem = "… (older entries: `myco project memory show --name " + p.Name + "`)\n" + cut
+			}
+			b.WriteString(mem + "\n")
 		}
+		fmt.Fprintf(&b, "When you learn something every member of this project should keep in mind (a decision, a convention, the owner's preference, a lesson from this task), add it in a sentence or two: "+
+			"`myco project memory add --name %s --text \"...\"`. Do not repeat what the brief or memory already says, and leave out task details and secrets.\n", p.Name)
+	}
+	names := make([]string, 0, len(p.Docs))
+	for _, d := range p.Docs {
+		if p.Memory != nil && d.Name == p.Memory.Name {
+			continue
+		}
+		names = append(names, d.Name)
+	}
+	if len(names) > 0 {
 		fmt.Fprintf(&b, "Shared documents: %s. `myco project pull --name %s` writes them to .myco/projects/%s/.\n", strings.Join(names, ", "), p.Name, p.Name)
 	}
 	return b.String()

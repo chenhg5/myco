@@ -2,9 +2,12 @@
 // page: a page's records and the person's Downloads.
 export type MycoRecord<T = Record<string, unknown>> = { collection: string; id: string; data: T; version: number; updated_by?: string };
 export type MycoChange = { seq: number; collection: string; record: string; op: "put" | "delete"; data?: Record<string, unknown>; version: number; by?: string };
-type Ctx = { page: { id: string; name: string }; me: { name: string } };
+export type PagePreferences = { language: "zh" | "en"; theme: "light" | "dark" };
+type Ctx = { preferences?: PagePreferences; page: { id: string; name: string }; me: { name: string } };
 
 interface Bridge {
+  readonly preferences?: PagePreferences;
+  on?(event: "preferences", callback: (value: PagePreferences) => void): () => void;
   ready: Promise<Ctx>;
   data: {
     list(collection?: string): Promise<{ records: MycoRecord[]; seq: number }>;
@@ -251,7 +254,7 @@ export async function save(name: string, content: string | Uint8Array | Blob, ty
 }
 
 export function dark() {
-  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
+  return myco?.features?.includes("preferences") && myco.preferences ? myco.preferences.theme === "dark" : window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
 }
 
 /** Local controller values from os.call("proxy.profile" / "proxy.control").

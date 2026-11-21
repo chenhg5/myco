@@ -1,3 +1,4 @@
+import { t as uiText } from "../_lib/i18n";
 // The tools beside the photo: one panel for each of crop, adjust, filters,
 // portrait, text, stickers, pens, mosaic and frames.
 import { useEffect, useRef, useState } from "react";
@@ -19,7 +20,7 @@ export function Slider({ label, value, min, max, onChange, onReset, step = 1, un
   const zero = min < 0 ? ((0 - min) / (max - min)) * 100 : 0;
   const lo = Math.min(pct, zero), hi = Math.max(pct, zero);
   return (
-    <label className="ph-slider" onDoubleClick={onReset} title={onReset ? "双击还原" : undefined}>
+    <label className="ph-slider" onDoubleClick={onReset} title={onReset ? uiText("双击还原") : undefined}>
       <span className="ph-slider-top"><span>{label}</span><b className={value ? "is-set" : ""}>{value > 0 && min < 0 ? "+" : ""}{Math.round(value * 10) / 10}{unit}</b></span>
       <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))}
         style={{ ["--lo" as string]: `${lo}%`, ["--hi" as string]: `${hi}%` }} />
@@ -34,8 +35,8 @@ function Swatches({ colors, value, onChange }: { colors: string[]; value: string
         <button key={c} type="button" role="radio" aria-checked={value.toLowerCase() === c} aria-label={c} className={`ph-swatch${value.toLowerCase() === c ? " is-on" : ""}`}
           style={{ background: c }} onClick={() => onChange(c)} />
       ))}
-      <label className="ph-swatch is-pick" title="别的颜色" style={{ background: COLORS.includes(value.toLowerCase()) || colors.includes(value.toLowerCase()) ? undefined : value }}>
-        <input type="color" value={/^#[0-9a-f]{6}$/i.test(value) ? value : "#ffffff"} onChange={(e) => onChange(e.target.value)} aria-label="别的颜色" />
+      <label className="ph-swatch is-pick" title={uiText("别的颜色")} style={{ background: COLORS.includes(value.toLowerCase()) || colors.includes(value.toLowerCase()) ? undefined : value }}>
+        <input type="color" value={/^#[0-9a-f]{6}$/i.test(value) ? value : "#ffffff"} onChange={(e) => onChange(e.target.value)} aria-label={uiText("别的颜色")} />
       </label>
     </div>
   );
@@ -85,7 +86,7 @@ export function CropPanel({ id, photo }: { id: string; photo: Photo }) {
   };
   return (
     <div className="ph-pane">
-      <Head title="裁剪和旋转">{(rc.crop || rc.rotate || rc.flipH || rc.flipV || rc.straighten) ? <button type="button" className="link-btn" onClick={() => patch(id, { crop: null, rotate: 0, flip_h: false, flip_v: false, straighten: 0, ratio: "free" })}>还原</button> : null}</Head>
+      <Head title={uiText("裁剪和旋转")}>{(rc.crop || rc.rotate || rc.flipH || rc.flipV || rc.straighten) ? <button type="button" className="link-btn" onClick={() => patch(id, { crop: null, rotate: 0, flip_h: false, flip_v: false, straighten: 0, ratio: "free" })}>{uiText("还原")}</button> : null}</Head>
       <div className="ph-ratios">
         {RATIOS.map((r) => (
           <button key={r.id} type="button" className={`ph-ratio${ratio === r.id ? " is-on" : ""}`} onClick={() => setRatio(r.id)}>
@@ -94,13 +95,13 @@ export function CropPanel({ id, photo }: { id: string; photo: Photo }) {
         ))}
       </div>
       <div className="ph-row4">
-        <button type="button" className="ph-act" onClick={() => turn(-90)}><RotateCcw className="ico" />向左转</button>
-        <button type="button" className="ph-act" onClick={() => turn(90)}><RotateCw className="ico" />向右转</button>
-        <button type="button" className="ph-act" onClick={() => patch(id, { flip_h: !rc.flipH })}><FlipHorizontal2 className="ico" />左右翻</button>
-        <button type="button" className="ph-act" onClick={() => patch(id, { flip_v: !rc.flipV })}><FlipVertical2 className="ico" />上下翻</button>
+        <button type="button" className="ph-act" onClick={() => turn(-90)}><RotateCcw className="ico" />{uiText("向左转")}</button>
+        <button type="button" className="ph-act" onClick={() => turn(90)}><RotateCw className="ico" />{uiText("向右转")}</button>
+        <button type="button" className="ph-act" onClick={() => patch(id, { flip_h: !rc.flipH })}><FlipHorizontal2 className="ico" />{uiText("左右翻")}</button>
+        <button type="button" className="ph-act" onClick={() => patch(id, { flip_v: !rc.flipV })}><FlipVertical2 className="ico" />{uiText("上下翻")}</button>
       </div>
-      <Slider label="拉直" value={rc.straighten} min={-45} max={45} step={0.5} unit="°" onChange={(v) => patch(id, { straighten: v }, "straighten")} onReset={() => patch(id, { straighten: 0 })} />
-      <p className="ph-hint">拖动框的边和角来裁剪，拖动框内移动它。</p>
+      <Slider label={uiText("拉直")} value={rc.straighten} min={-45} max={45} step={0.5} unit="°" onChange={(v) => patch(id, { straighten: v }, "straighten")} onReset={() => patch(id, { straighten: 0 })} />
+      <p className="ph-hint">{uiText("拖动框的边和角来裁剪，拖动框内移动它。")}</p>
     </div>
   );
 }
@@ -112,7 +113,7 @@ export function AdjustPanel({ id, photo }: { id: string; photo: Photo }) {
   const any = Object.values(a).some((v) => v);
   return (
     <div className="ph-pane">
-      <Head title="调色">{any && <button type="button" className="link-btn" onClick={() => patch(id, { adjust: {} })}>全部还原</button>}</Head>
+      <Head title={uiText("调色")}>{any && <button type="button" className="link-btn" onClick={() => patch(id, { adjust: {} })}>{uiText("全部还原")}</button>}</Head>
       {ADJUSTS.map((x) => (
         <Slider key={x.id} label={x.name} value={num(a[x.id], 0)} min={x.min} max={100} onChange={(v) => set(x.id, v)} onReset={() => set(x.id, 0)} />
       ))}
@@ -142,7 +143,7 @@ export function FilterPanel({ id, photo, local }: { id: string; photo: Photo; lo
   }, [geoKey]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div className="ph-pane">
-      <Head title="滤镜" />
+      <Head title={uiText("滤镜")} />
       <div className="ph-filters">
         {FILTERS.map((f) => (
           <button key={f.id} type="button" className={`ph-filter${rc.filter === f.id ? " is-on" : ""}`} onClick={() => patch(id, { filter: f.id, filter_strength: rc.filter === f.id ? rc.filterStrength : 80 })}>
@@ -151,7 +152,7 @@ export function FilterPanel({ id, photo, local }: { id: string; photo: Photo; lo
           </button>
         ))}
       </div>
-      {rc.filter && <Slider label="强度" value={rc.filterStrength} min={0} max={100} onChange={(v) => patch(id, { filter_strength: v }, "filter_strength")} onReset={() => patch(id, { filter_strength: 80 })} />}
+      {rc.filter && <Slider label={uiText("强度")} value={rc.filterStrength} min={0} max={100} onChange={(v) => patch(id, { filter_strength: v }, "filter_strength")} onReset={() => patch(id, { filter_strength: 80 })} />}
     </div>
   );
 }
@@ -162,27 +163,27 @@ export function BeautyPanel({ id, photo }: { id: string; photo: Photo }) {
   const set = (k: "smooth" | "whiten", v: number) => patch(id, { beauty: { ...(photos(id)?.beauty || {}), [k]: v } }, `beauty.${k}`);
   return (
     <div className="ph-pane">
-      <Head title="人像" />
-      <Slider label="磨皮" value={num(b.smooth, 0)} min={0} max={100} onChange={(v) => set("smooth", v)} onReset={() => set("smooth", 0)} />
-      <Slider label="美白" value={num(b.whiten, 0)} min={0} max={100} onChange={(v) => set("whiten", v)} onReset={() => set("whiten", 0)} />
+      <Head title={uiText("人像")} />
+      <Slider label={uiText("磨皮")} value={num(b.smooth, 0)} min={0} max={100} onChange={(v) => set("smooth", v)} onReset={() => set("smooth", 0)} />
+      <Slider label={uiText("美白")} value={num(b.whiten, 0)} min={0} max={100} onChange={(v) => set("whiten", v)} onReset={() => set("whiten", 0)} />
       <div className="ph-presets">
         {[["自然", 30, 15], ["清透", 50, 30], ["精致", 70, 40]].map(([n, s, w]) => (
-          <button key={n as string} type="button" className="ph-chip" onClick={() => patch(id, { beauty: { smooth: s as number, whiten: w as number } })}>{n}</button>
+          <button key={n as string} type="button" className="ph-chip" onClick={() => patch(id, { beauty: { smooth: s as number, whiten: w as number } })}>{uiText(String(n))}</button>
         ))}
-        <button type="button" className="ph-chip" onClick={() => patch(id, { beauty: {} })}>关闭</button>
+        <button type="button" className="ph-chip" onClick={() => patch(id, { beauty: {} })}>{uiText("关闭")}</button>
       </div>
-      <p className="ph-hint">按肤色找到皮肤，只在平滑的地方磨，眼睛、头发和轮廓保持清楚。</p>
+      <p className="ph-hint">{uiText("按肤色找到皮肤，只在平滑的地方磨，眼睛、头发和轮廓保持清楚。")}</p>
     </div>
   );
 }
 
 // ---- text ----
 const TEXT_PRESETS: { name: string; l: Partial<Extract<Layer, { type: "text" }>> }[] = [
-  { name: "标题", l: { size: 0.09, style: "shadow", color: "#ffffff", font: "sans" } },
-  { name: "描边", l: { size: 0.08, style: "stroke", color: "#ffd60a", font: "sans" } },
-  { name: "标签", l: { size: 0.05, style: "box", color: "#f54a45", font: "sans" } },
-  { name: "手写", l: { size: 0.07, style: "plain", color: "#ffffff", font: "kai", bold: false } },
-  { name: "印章", l: { size: 0.055, style: "box", color: "#1f2329", font: "serif" } },
+  { name: uiText("标题"), l: { size: 0.09, style: "shadow", color: "#ffffff", font: "sans" } },
+  { name: uiText("描边"), l: { size: 0.08, style: "stroke", color: "#ffd60a", font: "sans" } },
+  { name: uiText("标签"), l: { size: 0.05, style: "box", color: "#f54a45", font: "sans" } },
+  { name: uiText("手写"), l: { size: 0.07, style: "plain", color: "#ffffff", font: "kai", bold: false } },
+  { name: uiText("印章"), l: { size: 0.055, style: "box", color: "#1f2329", font: "serif" } },
 ];
 
 export function TextPanel({ id, sel, onSel, focusKey }: { id: string; sel: string | null; onSel: (s: string | null) => void; focusKey: number }) {
@@ -201,26 +202,26 @@ export function TextPanel({ id, sel, onSel, focusKey }: { id: string; sel: strin
   const set = (p: Partial<Extract<Layer, { type: "text" }>>, key?: string) => l && changeLayer(id, l.id, p, key);
   return (
     <div className="ph-pane">
-      <Head title="文字" />
+      <Head title={uiText("文字")} />
       <div className="ph-presets">
         {TEXT_PRESETS.map((t) => <button key={t.name} type="button" className="ph-chip" onClick={() => add(t.l)}><Plus className="ico" />{t.name}</button>)}
       </div>
       {l ? (
         <>
-          <textarea ref={ta} className="ph-text" rows={3} value={draft ?? l.text} placeholder="写点什么"
+          <textarea ref={ta} className="ph-text" rows={3} value={draft ?? l.text} placeholder={uiText("写点什么")}
             onChange={(e) => { setDraft(e.target.value); set({ text: e.target.value }, `text.${l.id}`); }} />
           <div className="ph-fonts">
             {FONTS.map((f) => <button key={f.id} type="button" className={`ph-chip${(l.font || "sans") === f.id ? " is-on" : ""}`} style={{ fontFamily: f.css }} onClick={() => set({ font: f.id })}>{f.name}</button>)}
-            <button type="button" className={`ph-chip${l.bold !== false ? " is-on" : ""}`} aria-label="加粗" title="加粗" onClick={() => set({ bold: l.bold === false })}><Bold className="ico" /></button>
+            <button type="button" className={`ph-chip${l.bold !== false ? " is-on" : ""}`} aria-label={uiText("加粗")} title={uiText("加粗")} onClick={() => set({ bold: l.bold === false })}><Bold className="ico" /></button>
           </div>
           <Seg<TextStyle> value={l.style || "shadow"} options={[["plain", "无"], ["shadow", "阴影"], ["stroke", "描边"], ["box", "底色"]]} onChange={(s) => set({ style: s })} />
           <Swatches colors={COLORS} value={l.color || "#ffffff"} onChange={(c) => set({ color: c }, `color.${l.id}`)} />
-          <Slider label="大小" value={Math.round(l.size * 1000) / 10} min={1} max={40} step={0.5} onChange={(v) => set({ size: v / 100 }, `size.${l.id}`)} />
-          <Slider label="角度" value={Math.round(l.rot || 0)} min={-180} max={180} unit="°" onChange={(v) => set({ rot: v }, `rot.${l.id}`)} onReset={() => set({ rot: 0 })} />
-          <button type="button" className="btn is-danger" onClick={() => { removeLayer(id, l.id); onSel(null); }}><Trash2 className="ico" />删除这段文字</button>
+          <Slider label={uiText("大小")} value={Math.round(l.size * 1000) / 10} min={1} max={40} step={0.5} onChange={(v) => set({ size: v / 100 }, `size.${l.id}`)} />
+          <Slider label={uiText("角度")} value={Math.round(l.rot || 0)} min={-180} max={180} unit="°" onChange={(v) => set({ rot: v }, `rot.${l.id}`)} onReset={() => set({ rot: 0 })} />
+          <button type="button" className="btn is-danger" onClick={() => { removeLayer(id, l.id); onSel(null); }}><Trash2 className="ico" />{uiText("删除这段文字")}</button>
         </>
       ) : (
-        <p className="ph-hint">{layers.some((x) => x.type === "text") ? "点图上的文字来改它，拖动移动，拖右下角旋转和缩放。" : "选一种样式加到图上。"}</p>
+        <p className="ph-hint">{layers.some((x) => x.type === "text") ? uiText("点图上的文字来改它，拖动移动，拖右下角旋转和缩放。") : uiText("选一种样式加到图上。")}</p>
       )}
     </div>
   );
@@ -238,17 +239,17 @@ export function StickerPanel({ id, sel, onSel }: { id: string; sel: string | nul
   };
   return (
     <div className="ph-pane">
-      <Head title="贴纸" />
+      <Head title={uiText("贴纸")} />
       <div className="ph-stickers">
         {STICKERS.map((e) => <button key={e} type="button" className="ph-sticker" onClick={() => add(e)} aria-label={e}>{e}</button>)}
       </div>
       {l ? (
         <>
-          <Slider label="大小" value={Math.round(l.size * 100)} min={3} max={80} onChange={(v) => changeLayer(id, l.id, { size: v / 100 }, `size.${l.id}`)} />
-          <Slider label="角度" value={Math.round(l.rot || 0)} min={-180} max={180} unit="°" onChange={(v) => changeLayer(id, l.id, { rot: v }, `rot.${l.id}`)} onReset={() => changeLayer(id, l.id, { rot: 0 })} />
-          <button type="button" className="btn is-danger" onClick={() => { removeLayer(id, l.id); onSel(null); }}><Trash2 className="ico" />删除这个贴纸</button>
+          <Slider label={uiText("大小")} value={Math.round(l.size * 100)} min={3} max={80} onChange={(v) => changeLayer(id, l.id, { size: v / 100 }, `size.${l.id}`)} />
+          <Slider label={uiText("角度")} value={Math.round(l.rot || 0)} min={-180} max={180} unit="°" onChange={(v) => changeLayer(id, l.id, { rot: v }, `rot.${l.id}`)} onReset={() => changeLayer(id, l.id, { rot: 0 })} />
+          <button type="button" className="btn is-danger" onClick={() => { removeLayer(id, l.id); onSel(null); }}><Trash2 className="ico" />{uiText("删除这个贴纸")}</button>
         </>
-      ) : <p className="ph-hint">点一个贴到图上，拖动移动，拖右下角旋转和缩放。</p>}
+      ) : <p className="ph-hint">{uiText("点一个贴到图上，拖动移动，拖右下角旋转和缩放。")}</p>}
     </div>
   );
 }
@@ -261,7 +262,7 @@ export function DrawPanel({ id, mode, brush, setBrush }: { id: string; mode: Mod
   const undoOne = () => { const last = mine[mine.length - 1]; if (last) removeLayer(id, last.id); };
   return (
     <div className="ph-pane">
-      <Head title={type === "mosaic" ? "马赛克" : "涂鸦"} />
+      <Head title={type === "mosaic" ? uiText("马赛克") : uiText("涂鸦")} />
       {type === "mosaic"
         ? <Seg value={brush.mosaic} options={[["pixel", "马赛克"], ["blur", "模糊"]]} onChange={(m) => setBrush({ ...brush, mosaic: m })} />
         : <>
@@ -269,13 +270,13 @@ export function DrawPanel({ id, mode, brush, setBrush }: { id: string; mode: Mod
             <Swatches colors={COLORS} value={brush.color} onChange={(color) => setBrush({ ...brush, color })} />
           </>}
       {type === "mosaic"
-        ? <Slider label="笔刷大小" value={Math.round(brush.mwidth * 1000) / 10} min={1} max={20} step={0.5} onChange={(v) => setBrush({ ...brush, mwidth: v / 100 })} />
-        : <Slider label="笔刷大小" value={Math.round(brush.width * 1000) / 10} min={0.3} max={10} step={0.1} onChange={(v) => setBrush({ ...brush, width: v / 100 })} />}
+        ? <Slider label={uiText("笔刷大小")} value={Math.round(brush.mwidth * 1000) / 10} min={1} max={20} step={0.5} onChange={(v) => setBrush({ ...brush, mwidth: v / 100 })} />
+        : <Slider label={uiText("笔刷大小")} value={Math.round(brush.width * 1000) / 10} min={0.3} max={10} step={0.1} onChange={(v) => setBrush({ ...brush, width: v / 100 })} />}
       <div className="ph-row2">
-        <button type="button" className="btn" disabled={!mine.length} onClick={undoOne}><Undo2 className="ico" />撤掉一笔</button>
-        <button type="button" className="btn" disabled={!mine.length} onClick={clearAll}><Trash2 className="ico" />全部擦掉</button>
+        <button type="button" className="btn" disabled={!mine.length} onClick={undoOne}><Undo2 className="ico" />{uiText("撤掉一笔")}</button>
+        <button type="button" className="btn" disabled={!mine.length} onClick={clearAll}><Trash2 className="ico" />{uiText("全部擦掉")}</button>
       </div>
-      <p className="ph-hint">{type === "mosaic" ? "在图上涂抹要遮住的地方：人脸、车牌、聊天记录里的名字。" : "在图上按住拖动来画。"}</p>
+      <p className="ph-hint">{type === "mosaic" ? uiText("在图上涂抹要遮住的地方：人脸、车牌、聊天记录里的名字。") : uiText("在图上按住拖动来画。")}</p>
     </div>
   );
 }
@@ -286,7 +287,7 @@ export function FramePanel({ id, photo }: { id: string; photo: Photo }) {
   const colored = rc.frame === "white" || rc.frame === "thin" || rc.frame === "polaroid";
   return (
     <div className="ph-pane">
-      <Head title="边框" />
+      <Head title={uiText("边框")} />
       <div className="ph-frames">
         {FRAMES.map((f) => (
           <button key={f.id} type="button" className={`ph-frame${rc.frame === f.id ? " is-on" : ""}`} onClick={() => patch(id, { frame: f.id })}>
@@ -294,7 +295,7 @@ export function FramePanel({ id, photo }: { id: string; photo: Photo }) {
           </button>
         ))}
       </div>
-      {colored && <><div className="ph-label">边框颜色</div><Swatches colors={FRAME_COLORS} value={rc.frameColor} onChange={(c) => patch(id, { frame_color: c }, "frame_color")} /></>}
+      {colored && <><div className="ph-label">{uiText("边框颜色")}</div><Swatches colors={FRAME_COLORS} value={rc.frameColor} onChange={(c) => patch(id, { frame_color: c }, "frame_color")} /></>}
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { t as uiText } from "../_lib/i18n";
 // What runs in the background of the page: the recording (one at a time),
 // transcribing (one meeting at a time, its tracks one after another), and
 // installing the speech engine. Each keeps its state here, outside React,
@@ -42,11 +43,11 @@ export type RecordPlan = { me: boolean; them: string | null; themName: string };
 
 /** Starts recording a new meeting; its id. Throws what the computer said (no permission…). */
 export async function startRecording(plan: RecordPlan, computer: string) {
-  if (recording) throw new Error("已经在录了");
+  if (recording) throw new Error(uiText("已经在录了"));
   const tracks: { id: Track; source: string }[] = [];
   if (plan.them) tracks.push({ id: "them", source: plan.them });
   if (plan.me) tracks.push({ id: "me", source: "mic" });
-  if (!tracks.length) throw new Error("至少录一个声音");
+  if (!tracks.length) throw new Error(uiText("至少录一个声音"));
   const now = new Date();
   const data: Meeting = {
     title: title(now), started_at: now.toISOString(), seconds: 0, status: "recording", computer,
@@ -54,7 +55,7 @@ export async function startRecording(plan: RecordPlan, computer: string) {
     speakers: { me: kit.me || "我", them: "对方" }, by: kit.me,
   };
   const rec = await meetings.put(data as Meeting & Record<string, unknown>);
-  if (!rec) throw new Error("没存上");
+  if (!rec) throw new Error(uiText("没存上"));
   const id = rec.id;
   kit.emit();
   const job = os().audio.record({ tracks });
@@ -195,7 +196,7 @@ export async function transcribe(id: string) {
     for (const t of tracks) {
       const err = await diarizeNow(id, t, 0);
       if (err === "已停止") break;
-      if (err) kit.flash(`没分出说话人：${err}`);
+      if (err) kit.flash(uiText("没分出说话人：{0}", err));
     }
   }
   transcribeJob = null;
@@ -277,7 +278,7 @@ export async function splitVoices(id: string, track: Track, count: number) {
     }
     await patchMeeting(id, track === "me" ? { mic_voices: 1 } : { voices: 1 });
     kit.emit();
-    kit.flash(track === "me" ? "麦克风这边算作一个人" : "别人算作一个人");
+    kit.flash(track === "me" ? uiText("麦克风这边算作一个人") : uiText("别人算作一个人"));
     return;
   }
   splitting = id;
@@ -286,8 +287,8 @@ export async function splitVoices(id: string, track: Track, count: number) {
   transcribeJob = null;
   splitting = null;
   changed();
-  if (err) kit.flash(err === "已停止" ? "已停止" : `没分出说话人：${err}`);
-  else kit.flash(`${track === "me" ? "麦克风这边" : "别人"}分成了 ${(track === "me" ? meetings.get(id)?.data.mic_voices : meetings.get(id)?.data.voices) || 1} 个人`);
+  if (err) kit.flash(err === "已停止" ? uiText("已停止") : uiText("没分出说话人：{0}", err));
+  else kit.flash(uiText("{0}分成了 {1} 个人", track === "me" ? "麦克风这边" : "别人", (track === "me" ? meetings.get(id)?.data.mic_voices : meetings.get(id)?.data.voices) || 1));
 }
 
 // ---- notes, by an agent ----

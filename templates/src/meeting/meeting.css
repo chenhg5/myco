@@ -92,7 +92,8 @@
 
 /* faces: one letter, in grey */
 .mt-face { display: inline-grid; place-items: center; width: 22px; height: 22px; flex: none; border-radius: 50%; font-size: 11px; font-style: normal; font-weight: 600; line-height: 1; }
-.mt-face { box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--fg) 12%, transparent); }
+.mt-face { --h: 214; background: hsl(var(--h) 30% 88%); color: hsl(var(--h) 34% 30%); }
+@media (prefers-color-scheme: dark) { .mt-face { background: hsl(var(--h) 18% 27%); color: hsl(var(--h) 34% 80%); } }
 
 /* a meeting */
 .mt-meeting { flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -107,18 +108,23 @@
 .mt-find-n { padding: 0 4px; font-size: 11px; color: var(--muted); }
 .mt-find .icon-btn { width: 22px; height: 22px; }
 
-.mt-timeline { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; align-items: center; padding: 8px 22px 12px; }
-.mt-tl-names { display: flex; flex-direction: column; gap: 6px; }
-.mt-tl-name { display: flex; align-items: center; gap: 6px; height: 20px; padding: 0 6px 0 0; border: 0; border-radius: 6px; background: none; color: var(--fg); font-size: 12px; text-align: left; }
-.mt-tl-name b { font-weight: 500; max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mt-tl-name em { font-style: normal; color: var(--faint); font-size: 11px; }
-.mt-tl-name:hover b { text-decoration: underline; }
+/* who spoke when: faces in the transcript's face column, lanes from where its text starts, names at the end */
+.mt-tl-wrap { position: sticky; top: 0; z-index: 2; background: var(--bg); }
+.mt-timeline { display: flex; gap: 8px; max-width: 800px; padding: 10px 22px 12px; }
+.mt-tl-faces, .mt-tl-names { display: flex; flex-direction: column; gap: 6px; flex: none; }
+.mt-tl-faces .mt-face { width: 22px !important; height: 20px !important; border-radius: 10px; }
+.mt-tl-names { width: 112px; }
+.mt-tl-name { display: flex; align-items: center; gap: 6px; height: 20px; padding: 0 4px; border: 0; border-radius: 6px; background: none; color: var(--fg); font-size: 12px; text-align: left; }
+.mt-tl-name b { flex: 1; min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mt-tl-name em { font-style: normal; color: var(--faint); font-size: 11px; font-variant-numeric: tabular-nums; }
+.mt-tl-name:hover { background: var(--hover); }
+.mt-tl-name.is-on { background: var(--accent-bg); }
 .mt-tl-name.is-off { opacity: 0.45; }
-.mt-tl-lanes { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 0; touch-action: none; }
-.mt-lane { position: relative; height: 20px; border-radius: 4px; background: var(--bg2); }
+.mt-tl-lanes { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; touch-action: none; }
+.mt-lane { --h: 214; position: relative; height: 20px; border-radius: 5px; background: var(--bg2); }
 .mt-lane.is-off { opacity: 0.35; }
-.mt-lane-seg { position: absolute; top: 4px; bottom: 4px; border-radius: 2px; }
-
+.mt-lane-seg { position: absolute; top: 5px; bottom: 5px; border-radius: 2px; background: hsl(var(--h) 28% 62%); }
+@media (prefers-color-scheme: dark) { .mt-lane-seg { background: hsl(var(--h) 24% 52%); } }
 .mt-tl-hit { position: absolute; top: -4px; width: 2px; height: 4px; margin-left: -1px; border-radius: 1px; background: var(--fg); opacity: 0.5; }
 .mt-tl-hit.is-on { opacity: 1; height: 5px; top: -5px; }
 .mt-tl-head { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; border-radius: 1px; background: var(--fg); pointer-events: none; }
@@ -127,7 +133,7 @@
 
 .mt-content { flex: 1; min-height: 0; display: flex; }
 .mt-body { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; }
-.mt-doc { max-width: 800px; padding: 6px 22px 40px; display: flex; flex-direction: column; gap: 2px; }
+.mt-doc { max-width: 800px; padding: 2px 22px 40px; display: flex; flex-direction: column; gap: 2px; }
 .mt-doc > .mt-alert { margin-bottom: 12px; }
 .mt-para { padding: 10px 0 8px; }
 .mt-para-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
@@ -136,7 +142,7 @@
 .mt-name-edit { width: 120px; height: 22px; padding: 0 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); outline: none; font-size: 13px; font-weight: 600; }
 .mt-para-time { padding: 0; border: 0; background: none; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
 .mt-para-time:not(:disabled):hover { color: var(--fg); text-decoration: underline; }
-.mt-para-text { margin: 0 0 0 30px; font-size: 15px; line-height: 1.85; color: var(--fg); }
+.mt-para-text { margin: 0 120px 0 30px; font-size: 15px; line-height: 1.85; color: var(--fg); }
 .mt-s { border-radius: 4px; padding: 2px 1px; margin: 0 -1px; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
 .mt-s:hover { background: var(--hover); }
 .mt-s.is-on { background: var(--now); box-shadow: 0 1.5px 0 var(--fg); }
@@ -169,7 +175,8 @@
   .mt-clock { font-size: 48px; }
   .mt-player .tool { padding: 0 6px; font-size: 0; gap: 0; }
   .mt-doc { padding: 10px 16px 32px; }
-  .mt-para-text { margin-left: 0; }
+  .mt-para-text { margin: 0; }
+  .mt-tl-names { width: 72px; }
 }
 
 .mt-menu-label { padding: 6px 10px 4px; font-size: 11px; color: var(--muted); }
@@ -211,3 +218,8 @@
 .mt-split-n { min-width: 30px; height: 26px; padding: 0 6px; border: 0; border-radius: 7px; background: var(--bg2); font-size: 12px; color: var(--fg); }
 .mt-split-n:hover { background: var(--hover); }
 .mt-split-n.is-on { background: var(--accent); color: var(--on-accent); }
+.mt-crash { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 24px; text-align: center; }
+.mt-crash b { font-size: 15px; font-weight: 600; }
+.mt-crash code { max-width: 560px; padding: 6px 10px; border-radius: 6px; background: var(--bg2); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); word-break: break-word; }
+.mt-crash span { font-size: 12.5px; color: var(--muted); }
+.mt-crash .btn { margin-top: 6px; }

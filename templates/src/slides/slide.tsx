@@ -1,3 +1,4 @@
+import { t as uiText } from "../_lib/i18n";
 // One slide, drawn at 1280×720 and scaled to fit: in the editor (its texts
 // edited in place), as a thumbnail and when presenting.
 import { useEffect, useLayoutEffect, useRef, type CSSProperties, type KeyboardEvent } from "react";
@@ -60,7 +61,7 @@ function Points({ points, save, editable }: { points: string[]; save: (p: string
     <ul className="pts">
       {list.map((p, i) => (
         <li key={i}>
-          <Editable value={p} editable={editable} placeholder="要点" focusRef={(el) => { els.current[i] = el; }}
+          <Editable value={p} editable={editable} placeholder={uiText("要点")} focusRef={(el) => { els.current[i] = el; }}
             onSave={(v) => save(list.map((x, j) => (j === i ? v : x)))}
             onEnter={(v) => { want.current = i + 1; save([...list.slice(0, i), v, "", ...list.slice(i + 1)]); }}
             onEmptyBack={list.length > 1 ? () => { want.current = Math.max(0, i - 1); save(list.filter((_, j) => j !== i)); } : undefined} />
@@ -74,7 +75,7 @@ function Points({ points, save, editable }: { points: string[]; save: (p: string
 export function ChartView({ chart, colors, fg, muted, line }: { chart?: Chart; colors: string[]; fg: string; muted: string; line: string }) {
   const labels = chart?.labels || [];
   const series = (chart?.series || []).filter((s) => s && Array.isArray(s.values));
-  if (!labels.length || !series.length) return <div className="chart-empty" style={{ color: muted }}>在右边填图表的数据</div>;
+  if (!labels.length || !series.length) return <div className="chart-empty" style={{ color: muted }}>{uiText("在右边填图表的数据")}</div>;
   const w = 560, h = 360, padL = 48, padB = 36, padT = 16;
   const num = (v: unknown) => (typeof v === "number" && isFinite(v) ? v : 0);
   if (chart?.type === "pie") {
@@ -134,7 +135,7 @@ export function ChartView({ chart, colors, fg, muted, line }: { chart?: Chart; c
       {series.length > 1 && series.map((s, si) => (
         <g key={si} transform={`translate(${padL + si * 140} ${h + 16})`}>
           <rect width="14" height="14" rx="3" y="-11" fill={colors[si % colors.length]} />
-          <text x="20" fill={fg} fontSize="15">{s.name || `系列${si + 1}`}</text>
+          <text x="20" fill={fg} fontSize="15">{s.name || uiText("系列{0}", si + 1)}</text>
         </g>
       ))}
     </svg>
@@ -150,13 +151,13 @@ export function SlideView({ s, deckTitle, theme, n, total, editable, save }: {
     "--bg": inverse ? t.coverBg : t.bg, "--fg": inverse ? t.coverFg : t.fg, "--muted": inverse ? t.coverMuted : t.muted,
     "--accent": t.accent, "--soft": t.soft, "--card": t.card, "--line": t.line, width: W, height: H,
   } as CSSProperties;
-  const title = <Editable className="sl-title" value={s.title || ""} placeholder="标题" editable={editable} onSave={(v) => put({ title: v })} />;
+  const title = <Editable className="sl-title" value={s.title || ""} placeholder={uiText("标题")} editable={editable} onSave={(v) => put({ title: v })} />;
   const sub = (ph = "副标题") => <Editable className="sl-sub" value={s.subtitle || ""} placeholder={ph} editable={editable} onSave={(v) => put({ subtitle: v })} />;
   const chart = <ChartView chart={s.chart} colors={t.chart} fg={inverse ? t.coverFg : t.fg} muted={inverse ? t.coverMuted : t.muted} line={t.line} />;
   const table = (
     <table className="sl-table">
       <thead><tr>{(s.table?.columns || []).map((c, i) => (
-        <th key={i}><Editable value={c} editable={editable} placeholder="列名" onSave={(v) => put({ table: { ...s.table, columns: (s.table?.columns || []).map((x, j) => (j === i ? v : x)) } })} /></th>
+        <th key={i}><Editable value={c} editable={editable} placeholder={uiText("列名")} onSave={(v) => put({ table: { ...s.table, columns: (s.table?.columns || []).map((x, j) => (j === i ? v : x)) } })} /></th>
       ))}</tr></thead>
       <tbody>{(s.table?.rows || []).map((r, ri) => (
         <tr key={ri}>{(s.table?.columns || []).map((_, ci) => (
@@ -172,7 +173,7 @@ export function SlideView({ s, deckTitle, theme, n, total, editable, save }: {
     case "end": body = <div className="lay-end">{title}{sub("联系方式或一句话（可不填）")}</div>; break;
     case "quote": body = (
       <div className="lay-quote"><span className="sl-q">“</span>
-        <Editable className="sl-quote" value={s.body || ""} placeholder="引言" editable={editable} multiline onSave={(v) => put({ body: v })} />
+        <Editable className="sl-quote" value={s.body || ""} placeholder={uiText("引言")} editable={editable} multiline onSave={(v) => put({ body: v })} />
         {sub("—— 出处")}</div>
     ); break;
     case "two": body = <div className="lay-main">{title}{s.subtitle || editable ? sub() : null}<div className="lay-two"><Points points={s.points || []} editable={editable} save={(p) => put({ points: p })} /><div className="sl-side">{chart}</div></div></div>; break;
@@ -181,8 +182,8 @@ export function SlideView({ s, deckTitle, theme, n, total, editable, save }: {
         <div className="sl-cards" style={{ gridTemplateColumns: `repeat(${Math.max(1, Math.min(4, (s.cards || []).length))}, 1fr)` }}>
           {(s.cards || []).map((c, i) => (
             <div className="sl-card" key={i}>
-              <Editable className="sl-card-t" value={c.title || ""} placeholder="数字或标题" editable={editable} onSave={(v) => put({ cards: (s.cards || []).map((x, j) => (j === i ? { ...x, title: v } : x)) })} />
-              <Editable className="sl-card-x" value={c.text || ""} placeholder="说明" editable={editable} multiline onSave={(v) => put({ cards: (s.cards || []).map((x, j) => (j === i ? { ...x, text: v } : x)) })} />
+              <Editable className="sl-card-t" value={c.title || ""} placeholder={uiText("数字或标题")} editable={editable} onSave={(v) => put({ cards: (s.cards || []).map((x, j) => (j === i ? { ...x, title: v } : x)) })} />
+              <Editable className="sl-card-x" value={c.text || ""} placeholder={uiText("说明")} editable={editable} multiline onSave={(v) => put({ cards: (s.cards || []).map((x, j) => (j === i ? { ...x, text: v } : x)) })} />
             </div>
           ))}
         </div>

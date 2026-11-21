@@ -1,3 +1,4 @@
+import { t as uiText } from "./i18n";
 // What 表格 and 多维表格 share besides the grid: following the data in
 // React, and exporting.
 import { useSyncExternalStore } from "react";
@@ -22,8 +23,8 @@ export async function exportRows(sheet: Sheet, rows: Row[], kind: "xlsx" | "csv"
   try {
     if (kind === "csv") await save(`${name}.csv`, csv(table), "text/csv");
     else await save(`${name}.xlsx`, xlsx(name, table, fields.map((f) => f.width || 140)), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    sheet.flash("已存到「下载」");
+    sheet.flash(uiText("已存到「下载」"));
   } catch (e) {
-    sheet.flash((e as Error).message || "没存下来");
+    sheet.flash((e as Error).message || uiText("没存下来"));
   }
 }

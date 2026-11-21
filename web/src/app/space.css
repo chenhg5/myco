@@ -6,7 +6,10 @@
 
 /* ---------- faces ---------- */
 .pa {
-  --av-stem: #efe3cc;
+  /* The stem: a warm beige with its right edge in shade, dark enough to
+     read on the pale tile of light mode; cream on dark (below). */
+  --av-stem: #dcc398;
+  --av-stem-shade: #c09f6c;
   --av-eye: #2f2a22;
   --av-frame: #3a3d46;
   --av-screen: #15171c;
@@ -19,6 +22,8 @@
   box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--av-cap) 30%, transparent);
 }
 .dark .pa {
+  --av-stem: #efe3cc;
+  --av-stem-shade: #d4c19b;
   background: color-mix(in srgb, var(--av-cap) 22%, var(--card));
 }
 .pa.is-workspace {

@@ -1,3 +1,4 @@
+import { t as uiText } from "../_lib/i18n";
 // The map of a folder: rings around its name, one ring a level down, each
 // thing as wide as the room it takes (as DaisyDisk draws a disk). Colours
 // run round the circle; deeper rings are lighter; files are greyer;
@@ -73,7 +74,7 @@ export function Sunburst({ node, levels, dark, hover, onHover, onOpen, onUp, can
   const label = shown ? (shown.more ? { name: `${shown.parent.more} 个更小的项目`, disk: shown.parent.more_disk || 0, files: shown.parent.more_files || 0 } : { name: shown.node!.name, disk: shown.node!.disk, files: shown.node!.files })
     : { name: node.name || node.path, disk: node.disk, files: node.files };
   return (
-    <svg className={`sb${busy ? " is-busy" : ""}`} viewBox={`0 0 ${SIZE} ${SIZE}`} role="img" aria-label={`${node.name} 的占用图`}
+    <svg className={`sb${busy ? " is-busy" : ""}`} viewBox={`0 0 ${SIZE} ${SIZE}`} role="img" aria-label={uiText("{0} 的占用图", node.name)}
       onMouseLeave={() => onHover(null, null)}>
       <g>
         {/* (the one pointed at, with what is in it, drawn last: it comes out over the others) */}
@@ -95,7 +96,7 @@ export function Sunburst({ node, levels, dark, hover, onHover, onOpen, onUp, can
       <circle cx={C} cy={C} r={R0 - 6} className={`sb-mid${canUp ? " can-up" : ""}`} onClick={onUp} onMouseEnter={() => onHover(null, null)} />
       <text x={C} y={C - 16} className="sb-name">{clip(label.name, 18)}</text>
       <text x={C} y={C + 16} className="sb-size">{formatBytes(label.disk)}</text>
-      <text x={C} y={C + 40} className="sb-hint">{shown ? (shown.node?.dir ? "点开看里面" : shown.more ? "太小，没有分开画" : `${label.files ? "文件" : ""}`) : canUp ? "点中间回上一层" : `${label.files.toLocaleString()} 个文件`}</text>
+      <text x={C} y={C + 40} className="sb-hint">{shown ? (shown.node?.dir ? uiText("点开看里面") : shown.more ? uiText("太小，没有分开画") : `${label.files ? uiText("文件") : ""}`) : canUp ? uiText("点中间回上一层") : uiText("{0} 个文件", label.files.toLocaleString())}</text>
     </svg>
   );
 }

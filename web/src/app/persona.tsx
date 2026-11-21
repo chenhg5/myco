@@ -23,12 +23,13 @@ const CAP_PATTERNS = [
   ["....CCCC....", "..CCCoCCCC..", ".CCCCCCCCoC.", "CoCCCCCCCCCC", "CCCCCCCoCCCC", ".CCCCCCCCCC."],
   ["....CoCC....", "..CCCCCCCC..", ".CCCCoCCCCC.", "CCCCCCCCCCoC", "CCoCCCCCCCCC", ".CCCCCCCCCC."],
 ];
-// The stem and face (rows 6-11): eyes (e), glasses (g), blush (b).
+// The stem and face (rows 6-11): eyes (e), glasses (g), blush (b); the
+// stem's right edge in shade (T), so it stands out from a pale tile.
 const FACES = [
-  ["...SSSSSS...", "...SeSSeS...", "...SSSSSS...", "...SSSSSS...", "...SS..SS...", "............"],
-  ["...SSSSSS...", "..ggggggggg.", "...SeSSeS...", "...SSSSSS...", "...SS..SS...", "............"],
-  ["...SSSSSS...", "...SeSSeS...", "...bSSSSb...", "...SSSSSS...", "...SS..SS...", "............"],
-  ["...SSSSSS...", "...SSSSSS...", "...SeSSeS...", "...SSSSSS...", "...SS..SS...", "............"],
+  ["...SSSSST...", "...SeSSeT...", "...SSSSST...", "...SSSSST...", "...SS..ST...", "............"],
+  ["...SSSSST...", "..ggggggggg.", "...SeSSeT...", "...SSSSST...", "...SS..ST...", "............"],
+  ["...SSSSST...", "...SeSSeT...", "...bSSSSb...", "...SSSSST...", "...SS..ST...", "............"],
+  ["...SSSSST...", "...SSSSST...", "...SeSSeT...", "...SSSSST...", "...SS..ST...", "............"],
 ];
 
 function hash(s: string): number {
@@ -79,7 +80,7 @@ export function looksOf(seed: string, avatar?: string) {
 }
 
 const FILL: Record<string, string> = {
-  C: "var(--av-cap)", o: "rgba(255,255,255,0.85)", S: "var(--av-stem)", e: "var(--av-eye)",
+  C: "var(--av-cap)", o: "rgba(255,255,255,0.85)", S: "var(--av-stem)", T: "var(--av-stem-shade)", e: "var(--av-eye)",
   g: "var(--av-eye)", b: "rgba(232,110,110,0.55)",
 };
 

@@ -1,0 +1,10 @@
+{
+  "en": {
+    "name": "Video editor",
+    "description": "Import video, split and trim clips, change speed, add text and mask faces or number plates. Export MP4 locally. Media stays on this computer; the edit plan is shared with people and agents."
+  },
+  "zh": {
+    "name": "视频剪辑",
+    "description": "导入 mp4，在时间线上分割、裁剪、调顺序、变速，加文字，给人脸和车牌打模糊或马赛克，在本机导出 mp4。视频只存在打开它的电脑上，剪辑方案大家共用，agent 按备注帮你剪。"
+  }
+}

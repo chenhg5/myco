@@ -76,3 +76,63 @@ func TestTemplateFromInitToRecords(t *testing.T) {
 }
 
 func itoa64(n int64) string { b, _ := json.Marshal(n); return string(b) }
+
+func TestTemplateLocalizedMetadataRoundTrip(t *testing.T) {
+	home := isolatedHome(t)
+	c := ctx(t)
+	h := startHub(t, filepath.Join(t.TempDir(), "hub.db"), app.DefaultMessagePolicy())
+	coder := newCLI(t, h, filepath.Join(home, "coder.yaml"))
+	coder.must(c, "agent", "register", "--name", "coder")
+	dir := filepath.Join(t.TempDir(), "localized")
+	coder.must(c, "template", "init", "--dir", dir, "--name", "笔记", "--id", "coder/localized")
+	if err := os.WriteFile(filepath.Join(dir, "locales.json"), []byte(`{"en":{"name":"Notes","description":"Shared notes"},"zh":{"name":"笔记"}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var tpl api.Template
+	if err := json.Unmarshal([]byte(coder.must(c, "template", "publish", "--dir", dir)), &tpl); err != nil || tpl.Locales["en"].Name != "Notes" || tpl.Name != "笔记" {
+		t.Fatal("localized publish", tpl, err)
+	}
+	var list api.TemplateList
+	if err := json.Unmarshal([]byte(coder.must(c, "template", "list", "--full")), &list); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, v := range list.Templates {
+		if v.Slug == "coder/localized" {
+			found = true
+			if v.Locales["en"].Name != "Notes" {
+				t.Fatal("list dropped locales", v)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("template not listed")
+	}
+	var used api.TemplateUsed
+	if err := json.Unmarshal([]byte(coder.must(c, "template", "use", "--template", "coder/localized", "--name", "My user title 用户标题")), &used); err != nil || used.Page.Name != "My user title 用户标题" {
+		t.Fatal("changed user's page name", used, err)
+	}
+	// A new sidecar version invalidates the metadata cache.
+	manifestFile := filepath.Join(dir, "myco.json")
+	raw, err := os.ReadFile(manifestFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest map[string]any
+	json.Unmarshal(raw, &manifest)
+	manifest["version"] = "1.0.1"
+	raw, _ = json.Marshal(manifest)
+	os.WriteFile(manifestFile, raw, 0600)
+	os.WriteFile(filepath.Join(dir, "locales.json"), []byte(`{"en":{"name":"Notebook"}}`), 0600)
+	if err := json.Unmarshal([]byte(coder.must(c, "template", "publish", "--dir", dir)), &tpl); err != nil || tpl.Locales["en"].Name != "Notebook" {
+		t.Fatal("stale locale cache", tpl, err)
+	}
+	// Broken translations are rejected, while ordinary manifests remain valid.
+	manifest["version"] = "1.0.2"
+	raw, _ = json.Marshal(manifest)
+	os.WriteFile(manifestFile, raw, 0600)
+	os.WriteFile(filepath.Join(dir, "locales.json"), []byte(`{"../en":{"name":"bad"}}`), 0600)
+	if code, _, _ := coder.run(c, "template", "publish", "--dir", dir); code == 0 {
+		t.Fatal("published invalid locales")
+	}
+}

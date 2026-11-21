@@ -179,3 +179,48 @@ Mutations return `true`. Authentication failures are `permission_denied`, missin
 controller operations `unsupported`, unavailable/invalid controllers `failed`.
 Every request is deadline- and size-bounded, follows no redirects, and accepts
 only literal loopback addresses. See [Proxy console](proxy-console.md).
+
+## App language and appearance
+
+The host App supplies its **resolved** display settings, including manual choices
+that differ from the operating system:
+
+```js
+const { preferences } = await myco.ready;
+// preferences: { language: "en" | "zh", theme: "light" | "dark" }
+console.log(myco.preferences); // the current value, not just the ready snapshot
+const off = myco.on("preferences", (value) => updateAppearance(value));
+```
+
+Check `myco.features.includes("preferences")` for support. The bridge sets the
+page's `html.lang`, `data-myco-theme` and `color-scheme`. The frame also gets an
+explicit color scheme, and a `myco_lang` URL hint before the app module runs.
+Changing language reopens the frame with its new language; changing appearance
+updates the open frame without reloading or writing page data. Display hints
+are local to the App and are never stored as page records.
+
+Official app sources use `uiText` from `templates/src/_lib/i18n.ts` for source UI
+strings and `locale()` for dates and numbers. Pass only application copy, never
+user titles, notes, document contents, option values or enum keys, to the text
+helper. Rich text editors choose the matching BlockNote dictionary. The template
+builder preserves system media styles for old Apps and also generates explicit
+`data-myco-theme` styles for current Apps. Canvas/editor code uses `themeMedia()`
+from `_lib/appearance.ts`; the browser's global `matchMedia` API is not replaced.
+
+Templates can include `locales.json` alongside `myco.json`:
+
+```json
+{
+  "en": {"name": "Notes", "description": "Write together."},
+  "zh": {"name": "笔记", "description": "一起写。"}
+}
+```
+
+It contains at most 20 language tags and 32 KiB. Names are one line of at most
+80 characters; descriptions are at most 300 characters. Missing entries fall
+back to the manifest. Keeping this file separate allows old Hubs with strict
+manifest validation to install the same apps. New Hubs include its `locales` in
+template list/get results; old Apps ignore the new field. A page's chosen name
+and all its user content remain unchanged. The current App also bundles official
+catalog translations for Hubs that do not return `locales` yet; custom catalog
+translations need a Hub that supports this sidecar.

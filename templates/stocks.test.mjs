@@ -1,3 +1,4 @@
+import { inlineI18n } from "./test-i18n.mjs";
 // Offline contract tests using public responses captured in testdata; no live keys or network.
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -20,7 +21,7 @@ for (const name of ["model", "providers"]) {
       },
     })
     .outputText.replaceAll('"./model"', '"./model.mjs"');
-  fs.writeFileSync(path.join(tmp, name + ".mjs"), js);
+  fs.writeFileSync(path.join(tmp, name + ".mjs"), inlineI18n(js));
 }
 try {
   const m = await import(pathToFileURL(path.join(tmp, "model.mjs")).href),

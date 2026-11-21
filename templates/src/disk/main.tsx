@@ -1,3 +1,5 @@
+import { themeMedia } from "../_lib/appearance";
+import { t as uiText, locale } from "../_lib/i18n";
 // 空间清理: what takes the room on this computer's disks, and making room.
 // The disks first (each one's room, one click to scan); then a map of the
 // disk (rings, as DaisyDisk draws it) beside the list of what is in the
@@ -25,7 +27,7 @@ type Target = { name: string; path: string; disk?: OSDisk };
 type Item = { path: string; name: string; disk: number; size: number; files: number; dir: boolean };
 
 const useDark = () => {
-  const q = window.matchMedia("(prefers-color-scheme: dark)");
+  const q = themeMedia();
   const [dark, setDark] = useState(q.matches);
   useEffect(() => {
     const f = () => setDark(q.matches);
@@ -51,7 +53,7 @@ function when(at?: string) {
   if (days <= 0) return "今天";
   if (days === 1) return "昨天";
   if (days < 30) return `${days} 天前`;
-  return d.toLocaleDateString("zh-CN");
+  return d.toLocaleDateString(locale());
 }
 
 function App() {
@@ -157,10 +159,10 @@ function App() {
       setTick((x) => x + 1);
       void loadDisks();
       if (r.done.length) {
-        kit.flash(`腾出了 ${formatBytes(freed)}，${r.done.length} 项在废纸篓里，倒掉之前都能放回去`);
+        kit.flash(uiText("腾出了 {0}，{1} 项在废纸篓里，倒掉之前都能放回去", formatBytes(freed), r.done.length));
         void kit.track(cleanups.put({ at: new Date().toISOString(), computer: sys.info?.hostname || "", disk: target?.name || "", freed, count: r.done.length, by: kit.me }));
       }
-      if (r.failed.length) kit.flash(`有 ${r.failed.length} 项没移走：${r.failed[0].error.message}`);
+      if (r.failed.length) kit.flash(uiText("有 {0} 项没移走：{1}", r.failed.length, r.failed[0].error.message));
     } catch (e) {
       kit.flash((e as Error).message);
     }
@@ -169,7 +171,7 @@ function App() {
   const last = useMemo(() => [...cleanups.rows].sort((a, b) => String(b.data.at).localeCompare(String(a.data.at)))[0], [cleanups.rows.length, kit.version]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (osState !== "ready") {
-    return <div className="dk-empty"><HardDrive className="dk-empty-ico" strokeWidth={1.2} /><h2>空间清理</h2><p>{osStateText()}</p></div>;
+    return <div className="dk-empty"><HardDrive className="dk-empty-ico" strokeWidth={1.2} /><h2>{uiText("空间清理")}</h2><p>{osStateText()}</p></div>;
   }
 
   // --- scanning ---
@@ -185,17 +187,17 @@ function App() {
         <ScanRing p={p} used={used} dark={dark} />
         <div className="dk-scan-num">{used ? `${Math.floor(share * 100)}%` : formatBytes(p?.disk || 0)}</div>
         <div className="dk-scan-sub">
-          {used ? `${formatBytes(p?.disk || 0)} / ${formatBytes(used)} · ` : ""}{(p?.files || 0).toLocaleString()} 个文件 · {secs < 60 ? `${secs} 秒` : `${Math.floor(secs / 60)} 分 ${secs % 60} 秒`}
+          {used ? `${formatBytes(p?.disk || 0)} / ${formatBytes(used)} · ` : ""}{(p?.files || 0).toLocaleString()} {" "}{uiText("个文件 ·")}{" "}{secs < 60 ? uiText("{0} 秒", secs) : uiText("{0} 分 {1} 秒", Math.floor(secs / 60), secs % 60)}
         </div>
         <div className="dk-scan-path" title={p?.current}>{ltr(p?.current || target?.path || "")}</div>
         {!!p?.top?.length && (
-          <ul className="dk-scan-top" aria-label="目前最大的">
+          <ul className="dk-scan-top" aria-label={uiText("目前最大的")}>
             {p.top.slice(0, 5).map((t, i) => (
               <li key={t.path}><i style={{ background: scanColor(p, i, used, dark) }} /><span>{t.name}</span><b>{formatBytes(t.disk)}</b></li>
             ))}
           </ul>
         )}
-        <button type="button" className="btn" onClick={() => { scanning.current = null; job.cancel(); setTarget(null); }}>停止</button>
+        <button type="button" className="btn" onClick={() => { scanning.current = null; job.cancel(); setTarget(null); }}>{uiText("停止")}</button>
       </div>
     );
   }
@@ -213,8 +215,8 @@ function App() {
     return (
       <div className="dk">
         <header className="dk-top">
-          <button type="button" className="tool" onClick={() => { setTarget(null); setTree(null); }}><ArrowLeft className="ico" />磁盘</button>
-          <nav className="dk-crumbs" aria-label="位置">
+          <button type="button" className="tool" onClick={() => { setTarget(null); setTree(null); }}><ArrowLeft className="ico" />{uiText("磁盘")}</button>
+          <nav className="dk-crumbs" aria-label={uiText("位置")}>
             {chain.map((n, i) => (
               <span key={n.path} className="dk-crumb">
                 {i > 0 && <ChevronRight className="dk-crumb-sep" />}
@@ -223,15 +225,15 @@ function App() {
             ))}
           </nav>
           <span className="top-gap" />
-          {target.disk && <span className="dk-free">可用 <b>{formatBytes(target.disk.available)}</b></span>}
-          <button type="button" className="icon-btn" title="重新扫描" onClick={() => void start(target)}><RefreshCw className="ico" /></button>
+          {target.disk && <span className="dk-free">{uiText("可用")}{" "}<b>{formatBytes(target.disk.available)}</b></span>}
+          <button type="button" className="icon-btn" title={uiText("重新扫描")} onClick={() => void start(target)}><RefreshCw className="ico" /></button>
         </header>
         {scan.skipped > 0 && !warnOff && (
           <div className="dk-warn">
             <ShieldAlert className="ico" />
-            <span>有 {scan.skipped.toLocaleString()} 处没读到（没有权限），实际占用会比这里多。</span>
-            {sys.info?.os === "darwin" && <button type="button" className="link-btn" onClick={() => void os().system.settings({ pane: "full_disk" })}>给 myco「完全磁盘访问」</button>}
-            <button type="button" className="icon-btn dk-warn-x" title="不再提示" aria-label="不再提示" onClick={hideWarn}><X className="ico" /></button>
+            <span>{uiText("有")}{" "}{scan.skipped.toLocaleString()} {" "}{uiText("处没读到（没有权限），实际占用会比这里多。")}</span>
+            {sys.info?.os === "darwin" && <button type="button" className="link-btn" onClick={() => void os().system.settings({ pane: "full_disk" })}>{uiText("给 myco「完全磁盘访问」")}</button>}
+            <button type="button" className="icon-btn dk-warn-x" title={uiText("不再提示")} aria-label={uiText("不再提示")} onClick={hideWarn}><X className="ico" /></button>
           </div>
         )}
         <div className="dk-body">
@@ -239,14 +241,14 @@ function App() {
             <Sunburst node={at} levels={LEVELS} dark={dark} hover={hover} busy={refining} canUp={chain.length > 1}
               onHover={(k) => setHover(k)} onOpen={onSeg} onUp={up} />
             <div className="dk-legend">
-              {hoverSeg ? (hoverSeg.more ? `${hoverSeg.parent.name} 里 ${hoverSeg.parent.more} 个更小的项目` : ltr(hoverSeg.node!.path))
-                : `扫了 ${scan.files.toLocaleString()} 个文件，用了 ${(scan.ms / 1000).toFixed(1)} 秒${scan.skipped && warnOff ? `，${scan.skipped.toLocaleString()} 处没权限读` : ""}`}
+              {hoverSeg ? (hoverSeg.more ? uiText("{0} 里 {1} 个更小的项目", hoverSeg.parent.name, hoverSeg.parent.more) : ltr(hoverSeg.node!.path))
+                : uiText("扫了 {0} 个文件，用了 {1} 秒{2}", scan.files.toLocaleString(), (scan.ms / 1000).toFixed(1), scan.skipped && warnOff ? `，${scan.skipped.toLocaleString()} 处没权限读` : "")}
             </div>
           </section>
           <aside className="dk-side">
             <div className="seg dk-tabs" role="tablist">
-              <button type="button" role="tab" aria-selected={tab === "here"} className={tab === "here" ? "is-on" : ""} onClick={() => setTab("here")}>这里有什么</button>
-              <button type="button" role="tab" aria-selected={tab === "largest"} className={tab === "largest" ? "is-on" : ""} onClick={() => setTab("largest")}>最大的文件</button>
+              <button type="button" role="tab" aria-selected={tab === "here"} className={tab === "here" ? "is-on" : ""} onClick={() => setTab("here")}>{uiText("这里有什么")}</button>
+              <button type="button" role="tab" aria-selected={tab === "largest"} className={tab === "largest" ? "is-on" : ""} onClick={() => setTab("largest")}>{uiText("最大的文件")}</button>
             </div>
             <div className="dk-list" role="list">
               {tab === "here" && kids.map((k) => {
@@ -262,8 +264,8 @@ function App() {
                     <Meter share={at.disk ? k.disk / at.disk : 0} color={s ? colorOf(s, dark) : "var(--faint)"} />
                     <span className="dk-size">{formatBytes(k.disk)}</span>
                     <span className="dk-acts">
-                      <button type="button" className="icon-btn" title="在访达里显示" onClick={(e) => { e.stopPropagation(); void os().fs.reveal({ path: k.path }); }}><ExternalLink className="ico" /></button>
-                      <button type="button" className="icon-btn" title={taken ? "已在待清理里" : "加到待清理"} disabled={taken} onClick={(e) => { e.stopPropagation(); add(it); }}><Plus className="ico" /></button>
+                      <button type="button" className="icon-btn" title={uiText("在访达里显示")} onClick={(e) => { e.stopPropagation(); void os().fs.reveal({ path: k.path }); }}><ExternalLink className="ico" /></button>
+                      <button type="button" className="icon-btn" title={taken ? uiText("已在待清理里") : uiText("加到待清理")} disabled={taken} onClick={(e) => { e.stopPropagation(); add(it); }}><Plus className="ico" /></button>
                     </span>
                   </div>
                 );
@@ -271,12 +273,12 @@ function App() {
               {tab === "here" && (at.more || 0) > 0 && (
                 <div className="dk-row is-more" role="listitem">
                   <span className="dk-more-ico" aria-hidden>⋯</span>
-                  <span className="dk-name">{at.more} 个更小的项目</span>
+                  <span className="dk-name">{at.more} {" "}{uiText("个更小的项目")}</span>
                   <Meter share={at.disk ? (at.more_disk || 0) / at.disk : 0} color={dark ? "hsl(220 6% 40%)" : "hsl(220 8% 74%)"} />
                   <span className="dk-size">{formatBytes(at.more_disk || 0)}</span>
                 </div>
               )}
-              {tab === "here" && !kids.length && !(at.more || 0) && <div className="dk-none">这里是空的</div>}
+              {tab === "here" && !kids.length && !(at.more || 0) && <div className="dk-none">{uiText("这里是空的")}</div>}
               {tab === "largest" && scan.largest.filter((f) => f.path.startsWith(at.path)).slice(0, 100).map((f) => {
                 const it: Item = { path: f.path, name: basename(f.path), disk: f.disk || f.size, size: f.size, files: 1, dir: false };
                 const taken = inBasket(f.path);
@@ -287,8 +289,8 @@ function App() {
                     <Meter share={it.disk / (biggest || 1)} color="var(--faint)" />
                     <span className="dk-size">{formatBytes(it.disk)}</span>
                     <span className="dk-acts">
-                      <button type="button" className="icon-btn" title="在访达里显示" onClick={() => void os().fs.reveal({ path: f.path })}><ExternalLink className="ico" /></button>
-                      <button type="button" className="icon-btn" title={taken ? "已在待清理里" : "加到待清理"} disabled={taken} onClick={() => add(it)}><Plus className="ico" /></button>
+                      <button type="button" className="icon-btn" title={uiText("在访达里显示")} onClick={() => void os().fs.reveal({ path: f.path })}><ExternalLink className="ico" /></button>
+                      <button type="button" className="icon-btn" title={taken ? uiText("已在待清理里") : uiText("加到待清理")} disabled={taken} onClick={() => add(it)}><Plus className="ico" /></button>
                     </span>
                   </div>
                 );
@@ -304,27 +306,27 @@ function App() {
               {basket.map((x) => (
                 <span key={x.path} className="dk-chip" title={x.path}>
                   {x.dir ? <Folder className="ico" /> : <File className="ico" />}{x.name}<b>{formatBytes(x.disk)}</b>
-                  <button type="button" aria-label={`拿掉 ${x.name}`} onClick={() => setBasket((b) => b.filter((y) => y.path !== x.path))}><X /></button>
+                  <button type="button" aria-label={uiText("拿掉 {0}", x.name)} onClick={() => setBasket((b) => b.filter((y) => y.path !== x.path))}><X /></button>
                 </span>
               ))}
             </div>
-          ) : <span className="dk-basket-hint">把要清理的拖到这里，或者点每行的 +</span>}
+          ) : <span className="dk-basket-hint">{uiText("把要清理的拖到这里，或者点每行的 +")}</span>}
           <span className="top-gap" />
           {basket.length > 0 && <>
-            <span className="dk-basket-total">{basket.length} 项 · <b>{formatBytes(total)}</b></span>
-            <button type="button" className="tool" onClick={() => setBasket([])}>清空</button>
-            <button type="button" className="btn btn-danger" onClick={() => setConfirm(true)}>移到废纸篓</button>
+            <span className="dk-basket-total">{basket.length} {" "}{uiText("项 ·")}{" "}<b>{formatBytes(total)}</b></span>
+            <button type="button" className="tool" onClick={() => setBasket([])}>{uiText("清空")}</button>
+            <button type="button" className="btn btn-danger" onClick={() => setConfirm(true)}>{uiText("移到废纸篓")}</button>
           </>}
         </footer>
         {confirm && (
           <div className="dk-modal-bg" onClick={() => setConfirm(false)}>
-            <div className="dk-modal" role="dialog" aria-modal aria-label="移到废纸篓" onClick={(e) => e.stopPropagation()}>
-              <h3>把这 {basket.length} 项移到废纸篓？</h3>
-              <p className="faint">一共 {formatBytes(total)}。倒掉废纸篓之前，都能放回原处。</p>
+            <div className="dk-modal" role="dialog" aria-modal aria-label={uiText("移到废纸篓")} onClick={(e) => e.stopPropagation()}>
+              <h3>{uiText("把这")}{" "}{basket.length} {" "}{uiText("项移到废纸篓？")}</h3>
+              <p className="faint">{uiText("一共")}{" "}{formatBytes(total)}{uiText("。倒掉废纸篓之前，都能放回原处。")}</p>
               <ul>{basket.map((x) => <li key={x.path}><span title={x.path}>{ltr(x.path)}</span><b>{formatBytes(x.disk)}</b></li>)}</ul>
               <div className="dk-modal-acts">
-                <button type="button" className="btn" onClick={() => setConfirm(false)} autoFocus>取消</button>
-                <button type="button" className="btn btn-danger" onClick={() => void clean()}>移到废纸篓</button>
+                <button type="button" className="btn" onClick={() => setConfirm(false)} autoFocus>{uiText("取消")}</button>
+                <button type="button" className="btn btn-danger" onClick={() => void clean()}>{uiText("移到废纸篓")}</button>
               </div>
             </div>
           </div>
@@ -338,7 +340,7 @@ function App() {
   return (
     <div className="dk-home">
       <header className="dk-home-head">
-        <h1>空间清理</h1>
+        <h1>{uiText("空间清理")}</h1>
         <p className="faint">{sys.info ? `${sys.info.hostname} · ${sys.info.name} ${sys.info.version}` : " "}</p>
       </header>
       {job.error && job.error.code !== "cancelled" && <div className="dk-warn"><ShieldAlert className="ico" />{job.error.message}</div>}
@@ -351,13 +353,13 @@ function App() {
             <article key={d.mount} className="dk-disk">
               <div className="dk-disk-top">
                 <DiskIcon d={d} />
-                <div className="dk-disk-name"><b>{diskName(d)}</b><span className="faint">{d.fs}{d.removable ? " · 外接" : d.network ? " · 网络" : ""}</span></div>
+                <div className="dk-disk-name"><b>{diskName(d)}</b><span className="faint">{d.fs}{d.removable ? uiText(" · 外接") : d.network ? uiText(" · 网络") : ""}</span></div>
               </div>
-              <div className="dk-disk-free"><b>{formatBytes(d.available)}</b> 可用</div>
+              <div className="dk-disk-free"><b>{formatBytes(d.available)}</b> {" "}{uiText("可用")}</div>
               <div className={`dk-meter${pct > 90 ? " is-full" : ""}`}><i style={{ width: `${pct}%` }} /></div>
               <div className="dk-disk-foot">
-                <span className="faint">已用 {formatBytes(used)} / 共 {formatBytes(d.total)}</span>
-                <button type="button" className="btn btn-primary" onClick={() => void start({ name: diskName(d), path: d.scan_path || d.mount, disk: d })}><Search className="ico" />扫描</button>
+                <span className="faint">{uiText("已用")}{" "}{formatBytes(used)} {" "}{uiText("/ 共")}{" "}{formatBytes(d.total)}</span>
+                <button type="button" className="btn btn-primary" onClick={() => void start({ name: diskName(d), path: d.scan_path || d.mount, disk: d })}><Search className="ico" />{uiText("扫描")}</button>
               </div>
             </article>
           );
@@ -365,11 +367,11 @@ function App() {
         {disks && (
           <article className="dk-disk is-folder">
             <FolderSearch className="dk-disk-ico" strokeWidth={1.5} />
-            <b>只看一个文件夹</b>
-            <span className="faint">比整块盘快：比如个人文件夹、下载</span>
+            <b>{uiText("只看一个文件夹")}</b>
+            <span className="faint">{uiText("比整块盘快：比如个人文件夹、下载")}</span>
             <div className="dk-folder-acts">
-              <button type="button" className="btn" onClick={() => void start({ name: "个人文件夹", path: "~" })}>个人文件夹</button>
-              {canPick && <button type="button" className="btn" onClick={() => void pickFolder()}>选一个…</button>}
+              <button type="button" className="btn" onClick={() => void start({ name: "个人文件夹", path: "~" })}>{uiText("个人文件夹")}</button>
+              {canPick && <button type="button" className="btn" onClick={() => void pickFolder()}>{uiText("选一个…")}</button>}
             </div>
           </article>
         )}
@@ -377,8 +379,7 @@ function App() {
       </div>
       {last && (
         <p className="dk-last faint">
-          上次清理：{when(String(last.data.at || ""))}{last.data.by ? `，${last.data.by} ` : ""}在 {String(last.data.computer || "这台电脑")} 上腾出了 {formatBytes(Number(last.data.freed) || 0)}（{Number(last.data.count) || 0} 项）
-        </p>
+          {uiText("上次清理：")}{when(String(last.data.at || ""))}{last.data.by ? `，${last.data.by} ` : ""}{uiText("在")}{" "}{String(last.data.computer || "这台电脑")} {" "}{uiText("上腾出了")}{" "}{formatBytes(Number(last.data.freed) || 0)}（{Number(last.data.count) || 0} {" "}{uiText("项）")}{" "}</p>
       )}
       <Toast kit={kit} />
     </div>

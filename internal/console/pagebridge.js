@@ -43,6 +43,22 @@
     };
   }
 
+  var displayLanguage = new URLSearchParams(location.search).get("myco_lang");
+  var preferences = {
+    language: displayLanguage === "en" || displayLanguage === "zh" ? displayLanguage : (/^zh\b/i.test(navigator.language || "") ? "zh" : "en"),
+    theme: window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
+  };
+  function applyPreferences(next) {
+    if (!next || !/^(zh|en)$/.test(next.language) || !/^(dark|light)$/.test(next.theme)) return;
+    preferences = {language:next.language, theme:next.theme};
+    document.documentElement.lang = preferences.language === "zh" ? "zh-CN" : "en";
+    document.documentElement.style.colorScheme = preferences.theme;
+    document.documentElement.setAttribute("data-myco-theme", preferences.theme);
+    if (handlers && handlers.preferences) handlers.preferences.slice().forEach(function(f) {
+      try { f(preferences); } catch (x) { setTimeout(function() {throw x;}); }
+    });
+  }
+  applyPreferences(preferences);
   var seq = 0;
   var waiting = {};
   var handlers = { change: [], data: [] };
@@ -75,6 +91,8 @@
         if (d.latest) err.latest = d.latest;
         w.reject(err);
       } else w.resolve(d.value);
+    } else if (d.myco === "preferences") {
+      applyPreferences(d.preferences);
     } else if (d.myco === "data" && Array.isArray(d.changes)) {
       // What others (an agent, another person) changed in the records.
       d.changes.forEach(function (c) {
@@ -186,15 +204,16 @@
     os[parts[0]][parts[1]] = f;
   });
 
-  var ready = call("ready").then(function (v) { ctx = v; return v; });
+  var ready = call("ready").then(function (v) { ctx = v; if(v.preferences) applyPreferences(v.preferences); return v; });
   ready.catch(function () { /* (a page that does not use the bridge) */ });
 
   window.myco = {
     ready: ready,
+    get preferences() { return preferences; },
     // What this App's bridge can do, for pages to check before trying:
     // "download-media": myco.download saves video and sound too (mp4, …);
     // "os": myco.os (this computer: files, commands, the screen…).
-    features: ["download-media", "os"],
+    features: ["download-media", "os", "preferences"],
     os: os,
     get state() { return ctx ? ctx.state : null; },
     get version() { return ctx ? ctx.version : 0; },

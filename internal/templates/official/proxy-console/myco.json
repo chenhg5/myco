@@ -1,11 +1,13 @@
 {
   "id": "myco/proxy-console",
   "name": "代理工作台",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "kind": "custom",
   "category": "tools",
   "icon": "icon.svg",
   "description": "管理本机 Mihomo 与 sing-box：实时流量、策略组切换、节点测速、连接查看与断开、运行配置摘要。控制密钥留在本机，不与工作区共享。需启用内核 Clash API，并使用支持 proxy.profile 的桌面 App。",
   "data": {},
-  "requires": { "hub": "0.20.7" }
+  "requires": {
+    "hub": "0.20.7"
+  }
 }

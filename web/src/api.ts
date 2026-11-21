@@ -85,6 +85,9 @@ export interface Project {
   /** the computers (ids) its coordinators may start agents on (hubs from
    *  v0.21.2; absent before) */
   machines?: string[];
+  /** the project's memory document, with its body (hubs from v0.21.10;
+   *  absent before): what members learned and all keep in mind */
+  memory?: ProjectDoc;
 }
 export interface ProjectLink { title?: string; url: string }
 export interface ProjectMember {
@@ -188,6 +191,7 @@ export interface Page {
 /** A template in the workspace's library (hubs from v0.20.5): official
  *  ones (myco's own) first. */
 export interface Template {
+  locales?: Record<string, { name?: string; description?: string }>;
   id: string; slug: string; name: string; description?: string; kind: string; version: string; publisher: string;
   /** its shelf (hubs from v0.20.6): office, dev, tools, life, creative, game, other */
   category?: string;

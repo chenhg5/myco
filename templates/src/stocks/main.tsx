@@ -1,3 +1,5 @@
+import { themeMedia } from "../_lib/appearance";
+import { t as uiText, locale } from "../_lib/i18n";
 import "../_lib/sheet.css";
 import "./stocks.css";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -20,7 +22,7 @@ import {
   Star,
   X,
 } from "lucide-react";
-import { Store, save } from "../_lib/myco";
+import { Store, save, myco } from "../_lib/myco";
 import { Kit, Toast, mount, useKit } from "../_lib/appkit";
 import { Popover, rectOf } from "../_lib/ui";
 import {
@@ -52,14 +54,14 @@ const watchlist = new Store<WatchItem & Record<string, unknown>>("watchlist"),
   kit = new Kit([watchlist]);
 const client = new MarketClient(transport, cache);
 const sources: Record<ProviderID, string> = {
-  auto: "自动选择",
+  auto: uiText("自动选择"),
   yahoo: "Yahoo Finance",
-  tencent: "腾讯行情",
-  gateway: "自定义网关",
+  tencent: uiText("腾讯行情"),
+  gateway: uiText("自定义网关"),
 };
 const labelTime = (s?: string, market: Market = "CN") => {
   if (!s || !Number.isFinite(Date.parse(s))) return "时间未提供";
-  return new Date(s).toLocaleString("zh-CN", {
+  return new Date(s).toLocaleString(locale(), {
     timeZone: timezone[market],
     month: "2-digit",
     day: "2-digit",
@@ -96,7 +98,7 @@ function App() {
   const [menu, setMenu] = useState<ReturnType<typeof rectOf> | null>(null),
     [expanded, setExpanded] = useState(false),
     [systemDark, setSystemDark] = useState(
-      window.matchMedia("(prefers-color-scheme: dark)").matches,
+      themeMedia().matches,
     );
   const capture = useRef<(() => Promise<Blob>) | null>(null),
     optionsKey = JSON.stringify(settings);
@@ -111,7 +113,7 @@ function App() {
         .includes(query.toLowerCase()),
   );
   const dark =
-      settings.theme === "dark" || (settings.theme === "system" && systemDark),
+      myco?.features?.includes("preferences") ? systemDark : settings.theme === "dark" || (settings.theme === "system" && systemDark),
     up = settings.redUp ? "#ce5853" : "#38886c",
     down = settings.redUp ? "#38886c" : "#ce5853";
   const instrumentKey = instrument ? keyOf(instrument) : "";
@@ -137,7 +139,7 @@ function App() {
     };
   }, []);
   useEffect(() => {
-    const q = window.matchMedia("(prefers-color-scheme: dark)"),
+    const q = themeMedia(),
       f = () => setSystemDark(q.matches);
     q.addEventListener("change", f);
     return () => q.removeEventListener("change", f);
@@ -164,7 +166,7 @@ function App() {
             setQuotes((q) => ({ ...q, [instrumentKey]: data }));
         },
         (e) => {
-          if (!off) setError((e as Error).message || "行情加载失败");
+          if (!off) setError((e as Error).message || uiText("行情加载失败"));
         },
       )
       .finally(() => {
@@ -221,7 +223,7 @@ function App() {
     if (watchlist.rows.some((r) => keyOf(r.data) === keyOf(i))) {
       setActive(keyOf(i));
       setAdd(false);
-      kit.flash("已在自选中");
+      kit.flash(uiText("已在自选中"));
       return;
     }
     setAdding(true);
@@ -256,7 +258,7 @@ function App() {
     if (!record) return;
     const keep = { id: record.id, data: { ...record.data } };
     kit.track(watchlist.remove(record.id));
-    kit.flash("已移出自选", () => {
+    kit.flash(uiText("已移出自选"), () => {
       kit.track(watchlist.put(keep.data, keep.id));
     });
     setActive("");
@@ -275,12 +277,12 @@ function App() {
           "application/json",
         );
       else {
-        if (!capture.current) throw new Error("图表还没准备好");
+        if (!capture.current) throw new Error(uiText("图表还没准备好"));
         await save(name + ".png", await capture.current(), "image/png");
       }
-      kit.flash("已保存到下载文件夹");
+      kit.flash(uiText("已保存到下载文件夹"));
     } catch (e) {
-      kit.flash((e as Error).message || "导出失败，请重试");
+      kit.flash((e as Error).message || uiText("导出失败，请重试"));
     }
   };
   const openSettings = () => {
@@ -296,7 +298,7 @@ function App() {
       setForce(false);
       setShowSettings(false);
       setChartData(null);
-      kit.flash("数据源设置已保存到本机");
+      kit.flash(uiText("数据源设置已保存到本机"));
     } catch (e) {
       setSettingsError((e as Error).message);
     }
@@ -315,15 +317,15 @@ function App() {
           <span>
             <ChartCandlestick />
           </span>
-          <strong>行情工作台</strong>
+          <strong>{uiText("行情工作台")}</strong>
           <small>/ myco</small>
         </div>
         <div className="sw-market-tags">
-          <span>A 股</span>
+          <span>{uiText("A 股")}</span>
           <i />
-          <span>港股</span>
+          <span>{uiText("港股")}</span>
           <i />
-          <span>美股</span>
+          <span>{uiText("美股")}</span>
         </div>
         <div className="sw-header-right">
           <button className="sw-source" onClick={openSettings}>
@@ -333,8 +335,8 @@ function App() {
           </button>
           <button
             className="sw-icon"
-            title="设置"
-            aria-label="设置"
+            title={uiText("设置")}
+            aria-label={uiText("设置")}
             onClick={openSettings}
           >
             <Settings2 />
@@ -348,8 +350,7 @@ function App() {
             }}
           >
             <Plus />
-            添加自选
-          </button>
+            {uiText("添加自选")}{" "}</button>
         </div>
       </header>
       <div className="sw-body">
@@ -357,21 +358,21 @@ function App() {
           <div className="sw-list-heading">
             <div>
               <Star />
-              <h2>我的自选</h2>
+              <h2>{uiText("我的自选")}</h2>
               <span>{watchlist.rows.length}</span>
             </div>
-            <span className="sw-small">跨市场，一处关注</span>
+            <span className="sw-small">{uiText("跨市场，一处关注")}</span>
           </div>
           <label className="sw-search">
             <Search />
             <input
-              aria-label="搜索自选"
-              placeholder="名称或代码"
+              aria-label={uiText("搜索自选")}
+              placeholder={uiText("名称或代码")}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
             {query && (
-              <button aria-label="清空搜索" onClick={() => setQuery("")}>
+              <button aria-label={uiText("清空搜索")} onClick={() => setQuery("")}>
                 <X />
               </button>
             )}
@@ -383,13 +384,13 @@ function App() {
                 className={filter === m ? "active" : ""}
                 onClick={() => setFilter(m)}
               >
-                {m === "all" ? "全部" : marketNames[m]}
+                {m === "all" ? uiText("全部") : marketNames[m]}
               </button>
             ))}
           </div>
           <div className="sw-list-columns">
-            <span>名称 / 代码</span>
-            <span>价格 / 涨跌幅</span>
+            <span>{uiText("名称 / 代码")}</span>
+            <span>{uiText("价格 / 涨跌幅")}</span>
           </div>
           <div className="sw-watchlist">
             {rows.map((r) => {
@@ -415,10 +416,10 @@ function App() {
                     <small>
                       {quote?.changePercent === undefined
                         ? quoteErrors[k]
-                          ? "暂不可用"
-                          : "读取中…"
+                          ? uiText("暂不可用")
+                          : uiText("读取中…")
                         : `${sign(quote.changePercent)}${quote.changePercent.toFixed(2)}%`}
-                      {q?.stale && " · 缓存"}
+                      {q?.stale && uiText(" · 缓存")}
                     </small>
                   </div>
                 </button>
@@ -427,24 +428,22 @@ function App() {
             {!rows.length && (
               <div className="sw-list-empty">
                 <Search />
-                <p>{query ? "没有找到自选股" : "这个市场还没有自选股"}</p>
+                <p>{query ? uiText("没有找到自选股") : uiText("这个市场还没有自选股")}</p>
                 <button
                   onClick={() => {
                     setAdd(true);
                     setAddMarket(filter === "all" ? "CN" : filter);
                   }}
                 >
-                  添加一只
-                </button>
+                  {uiText("添加一只")}{" "}</button>
               </div>
             )}
           </div>
           <div className="sw-sidebar-bottom">
             <ShieldCheck />
             <span>
-              行情从这台电脑获取
-              <br />
-              <small>自选列表与备注在工作区共享</small>
+              {uiText("行情从这台电脑获取")}{" "}<br />
+              <small>{uiText("自选列表与备注在工作区共享")}</small>
             </span>
           </div>
         </aside>
@@ -463,16 +462,16 @@ function App() {
                   <div className="sw-security-actions">
                     <button
                       className="sw-icon"
-                      title="移出自选"
-                      aria-label="移出自选"
+                      title={uiText("移出自选")}
+                      aria-label={uiText("移出自选")}
                       onClick={remove}
                     >
                       <Star fill="currentColor" />
                     </button>
                     <button
                       className="sw-icon"
-                      title="导出行情"
-                      aria-label="导出行情"
+                      title={uiText("导出行情")}
+                      aria-label={uiText("导出行情")}
                       disabled={!chartData}
                       onClick={(e) => setMenu(rectOf(e.currentTarget))}
                     >
@@ -509,7 +508,7 @@ function App() {
                       </>
                     ) : (
                       <span>
-                        {selectedQuote ? "涨跌基准未提供" : "等待有效报价"}
+                        {selectedQuote ? uiText("涨跌基准未提供") : uiText("等待有效报价")}
                       </span>
                     )}
                   </div>
@@ -517,13 +516,13 @@ function App() {
                 <div className="sw-price-meta">
                   <span>
                     {selectedQuote?.at
-                      ? `源站报价 ${labelTime(selectedQuote.at, instrument.market)}`
-                      : "报价时间未提供"}
+                      ? uiText("源站报价 {0}", labelTime(selectedQuote.at, instrument.market))
+                      : uiText("报价时间未提供")}
                   </span>
                   <i />
                   <span>{timezone[instrument.market]}</span>
                   <i />
-                  <span>与前一交易日收盘相比</span>
+                  <span>{uiText("与前一交易日收盘相比")}</span>
                 </div>
                 <div className="sw-stats">
                   {[
@@ -533,7 +532,7 @@ function App() {
                     ["最新日最低", chartData?.session?.low],
                   ].map(([label, value]) => (
                     <div key={String(label)}>
-                      <span>{label}</span>
+                      <span>{uiText(String(label))}</span>
                       <strong>{price(value as number | undefined)}</strong>
                     </div>
                   ))}
@@ -557,24 +556,24 @@ function App() {
                           setForce(false);
                         }}
                       >
-                        {label}
+                        {uiText(String(label))}
                       </button>
                     ))}
                   </div>
-                  <span className="sw-adjustment">不复权</span>
+                  <span className="sw-adjustment">{uiText("不复权")}</span>
                   <div className="sw-chart-tools">
                     <button
                       className={`sw-icon ${mode === "candles" ? "active" : ""}`}
-                      title="K 线图"
-                      aria-label="K 线图"
+                      title={uiText("K 线图")}
+                      aria-label={uiText("K 线图")}
                       onClick={() => setMode("candles")}
                     >
                       <ChartCandlestick />
                     </button>
                     <button
                       className={`sw-icon ${mode === "line" ? "active" : ""}`}
-                      title="收盘价折线"
-                      aria-label="收盘价折线"
+                      title={uiText("收盘价折线")}
+                      aria-label={uiText("收盘价折线")}
                       onClick={() => setMode("line")}
                     >
                       <LineChart />
@@ -589,8 +588,8 @@ function App() {
                     <span className="sw-tool-separator" />
                     <button
                       className="sw-icon"
-                      title="展开图表"
-                      aria-label="展开图表"
+                      title={uiText("展开图表")}
+                      aria-label={uiText("展开图表")}
                       onClick={() => setExpanded(!expanded)}
                     >
                       <Maximize2 />
@@ -604,22 +603,19 @@ function App() {
                     <div className="sw-skeleton-line" />
                     <span>
                       <LoaderCircle />
-                      正在读取{marketNames[instrument.market]}行情…
-                    </span>
+                      {uiText("正在读取")}{marketNames[instrument.market]}{uiText("行情…")}{" "}</span>
                   </div>
                 ) : error ? (
                   <div className="sw-chart-empty" role="alert">
                     <Globe2 />
-                    <h3>这次没能取到行情</h3>
+                    <h3>{uiText("这次没能取到行情")}</h3>
                     <p>{error}</p>
                     <div>
                       <button className="sw-button" onClick={doRefresh}>
                         <RefreshCw />
-                        重试
-                      </button>
+                        {uiText("重试")}{" "}</button>
                       <button className="sw-button" onClick={openSettings}>
-                        切换数据源
-                      </button>
+                        {uiText("切换数据源")}{" "}</button>
                     </div>
                   </div>
                 ) : chartData ? (
@@ -632,7 +628,7 @@ function App() {
                     onCapture={setCapture}
                   />
                 ) : (
-                  <div className="sw-chart-empty">选择股票后显示 K 线</div>
+                  <div className="sw-chart-empty">{uiText("选择股票后显示 K 线")}</div>
                 )}
                 <div
                   className={`sw-data-footer ${chartData?.stale ? "stale" : ""}`}
@@ -644,33 +640,32 @@ function App() {
                     </strong>
                     <span>
                       {chartData?.stale
-                        ? "离线缓存 · 不是最新行情"
+                        ? uiText("离线缓存 · 不是最新行情")
                         : chartData?.cached
-                          ? "本机缓存"
-                          : "源站数据"}
+                          ? uiText("本机缓存")
+                          : uiText("源站数据")}
                     </span>
                     {chartData && (
                       <span>
-                        {chartData.bars.length} 根 · 获取于{" "}
+                        {chartData.bars.length} {" "}{uiText("根 · 获取于")}{" "}
                         {labelTime(chartData.fetchedAt, instrument.market)}
                       </span>
                     )}
                   </div>
                   <button onClick={doRefresh} disabled={refreshDisabled}>
                     <RefreshCw className={loading ? "spin" : ""} />
-                    刷新
-                  </button>
+                    {uiText("刷新")}{" "}</button>
                 </div>
               </section>
               <section className="sw-bottom">
                 <div className="sw-notes">
                   <div className="sw-section-title">
-                    <h2>观察笔记</h2>
-                    <span>{kit.pending ? "正在保存…" : "与 agent 共享"}</span>
+                    <h2>{uiText("观察笔记")}</h2>
+                    <span>{kit.pending ? uiText("正在保存…") : uiText("与 agent 共享")}</span>
                   </div>
                   <textarea
-                    aria-label="观察笔记"
-                    placeholder="写下关注这只股票的原因、重要价格或待观察的变化…"
+                    aria-label={uiText("观察笔记")}
+                    placeholder={uiText("写下关注这只股票的原因、重要价格或待观察的变化…")}
                     value={record?.data.note || ""}
                     maxLength={6000}
                     onChange={(e) => {
@@ -686,20 +681,17 @@ function App() {
                 </div>
                 <div className="sw-data-info">
                   <div className="sw-section-title">
-                    <h2>数据说明</h2>
+                    <h2>{uiText("数据说明")}</h2>
                     <button onClick={openSettings}>
-                      管理来源
-                      <ArrowUpRight />
+                      {uiText("管理来源")}{" "}<ArrowUpRight />
                     </button>
                   </div>
                   <p>
                     {chartData?.warnings.join("；") ||
-                      "报价与 K 线均来自所选数据源。源站不可用时会提示错误，不使用模拟价格。"}
+                      uiText("报价与 K 线均来自所选数据源。源站不可用时会提示错误，不使用模拟价格。")}
                   </p>
                   <p>
-                    末根 K
-                    线可能尚未收盘；成交量单位为股。各市场币种独立，不进行汇率换算。
-                  </p>
+                    {uiText("末根 K 线可能尚未收盘；成交量单位为股。各市场币种独立，不进行汇率换算。")}{" "}</p>
                 </div>
               </section>
             </>
@@ -710,22 +702,17 @@ function App() {
               </span>
               <span className="sw-eyebrow">YOUR MARKETS, ONE WORKSPACE</span>
               <h1>
-                把关注的市场，
-                <br />
-                放在同一个视野里。
-              </h1>
+                {uiText("把关注的市场，")}{" "}<br />
+                {uiText("放在同一个视野里。")}{" "}</h1>
               <p>
-                A 股、港股、美股。自选、K 线和观察笔记，
-                <br />
-                跟着你的思路走。
-              </p>
+                {uiText("A 股、港股、美股。自选、K 线和观察笔记，")}{" "}<br />
+                {uiText("跟着你的思路走。")}{" "}</p>
               <button
                 className="sw-button primary"
                 onClick={() => setAdd(true)}
               >
                 <Plus />
-                添加第一只自选股
-              </button>
+                {uiText("添加第一只自选股")}{" "}</button>
               <div className="sw-welcome-cards">
                 {(["CN", "HK", "US"] as const).map((m) => (
                   <button
@@ -750,13 +737,12 @@ function App() {
           <span
             className={settings.autoRefresh ? "sw-live-dot" : "sw-paused-dot"}
           />
-          {settings.autoRefresh ? "每 60 秒刷新 · 后台暂停" : "手动刷新"}
+          {settings.autoRefresh ? uiText("每 60 秒刷新 · 后台暂停") : uiText("手动刷新")}
         </span>
-        <span>行情仅作信息展示 · 延迟以源站为准</span>
+        <span>{uiText("行情仅作信息展示 · 延迟以源站为准")}</span>
         <button onClick={openSettings}>
           <Settings2 />
-          显示与数据设置
-        </button>
+          {uiText("显示与数据设置")}{" "}</button>
       </footer>
       {add && (
         <div
@@ -774,11 +760,11 @@ function App() {
             <header>
               <div>
                 <span className="sw-eyebrow">FOLLOW WHAT MATTERS</span>
-                <h2 id="sw-add-title">添加自选股</h2>
+                <h2 id="sw-add-title">{uiText("添加自选股")}</h2>
               </div>
               <button
                 className="sw-icon"
-                aria-label="关闭"
+                aria-label={uiText("关闭")}
                 disabled={adding}
                 onClick={() => setAdd(false)}
               >
@@ -805,13 +791,13 @@ function App() {
               <Search />
               <input
                 autoFocus
-                aria-label="股票名称或代码"
+                aria-label={uiText("股票名称或代码")}
                 placeholder={
                   addMarket === "CN"
-                    ? "常用名称，或输入 600519 / 000001.SZ"
+                    ? uiText("常用名称，或输入 600519 / 000001.SZ")
                     : addMarket === "HK"
-                      ? "常用名称，或输入 00700 / 0700.HK"
-                      : "常用名称，或输入 AAPL / MSFT"
+                      ? uiText("常用名称，或输入 00700 / 0700.HK")
+                      : uiText("常用名称，或输入 AAPL / MSFT")
                 }
                 value={addQuery}
                 disabled={adding}
@@ -826,8 +812,8 @@ function App() {
             </label>
             <div className="sw-search-caption">
               {addQuery
-                ? "名称匹配常用列表；任意股票可直接输入代码"
-                : "常用股票 · 添加前验证行情是否可用"}
+                ? uiText("名称匹配常用列表；任意股票可直接输入代码")
+                : uiText("常用股票 · 添加前验证行情是否可用")}
             </div>
             <div className="sw-add-results">
               {[
@@ -854,8 +840,7 @@ function App() {
               })}
               {!candidates.length && !customCandidate && (
                 <div className="sw-no-results">
-                  没有匹配。请直接输入这个市场的证券代码。
-                </div>
+                  {uiText("没有匹配。请直接输入这个市场的证券代码。")}{" "}</div>
               )}
             </div>
             {newError && (
@@ -866,18 +851,16 @@ function App() {
             {adding && (
               <p className="sw-form-hint">
                 <LoaderCircle className="spin" />
-                正在验证代码与行情…
-              </p>
+                {uiText("正在验证代码与行情…")}{" "}</p>
             )}
             <footer>
-              <span>数据源：{sources[settings.source]}</span>
+              <span>{uiText("数据源：")}{sources[settings.source]}</span>
               <button
                 className="sw-button"
                 disabled={adding}
                 onClick={() => setAdd(false)}
               >
-                完成
-              </button>
+                {uiText("完成")}{" "}</button>
             </footer>
           </section>
         </div>
@@ -893,20 +876,19 @@ function App() {
             <header>
               <div>
                 <span className="sw-eyebrow">YOUR DATA, YOUR CHOICE</span>
-                <h2 id="sw-settings-title">显示与数据设置</h2>
+                <h2 id="sw-settings-title">{uiText("显示与数据设置")}</h2>
               </div>
               <button
                 className="sw-icon"
-                aria-label="关闭"
+                aria-label={uiText("关闭")}
                 onClick={() => setShowSettings(false)}
               >
                 <X />
               </button>
             </header>
             <label className="sw-field">
-              行情数据源
-              <select
-                aria-label="行情数据源"
+              {uiText("行情数据源")}{" "}<select
+                aria-label={uiText("行情数据源")}
                 value={draft.source}
                 onChange={(e) =>
                   setDraft({ ...draft, source: e.target.value as ProviderID })
@@ -921,18 +903,17 @@ function App() {
             </label>
             <div className="sw-provider-info">
               {draft.source === "auto"
-                ? "优先 Yahoo Finance；不可用时，A 股和港股尝试腾讯行情。美股不会降级到不完整的数据源。"
+                ? uiText("优先 Yahoo Finance；不可用时，A 股和港股尝试腾讯行情。美股不会降级到不完整的数据源。")
                 : draft.source === "yahoo"
-                  ? "覆盖 A 股、港股、美股。使用公开接口，无需密钥；可能限流或变更。"
+                  ? uiText("覆盖 A 股、港股、美股。使用公开接口，无需密钥；可能限流或变更。")
                   : draft.source === "tencent"
-                    ? "支持沪深 A 股与港股历史行情。美股和北交所历史数据不在此适配器的支持范围。"
-                    : "接入自己的 AKShare、Tushare 或其他服务。网关统一返回证券、报价与 OHLCV，界面无需修改。"}
+                    ? uiText("支持沪深 A 股与港股历史行情。美股和北交所历史数据不在此适配器的支持范围。")
+                    : uiText("接入自己的 AKShare、Tushare 或其他服务。网关统一返回证券、报价与 OHLCV，界面无需修改。")}
             </div>
             {draft.source === "gateway" && (
               <label className="sw-field">
-                网关地址
-                <input
-                  aria-label="行情网关地址"
+                {uiText("网关地址")}{" "}<input
+                  aria-label={uiText("行情网关地址")}
                   placeholder="https://quotes.example.com/v1"
                   value={draft.gateway}
                   onChange={(e) =>
@@ -940,20 +921,18 @@ function App() {
                   }
                 />
                 <small>
-                  将请求此地址下的
-                  /bars。请在网关服务端管理密钥，地址中不要放凭证。
-                </small>
+                  {uiText("将请求此地址下的 /bars。请在网关服务端管理密钥，地址中不要放凭证。")}{" "}</small>
               </label>
             )}
             <label className="sw-setting-row">
               <span>
-                <strong>自动刷新</strong>
-                <small>每 60 秒获取；窗口在后台时暂停</small>
+                <strong>{uiText("自动刷新")}</strong>
+                <small>{uiText("每 60 秒获取；窗口在后台时暂停")}</small>
               </span>
               <input
                 type="checkbox"
                 role="switch"
-                aria-label="自动刷新"
+                aria-label={uiText("自动刷新")}
                 checked={draft.autoRefresh}
                 onChange={(e) =>
                   setDraft({ ...draft, autoRefresh: e.target.checked })
@@ -961,23 +940,22 @@ function App() {
               />
             </label>
             <label className="sw-field">
-              涨跌颜色
-              <select
-                aria-label="涨跌颜色"
+              {uiText("涨跌颜色")}{" "}<select
+                aria-label={uiText("涨跌颜色")}
                 value={draft.redUp ? "red" : "green"}
                 onChange={(e) =>
                   setDraft({ ...draft, redUp: e.target.value === "red" })
                 }
               >
-                <option value="red">红涨绿跌</option>
-                <option value="green">绿涨红跌</option>
+                <option value="red">{uiText("红涨绿跌")}</option>
+                <option value="green">{uiText("绿涨红跌")}</option>
               </select>
             </label>
             <label className="sw-field">
-              外观
-              <select
-                aria-label="外观"
-                value={draft.theme}
+              {uiText("外观")}{" "}<select
+                aria-label={uiText("外观")}
+                disabled={myco?.features?.includes("preferences")}
+                value={myco?.features?.includes("preferences") ? "system" : draft.theme}
                 onChange={(e) =>
                   setDraft({
                     ...draft,
@@ -985,24 +963,22 @@ function App() {
                   })
                 }
               >
-                <option value="system">跟随系统</option>
-                <option value="light">浅色</option>
-                <option value="dark">深色</option>
+                <option value="system">{uiText(myco?.features?.includes("preferences") ? "跟随 App" : "跟随系统")}</option>
+                <option value="light">{uiText("浅色")}</option>
+                <option value="dark">{uiText("深色")}</option>
               </select>
             </label>
             <p className="sw-form-hint">
-              设置与行情缓存只保存在这台电脑；自选股与观察笔记通过工作区共享。使用公开接口时，请遵守数据源的使用条款。
-            </p>
+              {uiText("设置与行情缓存只保存在这台电脑；自选股与观察笔记通过工作区共享。使用公开接口时，请遵守数据源的使用条款。")}{" "}</p>
             {settingsError && (
               <p className="sw-form-error" role="alert">
                 {settingsError}
               </p>
             )}
             <footer>
-              <span>不绑定任何一家数据商</span>
+              <span>{uiText("不绑定任何一家数据商")}</span>
               <button className="sw-button primary" onClick={applySettings}>
-                保存设置
-              </button>
+                {uiText("保存设置")}{" "}</button>
             </footer>
           </section>
         </div>
@@ -1014,20 +990,17 @@ function App() {
               className="menu-item"
               onClick={() => void exportData("csv")}
             >
-              导出 CSV
-            </button>
+              {uiText("导出 CSV")}{" "}</button>
             <button
               className="menu-item"
               onClick={() => void exportData("json")}
             >
-              导出 JSON（含来源与时间）
-            </button>
+              {uiText("导出 JSON（含来源与时间）")}{" "}</button>
             <button
               className="menu-item"
               onClick={() => void exportData("png")}
             >
-              导出图表 PNG
-            </button>
+              {uiText("导出图表 PNG")}{" "}</button>
           </div>
         </Popover>
       )}

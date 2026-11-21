@@ -875,7 +875,7 @@ async function runMatrix(browser, size, scheme) {
       const lib = page.locator("[data-testid=templates-official] [data-shelf=office] .tp-card");
       await lib.first().waitFor({ timeout: 15_000 });
       const names = (await lib.allInnerTexts()).map(compactText);
-      if (names.length !== 4 || !names[0].startsWith("表格") || !names[1].startsWith("多维表格") || !names[2].startsWith("文档") || !names[3].startsWith("幻灯片")) throw new Error(`办公套件应是 表格、多维表格、文档、幻灯片，实际 ${names.join(" / ")}`);
+      if (names.length !== 5 || !names[0].startsWith("表格") || !names[1].startsWith("多维表格") || !names[2].startsWith("文档") || !names[3].startsWith("幻灯片") || !names[4].startsWith("会议记录")) throw new Error(`办公套件应是 表格、多维表格、文档、幻灯片、会议记录，实际 ${names.join(" / ")}`);
       await page.locator("[data-testid=templates-own] .tp-card").first().waitFor({ timeout: 5_000 });
       // myco's own apps update on their own; fetched now on request.
       await clickVisible(page, page.locator("[data-testid=apps-sync]"));
@@ -958,6 +958,31 @@ async function runMatrix(browser, size, scheme) {
       // (back where the steps after this one start: the project)
       await go(page, "官网改版", narrow);
       await page.locator(".sp-home, .sp-group").first().waitFor({ timeout: 10_000 });
+    });
+
+    await step("应用 · English metadata and legacy Hub", async () => {
+      const pattern="**/app/hubs/hub_studio/templates";
+      try {
+        await page.goto(`${r.base}/?lang=en`, {waitUntil:"domcontentloaded"});
+        await page.locator(".app-shell").waitFor();
+        await go(page,"应用",narrow);
+        const table=page.locator('[data-testid="template-myco/table"]');
+        await table.locator('.tp-card-name',{hasText:"Table"}).waitFor();
+        if(await page.locator('[data-testid="template-myco/poll"]').count())throw new Error("The retired Poll app must not be offered");
+        await page.locator('[data-testid="template-myco/notes"] .tp-card-name',{hasText:"Notes"}).waitFor();
+        await table.click();
+        await page.locator('[data-testid="template-name"]').waitFor();
+        if(await page.locator('[data-testid="template-name"]').inputValue()!=="Table")throw new Error("New app name must follow the App language");
+        await clickVisible(page,page.getByRole("button",{name:"Cancel",exact:true}));
+        await shot(page,size,scheme,"apps-english");
+        await page.route(pattern,async route=>{const response=await route.fetch();const data=await response.json();for(const t of data.templates||[])delete t.locales;data.templates.push({...data.templates[0],id:"tp_retired_poll",slug:"myco/poll",name:"投票"});await route.fulfill({response,json:data});});
+        await page.reload({waitUntil:"domcontentloaded"});await page.locator(".app-shell").waitFor();await go(page,"应用",narrow);
+        await page.locator('[data-testid="template-myco/notes"] .tp-card-name',{hasText:"Notes"}).waitFor();
+        if(await page.locator('[data-testid="template-myco/poll"]').count())throw new Error("Legacy Hub returned a retired Poll app");
+      } finally {
+        await page.unroute(pattern);
+        await page.goto(`${r.base}/?lang=zh`,{waitUntil:"domcontentloaded"});await page.locator(".app-shell").waitFor();
+      }
     });
 
     // A name picked in the notch's island (the Mac app): a chat already on
@@ -1499,6 +1524,16 @@ async function runMatrix(browser, size, scheme) {
     await step("项目资料", async () => {
       await clickVisible(page, page.locator(".sp-head").getByRole("button", { name: "项目资料" }));
       await page.locator(".app-page").first().waitFor({ timeout: 20_000 });
+      // The project's memory: its own section (not a row among the files),
+      // and you add to it here.
+      const memory = page.locator("[data-testid=project-memory]");
+      await memory.getByText("汇报用中文").waitFor({ timeout: 10_000 });
+      if (await page.locator(".app-project-doc", { hasText: /^memory/ }).count()) throw new Error("项目记忆不该再出现在文件列表里");
+      await clickVisible(page, memory.getByRole("button", { name: "添加" }));
+      const add = page.getByRole("dialog", { name: "添加到项目记忆" });
+      await add.locator("textarea").fill("首页截图统一 2x");
+      await clickVisible(page, add.getByRole("button", { name: "添加" }));
+      await memory.getByText("首页截图统一 2x").waitFor({ timeout: 10_000 });
       await settle(page);
       await shot(page, size, scheme, "project-notes");
       await navBackClick(page);

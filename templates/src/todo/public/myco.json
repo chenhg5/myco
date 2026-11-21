@@ -1,7 +1,7 @@
 {
   "id": "myco/todo",
   "name": "待办清单",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "kind": "custom",
   "category": "tools",
   "icon": "icon.svg",

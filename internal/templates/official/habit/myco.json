@@ -1,7 +1,7 @@
 {
   "id": "myco/habit",
   "name": "习惯打卡",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "kind": "custom",
   "category": "life",
   "icon": "icon.svg",

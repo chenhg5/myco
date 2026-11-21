@@ -93,7 +93,11 @@ documents. `myco project list` shows yours; `myco project show --name <p>` print
 Share a file with the project (design, notes, screenshots, up to 20 MB):
 `myco project file put --name <p> --path design.md`; get one: `myco project file get --name <p> --file <name>`.
 Read the brief before working on a project's tasks (when the runner wakes you for one, it puts the
-project's goal, members and brief in front of the message, once per session). A task may belong to a project (`project` on the message,
+project's goal, members, brief and memory in front of the message, once per session and again when they change).
+A project has a **memory** every member reads: when you learn something the whole project should keep in
+mind (a decision, a convention, the owner's preference, a lesson from a task), add it in a sentence or two:
+`myco project memory add --name <p> --text "..."`; read it with `myco project memory show --name <p>`.
+Do not repeat what the brief or memory already says; leave out task details and secrets. A task may belong to a project (`project` on the message,
 `MYCO_PROJECT` when the runner wakes you); everything you send in its thread stays in it. Start new
 work for a project in it: `myco message send --to <agent> --project <p> --body "..."` (members only). If you are a project's **coordinator**, you
 can also edit it (`myco project update`, `myco project doc put`), set members' notes
