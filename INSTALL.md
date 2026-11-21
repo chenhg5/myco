@@ -1178,14 +1178,15 @@ when the preferred release is absent; they report the version actually selected.
 A newer component can enable extra features such as Unicode input. Fresh installs
 still require published, checksum-verified component archives.
 
-On phones, text is edited locally before **Send text**. The editor stays above
-the software keyboard; sending hides it to reveal the desktop. Focus the remote
-field first: the App cannot locate its text caret from video. Sending does not
-add an extra Enter. Use the iPhone keyboard microphone for system Dictation,
-review/correct the text, then send. Enable Dictation in iOS Settings if its
-microphone is missing. **Live typing** remains available for immediate input and
-modifier keys. Hiding the editor preserves an unsent draft for the current
-connection; disconnecting clears it. Unsupported text is kept for correction.
+On phones, the keyboard types directly into the focused remote field. There is
+no local composer or Send step. Use the keyboard button on the right to show or
+hide the system keyboard. System Dictation can also enter text; Unicode requires
+a compatible remote component. An unsupported input error remains visible rather
+than silently discarding text.
+
+Brief WebRTC disconnections get a ten-second recovery window. A single failed
+Hub status request does not tear down working video; three consecutive failures
+end the connection. Explicit closure and authorization failures still disconnect.
 
 The initial version supports unlocked Mac and Windows desktops over a LAN or
 Tailscale. Audio, lock/sign-in or administrator confirmation screens, unattended access, virtual displays and

@@ -103,3 +103,29 @@ assert.equal(closed, 1);
 console.log(
   "Remote Desktop coordinate, late-session and input-backpressure checks passed",
 );
+
+// A transient Hub error preserves a connected video session; repeated failures
+// and explicit revocation still terminate it.
+let failures=0;
+const resilient=new DesktopSession(async()=>{if(failures++===0)throw Error("unavailable");return {state:"connected"};});
+resilient.pc={getStats:async()=>new Map(),close(){}};
+await resilient.poll(()=>{},()=>{});assert.equal(resilient.ended,false);
+await resilient.poll(()=>{},()=>{});assert.equal(resilient.failedPolls,0);
+resilient.call=async()=>{throw Error("unavailable")};
+await resilient.poll(()=>{},()=>{});await resilient.poll(()=>{},()=>{});assert.equal(resilient.ended,false);
+await resilient.poll(()=>{},()=>{});assert.equal(resilient.ended,true);
+const revoked=new DesktopSession(async()=>{throw Error("permission_denied")});revoked.pc={close(){}};
+await revoked.poll(()=>{},()=>{});assert.equal(revoked.ended,true);
+console.log("PASS transient signaling recovery, retry exhaustion and immediate revocation");
+
+RTCPeerConnection.prototype.setRemoteDescription=async function(){};
+const route=new DesktopSession(async(action)=>action==="connect"?{id:"route"}:{state:"connected",answer:{type:"answer",sdp:"v=0"}});
+await route.connect({machine:"mac",control:false},"abcdef12",false,()=>{},()=>{},()=>{});
+const savedTimeout=globalThis.setTimeout;let expire;
+globalThis.setTimeout=(fn,ms,...args)=>ms===10000?(expire=fn,999999):savedTimeout(fn,ms,...args);
+try {
+ route.pc.connectionState="disconnected";route.pc.onconnectionstatechange();assert.equal(route.ended,false);
+ route.pc.connectionState="connected";route.pc.onconnectionstatechange();assert.equal(route.disconnectTimer,undefined);
+ route.pc.connectionState="disconnected";route.pc.onconnectionstatechange();expire();assert.equal(route.ended,true);
+} finally {globalThis.setTimeout=savedTimeout;await route.close();}
+console.log("PASS ICE disconnect recovery and grace expiry");

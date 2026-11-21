@@ -56,6 +56,8 @@ export class DesktopSession {
   private pc: RTCPeerConnection | null = null;
   private channel: RTCDataChannel | null = null;
   private timer: ReturnType<typeof setInterval> | undefined;
+  private disconnectTimer: ReturnType<typeof setTimeout> | undefined;
+  private failedPolls = 0;
   private signal = "";
   private ended = false;
   private stateCallback: ((s: string) => void) | null = null;
@@ -103,11 +105,21 @@ export class DesktopSession {
       };
     pc.ontrack = (e) => onMedia(e.streams[0] || new MediaStream([e.track]));
     pc.onconnectionstatechange = () => {
-      if (!this.ended) {
-        onState(pc.connectionState);
-        if (["failed", "closed", "disconnected"].includes(pc.connectionState))
-          void this.close();
+      if (this.ended) return;
+      if (pc.connectionState === "disconnected") {
+        // ICE disconnects can recover during a brief route change. Do not
+        // notify the page of a terminal state until the grace period expires.
+        if (!this.disconnectTimer) this.disconnectTimer = setTimeout(() => {
+          this.disconnectTimer = undefined;
+          if (!this.ended && pc.connectionState === "disconnected") {
+            onState("connection_lost"); void this.close();
+          }
+        }, 10000);
+        return;
       }
+      clearTimeout(this.disconnectTimer); this.disconnectTimer = undefined;
+      onState(pc.connectionState);
+      if (["failed", "closed"].includes(pc.connectionState)) void this.close();
     };
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
@@ -170,6 +182,7 @@ export class DesktopSession {
         await this.close();
         return;
       }
+      this.failedPolls = 0;
       const reports = await this.pc.getStats();
       const out: RemoteStats = {
         fps: 0,
@@ -204,9 +217,13 @@ export class DesktopSession {
           out.latency = Math.round((r.currentRoundTripTime || 0) * 1000);
       });
       onStats(out);
-    } catch {
-      onState("connection_lost");
-      await this.close();
+    } catch (error) {
+      // A single signaling/stats failure must not tear down healthy video.
+      const terminal = /permission|not_found|unauthorized|forbidden|replaced|\b40[134]\b/i.test(String(error));
+      if (terminal || ++this.failedPolls >= 3) {
+        onState("connection_lost");
+        await this.close();
+      }
     } finally {
       this.polling = false;
     }
@@ -241,6 +258,7 @@ export class DesktopSession {
         /* the host releases inputs when this channel closes */
       }
     }
+    clearTimeout(this.disconnectTimer); this.disconnectTimer = undefined;
     clearInterval(this.timer);
     this.channel?.close();
     this.pc?.close();

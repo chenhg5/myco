@@ -113,7 +113,7 @@ function App() {
   const updateView=(next:View)=>{viewRef.current=next;setView(next);};
   const zoomBy=(delta:number)=>{const box=stage.current?.getBoundingClientRect();if(box)updateView(zoomView(viewRef.current,viewRef.current.scale+delta,{x:box.width/2,y:box.height/2},box.width,box.height));};
   const [keyboardOpen,setKeyboardOpen]=useState(false),[draft,setDraft]=useState(""),[dragging,setDragging]=useState(false),[modifiers,setModifiers]=useState<string[]>([]),[,setCursor]=useState({x:.5,y:.5}),[showCursor,setShowCursor]=useState(false),[,setLayout]=useState(0);
-  const [liveInput,setLiveInput]=useState(false),[scrollMode,setScrollMode]=useState(false),[inputError,setInputError]=useState("");
+  const [scrollMode,setScrollMode]=useState(false),[inputError,setInputError]=useState("");
   const keyboard=useRef<HTMLTextAreaElement>(null),composing=useRef(false);
   const touchpad=useRef<Touchpad>();
   if(!touchpad.current)touchpad.current=new Touchpad(e=>session.current?.input(e),p=>setCursor({...p}));
@@ -239,7 +239,7 @@ function App() {
   };
   const disconnect = async () => {
     attempt.current++;
-    touchpad.current?.reset();if(touchpad.current)touchpad.current.point={x:.5,y:.5};setCursor({x:.5,y:.5});updateView({scale:1,x:0,y:0});setExpanded(false);setToolsVisible(false);touches.current.clear();gesture.current=null;multiTouch.current=false;setDragging(false);setModifiers([]);setKeyboardOpen(false);setDraft("");setInputError("");setLiveInput(false);setScrollMode(false);setShowCursor(false);
+    touchpad.current?.reset();if(touchpad.current)touchpad.current.point={x:.5,y:.5};setCursor({x:.5,y:.5});updateView({scale:1,x:0,y:0});setExpanded(false);setToolsVisible(false);touches.current.clear();gesture.current=null;multiTouch.current=false;setDragging(false);setModifiers([]);setKeyboardOpen(false);setDraft("");setInputError("");setScrollMode(false);setShowCursor(false);
     const previous=session.current;
     session.current=null;pendingStream.current=null;
     setConnecting(false);setActive(null);setStats(null);setState("");
@@ -310,14 +310,14 @@ function App() {
     releaseModifiers();setDraft("");setInputError("");if(keyboard.current)keyboard.current.value="";return true;
   };
   useEffect(()=>{
-    const el=keyboard.current;if(!keyboardOpen||!el||!liveInput)return;
+    const el=keyboard.current;if(!keyboardOpen||!el)return;
     const before=(e:InputEvent)=>{
       if(e.isComposing||composing.current)return;
       if(e.inputType==="deleteContentBackward"&&!el.value){e.preventDefault();specialKey("Backspace");}
       if(e.inputType==="insertLineBreak"||e.inputType==="insertParagraph"){e.preventDefault();if(el.value&&!typed(el.value))return;specialKey("Enter");}
     };
     el.addEventListener("beforeinput",before);return()=>el.removeEventListener("beforeinput",before);
-  },[keyboardOpen,liveInput,modifiers]);
+  },[keyboardOpen,modifiers]);
   const touch=(e:React.PointerEvent,phase:"down"|"move"|"up")=>{
     if(e.pointerType!=="touch")return false;
     e.preventDefault();
@@ -548,27 +548,17 @@ function App() {
                 <button className="rd-btn" aria-pressed={scrollMode} onClick={()=>setScrollMode(!scrollMode)}>{uiText("双指滚动")}</button>
                 <button className="rd-btn" onClick={()=>touchpad.current?.click(2)}>{uiText("右键")}</button>
                 <button className="rd-btn" aria-pressed={dragging} onClick={()=>{touchpad.current?.drag(!dragging);setDragging(!dragging);}}>{dragging?uiText("结束拖动"):uiText("拖动")}</button>
+                {[["ControlLeft","Ctrl"],["AltLeft","Alt"],["MetaLeft",active.os==="darwin"?"⌘":"Win"],["ShiftLeft","Shift"]].map(([code,label])=><button key={code} className="rd-btn" aria-pressed={modifiers.includes(code)} onClick={()=>{const down=!modifiers.includes(code);input({kind:"key",code,down});setModifiers(down?[...modifiers,code]:modifiers.filter(x=>x!==code));}}>{label}</button>)}
                 {["Escape","Tab","Enter","Backspace"].map(code=><button key={code} className="rd-btn" aria-label={code} onClick={()=>specialKey(code)}>{({Escape:"Esc",Tab:"Tab",Enter:"↵",Backspace:"⌫"})[code as "Enter"]}</button>)}
               </div>}
-              {control&&keyboardOpen&&<div className="rd-keyboard">
-                <div className="rd-composer-row">
-                  <textarea ref={keyboard} aria-label={uiText("输入文字到远端")} placeholder={uiText(liveInput?"即时输入到远端":"先写好，再发送；也可用键盘麦克风听写")} value={draft} rows={1} autoCapitalize="off" autoCorrect={liveInput?"off":"on"} spellCheck={!liveInput}
-                    onChange={e=>{setDraft(e.target.value);setInputError("");if(liveInput&&!(e.nativeEvent as InputEvent).isComposing)typed(e.target.value);}}
-                    onCompositionStart={()=>{composing.current=true;}} onCompositionEnd={e=>{composing.current=false;if(liveInput)typed(e.currentTarget.value);}}
-                    onKeyDown={e=>{if(!liveInput)return;if(e.key==="Enter"&&!composing.current&&!(e.nativeEvent as KeyboardEvent).isComposing){e.preventDefault();if(draft&&!typed(draft))return;specialKey("Enter");}if(e.key==="Backspace"&&!draft&&!composing.current){e.preventDefault();specialKey("Backspace");}}}
-                  />
-                  {!liveInput&&<button className="rd-btn rd-primary" disabled={!draft} onClick={()=>{if(typed(draft)){setKeyboardOpen(false);setToolsVisible(false);keyboard.current?.blur();}}}>{uiText("发送文字")}</button>}
-                  <button className="rd-icon" aria-label={uiText("收起键盘")} onClick={()=>{setKeyboardOpen(false);setToolsVisible(false);keyboard.current?.blur();releaseModifiers();}}><ChevronLeft size={18}/></button>
-                </div>
-                <div className="rd-touch-row rd-keyboard-options">
-                  <label className="rd-live-input"><input type="checkbox" checked={liveInput} onChange={e=>{setLiveInput(e.target.checked);releaseModifiers();setInputError("");}}/>{uiText("即时输入")}</label>
-                  {liveInput&&[["ControlLeft","Ctrl"],["AltLeft","Alt"],["MetaLeft",active.os==="darwin"?"⌘":"Win"],["ShiftLeft","Shift"]].map(([code,label])=><button key={code} className="rd-btn" aria-pressed={modifiers.includes(code)} onClick={()=>{const down=!modifiers.includes(code);input({kind:"key",code,down});setModifiers(down?[...modifiers,code]:modifiers.filter(x=>x!==code));keyboard.current?.focus();}}>{label}</button>)}
-                  {liveInput&&["Escape","Tab","Enter","Backspace"].map(code=><button key={code} className="rd-btn" aria-label={code} onClick={()=>{specialKey(code);keyboard.current?.focus();}}>{({Escape:"Esc",Tab:"Tab",Enter:"↵",Backspace:"⌫"})[code as "Enter"]}</button>)}
-                  {!liveInput&&<span className="rd-input-hint">{uiText(session.current?.supportsText?"先点远端输入位置；发送文字不会额外按回车。":"远端组件较旧，只支持短英文；更新后可发送中文。") }</span>}
-                </div>
-                {inputError&&<p className="rd-input-error" role="alert">{inputError}</p>}
-              </div>}
+
             </div>
+            {control&&keyboardOpen&&<textarea className="rd-keyboard-sink" ref={keyboard} aria-label={uiText("输入文字到远端")} value={draft} autoCapitalize="off" autoCorrect="off" spellCheck={false}
+              onChange={e=>{setDraft(e.target.value);if(!(e.nativeEvent as InputEvent).isComposing)typed(e.target.value);}}
+              onCompositionStart={()=>{composing.current=true;}} onCompositionEnd={e=>{composing.current=false;typed(e.currentTarget.value);}}
+              onKeyDown={e=>{if(composing.current||(e.nativeEvent as KeyboardEvent).isComposing)return;if(e.key==="Enter"){e.preventDefault();if(draft&&!typed(draft))return;specialKey("Enter");}if(e.key==="Backspace"&&!draft){e.preventDefault();specialKey("Backspace");}}}
+            />}
+            {inputError&&<div className="rd-input-toast" role="alert">{inputError}</div>}
             <footer className="rd-session-footer">
               <span>
                 <LockKeyhole size={13} />
