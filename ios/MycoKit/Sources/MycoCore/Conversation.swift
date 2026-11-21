@@ -149,7 +149,7 @@ public enum ConversationBuilder {
         tracedPlans: [String: (items: [PlanItem], at: Date?)] = [:], paused: Set<String> = [],
         activity: [String: Date] = [:], ended: Set<String> = [], windows: RunWindows = RunWindows(),
         takeovers: [(id: String, at: Date, text: String)] = [],
-        stepWords: (text: String, at: Date)? = nil,
+        stepWords: (text: String?, at: Date)? = nil,
         status: (String) -> AgentStatus?, now: Date
     ) -> [ConversationItem] {
         var items: [ConversationItem] = []
@@ -360,19 +360,17 @@ public enum ConversationBuilder {
         if let leading {
             var line = ConversationItem(id: leading.task.id + ".status", at: .distantFuture, kind: leading.kind)
             if case .status(.working, let taskID) = leading.kind {
-                // What it is doing now, whatever task it is on: the newer of
-                // its newest update and what it last said between its steps
-                // (what goes on above must not run ahead of this line),
-                // unless it has answered since; its clock from the latest
-                // message here (a coordinator in one long session keeps an
-                // early task open while it answers newer ones).
+                // What it is doing now, whatever task it is on: the step it
+                // is on (a command, a file, thinking), as the desktop's live
+                // line. Never words already on the page: what it said
+                // between its steps and its updates are right above, so
+                // after those (or after it answered) the line says only
+                // that it is at work.
                 let fromAgent = messages.filter { $0.from == agent }
-                let update = fromAgent.filter { $0.type == "progress" }.max { $0.createdAt < $1.createdAt }
+                let update = fromAgent.filter { $0.type == "progress" }.map(\.createdAt).max() ?? .distantPast
                 let answer = fromAgent.filter { $0.type == "reply" }.map(\.createdAt).max() ?? .distantPast
-                var newest = update.map { (text: RunProcess.splitPlan($0.body).map { $0.rest } ?? $0.body, at: $0.createdAt) }
-                if let words = stepWords, words.at > (newest?.at ?? .distantPast) { newest = words }
-                if let newest, newest.at > answer {
-                    let said = Self.firstLine(of: newest.text)
+                if let step = stepWords, step.at > max(update, answer), let text = step.text {
+                    let said = Self.firstLine(of: text)
                     if !said.isEmpty { line.saying = said }
                 }
                 let latest = messages.filter { ["task", "note", "steer", "reply"].contains($0.type) }.map(\.createdAt).max()

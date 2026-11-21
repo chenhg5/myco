@@ -386,6 +386,28 @@ public struct RunProcess: Hashable, Sendable {
         return parts.joined(separator: L("、", ", "))
     }
 
+    /// A step that says what it is doing: a tool (not its plan), a
+    /// thought, or words.
+    public static func isStep(_ event: TraceEvent) -> Bool {
+        switch event.kind {
+        case "tool": return event.data.tool != "TodoWrite"
+        case "thinking": return true
+        case "text": return !(event.data.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        default: return false
+        }
+    }
+
+    /// What it is doing in a step, in a line: "运行 npm test", "正在思考".
+    /// nil for words it said (they are on the page already).
+    public static func doing(_ event: TraceEvent) -> String? {
+        if event.kind == "thinking" || event.data.tool == thinking { return L("正在思考", "Thinking") }
+        guard event.kind == "tool" else { return nil }
+        let input = (event.data.input ?? "").split(separator: "\n", omittingEmptySubsequences: true).first
+            .map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
+        let short = input.count > 80 ? String(input.prefix(80)) + "…" : input
+        return (label(for: event.data.tool ?? "") + " " + short).trimmingCharacters(in: .whitespaces)
+    }
+
     /// What a tool step is called: "运行", "读取", "修改", ...
     public static func label(for tool: String) -> String {
         if tool == thinking { return L("想", "Thought") }
