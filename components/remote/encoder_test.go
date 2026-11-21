@@ -30,7 +30,7 @@ func TestPackagedEncoderSendsParameterSets(t *testing.T) {
 		t.Fatal(e)
 	}
 	// Test pixels only, never a screenshot or camera feed.
-	frame := append(bytes.Repeat([]byte{128}, 640*360), bytes.Repeat([]byte{64, 192}, 640*360/4)...)
+	frame := append(bytes.Repeat([]byte{128}, 1280*720), bytes.Repeat([]byte{64, 192}, 1280*720/4)...)
 	input := filepath.Join(t.TempDir(), "test.nv12")
 	if e = os.WriteFile(input, bytes.Repeat(frame, 3), 0600); e != nil {
 		t.Fatal(e)
@@ -40,7 +40,7 @@ func TestPackagedEncoderSendsParameterSets(t *testing.T) {
 		t.Fatal(e)
 	}
 	defer conn.Close()
-	args := []string{"-hide_banner", "-loglevel", "error", "-nostdin", "-f", "rawvideo", "-pixel_format", "nv12", "-video_size", "640x360", "-framerate", "30", "-i", input, "-an", "-vf", "scale=640:360", "-frames:v", "3"}
+	args := []string{"-hide_banner", "-loglevel", "error", "-nostdin", "-f", "rawvideo", "-pixel_format", "nv12", "-video_size", "1280x720", "-framerate", "30", "-i", input, "-an", "-vf", "scale=1280:720", "-frames:v", "3"}
 	if runtime.GOOS == "darwin" {
 		args = append(args, "-c:v", "h264_videotoolbox", "-allow_sw", "1", "-realtime", "1")
 	} else {
@@ -53,9 +53,13 @@ func TestPackagedEncoderSendsParameterSets(t *testing.T) {
 		t.Fatalf("packaged platform encoder failed: %v\n%s", e, out)
 	}
 	seen := map[byte]bool{}
+	level := byte(0)
 	observe := func(data []byte) {
 		if len(data) > 0 {
 			seen[data[0]&31] = true
+			if data[0]&31 == 7 && len(data) >= 4 {
+				level = data[3]
+			}
 		}
 	}
 	for {
@@ -88,6 +92,9 @@ func TestPackagedEncoderSendsParameterSets(t *testing.T) {
 		default:
 			observe(p.Payload)
 		}
+	}
+	if level == 0 || level > 31 {
+		t.Fatalf("encoder exceeds negotiated H.264 level 3.1: %d", level)
 	}
 	if !seen[7] || !seen[8] || !seen[5] {
 		t.Fatalf("a browser needs in-band SPS, PPS and IDR, got NAL types %v", seen)

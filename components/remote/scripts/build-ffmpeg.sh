@@ -19,14 +19,15 @@ args=(--disable-everything --disable-autodetect --disable-doc --disable-debug
  --enable-protocol=file,udp,rtp --enable-demuxer=rawvideo --enable-muxer=rtp --enable-decoder=rawvideo,bmp
  --enable-filter=scale,format,fps,null --enable-bsf=h264_mp4toannexb
  --enable-parser=h264 --disable-x86asm)
+binary=ffmpeg
 case "${RUNNER_OS:-$(uname -s)}" in
  macOS|Darwin) args+=(--enable-indev=avfoundation --enable-encoder=h264_videotoolbox --enable-avfoundation --enable-videotoolbox) ;;
- Windows|MINGW*|MSYS*) args+=(--enable-indev=gdigrab --enable-encoder=h264_mf --enable-mediafoundation --extra-ldflags=-static) ;;
+ Windows|MINGW*|MSYS*) binary=ffmpeg.exe; args+=(--enable-indev=gdigrab --enable-encoder=h264_mf --enable-mediafoundation --extra-ldflags=-static) ;;
  *) echo 'Only macOS and Windows are supported' >&2; exit 1 ;;
 esac
 ./configure "${args[@]}"
-make -j4 ffmpeg
-if [[ -f ffmpeg.exe ]]; then cp ffmpeg.exe "$out/"; else cp ffmpeg "$out/"; fi
+make -j4 "$binary"
+cp "$binary" "$out/"
 cp COPYING.LGPLv2.1 "$out/LICENSE-FFmpeg.txt"
 printf '%s\n' 'FFmpeg n7.1.2, LGPL-2.1-or-later, https://ffmpeg.org/' \
  'Source and build configuration: https://github.com/chenhg5/myco/tree/main/components/remote/scripts/build-ffmpeg.sh' \

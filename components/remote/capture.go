@@ -47,8 +47,9 @@ func captureArgs(ctx context.Context, bin string) ([]string, error) {
 	default:
 		return nil, errors.New("unsupported_platform")
 	}
-	// Keep H.264 baseline for hardware decoding in WKWebView and WebView2.
-	args = append(args, "-an", "-vf", "scale=1920:1080:force_original_aspect_ratio=decrease:force_divisible_by=2", "-r", "30")
+	// Stay within the negotiated H.264 baseline level 3.1 (720p30), including
+	// on older WKWebView and WebView2 hardware decoders.
+	args = append(args, "-an", "-vf", "scale=1280:720:force_original_aspect_ratio=decrease:force_divisible_by=2", "-r", "30")
 	if runtime.GOOS == "darwin" {
 		args = append(args, "-c:v", "h264_videotoolbox", "-realtime", "1", "-allow_sw", "1")
 	} else {

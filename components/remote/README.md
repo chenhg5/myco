@@ -8,7 +8,7 @@ started or registered for incoming connections until the person opts in.
 
 ## First version
 
-- Apple silicon/Intel Mac and x64 Windows unlocked desktops; H.264 video, keyboard and mouse.
+- Apple silicon/Intel Mac and x64 Windows unlocked desktops; H.264 video up to 720p30, keyboard and mouse.
 - Direct WebRTC on a LAN or over Tailscale. ICE has no external STUN/TURN servers
   by default; this version does not promise public-internet NAT traversal.
 - No audio, clipboard synchronization, unattended service, virtual display,
@@ -81,3 +81,14 @@ checks its SHA-256, validates every archive entry and installs atomically into
 `ffmpeg` (`.exe` on Windows) and LICENSE/NOTICE text files. Until these assets are
 published, the UI reports installation unavailable; it does not silently download
 an arbitrary external program or fall back to an insecure connection.
+
+## Interactive acceptance before distributing a build
+
+On both Mac and Windows, verify screen capture, pointer mapping at display edges,
+scrolling, double-click, dragging, modified keys and reconnecting. Test both
+view-only and control, including refusal before permission is granted. On Mac,
+grant Screen Recording and Accessibility explicitly and retry; no prompt should
+claim these permissions were granted automatically. Check that closing the page,
+quitting/crashing the parent, stopping sharing and losing the Hub all terminate
+capture and release held input. Use LAN and Tailscale direct connections; a failed
+route must report a failure rather than falling back to an unencrypted stream.
