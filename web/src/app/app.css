@@ -4827,6 +4827,21 @@ html.fp-docked .app-main .sp-side {
 .dark .md-code {
   background: rgba(0, 0, 0, 0.28);
 }
+/* On a grey surface (your own message's bubble) the grey of code is the
+   bubble's own: there it is white with a hairline, as a card would be. */
+.conv-msg.is-me .conv-bubble .md-code,
+.conv-msg.is-me .conv-bubble .md :not(pre) > code {
+  background: var(--card);
+  box-shadow: 0 0 0 0.5px var(--line);
+}
+.dark .conv-msg.is-me .conv-bubble .md-code {
+  background: rgba(0, 0, 0, 0.28);
+  box-shadow: none;
+}
+.dark .conv-msg.is-me .conv-bubble .md :not(pre) > code {
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: none;
+}
 .md-code pre {
   margin: 0;
   padding: 10px 12px;
