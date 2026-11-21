@@ -1,5 +1,10 @@
 /* Neutral cinema surfaces follow the host appearance through the shared theme.
    Only the video stage stays dark so letterboxing never flashes while loading. */
+/* The shared sheet styles lock body scrolling for table layouts. Cinema uses
+   document flow: allow finger swipes over posters and cards to scroll it. */
+body {
+  overflow: auto;
+}
 :root {
   --ci-screen: #111;
   --ci-screen-fg: #eee;
