@@ -28,7 +28,7 @@ final class WalkthroughTests: XCTestCase {
         let member = app.buttons["strip.studio-codex-7f3a"]
         XCTAssertTrue(member.waitForExistence(timeout: 5), "the project shows its members")
         XCTAssertTrue(app.buttons["composer.submit"].exists, "and an input")
-        XCTAssertFalse(app.buttons["tab.members"].isHittable, "a pushed page hides the tab bar")
+        XCTAssertFalse(app.buttons["tab.workbench"].isHittable, "a pushed page hides the tab bar")
         member.tap()
 
         XCTAssertTrue(app.buttons["conversation.title"].waitForExistence(timeout: 5), "a member's page opens on top")
@@ -36,14 +36,15 @@ final class WalkthroughTests: XCTestCase {
         XCTAssertTrue(member.waitForExistence(timeout: 5), "back leads to the project")
         back(app)
         XCTAssertTrue(project.waitForExistence(timeout: 5), "and back again to Chats")
-        XCTAssertTrue(app.buttons["tab.members"].isHittable, "where the tab bar is back")
+        XCTAssertTrue(app.buttons["tab.workbench"].isHittable, "where the tab bar is back")
     }
 
     @MainActor
     func testFromMembersToAChatThenSendAddAndStop() {
         let app = launch()
-        XCTAssertTrue(app.buttons["tab.members"].waitForExistence(timeout: 15))
-        app.buttons["tab.members"].tap()
+        // Members: from the chats page's top bar.
+        XCTAssertTrue(app.buttons["chrome.members"].waitForExistence(timeout: 15))
+        app.buttons["chrome.members"].tap()
         let row = app.buttons["member.studio-codex-e07b"]
         XCTAssertTrue(row.waitForExistence(timeout: 5), "Members lists someone never talked to")
         row.tap()
@@ -503,8 +504,8 @@ final class WalkthroughTests: XCTestCase {
     @MainActor
     func testAWorkflowDecisionIsMadeAndAWorkflowRun() {
         // From the members page: the row under apps, with what waits for me.
-        let app = launch(["-myco-route", "tab:members"])
-        let entry = app.buttons["members.workflows"]
+        let app = launch(["-myco-route", "tab:workbench"])
+        let entry = app.buttons["workbench.workflows"]
         XCTAssertTrue(entry.waitForExistence(timeout: 15))
         expectation(for: NSPredicate(format: "label CONTAINS %@", "1 decision"), evaluatedWith: entry)
         waitForExpectations(timeout: 10)
@@ -572,10 +573,42 @@ final class WalkthroughTests: XCTestCase {
     }
 
     @MainActor
+    func testTheSuperagentIsTheOrbNotAChat() {
+        // Set up from the orb in the middle of the tab bar.
+        let app = launch(["-myco-route", "tab:chats"])
+        let orb = app.buttons["tab.superagent"]
+        XCTAssertTrue(orb.waitForExistence(timeout: 20))
+        orb.tap()
+        let how = app.segmentedControls["superagent.how"]
+        XCTAssertTrue(how.waitForExistence(timeout: 5))
+        how.buttons["Use one of your agents"].tap()
+        let pick = app.buttons.matching(identifier: "superagent.pick").firstMatch
+        XCTAssertTrue(pick.waitForExistence(timeout: 5))
+        let name = pick.label
+        pick.tap()
+        app.buttons["superagent.go"].tap()
+        // Its conversation comes up over the page.
+        XCTAssertTrue(app.descendants(matching: .any)["approval"].waitForExistence(timeout: 20))
+        app.swipeDown(velocity: .fast)
+        // Not one of the chats, nor of the members.
+        XCTAssertTrue(orb.waitForExistence(timeout: 10))
+        shot("superagent-orb")
+        XCTAssertFalse(app.staticTexts[name].exists && app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'chat.' AND label CONTAINS %@", name)).firstMatch.exists,
+                       "its chat is not in the list")
+        app.buttons["chrome.members"].tap()
+        XCTAssertTrue(app.navigationBars["Members"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'member.' AND label CONTAINS %@", name)).firstMatch.exists, "nor a member")
+        // A tap on the orb: its conversation again.
+        back(app)
+        orb.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["composer.input"].waitForExistence(timeout: 10))
+    }
+
+    @MainActor
     func testAnAppMakesAPageThatTalksToTheWorkspace() {
         // From the members page: the row under automations.
-        let app = launch(["-myco-route", "tab:members"])
-        let entry = app.buttons["members.apps"]
+        let app = launch(["-myco-route", "tab:workbench"])
+        let entry = app.buttons["workbench.apps"]
         XCTAssertTrue(entry.waitForExistence(timeout: 15))
         entry.tap()
         let checklist = app.buttons["app.myco/checklist"]
@@ -619,8 +652,8 @@ final class WalkthroughTests: XCTestCase {
     @MainActor
     func testAutomationsAreListedSwitchedAndWritten() {
         // From the members page: one row above the people.
-        var app = launch(["-myco-route", "tab:members"])
-        let entry = app.buttons["members.automations"]
+        var app = launch(["-myco-route", "tab:workbench"])
+        let entry = app.buttons["workbench.automations"]
         XCTAssertTrue(entry.waitForExistence(timeout: 15))
         expectation(for: NSPredicate(format: "label CONTAINS %@", "2, 1 on"), evaluatedWith: entry)
         waitForExpectations(timeout: 10)

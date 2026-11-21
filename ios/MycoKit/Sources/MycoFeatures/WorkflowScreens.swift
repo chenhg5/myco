@@ -572,3 +572,73 @@ private struct StepRow: View {
         .accessibilityIdentifier("run.step")
     }
 }
+
+/// My superagent, as Siri is called up: a round orb in the middle of the
+/// tab bar. A tap brings its conversation up over the page; a long press
+/// talks to it at once (a voice call, where voice is set up). With none
+/// yet, a tap sets one up. What waits for my approval, or what it said
+/// that I have not read, shows on it.
+struct SuperagentOrb: View {
+    @Environment(WorkspaceSession.self) private var session
+    @Environment(Router.self) private var router
+    @Environment(AppModel.self) private var app
+    @State private var breathe = false
+    /// Each long press (a tap of the hand).
+    @State private var talks = 0
+
+    var body: some View {
+        let model = session.superagent
+        let agent = model.agent
+        let unread = agent.map { name in session.chatRows.contains { $0.party == name && $0.unread } } ?? false
+        Button {
+            if let agent { router.sheet = .superagentChat(agent) } else { router.sheet = .superagent }
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(AngularGradient(colors: [MycoColor.accent, Color(red: 0.36, green: 0.62, blue: 0.92), Color(red: 0.62, green: 0.48, blue: 0.86), MycoColor.accent], center: .center))
+                    .blur(radius: breathe ? 3 : 1)
+                    .opacity(agent == nil ? 0.55 : 1)
+                Circle().fill(.white.opacity(0.18)).padding(5)
+                Image(systemName: agent == nil ? "plus" : "sparkles")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(.white)
+            }
+            .frame(width: 46, height: 46)
+            .overlay(alignment: .topTrailing) {
+                if model.pending > 0 {
+                    Text("\(model.pending)").font(.caption2.weight(.bold)).foregroundStyle(.white)
+                        .padding(.horizontal, 5).frame(minWidth: 18, minHeight: 18)
+                        .background(MycoColor.amber, in: Capsule())
+                        .offset(x: 4, y: -4)
+                } else if unread {
+                    Circle().fill(MycoColor.unread).frame(width: 10, height: 10).offset(x: 1, y: -1)
+                }
+            }
+            .shadow(color: MycoColor.accent.opacity(0.35), radius: breathe ? 8 : 4, y: 2)
+            .frame(maxHeight: .infinity)
+            .contentShape(Circle())
+        }
+        .buttonStyle(PressScaleStyle())
+        .simultaneousGesture(LongPressGesture(minimumDuration: 0.45).onEnded { _ in talk() })
+        .accessibilityLabel(agent.map { "Superagent " + session.displayName(of: $0) } ?? L("配一个 superagent", "Set up your superagent"))
+        .accessibilityHint(agent == nil ? "" : L("长按直接语音聊天", "Press and hold to talk"))
+        .accessibilityIdentifier("tab.superagent")
+        .onAppear {
+            withAnimation(.easeInOut(duration: 2.4).repeatForever(autoreverses: true)) { breathe = true }
+        }
+        .sensoryFeedback(.impact(weight: .medium), trigger: talks)
+    }
+
+    /// Talks to it now: its conversation comes up, and the call starts
+    /// where voice is set up.
+    private func talk() {
+        guard let agent = session.superagent.agent else { return }
+        talks += 1
+        router.sheet = .superagentChat(agent)
+        guard app.voiceReady else { return }
+        Task {
+            try? await Task.sleep(for: .milliseconds(400))
+            _ = await app.startCall(in: session.conversation(with: agent), of: session)
+        }
+    }
+}
