@@ -135,7 +135,9 @@ class Arm:
         env = dict(self.env, MYCO_HUB=self.hub)
         if admin:
             env["MYCO_ADMIN_TOKEN"] = self.admin
-        cmd = [self.bin, *args] + (["--config", config] if config else [])
+        # Never the caller's own identity (~/.myco/config.yaml): admin calls
+        # go with a config file that has none.
+        cmd = [self.bin, *args, "--config", config or os.path.join(self.tmp, "nobody.yaml")]
         return run(cmd, env=env, timeout=timeout, check=check)
 
     def start(self):
@@ -158,7 +160,7 @@ class Arm:
         name = f"eval-{role}-{rnd}"
         cfg = os.path.join(self.tmp, f"{role}.yaml")
         harness = [] if role == "lead" else ["--harness", "claude"]
-        self.myco("agent", "register", "--name", name, *harness, "--config", cfg, admin=True)
+        self.myco("agent", "register", "--name", name, *harness, config=cfg, admin=True)
         self.names[role] = name
         return cfg
 
