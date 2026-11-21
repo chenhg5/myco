@@ -9,6 +9,8 @@ import { Kit } from "../_lib/appkit";
 export type Project = {
   title?: string; ratio?: string; fps?: number;
   bg?: string; fg?: string; accent?: string; accent2?: string; font?: string; motion?: string;
+  /** captions: "bottom", "box", "top" or "off"; their size (1 = normal). */
+  captions?: string; caption_size?: number;
 };
 export type Scene = {
   name?: string; order?: number; duration?: number; transition?: string; transition_time?: number;
@@ -16,12 +18,34 @@ export type Scene = {
 };
 export type Asset = { name?: string; data?: string; width?: number; height?: number };
 export type Note = { time?: number; text?: string; done?: boolean; by?: string };
+/** A music or voice track: the file stays on this computer (key), the hub
+ *  keeps where it plays. in/out are seconds of the file; start, of the video. */
+export type Track = {
+  kind?: "music" | "voice"; name?: string; key?: string; size?: number; duration?: number;
+  start?: number; in?: number; out?: number; volume?: number; fade_in?: number; fade_out?: number;
+  beats?: number[]; bpm?: number; order?: number;
+};
+export type Caption = { start?: number; end?: number; text?: string; order?: number };
+/** A reference video taken apart for the agent: one record, its frames apart. */
+export type Reference = { name?: string; duration?: number; width?: number; height?: number; transcript?: string; frames?: number; by?: string };
+export type RefFrame = { time?: number; data?: string; text?: string; order?: number };
+/** A saved template (a whole video, or one scene); its scenes are rows of library_scenes. */
+export type LibraryItem = {
+  name?: string; kind?: "video" | "scene"; ratio?: string; theme?: Record<string, string>; motion?: string;
+  scenes?: number; duration?: number; thumb?: string; by?: string; at?: number; order?: number;
+};
 
 export const project = new Store<Project & Record<string, unknown>>("project");
 export const scenes = new Store<Scene & Record<string, unknown>>("scenes");
 export const assets = new Store<Asset & Record<string, unknown>>("assets");
 export const notes = new Store<Note & Record<string, unknown>>("notes");
-export const kit = new Kit([project, scenes, assets, notes], { quiet: true });
+export const tracks = new Store<Track & Record<string, unknown>>("tracks");
+export const captions = new Store<Caption & Record<string, unknown>>("captions");
+export const reference = new Store<Reference & Record<string, unknown>>("reference");
+export const refFrames = new Store<RefFrame & Record<string, unknown>>("ref_frames");
+export const library = new Store<LibraryItem & Record<string, unknown>>("library");
+export const libraryScenes = new Store<Scene & { item?: string } & Record<string, unknown>>("library_scenes");
+export const kit = new Kit([project, scenes, assets, notes, tracks, captions, reference, refFrames, library, libraryScenes], { quiet: true });
 
 export const RATIOS: { id: string; name: string; w: number; h: number }[] = [
   { id: "16:9", name: uiText("16:9 横屏"), w: 1920, h: 1080 },
@@ -131,8 +155,11 @@ export function frameDoc(mode: "preview" | "capture", only?: string[]) {
   const list = sceneRows().filter((r) => !only || only.includes(r.id));
   const usedAssets: Record<string, string> = {};
   for (const a of assets.rows) if (a.data.data) usedAssets[a.id] = String(a.data.data);
+  const p = project.get("main")?.data || {};
   return {
     w, h, mode, theme: theme(), assets: usedAssets,
+    captions: captionList().map((c) => ({ start: c.start, end: c.end, text: c.text })),
+    capStyle: String(p.captions || "bottom"), capSize: clamp(num(p.caption_size, 1), 0.5, 2),
     scenes: list.map((r) => ({
       id: r.id, html: String(r.data.html || ""), css: String(r.data.css || ""), script: String(r.data.script || ""),
       fields: (r.data.fields && typeof r.data.fields === "object" ? r.data.fields : {}) as Record<string, string>,
@@ -158,4 +185,12 @@ export function orderAt(index: number) {
   if (before === null) return (after as number) - 1;
   if (after === null) return before + 1;
   return (before + after) / 2;
+}
+
+/** Captions in time order, each until the next starts at the latest. */
+export function captionList() {
+  const list = captions.rows.map((r) => ({ id: r.id, start: Math.max(0, num(r.data.start, 0)), end: num(r.data.end, 0), text: String(r.data.text || "") }))
+    .filter((c) => c.end > c.start).sort((a, b) => a.start - b.start);
+  for (let i = 0; i + 1 < list.length; i++) if (list[i].end > list[i + 1].start) list[i].end = Math.max(list[i].start + 0.1, list[i + 1].start);
+  return list;
 }

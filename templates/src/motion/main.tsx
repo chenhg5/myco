@@ -8,54 +8,27 @@ import "../_lib/sheet.css";
 import "./motion.css";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  AlertTriangle, ArrowDown, ArrowUp, Bot, Code2, Copy, Download, ImagePlus, Loader2, Pause, Play, Plus, SkipBack, Trash2, X,
+  AlertTriangle, ArrowDown, ArrowUp, Bot, Code2, Copy, Download, Film, ImagePlus, Loader2, MessageSquarePlus, Pause, Play, Plus, Save, SkipBack, Trash2, X,
 } from "lucide-react";
 import { Bar, Toast, mount, titleSaver, useKit } from "../_lib/appkit";
 import { myco, save } from "../_lib/myco";
 import { MenuItem, Popover, rectOf } from "../_lib/ui";
 import {
-  FONTS, PALETTES, RATIOS, TRANSITIONS, MIN_SCENE, assets, clamp, draft, fieldsOf, fmt, fpsOf, frameDoc, kit, num, placed, project,
-  sceneAt, scenes, secs, sizeOf, total, type Field, type Placed,
+  FONTS, PALETTES, RATIOS, TRANSITIONS, MIN_SCENE, assets, captionList, clamp, draft, fieldsOf, fmt, fpsOf, frameDoc, kit, notes, num, placed, project,
+  sceneAt, scenes, secs, sizeOf, total, tracks, type Field, type Placed,
 } from "./model";
 import { addAsset, addScene, change, duplicateScene, moveScene, patch, redo, removeScene, sceneData, setField, setProject, undo } from "./edit";
 import { STARTERS, TEMPLATES } from "./templates";
 import { SceneFrame } from "./stage";
 import { QUALITIES, defaultOptions, estimate, outSize, render, type ExportOptions } from "./export";
 import { uid } from "../_lib/appkit";
+import { player, usePlayer } from "./player";
+import { PEAKS_PER_SEC, beatTimes, localFor, restore, trackList, type PlacedTrack } from "./audio";
+import { LibrarySection, NotesPanel, PlanPanel, SoundPanel, canSend, useLocal } from "./panels";
+import { addSavedScene, items, saveTemplate, useTemplate } from "./library";
 
 const title = titleSaver(kit, project);
 type Rect = ReturnType<typeof rectOf>;
-
-// ---------------------------------------------------------------- player
-const player = {
-  time: 0, playing: false, frame: null as SceneFrame | null,
-  subs: new Set<() => void>(),
-  emit() { for (const f of this.subs) f(); },
-  seek(t: number) { this.time = clamp(t, 0, total()); void this.frame?.seek(this.time); this.emit(); },
-  play() {
-    if (total() <= 0) return;
-    if (this.time >= total() - 0.02) this.time = 0;
-    this.playing = true; this.emit();
-    let last = performance.now();
-    const step = (now: number) => {
-      if (!this.playing) return;
-      this.time = Math.min(total(), this.time + (now - last) / 1000);
-      last = now;
-      void this.frame?.seek(this.time);
-      if (this.time >= total()) { this.playing = false; }
-      this.emit();
-      if (this.playing) requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
-  },
-  pause() { this.playing = false; this.emit(); },
-  toggle() { if (this.playing) this.pause(); else this.play(); },
-};
-function usePlayer() {
-  const [, set] = useState(0);
-  useEffect(() => { const f = () => set((n) => n + 1); player.subs.add(f); return () => { player.subs.delete(f); }; }, []);
-  return player;
-}
 
 // ---------------------------------------------------------------- thumbnails
 // drawn by a hidden frame, once for each look of a scene
@@ -98,7 +71,8 @@ async function drawThumbs() {
 }
 
 // ---------------------------------------------------------------- app
-type Side = "scene" | "video";
+type Side = "scene" | "sound" | "notes" | "plan" | "video";
+const SIDES: [Side, string][] = [["scene", uiText("场景")], ["sound", uiText("声音")], ["notes", uiText("批注")], ["plan", uiText("分镜")], ["video", uiText("视频")]];
 
 function App() {
   useKit(kit);
@@ -108,6 +82,12 @@ function App() {
   const [sel, setSelState] = useState("");
   const [side, setSide] = useState<Side>("scene");
   const [focusField, setFocusField] = useState("");
+  const [sideFocus, setSideFocus] = useState("");
+  useLocal();
+  const openSide = (s: Side, focus = "") => { setSide(s); setSideFocus(focus ? `${focus}:${Date.now()}` : ""); };
+  // the music and voice files this computer has
+  const trackKeys = tracks.rows.map((r) => String(r.data.key || "")).join(",");
+  useEffect(() => { void restore(trackKeys.split(",")); }, [trackKeys]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [agentAt, setAgentAt] = useState<Rect | null>(null);
   const [exporting, setExporting] = useState<Exp | null>(null);
@@ -120,9 +100,9 @@ function App() {
   const list = placed();
   const T = total(list);
   const selected = sel && scenes.get(sel) ? sel : "";
-  const setSel = useCallback((id: string, seek = true) => {
+  const setSel = useCallback((id: string, seek = true, reveal = true) => {
     setSelState(id);
-    if (id) setSide("scene");
+    if (id && reveal) setSide("scene");
     const p = placed().find((x) => x.id === id);
     // (a moment when the scene is all there, not its empty first frame)
     if (p && seek && !player.playing) player.seek(p.start + Math.min(p.dur * 0.7, p.dur - 0.05));
@@ -180,6 +160,7 @@ function App() {
         if (n) { player.pause(); player.seek(n.start); setSel(n.id, false); }
       }
       else if (e.key === "Home") player.seek(0);
+      else if (e.key === "n" || e.key === "N") { e.preventDefault(); player.pause(); openSide("notes", "new"); }
       else if (e.key === "End") player.seek(T);
       else if ((e.key === "Delete" || e.key === "Backspace") && selected) { e.preventDefault(); deleteScene(selected); }
     };
@@ -225,12 +206,14 @@ function App() {
     document.body.appendChild(host);
     const f = new SceneFrame(host, true);
     try {
-      const blob = await render(f, opts, (done) => setExporting((x) => (x && x.stage === "run" ? { ...x, done } : x)), () => cancelRef.current);
+      const out = await render(f, opts, (done) => setExporting((x) => (x && x.stage === "run" ? { ...x, done } : x)), () => cancelRef.current);
+      const blob = out.file;
+      const warn = out.silent ? uiText("这个浏览器不能编码声音，视频没有声音。") : out.missing.length ? uiText("这台电脑上没有「{0}」，它没混进去。", out.missing.join("、")) : "";
       const name = `${(title.get("") || uiText("动效视频")).replace(/[\\/:*?"<>|]+/g, " ").trim() || "motion"}.mp4`;
       const took = (performance.now() - at) / 1000;
       try {
         const where = (await save(name, blob, "video/mp4")).path;
-        setExporting({ stage: "done", where, size: blob.size, secs: took });
+        setExporting({ stage: "done", where, size: blob.size, secs: took, warn });
       } catch (e) {
         setExporting({ stage: "unsaved", name, blob, secs: took, error: (e as Error).message || uiText("没存上") });
       }
@@ -247,6 +230,13 @@ function App() {
   const ratio = sizeOf().ratio;
   const cur = list.find((p) => p.id === selected) || null;
   const empty = list.length === 0;
+  const openNotes = notes.rows.filter((n) => !n.data.done).length;
+
+  function saveAs(name: string, kind: "video" | "scene", sceneId?: string) {
+    const first = kind === "scene" ? sceneId! : list[0]?.id;
+    const id = saveTemplate(name || (kind === "scene" ? scenes.get(sceneId!)?.data.name || "" : title.get("")), kind, (first && thumbs.get(first)?.url) || "", kit.me, sceneId);
+    if (id) kit.flash(kind === "scene" ? uiText("已存成场景模板，「添加场景」里能找到") : uiText("已存成模板"), undo);
+  }
 
   return (
     <div className="app mo">
@@ -275,20 +265,28 @@ function App() {
         <main className="mo-center">
           <div className="mo-stage-wrap">
             <div className={`mo-stage${empty ? " is-empty" : ""}`} ref={stageRef} />
-            {empty && <Starter onStart={startWith} onBlank={() => { const id = addScene("title", 0); setSel(id); }} onAgent={(r) => setAgentAt(r)} />}
+            {empty && <Starter onStart={startWith} onBlank={() => { const id = addScene("title", 0); setSel(id); }} onAgent={(r) => setAgentAt(r)}
+              onTemplate={(id) => { const first = useTemplate(id); if (first) setSel(first, false); player.seek(0); }} onReference={() => openSide("plan")} />}
           </div>
-          {!empty && <Transport list={list} total={T} current={cur} />}
-          {!empty && <Timeline list={list} total={T} selected={selected} errors={errors} onSelect={(id) => setSel(id, false)} onMenu={(at, id) => setMenu({ at, id })} />}
+          {!empty && <Transport list={list} total={T} current={cur} onNote={() => { player.pause(); openSide("notes", "new"); }} />}
+          {!empty && <Timeline list={list} total={T} selected={selected} errors={errors} onSelect={(id) => setSel(id, false, false)} onMenu={(at, id) => setMenu({ at, id })}
+            onNote={(id) => openSide("notes", id)} onTrack={(id) => openSide("sound", id)} onCaption={() => openSide("sound", "captions")} />}
         </main>
         <aside className="mo-side">
           <nav className="mo-tabs" role="tablist">
-            <button type="button" role="tab" aria-selected={side === "scene"} className={side === "scene" ? "is-on" : ""} onClick={() => setSide("scene")}>{uiText("场景")}</button>
-            <button type="button" role="tab" aria-selected={side === "video"} className={side === "video" ? "is-on" : ""} onClick={() => setSide("video")}>{uiText("视频")}</button>
+            {SIDES.map(([id, name]) => (
+              <button key={id} type="button" role="tab" aria-selected={side === id} className={side === id ? "is-on" : ""} onClick={() => openSide(id)}>
+                {name}{id === "notes" && openNotes ? <i className="mo-dot" aria-label={uiText("{0} 条没处理", openNotes)} /> : null}
+              </button>
+            ))}
           </nav>
           <div className="mo-side-body">
             {side === "scene" && (cur ? <SceneProps key={cur.id} p={cur} error={errors[cur.id]} focus={focusField} onDelete={() => deleteScene(cur.id)} onDuplicate={() => { const n = duplicateScene(cur.id); if (n) setSel(n); }} />
               : <div className="mo-none">{uiText("还没有场景。从左边「添加场景」或中间选一个开头。")}</div>)}
-            {side === "video" && <VideoProps />}
+            {side === "sound" && <SoundPanel focus={sideFocus} />}
+            {side === "notes" && <NotesPanel focus={sideFocus} title={title.get("")} />}
+            {side === "plan" && <PlanPanel title={title.get("")} />}
+            {side === "video" && <><VideoProps /><LibrarySection onSave={(n) => saveAs(n, "video")} onUsed={(first) => { if (first) setSel(first, false); player.seek(0); }} /></>}
           </div>
         </aside>
       </div>
@@ -300,6 +298,7 @@ function App() {
             <MenuItem icon={<ArrowUp className="ico" />} onClick={() => { const i = list.findIndex((p) => p.id === menu.id); moveScene(menu.id, Math.max(0, i - 1)); setMenu(null); }}>{uiText("上移")}</MenuItem>
             <MenuItem icon={<ArrowDown className="ico" />} onClick={() => { const i = list.findIndex((p) => p.id === menu.id); moveScene(menu.id, Math.min(list.length - 1, i + 1)); setMenu(null); }}>{uiText("下移")}</MenuItem>
             <MenuItem icon={<Plus className="ico" />} onClick={() => { const i = list.findIndex((p) => p.id === menu.id); setAddAt({ at: menu.at, index: i + 1 }); setMenu(null); }}>{uiText("在后面添加场景")}</MenuItem>
+            <MenuItem icon={<Save className="ico" />} onClick={() => { saveAs("", "scene", menu.id); setMenu(null); }}>{uiText("存成场景模板")}</MenuItem>
             <div className="menu-sep" />
             <MenuItem icon={<Trash2 className="ico" />} onClick={() => { deleteScene(menu.id); setMenu(null); }}>{uiText("删除")}</MenuItem>
           </div>
@@ -307,10 +306,11 @@ function App() {
       )}
       {addAt && (
         <Popover at={addAt.at} onClose={() => setAddAt(null)} width={360}>
-          <TemplatePicker onPick={(tid) => { const id = addScene(tid, addAt.index); setAddAt(null); setSel(id); }} />
+          <TemplatePicker onPick={(tid) => { const id = addScene(tid, addAt.index); setAddAt(null); setSel(id); }}
+            onSaved={(item) => { const id = addSavedScene(item, addAt.index); setAddAt(null); if (id) setSel(id); }} />
         </Popover>
       )}
-      {agentAt && <AgentPop at={agentAt} selected={cur} onClose={() => setAgentAt(null)} />}
+      {agentAt && <AgentPop at={agentAt} selected={cur} onClose={() => setAgentAt(null)} onReference={() => { setAgentAt(null); openSide("plan"); }} />}
       {exporting && <ExportDialog state={exporting} onStart={doExport}
         onClose={() => { if (exporting.stage === "run") { cancelRef.current = true; return; } setExporting(null); }} />}
       <Toast kit={kit} />
@@ -346,7 +346,8 @@ function SceneCard({ p, on, playing, error, onClick, onMenu }: { p: Placed; on: 
   );
 }
 
-function TemplatePicker({ onPick }: { onPick: (id: string) => void }) {
+function TemplatePicker({ onPick, onSaved }: { onPick: (id: string) => void; onSaved: (item: string) => void }) {
+  const saved = items("scene");
   return (
     <div className="mo-picker">
       <div className="mo-picker-head">{uiText("选一个场景")}</div>
@@ -357,15 +358,46 @@ function TemplatePicker({ onPick }: { onPick: (id: string) => void }) {
           </button>
         ))}
       </div>
+      {saved.length > 0 && (
+        <>
+          <div className="mo-picker-head is-sub">{uiText("存下的场景")}</div>
+          <div className="mo-picker-grid">
+            {saved.map((it) => (
+              <button key={it.id} type="button" className="mo-tpl is-saved" onClick={() => onSaved(it.id)}>
+                {it.data.thumb ? <img src={String(it.data.thumb)} alt="" /> : null}
+                <b>{String(it.data.name || "")}</b><span>{secs(num(it.data.duration, 0))}{it.data.by ? ` · ${it.data.by}` : ""}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
-function Starter({ onStart, onBlank, onAgent }: { onStart: (id: string) => void; onBlank: () => void; onAgent: (r: Rect) => void }) {
+function Starter({ onStart, onBlank, onAgent, onTemplate, onReference }: {
+  onStart: (id: string) => void; onBlank: () => void; onAgent: (r: Rect) => void; onTemplate: (id: string) => void; onReference: () => void;
+}) {
+  const saved = items("video");
   return (
     <div className="mo-start">
       <h2>{uiText("做一个动效视频")}</h2>
       <p>{uiText("从一个现成的开头改文字和图片，或者说清楚要什么，让 agent 来做。")}</p>
+      {saved.length > 0 && (
+        <>
+          <div className="mo-start-label">{uiText("存下的模板")}</div>
+          <div className="mo-start-grid">
+            {saved.slice(0, 6).map((it) => (
+              <button key={it.id} type="button" className="mo-start-card is-saved" onClick={() => onTemplate(it.id)}>
+                {it.data.thumb ? <img src={String(it.data.thumb)} alt="" /> : null}
+                <span className="mo-start-ratio">{String(it.data.ratio || "")}</span><b>{String(it.data.name || "")}</b>
+                <span>{uiText("{0} 个场景", num(it.data.scenes, 0))} · {secs(num(it.data.duration, 0))}</span>
+              </button>
+            ))}
+          </div>
+          <div className="mo-start-label">{uiText("现成的开头")}</div>
+        </>
+      )}
       <div className="mo-start-grid">
         {STARTERS.map((s) => (
           <button key={s.id} type="button" className="mo-start-card" onClick={() => onStart(s.id)}>
@@ -375,6 +407,7 @@ function Starter({ onStart, onBlank, onAgent }: { onStart: (id: string) => void;
       </div>
       <div className="mo-start-row">
         <button type="button" className="btn" onClick={onBlank}><Plus className="ico" />{uiText("从一个场景开始")}</button>
+        <button type="button" className="btn" onClick={onReference}><Film className="ico" />{uiText("照一段视频做")}</button>
         <button type="button" className="btn" onClick={(e) => onAgent(rectOf(e.currentTarget))}><Bot className="ico" />{uiText("让 agent 做")}</button>
       </div>
     </div>
@@ -382,7 +415,7 @@ function Starter({ onStart, onBlank, onAgent }: { onStart: (id: string) => void;
 }
 
 // ---------------------------------------------------------------- transport + timeline
-function Transport({ list, total: T, current }: { list: Placed[]; total: number; current: Placed | null }) {
+function Transport({ list, total: T, onNote }: { list: Placed[]; total: number; current: Placed | null; onNote: () => void }) {
   const p = usePlayer();
   const at = sceneAt(p.time, list);
   return (
@@ -393,23 +426,54 @@ function Transport({ list, total: T, current }: { list: Placed[]; total: number;
       </button>
       <span className="mo-time"><b>{fmt(p.time, true)}</b> / {fmt(T, true)}</span>
       <span className="top-gap" />
-      <span className="mo-now">{at ? `${at.index + 1} · ${at.name || uiText("场景 {0}", at.index + 1)}` : ""}{current && at && current.id !== at.id ? "" : ""}</span>
+      <span className="mo-now">{at ? `${at.index + 1} · ${at.name || uiText("场景 {0}", at.index + 1)}` : ""}</span>
+      <button type="button" className="btn mo-note-btn" title={uiText("在这里留批注（N）")} onClick={onNote}><MessageSquarePlus className="ico" />{uiText("批注")}</button>
     </div>
   );
 }
 
-function Timeline({ list, total: T, selected, errors, onSelect, onMenu }: {
+/** A track's sound as bars, for the part of the file that plays. */
+function Wave({ t, width }: { t: PlacedTrack; width: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const l = localFor(t.key);
+  useLayoutEffect(() => {
+    const c = ref.current;
+    if (!c) return;
+    const dpr = window.devicePixelRatio || 1, h = 22;
+    const w = Math.max(1, Math.min(4000, Math.round(width)));
+    c.width = Math.round(w * dpr); c.height = Math.round(h * dpr);
+    const g = c.getContext("2d")!;
+    g.clearRect(0, 0, c.width, c.height);
+    if (!l?.peaks) return;
+    g.fillStyle = getComputedStyle(c).color;
+    const bar = 2 * dpr, gap = 1 * dpr;
+    const n = Math.floor(c.width / (bar + gap));
+    for (let i = 0; i < n; i++) {
+      const a = t.in + ((i / n) * (t.out - t.in)), b = t.in + (((i + 1) / n) * (t.out - t.in));
+      let m = 0;
+      for (let k = Math.floor(a * PEAKS_PER_SEC); k <= Math.ceil(b * PEAKS_PER_SEC) && k < l.peaks.length; k++) m = Math.max(m, l.peaks[k]);
+      const v = Math.max(1 * dpr, (m / l.peakMax) * c.height * 0.9);
+      g.fillRect(i * (bar + gap), (c.height - v) / 2, bar, v);
+    }
+  }, [l?.peaks, t.in, t.out, width, l]);
+  return <canvas ref={ref} className="mo-wave" style={{ width: Math.round(width), height: 22 }} />;
+}
+
+function Timeline({ list, total: T, selected, errors, onSelect, onMenu, onNote, onTrack, onCaption }: {
   list: Placed[]; total: number; selected: string; errors: Record<string, string>; onSelect: (id: string) => void; onMenu: (at: Rect, id: string) => void;
+  onNote: (id: string) => void; onTrack: (id: string) => void; onCaption: () => void;
 }) {
   const p = usePlayer();
+  useLocal();
   const ref = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<string>("");
   const timeAt = (x: number) => {
     const r = ref.current!.getBoundingClientRect();
     return clamp((x - r.left) / r.width, 0, 1) * T;
   };
+  const beats = beatTimes(T);
   function scrub(e: React.PointerEvent) {
-    if ((e.target as HTMLElement).closest(".mo-handle")) return;
+    if ((e.target as HTMLElement).closest(".mo-handle, .mo-pin, .mo-tblock, .mo-capblock")) return;
     p.pause();
     const go = (x: number) => p.seek(timeAt(x));
     go(e.clientX);
@@ -428,7 +492,11 @@ function Timeline({ list, total: T, selected, errors, onSelect, onMenu }: {
     const x0 = e.clientX, d0 = s.dur;
     setDrag(s.id);
     const move = (ev: PointerEvent) => {
-      const d = Math.round(clamp(d0 + (ev.clientX - x0) / pxPerSec, MIN_SCENE, 60) * 10) / 10;
+      let d = clamp(d0 + (ev.clientX - x0) / pxPerSec, MIN_SCENE, 60);
+      // (onto a beat of the music when near one; Alt to move freely)
+      const snap = 8 / pxPerSec;
+      const near = ev.altKey ? null : beats.reduce<number | null>((m, b) => (Math.abs(b - (s.start + d)) < snap && (m === null || Math.abs(b - (s.start + d)) < Math.abs(m - (s.start + d))) ? b : m), null);
+      d = near !== null && near - s.start >= MIN_SCENE ? Math.round((near - s.start) * 1000) / 1000 : Math.round(d * 10) / 10;
       draft.durations.set(s.id, d);
       kit.emit();
     };
@@ -438,6 +506,29 @@ function Timeline({ list, total: T, selected, errors, onSelect, onMenu }: {
       draft.durations.delete(s.id);
       setDrag("");
       if (d != null && d !== d0) patch(scenes, s.id, { duration: d }); else kit.emit();
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+  // a track moves along the video (its start), by tenths of a second
+  function moveTrack(e: React.PointerEvent, t: PlacedTrack) {
+    if (e.button !== 0) return;
+    e.preventDefault(); e.stopPropagation();
+    const r = ref.current!.getBoundingClientRect();
+    const pxPerSec = r.width / T;
+    const x0 = e.clientX, s0 = t.start;
+    let moved = false, now = s0;
+    const el = e.currentTarget as HTMLElement;
+    const move = (ev: PointerEvent) => {
+      if (Math.abs(ev.clientX - x0) > 3) moved = true;
+      if (!moved) return;
+      now = Math.max(0, Math.round((s0 + (ev.clientX - x0) / pxPerSec) * 10) / 10);
+      el.style.left = `${(now / T) * 100}%`;
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up);
+      if (moved && now !== s0) patch(tracks, t.id, { start: now });
+      else onTrack(t.id);
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
@@ -455,26 +546,57 @@ function Timeline({ list, total: T, selected, errors, onSelect, onMenu }: {
   const marks: number[] = [];
   // (none so near the end that its label would stick out)
   for (let s = 0; s <= T * 0.96; s += step) marks.push(s);
+  const tl = trackList();
+  const caps = captionList();
+  const pct = (t: number) => `${(t / Math.max(T, 0.001)) * 100}%`;
   return (
     <div className="mo-timeline">
       <div className="mo-tl" ref={ref} onPointerDown={scrub}>
-        <div className="mo-ruler">{marks.map((m) => <span key={m} style={{ left: `${(m / T) * 100}%` }}>{fmt(m)}</span>)}</div>
+        <div className="mo-ruler">
+          {marks.map((m) => <span key={m} style={{ left: pct(m) }}>{fmt(m)}</span>)}
+          {notes.rows.map((n) => {
+            const t = num(n.data.time, 0);
+            if (t > T) return null;
+            return <button key={n.id} type="button" className={`mo-pin${n.data.done ? " is-done" : ""}`} style={{ left: pct(t) }} title={`${fmt(t, true)} ${String(n.data.text || "")}`}
+              aria-label={uiText("批注：{0}", String(n.data.text || ""))} onClick={() => { p.pause(); p.seek(t); onNote(n.id); }} />;
+          })}
+        </div>
         <div className="mo-track">
           {list.map((s) => {
             const tr = String(scenes.get(s.id)?.data.transition || "cut");
             return (
               <div key={s.id} className={`mo-block${s.id === selected ? " is-on" : ""}${drag === s.id ? " is-drag" : ""}${errors[s.id] ? " is-error" : ""}`}
-                style={{ left: `${(s.start / T) * 100}%`, width: `${(s.dur / T) * 100}%` }}
+                style={{ left: pct(s.start), width: pct(s.dur) }}
                 onContextMenu={(e) => { e.preventDefault(); onSelect(s.id); onMenu({ x: e.clientX, y: e.clientY, w: 0, h: 0 }, s.id); }}>
                 {s.index > 0 && tr !== "cut" && <i className="mo-tr" title={TRANSITIONS.find((x) => x[0] === tr)?.[1] || tr} />}
                 <span className="mo-block-name">{s.name || uiText("场景 {0}", s.index + 1)}</span>
                 <span className="mo-block-dur">{secs(s.dur)}</span>
-                <span className="mo-handle" title={uiText("拖动改时长")} onPointerDown={(e) => resize(e, s)} />
+                <span className="mo-handle" title={beats.length ? uiText("拖动改时长（会吸到节拍上，按住 Alt 不吸）") : uiText("拖动改时长")} onPointerDown={(e) => resize(e, s)} />
               </div>
             );
           })}
         </div>
-        <div className="mo-head" style={{ left: `${(p.time / Math.max(T, 0.001)) * 100}%` }} />
+        {tl.map((t) => (
+          <div key={t.id} className="mo-lane">
+            <div className={`mo-tblock is-${t.kind}${localFor(t.key) ? "" : " is-missing"}`} style={{ left: pct(t.start), width: pct(t.end - t.start) }}
+              title={localFor(t.key) ? t.name : uiText("这台电脑上没有「{0}」", t.name)} onPointerDown={(e) => moveTrack(e, t)}>
+              <Wave t={t} width={((t.end - t.start) / Math.max(T, 0.001)) * width} />
+              <span className="mo-tblock-name">{t.name}</span>
+            </div>
+            {t.kind === "music" && t.beats.length > 0 && (
+              <div className="mo-beats" aria-hidden="true">
+                {t.beats.map((b) => { const at = t.start + b - t.in; return b >= t.in && b <= t.out && at <= T ? <i key={b} style={{ left: pct(at) }} /> : null; })}
+              </div>
+            )}
+          </div>
+        ))}
+        {caps.length > 0 && (
+          <div className="mo-lane is-caps">
+            {caps.map((c) => <div key={c.id} className="mo-capblock" style={{ left: pct(c.start), width: pct(Math.min(c.end, T) - c.start) }} title={c.text}
+              onPointerDown={(e) => { e.stopPropagation(); p.pause(); p.seek(c.start + 0.01); onCaption(); }}>{c.text}</div>)}
+          </div>
+        )}
+        <div className="mo-head" style={{ left: pct(p.time) }} />
       </div>
     </div>
   );
@@ -662,11 +784,11 @@ function VideoProps() {
 }
 
 // ---------------------------------------------------------------- agent
-function AgentPop({ at, selected, onClose }: { at: Rect; selected: Placed | null; onClose: () => void }) {
+function AgentPop({ at, selected, onClose, onReference }: { at: Rect; selected: Placed | null; onClose: () => void; onReference: () => void }) {
   const [text, setText] = useState("");
   const [only, setOnly] = useState(false);
   const [sending, setSending] = useState(false);
-  const canSend = typeof (myco as unknown as { send?: unknown })?.send === "function";
+  const sendable = canSend();
   const message = useMemo(() => {
     const lines = [
       uiText("请在「动效视频」网页里做视频。"),
@@ -697,10 +819,11 @@ function AgentPop({ at, selected, onClose }: { at: Rect; selected: Placed | null
         {selected && (
           <label className="mo-check"><input type="checkbox" checked={only} onChange={(e) => setOnly(e.target.checked)} />{uiText("只改选中的场景「{0}」", selected.name || uiText("场景 {0}", selected.index + 1))}</label>
         )}
+        <button type="button" className="link-btn mo-agent-ref" onClick={onReference}><Film className="ico" />{uiText("有想照着做的视频？在「分镜」里拆开交给 agent")}</button>
         <div className="mo-agent-foot">
-          {canSend ? <span className="faint">{uiText("发给这个网页的发布者")}</span>
+          {sendable ? <span className="faint">{uiText("发给这个网页的发布者")}</span>
             : <button type="button" className="link-btn" onClick={async () => { try { await navigator.clipboard.writeText(message); kit.flash(uiText("已复制，发给任意一个 agent 就行")); } catch { kit.flash(uiText("没复制上")); } }}>{uiText("复制这段话")}</button>}
-          <button type="button" className="btn btn-primary" disabled={!text.trim() || sending || !canSend} onClick={() => void send()}>
+          <button type="button" className="btn btn-primary" disabled={!text.trim() || sending || !sendable} onClick={() => void send()}>
             {sending ? <Loader2 className="ico spin" /> : <Bot className="ico" />}{uiText("发给 agent")}
           </button>
         </div>
@@ -711,7 +834,7 @@ function AgentPop({ at, selected, onClose }: { at: Rect; selected: Placed | null
 
 // ---------------------------------------------------------------- export
 type Exp = { stage: "setup" } | { stage: "run"; done: number; at: number; opts: ExportOptions }
-  | { stage: "done"; where: string; size: number; secs: number } | { stage: "error"; error: string }
+  | { stage: "done"; where: string; size: number; secs: number; warn: string } | { stage: "error"; error: string }
   | { stage: "unsaved"; name: string; blob: Blob; secs: number; error: string };
 const SIZE_NAME: Record<number, string> = { 2160: "4K", 1440: "2K", 1080: "1080p", 720: "720p" };
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
@@ -775,6 +898,7 @@ function ExportDialog({ state, onStart, onClose }: { state: Exp; onStart: (o: Ex
     body = (
       <>
         <p>{uiText("已存到 {0}（{1} MB，用了 {2}）", state.where, (state.size / 1024 / 1024).toFixed(1), mmss(state.secs))}</p>
+        {state.warn && <p className="modal-err">{state.warn}</p>}
         <div className="modal-foot"><span /><button type="button" className="btn btn-primary" onClick={onClose}>{uiText("好")}</button></div>
       </>
     );

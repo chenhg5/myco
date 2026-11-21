@@ -19,6 +19,8 @@
   var scenes = [];
   var themeCSS = "", sceneCSS = "";
   var lastTime = 0;
+  // captions: one layer over every scene
+  var caps = [], capStyle = "bottom", capEl = null;
 
   function post(msg, transfer) { parent.postMessage(msg, "*", transfer || []); }
 
@@ -461,6 +463,14 @@
       return sc;
     });
     sceneCSS = css.join("\n");
+    caps = (doc.captions || []).filter(function (c) { return c && c.text && +c.end > +c.start; });
+    capStyle = doc.capStyle || "bottom";
+    capEl = document.createElement("div");
+    capEl.className = "mo-cap is-" + capStyle;
+    capEl.style.display = "none";
+    capEl.style.fontSize = Math.round(Math.min(W, H) * 0.044 * (+doc.capSize || 1)) + "px";
+    capEl.innerHTML = "<span></span>";
+    stage.appendChild(capEl);
     var style = document.createElement("style");
     style.textContent = BASE + themeCSS + sceneCSS;
     stage.insertBefore(style, stage.firstChild);
@@ -525,6 +535,18 @@
       safeSeek(prev, prev.dur + local);
     }
     safeSeek(cur, local);
+    showCaption(t);
+  }
+  var capNow = null;
+  function showCaption(t) {
+    if (!capEl) return;
+    var c = null;
+    if (capStyle !== "off") for (var i = 0; i < caps.length; i++) if (t >= +caps[i].start && t < +caps[i].end) { c = caps[i]; break; }
+    if (c !== capNow) {
+      capNow = c;
+      capEl.firstChild.innerHTML = c ? esc(c.text).replace(/\n/g, "<br>") : "";
+    }
+    capEl.style.display = c ? "" : "none";
   }
   function safeSeek(sc, t) {
     if (!sc.tl) return;
@@ -534,7 +556,12 @@
   var BASE = "#stage{position:relative;overflow:hidden;background:var(--bg);color:var(--fg);font-family:var(--font);-webkit-font-smoothing:antialiased;line-height:1.2}" +
     "#stage *{box-sizing:border-box}" +
     "#stage .scene{position:absolute;left:0;top:0;width:100%;height:100%;overflow:hidden;background:var(--bg);container-type:size}" +
-    "#stage img{display:block}";
+    "#stage img{display:block}" +
+    "#stage .mo-cap{position:absolute;left:6%;right:6%;bottom:7%;z-index:5;display:flex;justify-content:center;text-align:center;pointer-events:none;" +
+    "font-weight:600;line-height:1.35;color:#fff}" +
+    "#stage .mo-cap span{max-width:100%;text-shadow:0 0 .12em rgba(0,0,0,.9),0 .06em .25em rgba(0,0,0,.75)}" +
+    "#stage .mo-cap.is-box span{padding:.18em .55em;border-radius:.25em;background:rgba(0,0,0,.66);text-shadow:none}" +
+    "#stage .mo-cap.is-top{bottom:auto;top:7%}";
 
   // ---------------------------------------------------------------- preview size
   function fit() {
@@ -551,6 +578,7 @@
     show(time);
     var parts = [];
     for (var i = 0; i < visible.length; i++) parts.push(new XMLSerializer().serializeToString(visible[i].el));
+    if (capEl && capEl.style.display !== "none") parts.push(new XMLSerializer().serializeToString(capEl));
     var css = BASE + themeCSS + sceneCSS;
     var xml = '<div xmlns="http://www.w3.org/1999/xhtml" id="stage" style="width:' + W + "px;height:" + H + 'px"><style>' + esc(css) + "</style>" + parts.join("") + "</div>";
     // (drawn at the video's own size and scaled on the canvas: WebKit draws
