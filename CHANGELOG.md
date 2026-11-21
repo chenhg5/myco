@@ -4,6 +4,20 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.21.15
+
+- **New official app: Recording Studio (录屏工作台)**: record your screen from the App, then trim and split, add text and focus zooms (blurred areas follow the zoom), and export MP4, all on your computer; the footage and its thumbnails never leave it, and an agent can help with the edit. The Mac App asks for screen-recording permission first and offers a direct link to its setting.
+- **Motion Videos 1.1**: notes and a shot plan for each video, a reference video to work from, sound and captions, steadier reference shots, and more templates.
+- The App: a message you queue with ⌘↩ while the agent is at work shows at once in the Queued list above the box (edit or withdraw it there).
+- Remote Desktop (preview): installing or updating the component from Settings, clearer errors that can be dismissed, and no update while a session is being shared.
+
+**中文**
+
+- **新的官方应用：录屏工作台**：在 App 里录屏，然后裁剪、分割、加文字和重点放大（打码区域会跟着放大移动），在本机导出 MP4。视频和缩略图都留在你的电脑上，不会上传；剪辑可以交给 agent 帮忙。Mac App 会先申请录屏权限，并提供直达设置的按钮。
+- **动效视频 1.1**：每个视频有备注和分镜，可以参照一段参考视频来做，支持声音和字幕，参考画面更稳定，模板也更多了。
+- App：agent 干活时按 ⌘↩ 排队的消息，会立刻出现在输入框上方的「排队中」里，可以在那里修改或撤回。
+- 远程桌面（预览）：可以在设置里安装或更新组件；出错提示更清楚，也能关掉；正在共享时不会更新组件。
+
 ## v0.21.14
 
 - **New official app: Motion Videos (动效视频)**: product promos, data stories and vertical shorts made of scenes played in order. Each scene is HTML and an animation (written by an agent, or one of eight templates) with its words and pictures in a form; preview, a timeline, transitions, 16:9 / 9:16 / 1:1 / 4:5, colour sets and fonts, and "ask an agent". Export to MP4 happens in the page, on your computer.
