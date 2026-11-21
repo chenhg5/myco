@@ -19,7 +19,7 @@
 
 **[下载 Mac 版](https://github.com/chenhg5/myco/releases/latest/download/myco.dmg)** · [Windows 版（预览）](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-amd64.exe) · [Linux 版](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-amd64) · [全部下载](https://github.com/chenhg5/myco/releases/latest)
 
-[English](README.md) · **中文** · [安装指南](INSTALL.zh-CN.md) · [架构](docs/architecture.md) · [HTTP API](docs/api.md)
+[English](README.md) · **中文** · [安装指南](INSTALL.zh-CN.md) · [使用教程](docs/tutorial.zh-CN.md) · [应用](docs/apps.zh-CN.md) · [架构](docs/architecture.md) · [HTTP API](docs/api.md)
 
 
 https://github.com/user-attachments/assets/2a9103f4-4f13-4130-aad8-3e02598460c3
@@ -59,12 +59,6 @@ App 的第一屏也有这句话（**让 agent 帮我装**）。
 | **Linux** | [myco-app-linux-amd64](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-amd64)（[ARM 版](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-arm64)）：在浏览器里打开 App（X11、Wayland、WSL 都行）。[详见](INSTALL.zh-CN.md#9-控制台-appmac--windows--linux) |
 | **iPhone**（测试版） | **[加入 TestFlight 测试](https://testflight.apple.com/join/XDKvU8Jp)**（iOS 17 或更新）。 |
 | **服务器** | 用命令行工具，见[更喜欢命令行？](#更喜欢命令行) |
-
-## 使用教程
-
-五分钟走一遍 App。
-
-https://github.com/user-attachments/assets/02541b5d-d724-4a13-9423-37805feb5153
 
 ## 三步上手
 
@@ -112,7 +106,9 @@ curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-h
 
 **[查看全部 26 个应用 →](docs/apps.zh-CN.md)**（文档、笔记、表格、幻灯片、代码编辑器、白板、视频剪辑、小游戏等）
 
-## 1. 让云端 agent 用你的电脑
+## 三种用法
+
+### 1. 让云端 agent 用你的电脑
 
 agent 在云端，仓库、工具和登录状态在你的电脑上。在原来的对话里，它可以在 **Shell 节点**上执行命令，或者把任务交给你电脑上配好的 **Claude Code、Codex**：
 
@@ -128,7 +124,7 @@ myco message send --to my-mac-claude --wait 15m --body "对本地数据库跑一
 - **只出不进**：你的电脑不开端口。每条命令和输出都有记录。
 - Mac、Linux（`sh`）和 Windows（PowerShell）都支持。实测过 claude.ai 上的 Claude Code 会话和服务器上的 agent。详见 [INSTALL.zh-CN.md 4.10 节](INSTALL.zh-CN.md#410-exec-节点远程执行命令)。
 
-## 2. 把活直接交给同事的 agent
+### 2. 把活直接交给同事的 agent
 
 和同事共用一个 Hub（设置 → 成员 → **邀请成员**）。然后说「问问 Matthew 的后端 agent，订单接口返回哪些字段」，你的 agent 就去他的 agent 那里拿答复。
 
@@ -136,7 +132,7 @@ myco message send --to my-mac-claude --wait 15m --body "对本地数据库跑一
 - **收到任务的 agent 知道是谁在问**，也知道这是同事、不是主人。
 - 团队 Hub 可以开**端到端加密**：连 Hub 都读不到消息。
 
-## 3. 所有 agent 连成一张网
+### 3. 所有 agent 连成一张网
 
 Claude Code、Codex、claude.ai 云端会话，还有 Pi、Kiro、Gemini CLI 等（见[支持的 agent](#支持的-agent)）：
 

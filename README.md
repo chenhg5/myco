@@ -19,7 +19,7 @@ reach your other computers and your phone, put them on a schedule — all from o
 
 **[Download for Mac](https://github.com/chenhg5/myco/releases/latest/download/myco.dmg)** · [Windows (preview)](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-amd64.exe) · [Linux](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-amd64) · [All downloads](https://github.com/chenhg5/myco/releases/latest)
 
-**English** · [中文](README.zh-CN.md) · [Install Guide](INSTALL.md) · [Architecture](docs/architecture.md) · [HTTP API](docs/api.md)
+**English** · [中文](README.zh-CN.md) · [Install Guide](INSTALL.md) · [Video tutorial](docs/tutorial.md) · [Apps](docs/apps.md) · [Architecture](docs/architecture.md) · [HTTP API](docs/api.md)
 
 
 https://github.com/user-attachments/assets/76d235fc-1c4a-4f7c-88c1-ee058f4db1da
@@ -59,12 +59,6 @@ The app's first screen has the same sentence (**Let my agent set it up**).
 | **Linux** | [myco-app-linux-amd64](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-amd64) ([ARM](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-arm64)): opens the app in your browser (X11, Wayland, WSL). [Details](INSTALL.md#9-the-console-app-mac--windows--linux) |
 | **iPhone** (beta) | **[Join the TestFlight beta](https://testflight.apple.com/join/XDKvU8Jp)** (iOS 17 or later). |
 | **Servers** | The command-line tool — see [Prefer the command line?](#prefer-the-command-line) |
-
-## Video tutorial
-
-A five-minute walkthrough of the app (in Chinese).
-
-https://github.com/user-attachments/assets/02541b5d-d724-4a13-9423-37805feb5153
 
 ## Get started in three steps
 
@@ -112,7 +106,9 @@ We are rebuilding the apps we use every day on Mac, Windows and phone so that **
 
 **[See all 26 apps →](docs/apps.md)** (docs, notes, sheets, slides, a code editor, a whiteboard, video editing, games and more)
 
-## 1. Let a cloud agent use your computer
+## Three ways to use it
+
+### 1. Let a cloud agent use your computer
 
 The agent runs in the cloud; the repo, tools and logins are on your computer. From the same conversation it can run a command on a **shell node**, or hand the task to the **Claude Code or Codex** already set up on your computer:
 
@@ -128,7 +124,7 @@ Add a shell node in the app (**Add a computer**), choose a folder and which agen
 - **Outbound only**: your computer opens no ports. Every command and its output are recorded.
 - Works on Mac, Linux (`sh`) and Windows (PowerShell). Tested with claude.ai Claude Code sessions and agents on servers. Details: [INSTALL.md §4.10](INSTALL.md#410-exec-nodes-run-commands-remotely).
 
-## 2. Hand work to a teammate's agent
+### 2. Hand work to a teammate's agent
 
 Share one hub with your team (Settings → Members → **Invite a member**). Then: “ask Matthew's backend agent which fields the orders API returns”, and your agent gets the answer from theirs.
 
@@ -136,7 +132,7 @@ Share one hub with your team (Settings → Members → **Invite a member**). The
 - **The receiving agent knows who is asking**, and that it is a teammate, not its owner.
 - **End-to-end encryption** is available for team hubs: not even the hub can read messages.
 
-## 3. All your agents in one network
+### 3. All your agents in one network
 
 Claude Code, Codex, claude.ai sessions, Pi, Kiro, Gemini CLI and more ([supported agents](#supported-agents)):
 
