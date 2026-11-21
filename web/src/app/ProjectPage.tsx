@@ -15,6 +15,7 @@ import { NodePicker } from "@/app/NodePicker";
 import { RowsSkeleton, TextSkeleton } from "@/app/Skeleton";
 import { stateMeta } from "@/components/status";
 import { cn, timeAgo } from "@/lib/utils";
+import { Avatar } from "@/app/persona";
 import { L } from "@/lib/i18n";
 
 export interface ProjectRef { hubId: string; name: string }
@@ -48,6 +49,8 @@ type Dialog =
   | { kind: "delete" };
 
 /** One project: its goal, members, brief, shared documents and links. */
+type ProjectTab = "notes" | "members" | "chats";
+
 export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode, onNewNode, onChanged, onDeleted, onOpenConversation, onAllConversations, onNewConversation }: {
   target: ProjectRef;
   /** Changes when something outside the page changed the project. */
@@ -135,6 +138,9 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
   };
   const open = (d: Dialog) => { setActionError(null); setDialog(d); };
   const addMenu = useContextMenu();
+  // Which tab: what the project knows first, each time it opens.
+  const [tab, setTab] = useState<ProjectTab>("notes");
+  useEffect(() => { setTab("notes"); }, [target.hubId, target.name]);
 
   const hubRows = useMemo(() => rows.filter((r) => r.hub.id === target.hubId), [rows, target.hubId]);
   const rowOf = (name: string) => hubRows.find((r) => r.st.agent.name === name);
@@ -183,17 +189,24 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
     .filter((a) => agentKind(a) !== "human" && a.binding.harness !== "machine" && !p.members.some((m) => m.name === a.name))
     .filter((a) => canManage(hub, a.owner_id));
 
+  const tabs: { key: ProjectTab; label: string; n?: number }[] = [
+    { key: "notes", label: L("资料", "Notes") },
+    { key: "members", label: L("成员", "Members"), n: p.members.length },
+    { key: "chats", label: L("对话", "Conversations"), n: threads.length },
+  ];
   return (
-    <div className="app-page app-project">
-      <div className="app-project-head">
-        <div className="app-project-titles">
+    <div className="app-page app-project aud">
+      {/* As every detail page (app-ui.md 6.15): the name, its goal, a line
+          about it; 编辑, 发任务 and ⋯ (settings) of one height; then tabs,
+          what the project knows first (this page opens from 项目资料). */}
+      <header className="pcd-head">
+        <div className="pcd-titles">
           <h1>
-            {p.title || p.name}
+            <span>{p.title || p.name}</span>
             {p.archived && <span className="app-pill">{L("已归档", "Archived")}</span>}
           </h1>
-          <p className={cn("app-project-goal", !p.goal && "is-empty")}>{p.goal || L("还没有写目标。", "No goal yet.")}</p>
-          <p className="app-project-meta">
-            <span>{p.name}</span>
+          <p className="pcd-sub">
+            <span className="mono">{p.name}</span>
             <span>{hubName}</span>
             {p.owner && <span>{L(`${p.owner} 创建`, `by ${p.owner}`)}</span>}
             <span className="app-project-vis">
@@ -201,132 +214,23 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
             </span>
           </p>
         </div>
-        <div className="app-project-actions">
+        <div className="ph-actions wf-actions">
           {p.can_edit && <button type="button" className="app-btn" onClick={() => open({ kind: "about" })}><Pencil />{L("编辑", "Edit")}</button>}
-          {p.can_manage && <button type="button" className="app-btn app-btn-plain" aria-label={L("项目设置", "Project settings")} title={L("项目设置", "Project settings")} onClick={() => open({ kind: "settings" })}><MoreHorizontal /></button>}
+          <button type="button" className="app-btn app-btn-primary" onClick={() => onNewConversation()} disabled={p.archived}><IconNewChat />{L("发任务", "New task")}</button>
+          {p.can_manage && <button type="button" className="app-btn wf-more" aria-label={L("项目设置", "Project settings")} title={L("项目设置", "Project settings")} onClick={() => open({ kind: "settings" })}><MoreHorizontal /></button>}
         </div>
+      </header>
+      <p className={cn("wf-desc app-project-goal", !p.goal && "is-empty")}>{p.goal || L("还没有写目标。", "No goal yet.")}</p>
+
+      <div className="wf-tabs" role="tablist" aria-label={L("看什么", "View")} data-testid="project-tabs">
+        {tabs.map((t) => (
+          <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} className={cn("wf-tab", tab === t.key && "is-on")} onClick={() => setTab(t.key)}>
+            {t.label}{t.n !== undefined && t.n > 0 && <small>{t.n}</small>}
+          </button>
+        ))}
       </div>
 
-      <div className="app-project-progress">
-        {recent === null ? <TextSkeleton width={220} /> : threads.length === 0 ? (
-          <span className="muted">{L("还没有这个项目的对话。给成员发个任务，或者让 agent 用 myco message send --project 发。", "No conversations in this project yet. Give a member a task, or have an agent send with myco message send --project.")}</span>
-        ) : (
-          <>
-            {(["working", "queued", "failed", "done"] as const).map((st) => (
-              <span key={st} className={cn("app-project-stat", `is-${st}`)}><i />{stateLabel[st]} <b>{count(st)}</b></span>
-            ))}
-          </>
-        )}
-        <span className="app-project-progress-actions">
-          <button type="button" className="app-btn app-btn-quiet" onClick={() => onNewConversation()} disabled={p.archived}><IconNewChat />{L("发任务", "New task")}</button>
-        </span>
-      </div>
-
-      <section className="app-group">
-        <div className="app-group-title">
-          <span className="name">{L(`成员 ${p.members.length}`, `Members ${p.members.length}`)}{coordinators > 0 && <span className="app-group-note">{L(` · ${coordinators} 个协调者`, ` · ${coordinators} coordinating`)}</span>}</span>
-          <span className="app-group-actions">
-            <button
-              type="button"
-              className="app-group-action"
-              aria-haspopup="menu"
-              disabled={p.archived}
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={(e) => addMenu.openUnder(e.currentTarget, [
-                { label: L("加入已有的 agent", "Add existing nodes"), icon: IconNodes, onSelect: () => open({ kind: "add" }) },
-                { label: L("新建一个 agent", "Start a new node"), icon: Plus, onSelect: onNewNode },
-              ])}
-            >
-              <Plus />{L("添加 agent", "Add nodes")}<ChevronDown className="app-group-action-caret" />
-            </button>
-            {addMenu.element}
-          </span>
-        </div>
-        <div className="app-list">
-          {p.members.length === 0 && <div className="app-empty-note">{L("还没有 agent。添加已有的 agent，或新建一个。", "No nodes yet. Add existing ones, or create one.")}</div>}
-          {p.members.map((m) => {
-            const row = rowOf(m.name);
-            const a = m.agent;
-            const Icon = a ? nodeIcon(a) : Users;
-            const st = row?.st.state;
-            const skills = a?.skills?.length ? a.skills.map((s) => s.name) : a?.capabilities || [];
-            const mayAct = p.can_edit || p.can_manage || (a && canManage(hub, a.owner_id));
-            return (
-              <div className="app-project-member" key={m.name}>
-                <button type="button" className="app-project-member-main" onClick={() => row && onOpenNode(row)} disabled={!row}>
-                  <span className="app-row-icon"><Icon /></span>
-                  <span className="app-row-main">
-                    <span className="app-row-titleline">
-                      <span className="app-row-title">{a ? nodeName(a, hub) : m.name}</span>
-                      {m.role === "coordinator" && <span className="app-label group">{L("协调者", "Coordinator")}</span>}
-                      {st && <span className={cn("dot", st)} title={stateMeta[st].label} />}
-                    </span>
-                    <span className="app-row-sub">
-                      {m.note || (a?.description ? a.description : a ? "" : L("别人的 agent （仅自己可见）", "Someone's private node"))}
-                    </span>
-                    {skills.length > 0 && (
-                      <span className="app-project-skills">
-                        {skills.slice(0, 4).map((s) => <span key={s} className="app-label">{s}</span>)}
-                        {skills.length > 4 && <span className="app-label">+{skills.length - 4}</span>}
-                      </span>
-                    )}
-                  </span>
-                </button>
-                {(() => {
-                  const h = onHand(m.name);
-                  return (h.working > 0 || h.queued > 0) ? (
-                    <span className="app-project-onhand">
-                      {[h.working ? L(`处理中 ${h.working}`, `${h.working} working`) : "", h.queued ? L(`排队 ${h.queued}`, `${h.queued} queued`) : ""].filter(Boolean).join(" · ")}
-                    </span>
-                  ) : null;
-                })()}
-                {mayAct && (
-                  <button type="button" className="app-btn app-btn-plain app-project-member-more" aria-label={L("成员设置", "Member settings")}
-                    onClick={() => open({ kind: "member", member: m })}><MoreHorizontal /></button>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </section>
-
-      {p.machines && (
-        <ProjectMachines project={p} machines={hub ? machinesOfHub(hub).filter((m) => !m.legacy && m.os !== "cloud") : []} busy={busy}
-          onSet={(id, allow) => void run(() => appApi.setProjectMachine(target.hubId, p.name, id, allow), false)} />
-      )}
-      {p.machines && <ErrorText error={dialog ? null : actionError} />}
-
-      {threads.length > 0 && (
-        <section className="app-group">
-          <div className="app-group-title">
-            <span className="name">{L("最近对话", "Recent conversations")}</span>
-            <button type="button" className="app-group-action" onClick={onAllConversations}>{L("全部对话", "All")}<span className="app-chev">›</span></button>
-          </div>
-          <div className="app-list">
-            {threads.slice(0, 6).map((it) => {
-              const ps = it.participants.length ? it.participants : [it.first.from, it.first.to];
-              const Icon = ps.some((x) => x.startsWith("@console:")) ? IconChat : IconExchange;
-              return (
-                <button key={it.thread_id} type="button" className="conv-row" onClick={() => onOpenConversation({ hubId: target.hubId, hubName, item: it })}
-                  title={it.state ? stateLabel[it.state] : undefined}>
-                  <span className="conv-row-icon">
-                    <Icon aria-hidden />
-                    {it.state && it.state !== "done" && <span className={cn("conv-row-state", `is-${it.state}`)} />}
-                  </span>
-                  <span className="conv-row-main">
-                    <span className="conv-row-top">
-                      <span className="conv-row-title">{`${nameOf(ps[0])} → ${nameOf(ps[1])}${ps.length > 2 ? ` +${ps.length - 2}` : ""}`}</span>
-                      <span className="conv-row-time">{timeAgo(it.updated_at, now)}</span>
-                    </span>
-                    <span className="conv-row-summary">{summarize(it.last)}</span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
+      {tab === "notes" && (<>
       <section className="app-group">
         <div className="app-group-title">
           <span className="name">{L("项目说明", "Brief")}</span>
@@ -407,6 +311,127 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
           ))}
         </div>
       </section>
+      </>)}
+
+      {tab === "members" && (<>
+      <section className="app-group">
+        <div className="app-group-title">
+          <span className="name">{L(`成员 ${p.members.length}`, `Members ${p.members.length}`)}{coordinators > 0 && <span className="app-group-note">{L(` · ${coordinators} 个协调者`, ` · ${coordinators} coordinating`)}</span>}</span>
+          <span className="app-group-actions">
+            <button
+              type="button"
+              className="app-group-action"
+              aria-haspopup="menu"
+              disabled={p.archived}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => addMenu.openUnder(e.currentTarget, [
+                { label: L("加入已有的 agent", "Add existing nodes"), icon: IconNodes, onSelect: () => open({ kind: "add" }) },
+                { label: L("新建一个 agent", "Start a new node"), icon: Plus, onSelect: onNewNode },
+              ])}
+            >
+              <Plus />{L("添加 agent", "Add nodes")}<ChevronDown className="app-group-action-caret" />
+            </button>
+            {addMenu.element}
+          </span>
+        </div>
+        <div className="app-list">
+          {p.members.length === 0 && <div className="app-empty-note">{L("还没有 agent。添加已有的 agent，或新建一个。", "No nodes yet. Add existing ones, or create one.")}</div>}
+          {p.members.map((m) => {
+            const row = rowOf(m.name);
+            const a = m.agent;
+            const Icon = a ? nodeIcon(a) : Users;
+            const st = row?.st.state;
+            const skills = a?.skills?.length ? a.skills.map((s) => s.name) : a?.capabilities || [];
+            const mayAct = p.can_edit || p.can_manage || (a && canManage(hub, a.owner_id));
+            return (
+              <div className="app-project-member" key={m.name}>
+                <button type="button" className="app-project-member-main" onClick={() => row && onOpenNode(row)} disabled={!row}>
+                  {a ? <Avatar agent={a} size={28} state={st} /> : <span className="app-row-icon"><Icon /></span>}
+                  <span className="app-row-main">
+                    <span className="app-row-titleline">
+                      <span className="app-row-title">{a ? nodeName(a, hub) : m.name}</span>
+                      {m.role === "coordinator" && <span className="app-label group">{L("协调者", "Coordinator")}</span>}
+                      {st && !a && <span className={cn("dot", st)} title={stateMeta[st].label} />}
+                    </span>
+                    <span className="app-row-sub">
+                      {m.note || (a?.description ? a.description : a ? "" : L("别人的 agent （仅自己可见）", "Someone's private node"))}
+                    </span>
+                    {skills.length > 0 && (
+                      <span className="app-project-skills">
+                        {skills.slice(0, 4).map((s) => <span key={s} className="app-label">{s}</span>)}
+                        {skills.length > 4 && <span className="app-label">+{skills.length - 4}</span>}
+                      </span>
+                    )}
+                  </span>
+                </button>
+                {(() => {
+                  const h = onHand(m.name);
+                  return (h.working > 0 || h.queued > 0) ? (
+                    <span className="app-project-onhand">
+                      {[h.working ? L(`处理中 ${h.working}`, `${h.working} working`) : "", h.queued ? L(`排队 ${h.queued}`, `${h.queued} queued`) : ""].filter(Boolean).join(" · ")}
+                    </span>
+                  ) : null;
+                })()}
+                {mayAct && (
+                  <button type="button" className="app-btn app-btn-plain app-project-member-more" aria-label={L("成员设置", "Member settings")}
+                    onClick={() => open({ kind: "member", member: m })}><MoreHorizontal /></button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {p.machines && (
+        <ProjectMachines project={p} machines={hub ? machinesOfHub(hub).filter((m) => !m.legacy && m.os !== "cloud") : []} busy={busy}
+          onSet={(id, allow) => void run(() => appApi.setProjectMachine(target.hubId, p.name, id, allow), false)} />
+      )}
+      {p.machines && <ErrorText error={dialog ? null : actionError} />}
+      </>)}
+
+      {tab === "chats" && (<>
+      <div className="app-project-progress">
+        {recent === null ? <TextSkeleton width={220} /> : threads.length === 0 ? (
+          <span className="muted">{L("还没有这个项目的对话。给成员发个任务，或者让 agent 用 myco message send --project 发。", "No conversations in this project yet. Give a member a task, or have an agent send with myco message send --project.")}</span>
+        ) : (
+          <>
+            {(["working", "queued", "failed", "done"] as const).map((st) => (
+              <span key={st} className={cn("app-project-stat", `is-${st}`)}><i />{stateLabel[st]} <b>{count(st)}</b></span>
+            ))}
+          </>
+        )}
+      </div>
+      {threads.length > 0 && (
+        <section className="app-group">
+          <div className="app-group-title">
+            <span className="name">{L("最近对话", "Recent conversations")}</span>
+            <button type="button" className="app-group-action" onClick={onAllConversations}>{L("全部对话", "All")}<span className="app-chev">›</span></button>
+          </div>
+          <div className="app-list">
+            {threads.slice(0, 6).map((it) => {
+              const ps = it.participants.length ? it.participants : [it.first.from, it.first.to];
+              const Icon = ps.some((x) => x.startsWith("@console:")) ? IconChat : IconExchange;
+              return (
+                <button key={it.thread_id} type="button" className="conv-row" onClick={() => onOpenConversation({ hubId: target.hubId, hubName, item: it })}
+                  title={it.state ? stateLabel[it.state] : undefined}>
+                  <span className="conv-row-icon">
+                    <Icon aria-hidden />
+                    {it.state && it.state !== "done" && <span className={cn("conv-row-state", `is-${it.state}`)} />}
+                  </span>
+                  <span className="conv-row-main">
+                    <span className="conv-row-top">
+                      <span className="conv-row-title">{`${nameOf(ps[0])} → ${nameOf(ps[1])}${ps.length > 2 ? ` +${ps.length - 2}` : ""}`}</span>
+                      <span className="conv-row-time">{timeAgo(it.updated_at, now)}</span>
+                    </span>
+                    <span className="conv-row-summary">{summarize(it.last)}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
+      </>)}
 
       <AboutDialog open={dialog?.kind === "about"} project={p} busy={busy} error={actionError} onClose={() => setDialog(null)}
         onSave={(title, goal) => void run(() => appApi.updateProject(target.hubId, p.name, { title, goal }))} />

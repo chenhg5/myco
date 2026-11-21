@@ -1601,6 +1601,8 @@ async function runMatrix(browser, size, scheme) {
     await step("项目 · 可以开 agent 的电脑", async () => {
       await go(page, "官网改版", narrow);
       await clickVisible(page, page.locator(".sp-head").getByRole("button", { name: "项目资料" }));
+      // (the computers are under 成员; the page opens on 资料)
+      await clickVisible(page, page.locator("[data-testid=project-tabs]").getByRole("tab", { name: /^成员/ }));
       const section = page.locator("[data-testid=project-machines]");
       await section.waitFor({ timeout: 20_000 });
       const studio = section.locator(".app-row", { hasText: "Studio Mac" }).getByRole("switch");
@@ -1628,6 +1630,7 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, card.getByRole("button", { name: "同意", exact: true }));
       await card.waitFor({ state: "hidden", timeout: 10_000 });
       await clickVisible(page, page.locator(".sp-head").getByRole("button", { name: "项目资料" }));
+      await clickVisible(page, page.locator("[data-testid=project-tabs]").getByRole("tab", { name: /^成员/ }));
       const office = page.locator("[data-testid=project-machines] .app-row", { hasText: "Office PC" }).getByRole("switch");
       await page.waitForFunction(() => [...document.querySelectorAll("[data-testid=project-machines] .app-row")]
         .some((r) => r.textContent?.includes("Office PC") && r.querySelector("[role=switch]")?.getAttribute("aria-checked") === "true"), null, { timeout: 15_000 });
