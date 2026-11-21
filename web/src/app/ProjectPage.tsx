@@ -700,7 +700,12 @@ function FileDialog({ hubId, project, doc, busy, error, onClose, onDelete }: {
   hubId: string; project: Project; doc: ProjectDoc; busy: boolean; error: unknown;
   onClose: () => void; onDelete: (name: string) => void;
 }) {
-  const [full, setFull] = useState<ProjectDoc | null>(null);
+  // A file opened before shows at once when it has not changed since.
+  const docKey = `projdoc\u0000${hubId}\u0000${project.name}\u0000${doc.name}`;
+  const [full, setFull] = useState<ProjectDoc | null>(() => {
+    const kept = recall<ProjectDoc>(docKey);
+    return kept && kept.updated_at === doc.updated_at ? kept : null;
+  });
   const [loadError, setLoadError] = useState<unknown>(null);
   const [saved, setSaved] = useState("");
   const [saving, setSaving] = useState(false);
@@ -710,7 +715,7 @@ function FileDialog({ hubId, project, doc, busy, error, onClose, onDelete }: {
     if (doc.binary) return;
     let off = false;
     appApi.projectDoc(hubId, project.name, doc.name)
-      .then((d) => { if (!off) setFull(d); })
+      .then((d) => { if (!off) setFull(remember(docKey, d)); })
       .catch((e) => { if (!off) setLoadError(e); });
     return () => { off = true; };
   }, [hubId, project.name, doc.name, doc.binary]);

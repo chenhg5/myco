@@ -1576,6 +1576,25 @@ async function runMatrix(browser, size, scheme) {
       });
     }
 
+    // Opened again, the project's notes show at once from what was
+    // loaded before (no loading placeholders while it asks again).
+    await step("项目资料 · 再次打开立刻显示", async () => {
+      await clickVisible(page, page.locator(".sp-head").getByRole("button", { name: "项目资料" }));
+      await page.locator(".app-project-brief").first().waitFor({ timeout: 20_000 });
+      await settle(page, 600);
+      await navBackClick(page);
+      await page.locator(".sp-home").waitFor({ timeout: 10_000 });
+      await clickVisible(page, page.locator(".sp-head").getByRole("button", { name: "项目资料" }));
+      await page.waitForTimeout(80);
+      const state = await page.evaluate(() => ({
+        brief: !!document.querySelector(".app-project-brief"),
+        skeleton: document.querySelectorAll(".app-page .skel, .app-page [class*=skeleton], .app-page [class*=Skeleton]").length,
+      }));
+      if (!state.brief || state.skeleton) throw new Error(`再次打开项目资料应立刻显示上次的内容：${JSON.stringify(state)}`);
+      await navBackClick(page);
+      await page.locator(".sp-home").waitFor({ timeout: 10_000 });
+    });
+
     await step("项目资料", async () => {
       await clickVisible(page, page.locator(".sp-head").getByRole("button", { name: "项目资料" }));
       await page.locator(".app-page").first().waitFor({ timeout: 20_000 });

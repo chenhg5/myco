@@ -9,6 +9,27 @@ import { useCallback, useEffect, useRef, useState } from "react";
  */
 const store = new Map<string, unknown>();
 const MAX = 400;
+// Finished runs' traces have their own room: a long conversation keeps
+// hundreds of them, and reading one must not push the pages out (a project's
+// notes, say, which then loaded from scratch each time they were opened).
+const MAX_TRACES = 400;
+const isTrace = (key: string) => key.startsWith("trace\u0000");
+
+/** Drops the least recently used entries of key's kind beyond its room;
+ *  dropped is told each one. */
+function trimLike(key: string, dropped?: (key: string) => void) {
+  const trace = isTrace(key);
+  const max = trace ? MAX_TRACES : MAX;
+  let n = 0;
+  for (const k of store.keys()) if (isTrace(k) === trace) n++;
+  for (const k of store.keys()) {
+    if (n <= max) break;
+    if (isTrace(k) !== trace) continue;
+    store.delete(k);
+    dropped?.(k);
+    n--;
+  }
+}
 
 // Saving: entries changed since the last save, written a moment later.
 let persist = false;
@@ -84,7 +105,8 @@ export async function hydrate(timeoutMs = 800) {
       store.set(e.key, e.data);
       savedJSON.set(e.key, JSON.stringify(e.data));
     }
-    while (store.size > MAX) store.delete(store.keys().next().value as string);
+    trimLike("");
+    trimLike("trace\u0000");
   } catch {
     // No cache this time.
   } finally {
@@ -117,11 +139,7 @@ export function remember<T>(key: string, value: T): T {
   store.delete(key);
   store.set(key, value);
   markDirty(key);
-  while (store.size > MAX) {
-    const old = store.keys().next().value as string;
-    store.delete(old);
-    markDirty(old); // deleted on the next save too
-  }
+  trimLike(key, markDirty); // (deleted on the next save too)
   return value;
 }
 
