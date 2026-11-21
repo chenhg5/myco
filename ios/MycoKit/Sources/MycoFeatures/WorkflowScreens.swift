@@ -573,16 +573,15 @@ private struct StepRow: View {
     }
 }
 
-/// My superagent, as Siri is called up: a round orb in the middle of the
-/// tab bar. A tap brings its conversation up over the page; a long press
-/// talks to it at once (a voice call, where voice is set up). With none
-/// yet, a tap sets one up. What waits for my approval, or what it said
-/// that I have not read, shows on it.
-struct SuperagentOrb: View {
+/// My superagent, as Siri is called up: a small sparkle in the top bar
+/// of each tab's first page. A tap brings its conversation up over the
+/// page; a long press talks to it at once (a voice call, where voice is
+/// set up). With none yet, a tap sets one up. What waits for my approval,
+/// or what it said that I have not read, shows on it.
+struct SuperagentButton: View {
     @Environment(WorkspaceSession.self) private var session
     @Environment(Router.self) private var router
     @Environment(AppModel.self) private var app
-    @State private var breathe = false
     /// Each long press (a tap of the hand).
     @State private var talks = 0
 
@@ -593,41 +592,28 @@ struct SuperagentOrb: View {
         Button {
             if let agent { router.sheet = .superagentChat(agent) } else { router.sheet = .superagent }
         } label: {
-            ZStack {
-                Circle()
-                    .fill(AngularGradient(colors: [MycoColor.accent, Color(red: 0.36, green: 0.62, blue: 0.92), Color(red: 0.62, green: 0.48, blue: 0.86), MycoColor.accent], center: .center))
-                    .blur(radius: breathe ? 3 : 1)
-                    .opacity(agent == nil ? 0.55 : 1)
-                Circle().fill(.white.opacity(0.18)).padding(5)
-                Image(systemName: agent == nil ? "plus" : "sparkles")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(.white)
-            }
-            .frame(width: 46, height: 46)
-            .overlay(alignment: .topTrailing) {
-                if model.pending > 0 {
-                    Text("\(model.pending)").font(.caption2.weight(.bold)).foregroundStyle(.white)
-                        .padding(.horizontal, 5).frame(minWidth: 18, minHeight: 18)
-                        .background(MycoColor.amber, in: Capsule())
-                        .offset(x: 4, y: -4)
-                } else if unread {
-                    Circle().fill(MycoColor.unread).frame(width: 10, height: 10).offset(x: 1, y: -1)
+            Image(systemName: "sparkles")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(LinearGradient(
+                    colors: [MycoColor.accent, Color(red: 0.36, green: 0.62, blue: 0.92), Color(red: 0.62, green: 0.48, blue: 0.86)],
+                    startPoint: .topLeading, endPoint: .bottomTrailing))
+                .opacity(agent == nil ? 0.6 : 1)
+                .overlay(alignment: .topTrailing) {
+                    if model.pending > 0 {
+                        Text("\(model.pending)").font(.system(size: 10, weight: .bold)).foregroundStyle(.white)
+                            .padding(.horizontal, 4).frame(minWidth: 15, minHeight: 15)
+                            .background(MycoColor.amber, in: Capsule())
+                            .offset(x: 9, y: -8)
+                    } else if unread {
+                        Circle().fill(MycoColor.unread).frame(width: 8, height: 8).offset(x: 6, y: -5)
+                    }
                 }
-            }
-            .shadow(color: MycoColor.accent.opacity(0.35), radius: breathe ? 8 : 4, y: 2)
-            // (the tab bar's height, not more: it must not grow the bar)
-            .frame(height: 54)
-            .contentShape(Circle())
         }
-        .buttonStyle(PressScaleStyle())
         .simultaneousGesture(LongPressGesture(minimumDuration: 0.45).onEnded { _ in talk() })
+        .sensoryFeedback(.impact(weight: .medium), trigger: talks)
         .accessibilityLabel(agent.map { "Superagent " + session.displayName(of: $0) } ?? L("配一个 superagent", "Set up your superagent"))
         .accessibilityHint(agent == nil ? "" : L("长按直接语音聊天", "Press and hold to talk"))
-        .accessibilityIdentifier("tab.superagent")
-        .onAppear {
-            withAnimation(.easeInOut(duration: 2.4).repeatForever(autoreverses: true)) { breathe = true }
-        }
-        .sensoryFeedback(.impact(weight: .medium), trigger: talks)
+        .accessibilityIdentifier("chrome.superagent")
     }
 
     /// Talks to it now: its conversation comes up, and the call starts
