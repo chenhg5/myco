@@ -589,7 +589,7 @@ final class WalkthroughTests: XCTestCase {
         app.buttons["superagent.go"].tap()
         // Its conversation comes up over the page.
         XCTAssertTrue(app.descendants(matching: .any)["approval"].waitForExistence(timeout: 20))
-        app.swipeDown(velocity: .fast)
+        app.buttons["superagent.close"].tap()
         // Not one of the chats, nor of the members.
         XCTAssertTrue(orb.waitForExistence(timeout: 10))
         shot("superagent-orb")

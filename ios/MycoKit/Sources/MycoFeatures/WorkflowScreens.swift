@@ -615,7 +615,8 @@ struct SuperagentOrb: View {
                 }
             }
             .shadow(color: MycoColor.accent.opacity(0.35), radius: breathe ? 8 : 4, y: 2)
-            .frame(maxHeight: .infinity)
+            // (the tab bar's height, not more: it must not grow the bar)
+            .frame(height: 54)
             .contentShape(Circle())
         }
         .buttonStyle(PressScaleStyle())

@@ -807,8 +807,17 @@ struct RootView: View {
             case .addComputer(let project): AddComputerSheet(project: project)
             case .superagent: SuperagentSetupSheet()
             case .superagentChat(let name):
-                NavigationStack { AgentScreen(name: name).routed() }
-                    .presentationDetents([.large])
+                NavigationStack {
+                    AgentScreen(name: name).routed()
+                        .toolbar {
+                            ToolbarItem(placement: .topBarLeading) {
+                                Button { router.sheet = nil } label: { Image(systemName: "xmark") }
+                                    .accessibilityLabel(L("关闭", "Close"))
+                                    .accessibilityIdentifier("superagent.close")
+                            }
+                        }
+                }
+                .presentationDetents([.large])
             case .export(let agent, let project): ExportSheet(agent: agent, project: project)
             case .handover(let agent, let back): HandoverSheet(agent: agent, backID: back)
             case .files(let agent, let project): ChatFilesSheet(agent: agent, project: project)
