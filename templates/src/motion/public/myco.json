@@ -1,0 +1,141 @@
+{
+  "id": "myco/motion",
+  "name": "动效视频",
+  "version": "1.1.0",
+  "kind": "custom",
+  "category": "creative",
+  "icon": "icon.svg",
+  "description": "做产品宣传、数据快报、竖版短视频这类动效视频：从模板开始改文字、图片和配色，或者说一句话让 agent 写好每个场景（HTML 加动画）；在时间点上批注让 agent 改，照一段参考视频重做；配上音乐和配音，场景切换对上节拍，配音转成字幕；存成模板给大家用；在本机导出 mp4。",
+  "data": {
+    "project": {
+      "single": true,
+      "fields": {
+        "title": "text",
+        "ratio": "text",
+        "fps": "number",
+        "bg": "text",
+        "fg": "text",
+        "accent": "text",
+        "accent2": "text",
+        "font": "text",
+        "motion": "markdown",
+        "captions": "text",
+        "caption_size": "number"
+      }
+    },
+    "scenes": {
+      "fields": {
+        "name": "text",
+        "order": "number",
+        "duration": "number",
+        "transition": "text",
+        "transition_time": "number",
+        "template": "text",
+        "html": "text",
+        "css": "text",
+        "script": "text",
+        "fields": "json"
+      }
+    },
+    "assets": {
+      "fields": {
+        "name": "text",
+        "data": "text",
+        "width": "number",
+        "height": "number"
+      }
+    },
+    "notes": {
+      "fields": {
+        "time": "number",
+        "text": "text",
+        "done": "bool",
+        "by": "person"
+      }
+    },
+    "tracks": {
+      "fields": {
+        "kind": "text",
+        "name": "text",
+        "key": "text",
+        "size": "number",
+        "duration": "number",
+        "start": "number",
+        "in": "number",
+        "out": "number",
+        "volume": "number",
+        "fade_in": "number",
+        "fade_out": "number",
+        "beats": "json",
+        "bpm": "number",
+        "order": "number"
+      }
+    },
+    "captions": {
+      "fields": {
+        "start": "number",
+        "end": "number",
+        "text": "text"
+      }
+    },
+    "reference": {
+      "single": true,
+      "fields": {
+        "name": "text",
+        "duration": "number",
+        "width": "number",
+        "height": "number",
+        "transcript": "text",
+        "frames": "number",
+        "by": "person"
+      }
+    },
+    "ref_frames": {
+      "fields": {
+        "time": "number",
+        "data": "text",
+        "text": "text",
+        "order": "number"
+      }
+    },
+    "library": {
+      "fields": {
+        "name": "text",
+        "kind": "text",
+        "ratio": "text",
+        "theme": "json",
+        "motion": "markdown",
+        "scenes": "number",
+        "duration": "number",
+        "thumb": "text",
+        "by": "person",
+        "at": "number"
+      }
+    },
+    "library_scenes": {
+      "fields": {
+        "item": "text",
+        "order": "number",
+        "name": "text",
+        "duration": "number",
+        "transition": "text",
+        "transition_time": "number",
+        "template": "text",
+        "html": "text",
+        "css": "text",
+        "script": "text",
+        "fields": "json"
+      }
+    }
+  },
+  "permissions": [
+    "send",
+    "download"
+  ],
+  "export": [
+    "mp4"
+  ],
+  "requires": {
+    "hub": "0.20.7"
+  }
+}

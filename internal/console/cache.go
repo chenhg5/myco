@@ -227,7 +227,9 @@ func (c *Cache) Put(entries []CacheEntry, del []string) error {
 	return c.trim()
 }
 
-// trim deletes the least recently used entries beyond the size limit.
+// trim deletes the least recently used entries beyond the size limit,
+// finished runs' traces first: a long conversation keeps hundreds of them,
+// and they must not push out the pages (a project's notes, say).
 func (c *Cache) trim() error {
 	var total int64
 	if err := c.db.QueryRow(`SELECT COALESCE(SUM(LENGTH(data)), 0) FROM entries`).Scan(&total); err != nil {
@@ -236,7 +238,8 @@ func (c *Cache) trim() error {
 	for total > c.max() {
 		var key string
 		var size int64
-		err := c.db.QueryRow(`SELECT key, LENGTH(data) FROM entries ORDER BY used ASC LIMIT 1`).Scan(&key, &size)
+		err := c.db.QueryRow(`SELECT key, LENGTH(data) FROM entries ORDER BY (key >= ? AND key < ?) DESC, used ASC LIMIT 1`,
+			"trace\x00", "trace\x01").Scan(&key, &size)
 		if err != nil {
 			return err
 		}

@@ -1,0 +1,16 @@
+.rec-backdrop{position:fixed;inset:0;z-index:100;background:#0006;display:grid;place-items:center;padding:24px;backdrop-filter:blur(5px)}
+.rec-dialog{width:min(520px,100%);max-height:90vh;overflow:auto;background:var(--bg,#fafafa);color:var(--fg,#181818);border:1px solid var(--line,#ddd);border-radius:18px;padding:28px;box-shadow:0 24px 100px #0003}
+.rec-dialog header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}.rec-dialog h2{font-size:24px;letter-spacing:-.04em;line-height:1.25;margin:8px 0 18px;font-weight:600}.rec-kicker{font-size:11px;letter-spacing:.1em;opacity:.6}.rec-dialog p{font-size:14px;line-height:1.7;margin:0 0 20px}.rec-option{display:flex;align-items:center;gap:12px;padding:16px 0;border-top:1px solid var(--line,#ddd);font-size:14px;cursor:pointer;min-height:64px}.rec-option input{width:18px;height:18px;accent-color:var(--fg,#181818)}.rec-option small{display:block;opacity:.6;font-size:12px;margin-top:6px;line-height:1.5}.rec-dialog .rec-info{opacity:.6;font-size:12px;line-height:1.6}.rec-dialog footer{display:flex;justify-content:flex-end;gap:16px;align-items:center;margin-top:24px;flex-wrap:wrap}.rec-dialog footer>span{font-size:12px;opacity:.7;display:flex;align-items:center;gap:8px}.rec-dialog .btn{min-height:38px}.rec-error{border:1px solid var(--line,#ddd);padding:12px;border-radius:8px;font-size:13px;line-height:1.6;margin:12px 0}.focus-item{display:block;margin-top:12px}.focus-field{display:grid;gap:8px;font-size:12px;margin-bottom:20px}.focus-field input{width:100%}
+
+.vid input[type="range"]{accent-color:var(--accent)}
+
+.stage-empty>.btn{margin-bottom:20px;font-size:15px;min-height:44px;padding:0 24px}
+
+.rec-option{position:relative}
+.rec-option input[type="checkbox"]{position:absolute;left:0;width:22px;height:22px;opacity:0}
+.rec-check{display:grid;place-items:center;width:22px;height:22px;flex:none;border:1.5px solid var(--muted);border-radius:6px;background:var(--bg2);color:var(--bg)}
+.rec-check svg{width:16px;height:16px;stroke-width:2.5;visibility:hidden}
+.rec-option input:checked+.rec-check{background:var(--fg);border-color:var(--fg)}
+.rec-option input:checked+.rec-check svg{visibility:visible}
+.rec-option input:focus-visible+.rec-check{outline:2px solid var(--fg);outline-offset:3px}
+.rec-permissions{border-top:1px solid var(--line);padding-top:16px}

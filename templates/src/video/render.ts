@@ -1,10 +1,12 @@
 // Draws one frame of the edit: the clip's picture fitted into the frame,
 // then the blur and mosaic regions, then the text. The player and the
 // export both draw with this, so what you see is what you get.
+import { zoomTransform } from "./zoom";
 import type { OverlayItem } from "./model";
 
 let tmp: HTMLCanvasElement | null = null;
 let tmp2: HTMLCanvasElement | null = null;
+let zoomBase: HTMLCanvasElement | null = null;
 const scratch = (which: 1 | 2) => {
   if (which === 1) return (tmp ||= document.createElement("canvas"));
   return (tmp2 ||= document.createElement("canvas"));
@@ -27,15 +29,27 @@ export function drawFrame(ctx: CanvasRenderingContext2D, W: number, H: number, p
   ctx.imageSmoothingQuality = "high";
   ctx.fillStyle = opts.background || "#000000";
   ctx.fillRect(0, 0, W, H);
-  if (pic) {
-    const r = fit(pic.w, pic.h, W, H);
-    try {
-      if (pic.draw) pic.draw(ctx, r.x, r.y, r.w, r.h);
-      else if (pic.image) ctx.drawImage(pic.image, r.x, r.y, r.w, r.h);
-    } catch { /* (not ready yet) */ }
-  }
   const live = over.filter((o) => t >= o.start - 1e-6 && t < o.end - 1e-6);
-  for (const o of live) if (o.type !== "text") censor(ctx, W, H, o);
+  const z = zoomTransform(live.filter((o) => o.type === "zoom").at(-1), t);
+  if (pic && z.scale > 1) {
+    // Redactions belong to the source picture: flatten them before zooming so
+    // a zoom cannot expose a face or address that was covered in the edit.
+    const base = zoomBase ||= document.createElement("canvas");
+    if (base.width !== W || base.height !== H) { base.width = W; base.height = H; }
+    drawFrame(base.getContext("2d")!, W, H, pic, live.filter(o => o.type === "blur" || o.type === "mosaic"), t, opts);
+    ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip();
+    ctx.translate(W / 2, H / 2); ctx.scale(z.scale, z.scale); ctx.translate(-z.x * W, -z.y * H);
+    ctx.drawImage(base, 0, 0); ctx.restore();
+  } else {
+    if (pic) {
+      const r = fit(pic.w, pic.h, W, H);
+      try {
+        if (pic.draw) pic.draw(ctx, r.x, r.y, r.w, r.h);
+        else if (pic.image) ctx.drawImage(pic.image, r.x, r.y, r.w, r.h);
+      } catch { /* (not ready yet) */ }
+    }
+    for (const o of live) if (o.type === "blur" || o.type === "mosaic") censor(ctx, W, H, o);
+  }
   for (const o of live) if (o.type === "text") text(ctx, W, H, o);
   ctx.restore();
 }

@@ -1173,6 +1173,14 @@ screen. Leaving the App or closing the page disconnects; reconnect explicitly
 when returning. Unicode typing requires remote component 0.2.0 or later on the
 computer; older components accept short ASCII text and physical keys.
 
+Component releases are separate from App releases. Maintainers publish signed,
+notarized Mac archives, Windows archives and SHA256SUMS under the remote-v tag
+before an App is paired with that version. Users update the desktop App first
+when needed, stop sharing, then open Remote Desktop settings and choose **Install
+App-compatible version**. This installs the version supported by that App; it
+does not automatically follow arbitrary newer releases. Old compatible installs
+remain usable if a download fails. Controllers must reconnect after updating.
+
 App upgrades reuse a complete, explicitly compatible installed remote component
 when the preferred release is absent; they report the version actually selected.
 A newer component can enable extra features such as Unicode input. Fresh installs
@@ -1197,3 +1205,19 @@ people who do not use remote control do not download or run the encoder.
 A compatible new App/Hub and published remote component assets are required;
 older installations show an update notice. See [component build and acceptance
 requirements](components/remote/README.md).
+
+### Recording studio
+
+Apps → **Recording studio** records a demonstration and places it directly on the
+video timeline. Trim or split clips, add text or a focus zoom, then export MP4.
+It follows the App's language and appearance. The original footage stays on the
+recording computer; agents collaborate on edit records, not uploaded footage.
+
+In the updated Mac App, choose a region or the main screen and optionally a
+microphone. This first version does not record internal Mac audio. On Windows,
+native desktop recording requires separately installed FFmpeg with gdigrab and
+h264_mf; it is silent and records the whole desktop. Supported browser hosts can
+use their screen/window picker. Other hosts can import recordings. Each recording
+is limited to ten minutes in the UI. Stop before leaving; native originals remain
+in `~/.myco/recordings`. Import failures offer a retry and a way to find the original.
+Automatic cursor following, captions and webcam overlays are outside this version.

@@ -23,8 +23,8 @@ var Order = []string{
 	"myco/table", "myco/base", "myco/doc", "myco/slides", "myco/meeting",
 	"myco/code", "myco/issues", "myco/devtools",
 	"myco/todo", "myco/notes", "myco/disk", "myco/stocks", "myco/proxy-console", "myco/remote-desktop",
-	"myco/ledger", "myco/habit",
-	"myco/design-studio", "myco/whiteboard", "myco/mindmap", "myco/video", "myco/photo",
+	"myco/ledger", "myco/habit", "myco/cinema",
+	"myco/design-studio", "myco/whiteboard", "myco/mindmap", "myco/recorder", "myco/video", "myco/motion", "myco/photo",
 	"myco/gomoku", "myco/sudoku",
 }
 

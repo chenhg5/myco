@@ -189,6 +189,16 @@
       "description": "导入 mp4，在时间线上分割、裁剪、调顺序、变速，加文字，给人脸和车牌打模糊或马赛克，在本机导出 mp4。视频只存在打开它的电脑上，剪辑方案大家共用，agent 按备注帮你剪。"
     }
   },
+  "myco/motion": {
+    "en": {
+      "name": "Motion video",
+      "description": "Make product promos, data stories and vertical shorts with motion: start from a template and change the words, pictures and colours, or ask an agent to write every scene (HTML with animation). Leave notes on moments for the agent, or have it remake a reference video; add music and voice, cut on the beat, turn speech into captions, save templates for everyone, and export an MP4 on this computer."
+    },
+    "zh": {
+      "name": "动效视频",
+      "description": "做产品宣传、数据快报、竖版短视频这类动效视频：从模板开始改文字、图片和配色，或者说一句话让 agent 写好每个场景（HTML 加动画）；在时间点上批注让 agent 改，照一段参考视频重做；配上音乐和配音，场景切换对上节拍，配音转成字幕；存成模板给大家用；在本机导出 mp4。"
+    }
+  },
   "myco/photo": {
     "en": {
       "name": "Photo editor",
@@ -222,11 +232,31 @@
   "myco/remote-desktop": {
     "en": {
       "name": "Remote Desktop",
-      "description": "View and control your Mac and Windows computers. Optional component, view-only mode, temporary pairing codes and instant disconnect. LAN or Tailscale; audio, lock screens and public relay are not included yet."
+      "description": "View and control your Mac and Windows computers from a computer or iPhone. Phone touchpad and keyboard, optional hosting component and temporary pairing codes. Direct LAN or Tailscale; no audio, lock screens or public relay yet."
     },
     "zh": {
       "name": "远程桌面",
-      "description": "连接同一工作区的 Mac 与 Windows，实时查看画面、操作键盘和鼠标。远控组件按需安装，默认关闭；支持仅查看、临时配对码与随时断开。首版用于局域网或 Tailscale，不含声音、锁屏登录和公网中继。"
+      "description": "从电脑或 iPhone 连接同一工作区的 Mac 与 Windows，实时查看画面、操作键鼠。手机支持触控板和键盘；远控组件按需安装，默认关闭。局域网或 Tailscale 直连，暂不含声音、锁屏登录和公网中继。"
+    }
+  },
+  "myco/recorder": {
+    "en": {
+      "name": "Recording studio",
+      "description": "Record your screen, trim and split clips, add text and focus zooms, then export MP4 locally. Footage stays on your computer; agents can help with the edit."
+    },
+    "zh": {
+      "name": "录屏工作台",
+      "description": "录下屏幕，直接裁剪、分割、加文字和重点放大，在本机导出 MP4。视频留在本机，剪辑方案可以交给 agent 协作。"
+    }
+  },
+  "myco/cinema": {
+    "en": {
+      "name": "Cinema",
+      "description": "Watch movies and series from your own sources. Search catalogs, choose episodes, share a watchlist and resume locally, with playback speed and intro/outro skipping. No sources are bundled."
+    },
+    "zh": {
+      "name": "影视",
+      "description": "用自己的影视源搜索电影与剧集、选集播放，收藏待看清单；观看进度保存在这台电脑，支持续播、倍速和跳过片头片尾。不内置影视源。"
     }
   }
 }

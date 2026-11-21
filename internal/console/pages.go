@@ -501,7 +501,7 @@ func (b *Backend) liveHandler(hubID, pageID string, port int) http.Handler {
 // <audio> seeks in them (ranges) and changes speed without changing the
 // voice, which reading them through the bridge could not do. Only files in
 // ~/.myco/recordings, and only in the App on this computer.
-var mediaTypes = map[string]string{".wav": "audio/wav", ".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".ogg": "audio/ogg", ".opus": "audio/ogg", ".webm": "audio/webm"}
+var mediaTypes = map[string]string{".wav": "audio/wav", ".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".ogg": "audio/ogg", ".opus": "audio/ogg", ".webm": "video/webm", ".mp4": "video/mp4", ".mov": "video/quicktime"}
 
 // mediaPath is the recording a page asks for, when it may have it.
 func mediaPath(home, p string) (string, bool) {

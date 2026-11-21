@@ -276,3 +276,68 @@ The iOS controller enters native landscape presentation only after an authorized
 connection exists. Its App toolbar and status bar are hidden; a native exit
 button remains above untrusted page content. Disconnect, page dismissal and
 background revocation restore the normal portrait presentation.
+
+### Local screen recordings
+
+`myco.os.screen.record({interactive?, microphone?, clicks?, max_seconds?})`
+returns a job. Write `"stop"` to finalize the movie; `done` resolves to
+`{path, bytes}`. Originals remain in a private directory under
+`~/.myco/recordings/screen-*`; `myco.os.mediaURL(path)` reads them on the page's
+own origin. MOV, MP4 and WebM are allowed alongside audio recordings, with the
+same directory and symlink checks. Files are never uploaded by this capability.
+
+macOS uses the system screen recorder: interactive region selection or the main
+screen, optional microphone and click indicators. Screen Recording permission
+(and microphone permission when requested) is controlled by macOS. Windows uses
+a separately installed FFmpeg on the login-shell PATH, with `gdigrab` and
+`h264_mf`, and records the desktop without audio; region/microphone options are
+rejected. Other systems report the native capability as unavailable. Apps should
+check `os.has("screen.record")` and can offer browser display capture where the
+host supports it, or import an existing recording.
+
+The default limit is 600 seconds, maximum 3600. Only one native screen recording
+runs at a time. Cancelling requests a graceful stop to finalize the original;
+a stuck recorder is killed after eight seconds. The recording app cancels its
+job when leaving and warns before closing an active recording. No capture starts
+merely by opening the app, and no remote-desktop component is started.
+
+The recording app waits for capability discovery before enabling capture. On a
+Mac or Windows App without native recording support it does not silently fall
+back to browser display capture: an embedded WebView may reject that request
+without opening a picker. The UI explains whether the App needs updating or the
+Windows encoder is missing. On supported Macs it offers a button for System
+Settings → Privacy & Security → Screen & System Audio Recording, naming the
+currently used myco / myco-preview app; microphone permission is separate.
+
+On macOS, `screen.record` also accepts a non-interactive `region: {x,y,w,h}`
+(rectangle in screen coordinates; each side 16–16384 pixels). This is useful for
+bounded capture of a known region. `region` and `interactive` are mutually
+exclusive; Windows does not support regions yet. Interactive video uses the
+system tool's `-Jvideo` mode, never the incompatible `-i` still-image mode.
+Recorder failures preserve bounded diagnostic text rather than misreporting every
+failed launch as a permission problem.
+
+The Mac App rechecks recording access on every attempt, but actively asks the
+system at most once per process. A denied or pending grant therefore does not
+open repeated consent dialogs; changing permission in Settings is recognized
+when the system makes it effective (which can require quitting and reopening
+the App). Revoked access is never cached as granted.
+
+## Network access on iPhone
+
+The iOS page bridge exposes `myco.net.fetch(args)` and the `net` feature, without
+claiming support for desktop `myco.os` operations. Official apps should use the
+shared `templates/src/_lib/net.ts` adapter: it selects `myco.net` on iPhone and
+falls back to `myco.os.net` in existing desktop Apps. Test network availability
+separately from the `os` feature. A page-only update cannot add this native
+capability to an older installed iPhone App.
+
+The request/response shapes match desktop `net.fetch`, including custom headers,
+text/base64 bodies, byte caps, redirects and HTTP status/response headers. iOS
+supports GET, HEAD, POST, PUT, PATCH, DELETE and OPTIONS, through the phone's
+network/proxy settings. The default response cap is 16 MB, the maximum is 64 MB;
+responses over the cap set `truncated`. Requests have a bounded timeout (at most
+ten minutes) and are cancelled on navigation, reload, close or backgrounding.
+No workspace authorization, saved HTTP credentials or ambient cookies are
+attached, and cross-origin redirects strip credential headers. The sandbox's
+external connection policy is unchanged; all requests use this bridge.

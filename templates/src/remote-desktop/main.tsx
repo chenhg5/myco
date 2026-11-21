@@ -304,7 +304,7 @@ function App() {
   const typed=(value:string)=>{
     if(composing.current)return false;
     const events=textInput(value,!!session.current?.supportsText,modifiers);
-    if(events===null){setInputError(uiText(modifiers.length?"先松开组合键，再输入这段文字。":([...value].length>256?"一次最多输入256个字符，文字已保留。":"远端组件需要更新才能输入这段文字，文字已保留。")));return false;}
+    if(events===null){setInputError(uiText(modifiers.length?"先松开组合键，再输入这段文字。":([...value].length>256?"一次最多输入256个字符，文字已保留。":"这段文字未输入。请在被控电脑更新远控组件，然后重新连接。")));return false;}
     if(!events.length)return true;
     for(const e of events)if(!input(e)){setInputError(uiText("文字未能全部送出，请检查连接后再确认远端内容。"));return false;}
     releaseModifiers();setDraft("");setInputError("");if(keyboard.current)keyboard.current.value="";return true;
@@ -558,7 +558,7 @@ function App() {
               onCompositionStart={()=>{composing.current=true;}} onCompositionEnd={e=>{composing.current=false;typed(e.currentTarget.value);}}
               onKeyDown={e=>{if(composing.current||(e.nativeEvent as KeyboardEvent).isComposing)return;if(e.key==="Enter"){e.preventDefault();if(draft&&!typed(draft))return;specialKey("Enter");}if(e.key==="Backspace"&&!draft){e.preventDefault();specialKey("Backspace");}}}
             />}
-            {inputError&&<div className="rd-input-toast" role="alert">{inputError}</div>}
+            {inputError&&<div className="rd-input-toast" role="alert"><span>{inputError}</span><button className="rd-btn" onClick={()=>{setInputError("");setDraft("");if(keyboard.current){keyboard.current.value="";keyboard.current.focus();}}}>{uiText("清除并关闭")}</button></div>}
             <footer className="rd-session-footer">
               <span>
                 <LockKeyhole size={13} />
@@ -997,6 +997,9 @@ function App() {
                 <dd>{uiText("当前版本不传输声音")}</dd>
               </div>
             </dl>
+            <p className="rd-update-help">{uiText(status?.running?"先停止共享，再更新组件。":"按当前桌面 App 配套的版本安装，不是自动追踪最新组件；如仍不支持所需功能，请先更新桌面 App。更新失败不会卸载旧组件。")}</p>
+            {error&&<p className="rd-dialog-error" role="alert">{error}</p>}
+            <button className="rd-btn rd-full rd-component-update" disabled={!status?.installed||status.running||!!busy} onClick={()=>void run("install")}>{uiText(busy==="install"?"正在下载安装…":"安装 App 配套版本")}</button>
             <button
               className="rd-btn rd-full"
               disabled={!status?.installed || !!busy}

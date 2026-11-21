@@ -6,12 +6,13 @@ import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, typ
 import { ChevronFirst, ChevronLast, Expand, Pause, Play, StepBack, StepForward, Upload } from "lucide-react";
 import { draft, fmt, frameSize, kit, overlayList, overlays, placed, total, clamp } from "./model";
 import { patch } from "./edit";
+import { zoomTransform } from "./zoom";
 import { player } from "./player";
 import type { Sel } from "./timeline";
 
 function usePlayer() { return useSyncExternalStore(player.subscribe, player.snapshot); }
 
-export function Stage({ sel, setSel, onImport }: { sel: Sel; setSel: (s: Sel) => void; onImport: () => void }) {
+export function Stage({ sel, setSel, onImport, onRecord }: { onRecord?: () => void; sel: Sel; setSel: (s: Sel) => void; onImport: () => void }) {
   const box = useRef<HTMLDivElement>(null);
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -42,13 +43,16 @@ export function Stage({ sel, setSel, onImport }: { sel: Sel; setSel: (s: Sel) =>
 
   const t = player.time;
   const live = overlayList().filter((o) => t >= o.start - 1e-6 && t < o.end - 1e-6);
+  const z = zoomTransform(live.filter(o => o.type === "zoom").at(-1), t);
   const selected = sel?.kind === "overlay" ? live.find((o) => o.id === sel.id) : undefined;
+
+  const selectionRect = selected && selected.type !== "text" ? {x:(selected.x-z.x)*z.scale+.5,y:(selected.y-z.y)*z.scale+.5,w:selected.w*z.scale,h:selected.h*z.scale}:selected;
 
   function pick(e: RPE) {
     const r = wrap.current!.getBoundingClientRect();
     const x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
     const hit = [...live].sort((a, b) => (a.type === "text" ? -1 : 1) - (b.type === "text" ? -1 : 1))
-      .find((o) => x >= o.x && x <= o.x + o.w && y >= o.y && y <= o.y + o.h);
+      .find((o) => { const px=o.type === "text" ? x : (x-.5)/z.scale+z.x, py=o.type === "text" ? y : (y-.5)/z.scale+z.y; return px >= o.x && px <= o.x+o.w && py >= o.y && py <= o.y+o.h; });
     if (hit) { setSel({ kind: "overlay", id: hit.id }); move(e, hit.id, "move"); }
     else setSel(null);
   }
@@ -59,7 +63,8 @@ export function Stage({ sel, setSel, onImport }: { sel: Sel; setSel: (s: Sel) =>
     const r = wrap.current!.getBoundingClientRect();
     const sx = e.clientX, sy = e.clientY;
     const mv = (ev: PointerEvent) => {
-      const dx = (ev.clientX - sx) / r.width, dy = (ev.clientY - sy) / r.height;
+      const k = o.type === "text" ? 1 : z.scale;
+      const dx = (ev.clientX - sx) / r.width / k, dy = (ev.clientY - sy) / r.height / k;
       let { x, y, w, h } = o;
       if (mode === "move") { x = clamp(o.x + dx, -o.w + 0.02, 0.98); y = clamp(o.y + dy, -o.h + 0.02, 0.98); }
       else {
@@ -97,7 +102,7 @@ export function Stage({ sel, setSel, onImport }: { sel: Sel; setSel: (s: Sel) =>
         <div className="stage-frame" ref={wrap} style={{ width: cw, height: ch }} onPointerDown={pick}>
           <canvas ref={canvas} className="stage-canvas" />
           {selected && (
-            <div className={`stage-sel is-${selected.type}`} style={{ left: `${selected.x * 100}%`, top: `${selected.y * 100}%`, width: `${selected.w * 100}%`, height: `${selected.h * 100}%` }}
+            <div className={`stage-sel is-${selected.type}`} style={{ left: `${selectionRect!.x * 100}%`, top: `${selectionRect!.y * 100}%`, width: `${selectionRect!.w * 100}%`, height: `${selectionRect!.h * 100}%` }}
               onPointerDown={(e) => move(e, selected.id, "move")}>
               {(["nw", "ne", "sw", "se"] as const).map((m) => <i key={m} className={`stage-h is-${m}`} onPointerDown={(e) => move(e, selected.id, m)} />)}
             </div>
@@ -108,6 +113,7 @@ export function Stage({ sel, setSel, onImport }: { sel: Sel; setSel: (s: Sel) =>
         )}
         {!list.length && (
           <div className="stage-empty">
+            {onRecord && <button className="btn btn-primary" onClick={onRecord}>{uiText("录制屏幕，开始创作")}</button>}
             <button type="button" className="stage-drop" onClick={onImport}>
               <Upload className="ico" />
               <b>{uiText("导入视频开始剪辑")}</b>

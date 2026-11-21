@@ -3308,9 +3308,8 @@ textarea.app-input {
    under the pointer (this one motion is the point of the control). */
 /* The rail keeps to its own narrow lane, so it never sits over the text or
    takes clicks meant for it; the timeline gives it a little room. */
-.conv-detail.has-rail {
-  --conv-pad-l: 36px;
-}
+/* (its lane is kept in every chat, rail or not: switching between a chat
+   with one and a chat without, the column does not move sideways) */
 .conv-rail {
   position: absolute;
   left: 2px;
@@ -3370,6 +3369,7 @@ textarea.app-input {
 /* Too narrow for the rail to stay clear of the text. */
 @media (max-width: 640px) {
   .conv-rail { display: none; }
+  .conv-detail { --conv-pad-l: var(--conv-pad); }
 }
 .conv-rail-card {
   position: absolute;
@@ -3420,6 +3420,10 @@ textarea.app-input {
 .conv-detail {
   --conv-col: 760px;
   --conv-pad: 24px;
+  /* the left side keeps room for the rail of turns (.conv-rail) */
+  --conv-pad-l: 36px;
+}
+.conv-detail:has(.conv-body.is-shell) {
   --conv-pad-l: var(--conv-pad);
 }
 .conv-timeline {
@@ -9305,3 +9309,13 @@ html.os-other ::-webkit-scrollbar-thumb:hover, html.os-other ::-webkit-scrollbar
 .app-backup-restore > summary { cursor: pointer; font-size: 13px; color: var(--muted); }
 .app-backup-restore > summary:hover { color: var(--fg); }
 .app-backup-restore .app-small-note { margin: 8px 0; }
+
+/* Project notes (ProjectPage): a long brief or memory folds at about 220px,
+   faded into its card; a long list of files or links shows its first five
+   and a quiet 「全部 N 个」 row. */
+.pp-fold { --md-fade: var(--card); }
+.pp-fold .md-fold-btn { margin-top: 6px; }
+.pp-more .app-row-sub { color: var(--muted); }
+.pp-more:hover .app-row-sub { color: var(--fg); }
+.pp-more-chev { width: 14px; height: 14px; color: var(--faint); }
+.pp-more-chev.is-open { transform: rotate(180deg); }

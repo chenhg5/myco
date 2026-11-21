@@ -10,7 +10,7 @@ import { Kit } from "../_lib/appkit";
 export type Project = { title?: string; ratio?: string; background?: string; fps?: number };
 export type Media = { name?: string; size?: number; duration?: number; width?: number; height?: number; audio?: boolean; key?: string; poster?: string };
 export type Clip = { media?: string; in?: number; out?: number; speed?: number; volume?: number; muted?: boolean; order?: number };
-export type OverlayKind = "text" | "blur" | "mosaic";
+export type OverlayKind = "text" | "blur" | "mosaic" | "zoom";
 export type Overlay = {
   type?: OverlayKind; start?: number; end?: number; x?: number; y?: number; w?: number; h?: number;
   strength?: number; text?: string; color?: string; size?: number; style?: string; lane?: number;
@@ -70,7 +70,7 @@ export function placed(): Placed[] {
 export function overlayList() {
   return overlays.rows.map((r) => {
     const d = { ...r.data, ...(draft.overlays.get(r.id) || {}) };
-    const type = (d.type === "blur" || d.type === "mosaic" ? d.type : "text") as OverlayKind;
+    const type = (d.type === "blur" || d.type === "mosaic" || d.type === "zoom" ? d.type : "text") as OverlayKind;
     const start = Math.max(0, num(d.start, 0));
     const end = Math.max(start + MIN_CLIP, num(d.end, start + 3));
     const defW = type === "text" ? 0.6 : 0.25, defH = type === "text" ? 0.12 : 0.25;

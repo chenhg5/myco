@@ -15,6 +15,7 @@ import { NodePicker } from "@/app/NodePicker";
 import { RowsSkeleton, TextSkeleton } from "@/app/Skeleton";
 import { stateMeta } from "@/components/status";
 import { cn, timeAgo } from "@/lib/utils";
+import { Avatar } from "@/app/persona";
 import { L } from "@/lib/i18n";
 
 export interface ProjectRef { hubId: string; name: string }
@@ -48,6 +49,52 @@ type Dialog =
   | { kind: "delete" };
 
 /** One project: its goal, members, brief, shared documents and links. */
+type ProjectTab = "notes" | "members" | "chats";
+
+/** How many files or links a list shows before 「全部 N 个」. */
+const LIST_FIRST = 5;
+
+/** A long brief or memory: its first lines (about 220px), faded, and 展开全部;
+ *  short ones as they are. The page stays a page however much is written. */
+function FoldText({ text }: { text: string }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [long, setLong] = useState(false);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const check = () => setLong(el.scrollHeight > FOLD_H + 40);
+    check();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(check);
+    ro.observe(el.firstElementChild || el);
+    return () => ro.disconnect();
+  }, [text]);
+  return (
+    <div className="md-fold pp-fold">
+      <div ref={box} className={cn("md-fold-body", long && !open && "is-collapsed")} style={long && !open ? { maxHeight: FOLD_H } : undefined}>
+        <Markdown text={text} />
+      </div>
+      {long && (
+        <button type="button" className="md-fold-btn" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+          {open ? L("收起", "Show less") : L("展开全部", "Show all")}
+        </button>
+      )}
+    </div>
+  );
+}
+const FOLD_H = 220;
+
+/** The row under a list's first few: 「全部 N 个…」 / 收起. */
+function MoreRow({ open, total, what, onToggle }: { open: boolean; total: number; what: string; onToggle: () => void }) {
+  return (
+    <button type="button" className="app-row pp-more" onClick={onToggle} aria-expanded={open}>
+      <span className="app-row-main"><span className="app-row-sub">{open ? L("收起", "Show fewer") : L(`全部 ${total} ${what}`, `All ${total}${what}`)}</span></span>
+      <ChevronDown className={cn("pp-more-chev", open && "is-open")} />
+    </button>
+  );
+}
+
 export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode, onNewNode, onChanged, onDeleted, onOpenConversation, onAllConversations, onNewConversation }: {
   target: ProjectRef;
   /** Changes when something outside the page changed the project. */
@@ -135,6 +182,12 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
   };
   const open = (d: Dialog) => { setActionError(null); setDialog(d); };
   const addMenu = useContextMenu();
+  // Which tab: what the project knows first, each time it opens.
+  const [tab, setTab] = useState<ProjectTab>("notes");
+  // A long list shows its first few; the rest on request (each project anew).
+  const [allFiles, setAllFiles] = useState(false);
+  const [allLinks, setAllLinks] = useState(false);
+  useEffect(() => { setTab("notes"); setAllFiles(false); setAllLinks(false); }, [target.hubId, target.name]);
 
   const hubRows = useMemo(() => rows.filter((r) => r.hub.id === target.hubId), [rows, target.hubId]);
   const rowOf = (name: string) => hubRows.find((r) => r.st.agent.name === name);
@@ -183,17 +236,24 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
     .filter((a) => agentKind(a) !== "human" && a.binding.harness !== "machine" && !p.members.some((m) => m.name === a.name))
     .filter((a) => canManage(hub, a.owner_id));
 
+  const tabs: { key: ProjectTab; label: string; n?: number }[] = [
+    { key: "notes", label: L("资料", "Notes") },
+    { key: "members", label: L("成员", "Members"), n: p.members.length },
+    { key: "chats", label: L("对话", "Conversations"), n: threads.length },
+  ];
   return (
-    <div className="app-page app-project">
-      <div className="app-project-head">
-        <div className="app-project-titles">
+    <div className="app-page app-project aud">
+      {/* As every detail page (app-ui.md 6.15): the name, its goal, a line
+          about it; 编辑, 发任务 and ⋯ (settings) of one height; then tabs,
+          what the project knows first (this page opens from 项目资料). */}
+      <header className="pcd-head">
+        <div className="pcd-titles">
           <h1>
-            {p.title || p.name}
+            <span>{p.title || p.name}</span>
             {p.archived && <span className="app-pill">{L("已归档", "Archived")}</span>}
           </h1>
-          <p className={cn("app-project-goal", !p.goal && "is-empty")}>{p.goal || L("还没有写目标。", "No goal yet.")}</p>
-          <p className="app-project-meta">
-            <span>{p.name}</span>
+          <p className="pcd-sub">
+            <span className="mono">{p.name}</span>
             <span>{hubName}</span>
             {p.owner && <span>{L(`${p.owner} 创建`, `by ${p.owner}`)}</span>}
             <span className="app-project-vis">
@@ -201,27 +261,108 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
             </span>
           </p>
         </div>
-        <div className="app-project-actions">
+        <div className="ph-actions wf-actions">
           {p.can_edit && <button type="button" className="app-btn" onClick={() => open({ kind: "about" })}><Pencil />{L("编辑", "Edit")}</button>}
-          {p.can_manage && <button type="button" className="app-btn app-btn-plain" aria-label={L("项目设置", "Project settings")} title={L("项目设置", "Project settings")} onClick={() => open({ kind: "settings" })}><MoreHorizontal /></button>}
+          <button type="button" className="app-btn app-btn-primary" onClick={() => onNewConversation()} disabled={p.archived}><IconNewChat />{L("发任务", "New task")}</button>
+          {p.can_manage && <button type="button" className="app-btn wf-more" aria-label={L("项目设置", "Project settings")} title={L("项目设置", "Project settings")} onClick={() => open({ kind: "settings" })}><MoreHorizontal /></button>}
         </div>
+      </header>
+      <p className={cn("wf-desc app-project-goal", !p.goal && "is-empty")}>{p.goal || L("还没有写目标。", "No goal yet.")}</p>
+
+      <div className="wf-tabs" role="tablist" aria-label={L("看什么", "View")} data-testid="project-tabs">
+        {tabs.map((t) => (
+          <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} className={cn("wf-tab", tab === t.key && "is-on")} onClick={() => setTab(t.key)}>
+            {t.label}{t.n !== undefined && t.n > 0 && <small>{t.n}</small>}
+          </button>
+        ))}
       </div>
 
-      <div className="app-project-progress">
-        {recent === null ? <TextSkeleton width={220} /> : threads.length === 0 ? (
-          <span className="muted">{L("还没有这个项目的对话。给成员发个任务，或者让 agent 用 myco message send --project 发。", "No conversations in this project yet. Give a member a task, or have an agent send with myco message send --project.")}</span>
-        ) : (
-          <>
-            {(["working", "queued", "failed", "done"] as const).map((st) => (
-              <span key={st} className={cn("app-project-stat", `is-${st}`)}><i />{stateLabel[st]} <b>{count(st)}</b></span>
-            ))}
-          </>
-        )}
-        <span className="app-project-progress-actions">
-          <button type="button" className="app-btn app-btn-quiet" onClick={() => onNewConversation()} disabled={p.archived}><IconNewChat />{L("发任务", "New task")}</button>
-        </span>
-      </div>
+      {tab === "notes" && (<>
+      <section className="app-group">
+        <div className="app-group-title">
+          <span className="name">{L("项目说明", "Brief")}</span>
+          {p.can_edit && <button type="button" className="app-group-action" onClick={() => open({ kind: "brief" })}><Pencil />{L("编辑", "Edit")}</button>}
+        </div>
+        <div className="app-list app-project-brief">
+          {p.brief ? <FoldText text={p.brief} /> : (
+            <div className="app-empty-note">{L("写下所有成员都该知道的事：仓库、分支和发版规则、怎么测试、注意事项。 agent 用 myco project show / pull 读取。", "Write what every member should know: repository, branch and release rules, how to test, what to watch out for. Agents read it with myco project show / pull.")}</div>
+          )}
+        </div>
+      </section>
 
+      {p.memory && (
+        <section className="app-group" data-testid="project-memory">
+          <div className="app-group-title">
+            <span className="name">{L("项目记忆", "Memory")}</span>
+            {!p.archived && <button type="button" className="app-group-action" onClick={() => open({ kind: "memory-add" })}><Plus />{L("添加", "Add")}</button>}
+            {p.can_edit && memoryBody(p.memory) && <button type="button" className="app-group-action" onClick={() => open({ kind: "memory-edit" })}><Pencil />{L("编辑", "Edit")}</button>}
+          </div>
+          <div className="app-list app-project-brief">
+            {memoryBody(p.memory) ? <FoldText text={memoryBody(p.memory)} /> : (
+              <div className="app-empty-note">{L("成员在干活中学到、大家都该记住的事：定下的决定、约定、你的偏好。成员 agent 会自己记（myco project memory add），每次干这个项目的活都会读到；你也可以在这里添加。", "What members learn and everyone should keep in mind: decisions, conventions, your preferences. Member agents add to it themselves (myco project memory add) and read it whenever they work on the project; you can add here too.")}</div>
+            )}
+          </div>
+        </section>
+      )}
+
+      <section className={cn("app-group app-project-files", dragging && "is-dragging")}
+        onDragOver={(e) => { if (!p.archived && e.dataTransfer.types.includes("Files")) { e.preventDefault(); setDragging(true); } }}
+        onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false); }}
+        onDrop={(e) => { e.preventDefault(); setDragging(false); if (!p.archived) void upload(Array.from(e.dataTransfer.files)); }}>
+        <div className="app-group-title">
+          <span className="name">{L(`文件 ${files.length || ""}`.trim(), `Files ${files.length || ""}`.trim())}</span>
+          <button type="button" className="app-group-action" onClick={() => fileInput.current?.click()} disabled={p.archived || uploading !== null}><Upload />{L("上传", "Upload")}</button>
+          <input ref={fileInput} type="file" multiple hidden onChange={(e) => { const fs = Array.from(e.target.files || []); e.target.value = ""; void upload(fs); }} />
+        </div>
+        <div className="app-list">
+          {uploading !== null && (
+            <div className="app-row app-row-static app-project-uploading">
+              <span className="app-spinner" />
+              <span className="app-row-main"><span className="app-row-sub">{L(`正在上传 ${uploading}…`, `Uploading ${uploading}…`)}</span></span>
+            </div>
+          )}
+          {uploadError !== null && <div className="app-project-upload-error"><ErrorText error={uploadError} /></div>}
+          {files.length === 0 && uploading === null && (
+            <div className="app-empty-note">{L("把文件拖到这里，或点「上传」。设计稿、约定、截图都可以（20 MB 以内）；成员 agent 用 myco project file put 上传，用 myco project pull 拉到本地。", "Drop files here, or click Upload: designs, conventions, screenshots (up to 20 MB). Member agents upload with myco project file put and get them with myco project pull.")}</div>
+          )}
+          {(allFiles ? files : files.slice(0, LIST_FIRST)).map((d) => {
+            const Icon = fileIcon(d);
+            return (
+              <button type="button" key={d.name} className="app-row app-project-doc" onClick={() => open({ kind: "doc", doc: d })}>
+                <span className="app-row-icon"><Icon strokeWidth={1.75} /></span>
+                <span className="app-row-main">
+                  <span className="app-row-title">{d.name}</span>
+                  <span className="app-row-sub">{[d.updated_by, timeAgo(d.updated_at, now), fileSize(d.size)].filter(Boolean).join(" · ")}</span>
+                </span>
+              </button>
+            );
+          })}
+          {files.length > LIST_FIRST && <MoreRow open={allFiles} total={files.length} onToggle={() => setAllFiles((o) => !o)} what={L("个文件", " files")} />}
+        </div>
+      </section>
+
+      <section className="app-group">
+        <div className="app-group-title">
+          <span className="name">{L("资料链接", "Links")}</span>
+          {p.can_edit && <button type="button" className="app-group-action" onClick={() => open({ kind: "links" })}><Pencil />{L("编辑", "Edit")}</button>}
+        </div>
+        <div className="app-list">
+          {p.links.length === 0 && <div className="app-empty-note">{L("仓库、设计稿、看板等放这里。", "Repository, designs, boards and the like.")}</div>}
+          {(allLinks ? p.links : p.links.slice(0, LIST_FIRST)).map((l) => (
+            <a key={l.url} className="app-row app-project-link" href={l.url} target="_blank" rel="noreferrer">
+              <span className="app-row-icon"><ExternalLink strokeWidth={1.75} /></span>
+              <span className="app-row-main">
+                <span className="app-row-title">{l.title || l.url}</span>
+                {l.title && <span className="app-row-sub mono">{l.url}</span>}
+              </span>
+            </a>
+          ))}
+          {p.links.length > LIST_FIRST && <MoreRow open={allLinks} total={p.links.length} onToggle={() => setAllLinks((o) => !o)} what={L("个链接", " links")} />}
+        </div>
+      </section>
+      </>)}
+
+      {tab === "members" && (<>
       <section className="app-group">
         <div className="app-group-title">
           <span className="name">{L(`成员 ${p.members.length}`, `Members ${p.members.length}`)}{coordinators > 0 && <span className="app-group-note">{L(` · ${coordinators} 个协调者`, ` · ${coordinators} coordinating`)}</span>}</span>
@@ -254,12 +395,12 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
             return (
               <div className="app-project-member" key={m.name}>
                 <button type="button" className="app-project-member-main" onClick={() => row && onOpenNode(row)} disabled={!row}>
-                  <span className="app-row-icon"><Icon /></span>
+                  {a ? <Avatar agent={a} size={28} state={st} /> : <span className="app-row-icon"><Icon /></span>}
                   <span className="app-row-main">
                     <span className="app-row-titleline">
                       <span className="app-row-title">{a ? nodeName(a, hub) : m.name}</span>
                       {m.role === "coordinator" && <span className="app-label group">{L("协调者", "Coordinator")}</span>}
-                      {st && <span className={cn("dot", st)} title={stateMeta[st].label} />}
+                      {st && !a && <span className={cn("dot", st)} title={stateMeta[st].label} />}
                     </span>
                     <span className="app-row-sub">
                       {m.note || (a?.description ? a.description : a ? "" : L("别人的 agent （仅自己可见）", "Someone's private node"))}
@@ -295,7 +436,20 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
           onSet={(id, allow) => void run(() => appApi.setProjectMachine(target.hubId, p.name, id, allow), false)} />
       )}
       {p.machines && <ErrorText error={dialog ? null : actionError} />}
+      </>)}
 
+      {tab === "chats" && (<>
+      <div className="app-project-progress">
+        {recent === null ? <TextSkeleton width={220} /> : threads.length === 0 ? (
+          <span className="muted">{L("还没有这个项目的对话。给成员发个任务，或者让 agent 用 myco message send --project 发。", "No conversations in this project yet. Give a member a task, or have an agent send with myco message send --project.")}</span>
+        ) : (
+          <>
+            {(["working", "queued", "failed", "done"] as const).map((st) => (
+              <span key={st} className={cn("app-project-stat", `is-${st}`)}><i />{stateLabel[st]} <b>{count(st)}</b></span>
+            ))}
+          </>
+        )}
+      </div>
       {threads.length > 0 && (
         <section className="app-group">
           <div className="app-group-title">
@@ -326,87 +480,7 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
           </div>
         </section>
       )}
-
-      <section className="app-group">
-        <div className="app-group-title">
-          <span className="name">{L("项目说明", "Brief")}</span>
-          {p.can_edit && <button type="button" className="app-group-action" onClick={() => open({ kind: "brief" })}><Pencil />{L("编辑", "Edit")}</button>}
-        </div>
-        <div className="app-list app-project-brief">
-          {p.brief ? <Markdown text={p.brief} /> : (
-            <div className="app-empty-note">{L("写下所有成员都该知道的事：仓库、分支和发版规则、怎么测试、注意事项。 agent 用 myco project show / pull 读取。", "Write what every member should know: repository, branch and release rules, how to test, what to watch out for. Agents read it with myco project show / pull.")}</div>
-          )}
-        </div>
-      </section>
-
-      {p.memory && (
-        <section className="app-group" data-testid="project-memory">
-          <div className="app-group-title">
-            <span className="name">{L("项目记忆", "Memory")}</span>
-            {!p.archived && <button type="button" className="app-group-action" onClick={() => open({ kind: "memory-add" })}><Plus />{L("添加", "Add")}</button>}
-            {p.can_edit && memoryBody(p.memory) && <button type="button" className="app-group-action" onClick={() => open({ kind: "memory-edit" })}><Pencil />{L("编辑", "Edit")}</button>}
-          </div>
-          <div className="app-list app-project-brief">
-            {memoryBody(p.memory) ? <Markdown text={memoryBody(p.memory)} /> : (
-              <div className="app-empty-note">{L("成员在干活中学到、大家都该记住的事：定下的决定、约定、你的偏好。成员 agent 会自己记（myco project memory add），每次干这个项目的活都会读到；你也可以在这里添加。", "What members learn and everyone should keep in mind: decisions, conventions, your preferences. Member agents add to it themselves (myco project memory add) and read it whenever they work on the project; you can add here too.")}</div>
-            )}
-          </div>
-        </section>
-      )}
-
-      <section className={cn("app-group app-project-files", dragging && "is-dragging")}
-        onDragOver={(e) => { if (!p.archived && e.dataTransfer.types.includes("Files")) { e.preventDefault(); setDragging(true); } }}
-        onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false); }}
-        onDrop={(e) => { e.preventDefault(); setDragging(false); if (!p.archived) void upload(Array.from(e.dataTransfer.files)); }}>
-        <div className="app-group-title">
-          <span className="name">{L(`文件 ${files.length || ""}`.trim(), `Files ${files.length || ""}`.trim())}</span>
-          <button type="button" className="app-group-action" onClick={() => fileInput.current?.click()} disabled={p.archived || uploading !== null}><Upload />{L("上传", "Upload")}</button>
-          <input ref={fileInput} type="file" multiple hidden onChange={(e) => { const fs = Array.from(e.target.files || []); e.target.value = ""; void upload(fs); }} />
-        </div>
-        <div className="app-list">
-          {uploading !== null && (
-            <div className="app-row app-row-static app-project-uploading">
-              <span className="app-spinner" />
-              <span className="app-row-main"><span className="app-row-sub">{L(`正在上传 ${uploading}…`, `Uploading ${uploading}…`)}</span></span>
-            </div>
-          )}
-          {uploadError !== null && <div className="app-project-upload-error"><ErrorText error={uploadError} /></div>}
-          {files.length === 0 && uploading === null && (
-            <div className="app-empty-note">{L("把文件拖到这里，或点「上传」。设计稿、约定、截图都可以（20 MB 以内）；成员 agent 用 myco project file put 上传，用 myco project pull 拉到本地。", "Drop files here, or click Upload: designs, conventions, screenshots (up to 20 MB). Member agents upload with myco project file put and get them with myco project pull.")}</div>
-          )}
-          {files.map((d) => {
-            const Icon = fileIcon(d);
-            return (
-              <button type="button" key={d.name} className="app-row app-project-doc" onClick={() => open({ kind: "doc", doc: d })}>
-                <span className="app-row-icon"><Icon strokeWidth={1.75} /></span>
-                <span className="app-row-main">
-                  <span className="app-row-title">{d.name}</span>
-                  <span className="app-row-sub">{[d.updated_by, timeAgo(d.updated_at, now), fileSize(d.size)].filter(Boolean).join(" · ")}</span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
-      <section className="app-group">
-        <div className="app-group-title">
-          <span className="name">{L("资料链接", "Links")}</span>
-          {p.can_edit && <button type="button" className="app-group-action" onClick={() => open({ kind: "links" })}><Pencil />{L("编辑", "Edit")}</button>}
-        </div>
-        <div className="app-list">
-          {p.links.length === 0 && <div className="app-empty-note">{L("仓库、设计稿、看板等放这里。", "Repository, designs, boards and the like.")}</div>}
-          {p.links.map((l) => (
-            <a key={l.url} className="app-row app-project-link" href={l.url} target="_blank" rel="noreferrer">
-              <span className="app-row-icon"><ExternalLink strokeWidth={1.75} /></span>
-              <span className="app-row-main">
-                <span className="app-row-title">{l.title || l.url}</span>
-                {l.title && <span className="app-row-sub mono">{l.url}</span>}
-              </span>
-            </a>
-          ))}
-        </div>
-      </section>
+      </>)}
 
       <AboutDialog open={dialog?.kind === "about"} project={p} busy={busy} error={actionError} onClose={() => setDialog(null)}
         onSave={(title, goal) => void run(() => appApi.updateProject(target.hubId, p.name, { title, goal }))} />
@@ -675,7 +749,12 @@ function FileDialog({ hubId, project, doc, busy, error, onClose, onDelete }: {
   hubId: string; project: Project; doc: ProjectDoc; busy: boolean; error: unknown;
   onClose: () => void; onDelete: (name: string) => void;
 }) {
-  const [full, setFull] = useState<ProjectDoc | null>(null);
+  // A file opened before shows at once when it has not changed since.
+  const docKey = `projdoc\u0000${hubId}\u0000${project.name}\u0000${doc.name}`;
+  const [full, setFull] = useState<ProjectDoc | null>(() => {
+    const kept = recall<ProjectDoc>(docKey);
+    return kept && kept.updated_at === doc.updated_at ? kept : null;
+  });
   const [loadError, setLoadError] = useState<unknown>(null);
   const [saved, setSaved] = useState("");
   const [saving, setSaving] = useState(false);
@@ -685,7 +764,7 @@ function FileDialog({ hubId, project, doc, busy, error, onClose, onDelete }: {
     if (doc.binary) return;
     let off = false;
     appApi.projectDoc(hubId, project.name, doc.name)
-      .then((d) => { if (!off) setFull(d); })
+      .then((d) => { if (!off) setFull(remember(docKey, d)); })
       .catch((e) => { if (!off) setLoadError(e); });
     return () => { off = true; };
   }, [hubId, project.name, doc.name, doc.binary]);

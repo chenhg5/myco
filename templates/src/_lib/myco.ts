@@ -22,6 +22,8 @@ interface Bridge {
   /** This computer (the App's): files, commands, the screen… Each system
    *  does what it can; what it cannot answers err.code "unsupported". */
   os?: MycoOS;
+  /** Network-only bridge on iOS; independent of desktop computer access. */
+  net?: MycoOS["net"];
   remote?: {call<T>(action: string, args?: unknown): Promise<T>; onDisconnect?(handler:()=>void):()=>void};
 }
 
@@ -123,6 +125,8 @@ export interface MycoOS {
   clipboard: { read(): Promise<{ text: string }>; write(a: { text: string }): Promise<true> };
   notify(a: { title?: string; body?: string; subtitle?: string; sound?: boolean }): Promise<true>;
   screen: {
+    /** macOS screen recording. Write "stop" to finalize; originals stay local. */
+    record(a?: { region?: {x:number; y:number; w:number; h:number}; interactive?: boolean; microphone?: boolean; clicks?: boolean; max_seconds?: number }): OSJob<{path: string; bytes: number}>;
     capture(a?: { display?: number; region?: { x: number; y: number; width: number; height: number }; format?: "png" | "jpeg"; quality?: number }): Promise<OSImage & { bytes: number }>;
   };
   /** Recording: each source a track, a 16 kHz mono WAV of its own. */

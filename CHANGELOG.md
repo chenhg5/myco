@@ -4,6 +4,46 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.21.16
+
+- **New official app: Cinema (影视)**: watch movies and series from sources you add yourself (none are bundled): search catalogs, choose episodes, keep a shared watchlist, and resume where you left off on this computer, with playback speed and intro/outro skipping. It follows the App's language and appearance. See docs/cinema.md.
+- Recording Studio: screen recording on the Mac works again with the interactive area picker, and no longer waits for a permission prompt when recording is already allowed.
+- The App: what you add while an agent is working stays with its run when the agent hands work to others meanwhile, instead of dropping below what it did after.
+- Codex agents: Codex's own internal log lines (such as "failed to record rollout items") no longer show as red errors under a task; problems you can act on (a dropped connection it retries, a refused key) still do.
+
+**中文**
+
+- **新的官方应用：影视**：用你自己添加的影视源（不内置任何源）搜索电影和剧集、选集播放，收藏共享的待看清单，在这台电脑上续播，支持倍速和跳过片头片尾。跟随 App 的语言和外观。说明见 docs/cinema.md。
+- 录屏工作台：Mac 上用框选区域录屏又能用了；已经授权录屏时，不再等待权限弹窗。
+- App：agent 干活时你补充的话，即使它中途把活派给了别人，也会留在这次运行里，不会掉到它后面做的事情下面。
+- Codex agent：Codex 自己的内部日志（比如 "failed to record rollout items"）不再显示成任务下的红色错误；需要你处理的问题（断线重试、key 被拒）照常显示。
+
+## v0.21.15
+
+- **New official app: Recording Studio (录屏工作台)**: record your screen from the App, then trim and split, add text and focus zooms (blurred areas follow the zoom), and export MP4, all on your computer; the footage and its thumbnails never leave it, and an agent can help with the edit. The Mac App asks for screen-recording permission first and offers a direct link to its setting.
+- **Motion Videos 1.1**: notes and a shot plan for each video, a reference video to work from, sound and captions, steadier reference shots, and more templates.
+- The App: a message you queue with ⌘↩ while the agent is at work shows at once in the Queued list above the box (edit or withdraw it there).
+- Remote Desktop (preview): installing or updating the component from Settings, clearer errors that can be dismissed, and no update while a session is being shared.
+
+**中文**
+
+- **新的官方应用：录屏工作台**：在 App 里录屏，然后裁剪、分割、加文字和重点放大（打码区域会跟着放大移动），在本机导出 MP4。视频和缩略图都留在你的电脑上，不会上传；剪辑可以交给 agent 帮忙。Mac App 会先申请录屏权限，并提供直达设置的按钮。
+- **动效视频 1.1**：每个视频有备注和分镜，可以参照一段参考视频来做，支持声音和字幕，参考画面更稳定，模板也更多了。
+- App：agent 干活时按 ⌘↩ 排队的消息，会立刻出现在输入框上方的「排队中」里，可以在那里修改或撤回。
+- 远程桌面（预览）：可以在设置里安装或更新组件；出错提示更清楚，也能关掉；正在共享时不会更新组件。
+
+## v0.21.14
+
+- **New official app: Motion Videos (动效视频)**: product promos, data stories and vertical shorts made of scenes played in order. Each scene is HTML and an animation (written by an agent, or one of eight templates) with its words and pictures in a form; preview, a timeline, transitions, 16:9 / 9:16 / 1:1 / 4:5, colour sets and fonts, and "ask an agent". Export to MP4 happens in the page, on your computer.
+- Remote Desktop (preview) on phones: typing goes straight to the remote computer again (the system keyboard, with modifier keys in the side menu); the controls sit in a compact rail on the right and the keyboard no longer resizes the screen; a brief network drop (up to 10 seconds) no longer ends the session.
+- The App: opening or switching an agent in a pane no longer makes the chat or the line between panes jump sideways.
+
+**中文**
+
+- **新的官方应用：动效视频**：做产品宣传片、数据故事、竖屏短视频，由一个个场景依次播放组成。每个场景是 HTML 加动画（agent 写，或者从八个模板里选），文字和图片在表单里改；有预览、时间线、转场，支持 16:9 / 9:16 / 1:1 / 4:5，配色和字体可选，也可以「让 agent 来做」。导出 MP4 在网页里完成，就在你自己的电脑上。
+- 远程桌面（预览）手机端：打字又改回直接发到远程电脑（用系统键盘，修饰键在侧边菜单里）；控制按钮收成右侧一条窄栏，弹出键盘时画面大小不变；网络短暂断开（10 秒以内）不会再结束会话。
+- App：在分栏里打开或切换 agent 时，对话和分栏之间的分隔线不会再左右晃动。
+
 ## v0.21.13
 
 - Remote Desktop (preview): on a phone, what you type goes into a draft above the keyboard and is sent when you confirm (dictation and corrections no longer stream half-typed text to the computer); two fingers zoom and pan the view, and a short hold with two fingers scrolls the remote screen. Leaving a session asks first, and the controls and the keyboard switch are larger.

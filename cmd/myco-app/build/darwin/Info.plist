@@ -33,6 +33,8 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>myco records the screen only when you start Recording studio. Videos stay on this Mac for local editing and export. 只在你主动开始录屏时采集画面；视频保留在这台 Mac 上，用于剪辑和导出。</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>myco listens only while you have the microphone, a voice call or a recording on: to turn what you say into a message, to talk with your agents, or to record a meeting. 只在你打开麦克风、语音聊天或录音时听：把你说的话变成消息，和 agent 们语音聊天，或者录会议。</string>
 	<key>NSAudioCaptureUsageDescription</key>

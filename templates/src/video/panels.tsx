@@ -6,6 +6,7 @@ import { Check, Copy, Droplets, FileVideo, Grid3x3, Loader2, MessageSquareText, 
 import { clips, fmt, kit, media, notes, num, overlayList, overlays, placed, project, frameSize, total, RATIOS, SPEEDS, clamp, type OverlayKind } from "./model";
 import { addClip, addNote, addOverlay, change, duplicateClip, freeLane, patch, removeClip, removeMedia, removeOverlay, setProject, split } from "./edit";
 import { localFor } from "./media";
+import { FocusProps } from "./focus";
 import { player } from "./player";
 import type { Sel } from "./timeline";
 
@@ -251,6 +252,7 @@ function ClipProps({ id, setSel }: { id: string; setSel: (s: Sel) => void }) {
 function OverlayProps({ id, setSel }: { id: string; setSel: (s: Sel) => void }) {
   const o = overlayList().find((x) => x.id === id)!;
   const set = (p: Record<string, unknown>, key?: string) => patch(overlays, id, p, key);
+  if (o.type === "zoom") return <FocusProps id={id} />;
   const isText = o.type === "text";
   return (
     <div className="pane props">

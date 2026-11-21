@@ -75,6 +75,10 @@
     "Video editor",
     "Import video, split and trim clips, change speed, add text and mask faces or number plates. Export MP4 locally. Media stays on this computer; the edit plan is shared with people and agents."
   ],
+  "motion": [
+    "Motion video",
+    "Make product promos, data stories and vertical shorts with motion: start from a template and change the words, pictures and colours, or ask an agent to write every scene (HTML with animation). Leave notes on moments for the agent, or have it remake a reference video; add music and voice, cut on the beat, turn speech into captions, save templates for everyone, and export an MP4 on this computer."
+  ],
   "photo": [
     "Photo editor",
     "Crop, adjust colors, filter, retouch, add text or stickers, draw, mask and frame your photos. Originals stay local; share edit instructions and undo any change."
@@ -90,5 +94,13 @@
   "remote-desktop": [
     "Remote Desktop",
     "View and control your Mac and Windows computers. Optional component, view-only mode, temporary pairing codes and instant disconnect. LAN or Tailscale; audio, lock screens and public relay are not included yet."
+  ],
+  "recorder": [
+    "Recording studio",
+    "Record your screen, trim and split clips, add text and focus zooms, then export MP4 locally. Footage stays on your computer; agents can help with the edit."
+  ],
+  "cinema": [
+    "Cinema",
+    "Watch movies and series from your own sources. Search catalogs, choose episodes, share a watchlist and resume locally, with playback speed and intro/outro skipping. No sources are bundled."
   ]
 }

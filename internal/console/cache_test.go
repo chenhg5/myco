@@ -273,3 +273,32 @@ func TestCacheStartsOverAfterAnUpdate(t *testing.T) {
 		t.Fatalf("kept %d entries across an update", n)
 	}
 }
+
+// Traces go before pages when the cache is full: reading long conversations
+// must not push out a page opened less often.
+func TestCacheTrimsTracesFirst(t *testing.T) {
+	c, err := console.OpenCache(filepath.Join(t.TempDir(), "c.db"), key(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	c.Max = 3000
+	put := func(k string) {
+		t.Helper()
+		data, _ := json.Marshal(strings.Repeat("x", 1000))
+		if err := c.Put([]console.CacheEntry{{Key: k, Hub: "h1", Data: data}}, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	put("project\x00h1\x00p")
+	put("trace\x00h1\x00t1")
+	put("trace\x00h1\x00t2")
+	got, _ := c.All(map[string]bool{"h1": true})
+	keys := []string{}
+	for _, e := range got {
+		keys = append(keys, strings.ReplaceAll(e.Key, "\x00", "/"))
+	}
+	if strings.Join(keys, ",") != "trace/h1/t2,project/h1/p" {
+		t.Fatalf("trim: %v", keys)
+	}
+}

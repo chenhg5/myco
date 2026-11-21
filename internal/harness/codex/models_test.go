@@ -35,7 +35,9 @@ func TestStderrProblemsAreShown(t *testing.T) {
 			t.Fatalf("%q should show", l)
 		}
 	}
-	for _, l := range []string{"Reading prompt from stdin...", "", "   "} {
+	for _, l := range []string{"Reading prompt from stdin...", "", "   ",
+		// Codex's own log: bookkeeping, not the person's business.
+		"2026-11-21T22:55:01.029382Z ERROR codex_core::session: failed to record rollout items: thread 01a1fe87-60f4-7b80-acf5-c595f9810a30 not found"} {
 		if _, ok := stderrProblem(l); ok {
 			t.Fatalf("%q should not show", l)
 		}
