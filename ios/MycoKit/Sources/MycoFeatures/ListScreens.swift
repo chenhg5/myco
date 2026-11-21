@@ -341,7 +341,6 @@ struct WorkbenchScreen: View {
                     ApprovalStrip(model: session.superagent, agent: nil, name: "")
                 }
             }
-            .accessibilityIdentifier("workbench.waiting")
         }
     }
 
