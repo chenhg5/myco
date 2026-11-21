@@ -244,6 +244,11 @@ func (r *Runner) inUseElsewhere(key, sessionID string) (bool, time.Time) {
 	r.mu.Lock()
 	own := r.ownRunEnd[sessionID]
 	r.mu.Unlock()
+	// Another runner on this machine (the same session joined to another
+	// workspace) wrote it last: that was ours too.
+	if t := r.opts.SessionLocks.LastEnd(r.harness.Name() + ":" + sessionID); t.After(own) {
+		own = t
+	}
 	recent := r.opts.Now().Sub(last) < r.opts.BusyWindow
 	notUs := own.IsZero() || last.After(own.Add(2*time.Second))
 	return recent && notUs, last
@@ -256,6 +261,24 @@ func (r *Runner) busyDelay(key string) time.Duration {
 	d := r.opts.BusyRetryMin << min(r.busyStreak[key], 8)
 	r.busyStreak[key]++
 	return min(d, r.opts.BusyRetry)
+}
+
+// requeue hands m back to the queue for a little later, as waiting behind
+// another task of this agent (not "open somewhere else").
+func (r *Runner) requeue(ctx context.Context, log *slog.Logger, m api.Message, key, reason string) {
+	finishCtx, cancel := r.finishContext(ctx)
+	defer cancel()
+	delay := r.busyDelay(key)
+	err, exhausted := r.retryFinish(finishCtx, log, "release", func(c context.Context) error {
+		_, err := r.hub.Release(c, m.ID, delay, false)
+		return err
+	})
+	if err != nil {
+		r.logFinishFailure(log, "release", err, exhausted, "")
+		return
+	}
+	log.Info("session busy with our own task; message queued for retry", "retry_in", delay, "reason", reason)
+	r.clearPending(m.ID)
 }
 
 // inUseReleaser is a Hub that can say why a message is handed back.
@@ -449,7 +472,15 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 			return
 		}
 	}
-	if busy, last := r.inUseElsewhere(key, sessionID); busy {
+	// The session at work on another task of ours (on this machine, for
+	// this workspace or another): the message waits in the queue, as any
+	// task behind another; it is not "open somewhere else".
+	if sessionID != "" && r.opts.SessionLocks.Busy(r.harness.Name()+":"+sessionID) {
+		r.requeue(ctx, log, m, key, "the session is running another task of this agent")
+		return
+	}
+	// A run of this task cut short by a restart wrote the transcript last.
+	if busy, last := r.inUseElsewhere(key, sessionID); busy && !rerun {
 		r.release(ctx, log, m, key, "session transcript changed "+r.opts.Now().Sub(last).Round(time.Second).String()+" ago by someone else")
 		return
 	}
@@ -458,7 +489,7 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 	if sessionID != "" {
 		unlockSession, ok := r.opts.SessionLocks.TryLock(r.harness.Name() + ":" + sessionID)
 		if !ok {
-			r.release(ctx, log, m, key, "the session is running a turn for another workspace")
+			r.requeue(ctx, log, m, key, "the session is running a turn for another workspace")
 			return
 		}
 		defer unlockSession()

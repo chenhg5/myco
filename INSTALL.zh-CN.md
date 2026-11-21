@@ -502,7 +502,7 @@ runner:
 ### 注意事项（适用于 4.2 到 4.5）
 
 - **不在 agent 的会话里跑命令时用哪个身份**：每个加入的会话有自己的身份（`~/.myco/agents/<名字>.yaml`），在那个会话里跑 myco 命令自动用它。在普通终端里跑（或者别的程序替你跑）时，`~/.myco/config.yaml` 里没有身份就用这台电脑上唯一的那个 agent；有好几个时，`myco doctor` 全查一遍，其他命令会列出名字，用 `MYCO_AGENT=<名字> myco …` 指定（或 `--config ~/.myco/agents/<名字>.yaml`）。
-- **会话被占用时的行为**：runner 在续接前会查看这个会话的记录文件（Claude 在 `~/.claude/projects/`，Codex 在 `~/.codex/sessions/`）。如果最近 90 秒内有**别人**写过（`--busy-window`），比如你正在交互界面里用它，runner 就把消息放回队列，10 秒后再试，之后逐步加长到最多 2 分钟（`--busy-retry`），**不算失败**。Codex 报 `already has an active writer` 时也按同样的方式处理。runner 自己写入的时间记在 `~/.myco/state/` 下，重启后不会把自己的写入误判成别人在用。
+- **会话被占用时的行为**：runner 在续接前会查看这个会话的记录文件（Claude 在 `~/.claude/projects/`，Codex 在 `~/.codex/sessions/`）。如果最近 90 秒内有**别人**写过（`--busy-window`），比如你正在交互界面里用它，runner 就把消息放回队列，10 秒后再试，之后逐步加长到最多 2 分钟（`--busy-retry`），**不算失败**。Codex 报 `already has an active writer` 时也按同样的方式处理。runner 自己写入的时间记在 `~/.myco/state/` 下，重启后不会把自己的写入误判成别人在用。v0.21.12 起，同一个 agent 的会话正在处理另一个任务时（另一个对话里的任务，或者同一个会话加入了另一个工作区），下一个任务只是排在它后面，不再显示「会话被占用」。
 - runner 自己如果是在某个 Claude Code 会话里启动的，启动 claude 时会清掉继承来的 `CLAUDE*` 会话变量（保留 `CLAUDE_CONFIG_DIR` 和认证相关的），以免 headless claude 连到外层那个会话上。建议在普通终端或 systemd/launchd 里运行 runner。
 - Codex 如果报 `model is not supported when using Codex with a ChatGPT account`，就在 `runner.args` 里指定一个账号可用的模型。
 - 已经绑定了会话的 agent，换一台机器或换一个 harness 启动 runner 会被拒绝（exit 5），以免悄悄开出一个新会话。确实要迁移时加 `--rebind`。
