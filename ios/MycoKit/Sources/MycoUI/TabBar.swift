@@ -28,16 +28,25 @@ public struct MycoTabBar<ID: Hashable & Sendable>: View {
     let items: [Item]
     let selection: ID
     let onSelect: (ID) -> Void
+    /// Something in the middle of the row, not a tab (the assistant's orb),
+    /// after this many tabs.
+    let center: AnyView?
+    let centerAfter: Int
 
-    public init(items: [Item], selection: ID, onSelect: @escaping (ID) -> Void) {
+    public init(items: [Item], selection: ID, center: AnyView? = nil, centerAfter: Int = 2, onSelect: @escaping (ID) -> Void) {
         self.items = items
         self.selection = selection
+        self.center = center
+        self.centerAfter = centerAfter
         self.onSelect = onSelect
     }
 
     public var body: some View {
         HStack(spacing: 0) {
-            ForEach(items) { item in
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                if index == centerAfter, let center {
+                    center.frame(width: 72)
+                }
                 let selected = item.id == selection
                 Button {
                     onSelect(item.id)

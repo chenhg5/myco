@@ -216,12 +216,14 @@ struct AutomationIcon: View {
     /// nil: neither kind.
     let hook: Bool?
 
+    // Grey whatever the kind: colour is kept for state (the desktop's
+    // plain icon blocks), not for which kind it is.
     var body: some View {
         Image(systemName: symbol)
             .font(.system(size: 15, weight: .medium))
-            .foregroundStyle(hook == nil ? MycoColor.muted : hook == true ? MycoColor.amber : MycoColor.green)
+            .foregroundStyle(MycoColor.muted)
             .frame(width: 34, height: 34)
-            .background(hook == nil ? MycoColor.pill : hook == true ? MycoColor.amberSoft : MycoColor.greenSoft, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .background(MycoColor.pill, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
     }
 }
 

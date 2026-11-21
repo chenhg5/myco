@@ -350,8 +350,7 @@ struct WorkspaceSheet: View {
             Section {
                 if let agent = model.agent {
                     Button {
-                        dismiss()
-                        router.chat(with: agent)
+                        router.sheet = .superagentChat(agent)
                     } label: {
                         HStack(spacing: 12) {
                             Image(systemName: "sparkles").frame(width: 24).foregroundStyle(MycoColor.accent)
@@ -1445,7 +1444,8 @@ struct SuperagentSetupSheet: View {
                                     dismiss()
                                     try? await Task.sleep(for: .milliseconds(400))
                                     await session.refresh()
-                                    router.chat(with: name)
+                                    // (its conversation comes up as the orb brings it)
+                                    router.sheet = .superagentChat(name)
                                 }
                             }
                         }
