@@ -94,5 +94,9 @@
   "remote-desktop": [
     "Remote Desktop",
     "View and control your Mac and Windows computers. Optional component, view-only mode, temporary pairing codes and instant disconnect. LAN or Tailscale; audio, lock screens and public relay are not included yet."
+  ],
+  "recorder": [
+    "Recording studio",
+    "Record your screen, trim and split clips, add text and focus zooms, then export MP4 locally. Footage stays on your computer; agents can help with the edit."
   ]
 }

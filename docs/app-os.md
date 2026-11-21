@@ -276,3 +276,27 @@ The iOS controller enters native landscape presentation only after an authorized
 connection exists. Its App toolbar and status bar are hidden; a native exit
 button remains above untrusted page content. Disconnect, page dismissal and
 background revocation restore the normal portrait presentation.
+
+### Local screen recordings
+
+`myco.os.screen.record({interactive?, microphone?, clicks?, max_seconds?})`
+returns a job. Write `"stop"` to finalize the movie; `done` resolves to
+`{path, bytes}`. Originals remain in a private directory under
+`~/.myco/recordings/screen-*`; `myco.os.mediaURL(path)` reads them on the page's
+own origin. MOV, MP4 and WebM are allowed alongside audio recordings, with the
+same directory and symlink checks. Files are never uploaded by this capability.
+
+macOS uses the system screen recorder: interactive region selection or the main
+screen, optional microphone and click indicators. Screen Recording permission
+(and microphone permission when requested) is controlled by macOS. Windows uses
+a separately installed FFmpeg on the login-shell PATH, with `gdigrab` and
+`h264_mf`, and records the desktop without audio; region/microphone options are
+rejected. Other systems report the native capability as unavailable. Apps should
+check `os.has("screen.record")` and can offer browser display capture where the
+host supports it, or import an existing recording.
+
+The default limit is 600 seconds, maximum 3600. Only one native screen recording
+runs at a time. Cancelling requests a graceful stop to finalize the original;
+a stuck recorder is killed after eight seconds. The recording app cancels its
+job when leaving and warns before closing an active recording. No capture starts
+merely by opening the app, and no remote-desktop component is started.

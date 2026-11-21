@@ -14,7 +14,7 @@ import { overlays } from "./model";
 export type Sel = { kind: "clip" | "overlay"; id: string } | null;
 
 const GUTTER = 44, RULER = 28, LANE = 30, MAIN = 66, THUMB_H = 46;
-const TYPE_NAME = { text: "文字", blur: "模糊", mosaic: "马赛克" } as const;
+const TYPE_NAME = { zoom: uiText("重点放大"), text: "文字", blur: "模糊", mosaic: "马赛克" } as const;
 
 function usePlayer() { return useSyncExternalStore(player.subscribe, player.snapshot); }
 function useLocal() {
@@ -319,7 +319,7 @@ export function Timeline({ sel, setSel, pps, setPps, onFiles, onNoteClick }: {
               {Array.from({ length: lanes }, (_, i) => <div key={i} className="tl-lane" style={{ top: i * LANE, height: LANE }} />)}
               {over.map((o) => {
                 const x = o.start * pps, w = Math.max(6, (o.end - o.start) * pps);
-                const Icon = o.type === "text" ? Type : o.type === "mosaic" ? Grid3x3 : Droplets;
+                const Icon = o.type === "zoom" ? Maximize2 : o.type === "text" ? Type : o.type === "mosaic" ? Grid3x3 : Droplets;
                 return (
                   <div key={o.id} className={`tl-ov is-${o.type}${o.id === selOver ? " is-sel" : ""}`} style={{ left: x, width: w, top: o.lane * LANE + 3, height: LANE - 6 }}
                     onPointerDown={(e) => overDown(e, o, "move")} title={`${TYPE_NAME[o.type]} ${fmt(o.start, true)} – ${fmt(o.end, true)}`}>

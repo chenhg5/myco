@@ -7,13 +7,15 @@ import { t as uiText } from "../_lib/i18n";
 import "../_lib/sheet.css";
 import "./video.css";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Bot, Download, Droplets, Film, Loader2, MessageSquareText, SlidersHorizontal, Type, X } from "lucide-react";
+import { Bot, Download, Droplets, Film, Loader2, MessageSquareText, SlidersHorizontal, Type, X, ZoomIn } from "lucide-react";
 import { Bar, Toast, mount, titleSaver, uid, useKit } from "../_lib/appkit";
 import { myco, save } from "../_lib/myco";
 import { Popover, rectOf } from "../_lib/ui";
 import { clips, frameSize, kit, media, notes, overlays, placed, project, total, RATIOS, clamp, sizeChoices } from "./model";
 import { addClip, change, patch, redo, removeClip, removeOverlay, setProject, split, undo, duplicateClip } from "./edit";
 import { keep, keyOf, onLocal, probe, restore } from "./media";
+import { Recorder } from "./recorder";
+import { FocusPanel } from "./focus";
 import { player } from "./player";
 import { Timeline, type Sel } from "./timeline";
 import { Stage } from "./stage";
@@ -22,7 +24,7 @@ import { QUALITIES, estimate, render, type ExportOptions, type Progress } from "
 
 const title = titleSaver(kit, project);
 
-type Tab = "media" | "text" | "censor" | "notes" | "props";
+type Tab = "media" | "text" | "censor" | "notes" | "props" | "focus";
 const TABS: [Tab, string, typeof Film][] = [["media", "素材", Film], ["text", "文字", Type], ["censor", "打码", Droplets], ["notes", "备注", MessageSquareText]];
 
 function useNarrow() {
@@ -32,11 +34,12 @@ function useNarrow() {
   return n;
 }
 
-function App() {
+export function VideoApp({ recording = false }: { recording?: boolean }) {
   useKit(kit);
   const [, setLocalVer] = useState(0);
   useEffect(() => onLocal(() => setLocalVer((n) => n + 1)), []);
   const narrow = useNarrow();
+  const [recordRequest, setRecordRequest] = useState(0);
   const [tab, setTab] = useState<Tab>("media");
   const [sel, setSelState] = useState<Sel>(null);
   const [pps, setPps] = useState(40);
@@ -67,6 +70,7 @@ function App() {
 
   // ---- files ----
   async function importFiles(files: File[], index?: number) {
+    let imported = 0;
     let at = index;
     for (const f of files) {
       const tmpKey = uid("i");
@@ -86,12 +90,14 @@ function App() {
           if (at !== undefined) at++;
           setSel({ kind: "clip", id }, false);
         }
+        imported++;
       } catch (e) {
         kit.flash((e as Error).message || uiText("「{0}」没导入成功", f.name));
       } finally {
         setImporting((l) => l.filter((x) => x.key !== tmpKey));
       }
     }
+    return imported > 0;
   }
   async function relink(file: File, mediaId: string) {
     const m = media.get(mediaId);
@@ -195,11 +201,12 @@ function App() {
   const ratio = String(project.get("main")?.data.ratio || "source");
   const open = notes.rows.filter((n) => !n.data.done).length;
   const side = narrow ? tab : tab === "props" ? "media" : tab;
-  const tabs: [Tab, string, typeof Film][] = narrow ? [...TABS, ["props", "属性", SlidersHorizontal]] : TABS;
+  const tabs: [Tab, string, typeof Film][] = narrow ? [...TABS, ["focus", "重点放大", ZoomIn], ["props", "属性", SlidersHorizontal]] : [...TABS, ["focus", "重点放大", ZoomIn]];
 
   return (
     <div className="app vid">
-      <Bar kit={kit} title={title.get("")} placeholder={uiText("未命名视频")} onTitle={title.set}>
+      <Bar kit={kit} title={title.get("")} placeholder={uiText(recording ? "未命名录屏" : "未命名视频")} onTitle={title.set}>
+        {recording && <Recorder request={recordRequest} onRecorded={(f) => importFiles([f], clips.rows.length)} />}
         <select className="sel top-ratio" aria-label={uiText("画面比例")} value={ratio} onChange={(e) => setProject({ ratio: e.target.value })}>
           {RATIOS.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
         </select>
@@ -217,6 +224,7 @@ function App() {
           </nav>
           <div className="side-body">
             {side === "media" && <MediaPanel importing={importing} onImport={pickFiles} onRelink={onRelink} setSel={setSel} />}
+            {side === "focus" && <FocusPanel setSel={setSel} />}
             {side === "text" && <TextPanel setSel={setSel} />}
             {side === "censor" && <CensorPanel setSel={setSel} />}
             {side === "notes" && <NotesPanel me={kit.me} focus={noteFocus} pageId={kit.page} title={title.get("")} />}
@@ -224,7 +232,7 @@ function App() {
           </div>
         </aside>
         <main className="center">
-          <Stage sel={sel} setSel={setSel} onImport={pickFiles} />
+          <Stage onRecord={recording ? () => setRecordRequest(n => n + 1) : undefined} sel={sel} setSel={setSel} onImport={pickFiles} />
         </main>
         {!narrow && <aside className="inspector"><Inspector sel={sel} setSel={setSel} /></aside>}
       </div>
@@ -396,6 +404,6 @@ function ExportDialog({ state, onStart, onRetry, onClose }: { state: Exp; onStar
   );
 }
 
-mount(kit, App, async () => {
+export function mountVideo(recording = false) { mount(kit, () => <VideoApp recording={recording} />, async () => {
   await restore(media.rows.map((r) => String(r.data.key || "")));
-});
+}); }

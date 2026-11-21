@@ -524,3 +524,10 @@ Actions: status, devices, install, remove, enable (`{control}`), disable, connec
 host pairing codes are scoped to their originating page. Closing a page also
 invalidates in-flight connection operations, preventing a late response from
 starting unattended sharing. `close` releases that page's host/session resources.
+
+The local App OS bridge additionally exposes the job `screen.record`; it is not
+a Hub recording/streaming endpoint. Inputs are `{interactive?, microphone?,
+clicks?, max_seconds?}`; the completed value is `{path, bytes}`. The path is local
+only. Stop through job input `stop` to finalize the movie. Capability availability
+and platform restrictions are documented in [app-os.md](app-os.md). Existing
+`myco.os.mediaURL` supports MOV/MP4/WebM recordings with its directory confinement.

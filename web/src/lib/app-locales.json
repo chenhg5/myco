@@ -238,5 +238,15 @@
       "name": "远程桌面",
       "description": "从电脑或 iPhone 连接同一工作区的 Mac 与 Windows，实时查看画面、操作键鼠。手机支持触控板和键盘；远控组件按需安装，默认关闭。局域网或 Tailscale 直连，暂不含声音、锁屏登录和公网中继。"
     }
+  },
+  "myco/recorder": {
+    "en": {
+      "name": "Recording studio",
+      "description": "Record your screen, trim and split clips, add text and focus zooms, then export MP4 locally. Footage stays on your computer; agents can help with the edit."
+    },
+    "zh": {
+      "name": "录屏工作台",
+      "description": "录下屏幕，直接裁剪、分割、加文字和重点放大，在本机导出 MP4。视频留在本机，剪辑方案可以交给 agent 协作。"
+    }
   }
 }

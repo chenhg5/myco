@@ -190,7 +190,7 @@
     "system.info", "system.disks", "system.processes", "system.usage", "system.apps", "system.settings", "process.kill",
     "fs.paths", "fs.list", "fs.stat", "fs.read", "fs.write", "fs.mkdir", "fs.move", "fs.copy", "fs.delete", "fs.trash", "fs.scan*",
     "fs.search*", "fs.watch*", "fs.thumbnail", "fs.pick", "fs.saveAs", "fs.reveal", "fs.open",
-    "exec.run", "exec.spawn*", "clipboard.read", "clipboard.write", "notify", "screen.capture", "net.fetch",
+    "exec.run", "exec.spawn*", "clipboard.read", "clipboard.write", "notify", "screen.capture", "screen.record*", "net.fetch",
     "audio.sources", "audio.record*", "speech.status", "speech.install*", "speech.transcribe*", "speech.diarize*",
   ].forEach(function (n) {
     var job = n.slice(-1) === "*";

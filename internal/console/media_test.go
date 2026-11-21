@@ -12,6 +12,12 @@ func TestMediaPath(t *testing.T) {
 	rec := filepath.Join(home, ".myco", "recordings", "m1")
 	_ = os.MkdirAll(rec, 0o700)
 	_ = os.WriteFile(filepath.Join(rec, "me.wav"), []byte("RIFF"), 0o600)
+	for _, ext := range []string{".mov", ".mp4", ".webm"} {
+		_ = os.WriteFile(filepath.Join(rec, "screen"+ext), []byte("movie"), 0600)
+		if _, ok := mediaPath(home, filepath.Join(rec, "screen"+ext)); !ok {
+			t.Errorf("recorded video rejected: %s", ext)
+		}
+	}
 	_ = os.WriteFile(filepath.Join(rec, "notes.txt"), []byte("x"), 0o600)
 	_ = os.WriteFile(filepath.Join(home, "secret.wav"), []byte("x"), 0o600)
 	for p, want := range map[string]bool{
