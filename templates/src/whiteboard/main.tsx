@@ -1,3 +1,5 @@
+import { themeMedia } from "../_lib/appearance";
+import { t as uiText } from "../_lib/i18n";
 // 白板: an endless canvas people and agents fill together: sticky notes,
 // text, rectangles, ellipses, and arrows joining them. Each thing is a
 // record (where it is, how big, its text and colour); agents add stickies
@@ -55,12 +57,12 @@ function edge(b: Box, tx: number, ty: number) {
 
 type Tool = "select" | "hand" | Kind;
 const TOOLS: [Tool, string, typeof Hand, string][] = [
-  ["select", "选择", MousePointer2, "V"], ["hand", "拖动画布", Hand, "H"], ["sticky", "便签", StickyNote, "N"], ["text", "文字", Type, "T"],
-  ["rect", "矩形", Square, "R"], ["ellipse", "椭圆", Circle, "O"], ["arrow", "连线：从一个拖到另一个", ArrowUpRight, "L"],
+  ["select", uiText("选择"), MousePointer2, "V"], ["hand", uiText("拖动画布"), Hand, "H"], ["sticky", uiText("便签"), StickyNote, "N"], ["text", uiText("文字"), Type, "T"],
+  ["rect", uiText("矩形"), Square, "R"], ["ellipse", uiText("椭圆"), Circle, "O"], ["arrow", uiText("连线：从一个拖到另一个"), ArrowUpRight, "L"],
 ];
 
 function useDarkMode() {
-  const q = window.matchMedia?.("(prefers-color-scheme: dark)");
+  const q = themeMedia();
   const [d, setD] = useState(!!q?.matches);
   useEffect(() => { if (!q) return; const f = () => setD(q.matches); q.addEventListener("change", f); return () => q.removeEventListener("change", f); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return d;
@@ -101,7 +103,7 @@ function App() {
     const keep = [...new Set(gone)].map((id) => items.get(id)).filter(Boolean).map((r) => ({ id: r!.id, data: r!.data }));
     for (const k of keep) kit.track(items.remove(k.id));
     setSel([]);
-    kit.flash(`删除了 ${ids.length} 个`, () => { for (const k of keep) kit.track(items.put(k.data, k.id)); kit.note = null; kit.emit(); });
+    kit.flash(uiText("删除了 {0} 个", ids.length), () => { for (const k of keep) kit.track(items.put(k.data, k.id)); kit.note = null; kit.emit(); });
   };
 
   // ---- pointer -----------------------------------------------------------------
@@ -218,7 +220,7 @@ function App() {
 
   const exportSvg = async () => {
     const bs = boxes();
-    if (!bs.length) { kit.flash("白板上还什么都没有"); return; }
+    if (!bs.length) { kit.flash(uiText("白板上还什么都没有")); return; }
     const x0 = Math.min(...bs.map((b) => b.x)) - 40, y0 = Math.min(...bs.map((b) => b.y)) - 40;
     const x1 = Math.max(...bs.map((b) => b.x + b.w)) + 40, y1 = Math.max(...bs.map((b) => b.y + b.h)) + 40;
     const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
@@ -244,16 +246,16 @@ function App() {
       return `<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="#646a73" stroke-width="2" marker-end="url(#h)"/>`;
     });
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x0} ${y0} ${x1 - x0} ${y1 - y0}" width="${x1 - x0}" height="${y1 - y0}" font-family="PingFang SC, Microsoft YaHei, sans-serif" fill="#1f2329"><defs><marker id="h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z" fill="#646a73"/></marker></defs><rect x="${x0}" y="${y0}" width="${x1 - x0}" height="${y1 - y0}" fill="#fff"/>${arr.join("")}${parts.join("")}</svg>`;
-    try { await save(`${(title.get() || "白板").replace(/[\\/:*?"<>|]/g, " ")}.svg`, svg, "image/svg+xml"); kit.flash("已存到「下载」"); }
-    catch (e) { kit.flash((e as Error).message || "没存下来"); }
+    try { await save(`${(title.get() || "白板").replace(/[\\/:*?"<>|]/g, " ")}.svg`, svg, "image/svg+xml"); kit.flash(uiText("已存到「下载」")); }
+    catch (e) { kit.flash((e as Error).message || uiText("没存下来")); }
   };
 
   const one = sel.length === 1 ? byId.get(sel[0]) : undefined;
   const selArrow = sel.length === 1 && items.get(sel[0])?.data.type === "arrow" ? sel[0] : null;
   return (
     <div className="app wb">
-      <Bar kit={kit} title={title.get()} placeholder="未命名白板" onTitle={title.set}>
-        <button type="button" className="btn" onClick={() => void exportSvg()}><Download className="ico" />导出图片</button>
+      <Bar kit={kit} title={title.get()} placeholder={uiText("未命名白板")} onTitle={title.set}>
+        <button type="button" className="btn" onClick={() => void exportSvg()}><Download className="ico" />{uiText("导出图片")}</button>
       </Bar>
       <div ref={stage} className={`wb-stage tool-${tool}${dark ? " is-dark" : ""}`} onPointerDown={(e) => down(e)} onPointerMove={move} onPointerUp={up} onWheel={wheel}
         onDoubleClick={(e) => { if (e.target === stage.current || (e.target as Element).classList.contains("wb-world")) { const w = toWorld(e.clientX, e.clientY); const id = create("sticky", w.x, w.y); setSel([id]); setEditing(id); } }}
@@ -302,22 +304,22 @@ function App() {
                 style={{ background: one.type === "sticky" ? (dark ? STICKY[c][1] : STICKY[c][0]) : STROKE[c] }} onClick={() => put(one.id, { color: c })} />
             ))}
             <span className="wb-sep" />
-            <button type="button" className="icon-btn" title="删除（Delete）" aria-label="删除" onClick={() => remove(sel)}><Trash2 className="ico" /></button>
+            <button type="button" className="icon-btn" title={uiText("删除（Delete）")} aria-label={uiText("删除")} onClick={() => remove(sel)}><Trash2 className="ico" /></button>
           </div>
         )}
         {sel.length > 1 && !editing && (
           <div className="wb-props" onPointerDown={(e) => e.stopPropagation()}>
-            <span className="wb-count">选中 {sel.length} 个</span>
-            <button type="button" className="icon-btn" title="删除（Delete）" aria-label="删除" onClick={() => remove(sel)}><Trash2 className="ico" /></button>
+            <span className="wb-count">{uiText("选中")}{" "}{sel.length} {" "}{uiText("个")}</span>
+            <button type="button" className="icon-btn" title={uiText("删除（Delete）")} aria-label={uiText("删除")} onClick={() => remove(sel)}><Trash2 className="ico" /></button>
           </div>
         )}
         <div className="wb-zoom" onPointerDown={(e) => e.stopPropagation()}>
-          <button type="button" aria-label="缩小" onClick={() => zoom(1 / 1.2)}><Minus className="ico" /></button>
-          <button type="button" className="wb-k" onClick={() => setView((v) => ({ ...v, k: 1 }))} title="恢复 100%">{Math.round(view.k * 100)}%</button>
-          <button type="button" aria-label="放大" onClick={() => zoom(1.2)}><Plus className="ico" /></button>
-          <button type="button" aria-label="适应画面" title="适应画面" onClick={fit}><Maximize className="ico" /></button>
+          <button type="button" aria-label={uiText("缩小")} onClick={() => zoom(1 / 1.2)}><Minus className="ico" /></button>
+          <button type="button" className="wb-k" onClick={() => setView((v) => ({ ...v, k: 1 }))} title={uiText("恢复 100%")}>{Math.round(view.k * 100)}%</button>
+          <button type="button" aria-label={uiText("放大")} onClick={() => zoom(1.2)}><Plus className="ico" /></button>
+          <button type="button" aria-label={uiText("适应画面")} title={uiText("适应画面")} onClick={fit}><Maximize className="ico" /></button>
         </div>
-        {!list.length && <div className="wb-empty">双击空白处贴一张便签，或者从左边选个工具。也可以让 agent 来：「在白板上把这次复盘的要点贴成便签」。</div>}
+        {!list.length && <div className="wb-empty">{uiText("双击空白处贴一张便签，或者从左边选个工具。也可以让 agent 来：「在白板上把这次复盘的要点贴成便签」。")}</div>}
       </div>
       <Toast kit={kit} />
     </div>

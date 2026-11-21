@@ -1,3 +1,4 @@
+import { t as uiText } from "../_lib/i18n";
 // 五子棋: two players, people or agents, on a 15 × 15 board. Each stone is
 // a record (round, number, where); a move's id is its place in the round,
 // so two moves at once cannot both land. The page checks turns and finds
@@ -72,36 +73,36 @@ function App() {
     kit.emit();
   };
   const seat = (s: "black" | "white") => {
-    const name = window.prompt(s === "black" ? "谁执黑？写你自己，或者一个 agent 的名字（它看到轮到自己就会下）" : "谁执白？写你自己，或者一个 agent 的名字", g[s] || me);
+    const name = window.prompt(s === "black" ? uiText("谁执黑？写你自己，或者一个 agent 的名字（它看到轮到自己就会下）") : uiText("谁执白？写你自己，或者一个 agent 的名字"), g[s] || me);
     if (name !== null) setGame({ [s]: name.trim() });
   };
-  const status = resigned ? `${resigned === "black" ? "黑" : "白"}方认输，${resigned === "black" ? "白" : "黑"}方赢了`
-    : st.winner ? `${st.winner === "black" ? "黑" : "白"}方五子连珠，赢了！`
-    : !g.black || !g.white ? "先坐下：点「黑方」「白方」写上谁来下" : `轮到${st.turn === "black" ? "黑" : "白"}方（${g[st.turn]}）${myTurn ? "，该你了" : ""}`;
+  const status = resigned ? uiText("{0}方认输，{1}方赢了", uiText(resigned === "black" ? "黑" : "白"),uiText(resigned === "black" ? "白" : "黑"))
+    : st.winner ? uiText("{0}方五子连珠，赢了！", uiText(st.winner === "black" ? "黑" : "白"))
+    : !g.black || !g.white ? uiText("先坐下：点「黑方」「白方」写上谁来下") : uiText("轮到{0}方（{1}）{2}",uiText(st.turn === "black" ? "黑" : "白"), g[st.turn],myTurn?uiText("，该你了"):"");
   const last = st.list[st.list.length - 1];
   const W = 600, pad = 30, step = (W - pad * 2) / (N - 1);
   const winSet = new Set(st.line.map(([x, y]) => `${x},${y}`));
   return (
     <div className="app gm">
-      <Bar kit={kit} title={title.get()} placeholder="五子棋" onTitle={title.set}>
-        <button type="button" className="btn" onClick={undo} disabled={!last || !mine(last.stone) || over}><Undo2 className="ico" />悔棋</button>
-        {!over && (mine("black") || mine("white")) && <button type="button" className="btn" onClick={() => { if (window.confirm("认输？")) setGame({ resigned: mine(st.turn) ? st.turn : mine("black") ? "black" : "white" }); }}><Flag className="ico" />认输</button>}
-        <button type="button" className="btn btn-primary" onClick={() => setGame({ round: round + 1, resigned: "" })}><RotateCcw className="ico" />再来一局</button>
+      <Bar kit={kit} title={title.get()} placeholder={uiText("五子棋")} onTitle={title.set}>
+        <button type="button" className="btn" onClick={undo} disabled={!last || !mine(last.stone) || over}><Undo2 className="ico" />{uiText("悔棋")}</button>
+        {!over && (mine("black") || mine("white")) && <button type="button" className="btn" onClick={() => { if (window.confirm(uiText("认输？"))) setGame({ resigned: mine(st.turn) ? st.turn : mine("black") ? "black" : "white" }); }}><Flag className="ico" />{uiText("认输")}</button>}
+        <button type="button" className="btn btn-primary" onClick={() => setGame({ round: round + 1, resigned: "" })}><RotateCcw className="ico" />{uiText("再来一局")}</button>
       </Bar>
       <div className="gm-main">
         <aside className="gm-side">
           {(["black", "white"] as const).map((s) => (
-            <button key={s} type="button" className={`gm-seat${!over && st.turn === s ? " is-turn" : ""}`} onClick={() => seat(s)} title="点一下换人">
+            <button key={s} type="button" className={`gm-seat${!over && st.turn === s ? " is-turn" : ""}`} onClick={() => seat(s)} title={uiText("点一下换人")}>
               <span className={`gm-stone is-${s}`} />
               <span className="gm-seat-text">
-                <b>{s === "black" ? "黑方（先手）" : "白方"}</b>
-                <span>{g[s] ? <>{g[s]}{mine(s) ? "（你）" : ""}</> : <span className="faint"><UserRound className="ico" />点这里坐下</span>}</span>
+                <b>{s === "black" ? uiText("黑方（先手）") : uiText("白方")}</b>
+                <span>{g[s] ? <>{g[s]}{mine(s) ? uiText("（你）") : ""}</> : <span className="faint"><UserRound className="ico" />{uiText("点这里坐下")}</span>}</span>
               </span>
             </button>
           ))}
           <div className={`gm-status${over ? " is-over" : myTurn ? " is-mine" : ""}`} role="status">{status}</div>
           <div className="gm-moves">
-            <div className="gm-moves-head">第 {round} 局 · {st.list.length} 手</div>
+            <div className="gm-moves-head">{uiText("第")}{" "}{round} {" "}{uiText("局 ·")}{" "}{st.list.length} {" "}{uiText("手")}</div>
             <ol>
               {st.list.slice(-12).map((m, i) => (
                 <li key={m.id}><span className={`gm-dot is-${m.stone}`} />{st.list.length - Math.min(12, st.list.length) + i + 1}. {COLS[m.x]}{N - m.y}</li>

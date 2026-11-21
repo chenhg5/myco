@@ -875,7 +875,7 @@ async function runMatrix(browser, size, scheme) {
       const lib = page.locator("[data-testid=templates-official] [data-shelf=office] .tp-card");
       await lib.first().waitFor({ timeout: 15_000 });
       const names = (await lib.allInnerTexts()).map(compactText);
-      if (names.length !== 4 || !names[0].startsWith("表格") || !names[1].startsWith("多维表格") || !names[2].startsWith("文档") || !names[3].startsWith("幻灯片")) throw new Error(`办公套件应是 表格、多维表格、文档、幻灯片，实际 ${names.join(" / ")}`);
+      if (names.length !== 5 || !names[0].startsWith("表格") || !names[1].startsWith("多维表格") || !names[2].startsWith("文档") || !names[3].startsWith("幻灯片") || !names[4].startsWith("会议记录")) throw new Error(`办公套件应是 表格、多维表格、文档、幻灯片、会议记录，实际 ${names.join(" / ")}`);
       await page.locator("[data-testid=templates-own] .tp-card").first().waitFor({ timeout: 5_000 });
       // myco's own apps update on their own; fetched now on request.
       await clickVisible(page, page.locator("[data-testid=apps-sync]"));
@@ -958,6 +958,29 @@ async function runMatrix(browser, size, scheme) {
       // (back where the steps after this one start: the project)
       await go(page, "官网改版", narrow);
       await page.locator(".sp-home, .sp-group").first().waitFor({ timeout: 10_000 });
+    });
+
+    await step("应用 · English metadata and legacy Hub", async () => {
+      const pattern="**/app/hubs/hub_studio/templates";
+      try {
+        await page.goto(`${r.base}/?lang=en`, {waitUntil:"domcontentloaded"});
+        await page.locator(".app-shell").waitFor();
+        await go(page,"应用",narrow);
+        const table=page.locator('[data-testid="template-myco/table"]');
+        await table.locator('.tp-card-name',{hasText:"Table"}).waitFor();
+        await page.locator('[data-testid="template-myco/notes"] .tp-card-name',{hasText:"Notes"}).waitFor();
+        await table.click();
+        await page.locator('[data-testid="template-name"]').waitFor();
+        if(await page.locator('[data-testid="template-name"]').inputValue()!=="Table")throw new Error("New app name must follow the App language");
+        await clickVisible(page,page.getByRole("button",{name:"Cancel",exact:true}));
+        await shot(page,size,scheme,"apps-english");
+        await page.route(pattern,async route=>{const response=await route.fetch();const data=await response.json();for(const t of data.templates||[])delete t.locales;await route.fulfill({response,json:data});});
+        await page.reload({waitUntil:"domcontentloaded"});await page.locator(".app-shell").waitFor();await go(page,"应用",narrow);
+        await page.locator('[data-testid="template-myco/notes"] .tp-card-name',{hasText:"Notes"}).waitFor();
+      } finally {
+        await page.unroute(pattern);
+        await page.goto(`${r.base}/?lang=zh`,{waitUntil:"domcontentloaded"});await page.locator(".app-shell").waitFor();
+      }
     });
 
     // A name picked in the notch's island (the Mac app): a chat already on

@@ -454,3 +454,14 @@ The local App backend uses the selected Hub's console token. `GET /app/hubs/{id}
 ### Read-only CLI tool inventory (from `codex/mcp-skills`)
 
 `GET /app/hubs/{id}/machines/{mid}/info` returns `ais[]`; each Claude Code or Codex entry can include user-level `mcp`, `skills`, `plugins`, and `tool_warnings`. An agent's `runtime` includes the same fields for tools found in its work directory (project scope). Older machines and runners omit them. `mcp` entries contain `{name, transport, host?, scope, enabled?}`, `skills` contain `{name, description?, scope, managed_by?}`, and `plugins` contain `{name, marketplace?, enabled}`. `scope` is `user`, `project`, or `plugin` for MCP and `user` or `project` for skills. `tool_warnings` names files that could not be read, without file contents. The scanner never reports environment variables, HTTP headers, command arguments, URL paths or queries, or secret values. It reads CLI configuration only; it does not connect to or start MCP servers.
+
+### Localized template display metadata
+
+Template list/get objects can include optional `locales`, a map from language
+tags to `{name?, description?}`. It comes from a template's optional
+`locales.json` sidecar, not a new manifest field or database column. Values are
+for display only: the base `name`/`description`, page names and record contents
+stay unchanged. Select an exact language tag, then its base language, then the
+base metadata. Publishing rejects malformed or oversized sidecars (32 KiB,
+20 languages; name 80 characters, description 300). Old clients may ignore the
+field, and old Hubs can still install apps containing the sidecar.

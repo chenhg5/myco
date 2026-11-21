@@ -1,0 +1,10 @@
+{
+  "en": {
+    "name": "Meeting notes",
+    "description": "Record your microphone and meeting audio separately, transcribe locally and identify speakers. Edit, search, replay and export transcripts; ask an agent for summaries, decisions and action items."
+  },
+  "zh": {
+    "name": "会议记录",
+    "description": "录下在 Zoom、腾讯会议、飞书里开的会：你的麦克风和别人的声音分开录，会后在这台电脑上转成文字（不上传），自动分出不同的人；点一句从那里播放，改字、改名字、搜索、导出；让 agent 写纪要（总结、决定、待办、章节）。录音只存在这台电脑上，要在 myco App 里录音。"
+  }
+}

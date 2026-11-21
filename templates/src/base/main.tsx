@@ -1,3 +1,4 @@
+import { t as uiText } from "../_lib/i18n";
 // 多维表格: one set of records, Feishu Bitable-like: a table (the grid),
 // a board grouped by a single-select field, a calendar by a date field, a
 // gallery, and a form to collect records; any record opens on the side.
@@ -28,7 +29,7 @@ const sheet = new Sheet({
 
 type ViewKind = "grid" | "board" | "calendar" | "gallery" | "form";
 const VIEWS: [ViewKind, string, typeof Table2][] = [
-  ["grid", "表格", Table2], ["board", "看板", KanbanSquare], ["calendar", "日历", CalendarDays], ["gallery", "画廊", Images], ["form", "表单", ClipboardList],
+  ["grid", uiText("表格"), Table2], ["board", uiText("看板"), KanbanSquare], ["calendar", uiText("日历"), CalendarDays], ["gallery", uiText("画廊"), Images], ["form", uiText("表单"), ClipboardList],
 ];
 
 function App() {
@@ -63,10 +64,9 @@ function App() {
           <FilterButton fields={fields} view={view} setView={setView} />
           <SortButton fields={fields} view={view} setView={setView} />
           {kind === "grid" && <SearchButton onClick={() => setSearch(true)} />}
-          <span className="toolbar-count">{filtered ? `${rows.length} / ${all.length} 条` : `共 ${all.length} 条`}</span>
+          <span className="toolbar-count">{filtered ? uiText("{0} / {1} 条", rows.length, all.length) : uiText("共 {0} 条", all.length)}</span>
           <button type="button" className="btn btn-primary base-add" onClick={() => { const id = sheet.add({}); onAdded(id); if (kind !== "grid") setOpen(id); }}>
-            <Plus className="ico" />添加记录
-          </button>
+            <Plus className="ico" />{uiText("添加记录")}{" "}</button>
         </>}
       </div>
       {kind === "grid" && (
@@ -87,7 +87,7 @@ function App() {
 
 async function start() {
   const root = createRoot(document.getElementById("root")!);
-  const outside = <div className="outside">在 myco App 里打开这个网页，才能读写它的内容。</div>;
+  const outside = <div className="outside">{uiText("在 myco App 里打开这个网页，才能读写它的内容。")}</div>;
   if (!myco) { root.render(outside); return; }
   try { await sheet.start(); } catch { root.render(outside); return; }
   root.render(<App />);

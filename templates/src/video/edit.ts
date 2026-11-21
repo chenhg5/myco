@@ -1,3 +1,4 @@
+import { t as uiText } from "../_lib/i18n";
 // Every change people make goes through here: written to the hub, and kept
 // for undo and redo (this person's own changes, in this page).
 import type { Store } from "../_lib/myco";
@@ -53,14 +54,14 @@ export function undo() {
   if (!s) return;
   redos.push(s);
   apply([...s.ops].reverse(), "before");
-  kit.flash("已撤销");
+  kit.flash(uiText("已撤销"));
 }
 export function redo() {
   const s = redos.pop();
   if (!s) return;
   undos.push(s);
   apply(s.ops, "after");
-  kit.flash("已重做");
+  kit.flash(uiText("已重做"));
 }
 
 // ---- the actions of the editor ----

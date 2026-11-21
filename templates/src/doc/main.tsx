@@ -1,3 +1,5 @@
+import { themeMedia } from "../_lib/appearance";
+import { t as uiText, language } from "../_lib/i18n";
 // 文档: a document written together, on BlockNote (a block editor of the
 // Notion / Feishu kind). Each top-level block is a record of `blocks`
 // (its id is the block's id): two people writing different blocks never
@@ -8,7 +10,7 @@ import "./doc.css";
 import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { BlockNoteSchema, defaultBlockSpecs, type Block, type PartialBlock } from "@blocknote/core";
-import { zh } from "@blocknote/core/locales";
+import { zh, en } from "@blocknote/core/locales";
 import { useCreateBlockNote } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
 import { dark, listen, myco, save, Store, type MycoChange } from "../_lib/myco";
@@ -71,7 +73,7 @@ function simpleOf(b: AnyBlock): Rec {
 
 // ---- the page ------------------------------------------------------------------
 function Doc({ initial, me, title0 }: { initial: PartialBlock<any, any, any>[]; me: string; title0: string }) {
-  const editor = useCreateBlockNote({ schema, dictionary: zh, initialContent: initial.length ? initial : undefined });
+  const editor = useCreateBlockNote({ schema, dictionary: language() === "en" ? en : zh, initialContent: initial.length ? initial : undefined });
   const [title, setTitle] = useState(title0);
   const [state, setState] = useState<"saved" | "saving" | "error">("saved");
   const [note, setNote] = useState("");
@@ -82,7 +84,7 @@ function Doc({ initial, me, title0 }: { initial: PartialBlock<any, any, any>[]; 
     { saved: new Map(), orders: new Map(), remote: 0, timer: 0, titleTimer: 0 });
 
   useEffect(() => {
-    const m = window.matchMedia("(prefers-color-scheme: dark)");
+    const m = themeMedia();
     const on = () => setTheme(m.matches ? "dark" : "light");
     m.addEventListener("change", on);
     return () => m.removeEventListener("change", on);
@@ -123,8 +125,8 @@ function Doc({ initial, me, title0 }: { initial: PartialBlock<any, any, any>[]; 
     });
     if (!writes.length) { setState("saved"); return; }
     Promise.all(writes).then(() => setState("saved"), (e: { code?: string; message?: string }) => {
-      if (e?.code === "conflict") { flash("别人刚改过同一段，已换成最新的"); setState("saved"); }
-      else { setState("error"); flash(e?.message || "没保存上"); }
+      if (e?.code === "conflict") { flash(uiText("别人刚改过同一段，已换成最新的")); setState("saved"); }
+      else { setState("error"); flash(e?.message || uiText("没保存上")); }
     });
   };
   useEffect(() => editor.onChange(() => {
@@ -174,7 +176,7 @@ function Doc({ initial, me, title0 }: { initial: PartialBlock<any, any, any>[]; 
       } finally {
         s.remote--;
       }
-      if (c.by && c.by !== me) flash(`${c.by} 刚改了`);
+      if (c.by && c.by !== me) flash(uiText("{0} 刚改了", c.by));
     };
     listen([docs, blocks], apply);
   }, [editor, me]);
@@ -184,7 +186,7 @@ function Doc({ initial, me, title0 }: { initial: PartialBlock<any, any, any>[]; 
     setTitle(t);
     window.clearTimeout(s.titleTimer);
     s.titleTimer = window.setTimeout(() => {
-      docs.put({ title: t.trim() }, "main")?.catch((e: { message?: string }) => flash(e?.message || "标题没保存上"));
+      docs.put({ title: t.trim() }, "main")?.catch((e: { message?: string }) => flash(e?.message || uiText("标题没保存上")));
     }, 500);
   };
   // (the title's height follows its text, and the width: the page may be
@@ -215,30 +217,30 @@ function Doc({ initial, me, title0 }: { initial: PartialBlock<any, any, any>[]; 
         const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>${esc(title || "文档")}</title><style>body{max-width:760px;margin:40px auto;padding:0 20px;font:16px/1.75 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;color:#1f2329}pre{background:#f5f6f7;padding:12px 14px;border-radius:8px;overflow:auto}blockquote{border-left:3px solid #dee0e3;margin:0;padding-left:14px;color:#646a73}table{border-collapse:collapse}td,th{border:1px solid #dee0e3;padding:6px 10px}</style></head><body><h1>${esc(title || "文档")}</h1>${body}</body></html>`;
         await save(`${fileName()}.html`, html, "text/html");
       }
-      flash("已存到「下载」");
+      flash(uiText("已存到「下载」"));
     } catch (e) {
-      flash((e as Error).message || "没存下来");
+      flash((e as Error).message || uiText("没存下来"));
     }
   };
 
   return (
     <div className="doc">
       <header className="doc-bar">
-        <span className={`doc-state is-${state}`}>{state === "saving" ? "正在保存…" : state === "error" ? "没保存上" : "已保存"}</span>
+        <span className={`doc-state is-${state}`}>{state === "saving" ? uiText("正在保存…") : state === "error" ? uiText("没保存上") : uiText("已保存")}</span>
         <span className="doc-spacer" />
-        {me && <span className="doc-me">你是 {me}</span>}
+        {me && <span className="doc-me">{uiText("你是")}{" "}{me}</span>}
         <div className="doc-export">
-          <button type="button" className="doc-btn" onClick={() => setMenu((v) => !v)} aria-expanded={menu}>导出</button>
+          <button type="button" className="doc-btn" onClick={() => setMenu((v) => !v)} aria-expanded={menu}>{uiText("导出")}</button>
           {menu && (
             <div className="doc-menu" role="menu" onMouseLeave={() => setMenu(false)}>
               <button type="button" role="menuitem" onClick={() => void exportAs("md")}>Markdown（.md）</button>
-              <button type="button" role="menuitem" onClick={() => void exportAs("html")}>网页（.html）</button>
+              <button type="button" role="menuitem" onClick={() => void exportAs("html")}>{uiText("网页（.html）")}</button>
             </div>
           )}
         </div>
       </header>
       <main className="doc-page">
-        <textarea ref={titleRef} className="doc-title" rows={1} value={title} placeholder="无标题" aria-label="标题"
+        <textarea ref={titleRef} className="doc-title" rows={1} value={title} placeholder={uiText("无标题")} aria-label={uiText("标题")}
           onChange={(e) => saveTitle(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.nativeEvent.isComposing) {
@@ -256,7 +258,7 @@ function Doc({ initial, me, title0 }: { initial: PartialBlock<any, any, any>[]; 
 }
 
 function Outside() {
-  return <div className="doc-outside">在 myco App 里打开这个网页，才能读写它的内容。</div>;
+  return <div className="doc-outside">{uiText("在 myco App 里打开这个网页，才能读写它的内容。")}</div>;
 }
 
 async function start() {

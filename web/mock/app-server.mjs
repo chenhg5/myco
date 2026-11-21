@@ -255,13 +255,13 @@ const shotsOf = (names) => {
   const out = light.map((src) => ({ src, ...(names.includes(src.replace(/(\.[a-z]+)$/i, ".dark$1")) ? { dark: src.replace(/(\.[a-z]+)$/i, ".dark$1") } : {}) }));
   return out.length ? out : undefined;
 };
-const officialOrder = ["table", "base", "doc", "slides", "meeting", "code", "issues", "devtools", "todo", "notes", "poll", "disk", "ledger", "habit", "whiteboard", "mindmap", "video", "photo", "gomoku", "sudoku"];
+const officialOrder = ["table", "base", "doc", "slides", "meeting", "code", "issues", "devtools", "todo", "notes", "poll", "disk", "stocks", "proxy-console", "ledger", "habit", "design-studio", "whiteboard", "mindmap", "video", "photo", "gomoku", "sudoku"];
 const mockTemplates = officialOrder.filter((name) => existsSync(new URL(`${name}/myco.json`, officialRoot))).map((name) => {
   const files = officialFiles(name);
   const m = JSON.parse(files["myco.json"]);
   const id = `tp_myco_${name}`;
   templateFiles.set(id, files);
-  return { id, slug: m.id, name: m.name, description: m.description, kind: m.kind, category: m.category, icon: m.icon ? String(files[m.icon] || "") : undefined, version: m.version, publisher: "myco", official: true, can_manage: false,
+  return { id, slug: m.id, name: m.name, description: m.description, locales: files["locales.json"] ? JSON.parse(files["locales.json"]) : undefined, kind: m.kind, category: m.category, icon: m.icon ? String(files[m.icon] || "") : undefined, version: m.version, publisher: "myco", official: true, can_manage: false,
     data: m.data, permissions: m.permissions, export: m.export, guide: files["agent.md"], versions: [{ version: m.version, files: Object.keys(files).length, size: 40000, by: "myco", at: iso(0) }],
     shots: shotsOf(Object.keys(files)), created_at: iso(0), updated_at: iso(0) };
 });

@@ -1,3 +1,5 @@
+import { themeMedia } from "../_lib/appearance";
+import { t as uiText } from "../_lib/i18n";
 // 思维导图: a tree of topics drawn to the right of the root. Each topic is a
 // record (its text and its parent); agents write a whole outline at once.
 // Tab adds a child, Enter a sibling, Delete removes a branch, drag a topic
@@ -82,7 +84,7 @@ function layout(): { laid: Map<string, Laid>; roots: string[]; kids: Map<string,
 }
 
 function useDarkMode() {
-  const q = window.matchMedia?.("(prefers-color-scheme: dark)");
+  const q = themeMedia();
   const [d, setD] = useState(!!q?.matches);
   useEffect(() => { if (!q) return; const f = () => setD(q.matches); q.addEventListener("change", f); return () => q.removeEventListener("change", f); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return d;
@@ -128,7 +130,7 @@ function App() {
     const p = String(nodes.get(id)?.data.parent || "");
     for (const k of keep) kit.track(nodes.remove(k.id));
     setSel(p || null);
-    kit.flash(`删除了 ${keep.length} 个主题`, () => { for (const k of keep) kit.track(nodes.put(k.data, k.id)); kit.note = null; kit.emit(); });
+    kit.flash(uiText("删除了 {0} 个主题", keep.length), () => { for (const k of keep) kit.track(nodes.put(k.data, k.id)); kit.note = null; kit.emit(); });
   };
   const isUnder = (x: string, anc: string): boolean => { let p = String(nodes.get(x)?.data.parent || ""); const seen = new Set<string>(); while (p && !seen.has(p)) { if (p === anc) return true; seen.add(p); p = String(nodes.get(p)?.data.parent || ""); } return false; };
 
@@ -221,8 +223,8 @@ function App() {
     const lines = [`# ${title.get() || "思维导图"}`, ""];
     const walk = (id: string, d: number) => { lines.push(`${"  ".repeat(d)}- ${String(nodes.get(id)?.data.text || "")}`); for (const k of kids.get(id) || []) walk(k, d + 1); };
     for (const r of roots) walk(r, 0);
-    try { await save(`${(title.get() || "思维导图").replace(/[\\/:*?"<>|]/g, " ")}.md`, lines.join("\n") + "\n", "text/markdown"); kit.flash("已存到「下载」"); }
-    catch (e) { kit.flash((e as Error).message || "没存下来"); }
+    try { await save(`${(title.get() || "思维导图").replace(/[\\/:*?"<>|]/g, " ")}.md`, lines.join("\n") + "\n", "text/markdown"); kit.flash(uiText("已存到「下载」")); }
+    catch (e) { kit.flash((e as Error).message || uiText("没存下来")); }
   };
 
   const edges: JSX.Element[] = [];
@@ -237,8 +239,8 @@ function App() {
   }
   return (
     <div className="app mm">
-      <Bar kit={kit} title={title.get()} placeholder="未命名思维导图" onTitle={title.set}>
-        <button type="button" className="btn" onClick={() => void exportMd()}><Download className="ico" />导出大纲</button>
+      <Bar kit={kit} title={title.get()} placeholder={uiText("未命名思维导图")} onTitle={title.set}>
+        <button type="button" className="btn" onClick={() => void exportMd()}><Download className="ico" />{uiText("导出大纲")}</button>
       </Bar>
       <div ref={stage} className={`mm-stage${dark ? " is-dark" : ""}`} onPointerDown={(e) => down(e)} onPointerMove={move} onPointerUp={up} onWheel={wheel}>
         <div className="mm-world" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})` }}>
@@ -249,7 +251,7 @@ function App() {
               <div key={l.id} className={`mm-node d${Math.min(l.depth, 2)}${sel === l.id ? " is-on" : ""}${drag?.over === l.id ? " is-target" : ""}${d ? " is-drag" : ""}`}
                 style={{ left: l.x + (d?.dx || 0), top: l.y + (d?.dy || 0), width: l.w, minHeight: l.h, ["--c" as string]: l.color }}
                 onPointerDown={(e) => down(e, l.id)} onDoubleClick={(e) => { e.stopPropagation(); setSel(l.id); setEditing(l.id); }} data-id={l.id}>
-                <Text value={l.text} editing={editing === l.id} placeholder={l.depth === 0 ? "中心主题" : "主题"}
+                <Text value={l.text} editing={editing === l.id} placeholder={l.depth === 0 ? uiText("中心主题") : uiText("主题")}
                   onDone={(v, next) => {
                     setEditing(null);
                     if (v !== l.text) put(l.id, { text: v });
@@ -257,7 +259,7 @@ function App() {
                   }} />
                 {l.kids.length > 0 && (
                   <button type="button" className={`mm-fold${l.collapsed ? " is-folded" : ""}`} onPointerDown={(e) => e.stopPropagation()}
-                    onClick={(e) => { e.stopPropagation(); put(l.id, { collapsed: !l.collapsed }); }} aria-label={l.collapsed ? "展开" : "收起"}>
+                    onClick={(e) => { e.stopPropagation(); put(l.id, { collapsed: !l.collapsed }); }} aria-label={l.collapsed ? uiText("展开") : uiText("收起")}>
                     {l.collapsed ? l.hidden : "−"}
                   </button>
                 )}
@@ -267,18 +269,18 @@ function App() {
         </div>
         {sel && !editing && (
           <div className="wb-props mm-props" onPointerDown={(e) => e.stopPropagation()}>
-            <button type="button" className="tool" onClick={() => addChild(sel)} title="Tab"><CornerDownRight className="ico" />子主题</button>
-            {String(nodes.get(sel)?.data.parent || "") && <button type="button" className="tool" onClick={() => addSibling(sel)} title="Enter"><ArrowDown className="ico" />同级主题</button>}
-            {String(nodes.get(sel)?.data.parent || "") && <button type="button" className="icon-btn" aria-label="删除" title="删除（Delete）" onClick={() => remove(sel)}><Trash2 className="ico" /></button>}
+            <button type="button" className="tool" onClick={() => addChild(sel)} title="Tab"><CornerDownRight className="ico" />{uiText("子主题")}</button>
+            {String(nodes.get(sel)?.data.parent || "") && <button type="button" className="tool" onClick={() => addSibling(sel)} title="Enter"><ArrowDown className="ico" />{uiText("同级主题")}</button>}
+            {String(nodes.get(sel)?.data.parent || "") && <button type="button" className="icon-btn" aria-label={uiText("删除")} title={uiText("删除（Delete）")} onClick={() => remove(sel)}><Trash2 className="ico" /></button>}
           </div>
         )}
         <div className="wb-zoom" onPointerDown={(e) => e.stopPropagation()}>
-          <button type="button" aria-label="缩小" onClick={() => zoom(1 / 1.2)}><Minus className="ico" /></button>
+          <button type="button" aria-label={uiText("缩小")} onClick={() => zoom(1 / 1.2)}><Minus className="ico" /></button>
           <button type="button" className="wb-k" onClick={() => setView((v) => ({ ...v, k: 1 }))}>{Math.round(view.k * 100)}%</button>
-          <button type="button" aria-label="放大" onClick={() => zoom(1.2)}><Plus className="ico" /></button>
-          <button type="button" aria-label="适应画面" title="适应画面" onClick={fit}><Maximize className="ico" /></button>
+          <button type="button" aria-label={uiText("放大")} onClick={() => zoom(1.2)}><Plus className="ico" /></button>
+          <button type="button" aria-label={uiText("适应画面")} title={uiText("适应画面")} onClick={fit}><Maximize className="ico" /></button>
         </div>
-        <div className="mm-help">选中一个主题：Tab 加子主题，Enter 加同级，空格折叠，Delete 删除；拖到另一个主题上就挪过去</div>
+        <div className="mm-help">{uiText("选中一个主题：Tab 加子主题，Enter 加同级，空格折叠，Delete 删除；拖到另一个主题上就挪过去")}</div>
       </div>
       <Toast kit={kit} />
     </div>

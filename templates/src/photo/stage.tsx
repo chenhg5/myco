@@ -1,3 +1,4 @@
+import { t as uiText } from "../_lib/i18n";
 // The photo in the middle: rendered to fit, and what you do on it — crop
 // (a box with handles over the whole photo), pens and mosaic (strokes
 // follow the pointer), text and stickers (pick one, drag it, turn and size
@@ -301,8 +302,8 @@ export function Stage(p: Props) {
         <div className="ph-sel" style={{ left: selBox.x - selBox.w / 2, top: selBox.y - selBox.h / 2, width: selBox.w, height: selBox.h, transform: `rotate(${selBox.rot}deg)` }}
           onPointerDown={(e) => startDrag(e, selLayer, "move")} onPointerMove={onLayerMove} onPointerUp={onLayerUp} onPointerCancel={onLayerUp}
           onDoubleClick={() => { if (selLayer.type === "text") p.onEditText(selLayer.id); }}>
-          <button type="button" className="ph-sel-x" aria-label="删除" title="删除" onPointerDown={(e) => e.stopPropagation()} onClick={() => p.onRemoveLayer(selLayer.id)}><X className="ico" /></button>
-          <span className="ph-sel-turn" aria-label="旋转和缩放" title="拖动：旋转、缩放"
+          <button type="button" className="ph-sel-x" aria-label={uiText("删除")} title={uiText("删除")} onPointerDown={(e) => e.stopPropagation()} onClick={() => p.onRemoveLayer(selLayer.id)}><X className="ico" /></button>
+          <span className="ph-sel-turn" aria-label={uiText("旋转和缩放")} title={uiText("拖动：旋转、缩放")}
             onPointerDown={(e) => startDrag(e, selLayer, "turn")} onPointerMove={onLayerMove} onPointerUp={onLayerUp} onPointerCancel={onLayerUp}><RotateCw className="ico" /></span>
         </div>
       )}

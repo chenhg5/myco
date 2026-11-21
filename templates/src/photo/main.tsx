@@ -1,3 +1,4 @@
+import { t as uiText } from "../_lib/i18n";
 // 修图: quick photo editing — crop, colours, filters, portrait retouch,
 // text, stickers, pens, mosaic and frames — in the page, with nothing of
 // the computer needed. The photos stay on the computer that opened them;
@@ -34,11 +35,11 @@ function useNarrow() {
 /** Imports image files: kept here, and a photo for each (or the one there is, found again). */
 async function importFiles(files: File[], onPick: (id: string) => void) {
   const images = files.filter(isImage);
-  if (!images.length) { kit.flash("这不是图片"); return; }
+  if (!images.length) { kit.flash(uiText("这不是图片")); return; }
   let last = "";
   for (const f of images) {
     const l = await keep(f).catch(() => null);
-    if (!l) { kit.flash(`读不了 ${f.name}：这台电脑的浏览器不认识这种图片`); continue; }
+    if (!l) { kit.flash(uiText("读不了 {0}：这台电脑的浏览器不认识这种图片", f.name)); continue; }
     const had = photos.rows.find((r) => r.data.key === l.key);
     if (had) { last = had.id; continue; }
     last = addPhoto({ name: f.name || "图片", key: l.key, width: l.width, height: l.height, poster: posterOf(l.view, l.width, l.height), by: kit.me });
@@ -140,11 +141,11 @@ function App() {
         {hidden}
         <div className="ph-empty">
           <div className="ph-empty-art" aria-hidden><Sparkles className="ph-empty-ico" strokeWidth={1.4} /></div>
-          <h1>修图</h1>
-          <p>裁剪、调色、滤镜、磨皮美白、文字、贴纸、涂鸦、马赛克、边框，改了随时能退回去。</p>
-          <button type="button" className="btn btn-primary ph-big" onClick={open}><ImagePlus className="ico" />选择照片</button>
-          <span className="ph-empty-or">也可以把照片拖进来，或者直接粘贴</span>
-          <span className="ph-empty-note">照片只存在这台电脑上，hub 只记一张小图和你做了哪些修改。</span>
+          <h1>{uiText("修图")}</h1>
+          <p>{uiText("裁剪、调色、滤镜、磨皮美白、文字、贴纸、涂鸦、马赛克、边框，改了随时能退回去。")}</p>
+          <button type="button" className="btn btn-primary ph-big" onClick={open}><ImagePlus className="ico" />{uiText("选择照片")}</button>
+          <span className="ph-empty-or">{uiText("也可以把照片拖进来，或者直接粘贴")}</span>
+          <span className="ph-empty-note">{uiText("照片只存在这台电脑上，hub 只记一张小图和你做了哪些修改。")}</span>
         </div>
         <Toast kit={kit} />
       </div>
@@ -162,7 +163,7 @@ function App() {
     : <FramePanel id={id} photo={photo} />;
 
   const rail = (
-    <nav className="ph-rail" aria-label="工具">
+    <nav className="ph-rail" aria-label={uiText("工具")}>
       {TOOLS.map(([m, name, I]) => (
         <button key={m} type="button" className={`ph-tool${mode === m ? " is-on" : ""}`} aria-pressed={mode === m} onClick={() => chooseMode(m)} disabled={!local}>
           <I className="ico" strokeWidth={1.7} /><span>{name}</span>
@@ -175,18 +176,18 @@ function App() {
     <div className={`app ph-app${narrow ? " is-narrow" : ""}${dragOver ? " is-drop" : ""}`} {...dropProps}>
       {hidden}
       <header className="top ph-top">
-        <span className="ph-name" title={photo.name}>{photo.name || "图片"}</span>
+        <span className="ph-name" title={photo.name}>{photo.name || uiText("图片")}</span>
         <span className="ph-dims">{num(photo.width, 0)} × {num(photo.height, 0)}</span>
-        <span className={`top-state is-${kit.pending ? "saving" : kit.failed ? "error" : "saved"}`}>{kit.pending ? "正在保存…" : kit.failed ? "没保存上" : edited(photo) ? "已保存" : ""}</span>
+        <span className={`top-state is-${kit.pending ? "saving" : kit.failed ? "error" : "saved"}`}>{kit.pending ? uiText("正在保存…") : kit.failed ? uiText("没保存上") : edited(photo) ? uiText("已保存") : ""}</span>
         <span className="top-gap" />
-        <button type="button" className="icon-btn" aria-label="撤销" title="撤销 (⌘Z)" disabled={!canUndo()} onClick={undo}><Undo2 className="ico" /></button>
-        <button type="button" className="icon-btn" aria-label="重做" title="重做 (⇧⌘Z)" disabled={!canRedo()} onClick={redo}><Redo2 className="ico" /></button>
-        <button type="button" className={`tool ph-compare${compare ? " is-on" : ""}`} disabled={!local || !edited(photo)} title="按住看原图"
+        <button type="button" className="icon-btn" aria-label={uiText("撤销")} title={uiText("撤销 (⌘Z)")} disabled={!canUndo()} onClick={undo}><Undo2 className="ico" /></button>
+        <button type="button" className="icon-btn" aria-label={uiText("重做")} title={uiText("重做 (⇧⌘Z)")} disabled={!canRedo()} onClick={redo}><Redo2 className="ico" /></button>
+        <button type="button" className={`tool ph-compare${compare ? " is-on" : ""}`} disabled={!local || !edited(photo)} title={uiText("按住看原图")}
           onPointerDown={() => setCompare(true)} onPointerUp={() => setCompare(false)} onPointerLeave={() => setCompare(false)} onKeyDown={(e) => { if (e.key === " ") setCompare(true); }} onKeyUp={() => setCompare(false)}>
-          <Eye className="ico" />{narrow ? "" : "对比原图"}
+          <Eye className="ico" />{narrow ? "" : uiText("对比原图")}
         </button>
-        <button type="button" className="tool" disabled={!edited(photo)} onClick={() => { reset(id); setSel(null); kit.flash("已回到原图", undo); }}><RotateCcw className="ico" />{narrow ? "" : "还原"}</button>
-        <button type="button" className="btn btn-primary" disabled={!local} onClick={(e) => setExporting(rectOf(e.currentTarget))}><Download className="ico" />导出</button>
+        <button type="button" className="tool" disabled={!edited(photo)} onClick={() => { reset(id); setSel(null); kit.flash(uiText("已回到原图"), undo); }}><RotateCcw className="ico" />{narrow ? "" : uiText("还原")}</button>
+        <button type="button" className="btn btn-primary" disabled={!local} onClick={(e) => setExporting(rectOf(e.currentTarget))}><Download className="ico" />{uiText("导出")}</button>
       </header>
       <div className="ph-body">
         {!narrow && rail}
@@ -202,14 +203,14 @@ function App() {
           ) : (
             <Missing photo={photo} onOpen={open} />
           )}
-          {compare && <span className="ph-badge">原图</span>}
+          {compare && <span className="ph-badge">{uiText("原图")}</span>}
         </main>
         {narrow && local && <div className="ph-under">{panel}</div>}
         {narrow && rail}
       </div>
       <Strip cur={id} onPick={pick} onAdd={open} />
       {exporting && local && <ExportBox at={exporting} photo={photo} local={local} onClose={() => setExporting(null)} />}
-      {dragOver && <div className="ph-drop"><ImagePlus className="ph-drop-ico" strokeWidth={1.4} />松开，加进来</div>}
+      {dragOver && <div className="ph-drop"><ImagePlus className="ph-drop-ico" strokeWidth={1.4} />{uiText("松开，加进来")}</div>}
       <Toast kit={kit} />
     </div>
   );
@@ -220,9 +221,9 @@ function Missing({ photo, onOpen }: { photo: Photo; onOpen: () => void }) {
     <div className="ph-missing">
       {photo.poster && <img src={photo.poster} alt="" />}
       <div className="ph-missing-box">
-        <b>原图不在这台电脑上</b>
-        <span>{photo.by ? `它是 ${photo.by} 加的。` : ""}把同一张照片（{photo.name || "图片"}）选进来或拖进来，就能接着修。</span>
-        <button type="button" className="btn btn-primary" onClick={onOpen}><ImagePlus className="ico" />选择照片</button>
+        <b>{uiText("原图不在这台电脑上")}</b>
+        <span>{photo.by ? uiText("它是 {0} 加的。", photo.by) : ""}{uiText("把同一张照片（")}{photo.name || uiText("图片")}{uiText("）选进来或拖进来，就能接着修。")}</span>
+        <button type="button" className="btn btn-primary" onClick={onOpen}><ImagePlus className="ico" />{uiText("选择照片")}</button>
       </div>
     </div>
   );
@@ -230,16 +231,16 @@ function Missing({ photo, onOpen }: { photo: Photo; onOpen: () => void }) {
 
 function Strip({ cur, onPick, onAdd }: { cur: string; onPick: (id: string) => void; onAdd: () => void }) {
   return (
-    <div className="ph-strip" role="listbox" aria-label="这一页的照片">
+    <div className="ph-strip" role="listbox" aria-label={uiText("这一页的照片")}>
       {photos.rows.map((r) => (
         <div key={r.id} className={`ph-thumb${r.id === cur ? " is-on" : ""}${localFor(r.data.key) ? "" : " is-away"}`} role="option" aria-selected={r.id === cur}
           title={r.data.name} onClick={() => onPick(r.id)}>
           {r.data.poster ? <img src={r.data.poster} alt="" /> : <span />}
-          <button type="button" className="ph-thumb-x" aria-label="从这一页移走" title="从这一页移走"
-            onClick={(e) => { e.stopPropagation(); removePhoto(r.id); kit.flash(`已移走 ${r.data.name || "图片"}`, undo); }}><Trash2 className="ico" /></button>
+          <button type="button" className="ph-thumb-x" aria-label={uiText("从这一页移走")} title={uiText("从这一页移走")}
+            onClick={(e) => { e.stopPropagation(); removePhoto(r.id); kit.flash(uiText("已移走 {0}", r.data.name || "图片"), undo); }}><Trash2 className="ico" /></button>
         </div>
       ))}
-      <button type="button" className="ph-thumb is-add" onClick={onAdd} aria-label="加照片" title="加照片"><ImagePlus className="ico" /></button>
+      <button type="button" className="ph-thumb is-add" onClick={onAdd} aria-label={uiText("加照片")} title={uiText("加照片")}><ImagePlus className="ico" /></button>
     </div>
   );
 }
@@ -268,31 +269,31 @@ function ExportBox({ at, photo, local, onClose }: { at: { x: number; y: number; 
     try {
       const r = new Renderer().render(local.full, local.key + ":full", rc, local.width, local.height, { max: Math.max(cw, ch) * k, fill: fmt === "jpeg" ? "#ffffff" : undefined });
       const blob = await new Promise<Blob | null>((res) => r.canvas.toBlob(res, `image/${fmt}`, quality / 100));
-      if (!blob) throw new Error("没导出来");
+      if (!blob) throw new Error(uiText("没导出来"));
       const base = (photo.name || "图片").replace(/\.[^.]+$/, "");
       const saved = await save(`${base}-修图.${fmt === "jpeg" ? "jpg" : "png"}`, blob, `image/${fmt}`);
-      kit.flash(`已存到 ${saved?.path || "下载"}`);
+      kit.flash(uiText("已存到 {0}", saved?.path || "下载"));
       onClose();
     } catch (e) {
-      kit.flash((e as Error)?.message || "没导出来");
+      kit.flash((e as Error)?.message || uiText("没导出来"));
     } finally { setBusy(false); }
   };
   return (
     <Popover at={at} onClose={onClose} align="right" width={272} className="ph-export">
       <div className="ph-export-in">
-        <div className="ph-label">格式</div>
+        <div className="ph-label">{uiText("格式")}</div>
         <div className="seg ph-seg">
           <button type="button" className={fmt === "jpeg" ? "is-on" : ""} onClick={() => setFmt("jpeg")}>JPG</button>
           <button type="button" className={fmt === "png" ? "is-on" : ""} onClick={() => setFmt("png")}>PNG</button>
         </div>
-        <div className="ph-label">尺寸</div>
+        <div className="ph-label">{uiText("尺寸")}</div>
         <div className="seg ph-seg">
           {SIZES.map((s) => <button key={s.id} type="button" className={size === s.id ? "is-on" : ""} onClick={() => setSize(s.id)}>{s.name}</button>)}
         </div>
-        <span className="ph-export-dims">{Math.round(cw * k)} × {Math.round(ch * k)}{rc.frame ? "（加上边框）" : ""}</span>
-        {fmt === "jpeg" && <Slider label="画质" value={quality} min={50} max={100} onChange={setQuality} />}
+        <span className="ph-export-dims">{Math.round(cw * k)} × {Math.round(ch * k)}{rc.frame ? uiText("（加上边框）") : ""}</span>
+        {fmt === "jpeg" && <Slider label={uiText("画质")} value={quality} min={50} max={100} onChange={setQuality} />}
         <button type="button" className="btn btn-primary ph-export-go" disabled={busy} onClick={go}>
-          {busy ? <Loader2 className="ico spin" /> : <Download className="ico" />}{busy ? "正在导出…" : "存到下载"}
+          {busy ? <Loader2 className="ico spin" /> : <Download className="ico" />}{busy ? uiText("正在导出…") : uiText("存到下载")}
         </button>
       </div>
     </Popover>

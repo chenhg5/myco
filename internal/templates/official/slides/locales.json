@@ -1,0 +1,10 @@
+{
+  "en": {
+    "name": "Slides",
+    "description": "Create presentations with covers, key points, charts, cards, tables and quotes. Edit on the slide, reorder, present full screen and export editable PowerPoint."
+  },
+  "zh": {
+    "name": "幻灯片",
+    "description": "agent 写内容，网页按版式和主题排好：封面、要点、图表、数字卡片、表格、引言；点哪改哪，拖动换顺序，全屏放映，导出能接着改的 PowerPoint。"
+  }
+}

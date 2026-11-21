@@ -1,3 +1,4 @@
+import { t as uiText } from "../_lib/i18n";
 // 会议记录: record a meeting held in any app (Zoom, 腾讯会议, 飞书…) as two
 // tracks — "me" (the microphone) and "them" (what the computer plays) —
 // then transcribe it on this computer and read, play and fix the text.
@@ -32,8 +33,8 @@ import { Player } from "./player";
 // speech.*, mediaURL: myco after 0.21.7); in an older one, or outside the
 // App, the page shows and edits the text only.
 const canUse = osState === "ready" && typeof (myco?.os as unknown as { mediaURL?: unknown } | undefined)?.mediaURL === "function";
-const notice = osState !== "ready" ? `${osStateText()} 录音和转写要在 myco App 里；这里能看和改文字。`
-  : !canUse ? "这个版本的 myco App 还不能录音和转写，更新 App 后就能用；这里能看和改文字。" : "";
+const notice = osState !== "ready" ? `${osStateText()} ${uiText("录音和转写要在 myco App 里；这里能看和改文字。")}`
+  : !canUse ? uiText("这个版本的 myco App 还不能录音和转写，更新 App 后就能用；这里能看和改文字。") : "";
 const TRACKS: Track[] = ["them", "me"];
 
 function App() {
@@ -57,15 +58,15 @@ function App() {
     <div className="app mt-app">
       <aside className="mt-side">
         <div className="mt-side-head">
-          <span className="mt-side-title">会议记录</span>
+          <span className="mt-side-title">{uiText("会议记录")}</span>
         </div>
-        <div className="mt-list" role="listbox" aria-label="会议">
+        <div className="mt-list" role="listbox" aria-label={uiText("会议")}>
           {!live && (
             <button type="button" role="option" aria-selected={!cur} className={`mt-item is-new${!cur ? " is-on" : ""}`} onClick={() => setSel("new")}>
-              <span className="mt-item-ico"><Mic className="ico" /></span><b>新录音</b>
+              <span className="mt-item-ico"><Mic className="ico" /></span><b>{uiText("新录音")}</b>
             </button>
           )}
-          {list.length > 0 && <div className="mt-list-label">会议</div>}
+          {list.length > 0 && <div className="mt-list-label">{uiText("会议")}</div>}
           {list.map((r) => {
             const m = r.data;
             const isLive = live === r.id;
@@ -73,11 +74,11 @@ function App() {
             return (
               <button key={r.id} type="button" role="option" aria-selected={sel === r.id} className={`mt-item${sel === r.id ? " is-on" : ""}`} onClick={() => setSel(r.id)}>
                 <span className="mt-item-text">
-                  <b>{m.title || "会议"}</b>
+                  <b>{m.title || uiText("会议")}</b>
                   <span>
-                    {isLive ? <><i className="dot is-rec" />录音中 · {clock(recording!.seconds)}</>
-                      : tx ? <><i className="dot is-work" />转写中</>
-                      : <>{when(m.started_at)}{num(m.seconds) ? ` · ${length(num(m.seconds))}` : ""}{m.status === "recorded" ? " · 没转写" : m.status === "failed" ? " · 转写没成" : ""}</>}
+                    {isLive ? <><i className="dot is-rec" />{uiText("录音中 ·")}{" "}{clock(recording!.seconds)}</>
+                      : tx ? <><i className="dot is-work" />{uiText("转写中")}</>
+                      : <>{when(m.started_at)}{num(m.seconds) ? ` · ${length(num(m.seconds))}` : ""}{m.status === "recorded" ? uiText(" · 没转写") : m.status === "failed" ? uiText(" · 转写没成") : ""}</>}
                   </span>
                 </span>
               </button>
@@ -129,44 +130,42 @@ function NewRecording({ computer, onStarted }: { computer: string; onStarted: (i
     <div className="mt-page">
       <div className="mt-page-in">
         <header className="mt-page-head">
-          <h1>新录音</h1>
-          <p>开会时录下你说的和别人说的，结束后在这台电脑上转成文字，录音不上传。</p>
+          <h1>{uiText("新录音")}</h1>
+          <p>{uiText("开会时录下你说的和别人说的，结束后在这台电脑上转成文字，录音不上传。")}</p>
         </header>
-        {lastRecordError && <div className="mt-alert is-err"><span className="mt-alert-grow"><b>没录上：</b>{lastRecordError}</span><button type="button" className="icon-btn" aria-label="关掉" onClick={clearRecordError}><X className="ico" /></button></div>}
+        {lastRecordError && <div className="mt-alert is-err"><span className="mt-alert-grow"><b>{uiText("没录上：")}</b>{lastRecordError}</span><button type="button" className="icon-btn" aria-label={uiText("关掉")} onClick={clearRecordError}><X className="ico" /></button></div>}
 
         <section className="mt-group">
-          <div className="mt-group-title">我</div>
+          <div className="mt-group-title">{uiText("我")}</div>
           <label className="mt-row">
             <span className="mt-row-ico"><Mic className="ico" /></span>
-            <span className="mt-row-text"><b>麦克风</b><span>你说的话</span></span>
-            <Switch on={me} onChange={setMe} disabled={!canUse} label="录麦克风" />
+            <span className="mt-row-text"><b>{uiText("麦克风")}</b><span>{uiText("你说的话")}</span></span>
+            <Switch on={me} onChange={setMe} disabled={!canUse} label={uiText("录麦克风")} />
           </label>
         </section>
 
         <section className="mt-group">
           <div className="mt-group-title">
-            别人
-            <button type="button" className="mt-link" onClick={() => void load()} title="会议开始后，会议软件才会出现在这里"><RefreshCw className="ico" />刷新</button>
+            {uiText("别人")}{" "}<button type="button" className="mt-link" onClick={() => void load()} title={uiText("会议开始后，会议软件才会出现在这里")}><RefreshCw className="ico" />{uiText("刷新")}</button>
           </div>
-          <div className="mt-choices" role="radiogroup" aria-label="别人的声音">
+          <div className="mt-choices" role="radiogroup" aria-label={uiText("别人的声音")}>
             {system && <Choice id="system" on={them === "system"} onPick={setThem} icon={<Monitor className="ico" />} name="电脑的全部声音" sub="所有应用放出的声音" />}
             {apps.map((a) => <Choice key={a.id} id={a.id} on={them === a.id} onPick={setThem} icon={<AppWindow className="ico" />} name={a.name} sub={a.playing ? "正在出声" : "只录这个应用"} live={a.playing} />)}
             <Choice id="none" on={them === "none"} onPick={setThem} icon={<CircleSlash className="ico" />} name="不录" sub="只录麦克风" />
           </div>
           {why && <p className="mt-hint">{why}</p>}
-          {sources && !system && !why && <p className="mt-hint">这台电脑录不了电脑放出的声音（macOS 14.2 起才行），可以只录麦克风。</p>}
+          {sources && !system && !why && <p className="mt-hint">{uiText("这台电脑录不了电脑放出的声音（macOS 14.2 起才行），可以只录麦克风。")}</p>}
         </section>
 
         <section className="mt-group">
-          <div className="mt-group-title">转写</div>
+          <div className="mt-group-title">{uiText("转写")}</div>
           <SpeechRow />
         </section>
 
         <div className="mt-start">
           <button type="button" className="btn btn-primary mt-go" disabled={!canUse || busy || (!me && them === "none")} onClick={() => void go()}>
-            {busy ? <Loader2 className="ico spin" /> : <i className="dot is-rec" />}开始录音
-          </button>
-          <p className="mt-hint">录别人之前，先告诉参会的人。录音时可以收起网页面板；关掉网页会停止录音。</p>
+            {busy ? <Loader2 className="ico spin" /> : <i className="dot is-rec" />}{uiText("开始录音")}{" "}</button>
+          <p className="mt-hint">{uiText("录别人之前，先告诉参会的人。录音时可以收起网页面板；关掉网页会停止录音。")}</p>
         </div>
       </div>
     </div>
@@ -200,23 +199,23 @@ function SpeechRow() {
       <div className="mt-row is-static">
         <span className="mt-row-ico"><Loader2 className="ico spin" /></span>
         <span className="mt-row-text">
-          <b>{installing.unpacking ? `正在解开${what}` : `正在下载${what}`}</b>
-          <span>{installing.total && !installing.unpacking ? `${formatBytes(installing.received)} / ${formatBytes(installing.total)}` : "请稍候"}</span>
+          <b>{installing.unpacking ? uiText("正在解开{0}", what) : uiText("正在下载{0}", what)}</b>
+          <span>{installing.total && !installing.unpacking ? `${formatBytes(installing.received)} / ${formatBytes(installing.total)}` : uiText("请稍候")}</span>
           <i className="mt-progress"><i style={{ width: `${installing.unpacking ? 100 : pct}%` }} /></i>
         </span>
       </div>
     );
   }
-  if (!speech) return <div className="mt-row is-static"><span className="mt-row-ico"><Loader2 className="ico spin" /></span><span className="mt-row-text"><span>正在看转写装好了没有</span></span></div>;
+  if (!speech) return <div className="mt-row is-static"><span className="mt-row-ico"><Loader2 className="ico spin" /></span><span className="mt-row-text"><span>{uiText("正在看转写装好了没有")}</span></span></div>;
   if (speech.ready) {
     return (
       <div className="mt-row is-static">
         <span className="mt-row-ico"><Check className="ico" /></span>
         <span className="mt-row-text">
-          <b>本机转写</b>
-          <span>{speech.diarize ? "SenseVoice · 中英粤日韩 · 录完自动转，自动分出不同的人" : installError ? <em className="is-err">没下成：{installError}</em> : "SenseVoice · 中英粤日韩 · 分出不同的人还要再下载约 35 MB"}</span>
+          <b>{uiText("本机转写")}</b>
+          <span>{speech.diarize ? uiText("SenseVoice · 中英粤日韩 · 录完自动转，自动分出不同的人") : installError ? <em className="is-err">{uiText("没下成：")}{installError}</em> : uiText("SenseVoice · 中英粤日韩 · 分出不同的人还要再下载约 35 MB")}</span>
         </span>
-        {!speech.diarize && <button type="button" className="btn" onClick={() => void installSpeech()}>下载</button>}
+        {!speech.diarize && <button type="button" className="btn" onClick={() => void installSpeech()}>{uiText("下载")}</button>}
       </div>
     );
   }
@@ -225,10 +224,10 @@ function SpeechRow() {
     <div className="mt-row is-static">
       <span className="mt-row-ico"><Download className="ico" /></span>
       <span className="mt-row-text">
-        <b>先下载转写模型</b>
-        <span>{installError ? <em className="is-err">没下成：{installError}</em> : `约 ${size} MB，只下一次，之后都在这台电脑上转`}</span>
+        <b>{uiText("先下载转写模型")}</b>
+        <span>{installError ? <em className="is-err">{uiText("没下成：")}{installError}</em> : uiText("约 {0} MB，只下一次，之后都在这台电脑上转", size)}</span>
       </span>
-      <button type="button" className="btn" onClick={() => void installSpeech()}>{installError ? "再试一次" : "下载"}</button>
+      <button type="button" className="btn" onClick={() => void installSpeech()}>{installError ? uiText("再试一次") : uiText("下载")}</button>
     </div>
   );
 }
@@ -269,27 +268,26 @@ function RecordingView({ id }: { id: string }) {
   const tracks = TRACKS.filter((t) => m.sources?.[t]);
   return (
     <div className="mt-rec">
-      <span className={`mt-pill${r.paused ? " is-paused" : ""}`}><i className="dot is-rec" />{r.stopping ? "正在结束" : r.paused ? "已暂停" : "录音中"}</span>
+      <span className={`mt-pill${r.paused ? " is-paused" : ""}`}><i className="dot is-rec" />{r.stopping ? uiText("正在结束") : r.paused ? uiText("已暂停") : uiText("录音中")}</span>
       <div className="mt-clock">{clock(r.seconds)}</div>
       <TitleInput id={id} m={m} center />
       <div className="mt-tracks">
         {tracks.map((t) => (
           <div key={t} className="mt-track">
-            <span className="mt-track-who"><Face m={m} t={t} />{speakerName(m, t)}<em>{t === "me" ? "麦克风" : m.source_name || "电脑的声音"}</em></span>
+            <span className="mt-track-who"><Face m={m} t={t} />{speakerName(m, t)}<em>{t === "me" ? uiText("麦克风") : m.source_name || uiText("电脑的声音")}</em></span>
             <Wave peaks={r.levels[t] || []} />
-            {(r.quiet[t] || 0) > 20 && <span className="mt-track-quiet">{t === "them" ? "一直没有声音：会议在出声吗？" : "一直没有声音：麦克风打开了吗？"}</span>}
+            {(r.quiet[t] || 0) > 20 && <span className="mt-track-quiet">{t === "them" ? uiText("一直没有声音：会议在出声吗？") : uiText("一直没有声音：麦克风打开了吗？")}</span>}
           </div>
         ))}
       </div>
       <div className="mt-rec-acts">
         <button type="button" className="btn mt-big" onClick={() => pauseRecording(!r.paused)} disabled={r.stopping}>
-          {r.paused ? <><Play className="ico" />继续</> : <><Pause className="ico" />暂停</>}
+          {r.paused ? <><Play className="ico" />{uiText("继续")}</> : <><Pause className="ico" />{uiText("暂停")}</>}
         </button>
         <button type="button" className="btn btn-primary mt-big" onClick={stopRecording} disabled={r.stopping}>
-          {r.stopping ? <Loader2 className="ico spin" /> : <Square className="ico is-fill" />}结束录音
-        </button>
+          {r.stopping ? <Loader2 className="ico spin" /> : <Square className="ico is-fill" />}{uiText("结束录音")}{" "}</button>
       </div>
-      <p className="mt-hint">结束后在这台电脑上转成文字{speech?.ready ? "" : "（先在「新录音」里下载转写模型）"}。可以收起网页面板，关掉网页会停止录音。</p>
+      <p className="mt-hint">{uiText("结束后在这台电脑上转成文字")}{speech?.ready ? "" : uiText("（先在「新录音」里下载转写模型）")}{uiText("。可以收起网页面板，关掉网页会停止录音。")}</p>
     </div>
   );
 }
@@ -298,7 +296,7 @@ function TitleInput({ id, m, center }: { id: string; m: Meeting; center?: boolea
   const [v, setV] = useState<string | null>(null);
   const t = useRef(0);
   return (
-    <input className={`mt-title${center ? " is-center" : ""}`} value={v ?? m.title ?? ""} placeholder="会议" aria-label="会议名称" maxLength={120}
+    <input className={`mt-title${center ? " is-center" : ""}`} value={v ?? m.title ?? ""} placeholder={uiText("会议")} aria-label={uiText("会议名称")} maxLength={120}
       onChange={(e) => {
         const val = e.target.value;
         setV(val);
@@ -438,11 +436,11 @@ function MeetingView({ id, host, onDeleted }: { id: string; host: string; onDele
         : `${m.title || "会议"}\n${when(m.started_at)} · ${length(num(m.seconds))}\n\n` + all.map((p) => `${speakerName(m, p.track)}  ${clock(p.start)}\n${text(p)}`).join("\n\n") + "\n";
     }
     const r = await save(`${name}.${kind}`, out, kind === "md" ? "text/markdown" : "text/plain").catch((e: Error) => { kit.flash(e.message); return null; });
-    if (r) kit.flash(`已存到 ${r.path}`);
+    if (r) kit.flash(uiText("已存到 {0}", r.path));
   };
   const remove = async () => {
     setMenu(null);
-    if (!window.confirm(`删除「${m.title || "会议"}」和它的文字稿？${here ? "录音会移进废纸篓。" : ""}`)) return;
+    if (!window.confirm(uiText("删除「{0}」和它的文字稿？{1}", m.title || "会议", here ? "录音会移进废纸篓。" : ""))) return;
     stopTranscribing();
     for (const s of segs) await segments.remove(s.id).catch(() => undefined);
     await meetings.remove(id).catch(() => undefined);
@@ -457,27 +455,27 @@ function MeetingView({ id, host, onDeleted }: { id: string; host: string; onDele
         <div className="mt-bar-main">
           <TitleInput id={id} m={m} />
           <span className="mt-meta">
-            {when(m.started_at)} · {length(num(m.seconds))}{m.source_name ? ` · ${m.source_name}` : ""}{m.computer && m.computer !== host ? ` · 录在 ${m.computer}` : ""}
+            {when(m.started_at)} · {length(num(m.seconds))}{m.source_name ? ` · ${m.source_name}` : ""}{m.computer && m.computer !== host ? uiText(" · 录在 {0}", m.computer) : ""}
           </span>
         </div>
         {searching || q ? (
           <div className="mt-find">
             <Search className="ico" />
-            <input ref={searchBox} autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索文字稿" aria-label="搜索文字稿"
+            <input ref={searchBox} autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder={uiText("搜索文字稿")} aria-label={uiText("搜索文字稿")}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && hits.length) { e.preventDefault(); setHit((h) => (e.shiftKey ? (h - 1 + hits.length) % hits.length : (h + 1) % hits.length)); }
                 if (e.key === "Escape") { setQuery(""); setSearching(false); }
               }} />
             {q && <span className="mt-find-n">{hits.length ? `${Math.min(hit, hits.length - 1) + 1}/${hits.length}` : "0"}</span>}
-            <button type="button" className="icon-btn" aria-label="上一处" disabled={!hits.length} onClick={() => setHit((h) => (h - 1 + hits.length) % hits.length)}><ArrowUp className="ico" /></button>
-            <button type="button" className="icon-btn" aria-label="下一处" disabled={!hits.length} onClick={() => setHit((h) => (h + 1) % hits.length)}><ArrowDown className="ico" /></button>
-            <button type="button" className="icon-btn" aria-label="关掉搜索" onClick={() => { setQuery(""); setSearching(false); }}><X className="ico" /></button>
+            <button type="button" className="icon-btn" aria-label={uiText("上一处")} disabled={!hits.length} onClick={() => setHit((h) => (h - 1 + hits.length) % hits.length)}><ArrowUp className="ico" /></button>
+            <button type="button" className="icon-btn" aria-label={uiText("下一处")} disabled={!hits.length} onClick={() => setHit((h) => (h + 1) % hits.length)}><ArrowDown className="ico" /></button>
+            <button type="button" className="icon-btn" aria-label={uiText("关掉搜索")} onClick={() => { setQuery(""); setSearching(false); }}><X className="ico" /></button>
           </div>
         ) : (
-          <button type="button" className="icon-btn" aria-label="搜索" title="搜索（⌘F）" onClick={() => setSearching(true)}><Search className="ico" /></button>
+          <button type="button" className="icon-btn" aria-label={uiText("搜索")} title={uiText("搜索（⌘F）")} onClick={() => setSearching(true)}><Search className="ico" /></button>
         )}
-        <button type="button" className={`tool${notesOpen ? " is-on" : ""}`} aria-pressed={notesOpen} onClick={() => setNotesOpen(!notesOpen)} title="纪要"><PanelRight className="ico" />纪要</button>
-        <button type="button" className="icon-btn" aria-label="更多" onClick={(e) => setMenu(rectOf(e.currentTarget))}><MoreHorizontal className="ico" /></button>
+        <button type="button" className={`tool${notesOpen ? " is-on" : ""}`} aria-pressed={notesOpen} onClick={() => setNotesOpen(!notesOpen)} title={uiText("纪要")}><PanelRight className="ico" />{uiText("纪要")}</button>
+        <button type="button" className="icon-btn" aria-label={uiText("更多")} onClick={(e) => setMenu(rectOf(e.currentTarget))}><MoreHorizontal className="ico" /></button>
         {split && (
           <Popover at={split} onClose={() => setSplit(null)} align="right">
             <div className="menu mt-split">
@@ -485,11 +483,11 @@ function MeetingView({ id, host, onDeleted }: { id: string; host: string; onDele
                 const cur = t === "me" ? m.mic_voices : m.voices;
                 return (
                   <div key={t} className="mt-split-row">
-                    <div className="mt-menu-label">{t === "me" ? "麦克风这边有几个人？" : "别人里有几个人？"}</div>
+                    <div className="mt-menu-label">{t === "me" ? uiText("麦克风这边有几个人？") : uiText("别人里有几个人？")}</div>
                     <div className="mt-split-opts">
                       {[0, 1, 2, 3, 4, 5, 6].map((n) => (
                         <button key={n} type="button" className={`mt-split-n${n && n === cur ? " is-on" : ""}`} onClick={() => { setSplit(null); void splitVoices(id, t, n); }}>
-                          {n ? n : "自动"}
+                          {n ? n : uiText("自动")}
                         </button>
                       ))}
                     </div>
@@ -502,16 +500,16 @@ function MeetingView({ id, host, onDeleted }: { id: string; host: string; onDele
         {menu && (
           <Popover at={menu} onClose={() => setMenu(null)} align="right">
             <div className="menu">
-              <button type="button" className="menu-item" disabled={!segs.length} onClick={() => void exportAs("txt")}><Download className="ico" />导出文字稿</button>
-              <button type="button" className="menu-item" disabled={!segs.length} onClick={() => void exportAs("md")}><Download className="ico" />导出 Markdown</button>
-              <button type="button" className="menu-item" disabled={!segs.length} onClick={() => void exportAs("srt")}><Download className="ico" />导出字幕（SRT）</button>
-              {here && m.dir && <button type="button" className="menu-item" onClick={() => { setMenu(null); void os().fs.reveal({ path: m.dir! }); }}><FileAudio className="ico" />显示录音文件</button>}
+              <button type="button" className="menu-item" disabled={!segs.length} onClick={() => void exportAs("txt")}><Download className="ico" />{uiText("导出文字稿")}</button>
+              <button type="button" className="menu-item" disabled={!segs.length} onClick={() => void exportAs("md")}><Download className="ico" />{uiText("导出 Markdown")}</button>
+              <button type="button" className="menu-item" disabled={!segs.length} onClick={() => void exportAs("srt")}><Download className="ico" />{uiText("导出字幕（SRT）")}</button>
+              {here && m.dir && <button type="button" className="menu-item" onClick={() => { setMenu(null); void os().fs.reveal({ path: m.dir! }); }}><FileAudio className="ico" />{uiText("显示录音文件")}</button>}
               {here && (m.files?.them || m.files?.me) && segs.length > 0 && (speech?.diarize
-                ? <button type="button" className="menu-item" disabled={!!tx || !!splitting} onClick={(e) => { const r = rectOf(e.currentTarget); setMenu(null); setSplit(r); }}><Users className="ico" />重新分说话人</button>
-                : speech?.ready && <button type="button" className="menu-item" onClick={() => { setMenu(null); void installSpeech(); kit.flash("正在下载分说话人的模型（约 35 MB）"); }}><Users className="ico" />分说话人（先下载 35 MB）</button>)}
-              {here && <button type="button" className="menu-item" disabled={!!tx} onClick={() => { setMenu(null); if (!segs.length || window.confirm("重新转写会换掉现在的文字稿，包括改过的字。")) void transcribe(id); }}><RefreshCw className="ico" />重新转写</button>}
+                ? <button type="button" className="menu-item" disabled={!!tx || !!splitting} onClick={(e) => { const r = rectOf(e.currentTarget); setMenu(null); setSplit(r); }}><Users className="ico" />{uiText("重新分说话人")}</button>
+                : speech?.ready && <button type="button" className="menu-item" onClick={() => { setMenu(null); void installSpeech(); kit.flash(uiText("正在下载分说话人的模型（约 35 MB）")); }}><Users className="ico" />{uiText("分说话人（先下载 35 MB）")}</button>)}
+              {here && <button type="button" className="menu-item" disabled={!!tx} onClick={() => { setMenu(null); if (!segs.length || window.confirm(uiText("重新转写会换掉现在的文字稿，包括改过的字。"))) void transcribe(id); }}><RefreshCw className="ico" />{uiText("重新转写")}</button>}
               <div className="menu-sep" />
-              <button type="button" className="menu-item is-danger" onClick={() => void remove()}><Trash2 className="ico" />删除</button>
+              <button type="button" className="menu-item is-danger" onClick={() => void remove()}><Trash2 className="ico" />{uiText("删除")}</button>
             </div>
           </Popover>
         )}
@@ -528,16 +526,16 @@ function MeetingView({ id, host, onDeleted }: { id: string; host: string; onDele
         )}
         <div className="mt-doc">
           {tx && <TranscribingRow />}
-          {!tx && splitting === id && <div className="mt-alert"><Loader2 className="ico spin" /><span className="mt-alert-grow">正在分说话人</span><button type="button" className="btn" onClick={stopTranscribing}>停止</button></div>}
-          {!tx && isWaiting(id) && <div className="mt-alert"><Loader2 className="ico spin" /><span className="mt-alert-grow">排队中：前一场转完就转这场</span></div>}
-          {m.status === "failed" && !tx && <div className="mt-alert is-err"><span className="mt-alert-grow"><b>转写没成：</b>{m.error}</span>{here && <button type="button" className="btn" onClick={() => void transcribe(id)}>再试一次</button>}</div>}
+          {!tx && splitting === id && <div className="mt-alert"><Loader2 className="ico spin" /><span className="mt-alert-grow">{uiText("正在分说话人")}</span><button type="button" className="btn" onClick={stopTranscribing}>{uiText("停止")}</button></div>}
+          {!tx && isWaiting(id) && <div className="mt-alert"><Loader2 className="ico spin" /><span className="mt-alert-grow">{uiText("排队中：前一场转完就转这场")}</span></div>}
+          {m.status === "failed" && !tx && <div className="mt-alert is-err"><span className="mt-alert-grow"><b>{uiText("转写没成：")}</b>{m.error}</span>{here && <button type="button" className="btn" onClick={() => void transcribe(id)}>{uiText("再试一次")}</button>}</div>}
           {!tx && !segs.length && <EmptyTranscript id={id} m={m} here={here} />}
           {paras.map((p) => (
             <section key={p.ids[0]} className={`mt-para${p.ids.includes(playingId || "") ? " is-on" : ""}`}>
               <div className="mt-para-head">
                 <Face m={m} t={p.track} />
                 <SpeakerName id={id} m={m} t={p.track} />
-                <button type="button" className="mt-para-time" disabled={!player} onClick={() => playFrom(p.start)} title={player ? "从这里播放" : undefined}>{clock(p.start)}</button>
+                <button type="button" className="mt-para-time" disabled={!player} onClick={() => playFrom(p.start)} title={player ? uiText("从这里播放") : undefined}>{clock(p.start)}</button>
               </div>
               <p className="mt-para-text">
                 {p.ids.map((sid) => {
@@ -555,7 +553,7 @@ function MeetingView({ id, host, onDeleted }: { id: string; host: string; onDele
             </section>
           ))}
           {segs.length > 0 && (
-            <p className="mt-tip"><TextCursor className="ico" />单击一句从那里播放，双击改字，右键有更多。空格播放或暂停，← → 前后 5 秒，⇧← ⇧→ 上一句、下一句，⌘F 搜索。</p>
+            <p className="mt-tip"><TextCursor className="ico" />{uiText("单击一句从那里播放，双击改字，右键有更多。空格播放或暂停，← → 前后 5 秒，⇧← ⇧→ 上一句、下一句，⌘F 搜索。")}</p>
           )}
         </div>
       </div>
@@ -576,12 +574,12 @@ function MeetingView({ id, host, onDeleted }: { id: string; host: string; onDele
         return (
           <Popover at={{ x: ctx.x, y: ctx.y }} onClose={close}>
             <div className="menu">
-              {player && <button type="button" className="menu-item" onClick={() => { close(); playFrom(num(s.start)); }}><Play className="ico" />从这里播放</button>}
-              <button type="button" className="menu-item" onClick={() => { close(); setEditing(ctx.sid); }}><TextCursor className="ico" />改字</button>
-              {others.map((k) => <button key={k} type="button" className="menu-item" onClick={() => { close(); moveTo(k); }}><Repeat className="ico" />改成{speakerName(m, k)}说的</button>)}
-              <button type="button" className="menu-item" onClick={() => { close(); void navigator.clipboard?.writeText(String(s.text || "")).then(() => kit.flash("已复制"), () => kit.flash("复制不了")); }}><Copy className="ico" />复制</button>
+              {player && <button type="button" className="menu-item" onClick={() => { close(); playFrom(num(s.start)); }}><Play className="ico" />{uiText("从这里播放")}</button>}
+              <button type="button" className="menu-item" onClick={() => { close(); setEditing(ctx.sid); }}><TextCursor className="ico" />{uiText("改字")}</button>
+              {others.map((k) => <button key={k} type="button" className="menu-item" onClick={() => { close(); moveTo(k); }}><Repeat className="ico" />{uiText("改成")}{speakerName(m, k)}{uiText("说的")}</button>)}
+              <button type="button" className="menu-item" onClick={() => { close(); void navigator.clipboard?.writeText(String(s.text || "")).then(() => kit.flash(uiText("已复制")), () => kit.flash(uiText("复制不了"))); }}><Copy className="ico" />{uiText("复制")}</button>
               <div className="menu-sep" />
-              <button type="button" className="menu-item is-danger" onClick={() => { close(); void kit.track(segments.remove(ctx.sid)); kit.emit(); kit.flash("已删掉这句"); }}><Trash2 className="ico" />删除这句</button>
+              <button type="button" className="menu-item is-danger" onClick={() => { close(); void kit.track(segments.remove(ctx.sid)); kit.emit(); kit.flash(uiText("已删掉这句")); }}><Trash2 className="ico" />{uiText("删除这句")}</button>
             </div>
           </Popover>
         );
@@ -589,7 +587,7 @@ function MeetingView({ id, host, onDeleted }: { id: string; host: string; onDele
       {player ? (
         <PlayerBar player={player} duration={duration} follow={follow} setFollow={setFollow} />
       ) : m.files ? (
-        <div className="mt-away">{!canUse ? "这个 myco App 还不能播放录音，更新后就能听。" : gone && m.computer === host ? "录音文件不在了（移走或删掉了），这里只能看文字。" : `录音在 ${m.computer || "另一台电脑"} 上，这里只能看文字。`}</div>
+        <div className="mt-away">{!canUse ? uiText("这个 myco App 还不能播放录音，更新后就能听。") : gone && m.computer === host ? uiText("录音文件不在了（移走或删掉了），这里只能看文字。") : uiText("录音在 {0} 上，这里只能看文字。",m.computer || uiText("另一台电脑"))}</div>
       ) : null}
     </div>
   );
@@ -632,7 +630,7 @@ function Timeline({ m, segs, duration, speakers, talk, totalTalk, now, hits, hit
       <div className="mt-tl-names">
         {speakers.map((t) => (
           <button key={t} type="button" className={`mt-tl-name${only === t ? " is-on" : ""}${only && only !== t ? " is-off" : ""}`} onClick={() => setOnly(only === t ? null : t)}
-            title={only === t ? "显示所有人" : `只看${speakerName(m, t)}说的`}>
+            title={only === t ? uiText("显示所有人") : uiText("只看{0}说的",speakerName(m,t))}>
             <b>{speakerName(m, t)}</b><em>{totalTalk ? Math.round(((talk[t] || 0) / totalTalk) * 100) : 0}%</em>
           </button>
         ))}
@@ -651,9 +649,9 @@ function SpeakerName({ id, m, t }: { id: string; m: Meeting; t: string }) {
   };
   if (edit !== null) {
     return <input className="mt-name-edit" autoFocus onFocus={(e) => e.target.select()} value={edit} onChange={(e) => setEdit(e.target.value)} onBlur={() => done(edit)}
-      onKeyDown={(e) => { if (e.key === "Enter") done(edit); if (e.key === "Escape") setEdit(null); }} aria-label="名字" maxLength={40} />;
+      onKeyDown={(e) => { if (e.key === "Enter") done(edit); if (e.key === "Escape") setEdit(null); }} aria-label={uiText("名字")} maxLength={40} />;
   }
-  return <button type="button" className="mt-name" title="改名字（这场会议里都改）" onClick={() => setEdit(speakerName(m, t))}>{speakerName(m, t)}</button>;
+  return <button type="button" className="mt-name" title={uiText("改名字（这场会议里都改）")} onClick={() => setEdit(speakerName(m, t))}>{speakerName(m, t)}</button>;
 }
 
 function Sentence({ sid, text, edited, q, on, hit, editing, onPlay, onEdit, onDone, onMenu }: {
@@ -697,7 +695,7 @@ function Sentence({ sid, text, edited, q, on, hit, editing, onPlay, onEdit, onDo
       onClick={() => { window.clearTimeout(clickT.current); if (window.getSelection()?.toString()) return; clickT.current = window.setTimeout(() => onPlay?.(), 220); }}
       onDoubleClick={(e) => { e.preventDefault(); window.clearTimeout(clickT.current); onEdit(); }}
       onContextMenu={(e) => { e.preventDefault(); window.clearTimeout(clickT.current); onMenu(e.clientX, e.clientY); }}
-      title={edited ? "改过 · 双击再改" : undefined}>
+      title={edited ? uiText("改过 · 双击再改") : undefined}>
       {q ? highlight(text, q) : text}
     </span>
   );
@@ -726,10 +724,10 @@ function TranscribingRow() {
     <div className="mt-alert">
       <Loader2 className="ico spin" />
       <span className="mt-alert-grow">
-        {t.voices ? "正在分说话人" : <>正在转写{t.tracks.length > 1 ? ` · ${t.track === "me" ? "我说的" : "别人说的"}（${t.index + 1}/${t.tracks.length}）` : ""} · {pct}%</>}
+        {t.voices ? uiText("正在分说话人") : <>{uiText("正在转写")}{t.tracks.length > 1 ? ` · ${t.track === "me" ? uiText("我说的") : uiText("别人说的")}（${t.index + 1}/${t.tracks.length}）` : ""} · {pct}%</>}
         <i className="mt-progress"><i style={{ width: `${pct}%` }} /></i>
       </span>
-      <button type="button" className="btn" onClick={stopTranscribing}>停止</button>
+      <button type="button" className="btn" onClick={stopTranscribing}>{uiText("停止")}</button>
     </div>
   );
 }
@@ -738,14 +736,14 @@ function EmptyTranscript({ id, m, here }: { id: string; m: Meeting; here: boolea
   useEngine();
   if (m.status === "failed") return null;
   if (!here) {
-    return <div className="mt-empty"><b>还没有文字稿</b><span>{!m.files ? "这场会议没有录音。" : m.computer ? `录音在 ${m.computer} 上，在那台电脑上打开这个网页来转写。` : "录音不在这台电脑上。"}</span></div>;
+    return <div className="mt-empty"><b>{uiText("还没有文字稿")}</b><span>{!m.files ? uiText("这场会议没有录音。") : m.computer ? uiText("录音在 {0} 上，在那台电脑上打开这个网页来转写。", m.computer) : uiText("录音不在这台电脑上。")}</span></div>;
   }
-  if (!speech?.ready) return <div className="mt-empty"><b>还没有文字稿</b><span>转写要先下载模型。</span><div className="mt-empty-row"><SpeechRow /></div></div>;
+  if (!speech?.ready) return <div className="mt-empty"><b>{uiText("还没有文字稿")}</b><span>{uiText("转写要先下载模型。")}</span><div className="mt-empty-row"><SpeechRow /></div></div>;
   return (
     <div className="mt-empty">
-      <b>还没有文字稿</b>
-      <span>在这台电脑上转，用时大约是录音的十分之一。</span>
-      <button type="button" className="btn btn-primary" onClick={() => void transcribe(id)}>转成文字</button>
+      <b>{uiText("还没有文字稿")}</b>
+      <span>{uiText("在这台电脑上转，用时大约是录音的十分之一。")}</span>
+      <button type="button" className="btn btn-primary" onClick={() => void transcribe(id)}>{uiText("转成文字")}</button>
     </div>
   );
 }
@@ -755,22 +753,20 @@ const RATES = [1, 1.25, 1.5, 2];
 function PlayerBar({ player, duration, follow, setFollow }: { player: Player; duration: number; follow: boolean; setFollow: (v: boolean) => void }) {
   return (
     <div className="mt-player">
-      <button type="button" className="icon-btn" aria-label="后退 15 秒" title="后退 15 秒" onClick={() => player.seek(player.time - 15)}><Rewind className="ico" /></button>
-      <button type="button" className="mt-play" aria-label={player.playing ? "暂停" : "播放"} title="播放 / 暂停（空格）" onClick={() => (player.playing ? player.pause() : player.play())}>
+      <button type="button" className="icon-btn" aria-label={uiText("后退 15 秒")} title={uiText("后退 15 秒")} onClick={() => player.seek(player.time - 15)}><Rewind className="ico" /></button>
+      <button type="button" className="mt-play" aria-label={player.playing ? uiText("暂停") : uiText("播放")} title={uiText("播放 / 暂停（空格）")} onClick={() => (player.playing ? player.pause() : player.play())}>
         {player.playing ? <Pause className="ico is-fill" /> : <Play className="ico is-fill" />}
       </button>
-      <button type="button" className="icon-btn" aria-label="前进 15 秒" title="前进 15 秒" onClick={() => player.seek(player.time + 15)}><FastForward className="ico" /></button>
+      <button type="button" className="icon-btn" aria-label={uiText("前进 15 秒")} title={uiText("前进 15 秒")} onClick={() => player.seek(player.time + 15)}><FastForward className="ico" /></button>
       <span className="mt-ptime">{clock(player.time)}<em> / {clock(duration)}</em></span>
       <span className="mt-gap" />
-      <div className="seg mt-rates" role="radiogroup" aria-label="播放速度">
+      <div className="seg mt-rates" role="radiogroup" aria-label={uiText("播放速度")}>
         {RATES.map((r) => <button key={r} type="button" role="radio" aria-checked={player.rate === r} className={player.rate === r ? "is-on" : ""} onClick={() => player.setRate(r)}>{r}×</button>)}
       </div>
-      <button type="button" className={`tool${player.skip ? " is-on" : ""}`} aria-pressed={!!player.skip} onClick={() => player.setSkip(!player.skip)} title="跳过没人说话的地方">
-        <ChevronsRight className="ico" />跳过静音
-      </button>
-      <button type="button" className={`tool${follow ? " is-on" : ""}`} aria-pressed={follow} onClick={() => setFollow(!follow)} title="播放时文字跟着走">
-        <TextCursor className="ico" />跟随
-      </button>
+      <button type="button" className={`tool${player.skip ? " is-on" : ""}`} aria-pressed={!!player.skip} onClick={() => player.setSkip(!player.skip)} title={uiText("跳过没人说话的地方")}>
+        <ChevronsRight className="ico" />{uiText("跳过静音")}{" "}</button>
+      <button type="button" className={`tool${follow ? " is-on" : ""}`} aria-pressed={follow} onClick={() => setFollow(!follow)} title={uiText("播放时文字跟着走")}>
+        <TextCursor className="ico" />{uiText("跟随")}{" "}</button>
     </div>
   );
 }
@@ -783,10 +779,10 @@ class Boundary extends Component<{ children: ReactNode }, { error: Error | null 
     if (!this.state.error) return this.props.children;
     return (
       <div className="mt-crash">
-        <b>这个网页出错了</b>
+        <b>{uiText("这个网页出错了")}</b>
         <code>{this.state.error.message || String(this.state.error)}</code>
-        <span>会议和文字稿都还在。把这段话发给做这个应用的 agent，或者重新加载试试。</span>
-        <button type="button" className="btn" onClick={() => location.reload()}>重新加载</button>
+        <span>{uiText("会议和文字稿都还在。把这段话发给做这个应用的 agent，或者重新加载试试。")}</span>
+        <button type="button" className="btn" onClick={() => location.reload()}>{uiText("重新加载")}</button>
       </div>
     );
   }
@@ -802,35 +798,35 @@ function NotesPanel({ id, m, hasText, onSeek, onClose }: { id: string; m: Meetin
   const [busy, setBusy] = useState(false);
   const ask = async () => {
     setBusy(true);
-    try { await askForNotes(id); kit.flash("已请 agent 写纪要，写好会出现在这里"); } catch (e) { kit.flash((e as Error).message || "没发出去"); }
+    try { await askForNotes(id); kit.flash(uiText("已请 agent 写纪要，写好会出现在这里")); } catch (e) { kit.flash((e as Error).message || uiText("没发出去")); }
     setBusy(false);
   };
   const asked = n.asked && (!n.at || n.asked > n.at);
   return (
-    <aside className="mt-notes" aria-label="纪要">
+    <aside className="mt-notes" aria-label={uiText("纪要")}>
       <div className="mt-notes-head">
-        <b>纪要</b>
-        {has && n.by && <span>{n.by} 写的{n.at ? ` · ${when(n.at)}` : ""}</span>}
+        <b>{uiText("纪要")}</b>
+        {has && n.by && <span>{n.by} {" "}{uiText("写的")}{n.at ? ` · ${when(n.at)}` : ""}</span>}
         <span className="mt-gap" />
-        <button type="button" className="icon-btn" aria-label="收起" onClick={onClose}><X className="ico" /></button>
+        <button type="button" className="icon-btn" aria-label={uiText("收起")} onClick={onClose}><X className="ico" /></button>
       </div>
       <div className="mt-notes-body">
         {!has && (
           <div className="mt-notes-empty">
             <NotebookPen className="mt-notes-ico" strokeWidth={1.5} />
             {asked ? (
-              <><b>agent 正在写</b><span>{n.asked_by ? `${n.asked_by} ` : ""}{when(n.asked)} 请它写的，写好会出现在这里。</span></>
+              <><b>{uiText("agent 正在写")}</b><span>{n.asked_by ? `${n.asked_by} ` : ""}{when(n.asked)} {" "}{uiText("请它写的，写好会出现在这里。")}</span></>
             ) : (
-              <><b>让 agent 写纪要</b><span>它读完文字稿，写出总结、决定、待办（谁、什么、何时）和按话题分的章节，点章节就跳到那一段；内容多时再建一份文档和一张白板。</span></>
+              <><b>{uiText("让 agent 写纪要")}</b><span>{uiText("它读完文字稿，写出总结、决定、待办（谁、什么、何时）和按话题分的章节，点章节就跳到那一段；内容多时再建一份文档和一张白板。")}</span></>
             )}
-            {canAsk() && hasText && <button type="button" className={`btn${asked ? "" : " btn-primary"}`} disabled={busy} onClick={() => void ask()}>{busy ? <Loader2 className="ico spin" /> : null}{asked ? "再请一次" : "让 agent 写纪要"}</button>}
-            {!hasText && <span className="mt-hint">先转成文字。</span>}
+            {canAsk() && hasText && <button type="button" className={`btn${asked ? "" : " btn-primary"}`} disabled={busy} onClick={() => void ask()}>{busy ? <Loader2 className="ico spin" /> : null}{asked ? uiText("再请一次") : uiText("让 agent 写纪要")}</button>}
+            {!hasText && <span className="mt-hint">{uiText("先转成文字。")}</span>}
           </div>
         )}
-        {n.summary && <section><h3>总结</h3><p className="mt-notes-text">{n.summary}</p></section>}
+        {n.summary && <section><h3>{uiText("总结")}</h3><p className="mt-notes-text">{n.summary}</p></section>}
         {!!n.chapters?.length && (
           <section>
-            <h3>章节</h3>
+            <h3>{uiText("章节")}</h3>
             <ol className="mt-chapters">
               {n.chapters.map((c, i) => (
                 <li key={i}>
@@ -843,10 +839,10 @@ function NotesPanel({ id, m, hasText, onSeek, onClose }: { id: string; m: Meetin
             </ol>
           </section>
         )}
-        {!!n.decisions?.length && <section><h3>决定</h3><ul className="mt-bullets">{n.decisions.map((d, i) => <li key={i}>{d}</li>)}</ul></section>}
+        {!!n.decisions?.length && <section><h3>{uiText("决定")}</h3><ul className="mt-bullets">{n.decisions.map((d, i) => <li key={i}>{d}</li>)}</ul></section>}
         {!!n.todos?.length && (
           <section>
-            <h3>待办</h3>
+            <h3>{uiText("待办")}</h3>
             <ul className="mt-todos">
               {n.todos.map((t, i) => <li key={i}><i /><span>{t.what}{(t.who || t.when) && <em>{[t.who, t.when].filter(Boolean).join(" · ")}</em>}</span></li>)}
             </ul>
@@ -854,11 +850,11 @@ function NotesPanel({ id, m, hasText, onSeek, onClose }: { id: string; m: Meetin
         )}
         {(n.doc || n.board) && (
           <section className="mt-links">
-            {n.doc && <a href={n.doc} target="_blank" rel="noreferrer"><ExternalLink className="ico" />完整纪要（文档）</a>}
-            {n.board && <a href={n.board} target="_blank" rel="noreferrer"><ExternalLink className="ico" />白板</a>}
+            {n.doc && <a href={n.doc} target="_blank" rel="noreferrer"><ExternalLink className="ico" />{uiText("完整纪要（文档）")}</a>}
+            {n.board && <a href={n.board} target="_blank" rel="noreferrer"><ExternalLink className="ico" />{uiText("白板")}</a>}
           </section>
         )}
-        {has && canAsk() && <button type="button" className="mt-link mt-notes-again" disabled={busy} onClick={() => void ask()}><RefreshCw className="ico" />请 agent 重写</button>}
+        {has && canAsk() && <button type="button" className="mt-link mt-notes-again" disabled={busy} onClick={() => void ask()}><RefreshCw className="ico" />{uiText("请 agent 重写")}</button>}
       </div>
     </aside>
   );

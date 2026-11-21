@@ -1,0 +1,10 @@
+{
+  "en": {
+    "name": "Gomoku",
+    "description": "Play five-in-a-row with another person or an agent. Choose black or white, take turns, undo moves, resign or start a new round."
+  },
+  "zh": {
+    "name": "五子棋",
+    "description": "和同事或 agent 下一局五子棋：谁执黑谁执白随便坐，网页管轮次、判输赢，能悔棋、认输、再来一局。"
+  }
+}

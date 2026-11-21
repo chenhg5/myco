@@ -230,6 +230,12 @@ func (s *Server) templateDTO(by app.Actor, tv *app.TemplateView) api.Template {
 	out := api.Template{ID: t.ID, Slug: t.Slug, Name: t.Name, Description: t.Description, Kind: t.Kind, Icon: t.Icon, Version: t.Latest,
 		Publisher: t.Publisher, Guide: tv.Guide, Versions: []api.TemplateVersion{}, CanManage: s.templates.Manages(by, t), Official: t.Official,
 		CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt}
+	if len(tv.Locales) > 0 {
+		out.Locales = map[string]api.TemplateLocale{}
+		for tag, v := range tv.Locales {
+			out.Locales[tag] = api.TemplateLocale{Name: v.Name, Description: v.Description}
+		}
+	}
 	if tv.Manifest != nil {
 		out.Data, out.Permissions, out.Export = collectionsDTO(tv.Manifest.Data), tv.Manifest.Permissions, tv.Manifest.Export
 		out.Category = tv.Manifest.Category

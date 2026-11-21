@@ -1,0 +1,10 @@
+{
+  "en": {
+    "name": "Poll",
+    "description": "Create single- or multiple-choice polls with live results. Allow anonymous votes, end a poll whenever needed, and let agents create or join polls."
+  },
+  "zh": {
+    "name": "投票",
+    "description": "发起一个投票，大家点一下就投了，结果实时更新；单选或多选、可以匿名、随时结束；agent 也能发起和投票。"
+  }
+}

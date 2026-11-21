@@ -1,0 +1,10 @@
+{
+  "en": {
+    "name": "Database",
+    "description": "One shared dataset with table, board, calendar, gallery and form views. Typed fields, filters, sorting, record details and Excel export."
+  },
+  "zh": {
+    "name": "多维表格",
+    "description": "像飞书多维表格：同一份记录，表格、看板、日历、画廊、表单几种视图，点一条在右侧展开；字段有类型，筛选、排序，导出 Excel。"
+  }
+}

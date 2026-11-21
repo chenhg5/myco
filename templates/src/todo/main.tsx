@@ -1,3 +1,4 @@
+import { t as uiText, locale } from "../_lib/i18n";
 // 待办清单: a list people and agents keep together. Type a to-do and press
 // Enter ("明天", "周五", "@名字" and "!" are understood); tick it off; open
 // it for a due date, who does it and a note; drag to reorder.
@@ -7,7 +8,7 @@ import { useMemo, useRef, useState } from "react";
 import { Calendar, ChevronDown, ChevronRight, GripVertical, Plus, Star, Trash2, X } from "lucide-react";
 import { Store } from "../_lib/myco";
 import { Bar, Kit, Toast, mount, titleSaver, uid, useKit } from "../_lib/appkit";
-import { addDays, dayName, today, WEEK } from "../_lib/dates";
+import { addDays, dayName, today } from "../_lib/dates";
 import { personColor } from "../_lib/cells";
 
 type Task = { title?: string; done?: boolean; due?: string | null; owner?: string | null; star?: boolean; note?: string; order?: number; done_at?: string | null };
@@ -23,7 +24,7 @@ function understand(s: string): Task {
   if (at) { owner = at[2]; t = t.replace(at[0], " "); }
   if (/(^|\s)!(\s|$)|！/.test(t)) { star = true; t = t.replace(/(^|\s)!(?=\s|$)|！/g, " "); }
   const words: [RegExp, () => string][] = [
-    [/今天/, () => today()], [/明天/, () => addDays(today(), 1)], [/后天/, () => addDays(today(), 2)],
+    [/后天|\bday after tomorrow\b/i, () => addDays(today(), 2)], [/今天|\btoday\b/i, () => today()], [/明天|\btomorrow\b/i, () => addDays(today(), 1)],
     [/(下)?(周|星期)([一二三四五六日天])/, () => ""],
   ];
   for (const [re, f] of words) {
@@ -38,6 +39,14 @@ function understand(s: string): Task {
     } else due = f();
     t = t.replace(m[0], " ");
     break;
+  }
+  if(!due) {
+    const weekday=/\b(next\s+)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/i.exec(t);
+    if(weekday) {
+      const want=["sunday","monday","tuesday","wednesday","thursday","friday","saturday"].indexOf(weekday[2].toLowerCase());
+      let offset=(want-new Date().getDay()+7)%7||7;if(weekday[1])offset+=7;
+      due=addDays(today(),offset);t=t.replace(weekday[0]," ");
+    }
   }
   const md = /(\d{1,2})月(\d{1,2})[日号]?/.exec(t);
   if (!due && md) { const y = new Date().getFullYear(); due = `${y}-${md[1].padStart(2, "0")}-${md[2].padStart(2, "0")}`; t = t.replace(md[0], " "); }
@@ -80,7 +89,7 @@ function App() {
     const data = cur.data;
     kit.track(tasks.remove(id));
     setOpen(null);
-    kit.flash("删除了一条待办", () => { kit.track(tasks.put(data, id)); kit.note = null; kit.emit(); });
+    kit.flash(uiText("删除了一条待办"), () => { kit.track(tasks.put(data, id)); kit.note = null; kit.emit(); });
   };
   const dropOn = (target: string) => {
     if (!drag || drag === target) return;
@@ -99,33 +108,33 @@ function App() {
         onDragOver={(e) => { if (drag) e.preventDefault(); }} onDrop={() => dropOn(r.id)}>
         <div className="td-line">
           {!d.done && <GripVertical className="ico td-grip" />}
-          <button type="button" className={`td-check${d.done ? " is-on" : ""}`} aria-label={d.done ? "标为没做完" : "标为做完"} onClick={() => toggle(r.id)} />
+          <button type="button" className={`td-check${d.done ? " is-on" : ""}`} aria-label={d.done ? uiText("标为没做完") : uiText("标为做完")} onClick={() => toggle(r.id)} />
           <TitleInput value={d.title || ""} onSave={(v) => put(r.id, { title: v })} />
           <span className="td-meta" onClick={() => setOpen(isOpen ? null : r.id)}>
             {d.due && <span className={`td-due${late ? " is-late" : d.due === t0 ? " is-today" : ""}`}><Calendar className="ico" />{dayName(d.due)}</span>}
             {d.owner && <span className="person-dot" title={d.owner} style={{ background: personColor(d.owner) }}>{d.owner.slice(0, 1).toUpperCase()}</span>}
             {d.note && <span className="td-note-mark" title={d.note}>…</span>}
           </span>
-          <button type="button" className={`td-star${d.star ? " is-on" : ""}`} aria-label={d.star ? "取消重要" : "标为重要"} onClick={() => put(r.id, { star: !d.star })}><Star className="ico" /></button>
-          <button type="button" className="icon-btn td-more" aria-label="详情" onClick={() => setOpen(isOpen ? null : r.id)}>{isOpen ? <ChevronDown className="ico" /> : <ChevronRight className="ico" />}</button>
+          <button type="button" className={`td-star${d.star ? " is-on" : ""}`} aria-label={d.star ? uiText("取消重要") : uiText("标为重要")} onClick={() => put(r.id, { star: !d.star })}><Star className="ico" /></button>
+          <button type="button" className="icon-btn td-more" aria-label={uiText("详情")} onClick={() => setOpen(isOpen ? null : r.id)}>{isOpen ? <ChevronDown className="ico" /> : <ChevronRight className="ico" />}</button>
         </div>
         {isOpen && (
           <div className="td-detail">
-            <label><span>截止</span>
+            <label><span>{uiText("截止")}</span>
               <input className="inp" type="date" value={d.due || ""} onChange={(e) => put(r.id, { due: e.target.value || null })} />
-              {d.due && <button type="button" className="icon-btn" aria-label="去掉截止日期" onClick={() => put(r.id, { due: null })}><X className="ico" /></button>}
+              {d.due && <button type="button" className="icon-btn" aria-label={uiText("去掉截止日期")} onClick={() => put(r.id, { due: null })}><X className="ico" /></button>}
               <span className="td-quick">
-                {[0, 1, 7].map((n) => <button key={n} type="button" className="tool" onClick={() => put(r.id, { due: addDays(t0, n) })}>{n === 0 ? "今天" : n === 1 ? "明天" : "下周"}</button>)}
+                {[0, 1, 7].map((n) => <button key={n} type="button" className="tool" onClick={() => put(r.id, { due: addDays(t0, n) })}>{n === 0 ? uiText("今天") : n === 1 ? uiText("明天") : uiText("下周")}</button>)}
               </span>
             </label>
-            <label><span>谁来做</span>
-              <input className="inp" value={d.owner || ""} placeholder="名字" list="td-people" onChange={(e) => put(r.id, { owner: e.target.value || null })} />
-              {kit.me && d.owner !== kit.me && <button type="button" className="tool" onClick={() => put(r.id, { owner: kit.me })}>我来</button>}
+            <label><span>{uiText("谁来做")}</span>
+              <input className="inp" value={d.owner || ""} placeholder={uiText("名字")} list="td-people" onChange={(e) => put(r.id, { owner: e.target.value || null })} />
+              {kit.me && d.owner !== kit.me && <button type="button" className="tool" onClick={() => put(r.id, { owner: kit.me })}>{uiText("我来")}</button>}
             </label>
-            <textarea className="inp td-note" rows={3} placeholder="备注" value={d.note || ""} onChange={(e) => put(r.id, { note: e.target.value })} />
+            <textarea className="inp td-note" rows={3} placeholder={uiText("备注")} value={d.note || ""} onChange={(e) => put(r.id, { note: e.target.value })} />
             <div className="td-detail-foot">
-              <span className="faint">{r.updated_by ? `${r.updated_by} 最后改的` : ""}</span>
-              <button type="button" className="tool td-del" onClick={() => remove(r.id)}><Trash2 className="ico" />删除</button>
+              <span className="faint">{r.updated_by ? uiText("{0} 最后改的", r.updated_by) : ""}</span>
+              <button type="button" className="tool td-del" onClick={() => remove(r.id)}><Trash2 className="ico" />{uiText("删除")}</button>
             </div>
           </div>
         )}
@@ -135,23 +144,23 @@ function App() {
   const people = [...new Set([kit.me, ...all.map((r) => r.data.owner).filter(Boolean) as string[]])].filter(Boolean);
   return (
     <div className="app td">
-      <Bar kit={kit} title={title.get()} placeholder="待办清单" onTitle={title.set} />
+      <Bar kit={kit} title={title.get()} placeholder={uiText("待办清单")} onTitle={title.set} />
       <div className="td-main"><div className="td-inner">
         <nav className="td-tabs">
           {([["all", "全部"], ["mine", "我的"], ["today", "今天"], ["star", "重要"]] as [Filter, string][]).map(([f, n]) => (
-            <button key={f} type="button" className={`tab${filter === f ? " is-on" : ""}`} onClick={() => setFilter(f)}>{n}{counts[f] ? <span className="td-n">{counts[f]}</span> : null}</button>
+            <button key={f} type="button" className={`tab${filter === f ? " is-on" : ""}`} onClick={() => setFilter(f)}>{uiText(n)}{counts[f] ? <span className="td-n">{counts[f]}</span> : null}</button>
           ))}
-          <span className="td-date faint">{new Date().getMonth() + 1}月{new Date().getDate()}日 周{WEEK[new Date().getDay()]}</span>
+          <span className="td-date faint">{new Date().toLocaleDateString(locale(), {month:"short",day:"numeric",weekday:"short"})}</span>
         </nav>
         <form className="td-add" onSubmit={(e) => { e.preventDefault(); add(); }}>
           <Plus className="ico" />
-          <input ref={input} value={text} onChange={(e) => setText(e.target.value)} placeholder="添加待办，回车保存（可以写「明天」「周五」「@名字」「!」）" aria-label="添加待办" />
+          <input ref={input} value={text} onChange={(e) => setText(e.target.value)} placeholder={uiText("添加待办，回车保存（可以写「明天」「周五」「@名字」「!」）")} aria-label={uiText("添加待办")} />
         </form>
         <ul className="td-list">{todo.map(row)}</ul>
-        {!todo.length && <div className="td-empty">{filter === "all" ? "都做完了。在上面加一条，或者让 agent 把会议里的待办整理进来。" : "这里没有要做的。"}</div>}
+        {!todo.length && <div className="td-empty">{filter === "all" ? uiText("都做完了。在上面加一条，或者让 agent 把会议里的待办整理进来。") : uiText("这里没有要做的。")}</div>}
         {done.length > 0 && (
           <>
-            <button type="button" className="td-done-head" onClick={() => setShowDone(!showDone)}>{showDone ? <ChevronDown className="ico" /> : <ChevronRight className="ico" />}已完成 {done.length}</button>
+            <button type="button" className="td-done-head" onClick={() => setShowDone(!showDone)}>{showDone ? <ChevronDown className="ico" /> : <ChevronRight className="ico" />}{uiText("已完成")}{" "}{done.length}</button>
             {showDone && <ul className="td-list">{done.map(row)}</ul>}
           </>
         )}
@@ -168,7 +177,7 @@ function TitleInput({ value, onSave }: { value: string; onSave: (v: string) => v
   const timer = useRef(0);
   const commit = (v: string) => { window.clearTimeout(timer.current); setDraft(null); if (v.trim() && v !== value) onSave(v.trim()); };
   return (
-    <input className="td-title" value={draft ?? value} aria-label="待办"
+    <input className="td-title" value={draft ?? value} aria-label={uiText("待办")}
       onChange={(e) => { const v = e.target.value; setDraft(v); window.clearTimeout(timer.current); timer.current = window.setTimeout(() => { if (v.trim() && v !== value) onSave(v.trim()); }, 700); }}
       onBlur={(e) => commit(e.target.value)}
       onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) (e.target as HTMLInputElement).blur(); }} />

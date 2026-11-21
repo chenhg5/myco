@@ -555,3 +555,13 @@ The "Allow MCP tools" item in the run settings is shown only to people who own t
 # Tool inventory
 
 Computer details show each CLI's MCP, skill, and plugin counts with an expandable list. Agent profiles combine that computer's user-level tools with project-level tools reported by the runner. When MCP tools are blocked by workspace access, the profile points to the run setting. Missing inventory from older runners is hidden.
+
+### Embedded apps: language and theme
+
+App pages inherit the host's resolved language and appearance, including manual
+choices that differ from the OS. The frame receives preferences before app code
+runs and gets theme changes without a reload. Official templates keep their own
+layouts and neutral palettes; their controls, menus, hints and editor dictionaries
+support Chinese and English. User content, chosen page names and stored enum keys
+are never translated. Template titles and descriptions use optional `locales.json`
+display metadata, falling back to the manifest when absent.

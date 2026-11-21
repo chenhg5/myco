@@ -1,3 +1,4 @@
+import { t as uiText } from "../_lib/i18n";
 // 视频剪辑's data: what the hub keeps (the edit, never the video itself)
 // and the arithmetic of the timeline. The main track is magnetic: clips
 // follow one another by `order`, so a clip's place is the sum of the ones
@@ -31,10 +32,10 @@ export const MIN_CLIP = 0.1; // seconds on the timeline
 export const FPS = 30;
 
 export const RATIOS: { id: string; name: string; w: number; h: number }[] = [
-  { id: "source", name: "原始比例", w: 0, h: 0 },
-  { id: "16:9", name: "16:9 横屏", w: 1920, h: 1080 },
-  { id: "9:16", name: "9:16 竖屏", w: 1080, h: 1920 },
-  { id: "1:1", name: "1:1 方形", w: 1080, h: 1080 },
+  { id: "source", name: uiText("原始比例"), w: 0, h: 0 },
+  { id: "16:9", name: uiText("16:9 横屏"), w: 1920, h: 1080 },
+  { id: "9:16", name: uiText("9:16 竖屏"), w: 1080, h: 1920 },
+  { id: "1:1", name: uiText("1:1 方形"), w: 1080, h: 1080 },
   { id: "4:3", name: "4:3", w: 1440, h: 1080 },
   { id: "3:4", name: "3:4", w: 1080, h: 1440 },
 ];

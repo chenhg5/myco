@@ -1,3 +1,4 @@
+import { inlineI18n } from "./test-i18n.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import http from "node:http";
@@ -15,7 +16,7 @@ const js = ts.transpileModule(
     { compilerOptions: { module: ts.ModuleKind.ES2020 } },
   ).outputText,
   m = await import(
-    "data:text/javascript;base64," + Buffer.from(js).toString("base64")
+    "data:text/javascript;base64," + Buffer.from(inlineI18n(js)).toString("base64")
   );
 for (const p of m.PRESETS) {
   const a = m.fresh(p.id, "<script>unsafe</script>");

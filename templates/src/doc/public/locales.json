@@ -1,0 +1,10 @@
+{
+  "en": {
+    "name": "Document",
+    "description": "Write together with headings, lists, tasks, tables and code blocks. Each paragraph saves independently. Export Markdown or a web page."
+  },
+  "zh": {
+    "name": "文档",
+    "description": "像飞书文档一样一起写：「/」插入标题、列表、待办、表格、代码块，选中文字改格式，拖动调整段落；每段单独保存，导出 Markdown 和网页。"
+  }
+}

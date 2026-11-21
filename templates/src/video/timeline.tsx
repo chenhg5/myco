@@ -1,3 +1,4 @@
+import { t as uiText } from "../_lib/i18n";
 // The timeline: a ruler, lanes of overlays (text, blur, mosaic) above the
 // main track of clips. Clips follow one another; drag one to move it, drag
 // its ends to trim. Overlays move freely in time and between lanes. The
@@ -270,23 +271,23 @@ export function Timeline({ sel, setSel, pps, setPps, onFiles, onNoteClick }: {
   const visible = (x: number, w: number) => x + w >= view.left - 300 && x <= view.left + view.width + 300;
 
   return (
-    <section className="tl" aria-label="时间线">
+    <section className="tl" aria-label={uiText("时间线")}>
       <div className="tl-bar">
-        <button type="button" className="icon-btn" title="撤销 (⌘Z)" aria-label="撤销" disabled={!canUndo()} onClick={undo}><Undo2 className="ico" /></button>
-        <button type="button" className="icon-btn" title="重做 (⇧⌘Z)" aria-label="重做" disabled={!canRedo()} onClick={redo}><Redo2 className="ico" /></button>
+        <button type="button" className="icon-btn" title={uiText("撤销 (⌘Z)")} aria-label={uiText("撤销")} disabled={!canUndo()} onClick={undo}><Undo2 className="ico" /></button>
+        <button type="button" className="icon-btn" title={uiText("重做 (⇧⌘Z)")} aria-label={uiText("重做")} disabled={!canRedo()} onClick={redo}><Redo2 className="ico" /></button>
         <span className="toolbar-sep" />
-        <button type="button" className="tool" title="在播放头处分割 (S)" disabled={!list.length} onClick={() => { const n = split(player.time); if (n) setSel({ kind: "clip", id: n }); else kit.flash("播放头要在一段视频中间"); }}>
-          <Scissors className="ico" />分割</button>
-        <button type="button" className="tool" title="复制一段 (⌘D)" disabled={!selClip} onClick={() => { const n = duplicateClip(selClip); if (n) setSel({ kind: "clip", id: n }); }}><Copy className="ico" />复制</button>
-        <button type="button" className="tool" title="删除 (Delete)" disabled={!sel} onClick={() => { if (selClip) removeClip(selClip); else if (selOver) removeOverlay(selOver); setSel(null); }}>
-          <Trash2 className="ico" />删除</button>
+        <button type="button" className="tool" title={uiText("在播放头处分割 (S)")} disabled={!list.length} onClick={() => { const n = split(player.time); if (n) setSel({ kind: "clip", id: n }); else kit.flash(uiText("播放头要在一段视频中间")); }}>
+          <Scissors className="ico" />{uiText("分割")}</button>
+        <button type="button" className="tool" title={uiText("复制一段 (⌘D)")} disabled={!selClip} onClick={() => { const n = duplicateClip(selClip); if (n) setSel({ kind: "clip", id: n }); }}><Copy className="ico" />{uiText("复制")}</button>
+        <button type="button" className="tool" title={uiText("删除 (Delete)")} disabled={!sel} onClick={() => { if (selClip) removeClip(selClip); else if (selOver) removeOverlay(selOver); setSel(null); }}>
+          <Trash2 className="ico" />{uiText("删除")}</button>
         <span className="tl-gap" />
         <span className="tl-dur">{fmt(T, true)}</span>
-        <button type="button" className="icon-btn" aria-label="缩小" title="缩小" onClick={() => setPps(clamp(pps / 1.5, 2, 400))}><Minus className="ico" /></button>
-        <input className="tl-zoom" type="range" min={0} max={100} aria-label="缩放时间线" value={Math.round((Math.log(pps / 2) / Math.log(200)) * 100)}
+        <button type="button" className="icon-btn" aria-label={uiText("缩小")} title={uiText("缩小")} onClick={() => setPps(clamp(pps / 1.5, 2, 400))}><Minus className="ico" /></button>
+        <input className="tl-zoom" type="range" min={0} max={100} aria-label={uiText("缩放时间线")} value={Math.round((Math.log(pps / 2) / Math.log(200)) * 100)}
           onChange={(e) => setPps(2 * Math.pow(200, Number(e.target.value) / 100))} />
-        <button type="button" className="icon-btn" aria-label="放大" title="放大" onClick={() => setPps(clamp(pps * 1.5, 2, 400))}><Plus className="ico" /></button>
-        <button type="button" className="icon-btn" aria-label="适合宽度" title="整条时间线放进视野" onClick={fitAll}><Maximize2 className="ico" /></button>
+        <button type="button" className="icon-btn" aria-label={uiText("放大")} title={uiText("放大")} onClick={() => setPps(clamp(pps * 1.5, 2, 400))}><Plus className="ico" /></button>
+        <button type="button" className="icon-btn" aria-label={uiText("适合宽度")} title={uiText("整条时间线放进视野")} onClick={fitAll}><Maximize2 className="ico" /></button>
       </div>
       <div className="tl-body" ref={scroller} onDragOver={dragOver} onDragLeave={() => setDropAt(null)} onDrop={drop}>
         <div className="tl-inner" style={{ width: contentW + GUTTER, height: H }}>
@@ -297,7 +298,7 @@ export function Timeline({ sel, setSel, pps, setPps, onFiles, onNoteClick }: {
                 {over.some((o) => o.lane === i && o.type === "text") || (i === 0 && !over.some((o) => o.lane === 0)) ? <Type className="ico" /> : <Droplets className="ico" />}
               </div>
             ))}
-            <div className="tl-gut is-main" style={{ height: MAIN }} title="主轨道"><Film className="ico" /></div>
+            <div className="tl-gut is-main" style={{ height: MAIN }} title={uiText("主轨道")}><Film className="ico" /></div>
           </div>
           <div className="tl-origin" ref={origin} style={{ left: GUTTER, width: contentW, height: H }}>
             <div className="tl-ruler" style={{ height: RULER }} onPointerDown={scrub}>
@@ -310,7 +311,7 @@ export function Timeline({ sel, setSel, pps, setPps, onFiles, onNoteClick }: {
               }))}
               {notes.rows.map((n) => (
                 <button key={n.id} type="button" className={`tl-note${n.data.done ? " is-done" : ""}`} style={{ left: num(n.data.time, 0) * pps }}
-                  title={String(n.data.text || "备注")} aria-label={`备注：${String(n.data.text || "")}`}
+                  title={String(n.data.text || "备注")} aria-label={uiText("备注：{0}", String(n.data.text || ""))}
                   onPointerDown={(e) => e.stopPropagation()} onClick={() => { player.seek(num(n.data.time, 0)); onNoteClick(n.id); }} />
               ))}
             </div>
@@ -322,7 +323,7 @@ export function Timeline({ sel, setSel, pps, setPps, onFiles, onNoteClick }: {
                 return (
                   <div key={o.id} className={`tl-ov is-${o.type}${o.id === selOver ? " is-sel" : ""}`} style={{ left: x, width: w, top: o.lane * LANE + 3, height: LANE - 6 }}
                     onPointerDown={(e) => overDown(e, o, "move")} title={`${TYPE_NAME[o.type]} ${fmt(o.start, true)} – ${fmt(o.end, true)}`}>
-                    <Icon className="ico" /><span>{o.type === "text" ? o.text || "文字" : TYPE_NAME[o.type]}</span>
+                    <Icon className="ico" /><span>{o.type === "text" ? o.text || uiText("文字") : TYPE_NAME[o.type]}</span>
                     <i className="tl-h is-l" onPointerDown={(e) => overDown(e, o, "l")} />
                     <i className="tl-h is-r" onPointerDown={(e) => overDown(e, o, "r")} />
                   </div>
@@ -330,7 +331,7 @@ export function Timeline({ sel, setSel, pps, setPps, onFiles, onNoteClick }: {
               })}
             </div>
             <div className="tl-main" style={{ top: RULER + lanes * LANE + 4, height: MAIN }} onPointerDown={scrub}>
-              {!list.length && <div className="tl-empty">把视频拖到这里，或者在左边「素材」里点 ＋</div>}
+              {!list.length && <div className="tl-empty">{uiText("把视频拖到这里，或者在左边「素材」里点 ＋")}</div>}
               {list.map((c) => {
                 const m = media.get(c.media)?.data;
                 const l = localFor(String(m?.key || ""));
@@ -338,14 +339,14 @@ export function Timeline({ sel, setSel, pps, setPps, onFiles, onNoteClick }: {
                 return (
                   <div key={c.id} className={`tl-clip${c.id === selClip ? " is-sel" : ""}${l ? "" : " is-missing"}${draft.order && c.id === selClip ? " is-lift" : ""}`}
                     style={{ left: x, width: w, height: MAIN }} onPointerDown={(e) => clipDown(e, c)}
-                    title={`${m?.name || "视频"} · ${fmt(c.end - c.start, true)}${c.speed !== 1 ? ` · ${c.speed}x` : ""}`}>
+                    title={`${m?.name || uiText("视频")} · ${fmt(c.end - c.start, true)}${c.speed !== 1 ? ` · ${c.speed}x` : ""}`}>
                     {l && visible(x, w) && <Thumbs l={l} c={c} pps={pps} x={x} w={w} view={view} aspect={num(m?.width, 16) / num(m?.height, 9)} />}
-                    {!l && <div className="tl-miss">本机没有这个文件</div>}
+                    {!l && <div className="tl-miss">{uiText("本机没有这个文件")}</div>}
                     {l && visible(x, w) && <Wave l={l} c={c} pps={pps} x={x} w={w} view={view} />}
                     <div className="tl-clip-tags">
                       {c.speed !== 1 && <span className="tl-tag">{c.speed}x</span>}
                       {(c.muted || c.volume === 0) && <span className="tl-tag"><VolumeX className="ico" /></span>}
-                      <span className="tl-tag is-name">{m?.name || "视频"}</span>
+                      <span className="tl-tag is-name">{m?.name || uiText("视频")}</span>
                     </div>
                     <i className="tl-h is-l" onPointerDown={(e) => trimDown(e, c, "l")} />
                     <i className="tl-h is-r" onPointerDown={(e) => trimDown(e, c, "r")} />

@@ -1108,3 +1108,7 @@ The computer details show the MCP servers, CLI skills, and plugins installed for
 ### 本机代理工作台
 
 **代理工作台**（`myco/proxy-console`）管理已有的本机 Mihomo 或 sing-box（需启用 Clash API）：查看流量、切换策略、节点测速、查看并断开连接、检查配置摘要。需要支持 `proxy.profile` / `proxy.control` 的桌面 App。凭据留在本机 App 的凭据存储中，不修改系统代理、DNS 或 TUN。没有内核时可以先看明确标注的示例预览。参见[使用说明与范围](docs/proxy-console.md)。
+
+### 应用语言与外观
+
+官方应用会跟随桌面 App 设置的语言和深浅色，包括与系统不同的手动设置，界面和编辑器菜单支持中文、英语。已有页面升级其应用版本即可获得这些改进，页面名称、记录和正文不变。新应用版本仍能安装在旧 Hub 上；跟随 App 的手动设置需要桌面 App 提供 `preferences` 桥接能力，旧 App 保持系统外观和模板原语言。应用作者可以通过 `locales.json` 提供多语言名称和描述，参见[应用 SDK](docs/app-os.md#app-language-and-appearance)。

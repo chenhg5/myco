@@ -1108,3 +1108,14 @@ The computer details show the MCP servers, CLI skills, and plugins installed for
 ### Local proxy console
 
 The **Proxy console** app (`myco/proxy-console`) manages an existing local Mihomo or sing-box core with Clash API enabled: traffic, policies, node delay tests, connections and a read-only configuration summary. It needs a desktop App with the `proxy.profile` / `proxy.control` capabilities. Credentials stay in the local App credential store; no system proxy, DNS or TUN settings are changed. An explicit demo works without a core. See [setup and limitations](docs/proxy-console.md).
+
+### App language and appearance
+
+Official apps follow the desktop App's language and light/dark setting, including
+manual choices that differ from the system. Their controls and editor menus
+support Chinese and English. Update an existing page's app to get these changes;
+its title, records and content stay unchanged. New app versions still work with
+older Hubs. A desktop App with the `preferences` bridge feature is needed to
+follow its manual settings; older Apps retain system appearance and the template's
+original language. Template authors can add translated titles and descriptions
+in `locales.json`; see [the app SDK](docs/app-os.md#app-language-and-appearance).

@@ -1,3 +1,4 @@
+import { t as uiText } from "../_lib/i18n";
 import { myco } from "../_lib/myco";
 import type { MarketData } from "./model";
 import type { CacheStore, ProviderOptions, Transport } from "./providers";
@@ -68,7 +69,7 @@ export const saveSettings = (s: LocalSettings) => put("settings", s);
 /** Network requests leave from the App, not an internet-enabled iframe or Hub. */
 export const transport: Transport = async (url) => {
   if (!myco?.os?.net?.fetch)
-    throw new Error("请在支持 myco.os 的新版桌面 App 中打开，才能获取行情");
+    throw new Error(uiText("请在支持 myco.os 的新版桌面 App 中打开，才能获取行情"));
   const r = await myco.os.net.fetch({
     url,
     headers: { "User-Agent": "Mozilla/5.0" },
@@ -76,12 +77,12 @@ export const transport: Transport = async (url) => {
     timeout_ms: 15000,
     max_bytes: 4000000,
   });
-  if (r.status === 429) throw new Error("数据源限流，请稍后刷新或切换数据源");
+  if (r.status === 429) throw new Error(uiText("数据源限流，请稍后刷新或切换数据源"));
   if (r.status < 200 || r.status >= 300)
     throw new Error(
-      `数据源请求失败（HTTP ${r.status}），请稍后重试或切换数据源`,
+      uiText("数据源请求失败（HTTP {0}），请稍后重试或切换数据源", r.status),
     );
-  if (r.truncated) throw new Error("数据源返回内容过大，已停止读取");
+  if (r.truncated) throw new Error(uiText("数据源返回内容过大，已停止读取"));
   let text = r.body;
   if (r.encoding === "base64") {
     const bytes = Uint8Array.from(atob(text), (c) => c.charCodeAt(0));
@@ -90,6 +91,6 @@ export const transport: Transport = async (url) => {
   try {
     return JSON.parse(text);
   } catch {
-    throw new Error("数据源没有返回有效 JSON，请切换数据源");
+    throw new Error(uiText("数据源没有返回有效 JSON，请切换数据源"));
   }
 };

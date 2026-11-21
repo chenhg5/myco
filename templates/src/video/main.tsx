@@ -1,3 +1,4 @@
+import { t as uiText } from "../_lib/i18n";
 // 视频剪辑: a video editor people and agents use together. The videos stay
 // on the computer that opened them; the edit (clips with their trims and
 // speeds, text, blur and mosaic regions, notes) is the page's records, so
@@ -75,7 +76,7 @@ function App() {
         let rec = media.rows.find((r) => r.data.key === key);
         if (!rec) {
           const p = await probe(f);
-          if (!p.duration) throw new Error(`「${f.name}」读不出来：换成 mp4（H.264）试试`);
+          if (!p.duration) throw new Error(uiText("「{0}」读不出来：换成 mp4（H.264）试试", f.name));
           const id = uid("m");
           change([[media, id, { name: f.name, size: f.size, duration: Math.round(p.duration * 1000) / 1000, width: p.width, height: p.height, audio: p.audio, key, poster: p.poster.length < 40000 ? p.poster : "" }]]);
           rec = media.get(id)!;
@@ -86,7 +87,7 @@ function App() {
           setSel({ kind: "clip", id }, false);
         }
       } catch (e) {
-        kit.flash((e as Error).message || `「${f.name}」没导入成功`);
+        kit.flash((e as Error).message || uiText("「{0}」没导入成功", f.name));
       } finally {
         setImporting((l) => l.filter((x) => x.key !== tmpKey));
       }
@@ -97,13 +98,13 @@ function App() {
     if (!m) return;
     const key = await keyOf(file);
     if (key !== m.data.key) {
-      if (!window.confirm(`选的文件和原来的「${m.data.name}」不一样（大小或内容不同）。还是用它代替吗？大家看到的都会换成它。`)) return;
+      if (!window.confirm(uiText("选的文件和原来的「{0}」不一样（大小或内容不同）。还是用它代替吗？大家看到的都会换成它。", m.data.name))) return;
       const p = await probe(file);
       await keep(file);
       patch(media, mediaId, { key, name: file.name, size: file.size, duration: p.duration || m.data.duration, width: p.width, height: p.height, audio: p.audio });
     } else {
       await keep(file);
-      kit.flash("找到了，接着剪吧");
+      kit.flash(uiText("找到了，接着剪吧"));
     }
   }
   const pickFiles = () => { relinkFor.current = ""; fileInput.current?.click(); };
@@ -198,19 +199,19 @@ function App() {
 
   return (
     <div className="app vid">
-      <Bar kit={kit} title={title.get("")} placeholder="未命名视频" onTitle={title.set}>
-        <select className="sel top-ratio" aria-label="画面比例" value={ratio} onChange={(e) => setProject({ ratio: e.target.value })}>
+      <Bar kit={kit} title={title.get("")} placeholder={uiText("未命名视频")} onTitle={title.set}>
+        <select className="sel top-ratio" aria-label={uiText("画面比例")} value={ratio} onChange={(e) => setProject({ ratio: e.target.value })}>
           {RATIOS.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
         </select>
-        <button type="button" className="btn" onClick={(e) => setAgentAt(rectOf(e.currentTarget))}><Bot className="ico" />交给 agent{open ? <span className="badge">{open}</span> : null}</button>
-        <button type="button" className="btn btn-primary" disabled={!list.length} onClick={() => setExporting({ stage: "setup" })}><Download className="ico" />导出</button>
+        <button type="button" className="btn" onClick={(e) => setAgentAt(rectOf(e.currentTarget))}><Bot className="ico" />{uiText("交给 agent")}{open ? <span className="badge">{open}</span> : null}</button>
+        <button type="button" className="btn btn-primary" disabled={!list.length} onClick={() => setExporting({ stage: "setup" })}><Download className="ico" />{uiText("导出")}</button>
       </Bar>
       <div className="ed">
         <aside className="side">
           <nav className="tabs" role="tablist">
             {tabs.map(([id, name, Icon]) => (
               <button key={id} type="button" role="tab" aria-selected={side === id} className={`tab${side === id ? " is-on" : ""}`} onClick={() => setTab(id)}>
-                <Icon className="ico" /><span>{name}</span>{id === "notes" && open ? <i className="dot" /> : null}
+                <Icon className="ico" /><span>{uiText(name)}</span>{id === "notes" && open ? <i className="dot" /> : null}
               </button>
             ))}
           </nav>
@@ -239,16 +240,16 @@ function App() {
       {agentAt && (
         <Popover at={agentAt} onClose={() => setAgentAt(null)} width={340} align="right">
           <div className="panel agent-pop">
-            <b>让 agent 一起剪</b>
-            <span className="faint">在「备注」里给时间点留话（「这段删掉」「给这个人脸打码」「加一句字幕」），再把这段话发给 agent。它按备注改剪辑方案，改动马上出现在这里。</span>
+            <b>{uiText("让 agent 一起剪")}</b>
+            <span className="faint">{uiText("在「备注」里给时间点留话（「这段删掉」「给这个人脸打码」「加一句字幕」），再把这段话发给 agent。它按备注改剪辑方案，改动马上出现在这里。")}</span>
             <textarea className="inp" rows={5} readOnly value={agentText(kit.page, title.get(""))} onFocus={(e) => e.target.select()} />
             <div className="row">
-              <button type="button" className="btn" onClick={() => { setTab("notes"); setAgentAt(null); }}><MessageSquareText className="ico" />去写备注</button>
+              <button type="button" className="btn" onClick={() => { setTab("notes"); setAgentAt(null); }}><MessageSquareText className="ico" />{uiText("去写备注")}</button>
               <span className="top-gap" />
               <button type="button" className="btn btn-primary" onClick={async () => {
-                try { await navigator.clipboard.writeText(agentText(kit.page, title.get(""))); kit.flash("已复制，发给任意一个 agent 就行"); setAgentAt(null); }
-                catch { kit.flash("没复制上，请手动选中复制"); }
-              }}>复制</button>
+                try { await navigator.clipboard.writeText(agentText(kit.page, title.get(""))); kit.flash(uiText("已复制，发给任意一个 agent 就行")); setAgentAt(null); }
+                catch { kit.flash(uiText("没复制上，请手动选中复制")); }
+              }}>{uiText("复制")}</button>
             </div>
           </div>
         </Popover>
@@ -293,37 +294,37 @@ function ExportDialog({ state, onStart, onRetry, onClose }: { state: Exp; onStar
     body = (
       <>
         <div className="field">
-          <div className="field-label">分辨率</div>
-          <div className="seg" role="radiogroup" aria-label="分辨率" data-testid="export-res">
+          <div className="field-label">{uiText("分辨率")}</div>
+          <div className="seg" role="radiogroup" aria-label={uiText("分辨率")} data-testid="export-res">
             {sizeChoices().map((s) => (
               <button key={s} type="button" role="radio" aria-checked={opts.short === s} className={opts.short === s ? "is-on" : ""} onClick={() => setOpts({ ...opts, short: s })}>
-                {SIZE_NAME[s] || "原始"}
+                {SIZE_NAME[s] || uiText("原始")}
               </button>
             ))}
           </div>
         </div>
         <div className="field">
-          <div className="field-label">帧率</div>
-          <div className="seg" role="radiogroup" aria-label="帧率">
-            {[24, 30, 60].map((f) => <button key={f} type="button" role="radio" aria-checked={opts.fps === f} className={opts.fps === f ? "is-on" : ""} onClick={() => setOpts({ ...opts, fps: f })}>{f} 帧</button>)}
+          <div className="field-label">{uiText("帧率")}</div>
+          <div className="seg" role="radiogroup" aria-label={uiText("帧率")}>
+            {[24, 30, 60].map((f) => <button key={f} type="button" role="radio" aria-checked={opts.fps === f} className={opts.fps === f ? "is-on" : ""} onClick={() => setOpts({ ...opts, fps: f })}>{f} {" "}{uiText("帧")}</button>)}
           </div>
         </div>
         <div className="field">
-          <div className="field-label">画质</div>
-          <div className="seg" role="radiogroup" aria-label="画质">
+          <div className="field-label">{uiText("画质")}</div>
+          <div className="seg" role="radiogroup" aria-label={uiText("画质")}>
             {QUALITIES.map(([q, n]) => <button key={q} type="button" role="radio" aria-checked={opts.quality === q} className={opts.quality === q ? "is-on" : ""} onClick={() => setOpts({ ...opts, quality: q })}>{n}</button>)}
           </div>
         </div>
-        <p className="export-sum"><b>{est.w}×{est.h}</b> · {opts.fps} 帧 · {mmss(T)} · 约 {est.mb < 10 ? est.mb.toFixed(1) : Math.round(est.mb)} MB</p>
-        <p className="faint">分辨率和帧率越低导出越快；在这台电脑上完成，不上传。</p>
+        <p className="export-sum"><b>{est.w}×{est.h}</b> · {opts.fps} {" "}{uiText("帧 ·")}{" "}{mmss(T)} {" "}{uiText("· 约")}{" "}{est.mb < 10 ? est.mb.toFixed(1) : Math.round(est.mb)} MB</p>
+        <p className="faint">{uiText("分辨率和帧率越低导出越快；在这台电脑上完成，不上传。")}</p>
         {myco && !myco.features?.includes("download-media") && (
-          <p className="modal-err">这个版本的 myco App 还存不了视频：先把 App 更新到 v0.20.27 或更新的版本再导出。</p>
+          <p className="modal-err">{uiText("这个版本的 myco App 还存不了视频：先把 App 更新到 v0.20.27 或更新的版本再导出。")}</p>
         )}
         <div className="modal-foot">
           <span />
           <span className="row">
-            <button type="button" className="btn" onClick={onClose}>取消</button>
-            <button type="button" className="btn btn-primary" data-testid="export-start" onClick={() => onStart(opts)}><Download className="ico" />开始导出</button>
+            <button type="button" className="btn" onClick={onClose}>{uiText("取消")}</button>
+            <button type="button" className="btn btn-primary" data-testid="export-start" onClick={() => onStart(opts)}><Download className="ico" />{uiText("开始导出")}</button>
           </span>
         </div>
       </>
@@ -336,20 +337,20 @@ function ExportDialog({ state, onStart, onRetry, onClose }: { state: Exp; onStar
     const { w, h } = frameSize(placed(), state.opts.short);
     body = (
       <>
-        <p className="faint">{w}×{h} · {state.opts.fps} 帧 · {mmss(T)}。{p.phase === "audio" ? "先合成声音…" : p.phase === "video" ? "一帧一帧地画出来。" : "收尾…"}</p>
+        <p className="faint">{w}×{h} · {state.opts.fps} {" "}{uiText("帧 ·")}{" "}{mmss(T)}。{p.phase === "audio" ? uiText("先合成声音…") : p.phase === "video" ? uiText("一帧一帧地画出来。") : uiText("收尾…")}</p>
         <div className="bar"><i style={{ width: `${pct}%` }} /></div>
         <div className="modal-foot">
-          <span className="faint"><Loader2 className="ico spin" /> {Math.floor(pct)}% · 已用 {mmss(secs)}{left ? ` · 还要约 ${mmss(left)}` : ""}</span>
-          <button type="button" className="btn" onClick={onClose}>取消</button>
+          <span className="faint"><Loader2 className="ico spin" /> {Math.floor(pct)}{uiText("% · 已用")}{" "}{mmss(secs)}{left ? uiText(" · 还要约 {0}", mmss(left)) : ""}</span>
+          <button type="button" className="btn" onClick={onClose}>{uiText("取消")}</button>
         </div>
       </>
     );
   } else if (state.stage === "done") {
     body = (
       <>
-        <p>已存到 <b>{state.where}</b>（{(state.size / 1024 / 1024).toFixed(1)} MB，用了 {mmss(state.secs)}）</p>
-        {state.silent && <p className="modal-err">这个浏览器不能编码声音，导出的视频没有声音。换 Chrome 或 Edge 打开再导出一次。</p>}
-        <div className="modal-foot"><span /><button type="button" className="btn btn-primary" onClick={onClose}>好</button></div>
+        <p>{uiText("已存到")}{" "}<b>{state.where}</b>（{(state.size / 1024 / 1024).toFixed(1)} {" "}{uiText("MB，用了")}{" "}{mmss(state.secs)}）</p>
+        {state.silent && <p className="modal-err">{uiText("这个浏览器不能编码声音，导出的视频没有声音。换 Chrome 或 Edge 打开再导出一次。")}</p>}
+        <div className="modal-foot"><span /><button type="button" className="btn btn-primary" onClick={onClose}>{uiText("好")}</button></div>
       </>
     );
   } else if (state.stage === "unsaved") {
@@ -362,14 +363,14 @@ function ExportDialog({ state, onStart, onRetry, onClose }: { state: Exp; onStar
     };
     body = (
       <>
-        <p>视频做好了（{(x.blob.size / 1024 / 1024).toFixed(1)} MB，用了 {mmss(x.secs)}），但没存到「下载」：</p>
+        <p>{uiText("视频做好了（")}{(x.blob.size / 1024 / 1024).toFixed(1)} {" "}{uiText("MB，用了")}{" "}{mmss(x.secs)}{uiText("），但没存到「下载」：")}</p>
         <p className="modal-err">{x.error}</p>
-        {x.retry && <p className="faint">关掉这个框之前它一直在，不用重新导出。</p>}
+        {x.retry && <p className="faint">{uiText("关掉这个框之前它一直在，不用重新导出。")}</p>}
         <div className="modal-foot">
-          <button type="button" className="btn" onClick={browser}>用浏览器下载</button>
+          <button type="button" className="btn" onClick={browser}>{uiText("用浏览器下载")}</button>
           <span className="row">
-            <button type="button" className="btn" onClick={onClose}>不要了</button>
-            {x.retry && <button type="button" className="btn btn-primary" onClick={() => onRetry(x)}>再存一次</button>}
+            <button type="button" className="btn" onClick={onClose}>{uiText("不要了")}</button>
+            {x.retry && <button type="button" className="btn btn-primary" onClick={() => onRetry(x)}>{uiText("再存一次")}</button>}
           </span>
         </div>
       </>
@@ -378,16 +379,16 @@ function ExportDialog({ state, onStart, onRetry, onClose }: { state: Exp; onStar
     body = (
       <>
         <p className="modal-err">{state.error}</p>
-        <div className="modal-foot"><span /><button type="button" className="btn btn-primary" onClick={onClose}>好</button></div>
+        <div className="modal-foot"><span /><button type="button" className="btn btn-primary" onClick={onClose}>{uiText("好")}</button></div>
       </>
     );
   }
   return (
-    <div className="modal-back" role="dialog" aria-modal="true" aria-label="导出视频">
+    <div className="modal-back" role="dialog" aria-modal="true" aria-label={uiText("导出视频")}>
       <div className="modal">
         <div className="modal-head">
           <b>{head}</b>
-          {state.stage !== "run" && <button type="button" className="icon-btn" aria-label="关闭" onClick={onClose}><X className="ico" /></button>}
+          {state.stage !== "run" && <button type="button" className="icon-btn" aria-label={uiText("关闭")} onClick={onClose}><X className="ico" /></button>}
         </div>
         {body}
       </div>

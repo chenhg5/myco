@@ -188,6 +188,7 @@ export interface Page {
 /** A template in the workspace's library (hubs from v0.20.5): official
  *  ones (myco's own) first. */
 export interface Template {
+  locales?: Record<string, { name?: string; description?: string }>;
   id: string; slug: string; name: string; description?: string; kind: string; version: string; publisher: string;
   /** its shelf (hubs from v0.20.6): office, dev, tools, life, creative, game, other */
   category?: string;

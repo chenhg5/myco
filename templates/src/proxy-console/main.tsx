@@ -1,3 +1,4 @@
+import { t as uiText, locale } from "../_lib/i18n";
 import "../_lib/sheet.css";
 import "./proxy.css";
 import { useEffect, useRef, useState } from "react";
@@ -35,20 +36,20 @@ import {
 } from "./model";
 const kit = new Kit([]);
 const tabs = [
-  { id: "overview", label: "概览", icon: Activity },
-  { id: "proxies", label: "策略与节点", icon: Layers2 },
-  { id: "connections", label: "连接", icon: Network },
-  { id: "config", label: "运行配置", icon: Settings2 },
-  { id: "log", label: "操作记录", icon: List },
+  { id: "overview", label: uiText("概览"), icon: Activity },
+  { id: "proxies", label: uiText("策略与节点"), icon: Layers2 },
+  { id: "connections", label: uiText("连接"), icon: Network },
+  { id: "config", label: uiText("运行配置"), icon: Settings2 },
+  { id: "log", label: uiText("操作记录"), icon: List },
 ];
 const modeLabels: Record<string, string> = {
-  rule: "规则",
-  global: "全局",
-  direct: "直连",
+  rule: uiText("规则"),
+  global: uiText("全局"),
+  direct: uiText("直连"),
 };
 const call = <T,>(name: string, args: object = {}) => {
   if (!myco?.os)
-    return Promise.reject(new Error("请更新 myco 桌面 App 后使用本机控制接口"));
+    return Promise.reject(new Error(uiText("请更新 myco 桌面 App 后使用本机控制接口")));
   return myco.os.call<T>(name, args, { timeout: 15000 });
 };
 const errorText = (e: unknown) => {
@@ -79,7 +80,7 @@ function Chart({ samples }: { samples: Sample[] }) {
       <svg
         viewBox={`0 0 ${w} ${h}`}
         role="img"
-        aria-label="最近 90 秒的上下行速率"
+        aria-label={uiText("最近 90 秒的上下行速率")}
         preserveAspectRatio="none"
       >
         <defs>
@@ -114,7 +115,7 @@ function Chart({ samples }: { samples: Sample[] }) {
           </>
         )}
       </svg>
-      {samples.length < 2 && <span className="chart-empty">等待流量采样…</span>}
+      {samples.length < 2 && <span className="chart-empty">{uiText("等待流量采样…")}</span>}
     </div>
   );
 }
@@ -142,7 +143,7 @@ function App() {
   const record = (text: string) =>
     setLogs((l) =>
       [
-        { at: new Date().toLocaleTimeString("zh-CN", { hour12: false }), text },
+        { at: new Date().toLocaleTimeString(locale(), { hour12: false }), text },
         ...l,
       ].slice(0, 100),
     );
@@ -209,7 +210,7 @@ function App() {
     setSamples(demoSamples);
     setError("");
     setLoading(false);
-    record("打开示例预览 · 不连接内核，不改本机配置");
+    record(uiText("打开示例预览 · 不连接内核，不改本机配置"));
   };
   const openSettings = () => {
     setEndpoint(
@@ -241,7 +242,7 @@ function App() {
       setProfile(p);
       setError("");
       setSettings(false);
-      record("已保存本机控制连接");
+      record(uiText("已保存本机控制连接"));
     } catch (e) {
       setNote(errorText(e));
     } finally {
@@ -250,7 +251,7 @@ function App() {
   }
   async function action(args: object, label: string) {
     if (demo) {
-      setNote("这是示例预览。连接本机内核后才能执行操作。");
+      setNote(uiText("这是示例预览。连接本机内核后才能执行操作。"));
       return;
     }
     setBusy(true);
@@ -265,7 +266,7 @@ function App() {
       setError("");
     } catch (e) {
       setNote(errorText(e));
-      record(label + " · 未完成");
+      record(label + uiText(" · 未完成"));
     } finally {
       setBusy(false);
     }
@@ -283,7 +284,7 @@ function App() {
       setSettings(false);
       setSecret("");
       setError("");
-      record("已断开控制连接 · 内核继续运行");
+      record(uiText("已断开控制连接 · 内核继续运行"));
     } catch (e) {
       setNote(errorText(e));
     } finally {
@@ -306,10 +307,10 @@ function App() {
             <Cable size={21} />
           </div>
           <span>
-            代理工作台<small>NETWORK CONSOLE</small>
+            {uiText("代理工作台")}<small>NETWORK CONSOLE</small>
           </span>
         </div>
-        <div className="rail-label">工作空间</div>
+        <div className="rail-label">{uiText("工作空间")}</div>
         <nav>
           {tabs.map((t) => (
             <button
@@ -329,33 +330,33 @@ function App() {
         <div className="rail-bottom">
           <ShieldCheck size={17} />
           <div>
-            控制信息仅存本机<small>不与工作区共享</small>
+            {uiText("控制信息仅存本机")}<small>{uiText("不与工作区共享")}</small>
           </div>
         </div>
       </aside>
       <div className="proxy-body">
         <header className="proxy-top">
           <div className="crumb">
-            工作台 <ChevronRight size={13} />
+            {uiText("工作台")}{" "}<ChevronRight size={13} />
             <strong>{title}</strong>
           </div>
           <div className="top-actions">
-            {demo && <span className="badge">示例预览</span>}
+            {demo && <span className="badge">{uiText("示例预览")}</span>}
             <span className="connection-state">
               <i className={online ? "on" : ""} />
               {demo
-                ? "演示数据"
+                ? uiText("演示数据")
                 : error
-                  ? "连接中断"
+                  ? uiText("连接中断")
                   : online
-                    ? "已连接"
+                    ? uiText("已连接")
                     : loading
-                      ? "正在连接"
-                      : "未连接"}
+                      ? uiText("正在连接")
+                      : uiText("未连接")}
             </span>
             <button
               className="icon-btn"
-              aria-label="连接设置"
+              aria-label={uiText("连接设置")}
               onClick={openSettings}
             >
               <Settings2 size={17} />
@@ -373,41 +374,40 @@ function App() {
               <h1>{title}</h1>
               <p>
                 {tab === "overview"
-                  ? "看清每一条连接，让网络按你的规则运行。"
+                  ? uiText("看清每一条连接，让网络按你的规则运行。")
                   : tab === "proxies"
-                    ? "管理出口策略，手动选择节点或交给内核自动选择。"
+                    ? uiText("管理出口策略，手动选择节点或交给内核自动选择。")
                     : tab === "connections"
-                      ? "查看当前流量经过哪里，按需断开单条连接。"
+                      ? uiText("查看当前流量经过哪里，按需断开单条连接。")
                       : tab === "config"
-                        ? "只读检查当前配置；切换模式在概览中完成。"
-                        : "这次打开工作台后的操作记录，仅在当前页面保留。"}
+                        ? uiText("只读检查当前配置；切换模式在概览中完成。")
+                        : uiText("这次打开工作台后的操作记录，仅在当前页面保留。")}
               </p>
             </div>
             <button className="btn" onClick={openSettings}>
               <Cable size={15} />
-              {profile ? "管理连接" : "连接内核"}
+              {profile ? uiText("管理连接") : uiText("连接内核")}
             </button>
           </div>
           {note && (
             <div role="status" className="notice">
               {note}
-              <button aria-label="关闭提示" onClick={() => setNote("")}>
+              <button aria-label={uiText("关闭提示")} onClick={() => setNote("")}>
                 <X size={14} />
               </button>
             </div>
           )}
           {error && (
             <div role="alert" className="notice error">
-              {error}。<button onClick={openSettings}>检查连接</button>
-              {snapshot && <span>下方保留上次数据，非实时。</span>}
+              {error}。<button onClick={openSettings}>{uiText("检查连接")}</button>
+              {snapshot && <span>{uiText("下方保留上次数据，非实时。")}</span>}
             </div>
           )}
           {demo && (
             <div className="demo-banner">
               <CircleHelp size={15} />
-              示例预览 · 节点、连接和流量均为演示数据，不代表你的网络。
-              <button onClick={openSettings}>
-                接入真实内核 <ChevronRight size={13} />
+              {uiText("示例预览 · 节点、连接和流量均为演示数据，不代表你的网络。")}{" "}<button onClick={openSettings}>
+                {uiText("接入真实内核")}{" "}<ChevronRight size={13} />
               </button>
             </div>
           )}
@@ -416,24 +416,20 @@ function App() {
               <div className="empty-symbol">
                 <Cable size={32} />
               </div>
-              <h2>连接你正在使用的代理内核</h2>
+              <h2>{uiText("连接你正在使用的代理内核")}</h2>
               <p>
-                支持 Mihomo 与启用了 Clash API 的 sing-box。
-                <br />
-                输入本机控制地址和密钥，即可查看并管理网络。
-              </p>
+                {uiText("支持 Mihomo 与启用了 Clash API 的 sing-box。")}{" "}<br />
+                {uiText("输入本机控制地址和密钥，即可查看并管理网络。")}{" "}</p>
               <div>
                 <button className="btn btn-primary" onClick={openSettings}>
-                  连接本机内核
-                </button>
+                  {uiText("连接本机内核")}{" "}</button>
                 <button className="btn" onClick={addDemo}>
-                  先看示例
-                </button>
+                  {uiText("先看示例")}{" "}</button>
               </div>
               <small>
                 {checked
-                  ? "管理已有内核，不会自动安装或启动代理服务。"
-                  : "正在检查本机连接…"}
+                  ? uiText("管理已有内核，不会自动安装或启动代理服务。")
+                  : uiText("正在检查本机连接…")}
               </small>
             </section>
           ) : (
@@ -443,34 +439,34 @@ function App() {
                   <section className="metrics">
                     {[
                       {
-                        name: "下载速率",
+                        name: uiText("下载速率"),
                         value:
                           validTraffic && current ? bytes(current.down) : "—",
                         unit: "/s",
                         icon: ArrowDown,
                         sub: validTraffic
-                          ? `累计 ${bytes(snapshot!.traffic.downloadTotal)}`
-                          : "等待流量采样",
+                          ? uiText("累计 {0}", bytes(snapshot!.traffic.downloadTotal))
+                          : uiText("等待流量采样"),
                       },
                       {
-                        name: "上传速率",
+                        name: uiText("上传速率"),
                         value:
                           validTraffic && current ? bytes(current.up) : "—",
                         unit: "/s",
                         icon: ArrowUp,
                         sub: validTraffic
-                          ? `累计 ${bytes(snapshot!.traffic.uploadTotal)}`
-                          : "等待流量采样",
+                          ? uiText("累计 {0}", bytes(snapshot!.traffic.uploadTotal))
+                          : uiText("等待流量采样"),
                       },
                       {
-                        name: "当前连接",
+                        name: uiText("当前连接"),
                         value: validTraffic ? String(connections.length) : "—",
                         unit: "",
                         icon: Network,
-                        sub: "活跃的网络连接",
+                        sub: uiText("活跃的网络连接"),
                       },
                       {
-                        name: "代理节点",
+                        name: uiText("代理节点"),
                         value: online
                           ? String(
                               nodes.filter(([, n]) => !n.all?.length).length,
@@ -478,7 +474,7 @@ function App() {
                           : "—",
                         unit: "",
                         icon: Globe2,
-                        sub: `${groups.length} 个策略组`,
+                        sub: uiText("{0} 个策略组", groups.length),
                       },
                     ].map((m) => (
                       <div className="metric" key={m.name}>
@@ -497,26 +493,26 @@ function App() {
                   <section className="surface traffic">
                     <div className="section-head">
                       <h2>
-                        实时流量{" "}
-                        <span>{demo ? "示例曲线" : "约每 2 秒采样"}</span>
+                        {uiText("实时流量")}{" "}
+                        <span>{demo ? uiText("示例曲线") : uiText("约每 2 秒采样")}</span>
                       </h2>
                       <div className="legend">
-                        <span>━ 下载</span>
-                        <span>┄ 上传</span>
+                        <span>{uiText("━ 下载")}</span>
+                        <span>{uiText("┄ 上传")}</span>
                       </div>
                     </div>
                     <Chart samples={samples} />
                     <div className="chart-footer">
-                      <span>约 90 秒前</span>
-                      <span>{loading && !demo ? "更新中…" : "现在"}</span>
+                      <span>{uiText("约 90 秒前")}</span>
+                      <span>{loading && !demo ? uiText("更新中…") : uiText("现在")}</span>
                     </div>
                   </section>
                   <div className="overview-bottom">
                     <section className="surface">
                       <div className="section-head">
-                        <h2>出站策略</h2>
+                        <h2>{uiText("出站策略")}</h2>
                         <button onClick={() => setTab("proxies")}>
-                          全部策略 <ChevronRight size={13} />
+                          {uiText("全部策略")}{" "}<ChevronRight size={13} />
                         </button>
                       </div>
                       {groups.length ? (
@@ -533,8 +529,8 @@ function App() {
                               <strong>{id}</strong>
                               <small>
                                 {n.type === "Selector"
-                                  ? "手动选择"
-                                  : "内核自动管理"}
+                                  ? uiText("手动选择")
+                                  : uiText("内核自动管理")}
                               </small>
                             </div>
                             <span>{n.now || "—"}</span>
@@ -543,13 +539,12 @@ function App() {
                         ))
                       ) : (
                         <p className="muted padded">
-                          暂无策略组，或该内核未提供列表。
-                        </p>
+                          {uiText("暂无策略组，或该内核未提供列表。")}{" "}</p>
                       )}
                     </section>
                     <section className="surface">
                       <div className="section-head">
-                        <h2>运行模式</h2>
+                        <h2>{uiText("运行模式")}</h2>
                         <ShieldCheck size={16} />
                       </div>
                       <div className="mode-switch">
@@ -586,15 +581,14 @@ function App() {
                       </div>
                       <p className="mode-description">
                         {snapshot?.config.mode?.toLowerCase() === "rule"
-                          ? "按内核现有规则选择代理或直连。"
+                          ? uiText("按内核现有规则选择代理或直连。")
                           : snapshot?.config.mode?.toLowerCase() === "global"
-                            ? "所有流量使用全局策略。"
-                            : "以当前内核返回的模式为准。"}
+                            ? uiText("所有流量使用全局策略。")
+                            : uiText("以当前内核返回的模式为准。")}
                       </p>
                       <div className="local-foot">
                         <LockKeyhole size={13} />
-                        密钥由本机 App 保管
-                      </div>
+                        {uiText("密钥由本机 App 保管")}{" "}</div>
                     </section>
                   </div>
                 </>
@@ -602,8 +596,8 @@ function App() {
               {tab === "proxies" && (
                 <>
                   <div className="section-head flat">
-                    <h2>{groups.length} 个策略组</h2>
-                    <span className="muted">只有手动选择组可以切换</span>
+                    <h2>{groups.length} {" "}{uiText("个策略组")}</h2>
+                    <span className="muted">{uiText("只有手动选择组可以切换")}</span>
                   </div>
                   {groups.map(([id, n]) => (
                     <section key={id} className="surface proxy-group">
@@ -612,7 +606,7 @@ function App() {
                           {id}
                           <span>{n.type}</span>
                         </h2>
-                        <span className="muted">当前：{n.now || "—"}</span>
+                        <span className="muted">{uiText("当前：")}{n.now || "—"}</span>
                       </div>
                       <div className="node-grid">
                         {n.all!.map((name) => {
@@ -645,7 +639,7 @@ function App() {
                                 </div>
                                 <small>
                                   {node?.type || "Proxy"} ·{" "}
-                                  {d ? `${d} ms` : "未测速"}
+                                  {d ? `${d} ms` : uiText("未测速")}
                                 </small>
                               </button>
                               <button
@@ -658,8 +652,7 @@ function App() {
                                   )
                                 }
                               >
-                                测速
-                              </button>
+                                {uiText("测速")}{" "}</button>
                             </div>
                           );
                         })}
@@ -668,8 +661,7 @@ function App() {
                   ))}
                   {!groups.length && (
                     <p className="muted">
-                      暂无策略组，检查内核配置或连接状态。
-                    </p>
+                      {uiText("暂无策略组，检查内核配置或连接状态。")}{" "}</p>
                   )}
                 </>
               )}
@@ -677,16 +669,16 @@ function App() {
                 <section className="surface">
                   <div className="section-head">
                     <h2>
-                      活跃连接{" "}
+                      {uiText("活跃连接")}{" "}
                       <span>
-                        {validTraffic ? connections.length : "数据不可用"}
+                        {validTraffic ? connections.length : uiText("数据不可用")}
                       </span>
                     </h2>
                     <label className="search">
                       <Search size={14} />
                       <input
-                        aria-label="搜索连接"
-                        placeholder="搜索域名、进程、策略"
+                        aria-label={uiText("搜索连接")}
+                        placeholder={uiText("搜索域名、进程、策略")}
                         value={filter}
                         onChange={(e) => setFilter(e.target.value)}
                       />
@@ -696,10 +688,10 @@ function App() {
                     <table>
                       <thead>
                         <tr>
-                          <th>目标 / 进程</th>
-                          <th>策略链</th>
-                          <th>下载 / 上传</th>
-                          <th>操作</th>
+                          <th>{uiText("目标 / 进程")}</th>
+                          <th>{uiText("策略链")}</th>
+                          <th>{uiText("下载 / 上传")}</th>
+                          <th>{uiText("操作")}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -721,10 +713,10 @@ function App() {
                                 <strong>
                                   {c.metadata.host ||
                                     c.metadata.destinationIP ||
-                                    "未知目标"}
+                                    uiText("未知目标")}
                                 </strong>
                                 <small>
-                                  {c.metadata.process || "未知进程"} ·{" "}
+                                  {c.metadata.process || uiText("未知进程")} ·{" "}
                                   {c.metadata.network.toUpperCase()}:
                                   {c.metadata.destinationPort}
                                 </small>
@@ -748,8 +740,7 @@ function App() {
                                     )
                                   }
                                 >
-                                  断开
-                                </button>
+                                  {uiText("断开")}{" "}</button>
                               </td>
                             </tr>
                           ))}
@@ -757,7 +748,7 @@ function App() {
                     </table>
                     {!connections.length && (
                       <div className="table-empty">
-                        {validTraffic ? "当前没有活跃连接" : "等待连接数据"}
+                        {validTraffic ? uiText("当前没有活跃连接") : uiText("等待连接数据")}
                       </div>
                     )}
                   </div>
@@ -766,41 +757,41 @@ function App() {
               {tab === "config" && (
                 <section className="surface config">
                   <div className="section-head">
-                    <h2>内核状态</h2>
-                    <span className="badge">只读摘要</span>
+                    <h2>{uiText("内核状态")}</h2>
+                    <span className="badge">{uiText("只读摘要")}</span>
                   </div>
                   {[
                     [
-                      "内核",
-                      `${profile.engine} · ${snapshot?.version || "等待响应"}`,
+                      uiText("内核"),
+                      `${profile.engine} · ${snapshot?.version || uiText("等待响应")}`,
                     ],
-                    ["控制地址", profile.endpoint],
+                    [uiText("控制地址"), profile.endpoint],
                     [
-                      "控制密钥",
+                      uiText("控制密钥"),
                       profile.has_secret
                         ? "已保存在本机（不会显示）"
-                        : "未设置",
+                        : uiText("未设置"),
                     ],
                     [
-                      "运行模式",
+                      uiText("运行模式"),
                       modeLabels[snapshot?.config.mode.toLowerCase() || ""] ||
                         snapshot?.config.mode ||
                         "—",
                     ],
-                    ["混合端口", snapshot?.config["mixed-port"] || "未提供"],
+                    [uiText("混合端口"), snapshot?.config["mixed-port"] || uiText("未提供")],
                     [
-                      "HTTP / SOCKS 端口",
+                      uiText("HTTP / SOCKS 端口"),
                       `${snapshot?.config.port || "—"} / ${snapshot?.config["socks-port"] || "—"}`,
                     ],
                     [
-                      "允许局域网",
+                      uiText("允许局域网"),
                       snapshot?.warnings.some((w) => w.startsWith("/configs"))
                         ? "未提供"
                         : snapshot?.config["allow-lan"] === undefined
                           ? "未提供"
                           : snapshot.config["allow-lan"]
                             ? "已开启"
-                            : "未开启",
+                            : uiText("未开启"),
                     ],
                     [
                       "TUN",
@@ -808,7 +799,7 @@ function App() {
                         ? "未提供"
                         : snapshot?.config.tun?.enable
                           ? "内核报告已开启"
-                          : "未开启 / 内核未提供",
+                          : uiText("未开启 / 内核未提供"),
                     ],
                   ].map(([k, v]) => (
                     <div className="config-row" key={k}>
@@ -817,18 +808,16 @@ function App() {
                     </div>
                   ))}
                   <p className="padded muted">
-                    工作台管理已有内核，不会修改系统代理、DNS、TUN
-                    或配置文件。系统流量是否经过代理，取决于你已使用的代理客户端。
-                  </p>
+                    {uiText("工作台管理已有内核，不会修改系统代理、DNS、TUN 或配置文件。系统流量是否经过代理，取决于你已使用的代理客户端。")}{" "}</p>
                 </section>
               )}
               {tab === "log" && (
                 <section className="surface">
                   <div className="section-head">
                     <h2>
-                      本次操作 <span>最多 100 条</span>
+                      {uiText("本次操作")}{" "}<span>{uiText("最多 100 条")}</span>
                     </h2>
-                    <button onClick={() => setLogs([])}>清空</button>
+                    <button onClick={() => setLogs([])}>{uiText("清空")}</button>
                   </div>
                   {logs.length ? (
                     logs.map((l, i) => (
@@ -839,8 +828,7 @@ function App() {
                     ))
                   ) : (
                     <p className="padded muted">
-                      还没有操作记录。这里不包含内核原始日志。
-                    </p>
+                      {uiText("还没有操作记录。这里不包含内核原始日志。")}{" "}</p>
                   )}
                 </section>
               )}
@@ -857,10 +845,10 @@ function App() {
                 </span>
                 <span>
                   {demo
-                    ? "示例预览"
+                    ? uiText("示例预览")
                     : snapshot
-                      ? `上次更新 ${new Date(snapshot.at).toLocaleTimeString("zh-CN", { hour12: false })}`
-                      : "等待内核响应"}
+                      ? uiText("上次更新 {0}", new Date(snapshot.at).toLocaleTimeString(locale(), { hour12: false }))
+                      : uiText("等待内核响应")}
                 </span>
               </footer>
             </>
@@ -906,9 +894,9 @@ function App() {
             className="connect-modal"
           >
             <div className="section-head">
-              <h2 id="connect-title">连接本机内核</h2>
+              <h2 id="connect-title">{uiText("连接本机内核")}</h2>
               <button
-                aria-label="关闭连接设置"
+                aria-label={uiText("关闭连接设置")}
                 disabled={busy}
                 onClick={() => {
                   setSettings(false);
@@ -919,12 +907,10 @@ function App() {
               </button>
             </div>
             <p>
-              先在已有代理客户端中启用 Clash API，控制地址需使用本机回环 IP。
-            </p>
+              {uiText("先在已有代理客户端中启用 Clash API，控制地址需使用本机回环 IP。")}{" "}</p>
             <form onSubmit={saveProfile}>
               <label>
-                代理内核
-                <select
+                {uiText("代理内核")}{" "}<select
                   value={engine}
                   onChange={(e) =>
                     setEngine(e.target.value as Profile["engine"])
@@ -935,8 +921,7 @@ function App() {
                 </select>
               </label>
               <label>
-                控制地址
-                <input
+                {uiText("控制地址")}{" "}<input
                   autoFocus
                   required
                   type="url"
@@ -946,24 +931,21 @@ function App() {
                 />
               </label>
               <label>
-                控制密钥
-                <input
+                {uiText("控制密钥")}{" "}<input
                   type="password"
                   autoComplete="new-password"
                   value={secret}
                   placeholder={
                     profile?.has_secret && !demo
-                      ? "留空保留已有密钥；换地址时自动清除"
-                      : "内核未设密钥时可留空"
+                      ? uiText("留空保留已有密钥；换地址时自动清除")
+                      : uiText("内核未设密钥时可留空")
                   }
                   onChange={(e) => setSecret(e.target.value)}
                 />
               </label>
               <small>
                 <LockKeyhole size={13} />
-                凭据按此页面存于本机 App，不写入工作区。Linux 无系统钥匙串时遵循
-                App 的本机凭据文件设置。
-              </small>
+                {uiText("凭据按此页面存于本机 App，不写入工作区。Linux 无系统钥匙串时遵循 App 的本机凭据文件设置。")}{" "}</small>
               {note && (
                 <p role="alert" className="form-error">
                   {note}
@@ -978,8 +960,7 @@ function App() {
                     onClick={forget}
                   >
                     <Unplug size={14} />
-                    断开并忘记
-                  </button>
+                    {uiText("断开并忘记")}{" "}</button>
                 )}
                 <span />
                 <button
@@ -991,16 +972,14 @@ function App() {
                     setSecret("");
                   }}
                 >
-                  取消
-                </button>
+                  {uiText("取消")}{" "}</button>
                 <button className="btn btn-primary" disabled={busy}>
                   {busy ? (
                     <LoaderCircle size={15} className="spin" />
                   ) : (
                     <Check size={15} />
                   )}
-                  保存并连接
-                </button>
+                  {uiText("保存并连接")}{" "}</button>
               </div>
             </form>
           </section>

@@ -1,7 +1,7 @@
 {
   "id": "myco/mindmap",
   "name": "思维导图",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "kind": "custom",
   "category": "creative",
   "icon": "icon.svg",

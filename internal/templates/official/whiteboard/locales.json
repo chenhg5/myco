@@ -1,0 +1,10 @@
+{
+  "en": {
+    "name": "Whiteboard",
+    "description": "An infinite canvas for sticky notes, text, shapes and connectors. Drag, zoom and color your ideas; work with agents on brainstorms, retrospectives and flows."
+  },
+  "zh": {
+    "name": "白板",
+    "description": "一块无限大的画布：便签、文字、矩形、椭圆、连线，拖动、缩放、改颜色；agent 能往上贴便签，适合头脑风暴、复盘、画流程。"
+  }
+}

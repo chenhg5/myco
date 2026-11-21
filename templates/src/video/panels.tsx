@@ -1,3 +1,4 @@
+import { t as uiText } from "../_lib/i18n";
 // The side panels: the files of the project (素材), text and censoring to
 // add, notes for agents and people, and the properties of what is selected.
 import { useEffect, useRef, useState } from "react";
@@ -18,7 +19,7 @@ export function MediaPanel({ importing, onImport, onRelink, setSel }: {
   for (const c of clips.rows) used.set(String(c.data.media), (used.get(String(c.data.media)) || 0) + 1);
   return (
     <div className="pane">
-      <button type="button" className="import" onClick={onImport}><Upload className="ico" />导入视频</button>
+      <button type="button" className="import" onClick={onImport}><Upload className="ico" />{uiText("导入视频")}</button>
       <div className="media-grid">
         {importing.map((f) => (
           <div key={f.key} className="media is-busy">
@@ -32,29 +33,29 @@ export function MediaPanel({ importing, onImport, onRelink, setSel }: {
           return (
             <div key={r.id} className={`media${l ? "" : " is-missing"}`} draggable={!!l}
               onDragStart={(e) => { e.dataTransfer.setData("application/x-myco-media", r.id); e.dataTransfer.effectAllowed = "copy"; }}
-              title={`${d.name || "视频"}${d.width ? ` · ${d.width}×${d.height}` : ""}`}>
+              title={`${d.name || uiText("视频")}${d.width ? ` · ${d.width}×${d.height}` : ""}`}>
               <div className="media-pic">
                 {pic ? <img src={pic} alt="" draggable={false} /> : l ? <FileVideo className="ico" /> : null}
                 <span className="media-dur">{fmt(num(d.duration, 0))}</span>
-                {used.get(r.id) ? <span className="media-used">已用 {used.get(r.id)}</span> : null}
+                {used.get(r.id) ? <span className="media-used">{uiText("已用")}{" "}{used.get(r.id)}</span> : null}
                 {l ? (
-                  <button type="button" className="media-add" title="放到时间线末尾" aria-label="放到时间线末尾"
+                  <button type="button" className="media-add" title={uiText("放到时间线末尾")} aria-label={uiText("放到时间线末尾")}
                     onClick={() => { const id = addClip(r.id); setSel({ kind: "clip", id }, false); player.seek(total() - 0.001); }}><Plus className="ico" /></button>
                 ) : (
-                  <button type="button" className="media-relink" onClick={() => onRelink(r.id)}><RefreshCw className="ico" />本机没有，选文件</button>
+                  <button type="button" className="media-relink" onClick={() => onRelink(r.id)}><RefreshCw className="ico" />{uiText("本机没有，选文件")}</button>
                 )}
               </div>
               <div className="media-row">
-                <span className="media-name">{d.name || "视频"}</span>
-                <button type="button" className="icon-btn media-del" title="从项目里去掉（连同时间线上用到它的片段）" aria-label="去掉"
-                  onClick={() => { removeMedia(r.id); kit.flash(`已去掉「${d.name || "视频"}」`); }}><Trash2 className="ico" /></button>
+                <span className="media-name">{d.name || uiText("视频")}</span>
+                <button type="button" className="icon-btn media-del" title={uiText("从项目里去掉（连同时间线上用到它的片段）")} aria-label={uiText("去掉")}
+                  onClick={() => { removeMedia(r.id); kit.flash(uiText("已去掉「{0}」", d.name || "视频")); }}><Trash2 className="ico" /></button>
               </div>
             </div>
           );
         })}
       </div>
       {!media.rows.length && !importing.length && (
-        <p className="pane-hint">支持 mp4、mov、webm。文件只存在这台电脑的浏览器里，不会上传；换一台电脑打开时，选一下同一个文件就能接着剪。</p>
+        <p className="pane-hint">{uiText("支持 mp4、mov、webm。文件只存在这台电脑的浏览器里，不会上传；换一台电脑打开时，选一下同一个文件就能接着剪。")}</p>
       )}
     </div>
   );
@@ -62,10 +63,10 @@ export function MediaPanel({ importing, onImport, onRelink, setSel }: {
 
 // ---- 文字 ----
 const TEXTS: { name: string; sample: string; o: { size: number; y: number; h: number; style: string; color: string; w: number; x?: number } }[] = [
-  { name: "标题", sample: "大标题", o: { size: 0.1, y: 0.36, h: 0.2, style: "shadow", color: "#ffffff", w: 0.8 } },
-  { name: "字幕", sample: "字幕放在底部", o: { size: 0.05, y: 0.82, h: 0.1, style: "box", color: "#ffffff", w: 0.8 } },
-  { name: "描边", sample: "描边大字", o: { size: 0.08, y: 0.12, h: 0.16, style: "outline", color: "#ffe14d", w: 0.8 } },
-  { name: "角标", sample: "角标", o: { size: 0.04, y: 0.05, h: 0.08, style: "box", color: "#ffffff", w: 0.24, x: 0.04 } },
+  { name: uiText("标题"), sample: uiText("大标题"), o: { size: 0.1, y: 0.36, h: 0.2, style: "shadow", color: "#ffffff", w: 0.8 } },
+  { name: uiText("字幕"), sample: uiText("字幕放在底部"), o: { size: 0.05, y: 0.82, h: 0.1, style: "box", color: "#ffffff", w: 0.8 } },
+  { name: uiText("描边"), sample: uiText("描边大字"), o: { size: 0.08, y: 0.12, h: 0.16, style: "outline", color: "#ffe14d", w: 0.8 } },
+  { name: uiText("角标"), sample: uiText("角标"), o: { size: 0.04, y: 0.05, h: 0.08, style: "box", color: "#ffffff", w: 0.24, x: 0.04 } },
 ];
 export function TextPanel({ setSel }: { setSel: (s: Sel) => void }) {
   const add = (i: number) => {
@@ -85,7 +86,7 @@ export function TextPanel({ setSel }: { setSel: (s: Sel) => void }) {
           </button>
         ))}
       </div>
-      <p className="pane-hint">点一个样式，在播放头处加 3 秒文字。在画面上拖动它换位置，在时间线上拖两端改时长。</p>
+      <p className="pane-hint">{uiText("点一个样式，在播放头处加 3 秒文字。在画面上拖动它换位置，在时间线上拖两端改时长。")}</p>
     </div>
   );
 }
@@ -103,13 +104,13 @@ export function CensorPanel({ setSel }: { setSel: (s: Sel) => void }) {
     <div className="pane">
       <div className="presets">
         <button type="button" className="preset" onClick={() => add("blur")}>
-          <span className="preset-pic is-blur"><Droplets className="ico" /></span><span className="preset-name">模糊</span>
+          <span className="preset-pic is-blur"><Droplets className="ico" /></span><span className="preset-name">{uiText("模糊")}</span>
         </button>
         <button type="button" className="preset" onClick={() => add("mosaic")}>
-          <span className="preset-pic is-mosaic"><Grid3x3 className="ico" /></span><span className="preset-name">马赛克</span>
+          <span className="preset-pic is-mosaic"><Grid3x3 className="ico" /></span><span className="preset-name">{uiText("马赛克")}</span>
         </button>
       </div>
-      <p className="pane-hint">在播放头处加一块打码，默认盖到这段视频结束。在画面上拖动方框盖住人脸、车牌，拖四角改大小；在时间线上拖两端改出现的时间。</p>
+      <p className="pane-hint">{uiText("在播放头处加一块打码，默认盖到这段视频结束。在画面上拖动方框盖住人脸、车牌，拖四角改大小；在时间线上拖两端改出现的时间。")}</p>
     </div>
   );
 }
@@ -131,14 +132,14 @@ export function NotesPanel({ me, focus, pageId, title }: { me: string; focus: st
     <div className="pane" ref={ref}>
       <AgentCard pageId={pageId} title={title} open={open} />
       <div className="note-add">
-        <textarea className="inp" rows={2} value={text} placeholder={`在 ${fmt(player.time, true)} 留一条备注，比如「这段删掉」「这里给人脸打码」`}
+        <textarea className="inp" rows={2} value={text} placeholder={uiText("在 {0} 留一条备注，比如「这段删掉」「这里给人脸打码」", fmt(player.time, true))}
           onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); add(); } }} />
-        <button type="button" className="btn btn-primary" disabled={!text.trim()} onClick={add}><MessageSquareText className="ico" />加备注</button>
+        <button type="button" className="btn btn-primary" disabled={!text.trim()} onClick={add}><MessageSquareText className="ico" />{uiText("加备注")}</button>
       </div>
       <div className="notes">
         {list.map((n) => (
           <div key={n.id} data-id={n.id} className={`note-item${n.data.done ? " is-done" : ""}${n.id === focus ? " is-focus" : ""}`}>
-            <button type="button" className="note-check" aria-label={n.data.done ? "标成没处理" : "标成已处理"} onClick={() => patch(notes, n.id, { done: !n.data.done })}>
+            <button type="button" className="note-check" aria-label={n.data.done ? uiText("标成没处理") : uiText("标成已处理")} onClick={() => patch(notes, n.id, { done: !n.data.done })}>
               {n.data.done ? <Check className="ico" /> : null}
             </button>
             <div className="note-body">
@@ -146,7 +147,7 @@ export function NotesPanel({ me, focus, pageId, title }: { me: string; focus: st
               <span className="note-text">{String(n.data.text || "")}</span>
               {n.data.by ? <span className="note-by">{String(n.data.by)}</span> : null}
             </div>
-            <button type="button" className="icon-btn" aria-label="删除备注" onClick={() => change([[notes, n.id, null]])}><Trash2 className="ico" /></button>
+            <button type="button" className="icon-btn" aria-label={uiText("删除备注")} onClick={() => change([[notes, n.id, null]])}><Trash2 className="ico" /></button>
           </div>
         ))}
       </div>
@@ -161,14 +162,14 @@ export function agentText(pageId: string, title: string) {
 }
 function AgentCard({ pageId, title, open }: { pageId: string; title: string; open: number }) {
   const copy = async () => {
-    try { await navigator.clipboard.writeText(agentText(pageId, title)); kit.flash("已复制，发给任意一个 agent 就行"); }
-    catch { kit.flash("没复制上，请手动选中复制"); }
+    try { await navigator.clipboard.writeText(agentText(pageId, title)); kit.flash(uiText("已复制，发给任意一个 agent 就行")); }
+    catch { kit.flash(uiText("没复制上，请手动选中复制")); }
   };
   return (
     <div className="agent-card">
-      <b>让 agent 一起剪</b>
-      <span>在时间点上留备注，然后把下面这段话发给 agent。它会读剪辑方案、按备注改，改动马上出现在这里。{open ? `现在有 ${open} 条没处理。` : ""}</span>
-      <button type="button" className="btn" onClick={copy}><Copy className="ico" />复制给 agent 的话</button>
+      <b>{uiText("让 agent 一起剪")}</b>
+      <span>{uiText("在时间点上留备注，然后把下面这段话发给 agent。它会读剪辑方案、按备注改，改动马上出现在这里。")}{open ? uiText("现在有 {0} 条没处理。", open) : ""}</span>
+      <button type="button" className="btn" onClick={copy}><Copy className="ico" />{uiText("复制给 agent 的话")}</button>
     </div>
   );
 }
@@ -205,43 +206,43 @@ function ClipProps({ id, setSel }: { id: string; setSel: (s: Sel) => void }) {
   const custom = !SPEEDS.includes(c.speed);
   return (
     <div className="pane props">
-      <div className="props-head"><FileVideo className="ico" /><b>{m?.name || "视频片段"}</b></div>
-      <Field label="变速">
+      <div className="props-head"><FileVideo className="ico" /><b>{m?.name || uiText("视频片段")}</b></div>
+      <Field label={uiText("变速")}>
         <div className="chips">
           {SPEEDS.map((s) => (
             <button key={s} type="button" className={`chip${c.speed === s ? " is-on" : ""}`} onClick={() => patch(clips, id, { speed: s })}>{s}x</button>
           ))}
         </div>
         <div className="row">
-          <input type="range" min={-2} max={2} step={0.01} aria-label="速度" value={Math.log2(c.speed)}
+          <input type="range" min={-2} max={2} step={0.01} aria-label={uiText("速度")} value={Math.log2(c.speed)}
             onChange={(e) => patch(clips, id, { speed: Math.round(Math.pow(2, Number(e.target.value)) * 100) / 100 }, `speed-${id}`)} />
           <span className={`row-v${custom ? " is-on" : ""}`}>{c.speed}x</span>
         </div>
-        <div className="field-note">变速后时长 {fmt(c.end - c.start, true)}，声音不变调</div>
+        <div className="field-note">{uiText("变速后时长")}{" "}{fmt(c.end - c.start, true)}{uiText("，声音不变调")}</div>
       </Field>
-      <Field label="音量">
+      <Field label={uiText("音量")}>
         <div className="row">
-          <button type="button" className="icon-btn" aria-label={c.muted ? "取消静音" : "静音"} title={c.muted ? "取消静音" : "静音"} onClick={() => patch(clips, id, { muted: !c.muted })}>
+          <button type="button" className="icon-btn" aria-label={c.muted ? uiText("取消静音") : uiText("静音")} title={c.muted ? uiText("取消静音") : uiText("静音")} onClick={() => patch(clips, id, { muted: !c.muted })}>
             {c.muted ? <VolumeX className="ico" /> : <Volume2 className="ico" />}
           </button>
-          <input type="range" min={0} max={2} step={0.01} aria-label="音量" value={c.muted ? 0 : c.volume}
+          <input type="range" min={0} max={2} step={0.01} aria-label={uiText("音量")} value={c.muted ? 0 : c.volume}
             onChange={(e) => patch(clips, id, { volume: Number(e.target.value), muted: false }, `vol-${id}`)} />
           <span className="row-v">{Math.round((c.muted ? 0 : c.volume) * 100)}%</span>
         </div>
       </Field>
-      <Field label="用原片的哪一段">
+      <Field label={uiText("用原片的哪一段")}>
         <div className="row">
           <Seconds value={c.in} onChange={(v) => patch(clips, id, { in: clamp(v, 0, c.out - 0.05) })} />
-          <span className="faint">到</span>
+          <span className="faint">{uiText("到")}</span>
           <Seconds value={c.out} onChange={(v) => patch(clips, id, { out: clamp(v, c.in + 0.05, num(m?.duration, v) || v) })} />
-          <span className="faint">秒</span>
+          <span className="faint">{uiText("秒")}</span>
         </div>
-        <div className="field-note">原片长 {fmt(num(m?.duration, 0), true)}；在时间线上拖片段两端也能裁剪</div>
+        <div className="field-note">{uiText("原片长")}{" "}{fmt(num(m?.duration, 0), true)}{uiText("；在时间线上拖片段两端也能裁剪")}</div>
       </Field>
       <div className="props-actions">
-        <button type="button" className="btn" onClick={() => { const n = split(player.time); if (n) setSel({ kind: "clip", id: n }); else kit.flash("把播放头放到这段中间再分割"); }}><Scissors className="ico" />分割</button>
-        <button type="button" className="btn" onClick={() => { const n = duplicateClip(id); if (n) setSel({ kind: "clip", id: n }); }}><Copy className="ico" />复制</button>
-        <button type="button" className="btn is-danger" onClick={() => { removeClip(id); setSel(null); }}><Trash2 className="ico" />删除</button>
+        <button type="button" className="btn" onClick={() => { const n = split(player.time); if (n) setSel({ kind: "clip", id: n }); else kit.flash(uiText("把播放头放到这段中间再分割")); }}><Scissors className="ico" />{uiText("分割")}</button>
+        <button type="button" className="btn" onClick={() => { const n = duplicateClip(id); if (n) setSel({ kind: "clip", id: n }); }}><Copy className="ico" />{uiText("复制")}</button>
+        <button type="button" className="btn is-danger" onClick={() => { removeClip(id); setSel(null); }}><Trash2 className="ico" />{uiText("删除")}</button>
       </div>
     </div>
   );
@@ -253,72 +254,72 @@ function OverlayProps({ id, setSel }: { id: string; setSel: (s: Sel) => void }) 
   const isText = o.type === "text";
   return (
     <div className="pane props">
-      <div className="props-head">{isText ? <Type className="ico" /> : o.type === "blur" ? <Droplets className="ico" /> : <Grid3x3 className="ico" />}<b>{isText ? "文字" : "打码"}</b></div>
+      <div className="props-head">{isText ? <Type className="ico" /> : o.type === "blur" ? <Droplets className="ico" /> : <Grid3x3 className="ico" />}<b>{isText ? uiText("文字") : uiText("打码")}</b></div>
       {isText ? (
         <>
-          <Field label="内容">
-            <textarea className="inp" rows={3} value={o.text} onChange={(e) => set({ text: e.target.value }, `text-${id}`)} placeholder="写点什么" />
+          <Field label={uiText("内容")}>
+            <textarea className="inp" rows={3} value={o.text} onChange={(e) => set({ text: e.target.value }, `text-${id}`)} placeholder={uiText("写点什么")} />
           </Field>
-          <Field label="样式">
+          <Field label={uiText("样式")}>
             <div className="seg">
               {[["shadow", "阴影"], ["outline", "描边"], ["box", "底色"], ["plain", "无"]].map(([v, n]) => (
-                <button key={v} type="button" className={o.style === v ? "is-on" : ""} onClick={() => set({ style: v })}>{n}</button>
+                <button key={v} type="button" className={o.style === v ? "is-on" : ""} onClick={() => set({ style: v })}>{uiText(String(n))}</button>
               ))}
             </div>
           </Field>
-          <Field label="颜色">
+          <Field label={uiText("颜色")}>
             <div className="swatches">
               {COLORS.map((c) => <button key={c} type="button" aria-label={c} className={`swatch${o.color.toLowerCase() === c ? " is-on" : ""}`} style={{ background: c }} onClick={() => set({ color: c })} />)}
-              <input type="color" aria-label="别的颜色" value={/^#[0-9a-f]{6}$/i.test(o.color) ? o.color : "#ffffff"} onChange={(e) => set({ color: e.target.value }, `color-${id}`)} />
+              <input type="color" aria-label={uiText("别的颜色")} value={/^#[0-9a-f]{6}$/i.test(o.color) ? o.color : "#ffffff"} onChange={(e) => set({ color: e.target.value }, `color-${id}`)} />
             </div>
           </Field>
-          <Field label="字号">
+          <Field label={uiText("字号")}>
             <div className="row">
-              <input type="range" min={0.02} max={0.2} step={0.002} aria-label="字号" value={o.size} onChange={(e) => set({ size: Number(e.target.value) }, `size-${id}`)} />
+              <input type="range" min={0.02} max={0.2} step={0.002} aria-label={uiText("字号")} value={o.size} onChange={(e) => set({ size: Number(e.target.value) }, `size-${id}`)} />
               <span className="row-v">{Math.round(o.size * 1000) / 10}%</span>
             </div>
           </Field>
-          <Field label="位置">
+          <Field label={uiText("位置")}>
             <div className="seg">
-              {[["上", 0.06], ["中", 0.5 - o.h / 2], ["下", 0.94 - o.h]].map(([n, y]) => (
-                <button key={n as string} type="button" onClick={() => set({ y, x: (1 - o.w) / 2 })}>{n as string}</button>
+              {[["上", 0.06], ["居中", 0.5 - o.h / 2], ["下", 0.94 - o.h]].map(([n, y]) => (
+                <button key={n as string} type="button" onClick={() => set({ y, x: (1 - o.w) / 2 })}>{uiText(n as string)}</button>
               ))}
             </div>
           </Field>
         </>
       ) : (
         <>
-          <Field label="方式">
+          <Field label={uiText("方式")}>
             <div className="seg">
-              <button type="button" className={o.type === "blur" ? "is-on" : ""} onClick={() => set({ type: "blur" })}>模糊</button>
-              <button type="button" className={o.type === "mosaic" ? "is-on" : ""} onClick={() => set({ type: "mosaic" })}>马赛克</button>
+              <button type="button" className={o.type === "blur" ? "is-on" : ""} onClick={() => set({ type: "blur" })}>{uiText("模糊")}</button>
+              <button type="button" className={o.type === "mosaic" ? "is-on" : ""} onClick={() => set({ type: "mosaic" })}>{uiText("马赛克")}</button>
             </div>
           </Field>
-          <Field label="强度">
+          <Field label={uiText("强度")}>
             <div className="row">
-              <input type="range" min={0} max={1} step={0.01} aria-label="强度" value={o.strength} onChange={(e) => set({ strength: Number(e.target.value) }, `str-${id}`)} />
+              <input type="range" min={0} max={1} step={0.01} aria-label={uiText("强度")} value={o.strength} onChange={(e) => set({ strength: Number(e.target.value) }, `str-${id}`)} />
               <span className="row-v">{Math.round(o.strength * 100)}</span>
             </div>
           </Field>
-          <Field label="范围">
+          <Field label={uiText("范围")}>
             <div className="row">
-              <button type="button" className="btn" onClick={() => set({ x: 0, y: 0, w: 1, h: 1 })}>盖满画面</button>
-              <button type="button" className="btn" onClick={() => set({ x: 0.375, y: 0.375, w: 0.25, h: 0.25 })}>放回中间</button>
+              <button type="button" className="btn" onClick={() => set({ x: 0, y: 0, w: 1, h: 1 })}>{uiText("盖满画面")}</button>
+              <button type="button" className="btn" onClick={() => set({ x: 0.375, y: 0.375, w: 0.25, h: 0.25 })}>{uiText("放回中间")}</button>
             </div>
           </Field>
         </>
       )}
-      <Field label="出现时间">
+      <Field label={uiText("出现时间")}>
         <div className="row">
           <Seconds value={o.start} onChange={(v) => set({ start: v, end: Math.max(v + 0.1, o.end) })} />
-          <span className="faint">到</span>
+          <span className="faint">{uiText("到")}</span>
           <Seconds value={o.end} onChange={(v) => set({ end: Math.max(o.start + 0.1, v) })} />
-          <span className="faint">秒</span>
+          <span className="faint">{uiText("秒")}</span>
         </div>
       </Field>
       <div className="props-actions">
-        <button type="button" className="btn" onClick={() => { const n = addOverlay({ ...overlays.get(id)!.data, lane: freeLane(o.start, o.end, o.lane) }); setSel({ kind: "overlay", id: n }); }}><Copy className="ico" />复制</button>
-        <button type="button" className="btn is-danger" onClick={() => { removeOverlay(id); setSel(null); }}><Trash2 className="ico" />删除</button>
+        <button type="button" className="btn" onClick={() => { const n = addOverlay({ ...overlays.get(id)!.data, lane: freeLane(o.start, o.end, o.lane) }); setSel({ kind: "overlay", id: n }); }}><Copy className="ico" />{uiText("复制")}</button>
+        <button type="button" className="btn is-danger" onClick={() => { removeOverlay(id); setSel(null); }}><Trash2 className="ico" />{uiText("删除")}</button>
       </div>
     </div>
   );
@@ -331,27 +332,27 @@ function ProjectProps() {
   const bg = String(p.background || "#000000");
   return (
     <div className="pane props">
-      <div className="props-head"><FileVideo className="ico" /><b>作品</b></div>
-      <Field label="画面比例">
+      <div className="props-head"><FileVideo className="ico" /><b>{uiText("作品")}</b></div>
+      <Field label={uiText("画面比例")}>
         <select className="sel" value={String(p.ratio || "source")} onChange={(e) => setProject({ ratio: e.target.value })}>
           {RATIOS.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
         </select>
-        <div className="field-note">导出 {w}×{h}，30 帧每秒</div>
+        <div className="field-note">{uiText("导出")}{" "}{w}×{h}{uiText("，30 帧每秒")}</div>
       </Field>
-      <Field label="背景">
+      <Field label={uiText("背景")}>
         <div className="swatches">
           {BGS.map((c) => <button key={c} type="button" aria-label={c} className={`swatch${bg === c ? " is-on" : ""}`} style={{ background: c }} onClick={() => setProject({ background: c })} />)}
-          <input type="color" aria-label="别的颜色" value={/^#[0-9a-f]{6}$/i.test(bg) ? bg : "#000000"} onChange={(e) => setProject({ background: e.target.value })} />
+          <input type="color" aria-label={uiText("别的颜色")} value={/^#[0-9a-f]{6}$/i.test(bg) ? bg : "#000000"} onChange={(e) => setProject({ background: e.target.value })} />
         </div>
-        <div className="field-note">比例和视频不一样时，空出来的地方是这个颜色</div>
+        <div className="field-note">{uiText("比例和视频不一样时，空出来的地方是这个颜色")}</div>
       </Field>
       <div className="stats">
-        <div><b>{fmt(total(list), true)}</b><span>总时长</span></div>
-        <div><b>{list.length}</b><span>片段</span></div>
-        <div><b>{overlays.rows.length}</b><span>文字和打码</span></div>
+        <div><b>{fmt(total(list), true)}</b><span>{uiText("总时长")}</span></div>
+        <div><b>{list.length}</b><span>{uiText("片段")}</span></div>
+        <div><b>{overlays.rows.length}</b><span>{uiText("文字和打码")}</span></div>
       </div>
       <div className="keys">
-        <div className="field-label">快捷键</div>
+        <div className="field-label">{uiText("快捷键")}</div>
         {[["空格", "播放 / 暂停"], ["S", "在播放头处分割"], ["Delete", "删除选中的"], ["⌘Z / ⇧⌘Z", "撤销 / 重做"], ["← →", "一帧一帧走（加 ⇧ 一秒）"], ["⌘ + 滚轮", "缩放时间线"]].map(([k, v]) => (
           <div key={k} className="key"><kbd>{k}</kbd><span>{v}</span></div>
         ))}

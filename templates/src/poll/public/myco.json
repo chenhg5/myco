@@ -1,7 +1,7 @@
 {
   "id": "myco/poll",
   "name": "投票",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "kind": "form",
   "category": "tools",
   "icon": "icon.svg",

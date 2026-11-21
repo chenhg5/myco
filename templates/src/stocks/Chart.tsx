@@ -1,3 +1,4 @@
+import { t as uiText, locale } from "../_lib/i18n";
 import { useEffect, useRef, useState } from "react";
 import {
   CandlestickSeries,
@@ -64,7 +65,7 @@ export function PriceChart({
         vertLine: { color: fg, labelBackgroundColor: dark ? "#444" : "#555" },
         horzLine: { color: fg, labelBackgroundColor: dark ? "#444" : "#555" },
       },
-      localization: { locale: "zh-CN" },
+      localization: { locale: locale() },
     });
     api.current = chart;
     const precision =
@@ -153,7 +154,7 @@ export function PriceChart({
         new Promise<Blob>((resolve, reject) => {
           const canvas = chart.takeScreenshot();
           canvas.toBlob(
-            (b) => (b ? resolve(b) : reject(new Error("图表导出失败"))),
+            (b) => (b ? resolve(b) : reject(new Error(uiText("图表导出失败")))),
             "image/png",
           );
         }),
@@ -171,26 +172,26 @@ export function PriceChart({
         {shown && (
           <>
             <span>
-              开 <b>{price(shown.open)}</b>
+              {uiText("开")}{" "}<b>{price(shown.open)}</b>
             </span>
             <span>
-              高 <b>{price(shown.high)}</b>
+              {uiText("高")}{" "}<b>{price(shown.high)}</b>
             </span>
             <span>
-              低 <b>{price(shown.low)}</b>
+              {uiText("低")}{" "}<b>{price(shown.low)}</b>
             </span>
             <span>
-              收 <b>{price(shown.close)}</b>
+              {uiText("收")}{" "}<b>{price(shown.close)}</b>
             </span>
             <span>
-              量 <b>{compact(shown.volume)}</b>
+              {uiText("量")}{" "}<b>{compact(shown.volume)}</b>
             </span>
           </>
         )}
         {averages && <span className="sw-ma-legend">MA5 · MA10 · MA20</span>}
       </div>
       <div className="sw-chart" ref={host} data-testid="price-chart" />
-      <span className="sw-volume-label">成交量 · 股</span>
+      <span className="sw-volume-label">{uiText("成交量 · 股")}</span>
     </div>
   );
 }

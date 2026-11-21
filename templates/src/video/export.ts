@@ -1,3 +1,4 @@
+import { t as uiText } from "../_lib/i18n";
 // Makes the mp4 here in the browser: each frame drawn as the player draws
 // it, encoded with WebCodecs (mediabunny); the sound of every clip mixed at
 // its speed (time-stretched, so voices keep their pitch) and volume.
@@ -13,7 +14,7 @@ export type Progress = { phase: "audio" | "video" | "finish"; done: number };
 /** What the person picks before exporting: the short side in pixels, frames
  *  a second, and quality (the bitrate). */
 export type ExportOptions = { short: number; fps: number; quality: "best" | "high" | "medium" | "low" };
-export const QUALITIES: [ExportOptions["quality"], string][] = [["best", "最高"], ["high", "高"], ["medium", "标准"], ["low", "小文件"]];
+export const QUALITIES: [ExportOptions["quality"], string][] = [["best", uiText("最高")], ["high", uiText("高")], ["medium", uiText("标准")], ["low", uiText("小文件")]];
 const QUALITY = { best: QUALITY_VERY_HIGH, high: QUALITY_HIGH, medium: QUALITY_MEDIUM, low: QUALITY_LOW };
 /** Rough bits a pixel a frame of each quality (H.264), for the size shown before exporting. */
 const BPP = { best: 0.16, high: 0.09, medium: 0.05, low: 0.025 };
@@ -29,18 +30,18 @@ export type Rendered = { file: Blob; silent: boolean; drop: () => void };
 export async function render(opts: ExportOptions, onProgress: (p: Progress) => void, cancelled: () => boolean): Promise<Rendered> {
   const FPS = opts.fps;
   const list = placed();
-  if (!list.length) throw new Error("时间线上还没有视频");
+  if (!list.length) throw new Error(uiText("时间线上还没有视频"));
   const files = new Map<string, Blob>();
   for (const c of list) {
     const m = media.get(c.media)?.data;
     const l = localFor(String(m?.key || ""));
-    if (!l) throw new Error(`本机没有「${m?.name || "一段视频"}」，先在素材里选上这个文件`);
+    if (!l) throw new Error(uiText("本机没有「{0}」，先在素材里选上这个文件", m?.name || "一段视频"));
     files.set(c.id, l.file);
   }
   const T = total(list);
   const { w: W, h: H } = frameSize(list, opts.short);
   const vcodec = await getFirstEncodableVideoCodec(["avc", "hevc", "vp9", "av1"], { width: W, height: H });
-  if (!vcodec) throw new Error("这个浏览器不能编码视频（需要 WebCodecs）");
+  if (!vcodec) throw new Error(uiText("这个浏览器不能编码视频（需要 WebCodecs）"));
   const loud = list.some((c) => !c.muted && c.volume > 0 && media.get(c.media)?.data.audio !== false);
   let acodec = loud ? await getFirstEncodableAudioCodec(["aac", "opus"], { numberOfChannels: 2, sampleRate: RATE }) : null;
   if (loud && !acodec) {

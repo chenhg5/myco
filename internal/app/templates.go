@@ -22,12 +22,13 @@ import (
 // the files and the manifest: deleting or updating the template leaves it
 // as it is.
 type TemplateService struct {
-	repo  domain.TemplateRepository
-	blobs domain.BlobStore
-	pages *PageService
-	data  *PageDataService
-	ids   IDGenerator
-	clock Clock
+	localeCache sync.Map // template id -> current blob and display translations
+	repo        domain.TemplateRepository
+	blobs       domain.BlobStore
+	pages       *PageService
+	data        *PageDataService
+	ids         IDGenerator
+	clock       Clock
 	// official are myco's own, offered in every workspace (they may change
 	// while the hub runs: a newer set fetched).
 	offMu    sync.RWMutex
@@ -102,7 +103,8 @@ func (s *TemplateService) officialView(o *OfficialTemplate) *TemplateView {
 	for n := range o.Files {
 		names = append(names, n)
 	}
-	return &TemplateView{Template: t, Manifest: m, Guide: string(o.Files[m.Agent]), Shots: shotsOf(names),
+	locales, _ := domain.ParseTemplateLocales(o.Files["locales.json"])
+	return &TemplateView{Locales: locales, Template: t, Manifest: m, Guide: string(o.Files[m.Agent]), Shots: shotsOf(names),
 		Versions: []*domain.TemplateVersion{{Template: t.ID, Version: m.Version, Size: size, Files: len(o.Files), By: "myco"}}}
 }
 
@@ -114,6 +116,7 @@ func NewTemplateService(repo domain.TemplateRepository, blobs domain.BlobStore, 
 // TemplateView is a template, its versions (newest first) and its latest
 // manifest and agent's guide.
 type TemplateView struct {
+	Locales  map[string]domain.TemplateLocale
 	Template *domain.Template
 	Versions []*domain.TemplateVersion
 	Manifest *domain.Manifest
@@ -210,6 +213,7 @@ func (s *TemplateService) view(ctx context.Context, t *domain.Template) (*Templa
 		tv.Manifest, _ = domain.ParseManifest([]byte(vs[0].Manifest))
 		tv.Guide = vs[0].Guide
 		t.Icon = vs[0].Icon
+		tv.Locales = s.templateLocales(ctx, t.ID, vs[0].Blob)
 	}
 	return tv, nil
 }
@@ -367,6 +371,13 @@ func (s *TemplateService) Publish(ctx context.Context, by Actor, r io.Reader, by
 		closer()
 		return nil, err
 	}
+	if raw, _, err := readZipFile(z, "locales.json", 32<<10); err != nil {
+		closer()
+		return nil, err
+	} else if _, err := domain.ParseTemplateLocales(raw); err != nil {
+		closer()
+		return nil, err
+	}
 	if strings.HasPrefix(m.ID, "myco/") {
 		closer()
 		return nil, domain.Errf(domain.CodeInvalidArgument, "ids starting with myco/ are myco's own templates").
@@ -484,6 +495,7 @@ func (s *TemplateService) Delete(ctx context.Context, by Actor, idOrSlug string)
 	for _, v := range tv.Versions {
 		_ = s.blobs.Delete(ctx, v.Blob)
 	}
+	s.localeCache.Delete(tv.Template.ID)
 	return tv.Template, nil
 }
 

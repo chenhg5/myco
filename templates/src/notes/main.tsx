@@ -1,3 +1,5 @@
+import { themeMedia } from "../_lib/appearance";
+import { t as uiText } from "../_lib/i18n";
 // 笔记: notes like Notion: pages in a tree on the left (nested, dragged
 // around, favourites, a trash), and each page an icon, a cover, a title and
 // blocks written with "/" in a block editor. People and agents share the
@@ -49,7 +51,7 @@ function Pop({ at, onClose, children, width = 220, className = "" }: { at: Ancho
 }
 
 function useTheme() {
-  const q = window.matchMedia?.("(prefers-color-scheme: dark)");
+  const q = themeMedia();
   const [d, setD] = useState<"light" | "dark">(q?.matches ? "dark" : "light");
   useEffect(() => { if (!q) return; const f = () => setD(q.matches ? "dark" : "light"); q.addEventListener("change", f); return () => q.removeEventListener("change", f); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return d;
@@ -69,7 +71,7 @@ function patchPage(id: string, p: Record<string, unknown>) {
 function trash(id: string) {
   const ids = subtree(id).filter((x) => !pages.get(x)?.data.trashed);
   for (const x of ids) patchPage(x, { trashed: true });
-  kit.flash(`已移到回收站：${titleOf(pages.get(id))}`, () => { for (const x of ids) patchPage(x, { trashed: false }); });
+  kit.flash(uiText("已移到回收站：{0}", titleOf(pages.get(id))), () => { for (const x of ids) patchPage(x, { trashed: false }); });
 }
 function destroy(id: string) {
   for (const x of subtree(id)) {
@@ -117,13 +119,13 @@ function App() {
       <aside className="nt-side">
         <div className="nt-space">
           <span className="nt-logo"><FileText className="ico" /></span>
-          <input className="nt-space-name" value={spaceTitle.get("")} placeholder="笔记" aria-label="名称" onChange={(e) => spaceTitle.set(e.target.value)} />
+          <input className="nt-space-name" value={spaceTitle.get("")} placeholder={uiText("笔记")} aria-label={uiText("名称")} onChange={(e) => spaceTitle.set(e.target.value)} />
         </div>
-        <button type="button" className="nt-side-item" onClick={() => setFinding(true)}><Search className="ico" /><span>搜索</span><kbd>⌘K</kbd></button>
-        <button type="button" className="nt-side-item" onClick={() => setOpen(newPage(null, me))}><Plus className="ico" /><span>新建页面</span></button>
+        <button type="button" className="nt-side-item" onClick={() => setFinding(true)}><Search className="ico" /><span>{uiText("搜索")}</span><kbd>⌘K</kbd></button>
+        <button type="button" className="nt-side-item" onClick={() => setOpen(newPage(null, me))}><Plus className="ico" /><span>{uiText("新建页面")}</span></button>
         {favs.length > 0 && (
           <>
-            <div className="nt-sec">收藏</div>
+            <div className="nt-sec">{uiText("收藏")}</div>
             {favs.map((p) => (
               <button key={p.id} type="button" className={`nt-side-item is-page${view === "page" && live === p.id ? " is-on" : ""}`} onClick={() => setOpen(p.id)}>
                 <PageIcon p={p} /><span>{titleOf(p)}</span>
@@ -132,16 +134,16 @@ function App() {
           </>
         )}
         <div className="nt-sec">
-          <span>页面</span>
-          <button type="button" className="icon-btn" title="新建页面" aria-label="新建页面" onClick={() => setOpen(newPage(null, me))}><Plus className="ico" /></button>
+          <span>{uiText("页面")}</span>
+          <button type="button" className="icon-btn" title={uiText("新建页面")} aria-label={uiText("新建页面")} onClick={() => setOpen(newPage(null, me))}><Plus className="ico" /></button>
         </div>
         <Tree parent={null} depth={0} open={view === "page" ? live : null} folded={folded} fold={fold} me={me} onOpen={setOpen} />
-        {!childrenOf(null).length && <div className="nt-side-empty">还没有页面</div>}
+        {!childrenOf(null).length && <div className="nt-side-empty">{uiText("还没有页面")}</div>}
         <div className="nt-side-foot">
           <button type="button" className={`nt-side-item${view === "trash" ? " is-on" : ""}`} onClick={() => { setView("trash"); setNarrowSide(false); }}>
-            <Trash2 className="ico" /><span>回收站</span>{trashed.length ? <span className="nt-n">{trashed.length}</span> : null}
+            <Trash2 className="ico" /><span>{uiText("回收站")}</span>{trashed.length ? <span className="nt-n">{trashed.length}</span> : null}
           </button>
-          <div className="nt-state faint">{kit.pending ? "正在保存…" : kit.failed ? "没保存上" : "已保存"}{me && me !== "你" ? ` · 你是 ${me}` : ""}</div>
+          <div className="nt-state faint">{kit.pending ? uiText("正在保存…") : kit.failed ? uiText("没保存上") : uiText("已保存")}{me && me !== "你" ? uiText(" · 你是 {0}", me) : ""}</div>
         </div>
       </aside>
       <main className="nt-main">
@@ -168,14 +170,14 @@ function IconPicker({ at, value, onPick, onClose }: { at: Anchor; value: string;
     <Pop at={at} onClose={onClose} width={316} className="nt-icons">
       <div className="nt-icon-head">
         <div className="seg">
-          <button type="button" className={tab === "glyph" ? "is-on" : ""} onClick={() => setTab("glyph")}>图标</button>
+          <button type="button" className={tab === "glyph" ? "is-on" : ""} onClick={() => setTab("glyph")}>{uiText("图标")}</button>
           <button type="button" className={tab === "emoji" ? "is-on" : ""} onClick={() => setTab("emoji")}>Emoji</button>
         </div>
-        {value && <button type="button" className="link-btn" onClick={() => { onPick(""); onClose(); }}>去掉</button>}
+        {value && <button type="button" className="link-btn" onClick={() => { onPick(""); onClose(); }}>{uiText("去掉")}</button>}
       </div>
       {tab === "glyph" ? (
         <>
-          <div className="nt-tints" role="radiogroup" aria-label="颜色">
+          <div className="nt-tints" role="radiogroup" aria-label={uiText("颜色")}>
             {TINTS.map((t) => <button key={t} type="button" role="radio" aria-checked={tint === t} aria-label={t} className={tint === t ? "is-on" : ""} style={{ background: `var(--tint-${t})` }} onClick={() => setTint(t)} />)}
           </div>
           <div className="nt-icon-grid">
@@ -239,15 +241,15 @@ function Tree({ parent, depth, open, folded, fold, me, onOpen }: {
               onDragLeave={() => setOver((o) => (o?.id === p.id ? null : o))}
               onDrop={(e) => { e.preventDefault(); drop(p, over?.where || "inside"); }}
               onClick={() => onOpen(p.id)}>
-              <button type="button" className={`nt-caret${kids.length ? "" : " is-none"}`} aria-label={shut ? "展开" : "收起"}
+              <button type="button" className={`nt-caret${kids.length ? "" : " is-none"}`} aria-label={shut ? uiText("展开") : uiText("收起")}
                 onClick={(e) => { e.stopPropagation(); if (kids.length) fold(p.id, !shut); }}>
                 <ChevronRight className={`ico${shut ? "" : " is-down"}`} />
               </button>
               <PageIcon p={p} />
               <span className="nt-row-title">{titleOf(p)}</span>
               <span className="nt-row-acts">
-                <button type="button" className="icon-btn" title="更多" aria-label="更多" onClick={(e) => { e.stopPropagation(); setMenu({ id: p.id, at: rectOf(e.currentTarget) }); }}><MoreHorizontal className="ico" /></button>
-                <button type="button" className="icon-btn" title="在里面新建页面" aria-label="在里面新建页面" onClick={(e) => { e.stopPropagation(); fold(p.id, false); onOpen(newPage(p.id, me)); }}><Plus className="ico" /></button>
+                <button type="button" className="icon-btn" title={uiText("更多")} aria-label={uiText("更多")} onClick={(e) => { e.stopPropagation(); setMenu({ id: p.id, at: rectOf(e.currentTarget) }); }}><MoreHorizontal className="ico" /></button>
+                <button type="button" className="icon-btn" title={uiText("在里面新建页面")} aria-label={uiText("在里面新建页面")} onClick={(e) => { e.stopPropagation(); fold(p.id, false); onOpen(newPage(p.id, me)); }}><Plus className="ico" /></button>
               </span>
             </div>
             {!shut && <Tree parent={p.id} depth={depth + 1} open={open} folded={folded} fold={fold} me={me} onOpen={onOpen} />}
@@ -319,44 +321,44 @@ function PageView({ id, me, theme, onOpen, onSide }: { id: string; me: string; t
     try {
       const md = `# ${titleOf(p)}\n\n${ed.current ? await ed.current.markdown() : ""}`;
       await save(`${titleOf(p).replace(/[\\/:*?"<>|]/g, " ")}.md`, md, "text/markdown");
-      kit.flash("已存到「下载」");
-    } catch (e) { kit.flash((e as Error).message || "没存下来"); }
+      kit.flash(uiText("已存到「下载」"));
+    } catch (e) { kit.flash((e as Error).message || uiText("没存下来")); }
   };
   const forAgent = async () => {
     const t = `帮我在 myco 笔记（网页 ${kit.page}）的「${titleOf(p)}」这一页上写东西：先运行 myco template get myco/notes 看它的数据怎么读写，` +
       `再用 myco page data list --page ${kit.page} --collection blocks 读这一页（page 是 ${id}）的段落，按我接下来说的补充或修改。`;
-    try { await navigator.clipboard.writeText(t); kit.flash("已复制，发给 agent，再告诉它要写什么"); } catch { kit.flash("没复制上"); }
+    try { await navigator.clipboard.writeText(t); kit.flash(uiText("已复制，发给 agent，再告诉它要写什么")); } catch { kit.flash(uiText("没复制上")); }
   };
   return (
     <div className="nt-page-wrap">
       <header className="nt-top">
-        <button type="button" className="icon-btn nt-side-toggle" aria-label="页面" onClick={onSide}><FileText className="ico" /></button>
-        <nav className="nt-crumbs" aria-label="位置">
+        <button type="button" className="icon-btn nt-side-toggle" aria-label={uiText("页面")} onClick={onSide}><FileText className="ico" /></button>
+        <nav className="nt-crumbs" aria-label={uiText("位置")}>
           {path.map((x) => (
             <span key={x.id} className="nt-crumb"><button type="button" onClick={() => onOpen(x.id)}><PageIcon p={x} size={14} />{titleOf(x)}</button><span className="faint">/</span></span>
           ))}
           <span className="nt-crumb is-cur"><PageIcon p={p} size={14} />{titleOf(p)}</span>
         </nav>
         <span className="top-gap" />
-        <span className={`nt-saving faint${state === "error" ? " is-error" : ""}`}>{state === "saving" ? "正在保存…" : state === "error" ? "没保存上" : ""}</span>
-        <button type="button" className={`icon-btn${d.favorite ? " is-fav" : ""}`} title={d.favorite ? "取消收藏" : "收藏"} aria-label="收藏" onClick={() => patchPage(id, { favorite: !d.favorite })}>
+        <span className={`nt-saving faint${state === "error" ? " is-error" : ""}`}>{state === "saving" ? uiText("正在保存…") : state === "error" ? uiText("没保存上") : ""}</span>
+        <button type="button" className={`icon-btn${d.favorite ? " is-fav" : ""}`} title={d.favorite ? uiText("取消收藏") : uiText("收藏")} aria-label={uiText("收藏")} onClick={() => patchPage(id, { favorite: !d.favorite })}>
           <Star className="ico" />
         </button>
-        <button type="button" className="icon-btn" title="更多" aria-label="更多" onClick={(e) => setMenuAt(rectOf(e.currentTarget))}><MoreHorizontal className="ico" /></button>
+        <button type="button" className="icon-btn" title={uiText("更多")} aria-label={uiText("更多")} onClick={(e) => setMenuAt(rectOf(e.currentTarget))}><MoreHorizontal className="ico" /></button>
       </header>
       <div className="nt-scroll">
         {d.cover && COVERS[String(d.cover)] && (
           <div className="nt-cover" style={{ background: COVERS[String(d.cover)] }}>
-            <button type="button" className="nt-cover-btn" onClick={(e) => setCoverAt(rectOf(e.currentTarget))}>换封面</button>
+            <button type="button" className="nt-cover-btn" onClick={(e) => setCoverAt(rectOf(e.currentTarget))}>{uiText("换封面")}</button>
           </div>
         )}
         <div className={`nt-page${d.cover ? " has-cover" : ""}`}>
-          {parseIcon(d.icon) && <button type="button" className="nt-big-icon" title="换图标" onClick={(e) => setIconAt(rectOf(e.currentTarget))}><IconView v={d.icon} size={60} /></button>}
+          {parseIcon(d.icon) && <button type="button" className="nt-big-icon" title={uiText("换图标")} onClick={(e) => setIconAt(rectOf(e.currentTarget))}><IconView v={d.icon} size={60} /></button>}
           <div className="nt-page-acts">
-            {!parseIcon(d.icon) && <button type="button" className="nt-ghost" onClick={(e) => setIconAt(rectOf(e.currentTarget))}><Smile className="ico" />添加图标</button>}
-            {!d.cover && <button type="button" className="nt-ghost" onClick={(e) => setCoverAt(rectOf(e.currentTarget))}><ImageIcon className="ico" />添加封面</button>}
+            {!parseIcon(d.icon) && <button type="button" className="nt-ghost" onClick={(e) => setIconAt(rectOf(e.currentTarget))}><Smile className="ico" />{uiText("添加图标")}</button>}
+            {!d.cover && <button type="button" className="nt-ghost" onClick={(e) => setCoverAt(rectOf(e.currentTarget))}><ImageIcon className="ico" />{uiText("添加封面")}</button>}
           </div>
-          <textarea ref={titleRef} className="nt-title" rows={1} value={shown} placeholder="无标题" aria-label="标题"
+          <textarea ref={titleRef} className="nt-title" rows={1} value={shown} placeholder={uiText("无标题")} aria-label={uiText("标题")}
             onChange={(e) => setT(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); ed.current?.focusStart(); } }} />
           <div className="nt-editor">
@@ -366,7 +368,7 @@ function PageView({ id, me, theme, onOpen, onSide }: { id: string; me: string; t
             {kids.map((k) => (
               <button key={k.id} type="button" className="nt-kid" onClick={() => onOpen(k.id)}><PageIcon p={k} /><span>{titleOf(k)}</span></button>
             ))}
-            <button type="button" className="nt-kid is-add" onClick={() => onOpen(newPage(id, me))}><Plus className="ico" /><span>添加子页面</span></button>
+            <button type="button" className="nt-kid is-add" onClick={() => onOpen(newPage(id, me))}><Plus className="ico" /><span>{uiText("添加子页面")}</span></button>
           </div>
         </div>
       </div>
@@ -376,16 +378,16 @@ function PageView({ id, me, theme, onOpen, onSide }: { id: string; me: string; t
           <div className="nt-cover-grid">
             {Object.entries(COVERS).map(([k, bg]) => <button key={k} type="button" aria-label={k} className={d.cover === k ? "is-on" : ""} style={{ background: bg }} onClick={() => { patchPage(id, { cover: k }); setCoverAt(null); }} />)}
           </div>
-          {d.cover && <button type="button" className="link-btn" onClick={() => { patchPage(id, { cover: "" }); setCoverAt(null); }}>去掉封面</button>}
+          {d.cover && <button type="button" className="link-btn" onClick={() => { patchPage(id, { cover: "" }); setCoverAt(null); }}>{uiText("去掉封面")}</button>}
         </Pop>
       )}
       {menuAt && (
         <Pop at={menuAt} onClose={() => setMenuAt(null)} width={210}>
           <div className="menu">
-            <button type="button" className="menu-item" onClick={() => { setMenuAt(null); void forAgent(); }}><Bot className="ico" /><span>交给 agent 写</span></button>
-            <button type="button" className="menu-item" onClick={() => { setMenuAt(null); void exportMd(); }}><Download className="ico" /><span>导出 Markdown</span></button>
+            <button type="button" className="menu-item" onClick={() => { setMenuAt(null); void forAgent(); }}><Bot className="ico" /><span>{uiText("交给 agent 写")}</span></button>
+            <button type="button" className="menu-item" onClick={() => { setMenuAt(null); void exportMd(); }}><Download className="ico" /><span>{uiText("导出 Markdown")}</span></button>
             <div className="menu-sep" />
-            <button type="button" className="menu-item is-danger" onClick={() => { setMenuAt(null); trash(id); }}><Trash2 className="ico" /><span>移到回收站</span></button>
+            <button type="button" className="menu-item is-danger" onClick={() => { setMenuAt(null); trash(id); }}><Trash2 className="ico" /><span>{uiText("移到回收站")}</span></button>
           </div>
         </Pop>
       )}
@@ -397,9 +399,9 @@ function Empty({ me, onOpen }: { me: string; onOpen: (id: string) => void }) {
   return (
     <div className="nt-empty">
       <FileText className="ico" />
-      <b>还没有页面</b>
-      <span>新建一页开始写，「/」插入标题、列表、待办；页面可以一层层套起来。也可以让 agent 帮你整理成页面。</span>
-      <button type="button" className="btn btn-primary" onClick={() => onOpen(newPage(null, me))}><Plus className="ico" />新建页面</button>
+      <b>{uiText("还没有页面")}</b>
+      <span>{uiText("新建一页开始写，「/」插入标题、列表、待办；页面可以一层层套起来。也可以让 agent 帮你整理成页面。")}</span>
+      <button type="button" className="btn btn-primary" onClick={() => onOpen(newPage(null, me))}><Plus className="ico" />{uiText("新建页面")}</button>
     </div>
   );
 }
@@ -410,17 +412,17 @@ function Trash({ onOpen }: { onOpen: (id: string) => void }) {
     .sort((a, b) => titleOf(a).localeCompare(titleOf(b)));
   return (
     <div className="nt-page-wrap">
-      <header className="nt-top"><span className="nt-crumb is-cur"><Trash2 className="ico" />回收站</span></header>
+      <header className="nt-top"><span className="nt-crumb is-cur"><Trash2 className="ico" />{uiText("回收站")}</span></header>
       <div className="nt-scroll">
         <div className="nt-trash">
-          {!list.length && <div className="nt-empty-line faint">回收站是空的</div>}
+          {!list.length && <div className="nt-empty-line faint">{uiText("回收站是空的")}</div>}
           {list.map((p) => (
             <div key={p.id} className="nt-trash-row">
               <PageIcon p={p} /><span className="nt-row-title">{titleOf(p)}</span>
-              <span className="faint">{subtree(p.id).length > 1 ? `含 ${subtree(p.id).length - 1} 个子页面` : ""}</span>
+              <span className="faint">{subtree(p.id).length > 1 ? uiText("含 {0} 个子页面", subtree(p.id).length - 1) : ""}</span>
               <span className="top-gap" />
-              <button type="button" className="btn" onClick={() => { for (const x of subtree(p.id)) patchPage(x, { trashed: false }); onOpen(p.id); }}><Undo2 className="ico" />恢复</button>
-              <button type="button" className="btn is-danger" onClick={() => { if (window.confirm(`彻底删除「${titleOf(p)}」和它的子页面？删了就找不回来了。`)) destroy(p.id); }}><X className="ico" />彻底删除</button>
+              <button type="button" className="btn" onClick={() => { for (const x of subtree(p.id)) patchPage(x, { trashed: false }); onOpen(p.id); }}><Undo2 className="ico" />{uiText("恢复")}</button>
+              <button type="button" className="btn is-danger" onClick={() => { if (window.confirm(uiText("彻底删除「{0}」和它的子页面？删了就找不回来了。", titleOf(p)))) destroy(p.id); }}><X className="ico" />{uiText("彻底删除")}</button>
             </div>
           ))}
         </div>
@@ -447,9 +449,9 @@ function Finder({ onOpen, onClose }: { onOpen: (id: string) => void; onClose: ()
   };
   return (
     <div className="modal-back" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="nt-find" role="dialog" aria-label="搜索">
+      <div className="nt-find" role="dialog" aria-label={uiText("搜索")}>
         <div className="nt-find-q"><Search className="ico" />
-          <input autoFocus value={q} placeholder="搜索页面的标题和内容…" onChange={(e) => { setQ(e.target.value); setI(0); }}
+          <input autoFocus value={q} placeholder={uiText("搜索页面的标题和内容…")} onChange={(e) => { setQ(e.target.value); setI(0); }}
             onKeyDown={(e) => {
               if (e.key === "ArrowDown") { e.preventDefault(); setI((x) => Math.min(hits.length - 1, x + 1)); }
               else if (e.key === "ArrowUp") { e.preventDefault(); setI((x) => Math.max(0, x - 1)); }
@@ -458,7 +460,7 @@ function Finder({ onOpen, onClose }: { onOpen: (id: string) => void; onClose: ()
             }} />
         </div>
         <div className="nt-find-list">
-          {!ql && <div className="nt-find-sec">最近</div>}
+          {!ql && <div className="nt-find-sec">{uiText("最近")}</div>}
           {hits.map((h, k) => (
             <button key={h.p.id} type="button" className={`nt-find-item${k === i ? " is-cur" : ""}`} onMouseEnter={() => setI(k)} onClick={() => onOpen(h.p.id)}>
               <PageIcon p={h.p} />
@@ -468,7 +470,7 @@ function Finder({ onOpen, onClose }: { onOpen: (id: string) => void; onClose: ()
               </span>
             </button>
           ))}
-          {ql && !hits.length && <div className="nt-empty-line faint">没有找到「{q}」</div>}
+          {ql && !hits.length && <div className="nt-empty-line faint">{uiText("没有找到「")}{q}」</div>}
         </div>
       </div>
     </div>

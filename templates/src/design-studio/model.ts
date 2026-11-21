@@ -1,3 +1,4 @@
+import { t as uiText } from "../_lib/i18n";
 /** The portable, editable design format. No executable code in a canvas. */
 export type Node = {
   id: string;
@@ -39,43 +40,43 @@ export type Artifact = {
 export const PRESETS = [
   {
     id: "website",
-    name: "网页",
-    detail: "落地页、官网、交互原型",
+    name: uiText("网页"),
+    detail: uiText("落地页、官网、交互原型"),
     w: 1440,
     h: 1000,
   },
   {
     id: "app",
-    name: "移动应用",
-    detail: "界面、流程、产品概念",
+    name: uiText("移动应用"),
+    detail: uiText("界面、流程、产品概念"),
     w: 390,
     h: 844,
   },
   {
     id: "poster",
-    name: "海报",
-    detail: "活动、品牌、宣传物料",
+    name: uiText("海报"),
+    detail: uiText("活动、品牌、宣传物料"),
     w: 900,
     h: 1200,
   },
   {
     id: "slides",
-    name: "演示文稿",
-    detail: "提案、发布会、故事讲述",
+    name: uiText("演示文稿"),
+    detail: uiText("提案、发布会、故事讲述"),
     w: 1280,
     h: 720,
   },
   {
     id: "social",
-    name: "社交图片",
-    detail: "封面、卡片、内容配图",
+    name: uiText("社交图片"),
+    detail: uiText("封面、卡片、内容配图"),
     w: 1080,
     h: 1080,
   },
   {
     id: "dashboard",
-    name: "数据看板",
-    detail: "指标、报告、管理界面",
+    name: uiText("数据看板"),
+    detail: uiText("指标、报告、管理界面"),
     w: 1440,
     h: 960,
   },

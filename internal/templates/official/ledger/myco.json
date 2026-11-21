@@ -1,7 +1,7 @@
 {
   "id": "myco/ledger",
   "name": "记账本",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "kind": "custom",
   "category": "life",
   "icon": "icon.svg",

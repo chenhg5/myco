@@ -1,3 +1,4 @@
+import { t as uiText } from "../_lib/i18n";
 // 幻灯片: a deck people and agents make together. Agents write each slide's
 // content (layout, title, points, cards, chart, table, notes); the page lays
 // it out in the deck's theme. Edit in place, reorder by dragging, present
@@ -35,7 +36,7 @@ function track(p: Promise<unknown> | null | undefined) {
   p.then(() => { pending--; failed = false; emit(); }, (e: { code?: string; message?: string }) => {
     pending--;
     failed = e?.code !== "conflict";
-    flash(e?.code === "conflict" ? "别人刚改过，已显示最新的" : e?.message || "没保存上");
+    flash(e?.code === "conflict" ? uiText("别人刚改过，已显示最新的") : e?.message || uiText("没保存上"));
   });
 }
 const uid = () => "s" + Math.random().toString(36).slice(2, 8);
@@ -61,7 +62,7 @@ function removeSlide(id: string) {
   if (!cur) return;
   const data = cur.data;
   track(slides.remove(id));
-  flash("删除了一页", () => { track(slides.put(data, id)); note = null; emit(); });
+  flash(uiText("删除了一页"), () => { track(slides.put(data, id)); note = null; emit(); });
 }
 function reorder(ids: string[]) {
   const have = new Map(slides.rows.map((r) => [r.id, typeof r.data.order === "number" ? r.data.order : NaN]));
@@ -109,9 +110,9 @@ function App() {
     try {
       if (kind === "pptx") await download(`${fileName}.pptx`, await toPptx(title || "幻灯片", d.theme, data), "application/vnd.openxmlformats-officedocument.presentationml.presentation");
       else await download(`${fileName}.md`, toMarkdown(title, data), "text/markdown");
-      flash("已存到「下载」");
+      flash(uiText("已存到「下载」"));
     } catch (e) {
-      flash((e as Error).message || "没存下来");
+      flash((e as Error).message || uiText("没存下来"));
     }
   };
 
@@ -132,23 +133,23 @@ function App() {
   return (
     <div className="app sd">
       <header className="top">
-        <Editable className="top-title sd-title" value={title} placeholder="未命名幻灯片" editable onSave={(v) => setDeck({ title: v.trim() })} />
-        <span className={`top-state is-${state}`}>{state === "saving" ? "正在保存…" : state === "error" ? "没保存上" : "已保存"}</span>
+        <Editable className="top-title sd-title" value={title} placeholder={uiText("未命名幻灯片")} editable onSave={(v) => setDeck({ title: v.trim() })} />
+        <span className={`top-state is-${state}`}>{state === "saving" ? uiText("正在保存…") : state === "error" ? uiText("没保存上") : uiText("已保存")}</span>
         <span className="top-gap" />
-        {me && <span className="top-me">你是 {me}</span>}
-        <button type="button" className="btn" onClick={(e) => setExp(rectOf(e.currentTarget))}><Download className="ico" />导出</button>
-        <button type="button" className="btn btn-primary" onClick={() => setPresent(index)} disabled={!list.length}><Play className="ico" />放映</button>
+        {me && <span className="top-me">{uiText("你是")}{" "}{me}</span>}
+        <button type="button" className="btn" onClick={(e) => setExp(rectOf(e.currentTarget))}><Download className="ico" />{uiText("导出")}</button>
+        <button type="button" className="btn btn-primary" onClick={() => setPresent(index)} disabled={!list.length}><Play className="ico" />{uiText("放映")}</button>
         {exp && (
           <Popover at={exp} align="right" onClose={() => setExp(null)}>
             <div className="menu">
-              <MenuItem onClick={() => void exportAs("pptx")}>PowerPoint（.pptx，能接着改）</MenuItem>
-              <MenuItem onClick={() => void exportAs("md")}>Markdown 大纲（.md）</MenuItem>
+              <MenuItem onClick={() => void exportAs("pptx")}>{uiText("PowerPoint（.pptx，能接着改）")}</MenuItem>
+              <MenuItem onClick={() => void exportAs("md")}>{uiText("Markdown 大纲（.md）")}</MenuItem>
             </div>
           </Popover>
         )}
       </header>
       <div className="sd-main">
-        <nav className="thumbs" aria-label="所有页">
+        <nav className="thumbs" aria-label={uiText("所有页")}>
           {list.map((r, i) => (
             <div key={r.id} className={`thumb${r.id === slide?.id ? " is-cur" : ""}${over === r.id && drag !== r.id ? " is-over" : ""}`}
               draggable onDragStart={(e) => { e.dataTransfer.setData("text/plain", r.id); setDrag(r.id); }}
@@ -164,18 +165,18 @@ function App() {
                 setOver(null);
               }}>
               <span className="thumb-n">{i + 1}</span>
-              <button type="button" className="thumb-face" onClick={() => setCur(r.id)} aria-label={`第 ${i + 1} 页：${r.data.title || layoutName(r.data.layout)}`} aria-current={r.id === slide?.id}>
+              <button type="button" className="thumb-face" onClick={() => setCur(r.id)} aria-label={uiText("第 {0} 页：{1}", i + 1, r.data.title || layoutName(r.data.layout))} aria-current={r.id === slide?.id}>
                 <div className="thumb-in" style={{ transform: `scale(${152 / W})` }}>
                   <SlideView s={r.data} deckTitle={title} theme={d.theme} n={i + 1} total={list.length} editable={false} />
                 </div>
               </button>
               <span className="thumb-acts">
-                <button type="button" title="复制这一页" aria-label="复制这一页" onClick={() => { const { order: _o, ...rest } = r.data; setCur(addSlide(rest, r.id)); }}><Copy className="ico" /></button>
-                <button type="button" title="删除这一页" aria-label="删除这一页" onClick={() => removeSlide(r.id)}><Trash2 className="ico" /></button>
+                <button type="button" title={uiText("复制这一页")} aria-label={uiText("复制这一页")} onClick={() => { const { order: _o, ...rest } = r.data; setCur(addSlide(rest, r.id)); }}><Copy className="ico" /></button>
+                <button type="button" title={uiText("删除这一页")} aria-label={uiText("删除这一页")} onClick={() => removeSlide(r.id)}><Trash2 className="ico" /></button>
               </span>
             </div>
           ))}
-          <button type="button" className="thumb-add" onClick={(e) => setAddAt(rectOf(e.currentTarget))}><Plus className="ico" />新建页</button>
+          <button type="button" className="thumb-add" onClick={(e) => setAddAt(rectOf(e.currentTarget))}><Plus className="ico" />{uiText("新建页")}</button>
         </nav>
         <section className="stage" ref={stageRef}>
           {slide ? (
@@ -186,18 +187,18 @@ function App() {
             </div>
           ) : (
             <div className="stage-empty">
-              <p>还没有内容。新建一页，或者让 agent 按大纲写：「用这个幻灯片做一份 Q4 发布会的 PPT，8 页左右」。</p>
-              <button type="button" className="btn btn-primary" onClick={() => add("cover")}><Plus className="ico" />新建封面</button>
+              <p>{uiText("还没有内容。新建一页，或者让 agent 按大纲写：「用这个幻灯片做一份 Q4 发布会的 PPT，8 页左右」。")}</p>
+              <button type="button" className="btn btn-primary" onClick={() => add("cover")}><Plus className="ico" />{uiText("新建封面")}</button>
             </div>
           )}
           {slide && (
-            <textarea className="notes" placeholder="演讲者备注（放映时不显示，导出到 PPT 的备注里）" value={slide.data.notes || ""} aria-label="演讲者备注"
+            <textarea className="notes" placeholder={uiText("演讲者备注（放映时不显示，导出到 PPT 的备注里）")} value={slide.data.notes || ""} aria-label={uiText("演讲者备注")}
               onChange={(e) => update(slide.id, { notes: e.target.value })} />
           )}
         </section>
         <aside className="side">
           {slide && <Side id={slide.id} s={slide.data} />}
-          <h4>主题</h4>
+          <h4>{uiText("主题")}</h4>
           <div className="themes">
             {Object.entries(THEMES).map(([key, t]) => (
               <button key={key} type="button" className={`theme${(d.theme || "light") === key ? " is-on" : ""}`} onClick={() => setDeck({ theme: key })}
@@ -216,7 +217,7 @@ function App() {
         </Popover>
       )}
       {present !== null && <Present start={present} theme={d.theme} title={title} onClose={(n) => { setPresent(null); go(n); }} />}
-      {note && <div className="note" role="status">{note.text}{note.undo && <button type="button" onClick={note.undo}>撤销</button>}</div>}
+      {note && <div className="note" role="status">{note.text}{note.undo && <button type="button" onClick={note.undo}>{uiText("撤销")}</button>}</div>}
     </div>
   );
 }
@@ -246,7 +247,7 @@ function Side({ id, s }: { id: string; s: SlideData }) {
   const cards = s.cards || [], tb = s.table || {}, cols = tb.columns || [], rows = tb.rows || [];
   return (
     <>
-      <h4>版式</h4>
+      <h4>{uiText("版式")}</h4>
       <div className="layouts">
         {LAYOUTS.map(([l, name]) => (
           <button key={l} type="button" className={`layout${layout === l ? " is-on" : ""}`} title={name} aria-pressed={layout === l}
@@ -266,7 +267,7 @@ function Side({ id, s }: { id: string; s: SlideData }) {
       </div>
       {(layout === "two" || layout === "chart") && (
         <>
-          <h4>图表</h4>
+          <h4>{uiText("图表")}</h4>
           <div className="seg sd-seg">
             {([["bar", "柱状"], ["line", "折线"], ["pie", "饼图"]] as const).map(([t, n]) => (
               <button key={t} type="button" className={(ch.type || "bar") === t ? "is-on" : ""} onClick={() => setChart({ ...ch, type: t })}>{n}</button>
@@ -274,46 +275,45 @@ function Side({ id, s }: { id: string; s: SlideData }) {
           </div>
           <table className="data">
             <thead><tr><th />{series.map((x, si) => (
-              <th key={si}><input className="inp" value={x.name || ""} placeholder={`系列${si + 1}`} aria-label="系列名"
+              <th key={si}><input className="inp" value={x.name || ""} placeholder={uiText("系列{0}", si + 1)} aria-label={uiText("系列名")}
                 onChange={(e) => setChart({ ...ch, series: series.map((y, j) => (j === si ? { ...y, name: e.target.value } : y)) })} /></th>
-            ))}{ch.type !== "pie" && series.length < 3 && <th><button type="button" className="icon-btn" title="加一个系列" aria-label="加一个系列"
+            ))}{ch.type !== "pie" && series.length < 3 && <th><button type="button" className="icon-btn" title={uiText("加一个系列")} aria-label={uiText("加一个系列")}
               onClick={() => setChart({ ...ch, series: [...series, { name: `系列${series.length + 1}`, values: labels.map(() => 0) }] })}><Plus className="ico" /></button></th>}</tr></thead>
             <tbody>{labels.map((l, i) => (
               <tr key={i}>
-                <td><input className="inp" value={l} aria-label="类别" onChange={(e) => setChart({ ...ch, labels: labels.map((x, j) => (j === i ? e.target.value : x)) })} /></td>
+                <td><input className="inp" value={l} aria-label={uiText("类别")} onChange={(e) => setChart({ ...ch, labels: labels.map((x, j) => (j === i ? e.target.value : x)) })} /></td>
                 {series.map((x, si) => (
-                  <td key={si}><input className="inp num" inputMode="decimal" value={x.values?.[i] ?? ""} aria-label="数值"
+                  <td key={si}><input className="inp num" inputMode="decimal" value={x.values?.[i] ?? ""} aria-label={uiText("数值")}
                     onChange={(e) => {
                       const v = e.target.value.trim() === "" ? null : Number(e.target.value);
                       setChart({ ...ch, series: series.map((y, j) => (j === si ? { ...y, values: labels.map((_, k) => (k === i ? (v !== null && isFinite(v) ? v : null) : y.values?.[k] ?? null)) } : y)) });
                     }} /></td>
                 ))}
-                <td><button type="button" className="icon-btn" aria-label="删掉这一行" onClick={() => setChart({ ...ch, labels: labels.filter((_, j) => j !== i), series: series.map((y) => ({ ...y, values: (y.values || []).filter((_, j) => j !== i) })) })}><X className="ico" /></button></td>
+                <td><button type="button" className="icon-btn" aria-label={uiText("删掉这一行")} onClick={() => setChart({ ...ch, labels: labels.filter((_, j) => j !== i), series: series.map((y) => ({ ...y, values: (y.values || []).filter((_, j) => j !== i) })) })}><X className="ico" /></button></td>
               </tr>
             ))}</tbody>
           </table>
           <button type="button" className="link-btn" onClick={() => setChart({ ...ch, labels: [...labels, `类别${labels.length + 1}`], series: series.map((y) => ({ ...y, values: [...labels.map((_, k) => y.values?.[k] ?? null), 0] })) })}>
-            <Plus className="ico" />加一行
-          </button>
+            <Plus className="ico" />{uiText("加一行")}{" "}</button>
         </>
       )}
       {layout === "cards" && (
         <>
-          <h4>卡片</h4>
+          <h4>{uiText("卡片")}</h4>
           <div className="row-btns">
-            <button type="button" className="btn" disabled={cards.length >= 4} onClick={() => update(id, { cards: [...cards, { title: "", text: "" }] })}><Plus className="ico" />加一张</button>
-            <button type="button" className="btn" disabled={cards.length <= 1} onClick={() => update(id, { cards: cards.slice(0, -1) })}>去掉最后一张</button>
+            <button type="button" className="btn" disabled={cards.length >= 4} onClick={() => update(id, { cards: [...cards, { title: "", text: "" }] })}><Plus className="ico" />{uiText("加一张")}</button>
+            <button type="button" className="btn" disabled={cards.length <= 1} onClick={() => update(id, { cards: cards.slice(0, -1) })}>{uiText("去掉最后一张")}</button>
           </div>
         </>
       )}
       {layout === "table" && (
         <>
-          <h4>表格</h4>
+          <h4>{uiText("表格")}</h4>
           <div className="row-btns">
-            <button type="button" className="btn" onClick={() => update(id, { table: { columns: cols, rows: [...rows, cols.map(() => "")] } })}><Plus className="ico" />加一行</button>
-            <button type="button" className="btn" disabled={cols.length >= 8} onClick={() => update(id, { table: { columns: [...cols, `列${cols.length + 1}`], rows: rows.map((r) => [...r, ""]) } })}><Plus className="ico" />加一列</button>
-            <button type="button" className="btn" disabled={!rows.length} onClick={() => update(id, { table: { columns: cols, rows: rows.slice(0, -1) } })}>去掉最后一行</button>
-            <button type="button" className="btn" disabled={cols.length <= 1} onClick={() => update(id, { table: { columns: cols.slice(0, -1), rows: rows.map((r) => r.slice(0, cols.length - 1)) } })}>去掉最后一列</button>
+            <button type="button" className="btn" onClick={() => update(id, { table: { columns: cols, rows: [...rows, cols.map(() => "")] } })}><Plus className="ico" />{uiText("加一行")}</button>
+            <button type="button" className="btn" disabled={cols.length >= 8} onClick={() => update(id, { table: { columns: [...cols, `列${cols.length + 1}`], rows: rows.map((r) => [...r, ""]) } })}><Plus className="ico" />{uiText("加一列")}</button>
+            <button type="button" className="btn" disabled={!rows.length} onClick={() => update(id, { table: { columns: cols, rows: rows.slice(0, -1) } })}>{uiText("去掉最后一行")}</button>
+            <button type="button" className="btn" disabled={cols.length <= 1} onClick={() => update(id, { table: { columns: cols.slice(0, -1), rows: rows.map((r) => r.slice(0, cols.length - 1)) } })}>{uiText("去掉最后一列")}</button>
           </div>
         </>
       )}
@@ -350,15 +350,15 @@ function Present({ start, theme, title, onClose }: { start: number; theme?: stri
   }, [list.length, n, onClose]);
   const k = Math.min(size.w / W, size.h / H), s = list[n];
   return (
-    <div className="present" ref={ref} onClick={() => setN((x) => Math.min(list.length - 1, x + 1))} role="dialog" aria-label="放映">
+    <div className="present" ref={ref} onClick={() => setN((x) => Math.min(list.length - 1, x + 1))} role="dialog" aria-label={uiText("放映")}>
       {s && <div style={{ width: W * k, height: H * k }}><div style={{ transform: `scale(${k})`, transformOrigin: "0 0" }}>
         <SlideView s={s.data} deckTitle={title} theme={theme} n={n + 1} total={list.length} editable={false} />
       </div></div>}
       <div className="present-bar" onClick={(e) => e.stopPropagation()}>
-        <button type="button" aria-label="上一页" onClick={() => setN((x) => Math.max(0, x - 1))}><ChevronLeft className="ico" /></button>
+        <button type="button" aria-label={uiText("上一页")} onClick={() => setN((x) => Math.max(0, x - 1))}><ChevronLeft className="ico" /></button>
         <span>{n + 1} / {list.length}</span>
-        <button type="button" aria-label="下一页" onClick={() => setN((x) => Math.min(list.length - 1, x + 1))}><ChevronRight className="ico" /></button>
-        <button type="button" aria-label="结束放映" onClick={() => onClose(n)}><X className="ico" /></button>
+        <button type="button" aria-label={uiText("下一页")} onClick={() => setN((x) => Math.min(list.length - 1, x + 1))}><ChevronRight className="ico" /></button>
+        <button type="button" aria-label={uiText("结束放映")} onClick={() => onClose(n)}><X className="ico" /></button>
       </div>
     </div>
   );
@@ -366,7 +366,7 @@ function Present({ start, theme, title, onClose }: { start: number; theme?: stri
 
 async function start() {
   const root = createRoot(document.getElementById("root")!);
-  const outside = <div className="outside">在 myco App 里打开这个网页，才能读写它的内容。</div>;
+  const outside = <div className="outside">{uiText("在 myco App 里打开这个网页，才能读写它的内容。")}</div>;
   if (!myco) { root.render(outside); return; }
   try {
     const ctx = await myco.ready;
@@ -374,7 +374,7 @@ async function start() {
     await Promise.all([deck.load(), slides.load()]);
     if (!deck.get("main")) await deck.put({ title: "", theme: "light" }, "main")?.catch(() => deck.load());
   } catch { root.render(outside); return; }
-  listen([deck, slides], (c: MycoChange) => { emit(); if (c.by && c.by !== me) flash(`${c.by} 刚改了`); });
+  listen([deck, slides], (c: MycoChange) => { emit(); if (c.by && c.by !== me) flash(uiText("{0} 刚改了", c.by)); });
   root.render(<App />);
 }
 void start();

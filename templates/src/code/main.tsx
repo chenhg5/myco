@@ -1,3 +1,5 @@
+import { themeMedia } from "../_lib/appearance";
+import { t as uiText } from "../_lib/i18n";
 // 代码编辑器: a small project people and agents edit together, in Monaco
 // (VS Code's editor): a file tree, tabs, syntax colours for many languages,
 // find and replace, multiple cursors, the minimap. Each file is a record
@@ -54,7 +56,7 @@ function treeOf(): Tree {
 }
 
 function useDark() {
-  const q = window.matchMedia?.("(prefers-color-scheme: dark)");
+  const q = themeMedia();
   const [d, setD] = useState(!!q?.matches);
   useEffect(() => { if (!q) return; const f = () => setD(q.matches); q.addEventListener("change", f); return () => q.removeEventListener("change", f); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return d;
@@ -110,7 +112,7 @@ function App() {
     const m = models.current.get(path), r = byPath().get(path);
     if (!m || !r) return;
     const text = m.getValue();
-    if (text.length > MAX) { kit.flash(`「${path}」超过 ${MAX / 1000}KB，没保存：拆成几个文件吧`); return; }
+    if (text.length > MAX) { kit.flash(uiText("「{0}」超过 {1}KB，没保存：拆成几个文件吧", path, MAX / 1000)); return; }
     if (text !== r.data.content) kit.track(files.put({ ...r.data, content: text }, r.id));
     setDirty((d) => { const n = new Set(d); n.delete(path); return n; });
   };
@@ -171,7 +173,7 @@ function App() {
     });
   };
   const newFile = (dir = "") => {
-    const name = window.prompt("新文件名（可以带路径，比如 src/app.js）", dir ? `${dir}/` : "");
+    const name = window.prompt(uiText("新文件名（可以带路径，比如 src/app.js）"), dir ? `${dir}/` : "");
     const path = name?.trim().replace(/^\/+/, "");
     if (!path) return;
     if (byPath().has(path)) { show(path); return; }
@@ -182,7 +184,7 @@ function App() {
     setTimeout(() => show(path), 0);
   };
   const newFolder = (dir = "") => {
-    const name = window.prompt("新文件夹名", dir ? `${dir}/` : "");
+    const name = window.prompt(uiText("新文件夹名"), dir ? `${dir}/` : "");
     const path = name?.trim().replace(/^\/+|\/+$/g, "");
     if (!path) return;
     kit.track(files.put({ path: `${path}/.keep`, content: "" }, uid("f")));
@@ -190,9 +192,9 @@ function App() {
     kit.emit();
   };
   const rename = (path: string) => {
-    const to = window.prompt("改名为", path)?.trim().replace(/^\/+/, "");
+    const to = window.prompt(uiText("改名为"), path)?.trim().replace(/^\/+/, "");
     if (!to || to === path) return;
-    if (byPath().has(to)) { kit.flash(`已经有「${to}」了`); return; }
+    if (byPath().has(to)) { kit.flash(uiText("已经有「{0}」了", to)); return; }
     const r = byPath().get(path);
     if (!r) return;
     flush(path);
@@ -205,17 +207,17 @@ function App() {
   };
   const remove = (path: string, isDir = false) => {
     const gone = files.rows.filter((r) => { const p = String(r.data.path || ""); return isDir ? p.startsWith(`${path}/`) : p === path; });
-    if (!gone.length || !window.confirm(isDir ? `删除文件夹「${path}」和里面的 ${gone.length} 个文件？` : `删除「${path}」？`)) return;
+    if (!gone.length || !window.confirm(isDir ? uiText("删除文件夹「{0}」和里面的 {1} 个文件？", path, gone.length) : uiText("删除「{0}」？", path))) return;
     const keep = gone.map((r) => ({ id: r.id, data: r.data }));
     for (const g of keep) { kit.track(files.remove(g.id)); const p = String(g.data.path); if (tabs.includes(p)) closeTab(p); }
-    kit.flash(`删除了 ${keep.length} 个文件`, () => { for (const g of keep) kit.track(files.put(g.data, g.id)); kit.note = null; kit.emit(); });
+    kit.flash(uiText("删除了 {0} 个文件", keep.length), () => { for (const g of keep) kit.track(files.put(g.data, g.id)); kit.note = null; kit.emit(); });
   };
   const exportZip = async () => {
     for (const p of dirty) flush(p);
     const out: Record<string, string> = {};
     for (const r of files.rows) { const p = String(r.data.path || ""); if (p && !p.endsWith("/.keep")) out[p] = String(r.data.content || ""); }
-    try { await save(`${(title.get() || "project").replace(/[\\/:*?"<>|]/g, " ")}.zip`, zip(out), "application/zip"); kit.flash("已存到「下载」"); }
-    catch (e) { kit.flash((e as Error).message || "没存下来"); }
+    try { await save(`${(title.get() || "project").replace(/[\\/:*?"<>|]/g, " ")}.zip`, zip(out), "application/zip"); kit.flash(uiText("已存到「下载」")); }
+    catch (e) { kit.flash((e as Error).message || uiText("没存下来")); }
   };
 
   const canPreview = /\.(html?|md)$/i.test(active);
@@ -225,8 +227,8 @@ function App() {
         <div className="cd-node is-dir" style={{ paddingLeft: 8 + depth * 14 }} onClick={() => setOpen((o) => { const n = new Set(o); if (n.has(d.path)) n.delete(d.path); else n.add(d.path); return n; })}>
           {open.has(d.path) ? <ChevronDown className="ico" /> : <ChevronRight className="ico" />}<Folder className="ico cd-ic" /><span>{d.name}</span>
           <span className="cd-acts" onClick={(e) => e.stopPropagation()}>
-            <button type="button" title="新文件" onClick={() => newFile(d.path)}><FilePlus className="ico" /></button>
-            <button type="button" title="删除文件夹" onClick={() => remove(d.path, true)}><Trash2 className="ico" /></button>
+            <button type="button" title={uiText("新文件")} onClick={() => newFile(d.path)}><FilePlus className="ico" /></button>
+            <button type="button" title={uiText("删除文件夹")} onClick={() => remove(d.path, true)}><Trash2 className="ico" /></button>
           </span>
         </div>
         {open.has(d.path) && branch(d, depth + 1)}
@@ -236,43 +238,43 @@ function App() {
       <div key={f.id} className={`cd-node${active === f.path ? " is-on" : ""}`} style={{ paddingLeft: 22 + depth * 14 }} onClick={() => show(f.path)} title={f.path}>
         <File className="ico cd-ic" /><span>{f.name}</span>{dirty.has(f.path) && <i className="cd-dot" />}
         <span className="cd-acts" onClick={(e) => e.stopPropagation()}>
-          <button type="button" title="改名" onClick={() => rename(f.path)}><Pencil className="ico" /></button>
-          <button type="button" title="删除" onClick={() => remove(f.path)}><Trash2 className="ico" /></button>
+          <button type="button" title={uiText("改名")} onClick={() => rename(f.path)}><Pencil className="ico" /></button>
+          <button type="button" title={uiText("删除")} onClick={() => remove(f.path)}><Trash2 className="ico" /></button>
         </span>
       </div>
     )),
   ];
   return (
     <div className={`app cd${dark ? " is-dark" : ""}`}>
-      <Bar kit={kit} title={title.get()} placeholder="未命名项目" onTitle={title.set}>
-        {canPreview && <button type="button" className={`btn${preview ? " is-on" : ""}`} onClick={() => { for (const p of dirty) flush(p); setPreview(!preview); }}>{preview ? <EyeOff className="ico" /> : <Eye className="ico" />}预览</button>}
-        <button type="button" className="btn" onClick={() => void exportZip()}><Download className="ico" />下载 zip</button>
+      <Bar kit={kit} title={title.get()} placeholder={uiText("未命名项目")} onTitle={title.set}>
+        {canPreview && <button type="button" className={`btn${preview ? " is-on" : ""}`} onClick={() => { for (const p of dirty) flush(p); setPreview(!preview); }}>{preview ? <EyeOff className="ico" /> : <Eye className="ico" />}{uiText("预览")}</button>}
+        <button type="button" className="btn" onClick={() => void exportZip()}><Download className="ico" />{uiText("下载 zip")}</button>
       </Bar>
       <div className="cd-main">
         <aside className="cd-tree">
-          <div className="cd-tree-head"><span>文件</span>
-            <button type="button" className="icon-btn" title="新文件" aria-label="新文件" onClick={() => newFile()}><FilePlus className="ico" /></button>
-            <button type="button" className="icon-btn" title="新文件夹" aria-label="新文件夹" onClick={() => newFolder()}><FolderPlus className="ico" /></button>
+          <div className="cd-tree-head"><span>{uiText("文件")}</span>
+            <button type="button" className="icon-btn" title={uiText("新文件")} aria-label={uiText("新文件")} onClick={() => newFile()}><FilePlus className="ico" /></button>
+            <button type="button" className="icon-btn" title={uiText("新文件夹")} aria-label={uiText("新文件夹")} onClick={() => newFolder()}><FolderPlus className="ico" /></button>
           </div>
-          <div className="cd-tree-body">{branch(tree, 0)}{!files.rows.length && <p className="cd-empty">还没有文件。点上面的 ＋ 新建，或者让 agent 写：「在代码编辑器里写一个贪吃蛇的 index.html」。</p>}</div>
+          <div className="cd-tree-body">{branch(tree, 0)}{!files.rows.length && <p className="cd-empty">{uiText("还没有文件。点上面的 ＋ 新建，或者让 agent 写：「在代码编辑器里写一个贪吃蛇的 index.html」。")}</p>}</div>
         </aside>
         <section className="cd-edit">
           <div className="cd-tabs">
             {tabs.map((t) => (
               <div key={t} className={`cd-tab${t === active ? " is-on" : ""}`} onClick={() => show(t)} title={t}>
                 <span>{t.split("/").pop()}</span>
-                <button type="button" aria-label={`关掉 ${t}`} onClick={(e) => { e.stopPropagation(); closeTab(t); }}>{dirty.has(t) ? <i className="cd-dot" /> : <X className="ico" />}</button>
+                <button type="button" aria-label={uiText("关掉 {0}", t)} onClick={(e) => { e.stopPropagation(); closeTab(t); }}>{dirty.has(t) ? <i className="cd-dot" /> : <X className="ico" />}</button>
               </div>
             ))}
           </div>
           <div className="cd-panes">
             <div className="cd-monaco" ref={host} style={{ visibility: active ? "visible" : "hidden" }} />
-            {!active && <div className="cd-blank">从左边打开一个文件</div>}
-            {preview && canPreview && <iframe className="cd-preview" title="预览" sandbox="allow-scripts" srcDoc={previewOf(active)} />}
+            {!active && <div className="cd-blank">{uiText("从左边打开一个文件")}</div>}
+            {preview && canPreview && <iframe className="cd-preview" title={uiText("预览")} sandbox="allow-scripts" srcDoc={previewOf(active)} />}
           </div>
           <div className="cd-status">
             <span>{active || "—"}</span><span className="top-gap" />
-            {active && <><span>行 {pos.line}，列 {pos.col}</span><span>{langOf(active)}</span><span>{dirty.has(active) ? "正在保存…" : kit.pending ? "正在保存…" : "已保存"}</span></>}
+            {active && <><span>{uiText("行")}{" "}{pos.line}{uiText("，列")}{" "}{pos.col}</span><span>{langOf(active)}</span><span>{dirty.has(active) ? uiText("正在保存…") : kit.pending ? uiText("正在保存…") : uiText("已保存")}</span></>}
           </div>
         </section>
       </div>

@@ -9,6 +9,7 @@ import { looksOf, MushroomFace } from "@/app/persona";
 import { Modal } from "@/app/dialogs";
 import { openOutside, setInAppLinks } from "@/app/links";
 import { L } from "@/lib/i18n";
+import { usePagePreferences, localizedPageURL } from "./page-preferences";
 import { cn, timeAgo } from "@/lib/utils";
 
 /*
@@ -349,6 +350,7 @@ export function PageHost() {
 function PageView({ target, open, active, reload, onMeta }: {
   target: PageTarget; open: boolean; active: boolean; reload: number; onMeta: (m: PageMeta) => void;
 }) {
+  const preferences = usePagePreferences();
   const [opened, setOpened] = useState<PageOpen | null>(null);
   const [page, setPage] = useState<Page | null>(null);
   const [error, setError] = useState("");
@@ -387,8 +389,8 @@ function PageView({ target, open, active, reload, onMeta }: {
   // The page's script (pagebridge.js) asks the App: a link to open in the
   // browser, and the myco bridge's calls. Only from this panel's frame;
   // answers go to the page's own origin only.
-  const live = useRef({ page, opened });
-  live.current = { page, opened };
+  const live = useRef({ page, opened, preferences });
+  live.current = { page, opened, preferences };
   const known = useRef(0); // the state version the page has
   const bridged = useRef(false);
   // Its records (myco.data): watched once the page listens; the change feed
@@ -453,7 +455,7 @@ function PageView({ target, open, active, reload, onMeta }: {
           const st = await appApi.pageState(t.hubId, t.id);
           known.current = st.version;
           bridged.current = true;
-          return { page: { id: t.id, name: o?.name || p?.name || "", version: o?.version || 0 }, me: { name: meOf(t.hubId) }, state: st.state, version: st.version };
+          return { page: { id: t.id, name: o?.name || p?.name || "", version: o?.version || 0 }, me: { name: meOf(t.hubId) }, state: st.state, version: st.version, preferences: live.current.preferences };
         }
         case "update": {
           const r = await appApi.putPageState(t.hubId, t.id, args.state ?? null, Number(args.version) || 0);
@@ -601,7 +603,13 @@ function PageView({ target, open, active, reload, onMeta }: {
   }, [open, active, target]);
 
   const local = target.kind === "local" ? new URL(target.url) : null;
-  const src = local ? target.kind === "local" && target.url : opened?.url;
+  const rawSrc = local ? target.kind === "local" && target.url : opened?.url;
+  const src = rawSrc && !local ? localizedPageURL(rawSrc, preferences.language) : rawSrc;
+  const sendPreferences = () => {
+    if (!src || !frame.current?.contentWindow) return;
+    frame.current.contentWindow.postMessage({myco:"preferences", preferences},new URL(src).origin);
+  };
+  useEffect(sendPreferences,[preferences.language,preferences.theme,src]);
   const title = local ? L(`这台电脑 · ${local.port || (local.protocol === "https:" ? "443" : "80")} 端口`, `This computer · port ${local.port || 80}`)
     : opened?.name || page?.name || L("网页", "Page");
   const about = local ? local.host + local.pathname.replace(/\/$/, "")
@@ -637,9 +645,9 @@ function PageView({ target, open, active, reload, onMeta }: {
       {error ? <p className="fp-note">{error}</p> : (
         <div className="pg-stage">
           {/* (named by aria-label, not title: WebKit shows a frame's title as a tooltip over all of the page) */}
-          {src && <iframe ref={frame} key={`${src}#${reload}`} className={cn("fp-frame pg-frame", loadedKey !== `${src}#${reload}` && "is-loading")} aria-label={title} src={src || undefined}
+          {src && <iframe ref={frame} key={`${src}#${reload}`} className={cn("fp-frame pg-frame", loadedKey !== `${src}#${reload}` && "is-loading")} aria-label={title} src={src || undefined} style={{colorScheme:preferences.theme}}
             sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads allow-same-origin" referrerPolicy="no-referrer"
-            allow="clipboard-write; fullscreen" onLoad={() => setLoadedKey(`${src}#${reload}`)} />}
+            allow="clipboard-write; fullscreen" onLoad={() => { setLoadedKey(`${src}#${reload}`); sendPreferences(); }} />}
           {loadedKey !== `${src}#${reload}` && (
             <PageLoading key={`${src}#${reload}`} name={title} seed={page?.publisher || (target.kind === "local" ? target.url : target.hubId)} who={page && target.kind === "page" ? nameOf(target.hubId, page.publisher) : ""} />
           )}

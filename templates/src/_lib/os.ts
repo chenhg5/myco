@@ -1,3 +1,4 @@
+import { t as uiText } from "./i18n";
 // The SDK for an app that uses this computer (myco.os, docs/app-os.md):
 // the bridge's calls with errors as OSError, jobs with progress and an
 // AbortSignal, React hooks, and the small helpers such apps need
@@ -16,8 +17,8 @@ export const osState: OSState = !myco ? "outside" : myco.os && (myco.features ||
 
 /** What to tell the person when this page cannot use the computer. */
 export function osStateText(s: OSState = osState): string {
-  if (s === "outside") return "在 myco App 里打开这个应用，才能用这台电脑";
-  if (s === "old") return "这个 myco App 还不能让应用用电脑：更新 App 后再试";
+  if (s === "outside") return uiText("在 myco App 里打开这个应用，才能用这台电脑");
+  if (s === "old") return uiText("这个 myco App 还不能让应用用电脑：更新 App 后再试");
   return "";
 }
 
