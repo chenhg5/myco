@@ -1158,7 +1158,9 @@ fingers pinch to zoom and move the local view. To scroll the remote computer,
 hold two still fingers briefly, then drag up or down. **Two-finger scroll** in
 Tools also allows immediate scrolling until switched off. Use the keyboard button for text and modifier keys, or zoom in
 for small controls. On the updated iPhone App, connecting enters a landscape
-full-screen desktop. App bars are hidden; a trusted exit button stays available.
+full-screen desktop. App bars are hidden; a trusted exit button stays available. It moves to the
+left while the software keyboard is visible, away from Send, and asks before
+disconnecting; cancelling keeps the connection and local draft.
 Tap the floating tools button for the keyboard and controls; disconnecting or
 closing restores portrait. Pinch with two fingers to zoom (also in view-only mode);
 in view-only mode, slide one finger to pan the enlarged desktop. Desktop viewers can use **Expand desktop** to fill the available App panel. A disabled

@@ -813,6 +813,7 @@ function App() {
                     <label className="rd-check">
                       <input
                         type="checkbox"
+                        role="switch"
                         checked={control}
                         onChange={(e) => setControl(e.target.checked)}
                       />
@@ -929,6 +930,7 @@ function App() {
             <label className="rd-check">
               <input
                 type="checkbox"
+                role="switch"
                 disabled={!selected.control || connecting}
                 checked={control && selected.control}
                 onChange={(e) => setControl(e.target.checked)}

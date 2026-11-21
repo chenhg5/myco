@@ -121,6 +121,8 @@ struct PageScreen: View {
     /// A file the page handed over, to save or send on.
     @State private var handed: HandedFile?
     @State private var remoteActive = false
+    @State private var remoteKeyboardVisible = false
+    @State private var confirmingRemoteExit = false
 
     private var page: Page? { session.pages.pages[id] }
 
@@ -279,17 +281,30 @@ struct PageScreen: View {
         } message: { one in
             Text(one.message)
         }
-        .overlay(alignment: .topTrailing) {
+        .overlay(alignment: remoteKeyboardVisible ? .topLeading : .topTrailing) {
             if remoteActive {
-                Button { dismiss() } label: {
+                Button { confirmingRemoteExit = true } label: {
                     Image(systemName: "xmark").font(.system(size: 16, weight: .medium))
                         .foregroundStyle(.white).frame(width: 44, height: 44)
                         .background(.black.opacity(0.65), in: Circle())
                 }
                 .accessibilityLabel(L("退出远程桌面", "Exit remote desktop"))
                 .accessibilityIdentifier("remote.exit")
-                .padding(.top, 8).padding(.trailing, 12)
+                .padding(.top, 8).padding(.horizontal, 12)
             }
+        }
+        .alert(L("断开远程桌面？", "Disconnect remote desktop?"), isPresented: $confirmingRemoteExit) {
+            Button(L("继续连接", "Stay connected"), role: .cancel) { }
+            Button(L("断开并退出", "Disconnect and exit"), role: .destructive) { dismiss() }
+        } message: {
+            Text(L("这会结束当前连接。", "This ends the current connection."))
+        }
+        // Keep the trusted exit away from the page's Send button while typing.
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            remoteKeyboardVisible = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            remoteKeyboardVisible = false
         }
         .statusBarHidden(remoteActive)
         .onChange(of: remoteActive) { _, active in RemotePresentation.setActive(active) }

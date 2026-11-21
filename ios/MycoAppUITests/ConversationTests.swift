@@ -865,8 +865,24 @@ final class ConversationTests: XCTestCase {
         XCTAssertTrue(alert.waitForExistence(timeout: 10))
         alert.buttons["Connect"].tap()
         XCTAssertTrue(app.buttons["remote.exit"].waitForExistence(timeout: 10))
+        let draft = web.textViews["Local draft"]
+        XCTAssertTrue(draft.waitForExistence(timeout: 5))
+        draft.tap()
+        draft.typeText("Unsent draft")
+        let exit = app.buttons["remote.exit"]
+        let moved = expectation(for: NSPredicate { _, _ in exit.frame.midX < web.frame.midX }, evaluatedWith: nil)
+        wait(for: [moved], timeout: 5)
+        snap("remote-keyboard-exit-away-from-send")
+        exit.tap()
+        XCTAssertTrue(alert.buttons["Stay connected"].waitForExistence(timeout: 5))
+        alert.buttons["Stay connected"].tap()
+        XCTAssertTrue(web.exists, "an accidental tap must not end the connection")
+        XCTAssertTrue(web.staticTexts["Connected test session"].exists)
+        XCTAssertEqual(draft.value as? String, "Unsent draft", "cancel preserves the local draft")
         app.buttons["remote.exit"].tap()
-        XCTAssertTrue(web.waitForNonExistence(timeout: 10), "the trusted exit must close a connected remote page")
+        XCTAssertTrue(alert.buttons["Disconnect and exit"].waitForExistence(timeout: 5))
+        alert.buttons["Disconnect and exit"].tap()
+        XCTAssertTrue(web.waitForNonExistence(timeout: 10), "confirmed exit closes a connected remote page")
     }
 
 }

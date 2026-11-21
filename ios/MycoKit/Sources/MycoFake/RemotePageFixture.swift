@@ -5,6 +5,7 @@ enum RemotePageFixture {
     <!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
     <style>body{font:17px -apple-system;padding:24px;color:#222;background:#fafafa}button{font:inherit;display:block;min-height:48px;margin:16px 0;padding:10px;border:1px solid #bbb;border-radius:10px;background:#fff;color:#222}#status{min-height:80px}</style></head><body>
     <h1>Remote controller probe</h1><p id="status">Ready</p><p id="error"></p>
+    <label>Local draft <textarea aria-label="Local draft" id="draft"></textarea></label>
     <button id="probe">Probe WebRTC</button><button id="connect">Connect test computer</button><button id="host">Attempt host action</button><button id="disconnect">Disconnect test session</button>
     <script>
     const status=document.getElementById('status');let offer,connection;

@@ -136,6 +136,14 @@ try {
         });
         await f.locator(".rd-install-card .rd-primary").click();
         await f.locator(".rd-enable-card").waitFor();
+        const permissionRow = f.locator(".rd-enable-card .rd-check");
+        assert((await permissionRow.boundingBox()).height >= 64, "the entire permission row must be a large click target");
+        const permission = permissionRow.getByRole("switch");
+        assert.equal(await permission.isChecked(), false, "control is opt-in");
+        await permissionRow.locator("small").click();
+        assert.equal(await permission.isChecked(), true, "clicking the explanatory text also toggles permission");
+        assert(await f.locator(".rd-share-notes p").first().evaluate(e => parseFloat(getComputedStyle(e).fontSize) >= 14), "sharing notes must be readable");
+        await page.screenshot({path:path.join(shots, `${width}-${lang}-${theme}-permission.png`)});
         await f.locator(".rd-enable-card .rd-primary").click();
         await f.locator(".rd-code").waitFor();
         assert.equal(
