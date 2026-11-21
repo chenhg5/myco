@@ -114,6 +114,13 @@ func TestSpeechEndToEnd(t *testing.T) {
 	if segs != len(v.Segments) {
 		t.Fatalf("%d segment events, %d segments", segs, len(v.Segments))
 	}
+	// who speaks when: three voices take turns in the test recording
+	j, _ = js.Start("speech.diarize", json.RawMessage(`{"path":`+mustJSON(in)+`}`))
+	b = waitFor(t, js, j.ID, 2*time.Minute)
+	if b.Error != nil {
+		t.Fatal(b.Error)
+	}
+	t.Logf("diarize: %s", mustJSON(b.Value))
 }
 
 func waitFor(t *testing.T, js *Jobs, id string, d time.Duration) Batch {
@@ -154,5 +161,21 @@ func TestSystemProxy(t *testing.T) {
 	}
 	if u := winProxy("    ProxyEnable    REG_DWORD    0x1\n    ProxyServer    REG_SZ    1.2.3.4:80\n"); u == nil || u.Host != "1.2.3.4:80" {
 		t.Fatalf("win plain: %v", u)
+	}
+}
+
+func TestTurns(t *testing.T) {
+	if tt, ok := parseTurn("8.148 -- 13.548 speaker_03"); !ok || tt.Start != 8.148 || tt.End != 13.548 || tt.Speaker != 3 {
+		t.Fatalf("%+v %v", tt, ok)
+	}
+	if _, ok := parseTurn("progress 100.00%"); ok {
+		t.Fatal("progress is not a turn")
+	}
+	got := renumber([]Turn{{Start: 9, Speaker: 3}, {Start: 1, Speaker: 2}, {Start: 5, Speaker: 0}, {Start: 12, Speaker: 2}})
+	want := []int{0, 1, 2, 0}
+	for i, tt := range got {
+		if tt.Speaker != want[i] {
+			t.Fatalf("%+v", got)
+		}
 	}
 }

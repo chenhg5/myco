@@ -118,7 +118,7 @@
       },
     },
     speech: {
-      status: () => call({ ready: !window.__NO_SPEECH__, engine: true, engine_version: "v2.0.2", vad: true, dir: "/Users/glenn/.myco/speech", engine_size_mb: window.__NO_SPEECH__ ? 25 : 0,
+      status: () => call({ ready: !window.__NO_SPEECH__, diarize: !window.__NO_SPEECH__, engine: true, engine_version: "v2.0.2", vad: true, dir: "/Users/glenn/.myco/speech", engine_size_mb: window.__NO_SPEECH__ ? 25 : 0,
         models: [{ id: "sensevoice", name: "SenseVoice", languages: ["zh", "en"], size_mb: 158, installed: !window.__NO_SPEECH__ }] }),
       install: () => timed(200, (i, emit) => { emit("progress", { step: "model", received: i * 16e6, total: 165e6 }); return i < 10; }, () => ({ ready: true })),
       transcribe: () => timed(150, (i, emit) => {
@@ -127,6 +127,7 @@
         emit("progress", { done: i * 20, total: 60 });
         return i < SAID.length;
       }, () => ({ segments: [], seconds: 60, ms: 900, model: "sensevoice" })),
+      diarize: () => timed(150, (i, emit) => { emit("progress", { percent: i * 50 }); return i < 2; }, () => ({ turns: [{ start: 2, end: 16, speaker: 0 }, { start: 30, end: 37, speaker: 1 }], speakers: 2, ms: 300 })),
     },
     has: async () => true,
     system: {
