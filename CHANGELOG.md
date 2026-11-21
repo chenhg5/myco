@@ -4,6 +4,20 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.21.9
+
+- **Official apps follow the App's language and appearance**: every official app now has Chinese and English text and switches with the App's language and light / dark setting, including their editors and canvases. Your records are unchanged.
+- **A restart no longer loses a running task**: when the runner restarts (an upgrade restarts it too) in the middle of a task, it puts the task back in the queue once and runs it again, telling the agent to check what it already did. A shell command on an exec node, which may have run in part, still fails, with a clear reason.
+- The Poll app is no longer offered among the official apps; pages already made from it keep working.
+- Upgrade the App and your computers (their runners) for these; upgrade the workspace (Settings › Workspace, or `sudo myco upgrade` on the server) for the translated apps.
+
+**中文**
+
+- **官方应用跟随 App 的语言和外观**：所有官方应用都有中英文，随 App 的语言和浅色 / 深色设置切换，编辑器和画布也一样。原有数据不变。
+- **重启不再丢掉正在跑的任务**：任务进行中 runner 重启了（升级也会重启它），会把任务放回队列重新跑一次，并提醒 agent 先检查已经做过的部分。exec 节点上的 shell 命令可能已执行一半，仍标为失败，并写明原因。
+- 官方应用里不再提供「投票」；已经用它做的网页照常可用。
+- 升级 App 和各台电脑（runner）即可用上这些；升级工作区（设置 › 工作区，或在服务器上 `sudo myco upgrade`）才有翻译好的应用。
+
 ## v0.21.8
 
 - **New official app: Meeting Notes (会议记录)**: record a meeting from any app (your microphone as "me", the computer's sound or one meeting app as "them") and have it transcribed on this computer (SenseVoice: Chinese, English, Cantonese, Japanese, Korean; downloaded the first time). Sentences by speaker, played from where you click, corrected in place, speakers renamed, search, and export as text, Markdown or SRT; several people at one microphone are told apart, and an agent can write the notes. Recording works in the Mac App (macOS 14.2+ for the computer's sound) and on Linux; not on Windows yet.
