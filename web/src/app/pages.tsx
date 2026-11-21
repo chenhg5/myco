@@ -12,7 +12,7 @@ import { L } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
 
 /*
- * Web pages agents publish (docs/design/browser.md). A link to one,
+ * Web pages agents publish. A link to one,
  * <hub>/pages/<id>, shows under its message as a card; it opens in the page
  * panel (the panel files open in: beside the chat when there is room). Its
  * files come from this App's own loopback port, not the App's origin, in a
@@ -396,8 +396,9 @@ function PageView({ target, open, active, reload, onMeta }: {
   const dataWatch = useRef(false);
   const dataSeq = useRef(0);
   const [asking, setAsking] = useState<{ text: string; to: string; answer: (ok: boolean) => void } | null>(null);
+  // (while the page is there: tucked away, it still runs and is answered,
+  // and what it started on the computer goes on)
   useEffect(() => {
-    if (!open) return;
     known.current = 0;
     bridged.current = false;
     const on = (e: MessageEvent) => {
@@ -496,11 +497,74 @@ function PageView({ target, open, active, reload, onMeta }: {
         }
       }
       if (method.startsWith("data.") || method === "download") return answerData(t, method, args);
+      if (method.startsWith("os.")) return answerOS(t, method, args);
+      throw new Error(`myco: no such call: ${method}`);
+    };
+    // What the page uses of this computer (myco.os): calls go to the App
+    // backend as they are; a job's events are read there and sent on to
+    // the page until it ends. Closing the page stops its jobs.
+    const jobs = new Set<string>();
+    let closed = false;
+    const toPage = (msg: Record<string, unknown>) => {
+      const win = frame.current?.contentWindow;
+      const origin = (() => { try { return new URL(frame.current?.src || "").origin; } catch { return ""; } })();
+      if (win && origin) win.postMessage(msg, origin);
+    };
+    const pump = async (id: string) => {
+      let after = 0, fails = 0;
+      while (!closed) {
+        try {
+          const b = await appApi.osJob(id, after, 15_000);
+          fails = 0;
+          after = b.next;
+          if ((b.events && b.events.length) || b.done) {
+            toPage({ myco: "os.event", job: id, events: b.events || [], dropped: !!b.dropped, done: b.done, value: b.value, error: b.error?.message, code: b.error?.code });
+          }
+          if (b.done) break;
+        } catch (e) {
+          // Gone (ended over 5 minutes ago, or the App restarted): say so.
+          // Anything else (the App asleep, a moment offline) passes: the
+          // job goes on in the App, so read it again, more slowly.
+          const code = (e as ApiError).code;
+          if (code === "not_found") {
+            toPage({ myco: "os.event", job: id, events: [], done: true, error: (e as Error).message || "the job is gone", code });
+            break;
+          }
+          fails++;
+          await new Promise((r) => window.setTimeout(r, Math.min(5000, 500 * fails)));
+        }
+      }
+      jobs.delete(id);
+    };
+    const answerOS = async (t: { hubId: string; id: string }, method: string, args: Record<string, unknown>): Promise<unknown> => {
+      const { page: p, opened: o } = live.current;
+      const who = { hub: t.hubId, id: t.id, name: o?.name || p?.name || "" };
+      switch (method) {
+        case "os.list":
+          return appApi.osList();
+        case "os.call":
+          return appApi.osCall(String(args.name || ""), args.args ?? {}, who);
+        case "os.start": {
+          const id = await appApi.osStart(String(args.name || ""), args.args ?? {}, who);
+          jobs.add(id);
+          // (after the page has the id: its job is waiting for these)
+          window.setTimeout(() => void pump(id), 0);
+          return { id };
+        }
+        case "os.input":
+          return appApi.osInput(String(args.job || ""), String(args.data ?? ""), !!args.close);
+        case "os.cancel":
+          return appApi.osCancel(String(args.job || ""));
+      }
       throw new Error(`myco: no such call: ${method}`);
     };
     window.addEventListener("message", on);
-    return () => window.removeEventListener("message", on);
-  }, [open, target]);
+    return () => {
+      window.removeEventListener("message", on);
+      closed = true;
+      for (const id of jobs) void appApi.osCancel(id).catch(() => undefined);
+    };
+  }, [target]);
 
   // While it is shown: what others (an agent, another person) change comes
   // to the page.
@@ -572,7 +636,8 @@ function PageView({ target, open, active, reload, onMeta }: {
       {local && <div className="pg-local-note"><Monitor />{L("这台电脑上正在运行的网页。是空白的话，可能这个端口没有在跑。", "A server running on this computer. Blank? Nothing may be running on this port.")}</div>}
       {error ? <p className="fp-note">{error}</p> : (
         <div className="pg-stage">
-          {src && <iframe ref={frame} key={`${src}#${reload}`} className={cn("fp-frame pg-frame", loadedKey !== `${src}#${reload}` && "is-loading")} title={title} src={src || undefined}
+          {/* (named by aria-label, not title: WebKit shows a frame's title as a tooltip over all of the page) */}
+          {src && <iframe ref={frame} key={`${src}#${reload}`} className={cn("fp-frame pg-frame", loadedKey !== `${src}#${reload}` && "is-loading")} aria-label={title} src={src || undefined}
             sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads allow-same-origin" referrerPolicy="no-referrer"
             allow="clipboard-write; fullscreen" onLoad={() => setLoadedKey(`${src}#${reload}`)} />}
           {loadedKey !== `${src}#${reload}` && (

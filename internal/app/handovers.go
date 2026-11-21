@@ -13,7 +13,6 @@ import (
 
 // HandoverService hands a node over to another session: the name, its
 // conversations, projects and aliases stay; the session behind it changes.
-// See docs/design/agent-handover.md.
 type HandoverService struct {
 	repo     domain.HandoverRepository
 	agents   domain.AgentRepository

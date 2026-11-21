@@ -1,4 +1,4 @@
-import type { Page, PageChanges, PageOpen, PageRecord, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, SuperagentState, Approval, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
+import type { Page, PageChanges, PageOpen, PageRecord, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, MCPServer, ToolSkill, ToolPlugin, SuperagentState, Approval, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
 import { L } from "@/lib/i18n";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
@@ -177,6 +177,10 @@ export interface MachineAI {
   login?: string;
   /** the models it offers there (Codex; computers from v0.21.1) */
   models?: RuntimeModel[];
+  mcp?: MCPServer[];
+  skills?: ToolSkill[];
+  plugins?: ToolPlugin[];
+  tool_warnings?: string[];
 }
 export interface MachineSession {
   cli: "claude" | "codex";
@@ -209,6 +213,8 @@ export interface JoinLinkInput {
    *  (exec node) that these agents may send commands to */
   shell_node?: boolean;
   allow_from?: string[];
+  /** the agent that joins through it becomes your superagent (hubs from v0.21.5) */
+  superagent?: boolean;
 }
 export interface JoinLink {
   join_url: string;
@@ -389,6 +395,24 @@ export interface StartLocalHubResult {
   public_url: string;
   join_url?: string;
   warnings: string[];
+}
+
+/** myco.os: the capabilities there are, and which work on this computer. */
+export interface OsList {
+  os: string;
+  arch: string;
+  caps: { name: string; job?: boolean; about: string; available: boolean; missing?: string }[];
+}
+/** The page that uses them (for the App's log). */
+export interface OsPage { hub: string; id: string; name: string }
+/** What a job (fs.scan, exec.spawn) sent since the last read, and its end. */
+export interface OsBatch {
+  events: { n: number; type: string; data?: unknown }[] | null;
+  next: number;
+  dropped?: boolean;
+  done: boolean;
+  value?: unknown;
+  error?: { code: string; message: string };
 }
 
 /** An error returned by the App backend or a hub (same shape as the hub API). */
@@ -714,7 +738,7 @@ export const appApi = {
     request<{ ok: boolean }>("DELETE", `app/hubs/${enc(hubId)}/agents/${enc(name)}/resume`),
   /** The model and effort this node runs with; "" follows the computer's
    *  setting. Hubs before the feature answer not_found. */
-  setRunSettings: (hubId: string, name: string, input: { model: string; effort: string; access?: RuntimeAccess | "" }) =>
+  setRunSettings: (hubId: string, name: string, input: { model: string; effort: string; access?: RuntimeAccess | ""; mcp_tools?: boolean }) =>
     request<Agent>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/run-settings`, input),
   // Projects
   projects: (hubId: string) => request<{ projects: Project[] }>("GET", `app/hubs/${enc(hubId)}/projects`),
@@ -885,6 +909,9 @@ export const appApi = {
   // The template library (hubs from v0.20.5; older ones answer 404).
   templates: (hubId: string) => request<{ templates: Template[] }>("GET", `app/hubs/${enc(hubId)}/templates`),
   template: (hubId: string, id: string) => request<Template>("GET", `app/hubs/${enc(hubId)}/templates/${enc(id)}`),
+  /** Where one of an app's screenshots is (an <img> source). */
+  templateShotURL: (hubId: string, id: string, path: string) =>
+    `app/hubs/${enc(hubId)}/templates/${enc(id)}/files/${path.split("/").map(enc).join("/")}`,
   // Fetch myco's official apps now; give a page its app's newest version (hubs from v0.20.7).
   syncApps: (hubId: string) => request<{ apps: number; updated?: string[]; source: string; error?: string }>("POST", `app/hubs/${enc(hubId)}/templates/sync`),
   upgradePage: (hubId: string, id: string) => request<Page>("POST", `app/hubs/${enc(hubId)}/pages/${enc(id)}/upgrade`),
@@ -907,6 +934,16 @@ export const appApi = {
   pageDownload: (name: string, bytes: Uint8Array | Blob, type: string) =>
     request<{ path: string }>("POST", `app/page-download?name=${encodeURIComponent(name)}`,
       bytes instanceof Blob ? bytes : new Blob([bytes as BlobPart], { type: type || "application/octet-stream" })),
+  // What a page (an app) uses of this computer: myco.os.* (App backend
+  // oscalls.go; only an App with a local install answers).
+  osList: () => request<OsList>("GET", "app/os"),
+  osCall: (name: string, args: unknown, page: OsPage) =>
+    request<{ value: unknown }>("POST", "app/os/call", { name, args, page }).then((r) => r.value),
+  osStart: (name: string, args: unknown, page: OsPage) => request<{ id: string }>("POST", "app/os/jobs", { name, args, page }).then((r) => r.id),
+  osJob: (id: string, after: number, waitMs: number) =>
+    request<OsBatch>("GET", `app/os/jobs/${enc(id)}?after=${after}&wait=${waitMs}`, undefined, undefined, waitMs + 15_000),
+  osInput: (id: string, data: string, close: boolean) => request<{ ok: boolean }>("POST", `app/os/jobs/${enc(id)}/input`, { data, close }),
+  osCancel: (id: string) => request<{ ok: boolean }>("DELETE", `app/os/jobs/${enc(id)}`),
   // Pins (hubs from v0.20.3; older ones answer 404): what a conversation
   // keeps at hand, for both its parties. a: the first party (default you).
   pins: (hubId: string, withWhom: string, a?: string) =>

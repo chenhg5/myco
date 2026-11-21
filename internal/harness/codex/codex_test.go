@@ -30,3 +30,18 @@ func TestParseEventsOutput(t *testing.T) {
 		t.Fatalf("%+v %q", res, failure)
 	}
 }
+
+// Old agent profiles carry --skip-git-repo-check in their own args; Codex
+// refuses a switch given twice, so it is passed once.
+func TestExtraArgsDropsOwnFlags(t *testing.T) {
+	got := extraArgs([]string{"--skip-git-repo-check", "-c", "x=1", "--json", "--search"})
+	want := []string{"-c", "x=1", "--search"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("got %v, want %v", got, want)
+		}
+	}
+}

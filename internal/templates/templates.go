@@ -20,11 +20,11 @@ var files embed.FS
 // Order is how the library lists the apps it knows within a shelf (as a
 // person would reach for them); shelves come first (domain.TemplateCategories).
 var Order = []string{
-	"myco/table", "myco/base", "myco/doc", "myco/slides",
+	"myco/table", "myco/base", "myco/doc", "myco/slides", "myco/meeting",
 	"myco/code", "myco/issues", "myco/devtools",
-	"myco/todo", "myco/notes", "myco/poll",
+	"myco/todo", "myco/notes", "myco/poll", "myco/disk", "myco/stocks", "myco/proxy-console",
 	"myco/ledger", "myco/habit",
-	"myco/whiteboard", "myco/mindmap", "myco/video",
+	"myco/design-studio", "myco/whiteboard", "myco/mindmap", "myco/video", "myco/photo",
 	"myco/gomoku", "myco/sudoku",
 }
 

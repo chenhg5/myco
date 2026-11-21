@@ -3,6 +3,7 @@ import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRightLeft, ArrowUp, ArrowUpRi
 import { ExportChat } from "@/app/ExportChat";
 import { appApi, isTransient } from "@/appapi";
 import type { Agent, Message } from "@/api";
+import { SHROOM, useIsSuperagent } from "@/app/superagentMark";
 import type { AgentRow } from "@/app/types";
 import { agentKind, canManage, isInbox, isMe, lastActivityAt, machineOfRow, personLabel, possiblyStuck, quietFor, runnerAway, SEEN_SLACK_MS, seenNow, sessionBusy, nodeName } from "@/app/nodes";
 import { MessageContent } from "@/app/Markdown";
@@ -263,6 +264,29 @@ function EmptyChat({ agent, name, project, onStarter }: { agent?: Agent; name: s
   );
 }
 
+/** Your superagent's empty chat: what it is and what it does for you,
+ *  in place of things to ask. */
+function SuperagentIntro({ agent }: { agent?: Agent }) {
+  const mac = /Mac/i.test(navigator.platform || navigator.userAgent);
+  const items: [string, string][] = [
+    ["派活、盯进度：一句话说你要什么，它找合适的 agent 去做，卡住了去催，做完回来告诉你。", "Hands out work and follows it: say what you want, it finds the right agent, nudges it when stuck, and reports back."],
+    ["开 agent、建项目：在你允许的电脑上开新的 agent，建项目，把合适的 agent 拉进去。", "Starts agents and projects: new agents on computers you allow, new projects, the right agents in them."],
+    ["看全局：谁在忙、哪些任务卡住了、各个项目走到哪一步，问它就行。", "Sees the whole workspace: who is busy, what is stuck, where each project stands. Just ask."],
+    ["要紧的事先问你：删东西、改权限这类，会先在这里弹一张卡片，你点了「同意」它才做。", "Asks you first about what matters: deleting, changing access. A card shows here and it waits for your OK."],
+  ];
+  return (
+    <div className="conv-empty sa-intro" data-testid="superagent-intro">
+      {agent && <Avatar agent={agent} size={64} badge={false} />}
+      <h3>{L(`${SHROOM}，你在这个工作区的 superagent`, `${SHROOM}, your superagent in this workspace`)}</h3>
+      <p>{L("它替你打理整个工作区，你只要说要什么。", "It looks after the whole workspace for you: just say what you want.")}</p>
+      <ul className="sa-intro-list">
+        {items.map(([z, e]) => <li key={z}>{L(z, e)}</li>)}
+      </ul>
+      <p className="sa-intro-foot">{L(`它总是以自己的名义说话，不会冒充你。${mac ? "在哪儿都可以按 ⌘⇧Space 叫它。" : ""}`, `It always speaks as itself, never as you.${mac ? " Press ⌘⇧Space anywhere to call it." : ""}`)}</p>
+    </div>
+  );
+}
+
 /** While a conversation loads for the first time: its shape, not a word.
  *  Only after a moment: a load that is quick shows nothing in between,
  *  instead of a blink of placeholders. */
@@ -447,6 +471,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const row = rows.find((r) => r.hub.id === target.hubId && r.st.agent.name === target.agent);
   const agent = row?.st.agent;
   const agentName = agent && row ? nodeName(agent, row.hub) : target.agent;
+  // Your superagent: no way "back" (it is not in a list you came from),
+  // and its empty chat says what it is.
+  const isSa = useIsSuperagent({ id: agent?.id || "", name: target.agent });
   const callHim = () => startCall({ hubId: target.hubId, agent: target.agent, peer: target.peer, agentName });
   const callHimRef = useRef(callHim);
   callHimRef.current = callHim;
@@ -2118,7 +2145,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         </div>
       )}
       {!bare && <header className="conv-head">
-        {(showBack || target.returnTo) && (
+        {(showBack || target.returnTo) && !isSa && (
           <button type="button" className="app-btn app-btn-plain" onClick={onBack}
             aria-label={backLabel || L("返回", "Back")} title={backLabel || L("返回", "Back")}>
             <ArrowLeft />
@@ -2283,6 +2310,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           ) : shown.length === 0 && !shellMode && trailing.length === 0 ? (
             observed
               ? <div className="app-empty-note">{L("它们还没说过话。", "They haven't talked yet.")}</div>
+              : isSa ? <SuperagentIntro agent={agent} />
               : <EmptyChat key={target.agent} agent={agent} name={agentName} project={projectTitle}
                 onStarter={(t) => { writeDraft(t); window.setTimeout(() => { const el = inputRef.current; if (el) { el.focus(); el.setSelectionRange(t.length, t.length); } }, 0); }} />
           ) : (

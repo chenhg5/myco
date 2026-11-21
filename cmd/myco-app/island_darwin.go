@@ -201,6 +201,7 @@ func newIsland(app *application.App, open func(hub, agent, project string)) *isl
 		// lets clicks through.
 		Hidden:            false,
 		IgnoreMouseEvents: true,
+		DisableResize:     true,
 		BackgroundType:    application.BackgroundTypeTransparent,
 		URL:               fmt.Sprintf("/?island=1&nw=%d&nh=%d", int(w), int(h)),
 		Mac: application.MacWindow{

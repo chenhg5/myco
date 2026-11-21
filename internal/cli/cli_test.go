@@ -946,13 +946,13 @@ func TestJoinLinks(t *testing.T) {
 		!strings.Contains(body, "export MYCO_HUB='"+hub+"'") || !strings.Contains(body, "machine join") {
 		t.Fatalf("script:\n%s", body)
 	}
-	if _, body := get(link.JoinURL, map[string]string{"Accept": "text/html"}); !strings.Contains(body, "curl -fsSL "+link.JoinURL+" | bash") || !strings.Contains(body, "接入 myco：") {
+	if _, body := get(link.JoinURL, map[string]string{"Accept": "text/html"}); !strings.Contains(body, "curl -fsSL "+link.JoinURL+" | bash") || !strings.Contains(body, "Join myco: ") {
 		t.Fatalf("html:\n%s", body)
 	}
 	if _, body := get(link.JoinURL+"?format=md", nil); !strings.Contains(body, "myco join") {
 		t.Fatalf("guide:\n%s", body)
 	}
-	if status, body := get(hub+"/j/myco_enroll_bogus", map[string]string{"Accept": "text/html"}); status != 404 || !strings.Contains(body, "不存在") {
+	if status, body := get(hub+"/j/myco_enroll_bogus", map[string]string{"Accept": "text/html"}); status != 404 || !strings.Contains(body, "does not exist") {
 		t.Fatalf("bogus link: %d %s", status, body)
 	}
 

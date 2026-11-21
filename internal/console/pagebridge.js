@@ -1,5 +1,5 @@
-// The script every html file of a page opened in the myco App starts with
-// (docs/design/browser.md). Two things:
+// The script every html file of a page opened in the myco App starts
+// with. Two things:
 //
 // 1. A link to elsewhere opens in the system's browser (the App is asked),
 //    not in the page panel.
@@ -82,6 +82,9 @@
           try { f(c); } catch (x) { setTimeout(function () { throw x; }); }
         });
       });
+    } else if (d.myco === "os.event" && typeof d.job === "string") {
+      var j = jobs[d.job];
+      if (j) j._take(d);
     } else if (d.myco === "change") {
       if (ctx) { ctx.state = d.state; ctx.version = d.version; }
       var c = { state: d.state, version: d.version, by: d.by };
@@ -91,14 +94,108 @@
     }
   });
 
+  // myco.os: what the page uses of this computer. A call answers once; a
+  // job (fs.scan, exec.spawn) sends events while it runs and ends with a
+  // value (job.done).
+  var jobs = {};
+  function osCall(name, args, opts) {
+    var a = args || {};
+    var ms = (opts && opts.timeout) || (a.timeout_ms ? a.timeout_ms + 30000 : 600000);
+    return call("os.call", { name: name, args: a }, ms);
+  }
+  function Job(name, args) {
+    var self = this, listeners = {}, resolve, reject;
+    self.id = "";
+    self.name = name;
+    self.done = new Promise(function (a, b) { resolve = a; reject = b; });
+    self.done.catch(function () { /* (handled by whoever awaits it) */ });
+    // f(data, event) for "progress", "stdout", "stderr", "started"…; "*" for all
+    self.on = function (type, f) {
+      (listeners[type] = listeners[type] || []).push(f);
+      return function () {
+        var l = listeners[type];
+        var i = l.indexOf(f);
+        if (i >= 0) l.splice(i, 1);
+      };
+    };
+    var started = call("os.start", { name: name, args: args || {} }, 60000).then(function (r) {
+      self.id = r.id;
+      jobs[r.id] = self;
+      return r.id;
+    });
+    started.catch(function (e) { reject(e); });
+    self.write = function (data) { return started.then(function (id) { return call("os.input", { job: id, data: String(data) }); }); };
+    self.end = function () { return started.then(function (id) { return call("os.input", { job: id, close: true }); }); };
+    self.cancel = function () { return started.then(function (id) { return call("os.cancel", { job: id }); }); };
+    self._take = function (d) {
+      (d.events || []).forEach(function (e) {
+        (listeners[e.type] || []).concat(listeners["*"] || []).forEach(function (f) {
+          try { f(e.data, e); } catch (x) { setTimeout(function () { throw x; }); }
+        });
+      });
+      if (!d.done) return;
+      delete jobs[self.id];
+      if (d.error) {
+        var err = new Error(d.error);
+        err.code = d.code;
+        reject(err);
+      } else resolve(d.value);
+    };
+  }
+  var osList = null;
+  var os = {
+    // {os, arch, caps: [{name, job, about, available, missing}]}
+    list: function () {
+      if (!osList) {
+        osList = call("os.list", {});
+        osList.catch(function () { osList = null; });
+      }
+      return osList;
+    },
+    // true when this App can do it on this computer
+    has: function (name) {
+      return os.list().then(function (l) {
+        return l.caps.some(function (c) { return c.name === name && c.available; });
+      }, function () { return false; });
+    },
+    call: osCall,
+    start: function (name, args) { return new Job(name, args); },
+    // An address for <audio> / <video> of a recording an app made (a file
+    // in ~/.myco/recordings): it seeks and plays at any speed.
+    mediaURL: function (path) {
+      var m = /^\/p\/[^\/]+\//.exec(location.pathname);
+      return (m ? m[0] : "/") + "__myco/media?path=" + encodeURIComponent(path);
+    },
+  };
+  // os.fs.list({path}), os.exec.spawn({shell}) …: the same, by name
+  [
+    "system.info", "system.disks", "system.processes", "system.usage", "system.apps", "system.settings", "process.kill",
+    "fs.paths", "fs.list", "fs.stat", "fs.read", "fs.write", "fs.mkdir", "fs.move", "fs.copy", "fs.delete", "fs.trash", "fs.scan*",
+    "fs.search*", "fs.watch*", "fs.thumbnail", "fs.pick", "fs.saveAs", "fs.reveal", "fs.open",
+    "exec.run", "exec.spawn*", "clipboard.read", "clipboard.write", "notify", "screen.capture", "net.fetch",
+    "audio.sources", "audio.record*", "speech.status", "speech.install*", "speech.transcribe*", "speech.diarize*",
+  ].forEach(function (n) {
+    var job = n.slice(-1) === "*";
+    var name = job ? n.slice(0, -1) : n;
+    var parts = name.split(".");
+    var f = job
+      ? function (args) { return new Job(name, args); }
+      : function (args, opts) { return osCall(name, args, opts); };
+    if (parts.length === 1) { os[parts[0]] = f; return; }
+    os[parts[0]] = os[parts[0]] || {};
+    os[parts[0]][parts[1]] = f;
+  });
+
   var ready = call("ready").then(function (v) { ctx = v; return v; });
   ready.catch(function () { /* (a page that does not use the bridge) */ });
 
   window.myco = {
     ready: ready,
     // What this App's bridge can do, for pages to check before trying:
-    // "download-media": myco.download saves video and sound too (mp4, …).
-    features: ["download-media"],
+    // "download-media": myco.download saves video and sound too (mp4, …);
+    // "os": myco.os (this computer: files, commands, the screen…).
+    features: ["download-media", "os"],
+    os: os,
     get state() { return ctx ? ctx.state : null; },
     get version() { return ctx ? ctx.version : 0; },
     on: function (event, f) {

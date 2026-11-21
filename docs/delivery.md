@@ -1,124 +1,124 @@
-# 身份绑定与唤醒
+# Identity binding and waking
 
-## agent = 一个 session + 一个环境 + 一个 harness
+## agent = one session + one environment + one harness
 
-在 myco 里，**一个 agent 就是一个具体的 session**。如果新开了一个空白 session，它就是一个新的 agent 节点。注册信息里会记录这个 agent 绑定在哪里：
+In myco, **an agent is one specific session**. A new blank session is a new agent node. The registration records where the agent is bound:
 
-| 字段 | 含义 | 例子 |
+| Field | Meaning | Example |
 |---|---|---|
-| `binding.harness` | 运行时 | `claude`、`codex`、`shell`、`claude-cloud`、`inbox` |
-| `binding.session_id` | 要续接的 session | Claude 的 session UUID、`session_01…`、codex 的 thread ID |
-| `binding.environment` | session 所在的位置 | 主机名、`claude-cloud_default` |
-| `binding.workdir` | 工作目录 | `/srv/agents/coder` |
+| `binding.harness` | Runtime | `claude`, `codex`, `shell`, `claude-cloud`, `inbox` |
+| `binding.session_id` | The session to resume | A Claude session UUID, `session_01…`, a codex thread ID |
+| `binding.environment` | Where the session lives | Hostname, `claude-cloud_default` |
+| `binding.workdir` | Working directory | `/srv/agents/coder` |
 
-- `myco runner start` 默认使用 `--session-scope agent`：每条消息都续接**同一个** session。如果还没有 session，runner 会在第一次运行时创建，并把它的 ID 写回 Hub。
-- 如果 agent 已经绑定在别的环境或别的 harness 上，runner 会**拒绝启动**并返回 exit 5，因为那个 session 在当前机器上并不存在。确实要迁移时加 `--rebind`。
-- 想沿用一个已有的 session，可以用 `myco agent register --session-id …`，或者 `myco agent bind --session-id …`。
-- 在 Claude Code 云端 session 里执行 `myco agent bind --detect`，会自动识别 `CLAUDE_CODE_REMOTE_SESSION_ID`。
+- `myco runner start` uses `--session-scope agent` by default: every message resumes **the same** session. If there is no session yet, the runner creates one on the first run and writes its ID back to the Hub.
+- If the agent is already bound to another environment or another harness, the runner **refuses to start** and exits with 5, because that session does not exist on this machine. To really move it, add `--rebind`.
+- To use an existing session, run `myco agent register --session-id …` or `myco agent bind --session-id …`.
+- In a Claude Code cloud session, `myco agent bind --detect` picks up `CLAUDE_CODE_REMOTE_SESSION_ID` automatically.
 
-## 投递方式（`--delivery`）
+## Delivery modes (`--delivery`)
 
-| 模式 | Hub 怎么唤醒 | agent 怎么回复 | 适合 |
+| Mode | How the Hub wakes it | How the agent replies | Good for |
 |---|---|---|---|
-| `pull`（默认） | 不需要唤醒，runner 长轮询收件箱 | myco CLI | 本地和 VPS 上的 claude、codex 等 CLI |
-| `webhook` | POST JSON，带 `X-Myco-Signature: sha256=HMAC(secret, body)` 签名，事件里包含 session_id | myco CLI | 你自己写的唤醒器，比如收到后执行 `claude --resume <session_id>` |
-| `claude_routine` | 调用 Claude Code 定时任务的 API 触发器，消息说明作为 `text` 传入 | 云端 session 里的 myco CLI | 无状态的云端 worker，每次唤醒都是这个定时任务的一个新 session |
-| `github_dispatch` | 发送 `repository_dispatch`，`client_payload` 里带消息 ID 和说明 | Actions 里的 myco CLI | 在 GitHub Actions 里跑 claude 或 codex |
-| `github_issue` | 每条消息开一个 issue，再用评论 @mention（默认 `@codex`） | GitHub webhook 发到 `/v1/ingress/github`，转成 reply | 不能执行 myco 的 GitHub 原生 agent，比如 Codex 云端 |
+| `pull` (default) | No waking needed; the runner long-polls the inbox | myco CLI | CLIs such as claude and codex, locally and on a VPS |
+| `webhook` | POSTs JSON signed with `X-Myco-Signature: sha256=HMAC(secret, body)`; the event includes session_id | myco CLI | A waker you write yourself, for example one that runs `claude --resume <session_id>` on receipt |
+| `claude_routine` | Calls the API trigger of a Claude Code routine, with the message description passed as `text` | myco CLI in the cloud session | A stateless cloud worker: each wake is a new session of that routine |
+| `github_dispatch` | Sends `repository_dispatch` with the message ID and description in `client_payload` | myco CLI in Actions | Running claude or codex in GitHub Actions |
+| `github_issue` | Opens an issue per message, then @mentions in a comment (`@codex` by default) | A GitHub webhook to `/v1/ingress/github`, turned into a reply | GitHub-native agents that cannot run myco, such as Codex cloud |
 
-关于唤醒的几点：
-- **合并唤醒**：同一个 agent 在冷却期内（`--wake-cooldown`，默认 2 分钟）最多唤醒一次。被唤醒的 agent 应该一直拉收件箱，直到拉空为止。
-- **补发**：后台每 30 秒扫描一次，对还有未处理消息的 push agent 重新唤醒。唤醒失败时按指数退避重试。
-- **扩展**：新增一种唤醒方式，只需实现 `app.Waker` 并在 `hubserver.DefaultWakers` 里注册。
+About waking:
+- **Coalesced wakes**: one agent is woken at most once within the cooldown (`--wake-cooldown`, 2 minutes by default). A woken agent should keep pulling its inbox until it is empty.
+- **Catch-up**: a background scan every 30 seconds wakes push agents that still have unhandled messages again. Failed wakes are retried with exponential backoff.
+- **Extending**: to add a wake mode, implement `app.Waker` and register it in `hubserver.DefaultWakers`.
 
-### 示例
+### Examples
 
 ```bash
-# webhook：VPS 上你自己的唤醒器
+# webhook: your own waker on a VPS
 myco agent register --name reviewer --harness claude --session-id 7f3c... --environment vps-1 \
   --delivery webhook --wake-url https://vps-1.example.com/myco-wake --wake-secret-file hook.secret
 
-# Claude Code 定时任务（无状态）：URL 和 token 在定时任务的设置页里复制
+# Claude Code routine (stateless): copy the URL and token from the routine's settings page
 myco agent register --name cloud-worker --harness claude-cloud --delivery claude_routine \
   --wake-url https://api.anthropic.com/v1/claude_code/routines/trig_.../fire --wake-secret-file routine.token
 
-# Codex 云端：通过 GitHub issue 交接
+# Codex cloud: hand off through GitHub issues
 myco hub serve ... --github-webhook-secret-file gh-hook.secret --github-reply-from 'chatgpt-codex-connector[bot]'
 myco agent register --name codex --harness codex-cloud --environment github:me/app \
   --delivery github_issue --wake-param repo=me/app --wake-secret-file gh.token
 ```
 
-触发定时任务时请求头的默认值是 `anthropic-version: 2023-06-01` 和 `anthropic-beta: experimental-cc-routine-2026-04-01`。如果定时任务页面给出的示例 curl 不一样，用 `--wake-param anthropic_beta=...` 覆盖。
+When firing a routine, the request headers default to `anthropic-version: 2023-06-01` and `anthropic-beta: experimental-cc-routine-2026-04-01`. If the example curl on the routine's page differs, override them with `--wake-param anthropic_beta=...`.
 
-## 两种接收方式：后台唤醒和会话里在线接收
+## Two ways to receive: background wake and live in the session
 
-一个节点在同一时刻只用一种方式收消息，Hub 会自动选择：
+A node receives messages one way at a time, and the Hub picks it automatically:
 
-| 方式 | 怎么收 | 适合 |
+| Way | How it receives | Good for |
 |---|---|---|
-| 后台唤醒 | runner 拉取消息，对每条消息续接这个会话（`claude -p --resume` 等）处理 | 你不在会话里，或者会话没开着 |
-| 会话里在线接收 | 会话自己在后台挂着 `myco inbox wait`，有消息时被唤醒，再 `inbox pull` 处理 | claude.ai 云端会话（只能这样）；你正开着、想让它在窗口里直接收消息的本地会话 |
+| Background wake | The runner pulls messages and resumes the session for each one to handle it (`claude -p --resume` and so on) | You are not in the session, or the session is not open |
+| Live in the session | The session keeps `myco inbox wait` running in the background, is woken when a message arrives, and handles it with `inbox pull` | claude.ai cloud sessions (the only way); a local session you have open and want to receive messages right in its window |
 
-会话用 `myco inbox pull` 取到任务后，**开始处理时**先执行 `myco message ack --id <任务 ID>`，完成后再 `myco message reply --id <任务 ID>`。pull 只给消息一个临时租约，尚未表示开工；ack 后 Hub 才把节点算作「在干活」，且长任务不会因租约到期而重复投递。overview 的 `queued` 包含未拉取和已拉取但未 ack 的任务，`in_progress` 只包含 acked；held 单独计入 `held`，不算在干活。runner 会在启动任务前自行 ack。
+After a session gets a task with `myco inbox pull`, it runs `myco message ack --id <task ID>` **when it starts working on it**, and `myco message reply --id <task ID>` when done. A pull only gives the message a temporary lease and does not yet mean work has started; only after the ack does the Hub count the node as "at work", and a long task is not delivered again because its lease expired. In the overview, `queued` includes tasks not yet pulled and tasks pulled but not acked; `in_progress` includes only acked ones; held tasks are counted separately in `held` and do not count as at work. The runner acks tasks itself before starting them.
 
-- **自动切换**：只要有 `inbox wait` 在等，Hub 就认为这个会话在线接收，runner 的拉取（`PullRequest.via = "runner"`）什么也拿不到；最后一次等待结束约 30 分钟后，runner 自动接手（v0.18.18 起；之前是 5 分钟）。两者不会抢同一条消息。会话还开着（桌面 App、IDE、终端）时应该让它自己挂着 `inbox wait`：runner 只能从会话最近 90 秒有没有动静判断它是否被占用，开着但闲着的会话会被当成空闲、在后台被续接，开着的窗口看不到这段工作，接着聊就分叉了。30 分钟的间隔是给开着的会话留的：它在两次等待之间不会被后台续接。
-- **仅 inbox 的节点**：无法检测可续接会话时，`myco join` 会注册 `harness: inbox`；也可以显式传 `--harness inbox`。这类节点只靠会话内的 `myco inbox wait` 接收，退出后要重新启动。runner 始终跳过它；会话关掉后不会自动唤醒。
-- **会话正在被使用**：runner 发现会话正被别人用（记录最近被别人写过，或 CLI 报会话被占用）时，不会打断，而是把消息交回、按退避稍后重试，并告诉 Hub 原因（`release` 的 `reason: "in_use"`）。App 里节点显示「会话被占用」；节点详情给出一句可以复制给那个会话的话，让它改成在线接收；对话页可以「复制一份接着做」（复制成新节点，等着的任务移过去）。
-- **运行结果回传**：runner 运行结束后，如果 Hub 暂时不可达或返回 5xx，会在独立的 3 分钟时限内退避重试读取消息状态、回复及完成操作。时限用尽时，runner 会记录错误和一段经过常见密钥遮盖的输出前缀，方便排查未送达的结果。
-- **遗留任务**：runner 把执行中的任务 ID、节点名和开始时间写进自己的 state 文件；重启时会检查这些记录，仍处于 `acked` 的任务标为失败，提示发送方重新发送。已经结束的任务只清理本地记录。Hub 暂时不可达时会重试；若重试用尽，保留记录供下次启动处理。
-- **可能卡住的任务**：`active_at` 是 `acked` / `held` 任务最近一次接收方活动时间（读取任务、进度、ask、上传 trace）；v0.20.28 起它存在任务上（最多 30 秒写一次），Hub 重启也不丢。发送方可用 `myco message stop --id <任务 ID>` 停止自己发出的任务，再决定是否重发。
-- **「在干活」要有活的东西撑着**（v0.20.28 起）：确认过的任务只有在接收方在线、并且最近有动静时才算「在干活」。runner 跑任务时每几秒就读一次任务，5 分钟没动静就不算了；会话里的 agent 是 30 分钟。不算的任务叫「没收尾」（overview 里的 `stale` / `stale_tasks`）：任务不会被自动关掉，只是 agent 不再显示为在干活。常见原因有三种：agent 忘了回复；会话已经结束；runner 挂了没再起来。v0.21.1 起还有两处：runner 起的 Codex / Claude Code 启动后 5 分钟一个字都没输出，就停掉这一轮、任务失败，原因是它 stderr 的最后几行（以前要等 30 分钟的空闲上限，期间任务一直显示「在做」）；App 里成员之间的派活卡片，任务没收尾时写「没动静」而不是「在做」。
-  - App 里，只剩没收尾任务的 agent 在左边显示一个空心圈，灵动岛不再列它。对话里那条任务下面有「标记完成」「再催一下」「停止」「重发」：
-    - 标记完成：关掉任务，不回复；
-    - 再催一下：给它发一条补充，问任务怎么样了。
-  - agent 这边：`myco inbox pull` 会列出它确认过、还没关的任务（`open`），提醒它回复或 `done`。
-  - runner 这边：结果送不回 Hub 时，会把结果留着，每 2 分钟再送一次，不再只记一条日志。
-- App 节点详情里的"接收方式"一行显示当前是哪一种（`/v1/overview` 的 `agents[].receiving`，取值 `session` 或 `runner`；`session_in_use` 表示最近被占用过）。这些状态只保存在 Hub 内存里，Hub 重启后由下一次拉取或等待重新建立。
+- **Automatic switching**: as long as an `inbox wait` is waiting, the Hub treats the session as receiving live, and the runner's pull (`PullRequest.via = "runner"`) gets nothing; about 30 minutes after the last wait ends, the runner takes over automatically (from v0.18.18; 5 minutes before that). The two never grab the same message. While the session is still open (desktop App, IDE, terminal), let it keep `inbox wait` running itself: the runner can tell whether a session is in use only from activity in the last 90 seconds, so an open but idle session is treated as free and resumed in the background; the open window does not see that work, and continuing the chat there forks it. The 30-minute gap is for open sessions: between two waits they are not resumed in the background.
+- **Inbox-only nodes**: when no resumable session can be detected, `myco join` registers `harness: inbox`; you can also pass `--harness inbox` explicitly. These nodes receive only through `myco inbox wait` inside the session, which has to be started again after it exits. The runner always skips them; once the session is closed, nothing wakes it.
+- **Session in use**: when the runner finds the session in use by someone else (recently written to by someone else, or the CLI reports the session busy), it does not interrupt. It hands the message back, retries later with backoff, and tells the Hub why (`release` with `reason: "in_use"`). The App shows the node as "Session in use"; the node's details give a sentence you can copy to that session to make it receive live; the conversation page offers "Continue in a copy" (copies it into a new node and moves the waiting tasks there).
+- **Sending back results**: after a run ends, if the Hub is unreachable for the moment or answers 5xx, the runner retries reading the message status, the reply and the completion with backoff, within a separate 3-minute limit. When the limit is used up, the runner logs the error and the beginning of the output with common secrets masked, to help track down results that were not delivered.
+- **Leftover tasks**: the runner writes the IDs, node names and start times of running tasks into its state file; on restart it checks these records and marks tasks still `acked` as failed, telling the sender to send them again. For tasks that already ended, it only clears the local record. If the Hub is unreachable for the moment it retries; if the retries are used up, it keeps the records for the next start.
+- **Tasks that may be stuck**: `active_at` is the last time the recipient of an `acked` / `held` task did something with it (read the task, progress, ask, trace upload); from v0.20.28 it is stored on the task (written at most every 30 seconds), so a Hub restart does not lose it. A sender can stop a task it sent with `myco message stop --id <task ID>`, and then decide whether to send it again.
+- **"At work" needs something alive behind it** (from v0.20.28): an acked task counts as "at work" only while the recipient is online and has been active recently. While the runner runs a task it reads the task every few seconds, and after 5 minutes without activity it no longer counts; for agents in a session it is 30 minutes. A task that no longer counts is "left open" (`stale` / `stale_tasks` in the overview): the task is not closed automatically; the agent is just no longer shown as at work. There are three common causes: the agent forgot to reply; the session has ended; the runner died and did not come back. From v0.21.1 there are two more: when a Codex / Claude Code started by the runner prints nothing at all for 5 minutes after it starts, the runner stops that turn and fails the task, with the last lines of its stderr as the reason (before, it waited for the 30-minute idle limit, and the task showed "Working" all that time); and in the App, task cards between members say "No activity" instead of "Working" when the task is left open.
+  - In the App, an agent with only left-open tasks shows a hollow circle on the left, and the Dynamic Island no longer lists it. Under that task in the conversation are "Mark done", "Nudge", "Stop" and "Resend":
+    - Mark done: closes the task without a reply;
+    - Nudge: sends it a follow-up asking how the task is going.
+  - On the agent's side: `myco inbox pull` lists the tasks it acked that are not yet closed (`open`), reminding it to reply or `done`.
+  - On the runner's side: when a result cannot be sent back to the Hub, it keeps the result and tries again every 2 minutes, instead of only logging it.
+- The "Receives" row in the App's node details shows which way is in use (`agents[].receiving` in `/v1/overview`, `session` or `runner`; `session_in_use` means it was in use recently). These states live only in the Hub's memory; after a Hub restart, the next pull or wait sets them up again.
 
-## 唤醒"指定的云端 session"：实测结论（2026-11）
+## Waking "a specific cloud session": what testing showed (2026-11)
 
-我们想从外部唤醒**某一个**已有的 Claude Code 云端 session，实测结果如下：
+We wanted to wake **one particular** existing Claude Code cloud session from outside. Testing showed:
 
-1. 定时任务的 API 触发器每次触发都会**新开一个 session**（`persist_session: false`）。
-2. 可以建绑定到某个 session 的定时任务（`persist_session: true`），但它**没有 API token**，外部调用不到。
-3. "门卫转发"（触发器新开的 session 再用 `send_message` 转给目标 session）**不可行**：触发器新开的 session 里没有跨 session 发消息的工具，试了两次都失败了。
+1. A routine's API trigger **starts a new session** every time it fires (`persist_session: false`).
+2. You can create a routine bound to one session (`persist_session: true`), but it **has no API token**, so nothing outside can call it.
+3. A "doorman relay" (the session the trigger starts passes the message on to the target session with `send_message`) **does not work**: the session the trigger starts has no tool for messaging other sessions; two attempts both failed.
 
-所以对于云端 session，目前可行的有两种方式：
+So for cloud sessions, two ways work for now:
 
-- **推荐：把 session 放在 VPS 上。** 用 `myco runner` 加 `claude` CLI，session 和环境都由你掌控，可以随时用 `--resume` 唤醒。这正好就是"agent = session + 环境"。
-- **云端 session 自己守着收件箱**：在云端 session 里用后台命令执行 `myco inbox wait`。myco 按 harness 自动选等待时长；有消息或超时后命令退出，处理收件箱并重新运行它。容器在长时间空闲后仍可能被回收，所以只适合需要短期在线的场景。
+- **Recommended: run the session on a VPS.** Use `myco runner` with the `claude` CLI; you control the session and the environment, and can wake it any time with `--resume`. This is exactly "agent = session + environment".
+- **The cloud session watches its own inbox**: in the cloud session, run `myco inbox wait` as a background command. myco picks the wait time by harness; when a message arrives or it times out, the command exits; handle the inbox and run it again. The container may still be reclaimed after a long idle time, so this only suits staying online for a short while.
 
-如果之后 Claude Code 提供了能直接定位 session 的触发方式，只需新增一个 `Waker` 实现，不用改其他代码。
+If Claude Code later offers a trigger that can target a session directly, only a new `Waker` implementation is needed; no other code changes.
 
-## 让 Claude Code 云端 session 自动成为节点（入网令牌）
+## Making Claude Code cloud sessions nodes automatically (enrollment tokens)
 
-**1. 在 VPS 上创建入网令牌**（只需一次）：
+**1. Create an enrollment token on the VPS** (once):
 
 ```bash
 sudo bash -c 'set -a; . /etc/myco/hub.env; set +a; /usr/local/bin/myco enrollment create \
-  --hub https://<你的 hub> --name-prefix cloud- --harness claude-cloud --note "claude.ai 云端环境" --format text'
+  --hub https://<your hub> --name-prefix cloud- --harness claude-cloud --note "claude.ai cloud environment" --format text'
 ```
 
-**2. 配置云端环境**（claude.ai → 环境设置）：
-- **环境变量 / Secrets**：
-  - `MYCO_HUB=https://<你的 hub>`
+**2. Configure the cloud environment** (claude.ai → environment settings):
+- **Environment variables / Secrets**:
+  - `MYCO_HUB=https://<your hub>`
   - `MYCO_ENROLL_TOKEN=myco_enroll_...`
-- **安装脚本**加一行：
+- Add one line to the **setup script**:
   ```bash
   curl -fsSL https://github.com/chenhg5/myco/releases/latest/download/myco-linux-amd64 -o /usr/local/bin/myco && chmod +x /usr/local/bin/myco
   ```
-- **网络**：如果网络权限是 Limited，把 Hub 域名加到 Allowed domains。
+- **Network**: if network access is Limited, add the Hub's domain to Allowed domains.
 
-**3. 使用**：在这个环境里新开的 session，第一次执行任何 `myco` 命令时会自动入网，名字是 `cloud-` 加 session ID 的后 8 位；想要好记的名字，就执行 `myco agent enroll --name cloud-xxx`。容器被回收重建后再执行 myco 命令，会**找回同一个 agent**，并换发新的 agent 令牌。
+**3. Use it**: a new session in this environment enrolls automatically the first time it runs any `myco` command, named `cloud-` plus the last 8 characters of the session ID; for a name that is easier to remember, run `myco agent enroll --name cloud-xxx`. After the container is reclaimed and rebuilt, the next myco command **gets back the same agent** and is issued a new agent token.
 
-**入网令牌能做和不能做的事**：
+**What an enrollment token can and cannot do**:
 
-| 能 | 不能 |
+| Can | Cannot |
 |---|---|
-| 把**当前 session** 注册成 agent，名字必须带指定前缀 | 注册别的 session，或使用不带前缀的名字 |
-| 找回由它自己创建的、绑定在当前 session 上的 agent | 接管管理员手动注册的 agent |
-| — | 设置 webhook 等推送方式（强制 `pull`），也不能做任何管理操作 |
+| Register **the current session** as an agent, with a name that must carry the given prefix | Register other sessions, or use names without the prefix |
+| Get back agents it created itself that are bound to the current session | Take over agents an admin registered by hand |
+| — | Set up push modes such as webhook (`pull` is forced), or do anything administrative |
 
-可以用 `--max-uses` 和 `--expires` 限制次数和有效期，用 `myco enrollment list` 和 `myco enrollment revoke --id … --force` 管理。吊销后已入网的 agent 还能继续用，但不能再新建，也不能再找回。
+Limit uses and lifetime with `--max-uses` and `--expires`; manage tokens with `myco enrollment list` and `myco enrollment revoke --id … --force`. After revoking, agents that already enrolled keep working, but no new ones can be created and none can be got back.
 
-同一个环境的所有 session 共用一个入网令牌，所以**这个环境就是信任边界**：拿到令牌的人可以把自己的 session 注册进网络。请只放在你信任的环境里。
+All sessions in one environment share one enrollment token, so **the environment is the trust boundary**: anyone who has the token can register their own sessions into the network. Put it only in environments you trust.

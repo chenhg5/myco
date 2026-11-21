@@ -184,8 +184,11 @@ func Build(o Options) (*Hub, error) {
 		return nil, err
 	}
 	srv.SetMembers(members, audit)
-	srv.SetSuperagents(app.NewSuperagentService(sqlite.NewSuperagentRepo(db), sqlite.NewApprovalRepo(db), agentsRepo,
-		sqlite.NewMemberRepo(db), messages, audit, ids, clock))
+	superagents := app.NewSuperagentService(sqlite.NewSuperagentRepo(db), sqlite.NewApprovalRepo(db), agentsRepo,
+		sqlite.NewMemberRepo(db), messages, audit, ids, clock)
+	srv.SetSuperagents(superagents)
+	// An agent that joins through a superagent link is its owner's superagent.
+	enroll.SetSuperagent(superagents.SetFor)
 	// New nodes of a plain member are private to them; the hub's owner and
 	// admins add nodes for the team.
 	defaultVisibility := func(ctx context.Context, owner string) domain.Visibility {
@@ -203,6 +206,10 @@ func Build(o Options) (*Hub, error) {
 	messages.SetProjects(projectRepo)
 	projectSvc := app.NewProjectService(projectRepo, agentsRepo, ids, clock)
 	projectSvc.SetBlobs(blob.FS{Dir: filesDir})
+	projectSvc.SetSuperagents(func(ctx context.Context, n domain.AgentName) bool {
+		m, err := superagents.OwnerOf(ctx, n)
+		return err == nil && m != nil
+	})
 	srv.SetProjects(projectSvc)
 	enroll.SetDefaultVisibility(defaultVisibility)
 	srv.SetHidden(app.NewHiddenService(sqlite.NewSettingRepo(db)))

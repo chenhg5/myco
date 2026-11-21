@@ -5625,6 +5625,11 @@ button.app-label:hover { filter: brightness(0.95); }
 /* Adding a computer: one command, run in the folder on that computer. */
 .ws-command { display: flex; flex-direction: column; gap: 10px; }
 .ws-command-os { align-self: flex-start; }
+/* The superagent by a sentence: what to send, then the note; waiting
+   for it to join is said left of the buttons. */
+.sa-link .add-sentence { margin-top: 0; }
+.sa-link-note { margin: 8px 0 0; line-height: 1.6; }
+.sa-wait { display: inline-flex; align-items: center; gap: 8px; }
 .ws-command-wait { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); }
 .ws-command-done { display: flex; align-items: flex-start; gap: 6px; font-size: 13px; color: var(--fg); }
 .ws-command-done svg { flex: none; width: 15px; height: 15px; margin-top: 2px; color: var(--green); }
@@ -8282,7 +8287,7 @@ body.is-resizing {
 .tp-own-empty { display: flex; align-items: center; gap: 14px; padding: 16px; border-radius: 14px; box-shadow: inset 0 0 0 1px var(--line); }
 .tp-own-empty p { margin: 0; font-size: 12.5px; line-height: 1.6; color: var(--muted); }
 @media (max-width: 640px) { .tp-search { width: auto; flex: 1; } }
-.tp-sample { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--fg-2); }
+.tp-sample-note { margin: 12px 0 0; line-height: 1.6; }
 
 /* ---------- a top-level page's head (PageHero.tsx): 自动化, 应用 ---------- */
 .ph { display: flex; align-items: center; gap: 14px; margin: 10px 0 22px; }
@@ -8479,6 +8484,10 @@ body.is-resizing {
 .pcd-ai.is-ready::before { background: var(--green); }
 .pcd-ai.is-signed_out::before { background: var(--amber); }
 .pcd-ai.is-missing { color: var(--muted); }
+.app-tool-list { margin: 8px 0 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.app-tool-list summary { cursor: pointer; color: var(--fg-2); font-size: 12px; }
+.app-tool-list .app-tool-inventory { margin-top: 8px; }
+.app-tool-inventory .app-small-note { margin: 4px 0; overflow-wrap: anywhere; }
 
 /* ---------- an automation opened (Automations.tsx AutomationDetail) ---------- */
 .aud .pcd-head .ph-actions { align-items: center; }
@@ -9086,8 +9095,8 @@ body.is-resizing {
   background: none; color: var(--muted); cursor: pointer; }
 .mdirs-x:hover { background: color-mix(in srgb, var(--fg) 10%, transparent); color: var(--fg); }
 .mdirs-x svg { width: 12px; height: 12px; }
-.mdirs-add { display: flex; gap: 6px; width: min(420px, 100%); }
-.mdirs-add .app-input { flex: 1; min-width: 0; height: 30px; }
+.mdirs-add { display: flex; align-items: center; gap: 6px; width: min(420px, 100%); }
+.mdirs-add .app-input { flex: 1; min-width: 0; height: 28px; }
 .mdirs-far { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; font-size: 12px; color: var(--muted); }
 .mdirs-far code { padding: 2px 6px; border-radius: 6px; background: var(--pill); color: var(--fg-2); font-size: 11.5px; }
 .mdirs-note { margin: 0; text-align: right; max-width: 460px; }
@@ -9188,14 +9197,13 @@ html.os-other ::-webkit-scrollbar-thumb:hover, html.os-other ::-webkit-scrollbar
 .wf .pcd-head + .wf-desc { margin-top: 2px; }
 .aud > .app-error-text, .aud > .app-error { margin: 12px 0 0; }
 .wf-actions { gap: 8px; }
-.wf-actions .app-btn { height: 32px; }
-.wf-more { width: 32px; padding: 0; justify-content: center; }
-.wf-more svg { width: 16px; height: 16px; }
+.wf-more { width: 26px; padding: 0; justify-content: center; }
 .wf-tabs { margin: 24px 0 16px; }
 .wf-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
 .wf-chip { height: 28px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--pill); font: inherit; font-size: 12.5px; color: var(--fg-2); cursor: default; }
 .wf-chip:hover { background: var(--pill-hover); color: var(--fg); }
 .wf-chip.is-on { background: var(--fg); color: var(--bg); }
+.wf-run-ref { font-size: 11.5px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wf-run-row { min-height: 60px; padding: 12px 16px; gap: 14px; }
 .wf .wfo-run-stats { margin-top: 16px; }
 .wf .wf-run-error { margin-top: 12px; }
@@ -9204,6 +9212,50 @@ html.os-other ::-webkit-scrollbar-thumb:hover, html.os-other ::-webkit-scrollbar
 /* A workflow in the list: 运行 and ⋯ (edit, turn off, delete), one size. */
 .wf-row-actions { flex: none; display: flex; align-items: center; gap: 6px; margin-right: 8px; }
 .wf-row-actions .wf-run-now { margin-right: 0; }
-.wf-row-actions .wf-more { width: 28px; height: 28px; }
+.wf-row-actions .wf-more { width: 22px; height: 22px; }
+.wf-row-actions .wf-more svg { width: 13px; height: 13px; }
 .aud-runs .aud-run-line { min-height: 56px; }
 .wf-chip .aud-filter-n { margin-left: 5px; font-size: 11px; opacity: 0.6; }
+
+/* A computer's page (Computers.tsx), as every detail page (app-ui.md 6.15):
+   tabs, then cards of lines: what it is on the left, its value on the right,
+   anything bigger (folders, a command to run) under both, left-aligned. */
+.wf-tabs + .ph-section { margin-top: 0; }
+.pcd-line { display: block; }
+.pcd-line-top { display: flex; align-items: center; gap: 16px; }
+.pcd-line-value { flex: none; display: flex; align-items: center; gap: 8px; }
+.pcd-value { font-size: 13px; color: var(--fg); }
+.pcd-value.is-quiet { color: var(--faint); }
+.pcd-line > .mdirs, .pcd-line > .app-notice, .pcd-line > .app-small-note, .pcd-line > .app-error-text, .pcd-line > .app-tool-inventory { margin-top: 10px; }
+.pcd-line-note { margin: 8px 0 0; }
+.pcd-line .mdirs { align-items: flex-start; }
+.pcd-line .mdirs-list { justify-content: flex-start; }
+.pcd-line .mdirs-far { justify-content: flex-start; }
+.pcd-line .mdirs-note { text-align: left; max-width: none; }
+.pcd-line .mdirs-add { width: min(460px, 100%); }
+.pcd-tools > summary { list-style: none; cursor: default; }
+.pcd-tools > summary::-webkit-details-marker { display: none; }
+.pcd-tools-go { width: 14px; height: 14px; color: var(--faint); transition: none; }
+.pcd-tools[open] .pcd-tools-go { transform: rotate(90deg); }
+.pcd-tools > summary:hover .pcd-tools-go { color: var(--fg); }
+.pcd-tools > .app-tool-inventory { margin-top: 10px; }
+
+/* An app's screenshots in its new-page dialog (Templates.tsx): one picture
+   at a time, 16:10, a thin line and a soft shadow; dots and arrows when
+   there are more. The dark ones in the dark. */
+.app-modal.tp-use { max-width: 620px; }
+.tp-shots { display: flex; flex-direction: column; align-items: center; gap: 10px; margin: 2px 0 6px; }
+.tp-shot { position: relative; width: 100%; aspect-ratio: 16 / 10; border-radius: 10px; overflow: hidden; background: var(--nav-hover);
+  box-shadow: 0 0 0 1px var(--line), 0 6px 20px color-mix(in srgb, var(--fg) 10%, transparent); }
+.tp-shot img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: top left; }
+.tp-shot.is-loading img { visibility: hidden; }
+.tp-shot-nav { position: absolute; top: 50%; display: grid; place-items: center; width: 30px; height: 30px; margin-top: -15px; padding: 0; border: 0; border-radius: 999px;
+  background: color-mix(in srgb, var(--card) 88%, transparent); box-shadow: 0 0 0 1px var(--line), var(--pop-shadow); color: var(--fg); opacity: 0; }
+.tp-shot-nav svg { width: 16px; height: 16px; }
+.tp-shot-nav.is-prev { left: 10px; }
+.tp-shot-nav.is-next { right: 10px; }
+.tp-shot:hover .tp-shot-nav, .tp-shot-nav:focus-visible { opacity: 1; }
+.tp-shot-dots { display: flex; gap: 6px; }
+.tp-shot-dot { width: 6px; height: 6px; padding: 0; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--fg) 22%, transparent); }
+.tp-shot-dot.is-on { width: 18px; background: var(--fg); }
+@media (pointer: coarse) { .tp-shot-nav { opacity: 1; } .tp-shot-dot { width: 8px; height: 8px; } .tp-shot-dot.is-on { width: 22px; } }

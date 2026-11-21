@@ -687,9 +687,15 @@ func (s *Server) createEnrollment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, domain.Errf(domain.CodePermissionDenied, "only the hub's owner or an admin can create links for exec nodes"))
 		return
 	}
+	owner := s.ownerIDFor(r.Context(), actor)
+	if req.Superagent && (actor.Member == nil || actor.Via != nil || owner == "" || req.Harness == "exec") {
+		writeError(w, domain.Errf(domain.CodePermissionDenied, "only a person makes a superagent link (their own)"))
+		return
+	}
 	e, tok, err := s.enroll.Create(r.Context(), app.CreateEnrollmentInput{
 		Kind: req.Kind, NamePrefix: req.NamePrefix, Harness: req.Harness, AllowFrom: req.AllowFrom, Capabilities: req.Capabilities, Labels: req.Labels,
-		Note: req.Note, MaxUses: req.MaxUses, TTL: time.Duration(req.TTLSeconds) * time.Second, DryRun: dry, Owner: s.ownerIDFor(r.Context(), actor),
+		Note: req.Note, MaxUses: req.MaxUses, TTL: time.Duration(req.TTLSeconds) * time.Second, DryRun: dry, Owner: owner,
+		Superagent: req.Superagent,
 	})
 	if err != nil {
 		writeError(w, err)
@@ -1816,10 +1822,16 @@ func (s *Server) reportRuntime(w http.ResponseWriter, r *http.Request, a *domain
 	if !decode(w, r, &in) {
 		return
 	}
+	toolJSON, _ := json.Marshal(struct {
+		MCP      []api.MCPServer  `json:"mcp,omitempty"`
+		Skills   []api.ToolSkill  `json:"skills,omitempty"`
+		Plugins  []api.ToolPlugin `json:"plugins,omitempty"`
+		Warnings []string         `json:"tool_warnings,omitempty"`
+	}{in.MCP, in.Skills, in.Plugins, in.ToolWarnings})
 	if err := s.machines.SetRuntime(r.Context(), a, domain.Runtime{CLI: in.CLI, CLIVersion: in.CLIVersion, Model: in.Model,
 		ModelSource: in.ModelSource, Access: in.Access, Provider: in.Provider, ProviderSource: in.ProviderSource,
 		Effort: in.Effort, EffortSource: in.EffortSource, MaxAccess: in.MaxAccess, Quota: quotaFromAPI(in.Quota),
-		Features: domain.JoinFeatures(in.Features), Away: in.Away, Env: in.Env, Models: domain.EncodeModels(modelsFromAPI(in.Models))}); err != nil {
+		Features: domain.JoinFeatures(in.Features), Away: in.Away, Env: in.Env, Models: domain.EncodeModels(modelsFromAPI(in.Models)), Tools: string(toolJSON)}); err != nil {
 		writeError(w, err)
 		return
 	}

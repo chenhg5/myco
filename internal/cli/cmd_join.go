@@ -32,7 +32,7 @@ import (
 //	admin:    myco link create                 → https://hub/j/<token>
 //	machine:  curl -fsSL https://hub/j/<token> | bash
 //	          (installs myco, runs `myco machine join`, installs the runner service)
-//	session:  myco join                        (or tell the agent: 接入 myco：<link>)
+//	session:  myco join                        (or tell the agent: Join myco: <link>)
 
 func linkCommands() *Command {
 	adminFlag := Flag{Name: "admin-token-file", Kind: String, Help: "File containing the admin token (instead of MYCO_ADMIN_TOKEN)"}
@@ -82,7 +82,7 @@ machines that already joined. With --exec, machines that join become exec nodes 
 			}
 			cmd := "curl -fsSL " + res.JoinURL + " | bash"
 			out := map[string]any{"link": res.Enrollment, "join_url": res.JoinURL, "command": cmd,
-				"agent_prompt": "接入 myco：" + res.JoinURL}
+				"agent_prompt": "Join myco: " + res.JoinURL}
 			warnLoopbackLink(e, out, res.JoinURL)
 			return e.p.Print(out, func(w io.Writer) {
 				fmt.Fprintf(w, "join link %s: %s, %s\n\n", res.Enrollment.ID, linkValidity(res.Enrollment), linkUses(res.Enrollment))
@@ -91,7 +91,7 @@ machines that already joined. With --exec, machines that join become exec nodes 
 					fmt.Fprintf(w, "Machines that run it become exec nodes: tasks from %s run there as shell commands.\n\n",
 						strings.Join(res.Enrollment.AllowFrom, ", "))
 				} else {
-					fmt.Fprintf(w, "To connect an AI session (Claude Code, Codex, claude.ai), tell it:\n  接入 myco：%s\n\n", res.JoinURL)
+					fmt.Fprintf(w, "To connect an AI session (Claude Code, Codex, claude.ai), tell it:\n  Join myco: %s\n\n", res.JoinURL)
 				}
 				fmt.Fprintf(w, "Open the link in a browser for copy buttons. Keep it private; revoke with:\n  myco link revoke --id %s --force\n", res.Enrollment.ID)
 			})
@@ -337,7 +337,7 @@ func (e *env) joinMachine(hub, tok string, extra func(out map[string]any) []stri
 		}
 		if res.Harness != execnode.Name && !cloud {
 			fmt.Fprintln(w)
-			fmt.Fprintln(w, "Next: in any Claude Code or Codex session on this machine, say \"接入 myco\", or run:")
+			fmt.Fprintln(w, "Next: in any Claude Code or Codex session on this machine, say \"join myco\", or run:")
 			fmt.Fprintln(w, "  myco join")
 			if found := detectCLIs(); len(found) > 0 {
 				fmt.Fprintf(w, "(found here: %s)\n", strings.Join(found, ", "))

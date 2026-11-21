@@ -9,7 +9,7 @@ import (
 )
 
 // SuperagentService: a person's own agent with the App's powers in its
-// workspace (docs/design/chief-of-staff.md). Only its owner names it, and
+// workspace. Only its owner names it, and
 // approves what it asks to do that is hard to undo.
 type SuperagentService struct {
 	repo      domain.SuperagentRepository
@@ -103,6 +103,32 @@ func (s *SuperagentService) Set(ctx context.Context, by Actor, name domain.Agent
 	}
 	s.audit.Record(ctx, by, "superagent.set", string(name), "")
 	return a, nil
+}
+
+// SetFor names agent memberID's superagent without a person calling: an
+// agent that joined through a superagent link that member made. The agent
+// is theirs (the link's owner owns what joins through it).
+func (s *SuperagentService) SetFor(ctx context.Context, memberID string, name domain.AgentName) error {
+	m, err := s.members.Get(ctx, memberID)
+	if err != nil {
+		return err
+	}
+	a, err := s.agents.Get(ctx, name)
+	if err != nil {
+		return err
+	}
+	if a.Owner != m.ID || a.Kind() != domain.KindAgent {
+		return domain.Errf(domain.CodeInvalidArgument, "%s cannot be %s's superagent", name, m.Name)
+	}
+	before, _ := s.repo.Of(ctx, m.ID)
+	if err := s.repo.Set(ctx, m.ID, name, s.clock.Now()); err != nil {
+		return err
+	}
+	if before != "" && before != name {
+		s.withdraw(ctx, before)
+	}
+	s.audit.Record(ctx, Actor{Member: m}, "superagent.set", string(name), "joined through a superagent link")
+	return nil
 }
 
 // Clear makes the actor's superagent an ordinary agent again.

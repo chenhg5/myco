@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 /**
  * Connecting computers from this App over SSH, or into this Windows
  * computer's WSL: tick them, and each is logged into, set up and joined to
- * the workspace, step by step (docs/design/computers.md, "从 SSH 或 WSL 加电脑").
+ * the workspace, step by step.
  */
 export function ConnectOver({ hubId, via, onConnected, purpose = "machine" }: {
   hubId: string;

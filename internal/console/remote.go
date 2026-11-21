@@ -19,8 +19,7 @@ import (
 
 // Reaching another computer from this one, to set myco up there or look at
 // it: over SSH with the person's own ssh and ssh-agent, or into a WSL
-// distribution of this Windows computer (docs/design/computers.md, "从 SSH
-// 或 WSL 加电脑"). The app never reads or keeps keys: BatchMode makes ssh
+// distribution of this Windows computer. The app never reads or keeps keys: BatchMode makes ssh
 // fail instead of asking for a password, and each failure is told in words
 // with the command to run in a terminal.
 

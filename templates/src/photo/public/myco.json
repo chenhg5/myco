@@ -1,0 +1,45 @@
+{
+  "id": "myco/photo",
+  "name": "修图",
+  "version": "1.0.0",
+  "kind": "custom",
+  "category": "creative",
+  "icon": "icon.svg",
+  "description": "快速修照片：裁剪旋转、调色、十几种滤镜、磨皮美白、文字、贴纸、涂鸦、马赛克、边框，按住对比原图，导出 JPG 或 PNG。改了随时能退回去；照片只存在打开它的电脑上，修了什么大家都看得到，agent 也能按你说的帮你调。",
+  "data": {
+    "photos": {
+      "fields": {
+        "name": "text",
+        "key": "text",
+        "width": "number",
+        "height": "number",
+        "poster": "text",
+        "order": "number",
+        "by": "person",
+        "rotate": "number",
+        "flip_h": "bool",
+        "flip_v": "bool",
+        "straighten": "number",
+        "crop": "json",
+        "ratio": "text",
+        "adjust": "json",
+        "filter": "text",
+        "filter_strength": "number",
+        "beauty": "json",
+        "layers": "json",
+        "frame": "text",
+        "frame_color": "text"
+      }
+    }
+  },
+  "permissions": [
+    "download"
+  ],
+  "export": [
+    "jpg",
+    "png"
+  ],
+  "requires": {
+    "hub": "0.20.7"
+  }
+}

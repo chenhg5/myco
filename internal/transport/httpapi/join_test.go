@@ -64,7 +64,11 @@ func TestJoinPageValidLink(t *testing.T) {
 		{"format=md", "?format=md", nil, "text/markdown", []string{"# Join the myco network at " + h.url, "curl -fsSL " + h.url + path + " | bash", "myco join", "myco message ack --id <id>", "myco message progress --id <id>"}},
 		{"Accept text/markdown", "", map[string]string{"Accept": "text/markdown"}, "text/markdown", []string{"# Join the myco network"}},
 		{"browser gets HTML", "", map[string]string{"Accept": "text/html,application/xhtml+xml", "User-Agent": "Mozilla/5.0"}, "text/html",
-			[]string{"<!doctype html>", "还可接入 3 台机器", "curl -fsSL " + h.url + path + " | bash"}},
+			[]string{"<!doctype html>", "3 more machines can join", "curl -fsSL " + h.url + path + " | bash"}},
+		{"a Chinese browser gets the page in Chinese", "", map[string]string{"Accept": "text/html", "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8"}, "text/html",
+			[]string{`<html lang="zh-CN">`, "还可接入 3 台机器", "接入 myco：" + h.url + path}},
+		{"?lang=en wins over the browser", "?lang=en", map[string]string{"Accept": "text/html", "Accept-Language": "zh-CN"}, "text/html",
+			[]string{`<html lang="en">`, "Join myco: " + h.url + path}},
 		{"default is markdown", "", map[string]string{"User-Agent": "python-requests/2"}, "text/markdown", []string{"# Join the myco network"}},
 		{"PowerShell gets the PowerShell script", "", map[string]string{"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Microsoft Windows 10.0.26100; zh-CN) PowerShell/7.5.0"}, "text/plain",
 			[]string{"$env:MYCO_JOIN_TOKEN = '" + tok + "'", "$env:MYCO_HUB = '" + h.url + "'", "install-client.ps1", "machine join", "Remove-Item Env:MYCO_JOIN_TOKEN"}},
@@ -77,7 +81,7 @@ func TestJoinPageValidLink(t *testing.T) {
 		{"shell=1 guide keeps the query", "?format=md&shell=1", nil, "text/markdown",
 			[]string{"curl -fsSL '" + h.url + path + "?shell=1' | bash", "irm '" + h.url + path + "?format=ps1&shell=1' | iex", "shell-access --deny"}},
 		{"shell=1 page keeps the query", "?shell=1", map[string]string{"Accept": "text/html"}, "text/html",
-			[]string{"curl -fsSL &#39;" + h.url + path + "?shell=1&#39; | bash", "允许 agent 在这台电脑上开终端"}},
+			[]string{"curl -fsSL &#39;" + h.url + path + "?shell=1&#39; | bash", "lets agents open a terminal on this computer"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -171,11 +175,11 @@ func TestJoinPageUnusableLinks(t *testing.T) {
 	cases := []struct {
 		name, tok, wantMsg string
 	}{
-		{"unknown token", "myco_enroll_doesnotexist", "不存在"},
-		{"not even an enrollment token", "garbage", "不存在"},
-		{"revoked link", revokedTok, "不可用"},
-		{"used-up link", usedTok, "不可用"},
-		{"plain enrollment token is not a link", plainTok, "不可用"},
+		{"unknown token", "myco_enroll_doesnotexist", "does not exist"},
+		{"not even an enrollment token", "garbage", "does not exist"},
+		{"revoked link", revokedTok, "cannot be used"},
+		{"used-up link", usedTok, "cannot be used"},
+		{"plain enrollment token is not a link", plainTok, "cannot be used"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -282,7 +286,7 @@ func TestJoinPageExecLinkUsesTheCurrentFolder(t *testing.T) {
 		}
 	}
 	r := h.doReq("GET", path, "", nil, map[string]string{"Accept": "text/html"}).want(t, 200)
-	if !strings.Contains(string(r.raw), "要给 agent 用的文件夹") {
+	if !strings.Contains(string(r.raw), "the folder agents should use") {
 		t.Errorf("page does not say where to run it:\n%s", r.raw)
 	}
 	plain, _, _ := h.createLink(nil)

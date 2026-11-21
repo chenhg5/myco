@@ -14,7 +14,7 @@ import (
 	"github.com/chenhg5/myco/internal/domain"
 )
 
-// PageService: web pages published to the hub (see docs/design/browser.md).
+// PageService: web pages published to the hub ().
 //
 // A page is seen by its owner (the publishing agent's owner, or the person
 // who published it), by agents of that owner, by the hub's owner and admins,

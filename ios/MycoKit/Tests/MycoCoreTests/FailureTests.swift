@@ -90,7 +90,7 @@ struct AgentSetupTests {
             // An error's raw words, on one line, not too long.
             let debug = AgentSetup.debug("HTTP 502\n  502 Bad Gateway   nginx")
             #expect(debug.hasPrefix("myco shows an error: \"HTTP 502 502 Bad Gateway nginx\"."))
-            #expect(debug.contains("排错"))
+            #expect(debug.contains("Troubleshooting"))
             #expect(AgentSetup.debug(String(repeating: "x", count: 2000)).count < 1000)
             let computer = AgentSetup.computer("curl -fsSL https://hub/j/x | bash", workspace: "Team")
             #expect(computer.contains("\"Team\""))

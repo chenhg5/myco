@@ -8,3 +8,9 @@
 runner.log
 /templates/node_modules/
 /dist/
+
+/templates/design-studio-shots/
+
+/templates/stocks-shots/
+
+/templates/proxy-console-shots/

@@ -96,7 +96,7 @@ func superagentCommands() *Command {
 	set := &Command{
 		Name: "set", Summary: "Name one of your agents your superagent in this workspace (people only)", Mutating: true,
 		Long: `Your superagent uses its own token with what the myco app can do, for you: some things at once,
-some only when you approve, never tokens, members or speaking as you (docs/design/chief-of-staff.md).
+some only when you approve, never tokens, members or speaking as you.
 One per person in a workspace; naming another makes the old one an ordinary agent.`,
 		Examples: []string{"myco superagent set --agent shroom"},
 		Flags:    []Flag{{Name: "agent", Kind: String, Required: true, Help: "One of your agents"}, {Name: "admin-token-file", Kind: String, Help: "File containing your member or admin token"}},

@@ -19,7 +19,7 @@
 
 **[下载 Mac 版](https://github.com/chenhg5/myco/releases/latest/download/myco.dmg)** · [Windows 版（预览）](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-amd64.exe) · [Linux 版](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-amd64) · [全部下载](https://github.com/chenhg5/myco/releases/latest)
 
-[English](README.md) · **中文** · [安装指南](INSTALL.md) · [架构](docs/architecture.md) · [HTTP API](docs/api.md)
+[English](README.md) · **中文** · [安装指南](INSTALL.zh-CN.md) · [架构](docs/architecture.md) · [HTTP API](docs/api.md)
 
 
 https://github.com/user-attachments/assets/2a9103f4-4f13-4130-aad8-3e02598460c3
@@ -62,7 +62,7 @@ App 的第一屏也有这句话（**让 agent 帮我装**）；App 里出错时�
 |---|---|
 | **Mac** | **[myco.dmg](https://github.com/chenhg5/myco/releases/latest/download/myco.dmg)** —— 一个安装包同时支持 Apple 芯片和 Intel，已签名并经 Apple 公证。打开后拖进「应用程序」即可。App 可以自己更新（设置 → 关于）。 |
 | **Windows**（预览） | [myco-app-windows-amd64.exe](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-amd64.exe)（[ARM 版](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-arm64.exe)）。还没有代码签名，第一次运行时选「更多信息 → 仍要运行」。 |
-| **Linux** | [myco-app-linux-amd64](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-amd64)（[ARM 版](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-arm64)）：一个程序，App 在浏览器里打开（X11、Wayland、WSL 都行）。加上可执行权限运行即可，它会把自己加进「应用程序」菜单。详见 [INSTALL.md](INSTALL.md#9-控制台-appmac--windows--linux)。 |
+| **Linux** | [myco-app-linux-amd64](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-amd64)（[ARM 版](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-arm64)）：一个程序，App 在浏览器里打开（X11、Wayland、WSL 都行）。加上可执行权限运行即可，它会把自己加进「应用程序」菜单。详见 [INSTALL.zh-CN.md](INSTALL.zh-CN.md#9-控制台-appmac--windows--linux)。 |
 | **iPhone**（测试版） | **[加入 TestFlight 测试](https://testflight.apple.com/join/XDKvU8Jp)**：在 iPhone 上打开这个链接，按提示先从 App Store 装 TestFlight，再装 myco。需要 iOS 17 或更新。新版本会在 TestFlight 里推送。 |
 | **服务器** | 用命令行工具，见[更喜欢命令行？](#更喜欢命令行) |
 
@@ -121,7 +121,7 @@ myco message send --to my-mac-claude --wait 15m --body "对本地数据库跑一
 
 **哪些云端 agent 能用。** 实测过 claude.ai 上的 Claude Code 会话（一句话接入，自己运行 `myco`），以及装了 myco runner 的服务器上的 agent。Codex 云端可以通过 GitHub issue 收发任务（见[投递方式](docs/delivery.md)），但它自己不运行 `myco`，所以用不了你的电脑。
 
-**目前还不能：** Shell 节点一次执行一条命令，每条是独立的进程（不是交互式终端，`cd` 不会带到下一条），有超时（默认 60 秒）和输出上限（64 KB）；读写文件要靠命令，没有文件传输，也不能看屏幕、操作鼠标键盘。详见 [INSTALL.md 4.10 节](INSTALL.md#410-exec-节点远程执行命令)。
+**目前还不能：** Shell 节点一次执行一条命令，每条是独立的进程（不是交互式终端，`cd` 不会带到下一条），有超时（默认 60 秒）和输出上限（64 KB）；读写文件要靠命令，没有文件传输，也不能看屏幕、操作鼠标键盘。详见 [INSTALL.zh-CN.md 4.10 节](INSTALL.zh-CN.md#410-exec-节点远程执行命令)。
 
 ## 2. 把活直接交给同事的 agent
 
@@ -203,7 +203,7 @@ myco exec --to build-shell --cmd "df -h"
 myco upgrade
 ```
 
-更多用法（claude.ai 云端会话、exec 节点、别名、webhook、GitHub 唤醒）见 **[INSTALL.md](INSTALL.md)**。
+更多用法（claude.ai 云端会话、exec 节点、别名、webhook、GitHub 唤醒）见 **[INSTALL.zh-CN.md](INSTALL.zh-CN.md)**。
 
 <details>
 <summary><b>全部功能</b></summary>
@@ -327,7 +327,7 @@ sequenceDiagram
 
 | 文档 | 内容 |
 |---|---|
-| [INSTALL.md](INSTALL.md) | 部署 Hub、入网链接、各类 agent 的接入方法 |
+| [INSTALL.zh-CN.md](INSTALL.zh-CN.md) | 部署 Hub、入网链接、各类 agent 的接入方法 |
 | [docs/architecture.md](docs/architecture.md) | 概念、消息状态机、runner 的行为、代码分层 |
 | [docs/delivery.md](docs/delivery.md) | 唤醒方式、云端会话的入网令牌 |
 | [docs/api.md](docs/api.md) | HTTP API |

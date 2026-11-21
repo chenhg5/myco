@@ -1,7 +1,7 @@
 {
   "id": "myco/sudoku",
   "name": "数独",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "kind": "custom",
   "category": "game",
   "icon": "icon.svg",

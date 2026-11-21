@@ -152,3 +152,53 @@ func hasAgent(list []api.Agent, name string) bool {
 	}
 	return false
 }
+
+// A superagent link (a person's): the agent that joins through it, from a
+// cloud session or any computer, is that person's superagent at once.
+func TestSuperagentJoinsThroughALink(t *testing.T) {
+	c := ctx(t)
+	h := startHub(t, filepath.Join(t.TempDir(), "hub.db"), app.DefaultMessagePolicy())
+	admin := h.admin()
+	if _, err := admin.UpdateMember(c, "owner", api.MemberUpdateRequest{Name: "glenn"}); err != nil {
+		t.Fatal(err)
+	}
+	ct, err := admin.CreateConsoleToken(c, "glenn-mac")
+	if err != nil {
+		t.Fatal(err)
+	}
+	glenn := h.client(ct.Token)
+	// An agent cannot make one.
+	other := h.client(h.register(api.RegisterRequest{Name: "other", Binding: api.Binding{Harness: "claude", SessionID: "s0"}}))
+	if _, err := other.CreateEnrollment(c, api.CreateEnrollmentRequest{Kind: "link", MaxUses: 1, Superagent: true}, false); err == nil {
+		t.Fatal("an agent made a superagent link")
+	}
+	link, err := glenn.CreateEnrollment(c, api.CreateEnrollmentRequest{Kind: "link", MaxUses: 1, TTLSeconds: 3600, Superagent: true}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The cloud session joins: its machine, then itself.
+	m, err := h.client(link.Token).Join(c, "cloud-box", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := h.client(m.Token).Enroll(c, api.EnrollRequest{Name: "cloud-box-chief", Binding: api.Binding{Harness: "claude-cloud", SessionID: "sess-1"}}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sa, err := glenn.Superagent(c); err != nil || sa.Agent == nil || sa.Agent.Name != res.Agent.Name {
+		t.Fatalf("superagent after joining: %+v %v", sa, err)
+	}
+	if me, err := h.client(res.Token).MeSuperagent(c); err != nil || !me.Superagent || me.Owner != "glenn" {
+		t.Fatalf("the agent should know it is glenn's superagent: %+v %v", me, err)
+	}
+	// A superagent joins no project: it works for glenn across the workspace.
+	if _, err := glenn.CreateProject(c, api.CreateProjectRequest{Name: "site"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := glenn.PutProjectMember(c, "site", res.Agent.Name, api.ProjectMemberRequest{}); err == nil || !strings.Contains(err.Error(), "superagent") {
+		t.Fatalf("a superagent was added to a project: %v", err)
+	}
+	if _, err := h.client(res.Token).PutProjectMember(c, "site", res.Agent.Name, api.ProjectMemberRequest{}); err == nil {
+		t.Fatal("a superagent added itself to a project")
+	}
+}

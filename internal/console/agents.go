@@ -18,7 +18,7 @@ import (
 
 // LocalAgent is an agent CLI on this computer: whether it is installed and
 // signed in, and the commands that install it or sign in
-// (GET /app/local/agents; docs/design/client-plan.md 5.1).
+// (GET /app/local/agents).
 type LocalAgent struct {
 	CLI  string `json:"cli"`  // claude | codex | gemini | opencode
 	Name string `json:"name"` // Claude Code, Codex, ...

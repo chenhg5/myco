@@ -27,7 +27,7 @@ import (
 const BroadcastTo = "@broadcast"
 
 // Sealer makes a client encrypt what it sends and decrypt what it receives
-// when the hub has end-to-end encryption on (docs/design/e2e-encryption.md).
+// when the hub has end-to-end encryption on.
 type Sealer struct {
 	// Me is who the client speaks as: the agent's name, or
 	// "@console:<member>" for a member's device.

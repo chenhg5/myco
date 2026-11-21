@@ -22,6 +22,7 @@ type EnrollmentService struct {
 	clock       Clock
 	aliases     domain.AliasRepository
 	visibility  func(ctx context.Context, owner string) domain.Visibility
+	superagent  func(ctx context.Context, owner string, agent domain.AgentName) error
 }
 
 // SetDefaultVisibility decides the visibility of enrolled agents from their
@@ -32,6 +33,12 @@ func (s *EnrollmentService) SetDefaultVisibility(f func(ctx context.Context, own
 
 // SetAliases makes enrollment avoid names already used as aliases.
 func (s *EnrollmentService) SetAliases(repo domain.AliasRepository) { s.aliases = repo }
+
+// SetSuperagent sets what makes an agent that joined through a superagent
+// link its owner's superagent (the SuperagentService, on hubs with it).
+func (s *EnrollmentService) SetSuperagent(f func(ctx context.Context, owner string, agent domain.AgentName) error) {
+	s.superagent = f
+}
 
 // NewEnrollmentService wires the enrollment use cases.
 func NewEnrollmentService(enrollments domain.EnrollmentRepository, agents domain.AgentRepository, tokens TokenIssuer, ids IDGenerator, clock Clock) *EnrollmentService {
@@ -53,6 +60,9 @@ type CreateEnrollmentInput struct {
 	DryRun       bool
 	// Owner is the member creating it; what joins through it is theirs.
 	Owner string
+	// Superagent: the agent that joins through it becomes Owner's
+	// superagent (a link made by a person).
+	Superagent bool
 }
 
 // Create issues a new enrollment and returns its plain token (once).
@@ -78,7 +88,7 @@ func (s *EnrollmentService) Create(ctx context.Context, in CreateEnrollmentInput
 	}
 	e, err := domain.NewEnrollment(s.ids.New("enr"), s.tokens.Hash(plain), domain.EnrollmentSpec{
 		Kind: in.Kind, NamePrefix: in.NamePrefix, Harness: in.Harness, AllowFrom: allow, Capabilities: caps, Labels: labels,
-		Note: in.Note, MaxUses: in.MaxUses, TTL: in.TTL, Owner: in.Owner,
+		Note: in.Note, MaxUses: in.MaxUses, TTL: in.TTL, Owner: in.Owner, Superagent: in.Superagent,
 	}, s.clock.Now())
 	if err != nil {
 		return nil, "", err
@@ -169,7 +179,7 @@ func (s *EnrollmentService) Join(ctx context.Context, linkToken string, in JoinI
 		return nil, err
 	}
 	e, err := domain.NewEnrollment(s.ids.New("enr"), s.tokens.Hash(plain), domain.EnrollmentSpec{
-		Kind: domain.EnrollmentMachine, ParentID: link.ID, Machine: machine, NamePrefix: machine + "-", Owner: link.Owner,
+		Kind: domain.EnrollmentMachine, ParentID: link.ID, Machine: machine, NamePrefix: machine + "-", Owner: link.Owner, Superagent: link.Superagent,
 		Harness: link.Harness, AllowFrom: link.AllowFrom, Capabilities: link.Capabilities, Labels: labels,
 		Note: "machine " + machine + " (joined via " + link.ID + ")",
 	}, s.clock.Now())
@@ -354,6 +364,10 @@ func (s *EnrollmentService) Enroll(ctx context.Context, enrollToken string, in E
 	a.RotateToken(hash)
 	if err := s.agents.Create(ctx, a); err != nil {
 		return nil, err
+	}
+	// A superagent link: the agent that joins is its owner's superagent.
+	if e.Superagent && e.Owner != "" && s.superagent != nil && a.Kind() == domain.KindAgent {
+		_ = s.superagent(ctx, e.Owner, a.Name)
 	}
 	return &RegisterOutput{Agent: a, Token: plain, Created: true}, nil
 }

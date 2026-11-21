@@ -3537,3 +3537,56 @@ body.is-resizing-rows { cursor: row-resize; user-select: none; }
 }
 .app-hub-menu-badge { flex: none; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--amber);
   color: #fff; font-size: 11px; font-weight: 600; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums; }
+
+/* Your superagent: a pixel crown on its tile and a thin gold edge. */
+.pa.is-super {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #e0a628 65%, transparent);
+}
+.pa-crown {
+  position: absolute;
+  z-index: 1;
+  top: -28%;
+  left: 50%;
+  width: 50%;
+  height: auto;
+  aspect-ratio: 9 / 7;
+  transform: translateX(-50%) rotate(-6deg);
+  filter: drop-shadow(0 0.5px 0 rgba(0, 0, 0, 0.35));
+  pointer-events: none;
+}
+
+/* Your superagent's empty chat: what it is and does (SuperagentIntro). */
+.sa-intro-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(480px, 100%);
+  margin: 10px 0 0;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 1px var(--line);
+  list-style: none;
+  text-align: left;
+}
+.sa-intro-list li {
+  position: relative;
+  padding-left: 16px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--fg-2);
+}
+.sa-intro-list li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 0.65em;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: #e0a628;
+}
+.conv-empty p.sa-intro-foot {
+  margin-top: 4px;
+  color: var(--faint);
+}

@@ -126,6 +126,7 @@ func runGUI(h http.Handler, onLink func(string), setRelaunch func(func())) error
 			return
 		}
 		detail, _ := json.Marshal(map[string]string{"hubId": hub, "agent": agent})
+		qlog.Printf("main window: show, then open %s in %s", agent, hub)
 		window.ExecJS(fmt.Sprintf(`window.dispatchEvent(new CustomEvent("myco-open-member",{detail:%s}))`, detail))
 	})
 	// myco://add-hub?link=… (an app link's "open in the app" button): the

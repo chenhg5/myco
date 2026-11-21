@@ -8,6 +8,8 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { showcase } from "./showcase.mjs";
 
 const PORT = Number(process.env.APP_MOCK_PORT || 7781);
+// MOCK_OS_URL: a real App backend for myco.os (see /app/os below).
+const OS_URL = (process.env.MOCK_OS_URL || "").replace(/\/$/, "");
 // MOCK_SHELL=mac reserves room for the macOS traffic lights; browser does not.
 const SHELL = process.env.MOCK_SHELL === "browser" ? "browser" : "mac";
 // MOCK_EMPTY=1 starts with no hubs, to see the welcome page.
@@ -245,7 +247,15 @@ const officialFiles = (name) => {
   return out;
 };
 const templateFiles = new Map();
-const officialOrder = ["table", "base", "doc", "slides", "code", "issues", "devtools", "todo", "notes", "poll", "ledger", "habit", "whiteboard", "mindmap", "video", "gomoku", "sudoku"];
+// An app's screenshots, as the hub lists them: pictures right in shots/,
+// x.webp with x.dark.webp (undefined when there are none).
+const shotOK = (n) => /^shots\/[^/]+\.(png|jpe?g|webp)$/i.test(n);
+const shotsOf = (names) => {
+  const light = names.filter((n) => shotOK(n) && !/\.dark\.[a-z]+$/i.test(n)).sort();
+  const out = light.map((src) => ({ src, ...(names.includes(src.replace(/(\.[a-z]+)$/i, ".dark$1")) ? { dark: src.replace(/(\.[a-z]+)$/i, ".dark$1") } : {}) }));
+  return out.length ? out : undefined;
+};
+const officialOrder = ["table", "base", "doc", "slides", "meeting", "code", "issues", "devtools", "todo", "notes", "poll", "disk", "ledger", "habit", "whiteboard", "mindmap", "video", "photo", "gomoku", "sudoku"];
 const mockTemplates = officialOrder.filter((name) => existsSync(new URL(`${name}/myco.json`, officialRoot))).map((name) => {
   const files = officialFiles(name);
   const m = JSON.parse(files["myco.json"]);
@@ -253,7 +263,7 @@ const mockTemplates = officialOrder.filter((name) => existsSync(new URL(`${name}
   templateFiles.set(id, files);
   return { id, slug: m.id, name: m.name, description: m.description, kind: m.kind, category: m.category, icon: m.icon ? String(files[m.icon] || "") : undefined, version: m.version, publisher: "myco", official: true, can_manage: false,
     data: m.data, permissions: m.permissions, export: m.export, guide: files["agent.md"], versions: [{ version: m.version, files: Object.keys(files).length, size: 40000, by: "myco", at: iso(0) }],
-    created_at: iso(0), updated_at: iso(0) };
+    shots: shotsOf(Object.keys(files)), created_at: iso(0), updated_at: iso(0) };
 });
 {
   const files = { ...tableFiles, "agent.md": kit("agent.md"), "sample.json": kit("sample.json") };
@@ -264,6 +274,8 @@ const mockTemplates = officialOrder.filter((name) => existsSync(new URL(`${name}
     created_at: iso(17500), updated_at: iso(17500) });
 }
 const madeFiles = new Map();
+// 这台电脑: a page trying myco.os (only with MOCK_OS_URL).
+if (OS_URL) madeFiles.set("pg_os", { "index.html": readFileSync(new URL("./os-page.html", import.meta.url), "utf8") });
 const pageFilesOf = (id, n) => madeFiles.has(id) ? madeFiles.get(id) : (id === "pg_live" ? { "index.html": livePage } : id === "pg_checklist" ? { "index.html": checklistPage, "style.css": checklistCss, "app.js": checklistJs } : id === "pg_table" ? tableFiles : pageFiles(n));
 const pageFiles = (n) => ({
   "index.html": `<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>v0.16.8 发布说明</title><link rel="stylesheet" href="style.css"></head>
@@ -285,6 +297,11 @@ pages.set("pg_checklist", {
   id: "pg_checklist", name: "上线清单", project: "website", publisher: "release-cloud", version: 1, entry: "index.html",
   url: "http://192.168.1.20:7780/pages/pg_checklist", created_at: iso(18500), updated_at: iso(18500), can_manage: true,
   versions: [{ n: 1, entry: "index.html", files: 3, size: 3100, sha256: "c1", by: "release-cloud", at: iso(18500) }],
+});
+if (OS_URL) pages.set("pg_os", {
+  id: "pg_os", name: "这台电脑", project: "website", publisher: "release-cloud", version: 1, entry: "index.html",
+  url: "http://192.168.1.20:7780/pages/pg_os", created_at: iso(100), updated_at: iso(100), can_manage: true,
+  versions: [{ n: 1, entry: "index.html", files: 1, size: 4000, sha256: "o1", by: "release-cloud", at: iso(100) }],
 });
 pages.set("pg_live", {
   id: "pg_live", name: "下载页（实时）", project: "website", publisher: "release-cloud", version: 0, entry: "",
@@ -493,8 +510,14 @@ const versionBelow = (v, want) => {
 const machineInfoOf = (m) => m.id === "m_vps" ? vpsInfo : {
   dirs: ["~"], new_dir: "~/myco", max_access: m.id.startsWith("m_studio") ? "full" : "workspace", home: m.os === "darwin" ? "/Users/glenn" : "/home/glenn",
   ais: [
-    { cli: "claude", name: "Claude Code", state: "ready", version: "2.1.3 (Claude Code)", login: "claude" },
-    { cli: "codex", name: "Codex", state: "ready", version: "codex-cli 0.52.0", login: "codex login", models: CODEX_MODELS },
+    { cli: "claude", name: "Claude Code", state: "ready", version: "2.1.3 (Claude Code)", login: "claude",
+      mcp: [{ name: "filesystem", transport: "stdio", scope: "user" }, { name: "figma", transport: "http", host: "mcp.figma.com", scope: "user" }],
+      skills: [{ name: "myco", description: "Talk to agents", scope: "user", managed_by: "myco" }],
+      plugins: [{ name: "review", marketplace: "official", enabled: true }],
+      tool_warnings: ["/Users/glenn/.claude/plugins/extra.json: invalid JSON"] },
+    { cli: "codex", name: "Codex", state: "ready", version: "codex-cli 0.52.0", login: "codex login", models: CODEX_MODELS,
+      mcp: [{ name: "search", transport: "http", host: "search.example.com", scope: "user" }],
+      skills: [{ name: "audit", description: "Review code", scope: "user" }], plugins: [] },
     { cli: "gemini", name: "Gemini CLI", state: "missing", install: "npm install -g @google/gemini-cli", login: "gemini" },
     { cli: "opencode", name: "OpenCode", state: "missing", install: "curl -fsSL https://opencode.ai/install | bash", login: "opencode auth login" },
   ],
@@ -729,11 +752,19 @@ const state = {
           resume: { created_at: iso(86_400 * 5), last_used_at: iso(3_600), last_used_env: "codespaces-4f2a" },
         }),
         makeAgent({
+          name: "mcp-claude", owner: "glenn", owner_id: "mem_glenn", display_name: "MCP Claude", description: "用 Claude Code 处理文档和工具调用。",
+          kind: "agent", machine_id: "m_studio",
+          runtime: { cli: "claude", cli_version: "2.1.240", model: "sonnet", access: "workspace", max_access: "workspace", features: ["mcp_tools"],
+            mcp: [{ name: "project-docs", transport: "stdio", scope: "project", enabled: true }],
+            skills: [{ name: "release-check", description: "Check release notes", scope: "project" }] },
+          binding: { harness: "claude", environment: "macOS 26.1", workdir: "~/code/myco" },
+        }),
+        makeAgent({
           name: "docs-claude", owner: "laohu", owner_id: "mem_laohu", description: "保持 README 和 docs/ 与代码同步。", visibility: "private",
           kind: "agent", machine_id: "m_studio",
           runtime: {
             cli: "claude", cli_version: "2.1.240", model: "claude-opus-5-5", model_source: "observed",
-            effort: "low", effort_source: "app", access: "readonly", max_access: "workspace", provider: "DeepSeek", provider_source: "machine",
+            effort: "low", effort_source: "app", access: "readonly", max_access: "workspace", provider: "DeepSeek", provider_source: "machine", features: ["mcp_tools"],
             away: "stopped",
             quota: {
               source: "claude", at: iso(600),
@@ -1600,6 +1631,15 @@ function readBody(req) {
   });
 }
 
+// The body as it came (what is passed on to MOCK_OS_URL).
+function rawBody(req) {
+  return new Promise((resolve) => {
+    const chunks = [];
+    req.on("data", (c) => chunks.push(c));
+    req.on("end", () => resolve(Buffer.concat(chunks)));
+  });
+}
+
 const cacheStore = new Map(); // key -> {key, hub, data}, oldest first
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
@@ -1750,6 +1790,20 @@ const server = http.createServer(async (req, res) => {
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "handovers" && parts.length === 3 && method === "POST") {
     state.handovers = {};
     return send(res, 200, { ok: true });
+  }
+
+  // /app/quick/* — the Mac app's own routes for the ⌘⇧Space panel
+  // (quick_darwin.go): here they only note what the panel asked for, and
+  // GET /app/mock/quick returns the last "open the chat".
+  if (parts[0] === "app" && parts[1] === "quick" && parts.length === 3 && method === "POST") {
+    const body = await readBody(req);
+    if (parts[2] === "open") state.quickOpen = body;
+    return send(res, 200, { ok: true });
+  }
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "quick" && parts.length === 3) {
+    const last = state.quickOpen || null;
+    if (method === "DELETE") state.quickOpen = null;
+    return send(res, 200, { open: last });
   }
 
   // /app/mock/superagent-ask — the superagent asks to do something that
@@ -1954,6 +2008,18 @@ const server = http.createServer(async (req, res) => {
     }
     if (method === "DELETE") { cacheStore.clear(); return send(res, 204); }
   }
+  // /app/os: a page using this computer (myco.os). Nothing to use in the
+  // mock, unless MOCK_OS_URL names a real App backend to pass it to (go run
+  // ./internal/console/devos), with a page to try it (这台电脑).
+  if (parts[0] === "app" && parts[1] === "os") {
+    if (OS_URL) {
+      const up = await fetch(OS_URL + req.url, { method, headers: { "Content-Type": "application/json" }, body: method === "GET" || method === "DELETE" ? undefined : await rawBody(req) });
+      res.writeHead(up.status, { "Content-Type": up.headers.get("Content-Type") || "application/json" });
+      return res.end(Buffer.from(await up.arrayBuffer()));
+    }
+    if (parts.length === 2 && method === "GET") return send(res, 200, { os: "mock", arch: "", caps: [] });
+    return fail(res, 501, "unsupported", "the mock App does not use this computer");
+  }
   // /app/info
   if (parts[0] === "app" && parts[1] === "info" && parts.length === 2) {
     if (method !== "GET") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
@@ -2005,6 +2071,13 @@ const server = http.createServer(async (req, res) => {
     const t = mockTemplates.find((x) => x.id === decodeURIComponent(parts[4]) || x.slug === decodeURIComponent(parts[4]));
     if (!t) return fail(res, 404, "not_found", `template ${parts[4]} not found`);
     if (parts.length === 5 && method === "GET") return send(res, 200, t);
+    if (parts[5] === "files" && method === "GET") {
+      const name = parts.slice(6).map(decodeURIComponent).join("/");
+      const body = shotOK(name) ? templateFiles.get(t.id)?.[name] : undefined;
+      if (!body) return fail(res, 404, "not_found", `${name} is not a screenshot of ${t.slug}`);
+      res.writeHead(200, { "Content-Type": /\.png$/i.test(name) ? "image/png" : /\.webp$/i.test(name) ? "image/webp" : "image/jpeg", "Cache-Control": "private, max-age=3600" });
+      return res.end(body);
+    }
     if (parts.length === 6 && parts[5] === "use" && method === "POST") {
       const body = (await readBody(req)) || {};
       const files = templateFiles.get(t.id);
@@ -3450,6 +3523,18 @@ const server = http.createServer(async (req, res) => {
       state.counter += 1;
       const joinUrl = `${hub.url.replace(/\/+$/, "")}/j/myco_enroll_demo${state.counter}x7k2m9q4w8`;
       // A shell-node link: the UI smoke "runs" it with /app/mock/run-join.
+      // A superagent link: a cloud session "joins" a moment later and is
+      // your superagent (as the hub does from v0.21.5).
+      if (body?.superagent) {
+        setTimeout(() => {
+          state.counter += 1;
+          const name = `cloud-shroom-${state.counter}`;
+          hub.agents.push(makeAgent({ name, display_name: "Shroom", owner: "glenn", owner_id: "mem_glenn", kind: "agent",
+            binding: { harness: "claude-cloud", environment: "claude.ai" }, created_at: iso(0), last_seen_at: iso(0), status_text: "刚加入" }));
+          state.superagents ||= {};
+          state.superagents[hub.id] = name;
+        }, 2500);
+      }
       if (body?.shell_node) state.pendingJoin = { hubId: hub.id, allow: Array.isArray(body.allow_from) ? body.allow_from : [] };
       else if (uses === 1) state.pendingConnect = { hubId: hub.id };
       return send(res, 200, {
@@ -3821,8 +3906,15 @@ const server = http.createServer(async (req, res) => {
           const cap = Math.max(levels.indexOf(rt.max_access), levels.indexOf(rt.access));
           if (access && levels.indexOf(access) > cap) return fail(res, 403, "permission_denied", "这台电脑不允许更高的权限，请在那台电脑上修改 spawn.max_access。");
         }
+        const mcpTools = body.mcp_tools === undefined ? !!agent.run_settings?.mcp_tools : !!body.mcp_tools;
+        if (body.mcp_tools !== undefined) {
+          const me = whoami(hub)?.member;
+          const owns = me && (agent.owner_id ? agent.owner_id === me.id : !agent.owner && me.role === "owner");
+          if (!owns && mcpTools !== !!agent.run_settings?.mcp_tools) return fail(res, 403, "permission_denied", "只有这个 agent 的主人能修改 MCP 工具权限。");
+        }
         agent.run_settings = {};
         if (access) agent.run_settings.access = access;
+        if (mcpTools) agent.run_settings.mcp_tools = true;
         if (body.model) agent.run_settings.model = body.model;
         if (body.effort) agent.run_settings.effort = body.effort;
         // What the runtime now reports, as a real hub's runner would.

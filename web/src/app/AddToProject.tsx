@@ -24,6 +24,7 @@ import { localWorkspaceOf } from "@/app/localHubs";
 import type { RuntimeAccess } from "@/api";
 import { L } from "@/lib/i18n";
 import { bytes, cn, timeAgo } from "@/lib/utils";
+import { isSuperagent } from "@/app/superagentMark";
 
 /**
  * Lets a new member use the project's workspaces: each one's "who may run
@@ -69,7 +70,7 @@ export async function addToProject(hubId: string, project: Project | undefined, 
 // (agent_guide) takes the project in the link, and its script ends with
 // the last step: the sentence is just the command. Older hubs need the
 // steps spelled out.
-function joinSentence(link: JoinLink, project?: string): string {
+export function joinSentence(link: JoinLink, project?: string): string {
   if (link.agent_guide) {
     const command = project ? `curl -fsSL ${link.join_url}/${project} | bash` : link.command;
     return L(`加入 myco：在终端运行 ${command} ，再照它最后的输出做完。`, `Join myco: run ${command} in a terminal, then do what its last lines say.`);
@@ -160,7 +161,8 @@ export function AddAgentDialog({ open, hub, project, projects = [], rows, start,
   // online first.
   function others(): AgentRow[] {
     const inIt = new Set((project?.members || []).map((m) => m.name));
-    return rows.filter((r) => r.hub.id === hubId && agentKind(r.st.agent) === "agent" && !inIt.has(r.st.agent.name))
+    // (not a superagent: it works for you across the workspace, in no project)
+    return rows.filter((r) => r.hub.id === hubId && agentKind(r.st.agent) === "agent" && !inIt.has(r.st.agent.name) && !isSuperagent(r.st.agent))
       .sort((a, b) => Number(a.st.state === "offline") - Number(b.st.state === "offline") || nodeName(a.st.agent, a.hub).localeCompare(nodeName(b.st.agent, b.hub)));
   }
   // Who was already there when this opened: anyone new has just joined.

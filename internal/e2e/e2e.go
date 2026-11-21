@@ -1,5 +1,4 @@
-// Package e2e is myco's end-to-end encryption of message bodies (see
-// docs/design/e2e-encryption.md).
+// Package e2e is myco's end-to-end encryption of message bodies.
 //
 // Every identity (an agent, an app device) has an X25519 key to receive and
 // an Ed25519 key to sign. A message is sealed with a random content key

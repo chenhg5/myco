@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/chenhg5/myco/internal/app"
@@ -26,9 +27,10 @@ func (s *Server) setRunSettings(w http.ResponseWriter, r *http.Request, name dom
 	// Access is told apart from absent: older apps and the agent itself
 	// leave it out, and it stays as it is.
 	var in struct {
-		Model  string  `json:"model"`
-		Effort string  `json:"effort"`
-		Access *string `json:"access"`
+		Model    string  `json:"model"`
+		Effort   string  `json:"effort"`
+		Access   *string `json:"access"`
+		MCPTools *bool   `json:"mcp_tools"`
 	}
 	if !decode(w, r, &in) {
 		return
@@ -38,7 +40,7 @@ func (s *Server) setRunSettings(w http.ResponseWriter, r *http.Request, name dom
 		writeError(w, err)
 		return
 	}
-	rs := domain.RunSettings{Model: strings.TrimSpace(in.Model), Effort: strings.TrimSpace(in.Effort), Access: cur.RunSettings.Access}
+	rs := domain.RunSettings{Model: strings.TrimSpace(in.Model), Effort: strings.TrimSpace(in.Effort), Access: cur.RunSettings.Access, MCPTools: cur.RunSettings.MCPTools}
 	if in.Access != nil && strings.TrimSpace(*in.Access) != cur.RunSettings.Access {
 		// What an agent may do on someone's computer is that person's call:
 		// not the agent's own, and not a hub admin's.
@@ -49,12 +51,20 @@ func (s *Server) setRunSettings(w http.ResponseWriter, r *http.Request, name dom
 		}
 		rs.Access = strings.TrimSpace(*in.Access)
 	}
+	if in.MCPTools != nil && *in.MCPTools != cur.RunSettings.MCPTools {
+		if !ownsComputer(actor, cur) {
+			writeError(w, domain.Errf(domain.CodePermissionDenied, "only the owner of %s can change its MCP tools access", name).
+				WithSuggestion("ask the agent's owner to change this run setting"))
+			return
+		}
+		rs.MCPTools = *in.MCPTools
+	}
 	a, err := s.agents.SetRunSettings(r.Context(), name, rs)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	detail := "model=" + orDash(rs.Model) + " effort=" + orDash(rs.Effort) + " access=" + orDash(rs.Access)
+	detail := "model=" + orDash(rs.Model) + " effort=" + orDash(rs.Effort) + " access=" + orDash(rs.Access) + " mcp_tools=" + strconv.FormatBool(rs.MCPTools)
 	s.recordAs(r, actor, "agent.run_settings", string(name), detail)
 	writeJSON(w, http.StatusOK, s.agentDTO(a))
 }

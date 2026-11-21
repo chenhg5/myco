@@ -19,7 +19,7 @@ import (
 )
 
 // workflowCommands: workflows the hub walks, handing each step to an agent,
-// a computer or a person (docs/design/workflow.md). Agents use their own
+// a computer or a person. Agents use their own
 // token (acting for their person); people their admin or member token.
 func workflowCommands() *Command {
 	adminFlag := Flag{Name: "admin-token-file", Kind: String, Help: "File containing the admin token (people; agents use their own)"}

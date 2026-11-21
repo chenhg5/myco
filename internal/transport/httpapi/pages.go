@@ -17,7 +17,7 @@ import (
 	"github.com/chenhg5/myco/internal/domain"
 )
 
-// SetPages enables /v1/pages (web pages agents publish; docs/design/browser.md).
+// SetPages enables /v1/pages (web pages agents publish).
 func (s *Server) SetPages(p *app.PageService) { s.pages = p }
 
 // pageSandbox is the CSP every file of a page is served with: whoever opens

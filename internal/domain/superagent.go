@@ -6,7 +6,7 @@ import (
 )
 
 // A superagent is a person's own agent with the App's powers in its
-// workspace (docs/design/chief-of-staff.md). Its owner names it; the hub
+// workspace. Its owner names it; the hub
 // then lets its agent token through the App's routes, each allowed, held
 // for its owner's approval, or refused. One per member in a workspace.
 

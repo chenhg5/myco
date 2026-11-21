@@ -141,6 +141,34 @@ type Runtime struct {
 	// say (Claude Code: its aliases are fixed) or the runner predates it
 	// (v0.21.1).
 	Models []RuntimeModel `json:"models,omitempty"`
+	// Project-level tool inventory only; user-level tools come from MachineAI.
+	MCP          []MCPServer  `json:"mcp,omitempty"`
+	Skills       []ToolSkill  `json:"skills,omitempty"`
+	Plugins      []ToolPlugin `json:"plugins,omitempty"`
+	ToolWarnings []string     `json:"tool_warnings,omitempty"`
+}
+
+// Tool inventory contains labels and remote hostnames only: never env,
+// headers, argv, or URL paths and queries.
+type MCPServer struct {
+	Name      string `json:"name"`
+	Transport string `json:"transport"`
+	Host      string `json:"host,omitempty"`
+	Scope     string `json:"scope"`
+	Enabled   *bool  `json:"enabled,omitempty"`
+}
+
+type ToolSkill struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Scope       string `json:"scope"`
+	ManagedBy   string `json:"managed_by,omitempty"`
+}
+
+type ToolPlugin struct {
+	Name        string `json:"name"`
+	Marketplace string `json:"marketplace,omitempty"`
+	Enabled     bool   `json:"enabled"`
 }
 
 // RuntimeModel is a model a CLI offers: the id its --model takes, a
@@ -175,6 +203,9 @@ type QuotaWindow struct {
 type RunSettings struct {
 	Model  string `json:"model"`
 	Effort string `json:"effort"`
+	// MCPTools, when present in a request, changes whether configured MCP
+	// tools may run without a prompt outside full access.
+	MCPTools *bool `json:"mcp_tools,omitempty"`
 	// Access: readonly, workspace or full ("" follows the machine). Only the
 	// agent's owner may change it; left out of a request, it stays as it is.
 	Access string `json:"access,omitempty"`
@@ -274,7 +305,7 @@ type Message struct {
 	// project with a terminal on that computer; v0.21.2+).
 	GrantedBy string `json:"granted_by,omitempty"`
 	// E2E: the body is end-to-end encrypted (an envelope only the
-	// message's readers can open; see docs/design/e2e-encryption.md).
+	// message's readers can open).
 	E2E bool `json:"e2e,omitempty"`
 	// Unreadable says why a client could not decrypt an end-to-end
 	// encrypted body (set by the client, never by the hub).
@@ -599,6 +630,9 @@ type CreateEnrollmentRequest struct {
 	Note         string   `json:"note,omitempty"`
 	MaxUses      int      `json:"max_uses,omitempty"`
 	TTLSeconds   int64    `json:"ttl_seconds,omitempty"`
+	// Superagent: the agent that joins through this link becomes the
+	// caller's superagent (a person's link; v0.21.5+, older hubs ignore it).
+	Superagent bool `json:"superagent,omitempty"`
 }
 
 // CreateEnrollmentResponse returns the enrollment and, once, its token.
@@ -834,7 +868,11 @@ type MachineAI struct {
 	Install string `json:"install,omitempty"`
 	Login   string `json:"login,omitempty"`
 	// Models are the models it offers there (Codex, v0.21.1+).
-	Models []RuntimeModel `json:"models,omitempty"`
+	Models       []RuntimeModel `json:"models,omitempty"`
+	MCP          []MCPServer    `json:"mcp,omitempty"`
+	Skills       []ToolSkill    `json:"skills,omitempty"`
+	Plugins      []ToolPlugin   `json:"plugins,omitempty"`
+	ToolWarnings []string       `json:"tool_warnings,omitempty"`
 }
 
 // MachineSession is a recent Claude Code or Codex session on the machine;
@@ -1649,11 +1687,22 @@ type Template struct {
 	// Guide is its agent's guide (agent.md): how to fill its data.
 	Guide string `json:"guide,omitempty"`
 	// Official: one of myco's, in every workspace (hubs from v0.20.5).
-	Official  bool              `json:"official,omitempty"`
+	Official bool `json:"official,omitempty"`
+	// Shots are its screenshots (hubs from v0.21.5): pictures in its
+	// folder's shots/, each with its dark one when there is one; fetch them
+	// with GET /v1/templates/{id}/files/{path}. A workspace's own templates
+	// list theirs when got one by one, not in the list.
+	Shots     []TemplateShot    `json:"shots,omitempty"`
 	Versions  []TemplateVersion `json:"versions"`
 	CanManage bool              `json:"can_manage"`
 	CreatedAt time.Time         `json:"created_at"`
 	UpdatedAt time.Time         `json:"updated_at"`
+}
+
+// TemplateShot is one screenshot of a template: paths in its folder.
+type TemplateShot struct {
+	Src  string `json:"src"`
+	Dark string `json:"dark,omitempty"`
 }
 
 // AppSync is what POST /v1/templates/sync found: how many official apps
@@ -1704,7 +1753,7 @@ type TemplateUsed struct {
 }
 
 // Workflows (v0.21+): graphs the hub walks, handing each step to an agent,
-// a computer or a person (docs/design/workflow.md).
+// a computer or a person.
 
 // Workflow is a stored workflow. Definition is its JSON (on get and apply).
 type Workflow struct {
@@ -2085,7 +2134,7 @@ type WorkflowDecisions struct {
 }
 
 // Superagents (v0.21.1+): a person's own agent with the App's powers in
-// its workspace (docs/design/chief-of-staff.md).
+// its workspace.
 
 // Superagent answers GET /v1/console/superagent: the caller's superagent
 // (none: Agent absent) and how many of its requests wait for them.

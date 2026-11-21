@@ -158,8 +158,10 @@ func randomHex(n int) string {
 type Backend struct {
 	// connects are computers being connected over SSH or WSL.
 	connects connectJobs
-	Store    *Store
-	Secrets  Secrets
+	// os: what pages use of this computer (myco.os, oscalls.go).
+	os      osState
+	Store   *Store
+	Secrets Secrets
 	// Timeout bounds each call to a hub (default 12s: a hub far away takes
 	// a few seconds a request; adding a hub 15s).
 	Timeout time.Duration
@@ -258,6 +260,8 @@ func (b *Backend) Handler() http.Handler {
 		m.HandleFunc("POST /app/local/hub/stop", b.stopLocal)
 		m.HandleFunc("POST /app/local/runner", b.postLocalRunner)
 		m.HandleFunc("POST /app/local/shell-access", b.postShellAccess)
+		// (pages using this computer: only an App on it)
+		b.osRoutes(m)
 		m.HandleFunc("GET /app/local/agents", b.getLocalAgents)
 		b.remoteRoutes(m)
 		m.HandleFunc("GET /app/local/claude-auth", b.getClaudeAuth)
@@ -1173,6 +1177,9 @@ func (b *Backend) Handler() http.Handler {
 			// on that computer needs allowing.
 			ShellNode bool     `json:"shell_node"`
 			AllowFrom []string `json:"allow_from"`
+			// Superagent: the agent that joins through it becomes this
+			// person's superagent (hubs from v0.21.5).
+			Superagent bool `json:"superagent"`
 		}
 		if !decode(w, r, &in) {
 			return
@@ -1192,6 +1199,8 @@ func (b *Backend) Handler() http.Handler {
 			TTLSeconds: int64(in.ExpiresHours) * 3600, Note: "myco console"}
 		if in.ShellNode {
 			req.Harness, req.AllowFrom, req.Note = execnode.Name, in.AllowFrom, "myco console: a folder as a computer"
+		} else if in.Superagent {
+			req.Superagent, req.Note = true, "myco console: superagent"
 		}
 		res, err := c.CreateEnrollment(r.Context(), req, false)
 		if err != nil {

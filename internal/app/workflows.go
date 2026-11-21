@@ -20,7 +20,7 @@ import (
 // the run's id); computer steps are commands for an exec node; human steps
 // wait for a decision. The service alone decides what comes next: when a
 // task is answered (Kick, or the next Tick), it reads the result, checks
-// it, and follows the edges (docs/design/workflow.md).
+// it, and follows the edges.
 type WorkflowService struct {
 	repo     domain.WorkflowRepository
 	messages *MessageService

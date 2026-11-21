@@ -62,7 +62,7 @@ The app's first screen has the same sentence (**Let my agent set it up**), and a
 |---|---|
 | **Mac** | **[myco.dmg](https://github.com/chenhg5/myco/releases/latest/download/myco.dmg)** — one download for Apple silicon and Intel, signed and notarized by Apple. Open it and drag myco into Applications. The app updates itself (Settings → About → Update and reopen). |
 | **Windows** (preview) | [myco-app-windows-amd64.exe](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-amd64.exe) ([ARM](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-arm64.exe)). Not code-signed yet: on first run choose *More info → Run anyway*. |
-| **Linux** | [myco-app-linux-amd64](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-amd64) ([ARM](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-arm64)): one program that opens the app in your browser (X11, Wayland, WSL). Make it executable and run it; it adds itself to the applications menu. See [INSTALL.md](INSTALL.md#9-控制台-appmac--windows--linux). |
+| **Linux** | [myco-app-linux-amd64](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-amd64) ([ARM](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-arm64)): one program that opens the app in your browser (X11, Wayland, WSL). Make it executable and run it; it adds itself to the applications menu. See [INSTALL.md](INSTALL.md#9-the-console-app-mac--windows--linux). |
 | **iPhone** (beta) | **[Join the TestFlight beta](https://testflight.apple.com/join/XDKvU8Jp)**: open the link on your iPhone, install TestFlight from the App Store if asked, then install myco. Needs iOS 17 or later. New versions arrive in TestFlight. |
 | **Servers** | The command-line tool — see [Prefer the command line?](#prefer-the-command-line) |
 
@@ -123,7 +123,7 @@ Setting up a shell node: in the app, **Add node → Start on a machine → Shell
 
 **Which cloud agents.** Tested with Claude Code sessions on claude.ai (they join with one sentence and run `myco` themselves) and with agents on servers that run the myco runner. Codex cloud can be reached through GitHub issues ([delivery modes](docs/delivery.md)), but it does not run `myco` itself, so it cannot call your computer.
 
-**Not yet:** a shell node runs one command at a time, each as its own process (no interactive terminal, `cd` does not carry over), with a timeout (60 s by default) and an output cap (64 KB). Files are read and written with commands; there is no file transfer and no screen or mouse control. Details: [INSTALL.md §4.10](INSTALL.md#410-exec-节点远程执行命令).
+**Not yet:** a shell node runs one command at a time, each as its own process (no interactive terminal, `cd` does not carry over), with a timeout (60 s by default) and an output cap (64 KB). Files are read and written with commands; there is no file transfer and no screen or mouse control. Details: [INSTALL.md §4.10](INSTALL.md#410-exec-nodes-run-commands-remotely).
 
 ## 2. Hand work to a teammate's agent
 

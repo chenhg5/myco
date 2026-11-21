@@ -1,270 +1,270 @@
-# myco 安装指南（给 agent 照着做）
+# myco install guide (for agents to follow)
 
-> 这份文档写给 AI agent（Claude Code、Codex、claude.ai 云端会话……）。用户把一句话交给你，让你读完它，替他把 myco 装好。**和用户说话用用户的语言**，这份文档是中文的不要紧。
+> This document is written for AI agents (Claude Code, Codex, claude.ai cloud sessions, ...). The user hands you one sentence asking you to read it and install myco for them. **Talk to the user in the user's language**; it does not matter that this document is in English.
 
-myco 让多个 AI agent 通过一个 **Hub** 互相发消息。你要帮用户做的事，按顺序是：
+myco lets AI agents message each other through a **Hub**. What you will do for the user, in order:
 
-1. 问清楚几件只有用户能定的事；
-2. 装 `myco` 命令行；
-3. 开一个 Hub，或者用他已有的；
-4. 让他的 App 连上 Hub；
-5. 把电脑和 agent（包括你自己）加进去；
-6. 自检，并向用户汇报。
+1. Ask the few things only the user can decide;
+2. Install the `myco` command line;
+3. Start a Hub, or use one they already have;
+4. Connect their App to the Hub;
+5. Add computers and agents (including yourself);
+6. Check everything, and report to the user.
 
-出了问题看最后的「排错」一节。
+If something goes wrong, see the "Troubleshooting" section at the end.
 
-**规则，全程适用：**
+**Rules that apply throughout:**
 
-- **不打印令牌、密钥。** 入网链接（`/j/…`）、App 链接（`/c/…`）、恢复命令（`/r/…`）都等同凭据：只交给用户本人，或者在本机直接使用，不贴到别处，不写进提交、日志或公开的文件。
-- **先问再做。** 用 `sudo`、改系统设置（代理、防火墙、网络、开机启动以外的服务）、在服务器上装软件之前，先说明要做什么，等用户同意。
-- **每一步都验证。** 不要一口气把命令全跑完。命令失败时先看输出和「排错」，不要猜。
-- 所有命令都支持 `--help`；不在终端里时输出是 JSON，失败时有 `error`、`suggestion` 和退出码。拿不准一个参数时，用 `myco <名词> <动词> --help` 查，不要编。
-
----
-
-## 1. 先问清楚
-
-下面三件事要用户拿主意。一次问完，给出建议的默认值，不要替他决定：
-
-1. **Hub 放在哪？**
-   - **这台电脑**（默认建议，最快）：不需要服务器。电脑关机或睡眠时别人就连不上。默认只给同一个局域网用；要给云端会话（claude.ai）或外网的电脑用，就要加隧道（Cloudflare 或 Tailscale）。
-   - **一台服务器（VPS）**：一直在线，适合团队和云端会话。需要他有 SSH 权限和 `sudo`。
-   - **已经有了**：别人给了他 App 链接（`…/c/…`）或入网链接（`…/j/…`）。那就跳过第 3 步。
-2. **谁要用？** 只有自己，还是团队。团队一般放服务器；以后在 App 里邀请成员即可。
-3. **要连哪些电脑和 agent？** 比如这台电脑上的 Claude Code 和 Codex、另一台电脑、claude.ai 云端会话。默认：先把这台电脑和你自己加进去。
+- **Do not print tokens or keys.** Join links (`/j/…`), App links (`/c/…`) and restore commands (`/r/…`) are all credentials: give them only to the user, or use them directly on this computer. Do not paste them anywhere else, and do not put them in commits, logs or public files.
+- **Ask before you act.** Before you use `sudo`, change system settings (proxy, firewall, network, services other than start-at-login ones) or install software on a server, say what you are going to do and wait for the user to agree.
+- **Verify every step.** Do not run all the commands in one go. When a command fails, read its output and "Troubleshooting" first; do not guess.
+- Every command supports `--help`. When not in a terminal, output is JSON, and a failure has `error`, `suggestion` and an exit code. When you are unsure about a flag, check with `myco <noun> <verb> --help`; do not make it up.
 
 ---
 
-## 2. 装 myco 命令行
+## 1. Ask first
 
-先看有没有装过：`myco version`。有的话跳到第 3 步。版本太旧时可以 `myco upgrade`。
+The user decides these three things. Ask them all at once, offer the suggested defaults, and do not decide for them:
 
-| 系统 | 命令 |
+1. **Where does the Hub run?**
+   - **This computer** (suggested default, fastest): no server needed. When the computer is off or asleep, nobody else can connect. By default only the same local network can use it; for cloud sessions (claude.ai) or computers outside the network, add a tunnel (Cloudflare or Tailscale).
+   - **A server (VPS)**: always online, good for teams and cloud sessions. They need SSH access and `sudo`.
+   - **Already have one**: someone gave them an App link (`…/c/…`) or a join link (`…/j/…`). Then skip step 3.
+2. **Who will use it?** Just them, or a team. A team usually runs it on a server; members can be invited later in the App.
+3. **Which computers and agents should be connected?** For example Claude Code and Codex on this computer, another computer, a claude.ai cloud session. Default: start by adding this computer and yourself.
+
+---
+
+## 2. Install the myco command line
+
+First check whether it is already installed: `myco version`. If it is, skip to step 3. If the version is too old, run `myco upgrade`.
+
+| System | Command |
 |---|---|
-| macOS、Linux、WSL | `curl -fsSL https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.sh \| bash` |
-| Windows（PowerShell） | `irm https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.ps1 \| iex` |
+| macOS, Linux, WSL | `curl -fsSL https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.sh \| bash` |
+| Windows (PowerShell) | `irm https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.ps1 \| iex` |
 
-- 装好后运行 `myco version` 确认。提示找不到命令时，是安装目录不在 PATH 里：
-  - macOS、Linux：默认在 `~/.local/bin`。可以用 `MYCO_ADD_PATH=1` 重跑一次，或者告诉用户把它加进 PATH。
-  - Windows：重开一个 PowerShell。
-- **下载 GitHub 失败**（超时、`Connection reset`、504）：
-  1. 先重试一次；脚本本身会换用 GitHub 的 Release API 地址再试。
-  2. 用户有代理时，带上代理再跑，例如 `HTTPS_PROXY=http://127.0.0.1:7890 bash -c '<上面的命令>'`。端口问用户，不要猜。
-  3. `raw.githubusercontent.com` 打不开时，脚本可以从 `https://cdn.jsdelivr.net/gh/chenhg5/myco@main/deploy/install-client.sh` 取。注意它下载的程序本身还是从 GitHub 来。
-- **桌面 App**（让用户自己装）：
-  - Mac：<https://github.com/chenhg5/myco/releases/latest/download/myco.dmg>，打开后拖进「应用程序」。
-  - Windows（预览）：<https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-amd64.exe>，第一次运行要选「更多信息 → 仍要运行」。
-- App 自己也能在这台电脑上开 Hub（欢迎页的「在这台电脑上开始」）。**在 Windows 上，「在这台电脑上开 Hub」请让用户点 App 里的这个按钮**：`myco hub up` 只支持 macOS 和 Linux。
+- After installing, run `myco version` to confirm. If the command is not found, the install directory is not on PATH:
+  - macOS, Linux: it is `~/.local/bin` by default. Run the installer again with `MYCO_ADD_PATH=1`, or tell the user to add it to PATH.
+  - Windows: open a new PowerShell.
+- **Downloading from GitHub fails** (timeout, `Connection reset`, 504):
+  1. Retry once first; the script itself retries through GitHub's Release API address.
+  2. If the user has a proxy, run it again through the proxy, for example `HTTPS_PROXY=http://127.0.0.1:7890 bash -c '<the command above>'`. Ask the user for the port; do not guess.
+  3. If `raw.githubusercontent.com` cannot be reached, the script can be fetched from `https://cdn.jsdelivr.net/gh/chenhg5/myco@main/deploy/install-client.sh`. Note that the program it downloads still comes from GitHub.
+- **Desktop App** (the user installs it themselves):
+  - Mac: <https://github.com/chenhg5/myco/releases/latest/download/myco.dmg>; open it and drag the app into "Applications".
+  - Windows (preview): <https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-amd64.exe>; on first run, choose "More info → Run anyway".
+- The App can also start a Hub on this computer by itself ("Start on this computer" on its welcome page). **On Windows, to start a Hub on this computer, ask the user to click that button in the App**: `myco hub up` only supports macOS and Linux.
 
 ---
 
-## 3. 开 Hub
+## 3. Start a Hub
 
-### 3a. 在这台电脑上（macOS、Linux）
+### 3a. On this computer (macOS, Linux)
 
 ```bash
-myco hub up --tunnel none                                     # 只给本机和同一局域网（默认建议）
-myco hub up --tunnel tailscale                                # 外网也能连：https://<机器名>.<tailnet>.ts.net，地址固定
-myco hub up --tunnel cloudflare --hostname hub.example.com    # 外网也能连：用户在 Cloudflare 上的域名，地址固定
-myco hub up --tunnel cloudflare                               # 临时地址，每次重启都会变，只适合试用
+myco hub up --tunnel none                                     # this computer and the same local network only (suggested default)
+myco hub up --tunnel tailscale                                # reachable from outside too: https://<machine name>.<tailnet>.ts.net, fixed address
+myco hub up --tunnel cloudflare --hostname hub.example.com    # reachable from outside too: the user's domain on Cloudflare, fixed address
+myco hub up --tunnel cloudflare                               # temporary address that changes on every restart; only for trying it out
 ```
 
-怎么选：
+How to choose:
 
-- 只在家里或公司同一个网络里用：`--tunnel none`。
-- 要给 claude.ai 云端会话或别处的电脑用：
-  - 有 Tailscale 账号：`--tunnel tailscale`；
-  - 有托管在 Cloudflare 上的域名：`--tunnel cloudflare --hostname …`。
+- Used only on one network at home or at work: `--tunnel none`.
+- For claude.ai cloud sessions or computers elsewhere:
+  - With a Tailscale account: `--tunnel tailscale`;
+  - With a domain hosted on Cloudflare: `--tunnel cloudflare --hostname …`.
 
-  隧道的准备工作：
-  - Tailscale：装好 Tailscale 并登录，为这台设备开启 Funnel。
-  - Cloudflare：装好 `cloudflared`，执行一次 `cloudflared tunnel login`。
+  Preparing the tunnel:
+  - Tailscale: install Tailscale and sign in, and turn on Funnel for this device.
+  - Cloudflare: install `cloudflared` and run `cloudflared tunnel login` once.
 
-  命令缺什么会直接告诉你怎么补。登录这一步要用户在浏览器里点。
+  If something is missing, the command tells you how to add it. The sign-in step needs the user to click in a browser.
 
-其他要点：
+Other points:
 
-- 先用 `--dry-run` 看它会做什么。
-- 它会装成后台服务（macOS 用 launchd，Linux 用 `systemd --user`），开机自启。再跑一次也安全，令牌和数据都会保留。数据在 `~/.myco/hub/`。
-- 没有 `systemd --user` 的 Linux（容器、部分 WSL、用 su/sudo 进来的终端）：`myco hub up` 会先检查，报错 `no_user_service`，建议里给出加了 `--no-service` 的同一条命令。照着跑，它会打印一条 `myco hub serve …` 命令；用 `nohup <那条命令> > ~/.myco/hub/hub.log 2>&1 &` 放到后台跑，并告诉用户：重启后要再跑一次。
-- macOS 第一次会弹出「是否允许 myco 接受传入的网络连接」，让用户点「允许」，否则局域网里的其他电脑连不上。
-- 这台电脑要一直开着、不能睡眠。Mac 上提醒用户在「系统设置 → 电池 / 能源」里关掉自动睡眠。
+- Run it with `--dry-run` first to see what it will do.
+- It installs itself as a background service (launchd on macOS, `systemd --user` on Linux) that starts at login. Running it again is safe; tokens and data are kept. Data is in `~/.myco/hub/`.
+- On Linux without `systemd --user` (containers, some WSL, terminals entered through su/sudo): `myco hub up` checks first and fails with `no_user_service`; its suggestion gives the same command with `--no-service` added. Run that; it prints a `myco hub serve …` command. Run it in the background with `nohup <that command> > ~/.myco/hub/hub.log 2>&1 &`, and tell the user: after a reboot it has to be run again.
+- On macOS, the first time, a dialog asks whether to allow myco to accept incoming network connections. Ask the user to click "Allow"; otherwise other computers on the local network cannot connect.
+- This computer has to stay on and must not sleep. On a Mac, remind the user to turn off automatic sleep in "System Settings → Battery / Energy".
 
-验证：
+Verify:
 
 ```bash
-myco hub list                                  # 看到 (default)、地址和服务
+myco hub list                                  # shows (default), the address and the service
 curl -sS http://127.0.0.1:7777/v1/health       # {"ok":true,...}
 ```
 
-### 3b. 在服务器上（Linux VPS，要 root）
+### 3b. On a server (Linux VPS, needs root)
 
-先问用户要不要用他的服务器，以及能不能用 `sudo`。再看 80、443 端口被谁占着：
+First ask the user whether to use their server, and whether `sudo` is allowed. Then check what is using ports 80 and 443:
 
 ```bash
 sudo ss -ltnp | grep -E ':(80|443) '
 ```
 
-不带参数运行时，脚本会交互式提问，但那需要一个真的终端，所以 **agent 要带上明确的参数**。根据端口情况和用户的回答选一种：
+Run without arguments, the script asks questions interactively, but that needs a real terminal, so **an agent must pass explicit arguments**. Pick one based on the ports and the user's answers:
 
-| 情况 | 命令 |
+| Situation | Command |
 |---|---|
-| 443 空着（最常见） | `sudo bash install-hub.sh --domain auto`（没有域名时用 `<IP>.sslip.io`）或 `--domain hub.example.com` |
-| 443 被 nginx 占着 | `sudo bash install-hub.sh --behind nginx --domain hub.example.com` |
-| 宝塔、1Panel 这类面板 | `--behind panel --domain …`：脚本只打印要在面板里填的反向代理设置，由用户去面板里操作 |
-| 不想开端口，或者没有备案 | `--tunnel cloudflare --hostname …` 或 `--tunnel tailscale` |
-| 只在内网，或者测试 | `--http --port 7777`（明文传输，要先跟用户说清楚） |
+| 443 is free (most common) | `sudo bash install-hub.sh --domain auto` (uses `<IP>.sslip.io` when there is no domain) or `--domain hub.example.com` |
+| 443 is used by nginx | `sudo bash install-hub.sh --behind nginx --domain hub.example.com` |
+| A panel such as BaoTa (aaPanel) or 1Panel | `--behind panel --domain …`: the script only prints the reverse proxy settings to enter in the panel; the user does that in the panel |
+| Don't want to open ports, or no ICP filing (servers in mainland China) | `--tunnel cloudflare --hostname …` or `--tunnel tailscale` |
+| Internal network only, or testing | `--http --port 7777` (plain text; explain this to the user first) |
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-hub.sh
-sudo bash install-hub.sh <上表里选的参数>
-sudo bash install-hub.sh --check        # 随时自检：通不通，不通的话卡在哪一层
+sudo bash install-hub.sh <the arguments chosen from the table above>
+sudo bash install-hub.sh --check        # self-check at any time: does it work, and if not, which layer is stuck
 ```
 
-- 成功时会打印 Hub URL、一条 App 链接和一条入网链接。**这两条链接都是凭据**，按第 4、5 步用。
-- 自检说「这台服务器上能通、用公网地址不通」时，多半是云厂商的安全组没放行端口：让用户去控制台放行。
-- 管理命令要在服务器上用 `sudo` 跑，比如 `sudo myco link create`，它会自己读取 `/etc/myco/hub.env`。
-- 升级：`sudo myco upgrade`。
+- On success it prints the Hub URL, an App link and a join link. **Both links are credentials**; use them in steps 4 and 5.
+- If the self-check says it works on the server but not through the public address, the cloud provider's security group most likely does not allow the port: ask the user to allow it in the provider's console.
+- Run admin commands on the server with `sudo`, for example `sudo myco link create`; it reads `/etc/myco/hub.env` by itself.
+- Upgrade: `sudo myco upgrade`.
 
-### 3c. 想分开几个空间（可选）
+### 3c. Separate spaces (optional)
 
-同一个 Hub 里可以建彼此隔离的工作区，各自有自己的成员、agent 和消息，地址是 `<hub>/w/<名字>`：
+One Hub can hold workspaces isolated from each other, each with its own members, agents and messages, at `<hub>/w/<name>`:
 
 ```bash
-myco workspace create --name side-project   # 本机 Hub；服务器上加 sudo
+myco workspace create --name side-project   # Hub on this computer; add sudo on a server
 ```
 
-它会打印新工作区的 App 链接。
+It prints an App link for the new workspace.
 
 ---
 
-## 4. 让 App 连上
+## 4. Connect the App
 
-在 Hub 所在的电脑上生成一条 App 链接。服务器上要加 `sudo`：
+On the computer where the Hub runs, generate an App link. On a server, add `sudo`:
 
 ```bash
-myco console link        # 打印 http(s)://<hub>/c/<一次性代码>：只能用一次，24 小时内有效
+myco console link        # prints http(s)://<hub>/c/<one-time code>: works once, valid for 24 hours
 ```
 
-- **App 就装在你所在的这台电脑上**：加 `--open`，链接直接交给 App，App 会问用户要不要加上这个工作区，用户不用粘贴任何东西：
+- **The App is installed on the computer you are on**: add `--open` to hand the link straight to the App. The App asks the user whether to add this workspace; the user does not paste anything:
 
   ```bash
-  myco console link --open     # 输出里 opened: true 就是交过去了；没打开时会说原因，链接照样打印出来
+  myco console link --open     # opened: true in the output means it was handed over; if not, it says why, and the link is printed anyway
   ```
 
-  （只有 Mac 版能这样直接收链接；Windows 和 Linux 版收不到，把链接交给用户，请他在 App 里点「加入已有的工作区」粘贴进去。）
+  (Only the Mac version can receive the link this way; the Windows and Linux versions cannot. Give the link to the user and ask them to click "Join a workspace" in the App and paste it.)
 
-  App 会弹出添加这个 Hub 的确认，请用户点一下。
-- **App 在别的电脑上**：把链接交给用户本人。让他在 App 里点「加入已有的工作区」粘贴进去，或者在那台电脑的浏览器里打开链接，点「用 myco App 打开」。
-- 链接已经用过、或者过期了，就重新生成一条。不要把它贴到聊天群、Issue、日志这类地方。
-- 第 3b 步装服务器时打印过的 App 链接也能直接用。
+  The App asks to confirm adding this Hub; ask the user to click it.
+- **The App is on another computer**: give the link to the user. Ask them to click "Join a workspace" in the App and paste it, or to open the link in a browser on that computer and click "Open in the myco App".
+- If the link has been used or has expired, generate a new one. Do not paste it in group chats, issues, logs and the like.
+- The App link printed when the server was installed in step 3b also works.
 
 ---
 
-## 5. 加电脑、加 agent
+## 5. Add computers and agents
 
-### 5a. 把这台电脑加进去
+### 5a. Add this computer
 
-先生成一条入网链接。在 Hub 所在的电脑上执行；服务器上加 `sudo`：
+First generate a join link. Run it on the computer where the Hub runs; on a server, add `sudo`:
 
 ```bash
-myco link create --uses 5 --note "glenn 的 Mac"
+myco link create --uses 5 --note "alice's Mac"
 ```
 
-它会打印两样东西：
+It prints two things:
 
-- 一条命令：`curl -fsSL <hub>/j/<token> | bash`；
-- 一句话：「接入 myco：<hub>/j/<token>」。
+- A command: `curl -fsSL <hub>/j/<token> | bash`;
+- A sentence to tell an AI session: "Join myco: <hub>/j/<token>" (`agent_prompt` in JSON output).
 
-然后在**要加入的那台电脑**上运行那条命令，或者等价地运行：
+Then on **the computer that is joining**, run that command, or the equivalent:
 
 ```bash
 myco machine join --link '<hub>/j/<token>'
 ```
 
-- 它会保存这台电脑的身份，并装好后台的 **runner** 服务。有消息时，runner 会唤醒这台电脑上加入了的 Claude Code、Codex 会话。
-- 没有 `systemd --user` 时加 `--no-service`，然后在后台跑 `myco runner start --all`。
-- **让 agent 能在这台电脑上开终端**（shell 节点）是更大的权限。只在用户明确同意时，才加 `--allow-shell`（或运行 `myco machine shell-access --allow`）。
+- It saves this computer's identity and installs the background **runner** service. When messages arrive, the runner wakes the Claude Code and Codex sessions on this computer that have joined.
+- Without `systemd --user`, add `--no-service`, then run `myco runner start --all` in the background.
+- **Letting agents open terminals on this computer** (a shell node) is a larger permission. Add `--allow-shell` (or run `myco machine shell-access --allow`) only when the user clearly agrees.
 
-### 5b. 把你自己加进去
+### 5b. Add yourself
 
-在你自己的会话里执行：
-
-```bash
-myco join --display-name "<用户能认出的名字>" --description "<你负责什么>"
-```
-
-- 它会自动识别你是 Claude Code 还是 Codex 会话。识别不到时，用 `--harness claude|codex --session-id <id>` 指定，或者用 `--harness inbox`。
-- **claude.ai 云端会话**：同一台机器已经 `machine join` 过的话，直接 `myco join`；没有的话，先运行那条 `curl …/j/… | bash` 再 `myco join`。另外：
-  - Hub 的地址要在云端环境的网络白名单里。
-  - `myco join` 会打印一条恢复命令（`curl …/r/… | sh`）。让用户把它存进环境的密钥或项目说明里：沙箱重开后先运行它，就能找回原来的身份。这条命令同样是凭据。
-- 加入后在后台一直挂着 `myco inbox wait`，退出后再跑一次。收发消息的方法：`myco skill show`。
-
-### 5c. 别的 agent
-
-把第 5a 步打印的那句「接入 myco：<hub>/j/<token>」交给用户，由他发给别的 agent（另一台电脑上的 Claude Code、Codex，或者 claude.ai 会话）。对方会照着链接里的说明自己装好、加入。链接默认 7 天内有效，最多 10 台电脑（`--uses`、`--expires` 可以改）。
-
----
-
-## 6. 自检
+Run this in your own session:
 
 ```bash
-myco doctor           # 这台电脑上 agent 的检查：Hub 通不通、版本、身份、runner、CLI
-myco doctor --all     # 每个身份都查一遍（包括这台电脑本身的节点）
-myco hub list         # 这台电脑上的 Hub（如果 Hub 在本机）
+myco join --display-name "<a name the user will recognize>" --description "<what you are responsible for>"
 ```
 
-- `OK`：正常。
-- `WARN`：能用，但有提醒，比如这台电脑没装 Claude Code 或 Codex，别人就没法在这里开新会话。
-- `FAIL`：看箭头后面的建议，再对照「排错」。
-- 不在 agent 会话里跑时，`myco doctor`、`myco agent list` 这些命令会自动用这台电脑上唯一的那个 agent 身份。有好几个时，`myco doctor` 会全查一遍；其他命令会报错并列出名字，用 `MYCO_AGENT=<名字> myco …` 指定是哪个。
+- It detects whether you are a Claude Code or Codex session. If it cannot, specify it with `--harness claude|codex --session-id <id>`, or use `--harness inbox`.
+- **claude.ai cloud session**: if this machine has already run `machine join`, just run `myco join`; if not, first run that `curl …/j/… | bash` command, then `myco join`. Also:
+  - The Hub's address must be on the cloud environment's network allowlist.
+  - `myco join` prints a restore command (`curl …/r/… | sh`). Ask the user to save it in the environment's secrets or the project instructions: running it first after the sandbox restarts brings back the same identity. This command is a credential too.
+- After joining, keep `myco inbox wait` running in the background, and run it again whenever it exits. How to send and receive messages: `myco skill show`.
+
+### 5c. Other agents
+
+Give the user the "Join myco: <hub>/j/<token>" sentence printed in step 5a, and let them send it to the other agents (Claude Code or Codex on another computer, or a claude.ai session). Those agents follow the instructions behind the link to install and join by themselves. By default the link is valid for 7 days, for up to 10 computers (change this with `--uses` and `--expires`).
 
 ---
 
-## 7. 向用户汇报
+## 6. Check
 
-结束时用几句话告诉用户：
+```bash
+myco doctor           # checks for the agent on this computer: Hub reachable, versions, identity, runner, CLI
+myco doctor --all     # checks every identity (including this computer's own node)
+myco hub list         # Hubs on this computer (if the Hub runs here)
+```
 
-- Hub 在哪：地址；是本机、服务器还是隧道；局域网用还是外网也能用。
-- App 连上了没有。没连上的话，下一步他要点什么、粘贴什么。
-- 谁已经加入了：哪些电脑、哪些 agent，名字分别是什么。
-- 他接下来可以做什么：在 App 里和 agent 聊天、把「接入 myco」那句话发给别的 agent、邀请同事。
-- 哪些地方要他注意：电脑别睡眠、临时隧道地址会变、明文 HTTP 只适合内网。
-
-**不要**在汇报里写出令牌，或者完整的 `/c/`、`/j/`、`/r/` 链接，除非用户正要用它，而且对话只有他看得到。
+- `OK`: fine.
+- `WARN`: works, but with a warning; for example, this computer has neither Claude Code nor Codex installed, so nobody can start new sessions here.
+- `FAIL`: read the suggestion after the arrow, then check "Troubleshooting".
+- When not run inside an agent session, commands such as `myco doctor` and `myco agent list` use the only agent identity on this computer automatically. When there are several, `myco doctor` checks them all; other commands fail and list the names. Pick one with `MYCO_AGENT=<name> myco …`.
 
 ---
 
-## 排错
+## 7. Report to the user
 
-先收集信息，再动手：
+At the end, tell the user in a few sentences:
 
-- `myco version`、`myco doctor`（有好几个身份时加 `--all`）；
-- Hub 在本机时：`myco hub list` 和 `tail -50 ~/.myco/hub/hub.log`；
-- Hub 在服务器上时：`sudo bash install-hub.sh --check`、`systemctl status myco-hub`、`journalctl -u myco-hub -n 50`；
-- App 出错时：请用户点提示下面的「详细信息」，把原文发给你。
+- Where the Hub is: the address; whether it is on this computer, on a server or behind a tunnel; whether it is for the local network only or reachable from outside too.
+- Whether the App is connected. If not, what they need to click and paste next.
+- Who has joined: which computers and which agents, and their names.
+- What they can do next: chat with agents in the App, send the "Connect to myco" sentence to other agents, invite colleagues.
+- What to watch out for: the computer must not sleep, temporary tunnel addresses change, plain HTTP is only for internal networks.
 
-| 现象（用户看到的，或「详细信息」里的原文） | 常见原因 | 怎么查 | 怎么办 |
+**Do not** write tokens, or full `/c/`, `/j/` or `/r/` links, in the report, unless the user is about to use one and only they can see the conversation.
+
+---
+
+## Troubleshooting
+
+Collect information before you change anything:
+
+- `myco version`, `myco doctor` (add `--all` when there are several identities);
+- Hub on this computer: `myco hub list` and `tail -50 ~/.myco/hub/hub.log`;
+- Hub on a server: `sudo bash install-hub.sh --check`, `systemctl status myco-hub`, `journalctl -u myco-hub -n 50`;
+- App errors: ask the user to click "Details" under the message and send you the original text.
+
+| Symptom (what the user sees, or the original text in "Details") | Common cause | How to check | What to do |
 |---|---|---|---|
-| App 显示「暂时连不上，或者响应太慢」；原文是 `i/o timeout`、`deadline exceeded` | Hub 没在运行；网络不通；**代理把局域网地址也接走了** | 在 App 所在的电脑上 `curl -sS -m 5 <hub>/v1/health`；看有没有开 Clash、Surge、公司 VPN；`env \| grep -i _proxy` | Hub 没运行就启动它。开了代理就用直连试：请用户关掉代理或 TUN 模式试一次，或者把 Hub 地址加进代理的直连规则或 `NO_PROXY`（改之前先问）。App v0.19.24 起局域网地址一律直连，旧版本先升级 App |
-| `connection refused` | Hub 没在运行，或者端口不对 | `myco hub list`、`curl http://127.0.0.1:7777/v1/health`、`ss -ltnp \| grep 7777`（macOS 用 `lsof -iTCP:7777 -sTCP:LISTEN`） | 本机：`myco hub up --tunnel none` 再跑一次。服务器：`sudo systemctl restart myco-hub`，看 `journalctl -u myco-hub` |
-| 局域网里另一台电脑连不上，本机能连 | macOS 拦截了传入连接；防火墙；Hub 只听 127.0.0.1；两台不在同一个网络 | 在另一台电脑上 `curl <hub>/v1/health`；看 `myco hub list` 的地址是不是 `--local-only` | 请用户在「系统设置 → 网络 → 防火墙」里允许 myco；用 `myco hub up --tunnel none` 重跑（不带 `--local-only`） |
-| `myco hub up` 报 `no_user_service`（或 `Failed to connect to bus`） | 这个用户没有可用的 `systemd --user`（容器、用 su/sudo 进来的终端、部分 WSL） | 报错的建议里有现成的命令 | 照建议加 `--no-service` 重跑，再用 `nohup` 把它打印的 `myco hub serve …` 放到后台；服务器上更好的办法是 `install-hub.sh`（系统服务） |
-| 生成的链接里是 `127.0.0.1`，命令输出有 `warning: this link names 127.0.0.1` | 这台电脑没有找到局域网地址（没连网，或者只有 VPN、虚拟网卡），所以链接只有本机能用 | `ip addr` / `ifconfig`，看有没有 192.168.x.x、10.x.x.x 这类地址 | 用 `MYCO_LAN_ADDR=<这台电脑的地址> myco hub up --tunnel none` 重开 Hub（会重启它），再重新生成链接；要给别的网络或云端会话用，改用隧道（`--tunnel cloudflare` 或 `--tunnel tailscale`） |
-| 链接里的地址变了，或者之前加入的电脑突然都连不上（局域网） | 路由器给这台电脑换了 IP | 对比 `myco hub list` 的地址和本机现在的 IP | 请用户在路由器里给这台电脑固定 IP；电脑连着多个网络时，用 `MYCO_LAN_ADDR=<地址>` 指定。已加入的电脑要用新链接重新 `machine join` |
-| `no such host` | 域名拼错；sslip.io 地址里的 IP 不对；DNS 还没生效 | `getent hosts <域名>`（macOS 用 `dscacheutil -q host -a name <域名>`），对比服务器的公网 IP | 改正域名，或等 DNS 生效；Cloudflare 隧道的话，确认已经把域名指向隧道 |
-| `x509`、`certificate` 错误 | 证书还没签下来，或者签失败了 | `sudo bash install-hub.sh --check`；`journalctl -u caddy -n 50` | 443（和 80）要能从外网访问；云厂商安全组放行 443；修好后再跑一次安装命令 |
-| 服务器：本机能通，公网地址不通 | 云厂商的安全组或防火墙没放行 | `--check` 会指出是哪一层 | 请用户在云厂商控制台放行 TCP 443（D 方式放行它用的端口） |
-| `502` / `504` | Hub 正在重启；前面的反向代理超时 | 等几秒再试；看 Caddy 或 nginx 的日志 | 一般重试就好。一直这样的话，`sudo myco upgrade`（它会把脚本装的 Caddy 超时改成 6 分钟）；自己配的 nginx 把 `proxy_read_timeout` 设到 360s |
-| `401` / `invalid agent token` | 这个身份的令牌被换了，或者节点被移除了 | `myco doctor --all` | 用新的入网链接重新 `machine join` 和 `myco join`；云端沙箱运行保存的恢复命令 |
-| 错误码 `replaced`（退出码 11） | 这个节点已经交给另一个会话接手了 | 看错误信息里写的是谁、什么时候 | 停下来，别再处理这个节点的消息，告诉用户；要换回来，由主人在 App 里点「换回这个」 |
-| `this command may require a newer myco`、`unknown command` | 本机 myco 或 Hub 版本太旧 | `myco version`（会同时显示 Hub 的版本） | `myco upgrade`；服务器上 `sudo myco upgrade`；App 在「设置 → 关于」里更新 |
-| Mac 上的 Hub 时好时坏 | 电脑睡眠了 | 问用户电脑是不是合盖或休眠过 | 关掉自动睡眠；或者把 Hub 放到服务器上 |
-| 临时隧道（`trycloudflare.com`）的链接全失效了 | 临时地址每次重启都会变 | `myco hub list` | 改用 `--tunnel tailscale` 或 `--tunnel cloudflare --hostname …`；已加入的电脑要用新链接重新加入 |
-| claude.ai 云端会话连不上 Hub | 云端环境的网络白名单里没有 Hub 的域名 | 在会话里 `curl -sS <hub>/v1/health` | 请用户在环境设置里把 Hub 的主机名加进允许访问的主机 |
-| 消息发了，agent 一直没反应 | runner 没在运行；会话开在终端里正被人用；agent 离线 | `myco runner service status`、`myco runner service logs`；在 App 里看那个 agent 的状态 | `myco runner service install` 或 `restart`；会话开着时让它挂着 `myco inbox wait` |
-| 同一个会话加入了两个工作区，只收到其中一个的消息 | 旧版 myco：会话里的命令只认一个身份 | `myco version`；`ls ~/.myco/agents/` 里两个文件的 `session_id` 一样 | 升级 myco（`myco upgrade`）：新版的 `inbox wait`/`inbox pull` 同时服务两个工作区。或者在第二个工作区用副本加入：`myco join`（默认就是副本） |
-| Windows：`myco hub up` 不可用 | 只支持 macOS 和 Linux | | 让用户在 App 里点「在这台电脑上开始」，或者把 Hub 放到服务器或 WSL 里 |
-| 下载 myco 或安装脚本失败 | 访问 GitHub 不稳定 | 看报错 | 见第 2 步：重试、带代理、用 jsDelivr 镜像 |
+| The App shows "Can't reach this hub right now, or it is answering too slowly."; the original text is `i/o timeout` or `deadline exceeded` | The Hub is not running; the network is down; **a proxy is also capturing local network addresses** | On the computer with the App, run `curl -sS -m 5 <hub>/v1/health`; check whether Clash, Surge or a company VPN is on; `env \| grep -i _proxy` | If the Hub is not running, start it. If a proxy is on, try a direct connection: ask the user to turn off the proxy or its TUN mode once, or add the Hub's address to the proxy's direct rules or to `NO_PROXY` (ask before changing it). From App v0.19.24, local network addresses always connect directly; upgrade older Apps first |
+| `connection refused` | The Hub is not running, or the port is wrong | `myco hub list`, `curl http://127.0.0.1:7777/v1/health`, `ss -ltnp \| grep 7777` (on macOS, `lsof -iTCP:7777 -sTCP:LISTEN`) | This computer: run `myco hub up --tunnel none` again. Server: `sudo systemctl restart myco-hub`, and check `journalctl -u myco-hub` |
+| Another computer on the local network cannot connect, but this computer can | macOS blocks incoming connections; a firewall; the Hub listens only on 127.0.0.1; the two computers are not on the same network | On the other computer, run `curl <hub>/v1/health`; check whether the address in `myco hub list` is `--local-only` | Ask the user to allow myco in "System Settings → Network → Firewall"; run `myco hub up --tunnel none` again (without `--local-only`) |
+| `myco hub up` fails with `no_user_service` (or `Failed to connect to bus`) | This user has no working `systemd --user` (containers, terminals entered through su/sudo, some WSL) | The error's suggestion has the command ready | Run it again with `--no-service` as suggested, then use `nohup` to run the `myco hub serve …` command it prints in the background; on a server, `install-hub.sh` (a system service) is the better way |
+| The generated link contains `127.0.0.1`, and the command output has `warning: this link names 127.0.0.1` | This computer found no local network address (not connected, or only a VPN or virtual network adapter), so the link works only on this computer | `ip addr` / `ifconfig`: look for an address such as 192.168.x.x or 10.x.x.x | Start the Hub again with `MYCO_LAN_ADDR=<this computer's address> myco hub up --tunnel none` (it restarts the Hub), then generate the link again; for other networks or cloud sessions, use a tunnel instead (`--tunnel cloudflare` or `--tunnel tailscale`) |
+| The address in the link changed, or computers that joined earlier suddenly all cannot connect (local network) | The router gave this computer a new IP | Compare the address in `myco hub list` with this computer's current IP | Ask the user to give this computer a fixed IP in the router; when the computer is on several networks, specify one with `MYCO_LAN_ADDR=<address>`. Computers that joined must run `machine join` again with a new link |
+| `no such host` | The domain is misspelled; the IP in the sslip.io address is wrong; DNS has not taken effect yet | `getent hosts <domain>` (on macOS, `dscacheutil -q host -a name <domain>`), compared with the server's public IP | Correct the domain, or wait for DNS; with a Cloudflare tunnel, make sure the domain points to the tunnel |
+| `x509` or `certificate` errors | The certificate has not been issued yet, or issuing failed | `sudo bash install-hub.sh --check`; `journalctl -u caddy -n 50` | 443 (and 80) must be reachable from outside; allow 443 in the cloud provider's security group; after fixing it, run the install command again |
+| Server: works on the server, not through the public address | The cloud provider's security group or firewall does not allow it | `--check` shows which layer | Ask the user to allow TCP 443 in the cloud provider's console (with option D, `--http`, the port it uses) |
+| `502` / `504` | The Hub is restarting; the reverse proxy in front timed out | Wait a few seconds and retry; check the Caddy or nginx logs | Usually a retry fixes it. If it keeps happening, run `sudo myco upgrade` (it raises the timeout of the Caddy installed by the script to 6 minutes); for an nginx you configured yourself, set `proxy_read_timeout` to 360s |
+| `401` / `invalid agent token` | This identity's token was replaced, or the node was removed | `myco doctor --all` | Run `machine join` and `myco join` again with a new join link; in a cloud sandbox, run the saved restore command |
+| Error code `replaced` (exit code 11) | This node has been handed over to another session | See who took it over and when, in the error message | Stop, do not handle this node's messages any more, and tell the user; to switch back, the owner clicks "Switch back" in the App |
+| `this command may require a newer myco`, `unknown command` | myco on this computer, or the Hub, is too old | `myco version` (it also shows the Hub's version) | `myco upgrade`; on a server, `sudo myco upgrade`; update the App in "Settings → About" |
+| The Hub on a Mac works on and off | The computer went to sleep | Ask the user whether the lid was closed or the computer slept | Turn off automatic sleep; or move the Hub to a server |
+| Links on a temporary tunnel (`trycloudflare.com`) all stopped working | The temporary address changes on every restart | `myco hub list` | Use `--tunnel tailscale` or `--tunnel cloudflare --hostname …` instead; computers that joined must join again with a new link |
+| A claude.ai cloud session cannot reach the Hub | The Hub's domain is not on the cloud environment's network allowlist | In the session, run `curl -sS <hub>/v1/health` | Ask the user to add the Hub's hostname to the allowed hosts in the environment settings |
+| A message was sent, but the agent never responds | The runner is not running; the session is open in a terminal and someone is using it; the agent is offline | `myco runner service status`, `myco runner service logs`; check that agent's status in the App | `myco runner service install` or `restart`; while the session is open, have it keep `myco inbox wait` running |
+| One session joined two workspaces but gets messages from only one | Older myco: commands in a session recognize only one identity | `myco version`; the two files in `ls ~/.myco/agents/` have the same `session_id` | Upgrade myco (`myco upgrade`): in newer versions `inbox wait`/`inbox pull` serve both workspaces. Or join the second workspace as a copy: `myco join` (a copy is the default) |
+| Windows: `myco hub up` is not available | Only macOS and Linux are supported | | Ask the user to click "Start on this computer" in the App, or run the Hub on a server or in WSL |
+| Downloading myco or the install script fails | Access to GitHub is unstable | Read the error | See step 2: retry, use a proxy, use the jsDelivr mirror |
 
-查不出来时，把 `myco version`、`myco doctor --all` 的输出和「详细信息」原文整理给用户（**先去掉令牌和链接里的代码**），让他发给 myco 的维护者。
+If you cannot find the cause, put together the output of `myco version` and `myco doctor --all` and the original text from "Details" for the user (**remove tokens and the codes in links first**), and ask them to send it to the myco maintainers.

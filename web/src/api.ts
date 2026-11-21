@@ -29,12 +29,17 @@ export interface Quota {
 export interface RunSettings {
   model?: string;
   effort?: string;
+  /** Agent owner's choice; omitted on old hubs means disabled. */
+  mcp_tools?: boolean;
   /** permission level chosen by the node's owner ("" follows the machine); only its owner may change it */
   access?: RuntimeAccess | "";
 }
 /** What the node actually runs; absent on nodes reported by old runners. */
 /** A model a CLI offers: the id --model takes, a display name, the efforts it supports. */
 export interface RuntimeModel { id: string; name?: string; efforts?: string[] }
+export interface MCPServer { name: string; transport: string; host?: string; scope: "user" | "project" | "plugin"; enabled?: boolean }
+export interface ToolSkill { name: string; description?: string; scope: "user" | "project"; managed_by?: string }
+export interface ToolPlugin { name: string; marketplace?: string; enabled: boolean }
 export interface Runtime {
   cli: string;
   cli_version?: string;
@@ -51,7 +56,7 @@ export interface Runtime {
   provider_source?: ProviderSource;
   /** plan usage, when the CLI writes it on this computer */
   quota?: Quota;
-  /** what its runner supports beyond the basics (docs/design/client-plan.md section 4); absent from older runners */
+  /** what its runner supports beyond the basics; absent from older runners */
   features?: string[];
   /** why its runner went offline, said as it stopped: "stopped" (absent from older runners and while it runs) */
   away?: "stopped" | string;
@@ -59,6 +64,10 @@ export interface Runtime {
   env?: "wsl" | string;
   /** the models its CLI offers on that computer, in the CLI's order (Codex; runners from v0.21.1) */
   models?: RuntimeModel[];
+  mcp?: MCPServer[];
+  skills?: ToolSkill[];
+  plugins?: ToolPlugin[];
+  tool_warnings?: string[];
 }
 export interface Skill { name: string; summary?: string; examples?: string[] }
 
@@ -185,6 +194,9 @@ export interface Template {
   /** its icon, SVG markup (hubs from v0.20.7): shown as a mask, tinted */
   icon?: string;
   official?: boolean; can_manage: boolean; guide?: string; permissions?: string[]; export?: string[];
+  /** its screenshots (hubs from v0.21.5): paths in its folder, a dark one
+   *  beside when there is one; a workspace's own list them when got alone */
+  shots?: { src: string; dark?: string }[];
   data?: Record<string, { fields: Record<string, string>; single?: boolean }>;
   versions: { version: string; files: number; size: number; by: string; at: string }[];
   created_at: string; updated_at: string;
@@ -230,7 +242,7 @@ export interface AutomationRequest {
 export interface AutomationResponse { automation: Automation; webhook_secret?: string }
 
 /** Workflows (hubs from v0.21): steps the workspace hands to agents,
- *  computers and people, in order (docs/design/workflow.md). */
+ *  computers and people, in order. */
 /** A JSON Schema (draft 2020-12): all of it is kept and checked by the
  *  hub; the App reads the common keywords. */
 export interface WfSchema {

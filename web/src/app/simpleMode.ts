@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 
 /*
- * 简单模式 (docs/design/client-plan.md 5.4): one person using the agents on
+ * 简单模式: one person using the agents on
  * their own computer. Workspaces, members, other computers and the ways to
  * bring in agents from elsewhere are hidden; conversations and agents stay.
  * On when the App was started from the welcome page (a new install); off

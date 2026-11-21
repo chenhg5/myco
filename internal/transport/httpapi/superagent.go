@@ -15,7 +15,7 @@ import (
 	"github.com/chenhg5/myco/internal/domain"
 )
 
-// A member's superagent (docs/design/chief-of-staff.md) uses its own agent
+// A member's superagent uses its own agent
 // token on the App's routes. Each route the App uses is listed here:
 // allowed (it acts as its owner, marked as through it), or held for its
 // owner's approval and carried out once they approve. A route not listed

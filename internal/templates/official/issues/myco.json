@@ -1,7 +1,7 @@
 {
   "id": "myco/issues",
   "name": "任务追踪",
-  "version": "1.2.0",
+  "version": "1.4.0",
   "kind": "custom",
   "category": "dev",
   "icon": "icon.svg",

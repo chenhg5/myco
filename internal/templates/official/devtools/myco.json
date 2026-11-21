@@ -1,7 +1,7 @@
 {
   "id": "myco/devtools",
   "name": "开发者工具箱",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "kind": "custom",
   "category": "dev",
   "icon": "icon.svg",

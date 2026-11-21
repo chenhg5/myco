@@ -16,7 +16,7 @@ import (
 	"github.com/chenhg5/myco/internal/client"
 )
 
-// Talking with an agent by voice (docs/design/voice.md), in the person's
+// Talking with an agent by voice, in the person's
 // chat with it: the App hears the person (speech recognition), a fast text
 // model reads the chat and talks with them, passing what they want done to
 // the agent as they would type it (a new task, or an addition to the one at

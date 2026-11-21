@@ -380,6 +380,16 @@ async function closeSettings(page) {
 // Right-click a row and pick from its menu. Scrolling the row into view
 // fires a scroll a moment later, which closes a menu (as it should for a
 // person scrolling): so again, until the menu stays.
+// A computer's page: one of its tabs (Agent 和终端, 权限, AI 和工具, 检查和修复).
+async function pcTab(page, name) {
+  await clickVisible(page, page.locator("[data-testid=pc-tabs]").getByRole("tab", { name: new RegExp(`^${name}`) }));
+}
+// A computer's page: an item of its ⋯ (改名, 移除).
+async function pcMore(page, item) {
+  await clickVisible(page, page.locator("[data-testid=computer-more]"));
+  await clickVisible(page, page.locator(".conv-menu").getByRole("menuitem", { name: item, exact: true }));
+}
+
 async function menuPick(page, row, item) {
   for (let i = 0; ; i++) {
     await row.scrollIntoViewIfNeeded();
@@ -886,10 +896,13 @@ async function runMatrix(browser, size, scheme) {
         await go(page, "应用", narrow);
         await clickVisible(page, page.locator(`[data-testid="template-${slug}"]`));
         await page.locator("[data-testid=template-name]").fill(name);
+        // No sample-data choice: the first of a kind comes with it, and says so.
+        if (await page.locator(".app-modal input[type=checkbox]").count()) throw new Error("新建应用的弹框不该再让人选要不要示例数据");
+        await page.locator("[data-testid=template-sample-note]").waitFor({ timeout: 5_000 });
         await clickVisible(page, page.getByRole("button", { name: "新建", exact: true }));
-        const frame = page.locator(`.pg-frame[title="${name}"]`);
+        const frame = page.locator(`.pg-frame[aria-label="${name}"]`);
         await frame.waitFor({ timeout: 15_000 });
-        return page.frameLocator(`.pg-frame[title="${name}"]`);
+        return page.frameLocator(`.pg-frame[aria-label="${name}"]`);
       };
       // 表格: a grid (canvas) with the sample rows.
       const sheet = await make("myco/table", `本周（${mark}）`);
@@ -3445,6 +3458,56 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".ms").waitFor({ state: "hidden" });
     });
 
+    await step("运行设置 · MCP 工具", async () => {
+      await go(page, "成员", narrow);
+      const card = page.locator(".mb-card", { hasText: "MCP Claude" }).first();
+      await card.scrollIntoViewIfNeeded(); await card.click();
+      await page.locator(".ms").waitFor({ timeout: 10000 });
+      await clickVisible(page, page.locator(".ms .ms-fold"));
+      const toggle = page.locator('.ms [role="switch"][aria-label="允许 MCP 工具"]');
+      await toggle.waitFor({ timeout: 5000 });
+      if ((await toggle.getAttribute("aria-checked")) === "true") throw new Error("MCP 工具应默认关闭");
+      await toggle.click();
+      await page.waitForFunction(() => document.querySelector('.ms [role="switch"][aria-label="允许 MCP 工具"]')?.getAttribute("aria-checked") === "true");
+      const enabled = await (await fetch(`http://${HOST}:${mockPort()}/app/mock/run-settings`)).json();
+      if (enabled.last?.agent !== "mcp-claude" || enabled.last.body.mcp_tools !== true) throw new Error("MCP 开关打开后未保存");
+      if (size.width === 1200 && scheme === "light") await shot(page, size, scheme, "member-mcp-tools-on");
+      await toggle.click();
+      await page.waitForFunction(() => document.querySelector('.ms [role="switch"][aria-label="允许 MCP 工具"]')?.getAttribute("aria-checked") === "false");
+      const disabled = await (await fetch(`http://${HOST}:${mockPort()}/app/mock/run-settings`)).json();
+      if (disabled.last?.body.mcp_tools !== false) throw new Error("MCP 开关关闭后未保存");
+      await page.keyboard.press("Escape"); await page.locator(".ms").waitFor({ state: "hidden" });
+    });
+
+    await step("成员 · 工具", async () => {
+      await go(page, "成员", narrow);
+      const card = page.locator(".mb-card", { hasText: "MCP Claude" }).first();
+      await card.scrollIntoViewIfNeeded(); await card.click();
+      await clickVisible(page, page.locator(".ms .ms-fold"));
+      const tools = page.locator('[data-testid="agent-tools"]');
+      await tools.waitFor({ timeout: 10_000 });
+      for (const want of ["filesystem", "project-docs", "release-check", "工作区权限下用不了"]) {
+        if (!(await tools.innerText()).includes(want)) throw new Error(`成员工具缺少 ${want}`);
+      }
+      await tools.scrollIntoViewIfNeeded();
+      if ((size.width === 1200 && scheme === "light") || (size.width === 760 && scheme === "dark")) await shot(page, size, scheme, "member-tools");
+      await page.keyboard.press("Escape"); await page.locator(".ms").waitFor({ state: "hidden" });
+    });
+
+    await step("电脑 · 工具清单", async () => {
+      await go(page, "电脑", narrow);
+      await clickVisible(page, page.locator(".pc-card", { hasText: "Studio Mac" }));
+      await pcTab(page, "AI 和工具");
+      const tools = page.locator('[data-testid="computer-tools-claude"]');
+      await tools.waitFor({ timeout: 10_000 });
+      await tools.locator("summary").click();
+      for (const want of ["filesystem", "figma", "myco 装的", "配置文件没读懂"]) {
+        if (!(await tools.innerText()).includes(want)) throw new Error(`电脑工具清单缺少 ${want}`);
+      }
+      if ((size.width === 1200 && scheme === "light") || (size.width === 760 && scheme === "dark")) await shot(page, size, scheme, "computer-tools");
+      await go(page, "成员", narrow);
+    });
+
     await step("成员 · 修改权限", async () => {
       await go(page, "成员", narrow);
       const openRun = async (name) => {
@@ -3529,8 +3592,11 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "computer-detail");
       await back();
       await clickVisible(page, page.locator(".pc-card", { hasText: "VPS 东京" }));
-      await detail.locator("[data-testid=pc-details] .app-kv", { hasText: "~/code/myco-team" }).waitFor({ timeout: 10_000 });
-      await detail.locator("[data-testid=pc-details] .app-kv", { hasText: "Codex 没装" }).waitFor({ timeout: 10_000 });
+      // What it allows and its AIs are tabs of its page.
+      await pcTab(page, "AI 和工具");
+      await detail.locator("[data-testid=pc-ais] .pcd-line", { hasText: "Codex" }).filter({ hasText: "没装" }).waitFor({ timeout: 10_000 });
+      await pcTab(page, "权限");
+      await detail.locator("[data-testid=pc-details] .pcd-line", { hasText: "~/code/myco-team" }).waitFor({ timeout: 10_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "computer-details");
       // Its folders are its own rule; this App reaches it over SSH, so it
@@ -3550,13 +3616,14 @@ async function runMatrix(browser, size, scheme) {
       // A computer that has not allowed terminals says how to allow it: on
       // that computer, never from here.
       await clickVisible(page, page.locator(".pc-card", { hasText: "Office PC" }));
+      await pcTab(page, "权限");
       await detail.locator("[data-testid=shell-ask] code", { hasText: "myco machine shell-access --allow" }).waitFor({ timeout: 10_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "computer-permission");
       await back();
       // Renaming a computer, from its page: another computer's name is refused.
       await clickVisible(page, page.locator(".pc-card", { hasText: "Bench Linux" }));
-      await clickVisible(page, detail.getByRole("button", { name: "改名" }));
+      await pcMore(page, "改名");
       const form = page.locator(".pc-rename-form");
       const nameBox = form.getByRole("textbox", { name: "电脑的名字" });
       await nameBox.fill("office pc");
@@ -3568,7 +3635,7 @@ async function runMatrix(browser, size, scheme) {
       await nameBox.press("Enter");
       await detail.locator(".pcd-titles h1", { hasText: `测试机 ${size.width} ${scheme}` }).waitFor({ timeout: 10_000 });
       // Back to its name for the steps after this one.
-      await clickVisible(page, detail.getByRole("button", { name: "改名" }));
+      await pcMore(page, "改名");
       await nameBox.fill("Bench Linux");
       await nameBox.press("Enter");
       await detail.locator(".pcd-titles h1", { hasText: "Bench Linux" }).waitFor({ timeout: 10_000 });
@@ -4313,6 +4380,7 @@ async function runMatrix(browser, size, scheme) {
     await step("电脑 · 检查", async () => {
       await go(page, "电脑", narrow);
       await clickVisible(page, page.locator(".pc-card", { hasText: "VPS 东京" }));
+      await pcTab(page, "检查和修复");
       const check = page.locator("[data-testid=computer-check]");
       await check.locator(".cc-route", { hasText: "tokyo-vps" }).waitFor({ timeout: 10_000 });
       await clickVisible(page, check.getByRole("button", { name: "检查" }));
@@ -4329,6 +4397,7 @@ async function runMatrix(browser, size, scheme) {
       // One the App did not connect: which SSH host is it?
       await navBackClick(page);
       await clickVisible(page, page.locator(".pc-card", { hasText: "临时 Mac" }));
+      await pcTab(page, "检查和修复");
       await page.locator("[data-testid=computer-check] select.app-select-field").waitFor({ timeout: 10_000 });
       await page.locator("[data-testid=computer-check]").scrollIntoViewIfNeeded();
       await settle(page, 300);
@@ -4342,7 +4411,9 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, page.locator(".pc-card", { hasText: "临时 Mac" }));
       const view = page.locator("[data-testid=pc-detail]");
       await view.waitFor({ timeout: 10_000 });
-      await clickVisible(page, view.locator(".pcd-danger").getByRole("button", { name: "移除" }));
+      // Removing it is under ⋯, as a workflow's 删除 is.
+      if (await view.locator(".pcd-danger, .pcd-icon").count()) throw new Error("电脑页不该再有红色移除块或图标块");
+      await pcMore(page, "移除");
       const dialog = page.locator(".app-modal");
       await dialog.locator(".pc-gone-row").nth(1).waitFor({ timeout: 10_000 });
       // The computer's own node goes too, but is not listed as one of them.
@@ -4402,8 +4473,8 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".app-hub-menu").waitFor();
       const entry = page.locator("[data-testid=menu-superagent]");
       await entry.waitFor({ timeout: 10_000 });
-      const label = compactText(await entry.innerText());
-      if (!label.includes("配一个 superagent")) throw new Error(`没有 superagent 时菜单应写「配一个 superagent」，实际「${label}」`);
+      const label = compactText(await entry.locator(".app-hub-menu-name").innerText());
+      if (label.trim() !== "superagent") throw new Error(`菜单里这一项应就叫「superagent」，实际「${label}」`);
       await clickVisible(page, entry);
       const dialog = page.locator("[data-testid=superagent-setup]");
       await dialog.waitFor({ timeout: 10_000 });
@@ -4414,6 +4485,17 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, dialog.getByRole("button", { name: "开一个 Shroom" }));
       await page.locator(".app-modal").waitFor({ state: "hidden", timeout: 30_000 });
       await page.locator(".conv-detail .conv-head h2", { hasText: "Shroom" }).waitFor({ timeout: 20_000 });
+      // It wears a crown, and is not one of the sidebar's chats. Its empty
+      // chat says what it is (no things to ask), and there is no way back.
+      await page.locator(".conv-detail .pa-crown").first().waitFor({ timeout: 10_000 });
+      await page.locator(".conv-detail [data-testid=superagent-intro]").waitFor({ timeout: 10_000 });
+      if (await page.locator(".conv-detail [data-testid=chat-starters]").count()) throw new Error("superagent 的空对话不该有「想问的」建议");
+      if (await page.locator(".conv-detail .conv-head > button[aria-label]", { has: page.locator("svg.lucide-arrow-left") }).count()) throw new Error("superagent 的对话左上角不该有返回");
+      await sidebar(page, true);
+      await page.waitForFunction(() => ![...document.querySelectorAll(".sp-nav-chat-list .sp-nav-person")].some((b) => b.textContent?.includes("Shroom")), null, { timeout: 10_000 })
+        .catch(() => { throw new Error("superagent 不应出现在侧栏的会话列表里"); });
+      if (narrow) await sidebar(page, false);
+      if (size.width === 1200 && scheme === "light") await shot(page, size, scheme, "superagent-crown");
       const ask = await fetch(`http://${HOST}:${mockPort()}/app/mock/superagent-ask`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ what: "删除项目 old-site", reason: "这个项目三个月没动了，文档已经并进 website。" }),
@@ -4439,8 +4521,35 @@ async function runMatrix(browser, size, scheme) {
       await card.waitFor({ state: "hidden", timeout: 10_000 });
     });
 
+    // A superagent from a sentence: copied to any session (a cloud one too),
+    // it joins and is your superagent; its chat opens.
+    await step("superagent · 复制一句话接入", async () => {
+      await fetch(`http://${HOST}:${mockPort()}/app/mock/superagent-ask`, { method: "DELETE" });
+      // (the App keeps what it knew for a while: start it afresh)
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await page.locator(".sp-home, .sp-group, .sp-first").first().waitFor({ timeout: 20_000 });
+      await sidebar(page, true);
+      await clickVisible(page, page.locator(".sp-switch .app-hub-trigger"));
+      await page.locator(".app-hub-menu").waitFor();
+      await clickVisible(page, page.locator("[data-testid=menu-superagent]"));
+      const dialog = page.locator("[data-testid=superagent-setup]");
+      await dialog.waitFor({ timeout: 10_000 });
+      await clickVisible(page, dialog.locator("[data-testid=superagent-link-tab]"));
+      const sentence = dialog.locator("[data-testid=superagent-link] .add-sentence-text");
+      await sentence.waitFor({ timeout: 10_000 });
+      // (the link is made when the tab opens: "正在生成…" until then)
+      await page.waitForFunction(() => (document.querySelector("[data-testid=superagent-link] .add-sentence-text")?.textContent || "").includes("/j/"), null, { timeout: 15_000 }).catch(() => undefined);
+      const text = compactText(await sentence.innerText());
+      if (!text.includes("myco superagent guide") || !text.includes("/j/")) throw new Error(`那句话应带加入命令和 superagent 说明，实际「${text}」`);
+      await settle(page, 200);
+      await shot(page, size, scheme, "superagent-link");
+      await page.locator(".app-modal").waitFor({ state: "hidden", timeout: 30_000 });
+      await page.locator(".conv-detail .conv-head h2", { hasText: "Shroom" }).waitFor({ timeout: 20_000 });
+    });
+
     // The ⌘⇧Space panel (the Mac app's own window, /?quick=1): one line to
-    // hand Shroom a thing, its answer under it, the approval cards too.
+    // hand Shroom a thing; sent, the app opens the chat (its answer is
+    // there). What waits on you shows as one line.
     await step("superagent · 快捷面板", async () => {
       const qp = await page.context().newPage();
       try {
@@ -4454,16 +4563,22 @@ async function runMatrix(browser, size, scheme) {
           body: JSON.stringify({ what: "停掉自动化「每晚跑测试」", reason: "它连着 5 天都失败在同一个地方，先停下来等修好。" }),
         });
         if (!ask.ok) throw new Error(`superagent 发起确认失败：HTTP ${ask.status}`);
+        await fetch(`http://${HOST}:${mockPort()}/app/mock/quick`, { method: "DELETE" });
+        const waiting = qp.locator("[data-testid=quick-waiting]");
+        await waiting.waitFor({ timeout: 25_000 });
+        if (!compactText(await waiting.innerText()).includes("1 件事等你点头")) throw new Error(`应写明有几件事等你点头，实际「${await waiting.innerText()}」`);
+        if (await qp.locator(".qp-answer, .qp-mine, .sa-approval").count()) throw new Error("面板里不该再显示对话内容或确认卡片：那些在对话页");
         const box = qp.locator("[data-testid=quick-input]");
         await box.fill("帮我看看今天哪些任务卡住了");
-        await box.press("Enter");
-        await qp.locator(".qp-mine", { hasText: "哪些任务卡住了" }).waitFor({ timeout: 10_000 });
-        await qp.locator(".qp-answer").first().waitFor({ timeout: 20_000 });
-        await qp.locator(".sa-approval").first().waitFor({ timeout: 25_000 });
         await settle(qp, 300);
         const name = `${size.width}x${size.height}-${scheme}-superagent-quick.png`;
         await panel.screenshot({ path: path.join(OUT, name) });
         log(`    截图 ui-smoke/${name}`);
+        // Sent: the message goes, the input empties, and the app is asked to open the chat.
+        await box.press("Enter");
+        await qp.waitForFunction(() => (document.querySelector("[data-testid=quick-input]")?.value || "") === "", null, { timeout: 10_000 });
+        const opened = await (await fetch(`http://${HOST}:${mockPort()}/app/mock/quick`)).json();
+        if (!opened.open?.agent || !opened.open?.hub) throw new Error(`发出去后应打开对话，实际 ${JSON.stringify(opened.open)}`);
       } finally {
         await qp.close();
       }
