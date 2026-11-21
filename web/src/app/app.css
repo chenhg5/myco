@@ -9309,3 +9309,13 @@ html.os-other ::-webkit-scrollbar-thumb:hover, html.os-other ::-webkit-scrollbar
 .app-backup-restore > summary { cursor: pointer; font-size: 13px; color: var(--muted); }
 .app-backup-restore > summary:hover { color: var(--fg); }
 .app-backup-restore .app-small-note { margin: 8px 0; }
+
+/* Project notes (ProjectPage): a long brief or memory folds at about 220px,
+   faded into its card; a long list of files or links shows its first five
+   and a quiet 「全部 N 个」 row. */
+.pp-fold { --md-fade: var(--card); }
+.pp-fold .md-fold-btn { margin-top: 6px; }
+.pp-more .app-row-sub { color: var(--muted); }
+.pp-more:hover .app-row-sub { color: var(--fg); }
+.pp-more-chev { width: 14px; height: 14px; color: var(--faint); }
+.pp-more-chev.is-open { transform: rotate(180deg); }

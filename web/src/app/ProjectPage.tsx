@@ -51,6 +51,50 @@ type Dialog =
 /** One project: its goal, members, brief, shared documents and links. */
 type ProjectTab = "notes" | "members" | "chats";
 
+/** How many files or links a list shows before 「全部 N 个」. */
+const LIST_FIRST = 5;
+
+/** A long brief or memory: its first lines (about 220px), faded, and 展开全部;
+ *  short ones as they are. The page stays a page however much is written. */
+function FoldText({ text }: { text: string }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [long, setLong] = useState(false);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const check = () => setLong(el.scrollHeight > FOLD_H + 40);
+    check();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(check);
+    ro.observe(el.firstElementChild || el);
+    return () => ro.disconnect();
+  }, [text]);
+  return (
+    <div className="md-fold pp-fold">
+      <div ref={box} className={cn("md-fold-body", long && !open && "is-collapsed")} style={long && !open ? { maxHeight: FOLD_H } : undefined}>
+        <Markdown text={text} />
+      </div>
+      {long && (
+        <button type="button" className="md-fold-btn" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+          {open ? L("收起", "Show less") : L("展开全部", "Show all")}
+        </button>
+      )}
+    </div>
+  );
+}
+const FOLD_H = 220;
+
+/** The row under a list's first few: 「全部 N 个…」 / 收起. */
+function MoreRow({ open, total, what, onToggle }: { open: boolean; total: number; what: string; onToggle: () => void }) {
+  return (
+    <button type="button" className="app-row pp-more" onClick={onToggle} aria-expanded={open}>
+      <span className="app-row-main"><span className="app-row-sub">{open ? L("收起", "Show fewer") : L(`全部 ${total} ${what}`, `All ${total}${what}`)}</span></span>
+      <ChevronDown className={cn("pp-more-chev", open && "is-open")} />
+    </button>
+  );
+}
+
 export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode, onNewNode, onChanged, onDeleted, onOpenConversation, onAllConversations, onNewConversation }: {
   target: ProjectRef;
   /** Changes when something outside the page changed the project. */
@@ -140,7 +184,10 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
   const addMenu = useContextMenu();
   // Which tab: what the project knows first, each time it opens.
   const [tab, setTab] = useState<ProjectTab>("notes");
-  useEffect(() => { setTab("notes"); }, [target.hubId, target.name]);
+  // A long list shows its first few; the rest on request (each project anew).
+  const [allFiles, setAllFiles] = useState(false);
+  const [allLinks, setAllLinks] = useState(false);
+  useEffect(() => { setTab("notes"); setAllFiles(false); setAllLinks(false); }, [target.hubId, target.name]);
 
   const hubRows = useMemo(() => rows.filter((r) => r.hub.id === target.hubId), [rows, target.hubId]);
   const rowOf = (name: string) => hubRows.find((r) => r.st.agent.name === name);
@@ -237,7 +284,7 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
           {p.can_edit && <button type="button" className="app-group-action" onClick={() => open({ kind: "brief" })}><Pencil />{L("编辑", "Edit")}</button>}
         </div>
         <div className="app-list app-project-brief">
-          {p.brief ? <Markdown text={p.brief} /> : (
+          {p.brief ? <FoldText text={p.brief} /> : (
             <div className="app-empty-note">{L("写下所有成员都该知道的事：仓库、分支和发版规则、怎么测试、注意事项。 agent 用 myco project show / pull 读取。", "Write what every member should know: repository, branch and release rules, how to test, what to watch out for. Agents read it with myco project show / pull.")}</div>
           )}
         </div>
@@ -251,7 +298,7 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
             {p.can_edit && memoryBody(p.memory) && <button type="button" className="app-group-action" onClick={() => open({ kind: "memory-edit" })}><Pencil />{L("编辑", "Edit")}</button>}
           </div>
           <div className="app-list app-project-brief">
-            {memoryBody(p.memory) ? <Markdown text={memoryBody(p.memory)} /> : (
+            {memoryBody(p.memory) ? <FoldText text={memoryBody(p.memory)} /> : (
               <div className="app-empty-note">{L("成员在干活中学到、大家都该记住的事：定下的决定、约定、你的偏好。成员 agent 会自己记（myco project memory add），每次干这个项目的活都会读到；你也可以在这里添加。", "What members learn and everyone should keep in mind: decisions, conventions, your preferences. Member agents add to it themselves (myco project memory add) and read it whenever they work on the project; you can add here too.")}</div>
             )}
           </div>
@@ -278,7 +325,7 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
           {files.length === 0 && uploading === null && (
             <div className="app-empty-note">{L("把文件拖到这里，或点「上传」。设计稿、约定、截图都可以（20 MB 以内）；成员 agent 用 myco project file put 上传，用 myco project pull 拉到本地。", "Drop files here, or click Upload: designs, conventions, screenshots (up to 20 MB). Member agents upload with myco project file put and get them with myco project pull.")}</div>
           )}
-          {files.map((d) => {
+          {(allFiles ? files : files.slice(0, LIST_FIRST)).map((d) => {
             const Icon = fileIcon(d);
             return (
               <button type="button" key={d.name} className="app-row app-project-doc" onClick={() => open({ kind: "doc", doc: d })}>
@@ -290,6 +337,7 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
               </button>
             );
           })}
+          {files.length > LIST_FIRST && <MoreRow open={allFiles} total={files.length} onToggle={() => setAllFiles((o) => !o)} what={L("个文件", " files")} />}
         </div>
       </section>
 
@@ -300,7 +348,7 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
         </div>
         <div className="app-list">
           {p.links.length === 0 && <div className="app-empty-note">{L("仓库、设计稿、看板等放这里。", "Repository, designs, boards and the like.")}</div>}
-          {p.links.map((l) => (
+          {(allLinks ? p.links : p.links.slice(0, LIST_FIRST)).map((l) => (
             <a key={l.url} className="app-row app-project-link" href={l.url} target="_blank" rel="noreferrer">
               <span className="app-row-icon"><ExternalLink strokeWidth={1.75} /></span>
               <span className="app-row-main">
@@ -309,6 +357,7 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
               </span>
             </a>
           ))}
+          {p.links.length > LIST_FIRST && <MoreRow open={allLinks} total={p.links.length} onToggle={() => setAllLinks((o) => !o)} what={L("个链接", " links")} />}
         </div>
       </section>
       </>)}
