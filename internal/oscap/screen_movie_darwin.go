@@ -19,13 +19,18 @@ package oscap
 @property(atomic,retain) NSString *failure;
 @property(atomic,assign) int state;
 @property(atomic,assign) BOOL stopping;
+@property(atomic,assign) BOOL terminal;
 - (void)stop;
 - (void)failed:(NSString*)reason;
 @end
 @implementation MycoMovie
-- (void)failed:(NSString*)reason {@synchronized(self){self.failure=reason;self.state=-1;}}
+- (void)failed:(NSString*)reason {
+ @synchronized(self){if(self.state==-1)return;self.failure=reason;self.state=-1;self.stopping=YES;}
+ if(self.stream){[self.stream stopCaptureWithCompletionHandler:^(NSError *error){self.terminal=YES;}];}
+ else {[self.legacy stopRunning];self.terminal=YES;}
+}
 - (void)stop {
- @synchronized(self){self.stopping=YES;}
+ @synchronized(self){self.stopping=YES;if(self.state!=1)return;}
  if(self.stream){[self.stream stopCaptureWithCompletionHandler:^(NSError *error){if(error)[self failed:error.localizedDescription];}];}
  else if(self.movie.isRecording){[self.movie stopRecording];}
 }
@@ -33,7 +38,7 @@ package oscap
  @synchronized(self){self.state=1;}
  if(self.stopping)[self stop];
 }
-- (void)recordingOutputDidFinishRecording:(SCRecordingOutput*)output {@synchronized(self){self.state=2;}}
+- (void)recordingOutputDidFinishRecording:(SCRecordingOutput*)output {@synchronized(self){self.state=2;self.terminal=YES;}}
 - (void)recordingOutput:(SCRecordingOutput*)output didFailWithError:(NSError*)error {[self failed:error.localizedDescription];}
 - (void)stream:(SCStream*)stream didStopWithError:(NSError*)error {[self failed:error.localizedDescription];}
 - (void)captureOutput:(AVCaptureFileOutput*)output didStartRecordingToOutputFileAtURL:(NSURL*)url fromConnections:(NSArray*)connections {
@@ -42,8 +47,7 @@ package oscap
 }
 - (void)captureOutput:(AVCaptureFileOutput*)output didFinishRecordingToOutputFileAtURL:(NSURL*)url fromConnections:(NSArray*)connections error:(NSError*)error {
  if(error && ![error.userInfo[AVErrorRecordingSuccessfullyFinishedKey] boolValue]){[self failed:error.localizedDescription];}
- else {@synchronized(self){self.state=2;}}
- [self.legacy stopRunning];
+ else {[self.legacy stopRunning];@synchronized(self){self.state=2;self.terminal=YES;}}
 }
 - (void)dealloc {self.stream=nil;self.output=nil;self.legacy=nil;self.movie=nil;self.failure=nil;[super dealloc];}
 @end
@@ -104,8 +108,8 @@ static void mycoMovieStop(void *p){MycoMovie *m=p;[m stop];}
 // still in flight. Keep its ownership until the terminal callback arrives.
 static void mycoMovieFree(void *p){
  MycoMovie *m=p;
- int state;@synchronized(m){state=m.state;}
- if(state==2 || state==-1){[m.legacy stopRunning];[m release];return;}
+ BOOL terminal;@synchronized(m){terminal=m.terminal;}
+ if(terminal){[m.legacy stopRunning];[m release];return;}
  dispatch_after(dispatch_time(DISPATCH_TIME_NOW,100*NSEC_PER_MSEC),dispatch_get_global_queue(QOS_CLASS_UTILITY,0),^{mycoMovieFree(m);});
 }
 */
