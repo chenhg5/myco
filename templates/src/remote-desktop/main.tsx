@@ -106,6 +106,7 @@ function App() {
   const [view,setView]=useState<View>({scale:1,x:0,y:0});
   const viewRef=useRef(view); viewRef.current=view;
   const [expanded,setExpanded]=useState(false);
+  const [toolsVisible,setToolsVisible]=useState(false);
   const touches=useRef(new Map<number,{x:number;y:number}>());
   const gesture=useRef<{distance:number;center:{x:number;y:number};lastY:number;view:View;mode:"pending"|"pinch"|"scroll"}|null>(null);
   const multiTouch=useRef(false);
@@ -237,7 +238,7 @@ function App() {
   };
   const disconnect = async () => {
     attempt.current++;
-    touchpad.current?.reset();if(touchpad.current)touchpad.current.point={x:.5,y:.5};setCursor({x:.5,y:.5});updateView({scale:1,x:0,y:0});setExpanded(false);touches.current.clear();gesture.current=null;multiTouch.current=false;setDragging(false);setModifiers([]);setKeyboardOpen(false);setDraft("");setShowCursor(false);
+    touchpad.current?.reset();if(touchpad.current)touchpad.current.point={x:.5,y:.5};setCursor({x:.5,y:.5});updateView({scale:1,x:0,y:0});setExpanded(false);setToolsVisible(false);touches.current.clear();gesture.current=null;multiTouch.current=false;setDragging(false);setModifiers([]);setKeyboardOpen(false);setDraft("");setShowCursor(false);
     const previous=session.current;
     session.current=null;pendingStream.current=null;
     setConnecting(false);setActive(null);setStats(null);setState("");
@@ -262,6 +263,7 @@ function App() {
           if (id !== attempt.current) return;
           pendingStream.current = stream;
           setActive(device);
+          if(controllerOnly){setExpanded(true);setToolsVisible(false);}
           setSelected(null);
           setCode("");
         },
@@ -403,7 +405,11 @@ function App() {
           </div>
         )}
         {active ? (
-          <section className={`rd-session${expanded?" is-expanded":""}`}>
+          <section className={`rd-session${expanded?" is-expanded":""}${controllerOnly?" is-immersive":""}${toolsVisible?" show-tools":""}`}>
+            {controllerOnly&&<div className="rd-floating-tools">
+              <button className="rd-icon" aria-label={uiText("工具")} aria-expanded={toolsVisible} onClick={()=>setToolsVisible(!toolsVisible)}><Settings2 size={19}/></button>
+              {control&&<button className="rd-icon" aria-label={uiText("键盘")} onClick={()=>{setToolsVisible(true);flushSync(()=>setKeyboardOpen(!keyboardOpen));if(!keyboardOpen)keyboard.current?.focus();}}><Keyboard size={19}/></button>}
+            </div>}
             <div className="rd-session-bar">
               <button
                 className="rd-btn rd-quiet"
@@ -521,7 +527,7 @@ function App() {
               />
               {showCursor&&control&&<span className="rd-touch-cursor" aria-hidden="true" style={(()=>{const p=cursorPosition();return {left:typeof p.left==="number"?p.left*view.scale+view.x:p.left,top:typeof p.top==="number"?p.top*view.scale+view.y:p.top};})()}/>}
             </div>
-            <div className="rd-touch-controls">
+            <div className={`rd-touch-controls${keyboardOpen?" has-keyboard":""}`}>
               <p>{uiText(control?"单指移动指针，轻点单击；双指滚动，捏合缩放。":"仅查看：双指捏合缩放，放大后单指移动画面。")}</p>
               <div className="rd-touch-row">
                 <button className="rd-btn" aria-label={uiText("缩小画面")} disabled={view.scale<=1} onClick={()=>zoomBy(-.5)}>−</button>

@@ -23,6 +23,7 @@ public final class PageBridge {
         public var askToSend: @MainActor (_ text: String, _ to: String) async -> Bool
         /// Asks before connecting this page to an authorized computer.
         public var askToConnect: @MainActor (_ computer: RemoteComputer, _ control: Bool) async -> Bool
+        public var remoteConnectionChanged: @MainActor (Bool) -> Void
         /// Hands a file the page made to the system (save, send).
         public var save: @MainActor (_ name: String, _ data: Data, _ type: String) async -> Void
         /// Sends a task as me; answers its id.
@@ -32,10 +33,12 @@ public final class PageBridge {
             askToSend: @escaping @MainActor (String, String) async -> Bool,
             save: @escaping @MainActor (String, Data, String) async -> Void,
             send: @escaping @MainActor (String, String, String?) async throws -> String,
-            askToConnect: @escaping @MainActor (RemoteComputer, Bool) async -> Bool = { _, _ in false }
+            askToConnect: @escaping @MainActor (RemoteComputer, Bool) async -> Bool = { _, _ in false },
+            remoteConnectionChanged: @escaping @MainActor (Bool) -> Void = { _ in }
         ) {
             self.askToSend = askToSend
             self.askToConnect = askToConnect
+            self.remoteConnectionChanged = remoteConnectionChanged
             self.save = save
             self.send = send
         }
@@ -68,7 +71,7 @@ public final class PageBridge {
         self.me = me
         self.names = names
         self.doors = doors
-        self.remote = PageRemoteDesktop(hub: hub, ask: doors.askToConnect)
+        self.remote = PageRemoteDesktop(hub: hub, ask: doors.askToConnect, changed: doors.remoteConnectionChanged)
         self.storage = storage
         storageKey = "myco-page-store:\(workspace):\(page.id)"
     }

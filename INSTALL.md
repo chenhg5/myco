@@ -1155,9 +1155,11 @@ The iPhone App can also control these computers: update the phone App, open
 **Apps → Remote Desktop** in the same workspace, select the sharing computer and
 enter its pairing code. A one-finger drag moves the pointer, a tap clicks and two
 fingers scroll. Use the keyboard button for text and modifier keys, or zoom in
-for small controls. Pinch with two fingers to zoom (also in view-only mode);
-in view-only mode, slide one finger to pan the enlarged desktop. **Expand desktop**
-uses the available App panel, without requiring browser fullscreen. A disabled
+for small controls. On the updated iPhone App, connecting enters a landscape
+full-screen desktop. App bars are hidden; a trusted exit button stays available.
+Tap the floating tools button for the keyboard and controls; disconnecting or
+closing restores portrait. Pinch with two fingers to zoom (also in view-only mode);
+in view-only mode, slide one finger to pan the enlarged desktop. Desktop viewers can use **Expand desktop** to fill the available App panel. A disabled
 keyboard/mouse option means the computer allows viewing only: stop sharing on
 that computer, enable **Allow keyboard and mouse**, then share and connect again. The phone does not install a hosting component or share its
 screen. Leaving the App or closing the page disconnects; reconnect explicitly

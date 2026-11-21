@@ -12,6 +12,9 @@ and asks for permission; WebKit receives H.264 video over WebRTC and sends input
 over its encrypted data channel. No hosting engine or extra codec is bundled
 with the phone App. The page follows the App language and theme, provides a
 touchpad, zoom and keyboard, and disconnects when backgrounded or closed.
+Authorized connections temporarily enter landscape with hidden navigation/status
+bars and a trusted native exit button; other App screens stay portrait. The page
+keeps tools in an overlay instead of shrinking the remote display.
 Direct LAN/Tailscale connectivity is required; public relay and audio are not
 included. Chinese and other Unicode input requires host component 0.2.0.
 

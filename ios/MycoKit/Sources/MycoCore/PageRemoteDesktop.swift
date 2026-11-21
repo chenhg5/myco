@@ -6,6 +6,7 @@ import MycoAPI
 @MainActor
 public final class PageRemoteDesktop {
     private let hub: any HubAPI
+    private let changed: @MainActor (Bool) -> Void
     private let ask: @MainActor (RemoteComputer, Bool) async -> Bool
     private var sessions: Set<String> = []
     private var generation = 0
@@ -13,8 +14,8 @@ public final class PageRemoteDesktop {
     private var suspended = false
     private var connecting = false
 
-    public init(hub: any HubAPI, ask: @escaping @MainActor (RemoteComputer, Bool) async -> Bool) {
-        self.hub = hub; self.ask = ask
+    public init(hub: any HubAPI, ask: @escaping @MainActor (RemoteComputer, Bool) async -> Bool, changed: @escaping @MainActor (Bool) -> Void = { _ in }) {
+        self.hub = hub; self.ask = ask; self.changed = changed
     }
 
     private func json<T: Encodable>(_ value: T) throws -> Data { try HubJSON.encoder().encode(value) }
@@ -53,12 +54,14 @@ public final class PageRemoteDesktop {
                 throw denied(L("页面已关闭，连接已取消。", "The page closed; the connection was cancelled."))
             }
             sessions.insert(result.id)
+            changed(true)
             return try json(result)
         case "session", "disconnect":
             guard let id = args["id"] as? String, sessions.contains(id) else { throw denied(L("这个连接不属于此页面。", "This connection does not belong to this page.")) }
             if action == "disconnect" {
-                try await hub.disconnectRemote(id)
                 sessions.remove(id)
+                if sessions.isEmpty { changed(false) }
+                try await hub.disconnectRemote(id)
                 return Data("true".utf8)
             }
             return try json(await hub.remoteConnection(id))
@@ -71,12 +74,12 @@ public final class PageRemoteDesktop {
     /// connect response is retracted even when dismissal arrives first.
     public func reset() async {
         generation += 1
-        let ids = sessions; sessions.removeAll()
+        let ids = sessions; sessions.removeAll(); if !ids.isEmpty { changed(false) }
         for id in ids { try? await hub.disconnectRemote(id) }
     }
     public func resetNow() {
         generation += 1
-        let ids = sessions; sessions.removeAll()
+        let ids = sessions; sessions.removeAll(); if !ids.isEmpty { changed(false) }
         let hub = hub
         Task { for id in ids { try? await hub.disconnectRemote(id) } }
     }

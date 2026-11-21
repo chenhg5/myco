@@ -740,3 +740,14 @@ p {
 .rd-session.is-expanded .rd-touch-controls { flex-shrink: 0; max-height: 45dvh; overflow: auto; }
 .rd-session.is-expanded .rd-session-footer { flex-shrink: 0; padding: 6px 12px; }
 @media (max-width: 520px) { .rd-session-actions > span { display: inline-flex; } }
+
+/* The phone is a remote display, with controls overlaid only on request. */
+.rd-floating-tools { position: absolute; top: max(10px, env(safe-area-inset-top)); left: max(10px, env(safe-area-inset-left)); z-index: 5; display: flex; gap: 2px; padding: 3px; border: 1px solid #ffffff28; border-radius: 15px; background: #171717d9; backdrop-filter: blur(16px); color: #fff; }
+.rd-floating-tools .rd-icon { width: 44px; height: 44px; color: inherit; }
+.rd-session.is-immersive { background: #080808; }
+.rd-session.is-immersive .rd-session-bar, .rd-session.is-immersive .rd-session-footer { display: none; }
+.rd-session.is-immersive .rd-screen { flex: none; width: 100%; height: 100%; max-height: none; }
+.rd-session.is-immersive .rd-touch-controls { display: none; position: absolute; z-index: 4; bottom: max(10px, env(safe-area-inset-bottom)); left: max(10px, env(safe-area-inset-left)); right: max(10px, env(safe-area-inset-right)); max-height: 52%; border: 1px solid var(--rd-line); border-radius: 14px; background: var(--rd-panel); box-shadow: 0 8px 30px #0005; }
+.rd-session.is-immersive.show-tools .rd-touch-controls { display: block; }
+
+.rd-session.is-immersive .rd-touch-controls.has-keyboard > p, .rd-session.is-immersive .rd-touch-controls.has-keyboard > .rd-touch-row:first-of-type { display: none; }

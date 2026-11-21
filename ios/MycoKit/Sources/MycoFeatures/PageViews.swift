@@ -120,6 +120,7 @@ struct PageScreen: View {
     @State private var asking: PageAsking?
     /// A file the page handed over, to save or send on.
     @State private var handed: HandedFile?
+    @State private var remoteActive = false
 
     private var page: Page? { session.pages.pages[id] }
 
@@ -176,13 +177,18 @@ struct PageScreen: View {
             },
             askToConnect: { computer, control in
                 await withCheckedContinuation { answer in
-                    if asking != nil || scenePhase != .active { answer.resume(returning: false); return }
+                    // Read the live application state; this retained closure must not
+                    // capture the scene phase from when the page was created.
+                    if asking != nil || UIApplication.shared.applicationState != .active { answer.resume(returning: false); return }
                     let capability = control ? L("查看画面并操作键盘和鼠标", "view the screen and control its keyboard and mouse") : L("仅查看画面", "view its screen only")
                     asking = PageAsking(
                         title: L("允许连接这台电脑吗？", "Allow this remote connection?"),
                         message: L("「\(page.name.prefix(80))」请求连接「\(computer.name.prefix(120))」：\(capability)。关闭页面或切到后台会断开。", "“\(page.name.prefix(80))” wants to connect to “\(computer.name.prefix(120))” and \(capability). Closing the page or moving the App to the background disconnects it."),
                         accept: L("连接", "Connect"), answer: Once(answer))
                 }
+            }, remoteConnectionChanged: { active in
+                // Do not re-enter SwiftUI state while its bridge property is borrowed.
+                Task { @MainActor in remoteActive = active }
             })
         return PageBridge(
             hub: session.hub, page: page, me: session.me, workspace: session.id,
@@ -194,7 +200,7 @@ struct PageScreen: View {
             Group {
                 if let page, let bridge, page.live == true || shown != nil {
                     PageWebView(id: id, version: page.live == true ? nil : shown, reloads: reloads, pages: session.pages, bridge: bridge, language: AppLanguage.current.rawValue, theme: colorScheme == .dark ? "dark" : "light", active: scenePhase == .active)
-                        .ignoresSafeArea(edges: .bottom)
+                        .ignoresSafeArea(edges: remoteActive ? .all : .bottom)
                 } else if gone {
                     EmptyState(
                         symbol: "macwindow", title: L("这个网页打不开了", "This page cannot be opened"),
@@ -206,7 +212,7 @@ struct PageScreen: View {
             }
             .background(MycoColor.bg)
             .safeAreaInset(edge: .top, spacing: 0) {
-                if let page, let shown, page.version > shown {
+                if !remoteActive, let page, let shown, page.version > shown {
                     HStack(spacing: Space.s) {
                         Text(L("有新版本：第 \(page.version) 版", "A newer version: \(page.version)")).font(.footnote).foregroundStyle(MycoColor.fg2)
                         Spacer(minLength: 0)
@@ -224,6 +230,7 @@ struct PageScreen: View {
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar(remoteActive ? .hidden : .visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
@@ -272,7 +279,21 @@ struct PageScreen: View {
         } message: { one in
             Text(one.message)
         }
-        .onDisappear { cancelAsk(); bridge?.closeRemote() }
+        .overlay(alignment: .topTrailing) {
+            if remoteActive {
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark").font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(.white).frame(width: 44, height: 44)
+                        .background(.black.opacity(0.65), in: Circle())
+                }
+                .accessibilityLabel(L("退出远程桌面", "Exit remote desktop"))
+                .accessibilityIdentifier("remote.exit")
+                .padding(.top, 8).padding(.trailing, 12)
+            }
+        }
+        .statusBarHidden(remoteActive)
+        .onChange(of: remoteActive) { _, active in RemotePresentation.setActive(active) }
+        .onDisappear { cancelAsk(); bridge?.closeRemote(); RemotePresentation.setActive(false) }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { cancelAsk(); bridge?.suspendRemote() } else { bridge?.resumeRemote() }
         }

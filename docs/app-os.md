@@ -271,3 +271,8 @@ Only then may a controller send `{kind:"text",text:"…"}` (at most 256 Unicode
 scalars / 1,024 UTF-8 bytes; control characters are rejected). Text uses native
 Unicode key events, without the clipboard. Legacy components still accept
 physical keys; the UI retains unsupported text and asks for a component update.
+
+The iOS controller enters native landscape presentation only after an authorized
+connection exists. Its App toolbar and status bar are hidden; a native exit
+button remains above untrusted page content. Disconnect, page dismissal and
+background revocation restore the normal portrait presentation.

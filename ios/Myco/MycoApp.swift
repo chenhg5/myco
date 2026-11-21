@@ -26,6 +26,7 @@ import MycoStore
 /// for a few seconds and says in the system's log what happened.
 @main
 struct MycoApp: App {
+    @UIApplicationDelegateAdaptor(MycoOrientationDelegate.self) private var orientationDelegate
     @State private var model: AppModel
     private let start: String
 
@@ -216,5 +217,12 @@ actor DemoWorkspaces: WorkspaceBook {
         records.removeAll { $0.id == id }
         hubs[id] = nil
         if chosen == id { chosen = nil }
+    }
+}
+
+@MainActor
+final class MycoOrientationDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
+        RemotePresentation.orientations
     }
 }

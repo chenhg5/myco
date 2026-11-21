@@ -45,17 +45,15 @@ try{
   await page.locator('.rd-screen video').waitFor();await page.waitForFunction(()=>document.querySelector('video')?.videoWidth>0);
   let box=await page.locator('.rd-screen').boundingBox(),x=Math.round(box.x+box.width/2),y=Math.round(box.y+box.height/2);
   const cdp=await context.newCDPSession(page);const touch=(type,points)=>cdp.send('Input.dispatchTouchEvent',{type,touchPoints:points});
+  await page.locator('.rd-session.is-expanded.is-immersive').waitFor();
+  await page.getByRole('button',{name:lang==='zh'?'工具':'Tools',exact:true}).click();
   const inputCount=await page.evaluate(()=>window.__inputs.length);
   await touch('touchStart',[{x:x-30,y,id:1},{x:x+30,y,id:2}]);
   await touch('touchMove',[{x:x-65,y,id:1},{x:x+65,y,id:2}]);await touch('touchEnd',[]);
   assert(parseInt(await page.locator('.rd-zoom').innerText())>150,'pinch must zoom in any permission mode');
   assert(!(await page.evaluate(n=>window.__inputs.slice(n),inputCount)).some(e=>['scroll','move','button'].includes(e.kind)),'a pinch must not scroll or click on the host');
   await page.getByRole('button',{name:lang==='zh'?'适应画面':'Fit to screen',exact:true}).click();
-  await page.getByRole('button',{name:lang==='zh'?'展开画面':'Expand desktop',exact:true}).click();
-  await page.locator('.rd-session.is-expanded').waitFor();
-  assert((await page.locator('.rd-session').boundingBox()).height>=height-2,'expanded view must use the available height');
-  await page.getByRole('button',{name:lang==='zh'?'收起画面':'Collapse desktop',exact:true}).click();
-  await page.locator('.rd-screen').scrollIntoViewIfNeeded();box=await page.locator('.rd-screen').boundingBox();x=Math.round(box.x+box.width/2);y=Math.round(box.y+box.height/2);
+  assert((await page.locator('.rd-session').boundingBox()).height>=height-2,'a phone connection must use the available height automatically');
   if(!readOnly){
   await touch('touchStart',[{x,y,id:1}]);await touch('touchEnd',[]);assert.equal(await page.evaluate(()=>window.__inputs.filter(x=>x.kind==='button').length),2);
   const old=await page.evaluate(()=>window.__inputs.length);await touch('touchStart',[{x,y,id:1}]);await touch('touchMove',[{x:x+45,y:y+15,id:1}]);await touch('touchEnd',[]);
@@ -79,6 +77,9 @@ try{
     assert.notEqual(await page.locator('video').getAttribute('style'),before,'one finger pans a zoomed view-only desktop');
     assert(!await page.evaluate(()=>window.__inputs.some(e=>['move','button','key','text','scroll'].includes(e.kind))),'view-only gestures must never reach the host');
   }
+  await page.screenshot({path:path.join(out,`${width}-${height}-${lang}-${theme}-tools.png`),fullPage:true});
+  await page.getByRole('button',{name:lang==='zh'?'工具':'Tools',exact:true}).click();
+  assert(!await page.locator('.rd-touch-controls').isVisible(),'tools must tuck away without shrinking the desktop');
   await page.screenshot({path:path.join(out,`${width}-${height}-${lang}-${theme}.png`),fullPage:true});
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'phone viewport overflows');
   await page.evaluate(()=>window.__mycoEvent({myco:'remote-disconnect'}));await page.locator('.rd-device').first().waitFor();assert(await page.evaluate(()=>window.__actions.includes('disconnect')));

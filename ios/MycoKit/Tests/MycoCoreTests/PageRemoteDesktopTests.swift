@@ -65,4 +65,17 @@ struct PageRemoteDesktopTests {
         #expect(asks == 0)
         #expect(await hub.remoteOffers.isEmpty)
     }
+    @Test func immersivePresentationFollowsOwnedConnectionsAndRevocation() async throws {
+        let hub = FakeHub(); await hub.seedRemote([computer])
+        var states: [Bool] = []
+        let page = PageRemoteDesktop(hub: hub, ask: { _,_ in true }, changed: { states.append($0) })
+        let connection = try HubJSON.decoder().decode(RemoteConnection.self, from: try await page.answer("connect", request()))
+        #expect(states == [true])
+        _ = try await page.answer("disconnect", ["id": connection.id])
+        #expect(states == [true, false])
+        _ = try await page.answer("connect", request())
+        page.suspendNow()
+        #expect(states.suffix(2) == [true, false])
+    }
+
 }
