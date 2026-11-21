@@ -1,7 +1,8 @@
+import { fileURLToPath } from "node:url";
 // Regenerate display metadata without changing application versions or records.
 import fs from "node:fs";
 import path from "node:path";
-const here = path.resolve(import.meta.dirname, ".."),
+const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."),
   catalog = JSON.parse(
     fs.readFileSync(path.join(here, "localization/catalog.json"), "utf8"),
   ),

@@ -1,12 +1,13 @@
+import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 import { i18nURL } from "./test-i18n.mjs";
-const root = path.join(import.meta.dirname, "src"),
+const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "src"),
   dict = JSON.parse(
     fs.readFileSync(
-      path.join(import.meta.dirname, "localization/en.json"),
+      path.join(path.dirname(fileURLToPath(import.meta.url)), "localization/en.json"),
       "utf8",
     ),
   );
@@ -67,7 +68,7 @@ assert.equal(
 delete globalThis.location;
 const fallback = JSON.parse(
   fs.readFileSync(
-    path.resolve(import.meta.dirname, "../web/src/lib/app-locales.json"),
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../web/src/lib/app-locales.json"),
     "utf8",
   ),
 );
