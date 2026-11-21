@@ -211,3 +211,8 @@
 .mt-split-n { min-width: 30px; height: 26px; padding: 0 6px; border: 0; border-radius: 7px; background: var(--bg2); font-size: 12px; color: var(--fg); }
 .mt-split-n:hover { background: var(--hover); }
 .mt-split-n.is-on { background: var(--accent); color: var(--on-accent); }
+.mt-crash { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 24px; text-align: center; }
+.mt-crash b { font-size: 15px; font-weight: 600; }
+.mt-crash code { max-width: 560px; padding: 6px 10px; border-radius: 6px; background: var(--bg2); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); word-break: break-word; }
+.mt-crash span { font-size: 12.5px; color: var(--muted); }
+.mt-crash .btn { margin-top: 6px; }

@@ -11,13 +11,13 @@
 // edits it in place), a player that skips silence, and keys for all of it.
 import "../_lib/sheet.css";
 import "./meeting.css";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AppWindow, ArrowDown, ArrowUp, Check, ChevronsRight, CircleSlash, Download, FastForward, FileAudio, Loader2, Mic, Monitor, MoreHorizontal,
   Pause, Play, Plus, RefreshCw, Rewind, Search, Square, Trash2, X, TextCursor, Repeat, Copy, Users, NotebookPen, PanelRight, ExternalLink,
 } from "lucide-react";
 import { Toast, mount, useKit } from "../_lib/appkit";
-import { save } from "../_lib/myco";
+import { myco, save } from "../_lib/myco";
 import type { OSAudioSource } from "../_lib/myco";
 import { os, osState, osStateText, useOS, formatBytes } from "../_lib/os";
 import { Popover, rectOf } from "../_lib/ui";
@@ -28,7 +28,12 @@ import {
 } from "./engine";
 import { Player } from "./player";
 
-const canUse = osState === "ready";
+// Recording, transcribing and playing need an App that has them (audio.*,
+// speech.*, mediaURL: myco after 0.21.7); in an older one, or outside the
+// App, the page shows and edits the text only.
+const canUse = osState === "ready" && typeof (myco?.os as unknown as { mediaURL?: unknown } | undefined)?.mediaURL === "function";
+const notice = osState !== "ready" ? `${osStateText()} 录音和转写要在 myco App 里；这里能看和改文字。`
+  : !canUse ? "这个版本的 myco App 还不能录音和转写，更新 App 后就能用；这里能看和改文字。" : "";
 const TRACKS: Track[] = ["them", "me"];
 
 function App() {
@@ -82,7 +87,7 @@ function App() {
         </div>
       </aside>
       <main className="mt-main">
-        {!canUse && <div className="mt-notice">{osStateText()} 录音和转写要在 myco App 里；这里能看和改文字。</div>}
+        {notice && <div className="mt-notice">{notice}</div>}
         {live && (sel === live || !cur) ? <RecordingView id={live} />
           : !cur ? <NewRecording computer={sys.info?.hostname || ""} onStarted={setSel} />
           : <MeetingView key={cur.id} id={cur.id} host={sys.info?.hostname || ""} onDeleted={() => setSel(meetingList()[0]?.id || "new")} />}
@@ -188,7 +193,7 @@ function Choice({ id, on, onPick, icon, name, sub, live }: { id: string; on: boo
 
 function SpeechRow() {
   useEngine();
-  if (!canUse) return <div className="mt-row is-static"><span className="mt-row-text"><span>{osStateText()}</span></span></div>;
+  if (!canUse) return <div className="mt-row is-static"><span className="mt-row-text"><span>{notice}</span></span></div>;
   if (installing) {
     const pct = installing.total ? Math.round((installing.received / installing.total) * 100) : 0;
     const what = installing.step === "engine" ? "转写引擎" : installing.step === "vad" ? "断句模型" : "识别模型";
@@ -585,7 +590,7 @@ function MeetingView({ id, host, onDeleted }: { id: string; host: string; onDele
       {player ? (
         <PlayerBar player={player} duration={duration} follow={follow} setFollow={setFollow} />
       ) : m.files ? (
-        <div className="mt-away">{gone && m.computer === host ? "录音文件不在了（移走或删掉了），这里只能看文字。" : `录音在 ${m.computer || "另一台电脑"} 上，这里只能看文字。`}</div>
+        <div className="mt-away">{!canUse ? "这个 myco App 还不能播放录音，更新后就能听。" : gone && m.computer === host ? "录音文件不在了（移走或删掉了），这里只能看文字。" : `录音在 ${m.computer || "另一台电脑"} 上，这里只能看文字。`}</div>
       ) : null}
     </div>
   );
@@ -768,7 +773,24 @@ function PlayerBar({ player, duration, follow, setFollow }: { player: Player; du
   );
 }
 
-void mount(kit, App);
+/** Whatever goes wrong while drawing, say so (not a blank page), and offer to reload. */
+class Boundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div className="mt-crash">
+        <b>这个网页出错了</b>
+        <code>{this.state.error.message || String(this.state.error)}</code>
+        <span>会议和文字稿都还在。把这段话发给做这个应用的 agent，或者重新加载试试。</span>
+        <button type="button" className="btn" onClick={() => location.reload()}>重新加载</button>
+      </div>
+    );
+  }
+}
+
+void mount(kit, () => <Boundary><App /></Boundary>);
 
 // ---- the notes (an agent writes them; agent.md) ----
 
