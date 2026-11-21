@@ -3308,9 +3308,8 @@ textarea.app-input {
    under the pointer (this one motion is the point of the control). */
 /* The rail keeps to its own narrow lane, so it never sits over the text or
    takes clicks meant for it; the timeline gives it a little room. */
-.conv-detail.has-rail {
-  --conv-pad-l: 36px;
-}
+/* (its lane is kept in every chat, rail or not: switching between a chat
+   with one and a chat without, the column does not move sideways) */
 .conv-rail {
   position: absolute;
   left: 2px;
@@ -3370,6 +3369,7 @@ textarea.app-input {
 /* Too narrow for the rail to stay clear of the text. */
 @media (max-width: 640px) {
   .conv-rail { display: none; }
+  .conv-detail { --conv-pad-l: var(--conv-pad); }
 }
 .conv-rail-card {
   position: absolute;
@@ -3420,6 +3420,10 @@ textarea.app-input {
 .conv-detail {
   --conv-col: 760px;
   --conv-pad: 24px;
+  /* the left side keeps room for the rail of turns (.conv-rail) */
+  --conv-pad-l: 36px;
+}
+.conv-detail:has(.conv-body.is-shell) {
   --conv-pad-l: var(--conv-pad);
 }
 .conv-timeline {

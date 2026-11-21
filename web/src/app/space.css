@@ -3121,7 +3121,11 @@ button.sp-nav-fold:hover {
 .pg-grid .sp-pane-right:not(.is-called) { animation: none; }
 /* The pane itself stays put (its left edge is the line between panes,
    which must not jump); what is in it comes in. */
-.pg-pane.is-new > * { animation: sp-pane-in 0.16s ease-out; }
+.pg-pane.is-new > * { animation: pg-pane-in 0.14s ease-out; }
+/* (a fade only: sliding, even a little, reads as the chat shaking) */
+@keyframes pg-pane-in {
+  from { opacity: 0; }
+}
 @media (prefers-reduced-motion: reduce) { .pg-pane.is-new > * { animation: none; } }
 /* The lines between panes: a wide grip over a 1px line. */
 .pg-line {
