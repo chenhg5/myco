@@ -317,6 +317,12 @@ system tool's `-Jvideo` mode, never the incompatible `-i` still-image mode.
 Recorder failures preserve bounded diagnostic text rather than misreporting every
 failed launch as a permission problem.
 
+The Mac App rechecks recording access on every attempt, but actively asks the
+system at most once per process. A denied or pending grant therefore does not
+open repeated consent dialogs; changing permission in Settings is recognized
+when the system makes it effective (which can require quitting and reopening
+the App). Revoked access is never cached as granted.
+
 ## Network access on iPhone
 
 The iOS page bridge exposes `myco.net.fetch(args)` and the `net` feature, without
