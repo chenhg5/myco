@@ -478,13 +478,22 @@ function MeetingView({ id, host, onDeleted }: { id: string; host: string; onDele
         <button type="button" className="icon-btn" aria-label="更多" onClick={(e) => setMenu(rectOf(e.currentTarget))}><MoreHorizontal className="ico" /></button>
         {split && (
           <Popover at={split} onClose={() => setSplit(null)} align="right">
-            <div className="menu">
-              <div className="mt-menu-label">别人里有几个人？</div>
-              {[0, 2, 3, 4, 5, 6].map((n) => (
-                <button key={n} type="button" className="menu-item" onClick={() => { setSplit(null); void splitVoices(id, n); }}>
-                  {n ? `${n} 个人` : "自动判断"}{(n || 0) === 0 && !m.voices ? "" : n === m.voices ? <Check className="ico mt-menu-check" /> : null}
-                </button>
-              ))}
+            <div className="menu mt-split">
+              {(["them", "me"] as Track[]).filter((t) => m.files?.[t]).map((t) => {
+                const cur = t === "me" ? m.mic_voices : m.voices;
+                return (
+                  <div key={t} className="mt-split-row">
+                    <div className="mt-menu-label">{t === "me" ? "麦克风这边有几个人？" : "别人里有几个人？"}</div>
+                    <div className="mt-split-opts">
+                      {[0, 1, 2, 3, 4, 5, 6].map((n) => (
+                        <button key={n} type="button" className={`mt-split-n${n && n === cur ? " is-on" : ""}`} onClick={() => { setSplit(null); void splitVoices(id, t, n); }}>
+                          {n ? n : "自动"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </Popover>
         )}
@@ -495,7 +504,7 @@ function MeetingView({ id, host, onDeleted }: { id: string; host: string; onDele
               <button type="button" className="menu-item" disabled={!segs.length} onClick={() => void exportAs("md")}><Download className="ico" />导出 Markdown</button>
               <button type="button" className="menu-item" disabled={!segs.length} onClick={() => void exportAs("srt")}><Download className="ico" />导出字幕（SRT）</button>
               {here && m.dir && <button type="button" className="menu-item" onClick={() => { setMenu(null); void os().fs.reveal({ path: m.dir! }); }}><FileAudio className="ico" />显示录音文件</button>}
-              {here && m.files?.them && segs.length > 0 && (speech?.diarize
+              {here && (m.files?.them || m.files?.me) && segs.length > 0 && (speech?.diarize
                 ? <button type="button" className="menu-item" disabled={!!tx || !!splitting} onClick={(e) => { const r = rectOf(e.currentTarget); setMenu(null); setSplit(r); }}><Users className="ico" />重新分说话人</button>
                 : speech?.ready && <button type="button" className="menu-item" onClick={() => { setMenu(null); void installSpeech(); kit.flash("正在下载分说话人的模型（约 35 MB）"); }}><Users className="ico" />分说话人（先下载 35 MB）</button>)}
               {here && <button type="button" className="menu-item" disabled={!!tx} onClick={() => { setMenu(null); if (!segs.length || window.confirm("重新转写会换掉现在的文字稿，包括改过的字。")) void transcribe(id); }}><RefreshCw className="ico" />重新转写</button>}
@@ -556,7 +565,7 @@ function MeetingView({ id, host, onDeleted }: { id: string; host: string; onDele
         const others = (speakers.length > 1 ? speakers : ["me", "them"]).filter((k) => k !== mine);
         const close = () => setCtx(null);
         const moveTo = (k: string) => {
-          const data = { ...s, track: (k === "me" ? "me" : "them") as Track, speaker: k.startsWith("them:") ? k : undefined };
+          const data = { ...s, track: (k.startsWith("me") ? "me" : "them") as Track, speaker: k.includes(":") ? k : undefined };
           if (!data.speaker) delete (data as { speaker?: string }).speaker;
           void kit.track(segments.put(data, ctx.sid)); kit.emit();
         };

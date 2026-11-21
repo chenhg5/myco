@@ -127,7 +127,7 @@
         emit("progress", { done: i * 20, total: 60 });
         return i < SAID.length;
       }, () => ({ segments: [], seconds: 60, ms: 900, model: "sensevoice" })),
-      diarize: () => timed(150, (i, emit) => { emit("progress", { percent: i * 50 }); return i < 2; }, () => ({ turns: [{ start: 2, end: 16, speaker: 0 }, { start: 30, end: 37, speaker: 1 }], speakers: 2, ms: 300 })),
+      diarize: () => timed(150, (i, emit) => { emit("progress", { percent: i * 50 }); return i < 2; }, () => ({ turns: Array.from({ length: 20 }, (_, i) => ({ start: i * 15, end: i * 15 + 14, speaker: i % 3 === 2 ? 1 : 0 })), speakers: 2, ms: 300 })),
     },
     has: async () => true,
     system: {

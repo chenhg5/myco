@@ -8,17 +8,20 @@ sentences. The recording itself stays on the computer that made it.
   (its length), `status` (`recording`, `recorded`: not transcribed yet,
   `transcribing`, `done`, `failed` with `error`), `source_name` (the
   meeting app recorded: Zoom, 腾讯会议…), `speakers` (names by speaker:
-  `{"me": "Glenn", "them:0": "小周", "them:1": "小李"}`), `voices` (how
-  many the others were told apart into), `notes` (below), and `computer`,
+  `{"me": "Glenn", "me:1": "小王", "them:0": "小周", "them:1": "小李"}`;
+  `me:1`, `me:2`… are others at the same microphone), `voices` and
+  `mic_voices` (how many the others and the microphone were told apart
+  into), `notes` (below), and `computer`,
   `dir`, `files`, `sources` (where the recording is: leave them).
 - `segments`: one record per sentence: `meeting` (the meeting's id),
   `track` (`me`: the person who recorded, their microphone; `them`: the
   others, what the computer played), `speaker` (`them:0`, `them:1`…: which
-  of the others; missing when they were not told apart), `start` and `end`
+  of the others; `me:1`, `me:2`…: someone else at the microphone; missing
+  for the person recording, or when not told apart), `start` and `end`
   (seconds from the start), `text`, `edited` (a person corrected it).
 
 A sentence's speaker is its `speaker`, else its `track`; their name is
-the meeting's `speakers[that]` (else 我, 对方, 说话人 N+1).
+the meeting's `speakers[that]` (else 我, 对方, 说话人 N+1, 现场 N).
 
 Read a meeting:
 

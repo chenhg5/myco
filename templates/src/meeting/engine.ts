@@ -188,12 +188,15 @@ export async function transcribe(id: string) {
     }
   }
   await line;
-  // then who of the others said what
-  if (!failed && m.files.them && speech?.diarize) {
+  // then who said what: the others, and those at the microphone
+  if (!failed && speech?.diarize) {
     transcribing = { ...transcribing!, voices: true, done: transcribing!.total };
     changed();
-    const err = await diarizeNow(id, 0);
-    if (err && err !== "已停止") kit.flash(`没分出说话人：${err}`);
+    for (const t of tracks) {
+      const err = await diarizeNow(id, t, 0);
+      if (err === "已停止") break;
+      if (err) kit.flash(`没分出说话人：${err}`);
+    }
   }
   transcribeJob = null;
   transcribing = null;
@@ -209,20 +212,23 @@ export const isWaiting = (id: string) => waiting.includes(id);
 // ---- telling the others apart ----
 
 /** Splits "them" into its voices (count: how many, 0 to find out); "" when done, or why not. */
-async function diarizeNow(id: string, count: number): Promise<string> {
+/** Splits a track into its voices (count: how many, 0 to find out); "" when done, or why not.
+ *  "them": 说话人 them:0, them:1…; "me" (several people at one microphone):
+ *  the one who talks most stays "me", the others are me:1, me:2… */
+async function diarizeNow(id: string, track: Track, count: number): Promise<string> {
   const m = meetings.get(id)?.data;
-  const path = m?.files?.them;
-  if (!m || !path) return "没有别人的录音";
+  const path = m?.files?.[track];
+  if (!m || !path) return track === "them" ? "没有别人的录音" : "没有麦克风的录音";
   const job = os().speech.diarize({ path, speakers: count || undefined });
   transcribeJob = job as OSJob<unknown>;
   let v;
   try { v = await job.done; } catch (e) { const err = toOSError(e); return err.code === "cancelled" ? "已停止" : err.message; }
-  // each sentence goes to the voice it overlaps most
   const turns = v.turns;
   const many = v.speakers > 1;
-  let line: Promise<unknown> = Promise.resolve();
-  for (const s of segmentsOf(id)) {
-    if (s.data.track !== "them") continue;
+  const mine = segmentsOf(id).filter((s) => s.data.track === track);
+  // each sentence goes to the voice it overlaps most
+  const voiceOf = new Map<string, number>();
+  for (const s of mine) {
     let best = -1, most = 0;
     for (const t of turns) {
       const o = Math.min(num(s.data.end), t.end) - Math.max(num(s.data.start), t.start);
@@ -233,29 +239,55 @@ async function diarizeNow(id: string, count: number): Promise<string> {
       let gap = Infinity;
       for (const t of turns) { const g = Math.min(Math.abs(t.start - num(s.data.end)), Math.abs(num(s.data.start) - t.end)); if (g < gap) { gap = g; best = t.speaker; } }
     }
-    const speaker = many && best >= 0 ? `them:${best}` : undefined;
+    voiceOf.set(s.id, best);
+  }
+  // on the microphone, the one who talks most is the person recording
+  const keyOf = new Map<number, string | undefined>();
+  if (track === "me") {
+    const talk = new Map<number, number>();
+    for (const s of mine) { const k = voiceOf.get(s.id)!; talk.set(k, (talk.get(k) || 0) + num(s.data.end) - num(s.data.start)); }
+    const order = [...talk.keys()].sort((a, b) => (talk.get(b) || 0) - (talk.get(a) || 0));
+    order.forEach((k, i) => keyOf.set(k, i === 0 ? undefined : `me:${i}`));
+  } else for (const t of turns) keyOf.set(t.speaker, `them:${t.speaker}`);
+  let line: Promise<unknown> = Promise.resolve();
+  for (const s of mine) {
+    const best = voiceOf.get(s.id)!;
+    const speaker = many && best >= 0 ? keyOf.get(best) : undefined;
     if ((s.data.speaker || undefined) === speaker) continue;
     const data = { ...s.data, speaker };
     if (!speaker) delete (data as { speaker?: string }).speaker;
     line = line.then(() => kit.track(segments.put(data, s.id))).then(() => kit.emit());
   }
   await line;
-  await patchMeeting(id, { voices: many ? v.speakers : 1 });
+  await patchMeeting(id, track === "me" ? { mic_voices: many ? v.speakers : 1 } : { voices: many ? v.speakers : 1 });
   return "";
 }
 
 export let splitting: string | null = null;
-/** Tells the others apart again (count: how many, 0 to find out). */
-export async function splitVoices(id: string, count: number) {
+/** Tells the people of a track apart again (count: how many, 0 to find out). */
+export async function splitVoices(id: string, track: Track, count: number) {
   if (transcribing || splitting) return;
+  if (count === 1) {
+    // one person: no voices to find
+    for (const s of segmentsOf(id)) {
+      if (s.data.track !== track || !s.data.speaker) continue;
+      const data = { ...s.data };
+      delete (data as { speaker?: string }).speaker;
+      void kit.track(segments.put(data, s.id));
+    }
+    await patchMeeting(id, track === "me" ? { mic_voices: 1 } : { voices: 1 });
+    kit.emit();
+    kit.flash(track === "me" ? "麦克风这边算作一个人" : "别人算作一个人");
+    return;
+  }
   splitting = id;
   changed();
-  const err = await diarizeNow(id, count);
+  const err = await diarizeNow(id, track, count);
   transcribeJob = null;
   splitting = null;
   changed();
   if (err) kit.flash(err === "已停止" ? "已停止" : `没分出说话人：${err}`);
-  else kit.flash(`已分成 ${meetings.get(id)?.data.voices || 1} 个人`);
+  else kit.flash(`${track === "me" ? "麦克风这边" : "别人"}分成了 ${(track === "me" ? meetings.get(id)?.data.mic_voices : meetings.get(id)?.data.voices) || 1} 个人`);
 }
 
 // ---- notes, by an agent ----
