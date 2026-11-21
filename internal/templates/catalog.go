@@ -46,8 +46,11 @@ type Catalog struct {
 	// Offline: never fetch (the binary's apps, and a kept archive).
 	Offline  bool
 	Interval time.Duration // default 24h
-	HTTP     *http.Client
-	Log      *slog.Logger
+	// RetryWait: how long to wait before fetching again when the archive
+	// and its checksum do not match (default 5s).
+	RetryWait time.Duration
+	HTTP      *http.Client
+	Log       *slog.Logger
 
 	mu      sync.Mutex
 	current []app.OfficialTemplate
@@ -125,8 +128,33 @@ func (c *Catalog) Sync(ctx context.Context) SyncResult {
 	if hc == nil {
 		hc = &http.Client{Timeout: 60 * time.Second}
 	}
-	b, err := release.FetchAsset(ctx, hc, c.Download, AppsTag, AppsAsset, maxApps)
+	// The release workflow uploads the archive, then its checksum: a fetch
+	// between the two (or soon after, while GitHub still hands out the old
+	// checksum) finds them unmatched. Try again a little later before
+	// saying so.
+	wait := c.RetryWait
+	if wait <= 0 {
+		wait = 5 * time.Second
+	}
+	var b []byte
+	var err error
+	for i := 0; ; i++ {
+		b, err = release.FetchAsset(ctx, hc, c.Download, AppsTag, AppsAsset, maxApps)
+		if err == nil || !strings.Contains(err.Error(), "checksum mismatch") || i >= 2 {
+			break
+		}
+		select {
+		case <-time.After(wait * time.Duration(i+1)):
+		case <-ctx.Done():
+		}
+		if ctx.Err() != nil {
+			break
+		}
+	}
 	if err != nil {
+		if strings.Contains(err.Error(), "checksum mismatch") {
+			return c.result(nil, "the official apps are being published right now (their archive and checksum do not match yet): try again in a minute")
+		}
 		return c.result(nil, err.Error())
 	}
 	got, err := c.read(b)
