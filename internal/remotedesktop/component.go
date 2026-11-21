@@ -42,6 +42,24 @@ type Component struct {
 func (c *Component) dir() string {
 	return filepath.Join(c.Home, ".myco", "components", "remote", ComponentVersion)
 }
+
+// Only explicitly compatible protocol-1 releases may be reused. Never scan
+// arbitrary version directories, copy old binaries into a new version, or
+// download an unreviewed release just because the App has been upgraded.
+func compatibleComponentVersions() []string { return []string{ComponentVersion, "0.1.0"} }
+
+func (c *Component) installedComponent() (string, string, bool) {
+	for _, version := range compatibleComponentVersions() {
+		dir := filepath.Join(c.Home, ".myco", "components", "remote", version)
+		engine, a := os.Stat(filepath.Join(dir, program("myco-remote")))
+		encoder, b := os.Stat(filepath.Join(dir, program("ffmpeg")))
+		if a == nil && b == nil && engine.Mode().IsRegular() && encoder.Mode().IsRegular() {
+			return dir, version, true
+		}
+	}
+	return c.dir(), ComponentVersion, false
+}
+
 func program(name string) string {
 	if runtime.GOOS == "windows" {
 		return name + ".exe"
@@ -69,9 +87,8 @@ func (c *Component) statusLocked() ComponentStatus {
 		default:
 		}
 	}
-	_, a := os.Stat(filepath.Join(c.dir(), program("myco-remote")))
-	_, b := os.Stat(filepath.Join(c.dir(), program("ffmpeg")))
-	s := ComponentStatus{Protocol: Protocol, Version: ComponentVersion, Installed: a == nil && b == nil, Supported: remoteSupported(), Running: c.process != nil}
+	_, version, installed := c.installedComponent()
+	s := ComponentStatus{Protocol: Protocol, Version: version, Installed: installed, Supported: remoteSupported(), Running: c.process != nil}
 	if s.Running {
 		s.PairingCode = c.pairing
 	}
@@ -246,7 +263,8 @@ func (c *Component) Start(ctx context.Context, control bool, ice json.RawMessage
 		cfg["ice_servers"] = ice
 	}
 	// The component is a child with no Hub credentials and no auto-start service.
-	cmd := exec.Command(filepath.Join(c.dir(), program("myco-remote")))
+	dir, _, _ := c.installedComponent()
+	cmd := exec.Command(filepath.Join(dir, program("myco-remote")))
 	hideComponent(cmd)
 	for _, key := range []string{"HOME", "USERPROFILE", "SystemRoot", "WINDIR", "TMP", "TEMP", "TMPDIR", "PATH", "LANG", "LC_ALL"} {
 		if v := os.Getenv(key); v != "" {
@@ -392,5 +410,11 @@ func (c *Component) Remove() error {
 	if c.installing {
 		return ErrBusy
 	}
-	return os.RemoveAll(c.dir())
+	// Otherwise removing the current release makes an older installation
+	// immediately appear installed again. Leave unknown versions untouched.
+	var errs []error
+	for _, version := range compatibleComponentVersions() {
+		errs = append(errs, os.RemoveAll(filepath.Join(c.Home, ".myco", "components", "remote", version)))
+	}
+	return errors.Join(errs...)
 }

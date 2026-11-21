@@ -1170,6 +1170,11 @@ screen. Leaving the App or closing the page disconnects; reconnect explicitly
 when returning. Unicode typing requires remote component 0.2.0 or later on the
 computer; older components accept short ASCII text and physical keys.
 
+App upgrades reuse a complete, explicitly compatible installed remote component
+when the preferred release is absent; they report the version actually selected.
+A newer component can enable extra features such as Unicode input. Fresh installs
+still require published, checksum-verified component archives.
+
 On phones, text is edited locally before **Send text**. The editor stays above
 the software keyboard; sending hides it to reveal the desktop. Focus the remote
 field first: the App cannot locate its text caret from video. Sending does not

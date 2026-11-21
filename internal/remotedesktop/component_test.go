@@ -87,3 +87,72 @@ func TestComponentNeverUsesWorkingDirectoryAsHome(t *testing.T) {
 		t.Fatal("started without an absolute home")
 	}
 }
+
+func installComponentFixture(t *testing.T, c *Component, version, script string) string {
+	t.Helper()
+	dir := filepath.Join(c.Home, ".myco", "components", "remote", version)
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	for name, content := range map[string]string{program("myco-remote"): script, program("ffmpeg"): "fixture"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+func TestComponentReusesInstalledCompatibleRelease(t *testing.T) {
+	c := &Component{Home: t.TempDir()}
+	old := installComponentFixture(t, c, "0.1.0", "old engine")
+	if got := c.Status(); !got.Installed || got.Version != "0.1.0" {
+		t.Fatal(got)
+	}
+	// An incomplete current install must not conceal a working old one.
+	if err := os.MkdirAll(filepath.Join(c.dir(), program("ffmpeg")), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if got := c.Status(); !got.Installed || got.Version != "0.1.0" {
+		t.Fatal(got)
+	}
+	if err := os.RemoveAll(c.dir()); err != nil {
+		t.Fatal(err)
+	}
+	installComponentFixture(t, c, ComponentVersion, "new engine")
+	if got := c.Status(); !got.Installed || got.Version != ComponentVersion {
+		t.Fatal(got)
+	}
+	unknown := installComponentFixture(t, c, "99.0.0", "unknown engine")
+	if err := c.Remove(); err != nil {
+		t.Fatal(err)
+	}
+	if got := c.Status(); got.Installed {
+		t.Fatal(got)
+	}
+	if _, err := os.Stat(old); !os.IsNotExist(err) {
+		t.Fatalf("old release remains: %v", err)
+	}
+	if _, err := os.Stat(unknown); err != nil {
+		t.Fatalf("unknown release removed: %v", err)
+	}
+}
+
+func TestComponentStartsCompatibleReleaseWithoutDownloading(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX fixture")
+	}
+	c := &Component{Home: t.TempDir()}
+	installComponentFixture(t, c, "0.1.0", `#!/bin/sh
+read config
+printf '%s\n' '{"address":"127.0.0.1:12345","protocol":1}'
+cat >/dev/null
+`)
+	defer c.Stop()
+	got, err := c.Start(context.Background(), false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Running || got.Version != "0.1.0" {
+		t.Fatal(got)
+	}
+}
