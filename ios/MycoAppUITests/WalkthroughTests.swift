@@ -503,17 +503,15 @@ final class WalkthroughTests: XCTestCase {
 
     @MainActor
     func testAWorkflowDecisionIsMadeAndAWorkflowRun() {
-        // From the members page: the row under apps, with what waits for me.
+        // The workbench shows what waits for me as soon as it opens.
         let app = launch(["-myco-route", "tab:workbench"])
-        let entry = app.buttons["workbench.workflows"]
-        XCTAssertTrue(entry.waitForExistence(timeout: 15))
-        expectation(for: NSPredicate(format: "label CONTAINS %@", "1 decision"), evaluatedWith: entry)
-        waitForExpectations(timeout: 10)
-        entry.tap()
         let decision = app.descendants(matching: .any)["decision"]
-        XCTAssertTrue(decision.waitForExistence(timeout: 10))
+        XCTAssertTrue(decision.waitForExistence(timeout: 15))
         XCTAssertTrue(app.buttons["合并"].exists && app.buttons["不合并"].exists, "its choices")
-        shot("workflows")
+        XCTAssertTrue(app.buttons.matching(identifier: "workbench.workflow").firstMatch.exists, "the workflows to run")
+        XCTAssertTrue(app.buttons.matching(identifier: "workbench.app").firstMatch.exists, "the apps to make a page from")
+        XCTAssertTrue(app.switches.matching(identifier: "workbench.automation.switch").firstMatch.exists, "the automations")
+        shot("workbench")
         // A choice, with a word.
         let note = app.textFields["decision.note"]
         note.tap()
@@ -521,6 +519,10 @@ final class WalkthroughTests: XCTestCase {
         app.buttons["合并"].tap()
         expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: decision)
         waitForExpectations(timeout: 10)
+        // All of them, on their own page.
+        app.buttons["workbench.workflows"].tap()
+        XCTAssertTrue(app.buttons.matching(identifier: "workflow.row").firstMatch.waitForExistence(timeout: 10))
+        shot("workflows")
         // A workflow: its steps; run it with what it asks for.
         app.buttons.matching(identifier: "workflow.row").firstMatch.tap()
         let start = app.buttons["workflow.start"]
@@ -573,10 +575,10 @@ final class WalkthroughTests: XCTestCase {
     }
 
     @MainActor
-    func testTheSuperagentIsTheOrbNotAChat() {
-        // Set up from the orb in the middle of the tab bar.
+    func testTheSuperagentIsInTheTopBarNotAChat() {
+        // Set up from the sparkle at the top of the page.
         let app = launch(["-myco-route", "tab:chats"])
-        let orb = app.buttons["tab.superagent"]
+        let orb = app.buttons["chrome.superagent"]
         XCTAssertTrue(orb.waitForExistence(timeout: 20))
         orb.tap()
         let how = app.segmentedControls["superagent.how"]
@@ -592,7 +594,7 @@ final class WalkthroughTests: XCTestCase {
         app.buttons["superagent.close"].tap()
         // Not one of the chats, nor of the members.
         XCTAssertTrue(orb.waitForExistence(timeout: 10))
-        shot("superagent-orb")
+        shot("superagent-button")
         XCTAssertFalse(app.staticTexts[name].exists && app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'chat.' AND label CONTAINS %@", name)).firstMatch.exists,
                        "its chat is not in the list")
         app.buttons["chrome.members"].tap()
@@ -606,7 +608,7 @@ final class WalkthroughTests: XCTestCase {
 
     @MainActor
     func testAnAppMakesAPageThatTalksToTheWorkspace() {
-        // From the members page: the row under automations.
+        // From the workbench: all the apps.
         let app = launch(["-myco-route", "tab:workbench"])
         let entry = app.buttons["workbench.apps"]
         XCTAssertTrue(entry.waitForExistence(timeout: 15))
@@ -651,12 +653,13 @@ final class WalkthroughTests: XCTestCase {
 
     @MainActor
     func testAutomationsAreListedSwitchedAndWritten() {
-        // From the members page: one row above the people.
+        // On the workbench, each with its switch; all of them one tap on.
         var app = launch(["-myco-route", "tab:workbench"])
         let entry = app.buttons["workbench.automations"]
         XCTAssertTrue(entry.waitForExistence(timeout: 15))
-        expectation(for: NSPredicate(format: "label CONTAINS %@", "2, 1 on"), evaluatedWith: entry)
-        waitForExpectations(timeout: 10)
+        let switches = app.switches.matching(identifier: "workbench.automation.switch")
+        XCTAssertTrue(switches.firstMatch.waitForExistence(timeout: 10))
+        XCTAssertEqual(switches.count, 2)
         entry.tap()
         let rows = app.buttons.matching(identifier: "automation.row")
         XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 10))

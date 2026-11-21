@@ -286,7 +286,7 @@ private struct MadeRow: View {
 }
 
 /// Making a page from an app: its name, where it goes, sample data.
-private struct UseAppSheet: View {
+struct UseAppSheet: View {
     let app: AppTemplate
     let onMade: (Page) -> Void
 
