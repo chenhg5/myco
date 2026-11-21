@@ -1601,5 +1601,10 @@
   "远端组件较旧，只支持短英文；更新后可发送中文。": "Older remote component: short ASCII text only. Update it for other languages.",
   "操作与画面": "Controls and display",
   "收起工具": "Hide tools",
-  "滚动": "Scroll"
+  "滚动": "Scroll",
+  "这段文字未输入。请在被控电脑更新远控组件，然后重新连接。": "Text was not entered. Update the remote component on the controlled computer, then reconnect.",
+  "清除并关闭": "Clear and dismiss",
+  "先停止共享，再更新组件。": "Stop sharing before updating the component.",
+  "按当前桌面 App 配套的版本安装，不是自动追踪最新组件；如仍不支持所需功能，请先更新桌面 App。更新失败不会卸载旧组件。": "Installs the component version paired with this desktop App, not the latest published version automatically. Update the desktop App first if a feature is missing. A failed download keeps the old component.",
+  "安装 App 配套版本": "Install App-compatible version"
 }
