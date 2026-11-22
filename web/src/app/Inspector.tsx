@@ -318,7 +318,7 @@ function providerLabel(rt?: { provider?: string; provider_host?: string }): stri
 
 const urlHost = (u?: string) => { try { return u ? new URL(u).host : ""; } catch { return u || ""; } };
 
-function ProviderRow({ row, onRefresh, mayManage }: { row: AgentRow; onRefresh: () => Promise<void>; mayManage: boolean }) {
+function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promise<void> }) {
   const ag = row.st.agent;
   const rt = ag.runtime;
   const prov = useCached(`provider\u0000${row.hub.id}\u0000${ag.name}`, () => appApi.agentProvider(ag.name, row.hub.id));
@@ -340,12 +340,16 @@ function ProviderRow({ row, onRefresh, mayManage }: { row: AgentRow; onRefresh: 
   // offering that computer's providers; a key only goes sealed (end-to-end
   // encryption), else it is entered on that computer. An older runner: read-only.
   const elsewhere = !!local && !local.local;
-  const remote = elsewhere && mayManage && !!rt?.features?.includes("remote_provider");
-  const olderRunner = elsewhere && mayManage && !!rt && !rt.features?.includes("remote_provider");
+  // Only its owner changes it from afar (as with its access).
+  const me = row.hub.me?.member;
+  const owns = !!me && (ag.owner_id ? ag.owner_id === me.id : ag.owner ? ag.owner === me.name : me.role === "owner");
+  const remote = elsewhere && owns && !!rt?.features?.includes("remote_provider");
+  const olderRunner = elsewhere && owns && !!rt && !rt.features?.includes("remote_provider");
+  const pending = remote && !!ag.run_settings?.provider_encrypted;
   const sealed = !!row.hub.e2e;
   const chosen = remote ? ag.run_settings?.provider || "" : local?.provider || "";
   const custom = remote
-    ? (ag.run_settings?.provider === "env_file" ? ag.run_settings.manual : undefined)
+    ? (ag.run_settings?.provider === "env_file" ? ag.run_settings.custom : undefined)
     : local?.provider === "env_file" ? local.manual : undefined;
   const hasKey = !!custom?.has_key;
   const start = async () => {
@@ -424,6 +428,7 @@ function ProviderRow({ row, onRefresh, mayManage }: { row: AgentRow; onRefresh: 
       </span>
       {saved && <span className="app-kv-help app-offline-ok">{saved}</span>}
       {!saved && olderRunner && <span className="app-kv-help">{L("升级它那台电脑上的 myco 后，就能在这里改。", "Upgrade myco on its computer to change it here.")}</span>}
+      {!saved && pending && <span className="app-kv-help">{L("自定义地址已发出，等它那台电脑收下（它接下一件任务前生效）。", "The custom address is sent; its computer takes it before its next task.")}</span>}
 
       <Modal open={open} onOpenChange={(o) => !busy && setOpen(o)} title={L("服务商", "Provider")}
         description={remote
@@ -1171,7 +1176,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
               {row_recv}
               {row_cli}
               <RunRows row={row} now={now} mayManage={mayManage} onRefresh={onRefresh} />
-              {kind === "agent" && !isCloud(ag) && ["claude", "codex"].includes(rt?.cli || ag.binding.harness || "") && <ProviderRow row={row} onRefresh={onRefresh} mayManage={mayManage} />}
+              {kind === "agent" && !isCloud(ag) && ["claude", "codex"].includes(rt?.cli || ag.binding.harness || "") && <ProviderRow row={row} onRefresh={onRefresh} />}
               {row_machine}
             </div>
           </section>
@@ -1189,7 +1194,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
             </div>
             <div className="app-list">
               <RunRows row={row} now={now} mayManage={mayManage} onRefresh={onRefresh} part="settings" />
-              {kind === "agent" && !isCloud(ag) && ["claude", "codex"].includes(rt?.cli || ag.binding.harness || "") && <ProviderRow row={row} onRefresh={onRefresh} mayManage={mayManage} />}
+              {kind === "agent" && !isCloud(ag) && ["claude", "codex"].includes(rt?.cli || ag.binding.harness || "") && <ProviderRow row={row} onRefresh={onRefresh} />}
               {row_recv}
             </div>
           </section>

@@ -36,8 +36,10 @@ export interface RunSettings {
   /** the provider chosen from the App for an agent on another computer ("" or absent: follow it;
    *  "cc-switch:<id>"; "env_file": a custom address, whose key was sealed for the agent) */
   provider?: string;
-  /** that custom address, never its key */
-  manual?: { base_url: string; model?: string; wire_api?: "chat" | "responses"; has_key?: boolean };
+  /** that custom address (taken by its runner, or waiting to be), never its key */
+  custom?: { base_url: string; model?: string; wire_api?: "chat" | "responses"; has_key?: boolean };
+  /** present while a sealed key waits for its runner to take it (it applies before its next task) */
+  provider_encrypted?: { id: string; from?: string; body?: string };
 }
 /** A provider the agent's computer offers (its runner reports them, never a key). */
 export interface RuntimeProvider { ref: string; name: string; host?: string; model?: string }
