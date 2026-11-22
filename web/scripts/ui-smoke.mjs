@@ -2818,9 +2818,18 @@ async function runMatrix(browser, size, scheme) {
       if (!(await doc.innerText()).includes("协调者")) throw new Error("项目那篇应讲协调者");
       await settle(page, 200);
       await shot(page, size, scheme, "help");
+      // Its pictures are there (each screenshot a page names is bundled)
+      // and one opens full size.
+      const pics = doc.locator(".md img");
+      if ((await pics.count()) < 1) throw new Error("项目那篇应有配图");
+      await page.waitForFunction(() => [...document.querySelectorAll("[data-testid=help-doc] .md img")].every((i) => i.complete && i.naturalWidth > 0), null, { timeout: 10_000 });
+      await clickVisible(page, pics.first());
+      await page.locator(".lightbox").waitFor({ timeout: 5_000 });
+      await page.keyboard.press("Escape");
+      await page.locator(".lightbox").waitFor({ state: "detached", timeout: 5_000 });
       // A link to another page opens it here.
       await clickVisible(page, help.locator(".hp-pager-btn.is-next"));
-      await page.waitForFunction(() => document.querySelector("[data-testid=help-doc]")?.getAttribute("data-doc") === "members", null, { timeout: 5_000 });
+      await page.waitForFunction(() => document.querySelector("[data-testid=help-doc]")?.getAttribute("data-doc") === "superagent", null, { timeout: 5_000 });
       if (!narrow) {
         await help.locator(".hp-search input").fill("webhook");
         await help.locator(".hp-item", { hasText: "自动化" }).first().waitFor({ timeout: 5_000 });

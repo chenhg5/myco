@@ -1,32 +1,90 @@
 # Voice
 
-## Voice input
+When you would rather talk than type, you can. myco has two kinds of voice: **dictation** writes what you say into the box, for you to check before sending; **voice chat** is a live conversation with an agent, like a call, where what you ask gets done straight away.
 
-The microphone at the bottom right of the box: click it and speak; your words go into the box. It stops when you finish, or when you click it again. It listens in the App's language.
+## Dictation
 
-- On a Mac it uses the system's speech recognition; the first time, the system asks for Microphone and Speech Recognition.
-- On Windows it opens the system's voice typing (Win+H).
-- In the box you can also hold **⌥Space** (Mac) to talk and let go to stop.
+The microphone at the bottom right of the box, left of the send button, is dictation. It is there whether or not the box has text.
+
+1. Click the microphone. It turns red and pulses gently while it listens.
+2. Speak. Your words go into the box, after anything you already typed. Pauses do not cut it off; keep talking and it keeps writing.
+3. It stops when you finish, or click it again. Typing or sending stops it too.
+4. Check it, fix anything, press Enter.
+
+![Dictation: the microphone turns red and your words go into the box](shot:dictation)
+
+It listens in the App's language, not the system's: a Chinese App listens for Chinese, an English one for English. To change it, change the App's language under **Settings › Appearance**.
+
+**Hold to talk**: with the caret in the box, hold **⌥Space** (Mac) or **⌃M** and speak; let go to stop.
+
+### On a Mac
+
+The App uses Apple's speech recognition (on the device when it can). The first time, the system asks for two permissions, Microphone and Speech Recognition; allow both.
+
+If you said no, the microphone turns amber, and hovering it tells you where to turn them on: **System Settings › Privacy & Security › Microphone** (or **Speech Recognition**), then switch on myco.
+
+### On Windows
+
+When you click the microphone, the App first switches this window's input language to the App's language, then opens Windows' own voice typing (the one Win+H opens), and the system types into the box.
+
+Hold to talk is **Ctrl+M** on Windows (⌥Space would open the window menu there).
+
+### No microphone?
+
+When this computer has no speech recognition the App can use (in a browser that does not support it, for example), the microphone is not shown. Terminals have no dictation.
 
 ## Voice chat
 
-Talk with an agent in real time, like a call (Mac App).
+Voice chat is like a call with this agent (as in ChatGPT and Claude: one chat, one call). You talk, and a quick voice assistant that reads this conversation talks with you:
+
+- ask how things are going and it answers itself;
+- ask for something to be done and it passes it to the agent: as an addition if the agent is busy, as a new task if it is free, just as pressing Enter would, with no extra confirmation;
+- when the agent replies or asks you something, it tells you in a sentence or two at a quiet moment, or says it is in the chat when it is long;
+- start talking while it speaks and it stops to listen.
+
+Voice chat is in the **Mac App** and the phone app for now.
 
 ### Setting it up
 
-Settings › Voice:
+Open **Settings › Voice**:
 
-- **Model**: the model for voice conversations (address, model, key). Left empty, the translation one is used.
-- **Speech**: the service that speaks; pick a voice and speed, and enter its API key. Keys are kept in the system keychain.
-- **On your other devices**: when on, the settings are kept in the connected workspaces, so your phone can use them too.
+1. **The assistant's model**: fill in **Address**, **Model** and **Key**. Any OpenAI-compatible service works (OpenAI, DeepSeek, Doubao, OpenRouter…); pick a quick one, since it hands anything hard to the agent. Left empty, the one set up under Translation is used.
+2. **Speech**: the service that says the assistant's words out loud. For now that is **Doubao voice**: in the Volcano Engine console, under Doubao voice, turn on speech synthesis, create an API key and paste it here.
+3. Choose a **Voice** (grouped by language) and **Speed**, and click **Try it** to hear a sentence. For a cloned voice, choose "Other (type a voice ID)".
+4. Click **Save**.
 
-Once set up, the round button on the right of a chat's box becomes **Voice chat** (a waveform) when the box is empty and the agent is not working.
+![Settings › Voice: the model and the speech service](shot:settings-voice)
 
-### Using it
+Keys are kept in this computer's system keychain; the page only says "Kept in the system keychain (not shown)".
 
-- Click it to connect: a voice bar above the box says whether it is listening, thinking or speaking, with captions below.
-- What you ask becomes a task or an addition, shown in the chat as usual with a small "By voice" tag.
-- On the right: mute and hang up (**Esc** hangs up too).
-- Going to another chat, a project or Settings does not end the call; a small pill at the top right takes you back.
-- One call at a time: voice in another chat hangs up the first.
-- A project home's box works the same way: it opens the chat with the recipient and connects.
+At the bottom, **On your other devices** is on by default: these settings, keys included, are kept on the workspaces you are connected to, so your phone and other computers need no setup. Note that the administrator of the computer a workspace runs on can read its data; to keep your keys on this computer only, turn it off.
+
+### Making a call
+
+Once set up, the round button on the right of a chat's box becomes **Voice chat** (a waveform) when **the box is empty and the agent is not working**.
+
+1. Click the waveform to connect.
+2. A voice bar appears above the box. The small dot on the left shows its state (Listening, Thinking, Speaking, Muted), next to "Voice chat with …".
+3. Captions run below, each line starting with "You" or "Voice". What it passed on to the agent shows as a small line with an arrow, such as "→ Handed to …: check the download links".
+4. Two small round buttons on the right: **Mute** and the red **Hang up**. **Esc** hangs up too.
+
+What you hand the agent by voice shows in the chat as usual, with a small "By voice" tag above it; hover to see your words as you said them.
+
+![The voice bar: its state, captions, and what went to the agent](shot:voice-chat)
+
+The box on a project's home works the same way: the waveform opens the chat with the recipient and connects.
+
+### Talking while you move around
+
+- Going to another chat, a project or Settings does not end the call. A small pill appears at the top right with who you are talking to and whether it is listening or speaking, plus mute and hang up; click the name to go back to that chat.
+- One call at a time. Voice chat in another chat hangs up the first; the button's tooltip says "Hang up on A and voice chat with B".
+
+![The call tucked into a pill at the top right](shot:voice-chip)
+
+## Common questions
+
+**Why is there no waveform button?** Check that this is the Mac App; that both the model and speech are set up under **Settings › Voice**; that the box is empty; and that the agent is not working (then the round button is Stop). Terminal chats have no voice chat.
+
+**Are recordings kept?** No. The small talk in the voice bar stays on this computer and recordings are not kept; what you hand the agent stays in the chat as an ordinary message.
+
+**What if it mishears and sets off the wrong work?** What it passes on is written in the captions, and the message in the chat shows your words as said. If it is wrong, add a correction or stop it in the chat right away; see [Chatting with agents](#help/chat).

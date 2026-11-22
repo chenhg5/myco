@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { Markdown } from "@/app/Markdown";
 import { useNavSub } from "@/app/nav";
 import { noteDone } from "@/app/Onboard";
+import { Lightbox, type Picture } from "@/app/lightbox";
 import { HELP_GROUPS, HELP_ORDER, helpText, helpTitle, isHelpId, type HelpId } from "@/app/help/docs";
 import { L } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -57,8 +58,20 @@ export function HelpPage({ start }: { start?: HelpId }) {
   const at = HELP_ORDER.indexOf(doc);
   const prev = at > 0 ? HELP_ORDER[at - 1] : null;
   const next = at < HELP_ORDER.length - 1 ? HELP_ORDER[at + 1] : null;
+  // A picture opens full size (← → through the page's pictures).
+  const [shots, setShots] = useState<{ items: Picture[]; index: number } | null>(null);
   // A link to another page of the guide opens it here.
   const onClick = (e: React.MouseEvent) => {
+    const img = (e.target as Element).closest(".hp-doc .md img");
+    if (img instanceof HTMLImageElement && main.current) {
+      const all = [...main.current.querySelectorAll<HTMLImageElement>(".hp-doc .md img")].filter((x) => !x.closest("a"));
+      const i = all.indexOf(img);
+      if (i >= 0) {
+        e.preventDefault();
+        setShots({ items: all.map((x) => ({ name: x.alt || helpTitle(doc), src: x.currentSrc || x.src })), index: i });
+        return;
+      }
+    }
     const a = (e.target as Element).closest("a");
     const href = a?.getAttribute("href") || "";
     const m = /^#help\/([\w-]+)$/.exec(href);
@@ -122,6 +135,7 @@ export function HelpPage({ start }: { start?: HelpId }) {
           </div>
         </article>
       </div>
+      {shots && <Lightbox items={shots.items} index={shots.index} onIndex={(index) => setShots({ ...shots, index })} onClose={() => setShots(null)} />}
     </div>
   );
 }
