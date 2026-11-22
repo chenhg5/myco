@@ -95,6 +95,7 @@ extern void mycoScreenRegionStopped(int ident);
  if(self.finished || !self.selected || NSWidth(self.selected.selection)<16 || NSHeight(self.selected.selection)<16)return;
  self.finished=YES;
  NSRect r=[self.selected.window convertRectToScreen:self.selected.selection];
+ NSRect visible=(self.selected.window.screen ?: [NSScreen mainScreen]).visibleFrame;
  CGFloat top=NSMaxY([NSScreen screens].firstObject.frame);
  for(NSWindow *p in self.panels)[p orderOut:nil];
  if(self.recording){
@@ -107,7 +108,6 @@ extern void mycoScreenRegionStopped(int ident);
   border.title=@"myco-recording-control:outline";border.releasedWhenClosed=NO;border.opaque=NO;border.backgroundColor=NSColor.clearColor;border.ignoresMouseEvents=YES;border.hasShadow=NO;border.level=NSFloatingWindowLevel;
   border.sharingType=NSWindowSharingNone;border.collectionBehavior=NSWindowCollectionBehaviorCanJoinAllSpaces|NSWindowCollectionBehaviorFullScreenAuxiliary;
   MycoRecordBorder *outline=[[MycoRecordBorder alloc]initWithFrame:NSMakeRect(0,0,NSWidth(r)+8,NSHeight(r)+8)];border.contentView=outline;[outline release];[self.panels addObject:border];[border orderFrontRegardless];[border release];
-  NSRect visible=self.selected.window.screen.visibleFrame;
   CGFloat hw=MIN(360,NSWidth(visible)-16),hh=66;
   CGFloat hx=MAX(NSMinX(visible)+8,MIN(NSMidX(r)-hw/2,NSMaxX(visible)-hw-8));
   CGFloat hy=NSMinY(r)-hh-12;if(hy<NSMinY(visible)+8)hy=MIN(NSMaxY(visible)-hh-8,NSMaxY(r)+12);
