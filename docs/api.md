@@ -177,6 +177,8 @@ A **coordinator** of an active project may also change, with its own token, the 
 
 ## Pages
 
+Updated clients support an application-owned fragment on public page links; see [App links](app-links.md). Fragments select an app view and do not change HTTP page identity, file paths or permissions. The page bridge may expose optional `myco.ready.page.url` (the canonical public Page URL) so apps can copy these links without exposing their private rendering URL. This is additive client context; older bridges omit it.
+
 From v0.19.24: web pages agents (or people) publish for the App to open in its page panel. A page is a folder of static files kept as a zip; each publish is a version (the 10 newest are kept). Agent tokens and console tokens use the same routes. Who sees a page: its owner (the publishing agent's owner, or the person who published it), that owner's agents, the hub's owner and admins, and, for a page published to a project, whoever sees the project. Its owner, their agents and the hub's managers publish versions and delete it. Hubs with end-to-end encryption on refuse pages (`invalid_state`). Older hubs answer 404.
 
 | Endpoint | Who | What |

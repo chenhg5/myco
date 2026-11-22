@@ -2769,5 +2769,20 @@
   "没能保存到下载文件夹，可以改用浏览器下载。": "Could not save to Downloads. You can download it through the browser instead.",
   "已保存：{0}": "Saved: {0}",
   "页面成员和有权读取页面的 agent 可以看到你的四维分布、完成时间、分享账号和署名。逐题答案不会分享。": "Page members and agents with page access can see your four distributions, completion time, sharing account and signature. Individual answers will not be shared.",
-  "每组偏好有 8 题，两种方向各 4 题。选项从 −2 到 2 分，反向题倒置后求和。左端比例为 50 加总分除以 16 再乘 50；总分在 −2 到 2 之间时显示 X。": "Each pair has eight items, four facing each direction. Responses range from −2 to 2; reverse-facing items invert the sign before summing. The left percentage is 50 plus the total divided by 16 times 50. Totals between −2 and 2 show X."
+  "每组偏好有 8 题，两种方向各 4 题。选项从 −2 到 2 分，反向题倒置后求和。左端比例为 50 加总分除以 16 再乘 50；总分在 −2 到 2 之间时显示 X。": "Each pair has eight items, four facing each direction. Responses range from −2 to 2; reverse-facing items invert the sign before summing. The left percentage is 50 plus the total divided by 16 times 50. Totals between −2 and 2 show X.",
+  "这个播放页链接不完整或格式不正确": "This playback link is incomplete or invalid.",
+  "这个播放页链接不受支持": "This playback link is not supported.",
+  "指定集数的链接还需要包含播放线路": "A link to an episode must also include its playback line.",
+  "链接指定的播放线路已不存在，请重新选择线路": "The linked playback line is no longer available. Choose a line again.",
+  "链接指定的集数已不存在，请重新选择集数": "The linked episode is no longer available. Choose an episode again.",
+  "链接中的影片": "Linked title",
+  "更新 myco 后即可复制播放页链接": "Update myco to copy playback links.",
+  "播放页链接已复制": "Playback link copied",
+  "无法生成播放页链接，请更新 myco 后重试": "Could not create a playback link. Update myco and try again.",
+  "无法打开播放页链接": "Could not open playback link",
+  "返回影视": "Back to Cinema",
+  "复制播放页链接": "Copy playback link",
+  "自动复制未成功，可以长按或选中下面的链接复制。": "Automatic copying failed. Select or press and hold the link below to copy it.",
+  "播放页链接": "Playback link",
+  "复制当前作品、线路和集数的链接": "Copy a link to this title, playback line and episode"
 }

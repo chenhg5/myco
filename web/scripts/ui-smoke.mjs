@@ -23,12 +23,14 @@
 import { spawn, spawnSync, execFileSync } from "node:child_process";
 import { createServer } from "node:net";
 import http from "node:http";
+import ts from "typescript";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { mkdir, access, readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+const pageRouteScript = ts.transpileModule(await readFile(new URL("../../templates/src/_lib/page-route.ts", import.meta.url),"utf8"),{compilerOptions:{module:ts.ModuleKind.ES2022,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^export /gm,"") + "\nwindow.__routeModule={subscribeAppRoute};";
 const WEB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = path.join(WEB, "ui-smoke");
 const HOST = "127.0.0.1";
@@ -654,6 +656,51 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, panel.getByRole("button", { name: "关闭" }));
       await panel.waitFor({ state: "detached", timeout: 5_000 });
       await clickVisible(page, chat.getByRole("button", { name: "关掉这一栏" }));
+    });
+
+    await step("网页 · 应用内直达链接", async () => {
+      await go(page,"官网改版",narrow);
+      if (narrow) await clickVisible(page,page.locator('.sp-strip-face[title="Release (Claude 云端)"]'));
+      else await clickVisible(page,page.locator(".sp-side .sp-member:visible",{hasText:"Release (Claude 云端)"}));
+      const chat = page.locator(".sp-pane-right"), panel = page.locator(".pg-panel");
+      const first = chat.locator(".conv-msg", {hasText:"直达链接一"}).first();
+      const second = chat.locator(".conv-msg", {hasText:"直达链接二"}).first();
+      // A route card must retain the link, rather than opening only the page ID.
+      const navigation = fragment => page.waitForEvent("framenavigated",{predicate:f=>f.url().includes("#watch") && f.url().includes(fragment),timeout:15000});
+      const firstNavigation = navigation("%E7%AC%AC01%E9%9B%86");
+      await clickVisible(page, first.locator(".pg-card"));
+      await firstNavigation;
+      const frame = () => page.frames().find(f => f.url().includes("#watch"));
+      await page.waitForFunction(() => document.querySelector(".pg-frame")?.getAttribute("src")?.includes("%E7%AC%AC01%E9%9B%86"));
+      await frame().waitForFunction(() => !!window.myco);
+      const ctx = await frame().evaluate(() => window.myco.ready);
+      if (ctx.page.url !== "http://192.168.1.20:7780/pages/pg_routes") throw Error("ready must expose the public page URL, not the private frame URL");
+      // The normal Markdown link follows exactly the same route path.
+      await frame().evaluate(() => { window.__routeMarker = "kept"; });
+      if (narrow) await clickVisible(page,panel.getByRole("button",{name:"收起",exact:true}));
+      const secondNavigation = navigation("%E7%AC%AC02%E9%9B%86");
+      await clickVisible(page,second.locator('a[href*="#watch"]'));
+      await secondNavigation;
+      await page.waitForFunction(() => document.querySelector(".pg-frame")?.getAttribute("src")?.includes("%E7%AC%AC02%E9%9B%86"));
+      if (await panel.locator(".pg-tab").count()) throw Error("two routes to one page must reuse one tab");
+      await frame().waitForFunction(() => !!window.myco);
+      if (await frame().evaluate(() => window.__routeMarker) !== "kept") throw Error("changing the fragment must preserve the page document");
+      await frame().addScriptTag({content:pageRouteScript});
+      await frame().evaluate(() => { window.__routeCount=0; window.__stopRoute=window.__routeModule.subscribeAppRoute(()=>window.__routeCount++); });
+      if (narrow) await clickVisible(page,panel.getByRole("button",{name:"收起",exact:true}));
+      await clickVisible(page, second.locator(".pg-card"));
+      await frame().waitForFunction(()=>window.__routeCount===1);
+      if (await frame().evaluate(() => window.__routeMarker) !== "kept") throw Error("repeated deep links must keep the page document");
+      // Returning through an ordinary page link clears the route, in place.
+      if (narrow) await clickVisible(page,panel.getByRole("button",{name:"收起",exact:true}));
+      await clickVisible(page,chat.locator(".conv-msg",{hasText:"直达普通入口"}).first().locator(".pg-card"));
+      const sameFrame=page.frames().find(f=>f.url().includes("/p/"));
+      await sameFrame.waitForFunction(()=>location.hash==="");
+      if (await sameFrame.evaluate(()=>window.__routeMarker)!=="kept") throw Error("a plain link back to the page must keep its document");
+      await shot(page,size,scheme,"page-route");
+      await clickVisible(page, panel.getByRole("button",{name:"关闭",exact:true}));
+      await panel.waitFor({state:"detached"});
+      await clickVisible(page,chat.getByRole("button",{name:"关掉这一栏"}));
     });
 
     // Several pages open: a tab each, under the panel's head; opening one

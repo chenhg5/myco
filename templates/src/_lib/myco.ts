@@ -9,7 +9,7 @@ export type PageActionFile = { media_type: string; data: Blob | Uint8Array | Arr
 export type PageActionBridge = {
   register(descriptors: PageActionDescriptor[], invoke: (request: PageActionRequest) => Promise<PageActionFile>): () => void;
 };
-type Ctx = { preferences?: PagePreferences; page: { id: string; name: string }; me: { name: string }; render?: { instance: string } };
+type Ctx = { preferences?: PagePreferences; page: { id: string; name: string; url?: string }; me: { name: string }; render?: { instance: string } };
 
 interface Bridge {
   readonly preferences?: PagePreferences;
