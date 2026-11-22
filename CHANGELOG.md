@@ -4,6 +4,20 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.21.20
+
+- **Add your phone in simple mode too**: a new install starts in simple mode, which hid My devices (on Settings › Members). It now shows at the foot of Settings › Workspaces, with Add another device, so you can add your iPhone.
+- The App: a page link from a workspace on this computer that serves the local network (http://192.168.x.x:7777/pages/…) opens in the App's page panel instead of the browser.
+- The App: pictures in messages keep their size while they load again, so switching workspaces or reopening a chat no longer makes the messages jump.
+- Docs: a step-by-step guide with screenshots, from installing the App to your agent on claude.ai and your phone (docs/guide-claude-ai.md).
+
+**中文**
+
+- **简单模式下也能加手机了**：新装的 App 默认是简单模式，它把「我的设备」（在 设置 › 成员 里）藏了。现在它显示在 设置 › 工作区 最下面，点「添加另一台设备」就能把 iPhone 加进来。
+- App：这台电脑上对局域网开放的工作区给出的页面链接（http://192.168.x.x:7777/pages/…），现在在 App 的页面面板里打开，不再跳到浏览器。
+- App：消息里的图片重新加载时保留原来的大小，切换工作区或重新打开对话时，消息不再跳动。
+- 文档：一篇带截图的图文教程，从安装 App 到连上你在 claude.ai 的 agent，再到手机上指挥（docs/guide-claude-ai.zh-CN.md）。
+
 ## v0.21.19
 
 - **A user guide in the App** (使用文档): short pages on everything the App does, with search, links between pages, and the previous and next page at the foot. Open it from the workspace menu, Settings › About, the Mac's Help menu, or the last step of the getting-started checklist. It covers voice, split panes, shortcuts and the community too.
