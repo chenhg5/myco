@@ -827,6 +827,44 @@ final class ConversationTests: XCTestCase {
         snap("project-handoffs")
     }
     @MainActor
+    func testAPageLinkOpensWhereItPointsAndMovesWithinThePage() {
+        // Opened from a link with a place in it: at that place, Chinese
+        // and all, and the bridge gives the page its public address.
+        var app = launch(["-myco-start", "links", "-myco-route", "page:pg_cinema#watch?source=src_1&movie=m42&line=线路一&episode=第3集"])
+        var web = app.webViews.firstMatch
+        XCTAssertTrue(web.staticTexts["Episode: 第3集 / 线路一"].waitForExistence(timeout: 20), web.debugDescription)
+        XCTAssertTrue(web.staticTexts["URL: https://demo.myco.example/pages/pg_cinema"].waitForExistence(timeout: 10), "the public address, not the app's own")
+        app.terminate()
+
+        // From the chat: the card opens where its link points.
+        app = launch(["-myco-start", "links", "-myco-route", "agent:vps-codex-90aa"])
+        let card = app.buttons.matching(identifier: "page.card").firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 20))
+        snap("page-link-card")
+        card.tap()
+        web = app.webViews.firstMatch
+        XCTAssertTrue(web.staticTexts["Episode: 第1集 / 线路一"].waitForExistence(timeout: 20), web.debugDescription)
+        XCTAssertTrue(web.staticTexts["Loads: 1"].exists)
+        // A link in the page to another place in itself: the same document,
+        // told by a hashchange.
+        web.links["Next episode"].tap()
+        XCTAssertTrue(web.staticTexts["Episode: 第2集 / 线路一"].waitForExistence(timeout: 10), web.debugDescription)
+        XCTAssertTrue(web.staticTexts["Changes: 1"].exists)
+        // The same link again: the page hears it again, and is not reloaded.
+        web.links["Next episode"].tap()
+        XCTAssertTrue(web.staticTexts["Changes: 2"].waitForExistence(timeout: 10), web.debugDescription)
+        XCTAssertTrue(web.staticTexts["Loads: 1"].exists, "not reloaded")
+        snap("page-link-episode")
+        app.buttons["page.close"].tap()
+        // The second link in the words: that episode.
+        let links = app.links.matching(NSPredicate(format: "label CONTAINS %@", "pg_cinema"))
+        XCTAssertTrue(links.firstMatch.waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertEqual(links.count, 2)
+        links.element(boundBy: 1).tap()
+        XCTAssertTrue(web.staticTexts["Episode: 第2集 / 线路一"].waitForExistence(timeout: 20), web.debugDescription)
+    }
+
+    @MainActor
     func testRemoteControllerHasWebRTCNativeConsentAndDisconnectsInBackground() {
         let app = launch(["-myco-start", "remote", "-myco-route", "page:pg_remote"])
         let web = app.webViews.firstMatch

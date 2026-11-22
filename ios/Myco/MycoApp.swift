@@ -66,7 +66,7 @@ struct MycoApp: App {
             // The voice's keys live in the keychain, beside the device tokens.
             secrets: KeychainStore(),
             voice: Self.voice)
-        let scenarios: [String: Scenario] = ["demo": .team, "empty": .empty, "long": .long, "waiting": .waiting, "session": .session, "remote": .remote]
+        let scenarios: [String: Scenario] = ["demo": .team, "empty": .empty, "long": .long, "waiting": .waiting, "session": .session, "remote": .remote, "links": .links]
         _model = State(initialValue: AppModel(session: scenarios[start].map(Self.demo), doors: doors))
     }
 

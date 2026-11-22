@@ -168,7 +168,9 @@ public final class Router {
             case "members": show([.members], in: .chats)
             default:
                 guard name.hasPrefix("pg_") else { return false }
-                page = PageRoute(id: name)
+                // (`page:pg_x#where`: opened at that place in it)
+                let parts = name.split(separator: "#", maxSplits: 1).map(String.init)
+                page = PageRoute(id: parts[0], fragment: parts.count > 1 ? parts[1] : nil)
             }
         case "sheet":
             switch name {
