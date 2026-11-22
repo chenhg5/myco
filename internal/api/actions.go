@@ -107,11 +107,14 @@ const (
 	JobCancelled = "cancelled"
 )
 
-// ActionError is why a job failed.
+// ActionError is why a job failed. Code "outcome_unknown" means it may or
+// may not have happened (observe before going on); Applied is how many of
+// an input's events the computer confirmed before it failed.
 type ActionError struct {
 	Code      string `json:"code"`
 	Message   string `json:"message"`
 	Retryable bool   `json:"retryable"`
+	Applied   *int   `json:"applied,omitempty"`
 }
 
 // ActionArtifact is a private, short-lived file a job made (a screenshot):
