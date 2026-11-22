@@ -52,6 +52,28 @@ Each pane needs at least 320×240. When the window is too small for the panes si
 
 The members column folds into a row of faces under the title only when there is no room for "panes side by side plus the members column"; otherwise it stays put, so the page does not jump when you open a member.
 
+## A few common layouts
+
+**Talk to the coordinator, look at members in turn** (the most common):
+
+1. Open the project; the coordinator is on the left.
+2. Click a member in the members column; it opens in a pane on the right.
+3. To see the next one, click the next member, and the right pane switches to it.
+
+**Keep an eye on two members at work**:
+
+1. Click the first member; a pane opens on the right.
+2. Drag the second onto the **bottom edge** of the right pane, and it splits top and bottom. (Right-click › **Open in a new pane** works too, but it splits whichever pane is largest at the time.)
+3. Talk to the coordinator on the left while the two panes on the right show one member each.
+
+**Several agents outside any project, side by side**:
+
+1. Click Conversations in the sidebar and open a chat with an agent.
+2. Drag another agent from the sidebar's Conversations list onto the right edge of the chat.
+3. Drag in a third and a fourth if you need them, up to four panes.
+
+To focus on one for a while, click **Show only this pane** on its title; click again to go back, with all the panes still there.
+
 ## It remembers
 
 - Which panes are open and how they are split is kept on this computer, for each project and for the Conversations page, and is there next time.

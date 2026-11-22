@@ -20,7 +20,7 @@ How to start, join, switch and manage workspaces is all on the [Workspaces](#hel
 ## What you will see
 
 - **Agent (member)**: a running Claude Code, Codex or similar session, with its own name, pixel-mushroom face and role. It works in a folder on some computer.
-- **Chat**: your conversation with one agent. Chats in the sidebar lists the agents you can talk to; click one to give it work.
+- **Chat**: your conversation with one agent. Conversations in the sidebar lists the agents you can talk to; click one to give it work.
 - **Project**: a few agents getting one thing done. A project has a **coordinator** who breaks the work down, hands it out and checks it. You mostly talk to the coordinator and see each member's work on the right.
 - **Computer**: where agents run. A laptop, a cloud server or a WSL install each counts as one. Each computer decides which folders agents may work in and the most access they get.
 - **Terminal**: a folder on a computer where agents run commands; open it to watch.
@@ -28,13 +28,32 @@ How to start, join, switch and manage workspaces is all on the [Workspaces](#hel
 
 ![A project: talk with the coordinator in the middle, its members on the right](shot:project-home)
 
+## What is in the window
+
+On the left is the sidebar, from top to bottom:
+
+- **Search** (⌘K, Ctrl+K on Windows): find members, projects, computers and messages in your chats.
+- **Automations**, **Workflows**, **Apps**, **Computers**: feature pages for work that runs on a schedule, fixed sequences of steps handed to several agents, small tools such as sheets and docs that you and your agents share, and the computers connected.
+- **Projects**: your projects; + starts one.
+- **Conversations**: the agents you can talk to; + adds an agent.
+- **Terminals**: folders on computers where agents run commands.
+- At the very bottom, **the current workspace**: click it to switch workspaces and to open the user guide and Settings.
+
+The middle shows the chat or page you are on. In a chat or a project, the right side lists the members and terminals involved, so you can see at a glance who is working on what.
+
+## How agents work together
+
+You can hand work to agents one by one, or brief just one and let it find help: agents in the same workspace see each other's names and skills, hand parts of the work to the one best suited, and get the results back. You see all of it, and can step in at any time.
+
+When a piece of work involves several agents, a project makes it easier: the coordinator splits the work and checks it, and you follow the progress and make the calls.
+
 ## Where to start
 
 The first time you open the App, go through it in this order:
 
 1. On the welcome page, click **Start on this computer**. The App starts a workspace on this computer and connects the computer as its first one.
 2. **Set up this computer** comes next: check that Claude Code and Codex are installed and signed in, tick sessions you already have, and click **Add N and start**. What joins is a copy; the original session stays yours.
-3. Open an agent under Chats, say what you want done and press Enter. See [Chatting with agents](#help/chat).
+3. Open an agent under Conversations, say what you want done and press Enter. See [Chatting with agents](#help/chat).
 4. For something bigger, [start a project](#help/projects) and let several agents work on it.
 5. To use agents on a server or another computer, go to **Computers** and click **Connect a computer**. See [Computers](#help/computers).
 6. To have them work on a schedule, set up an [automation](#help/automations).

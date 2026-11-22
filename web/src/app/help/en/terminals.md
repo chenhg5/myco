@@ -6,7 +6,7 @@ A terminal is a folder on a computer where agents can run commands; open it and 
 
 - The **Terminals** section of the sidebar lists every terminal in the workspace; click one to open it. A green dot means it is running a command; an amber dot means everything running there may be stuck.
 - The "Terminals" list in a project's right column holds the terminals added to that project.
-- On each computer's page, "Agents and terminals" lists the terminals on that computer.
+- On each [computer's](#help/computers) page, "Agents and terminals" lists the terminals on that computer.
 
 With Simple mode on (Settings › Appearance), the sidebar hides the Terminals section, but computer pages and projects still show them.
 
@@ -59,7 +59,7 @@ These keys are the same on Mac and Windows: Ctrl, not ⌘.
 
 ## How agents use a terminal
 
-Once a terminal is in a project, every agent in the project can run commands there. Tell the coordinator "run the tests and see", and it hands the commands to the terminal itself.
+Once a terminal is in a [project](#help/projects), every agent in the project can run commands there. Tell the coordinator "run the tests and see", and it hands the commands to the terminal itself.
 
 - To see what agents ran, click the terminal in the project's right column, and it opens in a column next to the coordinator. Work an agent hands to the terminal shows as handoff cards in that agent's chat; open one to see the record between them: who ran which command, when, and what it printed. A record is view-only; you cannot type in it.
 - A terminal can be in several projects at once. Take it out of a project and that project's agents can no longer use it.
