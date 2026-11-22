@@ -12,6 +12,12 @@
 
 > 截图里的地址、名字和对话都是演示用的，你看到的会不一样。
 
+## 先看一眼：它是怎么连起来的
+
+你（App 或手机）、claude.ai 上的会话、你的电脑，都只和工作区（Hub）说话，而且都是往外连，谁都不用开端口。claude.ai 的会话从外面连不进去，所以它自己挂着 `myco inbox wait` 等活，有消息就醒来干，干完再接着等。
+
+![myco 怎么让 claude.ai 上的 Claude Code 干活](assets/guide/claude-ai/zh/00-how-it-works.webp)
+
 ## 第 1 步：下载安装 App
 
 下载 **[myco.dmg](https://github.com/chenhg5/myco/releases/latest/download/myco.dmg)**（Apple 芯片和 Intel 通用，已签名公证），打开后把 myco 拖进「应用程序」，再打开它。

@@ -12,6 +12,12 @@ You need:
 
 > Addresses, names and conversations in the screenshots are examples; yours will differ.
 
+## First, how it fits together
+
+You (the App or your phone), the claude.ai session and your computers all talk only to the workspace (the Hub), and every connection goes out, so nobody opens a port. Nothing can connect into a claude.ai session, so the session keeps `myco inbox wait` open: a message wakes it, it does the work, then it waits again.
+
+![How myco puts Claude Code on claude.ai to work](assets/guide/claude-ai/en/00-how-it-works.webp)
+
 ## Step 1: Download and install the app
 
 Download **[myco.dmg](https://github.com/chenhg5/myco/releases/latest/download/myco.dmg)** (Apple silicon and Intel, signed and notarized), drag myco into Applications, and open it.
