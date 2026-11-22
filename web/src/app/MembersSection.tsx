@@ -143,7 +143,7 @@ export function MembersSection({ hubsOv, onRefresh }: { hubsOv?: HubOverview[]; 
           </div>
         ))}
         <p className="app-hint">
-          {L("每个人都能看到所有 agent 和对话、给任何 agent 发消息；只能管理自己加进来的 agent 和电脑。所有者和管理员可以管理所有人的。", "Everyone sees every node and conversation and can message any node, but manages only the nodes and machines they added. The owner and admins manage everyone’s.")}
+          {L("每个人都能看到团队可见的 agent、给它们发消息，但只看得到自己和自己的 agent 参与的对话；只能管理自己加进来的 agent 和电脑。所有者和管理员看得到所有对话，也能管理所有人的。", "Everyone sees the agents shared with the team and can message them, but sees only the conversations they or their own agents take part in, and manages only the agents and computers they added. The owner and admins see every conversation and manage everyone’s.")}
         </p>
       </section>
 

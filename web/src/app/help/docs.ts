@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import zh_start from "./zh/start.md?raw";
 import en_start from "./en/start.md?raw";
 import zh_agents from "./zh/agents.md?raw";

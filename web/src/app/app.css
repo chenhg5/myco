@@ -9359,8 +9359,8 @@ html.os-other ::-webkit-scrollbar-thumb:hover, html.os-other ::-webkit-scrollbar
   .hp-doc { padding-top: 20px; }
 }
 /* A page's pictures: screenshots of the App, as wide as the text, framed
-   like a window; click to see one full size. A QR code (an address that is
-   not one of the guide's) stays small. */
+   like a window; click to see one full size. The community page's QR code
+   (from GitHub) stays small. */
 .hp-doc .md img {
   display: block;
   width: 100%;
@@ -9371,7 +9371,7 @@ html.os-other ::-webkit-scrollbar-thumb:hover, html.os-other ::-webkit-scrollbar
   box-shadow: 0 0 0 1px var(--line), 0 6px 20px -8px rgba(0, 0, 0, 0.18);
   cursor: zoom-in;
 }
-.hp-doc .md img[src^="http"] { width: auto; max-width: 260px; box-shadow: none; cursor: default; }
+.hp-doc .md img[src*="githubusercontent"] { width: auto; max-width: 260px; box-shadow: none; cursor: default; }
 .hp-doc .md p:has(> img:only-child) { margin: 0; }
 
 /* Public tunnel setup uses the existing neutral controls and command blocks. */

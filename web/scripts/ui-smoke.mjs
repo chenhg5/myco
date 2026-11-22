@@ -2812,7 +2812,7 @@ async function runMatrix(browser, size, scheme) {
         await help.locator(".hp-pick").selectOption("projects");
       } else {
         if ((await help.locator(".hp-item").count()) < 12) throw new Error("使用文档左边应列出全部文档");
-        await clickVisible(page, help.locator(".hp-item", { hasText: "项目和协调者" }));
+        await clickVisible(page, help.locator(".hp-item", { hasText: /^项目$/ }));
       }
       await page.waitForFunction(() => document.querySelector("[data-testid=help-doc]")?.getAttribute("data-doc") === "projects", null, { timeout: 5_000 });
       if (!(await doc.innerText()).includes("协调者")) throw new Error("项目那篇应讲协调者");

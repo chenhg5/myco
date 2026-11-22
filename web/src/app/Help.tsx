@@ -64,7 +64,7 @@ export function HelpPage({ start }: { start?: HelpId }) {
   const onClick = (e: React.MouseEvent) => {
     const img = (e.target as Element).closest(".hp-doc .md img");
     if (img instanceof HTMLImageElement && main.current) {
-      const all = [...main.current.querySelectorAll<HTMLImageElement>(".hp-doc .md img")].filter((x) => !x.closest("a"));
+      const all = [...main.current.querySelectorAll<HTMLImageElement>(".hp-doc .md img")].filter((x) => !x.closest("a") && !x.src.includes("githubusercontent"));
       const i = all.indexOf(img);
       if (i >= 0) {
         e.preventDefault();

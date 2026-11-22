@@ -20,8 +20,8 @@ const HELP = path.join(WEB, "src/app/help");
 const IMG = path.join(HELP, "img");
 const SHOTS = path.join(WEB, "ui-smoke");
 const COMBO = process.env.HELP_SHOTS_COMBO || "1200x800-light";
-const MAX_W = 1600;
-const QUALITY = 0.82;
+const MAX_W = 1400;
+const QUALITY = 0.78;
 const all = process.argv.includes("--all");
 
 const require = createRequire(import.meta.url);
