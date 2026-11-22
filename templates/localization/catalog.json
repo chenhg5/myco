@@ -95,6 +95,10 @@
     "Arcade Emulator",
     "Play local NES cartridges and CHIP-8 games with touch controls, or verify and launch arcade ROM ZIPs with MAME in the desktop App."
   ],
+  "ocean": [
+    "Voyage",
+    "Take a small boat out on a lifelike 3D sea and explore freely: waves, shallows, reefs and islands are drawn live on this computer. Islands are page data that people and agents can add, so the map keeps growing."
+  ],
   "gomoku": [
     "Gomoku",
     "Play five-in-a-row with another person or an agent. Choose black or white, take turns, undo moves, resign or start a new round."

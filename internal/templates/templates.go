@@ -25,7 +25,7 @@ var Order = []string{
 	"myco/todo", "myco/notes", "myco/disk", "myco/stocks", "myco/proxy-console", "myco/remote-desktop",
 	"myco/ledger", "myco/habit", "myco/reader", "myco/cinema", "myco/personality",
 	"myco/design-studio", "myco/logo-studio", "myco/whiteboard", "myco/mindmap", "myco/recorder", "myco/video", "myco/motion", "myco/photo",
-	"myco/arcade", "myco/gomoku", "myco/sudoku",
+	"myco/arcade", "myco/ocean", "myco/gomoku", "myco/sudoku",
 }
 
 func rank(id string) int {

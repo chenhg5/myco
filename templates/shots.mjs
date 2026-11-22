@@ -119,6 +119,29 @@ const plans = {
     await wait(p, 300);
   }] },
   "logo-studio": [null],
+  // 航海: under way toward the islands, then arriving at one (WebGL in
+  // software: time is moved on by hand, then a frame drawn)
+  ocean: [async (p) => {
+    await p.waitForFunction(() => window.__ocean && document.querySelector(".oc-dash"));
+    await p.evaluate(async () => {
+      const w = window.__ocean; w.stop();
+      w.moveBoat(30, 120, 5.95);
+      w.controls.press("up", true); for (let i = 0; i < 60; i++) w.advance(1 / 30); w.controls.press("up", false);
+      w.controls.press("left", true); for (let i = 0; i < 25; i++) w.advance(1 / 30); w.controls.press("left", false);
+      for (let i = 0; i < 300; i++) w.advance(1 / 30);
+      for (let i = 0; i < 3; i++) { w.frame(1 / 60); await new Promise((r) => setTimeout(r, 150)); }
+    });
+    await wait(p, 300);
+  }, async (p) => {
+    await p.evaluate(async () => {
+      const w = window.__ocean;
+      w.moveBoat(-150, -330, 4.5); w.boat.speed = 2;
+      for (let i = 0; i < 40; i++) w.advance(1 / 30);
+      w.view.yaw = -0.55; w.view.pitch = 0.22; w.view.dist = 24; w.view.touched = performance.now();
+      for (let i = 0; i < 3; i++) { w.frame(1 / 60); await new Promise((r) => setTimeout(r, 150)); }
+    });
+    await wait(p, 300);
+  }],
   tutor: [null, async (p) => {
     await p.locator(".tu-example-link").click();
     await p.getByRole("button", { name: "中学基础", exact: true }).click();
@@ -200,7 +223,8 @@ const plans = {
 const chromium = await playwright();
 const srv = await serve();
 const base = `http://127.0.0.1:${srv.address().port}`;
-const browser = await chromium.launch(process.env.UI_SMOKE_EXECUTABLE ? {executablePath:process.env.UI_SMOKE_EXECUTABLE} : {});
+// (WebGL in software where there is no GPU: 航海 draws its sea with it)
+const browser = await chromium.launch({ args: ["--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"], ...(process.env.UI_SMOKE_EXECUTABLE ? { executablePath: process.env.UI_SMOKE_EXECUTABLE } : {}) });
 const only = process.argv.slice(2);
 const apps = readdirSync(official).filter((a) => existsSync(path.join(official, a, "myco.json")) && (!only.length || only.includes(a)));
 for (const app of apps) {
