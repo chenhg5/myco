@@ -5,7 +5,7 @@ import { ArrowLeft, Check, ChevronLeft, ChevronRight, Clock3, MapPin } from "luc
 import { t as uiText, locale } from "../_lib/i18n";
 import { save } from "../_lib/myco";
 import { addDays, calendarFile, dateIn, slotsForDay, type Booking, type Slot } from "./engine";
-import { bookings, eventData, hostZone, invalidLedger, kit, profile, schedule, types } from "./model";
+import { occupied, eventData, hostZone, invalidLedger, kit, profile, schedule, types } from "./model";
 import { reserve } from "./edit";
 import { ErrorNote, Field, ZoneSelect } from "./panels";
 
@@ -22,7 +22,7 @@ export async function downloadCalendar(entries: Booking[]) {
 }
 function firstDay(type: string, zone: string) {
   const today = dateIn(Date.now(), zone), event = eventData(types.get(type)?.data || {});
-  for (let i = 0; i <= Math.min(event.horizon, 14); i++) { const date = addDays(today, i); if (slotsForDay(date, zone, hostZone(), event, schedule(), bookings()).length) return date; }
+  for (let i = 0; i <= Math.min(event.horizon, 14); i++) { const date = addDays(today, i); if (slotsForDay(date, zone, hostZone(), event, schedule(), occupied(date)).length) return date; }
   return today;
 }
 export function BookingView({ typeId, close }: { typeId: string; close: () => void }) {
@@ -32,7 +32,7 @@ export function BookingView({ typeId, close }: { typeId: string; close: () => vo
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 30000); return () => window.clearInterval(timer); }, []);
   const rec = types.get(typeId), event = eventData(rec?.data || {}), host = profile.get("main")?.data;
   const broken = invalidLedger();
-  const slots = useMemo(() => broken ? [] : slotsForDay(day, zone, hostZone(), event, schedule(), bookings(), now), [day, zone, kit.version, now, broken]);
+  const slots = useMemo(() => broken ? [] : slotsForDay(day, zone, hostZone(), event, schedule(), occupied(day), now), [day, zone, kit.version, now, broken]);
   const start = month + "-01", weekday = new Date(start + "T12:00:00Z").getUTCDay(), gridStart = addDays(start, -((weekday + 6) % 7));
   const today = dateIn(now, zone), lastDay = addDays(today, event.horizon + 1);
   function selectDay(date: string) { setDay(date); setMonth(date.slice(0, 7)); setSlot(null); setError(""); }
@@ -41,7 +41,7 @@ export function BookingView({ typeId, close }: { typeId: string; close: () => vo
       <section className="sc-book-info"><div className="sc-avatar">{(host?.host || "M").slice(0, 1)}</div><p className="faint">{host?.host}</p><h1>{event.title}</h1><p className="sc-description">{event.description}</p><p className="sc-meta"><Clock3 className="ico" />{uiText("{0} 分钟", event.duration)}</p>{event.location && <p className="sc-meta"><MapPin className="ico" />{event.location}</p>}<p className="faint sc-intro">{host?.bio}</p><Field label={uiText("显示时区")}><ZoneSelect value={zone} onChange={z => { setZone(z); setSlot(null); setError(""); }} /></Field><p className="sc-small faint">{uiText("只有当前页面的预约会占用时间。")}</p></section>
       <section className="sc-calendar" aria-label={uiText("选择日期")}><header><h2>{new Intl.DateTimeFormat(locale(), { year: "numeric", month: "long", timeZone: "UTC" }).format(new Date(start + "T12:00:00Z"))}</h2><div className="sc-inline"><button type="button" className="icon-btn" title={uiText("上个月")} aria-label={uiText("上个月")} disabled={month <= today.slice(0, 7)} onClick={() => setMonth(addDays(start, -1).slice(0, 7))}><ChevronLeft className="ico" /></button><button type="button" className="icon-btn" title={uiText("下个月")} aria-label={uiText("下个月")} disabled={month >= lastDay.slice(0, 7)} onClick={() => setMonth(addDays(addDays(start, 32).slice(0, 7) + "-01", 0).slice(0, 7))}><ChevronRight className="ico" /></button></div></header>
         <div className="sc-calendar-grid">{Array.from({ length: 7 }, (_, i) => <span className="sc-weekday faint" key={i}>{new Intl.DateTimeFormat(locale(), { weekday: "short", timeZone: "UTC" }).format(new Date(Date.UTC(2026, 10, 23 + i)))}</span>)}{Array.from({ length: 42 }, (_, i) => { const date = addDays(gridStart, i); return <button type="button" key={date} className={`sc-date${date === day ? " is-selected" : ""}${date === today ? " is-today" : ""}`} aria-label={date} aria-pressed={date === day} disabled={date < today || date > lastDay || date.slice(0, 7) !== month} onClick={() => selectDay(date)}>{Number(date.slice(8))}</button>; })}</div>
-        <div className="sc-calendar-note"><p className="faint">{uiText("按 15 分钟间隔显示可约时段。")}</p><button className="link-btn" type="button" onClick={() => { for (let i = 1; i <= event.horizon + 2; i++) { const date = addDays(day, i); if (slotsForDay(date, zone, hostZone(), event, schedule(), bookings()).length) { selectDay(date); return; } } setError(uiText("预约范围内没有更多时段，可调整可用时间。")); }}>{uiText("找下一个可约日期")}</button></div>
+        <div className="sc-calendar-note"><p className="faint">{uiText("按 15 分钟间隔显示可约时段。")}</p><button className="link-btn" type="button" onClick={() => { for (let i = 1; i <= event.horizon + 2; i++) { const date = addDays(day, i); if (slotsForDay(date, zone, hostZone(), event, schedule(), occupied(date)).length) { selectDay(date); return; } } setError(uiText("预约范围内没有更多时段，可调整可用时间。")); }}>{uiText("找下一个可约日期")}</button></div>
       </section>
       <section className="sc-slot-panel"><h2>{new Intl.DateTimeFormat(locale(), { month: "short", day: "numeric", weekday: "short", timeZone: "UTC" }).format(new Date(day + "T12:00:00Z"))}</h2>{slot ? <form onSubmit={async e => { e.preventDefault(); setError(""); setBusy(true); try { setResult(await reserve(typeId, slot, { ...guest, zone })); } catch (e) { setError((e as Error).message); setNow(Date.now()); } finally { setBusy(false); } }}>
         <button type="button" className="sc-selected-slot" onClick={() => setSlot(null)}>{timeText(slot.start, zone, true)} – {timeText(slot.end, zone)} <span className="faint">{uiText("更换")}</span></button>

@@ -66,9 +66,9 @@ export function slotsForDay(viewDate: string, viewZone: string, hostZone: string
 }
 const escapeICS = (s: string) => s.replace(/\\/g, "\\\\").replace(/\r\n|\r|\n/g, "\\n").replace(/;/g, "\\;").replace(/,/g, "\\,");
 const stamp = (s: string) => new Date(s).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
-export function calendarFile(bookings: Booking[], now = new Date().toISOString()) {
+export function calendarFile(bookings: (Booking & { allDay?: boolean })[], now = new Date().toISOString()) {
   const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//myco//Scheduling//EN", "CALSCALE:GREGORIAN"];
-  for (const b of bookings) lines.push("BEGIN:VEVENT", `UID:${encodeURIComponent(b.id)}@myco-scheduling`, `DTSTAMP:${stamp(now)}`, `DTSTART:${stamp(b.start)}`, `DTEND:${stamp(b.end)}`, `SUMMARY:${escapeICS(b.title)}`, `DESCRIPTION:${escapeICS([b.name, b.email, b.notes].filter(Boolean).join("\n"))}`, `LOCATION:${escapeICS(b.location)}`, `STATUS:${b.status === "cancelled" ? "CANCELLED" : "CONFIRMED"}`, "END:VEVENT");
+  for (const b of bookings) lines.push("BEGIN:VEVENT", `UID:${encodeURIComponent(b.id)}@myco-scheduling`, `DTSTAMP:${stamp(now)}`, b.allDay ? `DTSTART;VALUE=DATE:${b.start.replace(/-/g, "")}` : `DTSTART:${stamp(b.start)}`, b.allDay ? `DTEND;VALUE=DATE:${b.end.replace(/-/g, "")}` : `DTEND:${stamp(b.end)}`, `SUMMARY:${escapeICS(b.title)}`, `DESCRIPTION:${escapeICS([b.name, b.email, b.notes].filter(Boolean).join("\n"))}`, `LOCATION:${escapeICS(b.location)}`, `STATUS:${b.status === "cancelled" ? "CANCELLED" : "CONFIRMED"}`, "END:VEVENT");
   lines.push("END:VCALENDAR");
   // RFC 5545 folds at 75 octets, preserving Unicode code points.
   return lines.map(line => { let out = "", width = 0; for (const c of line) { const len = new TextEncoder().encode(c).length; if (width + len > 75) { out += "\r\n "; width = 1; } out += c; width += len; } return out; }).join("\r\n") + "\r\n";

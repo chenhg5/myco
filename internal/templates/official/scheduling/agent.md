@@ -1,4 +1,57 @@
-# Scheduling
+# Calendar
+
+The default home is a **personal calendar**, with month, week and day views.
+People can click dates/time lanes to create events, edit or drag them, undo/redo,
+search and export the current visible range. Appointment scheduling is a secondary
+screen. Existing `profile`, `types`, `availability` and `days` data stays compatible.
+No external calendar sync, background reminders or invitation email is provided.
+Events inherit the page's sharing permissions. The `owner` field is attribution,
+not an access-control or private-calendar boundary.
+
+## Personal events: `events`
+
+One record per event or entire recurring series, with an arbitrary stable ID:
+
+- `title`: required text, 1–150 characters.
+- `start`, `end`: text. For timed events, ISO UTC instants with `Z`, at minute
+  precision, e.g. `2026-11-23T07:00:00.000Z`. End must be strictly after start.
+  For all-day events, `YYYY-MM-DD` dates, with an **exclusive** end: a one-day
+  event on November 25 is start `2026-11-25`, end `2026-11-26`.
+- `all_day`: required boolean. Dates in all-day events stay on the same calendar
+  dates when the display time zone changes.
+- `zone`: required IANA time zone, e.g. `Asia/Shanghai`. Timed recurrences keep
+  their wall-clock start time in this zone through DST changes.
+- `calendar`: `work` or `personal`, for filtering and category color.
+- `location`: text, default empty, max 300 characters.
+- `notes`: text, default empty, max 8,000 characters.
+- `busy`: boolean, default true. Already-saved busy occurrences are excluded by
+  the appointment picker. Setting false leaves the time free for appointments.
+- `repeat`: `none`, `daily`, `weekly` or `monthly`, default `none`. Weekly repeats
+  on the original weekday; monthly repeats on the original day of the month,
+  skipping months without that day. Nonexistent DST wall times are skipped.
+- `until`: empty string (no end) or `YYYY-MM-DD` last occurrence start date,
+  inclusive in the event zone. Must not precede the first occurrence.
+- `owner`: person string, attribution (usually the current person's name).
+
+Supply every event field; one event can span at most 31 days. Do not materialize
+an endless recurring series as individual records. Visible occurrences are
+calculated from the series. Editing, moving and deleting a recurring record
+applies to the **entire series**; per-occurrence exceptions are not supported.
+When a user means only one occurrence, explain that limitation before editing a
+series. Event overlaps are allowed and shown side by side in time views.
+
+Use the page data list/put/rm commands below with `--collection events`. Put
+replaces a whole event; retain unknown fields, read the current version and use
+`--if-version` so edits do not overwrite someone else's changes. Delete is
+reversible in the current person's UI; do not delete data without a user request.
+
+To arrange an afternoon meeting: read existing events and days, calculate actual
+UTC instants in the requested time zone, then create an event record. To move a
+series: change start/end together, retaining elapsed duration and other fields.
+To export: the UI exports only the current view as concrete ICS occurrences,
+with date-valued all-day entries; it does not subscribe or sync another calendar.
+
+## Secondary appointment tool
 
 Plan one host's appointments with people on the same myco page. This is a shared
 workspace calendar, not an anonymous public booking site. There is no email,
@@ -76,11 +129,14 @@ Every booking has these fields:
 ## Tasks and safety
 
 To start: create the profile, availability, then types. To arrange appointments:
-read all four collections; find an enabled type; use 15-minute start increments
+read profile, types, availability, days and events; find an enabled type; use 15-minute start increments
 within weekly hours or the date override. Respect notice/horizon, DST and UTC
 conversion. Nonexistent DST times are unavailable; repeated times have distinct
 UTC instants. Compare against **all confirmed bookings of all types**, including
-their buffers. Intervals are half open: exact buffer boundaries may touch.
+their buffers. Also expand and avoid personal events with `busy: true` (including
+all-day and recurring occurrences). A concurrent calendar edit and a booking are
+not one transaction; calendar edits can create a conflict that must be resolved
+by a person. Intervals are half open: exact buffer boundaries may touch.
 Append to the relevant day's entries using the day's exact version, or version
 0 when absent. A conflict requires selecting again, not retrying the stale write.
 Do not book if you cannot reliably calculate the time-zone conversion.

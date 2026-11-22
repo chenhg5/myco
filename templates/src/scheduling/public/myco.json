@@ -1,11 +1,11 @@
 {
   "id": "myco/scheduling",
-  "name": "日程预约",
-  "version": "1.0.1",
+  "name": "日历",
+  "version": "1.1.0",
   "kind": "custom",
   "category": "office",
   "icon": "icon.svg",
-  "description": "安排交流、评审和咨询：设置预约类型、每周可用时间与例外日期，按时区选择时段、填写信息，管理或取消预约，导出日历；和 agent 共用一份日程。",
+  "description": "管理自己的工作与生活日程：月、周、日视图，点击日期新建，拖动改期，全天与重复日程，搜索和日历导出。与 agent 一起安排；预约管理放在次级入口。",
   "data": {
     "profile": {
       "single": true,
@@ -40,6 +40,22 @@
     "days": {
       "fields": {
         "entries": "json"
+      }
+    },
+    "events": {
+      "fields": {
+        "title": "text",
+        "start": "text",
+        "end": "text",
+        "all_day": "bool",
+        "zone": "text",
+        "calendar": "text",
+        "location": "text",
+        "notes": "text",
+        "busy": "bool",
+        "repeat": "text",
+        "until": "text",
+        "owner": "person"
       }
     }
   },

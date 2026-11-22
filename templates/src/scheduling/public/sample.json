@@ -2,7 +2,7 @@
   "profile": [
     {
       "id": "main",
-      "title": "林间工作室 · 预约日历",
+      "title": "我的日历",
       "host": "林间工作室",
       "bio": "设计、产品与有意思的新想法。期待和你见面。",
       "zone": "Asia/Shanghai"
@@ -135,6 +135,158 @@
           "created": "2026-11-20T02:00:00.000Z"
         }
       ]
+    }
+  ],
+  "events": [
+    {
+      "id": "weekly-sync",
+      "title": "每周计划",
+      "start": "2026-11-02T01:30:00.000Z",
+      "end": "2026-11-02T02:00:00.000Z",
+      "all_day": false,
+      "zone": "Asia/Shanghai",
+      "calendar": "work",
+      "location": "线上会议",
+      "notes": "明确本周要完成的三件事。",
+      "busy": true,
+      "repeat": "weekly",
+      "until": "",
+      "owner": "glenn"
+    },
+    {
+      "id": "focus",
+      "title": "专注工作",
+      "start": "2026-11-16T02:30:00.000Z",
+      "end": "2026-11-16T04:00:00.000Z",
+      "all_day": false,
+      "zone": "Asia/Shanghai",
+      "calendar": "work",
+      "location": "",
+      "notes": "关掉消息提醒，留一段完整的思考时间。",
+      "busy": true,
+      "repeat": "daily",
+      "until": "2026-11-27",
+      "owner": "glenn"
+    },
+    {
+      "id": "design",
+      "title": "设计讨论",
+      "start": "2026-11-04T06:00:00.000Z",
+      "end": "2026-11-04T07:00:00.000Z",
+      "all_day": false,
+      "zone": "Asia/Shanghai",
+      "calendar": "work",
+      "location": "小会议室",
+      "notes": "",
+      "busy": true,
+      "repeat": "weekly",
+      "until": "",
+      "owner": "glenn"
+    },
+    {
+      "id": "planning",
+      "title": "产品规划",
+      "start": "2026-11-23T07:00:00.000Z",
+      "end": "2026-11-23T08:00:00.000Z",
+      "all_day": false,
+      "zone": "Asia/Shanghai",
+      "calendar": "work",
+      "location": "",
+      "notes": "梳理下一轮产品计划。",
+      "busy": true,
+      "repeat": "none",
+      "until": "",
+      "owner": "glenn"
+    },
+    {
+      "id": "interview",
+      "title": "用户访谈",
+      "start": "2026-11-23T07:30:00.000Z",
+      "end": "2026-11-23T08:30:00.000Z",
+      "all_day": false,
+      "zone": "Asia/Shanghai",
+      "calendar": "work",
+      "location": "线上",
+      "notes": "",
+      "busy": false,
+      "repeat": "none",
+      "until": "",
+      "owner": "glenn"
+    },
+    {
+      "id": "walk",
+      "title": "和家人散步",
+      "start": "2026-11-22T08:00:00.000Z",
+      "end": "2026-11-22T09:30:00.000Z",
+      "all_day": false,
+      "zone": "Asia/Shanghai",
+      "calendar": "personal",
+      "location": "公园",
+      "notes": "",
+      "busy": true,
+      "repeat": "none",
+      "until": "",
+      "owner": "glenn"
+    },
+    {
+      "id": "offsite",
+      "title": "团队共创日",
+      "start": "2026-11-25",
+      "end": "2026-11-26",
+      "all_day": true,
+      "zone": "Asia/Shanghai",
+      "calendar": "work",
+      "location": "",
+      "notes": "上午讨论，下午原型验证。",
+      "busy": true,
+      "repeat": "none",
+      "until": "",
+      "owner": "glenn"
+    },
+    {
+      "id": "birthday",
+      "title": "家人生日",
+      "start": "2026-11-18",
+      "end": "2026-11-19",
+      "all_day": true,
+      "zone": "Asia/Shanghai",
+      "calendar": "personal",
+      "location": "",
+      "notes": "",
+      "busy": false,
+      "repeat": "none",
+      "until": "",
+      "owner": "glenn"
+    },
+    {
+      "id": "review",
+      "title": "月度复盘",
+      "start": "2026-11-10T12:00:00.000Z",
+      "end": "2026-11-10T13:00:00.000Z",
+      "all_day": false,
+      "zone": "Asia/Shanghai",
+      "calendar": "personal",
+      "location": "",
+      "notes": "",
+      "busy": true,
+      "repeat": "monthly",
+      "until": "",
+      "owner": "glenn"
+    },
+    {
+      "id": "reading",
+      "title": "阅读与笔记",
+      "start": "2026-11-28T07:00:00.000Z",
+      "end": "2026-11-28T08:00:00.000Z",
+      "all_day": false,
+      "zone": "Asia/Shanghai",
+      "calendar": "personal",
+      "location": "",
+      "notes": "",
+      "busy": false,
+      "repeat": "none",
+      "until": "",
+      "owner": "glenn"
     }
   ]
 }

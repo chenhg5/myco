@@ -1,63 +1,17 @@
-// Built-page workflows against a shared, strict-version bridge. This exercises
-// two independent browser clients competing for the same day, not just mocks
-// that accept every write. Screenshots cover both languages/themes and mobile.
+// Appointment regressions remain active behind the secondary calendar entry.
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import http from "node:http";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { createRequire } from "node:module";
-import { execFileSync } from "node:child_process";
-const here = path.dirname(fileURLToPath(import.meta.url)), root = path.resolve(here, "../internal/templates/official/scheduling"), out = process.env.SCHEDULING_SHOTS || "/tmp/scheduling-shots";
-fs.mkdirSync(out, { recursive: true });
-const sample = JSON.parse(fs.readFileSync(path.join(here, "src/scheduling/public/sample.json"), "utf8"));
-const recs = new Map(); let seq = 0, events = [], race = false, pending = [];
-function reset(empty = false) { recs.clear(); seq = 0; events = []; for (const [c, rows] of Object.entries(empty ? {} : sample)) for (const { id, ...data } of rows) recs.set(c + "/" + id, { collection: c, id, data, version: 1 }); }
-function put(body, res) {
-  const { c, data, o } = body, key = c + "/" + o.id, old = recs.get(key);
-  if (o.ifVersion !== (old?.version || 0)) { res.writeHead(409, { "Content-Type": "application/json" }); res.end(JSON.stringify({ code: "conflict", message: "Someone changed this. Choose again.", latest: old })); return; }
-  const row = { collection: c, id: o.id, data, version: (old?.version || 0) + 1 };
-  recs.set(key, row); events.push({ seq: ++seq, collection: c, record: o.id, op: "put", data, version: row.version, by: "tester" });
-  res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(row));
-}
-const bridge = `(() => {
-  const request = async (url, options) => { const r = await fetch(url, options); const v = await r.json(); if (!r.ok) throw v; return v; };
-  window.__downloads = [];
-  window.myco = {features:[], ready: Promise.resolve({page:{id:'pg_test',name:'Scheduling'},me:{name:'tester'}}), data:{
-    list: c => request('/data?c='+encodeURIComponent(c)),
-    put: (c,data,o) => request('/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({c,data,o})}),
-    on: f => { let seen = 0, active = true; const t = setInterval(async () => { try { const evs = await request('/events?since='+seen); for(const e of evs) { seen=Math.max(seen,e.seq); if(active) f(e); } } catch {} },100); return () => {active=false;clearInterval(t)}; }
-  }, download: async (name, content, type) => {window.__downloads.push({name,content,type});return {path:'~/Downloads/'+name}}};
-  Date.now = () => Date.parse('2026-11-22T00:00:00Z');
-})();`;
-const server = http.createServer(async (req, res) => {
-  const u = new URL(req.url, "http://test");
-  if (u.pathname === "/bridge.js") { res.setHeader("Content-Type", "text/javascript"); res.end(bridge); return; }
-  if (u.pathname === "/events") { res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(events.filter(e => e.seq > Number(u.searchParams.get("since"))))); return; }
-  if (u.pathname === "/data" && req.method === "GET") { res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify({ records: [...recs.values()].filter(r => r.collection === u.searchParams.get("c")), seq })); return; }
-  if (u.pathname === "/data" && req.method === "POST") {
-    let source = ""; for await (const chunk of req) source += chunk;
-    const body = JSON.parse(source);
-    if (race && body.c === "days") { pending.push([body, res]); if (pending.length === 2) { race = false; for (const [b, r] of pending) put(b, r); pending = []; } return; }
-    put(body, res); return;
-  }
-  if (u.pathname === "/favicon.ico") { res.writeHead(204); res.end(); return; }
-  const f = path.resolve(root, "." + (u.pathname === "/" ? "/index.html" : u.pathname));
-  if (!f.startsWith(root + path.sep) || !fs.existsSync(f)) { res.writeHead(404); res.end(); return; }
-  res.setHeader("Content-Type", ({ ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".webp": "image/webp" })[path.extname(f)] || "application/octet-stream");
-  const content = fs.readFileSync(f); res.end(f.endsWith(".html") ? String(content).replace("<head>", '<head><script src="/bridge.js"></script>') : content);
-});
-await new Promise(r => server.listen(0, "127.0.0.1", r));
-const playwright = createRequire(path.join(execFileSync("npm", ["root", "-g"], { encoding: "utf8" }).trim(), "noop.js"))("playwright");
-const browser = await playwright.chromium.launch({ headless: true, executablePath: process.env.UI_SMOKE_EXECUTABLE, args: ["--no-sandbox"] });
-const base = `http://127.0.0.1:${server.address().port}/`;
+import { startFixture } from "./scheduling-test-fixture.mjs";
+const out=process.env.SCHEDULING_SHOTS||"/tmp/scheduling-shots";
+fs.mkdirSync(out,{recursive:true});
+const {browser,server,recs,reset,base,beginRace}=await startFixture();
 try {
   for (const [lang, theme, width] of [["zh","light",1400],["en","dark",1400],["zh","dark",760],["en","light",760],["en","dark",393],["zh","light",393]]) {
     reset();
     const context = await browser.newContext({ viewport: { width, height: 900 }, colorScheme: theme, isMobile: width < 400, hasTouch: width < 400 }), p = await context.newPage(), errors = [];
     p.on("pageerror", e => errors.push(e.message)); p.setDefaultTimeout(10000);
     const L = (zh, en) => lang === "zh" ? zh : en;
-    await p.goto(base + "?myco_lang=" + lang); await p.locator(".sc-type").first().waitFor();
+    await p.goto(base + "?myco_lang=" + lang); await p.getByRole("button", {name:L("预约管理","Appointments"),exact:true}).click(); await p.locator(".sc-type").first().waitFor();
     assert.equal(await p.locator(".sc-type").count(), 3);
     for (const actions of await p.locator(".sc-type-actions").all()) {
       const boxes = await actions.locator("button").evaluateAll(buttons => buttons.map(b => { const r = b.getBoundingClientRect(); return { y:r.y, height:r.height }; }));
@@ -71,7 +25,7 @@ try {
     await p.locator(".sc-type-actions .btn").nth(1).click();
     await p.locator(".sc-slot").first().waitFor();
     await p.screenshot({ path: `${out}/${lang}-${theme}-${width}-booking.png` });
-    assert.equal(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, "No horizontal overflow");
+    assert.equal(await p.evaluate(width => document.documentElement.scrollWidth <= width, width), true, "No horizontal overflow");
     if (width < 400) {
       // Real touch scroll: body is intentionally fixed; the workspace must scroll.
       const box = await p.locator(".sc-booking-wrap").boundingBox();
@@ -89,13 +43,13 @@ try {
     assert.equal([...recs.values()].filter(r => r.collection === "days").flatMap(r => r.data.entries).filter(b => b.name === "Test Guest").length, 1);
     await p.getByRole("button", { name: L("添加到日历", "Add to calendar") }).click();
     const dl = await p.evaluate(() => window.__downloads[0]); assert(dl.content.includes("BEGIN:VCALENDAR")); assert(dl.content.includes("guest@example.com"));
-    await p.locator("nav button").nth(1).click();
+    await p.locator("nav button").nth(2).click();
     await p.locator(".sc-booking-row", { hasText: "Test Guest" }).click();
     await p.getByRole("button", { name: L("取消预约", "Cancel booking"), exact: true }).click();
     await p.locator("dialog").waitFor({ state: "detached" });
     await p.getByRole("button", { name: L("撤销", "Undo"), exact: true }).click();
     await p.locator(".sc-booking-row", { hasText: "Test Guest" }).waitFor();
-    await p.locator("nav button").nth(2).click();
+    await p.locator("nav button").nth(3).click();
     await p.locator(".sc-week-row").first().waitFor();
     const starts = p.getByLabel(L("开始时间", "Start time"), { exact: true });
     await starts.first().fill("18:00");
@@ -112,10 +66,10 @@ try {
   reset();
   const clients = await Promise.all([browser.newPage(), browser.newPage()]);
   await Promise.all(clients.map(async (p, i) => {
-    await p.goto(base + "?myco_lang=en"); await p.locator(".sc-type-actions .btn").nth(1).click(); await p.locator(".sc-slot").first().click();
+    await p.goto(base + "?myco_lang=en"); await p.getByRole("button",{name:"Appointments",exact:true}).click(); await p.locator(".sc-type-actions .btn").nth(1).click(); await p.locator(".sc-slot").first().click();
     await p.getByLabel("Your name", { exact: true }).fill("Concurrent " + i); await p.getByLabel("Email", { exact: true }).fill(`guest${i}@example.com`);
   }));
-  race = true;
+  beginRace();
   await Promise.all(clients.map(p => p.getByRole("button", { name: "Confirm booking", exact: true }).click()));
   await Promise.all(clients.map(p => p.waitForFunction(() => document.querySelector(".sc-confirmation") || document.querySelector(".sc-slot-panel [role=alert]"))));
   assert.equal((await Promise.all(clients.map(p => p.locator(".sc-confirmation").count()))).reduce((a,b) => a+b), 1, "Only one client confirms");
@@ -124,6 +78,7 @@ try {
   // Empty-page setup, creation and peer updates arrive through the event feed.
   reset(true);
   const p = await browser.newPage(); await p.goto(base + "?myco_lang=en");
+  await p.getByRole("button",{name:"Appointments",exact:true}).click();
   await p.getByRole("button", { name: "Set up booking profile", exact: true }).click();
   await p.getByLabel("Host", { exact: true }).fill("New Host"); await p.getByRole("button", { name: "Save", exact: true }).click();
   await p.locator("dialog").waitFor({ state: "detached" });

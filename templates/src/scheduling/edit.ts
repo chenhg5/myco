@@ -3,7 +3,8 @@
 import { t as uiText } from "../_lib/i18n";
 import { myco, type Store } from "../_lib/myco";
 import { uid } from "../_lib/appkit";
-import { availability, bookings, days, eventData, hostZone, invalidLedger, kit, profile, schedule, types, type Profile } from "./model";
+import { availability, occupied, events, days, eventData, hostZone, invalidLedger, kit, profile, schedule, types, type Profile } from "./model";
+import { validCalendarEvent } from "./calendar-engine";
 import { overlaps, slotsForDay, validEvent, validSchedule, validZone, type Booking, type EventType, type Schedule, type Slot } from "./engine";
 
 export async function write(store: Store<any>, id: string, value: Record<string, unknown>, version = store.get(id)?.version || 0) {
@@ -55,10 +56,11 @@ async function exclusive<T>(f: () => Promise<T>) {
 }
 export function reserve(typeId: string, slot: Slot, guest: { name: string; email: string; notes: string; zone: string }) {
   return exclusive(async () => {
-    await Promise.all([days.load(), types.load(), availability.load(), profile.load()]);
+    await Promise.all([days.load(), types.load(), availability.load(), profile.load(), events.load()]);
+    if (events.rows.some(r => !validCalendarEvent(r.data))) throw new Error(uiText("部分日程数据有误，请让 agent 检查后再编辑。"));
     if (invalidLedger()) throw new Error(uiText("预约数据有误，请让 agent 检查后再预约。"));
     const rec = types.get(typeId), event = eventData(rec?.data || {});
-    if (!profile.get("main")?.data.zone || !rec || !slotsForDay(slot.day, hostZone(), hostZone(), event, schedule(), bookings()).some(s => s.start === slot.start && s.end === slot.end && s.day === slot.day)) { kit.emit(); throw new Error(uiText("这个时段已不可预约，请重新选一个。")); }
+    if (!profile.get("main")?.data.zone || !rec || !slotsForDay(slot.day, hostZone(), hostZone(), event, schedule(), occupied(slot.day)).some(s => s.start === slot.start && s.end === slot.end && s.day === slot.day)) { kit.emit(); throw new Error(uiText("这个时段已不可预约，请重新选一个。")); }
     if (!guest.name.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guest.email.trim()) || guest.name.length > 100 || guest.email.length > 200 || guest.notes.length > 1000 || !validZone(guest.zone)) throw new Error(uiText("填写姓名和有效邮箱，备注不超过 1000 字。"));
     const row = days.get(slot.day), entry: Booking = { ...guest, name: guest.name.trim(), email: guest.email.trim(), id: uid("booking"), type: typeId, title: event.title, start: slot.start, end: slot.end, location: event.location, before: event.before, after: event.after, status: "confirmed", created: new Date().toISOString() };
     await commitDay(slot.day, [...(row?.data.entries || []), entry], row?.version || 0);
@@ -67,12 +69,12 @@ export function reserve(typeId: string, slot: Slot, guest: { name: string; email
 }
 export function setStatus(day: string, id: string, status: Booking["status"]) {
   return exclusive(async () => {
-    await days.load();
+    await Promise.all([days.load(), events.load()]);
     if (invalidLedger()) throw new Error(uiText("预约数据有误，请让 agent 检查后再预约。"));
     const row = days.get(day), b = row?.data.entries?.find(e => e.id === id);
     if (!row || !b) throw new Error(uiText("没有找到这项预约，请刷新页面。"));
     if (status === "confirmed") {
-      if (bookings().some(o => o.id !== id && overlaps(Date.parse(b.start), Date.parse(b.end), b.before, b.after, o))) throw new Error(uiText("原时段已经被占用，无法恢复预约。"));
+      if (occupied(day).some(o => o.id !== id && overlaps(Date.parse(b.start), Date.parse(b.end), b.before, b.after, o))) throw new Error(uiText("原时段已经被占用，无法恢复预约。"));
     }
     await commitDay(day, row.data.entries!.map(e => e.id === id ? { ...e, status } : e), row.version);
     if (status === "cancelled") kit.flash(uiText("已取消预约"), () => { void setStatus(day, id, "confirmed").catch(e => kit.flash(e.message)); });

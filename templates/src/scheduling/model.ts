@@ -3,13 +3,17 @@
 import { Store } from "../_lib/myco";
 import { Kit } from "../_lib/appkit";
 import { dateIn, defaultEvent, defaultWeek, overlaps, validBooking, validDate, validSchedule, validZone, type Booking, type EventType, type Schedule } from "./engine";
+import { addDays } from "./engine";
+import { busyEvents, type CalendarEvent } from "./calendar-engine";
 export type Profile = { title?: string; host?: string; bio?: string; zone?: string };
 export type Day = { entries?: Booking[] };
 export const profile = new Store<Profile & Record<string, unknown>>("profile");
 export const types = new Store<Partial<EventType> & { order?: number } & Record<string, unknown>>("types");
 export const availability = new Store<Partial<Schedule> & Record<string, unknown>>("availability");
 export const days = new Store<Day & Record<string, unknown>>("days");
-export const kit = new Kit([profile, types, availability, days], { quiet: true });
+export const events = new Store<CalendarEvent & Record<string, unknown>>("events");
+export const kit = new Kit([profile, types, availability, days, events], { quiet: true });
+export const occupied = (date: string) => [...bookings(), ...busyEvents(events.rows, addDays(date, -2), addDays(date, 3), hostZone())];
 export const hostZone = () => validZone(String(profile.get("main")?.data.zone || "")) ? String(profile.get("main")!.data.zone) : "Asia/Shanghai";
 export const schedule = (): Schedule => {
   const s = { week: availability.get("main")?.data.week || structuredClone(defaultWeek), overrides: availability.get("main")?.data.overrides || [] };

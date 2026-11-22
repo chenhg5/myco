@@ -47,7 +47,7 @@ Agent access currently uses shared page records. The [agent actions SDK](app-act
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/tutor-dark.webp"><img src="assets/apps/tutor.webp" alt="Learning workspace"></picture><br><b>Learning workspace</b><br>Import a PDF, text or Markdown textbook and ask about a source page. Your tutor adapts to your level, with explanations, interactive diagrams, source references and short checks. Try the built-in Riemann hypothesis lesson at three levels.</td>
 </tr>
 <tr>
-<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/scheduling-dark.webp"><img src="assets/apps/scheduling.webp" alt="Scheduling"></picture><br><b>Scheduling</b><br>Set event types, weekly availability and date overrides. Book across time zones, manage and cancel appointments, and export calendar files. People and agents share the same page; no confirmation email or external calendar sync.</td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/scheduling-dark.webp"><img src="assets/apps/scheduling.webp" alt="Calendar"></picture><br><b>Calendar</b><br>A personal calendar with month, week and day views. Add and drag events, plan all-day and recurring entries, search and export calendars with agents. Appointment booking lives in a secondary screen. No external calendar sync.</td>
 <td width="50%"></td>
 </tr>
 </table>

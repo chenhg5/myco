@@ -111,7 +111,7 @@ const plans = {
     await wait(p);
     await p.locator(".tu-figure").scrollIntoViewIfNeeded();
   }],
-  scheduling: [null, async (p) => { await p.locator(".sc-type-actions .btn").nth(1).click(); await wait(p, 600); }],
+  scheduling: [async (p) => { await p.getByRole("combobox", { name: "时区", exact: true }).selectOption("Asia/Shanghai"); await wait(p); }, async (p) => { await p.getByRole("combobox", { name: "日历视图" }).selectOption("week"); await p.getByRole("button", { name: "下一页", exact: true }).click(); await wait(p, 600); }],
   cinema: [null, async (p) => { await p.getByRole("button", {name:"添加影视源", exact:true}).click(); await wait(p); }],
   "remote-desktop": [null, async (p) => { await p.locator(".rd-tabs button").nth(1).click(); await wait(p,300); }],
   base: [null, async (p) => { await p.locator("text=看板").first().click(); await wait(p, 600); }],

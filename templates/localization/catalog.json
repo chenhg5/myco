@@ -108,7 +108,7 @@
     "Watch movies and series from your own sources. Search catalogs, choose episodes, share a watchlist and resume locally, with playback speed and intro/outro skipping. No sources are bundled."
   ],
   "scheduling": [
-    "Scheduling",
-    "Book conversations, reviews and consultations. Set event types, weekly availability and date overrides, choose times across time zones, manage or cancel bookings and export calendars with your agents."
+    "Calendar",
+    "Plan work and life in month, week and day views. Click to create events, drag to reschedule, add all-day and recurring events, search and export calendars with agents. Appointment booking is a secondary tool."
   ]
 }

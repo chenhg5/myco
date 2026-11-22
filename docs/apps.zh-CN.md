@@ -47,7 +47,7 @@
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/tutor-dark.webp"><img src="assets/apps/tutor.webp" alt="学习工作台"></picture><br><b>学习工作台</b><br>导入 PDF、文本或 Markdown 教材，带着原文提问。导师按学习基础分层讲解，配上交互图、可回看的原文引用和小测。内置黎曼猜想示例课，可切换三种学习基础。</td>
 </tr>
 <tr>
-<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/scheduling-dark.webp"><img src="assets/apps/scheduling.webp" alt="日程预约"></picture><br><b>日程预约</b><br>设置预约类型、每周可用时间和例外日期，按时区选时预约，管理或取消预约并导出日历。人和 agent 共用一个页面；不发送确认邮件，不同步外部日历。</td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/scheduling-dark.webp"><img src="assets/apps/scheduling.webp" alt="日历"></picture><br><b>日历</b><br>用月、周、日视图管理工作与生活日程：点击新建，拖动改期，安排全天与重复日程，搜索和导出日历；和 agent 一起安排。预约管理放在次级入口，不同步外部日历。</td>
 <td width="50%"></td>
 </tr>
 </table>
