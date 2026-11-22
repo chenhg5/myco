@@ -33,13 +33,13 @@ const CLI_MODELS = {
   claude: "claude-opus-5-5", codex: "gpt-6-sol", pi: "pi-3", kiro: "kiro-2",
   cursor: "cursor-auto", gemini: "gemini-3-pro", opencode: "claude-opus-5-5",
   qoder: "qoder-auto", qwen: "qwen3-coder", kimi: "kimi-k3", goose: "goose", copilot: "copilot",
-  auggie: "auggie", codebuddy: "codebuddy", kilo: "kilo", cline: "cline", grok: "grok-5",
+  auggie: "auggie", codebuddy: "codebuddy", kilo: "kilo", cline: "cline", grok: "grok-5", antigravity: "gemini-3-pro",
 };
 const CLI_VERSIONS = {
   claude: "2.1.240", codex: "0.52.0", pi: "1.8.0", kiro: "0.4.2",
   cursor: "0.48.0", gemini: "0.12.0", opencode: "0.6.1",
   qoder: "0.3.0", qwen: "0.9.0", kimi: "1.2.0", goose: "1.9.0", copilot: "0.0.400",
-  auggie: "0.8.0", codebuddy: "1.1.0", kilo: "1.0.0", cline: "1.0.0", grok: "0.2.0",
+  auggie: "0.8.0", codebuddy: "1.1.0", kilo: "1.0.0", cline: "1.0.0", grok: "0.2.0", antigravity: "0.1.0",
 };
 
 function makeAgent(over) {
@@ -255,7 +255,7 @@ const shotsOf = (names) => {
   const out = light.map((src) => ({ src, ...(names.includes(src.replace(/(\.[a-z]+)$/i, ".dark$1")) ? { dark: src.replace(/(\.[a-z]+)$/i, ".dark$1") } : {}) }));
   return out.length ? out : undefined;
 };
-const officialOrder = ["table", "base", "doc", "slides", "meeting", "tutor", "scheduling", "code", "issues", "devtools", "todo", "notes", "disk", "stocks", "proxy-console", "remote-desktop", "ledger", "habit", "cinema", "personality", "design-studio", "logo-studio", "whiteboard", "mindmap", "video", "motion", "photo", "arcade", "gomoku", "sudoku"];
+const officialOrder = ["table", "base", "doc", "slides", "meeting", "tutor", "scheduling", "code", "issues", "devtools", "todo", "notes", "disk", "stocks", "proxy-console", "remote-desktop", "ledger", "habit", "reader", "cinema", "personality", "design-studio", "logo-studio", "whiteboard", "mindmap", "video", "motion", "photo", "arcade", "gomoku", "sudoku"];
 const mockTemplates = officialOrder.filter((name) => existsSync(new URL(`${name}/myco.json`, officialRoot))).map((name) => {
   const files = officialFiles(name);
   const m = JSON.parse(files["myco.json"]);

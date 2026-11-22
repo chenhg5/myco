@@ -86,6 +86,10 @@
 
 <table>
 <tr>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/reader-dark.webp"><img src="assets/apps/reader.webp" alt="阅读"></picture><br><b>阅读</b><br>导入 PDF 和 TXT 到本机书架，选择翻页效果、阅读主题、字体与行间距。目录、搜索、书签和阅读进度随手可用。原书留在本机，不跨设备同步。<a href="reader.md">使用说明</a>。</td>
+<td width="50%"></td>
+</tr>
+<tr>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/ledger-dark.webp"><img src="assets/apps/ledger.webp" alt="记账本"></picture><br><b>记账本</b><br>记收入和支出：每月支出、收入、结余和预算剩余，按分类看钱花在哪，按天列出每一笔；家里或小团队一起记，agent 能把账单整理进来。</td>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/habit-dark.webp"><img src="assets/apps/habit.webp" alt="习惯打卡"></picture><br><b>习惯打卡</b><br>一起养成好习惯：每人给自己打卡，看这周打了几天、连续了几天、别人打了没；家人、团队一起坚持，agent 能帮你提醒和统计。</td>
 </tr>

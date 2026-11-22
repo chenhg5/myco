@@ -64,6 +64,7 @@ var agentCLIs = []agentCLI{
 	{cli: "kilo", name: "Kilo Code", binary: "kilo", npm: "npm install -g @kilocode/cli", login: "kilo"},
 	{cli: "cline", name: "Cline", binary: "cline", npm: "npm install -g cline", login: "cline"},
 	{cli: "grok", name: "Grok", binary: "grok", npm: "npm install -g @xai-official/grok", login: "grok"},
+	{cli: "antigravity", name: "Antigravity", binary: "google-antigravity-acp", npm: "npm install -g google-antigravity-acp", login: "agy"},
 	{cli: "goose", name: "goose", binary: "goose", install: "curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | bash", login: "goose configure"},
 }
 

@@ -4,6 +4,18 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.21.25
+
+- **Google Antigravity as an agent**: pick "Antigravity" when you add an agent. myco drives the agy CLI through the community `google-antigravity-acp` adapter (`npm install -g google-antigravity-acp`, with agy signed in on that computer), and shows each step live. Experimental. The adapter cannot ask you for approval: only at full access does agy approve everything; below it, agy refuses what needs approval. Reaching Antigravity through third-party tools with a personal login is against Google's terms: use an AI Studio or Vertex AI key.
+- **New app: Reader**: a personal bookshelf for PDF and TXT books on your own device, with themes, page turns, vertical paging or continuous scrolling, contents, search and bookmarks. Books and reading progress stay on the device.
+- Upgrade myco on the computer that runs the Antigravity agent.
+
+**中文**
+
+- **Google Antigravity 可以当 agent 用了**：添加 agent 时选「Antigravity」。myco 通过社区的 `google-antigravity-acp` 适配器驱动 agy（在那台电脑上 `npm install -g google-antigravity-acp`，并登录 agy），每一步都能实时看到。实验性。这个适配器没法向你要审批：只有「完全权限」时 agy 才会全部自动批准；权限低于完全时，需要审批的操作 agy 会直接拒绝。用个人账号通过第三方工具访问 Antigravity 违反 Google 的条款，请改用 AI Studio 或 Vertex AI 的密钥。
+- **新应用：阅读**：在自己的设备上放 PDF、TXT 的个人书架，支持主题、翻页动画、上下翻页或连续滚动、目录、搜索和书签。书和阅读进度都只存在这台设备上。
+- 跑 Antigravity agent 的那台电脑要升级 myco。
+
 ## v0.21.24
 
 - **Links straight to a film and episode**: a link to a Cinema page can name a title, source and episode, and the desktop App opens that spot (the iPhone and Android Apps get it with their next builds). Agents can find a title for you and send such a link; copying the link of what is playing works too. Older Apps open the page from its start.

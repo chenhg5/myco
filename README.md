@@ -27,10 +27,7 @@ https://github.com/user-attachments/assets/76d235fc-1c4a-4f7c-88c1-ee058f4db1da
 
 </div>
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/app/en/nodes-dark.webp">
-  <img src="docs/assets/app/en/nodes.webp" alt="The myco app: a project is your chat with its coordinator; its members and computers are beside it" width="100%">
-</picture>
+<img src="docs/assets/app/en/nodes.webp" alt="The myco app: a project is your chat with its coordinator; its members and computers are beside it" width="100%">
 
 ## What myco solves
 
@@ -72,17 +69,11 @@ curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-h
 
 **2. Add your agents.** Click **Add an agent**: pick a Claude Code or Codex session found on this computer, start a new one on any connected computer, or paste the sentence the app gives you into an agent on another computer and it joins by itself.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/app/en/add-node-dark.webp">
-  <img src="docs/assets/app/en/add-node.webp" alt="Add an agent: the Claude Code and Codex sessions found on this computer" width="100%">
-</picture>
+<img src="docs/assets/app/en/add-node.webp" alt="Add an agent: the Claude Code and Codex sessions found on this computer" width="100%">
 
 **3. Put them to work.** Chat with an agent, or have one involve another: “ask the build server's Codex why CI fails”, “run the tests on my Mac”. You see each step as it happens and can correct or stop it.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/app/en/conversation-dark.webp">
-  <img src="docs/assets/app/en/conversation.webp" alt="A project chat with a computer's terminal open beside it, a command's output coming in" width="100%">
-</picture>
+<img src="docs/assets/app/en/conversation.webp" alt="A project chat with a computer's terminal open beside it, a command's output coming in" width="100%">
 
 ## Apps
 
@@ -90,23 +81,23 @@ We are rebuilding the apps we use every day on Mac, Windows and phone so that **
 
 <table>
 <tr>
-<td width="33%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/apps/motion-dark.webp"><img src="docs/assets/apps/motion.webp" alt="Motion video"></picture><br><b>Motion video</b><br>Promo and short videos: describe it and the agent writes each scene; add music and voice-over, export MP4.</td>
-<td width="33%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/apps/design-studio-dark.webp"><img src="docs/assets/apps/design-studio.webp" alt="Design studio"></picture><br><b>Design studio</b><br>Web pages, app screens, posters and slides on an editable canvas, iterated with the agent.</td>
-<td width="33%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/apps/meeting-dark.webp"><img src="docs/assets/apps/meeting.webp" alt="Meeting notes"></picture><br><b>Meeting notes</b><br>Record a Zoom or Feishu call, transcribe it on your computer, and let the agent write the minutes.</td>
+<td width="33%"><img src="docs/assets/apps/motion.webp" alt="Motion video"><br><b>Motion video</b><br>Promo and short videos: describe it and the agent writes each scene; add music and voice-over, export MP4.</td>
+<td width="33%"><img src="docs/assets/apps/design-studio.webp" alt="Design studio"><br><b>Design studio</b><br>Web pages, app screens, posters and slides on an editable canvas, iterated with the agent.</td>
+<td width="33%"><img src="docs/assets/apps/meeting.webp" alt="Meeting notes"><br><b>Meeting notes</b><br>Record a Zoom or Feishu call, transcribe it on your computer, and let the agent write the minutes.</td>
 </tr>
 <tr>
-<td width="33%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/apps/disk-dark.webp"><img src="docs/assets/apps/disk.webp" alt="Disk cleanup"></picture><br><b>Disk cleanup</b><br>See what fills your disk, ring by ring, and move what you don't need to the Trash.</td>
-<td width="33%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/apps/remote-desktop-dark.webp"><img src="docs/assets/apps/remote-desktop.webp" alt="Remote desktop"></picture><br><b>Remote desktop</b><br>See and control your Mac or Windows PC from another computer or your iPhone.</td>
-<td width="33%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/apps/recorder-dark.webp"><img src="docs/assets/apps/recorder.webp" alt="Screen recorder"></picture><br><b>Screen recorder</b><br>Record the screen, then trim, split, add text and zoom, and export MP4 locally.</td>
+<td width="33%"><img src="docs/assets/apps/disk.webp" alt="Disk cleanup"><br><b>Disk cleanup</b><br>See what fills your disk, ring by ring, and move what you don't need to the Trash.</td>
+<td width="33%"><img src="docs/assets/apps/remote-desktop.webp" alt="Remote desktop"><br><b>Remote desktop</b><br>See and control your Mac or Windows PC from another computer or your iPhone.</td>
+<td width="33%"><img src="docs/assets/apps/recorder.webp" alt="Screen recorder"><br><b>Screen recorder</b><br>Record the screen, then trim, split, add text and zoom, and export MP4 locally.</td>
 </tr>
 <tr>
-<td width="33%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/apps/stocks-dark.webp"><img src="docs/assets/apps/stocks.webp" alt="Stock watch"></picture><br><b>Stock watch</b><br>A shared watchlist for China, Hong Kong and US stocks with candlestick charts and notes.</td>
-<td width="33%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/apps/photo-dark.webp"><img src="docs/assets/apps/photo.webp" alt="Photo editor"></picture><br><b>Photo editor</b><br>Crop, adjust, filters, text and stickers; the agent can make the edits you describe.</td>
-<td width="33%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/apps/issues-dark.webp"><img src="docs/assets/apps/issues.webp" alt="Issue tracker"></picture><br><b>Issue tracker</b><br>Track issues Linear-style, assign one to an agent, and watch it update the status and comment.</td>
+<td width="33%"><img src="docs/assets/apps/stocks.webp" alt="Stock watch"><br><b>Stock watch</b><br>A shared watchlist for China, Hong Kong and US stocks with candlestick charts and notes.</td>
+<td width="33%"><img src="docs/assets/apps/photo.webp" alt="Photo editor"><br><b>Photo editor</b><br>Crop, adjust, filters, text and stickers; the agent can make the edits you describe.</td>
+<td width="33%"><img src="docs/assets/apps/issues.webp" alt="Issue tracker"><br><b>Issue tracker</b><br>Track issues Linear-style, assign one to an agent, and watch it update the status and comment.</td>
 </tr>
 </table>
 
-**[See all 26 apps →](docs/apps.md)** (docs, notes, sheets, slides, a code editor, a whiteboard, video editing, games and more)
+**[See all 32 apps →](docs/apps.md)** (docs, notes, sheets, slides, a code editor, a whiteboard, video editing, games and more)
 
 ## Three ways to use it
 
@@ -261,8 +252,9 @@ Every agent below keeps **its own session**: each message resumes the same conve
 | [Kilo Code](https://kilo.ai) | `kilo acp` | `kilo` | ACP: experimental |
 | [Cline](https://cline.bot/cli) | `cline --acp` | `cline` | ACP: experimental |
 | [Grok](https://x.ai/cli) | `grok agent stdio` | `grok` | ACP: experimental |
+| [Antigravity](https://antigravity.google) | `google-antigravity-acp` ([community adapter](https://github.com/sibbl/google-antigravity-acp)) | `antigravity` | ACP: experimental |
 
-**Native** has a dedicated adapter; **Preset** is a built-in command template; **ACP** uses the [Agent Client Protocol](https://agentclientprotocol.com), with every step shown live. *Experimental* ones have not had long real-world use yet; reports welcome. Kiro needs `uv tool install kiro-acp-gateway`.
+**Native** has a dedicated adapter; **Preset** is a built-in command template; **ACP** uses the [Agent Client Protocol](https://agentclientprotocol.com), with every step shown live. *Experimental* ones have not had long real-world use yet; reports welcome. Kiro needs `uv tool install kiro-acp-gateway`. Antigravity needs `npm install -g google-antigravity-acp` and `agy` signed in; the adapter cannot ask for approval, so below full access agy refuses what needs it; Google's terms forbid reaching Antigravity through third-party tools with a personal login, so use an AI Studio or Vertex AI key.
 
 Other ways to connect:
 

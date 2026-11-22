@@ -86,6 +86,10 @@ Agent access currently uses shared page records. The [agent actions SDK](app-act
 
 <table>
 <tr>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/reader-dark.webp"><img src="assets/apps/reader.webp" alt="Reader"></picture><br><b>Reader</b><br>A local PDF and TXT bookshelf with page transitions, paper themes, typography controls, contents, search, bookmarks and remembered progress. Original files stay on this device. <a href="reader.md">Details</a>.</td>
+<td width="50%"></td>
+</tr>
+<tr>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/ledger-dark.webp"><img src="assets/apps/ledger.webp" alt="Budget book"></picture><br><b>Budget book</b><br>Income and spending by month, balance and budget left, where the money went by category, every entry by day. Keep it with family or a small team; the agent can file bills for you.</td>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/habit-dark.webp"><img src="assets/apps/habit.webp" alt="Habit tracker"></picture><br><b>Habit tracker</b><br>Check in on your habits together: this week's days, streaks, and who else has checked in. The agent can remind you and count.</td>
 </tr>

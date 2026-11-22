@@ -14,7 +14,7 @@ import (
 )
 
 // readmeHarnesses are the harnesses the README advertises.
-var readmeHarnesses = []string{"acp", "auggie", "claude", "cline", "codebuddy", "codex", "copilot", "cursor", "exec", "gemini", "goose", "grok", "kilo", "kimi", "kiro", "opencode", "pi", "qoder", "qwen", "shell", "template"}
+var readmeHarnesses = []string{"acp", "antigravity", "auggie", "claude", "cline", "codebuddy", "codex", "copilot", "cursor", "exec", "gemini", "goose", "grok", "kilo", "kimi", "kiro", "opencode", "pi", "qoder", "qwen", "shell", "template"}
 
 func TestRegistryHasEveryAdvertisedHarness(t *testing.T) {
 	got := Registry().Names()
@@ -217,5 +217,22 @@ func TestPresetUserOverride(t *testing.T) {
 	// The override must not mutate the shared preset.
 	if legacyTemplates["gemini"].Binary != "gemini" {
 		t.Fatalf("preset mutated: %+v", legacyTemplates["gemini"])
+	}
+}
+
+// The Antigravity adapter cannot pass approvals on: only full access lets
+// agy approve everything; below it agy keeps its own approvals on.
+func TestAntigravityAutoApprovesOnlyAtFullAccess(t *testing.T) {
+	p := ACPPresets["antigravity"]
+	if p.Binary != "google-antigravity-acp" || slices.Contains(p.Args, "--no-skip-permissions") {
+		t.Fatalf("preset: %+v", p)
+	}
+	if len(p.AccessArgs[harness.AccessFull]) != 0 {
+		t.Fatalf("full access should auto-approve: %v", p.AccessArgs[harness.AccessFull])
+	}
+	for _, a := range []harness.Access{harness.AccessDefault, harness.AccessReadonly, harness.AccessWorkspace} {
+		if !slices.Equal(p.AccessArgs[a], []string{"--no-skip-permissions"}) {
+			t.Fatalf("access %q: %v", a, p.AccessArgs[a])
+		}
 	}
 }
