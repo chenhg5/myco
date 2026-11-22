@@ -4,6 +4,24 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.21.17
+
+- **Project notes, redesigned**: a project's page now has a header like other detail pages (name, goal, Edit, New task) and three tabs, Notes (brief, memory, files, links), Members (with the computers it may start agents on) and Conversations, instead of eight sections in a row. A long brief or memory folds, and long file and link lists show the first five.
+- The App: project notes open at once again after you have read long conversations; before, a run's steps could push the page out of the App's memory, so it loaded from scratch. A project file you opened before also shows at once when it has not changed.
+- The App: a project's members are listed with the most recently active first within each group.
+- Mac App: the ⌘⇧Space quick panel no longer pops up by itself when the App starts.
+- Recording Studio (Mac): you pick the area with the App's own selector, then the recording starts; the area, elapsed time and a Stop & edit button stay visible while recording (and are not recorded), stopping keeps the whole movie, and the system asks for permission at most once per session. Focus zooms ease in and out more gently, with adjustable durations.
+- Cinema: catalogs scroll with touch again. The updated Cinema and Recording Studio reach a workspace when its hub is upgraded (`sudo myco upgrade`, or from the App).
+
+**中文**
+
+- **项目资料改版**：项目页顶部和其他详情页一样（名字、目标、编辑、新任务），下面分三个标签：资料（说明、记忆、文件、链接）、成员（以及它能在哪些电脑上开 agent）、对话，不再是八段排下来。说明和记忆太长会折叠，文件和链接先显示前五个。
+- App：看过几段长对话后，再打开项目资料也能立刻显示了；之前执行过程会把它挤出 App 的缓存，只能从头加载。项目里打开过的文件，没改过的话再打开也立刻显示。
+- App：项目成员在每组里按最近活跃排在前面。
+- Mac App：⌘⇧Space 快捷面板不会再在 App 启动时自己弹出来。
+- 录屏工作台（Mac）：先用 App 自己的选框选好区域再开始录；录制时区域、计时和「停止并剪辑」按钮一直可见（不会被录进去），停止后完整保存视频，同一次运行里系统最多只问一次权限。重点放大的进出更柔和，时长可调。
+- 影视：片库又能用触摸滚动了。新版影视和录屏工作台在工作区的 Hub 升级后生效（`sudo myco upgrade`，或在 App 里升级）。
+
 ## v0.21.16
 
 - **New official app: Cinema (影视)**: watch movies and series from sources you add yourself (none are bundled): search catalogs, choose episodes, keep a shared watchlist, and resume where you left off on this computer, with playback speed and intro/outro skipping. It follows the App's language and appearance. See docs/cinema.md.
