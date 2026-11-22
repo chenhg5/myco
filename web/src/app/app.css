@@ -4324,6 +4324,7 @@ html.fp-docked .app-main .sp-side {
 .conv-queue,
 .conv-busy,
 .vc-bar,
+.conv-compose > .sa-approvals,
 .conv-compose > .app-error-text,
 .conv-compose-box {
   max-width: calc(var(--conv-col) - var(--conv-pad) - var(--conv-pad-l));
