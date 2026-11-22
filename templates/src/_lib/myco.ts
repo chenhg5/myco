@@ -223,8 +223,18 @@ export class Store<T extends Record<string, unknown> = Record<string, unknown>> 
   async remove(id: string) {
     const i = this.rows.findIndex((r) => r.id === id);
     if (i >= 0) this.rows.splice(i, 1);
-    await (this.queues.get(id) || Promise.resolve());
-    await myco!.data.remove(this.collection, id).catch((e: { code?: string }) => { if (e.code !== "not_found") throw e; });
+    const run = async () => {
+      const before = this.get(id), data = before?.data, version = before?.version;
+      await myco!.data.remove(this.collection, id).catch((e: { code?: string }) => { if (e.code !== "not_found") throw e; });
+      const cur = this.get(id);
+      // Undo may already have staged a replacement. After deletion its next
+      // queued put must create it, rather than reuse the removed version.
+      if (cur && this.pending(id)) cur.version = 0;
+      else if (cur && cur.data === data && cur.version === version) this.rows.splice(this.rows.indexOf(cur), 1);
+    };
+    const p = (this.queues.get(id) || Promise.resolve()).then(run, run);
+    this.queues.set(id, p.catch(() => undefined));
+    await p;
   }
   on(f: (c: MycoChange) => void) { this.listeners.push(f); }
   private fire(c: MycoChange) { for (const f of this.listeners) f(c); }
