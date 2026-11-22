@@ -30,6 +30,9 @@ then paste its link into **Join workspace**. Each workspace has its own device
 credential, conversation cache and drafts. HTTP is supported for self-hosted
 workspaces; use HTTPS when accessing a workspace over the internet.
 
+See [workspace page links](../docs/android-links.md) for opening pages from a
+conversation and passing a fragment to an app.
+
 ## Tests
 
 ```sh

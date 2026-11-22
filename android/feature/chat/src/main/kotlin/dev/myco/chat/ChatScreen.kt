@@ -4,6 +4,10 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.provider.OpenableColumns
+import android.text.SpannableString
+import android.text.method.LinkMovementMethod
+import android.text.style.URLSpan
+import android.text.util.Linkify
 import android.widget.TextView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -25,6 +29,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -33,7 +43,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.myco.conversation.*
 import dev.myco.model.*
 import dev.myco.ui.*
+import io.noties.markwon.AbstractMarkwonPlugin
+import io.noties.markwon.LinkResolverDef
 import io.noties.markwon.Markwon
+import io.noties.markwon.MarkwonConfiguration
+import io.noties.markwon.linkify.LinkifyPlugin
 import kotlinx.coroutines.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -45,6 +59,7 @@ fun ChatScreen(
     openFile: (Attachment) -> Unit,
     export: (String) -> Unit,
     settings: () -> Unit = {},
+    openLink: (String) -> Boolean = { false },
 ) {
     val state by controller.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
@@ -259,6 +274,7 @@ fun ChatScreen(
                             message.from == controller.me,
                             state.traces[message.id].orEmpty(),
                             openFile,
+                            openLink,
                             copy = { copy(context, message.readableBody) },
                             hide = {
                                 scope.launch {
@@ -465,6 +481,7 @@ private fun MessageRow(
     mine: Boolean,
     trace: List<TraceEvent>,
     openFile: (Attachment) -> Unit,
+    openLink: (String) -> Boolean,
     copy: () -> Unit,
     hide: () -> Unit,
     resend: () -> Unit,
@@ -482,7 +499,7 @@ private fun MessageRow(
                     shape = RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp),
                     modifier = Modifier.widthIn(max = 340.dp),
                 ) {
-                    SelectionContainer { Text(message.readableBody, Modifier.padding(14.dp)) }
+                    SelectionContainer { PlainMessage(message.readableBody, openLink) }
                 }
             else {
                 if (message.type == "progress")
@@ -492,7 +509,7 @@ private fun MessageRow(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(vertical = 4.dp),
                     )
-                else Markdown(message.readableBody)
+                else Markdown(message.readableBody, openLink = openLink)
             }
             DropdownMenu(menu, onDismissRequest = { menu = false }) {
                 DropdownMenuItem(
@@ -582,10 +599,56 @@ private fun MessageRow(
     }
 }
 
+/** Preserve the person's plain text and bubble sizing while making pasted URLs usable. */
 @Composable
-fun Markdown(text: String, modifier: Modifier = Modifier) {
+private fun PlainMessage(text: String, openLink: (String) -> Boolean) {
+    val currentOpenLink by rememberUpdatedState(openLink)
+    val uriHandler = LocalUriHandler.current
+    val linkStyle = TextLinkStyles(SpanStyle(textDecoration = TextDecoration.Underline))
+    val content =
+        remember(text, uriHandler, linkStyle) {
+            val links = SpannableString(text)
+            Linkify.addLinks(links, Linkify.WEB_URLS)
+            buildAnnotatedString {
+                append(text)
+                links.getSpans(0, links.length, URLSpan::class.java).forEach { span ->
+                    addLink(
+                        LinkAnnotation.Url(span.url, linkStyle) { link ->
+                            val url = (link as LinkAnnotation.Url).url
+                            if (!currentOpenLink(url)) uriHandler.openUri(url)
+                        },
+                        links.getSpanStart(span),
+                        links.getSpanEnd(span),
+                    )
+                }
+            }
+        }
+    Text(content, Modifier.padding(14.dp))
+}
+
+@Composable
+fun Markdown(
+    text: String,
+    modifier: Modifier = Modifier,
+    openLink: (String) -> Boolean = { false },
+) {
     val context = LocalContext.current
-    val renderer = remember(context) { Markwon.create(context) }
+    val currentOpenLink by rememberUpdatedState(openLink)
+    val renderer =
+        remember(context) {
+            Markwon.builder(context)
+                .usePlugin(LinkifyPlugin.create(Linkify.WEB_URLS))
+                .usePlugin(
+                    object : AbstractMarkwonPlugin() {
+                        override fun configureConfiguration(builder: MarkwonConfiguration.Builder) {
+                            builder.linkResolver { view, link ->
+                                if (!currentOpenLink(link)) LinkResolverDef().resolve(view, link)
+                            }
+                        }
+                    }
+                )
+                .build()
+        }
     val color = MaterialTheme.colorScheme.onSurface.toArgb()
     val density = androidx.compose.ui.platform.LocalDensity.current
     AndroidView(
@@ -593,6 +656,8 @@ fun Markdown(text: String, modifier: Modifier = Modifier) {
             TextView(it).apply {
                 textSize = 16f
                 setTextIsSelectable(true)
+                // Text selection installs ArrowKeyMovementMethod; Markwon keeps it unless replaced.
+                movementMethod = LinkMovementMethod.getInstance()
                 setLineSpacing(4f, 1f)
                 setPadding(0, 0, 0, 0)
             }

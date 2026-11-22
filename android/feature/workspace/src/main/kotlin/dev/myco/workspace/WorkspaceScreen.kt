@@ -12,6 +12,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -22,6 +24,9 @@ import dev.myco.chat.Markdown
 import dev.myco.conversation.ConversationController
 import dev.myco.model.*
 import dev.myco.network.HubClient
+import dev.myco.network.PageLinks
+import dev.myco.pages.PageNavigation
+import dev.myco.pages.PageScreen
 import dev.myco.ui.*
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.*
@@ -53,6 +58,46 @@ fun WorkspaceScreen(
     var refresh by remember { mutableIntStateOf(0) }
     var failures by remember { mutableIntStateOf(0) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val scope = rememberCoroutineScope()
+    val focus = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    var openedPage by remember(workspace.id) { mutableStateOf<JsonElement?>(null) }
+    var pageNavigation by remember(workspace.id) { mutableStateOf(PageNavigation()) }
+    var pageLoad by remember(workspace.id) { mutableStateOf<Job?>(null) }
+    var pageFailure by remember(workspace.id) { mutableStateOf<String?>(null) }
+    var pageRequest by remember(workspace.id) { mutableLongStateOf(0) }
+    fun closePage() {
+        pageRequest++
+        pageLoad?.cancel()
+        openedPage = null
+    }
+    LaunchedEffect(route) { closePage() }
+    val openPageLink: (String) -> Boolean = { link ->
+        val target = PageLinks.parse(link, workspace.url)
+        if (target == null || hub !is HubClient) false
+        else {
+            focus.clearFocus()
+            keyboard?.hide()
+            val request = ++pageRequest
+            pageNavigation = PageNavigation(target.fragment, request)
+            pageLoad?.cancel()
+            if (openedPage?.jsonObject?.get("id")?.jsonPrimitive?.content != target.pageId) {
+                openedPage = null
+                pageLoad = scope.launch {
+                    try {
+                        val found = hub.request("GET", listOf("v1", "pages", target.pageId))
+                        if (pageRequest == request) openedPage = found
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        if (pageRequest == request)
+                            pageFailure = e.message ?: "Could not open the page"
+                    }
+                }
+            }
+            true
+        }
+    }
     LaunchedEffect(workspace.id, refresh) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             while (isActive) {
@@ -88,22 +133,40 @@ fun WorkspaceScreen(
     if (route.startsWith("chat:") && me != null) {
         val name = route.removePrefix("chat:")
         val title = overview.agents.firstOrNull { it.agent.name == name }?.agent?.title ?: name
-        ConversationRoute(
-            hub,
-            me,
-            name,
-            workspace.id,
-            selectedProject,
-            conversations,
-            title,
-            {
-                route = ""
-                selectedProject = null
-            },
-            { openFile(hub, it) },
-            export,
-            { route = "member:$name" },
-        )
+        Box(Modifier.fillMaxSize()) {
+            ConversationRoute(
+                hub,
+                me,
+                name,
+                workspace.id,
+                selectedProject,
+                conversations,
+                title,
+                {
+                    route = ""
+                    selectedProject = null
+                },
+                { openFile(hub, it) },
+                export,
+                { route = "member:$name" },
+                openPageLink,
+            )
+            val page = openedPage
+            if (page != null && hub is HubClient) {
+                BackHandler { closePage() }
+                PageScreen(page, hub, { closePage() }, pageNavigation)
+            }
+        }
+        pageFailure?.let { failure ->
+            AlertDialog(
+                onDismissRequest = { pageFailure = null },
+                title = { Text(words("网页暂时无法打开", "Could not open the page")) },
+                text = { Text(failure) },
+                confirmButton = {
+                    TextButton(onClick = { pageFailure = null }) { Text(words("关闭", "Close")) }
+                },
+            )
+        }
         return
     }
     if (route.startsWith("member:")) {
@@ -331,6 +394,7 @@ private fun ConversationRoute(
     file: (Attachment) -> Unit,
     export: (String) -> Unit,
     settings: () -> Unit,
+    openLink: (String) -> Boolean,
 ) {
     val scope = rememberCoroutineScope()
     val controller =
@@ -345,7 +409,7 @@ private fun ConversationRoute(
                 project,
             )
         }
-    ChatScreen(controller, title, back, file, export, settings)
+    ChatScreen(controller, title, back, file, export, settings, openLink)
 }
 
 @Composable

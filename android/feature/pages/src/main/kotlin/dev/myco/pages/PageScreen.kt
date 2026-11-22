@@ -32,18 +32,28 @@ private const val POLICY =
 
 private data class PageConsent(val text: String, val to: String, val answer: (Boolean) -> Unit)
 
-/** Untrusted page content gets only a scoped bridge, never the console credential. */
-@SuppressLint("SetJavaScriptEnabled")
-@OptIn(ExperimentalMaterial3Api::class)
+/** An opaque document location; request distinguishes repeated clicks on the same link. */
+data class PageNavigation(val fragment: String? = null, val request: Long = 0)
+
 @Composable
-fun PageScreen(page: JsonElement, hub: HubClient, back: () -> Unit) {
-    key(hub.baseUrl, page.field("id")) { PageContent(page, hub, back) }
+fun PageScreen(
+    page: JsonElement,
+    hub: HubClient,
+    back: () -> Unit,
+    navigation: PageNavigation = PageNavigation(),
+) {
+    key(hub.baseUrl, page.field("id")) { PageContent(page, hub, back, navigation) }
 }
 
 @SuppressLint("SetJavaScriptEnabled")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PageContent(page: JsonElement, hub: HubClient, back: () -> Unit) {
+private fun PageContent(
+    page: JsonElement,
+    hub: HubClient,
+    back: () -> Unit,
+    navigation: PageNavigation,
+) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val hostScope = rememberCoroutineScope()
@@ -91,6 +101,8 @@ private fun PageContent(page: JsonElement, hub: HubClient, back: () -> Unit) {
     val theme = if (androidx.compose.foundation.isSystemInDarkTheme()) "dark" else "light"
     var active by remember { mutableStateOf(true) }
     val web = remember(id) { WebView(context) }
+    var documentReady by remember(id) { mutableStateOf(false) }
+    var appliedNavigation by remember(id) { mutableStateOf(navigation) }
     var requests by remember(id) { mutableStateOf(SupervisorJob()) }
     var known by remember(id) { mutableIntStateOf(0) }
     var seq by remember(id) { mutableIntStateOf(0) }
@@ -335,6 +347,10 @@ private fun PageContent(page: JsonElement, hub: HubClient, back: () -> Unit) {
             WebViewCompat.addDocumentStartJavaScript(web, script, setOf(origin))
             web.webViewClient =
                 object : WebViewClient() {
+                    override fun onPageFinished(view: WebView, url: String) {
+                        if (Uri.parse(url).host == pageHost) documentReady = true
+                    }
+
                     override fun shouldOverrideUrlLoading(
                         view: WebView,
                         request: WebResourceRequest,
@@ -403,7 +419,9 @@ private fun PageContent(page: JsonElement, hub: HubClient, back: () -> Unit) {
                         request.deny()
                     }
                 }
-            web.loadUrl("$origin/")
+            // Only the fragment is appended to this page's private document origin.
+            val suffix = navigation.fragment?.let { "#$it" }.orEmpty()
+            web.loadUrl("$origin/$suffix")
         }
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
@@ -437,6 +455,26 @@ private fun PageContent(page: JsonElement, hub: HubClient, back: () -> Unit) {
             web.destroy()
             consent?.answer?.invoke(false)
             consent = null
+        }
+    }
+    LaunchedEffect(web, documentReady, navigation) {
+        if (documentReady && navigation != appliedNavigation) {
+            val fragment = JsonPrimitive(navigation.fragment.orEmpty()).toString()
+            web.evaluateJavascript(
+                """
+                (function() {
+                  var next = new URL(location.href);
+                  next.hash = '#' + $fragment;
+                  if (next.hash === location.hash) {
+                    var here = location.href;
+                    window.dispatchEvent(new HashChangeEvent('hashchange', {oldURL: here, newURL: here}));
+                  } else { location.hash = next.hash; }
+                })();
+            """
+                    .trimIndent(),
+                null,
+            )
+            appliedNavigation = navigation
         }
     }
     LaunchedEffect(web, requests, active) {

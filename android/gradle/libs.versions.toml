@@ -39,6 +39,8 @@ compose-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
 androidx-test-runner = { module = "androidx.test:runner", version.ref = "test-runner" }
 androidx-webkit = { module = "androidx.webkit:webkit", version.ref = "webkit" }
 
+markwon-linkify = { module = "io.noties.markwon:linkify", version.ref = "markwon" }
+
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 android-library = { id = "com.android.library", version.ref = "agp" }
