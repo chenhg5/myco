@@ -97,7 +97,7 @@
   ],
   "remote-desktop": [
     "Remote Desktop",
-    "View and control your Mac and Windows computers. Optional component, view-only mode, temporary pairing codes and instant disconnect. LAN or Tailscale; audio, lock screens and public relay are not included yet."
+    "View and control your Mac and Windows computers from a computer or iPhone. Phone touchpad and keyboard, optional hosting component and temporary pairing codes. Direct LAN or Tailscale; no audio, lock screens or public relay yet."
   ],
   "recorder": [
     "Recording studio",

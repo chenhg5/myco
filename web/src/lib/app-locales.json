@@ -32,11 +32,11 @@
   "myco/slides": {
     "en": {
       "name": "Slides",
-      "description": "Create presentations with covers, key points, charts, cards, tables and quotes. Edit on the slide, reorder, present full screen and export editable PowerPoint."
+      "description": "Agents write content; the page arranges covers, points, charts, cards, tables and quotes. Co-edit and present; compatible Apps let agents export editable PowerPoint files and Markdown outlines."
     },
     "zh": {
       "name": "幻灯片",
-      "description": "agent 写内容，网页按版式和主题排好：封面、要点、图表、数字卡片、表格、引言；点哪改哪，拖动换顺序，全屏放映，导出能接着改的 PowerPoint。"
+      "description": "agent 写内容，网页按版式和主题排好：封面、要点、图表、数字卡片、表格和引言。共同编辑、放映；agent 可通过新版 App 导出可继续编辑的 PowerPoint 和 Markdown。"
     }
   },
   "myco/meeting": {
@@ -162,21 +162,21 @@
   "myco/design-studio": {
     "en": {
       "name": "Design studio",
-      "description": "Create websites, app interfaces, posters, presentations, social images and dashboards. Edit canvases and layers, preview HTML, collect feedback, save versions and export SVG, PNG or HTML with your agents."
+      "description": "Design websites, interfaces, posters and dashboards with agents. Edit canvases and layers, preview HTML, collect feedback and save versions; compatible Apps let agents export shared SVG, PNG, HTML or JSON files."
     },
     "zh": {
       "name": "设计工作台",
-      "description": "从设计需求到作品：网页、应用界面、海报、演示文稿、社交图片和数据看板。黑白灰工作空间，可编辑画布与图层、预览 HTML 原型、收集反馈、保存版本，和 agent 一起迭代，导出 SVG、PNG、HTML 或设计数据。"
+      "description": "和 agent 一起设计网页、界面、海报和数据看板。可编辑画布与图层，预览 HTML，收集反馈并保存版本；agent 可通过新版 App 导出共享作品的 SVG、PNG、HTML 或 JSON。"
     }
   },
   "myco/whiteboard": {
     "en": {
       "name": "Whiteboard",
-      "description": "An infinite canvas for sticky notes, text, shapes and connectors. Drag, zoom and color your ideas; work with agents on brainstorms, retrospectives and flows."
+      "description": "An infinite canvas with sticky notes, text, shapes and connectors. Co-edit with agents and export SVG/PNG; compatible Apps let agents export shared boards in the background."
     },
     "zh": {
       "name": "白板",
-      "description": "一块无限大的画布：便签、文字、矩形、椭圆、连线，拖动、缩放、改颜色；agent 能往上贴便签，适合头脑风暴、复盘、画流程。"
+      "description": "一块无限大的画布：便签、文字、形状和连线。和 agent 共同编辑，导出 SVG/PNG；兼容新版 App 时，agent 可在后台导出共享白板。"
     }
   },
   "myco/mindmap": {
