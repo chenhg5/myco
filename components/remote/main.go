@@ -62,6 +62,9 @@ type engine struct {
 	snapMu   sync.Mutex
 	frames   []frame
 	geometry func() [4]int
+	// Sessions a person controls through: agents' input waits its turn
+	// (one controller per computer).
+	controlling map[string]bool
 }
 
 func (e *engine) controlAllowed() bool {
@@ -92,6 +95,7 @@ func (e *engine) close(id string) {
 		e.inputMu.Unlock()
 	}
 	delete(e.peers, id)
+	delete(e.controlling, id)
 	e.mu.Unlock()
 	if p != nil {
 		p.cancel()
@@ -176,6 +180,12 @@ func (e *engine) connect(w http.ResponseWriter, r *http.Request) {
 	// Reserve before allocating a peer so concurrent requests cannot start capture twice.
 	id := r.PathValue("id")
 	e.peers[id] = nil
+	if in.Control {
+		if e.controlling == nil {
+			e.controlling = map[string]bool{}
+		}
+		e.controlling[id] = true
+	}
 	e.mu.Unlock()
 	success := false
 	defer func() {

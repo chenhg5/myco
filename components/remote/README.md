@@ -40,7 +40,8 @@ the display input maps to, scaled down only; 1440 wide by default), and `POST /a
 `{frame_id, events}` → `{applied}`. Input needs control, names a frame observed
 in the last 30 seconds of the display as it still is (same origin and size), takes 1–64 events checked all together before any
 runs, applies them one by one, stops when the request ends (the App drops it
-when the grant is revoked) and releases every key and button afterwards. A
+when the grant is revoked) and releases every key and button afterwards. While a person's remote control session is connected, agent input is refused
+(`computer_busy`): one controller per computer. A
 refusal is `{error, applied?}`. `/status` lists `agent_actions` from 0.3.0.
 The App checks each job's grant with its Hub; the component trusts the App.
 

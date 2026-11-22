@@ -213,3 +213,23 @@ func TestAgentInputQueuedAndCancelledAppliesNothing(t *testing.T) {
 		t.Fatalf("a cancelled queued batch applied %d events", n)
 	}
 }
+
+// One controller per computer: while a person controls it remotely, an
+// agent's input is refused before anything happens.
+func TestAgentInputWhileAPersonControls(t *testing.T) {
+	e, call := agentEngine(t, true, func(inputEvent) error { t.Fatal("agent input while a person controls"); return nil })
+	_, obs := call("/agent/observe", `{}`)
+	e.mu.Lock()
+	e.controlling = map[string]bool{"session-1": true}
+	e.mu.Unlock()
+	if code, out := call("/agent/input", `{"frame_id":"`+obs["frame_id"].(string)+`","events":[{"kind":"move","x":0,"y":0}]}`); code != 409 || out["error"] != "computer_busy" {
+		t.Fatalf("busy: %d %v", code, out)
+	}
+	e.close("session-1")
+	e.mu.Lock()
+	n := len(e.controlling)
+	e.mu.Unlock()
+	if n != 0 {
+		t.Fatal("closing the session kept it controlling")
+	}
+}

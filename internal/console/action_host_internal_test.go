@@ -172,3 +172,27 @@ func TestActionPermitted(t *testing.T) {
 		t.Fatal("view allowed control")
 	}
 }
+
+func TestControlLeaseOneGrantAtATime(t *testing.T) {
+	var l controlLease
+	ctx := context.Background()
+	soon := time.Now().Add(time.Minute)
+	stillActive := true
+	if !l.take(ctx, "g1", soon, func(context.Context) bool { return stillActive }) {
+		t.Fatal("first grant refused")
+	}
+	if !l.take(ctx, "g1", soon, nil) {
+		t.Fatal("the holder refused its own input")
+	}
+	if l.take(ctx, "g2", soon, nil) {
+		t.Fatal("a second grant took control while the first holds")
+	}
+	stillActive = false // revoked or ended
+	if !l.take(ctx, "g2", soon, nil) {
+		t.Fatal("control was not released when the holder's grant ended")
+	}
+	l.until = time.Now().Add(-time.Second) // expired
+	if !l.take(ctx, "g3", soon, nil) {
+		t.Fatal("control was not released when the holder's grant expired")
+	}
+}

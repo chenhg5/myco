@@ -39,6 +39,37 @@ type actionHosts struct {
 	agentOwned, control bool
 	lastJob             time.Time
 	frames              frameBook
+	lease               controlLease
+}
+
+// controlLease is the one grant that may control this computer at a time
+// (whichever workspace it is in): it holds until it ends or expires, and
+// another grant's input meanwhile is refused as computer_busy.
+type controlLease struct {
+	mu    sync.Mutex
+	grant string
+	until time.Time
+	// active asks the holder's Hub whether its grant still holds.
+	active func(context.Context) bool
+}
+
+func (l *controlLease) take(ctx context.Context, grant string, until time.Time, active func(context.Context) bool) bool {
+	l.mu.Lock()
+	holder, holderUntil, holderActive := l.grant, l.until, l.active
+	l.mu.Unlock()
+	if holder != "" && holder != grant && time.Now().Before(holderUntil) && (holderActive == nil || holderActive(ctx)) {
+		return false
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.grant != holder { // taken meanwhile
+		return l.grant == grant
+	}
+	if active != nil || l.grant != grant {
+		l.active = active
+	}
+	l.grant, l.until = grant, until
+	return true
 }
 
 // frameBook remembers which grant observed each frame: input may only use a
@@ -285,14 +316,14 @@ func actionFailure(code, message string, retryable bool, applied *int) api.Actio
 // runDesktopJob runs one job: grant checked again here, stopped as soon as
 // the Hub says to, reported either way.
 func (b *Backend) runDesktopJob(ctx context.Context, c *client.Client, host *api.ActionHost, hj api.ActionHostJob, desktop func(context.Context, bool) (desktopActions, error)) {
-	done := runDesktopJob(ctx, c, host, hj, desktop, &b.actionHosts.frames)
+	done := runDesktopJob(ctx, c, host, hj, desktop, &b.actionHosts.frames, &b.actionHosts.lease)
 	done.HostID, done.Generation = host.ID, host.Generation
 	end, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 	defer cancel()
 	_, _ = c.CompleteActionJob(end, hj.Job.ID, done)
 }
 
-func runDesktopJob(ctx context.Context, c *client.Client, host *api.ActionHost, hj api.ActionHostJob, desktop func(context.Context, bool) (desktopActions, error), frames *frameBook) api.ActionJobComplete {
+func runDesktopJob(ctx context.Context, c *client.Client, host *api.ActionHost, hj api.ActionHostJob, desktop func(context.Context, bool) (desktopActions, error), frames *frameBook, lease *controlLease) api.ActionJobComplete {
 	j := hj.Job
 	var permission string
 	for _, d := range desktopActionList {
@@ -406,6 +437,20 @@ func runDesktopJob(ctx context.Context, c *client.Client, host *api.ActionHost, 
 		if !frames.ok(args.FrameID, hj.Grant.ID) {
 			return actionFailure("stale_frame", "that frame is not this grant's or is over 30 seconds old: observe again", false, intPtr(0))
 		}
+		until := time.Now().Add(30 * time.Minute)
+		if hj.Grant.ExpiresAt != nil {
+			until = *hj.Grant.ExpiresAt
+		}
+		jobID := j.ID
+		active := func(ctx context.Context) bool {
+			check, cancel := context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
+			s, err := c.ActionHostJob(check, jobID, host.ID, host.Generation, 0)
+			return err == nil && s.GrantState == api.GrantActive
+		}
+		if !lease.take(run, hj.Grant.ID, until, active) {
+			return actionFailure("computer_busy", "another agent controls this computer now: try again when its grant ends", true, intPtr(0))
+		}
 		applied, err := d.Input(run, args.FrameID, args.Events)
 		if err == nil {
 			result, _ := json.Marshal(map[string]int{"applied": applied})
@@ -424,6 +469,8 @@ func runDesktopJob(ctx context.Context, c *client.Client, host *api.ActionHost, 
 			return actionFailure("invalid_argument", "an event is not valid (all or nothing: none was applied)", false, intPtr(0))
 		case "stale_frame":
 			return actionFailure("stale_frame", "that frame is over 30 seconds old or the display changed since: observe again", false, intPtr(0))
+		case "computer_busy":
+			return actionFailure("computer_busy", "a person is controlling this computer remotely: try again later", true, intPtr(0))
 		case "control_not_allowed":
 			return actionFailure("control_not_allowed", "this computer allows viewing only (on a Mac, allow Accessibility for myco; or Remote Desktop is sharing view only)", false, intPtr(0))
 		case "input_failed":
