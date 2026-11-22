@@ -1,7 +1,14 @@
-import type { Page, PageChanges, PageOpen, PageRecord, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Backup, Backups, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, MCPServer, ToolSkill, ToolPlugin, SuperagentState, Approval, ActionGrant, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
+import type { Page, PageChanges, PageOpen, PageRecord, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Backup, Backups, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, MCPServer, ToolSkill, ToolPlugin, SuperagentState, Approval, ActionGrant, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, NoticePrefs, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
 import { L } from "@/lib/i18n";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
+/** GET /app/notices: whether this computer shows notices, per workspace
+ *  (an older hub keeps none) and the badge. */
+export interface NoticeState {
+  available: boolean;
+  hubs: Record<string, { supported: boolean; badge: number; error?: string }>;
+  badge: number;
+}
 export interface Hub {
   id: string;
   name: string;
@@ -1066,6 +1073,12 @@ export const appApi = {
   voiceStop: () => request<VoiceInfo>("POST", "app/voice/stop", {}),
   voiceMute: (muted: boolean) => request<VoiceInfo>("POST", "app/voice/mute", { muted }),
   voiceEvents: (after: number) => request<VoiceEvents>("GET", `app/voice/events?after=${after}`),
+  /** Notices shown on this computer (the desktop app; `available` false in a browser). */
+  notices: () => request<NoticeState>("GET", "app/notices"),
+  /** What is on screen: the window in front, the conversation in it. Coming to one marks its notices read. */
+  noticeFocus: (f: { front: boolean; hub?: string; target?: string }) => request<void>("PUT", "app/notices/focus", f),
+  noticePrefs: (hubId: string) => request<NoticePrefs>("GET", `app/hubs/${encodeURIComponent(hubId)}/notice-prefs`),
+  setNoticePrefs: (hubId: string, p: NoticePrefs) => request<NoticePrefs>("PUT", `app/hubs/${encodeURIComponent(hubId)}/notice-prefs`, p),
   /** The language these pages show, for what the desktop app draws itself (its tray menu). */
   putUILang: (lang: "zh" | "en") => request<{ lang: string }>("PUT", "app/ui-lang", { lang }),
   // Workspaces of a hub's server (hubs from v0.19.9 serve several at /w/<name>)

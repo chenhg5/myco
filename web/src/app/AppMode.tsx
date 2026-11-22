@@ -551,6 +551,29 @@ export default function AppMode({ initialHubs, initialInfo }: {
     if (!hubId) return;
     navRecord({ hub: hubId, page, space: page === "space" || page === "about" ? shownKey : undefined, chat: navChatNow });
   }, [hubId, page, shownKey, navChatNow]);
+  // What is on screen, for notices on this computer: a chat in front is
+  // not announced (and is marked read on its workspace, for every device).
+  useEffect(() => {
+    let last = "";
+    const say = () => {
+      const front = document.visibilityState === "visible" && document.hasFocus();
+      const [h, a] = (navChatNow || "").split("\u0000");
+      const f = { front, hub: a ? h : hubId || undefined, target: a ? `agent:${a}` : undefined };
+      const key = JSON.stringify(f);
+      if (key === last) return;
+      last = key;
+      appApi.noticeFocus(f).catch(() => undefined);
+    };
+    say();
+    window.addEventListener("focus", say);
+    window.addEventListener("blur", say);
+    document.addEventListener("visibilitychange", say);
+    return () => {
+      window.removeEventListener("focus", say);
+      window.removeEventListener("blur", say);
+      document.removeEventListener("visibilitychange", say);
+    };
+  }, [hubId, navChatNow]);
   const navApply = useRef<(p: NavPlace) => void>(() => undefined);
   navApply.current = (p) => {
     if (p.hub !== hubId && hubs.some((h) => h.id === p.hub)) setHubPick(p.hub);
@@ -749,6 +772,27 @@ export default function AppMode({ initialHubs, initialInfo }: {
   }, [hubId, page]);
   // A workflow run to open on the 工作流 page (from an automation's runs).
   const [wfOpen, setWfOpen] = useState<{ workflow: string; run?: string; at: number } | undefined>();
+  // A notice clicked in the system's notifications (the desktop app): open
+  // where it leads, in its workspace (a workflow's run, or a chat: the
+  // agent it is about, or the one that sent it).
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<{ hubId?: string; target?: string; actor?: string }>).detail;
+      if (!d?.hubId) return;
+      const t = d.target || "";
+      setHubPick(d.hubId);
+      if (t.startsWith("workflow:")) {
+        const [workflow, q] = t.slice("workflow:".length).split("?");
+        setWfOpen({ workflow, run: new URLSearchParams(q || "").get("run") || undefined, at: Date.now() });
+        setPage("workflows");
+        return;
+      }
+      const agent = t.startsWith("agent:") ? t.slice("agent:".length) : d.actor;
+      if (agent) setToOpen({ hubId: d.hubId, agent });
+    };
+    window.addEventListener("myco-open-notice", on);
+    return () => window.removeEventListener("myco-open-notice", on);
+  }, []);
   // Decisions a workflow waits on you for: a count on its nav item.
   const [decisionCount, setDecisionCount] = useState(0);
   useEffect(() => {

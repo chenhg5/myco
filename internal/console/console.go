@@ -24,12 +24,14 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
 	"github.com/chenhg5/myco/internal/api"
 	"github.com/chenhg5/myco/internal/app"
 	"github.com/chenhg5/myco/internal/client"
+	"github.com/chenhg5/myco/internal/console/notices"
 	"github.com/chenhg5/myco/internal/harness/execnode"
 	"github.com/chenhg5/myco/internal/release"
 )
@@ -217,6 +219,8 @@ type Backend struct {
 	voice     *voice
 	// the pages' language (uilang.go)
 	uiLang uiLang
+	// notices shown on this computer (notices.go; nil in a browser)
+	notices atomic.Pointer[notices.Watcher]
 }
 
 func (b *Backend) timeout() time.Duration {
@@ -244,6 +248,7 @@ func (b *Backend) Handler() http.Handler {
 	m := http.NewServeMux()
 	b.cacheRoutes(m)
 	b.uiLangRoutes(m)
+	b.noticeRoutes(m)
 	b.proxyRoutes(m)
 	b.remoteDesktopRoutes(m)
 	b.backupRoutes(m)

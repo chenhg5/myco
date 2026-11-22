@@ -1092,6 +1092,7 @@ sudo myco hub restore --from myco-backup-hub-20261121-093000.tar.gz --db /var/li
     sudo /usr/local/bin/myco console link --name <设备名>
     ```
     点 `myco://` 开头的链接也能直接唤起 App 添加。也可以手动填 Hub 地址和控制台令牌（`myco console token create --name <设备名>`）。令牌存在钥匙串里，可以单独作废（`myco console token revoke`）。
+- **通知**（Mac 和 Windows，Hub v0.21.21 起）：App 开着时（窗口在不在前面都一样），有需要你的事就弹系统通知：agent 问你问题、工作流等你决定、superagent 请你批准、你派的任务没做成；点一下打开 App 到那里。回复和进展会记下来，但默认不弹。正在看的会话不弹；打开一个会话，它的通知在你所有设备上都算已读。弹不弹由 Hub 按你的偏好统一决定（免打扰时段按你的时区、暂停、静音的会话和项目），所以几台设备一致。Mac 上 Dock 图标的数字是还在等你的事；第一次弹通知时系统会问你是否允许（系统设置 → 通知 → myco）。想让 App 不弹，启动时设置环境变量 `MYCO_APP_NOTICES=off`。
 - **打开快**：各个页面显示过的内容（节点、对话列表、打开过的对话、项目、设置里的成员等）会记下来，再打开或 App 重启后先显示上次的内容，后台再刷新成最新的。存在这台电脑上的 `app-cache.db`（和 Hub 列表同一个目录），用钥匙串里的密钥加密，最多约 50 MB；移除一个 Hub、或它的令牌失效时，它的内容随之删掉。Hub 连不上时，节点页和对话标题旁会写「离线 · 显示的是 x 分钟前的数据」。「设置 → 关于 → 本机缓存」可以清除；启动 App 时设置环境变量 `MYCO_APP_CACHE=off` 则不保存（v0.18.34 起）。
 - **添加节点**有三种方式：
   - **本机的 agent**：App 列出这台电脑上最近的 Claude Code 和 Codex 会话（目录、第一句话、最后活动时间），点一下就加入当前 Hub，并自动启动本机的 runner 服务。

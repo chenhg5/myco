@@ -2279,6 +2279,19 @@ const server = http.createServer(async (req, res) => {
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "opened" && parts.length === 3) {
     return send(res, 200, { urls: openedLinks });
   }
+  // /app/notices: this mock is a browser, so it shows none; the pages
+  // still say what is on screen (recorded for tests).
+  if (parts[0] === "app" && parts[1] === "notices" && parts.length === 2) {
+    return send(res, 200, { available: false, hubs: {}, badge: 0 });
+  }
+  if (parts[0] === "app" && parts[1] === "notices" && parts[2] === "focus" && method === "PUT") {
+    state.noticeFocus = await readBody(req);
+    res.writeHead(204);
+    return res.end();
+  }
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "notice-focus") {
+    return send(res, 200, state.noticeFocus || {});
+  }
   // /app/ui-lang: the pages' language, for the desktop app's tray menu.
   if (parts[0] === "app" && parts[1] === "ui-lang" && parts.length === 2) {
     if (method === "PUT") {
