@@ -7,6 +7,12 @@ export type ActionRequest = (path: string, init: RequestInit) => Promise<Respons
 const grants = "/v1/me/action-grants";
 const jobs = "/v1/me/action-jobs";
 const idPath = (base: string, id: string) => `${base}/${encodeURIComponent(id)}`;
+function waitQuery(options: ActionOptions | undefined, fallback = "") {
+  const n = options?.wait_seconds;
+  if (n === undefined) return fallback;
+  if (!Number.isInteger(n) || n < 0 || n > 60) throw new ActionError({ code: "invalid_argument", message: "Wait must be an integer between 0 and 60 seconds.", retryable: false });
+  return `?wait_seconds=${n}`;
+}
 
 export class ActionHTTPTransport implements ActionTransport {
   constructor(private readonly request: ActionRequest) {}
@@ -33,7 +39,7 @@ export class ActionHTTPTransport implements ActionTransport {
       code: (typeof error.error === "string" ? error.error : undefined) || ({ 401: "permission_denied", 403: "permission_denied", 404: "not_found", 409: "conflict", 410: "expired" } as Record<number, string>)[response.status] || "failed",
       message: typeof error.message === "string" ? error.message : `Action request failed (${response.status}).`,
       retryable: error.retryable === true, applied: typeof error.applied === "number" ? error.applied : undefined,
-    });
+    }, response.status);
   }
   private async json<T>(path: string, method: string, body?: unknown, options?: ActionOptions): Promise<T> {
     const response = await this.response(path, method, body, options);
@@ -41,7 +47,12 @@ export class ActionHTTPTransport implements ActionTransport {
     catch { throw new ActionError({ code: "invalid_response", message: "The action service returned invalid JSON.", retryable: false }); }
   }
   requestGrant(request: GrantRequest, options?: ActionOptions) { return this.json<ActionGrant>(grants, "POST", request, options); }
-  getGrant(id: string, options?: ActionOptions) { return this.json<ActionGrant>(idPath(grants, id), "GET", undefined, options); }
+  async listGrants(options?: ActionOptions): Promise<ActionGrant[]> {
+    const result = await this.json<{ grants: ActionGrant[] }>(grants, "GET", undefined, options);
+    if (!Array.isArray(result.grants)) throw new ActionError({ code: "invalid_response", message: "The service returned no grants.", retryable: false });
+    return result.grants;
+  }
+  getGrant(id: string, options?: ActionOptions) { return this.json<ActionGrant>(idPath(grants, id) + waitQuery(options), "GET", undefined, options); }
   endGrant(id: string, options?: ActionOptions) { return this.json<ActionGrant>(`${idPath(grants, id)}/end`, "POST", {}, options); }
   async listActions(grant: string, options?: ActionOptions): Promise<ActionDescriptor[]> {
     const result = await this.json<{ actions: ActionDescriptor[] }>(`${idPath(grants, grant)}/actions`, "GET", undefined, options);
@@ -49,7 +60,7 @@ export class ActionHTTPTransport implements ActionTransport {
     return result.actions;
   }
   invoke(request: ActionInvocation, options?: ActionOptions) { return this.json<ActionJob>(jobs, "POST", request, options); }
-  getJob(id: string, options?: ActionOptions) { return this.json<ActionJob>(`${idPath(jobs, id)}?wait=30s`, "GET", undefined, options); }
+  getJob(id: string, options?: ActionOptions) { return this.json<ActionJob>(idPath(jobs, id) + waitQuery(options, "?wait=30s"), "GET", undefined, options); }
   cancelJob(id: string, options?: ActionOptions) { return this.json<ActionJob>(`${idPath(jobs, id)}/cancel`, "POST", {}, options); }
   async readArtifact(_grant: string, id: string, options?: ActionOptions): Promise<Uint8Array> {
     // The artifact endpoint binds its ID to the authenticated agent's grant.

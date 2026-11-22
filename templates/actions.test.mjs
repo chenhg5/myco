@@ -1,24 +1,11 @@
 // SDK/adapter contract tests. The fake service below is not proof that the Hub
 // or native component implements grants; those have separate integration tests.
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
-import ts from 'typescript';
+import { actionModule } from './action-test-modules.mjs';
 
-const compiled = new Map();
-async function moduleURL(name) {
-  if (compiled.has(name)) return compiled.get(name);
-  let code = ts.transpileModule(fs.readFileSync(new URL(`./src/${name}.ts`, import.meta.url), 'utf8'), {
-    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-  }).outputText;
-  for (const match of [...code.matchAll(/from "(\.[\w./-]+)"/g)]) code = code.replace(match[0], `from ${JSON.stringify(await moduleURL(path.posix.join(path.posix.dirname(name), match[1])))}`);
-  const url = `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`;
-  compiled.set(name, url);
-  return url;
-}
-const { ActionClient, ActionError } = await import(await moduleURL('_lib/actions'));
-const { ActionHTTPTransport } = await import(await moduleURL('_lib/actions-http'));
-const { RemoteDesktopActions, desktopClick, desktopPoint, validateDesktopInput } = await import(await moduleURL('remote-desktop/agent-actions'));
+const { ActionClient, ActionError } = await import(await actionModule('_lib/actions'));
+const { ActionHTTPTransport } = await import(await actionModule('_lib/actions-http'));
+const { RemoteDesktopActions, desktopClick, desktopPoint, validateDesktopInput } = await import(await actionModule('remote-desktop/agent-actions'));
 const future = () => new Date(Date.now() + 60_000).toISOString();
 const grant = { id: 'g_1', agent: 'agent_1', owner: 'owner_1', target: { kind: 'machine', id: 'machine_1' }, permissions: ['remote.desktop.view'], approval_id: 'a_1', state: 'active', created_at: new Date().toISOString(), expires_at: future() };
 const frame = { frame_id: 'frame_1', captured_at: new Date().toISOString(), display_id: 'display_1', width: 1440, height: 900, artifact: { id: 'art_1', media_type: 'image/jpeg', bytes: 3, expires_at: future() } };
@@ -28,6 +15,7 @@ const seen = [], jobs = new Map(), keys = new Map();
 let current = structuredClone(grant), executionCount = 0, cancelled = 0, pollHook;
 const fake = {
   requestGrant: async request => ({ ...structuredClone(grant), ...request, state: 'pending' }),
+  listGrants: async () => [structuredClone(current)],
   getGrant: async () => structuredClone(current),
   endGrant: async () => { current.state = 'ended'; return structuredClone(current); },
   listActions: async () => {
@@ -42,7 +30,7 @@ const fake = {
       return structuredClone(previous.job);
     }
     executionCount++;
-    const job = { id: `job_${executionCount}`, grant_id: request.grant_id, action: request.action, state: 'queued' };
+    const job = { id: `job_${executionCount}`, grant_id: request.grant_id, action: request.action, version: request.version, created_at: new Date().toISOString(), state: 'queued' };
     jobs.set(job.id, job); keys.set(request.idempotency_key, { request, job });
     return structuredClone(job);
   },
@@ -60,6 +48,7 @@ const fake = {
 const client = new ActionClient(fake);
 const requested = await client.request({ target: grant.target, permissions: grant.permissions, reason: 'Diagnose a screen' });
 assert.equal(requested.state, 'pending');
+assert.equal((await client.grants())[0].id, grant.id);
 current.state = 'pending';
 const pending = await client.session(grant.id);
 await assert.rejects(async () => pending.actions(), { code: 'permission_denied' });
@@ -100,6 +89,8 @@ await assert.rejects(() => failed.wait({ interval_ms: 10 }), e => e instanceof A
 const wrong = await controlled.observe('wrong-job');
 pollHook = id => ({ ...jobs.get(id), id: 'other-job' });
 await assert.rejects(() => wrong.wait({ interval_ms: 10 }), { code: 'invalid_response' });
+pollHook = id => ({ ...jobs.get(id), version: 2 });
+await assert.rejects(() => wrong.refresh(), { code: 'invalid_response' });
 pollHook = undefined;
 const raced = await controlled.observe('cancel-race');
 let finishPoll;
@@ -134,6 +125,13 @@ assert.equal(requests.at(-1).path, '/v1/me/action-grants/g%2Fa/actions');
 reply = () => Response.json({ state: 'running' });
 await http.getJob('j/1');
 assert.equal(requests.at(-1).path, '/v1/me/action-jobs/j%2F1?wait=30s');
+await http.getJob('j/1', { wait_seconds: 2 });
+assert.equal(requests.at(-1).path, '/v1/me/action-jobs/j%2F1?wait_seconds=2');
+await http.getGrant('g/1', { wait_seconds: 30 });
+assert.equal(requests.at(-1).path, '/v1/me/action-grants/g%2F1?wait_seconds=30');
+await assert.rejects(async () => http.getGrant('g', { wait_seconds: 61 }), { code: 'invalid_argument' });
+reply = () => Response.json({ grants: [grant] });
+assert.equal((await http.listGrants())[0].id, grant.id);
 reply = () => Response.json({ error: 'unsupported', message: 'Old component', retryable: false }, { status: 400 });
 await assert.rejects(() => http.getGrant('g'), { code: 'unsupported', retryable: false });
 reply = () => new Response('invalid JSON');
@@ -144,8 +142,8 @@ reply = () => new Response(new Uint8Array([1, 2, 3]));
 assert.deepEqual(await http.readArtifact('g', 'a'), new Uint8Array([1, 2, 3]));
 reply = () => new Response(new Uint8Array(4 * 1024 * 1024 + 1));
 await assert.rejects(() => http.readArtifact('g', 'large'), { code: 'too_large' });
-reply = () => Response.json({ error: 'expired', message: 'Grant ended', retryable: false }, { status: 410 });
-await assert.rejects(() => http.readArtifact('g', 'ended'), { code: 'expired' });
+reply = () => Response.json({ error: 'not_found', message: 'Grant ended', retryable: false }, { status: 410 });
+await assert.rejects(() => http.readArtifact('g', 'ended'), { code: 'not_found', status: 410 });
 let attempts = 0;
 const disconnected = new ActionHTTPTransport(async () => { attempts++; throw new Error('Connection lost'); });
 await assert.rejects(() => disconnected.invoke({ grant_id: 'g', action: 'remote.desktop.input', version: 1, args: {}, idempotency_key: 'once' }), { code: 'outcome_unknown', retryable: false });

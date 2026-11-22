@@ -7,8 +7,8 @@ export type ActionDescriptor = {
   version: number;
   title: string;
   permission: string;
-  input_schema: object;
-  output_schema: object;
+  input_schema?: object;
+  output_schema?: object;
 };
 export type GrantRequest = {
   target: ActionTarget;
@@ -23,12 +23,18 @@ export type ActionGrant = {
   agent: string;
   owner: string;
   target: ActionTarget;
-  permissions: string[];
+  target_name?: string;
+  /** Pending/denied grants may serialize an empty Go slice as null. */
+  permissions: string[] | null;
+  requested?: string[];
+  reason?: string;
   message_id?: string;
   approval_id: string;
   state: "pending" | "active" | "denied" | "expired" | "revoked" | "ended";
   created_at: string;
   expires_at?: string;
+  ended_at?: string;
+  end_reason?: string;
 };
 export type ActionInvocation = {
   grant_id: string;
@@ -44,17 +50,23 @@ export type ActionJob<T = unknown> = {
   id: string;
   grant_id: string;
   action: string;
+  version: number;
   state: "queued" | "running" | "succeeded" | "failed" | "cancelled";
   result?: T;
   error?: ActionFailure;
+  artifacts?: ActionArtifact[];
+  cancel_requested?: boolean;
+  created_at: string;
+  finished_at?: string;
 };
 export type ActionArtifact = { id: string; media_type: string; bytes: number; expires_at: string };
-export type ActionOptions = { signal?: AbortSignal };
+export type ActionOptions = { signal?: AbortSignal; wait_seconds?: number };
 
 /** Implemented by an authenticated framework adapter, never by forwarding
  * arbitrary page JavaScript to myco.os. An absent adapter means unsupported. */
 export interface ActionTransport {
   requestGrant(request: GrantRequest, options?: ActionOptions): Promise<ActionGrant>;
+  listGrants(options?: ActionOptions): Promise<ActionGrant[]>;
   getGrant(id: string, options?: ActionOptions): Promise<ActionGrant>;
   endGrant(id: string, options?: ActionOptions): Promise<ActionGrant>;
   listActions(grant: string, options?: ActionOptions): Promise<ActionDescriptor[]>;
@@ -69,7 +81,7 @@ export class ActionError extends Error {
   readonly code: string;
   readonly retryable: boolean;
   readonly applied?: number;
-  constructor(error: ActionFailure) {
+  constructor(error: ActionFailure, readonly status?: number) {
     super(error.message);
     this.name = "ActionError";
     this.code = error.code;
@@ -107,6 +119,9 @@ export class ActionClient {
   request(request: GrantRequest, options?: ActionOptions) {
     return call(() => this.transport.requestGrant(request, options), options);
   }
+  grants(options?: ActionOptions) {
+    return call(() => this.transport.listGrants(options), options);
+  }
   async session(id: string, options?: ActionOptions): Promise<ActionSession> {
     const grant = await call(() => this.transport.getGrant(id, options), options);
     if (grant.id !== id) fail("invalid_response", "The transport returned a different grant.");
@@ -141,11 +156,11 @@ export class ActionSession {
     if (!key.trim()) fail("invalid_argument", "An idempotency key is required.");
     const descriptor = (await this.actions(options)).find(d => d.name === action && d.version === version);
     if (!descriptor) fail("unsupported", "This action version is unavailable on the target.");
-    if (!this.value.permissions.includes(descriptor.permission)) fail("permission_denied", "This action needs a separately approved permission.");
+    if (!this.value.permissions?.includes(descriptor.permission)) fail("permission_denied", "This action needs a separately approved permission.");
     // Recheck after discovery: it may have taken long enough for expiry/end.
     this.active();
     const job = await call(() => this.transport.invoke({ grant_id: this.value.id, action, version, args, idempotency_key: key }, options), options);
-    return new ActionTask<T>(this.transport, this.value.id, action, job);
+    return new ActionTask<T>(this.transport, this.value.id, action, version, job);
   }
   read(artifact: ActionArtifact, options?: ActionOptions): Promise<Uint8Array> {
     this.active();
@@ -162,12 +177,12 @@ export class ActionSession {
 
 export class ActionTask<T> {
   private value: ActionJob<T>;
-  constructor(private readonly transport: ActionTransport, private readonly grant: string, private readonly action: string, job: ActionJob) {
+  constructor(private readonly transport: ActionTransport, private readonly grant: string, private readonly action: string, private readonly version: number, job: ActionJob) {
     this.value = this.checked(job);
   }
   get job(): ActionJob<T> { return structuredClone(this.value); }
   private checked(job: ActionJob): ActionJob<T> {
-    if (!job.id || job.grant_id !== this.grant || job.action !== this.action || (this.value && job.id !== this.value.id)) fail("invalid_response", "The transport returned a different action job.");
+    if (!job.id || job.grant_id !== this.grant || job.action !== this.action || job.version !== this.version || (this.value && job.id !== this.value.id)) fail("invalid_response", "The transport returned a different action job.");
     if (!["queued", "running", "succeeded", "failed", "cancelled"].includes(job.state)) fail("invalid_response", "Unknown action job state.");
     return structuredClone(job) as ActionJob<T>;
   }
