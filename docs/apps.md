@@ -27,7 +27,7 @@ Agent access currently uses shared page records. The [agent actions SDK](app-act
 </tr>
 <tr>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/whiteboard-dark.webp"><img src="assets/apps/whiteboard.webp" alt="Whiteboard"></picture><br><b>Whiteboard</b><br>An infinite canvas with sticky notes, text, shapes and connectors. Co-edit with agents and export SVG/PNG; compatible Apps let agents export shared boards in the background.</td>
-<td width="50%"></td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/logo-studio-dark.webp"><img src="assets/apps/logo-studio.webp" alt="Logo Studio"></picture><br><b>Logo Studio</b><br>Send a brand brief to your agent, compare original geometric marks, and play back their construction. Edit shapes, position and color, then export a clean SVG.</td>
 </tr>
 </table>
 

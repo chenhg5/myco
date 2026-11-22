@@ -27,7 +27,7 @@
 </tr>
 <tr>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/whiteboard-dark.webp"><img src="assets/apps/whiteboard.webp" alt="白板"></picture><br><b>白板</b><br>一块无限大的画布：便签、文字、形状和连线。和 agent 共同编辑，导出 SVG/PNG；兼容新版 App 时，agent 可在后台导出共享白板。</td>
-<td width="50%"></td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/logo-studio-dark.webp"><img src="assets/apps/logo-studio.webp" alt="标志工坊"></picture><br><b>标志工坊</b><br>写下品牌需求，请 agent 创作原创几何标志。可以对比方案、回放构图、编辑形状、位置与颜色，并导出 SVG。</td>
 </tr>
 </table>
 

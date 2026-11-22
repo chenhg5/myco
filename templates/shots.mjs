@@ -47,7 +47,7 @@ const bridge = `(() => {
     features: [...(fakeOS ? ["download-media", "os"] : ["download-media"]), ...(window.__REMOTE_FIXTURE__ ? ["remote"] : [])],
     remote: window.__REMOTE_FIXTURE__ ? {call: async action => action === "devices" ? [{machine:"mac",name:"Studio Mac",os:"darwin",control:true},{machine:"win",name:"Windows 工作站",os:"windows",control:true},{machine:"mini",name:"Mac mini",os:"darwin",control:false}] : {protocol:1,version:"0.1.0",supported:true,installed:false,running:false}} : undefined,
     os: fakeOS,
-    ...(location.pathname.startsWith("/tutor/") ? { send: async () => ({ id: "msg_preview" }) } : {}),
+    ...(["tutor", "logo-studio"].includes(location.pathname.split("/")[1]) ? { send: async () => ({ id: "msg_preview" }) } : {}),
     ready: Promise.resolve({ page: { id: "pg_shots", name: "shots" }, me: { name: "glenn" } }),
     data: {
       list: async (c) => ({ records: Object.values(recs).filter((r) => !c || r.collection === c).map((r) => ({ ...r })), seq }),
@@ -106,6 +106,7 @@ function photo() {
 // sample data is there before the first).
 const wait = (p, ms = 400) => p.waitForTimeout(ms);
 const plans = {
+  "logo-studio": [null],
   tutor: [null, async (p) => {
     await p.locator(".tu-example-link").click();
     await p.getByRole("button", { name: "中学基础", exact: true }).click();
