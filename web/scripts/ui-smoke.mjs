@@ -879,7 +879,10 @@ async function runMatrix(browser, size, scheme) {
       const lib = page.locator("[data-testid=templates-official] [data-shelf=office] .tp-card");
       await lib.first().waitFor({ timeout: 15_000 });
       const names = (await lib.allInnerTexts()).map(compactText);
-      if (names.length !== 5 || !names[0].startsWith("表格") || !names[1].startsWith("多维表格") || !names[2].startsWith("文档") || !names[3].startsWith("幻灯片") || !names[4].startsWith("会议记录")) throw new Error(`办公套件应是 表格、多维表格、文档、幻灯片、会议记录，实际 ${names.join(" / ")}`);
+      // The suite grows (学习工作台 joined it): check the core ones are there, in order.
+      const core = ["表格", "多维表格", "文档", "幻灯片", "会议记录"];
+      const at = core.map((c) => names.findIndex((n) => n.startsWith(c) && !(c === "表格" && n.startsWith("多维表格"))));
+      if (at.some((i) => i < 0) || at.some((i, k) => k > 0 && i < at[k - 1])) throw new Error(`办公套件应依次有 ${core.join("、")}，实际 ${names.join(" / ")}`);
       await page.locator("[data-testid=templates-own] .tp-card").first().waitFor({ timeout: 5_000 });
       // myco's own apps update on their own; fetched now on request.
       await clickVisible(page, page.locator("[data-testid=apps-sync]"));
