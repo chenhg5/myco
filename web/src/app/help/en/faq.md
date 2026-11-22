@@ -20,7 +20,7 @@ Tasks sent while it is offline wait in a queue and are picked up when it is back
 
 The App did not get it to the workspace this time, usually because of the network or a slow workspace. What you wrote is still in the box; click **Retry**. If it keeps happening, check that the workspace at the bottom left is connected, or look at Settings › Proxy. See [Proxy](#help/proxy).
 
-### A message says it was not delivered
+### A message says "Not delivered"
 
 It reached the workspace, but the agent took it several times without starting on it: its session may not be running, or it is stuck. Click **Send again**, or first check whether it is online.
 
