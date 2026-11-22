@@ -955,7 +955,7 @@ export function PublicAccessDialog({ open, onOpenChange, local, name, onDone }: 
       onDone();
     } catch (e) {
       if (!ctl.signal.aborted) setError(e instanceof ApiError && e.code === "tunnel_not_ready"
-        ? new Error(L("公网连接尚未就绪，本机和局域网使用不受影响。请稍后重试；如果持续失败，可查看本机工作区日志。", "Public access is not ready. Local and LAN access are unaffected. Try again shortly; if it keeps failing, check the local Hub log.")) : e);
+        ? new Error(L("公网连接尚未就绪，本机工作区仍在运行。请稍后重试；如果持续失败，可查看本机工作区日志。", "Public access is not ready. The workspace is still running on this computer. Try again shortly; if it keeps failing, check the local Hub log.")) : e);
     } finally {
       if (abort.current === ctl) {
         abort.current = null;
@@ -1044,7 +1044,7 @@ export function PublicAccessDialog({ open, onOpenChange, local, name, onDone }: 
               })}
             </div>
           )}
-          {!busy && choice === 2 && <TailscaleSetup installed={ts} name={name}
+          {!busy && choice === 2 && (!ts || !!error) && <TailscaleSetup installed={ts} name={name}
             localURL={(local?.hubs || (local?.hub ? [local.hub] : [])).find(h => (h.name || "") === (name || ""))?.local_url}
             onError={setError}
             onCheck={async () => {

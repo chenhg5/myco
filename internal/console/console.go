@@ -24,12 +24,14 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
 	"github.com/chenhg5/myco/internal/api"
 	"github.com/chenhg5/myco/internal/app"
 	"github.com/chenhg5/myco/internal/client"
+	"github.com/chenhg5/myco/internal/console/notices"
 	"github.com/chenhg5/myco/internal/harness/execnode"
 	"github.com/chenhg5/myco/internal/release"
 )
@@ -158,6 +160,7 @@ func randomHex(n int) string {
 type Backend struct {
 	backupLoop    sync.Once // the hourly copy of backups to this computer
 	remoteDesktop remoteDesktop
+	actionHosts   actionHosts // agent actions on this computer (action_host.go)
 	// connects are computers being connected over SSH or WSL.
 	connects connectJobs
 	// os: what pages use of this computer (myco.os, oscalls.go).
@@ -217,6 +220,8 @@ type Backend struct {
 	voice     *voice
 	// the pages' language (uilang.go)
 	uiLang uiLang
+	// notices shown on this computer (notices.go; nil in a browser)
+	notices atomic.Pointer[notices.Watcher]
 }
 
 func (b *Backend) timeout() time.Duration {
@@ -244,6 +249,7 @@ func (b *Backend) Handler() http.Handler {
 	m := http.NewServeMux()
 	b.cacheRoutes(m)
 	b.uiLangRoutes(m)
+	b.noticeRoutes(m)
 	b.proxyRoutes(m)
 	b.remoteDesktopRoutes(m)
 	b.backupRoutes(m)

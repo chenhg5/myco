@@ -5172,7 +5172,7 @@ async function runMatrix(browser, size, scheme) {
       await fetch(`http://${HOST}:${mockPort()}/app/mock/local`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tailscale_installed: true }) });
       try {
         await clickVisible(page, setup.getByRole("button", { name: "我已安装，重新检测" }));
-        await setup.getByRole("heading", { name: "已找到 Tailscale，接下来登录并连接" }).waitFor();
+        await setup.waitFor({ state: "hidden" });
         if (!(await pub.getByRole("button", { name: "开放", exact: true }).isEnabled())) throw new Error("安装后检测应解锁下一步");
       } finally {
         await fetch(`http://${HOST}:${mockPort()}/app/mock/local`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tailscale_installed: false }) });

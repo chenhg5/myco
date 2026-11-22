@@ -107,6 +107,14 @@ func runGUI(h http.Handler, onLink func(string), setRelaunch func(func())) error
 		window.Focus()
 	}
 	app.Event.OnApplicationEvent(events.Mac.ApplicationShouldHandleReopen, func(*application.ApplicationEvent) { show() })
+	// Notices: a banner for what needs the person; a click opens the App
+	// where it leads.
+	setUpNotices(app, func(hub, target, actor string) {
+		show()
+		activateApp()
+		detail, _ := json.Marshal(map[string]string{"hubId": hub, "target": target, "actor": actor})
+		window.ExecJS(fmt.Sprintf(`window.dispatchEvent(new CustomEvent("myco-open-notice",{detail:%s}))`, detail))
+	})
 	// While agents work, the notch grows to show them; a name in it opens
 	// the app at that member.
 	isl = newIsland(app, func(hub, agent, project string) {

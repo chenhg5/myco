@@ -27,20 +27,10 @@ func waitPublicAccess(ctx context.Context, poll time.Duration, read func(context
 			if !validPublicURL(public) {
 				return "", fmt.Errorf("the hub reported an invalid public URL")
 			}
-			c, err := client.New(public, "")
-			if err == nil {
-				probe, cancel := context.WithTimeout(ctx, 3*time.Second)
-				health, e := c.Health(probe)
-				cancel()
-				if e == nil && health.OK {
-					return public, nil
-				}
-				if e == nil {
-					e = fmt.Errorf("the public health check did not report ready")
-				}
-				err = e
+			last = probePublicHealth(ctx, public)
+			if last == nil {
+				return public, nil
 			}
-			last = err
 		} else {
 			last = fmt.Errorf("the tunnel has not reported a public URL yet")
 		}
@@ -52,10 +42,27 @@ func waitPublicAccess(ctx context.Context, poll time.Duration, read func(context
 	}
 }
 
+func probePublicHealth(ctx context.Context, public string) error {
+	c, err := client.New(public, "")
+	if err != nil {
+		return err
+	}
+	probe, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	h, err := c.Health(probe)
+	if err != nil {
+		return err
+	}
+	if !h.OK {
+		return fmt.Errorf("the public health check did not report ready")
+	}
+	return nil
+}
+
 func writePublicAccessNotReady(w http.ResponseWriter, reason error) {
 	writeJSON(w, http.StatusServiceUnavailable, api.Error{
 		Code: "tunnel_not_ready", Retryable: true,
 		Message:    "the local workspace is running, but public access is not ready: " + reason.Error(),
-		Suggestion: "retry public access or inspect hub.log; local and LAN access remain available",
+		Suggestion: "retry public access or inspect hub.log; local access remains available",
 	})
 }

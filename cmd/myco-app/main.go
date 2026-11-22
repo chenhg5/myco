@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/chenhg5/myco/internal/console"
+	"github.com/chenhg5/myco/internal/console/notices"
 	"github.com/chenhg5/myco/internal/release"
 	"github.com/chenhg5/myco/internal/service"
 	"github.com/chenhg5/myco/internal/web"
@@ -114,6 +115,11 @@ func main() {
 			f(l)
 		}
 	}
+	// Notices: what needs the person, shown while the App runs, window or
+	// not (MYCO_APP_NOTICES=off: none).
+	if os.Getenv("MYCO_APP_NOTICES") != "off" {
+		startNotices = func(p notices.Presenter) { b.StartNotices(p) }
+	}
 	if err := runGUI(handler(b), b.SetPendingLink, b.Update.SetRelaunch); err != nil {
 		fmt.Fprintln(os.Stderr, "myco-app:", err)
 		os.Exit(1)
@@ -142,6 +148,10 @@ var openURL func(string) error
 
 // uiLangHook, when the tray menu is up, redraws it in the pages' language.
 var uiLangHook func(lang string)
+
+// startNotices follows the workspaces' notices and shows them with the
+// system's notifications (set in main; called by runGUI once the app runs).
+var startNotices func(p notices.Presenter)
 
 // bundledCLI is the myco CLI inside the app bundle
 // (myco.app/Contents/Resources/myco), or "" when not running from one.

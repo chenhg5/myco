@@ -34,6 +34,7 @@ func (s *Server) actionRoutes(m *http.ServeMux) {
 	// The trusted App on the target computer.
 	m.HandleFunc("POST /v1/console/action-hosts", s.admin(s.registerActionHost))
 	m.HandleFunc("GET /v1/console/action-hosts/{id}/jobs", s.admin(s.actionHostJobs))
+	m.HandleFunc("GET /v1/console/action-jobs/{id}", s.admin(s.actionHostJob))
 	m.HandleFunc("POST /v1/console/action-jobs/{id}/artifacts", s.admin(s.uploadActionArtifact))
 	m.HandleFunc("POST /v1/console/action-jobs/{id}/complete", s.admin(s.completeActionJob))
 }
@@ -244,6 +245,19 @@ func (s *Server) actionHostJobs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, api.ActionHostJobs{Jobs: jobs})
+}
+
+func (s *Server) actionHostJob(w http.ResponseWriter, r *http.Request) {
+	if !s.actionsEnabled(w) {
+		return
+	}
+	q := r.URL.Query()
+	st, err := s.actions.HostJob(r.Context(), s.actorOf(r), r.PathValue("id"), q.Get("host_id"), q.Get("generation"), actionWait(r))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, st)
 }
 
 func (s *Server) uploadActionArtifact(w http.ResponseWriter, r *http.Request) {

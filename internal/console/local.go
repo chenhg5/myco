@@ -690,7 +690,7 @@ func (b *Backend) startLocal(w http.ResponseWriter, r *http.Request) {
 	}
 	var up struct {
 		PublicURL     string `json:"public_url"`
-		Reachable     bool   `json:"reachable"`
+		Reachable     *bool  `json:"reachable"`
 		JoinURL       string `json:"join_url"`
 		JoinLinkError string `json:"join_link_error"`
 	}
@@ -699,7 +699,12 @@ func (b *Backend) startLocal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	up.PublicURL = strings.TrimSpace(up.PublicURL)
-	if in.Tunnel != "none" && (!validPublicURL(up.PublicURL) || !up.Reachable) {
+	// Older CLIs may omit reachable; keep them usable by verifying here.
+	if in.Tunnel != "none" && up.Reachable == nil && validPublicURL(up.PublicURL) {
+		ready := probePublicHealth(ctx, up.PublicURL) == nil
+		up.Reachable = &ready
+	}
+	if in.Tunnel != "none" && (!validPublicURL(up.PublicURL) || up.Reachable == nil || !*up.Reachable) {
 		writePublicAccessNotReady(w, errors.New("the public address is missing, invalid, or not reachable yet"))
 		return
 	}

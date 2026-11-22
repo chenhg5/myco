@@ -202,6 +202,13 @@ func TestLocalHub(t *testing.T) {
 	if hubs, _ := console.NewStore(r.store).List(); len(hubs) != 1 {
 		t.Fatalf("hubs after a second start: %+v", hubs)
 	}
+	// A valid URL from an older CLI without a reachable flag is checked
+	// against the real health endpoint rather than rejected by default.
+	f.upResult, _ = json.Marshal(map[string]any{"public_url": r.hubURL})
+	if code, _, raw := r.do("POST", "/app/local/hub", map[string]string{"tunnel": "cloudflare"}); code != 200 {
+		t.Fatalf("older CLI public URL: %d %s", code, raw)
+	}
+	f.upResult = nil
 	if code, m, _ := r.do("POST", "/app/local/hub/stop", nil); code != 200 || m["stopped"] != true {
 		t.Fatalf("stop: %d %v", code, m)
 	}
