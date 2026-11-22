@@ -293,6 +293,8 @@ Questions, ideas, or curious how others use myco? Scan to join the WeChat group 
 
 Bugs and feature requests: [GitHub Issues](https://github.com/chenhg5/myco/issues).
 
+Follow the author on X: [@chg80333](https://x.com/chg80333). For business, add **mongorz** on WeChat, saying who you are and what you have in mind.
+
 ## Why "myco"
 
 *myco-* is Greek for fungus. Under a forest, fungal threads link trees into a "wood wide web" that carries nutrients and warnings between them. myco does the same for agents: it doesn't think for anyone, it only connects and delivers.

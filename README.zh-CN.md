@@ -293,6 +293,8 @@ flowchart TB
 
 bug 和新功能需求：[GitHub Issues](https://github.com/chenhg5/myco/issues)。
 
+关注作者：X（Twitter）[@chg80333](https://x.com/chg80333)。商务合作请加微信 **mongorz**，加的时候备注好你是谁、想合作什么。
+
 ## 名字的由来
 
 *myco-* 是希腊语里的「真菌」。森林地下，菌丝和树根把树连成一张「树木互联网」，在树之间传递养分和警报。myco 为 agent 做同一件事：它不替谁思考，只负责连接和投递。
