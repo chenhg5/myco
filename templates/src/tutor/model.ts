@@ -7,11 +7,16 @@ export type Subject = { title?: string; goal?: string; order?: number };
 export type Lesson = { subject?: string; title?: string; explanation?: string; summary?: string; order?: number };
 export type Question = { subject?: string; lesson?: string; prompt?: string; options?: string[]; answer?: number; explanation?: string; order?: number };
 export type Attempt = { question?: string; choice?: number; correct?: boolean; date?: string; who?: string };
+export type Mode = "explain" | "guide" | "practice";
+export type Request = { prompt: string; mode: Mode; subject: string; lesson: string; who: string; order: number };
+export type Answer = { text?: string };
 export const subjects = new Store<Subject & Record<string, unknown>>("subjects");
 export const lessons = new Store<Lesson & Record<string, unknown>>("lessons");
 export const questions = new Store<Question & Record<string, unknown>>("questions");
 export const attempts = new Store<Attempt & Record<string, unknown>>("attempts");
-export const kit = new Kit([subjects, lessons, questions, attempts], { quiet: true });
+export const requests = new Store<Request & Record<string, unknown>>("tutor_requests");
+export const answers = new Store<Answer & Record<string, unknown>>("tutor_answers");
+export const kit = new Kit([subjects, lessons, questions, attempts, requests, answers], { quiet: true });
 
 export function latestAttempts(subject: string, who: string) {
   const by = new Map<string, Attempt>();

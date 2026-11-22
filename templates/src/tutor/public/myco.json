@@ -1,7 +1,7 @@
 {
   "id": "myco/tutor",
   "name": "学习工作台",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "kind": "custom",
   "category": "office",
   "icon": "icon.svg",
@@ -10,7 +10,10 @@
     "subjects": { "fields": { "title": "text", "goal": "text", "order": "number" } },
     "lessons": { "fields": { "subject": "text", "title": "text", "explanation": "markdown", "summary": "text", "order": "number" } },
     "questions": { "fields": { "subject": "text", "lesson": "text", "prompt": "text", "options": "json", "answer": "number", "explanation": "text", "order": "number" } },
-    "attempts": { "fields": { "question": "text", "choice": "number", "correct": "bool", "date": "datetime", "who": "person" } }
+    "attempts": { "fields": { "question": "text", "choice": "number", "correct": "bool", "date": "datetime", "who": "person" } },
+    "tutor_requests": { "fields": { "prompt": "text", "mode": "text", "subject": "text", "lesson": "text", "who": "person", "order": "number" } },
+    "tutor_answers": { "fields": { "text": "text" } }
   },
+  "permissions": ["send"],
   "requires": { "hub": "0.20.7" }
 }

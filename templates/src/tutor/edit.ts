@@ -1,7 +1,24 @@
 // Record writes stay here so the interface and future undo support share a
 // single path. A question attempt is immutable history, never an answer key.
 import { uid } from "../_lib/appkit";
-import { kit, subjects, lessons, questions, attempts, type Subject, type Lesson, type Question } from "./model";
+import { myco } from "../_lib/myco";
+import { kit, subjects, lessons, questions, attempts, requests, type Subject, type Lesson, type Question, type Request } from "./model";
+
+const tutorBridge = myco as (typeof myco & { send?: (text: string) => Promise<{ id: string }> });
+export const canSend = typeof tutorBridge?.send === "function";
+
+export async function saveRequest(request: Request) {
+  // Wait for the Hub to assign the ID before the agent can see the message.
+  const saved = await requests.put(request);
+  if (!saved) throw new Error("Missing tutor request");
+  kit.emit();
+  return saved.id;
+}
+
+export async function sendRequest(message: string) {
+  if (!tutorBridge?.send) throw new Error("Missing send bridge");
+  await tutorBridge.send(message);
+}
 
 export function addSubject(title: string) {
   const id = uid("s");
