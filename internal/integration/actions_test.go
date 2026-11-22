@@ -324,6 +324,12 @@ func TestPageExportGrantsAndRenderers(t *testing.T) {
 	if err != nil || len(jobs) != 1 || jobs[0].Job.ID != job.ID || jobs[0].Grant.Target.ID != page.ID {
 		t.Fatalf("renderer jobs: %+v %v", jobs, err)
 	}
+	if _, err := glenn.UploadActionArtifact(c, job.ID, host.ID, "g1", "application/x-msdownload", []byte("MZ")); err == nil {
+		t.Fatal("an executable was taken as an export")
+	}
+	if _, err := glenn.UploadActionArtifact(c, job.ID, host.ID, "g1", "text/html", []byte("<p>design</p>")); err != nil {
+		t.Fatalf("an HTML export: %v", err)
+	}
 	art, err := glenn.UploadActionArtifact(c, job.ID, host.ID, "g1", "image/svg+xml", []byte("<svg/>"))
 	if err != nil {
 		t.Fatal(err)

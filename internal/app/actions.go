@@ -464,7 +464,9 @@ func (h actionApprovals) Deny(ctx context.Context, a *domain.Approval) {
 // artifactTypeAllowed: the files a job may make (a screenshot, an export).
 func artifactTypeAllowed(t string) bool {
 	switch t {
-	case "text/plain", "text/csv", "text/markdown", "application/json", "application/pdf":
+	// (text/html: an app's export of a design; artifacts are served as
+	// attachments, nosniff, sandboxed, never as a page)
+	case "text/plain", "text/csv", "text/markdown", "text/html", "application/json", "application/pdf":
 		return true
 	}
 	return strings.HasPrefix(t, "image/") || strings.HasPrefix(t, "application/vnd.openxmlformats-officedocument.")
@@ -890,7 +892,7 @@ func (s *ActionService) UploadArtifact(ctx context.Context, by Actor, jobID, hos
 	}
 	mediaType = strings.TrimSpace(strings.Split(mediaType, ";")[0])
 	if !artifactTypeAllowed(mediaType) {
-		return nil, domain.Errf(domain.CodeInvalidArgument, "artifact type %q is not allowed (images, PDF, Office documents, text/plain, text/csv, text/markdown, application/json)", mediaType)
+		return nil, domain.Errf(domain.CodeInvalidArgument, "artifact type %q is not allowed (images, PDF, Office documents, text/plain, text/csv, text/markdown, text/html, application/json)", mediaType)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
