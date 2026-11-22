@@ -1,11 +1,11 @@
 {
   "id": "myco/whiteboard",
   "name": "白板",
-  "version": "1.3.0",
+  "version": "1.5.0",
   "kind": "board",
   "category": "creative",
   "icon": "icon.svg",
-  "description": "一块无限大的画布：便签、文字、矩形、椭圆、连线，拖动、缩放、改颜色；agent 能往上贴便签，适合头脑风暴、复盘、画流程。",
+  "description": "一块无限大的画布：便签、文字、形状和连线。和 agent 共同编辑，导出 SVG/PNG；兼容新版 App 时，agent 可在后台导出共享白板。",
   "data": {
     "board": {
       "single": true,
@@ -34,13 +34,28 @@
         "font_size": "number",
         "locked": "bool"
       }
+    },
+    "exports": {
+      "single": true,
+      "fields": {
+        "schema": "number",
+        "source_fingerprint": "text",
+        "source_records": "number",
+        "generated_at": "text",
+        "status": "text",
+        "media_type": "text",
+        "svg": "text",
+        "width": "number",
+        "height": "number"
+      }
     }
   },
   "permissions": [
     "download"
   ],
   "export": [
-    "svg"
+    "svg",
+    "png"
   ],
   "requires": {
     "hub": "0.20.7"

@@ -28,6 +28,60 @@ struct PageTests {
         #expect(PageLinks.ids(in: "没有链接", workspace: hub).isEmpty)
     }
 
+    @Test func pageFragmentsStayOpaqueAndNeverBecomeHubQueries() throws {
+        let fragment = "watch?source=src&movie=42&line=%E4%B8%BB%E7%BA%BF&episode=1%262"
+        let href = "https://hub.example.com/pages/pg_ab12#" + fragment
+        let target = try #require(PageLinks.target(of: href, in: hub))
+        #expect(target.id == "pg_ab12")
+        #expect(target.fragment == fragment)
+        #expect(PageLinks.id(of: href, in: hub) == target.id)
+        let address = try #require(PageLinks.address(of: target.id, fragment: target.fragment))
+        #expect(address.absoluteString == "myco-page://pg-ab12/#" + fragment)
+        #expect(address.path == "/")
+        #expect(address.query == nil)
+        #expect(PageLinks.target(of: "https://hub.example.com/pages/pg_ab12", in: hub)?.fragment == nil)
+        #expect(PageLinks.target(of: "https://hub.example.com/pages/pg_ab12#", in: hub)?.fragment == nil)
+        #expect(PageLinks.target(of: "https://hub.example.com/w/other/pages/pg_ab12#watch?movie=1", in: hub) == nil)
+        #expect(PageLinks.target(of: "https://other.example.com/pages/pg_ab12#watch?movie=1", in: hub) == nil)
+        #expect(PageLinks.target(of: "https://hub.example.com/pages/pg_ab12?movie=1#watch", in: hub) == nil)
+        #expect(PageLinks.target(of: "https://hub.example.com/pages/pg_ab12/v/1/index.html#watch", in: hub) == nil)
+        let workspace = URL(string: "https://hub.example.com/w/team/")
+        #expect(PageLinks.target(of: "https://hub.example.com/w/team/pages/pg_ab12#" + fragment, in: workspace)?.fragment == fragment)
+    }
+
+    @Test func aCardKeepsTheFirstLinksFragmentAndDeduplicatesPages() {
+        let first = "https://hub.example.com/pages/pg_one#watch?movie=1&episode=2"
+        let body = "\(first) https://hub.example.com/pages/pg_one#watch?movie=2 https://hub.example.com/pages/pg_two"
+        let targets = PageLinks.targets(in: body, workspace: hub)
+        #expect(targets.map(\.id) == ["pg_one", "pg_two"])
+        #expect(targets.first?.fragment == "watch?movie=1&episode=2")
+        #expect(targets.last?.fragment == nil)
+        #expect(PageLinks.ids(in: body, workspace: hub) == ["pg_one", "pg_two"])
+    }
+
+    @Test func oversizedFragmentsAreDroppedWithoutLosingThePage() throws {
+        let maximum = String(repeating: "x", count: 1024)
+        #expect(PageLinks.target(of: "https://hub.example.com/pages/pg_ab12#" + maximum, in: hub)?.fragment == maximum)
+        for fragment in [maximum + "x", String(repeating: "影", count: 400)] {
+            let target = try #require(PageLinks.target(of: "https://hub.example.com/pages/pg_ab12#" + fragment, in: hub))
+            #expect(target.id == "pg_ab12")
+            #expect(target.fragment == nil)
+            #expect(PageLinks.address(of: target.id, fragment: fragment)?.absoluteString == "myco-page://pg-ab12/")
+        }
+    }
+
+    @Test func onlyPublicCredentialFreePageURLsAreExposed() {
+        var page = Page(id: "pg_a", name: "Films", publisher: "agent")
+        for address in ["http://127.0.0.1:7777/pages/pg_a", "http://127.3.2.1/pages/pg_a", "http://localhost/pages/pg_a", "http://[::1]/pages/pg_a", "http://[0:0:0:0:0:0:0:1]/pages/pg_a", "http://[::ffff:127.0.0.1]/pages/pg_a", "https://user:secret@hub.example.com/pages/pg_a", "myco-page://pg-a/", "https://hub.example.com/pages/pg_other"] {
+            page.url = address
+            #expect(PageLinks.publicURL(of: page) == nil)
+        }
+        page.url = "https://hub.example.com/w/team/pages/pg_a?token=secret#watch?movie=1"
+        #expect(PageLinks.publicURL(of: page) == "https://hub.example.com/w/team/pages/pg_a")
+        page.url = nil
+        #expect(PageLinks.publicURL(of: page) == nil)
+    }
+
     @Test func aPageHasItsOwnAddressInsideTheApp() throws {
         let home = try #require(PageLinks.address(of: "pg_ab12"))
         #expect(home.absoluteString == "myco-page://pg-ab12/")

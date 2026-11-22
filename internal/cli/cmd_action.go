@@ -25,28 +25,39 @@ func actionCommands() *Command {
 		Long: `The computer's owner gets a card in the myco app showing you, the computer, your reason and what
 you asked for; they may allow less, or say no. With --wait, the command waits for their decision.
 A grant lasts 5 minutes by default (30 at most) and ends with your task (--task) if you name it.
-remote.desktop.view lets you take screenshots; remote.desktop.control also lets you type and click.`,
+remote.desktop.view lets you take screenshots; remote.desktop.control also lets you type and click.
+A shared page you can see (--page) needs no approval: page.export lets its app make a file of it
+(an SVG, PNG or what the app offers), run by the App of a person who sees the page.`,
 		Examples: []string{
 			`myco action grant request --machine studio --permission remote.desktop.view --reason "check the build window" --wait 5m`,
 			`myco action grant request --machine studio --permission remote.desktop.control --reason "fill the form" --task $MYCO_MESSAGE_ID`,
+			`myco action grant request --page pg_abc --permission page.export --reason "export the board as SVG"`,
 		},
 		Flags: []Flag{
-			{Name: "machine", Kind: String, Required: true, Help: "The computer: its name or id"},
-			{Name: "permission", Kind: List, Required: true, Help: "remote.desktop.view or remote.desktop.control (repeatable)"},
+			{Name: "machine", Kind: String, Help: "The computer: its name or id (or --page)"},
+			{Name: "page", Kind: String, Help: "A shared page (pg_...) instead of a computer"},
+			{Name: "permission", Kind: List, Required: true, Help: "remote.desktop.view or remote.desktop.control for a computer; page.export for a page (repeatable)"},
 			{Name: "reason", Kind: String, Required: true, Help: "Why: its owner reads this before approving"},
 			{Name: "ttl", Kind: Duration, Default: "5m", Help: "How long you need it (at most 30m; its owner may give less)"},
 			{Name: "task", Kind: String, Help: "The task it is for (msg_...): the grant ends with it"},
 			{Name: "wait", Kind: Duration, Default: "0s", Help: "Wait this long for the owner's decision"},
 		},
 		Run: handler(func(e *env) error {
-			if err := e.in.Require("machine", "permission", "reason"); err != nil {
+			if err := e.in.Require("permission", "reason"); err != nil {
 				return err
+			}
+			target := api.ActionTarget{Kind: "machine", ID: e.in.String("machine")}
+			if p := e.in.String("page"); p != "" {
+				target = api.ActionTarget{Kind: "page", ID: p}
+			}
+			if (e.in.String("machine") == "") == (e.in.String("page") == "") {
+				return errorf("invalid_usage", ExitUsage, "pass --machine <computer> or --page <pg_...>", "name one target")
 			}
 			c, err := e.agentClient()
 			if err != nil {
 				return err
 			}
-			req := api.ActionGrantRequest{Target: api.ActionTarget{Kind: "machine", ID: e.in.String("machine")}, Permissions: e.in.List("permission"),
+			req := api.ActionGrantRequest{Target: target, Permissions: e.in.List("permission"),
 				Reason: e.in.String("reason"), MessageID: e.in.String("task"), TTLSeconds: int(e.in.Duration("ttl") / time.Second)}
 			if e.in.Bool("dry-run") {
 				g, err := c.RequestActionGrant(e.in.Ctx, req, true)

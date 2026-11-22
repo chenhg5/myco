@@ -255,7 +255,7 @@ const shotsOf = (names) => {
   const out = light.map((src) => ({ src, ...(names.includes(src.replace(/(\.[a-z]+)$/i, ".dark$1")) ? { dark: src.replace(/(\.[a-z]+)$/i, ".dark$1") } : {}) }));
   return out.length ? out : undefined;
 };
-const officialOrder = ["table", "base", "doc", "slides", "meeting", "code", "issues", "devtools", "todo", "notes", "disk", "stocks", "proxy-console", "remote-desktop", "ledger", "habit", "cinema", "design-studio", "whiteboard", "mindmap", "video", "motion", "photo", "gomoku", "sudoku"];
+const officialOrder = ["table", "base", "doc", "slides", "meeting", "tutor", "scheduling", "code", "issues", "devtools", "todo", "notes", "disk", "stocks", "proxy-console", "remote-desktop", "ledger", "habit", "cinema", "personality", "design-studio", "logo-studio", "whiteboard", "mindmap", "video", "motion", "photo", "arcade", "gomoku", "sudoku"];
 const mockTemplates = officialOrder.filter((name) => existsSync(new URL(`${name}/myco.json`, officialRoot))).map((name) => {
   const files = officialFiles(name);
   const m = JSON.parse(files["myco.json"]);
@@ -293,6 +293,7 @@ const pages = new Map([["pg_release", {
   url: "http://192.168.1.20:7780/pages/pg_release", created_at: iso(19000), updated_at: iso(19000), can_manage: true,
   versions: [{ n: 1, entry: "index.html", files: 3, size: 2048, sha256: "a1", by: "release-cloud", at: iso(19000) }],
 }]]);
+pages.set("pg_routes", { ...pages.get("pg_release"), id: "pg_routes", name: "应用内路由测试", url: "http://192.168.1.20:7780/pages/pg_routes" });
 pages.set("pg_checklist", {
   id: "pg_checklist", name: "上线清单", project: "website", publisher: "release-cloud", version: 1, entry: "index.html",
   url: "http://192.168.1.20:7780/pages/pg_checklist", created_at: iso(18500), updated_at: iso(18500), can_manage: true,
@@ -621,6 +622,9 @@ const consoleThreads = {
   // A page an agent published (myco page publish): its link in the reply
   // shows as a card and opens in the page panel.
   th_console_page: [
+    makeMessage({ thread_id: "th_console_page", project: "website", from: "release-cloud", to: CONSOLE, type: "note", status: "done", body: "直达普通入口：http://192.168.1.20:7780/pages/pg_routes", created_at: iso(19600), updated_at: iso(19600) }),
+    makeMessage({ thread_id: "th_console_page", project: "website", from: "release-cloud", to: CONSOLE, type: "note", status: "done", body: "直达链接一：http://192.168.1.20:7780/pages/pg_routes#watch?source=fixture&movie=1&line=HD&episode=%E7%AC%AC01%E9%9B%86", created_at: iso(19500), updated_at: iso(19500) }),
+    makeMessage({ thread_id: "th_console_page", project: "website", from: "release-cloud", to: CONSOLE, type: "note", status: "done", body: "直达链接二：http://192.168.1.20:7780/pages/pg_routes#watch?source=fixture&movie=1&line=HD&episode=%E7%AC%AC02%E9%9B%86", created_at: iso(19400), updated_at: iso(19400) }),
     makeMessage({ thread_id: "th_console_page", project: "website", from: CONSOLE, to: "release-cloud", type: "task", status: "done", body: "把 v0.16.8 的发布说明做成一页网页，带上每类改动的数量。", created_at: iso(20000), updated_at: iso(20000) }),
     makeMessage({ thread_id: "th_console_page", project: "website", from: "release-cloud", to: CONSOLE, type: "note", status: "done", body: "下载页的改动在我电脑上跑着，实时预览（改了会自己刷新）：http://192.168.1.20:7780/pages/pg_live", created_at: iso(18200), updated_at: iso(18200) }),
     makeMessage({ thread_id: "th_console_page", project: "website", from: "release-cloud", to: CONSOLE, type: "note", status: "done", body: "上线前的检查也做成了一页清单，大家可以在上面勾：http://192.168.1.20:7780/pages/pg_checklist\n\n勾完了点页面下面的「交给 agent」，我接着往下做。", created_at: iso(18500), updated_at: iso(18500) }),
@@ -1886,6 +1890,15 @@ const server = http.createServer(async (req, res) => {
     const agent = (hub && body?.agent) || (hub && state.superagents[hub.id]);
     if (!agent) return fail(res, 404, "not_found", "no superagent there");
     state.counter += 1;
+    // An agent that sees a page may export it without asking: its grant is
+    // active at once, with no approval.
+    if (body.kind === "page_grant") {
+      const g = { id: `agr_${state.counter}`, agent, owner: "glenn", target: { kind: "page", id: "pg_mock_board" }, target_name: body.page || "产品白板",
+        permissions: ["page.export"], requested: ["page.export"], reason: body.reason || "", state: "active", created_at: iso(0),
+        expires_at: new Date(Date.now() + 10 * 60_000).toISOString() };
+      (state.grants ||= {})[hub.id] = [...(state.grants[hub.id] || []), g];
+      return send(res, 201, g);
+    }
     const a = { id: `apr_${state.counter}`, agent, what: body.what || "删除项目 old-site", reason: body.reason || "", method: body.method || "DELETE", path: body.path || "/v1/projects/old-site",
       status: "pending", created_at: iso(0), expires_at: new Date(Date.now() + 24 * 3600_000).toISOString() };
     // An agent asking to act on a computer (kind action_grant): its
@@ -2102,6 +2115,12 @@ const server = http.createServer(async (req, res) => {
     }
     if (parts.length === 2 && method === "GET") return send(res, 200, { os: "mock", arch: "", caps: [] });
     return fail(res, 501, "unsupported", "the mock App does not use this computer");
+  }
+  // /app/page-render: no exports in the mock; the renderer waits and asks again.
+  if (parts[0] === "app" && parts[1] === "page-render" && parts[2] === "next" && method === "GET") {
+    const t = setTimeout(() => { res.writeHead(204); res.end(); }, 20_000);
+    req.on("close", () => clearTimeout(t));
+    return;
   }
   // /app/info
   if (parts[0] === "app" && parts[1] === "info" && parts.length === 2) {

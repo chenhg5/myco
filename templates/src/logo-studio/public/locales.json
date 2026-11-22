@@ -1,0 +1,10 @@
+{
+  "en": {
+    "name": "Logo Studio",
+    "description": "Turn a brand brief into original geometric marks with your agent. Compare concepts, inspect guides, edit vector layers and export SVG."
+  },
+  "zh": {
+    "name": "标志工坊",
+    "description": "输入品牌需求，请 agent 设计原创几何标志。比较不同方案、查看构图辅助线、微调矢量图层，再导出 SVG。"
+  }
+}

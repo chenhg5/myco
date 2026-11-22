@@ -47,9 +47,11 @@ const bridge = `(() => {
     features: [...(fakeOS ? ["download-media", "os"] : ["download-media"]), ...(window.__REMOTE_FIXTURE__ ? ["remote"] : [])],
     remote: window.__REMOTE_FIXTURE__ ? {call: async action => action === "devices" ? [{machine:"mac",name:"Studio Mac",os:"darwin",control:true},{machine:"win",name:"Windows 工作站",os:"windows",control:true},{machine:"mini",name:"Mac mini",os:"darwin",control:false}] : {protocol:1,version:"0.1.0",supported:true,installed:false,running:false}} : undefined,
     os: fakeOS,
+    ...(["tutor", "logo-studio"].includes(location.pathname.split("/")[1]) ? { send: async () => ({ id: "msg_preview" }) } : {}),
     ready: Promise.resolve({ page: { id: "pg_shots", name: "shots" }, me: { name: "glenn" } }),
     data: {
       list: async (c) => ({ records: Object.values(recs).filter((r) => !c || r.collection === c).map((r) => ({ ...r })), seq }),
+      get: async (c, id) => { const r = recs[c + "/" + id]; if (!r) throw {code:"not_found"}; return { ...r }; },
       put: async (c, data, o = {}) => { const id = o.id || rid(); const cur = recs[c + "/" + id]; const r = { collection: c, id, data, version: (cur ? cur.version : 0) + 1 }; recs[c + "/" + id] = r; seq++; return { ...r }; },
       remove: async (c, id) => { delete recs[c + "/" + id]; seq++; return true; },
       on: (f) => { subs.push(f); return () => {}; },
@@ -104,6 +106,15 @@ function photo() {
 // sample data is there before the first).
 const wait = (p, ms = 400) => p.waitForTimeout(ms);
 const plans = {
+  "logo-studio": [null],
+  tutor: [null, async (p) => {
+    await p.locator(".tu-example-link").click();
+    await p.getByRole("button", { name: "中学基础", exact: true }).click();
+    await wait(p);
+    await p.locator(".tu-figure").scrollIntoViewIfNeeded();
+  }],
+  personality: [null, async (p) => { await p.getByRole("button", { name: "16 种偏好", exact: true }).click(); await wait(p); }],
+  scheduling: [async (p) => { await p.getByRole("combobox", { name: "时区", exact: true }).selectOption("Asia/Shanghai"); await wait(p); }, async (p) => { await p.getByRole("combobox", { name: "日历视图" }).selectOption("week"); await p.getByRole("button", { name: "下一页", exact: true }).click(); await wait(p, 600); }],
   cinema: [null, async (p) => { await p.getByRole("button", {name:"添加影视源", exact:true}).click(); await wait(p); }],
   "remote-desktop": [null, async (p) => { await p.locator(".rd-tabs button").nth(1).click(); await wait(p,300); }],
   base: [null, async (p) => { await p.locator("text=看板").first().click(); await wait(p, 600); }],

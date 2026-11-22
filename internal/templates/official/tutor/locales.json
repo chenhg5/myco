@@ -1,0 +1,10 @@
+{
+  "en": {
+    "name": "Learning workspace",
+    "description": "Import a textbook, ask your tutor to teach at your level, and explore interactive diagrams and quick checks with source citations."
+  },
+  "zh": {
+    "name": "学习工作台",
+    "description": "导入教材，按学习基础听导师分层讲解，边看原文引用、边操作交互图和做小题。"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "id": "myco/logo-studio",
+  "name": "标志工坊",
+  "version": "1.0.0",
+  "kind": "custom",
+  "category": "creative",
+  "icon": "icon.svg",
+  "description": "输入品牌需求，请 agent 设计原创几何标志。比较不同方案、查看构图辅助线、微调矢量图层，再导出 SVG。",
+  "data": {
+    "briefs": {
+      "fields": {
+        "brand": "text",
+        "brief": "text",
+        "base": "text",
+        "order": "number"
+      }
+    },
+    "concepts": {
+      "fields": {
+        "request": "text",
+        "title": "text",
+        "rationale": "text",
+        "layers": "json",
+        "order": "number"
+      }
+    }
+  },
+  "permissions": [
+    "send",
+    "download"
+  ],
+  "requires": {
+    "hub": "0.20.7"
+  }
+}

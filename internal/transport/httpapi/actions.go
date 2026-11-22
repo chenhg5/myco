@@ -191,6 +191,10 @@ func (s *Server) getActionArtifact(w http.ResponseWriter, r *http.Request, a *do
 	}
 	w.Header().Set("Content-Type", art.MediaType)
 	w.Header().Set("Cache-Control", "no-store")
+	// A file for the agent, never a page to show (an SVG can hold script).
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Disposition", "attachment")
+	w.Header().Set("Content-Security-Policy", "sandbox")
 	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
 	_, _ = w.Write(data)
 }

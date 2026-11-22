@@ -58,7 +58,7 @@ struct ChatFilesSheet: View {
                                     dismiss()
                                     Task {
                                         try? await Task.sleep(for: .milliseconds(450))
-                                        router.page = PageRoute(id: page.id)
+                                        router.page = PageRoute(id: page.id, fragment: linked.first { $0.id == page.id }?.fragment)
                                     }
                                 }
                                 .accessibilityIdentifier("files.app")

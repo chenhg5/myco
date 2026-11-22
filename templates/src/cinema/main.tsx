@@ -3,8 +3,11 @@
 import "../_lib/sheet.css";
 import "./cinema.css";
 import { useEffect, useRef, useState } from "react";
-import { Film, Search, Settings2, Star, X } from "lucide-react";
+import { Film, Search, Settings2, Star, X, Link2 } from "lucide-react";
 import { Toast, mount, useKit } from "../_lib/appkit";
+import { myco } from "../_lib/myco";
+import { publicAppLink, subscribeAppRoute } from "../_lib/page-route";
+import { readWatchRoute, watchFragment, watchSelection, WatchRouteError, type WatchRoute } from "./route";
 import { networkState, networkStateText } from "../_lib/net";
 import { t as uiText } from "../_lib/i18n";
 import { kit, sources, sourceName, watchlist } from "./model";
@@ -59,6 +62,9 @@ function App() {
     [intro, setIntro] = useState(0),
     [outro, setOutro] = useState(0),
     [recent, setRecent] = useState<Progress[]>(history);
+  const [pageURL, setPageURL] = useState(""), [linkError, setLinkError] = useState(""), [copyFallback, setCopyFallback] = useState("");
+  const routeIntent = useRef<WatchRoute | undefined>(undefined);
+  useEffect(() => { let live = true; void myco!.ready.then(ctx => { if (live) setPageURL(ctx.page.url || ""); }); return () => { live = false; }; }, []);
   const openingGeneration = useRef(0),
     currentProgress = useRef({ seconds: 0, duration: 0 });
   useEffect(() => {
@@ -132,18 +138,29 @@ function App() {
     },
     [],
   );
+  const clearRoute = () => {
+    if (!location.hash) return;
+    try { historyReplace(); } catch { location.hash = ""; }
+  };
+  const historyReplace = () => window.history.replaceState(null, "", location.pathname + location.search);
   const closeMovie = () => {
+    routeIntent.current = undefined;
+    clearRoute();
     openingGeneration.current++;
     setSelected(null);
     setOpening(null);
     setOpenError("");
     setRecent(history());
   };
-  const open = async (movie: SavedMovie) => {
+  const open = async (movie: SavedMovie, route?: WatchRoute) => {
+    routeIntent.current = route;
+    if (!route) clearRoute();
+    setLinkError("");
     const n = ++openingGeneration.current;
     setOpening(movie);
     setSelected(null);
     setOpenError("");
+    if (networkState !== "ready") { setOpenError(networkStateText()); return; }
     const source = sources.get(movie.source);
     if (!source || source.data.enabled === false) {
       setOpenError(
@@ -162,24 +179,46 @@ function App() {
       const progress = history().find(
         (h) => movieKey(h.movie) === movieKey(movie),
       );
-      const li = Math.max(
-        0,
-        detail.lines.findIndex((l) => l.name === progress?.line),
-      );
-      const matched = progress
-        ? matchEpisode(detail.lines[li]?.episodes || [], progress.episode)
-        : -1;
+      const explicit = route && (route.line !== undefined || route.episode !== undefined);
+      const target = explicit ? watchSelection(detail, route) : null;
+      const li = target?.line ?? Math.max(0, detail.lines.findIndex(l => l.name === progress?.line));
+      const matched = target?.episode ?? (progress ? matchEpisode(detail.lines[li]?.episodes || [], progress.episode) : -1);
       setLine(li);
       setEpisode(matched >= 0 ? matched : 0);
-      setResume(matched >= 0 ? progress!.seconds : 0);
+      setResume(!explicit && matched >= 0 ? progress!.seconds : 0);
       setIntro(progress?.intro || 0);
       setOutro(progress?.outro || 0);
       currentProgress.current = { seconds: 0, duration: 0 };
       setSelected(detail);
-    } catch {
+    } catch (error) {
       if (n === openingGeneration.current)
-        setOpenError(uiText("影片载入失败，请重试或换个影视源"));
+        setOpenError(error instanceof WatchRouteError ? error.message : uiText("影片载入失败，请重试或换个影视源"));
     }
+  };
+  useEffect(() => {
+    const navigate = () => {
+      try {
+        const route = readWatchRoute(location.hash);
+        setLinkError("");
+        if (!route) { if (routeIntent.current) closeMovie(); return; }
+        void open({ source: route.source, movie_id: route.movie, title: uiText("链接中的影片"), poster: "", year: "", category: "", remarks: "" }, route);
+      } catch (error) {
+        openingGeneration.current++;
+        setSelected(null); setOpening(null);
+        setLinkError(error instanceof Error ? error.message : uiText("这个播放页链接不受支持"));
+      }
+    };
+    navigate();
+    return subscribeAppRoute(navigate);
+  }, [stamp]);
+  const copyPlaybackLink = async () => {
+    if (!selected || !currentLine || !current) return;
+    if (!pageURL) { kit.flash(uiText("更新 myco 后即可复制播放页链接")); return; }
+    try {
+      const url = publicAppLink(pageURL, watchFragment({ source: selected.source, movie: selected.movie_id, line: currentLine.name, episode: current.name }));
+      try { if (!navigator.clipboard) throw new Error("clipboard_unavailable"); await navigator.clipboard.writeText(url); kit.flash(uiText("播放页链接已复制")); }
+      catch { setCopyFallback(url); }
+    } catch { kit.flash(uiText("无法生成播放页链接，请更新 myco 后重试")); }
   };
   const currentLine = selected?.lines[line],
     current = currentLine?.episodes[episode];
@@ -535,6 +574,8 @@ function App() {
           </>
         )}
       </main>
+      {linkError && <Modal title={uiText("无法打开播放页链接")} onClose={() => { setLinkError(""); clearRoute(); }}><div className="ci-empty" role="alert"><p>{linkError}</p><button className="btn" onClick={() => { setLinkError(""); clearRoute(); }}>{uiText("返回影视")}</button></div></Modal>}
+      {copyFallback && <Modal title={uiText("复制播放页链接")} onClose={() => setCopyFallback("")}><div className="ci-empty"><p>{uiText("自动复制未成功，可以长按或选中下面的链接复制。")}</p><input className="inp" aria-label={uiText("播放页链接")} readOnly value={copyFallback} onFocus={e => e.currentTarget.select()} style={{width:"100%"}} /></div></Modal>}
       {settings && <Sources onClose={() => setSettings(false)} />}
       {opening && !settings && (
         <Modal
@@ -546,7 +587,7 @@ function App() {
             <div className="ci-empty" role={openError ? "alert" : "status"}>
               <p>{openError || uiText("正在载入影片…")}</p>
               {openError && (
-                <button className="btn" onClick={() => void open(opening)}>
+                <button className="btn" onClick={() => void open(opening, routeIntent.current)}>
                   {uiText("重试")}
                 </button>
               )}
@@ -564,6 +605,7 @@ function App() {
                     .filter(Boolean)
                     .join(" · ")}
                 </span>
+                <button className="btn" onClick={() => void copyPlaybackLink()} disabled={!current} title={pageURL ? uiText("复制当前作品、线路和集数的链接") : uiText("更新 myco 后即可复制播放页链接")}><Link2 className="ico" />{uiText("复制播放页链接")}</button>
                 <button
                   className="btn"
                   aria-pressed={!!favorite}

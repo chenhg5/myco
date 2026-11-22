@@ -28,6 +28,7 @@ type ActionService struct {
 	machines  *MachineService
 	members   *MemberService
 	messages  *MessageService
+	pages     *PageService
 	e2e       func(context.Context) bool
 	audit     *AuditService
 	ids       IDGenerator
@@ -59,7 +60,13 @@ const (
 // permissions each defines. A page cannot add one.
 var actionProviders = map[string][]string{
 	"remote.desktop": {"remote.desktop.view", "remote.desktop.control"},
+	// A shared page's own content, rendered by its app (page.export: a
+	// file of what the agent can already read).
+	"page": {"page.export"},
 }
+
+// providerTarget is the kind of target each provider acts on.
+var providerTarget = map[string]string{"remote.desktop": "machine", "page": "page"}
 
 // providerOf is the provider a permission or action name belongs to.
 func providerOf(name string) string {
@@ -73,11 +80,12 @@ func providerOf(name string) string {
 
 type actionGrant struct {
 	api.ActionGrant
-	ttl       time.Duration
-	hostSeen  string // the host it ran on (it ends when that host goes quiet)
-	idem      map[string]string
-	idemHash  map[string]string
-	jobsCount int
+	agentOwner string // the agent's owner (member id): page visibility is checked as it
+	ttl        time.Duration
+	hostSeen   string // the host it ran on (it ends when that host goes quiet)
+	idem       map[string]string
+	idemHash   map[string]string
+	jobsCount  int
 }
 
 type actionHost struct {
@@ -115,6 +123,44 @@ func NewActionService(approvals *SuperagentService, machines *MachineService, me
 	return s
 }
 
+// SetPages enables page targets (page.export).
+func (s *ActionService) SetPages(p *PageService) { s.pages = p }
+
+// pageFor returns the page if by may see it (not found otherwise).
+func (s *ActionService) pageFor(ctx context.Context, by Actor, id string) (*domain.Page, error) {
+	if s.pages == nil {
+		return nil, domain.Errf(domain.CodeUnsupported, "this hub has no pages")
+	}
+	v, err := s.pages.Get(ctx, by, id)
+	if err != nil {
+		return nil, err
+	}
+	return v.Page, nil
+}
+
+// agentSees reports whether the grant's agent may still see its page
+// target (a machine target needs no such check).
+func (s *ActionService) agentSees(ctx context.Context, g *actionGrant) bool {
+	if g.Target.Kind != "page" {
+		return true
+	}
+	_, err := s.pageFor(ctx, Actor{Agent: &domain.Agent{Name: domain.AgentName(g.Agent), Owner: g.agentOwner}}, g.Target.ID)
+	return err == nil
+}
+
+// memberSees reports whether a member may see a page.
+func (s *ActionService) memberSees(ctx context.Context, memberID, pageID string) bool {
+	if s.members == nil {
+		return false
+	}
+	m, err := s.members.Get(ctx, memberID)
+	if err != nil || !m.Active() {
+		return false
+	}
+	_, err = s.pageFor(ctx, Actor{Member: m}, pageID)
+	return err == nil
+}
+
 // changed wakes everything waiting (call with mu held).
 func (s *ActionService) changed() {
 	close(s.wake)
@@ -136,15 +182,18 @@ func (s *ActionService) RequestGrant(ctx context.Context, agent *domain.Agent, r
 	if err := s.enabled(ctx); err != nil {
 		return nil, err
 	}
+	if req.Target.Kind == "page" {
+		return s.requestPageGrant(ctx, agent, req, dry)
+	}
 	if req.Target.Kind != "machine" {
-		return nil, domain.Errf(domain.CodeUnsupported, "only a computer can be a target for now (kind \"machine\"), not %q", req.Target.Kind)
+		return nil, domain.Errf(domain.CodeUnsupported, "a target is a computer (kind \"machine\") or a shared page (kind \"page\"), not %q", req.Target.Kind)
 	}
 	m, err := s.machineByIDOrName(ctx, req.Target.ID)
 	if err != nil {
 		return nil, err
 	}
 	req.Target.ID = m.ID
-	perms, err := checkPermissions(req.Permissions)
+	perms, err := checkPermissions(req.Permissions, "machine")
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +225,7 @@ func (s *ActionService) RequestGrant(ctx context.Context, agent *domain.Agent, r
 		return nil, err
 	}
 	now := s.clock.Now()
-	g := &actionGrant{ttl: ttl, idem: map[string]string{}, idemHash: map[string]string{}}
+	g := &actionGrant{agentOwner: agent.Owner, ttl: ttl, idem: map[string]string{}, idemHash: map[string]string{}}
 	g.ActionGrant = api.ActionGrant{ID: s.ids.New("agr"), Agent: string(agent.Name), Owner: owner.Name, Target: req.Target, TargetName: m.Name,
 		Requested: perms, Reason: clipRunes(reason, 500), MessageID: req.MessageID, State: api.GrantPending, CreatedAt: now}
 	if dry {
@@ -198,6 +247,62 @@ func (s *ActionService) RequestGrant(ctx context.Context, agent *domain.Agent, r
 	out := g.ActionGrant
 	s.mu.Unlock()
 	s.audit.Record(ctx, Actor{Agent: agent}, "action.grant.request", m.Name, fmt.Sprintf("%s (%s)", strings.Join(perms, ","), g.ID))
+	return &out, nil
+}
+
+// requestPageGrant: an agent that may see a shared page may export it (a
+// file of what it can already read), so the grant is active at once, for
+// the page's owner to see and revoke. Its visibility is checked again at
+// every job and artifact.
+func (s *ActionService) requestPageGrant(ctx context.Context, agent *domain.Agent, req api.ActionGrantRequest, dry bool) (*api.ActionGrant, error) {
+	p, err := s.pageFor(ctx, Actor{Agent: agent}, req.Target.ID)
+	if err != nil {
+		return nil, err
+	}
+	perms, err := checkPermissions(req.Permissions, "page")
+	if err != nil {
+		return nil, err
+	}
+	ttl := ActionGrantDefaultTTL
+	if req.TTLSeconds > 0 {
+		ttl = min(max(time.Duration(req.TTLSeconds)*time.Second, 30*time.Second), ActionGrantMaxTTL)
+	}
+	if req.MessageID != "" {
+		msg, err := s.messages.Get(ctx, agent, req.MessageID)
+		if err != nil {
+			return nil, err
+		}
+		if msg.To != agent.Name || msg.Type != domain.TypeTask || msg.Status.Terminal() {
+			return nil, domain.Errf(domain.CodeInvalidArgument, "message %s is not an open task of yours", req.MessageID)
+		}
+	}
+	ownerName := ""
+	if s.members != nil {
+		if p.Owner != "" {
+			if mem, err := s.members.Get(ctx, p.Owner); err == nil && mem.Active() {
+				ownerName = mem.Name
+			}
+		}
+		if ownerName == "" {
+			if o, err := s.members.Owner(ctx); err == nil && o != nil {
+				ownerName = o.Name
+			}
+		}
+	}
+	now := s.clock.Now()
+	exp := now.Add(ttl)
+	g := &actionGrant{agentOwner: agent.Owner, ttl: ttl, idem: map[string]string{}, idemHash: map[string]string{}}
+	g.ActionGrant = api.ActionGrant{ID: s.ids.New("agr"), Agent: string(agent.Name), Owner: ownerName, Target: api.ActionTarget{Kind: "page", ID: p.ID}, TargetName: p.Name,
+		Permissions: perms, Requested: perms, Reason: clipRunes(strings.TrimSpace(req.Reason), 500), MessageID: req.MessageID, State: api.GrantActive, CreatedAt: now, ExpiresAt: &exp}
+	out := g.ActionGrant
+	if dry {
+		return &out, nil
+	}
+	s.mu.Lock()
+	s.grants[g.ID] = g
+	s.changed()
+	s.mu.Unlock()
+	s.audit.Record(ctx, Actor{Agent: agent}, "action.grant.page", p.Name, fmt.Sprintf("%s (%s)", strings.Join(perms, ","), g.ID))
 	return &out, nil
 }
 
@@ -243,9 +348,9 @@ func grantWhat(agent, machine string, perms []string, ttl time.Duration) string 
 
 // checkPermissions validates and normalizes requested permissions: known
 // ones only, no wildcard; control implies view.
-func checkPermissions(in []string) ([]string, error) {
+func checkPermissions(in []string, kind string) ([]string, error) {
 	if len(in) == 0 {
-		return nil, domain.Errf(domain.CodeInvalidArgument, "ask for at least one permission (remote.desktop.view, remote.desktop.control)")
+		return nil, domain.Errf(domain.CodeInvalidArgument, "ask for at least one permission (a computer: remote.desktop.view, remote.desktop.control; a page: page.export)")
 	}
 	set := map[string]bool{}
 	for _, p := range in {
@@ -256,7 +361,10 @@ func checkPermissions(in []string) ([]string, error) {
 			known = known || k == p
 		}
 		if !known {
-			return nil, domain.Errf(domain.CodeInvalidArgument, "unknown permission %q", p).WithSuggestion("use remote.desktop.view or remote.desktop.control")
+			return nil, domain.Errf(domain.CodeInvalidArgument, "unknown permission %q", p).WithSuggestion("a computer: remote.desktop.view or remote.desktop.control; a page: page.export")
+		}
+		if kind != "" && providerTarget[prov] != kind {
+			return nil, domain.Errf(domain.CodeInvalidArgument, "%s is not for a %s target", p, kind)
 		}
 		set[p] = true
 	}
@@ -316,7 +424,7 @@ func (h actionApprovals) Approve(ctx context.Context, a *domain.Approval, by *do
 	}
 	perms := g.Requested
 	if len(n.Permissions) > 0 {
-		narrowed, err := checkPermissions(n.Permissions)
+		narrowed, err := checkPermissions(n.Permissions, g.Target.Kind)
 		if err != nil {
 			return "", err
 		}
@@ -353,6 +461,17 @@ func (h actionApprovals) Deny(ctx context.Context, a *domain.Approval) {
 	}
 }
 
+// artifactTypeAllowed: the files a job may make (a screenshot, an export).
+func artifactTypeAllowed(t string) bool {
+	switch t {
+	// (text/html: an app's export of a design; artifacts are served as
+	// attachments, nosniff, sandboxed, never as a page)
+	case "text/plain", "text/csv", "text/markdown", "text/html", "application/json", "application/pdf":
+		return true
+	}
+	return strings.HasPrefix(t, "image/") || strings.HasPrefix(t, "application/vnd.openxmlformats-officedocument.")
+}
+
 func contains(list []string, v string) bool {
 	for _, x := range list {
 		if x == v {
@@ -373,6 +492,10 @@ func (s *ActionService) refresh(ctx context.Context, g *actionGrant) {
 	case api.GrantActive:
 		if g.ExpiresAt != nil && !now.Before(*g.ExpiresAt) {
 			s.close(g, api.GrantExpired, "its time ran out")
+			return
+		}
+		if !s.agentSees(ctx, g) {
+			s.close(g, api.GrantEnded, "its agent may no longer see the page")
 			return
 		}
 		if g.hostSeen != "" {
@@ -513,7 +636,7 @@ func (s *ActionService) Actions(ctx context.Context, agent *domain.Agent, id str
 		return nil, domain.Errf(domain.CodeInvalidState, "grant %s is %s", id, g.State)
 	}
 	out := []api.ActionDescriptor{}
-	for _, h := range s.liveHosts(g.Target.ID) {
+	for _, h := range s.hostsFor(ctx, g) {
 		for _, d := range h.actions {
 			if contains(g.Permissions, d.Permission) {
 				out = append(out, d)
@@ -585,12 +708,19 @@ func (s *ActionService) RegisterHost(ctx context.Context, by Actor, req api.Acti
 	if !ok {
 		return nil, domain.Errf(domain.CodeInvalidArgument, "unknown provider %q", req.Provider)
 	}
-	mach, err := s.machines.Get(ctx, req.MachineID)
-	if err != nil {
-		return nil, err
-	}
-	if mach.Owner != m.ID && !by.Manages() {
-		return nil, domain.Errf(domain.CodePermissionDenied, "%s is not your computer", mach.Name)
+	// A page renderer belongs to its person (it renders only pages they may
+	// see); a computer's provider to that computer.
+	where := m.Name
+	machineID := ""
+	if providerTarget[req.Provider] == "machine" {
+		mach, err := s.machines.Get(ctx, req.MachineID)
+		if err != nil {
+			return nil, err
+		}
+		if mach.Owner != m.ID && !by.Manages() {
+			return nil, domain.Errf(domain.CodePermissionDenied, "%s is not your computer", mach.Name)
+		}
+		where, machineID = mach.Name, mach.ID
 	}
 	if strings.TrimSpace(req.Generation) == "" {
 		return nil, domain.Errf(domain.CodeInvalidArgument, "generation is required (a fresh value each time the host starts)")
@@ -608,10 +738,10 @@ func (s *ActionService) RegisterHost(ctx context.Context, by Actor, req api.Acti
 	}
 	now := s.clock.Now()
 	h := &actionHost{owner: m.ID, actions: req.Actions}
-	h.ActionHost = api.ActionHost{ID: s.ids.New("ahs"), MachineID: mach.ID, Provider: req.Provider, Generation: req.Generation, LastSeenAt: now}
+	h.ActionHost = api.ActionHost{ID: s.ids.New("ahs"), MachineID: machineID, Provider: req.Provider, Generation: req.Generation, LastSeenAt: now}
 	s.mu.Lock()
 	for id, old := range s.hosts {
-		if old.MachineID == h.MachineID && old.Provider == h.Provider {
+		if old.Provider == h.Provider && old.MachineID == h.MachineID && (machineID != "" || old.owner == h.owner) {
 			s.failRunning(old.ID, "host_restarted", "the computer's App restarted while it ran: whether it happened is unknown; observe before going on")
 			delete(s.hosts, id)
 			for _, g := range s.grants {
@@ -625,7 +755,7 @@ func (s *ActionService) RegisterHost(ctx context.Context, by Actor, req api.Acti
 	s.changed()
 	out := h.ActionHost
 	s.mu.Unlock()
-	s.audit.Record(ctx, by, "action.host.register", mach.Name, req.Provider)
+	s.audit.Record(ctx, by, "action.host.register", where, req.Provider)
 	return &out, nil
 }
 
@@ -640,16 +770,28 @@ func (s *ActionService) failRunning(hostID, code, msg string) {
 	}
 }
 
-// liveHosts are the hosts of a computer seen lately (mu held).
-func (s *ActionService) liveHosts(machineID string) []*actionHost {
+// hostsFor are the live hosts that may run a grant's jobs (mu held): its
+// computer's, or for a page, page renderers whose person may see it.
+func (s *ActionService) hostsFor(ctx context.Context, g *actionGrant) []*actionHost {
 	var out []*actionHost
 	now := s.clock.Now()
 	for _, h := range s.hosts {
-		if h.MachineID == machineID && now.Sub(h.LastSeenAt) <= actionHostStale {
+		if now.Sub(h.LastSeenAt) <= actionHostStale && s.hostServes(ctx, h, g) {
 			out = append(out, h)
 		}
 	}
 	return out
+}
+
+// hostServes reports whether host h may run grant g's jobs (mu held).
+func (s *ActionService) hostServes(ctx context.Context, h *actionHost, g *actionGrant) bool {
+	if providerTarget[h.Provider] != g.Target.Kind {
+		return false
+	}
+	if g.Target.Kind == "page" {
+		return s.memberSees(ctx, h.owner, g.Target.ID)
+	}
+	return h.MachineID == g.Target.ID
 }
 
 func (s *ActionService) hostOf(by Actor, id, generation string) (*actionHost, error) {
@@ -688,7 +830,7 @@ func (s *ActionService) HostJobs(ctx context.Context, by Actor, hostID string, w
 				continue
 			}
 			g := s.grants[j.GrantID]
-			if g == nil || g.Target.ID != h.MachineID {
+			if g == nil || !s.hostServes(ctx, h, g) {
 				continue
 			}
 			s.refresh(ctx, g)
@@ -749,8 +891,8 @@ func (s *ActionService) UploadArtifact(ctx context.Context, by Actor, jobID, hos
 		return nil, domain.Errf(domain.CodeInvalidArgument, "an artifact is 1 byte to %d MB", actionArtifactMax>>20)
 	}
 	mediaType = strings.TrimSpace(strings.Split(mediaType, ";")[0])
-	if !(strings.HasPrefix(mediaType, "image/") || mediaType == "text/plain" || mediaType == "application/json") {
-		return nil, domain.Errf(domain.CodeInvalidArgument, "artifact type %q is not allowed (images, text/plain, application/json)", mediaType)
+	if !artifactTypeAllowed(mediaType) {
+		return nil, domain.Errf(domain.CodeInvalidArgument, "artifact type %q is not allowed (images, PDF, Office documents, text/plain, text/csv, text/markdown, text/html, application/json)", mediaType)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -808,6 +950,9 @@ func (s *ActionService) CompleteJob(ctx context.Context, by Actor, jobID string,
 	now := s.clock.Now()
 	j.FinishedAt = &now
 	g := s.grants[j.GrantID]
+	if g != nil {
+		s.refresh(ctx, g) // (a page's agent may no longer see it)
+	}
 	if g == nil || g.State != api.GrantActive {
 		j.State = api.JobCancelled
 		j.Error = &api.ActionError{Code: "grant_ended", Message: "its grant ended while it ran; whatever it did happened, but its result is not kept"}
@@ -871,7 +1016,7 @@ func (s *ActionService) RunAction(ctx context.Context, agent *domain.Agent, inv 
 		return nil, domain.Errf(domain.CodeInvalidState, "grant %s is %s", g.ID, g.State).WithSuggestion("request a new grant")
 	}
 	var desc *api.ActionDescriptor
-	for _, h := range s.liveHosts(g.Target.ID) {
+	for _, h := range s.hostsFor(ctx, g) {
 		for i := range h.actions {
 			if h.actions[i].Name == inv.Action {
 				desc = &h.actions[i]

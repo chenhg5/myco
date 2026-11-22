@@ -15,6 +15,7 @@ export function svgDocument(rows: Entry[]) {
     area = bounds(bs),
     esc = (v: string) =>
       v
+        .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff\ud800-\udfff]/gu, "")
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")

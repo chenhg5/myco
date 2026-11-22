@@ -13,11 +13,15 @@
   ],
   "slides": [
     "Slides",
-    "Create presentations with covers, key points, charts, cards, tables and quotes. Edit on the slide, reorder, present full screen and export editable PowerPoint."
+    "Agents write content; the page arranges covers, points, charts, cards, tables and quotes. Co-edit and present; compatible Apps let agents export editable PowerPoint files and Markdown outlines."
   ],
   "meeting": [
     "Meeting notes",
     "Record your microphone and meeting audio separately, transcribe locally and identify speakers. Edit, search, replay and export transcripts; ask an agent for summaries, decisions and action items."
+  ],
+  "tutor": [
+    "Learning workspace",
+    "Import a textbook, ask your tutor to teach at your level, and explore interactive diagrams and quick checks with source citations."
   ],
   "code": [
     "Code editor",
@@ -59,13 +63,17 @@
     "Habit tracker",
     "Build habits together. Check in each day, follow weekly progress and streaks, and see how family or teammates are doing."
   ],
+  "logo-studio": [
+    "Logo Studio",
+    "Turn a brand brief into original geometric marks with your agent. Compare concepts, inspect guides, edit vector layers and export SVG."
+  ],
   "design-studio": [
     "Design studio",
-    "Create websites, app interfaces, posters, presentations, social images and dashboards. Edit canvases and layers, preview HTML, collect feedback, save versions and export SVG, PNG or HTML with your agents."
+    "Design websites, interfaces, posters and dashboards with agents. Edit canvases and layers, preview HTML, collect feedback and save versions; compatible Apps let agents export shared SVG, PNG, HTML or JSON files."
   ],
   "whiteboard": [
     "Whiteboard",
-    "An infinite canvas for sticky notes, text, shapes and connectors. Drag, zoom and color your ideas; work with agents on brainstorms, retrospectives and flows."
+    "An infinite canvas with sticky notes, text, shapes and connectors. Co-edit with agents and export SVG/PNG; compatible Apps let agents export shared boards in the background."
   ],
   "mindmap": [
     "Mind map",
@@ -83,6 +91,10 @@
     "Photo editor",
     "Crop, adjust colors, filter, retouch, add text or stickers, draw, mask and frame your photos. Originals stay local; share edit instructions and undo any change."
   ],
+  "arcade": [
+    "Arcade Emulator",
+    "Verify and launch arcade ROM ZIPs with your local MAME in the desktop App, or play CHIP-8 and the original Orbit Courier demo."
+  ],
   "gomoku": [
     "Gomoku",
     "Play five-in-a-row with another person or an agent. Choose black or white, take turns, undo moves, resign or start a new round."
@@ -93,7 +105,7 @@
   ],
   "remote-desktop": [
     "Remote Desktop",
-    "View and control your Mac and Windows computers. Optional component, view-only mode, temporary pairing codes and instant disconnect. LAN or Tailscale; audio, lock screens and public relay are not included yet."
+    "View and control your Mac and Windows computers from a computer or iPhone. Phone touchpad and keyboard, optional hosting component and temporary pairing codes. Direct LAN or Tailscale; no audio, lock screens or public relay yet."
   ],
   "recorder": [
     "Recording studio",
@@ -102,5 +114,13 @@
   "cinema": [
     "Cinema",
     "Watch movies and series from your own sources. Search catalogs, choose episodes, share a watchlist and resume locally, with playback speed and intro/outro skipping. No sources are bundled."
+  ],
+  "scheduling": [
+    "Calendar",
+    "Plan work and life in month, week and day views. Click to create events, drag to reschedule, add all-day and recurring events, search and export calendars with agents. Appointment booking is a secondary tool."
+  ],
+  "personality": [
+    "Personality explorer",
+    "Explore four preference pairs with 32 original questions, read 16 perspectives and keep a private reflection journal. Answers stay on your device; choose to share a summary with agents. Not the official MBTI® assessment."
   ]
 }

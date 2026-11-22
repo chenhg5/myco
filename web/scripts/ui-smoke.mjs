@@ -23,12 +23,14 @@
 import { spawn, spawnSync, execFileSync } from "node:child_process";
 import { createServer } from "node:net";
 import http from "node:http";
+import ts from "typescript";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { mkdir, access, readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+const pageRouteScript = ts.transpileModule(await readFile(new URL("../../templates/src/_lib/page-route.ts", import.meta.url),"utf8"),{compilerOptions:{module:ts.ModuleKind.ES2022,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^export /gm,"") + "\nwindow.__routeModule={subscribeAppRoute};";
 const WEB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = path.join(WEB, "ui-smoke");
 const HOST = "127.0.0.1";
@@ -656,6 +658,51 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, chat.getByRole("button", { name: "关掉这一栏" }));
     });
 
+    await step("网页 · 应用内直达链接", async () => {
+      await go(page,"官网改版",narrow);
+      if (narrow) await clickVisible(page,page.locator('.sp-strip-face[title="Release (Claude 云端)"]'));
+      else await clickVisible(page,page.locator(".sp-side .sp-member:visible",{hasText:"Release (Claude 云端)"}));
+      const chat = page.locator(".sp-pane-right"), panel = page.locator(".pg-panel");
+      const first = chat.locator(".conv-msg", {hasText:"直达链接一"}).first();
+      const second = chat.locator(".conv-msg", {hasText:"直达链接二"}).first();
+      // A route card must retain the link, rather than opening only the page ID.
+      const navigation = fragment => page.waitForEvent("framenavigated",{predicate:f=>f.url().includes("#watch") && f.url().includes(fragment),timeout:15000});
+      const firstNavigation = navigation("%E7%AC%AC01%E9%9B%86");
+      await clickVisible(page, first.locator(".pg-card"));
+      await firstNavigation;
+      const frame = () => page.frames().find(f => f.url().includes("#watch"));
+      await page.waitForFunction(() => document.querySelector(".pg-frame")?.getAttribute("src")?.includes("%E7%AC%AC01%E9%9B%86"));
+      await frame().waitForFunction(() => !!window.myco);
+      const ctx = await frame().evaluate(() => window.myco.ready);
+      if (ctx.page.url !== "http://192.168.1.20:7780/pages/pg_routes") throw Error("ready must expose the public page URL, not the private frame URL");
+      // The normal Markdown link follows exactly the same route path.
+      await frame().evaluate(() => { window.__routeMarker = "kept"; });
+      if (narrow) await clickVisible(page,panel.getByRole("button",{name:"收起",exact:true}));
+      const secondNavigation = navigation("%E7%AC%AC02%E9%9B%86");
+      await clickVisible(page,second.locator('a[href*="#watch"]'));
+      await secondNavigation;
+      await page.waitForFunction(() => document.querySelector(".pg-frame")?.getAttribute("src")?.includes("%E7%AC%AC02%E9%9B%86"));
+      if (await panel.locator(".pg-tab").count()) throw Error("two routes to one page must reuse one tab");
+      await frame().waitForFunction(() => !!window.myco);
+      if (await frame().evaluate(() => window.__routeMarker) !== "kept") throw Error("changing the fragment must preserve the page document");
+      await frame().addScriptTag({content:pageRouteScript});
+      await frame().evaluate(() => { window.__routeCount=0; window.__stopRoute=window.__routeModule.subscribeAppRoute(()=>window.__routeCount++); });
+      if (narrow) await clickVisible(page,panel.getByRole("button",{name:"收起",exact:true}));
+      await clickVisible(page, second.locator(".pg-card"));
+      await frame().waitForFunction(()=>window.__routeCount===1);
+      if (await frame().evaluate(() => window.__routeMarker) !== "kept") throw Error("repeated deep links must keep the page document");
+      // Returning through an ordinary page link clears the route, in place.
+      if (narrow) await clickVisible(page,panel.getByRole("button",{name:"收起",exact:true}));
+      await clickVisible(page,chat.locator(".conv-msg",{hasText:"直达普通入口"}).first().locator(".pg-card"));
+      const sameFrame=page.frames().find(f=>f.url().includes("/p/"));
+      await sameFrame.waitForFunction(()=>location.hash==="");
+      if (await sameFrame.evaluate(()=>window.__routeMarker)!=="kept") throw Error("a plain link back to the page must keep its document");
+      await shot(page,size,scheme,"page-route");
+      await clickVisible(page, panel.getByRole("button",{name:"关闭",exact:true}));
+      await panel.waitFor({state:"detached"});
+      await clickVisible(page,chat.getByRole("button",{name:"关掉这一栏"}));
+    });
+
     // Several pages open: a tab each, under the panel's head; opening one
     // already open shows it; each keeps its page while another is shown.
     if (!narrow) await step("网页 · 多个标签", async () => {
@@ -879,7 +926,10 @@ async function runMatrix(browser, size, scheme) {
       const lib = page.locator("[data-testid=templates-official] [data-shelf=office] .tp-card");
       await lib.first().waitFor({ timeout: 15_000 });
       const names = (await lib.allInnerTexts()).map(compactText);
-      if (names.length !== 5 || !names[0].startsWith("表格") || !names[1].startsWith("多维表格") || !names[2].startsWith("文档") || !names[3].startsWith("幻灯片") || !names[4].startsWith("会议记录")) throw new Error(`办公套件应是 表格、多维表格、文档、幻灯片、会议记录，实际 ${names.join(" / ")}`);
+      // The suite grows (学习工作台 joined it): check the core ones are there, in order.
+      const core = ["表格", "多维表格", "文档", "幻灯片", "会议记录"];
+      const at = core.map((c) => names.findIndex((n) => n.startsWith(c) && !(c === "表格" && n.startsWith("多维表格"))));
+      if (at.some((i) => i < 0) || at.some((i, k) => k > 0 && i < at[k - 1])) throw new Error(`办公套件应依次有 ${core.join("、")}，实际 ${names.join(" / ")}`);
       await page.locator("[data-testid=templates-own] .tp-card").first().waitFor({ timeout: 5_000 });
       // myco's own apps update on their own; fetched now on request.
       await clickVisible(page, page.locator("[data-testid=apps-sync]"));
@@ -1688,6 +1738,20 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "action-grant-active");
       await clickVisible(page, grant.getByRole("button", { name: "收回", exact: true }));
       await grant.waitFor({ state: "hidden", timeout: 10_000 });
+      // A page it may export reads as that, not as a screen.
+      const pg = await fetch(`http://${HOST}:${mockPort()}/app/mock/superagent-ask`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agent: "pm-codex", kind: "page_grant", page: "产品白板" }),
+      });
+      if (!pg.ok) throw new Error(`页面导出授权失败：HTTP ${pg.status}`);
+      const pgGrant = page.locator(".sp-home [data-testid=action-grants] .sa-grant", { hasText: "产品白板" });
+      await pgGrant.waitFor({ timeout: 25_000 });
+      const pt = compactText(await pgGrant.innerText());
+      if (!pt.includes("可以导出「产品白板」") || pt.includes("屏幕")) throw new Error(`页面授权应写「可以导出「产品白板」」，实际「${pt}」`);
+      await settle(page, 200);
+      await shot(page, size, scheme, "action-grant-page");
+      await clickVisible(page, pgGrant.getByRole("button", { name: "收回", exact: true }));
+      await pgGrant.waitFor({ state: "hidden", timeout: 10_000 });
     });
 
     // Projects in the sidebar go where you drag them, and stay there.

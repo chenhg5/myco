@@ -48,7 +48,23 @@ import {
 import { colors } from "./export";
 import { Tools, Properties, Empty, PastePrompt } from "./panels";
 import { useBoard, editable } from "./useBoard";
+import { myco } from "../_lib/myco";
+import { startSharedExport } from "./shared-export";
+import { registerActions } from "../_lib/register-actions";
+import { whiteboardExport } from "./agent-actions";
 function App() {
+  useEffect(() => { const actions = registerActions([whiteboardExport]); return actions.dispose; }, []);
+  useEffect(() => {
+    let stopped = false, dispose: (() => void) | undefined;
+    void myco!.ready.then(ctx => {
+      if (stopped || ctx.render) return;
+      dispose = startSharedExport(myco!.data, () => {
+        if (kit.pending || kit.failed) return null;
+        return JSON.parse(JSON.stringify({ board: board.rows, items: items.rows }));
+      }, kit.subscribe);
+    });
+    return () => { stopped = true; dispose?.(); };
+  }, []);
   const {
     arrows,
     tool,
@@ -701,6 +717,6 @@ function Text({
   );
 }
 void mount(kit, App, async () => {
-  if (!board.get("main"))
+  if (!(await myco!.ready).render && !board.get("main"))
     await board.put({ title: "" }, "main")?.catch(() => board.load());
 });

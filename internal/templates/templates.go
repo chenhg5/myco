@@ -20,12 +20,12 @@ var files embed.FS
 // Order is how the library lists the apps it knows within a shelf (as a
 // person would reach for them); shelves come first (domain.TemplateCategories).
 var Order = []string{
-	"myco/table", "myco/base", "myco/doc", "myco/slides", "myco/meeting",
+	"myco/table", "myco/base", "myco/doc", "myco/slides", "myco/meeting", "myco/tutor", "myco/scheduling",
 	"myco/code", "myco/issues", "myco/devtools",
 	"myco/todo", "myco/notes", "myco/disk", "myco/stocks", "myco/proxy-console", "myco/remote-desktop",
-	"myco/ledger", "myco/habit", "myco/cinema",
-	"myco/design-studio", "myco/whiteboard", "myco/mindmap", "myco/recorder", "myco/video", "myco/motion", "myco/photo",
-	"myco/gomoku", "myco/sudoku",
+	"myco/ledger", "myco/habit", "myco/cinema", "myco/personality",
+	"myco/design-studio", "myco/logo-studio", "myco/whiteboard", "myco/mindmap", "myco/recorder", "myco/video", "myco/motion", "myco/photo",
+	"myco/arcade", "myco/gomoku", "myco/sudoku",
 }
 
 func rank(id string) int {

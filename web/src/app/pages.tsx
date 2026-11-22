@@ -10,6 +10,7 @@ import { Modal } from "@/app/dialogs";
 import { openOutside, setInAppLinks } from "@/app/links";
 import { L } from "@/lib/i18n";
 import { usePagePreferences, localizedPageURL } from "./page-preferences";
+import { parsePageLink, pageFragmentURL, type PageLink } from "@/lib/page-links";
 import { cn, timeAgo } from "@/lib/utils";
 
 /*
@@ -38,16 +39,9 @@ export function setPageHubs(list: HubRef[]) {
   hubs = list.map((h) => ({ id: h.id, url: base(h.url), aliases: (h.aliases || []).map(base) }));
 }
 
-const PAGE = /^(https?:\/\/[^\s?#]+?)\/pages\/(pg_[a-z0-9]+)\/?$/i;
-
-/** A link to a page of one of the App's workspaces. */
-export function pageLinkOf(href: string): { hubId: string; id: string } | null {
-  const m = PAGE.exec(href.trim());
-  if (!m) return null;
-  // (a hub on this computer links with its LAN address: one of its aliases)
-  const at = base(m[1]);
-  const h = hubs.find((x) => x.url === at) || hubs.find((x) => x.aliases?.includes(at));
-  return h ? { hubId: h.id, id: m[2] } : null;
+/** A known workspace page, with an optional application-owned fragment. */
+export function pageLinkOf(href: string): PageLink | null {
+  return parsePageLink(href, hubs);
 }
 
 /** A link to a server on this computer (not the App itself). */
@@ -61,7 +55,7 @@ export function localLinkOf(href: string): URL | null {
   } catch { return null; }
 }
 
-export type PageTarget = { kind: "page"; hubId: string; id: string } | { kind: "local"; url: string };
+export type PageTarget = { kind: "page"; hubId: string; id: string; fragment?: string; routeVisit?: number } | { kind: "local"; url: string };
 
 /** Opens a page (or a server on this computer) in the page panel. */
 export function openPage(t: PageTarget) {
@@ -91,7 +85,7 @@ export function pageLinksIn(body: string): { hubId: string; id: string; url: str
   for (const m of body.matchAll(URLS)) {
     const url = m[0].replace(/[.,;:!?)\]]+$/, "");
     const p = pageLinkOf(url);
-    if (p && !seen.has(p.id)) { seen.add(p.id); out.push({ ...p, url }); }
+    if (p && !seen.has(`${p.hubId}/${p.id}${p.fragment || ""}`)) { seen.add(`${p.hubId}/${p.id}${p.fragment || ""}`); out.push({ ...p, url }); }
   }
   return out;
 }
@@ -167,7 +161,7 @@ export function PageCards({ body }: { body: string }) {
   if (!links.length) return null;
   return (
     <div className="pg-cards">
-      {links.map((l) => <PageCard key={l.id} hubId={l.hubId} id={l.id} url={l.url} />)}
+      {links.map((l) => <PageCard key={l.url} hubId={l.hubId} id={l.id} url={l.url} />)}
     </div>
   );
 }
@@ -191,14 +185,14 @@ export function PageCard({ hubId, id, url }: { hubId: string; id: string; url: s
   // Right-click: open, pin it above the conversation (or unpin), copy its link.
   const pinned = !!pins?.pinned(id);
   const items: MenuItem[] = [
-    { label: L("打开", "Open"), icon: PanelRight, onSelect: () => openPage({ kind: "page", hubId, id }) },
+    { label: L("打开", "Open"), icon: PanelRight, onSelect: () => openPage({ kind: "page", hubId, id, fragment: pageLinkOf(url)?.fragment }) },
     ...(pins ? [{ label: pinned ? L("取消置顶", "Unpin") : L("置顶到对话上方", "Pin above the chat"), icon: pinned ? PinOff : PinIcon, onSelect: () => pins.toggle({ id, url, name: page?.name || L("网页", "Page") }) }] : []),
     "sep",
     { label: L("复制链接", "Copy the link"), icon: Copy, onSelect: () => void copyText(url) },
   ];
   return (
     <>
-    <button type="button" className={cn("pg-card", pinned && "is-pinned")} data-page={id} onClick={() => openPage({ kind: "page", hubId, id })}
+    <button type="button" className={cn("pg-card", pinned && "is-pinned")} data-page={id} onClick={() => openPage({ kind: "page", hubId, id, fragment: pageLinkOf(url)?.fragment })}
       onContextMenu={(e) => menu.open(e, items)}
       title={L("在旁边打开这个网页（右键：置顶、复制链接）", "Open this page beside the chat (right-click: pin, copy the link)")}>
       <span className={cn("pg-card-icon", page?.live && "is-live")}>{page?.live ? <Radio /> : <AppWindow />}</span>
@@ -236,7 +230,12 @@ export function PageHost() {
       const t = (e as CustomEvent<PageTarget>).detail;
       const k = keyOf(t);
       setTabs((list) => {
-        if (list.some((x) => x.key === k)) return list;
+        if (list.some((x) => x.key === k)) return list.map(x => {
+          if (x.key !== k || t.kind !== "page" || x.target.kind !== "page") return x;
+          // A user clicking a deep link means navigate, including clicking the
+          // same link after closing an app's inner view. Keep one page tab.
+          return t.fragment || x.target.fragment ? { ...x, target: { ...t, routeVisit: (x.target.routeVisit || 0) + 1 } } : x;
+        });
         const next = [...list, { key: k, target: t, reload: 0, meta: { title: "", about: "", icon: t.kind === "local" ? "local" : "page", loaded: false } as PageMeta }];
         // At most a few: the oldest goes (not the one shown).
         while (next.length > MAX_TABS) next.splice(next.findIndex((x) => x.key !== k), 1);
@@ -357,6 +356,7 @@ function PageView({ target, open, active, reload, onMeta }: {
   const [page, setPage] = useState<Page | null>(null);
   const [error, setError] = useState("");
   const frame = useRef<HTMLIFrameElement>(null);
+  const [loadedKey, setLoadedKey] = useState("");
   const key = target.kind === "page" ? `${target.hubId}/${target.id}` : target.url;
 
   const load = async (version?: number) => {
@@ -386,7 +386,7 @@ function PageView({ target, open, active, reload, onMeta }: {
     if (!open || !active || target.kind !== "page") return;
     const t = window.setInterval(() => { pageOf(target.hubId, target.id, true).then(setPage, () => undefined); }, 15_000);
     return () => window.clearInterval(t);
-  }, [open, active, target]);
+  }, [open, active, key]);
 
   // The page's script (pagebridge.js) asks the App: a link to open in the
   // browser, and the myco bridge's calls. Only from this panel's frame;
@@ -463,7 +463,7 @@ function PageView({ target, open, active, reload, onMeta }: {
           const st = await appApi.pageState(t.hubId, t.id);
           known.current = st.version;
           bridged.current = true;
-          return { page: { id: t.id, name: o?.name || p?.name || "", version: o?.version || 0 }, me: { name: meOf(t.hubId) }, state: st.state, version: st.version, preferences: live.current.preferences };
+          return { page: { id: t.id, url: p?.url || "", name: o?.name || p?.name || "", version: o?.version || 0 }, me: { name: meOf(t.hubId) }, state: st.state, version: st.version, preferences: live.current.preferences };
         }
         case "update": {
           const r = await appApi.putPageState(t.hubId, t.id, args.state ?? null, Number(args.version) || 0);
@@ -608,7 +608,7 @@ function PageView({ target, open, active, reload, onMeta }: {
       if (t && remoteUsed) void appApi.remoteCall(t.hubId, t.id, "close", {}, remoteInstance).catch(() => undefined);
       for (const id of jobs) void appApi.osCancel(id).catch(() => undefined);
     };
-  }, [target, opened?.url, reload, preferences.language]);
+  }, [key, opened?.url, reload, preferences.language]);
 
   // While it is shown: what others (an agent, another person) change comes
   // to the page.
@@ -625,7 +625,7 @@ function PageView({ target, open, active, reload, onMeta }: {
       }, () => undefined);
     }, 2000);
     return () => window.clearInterval(t);
-  }, [open, active, target]);
+  }, [open, active, key]);
   // What others changed in its records, once it listens (myco.data.on).
   useEffect(() => {
     if (!open || !active || target.kind !== "page") return;
@@ -642,11 +642,27 @@ function PageView({ target, open, active, reload, onMeta }: {
       }, () => undefined).finally(() => { busy = false; });
     }, 1500);
     return () => window.clearInterval(t);
-  }, [open, active, target]);
+  }, [open, active, key]);
 
   const local = target.kind === "local" ? new URL(target.url) : null;
-  const rawSrc = local ? target.kind === "local" && target.url : opened?.url;
+  // Keep an explicit empty fragment for the root view: navigating an iframe
+  // to a URL without any fragment would reload its document.
+  const rawSrc = local ? target.kind === "local" && target.url : opened?.url ? pageFragmentURL(opened.url, target.kind === "page" ? target.fragment || "#" : undefined) : undefined;
   const src = rawSrc && !local ? localizedPageURL(rawSrc, preferences.language) : rawSrc;
+  // A route is same-document navigation. It must not recreate the iframe or
+  // cancel its active jobs. A repeated link also notifies opted-in templates.
+  const frameIdentity = src && target.kind === "page" ? pageFragmentURL(src) : src;
+  const frameKey = `${frameIdentity}#${reload}`;
+  const lastRoute = useRef<string | undefined>(undefined);
+  const lastRouteVisit = useRef(0);
+  useEffect(() => {
+    if (target.kind !== "page") return;
+    const fragment = target.fragment || "";
+    if (target.routeVisit && target.routeVisit !== lastRouteVisit.current && lastRoute.current === fragment && loadedKey === frameKey && frame.current?.contentWindow && src)
+      frame.current.contentWindow.postMessage({myco:"page-route",fragment},new URL(src).origin);
+    lastRoute.current = fragment;
+    lastRouteVisit.current = target.routeVisit || 0;
+  }, [target, src, frameKey, loadedKey]);
   const sendPreferences = () => {
     if (!src || !frame.current?.contentWindow) return;
     frame.current.contentWindow.postMessage({myco:"preferences", preferences},new URL(src).origin);
@@ -660,11 +676,10 @@ function PageView({ target, open, active, reload, onMeta }: {
       : "";
   const newer = opened && page && page.version > opened.version ? page.version : 0;
   // Until the page has loaded: a loading scene over it, not a blank frame.
-  const [loadedKey, setLoadedKey] = useState("");
   const [upgrading, setUpgrading] = useState(false);
   const icon: PageMeta["icon"] = local ? "local" : opened?.live || page?.live ? "live" : "page";
   useEffect(() => {
-    onMeta({ title, about, icon, copyUrl: page?.url, localUrl: target.kind === "local" ? target.url : undefined, loaded: !!src });
+    onMeta({ title, about, icon, copyUrl: page?.url ? pageFragmentURL(page.url, target.kind === "page" ? target.fragment : undefined) : undefined, localUrl: target.kind === "local" ? target.url : undefined, loaded: !!src });
   }, [title, about, icon, page?.url, local, target, src, onMeta]);
   return (
     <div className={cn("pg-view", !active && "is-hidden")} role="tabpanel" aria-hidden={!active}>
@@ -687,11 +702,11 @@ function PageView({ target, open, active, reload, onMeta }: {
       {error ? <p className="fp-note">{error}</p> : (
         <div className="pg-stage">
           {/* (named by aria-label, not title: WebKit shows a frame's title as a tooltip over all of the page) */}
-          {src && <iframe ref={frame} key={`${src}#${reload}`} className={cn("fp-frame pg-frame", loadedKey !== `${src}#${reload}` && "is-loading")} aria-label={title} src={src || undefined} style={{colorScheme:preferences.theme}}
+          {src && <iframe ref={frame} key={frameKey} className={cn("fp-frame pg-frame", loadedKey !== frameKey && "is-loading")} aria-label={title} src={src || undefined} style={{colorScheme:preferences.theme}}
             sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads allow-same-origin" referrerPolicy="no-referrer"
-            allow="clipboard-write; fullscreen" onLoad={() => { setLoadedKey(`${src}#${reload}`); sendPreferences(); }} />}
-          {loadedKey !== `${src}#${reload}` && (
-            <PageLoading key={`${src}#${reload}`} name={title} seed={page?.publisher || (target.kind === "local" ? target.url : target.hubId)} who={page && target.kind === "page" ? nameOf(target.hubId, page.publisher) : ""} />
+            allow="clipboard-write; fullscreen" onLoad={() => { setLoadedKey(frameKey); sendPreferences(); }} />}
+          {loadedKey !== frameKey && (
+            <PageLoading key={frameKey} name={title} seed={page?.publisher || (target.kind === "local" ? target.url : target.hubId)} who={page && target.kind === "page" ? nameOf(target.hubId, page.publisher) : ""} />
           )}
         </div>
       )}

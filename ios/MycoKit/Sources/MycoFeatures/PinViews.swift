@@ -66,8 +66,8 @@ struct PinStrip: View {
         switch pin.kind {
         case "link":
             guard let address = pin.target else { return }
-            if let id = PageLinks.id(of: address, in: session.pages.workspace) {
-                router.page = PageRoute(id: id)
+            if let target = PageLinks.target(of: address, in: session.pages.workspace) {
+                router.page = PageRoute(id: target.id, fragment: target.fragment)
             } else if let url = URL(string: address) {
                 UIApplication.shared.open(url)
             }

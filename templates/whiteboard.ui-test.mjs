@@ -145,11 +145,22 @@ try {
       await p.mouse.up();
     };
     await load();
+    const waitExport = async (matches) => {
+      const deadline = Date.now() + 8000;
+      while (Date.now() < deadline) {
+        const r = await p.evaluate(async () => myco.data.get("exports", "main").catch(() => null));
+        if (r && matches(r.data)) return r.data;
+        await p.waitForTimeout(50);
+      }
+      throw new Error("shared export did not refresh");
+    };
+    const firstExport = (await waitExport(data => data.status === "ready")).source_fingerprint;
     assert.equal(await p.locator(".wb-item").count(), 3);
     assert((await p.locator(".wb-line").getAttribute("d")).includes("L"));
     await clickNode("a");
     await p.keyboard.press("Control+d");
     assert.equal((await records()).length, 5);
+    await waitExport(data => data.source_fingerprint !== firstExport);
     await p.keyboard.press("Control+z");
     assert.equal((await records()).length, 4);
     await p.keyboard.press("Control+Shift+z");

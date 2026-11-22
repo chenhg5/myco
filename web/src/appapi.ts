@@ -984,6 +984,16 @@ export const appApi = {
   openPage: (hubId: string, id: string, version?: number) => request<PageOpen>("POST", `app/hubs/${enc(hubId)}/pages/${enc(id)}/open`, version ? { version } : {}),
   deletePage: (hubId: string, id: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/pages/${enc(id)}`),
   pageState: (hubId: string, id: string) => request<PageState>("GET", `app/hubs/${enc(hubId)}/pages/${enc(id)}/state`),
+  // Pages rendered for agents (page.export): the next export the backend
+  // wants this window to make (null: none came in time), and its file.
+  pageRenderNext: (signal?: AbortSignal) => request<PageRenderJob | null>("GET", "app/page-render/next", undefined, signal, 40_000),
+  pageRenderResult: (id: string, r: PageRenderResult) => request<{ ok: boolean }>("POST", `app/page-render/${enc(id)}/result`, r, undefined, 60_000),
+  // While one renders: the page's state and records, through the job (refused once it may no longer run),
+  // and a wait that answers {stop: true} as soon as it may not.
+  pageRenderState: (id: string) => request<PageState>("GET", `app/page-render/${enc(id)}/state`),
+  pageRenderData: (id: string, collection: string, rid?: string) =>
+    request<unknown>("GET", `app/page-render/${enc(id)}/data?collection=${enc(collection)}${rid ? `&id=${enc(rid)}` : ""}`),
+  pageRenderWait: (id: string, signal?: AbortSignal) => request<{ stop: boolean }>("GET", `app/page-render/${enc(id)}/wait`, undefined, signal, 40_000),
   /** Writes a page's shared state based on version; when someone wrote
    *  first, ok is false and the latest comes back. */
   putPageState: async (hubId: string, id: string, state: unknown, version: number): Promise<PageState & { ok: boolean }> => {
@@ -1112,3 +1122,8 @@ export interface ManualProvider { base_url: string; api_key: string; model?: str
 
 /** How messages are translated: the service, and which ones have a key. */
 export type TranslateConfig = { provider: "deepl" | "google" | "openai"; base_url?: string; model?: string; keys: Record<string, boolean> };
+
+/** An export the App's renderer makes for an agent (page.export). */
+export interface PageRenderJob { id: string; hub_id: string; page_id: string; action: string; version: number; args?: Record<string, unknown> }
+/** Its file (base64), or why not. */
+export interface PageRenderResult { media_type?: string; data?: string; width?: number; height?: number; pages?: number; error?: { code: string; message: string; retryable?: boolean } }

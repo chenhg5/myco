@@ -158,7 +158,7 @@ const server = http.createServer((req, res) => {
   }
   if (p === "/bridge.js") {
     res.writeHead(200, { "Content-Type": "text/javascript" });
-    res.end(bridge + phoneBridge);
+    res.end(bridge.replace('page: { id: "pg_shots", name: "shots" }', 'page: { id: "pg_shots", name: "shots", url: "https://hub.test/pages/pg_shots" }') + phoneBridge);
     return;
   }
   const f = path.resolve(root, "." + (p === "/" ? "/index.html" : p));
@@ -524,6 +524,35 @@ try {
       );
       console.log("PASS live agent source edits and enable/disable");
     }
+    // Deep-link navigation is a view choice: no source or watchlist writes.
+    const sourceId = await page.evaluate(async () => (await window.myco.data.list("sources")).records[0].id);
+    const route = (movie, line="HLS", episode="第02集") => "#watch?" + new URLSearchParams({source:sourceId,movie,line,episode});
+    await page.evaluate(fragment => { location.hash = fragment; }, route("1"));
+    await page.getByRole("combobox",{name:L("播放线路","Playback line"),exact:true}).waitFor();
+    assert.equal(await page.getByRole("combobox",{name:L("播放线路","Playback line"),exact:true}).inputValue(),"0");
+    assert.equal(await page.getByRole("button",{name:"第02集",exact:true}).getAttribute("aria-pressed"),"true");
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth) <= width, "deep-link player fits the configured viewport");
+    // A clipboard refusal still exposes the canonical, answer-free public URL.
+    await page.evaluate(() => { Object.defineProperty(navigator,"clipboard",{configurable:true,value:{writeText:async()=>{throw Error("denied")}}}); });
+    await page.getByRole("button",{name:L("复制播放页链接","Copy playback link"),exact:true}).click();
+    const copied = new URL(await page.getByRole("textbox",{name:L("播放页链接","Playback link"),exact:true}).inputValue());
+    assert.equal(copied.origin,"https://hub.test");assert.equal(copied.pathname,"/pages/pg_shots");assert.equal(copied.hash,route("1"));assert.equal(copied.search,"");assert.ok(!copied.href.includes("media.test"));
+    await page.getByRole("dialog",{name:L("复制播放页链接","Copy playback link"),exact:true}).getByRole("button",{name:L("关闭","Close"),exact:true}).click();
+    await page.evaluate(fragment => { location.hash = fragment; },route("2","备用","第02集"));
+    await page.getByRole("heading",{name:"城市的另一面",exact:true}).waitFor();
+    assert.equal(await page.getByRole("combobox",{name:L("播放线路","Playback line"),exact:true}).inputValue(),"1");
+    await page.evaluate(fragment => { location.hash = fragment; },route("1","HLS","已移除的集数"));
+    await page.getByRole("alert").getByText(L("链接指定的集数已不存在，请重新选择集数","The linked episode is no longer available. Choose an episode again."),{exact:true}).waitFor();assert.equal(await page.locator("video").count(),0);
+    await page.getByRole("button",{name:L("关闭","Close"),exact:true}).click();
+    assert.equal(await page.evaluate(()=>location.hash), "");
+    // Startup with a fragment follows the same path, before any catalog card click.
+    await page.evaluate(({sourceId,source})=>{window.__savedSource={id:sourceId,...source}}, {sourceId,source});
+    const startup=await browser.newPage({viewport:{width,height:900},colorScheme:theme});
+    await startup.addInitScript(({sourceId,source,phone})=>{window.__PHONE_NETWORK__=phone;window.__SAMPLE__={sources:[{id:sourceId,...source}]};window.__FAKE_OS__={net:{fetch:async args=>(await fetch("/fixture?url="+encodeURIComponent(args.url)+"&binary="+(args.response==="base64"?"1":"0"))).json()}};},{sourceId,source,phone});
+    await startup.goto(`http://127.0.0.1:${server.address().port}/?myco_lang=${lang}`+route("1","备用","第02集"));
+    await startup.getByRole("combobox",{name:L("播放线路","Playback line"),exact:true}).waitFor();assert.equal(await startup.getByRole("combobox",{name:L("播放线路","Playback line"),exact:true}).inputValue(),"1");
+    await startup.screenshot({path:path.join(out,`${lang}-${theme}-${width}-deep-link.png`)});
+    await startup.close();
     assert.deepEqual(errors, []);
     await page.close();
     console.log(

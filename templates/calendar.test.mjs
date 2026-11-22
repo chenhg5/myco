@@ -1,0 +1,27 @@
+// Personal calendar recurrence, time zones, all-day boundaries and overlap layout.
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import ts from 'typescript';
+const url=s=>'data:text/javascript;base64,'+Buffer.from(s).toString('base64');
+const compile=name=>ts.transpile(fs.readFileSync(new URL('src/scheduling/'+name,import.meta.url),'utf8'),{target:99,module:99});
+const engineURL=url(compile('engine.ts')),c=await import(url(compile('calendar-engine.ts').replace('"./engine"',JSON.stringify(engineURL)))),e=await import(engineURL);
+const event={title:'Planning',start:'2026-03-02T14:00:00.000Z',end:'2026-03-02T15:00:00.000Z',all_day:false,zone:'America/New_York',calendar:'work',location:'',notes:'',busy:true,repeat:'weekly',until:'',owner:'Ann'};
+const record=(data,id='a')=>({id,data,version:1});
+assert(c.validCalendarEvent(event));assert(!c.validCalendarEvent({...event,start:'bad',until:'2026-03-30'}));assert(!c.validCalendarEvent({...event,end:event.start}));
+const repeats=c.expandEvents([record(event)],'2026-03-01','2026-03-31','America/New_York');
+assert.equal(repeats.length,5);assert.equal(repeats[0].start,'2026-03-02T14:00:00.000Z');assert.equal(repeats[1].start,'2026-03-09T13:00:00.000Z','Weekly repeats stay at 09:00 through DST');
+assert(repeats.every(o=>c.wallTime(o.start,event.zone).endsWith('09:00')));
+assert.equal(c.instant('2026-03-08T02:30','America/New_York'),null);
+assert.equal(c.instant('2026-11-01T01:30','America/New_York','2026-11-01T06:30:00.000Z'),'2026-11-01T06:30:00.000Z','Editing preserves the later DST fold');
+const allDay={...event,start:'2026-11-24',end:'2026-11-26',all_day:true,repeat:'none',zone:'Asia/Shanghai'};
+assert(c.validCalendarEvent(allDay));assert.equal(c.expandEvents([record(allDay)],'2026-11-25','2026-11-26','America/Los_Angeles').length,1);
+const occurrence=c.expandEvents([record(allDay)],'2026-11-01','2026-12-01','UTC')[0];assert(c.onDate(occurrence,'2026-11-25','UTC'));assert(!c.onDate(occurrence,'2026-11-26','UTC'),'All-day end is exclusive');
+const monthly={...allDay,start:'2026-01-31',end:'2026-02-01',repeat:'monthly'};
+assert.deepEqual(c.expandEvents([record(monthly)],'2026-01-01','2026-04-01','UTC').map(o=>o.start),['2026-01-31','2026-03-31']);
+assert.equal(c.expandEvents([record({...allDay,start:'2000-01-01',end:'2000-01-02',repeat:'daily'})],'2026-11-01','2026-12-01','UTC').length,30,'Old daily series expand only the visible window');
+const busy=c.busyEvents([record(allDay)],'2026-11-24','2026-11-26','Asia/Shanghai');assert.equal(busy[0].start,'2026-11-23T16:00:00.000Z');assert.equal(c.busyEvents([record({...allDay,busy:false})],'2026-11-24','2026-11-26','UTC').length,0);
+const slots=e.slotsForDay('2026-11-25','Asia/Shanghai','Asia/Shanghai',{...e.defaultEvent,title:'Intro',notice:0},{week:e.defaultWeek,overrides:[]},busy,Date.parse('2026-11-22T00:00Z'));assert.equal(slots.length,0,'Personal busy days block appointment times');
+const ics=e.calendarFile([c.asBooking(occurrence)]);assert(ics.includes('DTSTART;VALUE=DATE:20261124\r\n'));assert(ics.includes('DTEND;VALUE=DATE:20261126\r\n'));
+const timed=c.expandEvents([record({...event,start:'2026-11-23T01:00:00Z',end:'2026-11-23T02:00:00Z',repeat:'none'}),record({...event,start:'2026-11-23T01:30:00Z',end:'2026-11-23T03:00:00Z',repeat:'none'},'b'),record({...event,start:'2026-11-23T04:00:00Z',end:'2026-11-23T05:00:00Z',repeat:'none'},'c')],'2026-11-23','2026-11-24','UTC');
+const layout=c.timeLayout(timed,'2026-11-23','UTC');assert.equal(layout[0].columns,2);assert.equal(layout[1].column,1);assert.equal(layout[2].columns,1);
+console.log('PASS calendar: DST-safe recurrence, fold preservation, month-end repeats, all-day ranges/export, old series bounds, appointment busy integration and overlap columns');

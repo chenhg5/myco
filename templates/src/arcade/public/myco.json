@@ -1,0 +1,12 @@
+{
+  "id": "myco/arcade",
+  "name": "街机模拟器",
+  "description": "在桌面 App 中校验并启动本机 MAME 街机 ROM ZIP，也可运行 CHIP-8 和原创试玩《轨道信使》。",
+  "version": "1.2.0",
+  "kind": "custom",
+  "category": "game",
+  "icon": "icon.svg",
+  "requires": {
+    "hub": "0.20.7"
+  }
+}

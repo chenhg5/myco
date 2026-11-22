@@ -21,6 +21,7 @@ import {
   LoaderCircle,
   X,
   Keyboard,
+  Gamepad2,
   LockKeyhole,
 } from "lucide-react";
 import { t as uiText } from "../_lib/i18n";
@@ -34,6 +35,7 @@ import {
   type RemoteStatus,
   type RemoteStats,
 } from "../_lib/remote";
+import { Gamepad } from "./gamepad";
 import "./remote.css";
 const kit = new Kit([]);
 const errorMessage = (e: unknown) => {
@@ -107,6 +109,8 @@ function App() {
   const viewRef=useRef(view); viewRef.current=view;
   const [expanded,setExpanded]=useState(false);
   const [toolsVisible,setToolsVisible]=useState(false);
+  const [gamepadOpen,setGamepadOpen]=useState(false);
+  const canGamepad = controllerOnly && control && !!active?.control;
   const touches=useRef(new Map<number,{x:number;y:number}>());
   const gesture=useRef<{distance:number;center:{x:number;y:number};lastY:number;view:View;at:number;mode:"pending"|"pinch"|"scroll"}|null>(null);
   const multiTouch=useRef(false);
@@ -239,6 +243,7 @@ function App() {
   };
   const disconnect = async () => {
     attempt.current++;
+    setGamepadOpen(false);
     touchpad.current?.reset();if(touchpad.current)touchpad.current.point={x:.5,y:.5};setCursor({x:.5,y:.5});updateView({scale:1,x:0,y:0});setExpanded(false);setToolsVisible(false);touches.current.clear();gesture.current=null;multiTouch.current=false;setDragging(false);setModifiers([]);setKeyboardOpen(false);setDraft("");setInputError("");setScrollMode(false);setShowCursor(false);
     const previous=session.current;
     session.current=null;pendingStream.current=null;
@@ -284,7 +289,7 @@ function App() {
               ),
             );
             attempt.current++;setConnecting(false);setSelected(null);
-            pendingStream.current=null;setStats(null);setActive(null);
+            pendingStream.current=null;setStats(null);setActive(null);setGamepadOpen(false);
           }
         },
         setStats,
@@ -411,8 +416,13 @@ function App() {
           </div>
         )}
         {active ? (
-          <section className={`rd-session${expanded?" is-expanded":""}${controllerOnly?" is-immersive":""}${toolsVisible?" show-tools":""}${keyboardOpen?" keyboard-open":""}`}>
-            {controllerOnly&&<div className="rd-floating-tools">
+          <section className={`rd-session${expanded?" is-expanded":""}${controllerOnly?" is-immersive":""}${toolsVisible?" show-tools":""}${keyboardOpen?" keyboard-open":""}${gamepadOpen?" is-gamepad":""}`}>
+            {canGamepad&&gamepadOpen&&session.current&&<Gamepad session={session.current} close={()=>setGamepadOpen(false)} disconnect={()=>void disconnect()}/>}
+            {controllerOnly&&!gamepadOpen&&<div className="rd-floating-tools">
+              {canGamepad&&<button className="rd-icon" aria-label={uiText("街机手柄")} onClick={()=>{
+                touchpad.current?.reset();setDragging(false);releaseModifiers();keyboard.current?.blur();
+                setKeyboardOpen(false);setToolsVisible(false);setGamepadOpen(true);
+              }}><Gamepad2 size={19}/></button>}
               <button className="rd-icon" aria-label={uiText("工具")} aria-expanded={toolsVisible} onClick={()=>{setToolsVisible(!toolsVisible);if(toolsVisible){setKeyboardOpen(false);keyboard.current?.blur();releaseModifiers();}}}><Settings2 size={19}/></button>
               {control&&scrollMode&&<button className="rd-scroll-mode" aria-label={uiText("切回双指缩放")} onClick={()=>setScrollMode(false)} title={uiText("双指滚动 · 点此缩放")}>{uiText("滚动")}</button>}
               {control&&<button className="rd-icon" aria-label={uiText("键盘")} onClick={()=>{setToolsVisible(true);flushSync(()=>setKeyboardOpen(!keyboardOpen));if(!keyboardOpen)keyboard.current?.focus();}}><Keyboard size={19}/></button>}

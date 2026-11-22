@@ -78,6 +78,10 @@ type Options struct {
 	// Slots, if set, is shared by several runners in one process to cap the
 	// number of harness processes running at once.
 	Slots chan struct{}
+	// SlotTouch is how often a message waiting for a free slot checks in
+	// with the Hub (default 30s): the agent stays online while it waits, and
+	// a task ended meanwhile is not run.
+	SlotTouch time.Duration
 	// Now is the clock (tests).
 	Now func() time.Time
 	// StatePath, if set, persists when this runner last wrote each session,
@@ -179,6 +183,9 @@ func New(hub Hub, h harness.Harness, sessions SessionStore, prompt PromptBuilder
 	}
 	if opts.BusyRetryMin > opts.BusyRetry {
 		opts.BusyRetryMin = opts.BusyRetry
+	}
+	if opts.SlotTouch <= 0 {
+		opts.SlotTouch = 30 * time.Second
 	}
 	if opts.BusyWindow <= 0 {
 		opts.BusyWindow = 90 * time.Second
@@ -496,12 +503,10 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		defer unlockSession()
 	}
 	if r.opts.Slots != nil {
-		select {
-		case r.opts.Slots <- struct{}{}:
-			defer func() { <-r.opts.Slots }()
-		case <-ctx.Done():
+		if !r.waitSlot(ctx, log, m) {
 			return
 		}
+		defer func() { <-r.opts.Slots }()
 	}
 
 	var files []LocalFile
@@ -1142,4 +1147,34 @@ func (r *Runner) env() []string {
 		return append([]string{}, r.opts.EnvFunc()...)
 	}
 	return append([]string{}, r.opts.Env...)
+}
+
+// waitSlot takes one of the slots this machine's runners share. While the
+// other agents' runs hold them all, it checks in with the Hub every
+// SlotTouch: a runner that only waited would send nothing, and the Hub
+// would show the agent offline after its online window. A message closed
+// meanwhile (done, failed, stopped by its sender) is not run.
+func (r *Runner) waitSlot(ctx context.Context, log *slog.Logger, m api.Message) bool {
+	select {
+	case r.opts.Slots <- struct{}{}:
+		return true
+	default:
+	}
+	log.Info("waiting for a free slot", "max_concurrent", cap(r.opts.Slots))
+	t := time.NewTicker(r.opts.SlotTouch)
+	defer t.Stop()
+	for {
+		select {
+		case r.opts.Slots <- struct{}{}:
+			return true
+		case <-ctx.Done():
+			return false
+		case <-t.C:
+			cur, err := r.hub.GetMessage(ctx, m.ID)
+			if err == nil && (cur.Status == "done" || cur.Status == "failed") {
+				log.Info("closed while waiting for a slot; not running it", "status", cur.Status)
+				return false
+			}
+		}
+	}
 }

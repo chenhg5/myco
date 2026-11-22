@@ -48,6 +48,7 @@ import { setSystemPicker } from "@/app/AvatarPicker";
 import { handleLinkClick, setOpenLinksViaApp } from "@/app/links";
 import { CommandPalette } from "@/app/CommandPalette";
 import { PageHost, PageToggle, setPageHubs, setPageMe, setPageNames } from "@/app/pages";
+import { PageRenderer } from "@/app/PageRenderer";
 import { VoiceChip } from "@/app/VoiceBar";
 import { modKey } from "@/app/ConversationDetail";
 import { useSidebarWidth } from "@/app/sidebarWidth";
@@ -1379,6 +1380,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
 
 
       <PageHost />
+      <PageRenderer />
       <AgentSwitcher hubId={hubId} rows={chatRows} current={navChatNow ? navChatNow.split("\u0000")[1] : undefined}
         project={page === "space" && shownProject ? shownProject.members.map((m) => m.name) : undefined}
         onPick={(r) => { setNavChat(`${r.hub.id}\u0000${r.st.agent.name}`); chatWithMember(r); }} />

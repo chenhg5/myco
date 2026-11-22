@@ -139,12 +139,18 @@ func (b *Backend) startActionHosts() {
 func (b *Backend) reconcileActionHosts() {
 	a := &b.actionHosts
 	st := b.remoteComponent().Status()
+	// Keys: a hub's id (the computer's remote.desktop host) and "page:" and
+	// its id (its page renderer, while the window runs the renderer).
 	want := map[string]Hub{}
-	if st.Supported && st.Installed && remotedesktop.AgentActions(st.Version) {
-		if hubs, err := b.Store.List(); err == nil {
-			for _, h := range hubs {
-				want[h.ID] = h
-			}
+	hubs, _ := b.Store.List()
+	desktop := st.Supported && st.Installed && remotedesktop.AgentActions(st.Version)
+	pages := b.pageRender.active()
+	for _, h := range hubs {
+		if desktop {
+			want[h.ID] = h
+		}
+		if pages {
+			want["page:"+h.ID] = h
 		}
 	}
 	a.mu.Lock()
@@ -158,17 +164,22 @@ func (b *Backend) reconcileActionHosts() {
 			delete(a.running, id)
 		}
 	}
-	for id, h := range want {
-		if a.running[id] != nil || time.Now().Before(a.retry[id]) {
+	for key, h := range want {
+		if a.running[key] != nil || time.Now().Before(a.retry[key]) {
 			continue
 		}
 		ctx, cancel := context.WithCancel(context.Background())
-		a.running[id] = cancel
+		a.running[key] = cancel
 		go func() {
-			wait := b.hostActions(ctx, h)
+			var wait time.Duration
+			if strings.HasPrefix(key, "page:") {
+				wait = b.hostPages(ctx, h)
+			} else {
+				wait = b.hostActions(ctx, h)
+			}
 			a.mu.Lock()
-			delete(a.running, h.ID)
-			a.retry[h.ID] = time.Now().Add(wait)
+			delete(a.running, key)
+			a.retry[key] = time.Now().Add(wait)
 			a.mu.Unlock()
 		}()
 	}
@@ -229,7 +240,7 @@ func (b *Backend) hostActions(ctx context.Context, h Hub) time.Duration {
 	if err != nil {
 		var ce *client.Error
 		if errors.As(err, &ce) && (ce.Code == "unsupported" || ce.Status == 404 || ce.Code == "permission_denied") {
-			return 30 * time.Minute // an older hub, an end-to-end workspace, or not this person's computer
+			return 5 * time.Minute // an older hub, an end-to-end workspace, or not this person's computer
 		}
 		return time.Minute
 	}
@@ -345,47 +356,11 @@ func runDesktopJob(ctx context.Context, c *client.Client, host *api.ActionHost, 
 	if !actionPermitted(hj.Grant, host.MachineID, permission, time.Now()) {
 		return actionFailure("permission_denied", "the grant does not allow this on this computer now", false, nil)
 	}
-	// Ask the Hub once more right before anything happens here, then keep
-	// asking while it runs: stop when it says to, or when the grant expires.
-	check, cancel := context.WithTimeout(ctx, 10*time.Second)
-	st, err := c.ActionHostJob(check, j.ID, host.ID, host.Generation, 0)
-	cancel()
-	if err != nil {
-		return actionFailure("unavailable", "could not check the grant with the workspace", true, nil)
+	run, done, wasStopped, early := watchHostJob(ctx, c, host, j.ID)
+	if early != nil {
+		return *early
 	}
-	if st.Stop {
-		return api.ActionJobComplete{State: api.JobCancelled, Error: &api.ActionError{Code: "cancelled", Message: "stopped before it started", Applied: intPtr(0)}}
-	}
-	run, stop := context.WithCancel(ctx)
-	defer stop()
-	if exp := st.GrantExpiresAt; exp != nil {
-		t := time.AfterFunc(time.Until(*exp), stop)
-		defer t.Stop()
-	}
-	var stopped bool
-	var stopMu sync.Mutex
-	go func() {
-		for run.Err() == nil {
-			s, err := c.ActionHostJob(run, j.ID, host.ID, host.Generation, 30*time.Second)
-			if run.Err() != nil {
-				return
-			}
-			// Fail closed: a host replaced or gone, or a Hub that cannot say
-			// whether the grant still holds, stops the job.
-			if err != nil || s.Stop {
-				stopMu.Lock()
-				stopped = true
-				stopMu.Unlock()
-				stop()
-				return
-			}
-		}
-	}()
-	wasStopped := func() bool {
-		stopMu.Lock()
-		defer stopMu.Unlock()
-		return stopped || run.Err() != nil && ctx.Err() == nil
-	}
+	defer done()
 
 	// With control granted, the component starts able to control even for
 	// an observe: starting it again for the input that follows would lose
@@ -487,6 +462,59 @@ func runDesktopJob(ctx context.Context, c *client.Client, host *api.ActionHost, 
 		return actionFailure("outcome_unknown", "input failed ("+ce.Code+"): some of it may have happened; observe before going on", false, ce.Applied)
 	}
 	return actionFailure("unsupported", "unknown action", false, nil)
+}
+
+// watchHostJob asks the Hub once more right before anything happens here,
+// then keeps asking while the job runs: run ends when the Hub says to stop
+// (cancelled, revoked, expired), cannot confirm the job may go on, or the
+// grant runs out. early is the result when it should not start at all.
+func watchHostJob(ctx context.Context, c *client.Client, host *api.ActionHost, jobID string) (run context.Context, done func(), wasStopped func() bool, early *api.ActionJobComplete) {
+	check, cancel := context.WithTimeout(ctx, 10*time.Second)
+	st, err := c.ActionHostJob(check, jobID, host.ID, host.Generation, 0)
+	cancel()
+	if err != nil {
+		e := actionFailure("unavailable", "could not check the grant with the workspace", true, nil)
+		return nil, nil, nil, &e
+	}
+	if st.Stop {
+		return nil, nil, nil, &api.ActionJobComplete{State: api.JobCancelled, Error: &api.ActionError{Code: "cancelled", Message: "stopped before it started", Applied: intPtr(0)}}
+	}
+	run, stop := context.WithCancel(ctx)
+	var timer *time.Timer
+	if exp := st.GrantExpiresAt; exp != nil {
+		timer = time.AfterFunc(time.Until(*exp), stop)
+	}
+	var stopped bool
+	var stopMu sync.Mutex
+	go func() {
+		for run.Err() == nil {
+			s, err := c.ActionHostJob(run, jobID, host.ID, host.Generation, 30*time.Second)
+			if run.Err() != nil {
+				return
+			}
+			// Fail closed: a host replaced or gone, or a Hub that cannot say
+			// whether the grant still holds, stops the job.
+			if err != nil || s.Stop {
+				stopMu.Lock()
+				stopped = true
+				stopMu.Unlock()
+				stop()
+				return
+			}
+		}
+	}()
+	done = func() {
+		stop()
+		if timer != nil {
+			timer.Stop()
+		}
+	}
+	wasStopped = func() bool {
+		stopMu.Lock()
+		defer stopMu.Unlock()
+		return stopped || run.Err() != nil && ctx.Err() == nil
+	}
+	return run, done, wasStopped, nil
 }
 
 func intPtr(n int) *int { return &n }

@@ -454,6 +454,8 @@ myco runner start --all                       # 前台运行；新入网的 agen
 myco runner start --all --max-concurrent 2    # 同时最多跑 2 个 CLI
 ```
 
+默认同时最多 3 个（服务用 `myco runner service install --max-concurrent <n>` 改）。超出的 agent 收到任务会排队等空位，等的时候仍显示在线。一台电脑上有好几个 agent 都在做长任务时，把这个数调大，别的 agent 就不用一直等。
+
 **放到后台长期运行（推荐）**：一条命令装成系统服务，开机或登录后自动启动，崩溃了会自动重启。macOS 用 launchd，Linux 用 systemd 的用户服务：
 ```bash
 myco runner service install            # 安装并立即启动（先用 --dry-run 看会写什么）

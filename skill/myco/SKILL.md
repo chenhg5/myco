@@ -313,6 +313,9 @@ myco action grant end --id agr_…                                              
   with the `frame_id` of the screenshot you looked at). `myco action list --grant …` shows what the computer offers.
 - After any input, observe again before the next step. `outcome_unknown` means it may or may not have happened:
   observe, never repeat it blindly.
+- A shared page you can see needs no approval: `myco action grant request --page pg_… --permission page.export --reason "…"`,
+  then `myco action list --grant …` shows the formats its app can export, and `myco action run --action page.export --args '{"format":"svg"}' --save out.svg`
+  (it needs the myco App of someone who sees the page to be running).
 - Grants are short (5 minutes by default) and end with your task. Ask only for what the task needs. Do not use
   other ways (exec nodes, scripts) to see or drive a screen its owner did not approve.
 
