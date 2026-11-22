@@ -27,10 +27,7 @@ https://github.com/user-attachments/assets/2a9103f4-4f13-4130-aad8-3e02598460c3
 
 </div>
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/app/zh/nodes-dark.webp">
-  <img src="docs/assets/app/zh/nodes.webp" alt="myco App：一个项目就是你和它的协调者的对话，成员和电脑在旁边" width="100%">
-</picture>
+<img src="docs/assets/app/zh/nodes.webp" alt="myco App：一个项目就是你和它的协调者的对话，成员和电脑在旁边" width="100%">
 
 ## myco 解决什么问题
 
@@ -72,17 +69,11 @@ curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-h
 
 **2. 加入你的 agent。** 点 **添加 agent**：选这台电脑上找到的 Claude Code 或 Codex 会话，在任意已连上的电脑上新开一个，或者把 App 给的那句话发给另一台电脑上的 agent，它会自己加入。
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/app/zh/add-node-dark.webp">
-  <img src="docs/assets/app/zh/add-node.webp" alt="添加 agent：这台电脑上找到的 Claude Code 和 Codex 会话" width="100%">
-</picture>
+<img src="docs/assets/app/zh/add-node.webp" alt="添加 agent：这台电脑上找到的 Claude Code 和 Codex 会话" width="100%">
 
 **3. 让它们干活。** 和 agent 聊，或者让一个去找另一个：「问问构建服务器上的 Codex，CI 为什么挂了」「在我的 Mac 上把测试跑一遍」。每一步实时可见，运行中也能修正或停止。
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/app/zh/conversation-dark.webp">
-  <img src="docs/assets/app/zh/conversation.webp" alt="项目对话旁边打开一台电脑的终端，命令的输出正在出来" width="100%">
-</picture>
+<img src="docs/assets/app/zh/conversation.webp" alt="项目对话旁边打开一台电脑的终端，命令的输出正在出来" width="100%">
 
 ## 应用
 
@@ -90,19 +81,19 @@ curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-h
 
 <table>
 <tr>
-<td width="33%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/apps/motion-dark.webp"><img src="docs/assets/apps/motion.webp" alt="动效视频"></picture><br><b>动效视频</b><br>宣传片、短视频：说一句话，agent 写好每个场景；配音乐和配音，在本机导出 MP4。</td>
-<td width="33%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/apps/design-studio-dark.webp"><img src="docs/assets/apps/design-studio.webp" alt="设计工作台"></picture><br><b>设计工作台</b><br>网页、应用界面、海报、演示文稿，在可编辑的画布上和 agent 一起迭代。</td>
-<td width="33%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/apps/meeting-dark.webp"><img src="docs/assets/apps/meeting.webp" alt="会议记录"></picture><br><b>会议记录</b><br>录下 Zoom、腾讯会议、飞书里的会，在本机转成文字，让 agent 写纪要。</td>
+<td width="33%"><img src="docs/assets/apps/motion.webp" alt="动效视频"><br><b>动效视频</b><br>宣传片、短视频：说一句话，agent 写好每个场景；配音乐和配音，在本机导出 MP4。</td>
+<td width="33%"><img src="docs/assets/apps/design-studio.webp" alt="设计工作台"><br><b>设计工作台</b><br>网页、应用界面、海报、演示文稿，在可编辑的画布上和 agent 一起迭代。</td>
+<td width="33%"><img src="docs/assets/apps/meeting.webp" alt="会议记录"><br><b>会议记录</b><br>录下 Zoom、腾讯会议、飞书里的会，在本机转成文字，让 agent 写纪要。</td>
 </tr>
 <tr>
-<td width="33%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/apps/disk-dark.webp"><img src="docs/assets/apps/disk.webp" alt="空间清理"></picture><br><b>空间清理</b><br>一圈一圈看清磁盘被谁占了，不要的移进废纸篓。</td>
-<td width="33%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/apps/remote-desktop-dark.webp"><img src="docs/assets/apps/remote-desktop.webp" alt="远程桌面"></picture><br><b>远程桌面</b><br>从另一台电脑或 iPhone 查看、操作你的 Mac 和 Windows。</td>
-<td width="33%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/apps/recorder-dark.webp"><img src="docs/assets/apps/recorder.webp" alt="录屏工作台"></picture><br><b>录屏工作台</b><br>录屏后直接裁剪、分割、加文字和重点放大，在本机导出 MP4。</td>
+<td width="33%"><img src="docs/assets/apps/disk.webp" alt="空间清理"><br><b>空间清理</b><br>一圈一圈看清磁盘被谁占了，不要的移进废纸篓。</td>
+<td width="33%"><img src="docs/assets/apps/remote-desktop.webp" alt="远程桌面"><br><b>远程桌面</b><br>从另一台电脑或 iPhone 查看、操作你的 Mac 和 Windows。</td>
+<td width="33%"><img src="docs/assets/apps/recorder.webp" alt="录屏工作台"><br><b>录屏工作台</b><br>录屏后直接裁剪、分割、加文字和重点放大，在本机导出 MP4。</td>
 </tr>
 <tr>
-<td width="33%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/apps/stocks-dark.webp"><img src="docs/assets/apps/stocks.webp" alt="行情工作台"></picture><br><b>行情工作台</b><br>A 股、港股、美股共享自选，K 线、均线和观察笔记。</td>
-<td width="33%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/apps/photo-dark.webp"><img src="docs/assets/apps/photo.webp" alt="修图"></picture><br><b>修图</b><br>裁剪、调色、滤镜、文字、贴纸；说一句，agent 帮你调。</td>
-<td width="33%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/apps/issues-dark.webp"><img src="docs/assets/apps/issues.webp" alt="任务追踪"></picture><br><b>任务追踪</b><br>像 Linear 一样管问题；指给 agent，它改状态、写评论，你马上看到。</td>
+<td width="33%"><img src="docs/assets/apps/stocks.webp" alt="行情工作台"><br><b>行情工作台</b><br>A 股、港股、美股共享自选，K 线、均线和观察笔记。</td>
+<td width="33%"><img src="docs/assets/apps/photo.webp" alt="修图"><br><b>修图</b><br>裁剪、调色、滤镜、文字、贴纸；说一句，agent 帮你调。</td>
+<td width="33%"><img src="docs/assets/apps/issues.webp" alt="任务追踪"><br><b>任务追踪</b><br>像 Linear 一样管问题；指给 agent，它改状态、写评论，你马上看到。</td>
 </tr>
 </table>
 
