@@ -478,7 +478,10 @@ const ACCESS_SAYS: Record<RuntimeAccess, [string, string]> = {
  * Its access beside the model (as Codex shows its sandbox under the input):
  * what it may touch when it runs, switched here by its owner from its next
  * run, up to what its computer allows (this computer can allow more right
- * there). An agent in its own session or in the cloud shows nothing.
+ * there). An agent in its own session or in the cloud shows nothing. One
+ * whose computer sets no level (a session added from this computer) runs
+ * with its CLI's own default, shown as such, and can be switched too: for
+ * Codex that default is a sandbox without network, where myco itself fails.
  */
 export function AccessPill({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promise<void> }) {
   const ag = row.st.agent;
@@ -496,12 +499,15 @@ export function AccessPill({ row, onRefresh }: { row: AgentRow; onRefresh: () =>
   const editable = runner && owns && !!rt?.max_access && !old && hubAfter0194(row.hub.hub_version);
   const mcpAvailable = runner && owns && !!rt?.features?.includes("mcp_tools");
   const rs = useRunSettings(row);
-  if (!runner || !rt?.access) return null;
+  if (!runner || !rt) return null;
   const chosen = rs?.access || "";
   const cap = ACCESS[Math.max(ACCESS.indexOf(rt.max_access as RuntimeAccess), ACCESS.indexOf(rt.access as RuntimeAccess), 0)];
-  const shown = (chosen || rt.access) as RuntimeAccess;
+  const shown = (chosen || rt.access || "") as RuntimeAccess | "";
   const pending = !!chosen && chosen !== rt.access;
-  const label = shown === "full" ? L("完全权限", "Full access") : shown === "readonly" ? L("只读", "Read-only") : L("工作区权限", "Workspace access");
+  // (its CLI's own default: no level from myco)
+  const cliDefault = L("CLI 默认", "CLI default");
+  const label = shown === "full" ? L("完全权限", "Full access") : shown === "readonly" ? L("只读", "Read-only") : shown === "workspace" ? L("工作区权限", "Workspace access") : L("默认权限", "Default access");
+  const inUse = rt.access ? accessLabel(rt.access as RuntimeAccess) : cliDefault;
   const title = editable
     ? L(`权限：${label}（点一下切换，下次唤醒时生效）`, `Access: ${label} (click to switch; from its next run)`)
     : L(`权限：${label}`, `Access: ${label}`);
@@ -549,12 +555,12 @@ export function AccessPill({ row, onRefresh }: { row: AgentRow; onRefresh: () =>
                     <button key={`a:${level}`} type="button" role="menuitemradio" aria-checked={chosen === level} className={cn("run-pill-item run-pill-access", chosen === level && "is-on")}
                       disabled={busy || over} onClick={() => pick(level)}>
                       <span>{level ? accessLabel(level) : L("跟随电脑设置", "Follow this computer")}</span>
-                      <span className="run-pill-sub">{level ? L(ACCESS_SAYS[level][0], ACCESS_SAYS[level][1]) : accessLabel(rt.access as RuntimeAccess)}</span>
+                      <span className="run-pill-sub">{level ? L(ACCESS_SAYS[level][0], ACCESS_SAYS[level][1]) : rt.access ? accessLabel(rt.access as RuntimeAccess) : L("它的 CLI 自己的设置（Codex 默认不能联网，用不了 myco）", "Its CLI's own setting (Codex's default has no network, so myco fails)")}</span>
                     </button>
                   );
                 })}
                 <p className="run-pill-note">
-                  {L("现在是：", "In use: ")}{accessLabel(rt.access as RuntimeAccess)}{L("。切换后下次唤醒时生效。", ". A switch applies from its next run.")}
+                  {L("现在是：", "In use: ")}{inUse}{L("。切换后下次唤醒时生效。", ". A switch applies from its next run.")}
                 </p>
                 {mcpAvailable && <button type="button" role="menuitemcheckbox" aria-checked={shown === "full" || !!rs?.mcp_tools}
                   className={cn("run-pill-item", (shown === "full" || rs?.mcp_tools) && "is-on")}
@@ -575,7 +581,7 @@ export function AccessPill({ row, onRefresh }: { row: AgentRow; onRefresh: () =>
             ) : (
               <p className="run-pill-note">
                 <b>{label}</b><br />
-                {L(ACCESS_SAYS[shown]?.[0] || "", ACCESS_SAYS[shown]?.[1] || "")}
+                {shown ? L(ACCESS_SAYS[shown][0], ACCESS_SAYS[shown][1]) : L("用它的 CLI 自己的设置", "Its CLI's own setting")}
                 {!owns ? L("。只有它的主人能改。", ". Only its owner can change it.")
                   : !rt.max_access ? L("。升级那台电脑上的 myco 后才能在这里改。", ". Upgrade myco on that computer to change it here.") : "。"}
               </p>
