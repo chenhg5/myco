@@ -16,8 +16,8 @@ const { chromium } = require('playwright');
   };
   const shot = async (name, fn, { measure, wait = 700, phone = false } = {}) => {
     const ctx = await b.newContext(phone
-      ? { viewport: { width: 390, height: 844 }, deviceScaleFactor: scale === 1 ? 1 : 3, colorScheme: 'dark', locale: zh ? 'zh-CN' : 'en-US', isMobile: true, hasTouch: true }
-      : { viewport: { width: 1280, height: 800 }, deviceScaleFactor: scale, colorScheme: 'dark', locale: zh ? 'zh-CN' : 'en-US' });
+      ? { viewport: { width: 390, height: 844 }, deviceScaleFactor: scale === 1 ? 1 : 3, colorScheme: (process.env.SCHEME || 'dark'), locale: zh ? 'zh-CN' : 'en-US', isMobile: true, hasTouch: true }
+      : { viewport: { width: 1280, height: 800 }, deviceScaleFactor: scale, colorScheme: (process.env.SCHEME || 'dark'), locale: zh ? 'zh-CN' : 'en-US' });
     const p = await ctx.newPage(); p.setDefaultTimeout(8000);
     p.on('pageerror', (e) => notes.push(name + ' pageerror ' + e.message));
     await p.goto(`http://127.0.0.1:5174/?lang=${lang}`, { waitUntil: 'networkidle' }); await p.waitForTimeout(1200);
