@@ -6,6 +6,8 @@ import { Gamepad2, Pause, Play, RotateCcw, Upload, Volume2, VolumeX } from "luci
 import { t as uiText } from "../_lib/i18n";
 import { Chip8, height, maxROM, width } from "./chip8";
 import { demoROM } from "./demo";
+import { osState } from "../_lib/os";
+import { MamePanel } from "./mame-panel";
 import "../_lib/sheet.css";
 import "./arcade.css";
 
@@ -21,7 +23,7 @@ function paint(ctx: CanvasRenderingContext2D, core: Chip8) {
   core.dirty = false;
 }
 
-function App() {
+function ChipView() {
   const [cart, setCart] = useState(() => ({ rom: demoROM(), name: "" }));
   const [classic, setClassic] = useState(false);
   const [speed, setSpeed] = useState(720);
@@ -160,19 +162,16 @@ function App() {
   }
 
   const name = cart.name || uiText("轨道信使");
-  return <div className="arc-app">
-    <header className="arc-header">
-      <div><Gamepad2 size={21}/><h1>{uiText("街机模拟器")}</h1></div>
-      <button type="button" className="btn btn-primary" onClick={() => chooser.current?.click()}><Upload size={15}/>{uiText("打开 ROM")}</button>
+  return <>
       <input ref={chooser} hidden type="file" accept=".ch8,.c8,.rom,.bin" onChange={event => {
         void readFile(event.target.files?.[0]); event.target.value = "";
       }}/>
-    </header>
     <main className="arc-layout">
       <section className="arc-cabinet">
         <div className="arc-title"><h2>{name}</h2><span role="status">{running ? uiText("运行中") : uiText("已暂停")}</span></div>
         <div className="arc-screen"><canvas ref={canvas} width={width} height={height} role="img" aria-label={uiText("游戏画面")}/></div>
         <div className="arc-tools">
+          <button type="button" className="btn btn-primary" onClick={() => chooser.current?.click()}><Upload size={15}/>{uiText("打开 ROM")}</button>
           <button type="button" className="btn" onClick={() => setRunning(!running)}>
             {running ? <Pause size={16}/> : <Play size={16}/>} {running ? uiText("暂停") : uiText("开始")}
           </button>
@@ -215,6 +214,21 @@ function App() {
         </div>
       </aside>
     </main>
+  </>;
+}
+
+function App() {
+  const [mode, setMode] = useState<"mame" | "chip">(osState === "ready" ? "mame" : "chip");
+  return <div className="arc-app">
+    <header className="arc-header">
+      <div><Gamepad2 size={21}/><h1>{uiText("街机模拟器")}</h1></div>
+      <div className="arc-modes">
+        <button type="button" className="btn" aria-pressed={mode === "mame"} onClick={() => setMode("mame")}>MAME</button>
+        <button type="button" className="btn" aria-pressed={mode === "chip"} onClick={() => setMode("chip")}>CHIP‑8</button>
+      </div>
+    </header>
+    <div hidden={mode !== "mame"}><MamePanel/></div>
+    {mode === "chip" && <ChipView/>}
   </div>;
 }
 

@@ -29,3 +29,19 @@
 @media (max-width: 410px) {
   .arc-side { grid-template-columns: minmax(0, 1fr); }
 }
+.arc-modes .btn[aria-pressed="true"] { color: var(--on-accent); background: var(--accent); }
+.arc-mame { max-width: 820px; margin: auto; padding: clamp(12px, 4vw, 36px); }
+.arc-mame-panel { padding: clamp(14px, 4vw, 32px); border-radius: 13px; background: var(--bg2); }
+.arc-mame-panel > svg { margin-bottom: 9px; }
+.arc-mame-panel > h2 { font-size: 22px; }
+.arc-mame-panel > p { margin: 8px 0 0; }
+.arc-mame-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 20px 0; }
+.arc-mame-form > div { min-width: 0; overflow-wrap: anywhere; padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); }
+.arc-mame-form > div > p { margin: 4px 0 0; font-size: 12px; }
+.arc-mame-links { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; }
+.arc-mame-links a { color: var(--fg); }
+.arc-mame-panel pre { max-height: 170px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 8px; background: var(--bg); border-radius: 7px; font-size: 12px; }
+.arc-app button:disabled { opacity: .48; }
+@media (max-width: 580px) {
+  .arc-mame-form { grid-template-columns: minmax(0, 1fr); }
+}

@@ -48,6 +48,60 @@ try {
     assert.deepEqual(errors, []);
     await page.close();
   }
+  const page = await browser.newPage({ viewport: { width: 1040, height: 650 }, colorScheme: "dark" });
+  await page.addInitScript(() => {
+    let failure = true;
+    window.mameCalls = [];
+    window.myco = { features: ["os"], os: {
+      list: async () => ({ caps: ["fs.pick", "exec.run", "exec.spawn"].map(name => ({ name, available: true })) }),
+      fs: { pick: async () => ({ paths: ["/Local ROMs/gridlee.zip"] }) },
+      exec: {
+        run: async ({ argv }) => {
+          window.mameCalls.push(argv);
+          if (argv[1] === "-help") return { code: 0, stdout: "MAME v0.285 (mame0285)", stderr: "" };
+          if (failure) {
+            failure = false;
+            return { code: 2, stdout: "", stderr: "gridlee ROM not found" };
+          }
+          return { code: 0, stdout: "romset gridlee is good", stderr: "" };
+        },
+        spawn: ({ argv }) => {
+          window.mameCalls.push(argv);
+          let finish;
+          const done = new Promise(resolve => { finish = resolve; });
+          return { done, on() {}, write: async () => {}, end: async () => {},
+            cancel: async () => { finish({ code: 0 }); return true; } };
+        },
+      },
+    } };
+  });
+  await page.goto(`http://127.0.0.1:${server.address().port}/`);
+  await page.getByRole("button", { name: "查找 MAME" }).click();
+  await page.getByText("MAME 0.285").waitFor();
+  await page.getByRole("button", { name: "选择 MAME ROM ZIP" }).click();
+  await page.getByText("gridlee.zip", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "启动游戏" }).click();
+  await page.getByText("gridlee ROM not found").waitFor();
+  assert.equal(await page.evaluate(() => window.mameCalls.length), 2);
+  if (process.env.MAME_SCREENSHOT) {
+    await page.reload();
+    await page.getByRole("button", { name: "查找 MAME" }).click();
+    await page.getByRole("button", { name: "选择 MAME ROM ZIP" }).click();
+    await page.getByText("gridlee.zip", { exact: true }).waitFor();
+    await page.screenshot({ path: process.env.MAME_SCREENSHOT });
+    await page.getByRole("button", { name: "启动游戏" }).click();
+    await page.getByText("gridlee ROM not found").waitFor();
+  }
+  await page.getByRole("button", { name: "启动游戏" }).click();
+  await page.getByText("MAME 已启动。切换到游戏窗口开始玩。").waitFor();
+  assert.deepEqual(await page.evaluate(() => window.mameCalls.slice(-2)), [
+    ["mame", "gridlee", "-rompath", "/Local ROMs", "-verifyroms"],
+    ["mame", "gridlee", "-rompath", "/Local ROMs", "-window", "-skip_gameinfo"],
+  ]);
+  await page.getByRole("button", { name: "停止游戏" }).click();
+  await page.getByText("游戏窗口已关闭。").waitFor();
+  await page.close();
+  console.log("PASS MAME desktop selection, failed verification, native launch and stop");
   console.log("PASS Arcade Emulator keyboard, mobile touch, ROM import and validation in both languages and themes");
 } finally {
   await browser?.close();

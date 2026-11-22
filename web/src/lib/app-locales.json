@@ -232,11 +232,11 @@
   "myco/arcade": {
     "en": {
       "name": "Arcade Emulator",
-      "description": "Run CHIP-8 ROMs locally with keyboard and touch controls, pause and speed settings, and the original Orbit Courier demo."
+      "description": "Verify and launch arcade ROM ZIPs with your local MAME in the desktop App, or play CHIP-8 and the original Orbit Courier demo."
     },
     "zh": {
       "name": "街机模拟器",
-      "description": "在本机运行 CHIP-8 ROM，支持键盘、触屏、暂停与调速，附原创试玩《轨道信使》。"
+      "description": "在桌面 App 中校验并启动本机 MAME 街机 ROM ZIP，也可运行 CHIP-8 和原创试玩《轨道信使》。"
     }
   },
   "myco/gomoku": {

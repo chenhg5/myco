@@ -93,7 +93,7 @@
   ],
   "arcade": [
     "Arcade Emulator",
-    "Run CHIP-8 ROMs locally with keyboard and touch controls, pause and speed settings, and the original Orbit Courier demo."
+    "Verify and launch arcade ROM ZIPs with your local MAME in the desktop App, or play CHIP-8 and the original Orbit Courier demo."
   ],
   "gomoku": [
     "Gomoku",

@@ -9,6 +9,17 @@ async function load(name) {
 }
 const { Chip8 } = await load("chip8");
 const { demoROM } = await load("demo");
+const { mameArgs, mameVersion } = await load("mame");
+assert.deepEqual(mameArgs("C:\\My ROMs\\snowbros.zip"), {
+  filename: "snowbros.zip",
+  verify: ["snowbros", "-rompath", "C:\\My ROMs", "-verifyroms"],
+  play: ["snowbros", "-rompath", "C:\\My ROMs", "-window", "-skip_gameinfo"],
+});
+assert.equal(mameArgs("/snowbros.zip").play[2], "/");
+assert.equal(mameArgs("/test;other/snowbros.zip"), undefined);
+assert.equal(mameArgs("/roms/-verbose.zip"), undefined);
+assert.equal(mameArgs("/roms/snow bros.zip"), undefined);
+assert.equal(mameVersion("MAME v0.285 (mame0285)"), "0.285");
 const rom = (...ops) => Uint8Array.from(ops.flatMap(op => [op >> 8, op & 255]));
 const arithmetic = new Chip8(rom(0x60ff, 0x6101, 0x8014, 0x622a, 0xa350, 0xf233));
 for (let i = 0; i < 6; i++) arithmetic.step();
