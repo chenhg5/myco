@@ -425,6 +425,39 @@ try {
       await page.locator("video").evaluate((v) => v.playbackRate),
       1.5,
     );
+    // A successful click must actually enter element fullscreen, not merely
+    // resolve a mocked request. The exit control stays inside the fullscreen target.
+    await page.getByRole("button", {name: L("全屏", "Fullscreen"), exact:true}).click();
+    await page.waitForFunction(() => document.fullscreenElement?.classList.contains("ci-screen"));
+    await page.screenshot({path:path.join(out, `${lang}-${theme}-${width}-fullscreen.png`)});
+    await page.getByRole("button", {name:L("退出全屏", "Exit fullscreen"), exact:true}).click();
+    await page.waitForFunction(() => !document.fullscreenElement);
+    await page.getByRole("button", {name:L("全屏", "Fullscreen"), exact:true}).click();
+    await page.waitForFunction(() => !!document.fullscreenElement);
+    await page.evaluate(() => document.exitFullscreen());
+    await page.waitForFunction(() => !document.fullscreenElement);
+    // Permission failures must remain visible without replacing playable video.
+    await page.locator(".ci-screen").evaluate(el => {
+      el.requestFullscreen = () => Promise.reject(new Error("Permission denied"));
+    });
+    await page.getByRole("button", {name:L("全屏", "Fullscreen"), exact:true}).click();
+    await page.getByRole("alert").getByText(L("这里不能全屏", "Fullscreen is unavailable here"),{exact:true}).waitFor();
+    assert.equal(await page.locator("video").count(),1);
+    await page.locator("video").evaluate(video => {
+      window.__nativeFullscreen = 0;
+      video.webkitEnterFullscreen = () => window.__nativeFullscreen++;
+    });
+    await page.getByRole("button", {name:L("全屏", "Fullscreen"), exact:true}).click();
+    await page.waitForFunction(() => window.__nativeFullscreen === 1);
+    assert.equal(await page.getByRole("alert").count(),0);
+    await page.locator(".ci-screen").evaluate(el => {
+      el.requestFullscreen = undefined;
+      el.webkitRequestFullscreen = Element.prototype.requestFullscreen.bind(el);
+    });
+    await page.getByRole("button", {name:L("全屏", "Fullscreen"), exact:true}).click();
+    await page.waitForFunction(() => !!document.fullscreenElement);
+    await page.getByRole("button", {name:L("退出全屏", "Exit fullscreen"), exact:true}).click();
+    await page.waitForFunction(() => !document.fullscreenElement);
     await page.screenshot({
       path: path.join(out, `${lang}-${theme}-${width}-player.png`),
     });
@@ -556,7 +589,7 @@ try {
     assert.deepEqual(errors, []);
     await page.close();
     console.log(
-      `PASS ${lang}/${theme}/${width}: empty defaults, setup, catalog, search, real HLS, watchlist, local resume, line/episode selection, sandbox and layout`,
+      `PASS ${lang}/${theme}/${width}: empty defaults, setup, catalog, search, real HLS, watchlist, local resume, line/episode selection, sandbox, fullscreen entry/exit/failure/fallback and layout`,
     );
   }
   const legacy = await browser.newPage({viewport:{width:393,height:852}});
