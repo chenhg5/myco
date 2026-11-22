@@ -186,3 +186,30 @@ func TestSnapshotArgsAndBMP(t *testing.T) {
 		t.Fatal("a short file decoded")
 	}
 }
+
+// A batch that waited for another to finish, and whose request ended
+// meanwhile, applies nothing.
+func TestAgentInputQueuedAndCancelledAppliesNothing(t *testing.T) {
+	n := 0
+	e, call := agentEngine(t, true, func(inputEvent) error { n++; return nil })
+	_, obs := call("/agent/observe", `{}`)
+	srv := httptest.NewServer(e.handler())
+	defer srv.Close()
+	e.inputMu.Lock() // another batch is running
+	ctx, cancel := context.WithCancel(context.Background())
+	req, _ := http.NewRequestWithContext(ctx, "POST", srv.URL+"/agent/input", strings.NewReader(`{"frame_id":"`+obs["frame_id"].(string)+`","events":[{"kind":"move","x":0.5,"y":0.5}]}`))
+	req.Header.Set("Authorization", "Bearer "+e.cfg.Secret)
+	done := make(chan struct{})
+	go func() { _, _ = http.DefaultClient.Do(req); close(done) }()
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+	<-done
+	time.Sleep(50 * time.Millisecond) // the handler is still queued
+	e.inputMu.Unlock()
+	time.Sleep(100 * time.Millisecond)
+	e.inputMu.Lock()
+	defer e.inputMu.Unlock()
+	if n != 0 {
+		t.Fatalf("a cancelled queued batch applied %d events", n)
+	}
+}

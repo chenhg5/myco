@@ -75,6 +75,35 @@ export function desktopClick(frame: Pick<DesktopObservation, "width" | "height">
   return [ { kind: "button", ...p, button, clicks: 1, down: true }, { kind: "button", ...p, button, clicks: 1, down: false } ];
 }
 
+/** Keep a shortcut in one batch: the component releases all held input after
+ * every request. Use physical codes such as ["MetaLeft", "KeyS"]. */
+export function desktopShortcut(codes: readonly string[]): DesktopInput[] {
+  if (!Array.isArray(codes) || codes.length < 1 || codes.length > 16 || new Set(codes).size !== codes.length) invalid("A shortcut needs 1–16 distinct physical key codes.");
+  const events: DesktopInput[] = [
+    ...codes.map(code => ({ kind: "key" as const, code, down: true })),
+    ...[...codes].reverse().map(code => ({ kind: "key" as const, code, down: false })),
+  ];
+  validateDesktopInput(events);
+  return events;
+}
+
+/** Unicode text without clipboard access. Line breaks and tabs become native
+ * key presses in the same batch. Oversized input fails before any dispatch. */
+export function desktopText(text: string): DesktopInput[] {
+  if (typeof text !== "string" || !text || [...text].length > 256 || new TextEncoder().encode(text).length > 1024) invalid("Text must contain 1–256 characters and at most 1024 bytes.");
+  const events: DesktopInput[] = [];
+  let chunk = "";
+  for (const char of text.replace(/\r\n?/g, "\n")) {
+    if (char === "\n" || char === "\t") {
+      if (chunk) { events.push({ kind: "text", text: chunk }); chunk = ""; }
+      events.push(...desktopShortcut([char === "\n" ? "Enter" : "Tab"]));
+    } else chunk += char;
+  }
+  if (chunk) events.push({ kind: "text", text: chunk });
+  validateDesktopInput(events);
+  return events;
+}
+
 /** All calls still require a live server-authorized ActionSession. This SDK
  * neither starts sharing nor installs/approves the optional native component. */
 export class RemoteDesktopActions {
@@ -82,6 +111,7 @@ export class RemoteDesktopActions {
     if (session.grant.target.kind !== "machine") invalid("Remote desktop requires a machine target.");
   }
   observe(key: string, args: DesktopObserveOptions = {}, options?: ActionOptions): Promise<ActionTask<DesktopObservation>> {
+    if (args.display_id !== undefined && args.display_id !== "" && args.display_id !== "main") invalid("Only the main display is supported by this action version.");
     if ((args.format !== undefined && !["jpeg", "png"].includes(args.format)) ||
       (args.max_width !== undefined && (!Number.isInteger(args.max_width) || args.max_width < 320 || args.max_width > 2560))) invalid("Unsupported image format or maximum width.");
     return this.session.invoke<DesktopObservation>("remote.desktop.observe", 1, args, key, options);

@@ -207,14 +207,15 @@ export class ActionTask<T> {
   async wait(options: ActionOptions & { interval_ms?: number; onUpdate?: (job: ActionJob<T>) => void } = {}): Promise<T> {
     const interval = options.interval_ms ?? 250;
     if (!Number.isFinite(interval) || interval < 10 || interval > 30_000) fail("invalid_argument", "Polling interval must be between 10 and 30000 ms.");
-    let lastState = "";
+    let lastStatus = "";
     for (;;) {
       checkAbort(options);
       const job = this.job;
-      if (job.state !== lastState) { options.onUpdate?.(job); lastState = job.state; }
+      const status = `${job.state}:${!!job.cancel_requested}`;
+      if (status !== lastStatus) { options.onUpdate?.(job); lastStatus = status; }
       if (job.state === "succeeded") return job.result as T;
       if (job.state === "failed") throw new ActionError(job.error || { code: "failed", message: "The action failed.", retryable: false });
-      if (job.state === "cancelled") fail("cancelled", "The action was cancelled; prior input may already have been applied.");
+      if (job.state === "cancelled") throw new ActionError(job.error || { code: "cancelled", message: "The action was cancelled; prior input may already have been applied.", retryable: false });
       await delay(interval, options.signal);
       await this.refresh(options);
     }

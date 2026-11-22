@@ -25,6 +25,7 @@ type systemNotices struct {
 	allowed bool
 	asked   bool
 	shown   int
+	badgeMu sync.Mutex // one Dock update at a time
 }
 
 // setUpNotices adds the services to app and, once it has started, follows
@@ -104,6 +105,16 @@ func (p *systemNotices) Badge(n int) {
 	p.shown = n
 	p.mu.Unlock()
 	if !same && p.badge != nil {
-		application.InvokeAsync(func() { p.badge(n) })
+		// Not on the main thread: the Dock service dispatch_syncs onto
+		// it itself, and doing that from the main thread traps (the App
+		// crashed at launch). The newest number wins.
+		go func() {
+			p.badgeMu.Lock()
+			defer p.badgeMu.Unlock()
+			p.mu.Lock()
+			n := p.shown
+			p.mu.Unlock()
+			p.badge(n)
+		}()
 	}
 }

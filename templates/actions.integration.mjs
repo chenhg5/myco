@@ -68,7 +68,7 @@ const uploadPath = `/v1/console/action-jobs/${task.job.id}/artifacts?host_id=${h
 const upload = await owner(uploadPath, { method: 'POST', headers: { 'Content-Type': 'image/png' }, body: png });
 assert.equal(upload.ok, true);
 const artifact = await upload.json();
-const frame = { frame_id: 'sdk-frame-1', display_id: 'test-display', captured_at: new Date().toISOString(), width: 1, height: 1, artifact };
+const frame = { frame_id: 'sdk-frame-1', display_id: 'main', captured_at: new Date().toISOString(), width: 1, height: 1, artifact };
 await hostCall(`/v1/console/action-jobs/${task.job.id}/complete`, { host_id: host.id, generation: 'sdk-fixture-1', state: 'succeeded', result: frame, artifact_ids: [artifact.id] });
 const result = await task.wait({ interval_ms: 10 });
 assert.deepEqual(result, frame);
@@ -126,8 +126,75 @@ for (const applied of [0, 1]) {
   });
   await assert.rejects(() => failed.wait({ interval_ms: 10 }), e => e.code === 'outcome_unknown' && e.applied === applied && !e.retryable);
 }
+
+// Cancellation is a request until the host acknowledges it. Its long poll
+// wakes promptly, and the SDK must retain the host's partial-input diagnostic.
+const running = await controlled.input(after, events, 'cancel-running');
+const runningWork = await (await owner(`/v1/console/action-hosts/${host.id}/jobs?wait_seconds=1`)).json();
+assert.equal(runningWork.jobs[0].job.id, running.job.id);
+assert.equal((await running.refresh({ wait_seconds: 0 })).state, 'running');
+const stateURL = (job, generation = 'sdk-fixture-1', wait = 0) => `/v1/console/action-jobs/${job.id}?host_id=${host.id}&generation=${generation}&wait_seconds=${wait}`;
+assert.equal((await (await owner(stateURL(running.job))).json()).stop, false);
+assert.equal((await owner(stateURL(running.job, 'old-generation'))).status, 409);
+const stopStarted = Date.now();
+const stopWaiting = owner(stateURL(running.job, 'sdk-fixture-1', 5));
+const requestedCancel = await running.cancel();
+assert.equal(requestedCancel.state, 'running');
+assert.equal(requestedCancel.cancel_requested, true);
+const stopState = await (await stopWaiting).json();
+assert.equal(stopState.stop, true);
+assert.equal(stopState.job.cancel_requested, true);
+assert.ok(Date.now() - stopStarted < 3000, 'host stop query must wake without its 5-second timeout');
+await hostCall(`/v1/console/action-jobs/${running.job.id}/complete`, {
+  host_id: host.id, generation: 'sdk-fixture-1', state: 'cancelled',
+  error: { code: 'outcome_unknown', message: 'Cancelled after one simulated event', retryable: false, applied: 1 },
+});
+await assert.rejects(() => running.wait({ interval_ms: 10 }), { code: 'outcome_unknown', applied: 1 });
+
+// A provider refusal is propagated unchanged; it must not trigger an automatic
+// input retry with new coordinates or a new key. Frame validation itself is
+// exercised in the native component's tests, not by this simulated provider.
+const stale = await controlled.input(after, events, 'stale-frame');
+await (await owner(`/v1/console/action-hosts/${host.id}/jobs?wait_seconds=1`)).json();
+await hostCall(`/v1/console/action-jobs/${stale.job.id}/complete`, {
+  host_id: host.id, generation: 'sdk-fixture-1', state: 'failed',
+  error: { code: 'stale_frame', message: 'Observe again', retryable: false, applied: 0 },
+});
+await assert.rejects(() => stale.wait({ interval_ms: 10 }), { code: 'stale_frame', applied: 0, retryable: false });
+assert.equal((await (await owner(`/v1/console/action-hosts/${host.id}/jobs`)).json()).jobs.length, 0);
 assert.equal((await controlled.end()).state, 'ended');
 await assert.rejects(() => agent.readArtifact(controlRequest.id, after.artifact.id), { code: 'not_found', status: 410 });
+
+const revokedRequest = await client.request({ target: requested.target, permissions, reason: 'Revoke running operation' });
+await hostCall(`/v1/console/approvals/${revokedRequest.approval_id}/approve`, {});
+const revokedSession = await client.session(revokedRequest.id);
+const revokedInput = await revokedSession.invoke('remote.desktop.input', 1, { frame_id: 'simulated', events }, 'revoke-running');
+await (await owner(`/v1/console/action-hosts/${host.id}/jobs?wait_seconds=1`)).json();
+const revokedWaiting = owner(stateURL(revokedInput.job, 'sdk-fixture-1', 5));
+await hostCall(`/v1/console/action-grants/${revokedRequest.id}/revoke`, {});
+const revokedState = await (await revokedWaiting).json();
+assert.equal(revokedState.stop, true);
+assert.equal(revokedState.grant_state, 'revoked');
+const discarded = await hostCall(`/v1/console/action-jobs/${revokedInput.job.id}/complete`, {
+  host_id: host.id, generation: 'sdk-fixture-1', state: 'succeeded', result: { do_not_keep: 'late data' },
+});
+assert.equal(discarded.state, 'cancelled');
+assert.equal(discarded.result, undefined);
+await assert.rejects(() => revokedInput.wait({ interval_ms: 10 }), { code: 'grant_ended' });
+
+// Replacing a worker invalidates its in-flight jobs and generation. The SDK
+// surfaces uncertainty and cannot silently submit input to the new worker.
+const restartRequest = await client.request({ target: requested.target, permissions, reason: 'Provider replacement' });
+await hostCall(`/v1/console/approvals/${restartRequest.approval_id}/approve`, {});
+const restartSession = await client.session(restartRequest.id);
+const restarting = await restartSession.invoke('remote.desktop.input', 1, { frame_id: 'simulated', events }, 'restart-running');
+await (await owner(`/v1/console/action-hosts/${host.id}/jobs?wait_seconds=1`)).json();
+await hostCall('/v1/console/action-hosts', {
+  machine_id: requested.target.id, provider: 'remote.desktop', generation: 'sdk-fixture-2', actions: descriptors,
+});
+await assert.rejects(() => restarting.wait({ interval_ms: 10 }), { code: 'host_restarted', retryable: false });
+assert.equal((await owner(stateURL(restarting.job))).status, 404);
+await restartSession.end();
 const ended = await client.request({ target: requested.target, permissions: ['remote.desktop.view'], reason: 'End pending request' });
 assert.equal((await (await client.session(ended.id)).end()).state, 'ended');
-console.log('PASS actual SDK → real Hub HTTP: name resolution, narrowed approval, private artifacts, 410, idempotency, permissions, cancellation, revoke and simulated observe/input/observe/end');
+console.log('PASS actual SDK → real Hub HTTP: approval, artifacts, idempotency, observe/input, running cancellation/revoke, partial ACK, stale error propagation and worker generations');

@@ -331,11 +331,9 @@ func runDesktopJob(ctx context.Context, c *client.Client, host *api.ActionHost, 
 			if run.Err() != nil {
 				return
 			}
-			if err != nil {
-				time.Sleep(time.Second)
-				continue
-			}
-			if s.Stop {
+			// Fail closed: a host replaced or gone, or a Hub that cannot say
+			// whether the grant still holds, stops the job.
+			if err != nil || s.Stop {
 				stopMu.Lock()
 				stopped = true
 				stopMu.Unlock()
