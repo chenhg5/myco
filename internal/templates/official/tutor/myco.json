@@ -1,0 +1,16 @@
+{
+  "id": "myco/tutor",
+  "name": "学习工作台",
+  "version": "1.0.0",
+  "kind": "custom",
+  "category": "office",
+  "icon": "icon.svg",
+  "description": "和 agent 一起制定学习主题，写知识卡、做练习题，按掌握情况复习。",
+  "data": {
+    "subjects": { "fields": { "title": "text", "goal": "text", "order": "number" } },
+    "lessons": { "fields": { "subject": "text", "title": "text", "explanation": "markdown", "summary": "text", "order": "number" } },
+    "questions": { "fields": { "subject": "text", "lesson": "text", "prompt": "text", "options": "json", "answer": "number", "explanation": "text", "order": "number" } },
+    "attempts": { "fields": { "question": "text", "choice": "number", "correct": "bool", "date": "datetime", "who": "person" } }
+  },
+  "requires": { "hub": "0.20.7" }
+}

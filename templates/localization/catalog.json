@@ -19,6 +19,10 @@
     "Meeting notes",
     "Record your microphone and meeting audio separately, transcribe locally and identify speakers. Edit, search, replay and export transcripts; ask an agent for summaries, decisions and action items."
   ],
+  "tutor": [
+    "Learning workspace",
+    "Plan a subject with an agent, build lesson cards, practice questions and review what you have not mastered yet."
+  ],
   "code": [
     "Code editor",
     "A VS Code-style editor with a file tree, tabs, syntax highlighting, find and replace, multiple cursors and a minimap. Preview HTML or Markdown and download the project as a ZIP."

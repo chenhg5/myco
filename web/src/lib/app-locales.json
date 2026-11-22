@@ -49,6 +49,16 @@
       "description": "录下在 Zoom、腾讯会议、飞书里开的会：你的麦克风和别人的声音分开录，会后在这台电脑上转成文字（不上传），自动分出不同的人；点一句从那里播放，改字、改名字、搜索、导出；让 agent 写纪要（总结、决定、待办、章节）。录音只存在这台电脑上，要在 myco App 里录音。"
     }
   },
+  "myco/tutor": {
+    "en": {
+      "name": "Learning workspace",
+      "description": "Plan a subject with an agent, build lesson cards, practice questions and review what you have not mastered yet."
+    },
+    "zh": {
+      "name": "学习工作台",
+      "description": "和 agent 一起制定学习主题，写知识卡、做练习题，按掌握情况复习。"
+    }
+  },
   "myco/code": {
     "en": {
       "name": "Code editor",
