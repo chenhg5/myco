@@ -1,7 +1,7 @@
 {
   "id": "myco/scheduling",
   "name": "日程预约",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "kind": "custom",
   "category": "office",
   "icon": "icon.svg",

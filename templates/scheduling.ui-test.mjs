@@ -59,6 +59,11 @@ try {
     const L = (zh, en) => lang === "zh" ? zh : en;
     await p.goto(base + "?myco_lang=" + lang); await p.locator(".sc-type").first().waitFor();
     assert.equal(await p.locator(".sc-type").count(), 3);
+    for (const actions of await p.locator(".sc-type-actions").all()) {
+      const boxes = await actions.locator("button").evaluateAll(buttons => buttons.map(b => { const r = b.getBoundingClientRect(); return { y:r.y, height:r.height }; }));
+      assert.equal(boxes.length, 3);
+      assert(boxes.every(b => Math.abs(b.y - boxes[0].y) < 1 && b.height === 30), "Edit, Book and Pause share one row and control height");
+    }
     await p.screenshot({ path: `${out}/${lang}-${theme}-${width}-types.png` });
     await p.getByRole("textbox", { name: L("搜索预约类型", "Search event types") }).fill("no such event");
     assert.equal(await p.locator(".sc-type").count(), 0);
