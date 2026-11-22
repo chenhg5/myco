@@ -28,12 +28,16 @@ type Session struct {
 	Error   string       `json:"error,omitempty"`
 }
 type ComponentStatus struct {
-	Protocol      int    `json:"protocol"`
-	Version       string `json:"version"`
-	Installed     bool   `json:"installed"`
-	Supported     bool   `json:"supported"`
-	Running       bool   `json:"running"`
-	PairingCode   string `json:"pairing_code,omitempty"`
-	DownloadBytes int64  `json:"download_bytes,omitempty"`
-	Reason        string `json:"reason,omitempty"`
+	Protocol  int    `json:"protocol"`
+	Version   string `json:"version"`
+	Installed bool   `json:"installed"`
+	Supported bool   `json:"supported"`
+	Running   bool   `json:"running"`
+	// An older compatible release is installed; "install" fetches this
+	// App's release (needed for agent actions) and keeps the old one until
+	// "remove".
+	UpdateAvailable bool   `json:"update_available,omitempty"`
+	PairingCode     string `json:"pairing_code,omitempty"`
+	DownloadBytes   int64  `json:"download_bytes,omitempty"`
+	Reason          string `json:"reason,omitempty"`
 }

@@ -253,6 +253,9 @@ and an unlocked desktop. The initial adapter supports direct LAN/Tailscale video
 and keyboard/mouse, without audio, automatic public relay or unattended service.
 The component is downloaded separately and may be uninstalled from the app's
 settings. It is not installed or started for people who do not use it.
+An App keeps using an older compatible release it finds installed; `status`
+then returns `update_available: true`, and `install` fetches the App's own
+release. Agent actions (`remote.desktop`) need component 0.3.0 or later.
 
 The iOS page bridge advertises `remote-controller`: `devices`, `connect`,
 `session`, `disconnect` and `close` use the current workspace credential.
