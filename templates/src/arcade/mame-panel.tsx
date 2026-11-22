@@ -13,6 +13,8 @@ type Phase = "setup" | "checking" | "running" | "stopping";
 export function MamePanel() {
   const [ready, setReady] = useState<boolean>();
   const [engine, setEngine] = useState<Engine>();
+  const [windows, setWindows] = useState(false);
+  const [phoneKeys, setPhoneKeys] = useState(true);
   const [rom, setRom] = useState("");
   const [phase, setPhase] = useState<Phase>("setup");
   const [busy, setBusy] = useState(false);
@@ -25,6 +27,7 @@ export function MamePanel() {
   useEffect(() => {
     alive.current = true;
     if (osState === "ready") {
+      void os().system.info().then(info => { if (alive.current) setWindows(info.os === "windows"); }).catch(() => undefined);
       void Promise.all(["fs.pick", "exec.run", "exec.spawn"].map(has))
         .then(caps => { if (alive.current) setReady(caps.every(Boolean)); });
     }
@@ -85,7 +88,7 @@ export function MamePanel() {
   }
 
   async function play() {
-    const args = mameArgs(rom);
+    const args = mameArgs(rom, windows && phoneKeys);
     if (operation.current || !engine || !args) return;
     operation.current = true;
     setPhase("checking");
@@ -161,6 +164,7 @@ export function MamePanel() {
             </div>
           </div>
         </div>}
+      {ready && windows && <label className="arc-mame-phone"><input type="checkbox" disabled={locked} checked={phoneKeys} onChange={event => setPhoneKeys(event.target.checked)}/>{uiText("兼容 iPhone 街机手柄")}</label>}
       {status && <p role="status">{status}</p>}
       {detail && <pre>{detail}</pre>}
       <p>{uiText("默认按 5 投币、1 开始、方向键移动，Ctrl 和 Alt 为动作键。")}</p>

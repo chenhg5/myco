@@ -5,3 +5,5 @@ In the desktop App, the MAME mode detects an installed MAME or lets the user sel
 CHIP-8 mode runs a local 64 × 32 interpreter, with the original Orbit Courier demo. It supports modern or COSMAC VIP-style opcode behavior. Opening a ROM or changing compatibility starts a fresh machine. SUPER-CHIP and XO-CHIP are outside the CHIP-8 mode's scope.
 
 Neither mode uploads ROM data or uses page records or agent actions. References: MAME's command-line documentation, Tobias V. I. Langhoff's CHIP-8 guide, and the Timendus test suite.
+
+On Windows, leave iPhone arcade controller compatibility enabled when playing through the Remote Desktop arcade controller. It selects the Win32 keyboard provider for software-generated keys.

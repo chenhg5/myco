@@ -70,7 +70,7 @@ Agent access currently uses shared page records. The [agent actions SDK](app-act
 <table>
 <tr>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/disk-dark.webp"><img src="assets/apps/disk.webp" alt="Disk cleanup"></picture><br><b>Disk cleanup</b><br>See what fills this computer's disk as rings, with a list by size; drill into folders, collect what you don't need, then move it to the Trash (and put it back if you change your mind). Needs the myco app.</td>
-<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/remote-desktop-dark.webp"><img src="assets/apps/remote-desktop.webp" alt="Remote desktop"></picture><br><b>Remote desktop</b><br>See and control a Mac or Windows PC in the same workspace from another computer or an iPhone (touchpad and keyboard on the phone). Off until you install it; direct over your LAN or Tailscale.</td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/remote-desktop-dark.webp"><img src="assets/apps/remote-desktop.webp" alt="Remote desktop"></picture><br><b>Remote desktop</b><br>See and control a Mac or Windows PC in the same workspace from another computer or an iPhone (touchpad, keyboard and MAME arcade controller on iPhone). Off until you install it; direct over your LAN or Tailscale.</td>
 </tr>
 <tr>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/notes-dark.webp"><img src="assets/apps/notes.webp" alt="Notes"></picture><br><b>Notes</b><br>Notes like Notion: nested pages with icons and covers, '/' commands, search, favourites and a trash. The agent can create pages and write into them while you watch.</td>
@@ -103,7 +103,7 @@ Agent access currently uses shared page records. The [agent actions SDK](app-act
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/sudoku-dark.webp"><img src="assets/apps/sudoku.webp" alt="Sudoku"></picture><br><b>Sudoku</b><br>Solve one together: each cell saves on its own and shows who filled it, conflicts in red; easy, medium and hard puzzles with one answer each.</td>
 </tr>
 <tr>
-<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/arcade-dark.webp"><img src="assets/apps/arcade.webp" alt="Arcade Emulator"></picture><br><b>Arcade Emulator</b><br>Verify and launch a local arcade ROM ZIP from the desktop App in a separate MAME window. Install MAME separately. CHIP-8 mode includes the original Orbit Courier demo and touch controls.</td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/arcade-dark.webp"><img src="assets/apps/arcade.webp" alt="Arcade Emulator"></picture><br><b>Arcade Emulator</b><br>Verify and launch a local arcade ROM ZIP from the desktop App in a separate MAME window. Install MAME separately. On Windows, leave iPhone arcade controller compatibility enabled when using Remote Desktop. CHIP-8 mode includes the original Orbit Courier demo and touch controls.</td>
 <td width="50%"></td>
 </tr>
 </table>

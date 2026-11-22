@@ -45,3 +45,5 @@
 @media (max-width: 580px) {
   .arc-mame-form { grid-template-columns: minmax(0, 1fr); }
 }
+
+.arc-mame-phone { display: flex; align-items: center; gap: 6px; margin: 12px 0; }

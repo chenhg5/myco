@@ -811,3 +811,25 @@ p {
 .rd-input-toast > span { flex: 1; }
 .rd-input-toast > button { flex-shrink: 0; }
 .rd-update-help { margin-top: 16px; }
+
+.rd-gamepad { position: absolute; inset: 0; z-index: 8; display: grid; align-content: center; gap: clamp(12px, 4vh, 28px); padding: max(12px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); background: var(--rd-panel); overflow: auto; }
+.rd-gamepad header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.rd-gamepad header h2 { margin: 0; font-size: 15px; text-align: center; }
+.rd-gamepad header button { padding-inline: 8px; }
+.rd-gamepad-controls { display: flex; align-items: center; justify-content: space-around; gap: 8px; }
+.rd-gamepad-directions { display: grid; grid-template-columns: repeat(3, minmax(32px, 60px)); grid-template-rows: repeat(3, clamp(38px, 10vw, 60px)); gap: 3px; }
+.rd-gamepad button[aria-pressed] { touch-action: none; user-select: none; -webkit-user-select: none; display: grid; place-content: center; text-align: center; min-width: 0; border: 1px solid var(--rd-line); border-radius: 12px; background: var(--rd-bg); color: inherit; }
+.rd-gamepad button[aria-pressed="true"] { background: var(--rd-text); color: var(--rd-panel); }
+.rd-gamepad .rd-pad-up { grid-area: 1 / 2; }
+.rd-gamepad .rd-pad-left { grid-area: 2 / 1; }
+.rd-gamepad .rd-pad-right { grid-area: 2 / 3; }
+.rd-gamepad .rd-pad-down { grid-area: 3 / 2; }
+.rd-gamepad-actions { display: flex; gap: clamp(6px, 3vw, 16px); }
+.rd-gamepad-actions button { width: clamp(42px, 13vw, 75px); aspect-ratio: 1; }
+.rd-gamepad-actions b { font-size: 21px; }
+.rd-gamepad-actions small { font-size: 11px; }
+.rd-gamepad-utility { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; }
+.rd-gamepad-utility button { padding: 8px 10px; min-height: 42px; }
+.rd-gamepad > p { margin: 0; text-align: center; font-size: 12px; color: var(--rd-muted); }
+
+.rd-session.is-gamepad .rd-screen { visibility: hidden; }

@@ -119,3 +119,5 @@ the person which part needs updating; do not install unreleased binaries.
 Do not start sharing, install system permissions or connect to a computer on the
 person's behalf without their explicit request. The App and native OS permissions
 remain the authority; this guide cannot approve access.
+
+The iPhone controller has an Arcade controller view during a paired control session. It sends MAME default keyboard inputs (arrows, left Ctrl/Alt, 5, 1 and P); it uses the same remote permissions and does not emulate games. Keep the game window focused and watch the PC display.

@@ -53,6 +53,7 @@ try {
     let failure = true;
     window.mameCalls = [];
     window.myco = { features: ["os"], os: {
+      system: { info: async () => ({ os: "windows" }) },
       list: async () => ({ caps: ["fs.pick", "exec.run", "exec.spawn"].map(name => ({ name, available: true })) }),
       fs: { pick: async () => ({ paths: ["/Local ROMs/gridlee.zip"] }) },
       exec: {
@@ -96,7 +97,7 @@ try {
   await page.getByText("MAME 已启动。切换到游戏窗口开始玩。").waitFor();
   assert.deepEqual(await page.evaluate(() => window.mameCalls.slice(-2)), [
     ["mame", "gridlee", "-rompath", "/Local ROMs", "-verifyroms"],
-    ["mame", "gridlee", "-rompath", "/Local ROMs", "-window", "-skip_gameinfo"],
+    ["mame", "gridlee", "-rompath", "/Local ROMs", "-window", "-skip_gameinfo", "-keyboardprovider", "win32"],
   ]);
   await page.getByRole("button", { name: "停止游戏" }).click();
   await page.getByText("游戏窗口已关闭。").waitFor();

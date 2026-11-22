@@ -9,14 +9,14 @@ export function mameROM(path: string) {
   return { filename, shortName, directory: path.slice(0, Math.max(separator, rootLength)) };
 }
 
-export function mameArgs(path: string) {
+export function mameArgs(path: string, windowsKeys = false) {
   const rom = mameROM(path);
   if (!rom) return;
   const base = [rom.shortName, "-rompath", rom.directory];
   return {
     filename: rom.filename,
     verify: [...base, "-verifyroms"],
-    play: [...base, "-window", "-skip_gameinfo"],
+    play: [...base, "-window", "-skip_gameinfo", ...(windowsKeys ? ["-keyboardprovider", "win32"] : [])],
   };
 }
 
