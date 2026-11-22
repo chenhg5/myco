@@ -4,6 +4,26 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.21.24
+
+- **Links straight to a film and episode**: a link to a Cinema page can name a title, source and episode, and the desktop App opens that spot (the iPhone and Android Apps get it with their next builds). Agents can find a title for you and send such a link; copying the link of what is playing works too. Older Apps open the page from its start.
+- **Page exports with two Apps open**: two Apps signed in as the same person (two computers, or a preview beside the App) no longer take the export host from each other, which made agents' page exports stall and flooded the hub's audit log. Each App can render exports; one that closes no longer ends the agent's grant.
+- **Agents waiting their turn stay online**: a computer runs at most 3 agent CLIs at once by default. An agent whose task waits for a free one no longer shows as offline, and its message reads "busy with another task" instead of "its myco is not running". With several agents on long tasks on one computer, raise the number: `myco runner service install --max-concurrent <n>`.
+- A member's chat in a project shows all its exchanges and pages back through them.
+- An agent's grant to export a page reads as "may export <page>", not as access to a screen. After the hub is upgraded, an App that was already open offers page exports within minutes.
+- **New apps**: a logo studio where an agent draws geometric logos with guides; a personality exploration with private answers; an arcade with CHIP-8 and NES emulators, native MAME for desktop ROMs and an iPhone as the controller. Design Studio text lines up the same in every browser.
+- Upgrade the server's hub (`sudo myco upgrade`, or from the App) and myco on your computers (for agents waiting their turn).
+
+**中文**
+
+- **直达某部片、某一集的链接**：影视页面的链接可以指定作品、线路和集数，桌面 App 点开直接到那里（iPhone 和 Android 的 App 下一次出包时带上）。可以让 agent 帮你找片、回一个这样的链接；正在播放的那一集也能直接复制链接。旧版 App 点开只会打开页面首页。
+- **开着两个 App 时页面导出不再卡住**：同一个人登录的两个 App（两台电脑，或者正式版旁边开着预览版）不再互相抢导出宿主。之前会让 agent 的页面导出卡住，还会刷爆 hub 的审计日志。现在每个 App 都能渲染导出；其中一个关掉，agent 的授权也不会因此结束。
+- **排队的 agent 不再显示离线**：一台电脑默认同时最多跑 3 个 agent。任务在排队等空位的 agent 不再显示离线，消息下面显示「在忙别的，做完再看」，不再说「对方的 myco 没在运行」。一台电脑上好几个 agent 都在做长任务时，可以把上限调大：`myco runner service install --max-concurrent <n>`。
+- 项目里某个成员的对话，能看到它和所有人的往来，也能往前翻页。
+- agent 导出页面的授权条写的是「可以导出「页面名」」，不再写成看屏幕。hub 升级以后，已经开着的 App 几分钟内就能接页面导出。
+- **新应用**：标志工坊（agent 画几何标志，带辅助线）；人格探索（答案只存在本机）；街机（CHIP-8、NES 模拟器，桌面用原生 MAME 运行 ROM，iPhone 当手柄）。设计工作台的文字在各个浏览器里对齐一致。
+- 需要升级服务器上的 hub（`sudo myco upgrade`，或在 App 里升级），电脑上的 myco 也要升级（排队不掉线那条）。
+
 ## v0.21.23
 
 - **Agents can export a shared page as a file**: an agent you approve (or one that can already see the page) can export a whiteboard (SVG, PNG), a design (SVG, PNG, HTML, JSON) or a slide deck (PPTX, Markdown) without anyone clicking. The App renders the page in the background and the file goes only to that agent. Revoking the approval stops the export at once.
