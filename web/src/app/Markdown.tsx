@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { knownSize, noteSize } from "@/app/imageSizes";
 import DOMPurify from "dompurify";
 import { Marked } from "marked";
 import { ChevronDown } from "lucide-react";
@@ -126,6 +127,23 @@ function doingItems(text: string): string {
 export function Markdown({ text }: { text: string }) {
   const html = useMemo(() => sanitize(md.parse(doingItems(text), { async: false }) as string), [text]);
   const ref = useRef<HTMLDivElement>(null);
+  // Before it is painted: pictures seen before get their size (the box is
+  // there before they load: imageSizes); each one loading notes its size.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.querySelectorAll("img").forEach((img) => {
+      const known = knownSize(img.getAttribute("src") || "");
+      if (known && !img.getAttribute("width")) { img.width = known[0]; img.height = known[1]; }
+    });
+    const onLoad = (e: Event) => {
+      const img = e.target;
+      if (!(img instanceof HTMLImageElement) || !img.naturalWidth) return;
+      noteSize(img.dataset.src0 || img.getAttribute("src") || "", img.naturalWidth, img.naturalHeight);
+    };
+    el.addEventListener("load", onLoad, true);
+    return () => el.removeEventListener("load", onLoad, true);
+  }, [html]);
   // An image's error event does not bubble, so it is caught on the way down.
   useEffect(() => {
     const el = ref.current;
