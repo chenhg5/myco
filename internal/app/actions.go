@@ -237,7 +237,8 @@ func grantWhat(agent, machine string, perms []string, ttl time.Duration) string 
 			do = "看并操作电脑 " + machine + " 的屏幕（键盘和鼠标）"
 		}
 	}
-	return fmt.Sprintf("让 %s %s，%d 分钟", agent, do, int(ttl.Round(time.Minute)/time.Minute))
+	_ = agent // (the card says who asks)
+	return fmt.Sprintf("%s，%d 分钟", do, int(ttl.Round(time.Minute)/time.Minute))
 }
 
 // checkPermissions validates and normalizes requested permissions: known

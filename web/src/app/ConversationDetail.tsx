@@ -51,7 +51,7 @@ import { chatDraftKey, draftOf, keepDraft } from "@/app/drafts";
 import { chatQueueKey, keepQueue, queueOf, queuedId, type Queued } from "@/app/queued";
 import { hubAtLeast, hubHasHandover } from "@/app/hubVersion";
 import { HandoverDivider, handoverEntry, openHandover, useHandovers } from "@/app/Handover";
-import { ApprovalStrip } from "@/app/Superagent";
+import { ApprovalStrip, GrantStrip } from "@/app/Superagent";
 
 export interface ConversationTarget {
   hubId: string;
@@ -2543,6 +2543,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           <VoiceBar />
         )}
         <ApprovalStrip hubId={target.hubId} agent={target.agent} name={agentName} />
+        <GrantStrip hubId={target.hubId} agent={target.agent} name={agentName} />
         <SendTrouble error={sendError} stop={stopError} onRetry={sendError ? () => void send() : undefined}
           onClose={() => { setSendError(null); setStopError(null); }} />
         {/* Only while it is at work: a chat that has ended has nothing to

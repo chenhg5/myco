@@ -1846,6 +1846,7 @@ const server = http.createServer(async (req, res) => {
         const name = state.superagents[h.id];
         delete state.superagents[h.id];
         state.approvals[h.id] = [];
+        if (state.grants) state.grants[h.id] = [];
         if (name) h.agents = (h.agents || []).filter((a) => a.name !== name);
       }
       return send(res, 200, { ok: true });
@@ -1857,6 +1858,16 @@ const server = http.createServer(async (req, res) => {
     state.counter += 1;
     const a = { id: `apr_${state.counter}`, agent, what: body.what || "删除项目 old-site", reason: body.reason || "", method: body.method || "DELETE", path: body.path || "/v1/projects/old-site",
       status: "pending", created_at: iso(0), expires_at: new Date(Date.now() + 24 * 3600_000).toISOString() };
+    // An agent asking to act on a computer (kind action_grant): its
+    // pending grant too.
+    if (body.kind === "action_grant") {
+      const requested = body.permissions || ["remote.desktop.control", "remote.desktop.view"];
+      const g = { id: `agr_${state.counter}`, agent, owner: "glenn", target: { kind: "machine", id: "m_studio" }, target_name: body.machine || "Studio Mac",
+        permissions: [], requested, reason: a.reason, approval_id: a.id, state: "pending", created_at: iso(0), ttl: 300 };
+      (state.grants ||= {})[hub.id] = [...(state.grants[hub.id] || []), g];
+      Object.assign(a, { kind: "action_grant", payload: { grant_id: g.id }, method: "", path: "",
+        what: body.what || `${requested.includes("remote.desktop.control") ? "看并操作" : "看"}电脑 ${g.target_name} 的屏幕（键盘和鼠标），5 分钟` });
+    }
     (state.approvals[hub.id] ||= []).push(a);
     return send(res, 201, a);
   }
@@ -2819,6 +2830,24 @@ const server = http.createServer(async (req, res) => {
 
     // /app/hubs/{id}/superagent and /approvals… — your superagent (v0.21.1)
     // and what it asks you to approve. /app/mock/superagent-ask adds one.
+    // /app/hubs/{id}/action-grants — what agents may do on your computers
+    // (v0.21.21), and revoking it.
+    if (parts[3] === "action-grants") {
+      if (hub.id === "hub_lab") return fail(res, 404, "not_found", "no such route"); // an older hub
+      const list = ((state.grants ||= {})[hub.id] ||= []);
+      if (parts.length === 4 && method === "GET") {
+        const want = url.searchParams.get("state") || "";
+        return send(res, 200, { grants: list.filter((g) => !want || g.state === want).map(({ ttl, ...g }) => g) });
+      }
+      if (parts.length === 6 && parts[5] === "revoke" && method === "POST") {
+        const g = list.find((x) => x.id === parts[4]);
+        if (!g) return fail(res, 404, "not_found", "grant not found");
+        Object.assign(g, { state: "revoked", end_reason: "revoked by glenn", ended_at: iso(0) });
+        const { ttl, ...out } = g;
+        return send(res, 200, out);
+      }
+      return fail(res, 404, "not_found", "no such route");
+    }
     if (parts[3] === "superagent" || parts[3] === "approvals") {
       if (hub.id === "hub_lab") return fail(res, 404, "not_found", "no such route"); // an older hub
       state.superagents ||= {};
@@ -2857,6 +2886,15 @@ const server = http.createServer(async (req, res) => {
         if (a.status !== "pending") return fail(res, 409, "conflict", `already ${a.status}`);
         a.status = parts[5] === "approve" ? "done" : "denied";
         a.decided_by = "glenn";
+        if (a.kind === "action_grant") {
+          const body = await readBody(req);
+          const g = (state.grants?.[hub.id] || []).find((x) => x.id === a.payload?.grant_id);
+          if (g && a.status === "done") {
+            g.permissions = body?.permissions?.length ? body.permissions : g.requested;
+            g.state = "active";
+            g.expires_at = new Date(Date.now() + (body?.ttl_seconds || g.ttl) * 1000).toISOString();
+          } else if (g) g.state = "denied";
+        }
         a.decided_at = iso(0);
         if (a.status === "done") a.result = 200;
         // A coordinator's request for a computer: carried out as you.
