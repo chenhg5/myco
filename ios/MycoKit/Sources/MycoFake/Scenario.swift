@@ -17,6 +17,9 @@ public enum Scenario: Sendable {
     case session
     /// Native WebKit/controller consent probe, with no real computer or token.
     case remote
+    /// The team, with a page that reports deep links into it, linked by
+    /// 运维 with a fragment (for UI tests).
+    case links
     /// Joined, but nobody is here yet.
     case empty
 

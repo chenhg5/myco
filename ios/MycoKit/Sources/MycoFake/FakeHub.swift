@@ -83,6 +83,15 @@ public actor FakeHub: HubAPI {
             pageList.insert(page, at: 0)
             pageFiles[page.id] = ["index.html": ("text/html; charset=utf-8", RemotePageFixture.html)]
         }
+        if scenario == .links {
+            let page = Page(id: LinkPageFixture.id, name: "影视", publisher: "vps-codex-90aa", url: FakeHub.demoAddress.absoluteString + "/pages/" + LinkPageFixture.id, createdAt: now, updatedAt: now)
+            pageList.insert(page, at: 0)
+            pageFiles[page.id] = ["index.html": ("text/html; charset=utf-8", LinkPageFixture.html)]
+            messages.append(Message(
+                id: "cinema-link", from: "vps-codex-90aa", to: FakeHub.me, type: "note",
+                body: "第一集在这：\(LinkPageFixture.link(episode: "第1集"))\n\n第二集：\(LinkPageFixture.link(episode: "第2集"))", status: "done",
+                createdAt: now.addingTimeInterval(-30)))
+        }
     }
 
     public func setLatency(_ value: Duration) {
