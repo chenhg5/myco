@@ -5721,7 +5721,12 @@ button.app-label:hover { filter: brightness(0.95); }
 .app-provider-opt span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .app-provider-opt b { font-weight: 500; color: var(--fg); }
 .app-provider-opt small { font-size: 11.5px; color: var(--muted); overflow-wrap: anywhere; }
-.app-provider-manual { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.app-provider-manual { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
+.app-provider-manual .app-field { margin-top: 0; }
+.app-provider-manual .seg { display: inline-flex; }
+/* Clearing the custom address: quiet on the left, red only on hover. */
+.app-provider-clear { margin-right: auto; background: transparent; color: var(--muted); }
+.app-provider-clear:hover:not(:disabled) { background: var(--pill); color: var(--red); }
 .app-modal-note { font-size: 12px; color: var(--muted); margin: 0 0 8px; }
 
 /* Settings → 成员 / 审计 */

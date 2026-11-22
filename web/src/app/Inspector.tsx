@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useCached } from "@/lib/memo";
 import { ArrowRightLeft, Check, ChevronRight, Copy, Pencil, Plus, Power, Trash2, UserCheck, X } from "lucide-react";
 import { IconChat } from "@/components/icons";
-import { appApi, isOldHub, type AgentProvider, type ProviderList, type MachineInfo } from "@/appapi";
+import { appApi, isOldHub, type AgentProvider, type ManualProvider, type ProviderList, type MachineInfo, type WireAPI } from "@/appapi";
 import type { AgentRow } from "@/app/types";
 import type { AuditEntry, Member, Peer, Project, Runtime, Skill } from "@/api";
 import {
@@ -303,8 +303,19 @@ function LabelsEditor({ row, onRefresh, readOnly }: { row: AgentRow; onRefresh: 
 }
 
 // ProviderRow: which model provider (endpoint + key) the node's CLI uses.
-// A node on this computer can be pinned to a cc-switch provider, given an
-// endpoint by hand, or follow the computer's own setting.
+// A node on this computer can be pinned to a cc-switch provider, given a
+// custom address (base URL, model, key; for Codex the protocol too), or
+// follow the computer's own setting: then it says where requests really
+// go, as the runner reported (a local gateway, cc-switch's provider).
+
+/** A runner's provider as people read it: "magpie 网关（127.0.0.1:3425）". */
+function providerLabel(rt?: { provider?: string; provider_host?: string }): string {
+  if (!rt?.provider) return "";
+  return rt.provider_host && rt.provider_host !== rt.provider ? `${rt.provider}（${rt.provider_host}）` : rt.provider;
+}
+
+const urlHost = (u?: string) => { try { return u ? new URL(u).host : ""; } catch { return u || ""; } };
+
 function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promise<void> }) {
   const ag = row.st.agent;
   const rt = ag.runtime;
@@ -314,7 +325,7 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
   const [list, setList] = useState<ProviderList | null>(null);
   const [open, setOpen] = useState(false);
   const [choice, setChoice] = useState("");
-  const [manual, setManual] = useState({ base_url: "", api_key: "", model: "" });
+  const [manual, setManual] = useState<{ base_url: string; api_key: string; model: string; wire_api: WireAPI }>({ base_url: "", api_key: "", model: "", wire_api: "responses" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [saved, setSaved] = useState("");
@@ -323,22 +334,23 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
 
   const codex = (rt?.cli || ag.binding.harness) === "codex";
   const editable = !!local?.local && (local.harness === "claude" || local.harness === "codex");
+  const custom = local?.provider === "env_file" ? local.manual : undefined;
+  const hasKey = !!custom?.has_key;
   const start = async () => {
     setError(null);
     setChoice(local?.provider || "");
-    setManual({ base_url: "", api_key: "", model: "" });
+    setManual({ base_url: custom?.base_url || "", api_key: "", model: custom?.model || "", wire_api: custom?.wire_api || "responses" });
     setOpen(true);
     try { setList(await appApi.providers(codex ? "codex" : "claude")); } catch (e) { setError(e); }
   };
-  const save = async () => {
+  const urlOK = /^https?:\/\/[^\s/]+/i.test(manual.base_url.trim());
+  const canSave = choice !== "env_file" || (urlOK && (hasKey || !!manual.api_key.trim()));
+  const save = async (body: { provider: string } | { manual: ManualProvider }, note: string) => {
     setBusy(true);
     setError(null);
     try {
-      const body = choice === "env_file"
-        ? (manual.base_url || manual.api_key ? { manual } : null)
-        : { provider: choice };
-      if (body) setLocal(await appApi.setAgentProvider(ag.name, row.hub.id, body));
-      setSaved(L("已保存，从它收到的下一条消息开始生效。", "Saved. It applies from the node's next message."));
+      setLocal(await appApi.setAgentProvider(ag.name, row.hub.id, body));
+      setSaved(note);
       setOpen(false);
       window.setTimeout(() => void onRefresh(), 1500);
     } catch (e) {
@@ -347,15 +359,30 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
       setBusy(false);
     }
   };
+  const applies = L("已保存，从它收到的下一条消息开始生效。", "Saved. It applies from the agent's next message.");
+  const submit = () => {
+    if (choice !== "env_file") return void save({ provider: choice }, applies);
+    const m: ManualProvider = { base_url: manual.base_url.trim(), model: manual.model.trim() || undefined };
+    // The key only when typed: blank keeps the one saved.
+    if (manual.api_key.trim()) m.api_key = manual.api_key.trim();
+    if (codex) m.wire_api = manual.wire_api;
+    void save({ manual: m }, applies);
+  };
 
   const current = list?.providers.find((p) => p.current);
-  const name = rt?.provider || (rt ? L("CLI 自己的设置", "The CLI's own setting") : "—");
+  const reported = providerLabel(rt);
+  // What the row says: the custom address (host · model), else what the
+  // runner reported, else that it uses its CLI's own setting.
+  const name = custom
+    ? [urlHost(custom.base_url), custom.model].filter(Boolean).join(" · ")
+    : reported || (rt ? L("CLI 自己的设置", "The CLI's own setting") : "—");
+  const following = local?.provider === "" && rt?.provider_source !== "pinned" && rt?.provider_source !== "env_file" ? reported : "";
   return (
     <div className={cn("app-kv", saved && "has-help")}>
       <span className="app-kv-label">{L("服务商", "Provider")}</span>
       <span className="app-kv-value">
         {editable ? (
-          <button type="button" className="app-kv-link" onClick={() => void start()}>
+          <button type="button" className="app-kv-link" onClick={() => void start()} data-testid="provider-open">
             {name}<span className="app-chev">›</span>
           </button>
         ) : name}
@@ -363,13 +390,18 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
       {saved && <span className="app-kv-help app-offline-ok">{saved}</span>}
 
       <Modal open={open} onOpenChange={(o) => !busy && setOpen(o)} title={L("服务商", "Provider")}
-        description={L(`后台唤醒这个 agent 时，它的 ${codex ? "Codex" : "Claude Code"} 用哪个服务商（地址、密钥和模型）。只影响这个 agent，密钥只保存在这台电脑上。`, `Which provider (endpoint, key and model) this node's ${codex ? "Codex" : "Claude Code"} uses when it is woken in the background. Only this node is affected; keys stay on this computer.`)}>
-        <div className="app-provider-list" role="radiogroup">
+        description={L(`后台唤醒这个 agent 时，它的 ${codex ? "Codex" : "Claude Code"} 用哪个服务商（地址、密钥和模型）。只影响这个 agent，密钥只保存在这台电脑上。`, `Which provider (endpoint, key and model) this agent's ${codex ? "Codex" : "Claude Code"} uses when it is woken in the background. Only this agent is affected; keys stay on this computer.`)}>
+        <div className="app-provider-list" role="radiogroup" data-testid="provider-options">
           <label className={cn("app-provider-opt", choice === "" && "picked")}>
             <input type="radio" name="provider" checked={choice === ""} onChange={() => setChoice("")} />
             <span>
-              <b>{L("跟随本机设置", "Follow this computer")}</b>
-              <small>{current ? L(`现在是「${current.name}」，在 cc-switch 里切换时跟着变`, `Now “${current.name}”; changes when you switch in cc-switch`) : L(`用这台电脑上 ${codex ? "Codex" : "Claude Code"} 自己的设置`, `Uses ${codex ? "Codex" : "Claude Code"}'s own settings on this computer`)}</small>
+              <b>{L("跟随这台电脑", "Follow this computer")}</b>
+              <small>
+                {following
+                  ? L(`现在走的是 ${following}`, `Now going through ${following}`)
+                  : current ? L(`现在是「${current.name}」，在 cc-switch 里切换时跟着变`, `Now “${current.name}”; changes when you switch in cc-switch`)
+                  : L(`用这台电脑上 ${codex ? "Codex" : "Claude Code"} 自己的设置`, `Uses ${codex ? "Codex" : "Claude Code"}'s own settings on this computer`)}
+              </small>
             </span>
           </label>
           {list?.providers.map((p) => (
@@ -384,16 +416,47 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
           <label className={cn("app-provider-opt", choice === "env_file" && "picked")}>
             <input type="radio" name="provider" checked={choice === "env_file"} onChange={() => setChoice("env_file")} />
             <span>
-              <b>{L("手动填写", "Enter by hand")}</b>
-              <small>{local?.env_host ? L(`现在是 ${local.env_host}`, `Now ${local.env_host}`) : codex ? L("OpenAI 兼容的地址和密钥", "An OpenAI-compatible endpoint and key") : L("Anthropic 兼容的地址和密钥", "An Anthropic-compatible endpoint and key")}</small>
+              <b>{L("自定义地址", "Custom address")}</b>
+              <small>
+                {custom
+                  ? [urlHost(custom.base_url), custom.model, codex && custom.wire_api ? (custom.wire_api === "chat" ? "Chat Completions" : "Responses") : ""].filter(Boolean).join(" · ")
+                  : codex ? L("OpenAI 兼容的地址、模型和密钥", "An OpenAI-compatible address, model and key") : L("Anthropic 兼容的地址、模型和密钥", "An Anthropic-compatible address, model and key")}
+              </small>
             </span>
           </label>
         </div>
         {choice === "env_file" && (
-          <div className="app-provider-manual">
-            <input className="app-input" placeholder={codex ? "https://api.example.com/v1" : "https://api.example.com/anthropic"} value={manual.base_url} onChange={(e) => setManual({ ...manual, base_url: e.target.value })} disabled={busy} />
-            <input className="app-input" type="password" placeholder={L("密钥", "Key")} value={manual.api_key} onChange={(e) => setManual({ ...manual, api_key: e.target.value })} disabled={busy} autoComplete="off" />
-            <input className="app-input" placeholder={L("模型（可选）", "Model (optional)")} value={manual.model} onChange={(e) => setManual({ ...manual, model: e.target.value })} disabled={busy} />
+          <div className="app-provider-manual" data-testid="provider-custom">
+            <label className="app-field">
+              <span className="app-field-label">{L("地址（base URL）", "Base URL")}</span>
+              <input className="app-input" placeholder={codex ? "https://api.example.com/v1" : "https://api.example.com/anthropic"} value={manual.base_url}
+                onChange={(e) => setManual({ ...manual, base_url: e.target.value })} disabled={busy} spellCheck={false} data-testid="provider-url" />
+            </label>
+            <label className="app-field">
+              <span className="app-field-label">{L("模型", "Model")}</span>
+              <input className="app-input" placeholder={L("不填就用它默认的", "Blank: its default")} value={manual.model}
+                onChange={(e) => setManual({ ...manual, model: e.target.value })} disabled={busy} spellCheck={false} data-testid="provider-model" />
+            </label>
+            <label className="app-field">
+              <span className="app-field-label">{L("密钥", "Key")}</span>
+              <input className="app-input" type="password" autoComplete="new-password" value={manual.api_key}
+                placeholder={hasKey ? L("已保存，不显示；留空不改", "Saved and hidden; leave blank to keep it") : L("填上服务商给你的 key", "The key your provider gave you")}
+                onChange={(e) => setManual({ ...manual, api_key: e.target.value })} disabled={busy} data-testid="provider-key" />
+            </label>
+            {codex && (
+              <div className="app-field">
+                <span className="app-field-label">{L("协议", "Protocol")}</span>
+                <div className="seg" role="tablist" aria-label={L("协议", "Protocol")}>
+                  {(["responses", "chat"] as WireAPI[]).map((w) => (
+                    <button key={w} type="button" role="tab" aria-selected={manual.wire_api === w} className={cn("seg-btn", manual.wire_api === w && "active")}
+                      onClick={() => setManual({ ...manual, wire_api: w })} disabled={busy} data-testid={`provider-wire-${w}`}>
+                      {w === "responses" ? "Responses" : "Chat Completions"}
+                    </button>
+                  ))}
+                </div>
+                <span className="app-field-hint">{L("服务商只支持 /chat/completions 时选 Chat Completions。", "Pick Chat Completions when the provider only has /chat/completions.")}</span>
+              </div>
+            )}
           </div>
         )}
         {list && !list.cc_switch && (
@@ -401,9 +464,14 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
         )}
         <ErrorText error={error} />
         <div className="app-modal-actions">
+          {choice === "env_file" && custom && (
+            <button type="button" className="app-btn app-provider-clear" disabled={busy} data-testid="provider-clear"
+              onClick={() => void save({ provider: "" }, L("自定义地址和密钥已清除，改回跟随这台电脑。", "The custom address and key are cleared; it follows this computer again."))}>
+              {L("清除自定义地址", "Clear the custom address")}
+            </button>
+          )}
           <button type="button" className="app-btn" onClick={() => setOpen(false)} disabled={busy}>{L("取消", "Cancel")}</button>
-          <button type="button" className="app-btn app-btn-primary" onClick={() => void save()}
-            disabled={busy || (choice === "env_file" && !local?.env_host && (!manual.base_url || !manual.api_key))}>
+          <button type="button" className="app-btn app-btn-primary" onClick={submit} disabled={busy || !canSave} data-testid="provider-save">
             {busy ? L("正在保存…", "Saving…") : L("保存", "Save")}
           </button>
         </div>

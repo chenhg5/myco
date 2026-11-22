@@ -1100,9 +1100,13 @@ export const appApi = {
 /** A cc-switch provider (keys are never sent to the page). */
 export interface ProviderInfo { ref: string; id: string; name: string; app: string; current?: boolean; host?: string; model?: string }
 export interface ProviderList { cc_switch: boolean; providers: ProviderInfo[]; error?: string }
-/** provider: "" follows this computer; "cc-switch:<id>" is pinned; "env_file" was entered by hand. */
-export interface AgentProvider { local: boolean; provider: string; harness?: string; env_host?: string }
-export interface ManualProvider { base_url: string; api_key: string; model?: string }
+/** provider: "" follows this computer; "cc-switch:<id>" is pinned; "env_file" is a custom address
+ *  (`manual`: its address, model and Codex protocol; never its key, only whether there is one). */
+export interface AgentProvider { local: boolean; provider: string; harness?: string; env_host?: string; manual?: ManualInfo }
+export type WireAPI = "chat" | "responses";
+export interface ManualInfo { base_url: string; model?: string; wire_api?: WireAPI; has_key?: boolean }
+/** A custom address to save: api_key only when typed (blank keeps the saved one); wire_api only for Codex. */
+export interface ManualProvider { base_url: string; api_key?: string; model?: string; wire_api?: WireAPI }
 
 /** How messages are translated: the service, and which ones have a key. */
 export type TranslateConfig = { provider: "deepl" | "google" | "openai"; base_url?: string; model?: string; keys: Record<string, boolean> };

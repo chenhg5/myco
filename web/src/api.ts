@@ -51,8 +51,10 @@ export interface Runtime {
   access?: RuntimeAccess;
   /** the highest access its machine lets the owner choose (spawn.max_access); absent from older runners */
   max_access?: RuntimeAccess;
-  /** model provider's name (never its key) */
+  /** model provider's name (never its key): "magpie 网关", the cc-switch provider's name, or the host */
   provider?: string;
+  /** where its requests go, host:port only (runners that report it) */
+  provider_host?: string;
   provider_source?: ProviderSource;
   /** plan usage, when the CLI writes it on this computer */
   quota?: Quota;

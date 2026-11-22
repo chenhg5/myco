@@ -3398,6 +3398,55 @@ async function runMatrix(browser, size, scheme) {
       await page.keyboard.press("Escape");
     });
 
+    // Which provider an agent on this computer uses: following this
+    // computer says where requests really go (a local gateway here); a
+    // custom address shows its host and model, never its key, and Codex
+    // picks a protocol.
+    await step("成员 · 服务商", async () => {
+      const openRow = async (who) => {
+        await go(page, "成员", narrow);
+        await clickVisible(page, page.locator(".mb-card", { hasText: who }).first());
+        await page.locator(".ms").waitFor({ timeout: 10_000 });
+        await clickVisible(page, page.locator(".ms .ms-fold"));
+        const row = page.locator(".ms [data-testid=provider-open]");
+        await row.waitFor({ timeout: 10_000 });
+        await row.scrollIntoViewIfNeeded();
+        return row;
+      };
+      let row = await openRow("docs-claude");
+      if (!(await row.innerText()).includes("magpie 网关（127.0.0.1:3425）")) throw new Error(`跟随这台电脑时应写实际走的地址，实际「${await row.innerText()}」`);
+      await settle(page, 200);
+      await shot(page, size, scheme, "provider-follow");
+      await page.keyboard.press("Escape");
+      row = await openRow("PM (Codex)");
+      const rowText = await row.innerText();
+      if (!rowText.includes("api.example-llm.com · gpt-5-codex")) throw new Error(`自定义地址应显示 host 和模型，实际「${rowText}」`);
+      await row.click();
+      const dlg = page.locator(".app-modal", { has: page.locator("[data-testid=provider-options]") });
+      await dlg.waitFor({ timeout: 5_000 });
+      const form = dlg.locator("[data-testid=provider-custom]");
+      await form.waitFor({ timeout: 5_000 });
+      if ((await form.locator("[data-testid=provider-url]").inputValue()) !== "https://api.example-llm.com/v1") throw new Error("自定义地址应带出保存的 base URL");
+      const key = form.locator("[data-testid=provider-key]");
+      if ((await key.inputValue()) !== "" || !(await key.getAttribute("placeholder") || "").includes("已保存")) throw new Error("密钥只写不回显：输入框应是空的，并说已保存");
+      if (!(await form.locator("[data-testid=provider-wire-responses]").getAttribute("aria-selected"))?.includes("true")) throw new Error("Codex 默认协议应是 Responses");
+      await clickVisible(page, form.locator("[data-testid=provider-wire-chat]"));
+      await settle(page, 200);
+      await shot(page, size, scheme, "provider-custom");
+      // Saved without typing the key: the one saved stays.
+      await clickVisible(page, dlg.locator("[data-testid=provider-save]"));
+      await dlg.waitFor({ state: "hidden", timeout: 5_000 });
+      await page.waitForFunction(() => (document.querySelector(".ms [data-testid=provider-open]")?.textContent || "").includes("api.example-llm.com"), null, { timeout: 5_000 });
+      // Back to Responses (the next combo starts from the same data).
+      await clickVisible(page, page.locator(".ms [data-testid=provider-open]"));
+      await dlg.waitFor({ timeout: 5_000 });
+      if (!(await dlg.locator("[data-testid=provider-options]").innerText()).includes("Chat Completions")) throw new Error("保存后自定义地址那项应写协议");
+      await clickVisible(page, dlg.locator("[data-testid=provider-wire-responses]"));
+      await clickVisible(page, dlg.locator("[data-testid=provider-save]"));
+      await dlg.waitFor({ state: "hidden", timeout: 5_000 });
+      await page.keyboard.press("Escape");
+    });
+
     await step("成员", async () => {
       await go(page, "成员", narrow);
       await page.locator(".mb-card").first().waitFor({ timeout: 20_000 });

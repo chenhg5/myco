@@ -729,6 +729,8 @@ const state = {
           runtime: {
             cli: "codex", cli_version: "0.52.0", model: "gpt-6-sol", model_source: "app",
             effort: "high", effort_source: "app", access: "workspace", max_access: "workspace", models: CODEX_MODELS,
+            // a custom address (Settings: 自定义地址)
+            provider: "api.example-llm.com", provider_host: "api.example-llm.com", provider_source: "env_file",
             quota: {
               source: "codex", at: iso(120),
               windows: [
@@ -764,7 +766,8 @@ const state = {
           kind: "agent", machine_id: "m_studio",
           runtime: {
             cli: "claude", cli_version: "2.1.240", model: "claude-opus-5-5", model_source: "observed",
-            effort: "low", effort_source: "app", access: "readonly", max_access: "workspace", provider: "DeepSeek", provider_source: "machine", features: ["mcp_tools"],
+            // follows this computer, which sends it through a local gateway
+            effort: "low", effort_source: "app", access: "readonly", max_access: "workspace", provider: "magpie 网关", provider_host: "127.0.0.1:3425", provider_source: "machine", features: ["mcp_tools"],
             away: "stopped",
             quota: {
               source: "claude", at: iso(600),
@@ -1366,7 +1369,12 @@ const ccProviders = [
   { ref: "cc-switch:glm", id: "glm", name: "智谱 GLM", app: "claude", host: "open.bigmodel.cn", model: "glm-5" },
   { ref: "cc-switch:kimi", id: "kimi", name: "Kimi", app: "claude", host: "api.moonshot.cn" },
 ];
-const localProviderAgents = new Map([["docs-claude", { local: true, harness: "claude", provider: "" }]]);
+const localProviderAgents = new Map([
+  ["docs-claude", { local: true, harness: "claude", provider: "" }],
+  // a Codex agent on this computer with a custom address (the key is kept, never shown)
+  ["pm-codex", { local: true, harness: "codex", provider: "env_file", env_host: "api.example-llm.com",
+    manual: { base_url: "https://api.example-llm.com/v1", model: "gpt-5-codex", wire_api: "responses", has_key: true } }],
+]);
 
 // Resume lines the smoke test makes and revokes; put the demo ones back
 // between widths and themes.
@@ -2526,14 +2534,25 @@ const server = http.createServer(async (req, res) => {
       if (!localProviderAgents.has(name)) return method === "GET" ? send(res, 200, { local: false, provider: "" }) : send(res, 404, { error: "not_found", message: "this agent does not run on this computer" });
       if (method === "PUT") {
         const body = await readBody(req);
-        const cur = { local: true, harness: "claude", provider: body.manual ? "env_file" : body.provider || "" };
-        if (body.manual) cur.env_host = new URL(body.manual.base_url).host;
+        const was = localProviderAgents.get(name);
+        const cur = { local: true, harness: was.harness, provider: body.manual ? "env_file" : body.provider || "" };
+        if (body.manual) {
+          let u;
+          try { u = new URL(body.manual.base_url); } catch { return fail(res, 400, "invalid_argument", "base_url must be an http(s) address"); }
+          const hadKey = !!was.manual?.has_key;
+          if (!body.manual.api_key && !hadKey) return fail(res, 400, "invalid_argument", "a key is required");
+          cur.env_host = u.host;
+          cur.manual = { base_url: body.manual.base_url, model: body.manual.model || undefined, has_key: true,
+            ...(was.harness === "codex" ? { wire_api: body.manual.wire_api || "responses" } : {}) };
+        }
         localProviderAgents.set(name, cur);
         // what the runner would report on its next message
         for (const h of state.hubs) for (const a of h.agents || []) if (a.name === name && a.runtime) {
           const p = ccProviders.find((x) => x.ref === cur.provider);
-          a.runtime.provider = p ? p.name : cur.env_host || ccProviders.find((x) => x.current)?.name;
+          // following this computer: the gateway its CLI is set up with
+          a.runtime.provider = p ? p.name : cur.env_host || "magpie 网关";
           a.runtime.provider_source = p ? "pinned" : cur.env_host ? "env_file" : "machine";
+          a.runtime.provider_host = p ? p.host : cur.env_host || "127.0.0.1:3425";
         }
       }
       return send(res, 200, localProviderAgents.get(name));
