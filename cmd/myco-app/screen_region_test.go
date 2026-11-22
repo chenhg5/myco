@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"context"
+	"testing"
+	"time"
+)
 
 func TestScreenRegionCoordinates(t *testing.T) {
 	for _, c := range []struct {
@@ -18,5 +22,39 @@ func TestScreenRegionCoordinates(t *testing.T) {
 	}
 	if screenRegionFromCocoa(0, 0, 0, 100, 900) != nil {
 		t.Fatal("empty selection accepted")
+	}
+}
+
+func TestScreenCountdownCompletesBeforeCapture(t *testing.T) {
+	var seen []int
+	started := time.Now()
+	if err := screenCountdown(context.Background(), 5, 5*time.Millisecond, func(n int) { seen = append(seen, n) }); err != nil {
+		t.Fatal(err)
+	}
+	if seen[0] != 5 || seen[len(seen)-1] != 0 || time.Since(started) < 25*time.Millisecond {
+		t.Fatalf("countdown: %v", seen)
+	}
+	for i := 1; i < len(seen); i++ {
+		if seen[i] > seen[i-1] {
+			t.Fatalf("countdown went backwards: %v", seen)
+		}
+	}
+}
+func TestScreenCountdownCancelDoesNotStart(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var seen []int
+	err := screenCountdown(ctx, 5, time.Millisecond, func(n int) {
+		seen = append(seen, n)
+		if n == 5 {
+			cancel()
+		}
+	})
+	if err == nil || seen[len(seen)-1] == 0 {
+		t.Fatalf("cancelled countdown started capture: %v %v", seen, err)
+	}
+	cancel()
+	if err := screenCountdown(ctx, 5, time.Millisecond, func(int) { t.Fatal("cancelled countdown updated UI") }); err == nil {
+		t.Fatal("expected cancellation")
 	}
 }

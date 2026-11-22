@@ -318,7 +318,9 @@ bounded capture of a known region. `region` and `interactive` are mutually
 exclusive; Windows does not support regions yet. The Mac GUI advertises
 `screen.region`, a native drag-to-select overlay returning `{x,y,w,h}`. With
 `interactive: true`, `screen.record` emits `selecting`, waits for the user to drag
-a rectangle and confirm Start Recording, then emits `started`. Cancelling the
+a rectangle and confirm Start Recording. A cancellable five-second countdown
+then gives time to prepare; no movie capture begins during that countdown.
+The `started` event follows the native recording-start callback. Cancelling the
 picker produces `cancelled`, not a successful recording. The App hides its
 windows during capture. A click-through region outline and a movable floating
 bar stay visible, showing preparation, recording time, and saving. Its Stop & edit
