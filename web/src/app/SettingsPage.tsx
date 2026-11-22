@@ -17,7 +17,7 @@ import { colorIndex, HubFace } from "@/app/HubSwitcher";
 import { PictureButton } from "@/app/AvatarPicker";
 import { ErrorText, Modal, ConfirmDialog } from "@/app/dialogs";
 import { accessLabel, localWorkspaceOf, localWorkspaces, type LocalWorkspace } from "@/app/localHubs";
-import { AuditSection, MembersSection } from "@/app/MembersSection";
+import { AuditSection, MembersSection, MyDevices } from "@/app/MembersSection";
 import { LocalAgentsSection } from "@/app/LocalAgents";
 import { setSimpleMode, useSimpleMode } from "@/app/simpleMode";
 import type { TextSize, ThemeMode } from "@/lib/theme";
@@ -794,6 +794,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
         {section === "voice" && <VoiceSection />}
         {section === "network" && <ProxySection hubsOv={hubsOv} />}
         {section === "about" && <AboutSection info={info} local={local} />}
+        {section === "hubs" && simple && <MyDevices hubsOv={hubsOv} />}
         {section === "members" && <MembersSection hubsOv={hubsOv} onRefresh={onRefresh} />}
         {section === "audit" && <AuditSection hubsOv={hubsOv} />}
       </div>

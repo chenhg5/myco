@@ -1171,7 +1171,7 @@ struct WelcomeScreen: View {
             Button(L("用链接加入工作区", "Join a workspace with a link")) { joining = true }
                 .buttonStyle(PrimaryButtonStyle())
                 .accessibilityIdentifier("welcome.join")
-            Text(L("链接在电脑上的 myco 里：设置 → 成员 → 添加设备。", "The link is in myco on your computer: Settings → Members → Add a device."))
+            Text(L("链接在电脑上的 myco 里：设置 → 工作区（或成员）→ 我的设备 → 添加另一台设备。", "The link is in myco on your computer: Settings → Workspaces (or Members) → My devices → Add another device."))
                 .font(.footnote).foregroundStyle(MycoColor.muted).multilineTextAlignment(.center)
             // Not set up anywhere yet: a sentence for the agent one already
             // has (Claude Code, Codex…) on a computer, to set myco up there.

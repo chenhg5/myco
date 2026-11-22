@@ -2690,6 +2690,11 @@ async function runMatrix(browser, size, scheme) {
       if (!(await page.locator(".app-settings-tab", { hasText: "工作区" }).count())) throw new Error("简单模式下设置里也该有「工作区」");
       if (await page.locator(".app-settings-tab", { hasText: "成员" }).count()) throw new Error("简单模式下设置里不该有「成员」");
       if (!narrow && await page.locator(".sp-nav-pcs").count()) throw new Error("简单模式下侧栏不该有「电脑」");
+      // Adding your phone stays: 我的设备 on the Workspaces page.
+      await clickVisible(page, page.locator(".app-settings-tab", { hasText: "工作区" }));
+      await page.getByRole("button", { name: "添加另一台设备" }).waitFor({ timeout: 10_000 });
+      await clickVisible(page, page.locator(".app-settings-tab", { hasText: "外观" }));
+      await sw.waitFor({ timeout: 10_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "settings-simple-mode");
       // The workspace menu still joins or starts a workspace (onboarding

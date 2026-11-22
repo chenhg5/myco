@@ -89,7 +89,7 @@ What an upload is checked for is in the project: the privacy manifest (`Myco/Pri
 
 ## Trying it
 
-The app opens the workspace joined earlier, or the welcome page: join with a link from the desktop app (Settings → Members → Add a device), or look around the demo workspace. Launch arguments pick what to show:
+The app opens the workspace joined earlier, or the welcome page: join with a link from the desktop app (Settings → Members → My devices → Add another device; in simple mode under Settings → Workspaces), or look around the demo workspace. Launch arguments pick what to show:
 
 | Argument | Values |
 |---|---|
