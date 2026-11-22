@@ -105,9 +105,11 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, 
 
   const entries = useMemo<Entry[]>(() => [
     ...hubs.map((h) => ({ key: h.id, kind: "hub" as const, hub: h })),
-    ...(simple ? [] : [{ key: "add", kind: "add" as const }]),
+    // (in simple mode too: the welcome page sends people here to join or
+    // start another workspace)
+    { key: "add", kind: "add" as const },
     ...(onNewOnServer && !simple ? [{ key: "newOnServer", kind: "newOnServer" as const }] : []),
-    ...(simple ? [] : [{ key: "newLocal", kind: "newLocal" as const }]),
+    { key: "newLocal", kind: "newLocal" as const },
     ...(onSuperagent ? [{ key: "superagent", kind: "superagent" as const }] : []),
     ...(onGuide ? [{ key: "guide", kind: "guide" as const }] : []),
     { key: "settings", kind: "settings" },

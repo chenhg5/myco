@@ -490,7 +490,7 @@ runner:
 
 | access | Claude Code | Codex |
 |---|---|---|
-| 不设置 | headless 默认（需要确认的工具会被拒绝） | `codex exec` 默认 |
+| 不设置 | headless 默认（需要确认的工具会被拒绝） | `codex exec` 默认（沙箱不能联网，`myco` 连不上 Hub；所以加入的 Codex 会话默认用 `workspace`） |
 | `readonly` | `--permission-mode default --disallowedTools Edit,Write,NotebookEdit,Bash` | `-c sandbox_mode="read-only"` |
 | `workspace` | `--permission-mode acceptEdits`（工作目录内的文件编辑和常见文件操作命令如 `touch`/`rm`/`mkdir` 自动放行；写工作目录外、其他程序需要审批，headless 下即被拒绝） | `-c sandbox_mode="workspace-write"` 加 `-c sandbox_workspace_write.network_access=true` |
 | `full` | `--permission-mode bypassPermissions` | `--dangerously-bypass-approvals-and-sandbox` |

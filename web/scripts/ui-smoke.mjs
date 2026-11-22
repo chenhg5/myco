@@ -2692,6 +2692,17 @@ async function runMatrix(browser, size, scheme) {
       if (!narrow && await page.locator(".sp-nav-pcs").count()) throw new Error("简单模式下侧栏不该有「电脑」");
       await settle(page, 200);
       await shot(page, size, scheme, "settings-simple-mode");
+      // The workspace menu still joins or starts a workspace (onboarding
+      // sends people there).
+      if (!narrow) {
+        await page.keyboard.press("Escape");
+        await clickVisible(page, page.locator(".sp-switch .app-hub-trigger"));
+        await page.locator(".app-hub-menu", { hasText: "加入或新建工作区" }).waitFor({ timeout: 5_000 });
+        await page.keyboard.press("Escape");
+        await go(page, "设置", narrow);
+        await clickVisible(page, page.locator(".app-settings-tab", { hasText: "外观" }));
+        await sw.waitFor({ timeout: 10_000 });
+      }
       await sw.click();
       await page.locator(".app-settings-tab", { hasText: "工作区" }).waitFor({ timeout: 5_000 });
       if (!narrow) await page.locator(".sp-nav-pcs").waitFor({ timeout: 5_000 });
