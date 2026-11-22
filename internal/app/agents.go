@@ -512,3 +512,11 @@ func (s *AgentService) SetRunSettings(ctx context.Context, name domain.AgentName
 	a.RunSettings = rs
 	return a, nil
 }
+
+func (s *AgentService) AckProvider(ctx context.Context, name domain.AgentName, id string) error {
+	store, ok := s.agents.(domain.ProviderAcknowledger)
+	if !ok {
+		return domain.Errf(domain.CodeUnsupported, "provider receipts are unavailable")
+	}
+	return store.AckProvider(ctx, name, id)
+}

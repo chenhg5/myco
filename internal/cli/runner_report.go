@@ -190,6 +190,10 @@ func (r *runtimeReporter) flush(ctx context.Context) {
 		return
 	}
 	rt := *r.base
+	if supportsRemoteProvider(rt.CLI) {
+		options := localProviderOptions(rt.CLI)
+		rt.Providers = &options
+	}
 	if r.models != nil {
 		rt.Models = r.models()
 	}
@@ -309,7 +313,10 @@ func runnerFeatures(h harness.Harness) []string {
 	// Codex MCP calls are not controlled by its shell sandbox flag, so this
 	// capability is advertised only for the harness whose flag we change.
 	if h.Name() == "claude" {
-		return []string{"mcp_tools"}
+		return []string{"mcp_tools", "remote_provider"}
+	}
+	if h.Name() == "codex" {
+		return []string{"remote_provider"}
 	}
 	return nil
 }

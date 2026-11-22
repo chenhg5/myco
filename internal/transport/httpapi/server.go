@@ -29,12 +29,13 @@ import (
 
 // Server is the hub's HTTP adapter.
 type Server struct {
-	enroll     *app.EnrollmentService
-	agents     *app.AgentService
-	messages   *app.MessageService
-	adminToken string
-	log        *slog.Logger
-	publicURL  atomic.Value // string
+	runSettingsMu sync.Mutex
+	enroll        *app.EnrollmentService
+	agents        *app.AgentService
+	messages      *app.MessageService
+	adminToken    string
+	log           *slog.Logger
+	publicURL     atomic.Value // string
 	// lan: the hub listens on every interface without a public URL, so
 	// links made over localhost use this machine's LAN address instead.
 	lan atomic.Bool
@@ -275,6 +276,7 @@ func (s *Server) routes() {
 	m.HandleFunc("GET /v1/me", s.agent(s.me))
 	m.HandleFunc("POST /v1/me/resume", s.agent(s.createMyResume))
 	m.HandleFunc("PUT /v1/me/run-settings", s.agent(s.setMyRunSettings))
+	m.HandleFunc("POST /v1/me/provider/ack", s.agent(s.ackMyProvider))
 	m.HandleFunc("DELETE /v1/me/resume", s.agent(s.revokeMyResume))
 	m.HandleFunc("PUT /v1/me/binding", s.agent(s.bind))
 	m.HandleFunc("PUT /v1/me/labels", s.agent(s.myLabels))
@@ -1825,6 +1827,14 @@ func (s *Server) reportMachine(w http.ResponseWriter, r *http.Request, a *domain
 	writeJSON(w, http.StatusOK, map[string]string{"machine_id": m.ID, "name": m.Name})
 }
 
+func encodeProviderOptions(p *[]api.ProviderOption) string {
+	if p == nil {
+		return ""
+	}
+	b, _ := json.Marshal(*p)
+	return string(b)
+}
+
 func (s *Server) reportRuntime(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
 	if !s.machinesEnabled(w) {
 		return
@@ -1840,7 +1850,7 @@ func (s *Server) reportRuntime(w http.ResponseWriter, r *http.Request, a *domain
 		Warnings []string         `json:"tool_warnings,omitempty"`
 	}{in.MCP, in.Skills, in.Plugins, in.ToolWarnings})
 	if err := s.machines.SetRuntime(r.Context(), a, domain.Runtime{CLI: in.CLI, CLIVersion: in.CLIVersion, Model: in.Model,
-		ModelSource: in.ModelSource, Access: in.Access, Provider: in.Provider, ProviderSource: in.ProviderSource, ProviderHost: in.ProviderHost,
+		ModelSource: in.ModelSource, Access: in.Access, Provider: in.Provider, ProviderSource: in.ProviderSource, ProviderHost: in.ProviderHost, Providers: encodeProviderOptions(in.Providers),
 		Effort: in.Effort, EffortSource: in.EffortSource, MaxAccess: in.MaxAccess, Quota: quotaFromAPI(in.Quota),
 		Features: domain.JoinFeatures(in.Features), Away: in.Away, Env: in.Env, Models: domain.EncodeModels(modelsFromAPI(in.Models)), Tools: string(toolJSON)}); err != nil {
 		writeError(w, err)

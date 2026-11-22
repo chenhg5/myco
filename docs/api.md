@@ -625,3 +625,48 @@ service availability. Older runners omit `provider_host`; if an older Hub specif
 unknown field, the client retries once without it so other runtime reporting
 continues to work. The Hub stores this field with runtime JSON; no schema migration
 is needed.
+
+### Remote provider settings
+
+A runner supporting remote provider changes advertises the `remote_provider`
+feature and `runtime.providers: [{ref, name, host?, model?}]`. This inventory is
+from that computer's cc-switch configuration and never contains keys or config
+arguments. A supported runner sends an empty array when it has no channels;
+older runners omit it. Against a Hub that rejects these new runtime fields, the
+client omits them and removes `remote_provider`, so Apps keep remote controls
+read-only until both sides support them.
+
+`PUT /v1/agents/{name}/run-settings` and its App proxy accept an optional
+`provider`: `""` (follow that computer), `"cc-switch:<id>"` (an advertised channel),
+`"clear"` (clear custom provider variables and follow), or `"custom"` with a
+`provider_encrypted` envelope. Omitted provider fields preserve local settings
+and older clients. Only the agent's human owner can change provider settings;
+another administrator, project coordinator, the agent itself, and a superagent
+acting for a person cannot. Omitting model/effort also preserves those values;
+explicit empty strings still clear them. Existing local provider routes remain
+available independently of remote settings.
+
+**Remote custom keys must be encrypted before contacting the Hub.** The local
+App backend exposes `PUT /app/hubs/{id}/agents/{name}/provider` with the same
+`{manual:{base_url, api_key, model?, wire_api?}}` input as local editing. It checks
+that workspace E2E is on and that the target agent has registered its public key,
+then seals the whole configuration with `internal/e2e` for that agent alone. It
+sends the Hub only `{provider:"custom", provider_encrypted:{id,from,body}}` through
+run settings. Without E2E this endpoint returns `e2e_required` and advises entering
+settings in the App or CLI on the target computer. Never put `manual`, `api_key`
+or `key` in a Hub request or ordinary message.
+
+The envelope uses header `{From:from, To:agentName, Type:"provider.settings",
+ReplyTo:id}`, with `from` the authenticated owner's `@console:<member>` name.
+`id` is a fresh 16–80 character request identifier. The Hub validates the owner,
+E2E setting, device signature, envelope format and sole target recipient without
+decrypting it. Neither audit entries nor logs include the ciphertext or key.
+A pending `run_settings.provider_encrypted` means the runner has not acknowledged
+installation. The runner opens it locally before its next invocation, validates
+and writes a private 0600 env file, then `POST /v1/me/provider/ack {id}` consumes
+only that matching pending envelope. A stale receipt returns conflict and cannot
+delete a newer request. The `custom` marker remains while the actual settings live
+only on the target computer. Private local receipts make lost-ack retries avoid
+overwriting local changes with the same delivery again. Clearing or selecting a
+channel cancels pending ciphertext. The existing run_settings/runtime JSON stores
+are used; no database migration is required.

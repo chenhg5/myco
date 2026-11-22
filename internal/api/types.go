@@ -103,6 +103,20 @@ type ResumeRequest struct {
 	Binding Binding `json:"binding"`
 }
 
+// ProviderOption is an available channel on the runner's own computer; no secrets.
+type ProviderOption struct {
+	Ref   string `json:"ref"`
+	Name  string `json:"name"`
+	Host  string `json:"host,omitempty"`
+	Model string `json:"model,omitempty"`
+}
+
+type EncryptedProvider struct {
+	ID   string `json:"id"`
+	From string `json:"from"`
+	Body string `json:"body"`
+}
+
 // Runtime is what an agent runs on.
 type Runtime struct {
 	CLI        string `json:"cli,omitempty"`
@@ -119,7 +133,8 @@ type Runtime struct {
 	Provider       string `json:"provider,omitempty"`
 	ProviderSource string `json:"provider_source,omitempty"`
 	// ProviderHost is only the effective endpoint host and port, never URL credentials or a path.
-	ProviderHost string `json:"provider_host,omitempty"`
+	ProviderHost string            `json:"provider_host,omitempty"`
+	Providers    *[]ProviderOption `json:"providers,omitempty"`
 	// Effort is the reasoning effort the CLI runs with; EffortSource: app
 	// (the agent's run settings) or self (the agent reported it). From v0.19.5.
 	Effort       string `json:"effort,omitempty"`
@@ -204,14 +219,26 @@ type QuotaWindow struct {
 // RunSettings choose how an agent's runner starts its CLI ("" follows the
 // machine's own setting). PUT /v1/agents/{name}/run-settings (from v0.19.5).
 type RunSettings struct {
-	Model  string `json:"model"`
-	Effort string `json:"effort"`
+	Provider          *string            `json:"provider,omitempty"`
+	ProviderEncrypted *EncryptedProvider `json:"provider_encrypted,omitempty"`
+	Model             string             `json:"model"`
+	Effort            string             `json:"effort"`
 	// MCPTools, when present in a request, changes whether configured MCP
 	// tools may run without a prompt outside full access.
 	MCPTools *bool `json:"mcp_tools,omitempty"`
 	// Access: readonly, workspace or full ("" follows the machine). Only the
 	// agent's owner may change it; left out of a request, it stays as it is.
 	Access string `json:"access,omitempty"`
+}
+
+// RunSettingsPatch preserves every field omitted by an App update.
+type RunSettingsPatch struct {
+	Model             *string            `json:"model,omitempty"`
+	Effort            *string            `json:"effort,omitempty"`
+	Access            *string            `json:"access,omitempty"`
+	MCPTools          *bool              `json:"mcp_tools,omitempty"`
+	Provider          *string            `json:"provider,omitempty"`
+	ProviderEncrypted *EncryptedProvider `json:"provider_encrypted,omitempty"`
 }
 
 // Machine is a computer, server or cloud environment agents run on.

@@ -235,3 +235,15 @@ func (r *AgentRepo) setColumn(ctx context.Context, name domain.AgentName, col st
 	}
 	return nil
 }
+
+func (r *AgentRepo) AckProvider(ctx context.Context, name domain.AgentName, id string) error {
+	res, err := r.db.ExecContext(ctx, `UPDATE agents SET run_settings=json_remove(run_settings,'$.provider_encrypted') WHERE name=? AND json_extract(run_settings,'$.provider_encrypted.id')=?`, name, id)
+	if err != nil {
+		return internal(err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return domain.Errf(domain.CodeConflict, "provider request has already changed or been consumed")
+	}
+	return nil
+}

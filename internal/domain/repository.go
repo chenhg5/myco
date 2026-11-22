@@ -164,3 +164,9 @@ type ThreadRef struct {
 	ID        string
 	UpdatedAt time.Time
 }
+
+// ProviderAcknowledger consumes exactly the delivered ciphertext, preserving
+// newer owner updates and all other run settings atomically.
+type ProviderAcknowledger interface {
+	AckProvider(context.Context, AgentName, string) error
+}

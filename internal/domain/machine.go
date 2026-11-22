@@ -73,6 +73,7 @@ type Runtime struct {
 	ProviderSource string `json:"provider_source,omitempty"`
 	// ProviderHost is only the effective endpoint host and port, never URL credentials or a path.
 	ProviderHost string `json:"provider_host,omitempty"`
+	Providers    string `json:"providers,omitempty"`
 	// Effort is the reasoning effort the CLI runs with; EffortSource is
 	// app (the agent's run settings), self (the agent reported it) or "".
 	Effort       string `json:"effort,omitempty"`
@@ -172,9 +173,18 @@ type QuotaWindow struct {
 
 // RunSettings choose how an agent's runner starts its CLI; "" follows the
 // machine's own settings.
+// EncryptedProvider contains only a signed e2e envelope for the target agent.
+type EncryptedProvider struct {
+	ID   string `json:"id"`
+	From string `json:"from"`
+	Body string `json:"body"`
+}
+
 type RunSettings struct {
-	Model  string `json:"model,omitempty"`
-	Effort string `json:"effort,omitempty"`
+	Provider          *string            `json:"provider,omitempty"`
+	ProviderEncrypted *EncryptedProvider `json:"provider_encrypted,omitempty"`
+	Model             string             `json:"model,omitempty"`
+	Effort            string             `json:"effort,omitempty"`
 	// MCPTools lets headless runs use configured MCP servers outside full access.
 	// Only the agent's owner may choose this; false preserves the old behavior.
 	MCPTools bool `json:"mcp_tools,omitempty"`
@@ -194,6 +204,26 @@ var Efforts = map[string][]string{
 
 // Validate checks the settings for an agent on harness h.
 func (rs RunSettings) Validate(h string) error {
+	if rs.Provider != nil {
+		p := *rs.Provider
+		if h != "claude" && h != "codex" {
+			return Errf(CodeInvalidArgument, "provider settings require Claude Code or Codex")
+		}
+		if len(p) > 200 || strings.ContainsAny(p, "\x00\r\n\t ") || (p != "" && p != "clear" && p != "custom" && !(strings.HasPrefix(p, "cc-switch:") && len(p) > 10)) {
+			return Errf(CodeInvalidArgument, "invalid provider reference")
+		}
+	}
+	if rs.ProviderEncrypted != nil {
+		e := rs.ProviderEncrypted
+		if rs.Provider == nil || *rs.Provider != "custom" || len(e.ID) < 16 || len(e.ID) > 80 || len(e.From) > 200 || !strings.HasPrefix(e.From, "@console:") || len(e.Body) > 65536 || !strings.HasPrefix(e.Body, "myco-e2e:v1:") {
+			return Errf(CodeInvalidArgument, "invalid encrypted provider request")
+		}
+		for _, v := range []string{e.ID, e.From} {
+			if strings.ContainsAny(v, "\r\n\x00") {
+				return Errf(CodeInvalidArgument, "invalid encrypted provider request")
+			}
+		}
+	}
 	for _, s := range []string{rs.Model, rs.Effort} {
 		if len(s) > 80 || strings.ContainsAny(s, "\x00\n\r \t") {
 			return Errf(CodeInvalidArgument, "model and effort must be single words under 80 characters")
@@ -225,6 +255,9 @@ func orNone(h string) string {
 
 // Validate keeps runtime fields short single lines.
 func (r Runtime) Validate() error {
+	if len(r.Providers) > 32768 {
+		return Errf(CodeInvalidArgument, "provider inventory too large")
+	}
 	for _, s := range []string{r.CLI, r.CLIVersion, r.Model, r.ModelSource, r.Access, r.Provider, r.ProviderSource, r.ProviderHost, r.Effort, r.EffortSource, r.MaxAccess, r.Away, r.Env} {
 		if len(s) > 120 || strings.ContainsAny(s, "\x00\n\r") {
 			return Errf(CodeInvalidArgument, "runtime fields must be single lines under 120 characters")

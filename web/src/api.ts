@@ -26,7 +26,12 @@ export interface Quota {
   windows: QuotaWindow[];
 }
 /** What the node runs unless told otherwise; absent on nodes reported by old runners. */
+export interface EncryptedProvider { id: string; from: string; body: string }
+export interface ProviderOption { ref: string; name: string; host?: string; model?: string }
 export interface RunSettings {
+  /** absent: unmanaged by Hub; empty: follow machine; custom: private local settings */
+  provider?: string;
+  provider_encrypted?: EncryptedProvider;
   model?: string;
   effort?: string;
   /** Agent owner's choice; omitted on old hubs means disabled. */
@@ -55,6 +60,7 @@ export interface Runtime {
   provider?: string;
   /** where its requests go, host:port only (runners that report it) */
   provider_host?: string;
+  providers?: ProviderOption[];
   provider_source?: ProviderSource;
   /** plan usage, when the CLI writes it on this computer */
   quota?: Quota;
