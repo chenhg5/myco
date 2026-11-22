@@ -318,7 +318,7 @@ function providerLabel(rt?: { provider?: string; provider_host?: string }): stri
 
 const urlHost = (u?: string) => { try { return u ? new URL(u).host : ""; } catch { return u || ""; } };
 
-function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promise<void> }) {
+function ProviderRow({ row, onRefresh, mayManage }: { row: AgentRow; onRefresh: () => Promise<void>; mayManage: boolean }) {
   const ag = row.st.agent;
   const rt = ag.runtime;
   const prov = useCached(`provider\u0000${row.hub.id}\u0000${ag.name}`, () => appApi.agentProvider(ag.name, row.hub.id));
@@ -336,13 +336,27 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
 
   const codex = (rt?.cli || ag.binding.harness) === "codex";
   const editable = !!local?.local && (local.harness === "claude" || local.harness === "codex");
-  const custom = local?.provider === "env_file" ? local.manual : undefined;
+  // On another computer: its runner may let the App switch it (remote_provider),
+  // offering that computer's providers; a key only goes sealed (end-to-end
+  // encryption), else it is entered on that computer. An older runner: read-only.
+  const elsewhere = !!local && !local.local;
+  const remote = elsewhere && mayManage && !!rt?.features?.includes("remote_provider");
+  const olderRunner = elsewhere && mayManage && !!rt && !rt.features?.includes("remote_provider");
+  const sealed = !!row.hub.e2e;
+  const chosen = remote ? ag.run_settings?.provider || "" : local?.provider || "";
+  const custom = remote
+    ? (ag.run_settings?.provider === "env_file" ? ag.run_settings.manual : undefined)
+    : local?.provider === "env_file" ? local.manual : undefined;
   const hasKey = !!custom?.has_key;
   const start = async () => {
     setError(null);
-    setChoice(local?.provider || "");
+    setChoice(chosen);
     setManual({ base_url: custom?.base_url || "", api_key: "", model: custom?.model || "", wire_api: custom?.wire_api || "responses" });
     setOpen(true);
+    if (remote) {
+      setList({ cc_switch: true, providers: (rt?.providers || []).map((p) => ({ ...p, id: p.ref, app: codex ? "codex" : "claude" })) });
+      return;
+    }
     try { setList(await appApi.providers(codex ? "codex" : "claude")); } catch (e) { setError(e); }
   };
   // An address with no credentials, query or fragment in it (they would end
@@ -362,7 +376,13 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
     setBusy(true);
     setError(null);
     try {
-      setLocal(await appApi.setAgentProvider(ag.name, row.hub.id, body));
+      if (remote) {
+        // Over the hub: a choice goes with its run settings (as they are);
+        // a custom address through this App, which seals the key.
+        if ("manual" in body) await appApi.setRemoteProvider(row.hub.id, ag.name, body);
+        else await appApi.setRunSettings(row.hub.id, ag.name, { model: ag.run_settings?.model || "", effort: ag.run_settings?.effort || "", provider: body.provider });
+        await onRefresh();
+      } else setLocal(await appApi.setAgentProvider(ag.name, row.hub.id, body));
       setSaved(note);
       setOpen(false);
       window.setTimeout(() => void onRefresh(), 1500);
@@ -372,7 +392,11 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
       setBusy(false);
     }
   };
-  const applies = L("已保存，从它收到的下一条消息开始生效。", "Saved. It applies from the agent's next message.");
+  const applies = remote
+    ? L("已保存：它那台电脑从下一条消息开始用。", "Saved: its computer uses it from its next message.")
+    : L("已保存，从它收到的下一条消息开始生效。", "Saved. It applies from the agent's next message.");
+  // A custom address needs its key: over the hub only sealed.
+  const customOff = remote && !sealed;
   const submit = () => {
     if (choice !== "env_file") return void save({ provider: choice }, applies);
     const m: ManualProvider = { base_url: manual.base_url.trim(), api_key: manual.api_key.trim(), model: manual.model.trim() || undefined };
@@ -387,30 +411,34 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
   const name = custom
     ? [urlHost(custom.base_url), custom.model].filter(Boolean).join(" · ")
     : reported || (rt ? L("CLI 自己的设置", "The CLI's own setting") : "—");
-  const following = local?.provider === "" && rt?.provider_source !== "pinned" && rt?.provider_source !== "env_file" ? reported : "";
+  const following = chosen === "" && rt?.provider_source !== "pinned" && rt?.provider_source !== "env_file" ? reported : "";
   return (
     <div className={cn("app-kv", saved && "has-help")}>
       <span className="app-kv-label">{L("服务商", "Provider")}</span>
       <span className="app-kv-value">
-        {editable ? (
+        {editable || remote ? (
           <button type="button" className="app-kv-link" onClick={() => void start()} data-testid="provider-open">
             {name}<span className="app-chev">›</span>
           </button>
         ) : name}
       </span>
       {saved && <span className="app-kv-help app-offline-ok">{saved}</span>}
+      {!saved && olderRunner && <span className="app-kv-help">{L("升级它那台电脑上的 myco 后，就能在这里改。", "Upgrade myco on its computer to change it here.")}</span>}
 
       <Modal open={open} onOpenChange={(o) => !busy && setOpen(o)} title={L("服务商", "Provider")}
-        description={L(`后台唤醒这个 agent 时，它的 ${codex ? "Codex" : "Claude Code"} 用哪个服务商（地址、密钥和模型）。只影响这个 agent，密钥只保存在这台电脑上。`, `Which provider (endpoint, key and model) this agent's ${codex ? "Codex" : "Claude Code"} uses when it is woken in the background. Only this agent is affected; keys stay on this computer.`)}>
+        description={remote
+          ? L(`它在另一台电脑上：它的 ${codex ? "Codex" : "Claude Code"} 用哪个服务商（地址、密钥和模型），由它那台电脑上的 runner 照着改。只影响这个 agent，密钥只存在它那台电脑上。`, `It runs on another computer: which provider (endpoint, key and model) its ${codex ? "Codex" : "Claude Code"} uses; the runner there applies it. Only this agent is affected; keys stay on that computer.`)
+          : L(`后台唤醒这个 agent 时，它的 ${codex ? "Codex" : "Claude Code"} 用哪个服务商（地址、密钥和模型）。只影响这个 agent，密钥只保存在这台电脑上。`, `Which provider (endpoint, key and model) this agent's ${codex ? "Codex" : "Claude Code"} uses when it is woken in the background. Only this agent is affected; keys stay on this computer.`)}>
         <div className="app-provider-list" role="radiogroup" data-testid="provider-options">
           <label className={cn("app-provider-opt", choice === "" && "picked")}>
             <input type="radio" name="provider" checked={choice === ""} onChange={() => setChoice("")} />
             <span>
-              <b>{L("跟随这台电脑", "Follow this computer")}</b>
+              <b>{remote ? L("跟随它那台电脑", "Follow its computer") : L("跟随这台电脑", "Follow this computer")}</b>
               <small>
                 {following
                   ? L(`现在走的是 ${following}`, `Now going through ${following}`)
                   : current ? L(`现在是「${current.name}」，在 cc-switch 里切换时跟着变`, `Now “${current.name}”; changes when you switch in cc-switch`)
+                  : remote ? L(`用它那台电脑上 ${codex ? "Codex" : "Claude Code"} 自己的设置`, `Uses ${codex ? "Codex" : "Claude Code"}'s own settings on its computer`)
                   : L(`用这台电脑上 ${codex ? "Codex" : "Claude Code"} 自己的设置`, `Uses ${codex ? "Codex" : "Claude Code"}'s own settings on this computer`)}
               </small>
             </span>
@@ -424,19 +452,21 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
               </span>
             </label>
           ))}
-          <label className={cn("app-provider-opt", choice === "env_file" && "picked")}>
-            <input type="radio" name="provider" checked={choice === "env_file"} onChange={() => setChoice("env_file")} />
+          <label className={cn("app-provider-opt", choice === "env_file" && "picked", customOff && "is-off")} data-testid="provider-custom-opt">
+            <input type="radio" name="provider" checked={choice === "env_file"} onChange={() => setChoice("env_file")} disabled={customOff} />
             <span>
               <b>{L("自定义地址", "Custom address")}</b>
               <small>
-                {custom
+                {customOff
+                  ? L("密钥不经过 hub：请在那台电脑上的 App 里填，或在那台电脑上用 myco runner provider set。工作区开了端到端加密时，这里也能填。", "The key does not go through the hub: enter it in the App on that computer, or run myco runner provider set there. With end-to-end encryption on, you can enter it here.")
+                  : custom
                   ? [urlHost(custom.base_url), custom.model, codex && custom.wire_api ? (custom.wire_api === "chat" ? "Chat Completions" : "Responses") : ""].filter(Boolean).join(" · ")
                   : codex ? L("OpenAI 兼容的地址、模型和密钥", "An OpenAI-compatible address, model and key") : L("Anthropic 兼容的地址、模型和密钥", "An Anthropic-compatible address, model and key")}
               </small>
             </span>
           </label>
         </div>
-        {choice === "env_file" && (
+        {choice === "env_file" && !customOff && (
           <div className="app-provider-manual" data-testid="provider-custom">
             <label className="app-field">
               <span className="app-field-label">{L("地址（base URL）", "Base URL")}</span>
@@ -456,6 +486,7 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
                 onChange={(e) => setManual({ ...manual, api_key: e.target.value })} disabled={busy} data-testid="provider-key" />
               <span className="app-field-hint">{hasKey
                 ? L("已经存了一个，不会显示出来；保存时要再填一次（换地址或模型也一样）。", "One is saved and never shown; enter it again to save (also when you change only the address or model).")
+                : remote ? L("只存在它那台电脑上，存了以后不会再显示。", "Kept only on its computer, and never shown once saved.")
                 : L("只存在这台电脑上，存了以后不会再显示。", "Kept only on this computer, and never shown once saved.")}</span>
             </label>
             {codex && (
@@ -474,6 +505,9 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
             )}
           </div>
         )}
+        {remote && sealed && choice === "env_file" && (
+          <p className="app-modal-note">{L("密钥在这台电脑上先加密，只有那个 agent 能解开；hub 只经手密文。", "The key is sealed on this computer for that agent alone; the hub only carries it sealed.")}</p>
+        )}
         {list && !list.cc_switch && (
           <p className="app-modal-note">{L("装了 cc-switch 的话，这里会列出它的服务商。", "With cc-switch installed, its providers are listed here.")}</p>
         )}
@@ -481,7 +515,9 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
         <div className="app-modal-actions">
           {choice === "env_file" && custom && (
             <button type="button" className="app-btn app-provider-clear" disabled={busy} data-testid="provider-clear"
-              onClick={() => void save({ provider: "" }, L("自定义地址和密钥已清除，改回跟随这台电脑。", "The custom address and key are cleared; it follows this computer again."))}>
+              onClick={() => void save({ provider: remote ? "clear" : "" }, remote
+                ? L("自定义地址和密钥已清除，改回跟随它那台电脑。", "The custom address and key are cleared; it follows its computer again.")
+                : L("自定义地址和密钥已清除，改回跟随这台电脑。", "The custom address and key are cleared; it follows this computer again."))}>
               {L("清除自定义地址", "Clear the custom address")}
             </button>
           )}
@@ -1135,7 +1171,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
               {row_recv}
               {row_cli}
               <RunRows row={row} now={now} mayManage={mayManage} onRefresh={onRefresh} />
-              {kind === "agent" && !isCloud(ag) && ["claude", "codex"].includes(rt?.cli || ag.binding.harness || "") && <ProviderRow row={row} onRefresh={onRefresh} />}
+              {kind === "agent" && !isCloud(ag) && ["claude", "codex"].includes(rt?.cli || ag.binding.harness || "") && <ProviderRow row={row} onRefresh={onRefresh} mayManage={mayManage} />}
               {row_machine}
             </div>
           </section>
@@ -1153,7 +1189,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
             </div>
             <div className="app-list">
               <RunRows row={row} now={now} mayManage={mayManage} onRefresh={onRefresh} part="settings" />
-              {kind === "agent" && !isCloud(ag) && ["claude", "codex"].includes(rt?.cli || ag.binding.harness || "") && <ProviderRow row={row} onRefresh={onRefresh} />}
+              {kind === "agent" && !isCloud(ag) && ["claude", "codex"].includes(rt?.cli || ag.binding.harness || "") && <ProviderRow row={row} onRefresh={onRefresh} mayManage={mayManage} />}
               {row_recv}
             </div>
           </section>

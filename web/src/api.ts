@@ -33,7 +33,14 @@ export interface RunSettings {
   mcp_tools?: boolean;
   /** permission level chosen by the node's owner ("" follows the machine); only its owner may change it */
   access?: RuntimeAccess | "";
+  /** the provider chosen from the App for an agent on another computer ("" or absent: follow it;
+   *  "cc-switch:<id>"; "env_file": a custom address, whose key was sealed for the agent) */
+  provider?: string;
+  /** that custom address, never its key */
+  manual?: { base_url: string; model?: string; wire_api?: "chat" | "responses"; has_key?: boolean };
 }
+/** A provider the agent's computer offers (its runner reports them, never a key). */
+export interface RuntimeProvider { ref: string; name: string; host?: string; model?: string }
 /** What the node actually runs; absent on nodes reported by old runners. */
 /** A model a CLI offers: the id --model takes, a display name, the efforts it supports. */
 export interface RuntimeModel { id: string; name?: string; efforts?: string[] }
@@ -58,8 +65,10 @@ export interface Runtime {
   provider_source?: ProviderSource;
   /** plan usage, when the CLI writes it on this computer */
   quota?: Quota;
-  /** what its runner supports beyond the basics; absent from older runners */
+  /** what its runner supports beyond the basics; absent from older runners ("remote_provider": its provider can be switched from the App) */
   features?: string[];
+  /** the providers its computer offers (cc-switch), when its runner can switch them remotely */
+  providers?: RuntimeProvider[];
   /** why its runner went offline, said as it stopped: "stopped" (absent from older runners and while it runs) */
   away?: "stopped" | string;
   /** where its runner runs when that explains going offline: "wsl" */

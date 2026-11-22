@@ -3454,6 +3454,79 @@ async function runMatrix(browser, size, scheme) {
       await page.keyboard.press("Escape");
     });
 
+    // An agent on another computer: its runner lets the App switch the
+    // provider (its computer's list); a custom address needs end-to-end
+    // encryption (the key is sealed for it), else it is entered there. An
+    // older runner stays read-only.
+    await step("成员 · 远程服务商", async () => {
+      const mock = `http://${HOST}:${mockPort()}`;
+      const setE2E = (on) => fetch(`${mock}/app/hubs/hub_studio/settings`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ e2e: on }) });
+      const openRow = async (who) => {
+        await go(page, "成员", narrow);
+        await clickVisible(page, page.locator(".mb-card", { hasText: who }).first());
+        await page.locator(".ms").waitFor({ timeout: 10_000 });
+        await clickVisible(page, page.locator(".ms .ms-fold"));
+        const row = page.locator(".ms .app-kv", { has: page.locator(".app-kv-label", { hasText: /^服务商$/ }) });
+        await row.waitFor({ timeout: 10_000 });
+        await row.scrollIntoViewIfNeeded();
+        return row;
+      };
+      const dlg = page.locator(".app-modal", { has: page.locator("[data-testid=provider-options]") });
+      let row = await openRow("MCP Claude");
+      if (!(await row.innerText()).includes("DeepSeek（api.deepseek.com）")) throw new Error(`远程 agent 的服务商应写它那台电脑实际走的，实际「${await row.innerText()}」`);
+      await clickVisible(page, row.locator("[data-testid=provider-open]"));
+      await dlg.waitFor({ timeout: 5_000 });
+      const opts = dlg.locator("[data-testid=provider-options]");
+      const text = await opts.innerText();
+      if (!text.includes("跟随它那台电脑") || !text.includes("智谱 GLM")) throw new Error(`远程时应列出它那台电脑上的服务商，实际「${text}」`);
+      const customOpt = dlg.locator("[data-testid=provider-custom-opt]");
+      if (!(await customOpt.locator("input").isDisabled()) || !(await customOpt.innerText()).includes("密钥不经过 hub")) throw new Error("没开端到端加密时，远程的自定义地址应置灰并说明");
+      await settle(page, 200);
+      await shot(page, size, scheme, "provider-remote");
+      await clickVisible(page, opts.locator(".app-provider-opt", { hasText: "智谱 GLM" }));
+      await clickVisible(page, dlg.locator("[data-testid=provider-save]"));
+      await dlg.waitFor({ state: "hidden", timeout: 5_000 });
+      const sent = await (await fetch(`${mock}/app/mock/run-settings`)).json();
+      if (sent.last?.agent !== "mcp-claude" || sent.last.body.provider !== "cc-switch:glm") throw new Error(`远程切换服务商应随运行设置发出，实际 ${JSON.stringify(sent.last)}`);
+      await page.waitForFunction(() => (document.querySelector(".ms [data-testid=provider-open]")?.textContent || "").includes("智谱 GLM"), null, { timeout: 10_000 });
+      // With end-to-end encryption on, a custom address can be entered here.
+      await setE2E(true);
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(6_000); // the App reads the workspace's settings on its next refresh
+      row = await openRow("MCP Claude");
+      await clickVisible(page, row.locator("[data-testid=provider-open]"));
+      await dlg.waitFor({ timeout: 5_000 });
+      await clickVisible(page, dlg.locator("[data-testid=provider-custom-opt]"));
+      const form = dlg.locator("[data-testid=provider-custom]");
+      await form.waitFor({ timeout: 5_000 });
+      await form.locator("[data-testid=provider-url]").fill("https://llm.example.org/anthropic");
+      await form.locator("[data-testid=provider-model]").fill("claude-opus-5-5");
+      await form.locator("[data-testid=provider-key]").fill("sk-remote-1");
+      if (!(await dlg.innerText()).includes("hub 只经手密文")) throw new Error("开了端到端加密时应说明密钥先加密");
+      await settle(page, 200);
+      await shot(page, size, scheme, "provider-remote-sealed");
+      await clickVisible(page, dlg.locator("[data-testid=provider-save]"));
+      await dlg.waitFor({ state: "hidden", timeout: 5_000 });
+      await page.waitForFunction(() => (document.querySelector(".ms [data-testid=provider-open]")?.textContent || "").includes("llm.example.org · claude-opus-5-5"), null, { timeout: 10_000 });
+      // Back as it was: cleared, encryption off.
+      await clickVisible(page, page.locator(".ms [data-testid=provider-open]"));
+      await dlg.waitFor({ timeout: 5_000 });
+      await clickVisible(page, dlg.locator("[data-testid=provider-clear]"));
+      await dlg.waitFor({ state: "hidden", timeout: 5_000 });
+      const cleared = await (await fetch(`${mock}/app/mock/run-settings`)).json();
+      if (cleared.last?.body.provider !== "clear") throw new Error("清除远程的自定义地址应发 provider: clear");
+      await setE2E(false);
+      await page.keyboard.press("Escape");
+      // An older runner on another computer: read-only, and says why.
+      await go(page, "成员", narrow);
+      if (await page.locator(".mb-card", { hasText: "临时 Codex" }).count()) {
+        row = await openRow("临时 Codex");
+        if (await row.locator("[data-testid=provider-open]").count()) throw new Error("老 runner 的服务商应只读");
+        if (!(await row.innerText()).includes("升级它那台电脑上的 myco")) throw new Error("老 runner 应提示升级那台电脑上的 myco");
+        await page.keyboard.press("Escape");
+      }
+    });
+
     await step("成员", async () => {
       await go(page, "成员", narrow);
       await page.locator(".mb-card").first().waitFor({ timeout: 20_000 });

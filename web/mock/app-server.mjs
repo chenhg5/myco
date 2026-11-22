@@ -756,7 +756,15 @@ const state = {
         makeAgent({
           name: "mcp-claude", owner: "glenn", owner_id: "mem_glenn", display_name: "MCP Claude", description: "用 Claude Code 处理文档和工具调用。",
           kind: "agent", machine_id: "m_studio",
-          runtime: { cli: "claude", cli_version: "2.1.240", model: "sonnet", access: "workspace", max_access: "workspace", features: ["mcp_tools"],
+          // Its runner lets the App switch its provider from here (remote_provider)
+          // and lists the cc-switch providers on its computer (never a key).
+          runtime: { cli: "claude", cli_version: "2.1.240", model: "sonnet", access: "workspace", max_access: "workspace", features: ["mcp_tools", "remote_provider"],
+            provider: "DeepSeek", provider_host: "api.deepseek.com", provider_source: "machine",
+            providers: [
+              { ref: "cc-switch:deepseek", name: "DeepSeek", host: "api.deepseek.com", model: "deepseek-v4" },
+              { ref: "cc-switch:glm", name: "智谱 GLM", host: "open.bigmodel.cn", model: "glm-5" },
+              { ref: "cc-switch:kimi", name: "Kimi", host: "api.moonshot.cn" },
+            ],
             mcp: [{ name: "project-docs", transport: "stdio", scope: "project", enabled: true }],
             // Enough skills, some with long descriptions, to fold its list.
             skills: [
@@ -4092,7 +4100,22 @@ const server = http.createServer(async (req, res) => {
           const owns = me && (agent.owner_id ? agent.owner_id === me.id : !agent.owner && me.role === "owner");
           if (!owns && mcpTools !== !!agent.run_settings?.mcp_tools) return fail(res, 403, "permission_denied", "只有这个 agent 的主人能修改 MCP 工具权限。");
         }
+        const keptProvider = agent.run_settings?.provider;
+        const keptManual = agent.run_settings?.manual;
         agent.run_settings = {};
+        if (body.provider !== undefined) {
+          if (!rt.features?.includes("remote_provider")) return fail(res, 409, "unsupported", "this agent's runner cannot switch providers from the App; upgrade myco on its computer");
+          const p = (rt.providers || []).find((x) => x.ref === body.provider);
+          if (body.provider === "" || body.provider === "clear") {
+            rt.provider = (rt.providers || [])[0]?.name; rt.provider_host = (rt.providers || [])[0]?.host; rt.provider_source = "machine";
+          } else if (p) {
+            agent.run_settings.provider = body.provider;
+            rt.provider = p.name; rt.provider_host = p.host; rt.provider_source = "pinned";
+          } else return fail(res, 400, "invalid_argument", "unknown provider " + body.provider);
+        } else if (keptProvider) {
+          agent.run_settings.provider = keptProvider;
+          if (keptManual) agent.run_settings.manual = keptManual;
+        }
         if (access) agent.run_settings.access = access;
         if (mcpTools) agent.run_settings.mcp_tools = true;
         if (body.model) agent.run_settings.model = body.model;
@@ -4118,6 +4141,23 @@ const server = http.createServer(async (req, res) => {
           if (!rt.effort_source) delete rt.effort_source;
         }
         lastRunSettings = { hub: hub.id, agent: agent.name, body };
+        return send(res, 200, agent);
+      }
+      // /app/hubs/{id}/agents/{name}/provider — a custom address for an agent
+      // on another computer: the key is sealed for it, so only with end-to-end
+      // encryption on.
+      if (parts.length === 6 && parts[5] === "provider" && method === "PUT") {
+        const rt = agent.runtime || {};
+        if (!rt.features?.includes("remote_provider")) return fail(res, 409, "unsupported", "upgrade myco on its computer");
+        if (!hub.e2e) return fail(res, 409, "e2e_required", "the key would pass through the hub: turn on end-to-end encryption, or enter it on that computer");
+        const body = await readBody(req);
+        let u;
+        try { u = new URL(body?.manual?.base_url || ""); } catch { return fail(res, 400, "invalid_argument", "base_url must be an http(s) address"); }
+        if (!body.manual.api_key) return fail(res, 400, "invalid_argument", "a key is required");
+        if (u.username || u.password || u.search || u.hash) return fail(res, 400, "invalid_argument", "no credentials, query or fragment in base_url");
+        agent.run_settings = { ...(agent.run_settings || {}), provider: "env_file", manual: { base_url: body.manual.base_url, model: body.manual.model || undefined, has_key: true } };
+        rt.provider = u.host; rt.provider_host = u.host; rt.provider_source = "env_file";
+        lastRunSettings = { hub: hub.id, agent: agent.name, body: { manual: { ...body.manual, api_key: "(sealed)" } } };
         return send(res, 200, agent);
       }
       // /app/hubs/{id}/agents/{name}/resume — the line that brings the same

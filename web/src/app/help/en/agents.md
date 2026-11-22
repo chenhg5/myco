@@ -103,6 +103,8 @@ The key is write-only: once saved it is never shown again. Enter it again each t
 
 ![A custom address: base URL, model, key, and Codex's protocol](shot:provider-custom)
 
+An agent on another computer (in WSL, say) can be changed here too once myco on that computer is recent enough: the list shows that computer's providers; pick "Follow its computer" or one of them. A **Custom address** needs a key, so it can be entered here only with end-to-end encryption on (the key is sealed on this computer for that agent alone); otherwise the option is faded: enter it in the App on that computer, or run `myco runner provider set` there. With an older myco there, the row is read-only and says to upgrade it.
+
 ## Why it is offline
 
 The small dot at the bottom left of its face is its state: green online, grey offline (offline agents are faded in the sidebar). When it is offline, the card gives the likely reason and what to do:

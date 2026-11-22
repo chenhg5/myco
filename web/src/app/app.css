@@ -9438,3 +9438,6 @@ html.os-other ::-webkit-scrollbar-thumb:hover, html.os-other ::-webkit-scrollbar
 .ms .ms-fold-body .app-resume-actions > span:first-child { flex-basis: 100%; }
 .ms .ms-fold-body .app-resume-actions { text-align: left; }
 .app-msg.app-peer .meta .who { font-family: inherit; font-weight: 500; color: var(--fg); }
+/* A choice that can't be made from here (a remote custom address without
+   end-to-end encryption): its name faded, the reason left readable. */
+.app-provider-opt.is-off b, .app-provider-opt.is-off input { opacity: 0.45; }
