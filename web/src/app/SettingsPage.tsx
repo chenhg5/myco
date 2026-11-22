@@ -1,4 +1,5 @@
 import { clearAll, forgetHub, recall, remember } from "@/lib/memo";
+import { openHelp } from "@/app/Help";
 import { CopyButton } from "@/app/copy";
 import { IntroCard, introOf, noteDone } from "@/app/Onboard";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -121,6 +122,13 @@ function AboutSection({ info, local }: { info: AppInfo | null; local: LocalState
             <button type="button" className="app-btn app-btn-quiet" onClick={() => window.dispatchEvent(new CustomEvent("myco-prepare"))}>{L("重新打开", "Open")}</button>
           </span>
         </div>
+        <div className="app-kv app-about-update" data-setting="guide">
+          <span className="app-kv-label">{L("使用文档", "User guide")}</span>
+          <span className="app-kv-value">
+            <span className="app-about-status">{L("项目、自动化、工作流、应用……都怎么用", "How projects, automations, workflows and apps work")}</span>
+            <button type="button" className="app-btn app-btn-quiet" onClick={() => openHelp()} data-testid="settings-guide">{L("打开", "Open")}</button>
+          </span>
+        </div>
       </div>
       <ErrorText error={failure} />
       <p className="app-about-note">
@@ -227,6 +235,7 @@ const FINDABLE: { section: Section; key?: string; title: () => string; words: st
   { section: "audit", title: () => L("审计", "Audit"), words: "审计 日志 记录 操作 audit log" },
   { section: "shortcuts", title: () => L("快捷键", "Keyboard shortcuts"), words: "快捷键 键盘 按键 热键 shortcuts keyboard hotkeys keys" },
   { section: "about", title: () => L("关于", "About"), words: "关于 版本 更新 升级 about version update upgrade" },
+  { section: "about", key: "guide", title: () => L("使用文档", "User guide"), words: "使用文档 文档 帮助 说明 教程 怎么用 help guide docs manual documentation" },
   { section: "about", key: "prepare", title: () => L("上手引导", "Getting started"), words: "上手 引导 新手 准备这台电脑 onboarding getting started setup guide" },
 ];
 

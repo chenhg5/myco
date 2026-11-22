@@ -83,6 +83,7 @@ func appMenu(app *application.App, zh trayText, send func(cmd string)) *applicat
 
 	// Help
 	help := m.AddSubmenu(zh.s("帮助", "Help"))
+	help.Add(zh.s("myco 使用文档", "myco User Guide")).OnClick(do("help"))
 	help.Add(zh.s("键盘快捷键", "Keyboard Shortcuts")).SetAccelerator("CmdOrCtrl+/").OnClick(do("shortcuts"))
 	help.AddSeparator()
 	help.Add(zh.s("使用文档", "Documentation")).OnClick(open(zh.s("https://github.com/chenhg5/myco/blob/main/INSTALL.zh-CN.md", "https://github.com/chenhg5/myco/blob/main/INSTALL.md")))

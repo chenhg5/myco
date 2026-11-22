@@ -9319,3 +9319,42 @@ html.os-other ::-webkit-scrollbar-thumb:hover, html.os-other ::-webkit-scrollbar
 .pp-more:hover .app-row-sub { color: var(--fg); }
 .pp-more-chev { width: 14px; height: 14px; color: var(--faint); }
 .pp-more-chev.is-open { transform: rotate(180deg); }
+
+/* ---------- 使用文档 (Help.tsx): the guide as a documentation site reads:
+   the pages in groups down the left, with a search box; the page on the
+   right as a document (.fp-doc), the previous and next at its foot. Narrow
+   windows: one list to pick from above the page. ---------- */
+.hp { flex: 1; min-height: 0; min-width: 0; display: flex; }
+.hp-nav { flex: none; width: 232px; overflow-y: auto; padding: 18px 10px 28px 14px; border-right: 1px solid var(--line-2); }
+.hp-search { display: flex; align-items: center; gap: 6px; height: 28px; margin: 0 0 16px; padding: 0 9px; border-radius: 8px; background: var(--pill); }
+.hp-search svg { flex: none; width: 14px; height: 14px; color: var(--muted); }
+.hp-search input { flex: 1; min-width: 0; border: 0; background: none; outline: none; font: inherit; font-size: 12.5px; color: var(--fg); }
+.hp-search input::placeholder { color: var(--faint); }
+.hp-group + .hp-group { margin-top: 16px; }
+.hp-group-title { padding: 0 8px 5px; font-size: 11px; font-weight: 500; color: var(--muted); }
+.hp-item { display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 6px 8px; border: 0; border-radius: 6px; background: none;
+  font: inherit; font-size: 13px; line-height: 1.4; text-align: left; color: var(--fg-2); cursor: default; }
+.hp-item:hover { background: var(--nav-hover); color: var(--fg); }
+.hp-item.is-on { background: var(--pill); color: var(--fg); font-weight: 500; }
+.hp-item small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 400; color: var(--muted); }
+.hp-none { margin: 0; padding: 6px 8px; font-size: 12px; color: var(--muted); }
+.hp-pick { display: none; }
+.hp-main { flex: 1; min-width: 0; overflow-y: auto; }
+.hp-doc { padding-top: 30px; padding-bottom: 48px; }
+.hp-doc .md a[href^="#help/"] { color: var(--accent); text-decoration: none; }
+.hp-doc .md a[href^="#help/"]:hover { text-decoration: underline; }
+.hp-pager { display: flex; justify-content: space-between; gap: 12px; margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--line-2); }
+.hp-pager-btn { display: flex; flex-direction: column; gap: 3px; min-width: 0; max-width: 48%; padding: 10px 14px; border: 0; border-radius: 10px;
+  background: none; box-shadow: inset 0 0 0 1px var(--line); font: inherit; text-align: left; color: var(--fg); cursor: default; }
+.hp-pager-btn.is-next { align-items: flex-end; margin-left: auto; text-align: right; }
+.hp-pager-btn:hover { background: var(--nav-hover); }
+.hp-pager-btn small { font-size: 11px; color: var(--muted); }
+.hp-pager-btn span { display: inline-flex; align-items: center; gap: 4px; font-size: 13.5px; font-weight: 500; }
+.hp-pager-btn svg { width: 14px; height: 14px; color: var(--muted); }
+@media (max-width: 760px) {
+  .hp { flex-direction: column; }
+  .hp-nav { width: auto; padding: 10px 14px; border-right: 0; border-bottom: 1px solid var(--line-2); overflow: visible; }
+  .hp-nav > .hp-search, .hp-nav > .hp-group { display: none; }
+  .hp-pick { display: block; }
+  .hp-doc { padding-top: 20px; }
+}

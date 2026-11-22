@@ -2748,6 +2748,40 @@ async function runMatrix(browser, size, scheme) {
       await closeSettings(page);
     });
 
+    // 使用文档: from Settings › About (and the workspace menu); pages in
+    // groups on the left, the page on the right, links between pages, a
+    // search; a narrow window picks the page from one list.
+    await step("使用文档", async () => {
+      await go(page, "设置", narrow);
+      const box = page.locator(".app-settings-search input");
+      await box.fill("使用文档");
+      await box.press("Enter");
+      await clickVisible(page, page.locator("[data-testid=settings-guide]"));
+      const help = page.locator("[data-testid=help]");
+      await help.waitFor({ timeout: 10_000 });
+      const doc = help.locator("[data-testid=help-doc]");
+      if (narrow) {
+        await help.locator(".hp-pick").selectOption("projects");
+      } else {
+        if ((await help.locator(".hp-item").count()) < 12) throw new Error("使用文档左边应列出全部文档");
+        await clickVisible(page, help.locator(".hp-item", { hasText: "项目和协调者" }));
+      }
+      await page.waitForFunction(() => document.querySelector("[data-testid=help-doc]")?.getAttribute("data-doc") === "projects", null, { timeout: 5_000 });
+      if (!(await doc.innerText()).includes("协调者")) throw new Error("项目那篇应讲协调者");
+      await settle(page, 200);
+      await shot(page, size, scheme, "help");
+      // A link to another page opens it here.
+      await clickVisible(page, help.locator(".hp-pager-btn.is-next"));
+      await page.waitForFunction(() => document.querySelector("[data-testid=help-doc]")?.getAttribute("data-doc") === "members", null, { timeout: 5_000 });
+      if (!narrow) {
+        await help.locator(".hp-search input").fill("webhook");
+        await help.locator(".hp-item", { hasText: "自动化" }).first().waitFor({ timeout: 5_000 });
+        await help.locator(".hp-search input").press("Enter");
+        await page.waitForFunction(() => document.querySelector("[data-testid=help-doc]")?.getAttribute("data-doc") === "automations", null, { timeout: 5_000 });
+      }
+      await navBackClick(page);
+    });
+
     // 上手引导 again (Settings › About): this computer's agent CLIs and its
     // sessions to bring in; skipping leaves things as they were.
     await step("设置 · 上手引导", async () => {
@@ -2778,6 +2812,13 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".app-settings-head h2", { hasText: "工作区" }).waitFor({ timeout: 10_000 });
       if (narrow) await sidebar(page, true);
       await list.locator('.ob-step.is-done[data-step="workspace"]').waitFor({ timeout: 10_000 });
+      // The last step: what else myco does, in the user guide; ticked.
+      await closeSettings(page);
+      if (narrow) await sidebar(page, true);
+      await clickVisible(page, list.locator('.ob-step[data-step="guide"]'));
+      await page.locator("[data-testid=help]").waitFor({ timeout: 10_000 });
+      if (narrow) await sidebar(page, true);
+      await list.locator('.ob-step.is-done[data-step="guide"]').waitFor({ timeout: 10_000 });
       if (narrow) await sidebar(page, false);
       await go(page, "应用", narrow);
       const intro = page.locator("[data-testid=intro-apps]");
