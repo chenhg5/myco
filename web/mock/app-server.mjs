@@ -2539,8 +2539,8 @@ const server = http.createServer(async (req, res) => {
         if (body.manual) {
           let u;
           try { u = new URL(body.manual.base_url); } catch { return fail(res, 400, "invalid_argument", "base_url must be an http(s) address"); }
-          const hadKey = !!was.manual?.has_key;
-          if (!body.manual.api_key && !hadKey) return fail(res, 400, "invalid_argument", "a key is required");
+          if (!body.manual.api_key) return fail(res, 400, "invalid_argument", "a key is required");
+          if (u.username || u.password || u.search || u.hash) return fail(res, 400, "invalid_argument", "no credentials, query or fragment in base_url");
           cur.env_host = u.host;
           cur.manual = { base_url: body.manual.base_url, model: body.manual.model || undefined, has_key: true,
             ...(was.harness === "codex" ? { wire_api: body.manual.wire_api || "responses" } : {}) };

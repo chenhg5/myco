@@ -3428,12 +3428,18 @@ async function runMatrix(browser, size, scheme) {
       await form.waitFor({ timeout: 5_000 });
       if ((await form.locator("[data-testid=provider-url]").inputValue()) !== "https://api.example-llm.com/v1") throw new Error("自定义地址应带出保存的 base URL");
       const key = form.locator("[data-testid=provider-key]");
-      if ((await key.inputValue()) !== "" || !(await key.getAttribute("placeholder") || "").includes("已保存")) throw new Error("密钥只写不回显：输入框应是空的，并说已保存");
+      if ((await key.inputValue()) !== "" || !(await form.innerText()).includes("已经存了一个，不会显示出来")) throw new Error("密钥只写不回显：输入框应是空的，并说已经存了一个");
+      // An address with a key in it is refused before saving.
+      const url = form.locator("[data-testid=provider-url]");
+      await url.fill("https://user:sk-x@api.example-llm.com/v1");
+      await form.locator(".app-field-hint.is-bad").waitFor({ timeout: 5_000 });
+      await url.fill("https://api.example-llm.com/v1");
+      if (await dlg.locator("[data-testid=provider-save]").isEnabled()) throw new Error("没填密钥时不能保存（每次都要重新填）");
+      await key.fill("sk-test-123");
       if (!(await form.locator("[data-testid=provider-wire-responses]").getAttribute("aria-selected"))?.includes("true")) throw new Error("Codex 默认协议应是 Responses");
       await clickVisible(page, form.locator("[data-testid=provider-wire-chat]"));
       await settle(page, 200);
       await shot(page, size, scheme, "provider-custom");
-      // Saved without typing the key: the one saved stays.
       await clickVisible(page, dlg.locator("[data-testid=provider-save]"));
       await dlg.waitFor({ state: "hidden", timeout: 5_000 });
       await page.waitForFunction(() => (document.querySelector(".ms [data-testid=provider-open]")?.textContent || "").includes("api.example-llm.com"), null, { timeout: 5_000 });
@@ -3442,6 +3448,7 @@ async function runMatrix(browser, size, scheme) {
       await dlg.waitFor({ timeout: 5_000 });
       if (!(await dlg.locator("[data-testid=provider-options]").innerText()).includes("Chat Completions")) throw new Error("保存后自定义地址那项应写协议");
       await clickVisible(page, dlg.locator("[data-testid=provider-wire-responses]"));
+      await dlg.locator("[data-testid=provider-key]").fill("sk-test-123");
       await clickVisible(page, dlg.locator("[data-testid=provider-save]"));
       await dlg.waitFor({ state: "hidden", timeout: 5_000 });
       await page.keyboard.press("Escape");

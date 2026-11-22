@@ -99,7 +99,7 @@ A Claude Code or Codex agent running on this computer can have its own provider.
 
 ![Following this computer, the Provider row names the gateway it goes through](shot:provider-follow)
 
-The key is write-only: once saved it is never shown again; the box says "Saved and hidden; leave blank to keep it", so changing only the address or model does not need it again. After saving, the row shows the address's host and model, such as "api.example.com · gpt-5-codex". To stop using it, click **Clear the custom address** at the bottom left: the address and key are removed and it follows this computer again. Changes apply from its next message; the key stays on this computer and is never sent to the workspace.
+The key is write-only: once saved it is never shown again. Enter it again each time you save, even when you change only the address or model. Keep user names, keys and anything after ? or # out of the address: the key goes only in the Key box. After saving, the row shows the address's host and model, such as "api.example.com · gpt-5-codex". To stop using it, click **Clear the custom address** at the bottom left: the address and key are removed and it follows this computer again. Changes apply from its next message; the key stays on this computer and is never sent to the workspace.
 
 ![A custom address: base URL, model, key, and Codex's protocol](shot:provider-custom)
 

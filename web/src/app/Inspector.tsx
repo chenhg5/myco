@@ -343,8 +343,19 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
     setOpen(true);
     try { setList(await appApi.providers(codex ? "codex" : "claude")); } catch (e) { setError(e); }
   };
-  const urlOK = /^https?:\/\/[^\s/]+/i.test(manual.base_url.trim());
-  const canSave = choice !== "env_file" || (urlOK && (hasKey || !!manual.api_key.trim()));
+  // An address with no credentials, query or fragment in it (they would end
+  // up in the CLI's arguments); the key goes in its own box, every time.
+  const urlProblem = (() => {
+    const v = manual.base_url.trim();
+    if (!v) return "";
+    let u: URL;
+    try { u = new URL(v); } catch { return L("地址要以 http:// 或 https:// 开头", "The address starts with http:// or https://"); }
+    if (u.protocol !== "http:" && u.protocol !== "https:") return L("地址要以 http:// 或 https:// 开头", "The address starts with http:// or https://");
+    if (u.username || u.password) return L("地址里不要带用户名或密钥，密钥填在下面", "No user name or key in the address: the key goes below");
+    if (u.search || u.hash) return L("地址里不要带 ? 或 # 后面的部分", "No ? or # part in the address");
+    return "";
+  })();
+  const canSave = choice !== "env_file" || (!!manual.base_url.trim() && !urlProblem && !!manual.api_key.trim());
   const save = async (body: { provider: string } | { manual: ManualProvider }, note: string) => {
     setBusy(true);
     setError(null);
@@ -363,8 +374,7 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
   const submit = () => {
     if (choice !== "env_file") return void save({ provider: choice }, applies);
     const m: ManualProvider = { base_url: manual.base_url.trim(), model: manual.model.trim() || undefined };
-    // The key only when typed: blank keeps the one saved.
-    if (manual.api_key.trim()) m.api_key = manual.api_key.trim();
+    m.api_key = manual.api_key.trim();
     if (codex) m.wire_api = manual.wire_api;
     void save({ manual: m }, applies);
   };
@@ -431,6 +441,7 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
               <span className="app-field-label">{L("地址（base URL）", "Base URL")}</span>
               <input className="app-input" placeholder={codex ? "https://api.example.com/v1" : "https://api.example.com/anthropic"} value={manual.base_url}
                 onChange={(e) => setManual({ ...manual, base_url: e.target.value })} disabled={busy} spellCheck={false} data-testid="provider-url" />
+              {urlProblem && <span className="app-field-hint is-bad">{urlProblem}</span>}
             </label>
             <label className="app-field">
               <span className="app-field-label">{L("模型", "Model")}</span>
@@ -440,8 +451,11 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
             <label className="app-field">
               <span className="app-field-label">{L("密钥", "Key")}</span>
               <input className="app-input" type="password" autoComplete="new-password" value={manual.api_key}
-                placeholder={hasKey ? L("已保存，不显示；留空不改", "Saved and hidden; leave blank to keep it") : L("填上服务商给你的 key", "The key your provider gave you")}
+                placeholder={L("填上服务商给你的 key", "The key your provider gave you")}
                 onChange={(e) => setManual({ ...manual, api_key: e.target.value })} disabled={busy} data-testid="provider-key" />
+              <span className="app-field-hint">{hasKey
+                ? L("已经存了一个，不会显示出来；保存时要再填一次（换地址或模型也一样）。", "One is saved and never shown; enter it again to save (also when you change only the address or model).")
+                : L("只存在这台电脑上，存了以后不会再显示。", "Kept only on this computer, and never shown once saved.")}</span>
             </label>
             {codex && (
               <div className="app-field">
