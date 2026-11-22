@@ -16,8 +16,8 @@ cd "$source_dir"
 args=(--disable-everything --disable-autodetect --disable-doc --disable-debug
  --disable-shared --enable-static --disable-programs --enable-ffmpeg
  --enable-avdevice --enable-avfilter --enable-swscale --enable-network
- --enable-protocol=file,udp,rtp --enable-demuxer=rawvideo --enable-muxer=rtp --enable-decoder=rawvideo,bmp
- --enable-filter=scale,format,fps,null --enable-bsf=h264_mp4toannexb
+ --enable-protocol=file,udp,rtp,pipe --enable-demuxer=rawvideo --enable-muxer=rtp,image2pipe --enable-decoder=rawvideo,bmp
+ --enable-encoder=bmp --enable-filter=scale,format,fps,null,select --enable-bsf=h264_mp4toannexb
  --enable-parser=h264 --disable-x86asm)
 binary=ffmpeg
 case "${RUNNER_OS:-$(uname -s)}" in

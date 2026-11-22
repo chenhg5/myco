@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"image"
@@ -143,12 +144,33 @@ func TestStatusAdvertisesAgentActions(t *testing.T) {
 	}
 }
 
-func TestSnapshotArgs(t *testing.T) {
-	a := strings.Join(snapshotArgs(1280, "jpeg"), " ")
-	if !strings.Contains(a, `select=gte(n\,3),scale='min(1280,iw)':-2`) || !strings.Contains(a, "-frames:v 1") || !strings.HasSuffix(a, "pipe:1") || !strings.Contains(a, "mjpeg") {
-		t.Fatalf("jpeg args: %s", a)
+func TestSnapshotArgsAndBMP(t *testing.T) {
+	a := strings.Join(snapshotArgs(1280), " ")
+	if !strings.Contains(a, `select=gte(n\,3),scale='min(1280,iw)':-2`) || !strings.Contains(a, "-frames:v 1") || !strings.Contains(a, "-c:v bmp -pix_fmt bgr24 -f image2pipe pipe:1") {
+		t.Fatalf("args: %s", a)
 	}
-	if !strings.Contains(strings.Join(snapshotArgs(800, "png"), " "), "-c:v png") {
-		t.Fatal("png args")
+	// A 2x2 bottom-up BMP: red, green / blue, white (rows padded to 4 bytes).
+	px := []byte{0xff, 0, 0, 0xff, 0xff, 0xff, 0, 0, 0, 0, 0xff, 0, 0xff, 0, 0, 0}
+	head := make([]byte, 54)
+	copy(head, "BM")
+	binary.LittleEndian.PutUint32(head[10:], 54)
+	binary.LittleEndian.PutUint32(head[14:], 40)
+	binary.LittleEndian.PutUint32(head[18:], 2)
+	binary.LittleEndian.PutUint32(head[22:], 2)
+	binary.LittleEndian.PutUint16(head[26:], 1)
+	binary.LittleEndian.PutUint16(head[28:], 24)
+	img, err := decodeBMP(append(head, px...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[[2]int][3]uint8{{0, 0}: {0xff, 0, 0}, {1, 0}: {0, 0xff, 0}, {0, 1}: {0, 0, 0xff}, {1, 1}: {0xff, 0xff, 0xff}}
+	for p, c := range want {
+		got := img.RGBAAt(p[0], p[1])
+		if got.R != c[0] || got.G != c[1] || got.B != c[2] {
+			t.Fatalf("pixel %v: %v want %v", p, got, c)
+		}
+	}
+	if _, err := decodeBMP(head[:20]); err == nil {
+		t.Fatal("a short file decoded")
 	}
 }

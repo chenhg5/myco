@@ -10,13 +10,14 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"image"
-	_ "image/jpeg"
-	_ "image/png"
+	"image/jpeg"
+	"image/png"
 	"io"
 	"net/http"
 	"os"
@@ -173,7 +174,8 @@ func (e *engine) agentInput(w http.ResponseWriter, r *http.Request) {
 }
 
 // snapshot captures one still frame of the display input maps to, at most
-// maxWidth wide, as JPEG or PNG.
+// maxWidth wide, as JPEG or PNG. The bundled FFmpeg has no image encoders:
+// it hands over one uncompressed BMP, encoded here.
 func snapshot(ctx context.Context, maxWidth int, format string) ([]byte, error) {
 	bin := ffmpegPath()
 	if _, err := os.Stat(bin); err != nil {
@@ -184,7 +186,7 @@ func snapshot(ctx context.Context, maxWidth int, format string) ([]byte, error) 
 		return nil, err
 	}
 	args := append([]string{"-hide_banner", "-loglevel", "error", "-nostdin"}, in...)
-	args = append(args, snapshotArgs(maxWidth, format)...)
+	args = append(args, snapshotArgs(maxWidth)...)
 	c := exec.CommandContext(ctx, bin, args...)
 	hideProcess(c)
 	var out limitedBuffer
@@ -193,18 +195,63 @@ func snapshot(ctx context.Context, maxWidth int, format string) ([]byte, error) 
 	if err := c.Run(); err != nil || out.over || out.Len() == 0 {
 		return nil, errors.New("screen_capture_failed")
 	}
-	return out.Bytes(), nil
+	img, err := decodeBMP(out.Bytes())
+	if err != nil {
+		return nil, errors.New("screen_capture_failed")
+	}
+	var enc bytes.Buffer
+	if format == "png" {
+		err = (&png.Encoder{CompressionLevel: png.BestSpeed}).Encode(&enc, img)
+	} else {
+		err = jpeg.Encode(&enc, img, &jpeg.Options{Quality: 80})
+	}
+	if err != nil {
+		return nil, errors.New("screen_capture_failed")
+	}
+	return enc.Bytes(), nil
 }
 
 // snapshotArgs skip the first frames (AVFoundation's first one can be stale
-// or black) and scale down only.
-func snapshotArgs(maxWidth int, format string) []string {
+// or black), scale down only, and write one 24-bit BMP to stdout.
+func snapshotArgs(maxWidth int) []string {
 	vf := fmt.Sprintf("select=gte(n\\,3),scale='min(%d,iw)':-2", maxWidth)
-	args := []string{"-an", "-vf", vf, "-frames:v", "1", "-f", "image2pipe"}
-	if format == "png" {
-		return append(args, "-c:v", "png", "pipe:1")
+	return []string{"-an", "-vf", vf, "-frames:v", "1", "-c:v", "bmp", "-pix_fmt", "bgr24", "-f", "image2pipe", "pipe:1"}
+}
+
+// decodeBMP reads the uncompressed 24-bit BMP FFmpeg writes.
+func decodeBMP(b []byte) (*image.RGBA, error) {
+	if len(b) < 54 || b[0] != 'B' || b[1] != 'M' {
+		return nil, errors.New("not a bmp")
 	}
-	return append(args, "-c:v", "mjpeg", "-pix_fmt", "yuvj420p", "-q:v", "4", "pipe:1")
+	off := int(binary.LittleEndian.Uint32(b[10:]))
+	w := int(int32(binary.LittleEndian.Uint32(b[18:])))
+	h := int(int32(binary.LittleEndian.Uint32(b[22:])))
+	bpp := binary.LittleEndian.Uint16(b[28:])
+	comp := binary.LittleEndian.Uint32(b[30:])
+	topDown := h < 0
+	if topDown {
+		h = -h
+	}
+	if bpp != 24 || comp != 0 || w <= 0 || h <= 0 || w > 8192 || h > 8192 {
+		return nil, errors.New("unsupported bmp")
+	}
+	stride := (w*3 + 3) &^ 3
+	if off < 54 || off+stride*h > len(b) {
+		return nil, errors.New("short bmp")
+	}
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		row := h - 1 - y
+		if topDown {
+			row = y
+		}
+		src := b[off+row*stride:]
+		dst := img.Pix[y*img.Stride:]
+		for x := 0; x < w; x++ {
+			dst[x*4], dst[x*4+1], dst[x*4+2], dst[x*4+3] = src[x*3+2], src[x*3+1], src[x*3], 0xff
+		}
+	}
+	return img, nil
 }
 
 type limitedBuffer struct {
