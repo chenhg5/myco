@@ -4,6 +4,20 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.21.23
+
+- **Agents can export a shared page as a file**: an agent you approve (or one that can already see the page) can export a whiteboard (SVG, PNG), a design (SVG, PNG, HTML, JSON) or a slide deck (PPTX, Markdown) without anyone clicking. The App renders the page in the background and the file goes only to that agent. Revoking the approval stops the export at once.
+- **New apps**: a calendar for personal scheduling and shared bookings across time zones, and a learning workspace where a tutor teaches from the materials you import and guides you through a course.
+- Fixes: approval cards line up with the message box; calendar time grids and event buttons line up.
+- Upgrade the server's hub for page exports (`sudo myco upgrade`, or from the App).
+
+**中文**
+
+- **agent 能把共享页面导出成文件**：经你批准的 agent（或本来就能看到这个页面的 agent）可以直接导出白板（SVG、PNG）、设计稿（SVG、PNG、HTML、JSON）、幻灯片（PPTX、Markdown），不用人点。App 在后台渲染页面，文件只给这个 agent；撤销批准会立刻停止导出。
+- **新应用**：日历，安排个人日程、跨时区预约；学习工作台，导师按你导入的资料讲课、带你学完一门课。
+- 修复：审批卡片和输入框对齐；日历时间格和事件按钮对齐。
+- 页面导出需要升级服务器上的 hub（`sudo myco upgrade`，或在 App 里升级）。
+
 ## v0.21.22
 
 - **Use any model gateway for an agent**: an agent's Provider can now be a custom address (base URL, model and key; Codex also picks Responses or Chat Completions), so it can run through magpie, LiteLLM, OneAPI or any Anthropic- or OpenAI-compatible endpoint. The key stays in a private file on that computer and is never shown again.
