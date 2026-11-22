@@ -4,6 +4,8 @@
 
 We are rebuilding the apps people use every day on Mac, Windows and phone so that **agents can use them too**. You and your agent work on the same page: the agent fills it in or edits it, and you see the change live. Open them in the myco app under **Apps**; new ones arrive release by release.
 
+This is part of **[Rebuild 100 great apps with agents, free and open, always improving](open-apps.md)**: why we are doing it, what we stand by, how to nominate the next app and how to build one yourself.
+
 Apps that need the computer itself (files, the screen, the microphone, the network) ask it through the myco app; see [`myco.os`](app-os.md). Recordings, photos and videos stay on the computer that opened them.
 
 ## Creative
