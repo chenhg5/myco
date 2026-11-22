@@ -144,7 +144,10 @@ export function svg(f: Frame): string {
           ? `<image x="${x}" y="${y}" width="${w}" height="${h}" href="${esc(n.src)}" preserveAspectRatio="xMidYMid slice"/>`
           : "";
       const size = Math.max(6, Math.min(400, num(n.size, 24)));
-      return `<text x="${x}" y="${y}" dominant-baseline="text-before-edge" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,PingFang SC,sans-serif" font-size="${size}" font-weight="${num(n.weight, 400)}" ${common}>${String(
+      // Nodes use the top of a line box. An explicit alphabetic baseline also
+      // works in WebKit, where text-before-edge can fall back to alphabetic
+      // without adjusting y, moving glyphs above the node and its button.
+      return `<text x="${x}" y="${y + size}" dominant-baseline="alphabetic" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,PingFang SC,sans-serif" font-size="${size}" font-weight="${num(n.weight, 400)}" ${common}>${String(
         n.text || "",
       )
         .split("\n")

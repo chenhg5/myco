@@ -49,6 +49,27 @@ if(fixture){
 const output=fixture?.output||process.env.PAGE_EXPORT_SHOTS;
 if(output)await fs.mkdir(output,{recursive:true});
 let counter=0;
+async function assertButtonLabel(page, bytes, mediaType = 'image/png') {
+ const ink=await page.evaluate(async ({bytes,mediaType})=>{
+  const image=new Image(),url=URL.createObjectURL(new Blob([new Uint8Array(bytes)],{type:mediaType}));
+  try {
+   await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=reject;image.src=url;});
+   const scale=Math.min(1,640/image.width),canvas=document.createElement('canvas');
+   canvas.width=Math.round(image.width*scale);canvas.height=Math.round(image.height*scale);
+   const ctx=canvas.getContext('2d');ctx.drawImage(image,0,0,canvas.width,canvas.height);
+   const k=canvas.width/1440,pixels=ctx.getImageData(0,0,canvas.width,canvas.height).data;
+   let min=Infinity,max=-Infinity,count=0;
+   for(let y=Math.ceil(495*k);y<Math.floor(547*k);y++)for(let x=Math.ceil(112*k);x<Math.floor(200*k);x++){
+    const offset=(y*canvas.width+x)*4;
+    // Small scaled glyphs are antialiased; distinguish ink from #222.
+    if(pixels[offset]>140&&pixels[offset+1]>140&&pixels[offset+2]>140){min=Math.min(min,y);max=Math.max(max,y);count++;}
+   }
+   return {min,max,count,center:521*k};
+  } finally {URL.revokeObjectURL(url);}
+ },{bytes:Array.from(bytes),mediaType});
+ assert(ink.count>5,'button label disappeared from the export: '+JSON.stringify(ink));
+ assert(Math.abs((ink.min+ink.max)/2-ink.center)<=3,'button label is vertically displaced: '+JSON.stringify(ink));
+}
 try{
  for(const app of ['whiteboard','design-studio','slides']){
   const sample=JSON.parse(await fs.readFile(path.join(root,app,'sample.json'),'utf8'));
@@ -113,8 +134,21 @@ try{
   const cases=app==='whiteboard'?[{format:'svg'},{format:'png',max_width:640}]:app==='design-studio'?[{format:'svg',artifact_id:'design-website'},{format:'png',artifact_id:'design-website',max_width:640},{format:'json',artifact_id:'design-website'},{format:'html',artifact_id:'design-website'}]:[{format:'pptx'},{format:'md',slide_ids:['s2','s1']}];
   for(const args of cases){
    const result=await wrapped(args);assert(!result.error,JSON.stringify(result.error));const bytes=Buffer.from(result.bytes);assert(bytes.length>10);
-   if(args.format==='png'){assert(bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])));assert(result.width<=640);assert.equal(bytes.readUInt32BE(16),result.width);}
-   if(args.format==='svg'){assert(bytes.toString().startsWith('<svg'));assert(!bytes.toString().includes('<script>'));}
+   if(output)await fs.writeFile(path.join(output,app+'.'+args.format),bytes);
+   if(args.format==='png'){
+    assert(bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])));assert(result.width<=640);assert.equal(bytes.readUInt32BE(16),result.width);
+    if(app==='design-studio'){
+     // The sample's white label belongs inside its dark button, vertically
+     // centered. Inspect actual encoded pixels, not SVG attribute spelling.
+     await assertButtonLabel(page,result.bytes);
+    }
+   }
+   if(args.format==='svg'){
+    assert(bytes.toString().startsWith('<svg'));assert(!bytes.toString().includes('<script>'));
+    // Simulate a renderer that ignores SVG's optional top-edge baseline hint.
+    // The old WebKit output placed the label against the button's top edge.
+    if(app==='design-studio')await assertButtonLabel(page,Buffer.from(bytes.toString().replace(/\sdominant-baseline="[^"]*"/g,'')),'image/svg+xml');
+   }
    if(args.format==='pptx'){
     const zip=await JSZip.loadAsync(bytes);assert.equal(result.pages,8);
     assert.equal(Object.keys(zip.files).filter(k=>/^ppt\/slides\/slide\d+\.xml$/.test(k)).length,8);
@@ -123,7 +157,6 @@ try{
    }
    if(args.format==='md'){assert(bytes.toString().indexOf('议程')<bytes.toString().lastIndexOf('Q4 产品发布会'));assert.equal(result.pages,2);}
    if(args.format==='json')assert.equal(JSON.parse(bytes).title,'日常的形状');
-   if(output)await fs.writeFile(path.join(output,app+'.'+args.format),bytes);
   }
   assert.equal((await invoke({format:'pdf'})).error.code,'invalid_argument');
   assert.equal((await invoke(cases[0],{version:2})).error.code,'unsupported');

@@ -62,6 +62,8 @@ Read the application's `agent.md` for bounds and exact parameters. Unsupported
 formats, missing selections and excessive source data fail explicitly. HTML
 source is returned as file bytes, never executed by the export handler. Slides
 does not advertise PDF or PNG without a corresponding export engine.
+Design Studio text nodes use the top-left of their line box in the editable
+canvas and SVG/PNG files, including the WebKit-based desktop renderer.
 
 These actions require a compatible Hub/CLI and desktop App with the `page`
 render provider and `page-actions` bridge. Template updates alone cannot enable
