@@ -2103,6 +2103,12 @@ const server = http.createServer(async (req, res) => {
     if (parts.length === 2 && method === "GET") return send(res, 200, { os: "mock", arch: "", caps: [] });
     return fail(res, 501, "unsupported", "the mock App does not use this computer");
   }
+  // /app/page-render: no exports in the mock; the renderer waits and asks again.
+  if (parts[0] === "app" && parts[1] === "page-render" && parts[2] === "next" && method === "GET") {
+    const t = setTimeout(() => { res.writeHead(204); res.end(); }, 20_000);
+    req.on("close", () => clearTimeout(t));
+    return;
+  }
   // /app/info
   if (parts[0] === "app" && parts[1] === "info" && parts.length === 2) {
     if (method !== "GET") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);

@@ -461,6 +461,15 @@ func (h actionApprovals) Deny(ctx context.Context, a *domain.Approval) {
 	}
 }
 
+// artifactTypeAllowed: the files a job may make (a screenshot, an export).
+func artifactTypeAllowed(t string) bool {
+	switch t {
+	case "text/plain", "text/csv", "text/markdown", "application/json", "application/pdf":
+		return true
+	}
+	return strings.HasPrefix(t, "image/") || strings.HasPrefix(t, "application/vnd.openxmlformats-officedocument.")
+}
+
 func contains(list []string, v string) bool {
 	for _, x := range list {
 		if x == v {
@@ -880,8 +889,8 @@ func (s *ActionService) UploadArtifact(ctx context.Context, by Actor, jobID, hos
 		return nil, domain.Errf(domain.CodeInvalidArgument, "an artifact is 1 byte to %d MB", actionArtifactMax>>20)
 	}
 	mediaType = strings.TrimSpace(strings.Split(mediaType, ";")[0])
-	if !(strings.HasPrefix(mediaType, "image/") || mediaType == "text/plain" || mediaType == "application/json") {
-		return nil, domain.Errf(domain.CodeInvalidArgument, "artifact type %q is not allowed (images, text/plain, application/json)", mediaType)
+	if !artifactTypeAllowed(mediaType) {
+		return nil, domain.Errf(domain.CodeInvalidArgument, "artifact type %q is not allowed (images, PDF, Office documents, text/plain, text/csv, text/markdown, application/json)", mediaType)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
