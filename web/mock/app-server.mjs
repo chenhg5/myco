@@ -758,7 +758,21 @@ const state = {
           kind: "agent", machine_id: "m_studio",
           runtime: { cli: "claude", cli_version: "2.1.240", model: "sonnet", access: "workspace", max_access: "workspace", features: ["mcp_tools"],
             mcp: [{ name: "project-docs", transport: "stdio", scope: "project", enabled: true }],
-            skills: [{ name: "release-check", description: "Check release notes", scope: "project" }] },
+            // Enough skills, some with long descriptions, to fold its list.
+            skills: [
+              { name: "release-check", description: "Check release notes", scope: "project" },
+              { name: "dws", description: "管理钉钉产品能力（AI 表格、日历、通讯录、群聊与机器人、待办、审批、考勤、日志、DING 消息、钉钉文档、云盘、邮箱等）。当用户需要操作表格数据、管理日程会议、查谁负责某事项、发消息、创建待办、提交审批时使用。", scope: "user" },
+              { name: "loop-authoring", description: "在 loops 仓库里从零搭一条循环（Workflow + 卡片 + 账本 + draft PR）、改造现有循环，或判断某件事该不该做成循环时使用。15 分钟路径：起骨架 → 只填五个业务格子 → 验证。", scope: "user" },
+              { name: "myco", description: "Talk to other AI agents through a myco hub: discover agents, delegate tasks, answer tasks, and follow threads with the myco CLI.", scope: "user", managed_by: "myco" },
+              { name: "pr-triage", description: "Classify, route, label, and identify obsolete pull requests. Use for PR backlog triage, exact-head review gates, conflict/review/verification queues, or batch label maintenance.", scope: "user" },
+              { name: "frontend-design", description: "Create distinctive, production-grade frontend interfaces with high design quality.", scope: "plugin" },
+              { name: "pdf", description: "Read, extract, merge, split, rotate and fill PDF files.", scope: "plugin" },
+            ],
+            plugins: [
+              { name: "frontend-design", marketplace: "claude-plugins-official", enabled: true },
+              { name: "document-skills", marketplace: "anthropic-agent-skills", enabled: true },
+              { name: "old-linter", marketplace: "local", enabled: false },
+            ] },
           binding: { harness: "claude", environment: "macOS 26.1", workdir: "~/code/myco" },
         }),
         makeAgent({

@@ -8534,8 +8534,6 @@ body.is-resizing {
 .pcd-ai.is-missing { color: var(--muted); }
 .app-tool-list { margin: 8px 0 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; }
 .app-tool-list summary { cursor: pointer; color: var(--fg-2); font-size: 12px; }
-.app-tool-list .app-tool-inventory { margin-top: 8px; }
-.app-tool-inventory .app-small-note { margin: 4px 0; overflow-wrap: anywhere; }
 
 /* ---------- an automation opened (Automations.tsx AutomationDetail) ---------- */
 .aud .pcd-head .ph-actions { align-items: center; }
@@ -9275,7 +9273,7 @@ html.os-other ::-webkit-scrollbar-thumb:hover, html.os-other ::-webkit-scrollbar
 .pcd-line-value { flex: none; display: flex; align-items: center; gap: 8px; }
 .pcd-value { font-size: 13px; color: var(--fg); }
 .pcd-value.is-quiet { color: var(--faint); }
-.pcd-line > .mdirs, .pcd-line > .app-notice, .pcd-line > .app-small-note, .pcd-line > .app-error-text, .pcd-line > .app-tool-inventory { margin-top: 10px; }
+.pcd-line > .mdirs, .pcd-line > .app-notice, .pcd-line > .app-small-note, .pcd-line > .app-error-text { margin-top: 10px; }
 .pcd-line-note { margin: 8px 0 0; }
 .pcd-line .mdirs { align-items: flex-start; }
 .pcd-line .mdirs-list { justify-content: flex-start; }
@@ -9287,7 +9285,7 @@ html.os-other ::-webkit-scrollbar-thumb:hover, html.os-other ::-webkit-scrollbar
 .pcd-tools-go { width: 14px; height: 14px; color: var(--faint); transition: none; }
 .pcd-tools[open] .pcd-tools-go { transform: rotate(90deg); }
 .pcd-tools > summary:hover .pcd-tools-go { color: var(--fg); }
-.pcd-tools > .app-tool-inventory { margin-top: 10px; }
+.pcd-tools > .ti { margin-top: 10px; border-radius: 10px; background: var(--card); box-shadow: 0 0 0 0.5px var(--line); overflow: hidden; }
 
 /* An app's screenshots in its new-page dialog (Templates.tsx): one picture
    at a time, 16:10, a thin line and a soft shadow; dots and arrows when
@@ -9400,3 +9398,43 @@ html.os-other ::-webkit-scrollbar-thumb:hover, html.os-other ::-webkit-scrollbar
 .ms .ms-fold-body .app-kv:has(.app-resume-actions) { flex-wrap: wrap; }
 .ms .ms-fold-body .app-kv:has(.app-resume-actions) > .app-kv-label { flex-basis: 100%; }
 .ms .ms-fold-body .app-resume-actions { justify-content: flex-start; flex: 1 1 100%; }
+
+/* Tools (ToolInventory.tsx): a group per kind (MCP, skills, plugins) with
+   its count, one row per tool: its name, then where it comes from; a
+   skill's description is cut at two lines (all of it on hover); a long
+   group folds after the first five. */
+.ti-group + .ti-group { border-top: 1px solid var(--line-2); }
+.ti-head { display: flex; align-items: baseline; gap: 6px; padding: 10px 12px 4px; font-size: 11.5px; font-weight: 600; color: var(--fg-2); }
+.ti-head small { font-size: 11px; font-weight: 400; color: var(--muted); }
+.ti-note { margin: 2px 12px 6px; padding: 6px 9px; border-radius: 7px; background: var(--pill); font-size: 11.5px; line-height: 1.45; color: var(--fg-2); }
+.ti-row { padding: 7px 12px; }
+.ti-row + .ti-row { border-top: 1px solid var(--line-2); }
+.ti-line { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.ti-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 500; color: var(--fg); }
+.ti-meta { flex: none; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.ti-meta-below { margin-top: 3px; }
+.ti-desc { margin-top: 2px; font-size: 12px; line-height: 1.45; color: var(--fg-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.ti-tag { flex: none; padding: 1px 7px; border-radius: 999px; background: var(--pill); font-size: 11px; color: var(--muted); }
+.ti-row.is-off .ti-name { color: var(--muted); }
+.ti-more { display: flex; align-items: center; gap: 4px; width: 100%; padding: 8px 12px; border: 0; border-top: 1px solid var(--line-2); background: none; font: inherit; font-size: 12px; color: var(--fg-2); cursor: default; }
+.ti-more:hover { background: var(--nav-hover); color: var(--fg); }
+.ti-more svg { width: 13px; height: 13px; }
+.ti-more.is-open svg { transform: rotate(180deg); }
+.ti-warn { padding: 8px 12px; border-top: 1px solid var(--line-2); font-size: 11.5px; color: var(--muted); }
+/* A row's label stands level with its control (a select, a switch), not
+   above it; the hint under it keeps its own line. */
+.ms .ms-fold-body .app-kv:has(> .app-kv-value select, > .app-kv-value [role="switch"]) { align-items: center; }
+/* Exchanges with other agents: who (face, name as the App calls it), how
+   many messages, when; then the last one, said to be sent or received. */
+.app-peer .meta { align-items: center; }
+.app-peer .meta .pa { flex: none; }
+.app-peer .who { font-family: inherit; font-weight: 500; color: var(--fg); }
+.app-peer-dir { margin-right: 6px; padding: 0 5px; border-radius: 4px; background: var(--pill); font-size: 10.5px; color: var(--muted); }
+/* The resume row's actions look like what they are: small buttons; the
+   one that revokes is red only when pointed at. */
+.ms .ms-fold-body .app-resume-actions .app-kv-link { padding: 3px 10px; border-radius: 6px; background: var(--pill); font-size: 12px; color: var(--fg); }
+.ms .ms-fold-body .app-resume-actions .app-kv-link:hover:not(:disabled) { background: var(--pill-hover); }
+.ms .ms-fold-body .app-resume-actions .app-kv-link + .app-kv-link:hover:not(:disabled) { color: var(--red); }
+.ms .ms-fold-body .app-resume-actions > span:first-child { flex-basis: 100%; }
+.ms .ms-fold-body .app-resume-actions { text-align: left; }
+.app-msg.app-peer .meta .who { font-family: inherit; font-weight: 500; color: var(--fg); }

@@ -329,9 +329,9 @@ export function RunRows({ row, now, mayManage, onRefresh, part = "all" }: {
               </select>
             ) : rt?.effort ? <SourceValue value={effortLabel(rt.effort)} source={rt.effort_source} /> : "—"}
           </span>
-          {editable && (
+          {editable && rt?.effort && (
             <span className="app-kv-help">
-              {L("现在用的：", "In use: ")}{rt?.effort ? effortLabel(rt.effort) : "—"}
+              {L("现在用的：", "In use: ")}{effortLabel(rt.effort)}
               {rt?.effort && modelSourceLabel(rt.effort_source) ? L(`（${modelSourceLabel(rt.effort_source)}）`, ` (${modelSourceLabel(rt.effort_source)})`) : ""}
             </span>
           )}

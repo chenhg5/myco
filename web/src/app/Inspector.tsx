@@ -171,17 +171,19 @@ function PeerRows({ row, now, onPeer }: {
   if (error && !peers) return <ErrorText error={error} />;
   if (!peers) return <RowsSkeleton rows={2} className="is-flat" />;
   if (!peers.length) return <div className="app-empty-note">{L("还没有和其他 agent 的往来", "No exchanges with other nodes yet")}</div>;
-  const nameOf = (n: string) => { const x = (row.hub.overview?.agents || []).find((y) => y.agent.name === n); return x ? nodeName(x.agent, row.hub) : n; };
+  const stOf = (n: string) => (row.hub.overview?.agents || []).find((y) => y.agent.name === n);
+  const nameOf = (n: string) => { const x = stOf(n); return x ? nodeName(x.agent, row.hub) : n; };
   return (
     <>
       {peers.map((p) => (
-        <button key={p.agent} type="button" className="app-msg" onClick={() => onPeer(hubId, name, p.agent)}>
+        <button key={p.agent} type="button" className="app-msg app-peer" onClick={() => onPeer(hubId, name, p.agent)}>
           <span className="meta">
+            {stOf(p.agent) && <Avatar agent={stOf(p.agent)!.agent} size={18} badge={false} />}
             <span className="who">{nameOf(p.agent)}</span>
             <span className="count">{L(`${p.messages} 条消息`, `${p.messages} message${p.messages === 1 ? "" : "s"}`)}</span>
             {p.last && <span className="time">{timeAgo(p.last.created_at, now)}</span>}
           </span>
-          {p.last && <span className="body">{p.last.from === name ? "→ " : "← "}{summarize(p.last)}</span>}
+          {p.last && <span className="body"><span className="app-peer-dir">{p.last.from === name ? L("发出", "Sent") : L("收到", "Got")}</span>{summarize(p.last)}</span>}
         </button>
       ))}
     </>
@@ -1278,27 +1280,38 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
 
         </>
       );
+  const deliveryLabel = (m: string) => m === "pull" ? L("它自己来取", "It fetches them")
+    : m === "webhook" ? "Webhook" : m;
   const sec_identity = (
         <>
           <section className="app-group">
-            <div className="app-group-title"><span className="name">{L("身份与绑定", "Identity and binding")}</span></div>
+            <div className="app-group-title"><span className="name">{L("基本", "Basics")}</span></div>
             <div className="app-list">
               {embedded && <>{row_type}{row_cli}{row_machine}</>}
+              <div className="app-kv"><span className="app-kv-label">{L("工作区", "Workspace")}</span><span className="app-kv-value">{row.hub.name}</span></div>
+              <div className="app-kv"><span className="app-kv-label">{L("最近在线", "Last online")}</span><span className="app-kv-value">{timeAgo(ag.last_seen_at, now)}</span></div>
+              <div className="app-kv"><span className="app-kv-label">{L("加入时间", "Joined")}</span><span className="app-kv-value">{new Date(ag.created_at).toLocaleString(locale(), { hour12: false })}</span></div>
+            </div>
+          </section>
+          <section className="app-group">
+            <div className="app-group-title"><span className="name">{L("名字和接入", "Name and access")}</span></div>
+            <div className="app-list">
               <div className="app-kv"><span className="app-kv-label">{L("agent 名", "Node name")}</span><span className="app-kv-value mono">{ag.name}</span></div>
               <AliasRow row={row} mayManage={mayManage} onRefresh={onRefresh} />
+              <div className="app-kv"><span className="app-kv-label">{L("谁能给它派活", "Who can send it tasks")}</span><span className="app-kv-value">{ag.allow_from.length && !ag.allow_from.includes("*") ? ag.allow_from.join(", ") : L("任何 agent", "Any node")}</span></div>
               <ResumeRow row={row} now={now} mayManage={mayManage} onRefresh={onRefresh} />
-              <div className="app-kv"><span className="app-kv-label">Hub</span><span className="app-kv-value">{row.hub.name}</span></div>
+            </div>
+          </section>
+          <section className="app-group">
+            <div className="app-group-title"><span className="name">{L("技术信息", "Technical")}</span></div>
+            <div className="app-list">
               <div className="app-kv"><span className="app-kv-label">Agent ID</span><span className="app-kv-value mono">{ag.id}</span></div>
               <div className="app-kv"><span className="app-kv-label">{L("会话 ID", "Session ID")}</span><span className="app-kv-value mono">{ag.binding.session_id || "—"}</span></div>
               <div className="app-kv"><span className="app-kv-label">{L("工作目录", "Working directory")}</span><span className="app-kv-value mono">{ag.binding.workdir || "—"}</span></div>
-              <div className="app-kv"><span className="app-kv-label">{L("投递方式", "Delivery")}</span><span className="app-kv-value">{ag.delivery.mode}</span></div>
+              <div className="app-kv"><span className="app-kv-label">{L("收消息", "Messages")}</span><span className="app-kv-value">{deliveryLabel(ag.delivery.mode)}</span></div>
               <div className="app-kv"><span className="app-kv-label">{L("入网令牌", "Join token")}</span><span className="app-kv-value mono">{ag.enrolled_by || L("管理员注册", "Registered by admin")}</span></div>
-              <div className="app-kv"><span className="app-kv-label">{L("允许来源", "Allowed from")}</span><span className="app-kv-value">{ag.allow_from.length && !ag.allow_from.includes("*") ? ag.allow_from.join(", ") : L("任何 agent", "Any node")}</span></div>
-              <div className="app-kv"><span className="app-kv-label">{L("最近在线", "Last online")}</span><span className="app-kv-value">{timeAgo(ag.last_seen_at, now)}</span></div>
-              <div className="app-kv"><span className="app-kv-label">{L("注册时间", "Registered")}</span><span className="app-kv-value">{new Date(ag.created_at).toLocaleString(locale(), { hour12: false })}</span></div>
             </div>
           </section>
-
         </>
       );
   const sec_actions = (
@@ -1350,7 +1363,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
     <div className="ms-details">
       {openWork && sec_current}
       <button type="button" className={cn("ms-fold", more && "open")} onClick={() => setMore((v) => !v)} aria-expanded={more}>
-        <ChevronRight />{L("详细信息", "Details")}
+        <span>{L("详细信息", "Details")}</span><ChevronRight />
       </button>
       {more && (
         <div className="ms-fold-body">
