@@ -373,8 +373,7 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
   const applies = L("已保存，从它收到的下一条消息开始生效。", "Saved. It applies from the agent's next message.");
   const submit = () => {
     if (choice !== "env_file") return void save({ provider: choice }, applies);
-    const m: ManualProvider = { base_url: manual.base_url.trim(), model: manual.model.trim() || undefined };
-    m.api_key = manual.api_key.trim();
+    const m: ManualProvider = { base_url: manual.base_url.trim(), api_key: manual.api_key.trim(), model: manual.model.trim() || undefined };
     if (codex) m.wire_api = manual.wire_api;
     void save({ manual: m }, applies);
   };
