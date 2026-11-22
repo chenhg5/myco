@@ -164,7 +164,7 @@ export function MamePanel() {
       {status && <p role="status">{status}</p>}
       {detail && <pre>{detail}</pre>}
       <p>{uiText("默认按 5 投币、1 开始、方向键移动，Ctrl 和 Alt 为动作键。")}</p>
-      <div className="arc-mame-links"><a href="https://www.mamedev.org/release.html" target="_blank" rel="noreferrer">{uiText("下载官方 MAME")}</a>
+      <div className="arc-mame-links"><a href="https://github.com/mamedev/mame/releases" target="_blank" rel="noreferrer">{uiText("下载官方 MAME")}</a>
         <a href="https://www.mamedev.org/roms/" target="_blank" rel="noreferrer">{uiText("MAME 官方试玩 ROM")}</a></div>
     </section>
   </main>;
