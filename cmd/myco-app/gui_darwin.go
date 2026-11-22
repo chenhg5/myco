@@ -68,6 +68,10 @@ func runGUI(h http.Handler, onLink func(string), setRelaunch func(func())) error
 			PromptForSingleSelection()
 	}
 
+	// WKWebView disables element fullscreen by default, including video in
+	// embedded app pages. Use the public preference's setter (its type is internal).
+	webviewPreferences := application.MacWebviewPreferences{}
+	webviewPreferences.FullscreenEnabled.Set(true)
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:  "main",
 		Title: "myco",
@@ -82,6 +86,7 @@ func runGUI(h http.Handler, onLink func(string), setRelaunch func(func())) error
 		// No title bar: the traffic lights float over the sidebar, and the
 		// page marks its top row as the drag area (--wails-draggable).
 		Mac: application.MacWindow{
+			WebviewPreferences:      webviewPreferences,
 			TitleBar:                application.MacTitleBarHiddenInset,
 			InvisibleTitleBarHeight: 40,
 		},
