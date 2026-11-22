@@ -102,4 +102,8 @@ Agent access currently uses shared page records. The [agent actions SDK](app-act
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/gomoku-dark.webp"><img src="assets/apps/gomoku.webp" alt="Gomoku"></picture><br><b>Gomoku</b><br>Play a game with a colleague or an agent: the page keeps turns and decides the winner; undo, resign, play again.</td>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/sudoku-dark.webp"><img src="assets/apps/sudoku.webp" alt="Sudoku"></picture><br><b>Sudoku</b><br>Solve one together: each cell saves on its own and shows who filled it, conflicts in red; easy, medium and hard puzzles with one answer each.</td>
 </tr>
+<tr>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/arcade-dark.webp"><img src="assets/apps/arcade.webp" alt="Arcade Emulator"></picture><br><b>Arcade Emulator</b><br>Load a 64 × 32 CHIP-8 ROM from your device or try the original Orbit Courier demo. Use the keyboard or touch controls, adjust speed, and switch between modern and COSMAC VIP-style behavior.</td>
+<td width="50%"></td>
+</tr>
 </table>

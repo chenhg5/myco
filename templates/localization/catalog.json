@@ -91,6 +91,10 @@
     "Photo editor",
     "Crop, adjust colors, filter, retouch, add text or stickers, draw, mask and frame your photos. Originals stay local; share edit instructions and undo any change."
   ],
+  "arcade": [
+    "Arcade Emulator",
+    "Run CHIP-8 ROMs locally with keyboard and touch controls, pause and speed settings, and the original Orbit Courier demo."
+  ],
   "gomoku": [
     "Gomoku",
     "Play five-in-a-row with another person or an agent. Choose black or white, take turns, undo moves, resign or start a new round."

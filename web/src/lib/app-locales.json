@@ -229,6 +229,16 @@
       "description": "快速修照片：裁剪旋转、调色、十几种滤镜、磨皮美白、文字、贴纸、涂鸦、马赛克、边框，按住对比原图，导出 JPG 或 PNG。改了随时能退回去；照片只存在打开它的电脑上，修了什么大家都看得到，agent 也能按你说的帮你调。"
     }
   },
+  "myco/arcade": {
+    "en": {
+      "name": "Arcade Emulator",
+      "description": "Run CHIP-8 ROMs locally with keyboard and touch controls, pause and speed settings, and the original Orbit Courier demo."
+    },
+    "zh": {
+      "name": "街机模拟器",
+      "description": "在本机运行 CHIP-8 ROM，支持键盘、触屏、暂停与调速，附原创试玩《轨道信使》。"
+    }
+  },
   "myco/gomoku": {
     "en": {
       "name": "Gomoku",

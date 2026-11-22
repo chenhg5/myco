@@ -102,4 +102,8 @@
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/gomoku-dark.webp"><img src="assets/apps/gomoku.webp" alt="五子棋"></picture><br><b>五子棋</b><br>和同事或 agent 下一局五子棋：谁执黑谁执白随便坐，网页管轮次、判输赢，能悔棋、认输、再来一局。</td>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/sudoku-dark.webp"><img src="assets/apps/sudoku.webp" alt="数独"></picture><br><b>数独</b><br>大家一起填一道数独：每格单独保存，谁填的显示谁的颜色，冲突标红；简单、中等、困难三档新题，每道只有一个答案。</td>
 </tr>
+<tr>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/arcade-dark.webp"><img src="assets/apps/arcade.webp" alt="街机模拟器"></picture><br><b>街机模拟器</b><br>从本机打开 64 × 32 的 CHIP-8 ROM，或直接试玩原创《轨道信使》。支持键盘、触屏、调速和现代 / COSMAC VIP 兼容模式。</td>
+<td width="50%"></td>
+</tr>
 </table>

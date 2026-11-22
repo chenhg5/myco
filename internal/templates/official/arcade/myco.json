@@ -1,0 +1,12 @@
+{
+  "id": "myco/arcade",
+  "name": "街机模拟器",
+  "description": "在本机运行 CHIP-8 ROM，支持键盘、触屏、暂停与调速，附原创试玩《轨道信使》。",
+  "version": "1.0.0",
+  "kind": "custom",
+  "category": "game",
+  "icon": "icon.svg",
+  "requires": {
+    "hub": "0.20.7"
+  }
+}
