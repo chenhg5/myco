@@ -86,8 +86,15 @@ export function LessonView({ content, cite, pageLabel }: {
 }) {
   const [choice, setChoice] = useState<number | null>(null);
   const q = content.check;
+  const path = content.path;
   return <div className="tu-lesson">
     <header className="tu-lesson-head"><Layers3 size={19}/><h2>{content.title}</h2></header>
+    {path && <nav className="tu-course-path" aria-label={uiText("学习路线")}>
+      <strong>{uiText("第 {0} 步，共 {1} 步", path.step, path.steps.length)}</strong>
+      <ol>{path.steps.map((label, i) => <li key={i} aria-current={i + 1 === path.step ? "step" : undefined}>
+        <span>{i + 1 < path.step ? <Check size={12}/> : i + 1}</span>{label}
+      </li>)}</ol>
+    </nav>}
     {content.stages.map((stage, index) => <div key={index}>
       <section className="tu-lesson-stage"><h3>{stage.title}</h3><p>{stage.text}</p></section>
       {index === Math.min(1, content.stages.length - 1) && content.diagram && <DiagramView chart={content.diagram}/>}

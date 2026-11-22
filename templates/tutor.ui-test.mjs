@@ -48,8 +48,12 @@ try {
         data: {
           list: async (collection) => ({ records: records.filter((r) => r.collection === collection), seq: 0 }),
           put: async (collection, data, options) => {
-            const record = { collection, data, id: options?.id || "r" + records.length, version: 1 };
-            records.push(record);
+            const index = records.findIndex((r) => r.collection === collection && r.id === options?.id);
+            const version = index < 0 ? 0 : records[index].version;
+            if (options?.ifVersion !== undefined && options.ifVersion !== version) throw new Error("Version mismatch");
+            const record = { collection, data, id: options?.id || "r" + records.length, version: version + 1 };
+            if (index < 0) records.push(record);
+            else records[index] = record;
             localStorage.setItem("rows", JSON.stringify(records));
             return record;
           },
@@ -75,9 +79,14 @@ try {
     const sent = await page.evaluate(() => window.sent);
     assert.ok(sent.includes("pg_fixture") && sent.includes("r0") && sent.includes(question));
     if (refused) {
+      await page.getByText("Could not confirm delivery", { exact: true }).waitFor();
       assert.equal(await page.getByRole("textbox", { name: "Message for your tutor" }).inputValue(), sent);
       await page.locator(".tu-copy").getByRole("button", { name: "Copy for an agent" }).click();
       assert.equal(await page.evaluate(() => navigator.clipboard.readText()), sent);
+    } else {
+      await page.getByText("等待导师回复…", { exact: true }).waitFor();
+      await page.locator(".tu-wait svg.lucide-loader-circle").waitFor();
+      if (process.env.TUTOR_WAIT_SHOT) await page.screenshot({ path: process.env.TUTOR_WAIT_SHOT });
     }
     const answer = "SQL helps you ask questions of tabular data.";
     await page.evaluate((answer) => window.answer("r0", answer), answer);
@@ -100,6 +109,7 @@ try {
       await reader.getByText(/教材第二页。.*The real part is the horizontal coordinate\./).waitFor();
       await reader.getByRole("button", { name: "结合这页问导师" }).click();
       await page.getByRole("combobox", { name: "学习基础" }).selectOption("school");
+      await page.getByRole("combobox", { name: "辅导方式" }).selectOption("guide");
       await page.getByRole("textbox", { name: ask }).fill("用教材第二页讲实部");
       await page.getByRole("button", { name: ask, exact: true }).click();
       await page.waitForFunction(() => window.sent?.includes("用教材第二页讲实部"));
@@ -113,6 +123,7 @@ try {
         diagram: { type: "coordinate", title: "看临界线", line: 0.5, xLabel: "Re(s)", yLabel: "Im(s)", point: { x: 0.5, y: 1, label: "示意点" } },
         check: { question: "哪一步是找实部？", choices: ["看横坐标", "看纵坐标"], answer: 0, feedback: "实部画在横轴上。" },
         sources: [{ page: 1, quote: "This quote is invented." }, { page: 2, quote: "The real part is the horizontal coordinate." }],
+        path: { step: 1, steps: ["找到实部", "认识临界线"], nextPrompt: "用一个例子讲解临界线。" },
       };
       await page.evaluate(({ request, lesson }) => window.answer(request.id, { text: "The real part is the horizontal coordinate.", lesson }), { request, lesson });
       const lessonView = page.locator(".tu-lesson");
@@ -127,6 +138,25 @@ try {
       await reader.getByText(/The real part is the horizontal coordinate/).waitFor();
       await page.reload();
       await page.locator(".tu-lesson").getByRole("heading", { name: "实部是横坐标" }).waitFor();
+      await lessonView.getByText("第 1 步，共 2 步").waitFor();
+      const next = page.getByRole("button", { name: "下一步：认识临界线" });
+      if (process.env.TUTOR_NEXT_SHOT) {
+        await next.scrollIntoViewIfNeeded();
+        await page.screenshot({ path: process.env.TUTOR_NEXT_SHOT, fullPage: true });
+      }
+      await next.click();
+      await page.waitForFunction(() => window.sent?.includes("用一个例子讲解临界线。"));
+      const followUp = await page.evaluate(() => JSON.parse(localStorage.rows).filter((r) => r.collection === "tutor_requests").pop());
+      assert.equal(followUp.data.previous, request.id);
+      assert.equal(followUp.data.mode, "guide");
+      assert.equal(followUp.data.level, request.data.level);
+      assert.equal(followUp.data.material, request.data.material);
+      assert.equal(followUp.data.page, request.data.page);
+      await page.evaluate(({ id, steps }) => window.answer(id, { text: "临界线",
+        lesson: { title: "临界线", stages: [{ title: "读出位置", text: "这条线的横坐标为 0.5。" }], path: { step: 2, steps } },
+      }), { id: followUp.id, steps: lesson.path.steps });
+      await page.getByText("已学完这条路线").waitFor();
+      assert.equal(await next.count(), 0);
     } else {
       await page.locator(".tu-example-link").click();
       await page.getByRole("heading", { name: "The Riemann hypothesis: From primes to zeros" }).waitFor();
@@ -139,7 +169,7 @@ try {
     assert.deepEqual(errors, []);
     await page.close();
   }
-  console.log("PASS tutor transport, PDF import, source verification and navigation, interactive lesson and quiz, reload, and mobile example");
+  console.log("PASS tutor delivery states, learning path continuation, PDF import, source navigation, interactive lesson, reload, and mobile example");
 } finally {
   await browser?.close();
   server.close();

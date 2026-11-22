@@ -42,6 +42,15 @@
 .tu-tutor-turn { display: grid; gap: 8px; }
 .tu-role, .tu-wait { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
 .tu-role { font-weight: 600; }
+.tu-wait { flex-wrap: wrap; }
+.tu-wait > span { display: inline-flex; align-items: center; gap: 8px; }
+.tu-wait svg.lucide-loader-circle { flex: none; animation: tu-spin 1s linear infinite; }
+@keyframes tu-spin { to { transform: rotate(1turn); } }
+@media (prefers-reduced-motion: reduce) { .tu-wait svg.lucide-loader-circle { animation: none; } }
+.tu-next { display: flex; }
+.tu-next button { white-space: normal; text-align: left; overflow-wrap: anywhere; }
+.tu-next svg { flex: none; }
+.tu-course-complete { margin: 0; color: var(--muted); }
 .tu-manual, .tu-note textarea { min-height: 90px; width: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg2); color: var(--fg); font: inherit; }
 .tu-manual { margin-top: 8px; }
 .tu-copy { display: grid; gap: 6px; justify-items: end; }
@@ -93,6 +102,12 @@
 .tu-lesson-head { display: flex; gap: 10px; align-items: flex-start; padding-bottom: 15px; border-bottom: 1px solid var(--line2); }
 .tu-lesson-head svg { flex: none; margin-top: 4px; }
 .tu-lesson-head h2 { font-size: 20px; margin: 0; line-height: 1.35; overflow-wrap: anywhere; font-weight: 650; }
+.tu-course-path { margin-top: 14px; padding: 12px; border-radius: 9px; background: var(--bg2); font-size: 13px; }
+.tu-course-path ol { display: flex; flex-wrap: wrap; gap: 5px 12px; padding: 0; margin: 8px 0 0; list-style: none; }
+.tu-course-path li { display: flex; align-items: center; gap: 6px; min-width: 0; overflow-wrap: anywhere; color: var(--muted); }
+.tu-course-path li > span { display: grid; flex: none; place-items: center; width: 20px; height: 20px; border: 1px solid var(--line); border-radius: 50%; }
+.tu-course-path li[aria-current=step] { font-weight: 650; color: var(--fg); }
+.tu-course-path li[aria-current=step] > span { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 .tu-lesson-stage { padding: 17px 0; }
 .tu-lesson-stage h3, .tu-figure h3, .tu-check h3, .tu-citations h3 { margin: 0 0 5px; font-size: 15px; font-weight: 650; }
 .tu-lesson-stage p, .tu-figure p, .tu-check p { margin: 0; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }

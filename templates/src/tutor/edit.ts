@@ -2,7 +2,7 @@
 // single path. A question attempt is immutable history, never an answer key.
 import { uid } from "../_lib/appkit";
 import { myco } from "../_lib/myco";
-import { kit, subjects, lessons, questions, attempts, requests, type Subject, type Lesson, type Question, type Request } from "./model";
+import { kit, subjects, lessons, questions, attempts, requests, type Subject, type Lesson, type Question, type Request, type Delivery } from "./model";
 
 const tutorBridge = myco as (typeof myco & { send?: (text: string) => Promise<{ id: string }> });
 export const canSend = typeof tutorBridge?.send === "function";
@@ -18,6 +18,14 @@ export async function saveRequest(request: Request) {
 export async function sendRequest(message: string) {
   if (!tutorBridge?.send) throw new Error("Missing send bridge");
   await tutorBridge.send(message);
+}
+
+export async function saveDelivery(id: string, delivery: Delivery) {
+  const record = requests.get(id);
+  if (!record || !myco) return;
+  const saved = await myco.data.put(requests.collection, { ...record.data, delivery }, { id, ifVersion: record.version });
+  requests.apply({ collection: requests.collection, record: id, data: saved.data, version: saved.version, op: "put", seq: 0 });
+  kit.emit();
 }
 
 export function addSubject(title: string) {

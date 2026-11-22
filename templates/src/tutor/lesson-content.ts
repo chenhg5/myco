@@ -12,7 +12,9 @@ export type LessonContent = {
   diagram?: Diagram;
   check?: { question: string; choices: string[]; answer: number; feedback: string };
   sources: { page: number; quote: string }[];
+  path?: CoursePath;
 };
+export type CoursePath = { step: number; steps: string[]; nextPrompt?: string };
 const object = (value: unknown): Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const string = (value: unknown, max = 2000) => typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -24,6 +26,16 @@ function stages(value: unknown) {
     const item = object(raw);
     return { title: string(item.title, 120), text: string(item.text, 3000) };
   }).filter((s) => s.title && s.text);
+}
+
+function coursePath(value: unknown): CoursePath | undefined {
+  const item = object(value);
+  const steps = rows(item.steps).slice(0, 6).map((name) => string(name, 100));
+  const step = item.step;
+  if (steps.length < 2 || !steps.every(Boolean) || typeof step !== "number" ||
+      !Number.isInteger(step) || step < 1 || step > steps.length) return;
+  const nextPrompt = step < steps.length ? string(item.nextPrompt, 900) : undefined;
+  return { step, steps, nextPrompt };
 }
 
 function diagram(value: unknown): Diagram | undefined {
@@ -64,5 +76,5 @@ export function readLesson(value: unknown): LessonContent | undefined {
     const quote = string(entry.quote, 450);
     return finite(entry.page) && Number.isInteger(entry.page) && entry.page > 0 && quote ? [{ page: entry.page, quote }] : [];
   });
-  return { title, stages: entries, diagram: diagram(item.diagram), check, sources };
+  return { title, stages: entries, diagram: diagram(item.diagram), check, sources, path: coursePath(item.path) };
 }

@@ -44,7 +44,7 @@
 </tr>
 <tr>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/meeting-dark.webp"><img src="assets/apps/meeting.webp" alt="会议记录"></picture><br><b>会议记录</b><br>录下在 Zoom、腾讯会议、飞书里开的会：你的麦克风和别人的声音分开录，会后在这台电脑上转成文字（不上传），自动分出不同的人；点一句从那里播放，改字、改名字、搜索、导出；让 agent 写纪要（总结、决定、待办、章节）。录音只存在这台电脑上，要在 myco App 里录音。</td>
-<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/tutor-dark.webp"><img src="assets/apps/tutor.webp" alt="学习工作台"></picture><br><b>学习工作台</b><br>导入 PDF、文本或 Markdown 教材，带着原文提问。导师按学习基础分层讲解，配上交互图、可回看的原文引用和小测。内置黎曼猜想示例课，可切换三种学习基础。</td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/tutor-dark.webp"><img src="assets/apps/tutor.webp" alt="学习工作台"></picture><br><b>学习工作台</b><br>导入 PDF、文本或 Markdown 教材，带着原文提问。导师按学习基础分层讲解，配上交互图、可回看的原文引用和小测。选择「一步步学」可查看学习路线，并从当前一课接着学。内置黎曼猜想示例课，可切换三种学习基础。</td>
 </tr>
 <tr>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/scheduling-dark.webp"><img src="assets/apps/scheduling.webp" alt="日历"></picture><br><b>日历</b><br>用月、周、日视图管理工作与生活日程：点击新建，拖动改期，安排全天与重复日程，搜索和导出日历；和 agent 一起安排。预约管理放在次级入口，不同步外部日历。</td>

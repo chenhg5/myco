@@ -1,17 +1,18 @@
 // Send a saved question to the page's agent. The answer arrives as a separate
 // shared record and survives closing or reopening the app.
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, BookOpen, Compass, Copy, FileText, GraduationCap, Lightbulb, ListChecks, X } from "lucide-react";
+import { ArrowRight, ArrowUp, BookOpen, Compass, Copy, FileText, GraduationCap, Lightbulb, ListChecks, LoaderCircle, X } from "lucide-react";
 import { t as uiText } from "../_lib/i18n";
 import type { MycoRecord } from "../_lib/myco";
-import { canSend, saveRequest, sendRequest } from "./edit";
-import { answers, kit, materials, materialText, requests, type Lesson, type Level, type Mode, type Request, type Subject } from "./model";
+import { canSend, saveDelivery, saveRequest, sendRequest } from "./edit";
+import { answers, kit, materials, materialText, requests, type Delivery, type Lesson, type Level, type Mode, type Request, type Subject } from "./model";
 import { levelLabels } from "./example";
 import { readLesson } from "./lesson-content";
 import { LessonView } from "./lesson-view";
 import { locationLabel, type MaterialLocation } from "./materials";
 
 const MAX_PROMPT = 2000;
+const WAIT_FALLBACK_MS = 90_000;
 
 function modes() {
   return [
@@ -23,12 +24,29 @@ function modes() {
 
 function agentBrief(id: string, request: Request) {
   return uiText(
-    "请担任我的学习导师。学习页面 ID：{0}。请读取本页 agent.md 和 tutor_requests 中 ID 为 {1} 的记录。按所选学习基础，用我的语言从直觉和例子讲起；若附了教材，请读对应原文并引用。把分层讲解、交互图和理解检查写进 tutor_answers，使用同一个记录 ID。\n\n我的问题：{2}",
+    "请担任我的学习导师。学习页面 ID：{0}。请读取本页 agent.md 和 tutor_requests 中 ID 为 {1} 的记录。按所选方式和基础，用我的语言从直觉和例子讲起；若附了教材，请读对应原文并引用。分步辅导请给出学习路线，若有 previous 则接着上一课讲。把回答写进 tutor_answers，使用同一个记录 ID。\n\n我的问题：{2}",
     kit.page, id, request.prompt,
   );
 }
 
 const normalizeExcerpt = (s: string) => s.replace(/\s+/g, " ").trim();
+
+function Waiting({ request, delivery, now, copy }: {
+  request: Request; delivery?: Delivery; now: number; copy: () => void;
+}) {
+  const delayed = now - request.order >= WAIT_FALLBACK_MS;
+  const waiting = delivery !== "unconfirmed" && delivery !== "copy";
+  let status = uiText("等待导师回复…");
+  if (delivery === "unconfirmed") status = uiText("未能确认发送");
+  else if (delivery === "copy") status = uiText("复制提问后，发给你的导师");
+  else if (delayed) status = uiText("导师回复比平时久");
+  return <div className="tu-wait">
+    <span role="status">{waiting && !delayed && <LoaderCircle aria-hidden="true" size={16}/>} {status}</span>
+    {(!waiting || delayed) && <button type="button" className="btn" onClick={copy}>
+      <Copy size={14}/>{uiText("复制给 agent")}
+    </button>}
+  </div>;
+}
 
 export function TutorChat({ subject, lesson, level, onLevel, source, clearSource, openSource, openLibrary, openExample, clearContext }: {
   subject: MycoRecord<Subject> | null;
@@ -47,15 +65,26 @@ export function TutorChat({ subject, lesson, level, onLevel, source, clearSource
   const [working, setWorking] = useState(false);
   const [notice, setNotice] = useState("");
   const [manual, setManual] = useState("");
+  const [now, setNow] = useState(Date.now);
+  const [localDelivery, setLocalDelivery] = useState<Record<string, Delivery>>({});
+  const sending = useRef(false);
   const input = useRef<HTMLTextAreaElement>(null);
   const bottom = useRef<HTMLDivElement>(null);
   const timeline = requests.rows.filter((r) => r.data.who === kit.me);
   const last = timeline[timeline.length - 1];
+  const continued = new Set(timeline.map(({ data }) => data.previous));
+  const hasPending = timeline.some(({ id }) => !answers.get(id)?.data.text && !answers.get(id)?.data.lesson);
   const activeSource = source && materials.get(source.id);
 
   useEffect(() => {
     if (last?.id) bottom.current?.scrollIntoView({ block: "nearest" });
   }, [last?.id]);
+
+  useEffect(() => {
+    if (!hasPending) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 5000);
+    return () => window.clearInterval(timer);
+  }, [hasPending]);
 
   async function copy(message: string) {
     try {
@@ -67,34 +96,46 @@ export function TutorChat({ subject, lesson, level, onLevel, source, clearSource
     }
   }
 
-  async function submit() {
-    if (working || !kit.me || !prompt.trim()) return;
+  async function submit(followUp?: { id: string; request: Request; prompt: string }) {
+    const text = (followUp?.prompt || prompt).trim().slice(0, MAX_PROMPT);
+    if (sending.current || !kit.me || !text) return;
+    sending.current = true;
     setWorking(true);
     setNotice("");
     setManual("");
-    const request = {
-      prompt: prompt.trim(), mode, subject: subject?.id || "", lesson: lesson?.id || "",
+    const request: Request = {
+      ...(followUp ? followUp.request : {
+        mode, subject: subject?.id || "", lesson: lesson?.id || "",
+        level, ...(source && activeSource ? { material: source.id, page: source.page } : {}),
+      }),
+      prompt: text,
       who: kit.me, order: Date.now(),
-      level, ...(source && activeSource ? { material: source.id, page: source.page } : {}),
+      delivery: canSend ? "pending" : "copy",
+      ...(followUp ? { previous: followUp.id } : {}),
     };
     try {
       const id = await saveRequest(request);
       const message = agentBrief(id, request);
-      setPrompt("");
+      if (!followUp) setPrompt("");
       if (!canSend) await copy(message);
       else {
+        let delivery: Delivery;
         try {
           await sendRequest(message);
-          setNotice(uiText("已发给导师。你可以继续看笔记，导师的回答会显示在这里。"));
+          delivery = "sent";
         } catch {
+          delivery = "unconfirmed";
           setNotice(uiText("暂时发不出去。可以复制这条提问，发给你常用的 agent。"));
           setManual(message);
         }
+        setLocalDelivery((old) => ({ ...old, [id]: delivery }));
+        await saveDelivery(id, delivery).catch(() => undefined);
       }
     } catch {
       setNotice(uiText("问题没有保存，请检查连接后重试。"));
     } finally {
       setWorking(false);
+      sending.current = false;
     }
   }
 
@@ -117,6 +158,12 @@ export function TutorChat({ subject, lesson, level, onLevel, source, clearSource
               const content = readLesson(answer?.lesson);
               const materialID = data.material;
               const material = materialID && materials.get(materialID);
+              const path = content?.path;
+              const complete = path && path.step === path.steps.length;
+              const nextTitle = path && !complete ? path.steps[path.step] : undefined;
+              const nextPrompt = path?.nextPrompt || (nextTitle
+                ? uiText("请继续学习路线的下一步：{0}。承接上一课，用一个例子讲解，并留一道理解题。", nextTitle)
+                : uiText("请接着上一课讲下一步，保持学习基础和教材不变。先说明学习路线，再讲当前一步并留一道理解题。"));
               if (content) content.sources = materialID && material
                 ? content.sources.filter(({ page, quote }) => page <= material.data.pages &&
                   normalizeExcerpt(materialText(materialID, page)).includes(normalizeExcerpt(quote)))
@@ -129,8 +176,17 @@ export function TutorChat({ subject, lesson, level, onLevel, source, clearSource
                       cite={materialID && material ? (page) => openSource({ id: materialID, page }) : undefined}
                       pageLabel={material ? (page) => locationLabel(material.data.format, page) : undefined}/>
                       : <div className="tu-answer-text">{answer?.text}</div>}
+                    {!continued.has(id) && data.mode === "guide" && (complete
+                      ? <p className="tu-course-complete">{uiText("已学完这条路线")}</p>
+                      : <div className="tu-next">
+                          <button className="btn btn-primary" type="button" disabled={working}
+                            onClick={() => void submit({ id, request: data, prompt: nextPrompt })}>
+                            {nextTitle ? uiText("下一步：{0}", nextTitle) : uiText("继续下一步")}<ArrowRight size={15}/>
+                          </button>
+                        </div>)}
                   </div>
-                  : <div className="tu-wait"><span>{uiText("还没有导师回复")}</span><button type="button" className="btn" onClick={() => void copy(agentBrief(id, data))}><Copy size={14}/>{uiText("复制给 agent")}</button></div>}
+                  : <Waiting request={data} delivery={localDelivery[id] ?? data.delivery} now={now}
+                    copy={() => void copy(agentBrief(id, data))}/>}
               </article>;
             })}
             <div ref={bottom}/>
@@ -173,9 +229,9 @@ export function TutorChat({ subject, lesson, level, onLevel, source, clearSource
           </button>
         </div>
       </form>
-      <p className="tu-send-note" role="status">{notice || (canSend
-        ? uiText("问题会发给发布这个页面的 agent。")
-        : uiText("把问题复制到 agent 对话，回答会显示在这里。"))}</p>
+      <p className="tu-send-note" role="status">{notice || (!canSend
+        ? uiText("把问题复制到 agent 对话，回答会显示在这里。")
+        : mode === "guide" ? uiText("每次学一步，做完小测就可以继续。") : uiText("问题会发给发布这个页面的 agent。"))}</p>
       {manual && <div className="tu-copy">
         <textarea className="tu-manual" aria-label={uiText("给导师的消息")} readOnly value={manual} onFocus={(e) => e.target.select()}/>
         <button type="button" className="btn" onClick={() => void copy(manual)}><Copy size={14}/>{uiText("复制给 agent")}</button>

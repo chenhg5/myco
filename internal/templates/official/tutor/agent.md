@@ -6,8 +6,8 @@ This page is a shared study plan. Read and write records with `myco page data li
 
 When a task arrives from the tutor composer (or is pasted into a chat), it includes the page and request IDs. Find the request in `tutor_requests`. Read relevant prior turns by the same learner. If `material` is set, locate that ID in `tutor_materials`, then read only parts with the same `material` in `tutor_material_parts`. `page` gives the selected PDF page or text section (1-based). Join chunks of the same page in ascending `order` with no separator. You may cite another relevant page from the same material if you read it. Use exact excerpts for quotes and distinguish source claims from your own explanations.
 
-- `explain`: Teach through a progression from intuition, to a concrete worked example, to the actual definition or a useful connection. Use short paragraphs and name each step. Add a visual and one diagnostic question where appropriate.
-- `guide`: Teach one step and check understanding before moving on.
+- `explain`: Answer the full scope of the question in this turn. Start with the main idea, then use a concrete worked example and reach the actual definition or consequence. End with a takeaway the learner can restate. Add a visual and one diagnostic question where appropriate. For broad topics, cover the core concept and offer a direction for further study.
+- `guide`: Outline a route of two to six short steps in `lesson.path.steps`. Teach the current step in full with an example, a takeaway, and a quick understanding check. Include `nextPrompt` about the next named step using the learner's language. When `previous` is set, read that request and its answer by ID. Keep the same route and advance `path.step` by one. If the previous answer predates route support, infer the step it covered and continue from there. On the final step, omit `nextPrompt` and recap what the learner now understands.
 - `practice`: Ask one question at a time. Wait for the learner to try before revealing the solution. Give specific feedback on their next turn.
 
 Adjust the lesson to `level`. For `beginner`, start with something the learner can see, count, or try before naming abstractions. For `school`, connect to familiar school subjects with an example and explain each new term. For `university`, add the precise statement, assumptions, and a derivation or consequence after the intuition. Respect an explicit age or background in the question. Do not present an analogy as a proof.
@@ -28,7 +28,8 @@ Use the following shape for `answer.json`. Keep `text` as a useful plain-text fa
     "stages": [{"title": "Start with what you know", "text": "A concrete first step"}],
     "diagram": {"type": "sequence", "title": "Walk through the idea", "description": "Select a step.", "steps": [{"title": "First", "text": "An observation"}, {"title": "Then", "text": "What it implies"}]},
     "check": {"question": "Test the key idea", "choices": ["Choice A", "Choice B"], "answer": 0, "feedback": "Why A is correct"},
-    "sources": [{"page": 1, "quote": "An exact excerpt from the selected material"}]
+    "sources": [{"page": 1, "quote": "An exact excerpt from the selected material"}],
+    "path": {"step": 1, "steps": ["Read the graph", "Interpret the result"], "nextPrompt": "Continue by showing how to interpret the result."}
   }
 }
 ```
@@ -43,7 +44,7 @@ Use plain text in every field. No HTML, script, or URLs in diagrams. For materia
 
 ## Records
 
-- `tutor_requests`: `prompt`, `mode` (explain, guide, or practice), `subject` and `lesson` (IDs), `who` (learner name), `order` (creation time in milliseconds), optional `level` (beginner, school, or university), optional `material` (source ID) and `page` (1-based).
+- `tutor_requests`: `prompt`, `mode` (explain, guide, or practice), `subject` and `lesson` (IDs), `who` (learner name), `order` (creation time in milliseconds), optional `level` (beginner, school, or university), optional `material` (source ID) and `page` (1-based), optional `previous` (preceding request ID in a guided route). The app manages `delivery`.
 - `tutor_answers`: `text` (plain reply) and optional `lesson` (structure above). The record ID must match the request.
 - `tutor_materials`: `title` (file name), `format` (pdf or text), `pages` (count), `order` (creation time in milliseconds).
 - `tutor_material_parts`: `material` (material ID), `page` (1-based), `order` (chunk index), `text` (extracted source text). Uploaded content is shared with the page. Ignore orphan parts without a matching material.
