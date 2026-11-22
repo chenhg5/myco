@@ -4,6 +4,20 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.21.19
+
+- **A user guide in the App** (使用文档): short pages on everything the App does, with search, links between pages, and the previous and next page at the foot. Open it from the workspace menu, Settings › About, the Mac's Help menu, or the last step of the getting-started checklist. It covers voice, split panes, shortcuts and the community too.
+- **Whiteboard 1.3**: drag a node's edge point onto another to connect them; elbow, curved or straight connectors, dashed lines and labels; box select, copy, cut, paste and duplicate (connectors come along); align and distribute; lock items; undo and redo; export SVG. See docs/whiteboard.md.
+- Proxy console and Remote Desktop: their icons show correctly in the app library.
+- The new Whiteboard and icons reach a workspace when its hub is upgraded (`sudo myco upgrade`, or from the App).
+
+**中文**
+
+- **App 里有使用文档了**：每个功能一小页，可以搜索，页面之间能互相跳转，页尾有上一页、下一页。从左下角工作区菜单、设置 › 关于、Mac 的「帮助」菜单，或者新手清单的最后一步打开。语音、分屏、快捷键和社群也都有介绍。
+- **白板 1.3**：从节点边上的连接点拖到另一个节点就能连线；折线、曲线、直线，虚线和标签；框选、复制、剪切、粘贴、复制一份（连线一起带上）；对齐和均匀分布；锁定；撤销和重做；导出 SVG。说明见 docs/whiteboard.md。
+- 代理工作台和远程桌面：在应用库里的图标显示正常了。
+- 新版白板和图标在工作区的 Hub 升级后生效（`sudo myco upgrade`，或在 App 里升级）。
+
 ## v0.21.18
 
 - **New installs can join or start another workspace**: the workspace menu at the bottom left offers "Join or start a workspace" and "New workspace on this computer" in simple mode too (a new install starts in simple mode, and the welcome page sends people there).
