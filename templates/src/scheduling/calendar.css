@@ -56,13 +56,13 @@
 .pc-more { padding: 1px 4px; background: none; border: 0; text-align: left; color: var(--muted); font-size: 11px; }
 .pc-more:hover { text-decoration: underline; }
 .pc-time-view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.pc-time-head { display: grid; flex: none; min-height: 66px; border-bottom: 1px solid var(--line2); padding-right: 12px; }
+.pc-time-head { display: grid; flex: none; min-height: 66px; border-bottom: 1px solid var(--line2); }
 .pc-time-head > button { background: none; border: 0; color: var(--fg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 4px 0; }
 .pc-time-head > button span { font-size: 11px; color: var(--muted); }
 .pc-time-head > button b { font-size: 18px; font-weight: 500; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; }
 .pc-time-head .is-today { background: var(--accent); color: var(--on-accent); }
 .pc-zone-label { font-size: 11px; color: var(--faint); padding: 8px 4px; align-self: center; text-align: center; }
-.pc-all-day-row { display: grid; flex: none; min-height: 34px; max-height: 120px; overflow-y: auto; padding-right: 12px; border-bottom: 1px solid var(--line); }
+.pc-all-day-row { display: grid; flex: none; min-height: 34px; max-height: 120px; overflow-y: auto; border-bottom: 1px solid var(--line); }
 .pc-all-day-cell { padding: 3px; min-height: 32px; border-left: 1px solid var(--line2); display: flex; flex-direction: column; gap: 3px; }
 .pc-time-scroll { flex: 1; min-height: 0; overflow-y: scroll; }
 .pc-time-grid { display: grid; height: 1152px; }
@@ -105,6 +105,5 @@
   .pc-month .pc-event { min-height: 18px; }
   .pc-more { padding: 0 2px; font-size: 11px; white-space: nowrap; overflow: hidden; max-width: 100%; }
   .pc-week .pc-event time { font-size: 11px; }
-  .pc-time-head, .pc-all-day-row { padding-right: 0; }
 }
 @media (max-width: 480px) { .pc-sidebar .sc-brand b { display: none; } .pc-sidebar .btn { padding: 0 8px; } }

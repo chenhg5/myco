@@ -22,6 +22,6 @@ export async function startFixture() {
   });
   await new Promise(r=>server.listen(0,"127.0.0.1",r));
   const pw=createRequire(path.join(execFileSync("npm",["root","-g"],{encoding:"utf8"}).trim(),"noop.js"))("playwright");
-  const browser=await pw.chromium.launch({headless:true,executablePath:process.env.UI_SMOKE_EXECUTABLE,args:["--no-sandbox"]});
+  const browser=await pw.chromium.launch({headless:true,ignoreDefaultArgs:["--hide-scrollbars"],executablePath:process.env.UI_SMOKE_EXECUTABLE,args:["--no-sandbox"]});
   return{browser,server,recs,reset,base:`http://127.0.0.1:${server.address().port}/`,beginRace:()=>{race=true}};
 }

@@ -1,6 +1,6 @@
 // Month cells and time lanes display the same occurrences. Drag/drop moves
 // personal events; appointments remain linked to their own management screen.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { t as uiText, locale } from "../_lib/i18n";
 import { addDays, dateIn } from "./engine";
 import { onDate, timeLayout, weekStart, type Occurrence } from "./calendar-engine";
@@ -34,11 +34,23 @@ export function MonthView({ cursor, zone, items, create, open, move, select }: {
     })}</div></div>;
 }
 export function TimeView({ cursor, view, zone, items, create, open, move }: { cursor: string; view: "week" | "day"; zone: string; items: Occurrence[]; create: (d: EditDraft) => void; open: (o: Occurrence) => void; move: (d: DragEvent, date: string, minute?: number) => void }) {
-  const scroll = useRef<HTMLDivElement>(null), start = view === "day" ? cursor : weekStart(cursor), dates = Array.from({ length: view === "day" ? 1 : 7 }, (_, i) => addDays(start, i)), today = dateIn(Date.now(), zone);
+  const scroll = useRef<HTMLDivElement>(null), allDay = useRef<HTMLDivElement>(null), [gutters, setGutters] = useState({ timed: 0, allDay: 0 });
+  const start = view === "day" ? cursor : weekStart(cursor), dates = Array.from({ length: view === "day" ? 1 : 7 }, (_, i) => addDays(start, i)), today = dateIn(Date.now(), zone);
+  // Overlay scrollbars occupy no space. Either scroll pane can also have a
+  // classic gutter; compensate only their difference instead of counting twice.
+  useLayoutEffect(() => {
+    const timed = scroll.current, wholeDay = allDay.current; if (!timed || !wholeDay) return;
+    const measure = () => {
+      const next = { timed: timed.offsetWidth - timed.clientWidth, allDay: wholeDay.offsetWidth - wholeDay.clientWidth };
+      setGutters(old => old.timed === next.timed && old.allDay === next.allDay ? old : next);
+    };
+    const observer = new ResizeObserver(measure); observer.observe(timed); observer.observe(wholeDay); measure();
+    return () => observer.disconnect();
+  }, []);
   useEffect(() => { if (scroll.current) scroll.current.scrollTop = 7 * 48; }, [view, start]);
   const style = { gridTemplateColumns: `48px repeat(${dates.length}, minmax(0, 1fr))` };
-  return <div className={`pc-time-view pc-${view}`}><div className="pc-time-head" style={style}><span className="pc-zone-label">{uiText("时间")}</span>{dates.map(date => <button type="button" key={date} onClick={() => create({ date })}><span>{weekday(date)}</span><b className={date === today ? "is-today" : ""}>{Number(date.slice(8))}</b></button>)}</div>
-    <div className="pc-all-day-row" style={style}><span className="pc-zone-label">{uiText("全天")}</span>{dates.map(date => <div className="pc-all-day-cell" key={date} aria-label={uiText("{0} 全天", date)} onClick={() => create({ date, allDay: true })} onDragOver={over} onDragLeave={e => e.currentTarget.classList.remove("is-drop")} onDrop={e => drop(e, date, move)}>{items.filter(o => o.allDay && onDate(o, date, zone)).map(o => <EventChip key={o.key} item={o} date={date} zone={zone} open={open} compact />)}</div>)}</div>
+  return <div className={`pc-time-view pc-${view}`}><div className="pc-time-head" style={{ ...style, paddingRight: gutters.timed }}><span className="pc-zone-label">{uiText("时间")}</span>{dates.map(date => <button type="button" key={date} onClick={() => create({ date })}><span>{weekday(date)}</span><b className={date === today ? "is-today" : ""}>{Number(date.slice(8))}</b></button>)}</div>
+    <div className="pc-all-day-row" ref={allDay} style={{ ...style, paddingRight: Math.max(0, gutters.timed - gutters.allDay) }}><span className="pc-zone-label">{uiText("全天")}</span>{dates.map(date => <div className="pc-all-day-cell" key={date} aria-label={uiText("{0} 全天", date)} onClick={() => create({ date, allDay: true })} onDragOver={over} onDragLeave={e => e.currentTarget.classList.remove("is-drop")} onDrop={e => drop(e, date, move)}>{items.filter(o => o.allDay && onDate(o, date, zone)).map(o => <EventChip key={o.key} item={o} date={date} zone={zone} open={open} compact />)}</div>)}</div>
     <div className="pc-time-scroll" ref={scroll}><div className="pc-time-grid" style={style}><div className="pc-hours">{Array.from({ length: 24 }, (_, h) => <span key={h} style={{ top: h * 48 }}>{String(h).padStart(2, "0")}:00</span>)}</div>
       {dates.map(date => <div key={date} className="pc-day-lane" data-date={date} role="gridcell" aria-label={uiText("{0} 时间轴", date)} tabIndex={0} onClick={e => { if (e.target !== e.currentTarget) return; const m = Math.min(1425, Math.max(0, Math.floor((e.clientY - e.currentTarget.getBoundingClientRect().top) / 48 * 4) * 15)); create({ date, minute: m }); }} onKeyDown={e => { if (e.key === "Enter" && e.target === e.currentTarget) create({ date }); }} onDragOver={over} onDragLeave={e => e.currentTarget.classList.remove("is-drop")} onDrop={e => { const m = Math.min(1425, Math.max(0, Math.round((e.clientY - e.currentTarget.getBoundingClientRect().top) / 48 * 4) * 15)); drop(e, date, move, m); }}>
         {timeLayout(items, date, zone).map(b => <div className="pc-timed-event" key={b.item.key} style={{ top: b.top / 60 * 48, height: Math.max(22, (b.bottom - b.top) / 60 * 48 - 2), left: `calc(${b.column / b.columns * 100}% + 2px)`, width: `calc(${100 / b.columns}% - 4px)` }}><EventChip item={b.item} date={date} zone={zone} open={open} compact={(b.bottom-b.top)<50} /></div>)}
