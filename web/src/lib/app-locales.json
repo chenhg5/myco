@@ -288,5 +288,15 @@
       "name": "日历",
       "description": "管理自己的工作与生活日程：月、周、日视图，点击日期新建，拖动改期，全天与重复日程，搜索和日历导出。与 agent 一起安排；预约管理放在次级入口。"
     }
+  },
+  "myco/personality": {
+    "en": {
+      "name": "Personality explorer",
+      "description": "Explore four preference pairs with 32 original questions, read 16 perspectives and keep a private reflection journal. Answers stay on your device; choose to share a summary with agents. Not the official MBTI® assessment."
+    },
+    "zh": {
+      "name": "人格探索",
+      "description": "用 32 个原创小问题探索四维人格偏好，阅读 16 种可能，写下自我反思。答案仅留在本机，主动分享摘要后可与 agent 一起讨论。非官方 MBTI® 测评。"
+    }
   }
 }

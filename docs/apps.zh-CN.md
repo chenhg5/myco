@@ -91,7 +91,7 @@
 </tr>
 <tr>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/cinema-dark.webp"><img src="assets/apps/cinema.webp" alt="影视"></picture><br><b>影视</b><br>用自己的影视源搜索电影与剧集、选集播放，收藏待看清单；观看进度保存在这台电脑，支持续播、倍速和跳过片头片尾。不内置影视源。</td>
-<td width="50%"></td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/personality-dark.webp"><img src="assets/apps/personality.webp" alt="人格探索"></picture><br><b>人格探索</b><br>用 32 个原创问题探索四维偏好，配有插图和 16 类阅读。答案、续答和小记仅留在本机，可主动分享摘要给页面成员和 agent。非官方 MBTI® 测评，不用于诊断。</td>
 </tr>
 </table>
 

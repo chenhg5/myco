@@ -91,7 +91,7 @@ Agent access currently uses shared page records. The [agent actions SDK](app-act
 </tr>
 <tr>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/cinema-dark.webp"><img src="assets/apps/cinema.webp" alt="Cinema"></picture><br><b>Cinema</b><br>Search films and series from your own sources, pick an episode and play, keep a watchlist; progress stays on this computer, with resume, speed and intro skipping. No sources included.</td>
-<td width="50%"></td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/personality-dark.webp"><img src="assets/apps/personality.webp" alt="Personality explorer"></picture><br><b>Personality explorer</b><br>A gentle 32-question reflection exercise with original illustrations, four preference distributions and 16 perspectives. Answers and notes stay on this device; sharing a summary with the page is optional. Not the official MBTI® assessment or a diagnosis.</td>
 </tr>
 </table>
 
