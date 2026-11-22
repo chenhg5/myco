@@ -86,6 +86,21 @@ var ACPPresets = map[string]acp.Spec{
 	"kilo":      {Binary: "kilo", Args: []string{"acp"}, Login: "run kilo on this machine and sign in"},
 	"cline":     {Binary: "cline", Args: []string{"--acp"}, Login: "run cline on this machine and sign in"},
 	"grok":      {Binary: "grok", Args: []string{"agent", "stdio"}, Login: "run grok on this machine and sign in"},
+	// Google Antigravity through the community google-antigravity-acp
+	// adapter, which drives the agy CLI. It does not pass permission
+	// requests on over ACP: it either lets agy approve everything (full
+	// access) or leaves agy's own approvals on, which a headless run cannot
+	// grant.
+	"antigravity": {
+		Binary:    "google-antigravity-acp",
+		ModelArgs: []string{"-m", "{model}"},
+		AccessArgs: map[harness.Access][]string{
+			harness.AccessDefault:   {"--no-skip-permissions"},
+			harness.AccessReadonly:  {"--no-skip-permissions"},
+			harness.AccessWorkspace: {"--no-skip-permissions"},
+		},
+		Login: "install agy and sign in on this machine (an AI Studio or Vertex AI key is safer than a personal Antigravity login)",
+	},
 }
 
 // opencodeAsk makes opencode ask before shell commands and edits.

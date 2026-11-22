@@ -45,4 +45,4 @@ func acpOrTemplate(name string, spec acp.Spec) harness.Factory {
 
 // Experimental lists presets whose CLI formats have not been verified.
 var Experimental = map[string]bool{"cursor": true, "gemini": true, "opencode": true,
-	"qoder": true, "qwen": true, "kimi": true, "goose": true, "copilot": true, "auggie": true, "codebuddy": true, "kilo": true, "cline": true, "grok": true}
+	"qoder": true, "qwen": true, "kimi": true, "goose": true, "copilot": true, "auggie": true, "codebuddy": true, "kilo": true, "cline": true, "grok": true, "antigravity": true}

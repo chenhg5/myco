@@ -261,8 +261,9 @@ Every agent below keeps **its own session**: each message resumes the same conve
 | [Kilo Code](https://kilo.ai) | `kilo acp` | `kilo` | ACP: experimental |
 | [Cline](https://cline.bot/cli) | `cline --acp` | `cline` | ACP: experimental |
 | [Grok](https://x.ai/cli) | `grok agent stdio` | `grok` | ACP: experimental |
+| [Antigravity](https://antigravity.google) | `google-antigravity-acp` ([community adapter](https://github.com/sibbl/google-antigravity-acp)) | `antigravity` | ACP: experimental |
 
-**Native** has a dedicated adapter; **Preset** is a built-in command template; **ACP** uses the [Agent Client Protocol](https://agentclientprotocol.com), with every step shown live. *Experimental* ones have not had long real-world use yet; reports welcome. Kiro needs `uv tool install kiro-acp-gateway`.
+**Native** has a dedicated adapter; **Preset** is a built-in command template; **ACP** uses the [Agent Client Protocol](https://agentclientprotocol.com), with every step shown live. *Experimental* ones have not had long real-world use yet; reports welcome. Kiro needs `uv tool install kiro-acp-gateway`. Antigravity needs `npm install -g google-antigravity-acp` and `agy` signed in; the adapter cannot ask for approval, so below full access agy refuses what needs it; Google's terms forbid reaching Antigravity through third-party tools with a personal login, so use an AI Studio or Vertex AI key.
 
 Other ways to connect:
 

@@ -31,6 +31,7 @@ const CLI_META: Record<string, { label: string; icon: IconType }> = {
   kilo: { label: "Kilo Code", icon: IconBot },
   cline: { label: "Cline", icon: IconBot },
   grok: { label: "Grok", icon: IconBot },
+  antigravity: { label: "Antigravity", icon: IconBot },
 
   shell: { label: "Shell", icon: IconPrompt },
   exec: { label: "Exec", icon: IconTerminal },
