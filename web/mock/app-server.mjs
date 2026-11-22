@@ -1032,6 +1032,24 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
   };
   // Slow startup and live blocks for the conversation streaming smoke cases.
   const preview = hub.threads[threadId]?.find((m) => m.id === taskId);
+  // MOCK_CLOUD_JOIN: the claude.ai session answers the guide's first task
+  // (in the task's language).
+  if (preview && process.env.MOCK_CLOUD_JOIN && agent === "cloud-claude") {
+    const en = /[a-z]/i.test(preview.body) && !/[\u4e00-\u9fff]/.test(preview.body);
+    later(300, () => { if (["queued", "delivered"].includes(preview.status)) Object.assign(preview, { status: "acked", updated_at: iso(0) }); });
+    later(2500, () => {
+      replyTimers.delete(taskId);
+      const msgs = hub.threads[threadId];
+      if (!msgs || preview.status === "failed") return;
+      const body = en
+        ? "Done. The three most important changes this week:\n\n1. **Login moved to a new token flow**: old sessions sign in again once.\n2. **The orders API returns `currency`**: the app's price display uses it now.\n3. **CI runs on Windows too**: two tests that assumed `/` paths were fixed."
+        : "看完了，这周最重要的三件事：\n\n1. **登录换成了新的令牌流程**：老的登录状态会要求重新登录一次。\n2. **订单接口多返回了 `currency` 字段**：App 的价格显示已经用上了。\n3. **CI 加上了 Windows**：顺手修了两个默认路径是 `/` 的测试。";
+      msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "reply", status: "done", reply_to: taskId, body, created_at: iso(0), updated_at: iso(0) }));
+      Object.assign(preview, { status: "done", updated_at: iso(0) });
+      releaseAfter(hub, threadId, taskId);
+    });
+    return;
+  }
   // An agent that offers the next step (myco message reply --suggest): the
   // task carries it, the app's input shows it, Tab takes it.
   if (preview && /下一步/.test(preview.body)) {
@@ -1544,7 +1562,8 @@ const devices = [
 if (process.env.MOCK_OWNER_UNNAMED) { people[0].name = "owner"; people[0].display_name = ""; }
 function whoami(h) {
   // The showcase's own workspace is yours too (so its computers open).
-  if (h.id !== "hub_studio" && !(SHOWCASE && h.id === "hub_home")) return undefined;
+  // (MOCK_CLOUD_JOIN: the workspace you just started is yours too)
+  if (h.id !== "hub_studio" && !(SHOWCASE && h.id === "hub_home") && !(process.env.MOCK_CLOUD_JOIN && h.id.startsWith("hub_local"))) return undefined;
   const m = people.find((p) => p.id === "mem_" + meName);
   return { member: m, can_manage: m.role !== "member", device: devices[0] };
 }
@@ -3421,6 +3440,7 @@ const server = http.createServer(async (req, res) => {
       // A message the reset between passes took away, still in the app's
       // saved page data: no steps (a 404 would be a page error in the smoke).
       if (!m) return send(res, 200, { events: [] });
+      if (process.env.MOCK_CLOUD_JOIN && m.to === "cloud-claude") return send(res, 200, { events: [] });
       const node = (hub.agents || []).find((a) => a.name === m.to);
       if (node?.binding?.harness === "exec") {
         const lines = execLines();
@@ -3591,6 +3611,17 @@ const server = http.createServer(async (req, res) => {
           state.superagents ||= {};
           state.superagents[hub.id] = name;
         }, 2500);
+      }
+      // MOCK_CLOUD_JOIN=1 (screenshots for docs/guide-claude-ai): the
+      // sentence for an agent elsewhere is "sent" to a claude.ai session,
+      // which joins a few seconds later, once.
+      if (process.env.MOCK_CLOUD_JOIN && !body?.superagent && !body?.shell_node && !state.cloudJoined) {
+        state.cloudJoined = true;
+        setTimeout(() => {
+          hub.agents.push(makeAgent({ name: "cloud-claude", display_name: "Claude (claude.ai)", owner: "glenn", owner_id: "mem_glenn", kind: "agent",
+            description: "Claude Code session on claude.ai", runtime: { cli: "claude-cloud" },
+            binding: { harness: "claude-cloud", environment: "claude.ai" }, created_at: iso(0), last_seen_at: iso(0), status_text: "" }));
+        }, 4000);
       }
       if (body?.shell_node) state.pendingJoin = { hubId: hub.id, allow: Array.isArray(body.allow_from) ? body.allow_from : [] };
       else if (uses === 1) state.pendingConnect = { hubId: hub.id };

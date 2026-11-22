@@ -11,4 +11,4 @@
 
 https://github.com/user-attachments/assets/02541b5d-d724-4a13-9423-37805feb5153
 
-想看文字版？先看 [三步上手](../README.zh-CN.md#三步上手)，或者 [安装指南](../INSTALL.zh-CN.md)。
+想看文字版？看[图文教程](guide-claude-ai.zh-CN.md)，或者先看 [三步上手](../README.zh-CN.md#三步上手)，或者 [安装指南](../INSTALL.zh-CN.md)。

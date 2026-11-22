@@ -11,4 +11,4 @@ A five-minute walkthrough of the myco app (narrated in Chinese):
 
 https://github.com/user-attachments/assets/02541b5d-d724-4a13-9423-37805feb5153
 
-Prefer to read? Start with [Get started in three steps](../README.md#get-started-in-three-steps), or the [Install Guide](../INSTALL.md).
+Prefer to read? Follow the [step-by-step guide with screenshots](guide-claude-ai.md), start with [Get started in three steps](../README.md#get-started-in-three-steps), or the [Install Guide](../INSTALL.md).
