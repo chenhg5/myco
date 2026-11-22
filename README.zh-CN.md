@@ -106,7 +106,7 @@ curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-h
 </tr>
 </table>
 
-**[查看全部 26 个应用 →](docs/apps.zh-CN.md)**（文档、笔记、表格、幻灯片、代码编辑器、白板、视频剪辑、小游戏等）
+**[查看全部 32 个应用 →](docs/apps.zh-CN.md)**（文档、笔记、表格、幻灯片、代码编辑器、白板、视频剪辑、小游戏等）
 
 ## 三种用法
 

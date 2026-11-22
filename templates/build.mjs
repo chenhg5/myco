@@ -5,7 +5,7 @@
 import { build } from "vite";
 import react from "@vitejs/plugin-react";
 import appThemeCSS from "./theme-css.mjs";
-import { readdirSync, existsSync } from "node:fs";
+import { readdirSync, existsSync, cpSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -52,5 +52,13 @@ for (const name of readdirSync(path.join(here, "src"))) {
       },
     },
   });
+  if (name === "reader") {
+    // Fixed-layout PDF reading needs upstream CMaps, fonts and image decoders
+    // offline too. Keep these as ordinary app assets, not external URLs.
+    const pdf = path.join(here, "..", "internal", "templates", "official", name, "pdf");
+    mkdirSync(pdf, { recursive: true });
+    for (const dir of ["cmaps", "standard_fonts", "wasm", "iccs"]) cpSync(path.join(here, "node_modules", "pdfjs-dist", dir), path.join(pdf, dir), { recursive: true });
+    cpSync(path.join(here, "node_modules", "pdfjs-dist", "LICENSE"), path.join(pdf, "LICENSE"));
+  }
   console.log(`built ${name}`);
 }

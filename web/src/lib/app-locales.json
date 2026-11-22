@@ -308,5 +308,15 @@
       "name": "人格探索",
       "description": "用 32 个原创小问题探索四维人格偏好，阅读 16 种可能，写下自我反思。答案仅留在本机，主动分享摘要后可与 agent 一起讨论。非官方 MBTI® 测评。"
     }
+  },
+  "myco/reader": {
+    "en": {
+      "name": "Reader",
+      "description": "A local bookshelf for PDF and TXT books. Choose page transitions, paper themes and typography; keep your place with contents, search and bookmarks. Original files stay on this device."
+    },
+    "zh": {
+      "name": "阅读",
+      "description": "你的本机书架：导入 PDF 和 TXT，享受多种翻页效果、阅读主题与自由排版。目录、搜索、书签和阅读进度随手可用；原书保存在本机。"
+    }
   }
 }

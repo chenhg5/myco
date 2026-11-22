@@ -27,3 +27,5 @@ runner.log
 /myco-remote_*.sha256
 
 /templates/remote-mobile-shots/
+
+/templates/reader-shots/

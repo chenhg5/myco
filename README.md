@@ -106,7 +106,7 @@ We are rebuilding the apps we use every day on Mac, Windows and phone so that **
 </tr>
 </table>
 
-**[See all 26 apps →](docs/apps.md)** (docs, notes, sheets, slides, a code editor, a whiteboard, video editing, games and more)
+**[See all 32 apps →](docs/apps.md)** (docs, notes, sheets, slides, a code editor, a whiteboard, video editing, games and more)
 
 ## Three ways to use it
 

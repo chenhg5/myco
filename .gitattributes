@@ -1,1 +1,4 @@
 skill/myco/SKILL.md text eol=lf
+
+# Keep vendored PDF.js data and licenses byte-for-byte.
+internal/templates/official/reader/pdf/** -whitespace

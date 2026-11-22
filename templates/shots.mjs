@@ -106,6 +106,17 @@ function photo() {
 // sample data is there before the first).
 const wait = (p, ms = 400) => p.waitForTimeout(ms);
 const plans = {
+  reader: { viewport: { width: 1040, height: 800 }, steps: [async (p) => {
+    await p.getByRole("button", { name: "先读一篇示例", exact: true }).click();
+    await p.locator(".rd-book").nth(2).waitFor();
+    await wait(p, 300);
+  }, async (p) => {
+    await p.getByRole("button", { name: "阅读《山间来信》", exact: true }).click();
+    await p.locator(".rd-text-flow").waitFor();
+    await p.getByRole("button", { name: "阅读设置", exact: true }).click();
+    await p.getByRole("button", { name: "羊皮纸", exact: true }).click();
+    await wait(p, 300);
+  }] },
   "logo-studio": [null],
   tutor: [null, async (p) => {
     await p.locator(".tu-example-link").click();
@@ -193,12 +204,12 @@ const only = process.argv.slice(2);
 const apps = readdirSync(official).filter((a) => existsSync(path.join(official, a, "myco.json")) && (!only.length || only.includes(a)));
 for (const app of apps) {
   const plan = plans[app] || [null];
-  const { sample = true, steps = plan, os: fakeOS = false } = Array.isArray(plan) ? {} : plan;
+  const { sample = true, steps = plan, os: fakeOS = false, viewport = { width: 1040, height: 650 } } = Array.isArray(plan) ? {} : plan;
   const dir = path.join(here, "src", app, "public", "shots");
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
   for (const scheme of ["light", "dark"]) {
-    const ctx = await browser.newContext({ viewport: { width: 1040, height: 650 }, deviceScaleFactor: 2, colorScheme: scheme, locale: "zh-CN" });
+    const ctx = await browser.newContext({ viewport, deviceScaleFactor: 2, colorScheme: scheme, locale: "zh-CN" });
     const page = await ctx.newPage();
     const data = sample ? JSON.parse(readFileSync(path.join(official, app, "sample.json"), "utf8")) : {};
     await page.addInitScript((s) => { window.__SAMPLE__ = s; window.__REMOTE_FIXTURE__ = location.pathname.includes("remote-desktop"); try { localStorage.clear(); } catch { /* (none) */ } }, data);

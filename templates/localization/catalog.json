@@ -122,5 +122,9 @@
   "personality": [
     "Personality explorer",
     "Explore four preference pairs with 32 original questions, read 16 perspectives and keep a private reflection journal. Answers stay on your device; choose to share a summary with agents. Not the official MBTI® assessment."
+  ],
+  "reader": [
+    "Reader",
+    "A local bookshelf for PDF and TXT books. Choose page transitions, paper themes and typography; keep your place with contents, search and bookmarks. Original files stay on this device."
   ]
 }
