@@ -4,6 +4,18 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.21.18
+
+- **New installs can join or start another workspace**: the workspace menu at the bottom left offers "Join or start a workspace" and "New workspace on this computer" in simple mode too (a new install starts in simple mode, and the welcome page sends people there).
+- **Codex sessions added from this computer can use myco**: they now run with workspace access by default. Before, they had no level, so Codex used its own sandbox without network and could not reach the workspace. An agent that runs with its CLI's default access now shows "Default access" next to the input, and its owner can switch it there.
+- Recording Studio (Mac): a five-second countdown you can cancel before recording starts, so you can get the window ready.
+
+**中文**
+
+- **新装的 App 也能加入或新建工作区**：简单模式下，左下角的工作区菜单也有「加入或新建工作区」和「在这台电脑上新建工作区」了（新装的 App 默认是简单模式，欢迎页又会引导大家去那里）。
+- **从这台电脑导入的 Codex 会话能用 myco 了**：默认用工作区权限。以前没给它设权限，Codex 用的是自己那个不能联网的沙箱，连不上工作区。用 CLI 默认权限运行的 agent，输入框旁会显示「默认权限」，它的主人可以在那里切换。
+- 录屏工作台（Mac）：开始录制前有 5 秒倒计时，可以取消，方便先把窗口准备好。
+
 ## v0.21.17
 
 - **Project notes, redesigned**: a project's page now has a header like other detail pages (name, goal, Edit, New task) and three tabs, Notes (brief, memory, files, links), Members (with the computers it may start agents on) and Conversations, instead of eight sections in a row. A long brief or memory folds, and long file and link lists show the first five.
