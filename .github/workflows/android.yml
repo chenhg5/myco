@@ -28,7 +28,7 @@ jobs:
           go-version-file: go.mod
       - uses: gradle/actions/setup-gradle@v4
       - name: Android SDK
-        run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0'
+        run: android/tools/setup-sdk-linux.sh "$RUNNER_TEMP/android-sdk"
       - name: Build, lint and unit tests
         working-directory: android
         run: ./gradlew :app:assembleDebug :app:lintDebug :core:conversation:test :core:network:test

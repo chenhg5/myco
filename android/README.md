@@ -21,6 +21,10 @@ wrapper checks its distribution checksum. There is no dependency on the desktop
 Web UI or Go runtime in the APK. An offline demo is available on the welcome page.
 It never connects to a real workspace.
 
+On Linux, `tools/setup-sdk-linux.sh /absolute/path/to/android-sdk` installs
+the required SDK using Google’s command-line archive with a pinned checksum.
+CI uses the same helper and does not assume a preinstalled SDK.
+
 Open **Settings → My devices → Add another device** on an existing myco client,
 then paste its link into **Join workspace**. Each workspace has its own device
 credential, conversation cache and drafts. HTTP is supported for self-hosted
