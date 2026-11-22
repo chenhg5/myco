@@ -18,6 +18,18 @@ The page sandbox continues to block direct external scripts and connections.
 An older iOS App without the `net` feature needs a new native build; updating an
 embedded app page alone cannot add the bridge to an installed iPhone App.
 
+## Page deep links
+
+Workspace page links may include an opaque fragment, for example
+`https://hub.example.com/w/team/pages/pg_ab12#watch?movie=42&episode=2`.
+Chat links, page cards and pinned links preserve it in the page's isolated
+WebKit URL. Opening another fragment of the same page changes `location.hash`
+and emits `hashchange` without reloading the document. The fragment is never
+sent as a hub query or file path; fragments over 1024 encoded bytes are ignored.
+`myco.ready` includes optional `page.url` from the hub's public page address,
+without query credentials or a fragment. Local loopback or credential-bearing
+addresses are omitted, with no fallback to the App's internal transport URL.
+
 ## Remote Desktop
 
 The **Apps → Remote Desktop** page can control an explicitly sharing Mac or

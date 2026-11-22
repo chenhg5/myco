@@ -60,6 +60,35 @@ struct PageNetworkBridgeTests {
         Issue.record("WebKit did not reach \(expected)")
     }
 
+    @Test func changingAPageFragmentKeepsTheDocumentAndEmitsHashchange() async throws {
+        let hub = FakeHub()
+        let pages = PagesModel(hub: hub)
+        let coordinator = PageWebView.Coordinator(id: "pg_checklist", version: 2, pages: pages, bridge: nil)
+        coordinator.fragment = "watch?movie=1&episode=2"
+        let config = WKWebViewConfiguration()
+        config.setURLSchemeHandler(coordinator, forURLScheme: PageLinks.scheme)
+        let view = WKWebView(frame: CGRect(x: 0, y: 0, width: 393, height: 852), configuration: config)
+        view.navigationDelegate = coordinator
+        coordinator.view = view
+        defer { view.stopLoading(); view.navigationDelegate = nil }
+        let url = try #require(PageLinks.address(of: "pg_checklist", fragment: coordinator.fragment))
+        view.load(URLRequest(url: url))
+        try await wait(view, "document.readyState", for: "complete")
+        try await wait(view, "location.hash", for: "#watch?movie=1&episode=2")
+        _ = try await evaluate(view, "window.kept=42;window.hashes=0;window.addEventListener('hashchange',()=>window.hashes++);'ok'")
+        let next = try #require(PageLinks.address(of: "pg_checklist", fragment: "watch?movie=2&episode=3%264"))
+        #expect(coordinator.navigateWithinDocument(to: next))
+        try await wait(view, "String(window.hashes)", for: "1")
+        #expect(try await evaluate(view, "location.hash") == "#watch?movie=2&episode=3%264")
+        #expect(try await evaluate(view, "String(window.kept)") == "42")
+        #expect(view.url?.query == nil)
+        coordinator.fragment = nil
+        coordinator.applyFragment()
+        try await wait(view, "String(window.hashes)", for: "2")
+        #expect(try await evaluate(view, "location.hash") == "")
+        #expect(try await evaluate(view, "String(window.kept)") == "42")
+    }
+
     @Test func phoneSearchUsesTheNativeNetworkBridgeWithoutDesktopOS() async throws {
         let hub = FakeHub()
         let page = try #require(try await hub.pages().first)

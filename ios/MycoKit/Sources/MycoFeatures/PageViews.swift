@@ -58,18 +58,19 @@ struct PageCards: View {
     @Environment(Router.self) private var router
 
     var body: some View {
-        let ids = session.pages.ids(in: text)
+        let targets = PageLinks.targets(in: text, workspace: session.pages.workspace)
+        let ids = targets.map(\.id)
         if !ids.isEmpty {
             VStack(spacing: 6) {
-                ForEach(ids, id: \.self) { id in
-                    if let page = session.pages.pages[id] {
-                        let address = page.url ?? ""
+                ForEach(targets, id: \.id) { target in
+                    if let page = session.pages.pages[target.id] {
+                        let address = page.url.map { $0 + (target.fragment.map { "#" + $0 } ?? "") } ?? ""
                         let pinned = pins?.pin(link: address)
                         PageCard(page: page, publisher: session.displayName(of: page.publisher), pinned: pinned != nil) {
-                            router.page = PageRoute(id: id)
+                            router.page = PageRoute(id: target.id, fragment: target.fragment)
                         }
                         .contextMenu {
-                            Button(L("打开", "Open"), systemImage: "macwindow") { router.page = PageRoute(id: id) }
+                            Button(L("打开", "Open"), systemImage: "macwindow") { router.page = PageRoute(id: target.id, fragment: target.fragment) }
                             if let pins, pins.supported, !address.isEmpty {
                                 if let pinned {
                                     Button(L("取消置顶", "Unpin"), systemImage: "pin.slash") { Task { await pins.remove(pinned) } }
@@ -102,6 +103,10 @@ struct PageCards: View {
 /// system's browser. The desktop app's page panel.
 struct PageScreen: View {
     let id: String
+    @Environment(Router.self) private var router
+    // Read the live route: presenting the same page with another hash keeps
+    // this screen and its WebKit document alive.
+    private var fragment: String? { router.page?.id == id ? router.page?.fragment : nil }
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(AppLanguage.defaultsKey) private var language = "system"
@@ -201,7 +206,9 @@ struct PageScreen: View {
         NavigationStack {
             Group {
                 if let page, let bridge, page.live == true || shown != nil {
-                    PageWebView(id: id, version: page.live == true ? nil : shown, reloads: reloads, pages: session.pages, bridge: bridge, language: AppLanguage.current.rawValue, theme: colorScheme == .dark ? "dark" : "light", active: scenePhase == .active)
+                    PageWebView(id: id, fragment: fragment, version: page.live == true ? nil : shown, reloads: reloads, pages: session.pages, bridge: bridge, language: AppLanguage.current.rawValue, theme: colorScheme == .dark ? "dark" : "light", active: scenePhase == .active, openPage: { target in
+                        router.page = PageRoute(id: target.id, fragment: target.fragment)
+                    })
                         .ignoresSafeArea(edges: remoteActive ? .all : .bottom)
                 } else if gone {
                     EmptyState(
@@ -352,17 +359,20 @@ struct PageScreen: View {
 /// Which page is open over the screen.
 public struct PageRoute: Identifiable, Hashable, Sendable {
     public var id: String
+    public var fragment: String?
 
-    public init(id: String) {
+    public init(id: String, fragment: String? = nil) {
         self.id = id
+        self.fragment = PageLinks.boundedFragment(fragment)
     }
 }
 
 /// The page itself: a web view that loads the page's files from the
 /// workspace through the app (a scheme of its own, one origin per page),
 /// each with the policy that keeps it to its own files.
-private struct PageWebView: UIViewRepresentable {
+struct PageWebView: UIViewRepresentable {
     let id: String
+    var fragment: String? = nil
     /// nil: a live page.
     let version: Int?
     let reloads: Int
@@ -372,6 +382,7 @@ private struct PageWebView: UIViewRepresentable {
     let language: String
     let theme: String
     let active: Bool
+    var openPage: (PageLinks.Target) -> Void = { _ in }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(id: id, version: version, pages: pages, bridge: bridge)
@@ -412,13 +423,18 @@ private struct PageWebView: UIViewRepresentable {
         context.coordinator.theme = theme
         context.coordinator.active = active
         context.coordinator.view = view
-        if let home = PageLinks.address(of: id) { view.load(URLRequest(url: home)) }
+        context.coordinator.fragment = PageLinks.boundedFragment(fragment)
+        context.coordinator.openPage = openPage
+        if let home = PageLinks.address(of: id, fragment: fragment) { view.load(URLRequest(url: home)) }
         context.coordinator.listen()
         return view
     }
 
     func updateUIView(_ view: WKWebView, context: Context) {
         let coordinator = context.coordinator
+        coordinator.openPage = openPage
+        let fragmentChanged = coordinator.fragment != PageLinks.boundedFragment(fragment)
+        coordinator.fragment = PageLinks.boundedFragment(fragment)
         coordinator.bridge?.setPreferences(language: language, theme: theme)
         let prefsChanged = coordinator.language != language || coordinator.theme != theme
         let reload = coordinator.version != version || coordinator.reloads != reloads || coordinator.language != language
@@ -437,12 +453,15 @@ private struct PageWebView: UIViewRepresentable {
             view.evaluateJavaScript("window.__mycoPreferences && window.__mycoPreferences(\(json)); void 0", completionHandler: nil)
         }
         coordinator.language = language; coordinator.theme = theme
-        guard reload else { return }
+        guard reload else {
+            if fragmentChanged { coordinator.applyFragment() }
+            return
+        }
         coordinator.invalidateDocument()
         coordinator.version = version
         coordinator.reloads = reloads
         // Another version, or asked to: from its first file again.
-        if let home = PageLinks.address(of: id) { view.load(URLRequest(url: home)) }
+        if let home = PageLinks.address(of: id, fragment: fragment) { view.load(URLRequest(url: home)) }
     }
 
     @MainActor
@@ -453,6 +472,12 @@ private struct PageWebView: UIViewRepresentable {
         var language = ""
         var theme = ""
         var active = true
+        var fragment: String? {
+            didSet { if oldValue != fragment { fragmentPending = true } }
+        }
+        private var fragmentPending = true
+        var openPage: (PageLinks.Target) -> Void = { _ in }
+        private var documentReady = false
         private var documentGeneration = 0
         let pages: PagesModel
         let bridge: PageBridge?
@@ -513,7 +538,49 @@ private struct PageWebView: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+            documentReady = false
             invalidateDocument()
+        }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            documentReady = true
+            applyFragment()
+        }
+
+        /// Assigning hash preserves page state and emits the normal hashchange
+        /// event. It never reloads files or invalidates outstanding bridge calls.
+        func applyFragment() {
+            guard documentReady, fragmentPending, let view else { return }
+            fragmentPending = false
+            let hash = fragment.map { "#" + $0 } ?? ""
+            guard let raw = try? JSONSerialization.data(withJSONObject: [hash]),
+                  let json = String(data: raw, encoding: .utf8) else { return }
+            view.evaluateJavaScript("if (window.location.hash !== \(json)[0]) window.location.hash = \(json)[0]; void 0", completionHandler: nil)
+        }
+
+        /// A same-document link, including one asking for a new window,
+        /// uses the hash setter rather than WebKit's document loader.
+        func navigateWithinDocument(to url: URL) -> Bool {
+            guard PageLinks.isOwn(url, of: id), let current = view?.url,
+                  var before = URLComponents(url: current, resolvingAgainstBaseURL: false),
+                  var after = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return false }
+            let next = PageLinks.boundedFragment(after.percentEncodedFragment)
+            before.fragment = nil
+            after.fragment = nil
+            guard before == after else { return false }
+            fragment = next
+            fragmentPending = true
+            applyFragment()
+            return true
+        }
+
+        private func openWorkspacePage(_ target: PageLinks.Target) {
+            if target.id == id {
+                fragment = target.fragment
+                fragmentPending = true
+                applyFragment()
+            }
+            openPage(target)
         }
 
         /// Every two seconds, while it is open: what others changed.
@@ -577,7 +644,14 @@ private struct PageWebView: UIViewRepresentable {
         /// opens in the system's browser, not in this view.
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction) async -> WKNavigationActionPolicy {
             guard let url = action.request.url else { return .cancel }
+            // WebKit's own anchor navigation already preserves the document;
+            // allow it, including hash assignments made by applyFragment().
             if PageLinks.isOwn(url, of: id) { return .allow }
+            if action.targetFrame?.isMainFrame ?? true,
+               let target = PageLinks.target(of: url.absoluteString, in: pages.workspace) {
+                openWorkspacePage(target)
+                return .cancel
+            }
             if let scheme = url.scheme, ["about", "data", "blob"].contains(scheme) { return .allow }
             if action.targetFrame?.isMainFrame ?? true, let scheme = url.scheme, ["http", "https", "mailto"].contains(scheme) {
                 await UIApplication.shared.open(url)
@@ -593,7 +667,9 @@ private struct PageWebView: UIViewRepresentable {
         ) -> WKWebView? {
             guard let url = action.request.url else { return nil }
             if PageLinks.isOwn(url, of: id) {
-                webView.load(URLRequest(url: url))
+                if !navigateWithinDocument(to: url) { webView.load(URLRequest(url: url)) }
+            } else if let target = PageLinks.target(of: url.absoluteString, in: pages.workspace) {
+                openWorkspacePage(target)
             } else if let scheme = url.scheme, ["http", "https", "mailto"].contains(scheme) {
                 UIApplication.shared.open(url)
             }
