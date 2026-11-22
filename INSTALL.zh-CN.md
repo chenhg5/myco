@@ -1200,3 +1200,35 @@ Windows PowerShell / macOS Homebrew 与启动 / Linux 安装启动命令，以�
 成功；失败会保留本机工作区并提示重试，不再显示地址为空的成功页。
 
 检测到已安装 Tailscale 后，安装指引会收起；如果开放失败，再显示登录和权限排障帮助。
+
+### 和 magpie、cc-switch 及兼容网关一起用
+
+myco 不内嵌 magpie。请在运行 agent 的电脑上单独安装、启动网关。**跟随这台电脑**
+使用 CLI 自己的用户配置：magpie 或 cc-switch 改动全局设置后，下次运行就会使用新设置。
+运行时显示配置的地址主机；本机 3425 端口的网关标为 magpie。后台 runner 继承服务的
+环境，不会自动读取交互式 shell 的启动文件；需要时配置 CLI 的用户设置，或运行
+`myco runner env capture` 捕获环境变量。
+
+**为一个 agent 单独钉住渠道**，可以避免全局切换影响它：在本机 App 的渠道设置里
+选择 cc-switch 渠道，或填写自定义地址、密钥和模型。Codex 还需选择 `responses`
+（默认）或 `chat`，具体以已安装的 Codex 版本和网关支持为准。myco 只传递配置，
+不会做协议转换，也不会重写 Claude 或 Codex 的全局配置文件。
+
+Claude 要填兼容 Anthropic 协议的地址；Codex 要填兼容 OpenAI 协议的地址，通常以
+`/v1` 结尾。magpie 本机网关、LiteLLM、OneAPI 类服务都可按这种方式使用，具体路径
+和模型名以网关说明为准。`127.0.0.1` 指运行 agent 的那台电脑，而不是远程 App 所在电脑。
+
+先准备一个私有密钥文件，再为 Codex agent 设置，例如：
+
+```sh
+myco runner provider set --agent my-codex --provider custom \
+  --base-url http://127.0.0.1:3425/v1 --model my-model \
+  --wire-api responses --key-file /private/path/gateway-key
+myco runner provider show --agent my-codex
+myco runner provider set --agent my-codex --provider machine
+```
+
+`--key-file -` 从标准输入读取密钥，不要把密钥放进命令行参数。`--dry-run` 只校验，
+不保存。密钥只保存在该电脑的私有 env 文件里，不发给 Hub。每次更新自定义渠道都要
+重新提供密钥，读取设置时只返回是否已保存密钥。渠道切换在下一条消息生效；App
+运行设置中明确选择的模型仍优先于渠道默认模型。

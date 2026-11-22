@@ -1,9 +1,10 @@
 package console
 
 import (
+	"crypto/sha256"
 	"errors"
+	"fmt"
 	"net/http"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -29,10 +30,11 @@ type AgentProvider struct {
 	// Provider: "" (follow this computer), "cc-switch:<id>", or "env_file"
 	// (provider variables in the agent's env file, e.g. entered by hand).
 	Provider string `json:"provider"`
-	// Harness of the agent's runner; only claude can be pinned for now.
+	// Harness of the agent's runner; Claude Code and Codex support pins.
 	Harness string `json:"harness,omitempty"`
 	// EnvHost is the endpoint host in the env file, when set by hand.
-	EnvHost string `json:"env_host,omitempty"`
+	EnvHost string              `json:"env_host,omitempty"`
+	Manual  *ManualProviderInfo `json:"manual,omitempty"`
 }
 
 // ProviderUpdate is the body of PUT /app/local/agents/{name}/provider:
@@ -42,11 +44,14 @@ type ProviderUpdate struct {
 	Manual   *ManualProvider `json:"manual,omitempty"`
 }
 
-// ManualProvider is an Anthropic-compatible endpoint entered by hand.
-type ManualProvider struct {
+// ManualProvider is accepted only by the local App backend.
+type ManualProvider = provider.Manual
+
+type ManualProviderInfo struct {
 	BaseURL string `json:"base_url"`
-	APIKey  string `json:"api_key"`
 	Model   string `json:"model,omitempty"`
+	WireAPI string `json:"wire_api,omitempty"`
+	HasKey  bool   `json:"has_key"`
 }
 
 func (l *Local) defaultConfig() string { return filepath.Join(l.Home, ".myco", "config.yaml") }
@@ -106,15 +111,33 @@ func (b *Backend) agentProvider(p config.Profile) AgentProvider {
 	}
 	if out.Provider == "" && cfg.Runner.EnvFile != "" {
 		if vals, err := config.ReadEnvFile(cfg.Runner.EnvFile); err == nil {
+			vars := map[string]string{}
 			for _, kv := range vals {
-				for _, k := range []string{"ANTHROPIC_BASE_URL=", "OPENAI_BASE_URL="} {
-					if v, ok := strings.CutPrefix(kv, k); ok {
-						out.Provider, out.EnvHost = "env_file", hostOf(v)
-					}
+				k, v, _ := strings.Cut(kv, "=")
+				vars[k] = v
+			}
+			base, key, model := vars["ANTHROPIC_BASE_URL"], vars["ANTHROPIC_AUTH_TOKEN"], vars["ANTHROPIC_MODEL"]
+			if key == "" {
+				key = vars["ANTHROPIC_API_KEY"]
+			}
+			wire := ""
+			if out.Harness == "codex" {
+				base, key, model, wire = vars["OPENAI_BASE_URL"], vars["OPENAI_API_KEY"], vars["OPENAI_MODEL"], vars["OPENAI_WIRE_API"]
+				if wire == "" {
+					wire = "responses"
+				}
+			}
+			if base != "" {
+				out.Provider, out.EnvHost = "env_file", hostOf(base)
+				// Never echo URL credentials or query values from older env captures.
+				m := provider.Manual{BaseURL: base, APIKey: "placeholder", Model: model, WireAPI: wire}
+				if m.Validate(out.Harness) == nil {
+					out.Manual = &ManualProviderInfo{BaseURL: base, Model: model, WireAPI: wire, HasKey: key != ""}
 				}
 			}
 		}
 	}
+
 	return out
 }
 
@@ -160,25 +183,15 @@ func (b *Backend) putAgentProvider(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case in.Manual != nil:
 		m := in.Manual
-		m.BaseURL, m.APIKey, m.Model = strings.TrimSpace(m.BaseURL), strings.TrimSpace(m.APIKey), strings.TrimSpace(m.Model)
-		if !strings.HasPrefix(m.BaseURL, "https://") && !strings.HasPrefix(m.BaseURL, "http://") || m.APIKey == "" {
-			writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument", Message: "enter the endpoint URL (https://…) and the key"})
+		if err := m.Validate(cur.Harness); err != nil {
+			writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument", Message: err.Error()})
 			return
 		}
 		file := cfg.Runner.EnvFile
 		if file == "" {
-			file = filepath.Join(b.Local.Home, ".myco", "env", cfg.Agent+".env")
+			file = filepath.Join(b.Local.Home, ".myco", "env", fmt.Sprintf("provider-%x.env", sha256.Sum256([]byte(p.Path))))
 		}
-		vars := map[string]string{"ANTHROPIC_BASE_URL": m.BaseURL, "ANTHROPIC_AUTH_TOKEN": m.APIKey}
-		if m.Model != "" {
-			vars["ANTHROPIC_MODEL"] = m.Model
-		}
-		if cur.Harness == "codex" { // an OpenAI-compatible endpoint
-			vars = map[string]string{"OPENAI_BASE_URL": m.BaseURL, "OPENAI_API_KEY": m.APIKey}
-			if m.Model != "" {
-				vars["OPENAI_MODEL"] = m.Model
-			}
-		}
+		vars := m.Variables(cur.Harness)
 		if err := writeProviderEnv(file, cfg.Agent, vars); err != nil {
 			writeErr(w, err)
 			return
@@ -211,46 +224,7 @@ func (b *Backend) putAgentProvider(w http.ResponseWriter, r *http.Request) {
 // writeProviderEnv replaces the provider variables in an agent's env file
 // with vars (nil = remove them), keeping its other lines; mode 600.
 func writeProviderEnv(path, agent string, vars map[string]string) error {
-	var keep []string
-	if b, err := os.ReadFile(path); err == nil {
-		for _, line := range strings.Split(string(b), "\n") {
-			k, _, _ := strings.Cut(strings.TrimPrefix(strings.TrimSpace(line), "export "), "=")
-			if strings.TrimSpace(line) == "" || isProviderVar(strings.TrimSpace(k)) {
-				continue
-			}
-			keep = append(keep, line)
-		}
-	} else if len(vars) == 0 {
-		return nil
-	}
-	if len(keep) == 0 {
-		keep = []string{"# passed only to " + agent + "'s CLI (set in the myco app)"}
-	}
-	names := make([]string, 0, len(vars))
-	for k := range vars {
-		names = append(names, k)
-	}
-	sort.Strings(names)
-	for _, k := range names {
-		keep = append(keep, k+"="+quoteEnvValue(vars[k]))
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	if err := os.WriteFile(path, []byte(strings.Join(keep, "\n")+"\n"), 0o600); err != nil {
-		return err
-	}
-	return os.Chmod(path, 0o600)
+	return provider.WriteEnv(path, agent, vars)
 }
 
-func isProviderVar(k string) bool {
-	return strings.HasPrefix(k, "ANTHROPIC_") || strings.HasPrefix(k, "CLAUDE_CODE_USE_") || k == "CLAUDE_CODE_OAUTH_TOKEN" ||
-		strings.HasPrefix(k, "OPENAI_")
-}
-
-func quoteEnvValue(v string) string {
-	if strings.ContainsAny(v, " \t#\"'") {
-		return `"` + strings.ReplaceAll(v, `"`, `\"`) + `"`
-	}
-	return v
-}
+func isProviderVar(k string) bool { return provider.IsProviderVar(k) }

@@ -81,3 +81,37 @@ func TestLocalAgentProvider(t *testing.T) {
 		t.Fatalf("left over: %v", vals)
 	}
 }
+
+func TestLocalCustomCodexProvider(t *testing.T) {
+	r := newRig(t)
+	home := t.TempDir()
+	b := &console.Backend{Store: console.NewStore(r.store), Secrets: r.secrets, Local: &console.Local{Home: home}, Shell: "windows"}
+	r.app.Config.Handler = b.Handler()
+	prof := config.ProfilePath(filepath.Join(home, ".myco", "config.yaml"), "cx")
+	if err := config.Save(prof, &config.Config{Agent: "cx", Hub: "http://hub", Harness: "codex"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, wire := range []string{"chat", "responses"} {
+		code, m, raw := r.do("PUT", "/app/local/agents/cx/provider", map[string]any{"manual": map[string]string{"base_url": "http://127.0.0.1:3425/v1", "api_key": "never-return-this", "model": "my-model", "wire_api": wire}})
+		if code != 200 || strings.Contains(string(raw), "never-return-this") {
+			t.Fatalf("set: %d", code)
+		}
+		manual := m["manual"].(map[string]any)
+		if manual["has_key"] != true || manual["wire_api"] != wire || manual["model"] != "my-model" {
+			t.Fatalf("safe summary: %v", manual)
+		}
+		code, _, raw = r.do("GET", "/app/local/agents/cx/provider", nil)
+		if code != 200 || strings.Contains(string(raw), "never-return-this") {
+			t.Fatal("key leaked")
+		}
+	}
+	for _, base := range []string{"https://example.test?key=hidden", "https://user:hidden@example.test"} {
+		code, _, raw := r.do("PUT", "/app/local/agents/cx/provider", map[string]any{"manual": map[string]string{"base_url": base, "api_key": "private-input"}})
+		if code != 400 || strings.Contains(string(raw), "hidden") || strings.Contains(string(raw), "private-input") {
+			t.Fatal("unsafe URL accepted or echoed")
+		}
+	}
+	if code, _, _ := r.do("PUT", "/app/local/agents/cx/provider", map[string]any{"manual": map[string]string{"base_url": "http://localhost:3425/v1", "api_key": "k", "wire_api": "bad"}}); code != 400 {
+		t.Fatal("invalid wire accepted")
+	}
+}

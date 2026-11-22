@@ -71,6 +71,8 @@ type Runtime struct {
 	// pinned | machine | env_file | missing.
 	Provider       string `json:"provider,omitempty"`
 	ProviderSource string `json:"provider_source,omitempty"`
+	// ProviderHost is only the effective endpoint host and port, never URL credentials or a path.
+	ProviderHost string `json:"provider_host,omitempty"`
 	// Effort is the reasoning effort the CLI runs with; EffortSource is
 	// app (the agent's run settings), self (the agent reported it) or "".
 	Effort       string `json:"effort,omitempty"`
@@ -223,7 +225,7 @@ func orNone(h string) string {
 
 // Validate keeps runtime fields short single lines.
 func (r Runtime) Validate() error {
-	for _, s := range []string{r.CLI, r.CLIVersion, r.Model, r.ModelSource, r.Access, r.Provider, r.ProviderSource, r.Effort, r.EffortSource, r.MaxAccess, r.Away, r.Env} {
+	for _, s := range []string{r.CLI, r.CLIVersion, r.Model, r.ModelSource, r.Access, r.Provider, r.ProviderSource, r.ProviderHost, r.Effort, r.EffortSource, r.MaxAccess, r.Away, r.Env} {
 		if len(s) > 120 || strings.ContainsAny(s, "\x00\n\r") {
 			return Errf(CodeInvalidArgument, "runtime fields must be single lines under 120 characters")
 		}

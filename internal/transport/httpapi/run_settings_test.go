@@ -54,12 +54,12 @@ func TestRunSettings(t *testing.T) {
 func TestRuntimeCarriesEffortAndQuota(t *testing.T) {
 	h := newHub(t, app.DefaultMessagePolicy())
 	coder := h.register("coder", map[string]any{"binding": map[string]any{"harness": "codex", "session_id": "s-coder"}})
-	rt := map[string]any{"cli": "codex", "model": "m", "model_source": "app", "effort": "high", "effort_source": "app",
+	rt := map[string]any{"cli": "codex", "model": "m", "model_source": "app", "provider_host": "127.0.0.1:3425", "effort": "high", "effort_source": "app",
 		"quota": map[string]any{"source": "codex", "at": "2026-11-13T09:00:00Z", "windows": []any{
 			map[string]any{"name": "primary", "label": "7d", "used": 0.07, "resets_at": "2026-11-20T09:00:00Z"}}}}
 	h.do("PUT", "/v1/me/runtime", coder, rt).want(t, 200)
 	got := h.do("GET", "/v1/agents/coder", adminToken, nil).want(t, 200)
-	for _, want := range []string{`"effort":"high"`, `"effort_source":"app"`, `"label":"7d"`, `"used":0.07`, `"source":"codex"`} {
+	for _, want := range []string{`"provider_host":"127.0.0.1:3425"`, `"effort":"high"`, `"effort_source":"app"`, `"label":"7d"`, `"used":0.07`, `"source":"codex"`} {
 		if !strings.Contains(string(got.raw), want) {
 			t.Fatalf("runtime lacks %s: %s", want, got.raw)
 		}

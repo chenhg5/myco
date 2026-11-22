@@ -1104,9 +1104,9 @@ export interface ProviderList { cc_switch: boolean; providers: ProviderInfo[]; e
  *  (`manual`: its address, model and Codex protocol; never its key, only whether there is one). */
 export interface AgentProvider { local: boolean; provider: string; harness?: string; env_host?: string; manual?: ManualInfo }
 export type WireAPI = "chat" | "responses";
-export interface ManualInfo { base_url: string; model?: string; wire_api?: WireAPI; has_key?: boolean }
-/** A custom address to save: api_key only when typed (blank keeps the saved one); wire_api only for Codex. */
-export interface ManualProvider { base_url: string; api_key?: string; model?: string; wire_api?: WireAPI }
+export interface ManualInfo { base_url: string; model?: string; wire_api?: WireAPI; has_key: boolean }
+/** A custom address to save: the key every time (it is never read back); wire_api only for Codex. */
+export interface ManualProvider { base_url: string; api_key: string; model?: string; wire_api?: WireAPI }
 
 /** How messages are translated: the service, and which ones have a key. */
 export type TranslateConfig = { provider: "deepl" | "google" | "openai"; base_url?: string; model?: string; keys: Record<string, boolean> };
