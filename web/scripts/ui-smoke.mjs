@@ -1691,6 +1691,20 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "action-grant-active");
       await clickVisible(page, grant.getByRole("button", { name: "收回", exact: true }));
       await grant.waitFor({ state: "hidden", timeout: 10_000 });
+      // A page it may export reads as that, not as a screen.
+      const pg = await fetch(`http://${HOST}:${mockPort()}/app/mock/superagent-ask`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agent: "pm-codex", kind: "page_grant", page: "产品白板" }),
+      });
+      if (!pg.ok) throw new Error(`页面导出授权失败：HTTP ${pg.status}`);
+      const pgGrant = page.locator(".sp-home [data-testid=action-grants] .sa-grant", { hasText: "产品白板" });
+      await pgGrant.waitFor({ timeout: 25_000 });
+      const pt = compactText(await pgGrant.innerText());
+      if (!pt.includes("可以导出「产品白板」") || pt.includes("屏幕")) throw new Error(`页面授权应写「可以导出「产品白板」」，实际「${pt}」`);
+      await settle(page, 200);
+      await shot(page, size, scheme, "action-grant-page");
+      await clickVisible(page, pgGrant.getByRole("button", { name: "收回", exact: true }));
+      await pgGrant.waitFor({ state: "hidden", timeout: 10_000 });
     });
 
     // Projects in the sidebar go where you drag them, and stay there.

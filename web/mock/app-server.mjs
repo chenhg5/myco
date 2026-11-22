@@ -1886,6 +1886,15 @@ const server = http.createServer(async (req, res) => {
     const agent = (hub && body?.agent) || (hub && state.superagents[hub.id]);
     if (!agent) return fail(res, 404, "not_found", "no superagent there");
     state.counter += 1;
+    // An agent that sees a page may export it without asking: its grant is
+    // active at once, with no approval.
+    if (body.kind === "page_grant") {
+      const g = { id: `agr_${state.counter}`, agent, owner: "glenn", target: { kind: "page", id: "pg_mock_board" }, target_name: body.page || "产品白板",
+        permissions: ["page.export"], requested: ["page.export"], reason: body.reason || "", state: "active", created_at: iso(0),
+        expires_at: new Date(Date.now() + 10 * 60_000).toISOString() };
+      (state.grants ||= {})[hub.id] = [...(state.grants[hub.id] || []), g];
+      return send(res, 201, g);
+    }
     const a = { id: `apr_${state.counter}`, agent, what: body.what || "删除项目 old-site", reason: body.reason || "", method: body.method || "DELETE", path: body.path || "/v1/projects/old-site",
       status: "pending", created_at: iso(0), expires_at: new Date(Date.now() + 24 * 3600_000).toISOString() };
     // An agent asking to act on a computer (kind action_grant): its

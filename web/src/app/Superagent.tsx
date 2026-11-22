@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Monitor, ShieldQuestion } from "lucide-react";
+import { FileDown, Monitor, ShieldQuestion } from "lucide-react";
 import type { ActionGrant, Agent, Approval, SuperagentState } from "@/api";
 import { appApi, type JoinLink } from "@/appapi";
 import { CopyButton } from "@/app/copy";
@@ -269,8 +269,8 @@ function wantsControl(a: Approval, grants?: ActionGrant[]): boolean {
   return /操作|keyboard|control/i.test(a.what);
 }
 
-/** What an agent may do on one of your computers right now, above its
- *  chat's composer: which computer, how, until when, and 收回. */
+/** What an agent may do right now, above its chat's composer: on which
+ *  computer (or which page it may export), until when, and 收回. */
 export function GrantStrip({ hubId, agent, name }: { hubId: string; agent: string; name?: string }) {
   const s = useSuperagent(hubId);
   const [busy, setBusy] = useState<string | null>(null);
@@ -294,15 +294,19 @@ export function GrantStrip({ hubId, agent, name }: { hubId: string; agent: strin
     <div className="sa-approvals" data-testid="action-grants">
       {items.map((g) => {
         const control = g.permissions.includes("remote.desktop.control");
+        const page = g.target.kind === "page";
+        const what = g.target_name || g.target.id;
         const left = g.expires_at ? Math.max(0, Math.round((new Date(g.expires_at).getTime() - now) / 60_000)) : 0;
         return (
           <div className="sa-approval sa-grant" key={g.id}>
-            <Monitor className="sa-approval-icon sa-grant-icon" />
+            {page ? <FileDown className="sa-approval-icon sa-grant-icon" /> : <Monitor className="sa-approval-icon sa-grant-icon" />}
             <div className="sa-approval-text">
               <div className="sa-approval-what">
-                {control
-                  ? L(`${name || agent} 可以看并操作 ${g.target_name || g.target.id} 的屏幕`, `${name || agent} may see and use ${g.target_name || g.target.id}'s screen`)
-                  : L(`${name || agent} 可以看 ${g.target_name || g.target.id} 的屏幕`, `${name || agent} may see ${g.target_name || g.target.id}'s screen`)}
+                {page
+                  ? L(`${name || agent} 可以导出「${what}」`, `${name || agent} may export "${what}"`)
+                  : control
+                  ? L(`${name || agent} 可以看并操作 ${what} 的屏幕`, `${name || agent} may see and use ${what}'s screen`)
+                  : L(`${name || agent} 可以看 ${what} 的屏幕`, `${name || agent} may see ${what}'s screen`)}
               </div>
               <div className="sa-approval-meta">{left > 0 ? L(`还剩 ${left} 分钟`, `${left} min left`) : L("快到期了", "Ending soon")}</div>
             </div>
