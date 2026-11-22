@@ -1522,6 +1522,9 @@ function agentStatus(a) {
 function hubView(h) {
   const view = { id: h.id, name: h.name, url: h.url, ok: h.ok, hub_version: h.hub_version, update_available: h.update_available };
   if (!h.ok) view.error = h.error;
+  // MOCK_LOOPBACK_HUB=1: the studio hub as the App on its own computer sees
+  // it (127.0.0.1), while its links carry the LAN address.
+  if (process.env.MOCK_LOOPBACK_HUB && h.id === "hub_studio") { view.url = "http://127.0.0.1:7780"; view.aliases = ["http://localhost:7780", "http://[::1]:7780", "http://192.168.1.20:7780"]; }
   return view;
 }
 

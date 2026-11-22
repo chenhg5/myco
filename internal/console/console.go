@@ -1347,6 +1347,9 @@ type HubStatus struct {
 	Error           string `json:"error,omitempty"`
 	HubVersion      string `json:"hub_version,omitempty"`
 	UpdateAvailable bool   `json:"update_available,omitempty"`
+	// Aliases are other addresses its links can carry (a hub on this
+	// computer links with its LAN address): see hubAliases.
+	Aliases []string `json:"aliases,omitempty"`
 }
 
 func (b *Backend) listHubs(w http.ResponseWriter, r *http.Request) {
@@ -1357,7 +1360,7 @@ func (b *Backend) listHubs(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]HubStatus, len(hubs))
 	each(hubs, func(i int, h Hub) {
-		out[i] = HubStatus{Hub: h}
+		out[i] = HubStatus{Hub: h, Aliases: hubAliases(h.URL)}
 		var failed error // a failed health check (not a missing token)
 		defer func() { out[i] = b.steady.hubStatus(out[i], failed, time.Now()) }()
 		c, err := b.client(h)

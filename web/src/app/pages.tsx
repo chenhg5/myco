@@ -22,7 +22,7 @@ import { cn, timeAgo } from "@/lib/utils";
  * panel.
  */
 
-type HubRef = { id: string; url: string };
+type HubRef = { id: string; url: string; aliases?: string[] };
 let hubs: HubRef[] = [];
 // An agent's name as people see it (AppMode knows the members).
 let nameOf: (hubId: string, name: string) => string = (_h, n) => n;
@@ -35,7 +35,7 @@ const base = (u: string) => u.replace(/\/+$/, "");
 
 /** The App's workspaces, to know whose a page link is. */
 export function setPageHubs(list: HubRef[]) {
-  hubs = list.map((h) => ({ id: h.id, url: base(h.url) }));
+  hubs = list.map((h) => ({ id: h.id, url: base(h.url), aliases: (h.aliases || []).map(base) }));
 }
 
 const PAGE = /^(https?:\/\/[^\s?#]+?)\/pages\/(pg_[a-z0-9]+)\/?$/i;
@@ -44,7 +44,9 @@ const PAGE = /^(https?:\/\/[^\s?#]+?)\/pages\/(pg_[a-z0-9]+)\/?$/i;
 export function pageLinkOf(href: string): { hubId: string; id: string } | null {
   const m = PAGE.exec(href.trim());
   if (!m) return null;
-  const h = hubs.find((x) => x.url === base(m[1]));
+  // (a hub on this computer links with its LAN address: one of its aliases)
+  const at = base(m[1]);
+  const h = hubs.find((x) => x.url === at) || hubs.find((x) => x.aliases?.includes(at));
   return h ? { hubId: h.id, id: m[2] } : null;
 }
 

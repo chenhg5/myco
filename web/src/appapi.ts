@@ -10,6 +10,8 @@ export interface Hub {
   error?: string;
   hub_version?: string;
   update_available?: boolean;
+  /** other addresses its links can carry (a hub on this computer links with its LAN address) */
+  aliases?: string[];
 }
 
 /** Voice calls: what the person chose (no keys) and whether this App can. */
