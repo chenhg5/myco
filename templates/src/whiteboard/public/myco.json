@@ -1,11 +1,11 @@
 {
   "id": "myco/whiteboard",
   "name": "白板",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "kind": "board",
   "category": "creative",
   "icon": "icon.svg",
-  "description": "一块无限大的画布：便签、文字、形状和连线。agent 能共同编辑，并取得页面打开时生成、经过源版本核对的 SVG，适合头脑风暴、复盘和流程图。",
+  "description": "一块无限大的画布：便签、文字、形状和连线。和 agent 共同编辑，导出 SVG/PNG；兼容新版 App 时，agent 可在后台导出共享白板。",
   "data": {
     "board": {
       "single": true,
@@ -54,7 +54,8 @@
     "download"
   ],
   "export": [
-    "svg"
+    "svg",
+    "png"
   ],
   "requires": {
     "hub": "0.20.7"

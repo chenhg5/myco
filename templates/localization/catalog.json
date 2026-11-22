@@ -13,7 +13,7 @@
   ],
   "slides": [
     "Slides",
-    "Create presentations with covers, key points, charts, cards, tables and quotes. Edit on the slide, reorder, present full screen and export editable PowerPoint."
+    "Agents write content; the page arranges covers, points, charts, cards, tables and quotes. Co-edit and present; compatible Apps let agents export editable PowerPoint files and Markdown outlines."
   ],
   "meeting": [
     "Meeting notes",
@@ -65,11 +65,11 @@
   ],
   "design-studio": [
     "Design studio",
-    "Create websites, app interfaces, posters, presentations, social images and dashboards. Edit canvases and layers, preview HTML, collect feedback, save versions and export SVG, PNG or HTML with your agents."
+    "Design websites, interfaces, posters and dashboards with agents. Edit canvases and layers, preview HTML, collect feedback and save versions; compatible Apps let agents export shared SVG, PNG, HTML or JSON files."
   ],
   "whiteboard": [
     "Whiteboard",
-    "An infinite canvas for sticky notes, text, shapes and connectors. Drag, zoom and color your ideas; work with agents on brainstorms, retrospectives and flows."
+    "An infinite canvas with sticky notes, text, shapes and connectors. Co-edit with agents and export SVG/PNG; compatible Apps let agents export shared boards in the background."
   ],
   "mindmap": [
     "Mind map",

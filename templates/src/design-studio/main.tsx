@@ -45,6 +45,8 @@ import {
   ZoomOut,
 } from "lucide-react";
 import { Store, myco, save } from "../_lib/myco";
+import { registerActions } from "../_lib/register-actions";
+import { designExport } from "./agent-actions";
 import { Kit, Toast, mount, useKit } from "../_lib/appkit";
 import { Popover, rectOf } from "../_lib/ui";
 import {
@@ -128,6 +130,7 @@ function IconButton({
   );
 }
 function App() {
+  useEffect(() => { const actions = registerActions([designExport]); return actions.dispose; }, []);
   useKit(kit);
   const [opened, setOpened] = useState<string | null>(null),
     [frameId, setFrameId] = useState(""),

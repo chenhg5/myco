@@ -15,7 +15,7 @@
 <table>
 <tr>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/motion-dark.webp"><img src="assets/apps/motion.webp" alt="动效视频"></picture><br><b>动效视频</b><br>做产品宣传、数据快报、竖版短视频这类动效视频：从模板开始改文字、图片和配色，或者说一句话让 agent 写好每个场景（HTML 加动画）；在时间点上批注让 agent 改，照一段参考视频重做；配上音乐和配音，场景切换对上节拍，配音转成字幕；存成模板给大家用；在本机导出 mp4。</td>
-<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/design-studio-dark.webp"><img src="assets/apps/design-studio.webp" alt="设计工作台"></picture><br><b>设计工作台</b><br>从设计需求到作品：网页、应用界面、海报、演示文稿、社交图片和数据看板。黑白灰工作空间，可编辑画布与图层、预览 HTML 原型、收集反馈、保存版本，和 agent 一起迭代，导出 SVG、PNG、HTML 或设计数据。</td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/design-studio-dark.webp"><img src="assets/apps/design-studio.webp" alt="设计工作台"></picture><br><b>设计工作台</b><br>和 agent 一起设计网页、界面、海报和数据看板。可编辑画布与图层，预览 HTML，收集反馈并保存版本；agent 可通过新版 App 导出共享作品的 SVG、PNG、HTML 或 JSON。</td>
 </tr>
 <tr>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/photo-dark.webp"><img src="assets/apps/photo.webp" alt="修图"></picture><br><b>修图</b><br>快速修照片：裁剪旋转、调色、十几种滤镜、磨皮美白、文字、贴纸、涂鸦、马赛克、边框，按住对比原图，导出 JPG 或 PNG。改了随时能退回去；照片只存在打开它的电脑上，修了什么大家都看得到，agent 也能按你说的帮你调。</td>
@@ -26,7 +26,7 @@
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/mindmap-dark.webp"><img src="assets/apps/mindmap.webp" alt="思维导图"></picture><br><b>思维导图</b><br>agent 写一份大纲，网页画成思维导图；Tab 加子主题、Enter 加同级、拖动换位置、折叠分支，导出 Markdown 大纲。</td>
 </tr>
 <tr>
-<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/whiteboard-dark.webp"><img src="assets/apps/whiteboard.webp" alt="白板"></picture><br><b>白板</b><br>一块无限大的画布：便签、文字、形状和连线。agent 能共同编辑，并取得页面打开时生成、经过源版本核对的 SVG，适合头脑风暴、复盘和流程图。</td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/whiteboard-dark.webp"><img src="assets/apps/whiteboard.webp" alt="白板"></picture><br><b>白板</b><br>一块无限大的画布：便签、文字、形状和连线。和 agent 共同编辑，导出 SVG/PNG；兼容新版 App 时，agent 可在后台导出共享白板。</td>
 <td width="50%"></td>
 </tr>
 </table>
@@ -40,7 +40,7 @@
 </tr>
 <tr>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/base-dark.webp"><img src="assets/apps/base.webp" alt="多维表格"></picture><br><b>多维表格</b><br>像飞书多维表格：同一份记录，表格、看板、日历、画廊、表单几种视图，点一条在右侧展开；字段有类型，筛选、排序，导出 Excel。</td>
-<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/slides-dark.webp"><img src="assets/apps/slides.webp" alt="幻灯片"></picture><br><b>幻灯片</b><br>agent 写内容，网页按版式和主题排好：封面、要点、图表、数字卡片、表格、引言；点哪改哪，拖动换顺序，全屏放映，导出能接着改的 PowerPoint。</td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/slides-dark.webp"><img src="assets/apps/slides.webp" alt="幻灯片"></picture><br><b>幻灯片</b><br>agent 写内容，网页按版式和主题排好：封面、要点、图表、数字卡片、表格和引言。共同编辑、放映；agent 可通过新版 App 导出可继续编辑的 PowerPoint 和 Markdown。</td>
 </tr>
 <tr>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/meeting-dark.webp"><img src="assets/apps/meeting.webp" alt="会议记录"></picture><br><b>会议记录</b><br>录下在 Zoom、腾讯会议、飞书里开的会：你的麦克风和别人的声音分开录，会后在这台电脑上转成文字（不上传），自动分出不同的人；点一句从那里播放，改字、改名字、搜索、导出；让 agent 写纪要（总结、决定、待办、章节）。录音只存在这台电脑上，要在 myco App 里录音。</td>

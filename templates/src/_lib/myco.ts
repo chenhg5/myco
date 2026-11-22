@@ -3,7 +3,13 @@
 export type MycoRecord<T = Record<string, unknown>> = { collection: string; id: string; data: T; version: number; updated_by?: string };
 export type MycoChange = { seq: number; collection: string; record: string; op: "put" | "delete"; data?: Record<string, unknown>; version: number; by?: string };
 export type PagePreferences = { language: "zh" | "en"; theme: "light" | "dark" };
-type Ctx = { preferences?: PagePreferences; page: { id: string; name: string }; me: { name: string } };
+export type PageActionDescriptor = { name: string; version: number; input_schema: Record<string, unknown> };
+export type PageActionRequest = { id: string; action: string; version: number; args: unknown; signal: AbortSignal };
+export type PageActionFile = { media_type: string; data: Blob | Uint8Array | ArrayBuffer; width?: number; height?: number; pages?: number };
+export type PageActionBridge = {
+  register(descriptors: PageActionDescriptor[], invoke: (request: PageActionRequest) => Promise<PageActionFile>): () => void;
+};
+type Ctx = { preferences?: PagePreferences; page: { id: string; name: string }; me: { name: string }; render?: { instance: string } };
 
 interface Bridge {
   readonly preferences?: PagePreferences;
@@ -20,6 +26,7 @@ interface Bridge {
   /** What the App's bridge can do (Apps from v0.20.27); missing in older ones.
    *  "os": myco.os is there. */
   features?: string[];
+  actions?: PageActionBridge;
   /** This computer (the App's): files, commands, the screen… Each system
    *  does what it can; what it cannot answers err.code "unsupported". */
   os?: MycoOS;

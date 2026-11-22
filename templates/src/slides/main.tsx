@@ -14,6 +14,8 @@ import { MenuItem, Popover, rectOf } from "../_lib/ui";
 import { LAYOUTS, THEMES, layoutName, starter, type DeckData, type Layout, type SlideData } from "./model";
 import { Editable, H, SlideView, W } from "./slide";
 import { toMarkdown, toPptx } from "./pptx";
+import { registerActions } from "../_lib/register-actions";
+import { slidesExport } from "./agent-actions";
 
 const deck = new Store<DeckData & Record<string, unknown>>("deck");
 const slides = new Store<SlideData & Record<string, unknown>>("slides");
@@ -74,6 +76,7 @@ const useData = () => useSyncExternalStore((f) => { subs.add(f); return () => { 
 
 // ---- the page -------------------------------------------------------------------------
 function App() {
+  useEffect(() => { const actions = registerActions([slidesExport]); return actions.dispose; }, []);
   useData();
   const list = slides.rows;
   const [cur, setCur] = useState<string>(() => list[0]?.id || "");
@@ -372,7 +375,7 @@ async function start() {
     const ctx = await myco.ready;
     me = ctx.me?.name || "";
     await Promise.all([deck.load(), slides.load()]);
-    if (!deck.get("main")) await deck.put({ title: "", theme: "light" }, "main")?.catch(() => deck.load());
+    if (!ctx.render && !deck.get("main")) await deck.put({ title: "", theme: "light" }, "main")?.catch(() => deck.load());
   } catch { root.render(outside); return; }
   listen([deck, slides], (c: MycoChange) => { emit(); if (c.by && c.by !== me) flash(uiText("{0} 刚改了", c.by)); });
   root.render(<App />);

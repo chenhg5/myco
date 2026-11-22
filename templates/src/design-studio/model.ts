@@ -87,7 +87,7 @@ const palette = new Set(["none", "transparent"]);
 export const color = (s: string | undefined, fallback = "#202020") =>
   s && (/^#[\da-f]{3,8}$/i.test(s) || palette.has(s)) ? s : fallback;
 export const esc = (s: unknown) =>
-  String(s ?? "").replace(
+  String(s ?? "").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff\ud800-\udfff]/gu, "").replace(
     /[&<>"']/g,
     (c) =>
       ({

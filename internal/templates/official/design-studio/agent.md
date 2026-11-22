@@ -20,3 +20,39 @@ Example:
 `myco page data get --page <page> --collection artifacts --id <artifact>`
 `myco page data put --page <page> --collection artifacts --id <artifact> --if-version <n> --file design.json`
 See `myco page data put --help` for this CLI's supported file/JSON options.
+
+## Agent file exports (page.export v1)
+
+This version registers an application export handler. A compatible Hub and
+desktop App with the `page-actions` bridge and `page` render provider are required;
+upgrading this template alone does not add those framework capabilities. The App
+must be running. The page need not be open in a visible tab.
+
+Use the existing agent CLI (or the generic action SDK):
+
+```sh
+myco action grant request --page PAGE_ID --permission page.export --reason "Export the shared page"
+myco action list --grant GRANT_ID
+myco action run --grant GRANT_ID --action page.export --args '{"format":"png","artifact_id":"ARTIFACT_ID","frame_id":"FRAME_ID","max_width":1600}' --key design-export-1
+```
+
+A page visible to the requesting agent grants `page.export` automatically: it only transforms data the
+requesting agent can already read. This does not authorize OS/network access.
+`action run` reports `{job, saved}`; inspect `job.state` and `job.error` before
+using saved files. Exports are private artifacts, limited to 4 MB, and become
+inaccessible when the grant expires, ends or is revoked. Retrieve the file
+before calling `myco action grant end --id GRANT_ID`. Do not publish a grant
+or artifact ID as a public download link. `unsupported` means no compatible
+render provider/action version is available.
+
+Formats: `svg`, `png`, `json` and `html`; `artifact_id` is required.
+For SVG/PNG, `frame_id` is required when there is more than one frame; unknown
+IDs fail instead of exporting an arbitrary selection. `max_width` is PNG only
+(integer 320–2560, default 1600). JSON/HTML export the whole artifact and reject
+`frame_id`. Rendered canvases support shared inline PNG/JPEG/WebP images only.
+HTML is returned as source bytes; its scripts are never executed by the export
+handler. At most 32 frames, 300 nodes per rendered frame and 3 MB of source data
+are accepted. JSON preserves the shared design data.
+
+中文：agent 可指定作品导出 SVG/PNG/HTML/JSON；多画布的图片导出必须指定画布。
+HTML 只作为源码文件返回，导出时不执行脚本，也不读取本机素材。

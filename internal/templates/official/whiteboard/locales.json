@@ -1,10 +1,10 @@
 {
   "en": {
     "name": "Whiteboard",
-    "description": "An infinite canvas with sticky notes, text, shapes and connectors. Agents can co-edit and retrieve a version-checked SVG generated while the page is open."
+    "description": "An infinite canvas with sticky notes, text, shapes and connectors. Co-edit with agents and export SVG/PNG; compatible Apps let agents export shared boards in the background."
   },
   "zh": {
     "name": "白板",
-    "description": "一块无限大的画布：便签、文字、形状和连线。agent 能共同编辑，并取得页面打开时生成、经过源版本核对的 SVG，适合头脑风暴、复盘和流程图。"
+    "description": "一块无限大的画布：便签、文字、形状和连线。和 agent 共同编辑，导出 SVG/PNG；兼容新版 App 时，agent 可在后台导出共享白板。"
   }
 }

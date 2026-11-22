@@ -15,7 +15,7 @@ Agent access currently uses shared page records. The [agent actions SDK](app-act
 <table>
 <tr>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/motion-dark.webp"><img src="assets/apps/motion.webp" alt="Motion video"></picture><br><b>Motion video</b><br>Promo clips, data recaps and vertical shorts: start from a template or describe it and the agent writes each scene (HTML and animation). Comment at a point in time for changes, remake from a reference video, add music and voice-over with captions, export MP4 on your computer.</td>
-<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/design-studio-dark.webp"><img src="assets/apps/design-studio.webp" alt="Design studio"></picture><br><b>Design studio</b><br>From a design brief to the finished piece: web pages, app screens, posters, slides, social images and dashboards. Edit on a canvas with layers, preview HTML prototypes, collect feedback, keep versions, export SVG, PNG or HTML.</td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/design-studio-dark.webp"><img src="assets/apps/design-studio.webp" alt="Design studio"></picture><br><b>Design studio</b><br>Design websites, interfaces, posters and dashboards with agents. Edit canvases and layers, preview HTML, collect feedback and save versions; compatible Apps let agents export shared SVG, PNG, HTML or JSON files.</td>
 </tr>
 <tr>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/photo-dark.webp"><img src="assets/apps/photo.webp" alt="Photo editor"></picture><br><b>Photo editor</b><br>Crop and rotate, adjust colour, a dozen filters, retouching, text, stickers, doodles, mosaic and frames; hold to compare with the original. Photos stay on the computer that opened them; the agent can make the edits you describe.</td>
@@ -26,7 +26,7 @@ Agent access currently uses shared page records. The [agent actions SDK](app-act
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/mindmap-dark.webp"><img src="assets/apps/mindmap.webp" alt="Mind map"></picture><br><b>Mind map</b><br>The agent writes an outline and the page draws it as a mind map: Tab adds a child, Enter a sibling, drag to move, fold branches, export a Markdown outline.</td>
 </tr>
 <tr>
-<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/whiteboard-dark.webp"><img src="assets/apps/whiteboard.webp" alt="Whiteboard"></picture><br><b>Whiteboard</b><br>An endless canvas with sticky notes, text, shapes and connectors. Agents can edit it and retrieve a version-checked SVG generated while the page is open, for brainstorms, retros and flowcharts.</td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/whiteboard-dark.webp"><img src="assets/apps/whiteboard.webp" alt="Whiteboard"></picture><br><b>Whiteboard</b><br>An infinite canvas with sticky notes, text, shapes and connectors. Co-edit with agents and export SVG/PNG; compatible Apps let agents export shared boards in the background.</td>
 <td width="50%"></td>
 </tr>
 </table>
@@ -40,7 +40,7 @@ Agent access currently uses shared page records. The [agent actions SDK](app-act
 </tr>
 <tr>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/base-dark.webp"><img src="assets/apps/base.webp" alt="Database"></picture><br><b>Database</b><br>One set of records as a table, board, calendar, gallery or form, like Feishu Base: typed fields, filters and sorting, details on the side, export Excel.</td>
-<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/slides-dark.webp"><img src="assets/apps/slides.webp" alt="Slides"></picture><br><b>Slides</b><br>The agent writes the content and the page lays it out: covers, key points, charts, number cards, tables, quotes. Edit in place, reorder, present full screen, export editable PowerPoint.</td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/slides-dark.webp"><img src="assets/apps/slides.webp" alt="Slides"></picture><br><b>Slides</b><br>Agents write content; the page arranges covers, points, charts, cards, tables and quotes. Co-edit and present; compatible Apps let agents export editable PowerPoint files and Markdown outlines.</td>
 </tr>
 <tr>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/meeting-dark.webp"><img src="assets/apps/meeting.webp" alt="Meeting notes"></picture><br><b>Meeting notes</b><br>Record a meeting in Zoom, Tencent Meeting or Feishu, with your microphone and the others on separate tracks; transcribe it on your computer (nothing is uploaded), tell speakers apart, and let the agent write the minutes. Needs the myco app.</td>
