@@ -447,6 +447,17 @@ export interface Approval {
   id: string; agent: string; what: string; reason?: string; method: string; path: string; body?: string;
   status: "pending" | "done" | "denied" | "expired" | "withdrew"; result?: number; result_body?: string; decided_by?: string;
   created_at: string; expires_at: string; decided_at?: string;
+  /** "" (absent): a superagent's held request; "action_grant": an agent asks to act on a computer
+   *  (payload {grant_id}; approving may send {permissions?, ttl_seconds?} to allow less). v0.21.21 */
+  kind?: string; payload?: { grant_id?: string } & Record<string, unknown>;
+}
+
+/** What an agent may do on a computer, approved by its owner (agent actions, v0.21.21). */
+export interface ActionGrant {
+  id: string; agent: string; owner: string; target: { kind: "machine" | "page"; id: string }; target_name?: string;
+  permissions: string[]; requested?: string[]; reason?: string; message_id?: string; approval_id: string;
+  state: "pending" | "active" | "denied" | "expired" | "revoked" | "ended"; end_reason?: string;
+  created_at: string; expires_at?: string; ended_at?: string;
 }
 
 // Optional remote desktop signaling. No image, audio or input payloads use the Hub API.

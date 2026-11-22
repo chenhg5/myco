@@ -193,6 +193,7 @@ var statusByCode = map[domain.ErrorCode]int{
 	domain.CodeUnauthenticated:  http.StatusUnauthorized,
 	domain.CodeInternal:         http.StatusInternalServerError,
 	domain.CodeRateLimited:      http.StatusTooManyRequests,
+	domain.CodeUnsupported:      http.StatusNotImplemented,
 	domain.CodeReplaced:         http.StatusUnauthorized,
 }
 

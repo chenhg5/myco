@@ -475,6 +475,11 @@ func Open(path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 	// Live pages (a dev server forwarded): from the same release as pages.
+	// Typed approvals (v0.21.21): what kind of request, and its payload.
+	if err := addColumns(db, "approvals", [][2]string{{"kind", "TEXT NOT NULL DEFAULT ''"}, {"payload", "TEXT NOT NULL DEFAULT ''"}}); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate: %w", err)
+	}
 	if err := addColumns(db, "pages", [][2]string{{"live", "INTEGER NOT NULL DEFAULT 0"}, {"port", "INTEGER NOT NULL DEFAULT 0"},
 		{"template", "TEXT NOT NULL DEFAULT ''"}, {"template_version", "TEXT NOT NULL DEFAULT ''"}, {"manifest", "TEXT NOT NULL DEFAULT ''"}}); err != nil {
 		db.Close()
