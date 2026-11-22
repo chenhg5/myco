@@ -1,4 +1,7 @@
 {
+  "退出全屏": "Exit fullscreen",
+  "交换 A/B": "Swap A/B",
+  "键盘：方向键移动，Z 为 A，X 为 B，Enter 开始。": "Keyboard: arrows to move, Z for A, X for B, and Enter to start.",
   "继续游戏": "Resume game",
   "如果你的文件是 .nes，请切换到 NES 导入。": "For .nes files, switch to NES to import your cartridge.",
   "NES 程序已停止。请尝试重新载入 ROM。": "The NES game stopped. Try reloading the ROM.",

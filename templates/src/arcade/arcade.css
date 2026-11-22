@@ -78,3 +78,34 @@
   .arc-header .arc-modes { gap: 3px; }
   .arc-modes .btn { padding-inline: 8px; }
 }
+
+.arc-nes-full {
+  position: fixed; inset: 0; z-index: 10; box-sizing: border-box;
+  max-width: none; height: 100%; margin: 0; overflow: auto; overscroll-behavior: contain;
+  background: var(--bg); padding: 8px; gap: 8px;
+  grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(130px, 1fr) auto;
+}
+.arc-nes-full .arc-cabinet { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; padding: 0; background: none; }
+.arc-nes-full .arc-screen { display: grid; place-items: center; min-height: 0; padding: 0; overflow: hidden; }
+.arc-nes-full .arc-screen canvas { width: 100%; height: 100%; min-height: 0; object-fit: contain; }
+.arc-nes-full .arc-tools { margin-top: 6px; gap: 5px; justify-content: center; }
+.arc-nes-full .arc-title, .arc-nes-full .arc-nes-file-hint, .arc-nes-full .arc-nes-import,
+.arc-nes-full .arc-controls h2, .arc-nes-full .arc-controls p { display: none; }
+.arc-nes-full .arc-controls { padding: 6px 12px; }
+.arc-nes-full .arc-nes-pad { max-width: 320px; margin: 0 auto; gap: 5px; }
+.arc-nes-full .arc-side { grid-template-columns: minmax(0, 1fr); align-content: center; }
+.arc-nes-swap { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 12px; margin-top: 10px; }
+.arc-nes-full .arc-nes-swap { margin-top: 5px; }
+@media (orientation: landscape) {
+  .arc-nes-full {
+    grid-template-columns: clamp(108px, 16vw, 160px) minmax(0, 1fr) clamp(108px, 16vw, 160px);
+    grid-template-rows: minmax(0, 1fr) auto minmax(0, 1fr);
+  }
+  .arc-nes-full .arc-cabinet { grid-area: 1 / 2 / -1; }
+  .arc-nes-full .arc-side, .arc-nes-full .arc-controls, .arc-nes-full .arc-nes-pad { display: contents; }
+  .arc-nes-full .arc-nes-direction { grid-area: 1 / 1 / -1; place-self: center; }
+  .arc-nes-full .arc-nes-action { grid-area: 1 / 3; align-self: end; }
+  .arc-nes-full .arc-nes-utility { grid-area: 2 / 3; gap: 4px; }
+  .arc-nes-full .arc-nes-utility button { min-width: 52px; }
+  .arc-nes-full .arc-nes-swap { grid-area: 3 / 3; align-self: start; }
+}

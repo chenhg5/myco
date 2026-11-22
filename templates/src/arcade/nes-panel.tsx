@@ -2,7 +2,7 @@
 // crosses the page bridge. Keyboard and touch feed the same controller ports.
 import { useEffect, useRef, useState } from "react";
 import { Controller, NES, type ButtonKey } from "jsnes";
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Pause, Play, RotateCcw, Upload, Volume2, VolumeX } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Maximize, Minimize, Pause, Play, RotateCcw, Upload, Volume2, VolumeX } from "lucide-react";
 import { t as uiText } from "../_lib/i18n";
 import { NESAudio, nesSampleRate } from "./nes-audio";
 import { MAX_NES_ROM, validNESROM } from "./nes-rom";
@@ -15,36 +15,75 @@ const bindings: Record<string, ButtonKey> = {
 };
 
 export function NESPanel() {
+  const panel = useRef<HTMLElement>(null);
   const picker = useRef<HTMLInputElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const core = useRef<NES>();
   const cartridge = useRef<Uint8Array>();
   const audio = useRef<NESAudio>();
   const keys = useRef(new Map<string, ButtonKey>());
+  const pressedSinceFrame = useRef(new Set<ButtonKey>());
+  const pendingRelease = useRef(new Set<ButtonKey>());
+  const swap = useRef(false);
   const load = useRef(0);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [swapped, setSwapped] = useState(false);
   const [filename, setFilename] = useState("");
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(true);
   const [held, setHeld] = useState<ButtonKey[]>([]);
   const [error, setError] = useState("");
 
-  function input(source: string, code: ButtonKey, down: boolean) {
+  function mapped(code: ButtonKey): ButtonKey {
+    if (swap.current && code === button.BUTTON_A) return button.BUTTON_B;
+    if (swap.current && code === button.BUTTON_B) return button.BUTTON_A;
+    return code;
+  }
+
+  function input(source: string, code: ButtonKey, down: boolean, cancel = false) {
     if (!core.current) return;
     if (down) {
       if (keys.current.has(source)) return;
-      if (![...keys.current.values()].includes(code)) core.current.buttonDown(1, code);
+      if (![...keys.current.values()].includes(code) && !pendingRelease.current.delete(code)) {
+        core.current.buttonDown(1, mapped(code));
+        pressedSinceFrame.current.add(code);
+      }
       keys.current.set(source, code);
     } else {
       if (!keys.current.delete(source)) return;
-      if (![...keys.current.values()].includes(code)) core.current.buttonUp(1, code);
+      if (![...keys.current.values()].includes(code)) {
+        if (!cancel && pressedSinceFrame.current.has(code)) pendingRelease.current.add(code);
+        else core.current.buttonUp(1, mapped(code));
+      }
     }
     setHeld([...keys.current.values()]);
   }
 
   function release() {
-    for (const code of new Set(keys.current.values())) core.current?.buttonUp(1, code);
+    for (const code of new Set([...keys.current.values(), ...pendingRelease.current])) {
+      core.current?.buttonUp(1, mapped(code));
+    }
     keys.current.clear();
+    pendingRelease.current.clear();
+    pressedSinceFrame.current.clear();
     setHeld([]);
+  }
+
+  function toggleFullscreen() {
+    const element = panel.current;
+    if (!element) return;
+    if (fullscreen) {
+      if (document.fullscreenElement === element) void document.exitFullscreen().catch(() => undefined);
+      else setFullscreen(false);
+    } else {
+      setFullscreen(true);
+      // iPhone's embedded web view can use the page-sized layout even
+      // when the host cannot grant element fullscreen.
+      if (document.fullscreenEnabled && element.requestFullscreen) {
+        void element.requestFullscreen().catch(() => undefined);
+      }
+    }
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
   }
 
   useEffect(() => {
@@ -61,12 +100,25 @@ export function NESPanel() {
       if (code !== undefined) input(event.code, code, false);
     };
     const hidden = () => { if (document.hidden) { release(); setPlaying(false); } };
+    const element = panel.current;
+    let native = false;
+    const syncFullscreen = () => {
+      if (document.fullscreenElement === element) native = true;
+      else if (native) { native = false; setFullscreen(false); }
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && document.fullscreenElement !== element) setFullscreen(false);
+    };
+    document.addEventListener("fullscreenchange", syncFullscreen);
+    window.addEventListener("keydown", escape);
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
     window.addEventListener("blur", release);
     document.addEventListener("visibilitychange", hidden);
     return () => {
       ++load.current;
+      document.removeEventListener("fullscreenchange", syncFullscreen);
+      window.removeEventListener("keydown", escape);
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
       window.removeEventListener("blur", release);
@@ -85,6 +137,10 @@ export function NESPanel() {
         while (elapsed >= frameTime) {
           elapsed -= frameTime;
           core.current?.frame();
+          // A quick tap can start and end between two emulated frames.
+          for (const code of pendingRelease.current) core.current?.buttonUp(1, mapped(code));
+          pendingRelease.current.clear();
+          pressedSinceFrame.current.clear();
           audio.current?.flush();
         }
         request = requestAnimationFrame(tick);
@@ -162,14 +218,14 @@ export function NESPanel() {
         input("touch-" + event.pointerId, code, true);
       }}
       onPointerUp={event => input("touch-" + event.pointerId, code, false)}
-      onPointerCancel={event => input("touch-" + event.pointerId, code, false)}
-      onLostPointerCapture={event => input("touch-" + event.pointerId, code, false)}
+      onPointerCancel={event => input("touch-" + event.pointerId, code, false, true)}
+      onLostPointerCapture={event => input("touch-" + event.pointerId, code, false, true)}
       onKeyDown={event => { if (event.key === " " || event.key === "Enter") { event.preventDefault(); input("focus-" + code, code, true); } }}
       onKeyUp={event => { if (event.key === " " || event.key === "Enter") input("focus-" + code, code, false); }}
-      onBlur={() => input("focus-" + code, code, false)}>{content}</button>;
+      onBlur={() => input("focus-" + code, code, false, true)}>{content}</button>;
   }
 
-  return <main className="arc-layout arc-nes">
+  return <main ref={panel} className={fullscreen ? "arc-layout arc-nes arc-nes-full" : "arc-layout arc-nes"}>
     <section className="arc-cabinet">
       <div className="arc-title"><h2>{filename || uiText("NES 卡带")}</h2>{filename && <span role="status">{playing ? uiText("运行中") : uiText("已暂停")}</span>}</div>
       <div className="arc-screen">
@@ -180,7 +236,7 @@ export function NESPanel() {
         <input ref={picker} hidden type="file" accept=".nes,application/octet-stream" onChange={event => {
           void importFile(event.target.files?.[0]); event.target.value = "";
         }}/>
-        <button type="button" className="btn btn-primary" onClick={() => picker.current?.click()}>
+        <button type="button" className="btn btn-primary arc-nes-import" onClick={() => picker.current?.click()}>
           <Upload size={15}/>{uiText("导入 .nes")}
         </button>
         <button type="button" className="btn" disabled={!filename} onClick={() => {
@@ -196,9 +252,14 @@ export function NESPanel() {
           void sound();
           if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
         }}>{muted ? <VolumeX size={15}/> : <Volume2 size={15}/>} {muted ? uiText("开启声音") : uiText("关闭声音")}</button>
+        <button type="button" className="btn arc-nes-full-toggle" disabled={!filename}
+          aria-pressed={fullscreen} onClick={toggleFullscreen}>
+          {fullscreen ? <Minimize size={15}/> : <Maximize size={15}/>}
+          {fullscreen ? uiText("退出全屏") : uiText("全屏")}
+        </button>
       </div>
       {error && <p className="arc-error" role="alert">{error}</p>}
-      <p>{uiText("卡带只在当前设备读取。将附件保存到这台设备后即可选择。")}</p>
+      <p className="arc-nes-file-hint">{uiText("卡带只在当前设备读取。将附件保存到这台设备后即可选择。")}</p>
     </section>
     <aside className="arc-side">
       <div className="arc-controls">
@@ -219,7 +280,16 @@ export function NESPanel() {
             {touch(button.BUTTON_START, uiText("开始游戏"), "START")}
           </div>
         </div>
-        <p>{uiText("键盘：方向键移动，Z 为 B，X 为 A，Enter 开始。")}</p>
+        <label className="arc-nes-swap">
+          <input type="checkbox" checked={swapped} onChange={event => {
+            release();
+            swap.current = event.target.checked;
+            setSwapped(swap.current);
+            event.target.blur();
+          }}/>{uiText("交换 A/B")}
+        </label>
+        <p>{swapped ? uiText("键盘：方向键移动，Z 为 A，X 为 B，Enter 开始。")
+          : uiText("键盘：方向键移动，Z 为 B，X 为 A，Enter 开始。")}</p>
       </div>
     </aside>
   </main>;

@@ -10,9 +10,16 @@ const { chromium } = require("playwright");
 function testCartridge() {
   const rom = Buffer.alloc(16 + 16384);
   rom.set([0x4e, 0x45, 0x53, 0x1a, 1], 0);
-  // Set the PPU backdrop to blue, then loop without game assets.
-  rom.set([0xa9, 0x3f, 0x8d, 6, 0x20, 0xa9, 0, 0x8d, 6, 0x20,
-    0xa9, 0x21, 0x8d, 7, 0x20, 0x4c, 0x0f, 0x80], 16);
+  // Read the first two bits from controller 1 and latch the result in the
+  // PPU backdrop. A gives green, B gives red, and a fresh boot gives blue.
+  rom.set([
+    0xa9, 0x21, 0x85, 0x00,
+    0xa9, 0x01, 0x8d, 0x16, 0x40, 0xa9, 0x00, 0x8d, 0x16, 0x40,
+    0xad, 0x16, 0x40, 0x4a, 0xb0, 0x0b, 0xad, 0x16, 0x40, 0x4a, 0x90, 0x09,
+    0xa9, 0x26, 0x4c, 0x21, 0x80, 0xa9, 0x2a, 0x85, 0x00,
+    0xa9, 0x3f, 0x8d, 0x06, 0x20, 0xa9, 0x00, 0x8d, 0x06, 0x20,
+    0xa5, 0x00, 0x8d, 0x07, 0x20, 0x4c, 0x04, 0x80,
+  ], 16);
   rom.writeUInt16LE(0x8000, 16 + 0x3ffc);
   return { name: "test.nes", mimeType: "application/octet-stream", buffer: rom };
 }
@@ -83,6 +90,39 @@ try {
       const pixels = document.querySelector(".arc-nes canvas").getContext("2d").getImageData(0, 0, 256, 240).data;
       return pixels.some((value, index) => (index & 3) !== 3 && value > 20);
     });
+    if (mobile) await page.evaluate(() => Object.defineProperty(document, "fullscreenEnabled", { value: false }));
+    await panel.getByRole("button", { name: mobile ? "Fullscreen" : "全屏", exact: true }).click();
+    await page.waitForFunction(() => !!document.querySelector(".arc-nes-full"));
+    if (mobile) assert.equal(await page.evaluate(() => !!document.fullscreenElement), false);
+    else await page.waitForFunction(() => document.fullscreenElement === document.querySelector(".arc-nes"));
+    if (!provided) {
+      const color = channel => page.waitForFunction(channel => {
+        const data = document.querySelector(".arc-nes canvas").getContext("2d").getImageData(128, 120, 1, 1).data;
+        return channel === "green" ? data[1] > data[0] + 30 : data[0] > data[1] + 30;
+      }, channel);
+      const pressA = async () => {
+        if (mobile) await panel.getByRole("button", { name: "Action A", exact: true }).tap();
+        else await page.evaluate(() => {
+          // Dispatch both events synchronously so they fall in the same frame.
+          for (const type of ["keydown", "keyup"]) window.dispatchEvent(new KeyboardEvent(type, { code: "KeyX" }));
+        });
+      };
+      await pressA();
+      await color("green");
+      await panel.getByRole("checkbox", { name: mobile ? "Swap A/B" : "交换 A/B" }).check();
+      await pressA();
+      await color("red");
+      if (mobile) {
+        await page.setViewportSize({ width: 700, height: 350 });
+        const [screen, directions, actions] = await Promise.all([
+          panel.locator("canvas").boundingBox(), panel.locator(".arc-nes-direction").boundingBox(), panel.locator(".arc-nes-action").boundingBox(),
+        ]);
+        assert.ok(directions.x + directions.width <= screen.x && actions.x >= screen.x + screen.width);
+        assert.ok(actions.y + actions.height <= 350);
+      }
+    }
+    await panel.getByRole("button", { name: mobile ? "Exit fullscreen" : "退出全屏" }).click();
+    await page.waitForFunction(() => !document.querySelector(".arc-nes-full") && !document.fullscreenElement);
     const direction = panel.getByRole("button", { name: mobile ? "Right" : "方向键右", exact: true });
     if (mobile) {
       const action = panel.getByRole("button", { name: "Action A", exact: true });
