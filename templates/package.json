@@ -6,7 +6,8 @@
   "description": "Sources of myco's official templates (built into internal/templates/official)",
   "scripts": {
     "build": "tsc --noEmit && node build.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:actions": "node actions.test.mjs"
   },
   "dependencies": {
     "@blocknote/core": "0.57.0",
