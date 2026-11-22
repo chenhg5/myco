@@ -1,7 +1,7 @@
 {
   "id": "myco/recorder",
   "name": "录屏工作台",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "kind": "custom",
   "category": "creative",
   "icon": "icon.svg",
@@ -53,7 +53,9 @@
         "color": "text",
         "size": "number",
         "style": "text",
-        "lane": "number"
+        "lane": "number",
+        "fade_in": "number",
+        "fade_out": "number"
       }
     },
     "notes": {

@@ -25,3 +25,6 @@ auto captions, webcam or multi-track recording in this version.
 On Mac, the native region selector waits for a drag and confirmation before capture
 starts. The App hides while recording; the menu-bar Stop Recording control finalizes
 the local movie and returns to editing. Cancelling selection creates no footage.
+
+Focus zoom supports `fade_in` and `fade_out` seconds (0.1–3, default 0.9); preview
+and export share the same gradual transition, with a hold between both ends.

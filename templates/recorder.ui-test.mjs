@@ -14,6 +14,14 @@ const zoomJS=ts.transpile(fs.readFileSync(path.join(here,'src/video/zoom.ts'),'u
 const {zoomTransform}=await import('data:text/javascript;base64,'+Buffer.from(zoomJS).toString('base64'));
 const z={start:1,end:4,x:.75,y:.75,w:.25,h:.25,strength:1};
 assert.equal(zoomTransform(z,0).scale,1);assert.equal(zoomTransform(z,1).scale,1);assert.equal(zoomTransform(z,2).scale,4);assert.equal(zoomTransform(z,4).scale,1);assert.equal(zoomTransform(z,2).x,.875);assert.ok(zoomTransform(z,1.1).scale>1&&zoomTransform(z,1.1).scale<4);
+assert.ok(zoomTransform(z,1.35).scale<3,'default motion does not finish in the old 350 ms');
+const custom={...z,start:0,end:5,fade_in:1.2,fade_out:.4};
+assert.ok(zoomTransform(custom,.6).scale<zoomTransform(custom,1.2).scale);
+assert.equal(zoomTransform(custom,1.2).scale,4);assert.equal(zoomTransform(custom,4).scale,4);
+assert.ok(zoomTransform(custom,4.8).scale<4);assert.equal(zoomTransform(custom,5).scale,1);
+const short={...custom,end:.2};assert.equal(zoomTransform(short,.14).scale,4,'short zoom retains a hold');
+assert.ok(Math.abs(zoomTransform(z,1.001).scale-1)<1e-6,'gentle acceleration from rest');
+
 const server=http.createServer((req,res)=>{
  let p=new URL(req.url,'http://test').pathname;if(p.endsWith('/'))p+='index.html';
  if(p==='/render.mjs'||p==='/zoom.mjs'){
@@ -129,6 +137,11 @@ try{
  await page.getByRole('button',{name:lang==='en'?'Focus zoom':'重点放大',exact:false}).last().click().catch(()=>{});
  // A focused overlay is part of the edit, never baked into the source.
  const list=await page.evaluate(()=>window.myco.data.list('overlays'));assert.equal(list.records[0].data.type,'zoom');
+ const enter=page.getByRole('spinbutton',{name:lang==='en'?'Zoom-in transition (s)':'放大过渡（秒）'});
+ const leave=page.getByRole('spinbutton',{name:lang==='en'?'Zoom-out transition (s)':'还原过渡（秒）'});
+ await enter.fill('1.2');await leave.fill('1.1');
+ await page.waitForFunction(async()=>{const r=await window.myco.data.list('overlays');return r.records[0].data.fade_in===1.2&&r.records[0].data.fade_out===1.1;});
+
  await page.getByRole("button",{name:lang==="en"?"Go to start":"到开头",exact:true}).click();await page.waitForTimeout(500);await page.screenshot({path:path.join(out,`recorder-${lang}-${theme}-edit.png`)});
  await page.evaluate(()=>{window.myco.download=async(name,blob)=>{window.__export={name,size:blob.size,bytes:Array.from(new Uint8Array(await blob.slice(0,32).arrayBuffer()))};return {path:'~/Downloads/'+name};};});
  await page.getByRole('button',{name:lang==='en'?'Export':'导出',exact:true}).click();await page.getByRole('radio',{name:'480p',exact:true}).click();await page.getByTestId('export-start').click();

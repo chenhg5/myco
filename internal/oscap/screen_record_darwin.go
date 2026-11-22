@@ -32,5 +32,10 @@ func recordScreen(ctx context.Context, _ *Env, a screenRecordArgs, path string, 
 	if ctx.Err() != nil {
 		return errf(CodeCancelled, "region selection cancelled")
 	}
-	return recordNativeMovie(ctx, a, path, emit)
+	return recordNativeMovie(ctx, a, path, func(kind string, data any) {
+		if kind == "started" {
+			notifyScreenRecordingStarted()
+		}
+		emit(kind, data)
+	})
 }

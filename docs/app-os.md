@@ -320,8 +320,11 @@ exclusive; Windows does not support regions yet. The Mac GUI advertises
 `interactive: true`, `screen.record` emits `selecting`, waits for the user to drag
 a rectangle and confirm Start Recording, then emits `started`. Cancelling the
 picker produces `cancelled`, not a successful recording. The App hides its
-windows during capture; the menu-bar Stop Recording button finalizes the movie
-and returns to the editor. Headless servers do not advertise the picker. Older
+windows during capture. A click-through region outline and a movable floating
+bar stay visible, showing preparation, recording time, and saving. Its Stop & edit
+button (also available in the menu bar) finalizes the movie and returns to the
+editor. On ScreenCaptureKit, recorder-control windows are explicitly excluded
+from the movie. Headless servers do not advertise the picker. Older
 Apps without `screen.region` should offer main-screen recording instead of
 claiming a region picker is available. Coordinates use screen points, not Retina
 movie pixels; negative monitor coordinates are preserved.

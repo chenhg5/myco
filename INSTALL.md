@@ -1215,9 +1215,12 @@ recording computer; agents collaborate on edit records, not uploaded footage.
 
 In the updated Mac App, choose a region or the main screen and optionally a
 microphone. Drag a rectangle in the native selector, then click **Start Recording**.
-The App temporarily hides; click **Stop Recording** in the Mac menu bar to return
-to editing. Cancelling the selector does not start a recording. This first version
-does not record internal Mac audio. On Windows,
+The App temporarily hides; the region outline and a floating timer stay visible.
+Click **Stop & edit** on the floating bar (or Stop Recording in the Mac menu bar)
+to save the movie and return to editing. Focus zoom defaults to a gentle 0.9-second
+transition at each end; adjust zoom-in and zoom-out durations in its properties.
+Cancelling the selector does not start a recording. This first version does not
+record internal Mac audio. On Windows,
 native desktop recording requires separately installed FFmpeg with gdigrab and
 h264_mf; it is silent and records the whole desktop. Supported browser hosts can
 use their screen/window picker. Other hosts can import recordings. Each recording

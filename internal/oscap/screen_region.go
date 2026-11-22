@@ -16,13 +16,30 @@ type ScreenRegionPicker func(context.Context, func()) (*ScreenRecordRegion, func
 
 var regionPicker struct {
 	sync.RWMutex
-	pick ScreenRegionPicker
+	pick    ScreenRegionPicker
+	started func()
 }
 
 func SetScreenRegionPicker(p ScreenRegionPicker) {
 	regionPicker.Lock()
 	regionPicker.pick = p
 	regionPicker.Unlock()
+}
+
+// SetScreenRecordingStarted installs a GUI status hook. It fires only after
+// the native output confirms recording, never merely after region selection.
+func SetScreenRecordingStarted(fn func()) {
+	regionPicker.Lock()
+	regionPicker.started = fn
+	regionPicker.Unlock()
+}
+func notifyScreenRecordingStarted() {
+	regionPicker.RLock()
+	fn := regionPicker.started
+	regionPicker.RUnlock()
+	if fn != nil {
+		fn()
+	}
 }
 func chooseScreenRegion(ctx context.Context, stop func()) (*ScreenRecordRegion, func(), error) {
 	if ctx.Err() != nil {

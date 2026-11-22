@@ -10,6 +10,7 @@ package oscap
 #import <CoreGraphics/CoreGraphics.h>
 #include <stdlib.h>
 #include <dlfcn.h>
+#include <unistd.h>
 
 @interface MycoMovie : NSObject <SCRecordingOutputDelegate, SCStreamDelegate, AVCaptureFileOutputRecordingDelegate>
 @property(atomic,retain) SCStream *stream;
@@ -65,7 +66,11 @@ static void *mycoMovieStart(const char *path,int region,int x,int y,int w,int h,
    SCDisplay *chosen=nil;
    for(SCDisplay *d in content.displays){if(CGRectContainsRect(d.frame,wanted)){chosen=d;break;}}
    if(!chosen){[m failed:@"The selected region must fit within one connected display"];return;}
-   SCContentFilter *filter=[[NSClassFromString(@"SCContentFilter") alloc]initWithDisplay:chosen excludingWindows:@[]];
+   // Recorder UI is local feedback, not part of the movie. In particular the
+   // persistent outline and floating stop panel must never enter exported frames.
+   NSMutableArray *controls=[NSMutableArray array];
+   for(SCWindow *window in content.windows)if(window.owningApplication.processID==getpid() && [window.title hasPrefix:@"myco-recording-control:"])[controls addObject:window];
+   SCContentFilter *filter=[[NSClassFromString(@"SCContentFilter") alloc]initWithDisplay:chosen excludingWindows:controls];
    SCStreamConfiguration *cfg=[[NSClassFromString(@"SCStreamConfiguration") alloc]init];
    cfg.sourceRect=CGRectMake(wanted.origin.x-chosen.frame.origin.x,wanted.origin.y-chosen.frame.origin.y,wanted.size.width,wanted.size.height);
    // Encode at screen-point size: predictable bounds, even H.264 dimensions.

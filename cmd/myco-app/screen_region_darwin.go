@@ -31,6 +31,11 @@ extern void mycoScreenRegionStopped(int ident);
 @property(nonatomic,retain) NSMutableArray *panels;
 @property(nonatomic,retain) NSArray *hidden;
 @property(nonatomic,retain) NSStatusItem *status;
+@property(nonatomic,retain) NSPanel *recordHUD;
+@property(nonatomic,retain) NSTextField *clockLabel;
+@property(nonatomic,retain) NSButton *stopButton;
+@property(nonatomic,retain) NSTimer *timer;
+@property(nonatomic,assign) NSTimeInterval startedAt;
 @property(nonatomic,assign) MycoRegionView *selected;
 - (void)changed:(MycoRegionView*)v;
 - (void)record:(id)sender;
@@ -38,6 +43,8 @@ extern void mycoScreenRegionStopped(int ident);
 - (void)whole:(id)sender;
 - (void)stop:(id)sender;
 - (void)finish;
+- (void)tick:(NSTimer*)timer;
+- (void)beginClock;
 @end
 @implementation MycoRegionView
 - (BOOL)acceptsFirstResponder { return YES; }
@@ -66,6 +73,15 @@ extern void mycoScreenRegionStopped(int ident);
 - (void)keyDown:(NSEvent*)e {if(e.keyCode==53)[self.owner cancel:nil];else if(e.keyCode==36)[self.owner record:nil];else [super keyDown:e];}
 - (void)dealloc {self.recordButton=nil;[super dealloc];}
 @end
+@interface MycoRecordBorder : NSView
+@end
+@implementation MycoRecordBorder
+- (void)drawRect:(NSRect)dirty {
+ NSBezierPath *r=[NSBezierPath bezierPathWithRect:NSInsetRect(self.bounds,2,2)];
+ [[NSColor blackColor]setStroke];r.lineWidth=4;[r stroke];
+ [[NSColor whiteColor]setStroke];r.lineWidth=2;CGFloat dash[]={6,4};[r setLineDash:dash count:2 phase:0];[r stroke];
+}
+@end
 @implementation MycoRegionController
 - (void)changed:(MycoRegionView*)v {
  self.selected=v;
@@ -86,6 +102,23 @@ extern void mycoScreenRegionStopped(int ident);
   self.status.button.title=self.zh?@"■ 停止录制":@"■ Stop Recording";
   self.status.button.target=self;self.status.button.action=@selector(stop:);
   self.status.button.toolTip=self.zh?@"停止并返回剪辑":@"Stop and return to the editor";
+  // Keep a click-through outline and an explicit stop control on the desktop.
+  NSPanel *border=[[NSPanel alloc]initWithContentRect:NSInsetRect(r,-4,-4) styleMask:NSWindowStyleMaskBorderless backing:NSBackingStoreBuffered defer:NO];
+  border.title=@"myco-recording-control:outline";border.releasedWhenClosed=NO;border.opaque=NO;border.backgroundColor=NSColor.clearColor;border.ignoresMouseEvents=YES;border.hasShadow=NO;border.level=NSFloatingWindowLevel;
+  border.sharingType=NSWindowSharingNone;border.collectionBehavior=NSWindowCollectionBehaviorCanJoinAllSpaces|NSWindowCollectionBehaviorFullScreenAuxiliary;
+  MycoRecordBorder *outline=[[MycoRecordBorder alloc]initWithFrame:NSMakeRect(0,0,NSWidth(r)+8,NSHeight(r)+8)];border.contentView=outline;[outline release];[self.panels addObject:border];[border orderFrontRegardless];[border release];
+  NSRect visible=self.selected.window.screen.visibleFrame;
+  CGFloat hw=MIN(360,NSWidth(visible)-16),hh=66;
+  CGFloat hx=MAX(NSMinX(visible)+8,MIN(NSMidX(r)-hw/2,NSMaxX(visible)-hw-8));
+  CGFloat hy=NSMinY(r)-hh-12;if(hy<NSMinY(visible)+8)hy=MIN(NSMaxY(visible)-hh-8,NSMaxY(r)+12);
+  self.recordHUD=[[[NSPanel alloc]initWithContentRect:NSMakeRect(hx,hy,hw,hh) styleMask:NSWindowStyleMaskBorderless|NSWindowStyleMaskNonactivatingPanel backing:NSBackingStoreBuffered defer:NO]autorelease];
+  self.recordHUD.title=@"myco-recording-control:toolbar";self.recordHUD.releasedWhenClosed=NO;self.recordHUD.opaque=NO;self.recordHUD.backgroundColor=NSColor.clearColor;self.recordHUD.level=NSStatusWindowLevel;self.recordHUD.sharingType=NSWindowSharingNone;self.recordHUD.movableByWindowBackground=YES;
+  self.recordHUD.collectionBehavior=NSWindowCollectionBehaviorCanJoinAllSpaces|NSWindowCollectionBehaviorFullScreenAuxiliary;
+  NSVisualEffectView *bar=[[[NSVisualEffectView alloc]initWithFrame:NSMakeRect(0,0,hw,hh)]autorelease];bar.material=NSVisualEffectMaterialHUDWindow;bar.state=NSVisualEffectStateActive;bar.wantsLayer=YES;bar.layer.cornerRadius=12;
+  self.clockLabel=[NSTextField labelWithString:self.zh?@"正在准备录制…":@"Preparing recording…"];self.clockLabel.frame=NSMakeRect(16,35,hw-160,22);self.clockLabel.font=[NSFont monospacedDigitSystemFontOfSize:15 weight:NSFontWeightMedium];[bar addSubview:self.clockLabel];
+  NSTextField *hint=[NSTextField labelWithString:self.zh?@"点击停止，自动返回剪辑":@"Stop to return to the editor"];hint.font=[NSFont systemFontOfSize:12];hint.textColor=NSColor.secondaryLabelColor;hint.frame=NSMakeRect(16,12,hw-145,20);[bar addSubview:hint];
+  self.stopButton=[NSButton buttonWithTitle:self.zh?@"■ 停止并剪辑":@"■ Stop & edit" target:self action:@selector(stop:)];self.stopButton.frame=NSMakeRect(hw-132,15,120,36);self.stopButton.bezelStyle=NSBezelStyleRounded;[bar addSubview:self.stopButton];
+  self.recordHUD.contentView=bar;[self.recordHUD orderFrontRegardless];
  }
  mycoScreenRegionSelected(self.ident,r.origin.x,r.origin.y,r.size.width,r.size.height,top,0);
 }
@@ -94,15 +127,30 @@ extern void mycoScreenRegionStopped(int ident);
  for(NSWindow *p in self.panels)[p orderOut:nil];
  mycoScreenRegionSelected(self.ident,0,0,0,0,0,1);
 }
-- (void)stop:(id)sender {self.status.button.enabled=NO;mycoScreenRegionStopped(self.ident);}
+- (void)beginClock {
+ if(self.startedAt>0 || !self.stopButton.enabled)return;
+ self.startedAt=[NSDate timeIntervalSinceReferenceDate];
+ self.timer=[NSTimer scheduledTimerWithTimeInterval:.5 target:self selector:@selector(tick:) userInfo:nil repeats:YES];[self tick:nil];
+}
+- (void)tick:(NSTimer*)timer {
+ NSInteger seconds=MAX(0,(NSInteger)([NSDate timeIntervalSinceReferenceDate]-self.startedAt));
+ self.clockLabel.stringValue=[NSString stringWithFormat:self.zh?@"录制中 %02ld:%02ld":@"Recording %02ld:%02ld",(long)seconds/60,(long)seconds%60];
+ self.status.button.title=[NSString stringWithFormat:@"■ %02ld:%02ld",(long)seconds/60,(long)seconds%60];
+}
+- (void)stop:(id)sender {
+ self.status.button.enabled=NO;self.stopButton.enabled=NO;[self.timer invalidate];self.timer=nil;
+ self.clockLabel.stringValue=self.zh?@"正在保存…":@"Saving…";
+ mycoScreenRegionStopped(self.ident);
+}
 - (void)finish {
+ [self.timer invalidate];self.timer=nil;[self.recordHUD close];self.recordHUD=nil;
  for(NSWindow *p in self.panels)[p close];
  [self.panels removeAllObjects];
  if(self.status){[[NSStatusBar systemStatusBar] removeStatusItem:self.status];self.status=nil;}
  if([NSApp isRunning]){for(NSWindow *w in self.hidden)[w orderFront:nil];[NSApp activateIgnoringOtherApps:YES];}
  self.hidden=nil;
 }
-- (void)dealloc {self.panels=nil;self.hidden=nil;self.status=nil;[super dealloc];}
+- (void)dealloc {self.panels=nil;self.hidden=nil;self.status=nil;self.clockLabel=nil;self.stopButton=nil;[super dealloc];}
 @end
 static NSMutableDictionary *mycoRegionSessions;
 static NSButton *mycoRegionButton(NSString *title,NSRect frame,id target,SEL action){
@@ -136,6 +184,9 @@ static void mycoBeginRegion(int ident,int zh,int recording){
   [NSApp activateIgnoringOtherApps:YES];[[c.panels firstObject] makeKeyWindow];[c release];
  });
 }
+static void mycoRegionRecordingStarted(void){dispatch_async(dispatch_get_main_queue(), ^{
+ for(MycoRegionController *c in mycoRegionSessions.allValues)if(c.recording && c.finished)[c beginClock];
+});}
 static void mycoEndRegion(int ident){dispatch_async(dispatch_get_main_queue(), ^{
  MycoRegionController *c=mycoRegionSessions[@(ident)];if(c){[c finish];[mycoRegionSessions removeObjectForKey:@(ident)];}
 });}
@@ -164,7 +215,12 @@ var nativeRegions = struct {
 	sessions map[int]*nativeRegionSession
 }{sessions: map[int]*nativeRegionSession{}}
 
-func init() { screenPickerInstall = func() { oscap.SetScreenRegionPicker(pickNativeRegion) } }
+func init() {
+	screenPickerInstall = func() {
+		oscap.SetScreenRegionPicker(pickNativeRegion)
+		oscap.SetScreenRecordingStarted(func() { C.mycoRegionRecordingStarted() })
+	}
+}
 func pickNativeRegion(ctx context.Context, stop func()) (*oscap.ScreenRecordRegion, func(), error) {
 	nativeRegions.Lock()
 	if len(nativeRegions.sessions) != 0 {
