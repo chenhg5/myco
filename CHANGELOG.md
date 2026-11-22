@@ -4,6 +4,24 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.21.22
+
+- **Use any model gateway for an agent**: an agent's Provider can now be a custom address (base URL, model and key; Codex also picks Responses or Chat Completions), so it can run through magpie, LiteLLM, OneAPI or any Anthropic- or OpenAI-compatible endpoint. The key stays in a private file on that computer and is never shown again.
+- **See where an agent's requests really go**: an agent that follows its computer's settings shows the actual route, such as "magpie gateway (127.0.0.1:3425)" or the cc-switch provider in use. See "Use it with magpie or cc-switch" in INSTALL.md.
+- **Change the provider of an agent on another computer**: pick "follow that computer", one of that computer's cc-switch providers, or clear its custom address, from the App on any of your computers. A custom address with a key can be set remotely in end-to-end encrypted workspaces only: the key is encrypted for that agent, and the hub passes on only ciphertext.
+- The App: an agent's details are in four tabs (Settings, Skills, Records, Identity), and its tools are listed one per row, grouped by kind.
+- The claude.ai guide starts with a diagram of how everything connects; the App's user guide has fuller pages with screenshots.
+- Upgrade the server's hub for the provider changes (`sudo myco upgrade`, or from the App), and myco on the computer whose agents you change from elsewhere.
+
+**中文**
+
+- **agent 可以用任何模型网关了**：agent 的「服务商」可以填自定义地址（base URL、模型和密钥；Codex 还能选 Responses 或 Chat Completions），所以能走 magpie、LiteLLM、OneAPI，或任何兼容 Anthropic / OpenAI 的地址。密钥只存在那台电脑的私有文件里，存了以后不再显示。
+- **看得到 agent 的请求实际走哪**：「跟随这台电脑」的 agent 会显示实际去处，比如「magpie 网关（127.0.0.1:3425）」或正在用的 cc-switch 渠道。见 INSTALL.zh-CN.md 的「和 magpie / cc-switch 一起用」。
+- **能改别的电脑上 agent 的服务商**：在你任何一台电脑的 App 里，选「跟随它那台电脑」、它那台电脑上的某个 cc-switch 渠道，或清除自定义地址。带密钥的自定义地址只在开了端到端加密的工作区里能远程填：密钥先加密给那个 agent，hub 只经手密文。
+- App：agent 详情分成四个标签（设置、擅长、记录、身份），工具按种类分组、一行一个。
+- claude.ai 教程开头加了一张「怎么连起来的」图；App 的使用文档内容更全，配了截图。
+- 服务商相关的改动需要升级服务器上的 hub（`sudo myco upgrade`，或在 App 里升级）；要从别处改哪台电脑上的 agent，那台电脑上的 myco 也要升级。
+
 ## v0.21.21
 
 - **Reliable public workspace setup**: Windows waits for a public address and verifies the workspace is reachable before reporting success. An unfinished tunnel shows a retryable error while the local workspace keeps running.
