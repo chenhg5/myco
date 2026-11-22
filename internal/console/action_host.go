@@ -109,9 +109,12 @@ func (f *frameBook) ok(id, grant string) bool {
 }
 
 const (
-	actionHostPoll  = 25 * time.Second // under the Hub's 45 s host staleness
-	agentIdleStop   = 2 * time.Minute
-	artifactMaxSize = 4 << 20 // the Hub's artifact limit
+	actionHostPoll = 25 * time.Second // under the Hub's 45 s host staleness
+	// actionHostRetake: how long a host the Hub no longer knows waits before
+	// it registers again.
+	actionHostRetake = 30 * time.Second
+	agentIdleStop    = 2 * time.Minute
+	artifactMaxSize  = 4 << 20 // the Hub's artifact limit
 )
 
 var desktopActionList = []api.ActionDescriptor{
@@ -252,11 +255,11 @@ func (b *Backend) hostActions(ctx context.Context, h Hub) time.Duration {
 			}
 			var ce *client.Error
 			if errors.As(err, &ce) && (ce.Code == "not_found" || ce.Code == "conflict") {
-				// Gone quiet (asleep) or replaced: offer again.
-				if host, err = register(); err != nil {
-					return time.Minute
-				}
-				continue
+				// Gone quiet (asleep) or replaced, maybe by another App of
+				// this person's on this computer: offer again after a pause,
+				// never at once (two Apps would take it from each other in a
+				// tight loop).
+				return actionHostRetake
 			}
 			select {
 			case <-ctx.Done():

@@ -313,6 +313,19 @@ func TestPageExportGrantsAndRenderers(t *testing.T) {
 	if err != nil || host.MachineID != "" {
 		t.Fatalf("renderer: %+v %v", host, err)
 	}
+	// A second App of the same person (another computer, or a preview
+	// beside the released App) renders too: it does not push the first one
+	// out, which made two Apps take the host from each other in a loop.
+	second, err := glenn.RegisterActionHost(c, api.ActionHostRegister{Provider: "page", Generation: "g2", Actions: []api.ActionDescriptor{export}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := glenn.ActionHostJobs(c, host.ID, 0); err != nil {
+		t.Fatalf("the first App's renderer was replaced: %v", err)
+	}
+	if _, err := glenn.ActionHostJobs(c, second.ID, 0); err != nil {
+		t.Fatalf("the second App's renderer: %v", err)
+	}
 	job, err := run("k2")
 	if err != nil {
 		t.Fatal(err)

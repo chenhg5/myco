@@ -47,6 +47,7 @@ const (
 	ActionGrantDefaultTTL = 5 * time.Minute
 	ActionGrantMaxTTL     = 30 * time.Minute
 	actionHostStale       = 45 * time.Second
+	actionHostGone        = 10 * time.Minute // a host not seen this long is dropped
 	actionArtifactMax     = 4 << 20
 	actionArtifactTTL     = 10 * time.Minute
 	actionArgsMax         = 64 << 10
@@ -500,8 +501,14 @@ func (s *ActionService) refresh(ctx context.Context, g *actionGrant) {
 		}
 		if g.hostSeen != "" {
 			if h := s.hosts[g.hostSeen]; h == nil || now.Sub(h.LastSeenAt) > actionHostStale {
-				s.close(g, api.GrantEnded, "the computer went offline (or its App closed)")
-				return
+				if g.Target.Kind != "page" {
+					s.close(g, api.GrantEnded, "the computer went offline (or its App closed)")
+					return
+				}
+				// A page is rendered by any App of a person who sees it: the
+				// grant stays; what that App was running is lost.
+				s.failRunning(g.hostSeen, "host_gone", "the App rendering it closed: export again")
+				g.hostSeen = ""
 			}
 		}
 		if g.MessageID != "" && s.messages != nil {
@@ -741,13 +748,26 @@ func (s *ActionService) RegisterHost(ctx context.Context, by Actor, req api.Acti
 	h.ActionHost = api.ActionHost{ID: s.ids.New("ahs"), MachineID: machineID, Provider: req.Provider, Generation: req.Generation, LastSeenAt: now}
 	s.mu.Lock()
 	for id, old := range s.hosts {
-		if old.Provider == h.Provider && old.MachineID == h.MachineID && (machineID != "" || old.owner == h.owner) {
-			s.failRunning(old.ID, "host_restarted", "the computer's App restarted while it ran: whether it happened is unknown; observe before going on")
-			delete(s.hosts, id)
-			for _, g := range s.grants {
-				if g.hostSeen == old.ID {
-					g.hostSeen = h.ID
-				}
+		// A computer has one host per provider: a new registration replaces
+		// it. A person's page renderers are their Apps (on several
+		// computers, or two Apps on one): each stays, and one of theirs is
+		// replaced only once it has stopped polling. Replacing a live one
+		// made two Apps take it from each other in a tight loop. Hosts long
+		// gone are dropped whoever they belong to.
+		gone := now.Sub(old.LastSeenAt) > actionHostGone
+		same := old.Provider == h.Provider && old.MachineID == h.MachineID &&
+			(machineID != "" || (old.owner == h.owner && now.Sub(old.LastSeenAt) > actionHostStale))
+		if !gone && !same {
+			continue
+		}
+		s.failRunning(old.ID, "host_restarted", "the computer's App restarted while it ran: whether it happened is unknown; observe before going on")
+		delete(s.hosts, id)
+		if !same {
+			continue // its grants find out in refresh
+		}
+		for _, g := range s.grants {
+			if g.hostSeen == old.ID {
+				g.hostSeen = h.ID
 			}
 		}
 	}

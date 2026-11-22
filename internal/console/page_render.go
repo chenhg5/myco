@@ -285,10 +285,7 @@ func (b *Backend) hostPages(ctx context.Context, h Hub) time.Duration {
 			}
 			var ce *client.Error
 			if errors.As(err, &ce) && (ce.Code == "not_found" || ce.Code == "conflict") {
-				if host, err = register(); err != nil {
-					return time.Minute
-				}
-				continue
+				return actionHostRetake // offered again after a pause, as computers' hosts are
 			}
 			select {
 			case <-ctx.Done():
