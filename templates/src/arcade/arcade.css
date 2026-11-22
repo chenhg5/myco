@@ -47,3 +47,34 @@
 }
 
 .arc-mame-phone { display: flex; align-items: center; gap: 6px; margin: 12px 0; }
+
+.arc-nes { max-width: 970px; grid-template-columns: minmax(0, 1fr) minmax(270px, 315px); }
+.arc-nes .arc-screen { position: relative; background: #161718; }
+.arc-nes .arc-screen canvas { width: min(100%, 448px); margin: auto; aspect-ratio: 16 / 15; }
+.arc-nes .arc-screen > p { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; color: #d1d3d5; }
+.arc-nes-pad { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 12px; margin-top: 14px; }
+.arc-nes-direction { display: grid; grid-template: repeat(3, 36px) / repeat(3, 36px); }
+.arc-nes-pad button {
+  display: grid; place-items: center; touch-action: none; user-select: none;
+  background: var(--bg); color: var(--fg); border: 1px solid var(--line);
+  border-radius: 7px; box-shadow: 0 2px 0 var(--line);
+}
+.arc-nes-pad button[aria-pressed="true"] { color: var(--on-accent); background: var(--accent); box-shadow: none; }
+.arc-nes-pad button svg { width: 18px; height: 18px; }
+.arc-nes-up { grid-area: 1 / 2; }
+.arc-nes-left { grid-area: 2 / 1; }
+.arc-nes-right { grid-area: 2 / 3; }
+.arc-nes-down { grid-area: 3 / 2; }
+.arc-nes-action, .arc-nes-utility { display: flex; justify-content: center; gap: 8px; }
+.arc-nes-action button { width: 45px; height: 45px; border-radius: 50%; font-weight: 700; }
+.arc-nes-utility { grid-column: 1 / -1; }
+.arc-nes-utility button { min-height: 32px; min-width: 68px; font-size: 10px; font-weight: 700; letter-spacing: .05em; }
+.arc-nes .arc-controls p { margin: 12px 0 0; font-size: 12px; }
+@media (max-width: 650px) {
+  .arc-nes, .arc-nes .arc-side { grid-template-columns: minmax(0, 1fr); }
+  .arc-nes { gap: 10px; }
+  .arc-nes .arc-screen canvas { width: min(100%, 320px, 43svh); }
+  .arc-header { gap: 6px; flex-wrap: wrap; }
+  .arc-header .arc-modes { gap: 3px; }
+  .arc-modes .btn { padding-inline: 8px; }
+}

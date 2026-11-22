@@ -93,7 +93,7 @@
   ],
   "arcade": [
     "Arcade Emulator",
-    "Verify and launch arcade ROM ZIPs with your local MAME in the desktop App, or play CHIP-8 and the original Orbit Courier demo."
+    "Play local NES cartridges and CHIP-8 games with touch controls, or verify and launch arcade ROM ZIPs with MAME in the desktop App."
   ],
   "gomoku": [
     "Gomoku",

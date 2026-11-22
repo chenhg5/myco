@@ -7,6 +7,16 @@ import { join } from "node:path";
 
 const require = createRequire(join(execFileSync("npm", ["root", "-g"], { encoding: "utf8" }).trim(), "noop.js"));
 const { chromium } = require("playwright");
+function testCartridge() {
+  const rom = Buffer.alloc(16 + 16384);
+  rom.set([0x4e, 0x45, 0x53, 0x1a, 1], 0);
+  // Set the PPU backdrop to blue, then loop without game assets.
+  rom.set([0xa9, 0x3f, 0x8d, 6, 0x20, 0xa9, 0, 0x8d, 6, 0x20,
+    0xa9, 0x21, 0x8d, 7, 0x20, 0x4c, 0x0f, 0x80], 16);
+  rom.writeUInt16LE(0x8000, 16 + 0x3ffc);
+  return { name: "test.nes", mimeType: "application/octet-stream", buffer: rom };
+}
+
 const root = new URL("../internal/templates/official/arcade/", import.meta.url);
 const server = createServer((req, res) => {
   const path = new URL(req.url, "http://test").pathname;
@@ -48,6 +58,58 @@ try {
     assert.deepEqual(errors, []);
     await page.close();
   }
+  for (const [lang, theme, width] of [["zh", "light", 1080], ["en", "dark", 390]]) {
+    const mobile = width < 400;
+    const page = await browser.newPage({
+      viewport: { width, height: 820 }, colorScheme: theme, isMobile: mobile, hasTouch: mobile,
+    });
+    const errors = [];
+    page.on("pageerror", error => errors.push(error.message));
+    await page.goto(`http://127.0.0.1:${server.address().port}/?myco_lang=${lang}#nes`);
+    const panel = page.locator(".arc-nes");
+    const importButton = panel.getByRole("button", { name: mobile ? "Import .nes" : "导入 .nes" });
+    await importButton.waitFor();
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width);
+    const file = panel.locator('input[type="file"]');
+    await file.setInputFiles({ name: "invalid.nes", mimeType: "application/octet-stream", buffer: Buffer.alloc(16) });
+    await panel.getByRole("alert").waitFor();
+    const provided = process.env.NES_TEST_ROM;
+    const chooserPromise = page.waitForEvent("filechooser");
+    await importButton.click();
+    const chooser = await chooserPromise;
+    await chooser.setFiles(provided || testCartridge());
+    await panel.getByRole("status").getByText(mobile ? "Running" : "运行中").waitFor();
+    await page.waitForFunction(() => {
+      const pixels = document.querySelector(".arc-nes canvas").getContext("2d").getImageData(0, 0, 256, 240).data;
+      return pixels.some((value, index) => (index & 3) !== 3 && value > 20);
+    });
+    const direction = panel.getByRole("button", { name: mobile ? "Right" : "方向键右", exact: true });
+    if (mobile) {
+      const action = panel.getByRole("button", { name: "Action A", exact: true });
+      await direction.scrollIntoViewIfNeeded();
+      const [left, right] = await Promise.all([direction.boundingBox(), action.boundingBox()]);
+      const touchPoints = [left, right].map((box, id) => ({ id, x: box.x + box.width / 2, y: box.y + box.height / 2 }));
+      const cdp = await page.context().newCDPSession(page);
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints });
+      await panel.getByRole("button", { name: "Right", exact: true, pressed: true }).waitFor();
+      await panel.getByRole("button", { name: "Action A", exact: true, pressed: true }).waitFor();
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+      assert.equal(await direction.getAttribute("aria-pressed"), "false");
+      assert.equal(await action.getAttribute("aria-pressed"), "false");
+    } else {
+      await page.keyboard.down("ArrowRight");
+      await panel.getByRole("button", { name: "方向键右", exact: true, pressed: true }).waitFor();
+      await page.keyboard.up("ArrowRight");
+      assert.equal(await direction.getAttribute("aria-pressed"), "false");
+    }
+    await panel.getByRole("button", { name: mobile ? "Pause" : "暂停", exact: true }).click();
+    await panel.getByRole("status").getByText(mobile ? "Paused" : "已暂停").waitFor();
+    await panel.getByRole("button", { name: mobile ? "Restart" : "重启", exact: true }).click();
+    await panel.getByRole("status").getByText(mobile ? "Running" : "运行中").waitFor();
+    assert.deepEqual(errors, []);
+    await page.close();
+  }
+  console.log("PASS NES cartridge validation, local play, keyboard and multi-touch");
   const page = await browser.newPage({ viewport: { width: 1040, height: 650 }, colorScheme: "dark" });
   await page.addInitScript(() => {
     let failure = true;

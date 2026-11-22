@@ -103,7 +103,7 @@ Agent access currently uses shared page records. The [agent actions SDK](app-act
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/sudoku-dark.webp"><img src="assets/apps/sudoku.webp" alt="Sudoku"></picture><br><b>Sudoku</b><br>Solve one together: each cell saves on its own and shows who filled it, conflicts in red; easy, medium and hard puzzles with one answer each.</td>
 </tr>
 <tr>
-<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/arcade-dark.webp"><img src="assets/apps/arcade.webp" alt="Arcade Emulator"></picture><br><b>Arcade Emulator</b><br>Verify and launch a local arcade ROM ZIP from the desktop App in a separate MAME window. Install MAME separately. On Windows, leave iPhone arcade controller compatibility enabled when using Remote Desktop. CHIP-8 mode includes the original Orbit Courier demo and touch controls.</td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/arcade-dark.webp"><img src="assets/apps/arcade.webp" alt="Arcade Emulator"></picture><br><b>Arcade Emulator</b><br>Verify and launch a local arcade ROM ZIP from the desktop App in a separate MAME window. Install MAME separately. On Windows, leave iPhone arcade controller compatibility enabled when using Remote Desktop. CHIP-8 mode includes the original Orbit Courier demo and touch controls. In NES mode, select a local .nes cartridge and play on desktop or mobile.</td>
 <td width="50%"></td>
 </tr>
 </table>

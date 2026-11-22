@@ -1,10 +1,10 @@
 {
   "en": {
     "name": "Arcade Emulator",
-    "description": "Verify and launch arcade ROM ZIPs with your local MAME in the desktop App, or play CHIP-8 and the original Orbit Courier demo."
+    "description": "Play local NES cartridges and CHIP-8 games with touch controls, or verify and launch arcade ROM ZIPs with MAME in the desktop App."
   },
   "zh": {
     "name": "街机模拟器",
-    "description": "在桌面 App 中校验并启动本机 MAME 街机 ROM ZIP，也可运行 CHIP-8 和原创试玩《轨道信使》。"
+    "description": "导入本机 NES 卡带或玩 CHIP-8 游戏，支持触屏手柄。桌面 App 还可调用 MAME 校验并运行街机 ROM ZIP。"
   }
 }

@@ -103,7 +103,7 @@
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/sudoku-dark.webp"><img src="assets/apps/sudoku.webp" alt="数独"></picture><br><b>数独</b><br>大家一起填一道数独：每格单独保存，谁填的显示谁的颜色，冲突标红；简单、中等、困难三档新题，每道只有一个答案。</td>
 </tr>
 <tr>
-<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/arcade-dark.webp"><img src="assets/apps/arcade.webp" alt="街机模拟器"></picture><br><b>街机模拟器</b><br>桌面 App 可校验本地街机 ROM ZIP，调用另行安装的 MAME，在独立窗口里游玩。Windows 上使用 iPhone 远控手柄时，保留「兼容 iPhone 街机手柄」选项。CHIP-8 模式支持触屏并内置原创《轨道信使》。</td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/arcade-dark.webp"><img src="assets/apps/arcade.webp" alt="街机模拟器"></picture><br><b>街机模拟器</b><br>桌面 App 可校验本地街机 ROM ZIP，调用另行安装的 MAME，在独立窗口里游玩。Windows 上使用 iPhone 远控手柄时，保留「兼容 iPhone 街机手柄」选项。CHIP-8 模式支持触屏并内置原创《轨道信使》。 NES 模式可导入本机 .nes 卡带，在桌面或手机上玩。</td>
 <td width="50%"></td>
 </tr>
 </table>

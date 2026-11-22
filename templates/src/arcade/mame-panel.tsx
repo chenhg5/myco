@@ -145,6 +145,7 @@ export function MamePanel() {
       <Gamepad2 size={28} aria-hidden="true"/>
       <h2>{uiText("MAME 街机")}</h2>
       <p>{uiText("用本机 MAME 打开街机 ROM ZIP，游戏会在独立窗口运行。")}</p>
+      <p>{uiText("如果你的文件是 .nes，请切换到 NES 导入。")}</p>
       {(osState !== "ready" || ready === false) ? <p role="status">{uiText("MAME 模式需要支持本机程序的 myco 桌面 App。")}</p> :
         <div className="arc-mame-form">
           <div>

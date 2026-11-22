@@ -7,6 +7,8 @@ import { t as uiText } from "../_lib/i18n";
 import { Chip8, height, maxROM, width } from "./chip8";
 import { demoROM } from "./demo";
 import { osState } from "../_lib/os";
+import { subscribeAppRoute } from "../_lib/page-route";
+import { NESPanel } from "./nes-panel";
 import { MamePanel } from "./mame-panel";
 import "../_lib/sheet.css";
 import "./arcade.css";
@@ -218,17 +220,24 @@ function ChipView() {
 }
 
 function App() {
-  const [mode, setMode] = useState<"mame" | "chip">(osState === "ready" ? "mame" : "chip");
+  const [mode, setMode] = useState<"mame" | "chip" | "nes">(
+    () => location.hash === "#nes" ? "nes" : osState === "ready" ? "mame" : "chip",
+  );
+  useEffect(() => subscribeAppRoute(() => {
+    if (location.hash === "#nes") setMode("nes");
+  }), []);
   return <div className="arc-app">
     <header className="arc-header">
       <div><Gamepad2 size={21}/><h1>{uiText("街机模拟器")}</h1></div>
       <div className="arc-modes">
         <button type="button" className="btn" aria-pressed={mode === "mame"} onClick={() => setMode("mame")}>MAME</button>
+        <button type="button" className="btn" aria-pressed={mode === "nes"} onClick={() => setMode("nes")}>NES</button>
         <button type="button" className="btn" aria-pressed={mode === "chip"} onClick={() => setMode("chip")}>CHIP‑8</button>
       </div>
     </header>
     <div hidden={mode !== "mame"}><MamePanel/></div>
     {mode === "chip" && <ChipView/>}
+    {mode === "nes" && <NESPanel/>}
   </div>;
 }
 
