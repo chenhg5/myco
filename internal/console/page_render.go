@@ -270,7 +270,7 @@ func (b *Backend) hostPages(ctx context.Context, h Hub) time.Duration {
 	if err != nil {
 		var ce *client.Error
 		if errors.As(err, &ce) && (ce.Code == "unsupported" || ce.Code == "invalid_argument" || ce.Status == 404) {
-			return 30 * time.Minute // an older hub (no page targets), or an end-to-end workspace
+			return 5 * time.Minute // an older hub (no page targets; it may be upgraded soon), or an end-to-end workspace
 		}
 		return time.Minute
 	}

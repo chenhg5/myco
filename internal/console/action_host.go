@@ -240,7 +240,7 @@ func (b *Backend) hostActions(ctx context.Context, h Hub) time.Duration {
 	if err != nil {
 		var ce *client.Error
 		if errors.As(err, &ce) && (ce.Code == "unsupported" || ce.Status == 404 || ce.Code == "permission_denied") {
-			return 30 * time.Minute // an older hub, an end-to-end workspace, or not this person's computer
+			return 5 * time.Minute // an older hub, an end-to-end workspace, or not this person's computer
 		}
 		return time.Minute
 	}
