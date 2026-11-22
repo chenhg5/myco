@@ -490,7 +490,7 @@ Since v0.19.2, `timeout` counts "how long with no activity": an agent that keeps
 
 | access | Claude Code | Codex |
 |---|---|---|
-| not set | headless default (tools that need confirmation are refused) | `codex exec` default |
+| not set | headless default (tools that need confirmation are refused) | `codex exec` default (no network in its sandbox, so `myco` cannot reach the Hub; a Codex session that joins gets `workspace` instead) |
 | `readonly` | `--permission-mode default --disallowedTools Edit,Write,NotebookEdit,Bash` | `-c sandbox_mode="read-only"` |
 | `workspace` | `--permission-mode acceptEdits` (file edits in the working directory and common file commands such as `touch`/`rm`/`mkdir` are allowed automatically; writes outside the working directory and other programs need approval, which means they are refused in headless mode) | `-c sandbox_mode="workspace-write"` plus `-c sandbox_workspace_write.network_access=true` |
 | `full` | `--permission-mode bypassPermissions` | `--dangerously-bypass-approvals-and-sandbox` |

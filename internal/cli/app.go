@@ -17,6 +17,7 @@ import (
 	"github.com/chenhg5/myco/internal/cli/cmdkit"
 	"github.com/chenhg5/myco/internal/client"
 	"github.com/chenhg5/myco/internal/config"
+	"github.com/chenhg5/myco/internal/harness"
 	"github.com/chenhg5/myco/internal/osutil"
 	"github.com/chenhg5/myco/internal/release"
 	"github.com/chenhg5/myco/internal/service"
@@ -311,6 +312,12 @@ func (e *env) saveIdentity(hub, agent, token string, b api.Binding) error {
 	}
 	if cfg.Runner.Workdir == "" {
 		cfg.Runner.Workdir = b.Workdir
+	}
+	// A Codex session gets workspace access unless one was chosen: without
+	// a level, Codex runs in its own default sandbox, which has no network,
+	// so the session could not even reach the hub with myco.
+	if b.Harness == "codex" && cfg.Runner.Access == "" {
+		cfg.Runner.Access = string(harness.AccessWorkspace)
 	}
 	if err := config.Save(path, cfg); err != nil {
 		return err
