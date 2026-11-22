@@ -2908,5 +2908,14 @@
   "阅读进度": "Reading progress",
   "青瓷": "Sage",
   "黑体 / 无衬线": "Sans serif",
-  "此文件超过应用的 20 MB 保存上限，请自行保留导入时的原文件。": "This file exceeds the App’s 20 MB download limit. Keep the original file you imported."
+  "此文件超过应用的 20 MB 保存上限，请自行保留导入时的原文件。": "This file exceeds the App’s 20 MB download limit. Keep the original file you imported.",
+  "翻页方式": "Reading mode",
+  "左右逐页": "Horizontal pages",
+  "上下逐页": "Vertical pages",
+  "连续滚动": "Continuous scroll",
+  "像长文一样自然滚动，进度会自动记住。": "Scroll naturally through the book. Your place is saved automatically.",
+  "向上滑动读下一页，向下滑动回上一页。": "Swipe up for the next page, or down for the previous page.",
+  "向左滑动读下一页，向右滑动回上一页。": "Swipe left for the next page, or right for the previous page.",
+  "翻页方式支持手势、滚轮和方向键。系统开启减少动态效果时，将自动关闭动画。": "Navigate with gestures, the wheel or arrow keys. Reduce Motion disables page animations.",
+  "恢复适合页面": "Reset to fit page"
 }

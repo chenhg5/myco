@@ -31,6 +31,33 @@ export function ReadingSettings({
     <Dialog title={uiText("阅读设置")} onClose={onClose} drawer>
       <div className="rd-settings">
         <fieldset>
+          <legend>{uiText("翻页方式")}</legend>
+          <div className="rd-segments rd-reading-modes">
+            {(
+              [
+                ["horizontal", uiText("左右逐页")],
+                ["vertical", uiText("上下逐页")],
+                ["scroll", uiText("连续滚动")],
+              ] as const
+            ).map(([mode, label]) => (
+              <button
+                key={mode}
+                aria-pressed={s.mode === mode}
+                onClick={() => patch({ mode })}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="rd-hint rd-mode-hint">
+            {s.mode === "scroll"
+              ? uiText("像长文一样自然滚动，进度会自动记住。")
+              : s.mode === "vertical"
+                ? uiText("向上滑动读下一页，向下滑动回上一页。")
+                : uiText("向左滑动读下一页，向右滑动回上一页。")}
+          </p>
+        </fieldset>
+        <fieldset>
           <legend>{uiText("阅读主题")}</legend>
           <div className="rd-theme-options">
             {themes.map(([theme, label]) => (
@@ -147,23 +174,25 @@ export function ReadingSettings({
             )}
           </p>
         )}
-        <fieldset>
-          <legend>{uiText("翻页效果")}</legend>
-          <div className="rd-segments rd-effects">
-            {effects.map(([effect, label]) => (
-              <button
-                key={effect}
-                aria-pressed={s.effect === effect}
-                onClick={() => patch({ effect })}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </fieldset>
+        {s.mode !== "scroll" && (
+          <fieldset>
+            <legend>{uiText("翻页效果")}</legend>
+            <div className="rd-segments rd-effects">
+              {effects.map(([effect, label]) => (
+                <button
+                  key={effect}
+                  aria-pressed={s.effect === effect}
+                  onClick={() => patch({ effect })}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+        )}
         <p className="rd-hint">
           {uiText(
-            "左右滑动或使用方向键翻页。系统开启减少动态效果时，将自动关闭动画。",
+            "翻页方式支持手势、滚轮和方向键。系统开启减少动态效果时，将自动关闭动画。",
           )}
         </p>
         <button className="rd-quiet" onClick={() => onChange({ ...defaults })}>

@@ -3,39 +3,43 @@
 import { useEffect, useRef, useState } from "react";
 import { t as uiText } from "../_lib/i18n";
 import type { PDFBook } from "./pdf";
-import type { RenderTask, TextLayer as PDFTextLayer } from "pdfjs-dist";
-export function PDFView({
+import { pdfScale, type PDFSize } from "./pdf-layout";
+import type {
+  PDFPageProxy,
+  RenderTask,
+  TextLayer as PDFTextLayer,
+} from "pdfjs-dist";
+export function PDFPage({
   doc,
   page,
   zoom,
+  width,
+  fitHeight,
   onCover,
+  onSize,
 }: {
   doc: PDFBook;
   page: number;
   zoom: number;
+  width: number;
+  fitHeight?: number;
   onCover: (cover: string) => void;
+  onSize?: (size: PDFSize) => void;
 }) {
-  const container = useRef<HTMLDivElement>(null),
-    canvas = useRef<HTMLCanvasElement>(null),
+  const canvas = useRef<HTMLCanvasElement>(null),
     text = useRef<HTMLDivElement>(null);
   const [error, setError] = useState(""),
-    [busy, setBusy] = useState(true),
-    [width, setWidth] = useState(0);
-  const coverCallback = useRef(onCover);
+    [busy, setBusy] = useState(true);
+  const coverCallback = useRef(onCover),
+    sizeCallback = useRef(onSize);
   coverCallback.current = onCover;
-  useEffect(() => {
-    const el = container.current;
-    if (!el) return;
-    const r = new ResizeObserver(() => setWidth(el.clientWidth));
-    r.observe(el);
-    setWidth(el.clientWidth);
-    return () => r.disconnect();
-  }, []);
+  sizeCallback.current = onSize;
   useEffect(() => {
     if (!width) return;
     let disposed = false,
       render: RenderTask | undefined,
-      layer: PDFTextLayer | undefined;
+      layer: PDFTextLayer | undefined,
+      loadedPage: PDFPageProxy | undefined;
     setBusy(true);
     setError("");
     const currentCanvas = canvas.current!,
@@ -43,10 +47,14 @@ export function PDFView({
     currentText.replaceChildren();
     (async () => {
       const pdfPage = await doc.getPage(page + 1);
-      if (disposed) return;
+      loadedPage = pdfPage;
+      if (disposed) {
+        pdfPage.cleanup();
+        return;
+      }
       const natural = pdfPage.getViewport({ scale: 1 }),
-        scale =
-          Math.max(0.1, Math.min((width - 24) / natural.width, 1.8)) * zoom;
+        scale = pdfScale(natural, width, zoom, fitHeight);
+      sizeCallback.current?.({ width: natural.width, height: natural.height });
       const viewport = pdfPage.getViewport({ scale }),
         ratio = Math.min(2, window.devicePixelRatio || 1);
       // Bound canvas area for very large PDF page dimensions and high zoom.
@@ -105,11 +113,12 @@ export function PDFView({
       disposed = true;
       render?.cancel();
       layer?.cancel();
+      loadedPage?.cleanup();
       currentText.replaceChildren();
     };
-  }, [doc, page, width, zoom]);
+  }, [doc, page, width, zoom, fitHeight]);
   return (
-    <div className="rd-pdf-scroll" ref={container} aria-busy={busy}>
+    <div className="rd-pdf-leaf" aria-busy={busy} data-page={page + 1}>
       {error && (
         <p role="alert" className="rd-error">
           {error}
@@ -127,6 +136,47 @@ export function PDFView({
         <canvas ref={canvas} />
         <div className="rd-pdf-text textLayer" ref={text} />
       </div>
+    </div>
+  );
+}
+
+export function PDFView({
+  doc,
+  page,
+  zoom,
+  fitPage = false,
+  onCover,
+}: {
+  doc: PDFBook;
+  page: number;
+  zoom: number;
+  fitPage?: boolean;
+  onCover: (cover: string) => void;
+}) {
+  const container = useRef<HTMLDivElement>(null);
+  const [geometry, setGeometry] = useState({ width: 0, height: 0 });
+  useEffect(() => {
+    const el = container.current!;
+    const measure = () =>
+      setGeometry({ width: el.clientWidth, height: el.clientHeight });
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    measure();
+    return () => observer.disconnect();
+  }, []);
+  useEffect(() => {
+    if (container.current) container.current.scrollTop = 0;
+  }, [page]);
+  return (
+    <div className="rd-pdf-scroll" ref={container}>
+      <PDFPage
+        doc={doc}
+        page={page}
+        zoom={zoom}
+        width={geometry.width}
+        fitHeight={fitPage ? geometry.height : undefined}
+        onCover={onCover}
+      />
     </div>
   );
 }

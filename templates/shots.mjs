@@ -114,6 +114,7 @@ const plans = {
     await p.getByRole("button", { name: "阅读《山间来信》", exact: true }).click();
     await p.locator(".rd-text-flow").waitFor();
     await p.getByRole("button", { name: "阅读设置", exact: true }).click();
+    await p.getByRole("button", { name: "上下逐页", exact: true }).click();
     await p.getByRole("button", { name: "羊皮纸", exact: true }).click();
     await wait(p, 300);
   }] },

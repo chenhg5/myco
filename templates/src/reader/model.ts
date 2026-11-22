@@ -1,6 +1,11 @@
 // Reader domain values. Books, progress and preferences belong to this local
 // library; no book bytes or reading history are published as page records.
-export type Bookmark = { position: number; label: string; at: number };
+export type Bookmark = {
+  position: number;
+  pageOffset?: number;
+  label: string;
+  at: number;
+};
 export type Book = {
   id: string;
   title: string;
@@ -10,6 +15,7 @@ export type Book = {
   added: number;
   opened: number;
   position: number;
+  pageOffset?: number;
   progress: number;
   bookmarks: Bookmark[];
   cover?: string;
@@ -22,6 +28,7 @@ export type Settings = {
   size: number;
   line: number;
   width: number;
+  mode: "horizontal" | "vertical" | "scroll";
   effect: "slide" | "fade" | "leaf" | "none";
   bold: boolean;
 };
@@ -31,6 +38,7 @@ export const defaults: Settings = {
   size: 21,
   line: 1.9,
   width: 720,
+  mode: "horizontal",
   effect: "slide",
   bold: false,
 };
@@ -49,6 +57,9 @@ export function settingsOf(value: Partial<Settings> | null): Settings {
       ? s.theme
       : "auto",
     font: ["serif", "sans", "mono"].includes(s.font) ? s.font : "serif",
+    mode: ["horizontal", "vertical", "scroll"].includes(s.mode)
+      ? s.mode
+      : "horizontal",
     effect: ["slide", "fade", "leaf", "none"].includes(s.effect)
       ? s.effect
       : "slide",

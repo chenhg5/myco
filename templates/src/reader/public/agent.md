@@ -22,3 +22,10 @@ surrounding paper, not colors embedded in the PDF itself.
 
 Limits: PDF 100 MiB / 10,000 pages; TXT 5 MiB. All PDF worker, CMaps and standard
 fonts, image decoders and ICC profiles are bundled locally. Reduced-motion preferences disable page animations.
+
+Reading settings offer horizontal pages, vertical pages and continuous scroll.
+Mode changes retain source anchors. Continuous PDFs restore the page and its
+intra-page offset and render only nearby pages. In paged vertical mode, Up/Down,
+wheel and up/down swipes turn pages; continuous mode uses natural scrolling.
+All settings and progress remain local, with backward-compatible defaults for
+libraries created before reading modes were introduced.

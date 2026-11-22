@@ -89,6 +89,39 @@ function pdfFixture() {
     `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
   return Buffer.from(body);
 }
+function longPDF(count = 80) {
+  const font = count + 3,
+    contents = count + 4;
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    `<< /Type /Pages /Kids [${Array.from({ length: count }, (_, i) => `${i + 3} 0 R`).join(" ")}] /Count ${count} >>`,
+    ...Array.from(
+      { length: count },
+      (_, i) =>
+        `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 420 ${i % 3 ? 595 : 820}] /Resources << /Font << /F1 ${font} 0 R >> >> /Contents ${contents + i} 0 R >>`,
+    ),
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ...Array.from({ length: count }, (_, i) => {
+      const data = `BT /F1 24 Tf 40 510 Td (Page ${i + 1} of ${count}) Tj ET\n`;
+      return `<< /Length ${data.length} >>\nstream\n${data}endstream`;
+    }),
+  ];
+  let body = "%PDF-1.4\n",
+    offsets = [0];
+  for (const [i, o] of objects.entries()) {
+    offsets.push(Buffer.byteLength(body));
+    body += `${i + 1} 0 obj\n${o}\nendobj\n`;
+  }
+  const xref = Buffer.byteLength(body);
+  body +=
+    `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n` +
+    offsets
+      .slice(1)
+      .map((o) => `${String(o).padStart(10, "0")} 00000 n \n`)
+      .join("") +
+    `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return Buffer.from(body);
+}
 async function screenshot(page, name) {
   await page.screenshot({ path: join(artifact, name + ".png") });
 }
@@ -267,13 +300,11 @@ try {
     () => document.querySelectorAll(".rd-book").length === 4,
   );
   // A scanned JPX page must paint its image, not silently become a blank PDF.
-  await page
-    .getByTestId("import-books")
-    .setInputFiles({
-      name: "scan.pdf",
-      mimeType: "application/pdf",
-      buffer: readFileSync("templates/src/reader/testdata/jpx-scan.pdf"),
-    });
+  await page.getByTestId("import-books").setInputFiles({
+    name: "scan.pdf",
+    mimeType: "application/pdf",
+    buffer: readFileSync("templates/src/reader/testdata/jpx-scan.pdf"),
+  });
   await page.getByRole("button", { name: "阅读《scan》", exact: true }).click();
   await page.locator(".rd-pdf-page canvas").waitFor();
   await page.waitForFunction(() => {
@@ -370,6 +401,198 @@ try {
     "theme follows live host preferences",
   );
   await context.close();
+  // Reading modes preserve source anchors and use genuinely different scroll/paging paths.
+  {
+    const c = await browser.newContext({
+        viewport: { width: 1120, height: 800 },
+      }),
+      p = await c.newPage();
+    p.on("pageerror", (e) => errors.push(e.message));
+    await p.goto(url);
+    await p.getByRole("button", { name: "先读一篇示例", exact: true }).click();
+    await p.locator(".rd-book").nth(2).waitFor();
+    await p
+      .getByRole("button", { name: "阅读《山间来信》", exact: true })
+      .click();
+    await p.locator(".rd-text-flow").waitFor();
+    const mode = async (label) => {
+      await p.getByRole("button", { name: "阅读设置", exact: true }).click();
+      await p.getByRole("button", { name: label, exact: true }).click();
+      await p.getByRole("button", { name: "关闭", exact: true }).click();
+      await p.waitForTimeout(180);
+    };
+    const currentPage = async () =>
+      +(await p.locator(".rd-pagination>span").first().textContent()).split(
+        "/",
+      )[0];
+    const stored = async (title) =>
+      p.evaluate(async (title) => {
+        const db = await new Promise((r) => {
+          const q = indexedDB.open("myco-reader");
+          q.onsuccess = () => r(q.result);
+        });
+        return await new Promise((r) => {
+          const q = db.transaction("books").objectStore("books").getAll();
+          q.onsuccess = () => r(q.result.find((b) => b.title === title));
+        });
+      }, title);
+    await mode("上下逐页");
+    assert.equal(await p.locator(".rd-mode-vertical").count(), 1);
+    const first = await currentPage();
+    await p.locator(".rd-reading-stage").hover();
+    await p.mouse.wheel(0, 160);
+    await p.waitForFunction(
+      (n) =>
+        +document
+          .querySelector(".rd-pagination>span")
+          .textContent.split("/")[0] === n,
+      first + 1,
+    );
+    await p.keyboard.press("ArrowDown");
+    assert.equal(await currentPage(), first + 2);
+    await p.keyboard.press("ArrowUp");
+    assert.equal(await currentPage(), first + 1);
+    await p.waitForTimeout(180);
+    const before = await stored("山间来信");
+    await mode("连续滚动");
+    await p.locator(".rd-text-scroll").waitFor();
+    assert.equal(
+      (await stored("山间来信")).position,
+      before.position,
+      "switching to scroll retains exact character anchor",
+    );
+    const y = await p.locator(".rd-text-scroll").evaluate((e) => e.scrollTop);
+    await p.locator(".rd-text-scroll").hover();
+    await p.mouse.wheel(0, 600);
+    await p.waitForFunction(
+      (y) => document.querySelector(".rd-text-scroll").scrollTop > y + 100,
+      y,
+    );
+    await p.waitForTimeout(180);
+    assert.equal(
+      await p
+        .locator(".rd-page-shell")
+        .evaluate((e) => e.getAnimations().length),
+      0,
+      "continuous scrolling does not run page-flip effects",
+    );
+    await p.getByRole("button", { name: "目录", exact: true }).click();
+    await p
+      .getByRole("button", { name: "第三章 雨后的森林", exact: false })
+      .click();
+    await p.waitForTimeout(180);
+    const chapter = await stored("山间来信");
+    assert(chapter.position > before.position);
+    await p.getByRole("button", { name: "添加书签", exact: true }).click();
+    await p.locator(".rd-text-scroll").evaluate((e) => {
+      e.scrollTop = 0;
+    });
+    await p.waitForTimeout(180);
+    await p.getByRole("button", { name: "书签", exact: true }).click();
+    await p.locator(".rd-bookmark-row>button").first().click();
+    await p.waitForTimeout(180);
+    assert.equal(
+      (await stored("山间来信")).position,
+      chapter.position,
+      "scroll bookmarks restore source position",
+    );
+    await screenshot(p, "text-continuous");
+    await mode("上下逐页");
+    assert.equal(
+      (await stored("山间来信")).position,
+      chapter.position,
+      "returning to page mode preserves source position",
+    );
+    await p.getByRole("button", { name: "阅读设置", exact: true }).click();
+    await screenshot(p, "vertical-modes");
+    await p.getByRole("button", { name: "关闭", exact: true }).click();
+    await p.getByRole("button", { name: "书架", exact: true }).click();
+    await p.getByTestId("import-books").setInputFiles({
+      name: "vertical-pdf.pdf",
+      mimeType: "application/pdf",
+      buffer: pdfFixture(),
+    });
+    await p
+      .getByRole("button", { name: "阅读《vertical-pdf》", exact: true })
+      .click();
+    await p.locator(".rd-pdf-page canvas").waitFor();
+    await p.waitForFunction(
+      () => document.querySelector(".rd-pdf-page canvas")?.height > 0,
+    );
+    const fit = await p.locator(".rd-pdf-page canvas").evaluate((e) => ({
+      h: e.getBoundingClientRect().height,
+      box: e.closest(".rd-pdf-scroll").clientHeight,
+    }));
+    assert(fit.h <= fit.box, "vertical PDF page fits the screen before paging");
+    await p.keyboard.press("ArrowDown");
+    await p.waitForFunction(() =>
+      document.querySelector(".rd-pdf-text")?.textContent.includes("Page two"),
+    );
+    await mode("连续滚动");
+    await p.locator(".rd-pdf-continuous").waitFor();
+    await p.waitForTimeout(300);
+    assert.equal(
+      (await stored("vertical-pdf")).position,
+      1,
+      "PDF retains page when changing mode",
+    );
+    assert(
+      await p
+        .locator(".rd-pdf-continuous")
+        .evaluate((e) => e.scrollHeight > e.clientHeight * 2),
+    );
+    await p.locator(".rd-pdf-continuous").evaluate((e) => {
+      e.scrollTop = 400;
+    });
+    await p.waitForTimeout(250);
+    const location = await stored("vertical-pdf");
+    assert(location.pageOffset > 0);
+    await p.getByRole("button", { name: "书架", exact: true }).click();
+    await p
+      .getByRole("button", { name: "阅读《vertical-pdf》", exact: true })
+      .click();
+    await p.locator(".rd-pdf-continuous").waitFor();
+    await p.waitForTimeout(400);
+    const reopened = await stored("vertical-pdf");
+    assert.equal(reopened.position, location.position);
+    assert(
+      Math.abs(reopened.pageOffset - location.pageOffset) < 0.025,
+      "PDF restores intra-page scroll position",
+    );
+    await screenshot(p, "pdf-continuous");
+    await p.getByRole("button", { name: "书架", exact: true }).click();
+    await p
+      .getByTestId("import-books")
+      .setInputFiles({
+        name: "long-pdf.pdf",
+        mimeType: "application/pdf",
+        buffer: longPDF(),
+      });
+    await p
+      .getByRole("button", { name: "阅读《long-pdf》", exact: true })
+      .click();
+    await p.locator(".rd-pdf-continuous").waitFor();
+    await p.waitForTimeout(300);
+    assert(
+      (await p.locator(".rd-pdf-slot").count()) <= 6,
+      "long PDFs only mount nearby pages",
+    );
+    await p.getByRole("slider", { name: "阅读进度", exact: true }).fill("79");
+    await p.waitForFunction(() =>
+      document
+        .querySelector(".rd-pdf-continuous")
+        .textContent.includes("Page 80 of 80"),
+    );
+    await p.waitForTimeout(250);
+    assert.equal(
+      (await stored("long-pdf")).position,
+      79,
+      "last-page jump survives changing page heights",
+    );
+    assert((await p.locator(".rd-pdf-slot").count()) <= 6);
+
+    await c.close();
+  }
   // Actual narrow viewport + touch scroll/swipe, in both languages and themes.
   for (const [lang, theme] of [
     ["zh", "light"],
@@ -469,6 +692,69 @@ try {
           .evaluate((e) => parseFloat(getComputedStyle(e).lineHeight))) - 50.4,
       ) < 0.01,
     );
+    const chooseMode = async (label) => {
+      await p
+        .getByRole("button", {
+          name: lang === "zh" ? "阅读设置" : "Reading settings",
+          exact: true,
+        })
+        .click();
+      await p.getByRole("button", { name: label, exact: true }).click();
+      await p
+        .getByRole("button", {
+          name: lang === "zh" ? "关闭" : "Close",
+          exact: true,
+        })
+        .click();
+      await p.waitForTimeout(120);
+    };
+    await chooseMode(lang === "zh" ? "上下逐页" : "Vertical pages");
+    const beforeUp = +(
+      await p.locator(".rd-pagination>span").first().textContent()
+    ).split("/")[0];
+    await session.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [{ x: 220, y: 640 }],
+    });
+    await session.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [{ x: 220, y: 310 }],
+    });
+    await session.send("Input.dispatchTouchEvent", {
+      type: "touchEnd",
+      touchPoints: [],
+    });
+    await p.waitForTimeout(150);
+    assert.equal(
+      +(await p.locator(".rd-pagination>span").first().textContent()).split(
+        "/",
+      )[0],
+      beforeUp + 1,
+      "real up swipe turns exactly one vertical page",
+    );
+    await chooseMode(lang === "zh" ? "连续滚动" : "Continuous scroll");
+    const scrollBefore = await p
+      .locator(".rd-text-scroll")
+      .evaluate((e) => e.scrollTop);
+    await session.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [{ x: 220, y: 640 }],
+    });
+    await session.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [{ x: 220, y: 310 }],
+    });
+    await session.send("Input.dispatchTouchEvent", {
+      type: "touchEnd",
+      touchPoints: [],
+    });
+    await p.waitForTimeout(200);
+    assert(
+      (await p.locator(".rd-text-scroll").evaluate((e) => e.scrollTop)) >
+        scrollBefore + 100,
+      "continuous text supports native vertical touch scrolling",
+    );
+    await screenshot(p, `mobile-continuous-${lang}`);
     await mobile.close();
   }
   for (const [lang, theme] of [
@@ -498,7 +784,7 @@ try {
   }
   assert.deepEqual(errors, [], "no unhandled document/lifecycle errors");
   console.log(
-    "reader: import/dedupe, storage isolation, pagination/reflow, progress/settings/bookmarks, TOC/search, PDF worker/pixels/search/JPX scan, encrypted PDF retry/cancel, transaction aborts, original-file download, validation/removal, mobile touch and reduced motion passed",
+    "reader: import/dedupe, storage isolation, pagination/reflow, progress/settings/bookmarks, TOC/search, PDF worker/pixels/search/JPX scan, encrypted PDF retry/cancel, transaction aborts, original-file download, validation/removal, vertical paging/continuous mode, source anchors, virtual PDF, mobile touch and reduced motion passed",
   );
 } finally {
   await browser.close();

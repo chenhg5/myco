@@ -26,9 +26,22 @@ errors are reported; an uncommitted import is never shown as a saved book.
 
 ## Reading
 
-Turn pages with the side arrows, Left/Right, Page Up/Page Down, Space, or a
-horizontal touch swipe. Move further with the progress bar, chapter list,
-bookmarks or search results. Focus mode hides the toolbar; Escape or **Show
+**Reading settings > Reading mode** offers three modes:
+
+- **Horizontal pages:** swipe left/right or use the side arrows.
+- **Vertical pages:** swipe up for the next page, down for the previous page;
+  use the top/bottom arrows, mouse wheel, Up/Down or Page Up/Page Down.
+- **Continuous scroll:** scroll naturally with touch, trackpad or mouse wheel.
+  Up/Down scroll a little; Page Up/Page Down and Space move a screenful. There
+  are no page-turn animations or gesture interception in this mode.
+
+Switching modes retains the current source position. A continuous PDF remembers
+both the page and the position within that page, including when reopened.
+Vertical paged PDFs fit the whole page by default; zooming in allows panning
+inside it. Continuous PDFs paint only nearby pages, including in long books
+with different page sizes.
+
+Move further with the progress bar, chapter list, bookmarks or search results. Focus mode hides the toolbar; Escape or **Show
 toolbar** brings it back. Fullscreen is offered where the host allows it.
 
 **Reading settings** has App theme, Paper, Warm, Sage and Night backgrounds;
@@ -75,7 +88,8 @@ node templates/localization.test.mjs
 The browser test uses the production bundle and the desktop host's real CSP.
 It covers import validation, duplicate detection, transaction aborts, storage
 isolation, reflow and restoring progress, settings, contents/search/bookmarks,
-PDF canvas/text/search, JPEG2000 scan rendering, passwords, downloads, removal, mobile touch and reduced
-motion. It requires Playwright Chromium; `READER_ARTIFACTS` selects the screenshot
-directory. Native file pickers and WKWebView should also be checked on devices;
+PDF canvas/text/search, JPEG2000 scan rendering, passwords, downloads, removal,
+mobile touch, vertical paging, continuous scroll, source-position restoration,
+virtual PDF rendering and reduced motion. It requires Playwright Chromium;
+`READER_ARTIFACTS` selects the screenshot directory. Native file pickers and WKWebView should also be checked on devices;
 browser tests alone are not native-device acceptance.

@@ -5,6 +5,8 @@ import {
   ArrowLeft,
   Bookmark,
   ChevronLeft,
+  ChevronUp,
+  ChevronDown,
   ChevronRight,
   List,
   Maximize2,
@@ -21,6 +23,8 @@ import { chapters, decodeText, occurrences, percent } from "./model";
 import type { Library } from "./library";
 import { loadPDF, pdfChapters, searchPDF, type PDFBook } from "./pdf";
 import { PDFView } from "./pdf-view";
+import { useReadingNavigation } from "./use-reading-navigation";
+import { PDFScrollView } from "./pdf-scroll";
 import { TextView, type TextNavigation } from "./text-view";
 import { ReadingSettings } from "./settings";
 import { Dialog, IconButton } from "./ui";
@@ -57,7 +61,9 @@ export function Reader({
     [secret, setSecret] = useState("");
   const [nav, setNav] = useState({ page: 0, total: 1 }),
     navigation = useRef<TextNavigation | null>(null),
-    shell = useRef<HTMLDivElement>(null);
+    pdfNavigation = useRef<TextNavigation | null>(null),
+    shell = useRef<HTMLDivElement>(null),
+    stage = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState(""),
     [results, setResults] = useState<{ position: number; excerpt: string }[]>(
       [],
@@ -73,10 +79,45 @@ export function Reader({
     setBook((b) => ({ ...b, ...fields }));
     void library.patch(initial.id, fields).catch(onError);
   };
-  const progress = (offset: number, fraction: number) => {
-    position.current = offset;
-    persist({ position: offset, progress: fraction, opened: Date.now() });
+  const pdfOffset = useRef(initial.pageOffset || 0),
+    pendingProgress = useRef<Partial<Book> | null>(null),
+    progressTimer = useRef(0),
+    errorCallback = useRef(onError);
+  errorCallback.current = onError;
+  const flushProgress = () => {
+    window.clearTimeout(progressTimer.current);
+    progressTimer.current = 0;
+    const fields = pendingProgress.current;
+    pendingProgress.current = null;
+    if (fields)
+      void library.patch(initial.id, fields).catch(errorCallback.current);
   };
+  const progress = (offset: number, fraction: number, pageOffset = 0) => {
+    position.current = offset;
+    pdfOffset.current = pageOffset;
+    const fields = {
+      position: offset,
+      progress: fraction,
+      pageOffset,
+      opened: Date.now(),
+    };
+    setBook((b) => ({ ...b, ...fields }));
+    pendingProgress.current = fields;
+    if (!progressTimer.current)
+      progressTimer.current = window.setTimeout(flushProgress, 120);
+  };
+  useEffect(() => {
+    const hidden = () => {
+      if (document.hidden) flushProgress();
+    };
+    window.addEventListener("pagehide", flushProgress);
+    document.addEventListener("visibilitychange", hidden);
+    return () => {
+      window.removeEventListener("pagehide", flushProgress);
+      document.removeEventListener("visibilitychange", hidden);
+      flushProgress();
+    };
+  }, [initial.id, library]);
   useEffect(() => {
     const controller = new AbortController();
     let loaded: PDFBook | null = null;
@@ -131,8 +172,10 @@ export function Reader({
       if (loaded) void loaded.destroy().catch(() => undefined);
     };
   }, [initial.id, library]);
-  function go(offset: number) {
-    if (pdf) {
+  function go(offset: number, pageOffset = 0) {
+    if (pdf && settings.mode === "scroll") {
+      pdfNavigation.current?.go(offset, pageOffset);
+    } else if (pdf) {
       const p = Math.max(0, Math.min(pdf.numPages - 1, offset));
       direction.current = p >= nav.page ? 1 : -1;
       setNav({ page: p, total: pdf.numPages });
@@ -145,68 +188,22 @@ export function Reader({
   function turn(delta: number) {
     if (loading || error) return;
     direction.current = delta;
-    if (pdf) go(nav.page + delta);
+    if (pdf && settings.mode === "scroll") pdfNavigation.current?.turn(delta);
+    else if (pdf) go(nav.page + delta);
     else navigation.current?.turn(delta);
   }
-  useEffect(() => {
-    if (
-      !shell.current ||
-      settings.effect === "none" ||
-      matchMedia("(prefers-reduced-motion: reduce)").matches
-    )
-      return;
-    const d = direction.current,
-      effects = {
-        slide: [
-          { opacity: 0.45, transform: `translateX(${d * 22}px)` },
-          { opacity: 1, transform: "translateX(0)" },
-        ],
-        fade: [{ opacity: 0.2 }, { opacity: 1 }],
-        leaf: [
-          {
-            opacity: 0.55,
-            transform: `perspective(1400px) rotateY(${d * -7}deg) translateX(${d * 12}px)`,
-            filter: "brightness(.91)",
-          },
-          {
-            opacity: 1,
-            transform: "perspective(1400px) rotateY(0deg) translateX(0)",
-            filter: "brightness(1)",
-          },
-        ],
-      };
-    const animation = shell.current.animate(effects[settings.effect], {
-      duration: settings.effect === "leaf" ? 330 : 210,
-      easing: "cubic-bezier(.2,.7,.3,1)",
-    });
-    return () => animation.cancel();
-  }, [nav.page, settings.effect]);
-  useEffect(() => {
-    const key = (e: KeyboardEvent) => {
-      if (
-        document.querySelector("dialog[open]") ||
-        /INPUT|TEXTAREA|SELECT/.test((e.target as HTMLElement).tagName) ||
-        e.ctrlKey ||
-        e.metaKey ||
-        e.altKey
-      )
-        return;
-      if (
-        e.key === "ArrowRight" ||
-        e.key === "PageDown" ||
-        (e.key === " " && (e.target as HTMLElement).tagName !== "BUTTON")
-      ) {
-        e.preventDefault();
-        turn(1);
-      }
-      if (e.key === "ArrowLeft" || e.key === "PageUp") {
-        e.preventDefault();
-        turn(-1);
-      }
-      if (e.key === "Escape") setFocus(false);
-    };
-    window.addEventListener("keydown", key);
-    return () => window.removeEventListener("keydown", key);
+  useReadingNavigation({
+    settings,
+    page: nav.page,
+    direction,
+    stage,
+    shell,
+    zoom,
+    isPDF: !!pdf,
+    loading,
+    error,
+    turn,
+    setFocus,
   });
   useEffect(() => {
     const f = () => setFullscreen(!!document.fullscreenElement);
@@ -226,7 +223,12 @@ export function Reader({
         ? book.bookmarks.filter((b) => b.position !== position.current)
         : [
             ...book.bookmarks,
-            { position: position.current, label, at: Date.now() },
+            {
+              position: position.current,
+              pageOffset: pdfOffset.current,
+              label,
+              at: Date.now(),
+            },
           ].sort((a, b) => a.position - b.position),
     });
   }
@@ -262,7 +264,7 @@ export function Reader({
   }
   return (
     <div
-      className={`rd-reader rd-theme-${settings.theme} ${focus ? "is-focus" : ""}`}
+      className={`rd-reader rd-theme-${settings.theme} rd-mode-${settings.mode} ${pdf && zoom > 1 ? "rd-is-zoomed" : ""} ${focus ? "is-focus" : ""}`}
     >
       <header className="rd-reader-toolbar">
         <button className="rd-back" onClick={onBack}>
@@ -282,7 +284,11 @@ export function Reader({
             </IconButton>
             <button
               className="rd-zoom"
-              title={uiText("恢复适合宽度")}
+              title={
+                settings.mode === "vertical"
+                  ? uiText("恢复适合页面")
+                  : uiText("恢复适合宽度")
+              }
               onClick={() => setZoom(1)}
             >
               {Math.round(zoom * 100)}%
@@ -336,6 +342,7 @@ export function Reader({
       </header>
       <div
         className={`rd-reading-stage ${pdf ? "is-pdf" : ""}`}
+        ref={stage}
         onTouchStart={(e) => {
           if (e.touches.length === 1)
             touch.current = {
@@ -351,6 +358,7 @@ export function Reader({
           const start = touch.current;
           touch.current = null;
           if (
+            settings.mode === "scroll" ||
             !start ||
             e.touches.length ||
             zoom > 1 ||
@@ -359,8 +367,13 @@ export function Reader({
             return;
           const dx = e.changedTouches[0].clientX - start.x,
             dy = e.changedTouches[0].clientY - start.y;
-          if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5)
-            turn(dx < 0 ? 1 : -1);
+          const primary = settings.mode === "vertical" ? dy : dx,
+            cross = settings.mode === "vertical" ? dx : dy;
+          if (
+            Math.abs(primary) > 60 &&
+            Math.abs(primary) > Math.abs(cross) * 1.5
+          )
+            turn(primary < 0 ? 1 : -1);
         }}
       >
         <button
@@ -369,7 +382,11 @@ export function Reader({
           disabled={!nav.page || loading}
           onClick={() => turn(-1)}
         >
-          <ChevronLeft size={24} strokeWidth={1.2} />
+          {settings.mode === "vertical" ? (
+            <ChevronUp size={24} strokeWidth={1.2} />
+          ) : (
+            <ChevronLeft size={24} strokeWidth={1.2} />
+          )}
         </button>
         <article
           className="rd-page-shell"
@@ -396,7 +413,7 @@ export function Reader({
               <TextView
                 text={text}
                 settings={settings}
-                initial={initial.position}
+                initial={position.current}
                 onPosition={progress}
                 onNavigation={(n) => {
                   navigation.current = n;
@@ -405,16 +422,35 @@ export function Reader({
               />
             </>
           )}
-          {!loading && !error && pdf && (
-            <PDFView
-              doc={pdf}
-              page={nav.page}
-              zoom={zoom}
-              onCover={(cover) => {
-                if (book.cover !== cover) persist({ cover });
-              }}
-            />
-          )}
+          {!loading &&
+            !error &&
+            pdf &&
+            (settings.mode === "scroll" ? (
+              <PDFScrollView
+                doc={pdf}
+                zoom={zoom}
+                initial={position.current}
+                initialOffset={pdfOffset.current}
+                onPosition={progress}
+                onNavigation={(n) => {
+                  pdfNavigation.current = n;
+                  setNav({ page: n.page, total: n.total });
+                }}
+                onCover={(cover) => {
+                  if (book.cover !== cover) persist({ cover });
+                }}
+              />
+            ) : (
+              <PDFView
+                doc={pdf}
+                page={nav.page}
+                zoom={zoom}
+                fitPage={settings.mode === "vertical"}
+                onCover={(cover) => {
+                  if (book.cover !== cover) persist({ cover });
+                }}
+              />
+            ))}
         </article>
         <button
           className="rd-edge rd-edge-next"
@@ -422,7 +458,11 @@ export function Reader({
           disabled={nav.page >= nav.total - 1 || loading}
           onClick={() => turn(1)}
         >
-          <ChevronRight size={24} strokeWidth={1.2} />
+          {settings.mode === "vertical" ? (
+            <ChevronDown size={24} strokeWidth={1.2} />
+          ) : (
+            <ChevronRight size={24} strokeWidth={1.2} />
+          )}
         </button>
       </div>
       <footer className="rd-reader-footer">
@@ -458,7 +498,14 @@ export function Reader({
             }}
           />
           <span>
-            {percent(nav.total <= 1 ? 1 : nav.page / (nav.total - 1))}%
+            {percent(
+              settings.mode === "scroll"
+                ? book.progress
+                : nav.total <= 1
+                  ? 1
+                  : nav.page / (nav.total - 1),
+            )}
+            %
           </span>
         </div>
         <button
@@ -518,7 +565,7 @@ export function Reader({
                 <div key={mark.position} className="rd-bookmark-row">
                   <button
                     onClick={() => {
-                      go(mark.position);
+                      go(mark.position, mark.pageOffset);
                       closePanel();
                     }}
                   >

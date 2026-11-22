@@ -2,15 +2,16 @@
 // character anchor, not a page index, so resizing or changing type keeps place.
 import { useLayoutEffect, useRef, useState } from "react";
 import type { Settings } from "./model";
+import { ScrollTextView } from "./text-scroll";
 import { fonts } from "./model";
 export type TextNavigation = {
   page: number;
   total: number;
   turn: (delta: number) => void;
-  go: (position: number) => void;
+  go: (position: number, pageOffset?: number) => void;
   fraction: (value: number) => void;
 };
-export function TextView({
+export function PagedTextView({
   text,
   settings,
   initial,
@@ -134,5 +135,13 @@ export function TextView({
         {text}
       </div>
     </div>
+  );
+}
+
+export function TextView(props: Parameters<typeof PagedTextView>[0]) {
+  return props.settings.mode === "scroll" ? (
+    <ScrollTextView {...props} />
+  ) : (
+    <PagedTextView {...props} />
   );
 }
