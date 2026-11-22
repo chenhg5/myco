@@ -4,6 +4,22 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.21.21
+
+- **Reliable public workspace setup**: Windows waits for a public address and verifies the workspace is reachable before reporting success. An unfinished tunnel shows a retryable error while the local workspace keeps running.
+- Tailscale setup offers official downloads, platform-specific install and start commands, and instructions to give an agent. The installation guide disappears after Tailscale is detected; failed connections show troubleshooting help.
+- **Desktop notifications**: the App sends system notifications for workspace events that need your attention, opens the relevant conversation when clicked, and shows an unread badge on Mac. Upgrade the workspace hub (`sudo myco upgrade`) to enable the notice feed.
+- Mac App: fixed a crash at startup when updating the Dock badge.
+- Agents can request time-limited permission to use a computer; you can approve view-only access or revoke permission from the conversation. Upgrade the hub to enable grants; actual computer control also requires a compatible remote component, published separately.
+
+**中文**
+
+- **更可靠的公网开放流程**：Windows 会等公网地址生成并验证工作区可访问，再显示成功。隧道尚未就绪时给出可重试的错误，本地工作区继续运行。
+- Tailscale 安装提供官方下载、各平台的安装启动命令，以及可交给 agent 的操作说明。检测到已安装后收起安装指引，连接失败时显示排障帮助。
+- **桌面系统通知**：工作区有需要你处理的事情时，App 会发送系统通知；点击可打开对应对话，Mac 还会显示未读角标。工作区 Hub 需升级（`sudo myco upgrade`）才能提供通知。
+- Mac App：修复更新 Dock 角标时导致启动崩溃的问题。
+- Agent 可以申请限时使用电脑；你能在对话里只批准查看，或撤销授权。授权功能需升级 Hub；实际控制电脑还需另行发布的兼容远控组件。
+
 ## v0.21.20
 
 - **Add your phone in simple mode too**: a new install starts in simple mode, which hid My devices (on Settings › Members). It now shows at the foot of Settings › Workspaces, with Add another device, so you can add your iPhone.
