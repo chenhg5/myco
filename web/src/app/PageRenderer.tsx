@@ -19,8 +19,10 @@ function toBase64(buf: ArrayBuffer): string {
   return btoa(s);
 }
 
-// render opens the page for one export and returns its file.
-async function render(j: PageRenderJob): Promise<PageRenderResult> {
+// render opens the page for one export and returns its file. It stops at
+// once (the frame cancelled and removed) when the Hub says the job may no
+// longer run, or when the App's window closes (signal).
+async function render(j: PageRenderJob, signal: AbortSignal): Promise<PageRenderResult> {
   const opened = await appApi.openPage(j.hub_id, j.page_id);
   const lang = document.documentElement.lang.startsWith("zh") ? "zh" : "en";
   const src = localizedPageURL(opened.url, lang);
@@ -34,8 +36,30 @@ async function render(j: PageRenderJob): Promise<PageRenderResult> {
   frame.tabIndex = -1;
   Object.assign(frame.style, { position: "fixed", left: "-20000px", top: "0", width: "1280px", height: "800px", border: "0", opacity: "0", pointerEvents: "none" });
   let onMessage: ((e: MessageEvent) => void) | null = null;
+  const watch = new AbortController();
+  let stopRef: (() => void) | null = null;
   try {
     const result = await new Promise<PageRenderResult>((resolve, reject) => {
+      const stopNow = () => {
+        frame.contentWindow?.postMessage({ myco: "actions.cancel", instance, id: callID }, origin);
+        frame.remove();
+        reject({ code: "cancelled", message: "stopped (revoked, cancelled or the App closed)" } as Fail);
+      };
+      stopRef = stopNow;
+      if (signal.aborted) { stopNow(); return; }
+      signal.addEventListener("abort", stopNow, { once: true });
+      // The Hub's word, through the backend: stop as soon as it may not run.
+      void (async () => {
+        while (!watch.signal.aborted) {
+          try {
+            const w = await appApi.pageRenderWait(j.id, watch.signal);
+            if (w.stop) { stopNow(); return; }
+          } catch {
+            if (!watch.signal.aborted) stopNow();
+            return;
+          }
+        }
+      })();
       let registered = false;
       const readyTimer = window.setTimeout(() => reject({ code: "unsupported", message: "this page's app does not export files (or is an older version)" } as Fail), READY_MS);
       let runTimer = 0;
@@ -51,12 +75,12 @@ async function render(j: PageRenderJob): Promise<PageRenderResult> {
           const answer = async (): Promise<unknown> => {
             switch (d.method) {
               case "ready": {
-                const st = await appApi.pageState(j.hub_id, j.page_id);
+                const st = await appApi.pageRenderState(j.id);
                 return { page: { id: j.page_id, name: opened.name, version: opened.version }, me: { name: "" }, state: st.state, version: st.version,
                   preferences: { language: lang, theme: "light" }, render: { instance } };
               }
-              case "data.list": return appApi.pageRecords(j.hub_id, j.page_id, coll || undefined);
-              case "data.get": return appApi.pageRecord(j.hub_id, j.page_id, coll, String(args.id || ""));
+              case "data.list": return appApi.pageRenderData(j.id, coll);
+              case "data.get": return appApi.pageRenderData(j.id, coll, String(args.id || ""));
               case "data.watch": return true;
               case "storage.get": return null;
             }
@@ -100,6 +124,8 @@ async function render(j: PageRenderJob): Promise<PageRenderResult> {
     const f = e as Partial<Fail> & { message?: string };
     return { error: { code: f.code || "export_failed", message: f.message || "export failed", retryable: !!f.retryable } };
   } finally {
+    watch.abort();
+    if (stopRef) signal.removeEventListener("abort", stopRef);
     if (onMessage) window.removeEventListener("message", onMessage);
     frame.remove();
   }
@@ -116,7 +142,7 @@ export function PageRenderer() {
           const j = await appApi.pageRenderNext(stop.signal);
           if (!alive) break;
           if (!j) continue;
-          const r = await render(j);
+          const r = await render(j, stop.signal);
           await appApi.pageRenderResult(j.id, r).catch(() => undefined);
         } catch {
           if (!alive) break;

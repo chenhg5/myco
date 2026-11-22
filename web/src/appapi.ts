@@ -988,6 +988,12 @@ export const appApi = {
   // wants this window to make (null: none came in time), and its file.
   pageRenderNext: (signal?: AbortSignal) => request<PageRenderJob | null>("GET", "app/page-render/next", undefined, signal, 40_000),
   pageRenderResult: (id: string, r: PageRenderResult) => request<{ ok: boolean }>("POST", `app/page-render/${enc(id)}/result`, r, undefined, 60_000),
+  // While one renders: the page's state and records, through the job (refused once it may no longer run),
+  // and a wait that answers {stop: true} as soon as it may not.
+  pageRenderState: (id: string) => request<PageState>("GET", `app/page-render/${enc(id)}/state`),
+  pageRenderData: (id: string, collection: string, rid?: string) =>
+    request<unknown>("GET", `app/page-render/${enc(id)}/data?collection=${enc(collection)}${rid ? `&id=${enc(rid)}` : ""}`),
+  pageRenderWait: (id: string, signal?: AbortSignal) => request<{ stop: boolean }>("GET", `app/page-render/${enc(id)}/wait`, undefined, signal, 40_000),
   /** Writes a page's shared state based on version; when someone wrote
    *  first, ok is false and the latest comes back. */
   putPageState: async (hubId: string, id: string, state: unknown, version: number): Promise<PageState & { ok: boolean }> => {

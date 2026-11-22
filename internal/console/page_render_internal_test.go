@@ -124,6 +124,54 @@ func TestPageExportThroughTheWindowRenderer(t *testing.T) {
 		t.Fatalf("file: %q %s %v", data, typ, err)
 	}
 
+	// While it renders, the window reads the page through the job; revoked,
+	// the job stops at once: reads are refused and the window is told.
+	hj = run("e3")
+	type seen struct{ state, waitStop, after int }
+	saw := make(chan seen, 1)
+	go func() {
+		res, err := http.Get(win.URL + "/app/page-render/next")
+		if err != nil || res.StatusCode != 200 {
+			return
+		}
+		var j renderJob
+		_ = json.NewDecoder(res.Body).Decode(&j)
+		res.Body.Close()
+		var out seen
+		if r, err := http.Get(win.URL + "/app/page-render/" + j.ID + "/state"); err == nil {
+			out.state = r.StatusCode
+			r.Body.Close()
+		}
+		if _, err := owner.RevokeActionGrant(ctx, g.ID); err != nil {
+			return
+		}
+		if r, err := http.Get(win.URL + "/app/page-render/" + j.ID + "/wait"); err == nil {
+			var v struct{ Stop bool }
+			_ = json.NewDecoder(r.Body).Decode(&v)
+			r.Body.Close()
+			if v.Stop {
+				out.waitStop = 1
+			}
+		}
+		if r, err := http.Get(win.URL + "/app/page-render/" + j.ID + "/data?collection=items"); err == nil {
+			out.after = r.StatusCode
+			r.Body.Close()
+		}
+		saw <- out
+	}()
+	started := time.Now()
+	done = b.runPageJob(ctx, owner, Hub{ID: "hub1"}, host, hj)
+	if done.State != api.JobCancelled || time.Since(started) > 10*time.Second {
+		t.Fatalf("revoked export: %+v after %v", done, time.Since(started))
+	}
+	if o := <-saw; o.state != 200 || o.waitStop != 1 || o.after != http.StatusGone {
+		t.Fatalf("window during and after the revoke: %+v", o)
+	}
+	g, err = agent.RequestActionGrant(ctx, api.ActionGrantRequest{Target: api.ActionTarget{Kind: "page", ID: page.ID}, Permissions: []string{"page.export"}, Reason: "export again"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// The app says no (a format it does not make): its code reaches the agent.
 	hj = run("e2")
 	_ = answer(map[string]any{"error": map[string]any{"code": "unsupported_format", "message": "no pptx here"}})

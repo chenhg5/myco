@@ -24,6 +24,9 @@ import (
 //
 //	GET  /app/page-render/next?wait=25   the next export to render (204: none)
 //	POST /app/page-render/{id}/result    {media_type, data (base64), width?, height?, pages?} or {error: {code, message}}
+//	GET  /app/page-render/{id}/state     the page's shared state   } only while the job may run:
+//	GET  /app/page-render/{id}/data      ?collection=&id=          } then 410
+//	GET  /app/page-render/{id}/wait      {stop}: true as soon as it may no longer run
 
 const (
 	pageRenderTimeout = 30 * time.Second
@@ -50,6 +53,11 @@ type renderJob struct {
 	Args    json.RawMessage `json:"args,omitempty"`
 	done    chan renderResult
 	taken   bool
+	// While it renders: the page's data is read through it, for as long as
+	// the Hub lets the job run (ended closes when it no longer may).
+	ctx   context.Context
+	c     *client.Client
+	ended chan struct{}
 }
 
 type renderResult struct {
@@ -76,8 +84,10 @@ func (p *pageRender) signal() {
 }
 
 // render hands a job to the window's renderer and waits for its file.
-func (p *pageRender) render(ctx context.Context, j *renderJob) renderResult {
+func (p *pageRender) render(ctx context.Context, c *client.Client, j *renderJob) renderResult {
 	j.done = make(chan renderResult, 1)
+	j.ctx, j.c, j.ended = ctx, c, make(chan struct{})
+	defer close(j.ended)
 	p.mu.Lock()
 	if p.byID == nil {
 		p.byID = map[string]*renderJob{}
@@ -109,8 +119,79 @@ func (p *pageRender) render(ctx context.Context, j *renderJob) renderResult {
 	}
 }
 
+// live returns the job id while it may still run (its data readable).
+func (p *pageRender) live(id string) *renderJob {
+	p.mu.Lock()
+	j := p.byID[id]
+	p.mu.Unlock()
+	if j == nil || !j.taken || j.ended == nil {
+		return nil
+	}
+	select {
+	case <-j.ended:
+		return nil
+	case <-j.ctx.Done():
+		return nil
+	default:
+		return j
+	}
+}
+
 func (b *Backend) pageRenderRoutes(m *http.ServeMux) {
 	p := &b.pageRender
+	gone := func(w http.ResponseWriter) {
+		writeErr(w, &client.Error{Status: http.StatusGone, Code: "stopped", Message: "this export was stopped (revoked, cancelled or timed out)"})
+	}
+	m.HandleFunc("GET /app/page-render/{id}/state", func(w http.ResponseWriter, r *http.Request) {
+		j := p.live(r.PathValue("id"))
+		if j == nil {
+			gone(w)
+			return
+		}
+		st, err := j.c.PageState(j.ctx, j.PageID)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, st)
+	})
+	m.HandleFunc("GET /app/page-render/{id}/data", func(w http.ResponseWriter, r *http.Request) {
+		j := p.live(r.PathValue("id"))
+		if j == nil {
+			gone(w)
+			return
+		}
+		q := r.URL.Query()
+		var v any
+		var err error
+		if rid := q.Get("id"); rid != "" {
+			v, err = j.c.PageRecord(j.ctx, j.PageID, q.Get("collection"), rid)
+		} else {
+			v, err = j.c.PageRecords(j.ctx, j.PageID, q.Get("collection"))
+		}
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, v)
+	})
+	m.HandleFunc("GET /app/page-render/{id}/wait", func(w http.ResponseWriter, r *http.Request) {
+		j := p.live(r.PathValue("id"))
+		if j == nil {
+			writeJSON(w, http.StatusOK, map[string]bool{"stop": true})
+			return
+		}
+		select {
+		case <-j.ended:
+		case <-j.ctx.Done():
+		case <-time.After(25 * time.Second):
+			writeJSON(w, http.StatusOK, map[string]bool{"stop": false})
+			return
+		case <-r.Context().Done():
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"stop": true})
+	})
 	m.HandleFunc("GET /app/page-render/next", func(w http.ResponseWriter, r *http.Request) {
 		deadline := time.After(25 * time.Second)
 		if r.URL.Query().Get("wait") == "0" {
@@ -245,7 +326,7 @@ func (b *Backend) runPageJob(ctx context.Context, c *client.Client, h Hub, host 
 	defer done()
 	var id [12]byte
 	_, _ = rand.Read(id[:])
-	res := b.pageRender.render(run, &renderJob{ID: "rnd_" + base64.RawURLEncoding.EncodeToString(id[:]), HubID: h.ID, PageID: g.Target.ID,
+	res := b.pageRender.render(run, c, &renderJob{ID: "rnd_" + base64.RawURLEncoding.EncodeToString(id[:]), HubID: h.ID, PageID: g.Target.ID,
 		Action: j.Action, Version: j.Version, Args: hj.Args})
 	if wasStopped() {
 		return api.ActionJobComplete{State: api.JobCancelled, Error: &api.ActionError{Code: "cancelled", Message: "stopped while it rendered"}}
