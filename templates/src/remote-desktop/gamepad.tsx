@@ -65,22 +65,24 @@ export function Gamepad({ session, close, disconnect }: {
       <h2>{uiText("街机手柄")}</h2>
       <button type="button" className="rd-btn" onClick={() => { releaseAll(); disconnect(); }}><Unplug size={16}/>{uiText("断开")}</button>
     </header>
-    <div className="rd-gamepad-controls">
-      <div className="rd-gamepad-directions">
-        {button("ArrowUp", uiText("方向键上"), <ChevronUp/>, "rd-pad-up")}
-        {button("ArrowLeft", uiText("方向键左"), <ChevronLeft/>, "rd-pad-left")}
-        {button("ArrowRight", uiText("方向键右"), <ChevronRight/>, "rd-pad-right")}
-        {button("ArrowDown", uiText("方向键下"), <ChevronDown/>, "rd-pad-down")}
+    <div className="rd-gamepad-deck">
+      <div className="rd-gamepad-controls">
+        <div className="rd-gamepad-directions">
+          {button("ArrowUp", uiText("方向键上"), <ChevronUp/>, "rd-pad-up")}
+          {button("ArrowLeft", uiText("方向键左"), <ChevronLeft/>, "rd-pad-left")}
+          {button("ArrowRight", uiText("方向键右"), <ChevronRight/>, "rd-pad-right")}
+          {button("ArrowDown", uiText("方向键下"), <ChevronDown/>, "rd-pad-down")}
+        </div>
+        <div className="rd-gamepad-actions">
+          {button("ControlLeft", uiText("动作 A"), <><b>A</b><small>Ctrl</small></>)}
+          {button("AltLeft", uiText("动作 B"), <><b>B</b><small>Alt</small></>)}
+        </div>
       </div>
-      <div className="rd-gamepad-actions">
-        {button("ControlLeft", uiText("动作 A"), <><b>A</b><small>Ctrl</small></>)}
-        {button("AltLeft", uiText("动作 B"), <><b>B</b><small>Alt</small></>)}
+      <div className="rd-gamepad-utility">
+        {button("Digit5", uiText("投币"), uiText("投币"))}
+        {button("Digit1", uiText("开始游戏"), uiText("开始游戏"))}
+        {button("KeyP", uiText("暂停游戏"), uiText("暂停游戏"))}
       </div>
-    </div>
-    <div className="rd-gamepad-utility">
-      {button("Digit5", uiText("投币"), uiText("投币"))}
-      {button("Digit1", uiText("开始游戏"), uiText("开始游戏"))}
-      {button("KeyP", uiText("暂停游戏"), uiText("暂停游戏"))}
     </div>
     {failed ? <p role="status">{uiText("手柄尚未连上，请检查远程连接。")}</p> :
       <p>{uiText("请让电脑上的 MAME 游戏窗口保持在前台。")}</p>}
