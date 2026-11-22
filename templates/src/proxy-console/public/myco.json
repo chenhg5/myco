@@ -1,7 +1,7 @@
 {
   "id": "myco/proxy-console",
   "name": "代理工作台",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "kind": "custom",
   "category": "tools",
   "icon": "icon.svg",

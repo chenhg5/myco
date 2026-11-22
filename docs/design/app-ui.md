@@ -478,6 +478,7 @@ Automations and workflows were built from this section; a new kind of thing (say
 
 - The window frame, sidebar, node types and machine types use the hand-drawn icons in `web/src/components/icons.tsx`: 16px grid, stroke width 1.25, round caps and round joins. Draw new ones the same way, and look at them next to the other icons in the sample sheet.
 - Action icons inside pages (search, plus, edit, copy and so on) use lucide, with the stroke width set to 1.75 for all of them by the styles; do not pass `strokeWidth` to a single icon.
+- Official app SVG icons are rendered as alpha masks in the text color (`.tp-svg`). Use transparent backgrounds and outline artwork; an opaque background turns the whole icon into a solid tile. Check the mask in light and dark appearances.
 - Sizes: 16px in the top bar and sidebar, 18px in list rows, 14px inside buttons, 14px for section actions.
 - One shape means one thing: pen = edit, bubble with a plus = new chat, plus = add, `«` `»` = collapse and expand a pane.
 - Do not draw third parties' official logos; tell the vendors' CLIs apart with generic shapes (Claude: asterisk, Codex: code brackets, Gemini: four-pointed star, Cursor: pointer).
