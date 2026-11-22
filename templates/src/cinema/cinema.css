@@ -446,20 +446,6 @@ body {
 .ci-screen video {
   object-fit: contain;
 }
-.ci-exit-fullscreen {
-  position: absolute;
-  right: 16px;
-  top: 16px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border: 1px solid #777;
-  border-radius: 6px;
-  color: #fff;
-  background: #222d;
-  cursor: pointer;
-}
 .ci-player-message {
   position: absolute;
   inset: 0 0 44px;

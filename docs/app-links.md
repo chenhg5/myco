@@ -15,8 +15,9 @@ people with the message or a copied link can read its fragment.
 
 ## Cinema: a movie and a particular episode
 
-The player has a fullscreen button and an exit control inside the fullscreen
-video. On macOS, fullscreen requires a desktop build that enables WKWebView
+The player has a fullscreen button. The fullscreen picture has no app-added corner
+buttons; use the native video controls or Esc to exit. On macOS, fullscreen
+requires a desktop build that enables WKWebView
 element fullscreen; updating the Cinema template alone does not enable it.
 
 Use an existing Cinema page and one of its enabled, user-approved sources.

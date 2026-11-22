@@ -426,11 +426,12 @@ try {
       1.5,
     );
     // A successful click must actually enter element fullscreen, not merely
-    // resolve a mocked request. The exit control stays inside the fullscreen target.
+    // resolve a mocked request. Fullscreen has no app-added corner overlays.
     await page.getByRole("button", {name: L("全屏", "Fullscreen"), exact:true}).click();
     await page.waitForFunction(() => document.fullscreenElement?.classList.contains("ci-screen"));
     await page.screenshot({path:path.join(out, `${lang}-${theme}-${width}-fullscreen.png`)});
-    await page.getByRole("button", {name:L("退出全屏", "Exit fullscreen"), exact:true}).click();
+    assert.equal(await page.locator(".ci-screen button").count(), 0);
+    await page.evaluate(() => document.exitFullscreen());
     await page.waitForFunction(() => !document.fullscreenElement);
     await page.getByRole("button", {name:L("全屏", "Fullscreen"), exact:true}).click();
     await page.waitForFunction(() => !!document.fullscreenElement);
@@ -456,7 +457,8 @@ try {
     });
     await page.getByRole("button", {name:L("全屏", "Fullscreen"), exact:true}).click();
     await page.waitForFunction(() => !!document.fullscreenElement);
-    await page.getByRole("button", {name:L("退出全屏", "Exit fullscreen"), exact:true}).click();
+    assert.equal(await page.locator(".ci-screen button").count(), 0);
+    await page.evaluate(() => document.exitFullscreen());
     await page.waitForFunction(() => !document.fullscreenElement);
     await page.screenshot({
       path: path.join(out, `${lang}-${theme}-${width}-player.png`),

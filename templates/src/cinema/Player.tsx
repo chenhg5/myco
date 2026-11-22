@@ -1,7 +1,7 @@
 // Player view and per-film resume/skip settings. The transport itself lives in
 // player.ts; progress is saved locally on pause, episode changes and page exit.
 import { useEffect, useRef, useState } from "react";
-import { Maximize, Minimize, SkipBack, SkipForward } from "lucide-react";
+import { Maximize, SkipBack, SkipForward } from "lucide-react";
 import { t as uiText } from "../_lib/i18n";
 import { clock, positive } from "./catalog";
 import { playStream } from "./player";
@@ -29,33 +29,7 @@ export function Player({
     callbacks = useRef({ onProgress, next, intro, outro });
   callbacks.current = { onProgress, next, intro, outro };
   const speedRef = useRef(1);
-  const [fullscreen, setFullscreen] = useState(false);
   const [fullscreenError, setFullscreenError] = useState("");
-  const fullscreenDocument = document as Document & {
-    webkitFullscreenElement?: Element;
-    webkitExitFullscreen?: () => void;
-  };
-  useEffect(() => {
-    const changed = () =>
-      setFullscreen(
-        (document.fullscreenElement || fullscreenDocument.webkitFullscreenElement) ===
-          wrap.current,
-      );
-    document.addEventListener("fullscreenchange", changed);
-    document.addEventListener("webkitfullscreenchange", changed);
-    return () => {
-      document.removeEventListener("fullscreenchange", changed);
-      document.removeEventListener("webkitfullscreenchange", changed);
-    };
-  }, []);
-  const exitFullscreen = async () => {
-    try {
-      if (document.exitFullscreen) await document.exitFullscreen();
-      else fullscreenDocument.webkitExitFullscreen?.();
-    } catch {
-      setFullscreenError(uiText("这里不能全屏"));
-    }
-  };
   const enterFullscreen = async () => {
     setFullscreenError("");
     const screen = wrap.current as
@@ -206,16 +180,6 @@ export function Player({
           preload="auto"
           aria-label={uiText("影视播放器")}
         />
-        {fullscreen && (
-          <button
-            className="ci-exit-fullscreen"
-            aria-label={uiText("退出全屏")}
-            onClick={() => void exitFullscreen()}
-          >
-            <Minimize className="ico" />
-            {uiText("退出全屏")}
-          </button>
-        )}
         {(!ready || error) && (
           <div className="ci-player-message" role={error ? "alert" : "status"}>
             <p>{error || uiText("正在载入视频…")}</p>
