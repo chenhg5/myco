@@ -29,15 +29,16 @@ import (
 var agentActions = []string{"remote.desktop.observe", "remote.desktop.input"}
 
 const (
-	frameTTL      = 2 * time.Minute // input must refer to a frame this recent
+	frameTTL      = 30 * time.Second // input must refer to a frame this recent
 	framesKept    = 16
 	snapshotLimit = 8 << 20
 	inputGap      = 15 * time.Millisecond // lets apps take each event in turn
 )
 
 type frame struct {
-	id string
-	at time.Time
+	id       string
+	at       time.Time
+	geometry [4]int // the display's origin and size when it was taken
 }
 type observeRequest struct {
 	MaxWidth int    `json:"max_width"`
@@ -76,7 +77,7 @@ func (e *engine) observe(w http.ResponseWriter, r *http.Request) {
 		in.Format = "jpeg"
 	}
 	if in.MaxWidth == 0 {
-		in.MaxWidth = 1280
+		in.MaxWidth = 1440
 	}
 	if (in.Format != "jpeg" && in.Format != "png") || in.MaxWidth < 320 || in.MaxWidth > 2560 {
 		agentError(w, 400, "invalid_argument", nil)
@@ -107,7 +108,7 @@ func (e *engine) observe(w http.ResponseWriter, r *http.Request) {
 	}
 	var id [12]byte
 	_, _ = rand.Read(id[:])
-	f := frame{id: "frm_" + hex.EncodeToString(id[:]), at: time.Now()}
+	f := frame{id: "frm_" + hex.EncodeToString(id[:]), at: time.Now(), geometry: e.displayGeometry()}
 	e.mu.Lock()
 	e.frames = append(e.frames, f)
 	if len(e.frames) > framesKept {
@@ -118,16 +119,26 @@ func (e *engine) observe(w http.ResponseWriter, r *http.Request) {
 		MediaType: "image/" + in.Format, Image: data})
 }
 
-// knownFrame reports whether id is a frame observed within frameTTL.
+// knownFrame reports whether id is a frame observed within frameTTL, of
+// the display as it still is (a resolution or arrangement change makes
+// its coordinates mean somewhere else).
 func (e *engine) knownFrame(id string) bool {
 	e.mu.Lock()
-	defer e.mu.Unlock()
-	for _, f := range e.frames {
-		if f.id == id && time.Since(f.at) <= frameTTL {
-			return true
+	var found *frame
+	for i := range e.frames {
+		if e.frames[i].id == id && time.Since(e.frames[i].at) <= frameTTL {
+			found = &e.frames[i]
 		}
 	}
-	return false
+	e.mu.Unlock()
+	return found != nil && found.geometry == e.displayGeometry()
+}
+
+func (e *engine) displayGeometry() [4]int {
+	if e.geometry != nil {
+		return e.geometry()
+	}
+	return displayGeometry()
 }
 
 func (e *engine) agentInput(w http.ResponseWriter, r *http.Request) {

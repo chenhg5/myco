@@ -58,9 +58,10 @@ type engine struct {
 	input      func(inputEvent) error
 	canControl func() bool
 	// Agent actions (agent.go).
-	snap   func(ctx context.Context, maxWidth int, format string) ([]byte, error)
-	snapMu sync.Mutex
-	frames []frame
+	snap     func(ctx context.Context, maxWidth int, format string) ([]byte, error)
+	snapMu   sync.Mutex
+	frames   []frame
+	geometry func() [4]int
 }
 
 func (e *engine) controlAllowed() bool {

@@ -38,6 +38,42 @@ type actionHosts struct {
 	// sharing), with control or not; it stops when idle.
 	agentOwned, control bool
 	lastJob             time.Time
+	frames              frameBook
+}
+
+// frameBook remembers which grant observed each frame: input may only use a
+// frame its own grant observed, within frameMaxAge (the component checks age
+// and display geometry again).
+type frameBook struct {
+	mu sync.Mutex
+	m  map[string]frameSeen
+}
+type frameSeen struct {
+	grant string
+	at    time.Time
+}
+
+const frameMaxAge = 30 * time.Second
+
+func (f *frameBook) add(id, grant string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.m == nil {
+		f.m = map[string]frameSeen{}
+	}
+	for k, v := range f.m {
+		if time.Since(v.at) > frameMaxAge {
+			delete(f.m, k)
+		}
+	}
+	f.m[id] = frameSeen{grant: grant, at: time.Now()}
+}
+
+func (f *frameBook) ok(id, grant string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	v, found := f.m[id]
+	return found && v.grant == grant && time.Since(v.at) <= frameMaxAge
 }
 
 const (
@@ -249,14 +285,14 @@ func actionFailure(code, message string, retryable bool, applied *int) api.Actio
 // runDesktopJob runs one job: grant checked again here, stopped as soon as
 // the Hub says to, reported either way.
 func (b *Backend) runDesktopJob(ctx context.Context, c *client.Client, host *api.ActionHost, hj api.ActionHostJob, desktop func(context.Context, bool) (desktopActions, error)) {
-	done := runDesktopJob(ctx, c, host, hj, desktop)
+	done := runDesktopJob(ctx, c, host, hj, desktop, &b.actionHosts.frames)
 	done.HostID, done.Generation = host.ID, host.Generation
 	end, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 	defer cancel()
 	_, _ = c.CompleteActionJob(end, hj.Job.ID, done)
 }
 
-func runDesktopJob(ctx context.Context, c *client.Client, host *api.ActionHost, hj api.ActionHostJob, desktop func(context.Context, bool) (desktopActions, error)) api.ActionJobComplete {
+func runDesktopJob(ctx context.Context, c *client.Client, host *api.ActionHost, hj api.ActionHostJob, desktop func(context.Context, bool) (desktopActions, error), frames *frameBook) api.ActionJobComplete {
 	j := hj.Job
 	var permission string
 	for _, d := range desktopActionList {
@@ -314,7 +350,10 @@ func runDesktopJob(ctx context.Context, c *client.Client, host *api.ActionHost, 
 		return stopped || run.Err() != nil && ctx.Err() == nil
 	}
 
-	d, err := desktop(run, permission == "remote.desktop.control")
+	// With control granted, the component starts able to control even for
+	// an observe: starting it again for the input that follows would lose
+	// the frame just observed.
+	d, err := desktop(run, actionPermitted(hj.Grant, host.MachineID, "remote.desktop.control", time.Now()))
 	if err != nil {
 		return actionFailure("unavailable", "the Remote Desktop component could not start on this computer: "+err.Error(), true, intPtr(0))
 	}
@@ -345,6 +384,7 @@ func runDesktopJob(ctx context.Context, c *client.Client, host *api.ActionHost, 
 		if len(obs.Image) > artifactMaxSize {
 			return actionFailure("too_large", "the frame is over 4 MB: ask for jpeg or a smaller max_width", false, nil)
 		}
+		frames.add(obs.FrameID, hj.Grant.ID)
 		up, cancel := context.WithTimeout(run, 30*time.Second)
 		art, err := c.UploadActionArtifact(up, j.ID, host.ID, host.Generation, obs.MediaType, obs.Image)
 		cancel()
@@ -365,6 +405,9 @@ func runDesktopJob(ctx context.Context, c *client.Client, host *api.ActionHost, 
 		if json.Unmarshal(hj.Args, &args) != nil || args.FrameID == "" || len(args.Events) == 0 {
 			return actionFailure("invalid_argument", "input needs frame_id and events", false, intPtr(0))
 		}
+		if !frames.ok(args.FrameID, hj.Grant.ID) {
+			return actionFailure("stale_frame", "that frame is not this grant's or is over 30 seconds old: observe again", false, intPtr(0))
+		}
 		applied, err := d.Input(run, args.FrameID, args.Events)
 		if err == nil {
 			result, _ := json.Marshal(map[string]int{"applied": applied})
@@ -382,7 +425,7 @@ func runDesktopJob(ctx context.Context, c *client.Client, host *api.ActionHost, 
 		case "invalid_argument":
 			return actionFailure("invalid_argument", "an event is not valid (all or nothing: none was applied)", false, intPtr(0))
 		case "stale_frame":
-			return actionFailure("stale_frame", "that frame is unknown or over 2 minutes old: observe again", false, intPtr(0))
+			return actionFailure("stale_frame", "that frame is over 30 seconds old or the display changed since: observe again", false, intPtr(0))
 		case "control_not_allowed":
 			return actionFailure("control_not_allowed", "this computer allows viewing only (on a Mac, allow Accessibility for myco; or Remote Desktop is sharing view only)", false, intPtr(0))
 		case "input_failed":

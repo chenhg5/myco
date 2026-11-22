@@ -12,6 +12,19 @@ import (
 var user32 = syscall.NewLazyDLL("user32.dll")
 var mouseEvent = user32.NewProc("mouse_event")
 var keyEvent = user32.NewProc("keybd_event")
+var systemMetrics = user32.NewProc("GetSystemMetrics")
+
+// displayGeometry is the virtual desktop's origin and size: where
+// normalized pointer coordinates land (SM_X/YVIRTUALSCREEN, SM_CX/CYVIRTUALSCREEN).
+func displayGeometry() [4]int {
+	var g [4]int
+	for i, m := range []uintptr{76, 77, 78, 79} {
+		v, _, _ := systemMetrics.Call(m)
+		g[i] = int(int32(v))
+	}
+	return g
+}
+
 var keyCodes = map[string]uint16{"Enter": 13, "Escape": 27, "Backspace": 8, "Tab": 9, "Space": 32, "ArrowLeft": 37, "ArrowUp": 38, "ArrowRight": 39, "ArrowDown": 40, "Delete": 46, "Home": 36, "End": 35, "PageUp": 33, "PageDown": 34, "ShiftLeft": 160, "ShiftRight": 161, "ControlLeft": 162, "ControlRight": 163, "AltLeft": 164, "AltRight": 165, "MetaLeft": 91, "MetaRight": 92, "Minus": 189, "Equal": 187, "BracketLeft": 219, "BracketRight": 221, "Backslash": 220, "Semicolon": 186, "Quote": 222, "Backquote": 192, "Comma": 188, "Period": 190, "Slash": 191}
 
 func init() {

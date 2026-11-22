@@ -19,7 +19,7 @@ import (
 func agentEngine(t *testing.T, control bool, input func(inputEvent) error) (*engine, func(path, body string) (int, map[string]any)) {
 	t.Helper()
 	e := &engine{cfg: settings{Secret: strings.Repeat("s", 64), PairingCode: "abcdef12", Control: control}, peers: map[string]*peer{},
-		canControl: func() bool { return true }, input: input,
+		canControl: func() bool { return true }, input: input, geometry: func() [4]int { return [4]int{0, 0, 1512, 982} },
 		snap: func(ctx context.Context, maxWidth int, format string) ([]byte, error) {
 			var b bytes.Buffer
 			_ = jpeg.Encode(&b, image.NewRGBA(image.Rect(0, 0, 64, 40)), nil)
@@ -70,6 +70,18 @@ func TestAgentObserveThenInput(t *testing.T) {
 	code, out := call("/agent/input", `{"frame_id":"`+frame+`","events":[{"kind":"button","x":0.25,"y":0.5,"button":0,"clicks":1,"down":true},{"kind":"button","x":0.25,"y":0.5,"button":0,"clicks":1,"down":false},{"kind":"text","text":"你好 myco"}]}`)
 	if code != 200 || out["applied"].(float64) != 3 || len(got) != 3 || got[2].Text != "你好 myco" {
 		t.Fatalf("input: %d %v %v", code, out, got)
+	}
+}
+
+// A frame from before the display changed (resolution, arrangement) is stale.
+func TestAgentInputRefusesAFrameOfAnotherGeometry(t *testing.T) {
+	e, call := agentEngine(t, true, func(inputEvent) error { t.Fatal("applied input for a changed display"); return nil })
+	_, obs := call("/agent/observe", `{}`)
+	e.mu.Lock()
+	e.geometry = func() [4]int { return [4]int{0, 0, 1920, 1080} }
+	e.mu.Unlock()
+	if code, out := call("/agent/input", `{"frame_id":"`+obs["frame_id"].(string)+`","events":[{"kind":"move","x":0,"y":0}]}`); code != 409 || out["error"] != "stale_frame" {
+		t.Fatalf("changed geometry: %d %v", code, out)
 	}
 }
 

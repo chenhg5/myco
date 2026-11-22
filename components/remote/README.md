@@ -36,9 +36,9 @@ component. EOF on stdin shuts it down. Its stdout is never copied to user logs.
 For agent actions (`remote.desktop.observe` and `.input`, see `docs/api.md`),
 the App also calls `POST /agent/observe` `{max_width, format}` → `{frame_id,
 captured_at, display_id, width, height, media_type, image}` (one still frame of
-the display input maps to, scaled down only), and `POST /agent/input`
+the display input maps to, scaled down only; 1440 wide by default), and `POST /agent/input`
 `{frame_id, events}` → `{applied}`. Input needs control, names a frame observed
-in the last two minutes, takes 1–64 events checked all together before any
+in the last 30 seconds of the display as it still is (same origin and size), takes 1–64 events checked all together before any
 runs, applies them one by one, stops when the request ends (the App drops it
 when the grant is revoked) and releases every key and button afterwards. A
 refusal is `{error, applied?}`. `/status` lists `agent_actions` from 0.3.0.

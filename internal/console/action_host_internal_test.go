@@ -112,6 +112,17 @@ func TestDesktopJobsObserveAndStopOnRevoke(t *testing.T) {
 		t.Fatalf("artifact: %q %v", data, err)
 	}
 
+	// A frame no observe of this grant made is refused before anything runs.
+	bad, err := agent.RunAction(ctx, api.ActionInvocation{GrantID: g.ID, Action: "remote.desktop.input", Version: 1, IdempotencyKey: "i0",
+		Args: json.RawMessage(`{"frame_id":"frm_other","events":[{"kind":"text","text":"x"}]}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	jobs, _ = owner.ActionHostJobs(ctx, host.ID, 2*time.Second)
+	b.runDesktopJob(ctx, owner, host, jobs[0], desktop)
+	if j, _ := agent.ActionJob(ctx, bad.ID, time.Second); j.State != api.JobFailed || j.Error == nil || j.Error.Code != "stale_frame" {
+		t.Fatalf("foreign frame: %+v", j)
+	}
 	in, err := agent.RunAction(ctx, api.ActionInvocation{GrantID: g.ID, Action: "remote.desktop.input", Version: 1, IdempotencyKey: "i1",
 		Args: json.RawMessage(`{"frame_id":"frm_1","events":[{"kind":"text","text":"hello"}]}`)})
 	if err != nil {
@@ -140,7 +151,9 @@ func TestDesktopJobsObserveAndStopOnRevoke(t *testing.T) {
 	if j, err := agent.ActionJob(ctx, in.ID, time.Second); err != nil || j.State != api.JobCancelled {
 		t.Fatalf("input after revoke: %+v %v", j, err)
 	}
-	if len(askedControl) != 2 || askedControl[0] || !askedControl[1] {
+	// A control grant starts the component able to control from the first
+	// observe (no restart that would lose the frame).
+	if len(askedControl) != 3 || !askedControl[0] || !askedControl[1] {
 		t.Fatalf("component asked for control: %v", askedControl)
 	}
 }
