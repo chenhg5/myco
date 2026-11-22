@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
 
@@ -11,14 +11,17 @@ const require = createRequire(join(execFileSync("npm", ["root", "-g"], { encodin
 const { chromium } = require("playwright");
 const root = new URL("../internal/templates/official/tutor/", import.meta.url);
 const files = new Map([["/", ["text/html", readFileSync(new URL("index.html", root))]]]);
-const html = String(files.get("/")[1]);
-for (const [, path] of html.matchAll(/(?:src|href)="\.\/(assets\/[^"]+)"/g)) {
-  files.set("/" + path, [path.endsWith(".js") ? "text/javascript" : "text/css", readFileSync(new URL(path, root))]);
+for (const asset of readdirSync(new URL("assets/", root))) {
+  const path = "assets/" + asset;
+  files.set("/" + path, [path.endsWith(".css") ? "text/css" : "text/javascript", readFileSync(new URL(path, root))]);
 }
 const server = createServer((req, res) => {
   const file = files.get(new URL(req.url, "http://test").pathname);
   if (!file) return res.writeHead(404).end();
-  res.writeHead(200, { "Content-Type": file[0] }).end(file[1]);
+  res.writeHead(200, {
+    "Content-Type": file[0],
+    "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' data: blob:; worker-src 'self' blob:; img-src 'self' data: blob:",
+  }).end(file[1]);
 });
 await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 let browser;
@@ -34,7 +37,7 @@ try {
       const listeners = [];
       window.answer = (id, text) => {
         const collection = "tutor_answers";
-        const data = { text };
+        const data = typeof text === "string" ? { text } : text;
         records.push({ collection, id, data, version: 1 });
         localStorage.setItem("rows", JSON.stringify(records));
         for (const listener of listeners) listener({ collection, record: id, data, op: "put", version: 1 });
@@ -44,8 +47,8 @@ try {
         ready: Promise.resolve({ me: { name: "learner" }, page: { id: "pg_fixture" } }),
         data: {
           list: async (collection) => ({ records: records.filter((r) => r.collection === collection), seq: 0 }),
-          put: async (collection, data) => {
-            const record = { collection, data, id: "r" + records.length, version: 1 };
+          put: async (collection, data, options) => {
+            const record = { collection, data, id: options?.id || "r" + records.length, version: 1 };
             records.push(record);
             localStorage.setItem("rows", JSON.stringify(records));
             return record;
@@ -81,10 +84,62 @@ try {
     await page.getByText(answer, { exact: true }).waitFor();
     await page.reload();
     await page.getByText(answer, { exact: true }).waitFor();
+
+    if (!refused) {
+      // Feed a real PDF through the browser File API and packaged PDF.js worker.
+      const blank = await browser.newPage();
+      await blank.setContent(`<body><section style="break-after:page">The first page introduces prime numbers.</section>
+        <section>教材第二页。The real part is the horizontal coordinate.</section></body>`);
+      const pdf = await blank.pdf();
+      await blank.close();
+      await page.getByRole("button", { name: "教材库", exact: true }).click();
+      await page.locator('input[type="file"]').setInputFiles({ name: "chapter.pdf", mimeType: "application/pdf", buffer: pdf });
+      const reader = page.getByRole("complementary", { name: "教材原文" });
+      await reader.getByText("The first page introduces prime numbers.").waitFor();
+      await reader.getByRole("button", { name: "下一页" }).click();
+      await reader.getByText(/教材第二页。.*The real part is the horizontal coordinate\./).waitFor();
+      await reader.getByRole("button", { name: "结合这页问导师" }).click();
+      await page.getByRole("combobox", { name: "学习基础" }).selectOption("school");
+      await page.getByRole("textbox", { name: ask }).fill("用教材第二页讲实部");
+      await page.getByRole("button", { name: ask, exact: true }).click();
+      await page.waitForFunction(() => window.sent?.includes("用教材第二页讲实部"));
+      const request = await page.evaluate(() => JSON.parse(localStorage.rows).filter((r) => r.collection === "tutor_requests").pop());
+      assert.equal(request.data.level, "school");
+      assert.equal(request.data.page, 2);
+      assert.ok(request.data.material);
+      const lesson = {
+        title: "实部是横坐标",
+        stages: [{ title: "从平面坐标想起", text: "横坐标表示这个点向左或向右的位置。" }],
+        diagram: { type: "coordinate", title: "看临界线", line: 0.5, xLabel: "Re(s)", yLabel: "Im(s)", point: { x: 0.5, y: 1, label: "示意点" } },
+        check: { question: "哪一步是找实部？", choices: ["看横坐标", "看纵坐标"], answer: 0, feedback: "实部画在横轴上。" },
+        sources: [{ page: 1, quote: "This quote is invented." }, { page: 2, quote: "The real part is the horizontal coordinate." }],
+      };
+      await page.evaluate(({ request, lesson }) => window.answer(request.id, { text: "The real part is the horizontal coordinate.", lesson }), { request, lesson });
+      const lessonView = page.locator(".tu-lesson");
+      await lessonView.getByRole("heading", { name: "实部是横坐标" }).waitFor();
+      assert.equal(await lessonView.getByText("This quote is invented.").count(), 0);
+      await lessonView.getByRole("slider").fill("0.6");
+      await lessonView.getByText("Re(s) = 0.6 · 点在线外", { exact: true }).waitFor();
+      await lessonView.getByRole("button", { name: "看横坐标", exact: true }).click();
+      await lessonView.getByText(/答对了.*实部画在横轴上/).waitFor();
+      await reader.getByRole("button", { name: "上一页" }).click();
+      await lessonView.getByRole("button", { name: /The real part is the horizontal coordinate/ }).click();
+      await reader.getByText(/The real part is the horizontal coordinate/).waitFor();
+      await page.reload();
+      await page.locator(".tu-lesson").getByRole("heading", { name: "实部是横坐标" }).waitFor();
+    } else {
+      await page.locator(".tu-example-link").click();
+      await page.getByRole("heading", { name: "The Riemann hypothesis: From primes to zeros" }).waitFor();
+      await page.getByRole("slider").fill("100");
+      await page.getByText("There are 25 primes among the first 100 positive integers.").waitFor();
+      await page.getByRole("button", { name: "University", exact: true }).click();
+      await page.getByRole("heading", { name: "Start from the Euler product" }).waitFor();
+      assert.equal(await page.locator(".tu-main").evaluate((el) => el.scrollWidth <= el.clientWidth), true);
+    }
     assert.deepEqual(errors, []);
     await page.close();
   }
-  console.log("PASS tutor prompt, real-time answer, reload, denied delivery fallback, and desktop/mobile layout");
+  console.log("PASS tutor transport, PDF import, source verification and navigation, interactive lesson and quiz, reload, and mobile example");
 } finally {
   await browser?.close();
   server.close();

@@ -52,11 +52,11 @@
   "myco/tutor": {
     "en": {
       "name": "Learning workspace",
-      "description": "Plan a subject with an agent, build lesson cards, practice questions and review what you have not mastered yet."
+      "description": "Import a textbook, ask your tutor to teach at your level, and explore interactive diagrams and quick checks with source citations."
     },
     "zh": {
       "name": "学习工作台",
-      "description": "和 agent 一起制定学习主题，写知识卡、做练习题，按掌握情况复习。"
+      "description": "导入教材，按学习基础听导师分层讲解，边看原文引用、边操作交互图和做小题。"
     }
   },
   "myco/code": {

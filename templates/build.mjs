@@ -40,7 +40,14 @@ for (const name of readdirSync(path.join(here, "src"))) {
       chunkSizeWarningLimit: 4000,
       // one script and one stylesheet: a page is a few files
       rollupOptions: {
-        output: { manualChunks: undefined },
+        output: {
+          manualChunks: undefined,
+          // The app page host derives MIME type from the filename. Serve the
+          // PDF worker as ordinary JavaScript on hosts without .mjs MIME.
+          assetFileNames: ({ name }) => name === "pdf.worker.min.mjs"
+            ? "assets/[name]-[hash].js"
+            : "assets/[name]-[hash][extname]",
+        },
         onwarn(w, warn) { if (w.code !== "INVALID_ANNOTATION") warn(w); },
       },
     },

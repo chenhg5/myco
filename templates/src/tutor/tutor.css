@@ -77,3 +77,81 @@
   .tu-welcome { margin-bottom: 20px; }
   .tu-options { grid-template-columns: 1fr; }
 }
+
+/* The teaching surface can share the screen with a specific source page. */
+.tu-workspace { display: flex; flex: 1; min-width: 0; min-height: 0; position: relative; overflow: hidden; }
+.tu-example-link { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; margin: 16px 0 0; padding: 9px 10px; color: var(--fg); border: 1px solid var(--line); border-radius: 7px; background: var(--bg); font: inherit; }
+.tu-example-link[aria-current] { background: var(--accent-bg); }
+.tu-welcome-links, .tu-levels { display: flex; flex-wrap: wrap; gap: 8px; }
+.tu-welcome-links { justify-content: center; margin-top: 15px; }
+.tu-levels { margin-bottom: 18px; }
+.tu-levels button[aria-pressed=true] { background: var(--accent-bg); border-color: var(--muted); font-weight: 600; }
+.tu-compose-options { display: flex; min-width: 0; align-items: center; flex-wrap: wrap; gap: 6px; }
+.tu-compose-options .sel { flex: none; max-width: 100%; }
+.tu-compose .tu-context { margin-right: 6px; }
+.tu-lesson { border: 1px solid var(--line); border-radius: 14px; padding: clamp(15px, 3vw, 27px); min-width: 0; }
+.tu-lesson-head { display: flex; gap: 10px; align-items: flex-start; padding-bottom: 15px; border-bottom: 1px solid var(--line2); }
+.tu-lesson-head svg { flex: none; margin-top: 4px; }
+.tu-lesson-head h2 { font-size: 20px; margin: 0; line-height: 1.35; overflow-wrap: anywhere; font-weight: 650; }
+.tu-lesson-stage { padding: 17px 0; }
+.tu-lesson-stage h3, .tu-figure h3, .tu-check h3, .tu-citations h3 { margin: 0 0 5px; font-size: 15px; font-weight: 650; }
+.tu-lesson-stage p, .tu-figure p, .tu-check p { margin: 0; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tu-figure, .tu-check { background: var(--bg2); margin: 0 0 4px; padding: 16px; border-radius: 11px; }
+.tu-figure figcaption > p { color: var(--muted); }
+.tu-range { display: grid; gap: 6px; font-size: 13px; color: var(--muted); padding: 12px 0; }
+.tu-range span { display: flex; gap: 5px; align-items: center; }
+.tu-range input { width: 100%; accent-color: var(--accent); }
+.tu-prime-grid { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 4px; }
+.tu-prime-grid span { display: grid; place-items: center; min-height: 30px; border-radius: 5px; background: var(--bg); color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
+.tu-prime-grid span[data-prime=true] { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+.tu-figure .tu-chart-readout { margin-top: 10px; font-size: 13px; }
+.tu-coordinate { display: block; width: 100%; max-height: 254px; margin: 8px 0; border-radius: 7px; background: var(--bg); }
+.tu-critical { stroke: var(--accent); stroke-width: 2.5px; stroke-dasharray: 5 4; }
+.tu-coordinate-halo { fill: var(--accent-bg); stroke: var(--accent); }
+.tu-sequence { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.tu-sequence button { border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; background: var(--bg); }
+.tu-sequence button[aria-pressed=true] { background: var(--accent); color: var(--on-accent); }
+.tu-citations { margin-top: 16px; }
+.tu-citations button { display: flex; align-items: flex-start; gap: 8px; text-align: left; width: 100%; padding: 9px 0; border: 0; border-bottom: 1px solid var(--line2); background: none; }
+.tu-citations button span, .tu-citations button svg { flex: none; }
+.tu-citations button q { flex: 1; min-width: 0; color: var(--muted); overflow-wrap: anywhere; }
+.tu-citations button:hover { background: var(--hover); }
+.tu-example-source a { color: var(--muted); }
+.tu-library { width: 100%; max-width: 820px; margin: 0 auto; padding: 32px 26px; }
+.tu-library h1 { font-size: 24px; margin: 0 0 6px; font-weight: 600; }
+.tu-import { display: flex; align-items: center; gap: 15px; flex-wrap: wrap; border: 1px dashed var(--line); border-radius: 14px; padding: 20px; background: var(--bg2); }
+.tu-import .tu-mark { flex: none; }
+.tu-import > div { flex: 1 1 235px; }
+.tu-import h2 { font-size: 16px; margin: 0 0 4px; }
+.tu-import p { color: var(--muted); margin: 3px 0; }
+.tu-library-list { display: grid; gap: 8px; margin-top: 20px; }
+.tu-library-list button, .tu-library-list > p { display: flex; gap: 10px; align-items: center; }
+.tu-library-list button { width: 100%; padding: 12px; text-align: left; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.tu-library-list button:hover { background: var(--hover); }
+.tu-library-list button span { display: grid; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.tu-library-list small { color: var(--muted); }
+.tu-import-error { color: var(--red); }
+.tu-reader { display: flex; flex: 0 0 clamp(260px, 33%, 420px); flex-direction: column; min-height: 0; min-width: 0; border-left: 1px solid var(--line); background: var(--bg2); }
+.tu-reader > header, .tu-reader-controls, .tu-reader > footer { display: flex; align-items: center; gap: 8px; padding: 12px 14px; }
+.tu-reader > header { border-bottom: 1px solid var(--line); }
+.tu-reader > header > svg { flex: none; }
+.tu-reader h2 { flex: 1; margin: 0; min-width: 0; font-size: 14px; overflow-wrap: anywhere; }
+.tu-reader-controls { justify-content: center; font-size: 13px; }
+.tu-reader-text { min-height: 0; flex: 1; padding: 8px 15px 18px; overflow: auto; background: var(--bg); white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.65; }
+.tu-reader > footer { border-top: 1px solid var(--line); }
+.tu-reader > footer button:disabled, .tu-reader-controls button:disabled { opacity: .35; }
+@media (max-width: 1080px) {
+  .tu-workspace[data-reader=true] .tu-chat, .tu-workspace[data-reader=true] .tu-study { padding-left: 14px; padding-right: 14px; }
+}
+@media (max-width: 780px) {
+  .tu-workspace[data-reader=true] .tu-main { visibility: hidden; }
+  .tu-reader { position: absolute; inset: 0; z-index: 2; }
+}
+@media (max-width: 540px) {
+  .tu-sidebar nav button { white-space: nowrap; font-size: 12px; }
+  .tu-sidebar nav button svg { width: 14px; }
+  .tu-example-link { margin-top: 2px; padding: 5px 6px; font-size: 12px; }
+  .tu-library { padding: 18px 13px; }
+  .tu-prime-grid { gap: 3px; }
+  .tu-prime-grid span { min-height: 23px; font-size: 11px; }
+}

@@ -1,11 +1,15 @@
 // Send a saved question to the page's agent. The answer arrives as a separate
 // shared record and survives closing or reopening the app.
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, BookOpen, Compass, Copy, GraduationCap, Lightbulb, ListChecks, X } from "lucide-react";
+import { ArrowUp, BookOpen, Compass, Copy, FileText, GraduationCap, Lightbulb, ListChecks, X } from "lucide-react";
 import { t as uiText } from "../_lib/i18n";
 import type { MycoRecord } from "../_lib/myco";
 import { canSend, saveRequest, sendRequest } from "./edit";
-import { answers, kit, requests, type Lesson, type Mode, type Request, type Subject } from "./model";
+import { answers, kit, materials, materialText, requests, type Lesson, type Level, type Mode, type Request, type Subject } from "./model";
+import { levelLabels } from "./example";
+import { readLesson } from "./lesson-content";
+import { LessonView } from "./lesson-view";
+import { locationLabel, type MaterialLocation } from "./materials";
 
 const MAX_PROMPT = 2000;
 
@@ -19,14 +23,23 @@ function modes() {
 
 function agentBrief(id: string, request: Request) {
   return uiText(
-    "请担任我的学习导师。学习页面 ID：{0}。请读取本页 agent.md 和 tutor_requests 中 ID 为 {1} 的记录，结合相关课程和之前的问答，用我提问的语言辅导我。把这一轮的回答写进 tutor_answers，记录 ID 必须与请求相同。\n\n我的问题：{2}",
+    "请担任我的学习导师。学习页面 ID：{0}。请读取本页 agent.md 和 tutor_requests 中 ID 为 {1} 的记录。按所选学习基础，用我的语言从直觉和例子讲起；若附了教材，请读对应原文并引用。把分层讲解、交互图和理解检查写进 tutor_answers，使用同一个记录 ID。\n\n我的问题：{2}",
     kit.page, id, request.prompt,
   );
 }
 
-export function TutorChat({ subject, lesson, clearContext }: {
+const normalizeExcerpt = (s: string) => s.replace(/\s+/g, " ").trim();
+
+export function TutorChat({ subject, lesson, level, onLevel, source, clearSource, openSource, openLibrary, openExample, clearContext }: {
   subject: MycoRecord<Subject> | null;
   lesson: MycoRecord<Lesson> | null;
+  level: Level;
+  onLevel: (level: Level) => void;
+  source?: MaterialLocation;
+  clearSource: () => void;
+  openSource: (location: MaterialLocation) => void;
+  openLibrary: () => void;
+  openExample: () => void;
   clearContext: () => void;
 }) {
   const [prompt, setPrompt] = useState("");
@@ -38,11 +51,11 @@ export function TutorChat({ subject, lesson, clearContext }: {
   const bottom = useRef<HTMLDivElement>(null);
   const timeline = requests.rows.filter((r) => r.data.who === kit.me);
   const last = timeline[timeline.length - 1];
-  const lastAnswer = last && answers.get(last.id)?.data.text;
+  const activeSource = source && materials.get(source.id);
 
   useEffect(() => {
     if (last?.id) bottom.current?.scrollIntoView({ block: "nearest" });
-  }, [last?.id, lastAnswer]);
+  }, [last?.id]);
 
   async function copy(message: string) {
     try {
@@ -62,6 +75,7 @@ export function TutorChat({ subject, lesson, clearContext }: {
     const request = {
       prompt: prompt.trim(), mode, subject: subject?.id || "", lesson: lesson?.id || "",
       who: kit.me, order: Date.now(),
+      level, ...(source && activeSource ? { material: source.id, page: source.page } : {}),
     };
     try {
       const id = await saveRequest(request);
@@ -92,14 +106,30 @@ export function TutorChat({ subject, lesson, clearContext }: {
             <span className="tu-mark"><GraduationCap size={28}/></span>
             <h1>{uiText("今天想学什么？")}</h1>
             <p>{uiText("让导师讲懂一个概念、带你一步步学，或者出题检验理解。")}</p>
+            <div className="tu-welcome-links">
+              <button className="btn" type="button" onClick={openLibrary}><FileText size={16}/>{uiText("导入教材")}</button>
+              <button className="btn" type="button" onClick={openExample}><BookOpen size={16}/>{uiText("打开示例课")}</button>
+            </div>
           </header>
         : <section className="tu-turns" aria-label={uiText("导师对话")} aria-live="polite">
             {timeline.map(({ id, data }) => {
-              const answer = answers.get(id)?.data.text;
+              const answer = answers.get(id)?.data;
+              const content = readLesson(answer?.lesson);
+              const materialID = data.material;
+              const material = materialID && materials.get(materialID);
+              if (content) content.sources = materialID && material
+                ? content.sources.filter(({ page, quote }) => page <= material.data.pages &&
+                  normalizeExcerpt(materialText(materialID, page)).includes(normalizeExcerpt(quote)))
+                : [];
               return <article className="tu-turn" key={id}>
                 <p className="tu-user-turn">{data.prompt}</p>
-                {answer
-                  ? <div className="tu-tutor-turn"><div className="tu-role"><GraduationCap size={18}/>{uiText("导师")}</div><div className="tu-answer-text">{answer}</div></div>
+                {content || answer?.text
+                  ? <div className="tu-tutor-turn"><div className="tu-role"><GraduationCap size={18}/>{uiText("导师")}</div>
+                    {content ? <LessonView key={answers.get(id)?.version} content={content}
+                      cite={materialID && material ? (page) => openSource({ id: materialID, page }) : undefined}
+                      pageLabel={material ? (page) => locationLabel(material.data.format, page) : undefined}/>
+                      : <div className="tu-answer-text">{answer?.text}</div>}
+                  </div>
                   : <div className="tu-wait"><span>{uiText("还没有导师回复")}</span><button type="button" className="btn" onClick={() => void copy(agentBrief(id, data))}><Copy size={14}/>{uiText("复制给 agent")}</button></div>}
               </article>;
             })}
@@ -113,6 +143,10 @@ export function TutorChat({ subject, lesson, clearContext }: {
         }}><Icon size={17}/>{label}</button>)}
       </div>}
       <form className="tu-compose" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
+        {activeSource && source && <div className="tu-context"><FileText size={14}/>
+          <span>{activeSource.data.title} · {locationLabel(activeSource.data.format, source.page)}</span>
+          <button className="icon-btn" type="button" aria-label={uiText("移除教材引用")} onClick={clearSource}><X size={14}/></button>
+        </div>}
         {subject && <div className="tu-context"><BookOpen size={14}/><span>{lesson?.data.title || subject.data.title || uiText("未命名主题")}</span>
           <button className="icon-btn" type="button" aria-label={uiText("移除学习上下文")} onClick={clearContext}><X size={14}/></button>
         </div>}
@@ -125,9 +159,14 @@ export function TutorChat({ subject, lesson, clearContext }: {
             }
           }}/>
         <div className="tu-compose-controls">
-          <select className="sel" aria-label={uiText("辅导方式")} value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
-            {actions.map(({ id, label }) => <option value={id} key={id}>{label}</option>)}
-          </select>
+          <div className="tu-compose-options">
+            <select className="sel" aria-label={uiText("学习基础")} value={level} onChange={(e) => onLevel(e.target.value as Level)}>
+              {Object.entries(levelLabels()).map(([id, label]) => <option value={id} key={id}>{label}</option>)}
+            </select>
+            <select className="sel" aria-label={uiText("辅导方式")} value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
+              {actions.map(({ id, label }) => <option value={id} key={id}>{label}</option>)}
+            </select>
+          </div>
           <button className="btn btn-primary" aria-label={canSend ? uiText("问导师") : uiText("复制给 agent")} disabled={working || !prompt.trim()}>
             {canSend ? <ArrowUp size={16}/> : <Copy size={15}/>}
             {working ? uiText("正在准备…") : canSend ? uiText("问导师") : uiText("复制给 agent")}

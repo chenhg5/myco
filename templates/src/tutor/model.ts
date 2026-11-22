@@ -8,15 +8,24 @@ export type Lesson = { subject?: string; title?: string; explanation?: string; s
 export type Question = { subject?: string; lesson?: string; prompt?: string; options?: string[]; answer?: number; explanation?: string; order?: number };
 export type Attempt = { question?: string; choice?: number; correct?: boolean; date?: string; who?: string };
 export type Mode = "explain" | "guide" | "practice";
-export type Request = { prompt: string; mode: Mode; subject: string; lesson: string; who: string; order: number };
-export type Answer = { text?: string };
+export type Level = "beginner" | "school" | "university";
+export type Request = { prompt: string; mode: Mode; subject: string; lesson: string; who: string; order: number; level?: Level; material?: string; page?: number };
+export type Answer = { text?: string; lesson?: unknown };
+export type Material = { title: string; format: "pdf" | "text"; pages: number; order: number };
+export type MaterialPart = { material: string; page: number; order: number; text: string };
 export const subjects = new Store<Subject & Record<string, unknown>>("subjects");
 export const lessons = new Store<Lesson & Record<string, unknown>>("lessons");
 export const questions = new Store<Question & Record<string, unknown>>("questions");
 export const attempts = new Store<Attempt & Record<string, unknown>>("attempts");
 export const requests = new Store<Request & Record<string, unknown>>("tutor_requests");
 export const answers = new Store<Answer & Record<string, unknown>>("tutor_answers");
-export const kit = new Kit([subjects, lessons, questions, attempts, requests, answers], { quiet: true });
+export const materials = new Store<Material & Record<string, unknown>>("tutor_materials");
+export const materialParts = new Store<MaterialPart & Record<string, unknown>>("tutor_material_parts");
+export const kit = new Kit([subjects, lessons, questions, attempts, requests, answers, materials, materialParts], { quiet: true });
+
+export function materialText(id: string, page: number) {
+  return materialParts.rows.filter((r) => r.data.material === id && r.data.page === page).map((r) => r.data.text).join("");
+}
 
 export function latestAttempts(subject: string, who: string) {
   const by = new Map<string, Attempt>();
