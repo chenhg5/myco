@@ -9390,3 +9390,13 @@ html.os-other ::-webkit-scrollbar-thumb:hover, html.os-other ::-webkit-scrollbar
 .pub-setup > .app-btn { justify-self: start; }
 
 .pub-setup-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+/* The agent card's details: four tabs under 详细信息, close to it. */
+.ms .ms-tabs { margin: 6px 0 14px; }
+.ms .ms-tabs .wf-tab { padding: 0 10px; }
+/* Its settings' choices line up: one width, right edge to right edge. */
+.ms .ms-fold-body .app-kv-select { width: 168px; }
+/* Rows that carry a sentence and buttons (重新接入) read top to bottom in
+   the card: the label, then the state and its actions from the left. */
+.ms .ms-fold-body .app-kv:has(.app-resume-actions) { flex-wrap: wrap; }
+.ms .ms-fold-body .app-kv:has(.app-resume-actions) > .app-kv-label { flex-basis: 100%; }
+.ms .ms-fold-body .app-resume-actions { justify-content: flex-start; flex: 1 1 100%; }

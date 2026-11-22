@@ -122,11 +122,14 @@ function SourceValue({ value, source, sourceLabel }: { value?: string; source?: 
  * follow the computer's setting); an agent that receives in its own session
  * is left to that session.
  */
-export function RunRows({ row, now, mayManage, onRefresh }: {
+export function RunRows({ row, now, mayManage, onRefresh, part = "all" }: {
   row: AgentRow;
   now: number;
   mayManage: boolean;
   onRefresh: () => Promise<void>;
+  /** "settings": model, effort, access; "quota": the plan's windows;
+   *  "all": both (the inspector). The agent card shows them apart. */
+  part?: "all" | "settings" | "quota";
 }) {
   const ag = row.st.agent;
   const rt = ag.runtime;
@@ -201,8 +204,7 @@ export function RunRows({ row, now, mayManage, onRefresh }: {
       </span>
       {runner && (
         <div className="app-kv-help">
-          {accessEditable && <>{L("现在是：", "In use: ")}<SourceValue value={accessLabel(rt?.access)} sourceLabel={access ? "App" : undefined} />
-            {L(" · 下次唤醒时生效。", " · takes effect the next time it wakes.")}</>}
+          {accessEditable && <div>{L("现在用的：", "In use: ")}<SourceValue value={accessLabel(rt?.access)} sourceLabel={access ? "App" : undefined} /></div>}
           {!rt?.max_access && L("升级那台电脑上的 myco 后才能在这里改。", "Upgrade myco on that computer to change this here.")}
           {rt?.max_access && cap !== "full" && <div>{L(
             `这台电脑最多允许「${accessLabel(cap)}」。要更高，在那台电脑的 ~/.myco/machine.yaml 里设 spawn.max_access。`,
@@ -236,6 +238,7 @@ export function RunRows({ row, now, mayManage, onRefresh }: {
   // An agent that receives in its own session runs its CLI itself: myco can
   // neither read nor set its model and quota.
   if (isInbox(ag)) {
+    if (part === "quota") return null;
     return (
       <><div className="app-kv has-help">
         <span className="app-kv-label">{L("模型", "Model")}</span>
@@ -253,6 +256,18 @@ export function RunRows({ row, now, mayManage, onRefresh }: {
 
   const quota = rt?.quota;
   const stale = quota ? quotaStaleNote(quota, now) : undefined;
+  const quotaRows = (
+    <>
+      {quota?.windows?.map((w) => (
+        <div key={w.name} className={cn("app-kv app-quota", quotaSpent(w) ? "is-over" : quotaTight(w) && "is-tight")}>
+          <span className="app-kv-label">{quotaWindowLabel(w)}</span>
+          <span className="app-kv-value">{quotaWindowText(w, now)}</span>
+        </div>
+      ))}
+      {stale && <div className="app-quota-stale">{stale}</div>}
+    </>
+  );
+  if (part === "quota") return quota?.windows?.length ? quotaRows : null;
 
   return (
     <>
@@ -292,8 +307,7 @@ export function RunRows({ row, now, mayManage, onRefresh }: {
         </span>
         {editable && (
           <span className="app-kv-help">
-            {L("现在是：", "In use: ")}<SourceValue value={rt?.model} source={rt?.model_source} />
-            {L(" · 下次唤醒时生效。", " · takes effect the next time it wakes.")}
+            {L("现在用的：", "In use: ")}<SourceValue value={rt?.model} source={rt?.model_source} />
           </span>
         )}
       </div>
@@ -317,9 +331,8 @@ export function RunRows({ row, now, mayManage, onRefresh }: {
           </span>
           {editable && (
             <span className="app-kv-help">
-              {L("现在是：", "In use: ")}{rt?.effort ? effortLabel(rt.effort) : "—"}
+              {L("现在用的：", "In use: ")}{rt?.effort ? effortLabel(rt.effort) : "—"}
               {rt?.effort && modelSourceLabel(rt.effort_source) ? L(`（${modelSourceLabel(rt.effort_source)}）`, ` (${modelSourceLabel(rt.effort_source)})`) : ""}
-              {L(" · 下次唤醒时生效。", " · takes effect the next time it wakes.")}
             </span>
           )}
         </div>
@@ -328,13 +341,7 @@ export function RunRows({ row, now, mayManage, onRefresh }: {
       {accessRow}
       {mcpRow}
 
-      {quota?.windows?.map((w) => (
-        <div key={w.name} className={cn("app-kv app-quota", quotaSpent(w) ? "is-over" : quotaTight(w) && "is-tight")}>
-          <span className="app-kv-label">{quotaWindowLabel(w)}</span>
-          <span className="app-kv-value">{quotaWindowText(w, now)}</span>
-        </div>
-      ))}
-      {stale && <div className="app-quota-stale">{stale}</div>}
+      {part === "all" && quotaRows}
       <ErrorText error={confirmAccess ? null : error} />
       <ConfirmDialog open={confirmAccess} onOpenChange={(open) => { if (!busy) setConfirmAccess(open); }}
         title={L("使用完全权限？", "Use full access?")}

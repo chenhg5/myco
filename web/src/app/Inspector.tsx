@@ -841,6 +841,14 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
   }, [row?.hub.id, ag?.machine_id, ag?.runtime?.cli, toolAsk]);
 
   const [more, setMore] = useState(openDetails);
+  type DetailTab = "settings" | "skills" | "records" | "identity";
+  const [dtab, setDtab] = useState<DetailTab>("settings");
+  const detailTabs: { key: DetailTab; label: string }[] = [
+    { key: "settings", label: L("设置", "Settings") },
+    { key: "skills", label: L("能力", "Skills") },
+    { key: "records", label: L("记录", "Records") },
+    { key: "identity", label: L("身份", "Identity") },
+  ];
   useEffect(() => { if (openDetails) setMore(true); }, [openDetails, row?.hub.id, ag?.name]);
 
   if (!row || !ag) return null;
@@ -1008,15 +1016,19 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
 
         </>
       );
-  const sec_runtime = (
-        <>
-          <section className="app-group">
-            <div className="app-group-title"><span className="name">{L("运行", "Runtime")}</span></div>
-            <div className="app-list">
+  // The rows of what runs it and who it belongs to, laid out as the
+  // inspector shows them (sec_runtime) or, in the agent card, spread over
+  // the details' tabs (sec_run, sec_belongs, sec_identity).
+  const row_type = (
+    <>
               <div className="app-kv">
                 <span className="app-kv-label">{L("类型", "Type")}</span>
                 <span className="app-kv-value">{kindLabel(kind)}</span>
               </div>
+    </>
+  );
+  const row_owner = (
+    <>
               {ag.owner && (
                 <div className="app-kv">
                   <span className="app-kv-label">{L("主人", "Owner")}</span>
@@ -1029,6 +1041,10 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
                   </span>
                 </div>
               )}
+    </>
+  );
+  const row_vis = (
+    <>
               {kind !== "human" && row.hub.me?.member && (
                 <div className="app-kv">
                   <span className="app-kv-label">{L("可见范围", "Who can see it")}</span>
@@ -1041,23 +1057,10 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
                   </span>
                 </div>
               )}
-              {!embedded && kind !== "human" && ag.binding.harness !== "machine" && (inProjects.length > 0 || (mayManage && joinable.length > 0)) && (
-                <div className="app-kv">
-                  <span className="app-kv-label">{L("项目", "Projects")}</span>
-                  <span className="app-kv-value app-kv-projects">
-                    {inProjects.map((p) => (
-                      <button key={p.name} type="button" className="app-kv-link" onClick={() => onOpenProject?.({ hubId, name: p.name })}>
-                        {p.title || p.name}{roleIn(p) === "coordinator" && <span className="app-kv-note">{L("（协调者）", " (coordinator)")}</span>}
-                      </button>
-                    ))}
-                    {mayManage && joinable.length > 0 && (
-                      <button type="button" className="app-kv-link" onClick={() => { setJoinChoice(joinable[0].name); openAction("projects"); }}>
-                        {L("加入项目", "Join")}
-                      </button>
-                    )}
-                  </span>
-                </div>
-              )}
+    </>
+  );
+  const row_recv = (
+    <>
               {kind !== "human" && (row.st.receiving || inbox) && (
                 <div className="app-kv">
                   <span className="app-kv-label">{L("接收方式", "Receives")}</span>
@@ -1068,14 +1071,20 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
                   </span>
                 </div>
               )}
+    </>
+  );
+  const row_cli = (
+    <>
               <div className="app-kv">
                 <span className="app-kv-label">CLI</span>
                 <span className="app-kv-value">
                   {kind === "human" ? "—" : <>{cliName(ag)}{cliVersion(ag) ? ` ${cliVersion(ag)}` : ""}</>}
                 </span>
               </div>
-              <RunRows row={row} now={now} mayManage={mayManage} onRefresh={onRefresh} />
-              {kind === "agent" && !isCloud(ag) && ["claude", "codex"].includes(rt?.cli || ag.binding.harness || "") && <ProviderRow row={row} onRefresh={onRefresh} />}
+    </>
+  );
+  const row_machine = (
+    <>
               <div className="app-kv">
                 <span className="app-kv-label">{L("电脑", "Machine")}</span>
                 <span className="app-kv-value">
@@ -1094,9 +1103,73 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
                   )}
                 </span>
               </div>
+    </>
+  );
+  const sec_runtime = (
+        <>
+          <section className="app-group">
+            <div className="app-group-title"><span className="name">{L("运行", "Runtime")}</span></div>
+            <div className="app-list">
+              {row_type}
+              {row_owner}
+              {row_vis}
+              {!embedded && kind !== "human" && ag.binding.harness !== "machine" && (inProjects.length > 0 || (mayManage && joinable.length > 0)) && (
+                <div className="app-kv">
+                  <span className="app-kv-label">{L("项目", "Projects")}</span>
+                  <span className="app-kv-value app-kv-projects">
+                    {inProjects.map((p) => (
+                      <button key={p.name} type="button" className="app-kv-link" onClick={() => onOpenProject?.({ hubId, name: p.name })}>
+                        {p.title || p.name}{roleIn(p) === "coordinator" && <span className="app-kv-note">{L("（协调者）", " (coordinator)")}</span>}
+                      </button>
+                    ))}
+                    {mayManage && joinable.length > 0 && (
+                      <button type="button" className="app-kv-link" onClick={() => { setJoinChoice(joinable[0].name); openAction("projects"); }}>
+                        {L("加入项目", "Join")}
+                      </button>
+                    )}
+                  </span>
+                </div>
+              )}
+              {row_recv}
+              {row_cli}
+              <RunRows row={row} now={now} mayManage={mayManage} onRefresh={onRefresh} />
+              {kind === "agent" && !isCloud(ag) && ["claude", "codex"].includes(rt?.cli || ag.binding.harness || "") && <ProviderRow row={row} onRefresh={onRefresh} />}
+              {row_machine}
             </div>
           </section>
-
+        </>
+      );
+  // The card's 设置 tab: how it runs (model, effort, access, quota,
+  // provider, how it receives), then whose it is and who sees it.
+  const hasQuota = !!rt?.quota?.windows?.length && !isInbox(ag);
+  const sec_run = (
+        <>
+          <section className="app-group">
+            <div className="app-group-title">
+              <span className="name">{L("运行", "How it runs")}</span>
+              {mayManage && kind === "agent" && <span className="app-group-note">{L("改了从下次唤醒起生效", "Changes apply from its next run")}</span>}
+            </div>
+            <div className="app-list">
+              <RunRows row={row} now={now} mayManage={mayManage} onRefresh={onRefresh} part="settings" />
+              {kind === "agent" && !isCloud(ag) && ["claude", "codex"].includes(rt?.cli || ag.binding.harness || "") && <ProviderRow row={row} onRefresh={onRefresh} />}
+              {row_recv}
+            </div>
+          </section>
+          {hasQuota && (
+            <section className="app-group">
+              <div className="app-group-title"><span className="name">{L("额度", "Plan usage")}</span></div>
+              <div className="app-list"><RunRows row={row} now={now} mayManage={mayManage} onRefresh={onRefresh} part="quota" /></div>
+            </section>
+          )}
+          {(ag.owner || (kind !== "human" && row.hub.me?.member)) && (
+            <section className="app-group">
+              <div className="app-group-title"><span className="name">{L("归属", "Belongs to")}</span></div>
+              <div className="app-list">
+                {row_owner}
+                {row_vis}
+              </div>
+            </section>
+          )}
         </>
       );
   const sec_labels = (
@@ -1210,6 +1283,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
           <section className="app-group">
             <div className="app-group-title"><span className="name">{L("身份与绑定", "Identity and binding")}</span></div>
             <div className="app-list">
+              {embedded && <>{row_type}{row_cli}{row_machine}</>}
               <div className="app-kv"><span className="app-kv-label">{L("agent 名", "Node name")}</span><span className="app-kv-value mono">{ag.name}</span></div>
               <AliasRow row={row} mayManage={mayManage} onRefresh={onRefresh} />
               <ResumeRow row={row} now={now} mayManage={mayManage} onRefresh={onRefresh} />
@@ -1281,12 +1355,21 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
       {more && (
         <div className="ms-fold-body">
           {row.st.state !== "offline" && row.st.session_in_use && row.st.receiving !== "session" && <div className="ms-alert-in"><InUseCard /></div>}
-          {sec_runtime}
-          {sec_about}
-          {sec_labels}
-          {sec_peers}
-          {sec_history}
-          {sec_identity}
+          {/* The details in four tabs (design spec §6.15), so a long card
+              reads one subject at a time: how it runs and whose it is, what
+              it is good at, what it did, and what it is. */}
+          <div className="wf-tabs ms-tabs" role="tablist" aria-label={L("看什么", "View")} data-testid="ms-tabs">
+            {detailTabs.map((t) => (
+              <button key={t.key} type="button" role="tab" aria-selected={dtab === t.key} className={cn("wf-tab", dtab === t.key && "is-on")}
+                onClick={() => setDtab(t.key)} data-tab={t.key}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+          {dtab === "settings" && <>{sec_run}{sec_labels}</>}
+          {dtab === "skills" && (kind === "human" ? <div className="app-empty-note">{L("人没有擅长和工具。", "People have no skills or tools here.")}</div> : sec_about)}
+          {dtab === "records" && <>{sec_peers}{sec_history}</>}
+          {dtab === "identity" && sec_identity}
         </div>
       )}
       <HandoverHistory row={row} now={now} />

@@ -3470,9 +3470,18 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, page.locator(".ms .ms-fold"));
       await page.locator(".ms .ms-fold-body .app-kv").first().waitFor({ timeout: 5_000 });
       if (await page.locator(".app-inspector").count()) throw new Error("详细信息不该再弹出另一个面板");
-      await page.locator(".ms .ms-fold-body").scrollIntoViewIfNeeded();
+      // The details are four tabs, one subject at a time (settings first).
+      const tabs = page.locator(".ms [data-testid=ms-tabs] [role=tab]");
+      if ((await tabs.allInnerTexts()).join("|") !== "设置|能力|记录|身份") throw new Error(`详细信息应分成 设置/能力/记录/身份 四页，实际「${(await tabs.allInnerTexts()).join("|")}」`);
+      await page.locator(".ms [data-testid=ms-tabs]").scrollIntoViewIfNeeded();
       await settle(page, 300);
       await shot(page, size, scheme, "member-card-details");
+      for (const t of ["skills", "records", "identity"]) {
+        await clickVisible(page, page.locator(`.ms [data-testid=ms-tabs] [data-tab=${t}]`));
+        await settle(page, 200);
+        await shot(page, size, scheme, `member-card-details-${t}`);
+      }
+      await clickVisible(page, page.locator(".ms [data-testid=ms-tabs] [data-tab=settings]"));
       // Delete asks calmly: who it is about, plain words, no red block.
       const del = page.locator(".ms .app-action-row.danger", { hasText: "删除这个 agent" });
       if (await del.count() && await del.isEnabled()) {
@@ -3534,6 +3543,7 @@ async function runMatrix(browser, size, scheme) {
       await pm.click();
       await page.locator(".ms").waitFor({ timeout: 10_000 });
       await clickVisible(page, page.locator(".ms .ms-fold"));
+      await clickVisible(page, page.locator(".ms [data-testid=ms-tabs] [data-tab=identity]"));
       const resume = page.locator(".ms .ms-fold-body .app-kv", { hasText: "重新接入" });
       await resume.waitFor({ timeout: 5_000 });
       await resume.scrollIntoViewIfNeeded();
@@ -3658,7 +3668,7 @@ async function runMatrix(browser, size, scheme) {
       if (!offered.some((o) => o.includes("GPT-6.1 Sol"))) throw new Error(`模型应列出电脑上 Codex 给的，实际是「${offered.join("、")}」`);
       await modelSelect.selectOption("gpt-6.1-sol");
       await lastBody((x) => x.agent === "pm-codex" && x.body.model === "gpt-6.1-sol", "模型的修改");
-      await page.waitForFunction(() => (document.querySelector(".ms .ms-fold-body")?.textContent || "").includes("现在是：gpt-6.1-sol（"), null, { timeout: 5_000 });
+      await page.waitForFunction(() => (document.querySelector(".ms .ms-fold-body")?.textContent || "").includes("现在用的：gpt-6.1-sol（"), null, { timeout: 5_000 });
       await effortSelect.selectOption("low");
       const effortBody = await lastBody((x) => x.agent === "pm-codex" && x.body.effort === "low", "推理强度的修改");
       if (effortBody.body.model !== "gpt-6.1-sol") {
@@ -3750,6 +3760,7 @@ async function runMatrix(browser, size, scheme) {
       const card = page.locator(".mb-card", { hasText: "MCP Claude" }).first();
       await card.scrollIntoViewIfNeeded(); await card.click();
       await clickVisible(page, page.locator(".ms .ms-fold"));
+      await clickVisible(page, page.locator(".ms [data-testid=ms-tabs] [data-tab=skills]"));
       const tools = page.locator('[data-testid="agent-tools"]');
       await tools.waitFor({ timeout: 10_000 });
       for (const want of ["filesystem", "project-docs", "release-check", "工作区权限下用不了"]) {
@@ -3806,8 +3817,8 @@ async function runMatrix(browser, size, scheme) {
       await select.selectOption("readonly");
       const request = await savedAccess("pm-codex", "readonly");
       if (request.model !== model || request.effort !== effort || Object.keys(request).sort().join(",") !== "access,effort,model") throw new Error("修改权限只能发送当前模型、推理强度和新权限");
-      await permission.getByText(/现在是：工作区（App）/).waitFor({ timeout: 5000 });
-      if (!(await permission.innerText()).includes("下次唤醒时生效")) throw new Error("需要说明下次唤醒生效");
+      await permission.getByText(/现在用的：工作区（App）/).waitFor({ timeout: 5000 });
+      if (!(await page.locator(".ms .ms-fold-body").innerText()).includes("改了从下次唤醒起生效")) throw new Error("需要说明下次唤醒生效");
       await shot(page, size, scheme, "member-access-capped");
       await select.selectOption("");
       await savedAccess("pm-codex", "");
