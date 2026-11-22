@@ -134,6 +134,14 @@ func (e *engine) knownFrame(id string) bool {
 	return found != nil && found.geometry == e.displayGeometry()
 }
 
+// personControls reports whether a person's remote control session is
+// connected (or connecting): then this computer has its controller.
+func (e *engine) personControls() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return len(e.controlling) > 0
+}
+
 func (e *engine) displayGeometry() [4]int {
 	if e.geometry != nil {
 		return e.geometry()
@@ -144,6 +152,10 @@ func (e *engine) displayGeometry() [4]int {
 func (e *engine) agentInput(w http.ResponseWriter, r *http.Request) {
 	if !e.cfg.Control || !e.controlAllowed() {
 		agentError(w, 403, "control_not_allowed", nil)
+		return
+	}
+	if e.personControls() {
+		agentError(w, 409, "computer_busy", intPtr(0))
 		return
 	}
 	var in inputRequest
@@ -166,6 +178,10 @@ func (e *engine) agentInput(w http.ResponseWriter, r *http.Request) {
 	defer e.inputMu.Unlock()
 	defer releaseKeys()
 	// It may have waited for the lock: check again before the first event.
+	if e.personControls() {
+		agentError(w, 409, "computer_busy", intPtr(0))
+		return
+	}
 	if !e.knownFrame(in.FrameID) {
 		agentError(w, 409, "stale_frame", intPtr(0))
 		return
