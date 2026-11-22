@@ -1342,6 +1342,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     if (st === "acked" || progressOf.get(m.id)?.length) return null;
     if (waitingShort) return { text: waitingShort, title: waitingReason };
     if (atWorkId && atWorkId !== m.id) return { text: L("排在后面", "Queued behind the current one"), title: L("它做完手上这件就看这条", "It reads this once it is done with the one at hand") };
+    if (row && row.st.in_progress > 0) return { text: L("在忙别的，做完再看", "Busy with another task"), title: L("它正在做另一件事，做完就看这条", "It reads this once it is done with the task at hand") };
     return { text: L("还没开始看", "Not opened yet") };
   };
 

@@ -394,6 +394,9 @@ export function runnerAway(st: AgentStatus, hub: HubOverview): boolean {
   // An inbox node has no runner to take its messages: it is online exactly
   // while its session runs `myco inbox wait`.
   if (isInbox(st.agent) || st.state === "offline" || st.receiving || sessionBusy(st)) return false;
+  // A runner works one task at a time and does not pull while it does: no
+  // pulls then means busy, not away.
+  if (st.in_progress > 0) return false;
   const mode = st.agent.delivery?.mode || "pull";
   const k = agentKind(st.agent);
   if (mode !== "pull" || (k !== "agent" && k !== "shell") || /cloud/.test(st.agent.binding?.harness || "")) return false;
