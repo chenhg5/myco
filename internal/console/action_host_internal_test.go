@@ -196,3 +196,13 @@ func TestControlLeaseOneGrantAtATime(t *testing.T) {
 		t.Fatal("control was not released when the holder's grant expired")
 	}
 }
+
+func TestMachineOfNodes(t *testing.T) {
+	agents := []api.Agent{{Name: "mac-codex", MachineID: "mch_1"}, {Name: "old", MachineID: "env:mac"}, {Name: "studio-machine", Kind: "machine", MachineID: "mch_2"}}
+	if got := machineOfNodes(agents, []string{"studio-machine"}); got != "mch_2" {
+		t.Fatalf("machine: %q", got)
+	}
+	if got := machineOfNodes(agents, []string{"other-machine"}); got != "" {
+		t.Fatalf("no node here: %q", got)
+	}
+}

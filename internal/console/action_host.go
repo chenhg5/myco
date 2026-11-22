@@ -7,6 +7,7 @@ import (
 	"errors"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -178,24 +179,31 @@ func (b *Backend) reconcileActionHosts() {
 }
 
 // thisMachine is this computer's machine at hub: the one its machine node
-// there runs on.
+// there runs on (a machine's own agents list leaves machine nodes out).
 func (b *Backend) thisMachine(ctx context.Context, c *client.Client) (string, error) {
 	_, nodes, _ := b.Local.localMachine()
 	if len(nodes) == 0 {
 		return "", errors.New("this computer is not a machine of any workspace")
 	}
-	ms, err := c.Machines(ctx)
+	agents, err := c.ListAgents(ctx, "", false)
 	if err != nil {
 		return "", err
 	}
-	for _, m := range ms {
-		for _, a := range m.Agents {
-			if slices.Contains(nodes, a) {
-				return m.ID, nil
-			}
-		}
+	if id := machineOfNodes(agents, nodes); id != "" {
+		return id, nil
 	}
 	return "", errors.New("this computer is not a machine of this workspace")
+}
+
+// machineOfNodes is the machine one of nodes (this computer's machine
+// nodes) runs on.
+func machineOfNodes(agents []api.Agent, nodes []string) string {
+	for _, a := range agents {
+		if slices.Contains(nodes, a.Name) && strings.HasPrefix(a.MachineID, "mch_") {
+			return a.MachineID
+		}
+	}
+	return ""
 }
 
 // hostActions is the host for hub h until ctx ends or it cannot go on; it
