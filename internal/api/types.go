@@ -118,6 +118,8 @@ type Runtime struct {
 	// missing (the pinned provider no longer exists; the machine's is used).
 	Provider       string `json:"provider,omitempty"`
 	ProviderSource string `json:"provider_source,omitempty"`
+	// ProviderHost is only the effective endpoint host and port, never URL credentials or a path.
+	ProviderHost string `json:"provider_host,omitempty"`
 	// Effort is the reasoning effort the CLI runs with; EffortSource: app
 	// (the agent's run settings) or self (the agent reported it). From v0.19.5.
 	Effort       string `json:"effort,omitempty"`

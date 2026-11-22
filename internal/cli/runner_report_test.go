@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -103,5 +104,35 @@ func TestRunnerReportsAShellAccessChange(t *testing.T) {
 	}
 	if !config.ShellAllowed(cfg) || reads.Load() == 0 {
 		t.Fatal("shell access not read")
+	}
+}
+
+func TestRuntimeProviderReportsOnlyHost(t *testing.T) {
+	var seen atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		if strings.Contains(string(raw), "private-provider-key") || strings.Contains(string(raw), "/v1/private-path") {
+			t.Error("provider details leaked to hub")
+		}
+		var rt api.Runtime
+		_ = json.Unmarshal(raw, &rt)
+		if rt.ProviderHost != "127.0.0.1:3425" || rt.ProviderSource != "env_file" {
+			t.Errorf("runtime provider host/source missing")
+		}
+		seen.Store(true)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte("{}"))
+	}))
+	defer srv.Close()
+	c, err := client.New(srv.URL, "agent-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(t.TempDir(), "agent.env")
+	os.WriteFile(file, []byte("OPENAI_BASE_URL=http://127.0.0.1:3425/v1/private-path\nOPENAI_API_KEY=private-provider-key\n"), 0600)
+	rep := &runtimeReporter{c: c, log: slog.New(slog.NewTextHandler(io.Discard, nil)), base: &api.Runtime{CLI: "codex"}, choice: resolveProvider("codex", "", file)}
+	rep.flush(context.Background())
+	if !seen.Load() {
+		t.Fatal("no runtime sent")
 	}
 }

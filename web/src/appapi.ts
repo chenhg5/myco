@@ -1101,8 +1101,8 @@ export const appApi = {
 export interface ProviderInfo { ref: string; id: string; name: string; app: string; current?: boolean; host?: string; model?: string }
 export interface ProviderList { cc_switch: boolean; providers: ProviderInfo[]; error?: string }
 /** provider: "" follows this computer; "cc-switch:<id>" is pinned; "env_file" was entered by hand. */
-export interface AgentProvider { local: boolean; provider: string; harness?: string; env_host?: string }
-export interface ManualProvider { base_url: string; api_key: string; model?: string }
+export interface AgentProvider { local: boolean; provider: string; harness?: string; env_host?: string; manual?: { base_url: string; model?: string; wire_api?: "chat" | "responses"; has_key: boolean } }
+export interface ManualProvider { base_url: string; api_key: string; model?: string; wire_api?: "chat" | "responses" }
 
 /** How messages are translated: the service, and which ones have a key. */
 export type TranslateConfig = { provider: "deepl" | "google" | "openai"; base_url?: string; model?: string; keys: Record<string, boolean> };

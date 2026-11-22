@@ -1243,3 +1243,43 @@ running and offers a retry instead of displaying an empty success address.
 
 Once Tailscale is detected, the installation card is hidden. If opening fails,
 its sign-in and permission troubleshooting guidance becomes available again.
+
+### Using magpie, cc-switch and compatible gateways
+
+myco does not embed magpie. Install and run the gateway separately on the computer
+where the agent runs. **Follow this computer** uses the CLI's own user settings:
+changes made by magpie or cc-switch apply to its next run. The agent's runtime
+shows the configured host; a loopback gateway on port 3425 is labelled magpie.
+A background runner inherits its service's environment, not an interactive shell's
+startup files; use the CLI's user configuration or capture environment variables
+with `myco runner env capture` when needed.
+
+**Pin a provider for one agent** to keep that agent independent of global switches:
+choose an existing cc-switch provider, or enter a custom base URL, key and model
+in the local App's provider settings. For Codex also select `responses` (the
+default) or `chat`, as supported by the installed Codex version and the gateway.
+myco passes this setting through; it does not implement protocol conversion.
+Changing this pin does not rewrite Claude or Codex's global configuration.
+
+The custom URL must match the CLI's protocol: use an Anthropic-compatible endpoint
+for Claude, and an OpenAI-compatible endpoint (often ending in `/v1`) for Codex.
+magpie's local gateway, LiteLLM and OneAPI-compatible services can be used this
+way. Follow the gateway's documentation for its exact endpoint and model name;
+`127.0.0.1` means the agent's own computer, not the computer running a remote App.
+
+For example, prepare a private key file, then pin a Codex agent:
+
+```sh
+myco runner provider set --agent my-codex --provider custom \
+  --base-url http://127.0.0.1:3425/v1 --model my-model \
+  --wire-api responses --key-file /private/path/gateway-key
+myco runner provider show --agent my-codex
+myco runner provider set --agent my-codex --provider machine
+```
+
+Use `--key-file -` to read the key from stdin; never place a key in a command-line
+argument. `--dry-run` validates without writing settings. Keys stay on that
+computer in a private env file and are not sent to the Hub. Each custom update
+requires the key again; reading the settings returns only whether a key exists.
+Provider changes apply to the next message. Explicit model choices in the App's
+run settings still take precedence over a provider's default model.

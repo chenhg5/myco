@@ -594,3 +594,34 @@ responses use the existing desktop `net.fetch` shape documented in
 [App OS capabilities](app-os.md#network-access-on-iphone). Old iOS clients lack
 this feature; embedded apps must show an update hint instead of assuming that
 all platforms provide desktop computer access.
+
+### Local model-provider selection
+
+`GET/PUT /app/local/agents/{name}/provider?hub_id={id}` is an App-local
+endpoint, not a Hub route. Only agents with a profile on this computer can be
+changed. Existing `{"provider":"cc-switch:<id>"}` requests still pin a cc-switch
+entry; `{"provider":""}` clears the pin and provider variables from its private
+env file, retaining unrelated variables. Changes apply on the next run.
+
+A custom provider is set with
+`{"manual":{"base_url":"http://127.0.0.1:3425/v1","api_key":"<local-only>","model":"my-model","wire_api":"responses"}}`.
+`wire_api` is Codex-only (`chat` or `responses`, default `responses`); omit it for
+Claude Code. The URL must be HTTP(S) without user information, query or fragment.
+The key is required on each update and is written only to a local 0600 env file.
+It never enters argv, Hub state or responses. GET/PUT return
+`{local, provider, harness?, env_host?, manual?: {base_url, model?, wire_api?, has_key}}`;
+`provider: "env_file"` denotes the custom env settings (compatible with older Apps).
+`manual` never includes `api_key`. No remote editing of another computer's secret
+files is provided by this route.
+
+`runtime.provider_host` optionally reports only the effective endpoint's host
+and port, without path, credentials, query or fragment. Following this computer
+observes Claude user settings and inherited variables, or Codex's active
+`model_provider` in its user TOML configuration. `provider` identifies a detected
+magpie loopback gateway (`127.0.0.1:3425`, `localhost:3425`, `[::1]:3425`), a matching
+current cc-switch provider, or the host itself. These fields are observations of
+user-level configuration, not an assertion about project/profile overrides or
+service availability. Older runners omit `provider_host`; if an older Hub specifically rejects this
+unknown field, the client retries once without it so other runtime reporting
+continues to work. The Hub stores this field with runtime JSON; no schema migration
+is needed.

@@ -54,6 +54,7 @@ export interface Runtime {
   /** model provider's name (never its key) */
   provider?: string;
   provider_source?: ProviderSource;
+  provider_host?: string;
   /** plan usage, when the CLI writes it on this computer */
   quota?: Quota;
   /** what its runner supports beyond the basics; absent from older runners */

@@ -891,7 +891,15 @@ func (c *Client) ReportMachine(ctx context.Context, r api.MachineReport) error {
 
 // ReportRuntime tells the hub the caller's CLI and model.
 func (c *Client) ReportRuntime(ctx context.Context, r api.Runtime) error {
-	return c.do(ctx, http.MethodPut, "/v1/me/runtime", nil, r, nil)
+	err := c.do(ctx, http.MethodPut, "/v1/me/runtime", nil, r, nil)
+	// Older hubs reject unknown JSON fields. Retry only that specific schema
+	// rejection, leaving authentication and other validation failures intact.
+	var apiErr *Error
+	if r.ProviderHost != "" && errors.As(err, &apiErr) && apiErr.Status == http.StatusBadRequest && strings.Contains(apiErr.Message, `unknown field "provider_host"`) {
+		r.ProviderHost = ""
+		return c.do(ctx, http.MethodPut, "/v1/me/runtime", nil, r, nil)
+	}
+	return err
 }
 
 // Machines lists machines (admin).
