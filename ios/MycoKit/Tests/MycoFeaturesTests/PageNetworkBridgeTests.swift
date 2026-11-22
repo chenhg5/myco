@@ -82,9 +82,27 @@ struct PageNetworkBridgeTests {
         #expect(try await evaluate(view, "location.hash") == "#watch?movie=2&episode=3%264")
         #expect(try await evaluate(view, "String(window.kept)") == "42")
         #expect(view.url?.query == nil)
-        coordinator.fragment = nil
+        // Reopening the exact same public deep link still repositions the page.
+        let firstRoute = PageRoute(id: "pg_checklist", fragment: coordinator.fragment)
+        let repeatedRoute = PageRoute(id: "pg_checklist", fragment: coordinator.fragment)
+        #expect(firstRoute.id == repeatedRoute.id)
+        #expect(firstRoute.navigationID != repeatedRoute.navigationID)
+        coordinator.navigationID = firstRoute.navigationID
+        #expect(coordinator.requestFragment(repeatedRoute.fragment, navigationID: repeatedRoute.navigationID))
         coordinator.applyFragment()
         try await wait(view, "String(window.hashes)", for: "2")
+        #expect(try await evaluate(view, "String(window.kept)") == "42")
+        // A normal SwiftUI redraw is not a new navigation request.
+        #expect(!coordinator.requestFragment(repeatedRoute.fragment, navigationID: repeatedRoute.navigationID))
+        coordinator.applyFragment()
+        #expect(try await evaluate(view, "String(window.hashes)") == "2")
+        // Page-owned navigation must not be undone by an unrelated redraw.
+        coordinator.fragment = "watch?movie=3"
+        #expect(!coordinator.requestFragment(repeatedRoute.fragment, navigationID: repeatedRoute.navigationID))
+        #expect(coordinator.fragment == "watch?movie=3")
+        coordinator.fragment = nil
+        coordinator.applyFragment()
+        try await wait(view, "String(window.hashes)", for: "3")
         #expect(try await evaluate(view, "location.hash") == "")
         #expect(try await evaluate(view, "String(window.kept)") == "42")
     }

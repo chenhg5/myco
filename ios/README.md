@@ -24,7 +24,9 @@ Workspace page links may include an opaque fragment, for example
 `https://hub.example.com/w/team/pages/pg_ab12#watch?movie=42&episode=2`.
 Chat links, page cards and pinned links preserve it in the page's isolated
 WebKit URL. Opening another fragment of the same page changes `location.hash`
-and emits `hashchange` without reloading the document. The fragment is never
+and emits `hashchange` without reloading the document. Reopening the identical
+link dispatches one `hashchange` event so the page can locate its target again.
+The fragment is never
 sent as a hub query or file path; fragments over 1024 encoded bytes are ignored.
 `myco.ready` includes optional `page.url` from the hub's public page address,
 without query credentials or a fragment. Local loopback or credential-bearing

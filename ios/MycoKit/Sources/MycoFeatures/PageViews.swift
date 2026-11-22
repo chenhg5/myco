@@ -206,7 +206,7 @@ struct PageScreen: View {
         NavigationStack {
             Group {
                 if let page, let bridge, page.live == true || shown != nil {
-                    PageWebView(id: id, fragment: fragment, version: page.live == true ? nil : shown, reloads: reloads, pages: session.pages, bridge: bridge, language: AppLanguage.current.rawValue, theme: colorScheme == .dark ? "dark" : "light", active: scenePhase == .active, openPage: { target in
+                    PageWebView(id: id, fragment: fragment, navigationID: router.page?.navigationID, version: page.live == true ? nil : shown, reloads: reloads, pages: session.pages, bridge: bridge, language: AppLanguage.current.rawValue, theme: colorScheme == .dark ? "dark" : "light", active: scenePhase == .active, openPage: { target in
                         router.page = PageRoute(id: target.id, fragment: target.fragment)
                     })
                         .ignoresSafeArea(edges: remoteActive ? .all : .bottom)
@@ -360,6 +360,9 @@ struct PageScreen: View {
 public struct PageRoute: Identifiable, Hashable, Sendable {
     public var id: String
     public var fragment: String?
+    /// Every opening is a navigation request, even for the same hash. The
+    /// presentation's identity remains the page id so its document stays alive.
+    public let navigationID = UUID()
 
     public init(id: String, fragment: String? = nil) {
         self.id = id
@@ -373,6 +376,7 @@ public struct PageRoute: Identifiable, Hashable, Sendable {
 struct PageWebView: UIViewRepresentable {
     let id: String
     var fragment: String? = nil
+    var navigationID: UUID? = nil
     /// nil: a live page.
     let version: Int?
     let reloads: Int
@@ -424,6 +428,8 @@ struct PageWebView: UIViewRepresentable {
         context.coordinator.active = active
         context.coordinator.view = view
         context.coordinator.fragment = PageLinks.boundedFragment(fragment)
+        context.coordinator.navigationID = navigationID
+        context.coordinator.requestedFragment = PageLinks.boundedFragment(fragment)
         context.coordinator.openPage = openPage
         if let home = PageLinks.address(of: id, fragment: fragment) { view.load(URLRequest(url: home)) }
         context.coordinator.listen()
@@ -433,8 +439,7 @@ struct PageWebView: UIViewRepresentable {
     func updateUIView(_ view: WKWebView, context: Context) {
         let coordinator = context.coordinator
         coordinator.openPage = openPage
-        let fragmentChanged = coordinator.fragment != PageLinks.boundedFragment(fragment)
-        coordinator.fragment = PageLinks.boundedFragment(fragment)
+        let fragmentChanged = coordinator.requestFragment(fragment, navigationID: navigationID)
         coordinator.bridge?.setPreferences(language: language, theme: theme)
         let prefsChanged = coordinator.language != language || coordinator.theme != theme
         let reload = coordinator.version != version || coordinator.reloads != reloads || coordinator.language != language
@@ -476,6 +481,9 @@ struct PageWebView: UIViewRepresentable {
             didSet { if oldValue != fragment { fragmentPending = true } }
         }
         private var fragmentPending = true
+        private var replayFragment = false
+        var navigationID: UUID?
+        var requestedFragment: String?
         var openPage: (PageLinks.Target) -> Void = { _ in }
         private var documentReady = false
         private var documentGeneration = 0
@@ -547,15 +555,31 @@ struct PageWebView: UIViewRepresentable {
             applyFragment()
         }
 
+        /// A fresh route request must be noticed even when its hash is identical.
+        @discardableResult
+        func requestFragment(_ next: String?, navigationID: UUID?) -> Bool {
+            let next = PageLinks.boundedFragment(next)
+            guard requestedFragment != next || self.navigationID != navigationID else { return false }
+            requestedFragment = next
+            fragment = next
+            self.navigationID = navigationID
+            fragmentPending = true
+            replayFragment = true
+            return true
+        }
+
         /// Assigning hash preserves page state and emits the normal hashchange
         /// event. It never reloads files or invalidates outstanding bridge calls.
         func applyFragment() {
             guard documentReady, fragmentPending, let view else { return }
             fragmentPending = false
+            let replay = replayFragment
+            replayFragment = false
             let hash = fragment.map { "#" + $0 } ?? ""
             guard let raw = try? JSONSerialization.data(withJSONObject: [hash]),
                   let json = String(data: raw, encoding: .utf8) else { return }
-            view.evaluateJavaScript("if (window.location.hash !== \(json)[0]) window.location.hash = \(json)[0]; void 0", completionHandler: nil)
+            let repeatEvent = replay ? "else window.dispatchEvent(new HashChangeEvent('hashchange'));" : ""
+            view.evaluateJavaScript("if (window.location.hash !== \(json)[0]) window.location.hash = \(json)[0]; \(repeatEvent) void 0", completionHandler: nil)
         }
 
         /// A same-document link, including one asking for a new window,
@@ -570,16 +594,14 @@ struct PageWebView: UIViewRepresentable {
             guard before == after else { return false }
             fragment = next
             fragmentPending = true
+            replayFragment = true
             applyFragment()
             return true
         }
 
         private func openWorkspacePage(_ target: PageLinks.Target) {
-            if target.id == id {
-                fragment = target.fragment
-                fragmentPending = true
-                applyFragment()
-            }
+            // The route carries a fresh navigation id. Its representable update
+            // applies the hash exactly once, including repeated identical links.
             openPage(target)
         }
 
