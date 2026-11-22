@@ -26,7 +26,15 @@ export interface Quota {
   windows: QuotaWindow[];
 }
 /** What the node runs unless told otherwise; absent on nodes reported by old runners. */
+export interface EncryptedProvider { id: string; from: string; body: string }
+export interface ProviderOption { ref: string; name: string; host?: string; model?: string }
 export interface RunSettings {
+  /** the provider chosen from the App for an agent on another computer. Absent: unmanaged by
+   *  the hub; "": follow its computer; "cc-switch:<id>"; "custom": a custom address, private to
+   *  that computer (its key was sealed for the agent) */
+  provider?: string;
+  /** present while a sealed key waits for its runner to take it (it applies before its next task) */
+  provider_encrypted?: EncryptedProvider;
   model?: string;
   effort?: string;
   /** Agent owner's choice; omitted on old hubs means disabled. */
@@ -51,12 +59,16 @@ export interface Runtime {
   access?: RuntimeAccess;
   /** the highest access its machine lets the owner choose (spawn.max_access); absent from older runners */
   max_access?: RuntimeAccess;
-  /** model provider's name (never its key) */
+  /** model provider's name (never its key): "magpie 网关", the cc-switch provider's name, or the host */
   provider?: string;
+  /** where its requests go, host:port only (runners that report it) */
+  provider_host?: string;
+  /** the providers its computer offers (cc-switch, never a key), when its runner can switch them remotely */
+  providers?: ProviderOption[];
   provider_source?: ProviderSource;
   /** plan usage, when the CLI writes it on this computer */
   quota?: Quota;
-  /** what its runner supports beyond the basics; absent from older runners */
+  /** what its runner supports beyond the basics; absent from older runners ("remote_provider": its provider can be switched from the App) */
   features?: string[];
   /** why its runner went offline, said as it stopped: "stopped" (absent from older runners and while it runs) */
   away?: "stopped" | string;
@@ -213,6 +225,56 @@ export interface PageState { state: unknown; version: number; updated_by?: strin
 
 /** What a conversation keeps at hand (置顶; hubs from v0.20.3): a web
  *  address, a file, or one of its messages. Both parties see the same. */
+/** Something a person should hear about (GET /v1/console/notices, hub
+ *  v0.21.21+). The hub decides once whether it is announced (`announce`;
+ *  when not, `quiet` says why), so every device agrees. */
+export type NoticeKind =
+  | "asking" | "decision" | "approval" | "failed" | "run_failed" | "stuck"
+  | "answered" | "said" | "mention"
+  | "progress";
+export type NoticeTier = "needs_you" | "results" | "activity";
+
+export interface Notice {
+  seq: number;
+  id: string;
+  kind: NoticeKind;
+  tier: NoticeTier;
+  key: string;
+  ref?: string;
+  /** Where it leads: "agent:<name>", "project:<name>", "workflow:<id>?run=<run>", "superagent". */
+  target?: string;
+  project?: string;
+  actor?: string;
+  subject?: string;
+  message_id?: string;
+  announce: boolean;
+  quiet?: "tier" | "muted" | "paused" | "quiet_hours" | "off";
+  created_at: string;
+  read_at?: string;
+  resolved_at?: string;
+  message?: Message;
+}
+
+export interface NoticeFeed {
+  notices: Notice[];
+  /** Read after this next time. */
+  last: number;
+  /** Open needs-you notices. */
+  badge: number;
+}
+
+/** What a person chose (GET/PUT /v1/console/notice-prefs). */
+export interface NoticePrefs {
+  off?: boolean;
+  tiers?: Partial<Record<NoticeTier, boolean>>;
+  /** Minutes from midnight in an IANA zone; from > to spans the night. */
+  quiet?: { from: number; to: number; zone?: string };
+  paused_until?: string;
+  /** Scope ("agent:<name>", "project:<name>", "workflow:<id>", "superagent") → when the mute ends ("0001-01-01T00:00:00Z": never). */
+  mutes?: Record<string, string>;
+  updated_at?: string;
+}
+
 export interface Pin {
   id: string;
   kind: "link" | "file" | "message";
@@ -447,6 +509,17 @@ export interface Approval {
   id: string; agent: string; what: string; reason?: string; method: string; path: string; body?: string;
   status: "pending" | "done" | "denied" | "expired" | "withdrew"; result?: number; result_body?: string; decided_by?: string;
   created_at: string; expires_at: string; decided_at?: string;
+  /** "" (absent): a superagent's held request; "action_grant": an agent asks to act on a computer
+   *  (payload {grant_id}; approving may send {permissions?, ttl_seconds?} to allow less). v0.21.21 */
+  kind?: string; payload?: { grant_id?: string } & Record<string, unknown>;
+}
+
+/** What an agent may do on a computer, approved by its owner (agent actions, v0.21.21). */
+export interface ActionGrant {
+  id: string; agent: string; owner: string; target: { kind: "machine" | "page"; id: string }; target_name?: string;
+  permissions: string[]; requested?: string[]; reason?: string; message_id?: string; approval_id: string;
+  state: "pending" | "active" | "denied" | "expired" | "revoked" | "ended"; end_reason?: string;
+  created_at: string; expires_at?: string; ended_at?: string;
 }
 
 // Optional remote desktop signaling. No image, audio or input payloads use the Hub API.

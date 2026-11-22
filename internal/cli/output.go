@@ -62,6 +62,7 @@ var exitByCode = map[string]int{
 	"unauthenticated":      ExitPermission,
 	"conflict":             ExitConflict,
 	"invalid_state":        ExitConflict,
+	"unsupported":          ExitUnavailable,
 	client.CodeUnavailable: ExitUnavailable,
 	client.CodeTimeout:     ExitTimeout,
 	"not_configured":       ExitUsage,

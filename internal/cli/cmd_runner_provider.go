@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"os"
@@ -67,14 +68,21 @@ with: myco runner provider set --agent <name> --provider cc-switch:<id>`,
 		Long: `--provider cc-switch:<id> pins a cc-switch provider: it is read again before every run, so key
 changes made in cc-switch apply, and nothing secret is copied. --provider machine removes the pin
 (the CLI then uses whatever this machine is set to). Applies from the agent's next message; no
-restart needed. Claude Code and Codex agents.`,
+restart needed. Claude Code and Codex agents.
+--provider custom pins --base-url and --model; read the key using --key-file <path>
+(or --key-file - for stdin). Codex accepts --wire-api chat|responses (default responses).
+Keys stay in a local private env file; neither keys nor full endpoints are sent to the hub.`,
 		Examples: []string{
 			"myco runner provider set --agent mac-claude-docs --provider cc-switch:deepseek",
 			"myco runner provider set --agent mac-claude-docs --provider machine",
 		},
 		Flags: []Flag{
 			{Name: "agent", Kind: String, Help: "Agent whose profile to update (default: the current session's identity)"},
-			{Name: "provider", Kind: String, Help: "cc-switch:<id> (see: myco runner provider list), or machine"},
+			{Name: "provider", Kind: String, Help: "cc-switch:<id>, custom, or machine"},
+			{Name: "base-url", Kind: String, Help: "Custom http(s) provider base URL"},
+			{Name: "model", Kind: String, Help: "Custom provider model"},
+			{Name: "wire-api", Kind: Enum, Values: []string{"chat", "responses"}, Help: "Codex custom provider protocol (default responses)"},
+			{Name: "key-file", Kind: String, Help: "Read the key from a private file (- for stdin); never put it in argv"},
 		},
 		Run: handler(func(e *env) error {
 			path, err := e.agentProfilePath()
@@ -87,9 +95,39 @@ restart needed. Claude Code and Codex agents.`,
 			}
 			ref := strings.TrimSpace(e.in.String("provider"))
 			out := map[string]any{"agent": cfg.Agent, "profile": path}
+			var manual *provider.Manual
+			if ref != "custom" && (e.in.IsSet("base-url") || e.in.IsSet("key-file") || e.in.IsSet("model") || e.in.IsSet("wire-api")) {
+				return errorf("invalid_argument", ExitUsage, "use --provider custom", "custom flags require --provider custom")
+			}
 			switch {
 			case ref == "":
 				return &Error{Code: "invalid_usage", Message: "--provider is required", Suggestion: "myco runner provider list", Exit: ExitUsage}
+			case ref == "custom":
+				file := e.in.String("key-file")
+				if file == "" {
+					return errorf("invalid_argument", ExitUsage, "pass --key-file <path> or --key-file -", "--key-file is required")
+				}
+				var reader io.Reader
+				if file == "-" {
+					reader = e.in.Stdin
+				} else {
+					f, err := os.Open(file)
+					if err != nil {
+						return errorf("invalid_argument", ExitUsage, "check --key-file", "cannot open key file")
+					}
+					defer f.Close()
+					reader = f
+				}
+				key, err := io.ReadAll(io.LimitReader(reader, 16385))
+				if err != nil || len(key) > 16384 {
+					return errorf("invalid_argument", ExitUsage, "use a key file up to 16 KB", "cannot read key")
+				}
+				manual = &provider.Manual{BaseURL: e.in.String("base-url"), APIKey: string(key), Model: e.in.String("model"), WireAPI: e.in.String("wire-api")}
+				if err := manual.Validate(providerCLIs[profileHarness(cfg)]); err != nil {
+					return errorf("invalid_argument", ExitUsage, "check custom provider fields", "%v", err)
+				}
+				ref = ""
+				out["provider"], out["host"], out["name"] = "env_file", hostFromBase(manual.BaseURL), "custom address"
 			case ref == "machine" || ref == "none":
 				ref = ""
 				out["provider"] = "machine"
@@ -108,6 +146,21 @@ restart needed. Claude Code and Codex agents.`,
 			if e.in.Bool("dry-run") {
 				out["action"] = "set_provider"
 				return e.dryRun(out)
+			}
+			if manual != nil {
+				file := cfg.Runner.EnvFile
+				if file == "" {
+					sum := sha256.Sum256([]byte(path))
+					file = filepath.Join(config.Dir(e.defaultPath), "env", fmt.Sprintf("provider-%x.env", sum[:12]))
+				}
+				if err := provider.WriteEnv(file, cfg.Agent, manual.Variables(providerCLIs[profileHarness(cfg)])); err != nil {
+					return err
+				}
+				cfg.Runner.EnvFile = file
+			} else if ref == "" && cfg.Runner.EnvFile != "" {
+				if err := provider.WriteEnv(cfg.Runner.EnvFile, cfg.Agent, nil); err != nil {
+					return err
+				}
 			}
 			cfg.Runner.Provider = ref
 			if err := config.Save(path, cfg); err != nil {
@@ -136,7 +189,7 @@ restart needed. Claude Code and Codex agents.`,
 				return err
 			}
 			ch := resolveProvider(profileHarness(cfg), cfg.Runner.Provider, cfg.Runner.EnvFile)
-			out := map[string]any{"agent": cfg.Agent, "pinned": cfg.Runner.Provider, "provider": ch.name, "source": ch.source}
+			out := map[string]any{"agent": cfg.Agent, "pinned": cfg.Runner.Provider, "provider": ch.name, "provider_host": ch.host, "source": ch.source}
 			if ch.warn != "" {
 				out["warning"] = ch.warn
 			}

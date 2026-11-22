@@ -124,10 +124,10 @@ type ProviderAware interface{ AppliesProvider() }
 
 // ProviderSettings are a provider's variables and optional model.
 type ProviderSettings struct {
-	Env   map[string]string
+	Env   map[string]string `json:"-"`
 	Model string
 	// ConfigArgs are CLI arguments that pin the provider (Codex: -c key=value).
-	ConfigArgs []string
+	ConfigArgs []string `json:"-"`
 }
 
 // EnvList returns p's variables as KEY=VALUE pairs (nil-safe).

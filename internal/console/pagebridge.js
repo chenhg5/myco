@@ -91,6 +91,8 @@
         if (d.latest) err.latest = d.latest;
         w.reject(err);
       } else w.resolve(d.value);
+    } else if (d.myco === "actions.invoke" || d.myco === "actions.cancel") {
+      takeAction(d);
     } else if (d.myco === "preferences") {
       applyPreferences(d.preferences);
     } else if (d.myco === "data" && Array.isArray(d.changes)) {
@@ -190,7 +192,7 @@
     "system.info", "system.disks", "system.processes", "system.usage", "system.apps", "system.settings", "process.kill",
     "fs.paths", "fs.list", "fs.stat", "fs.read", "fs.write", "fs.mkdir", "fs.move", "fs.copy", "fs.delete", "fs.trash", "fs.scan*",
     "fs.search*", "fs.watch*", "fs.thumbnail", "fs.pick", "fs.saveAs", "fs.reveal", "fs.open",
-    "exec.run", "exec.spawn*", "clipboard.read", "clipboard.write", "notify", "screen.capture", "screen.record*", "net.fetch",
+    "exec.run", "exec.spawn*", "clipboard.read", "clipboard.write", "notify", "screen.capture", "screen.region", "screen.record*", "net.fetch",
     "audio.sources", "audio.record*", "speech.status", "speech.install*", "speech.transcribe*", "speech.diarize*",
   ].forEach(function (n) {
     var job = n.slice(-1) === "*";
@@ -204,7 +206,58 @@
     os[parts[0]][parts[1]] = f;
   });
 
-  var ready = call("ready").then(function (v) { ctx = v; if(v.preferences) applyPreferences(v.preferences); return v; });
+  // myco.actions: what an agent may ask this page's app to do (page.export:
+  // a file of the page). Only in the App's renderer, which opens the page
+  // for one job with an instance the App gave it (ctx.render.instance);
+  // anywhere else, registering does nothing. One job at a time.
+  var registered = null; // {descriptors, onInvoke}
+  var inflight = {};     // id -> AbortController
+  function renderInstance() { return ctx && ctx.render && typeof ctx.render.instance === "string" ? ctx.render.instance : ""; }
+  function announce() {
+    var inst = renderInstance();
+    if (!inst || !registered) return;
+    parent.postMessage({ myco: "actions.registered", instance: inst, actions: registered.descriptors.map(function (a) { return { name: a.name, version: a.version }; }) }, "*");
+  }
+  function takeAction(d) {
+    var inst = renderInstance();
+    if (!inst || d.instance !== inst || typeof d.id !== "string") return;
+    if (d.myco === "actions.cancel") {
+      var c = inflight[d.id];
+      if (c) { delete inflight[d.id]; c.abort(); }
+      return;
+    }
+    var reply = function (msg, transfer) {
+      if (!inflight[d.id]) return; // cancelled meanwhile: no late result
+      delete inflight[d.id];
+      msg.myco = "actions.result"; msg.instance = inst; msg.id = d.id;
+      parent.postMessage(msg, "*", transfer || []);
+    };
+    if (!registered || Object.keys(inflight).length) {
+      parent.postMessage({ myco: "actions.result", instance: inst, id: d.id, error: { code: registered ? "busy" : "unsupported", message: registered ? "an action is running" : "this page's app registered no actions" } }, "*");
+      return;
+    }
+    var known = registered.descriptors.some(function (a) { return a.name === d.action && a.version === d.version; });
+    var ac = new AbortController();
+    inflight[d.id] = ac;
+    if (!known) { reply({ error: { code: "unsupported", message: "this page's app has no " + d.action + " v" + d.version } }); return; }
+    Promise.resolve().then(function () {
+      return registered.onInvoke({ id: d.id, action: d.action, version: d.version, args: d.args || {}, signal: ac.signal });
+    }).then(function (r) {
+      if (!r || typeof r.media_type !== "string" || !r.data) throw Object.assign(new Error("the app returned no file"), { code: "export_failed" });
+      var data = r.data;
+      return (data instanceof Blob ? data.arrayBuffer() : Promise.resolve(data instanceof ArrayBuffer ? data : new Uint8Array(data).slice().buffer)).then(function (buf) {
+        var res = { media_type: r.media_type, data: buf };
+        if (r.width) res.width = r.width;
+        if (r.height) res.height = r.height;
+        if (r.pages) res.pages = r.pages;
+        reply({ result: res }, [buf]);
+      });
+    }).catch(function (e) {
+      reply({ error: { code: (e && e.code) || (ac.signal.aborted ? "cancelled" : "export_failed"), message: (e && e.message) || "export failed" } });
+    });
+  }
+
+  var ready = call("ready").then(function (v) { ctx = v; if(v.preferences) applyPreferences(v.preferences); announce(); return v; });
   ready.catch(function () { /* (a page that does not use the bridge) */ });
 
   window.myco = {
@@ -213,12 +266,24 @@
     // What this App's bridge can do, for pages to check before trying:
     // "download-media": myco.download saves video and sound too (mp4, …);
     // "os": myco.os (this computer: files, commands, the screen…).
-    features: ["download-media", "os", "preferences", "remote"],
+    features: ["download-media", "os", "preferences", "remote", "page-actions"],
     os: os,
     // Remote sessions are separate from local OS calls and need App consent.
     remote: {call: function(action, args) {
       return ready.then(function() { return call("remote.call", {action:action, args:args || {}}, action === "install" ? 600000 : 30000); });
     }},
+    // register([{name, version, input_schema}], onInvoke): onInvoke({id,
+    // action, version, args, signal}) resolves {media_type, data (Blob,
+    // ArrayBuffer or bytes), width?, height?, pages?}. Returns dispose.
+    actions: {
+      register: function (descriptors, onInvoke) {
+        if (!Array.isArray(descriptors) || typeof onInvoke !== "function") throw new Error("myco.actions.register(descriptors, onInvoke)");
+        var mine = { descriptors: descriptors.filter(function (a) { return a && typeof a.name === "string" && a.version >= 1; }), onInvoke: onInvoke };
+        registered = mine;
+        announce();
+        return function () { if (registered === mine) registered = null; };
+      },
+    },
     get state() { return ctx ? ctx.state : null; },
     get version() { return ctx ? ctx.version : 0; },
     on: function (event, f) {

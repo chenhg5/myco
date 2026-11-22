@@ -253,6 +253,9 @@ and an unlocked desktop. The initial adapter supports direct LAN/Tailscale video
 and keyboard/mouse, without audio, automatic public relay or unattended service.
 The component is downloaded separately and may be uninstalled from the app's
 settings. It is not installed or started for people who do not use it.
+An App keeps using an older compatible release it finds installed; `status`
+then returns `update_available: true`, and `install` fetches the App's own
+release. Agent actions (`remote.desktop`) need component 0.3.0 or later.
 
 The iOS page bridge advertises `remote-controller`: `devices`, `connect`,
 `session`, `disconnect` and `close` use the current workspace credential.
@@ -286,8 +289,10 @@ returns a job. Write `"stop"` to finalize the movie; `done` resolves to
 own origin. MOV, MP4 and WebM are allowed alongside audio recordings, with the
 same directory and symlink checks. Files are never uploaded by this capability.
 
-macOS uses the system screen recorder: interactive region selection or the main
-screen, optional microphone and click indicators. Screen Recording permission
+macOS uses native recording APIs: ScreenCaptureKit recording output on macOS 15+,
+with AVFoundation on older Macs, a region or the main screen, optional microphone
+and click indicators. Stop waits for the movie-file completion callback; it does
+not interrupt a `screencapture` subprocess. Screen Recording permission
 (and microphone permission when requested) is controlled by macOS. Windows uses
 a separately installed FFmpeg on the login-shell PATH, with `gdigrab` and
 `h264_mf`, and records the desktop without audio; region/microphone options are
@@ -297,7 +302,8 @@ host supports it, or import an existing recording.
 
 The default limit is 600 seconds, maximum 3600. Only one native screen recording
 runs at a time. Cancelling requests a graceful stop to finalize the original;
-a stuck recorder is killed after eight seconds. The recording app cancels its
+Mac finalization has a ten-second timeout; Windows kills a stuck encoder after
+eight seconds. The recording app cancels its
 job when leaving and warns before closing an active recording. No capture starts
 merely by opening the app, and no remote-desktop component is started.
 
@@ -310,10 +316,23 @@ Settings → Privacy & Security → Screen & System Audio Recording, naming the
 currently used myco / myco-preview app; microphone permission is separate.
 
 On macOS, `screen.record` also accepts a non-interactive `region: {x,y,w,h}`
-(rectangle in screen coordinates; each side 16–16384 pixels). This is useful for
+(rectangle in screen points; each side 16–16384 points). This is useful for
 bounded capture of a known region. `region` and `interactive` are mutually
-exclusive; Windows does not support regions yet. Interactive video uses the
-system tool's `-Jvideo` mode, never the incompatible `-i` still-image mode.
+exclusive; Windows does not support regions yet. The Mac GUI advertises
+`screen.region`, a native drag-to-select overlay returning `{x,y,w,h}`. With
+`interactive: true`, `screen.record` emits `selecting`, waits for the user to drag
+a rectangle and confirm Start Recording. A cancellable five-second countdown
+then gives time to prepare; no movie capture begins during that countdown.
+The `started` event follows the native recording-start callback. Cancelling the
+picker produces `cancelled`, not a successful recording. The App hides its
+windows during capture. A click-through region outline and a movable floating
+bar stay visible, showing preparation, recording time, and saving. Its Stop & edit
+button (also available in the menu bar) finalizes the movie and returns to the
+editor. On ScreenCaptureKit, recorder-control windows are explicitly excluded
+from the movie. Headless servers do not advertise the picker. Older
+Apps without `screen.region` should offer main-screen recording instead of
+claiming a region picker is available. Coordinates use screen points, not Retina
+movie pixels; negative monitor coordinates are preserved.
 Recorder failures preserve bounded diagnostic text rather than misreporting every
 failed launch as a permission problem.
 

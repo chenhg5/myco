@@ -454,6 +454,8 @@ myco runner start --all                       # 前台运行；新入网的 agen
 myco runner start --all --max-concurrent 2    # 同时最多跑 2 个 CLI
 ```
 
+默认同时最多 3 个（服务用 `myco runner service install --max-concurrent <n>` 改）。超出的 agent 收到任务会排队等空位，等的时候仍显示在线。一台电脑上有好几个 agent 都在做长任务时，把这个数调大，别的 agent 就不用一直等。
+
 **放到后台长期运行（推荐）**：一条命令装成系统服务，开机或登录后自动启动，崩溃了会自动重启。macOS 用 launchd，Linux 用 systemd 的用户服务：
 ```bash
 myco runner service install            # 安装并立即启动（先用 --dry-run 看会写什么）
@@ -490,7 +492,7 @@ runner:
 
 | access | Claude Code | Codex |
 |---|---|---|
-| 不设置 | headless 默认（需要确认的工具会被拒绝） | `codex exec` 默认 |
+| 不设置 | headless 默认（需要确认的工具会被拒绝） | `codex exec` 默认（沙箱不能联网，`myco` 连不上 Hub；所以加入的 Codex 会话默认用 `workspace`） |
 | `readonly` | `--permission-mode default --disallowedTools Edit,Write,NotebookEdit,Bash` | `-c sandbox_mode="read-only"` |
 | `workspace` | `--permission-mode acceptEdits`（工作目录内的文件编辑和常见文件操作命令如 `touch`/`rm`/`mkdir` 自动放行；写工作目录外、其他程序需要审批，headless 下即被拒绝） | `-c sandbox_mode="workspace-write"` 加 `-c sandbox_workspace_write.network_access=true` |
 | `full` | `--permission-mode bypassPermissions` | `--dangerously-bypass-approvals-and-sandbox` |
@@ -1092,6 +1094,7 @@ sudo myco hub restore --from myco-backup-hub-20261121-093000.tar.gz --db /var/li
     sudo /usr/local/bin/myco console link --name <设备名>
     ```
     点 `myco://` 开头的链接也能直接唤起 App 添加。也可以手动填 Hub 地址和控制台令牌（`myco console token create --name <设备名>`）。令牌存在钥匙串里，可以单独作废（`myco console token revoke`）。
+- **通知**（Mac 和 Windows，Hub v0.21.21 起）：App 开着时（窗口在不在前面都一样），有需要你的事就弹系统通知：agent 问你问题、工作流等你决定、superagent 请你批准、你派的任务没做成；点一下打开 App 到那里。回复和进展会记下来，但默认不弹。正在看的会话不弹；打开一个会话，它的通知在你所有设备上都算已读。弹不弹由 Hub 按你的偏好统一决定（免打扰时段按你的时区、暂停、静音的会话和项目），所以几台设备一致。Mac 上 Dock 图标的数字是还在等你的事；第一次弹通知时系统会问你是否允许（系统设置 → 通知 → myco）。想让 App 不弹，启动时设置环境变量 `MYCO_APP_NOTICES=off`。
 - **打开快**：各个页面显示过的内容（节点、对话列表、打开过的对话、项目、设置里的成员等）会记下来，再打开或 App 重启后先显示上次的内容，后台再刷新成最新的。存在这台电脑上的 `app-cache.db`（和 Hub 列表同一个目录），用钥匙串里的密钥加密，最多约 50 MB；移除一个 Hub、或它的令牌失效时，它的内容随之删掉。Hub 连不上时，节点页和对话标题旁会写「离线 · 显示的是 x 分钟前的数据」。「设置 → 关于 → 本机缓存」可以清除；启动 App 时设置环境变量 `MYCO_APP_CACHE=off` 则不保存（v0.18.34 起）。
 - **添加节点**有三种方式：
   - **本机的 agent**：App 列出这台电脑上最近的 Claude Code 和 Codex 会话（目录、第一句话、最后活动时间），点一下就加入当前 Hub，并自动启动本机的 runner 服务。
@@ -1179,8 +1182,69 @@ WebRTC 短暂断连会等待十秒恢复；单次工作区状态查询失败不�
 修改的是剪辑方案，不会自动上传视频。
 
 新版 Mac App 支持选择区域或主屏幕，可选麦克风，暂不采集电脑内部声音。
+在原生选择界面拖动框选，再点「开始录制」；App 暂时隐藏，点击 Mac 菜单栏的
+「停止录制」或悬浮条的「停止并剪辑」返回。录制中持续显示区域边框和计时，
+停止后先保存，再自动进入剪辑。取消框选不会开始录制。重点放大默认进、退
+各 0.9 秒，可在属性中分别调节过渡时长。
 Windows 原生录制需另外安装支持 gdigrab 和 h264_mf 的 FFmpeg，目前只录整个桌面、
 不录声音。支持屏幕采集的浏览器宿主可使用系统屏幕／窗口选择器；其他环境仍能导入
 已有录像。界面单次最多录制十分钟。离开前先停止录制，本机原片位于
 `~/.myco/recordings`，导入失败时可重试或打开原片位置。第一版不含自动跟随鼠标、
 自动字幕和摄像头画中画。
+
+### App 公网接入指引
+
+在设置 → 工作区 → 开放到公网中，没安装 Tailscale 也能选中 Funnel，查看官方下载、
+Windows PowerShell / macOS Homebrew 与启动 / Linux 安装启动命令，以及可复制给
+这台电脑上 agent 的说明。浏览器登录和系统网络权限由本人确认，之后点「我已安装，
+重新检测」再点「开放」。首次使用 Funnel 或 HTTPS 时可能需要在浏览器授权后重试。
+检测到程序不代表已经登录或连接。只有拿到有效公网地址、且公网健康检查通过才显示
+成功；失败会保留本机工作区并提示重试，不再显示地址为空的成功页。
+
+检测到已安装 Tailscale 后，安装指引会收起；如果开放失败，再显示登录和权限排障帮助。
+
+### 和 magpie、cc-switch 及兼容网关一起用
+
+myco 不内嵌 magpie。请在运行 agent 的电脑上单独安装、启动网关。**跟随这台电脑**
+使用 CLI 自己的用户配置：magpie 或 cc-switch 改动全局设置后，下次运行就会使用新设置。
+运行时显示配置的地址主机；本机 3425 端口的网关标为 magpie。后台 runner 继承服务的
+环境，不会自动读取交互式 shell 的启动文件；需要时配置 CLI 的用户设置，或运行
+`myco runner env capture` 捕获环境变量。
+
+**为一个 agent 单独钉住渠道**，可以避免全局切换影响它：在本机 App 的渠道设置里
+选择 cc-switch 渠道，或填写自定义地址、密钥和模型。Codex 还需选择 `responses`
+（默认）或 `chat`，具体以已安装的 Codex 版本和网关支持为准。myco 只传递配置，
+不会做协议转换，也不会重写 Claude 或 Codex 的全局配置文件。
+
+Claude 要填兼容 Anthropic 协议的地址；Codex 要填兼容 OpenAI 协议的地址，通常以
+`/v1` 结尾。magpie 本机网关、LiteLLM、OneAPI 类服务都可按这种方式使用，具体路径
+和模型名以网关说明为准。`127.0.0.1` 指运行 agent 的那台电脑，而不是远程 App 所在电脑。
+
+先准备一个私有密钥文件，再为 Codex agent 设置，例如：
+
+```sh
+myco runner provider set --agent my-codex --provider custom \
+  --base-url http://127.0.0.1:3425/v1 --model my-model \
+  --wire-api responses --key-file /private/path/gateway-key
+myco runner provider show --agent my-codex
+myco runner provider set --agent my-codex --provider machine
+```
+
+`--key-file -` 从标准输入读取密钥，不要把密钥放进命令行参数。`--dry-run` 只校验，
+不保存。密钥只保存在该电脑的私有 env 文件里，不发给 Hub。每次更新自定义渠道都要
+重新提供密钥，读取设置时只返回是否已保存密钥。渠道切换在下一条消息生效；App
+运行设置中明确选择的模型仍优先于渠道默认模型。
+
+#### 从另一台电脑修改服务商
+
+Hub 和 runner 更新后，agent 的主人可以从另一台 App 选择「跟随这台电脑」、清除
+自定义地址，或选择目标电脑上 cc-switch 提供的渠道。Runner 在下一条任务开始前
+应用，并回报实际使用的服务商。其他人（包括另一名 Hub 管理员）不能修改有主人的
+agent 的服务商。旧 runner 或旧 Hub 的远程控制保持只读。
+
+远程填写自定义地址和密钥，还要求工作区开启**端到端加密**，且目标 runner 已登记
+加密公钥。发起端 App 先把配置封给目标 agent，再发送给 Hub；目标电脑解密并写入
+本机私有文件，确认取用后清除运行设置中的待取密文。在确认前，App 可以显示正在
+等待 runner 应用。Hub 不保存明文密钥，也不用普通消息传递密钥。没有开启端到端
+加密时，请在目标电脑上的 App 或 CLI 中填写。远程选择 cc-switch 渠道不需要 E2E，
+因为传递的只是渠道标识。

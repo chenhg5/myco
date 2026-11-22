@@ -34,6 +34,22 @@ struct PageBridgeTests {
         (try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])) as? [String: Any] ?? [:]
     }
 
+    @Test func readyExposesTheHubsPublicPageURLWhenAvailable() async throws {
+        let hub = FakeHub()
+        let (one, _) = try await bridge(hub)
+        var page = one.page
+        page.url = "https://hub.example.com/w/team/pages/pg_checklist"
+        one.update(page)
+        let ready = object(try await one.answer("ready", [:]))
+        #expect((ready["page"] as? [String: Any])?["url"] as? String == page.url)
+        for address in [nil, "http://127.0.0.1:7777/pages/pg_checklist", "https://user:secret@hub.example.com/pages/pg_checklist"] as [String?] {
+            page.url = address
+            one.update(page)
+            let reply = object(try await one.answer("ready", [:]))
+            #expect((reply["page"] as? [String: Any])?["url"] == nil)
+        }
+    }
+
     @Test func theSharedStateIsReadAndWrittenAndAConflictAnswersTheLatest() async throws {
         let hub = FakeHub()
         let (one, _) = try await bridge(hub)

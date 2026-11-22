@@ -32,11 +32,11 @@
   "myco/slides": {
     "en": {
       "name": "Slides",
-      "description": "Create presentations with covers, key points, charts, cards, tables and quotes. Edit on the slide, reorder, present full screen and export editable PowerPoint."
+      "description": "Agents write content; the page arranges covers, points, charts, cards, tables and quotes. Co-edit and present; compatible Apps let agents export editable PowerPoint files and Markdown outlines."
     },
     "zh": {
       "name": "幻灯片",
-      "description": "agent 写内容，网页按版式和主题排好：封面、要点、图表、数字卡片、表格、引言；点哪改哪，拖动换顺序，全屏放映，导出能接着改的 PowerPoint。"
+      "description": "agent 写内容，网页按版式和主题排好：封面、要点、图表、数字卡片、表格和引言。共同编辑、放映；agent 可通过新版 App 导出可继续编辑的 PowerPoint 和 Markdown。"
     }
   },
   "myco/meeting": {
@@ -47,6 +47,16 @@
     "zh": {
       "name": "会议记录",
       "description": "录下在 Zoom、腾讯会议、飞书里开的会：你的麦克风和别人的声音分开录，会后在这台电脑上转成文字（不上传），自动分出不同的人；点一句从那里播放，改字、改名字、搜索、导出；让 agent 写纪要（总结、决定、待办、章节）。录音只存在这台电脑上，要在 myco App 里录音。"
+    }
+  },
+  "myco/tutor": {
+    "en": {
+      "name": "Learning workspace",
+      "description": "Import a textbook, ask your tutor to teach at your level, and explore interactive diagrams and quick checks with source citations."
+    },
+    "zh": {
+      "name": "学习工作台",
+      "description": "导入教材，按学习基础听导师分层讲解，边看原文引用、边操作交互图和做小题。"
     }
   },
   "myco/code": {
@@ -149,24 +159,34 @@
       "description": "一起养成好习惯：每人给自己打卡，看这周打了几天、连续了几天、别人打了没；家人、团队一起坚持，agent 能帮你提醒和统计。"
     }
   },
+  "myco/logo-studio": {
+    "en": {
+      "name": "Logo Studio",
+      "description": "Turn a brand brief into original geometric marks with your agent. Compare concepts, inspect guides, edit vector layers and export SVG."
+    },
+    "zh": {
+      "name": "标志工坊",
+      "description": "输入品牌需求，请 agent 设计原创几何标志。比较不同方案、查看构图辅助线、微调矢量图层，再导出 SVG。"
+    }
+  },
   "myco/design-studio": {
     "en": {
       "name": "Design studio",
-      "description": "Create websites, app interfaces, posters, presentations, social images and dashboards. Edit canvases and layers, preview HTML, collect feedback, save versions and export SVG, PNG or HTML with your agents."
+      "description": "Design websites, interfaces, posters and dashboards with agents. Edit canvases and layers, preview HTML, collect feedback and save versions; compatible Apps let agents export shared SVG, PNG, HTML or JSON files."
     },
     "zh": {
       "name": "设计工作台",
-      "description": "从设计需求到作品：网页、应用界面、海报、演示文稿、社交图片和数据看板。黑白灰工作空间，可编辑画布与图层、预览 HTML 原型、收集反馈、保存版本，和 agent 一起迭代，导出 SVG、PNG、HTML 或设计数据。"
+      "description": "和 agent 一起设计网页、界面、海报和数据看板。可编辑画布与图层，预览 HTML，收集反馈并保存版本；agent 可通过新版 App 导出共享作品的 SVG、PNG、HTML 或 JSON。"
     }
   },
   "myco/whiteboard": {
     "en": {
       "name": "Whiteboard",
-      "description": "An infinite canvas for sticky notes, text, shapes and connectors. Drag, zoom and color your ideas; work with agents on brainstorms, retrospectives and flows."
+      "description": "An infinite canvas with sticky notes, text, shapes and connectors. Co-edit with agents and export SVG/PNG; compatible Apps let agents export shared boards in the background."
     },
     "zh": {
       "name": "白板",
-      "description": "一块无限大的画布：便签、文字、矩形、椭圆、连线，拖动、缩放、改颜色；agent 能往上贴便签，适合头脑风暴、复盘、画流程。"
+      "description": "一块无限大的画布：便签、文字、形状和连线。和 agent 共同编辑，导出 SVG/PNG；兼容新版 App 时，agent 可在后台导出共享白板。"
     }
   },
   "myco/mindmap": {
@@ -207,6 +227,16 @@
     "zh": {
       "name": "修图",
       "description": "快速修照片：裁剪旋转、调色、十几种滤镜、磨皮美白、文字、贴纸、涂鸦、马赛克、边框，按住对比原图，导出 JPG 或 PNG。改了随时能退回去；照片只存在打开它的电脑上，修了什么大家都看得到，agent 也能按你说的帮你调。"
+    }
+  },
+  "myco/arcade": {
+    "en": {
+      "name": "Arcade Emulator",
+      "description": "Play local NES cartridges and CHIP-8 games with touch controls, or verify and launch arcade ROM ZIPs with MAME in the desktop App."
+    },
+    "zh": {
+      "name": "街机模拟器",
+      "description": "导入本机 NES 卡带或玩 CHIP-8 游戏，支持触屏手柄。桌面 App 还可调用 MAME 校验并运行街机 ROM ZIP。"
     }
   },
   "myco/gomoku": {
@@ -257,6 +287,26 @@
     "zh": {
       "name": "影视",
       "description": "用自己的影视源搜索电影与剧集、选集播放，收藏待看清单；观看进度保存在这台电脑，支持续播、倍速和跳过片头片尾。不内置影视源。"
+    }
+  },
+  "myco/scheduling": {
+    "en": {
+      "name": "Calendar",
+      "description": "Plan work and life in month, week and day views. Click to create events, drag to reschedule, add all-day and recurring events, search and export calendars with agents. Appointment booking is a secondary tool."
+    },
+    "zh": {
+      "name": "日历",
+      "description": "管理自己的工作与生活日程：月、周、日视图，点击日期新建，拖动改期，全天与重复日程，搜索和日历导出。与 agent 一起安排；预约管理放在次级入口。"
+    }
+  },
+  "myco/personality": {
+    "en": {
+      "name": "Personality explorer",
+      "description": "Explore four preference pairs with 32 original questions, read 16 perspectives and keep a private reflection journal. Answers stay on your device; choose to share a summary with agents. Not the official MBTI® assessment."
+    },
+    "zh": {
+      "name": "人格探索",
+      "description": "用 32 个原创小问题探索四维人格偏好，阅读 16 种可能，写下自我反思。答案仅留在本机，主动分享摘要后可与 agent 一起讨论。非官方 MBTI® 测评。"
     }
   }
 }

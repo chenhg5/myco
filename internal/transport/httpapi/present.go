@@ -56,7 +56,7 @@ func (s *Server) agentDTO(a *domain.Agent) api.Agent {
 	out.OwnerID, out.Owner = a.Owner, s.ownerName(a.Owner)
 	if rt := a.Runtime; rt != (domain.Runtime{}) {
 		out.Runtime = &api.Runtime{CLI: rt.CLI, CLIVersion: rt.CLIVersion, Model: rt.Model, ModelSource: rt.ModelSource, Access: rt.Access,
-			Provider: rt.Provider, ProviderSource: rt.ProviderSource, Effort: rt.Effort, EffortSource: rt.EffortSource, MaxAccess: rt.MaxAccess, Quota: quotaDTO(rt.Quota),
+			Provider: rt.Provider, ProviderSource: rt.ProviderSource, ProviderHost: rt.ProviderHost, Effort: rt.Effort, EffortSource: rt.EffortSource, MaxAccess: rt.MaxAccess, Quota: quotaDTO(rt.Quota),
 			Features: rt.FeatureList(), Away: rt.Away, Env: rt.Env, Models: modelsDTO(rt.ModelList())}
 		if rt.Tools != "" {
 			var tools struct {
@@ -70,8 +70,15 @@ func (s *Server) agentDTO(a *domain.Agent) api.Agent {
 			}
 		}
 	}
+	if out.Runtime != nil {
+		_ = json.Unmarshal([]byte(a.Runtime.Providers), &out.Runtime.Providers)
+	}
 	if rs := a.RunSettings; rs != (domain.RunSettings{}) {
-		out.RunSettings = &api.RunSettings{Model: rs.Model, Effort: rs.Effort, Access: rs.Access, MCPTools: &rs.MCPTools}
+		out.RunSettings = &api.RunSettings{Model: rs.Model, Effort: rs.Effort, Access: rs.Access, MCPTools: &rs.MCPTools, Provider: rs.Provider}
+		if rs.ProviderEncrypted != nil {
+			e := rs.ProviderEncrypted
+			out.RunSettings.ProviderEncrypted = &api.EncryptedProvider{ID: e.ID, From: e.From, Body: e.Body}
+		}
 	}
 	if a.Private() {
 		out.Visibility = string(domain.VisibilityPrivate)
@@ -193,6 +200,7 @@ var statusByCode = map[domain.ErrorCode]int{
 	domain.CodeUnauthenticated:  http.StatusUnauthorized,
 	domain.CodeInternal:         http.StatusInternalServerError,
 	domain.CodeRateLimited:      http.StatusTooManyRequests,
+	domain.CodeUnsupported:      http.StatusNotImplemented,
 	domain.CodeReplaced:         http.StatusUnauthorized,
 }
 

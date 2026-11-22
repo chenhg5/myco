@@ -1,0 +1,19 @@
+{
+  "results": [
+    {
+      "id": "example-result",
+      "questionnaire": "personality32-v1",
+      "scores": {
+        "EI": 4,
+        "SN": -8,
+        "TF": -6,
+        "JP": -10
+      },
+      "completed_at": "2026-11-22T00:00:00.000Z",
+      "participant": "示例结果",
+      "reflection": "",
+      "shared_by": "example",
+      "example": true
+    }
+  ]
+}

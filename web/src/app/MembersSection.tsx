@@ -143,7 +143,7 @@ export function MembersSection({ hubsOv, onRefresh }: { hubsOv?: HubOverview[]; 
           </div>
         ))}
         <p className="app-hint">
-          {L("每个人都能看到所有 agent 和对话、给任何 agent 发消息；只能管理自己加进来的 agent 和电脑。所有者和管理员可以管理所有人的。", "Everyone sees every node and conversation and can message any node, but manages only the nodes and machines they added. The owner and admins manage everyone’s.")}
+          {L("每个人都能看到团队可见的 agent、给它们发消息，但只看得到自己和自己的 agent 参与的对话；只能管理自己加进来的 agent 和电脑。所有者和管理员看得到所有对话，也能管理所有人的。", "Everyone sees the agents shared with the team and can message them, but sees only the conversations they or their own agents take part in, and manages only the agents and computers they added. The owner and admins see every conversation and manage everyone’s.")}
         </p>
       </section>
 
@@ -313,6 +313,22 @@ export function AuditSection({ hubsOv }: { hubsOv?: HubOverview[] }) {
   );
 }
 
+/** 我的设备 on its own, for simple mode (Settings › Workspaces), where the
+ *  members page is hidden: one person still adds their phone or another
+ *  computer here. */
+export function MyDevices({ hubsOv }: { hubsOv?: HubOverview[] }) {
+  const hubs = memberHubs(hubsOv);
+  const [hubId, setHubId] = useState("");
+  const hub = hubs.find((h) => h.id === hubId) || hubs[0];
+  if (!hub) return null;
+  return (
+    <>
+      <HubPicker hubs={hubs} value={hub.id} onChange={setHubId} />
+      <DevicesCard hubId={hub.id} currentId={hub.me?.device?.id} />
+    </>
+  );
+}
+
 /** 我的设备: this person's apps on the hub, a one-time link to add another,
  *  and removing one (its credential stops working). */
 function DevicesCard({ hubId, currentId }: { hubId: string; currentId?: string }) {
@@ -377,7 +393,7 @@ function DevicesCard({ hubId, currentId }: { hubId: string; currentId?: string }
       </section>
 
       <Modal open={linkOpen} onOpenChange={(o) => !busy && setLinkOpen(o)} title={L("添加另一台设备", "Add another device")}
-        description={L("在另一台设备（比如 Windows 电脑）的 myco App 里「添加工作区」时粘贴这个链接，它会以你的身份连上这个工作区。", "Paste this link under “Add Hub” in the myco app on your other device (a Windows PC, say); it connects to this Hub as you.")}>
+        description={L("在另一台设备（手机，或另一台电脑）的 myco App 里加入工作区时粘贴这个链接，它会以你的身份连上这个工作区。", "Paste this link when joining a workspace in the myco app on your other device (your phone, or another computer); it connects to this Hub as you.")}>
         {busy && !link && <div className="app-progress"><span className="app-spinner" />{L("正在生成链接…", "Creating link…")}</div>}
         <ErrorText error={linkOpen ? error : null} />
         {link && (

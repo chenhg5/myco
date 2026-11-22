@@ -21,7 +21,7 @@ import (
 )
 
 const protocol = 1
-const version = "0.2.0"
+const version = "0.3.0"
 
 type description struct {
 	Type string `json:"type"`
@@ -57,6 +57,14 @@ type engine struct {
 	start      func(context.Context, *webrtc.TrackLocalStaticRTP) error
 	input      func(inputEvent) error
 	canControl func() bool
+	// Agent actions (agent.go).
+	snap     func(ctx context.Context, maxWidth int, format string) ([]byte, error)
+	snapMu   sync.Mutex
+	frames   []frame
+	geometry func() [4]int
+	// Sessions a person controls through: agents' input waits its turn
+	// (one controller per computer).
+	controlling map[string]bool
 }
 
 func (e *engine) controlAllowed() bool {
@@ -87,6 +95,7 @@ func (e *engine) close(id string) {
 		e.inputMu.Unlock()
 	}
 	delete(e.peers, id)
+	delete(e.controlling, id)
 	e.mu.Unlock()
 	if p != nil {
 		p.cancel()
@@ -107,9 +116,11 @@ func (e *engine) handler() http.Handler {
 				states[id] = p.err
 			}
 		}
-		json.NewEncoder(w).Encode(map[string]any{"protocol": protocol, "version": version, "sessions": states, "control": e.controlAllowed(), "input_features": []string{"text"}})
+		json.NewEncoder(w).Encode(map[string]any{"protocol": protocol, "version": version, "sessions": states, "control": e.controlAllowed(), "input_features": []string{"text"}, "agent_actions": agentActions})
 	})
 	m.HandleFunc("POST /sessions/{id}", e.connect)
+	m.HandleFunc("POST /agent/observe", e.observe)
+	m.HandleFunc("POST /agent/input", e.agentInput)
 	m.HandleFunc("DELETE /sessions/{id}", func(w http.ResponseWriter, r *http.Request) {
 		e.close(r.PathValue("id"))
 		e.mu.Lock()
@@ -169,6 +180,12 @@ func (e *engine) connect(w http.ResponseWriter, r *http.Request) {
 	// Reserve before allocating a peer so concurrent requests cannot start capture twice.
 	id := r.PathValue("id")
 	e.peers[id] = nil
+	if in.Control {
+		if e.controlling == nil {
+			e.controlling = map[string]bool{}
+		}
+		e.controlling[id] = true
+	}
 	e.mu.Unlock()
 	success := false
 	defer func() {

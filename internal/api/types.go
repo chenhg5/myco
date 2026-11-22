@@ -103,6 +103,20 @@ type ResumeRequest struct {
 	Binding Binding `json:"binding"`
 }
 
+// ProviderOption is an available channel on the runner's own computer; no secrets.
+type ProviderOption struct {
+	Ref   string `json:"ref"`
+	Name  string `json:"name"`
+	Host  string `json:"host,omitempty"`
+	Model string `json:"model,omitempty"`
+}
+
+type EncryptedProvider struct {
+	ID   string `json:"id"`
+	From string `json:"from"`
+	Body string `json:"body"`
+}
+
 // Runtime is what an agent runs on.
 type Runtime struct {
 	CLI        string `json:"cli,omitempty"`
@@ -118,6 +132,9 @@ type Runtime struct {
 	// missing (the pinned provider no longer exists; the machine's is used).
 	Provider       string `json:"provider,omitempty"`
 	ProviderSource string `json:"provider_source,omitempty"`
+	// ProviderHost is only the effective endpoint host and port, never URL credentials or a path.
+	ProviderHost string            `json:"provider_host,omitempty"`
+	Providers    *[]ProviderOption `json:"providers,omitempty"`
 	// Effort is the reasoning effort the CLI runs with; EffortSource: app
 	// (the agent's run settings) or self (the agent reported it). From v0.19.5.
 	Effort       string `json:"effort,omitempty"`
@@ -202,14 +219,26 @@ type QuotaWindow struct {
 // RunSettings choose how an agent's runner starts its CLI ("" follows the
 // machine's own setting). PUT /v1/agents/{name}/run-settings (from v0.19.5).
 type RunSettings struct {
-	Model  string `json:"model"`
-	Effort string `json:"effort"`
+	Provider          *string            `json:"provider,omitempty"`
+	ProviderEncrypted *EncryptedProvider `json:"provider_encrypted,omitempty"`
+	Model             string             `json:"model"`
+	Effort            string             `json:"effort"`
 	// MCPTools, when present in a request, changes whether configured MCP
 	// tools may run without a prompt outside full access.
 	MCPTools *bool `json:"mcp_tools,omitempty"`
 	// Access: readonly, workspace or full ("" follows the machine). Only the
 	// agent's owner may change it; left out of a request, it stays as it is.
 	Access string `json:"access,omitempty"`
+}
+
+// RunSettingsPatch preserves every field omitted by an App update.
+type RunSettingsPatch struct {
+	Model             *string            `json:"model,omitempty"`
+	Effort            *string            `json:"effort,omitempty"`
+	Access            *string            `json:"access,omitempty"`
+	MCPTools          *bool              `json:"mcp_tools,omitempty"`
+	Provider          *string            `json:"provider,omitempty"`
+	ProviderEncrypted *EncryptedProvider `json:"provider_encrypted,omitempty"`
 }
 
 // Machine is a computer, server or cloud environment agents run on.
@@ -2198,20 +2227,26 @@ type MeSuperagent struct {
 
 // Approval is a superagent's request held for its owner.
 type Approval struct {
-	ID         string     `json:"id"`
-	Agent      string     `json:"agent"`
-	What       string     `json:"what"`
-	Reason     string     `json:"reason,omitempty"`
-	Method     string     `json:"method"`
-	Path       string     `json:"path"`
-	Body       string     `json:"body,omitempty"`
-	Status     string     `json:"status"` // pending done denied expired withdrew
-	Result     int        `json:"result,omitempty"`
-	ResultBody string     `json:"result_body,omitempty"`
-	DecidedBy  string     `json:"decided_by,omitempty"`
-	CreatedAt  time.Time  `json:"created_at"`
-	ExpiresAt  time.Time  `json:"expires_at"`
-	DecidedAt  *time.Time `json:"decided_at,omitempty"`
+	ID     string `json:"id"`
+	Agent  string `json:"agent"`
+	What   string `json:"what"`
+	Reason string `json:"reason,omitempty"`
+	Method string `json:"method"`
+	Path   string `json:"path"`
+	Body   string `json:"body,omitempty"`
+	// Kind is "" for a superagent's held request (Method/Path/Body), or a
+	// typed request any agent may make ("action_grant": Payload is
+	// {"grant_id": …}; approving may narrow it with an
+	// ActionGrantNarrow body). v0.21.21.
+	Kind       string          `json:"kind,omitempty"`
+	Payload    json.RawMessage `json:"payload,omitempty"`
+	Status     string          `json:"status"` // pending done denied expired withdrew
+	Result     int             `json:"result,omitempty"`
+	ResultBody string          `json:"result_body,omitempty"`
+	DecidedBy  string          `json:"decided_by,omitempty"`
+	CreatedAt  time.Time       `json:"created_at"`
+	ExpiresAt  time.Time       `json:"expires_at"`
+	DecidedAt  *time.Time      `json:"decided_at,omitempty"`
 }
 
 // ApprovalList answers GET /v1/console/approvals and /v1/me/approvals.
@@ -2224,3 +2259,76 @@ type RemoteDevice = remotedesktop.Device
 type RemoteSession = remotedesktop.Session
 type RemoteOffer = remotedesktop.Offer
 type RemoteDescription = remotedesktop.Description
+
+// Notice is something a person should hear about (GET /v1/console/notices,
+// hub v0.21.21+): an agent asking them, a decision waiting, a failure, an
+// answer. Announce says whether devices announce it (a banner, a sound, a
+// push), decided once by the hub from the person's preferences; Quiet says
+// why not ("tier", "muted", "paused", "quiet_hours", "off").
+type Notice struct {
+	Seq  int64  `json:"seq"`
+	ID   string `json:"id"`
+	Kind string `json:"kind"`
+	// Tier: needs_you, results or activity.
+	Tier string `json:"tier"`
+	Key  string `json:"key"`
+	Ref  string `json:"ref,omitempty"`
+	// Target is where it leads: "agent:<name>", "project:<name>",
+	// "workflow:<id>?run=<run>", "superagent".
+	Target    string     `json:"target,omitempty"`
+	Project   string     `json:"project,omitempty"`
+	Actor     string     `json:"actor,omitempty"`
+	Subject   string     `json:"subject,omitempty"`
+	MessageID string     `json:"message_id,omitempty"`
+	Announce  bool       `json:"announce"`
+	Quiet     string     `json:"quiet,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+	ReadAt    *time.Time `json:"read_at,omitempty"`
+	// ResolvedAt: it no longer waits for the person.
+	ResolvedAt *time.Time `json:"resolved_at,omitempty"`
+	// Message is the message it is about, when there is one (sealed as
+	// stored on an end-to-end encrypted hub).
+	Message *Message `json:"message,omitempty"`
+}
+
+// NoticeFeed is a page of a person's notices. Read after Last next time;
+// Badge counts what still needs them (open needs_you notices).
+type NoticeFeed struct {
+	Notices []Notice `json:"notices"`
+	Last    int64    `json:"last"`
+	Badge   int      `json:"badge"`
+}
+
+// NoticeReadRequest is the body of POST /v1/console/notices/read: mark as
+// seen what leads to Target ("" for all), up to Through (0 for all).
+type NoticeReadRequest struct {
+	Target  string `json:"target,omitempty"`
+	Through int64  `json:"through,omitempty"`
+}
+
+// NoticeReadResponse says how many notices changed.
+type NoticeReadResponse struct {
+	Changed int `json:"changed"`
+}
+
+// NoticePrefs is what a person chose about being told
+// (GET/PUT /v1/console/notice-prefs). Tiers overrides the defaults
+// (needs_you on, results and activity off); Quiet hours are minutes from
+// midnight in Zone (IANA); Mutes maps a scope ("agent:<name>",
+// "project:<name>", "workflow:<id>", "superagent") to when the mute ends
+// (the zero time: never).
+type NoticePrefs struct {
+	Off         bool                 `json:"off,omitempty"`
+	Tiers       map[string]bool      `json:"tiers,omitempty"`
+	Quiet       *NoticeQuiet         `json:"quiet,omitempty"`
+	PausedUntil *time.Time           `json:"paused_until,omitempty"`
+	Mutes       map[string]time.Time `json:"mutes,omitempty"`
+	UpdatedAt   *time.Time           `json:"updated_at,omitempty"`
+}
+
+// NoticeQuiet is a span of quiet hours.
+type NoticeQuiet struct {
+	From int    `json:"from"`
+	To   int    `json:"to"`
+	Zone string `json:"zone,omitempty"`
+}

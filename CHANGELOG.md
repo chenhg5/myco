@@ -4,6 +4,132 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.21.24
+
+- **Links straight to a film and episode**: a link to a Cinema page can name a title, source and episode, and the desktop App opens that spot (the iPhone and Android Apps get it with their next builds). Agents can find a title for you and send such a link; copying the link of what is playing works too. Older Apps open the page from its start.
+- **Page exports with two Apps open**: two Apps signed in as the same person (two computers, or a preview beside the App) no longer take the export host from each other, which made agents' page exports stall and flooded the hub's audit log. Each App can render exports; one that closes no longer ends the agent's grant.
+- **Agents waiting their turn stay online**: a computer runs at most 3 agent CLIs at once by default. An agent whose task waits for a free one no longer shows as offline, and its message reads "busy with another task" instead of "its myco is not running". With several agents on long tasks on one computer, raise the number: `myco runner service install --max-concurrent <n>`.
+- A member's chat in a project shows all its exchanges and pages back through them.
+- An agent's grant to export a page reads as "may export <page>", not as access to a screen. After the hub is upgraded, an App that was already open offers page exports within minutes.
+- **New apps**: a logo studio where an agent draws geometric logos with guides; a personality exploration with private answers; an arcade with CHIP-8 and NES emulators, native MAME for desktop ROMs and an iPhone as the controller. Design Studio text lines up the same in every browser.
+- Upgrade the server's hub (`sudo myco upgrade`, or from the App) and myco on your computers (for agents waiting their turn).
+
+**中文**
+
+- **直达某部片、某一集的链接**：影视页面的链接可以指定作品、线路和集数，桌面 App 点开直接到那里（iPhone 和 Android 的 App 下一次出包时带上）。可以让 agent 帮你找片、回一个这样的链接；正在播放的那一集也能直接复制链接。旧版 App 点开只会打开页面首页。
+- **开着两个 App 时页面导出不再卡住**：同一个人登录的两个 App（两台电脑，或者正式版旁边开着预览版）不再互相抢导出宿主。之前会让 agent 的页面导出卡住，还会刷爆 hub 的审计日志。现在每个 App 都能渲染导出；其中一个关掉，agent 的授权也不会因此结束。
+- **排队的 agent 不再显示离线**：一台电脑默认同时最多跑 3 个 agent。任务在排队等空位的 agent 不再显示离线，消息下面显示「在忙别的，做完再看」，不再说「对方的 myco 没在运行」。一台电脑上好几个 agent 都在做长任务时，可以把上限调大：`myco runner service install --max-concurrent <n>`。
+- 项目里某个成员的对话，能看到它和所有人的往来，也能往前翻页。
+- agent 导出页面的授权条写的是「可以导出「页面名」」，不再写成看屏幕。hub 升级以后，已经开着的 App 几分钟内就能接页面导出。
+- **新应用**：标志工坊（agent 画几何标志，带辅助线）；人格探索（答案只存在本机）；街机（CHIP-8、NES 模拟器，桌面用原生 MAME 运行 ROM，iPhone 当手柄）。设计工作台的文字在各个浏览器里对齐一致。
+- 需要升级服务器上的 hub（`sudo myco upgrade`，或在 App 里升级），电脑上的 myco 也要升级（排队不掉线那条）。
+
+## v0.21.23
+
+- **Agents can export a shared page as a file**: an agent you approve (or one that can already see the page) can export a whiteboard (SVG, PNG), a design (SVG, PNG, HTML, JSON) or a slide deck (PPTX, Markdown) without anyone clicking. The App renders the page in the background and the file goes only to that agent. Revoking the approval stops the export at once.
+- **New apps**: a calendar for personal scheduling and shared bookings across time zones, and a learning workspace where a tutor teaches from the materials you import and guides you through a course.
+- Fixes: approval cards line up with the message box; calendar time grids and event buttons line up.
+- Upgrade the server's hub for page exports (`sudo myco upgrade`, or from the App).
+
+**中文**
+
+- **agent 能把共享页面导出成文件**：经你批准的 agent（或本来就能看到这个页面的 agent）可以直接导出白板（SVG、PNG）、设计稿（SVG、PNG、HTML、JSON）、幻灯片（PPTX、Markdown），不用人点。App 在后台渲染页面，文件只给这个 agent；撤销批准会立刻停止导出。
+- **新应用**：日历，安排个人日程、跨时区预约；学习工作台，导师按你导入的资料讲课、带你学完一门课。
+- 修复：审批卡片和输入框对齐；日历时间格和事件按钮对齐。
+- 页面导出需要升级服务器上的 hub（`sudo myco upgrade`，或在 App 里升级）。
+
+## v0.21.22
+
+- **Use any model gateway for an agent**: an agent's Provider can now be a custom address (base URL, model and key; Codex also picks Responses or Chat Completions), so it can run through magpie, LiteLLM, OneAPI or any Anthropic- or OpenAI-compatible endpoint. The key stays in a private file on that computer and is never shown again.
+- **See where an agent's requests really go**: an agent that follows its computer's settings shows the actual route, such as "magpie gateway (127.0.0.1:3425)" or the cc-switch provider in use. See "Use it with magpie or cc-switch" in INSTALL.md.
+- **Change the provider of an agent on another computer**: pick "follow that computer", one of that computer's cc-switch providers, or clear its custom address, from the App on any of your computers. A custom address with a key can be set remotely in end-to-end encrypted workspaces only: the key is encrypted for that agent, and the hub passes on only ciphertext.
+- The App: an agent's details are in four tabs (Settings, Skills, Records, Identity), and its tools are listed one per row, grouped by kind.
+- The claude.ai guide starts with a diagram of how everything connects; the App's user guide has fuller pages with screenshots.
+- Upgrade the server's hub for the provider changes (`sudo myco upgrade`, or from the App), and myco on the computer whose agents you change from elsewhere.
+
+**中文**
+
+- **agent 可以用任何模型网关了**：agent 的「服务商」可以填自定义地址（base URL、模型和密钥；Codex 还能选 Responses 或 Chat Completions），所以能走 magpie、LiteLLM、OneAPI，或任何兼容 Anthropic / OpenAI 的地址。密钥只存在那台电脑的私有文件里，存了以后不再显示。
+- **看得到 agent 的请求实际走哪**：「跟随这台电脑」的 agent 会显示实际去处，比如「magpie 网关（127.0.0.1:3425）」或正在用的 cc-switch 渠道。见 INSTALL.zh-CN.md 的「和 magpie / cc-switch 一起用」。
+- **能改别的电脑上 agent 的服务商**：在你任何一台电脑的 App 里，选「跟随它那台电脑」、它那台电脑上的某个 cc-switch 渠道，或清除自定义地址。带密钥的自定义地址只在开了端到端加密的工作区里能远程填：密钥先加密给那个 agent，hub 只经手密文。
+- App：agent 详情分成四个标签（设置、擅长、记录、身份），工具按种类分组、一行一个。
+- claude.ai 教程开头加了一张「怎么连起来的」图；App 的使用文档内容更全，配了截图。
+- 服务商相关的改动需要升级服务器上的 hub（`sudo myco upgrade`，或在 App 里升级）；要从别处改哪台电脑上的 agent，那台电脑上的 myco 也要升级。
+
+## v0.21.21
+
+- **Reliable public workspace setup**: Windows waits for a public address and verifies the workspace is reachable before reporting success. An unfinished tunnel shows a retryable error while the local workspace keeps running.
+- Tailscale setup offers official downloads, platform-specific install and start commands, and instructions to give an agent. The installation guide disappears after Tailscale is detected; failed connections show troubleshooting help.
+- **Desktop notifications**: the App sends system notifications for workspace events that need your attention, opens the relevant conversation when clicked, and shows an unread badge on Mac. Upgrade the workspace hub (`sudo myco upgrade`) to enable the notice feed.
+- Mac App: fixed a crash at startup when updating the Dock badge.
+- Agents can request time-limited permission to use a computer; you can approve view-only access or revoke permission from the conversation. Upgrade the hub to enable grants; actual computer control also requires a compatible remote component, published separately.
+
+**中文**
+
+- **更可靠的公网开放流程**：Windows 会等公网地址生成并验证工作区可访问，再显示成功。隧道尚未就绪时给出可重试的错误，本地工作区继续运行。
+- Tailscale 安装提供官方下载、各平台的安装启动命令，以及可交给 agent 的操作说明。检测到已安装后收起安装指引，连接失败时显示排障帮助。
+- **桌面系统通知**：工作区有需要你处理的事情时，App 会发送系统通知；点击可打开对应对话，Mac 还会显示未读角标。工作区 Hub 需升级（`sudo myco upgrade`）才能提供通知。
+- Mac App：修复更新 Dock 角标时导致启动崩溃的问题。
+- Agent 可以申请限时使用电脑；你能在对话里只批准查看，或撤销授权。授权功能需升级 Hub；实际控制电脑还需另行发布的兼容远控组件。
+
+## v0.21.20
+
+- **Add your phone in simple mode too**: a new install starts in simple mode, which hid My devices (on Settings › Members). It now shows at the foot of Settings › Workspaces, with Add another device, so you can add your iPhone.
+- The App: a page link from a workspace on this computer that serves the local network (http://192.168.x.x:7777/pages/…) opens in the App's page panel instead of the browser.
+- The App: pictures in messages keep their size while they load again, so switching workspaces or reopening a chat no longer makes the messages jump.
+- Docs: a step-by-step guide with screenshots, from installing the App to your agent on claude.ai and your phone (docs/guide-claude-ai.md).
+
+**中文**
+
+- **简单模式下也能加手机了**：新装的 App 默认是简单模式，它把「我的设备」（在 设置 › 成员 里）藏了。现在它显示在 设置 › 工作区 最下面，点「添加另一台设备」就能把 iPhone 加进来。
+- App：这台电脑上对局域网开放的工作区给出的页面链接（http://192.168.x.x:7777/pages/…），现在在 App 的页面面板里打开，不再跳到浏览器。
+- App：消息里的图片重新加载时保留原来的大小，切换工作区或重新打开对话时，消息不再跳动。
+- 文档：一篇带截图的图文教程，从安装 App 到连上你在 claude.ai 的 agent，再到手机上指挥（docs/guide-claude-ai.zh-CN.md）。
+
+## v0.21.19
+
+- **A user guide in the App** (使用文档): short pages on everything the App does, with search, links between pages, and the previous and next page at the foot. Open it from the workspace menu, Settings › About, the Mac's Help menu, or the last step of the getting-started checklist. It covers voice, split panes, shortcuts and the community too.
+- **Whiteboard 1.3**: drag a node's edge point onto another to connect them; elbow, curved or straight connectors, dashed lines and labels; box select, copy, cut, paste and duplicate (connectors come along); align and distribute; lock items; undo and redo; export SVG. See docs/whiteboard.md.
+- Proxy console and Remote Desktop: their icons show correctly in the app library.
+- The new Whiteboard and icons reach a workspace when its hub is upgraded (`sudo myco upgrade`, or from the App).
+
+**中文**
+
+- **App 里有使用文档了**：每个功能一小页，可以搜索，页面之间能互相跳转，页尾有上一页、下一页。从左下角工作区菜单、设置 › 关于、Mac 的「帮助」菜单，或者新手清单的最后一步打开。语音、分屏、快捷键和社群也都有介绍。
+- **白板 1.3**：从节点边上的连接点拖到另一个节点就能连线；折线、曲线、直线，虚线和标签；框选、复制、剪切、粘贴、复制一份（连线一起带上）；对齐和均匀分布；锁定；撤销和重做；导出 SVG。说明见 docs/whiteboard.md。
+- 代理工作台和远程桌面：在应用库里的图标显示正常了。
+- 新版白板和图标在工作区的 Hub 升级后生效（`sudo myco upgrade`，或在 App 里升级）。
+
+## v0.21.18
+
+- **New installs can join or start another workspace**: the workspace menu at the bottom left offers "Join or start a workspace" and "New workspace on this computer" in simple mode too (a new install starts in simple mode, and the welcome page sends people there).
+- **Codex sessions added from this computer can use myco**: they now run with workspace access by default. Before, they had no level, so Codex used its own sandbox without network and could not reach the workspace. An agent that runs with its CLI's default access now shows "Default access" next to the input, and its owner can switch it there.
+- Recording Studio (Mac): a five-second countdown you can cancel before recording starts, so you can get the window ready.
+
+**中文**
+
+- **新装的 App 也能加入或新建工作区**：简单模式下，左下角的工作区菜单也有「加入或新建工作区」和「在这台电脑上新建工作区」了（新装的 App 默认是简单模式，欢迎页又会引导大家去那里）。
+- **从这台电脑导入的 Codex 会话能用 myco 了**：默认用工作区权限。以前没给它设权限，Codex 用的是自己那个不能联网的沙箱，连不上工作区。用 CLI 默认权限运行的 agent，输入框旁会显示「默认权限」，它的主人可以在那里切换。
+- 录屏工作台（Mac）：开始录制前有 5 秒倒计时，可以取消，方便先把窗口准备好。
+
+## v0.21.17
+
+- **Project notes, redesigned**: a project's page now has a header like other detail pages (name, goal, Edit, New task) and three tabs, Notes (brief, memory, files, links), Members (with the computers it may start agents on) and Conversations, instead of eight sections in a row. A long brief or memory folds, and long file and link lists show the first five.
+- The App: project notes open at once again after you have read long conversations; before, a run's steps could push the page out of the App's memory, so it loaded from scratch. A project file you opened before also shows at once when it has not changed.
+- The App: a project's members are listed with the most recently active first within each group.
+- Mac App: the ⌘⇧Space quick panel no longer pops up by itself when the App starts.
+- Recording Studio (Mac): you pick the area with the App's own selector, then the recording starts; the area, elapsed time and a Stop & edit button stay visible while recording (and are not recorded), stopping keeps the whole movie, and the system asks for permission at most once per session. Focus zooms ease in and out more gently, with adjustable durations.
+- Cinema: catalogs scroll with touch again. The updated Cinema and Recording Studio reach a workspace when its hub is upgraded (`sudo myco upgrade`, or from the App).
+
+**中文**
+
+- **项目资料改版**：项目页顶部和其他详情页一样（名字、目标、编辑、新任务），下面分三个标签：资料（说明、记忆、文件、链接）、成员（以及它能在哪些电脑上开 agent）、对话，不再是八段排下来。说明和记忆太长会折叠，文件和链接先显示前五个。
+- App：看过几段长对话后，再打开项目资料也能立刻显示了；之前执行过程会把它挤出 App 的缓存，只能从头加载。项目里打开过的文件，没改过的话再打开也立刻显示。
+- App：项目成员在每组里按最近活跃排在前面。
+- Mac App：⌘⇧Space 快捷面板不会再在 App 启动时自己弹出来。
+- 录屏工作台（Mac）：先用 App 自己的选框选好区域再开始录；录制时区域、计时和「停止并剪辑」按钮一直可见（不会被录进去），停止后完整保存视频，同一次运行里系统最多只问一次权限。重点放大的进出更柔和，时长可调。
+- 影视：片库又能用触摸滚动了。新版影视和录屏工作台在工作区的 Hub 升级后生效（`sudo myco upgrade`，或在 App 里升级）。
+
 ## v0.21.16
 
 - **New official app: Cinema (影视)**: watch movies and series from sources you add yourself (none are bundled): search catalogs, choose episodes, keep a shared watchlist, and resume where you left off on this computer, with playback speed and intro/outro skipping. It follows the App's language and appearance. See docs/cinema.md.

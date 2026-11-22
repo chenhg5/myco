@@ -14,6 +14,8 @@ import { NamePrompt } from "@/app/NamePrompt";
 import { recall, remember } from "@/lib/memo";
 import { renameHub, useHubNames } from "@/app/hubNames";
 import { ProjectPage } from "@/app/ProjectPage";
+import { HelpPage, openHelp } from "@/app/Help";
+import type { HelpId } from "@/app/help/docs";
 import { openSettingsSection, SettingsPage } from "@/app/SettingsPage";
 import { AgentSwitcher } from "@/app/AgentSwitcher";
 import { navBack, navForward, navRecord, navSub, onNavApply, useNavState, type NavPlace } from "@/app/nav";
@@ -46,6 +48,7 @@ import { setSystemPicker } from "@/app/AvatarPicker";
 import { handleLinkClick, setOpenLinksViaApp } from "@/app/links";
 import { CommandPalette } from "@/app/CommandPalette";
 import { PageHost, PageToggle, setPageHubs, setPageMe, setPageNames } from "@/app/pages";
+import { PageRenderer } from "@/app/PageRenderer";
 import { VoiceChip } from "@/app/VoiceBar";
 import { modKey } from "@/app/ConversationDetail";
 import { useSidebarWidth } from "@/app/sidebarWidth";
@@ -75,7 +78,7 @@ function readPendingLink(): Promise<string> {
  * agents work together and hand out tasks; Members is everyone you work
  * with; Settings holds the rest (team spaces, computers, the app itself).
  */
-type Page = "space" | "members" | "computers" | "automations" | "workflows" | "templates" | "settings" | "about";
+type Page = "space" | "members" | "computers" | "automations" | "workflows" | "templates" | "settings" | "about" | "help";
 
 function initialCollapsed() {
   try {
@@ -239,6 +242,18 @@ export default function AppMode({ initialHubs, initialInfo }: {
     };
     window.addEventListener("myco-open-settings", on);
     return () => window.removeEventListener("myco-open-settings", on);
+  }, []);
+  // 使用文档, from anywhere (Help.tsx openHelp): the workspace menu,
+  // Settings, the 上手清单, the Mac's Help menu.
+  const [helpStart, setHelpStart] = useState<{ doc?: HelpId; n: number }>({ n: 0 });
+  useEffect(() => {
+    const on = (e: Event) => {
+      const doc = (e as CustomEvent<{ doc?: HelpId }>).detail?.doc;
+      setHelpStart((h) => ({ doc, n: h.n + 1 }));
+      setPage("help");
+    };
+    window.addEventListener("myco-open-help", on);
+    return () => window.removeEventListener("myco-open-help", on);
   }, []);
   // The workspaces of the shown workspace's server (hubs v0.19.9+): whether
   // this App may add one there.
@@ -537,6 +552,29 @@ export default function AppMode({ initialHubs, initialInfo }: {
     if (!hubId) return;
     navRecord({ hub: hubId, page, space: page === "space" || page === "about" ? shownKey : undefined, chat: navChatNow });
   }, [hubId, page, shownKey, navChatNow]);
+  // What is on screen, for notices on this computer: a chat in front is
+  // not announced (and is marked read on its workspace, for every device).
+  useEffect(() => {
+    let last = "";
+    const say = () => {
+      const front = document.visibilityState === "visible" && document.hasFocus();
+      const [h, a] = (navChatNow || "").split("\u0000");
+      const f = { front, hub: a ? h : hubId || undefined, target: a ? `agent:${a}` : undefined };
+      const key = JSON.stringify(f);
+      if (key === last) return;
+      last = key;
+      appApi.noticeFocus(f).catch(() => undefined);
+    };
+    say();
+    window.addEventListener("focus", say);
+    window.addEventListener("blur", say);
+    document.addEventListener("visibilitychange", say);
+    return () => {
+      window.removeEventListener("focus", say);
+      window.removeEventListener("blur", say);
+      document.removeEventListener("visibilitychange", say);
+    };
+  }, [hubId, navChatNow]);
   const navApply = useRef<(p: NavPlace) => void>(() => undefined);
   navApply.current = (p) => {
     if (p.hub !== hubId && hubs.some((h) => h.id === p.hub)) setHubPick(p.hub);
@@ -735,6 +773,27 @@ export default function AppMode({ initialHubs, initialInfo }: {
   }, [hubId, page]);
   // A workflow run to open on the 工作流 page (from an automation's runs).
   const [wfOpen, setWfOpen] = useState<{ workflow: string; run?: string; at: number } | undefined>();
+  // A notice clicked in the system's notifications (the desktop app): open
+  // where it leads, in its workspace (a workflow's run, or a chat: the
+  // agent it is about, or the one that sent it).
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<{ hubId?: string; target?: string; actor?: string }>).detail;
+      if (!d?.hubId) return;
+      const t = d.target || "";
+      setHubPick(d.hubId);
+      if (t.startsWith("workflow:")) {
+        const [workflow, q] = t.slice("workflow:".length).split("?");
+        setWfOpen({ workflow, run: new URLSearchParams(q || "").get("run") || undefined, at: Date.now() });
+        setPage("workflows");
+        return;
+      }
+      const agent = t.startsWith("agent:") ? t.slice("agent:".length) : d.actor;
+      if (agent) setToOpen({ hubId: d.hubId, agent });
+    };
+    window.addEventListener("myco-open-notice", on);
+    return () => window.removeEventListener("myco-open-notice", on);
+  }, []);
   // Decisions a workflow waits on you for: a count on its nav item.
   const [decisionCount, setDecisionCount] = useState(0);
   useEffect(() => {
@@ -806,6 +865,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
       case "add-computer": if (hub) setAddWorkspace({ hubId: hub.id, loose: true }); break;
       case "refresh": void refreshRef.current(); break;
       case "shortcuts": openShortcuts(settingsOpen); setPage("settings"); break;
+      case "help": openHelp(); break;
       case "back": navBack(); break;
       case "forward": navForward(); break;
       case "text-bigger": setTextSize((s) => (s === "small" ? "standard" : "large")); break;
@@ -891,6 +951,9 @@ export default function AppMode({ initialHubs, initialInfo }: {
       done: (autoCount ?? 0) > 0, go: () => toPage("automations") },
     { key: "computer", title: L("再连一台电脑", "Connect another computer"), hint: L("让 agent 也能在服务器或另一台电脑上干活", "So agents can work on a server or another computer too"),
       done: (hereOv?.machines?.length ?? 0) >= 2, go: () => addAgentHere("connect") },
+    // The last: what else there is, in the user guide (read once, it ticks).
+    { key: "guide", title: L("看看 myco 还能做什么", "See what else myco does"), hint: L("使用文档：项目、自动化、工作流、应用……", "The user guide: projects, automations, workflows, apps…"),
+      done: false, seen: "guide", go: () => openHelp("start") },
   ];
 
   const profileRow = profile ? rows.find((r) => r.hub.id === profile.hubId && r.st.agent.name === profile.name) || null : null;
@@ -899,6 +962,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const title = page === "members" ? L("成员", "Members")
     : page === "computers" ? L("电脑", "Computers")
     : page === "automations" ? L("自动化", "Automations")
+    : page === "help" ? L("使用文档", "User guide")
     : page === "workflows" ? L("工作流", "Workflows")
     : page === "templates" ? L("应用", "Apps")
     : page === "settings" ? L("设置", "Settings")
@@ -1139,7 +1203,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 onSuperagent={onSuperagent}
                 superagentKey={isMac ? "⌘⇧Space" : undefined}
                 superagent={sa?.state ? { name: sa.state.agent?.name, pending: sa.approvals.filter((a) => a.status === "pending" && a.agent === sa.state?.agent?.name).length } : undefined}
-                onSettings={() => setPage("settings")} />
+                onSettings={() => setPage("settings")} onGuide={() => openHelp()} />
             </div>
           </div>
         </aside>
@@ -1216,6 +1280,10 @@ export default function AppMode({ initialHubs, initialInfo }: {
             <WorkflowsPage key={`${hub.id}/${again}`} hubId={hub.id} rows={rows} now={now} open={wfOpen} onOpened={() => setWfOpen(undefined)}
               onOpenMessage={(agent, message) => { const r = rows.find((x) => x.hub.id === hub.id && x.st.agent.name === agent); if (r) openAtMessage(r, message); }} />
           </div>
+        )}
+
+        {page === "help" && (
+          <HelpPage key={helpStart.n} start={helpStart.doc} />
         )}
 
         {page === "templates" && hub && (
@@ -1312,6 +1380,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
 
 
       <PageHost />
+      <PageRenderer />
       <AgentSwitcher hubId={hubId} rows={chatRows} current={navChatNow ? navChatNow.split("\u0000")[1] : undefined}
         project={page === "space" && shownProject ? shownProject.members.map((m) => m.name) : undefined}
         onPick={(r) => { setNavChat(`${r.hub.id}\u0000${r.st.agent.name}`); chatWithMember(r); }} />

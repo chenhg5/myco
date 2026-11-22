@@ -1,7 +1,14 @@
-import type { Page, PageChanges, PageOpen, PageRecord, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Backup, Backups, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, MCPServer, ToolSkill, ToolPlugin, SuperagentState, Approval, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
+import type { Page, PageChanges, PageOpen, PageRecord, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Backup, Backups, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, MCPServer, ToolSkill, ToolPlugin, SuperagentState, Approval, ActionGrant, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, NoticePrefs, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
 import { L } from "@/lib/i18n";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
+/** GET /app/notices: whether this computer shows notices, per workspace
+ *  (an older hub keeps none) and the badge. */
+export interface NoticeState {
+  available: boolean;
+  hubs: Record<string, { supported: boolean; badge: number; error?: string }>;
+  badge: number;
+}
 export interface Hub {
   id: string;
   name: string;
@@ -10,6 +17,8 @@ export interface Hub {
   error?: string;
   hub_version?: string;
   update_available?: boolean;
+  /** other addresses its links can carry (a hub on this computer links with its LAN address) */
+  aliases?: string[];
 }
 
 /** Voice calls: what the person chose (no keys) and whether this App can. */
@@ -741,7 +750,7 @@ export const appApi = {
     request<{ ok: boolean }>("DELETE", `app/hubs/${enc(hubId)}/agents/${enc(name)}/resume`),
   /** The model and effort this node runs with; "" follows the computer's
    *  setting. Hubs before the feature answer not_found. */
-  setRunSettings: (hubId: string, name: string, input: { model: string; effort: string; access?: RuntimeAccess | ""; mcp_tools?: boolean }) =>
+  setRunSettings: (hubId: string, name: string, input: { model?: string; effort?: string; access?: RuntimeAccess | ""; mcp_tools?: boolean; provider?: string }) =>
     request<Agent>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/run-settings`, input),
   // Projects
   projects: (hubId: string) => request<{ projects: Project[] }>("GET", `app/hubs/${enc(hubId)}/projects`),
@@ -893,6 +902,8 @@ export const appApi = {
   /** A node's provider setting, if the node runs on this computer. */
   agentProvider: (name: string, hubId: string) =>
     request<AgentProvider>("GET", `app/local/agents/${enc(name)}/provider?hub_id=${enc(hubId)}`),
+  setRemoteAgentProvider: (hubId: string, name: string, manual: ManualProvider) =>
+    request<Agent>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/provider`, { manual }),
   setAgentProvider: (name: string, hubId: string, body: { provider?: string; manual?: ManualProvider }) =>
     request<AgentProvider>("PUT", `app/local/agents/${enc(name)}/provider?hub_id=${enc(hubId)}`, body),
   /** Starts this computer's runner service, or restarts it when running. */
@@ -973,6 +984,16 @@ export const appApi = {
   openPage: (hubId: string, id: string, version?: number) => request<PageOpen>("POST", `app/hubs/${enc(hubId)}/pages/${enc(id)}/open`, version ? { version } : {}),
   deletePage: (hubId: string, id: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/pages/${enc(id)}`),
   pageState: (hubId: string, id: string) => request<PageState>("GET", `app/hubs/${enc(hubId)}/pages/${enc(id)}/state`),
+  // Pages rendered for agents (page.export): the next export the backend
+  // wants this window to make (null: none came in time), and its file.
+  pageRenderNext: (signal?: AbortSignal) => request<PageRenderJob | null>("GET", "app/page-render/next", undefined, signal, 40_000),
+  pageRenderResult: (id: string, r: PageRenderResult) => request<{ ok: boolean }>("POST", `app/page-render/${enc(id)}/result`, r, undefined, 60_000),
+  // While one renders: the page's state and records, through the job (refused once it may no longer run),
+  // and a wait that answers {stop: true} as soon as it may not.
+  pageRenderState: (id: string) => request<PageState>("GET", `app/page-render/${enc(id)}/state`),
+  pageRenderData: (id: string, collection: string, rid?: string) =>
+    request<unknown>("GET", `app/page-render/${enc(id)}/data?collection=${enc(collection)}${rid ? `&id=${enc(rid)}` : ""}`),
+  pageRenderWait: (id: string, signal?: AbortSignal) => request<{ stop: boolean }>("GET", `app/page-render/${enc(id)}/wait`, undefined, signal, 40_000),
   /** Writes a page's shared state based on version; when someone wrote
    *  first, ok is false and the latest comes back. */
   putPageState: async (hubId: string, id: string, state: unknown, version: number): Promise<PageState & { ok: boolean }> => {
@@ -1020,8 +1041,13 @@ export const appApi = {
   clearSuperagent: (hubId: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/superagent`),
   approvals: (hubId: string, status = "pending") =>
     request<{ approvals: Approval[] }>("GET", `app/hubs/${enc(hubId)}/approvals${status ? `?status=${enc(status)}` : ""}`),
-  decideApproval: (hubId: string, id: string, approve: boolean) =>
-    request<Approval>("POST", `app/hubs/${enc(hubId)}/approvals/${enc(id)}/${approve ? "approve" : "deny"}`, {}),
+  decideApproval: (hubId: string, id: string, approve: boolean, narrow?: { permissions?: string[]; ttl_seconds?: number }) =>
+    request<Approval>("POST", `app/hubs/${enc(hubId)}/approvals/${enc(id)}/${approve ? "approve" : "deny"}`, narrow || {}),
+  /** What agents may do on computers you decide for (v0.21.21 hubs). */
+  actionGrants: (hubId: string, state = "active") =>
+    request<{ grants: ActionGrant[] }>("GET", `app/hubs/${enc(hubId)}/action-grants${state ? `?state=${enc(state)}` : ""}`),
+  revokeActionGrant: (hubId: string, id: string) =>
+    request<ActionGrant>("POST", `app/hubs/${enc(hubId)}/action-grants/${enc(id)}/revoke`, {}),
   /** hubs from v0.21.1: figures over the last runs, a step's log, scores, two runs side by side */
   workflowStats: (hubId: string, ref: string, opts: { limit?: number; version?: number } = {}) => {
     const q = new URLSearchParams();
@@ -1059,6 +1085,12 @@ export const appApi = {
   voiceStop: () => request<VoiceInfo>("POST", "app/voice/stop", {}),
   voiceMute: (muted: boolean) => request<VoiceInfo>("POST", "app/voice/mute", { muted }),
   voiceEvents: (after: number) => request<VoiceEvents>("GET", `app/voice/events?after=${after}`),
+  /** Notices shown on this computer (the desktop app; `available` false in a browser). */
+  notices: () => request<NoticeState>("GET", "app/notices"),
+  /** What is on screen: the window in front, the conversation in it. Coming to one marks its notices read. */
+  noticeFocus: (f: { front: boolean; hub?: string; target?: string }) => request<void>("PUT", "app/notices/focus", f),
+  noticePrefs: (hubId: string) => request<NoticePrefs>("GET", `app/hubs/${encodeURIComponent(hubId)}/notice-prefs`),
+  setNoticePrefs: (hubId: string, p: NoticePrefs) => request<NoticePrefs>("PUT", `app/hubs/${encodeURIComponent(hubId)}/notice-prefs`, p),
   /** The language these pages show, for what the desktop app draws itself (its tray menu). */
   putUILang: (lang: "zh" | "en") => request<{ lang: string }>("PUT", "app/ui-lang", { lang }),
   // Workspaces of a hub's server (hubs from v0.19.9 serve several at /w/<name>)
@@ -1080,9 +1112,18 @@ export const appApi = {
 /** A cc-switch provider (keys are never sent to the page). */
 export interface ProviderInfo { ref: string; id: string; name: string; app: string; current?: boolean; host?: string; model?: string }
 export interface ProviderList { cc_switch: boolean; providers: ProviderInfo[]; error?: string }
-/** provider: "" follows this computer; "cc-switch:<id>" is pinned; "env_file" was entered by hand. */
-export interface AgentProvider { local: boolean; provider: string; harness?: string; env_host?: string }
-export interface ManualProvider { base_url: string; api_key: string; model?: string }
+/** provider: "" follows this computer; "cc-switch:<id>" is pinned; "env_file" is a custom address
+ *  (`manual`: its address, model and Codex protocol; never its key, only whether there is one). */
+export interface AgentProvider { local: boolean; provider: string; harness?: string; env_host?: string; manual?: ManualInfo }
+export type WireAPI = "chat" | "responses";
+export interface ManualInfo { base_url: string; model?: string; wire_api?: WireAPI; has_key: boolean }
+/** A custom address to save: the key every time (it is never read back); wire_api only for Codex. */
+export interface ManualProvider { base_url: string; api_key: string; model?: string; wire_api?: WireAPI }
 
 /** How messages are translated: the service, and which ones have a key. */
 export type TranslateConfig = { provider: "deepl" | "google" | "openai"; base_url?: string; model?: string; keys: Record<string, boolean> };
+
+/** An export the App's renderer makes for an agent (page.export). */
+export interface PageRenderJob { id: string; hub_id: string; page_id: string; action: string; version: number; args?: Record<string, unknown> }
+/** Its file (base64), or why not. */
+export interface PageRenderResult { media_type?: string; data?: string; width?: number; height?: number; pages?: number; error?: { code: string; message: string; retryable?: boolean } }

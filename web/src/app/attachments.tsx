@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { knownSize, noteSize } from "@/app/imageSizes";
 import { retryImage } from "@/app/Markdown";
 import { Check, Download, Eye, FileText, Loader2 } from "lucide-react";
 import { appApi } from "@/appapi";
@@ -37,11 +38,21 @@ export function MessageAttachments({ hubId, items }: { hubId: string; items: Att
       {pictures.length > 0 && (
         <div className={cn("conv-shots", pictures.length === 1 && "is-one")}>
           {pictures.map((a, i) => (
-            <button key={a.file_id} type="button" className="conv-attach is-image" onClick={() => setOpen(i)}
-              title={L(`${a.name} · 点一下看大图`, `${a.name} · click to enlarge`)}>
-              <img src={appApi.attachmentUrl(hubId, a.file_id)} alt={a.name} loading="lazy" draggable={false}
-                onError={(e) => { if (!retryImage(e.currentTarget)) fail(a.file_id); }} />
-            </button>
+            (() => {
+              // The room it took last time, kept while it loads again
+              // (imageSizes): the chat does not move under you.
+              const key = `${a.file_id}\u0000${pictures.length === 1 ? 1 : 0}`;
+              const box = knownSize(key);
+              return (
+                <button key={a.file_id} type="button" className="conv-attach is-image" onClick={() => setOpen(i)}
+                  title={L(`${a.name} · 点一下看大图`, `${a.name} · click to enlarge`)}
+                  style={box ? { width: box[0], aspectRatio: `${box[0]} / ${box[1]}` } : undefined}>
+                  <img src={appApi.attachmentUrl(hubId, a.file_id)} alt={a.name} loading="lazy" draggable={false}
+                    onLoad={(e) => { const r = e.currentTarget.getBoundingClientRect(); noteSize(key, Math.round(r.width), Math.round(r.height)); }}
+                    onError={(e) => { if (!retryImage(e.currentTarget)) fail(a.file_id); }} />
+                </button>
+              );
+            })()
           ))}
         </div>
       )}

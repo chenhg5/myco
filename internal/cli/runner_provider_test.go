@@ -11,6 +11,12 @@ import (
 
 func TestResolveProvider(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	t.Setenv("CODEX_HOME", dir)
+	t.Setenv("ANTHROPIC_BASE_URL", "")
+	t.Setenv("OPENAI_BASE_URL", "")
 	t.Setenv("CC_SWITCH_DIR", dir)
 	envFile := filepath.Join(dir, "a.env")
 	if err := os.WriteFile(envFile, []byte("ANTHROPIC_BASE_URL=https://proxy.example/v1\nANTHROPIC_API_KEY=k\nOTHER=x\n"), 0o600); err != nil {
@@ -31,7 +37,7 @@ func TestResolveProvider(t *testing.T) {
 	for _, q := range []string{
 		`CREATE TABLE providers (id TEXT, app_type TEXT, name TEXT, settings_config TEXT, created_at INTEGER, sort_index INTEGER, is_current BOOLEAN)`,
 		`INSERT INTO providers VALUES ('glm','claude','GLM','{"env":{"ANTHROPIC_BASE_URL":"https://open.bigmodel.cn/api/anthropic","ANTHROPIC_MODEL":"glm-5"}}',0,0,0),
-			('ds','claude','DeepSeek','{"env":{}}',0,1,1)`,
+			('ds','claude','DeepSeek','{"env":{"ANTHROPIC_BASE_URL":"https://deepseek.test"}}',0,1,1)`,
 	} {
 		if _, err := db.Exec(q); err != nil {
 			t.Fatal(err)
@@ -42,6 +48,7 @@ func TestResolveProvider(t *testing.T) {
 	if ch.source != "pinned" || ch.name != "GLM" || ch.model != "glm-5" || ch.settings == nil {
 		t.Fatalf("pinned: %+v", ch)
 	}
+	t.Setenv("ANTHROPIC_BASE_URL", "https://deepseek.test")
 	ch = resolveProvider("claude", "cc-switch:gone", "")
 	if ch.source != "missing" || ch.settings != nil || ch.warn == "" || ch.name != "DeepSeek" {
 		t.Fatalf("missing: %+v", ch)

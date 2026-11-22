@@ -105,7 +105,7 @@ func installComponentFixture(t *testing.T, c *Component, version, script string)
 func TestComponentReusesInstalledCompatibleRelease(t *testing.T) {
 	c := &Component{Home: t.TempDir()}
 	old := installComponentFixture(t, c, "0.1.0", "old engine")
-	if got := c.Status(); !got.Installed || got.Version != "0.1.0" {
+	if got := c.Status(); !got.Installed || got.Version != "0.1.0" || !got.UpdateAvailable {
 		t.Fatal(got)
 	}
 	// An incomplete current install must not conceal a working old one.
@@ -119,7 +119,7 @@ func TestComponentReusesInstalledCompatibleRelease(t *testing.T) {
 		t.Fatal(err)
 	}
 	installComponentFixture(t, c, ComponentVersion, "new engine")
-	if got := c.Status(); !got.Installed || got.Version != ComponentVersion {
+	if got := c.Status(); !got.Installed || got.Version != ComponentVersion || got.UpdateAvailable {
 		t.Fatal(got)
 	}
 	unknown := installComponentFixture(t, c, "99.0.0", "unknown engine")

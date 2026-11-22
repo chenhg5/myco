@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useCached } from "@/lib/memo";
 import { ArrowRightLeft, Check, ChevronRight, Copy, Pencil, Plus, Power, Trash2, UserCheck, X } from "lucide-react";
 import { IconChat } from "@/components/icons";
-import { appApi, isOldHub, type AgentProvider, type ProviderList, type MachineInfo } from "@/appapi";
+import { appApi, isOldHub, type AgentProvider, type ManualProvider, type ProviderList, type MachineInfo, type WireAPI } from "@/appapi";
 import type { AgentRow } from "@/app/types";
 import type { AuditEntry, Member, Peer, Project, Runtime, Skill } from "@/api";
 import {
@@ -171,17 +171,19 @@ function PeerRows({ row, now, onPeer }: {
   if (error && !peers) return <ErrorText error={error} />;
   if (!peers) return <RowsSkeleton rows={2} className="is-flat" />;
   if (!peers.length) return <div className="app-empty-note">{L("还没有和其他 agent 的往来", "No exchanges with other nodes yet")}</div>;
-  const nameOf = (n: string) => { const x = (row.hub.overview?.agents || []).find((y) => y.agent.name === n); return x ? nodeName(x.agent, row.hub) : n; };
+  const stOf = (n: string) => (row.hub.overview?.agents || []).find((y) => y.agent.name === n);
+  const nameOf = (n: string) => { const x = stOf(n); return x ? nodeName(x.agent, row.hub) : n; };
   return (
     <>
       {peers.map((p) => (
-        <button key={p.agent} type="button" className="app-msg" onClick={() => onPeer(hubId, name, p.agent)}>
+        <button key={p.agent} type="button" className="app-msg app-peer" onClick={() => onPeer(hubId, name, p.agent)}>
           <span className="meta">
+            {stOf(p.agent) && <Avatar agent={stOf(p.agent)!.agent} size={18} badge={false} />}
             <span className="who">{nameOf(p.agent)}</span>
             <span className="count">{L(`${p.messages} 条消息`, `${p.messages} message${p.messages === 1 ? "" : "s"}`)}</span>
             {p.last && <span className="time">{timeAgo(p.last.created_at, now)}</span>}
           </span>
-          {p.last && <span className="body">{p.last.from === name ? "→ " : "← "}{summarize(p.last)}</span>}
+          {p.last && <span className="body"><span className="app-peer-dir">{p.last.from === name ? L("发出", "Sent") : L("收到", "Got")}</span>{summarize(p.last)}</span>}
         </button>
       ))}
     </>
@@ -303,8 +305,19 @@ function LabelsEditor({ row, onRefresh, readOnly }: { row: AgentRow; onRefresh: 
 }
 
 // ProviderRow: which model provider (endpoint + key) the node's CLI uses.
-// A node on this computer can be pinned to a cc-switch provider, given an
-// endpoint by hand, or follow the computer's own setting.
+// A node on this computer can be pinned to a cc-switch provider, given a
+// custom address (base URL, model, key; for Codex the protocol too), or
+// follow the computer's own setting: then it says where requests really
+// go, as the runner reported (a local gateway, cc-switch's provider).
+
+/** A runner's provider as people read it: "magpie 网关（127.0.0.1:3425）". */
+function providerLabel(rt?: { provider?: string; provider_host?: string }): string {
+  if (!rt?.provider) return "";
+  return rt.provider_host && rt.provider_host !== rt.provider ? `${rt.provider}（${rt.provider_host}）` : rt.provider;
+}
+
+const urlHost = (u?: string) => { try { return u ? new URL(u).host : ""; } catch { return u || ""; } };
+
 function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promise<void> }) {
   const ag = row.st.agent;
   const rt = ag.runtime;
@@ -314,7 +327,7 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
   const [list, setList] = useState<ProviderList | null>(null);
   const [open, setOpen] = useState(false);
   const [choice, setChoice] = useState("");
-  const [manual, setManual] = useState({ base_url: "", api_key: "", model: "" });
+  const [manual, setManual] = useState<{ base_url: string; api_key: string; model: string; wire_api: WireAPI }>({ base_url: "", api_key: "", model: "", wire_api: "responses" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [saved, setSaved] = useState("");
@@ -323,22 +336,59 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
 
   const codex = (rt?.cli || ag.binding.harness) === "codex";
   const editable = !!local?.local && (local.harness === "claude" || local.harness === "codex");
+  // On another computer: its runner may let the App switch it (remote_provider),
+  // offering that computer's providers; a key only goes sealed (end-to-end
+  // encryption), else it is entered on that computer. An older runner: read-only.
+  const elsewhere = !!local && !local.local;
+  // Only its owner changes it from afar (as with its access).
+  const me = row.hub.me?.member;
+  const owns = !!me && (ag.owner_id ? ag.owner_id === me.id : ag.owner ? ag.owner === me.name : me.role === "owner");
+  const remote = elsewhere && owns && !!rt?.features?.includes("remote_provider");
+  const olderRunner = elsewhere && owns && !!rt && !rt.features?.includes("remote_provider");
+  const pending = remote && !!ag.run_settings?.provider_encrypted;
+  const sealed = !!row.hub.e2e;
+  // Remote: "custom" is a custom address kept private on that computer (the
+  // App shows it as the custom choice, without its address).
+  const remoteCustom = remote && ag.run_settings?.provider === "custom";
+  const chosen = remote ? (remoteCustom ? "env_file" : ag.run_settings?.provider || "") : local?.provider || "";
+  const custom = remote ? undefined : local?.provider === "env_file" ? local.manual : undefined;
+  const hasKey = !!custom?.has_key || remoteCustom;
   const start = async () => {
     setError(null);
-    setChoice(local?.provider || "");
-    setManual({ base_url: "", api_key: "", model: "" });
+    setChoice(chosen);
+    setManual({ base_url: custom?.base_url || "", api_key: "", model: custom?.model || "", wire_api: custom?.wire_api || "responses" });
     setOpen(true);
+    if (remote) {
+      setList({ cc_switch: true, providers: (rt?.providers || []).map((p) => ({ ...p, id: p.ref, app: codex ? "codex" : "claude" })) });
+      return;
+    }
     try { setList(await appApi.providers(codex ? "codex" : "claude")); } catch (e) { setError(e); }
   };
-  const save = async () => {
+  // An address with no credentials, query or fragment in it (they would end
+  // up in the CLI's arguments); the key goes in its own box, every time.
+  const urlProblem = (() => {
+    const v = manual.base_url.trim();
+    if (!v) return "";
+    let u: URL;
+    try { u = new URL(v); } catch { return L("地址要以 http:// 或 https:// 开头", "The address starts with http:// or https://"); }
+    if (u.protocol !== "http:" && u.protocol !== "https:") return L("地址要以 http:// 或 https:// 开头", "The address starts with http:// or https://");
+    if (u.username || u.password) return L("地址里不要带用户名或密钥，密钥填在下面", "No user name or key in the address: the key goes below");
+    if (u.search || u.hash) return L("地址里不要带 ? 或 # 后面的部分", "No ? or # part in the address");
+    return "";
+  })();
+  const canSave = choice !== "env_file" || (!!manual.base_url.trim() && !urlProblem && !!manual.api_key.trim());
+  const save = async (body: { provider: string } | { manual: ManualProvider }, note: string) => {
     setBusy(true);
     setError(null);
     try {
-      const body = choice === "env_file"
-        ? (manual.base_url || manual.api_key ? { manual } : null)
-        : { provider: choice };
-      if (body) setLocal(await appApi.setAgentProvider(ag.name, row.hub.id, body));
-      setSaved(L("已保存，从它收到的下一条消息开始生效。", "Saved. It applies from the node's next message."));
+      if (remote) {
+        // Over the hub: a choice goes with its run settings (as they are);
+        // a custom address through this App, which seals the key.
+        if ("manual" in body) await appApi.setRemoteAgentProvider(row.hub.id, ag.name, body.manual);
+        else await appApi.setRunSettings(row.hub.id, ag.name, { provider: body.provider });
+        await onRefresh();
+      } else setLocal(await appApi.setAgentProvider(ag.name, row.hub.id, body));
+      setSaved(note);
       setOpen(false);
       window.setTimeout(() => void onRefresh(), 1500);
     } catch (e) {
@@ -347,29 +397,56 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
       setBusy(false);
     }
   };
+  const applies = remote
+    ? L("已保存：它那台电脑从下一条消息开始用。", "Saved: its computer uses it from its next message.")
+    : L("已保存，从它收到的下一条消息开始生效。", "Saved. It applies from the agent's next message.");
+  // A custom address needs its key: over the hub only sealed.
+  const customOff = remote && !sealed;
+  const submit = () => {
+    if (choice !== "env_file") return void save({ provider: choice }, applies);
+    const m: ManualProvider = { base_url: manual.base_url.trim(), api_key: manual.api_key.trim(), model: manual.model.trim() || undefined };
+    if (codex) m.wire_api = manual.wire_api;
+    void save({ manual: m }, applies);
+  };
 
   const current = list?.providers.find((p) => p.current);
-  const name = rt?.provider || (rt ? L("CLI 自己的设置", "The CLI's own setting") : "—");
+  const reported = providerLabel(rt);
+  // What the row says: the custom address (host · model), else what the
+  // runner reported, else that it uses its CLI's own setting.
+  const name = custom
+    ? [urlHost(custom.base_url), custom.model].filter(Boolean).join(" · ")
+    : reported || (rt ? L("CLI 自己的设置", "The CLI's own setting") : "—");
+  const following = chosen === "" && rt?.provider_source !== "pinned" && rt?.provider_source !== "env_file" ? reported : "";
   return (
-    <div className={cn("app-kv", saved && "has-help")}>
+    <div className={cn("app-kv", (saved || olderRunner || pending) && "has-help")}>
       <span className="app-kv-label">{L("服务商", "Provider")}</span>
       <span className="app-kv-value">
-        {editable ? (
-          <button type="button" className="app-kv-link" onClick={() => void start()}>
+        {editable || remote ? (
+          <button type="button" className="app-kv-link" onClick={() => void start()} data-testid="provider-open">
             {name}<span className="app-chev">›</span>
           </button>
         ) : name}
       </span>
-      {saved && <span className="app-kv-help app-offline-ok">{saved}</span>}
+      {saved && !pending && <span className="app-kv-help app-offline-ok">{saved}</span>}
+      {!saved && olderRunner && <span className="app-kv-help">{L("升级它那台电脑上的 myco 后，就能在这里改。", "Upgrade myco on its computer to change it here.")}</span>}
+      {pending && <span className="app-kv-help">{L("自定义地址已发出，等它那台电脑收下（它接下一件任务前生效）。", "The custom address is sent; its computer takes it before its next task.")}</span>}
 
       <Modal open={open} onOpenChange={(o) => !busy && setOpen(o)} title={L("服务商", "Provider")}
-        description={L(`后台唤醒这个 agent 时，它的 ${codex ? "Codex" : "Claude Code"} 用哪个服务商（地址、密钥和模型）。只影响这个 agent，密钥只保存在这台电脑上。`, `Which provider (endpoint, key and model) this node's ${codex ? "Codex" : "Claude Code"} uses when it is woken in the background. Only this node is affected; keys stay on this computer.`)}>
-        <div className="app-provider-list" role="radiogroup">
+        description={remote
+          ? L(`它在另一台电脑上：它的 ${codex ? "Codex" : "Claude Code"} 用哪个服务商（地址、密钥和模型），由它那台电脑上的 runner 照着改。只影响这个 agent，密钥只存在它那台电脑上。`, `It runs on another computer: which provider (endpoint, key and model) its ${codex ? "Codex" : "Claude Code"} uses; the runner there applies it. Only this agent is affected; keys stay on that computer.`)
+          : L(`后台唤醒这个 agent 时，它的 ${codex ? "Codex" : "Claude Code"} 用哪个服务商（地址、密钥和模型）。只影响这个 agent，密钥只保存在这台电脑上。`, `Which provider (endpoint, key and model) this agent's ${codex ? "Codex" : "Claude Code"} uses when it is woken in the background. Only this agent is affected; keys stay on this computer.`)}>
+        <div className="app-provider-list" role="radiogroup" data-testid="provider-options">
           <label className={cn("app-provider-opt", choice === "" && "picked")}>
             <input type="radio" name="provider" checked={choice === ""} onChange={() => setChoice("")} />
             <span>
-              <b>{L("跟随本机设置", "Follow this computer")}</b>
-              <small>{current ? L(`现在是「${current.name}」，在 cc-switch 里切换时跟着变`, `Now “${current.name}”; changes when you switch in cc-switch`) : L(`用这台电脑上 ${codex ? "Codex" : "Claude Code"} 自己的设置`, `Uses ${codex ? "Codex" : "Claude Code"}'s own settings on this computer`)}</small>
+              <b>{remote ? L("跟随它那台电脑", "Follow its computer") : L("跟随这台电脑", "Follow this computer")}</b>
+              <small>
+                {following
+                  ? L(`现在走的是 ${following}`, `Now going through ${following}`)
+                  : current ? L(`现在是「${current.name}」，在 cc-switch 里切换时跟着变`, `Now “${current.name}”; changes when you switch in cc-switch`)
+                  : remote ? L(`用它那台电脑上 ${codex ? "Codex" : "Claude Code"} 自己的设置`, `Uses ${codex ? "Codex" : "Claude Code"}'s own settings on its computer`)
+                  : L(`用这台电脑上 ${codex ? "Codex" : "Claude Code"} 自己的设置`, `Uses ${codex ? "Codex" : "Claude Code"}'s own settings on this computer`)}
+              </small>
             </span>
           </label>
           {list?.providers.map((p) => (
@@ -381,29 +458,79 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
               </span>
             </label>
           ))}
-          <label className={cn("app-provider-opt", choice === "env_file" && "picked")}>
-            <input type="radio" name="provider" checked={choice === "env_file"} onChange={() => setChoice("env_file")} />
+          <label className={cn("app-provider-opt", choice === "env_file" && "picked", customOff && "is-off")} data-testid="provider-custom-opt">
+            <input type="radio" name="provider" checked={choice === "env_file"} onChange={() => setChoice("env_file")} disabled={customOff} />
             <span>
-              <b>{L("手动填写", "Enter by hand")}</b>
-              <small>{local?.env_host ? L(`现在是 ${local.env_host}`, `Now ${local.env_host}`) : codex ? L("OpenAI 兼容的地址和密钥", "An OpenAI-compatible endpoint and key") : L("Anthropic 兼容的地址和密钥", "An Anthropic-compatible endpoint and key")}</small>
+              <b>{L("自定义地址", "Custom address")}</b>
+              <small>
+                {remoteCustom && !customOff
+                  ? L("已设置：地址和密钥只存在它那台电脑上；重新填会换掉它。", "Set: its address and key stay on that computer; entering new ones replaces them.")
+                  : customOff
+                  ? L("密钥不经过 hub：请在那台电脑上的 App 里填，或在那台电脑上用 myco runner provider set。工作区开了端到端加密时，这里也能填。", "The key does not go through the hub: enter it in the App on that computer, or run myco runner provider set there. With end-to-end encryption on, you can enter it here.")
+                  : custom
+                  ? [urlHost(custom.base_url), custom.model, codex && custom.wire_api ? (custom.wire_api === "chat" ? "Chat Completions" : "Responses") : ""].filter(Boolean).join(" · ")
+                  : codex ? L("OpenAI 兼容的地址、模型和密钥", "An OpenAI-compatible address, model and key") : L("Anthropic 兼容的地址、模型和密钥", "An Anthropic-compatible address, model and key")}
+              </small>
             </span>
           </label>
         </div>
-        {choice === "env_file" && (
-          <div className="app-provider-manual">
-            <input className="app-input" placeholder={codex ? "https://api.example.com/v1" : "https://api.example.com/anthropic"} value={manual.base_url} onChange={(e) => setManual({ ...manual, base_url: e.target.value })} disabled={busy} />
-            <input className="app-input" type="password" placeholder={L("密钥", "Key")} value={manual.api_key} onChange={(e) => setManual({ ...manual, api_key: e.target.value })} disabled={busy} autoComplete="off" />
-            <input className="app-input" placeholder={L("模型（可选）", "Model (optional)")} value={manual.model} onChange={(e) => setManual({ ...manual, model: e.target.value })} disabled={busy} />
+        {choice === "env_file" && !customOff && (
+          <div className="app-provider-manual" data-testid="provider-custom">
+            <label className="app-field">
+              <span className="app-field-label">{L("地址（base URL）", "Base URL")}</span>
+              <input className="app-input" placeholder={codex ? "https://api.example.com/v1" : "https://api.example.com/anthropic"} value={manual.base_url}
+                onChange={(e) => setManual({ ...manual, base_url: e.target.value })} disabled={busy} spellCheck={false} data-testid="provider-url" />
+              {urlProblem && <span className="app-field-hint is-bad">{urlProblem}</span>}
+            </label>
+            <label className="app-field">
+              <span className="app-field-label">{L("模型", "Model")}</span>
+              <input className="app-input" placeholder={L("不填就用它默认的", "Blank: its default")} value={manual.model}
+                onChange={(e) => setManual({ ...manual, model: e.target.value })} disabled={busy} spellCheck={false} data-testid="provider-model" />
+            </label>
+            <label className="app-field">
+              <span className="app-field-label">{L("密钥", "Key")}</span>
+              <input className="app-input" type="password" autoComplete="new-password" value={manual.api_key}
+                placeholder={L("填上服务商给你的 key", "The key your provider gave you")}
+                onChange={(e) => setManual({ ...manual, api_key: e.target.value })} disabled={busy} data-testid="provider-key" />
+              <span className="app-field-hint">{hasKey
+                ? L("已经存了一个，不会显示出来；保存时要再填一次（换地址或模型也一样）。", "One is saved and never shown; enter it again to save (also when you change only the address or model).")
+                : remote ? L("只存在它那台电脑上，存了以后不会再显示。", "Kept only on its computer, and never shown once saved.")
+                : L("只存在这台电脑上，存了以后不会再显示。", "Kept only on this computer, and never shown once saved.")}</span>
+            </label>
+            {codex && (
+              <div className="app-field">
+                <span className="app-field-label">{L("协议", "Protocol")}</span>
+                <div className="seg" role="tablist" aria-label={L("协议", "Protocol")}>
+                  {(["responses", "chat"] as WireAPI[]).map((w) => (
+                    <button key={w} type="button" role="tab" aria-selected={manual.wire_api === w} className={cn("seg-btn", manual.wire_api === w && "active")}
+                      onClick={() => setManual({ ...manual, wire_api: w })} disabled={busy} data-testid={`provider-wire-${w}`}>
+                      {w === "responses" ? "Responses" : "Chat Completions"}
+                    </button>
+                  ))}
+                </div>
+                <span className="app-field-hint">{L("服务商只支持 /chat/completions 时选 Chat Completions。", "Pick Chat Completions when the provider only has /chat/completions.")}</span>
+              </div>
+            )}
           </div>
+        )}
+        {remote && sealed && choice === "env_file" && (
+          <p className="app-modal-note">{L("密钥在这台电脑上先加密，只有那个 agent 能解开；hub 只经手密文。", "The key is sealed on this computer for that agent alone; the hub only carries it sealed.")}</p>
         )}
         {list && !list.cc_switch && (
           <p className="app-modal-note">{L("装了 cc-switch 的话，这里会列出它的服务商。", "With cc-switch installed, its providers are listed here.")}</p>
         )}
         <ErrorText error={error} />
         <div className="app-modal-actions">
+          {choice === "env_file" && (custom || remoteCustom) && (
+            <button type="button" className="app-btn app-provider-clear" disabled={busy} data-testid="provider-clear"
+              onClick={() => void save({ provider: remote ? "clear" : "" }, remote
+                ? L("自定义地址和密钥已清除，改回跟随它那台电脑。", "The custom address and key are cleared; it follows its computer again.")
+                : L("自定义地址和密钥已清除，改回跟随这台电脑。", "The custom address and key are cleared; it follows this computer again."))}>
+              {L("清除自定义地址", "Clear the custom address")}
+            </button>
+          )}
           <button type="button" className="app-btn" onClick={() => setOpen(false)} disabled={busy}>{L("取消", "Cancel")}</button>
-          <button type="button" className="app-btn app-btn-primary" onClick={() => void save()}
-            disabled={busy || (choice === "env_file" && !local?.env_host && (!manual.base_url || !manual.api_key))}>
+          <button type="button" className="app-btn app-btn-primary" onClick={submit} disabled={busy || !canSave} data-testid="provider-save">
             {busy ? L("正在保存…", "Saving…") : L("保存", "Save")}
           </button>
         </div>
@@ -760,6 +887,14 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
   }, [row?.hub.id, ag?.machine_id, ag?.runtime?.cli, toolAsk]);
 
   const [more, setMore] = useState(openDetails);
+  type DetailTab = "settings" | "skills" | "records" | "identity";
+  const [dtab, setDtab] = useState<DetailTab>("settings");
+  const detailTabs: { key: DetailTab; label: string }[] = [
+    { key: "settings", label: L("设置", "Settings") },
+    { key: "skills", label: L("能力", "Skills") },
+    { key: "records", label: L("记录", "Records") },
+    { key: "identity", label: L("身份", "Identity") },
+  ];
   useEffect(() => { if (openDetails) setMore(true); }, [openDetails, row?.hub.id, ag?.name]);
 
   if (!row || !ag) return null;
@@ -927,15 +1062,19 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
 
         </>
       );
-  const sec_runtime = (
-        <>
-          <section className="app-group">
-            <div className="app-group-title"><span className="name">{L("运行", "Runtime")}</span></div>
-            <div className="app-list">
+  // The rows of what runs it and who it belongs to, laid out as the
+  // inspector shows them (sec_runtime) or, in the agent card, spread over
+  // the details' tabs (sec_run, sec_belongs, sec_identity).
+  const row_type = (
+    <>
               <div className="app-kv">
                 <span className="app-kv-label">{L("类型", "Type")}</span>
                 <span className="app-kv-value">{kindLabel(kind)}</span>
               </div>
+    </>
+  );
+  const row_owner = (
+    <>
               {ag.owner && (
                 <div className="app-kv">
                   <span className="app-kv-label">{L("主人", "Owner")}</span>
@@ -948,6 +1087,10 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
                   </span>
                 </div>
               )}
+    </>
+  );
+  const row_vis = (
+    <>
               {kind !== "human" && row.hub.me?.member && (
                 <div className="app-kv">
                   <span className="app-kv-label">{L("可见范围", "Who can see it")}</span>
@@ -960,23 +1103,10 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
                   </span>
                 </div>
               )}
-              {!embedded && kind !== "human" && ag.binding.harness !== "machine" && (inProjects.length > 0 || (mayManage && joinable.length > 0)) && (
-                <div className="app-kv">
-                  <span className="app-kv-label">{L("项目", "Projects")}</span>
-                  <span className="app-kv-value app-kv-projects">
-                    {inProjects.map((p) => (
-                      <button key={p.name} type="button" className="app-kv-link" onClick={() => onOpenProject?.({ hubId, name: p.name })}>
-                        {p.title || p.name}{roleIn(p) === "coordinator" && <span className="app-kv-note">{L("（协调者）", " (coordinator)")}</span>}
-                      </button>
-                    ))}
-                    {mayManage && joinable.length > 0 && (
-                      <button type="button" className="app-kv-link" onClick={() => { setJoinChoice(joinable[0].name); openAction("projects"); }}>
-                        {L("加入项目", "Join")}
-                      </button>
-                    )}
-                  </span>
-                </div>
-              )}
+    </>
+  );
+  const row_recv = (
+    <>
               {kind !== "human" && (row.st.receiving || inbox) && (
                 <div className="app-kv">
                   <span className="app-kv-label">{L("接收方式", "Receives")}</span>
@@ -987,14 +1117,20 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
                   </span>
                 </div>
               )}
+    </>
+  );
+  const row_cli = (
+    <>
               <div className="app-kv">
                 <span className="app-kv-label">CLI</span>
                 <span className="app-kv-value">
                   {kind === "human" ? "—" : <>{cliName(ag)}{cliVersion(ag) ? ` ${cliVersion(ag)}` : ""}</>}
                 </span>
               </div>
-              <RunRows row={row} now={now} mayManage={mayManage} onRefresh={onRefresh} />
-              {kind === "agent" && !isCloud(ag) && ["claude", "codex"].includes(rt?.cli || ag.binding.harness || "") && <ProviderRow row={row} onRefresh={onRefresh} />}
+    </>
+  );
+  const row_machine = (
+    <>
               <div className="app-kv">
                 <span className="app-kv-label">{L("电脑", "Machine")}</span>
                 <span className="app-kv-value">
@@ -1013,9 +1149,73 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
                   )}
                 </span>
               </div>
+    </>
+  );
+  const sec_runtime = (
+        <>
+          <section className="app-group">
+            <div className="app-group-title"><span className="name">{L("运行", "Runtime")}</span></div>
+            <div className="app-list">
+              {row_type}
+              {row_owner}
+              {row_vis}
+              {!embedded && kind !== "human" && ag.binding.harness !== "machine" && (inProjects.length > 0 || (mayManage && joinable.length > 0)) && (
+                <div className="app-kv">
+                  <span className="app-kv-label">{L("项目", "Projects")}</span>
+                  <span className="app-kv-value app-kv-projects">
+                    {inProjects.map((p) => (
+                      <button key={p.name} type="button" className="app-kv-link" onClick={() => onOpenProject?.({ hubId, name: p.name })}>
+                        {p.title || p.name}{roleIn(p) === "coordinator" && <span className="app-kv-note">{L("（协调者）", " (coordinator)")}</span>}
+                      </button>
+                    ))}
+                    {mayManage && joinable.length > 0 && (
+                      <button type="button" className="app-kv-link" onClick={() => { setJoinChoice(joinable[0].name); openAction("projects"); }}>
+                        {L("加入项目", "Join")}
+                      </button>
+                    )}
+                  </span>
+                </div>
+              )}
+              {row_recv}
+              {row_cli}
+              <RunRows row={row} now={now} mayManage={mayManage} onRefresh={onRefresh} />
+              {kind === "agent" && !isCloud(ag) && ["claude", "codex"].includes(rt?.cli || ag.binding.harness || "") && <ProviderRow row={row} onRefresh={onRefresh} />}
+              {row_machine}
             </div>
           </section>
-
+        </>
+      );
+  // The card's 设置 tab: how it runs (model, effort, access, quota,
+  // provider, how it receives), then whose it is and who sees it.
+  const hasQuota = !!rt?.quota?.windows?.length && !isInbox(ag);
+  const sec_run = (
+        <>
+          <section className="app-group">
+            <div className="app-group-title">
+              <span className="name">{L("运行", "How it runs")}</span>
+              {mayManage && kind === "agent" && <span className="app-group-note">{L("改了从下次唤醒起生效", "Changes apply from its next run")}</span>}
+            </div>
+            <div className="app-list">
+              <RunRows row={row} now={now} mayManage={mayManage} onRefresh={onRefresh} part="settings" />
+              {kind === "agent" && !isCloud(ag) && ["claude", "codex"].includes(rt?.cli || ag.binding.harness || "") && <ProviderRow row={row} onRefresh={onRefresh} />}
+              {row_recv}
+            </div>
+          </section>
+          {hasQuota && (
+            <section className="app-group">
+              <div className="app-group-title"><span className="name">{L("额度", "Plan usage")}</span></div>
+              <div className="app-list"><RunRows row={row} now={now} mayManage={mayManage} onRefresh={onRefresh} part="quota" /></div>
+            </section>
+          )}
+          {(ag.owner || (kind !== "human" && row.hub.me?.member)) && (
+            <section className="app-group">
+              <div className="app-group-title"><span className="name">{L("归属", "Belongs to")}</span></div>
+              <div className="app-list">
+                {row_owner}
+                {row_vis}
+              </div>
+            </section>
+          )}
         </>
       );
   const sec_labels = (
@@ -1124,26 +1324,38 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
 
         </>
       );
+  const deliveryLabel = (m: string) => m === "pull" ? L("它自己来取", "It fetches them")
+    : m === "webhook" ? "Webhook" : m;
   const sec_identity = (
         <>
           <section className="app-group">
-            <div className="app-group-title"><span className="name">{L("身份与绑定", "Identity and binding")}</span></div>
+            <div className="app-group-title"><span className="name">{L("基本", "Basics")}</span></div>
+            <div className="app-list">
+              {embedded && <>{row_type}{row_cli}{row_machine}</>}
+              <div className="app-kv"><span className="app-kv-label">{L("工作区", "Workspace")}</span><span className="app-kv-value">{row.hub.name}</span></div>
+              <div className="app-kv"><span className="app-kv-label">{L("最近在线", "Last online")}</span><span className="app-kv-value">{timeAgo(ag.last_seen_at, now)}</span></div>
+              <div className="app-kv"><span className="app-kv-label">{L("加入时间", "Joined")}</span><span className="app-kv-value">{new Date(ag.created_at).toLocaleString(locale(), { hour12: false })}</span></div>
+            </div>
+          </section>
+          <section className="app-group">
+            <div className="app-group-title"><span className="name">{L("名字和接入", "Name and access")}</span></div>
             <div className="app-list">
               <div className="app-kv"><span className="app-kv-label">{L("agent 名", "Node name")}</span><span className="app-kv-value mono">{ag.name}</span></div>
               <AliasRow row={row} mayManage={mayManage} onRefresh={onRefresh} />
+              <div className="app-kv"><span className="app-kv-label">{L("谁能给它派活", "Who can send it tasks")}</span><span className="app-kv-value">{ag.allow_from.length && !ag.allow_from.includes("*") ? ag.allow_from.join(", ") : L("任何 agent", "Any node")}</span></div>
               <ResumeRow row={row} now={now} mayManage={mayManage} onRefresh={onRefresh} />
-              <div className="app-kv"><span className="app-kv-label">Hub</span><span className="app-kv-value">{row.hub.name}</span></div>
+            </div>
+          </section>
+          <section className="app-group">
+            <div className="app-group-title"><span className="name">{L("技术信息", "Technical")}</span></div>
+            <div className="app-list">
               <div className="app-kv"><span className="app-kv-label">Agent ID</span><span className="app-kv-value mono">{ag.id}</span></div>
               <div className="app-kv"><span className="app-kv-label">{L("会话 ID", "Session ID")}</span><span className="app-kv-value mono">{ag.binding.session_id || "—"}</span></div>
               <div className="app-kv"><span className="app-kv-label">{L("工作目录", "Working directory")}</span><span className="app-kv-value mono">{ag.binding.workdir || "—"}</span></div>
-              <div className="app-kv"><span className="app-kv-label">{L("投递方式", "Delivery")}</span><span className="app-kv-value">{ag.delivery.mode}</span></div>
+              <div className="app-kv"><span className="app-kv-label">{L("收消息", "Messages")}</span><span className="app-kv-value">{deliveryLabel(ag.delivery.mode)}</span></div>
               <div className="app-kv"><span className="app-kv-label">{L("入网令牌", "Join token")}</span><span className="app-kv-value mono">{ag.enrolled_by || L("管理员注册", "Registered by admin")}</span></div>
-              <div className="app-kv"><span className="app-kv-label">{L("允许来源", "Allowed from")}</span><span className="app-kv-value">{ag.allow_from.length && !ag.allow_from.includes("*") ? ag.allow_from.join(", ") : L("任何 agent", "Any node")}</span></div>
-              <div className="app-kv"><span className="app-kv-label">{L("最近在线", "Last online")}</span><span className="app-kv-value">{timeAgo(ag.last_seen_at, now)}</span></div>
-              <div className="app-kv"><span className="app-kv-label">{L("注册时间", "Registered")}</span><span className="app-kv-value">{new Date(ag.created_at).toLocaleString(locale(), { hour12: false })}</span></div>
             </div>
           </section>
-
         </>
       );
   const sec_actions = (
@@ -1195,17 +1407,26 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
     <div className="ms-details">
       {openWork && sec_current}
       <button type="button" className={cn("ms-fold", more && "open")} onClick={() => setMore((v) => !v)} aria-expanded={more}>
-        <ChevronRight />{L("详细信息", "Details")}
+        <span>{L("详细信息", "Details")}</span><ChevronRight />
       </button>
       {more && (
         <div className="ms-fold-body">
           {row.st.state !== "offline" && row.st.session_in_use && row.st.receiving !== "session" && <div className="ms-alert-in"><InUseCard /></div>}
-          {sec_runtime}
-          {sec_about}
-          {sec_labels}
-          {sec_peers}
-          {sec_history}
-          {sec_identity}
+          {/* The details in four tabs (design spec §6.15), so a long card
+              reads one subject at a time: how it runs and whose it is, what
+              it is good at, what it did, and what it is. */}
+          <div className="wf-tabs ms-tabs" role="tablist" aria-label={L("看什么", "View")} data-testid="ms-tabs">
+            {detailTabs.map((t) => (
+              <button key={t.key} type="button" role="tab" aria-selected={dtab === t.key} className={cn("wf-tab", dtab === t.key && "is-on")}
+                onClick={() => setDtab(t.key)} data-tab={t.key}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+          {dtab === "settings" && <>{sec_run}{sec_labels}</>}
+          {dtab === "skills" && (kind === "human" ? <div className="app-empty-note">{L("人没有擅长和工具。", "People have no skills or tools here.")}</div> : sec_about)}
+          {dtab === "records" && <>{sec_peers}{sec_history}</>}
+          {dtab === "identity" && sec_identity}
         </div>
       )}
       <HandoverHistory row={row} now={now} />

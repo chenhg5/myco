@@ -35,6 +35,14 @@ const (
 	ApprovalWithdrew = "withdrew" // the agent is no longer a superagent
 )
 
+// Approval kinds: "" is a superagent's held HTTP request (carried out once
+// when approved); the others are typed requests any agent may make, whose
+// payload the service that made them reads.
+const (
+	ApprovalKindRequest     = ""
+	ApprovalKindActionGrant = "action_grant" // payload {"grant_id": …}: an agent asks to act on a computer
+)
+
 // ApprovalTTL is how long a request waits for its owner.
 const ApprovalTTL = 24 * time.Hour
 
@@ -51,6 +59,8 @@ type Approval struct {
 	Body        []byte
 	ContentType string
 	Status      string
+	Kind        string // "" (a held request) or a typed kind
+	Payload     string // JSON, for a typed kind
 	Result      int    // the HTTP status it got when carried out
 	ResultBody  string // the start of its answer
 	DecidedBy   string

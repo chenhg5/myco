@@ -190,6 +190,10 @@ func (r *runtimeReporter) flush(ctx context.Context) {
 		return
 	}
 	rt := *r.base
+	if supportsRemoteProvider(rt.CLI) {
+		options := localProviderOptions(rt.CLI)
+		rt.Providers = &options
+	}
 	if r.models != nil {
 		rt.Models = r.models()
 	}
@@ -200,7 +204,7 @@ func (r *runtimeReporter) flush(ctx context.Context) {
 	case ch.model != "" && ch.settings != nil:
 		rt.Model, rt.ModelSource = ch.model, "provider"
 	}
-	rt.Provider, rt.ProviderSource = ch.name, ch.source
+	rt.Provider, rt.ProviderSource, rt.ProviderHost = ch.name, ch.source, ch.host
 	// Chosen in the app: wins over the machine's settings for every run.
 	if r.model != "" {
 		rt.Model, rt.ModelSource = r.model, "app"
@@ -227,7 +231,7 @@ func (r *runtimeReporter) flush(ctx context.Context) {
 	if err == nil {
 		r.last = rt
 	}
-	again := err == nil && (r.choice.name != ch.name || r.choice.source != ch.source || r.choice.model != ch.model)
+	again := err == nil && (r.choice.name != ch.name || r.choice.host != ch.host || r.choice.source != ch.source || r.choice.model != ch.model)
 	r.mu.Unlock()
 	if err != nil {
 		r.log.Debug("runtime report failed (older hub?)", "err", err)
@@ -309,7 +313,10 @@ func runnerFeatures(h harness.Harness) []string {
 	// Codex MCP calls are not controlled by its shell sandbox flag, so this
 	// capability is advertised only for the harness whose flag we change.
 	if h.Name() == "claude" {
-		return []string{"mcp_tools"}
+		return []string{"mcp_tools", "remote_provider"}
+	}
+	if h.Name() == "codex" {
+		return []string{"remote_provider"}
 	}
 	return nil
 }

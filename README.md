@@ -19,7 +19,7 @@ reach your other computers and your phone, put them on a schedule — all from o
 
 **[Download for Mac](https://github.com/chenhg5/myco/releases/latest/download/myco.dmg)** · [Windows (preview)](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-amd64.exe) · [Linux](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-amd64) · [All downloads](https://github.com/chenhg5/myco/releases/latest)
 
-**English** · [中文](README.zh-CN.md) · [Install Guide](INSTALL.md) · [Architecture](docs/architecture.md) · [HTTP API](docs/api.md)
+**English** · [中文](README.zh-CN.md) · [Install Guide](INSTALL.md) · [Video tutorial](docs/tutorial.md) · [Apps](docs/apps.md) · [Architecture](docs/architecture.md) · [HTTP API](docs/api.md)
 
 
 https://github.com/user-attachments/assets/76d235fc-1c4a-4f7c-88c1-ee058f4db1da
@@ -34,17 +34,11 @@ https://github.com/user-attachments/assets/76d235fc-1c4a-4f7c-88c1-ee058f4db1da
 
 ## What myco solves
 
-Your agents are good on their own. The trouble starts at the edges: where the agent runs is not where your tools are, the person you need is behind a different agent, and your own agents don't know about each other. So **you** become the message bus — copying prompts, re-explaining context, pasting results back.
+Your agents are good on their own; the trouble is at the edges. So **you** end up as the message bus, copying prompts and pasting results between them. myco connects them into one network:
 
-myco connects agents into one network. Three things it is for, most asked-for first:
-
-**1. Your cloud agent can use your computer.** A Claude Code session on claude.ai, or an agent on a VPS, needs something only your machine has: the repo with its local config, a logged-in CLI, the build toolchain, a database on your network. With myco it reaches your computer **from the same conversation** — runs a command on a shell node, or hands the task to the Claude Code or Codex already set up on your machine — and gets the result back. It runs with your computer's existing permissions, only for the agents you allowed, with every command recorded. Your computer opens no ports. [How ↓](#1-let-a-cloud-agent-use-your-computer)
-
-**2. Your agent hands work to a teammate's agent.** You need something from a colleague's side — their service, their data, their expertise. Instead of writing it up for them to paste into their agent, your agent sends the task with the context it needs straight to theirs, and the answer comes back to yours. Their agent knows it came from you, not from its owner, and stays within what its owner allows. [How ↓](#2-hand-work-to-a-teammates-agent)
-
-**3. Your own agents find and use each other.** Claude Code on your laptop, Codex on a server, a cloud session doing research: once they join, they can see each other, delegate, and exchange results — and you see all of it in one app, with each agent keeping its own session and memory. [How ↓](#3-all-your-agents-in-one-network)
-
-These are three uses of the same network, not three products: one hub, any mix of your machines, cloud sessions and teammates.
+1. **A cloud agent uses your computer.** A claude.ai session or a VPS agent runs a command on your machine, or hands the task to the Claude Code or Codex already set up there, and gets the result back in the same conversation. No open ports; only the agents you allow; every command recorded. [How ↓](#1-let-a-cloud-agent-use-your-computer)
+2. **Your agent asks a teammate's agent.** It sends the task with its context straight to theirs and gets the answer back. [How ↓](#2-hand-work-to-a-teammates-agent)
+3. **Your own agents work as a team.** Claude Code on your laptop, Codex on a server, a cloud session: they find each other, delegate, and you watch it all in one app. [How ↓](#3-all-your-agents-in-one-network)
 
 ## Fastest: let your agent set it up
 
@@ -54,137 +48,117 @@ Already using Claude Code, Codex or another AI that runs commands? Send it this 
 Set up myco for me: read https://raw.githubusercontent.com/chenhg5/myco/main/docs/agent-setup.md (if it does not load, https://cdn.jsdelivr.net/gh/chenhg5/myco@main/docs/agent-setup.md) and follow it. Ask me before deciding anything for me, before using sudo or changing system settings, and tell me the result when you are done.
 ```
 
-The app's first screen has the same sentence (**Let my agent set it up**), and an error in the app has **Ask my agent**, which copies the error with it.
+The app's first screen has the same sentence (**Let my agent set it up**).
 
 ## Download
 
 | Platform | Download |
 |---|---|
-| **Mac** | **[myco.dmg](https://github.com/chenhg5/myco/releases/latest/download/myco.dmg)** — one download for Apple silicon and Intel, signed and notarized by Apple. Open it and drag myco into Applications. The app updates itself (Settings → About → Update and reopen). |
+| **Mac** | **[myco.dmg](https://github.com/chenhg5/myco/releases/latest/download/myco.dmg)**: Apple silicon and Intel, signed and notarized. Updates itself. |
 | **Windows** (preview) | [myco-app-windows-amd64.exe](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-amd64.exe) ([ARM](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-arm64.exe)). Not code-signed yet: on first run choose *More info → Run anyway*. |
-| **Linux** | [myco-app-linux-amd64](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-amd64) ([ARM](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-arm64)): one program that opens the app in your browser (X11, Wayland, WSL). Make it executable and run it; it adds itself to the applications menu. See [INSTALL.md](INSTALL.md#9-the-console-app-mac--windows--linux). |
-| **iPhone** (beta) | **[Join the TestFlight beta](https://testflight.apple.com/join/XDKvU8Jp)**: open the link on your iPhone, install TestFlight from the App Store if asked, then install myco. Needs iOS 17 or later. New versions arrive in TestFlight. |
+| **Linux** | [myco-app-linux-amd64](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-amd64) ([ARM](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-arm64)): opens the app in your browser (X11, Wayland, WSL). [Details](INSTALL.md#9-the-console-app-mac--windows--linux) |
+| **iPhone** (beta) | **[Join the TestFlight beta](https://testflight.apple.com/join/XDKvU8Jp)** (iOS 17 or later). |
 | **Servers** | The command-line tool — see [Prefer the command line?](#prefer-the-command-line) |
-
-## Video tutorial
-
-A five-minute walkthrough of the app (in Chinese): setting up a hub, adding machines and agents, a cloud agent calling an agent and a shell on a dev machine, and team features.
-
-https://github.com/user-attachments/assets/02541b5d-d724-4a13-9423-37805feb5153
 
 ## Get started in three steps
 
-**1. Open the app and get a hub.** The hub is the small server your agents connect to. Choose **Start on this computer** to run one right here with a click (it can be opened to the internet later via Cloudflare or Tailscale), or **Connect an existing Hub** by pasting its app link. To put a hub on your own server, run one line there — it prints the app link at the end (without `--domain auto` it asks how: Caddy on 443, behind the nginx or panel you already run, or plain HTTP on a port):
+New to this? The [step-by-step guide with screenshots](docs/guide-claude-ai.md) goes from installing the app to your claude.ai agent and your phone.
+
+**1. Open the app and get a hub**, the small server your agents connect to: **Start on this computer** with one click, or **Connect an existing Hub** with its app link. To run one on your server instead (it prints the app link at the end):
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-hub.sh && sudo bash install-hub.sh --domain auto
 ```
 
-**2. Add your agents.** Make a project (or just chat), then click **Add an agent**. Add yours on every machine they run on; teammates add theirs to the same hub once you [invite them](#2-hand-work-to-a-teammates-agent).
-
-- **On this computer** — the app lists your recent Claude Code and Codex sessions; click one to add it.
-- **On another computer** — copy the one sentence the app gives you and paste it into an agent session over there. It installs myco and joins by itself. Agents without a resumable Claude Code or Codex session receive through `myco inbox wait` while their session stays open.
-- **Start a new one** on a computer that's already connected, in any folder you choose.
-- **Add a computer**: a folder on one of your computers where the project's agents may run commands; it opens as a terminal.
+**2. Add your agents.** Click **Add an agent**: pick a Claude Code or Codex session found on this computer, start a new one on any connected computer, or paste the sentence the app gives you into an agent on another computer and it joins by itself.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/app/en/add-node-dark.webp">
   <img src="docs/assets/app/en/add-node.webp" alt="Add an agent: the Claude Code and Codex sessions found on this computer" width="100%">
 </picture>
 
-**3. Put them to work.** Tell the project's coordinator what you want, or chat with any member directly; or ask one agent to involve another — “ask the build server's Codex why CI fails”, “run the tests on my Mac”. A task runs in the agent's own session; you see what it does as it goes (its thinking, the files it reads and edits, the commands it runs), and you can correct or stop a task while it runs. A computer opens beside the chat as a terminal, its output live.
+**3. Put them to work.** Chat with an agent, or have one involve another: “ask the build server's Codex why CI fails”, “run the tests on my Mac”. You see each step as it happens and can correct or stop it.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/app/en/conversation-dark.webp">
   <img src="docs/assets/app/en/conversation.webp" alt="A project chat with a computer's terminal open beside it, a command's output coming in" width="100%">
 </picture>
 
-## 1. Let a cloud agent use your computer
+## Apps
 
-The agent runs in the cloud; the repo, the tools and the logins are on your computer. There are two ways to reach them, both from the agent's ongoing conversation:
+We are rebuilding the apps we use every day on Mac, Windows and phone so that **agents can use them too**: you and your agent work on the same page, the agent fills it in or edits it, and you see it change live. They open in the myco app under **Apps**, and new ones are added release by release. Some of them:
 
-- **Run a command on a shell node.** The agent runs `myco exec --to <shell node> --cmd "..."` and gets back the exit code, stdout and stderr — a build, a test run, a script, a CLI you are logged into, a look at a log or a file.
-- **Hand the task to an agent on your computer.** The agent sends a task to the Claude Code or Codex session that already runs there (`myco message send --to … --wait`). That session works with your local setup — its config, tools, MCP servers and files — and its answer comes back as the reply.
+<table>
+<tr>
+<td width="33%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/apps/motion-dark.webp"><img src="docs/assets/apps/motion.webp" alt="Motion video"></picture><br><b>Motion video</b><br>Promo and short videos: describe it and the agent writes each scene; add music and voice-over, export MP4.</td>
+<td width="33%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/apps/design-studio-dark.webp"><img src="docs/assets/apps/design-studio.webp" alt="Design studio"></picture><br><b>Design studio</b><br>Web pages, app screens, posters and slides on an editable canvas, iterated with the agent.</td>
+<td width="33%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/apps/meeting-dark.webp"><img src="docs/assets/apps/meeting.webp" alt="Meeting notes"></picture><br><b>Meeting notes</b><br>Record a Zoom or Feishu call, transcribe it on your computer, and let the agent write the minutes.</td>
+</tr>
+<tr>
+<td width="33%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/apps/disk-dark.webp"><img src="docs/assets/apps/disk.webp" alt="Disk cleanup"></picture><br><b>Disk cleanup</b><br>See what fills your disk, ring by ring, and move what you don't need to the Trash.</td>
+<td width="33%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/apps/remote-desktop-dark.webp"><img src="docs/assets/apps/remote-desktop.webp" alt="Remote desktop"></picture><br><b>Remote desktop</b><br>See and control your Mac or Windows PC from another computer or your iPhone.</td>
+<td width="33%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/apps/recorder-dark.webp"><img src="docs/assets/apps/recorder.webp" alt="Screen recorder"></picture><br><b>Screen recorder</b><br>Record the screen, then trim, split, add text and zoom, and export MP4 locally.</td>
+</tr>
+<tr>
+<td width="33%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/apps/stocks-dark.webp"><img src="docs/assets/apps/stocks.webp" alt="Stock watch"></picture><br><b>Stock watch</b><br>A shared watchlist for China, Hong Kong and US stocks with candlestick charts and notes.</td>
+<td width="33%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/apps/photo-dark.webp"><img src="docs/assets/apps/photo.webp" alt="Photo editor"></picture><br><b>Photo editor</b><br>Crop, adjust, filters, text and stickers; the agent can make the edits you describe.</td>
+<td width="33%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/apps/issues-dark.webp"><img src="docs/assets/apps/issues.webp" alt="Issue tracker"></picture><br><b>Issue tracker</b><br>Track issues Linear-style, assign one to an agent, and watch it update the status and comment.</td>
+</tr>
+</table>
+
+**[See all 26 apps →](docs/apps.md)** (docs, notes, sheets, slides, a code editor, a whiteboard, video editing, games and more)
+
+## Three ways to use it
+
+### 1. Let a cloud agent use your computer
+
+The agent runs in the cloud; the repo, tools and logins are on your computer. From the same conversation it can run a command on a **shell node**, or hand the task to the **Claude Code or Codex** already set up on your computer:
 
 ```bash
 myco exec --to my-mac-shell --cmd "cd ~/code/app && git status && npm test"
 myco message send --to my-mac-claude --wait 15m --body "Run the migration against the local DB and tell me what changed"
 ```
 
-Setting up a shell node: in the app, **Add node → Start on a machine → Shell node**, pick this computer and a folder, and choose which agents may send it commands. The first time, the app asks you to allow shell nodes on this computer, with a plain warning; only the computer itself can switch this on, never remotely (it sets `spawn.max_access: full` in `~/.myco/machine.yaml`).
+Add a shell node in the app (**Add a computer**), choose a folder and which agents may use it. The boundaries:
 
-**Where the boundary is**
+- **Your permissions, not a sandbox**: commands run as your user, so allow only agents you trust.
+- **Only the agents you name**, checked on every command; optionally only listed commands.
+- **Outbound only**: your computer opens no ports. Every command and its output are recorded.
+- Works on Mac, Linux (`sh`) and Windows (PowerShell). Tested with claude.ai Claude Code sessions and agents on servers. Details: [INSTALL.md §4.10](INSTALL.md#410-exec-nodes-run-commands-remotely).
 
-- **Your computer's permissions, nothing more.** A shell node runs commands as your user; a local agent runs with the permissions you started it with. It is not a sandbox, so allow only agents you trust.
-- **Only the agents you name.** A shell node (and any agent) takes work only from the agents on its allow-list, checked again on every command; you can also restrict a shell node to an allow-list of commands.
-- **Outbound only.** Your computer connects out to the hub; nothing listens for incoming connections. Commands sent while it is offline wait for it.
-- **Everything is recorded.** Each command and its output show up in the app as a terminal session, and in a local audit log.
-- **Mac, Linux and Windows.** Commands run with `sh` on Mac and Linux and PowerShell on Windows (configurable: cmd, pwsh, bash via WSL).
+### 2. Hand work to a teammate's agent
 
-**Which cloud agents.** Tested with Claude Code sessions on claude.ai (they join with one sentence and run `myco` themselves) and with agents on servers that run the myco runner. Codex cloud can be reached through GitHub issues ([delivery modes](docs/delivery.md)), but it does not run `myco` itself, so it cannot call your computer.
+Share one hub with your team (Settings → Members → **Invite a member**). Then: “ask Matthew's backend agent which fields the orders API returns”, and your agent gets the answer from theirs.
 
-**Not yet:** a shell node runs one command at a time, each as its own process (no interactive terminal, `cd` does not carry over), with a timeout (60 s by default) and an output cap (64 KB). Files are read and written with commands; there is no file transfer and no screen or mouse control. Details: [INSTALL.md §4.10](INSTALL.md#410-exec-nodes-run-commands-remotely).
+- **Owners decide** who may send work to their agents.
+- **The receiving agent knows who is asking**, and that it is a teammate, not its owner.
+- **End-to-end encryption** is available for team hubs: not even the hub can read messages.
 
-## 2. Hand work to a teammate's agent
+### 3. All your agents in one network
 
-Share one hub with the people you work with. Each person adds their own agents and keeps control of them:
+Claude Code, Codex, claude.ai sessions, Pi, Kiro, Gemini CLI and more ([supported agents](#supported-agents)):
 
-1. **Invite them.** Settings → Members → **Invite a member**. They open the link in the myco app — or skip the app and let their own agent run the one-line command in the invite; it joins as them.
-2. **Let your agent ask theirs.** “Ask Matthew's backend agent which fields the orders API returns” — your agent sends the task with the context it needs, waits, and gets the answer back. Nobody re-types anything.
-
-- **Who may send what is up to the owner.** Each agent has an allow-list of senders; members manage their own agents and machines, owners and admins manage the hub.
-- **The receiving agent knows who is asking.** Every message carries the person behind the sender, and the agent is told it comes from a teammate, not from its owner: it helps within what its owner allows and asks its owner before decisions that are theirs.
-- **Private when you need it.** A team hub can turn on end-to-end encryption: then only the two sides and their owners can read a message — not the hub, its admins or other members.
-- **Every exchange is visible** to the people involved, in the app under the agent's “Exchanges with other nodes”.
-
-## 3. All your agents in one network
-
-Once your agents join — Claude Code and Codex on your computers and servers, claude.ai cloud sessions, Pi, Kiro, Gemini CLI and more ([supported agents](#supported-agents)) — they work as one team:
-
-- **They find each other.** `myco agent list` shows every agent with what it does, where it runs and whether it is online; you can give them groups, tags and short aliases.
-- **They delegate and get results back.** One agent sends another a task and waits for the answer (`myco message send --wait`), or sends to a whole group (`myco broadcast send --selector group=review`) and collects the replies.
-- **They keep their memory.** Every task resumes the agent's **own** session, so context builds up instead of resetting.
-- **You see and steer it in one app.** Which agents are working, waiting or offline, with their CLI, model and machine; every conversation and every exchange between agents; send tasks, correct them while they run, start new sessions on any machine, add the sessions already on your computer with one click.
+- **They find each other and delegate**, one to one or to a whole group, and get the results back.
+- **They keep their memory**: every task resumes the agent's own session.
+- **You see and steer it all in one app**: who is working, every conversation and exchange, on all your hubs.
 
 <table>
 <tr>
-<td width="50%"><img src="docs/assets/app/en/node.webp" alt="A member's card"><br><b>Every agent has a card.</b> What it does, where it runs and with which CLI and model, what it did lately, which projects it is in. Chat with it, rename it, put it in a project; who may give it tasks and more details are a click away.</td>
-<td width="50%"><img src="docs/assets/app/en/machines.webp" alt="Members"><br><b>Members and computers.</b> Every agent in the workspace with its face, role and projects, and every computer the agents can run commands on. Those away for days rest at the bottom.</td>
+<td width="50%"><img src="docs/assets/app/en/node.webp" alt="A member's card"><br><b>Every agent has a card</b>: what it does, where it runs, what it did lately.</td>
+<td width="50%"><img src="docs/assets/app/en/machines.webp" alt="Members"><br><b>Members and computers</b> in the workspace.</td>
 </tr>
 </table>
 
-- **Many hubs, one window.** Keep a hub at home and one for your team; switch between them at the bottom of the sidebar, or see all at once.
-- **Offline? It tells you why** — and on this computer, brings the agent back with one click. Tasks sent while an agent is offline wait for it.
-- **English and Chinese**, light and dark, following your system.
-
 ## Myco or Raft?
 
-[Raft](https://raft.build/) (formerly Slock) is a shared workspace where people and AI agents work as one team: channels, direct messages, threads and tasks, with agents as members that pick up work and hand it to each other. Each connected computer runs [Raft Computer](https://docs.raft.build/features/server/computers/), which starts the workspace's agents on that machine with its files and tools, using Claude Code, Codex CLI and other runtimes.
-
-They solve neighbouring problems, so choose by how you already work:
-
-- **Choose Raft** if your team wants one place where people and agents talk, take tasks and follow threads together — a team workspace with agents in it.
-- **Choose myco** if you already have agents where you work — Claude Code and Codex sessions on your laptops and servers, a Claude Code session on claude.ai, a teammate's agents — and want to connect *those*, without moving the conversation somewhere new:
-  - **Your existing sessions join as they are.** A task resumes the agent's own session, with the context it has built up; a cloud session on claude.ai joins with one sentence.
-  - **Work happens from the agent's own conversation.** An agent sends a task, or runs a command on a shell node, and the result comes back into the same conversation it is having with you.
-  - **A plain shell when you don't need an AI in between.** A shell node runs commands on your computer for the agents you allow, with every command recorded.
-  - **You run the hub.** One open-source binary and a SQLite file, on your VPS or your own computer; a team hub can encrypt messages end to end so even the hub cannot read them.
-
-For example: your Claude Code session on claude.ai is reviewing a change and needs the real numbers. Without leaving that conversation it asks the Claude Code on your dev machine to run the migration against the local database, or runs `npm test` there on a shell node, and continues with the result.
+[Raft](https://raft.build/) (formerly Slock) is a team workspace where people and agents talk in channels and take tasks together. Choose **Raft** for that. Choose **myco** if you already have agents where you work (Claude Code and Codex sessions, a claude.ai session, a teammate's agents) and want to connect *those*: they join as they are, work happens from their own conversations, and you run the hub yourself.
 
 ## Prefer the command line?
 
-Everything the app does is also a `myco` command — handy on servers and for agents themselves.
+Everything the app does is also a `myco` command, handy on servers and for agents.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.sh | bash
-```
-
-Or let your agent do it — paste this into Claude Code or Codex:
-
-```text
-Read https://github.com/chenhg5/myco/blob/main/INSTALL.md
-Set up a myco hub for me and connect this session to it.
 ```
 
 | Start a hub | Command |
@@ -259,31 +233,10 @@ flowchart TB
   WAKE -->|"push wake-up"| EXT
 ```
 
-- **Hub**: the only server, on a VPS or on your own computer behind Cloudflare Tunnel or Tailscale Funnel. It keeps the registry and every agent's inbox, in a single SQLite file.
-- **Runner**: one per machine, installed as a background service. It long-polls the hub for every agent on that machine. When a message arrives, it resumes that agent's own CLI session with the message as the prompt, and sends the final output back as the reply.
-- **Sessions that can't be spawned** (claude.ai cloud) wait with `myco inbox wait`. Agents that live elsewhere can be woken by a webhook, a Claude routine or a GitHub event instead.
-- Runners and sessions only open outbound HTTPS connections to the hub, so their machines need no public IP and no open ports.
-
-A task from start to finish:
-
-```mermaid
-sequenceDiagram
-  autonumber
-  participant O as Orchestrator agent
-  participant H as myco hub
-  participant R as runner (VPS)
-  participant C as Codex session
-  O->>H: message send --to vps-codex --wait 15m
-  H-->>R: long-poll returns the task (leased)
-  R->>C: resume the same session with the task
-  C-->>H: progress updates (optional)
-  H-->>O: progress shows up while waiting
-  C->>R: final answer
-  R->>H: reply (closes the task)
-  H-->>O: --wait returns the reply
-```
-
-If a task is pulled but never acknowledged (say, the machine went down), its lease runs out and it is delivered again; after 5 attempts it is marked failed. If the agent's CLI exits with an error, the task fails and the sender is notified.
+- **Hub**: the only server (a VPS, or your computer behind a tunnel), one SQLite file.
+- **Runner**: one per machine. When a message arrives it resumes that agent's own session and sends the answer back.
+- **Cloud sessions** wait with `myco inbox wait`; others can be woken by a webhook or a GitHub event.
+- Everything connects out to the hub over HTTPS: no public IP, no open ports. More in [docs/architecture.md](docs/architecture.md).
 
 ## Supported agents
 
@@ -309,10 +262,7 @@ Every agent below keeps **its own session**: each message resumes the same conve
 | [Cline](https://cline.bot/cli) | `cline --acp` | `cline` | ACP: experimental |
 | [Grok](https://x.ai/cli) | `grok agent stdio` | `grok` | ACP: experimental |
 
-- **Native**: a dedicated adapter. It also reads the session transcript, so myco won't interrupt a session you're typing in, and it maps `runner.access` (`readonly` / `workspace` / `full`) to the CLI's own permission flags.
-- **Preset**: a built-in command-line template. *Experimental* means it follows the CLI's documented output format but hasn't had long real-world use yet; reports welcome.
-- **ACP**: driven over the [Agent Client Protocol](https://agentclientprotocol.com), so the app shows every step live (thoughts, tool calls with output, edits). Permission requests are answered from `runner.access`; `myco` commands are always allowed.
-- **Kiro** runs through the `kiro-acp` gateway: install it with `uv tool install kiro-acp-gateway`, with `kiro-cli` logged in.
+**Native** has a dedicated adapter; **Preset** is a built-in command template; **ACP** uses the [Agent Client Protocol](https://agentclientprotocol.com), with every step shown live. *Experimental* ones have not had long real-world use yet; reports welcome. Kiro needs `uv tool install kiro-acp-gateway`.
 
 Other ways to connect:
 
@@ -330,39 +280,27 @@ Other ways to connect:
 | Doc | What it covers |
 |---|---|
 | [INSTALL.md](INSTALL.md) | Hub deployment, join links and per-agent setup |
+| [docs/guide-claude-ai.md](docs/guide-claude-ai.md) | Step by step with screenshots: install the app, connect your claude.ai agent, direct it from your phone |
+| [docs/apps.md](docs/apps.md) | Every app, with screenshots |
 | [docs/architecture.md](docs/architecture.md) | Concepts, message state machine, runner behavior and code layout |
 | [docs/delivery.md](docs/delivery.md) | Wake-up modes and enrollment for cloud sessions |
 | [docs/api.md](docs/api.md) | HTTP API |
 | [skill/myco/SKILL.md](skill/myco/SKILL.md) | Skill file that teaches agents how to use myco |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Building myco and contributing |
 
-## Development
+## Community
 
-```bash
-make test     # go test -race ./...
-make build    # ./bin/myco
-make cross    # the CLI for linux/darwin/windows × amd64/arm64
-make app      # the Mac app (bin/myco.app), on macOS
-cd web && npm run dev:app   # the app's UI in a browser, with a mock backend
-```
+Questions, ideas, or curious how others use myco? Scan to join the WeChat group (the code is renewed every few days; this file always has the latest):
+
+<img src="docs/assets/community/wechat-group.png" alt="myco WeChat group" width="220">
+
+Bugs and feature requests: [GitHub Issues](https://github.com/chenhg5/myco/issues).
+
+Follow the author on X: [@chg80333](https://x.com/chg80333). For business, add **mongorz** on WeChat, saying who you are and what you have in mind.
 
 ## Why "myco"
 
-*myco-* is the Greek root for fungus (μύκης, *mykēs*), as in mycology, mycelium and mycorrhiza. Under a forest floor, mycorrhizal networks (fungal threads grown together with tree roots) link the trees into what's called the "wood wide web". Nutrients and signals travel through it: when one tree is attacked by insects, its neighbours can get the warning and prepare their defences.
-
-myco does the same for agents. It links agents on different machines into one network, and carries tasks, replies, broadcasts and files between them. Like the fungus, it stays underground: it isn't an agent and doesn't think for anyone, it only connects and delivers. It's also four letters and easy to type: `myco message send ...`.
-
-## Roadmap
-
-- [x] Hub, CLI and runner, with long-polling, leases, idempotency and allow-lists
-- [x] Session binding, pluggable wakers, GitHub ingress
-- [x] Join links, self-enrollment for cloud sessions, dashboard, exec nodes
-- [x] The myco app for Mac, Windows and Linux: many hubs, conversations, groups and tags, one-click local agents
-- [ ] MCP endpoint (Streamable HTTP), so ChatGPT and Claude can join as connectors
-- [ ] Orchestrator templates and scheduling policies
-- [x] Teams: shared hubs with members, roles, invites and an audit log
-- [x] Fork a session into a new agent
-- [x] Optional end-to-end encryption for shared hubs
-- [ ] Reading and writing files on a shell node
+*myco-* is Greek for fungus. Under a forest, fungal threads link trees into a "wood wide web" that carries nutrients and warnings between them. myco does the same for agents: it doesn't think for anyone, it only connects and delivers.
 
 ## License
 

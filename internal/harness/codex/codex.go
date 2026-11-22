@@ -106,10 +106,12 @@ func (c *codex) Run(ctx context.Context, req harness.Request) (harness.Result, e
 	if p := req.Provider; p != nil {
 		// -c overrides beat ~/.codex/config.toml for this run only; the key
 		// travels in the environment (the provider's env_key).
-		args = append(args, p.ConfigArgs...)
-		env = append(p.EnvList(), env...)
+		env = append(append([]string{}, env...), p.EnvList()...)
 	}
 	args = append(args, extraArgs(c.opts.Args)...)
+	if req.Provider != nil {
+		args = append(args, req.Provider.ConfigArgs...)
+	}
 	// After the runner's own args: the effort chosen in the app wins over
 	// a model_reasoning_effort set there (the last -c of a key wins).
 	if req.Effort != "" {

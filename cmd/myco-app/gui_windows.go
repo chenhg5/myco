@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	_ "embed"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -98,6 +99,13 @@ func runGUI(h http.Handler, _ func(string), setRelaunch func(func())) error {
 		window.Show()
 		window.Focus()
 	}
+	// Notices: a toast for what needs the person; a click opens the App
+	// where it leads.
+	setUpNotices(app, func(hub, target, actor string) {
+		show()
+		detail, _ := json.Marshal(map[string]string{"hubId": hub, "target": target, "actor": actor})
+		window.ExecJS(fmt.Sprintf(`window.dispatchEvent(new CustomEvent("myco-open-notice",{detail:%s}))`, detail))
+	})
 
 	// Clicking the tray icon opens the window, right-clicking shows the menu
 	// (the Windows way): the agents' status, open / restart the runner / quit.

@@ -102,8 +102,8 @@ export function ErrorText({ error, onRetry }: { error: unknown; onRetry?: () => 
     ? L("到设置里升级一下再试。", "Upgrade the hub in Settings → Hubs, then try again.")
     : transient
       ? onRetry
-        ? L("点「重试」再试一次。一直这样的话，看看左下角工作区连没连上，或者到设置 › 网络代理里看看。", "Press Retry to try again. If it keeps happening, check that the hub shows as connected (bottom left), or look at Settings → Network proxy.")
-        : L("等一下再试。一直这样的话，看看左下角工作区连没连上，或者到设置 › 网络代理里看看。", "Try again in a moment. If it keeps happening, check that the hub shows as connected (bottom left), or look at Settings → Network proxy.")
+        ? L("点「重试」再试一次。一直这样的话，看看左下角工作区连没连上，或者到设置 › 代理里看看。", "Press Retry to try again. If it keeps happening, check that the workspace shows as connected (bottom left), or look at Settings › Proxy.")
+        : L("等一下再试。一直这样的话，看看左下角工作区连没连上，或者到设置 › 代理里看看。", "Try again in a moment. If it keeps happening, check that the workspace shows as connected (bottom left), or look at Settings › Proxy.")
       : (error as { suggestion?: string } | null)?.suggestion;
   // The raw text is only hidden when it was replaced by words above.
   const detail = transient || old ? errorDetail(error) : "";

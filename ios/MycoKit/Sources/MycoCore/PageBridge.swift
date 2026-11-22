@@ -117,8 +117,10 @@ public final class PageBridge {
             let state = Self.object(try await call("GET", "state").data) as? [String: Any] ?? [:]
             known = state["version"] as? Int ?? 0
             bridged = true
+            var info: [String: Any] = ["id": page.id, "name": page.name, "version": page.version]
+            if let url = PageLinks.publicURL(of: page) { info["url"] = url }
             return Self.json([
-                "page": ["id": page.id, "name": page.name, "version": page.version],
+                "page": info,
                 "me": ["name": names(me)],
                 "state": state["state"] ?? NSNull(),
                 "version": known,

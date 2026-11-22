@@ -60,7 +60,32 @@ try{
   assert(!(await page.evaluate(n=>window.__inputs.slice(n),inputCount)).some(e=>['scroll','move','button'].includes(e.kind)),'a pinch must not scroll or click on the host');
   await showTools();await page.getByRole('button',{name:lang==='zh'?'适应画面':'Fit to screen',exact:true}).click();
   assert((await page.locator('.rd-session').boundingBox()).height>=height-2,'a phone connection must use the available height automatically');
+  const gamepad=page.getByRole('button',{name:lang==='zh'?'街机手柄':'Arcade controller',exact:true});
+  if(readOnly) assert.equal(await gamepad.count(),0,'view-only sessions must not expose the gamepad');
   if(!readOnly){
+  await gamepad.click();
+  const pad=page.locator('.rd-gamepad');
+  const right=pad.getByRole('button',{name:lang==='zh'?'方向键右':'Right',exact:true});
+  const action=pad.getByRole('button',{name:lang==='zh'?'动作 A':'Action A',exact:true});
+  const center=async(locator,id)=>{const b=await locator.boundingBox();return {x:b.x+b.width/2,y:b.y+b.height/2,id};};
+  const points=[await center(right,1),await center(action,2)];
+  const startIndex=await page.evaluate(()=>window.__inputs.length);
+  await touch('touchStart',points);
+  assert.equal(await right.getAttribute('aria-pressed'),'true');
+  assert.equal(await action.getAttribute('aria-pressed'),'true');
+  await touch('touchEnd',[]);
+  const sent=await page.evaluate(n=>window.__inputs.slice(n),startIndex);
+  assert.deepEqual(sent.filter(e=>e.kind==='key').map(e=>[e.code,e.down]),[
+    ['ArrowRight',true],['ControlLeft',true],['ArrowRight',false],['ControlLeft',false],
+  ]);
+  await touch('touchStart',[await center(right,1)]);
+  await page.evaluate(()=>window.dispatchEvent(new Event('blur')));
+  assert.equal(await right.getAttribute('aria-pressed'),'false');
+  assert.deepEqual(await page.evaluate(()=>window.__inputs.at(-1)),{kind:'key',code:'ArrowRight',down:false});
+  await touch('touchCancel',[]);
+  await page.screenshot({path:path.join(out,`${width}-${height}-${lang}-${theme}-gamepad.png`),fullPage:true});
+  await pad.getByRole('button',{name:lang==='zh'?'返回画面':'Back to screen',exact:true}).click();
+  assert.equal(await pad.count(),0);
   await touch('touchStart',[{x,y,id:1}]);await touch('touchEnd',[]);assert.equal(await page.evaluate(()=>window.__inputs.filter(x=>x.kind==='button').length),2);
   const old=await page.evaluate(()=>window.__inputs.length);await touch('touchStart',[{x,y,id:1}]);await touch('touchMove',[{x:x+45,y:y+15,id:1}]);await touch('touchEnd',[]);
   const moved=await page.evaluate(n=>window.__inputs.slice(n),old);assert(moved.some(x=>x.kind==='move'));assert(!moved.some(x=>x.kind==='button'),'moving is not dragging');

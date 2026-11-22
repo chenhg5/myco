@@ -1,7 +1,7 @@
 {
   "id": "myco/video",
   "name": "视频剪辑",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "kind": "custom",
   "category": "creative",
   "icon": "icon.svg",
@@ -53,7 +53,9 @@
         "color": "text",
         "size": "number",
         "style": "text",
-        "lane": "number"
+        "lane": "number",
+        "fade_in": "number",
+        "fade_out": "number"
       }
     },
     "notes": {

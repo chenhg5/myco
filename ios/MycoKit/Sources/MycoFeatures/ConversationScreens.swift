@@ -604,8 +604,8 @@ struct ConversationBody: View {
         // A link to a page of this workspace opens in the app, like its
         // card; any other link goes where links go.
         .environment(\.openURL, OpenURLAction { url in
-            guard let id = PageLinks.id(of: url.absoluteString, in: session.pages.workspace) else { return .systemAction }
-            router.page = PageRoute(id: id)
+            guard let target = PageLinks.target(of: url.absoluteString, in: session.pages.workspace) else { return .systemAction }
+            router.page = PageRoute(id: target.id, fragment: target.fragment)
             return .handled
         })
         // Typing or sending while it listens stops it: nothing late is

@@ -255,7 +255,7 @@ const shotsOf = (names) => {
   const out = light.map((src) => ({ src, ...(names.includes(src.replace(/(\.[a-z]+)$/i, ".dark$1")) ? { dark: src.replace(/(\.[a-z]+)$/i, ".dark$1") } : {}) }));
   return out.length ? out : undefined;
 };
-const officialOrder = ["table", "base", "doc", "slides", "meeting", "code", "issues", "devtools", "todo", "notes", "disk", "stocks", "proxy-console", "remote-desktop", "ledger", "habit", "cinema", "design-studio", "whiteboard", "mindmap", "video", "motion", "photo", "gomoku", "sudoku"];
+const officialOrder = ["table", "base", "doc", "slides", "meeting", "tutor", "scheduling", "code", "issues", "devtools", "todo", "notes", "disk", "stocks", "proxy-console", "remote-desktop", "ledger", "habit", "cinema", "personality", "design-studio", "logo-studio", "whiteboard", "mindmap", "video", "motion", "photo", "arcade", "gomoku", "sudoku"];
 const mockTemplates = officialOrder.filter((name) => existsSync(new URL(`${name}/myco.json`, officialRoot))).map((name) => {
   const files = officialFiles(name);
   const m = JSON.parse(files["myco.json"]);
@@ -293,6 +293,7 @@ const pages = new Map([["pg_release", {
   url: "http://192.168.1.20:7780/pages/pg_release", created_at: iso(19000), updated_at: iso(19000), can_manage: true,
   versions: [{ n: 1, entry: "index.html", files: 3, size: 2048, sha256: "a1", by: "release-cloud", at: iso(19000) }],
 }]]);
+pages.set("pg_routes", { ...pages.get("pg_release"), id: "pg_routes", name: "应用内路由测试", url: "http://192.168.1.20:7780/pages/pg_routes" });
 pages.set("pg_checklist", {
   id: "pg_checklist", name: "上线清单", project: "website", publisher: "release-cloud", version: 1, entry: "index.html",
   url: "http://192.168.1.20:7780/pages/pg_checklist", created_at: iso(18500), updated_at: iso(18500), can_manage: true,
@@ -621,6 +622,9 @@ const consoleThreads = {
   // A page an agent published (myco page publish): its link in the reply
   // shows as a card and opens in the page panel.
   th_console_page: [
+    makeMessage({ thread_id: "th_console_page", project: "website", from: "release-cloud", to: CONSOLE, type: "note", status: "done", body: "直达普通入口：http://192.168.1.20:7780/pages/pg_routes", created_at: iso(19600), updated_at: iso(19600) }),
+    makeMessage({ thread_id: "th_console_page", project: "website", from: "release-cloud", to: CONSOLE, type: "note", status: "done", body: "直达链接一：http://192.168.1.20:7780/pages/pg_routes#watch?source=fixture&movie=1&line=HD&episode=%E7%AC%AC01%E9%9B%86", created_at: iso(19500), updated_at: iso(19500) }),
+    makeMessage({ thread_id: "th_console_page", project: "website", from: "release-cloud", to: CONSOLE, type: "note", status: "done", body: "直达链接二：http://192.168.1.20:7780/pages/pg_routes#watch?source=fixture&movie=1&line=HD&episode=%E7%AC%AC02%E9%9B%86", created_at: iso(19400), updated_at: iso(19400) }),
     makeMessage({ thread_id: "th_console_page", project: "website", from: CONSOLE, to: "release-cloud", type: "task", status: "done", body: "把 v0.16.8 的发布说明做成一页网页，带上每类改动的数量。", created_at: iso(20000), updated_at: iso(20000) }),
     makeMessage({ thread_id: "th_console_page", project: "website", from: "release-cloud", to: CONSOLE, type: "note", status: "done", body: "下载页的改动在我电脑上跑着，实时预览（改了会自己刷新）：http://192.168.1.20:7780/pages/pg_live", created_at: iso(18200), updated_at: iso(18200) }),
     makeMessage({ thread_id: "th_console_page", project: "website", from: "release-cloud", to: CONSOLE, type: "note", status: "done", body: "上线前的检查也做成了一页清单，大家可以在上面勾：http://192.168.1.20:7780/pages/pg_checklist\n\n勾完了点页面下面的「交给 agent」，我接着往下做。", created_at: iso(18500), updated_at: iso(18500) }),
@@ -729,6 +733,8 @@ const state = {
           runtime: {
             cli: "codex", cli_version: "0.52.0", model: "gpt-6-sol", model_source: "app",
             effort: "high", effort_source: "app", access: "workspace", max_access: "workspace", models: CODEX_MODELS,
+            // a custom address (Settings: 自定义地址)
+            provider: "api.example-llm.com", provider_host: "api.example-llm.com", provider_source: "env_file",
             quota: {
               source: "codex", at: iso(120),
               windows: [
@@ -754,9 +760,31 @@ const state = {
         makeAgent({
           name: "mcp-claude", owner: "glenn", owner_id: "mem_glenn", display_name: "MCP Claude", description: "用 Claude Code 处理文档和工具调用。",
           kind: "agent", machine_id: "m_studio",
-          runtime: { cli: "claude", cli_version: "2.1.240", model: "sonnet", access: "workspace", max_access: "workspace", features: ["mcp_tools"],
+          // Its runner lets the App switch its provider from here (remote_provider)
+          // and lists the cc-switch providers on its computer (never a key).
+          runtime: { cli: "claude", cli_version: "2.1.240", model: "sonnet", access: "workspace", max_access: "workspace", features: ["mcp_tools", "remote_provider"],
+            provider: "DeepSeek", provider_host: "api.deepseek.com", provider_source: "machine",
+            providers: [
+              { ref: "cc-switch:deepseek", name: "DeepSeek", host: "api.deepseek.com", model: "deepseek-v4" },
+              { ref: "cc-switch:glm", name: "智谱 GLM", host: "open.bigmodel.cn", model: "glm-5" },
+              { ref: "cc-switch:kimi", name: "Kimi", host: "api.moonshot.cn" },
+            ],
             mcp: [{ name: "project-docs", transport: "stdio", scope: "project", enabled: true }],
-            skills: [{ name: "release-check", description: "Check release notes", scope: "project" }] },
+            // Enough skills, some with long descriptions, to fold its list.
+            skills: [
+              { name: "release-check", description: "Check release notes", scope: "project" },
+              { name: "dws", description: "管理钉钉产品能力（AI 表格、日历、通讯录、群聊与机器人、待办、审批、考勤、日志、DING 消息、钉钉文档、云盘、邮箱等）。当用户需要操作表格数据、管理日程会议、查谁负责某事项、发消息、创建待办、提交审批时使用。", scope: "user" },
+              { name: "loop-authoring", description: "在 loops 仓库里从零搭一条循环（Workflow + 卡片 + 账本 + draft PR）、改造现有循环，或判断某件事该不该做成循环时使用。15 分钟路径：起骨架 → 只填五个业务格子 → 验证。", scope: "user" },
+              { name: "myco", description: "Talk to other AI agents through a myco hub: discover agents, delegate tasks, answer tasks, and follow threads with the myco CLI.", scope: "user", managed_by: "myco" },
+              { name: "pr-triage", description: "Classify, route, label, and identify obsolete pull requests. Use for PR backlog triage, exact-head review gates, conflict/review/verification queues, or batch label maintenance.", scope: "user" },
+              { name: "frontend-design", description: "Create distinctive, production-grade frontend interfaces with high design quality.", scope: "plugin" },
+              { name: "pdf", description: "Read, extract, merge, split, rotate and fill PDF files.", scope: "plugin" },
+            ],
+            plugins: [
+              { name: "frontend-design", marketplace: "claude-plugins-official", enabled: true },
+              { name: "document-skills", marketplace: "anthropic-agent-skills", enabled: true },
+              { name: "old-linter", marketplace: "local", enabled: false },
+            ] },
           binding: { harness: "claude", environment: "macOS 26.1", workdir: "~/code/myco" },
         }),
         makeAgent({
@@ -764,7 +792,8 @@ const state = {
           kind: "agent", machine_id: "m_studio",
           runtime: {
             cli: "claude", cli_version: "2.1.240", model: "claude-opus-5-5", model_source: "observed",
-            effort: "low", effort_source: "app", access: "readonly", max_access: "workspace", provider: "DeepSeek", provider_source: "machine", features: ["mcp_tools"],
+            // follows this computer, which sends it through a local gateway
+            effort: "low", effort_source: "app", access: "readonly", max_access: "workspace", provider: "magpie 网关", provider_host: "127.0.0.1:3425", provider_source: "machine", features: ["mcp_tools"],
             away: "stopped",
             quota: {
               source: "claude", at: iso(600),
@@ -1032,6 +1061,24 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
   };
   // Slow startup and live blocks for the conversation streaming smoke cases.
   const preview = hub.threads[threadId]?.find((m) => m.id === taskId);
+  // MOCK_CLOUD_JOIN: the claude.ai session answers the guide's first task
+  // (in the task's language).
+  if (preview && process.env.MOCK_CLOUD_JOIN && agent === "cloud-claude") {
+    const en = /[a-z]/i.test(preview.body) && !/[\u4e00-\u9fff]/.test(preview.body);
+    later(300, () => { if (["queued", "delivered"].includes(preview.status)) Object.assign(preview, { status: "acked", updated_at: iso(0) }); });
+    later(2500, () => {
+      replyTimers.delete(taskId);
+      const msgs = hub.threads[threadId];
+      if (!msgs || preview.status === "failed") return;
+      const body = en
+        ? "Done. The three most important changes this week:\n\n1. **Login moved to a new token flow**: old sessions sign in again once.\n2. **The orders API returns `currency`**: the app's price display uses it now.\n3. **CI runs on Windows too**: two tests that assumed `/` paths were fixed."
+        : "看完了，这周最重要的三件事：\n\n1. **登录换成了新的令牌流程**：老的登录状态会要求重新登录一次。\n2. **订单接口多返回了 `currency` 字段**：App 的价格显示已经用上了。\n3. **CI 加上了 Windows**：顺手修了两个默认路径是 `/` 的测试。";
+      msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "reply", status: "done", reply_to: taskId, body, created_at: iso(0), updated_at: iso(0) }));
+      Object.assign(preview, { status: "done", updated_at: iso(0) });
+      releaseAfter(hub, threadId, taskId);
+    });
+    return;
+  }
   // An agent that offers the next step (myco message reply --suggest): the
   // task carries it, the app's input shows it, Tab takes it.
   if (preview && /下一步/.test(preview.body)) {
@@ -1348,7 +1395,12 @@ const ccProviders = [
   { ref: "cc-switch:glm", id: "glm", name: "智谱 GLM", app: "claude", host: "open.bigmodel.cn", model: "glm-5" },
   { ref: "cc-switch:kimi", id: "kimi", name: "Kimi", app: "claude", host: "api.moonshot.cn" },
 ];
-const localProviderAgents = new Map([["docs-claude", { local: true, harness: "claude", provider: "" }]]);
+const localProviderAgents = new Map([
+  ["docs-claude", { local: true, harness: "claude", provider: "" }],
+  // a Codex agent on this computer with a custom address (the key is kept, never shown)
+  ["pm-codex", { local: true, harness: "codex", provider: "env_file", env_host: "api.example-llm.com",
+    manual: { base_url: "https://api.example-llm.com/v1", model: "gpt-5-codex", wire_api: "responses", has_key: true } }],
+]);
 
 // Resume lines the smoke test makes and revokes; put the demo ones back
 // between widths and themes.
@@ -1504,6 +1556,9 @@ function agentStatus(a) {
 function hubView(h) {
   const view = { id: h.id, name: h.name, url: h.url, ok: h.ok, hub_version: h.hub_version, update_available: h.update_available };
   if (!h.ok) view.error = h.error;
+  // MOCK_LOOPBACK_HUB=1: the studio hub as the App on its own computer sees
+  // it (127.0.0.1), while its links carry the LAN address.
+  if (process.env.MOCK_LOOPBACK_HUB && h.id === "hub_studio") { view.url = "http://127.0.0.1:7780"; view.aliases = ["http://localhost:7780", "http://[::1]:7780", "http://192.168.1.20:7780"]; }
   return view;
 }
 
@@ -1544,7 +1599,8 @@ const devices = [
 if (process.env.MOCK_OWNER_UNNAMED) { people[0].name = "owner"; people[0].display_name = ""; }
 function whoami(h) {
   // The showcase's own workspace is yours too (so its computers open).
-  if (h.id !== "hub_studio" && !(SHOWCASE && h.id === "hub_home")) return undefined;
+  // (MOCK_CLOUD_JOIN: the workspace you just started is yours too)
+  if (h.id !== "hub_studio" && !(SHOWCASE && h.id === "hub_home") && !(process.env.MOCK_CLOUD_JOIN && h.id.startsWith("hub_local"))) return undefined;
   const m = people.find((p) => p.id === "mem_" + meName);
   return { member: m, can_manage: m.role !== "member", device: devices[0] };
 }
@@ -1824,6 +1880,7 @@ const server = http.createServer(async (req, res) => {
         const name = state.superagents[h.id];
         delete state.superagents[h.id];
         state.approvals[h.id] = [];
+        if (state.grants) state.grants[h.id] = [];
         if (name) h.agents = (h.agents || []).filter((a) => a.name !== name);
       }
       return send(res, 200, { ok: true });
@@ -1833,8 +1890,27 @@ const server = http.createServer(async (req, res) => {
     const agent = (hub && body?.agent) || (hub && state.superagents[hub.id]);
     if (!agent) return fail(res, 404, "not_found", "no superagent there");
     state.counter += 1;
+    // An agent that sees a page may export it without asking: its grant is
+    // active at once, with no approval.
+    if (body.kind === "page_grant") {
+      const g = { id: `agr_${state.counter}`, agent, owner: "glenn", target: { kind: "page", id: "pg_mock_board" }, target_name: body.page || "产品白板",
+        permissions: ["page.export"], requested: ["page.export"], reason: body.reason || "", state: "active", created_at: iso(0),
+        expires_at: new Date(Date.now() + 10 * 60_000).toISOString() };
+      (state.grants ||= {})[hub.id] = [...(state.grants[hub.id] || []), g];
+      return send(res, 201, g);
+    }
     const a = { id: `apr_${state.counter}`, agent, what: body.what || "删除项目 old-site", reason: body.reason || "", method: body.method || "DELETE", path: body.path || "/v1/projects/old-site",
       status: "pending", created_at: iso(0), expires_at: new Date(Date.now() + 24 * 3600_000).toISOString() };
+    // An agent asking to act on a computer (kind action_grant): its
+    // pending grant too.
+    if (body.kind === "action_grant") {
+      const requested = body.permissions || ["remote.desktop.control", "remote.desktop.view"];
+      const g = { id: `agr_${state.counter}`, agent, owner: "glenn", target: { kind: "machine", id: "m_studio" }, target_name: body.machine || "Studio Mac",
+        permissions: [], requested, reason: a.reason, approval_id: a.id, state: "pending", created_at: iso(0), ttl: 300 };
+      (state.grants ||= {})[hub.id] = [...(state.grants[hub.id] || []), g];
+      Object.assign(a, { kind: "action_grant", payload: { grant_id: g.id }, method: "", path: "",
+        what: body.what || `${requested.includes("remote.desktop.control") ? "看并操作" : "看"}电脑 ${g.target_name} 的屏幕（键盘和鼠标），5 分钟` });
+    }
     (state.approvals[hub.id] ||= []).push(a);
     return send(res, 201, a);
   }
@@ -1863,6 +1939,11 @@ const server = http.createServer(async (req, res) => {
   // computer; put the demo ones back between widths and themes.
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "local" && parts.length === 3) {
     if (method !== "POST") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
+    const body = await readBody(req);
+    if (typeof body?.tailscale_installed === "boolean") {
+      local.tools.tailscale = body.tailscale_installed ? { path: "C:/Program Files/Tailscale/tailscale.exe" } : null;
+      return send(res, 200, { ok: true });
+    }
     local.hubs = JSON.parse(JSON.stringify(localHubsAtStart));
     local.hub = JSON.parse(JSON.stringify(local.hubs.find((h) => !h.name) || null));
     state.hubs = [
@@ -2034,6 +2115,12 @@ const server = http.createServer(async (req, res) => {
     }
     if (parts.length === 2 && method === "GET") return send(res, 200, { os: "mock", arch: "", caps: [] });
     return fail(res, 501, "unsupported", "the mock App does not use this computer");
+  }
+  // /app/page-render: no exports in the mock; the renderer waits and asks again.
+  if (parts[0] === "app" && parts[1] === "page-render" && parts[2] === "next" && method === "GET") {
+    const t = setTimeout(() => { res.writeHead(204); res.end(); }, 20_000);
+    req.on("close", () => clearTimeout(t));
+    return;
   }
   // /app/info
   if (parts[0] === "app" && parts[1] === "info" && parts.length === 2) {
@@ -2245,6 +2332,19 @@ const server = http.createServer(async (req, res) => {
   }
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "opened" && parts.length === 3) {
     return send(res, 200, { urls: openedLinks });
+  }
+  // /app/notices: this mock is a browser, so it shows none; the pages
+  // still say what is on screen (recorded for tests).
+  if (parts[0] === "app" && parts[1] === "notices" && parts.length === 2) {
+    return send(res, 200, { available: false, hubs: {}, badge: 0 });
+  }
+  if (parts[0] === "app" && parts[1] === "notices" && parts[2] === "focus" && method === "PUT") {
+    state.noticeFocus = await readBody(req);
+    res.writeHead(204);
+    return res.end();
+  }
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "notice-focus") {
+    return send(res, 200, state.noticeFocus || {});
   }
   // /app/ui-lang: the pages' language, for the desktop app's tray menu.
   if (parts[0] === "app" && parts[1] === "ui-lang" && parts.length === 2) {
@@ -2475,14 +2575,25 @@ const server = http.createServer(async (req, res) => {
       if (!localProviderAgents.has(name)) return method === "GET" ? send(res, 200, { local: false, provider: "" }) : send(res, 404, { error: "not_found", message: "this agent does not run on this computer" });
       if (method === "PUT") {
         const body = await readBody(req);
-        const cur = { local: true, harness: "claude", provider: body.manual ? "env_file" : body.provider || "" };
-        if (body.manual) cur.env_host = new URL(body.manual.base_url).host;
+        const was = localProviderAgents.get(name);
+        const cur = { local: true, harness: was.harness, provider: body.manual ? "env_file" : body.provider || "" };
+        if (body.manual) {
+          let u;
+          try { u = new URL(body.manual.base_url); } catch { return fail(res, 400, "invalid_argument", "base_url must be an http(s) address"); }
+          if (!body.manual.api_key) return fail(res, 400, "invalid_argument", "a key is required");
+          if (u.username || u.password || u.search || u.hash) return fail(res, 400, "invalid_argument", "no credentials, query or fragment in base_url");
+          cur.env_host = u.host;
+          cur.manual = { base_url: body.manual.base_url, model: body.manual.model || undefined, has_key: true,
+            ...(was.harness === "codex" ? { wire_api: body.manual.wire_api || "responses" } : {}) };
+        }
         localProviderAgents.set(name, cur);
         // what the runner would report on its next message
         for (const h of state.hubs) for (const a of h.agents || []) if (a.name === name && a.runtime) {
           const p = ccProviders.find((x) => x.ref === cur.provider);
-          a.runtime.provider = p ? p.name : cur.env_host || ccProviders.find((x) => x.current)?.name;
+          // following this computer: the gateway its CLI is set up with
+          a.runtime.provider = p ? p.name : cur.env_host || "magpie 网关";
           a.runtime.provider_source = p ? "pinned" : cur.env_host ? "env_file" : "machine";
+          a.runtime.provider_host = p ? p.host : cur.env_host || "127.0.0.1:3425";
         }
       }
       return send(res, 200, localProviderAgents.get(name));
@@ -2797,6 +2908,24 @@ const server = http.createServer(async (req, res) => {
 
     // /app/hubs/{id}/superagent and /approvals… — your superagent (v0.21.1)
     // and what it asks you to approve. /app/mock/superagent-ask adds one.
+    // /app/hubs/{id}/action-grants — what agents may do on your computers
+    // (v0.21.21), and revoking it.
+    if (parts[3] === "action-grants") {
+      if (hub.id === "hub_lab") return fail(res, 404, "not_found", "no such route"); // an older hub
+      const list = ((state.grants ||= {})[hub.id] ||= []);
+      if (parts.length === 4 && method === "GET") {
+        const want = url.searchParams.get("state") || "";
+        return send(res, 200, { grants: list.filter((g) => !want || g.state === want).map(({ ttl, ...g }) => g) });
+      }
+      if (parts.length === 6 && parts[5] === "revoke" && method === "POST") {
+        const g = list.find((x) => x.id === parts[4]);
+        if (!g) return fail(res, 404, "not_found", "grant not found");
+        Object.assign(g, { state: "revoked", end_reason: "revoked by glenn", ended_at: iso(0) });
+        const { ttl, ...out } = g;
+        return send(res, 200, out);
+      }
+      return fail(res, 404, "not_found", "no such route");
+    }
     if (parts[3] === "superagent" || parts[3] === "approvals") {
       if (hub.id === "hub_lab") return fail(res, 404, "not_found", "no such route"); // an older hub
       state.superagents ||= {};
@@ -2835,6 +2964,15 @@ const server = http.createServer(async (req, res) => {
         if (a.status !== "pending") return fail(res, 409, "conflict", `already ${a.status}`);
         a.status = parts[5] === "approve" ? "done" : "denied";
         a.decided_by = "glenn";
+        if (a.kind === "action_grant") {
+          const body = await readBody(req);
+          const g = (state.grants?.[hub.id] || []).find((x) => x.id === a.payload?.grant_id);
+          if (g && a.status === "done") {
+            g.permissions = body?.permissions?.length ? body.permissions : g.requested;
+            g.state = "active";
+            g.expires_at = new Date(Date.now() + (body?.ttl_seconds || g.ttl) * 1000).toISOString();
+          } else if (g) g.state = "denied";
+        }
         a.decided_at = iso(0);
         if (a.status === "done") a.result = 200;
         // A coordinator's request for a computer: carried out as you.
@@ -3421,6 +3559,7 @@ const server = http.createServer(async (req, res) => {
       // A message the reset between passes took away, still in the app's
       // saved page data: no steps (a 404 would be a page error in the smoke).
       if (!m) return send(res, 200, { events: [] });
+      if (process.env.MOCK_CLOUD_JOIN && m.to === "cloud-claude") return send(res, 200, { events: [] });
       const node = (hub.agents || []).find((a) => a.name === m.to);
       if (node?.binding?.harness === "exec") {
         const lines = execLines();
@@ -3591,6 +3730,17 @@ const server = http.createServer(async (req, res) => {
           state.superagents ||= {};
           state.superagents[hub.id] = name;
         }, 2500);
+      }
+      // MOCK_CLOUD_JOIN=1 (screenshots for docs/guide-claude-ai): the
+      // sentence for an agent elsewhere is "sent" to a claude.ai session,
+      // which joins a few seconds later, once.
+      if (process.env.MOCK_CLOUD_JOIN && !body?.superagent && !body?.shell_node && !state.cloudJoined) {
+        state.cloudJoined = true;
+        setTimeout(() => {
+          hub.agents.push(makeAgent({ name: "cloud-claude", display_name: "Claude (claude.ai)", owner: "glenn", owner_id: "mem_glenn", kind: "agent",
+            description: "Claude Code session on claude.ai", runtime: { cli: "claude-cloud" },
+            binding: { harness: "claude-cloud", environment: "claude.ai" }, created_at: iso(0), last_seen_at: iso(0), status_text: "" }));
+        }, 4000);
       }
       if (body?.shell_node) state.pendingJoin = { hubId: hub.id, allow: Array.isArray(body.allow_from) ? body.allow_from : [] };
       else if (uses === 1) state.pendingConnect = { hubId: hub.id };
@@ -3946,8 +4096,13 @@ const server = http.createServer(async (req, res) => {
           return fail(res, 404, "not_found", `no route for ${method} /app/hubs/${hub.id}/agents/${agent.name}/run-settings`);
         }
         const body = await readBody(req);
-        if (!body || typeof body.model !== "string" || typeof body.effort !== "string") {
-          return fail(res, 400, "invalid_argument", 'model and effort are required ("" follows the computer)');
+        if (!body) return fail(res, 400, "invalid_argument", "a body is required");
+        // Model and effort may be left out (hubs from the remote-provider
+        // change): what was chosen stays.
+        if (body.model === undefined) body.model = agent.run_settings?.model || "";
+        if (body.effort === undefined) body.effort = agent.run_settings?.effort || "";
+        if (typeof body.model !== "string" || typeof body.effort !== "string") {
+          return fail(res, 400, "invalid_argument", 'model and effort are strings ("" follows the computer)');
         }
         const was = runSettingsAtStart.get(`${hub.id}/${agent.name}`);
         const rt = agent.runtime || (agent.runtime = { cli: agent.binding?.harness || "codex" });
@@ -3969,7 +4124,22 @@ const server = http.createServer(async (req, res) => {
           const owns = me && (agent.owner_id ? agent.owner_id === me.id : !agent.owner && me.role === "owner");
           if (!owns && mcpTools !== !!agent.run_settings?.mcp_tools) return fail(res, 403, "permission_denied", "只有这个 agent 的主人能修改 MCP 工具权限。");
         }
+        const keptProvider = agent.run_settings?.provider;
+        const keptManual = agent.run_settings?.provider_encrypted;
         agent.run_settings = {};
+        if (body.provider !== undefined) {
+          if (!rt.features?.includes("remote_provider")) return fail(res, 409, "unsupported", "this agent's runner cannot switch providers from the App; upgrade myco on its computer");
+          const p = (rt.providers || []).find((x) => x.ref === body.provider);
+          if (body.provider === "" || body.provider === "clear") {
+            rt.provider = (rt.providers || [])[0]?.name; rt.provider_host = (rt.providers || [])[0]?.host; rt.provider_source = "machine";
+          } else if (p) {
+            agent.run_settings.provider = body.provider;
+            rt.provider = p.name; rt.provider_host = p.host; rt.provider_source = "pinned";
+          } else return fail(res, 400, "invalid_argument", "unknown provider " + body.provider);
+        } else if (keptProvider) {
+          agent.run_settings.provider = keptProvider;
+          if (keptManual) agent.run_settings.provider_encrypted = keptManual;
+        }
         if (access) agent.run_settings.access = access;
         if (mcpTools) agent.run_settings.mcp_tools = true;
         if (body.model) agent.run_settings.model = body.model;
@@ -3995,6 +4165,24 @@ const server = http.createServer(async (req, res) => {
           if (!rt.effort_source) delete rt.effort_source;
         }
         lastRunSettings = { hub: hub.id, agent: agent.name, body };
+        return send(res, 200, agent);
+      }
+      // /app/hubs/{id}/agents/{name}/provider — a custom address for an agent
+      // on another computer: the key is sealed for it, so only with end-to-end
+      // encryption on.
+      if (parts.length === 6 && parts[5] === "provider" && method === "PUT") {
+        const rt = agent.runtime || {};
+        if (!rt.features?.includes("remote_provider")) return fail(res, 409, "unsupported", "upgrade myco on its computer");
+        if (!hub.e2e) return fail(res, 409, "e2e_required", "the key would pass through the hub: turn on end-to-end encryption, or enter it on that computer");
+        const body = await readBody(req);
+        let u;
+        try { u = new URL(body?.manual?.base_url || ""); } catch { return fail(res, 400, "invalid_argument", "base_url must be an http(s) address"); }
+        if (!body.manual.api_key) return fail(res, 400, "invalid_argument", "a key is required");
+        if (u.username || u.password || u.search || u.hash) return fail(res, 400, "invalid_argument", "no credentials, query or fragment in base_url");
+        // Sealed for the agent; its runner takes it before its next task.
+        agent.run_settings = { ...(agent.run_settings || {}), provider: "custom", provider_encrypted: { id: "pe_demo", from: "glenn", body: "(sealed)" } };
+        rt.provider = u.host; rt.provider_host = u.host; rt.provider_source = "env_file";
+        lastRunSettings = { hub: hub.id, agent: agent.name, body: { manual: { ...body.manual, api_key: "(sealed)" } } };
         return send(res, 200, agent);
       }
       // /app/hubs/{id}/agents/{name}/resume — the line that brings the same

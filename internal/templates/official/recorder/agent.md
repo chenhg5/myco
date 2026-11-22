@@ -21,3 +21,10 @@ requires a separately installed FFmpeg with gdigrab and h264_mf; silent desktop
 only. A browser with display capture may provide its own screen/window picker.
 Unsupported hosts can still import existing videos. No auto cursor tracking,
 auto captions, webcam or multi-track recording in this version.
+
+On Mac, the native region selector waits for a drag and confirmation before capture
+starts. The App hides while recording; the menu-bar Stop Recording control finalizes
+the local movie and returns to editing. Cancelling selection creates no footage.
+
+Focus zoom supports `fade_in` and `fade_out` seconds (0.1–3, default 0.9); preview
+and export share the same gradual transition, with a hold between both ends.

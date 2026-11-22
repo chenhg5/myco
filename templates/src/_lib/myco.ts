@@ -3,7 +3,13 @@
 export type MycoRecord<T = Record<string, unknown>> = { collection: string; id: string; data: T; version: number; updated_by?: string };
 export type MycoChange = { seq: number; collection: string; record: string; op: "put" | "delete"; data?: Record<string, unknown>; version: number; by?: string };
 export type PagePreferences = { language: "zh" | "en"; theme: "light" | "dark" };
-type Ctx = { preferences?: PagePreferences; page: { id: string; name: string }; me: { name: string } };
+export type PageActionDescriptor = { name: string; version: number; input_schema: Record<string, unknown> };
+export type PageActionRequest = { id: string; action: string; version: number; args: unknown; signal: AbortSignal };
+export type PageActionFile = { media_type: string; data: Blob | Uint8Array | ArrayBuffer; width?: number; height?: number; pages?: number };
+export type PageActionBridge = {
+  register(descriptors: PageActionDescriptor[], invoke: (request: PageActionRequest) => Promise<PageActionFile>): () => void;
+};
+type Ctx = { preferences?: PagePreferences; page: { id: string; name: string; url?: string }; me: { name: string }; render?: { instance: string } };
 
 interface Bridge {
   readonly preferences?: PagePreferences;
@@ -11,6 +17,7 @@ interface Bridge {
   ready: Promise<Ctx>;
   data: {
     list(collection?: string): Promise<{ records: MycoRecord[]; seq: number }>;
+    get(collection: string, id: string): Promise<MycoRecord>;
     put(collection: string, data: unknown, opts?: { id?: string; ifVersion?: number }): Promise<MycoRecord>;
     remove(collection: string, id: string, opts?: { ifVersion?: number }): Promise<boolean>;
     on(f: (c: MycoChange) => void): () => void;
@@ -19,6 +26,7 @@ interface Bridge {
   /** What the App's bridge can do (Apps from v0.20.27); missing in older ones.
    *  "os": myco.os is there. */
   features?: string[];
+  actions?: PageActionBridge;
   /** This computer (the App's): files, commands, the screen… Each system
    *  does what it can; what it cannot answers err.code "unsupported". */
   os?: MycoOS;
@@ -125,6 +133,7 @@ export interface MycoOS {
   clipboard: { read(): Promise<{ text: string }>; write(a: { text: string }): Promise<true> };
   notify(a: { title?: string; body?: string; subtitle?: string; sound?: boolean }): Promise<true>;
   screen: {
+    region(): Promise<{x:number; y:number; w:number; h:number}>;
     /** macOS screen recording. Write "stop" to finalize; originals stay local. */
     record(a?: { region?: {x:number; y:number; w:number; h:number}; interactive?: boolean; microphone?: boolean; clicks?: boolean; max_seconds?: number }): OSJob<{path: string; bytes: number}>;
     capture(a?: { display?: number; region?: { x: number; y: number; width: number; height: number }; format?: "png" | "jpeg"; quality?: number }): Promise<OSImage & { bytes: number }>;
@@ -222,8 +231,18 @@ export class Store<T extends Record<string, unknown> = Record<string, unknown>> 
   async remove(id: string) {
     const i = this.rows.findIndex((r) => r.id === id);
     if (i >= 0) this.rows.splice(i, 1);
-    await (this.queues.get(id) || Promise.resolve());
-    await myco!.data.remove(this.collection, id).catch((e: { code?: string }) => { if (e.code !== "not_found") throw e; });
+    const run = async () => {
+      const before = this.get(id), data = before?.data, version = before?.version;
+      await myco!.data.remove(this.collection, id).catch((e: { code?: string }) => { if (e.code !== "not_found") throw e; });
+      const cur = this.get(id);
+      // Undo may already have staged a replacement. After deletion its next
+      // queued put must create it, rather than reuse the removed version.
+      if (cur && this.pending(id)) cur.version = 0;
+      else if (cur && cur.data === data && cur.version === version) this.rows.splice(this.rows.indexOf(cur), 1);
+    };
+    const p = (this.queues.get(id) || Promise.resolve()).then(run, run);
+    this.queues.set(id, p.catch(() => undefined));
+    await p;
   }
   on(f: (c: MycoChange) => void) { this.listeners.push(f); }
   private fire(c: MycoChange) { for (const f of this.listeners) f(c); }

@@ -103,3 +103,7 @@ To extend it:
 - **A new reply source**: implement `httpapi.Ingress`.
 - **Different storage**: implement `domain.AgentRepository` and `domain.MessageRepository`.
 - **A multi-instance Hub**: implement `app.Notifier`, for example with Redis or NATS.
+- **React to what others do**: subscribe to the `app.EventBus` (`domain.Event`: a message stored or changed, an approval, a workflow step or run). The repositories publish these themselves (`app.ObserveMessages` and the like, wrapped in `hubserver`), so the services that cause an event never call its listeners.
+- **Tell people about something new** (notices, `app.NoticeService`): add an `app.NoticeSource` that turns events into `domain.Notice`s (who, what kind, where it leads, what settles it) and register it in `hubserver`. Storage, the person's preferences (`domain.NoticePrefs.Verdict`: tiers, quiet hours, pause, mutes), the App's feed and every channel come with it.
+- **A new channel for notices** (a push relay, a chat app, mail): implement `app.NoticeSink` (`Deliver` a new notice with its verdict, `Changed` when a person's notices were read or settled) and add it in `hubserver`. A sink that fails or panics does not stop the others.
+- **Notices on another device**: the App follows the feed with `internal/console/notices` and shows them through a `notices.Presenter` (the desktop's is `cmd/myco-app/notices_gui.go`); a new platform is a new presenter.

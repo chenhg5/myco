@@ -89,6 +89,7 @@ func (c *Component) statusLocked() ComponentStatus {
 	}
 	_, version, installed := c.installedComponent()
 	s := ComponentStatus{Protocol: Protocol, Version: version, Installed: installed, Supported: remoteSupported(), Running: c.process != nil}
+	s.UpdateAvailable = installed && version != ComponentVersion
 	if s.Running {
 		s.PairingCode = c.pairing
 	}

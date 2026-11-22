@@ -119,7 +119,10 @@ const server = http.createServer((req, res) => {
               ? []
               : remote.searchParams.has("ids")
                 ? [movie(remote.searchParams.get("ids"))]
-                : [movie("1"), movie("2")],
+                : Array.from(
+                    { length: u.searchParams.has("long") ? 24 : 2 },
+                    (_, i) => movie(String(i + 1)),
+                  ),
         }),
       );
     else if (remote.pathname === "/poster.png") {
@@ -155,7 +158,7 @@ const server = http.createServer((req, res) => {
   }
   if (p === "/bridge.js") {
     res.writeHead(200, { "Content-Type": "text/javascript" });
-    res.end(bridge + phoneBridge);
+    res.end(bridge.replace('page: { id: "pg_shots", name: "shots" }', 'page: { id: "pg_shots", name: "shots", url: "https://hub.test/pages/pg_shots" }') + phoneBridge);
     return;
   }
   const f = path.resolve(root, "." + (p === "/" ? "/index.html" : p));
@@ -217,10 +220,13 @@ try {
     ["en", "light", 760],
     ["en", "dark", 1400],
     ["zh", "light", 393, true],
+    ["en", "dark", 393, true],
   ]) {
     const page = await browser.newPage({
       viewport: { width, height: 900 },
       colorScheme: theme,
+      hasTouch: !!phone,
+      isMobile: !!phone,
     });
     const errors = [],
       network = [];
@@ -243,7 +249,8 @@ try {
                 "/fixture?url=" +
                   encodeURIComponent(args.url) +
                   "&binary=" +
-                  (args.response === "base64" ? "1" : "0"),
+                  (args.response === "base64" ? "1" : "0") +
+                  (phone ? "&long=1" : ""),
               );
               return r.json();
             },
@@ -318,7 +325,40 @@ try {
       .getByRole("button", { name: L("关闭", "Close"), exact: true })
       .click();
     await page.locator(".ci-film").first().waitFor();
-    assert.equal(await page.locator(".ci-film").count(), 2);
+    assert.equal(await page.locator(".ci-film").count(), phone ? 24 : 2);
+    if (phone) {
+      const touch = await page.context().newCDPSession(page);
+      const swipe = async (from, to) => {
+        await touch.send("Input.dispatchTouchEvent", {
+          type: "touchStart",
+          touchPoints: [{ x: 100, y: from }],
+        });
+        for (let i = 1; i <= 12; i++) {
+          await touch.send("Input.dispatchTouchEvent", {
+            type: "touchMove",
+            touchPoints: [{ x: 100, y: from + ((to - from) * i) / 12 }],
+          });
+          await page.waitForTimeout(20);
+        }
+        await touch.send("Input.dispatchTouchEvent", {
+          type: "touchEnd",
+          touchPoints: [],
+        });
+        await page.waitForTimeout(500);
+      };
+      // Finger gestures on film buttons must scroll a long catalog in both
+      // directions; click() and scrollIntoView() bypass overflow:hidden.
+      await swipe(720, 250);
+      await page.waitForFunction(() => scrollY > 100, null, { timeout: 5000 });
+      const down = await page.evaluate(() => scrollY);
+      await swipe(250, 720);
+      await page.waitForFunction((down) => scrollY < down - 100, down, {
+        timeout: 5000,
+      });
+      await touch.detach();
+      await page.evaluate(() => scrollTo(0, 0));
+      console.log("PASS phone finger swipes scroll the catalog down and back up");
+    }
     await page.screenshot({
       path: path.join(out, `${lang}-${theme}-${width}-catalog.png`),
     });
@@ -484,6 +524,35 @@ try {
       );
       console.log("PASS live agent source edits and enable/disable");
     }
+    // Deep-link navigation is a view choice: no source or watchlist writes.
+    const sourceId = await page.evaluate(async () => (await window.myco.data.list("sources")).records[0].id);
+    const route = (movie, line="HLS", episode="第02集") => "#watch?" + new URLSearchParams({source:sourceId,movie,line,episode});
+    await page.evaluate(fragment => { location.hash = fragment; }, route("1"));
+    await page.getByRole("combobox",{name:L("播放线路","Playback line"),exact:true}).waitFor();
+    assert.equal(await page.getByRole("combobox",{name:L("播放线路","Playback line"),exact:true}).inputValue(),"0");
+    assert.equal(await page.getByRole("button",{name:"第02集",exact:true}).getAttribute("aria-pressed"),"true");
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth) <= width, "deep-link player fits the configured viewport");
+    // A clipboard refusal still exposes the canonical, answer-free public URL.
+    await page.evaluate(() => { Object.defineProperty(navigator,"clipboard",{configurable:true,value:{writeText:async()=>{throw Error("denied")}}}); });
+    await page.getByRole("button",{name:L("复制播放页链接","Copy playback link"),exact:true}).click();
+    const copied = new URL(await page.getByRole("textbox",{name:L("播放页链接","Playback link"),exact:true}).inputValue());
+    assert.equal(copied.origin,"https://hub.test");assert.equal(copied.pathname,"/pages/pg_shots");assert.equal(copied.hash,route("1"));assert.equal(copied.search,"");assert.ok(!copied.href.includes("media.test"));
+    await page.getByRole("dialog",{name:L("复制播放页链接","Copy playback link"),exact:true}).getByRole("button",{name:L("关闭","Close"),exact:true}).click();
+    await page.evaluate(fragment => { location.hash = fragment; },route("2","备用","第02集"));
+    await page.getByRole("heading",{name:"城市的另一面",exact:true}).waitFor();
+    assert.equal(await page.getByRole("combobox",{name:L("播放线路","Playback line"),exact:true}).inputValue(),"1");
+    await page.evaluate(fragment => { location.hash = fragment; },route("1","HLS","已移除的集数"));
+    await page.getByRole("alert").getByText(L("链接指定的集数已不存在，请重新选择集数","The linked episode is no longer available. Choose an episode again."),{exact:true}).waitFor();assert.equal(await page.locator("video").count(),0);
+    await page.getByRole("button",{name:L("关闭","Close"),exact:true}).click();
+    assert.equal(await page.evaluate(()=>location.hash), "");
+    // Startup with a fragment follows the same path, before any catalog card click.
+    await page.evaluate(({sourceId,source})=>{window.__savedSource={id:sourceId,...source}}, {sourceId,source});
+    const startup=await browser.newPage({viewport:{width,height:900},colorScheme:theme});
+    await startup.addInitScript(({sourceId,source,phone})=>{window.__PHONE_NETWORK__=phone;window.__SAMPLE__={sources:[{id:sourceId,...source}]};window.__FAKE_OS__={net:{fetch:async args=>(await fetch("/fixture?url="+encodeURIComponent(args.url)+"&binary="+(args.response==="base64"?"1":"0"))).json()}};},{sourceId,source,phone});
+    await startup.goto(`http://127.0.0.1:${server.address().port}/?myco_lang=${lang}`+route("1","备用","第02集"));
+    await startup.getByRole("combobox",{name:L("播放线路","Playback line"),exact:true}).waitFor();assert.equal(await startup.getByRole("combobox",{name:L("播放线路","Playback line"),exact:true}).inputValue(),"1");
+    await startup.screenshot({path:path.join(out,`${lang}-${theme}-${width}-deep-link.png`)});
+    await startup.close();
     assert.deepEqual(errors, []);
     await page.close();
     console.log(

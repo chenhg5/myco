@@ -331,11 +331,12 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 			rep.Provider(ch)
 			return ch.settings
 		},
-		OnRunSettings: rep.RunSettings,
-		OnQuota:       rep.Quota,
-		OnStop:        rep.Goodbye,
-		Access:        access,
-		MaxAccess:     maxAccess,
+		OnRunSettings:         rep.RunSettings,
+		ApplyProviderSettings: remoteProviderApplier(cfgPath, c),
+		OnQuota:               rep.Quota,
+		OnStop:                rep.Goodbye,
+		Access:                access,
+		MaxAccess:             maxAccess,
 	}, alog), nil
 }
 

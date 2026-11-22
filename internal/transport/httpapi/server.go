@@ -29,53 +29,57 @@ import (
 
 // Server is the hub's HTTP adapter.
 type Server struct {
-	enroll     *app.EnrollmentService
-	agents     *app.AgentService
-	messages   *app.MessageService
-	adminToken string
-	log        *slog.Logger
-	publicURL  atomic.Value // string
+	runSettingsMu sync.Mutex
+	enroll        *app.EnrollmentService
+	agents        *app.AgentService
+	messages      *app.MessageService
+	adminToken    string
+	log           *slog.Logger
+	publicURL     atomic.Value // string
 	// lan: the hub listens on every interface without a public URL, so
 	// links made over localhost use this machine's LAN address instead.
 	lan atomic.Bool
 	// prefix is this workspace's path under the hub ("/w/<name>"), or ""
 	// for the default one: links it makes carry it.
-	prefix      string
-	e2e         *app.E2EService
-	version     string        // this hub's myco build
-	latest      func() string // newest known release ("" = unknown)
-	upgrade     func(ctx context.Context, version string) (api.HubUpgrade, error)
-	backups     Backups
-	mux         *http.ServeMux
-	ingress     map[string]Ingress
-	files       *app.FileService
-	overview    *app.OverviewService
-	console     *app.ConsoleService
-	machines    *app.MachineService
-	members     *app.MemberService
-	audit       *app.AuditService
-	projects    *app.ProjectService
-	resume      *app.ResumeService
-	traces      *app.TraceService
-	automations *app.AutomationService
-	workflows   *app.WorkflowService
-	superagents *app.SuperagentService
-	pages       *app.PageService
-	remote      remotedesktop.Broker
-	tun         tunnels
-	handovers   *app.HandoverService
-	hidden      *app.HiddenService
-	pins        *app.PinService
-	pageData    *app.PageDataService
-	templates   *app.TemplateService
-	appSync     func(context.Context) api.AppSync
-	appFreshen  func(context.Context)
-	voice       *app.VoiceSettingsService
-	activity    sync.Map   // message id -> time.Time; transient task heartbeat
-	aliasesMu   sync.Mutex // serialize alias permission checks with writes
-	namesMu     sync.Mutex
-	names       map[string]string // member id -> name (see ownerName)
-	namesAt     time.Time
+	prefix        string
+	e2e           *app.E2EService
+	version       string        // this hub's myco build
+	latest        func() string // newest known release ("" = unknown)
+	upgrade       func(ctx context.Context, version string) (api.HubUpgrade, error)
+	backups       Backups
+	mux           *http.ServeMux
+	ingress       map[string]Ingress
+	files         *app.FileService
+	overview      *app.OverviewService
+	console       *app.ConsoleService
+	machines      *app.MachineService
+	members       *app.MemberService
+	audit         *app.AuditService
+	projects      *app.ProjectService
+	resume        *app.ResumeService
+	traces        *app.TraceService
+	automations   *app.AutomationService
+	workflows     *app.WorkflowService
+	superagents   *app.SuperagentService
+	actions       *app.ActionService
+	pages         *app.PageService
+	remote        remotedesktop.Broker
+	tun           tunnels
+	handovers     *app.HandoverService
+	hidden        *app.HiddenService
+	pins          *app.PinService
+	notices       *app.NoticeService
+	noticeMessage func(ctx context.Context, id string) (*domain.Message, error)
+	pageData      *app.PageDataService
+	templates     *app.TemplateService
+	appSync       func(context.Context) api.AppSync
+	appFreshen    func(context.Context)
+	voice         *app.VoiceSettingsService
+	activity      sync.Map   // message id -> time.Time; transient task heartbeat
+	aliasesMu     sync.Mutex // serialize alias permission checks with writes
+	namesMu       sync.Mutex
+	names         map[string]string // member id -> name (see ownerName)
+	namesAt       time.Time
 }
 
 // SetMachines enables machine reporting, /v1/machines and machines in the
@@ -225,8 +229,10 @@ func (s *Server) routes() {
 	s.automationRoutes(m)
 	s.workflowRoutes(m)
 	s.superagentRoutes(m)
+	s.actionRoutes(m)
 	s.pageRoutes(m)
 	s.pinRoutes(m)
+	s.noticeRoutes(m)
 	s.pageDataRoutes(m)
 	s.liveRoutes(m)
 	s.remoteRoutes(m)
@@ -270,6 +276,7 @@ func (s *Server) routes() {
 	m.HandleFunc("GET /v1/me", s.agent(s.me))
 	m.HandleFunc("POST /v1/me/resume", s.agent(s.createMyResume))
 	m.HandleFunc("PUT /v1/me/run-settings", s.agent(s.setMyRunSettings))
+	m.HandleFunc("POST /v1/me/provider/ack", s.agent(s.ackMyProvider))
 	m.HandleFunc("DELETE /v1/me/resume", s.agent(s.revokeMyResume))
 	m.HandleFunc("PUT /v1/me/binding", s.agent(s.bind))
 	m.HandleFunc("PUT /v1/me/labels", s.agent(s.myLabels))
@@ -1820,6 +1827,14 @@ func (s *Server) reportMachine(w http.ResponseWriter, r *http.Request, a *domain
 	writeJSON(w, http.StatusOK, map[string]string{"machine_id": m.ID, "name": m.Name})
 }
 
+func encodeProviderOptions(p *[]api.ProviderOption) string {
+	if p == nil {
+		return ""
+	}
+	b, _ := json.Marshal(*p)
+	return string(b)
+}
+
 func (s *Server) reportRuntime(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
 	if !s.machinesEnabled(w) {
 		return
@@ -1835,7 +1850,7 @@ func (s *Server) reportRuntime(w http.ResponseWriter, r *http.Request, a *domain
 		Warnings []string         `json:"tool_warnings,omitempty"`
 	}{in.MCP, in.Skills, in.Plugins, in.ToolWarnings})
 	if err := s.machines.SetRuntime(r.Context(), a, domain.Runtime{CLI: in.CLI, CLIVersion: in.CLIVersion, Model: in.Model,
-		ModelSource: in.ModelSource, Access: in.Access, Provider: in.Provider, ProviderSource: in.ProviderSource,
+		ModelSource: in.ModelSource, Access: in.Access, Provider: in.Provider, ProviderSource: in.ProviderSource, ProviderHost: in.ProviderHost, Providers: encodeProviderOptions(in.Providers),
 		Effort: in.Effort, EffortSource: in.EffortSource, MaxAccess: in.MaxAccess, Quota: quotaFromAPI(in.Quota),
 		Features: domain.JoinFeatures(in.Features), Away: in.Away, Env: in.Env, Models: domain.EncodeModels(modelsFromAPI(in.Models)), Tools: string(toolJSON)}); err != nil {
 		writeError(w, err)

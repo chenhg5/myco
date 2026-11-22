@@ -298,6 +298,27 @@ myco message reply --id <id> --body "审完了：两处要改" --result '{"appro
 `--result` also takes a file. A result that does not fit is sent back once, saying what is
 missing.
 
+## Act on a computer's screen (with its owner's approval)
+
+When a task needs a computer's screen (a desktop app, a window no command reaches), ask its owner
+for a grant; they approve in the myco app, and may allow less:
+
+```bash
+myco action grant request --machine studio --permission remote.desktop.view --reason "check the build window" --task $MYCO_MESSAGE_ID --wait 5m
+myco action run --grant agr_… --action remote.desktop.observe --save screen.jpg   # look at screen.jpg
+myco action grant end --id agr_…                                                  # as soon as you are done
+```
+
+- `remote.desktop.view` takes screenshots; `remote.desktop.control` also types and clicks (`remote.desktop.input`,
+  with the `frame_id` of the screenshot you looked at). `myco action list --grant …` shows what the computer offers.
+- After any input, observe again before the next step. `outcome_unknown` means it may or may not have happened:
+  observe, never repeat it blindly.
+- A shared page you can see needs no approval: `myco action grant request --page pg_… --permission page.export --reason "…"`,
+  then `myco action list --grant …` shows the formats its app can export, and `myco action run --action page.export --args '{"format":"svg"}' --save out.svg`
+  (it needs the myco App of someone who sees the page to be running).
+- Grants are short (5 minutes by default) and end with your task. Ask only for what the task needs. Do not use
+  other ways (exec nodes, scripts) to see or drive a screen its owner did not approve.
+
 ## When you were started by `myco runner`
 
 The runner sets `MYCO_MESSAGE_ID`, `MYCO_THREAD_ID`, `MYCO_FROM`, `MYCO_MESSAGE_TYPE`, `MYCO_PROJECT`.

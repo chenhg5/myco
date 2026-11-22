@@ -51,7 +51,7 @@ import { chatDraftKey, draftOf, keepDraft } from "@/app/drafts";
 import { chatQueueKey, keepQueue, queueOf, queuedId, type Queued } from "@/app/queued";
 import { hubAtLeast, hubHasHandover } from "@/app/hubVersion";
 import { HandoverDivider, handoverEntry, openHandover, useHandovers } from "@/app/Handover";
-import { ApprovalStrip } from "@/app/Superagent";
+import { ApprovalStrip, GrantStrip } from "@/app/Superagent";
 
 export interface ConversationTarget {
   hubId: string;
@@ -498,6 +498,25 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   useEffect(() => { if (takePendingCall(target.hubId, target.agent)) callHimRef.current(); }, [target.hubId, target.agent, target.peer]);
 
   const exchange = !!target.peer;
+  // A member's view in a project (also set): its exchanges with the
+  // project's members, and with every other agent it worked with (its
+  // peers, read once): all it was asked, not only what this project shows.
+  const alsoKey = (target.also || []).join(",");
+  const [others, setOthers] = useState<string[] | undefined>(target.also);
+  useEffect(() => {
+    setOthers(target.also);
+    if (!target.also) return;
+    let off = false;
+    appApi.peers(target.hubId, target.agent).then((r) => {
+      if (off) return;
+      const all = new Set(target.also);
+      for (const p of r.peers || []) if (!p.agent.startsWith("@") && p.agent !== target.peer) all.add(p.agent);
+      if (all.size > (target.also || []).length) setOthers([...all].sort());
+    }, () => undefined);
+    return () => { off = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target.hubId, target.agent, target.peer, alsoKey]);
+  const othersKey = (others || []).join(",");
   // Exchange view: older pages loaded so far (oldest first) and whether more exist.
   const [older, setOlder] = useState<Message[]>([]);
   const [more, setMore] = useState(() => recall<SeenConversation>(cacheKey(target))?.more ?? false);
@@ -572,13 +591,17 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           // The newest page, polled; older pages stay as loaded. With also,
           // the newest page of each of those is merged in once it comes:
           // yours shows first, the others do not hold it up.
-          const extra = target.also?.length
-            ? Promise.all(target.also.map((p) => appApi.exchanges(target.hubId, target.agent, p, undefined, delta ? since : undefined)
-              .then((x) => x.messages).catch(() => [] as Message[])))
+          const extra = others?.length
+            ? Promise.all(others.map((p) => appApi.exchanges(target.hubId, target.agent, p, undefined, delta ? since : undefined)
+              .catch(() => ({ messages: [] as Message[], more: false }))))
             : null;
-          const mergeExtra = () => extra?.then((lists) => {
-            const others = lists.flat();
-            if (!cancelled && others.length) show(mergeById(current, others), more);
+          const mergeExtra = () => extra?.then((pages) => {
+            const theirs = pages.flatMap((x) => x.messages);
+            // Older pages of any of them: the chat can page back too.
+            const moreThere = !delta && pages.some((x) => x.more);
+            if (cancelled) return;
+            if (moreThere && !more) { more = true; setMore(true); }
+            if (theirs.length) show(mergeById(current, theirs), more);
           });
           const r = await appApi.exchanges(target.hubId, target.agent, target.peer, undefined, delta ? since : undefined);
           if (cancelled) return;
@@ -594,7 +617,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           // A whole page replaces what was shown, keeping what the others
           // said (merged in again just after).
           const mine = [...r.messages].reverse();
-          const keep = target.also?.length ? current.filter((m) => target.also!.includes(m.from) || target.also!.includes(m.to)) : [];
+          const keep = others?.length ? current.filter((m) => others.includes(m.from) || others.includes(m.to)) : [];
           show(keep.length ? mergeById(mine, keep) : mine, silent ? more : r.more);
           void mergeExtra();
           if (!silent) setMore(r.more);
@@ -628,7 +651,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       document.removeEventListener("visibilitychange", onVisible);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target.hubId, target.threadId, target.agent, target.peer, (target.also || []).join(",")]);
+  }, [target.hubId, target.threadId, target.agent, target.peer, othersKey]);
 
   const loadOlder = async () => {
     const first = older[0] || messages?.[0];
@@ -637,9 +660,14 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     const el = scrollRef.current;
     const fromBottom = el ? el.scrollHeight - el.scrollTop : 0;
     try {
-      const r = await appApi.exchanges(target.hubId, target.agent, target.peer, new Date(first.created_at).getTime());
-      setOlder((prev) => [...[...r.messages].reverse(), ...prev]);
-      setMore(r.more);
+      // The page before the oldest shown, with the person and with each of
+      // the others (a member's view): one older stretch, in time order.
+      const before = new Date(first.created_at).getTime();
+      const pages = await Promise.all([target.peer, ...(others || [])].map((p) => appApi.exchanges(target.hubId, target.agent, p, before)
+        .catch(() => ({ messages: [] as Message[], more: false }))));
+      const got = mergeById([], pages.flatMap((x) => x.messages)).sort((a, b) => a.created_at.localeCompare(b.created_at));
+      setOlder((prev) => [...got, ...prev]);
+      setMore(pages.some((x) => x.more));
       // Keep the view where it was.
       requestAnimationFrame(() => { if (el) el.scrollTop = el.scrollHeight - fromBottom; });
     } catch (e) {
@@ -837,7 +865,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const hubQueue = (messages || []).filter((m) => afterOpen(m) && !withdrawn.has(m.id));
 
   // Everything shown: in the exchange view, older pages before the newest.
-  const alsoSet = new Set(target.also || []);
+  const alsoSet = new Set(others || []);
   // In a member's chat (a project): what it and the other members said to
   // each other is not drawn as messages here (it would read as if it were
   // talking to you), only as a handoff card per exchange (Handoff.tsx).
@@ -1342,6 +1370,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     if (st === "acked" || progressOf.get(m.id)?.length) return null;
     if (waitingShort) return { text: waitingShort, title: waitingReason };
     if (atWorkId && atWorkId !== m.id) return { text: L("排在后面", "Queued behind the current one"), title: L("它做完手上这件就看这条", "It reads this once it is done with the one at hand") };
+    if (row && row.st.in_progress > 0) return { text: L("在忙别的，做完再看", "Busy with another task"), title: L("它正在做另一件事，做完就看这条", "It reads this once it is done with the task at hand") };
     return { text: L("还没开始看", "Not opened yet") };
   };
 
@@ -1939,7 +1968,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     // All of them, from the start (an empty chat shows them too, so none
     // appear all at once when you write); only while older messages are
     // still to load, the ones from before what is loaded wait for them.
-    const start = exchange && more && visible.length ? new Date(visible[0].created_at).getTime() : -Infinity;
+    // (From the oldest message loaded, cards' own ones included: a member's
+    // exchanges with others are cards, not messages, and must not wait for
+    // older messages of yours that may never come.)
+    const firstLoaded = (loaded || []).reduce((min, m) => Math.min(min, new Date(m.created_at).getTime()), Infinity);
+    const start = exchange && more && Number.isFinite(firstLoaded) ? firstLoaded : -Infinity;
     const ins = [...(allInserts || [])]
       .filter((x) => new Date(x.at).getTime() >= start)
       .sort((a, b) => a.at.localeCompare(b.at));
@@ -2543,6 +2576,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           <VoiceBar />
         )}
         <ApprovalStrip hubId={target.hubId} agent={target.agent} name={agentName} />
+        <GrantStrip hubId={target.hubId} agent={target.agent} name={agentName} />
         <SendTrouble error={sendError} stop={stopError} onRetry={sendError ? () => void send() : undefined}
           onClose={() => { setSendError(null); setStopError(null); }} />
         {/* Only while it is at work: a chat that has ended has nothing to

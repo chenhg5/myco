@@ -13,7 +13,7 @@ export type Clip = { media?: string; in?: number; out?: number; speed?: number; 
 export type OverlayKind = "text" | "blur" | "mosaic" | "zoom";
 export type Overlay = {
   type?: OverlayKind; start?: number; end?: number; x?: number; y?: number; w?: number; h?: number;
-  strength?: number; text?: string; color?: string; size?: number; style?: string; lane?: number;
+  fade_in?: number; fade_out?: number; strength?: number; text?: string; color?: string; size?: number; style?: string; lane?: number;
 };
 export type Note = { time?: number; text?: string; done?: boolean; by?: string };
 
@@ -78,6 +78,7 @@ export function overlayList() {
       id: r.id, type, start, end,
       x: clamp(num(d.x, (1 - defW) / 2), -1, 2), y: clamp(num(d.y, type === "text" ? 0.78 : (1 - defH) / 2), -1, 2),
       w: clamp(num(d.w, defW), 0.01, 3), h: clamp(num(d.h, defH), 0.01, 3),
+      fade_in: clamp(num(d.fade_in, .9), .1, 3), fade_out: clamp(num(d.fade_out, .9), .1, 3),
       strength: clamp(num(d.strength, 0.5), 0, 1), text: String(d.text ?? ""), color: String(d.color || "#ffffff"),
       size: clamp(num(d.size, 0.07), 0.02, 0.4), style: String(d.style || "shadow"), lane: Math.max(0, Math.round(num(d.lane, type === "text" ? 0 : 1))),
     };

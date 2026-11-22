@@ -454,6 +454,8 @@ myco runner start --all                       # runs in the foreground; newly en
 myco runner start --all --max-concurrent 2    # run at most 2 CLIs at the same time
 ```
 
+The default is 3 at once (`myco runner service install --max-concurrent <n>` changes it for the service). A task for an agent whose CLI can't start yet waits its turn; the agent stays online while it waits. If several agents on one computer work on long tasks, raise the number so the others are not kept waiting.
+
 **Run it in the background for good (recommended)**: one command installs it as a system service that starts at boot or login and restarts if it crashes. It uses launchd on macOS and a systemd user service on Linux:
 ```bash
 myco runner service install            # install and start now (use --dry-run first to see what it writes)
@@ -490,7 +492,7 @@ Since v0.19.2, `timeout` counts "how long with no activity": an agent that keeps
 
 | access | Claude Code | Codex |
 |---|---|---|
-| not set | headless default (tools that need confirmation are refused) | `codex exec` default |
+| not set | headless default (tools that need confirmation are refused) | `codex exec` default (no network in its sandbox, so `myco` cannot reach the Hub; a Codex session that joins gets `workspace` instead) |
 | `readonly` | `--permission-mode default --disallowedTools Edit,Write,NotebookEdit,Bash` | `-c sandbox_mode="read-only"` |
 | `workspace` | `--permission-mode acceptEdits` (file edits in the working directory and common file commands such as `touch`/`rm`/`mkdir` are allowed automatically; writes outside the working directory and other programs need approval, which means they are refused in headless mode) | `-c sandbox_mode="workspace-write"` plus `-c sandbox_workspace_write.network_access=true` |
 | `full` | `--permission-mode bypassPermissions` | `--dangerously-bypass-approvals-and-sandbox` |
@@ -1092,6 +1094,7 @@ One App (a window on Mac and Windows; opens in the browser on Linux) manages sev
     sudo /usr/local/bin/myco console link --name <device name>
     ```
     Clicking a link that starts with `myco://` also opens the App and adds it. You can also enter the Hub address and a console token by hand (`myco console token create --name <device name>`). The token is stored in the keychain and can be revoked on its own (`myco console token revoke`).
+- **Notifications** (Mac and Windows, with Hub v0.21.21 or later): while the App runs, its window shown or not, it shows a system notification when something needs you: an agent asks you a question, a workflow waits on your decision, your superagent asks for your OK, or a task you sent failed. A click opens the App there. Replies and progress are kept, but by default they don't pop up. Nothing pops up for the chat you're looking at, and opening a chat marks its notices as read for all your devices. The Hub decides once, from your preferences, what is announced (quiet hours in your time zone, pause, muted chats and projects), so all your devices agree. On the Mac, the number on the Dock icon counts what still needs you, and the first notification asks for the system's permission (System Settings → Notifications → myco). To turn them off for the App, start it with the environment variable `MYCO_APP_NOTICES=off`.
 - **Fast to open**: content each page has shown (nodes, conversation list, conversations you opened, projects, members in Settings, etc.) is remembered. When you open it again or restart the App, it first shows the last content, then refreshes in the background. It's stored in `app-cache.db` on this computer (in the same directory as the Hub list), encrypted with a key from the keychain, up to about 50 MB. When you remove a Hub, or its token stops working, its content is deleted with it. When a Hub can't be reached, the Nodes page and conversation titles say "Offline · showing data from x minutes ago". "Settings → About → Local cache" clears it; start the App with the environment variable `MYCO_APP_CACHE=off` to not save it (since v0.18.34).
 - **Adding nodes** has three ways:
   - **Agents on this computer**: the App lists recent Claude Code and Codex sessions on this computer (directory, first message, last activity). Click one to add it to the current Hub; the local runner service starts automatically.
@@ -1214,10 +1217,90 @@ It follows the App's language and appearance. The original footage stays on the
 recording computer; agents collaborate on edit records, not uploaded footage.
 
 In the updated Mac App, choose a region or the main screen and optionally a
-microphone. This first version does not record internal Mac audio. On Windows,
+microphone. Drag a rectangle in the native selector, then click **Start Recording**.
+The App temporarily hides; the region outline and a floating timer stay visible.
+Click **Stop & edit** on the floating bar (or Stop Recording in the Mac menu bar)
+to save the movie and return to editing. Focus zoom defaults to a gentle 0.9-second
+transition at each end; adjust zoom-in and zoom-out durations in its properties.
+Cancelling the selector does not start a recording. This first version does not
+record internal Mac audio. On Windows,
 native desktop recording requires separately installed FFmpeg with gdigrab and
 h264_mf; it is silent and records the whole desktop. Supported browser hosts can
 use their screen/window picker. Other hosts can import recordings. Each recording
 is limited to ten minutes in the UI. Stop before leaving; native originals remain
 in `~/.myco/recordings`. Import failures offer a retry and a way to find the original.
 Automatic cursor following, captions and webcam overlays are outside this version.
+
+### App public-access setup
+
+In Settings → Workspaces → Open to the internet, Tailscale Funnel remains selectable
+before installation. Its setup card links to official downloads, provides copyable
+Windows PowerShell, macOS Homebrew/start, and Linux install/start commands, and a
+prompt for an agent on this computer. Complete browser sign-in and system network
+approval yourself, then use Installed — check again and Open. First-time Funnel
+or HTTPS authorization may require a browser confirmation before retrying. Detecting
+the executable alone does not mean it is signed in or connected. Success requires
+a valid public URL and a passing public health check; failure keeps the local Hub
+running and offers a retry instead of displaying an empty success address.
+
+Once Tailscale is detected, the installation card is hidden. If opening fails,
+its sign-in and permission troubleshooting guidance becomes available again.
+
+### Using magpie, cc-switch and compatible gateways
+
+myco does not embed magpie. Install and run the gateway separately on the computer
+where the agent runs. **Follow this computer** uses the CLI's own user settings:
+changes made by magpie or cc-switch apply to its next run. The agent's runtime
+shows the configured host; a loopback gateway on port 3425 is labelled magpie.
+A background runner inherits its service's environment, not an interactive shell's
+startup files; use the CLI's user configuration or capture environment variables
+with `myco runner env capture` when needed.
+
+**Pin a provider for one agent** to keep that agent independent of global switches:
+choose an existing cc-switch provider, or enter a custom base URL, key and model
+in the local App's provider settings. For Codex also select `responses` (the
+default) or `chat`, as supported by the installed Codex version and the gateway.
+myco passes this setting through; it does not implement protocol conversion.
+Changing this pin does not rewrite Claude or Codex's global configuration.
+
+The custom URL must match the CLI's protocol: use an Anthropic-compatible endpoint
+for Claude, and an OpenAI-compatible endpoint (often ending in `/v1`) for Codex.
+magpie's local gateway, LiteLLM and OneAPI-compatible services can be used this
+way. Follow the gateway's documentation for its exact endpoint and model name;
+`127.0.0.1` means the agent's own computer, not the computer running a remote App.
+
+For example, prepare a private key file, then pin a Codex agent:
+
+```sh
+myco runner provider set --agent my-codex --provider custom \
+  --base-url http://127.0.0.1:3425/v1 --model my-model \
+  --wire-api responses --key-file /private/path/gateway-key
+myco runner provider show --agent my-codex
+myco runner provider set --agent my-codex --provider machine
+```
+
+Use `--key-file -` to read the key from stdin; never place a key in a command-line
+argument. `--dry-run` validates without writing settings. Keys stay on that
+computer in a private env file and are not sent to the Hub. Each custom update
+requires the key again; reading the settings returns only whether a key exists.
+Provider changes apply to the next message. Explicit model choices in the App's
+run settings still take precedence over a provider's default model.
+
+#### Changing a provider on another computer
+
+With updated runners and Hub, an agent's owner can choose **Follow this computer**,
+clear a custom address, or select one of the channels advertised by that
+computer's cc-switch installation from another App. The runner applies the change
+before its next task and reports the provider actually in use. Other people,
+including another Hub administrator, cannot change an owned agent's provider.
+Old runners or Hubs retain read-only remote controls.
+
+Entering a custom address and key remotely additionally requires an **end-to-end
+encrypted workspace** and the target runner's encryption key. The sending App
+seals the configuration for that agent before it reaches the Hub. The target
+computer decrypts it into a private local file and acknowledges delivery, which
+removes the pending ciphertext from run settings. Until then the App can show
+that the change is waiting for the runner; no plaintext key is stored on the Hub
+or sent through ordinary messages. When E2E is off, enter the custom settings in
+the App or CLI on the target computer instead. You can still use remote
+cc-switch selection without E2E because it carries only a channel reference.

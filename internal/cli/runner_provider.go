@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 
@@ -15,10 +16,11 @@ import (
 // chosen (for the runtime report and the console).
 type providerChoice struct {
 	settings *harness.ProviderSettings // nil: the machine's own setting
-	name     string                    // display name, never a key
-	source   string                    // pinned | machine | env_file | missing
-	model    string                    // model the provider sets, if any
-	warn     string                    // why a pinned provider was not used
+	host     string
+	name     string // display name, never a key
+	source   string // pinned | machine | env_file | missing
+	model    string // model the provider sets, if any
+	warn     string // why a pinned provider was not used
 }
 
 // providerCLIs maps harnesses to the cc-switch app whose providers they take.
@@ -40,7 +42,7 @@ func resolveProvider(cli, ref, envFile string) providerChoice {
 			}
 		} else {
 			return providerChoice{settings: &harness.ProviderSettings{Env: p.Env, Model: p.Model, ConfigArgs: p.CodexArgs},
-				name: p.Name, source: "pinned", model: orStr(p.Model, p.Env["ANTHROPIC_MODEL"])}
+				name: p.Name, host: p.Host, source: "pinned", model: orStr(p.Model, p.Env["ANTHROPIC_MODEL"])}
 		}
 	}
 	if ch.source == "" && supported && envFile != "" {
@@ -59,33 +61,38 @@ func resolveProvider(cli, ref, envFile string) providerChoice {
 				base, model := env["ANTHROPIC_BASE_URL"], env["ANTHROPIC_MODEL"]
 				ps := &harness.ProviderSettings{Env: env}
 				if app == "codex" {
-					// OPENAI_BASE_URL / OPENAI_API_KEY drive Codex's built-in
-					// openai provider; OPENAI_MODEL is ours (set in the app).
+					// Custom URLs select an isolated provider. Legacy key-only env
+					// captures still use Codex's built-in OpenAI provider.
 					base, model = env["OPENAI_BASE_URL"], env["OPENAI_MODEL"]
-					ps.ConfigArgs = []string{"-c", `model_provider="openai"`}
 					if base != "" {
-						ps.ConfigArgs = append(ps.ConfigArgs, "-c", "openai_base_url="+strconv.Quote(base))
-					}
-					if model != "" {
-						ps.ConfigArgs = append(ps.ConfigArgs, "-c", "model="+strconv.Quote(model))
+						ps.ConfigArgs, ps.Env = provider.CustomCodex(base, env["OPENAI_API_KEY"], model, env["OPENAI_WIRE_API"])
+					} else {
+						ps.ConfigArgs = []string{"-c", `model_provider="openai"`}
+						if model != "" {
+							ps.ConfigArgs = append(ps.ConfigArgs, "-c", "model="+strconv.Quote(model))
+						}
 					}
 				}
+				ps.Model = model
 				if u, err := url.Parse(base); err == nil && u.Host != "" {
 					name = u.Host
 				}
-				return providerChoice{settings: ps, name: name, source: "env_file", model: model}
+				return providerChoice{settings: ps, name: provider.DisplayName(name, provider.Provider{}, false), host: hostFromBase(base), source: "env_file", model: model}
 			}
 		}
 	}
 	if supported {
-		if p, ok := provider.Current(provider.Dir(), app); ok {
-			if ch.source == "missing" {
-				ch.name = p.Name
-				return ch
-			}
-			return providerChoice{name: p.Name, source: "machine", warn: ch.warn}
+		home, _ := os.UserHomeDir()
+		host, model := provider.MachineEndpoint(home, app, os.Getenv)
+		p, ok := provider.Current(provider.Dir(), app)
+		name := provider.DisplayName(host, p, ok)
+		if ch.source == "missing" {
+			ch.name, ch.host = name, host
+			return ch
 		}
+		return providerChoice{name: name, host: host, source: "machine", model: model, warn: ch.warn}
 	}
+
 	if ch.source == "" {
 		ch.source = "machine"
 	}
@@ -109,4 +116,11 @@ func orStr(a, b string) string {
 		return a
 	}
 	return b
+}
+
+func hostFromBase(base string) string {
+	if u, err := url.Parse(base); err == nil {
+		return u.Host
+	}
+	return ""
 }

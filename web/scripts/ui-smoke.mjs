@@ -23,12 +23,14 @@
 import { spawn, spawnSync, execFileSync } from "node:child_process";
 import { createServer } from "node:net";
 import http from "node:http";
+import ts from "typescript";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { mkdir, access, readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+const pageRouteScript = ts.transpileModule(await readFile(new URL("../../templates/src/_lib/page-route.ts", import.meta.url),"utf8"),{compilerOptions:{module:ts.ModuleKind.ES2022,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^export /gm,"") + "\nwindow.__routeModule={subscribeAppRoute};";
 const WEB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = path.join(WEB, "ui-smoke");
 const HOST = "127.0.0.1";
@@ -232,6 +234,8 @@ function reportProblems() {
   process.exitCode = 1;
 }
 
+const intentionalPublicNotReady = new WeakSet();
+
 function watchPage(page, size, scheme) {
   // Page events come outside this run's async context: keep it here.
   const r = run();
@@ -244,6 +248,8 @@ function watchPage(page, size, scheme) {
     if (msg.text().includes("502") && where.includes("/machines/m_studio/spawn")) return;
     // On purpose: 单聊 · 网络不好 cuts the chat's polls off.
     if (msg.text().includes("ERR_FAILED") && /\/(exchanges|thread)\b/.test(where)) return;
+    // This fixture deliberately returns the real backend's not-ready status.
+    if (intentionalPublicNotReady.has(page) && msg.text().includes("503") && /\/app\/local\/hub:/.test(where)) return;
     addProblem(r, "console", msg.text(), where);
   });
   page.on("pageerror", (err) => {
@@ -652,6 +658,51 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, chat.getByRole("button", { name: "关掉这一栏" }));
     });
 
+    await step("网页 · 应用内直达链接", async () => {
+      await go(page,"官网改版",narrow);
+      if (narrow) await clickVisible(page,page.locator('.sp-strip-face[title="Release (Claude 云端)"]'));
+      else await clickVisible(page,page.locator(".sp-side .sp-member:visible",{hasText:"Release (Claude 云端)"}));
+      const chat = page.locator(".sp-pane-right"), panel = page.locator(".pg-panel");
+      const first = chat.locator(".conv-msg", {hasText:"直达链接一"}).first();
+      const second = chat.locator(".conv-msg", {hasText:"直达链接二"}).first();
+      // A route card must retain the link, rather than opening only the page ID.
+      const navigation = fragment => page.waitForEvent("framenavigated",{predicate:f=>f.url().includes("#watch") && f.url().includes(fragment),timeout:15000});
+      const firstNavigation = navigation("%E7%AC%AC01%E9%9B%86");
+      await clickVisible(page, first.locator(".pg-card"));
+      await firstNavigation;
+      const frame = () => page.frames().find(f => f.url().includes("#watch"));
+      await page.waitForFunction(() => document.querySelector(".pg-frame")?.getAttribute("src")?.includes("%E7%AC%AC01%E9%9B%86"));
+      await frame().waitForFunction(() => !!window.myco);
+      const ctx = await frame().evaluate(() => window.myco.ready);
+      if (ctx.page.url !== "http://192.168.1.20:7780/pages/pg_routes") throw Error("ready must expose the public page URL, not the private frame URL");
+      // The normal Markdown link follows exactly the same route path.
+      await frame().evaluate(() => { window.__routeMarker = "kept"; });
+      if (narrow) await clickVisible(page,panel.getByRole("button",{name:"收起",exact:true}));
+      const secondNavigation = navigation("%E7%AC%AC02%E9%9B%86");
+      await clickVisible(page,second.locator('a[href*="#watch"]'));
+      await secondNavigation;
+      await page.waitForFunction(() => document.querySelector(".pg-frame")?.getAttribute("src")?.includes("%E7%AC%AC02%E9%9B%86"));
+      if (await panel.locator(".pg-tab").count()) throw Error("two routes to one page must reuse one tab");
+      await frame().waitForFunction(() => !!window.myco);
+      if (await frame().evaluate(() => window.__routeMarker) !== "kept") throw Error("changing the fragment must preserve the page document");
+      await frame().addScriptTag({content:pageRouteScript});
+      await frame().evaluate(() => { window.__routeCount=0; window.__stopRoute=window.__routeModule.subscribeAppRoute(()=>window.__routeCount++); });
+      if (narrow) await clickVisible(page,panel.getByRole("button",{name:"收起",exact:true}));
+      await clickVisible(page, second.locator(".pg-card"));
+      await frame().waitForFunction(()=>window.__routeCount===1);
+      if (await frame().evaluate(() => window.__routeMarker) !== "kept") throw Error("repeated deep links must keep the page document");
+      // Returning through an ordinary page link clears the route, in place.
+      if (narrow) await clickVisible(page,panel.getByRole("button",{name:"收起",exact:true}));
+      await clickVisible(page,chat.locator(".conv-msg",{hasText:"直达普通入口"}).first().locator(".pg-card"));
+      const sameFrame=page.frames().find(f=>f.url().includes("/p/"));
+      await sameFrame.waitForFunction(()=>location.hash==="");
+      if (await sameFrame.evaluate(()=>window.__routeMarker)!=="kept") throw Error("a plain link back to the page must keep its document");
+      await shot(page,size,scheme,"page-route");
+      await clickVisible(page, panel.getByRole("button",{name:"关闭",exact:true}));
+      await panel.waitFor({state:"detached"});
+      await clickVisible(page,chat.getByRole("button",{name:"关掉这一栏"}));
+    });
+
     // Several pages open: a tab each, under the panel's head; opening one
     // already open shows it; each keeps its page while another is shown.
     if (!narrow) await step("网页 · 多个标签", async () => {
@@ -875,7 +926,10 @@ async function runMatrix(browser, size, scheme) {
       const lib = page.locator("[data-testid=templates-official] [data-shelf=office] .tp-card");
       await lib.first().waitFor({ timeout: 15_000 });
       const names = (await lib.allInnerTexts()).map(compactText);
-      if (names.length !== 5 || !names[0].startsWith("表格") || !names[1].startsWith("多维表格") || !names[2].startsWith("文档") || !names[3].startsWith("幻灯片") || !names[4].startsWith("会议记录")) throw new Error(`办公套件应是 表格、多维表格、文档、幻灯片、会议记录，实际 ${names.join(" / ")}`);
+      // The suite grows (学习工作台 joined it): check the core ones are there, in order.
+      const core = ["表格", "多维表格", "文档", "幻灯片", "会议记录"];
+      const at = core.map((c) => names.findIndex((n) => n.startsWith(c) && !(c === "表格" && n.startsWith("多维表格"))));
+      if (at.some((i) => i < 0) || at.some((i, k) => k > 0 && i < at[k - 1])) throw new Error(`办公套件应依次有 ${core.join("、")}，实际 ${names.join(" / ")}`);
       await page.locator("[data-testid=templates-own] .tp-card").first().waitFor({ timeout: 5_000 });
       // myco's own apps update on their own; fetched now on request.
       await clickVisible(page, page.locator("[data-testid=apps-sync]"));
@@ -1656,6 +1710,48 @@ async function runMatrix(browser, size, scheme) {
       if ((await office.getAttribute("aria-checked")) !== "true") throw new Error("同意后，项目应能在 Office PC 上开 agent");
       await navBackClick(page);
       await page.locator(".sp-home").waitFor({ timeout: 10_000 });
+    });
+
+    // An agent asks to act on one of your computers (agent actions,
+    // v0.21.21): the card says which computer and how, and can allow
+    // seeing only; what it may do then shows above its chat, revocable.
+    await step("agent 申请用电脑 · 只让它看 · 收回", async () => {
+      await page.locator(".sp-home .conv-detail").waitFor({ timeout: 10_000 });
+      const ask = await fetch(`http://${HOST}:${mockPort()}/app/mock/superagent-ask`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agent: "pm-codex", kind: "action_grant", reason: "看一下构建窗口卡在哪一步。" }),
+      });
+      if (!ask.ok) throw new Error(`申请用电脑失败：HTTP ${ask.status}`);
+      const card = page.locator(".sp-home [data-testid=approvals] .sa-approval", { hasText: "Studio Mac" });
+      await card.waitFor({ timeout: 25_000 });
+      const text = compactText(await card.innerText());
+      if (!text.includes("看并操作") || !text.includes("构建窗口")) throw new Error(`申请卡片应写明要看并操作哪台电脑、为什么，实际「${text}」`);
+      await settle(page, 200);
+      await shot(page, size, scheme, "action-grant-request");
+      await clickVisible(page, card.getByRole("button", { name: "只让它看", exact: true }));
+      await card.waitFor({ state: "hidden", timeout: 10_000 });
+      const grant = page.locator(".sp-home [data-testid=action-grants] .sa-grant");
+      await grant.waitFor({ timeout: 10_000 });
+      const g = compactText(await grant.innerText());
+      if (!g.includes("可以看 Studio Mac") || g.includes("操作")) throw new Error(`只让它看以后，应写「可以看 Studio Mac 的屏幕」，实际「${g}」`);
+      await settle(page, 200);
+      await shot(page, size, scheme, "action-grant-active");
+      await clickVisible(page, grant.getByRole("button", { name: "收回", exact: true }));
+      await grant.waitFor({ state: "hidden", timeout: 10_000 });
+      // A page it may export reads as that, not as a screen.
+      const pg = await fetch(`http://${HOST}:${mockPort()}/app/mock/superagent-ask`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agent: "pm-codex", kind: "page_grant", page: "产品白板" }),
+      });
+      if (!pg.ok) throw new Error(`页面导出授权失败：HTTP ${pg.status}`);
+      const pgGrant = page.locator(".sp-home [data-testid=action-grants] .sa-grant", { hasText: "产品白板" });
+      await pgGrant.waitFor({ timeout: 25_000 });
+      const pt = compactText(await pgGrant.innerText());
+      if (!pt.includes("可以导出「产品白板」") || pt.includes("屏幕")) throw new Error(`页面授权应写「可以导出「产品白板」」，实际「${pt}」`);
+      await settle(page, 200);
+      await shot(page, size, scheme, "action-grant-page");
+      await clickVisible(page, pgGrant.getByRole("button", { name: "收回", exact: true }));
+      await pgGrant.waitFor({ state: "hidden", timeout: 10_000 });
     });
 
     // Projects in the sidebar go where you drag them, and stay there.
@@ -2690,8 +2786,24 @@ async function runMatrix(browser, size, scheme) {
       if (!(await page.locator(".app-settings-tab", { hasText: "工作区" }).count())) throw new Error("简单模式下设置里也该有「工作区」");
       if (await page.locator(".app-settings-tab", { hasText: "成员" }).count()) throw new Error("简单模式下设置里不该有「成员」");
       if (!narrow && await page.locator(".sp-nav-pcs").count()) throw new Error("简单模式下侧栏不该有「电脑」");
+      // Adding your phone stays: 我的设备 on the Workspaces page.
+      await clickVisible(page, page.locator(".app-settings-tab", { hasText: "工作区" }));
+      await page.getByRole("button", { name: "添加另一台设备" }).waitFor({ timeout: 10_000 });
+      await clickVisible(page, page.locator(".app-settings-tab", { hasText: "外观" }));
+      await sw.waitFor({ timeout: 10_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "settings-simple-mode");
+      // The workspace menu still joins or starts a workspace (onboarding
+      // sends people there).
+      if (!narrow) {
+        await page.keyboard.press("Escape");
+        await clickVisible(page, page.locator(".sp-switch .app-hub-trigger"));
+        await page.locator(".app-hub-menu", { hasText: "加入或新建工作区" }).waitFor({ timeout: 5_000 });
+        await page.keyboard.press("Escape");
+        await go(page, "设置", narrow);
+        await clickVisible(page, page.locator(".app-settings-tab", { hasText: "外观" }));
+        await sw.waitFor({ timeout: 10_000 });
+      }
       await sw.click();
       await page.locator(".app-settings-tab", { hasText: "工作区" }).waitFor({ timeout: 5_000 });
       if (!narrow) await page.locator(".sp-nav-pcs").waitFor({ timeout: 5_000 });
@@ -2748,6 +2860,49 @@ async function runMatrix(browser, size, scheme) {
       await closeSettings(page);
     });
 
+    // 使用文档: from Settings › About (and the workspace menu); pages in
+    // groups on the left, the page on the right, links between pages, a
+    // search; a narrow window picks the page from one list.
+    await step("使用文档", async () => {
+      await go(page, "设置", narrow);
+      const box = page.locator(".app-settings-search input");
+      await box.fill("使用文档");
+      await box.press("Enter");
+      await clickVisible(page, page.locator("[data-testid=settings-guide]"));
+      const help = page.locator("[data-testid=help]");
+      await help.waitFor({ timeout: 10_000 });
+      const doc = help.locator("[data-testid=help-doc]");
+      if (narrow) {
+        await help.locator(".hp-pick").selectOption("projects");
+      } else {
+        if ((await help.locator(".hp-item").count()) < 12) throw new Error("使用文档左边应列出全部文档");
+        await clickVisible(page, help.locator(".hp-item", { hasText: /^项目$/ }));
+      }
+      await page.waitForFunction(() => document.querySelector("[data-testid=help-doc]")?.getAttribute("data-doc") === "projects", null, { timeout: 5_000 });
+      if (!(await doc.innerText()).includes("协调者")) throw new Error("项目那篇应讲协调者");
+      await settle(page, 200);
+      await shot(page, size, scheme, "help");
+      // Its pictures are there (each screenshot a page names is bundled)
+      // and one opens full size.
+      const pics = doc.locator(".md img");
+      if ((await pics.count()) < 1) throw new Error("项目那篇应有配图");
+      await page.waitForFunction(() => [...document.querySelectorAll("[data-testid=help-doc] .md img")].every((i) => i.complete && i.naturalWidth > 0), null, { timeout: 10_000 });
+      await clickVisible(page, pics.first());
+      await page.locator(".lightbox").waitFor({ timeout: 5_000 });
+      await page.keyboard.press("Escape");
+      await page.locator(".lightbox").waitFor({ state: "detached", timeout: 5_000 });
+      // A link to another page opens it here.
+      await clickVisible(page, help.locator(".hp-pager-btn.is-next"));
+      await page.waitForFunction(() => document.querySelector("[data-testid=help-doc]")?.getAttribute("data-doc") === "superagent", null, { timeout: 5_000 });
+      if (!narrow) {
+        await help.locator(".hp-search input").fill("webhook");
+        await help.locator(".hp-item", { hasText: "自动化" }).first().waitFor({ timeout: 5_000 });
+        await help.locator(".hp-search input").press("Enter");
+        await page.waitForFunction(() => document.querySelector("[data-testid=help-doc]")?.getAttribute("data-doc") === "automations", null, { timeout: 5_000 });
+      }
+      await navBackClick(page);
+    });
+
     // 上手引导 again (Settings › About): this computer's agent CLIs and its
     // sessions to bring in; skipping leaves things as they were.
     await step("设置 · 上手引导", async () => {
@@ -2778,6 +2933,13 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".app-settings-head h2", { hasText: "工作区" }).waitFor({ timeout: 10_000 });
       if (narrow) await sidebar(page, true);
       await list.locator('.ob-step.is-done[data-step="workspace"]').waitFor({ timeout: 10_000 });
+      // The last step: what else myco does, in the user guide; ticked.
+      await closeSettings(page);
+      if (narrow) await sidebar(page, true);
+      await clickVisible(page, list.locator('.ob-step[data-step="guide"]'));
+      await page.locator("[data-testid=help]").waitFor({ timeout: 10_000 });
+      if (narrow) await sidebar(page, true);
+      await list.locator('.ob-step.is-done[data-step="guide"]').waitFor({ timeout: 10_000 });
       if (narrow) await sidebar(page, false);
       await go(page, "应用", narrow);
       const intro = page.locator("[data-testid=intro-apps]");
@@ -3300,6 +3462,137 @@ async function runMatrix(browser, size, scheme) {
       await page.keyboard.press("Escape");
     });
 
+    // Which provider an agent on this computer uses: following this
+    // computer says where requests really go (a local gateway here); a
+    // custom address shows its host and model, never its key, and Codex
+    // picks a protocol.
+    await step("成员 · 服务商", async () => {
+      const openRow = async (who) => {
+        await go(page, "成员", narrow);
+        await clickVisible(page, page.locator(".mb-card", { hasText: who }).first());
+        await page.locator(".ms").waitFor({ timeout: 10_000 });
+        await clickVisible(page, page.locator(".ms .ms-fold"));
+        const row = page.locator(".ms [data-testid=provider-open]");
+        await row.waitFor({ timeout: 10_000 });
+        await row.scrollIntoViewIfNeeded();
+        return row;
+      };
+      let row = await openRow("docs-claude");
+      if (!(await row.innerText()).includes("magpie 网关（127.0.0.1:3425）")) throw new Error(`跟随这台电脑时应写实际走的地址，实际「${await row.innerText()}」`);
+      await settle(page, 200);
+      await shot(page, size, scheme, "provider-follow");
+      await page.keyboard.press("Escape");
+      row = await openRow("PM (Codex)");
+      const rowText = await row.innerText();
+      if (!rowText.includes("api.example-llm.com · gpt-5-codex")) throw new Error(`自定义地址应显示 host 和模型，实际「${rowText}」`);
+      await row.click();
+      const dlg = page.locator(".app-modal", { has: page.locator("[data-testid=provider-options]") });
+      await dlg.waitFor({ timeout: 5_000 });
+      const form = dlg.locator("[data-testid=provider-custom]");
+      await form.waitFor({ timeout: 5_000 });
+      if ((await form.locator("[data-testid=provider-url]").inputValue()) !== "https://api.example-llm.com/v1") throw new Error("自定义地址应带出保存的 base URL");
+      const key = form.locator("[data-testid=provider-key]");
+      if ((await key.inputValue()) !== "" || !(await form.innerText()).includes("已经存了一个，不会显示出来")) throw new Error("密钥只写不回显：输入框应是空的，并说已经存了一个");
+      // An address with a key in it is refused before saving.
+      const url = form.locator("[data-testid=provider-url]");
+      await url.fill("https://user:sk-x@api.example-llm.com/v1");
+      await form.locator(".app-field-hint.is-bad").waitFor({ timeout: 5_000 });
+      await url.fill("https://api.example-llm.com/v1");
+      if (await dlg.locator("[data-testid=provider-save]").isEnabled()) throw new Error("没填密钥时不能保存（每次都要重新填）");
+      await key.fill("sk-test-123");
+      if (!(await form.locator("[data-testid=provider-wire-responses]").getAttribute("aria-selected"))?.includes("true")) throw new Error("Codex 默认协议应是 Responses");
+      await clickVisible(page, form.locator("[data-testid=provider-wire-chat]"));
+      await settle(page, 200);
+      await shot(page, size, scheme, "provider-custom");
+      await clickVisible(page, dlg.locator("[data-testid=provider-save]"));
+      await dlg.waitFor({ state: "hidden", timeout: 5_000 });
+      await page.waitForFunction(() => (document.querySelector(".ms [data-testid=provider-open]")?.textContent || "").includes("api.example-llm.com"), null, { timeout: 5_000 });
+      // Back to Responses (the next combo starts from the same data).
+      await clickVisible(page, page.locator(".ms [data-testid=provider-open]"));
+      await dlg.waitFor({ timeout: 5_000 });
+      if (!(await dlg.locator("[data-testid=provider-options]").innerText()).includes("Chat Completions")) throw new Error("保存后自定义地址那项应写协议");
+      await clickVisible(page, dlg.locator("[data-testid=provider-wire-responses]"));
+      await dlg.locator("[data-testid=provider-key]").fill("sk-test-123");
+      await clickVisible(page, dlg.locator("[data-testid=provider-save]"));
+      await dlg.waitFor({ state: "hidden", timeout: 5_000 });
+      await page.keyboard.press("Escape");
+    });
+
+    // An agent on another computer: its runner lets the App switch the
+    // provider (its computer's list); a custom address needs end-to-end
+    // encryption (the key is sealed for it), else it is entered there. An
+    // older runner stays read-only.
+    await step("成员 · 远程服务商", async () => {
+      const mock = `http://${HOST}:${mockPort()}`;
+      const setE2E = (on) => fetch(`${mock}/app/hubs/hub_studio/settings`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ e2e: on }) });
+      const openRow = async (who) => {
+        await go(page, "成员", narrow);
+        await clickVisible(page, page.locator(".mb-card", { hasText: who }).first());
+        await page.locator(".ms").waitFor({ timeout: 10_000 });
+        await clickVisible(page, page.locator(".ms .ms-fold"));
+        const row = page.locator(".ms .app-kv", { has: page.locator(".app-kv-label", { hasText: /^服务商$/ }) });
+        await row.waitFor({ timeout: 10_000 });
+        await row.scrollIntoViewIfNeeded();
+        return row;
+      };
+      const dlg = page.locator(".app-modal", { has: page.locator("[data-testid=provider-options]") });
+      let row = await openRow("MCP Claude");
+      if (!(await row.innerText()).includes("DeepSeek（api.deepseek.com）")) throw new Error(`远程 agent 的服务商应写它那台电脑实际走的，实际「${await row.innerText()}」`);
+      await clickVisible(page, row.locator("[data-testid=provider-open]"));
+      await dlg.waitFor({ timeout: 5_000 });
+      const opts = dlg.locator("[data-testid=provider-options]");
+      const text = await opts.innerText();
+      if (!text.includes("跟随它那台电脑") || !text.includes("智谱 GLM")) throw new Error(`远程时应列出它那台电脑上的服务商，实际「${text}」`);
+      const customOpt = dlg.locator("[data-testid=provider-custom-opt]");
+      if (!(await customOpt.locator("input").isDisabled()) || !(await customOpt.innerText()).includes("密钥不经过 hub")) throw new Error("没开端到端加密时，远程的自定义地址应置灰并说明");
+      await settle(page, 200);
+      await shot(page, size, scheme, "provider-remote");
+      await clickVisible(page, opts.locator(".app-provider-opt", { hasText: "智谱 GLM" }));
+      await clickVisible(page, dlg.locator("[data-testid=provider-save]"));
+      await dlg.waitFor({ state: "hidden", timeout: 5_000 });
+      const sent = await (await fetch(`${mock}/app/mock/run-settings`)).json();
+      if (sent.last?.agent !== "mcp-claude" || sent.last.body.provider !== "cc-switch:glm") throw new Error(`远程切换服务商应随运行设置发出，实际 ${JSON.stringify(sent.last)}`);
+      await page.waitForFunction(() => (document.querySelector(".ms [data-testid=provider-open]")?.textContent || "").includes("智谱 GLM"), null, { timeout: 10_000 });
+      // With end-to-end encryption on, a custom address can be entered here.
+      await setE2E(true);
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(6_000); // the App reads the workspace's settings on its next refresh
+      row = await openRow("MCP Claude");
+      await clickVisible(page, row.locator("[data-testid=provider-open]"));
+      await dlg.waitFor({ timeout: 5_000 });
+      await clickVisible(page, dlg.locator("[data-testid=provider-custom-opt]"));
+      const form = dlg.locator("[data-testid=provider-custom]");
+      await form.waitFor({ timeout: 5_000 });
+      await form.locator("[data-testid=provider-url]").fill("https://llm.example.org/anthropic");
+      await form.locator("[data-testid=provider-model]").fill("claude-opus-5-5");
+      await form.locator("[data-testid=provider-key]").fill("sk-remote-1");
+      if (!(await dlg.innerText()).includes("hub 只经手密文")) throw new Error("开了端到端加密时应说明密钥先加密");
+      await settle(page, 200);
+      await shot(page, size, scheme, "provider-remote-sealed");
+      await clickVisible(page, dlg.locator("[data-testid=provider-save]"));
+      await dlg.waitFor({ state: "hidden", timeout: 5_000 });
+      // Sent sealed; its computer takes it before its next task (said under the row).
+      await page.waitForFunction(() => (document.querySelector(".ms [data-testid=provider-open]")?.textContent || "").includes("llm.example.org"), null, { timeout: 10_000 });
+      await page.locator(".ms .app-kv-help", { hasText: "等它那台电脑收下" }).waitFor({ timeout: 10_000 });
+      // Back as it was: cleared, encryption off.
+      await clickVisible(page, page.locator(".ms [data-testid=provider-open]"));
+      await dlg.waitFor({ timeout: 5_000 });
+      await clickVisible(page, dlg.locator("[data-testid=provider-clear]"));
+      await dlg.waitFor({ state: "hidden", timeout: 5_000 });
+      const cleared = await (await fetch(`${mock}/app/mock/run-settings`)).json();
+      if (cleared.last?.body.provider !== "clear") throw new Error("清除远程的自定义地址应发 provider: clear");
+      await setE2E(false);
+      await page.keyboard.press("Escape");
+      // An older runner on another computer: read-only, and says why.
+      await go(page, "成员", narrow);
+      if (await page.locator(".mb-card", { hasText: "临时 Codex" }).count()) {
+        row = await openRow("临时 Codex");
+        if (await row.locator("[data-testid=provider-open]").count()) throw new Error("老 runner 的服务商应只读");
+        if (!(await row.innerText()).includes("升级它那台电脑上的 myco")) throw new Error("老 runner 应提示升级那台电脑上的 myco");
+        await page.keyboard.press("Escape");
+      }
+    });
+
     await step("成员", async () => {
       await go(page, "成员", narrow);
       await page.locator(".mb-card").first().waitFor({ timeout: 20_000 });
@@ -3316,9 +3609,18 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, page.locator(".ms .ms-fold"));
       await page.locator(".ms .ms-fold-body .app-kv").first().waitFor({ timeout: 5_000 });
       if (await page.locator(".app-inspector").count()) throw new Error("详细信息不该再弹出另一个面板");
-      await page.locator(".ms .ms-fold-body").scrollIntoViewIfNeeded();
+      // The details are four tabs, one subject at a time (settings first).
+      const tabs = page.locator(".ms [data-testid=ms-tabs] [role=tab]");
+      if ((await tabs.allInnerTexts()).join("|") !== "设置|能力|记录|身份") throw new Error(`详细信息应分成 设置/能力/记录/身份 四页，实际「${(await tabs.allInnerTexts()).join("|")}」`);
+      await page.locator(".ms [data-testid=ms-tabs]").scrollIntoViewIfNeeded();
       await settle(page, 300);
       await shot(page, size, scheme, "member-card-details");
+      for (const t of ["skills", "records", "identity"]) {
+        await clickVisible(page, page.locator(`.ms [data-testid=ms-tabs] [data-tab=${t}]`));
+        await settle(page, 200);
+        await shot(page, size, scheme, `member-card-details-${t}`);
+      }
+      await clickVisible(page, page.locator(".ms [data-testid=ms-tabs] [data-tab=settings]"));
       // Delete asks calmly: who it is about, plain words, no red block.
       const del = page.locator(".ms .app-action-row.danger", { hasText: "删除这个 agent" });
       if (await del.count() && await del.isEnabled()) {
@@ -3380,6 +3682,7 @@ async function runMatrix(browser, size, scheme) {
       await pm.click();
       await page.locator(".ms").waitFor({ timeout: 10_000 });
       await clickVisible(page, page.locator(".ms .ms-fold"));
+      await clickVisible(page, page.locator(".ms [data-testid=ms-tabs] [data-tab=identity]"));
       const resume = page.locator(".ms .ms-fold-body .app-kv", { hasText: "重新接入" });
       await resume.waitFor({ timeout: 5_000 });
       await resume.scrollIntoViewIfNeeded();
@@ -3504,7 +3807,7 @@ async function runMatrix(browser, size, scheme) {
       if (!offered.some((o) => o.includes("GPT-6.1 Sol"))) throw new Error(`模型应列出电脑上 Codex 给的，实际是「${offered.join("、")}」`);
       await modelSelect.selectOption("gpt-6.1-sol");
       await lastBody((x) => x.agent === "pm-codex" && x.body.model === "gpt-6.1-sol", "模型的修改");
-      await page.waitForFunction(() => (document.querySelector(".ms .ms-fold-body")?.textContent || "").includes("现在是：gpt-6.1-sol（"), null, { timeout: 5_000 });
+      await page.waitForFunction(() => (document.querySelector(".ms .ms-fold-body")?.textContent || "").includes("现在用的：gpt-6.1-sol（"), null, { timeout: 5_000 });
       await effortSelect.selectOption("low");
       const effortBody = await lastBody((x) => x.agent === "pm-codex" && x.body.effort === "low", "推理强度的修改");
       if (effortBody.body.model !== "gpt-6.1-sol") {
@@ -3596,6 +3899,7 @@ async function runMatrix(browser, size, scheme) {
       const card = page.locator(".mb-card", { hasText: "MCP Claude" }).first();
       await card.scrollIntoViewIfNeeded(); await card.click();
       await clickVisible(page, page.locator(".ms .ms-fold"));
+      await clickVisible(page, page.locator(".ms [data-testid=ms-tabs] [data-tab=skills]"));
       const tools = page.locator('[data-testid="agent-tools"]');
       await tools.waitFor({ timeout: 10_000 });
       for (const want of ["filesystem", "project-docs", "release-check", "工作区权限下用不了"]) {
@@ -3652,8 +3956,8 @@ async function runMatrix(browser, size, scheme) {
       await select.selectOption("readonly");
       const request = await savedAccess("pm-codex", "readonly");
       if (request.model !== model || request.effort !== effort || Object.keys(request).sort().join(",") !== "access,effort,model") throw new Error("修改权限只能发送当前模型、推理强度和新权限");
-      await permission.getByText(/现在是：工作区（App）/).waitFor({ timeout: 5000 });
-      if (!(await permission.innerText()).includes("下次唤醒时生效")) throw new Error("需要说明下次唤醒生效");
+      await permission.getByText(/现在用的：工作区（App）/).waitFor({ timeout: 5000 });
+      if (!(await page.locator(".ms .ms-fold-body").innerText()).includes("改了从下次唤醒起生效")) throw new Error("需要说明下次唤醒生效");
       await shot(page, size, scheme, "member-access-capped");
       await select.selectOption("");
       await savedAccess("pm-codex", "");
@@ -5057,6 +5361,38 @@ async function runMatrix(browser, size, scheme) {
       await pub.locator(".app-choice:not(.disabled)", { hasText: "一键开放" }).locator("input:checked").waitFor({ state: "attached", timeout: 5_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "open-to-internet");
+      // A missing Tailscale must lead to install/login guidance, not a dead row.
+      await clickVisible(page, pub.locator(".pub-option", { hasText: "Tailscale Funnel" }));
+      const setup = pub.getByTestId("tailscale-setup");
+      await setup.waitFor();
+      if (!(await pub.getByRole("button", { name: "开放", exact: true }).isDisabled())) throw new Error("未安装 Tailscale 时应先引导安装");
+      for (const [platform, command] of [["Windows", "winget install --exact --id Tailscale.Tailscale"], ["macOS", "brew install --cask tailscale-app"], ["Linux", "https://tailscale.com/install.sh"]]) {
+        await clickVisible(page, setup.getByRole("button", { name: platform, exact: true }));
+        await setup.locator(".app-command code").first().filter({ hasText: command }).waitFor();
+      }
+      await clickVisible(page, setup.getByRole("button", { name: "Windows", exact: true }));
+      let downloadURL = "";
+      const downloadRoute = /\/app\/open-url$/;
+      const downloadHandler = async route => { downloadURL = route.request().postDataJSON().url; await route.fulfill({ status: 200, contentType: "application/json", body: '{"ok":true}' }); };
+      await page.route(downloadRoute, downloadHandler);
+      try {
+        await clickVisible(page, setup.getByRole("button", { name: "打开官方下载" }));
+        await page.waitForTimeout(100);
+        if (downloadURL !== "https://tailscale.com/download/windows") throw new Error("应打开 Tailscale 官方 Windows 下载页");
+      } finally { await page.unroute(downloadRoute, downloadHandler); }
+      await clickVisible(page, setup.locator("summary"));
+      await setup.locator("details code", { hasText: "myco hub up --tunnel tailscale" }).waitFor();
+      await clickVisible(page, setup.locator("summary"));
+      await shot(page, size, scheme, "open-to-internet-tailscale-setup");
+      await fetch(`http://${HOST}:${mockPort()}/app/mock/local`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tailscale_installed: true }) });
+      try {
+        await clickVisible(page, setup.getByRole("button", { name: "我已安装，重新检测" }));
+        await setup.waitFor({ state: "hidden" });
+        if (!(await pub.getByRole("button", { name: "开放", exact: true }).isEnabled())) throw new Error("安装后检测应解锁下一步");
+      } finally {
+        await fetch(`http://${HOST}:${mockPort()}/app/mock/local`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tailscale_installed: false }) });
+      }
+      await clickVisible(page, pub.locator(".pub-option", { hasText: "一键开放" }));
       await clickVisible(page, pub.getByRole("button", { name: "开放", exact: true }));
       await pub.getByRole("button", { name: "正在开放…" }).waitFor({ timeout: 5_000 });
       await pub.locator("[data-testid=opening] .pub-steps li").first().waitFor({ timeout: 5_000 });
@@ -5064,7 +5400,33 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "open-to-internet-opening");
       await clickVisible(page, pub.getByRole("button", { name: "取消" }));
       await pub.locator("button.app-btn-primary:enabled", { hasText: "开放" }).waitFor({ timeout: 3_000 });
-      await clickVisible(page, pub.getByRole("button", { name: "取消" }));
+      // An older Windows backend could return HTTP 200 with no public URL.
+      // Neither that response nor a not-ready error may show the success panel.
+      let publicResponse = "empty";
+      const localHubRoute = /\/app\/local\/hub$/;
+      const publicHandler = async (route) => {
+        const body = publicResponse === "pending"
+          ? { error: "tunnel_not_ready", message: "tunnel not ready", retryable: true }
+          : { hub: {}, public_url: publicResponse === "ready" ? "https://ready.example.test" : "", warnings: [] };
+        if (publicResponse === "pending") intentionalPublicNotReady.add(page);
+        await route.fulfill({ status: publicResponse === "pending" ? 503 : 200, contentType: "application/json", body: JSON.stringify(body) });
+      };
+      await page.route(localHubRoute, publicHandler);
+      try {
+        await clickVisible(page, pub.getByRole("button", { name: "开放", exact: true }));
+        await pub.getByText("尚未拿到有效的公网地址", { exact: false }).waitFor({ timeout: 5_000 });
+        if (await pub.locator("[data-testid=opened]").count()) throw new Error("空地址不能显示已开放");
+        publicResponse = "pending";
+        await clickVisible(page, pub.getByRole("button", { name: "开放", exact: true }));
+        await pub.getByText("公网连接尚未就绪", { exact: false }).waitFor({ timeout: 5_000 });
+        if (await pub.locator("[data-testid=opened]").count()) throw new Error("公网未就绪不能显示已开放");
+        await shot(page, size, scheme, "open-to-internet-not-ready");
+        publicResponse = "ready";
+        await clickVisible(page, pub.getByRole("button", { name: "开放", exact: true }));
+        await pub.locator("[data-testid=opened]").waitFor({ timeout: 5_000 });
+        await pub.locator(".pub-link code", { hasText: "https://ready.example.test" }).waitFor();
+        await clickVisible(page, pub.getByRole("button", { name: "完成", exact: true }));
+      } finally { intentionalPublicNotReady.delete(page); await page.unroute(localHubRoute, publicHandler); }
       await pub.waitFor({ state: "hidden", timeout: 5_000 });
     });
   } finally {

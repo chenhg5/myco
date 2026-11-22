@@ -52,8 +52,8 @@ function useTick() {
 }
 
 export type ChecklistStep = { key: string; title: string; hint: string; done: boolean; go?: () => void;
-  /** done too once this intro card was read */
-  seen?: IntroId };
+  /** done too once this intro card was read (or this was noted done: noteDone) */
+  seen?: IntroId | "guide" };
 
 /** The 上手清单: a card at the foot of the sidebar, folded to a line with
  *  its progress, open to the steps. Gone once put away. */

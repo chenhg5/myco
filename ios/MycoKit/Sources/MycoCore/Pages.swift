@@ -1,18 +1,42 @@
 import Foundation
+import Network
 import MycoAPI
 
 /// Web pages agents publish to the workspace (`myco page publish`). A link
 /// to one, `<workspace>/pages/<id>`, shows under its message as a card,
 /// and opens in the app. The desktop app's `pages.tsx`.
 public enum PageLinks {
-    /// The page a link leads to, when it is a page of this workspace.
-    public static func id(of href: String, in workspace: URL?) -> String? {
+    /// A workspace page and its opaque, percent-encoded client-side location.
+    public struct Target: Hashable, Sendable {
+        public let id: String
+        public let fragment: String?
+    }
+
+    public static let maximumFragmentBytes = 1024
+
+    /// Fragments never become a hub query or file path. Oversized ones are
+    /// ignored, while the page itself still opens.
+    public static func boundedFragment(_ fragment: String?) -> String? {
+        guard let fragment, !fragment.isEmpty, fragment.utf8.count <= maximumFragmentBytes,
+              let encoded = URLComponents(string: "#" + fragment)?.percentEncodedFragment,
+              encoded.utf8.count <= maximumFragmentBytes else { return nil }
+        return encoded
+    }
+
+    public static func target(of href: String, in workspace: URL?) -> Target? {
         guard let workspace else { return nil }
-        let link = href.trimmingCharacters(in: .whitespaces)
+        let parts = href.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false)
+        let link = String(parts[0])
         guard let match = link.range(of: "/pages/pg_[a-z0-9]+/?$", options: [.regularExpression, .caseInsensitive]) else { return nil }
         let base = String(link[..<match.lowerBound])
-        guard same(base, workspace.absoluteString) else { return nil }
-        return link[match].split(separator: "/").last.map(String.init)
+        guard same(base, workspace.absoluteString),
+              let id = link[match].split(separator: "/").last.map(String.init) else { return nil }
+        return Target(id: id, fragment: boundedFragment(parts.count > 1 ? String(parts[1]) : nil))
+    }
+
+    /// The page a link leads to, when it is a page of this workspace.
+    public static func id(of href: String, in workspace: URL?) -> String? {
+        target(of: href, in: workspace)?.id
     }
 
     private static func same(_ a: String, _ b: String) -> Bool {
@@ -24,18 +48,49 @@ public enum PageLinks {
         return trimmed(a) == trimmed(b)
     }
 
-    /// The pages linked in a message's text, once each, in order.
-    public static func ids(in body: String, workspace: URL?) -> [String] {
+    /// The pages linked in a message, once per page, in order. A card keeps
+    /// the first link's fragment, just as tapping that link would.
+    public static func targets(in body: String, workspace: URL?) -> [Target] {
         guard workspace != nil, body.contains("/pages/pg_") else { return [] }
         guard let pattern = try? NSRegularExpression(pattern: "https?://[^\\s<>()\"'`，。；、]+") else { return [] }
-        var ids: [String] = []
+        var targets: [Target] = []
         for match in pattern.matches(in: body, range: NSRange(body.startIndex..., in: body)) {
             guard let range = Range(match.range, in: body) else { continue }
-            // (a link at the end of a sentence carries its full stop)
             let link = String(body[range]).replacingOccurrences(of: "[.,;:!?)\\]]+$", with: "", options: .regularExpression)
-            if let id = id(of: link, in: workspace), !ids.contains(id) { ids.append(id) }
+            if let target = target(of: link, in: workspace), !targets.contains(where: { $0.id == target.id }) { targets.append(target) }
         }
-        return ids
+        return targets
+    }
+
+    public static func ids(in body: String, workspace: URL?) -> [String] {
+        targets(in: body, workspace: workspace).map(\.id)
+    }
+
+    /// Only the hub's public page address may be exposed to page scripts.
+    /// Never substitute the app's local transport address or carry credentials.
+    public static func publicURL(of page: Page) -> String? {
+        guard let text = page.url, var url = URLComponents(string: text),
+              let scheme = url.scheme?.lowercased(), ["https", "http"].contains(scheme),
+              let host = url.host?.lowercased(), !host.isEmpty,
+              url.user == nil, url.password == nil else { return nil }
+        let name = host.trimmingCharacters(in: CharacterSet(charactersIn: "[]."))
+        guard name != "localhost", !name.hasSuffix(".localhost") else { return nil }
+        if let address = IPv4Address(name) {
+            let bytes = [UInt8](address.rawValue)
+            if bytes[0] == 127 || bytes.allSatisfy({ $0 == 0 }) { return nil }
+        }
+        if let address = IPv6Address(name) {
+            let bytes = [UInt8](address.rawValue)
+            let loopback = bytes.dropLast().allSatisfy { $0 == 0 } && bytes[15] == 1
+            let mappedLoopback = bytes.prefix(10).allSatisfy { $0 == 0 }
+                && bytes[10] == 255 && bytes[11] == 255 && bytes[12] == 127
+            if loopback || mappedLoopback || bytes.allSatisfy({ $0 == 0 }) { return nil }
+        }
+        let path = url.path.hasSuffix("/") ? String(url.path.dropLast()) : url.path
+        guard path.hasSuffix("/pages/" + page.id) else { return nil }
+        url.query = nil
+        url.fragment = nil
+        return url.string
     }
 
     /// What a page is loaded as inside the app: a scheme of its own, one
@@ -48,8 +103,9 @@ public enum PageLinks {
         id.lowercased().replacingOccurrences(of: "_", with: "-")
     }
 
-    public static func address(of id: String, path: String = "") -> URL? {
-        URL(string: "\(scheme)://\(host(of: id))/" + (path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? ""))
+    public static func address(of id: String, path: String = "", fragment: String? = nil) -> URL? {
+        let base = "\(scheme)://\(host(of: id))/" + (path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? "")
+        return URL(string: base + (boundedFragment(fragment).map { "#" + $0 } ?? ""))
     }
 
     /// Whether an address inside the app is this page's own.

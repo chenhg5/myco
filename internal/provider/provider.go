@@ -4,7 +4,8 @@
 // Providers come from cc-switch (https://github.com/farion1231/cc-switch),
 // read-only from ~/.cc-switch: an agent stores only a reference
 // ("cc-switch:<id>") and the provider is read again before every run, so key
-// changes made in cc-switch apply without copying secrets anywhere.
+// changes made in cc-switch apply without copying secrets anywhere. Custom
+// endpoints instead use a private local env file (see Manual and WriteEnv).
 package provider
 
 import (

@@ -1,0 +1,21 @@
+{
+  "id": "myco/tutor",
+  "name": "学习工作台",
+  "version": "1.3.0",
+  "kind": "custom",
+  "category": "office",
+  "icon": "icon.svg",
+  "description": "导入教材，按学习基础听导师分层讲解，边看原文引用、边操作交互图和做小题。",
+  "data": {
+    "subjects": { "fields": { "title": "text", "goal": "text", "order": "number" } },
+    "lessons": { "fields": { "subject": "text", "title": "text", "explanation": "markdown", "summary": "text", "order": "number" } },
+    "questions": { "fields": { "subject": "text", "lesson": "text", "prompt": "text", "options": "json", "answer": "number", "explanation": "text", "order": "number" } },
+    "attempts": { "fields": { "question": "text", "choice": "number", "correct": "bool", "date": "datetime", "who": "person" } },
+    "tutor_requests": { "fields": { "prompt": "text", "mode": "text", "subject": "text", "lesson": "text", "who": "person", "order": "number", "level": "text", "material": "text", "page": "number", "delivery": "text", "previous": "text" } },
+    "tutor_answers": { "fields": { "text": "text", "lesson": "json" } },
+    "tutor_materials": { "fields": { "title": "text", "format": "text", "pages": "number", "order": "number" } },
+    "tutor_material_parts": { "fields": { "material": "text", "page": "number", "order": "number", "text": "text" } }
+  },
+  "permissions": ["send"],
+  "requires": { "hub": "0.20.7" }
+}

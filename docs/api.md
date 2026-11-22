@@ -27,7 +27,12 @@ hub for older App clients, while `hubs` lists every locally configured hub as
 `{name, running, local_url, public_url, version, added}` (`name: ""` for the
 default). `POST /app/local/hub` and `POST /app/local/hub/stop` accept optional
 `name`; omitted or empty selects the default. A named start joins this machine
-to that hub and adds it to the App's hub list.
+to that hub and adds it to the App's hub list. For public tunnels, a successful
+start requires a nonempty valid HTTP(S) public URL and a successful public health
+check. The Windows App-managed path waits for the delayed tunnel URL, then
+checks that address; local readiness alone is insufficient. A missing or
+unreachable public address returns HTTP 503 `tunnel_not_ready` (`retryable: true`)
+while leaving the local Hub running. Local-only starts remain supported.
 
 Agent detail and overview entries include `resume: {created_at, last_used_at?, last_used_env?}` only when the caller manages that agent (or is the agent itself). The Hub stores only a hash of each recovery token, one per agent. Creating, revoking and using a link are audited without its token.
 
@@ -172,6 +177,8 @@ A **coordinator** of an active project may also change, with its own token, the 
 
 ## Pages
 
+Updated clients support an application-owned fragment on public page links; see [App links](app-links.md). Fragments select an app view and do not change HTTP page identity, file paths or permissions. The page bridge may expose optional `myco.ready.page.url` (the canonical public Page URL) so apps can copy these links without exposing their private rendering URL. This is additive client context; older bridges omit it.
+
 From v0.19.24: web pages agents (or people) publish for the App to open in its page panel. A page is a folder of static files kept as a zip; each publish is a version (the 10 newest are kept). Agent tokens and console tokens use the same routes. Who sees a page: its owner (the publishing agent's owner, or the person who published it), that owner's agents, the hub's owner and admins, and, for a page published to a project, whoever sees the project. Its owner, their agents and the hub's managers publish versions and delete it. Hubs with end-to-end encryption on refuse pages (`invalid_state`). Older hubs answer 404.
 
 | Endpoint | Who | What |
@@ -199,6 +206,27 @@ From v0.20.3: what a conversation keeps at hand ("Pinned" in the App), shown as 
 | `PATCH /v1/pins/{id}` | agent or person | `{a?, with, title}` → the pin |
 | `PUT /v1/pins/order` | agent or person | `{a?, with, ids}` → the list, those named first in that order |
 | `DELETE /v1/pins/{id}?with=&a=` | agent or person | `204` |
+
+## Notices
+
+What each person should hear about (hub v0.21.21+): an agent asking them, a workflow waiting on their decision, their superagent asking for their OK, a task of theirs that failed, an answer, an update. The hub works them out from its own events and decides once, from the person's preferences, whether each is announced (a banner, a sound, a push), so every device agrees. They are a person's: a console credential reads the notices of the member behind it (the hub's admin token reads the owner's); agents and superagents cannot. Kept 30 days.
+
+| Endpoint | Who | Description |
+|---|---|---|
+| `GET /v1/console/notices?after=&limit=&wait_seconds=` | person | `{notices: [Notice], last, badge}`, oldest first, those after `after` (a `seq`). With `wait_seconds` (at most 55) and nothing new, waits for the next one or for a change (read, settled). Read after `last` next time; `badge` counts open `needs_you` notices |
+| `POST /v1/console/notices/read` | person | `{target?, through?}` → `{changed}`: marks as read what leads to `target` (`"agent:codex"`; `"workflow:w1"` covers its runs; omitted: all) up to `through` (a `seq`; omitted: all). Reading settles notices that are not actionable (`asking`, `decision`, `approval` are settled only by answering, deciding, approving) |
+| `GET /v1/console/notice-prefs` | person | the person's preferences (below; `{}` when never set) |
+| `PUT /v1/console/notice-prefs` | person | replaces them; returns them. `400` for quiet hours outside 0–1439, an unknown zone or tier, or more than 500 mutes |
+
+A **Notice** is `{seq, id, kind, tier, key, ref?, target?, project?, actor?, subject?, message_id?, announce, quiet?, created_at, read_at?, resolved_at?, message?}`:
+
+- `kind` and its `tier`: `needs_you` (`asking`, `decision`, `approval`, `failed`, `run_failed`, `stuck`), `results` (`answered`, `said`, `mention`), `activity` (`progress`).
+- `target` is where it leads: `agent:<name>`, `project:<name>`, `workflow:<id>?run=<run>`, `superagent`. `actor` is who it is from.
+- `message` is the message it is about, when there is one (sealed as stored on an end-to-end encrypted hub; the Go client opens it). `subject` is a few words when the hub knows them (a run's name, what an approval would do); a message's text is never copied into a notice.
+- `announce` is whether devices announce it; when not, `quiet` says why: `tier`, `muted`, `paused`, `quiet_hours`, `off`. A device adds only what it alone knows (the person is looking at that conversation).
+- `resolved_at`: it no longer waits for the person (answered, decided, read).
+
+**Preferences** are `{off?, tiers?, quiet?, paused_until?, mutes?, updated_at?}`. `tiers` overrides the defaults (`needs_you` on; `results` and `activity` off). `quiet` is `{from, to, zone}`: minutes from midnight in an IANA zone, a `from` later than `to` spanning the night; nothing is announced then, whatever the tier. `mutes` maps a scope (a notice's target without its query, `project:<name>`, or `agent:<actor>`) to when the mute ends (the zero time: never).
 
 ## Page records and templates
 
@@ -390,6 +418,35 @@ A route not listed treats it as the ordinary agent it also is. Nothing widens wh
 | `GET /v1/me/superagent` | agent | `{superagent, owner?}` |
 | `GET /v1/me/approvals` | agent | what it asked for |
 
+Approvals also carry `kind` and `payload` (v0.21.21): an empty `kind` is a superagent's held request as above; `kind: "action_grant"` is any agent asking to act on a computer (see [Agent actions](#agent-actions)), with `payload: {grant_id}`. Approving one may send `{permissions?, ttl_seconds?}` to allow less than was asked (never more); an empty body allows all of it.
+
+## Agent actions
+
+From v0.21.21, an agent can act on a computer through a provider that computer's own myco App runs (`remote.desktop`: screenshots, keyboard and mouse), with its owner's approval. The hub checks grants and relays jobs; it never reads their arguments or results, and it keeps grants, jobs and artifacts in memory only (a hub restart ends every session). In an end-to-end encrypted workspace these routes answer `unsupported`. The contract (fields, provider actions, lifecycle) is `context/design/app-agent-actions.md` in the maintainers' repository.
+
+**Pages** (next version): a target can also be a shared page (`{kind: "page", id: "pg_..."}`) with the provider `page` and its one permission and action, `page.export` (v1): a file the page's own app makes of the page's shared content (SVG, PNG, or whatever the app declares in its action schema). An agent that may see the page gets the grant **active at once**, with no approval, because the file holds nothing it could not already read; the page's owner sees it among their grants and may revoke it. Page visibility is checked again when a job is run, handed to a renderer, completed, and when its artifact is downloaded: an agent that can no longer see the page loses the grant. A renderer is registered by a person, not a computer (`provider: "page"`, no `machine_id`), and gets only jobs for pages that person may see. The desktop App is the renderer: it loads the page in a sandboxed frame with that page's read-only data and calls the app's export handler.
+
+| Route | Who | |
+|---|---|---|
+| `POST /v1/me/action-grants` | agent | `{target: {kind: "machine", id}, permissions, reason, message_id?, page_id?, ttl_seconds?}` → `201` a pending grant `{id, agent, owner, target, target_name, permissions, requested, reason, message_id?, approval_id, state, end_reason?, created_at, expires_at?, ended_at?}`; the target's owner gets an `action_grant` approval. `id` may be the computer's name. Permissions: `remote.desktop.view`, `remote.desktop.control` (control includes view). TTL 5 minutes by default, 30 at most. With `message_id`, the grant ends when that task ends. `?dry_run=1` checks only |
+| `GET /v1/me/action-grants` | agent | `{grants: [...]}`, its own |
+| `GET /v1/me/action-grants/{id}?wait_seconds=30` | agent | the grant; waits while it is pending (`wait=30s` works too; 60 seconds at most) |
+| `POST /v1/me/action-grants/{id}/end` | agent | ends it → the grant |
+| `GET /v1/me/action-grants/{id}/actions` | agent | `{actions: [{name, version, title, permission, input_schema?, output_schema?}]}`: what the computer offers now that the grant covers |
+| `POST /v1/me/action-jobs` | agent | `{grant_id, action, version, args, idempotency_key}` → `201 {id, grant_id, action, version, state, result?, error?: {code, message, retryable}, artifacts?, cancel_requested?, created_at, finished_at?}`. The same key and body returns the first job; a different body is `409`. `unsupported` when the computer does not offer that action now |
+| `GET /v1/me/action-jobs/{id}?wait_seconds=30` | agent | the job; waits until it ends. `state`: queued running succeeded failed cancelled |
+| `POST /v1/me/action-jobs/{id}/cancel` | agent | cancels a queued job; asks a running one to stop (what it did stays done) |
+| `GET /v1/me/action-artifacts/{id}` | agent (the grant's) | the file (a screenshot), `Cache-Control: no-store`; `410` once its grant ends or it expires (10 minutes at most) |
+| `GET /v1/console/action-grants?state=active` | console | `{grants}` the caller decides (all, for owners and admins) |
+| `POST /v1/console/action-grants/{id}/revoke` | console | ends it at once: queued jobs are cancelled, a running job's late result is dropped, artifacts are gone |
+| `POST /v1/console/action-hosts` | console (the computer's owner) | the trusted App offers a provider there: `{machine_id, provider, generation, actions}` (a page renderer: `provider: "page"`, no `machine_id`) → `201 {id, machine_id, provider, generation, last_seen_at}`. Registering a computer's provider again replaces its host (its running jobs fail as `host_restarted`). A person may run several page renderers (one per App); a new one replaces only theirs that stopped polling (45 s). A host not seen for 10 minutes is dropped. After `404`/`409` on its job poll, an App waits 30 s before registering again |
+| `GET /v1/console/action-hosts/{id}/jobs?wait_seconds=30` | console | `{jobs: [{job, args, grant}]}`: queued jobs for that computer, now running. A host quiet for 45 seconds ends the grants it ran |
+| `GET /v1/console/action-jobs/{id}?host_id=&generation=&wait_seconds=30` | console | `{job, grant_state, grant_expires_at?, stop}` for a job the host runs. `stop` turns true when the agent cancels it, its grant ends (revoked, expired, its task ended) or it is no longer running; with `wait_seconds` it answers as soon as it does. The host asks right before anything native happens and keeps asking while it runs |
+| `POST /v1/console/action-jobs/{id}/artifacts?host_id=&generation=` | console | the raw file (`Content-Type` image/*, application/pdf, Office (OOXML), text/plain, text/csv, text/markdown, text/html or application/json; 4 MB at most; the agent downloads it as an attachment, nosniff and sandboxed) → `201 {id, media_type, bytes, expires_at}` |
+| `POST /v1/console/action-jobs/{id}/complete` | console | `{host_id, generation, state, result?, error?, artifact_ids?}` → the job. A wrong generation is `409`; a finished job cannot change |
+
+The CLI: `myco action grant request|list|get|end`, `myco action list`, `myco action run` (waits, and saves screenshots to files), `myco action job`, `myco action cancel`.
+
 ## Message object
 
 ```json
@@ -541,3 +598,79 @@ responses use the existing desktop `net.fetch` shape documented in
 [App OS capabilities](app-os.md#network-access-on-iphone). Old iOS clients lack
 this feature; embedded apps must show an update hint instead of assuming that
 all platforms provide desktop computer access.
+
+### Local model-provider selection
+
+`GET/PUT /app/local/agents/{name}/provider?hub_id={id}` is an App-local
+endpoint, not a Hub route. Only agents with a profile on this computer can be
+changed. Existing `{"provider":"cc-switch:<id>"}` requests still pin a cc-switch
+entry; `{"provider":""}` clears the pin and provider variables from its private
+env file, retaining unrelated variables. Changes apply on the next run.
+
+A custom provider is set with
+`{"manual":{"base_url":"http://127.0.0.1:3425/v1","api_key":"<local-only>","model":"my-model","wire_api":"responses"}}`.
+`wire_api` is Codex-only (`chat` or `responses`, default `responses`); omit it for
+Claude Code. The URL must be HTTP(S) without user information, query or fragment.
+The key is required on each update and is written only to a local 0600 env file.
+It never enters argv, Hub state or responses. GET/PUT return
+`{local, provider, harness?, env_host?, manual?: {base_url, model?, wire_api?, has_key}}`;
+`provider: "env_file"` denotes the custom env settings (compatible with older Apps).
+`manual` never includes `api_key`. No remote editing of another computer's secret
+files is provided by this route.
+
+`runtime.provider_host` optionally reports only the effective endpoint's host
+and port, without path, credentials, query or fragment. Following this computer
+observes Claude user settings and inherited variables, or Codex's active
+`model_provider` in its user TOML configuration. `provider` identifies a detected
+magpie loopback gateway (`127.0.0.1:3425`, `localhost:3425`, `[::1]:3425`), a matching
+current cc-switch provider, or the host itself. These fields are observations of
+user-level configuration, not an assertion about project/profile overrides or
+service availability. Older runners omit `provider_host`; if an older Hub specifically rejects this
+unknown field, the client retries once without it so other runtime reporting
+continues to work. The Hub stores this field with runtime JSON; no schema migration
+is needed.
+
+### Remote provider settings
+
+A runner supporting remote provider changes advertises the `remote_provider`
+feature and `runtime.providers: [{ref, name, host?, model?}]`. This inventory is
+from that computer's cc-switch configuration and never contains keys or config
+arguments. A supported runner sends an empty array when it has no channels;
+older runners omit it. Against a Hub that rejects these new runtime fields, the
+client omits them and removes `remote_provider`, so Apps keep remote controls
+read-only until both sides support them.
+
+`PUT /v1/agents/{name}/run-settings` and its App proxy accept an optional
+`provider`: `""` (follow that computer), `"cc-switch:<id>"` (an advertised channel),
+`"clear"` (clear custom provider variables and follow), or `"custom"` with a
+`provider_encrypted` envelope. Omitted provider fields preserve local settings
+and older clients. Only the agent's human owner can change provider settings;
+another administrator, project coordinator, the agent itself, and a superagent
+acting for a person cannot. Omitting model/effort also preserves those values;
+explicit empty strings still clear them. Existing local provider routes remain
+available independently of remote settings.
+
+**Remote custom keys must be encrypted before contacting the Hub.** The local
+App backend exposes `PUT /app/hubs/{id}/agents/{name}/provider` with the same
+`{manual:{base_url, api_key, model?, wire_api?}}` input as local editing. It checks
+that workspace E2E is on and that the target agent has registered its public key,
+then seals the whole configuration with `internal/e2e` for that agent alone. It
+sends the Hub only `{provider:"custom", provider_encrypted:{id,from,body}}` through
+run settings. Without E2E this endpoint returns `e2e_required` and advises entering
+settings in the App or CLI on the target computer. Never put `manual`, `api_key`
+or `key` in a Hub request or ordinary message.
+
+The envelope uses header `{From:from, To:agentName, Type:"provider.settings",
+ReplyTo:id}`, with `from` the authenticated owner's `@console:<member>` name.
+`id` is a fresh 16–80 character request identifier. The Hub validates the owner,
+E2E setting, device signature, envelope format and sole target recipient without
+decrypting it. Neither audit entries nor logs include the ciphertext or key.
+A pending `run_settings.provider_encrypted` means the runner has not acknowledged
+installation. The runner opens it locally before its next invocation, validates
+and writes a private 0600 env file, then `POST /v1/me/provider/ack {id}` consumes
+only that matching pending envelope. A stale receipt returns conflict and cannot
+delete a newer request. The `custom` marker remains while the actual settings live
+only on the target computer. Private local receipts make lost-ack retries avoid
+overwriting local changes with the same delivery again. Clearing or selecting a
+channel cancels pending ciphertext. The existing run_settings/runtime JSON stores
+are used; no database migration is required.

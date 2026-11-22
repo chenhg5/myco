@@ -24,12 +24,14 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
 	"github.com/chenhg5/myco/internal/api"
 	"github.com/chenhg5/myco/internal/app"
 	"github.com/chenhg5/myco/internal/client"
+	"github.com/chenhg5/myco/internal/console/notices"
 	"github.com/chenhg5/myco/internal/harness/execnode"
 	"github.com/chenhg5/myco/internal/release"
 )
@@ -158,6 +160,8 @@ func randomHex(n int) string {
 type Backend struct {
 	backupLoop    sync.Once // the hourly copy of backups to this computer
 	remoteDesktop remoteDesktop
+	actionHosts   actionHosts // agent actions on this computer (action_host.go)
+	pageRender    pageRender  // pages rendered for agents (page_render.go)
 	// connects are computers being connected over SSH or WSL.
 	connects connectJobs
 	// os: what pages use of this computer (myco.os, oscalls.go).
@@ -217,6 +221,8 @@ type Backend struct {
 	voice     *voice
 	// the pages' language (uilang.go)
 	uiLang uiLang
+	// notices shown on this computer (notices.go; nil in a browser)
+	notices atomic.Pointer[notices.Watcher]
 }
 
 func (b *Backend) timeout() time.Duration {
@@ -244,8 +250,10 @@ func (b *Backend) Handler() http.Handler {
 	m := http.NewServeMux()
 	b.cacheRoutes(m)
 	b.uiLangRoutes(m)
+	b.noticeRoutes(m)
 	b.proxyRoutes(m)
 	b.remoteDesktopRoutes(m)
+	b.pageRenderRoutes(m)
 	b.backupRoutes(m)
 	m.HandleFunc("GET /app/info", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"version": b.Version, "shell": orStr(b.Shell, "browser"), "dictation": b.Dictate != nil || b.Listen != nil, "pick_image": b.PickImage != nil, "open_url": b.OpenURL != nil})
@@ -374,13 +382,14 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	}))
+	m.HandleFunc("PUT /app/hubs/{id}/agents/{name}/provider", b.withHub(b.putRemoteAgentProvider))
 	m.HandleFunc("PUT /app/hubs/{id}/agents/{name}/run-settings", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
-		var in api.RunSettings
+		var in api.RunSettingsPatch
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			writeErr(w, err)
 			return
 		}
-		a, err := c.SetRunSettings(r.Context(), r.PathValue("name"), in)
+		a, err := c.PatchRunSettings(r.Context(), r.PathValue("name"), in)
 		if err != nil {
 			writeErr(w, err)
 			return
@@ -1347,6 +1356,9 @@ type HubStatus struct {
 	Error           string `json:"error,omitempty"`
 	HubVersion      string `json:"hub_version,omitempty"`
 	UpdateAvailable bool   `json:"update_available,omitempty"`
+	// Aliases are other addresses its links can carry (a hub on this
+	// computer links with its LAN address): see hubAliases.
+	Aliases []string `json:"aliases,omitempty"`
 }
 
 func (b *Backend) listHubs(w http.ResponseWriter, r *http.Request) {
@@ -1357,7 +1369,7 @@ func (b *Backend) listHubs(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]HubStatus, len(hubs))
 	each(hubs, func(i int, h Hub) {
-		out[i] = HubStatus{Hub: h}
+		out[i] = HubStatus{Hub: h, Aliases: hubAliases(h.URL)}
 		var failed error // a failed health check (not a missing token)
 		defer func() { out[i] = b.steady.hubStatus(out[i], failed, time.Now()) }()
 		c, err := b.client(h)

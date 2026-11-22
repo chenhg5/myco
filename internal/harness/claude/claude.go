@@ -112,8 +112,16 @@ func providerKey(k string) bool {
 // keys the user's settings set but this provider does not (e.g. another
 // provider's ANTHROPIC_MODEL left by cc-switch) are blanked, which Claude
 // Code treats as unset. A file keeps keys out of the process list.
-func providerSettingsFile(p *harness.ProviderSettings, dir string) (string, error) {
+func providerSettingsFile(p *harness.ProviderSettings, dir string, inherited ...string) (string, error) {
 	env := map[string]string{}
+	// Clear provider switches/credentials inherited from the service too. The
+	// pinned provider then supplies its own values through --settings.
+	for _, kv := range inherited {
+		k, _, _ := strings.Cut(kv, "=")
+		if providerKey(k) {
+			env[k] = ""
+		}
+	}
 	if b, err := os.ReadFile(filepath.Join(dir, "settings.json")); err == nil {
 		var user struct {
 			Env map[string]any `json:"env"`
@@ -198,7 +206,7 @@ func (c *claude) Run(ctx context.Context, req harness.Request) (harness.Result, 
 	}
 	args = append(args, c.opts.Args...)
 	if req.Provider != nil {
-		file, err := providerSettingsFile(req.Provider, configDir(req.Env))
+		file, err := providerSettingsFile(req.Provider, configDir(req.Env), append(os.Environ(), req.Env...)...)
 		if err != nil {
 			return harness.Result{}, err
 		}

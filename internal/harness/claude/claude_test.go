@@ -79,3 +79,23 @@ func TestProviderSettingsFile(t *testing.T) {
 		}
 	}
 }
+
+func TestCustomProviderOverridesInheritedEnvironment(t *testing.T) {
+	dir := t.TempDir()
+	f, err := providerSettingsFile(&harness.ProviderSettings{Env: map[string]string{"ANTHROPIC_BASE_URL": "http://localhost:3425", "ANTHROPIC_AUTH_TOKEN": "new-private-key"}, Model: "custom-model"}, dir, "CLAUDE_CODE_USE_BEDROCK=1", "ANTHROPIC_API_KEY=old-private-key", "OTHER=keep")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(f)
+	b, _ := os.ReadFile(f)
+	var doc struct {
+		Env   map[string]string `json:"env"`
+		Model string            `json:"model"`
+	}
+	if err := json.Unmarshal(b, &doc); err != nil {
+		t.Fatal(err)
+	}
+	if doc.Model != "custom-model" || doc.Env["ANTHROPIC_BASE_URL"] != "http://localhost:3425" || doc.Env["ANTHROPIC_API_KEY"] != "" || doc.Env["CLAUDE_CODE_USE_BEDROCK"] != "" || strings.Contains(string(b), "old-private-key") {
+		t.Fatal("inherited provider or model won over pin")
+	}
+}

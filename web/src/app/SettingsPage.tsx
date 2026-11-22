@@ -1,12 +1,14 @@
 import { clearAll, forgetHub, recall, remember } from "@/lib/memo";
+import { openHelp } from "@/app/Help";
 import { CopyButton } from "@/app/copy";
+import { TailscaleSetup } from "@/app/TailscaleSetup";
 import { IntroCard, introOf, noteDone } from "@/app/Onboard";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertTriangle, AudioLines, Bot, Check, Cloud, Globe, Info, Keyboard, Languages, Palette, Pencil, Plus, RotateCcw, ScrollText, Search, Server, Terminal, Users,
 } from "lucide-react";
 import {
-  appApi, type AppInfo, type CacheStats, type AppUpdate, type Hub, type HubOverview, type LocalState,
+  appApi, ApiError, type AppInfo, type CacheStats, type AppUpdate, type Hub, type HubOverview, type LocalState,
   type LocalTunnel, type StartLocalHubResult, type VoiceInfo, type VoiceTTSProvider, type TTSVoice, type ProxySetting, type ProxyInput,
 } from "@/appapi";
 import { ver } from "@/app/nodes";
@@ -16,7 +18,7 @@ import { colorIndex, HubFace } from "@/app/HubSwitcher";
 import { PictureButton } from "@/app/AvatarPicker";
 import { ErrorText, Modal, ConfirmDialog } from "@/app/dialogs";
 import { accessLabel, localWorkspaceOf, localWorkspaces, type LocalWorkspace } from "@/app/localHubs";
-import { AuditSection, MembersSection } from "@/app/MembersSection";
+import { AuditSection, MembersSection, MyDevices } from "@/app/MembersSection";
 import { LocalAgentsSection } from "@/app/LocalAgents";
 import { setSimpleMode, useSimpleMode } from "@/app/simpleMode";
 import type { TextSize, ThemeMode } from "@/lib/theme";
@@ -119,6 +121,13 @@ function AboutSection({ info, local }: { info: AppInfo | null; local: LocalState
           <span className="app-kv-value">
             <span className="app-about-status">{L("看看这台电脑上的 agent，把已有的会话加进来", "The agents on this computer, and sessions to bring in")}</span>
             <button type="button" className="app-btn app-btn-quiet" onClick={() => window.dispatchEvent(new CustomEvent("myco-prepare"))}>{L("重新打开", "Open")}</button>
+          </span>
+        </div>
+        <div className="app-kv app-about-update" data-setting="guide">
+          <span className="app-kv-label">{L("使用文档", "User guide")}</span>
+          <span className="app-kv-value">
+            <span className="app-about-status">{L("项目、自动化、工作流、应用……都怎么用", "How projects, automations, workflows and apps work")}</span>
+            <button type="button" className="app-btn app-btn-quiet" onClick={() => openHelp()} data-testid="settings-guide">{L("打开", "Open")}</button>
           </span>
         </div>
       </div>
@@ -227,6 +236,7 @@ const FINDABLE: { section: Section; key?: string; title: () => string; words: st
   { section: "audit", title: () => L("审计", "Audit"), words: "审计 日志 记录 操作 audit log" },
   { section: "shortcuts", title: () => L("快捷键", "Keyboard shortcuts"), words: "快捷键 键盘 按键 热键 shortcuts keyboard hotkeys keys" },
   { section: "about", title: () => L("关于", "About"), words: "关于 版本 更新 升级 about version update upgrade" },
+  { section: "about", key: "guide", title: () => L("使用文档", "User guide"), words: "使用文档 文档 帮助 说明 教程 怎么用 help guide docs manual documentation" },
   { section: "about", key: "prepare", title: () => L("上手引导", "Getting started"), words: "上手 引导 新手 准备这台电脑 onboarding getting started setup guide" },
 ];
 
@@ -785,6 +795,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
         {section === "voice" && <VoiceSection />}
         {section === "network" && <ProxySection hubsOv={hubsOv} />}
         {section === "about" && <AboutSection info={info} local={local} />}
+        {section === "hubs" && simple && <MyDevices hubsOv={hubsOv} />}
         {section === "members" && <MembersSection hubsOv={hubsOv} onRefresh={onRefresh} />}
         {section === "audit" && <AuditSection hubsOv={hubsOv} />}
       </div>
@@ -885,20 +896,24 @@ export function PublicAccessDialog({ open, onOpenChange, local, name, onDone }: 
   const [result, setResult] = useState<StartLocalHubResult | null>(null);
 
   const cf = !!local?.tools?.cloudflared;
-  const ts = !!local?.tools?.tailscale;
+  const [detectedTS, setDetectedTS] = useState<boolean | null>(null);
+  const ts = detectedTS ?? !!local?.tools?.tailscale;
 
   useEffect(() => {
     if (!open) return;
     setChoice(0);
+    setDetectedTS(null);
     setHostname("");
     setBusy(false);
     setError(null);
     setResult(null);
-  }, [open, cf, ts]);
+  // Installing the tool refreshes cf/ts after success; that refresh must not
+  // reset the result panel while this same dialog is open.
+  }, [open]);
 
   // The one-click way gets cloudflared itself; the others need their tool.
   const disabled = (i: TunnelChoice) =>
-    i === 0 ? false : i === 1 ? !cf : !ts;
+    i === 1 ? !cf : false;
 
   // Opening can take a minute or two (Funnel's certificate, a tunnel's
   // DNS): say how long, and let it be cancelled.
@@ -930,10 +945,17 @@ export function PublicAccessDialog({ open, onOpenChange, local, name, onDone }: 
         ? { tunnel: "tailscale" as const, ...which }
         : { tunnel: "cloudflare" as const, ...which };
     try {
-      setResult(await appApi.startLocalHub(input, ctl.signal));
+      const response = await appApi.startLocalHub(input, ctl.signal);
+      if (ctl.signal.aborted || abort.current !== ctl) return;
+      const publicURL = typeof response.public_url === "string" ? response.public_url.trim() : "";
+      let valid = false;
+      try { const u = new URL(publicURL); valid = ["https:", "http:"].includes(u.protocol) && !!u.hostname && !u.username && !u.password && !u.hash; } catch { /* older backend can return an empty address */ }
+      if (!valid) throw new Error(L("尚未拿到有效的公网地址。本机工作区仍在运行，请稍后重试。", "No valid public address was returned. The local workspace is still running; try again shortly."));
+      setResult({ ...response, public_url: publicURL });
       onDone();
     } catch (e) {
-      if (!ctl.signal.aborted) setError(e);
+      if (!ctl.signal.aborted) setError(e instanceof ApiError && e.code === "tunnel_not_ready"
+        ? new Error(L("公网连接尚未就绪，本机工作区仍在运行。请稍后重试；如果持续失败，可查看本机工作区日志。", "Public access is not ready. The workspace is still running on this computer. Try again shortly; if it keeps failing, check the local Hub log.")) : e);
     } finally {
       if (abort.current === ctl) {
         abort.current = null;
@@ -1010,7 +1032,7 @@ export function PublicAccessDialog({ open, onOpenChange, local, name, onDone }: 
                       onChange={() => setChoice(i as TunnelChoice)} />
                     <span className="pub-option-text">
                       <span className="t">{t.title}<em className="pub-badge">{i === 0 ? L("推荐", "Recommended") : L("地址固定", "Fixed address")}</em></span>
-                      <span className="d">{off || (i === 0 && !cf) ? t.missing : t.desc}</span>
+                      <span className="d">{off || (i === 0 && !cf) || (i === 2 && !ts) ? t.missing : t.desc}</span>
                       {i === 1 && on && (
                         <input className="app-input mono pub-domain" value={hostname} onChange={(e) => setHostname(e.target.value)}
                           placeholder="hub.example.com" aria-label={L("域名", "Domain")} autoFocus />
@@ -1022,7 +1044,16 @@ export function PublicAccessDialog({ open, onOpenChange, local, name, onDone }: 
               })}
             </div>
           )}
-          {error && choice === 2 && <div className="app-small-note">{L("Tailscale 这一步没成功，原因和办法在下面（来自 Tailscale）。常见的是：这个 macOS 用户下没开 Tailscale App 或没登录、还没在 Tailscale 后台为这台设备打开 Funnel。", "Tailscale's step failed; why and what to do are below (from Tailscale). Usually: the Tailscale app is not open and signed in for this macOS user, or Funnel is not on for this device in the Tailscale admin console.")}</div>}
+          {!busy && choice === 2 && (!ts || !!error) && <TailscaleSetup installed={ts} name={name}
+            localURL={(local?.hubs || (local?.hub ? [local.hub] : [])).find(h => (h.name || "") === (name || ""))?.local_url}
+            onError={setError}
+            onCheck={async () => {
+              const fresh = await appApi.local();
+              const found = !!fresh.tools?.tailscale;
+              setDetectedTS(found);
+              setError(found ? null : new Error(L("还没找到 Tailscale。请完成安装后重试；如果刚安装完成，重新打开 myco 再检测。", "Tailscale was not found yet. Finish installation and try again; if just installed, reopen myco and check again.")));
+            }} />}
+          {error && choice === 2 && <div className="app-small-note">{L("Tailscale 这一步没成功，原因和办法在下面（来自 Tailscale）。常见的是：这台电脑上的 Tailscale 没启动或没登录、还没在 Tailscale 后台为这台设备打开 Funnel。", "Tailscale's step failed; why and what to do are below (from Tailscale). Usually: Tailscale is not running and signed in on this computer, or Funnel is not on for this device in the Tailscale admin console.")}</div>}
           <ErrorText error={error} />
           <div className="app-modal-actions">
             <button type="button" className="app-btn" onClick={busy ? cancel : close}>{L("取消", "Cancel")}</button>
@@ -1030,7 +1061,7 @@ export function PublicAccessDialog({ open, onOpenChange, local, name, onDone }: 
               type="button"
               className="app-btn app-btn-primary"
               onClick={() => void submit()}
-              disabled={busy || disabled(choice) || (choice === 1 && !hostname.trim())}
+              disabled={busy || disabled(choice) || (choice === 2 && !ts) || (choice === 1 && !hostname.trim())}
             >
               {busy ? <><span className="app-spinner" />{L("正在开放…", "Opening…")}</> : <><Cloud />{L("开放", "Open")}</>}
             </button>

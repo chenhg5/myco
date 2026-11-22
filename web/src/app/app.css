@@ -4324,6 +4324,7 @@ html.fp-docked .app-main .sp-side {
 .conv-queue,
 .conv-busy,
 .vc-bar,
+.conv-compose > .sa-approvals,
 .conv-compose > .app-error-text,
 .conv-compose-box {
   max-width: calc(var(--conv-col) - var(--conv-pad) - var(--conv-pad-l));
@@ -5721,7 +5722,12 @@ button.app-label:hover { filter: brightness(0.95); }
 .app-provider-opt span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .app-provider-opt b { font-weight: 500; color: var(--fg); }
 .app-provider-opt small { font-size: 11.5px; color: var(--muted); overflow-wrap: anywhere; }
-.app-provider-manual { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.app-provider-manual { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
+.app-provider-manual .app-field { margin-top: 0; }
+.app-provider-manual .seg { display: inline-flex; }
+/* Clearing the custom address: quiet on the left, red only on hover. */
+.app-provider-clear { margin-right: auto; background: transparent; color: var(--muted); }
+.app-provider-clear:hover:not(:disabled) { background: var(--pill); color: var(--red); }
 .app-modal-note { font-size: 12px; color: var(--muted); margin: 0 0 8px; }
 
 /* Settings → 成员 / 审计 */
@@ -8529,8 +8535,6 @@ body.is-resizing {
 .pcd-ai.is-missing { color: var(--muted); }
 .app-tool-list { margin: 8px 0 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; }
 .app-tool-list summary { cursor: pointer; color: var(--fg-2); font-size: 12px; }
-.app-tool-list .app-tool-inventory { margin-top: 8px; }
-.app-tool-inventory .app-small-note { margin: 4px 0; overflow-wrap: anywhere; }
 
 /* ---------- an automation opened (Automations.tsx AutomationDetail) ---------- */
 .aud .pcd-head .ph-actions { align-items: center; }
@@ -9270,7 +9274,7 @@ html.os-other ::-webkit-scrollbar-thumb:hover, html.os-other ::-webkit-scrollbar
 .pcd-line-value { flex: none; display: flex; align-items: center; gap: 8px; }
 .pcd-value { font-size: 13px; color: var(--fg); }
 .pcd-value.is-quiet { color: var(--faint); }
-.pcd-line > .mdirs, .pcd-line > .app-notice, .pcd-line > .app-small-note, .pcd-line > .app-error-text, .pcd-line > .app-tool-inventory { margin-top: 10px; }
+.pcd-line > .mdirs, .pcd-line > .app-notice, .pcd-line > .app-small-note, .pcd-line > .app-error-text { margin-top: 10px; }
 .pcd-line-note { margin: 8px 0 0; }
 .pcd-line .mdirs { align-items: flex-start; }
 .pcd-line .mdirs-list { justify-content: flex-start; }
@@ -9282,7 +9286,7 @@ html.os-other ::-webkit-scrollbar-thumb:hover, html.os-other ::-webkit-scrollbar
 .pcd-tools-go { width: 14px; height: 14px; color: var(--faint); transition: none; }
 .pcd-tools[open] .pcd-tools-go { transform: rotate(90deg); }
 .pcd-tools > summary:hover .pcd-tools-go { color: var(--fg); }
-.pcd-tools > .app-tool-inventory { margin-top: 10px; }
+.pcd-tools > .ti { margin-top: 10px; border-radius: 10px; background: var(--card); box-shadow: 0 0 0 0.5px var(--line); overflow: hidden; }
 
 /* An app's screenshots in its new-page dialog (Templates.tsx): one picture
    at a time, 16:10, a thin line and a soft shadow; dots and arrows when
@@ -9319,3 +9323,122 @@ html.os-other ::-webkit-scrollbar-thumb:hover, html.os-other ::-webkit-scrollbar
 .pp-more:hover .app-row-sub { color: var(--fg); }
 .pp-more-chev { width: 14px; height: 14px; color: var(--faint); }
 .pp-more-chev.is-open { transform: rotate(180deg); }
+
+/* ---------- 使用文档 (Help.tsx): the guide as a documentation site reads:
+   the pages in groups down the left, with a search box; the page on the
+   right as a document (.fp-doc), the previous and next at its foot. Narrow
+   windows: one list to pick from above the page. ---------- */
+.hp { flex: 1; min-height: 0; min-width: 0; display: flex; }
+.hp-nav { flex: none; width: 232px; overflow-y: auto; padding: 18px 10px 28px 14px; border-right: 1px solid var(--line-2); }
+.hp-search { display: flex; align-items: center; gap: 6px; height: 28px; margin: 0 0 16px; padding: 0 9px; border-radius: 8px; background: var(--pill); }
+.hp-search svg { flex: none; width: 14px; height: 14px; color: var(--muted); }
+.hp-search input { flex: 1; min-width: 0; border: 0; background: none; outline: none; font: inherit; font-size: 12.5px; color: var(--fg); }
+.hp-search input::placeholder { color: var(--faint); }
+.hp-group + .hp-group { margin-top: 16px; }
+.hp-group-title { padding: 0 8px 5px; font-size: 11px; font-weight: 500; color: var(--muted); }
+.hp-item { display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 6px 8px; border: 0; border-radius: 6px; background: none;
+  font: inherit; font-size: 13px; line-height: 1.4; text-align: left; color: var(--fg-2); cursor: default; }
+.hp-item:hover { background: var(--nav-hover); color: var(--fg); }
+.hp-item.is-on { background: var(--pill); color: var(--fg); font-weight: 500; }
+.hp-item small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 400; color: var(--muted); }
+.hp-none { margin: 0; padding: 6px 8px; font-size: 12px; color: var(--muted); }
+.hp-pick { display: none; }
+.hp-main { flex: 1; min-width: 0; overflow-y: auto; }
+.hp-doc { padding-top: 30px; padding-bottom: 48px; }
+.hp-doc .md a[href^="#help/"] { color: var(--accent); text-decoration: none; }
+.hp-doc .md a[href^="#help/"]:hover { text-decoration: underline; }
+.hp-pager { display: flex; justify-content: space-between; gap: 12px; margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--line-2); }
+.hp-pager-btn { display: flex; flex-direction: column; gap: 3px; min-width: 0; max-width: 48%; padding: 10px 14px; border: 0; border-radius: 10px;
+  background: none; box-shadow: inset 0 0 0 1px var(--line); font: inherit; text-align: left; color: var(--fg); cursor: default; }
+.hp-pager-btn.is-next { align-items: flex-end; margin-left: auto; text-align: right; }
+.hp-pager-btn:hover { background: var(--nav-hover); }
+.hp-pager-btn small { font-size: 11px; color: var(--muted); }
+.hp-pager-btn span { display: inline-flex; align-items: center; gap: 4px; font-size: 13.5px; font-weight: 500; }
+.hp-pager-btn svg { width: 14px; height: 14px; color: var(--muted); }
+@media (max-width: 760px) {
+  .hp { flex-direction: column; }
+  .hp-nav { width: auto; padding: 10px 14px; border-right: 0; border-bottom: 1px solid var(--line-2); overflow: visible; }
+  .hp-nav > .hp-search, .hp-nav > .hp-group { display: none; }
+  .hp-pick { display: block; }
+  .hp-doc { padding-top: 20px; }
+}
+/* A page's pictures: screenshots of the App, as wide as the text, framed
+   like a window; click to see one full size. The community page's QR code
+   (from GitHub) stays small. */
+.hp-doc .md img {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  margin: 14px 0 6px;
+  border-radius: 10px;
+  box-shadow: 0 0 0 1px var(--line), 0 6px 20px -8px rgba(0, 0, 0, 0.18);
+  cursor: zoom-in;
+}
+.hp-doc .md img[src*="githubusercontent"] { width: auto; max-width: 260px; box-shadow: none; cursor: default; }
+.hp-doc .md p:has(> img:only-child) { margin: 0; }
+
+/* Public tunnel setup uses the existing neutral controls and command blocks. */
+.pub-setup { margin-top: 14px; padding: 14px; border: 1px solid var(--line); border-radius: 10px; display: grid; gap: 12px; }
+.pub-setup h3, .pub-setup p { margin: 0; }
+.pub-setup ol { list-style: decimal; margin: 0; padding-left: 20px; font-size: 13px; line-height: 1.7; color: var(--fg-2); }
+.pub-setup .app-command { margin: 0; min-width: 0; }
+.pub-setup .app-command code { white-space: pre-wrap; overflow-wrap: anywhere; }
+.pub-setup summary { cursor: pointer; font-size: 13px; }
+.pub-setup details[open] .app-command { margin-top: 10px; }
+.pub-setup > .app-btn { justify-self: start; }
+
+.pub-setup-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+/* The agent card's details: four tabs under 详细信息, close to it. */
+.ms .ms-tabs { margin: 6px 0 14px; }
+.ms .ms-tabs .wf-tab { padding: 0 10px; }
+/* Its settings' choices line up: one width, right edge to right edge. */
+.ms .ms-fold-body .app-kv-select { width: 168px; }
+/* Rows that carry a sentence and buttons (重新接入) read top to bottom in
+   the card: the label, then the state and its actions from the left. */
+.ms .ms-fold-body .app-kv:has(.app-resume-actions) { flex-wrap: wrap; }
+.ms .ms-fold-body .app-kv:has(.app-resume-actions) > .app-kv-label { flex-basis: 100%; }
+.ms .ms-fold-body .app-resume-actions { justify-content: flex-start; flex: 1 1 100%; }
+
+/* Tools (ToolInventory.tsx): a group per kind (MCP, skills, plugins) with
+   its count, one row per tool: its name, then where it comes from; a
+   skill's description is cut at two lines (all of it on hover); a long
+   group folds after the first five. */
+.ti-group + .ti-group { border-top: 1px solid var(--line-2); }
+.ti-head { display: flex; align-items: baseline; gap: 6px; padding: 10px 12px 4px; font-size: 11.5px; font-weight: 600; color: var(--fg-2); }
+.ti-head small { font-size: 11px; font-weight: 400; color: var(--muted); }
+.ti-note { margin: 2px 12px 6px; padding: 6px 9px; border-radius: 7px; background: var(--pill); font-size: 11.5px; line-height: 1.45; color: var(--fg-2); }
+.ti-row { padding: 7px 12px; }
+.ti-row + .ti-row { border-top: 1px solid var(--line-2); }
+.ti-line { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.ti-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 500; color: var(--fg); }
+.ti-meta { flex: none; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.ti-meta-below { margin-top: 3px; }
+.ti-desc { margin-top: 2px; font-size: 12px; line-height: 1.45; color: var(--fg-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.ti-tag { flex: none; padding: 1px 7px; border-radius: 999px; background: var(--pill); font-size: 11px; color: var(--muted); }
+.ti-row.is-off .ti-name { color: var(--muted); }
+.ti-more { display: flex; align-items: center; gap: 4px; width: 100%; padding: 8px 12px; border: 0; border-top: 1px solid var(--line-2); background: none; font: inherit; font-size: 12px; color: var(--fg-2); cursor: default; }
+.ti-more:hover { background: var(--nav-hover); color: var(--fg); }
+.ti-more svg { width: 13px; height: 13px; }
+.ti-more.is-open svg { transform: rotate(180deg); }
+.ti-warn { padding: 8px 12px; border-top: 1px solid var(--line-2); font-size: 11.5px; color: var(--muted); }
+/* A row's label stands level with its control (a select, a switch), not
+   above it; the hint under it keeps its own line. */
+.ms .ms-fold-body .app-kv:has(> .app-kv-value select, > .app-kv-value [role="switch"]) { align-items: center; }
+/* Exchanges with other agents: who (face, name as the App calls it), how
+   many messages, when; then the last one, said to be sent or received. */
+.app-peer .meta { align-items: center; }
+.app-peer .meta .pa { flex: none; }
+.app-peer .who { font-family: inherit; font-weight: 500; color: var(--fg); }
+.app-peer-dir { margin-right: 6px; padding: 0 5px; border-radius: 4px; background: var(--pill); font-size: 10.5px; color: var(--muted); }
+/* The resume row's actions look like what they are: small buttons; the
+   one that revokes is red only when pointed at. */
+.ms .ms-fold-body .app-resume-actions .app-kv-link { padding: 3px 10px; border-radius: 6px; background: var(--pill); font-size: 12px; color: var(--fg); }
+.ms .ms-fold-body .app-resume-actions .app-kv-link:hover:not(:disabled) { background: var(--pill-hover); }
+.ms .ms-fold-body .app-resume-actions .app-kv-link + .app-kv-link:hover:not(:disabled) { color: var(--red); }
+.ms .ms-fold-body .app-resume-actions > span:first-child { flex-basis: 100%; }
+.ms .ms-fold-body .app-resume-actions { text-align: left; }
+.app-msg.app-peer .meta .who { font-family: inherit; font-weight: 500; color: var(--fg); }
+/* A choice that can't be made from here (a remote custom address without
+   end-to-end encryption): its name faded, the reason left readable. */
+.app-provider-opt.is-off b, .app-provider-opt.is-off input { opacity: 0.45; }

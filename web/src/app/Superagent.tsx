@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ShieldQuestion } from "lucide-react";
-import type { Agent, Approval, SuperagentState } from "@/api";
+import { FileDown, Monitor, ShieldQuestion } from "lucide-react";
+import type { ActionGrant, Agent, Approval, SuperagentState } from "@/api";
 import { appApi, type JoinLink } from "@/appapi";
 import { CopyButton } from "@/app/copy";
 import { joinSentence } from "@/app/AddToProject";
@@ -15,7 +15,7 @@ export { SHROOM };
 
 // One shared copy per workspace: the bottom-left menu, the chat and the
 // approval cards read the same state, and only one poll runs per workspace.
-type Entry = { state?: SuperagentState; approvals: Approval[]; at: number; off?: boolean };
+type Entry = { state?: SuperagentState; approvals: Approval[]; grants?: ActionGrant[]; at: number; off?: boolean };
 const store = new Map<string, Entry>();
 const subs = new Set<() => void>();
 const users = new Map<string, number>();
@@ -31,7 +31,9 @@ export async function refreshSuperagent(hubId: string): Promise<void> {
     // What waits on you: your superagent's requests, and a project
     // coordinator's (a computer for its project).
     const approvals = (await appApi.approvals(hubId).catch(() => ({ approvals: [] as Approval[] }))).approvals;
-    store.set(hubId, { state, approvals, at: Date.now() });
+    // What agents may do on your computers now (hubs before v0.21.21: none).
+    const grants = (await appApi.actionGrants(hubId).catch(() => ({ grants: [] as ActionGrant[] }))).grants;
+    store.set(hubId, { state, approvals, grants, at: Date.now() });
     markSuperagent(hubId, state.agent);
   } catch {
     store.set(hubId, { approvals: [], at: Date.now(), off: true });
@@ -259,6 +261,68 @@ function leftOf(expires: string, now: number): string {
   return L(`${Math.max(1, Math.round(ms / 60_000))} 分钟内有效`, `${Math.max(1, Math.round(ms / 60_000))}m left`);
 }
 
+/** Whether an action_grant approval asks for keyboard and mouse (its
+ *  title says so; the grant, when listed, says exactly). */
+function wantsControl(a: Approval, grants?: ActionGrant[]): boolean {
+  const g = grants?.find((x) => x.approval_id === a.id);
+  if (g) return (g.requested || []).includes("remote.desktop.control");
+  return /操作|keyboard|control/i.test(a.what);
+}
+
+/** What an agent may do right now, above its chat's composer: on which
+ *  computer (or which page it may export), until when, and 收回. */
+export function GrantStrip({ hubId, agent, name }: { hubId: string; agent: string; name?: string }) {
+  const s = useSuperagent(hubId);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const items = (s?.grants || []).filter((g) => g.agent === agent && g.state === "active");
+  if (!items.length) return null;
+  const now = Date.now();
+  const revoke = async (g: ActionGrant) => {
+    setBusy(g.id);
+    setError(null);
+    try {
+      await appApi.revokeActionGrant(hubId, g.id);
+      await refreshSuperagent(hubId);
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBusy(null);
+    }
+  };
+  return (
+    <div className="sa-approvals" data-testid="action-grants">
+      {items.map((g) => {
+        const control = g.permissions.includes("remote.desktop.control");
+        const page = g.target.kind === "page";
+        const what = g.target_name || g.target.id;
+        const left = g.expires_at ? Math.max(0, Math.round((new Date(g.expires_at).getTime() - now) / 60_000)) : 0;
+        return (
+          <div className="sa-approval sa-grant" key={g.id}>
+            {page ? <FileDown className="sa-approval-icon sa-grant-icon" /> : <Monitor className="sa-approval-icon sa-grant-icon" />}
+            <div className="sa-approval-text">
+              <div className="sa-approval-what">
+                {page
+                  ? L(`${name || agent} 可以导出「${what}」`, `${name || agent} may export "${what}"`)
+                  : control
+                  ? L(`${name || agent} 可以看并操作 ${what} 的屏幕`, `${name || agent} may see and use ${what}'s screen`)
+                  : L(`${name || agent} 可以看 ${what} 的屏幕`, `${name || agent} may see ${what}'s screen`)}
+              </div>
+              <div className="sa-approval-meta">{left > 0 ? L(`还剩 ${left} 分钟`, `${left} min left`) : L("快到期了", "Ending soon")}</div>
+            </div>
+            <div className="sa-approval-actions">
+              <button type="button" className="app-btn app-btn-small" disabled={!!busy} onClick={() => void revoke(g)}>
+                {busy === g.id ? <span className="app-spinner" /> : null}{L("收回", "Revoke")}
+              </button>
+            </div>
+          </div>
+        );
+      })}
+      <ErrorText error={error} />
+    </div>
+  );
+}
+
 /** What an agent waits on you for, above its chat's composer (your
  *  superagent's requests, a coordinator asking for a computer): what, why,
  *  and 同意 / 不同意. */
@@ -270,11 +334,11 @@ export function ApprovalStrip({ hubId, agent, name }: { hubId: string; agent: st
   const who = name || (s?.state?.agent?.name === agent ? SHROOM : agent);
   if (!items.length) return null;
   const now = Date.now();
-  const decide = async (a: Approval, ok: boolean) => {
+  const decide = async (a: Approval, ok: boolean, viewOnly = false) => {
     setBusy(a.id);
     setError(null);
     try {
-      await appApi.decideApproval(hubId, a.id, ok);
+      await appApi.decideApproval(hubId, a.id, ok, viewOnly ? { permissions: ["remote.desktop.view"] } : undefined);
       await refreshSuperagent(hubId);
     } catch (e) {
       setError(e);
@@ -294,6 +358,10 @@ export function ApprovalStrip({ hubId, agent, name }: { hubId: string; agent: st
           </div>
           <div className="sa-approval-actions">
             <button type="button" className="app-btn app-btn-small" disabled={!!busy} onClick={() => void decide(a, false)}>{L("不同意", "Deny")}</button>
+            {a.kind === "action_grant" && wantsControl(a, s?.grants) && (
+              <button type="button" className="app-btn app-btn-small" disabled={!!busy} onClick={() => void decide(a, true, true)}
+                title={L("只让它看屏幕，不能用键盘和鼠标", "Let it see the screen only, without keyboard or mouse")}>{L("只让它看", "View only")}</button>
+            )}
             <button type="button" className="app-btn app-btn-small app-btn-primary" disabled={!!busy} onClick={() => void decide(a, true)}>
               {busy === a.id ? <span className="app-spinner" /> : null}{L("同意", "Approve")}
             </button>
