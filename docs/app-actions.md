@@ -8,9 +8,10 @@ Applications have two ways to collaborate with an agent:
   provider, such as observing a desktop. These need framework grants and jobs.
 
 The initial action SDK is in `templates/src/_lib/actions.ts` and
-`actions-http.ts`. The Hub/CLI, trusted App worker and native component require
-separate implementation. Adding these source libraries does **not** enable agent
-remote control in existing installations. No `myco.actions` browser feature is
+`actions-http.ts`. The Hub/CLI implement grants, jobs and private artifacts;
+the trusted App worker and native component are separate delivery stages.
+Adding these source libraries does **not** enable agent remote control in
+existing installations. No `myco.actions` browser feature is
 advertised. The existing `myco.os`, `myco.net` and `myco.remote` page bridges are
 not agent tools.
 
@@ -46,15 +47,19 @@ import { ActionHTTPTransport } from "./actions-http";
 
 const client = new ActionClient(new ActionHTTPTransport(authenticatedAgentRequest));
 const requested = await client.request({
-  target: { kind: "machine", id: machineID },
+  target: { kind: "machine", id: machineNameOrID },
   permissions: ["remote.desktop.view"],
   reason: "Inspect the reported display problem",
   message_id: taskID,
   ttl_seconds: 300,
 });
 // An owner approves in the trusted App. A pending request grants no access.
-const session = await client.session(requested.id);
-const actions = await session.actions();
+const session = await client.session(requested.id, { wait_seconds: 30 });
+// Long polling is bounded: if it is still pending, wait again or return to
+// other work. Denial/expiry/end must also be handled before calling actions().
+if (session.grant.state === "active") {
+  const actions = await session.actions();
+}
 ```
 
 The backend binds a grant to its authenticated requesting agent, target and
@@ -62,6 +67,11 @@ optional task. A grant ID alone gives no authority. Grants can be denied,
 expired, revoked or ended; callers must handle those states. Artifacts remain
 private, expire and become inaccessible when the grant ends. They do not belong
 in page data or messages.
+
+The SDK retains grant metadata such as `requested`, `target_name`, `end_reason`
+and `ended_at`. A pending grant's `permissions` may be `null`: nothing has been
+approved yet. List the agent's grants with `client.grants()`. The current Hub
+holds grants, jobs and artifacts in memory; restarting it ends those sessions.
 
 ## Remote application example
 
@@ -107,7 +117,15 @@ not claim an event/progress stream. Unsupported hosts, action versions or native
 components must fail explicitly. Never reuse a human pairing code or App token
 to bypass missing agent support.
 
+`wait_seconds` accepts 0–60 seconds for grant/job queries (job queries default
+to 30 seconds). `ActionError.status` preserves the HTTP response status alongside
+the server's code: an inaccessible or expired artifact returns status `410`
+with code `not_found`. Request a new observation rather than retrying that ID.
+Jobs also expose `artifacts`, `cancel_requested` and their version/timestamps.
+
 Run the SDK contract tests with `node templates/actions.test.mjs` and typecheck
 with `cd templates && npm run typecheck`. These tests exercise the SDK and a fake
-transport; real Hub authorization and native execution require their own
-integration and device tests.
+transport. With Node.js and template dependencies installed, run
+`go test -race ./internal/integration -run '^TestAgentActionsSDK$' -count=1`
+to exercise the actual SDK against an isolated real Hub and a simulated App
+provider. Native capture/input still requires separate component/device tests.

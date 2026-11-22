@@ -172,6 +172,16 @@ type ActionHostJobs struct {
 	Jobs []ActionHostJob `json:"jobs"`
 }
 
+// ActionHostJobState answers GET /v1/console/action-jobs/{id}: whether the
+// host should stop a job it is running (checked again before and while it
+// does anything native).
+type ActionHostJobState struct {
+	Job            ActionJob  `json:"job"`
+	GrantState     string     `json:"grant_state"`
+	GrantExpiresAt *time.Time `json:"grant_expires_at,omitempty"`
+	Stop           bool       `json:"stop"`
+}
+
 // ActionJobComplete is POST /v1/console/action-jobs/{id}/complete.
 type ActionJobComplete struct {
 	HostID      string          `json:"host_id"`

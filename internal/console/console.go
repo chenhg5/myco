@@ -160,6 +160,7 @@ func randomHex(n int) string {
 type Backend struct {
 	backupLoop    sync.Once // the hourly copy of backups to this computer
 	remoteDesktop remoteDesktop
+	actionHosts   actionHosts // agent actions on this computer (action_host.go)
 	// connects are computers being connected over SSH or WSL.
 	connects connectJobs
 	// os: what pages use of this computer (myco.os, oscalls.go).

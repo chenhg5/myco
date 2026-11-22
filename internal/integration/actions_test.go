@@ -164,6 +164,17 @@ func TestAgentActionsGrantJobArtifact(t *testing.T) {
 	if jobs, err := glenn.ActionHostJobs(c, host.ID, 2*time.Second); err != nil || len(jobs) != 1 {
 		t.Fatalf("host jobs 2: %+v %v", jobs, err)
 	}
+	// The host asks whether to stop while it runs: not yet; the agent
+	// cancelling says stop at once, and so does a revoke (waking a wait).
+	if st, err := glenn.ActionHostJob(c, job2.ID, host.ID, "gen1", 0); err != nil || st.Stop || st.GrantState != api.GrantActive || st.GrantExpiresAt == nil {
+		t.Fatalf("host job state: %+v %v", st, err)
+	}
+	if _, err := glenn.ActionHostJob(c, job2.ID, host.ID, "gen0", 0); err == nil {
+		t.Fatal("an old generation read a job")
+	}
+	stopped := make(chan *api.ActionHostJobState, 1)
+	go func() { st, _ := glenn.ActionHostJob(c, job2.ID, host.ID, "gen1", 20*time.Second); stopped <- st }()
+	time.Sleep(200 * time.Millisecond)
 	owned, err := glenn.OwnerActionGrants(c, api.GrantActive)
 	if err != nil || len(owned) != 1 {
 		t.Fatalf("owner grants: %+v %v", owned, err)
@@ -173,6 +184,14 @@ func TestAgentActionsGrantJobArtifact(t *testing.T) {
 	}
 	if rg, err := glenn.RevokeActionGrant(c, g.ID); err != nil || rg.State != api.GrantRevoked {
 		t.Fatalf("revoke: %+v %v", rg, err)
+	}
+	select {
+	case st := <-stopped:
+		if st == nil || !st.Stop || st.GrantState != api.GrantRevoked {
+			t.Fatalf("host job after revoke: %+v", st)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the host was not told to stop when the grant was revoked")
 	}
 	late, err := glenn.CompleteActionJob(c, job2.ID, api.ActionJobComplete{HostID: host.ID, Generation: "gen1", State: api.JobSucceeded, Result: json.RawMessage(`{"secret":1}`)})
 	if err != nil || late.State != api.JobCancelled || len(late.Result) != 0 {

@@ -432,6 +432,7 @@ From v0.21.21, an agent can act on a computer through a provider that computer's
 | `POST /v1/console/action-grants/{id}/revoke` | console | ends it at once: queued jobs are cancelled, a running job's late result is dropped, artifacts are gone |
 | `POST /v1/console/action-hosts` | console (the computer's owner) | the trusted App offers a provider there: `{machine_id, provider, generation, actions}` → `201 {id, machine_id, provider, generation, last_seen_at}`. Registering again replaces the host (its running jobs fail as `host_restarted`) |
 | `GET /v1/console/action-hosts/{id}/jobs?wait_seconds=30` | console | `{jobs: [{job, args, grant}]}`: queued jobs for that computer, now running. A host quiet for 45 seconds ends the grants it ran |
+| `GET /v1/console/action-jobs/{id}?host_id=&generation=&wait_seconds=30` | console | `{job, grant_state, grant_expires_at?, stop}` for a job the host runs. `stop` turns true when the agent cancels it, its grant ends (revoked, expired, its task ended) or it is no longer running; with `wait_seconds` it answers as soon as it does. The host asks right before anything native happens and keeps asking while it runs |
 | `POST /v1/console/action-jobs/{id}/artifacts?host_id=&generation=` | console | the raw file (`Content-Type` image/*, text/plain or application/json; 4 MB at most) → `201 {id, media_type, bytes, expires_at}` |
 | `POST /v1/console/action-jobs/{id}/complete` | console | `{host_id, generation, state, result?, error?, artifact_ids?}` → the job. A wrong generation is `409`; a finished job cannot change |
 

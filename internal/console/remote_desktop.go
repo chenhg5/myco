@@ -43,6 +43,7 @@ func (b *Backend) remoteComponent() *remotedesktop.Component {
 	return b.remoteDesktop.component
 }
 func (b *Backend) remoteDesktopRoutes(m *http.ServeMux) {
+	b.startActionHosts()
 	m.HandleFunc("POST /app/hubs/{id}/remote", b.withHubAndHubTimeout(10*time.Minute, func(w http.ResponseWriter, r *http.Request, c *client.Client, h Hub) {
 		var in struct {
 			Action   string          `json:"action"`
@@ -95,6 +96,9 @@ func (b *Backend) remoteDesktopCall(ctx context.Context, c *client.Client, h Hub
 		if h == nil || h.scope != scope {
 			out.PairingCode = ""
 		}
+		if h == nil && b.agentOwnsComponent() {
+			out.Running = false // started for an agent's job, not sharing
+		}
 		return out, nil
 	case "install":
 		if err := comp.Install(ctx); err != nil {
@@ -130,6 +134,7 @@ func (b *Backend) remoteDesktopCall(ctx context.Context, c *client.Client, h Hub
 		if busy {
 			return nil, remotedesktop.ErrBusy
 		}
+		b.releaseAgentComponent()
 		status, err := comp.Start(ctx, in.Control, nil)
 		if err != nil {
 			return nil, err

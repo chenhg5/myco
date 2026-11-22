@@ -87,6 +87,7 @@ export class RemoteDesktopActions {
     return this.session.invoke<DesktopObservation>("remote.desktop.observe", 1, args, key, options);
   }
   input(frame: DesktopObservation, events: readonly DesktopInput[], key: string, options?: ActionOptions): Promise<ActionTask<DesktopInputResult>> {
+    if (!this.session.grant.permissions?.includes(desktopPermissions.control)) throw new ActionError({ code: "permission_denied", message: "Desktop input requires separately approved control permission.", retryable: false });
     if (!frame.frame_id) invalid("Input requires an observation's frame ID.");
     validateDesktopInput(events);
     return this.session.invoke<DesktopInputResult>("remote.desktop.input", 1, { frame_id: frame.frame_id, events }, key, options);
