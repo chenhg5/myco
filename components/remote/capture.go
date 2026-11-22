@@ -25,8 +25,10 @@ func ffmpegPath() string {
 	}
 	return filepath.Join(filepath.Dir(exe), name)
 }
-func captureArgs(ctx context.Context, bin string) ([]string, error) {
-	args := []string{"-hide_banner", "-loglevel", "error", "-nostdin"}
+
+// screenInput is FFmpeg's input for the display remote control maps to (the
+// main display on a Mac, the virtual desktop on Windows) at fps frames a second.
+func screenInput(ctx context.Context, bin, fps string) ([]string, error) {
 	switch runtime.GOOS {
 	case "darwin":
 		// AVFoundation enumerates cameras before displays, so screen 0 is not
@@ -34,6 +36,7 @@ func captureArgs(ctx context.Context, bin string) ([]string, error) {
 		listCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 		c := exec.CommandContext(listCtx, bin, "-hide_banner", "-f", "avfoundation", "-list_devices", "true", "-i", "")
+		hideProcess(c)
 		var out bytes.Buffer
 		c.Stderr = &out
 		_ = c.Run()
@@ -41,12 +44,19 @@ func captureArgs(ctx context.Context, bin string) ([]string, error) {
 		if device == "" {
 			return nil, errors.New("no_screen")
 		}
-		args = append(args, "-f", "avfoundation", "-framerate", "30", "-capture_cursor", "1", "-i", device+":none")
+		return []string{"-f", "avfoundation", "-framerate", fps, "-capture_cursor", "1", "-i", device + ":none"}, nil
 	case "windows":
-		args = append(args, "-f", "gdigrab", "-framerate", "30", "-draw_mouse", "1", "-i", "desktop")
-	default:
-		return nil, errors.New("unsupported_platform")
+		return []string{"-f", "gdigrab", "-framerate", fps, "-draw_mouse", "1", "-i", "desktop"}, nil
 	}
+	return nil, errors.New("unsupported_platform")
+}
+func captureArgs(ctx context.Context, bin string) ([]string, error) {
+	args := []string{"-hide_banner", "-loglevel", "error", "-nostdin"}
+	in, err := screenInput(ctx, bin, "30")
+	if err != nil {
+		return nil, err
+	}
+	args = append(args, in...)
 	// Stay within the negotiated H.264 baseline level 3.1 (720p30), including
 	// on older WKWebView and WebView2 hardware decoders.
 	args = append(args, "-an", "-vf", "scale=1280:720:force_original_aspect_ratio=decrease:force_divisible_by=2", "-r", "30")

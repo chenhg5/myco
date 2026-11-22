@@ -171,6 +171,19 @@ func (c *Client) ActionHostJobs(ctx context.Context, hostID string, wait time.Du
 	return out.Jobs, nil
 }
 
+// ActionHostJob says whether a host should stop a job it runs; with wait,
+// it answers once it should (or after wait).
+func (c *Client) ActionHostJob(ctx context.Context, jobID, hostID, generation string, wait time.Duration) (*api.ActionHostJobState, error) {
+	q := waitQuery(wait)
+	q.Set("host_id", hostID)
+	q.Set("generation", generation)
+	var out api.ActionHostJobState
+	if err := c.do(ctx, http.MethodGet, "/v1/console/action-jobs/"+esc(jobID), q, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // UploadActionArtifact keeps a file a running job made.
 func (c *Client) UploadActionArtifact(ctx context.Context, jobID, hostID, generation, mediaType string, data []byte) (*api.ActionArtifact, error) {
 	q := url.Values{"host_id": {hostID}, "generation": {generation}}

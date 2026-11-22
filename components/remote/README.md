@@ -29,9 +29,20 @@ started or registered for incoming connections until the person opts in.
 The parent sends one JSON line on stdin, containing a fresh local RPC secret,
 pairing code and whether control was approved. The component responds once on
 its private stdout pipe with `{address:"127.0.0.1:<port>",protocol:1}`. It exposes
-only authenticated loopback `/status`, `POST /sessions/<id>` and
-`DELETE /sessions/<id>`; browser Origins are refused. No Hub token enters the
+only authenticated loopback `/status`, `POST /sessions/<id>`,
+`DELETE /sessions/<id>` and the agent calls below; browser Origins are refused. No Hub token enters the
 component. EOF on stdin shuts it down. Its stdout is never copied to user logs.
+
+For agent actions (`remote.desktop.observe` and `.input`, see `docs/api.md`),
+the App also calls `POST /agent/observe` `{max_width, format}` → `{frame_id,
+captured_at, display_id, width, height, media_type, image}` (one still frame of
+the display input maps to, scaled down only), and `POST /agent/input`
+`{frame_id, events}` → `{applied}`. Input needs control, names a frame observed
+in the last two minutes, takes 1–64 events checked all together before any
+runs, applies them one by one, stops when the request ends (the App drops it
+when the grant is revoked) and releases every key and button afterwards. A
+refusal is `{error, applied?}`. `/status` lists `agent_actions` from 0.3.0.
+The App checks each job's grant with its Hub; the component trusts the App.
 
 An offer/answer uses `{type,sdp}`. H.264 is sent through Pion; the adjacent FFmpeg
 captures the display and encodes with VideoToolbox (Mac) or Media Foundation

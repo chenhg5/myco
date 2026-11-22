@@ -709,6 +709,37 @@ func (s *ActionService) HostJobs(ctx context.Context, by Actor, hostID string, w
 	})
 }
 
+// HostJob is how a job handed to a host stands (GET
+// /v1/console/action-jobs/{id}?host_id&generation): Stop says to stop now
+// (the agent cancelled it, its grant ended, it is no longer running). With
+// wait, it answers when Stop turns true, or after wait.
+func (s *ActionService) HostJob(ctx context.Context, by Actor, jobID, hostID, generation string, wait time.Duration) (*api.ActionHostJobState, error) {
+	if _, err := person(by, "host agent actions"); err != nil {
+		return nil, err
+	}
+	return waitFor(ctx, s, wait, func() (*api.ActionHostJobState, bool, error) {
+		h, err := s.hostOf(by, hostID, generation)
+		if err != nil {
+			return nil, true, err
+		}
+		j := s.jobs[jobID]
+		if j == nil || j.hostID != h.ID {
+			return nil, true, domain.Errf(domain.CodeNotFound, "job %s not found on this host", jobID)
+		}
+		out := &api.ActionHostJobState{Job: j.ActionJob, GrantState: api.GrantEnded}
+		if g := s.grants[j.GrantID]; g != nil {
+			s.refresh(ctx, g)
+			out.GrantState = g.State
+			if g.ExpiresAt != nil {
+				t := *g.ExpiresAt
+				out.GrantExpiresAt = &t
+			}
+		}
+		out.Stop = j.State != api.JobRunning || j.CancelRequested || out.GrantState != api.GrantActive
+		return out, out.Stop, nil
+	})
+}
+
 // UploadArtifact keeps a file a running job made, for its agent only.
 func (s *ActionService) UploadArtifact(ctx context.Context, by Actor, jobID, hostID, generation, mediaType string, data []byte) (*api.ActionArtifact, error) {
 	if _, err := person(by, "host agent actions"); err != nil {
