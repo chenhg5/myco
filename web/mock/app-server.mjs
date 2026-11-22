@@ -4077,8 +4077,13 @@ const server = http.createServer(async (req, res) => {
           return fail(res, 404, "not_found", `no route for ${method} /app/hubs/${hub.id}/agents/${agent.name}/run-settings`);
         }
         const body = await readBody(req);
-        if (!body || typeof body.model !== "string" || typeof body.effort !== "string") {
-          return fail(res, 400, "invalid_argument", 'model and effort are required ("" follows the computer)');
+        if (!body) return fail(res, 400, "invalid_argument", "a body is required");
+        // Model and effort may be left out (hubs from the remote-provider
+        // change): what was chosen stays.
+        if (body.model === undefined) body.model = agent.run_settings?.model || "";
+        if (body.effort === undefined) body.effort = agent.run_settings?.effort || "";
+        if (typeof body.model !== "string" || typeof body.effort !== "string") {
+          return fail(res, 400, "invalid_argument", 'model and effort are strings ("" follows the computer)');
         }
         const was = runSettingsAtStart.get(`${hub.id}/${agent.name}`);
         const rt = agent.runtime || (agent.runtime = { cli: agent.binding?.harness || "codex" });

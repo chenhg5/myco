@@ -418,7 +418,7 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
     : reported || (rt ? L("CLI 自己的设置", "The CLI's own setting") : "—");
   const following = chosen === "" && rt?.provider_source !== "pinned" && rt?.provider_source !== "env_file" ? reported : "";
   return (
-    <div className={cn("app-kv", saved && "has-help")}>
+    <div className={cn("app-kv", (saved || olderRunner || pending) && "has-help")}>
       <span className="app-kv-label">{L("服务商", "Provider")}</span>
       <span className="app-kv-value">
         {editable || remote ? (
@@ -427,9 +427,9 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
           </button>
         ) : name}
       </span>
-      {saved && <span className="app-kv-help app-offline-ok">{saved}</span>}
+      {saved && !pending && <span className="app-kv-help app-offline-ok">{saved}</span>}
       {!saved && olderRunner && <span className="app-kv-help">{L("升级它那台电脑上的 myco 后，就能在这里改。", "Upgrade myco on its computer to change it here.")}</span>}
-      {!saved && pending && <span className="app-kv-help">{L("自定义地址已发出，等它那台电脑收下（它接下一件任务前生效）。", "The custom address is sent; its computer takes it before its next task.")}</span>}
+      {pending && <span className="app-kv-help">{L("自定义地址已发出，等它那台电脑收下（它接下一件任务前生效）。", "The custom address is sent; its computer takes it before its next task.")}</span>}
 
       <Modal open={open} onOpenChange={(o) => !busy && setOpen(o)} title={L("服务商", "Provider")}
         description={remote
