@@ -48,7 +48,13 @@ import {
 import { colors } from "./export";
 import { Tools, Properties, Empty, PastePrompt } from "./panels";
 import { useBoard, editable } from "./useBoard";
+import { myco } from "../_lib/myco";
+import { startSharedExport } from "./shared-export";
 function App() {
+  useEffect(() => startSharedExport(myco!.data, () => {
+    if (kit.pending || kit.failed) return null;
+    return JSON.parse(JSON.stringify({ board: board.rows, items: items.rows }));
+  }, kit.subscribe), []);
   const {
     arrows,
     tool,

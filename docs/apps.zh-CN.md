@@ -26,7 +26,7 @@
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/mindmap-dark.webp"><img src="assets/apps/mindmap.webp" alt="思维导图"></picture><br><b>思维导图</b><br>agent 写一份大纲，网页画成思维导图；Tab 加子主题、Enter 加同级、拖动换位置、折叠分支，导出 Markdown 大纲。</td>
 </tr>
 <tr>
-<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/whiteboard-dark.webp"><img src="assets/apps/whiteboard.webp" alt="白板"></picture><br><b>白板</b><br>一块无限大的画布：便签、文字、矩形、椭圆、连线，拖动、缩放、改颜色；agent 能往上贴便签，适合头脑风暴、复盘、画流程。</td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/whiteboard-dark.webp"><img src="assets/apps/whiteboard.webp" alt="白板"></picture><br><b>白板</b><br>一块无限大的画布：便签、文字、形状和连线。agent 能共同编辑，并取得页面打开时生成、经过源版本核对的 SVG，适合头脑风暴、复盘和流程图。</td>
 <td width="50%"></td>
 </tr>
 </table>

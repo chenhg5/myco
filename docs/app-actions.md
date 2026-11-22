@@ -13,11 +13,27 @@ trusted App worker and native component RPCs. A desktop provider is available
 only with a published compatible component installed, a registered workspace
 machine and the desktop App running. Older components do not advertise agent
 actions. Adding these source libraries does **not** enable agent remote control
-in existing installations. No `myco.actions` browser feature is
-advertised. The existing `myco.os`, `myco.net` and `myco.remote` page bridges are
-not agent tools.
+in existing installations. New desktop sources also include a restricted shared-
+page renderer and an optional `page-actions` bridge for application handler
+registration; applications must still register and validate their own exports.
+The existing `myco.os`, `myco.net` and `myco.remote` page bridges are not agent tools.
 
 ## Layer boundaries
+
+Shared data can include bounded, derived content without introducing an action
+queue. Whiteboard 1.4.0 publishes `exports/main` while its page is open: a shared
+SVG with a fingerprint of committed source record IDs, versions and data. Agents
+read it with existing page data permissions and validate that fingerprint before
+using the file. A missing or mismatched export is stale; a large board reports
+`too_large` rather than truncating its output. The application owns its renderer,
+schema and size limit. This contains no desktop screenshot or local assets and
+does not advertise a new grant, SDK action or offline rendering service. See the
+[Whiteboard guide](../templates/src/whiteboard/public/agent.md) for extraction.
+
+The producer observes synchronized stores only after writes settle and reads
+its singleton output with `data.get`. It does not repeatedly call `data.list`:
+the current App advances the page's shared change cursor on a list response,
+which could skip changes another editor store has not yet consumed.
 
 | Layer | Responsibility |
 | --- | --- |

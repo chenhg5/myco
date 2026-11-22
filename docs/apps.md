@@ -26,7 +26,7 @@ Agent access currently uses shared page records. The [agent actions SDK](app-act
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/mindmap-dark.webp"><img src="assets/apps/mindmap.webp" alt="Mind map"></picture><br><b>Mind map</b><br>The agent writes an outline and the page draws it as a mind map: Tab adds a child, Enter a sibling, drag to move, fold branches, export a Markdown outline.</td>
 </tr>
 <tr>
-<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/whiteboard-dark.webp"><img src="assets/apps/whiteboard.webp" alt="Whiteboard"></picture><br><b>Whiteboard</b><br>An endless canvas with sticky notes, text, shapes and connectors. The agent can add notes too: good for brainstorms, retros and flowcharts.</td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/whiteboard-dark.webp"><img src="assets/apps/whiteboard.webp" alt="Whiteboard"></picture><br><b>Whiteboard</b><br>An endless canvas with sticky notes, text, shapes and connectors. Agents can edit it and retrieve a version-checked SVG generated while the page is open, for brainstorms, retros and flowcharts.</td>
 <td width="50%"></td>
 </tr>
 </table>

@@ -11,6 +11,7 @@ interface Bridge {
   ready: Promise<Ctx>;
   data: {
     list(collection?: string): Promise<{ records: MycoRecord[]; seq: number }>;
+    get(collection: string, id: string): Promise<MycoRecord>;
     put(collection: string, data: unknown, opts?: { id?: string; ifVersion?: number }): Promise<MycoRecord>;
     remove(collection: string, id: string, opts?: { ifVersion?: number }): Promise<boolean>;
     on(f: (c: MycoChange) => void): () => void;

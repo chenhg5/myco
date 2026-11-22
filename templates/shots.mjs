@@ -51,6 +51,7 @@ const bridge = `(() => {
     ready: Promise.resolve({ page: { id: "pg_shots", name: "shots" }, me: { name: "glenn" } }),
     data: {
       list: async (c) => ({ records: Object.values(recs).filter((r) => !c || r.collection === c).map((r) => ({ ...r })), seq }),
+      get: async (c, id) => { const r = recs[c + "/" + id]; if (!r) throw {code:"not_found"}; return { ...r }; },
       put: async (c, data, o = {}) => { const id = o.id || rid(); const cur = recs[c + "/" + id]; const r = { collection: c, id, data, version: (cur ? cur.version : 0) + 1 }; recs[c + "/" + id] = r; seq++; return { ...r }; },
       remove: async (c, id) => { delete recs[c + "/" + id]; seq++; return true; },
       on: (f) => { subs.push(f); return () => {}; },
