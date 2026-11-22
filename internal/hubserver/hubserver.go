@@ -117,7 +117,10 @@ func Build(o Options) (*Hub, error) {
 		return nil, err
 	}
 	agentsRepo := sqlite.NewAgentRepo(db)
-	msgRepo := sqlite.NewMessageRepo(db)
+	// Events: repositories publish what they stored, for features that
+	// react to others (notices) without their code calling them.
+	bus := app.NewEventBus()
+	msgRepo := app.ObserveMessages(sqlite.NewMessageRepo(db), bus)
 	ids, clock := security.IDs{}, app.SystemClock{}
 	wakers := DefaultWakers()
 	agents := app.NewAgentService(agentsRepo, security.Tokens{}, ids, clock, o.OnlineWindow, wakers)
@@ -203,7 +206,7 @@ func Build(o Options) (*Hub, error) {
 		return nil, err
 	}
 	srv.SetMembers(members, audit)
-	superagents := app.NewSuperagentService(sqlite.NewSuperagentRepo(db), sqlite.NewApprovalRepo(db), agentsRepo,
+	superagents := app.NewSuperagentService(sqlite.NewSuperagentRepo(db), app.ObserveApprovals(sqlite.NewApprovalRepo(db), bus), agentsRepo,
 		sqlite.NewMemberRepo(db), messages, audit, ids, clock)
 	srv.SetSuperagents(superagents)
 	// An agent that joins through a superagent link is its owner's superagent.
@@ -247,9 +250,40 @@ func Build(o Options) (*Hub, error) {
 	automations := app.NewAutomationService(sqlite.NewAutomationRepo(db), messages, msgRepo, security.Tokens{}, ids, clock, o.Log)
 	srv.SetAutomations(automations)
 	domain.CompleteContracts = jsonschema.New()
-	workflows := app.NewWorkflowService(sqlite.NewWorkflowRepo(db), messages, msgRepo, ids, clock, o.Log)
+	workflowRepo := app.ObserveWorkflows(sqlite.NewWorkflowRepo(db), bus)
+	workflows := app.NewWorkflowService(workflowRepo, messages, msgRepo, ids, clock, o.Log)
 	workflows.SetTraces(sqlite.NewTraceRepo(db))
 	srv.SetWorkflows(workflows)
+	// Notices: what each person should hear about. Sources read the
+	// features' events; sinks (a push relay, chat apps) are added here.
+	person := func(ctx context.Context, name string) string {
+		name = strings.TrimPrefix(name, app.ConsoleSenderPrefix)
+		if m, err := members.Find(ctx, name); err == nil && m.Active() {
+			return m.ID
+		}
+		// A console from before members (a device's name, "admin"): on a
+		// hub one person uses, theirs.
+		list, err := members.List(ctx)
+		if err != nil {
+			return ""
+		}
+		only := ""
+		for _, m := range list {
+			if m.Active() {
+				if only != "" {
+					return ""
+				}
+				only = m.ID
+			}
+		}
+		return only
+	}
+	notices := app.NewNoticeService(sqlite.NewNoticeRepo(db), sqlite.NewSettingRepo(db), notify.NewMemory(), ids, clock, o.Log)
+	notices.AddSource(app.MessageNotices{Person: person})
+	notices.AddSource(app.ApprovalNotices{})
+	notices.AddSource(app.WorkflowNotices{Runs: workflowRepo, Person: person})
+	notices.Listen(bus)
+	srv.SetNotices(notices, msgRepo.Get)
 	automations.SetWorkflows(workflows)
 	pages := app.NewPageService(sqlite.NewPageRepo(db), blob.FS{Dir: filesDir}, projectSvc, ids, clock)
 	pages.SetEncrypted(e2e.Enabled)

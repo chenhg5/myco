@@ -200,6 +200,27 @@ From v0.20.3: what a conversation keeps at hand ("Pinned" in the App), shown as 
 | `PUT /v1/pins/order` | agent or person | `{a?, with, ids}` → the list, those named first in that order |
 | `DELETE /v1/pins/{id}?with=&a=` | agent or person | `204` |
 
+## Notices
+
+What each person should hear about (hub v0.21.21+): an agent asking them, a workflow waiting on their decision, their superagent asking for their OK, a task of theirs that failed, an answer, an update. The hub works them out from its own events and decides once, from the person's preferences, whether each is announced (a banner, a sound, a push), so every device agrees. They are a person's: a console credential reads the notices of the member behind it (the hub's admin token reads the owner's); agents and superagents cannot. Kept 30 days.
+
+| Endpoint | Who | Description |
+|---|---|---|
+| `GET /v1/console/notices?after=&limit=&wait_seconds=` | person | `{notices: [Notice], last, badge}`, oldest first, those after `after` (a `seq`). With `wait_seconds` (at most 55) and nothing new, waits for the next one or for a change (read, settled). Read after `last` next time; `badge` counts open `needs_you` notices |
+| `POST /v1/console/notices/read` | person | `{target?, through?}` → `{changed}`: marks as read what leads to `target` (`"agent:codex"`; `"workflow:w1"` covers its runs; omitted: all) up to `through` (a `seq`; omitted: all). Reading settles notices that are not actionable (`asking`, `decision`, `approval` are settled only by answering, deciding, approving) |
+| `GET /v1/console/notice-prefs` | person | the person's preferences (below; `{}` when never set) |
+| `PUT /v1/console/notice-prefs` | person | replaces them; returns them. `400` for quiet hours outside 0–1439, an unknown zone or tier, or more than 500 mutes |
+
+A **Notice** is `{seq, id, kind, tier, key, ref?, target?, project?, actor?, subject?, message_id?, announce, quiet?, created_at, read_at?, resolved_at?, message?}`:
+
+- `kind` and its `tier`: `needs_you` (`asking`, `decision`, `approval`, `failed`, `run_failed`, `stuck`), `results` (`answered`, `said`, `mention`), `activity` (`progress`).
+- `target` is where it leads: `agent:<name>`, `project:<name>`, `workflow:<id>?run=<run>`, `superagent`. `actor` is who it is from.
+- `message` is the message it is about, when there is one (sealed as stored on an end-to-end encrypted hub; the Go client opens it). `subject` is a few words when the hub knows them (a run's name, what an approval would do); a message's text is never copied into a notice.
+- `announce` is whether devices announce it; when not, `quiet` says why: `tier`, `muted`, `paused`, `quiet_hours`, `off`. A device adds only what it alone knows (the person is looking at that conversation).
+- `resolved_at`: it no longer waits for the person (answered, decided, read).
+
+**Preferences** are `{off?, tiers?, quiet?, paused_until?, mutes?, updated_at?}`. `tiers` overrides the defaults (`needs_you` on; `results` and `activity` off). `quiet` is `{from, to, zone}`: minutes from midnight in an IANA zone, a `from` later than `to` spanning the night; nothing is announced then, whatever the tier. `mutes` maps a scope (a notice's target without its query, `project:<name>`, or `agent:<actor>`) to when the mute ends (the zero time: never).
+
 ## Page records and templates
 
 From v0.20.5. A page's data can be **records**: JSON objects in named collections (`[a-z][a-z0-9_-]*`), each written on its own with a version, at most 64 KB a record and 20000 a page. Every write goes into the page's **change feed**. Whoever may see the page reads and writes its records (agent and console tokens alike). A page made from a template checks each record against the template's fields (no unknown fields; each of its type; `null` clears one); a `single` collection holds one record, `main`. Older hubs answer 404.

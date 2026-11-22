@@ -213,6 +213,56 @@ export interface PageState { state: unknown; version: number; updated_by?: strin
 
 /** What a conversation keeps at hand (置顶; hubs from v0.20.3): a web
  *  address, a file, or one of its messages. Both parties see the same. */
+/** Something a person should hear about (GET /v1/console/notices, hub
+ *  v0.21.21+). The hub decides once whether it is announced (`announce`;
+ *  when not, `quiet` says why), so every device agrees. */
+export type NoticeKind =
+  | "asking" | "decision" | "approval" | "failed" | "run_failed" | "stuck"
+  | "answered" | "said" | "mention"
+  | "progress";
+export type NoticeTier = "needs_you" | "results" | "activity";
+
+export interface Notice {
+  seq: number;
+  id: string;
+  kind: NoticeKind;
+  tier: NoticeTier;
+  key: string;
+  ref?: string;
+  /** Where it leads: "agent:<name>", "project:<name>", "workflow:<id>?run=<run>", "superagent". */
+  target?: string;
+  project?: string;
+  actor?: string;
+  subject?: string;
+  message_id?: string;
+  announce: boolean;
+  quiet?: "tier" | "muted" | "paused" | "quiet_hours" | "off";
+  created_at: string;
+  read_at?: string;
+  resolved_at?: string;
+  message?: Message;
+}
+
+export interface NoticeFeed {
+  notices: Notice[];
+  /** Read after this next time. */
+  last: number;
+  /** Open needs-you notices. */
+  badge: number;
+}
+
+/** What a person chose (GET/PUT /v1/console/notice-prefs). */
+export interface NoticePrefs {
+  off?: boolean;
+  tiers?: Partial<Record<NoticeTier, boolean>>;
+  /** Minutes from midnight in an IANA zone; from > to spans the night. */
+  quiet?: { from: number; to: number; zone?: string };
+  paused_until?: string;
+  /** Scope ("agent:<name>", "project:<name>", "workflow:<id>", "superagent") → when the mute ends ("0001-01-01T00:00:00Z": never). */
+  mutes?: Record<string, string>;
+  updated_at?: string;
+}
+
 export interface Pin {
   id: string;
   kind: "link" | "file" | "message";

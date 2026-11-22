@@ -2224,3 +2224,76 @@ type RemoteDevice = remotedesktop.Device
 type RemoteSession = remotedesktop.Session
 type RemoteOffer = remotedesktop.Offer
 type RemoteDescription = remotedesktop.Description
+
+// Notice is something a person should hear about (GET /v1/console/notices,
+// hub v0.21.21+): an agent asking them, a decision waiting, a failure, an
+// answer. Announce says whether devices announce it (a banner, a sound, a
+// push), decided once by the hub from the person's preferences; Quiet says
+// why not ("tier", "muted", "paused", "quiet_hours", "off").
+type Notice struct {
+	Seq  int64  `json:"seq"`
+	ID   string `json:"id"`
+	Kind string `json:"kind"`
+	// Tier: needs_you, results or activity.
+	Tier string `json:"tier"`
+	Key  string `json:"key"`
+	Ref  string `json:"ref,omitempty"`
+	// Target is where it leads: "agent:<name>", "project:<name>",
+	// "workflow:<id>?run=<run>", "superagent".
+	Target    string     `json:"target,omitempty"`
+	Project   string     `json:"project,omitempty"`
+	Actor     string     `json:"actor,omitempty"`
+	Subject   string     `json:"subject,omitempty"`
+	MessageID string     `json:"message_id,omitempty"`
+	Announce  bool       `json:"announce"`
+	Quiet     string     `json:"quiet,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+	ReadAt    *time.Time `json:"read_at,omitempty"`
+	// ResolvedAt: it no longer waits for the person.
+	ResolvedAt *time.Time `json:"resolved_at,omitempty"`
+	// Message is the message it is about, when there is one (sealed as
+	// stored on an end-to-end encrypted hub).
+	Message *Message `json:"message,omitempty"`
+}
+
+// NoticeFeed is a page of a person's notices. Read after Last next time;
+// Badge counts what still needs them (open needs_you notices).
+type NoticeFeed struct {
+	Notices []Notice `json:"notices"`
+	Last    int64    `json:"last"`
+	Badge   int      `json:"badge"`
+}
+
+// NoticeReadRequest is the body of POST /v1/console/notices/read: mark as
+// seen what leads to Target ("" for all), up to Through (0 for all).
+type NoticeReadRequest struct {
+	Target  string `json:"target,omitempty"`
+	Through int64  `json:"through,omitempty"`
+}
+
+// NoticeReadResponse says how many notices changed.
+type NoticeReadResponse struct {
+	Changed int `json:"changed"`
+}
+
+// NoticePrefs is what a person chose about being told
+// (GET/PUT /v1/console/notice-prefs). Tiers overrides the defaults
+// (needs_you on, results and activity off); Quiet hours are minutes from
+// midnight in Zone (IANA); Mutes maps a scope ("agent:<name>",
+// "project:<name>", "workflow:<id>", "superagent") to when the mute ends
+// (the zero time: never).
+type NoticePrefs struct {
+	Off         bool                 `json:"off,omitempty"`
+	Tiers       map[string]bool      `json:"tiers,omitempty"`
+	Quiet       *NoticeQuiet         `json:"quiet,omitempty"`
+	PausedUntil *time.Time           `json:"paused_until,omitempty"`
+	Mutes       map[string]time.Time `json:"mutes,omitempty"`
+	UpdatedAt   *time.Time           `json:"updated_at,omitempty"`
+}
+
+// NoticeQuiet is a span of quiet hours.
+type NoticeQuiet struct {
+	From int    `json:"from"`
+	To   int    `json:"to"`
+	Zone string `json:"zone,omitempty"`
+}

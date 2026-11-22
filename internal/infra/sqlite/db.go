@@ -442,6 +442,28 @@ CREATE TABLE IF NOT EXISTS template_versions (
   at       INTEGER NOT NULL,
   PRIMARY KEY (template, version)
 );
+CREATE TABLE IF NOT EXISTS notices (
+  seq         INTEGER PRIMARY KEY AUTOINCREMENT,
+  id          TEXT NOT NULL UNIQUE,
+  recipient   TEXT NOT NULL,
+  key         TEXT NOT NULL,
+  kind        TEXT NOT NULL,
+  tier        TEXT NOT NULL,
+  ref         TEXT NOT NULL DEFAULT '',
+  target      TEXT NOT NULL DEFAULT '',
+  project     TEXT NOT NULL DEFAULT '',
+  actor       TEXT NOT NULL DEFAULT '',
+  subject     TEXT NOT NULL DEFAULT '',
+  message_id  TEXT NOT NULL DEFAULT '',
+  announce    INTEGER NOT NULL DEFAULT 0,
+  quiet       TEXT NOT NULL DEFAULT '',
+  created_at  INTEGER NOT NULL,
+  read_at     INTEGER NOT NULL DEFAULT 0,
+  resolved_at INTEGER NOT NULL DEFAULT 0,
+  UNIQUE (recipient, key)
+);
+CREATE INDEX IF NOT EXISTS idx_notices_recipient ON notices(recipient, seq);
+CREATE INDEX IF NOT EXISTS idx_notices_open_ref ON notices(ref) WHERE resolved_at = 0;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_idem ON messages(from_agent, idempotency_key) WHERE idempotency_key IS NOT NULL;
 `
 
