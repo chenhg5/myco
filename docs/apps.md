@@ -46,6 +46,10 @@ Agent access currently uses shared page records. The [agent actions SDK](app-act
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/meeting-dark.webp"><img src="assets/apps/meeting.webp" alt="Meeting notes"></picture><br><b>Meeting notes</b><br>Record a meeting in Zoom, Tencent Meeting or Feishu, with your microphone and the others on separate tracks; transcribe it on your computer (nothing is uploaded), tell speakers apart, and let the agent write the minutes. Needs the myco app.</td>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/tutor-dark.webp"><img src="assets/apps/tutor.webp" alt="Learning workspace"></picture><br><b>Learning workspace</b><br>Plan a subject with an agent, read lesson cards, answer practice questions and review what you have not mastered. Progress is personal; lessons and questions are shared.</td>
 </tr>
+<tr>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/scheduling-dark.webp"><img src="assets/apps/scheduling.webp" alt="Scheduling"></picture><br><b>Scheduling</b><br>Set event types, weekly availability and date overrides. Book across time zones, manage and cancel appointments, and export calendar files. People and agents share the same page; no confirmation email or external calendar sync.</td>
+<td width="50%"></td>
+</tr>
 </table>
 
 ## Development

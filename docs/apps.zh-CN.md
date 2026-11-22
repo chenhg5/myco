@@ -46,6 +46,10 @@
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/meeting-dark.webp"><img src="assets/apps/meeting.webp" alt="会议记录"></picture><br><b>会议记录</b><br>录下在 Zoom、腾讯会议、飞书里开的会：你的麦克风和别人的声音分开录，会后在这台电脑上转成文字（不上传），自动分出不同的人；点一句从那里播放，改字、改名字、搜索、导出；让 agent 写纪要（总结、决定、待办、章节）。录音只存在这台电脑上，要在 myco App 里录音。</td>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/tutor-dark.webp"><img src="assets/apps/tutor.webp" alt="学习工作台"></picture><br><b>学习工作台</b><br>和 agent 一起规划学习主题，读知识卡、做练习题、复习还没掌握的内容。学习内容大家共用，进度按个人统计。</td>
 </tr>
+<tr>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/scheduling-dark.webp"><img src="assets/apps/scheduling.webp" alt="日程预约"></picture><br><b>日程预约</b><br>设置预约类型、每周可用时间和例外日期，按时区选时预约，管理或取消预约并导出日历。人和 agent 共用一个页面；不发送确认邮件，不同步外部日历。</td>
+<td width="50%"></td>
+</tr>
 </table>
 
 ## 编程开发

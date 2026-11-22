@@ -1,0 +1,140 @@
+{
+  "profile": [
+    {
+      "id": "main",
+      "title": "林间工作室 · 预约日历",
+      "host": "林间工作室",
+      "bio": "设计、产品与有意思的新想法。期待和你见面。",
+      "zone": "Asia/Shanghai"
+    }
+  ],
+  "types": [
+    {
+      "id": "intro",
+      "title": "30 分钟交流",
+      "description": "认识彼此，聊聊想法与合作的可能。带上一个你正在思考的问题就好。",
+      "duration": 30,
+      "location": "线上会议 · 预约后商定链接",
+      "notice": 120,
+      "horizon": 30,
+      "before": 0,
+      "after": 15,
+      "enabled": true,
+      "order": 1
+    },
+    {
+      "id": "review",
+      "title": "设计评审",
+      "description": "一起看产品、原型和细节。请在备注里附上评审目标和材料。",
+      "duration": 60,
+      "location": "工作室 · 二楼会议室",
+      "notice": 1440,
+      "horizon": 60,
+      "before": 15,
+      "after": 15,
+      "enabled": true,
+      "order": 2
+    },
+    {
+      "id": "coffee",
+      "title": "15 分钟咖啡时间",
+      "description": "给新朋友留一点轻松的时间，交流近况和灵感。",
+      "duration": 15,
+      "location": "线上或线下，备注里告诉我",
+      "notice": 60,
+      "horizon": 14,
+      "before": 0,
+      "after": 0,
+      "enabled": true,
+      "order": 3
+    }
+  ],
+  "availability": [
+    {
+      "id": "main",
+      "week": {
+        "0": [],
+        "1": [
+          {
+            "start": "09:00",
+            "end": "12:00"
+          },
+          {
+            "start": "13:00",
+            "end": "17:00"
+          }
+        ],
+        "2": [
+          {
+            "start": "09:00",
+            "end": "12:00"
+          },
+          {
+            "start": "13:00",
+            "end": "17:00"
+          }
+        ],
+        "3": [
+          {
+            "start": "09:00",
+            "end": "12:00"
+          },
+          {
+            "start": "13:00",
+            "end": "17:00"
+          }
+        ],
+        "4": [
+          {
+            "start": "09:00",
+            "end": "12:00"
+          },
+          {
+            "start": "13:00",
+            "end": "17:00"
+          }
+        ],
+        "5": [
+          {
+            "start": "09:00",
+            "end": "12:00"
+          },
+          {
+            "start": "13:00",
+            "end": "17:00"
+          }
+        ],
+        "6": []
+      },
+      "overrides": [
+        {
+          "date": "2026-12-25",
+          "ranges": []
+        }
+      ]
+    }
+  ],
+  "days": [
+    {
+      "id": "2026-11-24",
+      "entries": [
+        {
+          "id": "booking-demo",
+          "type": "review",
+          "title": "设计评审",
+          "start": "2026-11-24T06:00:00.000Z",
+          "end": "2026-11-24T07:00:00.000Z",
+          "name": "小林",
+          "email": "lin@example.com",
+          "notes": "一起看看新版首页的信息结构，重点是首次访问的体验。",
+          "location": "工作室 · 二楼会议室",
+          "zone": "Asia/Shanghai",
+          "status": "confirmed",
+          "before": 15,
+          "after": 15,
+          "created": "2026-11-20T02:00:00.000Z"
+        }
+      ]
+    }
+  ]
+}
