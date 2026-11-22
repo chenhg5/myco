@@ -165,15 +165,22 @@ func (e *engine) agentInput(w http.ResponseWriter, r *http.Request) {
 	e.inputMu.Lock()
 	defer e.inputMu.Unlock()
 	defer releaseKeys()
+	// It may have waited for the lock: check again before the first event.
+	if !e.knownFrame(in.FrameID) {
+		agentError(w, 409, "stale_frame", intPtr(0))
+		return
+	}
 	applied := 0
 	for i, ev := range in.Events {
 		if i > 0 {
 			select {
 			case <-r.Context().Done():
-				agentError(w, 499, "cancelled", &applied)
-				return
 			case <-time.After(inputGap):
 			}
+		}
+		if r.Context().Err() != nil {
+			agentError(w, 499, "cancelled", &applied)
+			return
 		}
 		if err := e.input(ev); err != nil {
 			agentError(w, 500, "input_failed", &applied)
@@ -277,3 +284,5 @@ func (b *limitedBuffer) Write(p []byte) (int, error) {
 	}
 	return b.Buffer.Write(p)
 }
+
+func intPtr(n int) *int { return &n }
