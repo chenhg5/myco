@@ -240,7 +240,8 @@ func Build(o Options) (*Hub, error) {
 	e2e := app.NewE2EService(sqlite.NewKeyRepo(db), sqlite.NewSettingRepo(db), agentsRepo, consoleSvc, sqlite.NewMemberRepo(db), clock)
 	srv.SetE2E(e2e)
 	// Agents acting on a computer through its App, with its owner's approval.
-	srv.SetActions(app.NewActionService(superagents, machineSvc, members, messages, e2e.Enabled, audit, ids, clock))
+	actionSvc := app.NewActionService(superagents, machineSvc, members, messages, e2e.Enabled, audit, ids, clock)
+	srv.SetActions(actionSvc)
 	messages.SetMemberNames(func(ctx context.Context, id string) string {
 		if m, err := members.Get(ctx, id); err == nil {
 			return m.Name
@@ -288,6 +289,7 @@ func Build(o Options) (*Hub, error) {
 	srv.SetNotices(notices, msgRepo.Get)
 	automations.SetWorkflows(workflows)
 	pages := app.NewPageService(sqlite.NewPageRepo(db), blob.FS{Dir: filesDir}, projectSvc, ids, clock)
+	actionSvc.SetPages(pages)
 	pages.SetEncrypted(e2e.Enabled)
 	srv.SetPages(pages)
 	pageData := app.NewPageDataService(pages, sqlite.NewPageDataRepo(db), ids, clock)

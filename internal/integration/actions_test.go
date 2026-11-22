@@ -1,9 +1,11 @@
 package integration_test
 
 import (
+	"archive/zip"
 	"bytes"
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -229,5 +231,125 @@ func TestAgentActionsGrantJobArtifact(t *testing.T) {
 	aps, _ = glenn.Approvals(c, "pending")
 	if _, err := glenn.DecideActionGrant(c, aps[0].ID, api.ActionGrantNarrow{}); err == nil {
 		t.Fatal("approved a request its agent had ended")
+	}
+}
+
+// A shared page's export: an agent that may see the page gets an active
+// grant at once (no approval: the file is what it can already read); only a
+// renderer of someone who also sees the page runs it; seeing is checked
+// again, and its owner can revoke.
+func TestPageExportGrantsAndRenderers(t *testing.T) {
+	c := ctx(t)
+	h := startHub(t, filepath.Join(t.TempDir(), "hub.db"), app.DefaultMessagePolicy())
+	admin := h.admin()
+	if _, err := admin.UpdateMember(c, "owner", api.MemberUpdateRequest{Name: "glenn"}); err != nil {
+		t.Fatal(err)
+	}
+	ct, err := admin.CreateConsoleToken(c, "glenn-mac")
+	if err != nil {
+		t.Fatal(err)
+	}
+	glenn := h.client(ct.Token)
+	maker := h.client(h.register(api.RegisterRequest{Name: "maker", Binding: api.Binding{Harness: "claude", SessionID: "s1"}}))
+	var buf bytes.Buffer
+	z := zip.NewWriter(&buf)
+	w, _ := z.Create("index.html")
+	_, _ = w.Write([]byte("<!doctype html><title>board</title><p>board</p>"))
+	_ = z.Close()
+	page, err := maker.PublishPage(c, client.PageInput{Name: "白板"}, bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Another person, with an agent of their own: they do not see the page.
+	inv, err := admin.InviteMember(c, api.InviteRequest{Name: "laohu"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	paired, err := h.client("").Pair(c, inv.Link[strings.Index(inv.Link, "/c/")+3:], "laohu-mac")
+	if err != nil {
+		t.Fatal(err)
+	}
+	laohu := h.client(paired.Token)
+	enr, err := laohu.CreateEnrollment(c, api.CreateEnrollmentRequest{NamePrefix: "laohu-", MaxUses: 1}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := h.client(enr.Token).Enroll(c, api.EnrollRequest{Name: "laohu-codex", Binding: api.Binding{Harness: "codex", SessionID: "s"}}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	outsider := h.client(res.Token)
+
+	target := api.ActionTarget{Kind: "page", ID: page.ID}
+	g, err := maker.RequestActionGrant(c, api.ActionGrantRequest{Target: target, Permissions: []string{"page.export"}, Reason: "export the board"}, false)
+	if err != nil || g.State != api.GrantActive || g.Owner != "glenn" || g.ExpiresAt == nil || g.ApprovalID != "" {
+		t.Fatalf("page grant: %+v %v", g, err)
+	}
+	if aps, _ := glenn.Approvals(c, "pending"); len(aps) != 0 {
+		t.Fatalf("a page export asked for approval: %+v", aps)
+	}
+	if _, err := outsider.RequestActionGrant(c, api.ActionGrantRequest{Target: target, Permissions: []string{"page.export"}, Reason: "x"}, false); err == nil {
+		t.Fatal("an agent that cannot see the page got a grant")
+	}
+	if _, err := maker.RequestActionGrant(c, api.ActionGrantRequest{Target: target, Permissions: []string{"remote.desktop.view"}, Reason: "x"}, false); err == nil {
+		t.Fatal("a computer's permission was granted on a page")
+	}
+	export := api.ActionDescriptor{Name: "page.export", Version: 1, Title: "Export", Permission: "page.export"}
+	run := func(key string) (*api.ActionJob, error) {
+		return maker.RunAction(c, api.ActionInvocation{GrantID: g.ID, Action: "page.export", Version: 1, IdempotencyKey: key, Args: json.RawMessage(`{"format":"svg"}`)})
+	}
+	if _, err := run("k0"); err == nil {
+		t.Fatal("an export ran with no renderer")
+	}
+	// A renderer of someone who cannot see the page does not count.
+	lh, err := laohu.RegisterActionHost(c, api.ActionHostRegister{Provider: "page", Generation: "l1", Actions: []api.ActionDescriptor{export}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := run("k1"); err == nil {
+		t.Fatal("an export ran on a renderer whose person cannot see the page")
+	}
+	host, err := glenn.RegisterActionHost(c, api.ActionHostRegister{Provider: "page", Generation: "g1", Actions: []api.ActionDescriptor{export}})
+	if err != nil || host.MachineID != "" {
+		t.Fatalf("renderer: %+v %v", host, err)
+	}
+	job, err := run("k2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if jobs, err := laohu.ActionHostJobs(c, lh.ID, 0); err != nil || len(jobs) != 0 {
+		t.Fatalf("the other person's renderer got the job: %+v %v", jobs, err)
+	}
+	jobs, err := glenn.ActionHostJobs(c, host.ID, 2*time.Second)
+	if err != nil || len(jobs) != 1 || jobs[0].Job.ID != job.ID || jobs[0].Grant.Target.ID != page.ID {
+		t.Fatalf("renderer jobs: %+v %v", jobs, err)
+	}
+	art, err := glenn.UploadActionArtifact(c, job.ID, host.ID, "g1", "image/svg+xml", []byte("<svg/>"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, _ := json.Marshal(map[string]any{"media_type": "image/svg+xml", "artifact": art})
+	if _, err := glenn.CompleteActionJob(c, job.ID, api.ActionJobComplete{HostID: host.ID, Generation: "g1", State: api.JobSucceeded, Result: result, ArtifactIDs: []string{art.ID}}); err != nil {
+		t.Fatal(err)
+	}
+	if data, typ, err := maker.ActionArtifact(c, art.ID); err != nil || string(data) != "<svg/>" || typ != "image/svg+xml" {
+		t.Fatalf("export: %q %s %v", data, typ, err)
+	}
+	if _, _, err := outsider.ActionArtifact(c, art.ID); err == nil {
+		t.Fatal("another agent downloaded the export")
+	}
+	// The page's owner sees the grant and can revoke it.
+	owned, err := glenn.OwnerActionGrants(c, api.GrantActive)
+	if err != nil || len(owned) != 1 || owned[0].ID != g.ID {
+		t.Fatalf("owner grants: %+v %v", owned, err)
+	}
+	if _, err := glenn.RevokeActionGrant(c, g.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := run("k3"); err == nil {
+		t.Fatal("a revoked page grant ran an export")
+	}
+	if _, _, err := maker.ActionArtifact(c, art.ID); err == nil {
+		t.Fatal("the export outlived its grant")
 	}
 }
