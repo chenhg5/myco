@@ -2198,20 +2198,26 @@ type MeSuperagent struct {
 
 // Approval is a superagent's request held for its owner.
 type Approval struct {
-	ID         string     `json:"id"`
-	Agent      string     `json:"agent"`
-	What       string     `json:"what"`
-	Reason     string     `json:"reason,omitempty"`
-	Method     string     `json:"method"`
-	Path       string     `json:"path"`
-	Body       string     `json:"body,omitempty"`
-	Status     string     `json:"status"` // pending done denied expired withdrew
-	Result     int        `json:"result,omitempty"`
-	ResultBody string     `json:"result_body,omitempty"`
-	DecidedBy  string     `json:"decided_by,omitempty"`
-	CreatedAt  time.Time  `json:"created_at"`
-	ExpiresAt  time.Time  `json:"expires_at"`
-	DecidedAt  *time.Time `json:"decided_at,omitempty"`
+	ID     string `json:"id"`
+	Agent  string `json:"agent"`
+	What   string `json:"what"`
+	Reason string `json:"reason,omitempty"`
+	Method string `json:"method"`
+	Path   string `json:"path"`
+	Body   string `json:"body,omitempty"`
+	// Kind is "" for a superagent's held request (Method/Path/Body), or a
+	// typed request any agent may make ("action_grant": Payload is
+	// {"grant_id": …}; approving may narrow it with an
+	// ActionGrantNarrow body). v0.21.21.
+	Kind       string          `json:"kind,omitempty"`
+	Payload    json.RawMessage `json:"payload,omitempty"`
+	Status     string          `json:"status"` // pending done denied expired withdrew
+	Result     int             `json:"result,omitempty"`
+	ResultBody string          `json:"result_body,omitempty"`
+	DecidedBy  string          `json:"decided_by,omitempty"`
+	CreatedAt  time.Time       `json:"created_at"`
+	ExpiresAt  time.Time       `json:"expires_at"`
+	DecidedAt  *time.Time      `json:"decided_at,omitempty"`
 }
 
 // ApprovalList answers GET /v1/console/approvals and /v1/me/approvals.

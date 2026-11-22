@@ -60,6 +60,7 @@ type Server struct {
 	automations   *app.AutomationService
 	workflows     *app.WorkflowService
 	superagents   *app.SuperagentService
+	actions       *app.ActionService
 	pages         *app.PageService
 	remote        remotedesktop.Broker
 	tun           tunnels
@@ -227,6 +228,7 @@ func (s *Server) routes() {
 	s.automationRoutes(m)
 	s.workflowRoutes(m)
 	s.superagentRoutes(m)
+	s.actionRoutes(m)
 	s.pageRoutes(m)
 	s.pinRoutes(m)
 	s.noticeRoutes(m)

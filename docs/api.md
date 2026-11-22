@@ -411,6 +411,32 @@ A route not listed treats it as the ordinary agent it also is. Nothing widens wh
 | `GET /v1/me/superagent` | agent | `{superagent, owner?}` |
 | `GET /v1/me/approvals` | agent | what it asked for |
 
+Approvals also carry `kind` and `payload` (v0.21.21): an empty `kind` is a superagent's held request as above; `kind: "action_grant"` is any agent asking to act on a computer (see [Agent actions](#agent-actions)), with `payload: {grant_id}`. Approving one may send `{permissions?, ttl_seconds?}` to allow less than was asked (never more); an empty body allows all of it.
+
+## Agent actions
+
+From v0.21.21, an agent can act on a computer through a provider that computer's own myco App runs (`remote.desktop`: screenshots, keyboard and mouse), with its owner's approval. The hub checks grants and relays jobs; it never reads their arguments or results, and it keeps grants, jobs and artifacts in memory only (a hub restart ends every session). In an end-to-end encrypted workspace these routes answer `unsupported`. The contract (fields, provider actions, lifecycle) is `context/design/app-agent-actions.md` in the maintainers' repository.
+
+| Route | Who | |
+|---|---|---|
+| `POST /v1/me/action-grants` | agent | `{target: {kind: "machine", id}, permissions, reason, message_id?, page_id?, ttl_seconds?}` → `201` a pending grant `{id, agent, owner, target, target_name, permissions, requested, reason, message_id?, approval_id, state, end_reason?, created_at, expires_at?, ended_at?}`; the target's owner gets an `action_grant` approval. `id` may be the computer's name. Permissions: `remote.desktop.view`, `remote.desktop.control` (control includes view). TTL 5 minutes by default, 30 at most. With `message_id`, the grant ends when that task ends. `?dry_run=1` checks only |
+| `GET /v1/me/action-grants` | agent | `{grants: [...]}`, its own |
+| `GET /v1/me/action-grants/{id}?wait_seconds=30` | agent | the grant; waits while it is pending (`wait=30s` works too; 60 seconds at most) |
+| `POST /v1/me/action-grants/{id}/end` | agent | ends it → the grant |
+| `GET /v1/me/action-grants/{id}/actions` | agent | `{actions: [{name, version, title, permission, input_schema?, output_schema?}]}`: what the computer offers now that the grant covers |
+| `POST /v1/me/action-jobs` | agent | `{grant_id, action, version, args, idempotency_key}` → `201 {id, grant_id, action, version, state, result?, error?: {code, message, retryable}, artifacts?, cancel_requested?, created_at, finished_at?}`. The same key and body returns the first job; a different body is `409`. `unsupported` when the computer does not offer that action now |
+| `GET /v1/me/action-jobs/{id}?wait_seconds=30` | agent | the job; waits until it ends. `state`: queued running succeeded failed cancelled |
+| `POST /v1/me/action-jobs/{id}/cancel` | agent | cancels a queued job; asks a running one to stop (what it did stays done) |
+| `GET /v1/me/action-artifacts/{id}` | agent (the grant's) | the file (a screenshot), `Cache-Control: no-store`; `410` once its grant ends or it expires (10 minutes at most) |
+| `GET /v1/console/action-grants?state=active` | console | `{grants}` the caller decides (all, for owners and admins) |
+| `POST /v1/console/action-grants/{id}/revoke` | console | ends it at once: queued jobs are cancelled, a running job's late result is dropped, artifacts are gone |
+| `POST /v1/console/action-hosts` | console (the computer's owner) | the trusted App offers a provider there: `{machine_id, provider, generation, actions}` → `201 {id, machine_id, provider, generation, last_seen_at}`. Registering again replaces the host (its running jobs fail as `host_restarted`) |
+| `GET /v1/console/action-hosts/{id}/jobs?wait_seconds=30` | console | `{jobs: [{job, args, grant}]}`: queued jobs for that computer, now running. A host quiet for 45 seconds ends the grants it ran |
+| `POST /v1/console/action-jobs/{id}/artifacts?host_id=&generation=` | console | the raw file (`Content-Type` image/*, text/plain or application/json; 4 MB at most) → `201 {id, media_type, bytes, expires_at}` |
+| `POST /v1/console/action-jobs/{id}/complete` | console | `{host_id, generation, state, result?, error?, artifact_ids?}` → the job. A wrong generation is `409`; a finished job cannot change |
+
+The CLI: `myco action grant request|list|get|end`, `myco action list`, `myco action run` (waits, and saves screenshots to files), `myco action job`, `myco action cancel`.
+
 ## Message object
 
 ```json

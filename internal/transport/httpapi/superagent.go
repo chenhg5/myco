@@ -3,6 +3,7 @@ package httpapi
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -283,11 +284,14 @@ func (s *Server) clearSuperagent(w http.ResponseWriter, r *http.Request) {
 }
 
 func approvalDTO(a *domain.Approval) api.Approval {
-	out := api.Approval{ID: a.ID, Agent: string(a.Agent), What: a.What, Reason: a.Reason, Method: a.Method, Path: a.Path,
+	out := api.Approval{ID: a.ID, Agent: string(a.Agent), What: a.What, Reason: a.Reason, Method: a.Method, Path: a.Path, Kind: a.Kind,
 		Status: a.Status, Result: a.Result, ResultBody: a.ResultBody, DecidedBy: a.DecidedBy, CreatedAt: a.CreatedAt,
 		ExpiresAt: a.CreatedAt.Add(domain.ApprovalTTL), DecidedAt: timePtr(a.DecidedAt)}
 	if len(a.Body) > 0 && len(a.Body) <= 2000 && strings.Contains(a.ContentType, "json") {
 		out.Body = string(a.Body)
+	}
+	if a.Kind != domain.ApprovalKindRequest && json.Valid([]byte(a.Payload)) {
+		out.Payload = json.RawMessage(a.Payload)
 	}
 	return out
 }
@@ -312,7 +316,14 @@ func (s *Server) decideApproval(w http.ResponseWriter, r *http.Request, approve 
 	if !s.superagentsEnabled(w) {
 		return
 	}
-	a, err := s.superagents.Decide(r.Context(), s.actorOf(r), r.PathValue("id"), approve, s.replayApproval)
+	// Approving a typed request may say what to allow of it (less than
+	// asked); an empty body allows all of it.
+	narrow, err := io.ReadAll(io.LimitReader(r.Body, 64<<10))
+	if err != nil {
+		writeError(w, domain.Errf(domain.CodeInvalidArgument, "could not read the request: %v", err))
+		return
+	}
+	a, err := s.superagents.DecideWith(r.Context(), s.actorOf(r), r.PathValue("id"), approve, narrow, s.replayApproval)
 	if err != nil {
 		writeError(w, err)
 		return

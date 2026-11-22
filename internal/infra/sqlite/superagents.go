@@ -64,12 +64,12 @@ func NewApprovalRepo(db *sql.DB) *ApprovalRepo { return &ApprovalRepo{db: db} }
 
 var _ domain.ApprovalRepository = (*ApprovalRepo)(nil)
 
-const approvalCols = `id, owner, agent, what, reason, method, path, body, content_type, status, result, result_body, decided_by, created_at, decided_at`
+const approvalCols = `id, owner, agent, what, reason, method, path, body, content_type, status, result, result_body, decided_by, created_at, decided_at, kind, payload`
 
 func (r *ApprovalRepo) Create(ctx context.Context, a *domain.Approval) error {
-	_, err := r.db.ExecContext(ctx, `INSERT INTO approvals (`+approvalCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err := r.db.ExecContext(ctx, `INSERT INTO approvals (`+approvalCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		a.ID, a.Owner, string(a.Agent), a.What, a.Reason, a.Method, a.Path, a.Body, a.ContentType, a.Status, a.Result, a.ResultBody,
-		a.DecidedBy, ms(a.CreatedAt), ms(a.DecidedAt))
+		a.DecidedBy, ms(a.CreatedAt), ms(a.DecidedAt), a.Kind, a.Payload)
 	return internal(err)
 }
 
@@ -86,7 +86,7 @@ func scanApproval(s scanner) (*domain.Approval, error) {
 		created, decided int64
 	)
 	if err := s.Scan(&a.ID, &a.Owner, &agent, &a.What, &a.Reason, &a.Method, &a.Path, &a.Body, &a.ContentType, &a.Status, &a.Result,
-		&a.ResultBody, &a.DecidedBy, &created, &decided); err != nil {
+		&a.ResultBody, &a.DecidedBy, &created, &decided, &a.Kind, &a.Payload); err != nil {
 		return nil, err
 	}
 	a.Agent = domain.AgentName(agent)

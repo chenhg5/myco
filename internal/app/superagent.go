@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -20,6 +21,38 @@ type SuperagentService struct {
 	audit     *AuditService
 	ids       IDGenerator
 	clock     Clock
+	typed     map[string]TypedApproval
+}
+
+// TypedApproval carries out a typed approval (one any agent may ask for,
+// such as acting on a computer) when its owner decides it. Approve returns
+// what to tell the agent; narrow is what the owner chose to allow, when
+// less than asked (the handler's own JSON).
+type TypedApproval interface {
+	Approve(ctx context.Context, a *domain.Approval, by *domain.Member, narrow json.RawMessage) (string, error)
+	Deny(ctx context.Context, a *domain.Approval)
+}
+
+// SetTyped registers the handler of a typed approval kind.
+func (s *SuperagentService) SetTyped(kind string, h TypedApproval) {
+	if s.typed == nil {
+		s.typed = map[string]TypedApproval{}
+	}
+	s.typed[kind] = h
+}
+
+// AskTyped holds a typed request of any agent for owner's approval (not
+// only a superagent's: the kind's handler decides what approving does).
+func (s *SuperagentService) AskTyped(ctx context.Context, owner *domain.Member, agent domain.AgentName, kind, what, reason, payload string) (*domain.Approval, error) {
+	if _, ok := s.typed[kind]; !ok {
+		return nil, domain.Errf(domain.CodeInvalidArgument, "unknown approval kind %q", kind)
+	}
+	a := &domain.Approval{ID: s.ids.New("apr"), Owner: owner.ID, Agent: agent, What: what, Reason: clipRunes(strings.TrimSpace(reason), 500),
+		Method: "", Path: "", Kind: kind, Payload: payload, Status: domain.ApprovalPending, CreatedAt: s.clock.Now()}
+	if err := s.approvals.Create(ctx, a); err != nil {
+		return nil, err
+	}
+	return a, nil
 }
 
 // NewSuperagentService wires superagents.
@@ -156,7 +189,7 @@ func (s *SuperagentService) withdraw(ctx context.Context, agent domain.AgentName
 		return
 	}
 	for _, a := range list {
-		if a.Status == domain.ApprovalPending {
+		if a.Status == domain.ApprovalPending && a.Kind == domain.ApprovalKindRequest {
 			a.Status, a.DecidedAt = domain.ApprovalWithdrew, s.clock.Now()
 			_ = s.approvals.Save(ctx, a)
 		}
@@ -221,6 +254,12 @@ type Replay func(ctx context.Context, a *domain.Approval, owner *domain.Member, 
 // Decide approves (carrying the request out once, with replay) or denies an
 // approval; its superagent hears how it went.
 func (s *SuperagentService) Decide(ctx context.Context, by Actor, id string, approve bool, replay Replay) (*domain.Approval, error) {
+	return s.DecideWith(ctx, by, id, approve, nil, replay)
+}
+
+// DecideWith is Decide with what the owner chose to allow of a typed
+// request (narrow; nil for all it asked).
+func (s *SuperagentService) DecideWith(ctx context.Context, by Actor, id string, approve bool, narrow json.RawMessage, replay Replay) (*domain.Approval, error) {
 	m, err := person(by, "approve its own requests")
 	if err != nil {
 		return nil, err
@@ -237,6 +276,9 @@ func (s *SuperagentService) Decide(ctx context.Context, by Actor, id string, app
 		return nil, domain.Errf(domain.CodeInvalidState, "approval %s is %s", id, a.Status)
 	}
 	a.DecidedBy, a.DecidedAt = m.Name, s.clock.Now()
+	if a.Kind != domain.ApprovalKindRequest {
+		return s.decideTyped(ctx, by, m, a, approve, narrow)
+	}
 	if !approve {
 		a.Status = domain.ApprovalDenied
 		if err := s.approvals.Save(ctx, a); err != nil {
@@ -266,6 +308,42 @@ func (s *SuperagentService) Decide(ctx context.Context, by Actor, id string, app
 		how = fmt.Sprintf("但没做成（%d）：%s", a.Result, clipRunes(a.ResultBody, 400))
 	}
 	s.tell(ctx, m, a, fmt.Sprintf("[myco] %s 同意了：%s（%s），%s。", m.Name, a.What, a.ID, how))
+	return a, nil
+}
+
+// decideTyped decides a typed approval through its kind's handler.
+func (s *SuperagentService) decideTyped(ctx context.Context, by Actor, m *domain.Member, a *domain.Approval, approve bool, narrow json.RawMessage) (*domain.Approval, error) {
+	h, ok := s.typed[a.Kind]
+	if !ok {
+		return nil, domain.Errf(domain.CodeUnsupported, "this hub cannot decide %q approvals", a.Kind)
+	}
+	if !approve {
+		a.Status = domain.ApprovalDenied
+		if err := s.approvals.Save(ctx, a); err != nil {
+			return nil, err
+		}
+		h.Deny(ctx, a)
+		s.audit.Record(ctx, by, "approval.deny", string(a.Agent), a.What)
+		s.tell(ctx, m, a, fmt.Sprintf("[myco] %s 没有同意：%s（%s）。不要再用别的办法去做这件事；需要的话先问清楚。", m.Name, a.What, a.ID))
+		return a, nil
+	}
+	note, err := h.Approve(ctx, a, m, narrow)
+	if err != nil {
+		if domain.IsCode(err, domain.CodeInvalidArgument) {
+			return nil, err // the owner's choice was wrong: still theirs to decide
+		}
+		// The request is gone (its session ended, the hub restarted): it
+		// cannot be granted any more.
+		a.Status, a.ResultBody = domain.ApprovalExpired, clipRunes(err.Error(), 400)
+		_ = s.approvals.Save(ctx, a)
+		return nil, err
+	}
+	a.Status, a.Result = domain.ApprovalDone, 200
+	if err := s.approvals.Save(ctx, a); err != nil {
+		return nil, err
+	}
+	s.audit.Record(ctx, by, "approval.approve", string(a.Agent), a.What)
+	s.tell(ctx, m, a, fmt.Sprintf("[myco] %s 同意了：%s（%s）。%s", m.Name, a.What, a.ID, note))
 	return a, nil
 }
 

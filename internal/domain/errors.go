@@ -22,6 +22,9 @@ const (
 	CodeInternal         ErrorCode = "internal"
 	// CodeRateLimited: too many calls; try again later (HTTP 429).
 	CodeRateLimited ErrorCode = "rate_limited"
+	// CodeUnsupported: this hub, computer or component cannot do that (an
+	// older version, or a feature off there); not worth retrying (HTTP 501).
+	CodeUnsupported ErrorCode = "unsupported"
 )
 
 // Error is a domain error carrying a code and an optional recovery hint.

@@ -239,6 +239,8 @@ func Build(o Options) (*Hub, error) {
 	srv.SetVoiceSettings(app.NewVoiceSettingsService(sqlite.NewSettingRepo(db)))
 	e2e := app.NewE2EService(sqlite.NewKeyRepo(db), sqlite.NewSettingRepo(db), agentsRepo, consoleSvc, sqlite.NewMemberRepo(db), clock)
 	srv.SetE2E(e2e)
+	// Agents acting on a computer through its App, with its owner's approval.
+	srv.SetActions(app.NewActionService(superagents, machineSvc, members, messages, e2e.Enabled, audit, ids, clock))
 	messages.SetMemberNames(func(ctx context.Context, id string) string {
 		if m, err := members.Get(ctx, id); err == nil {
 			return m.Name
