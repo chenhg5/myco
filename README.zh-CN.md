@@ -285,6 +285,14 @@ flowchart TB
 | [skill/myco/SKILL.md](skill/myco/SKILL.md) | 教 agent 使用 myco 的 skill 文件 |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 构建和参与开发 |
 
+## 社群
+
+有问题、想法，或者想看看别人怎么用 myco，扫码加入微信群（二维码每隔几天更新一次，这里放的总是最新的）：
+
+<img src="docs/assets/community/wechat-group.png" alt="myco 微信群" width="220">
+
+bug 和新功能需求：[GitHub Issues](https://github.com/chenhg5/myco/issues)。
+
 ## 名字的由来
 
 *myco-* 是希腊语里的「真菌」。森林地下，菌丝和树根把树连成一张「树木互联网」，在树之间传递养分和警报。myco 为 agent 做同一件事：它不替谁思考，只负责连接和投递。

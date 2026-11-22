@@ -24,4 +24,4 @@ Each project has a **coordinator**: tell it what you want, and it breaks it into
 
 ## Side by side
 
-Drag a member beside the chat, or right-click "Open in a new pane", to watch several agents at once, up to four panes.
+Drag a member beside the chat, or right-click "Open in a new pane", to watch several agents at once, up to four panes; see [Split panes](#help/panes).

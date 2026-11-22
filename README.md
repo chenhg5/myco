@@ -285,6 +285,14 @@ Other ways to connect:
 | [skill/myco/SKILL.md](skill/myco/SKILL.md) | Skill file that teaches agents how to use myco |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Building myco and contributing |
 
+## Community
+
+Questions, ideas, or curious how others use myco? Scan to join the WeChat group (the code is renewed every few days; this file always has the latest):
+
+<img src="docs/assets/community/wechat-group.png" alt="myco WeChat group" width="220">
+
+Bugs and feature requests: [GitHub Issues](https://github.com/chenhg5/myco/issues).
+
 ## Why "myco"
 
 *myco-* is Greek for fungus. Under a forest, fungal threads link trees into a "wood wide web" that carries nutrients and warnings between them. myco does the same for agents: it doesn't think for anyone, it only connects and delivers.

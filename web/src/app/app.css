@@ -9358,3 +9358,4 @@ html.os-other ::-webkit-scrollbar-thumb:hover, html.os-other ::-webkit-scrollbar
   .hp-pick { display: block; }
   .hp-doc { padding-top: 20px; }
 }
+.hp-doc .md img { max-width: 260px; border-radius: 10px; }

@@ -7,7 +7,7 @@ Click an agent in the sidebar for your chat with it. Say what you want done and 
 - **Enter** sends, **Shift+Enter** starts a new line.
 - What you send shows in the chat at once as "Sending…" and becomes the real message when it arrives. If it does not go, the text goes back into the box; click Retry.
 - Drop files on the box, paste a screenshot, or press **⌘U** to add files.
-- On a Mac, hold **⌥Space** to talk and let go to stop.
+- On a Mac, hold **⌥Space** to talk and let go to stop, or [voice chat](#help/voice) with it.
 
 ## While it is working
 
