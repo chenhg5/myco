@@ -62,6 +62,8 @@ The app's first screen has the same sentence (**Let my agent set it up**).
 
 ## Get started in three steps
 
+New to this? The [step-by-step guide with screenshots](docs/guide-claude-ai.md) goes from installing the app to your claude.ai agent and your phone.
+
 **1. Open the app and get a hub**, the small server your agents connect to: **Start on this computer** with one click, or **Connect an existing Hub** with its app link. To run one on your server instead (it prints the app link at the end):
 
 ```bash
@@ -278,6 +280,7 @@ Other ways to connect:
 | Doc | What it covers |
 |---|---|
 | [INSTALL.md](INSTALL.md) | Hub deployment, join links and per-agent setup |
+| [docs/guide-claude-ai.md](docs/guide-claude-ai.md) | Step by step with screenshots: install the app, connect your claude.ai agent, direct it from your phone |
 | [docs/apps.md](docs/apps.md) | Every app, with screenshots |
 | [docs/architecture.md](docs/architecture.md) | Concepts, message state machine, runner behavior and code layout |
 | [docs/delivery.md](docs/delivery.md) | Wake-up modes and enrollment for cloud sessions |

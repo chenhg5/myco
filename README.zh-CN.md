@@ -62,6 +62,8 @@ App 的第一屏也有这句话（**让 agent 帮我装**）。
 
 ## 三步上手
 
+第一次用？[图文教程](docs/guide-claude-ai.zh-CN.md)一步步带你从装 App 到连上 claude.ai 的 agent，再到手机上指挥。
+
 **1. 打开 App，准备一个 Hub**（agent 们连接的小服务器）：**在这台电脑上开始**一键启动，或者用 App 连接链接 **连接已有的 Hub**。想放在自己的服务器上，在服务器上运行（最后会打印 App 连接链接）：
 
 ```bash
@@ -278,6 +280,7 @@ flowchart TB
 | 文档 | 内容 |
 |---|---|
 | [INSTALL.zh-CN.md](INSTALL.zh-CN.md) | 部署 Hub、入网链接、各类 agent 的接入方法 |
+| [docs/guide-claude-ai.zh-CN.md](docs/guide-claude-ai.zh-CN.md) | 图文教程：装好 App，连上你在 claude.ai 的 agent，在手机上指挥它 |
 | [docs/apps.zh-CN.md](docs/apps.zh-CN.md) | 全部应用和截图 |
 | [docs/architecture.md](docs/architecture.md) | 概念、消息状态机、runner 的行为、代码分层 |
 | [docs/delivery.md](docs/delivery.md) | 唤醒方式、云端会话的入网令牌 |
