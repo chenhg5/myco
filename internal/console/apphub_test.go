@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/chenhg5/myco/internal/console"
 )
@@ -25,7 +28,7 @@ func TestLocalHubWithoutServiceManager(t *testing.T) {
 		c := strings.Join(args, " ")
 		calls = append(calls, c)
 		switch {
-		case strings.HasPrefix(c, "hub up --tunnel none"):
+		case strings.HasPrefix(c, "hub up --tunnel "):
 			dir := filepath.Join(home, ".myco", "hub")
 			addr := "0.0.0.0:7777"
 			if strings.Contains(c, "--name work") {
@@ -48,6 +51,9 @@ func TestLocalHubWithoutServiceManager(t *testing.T) {
 	}
 	l := &console.Local{Home: home, Device: "pc", Run: run, NoServiceManager: true, Dirs: []string{filepath.Join(home, ".local", "bin")},
 		LookPath: func(name string) (string, error) {
+			if name == "cloudflared" {
+				return filepath.Join(home, "cloudflared.exe"), nil
+			}
 			if name == "myco" && mycoPath != "" {
 				return mycoPath, nil
 			}
@@ -100,4 +106,18 @@ func TestLocalHubWithoutServiceManager(t *testing.T) {
 	if code, _, raw := r.do("POST", "/app/local/hub/stop", map[string]string{"name": "work"}); code != 200 {
 		t.Fatalf("named stop: %d %s", code, raw)
 	}
+	// Windows used to return reachable=true immediately after this local hub
+	// answered, even though its health response had no public_url at all.
+	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	defer cancel()
+	req := httptest.NewRequest("POST", "/app/local/hub", strings.NewReader(`{"tunnel":"cloudflare"}`)).WithContext(ctx)
+	rec := httptest.NewRecorder()
+	b.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), "tunnel_not_ready") {
+		t.Fatalf("Windows false public success: %d %s", rec.Code, rec.Body.String())
+	}
+	if _, err := os.Stat(filepath.Join(home, ".myco", "hub", "app-hub.json")); err != nil {
+		t.Fatal("failed public access must preserve the local hub", err)
+	}
+
 }

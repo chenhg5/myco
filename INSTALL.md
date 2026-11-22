@@ -1227,3 +1227,15 @@ use their screen/window picker. Other hosts can import recordings. Each recordin
 is limited to ten minutes in the UI. Stop before leaving; native originals remain
 in `~/.myco/recordings`. Import failures offer a retry and a way to find the original.
 Automatic cursor following, captions and webcam overlays are outside this version.
+
+### App public-access setup
+
+In Settings → Workspaces → Open to the internet, Tailscale Funnel remains selectable
+before installation. Its setup card links to official downloads, provides copyable
+Windows PowerShell, macOS Homebrew/start, and Linux install/start commands, and a
+prompt for an agent on this computer. Complete browser sign-in and system network
+approval yourself, then use Installed — check again and Open. First-time Funnel
+or HTTPS authorization may require a browser confirmation before retrying. Detecting
+the executable alone does not mean it is signed in or connected. Success requires
+a valid public URL and a passing public health check; failure keeps the local Hub
+running and offers a retry instead of displaying an empty success address.

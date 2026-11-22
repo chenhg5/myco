@@ -588,3 +588,14 @@ the language ends the page's sessions; hiding a tab leaves it running. Show
 connection progress, errors, real media statistics and a visible Disconnect.
 The initial version explicitly labels its LAN/Tailscale, no-audio and unlocked-
 desktop limitations. Optional media dependencies do not link into core myco.
+
+### Public-access setup and readiness
+
+Tailscale Funnel is selectable even if missing. Its setup card offers neutral
+platform buttons, official downloads, copyable install/start commands and an
+agent handoff prompt. The person completes account sign-in, OS network approval,
+and initial Funnel authorization. Check again refreshes executable detection
+without resetting the selected option. Only a nonempty valid public URL and a
+passing public health check count as success; otherwise retain local access,
+show an actionable error, and allow retry. Cancelled requests cannot reopen a
+success panel later.

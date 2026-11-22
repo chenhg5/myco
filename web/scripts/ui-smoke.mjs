@@ -232,6 +232,8 @@ function reportProblems() {
   process.exitCode = 1;
 }
 
+const intentionalPublicNotReady = new WeakSet();
+
 function watchPage(page, size, scheme) {
   // Page events come outside this run's async context: keep it here.
   const r = run();
@@ -244,6 +246,8 @@ function watchPage(page, size, scheme) {
     if (msg.text().includes("502") && where.includes("/machines/m_studio/spawn")) return;
     // On purpose: 单聊 · 网络不好 cuts the chat's polls off.
     if (msg.text().includes("ERR_FAILED") && /\/(exchanges|thread)\b/.test(where)) return;
+    // This fixture deliberately returns the real backend's not-ready status.
+    if (intentionalPublicNotReady.has(page) && msg.text().includes("503") && /\/app\/local\/hub:/.test(where)) return;
     addProblem(r, "console", msg.text(), where);
   });
   page.on("pageerror", (err) => {
@@ -5142,6 +5146,38 @@ async function runMatrix(browser, size, scheme) {
       await pub.locator(".app-choice:not(.disabled)", { hasText: "一键开放" }).locator("input:checked").waitFor({ state: "attached", timeout: 5_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "open-to-internet");
+      // A missing Tailscale must lead to install/login guidance, not a dead row.
+      await clickVisible(page, pub.locator(".pub-option", { hasText: "Tailscale Funnel" }));
+      const setup = pub.getByTestId("tailscale-setup");
+      await setup.waitFor();
+      if (!(await pub.getByRole("button", { name: "开放", exact: true }).isDisabled())) throw new Error("未安装 Tailscale 时应先引导安装");
+      for (const [platform, command] of [["Windows", "winget install --exact --id Tailscale.Tailscale"], ["macOS", "brew install --cask tailscale-app"], ["Linux", "https://tailscale.com/install.sh"]]) {
+        await clickVisible(page, setup.getByRole("button", { name: platform, exact: true }));
+        await setup.locator(".app-command code").first().filter({ hasText: command }).waitFor();
+      }
+      await clickVisible(page, setup.getByRole("button", { name: "Windows", exact: true }));
+      let downloadURL = "";
+      const downloadRoute = /\/app\/open-url$/;
+      const downloadHandler = async route => { downloadURL = route.request().postDataJSON().url; await route.fulfill({ status: 200, contentType: "application/json", body: '{"ok":true}' }); };
+      await page.route(downloadRoute, downloadHandler);
+      try {
+        await clickVisible(page, setup.getByRole("button", { name: "打开官方下载" }));
+        await page.waitForTimeout(100);
+        if (downloadURL !== "https://tailscale.com/download/windows") throw new Error("应打开 Tailscale 官方 Windows 下载页");
+      } finally { await page.unroute(downloadRoute, downloadHandler); }
+      await clickVisible(page, setup.locator("summary"));
+      await setup.locator("details code", { hasText: "myco hub up --tunnel tailscale" }).waitFor();
+      await clickVisible(page, setup.locator("summary"));
+      await shot(page, size, scheme, "open-to-internet-tailscale-setup");
+      await fetch(`http://${HOST}:${mockPort()}/app/mock/local`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tailscale_installed: true }) });
+      try {
+        await clickVisible(page, setup.getByRole("button", { name: "我已安装，重新检测" }));
+        await setup.getByRole("heading", { name: "已找到 Tailscale，接下来登录并连接" }).waitFor();
+        if (!(await pub.getByRole("button", { name: "开放", exact: true }).isEnabled())) throw new Error("安装后检测应解锁下一步");
+      } finally {
+        await fetch(`http://${HOST}:${mockPort()}/app/mock/local`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tailscale_installed: false }) });
+      }
+      await clickVisible(page, pub.locator(".pub-option", { hasText: "一键开放" }));
       await clickVisible(page, pub.getByRole("button", { name: "开放", exact: true }));
       await pub.getByRole("button", { name: "正在开放…" }).waitFor({ timeout: 5_000 });
       await pub.locator("[data-testid=opening] .pub-steps li").first().waitFor({ timeout: 5_000 });
@@ -5149,7 +5185,33 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "open-to-internet-opening");
       await clickVisible(page, pub.getByRole("button", { name: "取消" }));
       await pub.locator("button.app-btn-primary:enabled", { hasText: "开放" }).waitFor({ timeout: 3_000 });
-      await clickVisible(page, pub.getByRole("button", { name: "取消" }));
+      // An older Windows backend could return HTTP 200 with no public URL.
+      // Neither that response nor a not-ready error may show the success panel.
+      let publicResponse = "empty";
+      const localHubRoute = /\/app\/local\/hub$/;
+      const publicHandler = async (route) => {
+        const body = publicResponse === "pending"
+          ? { error: "tunnel_not_ready", message: "tunnel not ready", retryable: true }
+          : { hub: {}, public_url: publicResponse === "ready" ? "https://ready.example.test" : "", warnings: [] };
+        if (publicResponse === "pending") intentionalPublicNotReady.add(page);
+        await route.fulfill({ status: publicResponse === "pending" ? 503 : 200, contentType: "application/json", body: JSON.stringify(body) });
+      };
+      await page.route(localHubRoute, publicHandler);
+      try {
+        await clickVisible(page, pub.getByRole("button", { name: "开放", exact: true }));
+        await pub.getByText("尚未拿到有效的公网地址", { exact: false }).waitFor({ timeout: 5_000 });
+        if (await pub.locator("[data-testid=opened]").count()) throw new Error("空地址不能显示已开放");
+        publicResponse = "pending";
+        await clickVisible(page, pub.getByRole("button", { name: "开放", exact: true }));
+        await pub.getByText("公网连接尚未就绪", { exact: false }).waitFor({ timeout: 5_000 });
+        if (await pub.locator("[data-testid=opened]").count()) throw new Error("公网未就绪不能显示已开放");
+        await shot(page, size, scheme, "open-to-internet-not-ready");
+        publicResponse = "ready";
+        await clickVisible(page, pub.getByRole("button", { name: "开放", exact: true }));
+        await pub.locator("[data-testid=opened]").waitFor({ timeout: 5_000 });
+        await pub.locator(".pub-link code", { hasText: "https://ready.example.test" }).waitFor();
+        await clickVisible(page, pub.getByRole("button", { name: "完成", exact: true }));
+      } finally { intentionalPublicNotReady.delete(page); await page.unroute(localHubRoute, publicHandler); }
       await pub.waitFor({ state: "hidden", timeout: 5_000 });
     });
   } finally {

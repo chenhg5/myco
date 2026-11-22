@@ -1,13 +1,14 @@
 import { clearAll, forgetHub, recall, remember } from "@/lib/memo";
 import { openHelp } from "@/app/Help";
 import { CopyButton } from "@/app/copy";
+import { TailscaleSetup } from "@/app/TailscaleSetup";
 import { IntroCard, introOf, noteDone } from "@/app/Onboard";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertTriangle, AudioLines, Bot, Check, Cloud, Globe, Info, Keyboard, Languages, Palette, Pencil, Plus, RotateCcw, ScrollText, Search, Server, Terminal, Users,
 } from "lucide-react";
 import {
-  appApi, type AppInfo, type CacheStats, type AppUpdate, type Hub, type HubOverview, type LocalState,
+  appApi, ApiError, type AppInfo, type CacheStats, type AppUpdate, type Hub, type HubOverview, type LocalState,
   type LocalTunnel, type StartLocalHubResult, type VoiceInfo, type VoiceTTSProvider, type TTSVoice, type ProxySetting, type ProxyInput,
 } from "@/appapi";
 import { ver } from "@/app/nodes";
@@ -895,20 +896,24 @@ export function PublicAccessDialog({ open, onOpenChange, local, name, onDone }: 
   const [result, setResult] = useState<StartLocalHubResult | null>(null);
 
   const cf = !!local?.tools?.cloudflared;
-  const ts = !!local?.tools?.tailscale;
+  const [detectedTS, setDetectedTS] = useState<boolean | null>(null);
+  const ts = detectedTS ?? !!local?.tools?.tailscale;
 
   useEffect(() => {
     if (!open) return;
     setChoice(0);
+    setDetectedTS(null);
     setHostname("");
     setBusy(false);
     setError(null);
     setResult(null);
-  }, [open, cf, ts]);
+  // Installing the tool refreshes cf/ts after success; that refresh must not
+  // reset the result panel while this same dialog is open.
+  }, [open]);
 
   // The one-click way gets cloudflared itself; the others need their tool.
   const disabled = (i: TunnelChoice) =>
-    i === 0 ? false : i === 1 ? !cf : !ts;
+    i === 1 ? !cf : false;
 
   // Opening can take a minute or two (Funnel's certificate, a tunnel's
   // DNS): say how long, and let it be cancelled.
@@ -940,10 +945,17 @@ export function PublicAccessDialog({ open, onOpenChange, local, name, onDone }: 
         ? { tunnel: "tailscale" as const, ...which }
         : { tunnel: "cloudflare" as const, ...which };
     try {
-      setResult(await appApi.startLocalHub(input, ctl.signal));
+      const response = await appApi.startLocalHub(input, ctl.signal);
+      if (ctl.signal.aborted || abort.current !== ctl) return;
+      const publicURL = typeof response.public_url === "string" ? response.public_url.trim() : "";
+      let valid = false;
+      try { const u = new URL(publicURL); valid = ["https:", "http:"].includes(u.protocol) && !!u.hostname && !u.username && !u.password && !u.hash; } catch { /* older backend can return an empty address */ }
+      if (!valid) throw new Error(L("尚未拿到有效的公网地址。本机工作区仍在运行，请稍后重试。", "No valid public address was returned. The local workspace is still running; try again shortly."));
+      setResult({ ...response, public_url: publicURL });
       onDone();
     } catch (e) {
-      if (!ctl.signal.aborted) setError(e);
+      if (!ctl.signal.aborted) setError(e instanceof ApiError && e.code === "tunnel_not_ready"
+        ? new Error(L("公网连接尚未就绪，本机和局域网使用不受影响。请稍后重试；如果持续失败，可查看本机工作区日志。", "Public access is not ready. Local and LAN access are unaffected. Try again shortly; if it keeps failing, check the local Hub log.")) : e);
     } finally {
       if (abort.current === ctl) {
         abort.current = null;
@@ -1020,7 +1032,7 @@ export function PublicAccessDialog({ open, onOpenChange, local, name, onDone }: 
                       onChange={() => setChoice(i as TunnelChoice)} />
                     <span className="pub-option-text">
                       <span className="t">{t.title}<em className="pub-badge">{i === 0 ? L("推荐", "Recommended") : L("地址固定", "Fixed address")}</em></span>
-                      <span className="d">{off || (i === 0 && !cf) ? t.missing : t.desc}</span>
+                      <span className="d">{off || (i === 0 && !cf) || (i === 2 && !ts) ? t.missing : t.desc}</span>
                       {i === 1 && on && (
                         <input className="app-input mono pub-domain" value={hostname} onChange={(e) => setHostname(e.target.value)}
                           placeholder="hub.example.com" aria-label={L("域名", "Domain")} autoFocus />
@@ -1032,7 +1044,16 @@ export function PublicAccessDialog({ open, onOpenChange, local, name, onDone }: 
               })}
             </div>
           )}
-          {error && choice === 2 && <div className="app-small-note">{L("Tailscale 这一步没成功，原因和办法在下面（来自 Tailscale）。常见的是：这个 macOS 用户下没开 Tailscale App 或没登录、还没在 Tailscale 后台为这台设备打开 Funnel。", "Tailscale's step failed; why and what to do are below (from Tailscale). Usually: the Tailscale app is not open and signed in for this macOS user, or Funnel is not on for this device in the Tailscale admin console.")}</div>}
+          {!busy && choice === 2 && <TailscaleSetup installed={ts} name={name}
+            localURL={(local?.hubs || (local?.hub ? [local.hub] : [])).find(h => (h.name || "") === (name || ""))?.local_url}
+            onError={setError}
+            onCheck={async () => {
+              const fresh = await appApi.local();
+              const found = !!fresh.tools?.tailscale;
+              setDetectedTS(found);
+              setError(found ? null : new Error(L("还没找到 Tailscale。请完成安装后重试；如果刚安装完成，重新打开 myco 再检测。", "Tailscale was not found yet. Finish installation and try again; if just installed, reopen myco and check again.")));
+            }} />}
+          {error && choice === 2 && <div className="app-small-note">{L("Tailscale 这一步没成功，原因和办法在下面（来自 Tailscale）。常见的是：这台电脑上的 Tailscale 没启动或没登录、还没在 Tailscale 后台为这台设备打开 Funnel。", "Tailscale's step failed; why and what to do are below (from Tailscale). Usually: Tailscale is not running and signed in on this computer, or Funnel is not on for this device in the Tailscale admin console.")}</div>}
           <ErrorText error={error} />
           <div className="app-modal-actions">
             <button type="button" className="app-btn" onClick={busy ? cancel : close}>{L("取消", "Cancel")}</button>
@@ -1040,7 +1061,7 @@ export function PublicAccessDialog({ open, onOpenChange, local, name, onDone }: 
               type="button"
               className="app-btn app-btn-primary"
               onClick={() => void submit()}
-              disabled={busy || disabled(choice) || (choice === 1 && !hostname.trim())}
+              disabled={busy || disabled(choice) || (choice === 2 && !ts) || (choice === 1 && !hostname.trim())}
             >
               {busy ? <><span className="app-spinner" />{L("正在开放…", "Opening…")}</> : <><Cloud />{L("开放", "Open")}</>}
             </button>

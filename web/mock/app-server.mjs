@@ -1896,6 +1896,11 @@ const server = http.createServer(async (req, res) => {
   // computer; put the demo ones back between widths and themes.
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "local" && parts.length === 3) {
     if (method !== "POST") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
+    const body = await readBody(req);
+    if (typeof body?.tailscale_installed === "boolean") {
+      local.tools.tailscale = body.tailscale_installed ? { path: "C:/Program Files/Tailscale/tailscale.exe" } : null;
+      return send(res, 200, { ok: true });
+    }
     local.hubs = JSON.parse(JSON.stringify(localHubsAtStart));
     local.hub = JSON.parse(JSON.stringify(local.hubs.find((h) => !h.name) || null));
     state.hubs = [

@@ -27,7 +27,12 @@ hub for older App clients, while `hubs` lists every locally configured hub as
 `{name, running, local_url, public_url, version, added}` (`name: ""` for the
 default). `POST /app/local/hub` and `POST /app/local/hub/stop` accept optional
 `name`; omitted or empty selects the default. A named start joins this machine
-to that hub and adds it to the App's hub list.
+to that hub and adds it to the App's hub list. For public tunnels, a successful
+start requires a nonempty valid HTTP(S) public URL and a successful public health
+check. The Windows App-managed path waits for the delayed tunnel URL, then
+checks that address; local readiness alone is insufficient. A missing or
+unreachable public address returns HTTP 503 `tunnel_not_ready` (`retryable: true`)
+while leaving the local Hub running. Local-only starts remain supported.
 
 Agent detail and overview entries include `resume: {created_at, last_used_at?, last_used_env?}` only when the caller manages that agent (or is the agent itself). The Hub stores only a hash of each recovery token, one per agent. Creating, revoking and using a link are audited without its token.
 

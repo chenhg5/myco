@@ -164,8 +164,11 @@ func (l *Local) cloudflaredPath() string {
 }
 
 func (l *Local) tailscalePath() string {
-	return l.find("tailscale", append(l.in(l.binDirs(), "tailscale"),
-		"/Applications/Tailscale.app/Contents/MacOS/Tailscale")...)
+	paths := append(l.in(l.binDirs(), "tailscale"), "/Applications/Tailscale.app/Contents/MacOS/Tailscale")
+	if runtime.GOOS == "windows" && l.Dirs == nil {
+		paths = append(paths, windowsTailscalePaths(os.Getenv)...)
+	}
+	return l.find("tailscale", paths...)
 }
 
 // loginShellPath is the PATH this user's login shell sets up, through
@@ -673,9 +676,17 @@ func (b *Backend) startLocal(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, err)
 			return
 		}
-		// Report what a service install would have (the public URL comes
-		// from the running hub).
-		out, _ = json.Marshal(map[string]any{"public_url": l.publicURLNowFor(ctx, in.Name), "reachable": true})
+		public := ""
+		if in.Tunnel != "none" {
+			readyCtx, readyCancel := context.WithTimeout(ctx, 30*time.Second)
+			public, err = waitPublicAccess(readyCtx, 250*time.Millisecond, func(c context.Context) string { return l.publicURLNowFor(c, in.Name) })
+			readyCancel()
+			if err != nil {
+				writePublicAccessNotReady(w, err)
+				return
+			}
+		}
+		out, _ = json.Marshal(map[string]any{"public_url": public, "reachable": true})
 	}
 	var up struct {
 		PublicURL     string `json:"public_url"`
@@ -687,12 +698,14 @@ func (b *Backend) startLocal(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, fmt.Errorf("unexpected output from myco hub up: %w", err))
 		return
 	}
+	up.PublicURL = strings.TrimSpace(up.PublicURL)
+	if in.Tunnel != "none" && (!validPublicURL(up.PublicURL) || !up.Reachable) {
+		writePublicAccessNotReady(w, errors.New("the public address is missing, invalid, or not reachable yet"))
+		return
+	}
 	res := StartLocalResult{PublicURL: up.PublicURL, JoinURL: up.JoinURL, Warnings: []string{}}
 	if in.Tunnel == "cloudflare" && in.Hostname == "" {
 		res.Warnings = append(res.Warnings, "这是 Cloudflare 临时地址：隧道重启后地址会变，已加入的机器和链接会失效。长期使用请换成自己的域名或 Tailscale。")
-	}
-	if in.Tunnel != "none" && !up.Reachable {
-		res.Warnings = append(res.Warnings, "公网地址暂时还访问不到（DNS 可能需要几分钟生效），本机使用不受影响。")
 	}
 	if up.JoinLinkError != "" {
 		res.Warnings = append(res.Warnings, "入网链接没有生成："+up.JoinLinkError)

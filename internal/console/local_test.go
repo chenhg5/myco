@@ -26,6 +26,7 @@ type fakeCLI struct {
 	failUp   bool
 	installs int
 	joins    int
+	upResult []byte
 }
 
 func (f *fakeCLI) run(_ context.Context, env []string, name string, args ...string) ([]byte, error) {
@@ -50,7 +51,10 @@ func (f *fakeCLI) run(_ context.Context, env []string, name string, args ...stri
 		}
 		os.MkdirAll(dir, 0o700)
 		os.WriteFile(filepath.Join(dir, "hub.env"), []byte("MYCO_ADMIN_TOKEN="+adminToken+"\nMYCO_HUB="+target.hubURL+"\n"), 0o600)
-		return []byte(`{"public_url":"https://abc.trycloudflare.com","reachable":false,"join_url":"https://abc.trycloudflare.com/j/myco_enroll_x"}`), nil
+		if f.upResult != nil {
+			return f.upResult, nil
+		}
+		return []byte(`{"public_url":"https://abc.trycloudflare.com","reachable":true,"join_url":"https://abc.trycloudflare.com/j/myco_enroll_x"}`), nil
 	case "console token":
 		if !slices.Contains(args, "--hub") || !slices.Contains(args, "test-mac-app") {
 			f.r.t.Errorf("console token create args: %v", args)
@@ -151,10 +155,24 @@ func TestLocalHub(t *testing.T) {
 	}
 	f.failUp = false
 
+	// CLI success is insufficient: old or broken CLIs may return an empty URL,
+	// and a URL that failed its public health check must not show success either.
+	for _, response := range []string{
+		`{"public_url":"","reachable":true}`,
+		`{"public_url":"   ","reachable":true}`,
+		`{"public_url":"not-a-url","reachable":true}`,
+		`{"public_url":"https://abc.trycloudflare.com","reachable":false}`,
+	} {
+		f.upResult = []byte(response)
+		if code, m, raw := r.do("POST", "/app/local/hub", map[string]string{"tunnel": "cloudflare"}); code != 503 || m["error"] != "tunnel_not_ready" || m["retryable"] != true {
+			t.Fatalf("false public success: %d %s", code, raw)
+		}
+	}
+	f.upResult = nil
 	var res console.StartLocalResult
 	code, _, raw := r.do("POST", "/app/local/hub", map[string]string{"tunnel": "cloudflare"})
 	if err := json.Unmarshal(raw, &res); err != nil || code != 201 || res.Hub.URL != r.hubURL || res.Hub.Name != "我的工作区" ||
-		res.PublicURL != "https://abc.trycloudflare.com" || res.JoinURL == "" || len(res.Warnings) != 2 {
+		res.PublicURL != "https://abc.trycloudflare.com" || res.JoinURL == "" || len(res.Warnings) != 1 {
 		t.Fatalf("start: %d %v %s", code, err, raw)
 	}
 	if r.secrets.m[res.Hub.ID] == "" {
