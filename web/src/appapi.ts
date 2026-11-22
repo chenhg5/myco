@@ -1,4 +1,4 @@
-import type { Page, PageChanges, PageOpen, PageRecord, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Backup, Backups, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, MCPServer, ToolSkill, ToolPlugin, SuperagentState, Approval, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
+import type { Page, PageChanges, PageOpen, PageRecord, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Backup, Backups, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, MCPServer, ToolSkill, ToolPlugin, SuperagentState, Approval, ActionGrant, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
 import { L } from "@/lib/i18n";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
@@ -1022,8 +1022,13 @@ export const appApi = {
   clearSuperagent: (hubId: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/superagent`),
   approvals: (hubId: string, status = "pending") =>
     request<{ approvals: Approval[] }>("GET", `app/hubs/${enc(hubId)}/approvals${status ? `?status=${enc(status)}` : ""}`),
-  decideApproval: (hubId: string, id: string, approve: boolean) =>
-    request<Approval>("POST", `app/hubs/${enc(hubId)}/approvals/${enc(id)}/${approve ? "approve" : "deny"}`, {}),
+  decideApproval: (hubId: string, id: string, approve: boolean, narrow?: { permissions?: string[]; ttl_seconds?: number }) =>
+    request<Approval>("POST", `app/hubs/${enc(hubId)}/approvals/${enc(id)}/${approve ? "approve" : "deny"}`, narrow || {}),
+  /** What agents may do on computers you decide for (v0.21.21 hubs). */
+  actionGrants: (hubId: string, state = "active") =>
+    request<{ grants: ActionGrant[] }>("GET", `app/hubs/${enc(hubId)}/action-grants${state ? `?state=${enc(state)}` : ""}`),
+  revokeActionGrant: (hubId: string, id: string) =>
+    request<ActionGrant>("POST", `app/hubs/${enc(hubId)}/action-grants/${enc(id)}/revoke`, {}),
   /** hubs from v0.21.1: figures over the last runs, a step's log, scores, two runs side by side */
   workflowStats: (hubId: string, ref: string, opts: { limit?: number; version?: number } = {}) => {
     const q = new URLSearchParams();

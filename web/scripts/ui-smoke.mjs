@@ -1658,6 +1658,34 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".sp-home").waitFor({ timeout: 10_000 });
     });
 
+    // An agent asks to act on one of your computers (agent actions,
+    // v0.21.21): the card says which computer and how, and can allow
+    // seeing only; what it may do then shows above its chat, revocable.
+    await step("agent 申请用电脑 · 只让它看 · 收回", async () => {
+      await page.locator(".sp-home .conv-detail").waitFor({ timeout: 10_000 });
+      const ask = await fetch(`http://${HOST}:${mockPort()}/app/mock/superagent-ask`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agent: "pm-codex", kind: "action_grant", reason: "看一下构建窗口卡在哪一步。" }),
+      });
+      if (!ask.ok) throw new Error(`申请用电脑失败：HTTP ${ask.status}`);
+      const card = page.locator(".sp-home [data-testid=approvals] .sa-approval", { hasText: "Studio Mac" });
+      await card.waitFor({ timeout: 25_000 });
+      const text = compactText(await card.innerText());
+      if (!text.includes("看并操作") || !text.includes("构建窗口")) throw new Error(`申请卡片应写明要看并操作哪台电脑、为什么，实际「${text}」`);
+      await settle(page, 200);
+      await shot(page, size, scheme, "action-grant-request");
+      await clickVisible(page, card.getByRole("button", { name: "只让它看", exact: true }));
+      await card.waitFor({ state: "hidden", timeout: 10_000 });
+      const grant = page.locator(".sp-home [data-testid=action-grants] .sa-grant");
+      await grant.waitFor({ timeout: 10_000 });
+      const g = compactText(await grant.innerText());
+      if (!g.includes("可以看 Studio Mac") || g.includes("操作")) throw new Error(`只让它看以后，应写「可以看 Studio Mac 的屏幕」，实际「${g}」`);
+      await settle(page, 200);
+      await shot(page, size, scheme, "action-grant-active");
+      await clickVisible(page, grant.getByRole("button", { name: "收回", exact: true }));
+      await grant.waitFor({ state: "hidden", timeout: 10_000 });
+    });
+
     // Projects in the sidebar go where you drag them, and stay there.
     if (!narrow) await step("边栏 · 拖动排序", async () => {
       await sidebar(page, true);
