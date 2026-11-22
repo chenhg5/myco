@@ -4101,7 +4101,7 @@ const server = http.createServer(async (req, res) => {
           if (!owns && mcpTools !== !!agent.run_settings?.mcp_tools) return fail(res, 403, "permission_denied", "只有这个 agent 的主人能修改 MCP 工具权限。");
         }
         const keptProvider = agent.run_settings?.provider;
-        const keptManual = agent.run_settings?.custom;
+        const keptManual = agent.run_settings?.provider_encrypted;
         agent.run_settings = {};
         if (body.provider !== undefined) {
           if (!rt.features?.includes("remote_provider")) return fail(res, 409, "unsupported", "this agent's runner cannot switch providers from the App; upgrade myco on its computer");
@@ -4114,7 +4114,7 @@ const server = http.createServer(async (req, res) => {
           } else return fail(res, 400, "invalid_argument", "unknown provider " + body.provider);
         } else if (keptProvider) {
           agent.run_settings.provider = keptProvider;
-          if (keptManual) agent.run_settings.custom = keptManual;
+          if (keptManual) agent.run_settings.provider_encrypted = keptManual;
         }
         if (access) agent.run_settings.access = access;
         if (mcpTools) agent.run_settings.mcp_tools = true;
@@ -4155,7 +4155,8 @@ const server = http.createServer(async (req, res) => {
         try { u = new URL(body?.manual?.base_url || ""); } catch { return fail(res, 400, "invalid_argument", "base_url must be an http(s) address"); }
         if (!body.manual.api_key) return fail(res, 400, "invalid_argument", "a key is required");
         if (u.username || u.password || u.search || u.hash) return fail(res, 400, "invalid_argument", "no credentials, query or fragment in base_url");
-        agent.run_settings = { ...(agent.run_settings || {}), provider: "env_file", custom: { base_url: body.manual.base_url, model: body.manual.model || undefined, has_key: true } };
+        // Sealed for the agent; its runner takes it before its next task.
+        agent.run_settings = { ...(agent.run_settings || {}), provider: "custom", provider_encrypted: { id: "pe_demo", from: "glenn", body: "(sealed)" } };
         rt.provider = u.host; rt.provider_host = u.host; rt.provider_source = "env_file";
         lastRunSettings = { hub: hub.id, agent: agent.name, body: { manual: { ...body.manual, api_key: "(sealed)" } } };
         return send(res, 200, agent);

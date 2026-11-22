@@ -69,7 +69,8 @@ type Runner struct {
 	// Provider pins the model provider the agent's CLI uses, read again
 	// before every run: "cc-switch:<id>" (see internal/provider). Empty =
 	// whatever the machine is set to.
-	Provider string `yaml:"provider,omitempty" json:"provider,omitempty"`
+	Provider        string `yaml:"provider,omitempty" json:"provider,omitempty"`
+	ProviderApplied string `yaml:"provider_applied,omitempty" json:"provider_applied,omitempty"`
 	// Model and Access are mapped to CLI flags by the harness.
 	Model  string `yaml:"model,omitempty" json:"model,omitempty"`
 	Access string `yaml:"access,omitempty" json:"access,omitempty"`

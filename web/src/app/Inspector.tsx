@@ -347,11 +347,12 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
   const olderRunner = elsewhere && owns && !!rt && !rt.features?.includes("remote_provider");
   const pending = remote && !!ag.run_settings?.provider_encrypted;
   const sealed = !!row.hub.e2e;
-  const chosen = remote ? ag.run_settings?.provider || "" : local?.provider || "";
-  const custom = remote
-    ? (ag.run_settings?.provider === "env_file" ? ag.run_settings.custom : undefined)
-    : local?.provider === "env_file" ? local.manual : undefined;
-  const hasKey = !!custom?.has_key;
+  // Remote: "custom" is a custom address kept private on that computer (the
+  // App shows it as the custom choice, without its address).
+  const remoteCustom = remote && ag.run_settings?.provider === "custom";
+  const chosen = remote ? (remoteCustom ? "env_file" : ag.run_settings?.provider || "") : local?.provider || "";
+  const custom = remote ? undefined : local?.provider === "env_file" ? local.manual : undefined;
+  const hasKey = !!custom?.has_key || remoteCustom;
   const start = async () => {
     setError(null);
     setChoice(chosen);
@@ -383,8 +384,8 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
       if (remote) {
         // Over the hub: a choice goes with its run settings (as they are);
         // a custom address through this App, which seals the key.
-        if ("manual" in body) await appApi.setRemoteProvider(row.hub.id, ag.name, body);
-        else await appApi.setRunSettings(row.hub.id, ag.name, { model: ag.run_settings?.model || "", effort: ag.run_settings?.effort || "", provider: body.provider });
+        if ("manual" in body) await appApi.setRemoteAgentProvider(row.hub.id, ag.name, body.manual);
+        else await appApi.setRunSettings(row.hub.id, ag.name, { provider: body.provider });
         await onRefresh();
       } else setLocal(await appApi.setAgentProvider(ag.name, row.hub.id, body));
       setSaved(note);
@@ -462,7 +463,9 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
             <span>
               <b>{L("自定义地址", "Custom address")}</b>
               <small>
-                {customOff
+                {remoteCustom && !customOff
+                  ? L("已设置：地址和密钥只存在它那台电脑上；重新填会换掉它。", "Set: its address and key stay on that computer; entering new ones replaces them.")
+                  : customOff
                   ? L("密钥不经过 hub：请在那台电脑上的 App 里填，或在那台电脑上用 myco runner provider set。工作区开了端到端加密时，这里也能填。", "The key does not go through the hub: enter it in the App on that computer, or run myco runner provider set there. With end-to-end encryption on, you can enter it here.")
                   : custom
                   ? [urlHost(custom.base_url), custom.model, codex && custom.wire_api ? (custom.wire_api === "chat" ? "Chat Completions" : "Responses") : ""].filter(Boolean).join(" · ")
@@ -518,7 +521,7 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
         )}
         <ErrorText error={error} />
         <div className="app-modal-actions">
-          {choice === "env_file" && custom && (
+          {choice === "env_file" && (custom || remoteCustom) && (
             <button type="button" className="app-btn app-provider-clear" disabled={busy} data-testid="provider-clear"
               onClick={() => void save({ provider: remote ? "clear" : "" }, remote
                 ? L("自定义地址和密钥已清除，改回跟随它那台电脑。", "The custom address and key are cleared; it follows its computer again.")

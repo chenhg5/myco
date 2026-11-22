@@ -3507,7 +3507,9 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "provider-remote-sealed");
       await clickVisible(page, dlg.locator("[data-testid=provider-save]"));
       await dlg.waitFor({ state: "hidden", timeout: 5_000 });
-      await page.waitForFunction(() => (document.querySelector(".ms [data-testid=provider-open]")?.textContent || "").includes("llm.example.org · claude-opus-5-5"), null, { timeout: 10_000 });
+      // Sent sealed; its computer takes it before its next task (said under the row).
+      await page.waitForFunction(() => (document.querySelector(".ms [data-testid=provider-open]")?.textContent || "").includes("llm.example.org"), null, { timeout: 10_000 });
+      await page.locator(".ms .app-kv-help", { hasText: "等它那台电脑收下" }).waitFor({ timeout: 10_000 });
       // Back as it was: cleared, encryption off.
       await clickVisible(page, page.locator(".ms [data-testid=provider-open]"));
       await dlg.waitFor({ timeout: 5_000 });

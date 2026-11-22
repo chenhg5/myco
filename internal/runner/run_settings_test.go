@@ -97,3 +97,44 @@ func TestRunAccessIsCappedByTheMachine(t *testing.T) {
 		}
 	}
 }
+
+func TestRemoteProviderAppliedBeforeInvocationEnvironment(t *testing.T) {
+	m := api.Message{ID: "provider-task", Type: "task", From: "owner", ThreadID: "provider-thread"}
+	selected := "cc-switch:chosen"
+	hub := &settingsHub{traceHub: &traceHub{fakeHub: newFakeHub(m)}, settings: &api.RunSettings{Provider: &selected}}
+	applied := false
+	h := fakeHarness{fn: func(req harness.Request) (harness.Result, error) {
+		if !applied {
+			t.Error("harness started before provider applied")
+		}
+		found := false
+		for _, kv := range req.Env {
+			if kv == "PROVIDER_READY=yes" {
+				found = true
+			}
+		}
+		if !found {
+			t.Error("environment was loaded before provider applied")
+		}
+		return harness.Result{Output: "done"}, nil
+	}}
+	r := New(hub, h, NewMemorySessions(), nil, Options{
+		ApplyProviderSettings: func(ctx context.Context, rs api.RunSettings) error {
+			if rs.Provider == nil || *rs.Provider != selected {
+				t.Error("provider selection not passed")
+			}
+			applied = true
+			return nil
+		},
+		EnvFunc: func() []string {
+			if applied {
+				return []string{"PROVIDER_READY=yes"}
+			}
+			return nil
+		},
+	}, quiet())
+	r.Handle(context.Background(), m)
+	if !applied {
+		t.Fatal("provider hook not called")
+	}
+}

@@ -891,12 +891,30 @@ func (c *Client) ReportMachine(ctx context.Context, r api.MachineReport) error {
 
 // ReportRuntime tells the hub the caller's CLI and model.
 func (c *Client) ReportRuntime(ctx context.Context, r api.Runtime) error {
+	if c.Sealer != nil && c.Sealer.ID != nil {
+		for _, f := range r.Features {
+			if f == "remote_provider" {
+				_ = c.RegisterKeys(ctx)
+				break
+			}
+		}
+	}
 	err := c.do(ctx, http.MethodPut, "/v1/me/runtime", nil, r, nil)
 	// Older hubs reject unknown JSON fields. Retry only that specific schema
 	// rejection, leaving authentication and other validation failures intact.
 	var apiErr *Error
-	if r.ProviderHost != "" && errors.As(err, &apiErr) && apiErr.Status == http.StatusBadRequest && strings.Contains(apiErr.Message, `unknown field "provider_host"`) {
-		r.ProviderHost = ""
+	if (r.ProviderHost != "" || r.Providers != nil) && errors.As(err, &apiErr) && apiErr.Status == http.StatusBadRequest && (strings.Contains(apiErr.Message, `unknown field "provider_host"`) || strings.Contains(apiErr.Message, `unknown field "providers"`)) {
+		if strings.Contains(apiErr.Message, `unknown field "provider_host"`) {
+			r.ProviderHost = ""
+		}
+		r.Providers = nil
+		features := make([]string, 0, len(r.Features))
+		for _, f := range r.Features {
+			if f != "remote_provider" {
+				features = append(features, f)
+			}
+		}
+		r.Features = features
 		return c.do(ctx, http.MethodPut, "/v1/me/runtime", nil, r, nil)
 	}
 	return err

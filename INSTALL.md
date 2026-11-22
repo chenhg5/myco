@@ -1283,3 +1283,22 @@ computer in a private env file and are not sent to the Hub. Each custom update
 requires the key again; reading the settings returns only whether a key exists.
 Provider changes apply to the next message. Explicit model choices in the App's
 run settings still take precedence over a provider's default model.
+
+#### Changing a provider on another computer
+
+With updated runners and Hub, an agent's owner can choose **Follow this computer**,
+clear a custom address, or select one of the channels advertised by that
+computer's cc-switch installation from another App. The runner applies the change
+before its next task and reports the provider actually in use. Other people,
+including another Hub administrator, cannot change an owned agent's provider.
+Old runners or Hubs retain read-only remote controls.
+
+Entering a custom address and key remotely additionally requires an **end-to-end
+encrypted workspace** and the target runner's encryption key. The sending App
+seals the configuration for that agent before it reaches the Hub. The target
+computer decrypts it into a private local file and acknowledges delivery, which
+removes the pending ciphertext from run settings. Until then the App can show
+that the change is waiting for the runner; no plaintext key is stored on the Hub
+or sent through ordinary messages. When E2E is off, enter the custom settings in
+the App or CLI on the target computer instead. You can still use remote
+cc-switch selection without E2E because it carries only a channel reference.

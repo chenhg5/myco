@@ -44,7 +44,8 @@ type Options struct {
 	EnvFunc func() []string
 	// Provider, when set, is called before every invocation and returns the
 	// pinned model provider (nil = the machine's own setting).
-	Provider func() *harness.ProviderSettings
+	Provider              func() *harness.ProviderSettings
+	ApplyProviderSettings func(context.Context, api.RunSettings) error
 	// OnRunSettings hears the model, effort and access each run is started
 	// with (the agent's run settings from the hub; "" = the machine's own).
 	OnRunSettings func(model, effort, access string)
@@ -1003,6 +1004,13 @@ func (r *Runner) runSettings(ctx context.Context, log *slog.Logger) api.RunSetti
 	r.mu.Lock()
 	rs := r.settings
 	r.mu.Unlock()
+	if r.opts.ApplyProviderSettings != nil {
+		applyCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		if err := r.opts.ApplyProviderSettings(applyCtx, rs); err != nil {
+			log.Warn("provider setting not applied; keeping the local configuration")
+		}
+		cancel()
+	}
 	if a, err := harness.ParseAccess(rs.Access); err != nil {
 		rs.Access = ""
 	} else if limit := r.accessLimit(); a.Rank() > limit.Rank() {

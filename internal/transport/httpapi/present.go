@@ -70,8 +70,15 @@ func (s *Server) agentDTO(a *domain.Agent) api.Agent {
 			}
 		}
 	}
+	if out.Runtime != nil {
+		_ = json.Unmarshal([]byte(a.Runtime.Providers), &out.Runtime.Providers)
+	}
 	if rs := a.RunSettings; rs != (domain.RunSettings{}) {
-		out.RunSettings = &api.RunSettings{Model: rs.Model, Effort: rs.Effort, Access: rs.Access, MCPTools: &rs.MCPTools}
+		out.RunSettings = &api.RunSettings{Model: rs.Model, Effort: rs.Effort, Access: rs.Access, MCPTools: &rs.MCPTools, Provider: rs.Provider}
+		if rs.ProviderEncrypted != nil {
+			e := rs.ProviderEncrypted
+			out.RunSettings.ProviderEncrypted = &api.EncryptedProvider{ID: e.ID, From: e.From, Body: e.Body}
+		}
 	}
 	if a.Private() {
 		out.Visibility = string(domain.VisibilityPrivate)

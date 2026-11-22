@@ -26,23 +26,22 @@ export interface Quota {
   windows: QuotaWindow[];
 }
 /** What the node runs unless told otherwise; absent on nodes reported by old runners. */
+export interface EncryptedProvider { id: string; from: string; body: string }
+export interface ProviderOption { ref: string; name: string; host?: string; model?: string }
 export interface RunSettings {
+  /** the provider chosen from the App for an agent on another computer. Absent: unmanaged by
+   *  the hub; "": follow its computer; "cc-switch:<id>"; "custom": a custom address, private to
+   *  that computer (its key was sealed for the agent) */
+  provider?: string;
+  /** present while a sealed key waits for its runner to take it (it applies before its next task) */
+  provider_encrypted?: EncryptedProvider;
   model?: string;
   effort?: string;
   /** Agent owner's choice; omitted on old hubs means disabled. */
   mcp_tools?: boolean;
   /** permission level chosen by the node's owner ("" follows the machine); only its owner may change it */
   access?: RuntimeAccess | "";
-  /** the provider chosen from the App for an agent on another computer ("" or absent: follow it;
-   *  "cc-switch:<id>"; "env_file": a custom address, whose key was sealed for the agent) */
-  provider?: string;
-  /** that custom address (taken by its runner, or waiting to be), never its key */
-  custom?: { base_url: string; model?: string; wire_api?: "chat" | "responses"; has_key?: boolean };
-  /** present while a sealed key waits for its runner to take it (it applies before its next task) */
-  provider_encrypted?: { id: string; from?: string; body?: string };
 }
-/** A provider the agent's computer offers (its runner reports them, never a key). */
-export interface RuntimeProvider { ref: string; name: string; host?: string; model?: string }
 /** What the node actually runs; absent on nodes reported by old runners. */
 /** A model a CLI offers: the id --model takes, a display name, the efforts it supports. */
 export interface RuntimeModel { id: string; name?: string; efforts?: string[] }
@@ -64,13 +63,13 @@ export interface Runtime {
   provider?: string;
   /** where its requests go, host:port only (runners that report it) */
   provider_host?: string;
+  /** the providers its computer offers (cc-switch, never a key), when its runner can switch them remotely */
+  providers?: ProviderOption[];
   provider_source?: ProviderSource;
   /** plan usage, when the CLI writes it on this computer */
   quota?: Quota;
   /** what its runner supports beyond the basics; absent from older runners ("remote_provider": its provider can be switched from the App) */
   features?: string[];
-  /** the providers its computer offers (cc-switch), when its runner can switch them remotely */
-  providers?: RuntimeProvider[];
   /** why its runner went offline, said as it stopped: "stopped" (absent from older runners and while it runs) */
   away?: "stopped" | string;
   /** where its runner runs when that explains going offline: "wsl" */

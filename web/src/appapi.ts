@@ -750,12 +750,8 @@ export const appApi = {
     request<{ ok: boolean }>("DELETE", `app/hubs/${enc(hubId)}/agents/${enc(name)}/resume`),
   /** The model and effort this node runs with; "" follows the computer's
    *  setting. Hubs before the feature answer not_found. */
-  setRunSettings: (hubId: string, name: string, input: { model: string; effort: string; access?: RuntimeAccess | ""; mcp_tools?: boolean; provider?: string }) =>
+  setRunSettings: (hubId: string, name: string, input: { model?: string; effort?: string; access?: RuntimeAccess | ""; mcp_tools?: boolean; provider?: string }) =>
     request<Agent>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/run-settings`, input),
-  /** A custom address for an agent on another computer: this App seals the key for that agent
-   *  (end-to-end encryption on), so the hub only carries it sealed. */
-  setRemoteProvider: (hubId: string, name: string, body: { manual: ManualProvider }) =>
-    request<Agent>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/provider`, body),
   // Projects
   projects: (hubId: string) => request<{ projects: Project[] }>("GET", `app/hubs/${enc(hubId)}/projects`),
   project: (hubId: string, name: string, bodies = false) =>
@@ -906,6 +902,8 @@ export const appApi = {
   /** A node's provider setting, if the node runs on this computer. */
   agentProvider: (name: string, hubId: string) =>
     request<AgentProvider>("GET", `app/local/agents/${enc(name)}/provider?hub_id=${enc(hubId)}`),
+  setRemoteAgentProvider: (hubId: string, name: string, manual: ManualProvider) =>
+    request<Agent>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/provider`, { manual }),
   setAgentProvider: (name: string, hubId: string, body: { provider?: string; manual?: ManualProvider }) =>
     request<AgentProvider>("PUT", `app/local/agents/${enc(name)}/provider?hub_id=${enc(hubId)}`, body),
   /** Starts this computer's runner service, or restarts it when running. */

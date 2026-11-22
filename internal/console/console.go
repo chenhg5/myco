@@ -380,13 +380,14 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	}))
+	m.HandleFunc("PUT /app/hubs/{id}/agents/{name}/provider", b.withHub(b.putRemoteAgentProvider))
 	m.HandleFunc("PUT /app/hubs/{id}/agents/{name}/run-settings", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
-		var in api.RunSettings
+		var in api.RunSettingsPatch
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			writeErr(w, err)
 			return
 		}
-		a, err := c.SetRunSettings(r.Context(), r.PathValue("name"), in)
+		a, err := c.PatchRunSettings(r.Context(), r.PathValue("name"), in)
 		if err != nil {
 			writeErr(w, err)
 			return
