@@ -174,7 +174,7 @@ Retrying with the same --key returns the first job instead of running it twice. 
 fails with outcome_unknown, observe again before trying anything else.`,
 		Examples: []string{
 			`myco action run --grant agr_abc123 --action remote.desktop.observe --save screen.jpg`,
-			`myco action run --grant agr_abc123 --action remote.desktop.input --args '{"frame_id":"f1","events":[{"type":"text","text":"hello"}]}'`,
+			`myco action run --grant agr_abc123 --action remote.desktop.input --args '{"frame_id":"f1","events":[{"kind":"text","text":"hello"}]}'`,
 		},
 		Flags: []Flag{
 			{Name: "grant", Kind: String, Required: true, Help: "The grant (agr_...)"},

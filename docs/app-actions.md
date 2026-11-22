@@ -8,10 +8,12 @@ Applications have two ways to collaborate with an agent:
   provider, such as observing a desktop. These need framework grants and jobs.
 
 The initial action SDK is in `templates/src/_lib/actions.ts` and
-`actions-http.ts`. The Hub/CLI implement grants, jobs and private artifacts;
-the trusted App worker and native component are separate delivery stages.
-Adding these source libraries does **not** enable agent remote control in
-existing installations. No `myco.actions` browser feature is
+`actions-http.ts`. The source includes Hub grants/jobs, private artifacts, a
+trusted App worker and native component RPCs. A desktop provider is available
+only with a published compatible component installed, a registered workspace
+machine and the desktop App running. Older components do not advertise agent
+actions. Adding these source libraries does **not** enable agent remote control
+in existing installations. No `myco.actions` browser feature is
 advertised. The existing `myco.os`, `myco.net` and `myco.remote` page bridges are
 not agent tools.
 
@@ -79,7 +81,7 @@ Once the owner has approved a view-and-control grant and the installed provider
 advertises version 1 of both actions:
 
 ```ts
-import { RemoteDesktopActions, desktopClick } from "../remote-desktop/agent-actions";
+import { RemoteDesktopActions, desktopClick, desktopText, desktopShortcut } from "../remote-desktop/agent-actions";
 
 const desktop = new RemoteDesktopActions(session);
 const before = await (await desktop.observe("inspect-before-1")).wait();
@@ -91,6 +93,21 @@ const after = await (await desktop.observe("inspect-after-1")).wait();
 // Inspect the new frame before deciding whether the intended UI action worked.
 await desktop.end();
 ```
+
+The remote application's `desktopText("Hello\n第二行")` turns line breaks and
+tabs into physical key events alongside Unicode text. `desktopShortcut(["MetaLeft",
+"KeyS"])` creates balanced key-down and reverse key-up events (use `ControlLeft`
+for that shortcut on Windows). Pass these arrays to `desktop.input()` after
+observing the intended target. They do not use the clipboard. Oversized text,
+invalid keys and batches exceeding 64 events fail before dispatch. Keep each
+shortcut or drag in one batch: the native provider releases held input after
+every batch. These helpers belong to the remote application, not the generic SDK.
+
+Agents using the CLI should read the [Remote Desktop agent guide](../templates/src/remote-desktop/public/agent.md),
+which documents discovery, screenshot files, normalized coordinates, `--key`,
+input events and stopping. `myco action run` prints `{job, saved}`; the frame
+is `job.result` and `saved` contains local image paths. Inspect `job.state` and
+`job.error` before treating a successful CLI invocation as a successful action.
 
 Input references its observation's frame ID, not arbitrary native coordinates.
 The host must reject stale or resized frames and batches outside the grant.
@@ -109,7 +126,11 @@ been applied. Observe before deciding what to do next.
 
 `task.wait({signal, onUpdate})` observes state changes. Aborting stops waiting;
 it does not undo native input or imply that the job stopped. Use `task.cancel()`
-to request cancellation. Terminal results stay terminal. Errors expose `code`,
+to request cancellation. A running job with `cancel_requested` is not yet
+terminal; updates include changes to that flag. Terminal results stay terminal.
+Cancelled jobs preserve the host's error, such as `outcome_unknown` with its
+`applied` count, or `grant_ended` after revocation, rather than erasing that
+diagnostic. Errors expose `code`,
 `retryable` and, for partial native execution, `applied` where known.
 
 The first protocol uses job state and results with HTTP long polling; it does

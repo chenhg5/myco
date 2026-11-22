@@ -5,10 +5,10 @@ import { actionModule } from './action-test-modules.mjs';
 
 const { ActionClient, ActionError } = await import(await actionModule('_lib/actions'));
 const { ActionHTTPTransport } = await import(await actionModule('_lib/actions-http'));
-const { RemoteDesktopActions, desktopClick, desktopPoint, validateDesktopInput } = await import(await actionModule('remote-desktop/agent-actions'));
+const { RemoteDesktopActions, desktopClick, desktopPoint, desktopText, desktopShortcut, validateDesktopInput } = await import(await actionModule('remote-desktop/agent-actions'));
 const future = () => new Date(Date.now() + 60_000).toISOString();
 const grant = { id: 'g_1', agent: 'agent_1', owner: 'owner_1', target: { kind: 'machine', id: 'machine_1' }, permissions: ['remote.desktop.view'], approval_id: 'a_1', state: 'active', created_at: new Date().toISOString(), expires_at: future() };
-const frame = { frame_id: 'frame_1', captured_at: new Date().toISOString(), display_id: 'display_1', width: 1440, height: 900, artifact: { id: 'art_1', media_type: 'image/jpeg', bytes: 3, expires_at: future() } };
+const frame = { frame_id: 'frame_1', captured_at: new Date().toISOString(), display_id: 'main', width: 1440, height: 900, artifact: { id: 'art_1', media_type: 'image/jpeg', bytes: 3, expires_at: future() } };
 const descriptor = name => ({ name: `remote.desktop.${name}`, version: 1, title: name, permission: name === 'input' ? 'remote.desktop.control' : 'remote.desktop.view', input_schema: {}, output_schema: {} });
 
 const seen = [], jobs = new Map(), keys = new Map();
@@ -99,17 +99,37 @@ const oldPoll = raced.refresh();
 await raced.cancel();
 finishPoll(); await oldPoll;
 assert.equal(raced.job.state, 'cancelled', 'late polling response cannot reopen a cancelled job');
+const interrupted = await controlled.observe('interrupted-input');
+let poll = 0;
+pollHook = id => ({ ...jobs.get(id), state: ++poll < 3 ? 'running' : 'cancelled', cancel_requested: poll >= 2,
+  ...(poll >= 3 ? { error: { code: 'outcome_unknown', message: 'Some input was applied before cancellation', retryable: false, applied: 1 } } : {}) });
+const statuses = [];
+await assert.rejects(() => interrupted.wait({ interval_ms: 10, onUpdate: j => statuses.push(`${j.state}:${!!j.cancel_requested}`) }), { code: 'outcome_unknown', applied: 1 });
+assert.deepEqual(statuses, ['queued:false', 'running:false', 'running:true', 'cancelled:true']);
 pollHook = undefined;
 await controlled.end();
 await assert.rejects(async () => controlled.observe('ended'), { code: 'permission_denied' });
 console.log('PASS SDK lifecycle: pending/expiry/revoke/end, permission isolation, dedup keys, native failure, cancellation, job binding');
 
 validateDesktopInput([{ kind: 'text', text: '你好🙂' }, { kind: 'key', code: 'Enter', down: true }, { kind: 'key', code: 'Enter', down: false }]);
+assert.deepEqual(desktopText('你好🙂\r\n第二行\t完'), [
+  { kind: 'text', text: '你好🙂' }, { kind: 'key', code: 'Enter', down: true }, { kind: 'key', code: 'Enter', down: false },
+  { kind: 'text', text: '第二行' }, { kind: 'key', code: 'Tab', down: true }, { kind: 'key', code: 'Tab', down: false }, { kind: 'text', text: '完' },
+]);
+assert.deepEqual(desktopShortcut(['MetaLeft', 'KeyS']), [
+  { kind: 'key', code: 'MetaLeft', down: true }, { kind: 'key', code: 'KeyS', down: true },
+  { kind: 'key', code: 'KeyS', down: false }, { kind: 'key', code: 'MetaLeft', down: false },
+]);
+for (const text of ['', 'x\0', '\ud800', '🙂'.repeat(257), '\n'.repeat(33)]) assert.throws(() => desktopText(text), { code: 'invalid_argument' });
+assert.equal(desktopText('🙂'.repeat(256))[0].text.length, 512);
+assert.equal(desktopText('\n'.repeat(32)).length, 64);
+for (const codes of [[], ['KeyA', 'KeyA'], ['not-a-key'], Array(17).fill('KeyA')]) assert.throws(() => desktopShortcut(codes), { code: 'invalid_argument' });
 for (const events of [[], Array(65).fill({ kind: 'release' }), [{ kind: 'move', x: NaN, y: .5 }], [{ kind: 'button', x: .5, y: .5, button: 0, down: true, clicks: 4 }], [{ kind: 'text', text: 'valid' }, { kind: 'text', text: 'bad\n' }], [{ kind: 'text', text: '\ud800' }], [{ kind: 'text', text: '🙂'.repeat(257) }], [{ kind: 'key', code: 'arbitrary', down: true }], [{ kind: 'key', code: 'Enter', down: 1 }], [{ kind: 'scroll', delta: Infinity }], [{ kind: 'exec', shell: 'ignored' }]]) assert.throws(() => validateDesktopInput(events), { code: 'invalid_argument' });
 assert.throws(() => desktopPoint(frame, 1440, 0), { code: 'invalid_argument' });
 assert.deepEqual(desktopPoint(frame, 720, 450), { x: .5, y: .5 });
 assert.throws(() => desktopPoint({ width: 0, height: 0 }, 0, 0), { code: 'invalid_argument' });
 assert.throws(() => controlled.observe('bad-size', { max_width: 99999 }), { code: 'invalid_argument' });
+assert.throws(() => controlled.observe('second-display', { display_id: 'other' }), { code: 'invalid_argument' });
 console.log('PASS remote adapter: image coordinates, complete-batch validation, Unicode, text/key/scroll/batch limits');
 
 const requests = [];
