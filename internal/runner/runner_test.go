@@ -337,3 +337,86 @@ func TestSpawnedSessionIsNotBusy(t *testing.T) {
 		t.Fatal("an unmarked recent write should still count as someone else's")
 	}
 }
+
+// countingHub counts GetMessage calls (each one is a check-in with the Hub).
+type countingHub struct {
+	*fakeHub
+	mu   sync.Mutex
+	gets int
+}
+
+func (h *countingHub) GetMessage(ctx context.Context, id string) (*api.Message, error) {
+	h.mu.Lock()
+	h.gets++
+	h.mu.Unlock()
+	return h.fakeHub.GetMessage(ctx, id)
+}
+
+func TestWaitingForASlotChecksInAndSkipsClosedTasks(t *testing.T) {
+	hub := &countingHub{fakeHub: newFakeHub(api.Message{ID: "t1", Type: "task", From: "alice", ThreadID: "th1", Body: "hi"})}
+	slots := make(chan struct{}, 1)
+	slots <- struct{}{} // another agent's run holds the only slot
+	ran := make(chan struct{}, 1)
+	h := fakeHarness{fn: func(harness.Request) (harness.Result, error) {
+		ran <- struct{}{}
+		return harness.Result{Output: "ok"}, nil
+	}}
+	r := New(hub, h, NewMemorySessions(), nil, Options{Self: "me", Once: true, Slots: slots, SlotTouch: 10 * time.Millisecond}, quiet())
+	done := make(chan error, 1)
+	go func() { done <- r.Run(context.Background()) }()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		hub.mu.Lock()
+		n := hub.gets
+		hub.mu.Unlock()
+		if n >= 3 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("a task waiting for a slot should check in with the hub, got %d calls", n)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	select {
+	case <-ran:
+		t.Fatal("ran without a free slot")
+	default:
+	}
+	// Its sender stops it while it waits: it is not run, and the slot stays
+	// with whoever holds it.
+	_ = hub.set("t1", "failed")
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("a task closed while waiting should be dropped")
+	}
+	select {
+	case <-ran:
+		t.Fatal("a closed task ran")
+	default:
+	}
+	if len(slots) != 1 {
+		t.Fatalf("slot count changed: %d", len(slots))
+	}
+}
+
+func TestWaitingTaskRunsWhenASlotFrees(t *testing.T) {
+	hub := newFakeHub(api.Message{ID: "t1", Type: "task", From: "alice", ThreadID: "th1", Body: "hi"})
+	slots := make(chan struct{}, 1)
+	slots <- struct{}{}
+	h := fakeHarness{fn: func(harness.Request) (harness.Result, error) { return harness.Result{Output: "ok"}, nil }}
+	r := New(hub, h, NewMemorySessions(), nil, Options{Self: "me", Once: true, Slots: slots, SlotTouch: 10 * time.Millisecond}, quiet())
+	go func() { time.Sleep(50 * time.Millisecond); <-slots }()
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if hub.replies["t1"] != "ok" {
+		t.Fatalf("task should run once a slot frees: %q", hub.replies["t1"])
+	}
+	if len(slots) != 0 {
+		t.Fatalf("slot not given back: %d", len(slots))
+	}
+}
