@@ -9537,9 +9537,10 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
 /* Its panel: where the background goes, and the tones as swatches. */
 .focus-bg { position: relative; }
 .focus-bg-pop {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
+  position: fixed;
+  top: 48px;
+  right: 12px;
+  z-index: 60;
   width: 312px;
   padding: 12px;
   border-radius: 12px;
@@ -9569,6 +9570,11 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
 .focus-bg-tile:focus-visible .focus-bg-sw { outline: 2px solid var(--focus); outline-offset: 2px; }
 .focus-bg-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; color: var(--muted); }
 .focus-bg-tile.is-on .focus-bg-name { color: var(--fg); }
+/* 自定义: a rainbow until you pick a colour; the picker is the system's own. */
+.focus-bg-tile { position: relative; }
+.focus-bg-tile.is-pick .focus-bg-sw { background: conic-gradient(from 200deg, #f2b6b6, #f2dfa6, #b8e2b4, #a9d4ef, #c9b5ef, #f2b6b6); color: rgba(20, 20, 25, 0.7); }
+.focus-bg-input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: default; }
+.focus-bg-hint { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 10px 0 0; font-size: 11.5px; color: var(--muted); }
 /* Just the icon, quiet, at the top right; pointed at, it says what it
    does and its key. */
 .focus-exit {

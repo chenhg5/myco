@@ -4652,6 +4652,26 @@ async function runMatrix(browser, size, scheme) {
       await pop.waitFor({ state: "detached", timeout: 5_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "focus-bg-dots");
+      // A colour of your own (the system's picker): it applies to the theme
+      // you are in; one the words cannot be read on says so, with a way out.
+      await clickVisible(page, page.locator(".focus-tone"));
+      await pop.getByRole("radio", { name: "整个页面" }).click();
+      const picker = pop.locator("input[type=color]");
+      const good = scheme === "dark" ? "#24323a" : "#fbe9d0";
+      await picker.fill(good);
+      await page.locator(".app-shell[data-focus-bg=custom]").waitFor({ timeout: 5_000 });
+      const want = `rgb(${[1, 3, 5].map((i) => parseInt(good.slice(i, i + 2), 16)).join(", ")})`;
+      if ((await colourOf(".app-main")) !== want) throw new Error(`自定义颜色应成为背景：${await colourOf(".app-main")}，应为 ${want}`);
+      if (await pop.locator(".focus-bg-hint").count()) throw new Error("能看清的颜色不该提示");
+      await picker.fill(scheme === "dark" ? "#f0f0f0" : "#202020");
+      await pop.locator(".focus-bg-hint").waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "focus-bg-custom-hint");
+      await pop.locator(".focus-bg-hint").getByRole("button", { name: "改成只改外面" }).click();
+      await page.locator(".app-shell[data-focus-scope=outside]").waitFor({ timeout: 5_000 });
+      await picker.fill(good);
+      await page.keyboard.press("Escape");
+      await pop.waitFor({ state: "detached", timeout: 5_000 });
       // Back to how it was, for the steps after.
       await clickVisible(page, page.locator(".focus-tone"));
       await pop.getByRole("radio", { name: "整个页面" }).click();
