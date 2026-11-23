@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { appApi } from "@/appapi";
-import { MessageContent } from "@/app/Markdown";
+import { MessageContent, type InlineFiles } from "@/app/Markdown";
 import { L, lang } from "@/lib/i18n";
 
 /*
@@ -106,7 +106,7 @@ function failure(e: unknown): string {
 
 /** What an agent wrote, translated when asked or when automatic and in
  *  another language; a line under it switches to the original and back. */
-export function TranslatableBody({ id, body }: { id: string; body: string }) {
+export function TranslatableBody({ id, body, files }: { id: string; body: string; files?: InlineFiles }) {
   const autoOn = useAutoTranslate();
   const isReady = useTranslateReady();
   const choice = useChoice(id);
@@ -120,10 +120,10 @@ export function TranslatableBody({ id, body }: { id: string; body: string }) {
     translated(body, to).then((text) => live && setSt({ text }), (e) => live && setSt({ error: failure(e) }));
     return () => { live = false; };
   }, [want, body, to]);
-  if (!want) return <MessageContent body={body} foldId={id} />;
+  if (!want) return <MessageContent body={body} foldId={id} files={files} />;
   return (
     <>
-      <MessageContent body={st.text ?? body} foldId={id} />
+      <MessageContent body={st.text ?? body} foldId={id} files={files} />
       <div className="conv-translated">
         {st.error ? <span className="is-error">{st.error}</span>
           : st.text === undefined ? <span>{L("正在翻译…", "Translating…")}</span>

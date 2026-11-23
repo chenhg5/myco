@@ -4576,6 +4576,60 @@ async function runMatrix(browser, size, scheme) {
       if (narrow) await sidebar(page, false);
     });
 
+    // A reply with more than words: a diagram (```mermaid) drawn, code in
+    // colour, one diagram that does not parse showing why and its source,
+    // pictures placed in the text side by side (and not listed again below).
+    await step("消息 · 图、代码和插图", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      if (narrow) await sidebar(page, false);
+      await noRound(page);
+      const conv = page.locator(".conv-detail:visible").last();
+      await conv.locator(".conv-compose-input").fill("画一张架构图");
+      await conv.locator(".conv-compose-input").press("Enter");
+      const msg = conv.locator(".conv-msg", { has: page.locator(".md-mermaid") }).last();
+      await msg.locator(".md-mermaid[data-state=drawn] svg").first().waitFor({ timeout: 30_000 });
+      const bad = msg.locator(".md-mermaid[data-state=error]");
+      await bad.waitFor({ timeout: 15_000 });
+      if (!(await bad.locator(".md-mermaid-why").innerText()).includes("没画出来")) throw new Error("画不出来的图应说明原因");
+      if (!(await bad.locator(".md-code").isVisible())) throw new Error("画不出来的图应直接显示源码");
+      await msg.locator("code.hljs .hljs-keyword").first().waitFor({ timeout: 10_000 });
+      // (a long reply starts folded: opened to see it all)
+      if (await msg.locator(".md-fold-body.is-collapsed").count()) await msg.locator(".md-fold-btn").click();
+      const gallery = msg.locator(".md-gallery:not(.is-captioned) img");
+      if ((await gallery.count()) !== 2) throw new Error(`正文里应有两张并排的图，实际 ${await gallery.count()}`);
+      // A list whose items start with a picture: rows, picture on the left.
+      if ((await msg.locator("li.md-media").count()) !== 2) throw new Error("以图片开头的列表项应排成左图右文");
+      const row = await msg.locator("li.md-media").first().evaluate((li) => { const i = li.querySelector("img").getBoundingClientRect(); const t = li.querySelector("strong").getBoundingClientRect(); return { img: i.right, text: t.left, top: Math.abs(i.top - t.top) }; });
+      if (row.text < row.img || row.top > 12) throw new Error(`左图右文的排版不对：${JSON.stringify(row)}`);
+      // Titled pictures side by side: each with its name and line under it.
+      const figs = msg.locator(".md-gallery.is-captioned figure");
+      if ((await figs.count()) !== 3) throw new Error(`带说明的图片组应有三张，实际 ${await figs.count()}`);
+      if ((await figs.nth(1).locator("figcaption").innerText()).replace(/\s+/g, " ").trim() !== "棕色香菇 自然、食物") throw new Error("图片下面应显示名字和说明");
+      await page.waitForFunction(() => [...document.querySelectorAll(".md-gallery img")].every((i) => i.complete && i.naturalWidth > 0), null, { timeout: 10_000 });
+      await msg.locator(".md-gallery.is-captioned").evaluate((el) => el.scrollIntoView({ block: "center" }));
+      await settle(page, 300);
+      await shot(page, size, scheme, "message-rich-cards");
+      // The two placed in the text are not listed again; the log still is.
+      if (await msg.locator(".conv-shots").count()) throw new Error("正文里已经显示的图不该在下面再列一次");
+      await msg.locator(".conv-attach-list", { hasText: "build.log" }).waitFor({ timeout: 5_000 });
+      await msg.locator(".md-mermaid").first().evaluate((el) => el.scrollIntoView({ block: "start" }));
+      await settle(page, 300);
+      await shot(page, size, scheme, "message-rich");
+      // The diagram opens large; so do the pictures.
+      await msg.locator(".md-mermaid[data-state=drawn] .md-mermaid-pic").first().click();
+      const lb = page.locator(".lightbox");
+      await lb.waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "message-rich-diagram");
+      await page.keyboard.press("Escape");
+      await lb.waitFor({ state: "detached", timeout: 5_000 });
+      await gallery.nth(1).click();
+      await lb.waitFor({ timeout: 5_000 });
+      await page.keyboard.press("Escape");
+      await lb.waitFor({ state: "detached", timeout: 5_000 });
+      if (narrow) await sidebar(page, false);
+    });
+
     // 专注模式: ⋯ › 专注模式 (or ⌘⇧F) leaves one chat alone in the middle;
     // ⌃Tab still switches; Esc puts everything back.
     await step("专注模式", async () => {

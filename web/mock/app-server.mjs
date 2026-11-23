@@ -983,6 +983,58 @@ function demoNotes(n) {
   ].join("\n");
 }
 
+function richReply() {
+  const n = (state.counter += 1);
+  return {
+    body: [
+      "## 架构",
+      "",
+      "```mermaid",
+      "flowchart LR",
+      "  A[App] -->|HTTP| H[Hub]",
+      "  R[Runner] -->|long poll| H",
+      "  H --> D[(SQLite)]",
+      "  R --> C[Claude Code]",
+      "```",
+      "",
+      "入口在这里：",
+      "",
+      "```go",
+      "func main() {",
+      "\t// start the hub",
+      "\tif err := hub.Serve(ctx, \"127.0.0.1:7780\"); err != nil {",
+      "\t\tlog.Fatal(err)",
+      "\t}",
+      "}",
+      "```",
+      "",
+      "```mermaid",
+      "this is not a diagram",
+      "```",
+      "",
+      "改之前和改之后：",
+      "",
+      `![改之前](attachment:f_demo_shot_rich_a${n}) ![改之后](attachment:改之后.png)`,
+      "",
+      "## 参考的几个产品",
+      "",
+      `- ![lium](attachment:改之前.png) **[lium](https://example.com/lium)** GPU 计算平台，发光的蓝色蘑菇。`,
+      "  方向：计算基础设施、科技感",
+      `- ![Mushroom](attachment:改之后.png) **[Mushroom](https://example.com/mushroom)** 桌面休息提醒，像素蘑菇做常驻伙伴。`,
+      "  方向：开发者工具、桌面伙伴",
+      "",
+      "## 三种造型",
+      "",
+      `![红色斑点](attachment:改之前.png "游戏、童话联想强") ![棕色香菇](attachment:改之后.png "自然、食物") ![抽象科技](attachment:改之前.png "网络、协作、科技品牌")`,
+    ].join("\n"),
+    attachments: [
+      { file_id: `f_demo_shot_rich_a${n}`, name: "改之前.png", size: DEMO_PNG.length, sha256: "demo", content_type: "image/png" },
+      { file_id: `f_demo_shot_rich_b${n}`, name: "改之后.png", size: DEMO_PNG.length, sha256: "demo", content_type: "image/png" },
+      { file_id: `f_demo_rich_log${n}`, name: "build.log", size: 17, sha256: "demo", content_type: "text/plain" },
+    ],
+  };
+}
+
 function consoleReply() {
   replySeq += 1;
   const form = (replySeq - 1) % 4;
@@ -1309,7 +1361,10 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
     replyTimers.delete(taskId);
     const msgs = hub.threads[threadId];
     if (!msgs || msgs.find((m) => m.id === taskId)?.status === "failed") return; // stopped
-    const r = consoleReply();
+    // Asked for an architecture diagram: a reply with more than words (a
+    // diagram, coloured code, pictures placed in the text, one diagram that
+    // does not parse).
+    const r = /架构图|diagram/i.test(msgs.find((m) => m.id === taskId)?.body || "") ? richReply() : consoleReply();
     msgs.push(makeMessage({
       thread_id: threadId, from: agent, to: CONSOLE, type: "reply", status: "done",
       body: r.body, ...(r.attachments ? { attachments: r.attachments } : {}),

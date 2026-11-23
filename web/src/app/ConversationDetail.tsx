@@ -6,7 +6,7 @@ import type { Agent, Message } from "@/api";
 import { SHROOM, useIsSuperagent } from "@/app/superagentMark";
 import type { AgentRow } from "@/app/types";
 import { agentKind, canManage, isInbox, isMe, lastActivityAt, machineOfRow, personLabel, possiblyStuck, quietFor, runnerAway, SEEN_SLACK_MS, seenNow, sessionBusy, nodeName } from "@/app/nodes";
-import { MessageContent } from "@/app/Markdown";
+import { MessageContent, inlineAttachmentIds, type InlineFiles } from "@/app/Markdown";
 import { PromptSign, STOPPED, Terminal } from "@/app/Terminal";
 import { TraceView } from "@/app/TraceView";
 import { WorkingLine } from "@/app/Working";
@@ -1958,6 +1958,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // What the first load brought (however long it took): already there, so
   // it never grows in again.
   if (messages && !arrived.current.first) arrived.current.first = new Set(messages.map((m) => m.id));
+  // A message's own files, for pictures its text places (attachment:…).
+  const filesOf = (m: Message): InlineFiles | undefined => (m.attachments && m.attachments.length > 0 ? { hubId: target.hubId, items: m.attachments } : undefined);
   const growsIn = (m: Message) => m.type === "reply" && !isMe(m.from, row?.hub) && !m.unreadable && !revealed.has(m.id)
     && !(m.reply_to && drafted.has(m.reply_to))
     && !arrived.current.first?.has(m.id)
@@ -2089,13 +2091,20 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {m.unreadable
               ? <span className="conv-unreadable"><Lock />{L("已加密，只有双方的主人能看", "Encrypted: only the owners of both sides can read it")}</span>
               : mine && voiced ? <MessageContent body={voiced.text} />
-              : growsIn(m) ? <Reveal body={m.body} foldId={m.id} finish={m.id !== newestId} onDone={() => { revealed.add(m.id); setRevealedTick((n) => n + 1); }} />
+              : growsIn(m) ? <Reveal body={m.body} foldId={m.id} files={filesOf(m)} finish={m.id !== newestId} onDone={() => { revealed.add(m.id); setRevealedTick((n) => n + 1); }} />
               // What an agent wrote can be read in the App's language.
-              : !mine && m.type !== "event" ? <TranslatableBody id={m.id} body={m.body} />
-              : <MessageContent body={m.body} foldId={m.id} />}
+              : !mine && m.type !== "event" ? <TranslatableBody id={m.id} body={m.body} files={filesOf(m)} />
+              : <MessageContent body={m.body} foldId={m.id} files={filesOf(m)} />}
             {/* (after its text has grown in: pictures first, then the
                 words filling in above them, reads oddly) */}
-            {!growsIn(m) && m.attachments && m.attachments.length > 0 && <MessageAttachments hubId={target.hubId} items={m.attachments} />}
+            {/* (less those its text already shows: attachment:…) */}
+            {!growsIn(m) && (() => {
+              const f = filesOf(m);
+              if (!f) return null;
+              const inText = m.unreadable ? new Set<string>() : inlineAttachmentIds(m.body, f);
+              const rest = f.items.filter((a) => !inText.has(a.file_id));
+              return rest.length > 0 ? <MessageAttachments hubId={target.hubId} items={rest} /> : null;
+            })()}
             {!growsIn(m) && !m.unreadable && <PageCards body={m.body} />}
             {(steersOf.get(m.id) || []).map((s) => (
               <div className="conv-supplement" key={s.id} data-supplement={s.id}>

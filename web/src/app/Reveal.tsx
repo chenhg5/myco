@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { MessageContent } from "@/app/Markdown";
+import { MessageContent, type InlineFiles } from "@/app/Markdown";
 import { cn } from "@/lib/utils";
 
 /*
@@ -71,7 +71,9 @@ const reducedMotion = () => {
 
 /** `streaming` accepts an unfinished body: each appended suffix grows in
  * before the next poll, while completed replies keep the block reveal. */
-export function Reveal({ body, onDone, streaming = false, intervalMs = 1500, plain, cursor, onGrow, finish, foldId }: {
+export function Reveal({ body, onDone, streaming = false, intervalMs = 1500, plain, cursor, onGrow, finish, foldId, files }: {
+  /** the message's own files, for pictures its text places */
+  files?: InlineFiles;
   body: string; onDone?: () => void; streaming?: boolean; intervalMs?: number;
   /** the message it is (MessageContent keeps it unfolded by this) */
   foldId?: string;
@@ -160,7 +162,7 @@ export function Reveal({ body, onDone, streaming = false, intervalMs = 1500, pla
   const text = done ? body : body.slice(0, shown);
   return (
     <div className={cn("reveal", !done && "is-growing", streaming && "is-streaming")}>
-      {plain ? text : <MessageContent body={text} foldId={foldId} />}
+      {plain ? text : <MessageContent body={text} foldId={foldId} files={files} growing={!done} />}
       {cursor && <span className="trace-cursor" aria-hidden />}
     </div>
   );

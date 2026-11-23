@@ -177,6 +177,25 @@ it waits until that task closes. A steer is part of the current task, not a new 
 If you sent a task by mistake or no longer need it, run `myco message stop --id <message-id>`.
 Only the sender can stop it; the recipient's runner will end its run when it notices.
 
+## Diagrams, code and pictures in a reply
+
+Replies and progress updates are Markdown, and the myco App draws more than text:
+
+- A ` ```mermaid ` block becomes a diagram (architecture, flow, sequence, ER, state, gantt).
+  Prefer one for structure over ASCII art. One that does not parse shows its source and why.
+- Code blocks with a language (` ```go `, ` ```ts `, ...) are coloured.
+- Pictures you attach can sit in the text: `--attach before.png --attach after.png`, then write
+  `![before](attachment:before.png) ![after](attachment:after.png)` where they belong (by
+  file name or `f_` id). Two or more on one line show side by side; ones placed in the text
+  are not listed again under the message.
+- Things to compare: give each picture a title, `![Red cap](attachment:a.png "games, fairy tales")`,
+  all on one line: each shows with its name and that line under it.
+- A list of things with a picture each: start every item with it,
+  `- ![logo](attachment:lium.png) **[lium](https://…)** what it is`: picture on the left, words beside it.
+
+The phone apps may still show a mermaid block as its source, so keep the words around it
+enough on their own. For anything interactive, publish a page (below).
+
 ## Show your work as a web page
 
 When the result is better seen than read (a report with charts, slides, a prototype, a small

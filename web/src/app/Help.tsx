@@ -120,7 +120,7 @@ export function HelpPage({ start }: { start?: HelpId }) {
       </nav>
       <div className="hp-main" ref={main} onClick={onClick}>
         <article className="fp-doc hp-doc" data-testid="help-doc" data-doc={doc}>
-          <Markdown text={helpText(doc)} />
+          <Markdown text={helpText(doc)} zoom={false} />
           <div className="hp-pager">
             {prev ? (
               <button type="button" className="hp-pager-btn" onClick={() => setDoc(prev)}>
