@@ -255,7 +255,7 @@ const shotsOf = (names) => {
   const out = light.map((src) => ({ src, ...(names.includes(src.replace(/(\.[a-z]+)$/i, ".dark$1")) ? { dark: src.replace(/(\.[a-z]+)$/i, ".dark$1") } : {}) }));
   return out.length ? out : undefined;
 };
-const officialOrder = ["table", "base", "doc", "slides", "meeting", "tutor", "scheduling", "code", "issues", "devtools", "todo", "notes", "disk", "stocks", "proxy-console", "remote-desktop", "ledger", "habit", "reader", "cinema", "personality", "design-studio", "logo-studio", "whiteboard", "mindmap", "video", "motion", "photo", "arcade", "ocean", "gomoku", "sudoku"];
+const officialOrder = ["table", "base", "doc", "slides", "meeting", "tutor", "scheduling", "code", "issues", "devtools", "todo", "notes", "disk", "stocks", "proxy-console", "remote-desktop", "ledger", "habit", "reader", "cinema", "podcast", "personality", "design-studio", "logo-studio", "whiteboard", "mindmap", "video", "motion", "photo", "arcade", "ocean", "gomoku", "sudoku"];
 const mockTemplates = officialOrder.filter((name) => existsSync(new URL(`${name}/myco.json`, officialRoot))).map((name) => {
   const files = officialFiles(name);
   const m = JSON.parse(files["myco.json"]);

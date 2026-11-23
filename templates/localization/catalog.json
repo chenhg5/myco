@@ -130,5 +130,9 @@
   "reader": [
     "Reader",
     "A local bookshelf for PDF and TXT books. Choose page transitions, paper themes and typography; keep your place with contents, search and bookmarks. Original files stay on this device."
+  ],
+  "podcast": [
+    "World Podcasts",
+    "Turn a 3D globe to discover public podcasts by region. Search, listen continuously, follow shows, like episodes, change speed and set a sleep timer. Progress stays on this device. Requires a native App with network media streaming."
   ]
 }

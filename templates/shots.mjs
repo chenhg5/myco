@@ -148,6 +148,7 @@ const plans = {
     await wait(p);
     await p.locator(".tu-figure").scrollIntoViewIfNeeded();
   }],
+  podcast: [null],
   personality: [null, async (p) => { await p.getByRole("button", { name: "16 种偏好", exact: true }).click(); await wait(p); }],
   scheduling: [async (p) => { await p.getByRole("combobox", { name: "时区", exact: true }).selectOption("Asia/Shanghai"); await wait(p); }, async (p) => { await p.getByRole("combobox", { name: "日历视图" }).selectOption("week"); await p.getByRole("button", { name: "下一页", exact: true }).click(); await wait(p, 600); }],
   cinema: [null, async (p) => { await p.getByRole("button", {name:"添加影视源", exact:true}).click(); await wait(p); }],

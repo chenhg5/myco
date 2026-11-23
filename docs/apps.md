@@ -48,7 +48,7 @@ Agent access currently uses shared page records. The [agent actions SDK](app-act
 </tr>
 <tr>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/scheduling-dark.webp"><img src="assets/apps/scheduling.webp" alt="Calendar"></picture><br><b>Calendar</b><br>A personal calendar with month, week and day views. Add and drag events, plan all-day and recurring entries, search and export calendars with agents. Appointment booking lives in a secondary screen. No external calendar sync.</td>
-<td width="50%"></td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/podcast-dark.webp"><img src="assets/apps/podcast.webp" alt="World Podcasts"></picture><br><b>World Podcasts</b><br>Turn a 3D globe to discover public podcasts by region. Search or add RSS feeds, listen continuously, follow shows and like episodes. Speed, sleep timer and private device progress. Requires a native App with network media streaming. <a href="podcasts.md">Details</a>.</td>
 </tr>
 </table>
 
