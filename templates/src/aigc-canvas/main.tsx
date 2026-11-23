@@ -1,22 +1,19 @@
 import { useEffect, useRef, useState } from "react";
-import { Clapperboard, FileText, Image as ImageIcon, Minus, Plus, SquarePen, Play, Link2 } from "lucide-react";
+import { Play, Settings2 } from "lucide-react";
+import { Board, icons, kindName, kinds } from "./board";
+import type { XYPosition } from "@xyflow/react";
 import { Kit, mount, Toast, useKit, uid } from "../_lib/appkit";
 import { t as uiText } from "../_lib/i18n";
 import { myco, Store } from "../_lib/myco";
 import { network } from "../_lib/net";
 import { fromBase64 } from "../_lib/os";
-import { chain, mediaAddress, nodeHeight, nodeWidth, type CanvasNode, type Entry, type Kind } from "./model";
-import { generate, type Keys } from "./provider";
+import { chain, mediaAddress, type CanvasNode, type Entry, type Kind } from "./model";
+import { checkInputs, generate, type Keys } from "./provider";
 import "../_lib/sheet.css";
 import "./canvas.css";
 
 const nodes = new Store<CanvasNode>("nodes");
 const kit = new Kit([nodes], { quiet: true });
-const kinds = ["note", "text", "image", "video"] as const;
-const icons = { note: SquarePen, text: FileText, image: ImageIcon, video: Clapperboard };
-const kindName = (kind: Kind) => kind === "note" ? uiText("便签") : kind === "text" ? uiText("文本") :
-  kind === "image" ? uiText("图片") : uiText("视频");
-
 function errorText(error: unknown) {
   const reason = (error as { code?: string; message?: string })?.code || (error as Error)?.message;
   switch (reason) {
@@ -67,6 +64,28 @@ function Media({ kind, output }: { kind: Kind; output: string }) {
     <a href={address} target="_blank" rel="noreferrer">{uiText("打开或保存原文件")}</a>
     <p>{uiText("服务商链接会过期，请及时保存需要的文件。")}</p>
   </>;
+}
+
+function Services({ keys, update, close }: { keys: Keys; update: (keys: Keys) => void; close: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => { dialog.current?.showModal(); }, []);
+  return <dialog ref={dialog} className="ac-settings" aria-labelledby="ac-service-title" onClose={close}>
+    <h2 id="ac-service-title">{uiText("生成服务")}</h2>
+    <p>{uiText("密钥仅在当前会话使用。生成会向所选服务发送提示词和上游素材，并可能收费。")}</p>
+    {(["text", "media"] as const).map(key => {
+      const name = key === "text" ? "OpenRouter" : "Replicate";
+      return <div key={key}>
+        <div className="ac-service-field">
+          <label>{name}<input className="inp" type="password" autoComplete="off" value={keys[key]}
+            onChange={event => update({ ...keys, [key]: event.target.value })}/></label>
+          <button type="button" className="btn" disabled={!keys[key]} aria-label={uiText("清除 {0} 密钥", name)}
+            onClick={() => update({ ...keys, [key]: "" })}>{uiText("清除")}</button>
+        </div>
+        <small>{key === "text" ? uiText("用于文本节点") : uiText("用于图片和视频节点")} · {keys[key].trim() ? uiText("已填写") : uiText("未填写")}</small>
+      </div>;
+    })}
+    <form method="dialog" className="ac-controls"><button className="btn btn-primary">{uiText("完成")}</button></form>
+  </dialog>;
 }
 
 function Inspector({ entry, entries, busy, save, execute, remove }: {
@@ -121,12 +140,12 @@ function Inspector({ entry, entries, busy, save, execute, remove }: {
 function App() {
   useKit(kit);
   const [selected, setSelected] = useState("");
-  const [transform, setTransform] = useState({ x: 24, y: 24, zoom: 1 });
-  const [moving, setMoving] = useState<{ id: string; x: number; y: number }>();
   const [busy, setBusy] = useState("");
+  const [services, setServices] = useState(false);
+  const [progress, setProgress] = useState("");
   const [keys, setKeys] = useState<Keys>({ text: "", media: "" });
   const engine = useRef<AbortController>();
-  const drag = useRef<{ pointer: number; id: string; x: number; y: number; sx: number; sy: number }>();
+  const movements = useRef(new Map<string, Promise<XYPosition>>());
   const entries = nodes.rows.filter(node => kinds.includes(node.data.kind));
   const selectedNode = entries.find(node => node.id === selected);
   useEffect(() => () => engine.current?.abort(), []);
@@ -138,34 +157,55 @@ function App() {
     } catch (error) { kit.flash(errorText(error)); return undefined; }
   }
 
-  async function add(kind: Kind) {
+  async function add(kind: Kind, point?: XYPosition, from = "") {
     const id = uid("node_");
     const index = entries.length;
     const result = await kit.track(put(id, {
-      kind, title: kindName(kind), prompt: "", model: "", options: "", from: "",
-      x: (index % 3) * 262 + (24 - transform.x) / transform.zoom,
-      y: Math.floor(index / 3) * 162 + (24 - transform.y) / transform.zoom, output: "",
+      kind, title: kindName(kind), prompt: "", model: "", options: "", from,
+      x: point?.x ?? (index % 3) * 262, y: point?.y ?? Math.floor(index / 3) * 162, output: "",
     }, 0));
     if (result) setSelected(id);
   }
 
   async function execute(target: Entry) {
     if (engine.current) return;
+    let path: Entry[];
+    try { path = chain(entries.map(node => node.id === target.id ? target : node), target.id); }
+    catch (error) { kit.flash(errorText(error)); return; }
+    for (const [index, entry] of path.entries()) {
+      const upstream = path[index - 1];
+      try {
+        checkInputs(entry.data, upstream?.data.kind === "note" ? upstream.data.prompt : upstream ? "upstream output" : "", keys);
+      } catch (error) {
+        setSelected(entry.id);
+        kit.flash((entry.data.title || kindName(entry.data.kind)) + " · " + errorText(error));
+        if ((error as Error).message === "missing_key") setServices(true);
+        return;
+      }
+    }
     const controller = new AbortController();
     engine.current = controller;
+    let current = target;
     try {
-      const path = chain(entries.map(node => node.id === target.id ? target : node), target.id);
       let input = "";
+      const total = path.filter(entry => entry.data.kind !== "note").length;
+      let step = 0;
       for (const entry of path) {
         controller.signal.throwIfAborted();
         if (entry.data.kind === "note") { input = entry.data.prompt; continue; }
+        current = entry;
         setBusy(entry.id);
+        setProgress(uiText("正在生成 {0} · {1}/{2}", entry.data.title || kindName(entry.data.kind), ++step, total));
         input = await generate(entry.data, input, keys, controller.signal);
         controller.signal.throwIfAborted();
         await put(entry.id, { ...entry.data, output: input }, entry.version);
       }
+      setProgress(uiText("工作流已完成。"));
     } catch (error) {
-      kit.flash(controller.signal.aborted ? uiText("已停止等待生成。") : errorText(error));
+      const message = controller.signal.aborted ? uiText("已停止等待生成。") :
+        (current.data.title || kindName(current.data.kind)) + " · " + errorText(error);
+      setProgress(message);
+      setSelected(current.id);
     } finally { engine.current = undefined; setBusy(""); }
   }
 
@@ -176,86 +216,37 @@ function App() {
     return { id: result.id, version: result.version, data };
   }
 
-  function location(node: Entry) { return moving?.id === node.id ? moving : node.data; }
-  function begin(event: React.PointerEvent<HTMLElement>, id: string, x: number, y: number) {
-    if (event.button !== 0 || drag.current) return;
-    event.stopPropagation();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    drag.current = { pointer: event.pointerId, id, x, y, sx: event.clientX, sy: event.clientY };
-    if (id) setSelected(id);
+  function move(id: string, point: XYPosition) {
+    async function commit() {
+      const node = nodes.get(id);
+      if (!node || (Math.abs(node.data.x - point.x) < 0.5 && Math.abs(node.data.y - point.y) < 0.5)) return point;
+      const saved = await kit.track(put(id, { ...node.data, x: Math.round(point.x), y: Math.round(point.y) }, node.version));
+      return saved?.data || nodes.get(id)?.data || point;
+    }
+    const task = (movements.current.get(id) || Promise.resolve()).then(commit, commit);
+    movements.current.set(id, task);
+    return task.finally(() => { if (movements.current.get(id) === task) movements.current.delete(id); });
   }
-  function move(event: React.PointerEvent) {
-    if (drag.current?.pointer !== event.pointerId) return;
-    const { id, x, y, sx, sy } = drag.current;
-    const dx = event.clientX - sx, dy = event.clientY - sy;
-    if (id) setMoving({ id, x: Math.round(x + dx / transform.zoom), y: Math.round(y + dy / transform.zoom) });
-    else setTransform(current => ({ ...current, x: x + dx, y: y + dy }));
-  }
-  function end(event: React.PointerEvent, cancel = false) {
-    const previous = drag.current;
-    if (previous?.pointer !== event.pointerId) return;
-    drag.current = undefined;
-    setMoving(undefined);
-    if (!previous?.id || cancel) return;
-    const node = entries.find(entry => entry.id === previous.id);
-    if (!node) return;
-    const x = Math.round(previous.x + (event.clientX - previous.sx) / transform.zoom);
-    const y = Math.round(previous.y + (event.clientY - previous.sy) / transform.zoom);
-    if (x !== node.data.x || y !== node.data.y) void kit.track(put(node.id, { ...node.data, x, y }, node.version));
-  }
-  function zoom(step: number) {
-    setTransform(current => ({ ...current, zoom: Math.max(0.35, Math.min(2, current.zoom + step)) }));
+
+  function connect(from: string, target: string) {
+    const node = nodes.get(target);
+    if (!node || node.data.kind === "note" || node.data.from === from) return;
+    void save(target, { ...node.data, from, output: "" }, node.version).then(saved => { if (saved) setSelected(target); });
   }
 
   return <div className="ac-app">
     <header className="ac-header">
       <div><h1>{uiText("AIGC 画布")}</h1>
-        <small>{kit.pending ? uiText("正在保存…") : kit.failed ? uiText("没保存上") : uiText("已保存")}</small></div>
+        <small role="status">{progress || (kit.pending ? uiText("正在保存…") : kit.failed ? uiText("没保存上") : uiText("已保存"))}</small></div>
       <div className="ac-controls">
         {kinds.map(kind => { const Icon = icons[kind]; return <button type="button" className="btn" key={kind} onClick={() => void add(kind)}><Icon size={15}/>{kindName(kind)}</button>; })}
-        <details className="ac-settings"><summary className="btn">{uiText("生成服务")}</summary><div>
-          <label>OpenRouter<input className="inp" type="password" autoComplete="off" value={keys.text} onChange={event => setKeys({ ...keys, text: event.target.value })}/></label>
-          <label>Replicate<input className="inp" type="password" autoComplete="off" value={keys.media} onChange={event => setKeys({ ...keys, media: event.target.value })}/></label>
-          <p>{uiText("密钥仅在当前会话使用。生成会向所选服务发送提示词和上游素材，并可能收费。")}</p>
-        </div></details>
+        {busy && <button type="button" className="btn" onClick={() => engine.current?.abort()}>{uiText("停止")}</button>}
+        <button type="button" className="btn" onClick={() => setServices(true)}><Settings2 size={15}/>{uiText("生成服务")}</button>
       </div>
     </header>
     <div className="ac-body">
-      <section className="ac-stage" aria-label={uiText("节点画布")}
-        onPointerDown={event => begin(event, "", transform.x, transform.y)} onPointerMove={move} onPointerUp={event => end(event)}
-        onPointerCancel={event => end(event, true)}>
-        <div className="ac-world" style={{ transform: 'translate(' + transform.x + 'px,' + transform.y + 'px) scale(' + transform.zoom + ')' }}>
-          <svg className="ac-links" aria-hidden="true">
-            {entries.map(node => {
-              const upstream = entries.find(item => item.id === node.data.from);
-              if (!upstream) return null;
-              const a = location(upstream), b = location(node);
-              const ax = a.x + nodeWidth, ay = a.y + nodeHeight / 2, bx = b.x, by = b.y + nodeHeight / 2;
-              const bend = Math.max(32, Math.abs(bx - ax) / 2);
-              return <path key={node.id} d={['M', ax, ay, 'C', ax+bend, ay, bx-bend, by, bx, by].join(' ')}/>;
-            })}
-          </svg>
-          {entries.map(node => {
-            const Icon = icons[node.data.kind], at = location(node);
-            return <button type="button" className="ac-node" key={node.id} aria-pressed={selected === node.id}
-              onPointerDown={event => begin(event, node.id, at.x, at.y)} onClick={() => setSelected(node.id)}
-              style={{ left: at.x, top: at.y, width: nodeWidth, height: nodeHeight }}>
-              <span className="ac-node-kind"><Icon size={15}/>{kindName(node.data.kind)}{node.data.from && <Link2 size={13}/>}</span>
-              <strong>{node.data.title || kindName(node.data.kind)}</strong>
-              <span className="ac-node-preview">{busy === node.id ? uiText("生成中…") :
-                node.data.output && (node.data.kind === "image" || node.data.kind === "video") ? uiText("生成结果") :
-                node.data.output || node.data.prompt || uiText("点击编辑节点")}</span>
-            </button>;
-          })}
-        </div>
-        {!entries.length && <div className="ac-empty"><h2>{uiText("添加第一个节点")}</h2><p>{uiText("从便签开始，连接文本、图片和视频。")}</p></div>}
-        <div className="ac-viewport" onPointerDown={event => event.stopPropagation()}>
-          <button type="button" className="btn" aria-label={uiText("缩小")} onClick={() => zoom(-0.15)}><Minus size={15}/></button>
-          <button type="button" className="btn" onClick={() => setTransform({ x: 24, y: 24, zoom: 1 })}>{Math.round(transform.zoom * 100)}%</button>
-          <button type="button" className="btn" aria-label={uiText("放大")} onClick={() => zoom(0.15)}><Plus size={15}/></button>
-          {busy && <button type="button" className="btn" onClick={() => engine.current?.abort()}>{uiText("停止")}</button>}
-        </div>
-      </section>
+      <Board entries={entries} selected={selected} busy={busy} select={setSelected}
+        add={(kind, point, from) => void add(kind, point, from)} move={move} connect={connect}/>
       {selectedNode && <Inspector key={selectedNode.id} entry={selectedNode} entries={entries} busy={Boolean(busy)}
         save={(data, version) => save(selectedNode.id, data, version)} execute={entry => void execute(entry)}
         remove={() => {
@@ -269,6 +260,7 @@ function App() {
           });
         }}/>}
     </div>
+    {services && <Services keys={keys} update={setKeys} close={() => setServices(false)}/>}
     <Toast kit={kit}/>
   </div>;
 }

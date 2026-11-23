@@ -45,14 +45,22 @@ function pause(signal: AbortSignal) {
   });
 }
 
+export function checkInputs(node: CanvasNode, upstream: string, keys: Keys) {
+  if (node.kind === "note") return;
+  if (!node.prompt.trim()) throw new Error("missing_prompt");
+  const model = node.model.trim();
+  if (!model || (node.kind !== "text" && !/^[a-z\d_.-]+\/[a-z\d_.-]+(?::[a-f\d]{64})?$/i.test(model)))
+    throw new Error("missing_model");
+  if (node.kind !== "text") inputJSON(node.options, upstream);
+  if (!(node.kind === "text" ? keys.text : keys.media).trim()) throw new Error("missing_key");
+}
+
 export async function generate(node: CanvasNode, upstream: string, keys: Keys, signal: AbortSignal) {
   signal.throwIfAborted();
   if (node.kind === "note") return node.prompt;
-  if (!node.prompt.trim()) throw new Error("missing_prompt");
+  checkInputs(node, upstream, keys);
   const model = node.model.trim();
-  if (!model) throw new Error("missing_model");
   if (node.kind === "text") {
-    if (!keys.text.trim()) throw new Error("missing_key");
     const content = node.prompt + (upstream ? "\n\n" + upstream : "");
     const response = await request(openRouter, keys.text.trim(), "POST", {
       model, messages: [{ role: "user", content }], max_tokens: 1500,
@@ -62,8 +70,6 @@ export async function generate(node: CanvasNode, upstream: string, keys: Keys, s
     if (typeof output !== "string" || !output.trim()) throw new Error("empty_output");
     return cutOutput(output);
   }
-  if (!keys.media.trim()) throw new Error("missing_key");
-  if (!/^[a-z\d_.-]+\/[a-z\d_.-]+(?::[a-f\d]{64})?$/i.test(model)) throw new Error("missing_model");
   const token = keys.media.trim();
   const options = inputJSON(node.options, upstream);
   const useRawInput = node.options.includes("{{upstream}}");

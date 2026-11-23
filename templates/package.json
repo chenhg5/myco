@@ -17,6 +17,7 @@
     "@mantine/core": "8.3.11",
     "@mantine/hooks": "8.3.11",
     "@mediabunny/aac-encoder": "1.66.1",
+    "@xyflow/react": "12.10.2",
     "hls.js": "1.6.15",
     "jsnes": "3.0.0",
     "lightweight-charts": "5.3.0",
