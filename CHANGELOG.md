@@ -4,6 +4,20 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.21.27
+
+- **Focus mode**: a chat can fill the whole window on its own — press ⌘⇧F (Ctrl+Shift+F) or use the chat's ⋯ menu, which now shows the shortcut. The sidebar, top bar, members, pane tabs and a docked page hide, and the pane you were in zooms in with the chat centred on a plain background. ⌃Tab and ⌥↑/⌥↓ still switch chats; Esc, the shortcut again, or the button at the top right brings everything back.
+- **Shopping comparison queried by an agent**: the app now works with a Maishou API adapter that an agent runs on its own computer; the agent queries prices and purchase links directly and writes them into the shared page. Bring your own Maishou access (`MAISHOU_OPENID`, an optional invitation code and token, or a private config file); credentials never go into page records, a chat or the repository. Authenticated results still depend on your own provider account — until then the page says what it could not confirm.
+- The members column's hover cards show only the first line of what a member is doing, cut short.
+- No hub upgrade needed: update the App for focus mode. The shopping comparison app reaches hubs through the official apps update (v0.20.7 and later); run `sudo myco upgrade` only if your hub is older than that.
+
+**中文**
+
+- **专注模式**：一个对话可以单独铺满整个窗口——按 ⌘⇧F（Ctrl+Shift+F），或用对话的 ⋯ 菜单（菜单里现在会显示这个快捷键）。侧栏、顶栏、成员、面板标签和停靠的页面都会藏起来，你正在用的面板放大，对话居中放在干净的背景上。⌃Tab 和 ⌥↑/⌥↓ 还能切换对话；按 Esc、再按一次快捷键，或点右上角的按钮就全部回来。
+- **比价购物可以由 agent 来查了**：应用现在连上 agent 自己电脑上跑的 Maishou API 适配器，agent 直接查价格和购买链接，写进大家共享的页面。要带你自己的 Maishou 访问权限（`MAISHOU_OPENID`，可选的邀请码和 token，或一个私有的配置文件）；密钥不会写进页面记录、聊天或仓库。真正登录后的结果仍取决于你自己的服务商账号，在那之前页面会标明哪些没能确认。
+- 成员栏的悬浮卡片只显示成员在做什么的第一行，超出部分截断。
+- 不需要升级 hub：专注模式更新 App 即可。比价购物应用通过官方应用更新分发（v0.20.7 及以后的 hub）；hub 比这旧才需要 `sudo myco upgrade`。
+
 ## v0.21.26
 
 - **A member's chat leaves terminal commands out**: since v0.21.24 a member's chat in a project showed its exchanges with everyone, which brought each command it ran on a terminal (`ls`, `cat` on mac-exec) in as a card. Only its exchanges with other AIs show now; a terminal still shows when the project lists it.
