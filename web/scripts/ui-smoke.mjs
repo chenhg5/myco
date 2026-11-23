@@ -4598,26 +4598,69 @@ async function runMatrix(browser, size, scheme) {
       const ex = await page.locator(".focus-exit").boundingBox();
       if (!ex || ex.x < box.x + box.width) throw new Error("退出按钮不该压在对话上");
       await page.locator(".focus-exit").waitFor({ timeout: 5_000 });
+      // A pinned tab above the chat: its row lines up too.
+      // (as whoever this App is on the hub now: read off its own request)
+      const pinAs = await page.waitForFunction(() => {
+        const hit = performance.getEntriesByType("resource").map((e) => e.name).filter((n) => n.includes("/pins?with=review-cloud")).pop();
+        return hit ? new URL(hit).searchParams.get("a") || "" : null;
+      }, null, { timeout: 10_000 }).then((h) => h.jsonValue());
+      const asQ = pinAs ? `&a=${encodeURIComponent(pinAs)}` : "";
+      const pinApi = (method, path, data) => fetch(`http://${HOST}:${mockPort()}/app/hubs/hub_studio/pins${path}`, { method, headers: { "Content-Type": "application/json" }, body: data ? JSON.stringify(data) : undefined });
+      for (const p of (await (await pinApi("GET", `?with=review-cloud${asQ}`)).json()).pins) await pinApi("DELETE", `/${p.id}?with=review-cloud${asQ}`);
+      await pinApi("POST", "", { ...(pinAs ? { a: pinAs } : {}), with: "review-cloud", kind: "link", target: "http://192.168.1.20:7780/pages/pg_release", title: "审查清单", by: "review-cloud" });
+      await page.evaluate(() => window.dispatchEvent(new CustomEvent("myco-pins-changed", { detail: { hubId: "hub_studio" } })));
+      await page.locator(".conv-detail:visible .pin-bar").first().waitFor({ timeout: 10_000 });
+      // The header's line, the pinned row's and the box you write in end at
+      // the same place.
+      const cbox = await page.locator(".conv-detail:visible .conv-compose-box").first().boundingBox();
+      for (const sel of [".conv-head", ".pin-bar"]) {
+        const b = await page.locator(`.conv-detail:visible > ${sel}`).first().boundingBox();
+        if (!b || !cbox || Math.abs(b.x - cbox.x) > 2 || Math.abs(b.x + b.width - cbox.x - cbox.width) > 2) {
+          throw new Error(`专注模式的 ${sel} 应和输入框对齐（${b?.x}–${b && b.x + b.width}，输入框 ${cbox?.x}–${cbox && cbox.x + cbox.width}）`);
+        }
+      }
       await settle(page, 250);
       await shot(page, size, scheme, "focus-mode");
-      // The header's line ends where the box you write in does.
-      const head = await page.locator(".conv-detail:visible .conv-head").first().boundingBox();
-      const cbox = await page.locator(".conv-detail:visible .conv-compose-box").first().boundingBox();
-      if (!head || !cbox || Math.abs(head.x - cbox.x) > 2 || Math.abs(head.x + head.width - cbox.x - cbox.width) > 2) {
-        throw new Error(`专注模式的标题栏应和输入框对齐（标题 ${head?.x}–${head && head.x + head.width}，输入框 ${cbox?.x}–${cbox && cbox.x + cbox.width}）`);
-      }
-      // The background: the quiet button beside the way out; kept until changed.
-      const bgOf = () => page.locator(".app-shell").evaluate((el) => getComputedStyle(el).backgroundColor);
-      const themeBg = await bgOf();
+      // The background: the quiet button beside the way out opens its panel.
+      const colourOf = (sel) => page.locator(sel).first().evaluate((el) => getComputedStyle(el).backgroundColor);
+      const themeBg = await colourOf(".app-shell");
       await clickVisible(page, page.locator(".focus-tone"));
-      await page.locator(".conv-menu").getByRole("menuitem", { name: "纸张" }).click();
+      const pop = page.locator(".focus-bg-pop");
+      await pop.waitFor({ timeout: 5_000 });
+      if ((await pop.locator(".focus-bg-tile").count()) < 12) throw new Error("专注背景应有十几种可选");
+      await pop.getByRole("radio", { name: "纸张" }).click();
       await page.locator(".app-shell[data-focus-bg=paper]").waitFor({ timeout: 5_000 });
-      if ((await bgOf()) === themeBg) throw new Error("选了纸张，专注模式的背景应换掉");
+      if ((await colourOf(".app-main")) === themeBg) throw new Error("整个页面换成纸张，对话也应换色");
       await settle(page, 200);
-      await shot(page, size, scheme, "focus-mode-paper");
+      await shot(page, size, scheme, "focus-bg-panel");
+      // Outside only: the chat keeps the theme's colour, around it changes.
+      await pop.getByRole("radio", { name: "只改外面" }).click();
+      await page.locator(".app-shell[data-focus-scope=outside]").waitFor({ timeout: 5_000 });
+      if ((await colourOf(".sp-main")) !== themeBg) throw new Error("只改外面时，对话应保持主题的底色");
+      if ((await colourOf(".app-shell")) === themeBg) throw new Error("只改外面时，对话外面应换色");
+      // Esc closes the panel, not 专注模式.
+      await page.keyboard.press("Escape");
+      await pop.waitFor({ state: "detached", timeout: 5_000 });
+      if (!(await page.locator(".app-shell.is-focus").count())) throw new Error("Esc 应只关掉背景面板");
+      await settle(page, 200);
+      await shot(page, size, scheme, "focus-bg-outside");
+      // A pattern, outside only.
       await clickVisible(page, page.locator(".focus-tone"));
-      await page.locator(".conv-menu").getByRole("menuitem", { name: "跟随主题" }).click();
+      await pop.getByRole("radio", { name: "点阵" }).click();
+      await page.locator(".app-shell[data-focus-kind=pattern]").waitFor({ timeout: 5_000 });
+      await page.mouse.click(5, 400);
+      await pop.waitFor({ state: "detached", timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "focus-bg-dots");
+      // Back to how it was, for the steps after.
+      await clickVisible(page, page.locator(".focus-tone"));
+      await pop.getByRole("radio", { name: "整个页面" }).click();
+      await pop.getByRole("radio", { name: "跟随主题" }).click();
       await page.locator(".app-shell[data-focus-bg]").waitFor({ state: "detached", timeout: 5_000 });
+      await page.keyboard.press("Escape");
+      await pop.waitFor({ state: "detached", timeout: 5_000 });
+      for (const p of (await (await pinApi("GET", `?with=review-cloud${asQ}`)).json()).pins) await pinApi("DELETE", `/${p.id}?with=review-cloud${asQ}`);
+      await page.evaluate(() => window.dispatchEvent(new CustomEvent("myco-pins-changed", { detail: { hubId: "hub_studio" } })));
       // ⌃Tab still switches, and the one opened stays alone.
       // (the chat shown: the start of its pane; the sidebar may be closed)
       const activeChat = async () => ((await page.locator("[data-pane]:visible").first().innerText().catch(() => "")) || "").slice(0, 80);

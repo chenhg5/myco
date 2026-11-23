@@ -9449,18 +9449,21 @@ html.os-other ::-webkit-scrollbar-thumb:hover, html.os-other ::-webkit-scrollbar
    bar, no members; the zoomed pane's conversation centred at a reading
    width. A small button at the top right (and Esc) leaves it. */
 .app-shell.is-focus { background: var(--bg); }
-/* The backgrounds you can pick (AppMode FOCUS_BGS), light and dark: quiet
-   tones the theme's words stay readable on. */
-.app-shell.is-focus[data-focus-bg="paper"] { --bg: #f5f0e6; }
-.app-shell.is-focus[data-focus-bg="sage"] { --bg: #ebf1e7; }
-.app-shell.is-focus[data-focus-bg="mist"] { --bg: #eaeff5; }
-.app-shell.is-focus[data-focus-bg="dusk"] { --bg: #f1ecf4; }
-.app-shell.is-focus[data-focus-bg="contrast"] { --bg: #ffffff; }
-.dark .app-shell.is-focus[data-focus-bg="paper"] { --bg: #23211c; }
-.dark .app-shell.is-focus[data-focus-bg="sage"] { --bg: #1b211d; }
-.dark .app-shell.is-focus[data-focus-bg="mist"] { --bg: #1a1e26; }
-.dark .app-shell.is-focus[data-focus-bg="dusk"] { --bg: #211d26; }
-.dark .app-shell.is-focus[data-focus-bg="contrast"] { --bg: #0c0c0e; }
+/* The background you pick (FocusBg.tsx): its light and dark shade come as
+   --focus-bg-l / --focus-bg-d. A solid tone over the whole page becomes the
+   page's own colour; a pattern, or any tone "outside only", is drawn behind
+   the page, and the conversation's column keeps the theme's colour then,
+   like a sheet on a desk. */
+.app-shell.is-focus[data-focus-bg] { --focus-bg: var(--focus-bg-l); background: var(--focus-bg); }
+.dark .app-shell.is-focus[data-focus-bg] { --focus-bg: var(--focus-bg-d); }
+.app-shell.is-focus[data-focus-kind="solid"][data-focus-scope="all"] { --bg: var(--focus-bg); }
+.app-shell.is-focus[data-focus-kind="pattern"] .app-main,
+.app-shell.is-focus[data-focus-scope="outside"] .app-main { background: transparent; }
+.app-shell.is-focus[data-focus-kind="pattern"][data-focus-scope="all"] .conv-compose { background: transparent; }
+.app-shell.is-focus[data-focus-scope="outside"] .sp-main {
+  background: var(--bg);
+  box-shadow: 0 0 0 1px var(--line-2), 0 0 48px rgba(15, 20, 30, 0.07);
+}
 .app-shell.is-focus .app-sidebar,
 .app-shell.is-focus .app-crumbbar,
 .app-shell.is-focus .sp-side,
@@ -9483,11 +9486,18 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
 }
 /* The header shares the column of the messages and the box you write in:
    its line and its edges end where the box's do, not 90px further out. */
-.app-shell.is-focus .conv-detail > .conv-head {
+.app-shell.is-focus .conv-detail > .conv-head,
+.app-shell.is-focus .conv-detail > .pin-bar,
+.app-shell.is-focus .conv-detail > .shell-stuck {
   --conv-box: min(calc(var(--conv-col) - var(--conv-pad) - var(--conv-pad-l)), calc(100% - var(--conv-pad) - var(--conv-pad-l)));
   margin-left: calc(var(--conv-pad-l) + (100% - var(--conv-pad) - var(--conv-pad-l) - var(--conv-box)) / 2);
   margin-right: calc(var(--conv-pad) + (100% - var(--conv-pad) - var(--conv-pad-l) - var(--conv-box)) / 2);
-  padding: 0 2px;
+}
+.app-shell.is-focus .conv-detail > .conv-head { padding: 0 2px; }
+.app-shell.is-focus .conv-detail > .pin-bar { padding-left: 2px; }
+/* The search in the chat ends where the column does. */
+.app-shell.is-focus .conv-body > .conv-search {
+  right: calc(var(--conv-pad) + (100% - var(--conv-pad) - var(--conv-pad-l) - min(calc(var(--conv-col) - var(--conv-pad) - var(--conv-pad-l)), calc(100% - var(--conv-pad) - var(--conv-pad-l)))) / 2);
 }
 /* The buttons at the top right, together: the background and the way out.
    Quiet until pointed at, so they stay out of the work. */
@@ -9517,6 +9527,42 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
 .focus-tone:hover,
 .focus-tone:focus-visible { opacity: 1 !important; color: var(--fg); background: var(--bg); border-color: var(--line); }
 .focus-tone svg { width: 13px; height: 13px; }
+.focus-tone.is-open { opacity: 1; color: var(--fg); background: var(--bg); border-color: var(--line); }
+/* Its panel: where the background goes, and the tones as swatches. */
+.focus-bg { position: relative; }
+.focus-bg-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 312px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: 0 0 0 1px var(--line), 0 12px 32px rgba(15, 20, 30, 0.16);
+  color: var(--fg);
+}
+.focus-bg-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; font-size: 12.5px; font-weight: 500; }
+.focus-bg-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px 6px; }
+.focus-bg-tile { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; padding: 0; border: 0; background: none; font: inherit; cursor: default; }
+.focus-bg-sw {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--sw-l);
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--fg);
+}
+.dark .focus-bg-sw { background: var(--sw-d); }
+.focus-bg-tile.is-theme .focus-bg-sw { background: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--fg) 7%, transparent) 6px 7px), var(--bg); }
+.focus-bg-sw svg { width: 14px; height: 14px; }
+.focus-bg-tile:hover .focus-bg-sw { box-shadow: inset 0 0 0 1px var(--line), 0 2px 8px rgba(15, 20, 30, 0.12); }
+.focus-bg-tile.is-on .focus-bg-sw { box-shadow: inset 0 0 0 2px var(--fg); }
+.focus-bg-tile:focus-visible { outline: none; }
+.focus-bg-tile:focus-visible .focus-bg-sw { outline: 2px solid var(--focus); outline-offset: 2px; }
+.focus-bg-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; color: var(--muted); }
+.focus-bg-tile.is-on .focus-bg-name { color: var(--fg); }
 /* Just the icon, quiet, at the top right; pointed at, it says what it
    does and its key. */
 .focus-exit {

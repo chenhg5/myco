@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpDown, ChevronLeft, ChevronRight, LayoutGrid, Minimize2, Monitor, MoreHorizontal, Palette, Pin, Plus, Search, WifiOff, Workflow, X, Zap } from "lucide-react";
+import { ArrowUpDown, ChevronLeft, ChevronRight, LayoutGrid, Minimize2, Monitor, MoreHorizontal, Pin, Plus, Search, WifiOff, Workflow, X, Zap } from "lucide-react";
 import { ComputerSettings } from "@/app/ComputerSettings";
 import { AutomationsPage } from "@/app/Automations";
 import { WorkflowsPage } from "@/app/Workflows";
@@ -39,6 +39,7 @@ import { LogoWordmark } from "@/components/brand";
 import { IconSidebar } from "@/components/icons";
 import { recentChats } from "@/app/recentChats";
 import { useContextMenu } from "@/app/ContextMenu";
+import { FocusBgButton, focusBgProps, useFocusBg } from "@/app/FocusBg";
 import { useSortable } from "@/app/sortable";
 import { useTextSize, useThemeMode } from "@/lib/theme";
 import { L, lang, setLangChoice, storedLangChoice, type LangChoice } from "@/lib/i18n";
@@ -721,17 +722,9 @@ export default function AppMode({ initialHubs, initialInfo }: {
     return () => window.removeEventListener("myco-focus-mode", on);
   }, []);
   useEffect(() => { if (page !== "space") setFocusMode(false); }, [page]);
-  // Its background: the theme's own, or a quiet tone you pick from the
-  // button at the top right (each tone has a light and a dark shade; see
-  // .app-shell.is-focus[data-focus-bg] in app.css). Kept on this computer.
-  const [focusBg, setFocusBgState] = useState<string>(() => {
-    try { const v = localStorage.getItem(FOCUS_BG_KEY) || ""; return FOCUS_BGS.some((t) => t.id === v) ? v : ""; } catch { return ""; }
-  });
-  const setFocusBg = (v: string) => {
-    setFocusBgState(v);
-    try { if (v) localStorage.setItem(FOCUS_BG_KEY, v); else localStorage.removeItem(FOCUS_BG_KEY); } catch { /* not kept */ }
-  };
-  const focusMenu = useContextMenu();
+  // Its background (FocusBg.tsx): the whole page or only around the chat.
+  const [focusBg, setFocusBg] = useFocusBg();
+  const focusLook = focusBgProps(focusBg);
   // The window too: the desktop App's own full screen, else the browser's;
   // leaving the browser's (its Esc) leaves 专注模式 as well.
   const winFull = !!info?.fullscreen;
@@ -744,7 +737,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
     // something on top takes it: a dialog, a menu, the search in the chat.
     const key = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.isComposing || keysRef.current.settingsOpen) return;
-      if (document.querySelector(".app-modal, .cp, .app-menu, .lightbox, .conv-menu, [data-radix-popper-content-wrapper], [role=listbox]")) return;
+      if (document.querySelector(".app-modal, .cp, .app-menu, .lightbox, .conv-menu, .focus-bg-pop, [data-radix-popper-content-wrapper], [role=listbox]")) return;
       if ((document.activeElement as HTMLElement | null)?.closest(".conv-search")) return;
       e.preventDefault();
       e.stopPropagation();
@@ -1093,26 +1086,17 @@ export default function AppMode({ initialHubs, initialInfo }: {
 
   return (
     <div key={lang()} className={cn("app-shell", isMac && "shell-mac", collapsed && "collapsed", focusMode && "is-focus")}
-      data-focus-bg={focusMode && focusBg ? focusBg : undefined}
-      style={{ ["--sidebar-w" as string]: `${sidebar.width}px` }}>
+      {...(focusMode ? focusLook.attrs : {})}
+      style={{ ["--sidebar-w" as string]: `${sidebar.width}px`, ...(focusMode ? focusLook.style : {}) }}>
       {focusMode && (
         <div className="focus-tools" style={{ ["--wails-draggable" as string]: "no-drag" }}>
-          {/* The background, barely there until pointed at. */}
-          <button type="button" className="focus-tone"
-            title={L("专注背景", "Focus background")} aria-label={L("换专注模式的背景", "Change the focus background")}
-            onClick={(e) => focusMenu.openUnder(e.currentTarget, [
-              { header: L("专注背景", "Focus background") },
-              ...FOCUS_BGS.map((t) => ({ label: t.name(), checked: focusBg === t.id, onSelect: () => setFocusBg(t.id) })),
-            ])}>
-            <Palette />
-          </button>
+          <FocusBgButton value={focusBg} onChange={setFocusBg} />
           <button type="button" className="focus-exit" onClick={() => setFocusMode(false)}
             title={L("退出专注模式（Esc）", "Leave focus mode (Esc)")} aria-label={L("退出专注模式", "Leave focus mode")}>
             <Minimize2 /><span className="focus-exit-label">{L("退出专注", "Leave focus")}<kbd>Esc</kbd></span>
           </button>
         </div>
       )}
-      {focusMenu.element}
       {!collapsed && (
         <aside className="app-sidebar">
           {/* Its right edge: drag to make it wider or narrower. */}
@@ -1513,16 +1497,6 @@ export default function AppMode({ initialHubs, initialInfo }: {
 }
 
 const SPACE_KEY = "myco-app-space";
-const FOCUS_BG_KEY = "myco-focus-bg";
-/** 专注模式's backgrounds ("" is the theme's own); their colours are in app.css. */
-const FOCUS_BGS: { id: string; name: () => string }[] = [
-  { id: "", name: () => L("跟随主题", "Theme") },
-  { id: "paper", name: () => L("纸张", "Paper") },
-  { id: "sage", name: () => L("护眼绿", "Sage") },
-  { id: "mist", name: () => L("雾蓝", "Mist") },
-  { id: "dusk", name: () => L("暮紫", "Dusk") },
-  { id: "contrast", name: () => L("高对比", "High contrast") },
-];
 // Computers listed in the sidebar before "All N".
 const NAV_COMPUTERS = 6;
 type ChatSort = "recent" | "busy" | "name";
