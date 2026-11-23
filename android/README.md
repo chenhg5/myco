@@ -117,3 +117,17 @@ and no signing key belongs in this repository. Keep an APK's signing identity
 stable before distributing it, so later builds can update it in place.
 
 Do not change the repository `VERSION` to publish Android previews.
+
+## Public media
+
+Pages can check `myco.features.includes("net-media")` and use
+`myco.media.url(publicHttpUrl)` as an audio or video source. Android streams through
+its system proxy settings with Range support, without changing the page CSP or
+sharing workspace credentials, cookies or browser headers. Initial hosts, every
+redirect and addresses used for direct connections must be public. HTML and other
+nonmedia responses are refused. Closing or backgrounding the page cancels active
+streams; returning to the page requires starting playback again.
+
+See [the shared media contract](../docs/app-os.md#playing-public-audio-and-video).
+Playback formats depend on Android System WebView and the device's codecs. A new
+APK is required to add this native capability to an older Android installation.

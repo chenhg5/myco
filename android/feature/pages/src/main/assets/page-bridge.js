@@ -57,11 +57,14 @@
   ready.catch(function () { /* (a page that does not use the bridge) */ });
   window.myco = {
     ready: ready,
-    features: ["preferences", "net", "remote", "remote-controller"],
+    features: ["preferences", "net", "net-media", "remote", "remote-controller"],
     get preferences() { return preferences; },
     net: { fetch: function(args) {
       var a = args || {};
       return ready.then(function() { return call("net.fetch", a, Math.min(600000, a.timeout_ms || 30000) + 30000); });
+    } },
+    media: { url: function(u) {
+      return location.origin + "/__myco/stream?url=" + encodeURIComponent(String(u));
     } },
     remote: {
       call: function(action,args) { return ready.then(function(){ return call("remote.call",{action:action,args:args || {}},30000); }); },
