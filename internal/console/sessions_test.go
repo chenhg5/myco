@@ -79,18 +79,24 @@ func TestLocalJoin(t *testing.T) {
 	var restarts int
 	run := func(ctx context.Context, env []string, name string, args ...string) ([]byte, error) {
 		calls = append(calls, args)
-		get := func(k string) string {
+		get := func(k string) string { // the last one counts, as for exec
+			v := ""
 			for _, kv := range env {
-				if v, ok := strings.CutPrefix(kv, k+"="); ok {
-					return v
+				if x, ok := strings.CutPrefix(kv, k+"="); ok {
+					v = x
 				}
 			}
-			return ""
+			return v
 		}
 		switch args[0] {
 		case "join":
 			if get("MYCO_APP_WORKDIR") != work || get("MYCO_HUB") != r.hubURL || !slices.Contains(args, "--session-id") {
-				t.Errorf("myco join must run in the session dir against the hub: %v %v", args, env)
+				t.Errorf("myco join must run in the session dir against the hub: %v", args)
+			}
+			// What the person's shell has for the model, passed on (and
+			// nothing else of it).
+			if get("ANTHROPIC_BASE_URL") != "https://gw.example" || get("UNRELATED_SECRET") != "" {
+				t.Errorf("myco join must get the shell's provider variables, only those (ANTHROPIC_BASE_URL %q)", get("ANTHROPIC_BASE_URL"))
 			}
 			// What myco join does: enroll with the one-time token.
 			name := args[slices.Index(args, "--name")+1]
@@ -113,7 +119,8 @@ func TestLocalJoin(t *testing.T) {
 		return nil, errors.New("unexpected")
 	}
 	l := &console.Local{Home: home, Device: "test-mac", Run: run, Dirs: []string{filepath.Join(home, ".local", "bin")},
-		LookPath: func(string) (string, error) { return "/x/myco", nil }}
+		LookPath: func(string) (string, error) { return "/x/myco", nil },
+		ShellEnv: func() []string { return []string{"ANTHROPIC_BASE_URL=https://gw.example", "UNRELATED_SECRET=x"} }}
 	b := &console.Backend{Store: console.NewStore(r.store), Secrets: r.secrets, Local: l}
 	r.app.Config.Handler = b.Handler()
 	code, m, _ := r.do("POST", "/app/hubs", map[string]string{"name": "Main", "url": r.hubURL, "token": r.consoleToken("t")})
@@ -343,5 +350,28 @@ func TestLocalSessionsOwnTitles(t *testing.T) {
 		if titles[id] != w {
 			t.Errorf("%s: title %q, want %q", id, titles[id], w)
 		}
+	}
+}
+
+// Codex kept in another CODEX_HOME, set in the person's shell (an App
+// started from the Dock does not have it), with a session codex exec made:
+// listed, as one a program ran.
+func TestLocalSessionsShellCodexHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	t.Setenv("CODEX_HOME", "")
+	work := t.TempDir()
+	alt := filepath.Join(home, "codex-work")
+	writeLines(t, filepath.Join(alt, "sessions", "2026", "11", "20", "rollout-2026-11-20T10-00-00-0199eeee.jsonl"),
+		map[string]any{"type": "session_meta", "payload": map[string]any{"id": "0199eeee-ffff", "cwd": work, "originator": "codex_exec", "source": "exec"}},
+		map[string]any{"type": "response_item", "payload": map[string]any{"type": "message", "role": "user", "content": []any{map[string]any{"type": "input_text", "text": "跑一遍测试"}}}},
+	)
+	if got := (&console.Local{Home: home}).LocalSessions(time.Now()); len(got) != 0 {
+		t.Fatalf("without the shell's CODEX_HOME: %+v", got)
+	}
+	l := &console.Local{Home: home, ShellEnv: func() []string { return []string{"CODEX_HOME=" + alt} }}
+	got := l.LocalSessions(time.Now())
+	if len(got) != 1 || got[0].SessionID != "0199eeee-ffff" || !got[0].Auto || got[0].Title != "跑一遍测试" {
+		t.Fatalf("sessions: %+v", got)
 	}
 }

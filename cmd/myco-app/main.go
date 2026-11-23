@@ -56,7 +56,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	local := &console.Local{Home: home, Device: deviceName(), Bundled: bundledCLI(), ShellPath: console.LoginShellPath,
+	local := &console.Local{Home: home, Device: deviceName(), Bundled: bundledCLI(), ShellPath: console.LoginShellPath, ShellEnv: console.LoginShellEnv,
 		// No launchd/systemd --user (Windows; Linux in WSL, a container,
 		// a su shell): the app runs the local hub itself.
 		NoServiceManager: !serviceManager(home)}

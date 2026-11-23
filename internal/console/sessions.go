@@ -17,6 +17,7 @@ import (
 	"github.com/chenhg5/myco/internal/api"
 	"github.com/chenhg5/myco/internal/client"
 	"github.com/chenhg5/myco/internal/config"
+	"github.com/chenhg5/myco/internal/provider"
 )
 
 // LocalSession is a Claude Code or Codex session on this computer that can
@@ -66,7 +67,30 @@ var claudeSessionFile = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}
 func (l *Local) claudeDirs() []string {
 	var dirs []string
 	seen := map[string]bool{}
-	for _, d := range []string{os.Getenv("CLAUDE_CONFIG_DIR"), filepath.Join(l.Home, ".claude"), filepath.Join(l.Home, ".config", "claude")} {
+	// The configured directory: the App's own, or the one the person's
+	// shell sets (an App started from the Dock does not have it).
+	for _, d := range []string{os.Getenv("CLAUDE_CONFIG_DIR"), l.userGetenv("CLAUDE_CONFIG_DIR"), filepath.Join(l.Home, ".claude"), filepath.Join(l.Home, ".config", "claude")} {
+		if d == "" {
+			continue
+		}
+		if abs, err := filepath.Abs(d); err == nil {
+			d = abs
+		}
+		if !seen[d] {
+			seen[d] = true
+			dirs = append(dirs, d)
+		}
+	}
+	return dirs
+}
+
+// codexDirs are where Codex keeps its sessions: CODEX_HOME (the App's, or
+// the one the person's shell sets, as tools that switch Codex accounts or
+// gateways do) and the default ~/.codex, each once.
+func (l *Local) codexDirs() []string {
+	var dirs []string
+	seen := map[string]bool{}
+	for _, d := range []string{os.Getenv("CODEX_HOME"), l.userGetenv("CODEX_HOME"), filepath.Join(l.Home, ".codex")} {
 		if d == "" {
 			continue
 		}
@@ -84,7 +108,7 @@ func (l *Local) claudeDirs() []string {
 // LocalSessions lists the most recent Claude Code and Codex sessions on
 // this computer (newest first), from their transcripts:
 // <claude dir>/projects/<dir>/<session>.jsonl and
-// ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl.
+// <codex dir>/sessions/YYYY/MM/DD/rollout-*.jsonl.
 //
 // One conversation can have several transcripts: a copy made to join myco
 // (复制一份加入), a fork, a resume that started a new file, or the same
@@ -92,10 +116,7 @@ func (l *Local) claudeDirs() []string {
 // text, folder and time) and are shown once: the newest, marked joined if
 // any of them joined.
 func (l *Local) LocalSessions(now time.Time) []LocalSession {
-	codexDir := os.Getenv("CODEX_HOME")
-	if codexDir == "" {
-		codexDir = filepath.Join(l.Home, ".codex")
-	}
+	codexDirs := l.codexDirs()
 	type file struct {
 		path, cli string
 		mod       time.Time
@@ -115,14 +136,21 @@ func (l *Local) LocalSessions(now time.Time) []LocalSession {
 	for _, d := range l.claudeDirs() {
 		add(filepath.Join(d, "projects", "*", "*.jsonl"), "claude", claudeSessionFile.MatchString)
 	}
-	add(filepath.Join(codexDir, "sessions", "*", "*", "*", "rollout-*.jsonl"), "codex", func(string) bool { return true })
+	for _, d := range codexDirs {
+		add(filepath.Join(d, "sessions", "*", "*", "*", "rollout-*.jsonl"), "codex", func(string) bool { return true })
+	}
 	sort.Slice(files, func(i, j int) bool { return files[i].mod.After(files[j].mod) })
 	if len(files) > filesMax {
 		files = files[:filesMax]
 	}
 
 	joined := l.joinedSessions()
-	threadNames := codexThreadNames(codexDir)
+	threadNames := map[string]string{}
+	for _, d := range codexDirs {
+		for id, n := range codexThreadNames(d) {
+			threadNames[id] = n
+		}
+	}
 	var out []LocalSession
 	byID := map[string]int{}    // cli:session → index in out
 	byConv := map[string]int{}  // a conversation's first request → index in out
@@ -551,7 +579,17 @@ func (b *Backend) localJoin(w http.ResponseWriter, r *http.Request, c *client.Cl
 	if in.Description != "" {
 		args = append(args, "--description", in.Description)
 	}
-	out, err := b.Local.runIn(r.Context(), in.Workdir, []string{"MYCO_HUB=" + hub.URL, "MYCO_ENROLL_TOKEN=" + enr.Token}, args...)
+	// The variables the session reaches its model with, as the person's
+	// terminal has them (a key in ~/.zshrc, a gateway's base URL,
+	// CODEX_HOME): join keeps them for the runner, which does not load the
+	// shell profile either.
+	var extra []string
+	for k, v := range provider.Inherit(in.CLI, b.Local.Home, b.Local.userEnv()) {
+		extra = append(extra, k+"="+v)
+	}
+	sort.Strings(extra)
+	extra = append(extra, "MYCO_HUB="+hub.URL, "MYCO_ENROLL_TOKEN="+enr.Token)
+	out, err := b.Local.runIn(r.Context(), in.Workdir, extra, args...)
 	if err != nil {
 		writeErr(w, err)
 		return

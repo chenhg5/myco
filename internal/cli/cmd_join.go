@@ -464,6 +464,7 @@ Safe to re-run: the same session gets the same agent back.`,
 			{Name: "hub", Kind: String, Help: "Which hub to join, when this machine joined several (default: the first one it joined)"},
 			{Name: "fork", Kind: Bool, Help: "Join a copy of the session (keeps its context; the original stays yours and untouched). Claude Code and Codex"},
 			{Name: "no-memory", Kind: Bool, Help: "Do not add the myco lines to ~/.claude/CLAUDE.md and ~/.codex/AGENTS.md (see myco skill memory)"},
+			{Name: "no-env", Kind: Bool, Help: "Do not pass this session's provider variables (API keys, base URLs, CODEX_HOME, proxies) on to the runner (they go to the agent's private env file)"},
 			{Name: "same-session", Kind: Bool, Help: "When this session is already an agent of another workspace, join it as it is instead of a copy (default: a copy, so each workspace has its own session)"},
 			{Name: "project", Kind: String, Help: "Then join this project (one you can see, e.g. one its owner sent you the link for)"},
 			{Name: "take-over", Kind: String, Help: "Take a node over with a link from myco agent handover-link (its /h/ URL or token; default: MYCO_TAKEOVER, which keeps it out of the process list)"},
@@ -609,6 +610,19 @@ Safe to re-run: the same session gets the same agent back.`,
 			if len(elsewhere) > 0 {
 				out["also_in"], out["session"] = identitiesOf(elsewhere), sessionMode
 			}
+			// The variables this session reaches its model with (a key in
+			// the shell profile, a gateway's base URL, CODEX_HOME), for the
+			// runner, which does not load the profile.
+			var envNames []string
+			if !cloud && !e.in.Bool("no-env") {
+				names, file, err := inheritEnv(e.cfgPath, e.defaultPath, b.Harness)
+				if err != nil {
+					out["env_error"] = err.Error()
+				} else if len(names) > 0 {
+					envNames = names
+					out["env"] = map[string]any{"file": file, "variables": names}
+				}
+			}
 			if cmd := e.ensureResume(hub, res.Token); cmd != "" {
 				out["resume_command"] = cmd
 			}
@@ -645,6 +659,11 @@ Safe to re-run: the same session gets the same agent back.`,
 				}
 				if cmd, ok := out["resume_command"].(string); ok {
 					fmt.Fprintln(w, "If this sandbox is temporary, save this credential outside it (memory, project instructions or an environment variable). Run it first if myco or its config is missing; keep it private:\n  "+cmd)
+				}
+				if len(envNames) > 0 {
+					fmt.Fprintf(w, "the runner will start it with this session's %s (kept in %s; --no-env to skip)\n", strings.Join(envNames, ", "), out["env"].(map[string]any)["file"])
+				} else if msg, ok := out["env_error"].(string); ok {
+					fmt.Fprintf(w, "could not keep this session's provider variables for the runner: %s\n", msg)
 				}
 				if project != "" && projectErr == "" {
 					fmt.Fprintf(w, "joined project %s\n", project)

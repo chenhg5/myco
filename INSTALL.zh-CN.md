@@ -381,6 +381,8 @@ myco runner provider show --agent <agent 名>                         # 看下�
 ```
 固定的服务商只记 cc-switch 里的 ID，每次唤醒前重新读取，所以在 cc-switch 里改了密钥会自动生效，密钥也不会被复制一份。如果它在 cc-switch 里被删掉了，节点会退回跟随本机，App 里会显示"指定的服务商已不存在"。在 App 里"手动填写"的地址和密钥，会写进这个节点的 env 文件（`~/.myco/env/<agent>.env`，权限 600）。改动从节点收到的下一条消息开始生效，不用重启 runner。支持 Claude Code 和 Codex 节点（`myco runner provider list --cli codex`）：Codex 的服务商通过 `codex -c` 参数逐次覆盖，只覆盖和服务商有关的设置（地址、模型、密钥），不动权限和其他配置，也不影响会话续接。
 
+**会话加入时带上它用的变量**：后台服务（launchd/systemd）不加载 shell 配置，所以 `myco join`（以及在 App 里加会话）会把这个会话连模型用的变量留给 runner。Codex：`CODEX_HOME`、`config.toml` 里各服务商 `env_key` 指定的变量（magpie 这类网关、cc-switch 服务商的密钥），用内置 OpenAI 服务商时还有 `OPENAI_API_KEY`、`OPENAI_BASE_URL`。Claude Code：`ANTHROPIC_*` 和它的服务商开关，但和 `~/.claude/settings.json` 里相同的值不带（继续从文件读，cc-switch 里切换服务商照常生效）。两者都带代理变量。这些变量写进该 agent 的 env 文件（`~/.myco/env/<agent>.env`，权限 600，和已有内容合并），只显示变量名。App 会从你的登录 shell 读取这些变量（从 Dock、访达打开的 App 拿不到 `~/.zshrc` 里 export 的东西），也会按那里设置的 `CODEX_HOME`、`CLAUDE_CONFIG_DIR` 找会话。`myco join --no-env` 可以不带。
+
 **后台服务里的 CLI 认证失败**（比如 claude 报 `OAuth session expired and could not be refreshed`）：后台服务（launchd/systemd）**不会加载你的 shell 配置**。如果你的 CLI 是靠 shell 里导出的变量来配置的，比如第三方 Anthropic 兼容服务的 `ANTHROPIC_BASE_URL` 加 `ANTHROPIC_API_KEY`（或 `ANTHROPIC_AUTH_TOKEN`），后台的 claude 就拿不到这些变量。在一个 CLI 能正常工作的终端里执行：
 ```bash
 myco runner env capture --agent <agent 名> --dry-run   # 先看会抓取哪些变量（只显示变量名）
