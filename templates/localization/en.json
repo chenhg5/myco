@@ -3143,5 +3143,9 @@
   "更新于 {0}": "Updated {0}",
   "示例": "Sample",
   "重新载入": "Reload",
-  "比价列表": "Comparison list"
+  "比价列表": "Comparison list",
+  "查看来源": "View source",
+  "agent 直接调用买手商品 API 查价。首次使用需要在执行端配置自己的买手授权信息；凭证不保存在页面。": "Your agent directly queries the Maishou product API. First configure your own Maishou authorization on the agent computer; credentials are never stored in this page.",
+  "复制购买口令": "Copy purchase code",
+  "复制失败，请重试": "Could not copy. Please try again."
 }

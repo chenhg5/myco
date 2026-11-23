@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
 const here=path.dirname(fileURLToPath(import.meta.url));
@@ -32,5 +32,12 @@ try{
   await page.getByRole("heading",{name:"Agent refreshed via real Hub"}).waitFor();await page.waitForFunction(()=>!document.querySelector('.pc-best'));
   assert.deepEqual((await api("/data?collection=decisions")).records[0].data,decision.data);
   await assert.rejects(write("comparisons",id,data,1),e=>e.code==="conflict");
-  assert.deepEqual(errors,[]);await page.close();console.log("PASS actual Hub: official schema, agent create/update, browser changes feed, shipping-aware winner, conditional exclusion, saved candidates, notes, refresh preservation and stale-version refusal");
+  const adapter=await import(pathToFileURL(path.join(root,"agent-api.mjs")).href);
+  const fakeCredentials={openid:"fixture-own-openid-private",invite_code:"fixture-own-referral"};
+  const product={goodsId:"opaque_jd_fixture",sourceType:"2",title:"Direct API pipeline fixture",actualPrice:"99.90",originalPrice:"199.90",couponPrice:"100",shopName:"Test shop"};
+  const generated=await adapter.search({query:"Direct API pipeline fixture",spec:"Test only; no real quote",credentials:fakeCredentials,selected:["jd"],linkDelay:0,fetcher:async url=>Response.json({status:"success",code:200,data:url===adapter.endpoints.search?[product]:url===adapter.endpoints.share?{appUrl:"https://shop.example/product/100",kl:"fixture purchase code"}:{}})});
+  const apiRecord=await write("comparisons","api-direct",generated.comparison);
+  assert.equal(apiRecord.data.offers[0].price,99.9);assert.equal(apiRecord.data.offers[0].provider_ref.provider,"maishou");assert(!JSON.stringify(apiRecord).includes(fakeCredentials.openid));
+  await page.evaluate(()=>location.hash="#compare?id=api-direct");await page.getByRole("heading",{name:"Direct API pipeline fixture",level:1}).waitFor();await page.getByRole("button",{name:"Copy purchase code"}).waitFor();assert.equal(await page.locator(".pc-best").count(),0,"An API candidate does not prove exact SKU/shipping/eligibility");assert.equal(await page.getByRole("link",{name:"View product",exact:true}).getAttribute("href"),"https://shop.example/product/100");
+  assert.deepEqual(errors,[]);await page.close();console.log("PASS actual Hub: official schema, agent create/update, browser changes feed, shipping-aware winner, conditional exclusion, saved candidates, notes, refresh preservation, stale-version refusal, and built Maishou adapter fixture -> real Hub -> UI with purchase code. Real provider acceptance remains pending owner credentials.");
 }finally{await browser.close();await new Promise(r=>server.close(r));}
