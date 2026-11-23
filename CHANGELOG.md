@@ -4,6 +4,24 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.21.31
+
+- **The Dock's red dot clears when you bring the App to the front**: it counts only what came after you last looked.
+- Pictures that a progress update or a follow-up places in its text now show there, instead of "attachment not found", and are not listed again below.
+- Picture rows in messages (a list item that starts with a picture) no longer overlap the line below.
+- myco-ui cards: a card's colour is a small dot before its title, not a bar down the side.
+- The binary ships only the everyday official apps, compressed, with smaller screenshots.
+- Upgrade: update the App for the Dock dot, pictures in progress updates and the card dot; the smaller binary comes with the normal update. No hub upgrade needed.
+
+**中文**
+
+- **把 App 切到前台，Dock 上的红点就会消失**：只计算你上次看过之后新来的。
+- 进展更新、补充消息里插在正文中的图片，现在会显示在原位，不再提示「没找到附件」，下面也不会重复列出。
+- 消息里「左图右文」的列表行，图片不再压到下一行。
+- myco-ui 卡片的颜色改成标题前的小圆点，不再是左侧的竖条。
+- 安装包只带日常用的官方应用，并做了压缩，截图也更小。
+- 升级：更新 App 才能看到 Dock 红点、进展更新里的图片和卡片小圆点；安装包变小随正常更新生效。不需要升级 Hub。
+
 ## v0.21.30
 
 - **Messages can carry diagrams, coloured code and pictures**: a fenced `mermaid` block is drawn as a diagram (flowchart, sequence, ER, state, gantt), and one that does not parse shows its source and why. Code blocks that name a language are coloured, quietly in light and dark. Attach pictures and place them in the text with `![words](attachment:<name>)`: several on one line sit side by side, titled ones show their name and a line under it, and pictures placed in the text are not listed again below. Click a picture or diagram to see it large. Older Apps and the phone Apps show all of it as readable text.
