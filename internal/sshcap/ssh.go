@@ -496,6 +496,13 @@ func Command(op Operation) (string, bool, error) {
 }
 
 const overview = `LC_ALL=C; export LC_ALL
+printf '%s\n' '@@myco:identity'
+myco_hostname=$(uname -n) || myco_hostname=
+printf 'hostname=%s\n' "$myco_hostname"
+myco_cpus=$(getconf _NPROCESSORS_ONLN) || myco_cpus=
+case "$myco_cpus" in ''|*[!0-9]*) myco_cpus=;; esac
+[ -n "$myco_cpus" ] && [ "$myco_cpus" -gt 0 ] 2>/dev/null || myco_cpus=
+printf 'cpus=%s\n' "$myco_cpus"
 printf '%s\n' '@@myco:os'; uname -srm; cat /etc/os-release
 printf '%s\n' '@@myco:uptime'; cat /proc/uptime /proc/loadavg
 printf '%s\n' '@@myco:cpu0'; head -n 1 /proc/stat

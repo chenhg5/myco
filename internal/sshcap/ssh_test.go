@@ -2,12 +2,14 @@ package sshcap
 
 import (
 	"context"
-	"github.com/chenhg5/myco/internal/testsshd"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/chenhg5/myco/internal/testsshd"
 )
 
 func isolated(t *testing.T) (*Manager, Create) {
@@ -52,6 +54,21 @@ func TestRealOpenSSHImmutableTarget(t *testing.T) {
 	r, err = m.Run(ctx, p.ID, p.Binding, Operation{Action: "overview"}, false)
 	if err != nil || !strings.Contains(r.Stdout, "@@myco:memory") || !strings.Contains(r.Stdout, "MemTotal:") {
 		t.Fatalf("real Linux overview: %+v %v", r, err)
+	}
+	identity, _, ok := strings.Cut(strings.TrimPrefix(r.Stdout, "@@myco:identity\n"), "@@myco:os\n")
+	hostname, er := os.Hostname()
+	if er != nil {
+		t.Fatal(er)
+	}
+	if !ok || !strings.Contains(identity, "hostname="+hostname+"\n") {
+		t.Fatal("real SSH overview lacks the remote hostname")
+	}
+	expectedCPUs, er := exec.Command("getconf", "_NPROCESSORS_ONLN").Output()
+	if er != nil {
+		t.Fatal(er)
+	}
+	if !strings.Contains(identity, "cpus="+strings.TrimSpace(string(expectedCPUs))+"\n") {
+		t.Fatal("real SSH overview lacks the online CPU count")
 	}
 	if _, err := m.Run(ctx, p.ID, p.Binding, Operation{Action: "probe"}, true); err == nil {
 		t.Fatal("agent access default allowed")
@@ -122,5 +139,29 @@ func TestRealOpenSSHRefusesUnfrozenJumpConfiguration(t *testing.T) {
 	_, err = m.Create(context.Background(), in)
 	if e, ok := err.(*Error); !ok || e.Code != "unsupported" {
 		t.Fatalf("unfrozen SSH hop accepted: %v", err)
+	}
+}
+
+func TestOverviewIdentityDoesNotInventCPUCount(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux overview script")
+	}
+	for _, fixture := range []struct{ name, body string }{{"zero", "printf 0"}, {"unavailable", "exit 1"}} {
+		t.Run(fixture.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, "getconf"), []byte("#!/bin/sh\n"+fixture.body+"\n"), 0700); err != nil {
+				t.Fatal(err)
+			}
+			cmd := exec.Command("/bin/sh", "-c", overview)
+			cmd.Env = append(os.Environ(), "PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+			output, err := cmd.Output()
+			if err != nil {
+				t.Fatal(err)
+			}
+			identity, _, ok := strings.Cut(strings.TrimPrefix(string(output), "@@myco:identity\n"), "@@myco:os\n")
+			if !ok || !strings.Contains(identity, "\ncpus=\n") {
+				t.Fatal("missing CPU count was not preserved as unknown")
+			}
+		})
 	}
 }
