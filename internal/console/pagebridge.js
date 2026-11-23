@@ -266,7 +266,17 @@
     // What this App's bridge can do, for pages to check before trying:
     // "download-media": myco.download saves video and sound too (mp4, …);
     // "os": myco.os (this computer: files, commands, the screen…).
-    features: ["download-media", "os", "preferences", "remote", "page-actions"],
+    // "net-media": myco.media.url plays a public audio or video address.
+    features: ["download-media", "os", "preferences", "remote", "page-actions", "net-media"],
+    // An address for <audio> / <video> of a public http(s) file (a podcast
+    // episode): the App streams it, with seeking, since the page itself
+    // cannot load media from the internet. Private addresses are refused.
+    media: {
+      url: function (u) {
+        var m = /^\/p\/[^\/]+\//.exec(location.pathname);
+        return (m ? m[0] : "/") + "__myco/stream?url=" + encodeURIComponent(String(u));
+      },
+    },
     os: os,
     // Remote sessions are separate from local OS calls and need App consent.
     remote: {call: function(action, args) {

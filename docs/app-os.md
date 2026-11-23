@@ -225,6 +225,25 @@ and all its user content remain unchanged. The current App also bundles official
 catalog translations for Hubs that do not return `locales` yet; custom catalog
 translations need a Hub that supports this sidecar.
 
+## Playing public audio and video
+
+A page cannot load media from the internet itself (its CSP allows only its
+own origin). Where `myco.features` includes `"net-media"`, `myco.media.url(u)`
+turns a public `http(s)` address into one the page may play:
+
+```ts
+const audio = new Audio(myco.media.url("https://example.com/episode.mp3"));
+await audio.play();
+```
+
+The App streams the file as it plays, passing `Range` on so seeking works,
+and stops when the page stops asking (pause, seek, close). Only public
+addresses are reached: a name that resolves to this computer or the local
+network is refused (`403`), redirects included. Only audio, video, HLS
+playlists and `application/octet-stream` come back; anything else is `415`.
+Older Apps and the browser console lack the feature: check it and say so,
+rather than fetching the whole file with `net.fetch`.
+
 ## Optional Remote Desktop SDK
 
 `myco.features.includes("remote")` exposes `myco.remote.call(action, args)`.
