@@ -899,7 +899,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   // workspace is asked now and then.
   const [noticesOpen, setNoticesOpen] = useState(false);
   const [noticeCount, setNoticeCount] = useState(0);
-  const hubIdsKey = hubs.map((h) => h.id).join(",");
+  const hubIdsKey = hubs.filter((h) => h.ok).map((h) => h.id).join(",");
   const readNoticeCount = useRef<() => void>(() => undefined);
   useEffect(() => {
     let off = false;
@@ -914,7 +914,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
         }
         if (Date.now() - last < 60_000) return;
         last = Date.now();
-        const counts = await Promise.all(hubs.map((h) => appApi.openNotices(h.id).then((f) => f.badge || 0, () => 0)));
+        const counts = await Promise.all(hubs.filter((h) => h.ok).map((h) => appApi.openNotices(h.id).then((f) => f.badge || 0, () => 0)));
         if (!off) setNoticeCount(counts.reduce((a, b) => a + b, 0));
       } catch { /* kept as it was */ }
     };
@@ -1494,7 +1494,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
       </div>
 
       {navMenu.element}
-      <NoticesPanel open={noticesOpen} onOpenChange={setNoticesOpen} hubs={hubs.map((h) => ({ id: h.id, name: h.name }))}
+      <NoticesPanel open={noticesOpen} onOpenChange={setNoticesOpen} hubs={hubs.filter((h) => h.ok).map((h) => ({ id: h.id, name: h.name }))}
         nameOf={(h, a) => { const r = allRows.find((x) => x.hub.id === h && x.st.agent.name === a); return r ? nodeName(r.st.agent, r.hub) : a; }}
         onGo={goNotice} onChanged={() => readNoticeCount.current()} />
       <ComputerSettings focus={pcSettings?.focus} row={pcSettings ? rows.find((r) => r.hub.id === pcSettings.hubId && r.st.agent.name === pcSettings.name) || null : null}

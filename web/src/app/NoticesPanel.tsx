@@ -4,7 +4,7 @@ import type { Notice } from "@/api";
 import { appApi } from "@/appapi";
 import { L } from "@/lib/i18n";
 import { timeAgo } from "@/lib/utils";
-import { Modal, ErrorText } from "@/app/dialogs";
+import { Modal } from "@/app/dialogs";
 
 /*
  * 待处理: what still waits for you (the hub's open needs-you notices, the
@@ -63,7 +63,8 @@ export function NoticesPanel({ open, onOpenChange, hubs, nameOf, onGo, onChanged
 
   const all = (lists || []).flatMap((l) => l.notices.map((n) => ({ hubId: l.hubId, n })));
   const readable = all.filter(({ n }) => !actionable(n.kind));
-  const many = hubs.length > 1;
+  // (the workspace's name only when what is listed comes from several)
+  const many = new Set(all.map((x) => x.hubId)).size > 1;
 
   const go = (hubId: string, n: Notice) => {
     onOpenChange(false);
@@ -95,10 +96,14 @@ export function NoticesPanel({ open, onOpenChange, hubs, nameOf, onGo, onChanged
         <div className="nt-empty">{L("正在看…", "Looking…")}</div>
       ) : (
         <>
-          {lists.filter((l) => l.error).map((l) => (
-            <div key={l.hubId} className="nt-error">{many && <b>{l.hubName}</b>}<ErrorText error={l.error} onRetry={() => void load()} /></div>
-          ))}
-          {all.length === 0 && !lists.some((l) => l.error) && <div className="nt-empty">{L("没有在等你的事。", "Nothing waits for you.")}</div>}
+          {/* (a workspace that cannot be reached now is left out quietly;
+              only when none could be read is that said) */}
+          {lists.length > 0 && lists.every((l) => l.error) ? (
+            <div className="nt-empty">
+              {L("暂时看不到：工作区没连上。", "Cannot see them now: the workspace is not connected.")}
+              <button type="button" className="app-group-action" onClick={() => { setLists(null); void load(); }}>{L("重试", "Retry")}</button>
+            </div>
+          ) : all.length === 0 && <div className="nt-empty">{L("没有在等你的事。", "Nothing waits for you.")}</div>}
           {all.length > 0 && (
             <ul className="nt-list">
               {all.map(({ hubId, n }) => {

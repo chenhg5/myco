@@ -4588,6 +4588,8 @@ async function runMatrix(browser, size, scheme) {
       await dlg.waitFor({ timeout: 5_000 });
       await dlg.locator(".nt-row").nth(2).waitFor({ timeout: 10_000 });
       if ((await dlg.locator(".nt-row").count()) !== 3) throw new Error("待处理应列出 3 件事");
+      // A workspace that cannot be reached is left out quietly (no error).
+      if (await dlg.locator(".app-error, .app-error-text, [role=alert]").count()) throw new Error("待处理不该显示别的工作区连不上的错误");
       await dlg.locator(".nt-row").first().getByText("在问你").waitFor({ timeout: 5_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "notices");

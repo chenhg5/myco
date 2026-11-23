@@ -2476,6 +2476,9 @@ const server = http.createServer(async (req, res) => {
         { seq: 1, id: "nt_stuck", kind: "stuck", tier: "needs_you", key: "k1", target: "project:官网改版", project: "官网改版", actor: "release-cloud", subject: "首页改版：半小时没有动静", announce: true, created_at: iso(7200) },
       ],
     };
+    // (a workspace that cannot be reached answers as the real backend does)
+    const nh = state.hubs.find((h) => h.id === parts[2]);
+    if (nh && !nh.ok) return fail(res, 502, "hub_unreachable", nh.error || "Hub 连不上");
     const list = (state.notices[parts[2]] ||= []);
     if (parts[4] === "open") return send(res, 200, { notices: list, last: 3, badge: list.length });
     const body = await readBody(req);
