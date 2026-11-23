@@ -14,6 +14,7 @@ import (
 	"github.com/chenhg5/myco/internal/api"
 	"github.com/chenhg5/myco/internal/client"
 	"github.com/chenhg5/myco/internal/remotedesktop"
+	"github.com/chenhg5/myco/internal/sshcap"
 )
 
 // The App hosts agent actions on this computer (api/actions.go): for each
@@ -145,10 +146,19 @@ func (b *Backend) reconcileActionHosts() {
 	// Keys: a hub's id (the computer's remote.desktop host) and "page:" and
 	// its id (its page renderer, while the window runs the renderer).
 	want := map[string]Hub{}
+	sshWant := map[string]sshcap.Profile{}
+	_, profiles := b.sshProfiles()
 	hubs, _ := b.Store.List()
 	desktop := st.Supported && st.Installed && remotedesktop.AgentActions(st.Version)
 	pages := b.pageRender.active()
 	for _, h := range hubs {
+		for _, p := range profiles {
+			if p.AgentEnabled && p.AgentHub == h.ID {
+				key := "ssh:" + h.ID + ":" + p.ID + ":" + p.Binding
+				want[key] = h
+				sshWant[key] = p
+			}
+		}
 		if desktop {
 			want[h.ID] = h
 		}
@@ -175,7 +185,9 @@ func (b *Backend) reconcileActionHosts() {
 		a.running[key] = cancel
 		go func() {
 			var wait time.Duration
-			if strings.HasPrefix(key, "page:") {
+			if p, ok := sshWant[key]; ok {
+				wait = b.hostSSH(ctx, h, p)
+			} else if strings.HasPrefix(key, "page:") {
 				wait = b.hostPages(ctx, h)
 			} else {
 				wait = b.hostActions(ctx, h)
@@ -325,7 +337,7 @@ func (b *Backend) agentOwnsComponent() bool {
 // actionPermitted reports whether grant g (as the host got it) allows
 // action on machine now.
 func actionPermitted(g api.ActionGrant, machine, permission string, now time.Time) bool {
-	if g.State != api.GrantActive || g.Target.Kind != "machine" || g.Target.ID != machine || (g.ExpiresAt != nil && !now.Before(*g.ExpiresAt)) {
+	if g.State != api.GrantActive || g.Target.Kind != "machine" || g.Target.ID != machine || g.Target.Resource != nil || (g.ExpiresAt != nil && !now.Before(*g.ExpiresAt)) {
 		return false
 	}
 	return slices.Contains(g.Permissions, permission) || (permission == "remote.desktop.view" && slices.Contains(g.Permissions, "remote.desktop.control"))

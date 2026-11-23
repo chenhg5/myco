@@ -19,6 +19,7 @@ func (s *Server) SetActions(a *app.ActionService) { s.actions = a }
 
 func (s *Server) actionRoutes(m *http.ServeMux) {
 	// The agent.
+	m.HandleFunc("GET /v1/me/action-targets", s.agent(s.listActionTargets))
 	m.HandleFunc("POST /v1/me/action-grants", s.agent(s.requestActionGrant))
 	m.HandleFunc("GET /v1/me/action-grants", s.agent(s.listMyActionGrants))
 	m.HandleFunc("GET /v1/me/action-grants/{id}", s.agent(s.getActionGrant))
@@ -297,4 +298,16 @@ func (s *Server) completeActionJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, j)
+}
+
+func (s *Server) listActionTargets(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
+	if !s.actionsEnabled(w) {
+		return
+	}
+	ts, err := s.actions.ResourceTargets(r.Context(), a)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, api.ActionTargetList{Targets: ts})
 }

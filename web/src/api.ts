@@ -515,8 +515,18 @@ export interface Approval {
 }
 
 /** What an agent may do on a computer, approved by its owner (agent actions, v0.21.21). */
+export interface ActionResource {
+  provider: "server.ssh"; id: string; binding: string; name?: string; summary?: string;
+}
+export interface ActionTarget { kind: "machine" | "page"; id: string; resource?: ActionResource }
+export interface ActionTargetList { targets: ActionTarget[] }
+export interface SSHProfile {
+  id: string; name: string; destination: string; host: string; user: string; port: number;
+  binding: string; agent_enabled: boolean; agent_hub?: string;
+}
+export interface SSHResult { stdout: string; stderr: string; exit_code: number; truncated: boolean; duration_ms: number }
 export interface ActionGrant {
-  id: string; agent: string; owner: string; target: { kind: "machine" | "page"; id: string }; target_name?: string;
+  id: string; agent: string; owner: string; target: ActionTarget; target_name?: string;
   permissions: string[]; requested?: string[]; reason?: string; message_id?: string; approval_id: string;
   state: "pending" | "active" | "denied" | "expired" | "revoked" | "ended"; end_reason?: string;
   created_at: string; expires_at?: string; ended_at?: string;

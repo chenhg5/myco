@@ -429,6 +429,7 @@ From v0.21.21, an agent can act on a computer through a provider that computer's
 | Route | Who | |
 |---|---|---|
 | `POST /v1/me/action-grants` | agent | `{target: {kind: "machine", id}, permissions, reason, message_id?, page_id?, ttl_seconds?}` → `201` a pending grant `{id, agent, owner, target, target_name, permissions, requested, reason, message_id?, approval_id, state, end_reason?, created_at, expires_at?, ended_at?}`; the target's owner gets an `action_grant` approval. `id` may be the computer's name. Permissions: `remote.desktop.view`, `remote.desktop.control` (control includes view). TTL 5 minutes by default, 30 at most. With `message_id`, the grant ends when that task ends. `?dry_run=1` checks only |
+| `GET /v1/me/action-targets` | agent | `{targets: [{kind:"machine",id,resource:{provider:"server.ssh",id,binding,name,summary}}]}`: enabled SSH resources belonging to the agent's own person in this workspace. Discovery is not permission to execute. Older hubs return 404 |
 | `GET /v1/me/action-grants` | agent | `{grants: [...]}`, its own |
 | `GET /v1/me/action-grants/{id}?wait_seconds=30` | agent | the grant; waits while it is pending (`wait=30s` works too; 60 seconds at most) |
 | `POST /v1/me/action-grants/{id}/end` | agent | ends it → the grant |
@@ -446,6 +447,77 @@ From v0.21.21, an agent can act on a computer through a provider that computer's
 | `POST /v1/console/action-jobs/{id}/complete` | console | `{host_id, generation, state, result?, error?, artifact_ids?}` → the job. A wrong generation is `409`; a finished job cannot change |
 
 The CLI: `myco action grant request|list|get|end`, `myco action list`, `myco action run` (waits, and saves screenshots to files), `myco action job`, `myco action cancel`.
+
+### Bound SSH resources
+
+The desktop App can host `server.ssh` for a private, immutable OpenSSH profile.
+A grant must supply `target: {kind:"machine", id:controller_machine_id,
+resource:{provider:"server.ssh", id:profile_id, binding:sha256}}`. The trusted
+host, not the agent, supplies the profile name and resolved `user@host:port`
+summary shown in the approval. `server.ssh.read` allows overview, service and
+container lists/status/logs; `server.ssh.manage` additionally allows fixed
+start/stop/restart operations and implies read. Providers cannot be mixed in a
+resource grant. There is no arbitrary agent shell action.
+
+Host registration includes the same `resource` with `name` and `summary`.
+Only the controller machine's actual owner may register or poll an SSH host;
+hub management privileges do not substitute for ownership. Different profiles
+on one machine have separate hosts. Matching requires the same provider, profile
+ID and SHA256 binding at both the Hub and the native host. A changed binding
+revokes existing grants, including pending requests; a restarted host with the
+same binding can serve the same target. Old hubs/Apps are unsupported: clients
+must never retry SSH grants without their resource binding.
+
+Action names (v1): `server.ssh.overview`, `server.ssh.services.list`,
+`server.ssh.services.status`, `server.ssh.services.logs`,
+`server.ssh.services.start|stop|restart`, `server.ssh.containers.list`,
+`server.ssh.containers.logs`, `server.ssh.containers.start|stop|restart`.
+Arguments only contain `{name?,lines?}` (systemd `.service` unit/container name, log lines 1–200,
+default 100); a profile or host override is rejected. Results are
+`{stdout,stderr,exit_code,truncated,duration_ms}`. The SDK parses the fixed text
+formats (`overview` uses `@@myco:` section markers, container lists use Docker
+JSON lines). Nonzero remote exit codes are returned as results, not success
+claims about the service. Output is capped at 256 KiB total and each operation
+at 30 seconds. JSON results over 200 KiB use a private `application/json` action
+artifact; the job result then contains `{artifact,exit_code,truncated,duration_ms}`.
+Cancellation/disconnection during a mutation returns `outcome_unknown`, never an
+automatic retry. Read current status before deciding to retry.
+
+`myco action targets` discovers resources; request using
+`myco action grant request --machine mch_... --ssh-profile ssh_... --binding
+<sha256> --permission server.ssh.read --reason "inspect server"`. Grants,
+expiry, private results and audit follow the same framework lifecycle as desktop
+actions, including its current restriction in encrypted workspaces.
+
+### Local SSH capabilities
+
+Updated desktop bridges advertise `ssh` and offer `myco.os.ssh.profiles(args)` /
+`myco.os.ssh.run(args)` (also `myco.os.call("ssh.profiles", args)` and
+`myco.os.call("ssh.run", args)`). Detect capability availability before use;
+missing OpenSSH or an old/mobile bridge is unsupported.
+
+Profiles use `~/.myco/ssh/<stable-id>.json` (0600). `ssh.profiles` accepts
+`{op:"list"}` → `{profiles:[...]}`;
+`{op:"create",name,destination,user?,port?}` → a profile;
+`{op:"delete",id}` → `{ok:true}`;
+`{op:"agent_enabled",id,agent_enabled:boolean}` → updated profile.
+Public profiles contain `{id,name,destination,host,user,port,binding,
+agent_enabled,agent_hub?}`; no config, key paths, passwords or key contents.
+Opt-in binds agent access to the page's current workspace (`agent_hub`), not all
+workspaces on this computer. Enabling authenticates and verifies Linux first.
+A profile's destination cannot be edited in place: recreate it and approve again.
+
+`ssh.run` accepts `{profile_id,binding?,action,name?,lines?}` with the short
+native action names (`overview`, `services.list`, etc.; `probe` returns `uname -s`).
+These human calls do not create agent grants or execute shared page records.
+Both native and agent calls use local OpenSSH/config/ssh-agent, BatchMode,
+strict existing known_hosts, no PTY/password prompts, forwarding or automatic
+host trust. Verify an unknown server's host fingerprint independently and connect
+once with OpenSSH locally. SSH config and known_hosts are snapshotted and hashed;
+changes cause `target_changed` rather than silently retargeting an approval.
+The original profile and trust remain local; only explicitly enabled resource
+display metadata reaches the workspace. Execution uses the SSH account's normal
+permissions; it never adds sudo, daemon privileges or remote software.
 
 ## Message object
 
