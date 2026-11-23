@@ -9442,3 +9442,71 @@ html.os-other ::-webkit-scrollbar-thumb:hover, html.os-other ::-webkit-scrollbar
 /* A choice that can't be made from here (a remote custom address without
    end-to-end encryption): its name faded, the reason left readable. */
 .app-provider-opt.is-off b, .app-provider-opt.is-off input { opacity: 0.45; }
+.conv-menu-hint { margin-left: auto; padding-left: 12px; font-size: 11px; color: var(--muted); }
+
+/* ---------- 专注模式 (focus mode) ----------
+   The chat you are in alone, on a plain background: no sidebar, no top
+   bar, no members; the zoomed pane's conversation centred at a reading
+   width. A small button at the top right (and Esc) leaves it. */
+.app-shell.is-focus { background: var(--bg); }
+.app-shell.is-focus .app-sidebar,
+.app-shell.is-focus .app-crumbbar,
+.app-shell.is-focus .sp-side,
+.app-shell.is-focus .sp-strip,
+.app-shell.is-focus .sp-pane-zoom,
+.app-shell.is-focus .pg-tabs { display: none !important; }
+/* A page docked beside the chat waits until you leave. */
+html.is-focus .fp-panel.is-docked { display: none !important; }
+.app-shell.is-focus .app-main,
+.app-shell.is-focus.collapsed .app-main {
+  margin: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+/* Room on each side for the button at the top right. */
+.app-shell.is-focus .sp-main {
+  max-width: min(880px, calc(100% - 112px));
+  width: 100%;
+  margin: 0 auto;
+}
+/* Just the icon, quiet, at the top right; pointed at, it says what it
+   does and its key. */
+.focus-exit {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 40;
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  min-width: 30px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: .6;
+  transition: opacity .15s, color .15s;
+}
+.focus-exit:hover,
+.focus-exit:focus-visible { opacity: 1; color: var(--fg); }
+.focus-exit svg { flex: none; width: 13px; height: 13px; }
+.focus-exit-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 0;
+  overflow: hidden;
+  transition: max-width .18s ease, margin .18s ease;
+}
+.focus-exit:hover .focus-exit-label,
+.focus-exit:focus-visible .focus-exit-label { max-width: 140px; margin-left: 6px; }
+.focus-exit kbd {
+  font: 11px ui-monospace, "SF Mono", Menlo, monospace;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--pill-hover);
+  color: var(--muted);
+}

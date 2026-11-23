@@ -15,9 +15,10 @@ try {
     assert.equal(writes.length,0,"Opening never writes defaults");
     await p.screenshot({path:`${out}/${lang}-${theme}-${width}.png`});
     const sample=recs.get("comparisons/headphones").data;
-    write("comparisons","headphones",{...sample,status:"ready",title:"Agent verified comparison"});
+    write("comparisons","headphones",{...sample,status:"ready",title:"Agent verified comparison",offers:sample.offers.map(o=>o.id==="a"?{...o,link_kind:"evidence",purchase_code:"Fixture shopping code"}:o)});
     await p.getByRole("heading",{name:"Agent verified comparison"}).waitFor();await p.locator(".pc-best[data-offer=a]").waitFor();
     assert.equal(await p.locator(".pc-best").count(),1);
+    await p.getByRole("button",{name:L("复制购买口令","Copy purchase code"),exact:true}).click();assert.equal(await p.evaluate(()=>window.__clipboard),"Fixture shopping code");assert.equal(await p.locator('[data-offer="a"]').getByRole("link",{name:L("查看来源","View source"),exact:true}).count(),1);
     await p.getByLabel(L("筛选平台","Filter platforms")).selectOption("平台 B");assert.equal(await p.locator(".pc-offer").count(),1);assert.equal(await p.locator(".pc-best").count(),0);
     await p.getByLabel(L("筛选平台","Filter platforms")).selectOption("");
     await p.getByLabel(L("搜索报价","Search offers")).fill("nothing matches");assert.equal(await p.locator(".pc-offer").count(),0);await p.getByLabel(L("搜索报价","Search offers")).fill("");

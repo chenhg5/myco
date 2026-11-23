@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRightLeft, ArrowUp, ArrowUpRight, Check, ChevronRight, Copy, AudioLines, Download, Images, Loader2, Lock, MoreHorizontal, Paintbrush, Pin as PinIcon, PinOff, Search, Settings2, Square, Trash2, WifiOff, X } from "lucide-react";
+import { Focus as FocusIcon, AlertTriangle, ArrowDown, ArrowLeft, ArrowRightLeft, ArrowUp, ArrowUpRight, Check, ChevronRight, Copy, AudioLines, Download, Images, Loader2, Lock, MoreHorizontal, Paintbrush, Pin as PinIcon, PinOff, Search, Settings2, Square, Trash2, WifiOff, X } from "lucide-react";
 import { ExportChat } from "@/app/ExportChat";
 import { appApi, isTransient } from "@/appapi";
 import type { Agent, Message } from "@/api";
@@ -90,6 +90,17 @@ function dayTime(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   return d.toLocaleString(locale(), { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
+/** 专注模式's keys, as the menu shows them: ⌘⇧F on a Mac, Ctrl+Shift+F elsewhere. */
+export function focusKey(): string {
+  return /Mac/i.test(navigator.platform || navigator.userAgent) ? "⌘⇧F" : "Ctrl+Shift+F";
+}
+
+/** Turns 专注模式 on or off (AppMode listens), for the chat whose pane el is in. */
+export function toggleFocus(el?: Element | null) {
+  if (el) markActivePane(el as HTMLElement);
+  window.dispatchEvent(new CustomEvent("myco-focus-mode"));
 }
 
 // A pause this long between two messages gets a divider with the time.
@@ -2202,6 +2213,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       "sep" as const,
     ] : []),
     ...(!termMode && pins ? [{ label: L("置顶一个网址", "Pin an address"), icon: PinIcon, onSelect: () => setPinAdding(true) }] : []),
+    // 专注模式 (AppMode): this chat alone, full screen, centred.
+    { label: L("专注模式", "Focus mode"), icon: FocusIcon, hint: focusKey(), onSelect: () => toggleFocus(rootRef.current) },
     ...(hoEntry.show ? [{ label: hoEntry.why ? L("换一个来接着做（现在不行）", "Hand over (not now)") : L("换一个来接着做", "Hand over to another session"), icon: ArrowRightLeft, disabled: !!hoEntry.why, onSelect: () => openHandover({ hubId: target.hubId, name: target.agent }) }] : []),
     ...(!observed && (shown?.length || 0) > 0 ? [{ label: L("导出这段对话", "Export this conversation"), icon: Download, onSelect: () => setExporting(true) }] : []),
   ].filter((it, i, all) => it !== "sep" || i < all.length - 1);

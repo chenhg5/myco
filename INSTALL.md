@@ -1304,3 +1304,27 @@ that the change is waiting for the runner; no plaintext key is stored on the Hub
 or sent through ordinary messages. When E2E is off, enter the custom settings in
 the App or CLI on the target computer instead. You can still use remote
 cc-switch selection without E2E because it carries only a channel reference.
+
+## Manage a Linux server over SSH
+
+The desktop App can use an existing OpenSSH alias or `user@host` to read Linux
+CPU, memory and disk usage, inspect systemd services and Docker containers, and
+run fixed start/stop/restart operations. Install OpenSSH locally and confirm the
+server's host fingerprint through a trusted channel before connecting once in
+a terminal. Reuse `~/.ssh/config`, your local keys and ssh-agent; do not paste a
+private key or password into the application. Encrypted keys need an unlocked
+ssh-agent: the App never opens an authentication prompt.
+
+Connection profiles stay private on the controller computer. Agent access is
+off by default; enable a profile for the current workspace, then let the agent
+request a short approval for that exact server. Read access and service/container
+management are separate permissions. No arbitrary agent shell or automatic
+execution of shared page records is provided. The controller App must remain
+open. If SSH configuration or host trust changes, recreate the profile and
+approve again; an old approval cannot silently move to a different server.
+Current action grants are unavailable in end-to-end encrypted workspaces.
+
+The native capability needs an updated desktop build (updating a template alone
+is insufficient). See the [SSH API contract](docs/api.md#bound-ssh-resources)
+for agent commands and limits. Commands use the SSH account's existing rights;
+there is no automatic sudo or remote daemon installation.

@@ -1,0 +1,53 @@
+.ac-app { height: 100%; display: flex; flex-direction: column; background: var(--bg); color: var(--fg); }
+.ac-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 12px 18px; border-bottom: 1px solid var(--line); }
+.ac-header h1 { margin: 0; font-size: 17px; }
+.ac-header small, .ac-node-preview, .ac-settings p, .ac-empty p { color: var(--muted); }
+.ac-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.ac-settings { width: min(420px, calc(100% - 24px)); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 18px; box-shadow: 0 10px 40px #0003; }
+.ac-settings::backdrop { background: #0007; }
+.ac-settings h2 { font-size: 17px; margin: 0 0 10px; }
+.ac-settings p { font-size: 13px; }
+.ac-service-field { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 7px; margin-block: 10px; }
+.ac-settings label { margin: 0; }
+.ac-settings .ac-service-field + small { color: var(--muted); }
+.ac-settings form { margin-block-start: 16px; justify-content: flex-end; }
+.ac-body { min-height: 0; flex: 1; display: flex; }
+.ac-stage { position: relative; flex: 1; min-width: 0; overflow: hidden; background: var(--bg2); }
+.ac-stage .react-flow { --xy-background-pattern-dots-color: var(--line); --xy-edge-stroke: var(--muted); --xy-connectionline-stroke: var(--fg); }
+.ac-stage .react-flow__edge-path, .ac-stage .react-flow__connection-path { stroke-width: 1.7; }
+.ac-node { width: 100%; height: 100%; text-align: start; display: flex; flex-direction: column; gap: 7px; align-items: flex-start; padding: 12px 14px; user-select: none; border: 1px solid var(--line); border-radius: 11px; background: var(--bg); color: var(--fg); box-shadow: 0 4px 14px #0001; }
+.ac-node[data-selected="true"] { outline: 2px solid var(--fg); outline-offset: -2px; }
+.ac-stage .react-flow__handle { width: 13px; height: 13px; background: var(--bg); border: 2px solid var(--muted); }
+.ac-stage .react-flow__handle:hover, .ac-stage .react-flow__handle.valid { background: var(--fg); border-color: var(--fg); }
+.ac-stage .react-flow__controls-button { background: var(--bg); color: var(--fg); border-color: var(--line); }
+.ac-create-menu { position: absolute; z-index: 10; display: grid; gap: 2px; width: 166px; padding: 6px; background: var(--bg); border: 1px solid var(--line); border-radius: 9px; box-shadow: 0 6px 24px #0003; }
+.ac-create-menu strong { color: var(--muted); padding: 6px 8px; font-size: 11px; }
+.ac-create-menu button { display: flex; align-items: center; gap: 8px; text-align: start; padding: 5px 8px; border: 0; border-radius: 5px; background: transparent; color: var(--fg); }
+.ac-create-menu button:hover, .ac-create-menu button:focus-visible { background: var(--bg2); }
+.ac-node-kind { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+.ac-node strong { max-width: 100%; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; font-size: 14px; }
+.ac-node-preview { font-size: 12px; line-height: 1.35; text-align: start; overflow: hidden; overflow-wrap: anywhere; }
+.ac-empty { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; pointer-events: none; padding: 16px; }
+.ac-empty h2, .ac-empty p { margin: 3px; }
+.ac-empty h2 { font-size: 18px; }
+.ac-inspector { width: clamp(260px, 28vw, 340px); min-width: 0; padding: 16px; overflow: auto; border-inline-start: 1px solid var(--line); }
+.ac-inspector-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.ac-inspector h2 { margin: 0; font-size: 16px; }
+.ac-inspector label, .ac-settings label { display: grid; gap: 4px; margin-block-end: 10px; font-size: 12px; }
+.ac-inspector textarea { height: auto; min-height: 54px; resize: vertical; }
+.ac-output { margin-block-start: 12px; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
+.ac-output h3 { font-size: 13px; }
+.ac-output img, .ac-output video { max-width: 100%; max-height: 280px; border-radius: 7px; }
+.ac-output pre { font: inherit; white-space: pre-wrap; }
+@media (max-width: 620px) {
+  .ac-header { padding: 8px; }
+  .ac-header .btn { padding-inline: 6px; }
+  .ac-body { flex-direction: column; }
+  .ac-stage { flex: 1 0 43%; }
+  .ac-inspector { width: 100%; padding: 10px; border-inline-start: 0; border-top: 1px solid var(--line); }
+}
+
+@media (pointer: coarse) { .ac-stage .react-flow__handle { width: 20px; height: 20px; } }
+
+.ac-pending-edge { position: absolute; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
+.ac-pending-edge path { fill: none; stroke: var(--muted); stroke-width: 1.7px; stroke-dasharray: 4 4; }

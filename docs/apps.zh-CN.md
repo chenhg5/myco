@@ -12,6 +12,10 @@
 
 ## 创意设计
 
+**AIGC 画布**把便签、文本、图片和视频连成共享工作流。文本通过 OpenRouter 生成，图片和视频通过 Replicate 生成。生成需使用自己的服务密钥，密钥只留在当前会话。生成的媒体链接可能过期，请及时保存。
+
+[配色助手](palette.md)：从本地图片提色，保存色卡与喜欢的配色，生成搭配、检查文字对比度，并导出 SVG、CSS 或 JSON。设计师与 agent 共用同一份色卡。
+
 <table>
 <tr>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/motion-dark.webp"><img src="assets/apps/motion.webp" alt="动效视频"></picture><br><b>动效视频</b><br>做产品宣传、数据快报、竖版短视频这类动效视频：从模板开始改文字、图片和配色，或者说一句话让 agent 写好每个场景（HTML 加动画）；在时间点上批注让 agent 改，照一段参考视频重做；配上音乐和配音，场景切换对上节拍，配音转成字幕；存成模板给大家用；在本机导出 mp4。</td>

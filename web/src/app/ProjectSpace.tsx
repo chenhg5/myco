@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { activePaneId } from "@/app/ChatSearch";
 import { IntroCard, introOf } from "@/app/Onboard";
 import { Activity, ArrowLeft, ArrowUp, ChevronDown, AudioLines, Columns2, FileText, Loader2, PanelRightClose, PanelRightOpen, Plus, Users } from "lucide-react";
 import { appApi, type RecentItem } from "@/appapi";
@@ -90,7 +91,7 @@ const POLL_MS = 4000;
  * for looking back. The agents in no project yet have the group view: a
  * feed of their tasks and a box to give one a task.
  */
-export function ProjectSpace({ space, project, looseRows = [], hubName, rows, now, me, openChat, home, onAddAgent, onAddWorkspace, onOpenMember, onAbout, onRefresh, projects = [], onNewProject }: {
+export function ProjectSpace({ space, project, looseRows = [], hubName, rows, now, me, openChat, home, onAddAgent, onAddWorkspace, onOpenMember, onAbout, onRefresh, projects = [], onNewProject, focus = false }: {
   space: SpaceRef;
   /** the project (none for the agents not in a project) */
   project?: Project;
@@ -116,6 +117,8 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
   projects?: Project[];
   /** start a project (from chat) */
   onNewProject?: () => void;
+  /** 专注模式 (AppMode): the chat you were in takes the whole space. */
+  focus?: boolean;
 }) {
   const hubId = space.hubId;
   const loose = isLoose(space);
@@ -306,6 +309,27 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
       window.setTimeout(() => el.classList.remove("is-called"), 1200);
     }, 0);
   };
+  // 专注模式: the pane of the chat you were in (else the main one) takes the
+  // whole space, as a pane zoomed by hand does; whoever you switch to then
+  // (⌃Tab, the sidebar) takes it. Leaving puts the panes back as they were.
+  const zoomBefore = useRef<string | null>(null);
+  useEffect(() => {
+    if (focus) {
+      if (zoomBefore.current === null) zoomBefore.current = zoom;
+      const here = activePaneId();
+      const id = here && (here === MAIN || sides.some((x) => x.id === here)) ? here : zoom || MAIN;
+      if (zoom !== id) setZoom(id);
+    } else if (zoomBefore.current !== null) {
+      setZoom(zoomBefore.current);
+      zoomBefore.current = null;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus]);
+  // Still one pane in 专注模式: a chat opened in a pane of its own takes it.
+  useEffect(() => {
+    if (focus && !zoom) setZoom(sides.some((x) => x.id === lastSide) ? lastSide : MAIN);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus, zoom]);
   // The pane a picked member shows in (for the members list's highlight).
   const focusedSide = sides.find((x) => x.id === lastSide) || sides[sides.length - 1];
   const chatWith = async (agent: string, focus?: string) => {
@@ -1256,7 +1280,11 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
   const face = (r: AgentRow) => {
     const a = r.st.agent;
     const ws = isWorkspace(a);
-    const what = ws ? whereOf(r) : liveLine(r, nameOf, now).text;
+    // The hint on hover: who, and what it is doing in a few words (its
+    // first line, cut at 40 characters), never the whole task.
+    const full = ws ? whereOf(r) : liveLine(r, nameOf, now).text;
+    const first = (full || "").split("\n")[0].trim();
+    const what = [...first].length > 40 ? [...first].slice(0, 39).join("") + "…" : first;
     const name = nodeName(a, r.hub) + (a.name === coordinator ? ` · ${L("协调者", "Coordinator")}` : "");
     return (
       <button
@@ -1299,7 +1327,7 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
         onClick={() => onChat(r)}
         onContextMenu={(e) => menu.open(e, menuOf(r))}
         draggable onDragStart={(e) => dragAgent(e, { hubId: r.hub.id, agent: a.name })}
-        title={a.description || nodeName(a, r.hub)}
+        title={(() => { const d = (a.description || "").split("\n")[0].trim(); return d ? ([...d].length > 60 ? [...d].slice(0, 59).join("") + "…" : d) : nodeName(a, r.hub); })()}
       >
         <Avatar agent={a} size={32} state={r.st.state} />
         <span className="sp-member-text">

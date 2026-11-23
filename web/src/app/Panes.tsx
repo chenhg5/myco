@@ -381,7 +381,7 @@ export function PaneGrid({ slots, layout, onLayout, zoom, onZoom, onClose, onDro
     return (
       <>
         {!tabbed && (
-          <button type="button" className="app-btn app-btn-plain sp-pane-btn" onClick={() => onZoom(zoomed ? "" : s.key)}
+          <button type="button" className="app-btn app-btn-plain sp-pane-btn sp-pane-zoom" onClick={() => onZoom(zoomed ? "" : s.key)}
             title={zoomed ? L("还原所有栏", "Back to all the panes") : L("只看这一栏", "Show only this pane")}
             aria-label={zoomed ? L("还原所有栏", "Back to all the panes") : L("只看这一栏", "Show only this pane")}>
             {zoomed ? <Minimize2 /> : <Maximize2 />}

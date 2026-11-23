@@ -12,6 +12,10 @@ Agent access currently uses shared page records. The [agent actions SDK](app-act
 
 ## Creative
 
+**AIGC Canvas** links notes, text, images, and videos into a shared workflow. Text generation uses OpenRouter, while images and videos use Replicate. Enter your own provider keys for the current session. Generated media links can expire, so save files you want to keep.
+
+[Color studio](palette.md): extract colors from local images, save shared palettes and favorites, explore harmonies, check text contrast, and export SVG, CSS or JSON. Agents can create and revise the same palettes.
+
 <table>
 <tr>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/motion-dark.webp"><img src="assets/apps/motion.webp" alt="Motion video"></picture><br><b>Motion video</b><br>Promo clips, data recaps and vertical shorts: start from a template or describe it and the agent writes each scene (HTML and animation). Comment at a point in time for changes, remake from a reference video, add music and voice-over with captions, export MP4 on your computer.</td>
@@ -87,7 +91,7 @@ Agent access currently uses shared page records. The [agent actions SDK](app-act
 <table>
 <tr>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/reader-dark.webp"><img src="assets/apps/reader.webp" alt="Reader"></picture><br><b>Reader</b><br>A local PDF and TXT bookshelf with page transitions, paper themes, typography controls, contents, search, bookmarks and remembered progress. Original files stay on this device. <a href="reader.md">Details</a>.</td>
-<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/price-compare-dark.webp"><img src="assets/apps/price-compare.webp" alt="Shopping comparison"></picture><br><b>Shopping comparison</b><br>Agents research offers; people compare matching specifications, shipping, coupon conditions, sources and observation times. Save candidates and shared buying notes. No built-in marketplace login or automatic scraping. <a href="shopping-comparison.md">Details</a>.</td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/price-compare-dark.webp"><img src="assets/apps/price-compare.webp" alt="Shopping comparison"></picture><br><b>Shopping comparison</b><br>An agent-side Maishou API adapter queries offers and purchase links; people compare specifications, conditions and sources. Requires your own Maishou authorization on the executing agent. Live authenticated acceptance awaits owner credentials. Save candidates and shared notes. <a href="shopping-comparison.md">Details</a>.</td>
 </tr>
 <tr>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/ledger-dark.webp"><img src="assets/apps/ledger.webp" alt="Budget book"></picture><br><b>Budget book</b><br>Income and spending by month, balance and budget left, where the money went by category, every entry by day. Keep it with family or a small team; the agent can file bills for you.</td>

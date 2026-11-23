@@ -241,6 +241,13 @@ and stops when the page stops asking (pause, seek, close). Only public
 addresses are reached: a name that resolves to this computer or the local
 network is refused (`403`), redirects included. Only audio, video, HLS
 playlists and `application/octet-stream` come back; anything else is `415`.
+On iOS the same API uses the page's custom scheme, with bounded native
+streaming and connections pinned to validated public IPs. It uses the phone's
+direct network route (including a device VPN), independently of the App's HTTP
+proxy setting. Pausing closes the upstream socket; playing resumes the existing
+WebKit resource from the forwarded byte using Range. Reload, close and background
+cancel streams. Installing an updated native App is necessary to add the feature.
+
 Older Apps and the browser console lack the feature: check it and say so,
 rather than fetching the whole file with `net.fetch`.
 
@@ -379,3 +386,13 @@ ten minutes) and are cancelled on navigation, reload, close or backgrounding.
 No workspace authorization, saved HTTP credentials or ambient cookies are
 attached, and cross-origin redirects strip credential headers. The sandbox's
 external connection policy is unchanged; all requests use this bridge.
+
+## SSH server administration
+
+Desktop builds with OpenSSH offer `ssh.profiles` and `ssh.run`; see the
+[local SSH capability contract](api.md#local-ssh-capabilities). These calls reuse
+local SSH configuration, keys and ssh-agent with strict existing host trust.
+Profiles are private to this computer; agent access requires explicit opt-in
+for the current workspace and a separate human-approved, target-bound grant.
+An old desktop or mobile bridge returns unsupported; updating a template alone
+cannot install this native capability. There is no arbitrary agent terminal.

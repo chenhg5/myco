@@ -25,7 +25,7 @@ export function showcase(lang, { makeAgent, makeMessage, iso, CONSOLE }) {
       status_text: T("好的，在套餐下面加 FAQ。", "Yes, add an FAQ below the plans."), status_at: iso(40),
       binding: { harness: "claude", environment: "macOS 26.1", workdir: "~/code/website" },
       allow_from: ["build-backend", "mbp-reviewer"], last_seen_at: iso(3), aliases: ["frontend"],
-      queued: 1, current_from: CONSOLE, current_thread: "th_pricing",
+      queued: 1, current_from: CONSOLE, current_thread: "th_pricing", current_id: "msg_sc_faq",
     }),
     makeAgent({
       name: "build-backend", display_name: T("后端（Codex）", "Backend (Codex)"),
@@ -151,7 +151,7 @@ export function showcase(lang, { makeAgent, makeMessage, iso, CONSOLE }) {
       makeMessage({ thread_id: "th_pricing", from: CONSOLE, to: "mbp-frontend", type: "task", status: "done", body: T("按设计稿做新的定价页，三档套餐，支持月付 / 年付切换。", "Build the new pricing page from the design: three plans, with a monthly / yearly toggle."), trace: traces.pricing, created_at: iso(2400), updated_at: iso(2400) }),
       makeMessage({ thread_id: "th_pricing", from: "mbp-frontend", to: CONSOLE, type: "progress", status: "done", body: T("读完设计稿，先搭页面骨架…", "Read the design; laying out the page…"), created_at: iso(2200), updated_at: iso(2200) }),
       makeMessage({ thread_id: "th_pricing", from: "mbp-frontend", to: CONSOLE, type: "reply", status: "done", body: pricingReply, created_at: iso(1500), updated_at: iso(1500) }),
-      makeMessage({ thread_id: "th_pricing", from: CONSOLE, to: "mbp-frontend", type: "task", status: "acked", trace: traces.faq, body: T("好的，在套餐下面加 FAQ。", "Yes, add an FAQ below the plans."), created_at: iso(60), updated_at: iso(40) }),
+      makeMessage({ id: "msg_sc_faq", thread_id: "th_pricing", from: CONSOLE, to: "mbp-frontend", type: "task", status: "acked", trace: traces.faq, body: T("好的，在套餐下面加 FAQ。", "Yes, add an FAQ below the plans."), created_at: iso(60), updated_at: iso(40) }),
       makeMessage({ thread_id: "th_pricing", from: "mbp-frontend", to: CONSOLE, type: "progress", status: "done", body: T("在写 FAQ，先列 6 个常见问题…", "Writing the FAQ: six common questions first…"), created_at: iso(30), updated_at: iso(30) }),
     ],
     th_api: [

@@ -36,6 +36,28 @@ func (b *Backend) openURL(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
+// fullscreen: PUT /app/window/fullscreen {on} puts the desktop app's
+// window in full screen or takes it out (专注模式). 404 not_supported in a
+// browser, which uses its own full screen.
+func (b *Backend) fullscreen(w http.ResponseWriter, r *http.Request) {
+	if b.Fullscreen == nil {
+		writeErr(w, &client.Error{Code: "not_supported", Message: "only the desktop app sets its window's full screen", Status: http.StatusNotFound})
+		return
+	}
+	var in struct {
+		On bool `json:"on"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&in); err != nil {
+		writeErr(w, &client.Error{Code: "invalid_argument", Message: "on (true or false) is required", Status: http.StatusBadRequest})
+		return
+	}
+	if err := b.Fullscreen(in.On); err != nil {
+		writeErr(w, &client.Error{Code: "unavailable", Message: "the window is not ready", Status: http.StatusConflict})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // openable: an absolute http(s) link with a host, or a mailto link.
 func openable(raw string) bool {
 	raw = strings.TrimSpace(raw)

@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 /** One line of a menu, "sep" for a divider, or a small heading over a group
  * of choices. A choice that is currently on carries `checked`. */
 export type MenuItem =
-  | { label: string; icon?: IconType; onSelect: () => void; danger?: boolean; disabled?: boolean; checked?: boolean }
+  | { label: string; icon?: IconType; onSelect: () => void; danger?: boolean; disabled?: boolean; checked?: boolean; hint?: string }
   | { header: string }
   | "sep";
 
@@ -132,6 +132,7 @@ export function useContextMenu(): {
             {it.checked !== undefined ? (it.checked ? <Check /> : <span className="conv-menu-noicon" />)
               : it.icon ? <it.icon /> : <span className="conv-menu-noicon" />}
             <span className="conv-menu-label">{it.label}</span>
+            {it.hint && <span className="conv-menu-hint">{it.hint}</span>}
           </button>
         ))}
       </div>,

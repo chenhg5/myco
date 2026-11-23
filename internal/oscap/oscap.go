@@ -23,6 +23,8 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+
+	"github.com/chenhg5/myco/internal/sshcap"
 )
 
 // Error is a capability's error: a code the page can act on and a message.
@@ -106,6 +108,7 @@ type Secrets interface {
 
 // Env is what capabilities need from the App.
 type Env struct {
+	SSH     *sshcap.Manager
 	Secrets Secrets
 	// Scope separates controller profiles by workspace and page.
 	Scope string
@@ -119,7 +122,7 @@ type Env struct {
 // NewEnv is an Env for this person.
 func NewEnv(path func() string) *Env {
 	home, _ := os.UserHomeDir()
-	return &Env{Home: home, Path: path}
+	return &Env{Home: home, Path: path, SSH: &sshcap.Manager{Home: home}}
 }
 
 // PATH is the PATH for commands.

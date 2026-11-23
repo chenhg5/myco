@@ -47,6 +47,7 @@ func (b *Backend) osInit() (*oscap.Env, *oscap.Jobs) {
 		s.env.Secrets = b.Secrets
 		if b.Local != nil && b.Local.Home != "" {
 			s.env.Home = b.Local.Home
+			s.env.SSH.Home = b.Local.Home
 		}
 		s.jobs = &oscap.Jobs{Env: s.env}
 	})
@@ -111,6 +112,9 @@ func (b *Backend) osRoutes(m *http.ServeMux) {
 		scoped.Scope = in.Page.Hub + "\x00" + in.Page.ID
 		v, err := oscap.Call(r.Context(), &scoped, in.Name, in.Args)
 		b.osLog(in, "", start, err)
+		if err == nil && in.Name == "ssh.profiles" && b.Local != nil && b.Store != nil {
+			go b.reconcileActionHosts()
+		}
 		if err != nil {
 			writeOSErr(w, err)
 			return

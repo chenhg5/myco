@@ -14,6 +14,7 @@ import (
 	"github.com/chenhg5/myco/internal/api"
 	"github.com/chenhg5/myco/internal/client"
 	"github.com/chenhg5/myco/internal/remotedesktop"
+	"github.com/chenhg5/myco/internal/sshcap"
 )
 
 // The App hosts agent actions on this computer (api/actions.go): for each
@@ -34,7 +35,8 @@ type actionHosts struct {
 	once    sync.Once
 	mu      sync.Mutex
 	running map[string]context.CancelFunc // hub id -> its host loop
-	retry   map[string]time.Time          // hub id -> not before (no machine here, old hub)
+	epochs  map[string]uint64
+	retry   map[string]time.Time // hub id -> not before (no machine here, old hub)
 	// The component was started for agents (not by Remote Desktop's
 	// sharing), with control or not; it stops when idle.
 	agentOwned, control bool
@@ -145,10 +147,19 @@ func (b *Backend) reconcileActionHosts() {
 	// Keys: a hub's id (the computer's remote.desktop host) and "page:" and
 	// its id (its page renderer, while the window runs the renderer).
 	want := map[string]Hub{}
+	sshWant := map[string]sshcap.Profile{}
+	_, profiles := b.sshProfiles()
 	hubs, _ := b.Store.List()
 	desktop := st.Supported && st.Installed && remotedesktop.AgentActions(st.Version)
 	pages := b.pageRender.active()
 	for _, h := range hubs {
+		for _, p := range profiles {
+			if p.AgentEnabled && p.AgentHub == h.ID {
+				key := "ssh:" + h.ID + ":" + p.ID + ":" + p.Binding
+				want[key] = h
+				sshWant[key] = p
+			}
+		}
 		if desktop {
 			want[h.ID] = h
 		}
@@ -161,9 +172,14 @@ func (b *Backend) reconcileActionHosts() {
 	if a.running == nil {
 		a.running, a.retry = map[string]context.CancelFunc{}, map[string]time.Time{}
 	}
+	if a.epochs == nil {
+		a.epochs = map[string]uint64{}
+	}
 	for id, stop := range a.running {
 		if _, ok := want[id]; !ok {
 			stop()
+			a.epochs[id]++ // invalidate that loop's late completion
+			delete(a.retry, id)
 			delete(a.running, id)
 		}
 	}
@@ -173,23 +189,36 @@ func (b *Backend) reconcileActionHosts() {
 		}
 		ctx, cancel := context.WithCancel(context.Background())
 		a.running[key] = cancel
+		a.epochs[key]++
+		epoch := a.epochs[key]
 		go func() {
 			var wait time.Duration
-			if strings.HasPrefix(key, "page:") {
+			if p, ok := sshWant[key]; ok {
+				wait = b.hostSSH(ctx, h, p)
+			} else if strings.HasPrefix(key, "page:") {
 				wait = b.hostPages(ctx, h)
 			} else {
 				wait = b.hostActions(ctx, h)
 			}
-			a.mu.Lock()
-			delete(a.running, key)
-			a.retry[key] = time.Now().Add(wait)
-			a.mu.Unlock()
+			a.finish(key, epoch, wait)
 		}()
 	}
 	if a.agentOwned && time.Since(a.lastJob) > agentIdleStop {
 		b.remoteComponent().Stop()
 		a.agentOwned = false
 	}
+}
+
+// finish never removes a newer loop when a profile is quickly disabled and
+// re-enabled while the cancelled loop is still unwinding its HTTP poll.
+func (a *actionHosts) finish(key string, epoch uint64, wait time.Duration) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.epochs[key] != epoch {
+		return
+	}
+	delete(a.running, key)
+	a.retry[key] = time.Now().Add(wait)
 }
 
 // thisMachine is this computer's machine at hub: the one its machine node
@@ -325,7 +354,7 @@ func (b *Backend) agentOwnsComponent() bool {
 // actionPermitted reports whether grant g (as the host got it) allows
 // action on machine now.
 func actionPermitted(g api.ActionGrant, machine, permission string, now time.Time) bool {
-	if g.State != api.GrantActive || g.Target.Kind != "machine" || g.Target.ID != machine || (g.ExpiresAt != nil && !now.Before(*g.ExpiresAt)) {
+	if g.State != api.GrantActive || g.Target.Kind != "machine" || g.Target.ID != machine || g.Target.Resource != nil || (g.ExpiresAt != nil && !now.Before(*g.ExpiresAt)) {
 		return false
 	}
 	return slices.Contains(g.Permissions, permission) || (permission == "remote.desktop.view" && slices.Contains(g.Permissions, "remote.desktop.control"))

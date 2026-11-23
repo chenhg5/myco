@@ -1,35 +1,58 @@
 # Shopping comparison
 
-Shopping comparison is a shared research page: an agent checks the available
-sources and writes offers; people open the page to compare conditions and pick
-what suits them. Create it from **Apps → Shopping comparison**, then tell an
-agent which product, exact specification, quantity, region and budget to check.
-The page's **New comparison** button sends that brief to its publishing agent;
-clients without message sending let you copy the request instead.
+Shopping comparison connects an agent-side Maishou API adapter to a shared
+page. The agent directly queries product prices and purchase links; people open
+the page to compare conditions and choose. Create it from **Apps → Shopping
+comparison** and tell an agent the product, exact specification and delivery
+region. **New comparison** sends an API-query brief to the publishing agent;
+clients without sending can copy the request. General web search is not used
+as a fallback for missing product API access.
 
-Agents use the normal page records API, not a new shopping action. Each
-`comparisons` record is a complete research snapshot, with stable offer IDs,
-source URLs, observation times, stock, currency, shipping and eligibility.
-The template's `agent.md` documents every field and a versioned CLI workflow.
-Return a page URL with `#compare?id=<record-id>` to open the requested snapshot
-on clients supporting app links. Access follows existing page sharing.
+## Configure your own Maishou access
 
-The displayed lowest comparable price includes known shipping and requires a
-verified matching specification, the same currency, public eligibility,
-available stock and evidence no older than 24 hours. Conditional member or
-subsidy prices, uncertain specifications, expired offers and unknown shipping
-remain visible with explanations. Cashback is displayed separately and never
-deducted as an immediate discount. The lowest observed comparable price is not
-a guaranteed market-wide minimum; the marketplace checkout price wins.
+The selected reference Skill uses OpenID and account authorization, not a
+documented generic API-key field. Obtain your own approved access from Maishou:
+OpenID and relevant marketplace bindings, plus your own invitation code and
+token if required for purchase links. If the supplier provides a different
+developer API-key contract, its documentation must be applied before use.
 
-Filter by platform, search offer text, save candidates, and keep shared purchase
-notes. Human decisions live separately from research, so an agent refresh does
-not overwrite them. Export downloads the selected comparison and decisions as
-JSON. Notes and saved candidates are visible to authorized page members.
+On the agent's computer, configure MAISHOU_OPENID, optional
+MAISHOU_INVITE_CODE and MAISHOU_TOKEN, or a private JSON file passed as
+--config-file. Never put credentials in page records, a shared chat, the web
+bundle or repository. The app includes no borrowed identity or referral code,
+auto-login, subscription purchase or ordering capability. Provider account
+terms, quota and fees still apply and have not been established by this client.
 
-No provider credentials, default affiliate identity, marketplace login,
-automated scraping, ordering, payments or background monitoring are included.
-Agents use tools or provider accounts they are authorized to use. If the agent
-cannot obtain useful evidence, it records a blocked result and explains what
-is missing. Prices in **Try sample** are explicitly fictional and excluded
-from ranking; a blank page starts without offers.
+The template guide documents how to download and run agent-api.mjs with Node
+20+, query selected platforms, paginate, obtain purchase links, and publish
+through the existing myco CLI with a version check. A source-type enum does
+not guarantee that the caller has access to every listed platform. Partial
+failures, expired authorization and missing links are reported explicitly.
+
+**Acceptance status:** request/error contracts and local HTTP handling are
+tested. The live anonymous endpoint rejects queries as not logged in or not
+authorized. Authenticated product and purchase-link acceptance is pending the
+owner's own provider credentials; installing this template alone does not
+make a live account available.
+
+## Compare and choose
+
+Each comparisons record is a research snapshot with stable offer IDs, sources,
+query times and conditions. API product-level prices may be minimum-SKU or
+account-conditional prices. The adapter leaves unconfirmed specifications,
+shipping, eligibility and stock unknown; original prices and cashback are not
+substituted for payable prices. Where only a platform source entry is available,
+the button says **View source**; copy a provided purchase code when available.
+
+The displayed lowest comparable price includes known shipping and requires an
+exact specification, the same currency, public eligibility, available stock
+and evidence no older than 24 hours. It is the lowest of the queried comparable
+offers, not a guaranteed market-wide minimum. Checkout remains authoritative.
+
+Filter, search, save candidates, write shared buying notes and export JSON.
+Human decisions live separately from research and survive agent refreshes.
+Notes and saved candidates are visible to authorized page members. Return a
+page URL with #compare?id=<record-id> for direct navigation on updated clients;
+sharing still follows page access. Sample prices are explicitly fictional,
+have no buying links and are excluded from ranking. No orders, payments or
+background monitoring are included.

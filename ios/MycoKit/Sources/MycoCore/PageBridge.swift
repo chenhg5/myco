@@ -51,6 +51,7 @@ public final class PageBridge {
     private let doors: Doors
     private let remote: PageRemoteDesktop
     private let network: PageNetwork
+    public let media = PageMedia()
     private var preferences = ["language": AppLanguage.current.rawValue, "theme": "light"]
     private let storage: UserDefaults
     private let storageKey: String
@@ -126,6 +127,12 @@ public final class PageBridge {
                 "version": known,
                 "preferences": preferences,
             ] as [String: Any])
+        case "media.pause":
+            media.pause(address: (args["url"] as? String) ?? "")
+            return Self.json(true)
+        case "media.resume":
+            media.resume(address: (args["url"] as? String) ?? "")
+            return Self.json(true)
         case "net.fetch":
             return try await network.answer(args)
         case "remote.call":
@@ -201,7 +208,7 @@ public final class PageBridge {
     public func setPreferences(language: String, theme: String) {
         preferences = ["language": language == "zh" ? "zh" : "en", "theme": theme == "dark" ? "dark" : "light"]
     }
-    public func cancelNetwork() { network.cancel() }
+    public func cancelNetwork() { network.cancel(); media.cancel() }
     public func resetRemote() { remote.resetNow() }
     public func closeRemote() { remote.closeNow() }
     public func suspendRemote() { remote.suspendNow() }

@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/chenhg5/myco/internal/api"
@@ -31,13 +33,13 @@ func (c *Client) RequestActionGrant(ctx context.Context, req api.ActionGrantRequ
 			Grant api.ActionGrant `json:"grant"`
 		}
 		if err := c.do(ctx, http.MethodPost, "/v1/me/action-grants", dryQuery(true), req, &out); err != nil {
-			return nil, err
+			return nil, sshGrantCompatibility(err, req.Target.Resource)
 		}
 		return &out.Grant, nil
 	}
 	var out api.ActionGrant
 	if err := c.do(ctx, http.MethodPost, "/v1/me/action-grants", nil, req, &out); err != nil {
-		return nil, err
+		return nil, sshGrantCompatibility(err, req.Target.Resource)
 	}
 	return &out, nil
 }
@@ -239,4 +241,26 @@ func (c *Client) raw(ctx context.Context, method, path string, query url.Values,
 		return nil, "", decodeError(resp.StatusCode, data)
 	}
 	return data, resp.Header.Get("Content-Type"), nil
+}
+
+// ActionTargets lists enabled resources belonging to this agent's person.
+func (c *Client) ActionTargets(ctx context.Context) ([]api.ActionTarget, error) {
+	var out api.ActionTargetList
+	if err := c.do(ctx, http.MethodGet, "/v1/me/action-targets", nil, nil, &out); err != nil {
+		var e *Error
+		if errors.As(err, &e) && e.Status == 404 {
+			return nil, &Error{Code: "unsupported", Status: e.Status, Message: "this Hub does not support bound SSH action targets", Suggestion: "update the Hub and controller App"}
+		}
+		return nil, err
+	}
+	return out.Targets, nil
+}
+
+// Never downgrade a bound request to a machine-wide grant on an old Hub.
+func sshGrantCompatibility(err error, r *api.ActionResource) error {
+	var e *Error
+	if r != nil && errors.As(err, &e) && e.Status == 400 && strings.Contains(e.Message, `unknown field "resource"`) {
+		return &Error{Code: "unsupported", Status: e.Status, Message: "this Hub does not support resource-bound SSH grants", Suggestion: "update the Hub and controller App"}
+	}
+	return err
 }

@@ -192,7 +192,7 @@
     "system.info", "system.disks", "system.processes", "system.usage", "system.apps", "system.settings", "process.kill",
     "fs.paths", "fs.list", "fs.stat", "fs.read", "fs.write", "fs.mkdir", "fs.move", "fs.copy", "fs.delete", "fs.trash", "fs.scan*",
     "fs.search*", "fs.watch*", "fs.thumbnail", "fs.pick", "fs.saveAs", "fs.reveal", "fs.open",
-    "exec.run", "exec.spawn*", "clipboard.read", "clipboard.write", "notify", "screen.capture", "screen.region", "screen.record*", "net.fetch",
+    "ssh.profiles", "ssh.run", "exec.run", "exec.spawn*", "clipboard.read", "clipboard.write", "notify", "screen.capture", "screen.region", "screen.record*", "net.fetch",
     "audio.sources", "audio.record*", "speech.status", "speech.install*", "speech.transcribe*", "speech.diarize*",
   ].forEach(function (n) {
     var job = n.slice(-1) === "*";
@@ -267,7 +267,7 @@
     // "download-media": myco.download saves video and sound too (mp4, …);
     // "os": myco.os (this computer: files, commands, the screen…).
     // "net-media": myco.media.url plays a public audio or video address.
-    features: ["download-media", "os", "preferences", "remote", "page-actions", "net-media"],
+    features: ["download-media", "os", "ssh", "preferences", "remote", "page-actions", "net-media"],
     // An address for <audio> / <video> of a public http(s) file (a podcast
     // episode): the App streams it, with seeking, since the page itself
     // cannot load media from the internet. Private addresses are refused.

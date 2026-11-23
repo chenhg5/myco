@@ -46,6 +46,7 @@ const GROUPS: Group[] = [
       { label: () => L("文字放大 / 缩小", "Larger / smaller text"), keys: [["mod", "="], ["mod", "-"]] },
       { label: () => L("文字恢复标准大小", "Standard text size"), keys: [["mod", "0"]] },
       { label: () => L("切换浅色 / 深色", "Switch light / dark"), keys: [["mod", "shift", "L"]] },
+      { label: () => L("专注模式：只留这个对话，全屏（Esc 退出）", "Focus mode: this chat alone, full screen (Esc leaves)"), keys: [["mod", "shift", "F"]] },
       { label: () => L("关闭弹框、菜单和面板", "Close a dialog, menu or panel"), keys: [["Esc"]] },
     ],
   },

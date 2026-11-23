@@ -41,7 +41,7 @@ function Request({ current, id, close }: { current?: Comparison; id?: string; cl
     <header><div><span className="pc-eyebrow">{uiText("让 agent 做功课")}</span><h2>{uiText("你想买什么？")}</h2></div><button className="icon-btn" aria-label={uiText("关闭")} title={uiText("关闭")} disabled={busy} onClick={close}><X className="ico" /></button></header>
     <label>{uiText("商品或型号")}<input autoFocus className="inp" maxLength={500} value={query} placeholder={uiText("例如：索尼 WH-1000XM6")} onChange={e => setQuery(e.target.value)} /></label>
     <label>{uiText("规格与购买要求")}<textarea maxLength={1000} value={spec} placeholder={uiText("颜色、容量、件数、预算、收货地区，以及是否接受会员或补贴价格…")} onChange={e => setSpec(e.target.value)} /></label>
-    <p className="pc-muted">{uiText("agent 使用它能访问的来源查价，再把结果写到这里；页面不会自行登录购物平台。")}</p>
+    <p className="pc-muted">{uiText("agent 直接调用买手商品 API 查价。首次使用需要在执行端配置自己的买手授权信息；凭证不保存在页面。")}</p>
     {error && <p role="alert" className="pc-error">{error}</p>}
     {manual && <label>{uiText("复制以下内容发给 agent")}<textarea className="pc-prompt" readOnly value={manual} onFocus={e => e.target.select()} /></label>}
     <footer><button className="btn" disabled={busy} onClick={close}>{uiText("关闭")}</button><button className="btn btn-primary" disabled={!query.trim() || busy} onClick={() => void submit()}>{busy ? uiText("正在发送…") : typeof bridge?.send === "function" ? uiText("请 agent 查价") : uiText("复制查价需求")}</button></footer>
@@ -72,7 +72,7 @@ function OfferCard({ offer: o, comparison: c, id, best, now }: { offer: Offer; c
     <div className="pc-offer-price"><span className="pc-muted">{uiText("商品价")}</span><strong>{price(o.price, o.currency)}</strong><small>{o.shipping === null ? uiText("运费待确认") : o.shipping === 0 ? uiText("包邮") : uiText("运费 {0}", price(o.shipping, o.currency))}</small>
       {total(o) !== null && <small>{uiText("含运费 {0}", price(total(o), o.currency))}</small>}
       {excluded && <span className="pc-excluded">{reason(excluded)}</span>}
-      <div className="pc-offer-actions"><button className={`icon-btn ${saved ? "is-saved" : ""}`} aria-label={saved ? uiText("取消收藏") : uiText("收藏报价")} title={saved ? uiText("取消收藏") : uiText("收藏报价")} aria-pressed={saved} disabled={!!kit.pending} onClick={() => void toggleSaved(id, o.id)}><Bookmark className="ico" fill={saved ? "currentColor" : "none"} /></button>{c.status === "sample" ? <button className="btn" disabled>{uiText("示例")}</button> : <a className="btn" href={safeURL(o.url)} target="_blank" rel="noopener noreferrer">{uiText("查看商品")}<ArrowUpRight className="ico" /></a>}</div>
+      <div className="pc-offer-actions"><button className={`icon-btn ${saved ? "is-saved" : ""}`} aria-label={saved ? uiText("取消收藏") : uiText("收藏报价")} title={saved ? uiText("取消收藏") : uiText("收藏报价")} aria-pressed={saved} disabled={!!kit.pending} onClick={() => void toggleSaved(id, o.id)}><Bookmark className="ico" fill={saved ? "currentColor" : "none"} /></button>{c.status !== "sample" && o.purchase_code && <button className="btn" onClick={() => void copy(o.purchase_code!).catch(() => kit.flash(uiText("复制失败，请重试")))}>{uiText("复制购买口令")}</button>}{c.status === "sample" ? <button className="btn" disabled>{uiText("示例")}</button> : <a className="btn" href={safeURL(o.url)} target="_blank" rel="noopener noreferrer">{o.link_kind === "evidence" ? uiText("查看来源") : uiText("查看商品")}<ArrowUpRight className="ico" /></a>}</div>
     </div>
   </article>;
 }

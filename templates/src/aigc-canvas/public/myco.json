@@ -1,0 +1,27 @@
+{
+  "id": "myco/aigc-canvas",
+  "name": "AIGC 画布",
+  "description": "把便签、文本、图片和视频连成工作流，使用自己的生成服务密钥，与协作者共享节点和结果。",
+  "version": "1.1.0",
+  "kind": "custom",
+  "category": "creative",
+  "icon": "icon.svg",
+  "data": {
+    "nodes": {
+      "fields": {
+        "kind": "text",
+        "title": "text",
+        "prompt": "text",
+        "model": "text",
+        "options": "text",
+        "from": "text",
+        "output": "text",
+        "x": "number",
+        "y": "number"
+      }
+    }
+  },
+  "requires": {
+    "hub": "0.20.7"
+  }
+}

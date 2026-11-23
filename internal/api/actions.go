@@ -14,10 +14,22 @@ import (
 // arguments or results. Contract: context/design/app-agent-actions.md in
 // the maintainers' repository.
 
-// ActionTarget is where actions run. Only "machine" for now.
+// ActionResource is a private, explicitly enabled resource on a controller
+// machine. Its immutable binding freezes the actual target; display metadata
+// comes from the trusted host, never from the requesting agent.
+type ActionResource struct {
+	Provider string `json:"provider"`
+	ID       string `json:"id"`
+	Binding  string `json:"binding"`
+	Name     string `json:"name,omitempty"`
+	Summary  string `json:"summary,omitempty"`
+}
+
+// ActionTarget is where actions run.
 type ActionTarget struct {
-	Kind string `json:"kind"` // "machine" | "page"
-	ID   string `json:"id"`
+	Kind     string          `json:"kind"` // "machine" | "page"
+	ID       string          `json:"id"`
+	Resource *ActionResource `json:"resource,omitempty"`
 }
 
 // ActionDescriptor is one action a provider offers.
@@ -144,6 +156,7 @@ type ActionJob struct {
 // ActionHostRegister is POST /v1/console/action-hosts: the trusted App on
 // a computer offering a provider's actions there.
 type ActionHostRegister struct {
+	Resource   *ActionResource    `json:"resource,omitempty"`
 	MachineID  string             `json:"machine_id"`
 	Provider   string             `json:"provider"`
 	Generation string             `json:"generation"`
@@ -152,11 +165,12 @@ type ActionHostRegister struct {
 
 // ActionHost is a registered host.
 type ActionHost struct {
-	ID         string    `json:"id"`
-	MachineID  string    `json:"machine_id"`
-	Provider   string    `json:"provider"`
-	Generation string    `json:"generation"`
-	LastSeenAt time.Time `json:"last_seen_at"`
+	Resource   *ActionResource `json:"resource,omitempty"`
+	ID         string          `json:"id"`
+	MachineID  string          `json:"machine_id"`
+	Provider   string          `json:"provider"`
+	Generation string          `json:"generation"`
+	LastSeenAt time.Time       `json:"last_seen_at"`
 }
 
 // ActionHostJob is a job handed to a host, with the grant it runs under
@@ -190,4 +204,9 @@ type ActionJobComplete struct {
 	Result      json.RawMessage `json:"result,omitempty"`
 	Error       *ActionError    `json:"error,omitempty"`
 	ArtifactIDs []string        `json:"artifact_ids,omitempty"`
+}
+
+// ActionTargetList contains enabled private resources of the agent's owner.
+type ActionTargetList struct {
+	Targets []ActionTarget `json:"targets"`
 }

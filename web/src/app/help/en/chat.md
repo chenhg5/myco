@@ -128,4 +128,10 @@ Hover a message and click the bin beside its time. It disappears from your view 
 - The column of small ticks on the left of a chat marks each of your turns; hover to see what you asked, click to jump there.
 - Scrolled far up, a down arrow appears at the bottom (or "N new" when new messages arrive); click it to go back to the bottom.
 
+## Focus mode
+
+To keep your eyes on one chat, choose ⋯ › Focus mode at the top right of the chat, or press ⌘⇧F (Ctrl+Shift+F on Windows). The window goes full screen and the sidebar, the top bar, the members and the other panes hide, leaving this chat in the middle. ⌃Tab and ⌥↑ / ⌥↓ still move to other chats, which show the same way. Esc, ⌘⇧F again, or Leave focus at the top right brings everything back.
+
+![Focus mode: this chat alone, everything else hidden](shot:focus-mode)
+
 To watch several agents at once, split the chat into panes; see [Split panes](#help/panes).

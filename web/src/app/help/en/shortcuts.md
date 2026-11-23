@@ -16,6 +16,7 @@ These work anywhere in the App.
 | Back / forward | ⌘[ / ⌘] | Ctrl+[ / Ctrl+] |
 | Switch agents (as ⌘Tab does) | ⌃Tab / ⌥Tab | Ctrl+Tab / Ctrl+\` |
 | Previous / next conversation | ⌥↑ / ⌥↓ | Alt+↑ / Alt+↓ |
+| Focus mode (press again, or Esc, to leave) | ⌘⇧F | Ctrl+Shift+F |
 | Switch to workspace 1–9 | ⌘1…9 | Ctrl+1…9 |
 | New project | ⌘N | Ctrl+N |
 | Show / hide the sidebar | ⌘\\ | Ctrl+\\ |
