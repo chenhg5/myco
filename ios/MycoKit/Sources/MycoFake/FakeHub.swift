@@ -83,6 +83,11 @@ public actor FakeHub: HubAPI {
             pageList.insert(page, at: 0)
             pageFiles[page.id] = ["index.html": ("text/html; charset=utf-8", RemotePageFixture.html)]
         }
+        if scenario == .media {
+            let page = Page(id: MediaPageFixture.id, name: "Media probe", publisher: FakeHub.me, url: FakeHub.demoAddress.absoluteString + "/pages/" + MediaPageFixture.id, createdAt: now, updatedAt: now)
+            pageList.insert(page, at: 0)
+            pageFiles[page.id] = ["index.html": ("text/html; charset=utf-8", MediaPageFixture.html)]
+        }
         if scenario == .links {
             let page = Page(id: LinkPageFixture.id, name: "影视", publisher: "vps-codex-90aa", url: FakeHub.demoAddress.absoluteString + "/pages/" + LinkPageFixture.id, createdAt: now, updatedAt: now)
             pageList.insert(page, at: 0)
@@ -92,6 +97,13 @@ public actor FakeHub: HubAPI {
                 body: "第一集在这：\(LinkPageFixture.link(episode: "第1集"))\n\n第二集：\(LinkPageFixture.link(episode: "第2集"))", status: "done",
                 createdAt: now.addingTimeInterval(-30)))
         }
+    }
+
+    /// Adds a page made of these files (by path, with their types): to
+    /// open a built app in the demo (`-myco-page-dir`).
+    public func addPage(_ page: Page, files: [String: (type: String, text: String)]) {
+        pageList.insert(page, at: 0)
+        pageFiles[page.id] = files
     }
 
     public func setLatency(_ value: Duration) {

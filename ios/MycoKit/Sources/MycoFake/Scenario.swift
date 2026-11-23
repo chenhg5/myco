@@ -20,6 +20,9 @@ public enum Scenario: Sendable {
     /// The team, with a page that reports deep links into it, linked by
     /// 运维 with a fragment (for UI tests).
     case links
+    /// The team, with a page that plays a public podcast through the
+    /// phone's network (for UI tests; needs the internet).
+    case media
     /// Joined, but nobody is here yet.
     case empty
 

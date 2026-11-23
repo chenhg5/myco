@@ -66,7 +66,7 @@ struct MycoApp: App {
             // The voice's keys live in the keychain, beside the device tokens.
             secrets: KeychainStore(),
             voice: Self.voice)
-        let scenarios: [String: Scenario] = ["demo": .team, "empty": .empty, "long": .long, "waiting": .waiting, "session": .session, "remote": .remote, "links": .links]
+        let scenarios: [String: Scenario] = ["demo": .team, "empty": .empty, "long": .long, "waiting": .waiting, "session": .session, "remote": .remote, "links": .links, "media": .media]
         _model = State(initialValue: AppModel(session: scenarios[start].map(Self.demo), doors: doors))
     }
 
@@ -102,6 +102,20 @@ struct MycoApp: App {
         }
     }()
 
+    /// The text files of a folder, by path inside it, with their types.
+    private static func pageFiles(in folder: URL) -> [String: (type: String, text: String)] {
+        let types = ["html": "text/html; charset=utf-8", "js": "text/javascript; charset=utf-8", "css": "text/css; charset=utf-8",
+                     "json": "application/json", "svg": "image/svg+xml", "txt": "text/plain; charset=utf-8"]
+        var files: [String: (type: String, text: String)] = [:]
+        let base = folder.standardizedFileURL.path
+        for case let url as URL in FileManager.default.enumerator(at: folder, includingPropertiesForKeys: nil) ?? .init() {
+            guard let type = types[url.pathExtension.lowercased()], let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
+            let path = String(url.standardizedFileURL.path.dropFirst(base.count)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            files[path] = (type, text)
+        }
+        return files
+    }
+
     private static func demo(_ scenario: Scenario) -> WorkspaceSession {
         // `-myco-latency <ms>`: every answer of the demo takes this long,
         // to see what loading looks like on a slow connection.
@@ -113,6 +127,15 @@ struct MycoApp: App {
         // gateway in front of the workspace would, to see what is said.
         if UserDefaults.standard.string(forKey: "myco-trouble") == "links" {
             Task { await hub.setJoinLinkFailures(1) }
+        }
+        // `-myco-page-dir <folder>`: a built app's files (on this Mac, read
+        // by the simulator) as a page of the demo, `pg_dir`, to try a real
+        // app with the native bridge.
+        if let folder = UserDefaults.standard.string(forKey: "myco-page-dir"), !folder.isEmpty {
+            let files = Self.pageFiles(in: URL(fileURLWithPath: folder))
+            let page = Page(id: "pg_dir", name: URL(fileURLWithPath: folder).lastPathComponent, publisher: FakeHub.me,
+                            url: FakeHub.demoAddress.absoluteString + "/pages/pg_dir", createdAt: Date(), updatedAt: Date())
+            Task { await hub.addPage(page, files: files) }
         }
         let session = WorkspaceSession(id: AppModel.demoID, name: "演示工作区", hub: hub)
         // `-myco-attach <agent>`: the demo starts with a picture and a
