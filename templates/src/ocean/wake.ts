@@ -112,7 +112,7 @@ export class Wake {
       this.band(cx, cz, ax, az, wid(ageC, sc), wid(ageA, sa), churn(ageC, sc), churn(ageA, sa), dC, dA);
       // a wider, fainter scar of bubbles around the churn
       const scar = (age: number, s: number) => [0, Math.min(0.55, s * 1.4) * Math.pow(clamp(1 - age / LIFE, 0, 1), 1.5), 0];
-      this.band(cx, cz, ax, az, wid(ageC, sc) * 1.9 + 1, wid(ageA, sa) * 1.9 + 1, scar(ageC, sc), scar(ageA, sa), dC, dA);
+      this.band(cx, cz, ax, az, wid(ageC, sc) * 1.4 + 0.6, wid(ageA, sa) * 1.4 + 0.6, scar(ageC, sc), scar(ageA, sa), dC, dA);
       // the V from the bow: each arm a ridge moving out at about 19.5° to the track
       for (const side of [1, -1]) {
         const [bx, bz] = at(c, 0.42), [dx, dz] = at(a, 0.42);
@@ -121,7 +121,7 @@ export class Wake {
         const gx = dx - a.fz * side * oa, gz = dz + a.fx * side * oa;
         const arm = (age: number, s: number) => {
           const life = Math.pow(clamp(1 - age / (LIFE * 0.7), 0, 1), 1.6) * clamp(age * 3, 0, 1);
-          return [Math.min(0.85, s * 2) * life * Math.pow(clamp(1 - age / 6, 0, 1), 1.3), Math.min(0.7, s * 1.8) * life, Math.min(1, s * 2.6) * life];
+          return [Math.min(0.85, s * 2) * life * Math.pow(clamp(1 - age / 6, 0, 1), 1.3), Math.min(0.25, s * 0.8) * life, Math.min(1, s * 2.6) * life];
         };
         const aw = (age: number) => 1.5 + age * 0.45;
         // crests along the arm: about one every 3 m

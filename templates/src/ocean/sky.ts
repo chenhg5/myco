@@ -120,6 +120,16 @@ vec4 clouds(vec3 d, int octaves) {
   return vec4(col, c * fadeH);
 }
 
+// The sky as rough water sees it: the clouds blurred into their average.
+vec3 skyMean(vec3 d) {
+  vec3 c = airColor(d);
+  vec3 dark = mix(uHorizon, vec3(dot(uHorizon, vec3(0.333))), 0.6) * 0.72;
+  vec3 bright = uSunColor * 0.34 + uZenith * 0.25 + vec3(0.42);
+  c = mix(c, mix(dark, bright, 0.55), uCover * 0.85 * smoothstep(0.0, 0.18, d.y));
+  float h = 1.0 - smoothstep(-0.02, 0.12, d.y);
+  return mix(c, uHorizon, h * 0.85);
+}
+
 vec3 skyColor(vec3 d, int octaves, bool withSun) {
   vec3 c = airColor(d);
   vec4 cl = clouds(d, octaves);

@@ -5,7 +5,6 @@
 
 import * as THREE from "three";
 import { clamp, lerp } from "./noise";
-import { heightAt, type Wave } from "./waves";
 import { merge } from "./islands";
 
 export const LENGTH = 7.4, BEAM = 2.6;
@@ -182,8 +181,9 @@ export function newBoat(x = 0, z = 0, heading = 0): BoatState {
 }
 
 /** Moves the boat on by dt seconds. `ground` gives the ground's height at
- *  a point; the boat stops (and is pushed back) where it would touch it. */
-export function stepBoat(b: BoatState, inp: BoatInput, dt: number, waves: Wave[], t: number, ground: (x: number, z: number) => number) {
+ *  a point, `water` the sea's surface there now; the boat stops (and is
+ *  pushed back) where it would touch the ground. */
+export function stepBoat(b: BoatState, inp: BoatInput, dt: number, water: (x: number, z: number) => number, ground: (x: number, z: number) => number) {
   dt = Math.min(dt, 0.05);
   // the lever moves while a key is held; the rudder springs back
   if (inp.stop) b.throttle = 0;
@@ -212,10 +212,10 @@ export function stepBoat(b: BoatState, inp: BoatInput, dt: number, waves: Wave[]
   b.aground += dt;
   // riding the waves: four points on the hull feel the water
   const rx = Math.cos(b.heading), rz = Math.sin(b.heading); // to starboard
-  const hb = heightAt(waves, b.x + fx * 2.6, b.z + fz * 2.6, t);
-  const hs = heightAt(waves, b.x - fx * 2.6, b.z - fz * 2.6, t);
-  const hr = heightAt(waves, b.x + rx * 1.1, b.z + rz * 1.1, t);
-  const hl = heightAt(waves, b.x - rx * 1.1, b.z - rz * 1.1, t);
+  const hb = water(b.x + fx * 2.6, b.z + fz * 2.6);
+  const hs = water(b.x - fx * 2.6, b.z - fz * 2.6);
+  const hr = water(b.x + rx * 1.1, b.z + rz * 1.1);
+  const hl = water(b.x - rx * 1.1, b.z - rz * 1.1);
   const v = clamp(b.speed / MAX_SPEED, -0.4, 1);
   const wantY = (hb + hs + hr + hl) / 4 + 0.12 * v; // a little lift when planing
   const wantP = Math.atan2(hb - hs, 5.2) + 0.06 * v * (1 - v * 0.5); // bow up when pushing

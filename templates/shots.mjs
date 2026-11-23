@@ -120,7 +120,7 @@ const plans = {
   }] },
   "logo-studio": [null],
   // 航海: under way toward the islands, then arriving at one (WebGL in
-  // software: time is moved on by hand, then a frame drawn)
+  // software: time is moved on by hand, then frames drawn)
   ocean: [async (p) => {
     await p.waitForFunction(() => window.__ocean && document.querySelector(".oc-dash"));
     await p.evaluate(async () => {
@@ -129,7 +129,9 @@ const plans = {
       w.controls.press("up", true); for (let i = 0; i < 60; i++) w.advance(1 / 30); w.controls.press("up", false);
       w.controls.press("left", true); for (let i = 0; i < 25; i++) w.advance(1 / 30); w.controls.press("left", false);
       for (let i = 0; i < 300; i++) w.advance(1 / 30);
-      for (let i = 0; i < 3; i++) { w.frame(1 / 60); await new Promise((r) => setTimeout(r, 150)); }
+      // (a few seconds drawn: the foam of breaking crests builds up)
+      for (let i = 0; i < 45; i++) w.frame(1 / 15);
+      await new Promise((r) => setTimeout(r, 300));
     });
     await wait(p, 300);
   }, async (p) => {
@@ -138,7 +140,8 @@ const plans = {
       w.moveBoat(-150, -330, 4.5); w.boat.speed = 2;
       for (let i = 0; i < 40; i++) w.advance(1 / 30);
       w.view.yaw = -0.55; w.view.pitch = 0.22; w.view.dist = 24; w.view.touched = performance.now();
-      for (let i = 0; i < 3; i++) { w.frame(1 / 60); await new Promise((r) => setTimeout(r, 150)); }
+      for (let i = 0; i < 45; i++) w.frame(1 / 15);
+      await new Promise((r) => setTimeout(r, 300));
     });
     await wait(p, 300);
   }],
@@ -242,7 +245,7 @@ for (const app of apps) {
     await page.waitForTimeout(2500);
     for (let n = 0; n < steps.length; n++) {
       if (steps[n]) await steps[n](page);
-      const png = await page.screenshot();
+      const png = await page.screenshot({ timeout: 180000 });
       // (WebP, made by the browser itself: no other tool needed)
       const webp = await page.evaluate(async (b64) => {
         const img = new Image();

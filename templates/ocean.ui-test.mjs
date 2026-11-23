@@ -59,6 +59,7 @@ try {
   assert.equal(await page.locator(".oc-chip b").first().textContent(), "椰影群岛");
   assert.match(await page.locator(".oc-chip").first().textContent(), /开阔海面/);
   assert.equal(await world(page, (w) => w.shapes.length), 8, "every island record is in the world");
+  assert.equal(await world(page, (w) => w.fftSea), true, "the FFT sea (this browser renders to float textures)");
   // the picture is not blank: sky above, sea below, differently coloured
   const px = await page.evaluate(() => {
     window.__ocean.frame(1 / 60); // (a WebGL canvas can be read only right after it is drawn)

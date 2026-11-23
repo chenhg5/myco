@@ -12,6 +12,7 @@ import { GEO_WAVES, SEAS, heightAt, makeWaves, packWaves, type Sea, type Wave } 
 import { Wake, WAKE_SIZE } from "./wake";
 import { Controls } from "./controls";
 import { clamp } from "./noise";
+import { FFTOcean, SPECTRA } from "./fft";
 
 export type Settings = { time: number; weather: Weather; sea: Sea; wind: number };
 export type Label = { id: string; name: string; x: number; y: number; dist: number };
@@ -28,6 +29,7 @@ export class World {
   private sky = skyUniforms();
   private dome = skyDome(this.sky);
   private ocean: { mat: THREE.ShaderMaterial; uniforms: OceanUniforms };
+  private fft: FFTOcean | null = null;
   private sun = new THREE.DirectionalLight(0xffffff, 1);
   private pmrem: THREE.PMREMGenerator;
   private env: THREE.WebGLRenderTarget | null = null;
@@ -55,7 +57,13 @@ export class World {
     this.renderer.toneMappingExposure = 0.85;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.pmrem = new THREE.PMREMGenerator(this.renderer);
-    this.ocean = oceanMaterial(this.sky);
+    // the FFT sea where the browser can render to float textures; waves summed in the shader otherwise
+    try { if (FFTOcean.supported(this.renderer)) this.fft = new FFTOcean(this.renderer); } catch { this.fft = null; }
+    this.ocean = oceanMaterial(this.sky, !!this.fft);
+    if (this.fft) {
+      this.ocean.uniforms.uDisp.value = this.fft.disp.texture;
+      this.ocean.uniforms.uSlope.value = this.fft.slope.texture;
+    }
     this.scene.add(this.dome, oceanMesh(this.ocean.mat), this.isles, this.model, this.sun, this.sun.target);
     this.ocean.uniforms.uSeabed.value = this.seabed.target.texture;
     this.ocean.uniforms.uSeabedSize.value = SEABED_SIZE;
@@ -80,6 +88,8 @@ export class World {
     this.ocean.uniforms.uWA.value = g.A; this.ocean.uniforms.uWB.value = g.B;
     this.ocean.uniforms.uFoamAmt.value = SEAS[s.sea]?.foam ?? 0.5;
     this.ocean.uniforms.uRippleAmt.value = 0.55 + 0.45 * (SEAS[s.sea]?.height ?? 1);
+    this.fft?.setSea(s.sea, s.wind);
+    this.ocean.uniforms.uHs.value = (SPECTRA[s.sea] ?? SPECTRA.moderate).hs;
     // the sky's light on the islands and the boat
     const skyScene = new THREE.Scene();
     const dome = skyDome(this.sky);
@@ -121,7 +131,9 @@ export class World {
   }
 
   ground = (x: number, z: number) => groundAt(this.shapes, x, z);
-  waterAt = (x: number, z: number) => heightAt(this.waves, x, z, this.t);
+  waterAt = (x: number, z: number) => (this.fft ? this.fft.long.heightAt(x, z, this.t) : heightAt(this.waves, x, z, this.t));
+  /** Whether the sea is the FFT one (else waves summed in the shader). */
+  get fftSea() { return !!this.fft; }
 
   /** Puts the boat somewhere (and the camera behind it). */
   moveBoat(x: number, z: number, heading: number) {
@@ -183,6 +195,10 @@ export class World {
       sb.dirty = false;
     }
     this.wake.render(this.renderer, this.boat, this.t);
+    if (this.fft) {
+      this.fft.update(this.t, dt);
+      this.ocean.uniforms.uFoamMap.value = this.fft.foamTexture;
+    }
     this.ocean.uniforms.uWakeCenter.value.copy(this.wake.center);
     this.renderer.render(this.scene, this.camera);
     this.measure(dt);
@@ -195,7 +211,7 @@ export class World {
     const n = Math.max(1, Math.ceil(dt / (1 / 30)));
     for (let i = 0; i < n; i++) {
       this.t += dt / n;
-      stepBoat(this.boat, input, dt / n, this.waves, this.t, this.ground);
+      stepBoat(this.boat, input, dt / n, this.waterAt, this.ground);
       this.wake.add(this.boat, this.t);
     }
     this.sky.uTime.value = this.t;
@@ -291,6 +307,7 @@ export class World {
     this.stop();
     disposeTree(this.scene);
     this.wake.dispose();
+    this.fft?.dispose();
     this.seabed.target.dispose();
     this.env?.dispose();
     this.pmrem.dispose();

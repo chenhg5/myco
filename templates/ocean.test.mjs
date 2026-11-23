@@ -13,10 +13,10 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "myco-ocean-test-"));
 const entry = path.join(tmp, "entry.ts");
 const src = path.join(here, "src/ocean").replace(/\\/g, "/");
-fs.writeFileSync(entry, ["waves", "boat", "islands", "sky", "noise"].map((m) => `export * as ${m} from "${src}/${m}.ts";`).join("\n"));
+fs.writeFileSync(entry, ["waves", "boat", "islands", "sky", "noise", "fft"].map((m) => `export * as ${m} from "${src}/${m}.ts";`).join("\n"));
 const out = path.join(tmp, "bundle.mjs");
 await build({ entryPoints: [entry], bundle: true, format: "esm", platform: "node", outfile: out, nodePaths: [path.join(here, "node_modules")], logLevel: "error" });
-const { waves: W, boat: B, islands: I, sky: S } = await import(pathToFileURL(out).href);
+const { waves: W, boat: B, islands: I, sky: S, fft: F } = await import(pathToFileURL(out).href);
 
 // ---- waves ----
 for (const sea of ["calm", "moderate", "rough"]) {
@@ -41,12 +41,43 @@ for (const sea of ["calm", "moderate", "rough"]) {
   assert.ok(range("rough") > range("calm") * 2.5, `rough ${range("rough").toFixed(2)} m vs calm ${range("calm").toFixed(2)} m`);
 }
 
+// ---- the FFT sea's spectrum (the GPU turns it into the surface; the boat
+// rides its long waves, summed here) ----
+for (const sea of ["calm", "moderate", "rough"]) {
+  const n = 64, s = F.spectrum(sea, 200, n, 256);
+  // the variance is set by the significant wave height (Hs = 4·σ)
+  let v = 0;
+  for (let i = 0; i < n * n; i++) v += s.tex[i * 4] ** 2 + s.tex[i * 4 + 1] ** 2 + s.tex[i * 4 + 2] ** 2 + s.tex[i * 4 + 3] ** 2;
+  assert.ok(Math.abs(4 * Math.sqrt(v) - F.SPECTRA[sea].hs) < 1e-3, `${sea}: Hs ${(4 * Math.sqrt(v)).toFixed(3)} m`);
+  // h(−k) is stored as conj(h0(−k)): the field is real (no imaginary leftovers)
+  const at = (i, j) => s.tex.subarray(((j % n) * n + (i % n)) * 4, ((j % n) * n + (i % n)) * 4 + 4);
+  for (const [i, j] of [[3, 5], [60, 2], [17, 40]]) {
+    const a = at(i, j), b = at(n - i, n - j);
+    assert.ok(Math.abs(a[2] - b[0]) < 1e-12 && Math.abs(a[3] + b[1]) < 1e-12, "the mirrored wave is the conjugate");
+  }
+  // waves run with the wind: more energy toward the north-north-east than against it
+  const e = (i, j) => { const t = at(i, j); return t[0] ** 2 + t[1] ** 2; };
+  let down = 0, up = 0;
+  for (let i = 1; i < 8; i++) { down += e(i, n - 3 * i); up += e(n - i, 3 * i); }
+  assert.ok(down > up * 3, `${sea}: downwind ${down.toExponential(2)} vs upwind ${up.toExponential(2)}`);
+}
+{
+  const s = F.spectrum("moderate", 200);
+  const lw = new F.LongWaves(s.modes, s.chop);
+  assert.ok(s.modes.length > 500 && s.modes.every((m) => (2 * Math.PI) / m.k >= 10 - 1e-9), `${s.modes.length} long waves, all 10 m or longer`);
+  // the height asked for at a point is the height of the surface point that lands there
+  for (const [x, z, t] of [[0, 0, 0], [33, -71, 4.2], [-500, 260, 61]]) {
+    const [h, dx, dz] = lw.displace(x, z, t);
+    assert.ok(Math.abs(lw.heightAt(x + dx, z + dz, t) - h) < 0.03, `long waves at (${x}, ${z})`);
+  }
+}
+
 // ---- the boat ----
 {
   const ws = W.makeWaves("calm", 0);
   const open = () => -30;
   const b = B.newBoat(0, 0, 0);
-  const run = (inp, secs) => { for (let i = 0; i < secs * 30; i++) B.stepBoat(b, inp, 1 / 30, ws, i / 30, open); };
+  const run = (inp, secs) => { for (let i = 0; i < secs * 30; i++) B.stepBoat(b, inp, 1 / 30, (x, z) => W.heightAt(ws, x, z, i / 30), open); };
   run({ throttle: 1, steer: 0, stop: false }, 40);
   assert.equal(b.throttle, 1, "the lever goes to full");
   assert.ok(b.speed > B.MAX_SPEED * 0.9 && b.speed < B.MAX_SPEED * 1.1, `top speed ${b.speed.toFixed(1)} m/s`);
@@ -65,7 +96,7 @@ for (const sea of ["calm", "moderate", "rough"]) {
   const ws = W.makeWaves("calm", 0);
   const wall = (x, z) => (z < -50 ? 5 : -30);
   const b = B.newBoat(0, 0, 0);
-  for (let i = 0; i < 30 * 30; i++) B.stepBoat(b, { throttle: 1, steer: 0, stop: false }, 1 / 30, ws, i / 30, wall);
+  for (let i = 0; i < 30 * 30; i++) B.stepBoat(b, { throttle: 1, steer: 0, stop: false }, 1 / 30, (x, z) => W.heightAt(ws, x, z, i / 30), wall);
   assert.ok(b.z > -50, `never inside the ground (${b.z.toFixed(1)})`);
   assert.ok(b.aground < 30, "it knows it touched");
 }
