@@ -1,0 +1,1 @@
+{"id":"myco/server-console","name":"服务器","version":"1.0.0","kind":"custom","category":"tools","icon":"icon.svg","description":"通过本机 SSH 管理 Linux 主机：查看资源、系统服务与 Docker 容器，读取日志并确认启停操作。支持绑定具体主机的 Agent 限时授权。连接信息与命令结果不写入共享页面，需支持 SSH 的桌面 App。","data":{},"requires":{"hub":"0.20.7"}}

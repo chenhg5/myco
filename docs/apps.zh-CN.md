@@ -86,6 +86,10 @@
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/stocks-dark.webp"><img src="assets/apps/stocks.webp" alt="行情工作台"></picture><br><b>行情工作台</b><br>在同一个工作台关注 A 股、港股、美股：共享自选与观察笔记，查看日周月 K 线、成交量和均线，导出行情。数据源可切换，支持接入自己的行情网关；行情由打开应用的电脑获取。</td>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/proxy-console-dark.webp"><img src="assets/apps/proxy-console.webp" alt="代理工作台"></picture><br><b>代理工作台</b><br>管理本机 Mihomo 与 sing-box：实时流量、策略组切换、节点测速、连接查看与断开、运行配置摘要。控制密钥留在本机，不与工作区共享。需启用内核 Clash API，并使用支持 proxy.profile 的桌面 App。</td>
 </tr>
+<tr>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/server-console-dark.webp"><img src="assets/apps/server-console.webp" alt="Server Console"></picture><br><b>服务器</b><br>通过本机 SSH 管理 Linux 主机：资源概览、系统服务、Docker 容器、日志和确认后的启停操作。Agent 使用绑定主机的限时授权。需新版桌面 App 与 Hub。<a href="server-console.md">使用说明</a>。</td>
+<td width="50%"></td>
+</tr>
 </table>
 
 ## 生活

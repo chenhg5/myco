@@ -86,6 +86,10 @@ Agent access currently uses shared page records. The [agent actions SDK](app-act
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/stocks-dark.webp"><img src="assets/apps/stocks.webp" alt="Stock watch"></picture><br><b>Stock watch</b><br>A shared watchlist for China, Hong Kong and US stocks with daily, weekly and monthly candles, volume, moving averages and notes. Switchable data sources; quotes are fetched by the computer that opens it.</td>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/proxy-console-dark.webp"><img src="assets/apps/proxy-console.webp" alt="Proxy console"></picture><br><b>Proxy console</b><br>Manage the Mihomo and sing-box running on this computer: live traffic, policy groups, node speed tests, connections. The control key stays on this computer. Needs the desktop app.</td>
 </tr>
+<tr>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/server-console-dark.webp"><img src="assets/apps/server-console.webp" alt="Server Console"></picture><br><b>Server Console</b><br>Manage Linux hosts over local SSH: resource overview, systemd services, Docker containers, bounded logs and reviewed lifecycle operations. Agents use host-bound expiring grants. Requires an updated desktop App and Hub. <a href="server-console.md">Details</a>.</td>
+<td width="50%"></td>
+</tr>
 </table>
 
 ## Life

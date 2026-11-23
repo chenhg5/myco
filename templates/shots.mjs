@@ -1,3 +1,4 @@
+import { installSSHFixture } from './server-console-fixture.mjs';
 // Screenshots of the official apps, for the App's new-page dialog: each app
 // opened with its sample data (an in-memory bridge stands in for the App)
 // in a 1040×650 window (at twice the pixels), light and dark, saved as
@@ -157,6 +158,16 @@ const plans = {
     await wait(p);
     await p.locator(".tu-figure").scrollIntoViewIfNeeded();
   }],
+  "server-console": [async (p) => {
+    const theme = await p.evaluate(() => matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    await p.addInitScript(installSSHFixture, {lang:'zh',theme});
+    await p.reload();
+    await p.getByRole('button',{name:'添加 SSH 主机',exact:true}).click();
+    await p.getByLabel('显示名称',{exact:true}).fill('示例 Linux');
+    await p.getByLabel('SSH 配置别名或 user@host',{exact:true}).fill('fixture');
+    await p.getByRole('button',{name:'保存并连接',exact:true}).click();
+    await p.locator('.sv-metrics').waitFor();
+  }, async(p)=>{await p.locator('.sv-sidebar nav button').nth(1).click();await wait(p);}],
   podcast: [null],
   personality: [null, async (p) => { await p.getByRole("button", { name: "16 种偏好", exact: true }).click(); await wait(p); }],
   scheduling: [async (p) => { await p.getByRole("combobox", { name: "时区", exact: true }).selectOption("Asia/Shanghai"); await wait(p); }, async (p) => { await p.getByRole("combobox", { name: "日历视图" }).selectOption("week"); await p.getByRole("button", { name: "下一页", exact: true }).click(); await wait(p, 600); }],

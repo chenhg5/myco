@@ -150,5 +150,9 @@
   "database": [
     "Database studio",
     "Manage local MySQL, PostgreSQL, SQLite and MongoDB connections. Browse schemas, edit records, run SQL or Extended JSON, and share query drafts with agents. Requires a desktop App with database capabilities; credentials and results stay on this computer."
+  ],
+  "server-console": [
+    "Server Console",
+    "Manage Linux hosts over your local SSH connection. Inspect resources, systemd services and Docker containers, read logs and review fixed management actions. Agents use host-bound expiring grants. Requires a desktop App with SSH support; credentials and results stay private."
   ]
 }

@@ -22,7 +22,7 @@ var files embed.FS
 var Order = []string{
 	"myco/table", "myco/base", "myco/doc", "myco/slides", "myco/meeting", "myco/tutor", "myco/scheduling",
 	"myco/database", "myco/code", "myco/issues", "myco/devtools",
-	"myco/todo", "myco/notes", "myco/disk", "myco/stocks", "myco/proxy-console", "myco/remote-desktop",
+	"myco/todo", "myco/notes", "myco/disk", "myco/stocks", "myco/proxy-console", "myco/server-console", "myco/remote-desktop",
 	"myco/ledger", "myco/habit", "myco/reader", "myco/price-compare", "myco/cinema", "myco/podcast", "myco/personality",
 	"myco/palette", "myco/aigc-canvas", "myco/design-studio", "myco/logo-studio", "myco/whiteboard", "myco/mindmap", "myco/recorder", "myco/video", "myco/motion", "myco/photo",
 	"myco/arcade", "myco/ocean", "myco/gomoku", "myco/sudoku",
