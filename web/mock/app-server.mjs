@@ -1403,6 +1403,23 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
       return;
     }
   }
+  // Asked for an architecture diagram: a progress update along the way that
+  // places its two sketches in its text.
+  later(3000, () => {
+    const msgs = hub.threads[threadId];
+    const task = msgs?.find((m) => m.id === taskId);
+    if (!msgs || !/架构图|diagram/i.test(task?.body || "")) return;
+    const n = (state.counter += 1);
+    msgs.push(makeMessage({
+      thread_id: threadId, from: agent, to: CONSOLE, type: "progress", status: "done", reply_to: taskId,
+      body: `先放两张草图：\n\n![草图一](attachment:草图一.png) ![草图二](attachment:f_demo_shot_sketch_b${n})`,
+      attachments: [
+        { file_id: `f_demo_shot_sketch_a${n}`, name: "草图一.png", size: DEMO_PNG.length, sha256: "", content_type: "image/png" },
+        { file_id: `f_demo_shot_sketch_b${n}`, name: "草图二.png", size: DEMO_PNG.length, sha256: "", content_type: "image/png" },
+      ],
+      created_at: iso(0), updated_at: iso(0),
+    }));
+  });
   // Asked for a screenshot: one comes along the way, with what it shows.
   later(3800, () => {
     const msgs = hub.threads[threadId];

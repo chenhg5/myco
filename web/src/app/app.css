@@ -9758,7 +9758,18 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
   box-shadow: 0 0 0 1px var(--line-2);
   overflow: hidden;
 }
-.ui-card:not(.tone-neutral) { box-shadow: inset 3px 0 0 var(--tone), 0 0 0 1px var(--line-2); }
+/* (a tone is a small dot before the title, not a bar down the side: a bar
+   reads as a quote) */
+.ui-card:not(.tone-neutral) .ui-card-head h4::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin: 0 7px 1px 0;
+  border-radius: 50%;
+  background: var(--tone);
+  vertical-align: middle;
+}
 .ui-card-head { padding: 12px 14px 0; }
 .ui-card-head h4 { margin: 0; font-size: 14px; font-weight: 600; }
 .ui-card-head p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
@@ -9877,7 +9888,7 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
 .ui-file-count { display: flex; gap: 6px; font: 11.5px ui-monospace, "SF Mono", Menlo, monospace; }
 .ui-file-count .is-add { color: var(--green); }
 .ui-file-count .is-del { color: var(--red); }
-.ui-tests { border-radius: 8px; box-shadow: inset 3px 0 0 var(--tone), 0 0 0 1px var(--line-2); background: var(--card); padding: 10px 12px; }
+.ui-tests { border-radius: 8px; box-shadow: 0 0 0 1px var(--line-2); background: var(--card); padding: 10px 12px; }
 .ui-tests-sum { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; font-size: 12.5px; }
 .ui-tests-sum > span { display: inline-flex; align-items: center; gap: 4px; }
 .ui-tests-sum svg { width: 13px; height: 13px; }

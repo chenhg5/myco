@@ -4588,6 +4588,13 @@ async function runMatrix(browser, size, scheme) {
       await conv.locator(".conv-compose-input").press("Enter");
       const msg = conv.locator(".conv-msg", { has: page.locator(".md-mermaid") }).last();
       await msg.locator(".md-mermaid[data-state=drawn] svg").first().waitFor({ timeout: 30_000 });
+      // The progress update along the way placed its two sketches in its
+      // text: there, side by side, not "not found", not listed again.
+      const report = conv.locator(".trace-report", { hasText: "先放两张草图" }).last();
+      await report.waitFor({ timeout: 10_000 });
+      if (await report.locator(".md-img-missing").count()) throw new Error("进展里引用的附件应能找到");
+      if ((await report.locator(".md-gallery img").count()) !== 2) throw new Error("进展里的两张草图应并排显示在正文里");
+      if (await report.locator(".trace-report-files").count()) throw new Error("进展正文里已经显示的图不该在下面再列一次");
       const bad = msg.locator(".md-mermaid[data-state=error]");
       await bad.waitFor({ timeout: 15_000 });
       if (!(await bad.locator(".md-mermaid-why").innerText()).includes("没画出来")) throw new Error("画不出来的图应说明原因");
