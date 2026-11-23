@@ -107,6 +107,30 @@ struct PageNetworkBridgeTests {
         #expect(try await evaluate(view, "String(window.kept)") == "42")
     }
 
+    @Test func mediaBridgeReturnsASynchronousPageOriginURL() async throws {
+        let hub = FakeHub()
+        let pages = PagesModel(hub: hub)
+        let coordinator = PageWebView.Coordinator(id: "pg_checklist", version: 2, pages: pages, bridge: nil)
+        let config = WKWebViewConfiguration()
+        config.setURLSchemeHandler(coordinator, forURLScheme: PageLinks.scheme)
+        config.userContentController.addUserScript(WKUserScript(source: PageBridgeScript.source, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        let view = WKWebView(frame: .zero, configuration: config)
+        defer { view.stopLoading() }
+        view.load(URLRequest(url: try #require(PageLinks.address(of: "pg_checklist"))))
+        try await wait(view, "document.readyState", for: "complete")
+        #expect(try await evaluate(view, "String(myco.features.includes('net-media'))") == "true")
+        let target = "https://media.example/song.mp3?part=1&name=a+b#episode"
+        let script = "myco.media.url('\(target)')"
+        let address = try await evaluate(view, script)
+        let parts = try #require(URLComponents(string: address))
+        #expect(parts.scheme == PageLinks.scheme)
+        #expect(parts.host == "pg-checklist")
+        #expect(parts.path == PageMedia.path)
+        #expect(parts.queryItems == [URLQueryItem(name: "url", value: target)])
+        #expect(try await evaluate(view, "typeof myco.media.url('https://media.example/a')") == "string")
+        #expect(!PageLinks.contentPolicy.contains("https:"))
+    }
+
     @Test func phoneSearchUsesTheNativeNetworkBridgeWithoutDesktopOS() async throws {
         let hub = FakeHub()
         let page = try #require(try await hub.pages().first)

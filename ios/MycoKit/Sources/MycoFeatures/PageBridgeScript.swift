@@ -58,10 +58,28 @@ enum PageBridgeScript {
   };
   var ready = call("ready").then(function (v) { ctx = v; if(v.preferences) applyPreferences(v.preferences); return v; });
   ready.catch(function () { /* (a page that does not use the bridge) */ });
+  // A paused player keeps its WebKit resource while the native transport
+  // drops the socket. Play resumes at the byte already handed to WebKit.
+  function mediaEvent(method, event) {
+    var player = event.target;
+    if (!player || (player.tagName !== "AUDIO" && player.tagName !== "VIDEO")) return;
+    try {
+      var u = new URL(player.currentSrc || player.src, location.href);
+      if (u.protocol === location.protocol && u.host === location.host && u.pathname === "/__myco/stream") {
+        call(method, {url:u.href}).catch(function(){});
+      }
+    } catch (_) {}
+  }
+  document.addEventListener("pause", function(e){ mediaEvent("media.pause",e); }, true);
+  document.addEventListener("play", function(e){ mediaEvent("media.resume",e); }, true);
   window.myco = {
     ready: ready,
-    features: ["preferences", "remote", "remote-controller", "net"],
+    features: ["preferences", "remote", "remote-controller", "net", "net-media"],
     get preferences() { return preferences; },
+    media: {url: function(u) {
+      // location.origin can be "null" for a custom WebKit scheme.
+      return location.protocol + "//" + location.host + "/__myco/stream?url=" + encodeURIComponent(String(u));
+    }},
     net: { fetch: function(args) {
       var a = args || {};
       return ready.then(function() { return call("net.fetch", a, Math.min(600000, a.timeout_ms || 30000) + 30000); });

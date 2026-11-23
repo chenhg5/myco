@@ -1,0 +1,18 @@
+{
+  "id": "myco/price-compare",
+  "name": "购物比价",
+  "version": "1.0.0",
+  "kind": "custom",
+  "category": "life",
+  "icon": "icon.svg",
+  "description": "agent 查价，你来选：并排查看同款报价、优惠条件、运费、来源和查询时间，收藏候选并记录购买考虑。支持分享直达；不内置电商登录或自动抓价。",
+  "data": {
+    "comparisons": { "fields": {
+      "title": "text", "query": "text", "spec": "text", "currency": "text", "budget": "number",
+      "status": "text", "summary": "text", "updated_at": "datetime", "offers": "json"
+    } },
+    "decisions": { "fields": { "saved": "json", "note": "text" } }
+  },
+  "permissions": ["send", "download"],
+  "requires": { "hub": "0.20.7" }
+}

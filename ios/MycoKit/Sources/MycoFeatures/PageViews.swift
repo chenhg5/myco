@@ -626,6 +626,34 @@ struct PageWebView: UIViewRepresentable {
             }
             let key = ObjectIdentifier(task)
             let path = String(url.path.drop(while: { $0 == "/" }))
+            if url.path == PageMedia.path, let media = bridge?.media {
+                open[key] = Task { [weak self] in
+                    var responded = false
+                    do {
+                        try await media.stream(task.request, response: { [weak self] response in
+                            guard self?.open[key] != nil, !Task.isCancelled else { return }
+                            responded = true
+                            task.didReceive(response)
+                        }, data: { [weak self] chunk in
+                            guard self?.open[key] != nil, !Task.isCancelled else { return }
+                            task.didReceive(chunk)
+                        })
+                        guard self?.open[key] != nil, !Task.isCancelled else { return }
+                        self?.open[key] = nil
+                        task.didFinish()
+                    } catch {
+                        guard self?.open[key] != nil, !Task.isCancelled else { return }
+                        self?.open[key] = nil
+                        if responded { task.didFailWithError(error); return }
+                        let failure = error as? PageMedia.Failure
+                        let body = Data((failure?.message ?? "The media could not be reached").utf8)
+                        if let answer = HTTPURLResponse(url: url, statusCode: failure?.status ?? 502, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "text/plain; charset=utf-8", "Content-Length": String(body.count), "Content-Security-Policy": "sandbox", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"]) {
+                            task.didReceive(answer); task.didReceive(body); task.didFinish()
+                        } else { task.didFailWithError(URLError(.badServerResponse)) }
+                    }
+                }
+                return
+            }
             let version = version, id = id, pages = pages
             open[key] = Task { [weak self] in
                 var file: PageFile?

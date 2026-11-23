@@ -181,3 +181,14 @@ func TestLaunchdStart(t *testing.T) {
 		t.Fatalf("calls: %v", r.calls)
 	}
 }
+
+// The install restarts without blocking: a runner busy with tasks restarts
+// once they finish, instead of the install waiting (and looking stuck).
+func TestSystemdInstallRestartsWithoutBlocking(t *testing.T) {
+	s := &Systemd{Home: t.TempDir(), R: &fakeRunner{output: map[string]string{"loginctl show-user me --property=Linger": "Linger=yes\n"}}, User: "me"}
+	p, _ := s.PlanInstall(spec)
+	last := strings.Join(p.Commands[len(p.Commands)-1], " ")
+	if last != "systemctl --user restart --no-block myco-runner.service" {
+		t.Fatalf("restart: %q", last)
+	}
+}

@@ -95,6 +95,10 @@
     "Arcade Emulator",
     "Play local NES cartridges and CHIP-8 games with touch controls, or verify and launch arcade ROM ZIPs with MAME in the desktop App."
   ],
+  "ocean": [
+    "Voyage",
+    "Take a small boat out on a lifelike 3D sea and explore freely: waves, shallows, reefs and islands are drawn live on this computer. Islands are page data that people and agents can add, so the map keeps growing."
+  ],
   "gomoku": [
     "Gomoku",
     "Play five-in-a-row with another person or an agent. Choose black or white, take turns, undo moves, resign or start a new round."
@@ -126,5 +130,13 @@
   "reader": [
     "Reader",
     "A local bookshelf for PDF and TXT books. Choose page transitions, paper themes and typography; keep your place with contents, search and bookmarks. Original files stay on this device."
+  ],
+  "podcast": [
+    "World Podcasts",
+    "Turn a 3D globe to discover public podcasts by region. Search, listen continuously, follow shows, like episodes, change speed and set a sleep timer. Progress stays on this device. Requires a native App with network media streaming."
+  ],
+  "price-compare": [
+    "Shopping comparison",
+    "Agents research; you choose. Compare matching offers with coupon conditions, shipping, sources and observation times. Save candidates, add shared notes and link to a comparison. No built-in marketplace login or automatic scraping."
   ]
 }

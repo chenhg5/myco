@@ -18,6 +18,18 @@ The page sandbox continues to block direct external scripts and connections.
 An older iOS App without the `net` feature needs a new native build; updating an
 embedded app page alone cannot add the bridge to an installed iPhone App.
 
+Pages with the `net-media` feature can set `audio.src` or `video.src` to
+`myco.media.url(publicURL)`. The synchronous call returns a page-origin address;
+the native scheme handler streams bytes, forwards Range/If-Range and preserves
+200/206/416 responses. Only credential-free HTTP(S) targets resolving entirely
+to public IPs are accepted, including every redirect. Connections are pinned to
+validated IPs with the original TLS server name. Only audio, video, HLS, Ogg and
+octet-stream content is returned; the page CSP is unchanged. This transport uses
+the phone's direct network route (including a device VPN), independently of the
+App's HTTP proxy setting. Pause closes the upstream socket; play resumes with
+Range. Seeking, reloading, closing and backgrounding cancel outstanding streams.
+An updated native build is required to add this feature to an installed App.
+
 ## Page deep links
 
 Workspace page links may include an opaque fragment, for example

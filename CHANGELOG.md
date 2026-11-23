@@ -4,6 +4,24 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.21.26
+
+- **A member's chat leaves terminal commands out**: since v0.21.24 a member's chat in a project showed its exchanges with everyone, which brought each command it ran on a terminal (`ls`, `cat` on mac-exec) in as a card. Only its exchanges with other AIs show now; a terminal still shows when the project lists it.
+- **Pages play public audio and video**: a page can play a podcast or a video from a public address through the App, streamed as it plays (seeking works), instead of downloading it whole first.
+- **New apps**: Voyage (航海), a 3D sea to explore by boat, with a lifelike sea, sky and weather; a podcast globe to discover and listen to public podcasts by region; a shopping comparison where an agent finds offers with their sources.
+- Cinema's full screen works in the Mac desktop App, without corner overlays.
+- Installing the runner service (from `myco join` or a join link's script) no longer waits silently for running tasks to finish: the runner restarts once they are done, and the install says so.
+- No hub upgrade needed: update the App (pages playing media, the member chat), and myco on your computers for the runner install fix.
+
+**中文**
+
+- **成员对话里不再出现终端命令**：从 v0.21.24 起，项目里成员的对话会显示它和所有人的往来，结果它在终端上跑的每条命令（比如在 mac-exec 上的 `ls`、`cat`）也成了一张卡片。现在只显示它和其他 AI 的往来；项目里本来就列着的终端照常显示。
+- **页面可以播放公开的音频和视频**：页面能通过 App 播放公开地址上的播客或视频，边播边传（可以拖进度），不用先整个下载下来。
+- **新应用**：航海（坐船在 3D 海面上航行，海、天空和天气都很逼真）；播客地球（按地区发现并收听公开播客）；比价购物（agent 帮你找报价，并附上来源）。
+- 影视在 Mac 桌面 App 里可以正常全屏，四角也不再有遮挡。
+- 安装 runner 服务（`myco join` 或加入链接里的脚本）时，不再一声不响地等正在跑的任务结束：任务做完 runner 会自己重启，安装时会说明这一点。
+- 不需要升级 hub：更新 App 即可（页面播放媒体、成员对话）；runner 安装的修复需要升级各台电脑上的 myco。
+
 ## v0.21.25
 
 - **Google Antigravity as an agent**: pick "Antigravity" when you add an agent. myco drives the agy CLI through the community `google-antigravity-acp` adapter (`npm install -g google-antigravity-acp`, with agy signed in on that computer), and shows each step live. Experimental. The adapter cannot ask you for approval: only at full access does agy approve everything; below it, agy refuses what needs approval. Reaching Antigravity through third-party tools with a personal login is against Google's terms: use an AI Studio or Vertex AI key.

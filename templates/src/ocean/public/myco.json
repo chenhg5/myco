@@ -1,0 +1,40 @@
+{
+  "id": "myco/ocean",
+  "name": "航海",
+  "version": "1.1.0",
+  "kind": "custom",
+  "category": "game",
+  "icon": "icon.svg",
+  "description": "开一条小船，在逼真的 3D 海上自由探索：浪、浅滩、礁石和海岛都在本机实时画出来。岛是页面里的数据，人和 agent 都能加，地图可以一直往外扩。",
+  "data": {
+    "world": {
+      "single": true,
+      "fields": {
+        "title": "text",
+        "time": "number",
+        "weather": "select",
+        "sea": "select",
+        "wind": "number",
+        "start_x": "number",
+        "start_z": "number",
+        "start_heading": "number"
+      }
+    },
+    "islands": {
+      "fields": {
+        "name": "text",
+        "x": "number",
+        "z": "number",
+        "size": "number",
+        "height": "number",
+        "kind": "select",
+        "palms": "number",
+        "seed": "number",
+        "note": "markdown"
+      }
+    }
+  },
+  "requires": {
+    "hub": "0.20.7"
+  }
+}

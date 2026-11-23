@@ -106,6 +106,7 @@ function photo() {
 // sample data is there before the first).
 const wait = (p, ms = 400) => p.waitForTimeout(ms);
 const plans = {
+  "price-compare": { viewport: { width: 1400, height: 1000 }, steps: [null] },
   reader: { viewport: { width: 1040, height: 800 }, steps: [async (p) => {
     await p.getByRole("button", { name: "先读一篇示例", exact: true }).click();
     await p.locator(".rd-book").nth(2).waitFor();
@@ -119,12 +120,39 @@ const plans = {
     await wait(p, 300);
   }] },
   "logo-studio": [null],
+  // 航海: under way toward the islands, then arriving at one (WebGL in
+  // software: time is moved on by hand, then frames drawn)
+  ocean: [async (p) => {
+    await p.waitForFunction(() => window.__ocean && document.querySelector(".oc-dash"));
+    await p.evaluate(async () => {
+      const w = window.__ocean; w.stop();
+      w.moveBoat(30, 120, 5.95);
+      w.controls.press("up", true); for (let i = 0; i < 60; i++) w.advance(1 / 30); w.controls.press("up", false);
+      w.controls.press("left", true); for (let i = 0; i < 25; i++) w.advance(1 / 30); w.controls.press("left", false);
+      for (let i = 0; i < 300; i++) w.advance(1 / 30);
+      // (a few seconds drawn: the foam of breaking crests builds up)
+      for (let i = 0; i < 45; i++) w.frame(1 / 15);
+      await new Promise((r) => setTimeout(r, 300));
+    });
+    await wait(p, 300);
+  }, async (p) => {
+    await p.evaluate(async () => {
+      const w = window.__ocean;
+      w.moveBoat(-150, -330, 4.5); w.boat.speed = 2;
+      for (let i = 0; i < 40; i++) w.advance(1 / 30);
+      w.view.yaw = -0.55; w.view.pitch = 0.22; w.view.dist = 24; w.view.touched = performance.now();
+      for (let i = 0; i < 45; i++) w.frame(1 / 15);
+      await new Promise((r) => setTimeout(r, 300));
+    });
+    await wait(p, 300);
+  }],
   tutor: [null, async (p) => {
     await p.locator(".tu-example-link").click();
     await p.getByRole("button", { name: "中学基础", exact: true }).click();
     await wait(p);
     await p.locator(".tu-figure").scrollIntoViewIfNeeded();
   }],
+  podcast: [null],
   personality: [null, async (p) => { await p.getByRole("button", { name: "16 种偏好", exact: true }).click(); await wait(p); }],
   scheduling: [async (p) => { await p.getByRole("combobox", { name: "时区", exact: true }).selectOption("Asia/Shanghai"); await wait(p); }, async (p) => { await p.getByRole("combobox", { name: "日历视图" }).selectOption("week"); await p.getByRole("button", { name: "下一页", exact: true }).click(); await wait(p, 600); }],
   cinema: [null, async (p) => { await p.getByRole("button", {name:"添加影视源", exact:true}).click(); await wait(p); }],
@@ -200,7 +228,8 @@ const plans = {
 const chromium = await playwright();
 const srv = await serve();
 const base = `http://127.0.0.1:${srv.address().port}`;
-const browser = await chromium.launch(process.env.UI_SMOKE_EXECUTABLE ? {executablePath:process.env.UI_SMOKE_EXECUTABLE} : {});
+// (WebGL in software where there is no GPU: 航海 draws its sea with it)
+const browser = await chromium.launch({ args: ["--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"], ...(process.env.UI_SMOKE_EXECUTABLE ? { executablePath: process.env.UI_SMOKE_EXECUTABLE } : {}) });
 const only = process.argv.slice(2);
 const apps = readdirSync(official).filter((a) => existsSync(path.join(official, a, "myco.json")) && (!only.length || only.includes(a)));
 for (const app of apps) {
@@ -218,7 +247,7 @@ for (const app of apps) {
     await page.waitForTimeout(2500);
     for (let n = 0; n < steps.length; n++) {
       if (steps[n]) await steps[n](page);
-      const png = await page.screenshot();
+      const png = await page.screenshot({ timeout: 180000 });
       // (WebP, made by the browser itself: no other tool needed)
       const webp = await page.evaluate(async (b64) => {
         const img = new Image();

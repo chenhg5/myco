@@ -1,4 +1,4 @@
-// README screenshots of the app, from the showcase mock (2x, 1280x800).
+// README screenshots of the app, from the showcase mock (2x, 1440x900: a roomy window, not a cramped one).
 //   cd web && MOCK_SHELL=mac MOCK_SHOWCASE=zh node mock/app-server.mjs & npx vite --port 5174
 //   node scripts/readme-shots.cjs zh /tmp/shots/zh      (restart the mock with en for English)
 //   python3 scripts/readme-frame.py /tmp/shots/zh/nodes.png ../docs/assets/app/zh/nodes.webp   (each file)
@@ -10,10 +10,10 @@ const { chromium } = require('playwright');
   const zh = lang === 'zh'; const T = (z, e) => (zh ? z : e);
   const b = await chromium.launch(); const notes = [];
   const shot = async (name, dark, fn, wait = 700) => {
-    const ctx = await b.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2, colorScheme: dark ? 'dark' : 'light', locale: zh ? 'zh-CN' : 'en-US' });
+    const ctx = await b.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, colorScheme: dark ? 'dark' : 'light', locale: zh ? 'zh-CN' : 'en-US' });
     const p = await ctx.newPage(); p.setDefaultTimeout(8000);
     p.on('pageerror', (e) => notes.push(name + ' pageerror ' + e.message));
-    await p.goto(`http://127.0.0.1:5174/?lang=${lang}`, { waitUntil: 'networkidle' }); await p.waitForTimeout(1200);
+    await p.goto(`http://127.0.0.1:5174/?lang=${lang}`, { waitUntil: 'load' }); await p.waitForTimeout(2500); // not networkidle: the page renderer keeps a long poll open
     try { await fn(p); } catch (e) { notes.push(name + ' FAILED ' + e.message.split('\n')[0]); }
     await p.waitForTimeout(wait);
     await p.screenshot({ path: `${out}/${name}${dark ? '-dark' : ''}.png` });
@@ -25,6 +25,9 @@ const { chromium } = require('playwright');
   // the same, with a computer's terminal open and a command running in it
   const terminal = async (p) => {
     await p.locator('.sp-nav-pc').first().click(); await p.waitForTimeout(1500);
+    // Members folded to their faces, so the chat and the terminal have room.
+    const fold = p.locator(`[aria-label="${T('收起成员', 'Fold members')}"]`).first();
+    if (await fold.count()) { await fold.click(); await p.waitForTimeout(500); }
     // The mock keeps what ran before (the light pass): run it only once.
     if (!(await p.getByText('go test ./...').count())) {
       const c = p.locator('.term-input').first(); await c.fill('go test ./...'); await c.press('Enter');
@@ -34,7 +37,7 @@ const { chromium } = require('playwright');
   // add an agent: the sessions found on this computer
   const addAgent = async (p) => {
     await p.locator(`[title="${T('添加 agent', 'Add an agent')}"]:visible`).first().click(); await p.waitForTimeout(600);
-    await p.getByRole('dialog').getByText(T('这台电脑上的', 'On this computer'), { exact: true }).click(); await p.waitForTimeout(800);
+    await p.getByRole('dialog').getByText(T('这台电脑', 'This computer'), { exact: true }).click(); await p.waitForTimeout(1200);
   };
   // Members is in the conversation list's menu (sort and members), not a sidebar line.
   const members = async (p) => { await p.locator('.sp-nav-chat-sort').first().click(); await p.waitForTimeout(300); await p.getByText(T('管理成员', 'Manage members'), { exact: true }).click(); await p.waitForTimeout(900); };

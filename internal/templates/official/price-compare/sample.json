@@ -1,0 +1,110 @@
+{
+  "comparisons": [
+    {
+      "id": "headphones",
+      "title": "一副适合通勤的降噪耳机",
+      "query": "A 系列无线降噪耳机",
+      "spec": "黑色 · 全新国行 · 标准套装 · 预算 ¥2,200",
+      "currency": "CNY",
+      "budget": 2200,
+      "status": "sample",
+      "summary": "先比规格，再比价格。示例中平台 A 的公开优惠更简单；平台 B 的标价更低，但需要会员资格。\n返利与立即减免分开看，运费未知的商品先不参与排名。",
+      "updated_at": "2026-11-23T01:00:00Z",
+      "offers": [
+        {
+          "title": "A 系列无线降噪耳机",
+          "platform": "平台 A",
+          "shop": "示例品牌店",
+          "spec": "黑色 · 全新国行 · 标准套装",
+          "currency": "CNY",
+          "price": 1899,
+          "shipping": 0,
+          "match": "exact",
+          "availability": "available",
+          "eligibility": "public",
+          "conditions": "公开领券，示例条件，不代表真实优惠。",
+          "coupon": "示例优惠已计入商品价",
+          "cashback": "",
+          "source": "虚构示例，非真实商品",
+          "url": "https://example.com/",
+          "checked_at": "2026-11-23T01:00:00Z",
+          "expires_at": "",
+          "affiliate": false,
+          "id": "a"
+        },
+        {
+          "title": "A 系列无线降噪耳机",
+          "platform": "平台 B",
+          "shop": "示例自营店",
+          "spec": "黑色 · 全新国行 · 标准套装",
+          "currency": "CNY",
+          "price": 1799,
+          "shipping": 0,
+          "match": "exact",
+          "availability": "available",
+          "eligibility": "conditional",
+          "conditions": "需要年度会员资格；未确认你是否适用。",
+          "coupon": "会员专属券已计入示例价",
+          "cashback": "预计返 ¥30，确认收货后按规则结算",
+          "source": "虚构示例，非真实商品",
+          "url": "https://example.com/",
+          "checked_at": "2026-11-23T01:00:00Z",
+          "expires_at": "",
+          "affiliate": true,
+          "id": "b"
+        },
+        {
+          "title": "A 系列无线降噪耳机",
+          "platform": "平台 C",
+          "shop": "示例数码店",
+          "spec": "黑色 · 全新国行 · 标准套装",
+          "currency": "CNY",
+          "price": 1859,
+          "shipping": null,
+          "match": "exact",
+          "availability": "available",
+          "eligibility": "public",
+          "conditions": "需要核对收货地区的运费。",
+          "coupon": "",
+          "cashback": "",
+          "source": "虚构示例，非真实商品",
+          "url": "https://example.com/",
+          "checked_at": "2026-11-23T01:00:00Z",
+          "expires_at": "",
+          "affiliate": false,
+          "id": "c"
+        },
+        {
+          "title": "A 系列无线降噪耳机",
+          "platform": "平台 D",
+          "shop": "示例海外店",
+          "spec": "海外版本 · 翻新 · 不同保修条件",
+          "currency": "CNY",
+          "price": 1599,
+          "shipping": 0,
+          "match": "different",
+          "availability": "available",
+          "eligibility": "public",
+          "conditions": "版本、成色与保修不同，不作为同款低价。",
+          "coupon": "",
+          "cashback": "",
+          "source": "虚构示例，非真实商品",
+          "url": "https://example.com/",
+          "checked_at": "2026-11-23T01:00:00Z",
+          "expires_at": "",
+          "affiliate": false,
+          "id": "d"
+        }
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "id": "headphones",
+      "saved": [
+        "a"
+      ],
+      "note": "更在意保修和退换货，会员专属价格确认资格后再考虑。"
+    }
+  ]
+}

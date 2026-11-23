@@ -1,0 +1,10 @@
+{
+  "en": {
+    "name": "World Podcasts",
+    "description": "Turn a 3D globe to discover public podcasts by region. Search, listen continuously, follow shows, like episodes, change speed and set a sleep timer. Progress stays on this device. Requires a native App with network media streaming."
+  },
+  "zh": {
+    "name": "地球播客",
+    "description": "转动3D地球，点选地区频道发现公开播客。支持搜索、连续收听、喜欢、订阅、倍速、睡眠定时与本机续听。需支持网络媒体流的新版 App。"
+  }
+}

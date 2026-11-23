@@ -29,6 +29,31 @@ export function Player({
     callbacks = useRef({ onProgress, next, intro, outro });
   callbacks.current = { onProgress, next, intro, outro };
   const speedRef = useRef(1);
+  const [fullscreenError, setFullscreenError] = useState("");
+  const enterFullscreen = async () => {
+    setFullscreenError("");
+    const screen = wrap.current as
+      | (HTMLDivElement & { webkitRequestFullscreen?: () => void })
+      | null;
+    const video = ref.current as
+      | (HTMLVideoElement & { webkitEnterFullscreen?: () => void })
+      | null;
+    try {
+      if (screen?.requestFullscreen) await screen.requestFullscreen();
+      else if (screen?.webkitRequestFullscreen) screen.webkitRequestFullscreen();
+      else if (video?.webkitEnterFullscreen) video.webkitEnterFullscreen();
+      else throw new Error("Fullscreen unavailable");
+    } catch {
+      // iPhone can expose an element API without allowing it, while still
+      // supporting the native video presentation used by earlier clients.
+      try {
+        if (!video?.webkitEnterFullscreen) throw new Error("Fullscreen unavailable");
+        video.webkitEnterFullscreen();
+      } catch {
+        setFullscreenError(uiText("这里不能全屏"));
+      }
+    }
+  };
   const [error, setError] = useState(""),
     [ready, setReady] = useState(false),
     [retry, setRetry] = useState(0),
@@ -204,20 +229,12 @@ export function Player({
           className="icon-btn"
           title={uiText("全屏")}
           aria-label={uiText("全屏")}
-          onClick={() => {
-            const v = ref.current as
-              | (HTMLVideoElement & { webkitEnterFullscreen?: () => void })
-              | null;
-            if (wrap.current?.requestFullscreen)
-              void wrap.current
-                .requestFullscreen()
-                .catch(() => v?.webkitEnterFullscreen?.());
-            else v?.webkitEnterFullscreen?.();
-          }}
+          onClick={() => void enterFullscreen()}
         >
           <Maximize className="ico" />
         </button>
       </div>
+      {fullscreenError && <p role="alert">{fullscreenError}</p>}
       {settings && (
         <div className="ci-skip">
           <label>
