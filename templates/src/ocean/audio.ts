@@ -12,6 +12,8 @@ export class Sound {
   private spray: GainNode | null = null;
   private engine: { gain: GainNode; osc: OscillatorNode; sub: OscillatorNode; filter: BiquadFilterNode; chug: OscillatorNode } | null = null;
   private swellAt = 0;
+  private rain: GainNode | null = null;
+  private noiseBuf: AudioBuffer | null = null;
   on = true;
 
   /** Creates the sounds (call from a key or click). */
@@ -43,6 +45,13 @@ export class Sound {
     const ws = ctx.createBufferSource(); ws.buffer = white; ws.loop = true; ws.start();
     ws.connect(sprF).connect(spray).connect(master);
     this.spray = spray;
+    // rain: a soft hiss on the sea
+    const rf = ctx.createBiquadFilter(); rf.type = "highpass"; rf.frequency.value = 900;
+    const rain = ctx.createGain(); rain.gain.value = 0;
+    const rs = ctx.createBufferSource(); rs.buffer = white; rs.loop = true; rs.start(0, 1.3);
+    rs.connect(rf).connect(rain).connect(master);
+    this.rain = rain;
+    this.noiseBuf = buf;
     // the engine: a sawtooth and a sub, through a low filter, chugging
     const osc = ctx.createOscillator(); osc.type = "sawtooth"; osc.frequency.value = 42;
     const sub = ctx.createOscillator(); sub.type = "square"; sub.frequency.value = 21;
@@ -64,7 +73,7 @@ export class Sound {
   }
 
   /** Follows the boat (a few times a second). */
-  update(speed: number, throttle: number, sea: number) {
+  update(speed: number, throttle: number, sea: number, rain = 0) {
     const ctx = this.ctx;
     if (!ctx || !this.engine || !this.sea || !this.spray) return;
     const now = ctx.currentTime, th = Math.abs(throttle), v = clamp(Math.abs(speed) / 13, 0, 1);
@@ -75,12 +84,29 @@ export class Sound {
     this.engine.filter.frequency.setTargetAtTime(220 + th * 520, now, 0.3);
     this.engine.gain.gain.setTargetAtTime(0.04 + th * 0.09, now, 0.3);
     this.spray.gain.setTargetAtTime(0.012 + v * 0.07 + sea * 0.015, now, 0.4);
+    this.rain?.gain.setTargetAtTime(rain * 0.09, now, 1.2);
     // a wave swells every few seconds
     if (now > this.swellAt) {
       const dur = 2.5 + Math.random() * 4;
       this.sea.gain.setTargetAtTime((0.25 + Math.random() * 0.45) * (0.6 + sea * 0.6), now, dur / 3);
       this.swellAt = now + dur;
     }
+  }
+
+  /** Thunder from a strike `distance` metres away (sound at 340 m/s). */
+  thunder(distance: number) {
+    const ctx = this.ctx, master = this.master, buf = this.noiseBuf;
+    if (!ctx || !master || !buf) return;
+    const at = ctx.currentTime + distance / 340, near = Math.max(0.15, 1 - distance / 3000);
+    const src = ctx.createBufferSource(); src.buffer = buf; src.playbackRate.value = 0.5;
+    const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 160 + near * 500;
+    const g = ctx.createGain(); g.gain.value = 0;
+    g.gain.setValueAtTime(0, at);
+    g.gain.linearRampToValueAtTime(0.9 * near, at + 0.08 + (1 - near) * 0.4);
+    g.gain.exponentialRampToValueAtTime(0.001, at + 3.5 + Math.random() * 2);
+    src.connect(f).connect(g).connect(master);
+    src.start(at, Math.random() * 2);
+    src.stop(at + 6.5);
   }
 
   stop() { void this.ctx?.close(); this.ctx = null; this.engine = null; }

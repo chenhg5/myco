@@ -13,10 +13,10 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "myco-ocean-test-"));
 const entry = path.join(tmp, "entry.ts");
 const src = path.join(here, "src/ocean").replace(/\\/g, "/");
-fs.writeFileSync(entry, ["waves", "boat", "islands", "sky", "noise", "fft"].map((m) => `export * as ${m} from "${src}/${m}.ts";`).join("\n"));
+fs.writeFileSync(entry, ["waves", "boat", "islands", "sky", "noise", "fft", "world"].map((m) => `export * as ${m} from "${src}/${m}.ts";`).join("\n"));
 const out = path.join(tmp, "bundle.mjs");
 await build({ entryPoints: [entry], bundle: true, format: "esm", platform: "node", outfile: out, nodePaths: [path.join(here, "node_modules")], logLevel: "error" });
-const { waves: W, boat: B, islands: I, sky: S, fft: F } = await import(pathToFileURL(out).href);
+const { waves: W, boat: B, islands: I, sky: S, fft: F, world: WO } = await import(pathToFileURL(out).href);
 
 // ---- waves ----
 for (const sea of ["calm", "moderate", "rough"]) {
@@ -131,12 +131,32 @@ for (const sea of ["calm", "moderate", "rough"]) {
 
 // ---- the sky ----
 {
-  const noon = S.skyLook(12, "clear"), morning = S.skyLook(7, "clear"), evening = S.skyLook(18, "clear");
-  assert.ok(noon.sun.y > 0.8 && noon.sun.z > 0, "at noon the sun is high in the south (+z)");
-  assert.ok(morning.sun.x > 0.5 && evening.sun.x < -0.5, "it rises in the east (+x) and sets in the west");
-  assert.ok(S.skyLook(12, "overcast").sunColor.r < noon.sunColor.r * 0.5, "cloud dims the sun");
-  assert.ok(S.skyLook(3, "clear").sun.y > 0, "no night: the hour is kept in daylight");
+  const noon = S.skyLook(12, "clear"), morning = S.skyLook(7, "clear"), evening = S.skyLook(17.5, "clear");
+  assert.ok(noon.sunPos.y > 0.8 && noon.sunPos.z > 0, "at noon the sun is high in the south (+z)");
+  assert.ok(morning.sunPos.x > 0.5 && evening.sunPos.x < -0.5, "it rises in the east (+x) and sets in the west");
+  assert.ok(Math.abs(S.skyLook(6, "clear").sunPos.y) < 0.02 && Math.abs(S.skyLook(18, "clear").sunPos.y) < 0.02, "sunrise at 6, sunset at 18");
+  assert.ok(S.skyLook(12, "overcast").lightColor.r < noon.lightColor.r * 0.5, "cloud dims the sun");
+  // night: the sun is down, the moon is up and gives the (faint, blue) light
+  const night = S.skyLook(23, "clear");
+  assert.ok(night.sunPos.y < -0.5 && night.moon.y > 0.2 && night.moon.y < 0.45, `the moon rides low at night (${night.moon.y.toFixed(2)})`);
+  assert.ok(night.light.distanceTo(night.moon) < 1e-6 && night.lightColor.b > night.lightColor.r && night.lightColor.b < 0.2, "moonlight");
+  assert.ok(night.day === 0 && night.stars > 0.8 && night.exposure > 2, "stars, and eyes adjusted to the dark");
+  assert.ok(S.skyLook(23, "overcast").stars < 0.3, "cloud hides the stars");
+  // weather
+  assert.ok(S.skyLook(14, "rain").rain > 0 && S.skyLook(14, "storm").storm && !S.skyLook(14, "rain").storm);
+  assert.ok(S.skyLook(9, "fog").haze > S.skyLook(9, "clear").haze * 5, "sea fog closes the distance in");
+  assert.equal(S.skyLook(14, "hail").cover, S.skyLook(14, "cloudy").cover, "an unknown weather reads as cloudy");
+}
+
+// ---- the shared clock: everyone works out the same hour from the record ----
+{
+  const at = Date.UTC(2026, 10, 23, 8, 0, 0);
+  const s = { time: 22, weather: "clear", sea: "calm", wind: 0, speed: 120, at };
+  assert.equal(WO.hourOf(s, at), 22);
+  assert.ok(Math.abs(WO.hourOf(s, at + 60_000) - 0) < 1e-9, "at 120× a real minute is two hours: past midnight to 0:00");
+  assert.ok(Math.abs(WO.hourOf(s, at + 6 * 60_000) - 10) < 1e-9, "a day every 12 minutes");
+  assert.equal(WO.hourOf({ ...s, speed: 0 }, at + 3.6e6), 22, "stopped: the hour stays");
 }
 
 fs.rmSync(tmp, { recursive: true, force: true });
-console.log("PASS ocean: waves, boat, islands, sky");
+console.log("PASS ocean: waves, spectrum, boat, islands, sky (day, night, weather), shared clock");

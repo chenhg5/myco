@@ -3143,5 +3143,12 @@
   "更新于 {0}": "Updated {0}",
   "示例": "Sample",
   "重新载入": "Reload",
-  "比价列表": "Comparison list"
+  "比价列表": "Comparison list",
+  "雨": "Rain",
+  "雷雨": "Storm",
+  "海雾": "Sea fog",
+  "停住": "Still",
+  "一天 48 分钟": "Day in 48 min",
+  "一天 12 分钟": "Day in 12 min",
+  "时间流动": "Time runs"
 }

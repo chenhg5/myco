@@ -11,12 +11,22 @@ import { boatModel, newBoat, placeBoat, stepBoat, type BoatState } from "./boat"
 import { GEO_WAVES, SEAS, heightAt, makeWaves, packWaves, type Sea, type Wave } from "./waves";
 import { Wake, WAKE_SIZE } from "./wake";
 import { Controls } from "./controls";
+import { Lightning, Rain } from "./rain";
 import { clamp } from "./noise";
 import { FFTOcean, SPECTRA } from "./fft";
 
-export type Settings = { time: number; weather: Weather; sea: Sea; wind: number };
+/** The world's shared settings. The hour runs on from `time` (set at `at`,
+ *  ms since 1970) by `speed` hours of the sea's day per real hour (0: it
+ *  stays), so everyone sees the same hour. */
+export type Settings = { time: number; weather: Weather; sea: Sea; wind: number; speed: number; at: number };
+
+/** The hour now (0–24) by the shared clock. */
+export function hourOf(s: Settings, now = Date.now()) {
+  const h = s.speed > 0 ? s.time + ((now - s.at) / 3.6e6) * s.speed : s.time;
+  return ((h % 24) + 24) % 24;
+}
 export type Label = { id: string; name: string; x: number; y: number; dist: number };
-export type Status = { boat: BoatState; near: { isle: Isle; dist: number } | null; labels: Label[]; fps: number; scale: number };
+export type Status = { boat: BoatState; near: { isle: Isle; dist: number } | null; labels: Label[]; fps: number; scale: number; hour: number; weather: Weather };
 
 const SEABED_SIZE = 1600, SEABED_RES = 1024;
 
@@ -39,7 +49,15 @@ export class World {
   private shapes: Shape[] = [];
   private isles = new THREE.Group();
   private seabed = { scene: new THREE.Scene(), target: new THREE.WebGLRenderTarget(SEABED_RES, SEABED_RES, { depthBuffer: true }), center: new THREE.Vector2(1e9, 1e9), dirty: true, cam: new THREE.OrthographicCamera(-SEABED_SIZE / 2, SEABED_SIZE / 2, SEABED_SIZE / 2, -SEABED_SIZE / 2, -100, 600) };
-  private settings: Settings = { time: 15, weather: "cloudy", sea: "moderate", wind: 225 };
+  private settings: Settings = { time: 15, weather: "cloudy", sea: "moderate", wind: 225, speed: 0, at: 0 };
+  private seaKey = "";
+  private skyAt = { hour: NaN, weather: "", env: NaN };
+  private rain = new Rain();
+  private lightning = new Lightning();
+  private flash = 0;
+  private look = skyLook(15, "cloudy");
+  /** For tests and pictures: an hour that holds still (null: the shared clock). */
+  hourOverride: number | null = null;
   private t = 0;
   private last = 0;
   private raf = 0;
@@ -48,7 +66,8 @@ export class World {
   private size = { w: 1, h: 1 };
   private view = { heading: 0, yaw: 0, pitch: 0.2, dist: 19, touched: -1e9, pointers: new Map<number, { x: number; y: number }>(), pinch: 0 };
   private labelsAt = 0;
-  private status: Status = { boat: this.boat, near: null, labels: [], fps: 60, scale: 1 };
+  private status: Status = { boat: this.boat, near: null, labels: [], fps: 60, scale: 1, hour: 15, weather: "cloudy" };
+  onStrike: (distance: number) => void = () => {};
   onFrame: (s: Status) => void = () => {};
 
   constructor(readonly canvas: HTMLCanvasElement) {
@@ -64,7 +83,8 @@ export class World {
       this.ocean.uniforms.uDisp.value = this.fft.disp.texture;
       this.ocean.uniforms.uSlope.value = this.fft.slope.texture;
     }
-    this.scene.add(this.dome, oceanMesh(this.ocean.mat), this.isles, this.model, this.sun, this.sun.target);
+    this.scene.add(this.dome, oceanMesh(this.ocean.mat), this.isles, this.model, this.sun, this.sun.target, this.rain.mesh);
+    this.lightning.onStrike = (d) => this.onStrike(d);
     this.ocean.uniforms.uSeabed.value = this.seabed.target.texture;
     this.ocean.uniforms.uSeabedSize.value = SEABED_SIZE;
     this.ocean.uniforms.uWake.value = this.wake.target.texture;
@@ -77,12 +97,10 @@ export class World {
 
   setSettings(s: Settings) {
     this.settings = s;
-    const look = skyLook(s.time, s.weather);
-    applySky(this.sky, look, s.wind);
-    this.sun.color.copy(look.sunColor).multiplyScalar(1 / 2.2);
-    this.sun.intensity = 2.2;
-    (this.scene.fog as THREE.FogExp2).color.copy(look.horizon);
-    (this.scene.fog as THREE.FogExp2).density = look.haze;
+    this.skyAt.hour = NaN; // (the sky is redrawn for the new settings on the next frame)
+    const key = `${s.sea}/${s.wind}`;
+    if (key === this.seaKey) return;
+    this.seaKey = key;
     this.waves = makeWaves(s.sea, s.wind);
     const g = packWaves(this.waves, GEO_WAVES);
     this.ocean.uniforms.uWA.value = g.A; this.ocean.uniforms.uWB.value = g.B;
@@ -90,16 +108,43 @@ export class World {
     this.ocean.uniforms.uRippleAmt.value = 0.55 + 0.45 * (SEAS[s.sea]?.height ?? 1);
     this.fft?.setSea(s.sea, s.wind);
     this.ocean.uniforms.uHs.value = (SPECTRA[s.sea] ?? SPECTRA.moderate).hs;
-    // the sky's light on the islands and the boat
-    const skyScene = new THREE.Scene();
-    const dome = skyDome(this.sky);
-    skyScene.add(dome);
-    const env = this.pmrem.fromScene(skyScene, 0, 1, 2000);
-    dome.geometry.dispose(); (dome.material as THREE.Material).dispose();
-    this.env?.dispose();
-    this.env = env;
-    this.scene.environment = env.texture;
-    this.scene.environmentIntensity = 0.85;
+  }
+
+  /** The hour now (the shared clock, unless held for a picture). */
+  hour() { return this.hourOverride ?? hourOf(this.settings); }
+
+  /** The sky for the hour and weather: its colours every frame (cheap); the
+   *  light it casts on the islands and boat when it has changed enough. */
+  private updateSky() {
+    const s = this.settings, hour = this.hour();
+    const changed = s.weather !== this.skyAt.weather;
+    if (!changed && Math.abs(hour - this.skyAt.hour) < 0.002) return;
+    const look = skyLook(hour, s.weather);
+    this.look = look;
+    applySky(this.sky, look, s.wind);
+    this.sun.position.copy(look.light);
+    this.sun.color.copy(look.lightColor).multiplyScalar(1 / 2.2);
+    this.sun.intensity = 2.2;
+    (this.scene.fog as THREE.FogExp2).color.copy(look.horizon);
+    (this.scene.fog as THREE.FogExp2).density = look.haze;
+    this.renderer.toneMappingExposure = look.exposure;
+    (this.model.userData.night as (n: number) => void)(1 - look.day);
+    this.skyAt.hour = hour;
+    this.skyAt.weather = s.weather;
+    let dh = Math.abs(hour - this.skyAt.env);
+    dh = Math.min(dh, 24 - dh);
+    if (changed || !(dh < 0.08)) {
+      const skyScene = new THREE.Scene();
+      const dome = skyDome(this.sky);
+      skyScene.add(dome);
+      const env = this.pmrem.fromScene(skyScene, 0, 1, 2000);
+      dome.geometry.dispose(); (dome.material as THREE.Material).dispose();
+      this.env?.dispose();
+      this.env = env;
+      this.scene.environment = env.texture;
+      this.scene.environmentIntensity = 0.85 + 0.4 * (1 - look.day);
+      this.skyAt.env = hour;
+    }
   }
 
   setIslands(list: Isle[]) {
@@ -170,6 +215,14 @@ export class World {
   frame(dt: number) {
     this.resize();
     this.advance(dt);
+    this.updateSky();
+    // a storm's lightning: the sky, the sea and everything lit for a moment
+    const f = this.lightning.update(this.t, this.look.storm);
+    if (f !== this.flash) {
+      this.flash = f;
+      this.sky.uFlash.value = f;
+      this.scene.environmentIntensity = 0.85 + 0.4 * (1 - this.look.day) + f * 3;
+    }
     placeBoat(this.model, this.boat);
     this.model.updateMatrixWorld();
     this.ocean.uniforms.uBoatInv.value.copy(this.model.matrixWorld).invert();
@@ -178,6 +231,7 @@ export class World {
     this.ocean.uniforms.uPix.value = (2 * Math.tan((this.camera.fov * Math.PI) / 360)) / (this.size.h * this.renderer.getPixelRatio());
     this.dome.position.copy(this.camera.position);
     this.sun.position.set(this.boat.x, 0, this.boat.z).addScaledVector(this.sky.uSun.value, 300);
+    this.rain.update(this.camera.position, dt, this.look.rain, this.sky.uWind.value, this.look.horizon.clone().lerp(new THREE.Color(1, 1, 1), 0.5 * this.look.day + 0.3 * this.flash));
     this.sun.target.position.set(this.boat.x, 0, this.boat.z);
     // the seabed under and around the boat (again when it has gone far)
     const sb = this.seabed;
@@ -300,6 +354,8 @@ export class World {
       for (const l of out) if (kept.every((k) => Math.abs(k.y - l.y) > 26 || Math.abs(k.x - l.x) > 120)) kept.push(l);
       this.status.labels = kept;
     }
+    this.status.hour = this.hour();
+    this.status.weather = this.settings.weather;
     this.onFrame(this.status);
   }
 
