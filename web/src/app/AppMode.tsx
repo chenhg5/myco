@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpDown, ChevronLeft, ChevronRight, LayoutGrid, Monitor, MoreHorizontal, Pin, Plus, Search, WifiOff, Workflow, X, Zap } from "lucide-react";
+import { ArrowUpDown, ChevronLeft, ChevronRight, LayoutGrid, Minimize2, Monitor, MoreHorizontal, Pin, Plus, Search, WifiOff, Workflow, X, Zap } from "lucide-react";
 import { ComputerSettings } from "@/app/ComputerSettings";
 import { AutomationsPage } from "@/app/Automations";
 import { WorkflowsPage } from "@/app/Workflows";
@@ -676,6 +676,51 @@ export default function AppMode({ initialHubs, initialInfo }: {
   // (preventDefault) does not reach the menu, so each acts once.
   const keysRef = useRef({ settingsOpen, hasHub: false });
   keysRef.current = { settingsOpen, hasHub: !!hub };
+  // 专注模式: the chat you are in alone, full screen, centred on a plain
+  // background; the sidebar, the top bar and the members are hidden. ⌃Tab
+  // still switches chats (the zoomed pane takes whoever you pick). From a
+  // chat's ⋯ menu or ⌘⇧F (Ctrl+Shift+F); Esc, ⌘⇧F or the button at the top
+  // right leave it. Only on a page with chats.
+  const [focusMode, setFocusMode] = useState(false);
+  const focusRef = useRef(false);
+  focusRef.current = focusMode;
+  const pageRef = useRef(page);
+  pageRef.current = page;
+  useEffect(() => {
+    const on = () => setFocusMode((f) => !f && pageRef.current === "space");
+    window.addEventListener("myco-focus-mode", on);
+    return () => window.removeEventListener("myco-focus-mode", on);
+  }, []);
+  useEffect(() => { if (page !== "space") setFocusMode(false); }, [page]);
+  // The window too: the desktop App's own full screen, else the browser's;
+  // leaving the browser's (its Esc) leaves 专注模式 as well.
+  const winFull = !!info?.fullscreen;
+  useEffect(() => {
+    if (winFull) void appApi.windowFullscreen(focusMode).catch(() => undefined);
+    else if (focusMode && !document.fullscreenElement) void document.documentElement.requestFullscreen?.()?.catch(() => undefined);
+    else if (!focusMode && document.fullscreenElement) void document.exitFullscreen?.()?.catch(() => undefined);
+    if (!focusMode) return;
+    // Esc, first (a docked page, hidden here, would take it), unless
+    // something on top takes it: a dialog, a menu, the search in the chat.
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.isComposing || keysRef.current.settingsOpen) return;
+      if (document.querySelector(".app-modal, .cp, .app-menu, .lightbox, .conv-menu, [data-radix-popper-content-wrapper], [role=listbox]")) return;
+      if ((document.activeElement as HTMLElement | null)?.closest(".conv-search")) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setFocusMode(false);
+    };
+    let was = !!document.fullscreenElement;
+    const changed = () => {
+      const now = !!document.fullscreenElement;
+      if (was && !now && !winFull) setFocusMode(false);
+      was = now;
+    };
+    window.addEventListener("keydown", key, true);
+    document.addEventListener("fullscreenchange", changed);
+    document.documentElement.classList.add("is-focus");
+    return () => { document.documentElement.classList.remove("is-focus"); window.removeEventListener("keydown", key, true); document.removeEventListener("fullscreenchange", changed); };
+  }, [focusMode, winFull]);
   useEffect(() => {
     const overlay = () => !!document.querySelector(".app-modal, .cp, .app-menu, .lightbox");
     const onKey = (e: KeyboardEvent) => {
@@ -702,6 +747,11 @@ export default function AppMode({ initialHubs, initialInfo }: {
         if (e.code === "KeyL") {
           e.preventDefault();
           setTheme(document.documentElement.classList.contains("dark") ? "light" : "dark");
+        }
+        // ⌘⇧F: 专注模式, the chat you are in alone (or back).
+        if (e.code === "KeyF" && !overlay() && (focusRef.current || pageRef.current === "space")) {
+          e.preventDefault();
+          window.dispatchEvent(new CustomEvent("myco-focus-mode"));
         }
         return;
       }
@@ -1002,8 +1052,15 @@ export default function AppMode({ initialHubs, initialInfo }: {
   };
 
   return (
-    <div key={lang()} className={cn("app-shell", isMac && "shell-mac", collapsed && "collapsed")}
+    <div key={lang()} className={cn("app-shell", isMac && "shell-mac", collapsed && "collapsed", focusMode && "is-focus")}
       style={{ ["--sidebar-w" as string]: `${sidebar.width}px` }}>
+      {focusMode && (
+        <button type="button" className="focus-exit" onClick={() => setFocusMode(false)}
+          title={L("退出专注模式（Esc）", "Leave focus mode (Esc)")} aria-label={L("退出专注模式", "Leave focus mode")}
+          style={{ ["--wails-draggable" as string]: "no-drag" }}>
+          <Minimize2 /><span className="focus-exit-label">{L("退出专注", "Leave focus")}<kbd>Esc</kbd></span>
+        </button>
+      )}
       {!collapsed && (
         <aside className="app-sidebar">
           {/* Its right edge: drag to make it wider or narrower. */}
@@ -1233,6 +1290,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
 
         {page === "space" && (shown ? (
           <ProjectSpace
+            focus={focusMode}
             key={spaceKey(shown)}
             space={shown}
             project={shownProject}

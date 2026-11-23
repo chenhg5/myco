@@ -343,6 +343,8 @@ export interface AppInfo {
   pick_image?: boolean;
   /** the desktop app opens links in the default browser (POST /app/open-url) */
   open_url?: boolean;
+  /** the desktop app puts its window in full screen (PUT /app/window/fullscreen) */
+  fullscreen?: boolean;
 }
 /** Everything the boot probe needs to decide the mode and lay out the shell. */
 export interface AppBootstrap { hubs: Hub[]; info: AppInfo }
@@ -1088,6 +1090,8 @@ export const appApi = {
   /** Notices shown on this computer (the desktop app; `available` false in a browser). */
   notices: () => request<NoticeState>("GET", "app/notices"),
   /** What is on screen: the window in front, the conversation in it. Coming to one marks its notices read. */
+  /** 专注模式: the desktop app's window in full screen, or back. */
+  windowFullscreen: (on: boolean) => request<void>("PUT", "app/window/fullscreen", { on }),
   noticeFocus: (f: { front: boolean; hub?: string; target?: string }) => request<void>("PUT", "app/notices/focus", f),
   noticePrefs: (hubId: string) => request<NoticePrefs>("GET", `app/hubs/${encodeURIComponent(hubId)}/notice-prefs`),
   setNoticePrefs: (hubId: string, p: NoticePrefs) => request<NoticePrefs>("PUT", `app/hubs/${encodeURIComponent(hubId)}/notice-prefs`, p),

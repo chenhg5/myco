@@ -4575,6 +4575,54 @@ async function runMatrix(browser, size, scheme) {
       if (narrow) await sidebar(page, false);
     });
 
+    // 专注模式: ⋯ › 专注模式 (or ⌘⇧F) leaves one chat alone in the middle;
+    // ⌃Tab still switches; Esc puts everything back.
+    await step("专注模式", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      if (narrow) await sidebar(page, false);
+      const conv = page.locator(".conv-detail:visible").last();
+      await clickVisible(page, conv.getByRole("button", { name: "更多" }).first());
+      const item = page.locator(".conv-menu").getByRole("menuitem", { name: /专注模式/ });
+      await item.waitFor({ timeout: 5_000 });
+      if (!/⌘⇧F|Ctrl\+Shift\+F/.test(await item.innerText())) throw new Error("菜单里应写着专注模式的快捷键");
+      await item.click();
+      await page.locator(".app-shell.is-focus").waitFor({ timeout: 5_000 });
+      for (const sel of [".app-sidebar", ".app-crumbbar", ".sp-side", ".sp-strip", ".sp-pane-zoom"]) {
+        if (await page.locator(sel).first().isVisible().catch(() => false)) throw new Error(`专注模式下 ${sel} 应藏起来`);
+      }
+      if ((await page.locator("[data-pane]:visible").count()) !== 1) throw new Error("专注模式下只留一栏");
+      const box = await page.locator(".conv-detail:visible").first().boundingBox();
+      const vw = page.viewportSize().width;
+      if (!box || Math.abs(box.x + box.width / 2 - vw / 2) > 24) throw new Error("对话应在中间");
+      const ex = await page.locator(".focus-exit").boundingBox();
+      if (!ex || ex.x < box.x + box.width) throw new Error("退出按钮不该压在对话上");
+      await page.locator(".focus-exit").waitFor({ timeout: 5_000 });
+      await settle(page, 250);
+      await shot(page, size, scheme, "focus-mode");
+      // ⌃Tab still switches, and the one opened stays alone.
+      // (the chat shown: the start of its pane; the sidebar may be closed)
+      const activeChat = async () => ((await page.locator("[data-pane]:visible").first().innerText().catch(() => "")) || "").slice(0, 80);
+      const before = await activeChat();
+      await page.keyboard.down("Control");
+      await page.keyboard.press("Tab");
+      await page.locator("[data-testid=agent-switcher]").waitFor({ timeout: 5_000 });
+      await page.keyboard.up("Control");
+      await page.locator("[data-testid=agent-switcher]").waitFor({ state: "detached", timeout: 5_000 });
+      await settle(page, 400);
+      if (!(await page.locator(".app-shell.is-focus").count())) throw new Error("⌃Tab 换对话后应还在专注模式");
+      if ((await activeChat()) === before) throw new Error("⌃Tab 应换到别的对话");
+      if ((await page.locator("[data-pane]:visible").count()) !== 1) throw new Error("换过去的对话也只留一栏");
+      // Esc leaves; the key comes back in.
+      await page.keyboard.press("Escape");
+      await page.locator(".app-shell.is-focus").waitFor({ state: "detached", timeout: 5_000 });
+      if (!(await page.locator(".app-crumbbar").isVisible())) throw new Error("退出专注后顶栏应回来");
+      await page.keyboard.press("ControlOrMeta+Shift+KeyF");
+      await page.locator(".app-shell.is-focus").waitFor({ timeout: 5_000 });
+      await clickVisible(page, page.locator(".focus-exit"));
+      await page.locator(".app-shell.is-focus").waitFor({ state: "detached", timeout: 5_000 });
+      if (narrow) await sidebar(page, false);
+    });
+
     // ‹ › at the top: back to where you were and forward again, pages and
     // what they had open; no back buttons on the pages themselves.
     await step("导航 · 后退前进", async () => {

@@ -20,6 +20,10 @@ const norm = (s: string) => s.toLocaleLowerCase();
 /** The pane ⌘F belongs to: the chat last clicked in (two side by side). */
 let activePane: HTMLElement | null = null;
 export function markActivePane(el: HTMLElement | null) { activePane = el; }
+/** The pane (Panes.tsx data-pane) of the chat last clicked in, if it is still there. */
+export function activePaneId(): string {
+  return (activePane?.isConnected && activePane.closest<HTMLElement>("[data-pane]")?.dataset.pane) || "";
+}
 export function ownsFind(el: HTMLElement | null): boolean {
   if (!el) return false;
   if (activePane && activePane.isConnected) return activePane === el;

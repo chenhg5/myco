@@ -99,6 +99,15 @@ func runGUI(h http.Handler, _ func(string), setRelaunch func(func())) error {
 		window.Show()
 		window.Focus()
 	}
+	setFullscreen = func(on bool) {
+		application.InvokeAsync(func() {
+			if on && !window.IsFullscreen() {
+				window.Fullscreen()
+			} else if !on && window.IsFullscreen() {
+				window.UnFullscreen()
+			}
+		})
+	}
 	// Notices: a toast for what needs the person; a click opens the App
 	// where it leads.
 	setUpNotices(app, func(hub, target, actor string) {

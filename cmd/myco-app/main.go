@@ -109,6 +109,14 @@ func main() {
 		}
 		return openURL(u)
 	}
+	// 专注模式: the window in full screen (set by runGUI where it can).
+	b.Fullscreen = func(on bool) error {
+		if setFullscreen == nil {
+			return fmt.Errorf("not ready")
+		}
+		setFullscreen(on)
+		return nil
+	}
 	// The pages' language changed: the tray menu (when there is one) follows.
 	b.OnUILang = func(l string) {
 		if f := uiLangHook; f != nil {
@@ -145,6 +153,10 @@ var pickImage func() (string, error)
 
 // openURL opens a link in the default browser (set by runGUI).
 var openURL func(string) error
+
+// setFullscreen puts the window in full screen or takes it out (set by
+// runGUI where the window can).
+var setFullscreen func(on bool)
 
 // uiLangHook, when the tray menu is up, redraws it in the pages' language.
 var uiLangHook func(lang string)

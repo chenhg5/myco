@@ -195,6 +195,10 @@ type Backend struct {
 	// OpenURL opens a web or mail link in the default browser (the desktop
 	// app, whose web view opens no new windows). Nil elsewhere.
 	OpenURL func(url string) error
+	// Fullscreen puts the window in full screen or takes it out (the
+	// desktop app, for 专注模式). Nil elsewhere: a browser page uses the
+	// browser's own full screen.
+	Fullscreen func(on bool) error
 	// Update, when set, enables /app/update (the app updating itself).
 	Update *Updater
 	// Cache, when set, keeps what the pages fetched across restarts
@@ -256,7 +260,7 @@ func (b *Backend) Handler() http.Handler {
 	b.pageRenderRoutes(m)
 	b.backupRoutes(m)
 	m.HandleFunc("GET /app/info", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{"version": b.Version, "shell": orStr(b.Shell, "browser"), "dictation": b.Dictate != nil || b.Listen != nil, "pick_image": b.PickImage != nil, "open_url": b.OpenURL != nil})
+		writeJSON(w, http.StatusOK, map[string]any{"version": b.Version, "shell": orStr(b.Shell, "browser"), "dictation": b.Dictate != nil || b.Listen != nil, "pick_image": b.PickImage != nil, "open_url": b.OpenURL != nil, "fullscreen": b.Fullscreen != nil})
 	})
 	if b.Update != nil {
 		m.HandleFunc("GET /app/update", b.getUpdate)
@@ -287,6 +291,7 @@ func (b *Backend) Handler() http.Handler {
 	b.translateRoutes(m)
 	m.HandleFunc("POST /app/pick-image", b.pickImage)
 	m.HandleFunc("POST /app/open-url", b.openURL)
+	m.HandleFunc("PUT /app/window/fullscreen", b.fullscreen)
 	m.HandleFunc("GET /app/pending-link", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"link": b.takePendingLink()})
 	})
