@@ -12,6 +12,8 @@ Agent access currently uses shared page records. The [agent actions SDK](app-act
 
 ## Creative
 
+[Color studio](palette.md): extract colors from local images, save shared palettes and favorites, explore harmonies, check text contrast, and export SVG, CSS or JSON. Agents can create and revise the same palettes.
+
 <table>
 <tr>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/motion-dark.webp"><img src="assets/apps/motion.webp" alt="Motion video"></picture><br><b>Motion video</b><br>Promo clips, data recaps and vertical shorts: start from a template or describe it and the agent writes each scene (HTML and animation). Comment at a point in time for changes, remake from a reference video, add music and voice-over with captions, export MP4 on your computer.</td>

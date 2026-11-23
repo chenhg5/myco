@@ -348,5 +348,15 @@
       "name": "购物比价",
       "description": "对接买手商品 API，由 agent 直接查询报价、优惠与购买链接，保留来源和查询时间。支持收藏与购买笔记；需在执行端配置自己的买手授权凭证，开通后使用。"
     }
+  },
+  "myco/palette": {
+    "en": {
+      "name": "Color studio",
+      "description": "Extract colors from images, create and save palettes, explore color harmonies, and check text contrast. Share design notes with your team and agent; export SVG, CSS and JSON."
+    },
+    "zh": {
+      "name": "配色助手",
+      "description": "从图片提色，生成、调整与收藏配色方案，分析文字对比度，预览实际设计搭配。与团队和 agent 共享色卡及设计笔记，支持 SVG、CSS、JSON 导出。"
+    }
   }
 }
