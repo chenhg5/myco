@@ -4,6 +4,22 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.21.29
+
+- **App updates work behind a system proxy, and a failed update no longer leaves you without an App**: with the proxy set to "System" and no proxy variables in the environment, the App now also reads the proxy in Windows' or macOS' network settings — the system proxy Clash or v2rayN turns on — and connects directly when that proxy program is not running. A release download cut off midway resumes where it stopped, reconnects after 60 seconds without data, and goes direct when the proxy fails. On Windows, a new version that cannot start is stopped and the current version is put back and keeps running. When an update fails, Settings says "更新失败" and explains the reason in plain words, with the raw error under details.
+- **Sessions keep the variables they use to reach their model**: adding a Codex or Claude Code session (or running `myco join`) now saves the variables that session uses for its model into the agent's private env file (`~/.myco/env/<agent>.env`, mode 600): `CODEX_HOME`, the keys of magpie / cc-switch providers, `OPENAI_*` / `ANTHROPIC_*` and proxy settings. The runner no longer loses them when the shell's exports are gone. The App reads your login shell's environment (including a `CODEX_HOME` set there) and lists sessions under it, `codex exec` ones included. `myco join --no-env` skips this.
+- **Focus mode backgrounds**: a palette button beside the exit button opens a small panel with quiet background tones (each in a light and a dark shade), the chat backgrounds' gradients and patterns, and a custom colour from the system picker, kept separately for light and dark. Choose to recolour the whole page or only around the conversation ("只改外面"); when text would be hard to read on a whole-page colour, the panel says so and offers "改成只改外面". Dark tones are softer, cards sit a shade above the background, and the chat header, pinned row and search line up with the messages. ⌘⇧F no longer also opens the chat search.
+- Saving an agent's name or face in the App now shows at once, without waiting for the next refresh.
+- Upgrade: update the App (updates behind a proxy, focus backgrounds, profiles showing at once); update myco on computers that run agents. Sessions added from then on keep their model variables — for an existing agent, run `myco runner env capture --agent <name>` in a shell where those variables are set. No hub upgrade needed.
+
+**中文**
+
+- **App 更新在系统代理下也能用，更新失败也不会把 App 弄没**：代理选「系统」且环境里没有代理变量时，App 现在会读 Windows / macOS 网络设置里的系统代理（Clash、v2rayN 打开的那个），代理程序没在运行就直连。下载中断会断点续传，60 秒没有数据自动重连，代理失败再直连。Windows 上新版本启动不了会被停掉，自动换回旧版，当前版本继续运行。更新失败时「设置」里显示「更新失败」，用大白话说明原因，原始错误收在详情里。
+- **会话会带上连模型用的变量**：添加 Codex 或 Claude Code 会话（或运行 `myco join`）时，会把该会话连模型用的变量存进这个 agent 的私有 env 文件（`~/.myco/env/<agent>.env`，权限 600）：`CODEX_HOME`、magpie / cc-switch 各 provider 的 key、`OPENAI_*` / `ANTHROPIC_*` 和代理设置。shell 里 export 的变量没了，runner 唤醒时也照样能连上模型。App 会读登录 shell 的环境（包括在 shell 里设置的 `CODEX_HOME`），连 `codex exec` 的会话也能找到。`myco join --no-env` 可以跳过保存。
+- **专注模式的背景**：退出按钮旁的调色按钮会打开一个小面板，里面有安静的背景色调（每个都有深浅两档）、聊天背景的渐变和图案，以及用系统取色器的自定义颜色，浅色和深色分别记住。可以选改整个页面，或只改对话外面（「只改外面」）；整页颜色会让文字难读时，面板会提示，并给出「改成只改外面」。深色色调更柔和，卡片比背景亮一档；对话标题、置顶行和搜索与消息对齐。⌘⇧F 也不会再顺带打开聊天搜索。
+- 在 App 里改 agent 的名字或头像，保存后马上就会显示，不用等下一次刷新。
+- 升级：更新 App（代理下的更新、专注模式背景、资料即时显示）；跑 agent 的电脑更新 myco。之后添加的会话才会带上模型变量——已有的 agent 可以在设了这些变量的 shell 里运行 `myco runner env capture --agent <名字>`。不需要升级 Hub。
+
 ## v0.21.28
 
 - **New app: Server Console (服务器)**: manage Linux hosts over the OpenSSH setup already on your computer — CPU, memory and disk overview with hostname and online CPU count, systemd services and Docker containers, logs, and reviewed start/stop/restart. Profiles, host trust and keys stay on the computer that connects, and a shared page never runs a command. An agent can be given a grant for one exact server that expires: read-only for status and logs, or read and manage for services and containers. Needs the updated desktop App and Hub (`sudo myco upgrade`); ProxyJump and end-to-end encrypted workspaces are not supported yet.
