@@ -4608,6 +4608,9 @@ async function runMatrix(browser, size, scheme) {
       if ((await msg.locator("li.md-media").count()) !== 2) throw new Error("以图片开头的列表项应排成左图右文");
       const row = await msg.locator("li.md-media").first().evaluate((li) => { const i = li.querySelector("img").getBoundingClientRect(); const t = li.querySelector("strong").getBoundingClientRect(); return { img: i.right, text: t.left, top: Math.abs(i.top - t.top) }; });
       if (row.text < row.img || row.top > 12) throw new Error(`左图右文的排版不对：${JSON.stringify(row)}`);
+      // Each picture stays inside its row (not over the line below it).
+      const spill = await msg.locator("li.md-media").evaluateAll((lis) => lis.map((li) => Math.round(li.querySelector("img").getBoundingClientRect().bottom - li.getBoundingClientRect().bottom)));
+      if (spill.some((d) => d > 0)) throw new Error(`左图右文的图超出了这一行：${spill.join(", ")}px`);
       // Titled pictures side by side: each with its name and line under it.
       const figs = msg.locator(".md-gallery.is-captioned figure");
       if ((await figs.count()) !== 3) throw new Error(`带说明的图片组应有三张，实际 ${await figs.count()}`);

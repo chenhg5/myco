@@ -4975,7 +4975,10 @@ html.fp-docked .app-main .sp-side {
 .md ul:has(> li.md-media), .md ol:has(> li.md-media) { padding-left: 0; list-style: none; }
 .md li.md-media {
   position: relative;
-  min-height: 64px;
+  /* (the picture and the padding around it: boxes here count padding in
+     their height, so a row with one short line still holds its picture) */
+  box-sizing: border-box;
+  min-height: 84px;
   margin: 0;
   padding: 10px 0 10px 78px;
   list-style: none;
