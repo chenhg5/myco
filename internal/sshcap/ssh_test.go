@@ -34,6 +34,21 @@ func TestRealOpenSSHImmutableTarget(t *testing.T) {
 		}
 		t.Fatalf("real ssh probe: %+v %v", r, err)
 	}
+	// A user@alias command-line destination overrides a config-file User.
+	// Freeze the resolved -l override on the execution command line too.
+	override, er := m.Create(ctx, Create{Name: "User override", Destination: "not-a-real-user@fixture", User: p.User})
+	if er != nil {
+		t.Fatal(er)
+	}
+	if override.User != p.User {
+		t.Fatal("resolved user differs from approval")
+	}
+	if got, er := m.Run(ctx, override.ID, override.Binding, Operation{Action: "probe"}, false); er != nil || strings.TrimSpace(got.Stdout) != "Linux" {
+		t.Fatalf("user@alias retargeted the resolved account: %v", er)
+	}
+	if er := m.Delete(override.ID); er != nil {
+		t.Fatal(er)
+	}
 	r, err = m.Run(ctx, p.ID, p.Binding, Operation{Action: "overview"}, false)
 	if err != nil || !strings.Contains(r.Stdout, "@@myco:memory") || !strings.Contains(r.Stdout, "MemTotal:") {
 		t.Fatalf("real Linux overview: %+v %v", r, err)
@@ -90,5 +105,22 @@ func TestFixedCommandsRejectShellAndOptionInjection(t *testing.T) {
 	}
 	if _, _, err := Command(Operation{Action: "services.logs", Name: "ssh.service", Lines: 201}); err == nil {
 		t.Fatal("unbounded logs accepted")
+	}
+}
+
+func TestRealOpenSSHRefusesUnfrozenJumpConfiguration(t *testing.T) {
+	m, in := isolated(t)
+	f, err := os.OpenFile(m.Config, os.O_APPEND|os.O_WRONLY, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = f.WriteString("\n ProxyJump another-host\n")
+	f.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = m.Create(context.Background(), in)
+	if e, ok := err.(*Error); !ok || e.Code != "unsupported" {
+		t.Fatalf("unfrozen SSH hop accepted: %v", err)
 	}
 }

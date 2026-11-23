@@ -76,6 +76,9 @@ func (b *Backend) hostSSH(ctx context.Context, h Hub, p sshcap.Profile) time.Dur
 		}
 		jobs, err := c.ActionHostJobs(ctx, host.ID, actionHostPoll)
 		if err != nil {
+			if ctx.Err() != nil {
+				return 0
+			}
 			return actionHostRetake
 		}
 		for _, j := range jobs {

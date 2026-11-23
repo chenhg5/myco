@@ -292,3 +292,17 @@ esac
 		t.Fatalf("changed target kept grant %+v %v", old, err)
 	}
 }
+
+func TestCancelledSSHHostCannotRemoveReplacement(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	a := &actionHosts{epochs: map[string]uint64{"ssh:profile": 2}, running: map[string]context.CancelFunc{"ssh:profile": cancel}, retry: map[string]time.Time{}}
+	a.finish("ssh:profile", 1, time.Minute)
+	if a.running["ssh:profile"] == nil || !a.retry["ssh:profile"].IsZero() || ctx.Err() != nil {
+		t.Fatal("cancelled host removed/backed off its replacement")
+	}
+	a.finish("ssh:profile", 2, 0)
+	if a.running["ssh:profile"] != nil {
+		t.Fatal("current host did not finish")
+	}
+}

@@ -291,6 +291,11 @@ func (m *Manager) resolve(ctx context.Context, in Create) (stored, error) {
 			continue
 		}
 		value = strings.TrimSpace(value)
+		// A flattened ssh -G profile cannot safely carry a second host's
+		// configuration. Refuse ProxyJump until every hop can be frozen too.
+		if key == "proxyjump" && value != "none" {
+			return stored{}, fail("unsupported", "ProxyJump profiles are not supported yet; use a direct SSH address reachable from this computer (for example over a VPN)")
+		}
 		switch key {
 		case "hostname":
 			p.Host = value
@@ -413,7 +418,7 @@ func (m *Manager) RunFor(ctx context.Context, id, binding string, op Operation, 
 	if runtime.GOOS == "windows" {
 		null = "NUL"
 	}
-	args := []string{"-F", cfg, "-n", "-T", "-o", "BatchMode=yes", "-o", "LogLevel=ERROR", "-o", "StrictHostKeyChecking=yes", "-o", "UpdateHostKeys=no", "-o", "VerifyHostKeyDNS=no", "-o", "KnownHostsCommand=none", "-o", "ForwardAgent=no", "-o", "ForwardX11=no", "-o", "PermitLocalCommand=no", "-o", "ClearAllForwardings=yes", "-o", "ControlMaster=no", "-o", "ControlPath=none", "-o", "ControlPersist=no", "-o", "ConnectTimeout=10", "-o", "ConnectionAttempts=1", "-o", "ServerAliveInterval=5", "-o", "ServerAliveCountMax=2", "-o", "UserKnownHostsFile=" + quoteConfig(known), "-o", "GlobalKnownHostsFile=" + quoteConfig(null), "--", p.Destination, command}
+	args := []string{"-F", cfg, "-l", p.User, "-p", strconv.Itoa(p.Port), "-n", "-T", "-o", "BatchMode=yes", "-o", "LogLevel=ERROR", "-o", "StrictHostKeyChecking=yes", "-o", "UpdateHostKeys=no", "-o", "VerifyHostKeyDNS=no", "-o", "KnownHostsCommand=none", "-o", "ForwardAgent=no", "-o", "ForwardX11=no", "-o", "PermitLocalCommand=no", "-o", "ClearAllForwardings=yes", "-o", "ControlMaster=no", "-o", "ControlPath=none", "-o", "ControlPersist=no", "-o", "ConnectTimeout=10", "-o", "ConnectionAttempts=1", "-o", "ServerAliveInterval=5", "-o", "ServerAliveCountMax=2", "-o", "UserKnownHostsFile=" + quoteConfig(known), "-o", "GlobalKnownHostsFile=" + quoteConfig(null), "--", p.Destination, command}
 	c := m.command(call, args...)
 	stdout, stderr := &limited{max: OutputLimit - OutputLimit/4}, &limited{max: OutputLimit / 4}
 	c.Stdout, c.Stderr = stdout, stderr

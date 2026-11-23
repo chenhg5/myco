@@ -515,6 +515,9 @@ strict existing known_hosts, no PTY/password prompts, forwarding or automatic
 host trust. Verify an unknown server's host fingerprint independently and connect
 once with OpenSSH locally. SSH config and known_hosts are snapshotted and hashed;
 changes cause `target_changed` rather than silently retargeting an approval.
+The first version rejects `ProxyJump` configurations: a flattened single-host
+snapshot cannot safely preserve a second host's settings. Use a directly
+reachable address (including a VPN address) instead.
 The original profile and trust remain local; only explicitly enabled resource
 display metadata reaches the workspace. Execution uses the SSH account's normal
 permissions; it never adds sudo, daemon privileges or remote software.
