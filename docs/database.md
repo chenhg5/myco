@@ -1,6 +1,6 @@
 # Database studio
 
-Database studio (`myco/database`) is a desktop client for MySQL, PostgreSQL, SQLite and MongoDB. It uses myco's neutral interface: local connections and objects on the left, data/structure/query tabs in the workspace, a bounded result grid and a deliberately shared query library.
+Database studio (`myco/database`) is a desktop client for MySQL, PostgreSQL, SQLite and MongoDB. It uses myco's neutral interface: local connections and objects on the left, data/structure/query tabs in the workspace, a bounded result grid and a deliberately shared query library. Table values and SQL use a 14px baseline; supporting text stays at least 12px, including in narrow windows.
 
 A **desktop App build with the `db.profile` capability** is required to connect. A template update alone cannot add database drivers to an older desktop App. Clients without this capability show an update message and can still browse shared query drafts. This version does not add native database access to iOS or Android.
 
