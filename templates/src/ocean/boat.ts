@@ -159,8 +159,52 @@ export function boatModel() {
   for (const side of [1, -1]) for (const z of [cz + 0.45, cz - 0.4]) pane(0.68, 0.5, side * (cw / 2 + 0.006), wy, z, (side * Math.PI) / 2);
   pane(0.9, 0.45, 0, wy, cz - cd / 2 - 0.006, Math.PI);
   group.add(win);
+  // lights for the night: red to port (left, +x here), green to starboard,
+  // white at the masthead; the cabin glows and a lamp lights the deck
+  const lamp = (c: number, x: number, y: number, z: number) => {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), new THREE.MeshBasicMaterial({ color: c }));
+    m.position.set(x, y, z);
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: c, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+    glow.scale.setScalar(1.6);
+    m.add(glow);
+    group.add(m);
+    return { m, glow };
+  };
+  const lamps = [
+    lamp(0xff2a1a, cw / 2 + 0.08, cy + ch * 0.85, cz + cd / 2 - 0.1),
+    lamp(0x1aff5a, -cw / 2 - 0.08, cy + ch * 0.85, cz + cd / 2 - 0.1),
+    lamp(0xfff4e0, 0, cy + ch + 2.5, cz - 0.3),
+  ];
+  const deck = new THREE.PointLight(0xffc98a, 0, 9, 1.6);
+  deck.position.set(0, cy + ch - 0.1, cz - cd / 2 - 0.6);
+  group.add(deck);
+  const dark = new THREE.Color(0x0b0f14), lit = new THREE.Color(0xffb766);
+  group.userData.night = (n: number) => {
+    for (const l of lamps) { l.m.visible = n > 0.05; (l.glow.material as THREE.SpriteMaterial).opacity = n; }
+    deck.intensity = n * 6;
+    glass.emissive.copy(lit).multiplyScalar(n * 0.9);
+    glass.color.copy(dark);
+  };
+  group.userData.night(0);
   group.traverse((o) => { (o as THREE.Mesh).castShadow = true; });
   return group;
+}
+
+let glowTex: THREE.Texture | null = null;
+/** A soft round glow (for lamps seen from afar). */
+function glowTexture() {
+  if (glowTex) return glowTex;
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const g = c.getContext("2d")!;
+  const r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  r.addColorStop(0, "rgba(255,255,255,1)");
+  r.addColorStop(0.25, "rgba(255,255,255,0.45)");
+  r.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = r;
+  g.fillRect(0, 0, 64, 64);
+  glowTex = new THREE.CanvasTexture(c);
+  return glowTex;
 }
 
 export type BoatState = {

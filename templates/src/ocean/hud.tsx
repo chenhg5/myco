@@ -11,7 +11,8 @@ import { type Isle, type Kind } from "./islands";
 import type { Label, Status } from "./world";
 import type { Controls, Key } from "./controls";
 import type { Settings } from "./world";
-import type { Weather } from "./sky";
+import { WEATHERS, type Weather } from "./sky";
+import { SPEEDS } from "./model";
 import type { Sea } from "./waves";
 
 export const KNOTS = 1.94384;
@@ -20,7 +21,11 @@ const KIND_NAME: Record<Kind, () => string> = {
   island: () => uiText("岛"), rocks: () => uiText("礁石"), stack: () => uiText("海蚀柱"), sandbar: () => uiText("沙洲"),
 };
 export const kindName = (k: Kind) => KIND_NAME[k]?.() ?? k;
-const WEATHER_NAME: Record<Weather, () => string> = { clear: () => uiText("晴"), cloudy: () => uiText("多云"), overcast: () => uiText("阴") };
+const WEATHER_NAME: Record<Weather, () => string> = {
+  clear: () => uiText("晴"), cloudy: () => uiText("多云"), overcast: () => uiText("阴"), rain: () => uiText("雨"), storm: () => uiText("雷雨"), fog: () => uiText("海雾"),
+};
+export const weatherName = (w: Weather) => WEATHER_NAME[w]?.() ?? w;
+const SPEED_NAME = [() => uiText("停住"), () => uiText("一天 48 分钟"), () => uiText("一天 12 分钟")];
 const SEA_NAME: Record<Sea, () => string> = { calm: () => uiText("平静"), moderate: () => uiText("中浪"), rough: () => uiText("大浪") };
 const POINTS = () => [uiText("北"), uiText("东北"), uiText("东"), uiText("东南"), uiText("南"), uiText("西南"), uiText("西"), uiText("西北")];
 export const pointOf = (deg: number) => POINTS()[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
@@ -212,17 +217,19 @@ export function Labels({ labels }: { labels: Label[] }) {
 }
 
 /** The shared settings: hour, weather, sea, wind (everyone sees the same). */
-export function SettingsPanel({ value, title, onChange, onTitle, onStartHere, onGoStart, onClose }: {
-  value: Settings; title: string; onChange: (s: Settings) => void; onTitle: (t: string) => void; onStartHere: () => void; onGoStart: () => void; onClose: () => void;
+export function SettingsPanel({ value, hour, title, onChange, onTitle, onStartHere, onGoStart, onClose }: {
+  value: Settings; hour: number; title: string; onChange: (s: Settings) => void; onTitle: (t: string) => void; onStartHere: () => void; onGoStart: () => void; onClose: () => void;
 }) {
   return (
     <div className="oc-panel pop" role="dialog" aria-label={uiText("海况和天气")}>
       <div className="oc-panel-head"><b>{uiText("海况和天气")}</b><span className="faint">{uiText("大家看到的一样")}</span><span className="top-gap" /><button type="button" className="icon-btn" onClick={onClose} aria-label={uiText("关闭")}><X className="ico" /></button></div>
       <label className="oc-field"><span>{uiText("名字")}</span><input className="inp" value={title} maxLength={60} placeholder={uiText("这片海叫什么")} onChange={(e) => onTitle(e.target.value)} /></label>
-      <label className="oc-field"><span>{uiText("时间")} <b className="oc-num">{clock(value.time)}</b></span>
-        <input type="range" min={5} max={19.5} step={0.25} value={value.time} onChange={(e) => onChange({ ...value, time: Number(e.target.value) })} /></label>
+      <label className="oc-field"><span>{uiText("时间")} <b className="oc-num">{clock(hour)}</b></span>
+        <input type="range" min={0} max={23.75} step={0.25} value={Math.round(hour * 4) / 4} onChange={(e) => onChange({ ...value, time: Number(e.target.value), at: Date.now() })} /></label>
+      <div className="oc-field"><span>{uiText("时间流动")}</span>
+        <div className="seg">{SPEEDS.map((sp, i) => <button key={sp} type="button" className={value.speed === sp ? "is-on" : ""} onClick={() => onChange({ ...value, time: hour, at: Date.now(), speed: sp })}>{SPEED_NAME[i]()}</button>)}</div></div>
       <div className="oc-field"><span>{uiText("天气")}</span>
-        <div className="seg">{(["clear", "cloudy", "overcast"] as Weather[]).map((w) => <button key={w} type="button" className={value.weather === w ? "is-on" : ""} onClick={() => onChange({ ...value, weather: w })}>{WEATHER_NAME[w]()}</button>)}</div></div>
+        <div className="seg oc-seg-wrap">{WEATHERS.map((w) => <button key={w} type="button" className={value.weather === w ? "is-on" : ""} onClick={() => onChange({ ...value, weather: w })}>{WEATHER_NAME[w]()}</button>)}</div></div>
       <div className="oc-field"><span>{uiText("海况")}</span>
         <div className="seg">{(["calm", "moderate", "rough"] as Sea[]).map((w) => <button key={w} type="button" className={value.sea === w ? "is-on" : ""} onClick={() => onChange({ ...value, sea: w })}>{SEA_NAME[w]()}</button>)}</div></div>
       <label className="oc-field"><span>{uiText("风向")} <b className="oc-num">{uiText("{0}风", pointOf(value.wind))} {Math.round(value.wind)}°</b></span>

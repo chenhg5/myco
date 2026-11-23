@@ -484,7 +484,11 @@ Arguments only contain `{name?,lines?}` (systemd `.service` unit/container name,
 default 100); a profile or host override is rejected. Results are
 `{stdout,stderr,exit_code,truncated,duration_ms}`. The SDK parses the fixed text
 formats (`overview` uses `@@myco:` section markers, container lists use Docker
-JSON lines). Nonzero remote exit codes are returned as results, not success
+JSON lines). The optional `@@myco:identity` section contains `hostname=<value>`
+and `cpus=<positive online CPU count>` lines, read with `uname -n` and
+`getconf _NPROCESSORS_ONLN`. Empty values mean unavailable, never zero cores.
+Older hosts omit this section; parsers must ignore unknown sections and preserve
+unknown/missing fields. Nonzero remote exit codes are returned as results, not success
 claims about the service. Output is capped at 256 KiB total and each operation
 at 30 seconds. JSON results over 200 KiB use a private `application/json` action
 artifact; the job result then contains `{artifact,exit_code,truncated,duration_ms}`.

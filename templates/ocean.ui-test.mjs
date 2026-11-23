@@ -91,6 +91,17 @@ try {
   const kept = await page.evaluate(async () => (await window.myco.data.get("world", "main")).data);
   assert.equal(kept.title, "椰影群岛", "the other settings are kept");
   assert.equal(kept.weather, "cloudy");
+  // the day runs on for everyone: a speed and the moment it was set are saved
+  await page.locator(".oc-panel .seg button", { hasText: "一天 12 分钟" }).click();
+  await page.waitForFunction(async () => (await window.myco.data.get("world", "main")).data.time_speed === 120, null, { timeout: 5000 });
+  const clockRec = await page.evaluate(async () => (await window.myco.data.get("world", "main")).data);
+  assert.ok(Math.abs(clockRec.time_at - Date.now()) < 60_000 && Math.abs(clockRec.time - 15.5) < 0.6, `the clock starts from the hour shown (${clockRec.time})`);
+  await page.waitForFunction(() => window.__ocean.status.hour > 15.55, null, { timeout: 15000 });
+  await page.locator(".oc-panel .seg button", { hasText: "停住" }).click();
+  // storm: the record, and the chip says so
+  await page.locator(".oc-panel .seg button", { hasText: "雷雨" }).click();
+  await page.waitForFunction(async () => (await window.myco.data.get("world", "main")).data.weather === "storm", null, { timeout: 5000 });
+  await page.waitForFunction(() => /\d\d:\d\d · 雷雨/.test(document.querySelector(".oc-chip").textContent));
   await page.locator(".oc-panel .inp").fill("新群岛");
   await page.waitForFunction(async () => (await window.myco.data.get("world", "main")).data.title === "新群岛", null, { timeout: 5000 });
   await page.keyboard.press("Escape");

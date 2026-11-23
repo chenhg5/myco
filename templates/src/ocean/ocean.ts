@@ -261,6 +261,11 @@ export function oceanMaterial(sky: SkyUniforms, fft = false) {
         #else
         vec2 rip = (r1 * 0.16 + r2 * 0.09 * near + r3 * 0.22) * uRippleAmt;
         #endif
+        // raindrops: a fine chatter all over the surface
+        if (uRain > 0.0) {
+          vec2 rr = (texture2D(uRipple, p * 1.9 + vec2(uTime * 1.3, -uTime * 0.7)).rg * 2.0 - 1.0) + (texture2D(uRipple, p * 3.1 - uTime * 1.1).rg * 2.0 - 1.0);
+          rip += rr * 0.1 * uRain * near;
+        }
         // the wake here: foam, bubbles, and the slope of its ridges
         vec4 wk = vec4(0.0, 0.0, 0.5, 0.0);
         vec2 wUV = topUV(vWorld.xz, uWakeCenter, uWakeSize);
@@ -332,7 +337,7 @@ export function oceanMaterial(sky: SkyUniforms, fft = false) {
         vec3 H = normalize(V + L);
         float shin = mix(900.0, 60.0, clamp(foot * 8.0, 0.0, 1.0));
         float spec = pow(max(dot(N, H), 0.0), shin) * (shin + 8.0) / 25.0;
-        col += uSunColor * spec * F * 1.4 * (1.0 - uCover * 0.6);
+        col += uSunColor * spec * F * 1.4 * (1.0 - uCover * 0.6) * (1.0 - 0.6 * uRain);
 
         // foam: breaking crests, surf on the shallows, the wake. Each gives an
         // amount (0–1); foamLook turns an amount into foam: solid where fresh,
