@@ -386,3 +386,13 @@ ten minutes) and are cancelled on navigation, reload, close or backgrounding.
 No workspace authorization, saved HTTP credentials or ambient cookies are
 attached, and cross-origin redirects strip credential headers. The sandbox's
 external connection policy is unchanged; all requests use this bridge.
+
+## SSH server administration
+
+Desktop builds with OpenSSH offer `ssh.profiles` and `ssh.run`; see the
+[local SSH capability contract](api.md#local-ssh-capabilities). These calls reuse
+local SSH configuration, keys and ssh-agent with strict existing host trust.
+Profiles are private to this computer; agent access requires explicit opt-in
+for the current workspace and a separate human-approved, target-bound grant.
+An old desktop or mobile bridge returns unsupported; updating a template alone
+cannot install this native capability. There is no arbitrary agent terminal.
