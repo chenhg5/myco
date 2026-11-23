@@ -121,6 +121,10 @@ export interface HubOverview {
   seen_at?: number;
 }
 
+/** Said on window when an agent's profile was saved from this App. */
+export const AGENT_UPDATED = "myco-agent-updated";
+export interface AgentUpdated { hubId: string; agent: Agent }
+
 export interface AppOverview {
   generated_at: string;
   hubs: HubOverview[];
@@ -740,8 +744,16 @@ export const appApi = {
   /** An agent's picture face; v (its avatar word) changes with the picture. */
   avatarUrl: (hubId: string, name: string, v: string) =>
     `app/hubs/${enc(hubId)}/agents/${enc(name)}/avatar?v=${encodeURIComponent(v)}`,
-  updateProfile: (hubId: string, name: string, input: ProfileInput) =>
-    request<void>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/profile`, input),
+  /** Saves an agent's name, description or face. The agent as saved comes
+   *  back and is announced ("myco-agent-updated", AppMode), so every list
+   *  shows it at once instead of at the next refresh. */
+  updateProfile: async (hubId: string, name: string, input: ProfileInput) => {
+    const agent = await request<Agent | null>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/profile`, input);
+    if (agent && typeof agent === "object" && agent.name === name) {
+      window.dispatchEvent(new CustomEvent<AgentUpdated>(AGENT_UPDATED, { detail: { hubId, agent } }));
+    }
+    return agent;
+  },
   /** Makes the agent's resume line (the old one stops working): the command
    *  to run in a new sandbox to bring the same agent back. Hubs before
    *  v0.19.5 answer not_found. */

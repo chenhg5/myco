@@ -810,7 +810,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const [findFirst, setFindFirst] = useState("");
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.key.toLowerCase() !== "f") return;
+      // Not ⌘⇧F: that is 专注模式 (AppMode).
+      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== "f") return;
       if (document.querySelector(".app-modal, .fp-panel, .lightbox") || !ownsFind(rootRef.current)) return;
       e.preventDefault();
       setSearching(true);

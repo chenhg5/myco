@@ -3650,7 +3650,8 @@ async function runMatrix(browser, size, scheme) {
       await page.waitForFunction(() => {
         const cap = document.querySelector(".ms .ms-face .pa")?.style.getPropertyValue("--av-cap");
         return cap && cap.toLowerCase() === "#e7a33e";
-      }, null, { timeout: 10_000 });
+      // at once: the saved agent comes back with the save (not the next refresh)
+      }, null, { timeout: 2_000 });
       await clickVisible(page, page.locator(".ms .ms-face-btn"));
       await face.waitFor({ timeout: 5_000 });
       // Only a picture: anything else is turned away with a word.
@@ -3663,13 +3664,13 @@ async function runMatrix(browser, size, scheme) {
       await page.waitForFunction(() => {
         const img = document.querySelector(".ms .ms-face .pa-pic");
         return img && img.complete && img.naturalWidth > 0;
-      }, null, { timeout: 10_000 });
+      }, null, { timeout: 2_000 });
       await clickVisible(page, page.locator(".ms .ms-face-btn"));
       await face.waitFor({ timeout: 5_000 });
       await face.getByRole("button", { name: "用回原来的" }).click();
       await face.getByRole("button", { name: "用这个头像" }).click();
       await face.waitFor({ state: "hidden", timeout: 5_000 });
-      await page.locator(".ms .ms-face .pa-pic").waitFor({ state: "detached", timeout: 10_000 });
+      await page.locator(".ms .ms-face .pa-pic").waitFor({ state: "detached", timeout: 2_000 });
       await page.keyboard.press("Escape");
       await page.locator(".ms").waitFor({ state: "hidden" });
     });
@@ -4599,6 +4600,24 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".focus-exit").waitFor({ timeout: 5_000 });
       await settle(page, 250);
       await shot(page, size, scheme, "focus-mode");
+      // The header's line ends where the box you write in does.
+      const head = await page.locator(".conv-detail:visible .conv-head").first().boundingBox();
+      const cbox = await page.locator(".conv-detail:visible .conv-compose-box").first().boundingBox();
+      if (!head || !cbox || Math.abs(head.x - cbox.x) > 2 || Math.abs(head.x + head.width - cbox.x - cbox.width) > 2) {
+        throw new Error(`专注模式的标题栏应和输入框对齐（标题 ${head?.x}–${head && head.x + head.width}，输入框 ${cbox?.x}–${cbox && cbox.x + cbox.width}）`);
+      }
+      // The background: the quiet button beside the way out; kept until changed.
+      const bgOf = () => page.locator(".app-shell").evaluate((el) => getComputedStyle(el).backgroundColor);
+      const themeBg = await bgOf();
+      await clickVisible(page, page.locator(".focus-tone"));
+      await page.locator(".conv-menu").getByRole("menuitem", { name: "纸张" }).click();
+      await page.locator(".app-shell[data-focus-bg=paper]").waitFor({ timeout: 5_000 });
+      if ((await bgOf()) === themeBg) throw new Error("选了纸张，专注模式的背景应换掉");
+      await settle(page, 200);
+      await shot(page, size, scheme, "focus-mode-paper");
+      await clickVisible(page, page.locator(".focus-tone"));
+      await page.locator(".conv-menu").getByRole("menuitem", { name: "跟随主题" }).click();
+      await page.locator(".app-shell[data-focus-bg]").waitFor({ state: "detached", timeout: 5_000 });
       // ⌃Tab still switches, and the one opened stays alone.
       // (the chat shown: the start of its pane; the sidebar may be closed)
       const activeChat = async () => ((await page.locator("[data-pane]:visible").first().innerText().catch(() => "")) || "").slice(0, 80);
@@ -4618,6 +4637,9 @@ async function runMatrix(browser, size, scheme) {
       if (!(await page.locator(".app-crumbbar").isVisible())) throw new Error("退出专注后顶栏应回来");
       await page.keyboard.press("ControlOrMeta+Shift+KeyF");
       await page.locator(".app-shell.is-focus").waitFor({ timeout: 5_000 });
+      // ⌘⇧F is focus mode only, not the search in the chat (⌘F) as well.
+      await settle(page, 200);
+      if (await page.locator(".conv-search").first().isVisible().catch(() => false)) throw new Error("⌘⇧F 不该同时打开对话里的搜索");
       await clickVisible(page, page.locator(".focus-exit"));
       await page.locator(".app-shell.is-focus").waitFor({ state: "detached", timeout: 5_000 });
       if (narrow) await sidebar(page, false);

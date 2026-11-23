@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpDown, ChevronLeft, ChevronRight, LayoutGrid, Minimize2, Monitor, MoreHorizontal, Pin, Plus, Search, WifiOff, Workflow, X, Zap } from "lucide-react";
+import { ArrowUpDown, ChevronLeft, ChevronRight, LayoutGrid, Minimize2, Monitor, MoreHorizontal, Palette, Pin, Plus, Search, WifiOff, Workflow, X, Zap } from "lucide-react";
 import { ComputerSettings } from "@/app/ComputerSettings";
 import { AutomationsPage } from "@/app/Automations";
 import { WorkflowsPage } from "@/app/Workflows";
 import { TemplatesPage } from "@/app/Templates";
 import "@/app/app.css";
 import "@/app/space.css";
-import { appApi, errorMessage, type AppInfo, type AppOverview, type Hub, type LocalState, type WorkspaceState } from "@/appapi";
+import { AGENT_UPDATED, appApi, errorMessage, type AgentUpdated, type AppInfo, type AppOverview, type Hub, type LocalState, type WorkspaceState } from "@/appapi";
 import type { AgentRow } from "@/app/types";
 import type { Project } from "@/api";
 import { ConnectHubDialog } from "@/app/ConnectHubDialog";
@@ -328,9 +328,13 @@ export default function AppMode({ initialHubs, initialInfo }: {
       return remember("projects", allIds.flatMap((id) => { const i = okIds.indexOf(id); return (i >= 0 ? lists[i] : null) ?? keep(id); }));
     });
   }, []);
-  const refresh = useCallback(async () => {
-    if (refreshing.current) return;
+  // Asked for while one runs (after a save, say): once more when it ends,
+  // since the one running may have read the hub before the change.
+  const refreshAgain = useRef(false);
+  const refresh = useCallback(async (): Promise<void> => {
+    if (refreshing.current) { refreshAgain.current = true; return; }
     refreshing.current = true;
+    refreshAgain.current = false;
     try {
       const [h, o, pending, l] = await Promise.all([appApi.hubs(), appApi.overview(), readPendingLink(),
         appApi.local().catch(() => null)]);
@@ -356,8 +360,33 @@ export default function AppMode({ initialHubs, initialInfo }: {
       setOv((o) => (o ? unreached(o, e) : o));
     } finally {
       refreshing.current = false;
+      if (refreshAgain.current) void refresh();
     }
   }, [loadProjects]);
+  // A profile saved here (appApi.updateProfile): its name and face show
+  // everywhere at once, not at the next refresh.
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<AgentUpdated>).detail;
+      if (!d?.agent) return;
+      setOv((o) => {
+        if (!o) return o;
+        let hit = false;
+        const hubs = o.hubs.map((h) => {
+          if (h.id !== d.hubId || !h.overview) return h;
+          const agents = h.overview.agents.map((st) => {
+            if (st.agent.name !== d.agent.name) return st;
+            hit = true;
+            return { ...st, agent: { ...st.agent, ...d.agent } };
+          });
+          return { ...h, overview: { ...h.overview, agents } };
+        });
+        return hit ? remember("overview", { ...o, hubs }) : o;
+      });
+    };
+    window.addEventListener(AGENT_UPDATED, on);
+    return () => window.removeEventListener(AGENT_UPDATED, on);
+  }, []);
 
   useEffect(() => {
     void refresh();
@@ -692,6 +721,17 @@ export default function AppMode({ initialHubs, initialInfo }: {
     return () => window.removeEventListener("myco-focus-mode", on);
   }, []);
   useEffect(() => { if (page !== "space") setFocusMode(false); }, [page]);
+  // Its background: the theme's own, or a quiet tone you pick from the
+  // button at the top right (each tone has a light and a dark shade; see
+  // .app-shell.is-focus[data-focus-bg] in app.css). Kept on this computer.
+  const [focusBg, setFocusBgState] = useState<string>(() => {
+    try { const v = localStorage.getItem(FOCUS_BG_KEY) || ""; return FOCUS_BGS.some((t) => t.id === v) ? v : ""; } catch { return ""; }
+  });
+  const setFocusBg = (v: string) => {
+    setFocusBgState(v);
+    try { if (v) localStorage.setItem(FOCUS_BG_KEY, v); else localStorage.removeItem(FOCUS_BG_KEY); } catch { /* not kept */ }
+  };
+  const focusMenu = useContextMenu();
   // The window too: the desktop App's own full screen, else the browser's;
   // leaving the browser's (its Esc) leaves 专注模式 as well.
   const winFull = !!info?.fullscreen;
@@ -1053,14 +1093,26 @@ export default function AppMode({ initialHubs, initialInfo }: {
 
   return (
     <div key={lang()} className={cn("app-shell", isMac && "shell-mac", collapsed && "collapsed", focusMode && "is-focus")}
+      data-focus-bg={focusMode && focusBg ? focusBg : undefined}
       style={{ ["--sidebar-w" as string]: `${sidebar.width}px` }}>
       {focusMode && (
-        <button type="button" className="focus-exit" onClick={() => setFocusMode(false)}
-          title={L("退出专注模式（Esc）", "Leave focus mode (Esc)")} aria-label={L("退出专注模式", "Leave focus mode")}
-          style={{ ["--wails-draggable" as string]: "no-drag" }}>
-          <Minimize2 /><span className="focus-exit-label">{L("退出专注", "Leave focus")}<kbd>Esc</kbd></span>
-        </button>
+        <div className="focus-tools" style={{ ["--wails-draggable" as string]: "no-drag" }}>
+          {/* The background, barely there until pointed at. */}
+          <button type="button" className="focus-tone"
+            title={L("专注背景", "Focus background")} aria-label={L("换专注模式的背景", "Change the focus background")}
+            onClick={(e) => focusMenu.openUnder(e.currentTarget, [
+              { header: L("专注背景", "Focus background") },
+              ...FOCUS_BGS.map((t) => ({ label: t.name(), checked: focusBg === t.id, onSelect: () => setFocusBg(t.id) })),
+            ])}>
+            <Palette />
+          </button>
+          <button type="button" className="focus-exit" onClick={() => setFocusMode(false)}
+            title={L("退出专注模式（Esc）", "Leave focus mode (Esc)")} aria-label={L("退出专注模式", "Leave focus mode")}>
+            <Minimize2 /><span className="focus-exit-label">{L("退出专注", "Leave focus")}<kbd>Esc</kbd></span>
+          </button>
+        </div>
       )}
+      {focusMenu.element}
       {!collapsed && (
         <aside className="app-sidebar">
           {/* Its right edge: drag to make it wider or narrower. */}
@@ -1461,6 +1513,16 @@ export default function AppMode({ initialHubs, initialInfo }: {
 }
 
 const SPACE_KEY = "myco-app-space";
+const FOCUS_BG_KEY = "myco-focus-bg";
+/** 专注模式's backgrounds ("" is the theme's own); their colours are in app.css. */
+const FOCUS_BGS: { id: string; name: () => string }[] = [
+  { id: "", name: () => L("跟随主题", "Theme") },
+  { id: "paper", name: () => L("纸张", "Paper") },
+  { id: "sage", name: () => L("护眼绿", "Sage") },
+  { id: "mist", name: () => L("雾蓝", "Mist") },
+  { id: "dusk", name: () => L("暮紫", "Dusk") },
+  { id: "contrast", name: () => L("高对比", "High contrast") },
+];
 // Computers listed in the sidebar before "All N".
 const NAV_COMPUTERS = 6;
 type ChatSort = "recent" | "busy" | "name";

@@ -9449,6 +9449,18 @@ html.os-other ::-webkit-scrollbar-thumb:hover, html.os-other ::-webkit-scrollbar
    bar, no members; the zoomed pane's conversation centred at a reading
    width. A small button at the top right (and Esc) leaves it. */
 .app-shell.is-focus { background: var(--bg); }
+/* The backgrounds you can pick (AppMode FOCUS_BGS), light and dark: quiet
+   tones the theme's words stay readable on. */
+.app-shell.is-focus[data-focus-bg="paper"] { --bg: #f5f0e6; }
+.app-shell.is-focus[data-focus-bg="sage"] { --bg: #ebf1e7; }
+.app-shell.is-focus[data-focus-bg="mist"] { --bg: #eaeff5; }
+.app-shell.is-focus[data-focus-bg="dusk"] { --bg: #f1ecf4; }
+.app-shell.is-focus[data-focus-bg="contrast"] { --bg: #ffffff; }
+.dark .app-shell.is-focus[data-focus-bg="paper"] { --bg: #23211c; }
+.dark .app-shell.is-focus[data-focus-bg="sage"] { --bg: #1b211d; }
+.dark .app-shell.is-focus[data-focus-bg="mist"] { --bg: #1a1e26; }
+.dark .app-shell.is-focus[data-focus-bg="dusk"] { --bg: #211d26; }
+.dark .app-shell.is-focus[data-focus-bg="contrast"] { --bg: #0c0c0e; }
 .app-shell.is-focus .app-sidebar,
 .app-shell.is-focus .app-crumbbar,
 .app-shell.is-focus .sp-side,
@@ -9469,13 +9481,45 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
   width: 100%;
   margin: 0 auto;
 }
-/* Just the icon, quiet, at the top right; pointed at, it says what it
-   does and its key. */
-.focus-exit {
+/* The header shares the column of the messages and the box you write in:
+   its line and its edges end where the box's do, not 90px further out. */
+.app-shell.is-focus .conv-detail > .conv-head {
+  --conv-box: min(calc(var(--conv-col) - var(--conv-pad) - var(--conv-pad-l)), calc(100% - var(--conv-pad) - var(--conv-pad-l)));
+  margin-left: calc(var(--conv-pad-l) + (100% - var(--conv-pad) - var(--conv-pad-l) - var(--conv-box)) / 2);
+  margin-right: calc(var(--conv-pad) + (100% - var(--conv-pad) - var(--conv-pad-l) - var(--conv-box)) / 2);
+  padding: 0 2px;
+}
+/* The buttons at the top right, together: the background and the way out.
+   Quiet until pointed at, so they stay out of the work. */
+.focus-tools {
   position: fixed;
   top: 12px;
   right: 12px;
   z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.focus-tone {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  opacity: .35;
+  transition: opacity .15s, color .15s, background .15s, border-color .15s;
+}
+.focus-tools:hover .focus-tone { opacity: .7; }
+.focus-tone:hover,
+.focus-tone:focus-visible { opacity: 1 !important; color: var(--fg); background: var(--bg); border-color: var(--line); }
+.focus-tone svg { width: 13px; height: 13px; }
+/* Just the icon, quiet, at the top right; pointed at, it says what it
+   does and its key. */
+.focus-exit {
   display: inline-flex;
   align-items: center;
   height: 30px;
