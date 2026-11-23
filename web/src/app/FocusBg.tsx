@@ -18,18 +18,20 @@ export type FocusBgChoice = { id: string; scope: FocusScope };
 type Tone = { id: string; name: () => string; light: string; dark: string; solid: boolean };
 
 /** The tones: solid colours first (the words stay readable on them in either
- *  theme), then the chat backgrounds' gradients and patterns. */
+ *  theme), then the chat backgrounds' gradients and patterns. The dark
+ *  shades are a little lighter than the dark theme's own (#1b1b1f): a tint,
+ *  not a deeper dark, which only felt heavy (all but 高对比). */
 export const FOCUS_TONES: Tone[] = [
-  { id: "paper", name: () => L("纸张", "Paper"), light: "#f5f0e6", dark: "#23211c", solid: true },
-  { id: "sand", name: () => L("沙色", "Sand"), light: "#f3ead9", dark: "#29231a", solid: true },
-  { id: "rose", name: () => L("樱粉", "Rose"), light: "#f8ecee", dark: "#261d20", solid: true },
-  { id: "dusk", name: () => L("暮紫", "Dusk"), light: "#f1ecf4", dark: "#211d26", solid: true },
-  { id: "mist", name: () => L("雾蓝", "Mist"), light: "#eaeff5", dark: "#1a1e26", solid: true },
-  { id: "sky", name: () => L("天青", "Sky"), light: "#e4f0f7", dark: "#16202a", solid: true },
-  { id: "celadon", name: () => L("青瓷", "Celadon"), light: "#e4f2ed", dark: "#17221f", solid: true },
-  { id: "sage", name: () => L("护眼绿", "Sage"), light: "#ebf1e7", dark: "#1b211d", solid: true },
-  { id: "stone", name: () => L("石墨", "Stone"), light: "#e6e7ea", dark: "#121316", solid: true },
-  { id: "contrast", name: () => L("高对比", "High contrast"), light: "#ffffff", dark: "#0b0b0d", solid: true },
+  { id: "paper", name: () => L("纸张", "Paper"), light: "#f5f0e6", dark: "#2e2a24", solid: true },
+  { id: "sand", name: () => L("沙色", "Sand"), light: "#f5eddf", dark: "#322a20", solid: true },
+  { id: "rose", name: () => L("樱粉", "Rose"), light: "#f8ecee", dark: "#32262b", solid: true },
+  { id: "dusk", name: () => L("暮紫", "Dusk"), light: "#f1ecf4", dark: "#2b2633", solid: true },
+  { id: "mist", name: () => L("雾蓝", "Mist"), light: "#eaeff5", dark: "#252c38", solid: true },
+  { id: "sky", name: () => L("天青", "Sky"), light: "#e4f0f7", dark: "#22303b", solid: true },
+  { id: "celadon", name: () => L("青瓷", "Celadon"), light: "#e4f2ed", dark: "#223029", solid: true },
+  { id: "sage", name: () => L("护眼绿", "Sage"), light: "#ebf1e7", dark: "#29302a", solid: true },
+  { id: "stone", name: () => L("石墨", "Stone"), light: "#ececef", dark: "#2b2c31", solid: true },
+  { id: "contrast", name: () => L("高对比", "High contrast"), light: "#ffffff", dark: "#111113", solid: true },
   ...PRESETS.map((p) => ({ id: `chat-${p.id}`, name: p.name, light: p.css, dark: p.css, solid: false })),
 ];
 

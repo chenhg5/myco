@@ -9457,6 +9457,12 @@ html.os-other ::-webkit-scrollbar-thumb:hover, html.os-other ::-webkit-scrollbar
 .app-shell.is-focus[data-focus-bg] { --focus-bg: var(--focus-bg-l); background: var(--focus-bg); }
 .dark .app-shell.is-focus[data-focus-bg] { --focus-bg: var(--focus-bg-d); }
 .app-shell.is-focus[data-focus-kind="solid"][data-focus-scope="all"] { --bg: var(--focus-bg); }
+/* (in the dark, cards and bubbles a shade above that tone, not darker than it) */
+.dark .app-shell.is-focus[data-focus-kind="solid"][data-focus-scope="all"] {
+  --card: color-mix(in srgb, var(--focus-bg) 93%, #fff);
+  --pill: color-mix(in srgb, var(--focus-bg) 88%, #fff);
+  --pill-hover: color-mix(in srgb, var(--focus-bg) 84%, #fff);
+}
 .app-shell.is-focus[data-focus-kind="pattern"] .app-main,
 .app-shell.is-focus[data-focus-scope="outside"] .app-main { background: transparent; }
 .app-shell.is-focus[data-focus-kind="pattern"][data-focus-scope="all"] .conv-compose { background: transparent; }
