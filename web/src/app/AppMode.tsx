@@ -897,11 +897,14 @@ export default function AppMode({ initialHubs, initialInfo }: {
   // 待处理 (NoticesPanel): what waits for you, the Dock badge's number. The
   // desktop app's watcher keeps it; in a browser (no watcher) each
   // workspace is asked now and then.
+  // (hidden for now, the maintainers' call, 2026-11-23: looking at the App
+  // clears the Dock's number instead; the list stays for later)
   const [noticesOpen, setNoticesOpen] = useState(false);
   const [noticeCount, setNoticeCount] = useState(0);
   const hubIdsKey = hubs.filter((h) => h.ok).map((h) => h.id).join(",");
   const readNoticeCount = useRef<() => void>(() => undefined);
   useEffect(() => {
+    if (!NOTICES_LIST) return;
     let off = false;
     let inBrowser: boolean | null = null;
     let last = 0;
@@ -1167,11 +1170,13 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 order you pick; the height left, scrolling), computers last.
                 The three lists fold. */}
             <div className="app-nav-group sp-nav-autos">
-              <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-notices", noticesOpen && "active")} data-testid="nav-notices"
-                onClick={() => setNoticesOpen(true)}>
-                <Bell /><span className="app-nav-label">{L("待处理", "Needs you")}</span>
-                {noticeCount > 0 && <span className="wf-nav-badge" title={L(`${noticeCount} 件事在等你`, `${noticeCount} things wait for you`)}>{noticeCount}</span>}
-              </button>
+              {NOTICES_LIST && (
+                <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-notices", noticesOpen && "active")} data-testid="nav-notices"
+                  onClick={() => setNoticesOpen(true)}>
+                  <Bell /><span className="app-nav-label">{L("待处理", "Needs you")}</span>
+                  {noticeCount > 0 && <span className="wf-nav-badge" title={L(`${noticeCount} 件事在等你`, `${noticeCount} things wait for you`)}>{noticeCount}</span>}
+                </button>
+              )}
               <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-auto", page === "automations" && "active")} aria-current={page === "automations" ? "page" : undefined}
                 onClick={() => { setNavChat(null); toPage("automations"); }}>
                 <Zap /><span className="app-nav-label">{L("自动化", "Automations")}</span>
@@ -1553,6 +1558,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
 }
 
 const SPACE_KEY = "myco-app-space";
+/** 待处理 in the sidebar (NoticesPanel): off for now. */
+const NOTICES_LIST = false;
 // Computers listed in the sidebar before "All N".
 const NAV_COMPUTERS = 6;
 type ChatSort = "recent" | "busy" | "name";

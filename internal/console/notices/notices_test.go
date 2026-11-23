@@ -230,3 +230,57 @@ func longText() string {
 	}
 	return string(b)
 }
+
+func (p *fakePresenter) badgeNow() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.badge
+}
+
+// withBadge sets the hub's count without waking a reader (the next notice does).
+func (f *fakeFeed) withBadge(n int) {
+	f.mu.Lock()
+	f.badge = n
+	f.mu.Unlock()
+}
+
+func (f *fakeFeed) setBadge(n int) {
+	f.mu.Lock()
+	f.badge = n
+	f.mu.Unlock()
+	f.changed <- struct{}{}
+}
+
+// The Dock counts what came since the App was last in front: bringing it
+// to the front clears the number; what comes after shows again.
+func TestWatcherBadgeClearsWhenTheAppIsInFront(t *testing.T) {
+	f := newFeed()
+	f.badge = 2
+	p := &fakePresenter{}
+	w := newWatcher(t, []Hub{hubOf("h1", f)}, p, filepath.Join(t.TempDir(), "state.json"))
+	w.Start()
+	eventually(t, "the badge shows what waits", func() bool { return p.badgeNow() == 2 })
+
+	w.SetFocus(context.Background(), Focus{Front: true})
+	if p.badgeNow() != 0 {
+		t.Fatalf("badge = %d with the App in front, want 0", p.badgeNow())
+	}
+	// Still in front: a new one does not show.
+	f.withBadge(3)
+	f.add(ask("codex", "要不要发版？"))
+	time.Sleep(50 * time.Millisecond)
+	if p.badgeNow() != 0 {
+		t.Fatalf("badge = %d while in front, want 0", p.badgeNow())
+	}
+	// Away: what comes now counts.
+	w.SetFocus(context.Background(), Focus{Front: false})
+	f.withBadge(4)
+	f.add(ask("codex", "再确认一下？"))
+	eventually(t, "a new one after leaving shows", func() bool { return p.badgeNow() == 1 })
+	// One settled elsewhere (fewer than were seen): never below zero.
+	f.setBadge(1)
+	eventually(t, "settled ones do not go negative", func() bool { return p.badgeNow() == 0 })
+	f.withBadge(2)
+	f.add(ask("codex", "第三个问题"))
+	eventually(t, "the next one shows as one", func() bool { return p.badgeNow() == 1 })
+}

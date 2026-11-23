@@ -122,8 +122,11 @@ type Watcher struct {
 	cursors map[string]int64
 	states  map[string]HubState
 	groups  map[string]*group
-	cancel  context.CancelFunc
-	done    chan struct{}
+	// seen is how many waited when the App was last in front: the Dock
+	// counts only what came after (looking at the App clears it).
+	seen   int
+	cancel context.CancelFunc
+	done   chan struct{}
 }
 
 type loop struct {
@@ -358,12 +361,36 @@ func (w *Watcher) toast(h Hub, n *api.Notice) Toast {
 	return t
 }
 
+// shownBadge is the number for the Dock out of total (the hub's open
+// needs-you notices): what came since the App was last in front; none
+// while it is. (Called with w.mu held.)
+func (w *Watcher) shownBadge(total int) int {
+	if w.focus.Front || total < w.seen {
+		w.seen = total
+	}
+	return total - w.seen
+}
+
+func (w *Watcher) totalLocked() int {
+	total := 0
+	for _, x := range w.states {
+		total += x.Badge
+	}
+	return total
+}
+
 // SetFocus says what the person is looking at. Coming to a conversation
 // marks its notices read on the hub (every device stops announcing them)
 // and takes its banners away.
 func (w *Watcher) SetFocus(ctx context.Context, f Focus) {
 	w.mu.Lock()
+	wasFront := w.focus.Front
 	w.focus = f
+	// The App in front: the Dock's number goes (what came before is seen).
+	clear := f.Front && !wasFront
+	if clear {
+		w.shownBadge(w.totalLocked())
+	}
 	l := w.loops[f.Hub]
 	var id string
 	if f.Front && f.Target != "" {
@@ -371,6 +398,9 @@ func (w *Watcher) SetFocus(ctx context.Context, f Focus) {
 		delete(w.groups, id)
 	}
 	w.mu.Unlock()
+	if clear && w.present != nil {
+		w.present.Badge(0)
+	}
 	if id == "" || l == nil {
 		return
 	}
@@ -411,13 +441,10 @@ func (w *Watcher) setState(id string, s HubState) {
 		return
 	}
 	w.states[id] = s
-	total := 0
-	for _, x := range w.states {
-		total += x.Badge
-	}
+	shown := w.shownBadge(w.totalLocked())
 	w.mu.Unlock()
 	if w.present != nil {
-		w.present.Badge(total)
+		w.present.Badge(shown)
 	}
 }
 
