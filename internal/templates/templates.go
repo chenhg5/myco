@@ -24,7 +24,7 @@ var Order = []string{
 	"myco/code", "myco/issues", "myco/devtools",
 	"myco/todo", "myco/notes", "myco/disk", "myco/stocks", "myco/proxy-console", "myco/remote-desktop",
 	"myco/ledger", "myco/habit", "myco/reader", "myco/price-compare", "myco/cinema", "myco/podcast", "myco/personality",
-	"myco/palette", "myco/design-studio", "myco/logo-studio", "myco/whiteboard", "myco/mindmap", "myco/recorder", "myco/video", "myco/motion", "myco/photo",
+	"myco/palette", "myco/aigc-canvas", "myco/design-studio", "myco/logo-studio", "myco/whiteboard", "myco/mindmap", "myco/recorder", "myco/video", "myco/motion", "myco/photo",
 	"myco/arcade", "myco/ocean", "myco/gomoku", "myco/sudoku",
 }
 

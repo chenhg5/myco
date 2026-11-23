@@ -12,6 +12,8 @@ Agent access currently uses shared page records. The [agent actions SDK](app-act
 
 ## Creative
 
+**AIGC Canvas** links notes, text, images, and videos into a shared workflow. Text generation uses OpenRouter, while images and videos use Replicate. Enter your own provider keys for the current session. Generated media links can expire, so save files you want to keep.
+
 [Color studio](palette.md): extract colors from local images, save shared palettes and favorites, explore harmonies, check text contrast, and export SVG, CSS or JSON. Agents can create and revise the same palettes.
 
 <table>

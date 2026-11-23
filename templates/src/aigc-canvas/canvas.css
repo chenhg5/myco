@@ -1,0 +1,40 @@
+.ac-app { height: 100%; display: flex; flex-direction: column; background: var(--bg); color: var(--fg); }
+.ac-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 12px 18px; border-bottom: 1px solid var(--line); }
+.ac-header h1 { margin: 0; font-size: 17px; }
+.ac-header small, .ac-node-preview, .ac-settings p, .ac-empty p { color: var(--muted); }
+.ac-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.ac-settings { position: relative; z-index: 5; }
+.ac-settings summary { list-style: none; }
+.ac-settings summary::marker { content: ""; }
+.ac-settings > div { position: absolute; inset-inline-end: 0; top: calc(100% + 8px); width: min(285px, 85vw); padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); box-shadow: 0 6px 24px #0003; }
+.ac-body { min-height: 0; flex: 1; display: flex; }
+.ac-stage { position: relative; flex: 1; min-width: 0; overflow: hidden; touch-action: none; background: var(--bg2); background-image: radial-gradient(var(--line) 1px, transparent 1px); background-size: 20px 20px; }
+.ac-world { position: absolute; width: 1px; height: 1px; transform-origin: left top; }
+.ac-links { position: absolute; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
+.ac-links path { fill: none; stroke: var(--muted); stroke-width: 1.6px; }
+.ac-node { position: absolute; text-align: start; display: flex; flex-direction: column; justify-content: flex-start; gap: 7px; align-items: flex-start; padding: 12px 14px; overflow: hidden; touch-action: none; user-select: none; border: 1px solid var(--line); border-radius: 11px; background: var(--bg); color: var(--fg); box-shadow: 0 4px 14px #0001; }
+.ac-node[aria-pressed="true"] { outline: 2px solid var(--fg); outline-offset: -2px; }
+.ac-node-kind { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+.ac-node strong { max-width: 100%; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; font-size: 14px; }
+.ac-node-preview { font-size: 12px; line-height: 1.35; text-align: start; overflow: hidden; overflow-wrap: anywhere; }
+.ac-viewport { position: absolute; bottom: 12px; left: 12px; display: flex; gap: 4px; }
+.ac-viewport .btn { background: var(--bg); }
+.ac-empty { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; pointer-events: none; padding: 16px; }
+.ac-empty h2, .ac-empty p { margin: 3px; }
+.ac-empty h2 { font-size: 18px; }
+.ac-inspector { width: clamp(260px, 28vw, 340px); min-width: 0; padding: 16px; overflow: auto; border-inline-start: 1px solid var(--line); }
+.ac-inspector-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.ac-inspector h2 { margin: 0; font-size: 16px; }
+.ac-inspector label, .ac-settings label { display: grid; gap: 4px; margin-block-end: 10px; font-size: 12px; }
+.ac-inspector textarea { height: auto; min-height: 54px; resize: vertical; }
+.ac-output { margin-block-start: 12px; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
+.ac-output h3 { font-size: 13px; }
+.ac-output img, .ac-output video { max-width: 100%; max-height: 280px; border-radius: 7px; }
+.ac-output pre { font: inherit; white-space: pre-wrap; }
+@media (max-width: 620px) {
+  .ac-header { padding: 8px; }
+  .ac-header .btn { padding-inline: 6px; }
+  .ac-body { flex-direction: column; }
+  .ac-stage { flex: 1 0 43%; }
+  .ac-inspector { width: 100%; padding: 10px; border-inline-start: 0; border-top: 1px solid var(--line); }
+}

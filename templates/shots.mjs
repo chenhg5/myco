@@ -106,6 +106,7 @@ function photo() {
 // sample data is there before the first).
 const wait = (p, ms = 400) => p.waitForTimeout(ms);
 const plans = {
+  "aigc-canvas": [async p => { await p.getByRole("button", { name: /写一句海报文案/ }).click(); }],
   "palette": { viewport: { width: 1400, height: 1000 }, steps: [null, async p => { await p.getByRole("button", { name: "编辑配色", exact: true }).click(); }] },
   "price-compare": { viewport: { width: 1400, height: 1000 }, steps: [null] },
   reader: { viewport: { width: 1040, height: 800 }, steps: [async (p) => {
