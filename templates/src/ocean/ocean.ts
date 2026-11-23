@@ -11,6 +11,7 @@ import { GEO_WAVES } from "./waves";
 import { HULL_GLSL } from "./boat";
 
 export const SEABED_LOW = -12, SEABED_SPAN = 14; // what the seabed texture holds (m)
+const WAKE_RIDGE = 0.55; // the wake's ridges at their highest (m)
 
 /** Rings of vertices around the centre; each knows how far apart it is from its neighbours. */
 function discGeometry(r0 = 0.4, far = 7000, seg = 220, grow = 1.034) {
@@ -147,6 +148,9 @@ export function oceanMaterial(sky: SkyUniforms) {
       uniform vec4 uWB[GEO];
       uniform vec2 uCenter;
       uniform float uTime;
+      uniform sampler2D uWake;
+      uniform vec2 uWakeCenter;
+      uniform float uWakeSize;
       attribute float spacing;
       varying vec3 vWorld;
       varying vec2 vFlat;
@@ -163,6 +167,9 @@ export function oceanMaterial(sky: SkyUniforms) {
           d.y += f * B.x * s;
         }
         vec3 wp = vec3(p.x + d.x, d.y, p.y + d.z);
+        // the wake's ridges lift the water (up to about half a metre)
+        vec2 wuv = vec2((p.x - uWakeCenter.x) / uWakeSize + 0.5, -(p.y - uWakeCenter.y) / uWakeSize + 0.5);
+        if (wuv.x > 0.0 && wuv.x < 1.0 && wuv.y > 0.0 && wuv.y < 1.0) wp.y += (texture2D(uWake, wuv).b - 0.5) * ${WAKE_RIDGE.toFixed(2)} * 2.0;
         vWorld = wp;
         vFlat = p;
         gl_Position = projectionMatrix * viewMatrix * vec4(wp, 1.0);
@@ -218,6 +225,17 @@ export function oceanMaterial(sky: SkyUniforms) {
         vec2 r3 = texture2D(uRipple, mat2(0.6, -0.8, 0.8, 0.6) * p / 23.0 + wd * uTime * 0.02).rg * 2.0 - 1.0;
         float near = 1.0 - smoothstep(80.0, 900.0, dist);
         vec2 rip = (r1 * 0.16 + r2 * 0.09 * near + r3 * 0.22) * uRippleAmt;
+        // the wake here: foam, bubbles, and the slope of its ridges
+        vec4 wk = vec4(0.0, 0.0, 0.5, 0.0);
+        vec2 wUV = topUV(vWorld.xz, uWakeCenter, uWakeSize);
+        if (wUV.x > 0.002 && wUV.x < 0.998 && wUV.y > 0.002 && wUV.y < 0.998) {
+          wk = texture2D(uWake, wUV);
+          float e = 1.0 / 512.0, m = uWakeSize / 512.0 * 2.0;
+          float k = ${WAKE_RIDGE.toFixed(2)} * 2.0;
+          float dx = (texture2D(uWake, wUV + vec2(e, 0.0)).b - texture2D(uWake, wUV - vec2(e, 0.0)).b) * k / m;
+          float dz = -(texture2D(uWake, wUV + vec2(0.0, e)).b - texture2D(uWake, wUV - vec2(0.0, e)).b) * k / m;
+          nx -= dx; nz -= dz;
+        }
         vec3 N = normalize(vec3(nx + rip.x, 1.0 - comp, nz + rip.y));
         float jac = 1.0 - comp; // small where the crest is pinched (it breaks)
 
@@ -253,6 +271,8 @@ export function oceanMaterial(sky: SkyUniforms) {
         // light through the crests: brighter, greener where the wave stands up
         float through = pow(max(dot(-V, normalize(vec3(L.x, 0.25, L.z))), 0.0), 3.0);
         body += vec3(0.02, 0.2, 0.17) * crest * (0.35 + 1.2 * through);
+        // bubbles stirred under the surface: paler, greener water
+        body = mix(body, vec3(0.15, 0.66, 0.62), clamp(wk.g, 0.0, 1.0) * 0.7);
         body *= skyLight * 0.75 + sunLight * 0.35;
 
         vec3 col = mix(body, refl, F);
@@ -278,13 +298,20 @@ export function oceanMaterial(sky: SkyUniforms) {
         float band = 0.5 + 0.5 * sin(depth * 5.0 - uTime * 1.6 + tex * 4.0);
         float edge = 1.0 - smoothstep(0.0, 0.35, depth);
         foam += max(edge * smoothstep(0.2, 0.6, tex + edge * 0.3), shore * smoothstep(0.45, 0.85, band * tex + shore * 0.25)) * (0.4 + 0.6 * uFoamAmt);
-        vec2 wUV = topUV(vWorld.xz, uWakeCenter, uWakeSize);
-        if (wUV.x > 0.0 && wUV.x < 1.0 && wUV.y > 0.0 && wUV.y < 1.0) {
-          float w = texture2D(uWake, wUV).r;
-          // white and churned near the stern, a lacy scar further back
-          float fine = texture2D(uFoamTex, fp * 0.42 + vec2(0.31, 0.17) * uTime * 0.05).r;
-          float lace = smoothstep(0.3, 0.72, fine * 0.7 + tex * 0.35 + w * 0.32);
-          foam += clamp(w * 1.15, 0.0, 1.0) * lace;
+        {
+          // the wake's foam: dense and torn at the stern, breaking up into
+          // patches and specks, ragged at its edges (never a painted band)
+          float w = wk.r;
+          float fine = texture2D(uFoamTex, fp * 0.55 + vec2(0.31, 0.17) * uTime * 0.04).r;
+          float mid = texture2D(uFoamTex, fp * 0.19 - vec2(0.12, 0.27) * uTime * 0.03).r;
+          float n = fine * 0.55 + mid * 0.45;
+          // (older churn, weaker, tears into patches and streaks)
+          float churn = smoothstep(0.55, 0.8, w * 0.62 + n * 0.7 - 0.12) * smoothstep(0.02, 0.25, w);
+          float specks = smoothstep(0.62, 0.8, fine) * smoothstep(0.05, 0.4, w);
+          // a little foam where the V's ridges stand highest
+          float ridge = clamp((wk.b - 0.5) * 2.0, 0.0, 1.0);
+          float crestFoam = smoothstep(0.3, 0.75, ridge) * smoothstep(0.42, 0.7, n + w * 0.4) * 0.9;
+          foam += max(churn, max(specks * 0.8, crestFoam));
         }
         foam = clamp(foam, 0.0, 1.0) * (1.0 - smoothstep(600.0, 2400.0, dist) * 0.7);
         vec3 foamCol = vec3(0.92, 0.95, 0.96) * (skyLight * 0.9 + sunLight * 0.45 * max(N.y, 0.0));
