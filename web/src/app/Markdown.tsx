@@ -10,6 +10,8 @@ import type { Attachment } from "@/api";
 import { appApi } from "@/appapi";
 import { Lightbox, type Picture } from "@/app/lightbox";
 import { colourCode, diagramPicture, drawDiagrams, onThemeChange, redrawDiagrams } from "@/app/mdRich";
+import { splitUi } from "@/app/ui/spec";
+import { UiBlock } from "@/app/ui/UiBlock";
 
 /** Rough line budget for one message before it starts collapsed. */
 const COLLAPSE_LINES = 30;
@@ -396,7 +398,18 @@ function RenderedBody({ body, files, growing }: { body: string; files?: InlineFi
     }
     return <PrettyJSON data={parsed.value} />;
   }
-  return <Markdown text={body} files={files} growing={growing} />;
+  // ```myco-ui blocks (ui/): drawn as components between the Markdown;
+  // while the reply is still coming in, a line in their place.
+  const parts = splitUi(body);
+  if (parts.length === 1 && parts[0].kind === "md") return <Markdown text={body} files={files} growing={growing} />;
+  return (
+    <div className="md-parts">
+      {parts.map((p, i) => p.kind === "md"
+        ? <Markdown key={i} text={p.text} files={files} growing={growing} />
+        : growing ? <div key={i} className="ui-wait">{L("正在准备界面…", "Preparing…")}</div>
+        : <UiBlock key={i} src={p.src} files={files} />)}
+    </div>
+  );
 }
 
 /** Long bodies unfolded in this window (MessageContent). */
@@ -407,7 +420,8 @@ const unfolded = new Set<string>();
  * than 30 lines start folded so one long reply cannot take over the thread.
  */
 export function MessageContent({ body, foldId, files, growing }: { body: string; foldId?: string; files?: InlineFiles; growing?: boolean }) {
-  const lines = body.split("\n").length;
+  // (a block of components counts as a few lines, not its JSON's)
+  const lines = splitUi(body).reduce((n, p) => n + (p.kind === "md" ? p.text.split("\n").length : 12), 0);
   const collapsible = lines > COLLAPSE_LINES;
   // Unfolded stays unfolded while this window is open, even when the
   // message is drawn anew (a reply that finished growing, one shown

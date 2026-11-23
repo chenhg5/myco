@@ -1,0 +1,260 @@
+{
+  "version": 1,
+  "fence": "myco-ui",
+  "about": "Components an agent may put in a message as a ```myco-ui block (JSON). Only these are drawn; anything else shows as its source. The words around the block should still make sense without it (older apps and phones may show the source).",
+  "limits": { "max_bytes": 65536, "max_elements": 300, "max_depth": 12, "max_list": 200 },
+  "tones": ["neutral", "info", "success", "warning", "danger"],
+  "types": {
+    "string": "text",
+    "markdown": "text, Markdown allowed (no ```myco-ui inside)",
+    "number": "a number",
+    "boolean": "true or false",
+    "enum": "one of `values`",
+    "src": "a picture: attachment:<file name or f_ id> (attached to the same message) or an https:// address",
+    "url": "a link: https://… or http://…",
+    "list": "a list; `of` is a scalar type, or `items` describes each entry's fields",
+    "rows": "a list of rows, each a list of strings or numbers"
+  },
+  "components": {
+    "Card": {
+      "group": "layout",
+      "description": "A framed box with an optional title; holds other components.",
+      "children": true,
+      "props": {
+        "title": { "type": "string" },
+        "subtitle": { "type": "string" },
+        "tone": { "type": "enum", "values": ["neutral", "info", "success", "warning", "danger"] }
+      }
+    },
+    "Stack": {
+      "group": "layout",
+      "description": "Components one after another, down (default) or across.",
+      "children": true,
+      "props": {
+        "direction": { "type": "enum", "values": ["vertical", "horizontal"] },
+        "gap": { "type": "enum", "values": ["small", "medium", "large"] }
+      }
+    },
+    "Grid": {
+      "group": "layout",
+      "description": "Components in columns (one column in a narrow window).",
+      "children": true,
+      "props": {
+        "columns": { "type": "number", "min": 1, "max": 4 }
+      }
+    },
+    "Tabs": {
+      "group": "layout",
+      "description": "One tab per child; each child's `label` prop names its tab.",
+      "children": true,
+      "props": {}
+    },
+    "Heading": {
+      "group": "content",
+      "description": "A heading.",
+      "props": {
+        "text": { "type": "string", "required": true },
+        "level": { "type": "number", "min": 1, "max": 3 }
+      }
+    },
+    "Text": {
+      "group": "content",
+      "description": "A paragraph of Markdown.",
+      "props": {
+        "text": { "type": "markdown", "required": true },
+        "tone": { "type": "enum", "values": ["default", "muted"] }
+      }
+    },
+    "Callout": {
+      "group": "content",
+      "description": "A highlighted note: a conclusion, a warning, a risk.",
+      "props": {
+        "tone": { "type": "enum", "values": ["neutral", "info", "success", "warning", "danger"] },
+        "title": { "type": "string" },
+        "text": { "type": "markdown", "required": true }
+      }
+    },
+    "Badge": {
+      "group": "content",
+      "description": "A small coloured tag.",
+      "props": {
+        "text": { "type": "string", "required": true },
+        "tone": { "type": "enum", "values": ["neutral", "info", "success", "warning", "danger"] }
+      }
+    },
+    "KeyValue": {
+      "group": "content",
+      "description": "Label and value pairs.",
+      "props": {
+        "items": { "type": "list", "required": true, "items": {
+          "label": { "type": "string", "required": true },
+          "value": { "type": "string", "required": true },
+          "tone": { "type": "enum", "values": ["neutral", "info", "success", "warning", "danger"] }
+        } }
+      }
+    },
+    "Table": {
+      "group": "content",
+      "description": "A table: column names and rows of cells.",
+      "props": {
+        "columns": { "type": "list", "of": "string", "required": true },
+        "rows": { "type": "rows", "required": true },
+        "align": { "type": "list", "of": "string" }
+      }
+    },
+    "Metric": {
+      "group": "content",
+      "description": "One number that matters, with its label and the change.",
+      "props": {
+        "label": { "type": "string", "required": true },
+        "value": { "type": "string", "required": true },
+        "delta": { "type": "string" },
+        "tone": { "type": "enum", "values": ["neutral", "info", "success", "warning", "danger"] }
+      }
+    },
+    "Progress": {
+      "group": "content",
+      "description": "How far along something is (0-100).",
+      "props": {
+        "label": { "type": "string" },
+        "value": { "type": "number", "required": true, "min": 0, "max": 100 },
+        "tone": { "type": "enum", "values": ["neutral", "info", "success", "warning", "danger"] }
+      }
+    },
+    "Steps": {
+      "group": "content",
+      "description": "Steps of a plan or a run, each with its state.",
+      "props": {
+        "items": { "type": "list", "required": true, "items": {
+          "title": { "type": "string", "required": true },
+          "status": { "type": "enum", "values": ["done", "doing", "todo", "failed", "skipped"] },
+          "note": { "type": "string" }
+        } }
+      }
+    },
+    "Image": {
+      "group": "media",
+      "description": "One picture, with a caption.",
+      "props": {
+        "src": { "type": "src", "required": true },
+        "alt": { "type": "string" },
+        "caption": { "type": "string" }
+      }
+    },
+    "Gallery": {
+      "group": "media",
+      "description": "Pictures to compare side by side, each with a title, a line and a tag.",
+      "props": {
+        "columns": { "type": "number", "min": 2, "max": 4 },
+        "items": { "type": "list", "required": true, "items": {
+          "src": { "type": "src", "required": true },
+          "title": { "type": "string" },
+          "text": { "type": "string" },
+          "badge": { "type": "string" },
+          "tone": { "type": "enum", "values": ["neutral", "info", "success", "warning", "danger"] }
+        } }
+      }
+    },
+    "MediaList": {
+      "group": "media",
+      "description": "Things in rows: a picture on the left, a name (a link), a line, small print and tags.",
+      "props": {
+        "items": { "type": "list", "required": true, "items": {
+          "image": { "type": "src" },
+          "title": { "type": "string", "required": true },
+          "href": { "type": "url" },
+          "text": { "type": "markdown" },
+          "meta": { "type": "string" },
+          "badges": { "type": "list", "of": "string" }
+        } }
+      }
+    },
+    "Diagram": {
+      "group": "media",
+      "description": "A Mermaid diagram (flowchart, sequence, ER, state, gantt...).",
+      "props": {
+        "source": { "type": "string", "required": true },
+        "caption": { "type": "string" }
+      }
+    },
+    "Chart": {
+      "group": "media",
+      "description": "A simple chart from numbers: bars, lines or a pie.",
+      "props": {
+        "kind": { "type": "enum", "values": ["bar", "line", "pie"], "required": true },
+        "title": { "type": "string" },
+        "labels": { "type": "list", "of": "string", "required": true },
+        "series": { "type": "list", "required": true, "items": {
+          "name": { "type": "string", "required": true },
+          "values": { "type": "list", "of": "number", "required": true }
+        } },
+        "unit": { "type": "string" }
+      }
+    },
+    "Code": {
+      "group": "engineering",
+      "description": "A block of code.",
+      "props": {
+        "code": { "type": "string", "required": true },
+        "lang": { "type": "string" },
+        "title": { "type": "string" }
+      }
+    },
+    "FileChange": {
+      "group": "engineering",
+      "description": "A file that was changed, with its counts and optionally its diff.",
+      "props": {
+        "path": { "type": "string", "required": true },
+        "status": { "type": "enum", "values": ["added", "modified", "deleted", "renamed"] },
+        "additions": { "type": "number", "min": 0 },
+        "deletions": { "type": "number", "min": 0 },
+        "diff": { "type": "string" }
+      }
+    },
+    "TestResults": {
+      "group": "engineering",
+      "description": "Test counts, and the tests worth naming (failures first).",
+      "props": {
+        "passed": { "type": "number", "min": 0, "required": true },
+        "failed": { "type": "number", "min": 0, "required": true },
+        "skipped": { "type": "number", "min": 0 },
+        "duration": { "type": "string" },
+        "items": { "type": "list", "items": {
+          "name": { "type": "string", "required": true },
+          "status": { "type": "enum", "values": ["passed", "failed", "skipped"], "required": true },
+          "message": { "type": "string" }
+        } }
+      }
+    },
+    "Button": {
+      "group": "action",
+      "description": "A button. reply: puts `value` in the person's input box (they send it); open: opens the link `value`; copy: copies `value`.",
+      "props": {
+        "label": { "type": "string", "required": true },
+        "action": { "type": "enum", "values": ["reply", "open", "copy"], "required": true },
+        "value": { "type": "string", "required": true },
+        "primary": { "type": "boolean" }
+      }
+    }
+  },
+  "common": {
+    "label": { "type": "string", "description": "The tab name, for a child of Tabs." }
+  },
+  "example": {
+    "type": "Card",
+    "props": { "title": "Release check" },
+    "children": [
+      { "type": "Grid", "props": { "columns": 3 }, "children": [
+        { "type": "Metric", "props": { "label": "Tests", "value": "412", "delta": "+12", "tone": "success" } },
+        { "type": "Metric", "props": { "label": "Failed", "value": "0", "tone": "success" } },
+        { "type": "Metric", "props": { "label": "Bundle", "value": "7.4 MB", "delta": "+2.6 MB", "tone": "warning" } }
+      ] },
+      { "type": "Steps", "props": { "items": [
+        { "title": "Build", "status": "done" },
+        { "title": "Sign and notarize", "status": "doing" },
+        { "title": "Publish", "status": "todo" }
+      ] } },
+      { "type": "Button", "props": { "label": "Ship it", "action": "reply", "value": "Ship it", "primary": true } }
+    ]
+  }
+}

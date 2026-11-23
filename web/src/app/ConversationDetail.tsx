@@ -7,6 +7,7 @@ import { SHROOM, useIsSuperagent } from "@/app/superagentMark";
 import type { AgentRow } from "@/app/types";
 import { agentKind, canManage, isInbox, isMe, lastActivityAt, machineOfRow, personLabel, possiblyStuck, quietFor, runnerAway, SEEN_SLACK_MS, seenNow, sessionBusy, nodeName } from "@/app/nodes";
 import { MessageContent, inlineAttachmentIds, type InlineFiles } from "@/app/Markdown";
+import { UI_REPLY } from "@/app/ui/UiBlock";
 import { PromptSign, STOPPED, Terminal } from "@/app/Terminal";
 import { TraceView } from "@/app/TraceView";
 import { WorkingLine } from "@/app/Working";
@@ -806,6 +807,22 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
 
   // Finding a message (ChatSearch): ⌘F in the chat last clicked in.
   const rootRef = useRef<HTMLDivElement>(null);
+  // A button in a message's block of components (ui/UiBlock, action
+  // "reply"): its words go to this chat's box, for you to send or change.
+  const writeDraftRef = useRef(writeDraft);
+  writeDraftRef.current = writeDraft;
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const on = (e: Event) => {
+      const text = (e as CustomEvent<{ text?: string }>).detail?.text;
+      if (typeof text !== "string" || !text) return;
+      writeDraftRef.current(text);
+      window.setTimeout(() => { const box = inputRef.current; if (box) { box.focus(); box.setSelectionRange(text.length, text.length); } }, 0);
+    };
+    el.addEventListener(UI_REPLY, on);
+    return () => el.removeEventListener(UI_REPLY, on);
+  }, []);
   const [searching, setSearching] = useState(false);
   const [findFirst, setFindFirst] = useState("");
   useEffect(() => {

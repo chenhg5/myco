@@ -551,6 +551,8 @@ permissions; it never adds sudo, daemon privileges or remote software.
 
 `after` is optional and omitted when empty (from v0.19.2). `automation` names the automation that sent the message, omitted otherwise. `workflow` (v0.21+) is the workflow run that sent a task; `result` is the structured result on a reply that has one. `granted_by` (v0.21.2+), on a task, says why the hub let it past its recipient's `allow_from`: `project:<name>` for a spawn request (`myco agent spawn`) to a computer's machine node from a coordinator of an active project that allows that computer (see [Projects](#projects): `machines`); not for new terminals or sealed bodies. The machine node accepts such a request; its own folder and access rules still apply. Adding fields is non-breaking; renaming/removing fields requires `/v2`.
 
+`body` is Markdown; what the App draws beyond plain Markdown (diagrams, pictures in the text, `myco-ui` blocks) is in [rich-messages.md](rich-messages.md).
+
 ## Exec nodes
 
 An agent served with harness `exec` runs each **task** body as `sh -c <body>` and replies with

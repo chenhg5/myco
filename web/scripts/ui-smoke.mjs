@@ -4630,6 +4630,54 @@ async function runMatrix(browser, size, scheme) {
       if (narrow) await sidebar(page, false);
     });
 
+    // A ```myco-ui block (ui/UiBlock.tsx): the catalog's components drawn
+    // in place of its JSON; an unknown one is a small note; a reply button
+    // puts its words in the box.
+    await step("消息 · 界面块", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      if (narrow) await sidebar(page, false);
+      await noRound(page);
+      const conv = page.locator(".conv-detail:visible").last();
+      await conv.locator(".conv-compose-input").fill("做一下发版检查");
+      await conv.locator(".conv-compose-input").press("Enter");
+      const msg = conv.locator(".conv-msg", { has: page.locator(".ui-root") }).last();
+      await msg.locator(".ui-root .ui-card").first().waitFor({ timeout: 30_000 });
+      if (await msg.locator(".md-fold-body.is-collapsed").count()) await msg.locator(".md-fold-btn").click();
+      if (await msg.getByText('"type": "Card"').count()) throw new Error("界面块不该显示成 JSON 原文");
+      for (const [sel, n] of [[".ui-metric", 3], [".ui-steps li", 4], [".ui-gallery figure", 3], [".ui-media li", 1], [".ui-kv dt", 2], [".ui-table tbody tr", 2], [".ui-btn", 3]]) {
+        const c = await msg.locator(sel).count();
+        if (c !== n) throw new Error(`${sel} 应有 ${n} 个，实际 ${c}`);
+      }
+      await msg.locator(".ui-unknown", { hasText: "Sparkles" }).waitFor({ timeout: 5_000 });
+      await page.waitForFunction(() => [...document.querySelectorAll(".ui-gallery img")].length === 3 && [...document.querySelectorAll(".ui-gallery img")].every((i) => i.complete && i.naturalWidth > 0), null, { timeout: 10_000 });
+      // The pictures it shows are not listed again below.
+      if (await msg.locator(".conv-shots").count()) throw new Error("界面块里用过的图不该在下面再列一次");
+      await msg.locator(".ui-card").first().evaluate((el) => el.scrollIntoView({ block: "start" }));
+      await settle(page, 300);
+      await shot(page, size, scheme, "message-ui");
+      // (and the whole block on its own, top to bottom)
+      await page.setViewportSize({ width: size.width, height: 2600 });
+      await settle(page, 300);
+      await msg.locator(".ui-root").first().evaluate((el) => el.scrollIntoView({ block: "center" }));
+      await settle(page, 200);
+      await msg.locator(".ui-root").first().screenshot({ path: path.join(OUT, `${size.width}x${size.height}-${scheme}-message-ui-block.png`) });
+      await page.setViewportSize(size);
+      await settle(page, 300);
+      // Tabs: the changes, then the chart.
+      await msg.locator(".ui-tabs").getByRole("tab", { name: "改动" }).click();
+      await msg.locator(".ui-file").first().waitFor({ timeout: 5_000 });
+      await msg.locator(".ui-tabs").getByRole("tab", { name: "体积" }).click();
+      if ((await msg.locator(".ui-chart-xy rect").count()) !== 8) throw new Error("柱状图应有 8 根柱子");
+      await msg.locator(".ui-gallery").evaluate((el) => el.scrollIntoView({ block: "center" }));
+      await settle(page, 200);
+      await shot(page, size, scheme, "message-ui-more");
+      // 「发吧」: into the box, not sent.
+      await msg.locator(".ui-btn", { hasText: "发吧" }).click();
+      await page.waitForFunction(() => (document.querySelector(".conv-detail .conv-compose-input")?.value || "") === "发吧", null, { timeout: 5_000 });
+      await conv.locator(".conv-compose-input").fill("");
+      if (narrow) await sidebar(page, false);
+    });
+
     // 专注模式: ⋯ › 专注模式 (or ⌘⇧F) leaves one chat alone in the middle;
     // ⌃Tab still switches; Esc puts everything back.
     await step("专注模式", async () => {

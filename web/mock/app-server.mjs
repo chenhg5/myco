@@ -983,6 +983,64 @@ function demoNotes(n) {
   ].join("\n");
 }
 
+// A reply with a ```myco-ui block (internal/uispec/catalog.json): most of
+// the catalog's components, and one the App does not know.
+function uiReply() {
+  const n = (state.counter += 1);
+  const spec = {
+    type: "Card", props: { title: "发版检查 v0.21.30", subtitle: "main · 889ed5e", tone: "success" },
+    children: [
+      { type: "Grid", props: { columns: 3 }, children: [
+        { type: "Metric", props: { label: "测试", value: "412", delta: "+12", tone: "success" } },
+        { type: "Metric", props: { label: "失败", value: "0", tone: "success" } },
+        { type: "Metric", props: { label: "安装包", value: "7.4 MB", delta: "+2.6 MB", tone: "warning" } },
+      ] },
+      { type: "Steps", props: { items: [
+        { title: "构建", status: "done", note: "3 分 12 秒" },
+        { title: "签名和公证", status: "doing" },
+        { title: "发布", status: "todo" },
+        { title: "旧版 Windows 安装包", status: "skipped" },
+      ] } },
+      { type: "Progress", props: { label: "上传", value: 64 } },
+      { type: "Callout", props: { tone: "warning", title: "注意", text: "安装包变大了，主要是 **mermaid**。" } },
+      { type: "Tabs", children: [
+        { type: "TestResults", props: { label: "测试", passed: 410, failed: 2, skipped: 3, duration: "2 分 5 秒", items: [
+          { name: "TestHubServe", status: "passed" },
+          { name: "TestRunnerResume", status: "failed", message: "expected 3 tasks, got 2" },
+        ] } },
+        { type: "Stack", props: { label: "改动" }, children: [
+          { type: "FileChange", props: { path: "web/src/app/Markdown.tsx", status: "modified", additions: 120, deletions: 8, diff: "@@ -1,3 +1,4 @@\n import x\n-old line\n+new line\n+another" } },
+          { type: "FileChange", props: { path: "web/src/app/mdRich.ts", status: "added", additions: 140 } },
+        ] },
+        { type: "Chart", props: { label: "体积", kind: "bar", title: "安装包（MB）", labels: ["v0.21.27", "v0.21.28", "v0.21.29", "v0.21.30"], series: [{ name: "macOS", values: [4.6, 4.7, 4.8, 7.4] }, { name: "Windows", values: [4.1, 4.2, 4.3, 6.9] }] } },
+      ] },
+      { type: "KeyValue", props: { items: [{ label: "分支", value: "main" }, { label: "状态", value: "可以发", tone: "success" }] } },
+      { type: "Table", props: { columns: ["平台", "大小", "状态"], rows: [["macOS", 7.4, "已签名"], ["Windows", 6.9, "待签名"]] } },
+      { type: "Gallery", props: { items: [
+        { src: `attachment:f_demo_shot_ui_a${n}`, title: "红色斑点蘑菇", badge: "误解风险较高", tone: "danger", text: "游戏、童话" },
+        { src: "attachment:棕色香菇.png", title: "棕色香菇", badge: "误解风险较低", text: "自然、食物" },
+        { src: `attachment:f_demo_shot_ui_a${n}`, title: "抽象科技蘑菇", badge: "较推荐", tone: "success", text: "网络、协作" },
+      ] } },
+      { type: "MediaList", props: { items: [
+        { image: "attachment:棕色香菇.png", title: "lium", href: "https://example.com/lium", text: "GPU 计算平台，发光的蓝色蘑菇。", meta: "方向：计算基础设施", badges: ["科技感"] },
+      ] } },
+      { type: "Sparkles", props: {} },
+      { type: "Stack", props: { direction: "horizontal" }, children: [
+        { type: "Button", props: { label: "发吧", action: "reply", value: "发吧", primary: true } },
+        { type: "Button", props: { label: "看发布页", action: "open", value: "https://example.com/release" } },
+        { type: "Button", props: { label: "复制版本号", action: "copy", value: "v0.21.30" } },
+      ] },
+    ],
+  };
+  return {
+    body: ["检查完了，结果在下面。", "", "```myco-ui", JSON.stringify(spec, null, 2), "```", "", "要发就点「发吧」。"].join("\n"),
+    attachments: [
+      { file_id: `f_demo_shot_ui_a${n}`, name: "红色斑点.png", size: DEMO_PNG.length, sha256: "demo", content_type: "image/png" },
+      { file_id: `f_demo_shot_ui_b${n}`, name: "棕色香菇.png", size: DEMO_PNG.length, sha256: "demo", content_type: "image/png" },
+    ],
+  };
+}
+
 function richReply() {
   const n = (state.counter += 1);
   return {
@@ -1364,7 +1422,8 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
     // Asked for an architecture diagram: a reply with more than words (a
     // diagram, coloured code, pictures placed in the text, one diagram that
     // does not parse).
-    const r = /架构图|diagram/i.test(msgs.find((m) => m.id === taskId)?.body || "") ? richReply() : consoleReply();
+    const asked = msgs.find((m) => m.id === taskId)?.body || "";
+    const r = /发版检查|myco-ui/i.test(asked) ? uiReply() : /架构图|diagram/i.test(asked) ? richReply() : consoleReply();
     msgs.push(makeMessage({
       thread_id: threadId, from: agent, to: CONSOLE, type: "reply", status: "done",
       body: r.body, ...(r.attachments ? { attachments: r.attachments } : {}),

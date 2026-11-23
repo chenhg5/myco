@@ -39,7 +39,16 @@ type Error struct {
 	Retryable  bool           `json:"retryable"`
 	Command    string         `json:"command,omitempty"`
 	Input      map[string]any `json:"input,omitempty"`
-	Exit       int            `json:"exit_code"`
+	// Details lists what exactly is wrong when there is more than one thing
+	// (e.g. each problem of a myco-ui block).
+	Details []ErrorDetail `json:"details,omitempty"`
+	Exit    int           `json:"exit_code"`
+}
+
+// ErrorDetail is one item of Error.Details: where (a path in the input) and what.
+type ErrorDetail struct {
+	Path    string `json:"path,omitempty"`
+	Message string `json:"message"`
 }
 
 func (e *Error) Error() string { return e.Message }
@@ -130,6 +139,13 @@ func (p *Printer) PrintError(e *Error) {
 		return
 	}
 	fmt.Fprintf(p.Err, "error: %s\n", e.Message)
+	for _, d := range e.Details {
+		if d.Path != "" {
+			fmt.Fprintf(p.Err, "  - %s: %s\n", d.Path, d.Message)
+		} else {
+			fmt.Fprintf(p.Err, "  - %s\n", d.Message)
+		}
+	}
 	if e.Suggestion != "" {
 		fmt.Fprintf(p.Err, "hint: %s\n", e.Suggestion)
 	}
