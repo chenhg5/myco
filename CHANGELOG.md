@@ -4,6 +4,18 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.21.30
+
+- **Messages can carry diagrams, coloured code and pictures**: a fenced `mermaid` block is drawn as a diagram (flowchart, sequence, ER, state, gantt), and one that does not parse shows its source and why. Code blocks that name a language are coloured, quietly in light and dark. Attach pictures and place them in the text with `![words](attachment:<name>)`: several on one line sit side by side, titled ones show their name and a line under it, and pictures placed in the text are not listed again below. Click a picture or diagram to see it large. Older Apps and the phone Apps show all of it as readable text.
+- **Structured UI in a message (myco-ui)**: an agent can put a `myco-ui` block of JSON in a message, and the App draws it with a fixed set of components — cards, grids, tabs, headings, text, callouts, badges, key–value lists, tables, metrics, progress, steps, images, galleries, media lists, diagrams, charts, code, changed files, test results and buttons (a button can put words in your input, open a link or copy text). Anything outside that set is left out. Agents can print the components with `myco ui schema` and check a block with `myco ui check`; older clients show the message as text.
+- Upgrade: update the App to see diagrams, code colours, pictures in the text and myco-ui blocks; update myco on computers where agents should write and check these blocks. No hub upgrade needed.
+
+**中文**
+
+- **消息里可以放图表、彩色代码和图片**：标了 `mermaid` 的代码块会画成图（流程图、时序图、ER 图、状态图、甘特图），解析失败会显示原文和原因。标了语言的代码块会着色，深浅色下都很克制。把图片作为附件上传后，可以用 `![说明](attachment:<文件名>)` 放进正文：同一行放几张会并排显示，带标题的会显示名称和下面一行说明，放进正文的图片不会在下面重复列出。点图片或图表可以放大看。旧版 App 和手机 App 会把它当普通文字显示。
+- **消息里的结构化界面（myco-ui）**：agent 可以在消息里放一个 `myco-ui` 的 JSON 代码块，App 会用固定的组件把它画出来——卡片、网格、标签页、标题、文字、提示、徽章、键值列表、表格、指标、进度、步骤、图片、画廊、媒体列表、示意图、图表、代码、改动文件、测试结果和按钮（按钮可以把文字放进你的输入框、打开链接或复制文字）。不在固定组件里的内容不会画出来。agent 可以用 `myco ui schema` 查看组件，用 `myco ui check` 检查代码块；旧客户端会把消息当文字显示。
+- 升级：更新 App 才能看到图表、代码着色、正文图片和 myco-ui 块；跑 agent 的电脑更新 myco 后，agent 才能写和检查这些块。不需要升级 Hub。
+
 ## v0.21.29
 
 - **App updates work behind a system proxy, and a failed update no longer leaves you without an App**: with the proxy set to "System" and no proxy variables in the environment, the App now also reads the proxy in Windows' or macOS' network settings — the system proxy Clash or v2rayN turns on — and connects directly when that proxy program is not running. A release download cut off midway resumes where it stopped, reconnects after 60 seconds without data, and goes direct when the proxy fails. On Windows, a new version that cannot start is stopped and the current version is put back and keeps running. When an update fails, Settings says "更新失败" and explains the reason in plain words, with the raw error under details.
