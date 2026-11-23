@@ -338,5 +338,15 @@
       "name": "地球播客",
       "description": "转动3D地球，点选地区频道发现公开播客。支持搜索、连续收听、喜欢、订阅、倍速、睡眠定时与本机续听。需支持网络媒体流的新版 App。"
     }
+  },
+  "myco/price-compare": {
+    "en": {
+      "name": "Shopping comparison",
+      "description": "Agents research; you choose. Compare matching offers with coupon conditions, shipping, sources and observation times. Save candidates, add shared notes and link to a comparison. No built-in marketplace login or automatic scraping."
+    },
+    "zh": {
+      "name": "购物比价",
+      "description": "agent 查价，你来选：并排查看同款报价、优惠条件、运费、来源和查询时间，收藏候选并记录购买考虑。支持分享直达；不内置电商登录或自动抓价。"
+    }
   }
 }

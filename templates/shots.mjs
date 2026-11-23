@@ -106,6 +106,7 @@ function photo() {
 // sample data is there before the first).
 const wait = (p, ms = 400) => p.waitForTimeout(ms);
 const plans = {
+  "price-compare": { viewport: { width: 1400, height: 1000 }, steps: [null] },
   reader: { viewport: { width: 1040, height: 800 }, steps: [async (p) => {
     await p.getByRole("button", { name: "先读一篇示例", exact: true }).click();
     await p.locator(".rd-book").nth(2).waitFor();
