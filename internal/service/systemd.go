@@ -80,7 +80,10 @@ func (s *Systemd) PlanInstall(sp Spec) (Plan, error) {
 	cmds := [][]string{
 		{"systemctl", "--user", "daemon-reload"},
 		{"systemctl", "--user", "enable", s.unit()},
-		{"systemctl", "--user", "restart", s.unit()},
+		// Without blocking: a running runner first lets its tasks finish
+		// (up to TimeoutStopSec), and an install that waited would look
+		// stuck; one interrupted then left the runner stopped.
+		{"systemctl", "--user", "restart", "--no-block", s.unit()},
 	}
 	// Keep it running after logout. Turning linger on for yourself needs no
 	// password on most systems; when it does, the install says what to run.

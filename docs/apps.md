@@ -48,7 +48,7 @@ Agent access currently uses shared page records. The [agent actions SDK](app-act
 </tr>
 <tr>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/scheduling-dark.webp"><img src="assets/apps/scheduling.webp" alt="Calendar"></picture><br><b>Calendar</b><br>A personal calendar with month, week and day views. Add and drag events, plan all-day and recurring entries, search and export calendars with agents. Appointment booking lives in a secondary screen. No external calendar sync.</td>
-<td width="50%"></td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/podcast-dark.webp"><img src="assets/apps/podcast.webp" alt="World Podcasts"></picture><br><b>World Podcasts</b><br>Turn a 3D globe to discover public podcasts by region. Search or add RSS feeds, listen continuously, follow shows and like episodes. Speed, sleep timer and private device progress. Requires a native App with network media streaming. <a href="podcasts.md">Details</a>.</td>
 </tr>
 </table>
 
@@ -87,7 +87,7 @@ Agent access currently uses shared page records. The [agent actions SDK](app-act
 <table>
 <tr>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/reader-dark.webp"><img src="assets/apps/reader.webp" alt="Reader"></picture><br><b>Reader</b><br>A local PDF and TXT bookshelf with page transitions, paper themes, typography controls, contents, search, bookmarks and remembered progress. Original files stay on this device. <a href="reader.md">Details</a>.</td>
-<td width="50%"></td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/price-compare-dark.webp"><img src="assets/apps/price-compare.webp" alt="Shopping comparison"></picture><br><b>Shopping comparison</b><br>Agents research offers; people compare matching specifications, shipping, coupon conditions, sources and observation times. Save candidates and shared buying notes. No built-in marketplace login or automatic scraping. <a href="shopping-comparison.md">Details</a>.</td>
 </tr>
 <tr>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/ledger-dark.webp"><img src="assets/apps/ledger.webp" alt="Budget book"></picture><br><b>Budget book</b><br>Income and spending by month, balance and budget left, where the money went by category, every entry by day. Keep it with family or a small team; the agent can file bills for you.</td>

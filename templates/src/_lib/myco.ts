@@ -32,6 +32,8 @@ interface Bridge {
   os?: MycoOS;
   /** Network-only bridge on iOS; independent of desktop computer access. */
   net?: MycoOS["net"];
+  /** Public network media streaming (optional on older native clients). */
+  media?: { url(address: string): string };
   remote?: {call<T>(action: string, args?: unknown): Promise<T>; onDisconnect?(handler:()=>void):()=>void};
 }
 

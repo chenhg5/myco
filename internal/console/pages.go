@@ -293,6 +293,10 @@ func (b *Backend) pageHandler(ps *pageServer) http.Handler {
 			b.serveMedia(w, r)
 			return
 		}
+		if file == "__myco/stream" {
+			b.serveStream(w, r)
+			return
+		}
 		hub, err := b.find(k.hub)
 		if err != nil {
 			writeErr(w, err)

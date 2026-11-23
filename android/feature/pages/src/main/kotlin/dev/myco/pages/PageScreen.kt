@@ -19,8 +19,11 @@ import androidx.webkit.WebViewFeature
 import dev.myco.model.*
 import dev.myco.network.HubClient
 import dev.myco.network.HubRemoteTransport
+import dev.myco.network.MediaFailure
+import dev.myco.network.PageMedia
 import dev.myco.network.PageNetwork
 import dev.myco.network.RemoteSessions
+import dev.myco.network.WebViewMediaInput
 import dev.myco.ui.*
 import java.io.ByteArrayInputStream
 import kotlin.coroutines.resume
@@ -76,6 +79,7 @@ private fun PageContent(
     var remoteActive by remember { mutableStateOf(false) }
     val cleanupScope = remember { CoroutineScope(SupervisorJob() + Dispatchers.IO) }
     val network = remember { PageNetwork() }
+    val media = remember(id) { PageMedia() }
     val remote =
         remember(id) {
             RemoteSessions(
@@ -375,9 +379,48 @@ private fun PageContent(
                             )
                         val uri = request.url
                         if (
-                            uri.scheme != "https" || uri.host != pageHost || request.method != "GET"
+                            uri.scheme != "https" ||
+                                uri.host != pageHost ||
+                                (uri.port != -1 && uri.port != 443)
                         )
                             return response(403, "text/plain", byteArrayOf())
+                        if (uri.path == "/__myco/stream") {
+                            return try {
+                                val stream =
+                                    media.open(
+                                        uri.getQueryParameter("url").orEmpty(),
+                                        request.method,
+                                        request.requestHeaders,
+                                    )
+                                val input =
+                                    WebViewMediaInput(
+                                        stream,
+                                        request.requestHeaders.entries
+                                            .firstOrNull { it.key.equals("Range", true) }
+                                            ?.value,
+                                    )
+                                WebResourceResponse(
+                                    stream.type,
+                                    null,
+                                    stream.status,
+                                    when (stream.status) {
+                                        206 -> "Partial Content"
+                                        416 -> "Range Not Satisfiable"
+                                        else -> "OK"
+                                    },
+                                    input.headers,
+                                    input,
+                                )
+                            } catch (e: Exception) {
+                                response(
+                                    if (e is MediaFailure) e.status else 502,
+                                    "text/plain",
+                                    "Media unavailable".toByteArray(),
+                                )
+                            }
+                        }
+                        if (request.method != "GET")
+                            return response(405, "text/plain", byteArrayOf())
                         return try {
                             val resource = uri.path.orEmpty().trimStart('/')
                             val path =
@@ -427,6 +470,11 @@ private fun PageContent(
             when (event) {
                 Lifecycle.Event.ON_PAUSE -> {
                     active = false
+                    media.pause()
+                    web.evaluateJavascript(
+                        "document.querySelectorAll('audio,video').forEach(function(m){m.pause();})",
+                        null,
+                    )
                     requests.cancel()
                     remote.pause()
                     web.evaluateJavascript("window.__mycoEvent({myco:\"remote-disconnect\"})", null)
@@ -438,6 +486,7 @@ private fun PageContent(
                 }
                 Lifecycle.Event.ON_RESUME -> {
                     active = true
+                    media.resume()
                     remote.resume()
                     if (!requests.isActive) requests = SupervisorJob()
                     web.onResume()
@@ -448,6 +497,7 @@ private fun PageContent(
         lifecycle.addObserver(observer)
         onDispose {
             active = false
+            media.close()
             requests.cancel()
             remote.close()
             lifecycle.removeObserver(observer)
