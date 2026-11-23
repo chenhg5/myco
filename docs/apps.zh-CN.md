@@ -35,6 +35,8 @@
 </tr>
 </table>
 
+[数据库工作台](database.md)：在支持数据库能力的桌面 App 中连接 MySQL、PostgreSQL、SQLite 与 MongoDB，管理连接、编辑数据并执行 SQL / Extended JSON。凭证与结果留在本机，仅主动共享的查询草稿进入页面。
+
 ## 办公套件
 
 <table>

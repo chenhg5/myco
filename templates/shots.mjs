@@ -66,6 +66,7 @@ function serve() {
     let p = decodeURIComponent(new URL(req.url, "http://x").pathname);
     if (p.endsWith("/")) p += "index.html";
     if (p === "/__bridge.js") { res.writeHead(200, { "Content-Type": "text/javascript" }); res.end(bridge); return; }
+    if (p === "/__database.js") { res.writeHead(200, { "Content-Type": "text/javascript" }); res.end(readFileSync(path.join(here, "database-shots.js"))); return; }
     if (p === "/__os.js") { res.writeHead(200, { "Content-Type": "text/javascript" }); res.end(readFileSync(path.join(here, "shots-os.js"))); return; }
     const f = path.join(official, p);
     if (!f.startsWith(official) || !existsSync(f)) { res.writeHead(404); res.end(); return; }
@@ -73,7 +74,7 @@ function serve() {
     if (f.endsWith(".html")) {
       // (a made-up computer first, for the apps that use one)
       const os = new URL(req.url, "http://x").searchParams.get("os") ? '<script src="/__os.js"></script>' : "";
-      body = Buffer.from(String(body).replace("<head>", `<head>${os}<script src="/__bridge.js"></script>`));
+      body = Buffer.from(String(body).replace("<head>", `<head>${os}${p.startsWith("/database/") ? '<script src="/__database.js"></script>' : ""}<script src="/__bridge.js"></script>`));
     }
     res.writeHead(200, { "Content-Type": types[path.extname(f)] || "application/octet-stream" });
     res.end(body);
@@ -107,6 +108,8 @@ function photo() {
 const wait = (p, ms = 400) => p.waitForTimeout(ms);
 const plans = {
   "aigc-canvas": [async p => { await p.locator(".ac-node").filter({ hasText: "写一句海报文案" }).click(); }],
+
+  database: { viewport: { width: 1400, height: 900 }, steps: [async p => { await p.locator(".db-grid tbody tr").first().waitFor(); }, async p => { await p.getByRole("button", { name: "SQL 工作台", exact: true }).click(); await p.getByLabel("SQL 查询内容").fill("SELECT category, COUNT(*) AS products,\n       SUM(stock) AS total_stock\nFROM public.products\nGROUP BY category\nORDER BY total_stock DESC;"); await p.getByRole("button", { name: "执行", exact: true }).click(); }] },
   "palette": { viewport: { width: 1400, height: 1000 }, steps: [null, async p => { await p.getByRole("button", { name: "编辑配色", exact: true }).click(); }] },
   "price-compare": { viewport: { width: 1400, height: 1000 }, steps: [null] },
   reader: { viewport: { width: 1040, height: 800 }, steps: [async (p) => {

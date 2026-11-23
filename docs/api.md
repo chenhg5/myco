@@ -22,6 +22,14 @@ Errors (any non-2xx):
 
 ## Endpoints
 
+The desktop App also provides the generic `GET /app/os` and `POST /app/os/call`
+transport documented in [App capabilities](app-os.md). Database studio adds
+scoped local `db.*` capabilities through this existing transport, with no new
+Hub or agent-token database endpoints. Local database operations may return
+`conflict` (409) or `outcome_unknown` (500); an unacknowledged write must not be
+automatically retried. Capability discovery, rather than a Hub version check,
+determines whether the installed desktop App supports database connections.
+
 The App's local backend also exposes `GET /app/local`: `hub` remains the default
 hub for older App clients, while `hubs` lists every locally configured hub as
 `{name, running, local_url, public_url, version, added}` (`name: ""` for the

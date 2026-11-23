@@ -35,6 +35,8 @@ Agent access currently uses shared page records. The [agent actions SDK](app-act
 </tr>
 </table>
 
+[Database studio](database.md): local MySQL, PostgreSQL, SQLite and MongoDB connections, record editing and SQL/Extended JSON queries in a compatible desktop App. Only deliberately shared query drafts enter the page.
+
 ## Office
 
 <table>

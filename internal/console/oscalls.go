@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -73,7 +74,7 @@ func osStatus(code string) int {
 		return http.StatusBadRequest
 	case oscap.CodeNotFound:
 		return http.StatusNotFound
-	case oscap.CodeExists, oscap.CodeCancelled:
+	case oscap.CodeExists, oscap.CodeCancelled, "conflict":
 		return http.StatusConflict
 	case oscap.CodePermission:
 		return http.StatusForbidden
@@ -102,7 +103,7 @@ func (b *Backend) osRoutes(m *http.ServeMux) {
 		if !decode(w, r, &in) {
 			return
 		}
-		if (in.Name == "proxy.profile" || in.Name == "proxy.control") && (in.Page.ID == "" || in.Page.Hub == "") {
+		if (in.Name == "proxy.profile" || in.Name == "proxy.control" || strings.HasPrefix(in.Name, "db.")) && (in.Page.ID == "" || in.Page.Hub == "") {
 			writeOSErr(w, &oscap.Error{Code: oscap.CodeInvalid, Message: "controller calls require a workspace and page"})
 			return
 		}

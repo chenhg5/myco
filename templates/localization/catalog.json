@@ -146,5 +146,9 @@
   "palette": [
     "Color studio",
     "Extract colors from images, create and save palettes, explore color harmonies, and check text contrast. Share design notes with your team and agent; export SVG, CSS and JSON."
+  ],
+  "database": [
+    "Database studio",
+    "Manage local MySQL, PostgreSQL, SQLite and MongoDB connections. Browse schemas, edit records, run SQL or Extended JSON, and share query drafts with agents. Requires a desktop App with database capabilities; credentials and results stay on this computer."
   ]
 }

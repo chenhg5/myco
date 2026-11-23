@@ -368,5 +368,15 @@
       "name": "配色助手",
       "description": "从图片提色，生成、调整与收藏配色方案，分析文字对比度，预览实际设计搭配。与团队和 agent 共享色卡及设计笔记，支持 SVG、CSS、JSON 导出。"
     }
+  },
+  "myco/database": {
+    "en": {
+      "name": "Database studio",
+      "description": "Manage local MySQL, PostgreSQL, SQLite and MongoDB connections. Browse schemas, edit records, run SQL or Extended JSON, and share query drafts with agents. Requires a desktop App with database capabilities; credentials and results stay on this computer."
+    },
+    "zh": {
+      "name": "数据库工作台",
+      "description": "连接 MySQL、PostgreSQL、SQLite 与 MongoDB，管理本机连接、浏览结构、增删改查及执行 SQL 或 Extended JSON。可与 agent 共享查询草稿；凭证与结果留在本机，需支持数据库能力的桌面 App。"
+    }
   }
 }
