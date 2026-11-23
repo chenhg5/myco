@@ -1094,6 +1094,68 @@ async function runMatrix(browser, size, scheme) {
       }
     });
 
+    // The notch's island (the Mac app's own window, /?island=1): how many
+    // are at work, never "0". A workspace that cannot be read keeps who was
+    // at work there; someone who stops before the window is ready leaves
+    // it folded away (a slow network made it stay out showing 0).
+    if (!narrow) await step("灵动岛 · 不显示 0", async () => {
+      const ip = await page.context().newPage();
+      try {
+        const real = await (await fetch(`http://${HOST}:${mockPort()}/app/overview`)).json();
+        let mode = "working";
+        const overview = () => {
+          const ov = JSON.parse(JSON.stringify(real));
+          for (const h of ov.hubs) {
+            if (h.id !== "hub_studio") continue;
+            if (mode === "down") { h.ok = false; delete h.overview; continue; }
+            for (const st of h.overview?.agents || []) {
+              const on = mode === "working" && st.agent.name === "review-cloud";
+              st.state = on ? "working" : "idle";
+              st.in_progress = on ? 1 : 0;
+              st.stale = 0;
+              st.stale_tasks = [];
+            }
+          }
+          for (const h of ov.hubs) if (h.id !== "hub_studio" && h.overview) for (const st of h.overview.agents || []) st.state = "idle";
+          return ov;
+        };
+        await ip.route("**/app/overview", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(overview()) }));
+        let frameDelay = 0;
+        await ip.route("**/app/island/frame", async (route) => {
+          if (frameDelay) await new Promise((ok) => setTimeout(ok, frameDelay));
+          await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+        });
+        await ip.setViewportSize({ width: 520, height: 320 });
+        await ip.goto(`${r.base}/?island=1&nw=200&nh=32&lang=zh`, { waitUntil: "domcontentloaded" });
+        // (every number the island ever draws, recorded)
+        await ip.evaluate(() => {
+          window.__islandNumbers = [];
+          const note = () => { const b = document.querySelector(".isl.is-shown .isl-wing.is-right"); if (b) window.__islandNumbers.push((b.textContent || "").trim()); };
+          new MutationObserver(note).observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
+        });
+        const right = ip.locator(".isl.is-shown .isl-wing.is-right b");
+        await right.filter({ hasText: /^1$/ }).waitFor({ timeout: 15_000 });
+        // The workspace cannot be read for a while: still 1, not gone.
+        mode = "down";
+        await ip.waitForTimeout(6_000);
+        if ((await right.innerText().catch(() => "")) !== "1") throw new Error("工作区暂时连不上时，灵动岛应保持原来的人数");
+        // Nobody at work: it folds away.
+        mode = "idle";
+        await ip.locator(".isl.is-shown").waitFor({ state: "detached", timeout: 10_000 });
+        // Someone starts and stops before the window is ready: it stays in.
+        frameDelay = 3_500;
+        mode = "working";
+        await ip.waitForTimeout(3_000);
+        mode = "idle";
+        await ip.waitForTimeout(6_000);
+        if (await ip.locator(".isl.is-shown").count()) throw new Error("开始又马上停下时，灵动岛不该停在外面");
+        const seen = await ip.evaluate(() => window.__islandNumbers);
+        if (seen.some((t) => t === "0" || /^0\D/.test(t))) throw new Error(`灵动岛不该显示 0：${JSON.stringify([...new Set(seen)])}`);
+      } finally {
+        await ip.close();
+      }
+    });
+
     // A name picked in the notch's island (the Mac app): a chat already on
     // screen stays as it is (its pane is pointed out); a member of the
     // project you look at opens beside the coordinator; from elsewhere
