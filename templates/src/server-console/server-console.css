@@ -12,7 +12,7 @@ body,
   --sv-panel: #fff;
   --sv-rail: #fbfbfc;
   --sv-ink: #20242b;
-  --sv-muted: #858b95;
+  --sv-muted: #69717d;
   --sv-line: #e8eaee;
   --sv-fill: #f1f3f5;
   --sv-good: #4b7662;
@@ -21,6 +21,8 @@ body,
   color: var(--sv-ink);
   background: var(--sv-bg);
   font-family: inherit;
+  font-size: 14px;
+  line-height: 1.6;
 }
 .sv-app * {
   box-sizing: border-box;
@@ -74,7 +76,7 @@ body,
   font-weight: 600;
 }
 .sv-brand small {
-  font-size: 8px;
+  font-size: 12px;
   letter-spacing: 1.2px;
   color: var(--sv-muted);
   display: block;
@@ -84,7 +86,7 @@ body,
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 10px;
+  font-size: 13px;
   color: var(--sv-muted);
   letter-spacing: 1px;
   padding: 0 9px;
@@ -126,14 +128,14 @@ body,
 }
 .sv-hosts b {
   display: block;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
   overflow-wrap: anywhere;
 }
 .sv-hosts small {
   display: block;
   color: var(--sv-muted);
-  font-size: 10px;
+  font-size: 13px;
   margin-top: 5px;
   overflow-wrap: anywhere;
 }
@@ -149,7 +151,7 @@ body,
 }
 .sv-hosts > p {
   padding: 10px;
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.7;
   color: var(--sv-muted);
 }
@@ -171,7 +173,7 @@ body,
   background: transparent;
   border-radius: 8px;
   padding: 11px 12px;
-  font-size: 12px;
+  font-size: 14px;
   text-align: left;
   color: var(--sv-muted);
 }
@@ -186,12 +188,12 @@ body,
   gap: 9px;
   margin: auto 8px 0;
   padding-top: 40px;
-  font-size: 11px;
+  font-size: 14px;
   color: var(--sv-muted);
 }
 .sv-sidebar-foot small {
   display: block;
-  font-size: 10px;
+  font-size: 13px;
   margin-top: 6px;
 }
 .sv-workspace {
@@ -208,7 +210,7 @@ body,
   border-bottom: 1px solid var(--sv-line);
 }
 .sv-breadcrumb {
-  font-size: 10px;
+  font-size: 13px;
   color: var(--sv-muted);
 }
 .sv-breadcrumb i {
@@ -230,7 +232,7 @@ body,
   display: flex;
   gap: 6px;
   align-items: center;
-  font-size: 10px;
+  font-size: 13px;
   color: var(--sv-muted);
   white-space: nowrap;
 }
@@ -251,7 +253,7 @@ body,
   border: 1px solid var(--sv-line);
   padding: 8px 12px;
   border-radius: 7px;
-  font-size: 11px !important;
+  font-size: 14px !important;
 }
 .sv-content {
   padding: 28px 34px;
@@ -280,7 +282,7 @@ body,
   align-items: center;
   gap: 8px;
   color: var(--sv-muted);
-  font-size: 11px;
+  font-size: 14px;
 }
 .sv-live-dot {
   margin-left: auto;
@@ -297,12 +299,12 @@ body,
   font-variant-numeric: tabular-nums;
 }
 .sv-metric-number small {
-  font-size: 13px;
+  font-size: 15px;
   color: var(--sv-muted);
   margin-left: 5px;
 }
 .sv-metric p {
-  font-size: 10px;
+  font-size: 13px;
   color: var(--sv-muted);
   margin: 7px 0 11px;
   line-height: 1.5;
@@ -336,13 +338,13 @@ body,
   align-items: center;
   gap: 10px;
   color: var(--sv-muted);
-  font-size: 8px;
+  font-size: 12px;
   letter-spacing: 2px;
   margin-top: 18px;
 }
 .sv-overview-grid {
   display: grid;
-  grid-template-columns: 1fr 1.25fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
   gap: 22px;
 }
 .sv-card > header {
@@ -354,12 +356,12 @@ body,
   border-bottom: 1px solid var(--sv-line);
 }
 .sv-card h2 {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 550;
   margin: 0;
 }
 .sv-card header p {
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.6;
   color: var(--sv-muted);
   margin: 8px 0 0;
@@ -367,7 +369,7 @@ body,
 .sv-card > header > svg,
 .sv-card > header > span {
   color: var(--sv-muted);
-  font-size: 11px;
+  font-size: 14px;
 }
 .sv-specs {
   margin: 6px 23px 14px;
@@ -378,7 +380,7 @@ body,
   gap: 15px;
   padding: 13px 0;
   border-bottom: 1px solid var(--sv-line);
-  font-size: 11px;
+  font-size: 14px;
 }
 .sv-specs > div:last-child {
   border-bottom: 0;
@@ -402,7 +404,7 @@ body,
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  font-size: 11px;
+  font-size: 14px;
 }
 .sv-disks b {
   font-weight: 500;
@@ -411,7 +413,7 @@ body,
 .sv-disks span,
 .sv-disks small {
   color: var(--sv-muted);
-  font-size: 10px;
+  font-size: 13px;
 }
 .sv-table-wrap {
   overflow: auto;
@@ -420,7 +422,7 @@ body,
   width: 100%;
   border-collapse: collapse;
   text-align: left;
-  font-size: 11px;
+  font-size: 14px;
 }
 .sv-table th {
   font-weight: 400;
@@ -442,7 +444,7 @@ body,
 }
 .sv-table small {
   display: block;
-  font-size: 10px;
+  font-size: 13px;
   color: var(--sv-muted);
   margin-top: 5px;
 }
@@ -452,7 +454,7 @@ body,
   border-radius: 5px;
   background: var(--sv-fill);
   color: var(--sv-muted);
-  font-size: 10px;
+  font-size: 13px;
 }
 .sv-status.good {
   color: var(--sv-good);
@@ -476,7 +478,7 @@ body,
   border: 0;
   background: transparent;
   color: var(--sv-ink);
-  font-size: 11px;
+  font-size: 14px;
   max-width: 180px;
   min-width: 0;
 }
@@ -484,7 +486,7 @@ body,
   padding: 60px 25px;
   text-align: center;
   color: var(--sv-muted);
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.8;
 }
 .sv-empty h3 {
@@ -496,7 +498,7 @@ body,
   padding: 25px;
   text-align: center;
   color: var(--sv-muted);
-  font-size: 12px;
+  font-size: 14px;
 }
 .sv-spin {
   animation: sv-spin 1s linear infinite;
@@ -512,7 +514,7 @@ body,
     --sv-panel: #202329;
     --sv-rail: #1b1e23;
     --sv-ink: #e2e6ed;
-    --sv-muted: #8e96a3;
+    --sv-muted: #a3acb9;
     --sv-line: #2e333c;
     --sv-fill: #2b3038;
     --sv-good: #98b8a6;
@@ -570,7 +572,7 @@ body,
   }
   .sv-sidebar nav button {
     white-space: nowrap;
-    font-size: 11px;
+    font-size: 14px;
     padding: 9px;
   }
   .sv-topbar {
@@ -651,9 +653,9 @@ body,
 .sv-modal-intro,
 .sv-security-note,
 .sv-review > p {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.8;
-  color: var(--sv-muted, #858b95);
+  color: var(--sv-muted, #69717d);
 }
 .sv-modal-intro {
   margin: 21px 0;
@@ -663,7 +665,7 @@ body,
   flex-direction: column;
   gap: 8px;
   margin: 18px 0;
-  font-size: 12px;
+  font-size: 14px;
 }
 .sv-modal input {
   border: 1px solid var(--sv-line, #e8eaee);
@@ -697,15 +699,15 @@ body,
   border-color: transparent !important;
 }
 .sv-error {
-  font-size: 12px;
+  font-size: 14px;
   color: #b95050;
   line-height: 1.8;
 }
 .sv-review-label {
   display: inline-block;
-  font-size: 11px;
+  font-size: 14px;
   letter-spacing: 1px;
-  color: var(--sv-muted, #858b95);
+  color: var(--sv-muted, #69717d);
   padding-top: 25px;
 }
 .sv-review h3 {
@@ -720,10 +722,10 @@ body,
   justify-content: space-between;
   border-top: 1px solid var(--sv-line, #e8eaee);
   padding: 13px 0;
-  font-size: 12px;
+  font-size: 14px;
 }
 .sv-review dt {
-  color: var(--sv-muted, #858b95);
+  color: var(--sv-muted, #69717d);
   white-space: nowrap;
 }
 .sv-review dd {
@@ -738,7 +740,7 @@ body,
   color: #d5dbe4;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.75;
   min-height: 200px;
   max-height: 60vh;
@@ -748,7 +750,7 @@ body,
   .sv-modal {
     --sv-panel: #202329;
     --sv-ink: #e2e6ed;
-    --sv-muted: #8e96a3;
+    --sv-muted: #a3acb9;
     --sv-line: #2e333c;
     --sv-fill: #2b3038;
   }
@@ -762,7 +764,7 @@ body,
   color: var(--sv-ink);
   padding: 13px 16px;
   border-radius: 10px;
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.8;
   margin-bottom: 20px;
 }
@@ -775,7 +777,7 @@ body,
   justify-content: space-between;
   gap: 16px;
   color: var(--sv-muted);
-  font-size: 10px;
+  font-size: 13px;
   margin-bottom: 20px;
   overflow-wrap: anywhere;
 }
@@ -787,11 +789,11 @@ body,
 }
 .sv-agent p {
   color: var(--sv-muted);
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.9;
 }
 .sv-agent h3 {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 550;
   margin-top: 29px;
 }
@@ -799,14 +801,14 @@ body,
   margin: 0 0 20px;
 }
 .sv-agent code {
-  font-size: 10px;
+  font-size: 13px;
   word-break: break-all;
 }
 .sv-code {
   background: var(--sv-fill);
   padding: 14px;
   border-radius: 8px;
-  font-size: 11px;
+  font-size: 14px;
   overflow: auto;
 }
 .sv-activity {
@@ -814,7 +816,7 @@ body,
   gap: 20px;
   padding: 18px 23px;
   border-bottom: 1px solid var(--sv-line);
-  font-size: 11px;
+  font-size: 14px;
 }
 .sv-activity time {
   color: var(--sv-muted);
@@ -835,7 +837,7 @@ body,
 }
 .sv-activity p {
   color: var(--sv-muted);
-  font-size: 10px;
+  font-size: 13px;
   line-height: 1.8;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
