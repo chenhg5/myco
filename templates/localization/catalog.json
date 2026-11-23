@@ -137,6 +137,6 @@
   ],
   "price-compare": [
     "Shopping comparison",
-    "Agents research; you choose. Compare matching offers with coupon conditions, shipping, sources and observation times. Save candidates, add shared notes and link to a comparison. No built-in marketplace login or automatic scraping."
+    "Connect the Maishou product API for direct agent queries of offers, discounts and purchase links, with sources and query times. Save offers and shared buying notes. Requires your own Maishou credentials configured on the executing agent."
   ]
 }

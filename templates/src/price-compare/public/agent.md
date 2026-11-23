@@ -1,13 +1,96 @@
-# Shopping comparison: agents research, people choose
+# Shopping comparison: direct Maishou API queries
 
-Use your available search/browser tools or a provider account you are authorized
-to use, then write a sourced comparison. This app is a shared research and
-decision surface, not a shopping API or a browser automation tool. It includes
-no marketplace credentials, scraping service, automatic price checks, orders,
-payments, automatic stock checks or background price alerts. An API response
-with HTTP 200 can still contain an authentication or other business error;
-check that before interpreting data. Do not use identity/referral defaults
-bundled in someone else's skill.
+Use this app's `agent-api.mjs` adapter to query Maishou directly. General web
+search is not a substitute. The adapter executes in the agent's Node process,
+not the page iframe, and publishes through the existing myco CLI identity.
+No third-party identity, referral code, default account or API key is included.
+
+## Access and acceptance status
+
+The current contract follows the user-selected SkillHub package
+`@user_48ebdf60/findbestprice` version 1.0.3. It uses an OpenID header/form
+field, and optionally the caller's own invitation code and a token for purchase
+links. This is an App API protocol, not verified public developer documentation
+for a generic API-key product. Do not invent an `apikey` field or treat an
+issued API key as an OpenID. Ask the provider for the corresponding authorization
+and official usage instructions; adapt the client if that contract differs.
+
+Anonymous live queries were rejected with HTTP 200 and business errors
+`{status:"error", code:401, message:"用户未登录"}` or code 201 for platform
+authorization. Credential-less execution refuses before making network calls.
+Successful response envelopes and purchase links have contract tests, but real
+authenticated product/link acceptance is pending the owner's credentials.
+Do not claim live access works until that acceptance has passed. Installation
+does not open an account, complete marketplace authorization or establish price,
+quota or commercial terms.
+
+## Agent-side setup (Node 20+)
+
+1. Obtain the owner's own Maishou access: OpenID, required marketplace account
+   authorizations, and optionally their own invitation code and token if issued.
+   Do not extract unrelated App/browser credentials or reuse the Skill author's
+   embedded account. If a supplier issues a different API-key contract, request
+   its documentation rather than guessing authentication.
+2. Configure `MAISHOU_OPENID`, optional `MAISHOU_INVITE_CODE` and
+   `MAISHOU_TOKEN` in the executing agent's credential environment. Alternatively
+   use a private JSON file `{"openid":"<your own>","invite_code":"<optional own>","token":"<optional issued>"}`
+   with POSIX mode 600. Values belong on that computer, never in chat, repository,
+   page records, URLs returned to users or the web bundle. No auto-login or
+   credential acquisition is implemented.
+3. Download the app-owned adapter from the official repository, review it, then
+   run it with Node. No npm dependencies or global SkillHub setup is needed:
+
+   ```sh
+   curl -fSL --max-time 30 https://raw.githubusercontent.com/chenhg5/myco/main/templates/src/price-compare/public/agent-api.mjs -o agent-api.mjs
+   node agent-api.mjs --help
+   node agent-api.mjs --query "WH-1000XM6" --spec "Black, new, one pair, China delivery" --platforms taobao,jd,pdd --config-file /private/path/maishou.json --out comparison.json --page <pg_id> --id headphones
+   ```
+
+   A repository checkout can run the same file directly. Keep the script version
+   corresponding to the page template. Do not pass credential values in flags.
+4. `--page` reads the current comparison version before the API calls, then
+   publishes with that exact version. It never modifies `decisions`. Omit
+   `--page` to inspect JSON without publishing. Never blindly retry CAS conflicts.
+5. By default query Taobao/Tmall, JD and Pinduoduo separately to report partial
+   failures. `--platforms all` uses the provider's sourceType 0 route; do not
+   mix all with individual platforms. The reference also defines suning, vip,
+   douyin and kuaishou, but enumeration is not proof of account access or coverage.
+   Default one search page per platform; `--pages 1..3` is bounded. The reference
+   used page 1 only: higher-page behavior still needs live acceptance. Duplicate
+   IDs are removed; up to 40 candidates are balanced across queried platforms.
+6. `--links 0..10` (default 3) calls detail then share serially for selected
+   lower-price candidates, only with the caller's own invitation code. No code
+   means no referral-generation requests. Link failures do not erase quotes;
+   the summary reports failures. Only safe public HTTP(S) links are stored;
+   supported purchase codes can be copied in the UI. Promotion links disclose
+   affiliate attribution. Opaque IDs without a usable link fall back to an
+   explicitly labeled platform source entry, not a fabricated purchase URL.
+7. Exit 0 means the requested calls succeeded, possibly with no candidates.
+   Exit 4 means missing credentials; exit 6 reports partial/provider/link failure
+   and the output/page may already contain the partial or blocked snapshot.
+   Inspect `coverage` and `links`. Unknown business codes are errors, never
+   inferred empty results. API requests use HTTPS, reject redirects, have 15s
+   timeouts and a 2 MiB response limit. Ctrl-C stops before publishing. Error
+   output does not echo raw provider bodies, OpenID, token or authenticated URLs.
+
+## Protocol
+
+- POST `https://appapi.maishou88.com/api/v1/homepage/searchList`, form data:
+  keyword, sourceType, page, own openid, isCoupon=0, order=desc, sort="",
+  pddListId="", user_id="". Headers include the same own OpenID and protocol
+  version 3.7.7.2. The client identifies itself as myco; any additional provider
+  header requirements must be verified during authenticated acceptance.
+- POST `https://appapi.maishou88.com/api/v3/goods/detail`, JSON with goodsId,
+  sourceType, own inviteCode, optional issued token, supplierCode/activityId,
+  isShare, keyword and usageScene. Then POST
+  `https://msapi.maishou88.com/api/v1/share/getTargetUrl` with isDirectDetail=0.
+- Current strict success gate: status="success", code=200 and the expected
+  data shape. This gate must be checked against a real authenticated response;
+  never relax it just to swallow an authorization error.
+- Map title/shopName/actualPrice/couponPrice/goodsId/sourceType to offers. Never
+  substitute originalPrice for missing actualPrice, deduct cashback, invent
+  shipping/stock, or declare an exact SKU from a keyword alone. API query time
+  is not a guarantee of the upstream price's update time.
 
 ## Workflow
 
@@ -21,8 +104,8 @@ bundled in someone else's skill.
    (new/used), delivery region and currency when they affect equivalence. If
    unknown, mark match/eligibility/stock unknown rather than assume a low price
    applies. A keyword match alone does not establish the same SKU.
-4. Write an initial `status="researching"` snapshot. Query the sources with
-   tools you actually have. The page itself does not perform that query. A
+4. Write an initial `status="researching"` snapshot. Query the product API with
+   the configured Maishou adapter above; do not fall back to general web search. A
    person can send a follow-up request to the page publisher, or copy the prompt
    to an agent when sending is unavailable. A successful send is not a promise
    that research has completed.
@@ -90,6 +173,9 @@ Every offer supplies all fields:
 | `checked_at` | Actual observation time, ISO-8601 with seconds and timezone; never stamp an old search snippet as newly observed price |
 | `expires_at` | Known offer/coupon expiry as ISO-8601, or empty string if unknown |
 | `affiliate` | Boolean: true when this link carries referral/affiliate attribution; false only when absent |
+| `link_kind` | Optional `product` or `evidence`; legacy records default to product. API results without a usable product URL must use evidence |
+| `purchase_code` | Optional plain purchase code, max 2000 characters, copied only on user action |
+| `provider_ref` | Optional JSON provenance: provider name, goods_id and source_type; never credentials |
 
 Unknown text is `""`; unknown money must be `null`, not zero. Do not invent data,
 evidence URLs, stock, coupon eligibility or observation times. If a source only

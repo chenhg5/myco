@@ -1,18 +1,37 @@
 {
   "id": "myco/price-compare",
   "name": "购物比价",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "kind": "custom",
   "category": "life",
   "icon": "icon.svg",
-  "description": "agent 查价，你来选：并排查看同款报价、优惠条件、运费、来源和查询时间，收藏候选并记录购买考虑。支持分享直达；不内置电商登录或自动抓价。",
+  "description": "对接买手商品 API，由 agent 直接查询报价、优惠与购买链接，保留来源和查询时间。支持收藏与购买笔记；需在执行端配置自己的买手授权凭证，开通后使用。",
   "data": {
-    "comparisons": { "fields": {
-      "title": "text", "query": "text", "spec": "text", "currency": "text", "budget": "number",
-      "status": "text", "summary": "text", "updated_at": "datetime", "offers": "json"
-    } },
-    "decisions": { "fields": { "saved": "json", "note": "text" } }
+    "comparisons": {
+      "fields": {
+        "title": "text",
+        "query": "text",
+        "spec": "text",
+        "currency": "text",
+        "budget": "number",
+        "status": "text",
+        "summary": "text",
+        "updated_at": "datetime",
+        "offers": "json"
+      }
+    },
+    "decisions": {
+      "fields": {
+        "saved": "json",
+        "note": "text"
+      }
+    }
   },
-  "permissions": ["send", "download"],
-  "requires": { "hub": "0.20.7" }
+  "permissions": [
+    "send",
+    "download"
+  ],
+  "requires": {
+    "hub": "0.20.7"
+  }
 }
