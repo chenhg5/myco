@@ -132,6 +132,7 @@ type Watcher struct {
 type loop struct {
 	hub    Hub
 	cancel context.CancelFunc
+	done   chan struct{}
 }
 
 // group is a conversation's banner while it is shown.
@@ -203,11 +204,18 @@ func (w *Watcher) run(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			w.mu.Lock()
+			var dones []chan struct{}
 			for id, l := range w.loops {
 				l.cancel()
+				dones = append(dones, l.done)
 				delete(w.loops, id)
 			}
 			w.mu.Unlock()
+			// Wait for the feeds to stop: one may still be writing the
+			// state file, and Stop's caller may be removing its directory.
+			for _, done := range dones {
+				<-done
+			}
 			return
 		case <-t.C:
 		}
@@ -238,8 +246,12 @@ func (w *Watcher) sync(ctx context.Context) {
 			continue
 		}
 		lctx, cancel := context.WithCancel(ctx)
-		w.loops[id] = &loop{hub: h, cancel: cancel}
-		go w.follow(lctx, h)
+		l := &loop{hub: h, cancel: cancel, done: make(chan struct{})}
+		w.loops[id] = l
+		go func() {
+			defer close(l.done)
+			w.follow(lctx, h)
+		}()
 	}
 }
 
