@@ -17,6 +17,7 @@ import { setHubLook, useHubLooks, type HubLook } from "@/app/hubLooks";
 import { colorIndex, HubFace } from "@/app/HubSwitcher";
 import { PictureButton } from "@/app/AvatarPicker";
 import { ErrorText, Modal, ConfirmDialog } from "@/app/dialogs";
+import { updateFailure } from "@/app/UpdateNotice";
 import { accessLabel, localWorkspaceOf, localWorkspaces, type LocalWorkspace } from "@/app/localHubs";
 import { AuditSection, MembersSection, MyDevices } from "@/app/MembersSection";
 import { LocalAgentsSection } from "@/app/LocalAgents";
@@ -77,7 +78,7 @@ function AboutSection({ info, local }: { info: AppInfo | null; local: LocalState
       status = <span className="app-about-status ok">{L(`已安装 ${st.latest}，正在重新打开…`, `Installed ${st.latest}, reopening…`)}</span>;
       break;
     case "failed":
-      status = <span className="app-about-status bad">{L("检查失败", "Check failed")}</span>;
+      status = <span className="app-about-status bad">{st.u ? L("更新失败", "Update failed") : L("检查失败", "Check failed")}</span>;
       action = <button type="button" className="app-btn" onClick={() => void check()}>{L("重试", "Retry")}</button>;
       break;
     case "checked": {
@@ -131,7 +132,7 @@ function AboutSection({ info, local }: { info: AppInfo | null; local: LocalState
           </span>
         </div>
       </div>
-      <ErrorText error={failure} />
+      <ErrorText error={failure} summary={st.step === "failed" && st.u ? updateFailure(failure) : null} />
       <p className="app-about-note">
         {isWindows
           ? lang() === "zh"
@@ -1281,7 +1282,7 @@ function TranslateSection() {
 }
 
 /** How the App reaches its workspaces, update checks, translation and
- *  voice services: the proxy in the environment (as before), none, or one
+ *  voice services: the proxy in the environment or the system settings, none, or one
  *  set here (HTTP or SOCKS5; a password goes to the keychain). Addresses on
  *  this computer and the local network go direct. 「试一下」 tries the
  *  setting before it is saved, against a workspace's address. */
@@ -1353,7 +1354,7 @@ function ProxySection({ hubsOv }: { hubsOv?: HubOverview[] }) {
           ))}
         </div>
         <p className="tr-note">{mode === "system"
-          ? L("用环境变量里的代理（HTTPS_PROXY、HTTP_PROXY、ALL_PROXY），没有就直连。", "Uses the proxy in the environment (HTTPS_PROXY, HTTP_PROXY, ALL_PROXY), else connects directly.")
+          ? L("用环境变量里的代理（HTTPS_PROXY、HTTP_PROXY、ALL_PROXY）；没有就用系统网络设置里的代理（Clash 等软件的「系统代理」），代理软件没在运行时直连。", "Uses the proxy in the environment (HTTPS_PROXY, HTTP_PROXY, ALL_PROXY), else the one in the system's network settings (a proxy app's \"system proxy\"); connects directly when that proxy app isn't running.")
           : mode === "none" ? L("所有连接都直连，不走任何代理。", "Every connection goes directly, through no proxy.")
           : L("比如 Clash、V2Ray 一类本地代理：SOCKS5 常见端口 1080 / 7891，HTTP 常见 7890 / 8080。", "Such as a local Clash or V2Ray: SOCKS5 is often on 1080 / 7891, HTTP on 7890 / 8080.")}</p>
       </div>

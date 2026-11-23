@@ -2497,10 +2497,13 @@ const server = http.createServer(async (req, res) => {
     const current = SHOWCASE ? "v0.18.39" : "v0.16.8-demo";
     const latest = process.env.MOCK_UPDATE === "none" || SHOWCASE ? current : "v0.17.2";
     if (method === "GET") {
-      return send(res, 200, { current, latest, available: latest !== current, can_install: SHELL === "mac" });
+      return send(res, 200, { current, latest, available: latest !== current, can_install: SHELL === "mac" || !!process.env.MOCK_UPDATE_FAIL });
     }
     if (method === "POST") {
       await new Promise((r) => setTimeout(r, 1200));
+      // MOCK_UPDATE_FAIL=download_failed|install_failed|start_failed: how an update fails
+      const failCode = process.env.MOCK_UPDATE_FAIL;
+      if (failCode) return fail(res, 502, failCode, `${failCode}: GET https://github.com/chenhg5/myco/releases/download/${latest}/myco-app-windows-amd64.exe: dial tcp 20.205.243.166:443: i/o timeout (after 6 attempts)`);
       return send(res, 200, { installed: latest, relaunching: true });
     }
     return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);

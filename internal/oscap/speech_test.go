@@ -144,26 +144,6 @@ func waitFor(t *testing.T, js *Jobs, id string, d time.Duration) Batch {
 	return Batch{}
 }
 
-func TestSystemProxy(t *testing.T) {
-	mac := "<dictionary> {\n  HTTPEnable : 1\n  HTTPPort : 10808\n  HTTPProxy : 127.0.0.1\n  HTTPSEnable : 1\n  HTTPSPort : 10809\n  HTTPSProxy : 127.0.0.1\n}\n"
-	if u := scutilProxy(mac); u == nil || u.String() != "http://127.0.0.1:10809" {
-		t.Fatalf("mac: %v", u)
-	}
-	if u := scutilProxy("<dictionary> {\n  HTTPSEnable : 0\n}\n"); u != nil {
-		t.Fatalf("off: %v", u)
-	}
-	win := "\n    ProxyEnable    REG_DWORD    0x1\n    ProxyServer    REG_SZ    http=10.0.0.1:8080;https=10.0.0.1:8443\n"
-	if u := winProxy(win); u == nil || u.String() != "http://10.0.0.1:8443" {
-		t.Fatalf("win: %v", u)
-	}
-	if u := winProxy("    ProxyEnable    REG_DWORD    0x0\n    ProxyServer    REG_SZ    1.2.3.4:80\n"); u != nil {
-		t.Fatalf("win off: %v", u)
-	}
-	if u := winProxy("    ProxyEnable    REG_DWORD    0x1\n    ProxyServer    REG_SZ    1.2.3.4:80\n"); u == nil || u.Host != "1.2.3.4:80" {
-		t.Fatalf("win plain: %v", u)
-	}
-}
-
 func TestTurns(t *testing.T) {
 	if tt, ok := parseTurn("8.148 -- 13.548 speaker_03"); !ok || tt.Start != 8.148 || tt.End != 13.548 || tt.Speaker != 3 {
 		t.Fatalf("%+v %v", tt, ok)

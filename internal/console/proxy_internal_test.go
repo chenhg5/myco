@@ -75,6 +75,47 @@ func TestProxyForGoesDirectOnTheLocalNetwork(t *testing.T) {
 	}
 }
 
+func TestSystemModeFallsBackToSystemSettings(t *testing.T) {
+	oldEnv, oldSys := envProxy, systemProxyFor
+	defer func() { envProxy, systemProxyFor = oldEnv, oldSys }()
+	sysURL, _ := url.Parse("http://127.0.0.1:7890")
+	var asked []string
+	systemProxyFor = func(host string) *url.URL { asked = append(asked, host); return sysURL }
+	envProxy = func(*http.Request) (*url.URL, error) { return nil, nil }
+	f := proxyFor(ProxyConfig{Mode: "system"}, "")
+	at := func(raw string) *url.URL {
+		u, _ := url.Parse(raw)
+		p, err := f(&http.Request{URL: u})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	// No HTTPS_PROXY (an App started from the desktop): the system's.
+	if p := at("https://github.com/chenhg5/myco/releases"); p != sysURL {
+		t.Fatalf("github.com: %v", p)
+	}
+	// This computer and the local network still go direct, without asking.
+	if p := at("http://192.168.1.20:7777/"); p != nil {
+		t.Fatalf("local network: %v", p)
+	}
+	if len(asked) != 1 || asked[0] != "github.com" {
+		t.Fatalf("asked the system for %v", asked)
+	}
+	// The environment's proxy wins over the system's.
+	envURL, _ := url.Parse("http://10.0.0.1:3128")
+	envProxy = func(*http.Request) (*url.URL, error) { return envURL, nil }
+	if p := at("https://github.com/"); p != envURL {
+		t.Fatalf("environment: %v", p)
+	}
+	// No proxy anywhere (or the system's not listening): direct.
+	envProxy = func(*http.Request) (*url.URL, error) { return nil, nil }
+	systemProxyFor = func(string) *url.URL { return nil }
+	if p := at("https://github.com/"); p != nil {
+		t.Fatalf("direct: %v", p)
+	}
+}
+
 func TestProxyRoutesSaveApplyAndTest(t *testing.T) {
 	defer client.SetProxy(nil)
 	// A proxy that answers every request it is asked to make.

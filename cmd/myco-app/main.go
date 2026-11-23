@@ -128,6 +128,9 @@ func main() {
 	if os.Getenv("MYCO_APP_NOTICES") != "off" {
 		startNotices = func(p notices.Presenter) { b.StartNotices(p) }
 	}
+	// An update that started this program waits for it to report in
+	// (Windows): it got this far.
+	console.ConfirmStarted(b.Update.Exe)
 	if err := runGUI(handler(b), b.SetPendingLink, b.Update.SetRelaunch); err != nil {
 		fmt.Fprintln(os.Stderr, "myco-app:", err)
 		os.Exit(1)

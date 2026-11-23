@@ -1,6 +1,7 @@
 package release
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -12,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -334,5 +336,98 @@ func TestLatestFallsBackToTheReleasePage(t *testing.T) {
 	// Not the API's latest-release shape: no page to fall back to, the API's error stands.
 	if _, err := Latest(context.Background(), srv.Client(), srv.URL+"/elsewhere"); err == nil || !strings.Contains(err.Error(), "HTTP") {
 		t.Fatalf("other URL: %v", err)
+	}
+}
+
+// A download cut off midway resumes with a range request instead of
+// starting over; a server that ignores the range sends it all again.
+func TestGetResumesCutOffDownloads(t *testing.T) {
+	defer func(r int, b time.Duration) { getRetries, getBackoff = r, b }(getRetries, getBackoff)
+	getRetries, getBackoff = 2, time.Millisecond
+	body := bytes.Repeat([]byte("0123456789"), 5000) // 50 KB
+	for _, honourRange := range []bool{true, false} {
+		var ranges []string
+		calls := 0
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			calls++
+			ranges = append(ranges, r.Header.Get("Range"))
+			from := 0
+			if rg := r.Header.Get("Range"); rg != "" && honourRange {
+				fmt.Sscanf(rg, "bytes=%d-", &from)
+				w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", from, len(body)-1, len(body)))
+				w.Header().Set("Content-Length", strconv.Itoa(len(body)-from))
+				w.WriteHeader(http.StatusPartialContent)
+			} else {
+				w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+			}
+			part := body[from:]
+			if calls <= 3 { // the first three connections break after 10 KB
+				w.Write(part[:10000])
+				w.(http.Flusher).Flush()
+				hj, _ := w.(http.Hijacker)
+				c, _, _ := hj.Hijack()
+				c.Close()
+				return
+			}
+			w.Write(part)
+		}))
+		b, err := get(context.Background(), srv.Client(), srv.URL+"/x", 1<<20, "")
+		srv.Close()
+		if err != nil || !bytes.Equal(b, body) {
+			t.Fatalf("honourRange=%v: %d bytes, %v (ranges %q)", honourRange, len(b), err, ranges)
+		}
+		if honourRange && (len(ranges) != 4 || ranges[0] != "" || ranges[1] != "bytes=10000-" || ranges[3] != "bytes=30000-") {
+			t.Fatalf("ranges asked: %q", ranges)
+		}
+	}
+}
+
+// A connection that stops sending is given up on and resumed.
+func TestGetResumesStalledDownloads(t *testing.T) {
+	defer func(r int, b, s time.Duration) { getRetries, getBackoff, stallTimeout = r, b, s }(getRetries, getBackoff, stallTimeout)
+	getRetries, getBackoff, stallTimeout = 2, time.Millisecond, 200*time.Millisecond
+	body := bytes.Repeat([]byte("x"), 30000)
+	calls := 0
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls == 1 {
+			w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+			w.Write(body[:1000])
+			w.(http.Flusher).Flush()
+			select { // hangs, as a stuck connection does
+			case <-release:
+			case <-r.Context().Done():
+			}
+			return
+		}
+		var from int
+		fmt.Sscanf(r.Header.Get("Range"), "bytes=%d-", &from)
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", from, len(body)-1, len(body)))
+		w.WriteHeader(http.StatusPartialContent)
+		w.Write(body[from:])
+	}))
+	defer srv.Close()
+	defer close(release)
+	start := time.Now()
+	b, err := get(context.Background(), srv.Client(), srv.URL+"/x", 1<<20, "")
+	if err != nil || !bytes.Equal(b, body) || calls != 2 {
+		t.Fatalf("%d bytes, %v, calls %d", len(b), err, calls)
+	}
+	if d := time.Since(start); d > 5*time.Second {
+		t.Fatalf("took %s", d)
+	}
+}
+
+func TestRangeStart(t *testing.T) {
+	for in, want := range map[string]int64{"bytes 100-199/200": 100, "bytes 0-9/*": 0} {
+		if n, ok := rangeStart(in); !ok || n != want {
+			t.Fatalf("%q: %d %v", in, n, ok)
+		}
+	}
+	for _, bad := range []string{"", "bytes */200", "items 1-2/3"} {
+		if _, ok := rangeStart(bad); ok {
+			t.Fatalf("%q accepted", bad)
+		}
 	}
 }

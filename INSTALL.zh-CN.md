@@ -468,7 +468,7 @@ myco runner service uninstall          # 停止并删除
 
 **要走代理才能上网的机器**：后台服务不会读 `~/.zshrc`、`~/.bashrc`，代理只写在那里的话，runner 启动的 claude、codex 连不上模型（报 `Network unreachable`、`request timed out`）。在设置了代理的终端里重新执行一次 `myco runner service install`，就会把 `HTTPS_PROXY`、`HTTP_PROXY`、`ALL_PROXY`、`NO_PROXY`（大小写都算）一起写进服务定义。带用户名或密码的代理地址不会写进去（服务定义其他用户可读），会提示你改放到 agent 的 `env_file` 里。Linux 上安装时会顺手打开 linger（`loginctl enable-linger`），注销、关掉最后一个 SSH 或 WSL 窗口后 runner 也继续运行；系统不让你自己打开时，安装结果里会提示执行 `sudo loginctl enable-linger <用户名>`。
 
-**App 走代理**：桌面 App（和它连的工作区、更新检查、翻译、语音服务）的代理在 App 的「设置 › 代理」里设：跟系统环境（默认，读 `HTTPS_PROXY` 等环境变量）、不用代理，或者手动填 SOCKS5 / HTTP 代理（比如本机 Clash 的 `127.0.0.1:7890`），可以先「试一下」再保存。本机和局域网里的地址总是直连。这只管 App 自己；runner 启动的 agent 用上面说的服务环境。 iPhone 上的 App 也有「设置 › 代理」：默认跟 iPhone 自己的代理和 VPN 设置，也可以不用代理，或手动填一个 SOCKS5 / HTTP 代理（比如电脑上的 Clash，要填电脑在局域网里的地址，并在 Clash 里打开「允许局域网连接」）。
+**App 走代理**：桌面 App（和它连的工作区、更新检查、翻译、语音服务）的代理在 App 的「设置 › 代理」里设：跟系统（默认：读 `HTTPS_PROXY` 等环境变量，没有就用 Windows、macOS 网络设置里的代理，比如 Clash、v2rayN 打开的「系统代理」；代理软件没在运行时直连）、不用代理，或者手动填 SOCKS5 / HTTP 代理（比如本机 Clash 的 `127.0.0.1:7890`），可以先「试一下」再保存。本机和局域网里的地址总是直连。这只管 App 自己；runner 启动的 agent 用上面说的服务环境。 iPhone 上的 App 也有「设置 › 代理」：默认跟 iPhone 自己的代理和 VPN 设置，也可以不用代理，或手动填一个 SOCKS5 / HTTP 代理（比如电脑上的 Clash，要填电脑在局域网里的地址，并在 Clash 里打开「允许局域网连接」）。
 
 每个 agent 的运行参数写在它自己的身份文件里，比如模型和权限：
 ```yaml
@@ -1077,7 +1077,7 @@ sudo myco hub restore --from myco-backup-hub-20261121-093000.tar.gz --db /var/li
 
 - **下载**（[最新发布](https://github.com/chenhg5/myco/releases/latest)）：
   - Mac：`myco.dmg`，一个包同时支持 Apple 芯片和 Intel，已用 Developer ID 签名并经 Apple 公证，双击打开后拖进「应用程序」即可。以后在 App 的「设置 → 关于」里一键更新。
-  - Windows（预览）：`myco-app-windows-amd64.exe`（ARM 电脑用 `-arm64`），下载后直接运行。还没有代码签名，第一次运行 SmartScreen 会提示，点「更多信息 → 仍要运行」。v0.18.6 起支持在「设置 → 关于」里一键更新：替换正在运行的 exe 并重新打开，这台电脑上的 myco 命令行工具也一起升级（v0.18.5 及之前的版本要手动下载一次新版）。还不支持 `myco://` 链接。App 用到的 myco 命令行工具可以在「设置 → Hub」里安装。
+  - Windows（预览）：`myco-app-windows-amd64.exe`（ARM 电脑用 `-arm64`），下载后直接运行。还没有代码签名，第一次运行 SmartScreen 会提示，点「更多信息 → 仍要运行」。v0.18.6 起支持在「设置 → 关于」里一键更新：替换正在运行的 exe 并重新打开（下载中断会接着下；新版本起不来，比如被杀毒软件拦住，会换回当前版本继续用），这台电脑上的 myco 命令行工具也一起升级（v0.18.5 及之前的版本要手动下载一次新版）。还不支持 `myco://` 链接。App 用到的 myco 命令行工具可以在「设置 → Hub」里安装。
     - **窗口一直是黑的**：通常是 Windows 的 WebView2 组件（显示窗口内容的部分）在这台电脑上起不来（比如 WebView2 157 在开了 Defender 的远程桌面里，它的沙箱初始化失败、反复崩溃）。v0.21.4 起，窗口 25 秒还没显示出内容，App 会弹框：「是」在浏览器里打开 myco（照常能用）；「否」用兼容模式重启（只对 myco 关掉 WebView2 的沙箱，记在 `%APPDATA%\myco\app-compat`，删掉这个文件就恢复）。不要用用户级的 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` 环境变量，它会影响这台电脑上所有用 WebView2 的程序。
   - Linux（v0.20.13 起）：`myco-app-linux-amd64`（ARM 用 `-arm64`），一个程序，放进 `~/.local/bin` 运行即可（命令见[开头](#推荐先装-appmac--windows--linux)）。
     - **在浏览器里打开**：它在本机 `127.0.0.1` 上开一个端口，用默认浏览器打开（`$BROWSER`、`xdg-open`），不依赖任何窗口库，X11、Wayland、WSL 都一样。只有本机能访问，地址里带一个密钥，换成浏览器 cookie 后才能看页面；端口和密钥存在 `~/.config/myco/app-window.json`（0600），重启、更新后不变，开着的标签页可以接着用。

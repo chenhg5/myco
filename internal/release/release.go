@@ -364,35 +364,58 @@ func assetAPIURL(ctx context.Context, hc *http.Client, tag, name string) (string
 }
 
 // getRetries and getBackoff bound retries of transient download failures:
-// GitHub's release downloads answer 502/503/504 now and then.
+// GitHub's release downloads answer 502/503/504 now and then. An attempt
+// that got further than the one before does not count: on a slow, flaky
+// connection a large download goes on as long as it keeps moving (up to
+// getMaxAttempts in all). stallTimeout ends an attempt whose connection
+// stopped sending; the next one resumes where it stopped.
 var (
-	getRetries = 5
-	getBackoff = 3 * time.Second
+	getRetries     = 5
+	getBackoff     = 3 * time.Second
+	getMaxAttempts = 40
+	stallTimeout   = 60 * time.Second
 )
 
-// get downloads url, retrying network errors and 5xx answers (up to
-// getRetries more times, waiting a little longer each time).
+// get downloads url, retrying network errors, stalls and 5xx answers, and
+// resuming a download cut off midway (an HTTP range request) instead of
+// starting over.
 func get(ctx context.Context, hc *http.Client, url string, max int64, accept string) ([]byte, error) {
-	var err error
-	for attempt := 0; ; attempt++ {
-		var b []byte
-		var retry bool
-		b, retry, err = getOnce(ctx, hc, url, max, accept)
-		if err == nil || !retry || attempt >= getRetries || ctx.Err() != nil {
-			if err != nil && attempt > 0 {
-				err = fmt.Errorf("%w (after %d attempts)", err, attempt+1)
+	var have []byte
+	failed := 0
+	for attempt := 1; ; attempt++ {
+		before := len(have)
+		b, retry, err := getOnce(ctx, hc, url, max, accept, have)
+		if err == nil {
+			return b, nil
+		}
+		have = b
+		if len(have) <= before {
+			failed++
+		}
+		if !retry || failed > getRetries || attempt >= getMaxAttempts || ctx.Err() != nil {
+			if attempt > 1 {
+				err = fmt.Errorf("%w (after %d attempts)", err, attempt)
 			}
-			return b, err
+			return nil, err
+		}
+		wait := getBackoff * time.Duration(failed)
+		if len(have) > before {
+			wait = getBackoff / 3 // it was moving: carry on soon
 		}
 		select {
 		case <-ctx.Done():
 			return nil, err
-		case <-time.After(getBackoff * time.Duration(attempt+1)):
+		case <-time.After(wait):
 		}
 	}
 }
 
-func getOnce(ctx context.Context, hc *http.Client, url string, max int64, accept string) (b []byte, retry bool, err error) {
+// getOnce makes one attempt. With have (what earlier attempts got), it asks
+// for the rest; a server that sends the whole file again starts it over.
+// On a failure that is worth retrying it returns what it has so far.
+func getOnce(ctx context.Context, hc *http.Client, url string, max int64, accept string, have []byte) (b []byte, retry bool, err error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, false, err
@@ -401,23 +424,73 @@ func getOnce(ctx context.Context, hc *http.Client, url string, max int64, accept
 	if accept != "" {
 		req.Header.Set("Accept", accept)
 	}
+	if len(have) > 0 {
+		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", len(have)))
+	}
+	// A connection that stops sending (headers or body) is given up on.
+	stall := time.AfterFunc(stallTimeout, cancel)
+	defer stall.Stop()
+	stalled := func(err error) error {
+		if ctx.Err() != nil && !stall.Stop() {
+			return fmt.Errorf("GET %s: no data for %s", url, stallTimeout)
+		}
+		return err
+	}
 	resp, err := hc.Do(req)
 	if err != nil {
-		return nil, true, err
+		return have, true, stalled(err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, resp.StatusCode >= 500 || resp.StatusCode == http.StatusTooManyRequests,
+	switch {
+	case resp.StatusCode == http.StatusPartialContent && len(have) > 0:
+		if start, ok := rangeStart(resp.Header.Get("Content-Range")); !ok || start != int64(len(have)) {
+			// Not the part asked for: start over.
+			return nil, true, fmt.Errorf("GET %s: unexpected range %q", url, resp.Header.Get("Content-Range"))
+		}
+	case resp.StatusCode == http.StatusOK:
+		have = nil // the whole file again
+	case resp.StatusCode == http.StatusRequestedRangeNotSatisfiable && len(have) > 0:
+		return nil, true, fmt.Errorf("GET %s: HTTP %d", url, resp.StatusCode)
+	default:
+		return have, resp.StatusCode >= 500 || resp.StatusCode == http.StatusTooManyRequests,
 			fmt.Errorf("GET %s: HTTP %d", url, resp.StatusCode)
 	}
-	b, err = io.ReadAll(io.LimitReader(resp.Body, max+1))
-	if err != nil {
-		return nil, true, err // cut off mid-download
+	buf := bytes.NewBuffer(have)
+	chunk := make([]byte, 64<<10)
+	for {
+		n, rerr := resp.Body.Read(chunk)
+		if n > 0 {
+			stall.Reset(stallTimeout)
+			buf.Write(chunk[:n])
+			if int64(buf.Len()) > max {
+				return nil, false, fmt.Errorf("GET %s: response larger than %d bytes", url, max)
+			}
+		}
+		if rerr == io.EOF {
+			break
+		}
+		if rerr != nil {
+			return buf.Bytes(), true, stalled(rerr) // cut off mid-download
+		}
 	}
-	if int64(len(b)) > max {
-		return nil, false, fmt.Errorf("GET %s: response larger than %d bytes", url, max)
+	if resp.ContentLength >= 0 && resp.StatusCode == http.StatusOK && int64(buf.Len()) != resp.ContentLength {
+		return buf.Bytes(), true, fmt.Errorf("GET %s: got %d of %d bytes", url, buf.Len(), resp.ContentLength)
 	}
-	return b, false, nil
+	return buf.Bytes(), false, nil
+}
+
+// rangeStart reads the first byte of "bytes 100-199/200".
+func rangeStart(cr string) (int64, bool) {
+	rest, ok := strings.CutPrefix(strings.TrimSpace(cr), "bytes ")
+	if !ok {
+		return 0, false
+	}
+	start, _, ok := strings.Cut(rest, "-")
+	if !ok {
+		return 0, false
+	}
+	n, err := strconv.ParseInt(strings.TrimSpace(start), 10, 64)
+	return n, err == nil && n >= 0
 }
 
 // ErrNotWritable means the binary's directory cannot be written by this user.
