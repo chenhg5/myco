@@ -20,17 +20,20 @@ const bundle = await build({
         { id: "west-asia", label: "Western Asia", lat: 31, lon: 49 },
         { id: "africa", label: "Africa", lat: -5, lon: 22 },
         { id: "south-asia", label: "South Asia", lat: 19, lon: 78 },
-        { id: "east-asia", label: "East Asia", lat: 35, lon: 123 },
+        { id: "china", label: "China", lat: 35, lon: 105 },
         { id: "pacific", label: "Pacific", lat: -18, lon: -158 },
       ];
       function Demo() {
-        const [selected, setSelected] = useState("europe");
+        const [selected, setSelected] = useState(window.initialRegion || "europe");
+        const [currentRegions, setRegions] = useState(regions);
+        window.selectRegion = setSelected;
+        window.refreshRegions = () => setRegions(items => [...items]);
         return <>
-          <Globe regions={regions} selected={selected} onSelect={id => {
+          <Globe regions={currentRegions} selected={selected} onSelect={id => {
             window.selected.push(id);
             setSelected(id);
           }}/>
-          <output>{selected}</output>
+          <output data-refreshed={currentRegions !== regions}>{selected}</output>
         </>;
       }
       window.selected = [];
@@ -48,7 +51,7 @@ const browser = await chromium.launch({
   args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
 });
 
-async function openPage(options, fallback = false) {
+async function openPage(options, fallback = false, initialRegion) {
   const page = await browser.newPage(options);
   await page.setContent('<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0"><div id="root"></div></body></html>');
   if (fallback) await page.evaluate(() => {
@@ -57,41 +60,64 @@ async function openPage(options, fallback = false) {
       return name.startsWith("webgl") || name === "experimental-webgl" ? null : context.call(this, name, ...args);
     };
   });
+  await page.evaluate(id => { window.initialRegion = id; }, initialRegion);
   await page.addStyleTag({ content: css });
   await page.addScriptTag({ content: js });
   return page;
 }
 
 try {
-  const page = await openPage({ viewport: { width: 960, height: 570 } });
+  const page = await openPage({ viewport: { width: 960, height: 570 } }, false, "china");
   const errors = [];
   page.on("pageerror", error => errors.push(error.message));
   const canvas = page.locator(".pg-globe-canvas");
-  await page.getByRole("button", { name: "Europe", pressed: true }).waitFor();
+  const atCenter = name => page.waitForFunction(name => {
+    const marker = document.querySelector('.pg-globe-marker[aria-label="' + name + '"]');
+    const globe = document.querySelector(".pg-globe-canvas");
+    if (!marker || marker.hidden || !globe) return false;
+    const mark = marker.getBoundingClientRect();
+    const view = globe.getBoundingClientRect();
+    return Math.abs(mark.x + mark.width / 2 - view.x - view.width / 2) < 2 &&
+      Math.abs(mark.y + mark.height / 2 - view.y - view.height / 2) < 2;
+  }, name);
+  await atCenter("China");
+  if (process.env.PODCAST_GLOBE_SHOT) {
+    await page.locator(".pg-globe").screenshot({ path: process.env.PODCAST_GLOBE_SHOT, animations: "disabled" });
+  }
+  await page.evaluate(() => window.selectRegion("europe"));
+  await atCenter("Europe");
   const remote = page.getByRole("button", { name: "Pacific", includeHidden: true });
   assert.equal(await remote.isVisible(), false);
   await remote.evaluate(button => button.click());
   assert.deepEqual(await page.evaluate(() => window.selected), []);
   await page.getByRole("button", { name: "Western Asia", exact: true }).click();
   await page.getByRole("button", { name: "Western Asia", pressed: true }).waitFor();
+  await atCenter("Western Asia");
 
-  if (process.env.PODCAST_GLOBE_SHOT) {
-    await page.locator(".pg-globe").screenshot({ path: process.env.PODCAST_GLOBE_SHOT, animations: "disabled" });
-  }
-  const mark = page.getByRole("button", { name: "Western Asia", exact: true });
+  const mark = page.getByRole("button", { name: "Africa", exact: true });
   const before = await mark.boundingBox();
   await page.mouse.move(480, 200);
   await page.mouse.wheel(0, -620);
   await page.waitForFunction(before => {
-    const rect = document.querySelector('[aria-label="Western Asia"]').getBoundingClientRect();
+    const rect = document.querySelector('[aria-label="Africa"]').getBoundingClientRect();
     return Math.abs(rect.x - before.x) > 2 || Math.abs(rect.y - before.y) > 2;
   }, before);
 
+  // A fresh array from the parent must not move the user's chosen bearing.
+  await canvas.focus();
+  await page.keyboard.press("ArrowLeft");
+  await page.evaluate(() => window.refreshRegions());
+  await page.locator('output[data-refreshed="true"]').waitFor();
+  const moved = await page.getByRole("button", { name: "Western Asia", exact: true }).boundingBox();
+  assert.ok(Math.abs(moved.x + moved.width / 2 - 480) > 10);
+  await page.keyboard.press("ArrowRight");
+
   await page.mouse.move(500, 110);
+  await page.mouse.wheel(0, 620);
   await page.mouse.down();
   await page.mouse.move(180, 110, { steps: 15 });
   await page.mouse.up();
-  // Rotating from Europe across Asia exposes the previously hidden Pacific.
+  // Rotating across Asia exposes the previously hidden Pacific.
   await page.getByRole("button", { name: "Pacific" }).waitFor();
   await page.getByRole("button", { name: "Pacific" }).click();
   assert.deepEqual(await page.evaluate(() => window.selected), ["west-asia", "pacific"]);
@@ -130,7 +156,7 @@ try {
   await fallback.getByRole("button", { name: "Pacific" }).click();
   await fallback.getByRole("button", { name: "Pacific", pressed: true }).waitFor();
   assert.deepEqual(await fallback.evaluate(() => window.selected), ["pacific"]);
-  console.log("PASS podcast globe drag, zoom, back-face picking, touch and WebGL fallback");
+  console.log("PASS podcast globe selection centering, drag, zoom, back-face picking, touch and WebGL fallback");
 } finally {
   await browser.close();
 }

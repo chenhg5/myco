@@ -109,6 +109,7 @@ function mountGlobe(
 
   const projected = new THREE.Vector3();
   const lightOffset = new THREE.Vector3(-1, 2, 1);
+  let centered: string | undefined;
   let width = 0;
   let height = 0;
   function draw() {
@@ -164,7 +165,17 @@ function mountGlobe(
   sized.observe(canvas);
   resize();
   return {
-    draw,
+    updateSelection(id: string | null | undefined) {
+      if (id !== centered) {
+        const region = regions().find(region => region.id === id && Number.isFinite(region.lat) && Number.isFinite(region.lon));
+        centered = region?.id;
+        if (region) {
+          camera.position.copy(point(region.lat, region.lon).multiplyScalar(camera.position.length()));
+          controls.update();
+        }
+      }
+      draw();
+    },
     dispose() {
       sized.disconnect();
       canvas.removeEventListener("keydown", keyboard);
@@ -202,8 +213,8 @@ export function Globe({ regions, selected, onSelect }: Props) {
 
   useLayoutEffect(() => {
     current.current = regions;
-    view.current?.draw();
-  }, [regions]);
+    view.current?.updateSelection(selected);
+  }, [regions, selected]);
 
   return <div className="pg-globe">
     {fallback ? <div className="pg-globe-fallback">
