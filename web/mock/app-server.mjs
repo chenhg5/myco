@@ -2464,6 +2464,26 @@ const server = http.createServer(async (req, res) => {
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "opened" && parts.length === 3) {
     return send(res, 200, { urls: openedLinks });
   }
+  // /app/hubs/{id}/notices/open and …/read: what waits for the person (the
+  // 待处理 list). Studio starts with an ask, a failed task and a project
+  // task that seems stuck; reading settles all but asks, decisions and
+  // approvals.
+  if (parts[0] === "app" && parts[1] === "hubs" && parts[3] === "notices" && (parts[4] === "open" || parts[4] === "read")) {
+    state.notices ||= {
+      hub_studio: [
+        { seq: 3, id: "nt_ask", kind: "asking", tier: "needs_you", key: "k3", target: "agent:review-cloud", actor: "review-cloud", subject: "要不要顺手把旧的测试也删掉？", announce: true, created_at: iso(600) },
+        { seq: 2, id: "nt_failed", kind: "failed", tier: "needs_you", key: "k2", target: "agent:pm-codex", actor: "pm-codex", subject: "整理 v0.17 的发布计划：没完成（超时）", announce: true, created_at: iso(3600) },
+        { seq: 1, id: "nt_stuck", kind: "stuck", tier: "needs_you", key: "k1", target: "project:官网改版", project: "官网改版", actor: "release-cloud", subject: "首页改版：半小时没有动静", announce: true, created_at: iso(7200) },
+      ],
+    };
+    const list = (state.notices[parts[2]] ||= []);
+    if (parts[4] === "open") return send(res, 200, { notices: list, last: 3, badge: list.length });
+    const body = await readBody(req);
+    const keep = list.filter((n) => (n.kind === "asking" || n.kind === "decision" || n.kind === "approval") || (body?.target && n.target !== body.target && !n.target.startsWith(`${body.target}?`)));
+    const changed = list.length - keep.length;
+    state.notices[parts[2]] = keep;
+    return send(res, 200, { changed });
+  }
   // /app/notices: this mock is a browser, so it shows none; the pages
   // still say what is on screen (recorded for tests).
   if (parts[0] === "app" && parts[1] === "notices" && parts.length === 2) {

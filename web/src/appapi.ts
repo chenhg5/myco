@@ -1,4 +1,4 @@
-import type { Page, PageChanges, PageOpen, PageRecord, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Backup, Backups, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, MCPServer, ToolSkill, ToolPlugin, SuperagentState, Approval, ActionGrant, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, NoticePrefs, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
+import type { Page, PageChanges, PageOpen, PageRecord, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Backup, Backups, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, MCPServer, ToolSkill, ToolPlugin, SuperagentState, Approval, ActionGrant, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, NoticeFeed, NoticePrefs, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
 import { L } from "@/lib/i18n";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
@@ -1105,6 +1105,10 @@ export const appApi = {
   /** 专注模式: the desktop app's window in full screen, or back. */
   windowFullscreen: (on: boolean) => request<void>("PUT", "app/window/fullscreen", { on }),
   noticeFocus: (f: { front: boolean; hub?: string; target?: string }) => request<void>("PUT", "app/notices/focus", f),
+  /** What still waits for you on a workspace (open needs-you notices, newest first) and its badge: the 待处理 list. */
+  openNotices: (hubId: string) => request<NoticeFeed>("GET", `app/hubs/${enc(hubId)}/notices/open`),
+  /** Marks as read what leads to target ("" or absent: all). Reading settles what is not an ask, a decision or an approval. */
+  readNotices: (hubId: string, target?: string) => request<{ changed: number }>("POST", `app/hubs/${enc(hubId)}/notices/read`, target ? { target } : {}),
   noticePrefs: (hubId: string) => request<NoticePrefs>("GET", `app/hubs/${encodeURIComponent(hubId)}/notice-prefs`),
   setNoticePrefs: (hubId: string, p: NoticePrefs) => request<NoticePrefs>("PUT", `app/hubs/${encodeURIComponent(hubId)}/notice-prefs`, p),
   /** The language these pages show, for what the desktop app draws itself (its tray menu). */

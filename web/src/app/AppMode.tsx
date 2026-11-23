@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpDown, ChevronLeft, ChevronRight, LayoutGrid, Minimize2, Monitor, MoreHorizontal, Pin, Plus, Search, WifiOff, Workflow, X, Zap } from "lucide-react";
+import { ArrowUpDown, Bell, ChevronLeft, ChevronRight, LayoutGrid, Minimize2, Monitor, MoreHorizontal, Pin, Plus, Search, WifiOff, Workflow, X, Zap } from "lucide-react";
 import { ComputerSettings } from "@/app/ComputerSettings";
 import { AutomationsPage } from "@/app/Automations";
 import { WorkflowsPage } from "@/app/Workflows";
@@ -40,6 +40,8 @@ import { IconSidebar } from "@/components/icons";
 import { recentChats } from "@/app/recentChats";
 import { useContextMenu } from "@/app/ContextMenu";
 import { FocusBgButton, focusBgProps, useFocusBg } from "@/app/FocusBg";
+import { NoticesPanel } from "@/app/NoticesPanel";
+import type { Notice } from "@/api";
 import { useSortable } from "@/app/sortable";
 import { useTextSize, useThemeMode } from "@/lib/theme";
 import { L, lang, setLangChoice, storedLangChoice, type LangChoice } from "@/lib/i18n";
@@ -582,6 +584,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
     if (!hubId) return;
     navRecord({ hub: hubId, page, space: page === "space" || page === "about" ? shownKey : undefined, chat: navChatNow });
   }, [hubId, page, shownKey, navChatNow]);
+  // A workflow (and run) to open on the workflows page.
+  const [wfOpen, setWfOpen] = useState<{ workflow: string; run?: string; at: number } | undefined>();
   // What is on screen, for notices on this computer: a chat in front is
   // not announced (and is marked read on its workspace, for every device).
   useEffect(() => {
@@ -589,7 +593,13 @@ export default function AppMode({ initialHubs, initialInfo }: {
     const say = () => {
       const front = document.visibilityState === "visible" && document.hasFocus();
       const [h, a] = (navChatNow || "").split("\u0000");
-      const f = { front, hub: a ? h : hubId || undefined, target: a ? `agent:${a}` : undefined };
+      // (else a project's group in front, or a workflow's run: their
+      // notices are read too)
+      const other = a ? null
+        : page === "space" && shown && !isLoose(shown) ? { hub: shown.hubId, target: `project:${shown.name}` }
+        : page === "workflows" && wfOpen ? { hub: hubId || undefined, target: `workflow:${wfOpen.workflow}` }
+        : null;
+      const f = a ? { front, hub: h, target: `agent:${a}` } : other ? { front, ...other } : { front, hub: hubId || undefined, target: undefined };
       const key = JSON.stringify(f);
       if (key === last) return;
       last = key;
@@ -604,7 +614,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
       window.removeEventListener("blur", say);
       document.removeEventListener("visibilitychange", say);
     };
-  }, [hubId, navChatNow]);
+  }, [hubId, navChatNow, page, shown ? spaceKey(shown) : "", wfOpen?.workflow]);
   const navApply = useRef<(p: NavPlace) => void>(() => undefined);
   navApply.current = (p) => {
     if (p.hub !== hubId && hubs.some((h) => h.id === p.hub)) setHubPick(p.hub);
@@ -855,7 +865,6 @@ export default function AppMode({ initialHubs, initialInfo }: {
     return () => { off = true; window.clearInterval(t); window.removeEventListener("myco-automations", on); };
   }, [hubId, page]);
   // A workflow run to open on the 工作流 page (from an automation's runs).
-  const [wfOpen, setWfOpen] = useState<{ workflow: string; run?: string; at: number } | undefined>();
   // A notice clicked in the system's notifications (the desktop app): open
   // where it leads, in its workspace (a workflow's run, or a chat: the
   // agent it is about, or the one that sent it).
@@ -871,12 +880,51 @@ export default function AppMode({ initialHubs, initialInfo }: {
         setPage("workflows");
         return;
       }
+      // (a project's group: its space)
+      if (t.startsWith("project:")) {
+        setNavChat(null);
+        setSpace({ hubId: d.hubId, name: t.slice("project:".length) });
+        setChatWith(null);
+        setPage("space");
+        return;
+      }
       const agent = t.startsWith("agent:") ? t.slice("agent:".length) : d.actor;
       if (agent) setToOpen({ hubId: d.hubId, agent });
     };
     window.addEventListener("myco-open-notice", on);
     return () => window.removeEventListener("myco-open-notice", on);
   }, []);
+  // 待处理 (NoticesPanel): what waits for you, the Dock badge's number. The
+  // desktop app's watcher keeps it; in a browser (no watcher) each
+  // workspace is asked now and then.
+  const [noticesOpen, setNoticesOpen] = useState(false);
+  const [noticeCount, setNoticeCount] = useState(0);
+  const hubIdsKey = hubs.map((h) => h.id).join(",");
+  const readNoticeCount = useRef<() => void>(() => undefined);
+  useEffect(() => {
+    let off = false;
+    let inBrowser: boolean | null = null;
+    let last = 0;
+    const read = async () => {
+      try {
+        if (inBrowser !== true) {
+          const st = await appApi.notices();
+          inBrowser = !st.available;
+          if (!inBrowser) { if (!off) setNoticeCount(st.badge || 0); return; }
+        }
+        if (Date.now() - last < 60_000) return;
+        last = Date.now();
+        const counts = await Promise.all(hubs.map((h) => appApi.openNotices(h.id).then((f) => f.badge || 0, () => 0)));
+        if (!off) setNoticeCount(counts.reduce((a, b) => a + b, 0));
+      } catch { /* kept as it was */ }
+    };
+    readNoticeCount.current = () => { last = 0; void read(); };
+    void read();
+    const t = window.setInterval(() => void read(), POLL_MS);
+    return () => { off = true; window.clearInterval(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hubIdsKey]);
+  const goNotice = (h: string, n: Notice) => window.dispatchEvent(new CustomEvent("myco-open-notice", { detail: { hubId: h, target: n.target, actor: n.actor } }));
   // Decisions a workflow waits on you for: a count on its nav item.
   const [decisionCount, setDecisionCount] = useState(0);
   useEffect(() => {
@@ -1119,6 +1167,11 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 order you pick; the height left, scrolling), computers last.
                 The three lists fold. */}
             <div className="app-nav-group sp-nav-autos">
+              <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-notices", noticesOpen && "active")} data-testid="nav-notices"
+                onClick={() => setNoticesOpen(true)}>
+                <Bell /><span className="app-nav-label">{L("待处理", "Needs you")}</span>
+                {noticeCount > 0 && <span className="wf-nav-badge" title={L(`${noticeCount} 件事在等你`, `${noticeCount} things wait for you`)}>{noticeCount}</span>}
+              </button>
               <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-auto", page === "automations" && "active")} aria-current={page === "automations" ? "page" : undefined}
                 onClick={() => { setNavChat(null); toPage("automations"); }}>
                 <Zap /><span className="app-nav-label">{L("自动化", "Automations")}</span>
@@ -1441,6 +1494,9 @@ export default function AppMode({ initialHubs, initialInfo }: {
       </div>
 
       {navMenu.element}
+      <NoticesPanel open={noticesOpen} onOpenChange={setNoticesOpen} hubs={hubs.map((h) => ({ id: h.id, name: h.name }))}
+        nameOf={(h, a) => { const r = allRows.find((x) => x.hub.id === h && x.st.agent.name === a); return r ? nodeName(r.st.agent, r.hub) : a; }}
+        onGo={goNotice} onChanged={() => readNoticeCount.current()} />
       <ComputerSettings focus={pcSettings?.focus} row={pcSettings ? rows.find((r) => r.hub.id === pcSettings.hubId && r.st.agent.name === pcSettings.name) || null : null}
         rows={rows} projects={hubProjects} onClose={() => setPcSettings(null)} onChanged={() => { setProjectReload((n) => n + 1); void refresh(); void loadProjects(hubs.map((h) => h.id)); }}
         onOpenTerminal={(r) => chatWithMember(r)} />

@@ -1825,7 +1825,7 @@ async function runMatrix(browser, size, scheme) {
       // Automations and apps are rows on top, like the rows below, with an icon.
       const tops = await page.evaluate(() => [...document.querySelectorAll(".sp-nav-autos .sp-nav-top")].map((e) => ({ text: (e.querySelector(".app-nav-label")?.textContent || "").trim(), icon: !!e.querySelector("svg"), size: getComputedStyle(e).fontSize })));
       const row = await page.evaluate(() => getComputedStyle(document.querySelector(".sp-nav-projects .app-nav-item")).fontSize);
-      if (tops.map((t) => t.text).join("|") !== "自动化|工作流|应用|电脑" || tops.some((t) => !t.icon || t.size !== row)) throw new Error(`顶上应是带图标的「自动化」「工作流」「应用」「电脑」四行，和项目一样大：${JSON.stringify(tops)} ${row}`);
+      if (tops.map((t) => t.text).join("|") !== "待处理|自动化|工作流|应用|电脑" || tops.some((t) => !t.icon || t.size !== row)) throw new Error(`顶上应是带图标的「待处理」「自动化」「工作流」「应用」「电脑」五行，和项目一样大：${JSON.stringify(tops)} ${row}`);
       if (new Set(heads.map((h) => h.size)).size !== 1 || heads.some((h) => h.icon)) throw new Error(`边栏标题字号应一致、不带图标：${JSON.stringify(heads)}`);
       // Projects fold, and stay folded.
       await clickVisible(page, page.locator(".sp-nav-projects .sp-nav-fold"));
@@ -4573,6 +4573,42 @@ async function runMatrix(browser, size, scheme) {
       await sw.waitFor({ state: "detached", timeout: 5_000 });
       await sidebar(page, true);
       if (!(await page.locator(".app-sidebar .sp-nav-person.active", { hasText: picked }).count())) throw new Error("Esc 收起时不该换对话");
+      if (narrow) await sidebar(page, false);
+    });
+
+    // 待处理: what waits for you (the Dock badge's number), in the sidebar
+    // with its count; a row goes there and, for what looking settles, is
+    // read; asks stay until answered.
+    await step("待处理", async () => {
+      await sidebar(page, true);
+      const nav = page.locator("[data-testid=nav-notices]");
+      await nav.locator(".wf-nav-badge", { hasText: "3" }).waitFor({ timeout: 15_000 });
+      await nav.click();
+      const dlg = page.locator(".app-modal.nt-modal");
+      await dlg.waitFor({ timeout: 5_000 });
+      await dlg.locator(".nt-row").nth(2).waitFor({ timeout: 10_000 });
+      if ((await dlg.locator(".nt-row").count()) !== 3) throw new Error("待处理应列出 3 件事");
+      await dlg.locator(".nt-row").first().getByText("在问你").waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "notices");
+      // The stuck task in a project: its space opens, and the project counts
+      // as on screen (its notices are read there too).
+      await dlg.locator(".nt-row", { hasText: "好像卡住了" }).click();
+      await dlg.waitFor({ state: "detached", timeout: 5_000 });
+      await page.waitForFunction(async () => (await (await fetch("/app/mock/notice-focus")).json()).target === "project:官网改版", null, { timeout: 10_000 });
+      if (narrow) await sidebar(page, true);
+      await nav.locator(".wf-nav-badge", { hasText: "2" }).waitFor({ timeout: 10_000 });
+      // All read: the ask stays (it goes once answered); it opens its chat.
+      await nav.click();
+      await dlg.locator(".nt-row").nth(1).waitFor({ timeout: 10_000 });
+      await dlg.getByRole("button", { name: /全部标为已读/ }).click();
+      await page.waitForFunction(() => document.querySelectorAll(".nt-modal .nt-row").length === 1, null, { timeout: 10_000 });
+      if (!(await dlg.locator(".nt-hint").innerText()).includes("回答或决定后才会消失")) throw new Error("应说明在问你的要回答后才消失");
+      await dlg.locator(".nt-row", { hasText: "在问你" }).click();
+      await dlg.waitFor({ state: "detached", timeout: 5_000 });
+      await page.locator(".conv-detail .conv-head", { hasText: "Review (Codex 云端)" }).first().waitFor({ timeout: 10_000 });
+      if (narrow) await sidebar(page, true);
+      await nav.locator(".wf-nav-badge", { hasText: "1" }).waitFor({ timeout: 10_000 });
       if (narrow) await sidebar(page, false);
     });
 
