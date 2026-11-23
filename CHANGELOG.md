@@ -4,6 +4,26 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.21.28
+
+- **New app: Server Console (服务器)**: manage Linux hosts over the OpenSSH setup already on your computer — CPU, memory and disk overview with hostname and online CPU count, systemd services and Docker containers, logs, and reviewed start/stop/restart. Profiles, host trust and keys stay on the computer that connects, and a shared page never runs a command. An agent can be given a grant for one exact server that expires: read-only for status and logs, or read and manage for services and containers. Needs the updated desktop App and Hub (`sudo myco upgrade`); ProxyJump and end-to-end encrypted workspaces are not supported yet.
+- **New app: Database studio (数据库工作台)**: connect to MySQL, PostgreSQL, SQLite and MongoDB from the desktop App, browse schemas and tables, edit rows and documents with concurrent-write checks, run one SQL statement or MongoDB find/aggregate, and export results as CSV or typed JSON. Passwords and results stay on your computer; only a saved query draft is shared with the page. Needs the updated desktop App.
+- **New app: Color studio (配色助手)**: build palettes of 2–12 colors, extract up to six colors from a local image, generate harmonies, check text/background contrast, and export SVG, CSS or JSON. Palettes, favorites and notes are shared with the page, so its agents can create and revise them too.
+- **New app: AIGC Canvas (AIGC 画布)**: connect notes, text, images and videos into a workflow on a canvas, run a node with its upstream chain using your own OpenRouter (text) and Replicate (images, video) keys, and share nodes and results. Keys stay in the session; generated media links can expire, so save what you want to keep.
+- **Voyage 1.2 (航海)**: a full day passes on the sea — the sun crosses the sky with dawn and dusk colors, a moon and stars light the night, and the boat shows its navigation lights. Weather now changes the scene: clear, cloudy, overcast, rain, storm with lightning and thunder, and sea fog. Time is shared in the page (still, a day in 48 or 12 minutes), so everyone sees the same hour.
+- Text in Server Console and Database studio is larger and easier to read: table values and SQL at 14px, supporting text at least 12px, including in narrow windows.
+- Upgrade: run `sudo myco upgrade` on the hub and update the App for Server Console; the other new apps and Voyage need only the updated App.
+
+**中文**
+
+- **新应用：服务器（Server Console）**：用电脑上已有的 OpenSSH 管理 Linux 主机——查看 CPU、内存和磁盘概览（含主机名和在线 CPU 数）、systemd 服务与 Docker 容器、日志，以及确认后的启动/停止/重启。连接配置、主机信任和密钥都留在发起连接的电脑上，共享页面里不会执行命令。可以给 agent 一个只针对某台服务器、会过期的授权：只读可看状态和日志，读写还能启停服务和容器。需要新版桌面 App 和 Hub（`sudo myco upgrade`）；暂不支持 ProxyJump 和端到端加密工作区。
+- **新应用：数据库工作台（Database studio）**：在桌面 App 里连接 MySQL、PostgreSQL、SQLite 和 MongoDB，浏览库表结构，编辑数据行和文档（并发写入有校验），执行单条 SQL 或 MongoDB 的 find/aggregate，结果可导出 CSV 或带类型的 JSON。密码和结果都留在本机，只有主动保存的查询草稿会共享给页面。需要新版桌面 App。
+- **新应用：配色助手（Color studio）**：创建 2–12 种颜色的色卡，从本地图片提取最多 6 种主色，生成邻近色、互补色等搭配，检查文字与背景的对比度，导出 SVG、CSS 或 JSON。色卡、收藏和笔记与页面共享，agent 也能一起创建和修改。
+- **新应用：AIGC 画布（AIGC Canvas）**：在画布上把便签、文本、图片和视频连成工作流，用自己的 OpenRouter（文本）和 Replicate（图片、视频）密钥运行节点及其上游链路，节点和结果共享给页面。密钥只留在当前会话；生成的媒体链接可能过期，想留的请及时保存。
+- **航海 1.2（Voyage）**：海上过完一整天的昼夜——太阳划过天空，早晚有金色和玫红色，夜里月亮和星星照亮海面，船会亮起航行灯。天气会改变画面：晴、多云、阴、雨、带闪电和雷声的暴风雨，还有海雾。时间在页面里共享（静止、48 分钟或 12 分钟一天），大家看到的是同一个时刻。
+- 服务器和数据库工作台的文字更大更好读：表格数值和 SQL 为 14px，辅助文字至少 12px，窄窗口里也一样。
+- 升级：服务器应用需要在 Hub 上执行 `sudo myco upgrade` 并更新 App；其他新应用和航海只需更新 App。
+
 ## v0.21.27
 
 - **Focus mode**: a chat can fill the whole window on its own — press ⌘⇧F (Ctrl+Shift+F) or use the chat's ⋯ menu, which now shows the shortcut. The sidebar, top bar, members, pane tabs and a docked page hide, and the pane you were in zooms in with the chat centred on a plain background. ⌃Tab and ⌥↑/⌥↓ still switch chats; Esc, the shortcut again, or the button at the top right brings everything back.
