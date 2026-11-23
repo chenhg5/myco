@@ -182,3 +182,54 @@ func TestCatalogFreshensWhenStale(t *testing.T) {
 		t.Fatalf("fetched again within the hour: %d", hits)
 	}
 }
+
+// A hub whose first fetch fails (no network at start) tries again soon,
+// not a day later: the binary carries only the builtin apps.
+func TestCatalogRetriesAFailedFirstFetch(t *testing.T) {
+	defer templates.SetRunWaits(10*time.Millisecond, 20*time.Millisecond, 40*time.Millisecond)()
+	archive := appsZip(t, map[string]string{"new": `{"id": "myco/new", "name": "新应用", "version": "1.0.0", "category": "life"}`})
+	sum := sha256.Sum256(archive)
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/apps/SHA256SUMS" && r.URL.Path != "/apps/apps.zip" {
+			http.NotFound(w, r)
+			return
+		}
+		if r.URL.Path == "/apps/SHA256SUMS" {
+			calls++
+		}
+		if calls <= 2 {
+			http.Error(w, "down", http.StatusNotFound) // the network is not there yet
+			return
+		}
+		if r.URL.Path == "/apps/apps.zip" {
+			w.Write(archive)
+		} else {
+			w.Write([]byte(hex.EncodeToString(sum[:]) + "  apps.zip\n"))
+		}
+	}))
+	defer srv.Close()
+	c := &templates.Catalog{Download: srv.URL, Interval: time.Hour, RetryWait: time.Millisecond}
+	if err := c.Load(); err != nil {
+		t.Fatal(err)
+	}
+	got := make(chan []app.OfficialTemplate, 16)
+	c.Attach(func(l []app.OfficialTemplate) { got <- l })
+	<-got // the built-in ones
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go c.Run(ctx)
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case l := <-got:
+			for _, o := range l {
+				if o.Manifest.ID == "myco/new" {
+					return
+				}
+			}
+		case <-deadline:
+			t.Fatalf("the published apps did not arrive after the first fetches failed (%d tries)", calls)
+		}
+	}
+}

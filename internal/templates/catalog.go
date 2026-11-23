@@ -232,7 +232,19 @@ func (c *Catalog) Freshen(ctx context.Context, maxAge time.Duration) {
 	}
 }
 
-// Run fetches shortly after start and then every Interval.
+// firstRetry and firstRetryMax pace fetching again after a failure while
+// nothing was ever fetched or kept: the binary carries only the Builtin
+// apps, so the rest should not wait a day for a network that was down at
+// start.
+// startWait is how long after start the first fetch waits.
+var (
+	startWait     = 20 * time.Second
+	firstRetry    = time.Minute
+	firstRetryMax = 30 * time.Minute
+)
+
+// Run fetches shortly after start and then every Interval (sooner, after
+// a failure, until a first fetch succeeds).
 func (c *Catalog) Run(ctx context.Context) {
 	if c.Offline {
 		return
@@ -241,17 +253,27 @@ func (c *Catalog) Run(ctx context.Context) {
 	if interval <= 0 {
 		interval = 24 * time.Hour
 	}
-	wait := 20 * time.Second
+	wait := startWait
+	retry := firstRetry
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-time.After(wait):
 		}
-		if r := c.Sync(ctx); r.Error != "" && c.Log != nil {
-			c.Log.Debug("official apps: fetch failed (will retry)", "err", r.Error)
-		}
+		r := c.Sync(ctx)
 		wait = interval
+		if r.Error != "" {
+			if c.Log != nil {
+				c.Log.Debug("official apps: fetch failed (will retry)", "err", r.Error)
+			}
+			c.mu.Lock()
+			never := c.fetched.IsZero() && c.from != "kept"
+			c.mu.Unlock()
+			if never {
+				wait, retry = retry, min(retry*2, firstRetryMax)
+			}
+		}
 	}
 }
 
