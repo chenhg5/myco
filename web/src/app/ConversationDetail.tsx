@@ -510,7 +510,14 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     appApi.peers(target.hubId, target.agent).then((r) => {
       if (off) return;
       const all = new Set(target.also);
-      for (const p of r.peers || []) if (!p.agent.startsWith("@") && p.agent !== target.peer) all.add(p.agent);
+      // Other AIs only: a terminal's commands (mac-exec running ls) are the
+      // agent's tools at work, not work handed to someone; they stay out
+      // (unless the project already lists that terminal).
+      for (const p of r.peers || []) {
+        if (p.agent.startsWith("@") || p.agent === target.peer) continue;
+        const peer = rows.find((x) => x.hub.id === target.hubId && x.st.agent.name === p.agent)?.st.agent;
+        if (peer && agentKind(peer) === "agent") all.add(p.agent);
+      }
       if (all.size > (target.also || []).length) setOthers([...all].sort());
     }, () => undefined);
     return () => { off = true; };
