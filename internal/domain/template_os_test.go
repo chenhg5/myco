@@ -38,3 +38,10 @@ func TestManifestOSAndNet(t *testing.T) {
 	bad(`,"os":["network"],"net":["a.*.com"]`, `net "a.*.com"`)
 	bad(`,"net":["api.example.com"]`, `os has no "network"`)
 }
+
+func TestManifestDedicatedBrowserCapability(t *testing.T) {
+	m, err := ParseManifest([]byte(`{"id":"myco/web-automation","name":"Browser automation","version":"0.1.0","os":["browser"]}`))
+	if err != nil || m == nil || len(m.OS) != 1 || m.OS[0] != "browser" {
+		t.Fatalf("browser manifest: %+v %v", m, err)
+	}
+}

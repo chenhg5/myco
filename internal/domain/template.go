@@ -164,8 +164,8 @@ var TemplatePermissions = []string{"send", "download"}
 // (manifest "os"): files (look and read, and what the person picks), files.write,
 // files.delete, exec (commands, ending processes), screen, microphone, speech,
 // clipboard (reading it), notify, system, network (net.fetch, to the hosts in
-// "net"), ssh, database, proxy.
-var TemplateOSGroups = []string{"files", "files.write", "files.delete", "exec", "screen", "microphone", "speech", "clipboard", "notify", "system", "network", "ssh", "database", "proxy"}
+// "net"), ssh, database, proxy, browser (dedicated browser profiles).
+var TemplateOSGroups = []string{"files", "files.write", "files.delete", "exec", "screen", "microphone", "speech", "clipboard", "notify", "system", "network", "ssh", "database", "proxy", "browser"}
 
 // netHost is a host a manifest's "net" names: a DNS name or an IP address,
 // with a port or not, or *. and a domain for its subdomains.
