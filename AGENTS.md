@@ -90,3 +90,9 @@ Before you finish a change, run `make vet` and `make test`. Run `make smoke` whe
   - Write docs, comments and commit messages in English: most users read English.
   - `README.md`/`README.zh-CN.md` and `INSTALL.md`/`INSTALL.zh-CN.md` are kept in sync (English first).
   - `docs/design/app-ui.md` is the one design doc kept here (the UI spec); the team's other design notes live in the maintainers' internal repository.
+
+## Official apps migration (phase 1)
+
+Official app development has moved to [myco-ai/apps](https://github.com/myco-ai/apps). Use an independent clone of that repository for `templates/`, the `_lib` SDK, app tests and app releases. The copies under `templates/` and `internal/templates/official` in this repository are temporarily retained for existing builds; do not edit or rebuild them. Host bridges, Go services and `web/` stay here.
+
+The apps repository publishes the rolling catalog and immutable versioned artifacts. `.github/workflows/apps-mirror.yml` verifies and mirrors those public assets to this repository's `apps` prerelease for older Hubs. Keep the compatibility mirror for at least 90 days after cutover and two stable host releases; removal requires a maintenance decision. Phase 2 (locked builtin downloads and deleting these copies) needs separate authorization.

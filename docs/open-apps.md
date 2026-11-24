@@ -106,6 +106,8 @@ Open an issue in [Issues](https://github.com/myco-ai/myco/issues). Include the a
 
 ### 4. Build an app yourself
 
+App development lives in [myco-ai/apps](https://github.com/myco-ai/apps), a separate repository with its own CI and releases. The main repository temporarily retains historical copies for existing builds; make changes in apps.
+
 Each app is a folder under `templates/src/`: a React page plus a few files in `public/`.
 
 | File | What it does |
@@ -122,10 +124,10 @@ The page reads and writes its data with `myco.data.*` (see the [HTTP API](api.md
 **The quickest start:** copy an existing app, such as `templates/src/todo` (To-do list).
 
 ```bash
-git clone https://github.com/myco-ai/myco && cd myco
+git clone https://github.com/myco-ai/apps && cd apps
 cd templates && npm ci
 cp -r src/todo src/my-app        # start from an existing app, then change the id, name and fields in public/myco.json
-npm run build                    # type-check and build into internal/templates/official/
+npm run build                    # type-check and build into dist/official/
 node shots.mjs my-app && node build.mjs   # take the screenshots
 cd .. && make check              # run every check before you commit
 ```
@@ -133,10 +135,10 @@ cd .. && make check              # run every check before you commit
 **Let your agent build it:** open Claude Code or Codex in the repository and tell it:
 
 ```text
-Read AGENTS.md and templates/README.md. Using templates/src/todo as a reference, build a new myco app under templates/src/: <the app you want and its core features>. Follow docs/design/app-ui.md for the UI, use myco.data for data, write agent.md and sample.json, and get npm run build, the screenshots and make check passing.
+Read AGENTS.md and templates/README.md. Using templates/src/todo as a reference, build a new myco app under templates/src/: <the app you want and its core features>. Follow the linked myco App UI guide in AGENTS.md for the UI, use myco.data for data, write agent.md and sample.json, and get npm run build, the screenshots and make check passing.
 ```
 
-When it's ready, open a pull request following [CONTRIBUTING.md](../CONTRIBUTING.md): one change per pull request, include the built `internal/templates/official/<app>`, and don't change `VERSION`. For a bigger app, open an issue or post in Discussions first so no one duplicates the work.
+When it's ready, open a pull request in [myco-ai/apps](https://github.com/myco-ai/apps): one change per pull request, run `make pack`, and leave generated `dist/` out of Git. Read that repository's AGENTS.md for checks and host compatibility. For a bigger app, open an issue or post in Discussions first so no one duplicates the work.
 
 All contributions are open under the [MIT License](../LICENSE).
 

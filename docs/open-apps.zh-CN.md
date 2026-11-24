@@ -106,6 +106,8 @@ agent 改变了这件事。今天，一个人带着几个 agent，就能把一�
 
 ### 4. 自己做一个应用
 
+应用开发已迁到独立仓库 [myco-ai/apps](https://github.com/myco-ai/apps)，独立检查和发布。主仓库暂留旧副本供现有构建使用，应用改动请提交到 apps。
+
 每个应用就是 `templates/src/` 下的一个文件夹：一个 React 页面，加上 `public/` 里的几份文件。
 
 | 文件 | 作用 |
@@ -122,10 +124,10 @@ agent 改变了这件事。今天，一个人带着几个 agent，就能把一�
 **最快的起步：** 照着一个现成的改，比如 `templates/src/todo`（待办清单）。
 
 ```bash
-git clone https://github.com/myco-ai/myco && cd myco
+git clone https://github.com/myco-ai/apps && cd apps
 cd templates && npm ci
 cp -r src/todo src/my-app        # 从一个现成的应用起步，再改掉 public/myco.json 里的 id、名字和字段
-npm run build                    # 类型检查并生成到 internal/templates/official/
+npm run build                    # 类型检查并生成到 dist/official/
 node shots.mjs my-app && node build.mjs   # 生成截图
 cd .. && make check              # 提交前跑一遍全部检查
 ```
@@ -133,10 +135,10 @@ cd .. && make check              # 提交前跑一遍全部检查
 **让你的 agent 来做：** 在仓库目录里打开 Claude Code 或 Codex，告诉它：
 
 ```text
-读一下 AGENTS.md 和 templates/README.md，参考 templates/src/todo，在 templates/src/ 下做一个新的 myco 应用：<你要做的应用和它的核心功能>。界面按 docs/design/app-ui.md，数据用 myco.data，写好 agent.md 和 sample.json，跑通 npm run build、截图和 make check。
+读一下 AGENTS.md 和 templates/README.md，参考 templates/src/todo，在 templates/src/ 下做一个新的 myco 应用：<你要做的应用和它的核心功能>。界面按 AGENTS.md 链接的 myco App 界面规范，数据用 myco.data，写好 agent.md 和 sample.json，跑通 npm run build、截图和 make check。
 ```
 
-做好后提一个 PR，规则见 [CONTRIBUTING.md](../CONTRIBUTING.md)：一个 PR 只做一件事，带上生成好的 `internal/templates/official/<应用名>`，不要改 `VERSION`。大一点的应用，先开 issue 或在 Discussions 里说一声，免得撞车。
+做好后到 [myco-ai/apps](https://github.com/myco-ai/apps) 提一个 PR：一个 PR 只做一件事，跑通 `make pack`，不要提交生成的 `dist/`。检查与宿主兼容要求见该仓库 AGENTS.md。大一点的应用，先开 issue 或在 Discussions 里说一声，免得撞车。
 
 所有贡献都按 [MIT 许可证](../LICENSE) 开放。
 
