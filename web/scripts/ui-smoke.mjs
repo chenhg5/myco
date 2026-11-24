@@ -2719,9 +2719,15 @@ async function runMatrix(browser, size, scheme) {
       if (narrow) await sidebar(page, false);
       await page.keyboard.press("Control+k");
       await cp.waitFor({ timeout: 5_000 });
+      // (only the workspace you are in is searched: no other one is asked)
+      const asked = new Set();
+      const onReq = (req) => { const m = /\/app\/hubs\/([^/]+)\/recent/.exec(req.url()); if (m) asked.add(decodeURIComponent(m[1])); };
+      page.on("request", onReq);
       await cp.locator("input").fill("芒果布丁");
       const msg = cp.locator(".cp-item", { hasText: "芒果布丁" }).first();
       await msg.waitFor({ timeout: 8_000 });
+      page.off("request", onReq);
+      if ([...asked].some((h) => h !== "hub_studio")) throw new Error(`⌘K 只该在当前工作区里搜，实际还问了：${[...asked].join("、")}`);
       await msg.click();
       await page.locator(".conv-detail .conv-search input").first().waitFor({ timeout: 10_000 });
       const v = await page.locator(".conv-detail .conv-search input").first().inputValue();

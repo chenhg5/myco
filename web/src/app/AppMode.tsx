@@ -1539,8 +1539,10 @@ export default function AppMode({ initialHubs, initialInfo }: {
       <AgentSwitcher hubId={hubId} rows={chatRows} current={navChatNow ? navChatNow.split("\u0000")[1] : undefined}
         project={page === "space" && shownProject ? shownProject.members.map((m) => m.name) : undefined}
         onPick={(r) => { setNavChat(`${r.hub.id}\u0000${r.st.agent.name}`); chatWithMember(r); }} />
-      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} rows={allRows} hubs={namedOv?.hubs || []} now={now}
-        projects={(projects || []).filter((x) => !x.p.archived).map((x) => ({ hubId: x.hubId, name: x.p.name, title: x.p.title || x.p.name, goal: x.p.goal }))}
+      {/* ⌘K finds in the workspace you are in, not in every one. */}
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} rows={allRows.filter((r) => r.hub.id === hubId)}
+        hubs={(namedOv?.hubs || []).filter((h) => h.id === hubId)} now={now}
+        projects={(projects || []).filter((x) => !x.p.archived && x.hubId === hubId).map((x) => ({ hubId: x.hubId, name: x.p.name, title: x.p.title || x.p.name, goal: x.p.goal }))}
         onPick={(t) => {
           setProfile(null);
           if (t.kind === "page") { setPage(t.page); return; }
