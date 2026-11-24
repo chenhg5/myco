@@ -189,6 +189,19 @@ try {
   assert.deepEqual(first.data.tags, ["Rankings", "Charts"]);
   // Exercise records made before the kind field existed.
   delete first.data.kind;
+  await content.getByRole("button", { name: "Enlarge image" }).click();
+  const viewer = content.getByRole("dialog", { name: "Image viewer" });
+  await viewer.getByText("1 / 2", { exact: true }).waitFor();
+  assert.equal(await viewer.locator("img").getAttribute("src"), await content.locator(".mk-expand-photo img").getAttribute("src"));
+  await viewer.getByRole("button", { name: "100%" }).click();
+  assert.equal(await viewer.locator(".mk-viewer-stage").getAttribute("data-actual"), "true");
+  assert.equal(await viewer.locator("img").evaluate(img => img.width), 200);
+  await page.keyboard.press("ArrowRight");
+  await viewer.getByText("2 / 2", { exact: true }).waitFor();
+  await page.keyboard.press("ArrowLeft");
+  await viewer.getByText("1 / 2", { exact: true }).waitFor();
+  await page.keyboard.press("Escape");
+  await viewer.waitFor({ state: "detached" });
   await content.getByRole("button", { name: "Next asset" }).click();
   await content.getByText("2 / 2", { exact: true }).waitFor();
   await content.getByRole("button", { name: "Copy text" }).last().click();
@@ -382,6 +395,11 @@ try {
         await frame.locator(".mk-image-badge").waitFor();
         await frame.locator('.mk-photo img[src^="blob:"]').evaluate(image => image.decode());
         assert.equal(await frame.locator(".mk-app").evaluate(el => el.scrollWidth), width);
+        await frame.getByRole("button", { name: locale === "zh" ? "放大查看" : "Enlarge image" }).click();
+        const lightbox = frame.getByRole("dialog");
+        await lightbox.getByText("1 / 1", { exact: true }).waitFor();
+        assert.ok(await lightbox.getByRole("button", { name: locale === "zh" ? "下一个素材" : "Next asset" }).isDisabled());
+        await lightbox.locator("img").evaluate(image => image.decode());
         if (shots) await view.screenshot({ path: path.join(shots, `media-kit-${width}-${theme}-${locale}.png`) });
         await view.close();
       }
@@ -404,6 +422,9 @@ try {
   await fallback.getByText(/Open this project page in an updated desktop app/).waitFor();
   await fallback.getByRole("button", { name: /Usage reporting/ }).click();
   assert.ok(await fallback.getByRole("button", { name: "Download original" }).isDisabled());
+  await fallback.getByRole("button", { name: "Enlarge image" }).click();
+  assert.ok(await fallback.getByRole("dialog").getByRole("button", { name: "100%" }).isDisabled());
+  await fallback.getByRole("dialog").getByRole("button", { name: "Close" }).click();
   const dimensions = await fallback.locator(".mk-app").evaluate(el => [el.scrollWidth, el.clientWidth]);
   assert.equal(dimensions[0], dimensions[1]);
   await narrow.goto(base + "?readonly&dark");

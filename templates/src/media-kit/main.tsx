@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { ArrowLeft, ChevronLeft, ChevronRight, Copy, Download, ImageIcon, Play, Plus, Search, Upload } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Copy, Download, ImageIcon, Maximize2, Play, Plus, Search, Upload } from "lucide-react";
 import { mount, Toast, uid, useKit } from "../_lib/appkit";
 import { language, t as uiText } from "../_lib/i18n";
 import { myco, type MycoRecord } from "../_lib/myco";
@@ -7,6 +7,7 @@ import { canUseMedia, canUseOriginals, dateToday, entries, imageTypes, initializ
 import { saveEntry, savePicture } from "./edit";
 import { blankPicture, upload, type PendingFile, type PictureOptions } from "./upload";
 import { aspectName, AssetFilters, ImageBadge, platformName, useAssetFilters } from "./filters";
+import { ImageViewer, type ImageNavigation } from "./image-viewer";
 import { VideoLinkEditor, VideoLinks } from "./video-links";
 import "../_lib/sheet.css";
 import "./media-kit.css";
@@ -21,10 +22,15 @@ async function copyText(text: string) {
   catch { kit.flash(uiText("剪贴板不可用，请手动选择并复制。")); }
 }
 
-function Preview({ record, full = false }: { record?: MycoRecord<Picture>; full?: boolean }) {
-  const [url, setURL] = useState("");
-  const [failed, setFailed] = useState(false);
+function Preview({ record, full = false, navigation }: { record?: MycoRecord<Picture>; full?: boolean; navigation?: ImageNavigation }) {
   const file = record?.data.file;
+  const imageKey = file || record?.id;
+  const [original, setOriginal] = useState<{ file: string; url: string }>();
+  const [failedKey, setFailedKey] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const url = original?.file === file ? original?.url || "" : "";
+  const failed = failedKey === imageKey;
+  const fail = () => setFailedKey(imageKey || null);
   const video = record?.data.kind === "video";
   const isNewMedia = needsMediaBridge(record?.data);
   const poster = thumbnail(record?.data.preview);
@@ -34,18 +40,22 @@ function Preview({ record, full = false }: { record?: MycoRecord<Picture>; full?
     let active = true;
     let address = "";
     void myco!.projectFiles!.get(file).then(blob => {
-      if (active) { address = URL.createObjectURL(blob); setURL(address); }
-    }).catch(() => { if (active) setFailed(true); });
+      if (active) { address = URL.createObjectURL(blob); setOriginal({ file, url: address }); }
+    }).catch(() => { if (active) setFailedKey(file); });
     return () => { active = false; if (address) URL.revokeObjectURL(address); };
   }, [file, full, isNewMedia]);
   if (full && video && url && !failed) {
     return <video controls playsInline preload="metadata" src={url} poster={poster || undefined} aria-label={alt}
-      onError={() => setFailed(true)}/>;
+      onError={fail}/>;
   }
   const src = !video && !failed ? url || poster : poster;
   return <>
-    {src ? <img loading={full ? "eager" : "lazy"} src={src} alt={alt} onError={() => setFailed(true)}/> :
+    {src && navigation && !video ? <button type="button" className="mk-expand-photo" aria-label={uiText("放大查看")} onClick={() => setExpanded(true)}>
+      <img src={src} alt={alt} onError={fail}/>
+      <span className="mk-expand-icon"><Maximize2 size={16} aria-hidden/></span>
+    </button> : src ? <img loading={full ? "eager" : "lazy"} src={src} alt={alt} onError={fail}/> :
       !video && <ImageIcon size={30} aria-hidden/>}
+    {expanded && navigation && !video && <ImageViewer src={src} alt={alt} original={!!url && !failed} navigation={navigation} close={() => setExpanded(false)}/>}
     {video && !full && <span className="mk-play-mark"><Play size={18} fill="currentColor" aria-hidden/></span>}
     {full && failed && <p role="status" className="mk-media-message">{uiText("无法预览原文件，请尝试下载。")}</p>}
     {full && video && file && canUseMedia && !url && !failed && <p role="status" className="mk-media-message">{uiText("正在载入视频…")}</p>}
@@ -183,11 +193,17 @@ function Detail({ record, edit, back, uploading }: { record: MycoRecord<Entry>; 
   const [downloading, setDownloading] = useState(false);
   const assets = pictures(record.id);
   const photos = assets.filter(({ data }) => (!filters.language || data.language === filters.language) && filters.matches(data));
+  const imageSet = photos.filter(({ data }) => data.kind !== "video" && (thumbnail(data.preview) || canDownload(data)));
   const originals = photos.filter(({ data }) => data.kind !== "video" && data.file);
   const n = Math.max(0, photos.findIndex(item => item.id === activeID));
   const picture = photos[n];
   const entry = record.data;
   const isVideo = picture?.data.kind === "video";
+  const imageIndex = imageSet.findIndex(item => item.id === picture?.id);
+  const navigation = imageIndex < 0 ? undefined : {
+    index: imageIndex, count: imageSet.length,
+    move: (direction: number) => setActiveID(imageSet[(imageIndex + direction + imageSet.length) % imageSet.length].id),
+  };
   const aspect = picture && (picture.data.aspect ?? mediaAspect(picture.data.width, picture.data.height));
   const canRead = canDownload(picture?.data);
   function cycle(direction: number) { if (photos.length) setActiveID(photos[(n + direction + photos.length) % photos.length].id); }
@@ -248,7 +264,7 @@ function Detail({ record, edit, back, uploading }: { record: MycoRecord<Entry>; 
           </button>
         </div>
         <div className="mk-photo">
-          {picture ? <Preview key={picture.data.file || picture.id} record={picture} full/> :
+          {picture ? <Preview record={picture} full navigation={navigation}/> :
             <p className="mk-media-message">{assets.length ? uiText("没有符合筛选条件的素材。") : uiText("此条目还没有素材。")}</p>}
           {picture && !isVideo && <ImageBadge picture={picture.data}/>}
         </div>
