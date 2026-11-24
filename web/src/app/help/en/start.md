@@ -37,7 +37,7 @@ On the left is the sidebar, from top to bottom:
 - **Projects**: your projects; + starts one.
 - **Conversations**: the agents you can talk to; + adds an agent.
 - **Terminals**: folders on computers where agents run commands.
-- At the very bottom, **the current workspace**: click it to switch workspaces and to open the user guide and Settings.
+- At the very bottom, **the current workspace**: click it to switch workspaces, see usage, and open Settings.
 
 The middle shows the chat or page you are on. In a chat or a project, the right side lists the members and terminals involved, so you can see at a glance who is working on what.
 
@@ -68,4 +68,4 @@ A newly installed App has a "Getting started" card at the bottom of the sidebar:
 
 ## Finding this guide again
 
-The workspace menu at the bottom left has **User guide**, and Settings › About opens it too. Search is on the left, and it opens on the page you read last. You can also ask your [superagent](#help/superagent) or any agent, or look at the [FAQ](#help/faq).
+**User guide** is the last row on the left of **Settings**, and Settings › About opens it too. Search is on the left, and it opens on the page you read last. You can also ask your [superagent](#help/superagent) or any agent, or look at the [FAQ](#help/faq).

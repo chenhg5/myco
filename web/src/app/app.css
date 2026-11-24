@@ -2603,6 +2603,10 @@ textarea.app-input {
 .app-settings-tab.active svg {
   color: var(--fg-2);
 }
+/* A row that leaves Settings (使用文档): a small arrow says so. */
+.app-settings-link > span { flex: 1; }
+.app-settings-tab svg.app-settings-link-arrow { width: 13px; height: 13px; color: var(--faint); }
+.app-settings-link:hover svg.app-settings-link-arrow { color: var(--muted); }
 .app-settings-body {
   flex: 1;
   min-width: 0;

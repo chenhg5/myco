@@ -355,6 +355,7 @@ async function go(page, label, narrow) {
     const menu = page.locator(".app-hub-menu");
     await menu.waitFor({ timeout: 5_000 });
     if (await menu.evaluate((el) => el.scrollHeight > el.clientHeight + 1)) throw new Error("工作区菜单不该要滚动");
+    if ((await menu.innerText()).includes("使用文档")) throw new Error("使用文档在设置里，不在工作区菜单");
     await clickVisible(page, page.locator("[data-testid=menu-usage]"));
     await page.locator(".usage-page").waitFor({ timeout: 10_000 });
     if (narrow) await sidebar(page, false);
@@ -2950,15 +2951,22 @@ async function runMatrix(browser, size, scheme) {
       await closeSettings(page);
     });
 
-    // 使用文档: from Settings › About (and the workspace menu); pages in
+    // 使用文档: from the last row of Settings' nav (and Settings › About;
+    // no longer in the workspace menu); pages in
     // groups on the left, the page on the right, links between pages, a
     // search; a narrow window picks the page from one list.
     await step("使用文档", async () => {
       await go(page, "设置", narrow);
-      const box = page.locator(".app-settings-search input");
-      await box.fill("使用文档");
-      await box.press("Enter");
-      await clickVisible(page, page.locator("[data-testid=settings-guide]"));
+      const navGuide = page.locator("[data-testid=settings-nav-guide]");
+      if (await navGuide.isVisible()) {
+        await clickVisible(page, navGuide);
+      } else {
+        // (a narrow window: Settings' search finds it under About)
+        const box = page.locator(".app-settings-search input");
+        await box.fill("使用文档");
+        await box.press("Enter");
+        await clickVisible(page, page.locator("[data-testid=settings-guide]"));
+      }
       const help = page.locator("[data-testid=help]");
       await help.waitFor({ timeout: 10_000 });
       const doc = help.locator("[data-testid=help-doc]");

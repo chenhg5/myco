@@ -55,9 +55,9 @@ An invite link works once, within 24 hours. If all you have is an address and a 
 - Keyboard: **⌘1…⌘9** (Ctrl+1…Ctrl+9 on Windows) switch in the menu's order.
 - You come back to where you were in that workspace.
 
-The same menu has the superagent, **User guide** and **Settings** (⌘, / Ctrl+,).
+The same menu has the superagent, **Usage** and **Settings** (⌘, / Ctrl+,); the user guide is in Settings.
 
-![The workspace menu at the bottom left: switch, join or start, user guide, settings](shot:workspace-switch)
+![The workspace menu at the bottom left: switch, join or start, usage, settings](shot:workspace-switch)
 
 ## Settings › Workspaces
 

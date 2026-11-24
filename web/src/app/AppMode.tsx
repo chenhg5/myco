@@ -247,8 +247,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
     window.addEventListener("myco-open-settings", on);
     return () => window.removeEventListener("myco-open-settings", on);
   }, []);
-  // 使用文档, from anywhere (Help.tsx openHelp): the workspace menu,
-  // Settings, the 上手清单, the Mac's Help menu.
+  // 使用文档, from anywhere (Help.tsx openHelp): Settings (its nav and About),
+  // the 上手清单, the Mac's Help menu.
   const [helpStart, setHelpStart] = useState<{ doc?: HelpId; n: number }>({ n: 0 });
   useEffect(() => {
     const on = (e: Event) => {
@@ -1357,7 +1357,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 superagentKey={isMac ? "⌘⇧Space" : undefined}
                 superagent={sa?.state ? { name: sa.state.agent?.name, pending: sa.approvals.filter((a) => a.status === "pending" && a.agent === sa.state?.agent?.name).length } : undefined}
                 onUsage={() => { setNavChat(null); toPage("usage"); }} usageOpen={page === "usage"}
-                onSettings={() => setPage("settings")} onGuide={() => openHelp()} />
+                onSettings={() => setPage("settings")} />
             </div>
           </div>
         </aside>

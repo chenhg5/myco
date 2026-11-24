@@ -5,7 +5,7 @@ import { TailscaleSetup } from "@/app/TailscaleSetup";
 import { IntroCard, introOf, noteDone } from "@/app/Onboard";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  AlertTriangle, AudioLines, Bot, Check, Cloud, Globe, Info, Keyboard, Languages, Palette, Pencil, Plus, RotateCcw, ScrollText, Search, Server, ShieldCheck, Terminal, Users,
+  AlertTriangle, ArrowUpRight, AudioLines, BookOpen, Bot, Check, Cloud, Globe, Info, Keyboard, Languages, Palette, Pencil, Plus, RotateCcw, ScrollText, Search, Server, ShieldCheck, Terminal, Users,
 } from "lucide-react";
 import {
   appApi, ApiError, type AppInfo, type CacheStats, type AppUpdate, type Hub, type HubOverview, type LocalState,
@@ -549,6 +549,15 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
                   <span>{s.label}</span>
                 </button>
               ))}
+              {/* The user guide, last: not a section here; it opens the
+                  guide's own page (and closes Settings). */}
+              {gi === GROUPS.length - 1 && (
+                <button type="button" className="app-settings-tab app-settings-link" onClick={() => openHelp()} data-testid="settings-nav-guide">
+                  <BookOpen strokeWidth={1.75} />
+                  <span>{L("使用文档", "User guide")}</span>
+                  <ArrowUpRight className="app-settings-link-arrow" strokeWidth={1.75} aria-hidden />
+                </button>
+              )}
             </div>
           );
         })}
