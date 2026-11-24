@@ -473,13 +473,14 @@ in stored functions. MongoDB aggregation rejects `$out` and `$merge`.
 
 `system.disks` reports byte counts from the OS; displayed GB/GiB units do not change them. `fs.scan` keeps logical file length in `size` and allocated storage in `disk`. New Windows builds query allocation information, including compressed/sparse storage; older Windows builds approximate `disk` with logical length. Zero allocation is valid. Filesystem query failures may fall back to logical length. See [Disk usage and capacity units](disk.md) for system comparison limits and Space cleaner's local unit selector.
 
-## Media Kit project images
+## Media Kit project media
 
 Media Kit pages inside a project can detect desktop support with
 `(await myco.ready).projectFiles`. The desktop host exposes
 `myco.projectFiles.info()` (used and maximum project file slots, maximum file
 bytes), `put(name, blob)`, `get(name)` (returns a Blob), and `download(name)`
 (saves to Downloads). The host derives the project from the open page and
-accepts only Media Kit image names with the current page's ID as a prefix.
-It uses the signed-in person's existing project file permissions. Each image
+accepts only Media Kit media names with the current page's ID as a prefix.
+It uses the signed-in person's existing project file permissions. Check
+`(await myco.ready).projectMedia` before using GIF, MP4, or WebM. Each file
 can be up to 20 MiB and counts toward the project's 100-file quota.

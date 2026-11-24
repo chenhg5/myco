@@ -475,8 +475,9 @@ function PageView({ target, open, active, reload, onMeta }: {
           const st = await appApi.pageState(t.hubId, t.id);
           known.current = st.version;
           bridged.current = true;
+          const projectFiles = !!projectFileScope(p);
           // (can_edit: false when only those who manage it change it, and not you)
-          return { page: { id: t.id, url: p?.url || "", name: o?.name || p?.name || "", version: o?.version || 0 }, me: { name: meOf(t.hubId), can_edit: !p?.read_only, can_manage: !!p?.can_manage }, state: st.state, version: st.version, preferences: live.current.preferences, projectFiles: !!projectFileScope(p) };
+          return { page: { id: t.id, url: p?.url || "", name: o?.name || p?.name || "", version: o?.version || 0 }, me: { name: meOf(t.hubId), can_edit: !p?.read_only, can_manage: !!p?.can_manage }, state: st.state, version: st.version, preferences: live.current.preferences, projectFiles, projectMedia: projectFiles };
         }
         case "update": {
           const r = await appApi.putPageState(t.hubId, t.id, args.state ?? null, Number(args.version) || 0);

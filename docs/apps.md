@@ -11,7 +11,7 @@ Apps that need the computer itself (files, the screen, the microphone, the netwo
 Agent access currently uses shared page records. The [agent actions SDK](app-actions.md) separates framework authorization, SDK transport and application logic for future runtime actions; it does not yet enable agent remote control on existing installations.
 
 ## Creative
-**Media Kit** organizes launch images and bilingual copy by feature, tags and publication status. Open a page in a project from an updated desktop app to share original screenshots up to 20 MB each. Agents can read entries and use the project file CLI for originals.
+**Media Kit** organizes launch images and bilingual copy by feature, tags and publication status. Open a page in a project from an updated desktop app to share original screenshots, GIFs and short videos up to 20 MB each. Add browser links to longer videos. Agents can read entries and use the project file CLI for originals.
 
 **AIGC Canvas** links notes, text, images, and videos into a shared workflow. Text generation uses OpenRouter, while images and videos use Replicate. Enter your own provider keys for the current session. Generated media links can expire, so save files you want to keep.
 
