@@ -356,10 +356,24 @@ func pageDataCommand() *Command {
 	collFlag := Flag{Name: "collection", Kind: String, Required: true, Help: "The collection (myco page data list shows them)"}
 	idFlag := Flag{Name: "id", Kind: String, Required: true, Help: "The record's id"}
 	list := &Command{
-		Name:     "list",
-		Summary:  "List a page's records (of one collection, or all)",
-		Examples: []string{"myco page data list --page pg_abc123", "myco page data list --page pg_abc123 --collection rows --format json"},
-		Flags:    []Flag{pageFlag, {Name: "collection", Kind: String, Help: "Only this collection"}, adminFile},
+		Name:    "list",
+		Summary: "List a page's records (of one collection, or all)",
+		Long: `Query flat data fields with --fields and --sort (-field for descending, missing fields last).
+Repeat --where for AND: field:value, field:ne:value, field:in:a,b,
+field:exists, field:exists:false, or field:gt/lt/gte/lte:number-or-ISO-date.
+Values are JSON scalars or plain strings. Quote JSON-looking strings inside the expression.
+--limit is 1–1000, or 0/unset for all. Continue with the response's next cursor as --after,
+keeping the same fields/where/sort; if records changed, restart without --after.
+--count returns only the total (ignoring limit). Projection trims data: get the whole record
+before replacing it with put. Older Hubs are filtered locally with an upgrade notice.`,
+		Examples: []string{"myco page data list --page pg_abc123", "myco page data list --page pg_abc123 --collection rows --format json", "myco page data list --page pg_abc123 --collection issues --fields n --sort -n --limit 1", "myco page data list --page pg_abc123 --collection issues --where status:progress --count"},
+		Flags: []Flag{pageFlag, {Name: "collection", Kind: String, Help: "Only this collection"}, adminFile,
+			{Name: "fields", Kind: String, Help: "Comma-separated data fields; record id and version are always retained"},
+			{Name: "where", Kind: List, NoSplit: true, Help: "AND condition, repeatable: status:progress, n:gte:10, assignee:exists"},
+			{Name: "sort", Kind: String, Help: "Comma-separated fields, prefix - for descending; missing fields last"},
+			{Name: "limit", Kind: Int, Default: "0", Help: "Page size (0: unlimited; max 1000)"},
+			{Name: "after", Kind: String, Help: "Opaque next cursor from the previous page (same query)"},
+			{Name: "count", Kind: Bool, Help: "Return only the number of matching records"}},
 		Run: handler(func(e *env) error {
 			if err := e.in.Require("page"); err != nil {
 				return err
@@ -368,21 +382,29 @@ func pageDataCommand() *Command {
 			if err != nil {
 				return err
 			}
-			l, err := c.PageRecords(e.in.Ctx, e.in.String("page"), e.in.String("collection"))
+			in := api.PageQuery{Fields: e.in.String("fields"), Where: e.in.List("where"), Sort: e.in.String("sort"), Limit: e.in.Int("limit"), After: e.in.String("after"), Count: e.in.Bool("count")}
+			var l *api.PageRecords
+			if in.Fields != "" || len(in.Where) > 0 || in.Sort != "" || in.Limit != 0 || in.After != "" || in.Count {
+				l, err = c.QueryPageRecords(e.in.Ctx, e.in.String("page"), e.in.String("collection"), in)
+			} else {
+				l, err = c.PageRecords(e.in.Ctx, e.in.String("page"), e.in.String("collection"))
+			}
 			if err != nil {
 				return dataErr(err)
 			}
-			return e.p.Print(l, func(w io.Writer) {
-				if len(l.Records) == 0 {
-					fmt.Fprintln(w, "no records yet")
+			if l.LocalFallback {
+				fmt.Fprintln(e.in.Stderr, "note: this Hub has no server-side record queries; filtered locally. Upgrade the Hub to query records on the server.")
+			}
+			if in.Count {
+				if l.Count == nil {
+					return errorf("invalid_response", ExitError, "upgrade the Hub", "missing query count")
 				}
-				for _, r := range l.Records {
-					fmt.Fprintf(w, "%s/%s  v%d  %s\n", r.Collection, r.ID, r.Version, string(r.Data))
-				}
-				fmt.Fprintf(w, "(latest change %d: watch from there with myco page data watch --page %s --after %d)\n", l.Seq, e.in.String("page"), l.Seq)
-			})
+				return e.p.Print(api.PageRecordCount{Count: *l.Count, Seq: l.Seq, QueryVersion: l.QueryVersion}, func(w io.Writer) { fmt.Fprintln(w, *l.Count) })
+			}
+			return e.p.Print(l, func(w io.Writer) { printPageRecords(w, l, in.Fields) })
 		}),
 	}
+
 	get := &Command{
 		Name:     "get",
 		Summary:  "Show one record",
@@ -629,4 +651,56 @@ func oneLine(s string, n int) string {
 		return string(r[:n-1]) + "…"
 	}
 	return s
+}
+
+func printPageRecords(w io.Writer, l *api.PageRecords, projection string) {
+	fields := []string{}
+	if projection != "" {
+		fields = strings.Split(projection, ",")
+	} else {
+		seen := map[string]bool{}
+		for _, r := range l.Records {
+			var data map[string]json.RawMessage
+			_ = json.Unmarshal(r.Data, &data)
+			for k := range data {
+				seen[k] = true
+			}
+		}
+		for k := range seen {
+			fields = append(fields, k)
+		}
+		sort.Strings(fields)
+	}
+	tw := tabwriter.NewWriter(w, 0, 2, 2, ' ', 0)
+	clean := func(s string) string {
+		return strings.Map(func(r rune) rune {
+			if r < 32 || r == 127 {
+				return ' '
+			}
+			return r
+		}, oneLine(s, 120))
+	}
+	fmt.Fprint(tw, "COLLECTION\tID\tVERSION")
+	for _, f := range fields {
+		fmt.Fprint(tw, "\t", clean(f))
+	}
+	fmt.Fprintln(tw)
+	for _, r := range l.Records {
+		var data map[string]json.RawMessage
+		_ = json.Unmarshal(r.Data, &data)
+		fmt.Fprintf(tw, "%s\t%s\t%d", r.Collection, r.ID, r.Version)
+		for _, f := range fields {
+			v := string(data[f])
+			var text string
+			if json.Unmarshal(data[f], &text) == nil {
+				v = text
+			}
+			fmt.Fprint(tw, "\t", clean(v))
+		}
+		fmt.Fprintln(tw)
+	}
+	tw.Flush()
+	if l.Next != "" {
+		fmt.Fprintf(w, "next: %s\n", l.Next)
+	}
 }

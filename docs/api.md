@@ -258,6 +258,66 @@ From v0.20.5. A page's data can be **records**: JSON objects in named collection
 | `DELETE /v1/pages/{id}/data/{collection}/{record}?if_version=` | `204` |
 | `GET /v1/pages/{id}/changes?after=&wait=` | `{changes: [{seq, collection, record, op: put\|delete, data?, version, by, at}], seq, reset?}` after `after`, oldest first; with `wait` (seconds, up to 60) it waits for one. The newest 5000 are kept: `reset` means list the records again (a page hears it as `myco.on("reset")`, bridge feature `data-reset`) |
 
+### Record queries
+
+The records GET endpoint accepts optional `fields`, repeatable `where`, `sort`,
+`limit`, `after` and `count` parameters. Existing requests retain their unlimited
+list behavior. Successful query-capable responses include `query_version: 1`;
+clients may send `query_version=1` to negotiate. Older Hubs silently ignore these
+GET parameters and omit the response marker: the current CLI and desktop detect
+that and apply the same query locally to the returned records. The CLI warns to
+upgrade the Hub. Authentication and validation failures never trigger fallback.
+
+| Parameter | Behavior |
+| --- | --- |
+| `fields=n,title,status` | Projects only `data`. The record envelope, including `id` and `version`, remains. |
+| `where=status:progress` | Equality; repeat conditions to AND them. |
+| `where=status:ne:done` | Not equal; `!=` is an alias. Missing fields do not match. |
+| `where=status:in:todo,progress` | Membership; a JSON scalar array (`n:in:[1,2,3]`) also works. 1–100 values. |
+| `where=assignee:exists` | Field is present, including JSON null. `exists:false` finds missing fields. |
+| `where=n:gte:10` | Numeric range. `gt`, `lt`, `gte`, `lte` and `>`, `<`, `>=`, `<=` work. |
+| `where=created:>=:2026-11-25T00:00:00Z` | ISO date / RFC3339 instant range, millisecond precision; invalid dates do not match. |
+| `sort=-n,created` | Ascending by default, `-` descending; missing fields always last. Stable ties use collection, record position, ID. |
+| `limit=100` | 1–1000 records; unset or 0 is unlimited. A nonempty `next` response cursor means more records. |
+| `after=<next>` | Repeat the same page, collection, fields, filters and sort. Page size may change. |
+| `count=true` | Only `{count, seq, query_version:1}`; total matching records, ignores projection/sort/limit. Cannot combine with after. |
+
+Field names address flat `data` keys: `[A-Za-z_][A-Za-z0-9_]{0,63}`. Nested paths
+and SQL syntax are rejected. At most 64 projected fields, 8 sort fields and 32
+conditions (4096 bytes each) are allowed. Values are bound SQL parameters, never
+interpolated into SQL. Scalars use JSON types, or unquoted strings; quote strings
+that look like JSON (`status:eq:"null"`). Equality is type-strict (numbers compare
+numerically; booleans are distinct). Missing fields fail all comparisons except
+`exists:false`. Ranges accept only numbers or dates; equivalent timezone-offset
+instants compare chronologically in ranges, whereas equality remains literal.
+Sorting uses SQLite scalar order: null, numbers/booleans, then text; array/object
+values use compact JSON text. Use consistent field types and normalized UTC date
+strings when sorting. Useful collection indexes cover position, issue number,
+status and assignee/status; other fields remain queryable without fixed schemas.
+
+Cursors are opaque, scoped to the query and the page's change sequence. Any page
+record mutation invalidates them with `409 conflict`; restart without `after`.
+Malformed or cross-query cursors return `400 invalid_argument`. A query reads its
+sequence and records in one SQLite snapshot. Projection is not a complete record:
+get the full record before a replacing `put`, and use its version for CAS writes.
+
+CLI examples (text mode renders a table; JSON remains structured):
+
+```sh
+myco page data list --page pg_id --collection issues --fields n --sort -n --limit 1
+myco page data list --page pg_id --collection issues --where assignee:alex --where status:progress
+myco page data list --page pg_id --collection issues --where status:in:todo,progress --count
+```
+
+The desktop page bridge exposes the same options as
+`myco.data.list(collection, {fields, where, sort, limit, after, count})`. Fields and
+sort accept a comma-separated string or string array; where accepts a string or
+string array. Check feature **`data-query`** first: older native hosts, including
+mobile versions without this feature, may ignore extra arguments. Query reads do
+not advance the editor's shared watch cursor; an ordinary unfiltered list keeps
+its existing watch initialization behavior. SDK examples and types live in the
+[apps query guide](https://github.com/myco-ai/apps/blob/main/docs/page-data-queries.md).
+
 **Templates**: a folder with `myco.json` (its manifest: `id` as `author/name`, `name`, `version` as `x.y.z`, `kind`, `category` (from v0.20.6: `office`, `dev`, `tools`, `life`, `creative`, `game` or `other`; the App's shelves), `icon` (from v0.20.7: an `.svg` in the template, at most 16 KB; the App shows its shape), `requires` (from v0.20.7: `{"hub": "0.20.7"}`; an older hub refuses it, saying which version it needs), `description`, `entry`, `data` (collections → `{fields: {name: type}, single?, write?}` (`write: "managers"`, from v0.22.2: only those who manage the page change that collection); types `text, markdown, number, bool, date, datetime, person, select, multi, url, file, json`), `permissions` (`send`, `download`), `os` (from v0.22.1: the groups of `myco.os` capabilities it uses: `files`, `files.write`, `files.delete`, `exec`, `screen`, `microphone`, `speech`, `clipboard`, `notify`, `system`, `network`, `ssh`, `database`, `proxy`; see docs/app-os.md), `net` (from v0.22.1: the hosts `net.fetch` may reach, as `host`, `host:port` or `*.domain`; needs `network` in `os`), `export`, `agent` (default `agent.md`), `sample` (default `sample.json`)), its page files, the agent's guide and sample data (`{collection: [records…]}`). Everyone in the workspace sees the library and uses its templates; whoever published one (a person, or agents of the same owner) and the workspace's managers publish its versions and delete it. A page made from a template keeps its own copy of the files and the manifest.
 
 | Endpoint | What |

@@ -405,6 +405,11 @@ CREATE TABLE IF NOT EXISTS page_records (
   pos        INTEGER NOT NULL,
   PRIMARY KEY (page, collection, id)
 );
+-- Forward-only, idempotent indexes for record order and common task queries.
+CREATE INDEX IF NOT EXISTS idx_page_records_order ON page_records(page, collection, pos, id);
+CREATE INDEX IF NOT EXISTS idx_page_records_n ON page_records(page, collection, (json_type(data,'$.n') IS NULL), json_extract(data,'$.n') DESC, pos, id);
+CREATE INDEX IF NOT EXISTS idx_page_records_status ON page_records(page, collection, json_extract(data,'$.status'));
+CREATE INDEX IF NOT EXISTS idx_page_records_assignee_status ON page_records(page, collection, json_extract(data,'$.assignee'), json_extract(data,'$.status'));
 CREATE TABLE IF NOT EXISTS page_changes (
   seq        INTEGER PRIMARY KEY AUTOINCREMENT,
   page       TEXT NOT NULL,

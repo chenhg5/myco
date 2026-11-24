@@ -305,6 +305,13 @@ export interface Pin {
 }
 export interface PinList { a: string; with: string; pins: Pin[]; max: number }
 /** A page's records (hubs from v0.20.5). */
+/** Record queries require the host's data-query feature. Fields/sort accept CSV or arrays. */
+export interface PageRecordQuery {
+ fields?: string | string[]; where?: string | string[]; sort?: string | string[];
+ limit?: number; after?: string; count?: boolean;
+}
+export interface PageRecordList { records: PageRecord[]; seq: number; next?: string; query_version?: number }
+export interface PageRecordCount { count: number; seq: number; query_version: number }
 export interface PageRecord { collection: string; id: string; data: Record<string, unknown>; version: number; updated_by?: string; updated_at: string }
 export interface PageChange { seq: number; collection: string; record: string; op: "put" | "delete"; data?: Record<string, unknown>; version: number; by?: string; at: string }
 export interface PageChanges { changes: PageChange[]; seq: number; reset?: boolean }

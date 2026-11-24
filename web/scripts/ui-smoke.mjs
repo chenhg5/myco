@@ -922,6 +922,43 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, chat.getByRole("button", { name: "关掉这一栏" }));
     });
 
+    await step("网页 · 记录查询", async () => {
+      await go(page, "官网改版", narrow);
+      const pattern = "**/app/hubs/hub_studio/pages/pg_checklist/data?*";
+      const queries = [];
+      await page.route(pattern, async route => {
+        const q = new URL(route.request().url()).searchParams;
+        queries.push(q);
+        const queried = q.has("query_version");
+        await route.fulfill({ json: q.get("count") === "true"
+          ? { count: 1, seq: 999, query_version: 1 }
+          : { records: [{ collection: "issues", id: "i42", version: 3, data: queried ? { n: 42 } : { n: 42, title: "Demo" } }], seq: queried ? 999 : 10, query_version: 1 } });
+      });
+      try {
+        await page.evaluate(() => window.dispatchEvent(new CustomEvent("myco-open-page", { detail: { kind: "page", hubId: "hub_studio", id: "pg_checklist" } })));
+        const frame = () => page.frames().find(f => f.url().includes("/p/"));
+        await page.frameLocator(".pg-frame").locator("#who").waitFor();
+        await frame().evaluate(async () => {
+          await window.myco.ready;
+          await window.myco.data.list("issues");
+          const r = await window.myco.data.list("issues", { fields: ["n"], where: ["status:in:todo,progress", "assignee:alex"], sort: "-n", limit: 1 });
+          if (r.records[0].data.n !== 42 || "title" in r.records[0].data) throw new Error("projection was lost");
+          const c = await window.myco.data.list("issues", { count: true });
+          if (c.count !== 1 || "records" in c) throw new Error("count was lost");
+        });
+        const q = queries.find(q => q.get("fields") === "n");
+        if (!q || q.getAll("where").join("|") !== "status:in:todo,progress|assignee:alex" || q.get("sort") !== "-n" || q.get("limit") !== "1") throw new Error("bridge query options changed in transit");
+        const watch = page.waitForRequest(r => r.url().includes("/pages/pg_checklist/changes?"), { timeout: 10_000 });
+        await frame().evaluate(() => { window.stopQueryWatch = window.myco.data.on(() => {}); });
+        const request = await watch;
+        if (new URL(request.url()).searchParams.get("after") !== "10") throw new Error("query/count advanced the shared editor watch cursor");
+        await frame().evaluate(() => window.stopQueryWatch());
+      } finally {
+        await page.unroute(pattern);
+        await clickVisible(page, page.locator(".pg-panel").getByRole("button", { name: /关闭/ }).first());
+      }
+    });
+
     // A page made from the starter `myco template init` writes: its own
     // small HTML table (internal/cli/templatekit), not the official 表格 app
     // (that one is the canvas grid, made from the locked apps checkout and

@@ -1758,8 +1758,13 @@ type PageRecord struct {
 // PageRecords is GET /v1/pages/{id}/data: the records (in their order) and
 // the page's latest change, to watch from.
 type PageRecords struct {
-	Records []PageRecord `json:"records"`
-	Seq     int64        `json:"seq"`
+	Next         string `json:"next,omitempty"`
+	Count        *int   `json:"count,omitempty"`
+	QueryVersion int    `json:"query_version,omitempty"`
+	// LocalFallback is client-side provenance, never part of the Hub contract.
+	LocalFallback bool         `json:"-"`
+	Records       []PageRecord `json:"records"`
+	Seq           int64        `json:"seq"`
 }
 
 // PageRecordWrite is PUT /v1/pages/{id}/data/{collection}/{record} and

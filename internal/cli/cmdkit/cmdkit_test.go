@@ -31,3 +31,11 @@ func TestGlobalFlagsBeforeSubcommand(t *testing.T) {
 		t.Error("leaf flag before the command must fail")
 	}
 }
+
+func TestLiteralListPreservesQueryCommas(t *testing.T) {
+	cmd := &Command{Name: "list", Run: func(*Invocation) error { return nil }, Flags: []Flag{{Name: "where", Kind: List, NoSplit: true}, {Name: "tags", Kind: List}}}
+	_, values, _, err := Resolve(cmd, []string{"--where", `status:in:["todo","done"]`, "--where", "title:eq:hello, world", "--tags", "a,b"})
+	if err != nil || len(values["where"]) != 2 || values["where"][0] != `status:in:["todo","done"]` || values["where"][1] != "title:eq:hello, world" || len(values["tags"]) != 2 {
+		t.Fatalf("%v %v", values, err)
+	}
+}

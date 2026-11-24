@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // PageRecords lists a page's records (of one collection, or all) and the
@@ -152,4 +153,53 @@ func (c *Client) DeleteTemplate(ctx context.Context, id string) error {
 func (c *Client) UseTemplate(ctx context.Context, id string, in api.TemplateUse) (*api.TemplateUsed, error) {
 	var out api.TemplateUsed
 	return &out, c.do(ctx, http.MethodPost, "/v1/templates/"+esc(id)+"/use", nil, in, &out)
+}
+
+// QueryPageRecords negotiates by a response marker, not a version number:
+// older Hubs silently ignore unknown GET parameters and return every record.
+// That already-returned collection is filtered locally with identical rules.
+func (c *Client) QueryPageRecords(ctx context.Context, page, collection string, in api.PageQuery) (*api.PageRecords, error) {
+	q, err := domain.ParsePageQuery(domain.PageQueryInput{Fields: in.Fields, Where: in.Where, Sort: in.Sort, Limit: in.Limit, After: in.After, Count: in.Count})
+	if err != nil {
+		return nil, pageQueryClientError(err)
+	}
+	if collection != "" {
+		if _, err := domain.ParseCollection(collection); err != nil {
+			return nil, pageQueryClientError(err)
+		}
+	}
+	var out api.PageRecords
+	if err := c.do(ctx, http.MethodGet, "/v1/pages/"+esc(page)+"/data", in.Values(collection), nil, &out); err != nil {
+		return nil, pageQueryClientError(err)
+	}
+	if out.QueryVersion >= 1 {
+		return &out, nil
+	}
+	records := make([]*domain.PageRecord, 0, len(out.Records))
+	for i, r := range out.Records {
+		records = append(records, &domain.PageRecord{Page: page, Collection: r.Collection, ID: r.ID, Data: string(r.Data), Version: r.Version, UpdatedBy: r.UpdatedBy, UpdatedAt: r.UpdatedAt, Pos: int64(i)})
+	}
+	result, err := domain.ApplyPageQuery(records, page, collection, out.Seq, q)
+	if err != nil {
+		return nil, pageQueryClientError(err)
+	}
+	out.Records = []api.PageRecord{}
+	out.Next = result.Next
+	out.Count = result.Count
+	out.LocalFallback = true
+	for _, r := range result.Records {
+		out.Records = append(out.Records, api.PageRecord{Collection: r.Collection, ID: r.ID, Data: json.RawMessage(r.Data), Version: r.Version, UpdatedBy: r.UpdatedBy, UpdatedAt: r.UpdatedAt})
+	}
+	return &out, nil
+}
+
+func pageQueryClientError(err error) error {
+	if e, ok := err.(*domain.Error); ok {
+		status := http.StatusBadRequest
+		if e.Code == domain.CodeConflict {
+			status = http.StatusConflict
+		}
+		return &Error{Status: status, Code: string(e.Code), Message: e.Message, Suggestion: e.Suggestion}
+	}
+	return err
 }

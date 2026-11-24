@@ -79,7 +79,7 @@ async function render(j: PageRenderJob, signal: AbortSignal): Promise<PageRender
                 return { page: { id: j.page_id, name: opened.name, version: opened.version }, me: { name: "" }, state: st.state, version: st.version,
                   preferences: { language: lang, theme: "light" }, render: { instance } };
               }
-              case "data.list": return appApi.pageRenderData(j.id, coll);
+              case "data.list": return appApi.pageRenderData(j.id, coll, undefined, args.query as import("@/api").PageRecordQuery|undefined);
               case "data.get": return appApi.pageRenderData(j.id, coll, String(args.id || ""));
               case "data.watch": return true;
               case "storage.get": return null;

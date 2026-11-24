@@ -467,8 +467,11 @@ function PageView({ target, open, active, reload, onMeta }: {
       const coll = String(args.collection || "");
       switch (method) {
         case "data.list": {
-          const r = await appApi.pageRecords(t.hubId, t.id, coll || undefined);
-          dataSeq.current = Math.max(dataSeq.current, r.seq);
+          const query = args.query as import("@/api").PageRecordQuery | undefined;
+          const r = await appApi.pageRecords(t.hubId, t.id, coll || undefined, query);
+          // Partial/count reads must not skip changes the editing Store has
+          // not consumed. Only the historical full list initializes watch.
+          if (query === undefined) dataSeq.current = Math.max(dataSeq.current, r.seq);
           return r;
         }
         case "data.get":

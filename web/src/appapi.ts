@@ -1,5 +1,5 @@
 import type { UsageResponse } from "@/lib/usage";
-import type { Page, PageChanges, PageOpen, PageRecord, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Backup, Backups, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, MCPServer, ToolSkill, ToolPlugin, SuperagentState, Approval, ActionGrant, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, NoticeFeed, NoticePrefs, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
+import type { Page, PageChanges, PageOpen, PageRecord, PageRecordQuery, PageRecordList, PageRecordCount, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Backup, Backups, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, MCPServer, ToolSkill, ToolPlugin, SuperagentState, Approval, ActionGrant, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, NoticeFeed, NoticePrefs, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
 import { L } from "@/lib/i18n";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
@@ -998,8 +998,7 @@ export const appApi = {
   useTemplate: (hubId: string, id: string, input: { name?: string; project?: string; sample?: boolean }) =>
     request<{ page: Page; template: Template }>("POST", `app/hubs/${enc(hubId)}/templates/${enc(id)}/use`, input),
   // A page's records and change feed (hubs from v0.20.5), for the bridge.
-  pageRecords: (hubId: string, id: string, collection?: string) =>
-    request<{ records: PageRecord[]; seq: number }>("GET", `app/hubs/${enc(hubId)}/pages/${enc(id)}/data${collection ? `?collection=${enc(collection)}` : ""}`),
+  pageRecords: listPageRecords,
   pageRecord: (hubId: string, id: string, collection: string, rid: string) =>
     request<PageRecord>("GET", `app/hubs/${enc(hubId)}/pages/${enc(id)}/data/${enc(collection)}/${enc(rid)}`),
   /** A record written; on a conflict the error carries the latest. */
@@ -1065,8 +1064,8 @@ export const appApi = {
   // While one renders: the page's state and records, through the job (refused once it may no longer run),
   // and a wait that answers {stop: true} as soon as it may not.
   pageRenderState: (id: string) => request<PageState>("GET", `app/page-render/${enc(id)}/state`),
-  pageRenderData: (id: string, collection: string, rid?: string) =>
-    request<unknown>("GET", `app/page-render/${enc(id)}/data?collection=${enc(collection)}${rid ? `&id=${enc(rid)}` : ""}`),
+  pageRenderData: (id: string, collection: string, rid?: string, query?: PageRecordQuery) =>
+    request<unknown>("GET", `app/page-render/${enc(id)}/data?${pageQueryParams(collection, query)}${rid ? `&id=${enc(rid)}` : ""}`),
   pageRenderWait: (id: string, signal?: AbortSignal) => request<{ stop: boolean }>("GET", `app/page-render/${enc(id)}/wait`, undefined, signal, 40_000),
   /** Writes a page's shared state based on version; when someone wrote
    *  first, ok is false and the latest comes back. */
@@ -1207,3 +1206,41 @@ export type TranslateConfig = { provider: "deepl" | "google" | "openai"; base_ur
 export interface PageRenderJob { id: string; hub_id: string; page_id: string; action: string; version: number; args?: Record<string, unknown> }
 /** Its file (base64), or why not. */
 export interface PageRenderResult { media_type?: string; data?: string; width?: number; height?: number; pages?: number; error?: { code: string; message: string; retryable?: boolean } }
+
+// Keep unfiltered legacy calls typed as full lists, while count queries
+// explicitly return a count-only response.
+function listPageRecords(hubId: string, id: string, collection?: string): Promise<PageRecordList>;
+function listPageRecords(hubId: string, id: string, collection: string | undefined, query: PageRecordQuery | undefined): Promise<PageRecordList | PageRecordCount>;
+function listPageRecords(hubId: string, id: string, collection?: string, query?: PageRecordQuery): Promise<PageRecordList | PageRecordCount> {
+  return request("GET", `app/hubs/${enc(hubId)}/pages/${enc(id)}/data?${pageQueryParams(collection, query)}`);
+}
+export function pageQueryParams(collection?: string, query?: PageRecordQuery): URLSearchParams {
+  const p = new URLSearchParams();
+  if (collection) p.set("collection", collection);
+  const invalid = (message: string) => Object.assign(new Error(message), { code: "invalid_argument" });
+  if (query !== undefined) {
+    if (!query || typeof query !== "object" || Array.isArray(query)) throw invalid("query must be an object");
+    p.set("query_version", "1");
+    for (const key of ["fields", "where", "sort"] as const) {
+      const value = query[key];
+      if (value === undefined) continue;
+      if (typeof value !== "string" && !(Array.isArray(value) && value.every(x => typeof x === "string"))) throw invalid(`${key} must be a string or string array`);
+      if (key === "where") {
+        for (const condition of typeof value === "string" ? [value] : value) p.append(key, condition);
+      } else p.set(key, typeof value === "string" ? value : value.join(","));
+    }
+    if (query.limit !== undefined) {
+      if (!Number.isInteger(query.limit)) throw invalid("limit must be an integer");
+      p.set("limit", String(query.limit));
+    }
+    if (query.after !== undefined) {
+      if (typeof query.after !== "string") throw invalid("after must be a cursor string");
+      p.set("after", query.after);
+    }
+    if (query.count !== undefined) {
+      if (typeof query.count !== "boolean") throw invalid("count must be boolean");
+      p.set("count", String(query.count));
+    }
+  }
+  return p;
+}

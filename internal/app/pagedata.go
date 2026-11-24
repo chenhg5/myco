@@ -303,3 +303,30 @@ func (s *PageDataService) Seed(ctx context.Context, by Actor, page string, sampl
 	}
 	return nil
 }
+
+// QueryRecords retains the ordinary page authorization boundary for every
+// query, including projections and count-only requests.
+func (s *PageDataService) QueryRecords(ctx context.Context, by Actor, page, collection string, in domain.PageQueryInput) (domain.RecordQueryResult, error) {
+	if _, err := s.page(ctx, by, page); err != nil {
+		return domain.RecordQueryResult{}, err
+	}
+	if collection != "" {
+		if _, err := domain.ParseCollection(collection); err != nil {
+			return domain.RecordQueryResult{}, err
+		}
+	}
+	q, err := domain.ParsePageQuery(in)
+	if err != nil {
+		return domain.RecordQueryResult{}, err
+	}
+	if repo, ok := s.data.(interface {
+		Query(context.Context, string, string, domain.PageQuery) (domain.RecordQueryResult, error)
+	}); ok {
+		return repo.Query(ctx, page, collection, q)
+	}
+	recs, seq, err := s.Records(ctx, by, page, collection)
+	if err != nil {
+		return domain.RecordQueryResult{}, err
+	}
+	return domain.ApplyPageQuery(recs, page, collection, seq, q)
+}

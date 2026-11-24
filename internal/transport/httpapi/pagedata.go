@@ -84,13 +84,22 @@ func recordDTO(r *domain.PageRecord) api.PageRecord {
 }
 
 func (s *Server) listRecords(w http.ResponseWriter, r *http.Request, c pageCall) {
-	recs, seq, err := s.pageData.Records(r.Context(), c.by, r.PathValue("id"), r.URL.Query().Get("collection"))
+	in, err := api.ParsePageQuery(r.URL.Query())
+	if err != nil {
+		writeError(w, domain.Errf(domain.CodeInvalidArgument, "%v", err))
+		return
+	}
+	result, err := s.pageData.QueryRecords(r.Context(), c.by, r.PathValue("id"), r.URL.Query().Get("collection"), domain.PageQueryInput{Fields: in.Fields, Where: in.Where, Sort: in.Sort, Limit: in.Limit, After: in.After, Count: in.Count})
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	out := api.PageRecords{Records: make([]api.PageRecord, 0, len(recs)), Seq: seq}
-	for _, x := range recs {
+	if result.Count != nil {
+		writeJSON(w, http.StatusOK, api.PageRecordCount{Count: *result.Count, Seq: result.Seq, QueryVersion: 1})
+		return
+	}
+	out := api.PageRecords{Records: make([]api.PageRecord, 0, len(result.Records)), Seq: result.Seq, Next: result.Next, QueryVersion: 1}
+	for _, x := range result.Records {
 		out.Records = append(out.Records, recordDTO(x))
 	}
 	writeJSON(w, http.StatusOK, out)

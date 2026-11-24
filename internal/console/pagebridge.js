@@ -276,7 +276,7 @@
     // "download-media": myco.download saves video and sound too (mp4, …);
     // "os": myco.os (this computer: files, commands, the screen…).
     // "net-media": myco.media.url plays a public audio or video address.
-    features: ["download-media", "os", "ssh", "preferences", "remote", "page-actions", "net-media", "data-reset"] /*__MYCO_BROWSER_FEATURE__*/,
+    features: ["download-media", "os", "ssh", "preferences", "remote", "page-actions", "net-media", "data-reset", "data-query"] /*__MYCO_BROWSER_FEATURE__*/,
     // An address for <audio> / <video> of a public http(s) file (a podcast
     // episode): the App streams it, with seeking, since the page itself
     // cannot load media from the internet. Private addresses are refused.
@@ -361,7 +361,11 @@
     // new one; with opts.ifVersion it is refused (err.code "conflict",
     // err.latest the record now) if someone changed it since.
     data: {
-      list: function (collection) { return call("data.list", { collection: collection || "" }); },
+      list: function (collection, options) {
+        var args = { collection: collection || "" };
+        if (options !== undefined) args.query = options;
+        return call("data.list", args);
+      },
       get: function (collection, id) { return call("data.get", { collection: collection, id: id }); },
       put: function (collection, data, opts) {
         opts = opts || {};
