@@ -83,6 +83,15 @@ func (s *session) installTarget(evt proto.TargetAttachedToTarget) (err error) {
 	if err = s.call(sid, "Page.addScriptToEvaluateOnNewDocument", map[string]any{"source": recorderSource, "worldName": recorderWorld, "runImmediately": true}, nil); err != nil {
 		return err
 	}
+	if err = s.call(sid, "Target.setAutoAttach", autoAttach(), nil); err != nil {
+		return err
+	}
+	// A renderer-created popup is paused at window.open. Rod's attachment
+	// (and Runtime.evaluate) can wait for that renderer to start. Resume
+	// after the binding/preload are installed, before requesting either.
+	if err = s.call(sid, "Runtime.runIfWaitingForDebugger", map[string]any{}, nil); err != nil {
+		return err
+	}
 	var tree struct {
 		FrameTree *structFrameTree `json:"frameTree"`
 	}
@@ -110,7 +119,6 @@ func (s *session) installTarget(evt proto.TargetAttachedToTarget) (err error) {
 		}
 		create(tree.FrameTree)
 	}
-	_ = s.call(sid, "Target.setAutoAttach", autoAttach(), nil)
 	if info.Type == "page" {
 		p, err := s.browser.PageFromTarget(info.TargetID)
 		if err != nil {
