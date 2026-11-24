@@ -4,6 +4,30 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.22.7
+
+- **Web automation records and replays a workflow in a dedicated browser profile**: the official Web automation app can record the clicks, typing and navigation you make in a visible browser window, then replay that sequence step by step or in one run, with a breakpoint or a confirmation before anything consequential. It needs the optional browser component, which the app installs from its own dialog on Mac (Apple silicon and Intel) and Windows; the component never downloads a browser or uses your everyday profile, and profiles, cookies, passwords and downloads stay on this computer.
+- **Agents can use a computer's browser through the Hub**: a computer's owner can approve a short-lived grant for a dedicated browser profile, and an agent can then list that profile, run a script version the owner reviewed, and check, pause or cancel the run (`browser.profiles.list`, `browser.script.run`, `browser.run.status/resume/cancel`). Passwords and other secret parameters are supplied for each run; screenshots and results come back as private files. This needs the Hub at 0.22.7.
+- **Older local files appear only when there is something to recover**: the page recovery entry is shown only for an app that actually has old data, instead of on every page.
+- **Page records can be queried on the Hub**: the CLI and the page bridge can ask for a filtered, paged view of a page's collection instead of loading every record; an older Hub keeps answering with the full collection and the client filters it itself.
+- **Replies type out as they are written**: text and thinking arrive piece by piece with a caret; a run's whole process folds into one line (process · 32 steps · 12 minutes), opens while it runs and folds once the answer is in; plan items fade in as they are added; Enter adds to your newest open task.
+- **The App guide links to Telegram and Discord**: the README and the in-app guide's Community page now list the Telegram and Discord groups.
+- **Android**: appearance settings persist across restarts, and a page can save its downloads to the device with the system save dialog.
+
+Upgrade: this App release needs no Hub upgrade for recording and replaying, the recovery entry, page queries or the interface changes. Agents driving a computer's browser through the Hub need Hub 0.22.7: on the server run `sudo myco upgrade`, then update the runner/CLI on each computer.
+
+**中文**
+
+- **网页自动化在专用浏览器资料里录制和回放**：官方「网页自动化」应用可以在一个看得见的浏览器窗口里录制你的点击、输入和跳转，然后逐步或整段回放这个流程；在提交等有后果的步骤前可以加断点或确认。它需要可选的浏览器组件，应用会从自己的确认对话框里安装（Mac 的 Apple 芯片和 Intel、Windows）；组件不会下载浏览器，也不会使用你日常的资料，资料、Cookie、密码和下载文件都留在这台电脑上。
+- **agent 可以通过 Hub 使用某台电脑的浏览器**：电脑主人可以为专用的浏览器资料批准一个短期授权，agent 随后可以列出这个资料、运行主人审阅过的脚本版本，并查看、暂停或取消这次运行（`browser.profiles.list`、`browser.script.run`、`browser.run.status/resume/cancel`）。密码等秘密参数在每次运行时单独提供；截图和结果作为私有文件返回。这项功能需要 Hub 0.22.7。
+- **旧本机文件只在确实有可恢复数据时出现**：页面恢复入口只对存在旧数据的应用显示，不再出现在每个页面上。
+- **页面记录可以在 Hub 上查询**：CLI 和页面桥可以按条件、分页读取一个页面的集合，不必把全部记录都加载下来；旧 Hub 仍返回完整集合，由客户端自己筛选。
+- **回复随写随出**：文字和思考会带着光标一段段出现；一次运行的全部过程折叠成一行（过程 · 32 步 · 12 分钟），运行中展开、拿到回答后折叠；计划项加入时淡入；回车会追加到你最新的未完成任务的下面。
+- **App 指南加了 Telegram 和 Discord**：README 和 App 内指南的「社区」页现在列出 Telegram 和 Discord 群。
+- **Android**：外观设置（如主题）重启后保留，页面可以用系统的保存对话框把下载文件存到本机。
+
+升级：这个 App 版本本身不需要升级 Hub 就能录制回放、使用恢复入口、页面查询和界面改动。让 agent 通过 Hub 使用某台电脑的浏览器需要 Hub 0.22.7：在服务器上运行 `sudo myco upgrade`，然后更新每台电脑上的 runner/CLI。
+
 ## v0.22.6
 
 - **Each page keeps its own local storage**: in the desktop App every workspace, account and page now opens on its own local address, so what a page saves (a draft, a sign-in, an app's data) is no longer visible to another page or another workspace. A page keeps that address across App restarts, so it reopens with its data.
