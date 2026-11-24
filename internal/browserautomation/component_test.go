@@ -1,0 +1,173 @@
+package browserautomation
+
+import (
+	"archive/zip"
+	"bufio"
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+	"time"
+)
+
+// The test executable can act as an actual child process. This exercises
+// handshake/EOF/environment boundaries on native Windows as well as macOS.
+func TestMain(m *testing.M) {
+	if filepath.Base(os.Args[0]) == program("myco-browser") {
+		var cfg struct {
+			Secret string `json:"secret"`
+			Dir    string `json:"data_dir"`
+		}
+		reader := bufio.NewReader(os.Stdin)
+		line, err := reader.ReadBytes('\n')
+		if err != nil || json.Unmarshal(line, &cfg) != nil || len(cfg.Secret) < 32 || !filepath.IsAbs(cfg.Dir) {
+			os.Exit(3)
+		}
+		listener, err := net.Listen("tcp4", "127.0.0.1:0")
+		if err != nil {
+			os.Exit(4)
+		}
+		server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("Authorization") != "Bearer "+cfg.Secret || r.Header.Get("X-Myco-Scope") == "" {
+				http.Error(w, "denied", 401)
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]any{"protocol": Protocol, "version": ComponentVersion, "environment_clean": os.Getenv("BROWSER_FIXTURE_PRIVATE") == ""})
+		})}
+		json.NewEncoder(os.Stdout).Encode(map[string]any{"address": listener.Addr().String(), "protocol": Protocol})
+		go func() { io.Copy(io.Discard, reader); server.Close() }()
+		server.Serve(listener)
+		os.Exit(0)
+	}
+	os.Exit(m.Run())
+}
+func archive(t *testing.T, files map[string]string) []byte {
+	t.Helper()
+	var b bytes.Buffer
+	z := zip.NewWriter(&b)
+	for name, data := range files {
+		w, err := z.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.Write([]byte(data))
+	}
+	if err := z.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return b.Bytes()
+}
+func TestArchiveBoundary(t *testing.T) {
+	for _, files := range []map[string]string{{"../escape": "bad"}, {"x\\escape": "bad"}, {"LICENSE": "missing engine"}, {program("myco-browser"): "engine", "script.sh": "unexpected"}} {
+		if err := extractComponent(archive(t, files), t.TempDir()); err == nil {
+			t.Fatal("unsafe or incomplete archive accepted")
+		}
+	}
+	if err := extractComponent(archive(t, map[string]string{program("myco-browser"): "fixture", "LICENSE.txt": "MIT"}), t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+}
+func TestAbsentDoesNotCreateFilesOrInstall(t *testing.T) {
+	c := &Component{Home: t.TempDir()}
+	s := c.Status()
+	if s.Installed || s.Running {
+		t.Fatal(s)
+	}
+	if _, err := os.Stat(filepath.Join(c.Home, ".myco")); !os.IsNotExist(err) {
+		t.Fatal("status wrote private storage")
+	}
+	if c.EnsureRunning(context.Background()) == nil {
+		t.Fatal("started an absent component")
+	}
+}
+func TestChildHandshakeAndStop(t *testing.T) {
+	c := &Component{Home: t.TempDir()}
+	if err := os.MkdirAll(c.dir(), 0700); err != nil {
+		t.Fatal(err)
+	}
+	binary, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(binary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(c.dir(), program("myco-browser")), data, 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("BROWSER_FIXTURE_PRIVATE", "never forward")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	defer c.Stop()
+	if err = c.EnsureRunning(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var status struct {
+		Protocol int  `json:"protocol"`
+		Clean    bool `json:"environment_clean"`
+	}
+	if err = c.Call(ctx, "page-a/instance-a", "GET", "/status", nil, &status); err != nil || status.Protocol != Protocol || !status.Clean {
+		t.Fatalf("child status/environment: %+v %v", status, err)
+	}
+	c.Stop()
+	if c.Status().Running {
+		t.Fatal("stdin EOF did not stop child")
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+func TestInstallChecksDigestAndKeepsPrivateProfiles(t *testing.T) {
+	if !browserSupported() {
+		t.Skip("component packages are Mac/Windows only")
+	}
+	for _, valid := range []bool{false, true} {
+		t.Run(fmt.Sprint(valid), func(t *testing.T) {
+			c := &Component{Home: t.TempDir()}
+			name := "myco-browser_" + runtime.GOOS + "_" + runtime.GOARCH + ".zip"
+			data := archive(t, map[string]string{program("myco-browser"): "fixture", "LICENSE.txt": "MIT"})
+			sum := sha256.Sum256(data)
+			digest := hex.EncodeToString(sum[:])
+			if !valid {
+				digest = strings.Repeat("0", 64)
+			}
+			c.HTTP = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				body := data
+				if strings.HasSuffix(r.URL.Path, "SHA256SUMS") {
+					body = []byte(digest + "  " + name + "\n")
+				}
+				return &http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewReader(body)), Request: r}, nil
+			})}
+			err := c.Install(context.Background())
+			if valid && err != nil {
+				t.Fatal(err)
+			}
+			if !valid && (err == nil || c.Status().Installed) {
+				t.Fatal("bad digest installed")
+			}
+			if valid {
+				profiles := filepath.Join(c.Home, ".myco", "browser", "profiles", "p_fixture")
+				os.MkdirAll(profiles, 0700)
+				os.WriteFile(filepath.Join(profiles, "marker"), []byte("keep"), 0600)
+				if err = c.Remove(); err != nil {
+					t.Fatal(err)
+				}
+				if _, err = os.Stat(filepath.Join(profiles, "marker")); err != nil {
+					t.Fatal("uninstall deleted sign-ins")
+				}
+			}
+		})
+	}
+}

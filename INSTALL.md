@@ -21,6 +21,8 @@ In this guide, `<HUB_URL>` is the Hub's address, for example `https://1-2-3-4.ss
 > - Check the exit code of every command (see [section 6](#6-command-reference)). On an error, follow the `suggestion` in the JSON error. Do not guess.
 > - If you are unsure of something (for example, you can't find the session ID), report that plainly. **Do not make things up.**
 
+The optional **Web automation** application uses a dedicated local Chrome profile (Windows falls back to Edge). Open it in the desktop App and choose **Install browser component**; the App asks before downloading the separate, SHA256-verified component. It never uses your everyday Chrome profile or downloads a browser. See [browser component setup and limits](docs/browser-component.md).
+
 ---
 
 ## Recommended: start with the App (Mac / Windows / Linux)

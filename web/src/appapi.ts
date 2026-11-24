@@ -10,6 +10,10 @@ export interface NoticeState {
   hubs: Record<string, { supported: boolean; badge: number; error?: string }>;
   badge: number;
 }
+/** The optional local browser component, without credentials or profile paths. */
+export interface BrowserProfile { id: string; name: string; running: boolean; agents: boolean }
+export interface BrowserStatus { protocol: number; version: string; installed: boolean; supported: boolean; reason?: string; browsers: string[]; machine: string; profiles: BrowserProfile[] }
+
 export interface Hub {
   id: string;
   name: string;
@@ -561,8 +565,8 @@ export interface ConnectJob {
  *  not cut short: some take minutes (a session starting, an upload). */
 const READ_TIMEOUT_MS = 60_000;
 
-async function request<T>(method: string, path: string, body?: unknown, signal?: AbortSignal, timeoutMs?: number): Promise<T> {
-  const headers: Record<string, string> = { Accept: "application/json" };
+async function request<T>(method: string, path: string, body?: unknown, signal?: AbortSignal, timeoutMs?: number, extraHeaders?: Record<string, string>): Promise<T> {
+  const headers: Record<string, string> = { Accept: "application/json", ...extraHeaders };
   const raw = body instanceof Blob;
   if (body !== undefined) headers["Content-Type"] = raw ? (body.type || "application/octet-stream") : "application/json";
   const limit = timeoutMs ?? (method === "GET" ? READ_TIMEOUT_MS : 0);
@@ -1012,6 +1016,10 @@ export const appApi = {
       bytes instanceof Blob ? bytes : new Blob([bytes as BlobPart], { type: type || "application/octet-stream" })),
   // What a page (an app) uses of this computer: myco.os.* (App backend
   // oscalls.go; only an App with a local install answers).
+  browserConfirm: (hubId: string, page: string, instance: string, action: string, args: unknown) =>
+    request<{ confirmation: string }>("POST", `app/hubs/${enc(hubId)}/browser/confirm`, { page, instance, action, args }, undefined, 30_000, { "X-Myco-Browser-Owner": "1" }),
+  browserCall: <T = unknown>(hubId: string, page: string, instance: string, action: string, args: unknown = {}, confirmation = "") =>
+    request<T>("POST", `app/hubs/${enc(hubId)}/browser`, { page, instance, action, args, confirmation }, undefined, action === "install" ? 600_000 : action === "pick" ? 150_000 : 45_000),
   remoteCall: <T = unknown>(hubId: string, page: string, action: string, args: unknown = {}, instance: string = "") =>
     request<T>("POST", `app/hubs/${enc(hubId)}/remote`, {page, instance, action, args}, undefined, action === "install" ? 600_000 : 30_000),
   osList: () => request<OsList>("GET", "app/os"),

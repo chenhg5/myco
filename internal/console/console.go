@@ -160,6 +160,7 @@ func randomHex(n int) string {
 type Backend struct {
 	backupLoop    sync.Once // the hourly copy of backups to this computer
 	remoteDesktop remoteDesktop
+	browser       browserState
 	actionHosts   actionHosts // agent actions on this computer (action_host.go)
 	pageRender    pageRender  // pages rendered for agents (page_render.go)
 	// connects are computers being connected over SSH or WSL.
@@ -282,6 +283,7 @@ func (b *Backend) Handler() http.Handler {
 		m.HandleFunc("POST /app/local/shell-access", b.postShellAccess)
 		// (pages using this computer: only an App on it)
 		b.osRoutes(m)
+		b.browserRoutes(m)
 		b.grantRoutes(m)
 		m.HandleFunc("GET /app/local/agents", b.getLocalAgents)
 		b.remoteRoutes(m)

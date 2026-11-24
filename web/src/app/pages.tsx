@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { AppWindow, Check, Copy, ExternalLink, Link2, Lock, Monitor, PanelRight, PanelRightClose, Pin as PinIcon, PinOff, Radio, RotateCw, Users, X } from "lucide-react";
 import type { Page, PageOpen } from "@/api";
-import { ApiError, appApi, isOldHub, type OsAnswer, type OsConsent } from "@/appapi";
+import { ApiError, appApi, isOldHub, type OsAnswer, type OsConsent, type BrowserStatus } from "@/appapi";
 import { copyText } from "@/app/copy";
 import { useContextMenu, type MenuItem } from "@/app/ContextMenu";
 import { DockPanel } from "@/app/preview";
@@ -438,7 +438,7 @@ function PageView({ target, open, active, reload, onMeta }: {
   const [asking, setAsking] = useState<{ text: string; to: string; answer: (ok: boolean) => void } | null>(null);
   // a page wanting a group of the computer's capabilities the person has not allowed yet
   const [consent, setConsent] = useState<(OsConsent & { name: string; answer: (a: OsAnswer) => void }) | null>(null);
-  const [remoteAsking, setRemoteAsking] = useState<{text:string; answer:(ok:boolean)=>void} | null>(null);
+  const [remoteAsking, setRemoteAsking] = useState<{text:string; title?:string; answer:(ok:boolean)=>void} | null>(null);
   const remoteConsent = useRef<((ok:boolean)=>void) | null>(null);
   // (while the page is there: tucked away, it still runs and is answered,
   // and what it started on the computer goes on)
@@ -549,6 +549,36 @@ function PageView({ target, open, active, reload, onMeta }: {
       }
       if (method.startsWith("projectFiles.")) return answerProjectFiles(t.hubId, p, method, args);
       if (method.startsWith("data.") || method === "download") return answerData(t, method, args);
+      if (method === "browser.call") {
+        const action = String(args.action || "");
+        const input = (args.args && typeof args.args === "object" ? args.args : {}) as Record<string, unknown>;
+        const who = { hub: t.hubId, id: t.id, name: o?.name || p?.name || "" };
+        if (action === "install" || (action === "profiles.allowAgents" && input.allowed === true)) {
+          let text = L("安装浏览器组件，用 myco 专用的浏览器资料录制和回放网页操作。它不使用你日常的 Chrome 资料，也不会自动开放 agent 控制。", "Install the browser component to record and replay web actions in a dedicated myco browser profile. It does not use your everyday Chrome profile or enable agent control automatically.");
+          if (action === "profiles.allowAgents") {
+            const status = await withConsent(who, () => appApi.browserCall<BrowserStatus>(t.hubId, t.id, remoteInstance, "status"));
+            const profile = status.profiles.find(item => item.id === String(input.id || ""));
+            if (!profile) throw Object.assign(new Error(L("找不到这个浏览器资料", "Browser profile not found")), { code: "not_found" });
+            text = L(`允许 agent 申请使用「${profile.name}」浏览器资料？当前版本只保存本机偏好；开放控制仍需后续单独授权。`, `Allow agents to request access to the “${profile.name}” browser profile? This version only saves your local preference; control still requires a separate grant.`);
+          }
+          if (closed) throw Object.assign(new Error("cancelled"), { code: "cancelled" });
+          if (remoteConsent.current) throw Object.assign(new Error(L("请先处理当前的授权请求", "Finish the current permission request first")), { code: "busy" });
+          const accepted = await new Promise<boolean>(resolve => {
+            remoteConsent.current = resolve;
+            setRemoteAsking({ text, title: L("浏览器自动化授权", "Browser automation permission"), answer: resolve });
+          });
+          remoteConsent.current = null;
+          setRemoteAsking(null);
+          if (!accepted || closed) throw Object.assign(new Error(L("已取消", "Cancelled")), { code: "cancelled" });
+          // Minted after the host modal, never supplied by or returned to the child.
+          const approved = await appApi.browserConfirm(t.hubId, t.id, remoteInstance, action, input);
+          if (closed) throw Object.assign(new Error("cancelled"), { code: "cancelled" });
+          return withConsent(who, () => appApi.browserCall(t.hubId, t.id, remoteInstance, action, input, approved.confirmation));
+        }
+        const result = await withConsent(who, () => appApi.browserCall(t.hubId, t.id, remoteInstance, action, input));
+        if (closed) throw Object.assign(new Error("cancelled"), { code: "cancelled" });
+        return result;
+      }
       if (method === "remote.call") {
         const action = String(args.action || "");
         const remoteArgs = (args.args || {}) as Record<string, unknown>;
@@ -683,6 +713,7 @@ function PageView({ target, open, active, reload, onMeta }: {
       closed = true;
       remoteConsent.current?.(false);remoteConsent.current = null;
       const t = target.kind === "page" ? target : null;
+      if (t) void appApi.browserCall(t.hubId, t.id, remoteInstance, "close").catch(() => undefined);
       if (t && remoteUsed) void appApi.remoteCall(t.hubId, t.id, "close", {}, remoteInstance).catch(() => undefined);
       for (const id of jobs) void appApi.osCancel(id).catch(() => undefined);
     };
@@ -818,7 +849,7 @@ function PageView({ target, open, active, reload, onMeta }: {
         </div>
       )}
     <Modal className="pg-remote-ask" open={!!remoteAsking} onOpenChange={(o) => {if (!o) remoteAsking?.answer(false);}}
-      title={L(`允许「${opened?.name || page?.name || "此应用"}」使用远程桌面？`, `Allow “${opened?.name || page?.name || "this app"}” to use Remote Desktop?`)} description={remoteAsking?.text || ""}>
+      title={remoteAsking?.title || L(`允许「${opened?.name || page?.name || "此应用"}」使用远程桌面？`, `Allow “${opened?.name || page?.name || "this app"}” to use Remote Desktop?`)} description={remoteAsking?.text || ""}>
       <div className="app-modal-actions">
         <button type="button" className="app-btn" onClick={() => remoteAsking?.answer(false)}>{L("不允许", "Don't allow")}</button>
         <button type="button" className="app-btn app-btn-primary" onClick={() => remoteAsking?.answer(true)}>{L("允许", "Allow")}</button>
@@ -899,6 +930,7 @@ export function osWant(group: string, host?: string): { zh: string; en: string }
     case "network": return host ? { zh: `访问 ${host}`, en: `reach ${host}` } : { zh: "联网", en: "use the network" };
     case "ssh": return { zh: "连接你保存的服务器", en: "connect to servers you saved" };
     case "database": return { zh: "连接你保存的数据库", en: "connect to databases you saved" };
+    case "browser": return { zh: "在 myco 专用浏览器资料中录制和运行网页操作", en: "record and run web actions in dedicated myco browser profiles" };
     case "proxy": return { zh: "控制这台电脑上的代理", en: "control this computer's proxy" };
     default: return { zh: "查看这台电脑的信息（系统、磁盘、进程、已装的应用）", en: "see this computer's details (system, disks, processes, apps)" };
   }

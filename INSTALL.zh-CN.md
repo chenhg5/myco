@@ -21,6 +21,8 @@
 > - 每条命令都看退出码（见[第 6 节](#6-命令速查)）。出错时按 JSON 错误里的 `suggestion` 处理，不要猜。
 > - 不确定的东西（比如找不到会话 ID）就如实报告，**不要编造**。
 
+可选的「网页自动化」应用使用本机专用 Chrome 资料（Windows 无 Chrome 时使用 Edge）。在桌面 App 内打开应用并点「安装浏览器组件」，App 确认后才下载单独组件并校验 SHA256；不会访问日常 Chrome 资料，也不会下载浏览器。详见[浏览器组件的安装与限制](docs/browser-component.md)。
+
 ---
 
 ## 推荐：先装 App（Mac / Windows / Linux）

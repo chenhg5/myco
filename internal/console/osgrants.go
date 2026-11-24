@@ -69,6 +69,8 @@ func osGroupOf(name string) string {
 	switch {
 	case strings.HasPrefix(name, "system."):
 		return "system"
+	case strings.HasPrefix(name, "browser."):
+		return "browser"
 	case strings.HasPrefix(name, "db."):
 		return "database"
 	}
@@ -79,7 +81,7 @@ func osGroupOf(name string) string {
 var pickFree = map[string]bool{"fs.pick": true, "fs.saveAs": true}
 
 // Groups that may only be allowed for this run of the App, never always.
-var osOnceOnly = map[string]bool{"exec": true, "files.delete": true, "screen": true}
+var osOnceOnly = map[string]bool{"exec": true, "files.delete": true, "screen": true, "browser": true}
 
 type osGrant struct {
 	Hub    string   `json:"hub"`
@@ -527,6 +529,9 @@ func (b *Backend) grantRoutes(m *http.ServeMux) {
 		if answer == "always" {
 			g.saveLocked()
 		}
+		if answer == "deny" && in.Group == "browser" {
+			b.stopBrowserPage(in.Hub, in.Page)
+		}
 		writeJSON(w, http.StatusOK, map[string]any{"group": in.Group, "answer": answer})
 	})
 	m.HandleFunc("DELETE /app/os/grants", func(w http.ResponseWriter, r *http.Request) {
@@ -547,6 +552,9 @@ func (b *Backend) grantRoutes(m *http.ServeMux) {
 				}
 			}
 			g.saveLocked()
+		}
+		if group == "" || group == "browser" {
+			b.stopBrowserPage(hub, page)
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})

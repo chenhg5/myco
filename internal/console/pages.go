@@ -263,7 +263,7 @@ func (b *Backend) pageHandler(ps *pageListener) http.Handler {
 		if r.URL.Path == "/__myco/page.js" {
 			h.Set("Content-Type", "text/javascript; charset=utf-8")
 			h.Set("Cache-Control", "no-cache")
-			_, _ = io.WriteString(w, pageHelperJS)
+			_, _ = io.WriteString(w, b.browserPageScript())
 			return
 		}
 		rest, ok := strings.CutPrefix(r.URL.Path, "/p/")
@@ -485,7 +485,7 @@ func (b *Backend) liveHandler(hubID, pageID string, port int) http.Handler {
 		if r.URL.Path == "/__myco/page.js" {
 			w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 			w.Header().Set("Cache-Control", "no-cache")
-			_, _ = io.WriteString(w, pageHelperJS)
+			_, _ = io.WriteString(w, b.browserPageScript())
 			return
 		}
 		rp.ServeHTTP(w, r)

@@ -276,7 +276,7 @@
     // "download-media": myco.download saves video and sound too (mp4, …);
     // "os": myco.os (this computer: files, commands, the screen…).
     // "net-media": myco.media.url plays a public audio or video address.
-    features: ["download-media", "os", "ssh", "preferences", "remote", "page-actions", "net-media", "data-reset"],
+    features: ["download-media", "os", "ssh", "preferences", "remote", "page-actions", "net-media", "data-reset"] /*__MYCO_BROWSER_FEATURE__*/,
     // An address for <audio> / <video> of a public http(s) file (a podcast
     // episode): the App streams it, with seeking, since the page itself
     // cannot load media from the internet. Private addresses are refused.
@@ -288,6 +288,37 @@
     },
     os: os,
     // Remote sessions are separate from local OS calls and need App consent.
+    browser: (function () {
+      function invoke(action, args) {
+        return ready.then(function () { return call("browser.call", {action:action,args:args||{}}, action === "install" ? 600000 : action === "pick" ? 150000 : 45000); });
+      }
+      return {
+        status:function(){return invoke("status");},
+        install:function(){return invoke("install");},
+        profiles:{
+          create:function(name){return invoke("profiles.create",{name:String(name)});},
+          open:function(id){return invoke("profiles.open",{id:String(id)});},
+          allowAgents:function(id,allowed){return invoke("profiles.allowAgents",{id:String(id),allowed:allowed===true});}
+        },
+        record:{
+          start:function(options){return invoke("record.start",options);},
+          events:function(id,after){return invoke("record.events",{id:String(id),after:after});},
+          stop:function(id){return invoke("record.stop",{id:String(id)});}
+        },
+        runs:{
+          start:function(options){return invoke("runs.start",options);},
+          get:function(id,after){return invoke("runs.get",{id:String(id),after:after});},
+          control:function(id,action,choice){return invoke("runs.control",{id:String(id),action:action,choice:choice});}
+        },
+        locate:function(options){return invoke("locate",options);},
+        pick:function(options){return invoke("pick",options);},
+        snapshot:function(id){return invoke("snapshot",{id:String(id)}).then(function(r){
+          var data=atob(r.base64),bytes=new Uint8Array(data.length);
+          for(var i=0;i<data.length;i++)bytes[i]=data.charCodeAt(i);
+          return new Blob([bytes],{type:r.type});
+        });}
+      };
+    })(),
     remote: {call: function(action, args) {
       return ready.then(function() { return call("remote.call", {action:action, args:args || {}}, action === "install" ? 600000 : 30000); });
     }},
