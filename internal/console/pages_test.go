@@ -183,6 +183,10 @@ func TestPageRecoveryUsesRetiredOrigin(t *testing.T) {
 	if code != 200 || !strings.HasPrefix(recover["url"].(string), prefix) {
 		t.Fatalf("recovery should use the retired origin: %d %s", code, raw)
 	}
+	code, later, raw := r.do("POST", "/app/page-storage-recovery", nil)
+	if code != 200 || later["url"] != recover["url"] {
+		t.Fatalf("a new inventory request invalidated the open recovery URL: %d %s", code, raw)
+	}
 	res, err := http.Get(recover["url"].(string))
 	if err != nil {
 		t.Fatal(err)

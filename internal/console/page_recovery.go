@@ -43,6 +43,10 @@ func (s *pageServer) openRecovery() (string, error) {
 		s.recovery = &http.Server{Handler: http.HandlerFunc(s.serveRecovery), ReadHeaderTimeout: 10 * time.Second}
 		go func(server *http.Server) { _ = server.Serve(ln) }(s.recovery)
 	}
+	// A background probe must not revoke the URL of an open recovery dialog.
+	if s.recoveryTicket != "" && time.Until(s.recoveryExpiry) > time.Minute {
+		return fmt.Sprintf("http://127.0.0.1:%d/__myco/recover/%s/", s.legacyPort, s.recoveryTicket), nil
+	}
 	var random [24]byte
 	if _, err := rand.Read(random[:]); err != nil {
 		return "", err

@@ -738,6 +738,105 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page,chat.getByRole("button",{name:"关掉这一栏"}));
     });
 
+    await step("网页 · 恢复旧本机文件", async () => {
+      const zh = scheme === "dark";
+      await page.goto(`${r.base}/?lang=${zh ? "zh" : "en"}`);
+      await page.locator(".app-shell").waitFor();
+      const recoveryOrigin = `http://${HOST}:${mockPort()}`;
+      const recovery = `${recoveryOrigin}/__myco/recovery-test/`;
+      let scans = 0;
+      await page.route("**/app/hubs/*/pages/pg_release", async route => {
+        const response = await route.fetch();
+        await route.fulfill({ response, json: { ...await response.json(), template: { id: "tp_myco_photo", name: "Photo", version: "1.0.0" } } });
+      });
+      await page.route("**/app/hubs/*/pages/pg_release/open", async route => {
+        const response = await route.fetch();
+        await route.fulfill({ response, json: { ...await response.json(), recovery: true } });
+      });
+      await page.route("**/app/hubs/*/browser", route => route.fulfill({ json: { ok: true } }));
+      await page.route("**/app/page-storage-recovery", route => route.fulfill({ json: { url: recovery } }));
+      await page.route(`${recovery}**`, async route => {
+        const url = new URL(route.request().url());
+        if (url.pathname.endsWith("/seed")) return route.fulfill({ contentType: "text/html", body: "<!doctype html><title>Seed</title>" });
+        if (url.pathname.endsWith("/recover.js")) return route.fulfill({ contentType: "text/javascript", body: await readFile(path.join(WEB, "../internal/console/page_recovery.js")) });
+        if (url.searchParams.has("probe")) scans++;
+        return route.fulfill({ contentType: "text/html", body: await readFile(path.join(WEB, "../internal/console/page_recovery.html")) });
+      });
+      const panel = page.locator(".pg-panel");
+      const more = panel.getByRole("button", { name: zh ? "更多页面操作" : "More page actions" });
+      const recover = zh ? "恢复旧本机文件" : "Recover older local files";
+      const close = zh ? "关闭" : "Close";
+      const openPage = () => page.evaluate(() => window.dispatchEvent(new CustomEvent("myco-open-page", {
+        detail: { kind: "page", hubId: "hub_studio", id: "pg_release" },
+      })));
+      const closePage = async () => {
+        await panel.getByRole("button", { name: close, exact: true }).click();
+        await panel.waitFor({ state: "detached" });
+      };
+      await openPage();
+      await page.frameLocator(".pg-frame").locator("h1").waitFor();
+      for (let i = 0; !scans && i < 30; i++) await page.waitForTimeout(100);
+      if (scans !== 1) throw Error("host should probe the retired origin once");
+      await page.locator('iframe[title="Recovery inventory"][data-checked="true"]').waitFor({ state: "attached" });
+      if (await more.count() || await panel.locator(".fp-title-hint").count()) throw Error("empty legacy storage must not show a recovery menu or hint");
+      await shot(page, size, scheme, "page-recovery-empty");
+      await closePage();
+
+      const seedNavigation = page.waitForEvent("framenavigated", frame => frame.url() === recovery + "seed");
+      await page.evaluate(url => {
+        const frame = document.createElement("iframe"); frame.id = "recovery-seed"; frame.hidden = true; frame.src = url; document.body.append(frame);
+      }, recovery + "seed");
+      await (await seedNavigation).evaluate(() => Promise.all(["myco-photo", "myco-video"].map(name => new Promise((resolve, reject) => {
+        const request = indexedDB.open(name, 1);
+        request.onupgradeneeded = () => request.result.createObjectStore("files");
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          const db = request.result;
+          const tx = db.transaction("files", "readwrite");
+          tx.objectStore("files").put({ file: new Blob(["synthetic fixture"]), name: name + ".png" }, "fixture");
+          tx.oncomplete = () => { db.close(); resolve(); };
+          tx.onabort = () => reject(tx.error);
+        };
+      }))));
+      await page.locator("#recovery-seed").evaluate(node => node.remove());
+      await openPage();
+      await more.waitFor();
+      await panel.locator(".fp-title-hint").waitFor();
+      if (await panel.locator(".pg-new").count()) throw Error("recovery must only appear in the title bar");
+      const show = async () => {
+        await more.click();
+        await page.getByRole("menuitem", { name: recover, exact: true }).click();
+        const dialog = page.getByRole("dialog", { name: recover, exact: true });
+        await dialog.getByText("myco-photo.png", { exact: false }).waitFor();
+        if (await dialog.locator("select option").count() !== 2 || await dialog.locator("select").inputValue() !== "1") throw Error("the viewer should select Photo and only list sources with data");
+        return dialog;
+      };
+      let dialog = await show();
+      await shot(page, size, scheme, "page-recovery-available");
+      await dialog.getByRole("button", { name: close, exact: true }).click();
+      await dialog.waitFor({ state: "detached" });
+      dialog = await show();
+      await page.keyboard.press("Escape");
+      await dialog.waitFor({ state: "detached" });
+      dialog = await show();
+      const [download] = await Promise.all([
+        page.waitForRequest(request => request.method() === "POST" && new URL(request.url()).pathname === "/app/page-download", { timeout: 10_000 }),
+        dialog.getByRole("button", { name: zh ? "保存副本" : "Save copy", exact: true }).click({ timeout: 7_000 }),
+      ]);
+      if (!download.url().endsWith("name=myco-photo.png") || download.postData() !== "synthetic fixture") throw Error("could not save the original");
+      await dialog.getByRole("button", { name: zh ? "标记已恢复" : "Mark recovered", exact: true }).click();
+      await more.waitFor({ state: "detached" });
+      await dialog.getByRole("button", { name: close, exact: true }).click();
+      await closePage();
+      const previousScans = scans;
+      await openPage();
+      for (let i = 0; scans === previousScans && i < 30; i++) await page.waitForTimeout(100);
+      if (scans !== previousScans + 1) throw Error("reopening should check once");
+      await page.locator('iframe[title="Recovery inventory"][data-checked="true"]').waitFor({ state: "attached" });
+      if (await more.count() || await panel.locator(".fp-title-hint").count()) throw Error("the recovered app must stay hidden after reopening");
+      await closePage();
+    });
+
     // Several pages open: a tab each, under the panel's head; opening one
     // already open shows it; each keeps its page while another is shown.
     if (!narrow) await step("网页 · 多个标签", async () => {

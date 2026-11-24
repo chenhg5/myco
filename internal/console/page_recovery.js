@@ -1,14 +1,15 @@
 // A locally served, read-only exporter on the retired browser origin.
 "use strict";
-const zh = new URLSearchParams(location.search).get("myco_lang") === "zh";
+const params = new URLSearchParams(location.search);
+const zh = params.get("myco_lang") === "zh";
 const t = (en, cn) => zh ? cn : en;
 document.documentElement.lang = zh ? "zh-CN" : "en";
 const sources = [
-  ["myco-video", "files", t("Video Editor", "视频剪辑")],
-  ["myco-photo", "files", t("Photo", "修图")],
-  ["myco-motion", "files", t("Motion", "动效")],
-  ["myco-reader", "books", t("Reader", "阅读")],
-  ["myco-reader", "settings", t("Reader settings", "阅读设置")],
+  ["tp_myco_video", "myco-video", "files", t("Video Editor", "视频剪辑")],
+  ["tp_myco_photo", "myco-photo", "files", t("Photo", "修图")],
+  ["tp_myco_motion", "myco-motion", "files", t("Motion", "动效")],
+  ["tp_myco_reader", "myco-reader", "books", t("Reader", "阅读")],
+  ["tp_myco_reader", "myco-reader", "settings", t("Reader settings", "阅读设置")],
 ];
 const select = document.getElementById("source");
 const list = document.getElementById("files");
@@ -20,7 +21,15 @@ document.getElementById("intro").textContent = t(
 );
 document.getElementById("label").textContent = t("Application ", "应用 ");
 more.textContent = t("Show more", "显示更多");
-sources.forEach(([, , label], index) => select.add(new Option(label, index)));
+let completed = new Set();
+let hostOrigin;
+
+const message = (type, payload) => {
+  // A desktop shell can use a custom scheme with an opaque origin. The
+  // parent window itself is still the one that configured this ticketed frame.
+  if (hostOrigin) parent.postMessage({ type, ...payload }, hostOrigin === "null" ? "*" : hostOrigin);
+};
+const keyOf = (source, key) => JSON.stringify([source[1], source[2], key]);
 
 function openExisting(name) {
   return new Promise((resolve, reject) => {
@@ -37,7 +46,8 @@ function openExisting(name) {
 }
 
 // Browse only a bounded group of records and hold no copies of media bytes.
-function batch(db, store, after) {
+function batch(db, source, after) {
+  const store = source[2];
   return new Promise((resolve, reject) => {
     const tx = db.transaction(store, "readonly");
     const request = tx.objectStore(store).openCursor(after === undefined ? null : IDBKeyRange.lowerBound(after, true));
@@ -47,6 +57,7 @@ function batch(db, store, after) {
     request.onsuccess = () => {
       const row = request.result;
       if (!row) return;
+      if (completed.has(keyOf(source, row.key))) { row.continue(); return; }
       if (rows.length === 24) { hasMore = true; return; }
       const value = row.value;
       const file = value instanceof Blob ? value : value?.file;
@@ -81,23 +92,56 @@ let cursor;
 const unavailable = () => {
   status.textContent = t("Could not read the old storage. Reopen this panel to retry.", "无法读取旧库。请重新打开此面板重试。");
 };
+
+async function hasPending(source) {
+  const [, name, store] = source;
+  let db;
+  try {
+    db = await openExisting(name);
+    if (!db?.objectStoreNames.contains(store)) return false;
+    return await new Promise((resolve, reject) => {
+      const request = db.transaction(store, "readonly").objectStore(store).openKeyCursor();
+      request.onsuccess = () => {
+        const row = request.result;
+        if (!row) resolve(false);
+        else if (!completed.has(keyOf(source, row.primaryKey))) resolve(true);
+        else row.continue();
+      };
+      request.onerror = () => reject(request.error);
+    });
+  } finally { db?.close(); }
+}
+
+async function browse(preferred) {
+  const found = await Promise.all(sources.map(source => hasPending(source).catch(() => false)));
+  const available = sources.filter((_, index) => found[index]);
+
+  select.replaceChildren();
+  for (const source of available) select.add(new Option(source[3], String(sources.indexOf(source))));
+  select.parentElement.hidden = available.length === 0;
+  const match = available.find(source => source === preferred) || available.find(([id]) => id === preferred) || available[0];
+  if (match) select.value = String(sources.indexOf(match));
+  await read(false);
+}
+
 async function read(append) {
   const run = ++generation;
-  const [name, store] = sources[Number(select.value)];
+  const source = select.value === "" ? undefined : sources[Number(select.value)];
   if (!append) { list.replaceChildren(); cursor = undefined; more.hidden = true; }
+  if (!source) {
+    status.textContent = t("No files left to recover.", "没有待恢复的文件。");
+    return;
+  }
+  const [, name, store] = source;
   let db;
   try {
     db = await openExisting(name);
     if (generation !== run) return;
-    if (!db?.objectStoreNames.contains(store)) {
-      status.textContent = t("No old data for this app.", "这个应用没有旧数据。");
-      return;
-    }
-    const result = await batch(db, store, cursor);
+    const result = db?.objectStoreNames.contains(store) ? await batch(db, source, cursor) : { rows: [] };
     if (generation !== run) return;
     cursor = result.last;
     more.hidden = !result.hasMore;
-    status.textContent = result.rows.length ? "" : t("No old data for this app.", "这个应用没有旧数据。");
+    status.textContent = "";
     for (const row of result.rows) {
       const item = document.createElement("li");
       const save = document.createElement("button");
@@ -106,16 +150,11 @@ async function read(append) {
       item.append(document.createTextNode(row.name + " "), save);
       save.onclick = async () => {
         save.disabled = true;
-        let copyDB;
         try {
-          copyDB = await openExisting(name);
-          const value = await get(copyDB, store, row.key);
-          if (value === undefined) throw new Error("missing entry");
-          const file = value instanceof Blob ? value : value?.file;
-          if (file instanceof Blob) download(file, row.name);
-          else download(new Blob([JSON.stringify({ key: row.key, value })], { type: "application/json" }), "myco-reader-settings.json");
+          const { file, name } = await readCopy(source, row.key, row.name);
+          download(file, name);
         } catch { unavailable(); }
-        finally { copyDB?.close(); save.disabled = false; }
+        finally { save.disabled = false; }
       };
       list.append(item);
     }
@@ -124,4 +163,73 @@ async function read(append) {
 }
 select.onchange = () => void read(false);
 more.onclick = () => void read(true);
-void read(false);
+async function readCopy(source, key, filename) {
+  const [, dbName, store] = source;
+  const db = await openExisting(dbName);
+  try {
+    const value = await get(db, store, key);
+    if (value === undefined) throw new Error("missing entry");
+    const original = value instanceof Blob ? value : value?.file;
+    return original instanceof Blob ? { file: original, name: filename } : {
+      file: new Blob([JSON.stringify({ key, value })], { type: "application/json" }),
+      name: "myco-reader-settings.json",
+    };
+  } finally { db?.close(); }
+}
+
+async function reportSources() {
+  const found = await Promise.all(sources.map(source => hasPending(source).catch(() => false)));
+  message("myco-recovery-sources", { sources: sources.flatMap(([template, , , label], index) => found[index] ? [{ index, template, label }] : []) });
+}
+
+let browseGeneration = 0;
+let lastIndex;
+let lastKey;
+const listed = new Map();
+async function reportRows(index, append) {
+  const token = ++browseGeneration;
+  const source = sources[index];
+  let db;
+  try {
+    db = await openExisting(source[1]);
+    const extending = append && lastIndex === index;
+    const result = db?.objectStoreNames.contains(source[2]) ? await batch(db, source, extending ? lastKey : undefined) : { rows: [] };
+    if (token !== browseGeneration) return;
+    if (!extending) listed.clear();
+    const entries = result.rows.map(row => {
+      const id = keyOf(source, row.key);
+      listed.set(id, row);
+      return { id, name: row.name };
+    });
+    lastIndex = index;
+    lastKey = result.last;
+    message("myco-recovery-rows", { index, append: extending, entries, more: !!result.hasMore });
+  } catch { if (token === browseGeneration) message("myco-recovery-error"); }
+  finally { db?.close(); }
+}
+
+if (parent === window) {
+  void browse();
+} else {
+  addEventListener("message", (event) => {
+    if (event.source !== parent || !event.data) return;
+    const { type, completed: done, index, append, id } = event.data;
+    if (!hostOrigin && type === "myco-recovery-configure") {
+      hostOrigin = event.origin;
+      completed = new Set(done);
+      void reportSources();
+    }
+    if (event.origin !== hostOrigin || !Number.isInteger(index) || !sources[index]) return;
+    if (type === "myco-recovery-list") void reportRows(index, append);
+    if (index !== lastIndex || !listed.has(id)) return;
+    const row = listed.get(id);
+    if (type === "myco-recovery-save") void readCopy(sources[index], row.key, row.name).then(
+      copy => message("myco-recovery-file", { id, ...copy }), () => message("myco-recovery-error"),
+    );
+    if (type === "myco-recovery-complete") {
+      completed.add(id);
+      listed.delete(id);
+      void reportSources();
+    }
+  });
+}

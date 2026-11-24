@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { AppWindow, Check, Copy, ExternalLink, Link2, Lock, Monitor, PanelRight, PanelRightClose, Pin as PinIcon, PinOff, Radio, RotateCw, Users, X } from "lucide-react";
+import { AppWindow, Check, Copy, ExternalLink, Link2, Lock, Monitor, MoreHorizontal, PanelRight, PanelRightClose, Pin as PinIcon, PinOff, Radio, RotateCw, Users, X } from "lucide-react";
 import type { Page, PageOpen } from "@/api";
 import { ApiError, appApi, isOldHub, type OsAnswer, type OsConsent, type BrowserStatus } from "@/appapi";
 import { copyText } from "@/app/copy";
@@ -10,6 +10,7 @@ import { Modal } from "@/app/dialogs";
 import { openOutside, setInAppLinks } from "@/app/links";
 import { L } from "@/lib/i18n";
 import { answerProjectFiles, projectFileScope } from "./page-project-files";
+import { canRecoverTemplate, PageRecovery, recoveryLabel } from "./page-recovery";
 import { usePagePreferences, localizedPageURL } from "./page-preferences";
 import { parsePageLink, pageFragmentURL, type PageLink } from "@/lib/page-links";
 import { cn, timeAgo } from "@/lib/utils";
@@ -227,7 +228,7 @@ export function PageCard({ hubId, id, url }: { hubId: string; id: string; url: s
 /** The page panel: one, for the whole App; links and cards open it. */
 type Tab = { key: string; target: PageTarget; reload: number; meta: PageMeta };
 /** What a tab says about itself, for the panel's head and its tab. */
-type PageMeta = { title: string; about: string; icon: "page" | "live" | "local"; copyUrl?: string; localUrl?: string; loaded: boolean };
+type PageMeta = { title: string; about: string; icon: "page" | "live" | "local"; copyUrl?: string; localUrl?: string; loaded: boolean; recover?: string; exportPreferences?: boolean };
 const keyOf = (t: PageTarget) => (t.kind === "page" ? `${t.hubId}/${t.id}` : t.url);
 const MAX_TABS = 8;
 
@@ -238,6 +239,10 @@ export function PageHost() {
   const [active, setActive] = useState("");
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [recovery, setRecovery] = useState("");
+  const [available, setAvailable] = useState<string[]>([]);
+  const recoveryMenu = useContextMenu("pg-recovery-menu");
+  const preferences = usePagePreferences();
   useEffect(() => {
     const on = (e: Event) => {
       const t = (e as CustomEvent<PageTarget>).detail;
@@ -285,7 +290,7 @@ export function PageHost() {
   // Tucked away (收起, Esc, a click beside it): the pages stay open, a
   // small button brings them back. Closed (×): they go.
   const setPanel = (o: boolean) => setOpen(o);
-  const closeAll = () => { setOpen(false); setTabs([]); setActive(""); };
+  const closeAll = () => { setOpen(false); setTabs([]); setActive(""); setRecovery(""); setAvailable([]); };
   const close = (k: string) => {
     const at = tabs.findIndex((x) => x.key === k);
     const rest = tabs.filter((x) => x.key !== k);
@@ -307,6 +312,20 @@ export function PageHost() {
   if (!tabs.length) return null;
   const cur = tabs.find((x) => x.key === active) || tabs[0];
   const m = cur.meta;
+  const recoverable = !!m.recover && available.includes(m.recover);
+  const items: MenuItem[] = [];
+  if (recoverable) items.push({ label: recoveryLabel(), onSelect: () => setRecovery(cur.key) });
+  if (m.exportPreferences && cur.target.kind === "page") {
+    const previous = storeOf(storeKey(cur.target.hubId, cur.target.id));
+    items.push({ label: L("导出旧页面设置", "Export older page settings"), onSelect: () => {
+      const url = URL.createObjectURL(new Blob([JSON.stringify(previous, null, 2)], { type: "application/json" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "myco-older-page-settings.json";
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 30000);
+    } });
+  }
   const copy = async () => {
     if (!m.copyUrl) return;
     await copyText(m.copyUrl);
@@ -316,11 +335,14 @@ export function PageHost() {
   const tabIcon = (x: Tab) => (x.meta.icon === "live" ? <Radio /> : x.meta.icon === "local" ? <Monitor /> : <AppWindow />);
   return (
     <>
-    <DockPanel open={open} onOpenChange={setPanel} onClose={closeAll} keepMounted
+    <DockPanel open={open} onOpenChange={setPanel} onClose={closeAll} keepMounted keepOpenOn=".pg-recovery-menu, .pg-recovery-dialog"
       closeLabel={tabs.length > 1 ? L(`关闭全部 ${tabs.length} 个网页`, `Close all ${tabs.length} pages`) : L("关闭", "Close")}
-      title={m.title || L("网页", "Page")} about={m.about} className="pg-panel" bodyClass="is-page pg-body"
+      title={m.title || L("网页", "Page")} titleHint={recoverable ? recoveryLabel() : undefined} about={m.about} className="pg-panel" bodyClass="is-page pg-body"
       tools={(
         <>
+          {items.length > 0 && <button type="button" className="app-btn app-btn-plain" aria-haspopup="menu"
+            title={L("更多页面操作", "More page actions")} aria-label={L("更多页面操作", "More page actions")}
+            onClick={(event) => recoveryMenu.openUnder(event.currentTarget, items)}><MoreHorizontal /></button>}
           <button type="button" className="app-btn app-btn-plain" onClick={() => setOpen(false)}
             title={L("收起（网页保留，点顶栏右边的「网页」展开）", "Tuck away (the pages stay; Pages at the top right brings them back)")} aria-label={L("收起", "Tuck away")}><PanelRightClose /></button>
           <button type="button" className="app-btn app-btn-plain" onClick={() => setTabs((list) => list.map((x) => (x.key === cur.key ? { ...x, reload: x.reload + 1 } : x)))} disabled={!m.loaded}
@@ -355,6 +377,9 @@ export function PageHost() {
         <PageView key={x.key} target={x.target} open={open} active={x.key === cur.key} reload={x.reload} onMeta={(mm) => meta(x.key, mm)} />
       ))}
     </DockPanel>
+    {recoveryMenu.element}
+    <PageRecovery enabled={open && !!m.recover} template={m.recover} language={preferences.language}
+      showing={open && recovery === cur.key} onClose={() => setRecovery("")} onAvailable={setAvailable} />
     </>
   );
 }
@@ -789,30 +814,13 @@ function PageView({ target, open, active, reload, onMeta }: {
   const newer = opened && page && page.version > opened.version ? page.version : 0;
   // Until the page has loaded: a loading scene over it, not a blank frame.
   const [upgrading, setUpgrading] = useState(false);
-  const oldPreferences = opened?.storage_scope && target.kind === "page" ? storeOf(storeKey(target.hubId, target.id)) : null;
-  const exportPreferences = () => {
-    if (!oldPreferences) return;
-    const url = URL.createObjectURL(new Blob([JSON.stringify(oldPreferences, null, 2)], { type: "application/json" }));
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "myco-older-page-settings.json";
-    link.click();
-    window.setTimeout(() => URL.revokeObjectURL(url), 30000);
-  };
-  const [recovery, setRecovery] = useState<{ url?: string; error?: string } | null>(null);
-  const recover = async () => {
-    setRecovery({});
-    try {
-      const { url } = await appApi.openPageStorageRecovery();
-      setRecovery((current) => current && { url: localizedPageURL(url, preferences.language) });
-    } catch (e) {
-      setRecovery((current) => current && { error: (e as Error).message });
-    }
-  };
+  const oldPreferences = !!opened?.storage_scope && target.kind === "page" && Object.keys(storeOf(storeKey(target.hubId, target.id))).length > 0;
+  const template = page?.template?.id;
+  const recover = opened?.recovery && loadedKey === frameKey && canRecoverTemplate(template) ? template : undefined;
   const icon: PageMeta["icon"] = local ? "local" : opened?.live || page?.live ? "live" : "page";
   useEffect(() => {
-    onMeta({ title, about, icon, copyUrl: page?.url ? pageFragmentURL(page.url, target.kind === "page" ? target.fragment : undefined) : undefined, localUrl: target.kind === "local" ? target.url : undefined, loaded: !!src });
-  }, [title, about, icon, page?.url, local, target, src, onMeta]);
+    onMeta({ title, about, icon, copyUrl: page?.url ? pageFragmentURL(page.url, target.kind === "page" ? target.fragment : undefined) : undefined, localUrl: target.kind === "local" ? target.url : undefined, loaded: !!src, recover, exportPreferences: oldPreferences });
+  }, [title, about, icon, page?.url, local, target, src, recover, oldPreferences, onMeta]);
   return (
     <div className={cn("pg-view", !active && "is-hidden")} role="tabpanel" aria-hidden={!active}>
       {newer > 0 && (
@@ -830,15 +838,6 @@ function PageView({ target, open, active, reload, onMeta }: {
           }}>{upgrading ? L("正在升级…", "Upgrading…") : L("升级", "Upgrade")}</button>
         </div>
       )}
-      {(opened?.recovery || (oldPreferences && Object.keys(oldPreferences).length > 0)) && <div className="pg-new">
-        {opened?.recovery && <button type="button" className="app-btn app-btn-small" onClick={() => void recover()}>{L("恢复旧本机文件", "Recover older local files")}</button>}
-        {oldPreferences && Object.keys(oldPreferences).length > 0 && <button type="button" className="app-btn app-btn-small" onClick={exportPreferences}>{L("导出旧页面设置", "Export older page settings")}</button>}
-      </div>}
-      <Modal open={recovery !== null} onOpenChange={(value) => { if (!value) setRecovery(null); }} title={L("恢复旧本机文件", "Recover older local files")} wide>
-        {recovery?.error ? <p role="alert">{recovery.error}</p> : recovery?.url
-          ? <iframe title={L("旧本机文件", "Older local files")} className="w-full h-80 border-0" src={recovery.url} sandbox="allow-scripts allow-same-origin allow-downloads" referrerPolicy="no-referrer" />
-          : <p role="status">{L("正在打开旧库…", "Opening older storage…")}</p>}
-      </Modal>
       {local && <div className="pg-local-note"><Monitor />{L("这台电脑上正在运行的网页。是空白的话，可能这个端口没有在跑。", "A server running on this computer. Blank? Nothing may be running on this port.")}</div>}
       {error ? <p className="fp-note">{error}</p> : (
         <div className="pg-stage">

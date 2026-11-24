@@ -42,7 +42,7 @@ function scales(): { zoom: number; ev: number; rect: number } {
 /** A right-click menu for a row: call open(event, items) from onContextMenu
  * and render `element` once anywhere in the page. It closes on a click
  * elsewhere, Escape, scrolling, resizing or the window losing focus. */
-export function useContextMenu(): {
+export function useContextMenu(className?: string): {
   open: (e: MouseEvent, items: MenuItem[]) => void;
   /** The same menu dropped under a button, right edges aligned. */
   openUnder: (el: Element, items: MenuItem[]) => void;
@@ -116,7 +116,7 @@ export function useContextMenu(): {
   const element = menu
     ? createPortal(
       <div
-        className="app-portal conv-menu"
+        className={cn("app-portal conv-menu", className)}
         role="menu"
         style={{ left: menu.x, top: menu.y, minWidth: WIDTH }}
         onMouseDown={(e) => e.stopPropagation()}
