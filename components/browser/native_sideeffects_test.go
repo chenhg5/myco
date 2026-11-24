@@ -81,14 +81,19 @@ func TestNativeChromeSideEffectsAndDebugger(t *testing.T) {
 	run := e.runs[started.ID]
 	e.mu.Unlock()
 	cursor := 0
+	var last runUpdate
 	await := func(match func(runUpdate) bool) runUpdate {
 		t.Helper()
 		for {
 			out, err := run.events(ctx, cursor)
 			if err != nil {
-				t.Fatal(err)
+				t.Fatalf("poll: %v; last state=%s node=%s steps=%+v", err, last.State, last.Node, last.Steps)
 			}
 			cursor = out.Next
+			if out.State != last.State || out.Node != last.Node {
+				t.Logf("state=%s node=%s steps=%+v", out.State, out.Node, out.Steps)
+			}
+			last = out
 			if match(out) {
 				return out
 			}

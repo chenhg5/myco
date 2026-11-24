@@ -168,3 +168,36 @@ func TestExpectedDialogIsArmedBeforeClickAndHonorsSingleStep(t *testing.T) {
 	r.control("resume", "")
 	awaitRun(t, r, &cursor, func(out runUpdate) bool { return out.State == "succeeded" })
 }
+
+func TestStepClickIntoDialogThenResumeReachesConfirmation(t *testing.T) {
+	r := fixtureRun(t)
+	s := &session{ctx: r.ctx, pages: map[proto.TargetTargetID]*rod.Page{"root": {TargetID: "root", FrameID: "root"}}, current: "root", controller: r.id}
+	r.session = s
+	r.breakpoints["trigger"] = true
+	handled := make(chan struct{})
+	r.applyDialog = func(context.Context, node, observation) error { close(handled); return nil }
+	r.action = func(ctx context.Context, n node) (any, error) {
+		if n.Type == "dialog" {
+			return nil, r.dialog(ctx, n)
+		}
+		if n.ID == "trigger" {
+			s.observe(observation{Kind: "dialog", Target: "root", Session: "primary"})
+			select {
+			case <-handled:
+				return nil, nil
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+		return nil, nil
+	}
+	go r.play([]node{{ID: "trigger", Type: "click"}, {ID: "dialog", Type: "dialog", Dialog: "accept"}, {ID: "after", Type: "click"}, {ID: "confirm", Type: "confirm", Message: "Stop"}, {ID: "submit", Type: "click"}}, "stop")
+	cursor := 0
+	awaitRun(t, r, &cursor, func(o runUpdate) bool { return o.State == "paused" && o.Node == "trigger" })
+	r.control("step", "")
+	awaitRun(t, r, &cursor, func(o runUpdate) bool { return o.State == "paused" && o.Node == "dialog" })
+	r.control("resume", "")
+	awaitRun(t, r, &cursor, func(o runUpdate) bool { return o.State == "paused" && o.Node == "confirm" })
+	r.control("cancel", "")
+	awaitRun(t, r, &cursor, func(o runUpdate) bool { return o.State == "cancelled" })
+}
