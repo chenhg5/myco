@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { activePaneId } from "@/app/ChatSearch";
 import { IntroCard, introOf } from "@/app/Onboard";
 import { Activity, ArrowLeft, ArrowUp, ChevronDown, AudioLines, Columns2, FileText, Loader2, PanelRightClose, PanelRightOpen, Plus, Users } from "lucide-react";
@@ -482,9 +482,13 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
   const t = target(view);
   const spRef = useRef<HTMLDivElement>(null);
   const [spWidth, setSpWidth] = useState(0);
-  useEffect(() => {
+  // Measured before the first paint: this view is built anew on a workspace
+  // switch, and drawn once at width 0 it hid the members column, so the
+  // panes beside widened and shrank back as it returned.
+  useLayoutEffect(() => {
     const el = spRef.current;
     if (!el) return;
+    setSpWidth(el.clientWidth);
     const ro = new ResizeObserver(() => setSpWidth(el.clientWidth));
     ro.observe(el);
     return () => ro.disconnect();

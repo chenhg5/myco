@@ -5221,6 +5221,59 @@ async function runMatrix(browser, size, scheme) {
       } else if (narrow) await sidebar(page, false);
     });
 
+    // A project with two members open beside the coordinator: switching to
+    // another workspace and back puts the panes back as they were, at once
+    // (the first one beside did widen and shrink back).
+    if (!narrow) await step("项目 · 多栏 · 切换工作区不抖", async () => {
+      // (a wide window, where the members column has room beside two panes)
+      const vp = page.viewportSize();
+      await page.setViewportSize({ width: 1800, height: 900 });
+      await go(page, "官网改版", narrow);
+      await page.locator(".pg-pane[data-pane=main]").waitFor({ timeout: 10_000 });
+      const members = page.locator(".sp-side .sp-member:not(.is-add)");
+      await clickVisible(page, members.nth(1));
+      await page.locator(".pg-pane.sp-pane-right").first().waitFor({ timeout: 10_000 });
+      await menuPick(page, page.locator(".sp-nav-person", { hasText: "docs-claude" }), "在新的一栏打开");
+      await page.locator(".pg-pane.sp-pane-right").nth(1).waitFor({ timeout: 10_000 });
+      await settle(page, 400);
+      const steady = await page.locator(".pg-pane.sp-pane-right").evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().width)));
+      // (every frame: the panes beside, their widths)
+      await page.evaluate(() => {
+        window.__paneWidths = [];
+        const tick = () => {
+          window.__paneWidths.push([...document.querySelectorAll(".pg-pane.sp-pane-right:not(.is-hidden)")].map((e) => Math.round(e.getBoundingClientRect().width)).join(","));
+          if (window.__paneWidths.length < 600) requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      });
+      await clickVisible(page, page.locator(".sp-switch .app-hub-trigger"));
+      await page.locator(".app-hub-menu").waitFor();
+      const hubs = await page.locator(".app-hub-menu-item[role=menuitemradio]").evaluateAll((els) => els.map((e) => ({ on: e.getAttribute("aria-checked") === "true", ok: !!e.querySelector(".dot.working"), name: e.querySelector(".app-hub-menu-name")?.textContent || "" })));
+      await page.keyboard.press("Escape");
+      const here = hubs.findIndex((h) => h.on);
+      const other = hubs.findIndex((h, i) => i !== here && h.ok);
+      await page.keyboard.press(`Control+${other + 1}`);
+      await page.locator(".sp-switch .app-hub-name", { hasText: hubs[other].name }).waitFor({ timeout: 10_000 });
+      await settle(page, 300);
+      await page.evaluate(() => { window.__paneWidths.push("|back|"); });
+      await page.keyboard.press(`Control+${here + 1}`);
+      await page.locator(".sp-switch .app-hub-name", { hasText: hubs[here].name }).waitFor({ timeout: 10_000 });
+      await page.locator(".pg-pane.sp-pane-right").nth(1).waitFor({ timeout: 10_000 });
+      await settle(page, 600);
+      const seen = await page.evaluate(() => window.__paneWidths);
+      const after = seen.slice(seen.indexOf("|back|") + 1).filter((x) => x !== "");
+      const want = steady.join(",");
+      const odd = [...new Set(after)].filter((x) => x !== want);
+      if (odd.length) throw new Error(`切回工作区时旁边的栏宽度不该变来变去：应一直是 ${want}，实际出现过 ${odd.join(" / ")}`);
+      // Close them: the coordinator's pane alone again.
+      for (let i = 0; i < 2; i++) {
+        await page.locator(".pg-pane.sp-pane-right:not(.is-hidden)").getByRole("button", { name: "关掉这一栏" }).first().click();
+        await page.waitForTimeout(200);
+      }
+      await page.locator(".pg-pane.sp-pane-right").first().waitFor({ state: "detached", timeout: 5_000 });
+      await page.setViewportSize(vp);
+    });
+
     // Superagent: set up from the bottom-left menu (a new Shroom on a
     // computer of yours), its chat opens; what it asks you shows above the
     // composer, with 同意 / 不同意; the menu counts what waits.
