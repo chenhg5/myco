@@ -247,6 +247,7 @@ try {
               pitch_en: scene.en,
               tags: ["App", ...scene.tags],
               boundary: scene.boundary || "Mock demonstration only.",
+              description: scene.description,
             });
             console.log(`PASS ${scene.id} ${lang}/${theme}`);
             if (record) {

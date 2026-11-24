@@ -10,6 +10,25 @@ const out = path.resolve(value("--out", "../media-kit-output"));
 const page = value("--page", "pg_h3ckpnrw4xgo4oox"),
   project = value("--project", "myco-team");
 const live = args.includes("--upload");
+const metadataOnly = args.includes("--metadata-only");
+const descriptions = {
+  teamwork: "项目主页，协调者对话、成员状态和跨电脑团队",
+  progress: "任务对话，进展、工具调用和执行步骤",
+  terminal: "项目旁终端，测试命令和输出",
+  coedit: "对话与任务追踪并排，问题状态已更新",
+  workflow: "工作流详情，运行列表及成功、失败和等待状态",
+  automation: "自动化列表，定时摘要、CI排查和新issue触发",
+  permissions: "对话中的限时查看授权卡，目标电脑和请求原因",
+  usage: "用量页，总量、每日柱状图和成员排行",
+  sessions: "添加Agent对话框，本机找到的会话",
+  focus: "专注模式，居中的单个对话",
+  rich: "发布检查卡，测试指标和操作按钮",
+  providers: "成员设置，模型、推理强度和服务商",
+  design: "白板画布，问题、方案和验证节点及连线",
+  motion: "动效视频编辑器，场景预览和分镜列表",
+  disk: "空间清理，磁盘概况、空间图和目录列表",
+  servers: "服务器概览，CPU、内存、磁盘和系统信息",
+};
 const cli = (...args) =>
   JSON.parse(
     execFileSync("myco", args, {
@@ -49,6 +68,9 @@ const pictures = cli(
 const before = cli("project", "show", "--name", project).docs.length;
 const planned = [];
 for (const [id, shots] of groups) {
+  const prior = existing.find((r) => r.id === "feature-" + id);
+  if (prior && prior.data.status !== "draft")
+    throw Error("Refusing to overwrite a reviewed entry: " + prior.id);
   const entry = "feature-" + id;
   for (const s of shots) {
     const suffix = ("scene" + id + s.lang + s.theme).replace(/[^a-z0-9]/g, "");
@@ -69,6 +91,11 @@ for (const [id, shots] of groups) {
     planned.push({ s, entry, name, suffix, bytes: meta.size });
   }
 }
+if (
+  metadataOnly &&
+  planned.some((p) => !pictures.some((x) => x.data.file === p.name))
+)
+  throw Error("Metadata-only mode requires all images to exist already.");
 const newFiles = planned.filter(
   (p) => !pictures.some((x) => x.data.file === p.name),
 ).length;
@@ -129,17 +156,18 @@ for (const [id, shots] of groups) {
     const oldPic = pictures.find((r) => r.data.file === p.name);
     const imageId = oldPic?.id || "img_" + p.suffix;
     // Retry uses the same project filename; no extra file slot is consumed.
-    cli(
-      "project",
-      "file",
-      "put",
-      "--name",
-      project,
-      "--path",
-      p.s.file,
-      "--as",
-      p.name,
-    );
+    if (!metadataOnly)
+      cli(
+        "project",
+        "file",
+        "put",
+        "--name",
+        project,
+        "--path",
+        p.s.file,
+        "--as",
+        p.name,
+      );
     const preview = execFileSync(
       "python3",
       [
@@ -151,7 +179,11 @@ for (const [id, shots] of groups) {
     ).trim();
     if (preview.length > 18000) throw Error("Thumbnail too large");
     const image = {
-      kind: "image",
+      kind: "screenshot",
+      platform: "app",
+      aspect: "landscape",
+      tags: p.s.tags,
+      description: `${p.s.description || descriptions[p.s.id] || p.s.title.split(" / ")[0]}，${p.s.lang === "zh" ? "中文" : "英文"}界面、${p.s.theme === "light" ? "浅色" : "深色"}。模拟数据。`,
       entry,
       file: p.name,
       name: p.s.lang + " · " + p.s.theme,

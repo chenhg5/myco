@@ -34,7 +34,7 @@ node web/scripts/media-kit-shots.mjs --out ../media-kit-video --scene teamwork,p
 ```
 
 Add a scene in `scenes.mjs`: a stable `id`, bilingual title and pitches, category
-tags, and an async `prepare` function operating the real UI or local mock API.
+tags, an optional Chinese `description` naming the visible elements, and an async `prepare` function operating the real UI or local mock API.
 Optional `video` performs a visible interaction after the still image. Put
 app-specific fixture preparation in `apps.mjs`. Never make a placeholder scene
 use the project home as a substitute: declare `skip` with the exact reason when
@@ -54,12 +54,14 @@ English `.text.txt` files for untranslated fixture copy. The upload helper
 requires an explicit `--upload` and refuses a failed capture run. It checks the
 project's 100-file quota before writing, preserves existing published entries,
 creates separate `feature-*` drafts, includes `App` and category tags, records
-actual language/theme/dimensions, and adds small JPEG gallery previews. Python 3
+actual language/theme/dimensions plus platform/aspect/kind/tags/description, and adds small JPEG gallery previews. Python 3
 with Pillow is required for previews. It never uploads videos or debug files.
 
 ```sh
 node web/scripts/media-kit/upload.mjs --out ../media-kit-output
 node web/scripts/media-kit/upload.mjs --out ../media-kit-output --upload
+# Update metadata for existing files without uploading the originals again:
+node web/scripts/media-kit/upload.mjs --out ../media-kit-output --upload --metadata-only
 ```
 
 Default destination: page `pg_h3ckpnrw4xgo4oox`, project `myco-team`. Override
