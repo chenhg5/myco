@@ -17,9 +17,11 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import dev.myco.model.*
+import dev.myco.network.DownloadRefusal
 import dev.myco.network.HubClient
 import dev.myco.network.HubRemoteTransport
 import dev.myco.network.MediaFailure
+import dev.myco.network.PageDownload
 import dev.myco.network.PageMedia
 import dev.myco.network.PageNetwork
 import dev.myco.network.RemoteSessions
@@ -28,6 +30,7 @@ import dev.myco.ui.*
 import java.io.ByteArrayInputStream
 import kotlin.coroutines.resume
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.*
 
 private const val POLICY =
@@ -101,8 +104,17 @@ private fun PageContent(
                 changed = { remoteActive = it },
             )
         }
-    val lang = words("zh", "en")
-    val theme = if (androidx.compose.foundation.isSystemInDarkTheme()) "dark" else "light"
+    val lang = appLanguage()
+    val theme = appAppearance()
+    val preferences by
+        rememberUpdatedState(
+            buildJsonObject {
+                put("language", lang)
+                put("theme", theme)
+            }
+        )
+    val saveFailure = words("文件没有保存，请重试。", "The file was not saved. Try again.")
+    val saveDownload = rememberPageDownload { problem = saveFailure }
     var active by remember { mutableStateOf(true) }
     val web = remember(id) { WebView(context) }
     var documentReady by remember(id) { mutableStateOf(false) }
@@ -146,13 +158,7 @@ private fun PageContent(
                     )
                     put("state", state["state"] ?: JsonNull)
                     put("version", known)
-                    put(
-                        "preferences",
-                        buildJsonObject {
-                            put("language", lang)
-                            put("theme", theme)
-                        },
-                    )
+                    put("preferences", preferences)
                 }
             }
             "update" -> {
@@ -186,6 +192,7 @@ private fun PageContent(
                 }
             }
             "net.fetch" -> network.fetch(args)
+            "download" -> JsonPrimitive(saveDownload(args))
             "remote.call" ->
                 remote.call(arg("action"), args["args"] as? JsonObject ?: buildJsonObject {})
             "data.list" ->
@@ -308,35 +315,60 @@ private fun PageContent(
                 if (!active || !isMainFrame || sourceOrigin.toString().trimEnd('/') != origin)
                     return@addWebMessageListener
                 val generation = requests
-                hostScope.launch(generation + Dispatchers.Main.immediate) {
+                hostScope.launch(Dispatchers.Main.immediate) {
                     var callId: JsonElement = JsonNull
+                    var download = false
                     val result =
                         try {
-                            val input = HubJson.parseToJsonElement(message.data ?: "{}").jsonObject
-                            callId = input["id"] ?: JsonNull
-                            buildJsonObject {
-                                put(
-                                    "value",
-                                    answer(
-                                        input.field("method"),
-                                        input["args"] as? JsonObject ?: buildJsonObject {},
-                                    ),
+                            val raw = message.data ?: "{}"
+                            if (raw.length > ((PageDownload.maxBytes + 2) / 3) * 4 + 4096)
+                                throw DownloadRefusal(
+                                    "too_large",
+                                    "The request is too large",
+                                    "请求的内容太大",
                                 )
-                            }
+                            val input =
+                                withContext(Dispatchers.Default) {
+                                    HubJson.parseToJsonElement(raw).jsonObject
+                                }
+                            callId = input["id"] ?: JsonNull
+                            val method = input.field("method")
+                            download = method == "download"
+                            if (!active) throw CancellationException("Page is inactive")
+                            val args = input["args"] as? JsonObject ?: buildJsonObject {}
+                            // A system save picker pauses this Activity. Its one export request
+                            // survives that pause; all network/remote requests still cancel.
+                            val value =
+                                if (download) answer(method, args)
+                                else withContext(generation) { answer(method, args) }
+                            buildJsonObject { put("value", value) }
                         } catch (e: CancellationException) {
                             throw e
                         } catch (e: Exception) {
                             buildJsonObject {
                                 put(
                                     "error",
-                                    if (e is HubException) e.failure.message
-                                    else e.message ?: "The request failed",
+                                    when {
+                                        e is HubException -> e.failure.message
+                                        e is DownloadRefusal &&
+                                            preferences["language"]?.jsonPrimitive?.content ==
+                                                "zh" -> e.chinese
+                                        else -> e.message ?: "The request failed"
+                                    },
                                 )
-                                put("code", if (e is HubException) e.failure.error else "error")
+                                put(
+                                    "code",
+                                    when (e) {
+                                        is HubException -> e.failure.error
+                                        is DownloadRefusal -> e.code
+                                        else -> "error"
+                                    },
+                                )
                                 if (e is HubException) e.failure.latest?.let { put("latest", it) }
                             }
                         }
-                    if (active && generation === requests)
+                    if (download) snapshotFlow { active }.first { it }
+                    if (active && (download || generation === requests))
                         reply.postMessage(
                             buildJsonObject {
                                 put("id", callId)
@@ -348,7 +380,11 @@ private fun PageContent(
             }
             val script =
                 context.assets.open("page-bridge.js").bufferedReader().use { it.readText() }
-            WebViewCompat.addDocumentStartJavaScript(web, script, setOf(origin))
+            WebViewCompat.addDocumentStartJavaScript(
+                web,
+                "window.__mycoInitialPreferences=$preferences;\n" + script,
+                setOf(origin),
+            )
             web.webViewClient =
                 object : WebViewClient() {
                     override fun onPageFinished(view: WebView, url: String) {
@@ -506,6 +542,13 @@ private fun PageContent(
             consent?.answer?.invoke(false)
             consent = null
         }
+    }
+    LaunchedEffect(web, documentReady, lang, theme) {
+        if (documentReady)
+            web.evaluateJavascript(
+                "window.__mycoPreferences && window.__mycoPreferences($preferences)",
+                null,
+            )
     }
     LaunchedEffect(web, documentReady, navigation) {
         if (documentReady && navigation != appliedNavigation) {

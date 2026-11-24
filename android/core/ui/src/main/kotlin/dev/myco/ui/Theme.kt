@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -15,15 +17,44 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import dev.myco.model.AppPreferences
+
+private val LocalLanguage = staticCompositionLocalOf { "system" }
+private val LocalAppearance = staticCompositionLocalOf { "system" }
 
 @Composable
-fun words(zh: String, en: String): String =
-    if (LocalConfiguration.current.locales[0].language == "zh") zh else en
+fun appLanguage(): String =
+    when (LocalLanguage.current) {
+        "zh" -> "zh"
+        "en" -> "en"
+        else -> if (LocalConfiguration.current.locales[0].language == "zh") "zh" else "en"
+    }
 
 @Composable
-fun MycoTheme(dark: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
+fun appAppearance(): String =
+    when (LocalAppearance.current) {
+        "dark" -> "dark"
+        "light" -> "light"
+        else -> if (isSystemInDarkTheme()) "dark" else "light"
+    }
+
+@Composable fun words(zh: String, en: String): String = if (appLanguage() == "zh") zh else en
+
+@Composable
+fun MycoTheme(
+    dark: Boolean? = null,
+    preferences: AppPreferences = AppPreferences(),
+    content: @Composable () -> Unit,
+) {
+    val resolvedDark =
+        dark
+            ?: when (preferences.appearance) {
+                "dark" -> true
+                "light" -> false
+                else -> isSystemInDarkTheme()
+            }
     val colors =
-        if (dark)
+        if (resolvedDark)
             darkColorScheme(
                 primary = Color(0xffeeece5),
                 onPrimary = Color(0xff171816),
@@ -45,7 +76,12 @@ fun MycoTheme(dark: Boolean = isSystemInDarkTheme(), content: @Composable () -> 
                 onSecondaryContainer = Color(0xff252821),
                 outlineVariant = Color(0xffe4e5dd),
             )
-    MaterialTheme(colorScheme = colors, content = content)
+    CompositionLocalProvider(
+        LocalLanguage provides preferences.language,
+        LocalAppearance provides if (resolvedDark) "dark" else "light",
+    ) {
+        MaterialTheme(colorScheme = colors, content = content)
+    }
 }
 
 /** Deterministic pixel mushroom; no network fetch is needed to draw a member. */

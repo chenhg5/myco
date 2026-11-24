@@ -95,17 +95,18 @@ Backgrounding or closing revokes remote sessions and cancels page requests.
 
 | Area | Status |
 | --- | --- |
-| Pairing, multiple workspaces, switching and leaving | Implemented; device management/rename still to follow |
+| Pairing, multiple workspaces, switching and leaving | Implemented, including device-local workspace names; device management still to follow |
 | Chat, Markdown, multiline input, send/steer/stop, queued edits | Implemented; conversation presentation still being aligned with iOS |
 | Drafts, cached messages, interrupted sends | Implemented |
 | Files | Picker, upload, download/open, queued attachment reuse; camera and image normalization/preview still to follow |
 | Projects and members | Browse and converse; model/effort settings; full management still to follow |
 | Automations and workflows | Initial list/actions/editor; workflow inputs, runs and decisions still to follow |
-| Apps and pages | Initial app library, page creation and scoped bridge; downloads, pins and additional lifecycle tests still to follow |
+| Apps and pages | App library, page creation, scoped bridge and native document saving; pins and additional lifecycle tests still to follow |
 | Remote Desktop | Signaling/consent/revocation implemented; real-host video/input acceptance pending |
 | Speech input and voice calls | Pending |
 | Notifications, quiet hours and off-screen workspace refresh | Pending |
-| Proxy settings, appearance/language controls and chat backgrounds | Pending; system appearance/language are followed |
+| Appearance/language controls | System, light/dark and Chinese/English choices persist on this device and apply to embedded pages |
+| Proxy settings and chat backgrounds | Pending; system proxy settings are used |
 | E2E messages, QR scan and server push | Not implemented in the iOS reference either; sealed messages remain unreadable |
 
 ## Packages
@@ -131,3 +132,31 @@ streams; returning to the page requires starting playback again.
 See [the shared media contract](../docs/app-os.md#playing-public-audio-and-video).
 Playback formats depend on Android System WebView and the device's codecs. A new
 APK is required to add this native capability to an older Android installation.
+
+## Appearance and local workspace names
+
+Open **Appearance and language** on the welcome page, or **Settings** inside a
+workspace. Choose System, Light or Dark and System, 中文 or English. Choices take
+effect immediately and survive restarts. Embedded pages receive the resolved
+preferences before their scripts run and receive later changes without reloading
+the document. User content is not translated.
+
+**Settings → Rename this workspace** changes only this device's name for it.
+The workspace address, selected workspace and sign-in stay the same. Other
+members' workspace names are unaffected. A failed save remains visible and can
+be retried.
+
+## Saving files from apps
+
+`myco.download(name, content, type)` opens Android's **Save as** document picker.
+Choose the destination there; a page cannot supply a local path or destination
+URI. Documents, pictures, audio and video can be up to 20 MiB. Programs and
+unknown file extensions are refused. Large desktop media-export capability
+(`download-media`) is not advertised by this Android bridge.
+
+The promise resolves to `true` only after writing completes, or `false` when the
+picker is cancelled; a failure rejects and is also shown in the native page.
+Closing the page cancels a pending export. The one save request survives the
+Activity pause caused by the system picker; network and remote requests continue
+to cancel when the page leaves the foreground. Typed-array views export only
+the selected bytes, and text is UTF-8. No broad storage permission is requested.

@@ -18,6 +18,7 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -33,6 +34,47 @@ class DeviceStore(context: Context) : WorkspaceStore, ConversationStore {
     private val crypto = DeviceCipher()
     private val accountsKey = stringPreferencesKey("workspaces")
     private val selectedKey = stringPreferencesKey("selected")
+    private val preferencesKey = stringPreferencesKey("appearance_language")
+
+    val preferences =
+        context.settings.data.map { prefs ->
+            prefs[preferencesKey]?.let { HubJson.decodeFromString<AppPreferences>(it).normalized() }
+                ?: AppPreferences()
+        }
+
+    /**
+     * The edit reads the latest value so quick changes to different fields do not overwrite one
+     * another.
+     */
+    suspend fun updatePreferences(change: (AppPreferences) -> AppPreferences) {
+        context.settings.edit { prefs ->
+            val before =
+                prefs[preferencesKey]?.let { HubJson.decodeFromString<AppPreferences>(it) }
+                    ?: AppPreferences()
+            prefs[preferencesKey] = HubJson.encodeToString(change(before.normalized()).normalized())
+        }
+    }
+
+    suspend fun rename(id: String, name: String): Workspace = lock.withLock {
+        val clean = name.trim()
+        require(clean.isNotEmpty() && clean.length <= 80 && clean.none { it.isISOControl() }) {
+            "Use a name of 1–80 characters"
+        }
+        val all = accounts()
+        val before = all.firstOrNull { it.workspace.id == id } ?: error("Workspace not found")
+        val changed = before.copy(workspace = before.workspace.copy(name = clean))
+        context.settings.edit {
+            it[accountsKey] =
+                crypto.seal(
+                    HubJson.encodeToString(
+                        all.map { account ->
+                            if (account.workspace.id == id) changed else account
+                        }
+                    )
+                )
+        }
+        changed.workspace
+    }
 
     private suspend fun accounts(): List<Credentials> {
         val text = context.settings.data.first()[accountsKey] ?: return emptyList()
