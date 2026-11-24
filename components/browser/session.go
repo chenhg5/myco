@@ -20,9 +20,10 @@ import (
 )
 
 type targetInstall struct {
-	sid   proto.TargetSessionID
-	ready chan struct{}
-	err   error
+	sid        proto.TargetSessionID
+	ready      chan struct{}
+	configured chan struct{}
+	err        error
 }
 
 type session struct {

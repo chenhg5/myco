@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-rod/rod"
@@ -57,12 +58,24 @@ func (s *session) installTarget(evt proto.TargetAttachedToTarget) (err error) {
 	}
 	s.mu.Lock()
 	s.targets[sid] = info.TargetID
-	if s.installs[info.TargetID] != nil {
+	if previous := s.installs[info.TargetID]; previous != nil {
 		s.mu.Unlock()
-		return nil
+		// Every auto-attachment may wait for its own debugger. Resume a
+		// secondary session too, once the primary collector is configured.
+		if previous.configured != nil {
+			select {
+			case <-previous.configured:
+			case <-s.ctx.Done():
+				return s.ctx.Err()
+			}
+		}
+		return s.call(sid, "Runtime.runIfWaitingForDebugger", map[string]any{}, nil)
 	}
-	installed := &targetInstall{sid: sid, ready: make(chan struct{})}
+	installed := &targetInstall{sid: sid, ready: make(chan struct{}), configured: make(chan struct{})}
 	s.installs[info.TargetID] = installed
+	var configuredOnce sync.Once
+	configured := func() { configuredOnce.Do(func() { close(installed.configured) }) }
+	defer configured()
 	// A secondary Rod attachment must not resume a target while the
 	// primary collector is still installing its bindings and new-doc script.
 	defer func() { _ = s.call(sid, "Runtime.runIfWaitingForDebugger", map[string]any{}, nil) }()
@@ -89,6 +102,7 @@ func (s *session) installTarget(evt proto.TargetAttachedToTarget) (err error) {
 	// A renderer-created popup is paused at window.open. Rod's attachment
 	// (and Runtime.evaluate) can wait for that renderer to start. Resume
 	// after the binding/preload are installed, before requesting either.
+	configured()
 	if err = s.call(sid, "Runtime.runIfWaitingForDebugger", map[string]any{}, nil); err != nil {
 		return err
 	}

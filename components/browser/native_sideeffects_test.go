@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"runtime/pprof"
 	"testing"
 	"time"
 )
@@ -90,6 +91,12 @@ func TestNativeChromeSideEffectsAndDebugger(t *testing.T) {
 				t.Fatalf("poll: %v; last state=%s node=%s steps=%+v", err, last.State, last.Node, last.Steps)
 			}
 			cursor = out.Next
+			if out.State == "running" && out.Node == "popup" && last.Node == out.Node && len(out.Steps) == 0 {
+				var stack bytes.Buffer
+				_ = pprof.Lookup("goroutine").WriteTo(&stack, 2)
+				t.Logf("stalled popup goroutines:\n%s", stack.String())
+				t.Fatal("popup made no progress through an entire long-poll")
+			}
 			if out.State != last.State || out.Node != last.Node {
 				t.Logf("state=%s node=%s steps=%+v", out.State, out.Node, out.Steps)
 			}

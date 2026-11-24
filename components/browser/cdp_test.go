@@ -69,3 +69,46 @@ func TestPausedPopupBootstrapsBeforeRodAttachment(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestSecondaryAttachmentResumesAfterConfigurationWithoutWaitingForRod(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	client := &pausedPopupClient{events: make(chan *cdp.Event), binding: true, preload: true, autoAttach: true}
+	defer close(client.events)
+	browser := rod.New().Context(ctx).ControlURL("").Client(client).NoDefaultDevice()
+	if err := browser.Connect(); err != nil {
+		t.Fatal(err)
+	}
+	configured := make(chan struct{})
+	close(configured)
+	// ready remains open: the primary is inside Rod's second attachment,
+	// which itself cannot finish until that secondary debugger is resumed.
+	s := &session{ctx: ctx, browser: browser, installs: map[proto.TargetTargetID]*targetInstall{"popup": {configured: configured, ready: make(chan struct{})}}, targets: map[proto.TargetSessionID]proto.TargetTargetID{}}
+	if err := s.installTarget(proto.TargetAttachedToTarget{SessionID: "secondary", TargetInfo: &proto.TargetTargetInfo{TargetID: "popup", Type: "page"}}); err != nil {
+		t.Fatal(err)
+	}
+	client.mu.Lock()
+	resumed := client.resumed
+	client.mu.Unlock()
+	if !resumed {
+		t.Fatal("secondary debugger left the popup paused")
+	}
+}
+
+func TestSecondaryAttachmentDoesNotResumeBeforeCollectorConfiguration(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	client := &pausedPopupClient{events: make(chan *cdp.Event), binding: true, preload: true, autoAttach: true}
+	defer close(client.events)
+	browser := rod.New().Context(ctx).ControlURL("").Client(client).NoDefaultDevice()
+	s := &session{ctx: ctx, browser: browser, installs: map[proto.TargetTargetID]*targetInstall{"popup": {configured: make(chan struct{}), ready: make(chan struct{})}}, targets: map[proto.TargetSessionID]proto.TargetTargetID{}}
+	if err := s.installTarget(proto.TargetAttachedToTarget{SessionID: "secondary", TargetInfo: &proto.TargetTargetInfo{TargetID: "popup", Type: "page"}}); !errors.Is(err, context.Canceled) {
+		t.Fatal("unconfigured attachment did not cancel", err)
+	}
+	client.mu.Lock()
+	resumed := client.resumed
+	client.mu.Unlock()
+	if resumed {
+		t.Fatal("resumed before primary collector configuration")
+	}
+}
