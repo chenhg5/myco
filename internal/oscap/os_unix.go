@@ -28,7 +28,7 @@ func devOf(fi fs.FileInfo) (uint64, bool) {
 	return 0, false
 }
 
-func diskOf(fi fs.FileInfo) int64 {
+func diskOf(_ string, fi fs.FileInfo) int64 {
 	if st := statOf(fi); st != nil {
 		return int64(st.Blocks) * 512
 	}

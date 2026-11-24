@@ -3556,5 +3556,7 @@
   "连接一台 Linux 主机，开始查看资源、管理服务和容器。": "Connect a Linux host to inspect resources and manage services and containers.",
   "连接已中断，操作结果可能未知。请先刷新资源状态，不要直接重复执行。": "Connection interrupted; the outcome may be unknown. Refresh resource state before retrying.",
   "需要本机 OpenSSH 与支持 SSH 的新版 myco 桌面 App。私钥和密码不会存入页面。": "Requires local OpenSSH and an updated myco desktop App with SSH support. Keys and passwords are never stored in this page.",
-  "当前目标或连接方式暂不支持。请使用 Linux 直连或 VPN 地址；暂不支持 ProxyJump。": "This target or connection method is unsupported. Use a direct or VPN-reachable Linux host; ProxyJump is not supported."
+  "当前目标或连接方式暂不支持。请使用 Linux 直连或 VPN 地址；暂不支持 ProxyJump。": "This target or connection method is unsupported. Use a direct or VPN-reachable Linux host; ProxyJump is not supported.",
+  "容量单位": "Capacity units",
+  "GB 按 1000 进位，GiB 按 1024 进位；扫描汇总文件占用，不等于整盘已用空间。系统保留、快照和无权限内容可能造成差异。": "GB uses base 1000; GiB uses base 1024. Scanned file storage differs from total disk usage. Reserved space, snapshots and unreadable content can account for differences."
 }

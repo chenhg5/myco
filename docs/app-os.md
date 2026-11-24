@@ -447,3 +447,7 @@ acknowledged: inspect current database state before retrying. Cancellation does
 not mean a write was rolled back. Read-only transactions are not a substitute
 for server-side read-only account privileges, especially for external effects
 in stored functions. MongoDB aggregation rejects `$out` and `$merge`.
+
+## Disk usage accounting
+
+`system.disks` reports byte counts from the OS; displayed GB/GiB units do not change them. `fs.scan` keeps logical file length in `size` and allocated storage in `disk`. New Windows builds query allocation information, including compressed/sparse storage; older Windows builds approximate `disk` with logical length. Zero allocation is valid. Filesystem query failures may fall back to logical length. See [Disk usage and capacity units](disk.md) for system comparison limits and Space cleaner's local unit selector.

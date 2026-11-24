@@ -5,7 +5,7 @@ import { t as uiText } from "../_lib/i18n";
 // smaller items folded together are grey.
 import { useMemo } from "react";
 import type { OSScanNode } from "../_lib/myco";
-import { formatBytes } from "../_lib/os";
+
 
 export type Seg = {
   key: string; node: OSScanNode | null; parent: OSScanNode; depth: number; a0: number; a1: number;
@@ -62,8 +62,8 @@ function arc(r0: number, r1: number, a0: number, a1: number, c: number) {
 
 const SIZE = 600, C = SIZE / 2, R = 292, R0 = 96;
 
-export function Sunburst({ node, levels, dark, hover, onHover, onOpen, onUp, canUp, busy }: {
-  node: OSScanNode; levels: number; dark: boolean; hover: string | null; busy: boolean; canUp: boolean;
+export function Sunburst({ node, levels, dark, hover, onHover, onOpen, onUp, canUp, busy, formatSize }: {
+  formatSize: (bytes: number) => string; node: OSScanNode; levels: number; dark: boolean; hover: string | null; busy: boolean; canUp: boolean;
   onHover: (key: string | null, s: Seg | null) => void; onOpen: (s: Seg) => void; onUp: () => void;
 }) {
   const segs = useMemo(() => layout(node, levels), [node, node.disk, node.children, levels]);
@@ -95,7 +95,7 @@ export function Sunburst({ node, levels, dark, hover, onHover, onOpen, onUp, can
       </g>
       <circle cx={C} cy={C} r={R0 - 6} className={`sb-mid${canUp ? " can-up" : ""}`} onClick={onUp} onMouseEnter={() => onHover(null, null)} />
       <text x={C} y={C - 16} className="sb-name">{clip(label.name, 18)}</text>
-      <text x={C} y={C + 16} className="sb-size">{formatBytes(label.disk)}</text>
+      <text x={C} y={C + 16} className="sb-size">{formatSize(label.disk)}</text>
       <text x={C} y={C + 40} className="sb-hint">{shown ? (shown.node?.dir ? uiText("点开看里面") : shown.more ? uiText("太小，没有分开画") : `${label.files ? uiText("文件") : ""}`) : canUp ? uiText("点中间回上一层") : uiText("{0} 个文件", label.files.toLocaleString())}</text>
     </svg>
   );

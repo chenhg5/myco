@@ -163,8 +163,48 @@ func crossDevice(err error) bool {
 	return errors.As(err, &en) && en == 17 // ERROR_NOT_SAME_DEVICE
 }
 
-func devOf(fs.FileInfo) (uint64, bool)      { return 0, false }
-func diskOf(fi fs.FileInfo) int64           { return fi.Size() }
+func devOf(fs.FileInfo) (uint64, bool) { return 0, false }
+
+// diskOf reports allocated storage, including NTFS sparse/compressed files.
+// Reparse points are never followed just to measure a link.
+func diskOf(path string, fi fs.FileInfo) int64 {
+	if !fi.Mode().IsRegular() {
+		return fi.Size()
+	}
+	if !strings.HasPrefix(path, `\\?\`) {
+		if strings.HasPrefix(path, `\\`) {
+			path = `\\?\UNC\` + path[2:]
+		} else {
+			path = `\\?\` + path
+		}
+	}
+	ptr, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return fi.Size()
+	}
+	attrs, ok := fi.Sys().(*syscall.Win32FileAttributeData)
+	if ok && attrs.FileAttributes&(windows.FILE_ATTRIBUTE_SPARSE_FILE|windows.FILE_ATTRIBUTE_COMPRESSED) != 0 {
+		var high uint32
+		low, _, callErr := kernel32.NewProc("GetCompressedFileSizeW").Call(uintptr(unsafe.Pointer(ptr)), uintptr(unsafe.Pointer(&high)))
+		if uint32(low) != 0xffffffff || callErr == syscall.Errno(0) {
+			return int64(uint64(high)<<32 | uint64(uint32(low)))
+		}
+	}
+	h, err := windows.CreateFile(ptr, windows.FILE_READ_ATTRIBUTES, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, nil, windows.OPEN_EXISTING, windows.FILE_FLAG_OPEN_REPARSE_POINT, 0)
+	if err != nil {
+		return fi.Size()
+	}
+	defer windows.CloseHandle(h)
+	var info struct {
+		AllocationSize, EndOfFile int64
+		NumberOfLinks             uint32
+		DeletePending, Directory  byte
+	}
+	if err := windows.GetFileInformationByHandleEx(h, windows.FileStandardInfo, (*byte)(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info))); err != nil {
+		return fi.Size()
+	}
+	return info.AllocationSize
+}
 func inodeOf(fs.FileInfo) ([2]uint64, bool) { return [2]uint64{}, false }
 func linksOf(fs.FileInfo) uint64            { return 1 }
 func shellArgv(_ *Env, script string) []string {

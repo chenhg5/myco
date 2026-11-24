@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { mount, useKit, Toast } from "../_lib/appkit";
 import type { OSDisk, OSScan, OSScanNode } from "../_lib/myco";
-import { OSError, basename, formatBytes, has, os, osState, osStateText, useJob, useOS } from "../_lib/os";
+import { OSError, basename, formatBytes as bytes, has, os, osState, osStateText, useJob, useOS } from "../_lib/os";
 import { cleanups, kit, Tree } from "./model";
 import { Sunburst, colorOf, layout, type Seg } from "./sunburst";
 
@@ -60,6 +60,10 @@ function App() {
   useKit(kit);
   const sys = useOS();
   const dark = useDark();
+  const [unit, setUnit] = useState(() => { try { return localStorage.getItem("myco-disk-unit") || "auto"; } catch { return "auto"; } });
+  const binary = unit === "binary" || (unit === "auto" && sys.info?.os === "windows");
+  const formatBytes = (n: number) => bytes(n, { binary });
+  const unitPicker = <label className="dk-units">{uiText("容量单位")} <select className="sel" aria-label={uiText("容量单位")} value={unit} onChange={e => { setUnit(e.target.value); try { localStorage.setItem("myco-disk-unit", e.target.value); } catch { /* private storage */ } }}><option value="auto">{uiText("跟随系统")}</option><option value="decimal">GB · 1000</option><option value="binary">GiB · 1024</option></select></label>;
   const [disks, setDisks] = useState<OSDisk[] | null>(null);
   const [diskErr, setDiskErr] = useState("");
   const [target, setTarget] = useState<Target | null>(null);
@@ -180,7 +184,7 @@ function App() {
     const secs = Math.max(0, Math.round((Date.now() - started.current) / 1000));
     // a disk: how much of what is used on it has been read (an estimate: a
     // disk holds a little more than its files)
-    const used = target?.disk ? target.disk.total - target.disk.available : 0;
+    const used = target?.disk ? Math.max(0, target.disk.total - target.disk.available) : 0;
     const share = used ? Math.min(0.99, (p?.disk || 0) / used) : 0;
     return (
       <div className="dk-scanning" style={{ ["--glow" as string]: p?.top?.[0] ? scanColor(p, 0, used, dark) : "transparent" }}>
@@ -224,7 +228,7 @@ function App() {
               </span>
             ))}
           </nav>
-          <span className="top-gap" />
+          <span className="top-gap" />{unitPicker}
           {target.disk && <span className="dk-free">{uiText("可用")}{" "}<b>{formatBytes(target.disk.available)}</b></span>}
           <button type="button" className="icon-btn" title={uiText("重新扫描")} onClick={() => void start(target)}><RefreshCw className="ico" /></button>
         </header>
@@ -238,7 +242,7 @@ function App() {
         )}
         <div className="dk-body">
           <section className="dk-map">
-            <Sunburst node={at} levels={LEVELS} dark={dark} hover={hover} busy={refining} canUp={chain.length > 1}
+            <Sunburst formatSize={formatBytes} node={at} levels={LEVELS} dark={dark} hover={hover} busy={refining} canUp={chain.length > 1}
               onHover={(k) => setHover(k)} onOpen={onSeg} onUp={up} />
             <div className="dk-legend">
               {hoverSeg ? (hoverSeg.more ? uiText("{0} 里 {1} 个更小的项目", hoverSeg.parent.name, hoverSeg.parent.more) : ltr(hoverSeg.node!.path))
@@ -280,7 +284,7 @@ function App() {
               )}
               {tab === "here" && !kids.length && !(at.more || 0) && <div className="dk-none">{uiText("这里是空的")}</div>}
               {tab === "largest" && scan.largest.filter((f) => f.path.startsWith(at.path)).slice(0, 100).map((f) => {
-                const it: Item = { path: f.path, name: basename(f.path), disk: f.disk || f.size, size: f.size, files: 1, dir: false };
+                const it: Item = { path: f.path, name: basename(f.path), disk: f.disk ?? f.size, size: f.size, files: 1, dir: false };
                 const taken = inBasket(f.path);
                 return (
                   <div key={f.path} role="listitem" className={`dk-row${taken ? " is-taken" : ""}`} draggable onDragStart={(e) => drag(e, it)}>
@@ -340,14 +344,14 @@ function App() {
   return (
     <div className="dk-home">
       <header className="dk-home-head">
-        <h1>{uiText("空间清理")}</h1>
+        <h1>{uiText("空间清理")}</h1>{unitPicker}
         <p className="faint">{sys.info ? `${sys.info.hostname} · ${sys.info.name} ${sys.info.version}` : " "}</p>
       </header>
       {job.error && job.error.code !== "cancelled" && <div className="dk-warn"><ShieldAlert className="ico" />{job.error.message}</div>}
       {diskErr && <div className="dk-warn"><ShieldAlert className="ico" />{diskErr}</div>}
-      <div className="dk-disks">
+      <p className="dk-accounting faint">{uiText("GB 按 1000 进位，GiB 按 1024 进位；扫描汇总文件占用，不等于整盘已用空间。系统保留、快照和无权限内容可能造成差异。")}</p><div className="dk-disks">
         {(disks || []).map((d) => {
-          const used = d.total - d.available;
+          const used = Math.max(0, d.total - d.available);
           const pct = d.total ? (used / d.total) * 100 : 0;
           return (
             <article key={d.mount} className="dk-disk">
