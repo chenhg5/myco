@@ -217,7 +217,7 @@ export interface Page {
   /** the template it was made from (hubs from v0.20.5) */
   /** the app it was made from; latest: the app's newer version (hubs from v0.20.7) */
   template?: { id: string; slug: string; name: string; version: string; permissions?: string[]; os?: string[]; net?: string[]; latest?: string; requires_isolation?: boolean;
-    /** hubs from v0.22.8: permissions and os are all it declares (the App refuses the rest); official: one of myco's own */
+    /** hubs from v0.22.9: permissions and os are all it declares (the App refuses the rest); official: one of myco's own */
     declares?: boolean; official?: boolean };
 }
 /** A template in the workspace's library (hubs from v0.20.5): official

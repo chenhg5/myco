@@ -220,7 +220,7 @@ public final class PageBridge {
         storage.data(forKey: storageKey).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
     }
 
-    /// An app may not use what it does not declare (hubs from v0.22.8).
+    /// An app may not use what it does not declare (hubs from v0.22.9).
     private func declared(_ permission: String) throws {
         if let template = page.template, !template.allows(permission) {
             throw Refusal(

@@ -112,7 +112,7 @@ type osDecl struct {
 	app     bool // made from an app (a template): it can declare
 	os, net []string
 	at      time.Time
-	// declares: the hub says os is all the app declares (hubs from v0.22.8)
+	// declares: the hub says os is all the app declares (hubs from v0.22.9)
 	declares bool
 	// official: one of myco's own apps (the hub says so)
 	official bool

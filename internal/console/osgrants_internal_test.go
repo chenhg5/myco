@@ -157,7 +157,7 @@ func TestOSNetworkConsent(t *testing.T) {
 	}
 }
 
-// From hubs that say an app's declarations are all it declares (v0.22.8),
+// From hubs that say an app's declarations are all it declares (v0.22.9),
 // an app may not use what it does not declare: refused, not asked. Pages
 // with no app, older hubs and myco's own apps that declare nothing yet are
 // asked as before; the person's own pick is no way around it.

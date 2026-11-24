@@ -1651,11 +1651,11 @@ type PageTemplate struct {
 	// (hubs from v0.20.7): POST /v1/pages/{id}/upgrade takes it.
 	Latest            string `json:"latest,omitempty"`
 	RequiresIsolation bool   `json:"requires_isolation,omitempty"`
-	// Declares (hubs from v0.22.8): Permissions and OS are all the app
+	// Declares (hubs from v0.22.9): Permissions and OS are all the app
 	// declares; Apps refuse what they leave out. Older hubs leave it out,
 	// and Apps only warn.
 	Declares bool `json:"declares,omitempty"`
-	// Official: one of myco's own apps (hubs from v0.22.8).
+	// Official: one of myco's own apps (hubs from v0.22.9).
 	Official bool `json:"official,omitempty"`
 }
 

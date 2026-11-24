@@ -897,7 +897,7 @@ public struct PageTemplate: Codable, Sendable, Hashable {
     /// capabilities, in os).
     public var permissions: [String]?
     public var os: [String]?
-    /// Hubs from v0.22.8: permissions and os are all it declares, so what
+    /// Hubs from v0.22.9: permissions and os are all it declares, so what
     /// they leave out is refused. Official: one of myco's own apps.
     public var declares: Bool?
     public var official: Bool?

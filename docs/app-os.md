@@ -27,7 +27,7 @@ App 版本里有了这一项，桥的 `myco.features` 里会有 `"os"`。
 >
 > **在 myco.json 里声明**（Hub v0.22.1 起认得）：`"os"` 列出用到的能力组，`"net"` 列出要访问的域名。
 >
-> **没声明的直接拒绝**（Hub 和 App v0.22.8 起）：页面是从应用做出来的，而 Hub 说明了清单里的就是全部（页面的 `template.declares`），那么 `"os"` 里没有的能力组直接回 `permission_denied`，提示在 `myco.json` 的 `"os"` 里加上哪一组，不再问人。人自己选的文件也不例外：没声明 `files` 就不能用 `fs.pick`。`myco.send`、`myco.download` 同样：`"permissions"` 里没写就拒绝（桌面、iOS、Android 都一样）。
+> **没声明的直接拒绝**（Hub 和 App v0.22.9 起）：页面是从应用做出来的，而 Hub 说明了清单里的就是全部（页面的 `template.declares`），那么 `"os"` 里没有的能力组直接回 `permission_denied`，提示在 `myco.json` 的 `"os"` 里加上哪一组，不再问人。人自己选的文件也不例外：没声明 `files` 就不能用 `fs.pick`。`myco.send`、`myco.download` 同样：`"permissions"` 里没写就拒绝（桌面、iOS、Android 都一样）。
 > - 没有清单的普通页面（agent 直接发布的）没法声明，照旧每次问。
 > - 旧 Hub 不说 `declares`，App 照旧只提醒「这个应用没有声明要用这一项」。
 > - `net`：声明了 `network` 的应用，访问 `"net"` 里没写的公网域名仍然一个一个问（播客的订阅源、观影的片源、股票的网关都是用户自己填的，没法提前写进清单）；没写的本机和局域网地址直接拒绝。

@@ -4,7 +4,7 @@ import kotlinx.serialization.json.*
 
 /**
  * Whether a page's app may use a permission ("send", "download"). From hubs that say its
- * declarations are all it declares (template.declares, hubs from v0.22.8), only what it lists in
+ * declarations are all it declares (template.declares, hubs from v0.22.9), only what it lists in
  * "permissions"; myco's own apps that declare nothing yet ("os" empty) may, for now. Pages with
  * no app and older hubs: as before.
  */
