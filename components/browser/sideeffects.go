@@ -83,6 +83,7 @@ func (s *session) newPage(ctx context.Context, rawURL string) (*rod.Page, error)
 		if failed {
 			cleanup, stop := context.WithTimeout(s.ctx, 2*time.Second)
 			defer stop()
+			cleanup = context.WithValue(cleanup, engineInternal{}, true)
 			_, _ = s.browser.Call(cleanup, "", "Target.closeTarget", map[string]any{"targetId": created.ID})
 		}
 	}()

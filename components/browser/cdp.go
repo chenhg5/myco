@@ -18,6 +18,8 @@ import (
 //go:embed recorder.js
 var recorderSource string
 
+type engineInternal struct{}
+
 const recorderWorld = "myco-browser-collector"
 
 func (s *session) trace(method string, sid proto.TargetSessionID, done bool) {
@@ -26,10 +28,9 @@ func (s *session) trace(method string, sid proto.TargetSessionID, done bool) {
 	}
 }
 func (s *session) call(sid proto.TargetSessionID, method string, args any, out any) error {
-	s.trace(method, sid, false)
-	defer s.trace(method, sid, true)
 	ctx, cancel := context.WithTimeout(s.ctx, 10*time.Second)
 	defer cancel()
+	ctx = context.WithValue(ctx, engineInternal{}, true)
 	raw, err := s.browser.Call(ctx, string(sid), method, args)
 	if err != nil {
 		return err

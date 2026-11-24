@@ -127,7 +127,7 @@ func (e *engine) snapshot(owner string, p *rod.Page, t *target) (string, error) 
 		findCtx, stop := context.WithTimeout(ctx, 700*time.Millisecond)
 		el, findErr := findTarget(findCtx, p, *t)
 		if findErr == nil {
-			data, _ = el.Screenshot(proto.PageCaptureScreenshotFormatJpeg, quality)
+			data, _ = passiveElementScreenshot(el.Page().Context(findCtx), el.Object.ObjectID, quality)
 		}
 		stop()
 	}
@@ -187,4 +187,24 @@ func (s *session) registerDownload(guid string) {
 		return
 	}
 	_, _ = s.e.storeArtifact(s.scope, "application/octet-stream", data)
+}
+
+// Never call Element.Screenshot here: its scroll/RAF helpers can use Rod's
+// unbounded root Page and hang when a popup backgrounds the opener.
+func passiveElementScreenshot(page proto.Client, id proto.RuntimeRemoteObjectID, quality int) ([]byte, error) {
+	shape, err := (proto.DOMGetContentQuads{ObjectID: id}).Call(page)
+	if err != nil {
+		return nil, err
+	}
+	box := shape.Box()
+	if box.Width <= 0 || box.Height <= 0 || box.X < 0 || box.Y < 0 {
+		return nil, errors.New("target_not_found")
+	}
+	// Quads and Clip use CSS pixels. Let Chrome apply device scale rather
+	// than cropping device pixels with CSS coordinates on Retina/Windows.
+	view, err := (proto.PageCaptureScreenshot{Format: proto.PageCaptureScreenshotFormatJpeg, Quality: &quality, FromSurface: true, Clip: &proto.PageViewport{X: box.X, Y: box.Y, Width: math.Min(box.Width, 4096), Height: math.Min(box.Height, 4096), Scale: 1}}).Call(page)
+	if err != nil {
+		return nil, err
+	}
+	return view.Data, nil
 }

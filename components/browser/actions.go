@@ -15,6 +15,8 @@ import (
 
 func (r *playRun) act(ctx context.Context, n node) (any, error) {
 	s := r.session
+	restore := s.commands(ctx)
+	defer restore()
 	p, err := s.page()
 	if err != nil {
 		return nil, err

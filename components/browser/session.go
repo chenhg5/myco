@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/cdp"
 	"github.com/go-rod/rod/lib/proto"
 )
 
@@ -27,6 +28,8 @@ type targetInstall struct {
 }
 
 type session struct {
+	commandCtx          context.Context
+	commandToken        uint64
 	headless            bool
 	seenTargets         map[proto.TargetTargetID]bool
 	sequence            uint64
@@ -232,7 +235,12 @@ func (e *engine) openSession(ctx context.Context, owner, id string, headless boo
 		}
 	}
 	s.trace("stage:DevTools-port", "", true)
-	b := rod.New().Context(run).ControlURL(endpoint).NoDefaultDevice().Trace(false).SlowMotion(0).Logger(quietLog{})
+	ws := &cdp.WebSocket{}
+	if err = ws.Connect(run, endpoint, nil); err != nil {
+		return nil, err
+	}
+	wire := cdp.New().Logger(quietLog{}).Start(ws)
+	b := rod.New().Context(run).ControlURL("").Client(&sessionClient{base: wire, owner: s}).NoDefaultDevice().Trace(false).SlowMotion(0).Logger(quietLog{})
 	s.trace("stage:Rod-connect", "", false)
 	if err = b.Connect(); err != nil {
 		return nil, err
@@ -242,36 +250,22 @@ func (e *engine) openSession(ctx context.Context, owner, id string, headless boo
 	if err = s.attach(); err != nil {
 		return nil, err
 	}
+	// Do not let Pages() race auto-attachment by attaching all targets a
+	// second time. Each primary installer constructs its Rod Page itself.
 	s.trace("stage:Rod-pages", "", false)
-	pages, err := b.Pages()
+	targets, err := (proto.TargetGetTargets{}).Call(b)
 	if err != nil {
 		return nil, err
 	}
-	s.trace("stage:Rod-pages", "", true)
-	for _, p := range pages {
-		if err = s.installTarget(proto.TargetAttachedToTarget{SessionID: p.SessionID, TargetInfo: &proto.TargetTargetInfo{TargetID: p.TargetID, Type: "page"}}); err != nil {
+	for _, info := range targets.TargetInfos {
+		if info.Type != "page" {
+			continue
+		}
+		if _, err = s.waitPage(startup, info.TargetID); err != nil {
 			return nil, err
 		}
-		s.mu.Lock()
-		installed := s.installs[p.TargetID]
-		s.mu.Unlock()
-		if installed != nil {
-			select {
-			case <-installed.ready:
-				if installed.err != nil {
-					return nil, installed.err
-				}
-			case <-startup.Done():
-				return nil, startup.Err()
-			}
-		}
-		s.mu.Lock()
-		s.pages[p.TargetID] = p
-		if s.current == "" {
-			s.current = p.TargetID
-		}
-		s.mu.Unlock()
 	}
+	s.trace("stage:Rod-pages", "", true)
 	failed = false
 	go func() { <-run.Done(); s.close() }()
 	return s, nil
@@ -354,3 +348,20 @@ func (s *session) page() (*rod.Page, error) {
 type quietLog struct{}
 
 func (quietLog) Println(...interface{}) {}
+
+// Rod sometimes routes frame/repaint helpers through its original root Page,
+// losing a derived Page's context. Carry the active operation to the wire too.
+func (s *session) commands(ctx context.Context) func() {
+	s.mu.Lock()
+	s.commandToken++
+	token := s.commandToken
+	s.commandCtx = ctx
+	s.mu.Unlock()
+	return func() {
+		s.mu.Lock()
+		if s.commandToken == token {
+			s.commandCtx = nil
+		}
+		s.mu.Unlock()
+	}
+}
