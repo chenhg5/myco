@@ -357,6 +357,7 @@ func (b *Backend) runBrowserJob(ctx context.Context, c *client.Client, host *api
 		return api.ActionJobComplete{State: api.JobSucceeded, Result: data}
 	}
 	var record *browserAgentRun
+	cursor := 0
 	if hj.Job.Action == "browser.script.run" {
 		store, e := b.browserPolicies()
 		if e != nil {
@@ -440,6 +441,7 @@ func (b *Backend) runBrowserJob(ctx context.Context, c *client.Client, host *api
 		}
 		record.mu.Lock()
 		paused := !record.closed && record.update.State == "paused"
+		cursor = record.update.Next
 		if paused {
 			if record.timer != nil {
 				record.timer.Stop()
@@ -454,13 +456,18 @@ func (b *Backend) runBrowserJob(ctx context.Context, c *client.Client, host *api
 		if choice == "" {
 			choice = "ok"
 		}
+		// Protocol 1 appends a control acknowledgement before gate() changes
+		// state. Skip that event: its state can still be the previous pause.
+		if choice == "ok" {
+			cursor++
+		}
 		var discard any
 		if e := b.browserComponent().Call(run, record.scope, "POST", "/runs/"+url.PathEscape(record.id)+"/resume", map[string]string{"choice": choice}, &discard); e != nil {
 			b.cancelBrowserRun(record)
 			return actionFailure("outcome_unknown", "resume was not confirmed; the native session was closed, do not repeat blindly", false, nil)
 		}
 	}
-	return b.waitBrowserRun(run, c, host, hj.Job.ID, record)
+	return b.waitBrowserRun(run, c, host, hj.Job.ID, record, cursor)
 }
 func validBrowserRunID(id string) bool {
 	if !strings.HasPrefix(id, "run_") || len(id) > 100 {
@@ -497,7 +504,7 @@ func browserParamsAllowed(raw json.RawMessage, params map[string]string) bool {
 	}
 	return true
 }
-func (b *Backend) waitBrowserRun(ctx context.Context, c *client.Client, host *api.ActionHost, job string, r *browserAgentRun) api.ActionJobComplete {
+func (b *Backend) waitBrowserRun(ctx context.Context, c *client.Client, host *api.ActionHost, job string, r *browserAgentRun, after int) api.ActionJobComplete {
 	native := b.browserComponent()
 	run, stop := context.WithCancel(ctx)
 	defer stop()
@@ -508,7 +515,6 @@ func (b *Backend) waitBrowserRun(ctx context.Context, c *client.Client, host *ap
 	if closed {
 		stop()
 	}
-	after := 0
 	for run.Err() == nil {
 		var update browserNativeUpdate
 		e := native.Call(run, r.scope, "GET", "/runs/"+url.PathEscape(r.id)+"?after="+strconv.Itoa(after), nil, &update)
@@ -517,6 +523,11 @@ func (b *Backend) waitBrowserRun(ctx context.Context, c *client.Client, host *ap
 		}
 		if update.State != "queued" && update.State != "running" && update.State != "paused" && update.State != "succeeded" && update.State != "failed" && update.State != "cancelled" {
 			break
+		}
+		// A long-poll heartbeat has no new event. In particular it cannot
+		// confirm a fresh pause after a resume acknowledgement.
+		if update.State == "paused" && update.Next <= after {
+			continue
 		}
 		r.mu.Lock()
 		if r.closed {

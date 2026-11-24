@@ -18,6 +18,10 @@ import (
 )
 
 type actionBrowserFixture struct {
+	resumePending    bool
+	resumeHeartbeats int
+	next             int
+
 	policyFixtureComponent
 	mu                             sync.Mutex
 	state                          string
@@ -51,6 +55,7 @@ func (f *actionBrowserFixture) Call(ctx context.Context, scope, method, path str
 		f.script = req.Script
 		f.starts++
 		f.state = "paused"
+		f.next = 2
 		value = map[string]string{"id": "run_fixture"}
 	case method == "GET" && strings.HasPrefix(path, "/runs/run_fixture?"):
 		if f.wait {
@@ -58,9 +63,29 @@ func (f *actionBrowserFixture) Call(ctx context.Context, scope, method, path str
 			<-ctx.Done()
 			return ctx.Err()
 		}
-		value = map[string]any{"state": f.state, "node": "confirm", "question": "Publish?", "next": 2, "output": map[string]string{"title": "Report"}, "steps": []map[string]string{{"shot": "a_fixture"}}}
+		if f.resumePending && strings.Contains(path, "after=3") && f.resumeHeartbeats == 0 {
+			f.resumePending = false
+			f.state = "succeeded"
+			f.next = 4
+		}
+		if f.resumePending && strings.Contains(path, "after=3") && f.resumeHeartbeats > 0 {
+			f.resumeHeartbeats--
+		}
+		value = map[string]any{"state": f.state, "node": "confirm", "question": "Publish?", "next": f.next, "output": map[string]string{"title": "Report"}, "steps": []map[string]string{{"shot": "a_fixture"}}}
 	case method == "POST" && path == "/runs/run_fixture/resume":
-		f.state = "succeeded"
+		f.state = "paused"
+		f.next = 3
+		f.resumePending = true
+		f.resumeHeartbeats = 1
+		raw, _ := json.Marshal(in)
+		var input struct {
+			Choice string `json:"choice"`
+		}
+		json.Unmarshal(raw, &input)
+		if input.Choice == "cancel" {
+			f.state = "cancelled"
+			f.resumePending = false
+		}
 		value = true
 	case method == "POST" && path == "/runs/run_fixture/cancel":
 		f.cancels++
@@ -167,6 +192,15 @@ func TestBrowserHostUsesApprovedSnapshotAndOriginalGrant(t *testing.T) {
 	if done.State != api.JobSucceeded || !strings.Contains(string(done.Result), `"state":"succeeded"`) {
 		t.Fatalf("resume: %+v", done)
 	}
+	// Cancelling a confirmation has no control ACK event in protocol 1.
+	done = call("browser.script.run", `{"script_id":"report","version":3,"page_id":"pg_test"}`, grant)
+	if done.State != api.JobSucceeded {
+		t.Fatalf("new paused run: %+v", done)
+	}
+	done = call("browser.run.resume", `{"run_id":"run_fixture","choice":"cancel"}`, grant)
+	if done.State != api.JobCancelled || !strings.Contains(string(done.Result), `"state":"cancelled"`) {
+		t.Fatalf("cancel choice: %+v", done)
+	}
 	// A policy edit locally cancels paused native work before old grants can
 	// resume. The callback is installed when the browser host book is initialized.
 	done = call("browser.script.run", `{"script_id":"report","version":3,"page_id":"pg_test"}`, grant)
@@ -223,7 +257,7 @@ func TestBrowserRunningCancellationStopsNativeSession(t *testing.T) {
 	r := &browserAgentRun{id: "run_fixture", scope: "agent-fixture", expires: time.Now().Add(time.Minute), update: browserNativeUpdate{State: "running"}}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan api.ActionJobComplete, 1)
-	go func() { done <- b.waitBrowserRun(ctx, nil, nil, "job", r) }()
+	go func() { done <- b.waitBrowserRun(ctx, nil, nil, "job", r, 0) }()
 	cancel()
 	select {
 	case result := <-done:
