@@ -81,7 +81,16 @@ if git ls-remote "$push_url" "refs/tags/$V" 2>/dev/null | grep -q .; then
 elif [ "$DRY" = 1 ]; then
   say "would push tag $V to Gitee"
 else
-  git fetch -q --depth=1 origin "refs/tags/$V:refs/tags/$V" 2>/dev/null || true
+  # Fetch the tag whole: a --depth=1 fetch makes it shallow, and Gitee
+  # rejects pushing a shallow tag ("shallow update not allowed").
+  if ! git rev-parse -q --verify "refs/tags/$V" >/dev/null; then
+    git fetch -q origin "refs/tags/$V:refs/tags/$V" ||
+      { echo "gitee-sync: could not fetch tag $V" >&2; exit 1; }
+  fi
+  if [ -f "$(git rev-parse --git-dir)/shallow" ]; then
+    echo "gitee-sync: this clone is shallow; Gitee rejects a shallow tag (fetch --unshallow first)" >&2
+    exit 1
+  fi
   git push -q "$push_url" "refs/tags/$V:refs/tags/$V" ||
     { echo "gitee-sync: could not push tag $V to Gitee" >&2; exit 1; }
   say "pushed tag $V to Gitee"
