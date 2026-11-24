@@ -54,6 +54,7 @@ make web                # rebuild web/ into internal/web/dist (Node 18+)
 cd web && npm run typecheck
 cd web && npm run dev:app   # UI against the mock App backend (web/mock/app-server.mjs)
 make app                # macOS only: bin/myco.app
+scripts/ship.sh         # push to main: rebuilds dist if web/ changed, rebases (dist-only conflicts rebuilt), pushes; --check runs vet+test first
 ```
 
 Before you finish a change, run `make vet` and `make test`. Run `make smoke` when you change CLI or runner behaviour.
@@ -61,7 +62,7 @@ Before you finish a change, run `make vet` and `make test`. Run `make smoke` whe
 ## Rules
 
 - **Format.** Run `gofmt` on Go files; CI fails on unformatted code.
-- **Web changes.** If you change `web/src`, run `make web` and commit the regenerated `internal/web/dist`. Go builds never run Node, so a stale `dist` ships a stale UI. Never hand-edit `dist`.
+- **Web changes.** If you change `web/src`, run `make web` and commit the regenerated `internal/web/dist` (`scripts/ship.sh` does both, and rebuilds dist when a rebase conflicts on it). Go builds never run Node, so a stale `dist` ships a stale UI. Never hand-edit `dist`.
 - **App UI.** New pages, components and dialogs in `web/src/app` follow `docs/design/app-ui.md`: use the existing classes and components it lists, and run its checklist (`npm run test:ui`, light and dark, two widths) before you finish.
 - **Releases.** Do not touch `VERSION`. Bumping it on `main` publishes a release. Only maintainers do that, and only when they ask for it.
   When a release is asked for, add its section to `CHANGELOG.md` (`## vX.Y.Z`, newest first, user-facing changes in English, then the same in Chinese under a `**中文**` line) in the same commit as `VERSION`: the release workflow publishes that section as the release notes.
