@@ -22,6 +22,9 @@ public enum MarkdownBlock: Hashable, Sendable {
     case quote(String)
     case table(header: [String], rows: [[String]])
     case rule
+    /// A picture on a line of its own: `![alt](attachment:name)` or an
+    /// https:// one.
+    case image(alt: String, src: String)
 
     /// Splits Markdown into blocks, line by line. Anything it does not
     /// recognise stays a paragraph, so nothing an agent wrote is lost.
@@ -52,6 +55,12 @@ public enum MarkdownBlock: Hashable, Sendable {
                 }
                 i += 1 // the closing fence, or the end
                 blocks.append(.code(language: language, text: body.joined(separator: "\n")))
+                continue
+            }
+            if let picture = Self.picture(trimmed) {
+                flush()
+                blocks.append(.image(alt: picture.alt, src: picture.src))
+                i += 1
                 continue
             }
             if trimmed.isEmpty {
@@ -151,6 +160,30 @@ public enum MarkdownBlock: Hashable, Sendable {
         return ListItem(marker: marker, text: text, level: min(level, 4), checked: checked, inHand: inHand)
     }
 
+    /// A line that is only a picture: its words and where it is.
+    static func picture(_ line: String) -> (alt: String, src: String)? {
+        guard line.hasPrefix("!["), let match = line.wholeMatch(of: /!\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/) else { return nil }
+        let src = String(match.2)
+        guard src.hasPrefix("attachment:") || src.hasPrefix("https://") || src.hasPrefix("http://") else { return nil }
+        return (String(match.1), src)
+    }
+
+    /// The pictures a message places in its text (Markdown pictures and
+    /// myco-ui blocks), as written: `attachment:<name or id>` or a link.
+    /// Those of its files are drawn there, and not listed again below.
+    public static func placedPictures(in source: String) -> [String] {
+        var found: [String] = []
+        for block in parse(source) {
+            switch block {
+            case .image(_, let src): found.append(src)
+            case .code(let language, let text) where language == UIBlock.fence:
+                if let root = UIBlock.parse(text) { found += UIBlock.pictures(in: root) }
+            default: break
+            }
+        }
+        return found
+    }
+
     /// Inline Markdown (bold, italics, code, links) as attributed text.
     static func inline(_ text: String) -> AttributedString {
         let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
@@ -215,16 +248,18 @@ public struct ReplyText: View {
                     .padding(.leading, CGFloat(item.level) * 20)
                 }
             }
-        case .code(_, let text):
-            ScrollView(.horizontal, showsIndicators: false) {
-                Text(text)
-                    .font(.footnote.monospaced())
-                    .lineSpacing(3)
-                    .foregroundStyle(MycoColor.fg)
-                    .textSelection(.enabled)
-                    .padding(14)
+        case .code(let language, let text):
+            if language == UIBlock.fence {
+                // Structured parts, drawn as components.
+                UIBlockView(source: text)
+            } else if language.lowercased() == "mermaid" {
+                // A diagram: its source, said to be one (drawn on the desktop).
+                CodeBlockView(code: text, language: "", title: UIBlockWords.words().diagram)
+            } else {
+                CodeBlockView(code: text, language: language)
             }
-            .background(MycoColor.pill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        case .image(let alt, let src):
+            PlacedPicture(src: src, alt: alt)
         case .quote(let text):
             HStack(spacing: 10) {
                 RoundedRectangle(cornerRadius: 1.5).fill(MycoColor.line).frame(width: 3)

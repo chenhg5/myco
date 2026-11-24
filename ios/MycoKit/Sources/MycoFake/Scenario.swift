@@ -23,6 +23,9 @@ public enum Scenario: Sendable {
     /// The team, with a page that plays a public podcast through the
     /// phone's network (for UI tests; needs the internet).
     case media
+    /// The team, with 运维 answering in structured parts: code, a
+    /// diagram, a myco-ui block and pictures placed in its text.
+    case rich
     /// Joined, but nobody is here yet.
     case empty
 
@@ -327,6 +330,45 @@ public enum Scenario: Sendable {
                 id: "pgm", from: tester.name, to: me, type: "note",
                 body: "清单做成了一个网页，可以直接勾：\(FakeHub.demoAddress.absoluteString)/pages/pg_checklist\n\n有改动我会再发一版。", status: "done",
                 createdAt: ago(1_050)))
+        }
+        if self == .rich {
+            let screen = file("f_screen", "首页.png", "image/png", SamplePicture.png(hue: 0.52, width: 750, height: 1000))
+            let log = file("f_log", "build.log", "text/plain", Data("ok\n".utf8))
+            let block = """
+            {"type": "Card", "props": {"title": "发版检查", "tone": "success"}, "children": [
+              {"type": "Grid", "props": {"columns": 3}, "children": [
+                {"type": "Metric", "props": {"label": "测试", "value": "412", "delta": "+12", "tone": "success"}},
+                {"type": "Metric", "props": {"label": "失败", "value": "0", "tone": "success"}},
+                {"type": "Metric", "props": {"label": "包大小", "value": "7.4 MB", "delta": "+2.6 MB", "tone": "warning"}}]},
+              {"type": "Steps", "props": {"items": [{"title": "构建", "status": "done"}, {"title": "签名", "status": "doing"}, {"title": "发布", "status": "todo"}]}},
+              {"type": "Callout", "props": {"tone": "warning", "title": "注意", "text": "包大了 **2.6 MB**，主要是新字体。"}},
+              {"type": "Image", "props": {"src": "attachment:首页.png", "caption": "新的首页"}},
+              {"type": "Button", "props": {"label": "发吧", "action": "reply", "value": "发吧", "primary": true}}]}
+            """
+            world.messages.append(Message(
+                id: "rich", from: ops.name, to: me, type: "note",
+                body: """
+                检查完了，可以发。
+
+                ```myco-ui
+                \(block)
+                ```
+
+                改的地方：
+
+                ```swift
+                // 首页的标题
+                let title = "myco"   // 12 个字以内
+                if title.count > 12 { return }
+                ```
+
+                ```mermaid
+                graph LR; 构建 --> 签名 --> 发布
+                ```
+
+                ![首页截图](attachment:首页.png)
+                """,
+                status: "done", createdAt: ago(40), attachments: [screen, log]))
         }
         if self == .long {
             // Four hundred messages with the notes helper, oldest first,

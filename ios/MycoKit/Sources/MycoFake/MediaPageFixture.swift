@@ -12,7 +12,7 @@ enum MediaPageFixture {
     <style>body{font:16px -apple-system;padding:20px;color:#222;background:#fafafa}button{font:inherit;min-height:44px;margin:6px 6px 0 0;padding:6px 12px;border:1px solid #bbb;border-radius:10px;background:#fff;color:#222}p{margin:8px 0}</style></head><body>
     <h1>Media probe</h1>
     <p id="feed">Feed: reading</p><p id="state">State: idle</p><p id="time">Time: 0</p><p id="note">Note: none</p>
-    <button id="play">Play</button><button id="pause">Pause</button><button id="seek">Seek 600</button>
+    <button id="play">Play</button><button id="pause">Pause</button><button id="seek">Seek 180</button>
     <p id="private">Private: not tried</p><p id="type">Type: not tried</p>
     <button id="tryPrivate">Try private</button><button id="tryType">Try feed as media</button>
     <audio id="player" preload="none"></audio>
@@ -29,6 +29,10 @@ enum MediaPageFixture {
       var xml = new DOMParser().parseFromString(r.body, 'text/xml');
       var items = xml.querySelectorAll('item enclosure');
       episode = items.length ? items[0].getAttribute('url') : null;
+      // `#track=<address>`: that instead (a network that cannot reach the
+      // feed's audio directly still tests the stream).
+      var given = new URLSearchParams(location.hash.slice(1)).get('track');
+      if (given) episode = given;
       say('feed', 'Feed: ' + items.length + ' episodes' + (episode ? '' : ', none to play'));
     }).catch(function (e) { say('feed', 'Feed: failed ' + (e.message || e)); });
     document.getElementById('play').onclick = function () {
@@ -37,7 +41,7 @@ enum MediaPageFixture {
       player.play().catch(function (e) { say('note', 'Note: play refused ' + e.name); });
     };
     document.getElementById('pause').onclick = function () { player.pause(); };
-    document.getElementById('seek').onclick = function () { player.currentTime = 600; player.play(); };
+    document.getElementById('seek').onclick = function () { player.currentTime = 180; player.play(); };
     function tryStream(id, address) {
       fetch(myco.media.url(address)).then(function (r) {
         return r.text().then(function (t) { say(id, id[0].toUpperCase() + id.slice(1) + ': ' + r.status + ' ' + t.slice(0, 80)); });

@@ -826,6 +826,38 @@ final class ConversationTests: XCTestCase {
         XCTAssertTrue(app.buttons["handoff.d1"].exists)
         snap("project-handoffs")
     }
+    @MainActor
+    func testAnAnswerInStructuredPartsIsDrawnAsComponents() {
+        // A myco-ui block, coloured code, a diagram's source and a picture
+        // placed in the text, as the desktop draws them.
+        let app = launch(["-myco-start", "rich", "-myco-route", "agent:vps-codex-90aa"])
+        let block = app.descendants(matching: .any)["uiblock"]
+        XCTAssertTrue(block.waitForExistence(timeout: 20), app.debugDescription)
+        XCTAssertTrue(app.staticTexts["发版检查"].exists, "the card's title")
+        XCTAssertTrue(app.staticTexts["412"].exists, "a metric")
+        XCTAssertTrue(app.staticTexts["签名"].exists, "a step")
+        XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "\"type\"")).firstMatch.exists, "not its JSON")
+        snap("rich-block")
+        // The code and the diagram, further down.
+        let code = app.descendants(matching: .any).matching(identifier: "code.block")
+        XCTAssertGreaterThanOrEqual(code.count, 2, "the Swift and the diagram's source")
+        XCTAssertTrue(app.staticTexts["Diagram (Mermaid)"].exists)
+        // The picture is drawn where the text puts it, not listed again
+        // below; the log still is.
+        XCTAssertGreaterThanOrEqual(app.descendants(matching: .any).matching(identifier: "placed.picture").count, 2)
+        XCTAssertEqual(app.buttons.matching(identifier: "attachment.picture").count, 0)
+        app.swipeUp()
+        snap("rich-code")
+        // The block's button puts its words in the input.
+        app.swipeDown()
+        let ship = app.buttons.matching(identifier: "uiblock.button").firstMatch
+        XCTAssertTrue(ship.waitForExistence(timeout: 5))
+        ship.tap()
+        let input = app.descendants(matching: .any)["composer.input"]
+        expectation(for: NSPredicate(format: "value CONTAINS %@", "发吧"), evaluatedWith: input)
+        waitForExpectations(timeout: 5)
+    }
+
     /// The whole seconds a "Time: n" line says.
     private func seconds(_ element: XCUIElement) -> Int {
         Int(element.label.replacingOccurrences(of: "Time: ", with: "")) ?? -1
@@ -836,7 +868,11 @@ final class ConversationTests: XCTestCase {
         // A page plays a publisher's public podcast through myco.media.url:
         // the feed read through the network bridge, the audio streamed by
         // the app over the phone's own network (this needs the internet).
-        let app = launch(["-myco-start", "media", "-myco-route", "page:pg_media"])
+        // MYCO_MEDIA_TRACK: a public audio address to play instead of the
+        // feed's first episode (where the feed's host is not reachable
+        // directly, as behind a desktop proxy).
+        let track = ProcessInfo.processInfo.environment["MYCO_MEDIA_TRACK"].flatMap { $0.isEmpty ? nil : $0 }
+        let app = launch(["-myco-start", "media", "-myco-route", "page:pg_media" + (track.map { "#track=" + $0 } ?? "")])
         let web = app.webViews.firstMatch
         func line(_ prefix: String) -> XCUIElement {
             web.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", prefix)).firstMatch
@@ -866,8 +902,8 @@ final class ConversationTests: XCTestCase {
         expectation(for: NSPredicate { _, _ in self.seconds(time) >= paused + 2 }, evaluatedWith: nil)
         waitForExpectations(timeout: 45)
         // Seek far ahead (a range of the file): it plays from there.
-        web.buttons["Seek 600"].tap()
-        expectation(for: NSPredicate { _, _ in self.seconds(time) >= 602 }, evaluatedWith: nil)
+        web.buttons["Seek 180"].tap()
+        expectation(for: NSPredicate { _, _ in self.seconds(time) >= 182 }, evaluatedWith: nil)
         waitForExpectations(timeout: 45)
         XCTAssertEqual(state.label, "State: playing")
         snap("media-seeked")

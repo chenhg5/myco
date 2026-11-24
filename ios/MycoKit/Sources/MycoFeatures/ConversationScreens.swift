@@ -338,6 +338,8 @@ struct ConversationBody: View {
                     let current = found.isEmpty ? nil : found[min(findIndex ?? found.count - 1, found.count - 1)]
                     ForEach(Array(model.items.enumerated()), id: \.element.id) { index, item in
                         row(item, at: index)
+                            // Its pictures, for those its text places.
+                            .environment(\.messagePictures, pictures(item.files))
                             // Found by the search bar: marked, the one shown more.
                             .background {
                                 if found.contains(item.id) {
@@ -601,6 +603,8 @@ struct ConversationBody: View {
             FilePreview.show([url], at: url)
             lookingAt = nil
         }
+        // A block's reply button puts its words in the input, to send.
+        .environment(\.uiBlockActions, UIBlockActions(reply: { words in model.draft = words }))
         // A link to a page of this workspace opens in the app, like its
         // card; any other link goes where links go.
         .environment(\.openURL, OpenURLAction { url in
@@ -846,9 +850,20 @@ struct ConversationBody: View {
         return nil
     }
 
-    /// The files a message came with, under it.
+    /// The files a message came with, under it: not the pictures its text
+    /// already shows in place.
     private func files(of item: ConversationItem, trailing: Bool) -> some View {
-        files(item.files, trailing: trailing)
+        let text: String
+        switch item.kind {
+        case .mine(let words, _, _), .reply(let words, _, _), .progress(let words, _): text = words
+        default: text = ""
+        }
+        return files(PlacedFiles.unplaced(item.files, in: text), trailing: trailing)
+    }
+
+    /// Where the pictures a text places come from: these files.
+    private func pictures(_ attachments: [Attachment]) -> MessagePictures? {
+        PlacedFiles.pictures(attachments, shelf: session.shelf)
     }
 
     @ViewBuilder private func files(_ attachments: [Attachment], trailing: Bool) -> some View {
@@ -1031,7 +1046,7 @@ struct ConversationBody: View {
                         .font(.caption).foregroundStyle(MycoColor.muted)
                         .accessibilityIdentifier("run.carrying")
                 }
-                ProcessView(parts: model.run(of: taskID), live: live) { attachments, trailing in
+                ProcessView(parts: model.run(of: taskID), live: live, pictures: { pictures($0) }) { attachments, trailing in
                     AnyView(files(attachments, trailing: trailing))
                 }
             }
@@ -1402,6 +1417,8 @@ struct ProcessView: View {
     /// Still being worked on: a step without a result is still going, and
     /// its updates stay open as a timeline.
     let live: Bool
+    /// Where the pictures an update places come from.
+    var pictures: ([Attachment]) -> MessagePictures? = { _ in nil }
     /// Draws the files that came with an update or an addition.
     let files: ([Attachment], Bool) -> AnyView
 
@@ -1426,8 +1443,10 @@ struct ProcessView: View {
                                         report.text, time: report.at.formatted(date: .omitted, time: .shortened),
                                         position: ProgressLine.position(at, of: reports.count),
                                         latest: index == parts.count - 1 && at == reports.count - 1)
-                                    if !report.files.isEmpty { files(report.files, false).padding(.leading, 22) }
+                                    let unplaced = PlacedFiles.unplaced(report.files, in: report.text)
+                                    if !unplaced.isEmpty { files(unplaced, false).padding(.leading, 22) }
                                 }
+                                .environment(\.messagePictures, pictures(report.files))
                             }
                         }
                     } else {
