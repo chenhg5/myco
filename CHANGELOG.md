@@ -4,6 +4,20 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.21.34
+
+- **A project's members can be grouped**: put people into 前端, 后端, 应用 or any group of your own. The workspace keeps the groups per project (up to 30, each name 1–40 characters). In the members column's ⋯ create a group; move a member from its own menu or drag it onto a group; a group's ⋯ renames, moves or deletes it. The coordinator stays on top and members in no group are under 其他. The column can show the groups folded (the default: a folded group's heading still shows its faces and who is at work or asking), as a row of faces per group, or as filter chips on top; the choice is kept on this computer. An older workspace says to upgrade first instead of hiding the ⋯.
+- The CLI can group too: `myco project add --group 后端` puts a member in a group and creates it if it is new; `myco project show` lists each member's group.
+- **A Usage page**: next to Automations and Workflows, totals, a bar a day, and members, projects and models ranked by tokens, for 7, 30 or 90 days, for the whole workspace or one project. The figures come from what each member's CLI reports, so the page fills in as members upgrade myco; a workspace whose hub cannot report usage yet says to upgrade the hub.
+- Upgrade: update the hub to v0.21.34 to use groups; update the App for the grouped members column and the Usage page; update myco on computers that run `myco project add --group` or should report usage.
+
+**中文**
+
+- **项目成员可以分组**：把成员按前端、后端、应用或你自己起的名字分组。工作区为每个项目保存分组（最多 30 个，组名 1–40 个字符）。在成员栏的 ⋯ 里新建分组；成员可以从自己的菜单移动，也可以直接拖到组上；分组自己的 ⋯ 可以改名、调整顺序或删除。协调者始终在最上面，没有分组的成员在「其他」下面。成员栏的分组可以折叠显示（默认；折叠时标题上仍然显示组里的面孔，以及正在工作或提问的人）、每组一行面孔，或用顶部的筛选标签；这个选择保存在这台电脑上。旧工作区会在成员栏提示先升级，而不是把 ⋯ 藏起来。
+- 命令行也能分组：`myco project add --group 后端` 把成员放进分组，分组不存在时会顺带创建；`myco project show` 会列出每个成员所在的分组。
+- **用量页**：在「自动化」和「工作流」旁边，显示总量、每天一根柱子，以及按 token 排名的成员、项目和模型，可以看 7、30 或 90 天，范围是整个工作区或单个项目。数字来自各成员的 CLI 上报，成员升级 myco 后会陆续出现；工作区的 Hub 还不支持用量统计时，页面会提示升级 Hub。
+- 升级：把工作区（Hub）升级到 v0.21.34 才能使用分组；更新 App 才能看到分组后的成员栏和用量页；需要用 `myco project add --group` 或需要上报用量的电脑更新 myco。
+
 ## v0.21.33
 
 - **Disk usage is right on Windows, and capacity units are clear**: compressed and sparse files show the storage they actually take, and a file that takes 0 bytes shows 0. The Disk app's capacity selector defaults to binary GiB on Windows and decimal GB elsewhere, applies to the disk cards, scans, map, file lists and cleanup basket on that computer, and never changes the underlying byte counts. The Windows allocation fix needs the updated desktop App; updating the Disk app alone is not enough.
