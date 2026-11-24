@@ -7,6 +7,7 @@ the daily workflow (.github/workflows/downloads.yml) builds up a history
 that shows the trend.
 
     python3 scripts/downloads.py                      # totals now, by kind and by version
+    python3 scripts/downloads.py --repo-snapshot FILE # record today's repository metrics
     python3 scripts/downloads.py --snapshot FILE      # append today's counts to FILE (CSV)
     python3 scripts/downloads.py --trend FILE [DAYS]  # downloads per day from a snapshot CSV
 
@@ -20,6 +21,7 @@ import datetime as dt
 import json
 import os
 import sys
+import urllib.parse
 import urllib.request
 from collections import defaultdict
 
@@ -54,17 +56,51 @@ def platform(name):
     return p
 
 
-def fetch():
-    """Every release with its files: [(tag, published_at, [(name, count)])]."""
-    out, page = [], 1
+def github_json(path):
     headers = {"Accept": "application/vnd.github+json", "User-Agent": "myco-downloads"}
     if os.environ.get("GITHUB_TOKEN"):
         headers["Authorization"] = "Bearer " + os.environ["GITHUB_TOKEN"]
+    req = urllib.request.Request("https://api.github.com/" + path, headers=headers)
+    with urllib.request.urlopen(req, timeout=30) as response:
+        return json.load(response)
+
+
+def repo_metrics():
+    info = github_json(f"repos/{REPO}")
+    metrics = {
+        "stars": info["stargazers_count"],
+        "forks": info["forks_count"],
+        "watchers": info["subscribers_count"],
+    }
+    for result_key, qualifier in (("open_issues", "issue"), ("open_prs", "pr")):
+        query = urllib.parse.urlencode({"q": f"repo:{REPO} is:open is:{qualifier}", "per_page": 1})
+        result = github_json(f"search/issues?{query}")
+        if result["incomplete_results"]:
+            raise ValueError(f"GitHub returned an incomplete count for {result_key}")
+        metrics[result_key] = result["total_count"]
+    return metrics
+
+
+def repo_snapshot(path, today=None):
+    today = today or dt.datetime.now(dt.timezone.utc).date().isoformat()
+    current = {"date": today, **repo_metrics()}
+    history = {}
+    if os.path.exists(path):
+        with open(path, newline="") as file:
+            history = {row["date"]: row for row in csv.DictReader(file)}
+    history[today] = current
+    with open(path, "w", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=list(current))
+        writer.writeheader()
+        writer.writerows(history[date] for date in sorted(history))
+    print(f"{today}: repository metrics → {path}")
+
+
+def fetch():
+    """Every release with its files: [(tag, published_at, [(name, count)])]."""
+    out, page = [], 1
     while True:
-        url = f"https://api.github.com/repos/{REPO}/releases?per_page=100&page={page}"
-        req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req, timeout=30) as r:
-            batch = json.load(r)
+        batch = github_json(f"repos/{REPO}/releases?per_page=100&page={page}")
         if not batch:
             return out
         for rel in batch:
@@ -136,6 +172,9 @@ def trend(path, days):
 def main(argv):
     if len(argv) >= 2 and argv[0] == "--trend":
         trend(argv[1], int(argv[2]) if len(argv) > 2 else 30)
+        return
+    if len(argv) == 2 and argv[0] == "--repo-snapshot":
+        repo_snapshot(argv[1])
         return
     releases = fetch()
     if len(argv) == 2 and argv[0] == "--snapshot":

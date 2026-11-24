@@ -1,4 +1,4 @@
-# Records release download counts once a day on the `stats` branch
+# Records public repository metrics (stats/repo.csv) and release download counts once a day on the `stats` branch
 # (stats/downloads.csv), so the trend can be read with
 #   python3 scripts/downloads.py --trend stats/downloads.csv
 # GitHub itself only keeps running totals.
@@ -36,6 +36,7 @@ jobs:
         run: |
           mkdir -p stats-branch/stats
           python3 main/scripts/downloads.py --snapshot stats-branch/stats/downloads.csv
+          python3 main/scripts/downloads.py --repo-snapshot stats-branch/stats/repo.csv
           python3 main/scripts/downloads.py --trend stats-branch/stats/downloads.csv 14 || true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -44,7 +45,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add stats/downloads.csv
+          git add stats/downloads.csv stats/repo.csv
           git diff --cached --quiet && exit 0
-          git commit -q -m "Download counts $(date -u +%F)"
+          git commit -q -m "Repository stats $(date -u +%F)"
           git push -q origin stats
