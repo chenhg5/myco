@@ -2243,6 +2243,14 @@ async function runMatrix(browser, size, scheme) {
       try {
         await page.locator("[data-testid=chat-behind]").waitFor({ timeout: 40_000 });
         if (await page.locator(".conv-detail .conv-stuck").count()) throw new Error("网络不好时不该说任务卡住");
+        // (in the chat's column: as wide as the input box, not the pane)
+        {
+          const note = await page.locator("[data-testid=chat-behind]").boundingBox();
+          const box = await page.locator("[data-testid=chat-behind]").locator("xpath=..").locator(".conv-compose-box").boundingBox();
+          if (!note || !box || Math.abs(note.x - box.x) > 1 || Math.abs(note.width - box.width) > 1) {
+            throw new Error(`「网络不太好」应和输入框一样宽、对齐：提示 ${Math.round(note?.x)}+${Math.round(note?.width)}，输入框 ${Math.round(box?.x)}+${Math.round(box?.width)}`);
+          }
+        }
         await settle(page, 150);
         await shot(page, size, scheme, "chat-behind");
       } finally {

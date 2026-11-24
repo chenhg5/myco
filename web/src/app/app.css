@@ -4350,6 +4350,13 @@ html.fp-docked .app-main .sp-side {
   margin-left: auto;
   margin-right: auto;
 }
+/* The connection notices ("网络不太好", a message not sent) set their own
+   margin (space.css), so they are held to the column here, more firmly. */
+.conv-compose > .conv-trouble {
+  max-width: calc(var(--conv-col) - var(--conv-pad) - var(--conv-pad-l));
+  margin-left: auto;
+  margin-right: auto;
+}
 .conv-working {
   display: flex;
   align-items: center;
