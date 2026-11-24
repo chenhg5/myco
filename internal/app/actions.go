@@ -65,10 +65,11 @@ var actionProviders = map[string][]string{
 	// file of what the agent can already read).
 	"page":       {"page.export"},
 	"server.ssh": {"server.ssh.read", "server.ssh.manage"},
+	"browser":    {"browser.view", "browser.run"},
 }
 
 // providerTarget is the kind of target each provider acts on.
-var providerTarget = map[string]string{"remote.desktop": "machine", "page": "page", "server.ssh": "machine"}
+var providerTarget = map[string]string{"remote.desktop": "machine", "page": "page", "server.ssh": "machine", "browser": "machine"}
 
 // providerOf is the provider a permission or action name belongs to.
 func providerOf(name string) string {
@@ -203,19 +204,26 @@ func (s *ActionService) RequestGrant(ctx context.Context, agent *domain.Agent, r
 		return nil, err
 	}
 	targetName := m.Name
-	if req.Target.Resource != nil || contains(perms, "server.ssh.read") {
-		if req.Target.Resource == nil || req.Target.Resource.Provider != "server.ssh" {
-			return nil, domain.Errf(domain.CodeInvalidArgument, "SSH grants require an enabled, bound profile resource")
+	boundProvider := ""
+	for _, p := range perms {
+		if profileProvider(providerOf(p)) {
+			boundProvider = providerOf(p)
 		}
+	}
+	if req.Target.Resource != nil || boundProvider != "" {
+		if req.Target.Resource == nil || !profileProvider(req.Target.Resource.Provider) {
+			return nil, domain.Errf(domain.CodeInvalidArgument, "profile grants require an enabled, bound profile resource")
+		}
+		boundProvider = req.Target.Resource.Provider
 		for _, p := range perms {
-			if providerOf(p) != "server.ssh" {
+			if providerOf(p) != boundProvider {
 				return nil, domain.Errf(domain.CodeInvalidArgument, "a resource grant cannot mix providers")
 			}
 		}
 		s.mu.Lock()
 		var found *api.ActionResource
 		for _, h := range s.hosts {
-			if h.MachineID == m.ID && h.Provider == "server.ssh" && sameResource(h.Resource, req.Target.Resource) && s.clock.Now().Sub(h.LastSeenAt) <= actionHostStale {
+			if h.MachineID == m.ID && h.Provider == boundProvider && sameResource(h.Resource, req.Target.Resource) && s.clock.Now().Sub(h.LastSeenAt) <= actionHostStale {
 				cp := *h.Resource
 				found = &cp
 				break
@@ -223,7 +231,7 @@ func (s *ActionService) RequestGrant(ctx context.Context, agent *domain.Agent, r
 		}
 		s.mu.Unlock()
 		if found == nil {
-			return nil, domain.Errf(domain.CodeUnsupported, "this SSH profile is not enabled on the controller App, or its binding changed")
+			return nil, domain.Errf(domain.CodeUnsupported, "this %s profile is not enabled on the controller App, or its binding changed", boundProvider)
 		}
 		req.Target.Resource = found
 		targetName += " / " + found.Name + " / " + found.Summary
@@ -384,6 +392,19 @@ func grantWhat(agent, machine string, perms []string, ttl time.Duration) string 
 	if contains(perms, "server.ssh.manage") {
 		do = "读取服务器 " + machine + " 并启动、停止或重启服务与容器"
 	}
+	if contains(perms, "browser.view") {
+		do = "在 " + machine + " 上查看状态与运行结果"
+	}
+	if contains(perms, "browser.run") {
+		do = "在 " + machine + " 上运行主人批准的脚本"
+		if contains(perms, "browser.view") {
+			do = "在 " + machine + " 上查看状态与运行结果，并运行主人批准的脚本"
+		}
+	}
+	// Reserved for M3: checkPermissions currently refuses browser.control.
+	if contains(perms, "browser.control") {
+		do = "操作浏览器 profile " + machine + "（能读到这个 profile 登录的所有网站）"
+	}
 	_ = agent // (the card says who asks)
 	return fmt.Sprintf("%s，%d 分钟", do, int(ttl.Round(time.Minute)/time.Minute))
 }
@@ -397,6 +418,9 @@ func checkPermissions(in []string, kind string) ([]string, error) {
 	set := map[string]bool{}
 	for _, p := range in {
 		p = strings.TrimSpace(p)
+		if p == "browser.control" {
+			return nil, domain.Errf(domain.CodeUnsupported, "live browser control is not available in this version")
+		}
 		prov := providerOf(p)
 		known := false
 		for _, k := range actionProviders[prov] {
@@ -768,13 +792,13 @@ func (s *ActionService) RegisterHost(ctx context.Context, by Actor, req api.Acti
 		if err != nil {
 			return nil, err
 		}
-		if mach.Owner != m.ID && (!by.Manages() || req.Provider == "server.ssh") {
+		if mach.Owner != m.ID && (!by.Manages() || profileProvider(req.Provider)) {
 			return nil, domain.Errf(domain.CodePermissionDenied, "%s is not your computer", mach.Name)
 		}
 		where, machineID = mach.Name, mach.ID
 	}
-	if req.Provider == "server.ssh" {
-		if err := validateSSHResource(req.Resource); err != nil {
+	if profileProvider(req.Provider) {
+		if err := validateProfileResource(req.Provider, req.Resource); err != nil {
 			return nil, err
 		}
 		cp := *req.Resource
@@ -791,6 +815,9 @@ func (s *ActionService) RegisterHost(ctx context.Context, by Actor, req api.Acti
 	for _, d := range req.Actions {
 		if !strings.HasPrefix(d.Name, req.Provider+".") || d.Version < 1 || !contains(perms, d.Permission) {
 			return nil, domain.Errf(domain.CodeInvalidArgument, "action %q (v%d, %s) is not one of %s's", d.Name, d.Version, d.Permission, req.Provider)
+		}
+		if req.Provider == "browser" && (d.Version != 1 || api.BrowserActionPermission(d.Name) == "" || api.BrowserActionPermission(d.Name) != d.Permission) {
+			return nil, domain.Errf(domain.CodeInvalidArgument, "browser action %q has an invalid version or permission", d.Name)
 		}
 		if len(d.InputSchema) > actionSchemaMax || len(d.OutputSchema) > actionSchemaMax {
 			return nil, domain.Errf(domain.CodeInvalidArgument, "action %s's schema is too large", d.Name)
@@ -820,7 +847,7 @@ func (s *ActionService) RegisterHost(ctx context.Context, by Actor, req api.Acti
 		}
 		for _, g := range s.grants {
 			if same && !sameResource(old.Resource, h.Resource) && g.Target.ID == h.MachineID && sameResourceID(g.Target.Resource, old.Resource) {
-				s.close(g, api.GrantRevoked, "SSH target binding changed")
+				s.close(g, api.GrantRevoked, "profile target binding changed")
 			} else if g.hostSeen == old.ID {
 				g.hostSeen = h.ID
 			}
@@ -832,6 +859,70 @@ func (s *ActionService) RegisterHost(ctx context.Context, by Actor, req api.Acti
 	s.mu.Unlock()
 	s.audit.Record(ctx, by, "action.host.register", where, req.Provider)
 	return &out, nil
+}
+
+// UnregisterHost withdraws the current host generation. Profile grants match
+// resource identity, so stale policy bindings and pending approvals end too.
+func (s *ActionService) UnregisterHost(ctx context.Context, by Actor, id, generation string) error {
+	member, err := person(by, "withdraw agent action hosts")
+	if err != nil {
+		return err
+	}
+	if err := s.enabled(ctx); err != nil {
+		return err
+	}
+	if generation == "" {
+		return domain.Errf(domain.CodeInvalidArgument, "generation is required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	h, err := s.hostOf(by, id, generation)
+	if err != nil {
+		return err
+	}
+	if h.owner != member.ID {
+		return domain.Errf(domain.CodePermissionDenied, "only the host's actual owner may withdraw it")
+	}
+	delete(s.hosts, id)
+	affected := map[string]bool{}
+	for _, g := range s.grants {
+		if h.MachineID != "" && g.Target.Kind == "machine" && g.Target.ID == h.MachineID && sameResourceID(g.Target.Resource, h.Resource) {
+			matches := false
+			for _, p := range g.Requested {
+				matches = matches || providerOf(p) == h.Provider
+			}
+			if matches && (g.State == api.GrantPending || g.State == api.GrantActive) {
+				affected[g.ID] = true
+				wasPending := g.State == api.GrantPending
+				s.close(g, api.GrantRevoked, "revoked: host withdrawn")
+				if wasPending && s.approvals != nil {
+					s.approvals.withdrawActionGrant(ctx, g.ApprovalID, g.ID)
+				}
+			}
+		}
+	}
+	now := s.clock.Now()
+	for _, j := range s.jobs {
+		newlyCancelled := affected[j.GrantID] && j.State == api.JobCancelled && j.Error != nil && j.Error.Code == "grant_ended"
+		if j.State != api.JobQueued && j.State != api.JobRunning && !newlyCancelled {
+			continue
+		}
+		if j.hostID != id && !affected[j.GrantID] {
+			continue
+		}
+		wasRunning := j.State == api.JobRunning
+		j.State, j.FinishedAt, j.CancelRequested = api.JobCancelled, &now, true
+		if j.Error == nil || j.Error.Code == "grant_ended" {
+			message := "Authorization revoked: the action host was withdrawn before this job completed."
+			if wasRunning {
+				message += " Earlier side effects may remain; inspect before retrying."
+			}
+			j.Error = &api.ActionError{Code: "revoked", Message: message}
+		}
+	}
+	s.changed()
+	s.audit.Record(ctx, by, "action.host.unregister", h.MachineID, h.Provider)
+	return nil
 }
 
 // failRunning fails a host's running jobs as outcome unknown (mu held).
@@ -871,7 +962,7 @@ func (s *ActionService) hostServes(ctx context.Context, h *actionHost, g *action
 
 func (s *ActionService) hostOf(by Actor, id, generation string) (*actionHost, error) {
 	h := s.hosts[id]
-	if h == nil || (by.Member != nil && h.owner != by.Member.ID && (!by.Manages() || h.Provider == "server.ssh")) {
+	if h == nil || (by.Member != nil && h.owner != by.Member.ID && (!by.Manages() || profileProvider(h.Provider))) {
 		return nil, domain.Errf(domain.CodeNotFound, "host %s not found", id).WithSuggestion("register it again")
 	}
 	if generation != "" && generation != h.Generation {

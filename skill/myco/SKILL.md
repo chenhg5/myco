@@ -354,6 +354,19 @@ myco action grant end --id agr_…                                              
 - Grants are short (5 minutes by default) and end with your task. Ask only for what the task needs. Do not use
   other ways (exec nodes, scripts) to see or drive a screen its owner did not approve.
 
+## Run an owner-approved browser script
+
+Use `myco action targets` to discover browser profiles explicitly enabled by your
+owner in this workspace. Request a grant with `--machine`, `--browser-profile`
+and `--binding` from that result, `--permission browser.run` (and `browser.view`
+for status), a reason and your task id. Run `browser.script.run` with `script_id`
+and **version**: only a snapshot your owner approved locally may execute. Editing
+shared page records never approves a script; ask the owner to review the new
+version. `myco action list --grant ID` is authoritative for installed capabilities.
+M2 has no live page control. Do not fall back to shell, direct component requests,
+unbound grants or a different profile when access is refused. End the grant when
+your task is finished; never repeat an uncertain mutation blindly.
+
 ## When you were started by `myco runner`
 
 The runner sets `MYCO_MESSAGE_ID`, `MYCO_THREAD_ID`, `MYCO_FROM`, `MYCO_MESSAGE_TYPE`, `MYCO_PROJECT`.

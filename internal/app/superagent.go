@@ -363,3 +363,21 @@ func (s *SuperagentService) tell(ctx context.Context, owner *domain.Member, a *d
 	}
 	_, _ = s.messages.SendFromMember(ctx, owner.Name, owner.ID, SendInput{To: string(a.Agent), Type: string(domain.TypeNote), Body: body})
 }
+
+// withdrawActionGrant removes a now-revoked pending grant's approval card.
+// The grant itself is closed first, so a concurrently loaded approval cannot
+// authorize execution even if its database update races this cleanup.
+func (s *SuperagentService) withdrawActionGrant(ctx context.Context, id, grantID string) {
+	a, err := s.approvals.Get(ctx, id)
+	if err != nil || a.Status != domain.ApprovalPending || a.Kind != domain.ApprovalKindActionGrant {
+		return
+	}
+	var payload struct {
+		GrantID string `json:"grant_id"`
+	}
+	if json.Unmarshal([]byte(a.Payload), &payload) != nil || payload.GrantID != grantID {
+		return
+	}
+	a.Status, a.DecidedAt = domain.ApprovalWithdrew, s.clock.Now()
+	_ = s.approvals.Save(ctx, a)
+}

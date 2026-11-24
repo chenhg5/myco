@@ -102,4 +102,21 @@ func TestActionCommandsGrantRunSave(t *testing.T) {
 	if code, _, e := agent.run("action", "grant", "end", "--id", g.ID); code != 0 {
 		t.Fatalf("end: %s", e)
 	}
+	// Browser discovery has a distinct provider; never encode its profile as SSH.
+	resource := &api.ActionResource{Provider: "browser", ID: "browser-work", Binding: "policy-1", Name: "Work"}
+	if _, err := owner.RegisterActionHost(ctx, api.ActionHostRegister{MachineID: ms[0].ID, Provider: "browser", Resource: resource, Generation: "browser-1", Actions: []api.ActionDescriptor{{Name: "browser.profiles.list", Version: 1, Permission: "browser.view"}}}); err != nil {
+		t.Fatal(err)
+	}
+	code, out, e = agent.run("action", "grant", "request", "--machine", "studio", "--browser-profile", resource.ID, "--binding", resource.Binding, "--permission", "browser.view", "--reason", "review a browser run")
+	if code != 0 {
+		t.Fatalf("browser request: %d %s", code, e)
+	}
+	var browser api.ActionGrant
+	if err := json.Unmarshal([]byte(out), &browser); err != nil || browser.Target.Resource == nil || browser.Target.Resource.Provider != "browser" || browser.Target.Resource.Binding != "policy-1" {
+		t.Fatalf("browser target: %s %v", out, err)
+	}
+	if code, _, _ := agent.run("action", "grant", "request", "--machine", "studio", "--browser-profile", resource.ID, "--ssh-profile", "ssh-profile", "--binding", resource.Binding, "--permission", "browser.view", "--reason", "invalid"); code != ExitUsage {
+		t.Fatalf("mixed profile flags: %d", code)
+	}
+
 }

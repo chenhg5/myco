@@ -18,7 +18,7 @@ import (
 // machine. Its immutable binding freezes the actual target; display metadata
 // comes from the trusted host, never from the requesting agent.
 type ActionResource struct {
-	Provider string `json:"provider"`
+	Provider string `json:"provider"` // "server.ssh" or "browser"; profile-scoped
 	ID       string `json:"id"`
 	Binding  string `json:"binding"`
 	Name     string `json:"name,omitempty"`
@@ -163,7 +163,9 @@ type ActionHostRegister struct {
 	Actions    []ActionDescriptor `json:"actions"`
 }
 
-// ActionHost is a registered host.
+// ActionHost is a registered host. DELETE /v1/console/action-hosts/{id}
+// requires ?generation=<Generation> and its actual owner; it revokes all
+// machine/provider/profile grants, including pending ones, across bindings.
 type ActionHost struct {
 	Resource   *ActionResource `json:"resource,omitempty"`
 	ID         string          `json:"id"`

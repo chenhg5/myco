@@ -31,8 +31,9 @@ export async function refreshSuperagent(hubId: string): Promise<void> {
     // What waits on you: your superagent's requests, and a project
     // coordinator's (a computer for its project).
     const approvals = (await appApi.approvals(hubId).catch(() => ({ approvals: [] as Approval[] }))).approvals;
-    // What agents may do on your computers now (hubs before v0.21.21: none).
-    const grants = (await appApi.actionGrants(hubId).catch(() => ({ grants: [] as ActionGrant[] }))).grants;
+    // Include pending grants so approval cards use the exact target and requested
+    // permissions, rather than inferring them from a human-readable title.
+    const grants = (await appApi.actionGrants(hubId, "").catch(() => ({ grants: [] as ActionGrant[] }))).grants;
     store.set(hubId, { state, approvals, grants, at: Date.now() });
     markSuperagent(hubId, state.agent);
   } catch {
@@ -266,7 +267,7 @@ function leftOf(expires: string, now: number): string {
 function wantsControl(a: Approval, grants?: ActionGrant[]): boolean {
   const g = grants?.find((x) => x.approval_id === a.id);
   if (g) return (g.requested || []).includes("remote.desktop.control");
-  return /操作|keyboard|control/i.test(a.what);
+  return !/profile|browser/i.test(a.what) && /操作|keyboard|control/i.test(a.what);
 }
 
 /** What an agent may do right now, above its chat's composer: on which
@@ -296,6 +297,9 @@ export function GrantStrip({ hubId, agent, name }: { hubId: string; agent: strin
         const control = g.permissions.includes("remote.desktop.control");
         const page = g.target.kind === "page";
         const ssh = g.target.resource?.provider === "server.ssh";
+        const browser = g.target.resource?.provider === "browser";
+        const browserControl = g.permissions.includes("browser.control");
+        const browserRun = g.permissions.includes("browser.run");
         const manage = g.permissions.includes("server.ssh.manage");
         const what = g.target_name || g.target.id;
         const left = g.expires_at ? Math.max(0, Math.round((new Date(g.expires_at).getTime() - now) / 60_000)) : 0;
@@ -306,6 +310,15 @@ export function GrantStrip({ hubId, agent, name }: { hubId: string; agent: strin
               <div className="sa-approval-what">
                 {page
                   ? L(`${name || agent} 可以导出「${what}」`, `${name || agent} may export "${what}"`)
+                  : browser
+                  ? browserControl
+                    // Reserved M3 copy; M2 refuses browser.control grants.
+                    ? L(`${name || agent} 可以操作浏览器 profile ${what}，能读到这个 profile 登录的所有网站`, `${name || agent} may control browser profile ${what} and read all websites signed in through it`)
+                    : browserRun
+                      ? g.permissions.includes("browser.view")
+                        ? L(`${name || agent} 可以在 ${what} 上查看状态与运行结果，并运行主人批准的脚本`, `${name || agent} may view status and run results, and run owner-approved scripts on ${what}`)
+                        : L(`${name || agent} 可以在 ${what} 上运行主人批准的脚本`, `${name || agent} may run owner-approved scripts on ${what}`)
+                      : L(`${name || agent} 可以查看 ${what} 的状态与运行结果`, `${name || agent} may view status and run results in ${what}`)
                   : ssh
                   ? manage
                     ? L(`${name || agent} 可以读取并管理 ${what} 的服务与容器`, `${name || agent} may inspect and manage services and containers on ${what}`)
@@ -347,7 +360,20 @@ function automationRequestContent(a: Approval): string {
   return typeof input?.body === "string" ? input.body : input?.inputs ? JSON.stringify(input.inputs, null, 2) : "";
 }
 
-function invitationWhat(a: Approval): string {
+function invitationWhat(a: Approval, grants?: ActionGrant[]): string {
+  const grant = grants?.find(g => g.approval_id === a.id);
+  if (a.kind === "action_grant" && grant?.target.resource?.provider === "browser") {
+    const profile = grant.target.resource.name || grant.target.resource.id;
+    const permissions = grant.requested || [];
+    const minutes = /，(\d+) 分钟$/.exec(a.what)?.[1];
+    const ttl = minutes ? L(`，${minutes} 分钟`, `, for ${minutes} minutes`) : "";
+    // Reserved M3 copy; M2 refuses browser.control grants.
+    if (permissions.includes("browser.control")) return L(`操作浏览器 profile「${profile}」`, `Control browser profile “${profile}”`) + ttl;
+    if (permissions.includes("browser.run")) return (permissions.includes("browser.view")
+      ? L(`在「${profile}」上查看状态与运行结果，并运行主人批准的脚本`, `View status and run results, and run owner-approved scripts in “${profile}”`)
+      : L(`运行「${profile}」中主人批准的脚本`, `Run owner-approved scripts in “${profile}”`)) + ttl;
+    return L(`查看「${profile}」的状态与运行结果`, `View status and run results in “${profile}”`) + ttl;
+  }
   if (a.kind === "project_automation") {
     const action = String(a.payload?.action || "update");
     const input = a.payload?.input as Record<string, unknown> | undefined;
@@ -388,11 +414,12 @@ export function ApprovalStrip({ hubId, agent, name }: { hubId: string; agent: st
         <div className="sa-approval" key={a.id}>
           <ShieldQuestion className="sa-approval-icon" />
           <div className="sa-approval-text">
-            <div className="sa-approval-what">{L(`${who} 想：`, `${who} wants to: `)}{invitationWhat(a)}</div>
+            <div className="sa-approval-what">{L(`${who} 想：`, `${who} wants to: `)}{invitationWhat(a, s?.grants)}</div>
             {a.kind === "project_automation" && <div className="sa-approval-why">{L("仅批准这一次变更，不会打开项目的长期权限。任务归项目主人所有。", "Approve this change only; ongoing coordinator access stays unchanged. The task belongs to the project owner.")}</div>}
             {a.kind === "project_automation" && !!a.payload?.input && <div className="sa-approval-why">{automationRequestSummary(a.payload.input as Record<string, unknown>)}</div>}
             {a.kind === "project_automation" && automationRequestContent(a) && <details className="sa-approval-why"><summary>{L("查看任务内容", "Review task content")}</summary><pre className="sa-approval-content">{automationRequestContent(a)}</pre></details>}
             {a.kind === "project_invite" && <div className="sa-approval-why">{L("仅这一次邀请：链接 24 小时有效，只能用一次。新 agent 归项目主人所有，只加入为普通成员。", "This invitation only: the link lasts 24 hours and works once. The new agent belongs to the project owner and joins as an ordinary member.")}</div>}
+            {a.kind === "action_grant" && (s?.grants?.some(g => g.approval_id === a.id && (g.requested || []).includes("browser.control")) || /能读到这个 profile 登录的所有网站/.test(a.what)) && <div className="sa-approval-why">{L("能读到这个 profile 登录的所有网站，包括登录后的页面和数据。仅在你信任该 agent 时批准。", "Can read all websites signed in through this profile, including authenticated pages and data. Approve only if you trust this agent.")}</div>}
             {a.reason && <div className="sa-approval-why">{a.reason}</div>}
             <div className="sa-approval-meta">{leftOf(a.expires_at, now)}</div>
           </div>

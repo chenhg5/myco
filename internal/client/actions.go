@@ -164,6 +164,12 @@ func (c *Client) RegisterActionHost(ctx context.Context, req api.ActionHostRegis
 	return &out, nil
 }
 
+// UnregisterActionHost withdraws exactly this generation and revokes its
+// machine/profile grants. A 404 is safe to ignore; never retry as another host.
+func (c *Client) UnregisterActionHost(ctx context.Context, hostID, generation string) error {
+	return c.do(ctx, http.MethodDelete, "/v1/console/action-hosts/"+esc(hostID), url.Values{"generation": {generation}}, nil, nil)
+}
+
 // ActionHostJobs takes the jobs waiting for a host, waiting up to wait.
 func (c *Client) ActionHostJobs(ctx context.Context, hostID string, wait time.Duration) ([]api.ActionHostJob, error) {
 	var out api.ActionHostJobs

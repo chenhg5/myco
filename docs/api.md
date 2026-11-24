@@ -446,7 +446,7 @@ From v0.21.21, an agent can act on a computer through a provider that computer's
 | Route | Who | |
 |---|---|---|
 | `POST /v1/me/action-grants` | agent | `{target: {kind: "machine", id}, permissions, reason, message_id?, page_id?, ttl_seconds?}` → `201` a pending grant `{id, agent, owner, target, target_name, permissions, requested, reason, message_id?, approval_id, state, end_reason?, created_at, expires_at?, ended_at?}`; the target's owner gets an `action_grant` approval. `id` may be the computer's name. Permissions: `remote.desktop.view`, `remote.desktop.control` (control includes view). TTL 5 minutes by default, 30 at most. With `message_id`, the grant ends when that task ends. `?dry_run=1` checks only |
-| `GET /v1/me/action-targets` | agent | `{targets: [{kind:"machine",id,resource:{provider:"server.ssh",id,binding,name,summary}}]}`: enabled SSH resources belonging to the agent's own person in this workspace. Discovery is not permission to execute. Older hubs return 404 |
+| `GET /v1/me/action-targets` | agent | `{targets: [{kind:"machine",id,resource:{provider:"server.ssh"|"browser",id,binding,name,summary}}]}`: enabled private profile resources belonging to the agent's own person in this workspace. Discovery is not permission to execute. Older hubs return 404 |
 | `GET /v1/me/action-grants` | agent | `{grants: [...]}`, its own |
 | `GET /v1/me/action-grants/{id}?wait_seconds=30` | agent | the grant; waits while it is pending (`wait=30s` works too; 60 seconds at most) |
 | `POST /v1/me/action-grants/{id}/end` | agent | ends it → the grant |
@@ -458,12 +458,66 @@ From v0.21.21, an agent can act on a computer through a provider that computer's
 | `GET /v1/console/action-grants?state=active` | console | `{grants}` the caller decides (all, for owners and admins) |
 | `POST /v1/console/action-grants/{id}/revoke` | console | ends it at once: queued jobs are cancelled, a running job's late result is dropped, artifacts are gone |
 | `POST /v1/console/action-hosts` | console (the computer's owner) | the trusted App offers a provider there: `{machine_id, provider, generation, actions}` (a page renderer: `provider: "page"`, no `machine_id`) → `201 {id, machine_id, provider, generation, last_seen_at}`. Registering a computer's provider again replaces its host (its running jobs fail as `host_restarted`). A person may run several page renderers (one per App); a new one replaces only theirs that stopped polling (45 s). A host not seen for 10 minutes is dropped. After `404`/`409` on its job poll, an App waits 30 s before registering again |
+| `DELETE /v1/console/action-hosts/{id}?generation=...` | console | `204`; actual host owner only, including on an administrated Hub. Exact generation required (`409` if changed). Withdraws the host and revokes active and pending grants for the same machine/provider/profile id across bindings. Queued/running jobs are cancelled with `error.code: revoked`; a running action may already have side effects and must not be blindly retried. Existing outcome/error details are preserved. Local execution must stop/refuse first; this request uses a fresh bounded context. Missing/older Hub `404` never permits local execution or unbound fallback |
 | `GET /v1/console/action-hosts/{id}/jobs?wait_seconds=30` | console | `{jobs: [{job, args, grant}]}`: queued jobs for that computer, now running. A host quiet for 45 seconds ends the grants it ran |
 | `GET /v1/console/action-jobs/{id}?host_id=&generation=&wait_seconds=30` | console | `{job, grant_state, grant_expires_at?, stop}` for a job the host runs. `stop` turns true when the agent cancels it, its grant ends (revoked, expired, its task ended) or it is no longer running; with `wait_seconds` it answers as soon as it does. The host asks right before anything native happens and keeps asking while it runs |
 | `POST /v1/console/action-jobs/{id}/artifacts?host_id=&generation=` | console | the raw file (`Content-Type` image/*, application/pdf, Office (OOXML), text/plain, text/csv, text/markdown, text/html or application/json; 4 MB at most; the agent downloads it as an attachment, nosniff and sandboxed) → `201 {id, media_type, bytes, expires_at}` |
 | `POST /v1/console/action-jobs/{id}/complete` | console | `{host_id, generation, state, result?, error?, artifact_ids?}` → the job. A wrong generation is `409`; a finished job cannot change |
 
 The CLI: `myco action grant request|list|get|end`, `myco action list`, `myco action run` (waits, and saves screenshots to files), `myco action job`, `myco action cancel`.
+
+### Bound browser profiles
+
+The trusted desktop App can host `browser` for a dedicated local browser profile
+that its owner explicitly enabled for agents **in this workspace**. Discovery via
+`GET /v1/me/action-targets` returns `{kind:"machine",id:machine_id,
+resource:{provider:"browser",id:profile_id,binding,name,summary}}`. The opaque
+`binding` identifies the local authorization policy generation. The owner must
+approve a short-lived grant to this exact target; knowing its id grants no access.
+Unopened profiles, stale bindings, mixed providers and machine-wide browser grants
+are rejected. The host must belong to the computer's actual owner. These actions
+are unavailable in end-to-end encrypted workspaces.
+
+M2 offers five v1 actions. `browser.view` and `browser.run` are independent
+permissions; request both when needed. The Hub fixes the action-to-permission
+mapping, and the host registers only capabilities its installed component supports.
+
+| Action | Permission | Arguments |
+|---|---|---|
+| `browser.profiles.list` | `browser.view` | `{}`; only the bound, enabled profile is disclosed |
+| `browser.script.run` | `browser.run` | `{script_id,version,params?,headless?}` |
+| `browser.run.status` | `browser.view` | `{run_id}` |
+| `browser.run.resume` | `browser.run` | `{run_id,choice?}` |
+| `browser.run.cancel` | `browser.run` | `{run_id}` |
+
+Shared page records are **not** approval. The desktop executes only the immutable
+script version and child-script snapshots the computer's owner reviewed and
+approved locally for that profile. An absent, revoked or mismatching version is
+`permission_denied`; the host never fetches a newer shared script as a fallback.
+Runs and their cancellation/resumption remain bound to the originating agent,
+grant and profile. Revoking a script approval or disabling agent access changes
+the policy binding, ends old grants and cancels their running jobs. Results and
+screenshots use private job artifacts; they are not automatically published in
+shared page data. A paused confirmation is reported to the caller, never approved
+by merely changing a shared record.
+
+Live `browser.page.snapshot`, `browser.page.act` and `browser.control` are reserved
+for M3 and are not offered in M2. Hard calls return `unsupported`. Future control
+approval must explicitly warn that it can read all websites signed in through the
+profile. An unsupported component capability or older Hub must not trigger an
+unbound or more privileged fallback.
+
+Example (copy the ids and binding from discovery):
+
+```sh
+myco action targets
+myco action grant request --machine COMPUTER --browser-profile PROFILE --binding BINDING \
+  --permission browser.view --permission browser.run --reason "Run the approved report" --wait 5m
+myco action list --grant GRANT
+myco action run --grant GRANT --action browser.script.run \
+  --args '{"script_id":"report","version":3,"params":{"month":"2026-11"}}'
+myco action grant end --id GRANT
+```
 
 ### Bound SSH resources
 

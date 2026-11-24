@@ -535,8 +535,10 @@ export interface Approval {
 }
 
 /** What an agent may do on a computer, approved by its owner (agent actions, v0.21.21). */
+// Disabling a profile withdraws its native host with exact-generation DELETE;
+// all grants for this provider/profile id end, including older policy bindings.
 export interface ActionResource {
-  provider: "server.ssh"; id: string; binding: string; name?: string; summary?: string;
+  provider: "server.ssh" | "browser"; id: string; binding: string; name?: string; summary?: string;
 }
 export interface ActionTarget { kind: "machine" | "page"; id: string; resource?: ActionResource }
 export interface ActionTargetList { targets: ActionTarget[] }

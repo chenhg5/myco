@@ -2159,7 +2159,7 @@ const server = http.createServer(async (req, res) => {
     // pending grant too.
     if (body.kind === "action_grant") {
       const requested = body.permissions || ["remote.desktop.control", "remote.desktop.view"];
-      const g = { id: `agr_${state.counter}`, agent, owner: "glenn", target: { kind: "machine", id: "m_studio" }, target_name: body.machine || "Studio Mac",
+      const g = { id: `agr_${state.counter}`, agent, owner: "glenn", target: { kind: "machine", id: "m_studio", ...(body.resource ? { resource: body.resource } : {}) }, target_name: body.machine || "Studio Mac",
         permissions: [], requested, reason: a.reason, approval_id: a.id, state: "pending", created_at: iso(0), ttl: 300 };
       (state.grants ||= {})[hub.id] = [...(state.grants[hub.id] || []), g];
       Object.assign(a, { kind: "action_grant", payload: { grant_id: g.id }, method: "", path: "",

@@ -19,6 +19,38 @@ func sameResourceID(a, b *api.ActionResource) bool {
 func sameResource(a, b *api.ActionResource) bool {
 	return sameResourceID(a, b) && (a == nil || a.Binding == b.Binding)
 }
+
+// Profile providers never accept unbound machine-wide grants.
+func profileProvider(provider string) bool { return provider == "server.ssh" || provider == "browser" }
+
+func validateProfileResource(provider string, r *api.ActionResource) error {
+	if provider == "server.ssh" {
+		return validateSSHResource(r)
+	}
+	if provider != "browser" || r == nil || r.Provider != provider {
+		return domain.Errf(domain.CodeInvalidArgument, "browser requires an enabled profile resource")
+	}
+	// The binding identifies an immutable local policy snapshot, not a URL or
+	// browser credential. Changing the profile policy invalidates old grants.
+	if len(r.ID) < 1 || len(r.ID) > 80 || len(r.Binding) < 1 || len(r.Binding) > 128 || r.Name == "" || len(r.Name) > 200 || len(r.Summary) > 800 {
+		return domain.Errf(domain.CodeInvalidArgument, "browser resource needs a profile id, policy binding and safe display name")
+	}
+	for _, c := range r.ID {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '-') {
+			return domain.Errf(domain.CodeInvalidArgument, "invalid browser profile id")
+		}
+	}
+	for _, c := range r.Binding {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '-') {
+			return domain.Errf(domain.CodeInvalidArgument, "invalid browser profile binding")
+		}
+	}
+	if strings.IndexFunc(r.Name+r.Summary, unicode.IsControl) >= 0 {
+		return domain.Errf(domain.CodeInvalidArgument, "invalid browser profile label")
+	}
+	return nil
+}
+
 func validateSSHResource(r *api.ActionResource) error {
 	invalid := func() error {
 		return domain.Errf(domain.CodeInvalidArgument, "SSH resource needs a profile id, SHA256 binding and safe display name and endpoint summary")
@@ -57,7 +89,7 @@ func (s *ActionService) ResourceTargets(ctx context.Context, a *domain.Agent) ([
 		if h.Resource == nil || h.owner != a.Owner || s.clock.Now().Sub(h.LastSeenAt) > actionHostStale {
 			continue
 		}
-		key := h.MachineID + "/" + h.Resource.ID + "/" + h.Resource.Binding
+		key := h.MachineID + "/" + h.Resource.Provider + "/" + h.Resource.ID + "/" + h.Resource.Binding
 		if seen[key] {
 			continue
 		}

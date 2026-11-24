@@ -34,6 +34,7 @@ func (s *Server) actionRoutes(m *http.ServeMux) {
 	m.HandleFunc("POST /v1/console/action-grants/{id}/revoke", s.admin(s.revokeActionGrant))
 	// The trusted App on the target computer.
 	m.HandleFunc("POST /v1/console/action-hosts", s.admin(s.registerActionHost))
+	m.HandleFunc("DELETE /v1/console/action-hosts/{id}", s.admin(s.unregisterActionHost))
 	m.HandleFunc("GET /v1/console/action-hosts/{id}/jobs", s.admin(s.actionHostJobs))
 	m.HandleFunc("GET /v1/console/action-jobs/{id}", s.admin(s.actionHostJob))
 	m.HandleFunc("POST /v1/console/action-jobs/{id}/artifacts", s.admin(s.uploadActionArtifact))
@@ -238,6 +239,17 @@ func (s *Server) registerActionHost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, h)
+}
+
+func (s *Server) unregisterActionHost(w http.ResponseWriter, r *http.Request) {
+	if !s.actionsEnabled(w) {
+		return
+	}
+	if err := s.actions.UnregisterHost(r.Context(), s.actorOf(r), r.PathValue("id"), r.URL.Query().Get("generation")); err != nil {
+		writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) actionHostJobs(w http.ResponseWriter, r *http.Request) {

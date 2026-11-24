@@ -1830,6 +1830,31 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".sp-home").waitFor({ timeout: 10_000 });
     });
 
+    await step("agent 浏览器授权 · 版本快照 · 收回", async () => {
+      await go(page, "官网改版", narrow);
+      await page.locator(".sp-home .conv-detail").waitFor({ timeout: 10_000 });
+      const ask = await fetch(`http://${HOST}:${mockPort()}/app/mock/superagent-ask`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agent: "pm-codex", kind: "action_grant", permissions: ["browser.view", "browser.run"],
+          resource: { provider: "browser", id: "profile_reports", binding: "policy-1", name: "报告专用", summary: "Dedicated profile" },
+          machine: "Studio Mac / 报告专用", what: "运行主人批准的报告脚本，5 分钟", reason: "运行已批准的月报 v3，不读取共享脚本的最新版本。" }),
+      });
+      if (!ask.ok) throw new Error(`浏览器申请失败：HTTP ${ask.status}`);
+      const card = page.locator(".sp-home [data-testid=approvals] .sa-approval", { hasText: "报告专用" });
+      await card.waitFor({ timeout: 25_000 });
+      const text = compactText(await card.innerText());
+      if (!text.includes("主人批准的脚本") || text.includes("键盘") || await card.getByRole("button", { name: "只让它看", exact: true }).count()) throw new Error(`浏览器申请不应使用桌面权限文案：${text}`);
+      await shot(page, size, scheme, "browser-grant-request");
+      await clickVisible(page, card.getByRole("button", { name: "同意", exact: true }));
+      await card.waitFor({ state: "hidden", timeout: 10_000 });
+      const grant = page.locator(".sp-home [data-testid=action-grants] .sa-grant", { hasText: "报告专用" });
+      await grant.waitFor({ timeout: 10_000 });
+      if (!(await grant.innerText()).includes("主人批准的脚本")) throw new Error("浏览器授权范围文案丢失");
+      await shot(page, size, scheme, "browser-grant-active");
+      await clickVisible(page, grant.getByRole("button", { name: "收回", exact: true }));
+      await grant.waitFor({ state: "hidden", timeout: 10_000 });
+    });
+
     // An agent asks to act on one of your computers (agent actions,
     // v0.21.21): the card says which computer and how, and can allow
     // seeing only; what it may do then shows above its chat, revocable.
