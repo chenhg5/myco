@@ -174,7 +174,8 @@ struct PlacedPicture: View {
                 Text(alt.isEmpty ? src : alt).font(.footnote).foregroundStyle(MycoColor.muted)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: height, alignment: .leading)
+        // (a tall screenshot is not a whole screen of the conversation)
+        .frame(maxWidth: .infinity, maxHeight: height ?? 360, alignment: .leading)
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .accessibilityLabel(alt.isEmpty ? "picture" : alt)
         .accessibilityIdentifier("placed.picture")

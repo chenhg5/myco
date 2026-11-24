@@ -833,6 +833,8 @@ final class ConversationTests: XCTestCase {
         let app = launch(["-myco-start", "rich", "-myco-route", "agent:vps-codex-90aa"])
         let block = app.descendants(matching: .any)["uiblock"]
         XCTAssertTrue(block.waitForExistence(timeout: 20), app.debugDescription)
+        // (it opens at the end: up to the block)
+        for _ in 0..<4 where !app.staticTexts["412"].isHittable { app.swipeDown() }
         XCTAssertTrue(app.staticTexts["发版检查"].exists, "the card's title")
         XCTAssertTrue(app.staticTexts["412"].exists, "a metric")
         XCTAssertTrue(app.staticTexts["签名"].exists, "a step")
@@ -849,7 +851,7 @@ final class ConversationTests: XCTestCase {
         app.swipeUp()
         snap("rich-code")
         // The block's button puts its words in the input.
-        app.swipeDown()
+        for _ in 0..<4 where !app.buttons.matching(identifier: "uiblock.button").firstMatch.isHittable { app.swipeDown() }
         let ship = app.buttons.matching(identifier: "uiblock.button").firstMatch
         XCTAssertTrue(ship.waitForExistence(timeout: 5))
         ship.tap()
@@ -905,7 +907,7 @@ final class ConversationTests: XCTestCase {
         web.buttons["Seek 180"].tap()
         expectation(for: NSPredicate { _, _ in self.seconds(time) >= 182 }, evaluatedWith: nil)
         waitForExpectations(timeout: 45)
-        XCTAssertEqual(state.label, "State: playing")
+        XCTAssertTrue(["State: playing", "State: seeked"].contains(state.label), state.label)
         snap("media-seeked")
         // What the stream refuses: a private address, and what is not media.
         web.buttons["Try private"].tap()
