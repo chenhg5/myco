@@ -577,7 +577,7 @@ func installLatest(ctx context.Context, dir string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	bin, err := release.Fetch(ctx, hc, release.DownloadURL(os.Getenv), tag, runtime.GOOS, runtime.GOARCH)
+	bin, err := release.FetchFrom(ctx, hc, release.DownloadURLs(os.Getenv), tag, runtime.GOOS, runtime.GOARCH)
 	if err != nil {
 		return "", err
 	}

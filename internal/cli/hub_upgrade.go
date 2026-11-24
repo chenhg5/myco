@@ -95,7 +95,7 @@ func hubUpgrader(getenv func(string) string, dbPath string, stop func()) func(ct
 		if real, err := filepath.EvalSymlinks(exe); err == nil {
 			exe = real
 		}
-		bin, err := release.Fetch(ctx, hc, release.DownloadURL(getenv), target, runtime.GOOS, runtime.GOARCH)
+		bin, err := release.FetchFrom(ctx, hc, release.DownloadURLs(getenv), target, runtime.GOOS, runtime.GOARCH)
 		if err != nil {
 			return api.HubUpgrade{}, domain.Errf(domain.CodeInvalidState, "downloading myco %s: %v", target, err)
 		}

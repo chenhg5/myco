@@ -98,7 +98,7 @@ schema migrates on start. Nothing is upgraded automatically: run this when 'myco
 				return e.dryRun(out)
 			}
 			fmt.Fprintf(e.in.Stderr, "==> downloading myco %s for %s/%s (checked against SHA256SUMS; on a slow link this takes a few minutes)\n", target, runtime.GOOS, runtime.GOARCH)
-			bin, err := release.Fetch(e.in.Ctx, hc, release.DownloadURL(e.in.Getenv), target, runtime.GOOS, runtime.GOARCH)
+			bin, err := release.FetchFrom(e.in.Ctx, hc, release.DownloadURLs(e.in.Getenv), target, runtime.GOOS, runtime.GOARCH)
 			if err != nil {
 				return errorf("upgrade_failed", ExitError, "nothing was changed; try again, or pass --version", "%v", err)
 			}
