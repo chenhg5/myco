@@ -4940,6 +4940,11 @@ async function runMatrix(browser, size, scheme) {
       await conv.locator(".conv-compose-input").press("Enter");
       const msg = conv.locator(".conv-msg", { has: page.locator(".md-mermaid") }).last();
       await msg.locator(".md-mermaid[data-state=drawn] svg").first().waitFor({ timeout: 30_000 });
+      // The reply is in: the run before it is folded to its one line, so
+      // read it opened.
+      for (const b of await conv.locator(".trace-fold").all()) {
+        if ((await b.getAttribute("aria-expanded")) === "false") await b.click();
+      }
       // The progress update along the way placed its two sketches in its
       // text: there, side by side, not "not found", not listed again.
       const report = conv.locator(".trace-report", { hasText: "先放两张草图" }).last();
