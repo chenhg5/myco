@@ -4,6 +4,32 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.22.6
+
+- **Each page keeps its own local storage**: in the desktop App every workspace, account and page now opens on its own local address, so what a page saves (a draft, a sign-in, an app's data) is no longer visible to another page or another workspace. A page keeps that address across App restarts, so it reopens with its data.
+- **Older local page data is not lost**: the previous shared address now opens a read-only "Older local files" page that lists what old pages left behind; "Save copy" downloads a file, and older page settings can be exported. Nothing is deleted.
+- **Apps can keep an encrypted vault in the App**: an app that needs isolated page storage, such as Password Vault 1.2.0 from the apps catalog, opens only on its own page origin and shows "Update the myco App" on an older App or a shared address, with no password field.
+- **Project coordinators can invite agents**: a coordinator can create a join link for one ordinary agent (`myco project invite-agent`), valid for 24 hours; the agent joins the project owned by the project owner and gets no member-management or invitation rights. Whether coordinators may invite is a per-project switch, off by default: until the owner enables it, each request arrives as an approval card.
+- **Project coordinators can schedule tasks**: a coordinator can create cron automations bounded by start and end dates (`myco automation create --project ... --cron ... --starts ... --ends ...`, or `--once`). Scheduling is off by default, so creating, changing, pausing or deleting a task asks the project owner to approve that change; with it on, coordinators apply changes directly and the tasks still belong to the owner. The App editor uses local times and shows the active dates and why a task is disabled.
+- **Waiting tasks are visible**: the App shows “Queued: this computer has 3/3 slots in use, position 2”, and computer details show the limit and the waiting count. Workspaces share free slots fairly instead of one busy workspace taking every new slot; running tasks are never interrupted.
+- **A line added to a running task is answered under it**: the steps, progress and loading that follow your message now appear below that line, not above it.
+- **Working counts follow agents**: project dots, the notch island and the menu bar's working line count agents only; a shell node running commands no longer lights whole projects and keeps its own dot under Computers.
+
+Upgrade: this release needs the Hub updated as well. On the server run `sudo myco upgrade`, then update the App and the runner/CLI on each computer. Invitations, scheduling and the queue view are Hub-side features, and the isolated page addresses and the vault need Hub 0.22.6 with this App. Older Hubs keep accepting runners, but these features stay unavailable until the Hub is upgraded.
+
+**中文**
+
+- **每个页面有自己的本机存储**：桌面 App 里每个工作区、账号和页面现在都在各自的本机地址上打开，一个页面保存的内容（草稿、登录状态、应用数据）不会再被另一个页面或另一个工作区看到。App 重启后页面仍用同一个地址，所以数据还在。
+- **旧的页面数据不会丢**：原来的共享地址现在打开一个只读的「旧本机文件」页面，列出旧页面留下的文件；「保存副本」可以下载文件，「导出旧页面设置」可以导出设置。不会删除任何东西。
+- **应用可以把加密密码库放在 App 里**：需要独立页面存储的应用（例如应用目录里的密码库 1.2.0）只在自己的页面来源上打开；旧版 App 或共享地址会显示「请升级 myco App」，不显示密码输入框。
+- **项目协调者可以邀请 agent**：协调者可以为一个普通 agent 生成加入链接（`myco project invite-agent`），24 小时内有效；agent 以项目所有者名下的普通成员加入，没有成员管理或邀请权限。是否允许协调者邀请是每个项目的开关，默认关闭：所有者打开前，每次请求都会变成一张审批卡。
+- **项目协调者可以安排定时任务**：协调者可以创建带起止日期的 cron 自动化（`myco automation create --project ... --cron ... --starts ... --ends ...`，或 `--once`）。定时默认关闭，所以新建、修改、暂停或删除任务都要项目所有者批准这次改动；打开后协调者可以直接改，任务仍归所有者。App 编辑器用本地时间，并显示生效日期和任务被停用的原因。
+- **等待中的任务看得见**：App 显示「排队中：这台电脑 3/3 个位置都在用，排第 2 位」，电脑详情显示上限和等待数量。多个工作区公平分享空出的位置，不再让一个忙的工作区占走所有新位置；正在跑的任务不会被打断。
+- **在运行中的任务里插一句话，回复显示在它下面**：你发消息之后 agent 做的步骤、进度和加载现在显示在这句话下面，而不是上面。
+- **“正在工作”只算 agent**：项目圆点、刘海岛和菜单栏的工作行只统计 agent；执行命令的 shell 节点不再点亮整个项目，而是在「电脑」下面保留自己的圆点。
+
+升级：这个版本需要同时升级 Hub。在服务器上运行 `sudo myco upgrade`，然后更新 App 和每台电脑上的 runner/CLI。邀请、定时任务和排队显示是 Hub 侧的功能，独立页面地址和密码库需要 Hub 0.22.6 配这个 App。旧 Hub 仍接受 runner 连接，但升级前这些功能不可用。
+
 ## v0.22.5
 
 - **Project changes show at once**: adding an agent to a project, or changing a project's name, members or computers, appears in the App immediately instead of waiting for every workspace to be read again; a new project opens and joins the sidebar the same way.
