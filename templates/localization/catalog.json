@@ -154,5 +154,9 @@
   "server-console": [
     "Server Console",
     "Manage Linux hosts over your local SSH connection. Inspect resources, systemd services and Docker containers, read logs and review fixed management actions. Agents use host-bound expiring grants. Requires a desktop App with SSH support; credentials and results stay private."
+  ],
+  "media-kit": [
+    "Media Kit",
+    "Organize launch screenshots and bilingual copy by feature. Share originals and publication status with your team and agents."
   ]
 }

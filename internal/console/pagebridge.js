@@ -356,6 +356,12 @@
         : new Blob([typeof content === "string" ? content : content instanceof ArrayBuffer ? new Uint8Array(content) : content], { type: type || "" });
       return call("download", { name: String(name), type: type || blob.type || "", blob: blob }, 600000);
     },
+    projectFiles: {
+      info: function () { return call("projectFiles.info", {}); },
+      put: function (name, blob) { return call("projectFiles.put", { name: name, blob: blob }, 300000); },
+      get: function (name) { return call("projectFiles.get", { name: name }, 300000); },
+      download: function (name) { return call("projectFiles.download", { name: name }, 300000); },
+    },
     storage: {
       get: function (key) { return call("storage.get", { key: String(key) }); },
       set: function (key, value) { return call("storage.set", { key: String(key), value: value }); },

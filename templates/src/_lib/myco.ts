@@ -11,10 +11,17 @@ export type PageActionBridge = {
 };
 /** me.can_edit is false when only those who manage the page change it and
  *  this person does not (Apps from v0.22.2; absent: they may). */
-type Ctx = { preferences?: PagePreferences; page: { id: string; name: string; url?: string }; me: { name: string; can_edit?: boolean; can_manage?: boolean }; render?: { instance: string } };
+type Ctx = { projectFiles?: boolean; preferences?: PagePreferences; page: { id: string; name: string; url?: string }; me: { name: string; can_edit?: boolean; can_manage?: boolean }; render?: { instance: string } };
 
 interface Bridge {
   readonly preferences?: PagePreferences;
+  /** Desktop, scoped to a Media Kit page and its own project. Check ready.projectFiles. */
+  projectFiles?: {
+    info(): Promise<{ used: number; max: number; maxBytes: number }>;
+    put(name: string, blob: Blob): Promise<true>;
+    get(name: string): Promise<Blob>;
+    download(name: string): Promise<true>;
+  };
   on?(event: "preferences", callback: (value: PagePreferences) => void): () => void;
   /** The change feed moved on past what this page has (feature "data-reset"): list the records again. */
   on?(event: "reset", callback: (value: { reset: true }) => void): () => void;

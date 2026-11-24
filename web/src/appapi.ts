@@ -803,6 +803,15 @@ export const appApi = {
     request<ProjectDoc>("PUT", `app/hubs/${enc(hubId)}/projects/${enc(name)}/files/${enc(as || file.name)}`, file),
   /** A project file's URL (for a browser download or an image preview). */
   projectFileURL: (hubId: string, name: string, file: string) => `app/hubs/${enc(hubId)}/projects/${enc(name)}/files/${enc(file)}`,
+  /** Reads an authenticated project file for an authorized page bridge. */
+  readProjectFile: async (hubId: string, name: string, file: string): Promise<Blob> => {
+    const response = await fetch(`app/hubs/${enc(hubId)}/projects/${enc(name)}/files/${enc(file)}`, { credentials: "same-origin" });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({})) as { message?: string; error?: string };
+      throw new ApiError(error.message || `HTTP ${response.status}`, response.status, error.error);
+    }
+    return response.blob();
+  },
   /** Saves a project file to this computer's Downloads folder and shows it there. */
   saveProjectFile: (hubId: string, name: string, file: string) =>
     request<{ path: string }>("POST", `app/hubs/${enc(hubId)}/projects/${enc(name)}/files/${enc(file)}/save`),

@@ -9,6 +9,7 @@ import { looksOf, MushroomFace } from "@/app/persona";
 import { Modal } from "@/app/dialogs";
 import { openOutside, setInAppLinks } from "@/app/links";
 import { L } from "@/lib/i18n";
+import { answerProjectFiles, projectFileScope } from "./page-project-files";
 import { usePagePreferences, localizedPageURL } from "./page-preferences";
 import { parsePageLink, pageFragmentURL, type PageLink } from "@/lib/page-links";
 import { cn, timeAgo } from "@/lib/utils";
@@ -475,7 +476,7 @@ function PageView({ target, open, active, reload, onMeta }: {
           known.current = st.version;
           bridged.current = true;
           // (can_edit: false when only those who manage it change it, and not you)
-          return { page: { id: t.id, url: p?.url || "", name: o?.name || p?.name || "", version: o?.version || 0 }, me: { name: meOf(t.hubId), can_edit: !p?.read_only, can_manage: !!p?.can_manage }, state: st.state, version: st.version, preferences: live.current.preferences };
+          return { page: { id: t.id, url: p?.url || "", name: o?.name || p?.name || "", version: o?.version || 0 }, me: { name: meOf(t.hubId), can_edit: !p?.read_only, can_manage: !!p?.can_manage }, state: st.state, version: st.version, preferences: live.current.preferences, projectFiles: !!projectFileScope(p) };
         }
         case "update": {
           const r = await appApi.putPageState(t.hubId, t.id, args.state ?? null, Number(args.version) || 0);
@@ -519,6 +520,7 @@ function PageView({ target, open, active, reload, onMeta }: {
           return true;
         }
       }
+      if (method.startsWith("projectFiles.")) return answerProjectFiles(t.hubId, p, method, args);
       if (method.startsWith("data.") || method === "download") return answerData(t, method, args);
       if (method === "remote.call") {
         const action = String(args.action || "");

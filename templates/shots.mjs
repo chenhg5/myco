@@ -108,6 +108,7 @@ function photo() {
 // sample data is there before the first).
 const wait = (p, ms = 400) => p.waitForTimeout(ms);
 const plans = {
+  "media-kit": { steps: [null, async (p) => { await p.locator(".mk-card").first().click(); }] },
   "aigc-canvas": [async p => { await p.locator(".ac-node").filter({ hasText: "写一句海报文案" }).click(); }],
 
   database: { viewport: { width: 1400, height: 900 }, steps: [async p => { await p.locator(".db-grid tbody tr").first().waitFor(); }, async p => { await p.getByRole("button", { name: "SQL 工作台", exact: true }).click(); await p.getByLabel("SQL 查询内容").fill("SELECT category, COUNT(*) AS products,\n       SUM(stock) AS total_stock\nFROM public.products\nGROUP BY category\nORDER BY total_stock DESC;"); await p.getByRole("button", { name: "执行", exact: true }).click(); }] },

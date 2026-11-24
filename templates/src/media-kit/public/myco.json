@@ -1,0 +1,43 @@
+{
+  "id": "myco/media-kit",
+  "name": "素材库",
+  "version": "1.0.0",
+  "kind": "custom",
+  "category": "creative",
+  "icon": "icon.svg",
+  "description": "按功能整理截图和中英文配文，和团队及 agent 共享原图与发布进度。",
+  "data": {
+    "entries": {
+      "fields": {
+        "title": "text",
+        "date": "date",
+        "version": "text",
+        "pitch_zh": "text",
+        "pitch_en": "text",
+        "copy_zh": "markdown",
+        "copy_en": "markdown",
+        "tags": "multi",
+        "status": "select",
+        "channels": "text"
+      }
+    },
+    "images": {
+      "fields": {
+        "entry": "text",
+        "file": "text",
+        "name": "text",
+        "language": "select",
+        "theme": "select",
+        "width": "number",
+        "height": "number",
+        "bytes": "number",
+        "caption": "text",
+        "preview": "text",
+        "order": "number"
+      }
+    }
+  },
+  "requires": {
+    "hub": "0.20.7"
+  }
+}
