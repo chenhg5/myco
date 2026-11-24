@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
-  BookOpen, Check, ChevronDown, ChevronUp, Laptop, Plus, Server, Settings, Sparkles,
+  BookOpen, Check, ChevronDown, ChevronUp, Gauge, Laptop, Plus, Server, Settings, Sparkles,
 } from "lucide-react";
 import type { Hub, HubOverview } from "@/appapi";
 import { useHubLooks, type HubLook } from "@/app/hubLooks";
@@ -18,6 +18,7 @@ type Entry =
   | { key: string; kind: "newOnServer" }
   | { key: string; kind: "settings" }
   | { key: string; kind: "guide" }
+  | { key: string; kind: "usage" }
   | { key: string; kind: "superagent" };
 
 function initial(name: string): string {
@@ -63,7 +64,7 @@ function switchKey(n: number): string {
   return /Mac|iPhone|iPad/.test(p) ? `⌘${n}` : `Ctrl+${n}`;
 }
 
-export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, onNewOnServer, serverName, onSettings, onGuide, onSuperagent, superagent, superagentKey, isLocal, variant = "sidebar", down = false, simple = false }: {
+export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, onNewOnServer, serverName, onSettings, onGuide, onUsage, usageOpen, onSuperagent, superagent, superagentKey, isLocal, variant = "sidebar", down = false, simple = false }: {
   /** opens your superagent (its chat, or setting one up); unset: the
    *  workspace has none to offer (an older hub) */
   onSuperagent?: () => void;
@@ -88,6 +89,9 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, 
   onSettings: () => void;
   /** the user guide (使用文档) */
   onGuide?: () => void;
+  /** the workspace's token usage (用量); usageOpen: it is on show */
+  onUsage?: () => void;
+  usageOpen?: boolean;
   /** whether a hub runs on this computer (it gets a tag) */
   isLocal?: (hub: Hub) => boolean;
   variant?: Variant;
@@ -111,9 +115,10 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, 
     ...(onNewOnServer && !simple ? [{ key: "newOnServer", kind: "newOnServer" as const }] : []),
     { key: "newLocal", kind: "newLocal" as const },
     ...(onSuperagent ? [{ key: "superagent", kind: "superagent" as const }] : []),
+    ...(onUsage ? [{ key: "usage", kind: "usage" as const }] : []),
     ...(onGuide ? [{ key: "guide", kind: "guide" as const }] : []),
     { key: "settings", kind: "settings" },
-  ], [hubs, onNewOnServer, onSuperagent, onGuide, simple]);
+  ], [hubs, onNewOnServer, onSuperagent, onUsage, onGuide, simple]);
 
   const selectedIndex = (): number => {
     const i = entries.findIndex((e) => e.kind === "hub" && e.hub.id === value);
@@ -137,6 +142,7 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, 
     else if (e.kind === "settings") { close(); onSettings(); }
     else if (e.kind === "superagent") { close(); onSuperagent?.(); }
     else if (e.kind === "guide") { close(); onGuide?.(); }
+    else if (e.kind === "usage") { close(); onUsage?.(); }
   };
 
   const toggle = () => {
@@ -270,18 +276,19 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, 
                 </button>
               );
             }
-            const Icon = e.kind === "add" ? Plus : e.kind === "newLocal" ? Laptop : e.kind === "newOnServer" ? Server : e.kind === "superagent" ? Sparkles : e.kind === "guide" ? BookOpen : Settings;
+            const Icon = e.kind === "add" ? Plus : e.kind === "newLocal" ? Laptop : e.kind === "newOnServer" ? Server : e.kind === "superagent" ? Sparkles : e.kind === "guide" ? BookOpen : e.kind === "usage" ? Gauge : Settings;
             return (
               <Fragment key={e.key}>
-                {(e.kind === "add" || e.kind === "superagent") && <div className="app-hub-menu-sep" />}
+                {(e.kind === "add" || e.kind === "superagent" || (e.kind === "usage" && !onSuperagent)) && <div className="app-hub-menu-sep" />}
                 <button
                   ref={(el) => { itemRefs.current[i] = el; }}
                   type="button"
                   role="menuitem"
-                  className={cn("app-hub-menu-item", active === i && "is-active")}
+                  className={cn("app-hub-menu-item", active === i && "is-active", e.kind === "usage" && usageOpen && "active")}
+                  aria-current={e.kind === "usage" && usageOpen ? "page" : undefined}
                   onMouseEnter={() => setActive(i)}
                   onClick={() => run(i)}
-                  data-testid={e.kind === "superagent" ? "menu-superagent" : e.kind === "guide" ? "menu-guide" : undefined}
+                  data-testid={e.kind === "superagent" ? "menu-superagent" : e.kind === "guide" ? "menu-guide" : e.kind === "usage" ? "menu-usage" : undefined}
                 >
                   <span className="app-hub-menu-icon-wrap"><Icon /></span>
                   <span className="app-hub-menu-name">
@@ -295,6 +302,8 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, 
                             ? "superagent"
                             : e.kind === "guide"
                               ? L("使用文档", "User guide")
+                              : e.kind === "usage"
+                                ? L("用量", "Usage")
                               : L("设置", "Settings")}
                   </span>
                   {e.kind === "superagent" && superagentKey && !superagent?.pending && <span className="app-hub-menu-key">{superagentKey}</span>}

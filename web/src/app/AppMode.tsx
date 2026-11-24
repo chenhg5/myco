@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Gauge, ArrowUpDown, Bell, ChevronLeft, ChevronRight, LayoutGrid, Minimize2, Monitor, MoreHorizontal, Pin, Plus, Search, WifiOff, Workflow, X, Zap } from "lucide-react";
+import { ArrowUpDown, Bell, ChevronLeft, ChevronRight, LayoutGrid, Minimize2, Monitor, MoreHorizontal, Pin, Plus, Search, WifiOff, Workflow, X, Zap } from "lucide-react";
 import { ComputerSettings } from "@/app/ComputerSettings";
 import { UsagePage } from "@/app/Usage";
 import { AutomationsPage } from "@/app/Automations";
@@ -1188,10 +1188,6 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 <Workflow /><span className="app-nav-label">{L("工作流", "Workflows")}</span>
                 {decisionCount > 0 && <span className="wf-nav-badge" title={L(`${decisionCount} 个决定在等你`, `${decisionCount} decisions wait for you`)}>{decisionCount}</span>}
               </button>
-              <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-usage", page === "usage" && "active")} aria-current={page === "usage" ? "page" : undefined}
-                onClick={() => { setNavChat(null); toPage("usage"); }}>
-                <Gauge /><span className="app-nav-label">{L("用量", "Usage")}</span>
-              </button>
               <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-templates", page === "templates" && "active")} aria-current={page === "templates" ? "page" : undefined}
                 onClick={() => { setNavChat(null); toPage("templates"); }}>
                 <LayoutGrid /><span className="app-nav-label">{L("应用", "Apps")}</span>
@@ -1360,6 +1356,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 onSuperagent={onSuperagent}
                 superagentKey={isMac ? "⌘⇧Space" : undefined}
                 superagent={sa?.state ? { name: sa.state.agent?.name, pending: sa.approvals.filter((a) => a.status === "pending" && a.agent === sa.state?.agent?.name).length } : undefined}
+                onUsage={() => { setNavChat(null); toPage("usage"); }} usageOpen={page === "usage"}
                 onSettings={() => setPage("settings")} onGuide={() => openHelp()} />
             </div>
           </div>

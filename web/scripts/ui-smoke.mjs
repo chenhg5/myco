@@ -348,6 +348,18 @@ async function go(page, label, narrow) {
   // Settings is a dialog over the page: closed first (as Esc does).
   await closeSettings(page);
   await sidebar(page, true);
+  if (label === "用量") {
+    // Usage sits in the workspace menu too, not at the top of the sidebar;
+    // the menu shows all its items without scrolling.
+    await clickVisible(page, page.locator(".sp-switch .app-hub-trigger"));
+    const menu = page.locator(".app-hub-menu");
+    await menu.waitFor({ timeout: 5_000 });
+    if (await menu.evaluate((el) => el.scrollHeight > el.clientHeight + 1)) throw new Error("工作区菜单不该要滚动");
+    await clickVisible(page, page.locator("[data-testid=menu-usage]"));
+    await page.locator(".usage-page").waitFor({ timeout: 10_000 });
+    if (narrow) await sidebar(page, false);
+    return;
+  }
   if (label === "设置") {
     // Settings sit in the workspace menu at the bottom of the sidebar.
     await clickVisible(page, page.locator(".sp-switch .app-hub-trigger"));
@@ -1897,7 +1909,7 @@ async function runMatrix(browser, size, scheme) {
       // Automations and apps are rows on top, like the rows below, with an icon.
       const tops = await page.evaluate(() => [...document.querySelectorAll(".sp-nav-autos .sp-nav-top")].map((e) => ({ text: (e.querySelector(".app-nav-label")?.textContent || "").trim(), icon: !!e.querySelector("svg"), size: getComputedStyle(e).fontSize })));
       const row = await page.evaluate(() => getComputedStyle(document.querySelector(".sp-nav-projects .app-nav-item")).fontSize);
-      if (tops.map((t) => t.text).join("|") !== "自动化|工作流|用量|应用|电脑" || tops.some((t) => !t.icon || t.size !== row)) throw new Error(`顶上应是带图标的「自动化」「工作流」「用量」「应用」「电脑」五行，和项目一样大：${JSON.stringify(tops)} ${row}`);
+      if (tops.map((t) => t.text).join("|") !== "自动化|工作流|应用|电脑" || tops.some((t) => !t.icon || t.size !== row)) throw new Error(`顶上应是带图标的「自动化」「工作流」「应用」「电脑」四行，和项目一样大（用量在左下角的工作区菜单里）：${JSON.stringify(tops)} ${row}`);
       if (new Set(heads.map((h) => h.size)).size !== 1 || heads.some((h) => h.icon)) throw new Error(`边栏标题字号应一致、不带图标：${JSON.stringify(heads)}`);
       // Projects fold, and stay folded.
       await clickVisible(page, page.locator(".sp-nav-projects .sp-nav-fold"));

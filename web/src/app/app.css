@@ -1984,10 +1984,12 @@ textarea.app-input {
 }
 
 /* The menu opens upward from the sidebar and downward from the pill. */
+/* Tall enough for a few workspaces and every item below them without
+   scrolling; a short window still caps it (and then it scrolls). */
 .app-hub-menu {
   position: absolute;
   z-index: 40;
-  max-height: 320px;
+  max-height: min(560px, calc(100vh - 110px));
   overflow-y: auto;
   padding: 5px;
   border-radius: 10px;
