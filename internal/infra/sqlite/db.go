@@ -480,7 +480,7 @@ func Open(path string) (*sql.DB, error) {
 	// A single writer connection serializes transactions and keeps
 	// ":memory:" databases shared across the pool.
 	db.SetMaxOpenConns(1)
-	if _, err := db.Exec(schema + usageSchema); err != nil {
+	if _, err := db.Exec(schema + usageSchema + projectInvitationSchema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
@@ -492,7 +492,7 @@ func Open(path string) (*sql.DB, error) {
 		{"kind", "TEXT NOT NULL DEFAULT ''"}, {"parent_id", "TEXT NOT NULL DEFAULT ''"}, {"machine", "TEXT NOT NULL DEFAULT ''"},
 		{"owner", "TEXT NOT NULL DEFAULT ''"},
 		// A link whose agent becomes its owner's superagent (v0.21.5).
-		{"superagent", "INTEGER NOT NULL DEFAULT 0"}}); err != nil {
+		{"superagent", "INTEGER NOT NULL DEFAULT 0"}, {"invitation_id", "TEXT NOT NULL DEFAULT ''"}}); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
@@ -532,7 +532,7 @@ func Open(path string) (*sql.DB, error) {
 		"machines": {{"owner", "TEXT NOT NULL DEFAULT ''"}},
 		// The computers a project's coordinators may start agents on (v0.21.2).
 		// Member groups (JSON list, in display order; v0.21.34).
-		"projects": {{"machines", "TEXT NOT NULL DEFAULT '[]'"}, {"member_groups", "TEXT NOT NULL DEFAULT '[]'"}},
+		"projects": {{"coordinator_invites", "INTEGER NOT NULL DEFAULT 0"}, {"machines", "TEXT NOT NULL DEFAULT '[]'"}, {"member_groups", "TEXT NOT NULL DEFAULT '[]'"}},
 		// A member's group in its project ('' = ungrouped).
 		"project_members": {{"group_name", "TEXT NOT NULL DEFAULT ''"}},
 		"console_tokens":  {{"member_id", "TEXT NOT NULL DEFAULT ''"}},
@@ -611,6 +611,7 @@ var agentColumnsV2 = [][2]string{
 	{"avatar_data", "BLOB"},
 	// The model and reasoning effort chosen for the agent's runner (v0.19.5).
 	{"run_settings", "TEXT NOT NULL DEFAULT '{}'"},
+	{"invited_by", "TEXT NOT NULL DEFAULT ''"},
 }
 
 // addColumns adds missing columns (idempotent, forward-only migrations).

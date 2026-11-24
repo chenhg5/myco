@@ -157,6 +157,8 @@ type Agent struct {
 	// EnrolledBy is the enrollment that created this agent ("" if the admin
 	// registered it). Only that enrollment can recover the agent.
 	EnrolledBy string
+	// InvitedBy is the coordinator that invited this agent; immutable provenance.
+	InvitedBy  string
 	CreatedAt  time.Time
 	LastSeenAt time.Time
 	// MachineID is the machine the agent runs on ("" until its runner

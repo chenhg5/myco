@@ -20,15 +20,19 @@ var _ domain.AgentRepository = (*AgentRepo)(nil)
 
 const agentCols = `id, name, description, capabilities, delivery, allow_from, token_hash, created_at, last_seen_at,
   harness, session_id, environment, workdir, delivery_url, delivery_secret, delivery_params, enrolled_by, labels, display_name, status_text, status_at,
-  machine_id, runtime, owner, skills, visibility, avatar, run_settings`
+  machine_id, runtime, owner, skills, visibility, avatar, run_settings, invited_by`
 
 func (r *AgentRepo) Create(ctx context.Context, a *domain.Agent) error {
+	return createAgent(ctx, r.db, a)
+}
+
+func createAgent(ctx context.Context, q sqlExecer, a *domain.Agent) error {
 	caps, allow, params := encodeLists(a)
 	b, d := a.Binding, a.Delivery
-	_, err := r.db.ExecContext(ctx, `INSERT INTO agents (`+agentCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err := q.ExecContext(ctx, `INSERT INTO agents (`+agentCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		a.ID, a.Name, a.Description, caps, d.Mode, allow, a.TokenHash, ms(a.CreatedAt), ms(a.LastSeenAt),
 		b.Harness, b.SessionID, b.Environment, b.Workdir, d.URL, d.Secret, params, a.EnrolledBy, labelsJSON(a.Labels), a.DisplayName,
-		a.StatusText, ms(a.StatusAt), a.MachineID, runtimeJSON(a.Runtime), a.Owner, skillsJSON(a.Skills), string(a.Visibility), a.Avatar, runSettingsJSON(a.RunSettings))
+		a.StatusText, ms(a.StatusAt), a.MachineID, runtimeJSON(a.Runtime), a.Owner, skillsJSON(a.Skills), string(a.Visibility), a.Avatar, runSettingsJSON(a.RunSettings), a.InvitedBy)
 	if isUniqueViolation(err) {
 		return domain.Errf(domain.CodeConflict, "agent %s already exists", a.Name)
 	}
@@ -126,7 +130,7 @@ func scanAgent(s scanner) (*domain.Agent, error) {
 	b, d := &a.Binding, &a.Delivery
 	if err := s.Scan(&a.ID, &a.Name, &a.Description, &caps, &d.Mode, &allow, &a.TokenHash, &created, &lastSeen,
 		&b.Harness, &b.SessionID, &b.Environment, &b.Workdir, &d.URL, &d.Secret, &params, &a.EnrolledBy, &labels, &a.DisplayName, &a.StatusText, &statusAt,
-		&a.MachineID, &runtime, &a.Owner, &skills, &visibility, &a.Avatar, &runSettings); err != nil {
+		&a.MachineID, &runtime, &a.Owner, &skills, &visibility, &a.Avatar, &runSettings, &a.InvitedBy); err != nil {
 		return nil, err
 	}
 	_ = json.Unmarshal([]byte(caps), &a.Capabilities)

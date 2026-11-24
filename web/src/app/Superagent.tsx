@@ -332,6 +332,13 @@ export function GrantStrip({ hubId, agent, name }: { hubId: string; agent: strin
 /** What an agent waits on you for, above its chat's composer (your
  *  superagent's requests, a coordinator asking for a computer): what, why,
  *  and 同意 / 不同意. */
+function invitationWhat(a: Approval): string {
+  if (a.kind !== "project_invite") return a.what;
+  const project = String(a.payload?.project_title || a.payload?.project || "");
+  const name = String(a.payload?.display_name || L("新 agent", "a new agent"));
+  return L(`邀请「${name}」加入项目「${project}」`, `Invite ${name} to project “${project}”`);
+}
+
 export function ApprovalStrip({ hubId, agent, name }: { hubId: string; agent: string; name?: string }) {
   const s = useSuperagent(hubId);
   const [busy, setBusy] = useState<string | null>(null);
@@ -358,7 +365,8 @@ export function ApprovalStrip({ hubId, agent, name }: { hubId: string; agent: st
         <div className="sa-approval" key={a.id}>
           <ShieldQuestion className="sa-approval-icon" />
           <div className="sa-approval-text">
-            <div className="sa-approval-what">{L(`${who} 想：`, `${who} wants to: `)}{a.what}</div>
+            <div className="sa-approval-what">{L(`${who} 想：`, `${who} wants to: `)}{invitationWhat(a)}</div>
+            {a.kind === "project_invite" && <div className="sa-approval-why">{L("仅这一次邀请：链接 24 小时有效，只能用一次。新 agent 归项目主人所有，只加入为普通成员。", "This invitation only: the link lasts 24 hours and works once. The new agent belongs to the project owner and joins as an ordinary member.")}</div>}
             {a.reason && <div className="sa-approval-why">{a.reason}</div>}
             <div className="sa-approval-meta">{leftOf(a.expires_at, now)}</div>
           </div>

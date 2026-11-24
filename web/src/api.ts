@@ -100,6 +100,8 @@ export interface Project {
   /** the computers (ids) its coordinators may start agents on (hubs from
    *  v0.21.2; absent before) */
   machines?: string[];
+  /** Absent on older workspaces; only people managing the project may change it. */
+  coordinator_invites?: boolean;
   /** the project's memory document, with its body (hubs from v0.21.10;
    *  absent before): what members learned and all keep in mind */
   memory?: ProjectDoc;
@@ -142,7 +144,7 @@ export interface Agent {
   /** team (everyone on the hub) or private (only its owner and their agents); absent = team */
   visibility?: "team" | "private";
   labels: string[];
-  binding: Binding; delivery: Delivery; allow_from: string[]; enrolled_by?: string;
+  binding: Binding; delivery: Delivery; allow_from: string[]; enrolled_by?: string; invited_by?: string;
   online: boolean; created_at: string; last_seen_at?: string;
   kind?: AgentKind; machine_id?: string; runtime?: Runtime;
   /** the model and effort chosen for this node in the App ("" = follow the
@@ -544,3 +546,5 @@ export type RemoteDevice = {machine:string; name:string; os:string; control:bool
 export type RemoteDescription = {type:"offer"|"answer"; sdp:string};
 export type RemoteOffer = {description:RemoteDescription; pairing_code?:string; control:boolean};
 export type RemoteSession = {id:string; machine:string; state:"pending"|"connected"|"failed"|"closed"; answer?:RemoteDescription; error?:string};
+
+export interface ProjectInviteResponse { id: string; approval_id?: string; link: string; sentence: string; expires_at: string; status: "pending" | "approved" | "ready" | "used" | "denied" | "expired" }

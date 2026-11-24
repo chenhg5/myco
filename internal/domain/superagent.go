@@ -39,8 +39,9 @@ const (
 // when approved); the others are typed requests any agent may make, whose
 // payload the service that made them reads.
 const (
-	ApprovalKindRequest     = ""
-	ApprovalKindActionGrant = "action_grant" // payload {"grant_id": …}: an agent asks to act on a computer
+	ApprovalKindProjectInvite = "project_invite"
+	ApprovalKindRequest       = ""
+	ApprovalKindActionGrant   = "action_grant" // payload {"grant_id": …}: an agent asks to act on a computer
 )
 
 // ApprovalTTL is how long a request waits for its owner.

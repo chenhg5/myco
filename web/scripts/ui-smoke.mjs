@@ -1754,6 +1754,36 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".sp-home").waitFor({ timeout: 10_000 });
     });
 
+    await step("项目 · 邀请 agent", async () => {
+      await go(page, "官网改版", narrow);
+      await clickVisible(page, page.locator(".sp-head").getByRole("button", {name:"项目资料"}));
+      await clickVisible(page, page.locator("[data-testid=project-tabs]").getByRole("tab", {name:/^成员/}));
+      const section=page.locator("[data-testid=project-agent-invites]");
+      await section.waitFor({timeout:20000});
+      const toggle=section.getByRole("switch");
+      if(await toggle.getAttribute("aria-checked")!=="false")throw new Error("Invitations should default off");
+      await clickVisible(page,toggle);
+      await page.waitForFunction(()=>document.querySelector("[data-testid=project-agent-invites] [role=switch]")?.getAttribute("aria-checked")==="true");
+      await clickVisible(page,toggle);
+      await page.waitForFunction(()=>document.querySelector("[data-testid=project-agent-invites] [role=switch]")?.getAttribute("aria-checked")==="false");
+      await section.scrollIntoViewIfNeeded();await settle(page,200);
+      await shot(page,size,scheme,"project-agent-invites");
+      await navBackClick(page);
+      await page.locator(".sp-home .conv-detail").waitFor({timeout:10000});
+      const request=async()=>{
+        const response=await fetch(`http://${HOST}:${mockPort()}/app/mock/superagent-ask`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({agent:"pm-codex",kind:"project_invite",reason:"协助整理项目文档",payload:{invitation_id:"pinv_fixture",project:"website",project_title:"官网改版",display_name:"文档助手",description:"整理与校对项目文档",note:"文档"}})});
+        if(!response.ok)throw new Error("Invitation mock request failed");
+      };
+      const card=page.locator(".sp-home [data-testid=approvals] .sa-approval");
+      await request();await card.waitFor({timeout:25000});
+      const text=await card.innerText();
+      if(!text.includes("文档助手")||!text.includes("普通成员")||!text.includes("24 小时"))throw new Error("Approval must show invitee and limited permissions");
+      await settle(page,200);await shot(page,size,scheme,"project-invite-request");
+      await clickVisible(page,card.getByRole("button",{name:"不同意",exact:true}));await card.waitFor({state:"hidden"});
+      await request();await card.waitFor({timeout:25000});
+      await clickVisible(page,card.getByRole("button",{name:"同意",exact:true}));await card.waitFor({state:"hidden"});
+    });
+
     // Which computers the project's coordinator may start agents on: a
     // setting of the project (项目资料), apart from its terminals; the
     // coordinator asks for another, and you approve it in its chat.

@@ -465,6 +465,7 @@ Safe to re-run: the same session gets the same agent back.`,
 			{Name: "fork", Kind: Bool, Help: "Join a copy of the session (keeps its context; the original stays yours and untouched). Claude Code and Codex"},
 			{Name: "no-memory", Kind: Bool, Help: "Do not add the myco lines to ~/.claude/CLAUDE.md and ~/.codex/AGENTS.md (see myco skill memory)"},
 			{Name: "no-env", Kind: Bool, Help: "Do not pass this session's provider variables (API keys, base URLs, CODEX_HOME, proxies) on to the runner (they go to the agent's private env file)"},
+			{Name: "invitation", Kind: Bool, Help: "Join only this session with MYCO_ENROLL_TOKEN, ignoring existing computer memberships"},
 			{Name: "same-session", Kind: Bool, Help: "When this session is already an agent of another workspace, join it as it is instead of a copy (default: a copy, so each workspace has its own session)"},
 			{Name: "project", Kind: String, Help: "Then join this project (one you can see, e.g. one its owner sent you the link for)"},
 			{Name: "take-over", Kind: String, Help: "Take a node over with a link from myco agent handover-link (its /h/ URL or token; default: MYCO_TAKEOVER, which keeps it out of the process list)"},
@@ -480,7 +481,7 @@ Safe to re-run: the same session gets the same agent back.`,
 			// The membership to use: --hub, else MYCO_HUB when it is one of
 			// this machine's hubs, else the primary one.
 			var m *config.MachineHub
-			if mf != nil {
+			if mf != nil && !e.in.Bool("invitation") {
 				want := e.in.String("hub")
 				if want == "" {
 					want = e.in.Getenv(config.EnvHub)
@@ -516,6 +517,9 @@ Safe to re-run: the same session gets the same agent back.`,
 			}
 			if h := e.in.Getenv(config.EnvHub); h != "" && !chosen && (m == nil || tok != m.EnrollToken) {
 				hub = h
+			}
+			if e.in.Bool("invitation") && e.in.String("hub") != "" {
+				hub = e.in.String("hub")
 			}
 			if hub == "" || tok == "" {
 				return errorf("not_configured", ExitUsage, "add this machine first: run the join link's command (curl -fsSL <link> | bash), or ask your admin for one (myco link create)",

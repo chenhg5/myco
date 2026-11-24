@@ -282,6 +282,43 @@ export const scenes = [
     tags: ["应用", "权限与安全"],
     prepare: servers,
   },
+  {
+    id: "project-invites",
+    title: "项目协调者邀请 Agent / Coordinator invitations",
+    zh: "让项目协调者邀请新 Agent，是否需要逐次批准由你决定。",
+    en: "Let project coordinators invite agents, with approval when you need it.",
+    tags: ["协作", "权限与安全"],
+    themes: ["light", "dark"],
+    description: "项目成员设置中的协调者邀请开关，默认关闭，展示一次性邀请和成员权限说明",
+    prepare: async ({ api, page, T }) => {
+      await api("/app/hubs/hub_studio/projects/website/agent-invites", "PUT", { allowed: false });
+      await page.reload();
+      await click(page.locator(".app-nav-item:visible", {hasText:T("官网改版", "Website redesign")}));
+      await click(page.locator(".sp-head").getByRole("button", {name:T("项目资料", "Project notes")}));
+      await click(page.locator("[data-testid=project-tabs]").getByRole("tab", {name:T("成员", "Members"), exact:false}));
+      await page.locator("[data-testid=project-agent-invites]").scrollIntoViewIfNeeded();
+    },
+  },
+  {
+    id: "project-invite-approval",
+    title: "一键批准项目邀请 / Approve project invitations",
+    zh: "看清谁将加入、归谁所有，再一键批准一次性邀请。",
+    en: "See who will join and who owns the agent before approving an invitation.",
+    tags: ["协作", "权限与安全"],
+    themes: ["light", "dark"],
+    description: "项目协调者的邀请批准卡，展示文档助手、24小时有效和普通成员权限",
+    prepare: async ({ api, page, T }) => {
+      await api("/app/mock/superagent-ask", "DELETE");
+      await api("/app/mock/superagent-ask", "POST", {
+        hub: "hub_studio", agent: "mbp-frontend", kind: "project_invite",
+        reason: T("协助整理项目文档", "Help organize the project documentation"),
+        payload: {invitation_id:"pinv_demo", project:"website", project_title:T("官网改版", "Website redesign"), display_name:T("文档助手", "Documentation assistant"), description:T("整理与校对项目文档", "Organize and review project documentation"), note:T("文档", "Documentation")},
+      });
+      await page.reload();
+      await page.locator(".sa-approval").first().waitFor();
+    },
+  },
+
 ];
 
 scenes.push(...interactionScenes);

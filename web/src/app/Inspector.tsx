@@ -1075,6 +1075,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
   );
   const row_owner = (
     <>
+      {ag.invited_by && <div className="app-kv" data-testid="agent-invited-by"><span className="app-kv-label">{L("邀请来源", "Invitation")}</span><span className="app-kv-value">{L(`由 ${ag.invited_by} 邀请`, `Invited by ${ag.invited_by}`)}</span></div>}
               {ag.owner && (
                 <div className="app-kv">
                   <span className="app-kv-label">{L("主人", "Owner")}</span>

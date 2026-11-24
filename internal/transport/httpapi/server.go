@@ -29,14 +29,15 @@ import (
 
 // Server is the hub's HTTP adapter.
 type Server struct {
-	usage         *app.UsageService
-	runSettingsMu sync.Mutex
-	enroll        *app.EnrollmentService
-	agents        *app.AgentService
-	messages      *app.MessageService
-	adminToken    string
-	log           *slog.Logger
-	publicURL     atomic.Value // string
+	projectInvites *app.ProjectInvitationService
+	usage          *app.UsageService
+	runSettingsMu  sync.Mutex
+	enroll         *app.EnrollmentService
+	agents         *app.AgentService
+	messages       *app.MessageService
+	adminToken     string
+	log            *slog.Logger
+	publicURL      atomic.Value // string
 	// lan: the hub listens on every interface without a public URL, so
 	// links made over localhost use this machine's LAN address instead.
 	lan atomic.Bool

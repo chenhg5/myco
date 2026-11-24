@@ -44,9 +44,9 @@ func (s *Server) agentDTO(a *domain.Agent) api.Agent {
 		Delivery: api.Delivery{Mode: a.Delivery.Mode, URL: redactURL(a.Delivery.URL),
 			HasSecret: a.Delivery.Secret != "", Params: a.Delivery.Params},
 		AllowFrom:  make([]string, 0, len(a.AllowFrom)),
-		EnrolledBy: a.EnrolledBy,
-		Online:     a.IsOnline(s.agents.Now(), s.agents.OnlineWindow()),
-		CreatedAt:  a.CreatedAt, LastSeenAt: timePtr(a.LastSeenAt),
+		EnrolledBy: a.EnrolledBy, InvitedBy: a.InvitedBy,
+		Online:    a.IsOnline(s.agents.Now(), s.agents.OnlineWindow()),
+		CreatedAt: a.CreatedAt, LastSeenAt: timePtr(a.LastSeenAt),
 		StatusText: a.StatusText, StatusAt: timePtr(a.StatusAt),
 	}
 	for _, n := range a.AllowFrom {

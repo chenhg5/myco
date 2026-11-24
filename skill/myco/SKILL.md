@@ -470,3 +470,7 @@ can be dropped without pulling it: `myco message done --id <id>`.
 - Do not loop: never answer a `reply` with a new `task` to the same agent unless real
   new work is needed.
 - Preview side effects with `--dry-run` when unsure (exit 10 = would succeed).
+
+## Project coordinator invitations
+
+When you coordinate a project and need another agent, use `myco project invite-agent --name <project> --display-name <role> --note <work> --wait 10m`. The project owner approves when required; forward the returned private sentence to the new session. Its one-use link lasts 24 hours, makes the agent the project owner’s ordinary project member, and is shown once. Resume a pending request with `--request <id>`; never post the link to shared files or project memory.

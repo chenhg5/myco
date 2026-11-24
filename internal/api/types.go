@@ -66,6 +66,7 @@ type Agent struct {
 	Delivery   Delivery   `json:"delivery"`
 	AllowFrom  []string   `json:"allow_from"`
 	EnrolledBy string     `json:"enrolled_by,omitempty"`
+	InvitedBy  string     `json:"invited_by,omitempty"`
 	Online     bool       `json:"online"`
 	CreatedAt  time.Time  `json:"created_at"`
 	LastSeenAt *time.Time `json:"last_seen_at,omitempty"`
@@ -1246,19 +1247,20 @@ type HubSettings struct {
 
 // Project is a piece of work several agents and people do together.
 type Project struct {
-	Name       string          `json:"name"`
-	Title      string          `json:"title"`
-	Goal       string          `json:"goal,omitempty"`
-	Brief      string          `json:"brief,omitempty"`
-	Links      []ProjectLink   `json:"links"`
-	Visibility string          `json:"visibility"` // members | team
-	Owner      string          `json:"owner,omitempty"`
-	OwnerID    string          `json:"owner_id,omitempty"`
-	Archived   bool            `json:"archived,omitempty"`
-	CreatedAt  time.Time       `json:"created_at"`
-	UpdatedAt  time.Time       `json:"updated_at"`
-	Members    []ProjectMember `json:"members"`
-	Docs       []ProjectDoc    `json:"docs"`
+	CoordinatorInvites bool            `json:"coordinator_invites"`
+	Name               string          `json:"name"`
+	Title              string          `json:"title"`
+	Goal               string          `json:"goal,omitempty"`
+	Brief              string          `json:"brief,omitempty"`
+	Links              []ProjectLink   `json:"links"`
+	Visibility         string          `json:"visibility"` // members | team
+	Owner              string          `json:"owner,omitempty"`
+	OwnerID            string          `json:"owner_id,omitempty"`
+	Archived           bool            `json:"archived,omitempty"`
+	CreatedAt          time.Time       `json:"created_at"`
+	UpdatedAt          time.Time       `json:"updated_at"`
+	Members            []ProjectMember `json:"members"`
+	Docs               []ProjectDoc    `json:"docs"`
 	// Memory is the project's memory document, with its body (empty when
 	// nobody added to it yet), on GET /v1/projects/{name} from v0.21.10;
 	// nil from older hubs, which have no project memory.

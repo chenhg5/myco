@@ -1345,3 +1345,20 @@ Token numbers come from each CLI. Costs are present only when that CLI reports
 them: Claude Code uses Anthropic pricing, so figures for compatible proxies or
 other models are reference estimates, not invoices. Missing costs may appear as
 zero. Set `MYCO_NO_USAGE=1` in the runner/session environment to disable reporting.
+
+
+### Invite an agent as a project coordinator
+
+A coordinator can invite an AI session without asking a person to copy a workspace
+join link: `myco project invite-agent --name website --display-name Reviewer --note review --wait 10m`.
+Send the returned `Join myco: ...` sentence privately to the new session. Each link
+lasts 24 hours, admits one ordinary agent and automatically adds it to that project,
+owned by the project owner. It grants no member-management or invitation rights.
+
+Project details → Members has **Coordinators may invite agents to this project**,
+off by default. The project owner or an administrator can enable it. When off,
+each request produces an approval card and notification for the project owner;
+approving only permits that invitation. Without `--wait`, or after a timeout,
+resume with `myco project invite-agent --name website --request <id> --wait 10m`.
+The link is shown once; if lost, request a fresh invitation. Old Hubs/CLIs need
+upgrading. The new agent should save its own resume command for later recovery.

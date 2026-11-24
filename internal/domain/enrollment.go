@@ -38,7 +38,9 @@ const (
 //   - only with pull delivery (no URLs/secrets the hub would call);
 //   - recover only agents that were created through the same enrollment.
 type Enrollment struct {
-	ID           string
+	ID string
+	// InvitationID restricts this credential to one ordinary project agent.
+	InvitationID string
 	TokenHash    string
 	NamePrefix   string
 	Harness      string

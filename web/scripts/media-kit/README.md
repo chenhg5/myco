@@ -19,7 +19,7 @@ node web/scripts/media-kit-shots.mjs --out ../media-kit-output
 
 The output is a manifest and 2880 × 2000 PNGs (1440 × 1000 at 2×). Every scene
 gets Chinese and English light screenshots. The first six scenes also get both
-dark versions. The same scene function and translated synthetic data are used
+dark versions; individual scenes may also specify `themes` explicitly. The same scene function and translated synthetic data are used
 for both languages. English workflow and automation fixture copy is translated
 separately from the product's own UI dictionary. A failed scene writes a
 `.FAILED.png` and debug text and makes the run exit unsuccessfully; it does not

@@ -57,7 +57,7 @@ report.expected = scenes.reduce(
     n +
     (s.skip || (only.length && !only.includes(s.id))
       ? 0
-      : (i < 6 ? 2 : 1) * langs.length),
+      : (s.themes?.length || (i < 6 ? 2 : 1)) * langs.length),
   0,
 );
 if (args.includes("--resume")) {
@@ -136,7 +136,7 @@ try {
           report.skipped.push({ id: scene.id, reason: scene.skip });
           continue;
         }
-        for (const theme of index < 6 ? ["light", "dark"] : ["light"]) {
+        for (const theme of scene.themes || (index < 6 ? ["light", "dark"] : ["light"])) {
           const dir = path.join(out, scene.id);
           await mkdir(dir, { recursive: true });
           const record =

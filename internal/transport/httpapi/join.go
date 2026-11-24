@@ -58,6 +58,10 @@ func (s *Server) joinPage(w http.ResponseWriter, r *http.Request) {
 		v.PSCommand = "irm '" + v.Link + "?format=ps1&shell=1' | iex"
 	}
 	link, err := s.enroll.PeekLink(r.Context(), tok)
+	if err == nil && link.InvitationID != "" {
+		s.projectInvitationPage(w, r, link, tok)
+		return
+	}
 	if err == nil {
 		err = link.Usable(s.agents.Now(), true)
 	}

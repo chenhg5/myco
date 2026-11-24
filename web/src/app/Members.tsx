@@ -193,6 +193,7 @@ export function MemberSheet({ row, details, projects, rows, now, onClose, onChat
         <input className="ms-name" value={name} onChange={(e) => setName(e.target.value)} aria-label={L("名字", "Name")} />
         <input className="ms-desc" value={desc} title={desc} onChange={(e) => setDesc(e.target.value)}
           placeholder={ws ? L("这个文件夹是做什么的", "What this folder is for") : L("它负责什么？比如 维护后端接口和数据库", "What does it do? e.g. Looks after the backend and the database")} aria-label={L("分工", "What it does")} />
+        {a.invited_by && <div className="ms-state" data-testid="member-invited-by">{L(`由 ${a.invited_by} 邀请`, `Invited by ${a.invited_by}`)}</div>}
         <div className="ms-state">{ws ? whereOf(row) : stateWords(row.st.state, a.status_text)}</div>
         {dirty && <div className="ms-save"><button type="button" className="app-btn app-btn-primary app-btn-small" disabled={busy || !name.trim()} onClick={() => void save()}>{L("保存", "Save")}</button></div>}
 

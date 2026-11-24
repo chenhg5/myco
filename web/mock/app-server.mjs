@@ -1782,7 +1782,7 @@ function appOverview() {
 // Projects (studio hub only).
 const projects = [
   {
-    name: "website", title: "官网改版", goal: "11 月底前上线新版官网：首页、文档站和下载页，中英双语。",
+    name: "website", coordinator_invites: false, title: "官网改版", goal: "11 月底前上线新版官网：首页、文档站和下载页，中英双语。",
     brief: "## 仓库\n- 代码在 `myco-web`，分支 `redesign`，PR 合到 `main` 才会部署。\n\n## 规则\n- 改文案先改中文，再同步英文。\n- 截图统一 2x。\n\n## 怎么测试\n`npm run build && npm run preview`，在 1280 和 390 两个宽度下看一遍。",
     links: [{ title: "仓库", url: "https://github.com/acme/myco-web" }, { title: "设计稿", url: "https://figma.com/file/demo" }],
     visibility: "members", owner: "glenn", owner_id: "mem_glenn", archived: false, created_at: iso(86400 * 5), updated_at: iso(3600),
@@ -2105,6 +2105,7 @@ const server = http.createServer(async (req, res) => {
       Object.assign(a, { kind: "action_grant", payload: { grant_id: g.id }, method: "", path: "",
         what: body.what || `${requested.includes("remote.desktop.control") ? "看并操作" : "看"}电脑 ${g.target_name} 的屏幕（键盘和鼠标），5 分钟` });
     }
+    if (body.kind === "project_invite") Object.assign(a, {kind: body.kind, payload: body.payload || {project: "website", project_title: "官网改版", display_name: "文档助手"}, method: "", path: ""});
     (state.approvals[hub.id] ||= []).push(a);
     return send(res, 201, a);
   }
@@ -3747,6 +3748,7 @@ const server = http.createServer(async (req, res) => {
       const p = list.find((x) => x.name === parts[4]);
       if (!p) return fail(res, 404, "not_found", `no project ${parts[4]}`);
       if (parts.length === 5 && method === "GET") return send(res, 200, projectView(hub, p, url.searchParams.get("docs") === "body"));
+      if (parts[5] === "agent-invites" && method === "PUT") { const b = await readBody(req); p.coordinator_invites = !!b.allowed; return send(res, 200, projectView(hub,p)); }
       if (parts.length === 5 && method === "PATCH") {
         const b = await readBody(req);
         for (const k of ["title", "goal", "brief", "links", "visibility", "archived"]) if (b[k] !== undefined) p[k] = b[k];

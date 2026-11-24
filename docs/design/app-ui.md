@@ -620,3 +620,5 @@ success panel later.
 
 Once Tailscale is detected, the installation card is hidden. If opening fails,
 its sign-in and permission troubleshooting guidance becomes available again.
+
+项目成员设置中的「邀请 agent」开关默认关闭，项目主人或管理员可更改。关闭时，协调者的邀请在现有批准卡中展示项目和预填的 agent 资料，并明确说明一次性、24 小时、归项目主人所有和普通成员权限；批准卡不含邀请凭据。成员资料显示邀请来源。旧 Hub 未提供此字段时隐藏设置。

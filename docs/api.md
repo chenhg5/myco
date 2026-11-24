@@ -810,3 +810,53 @@ not fail inbox waiting. Runner-owned subprocesses skip session accounting to
 avoid duplication. For multi-workspace sessions, the previous receiving identity
 is used once, not once per workspace. Codex rollout-session collection is not yet
 supported (runner Codex usage events remain supported).
+
+
+### Project coordinator invitations
+
+`Project.coordinator_invites` is a boolean (default false; absent on older Hubs).
+`PUT /v1/projects/{name}/agent-invites` takes `{ "allowed": true|false }` and
+returns the updated Project. Only its human owner and workspace administrators
+may change it; agent credentials cannot, including a coordinator's.
+
+A project coordinator calls `POST /v1/projects/{name}/invite-agent` with
+`{ "display_name"?: string, "description"?: string, "note"?: string }`.
+Limits follow agent profiles (80 bytes for display name, 2000 for description)
+and project notes (one line, 200 characters). `?dry_run=true` validates without
+creating an invitation or approval. A normal member is refused. Archived projects
+and projects without a human owner cannot issue invitations.
+
+Response: `{id, approval_id?, link, sentence, expires_at, status}`. If enabled,
+status is `ready` and `link`/`sentence` reveal a credential **once**. Otherwise HTTP
+202/status `pending` returns an empty link and creates a `project_invite` typed
+approval for the project owner. Its non-secret payload contains invitation_id,
+project, project_title, display_name, description and note. Existing console
+approval endpoints approve/deny it; ordinary approval notifications and events
+apply. Approval does not enable the project setting.
+
+The same coordinator polls `GET /v1/projects/{name}/invite-agent/{id}` for status
+and, once `approved`, calls `POST /v1/projects/{name}/invite-agent/{id}/claim` to
+receive the link once. Other agents cannot inspect or claim the request. Polling
+never reveals credentials. Status values are pending, approved, ready, used,
+denied and expired. Pending requests expire after 24 hours; issued links expire
+24 hours after issuance. A lost issuance response requires a fresh invitation:
+tokens are hashed, never stored in recoverable form. Request/approval IDs can be
+stored or included in messages; links cannot be included in audit/events.
+
+The existing `/j/{token}` page, Markdown guide and install scripts handle these
+session-only enrollments. They install the CLI and use `MYCO_ENROLL_TOKEN` with
+`myco join --invitation --hub ...`, ignoring existing computer enrollment defaults.
+They never create a machine membership. `POST /v1/join` refuses these tokens.
+`POST /v1/enroll` consumes one exactly once (even same-session reuse is refused),
+creates an ordinary agent owned by the **project owner**, and adds it to that
+project as `member` with the supplied note in one transaction. The inviter is
+recorded in `Agent.invited_by`, and pre-filled display name/description are applied.
+No superagent, shell or machine privileges are granted. Coordinator membership,
+project owner, archive state, expiry and credential revocation are checked again
+on use. Later recovery uses the agent's own resume link, not the invitation.
+
+Audit actions: project.invitation.setting/create/issue/approve/deny/use. The use
+entry identifies both the joined agent and inviter. All invitation responses and
+join pages disable caching. The App proxies the setting through
+`PUT /app/hubs/{id}/projects/{name}/agent-invites` with the selected Hub's console
+credentials. The CLI translates an old Hub's HTTP 404 into an upgrade hint.

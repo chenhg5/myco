@@ -237,6 +237,7 @@ func Build(o Options) (*Hub, error) {
 		return err == nil && m != nil
 	})
 	srv.SetProjects(projectSvc)
+	srv.SetProjectInvitations(app.NewProjectInvitationService(sqlite.NewProjectInvitationRepo(db), projectSvc, sqlite.NewMemberRepo(db), superagents, enroll, audit, ids, clock))
 	enroll.SetDefaultVisibility(defaultVisibility)
 	srv.SetHidden(app.NewHiddenService(sqlite.NewSettingRepo(db)))
 	srv.SetPins(app.NewPinService(sqlite.NewSettingRepo(db), ids, clock))

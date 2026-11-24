@@ -560,7 +560,7 @@ owner and coordinators edit or tidy like any document.`,
 	file := (&Command{Name: "file", Summary: "A project's files: upload, download, remove"}).Add(filePut, fileGet, fileRemove)
 	machines, machine := projectMachineCommands()
 	return (&Command{Name: "project", Summary: "Projects: nodes working together on a goal, with a shared brief and files"}).
-		Add(list, show, pull, create, update, memberCmd("add"), memberCmd("remove"), memory, file, doc, machines, machine, del)
+		Add(projectInviteCommand(), list, show, pull, create, update, memberCmd("add"), memberCmd("remove"), memory, file, doc, machines, machine, del)
 }
 
 // memoryUpgradeHint: hubs before v0.21.10 have no project memory.
