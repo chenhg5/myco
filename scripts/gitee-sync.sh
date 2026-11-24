@@ -103,15 +103,18 @@ if [ "$DRY" = 0 ]; then
 fi
 
 # 3. The release: create it, or keep its notes in step with the CHANGELOG.
+# A tag without a release is 404, or 200 with a null body (Gitee does the
+# latter once the tag is pushed).
 code=$(api_to GET "/releases/tags/$V" "$tmp/rel.json")
 case $code in
   200)
     REL=$(python3 - "$tmp/rel.json" <<'PY'
 import json, sys
-print(json.load(open(sys.argv[1]))["id"])
+d = json.load(open(sys.argv[1]))
+print(d["id"] if d else "")
 PY
 )
-    action=update
+    if [ -n "$REL" ]; then action=update; else action=create; fi
     ;;
   404)
     REL=""
