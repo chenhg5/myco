@@ -23,6 +23,8 @@ import { Modal } from "@/app/dialogs";
  */
 
 export type GroupStyle = "fold" | "faces" | "chips";
+/** A group dragged to a new place among the groups. */
+const GROUP_DRAG = "application/x-myco-group";
 const STYLE_KEY = "myco-member-groups-style";
 const FOLD_KEY = "myco-member-groups-folded:";
 export const OTHER = () => L("其他", "Other");
@@ -69,17 +71,24 @@ export function grouped(rows: AgentRow[], ctl: GroupsCtl): Group[] {
   return out;
 }
 
-/** The menu items of a member to move it to another group. */
-export function moveItems(r: AgentRow, ctl: GroupsCtl | undefined, onNew: () => void): MenuItem[] {
+/** A member's menu item to move it to another group: one line (with its
+ *  group), which opens the short list of groups in the menu's place. */
+export function moveItems(r: AgentRow, ctl: GroupsCtl | undefined, onNew: () => void, again: (items: MenuItem[]) => void): MenuItem[] {
   if (!ctl || !ctl.canEdit) return [];
   const mine = ctl.groupOf(r.st.agent.name);
   const to = (g: string) => void ctl.save(ctl.list, { [r.st.agent.name]: g }).catch(() => undefined);
-  return [
-    "sep",
+  const list: MenuItem[] = [
     { header: L("移到分组", "Move to a group") },
     ...ctl.list.map((g) => ({ label: g, checked: mine === g, onSelect: () => to(g) })),
     ...(ctl.list.length ? [{ label: OTHER(), checked: !ctl.list.includes(mine), onSelect: () => to("") }] : []),
-    { label: L("新建分组…", "New group…"), onSelect: onNew },
+    "sep",
+    { label: L("新建分组", "New group"), onSelect: onNew },
+  ];
+  return [
+    "sep",
+    ctl.list.length
+      ? { label: L("移到分组", "Move to a group"), hint: ctl.list.includes(mine) ? mine : OTHER(), onSelect: () => again(list) }
+      : { label: L("新建分组", "New group"), onSelect: onNew },
   ];
 }
 
@@ -161,6 +170,31 @@ export function GroupedMembers({ rows, ctl, style, row, foldKey, onNewGroup, onR
   const [opened, toggleOpen] = useSet(FOLD_KEY + "faces:" + foldKey);
   const [chip, setChip] = useState("");
   const [over, setOver] = useState("");
+  // A group dragged among the others: where it would go (before or after one).
+  const [slot, setSlot] = useState<{ name: string; after: boolean } | null>(null);
+  const isGroupDrag = (e: React.DragEvent) => Array.from(e.dataTransfer.types).includes(GROUP_DRAG);
+  const groupDragProps = (g: Group) => (!ctl.canEdit || g.other ? {} : {
+    draggable: true,
+    onDragStart: (e: React.DragEvent) => {
+      e.stopPropagation();
+      e.dataTransfer.setData(GROUP_DRAG, g.name);
+      e.dataTransfer.effectAllowed = "move";
+    },
+    onDragEnd: () => setSlot(null),
+  });
+  /** Drops a dragged group before or after g (其他 stays last). */
+  const placeGroup = (moved: string, g: Group, after: boolean) => {
+    if (!moved || moved === g.name || !ctl.list.includes(moved)) return;
+    const rest = ctl.list.filter((x) => x !== moved);
+    const at = g.other ? rest.length : rest.indexOf(g.name) + (after ? 1 : 0);
+    const next = [...rest.slice(0, at), moved, ...rest.slice(at)];
+    if (next.join("\u0000") !== ctl.list.join("\u0000")) void ctl.save(next).catch(() => undefined);
+  };
+  /** Which half of the box the pointer is in (across for chips). */
+  const afterHalf = (e: React.DragEvent, across: boolean) => {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    return across ? e.clientX > r.left + r.width / 2 : e.clientY > r.top + r.height / 2;
+  };
   const menu = useContextMenu();
   const groupMenu = (el: Element, g: string) => {
     const i = ctl.list.indexOf(g);
@@ -178,17 +212,33 @@ export function GroupedMembers({ rows, ctl, style, row, foldKey, onNewGroup, onR
     ]);
   };
   // A member dropped on a group: moved there.
-  const dropProps = (g: Group) => (!ctl.canEdit ? {} : {
+  const dropProps = (g: Group, across = false) => (!ctl.canEdit ? {} : {
     onDragOver: (e: React.DragEvent) => {
+      if (isGroupDrag(e)) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = "move";
+        const after = g.other ? false : afterHalf(e, across);
+        if (slot?.name !== g.name || slot.after !== after) setSlot({ name: g.name, after });
+        return;
+      }
       if (!Array.from(e.dataTransfer.types).includes(DRAG_TYPE)) return;
       e.preventDefault();
       e.stopPropagation();
       e.dataTransfer.dropEffect = "move";
       if (over !== g.name) setOver(g.name);
     },
-    onDragLeave: (e: React.DragEvent) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(""); },
+    onDragLeave: (e: React.DragEvent) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) { setOver(""); setSlot(null); } },
     onDrop: (e: React.DragEvent) => {
       setOver("");
+      if (isGroupDrag(e)) {
+        e.preventDefault();
+        e.stopPropagation();
+        const after = g.other ? false : afterHalf(e, across);
+        setSlot(null);
+        placeGroup(e.dataTransfer.getData(GROUP_DRAG), g, after);
+        return;
+      }
       let a: DragAgent | null = null;
       try { a = JSON.parse(e.dataTransfer.getData(DRAG_TYPE)) as DragAgent; } catch { return; }
       if (!a || !rows.some((r) => r.st.agent.name === a!.agent)) return;
@@ -214,9 +264,13 @@ export function GroupedMembers({ rows, ctl, style, row, foldKey, onNewGroup, onR
     return (
       <div className="mg mg-chips-style">
         <div className="mg-chips" role="tablist" aria-label={L("分组", "Groups")}>
-          {[{ name: "", label: L("全部", "All"), n: rows.length }, ...groups.map((g) => ({ name: g.name, label: g.name, n: g.rows.length }))].map((c) => (
-            <button key={c.name || "*"} type="button" role="tab" aria-selected={on === c.name} className={cn("mg-chip", on === c.name && "is-on")}
-              onClick={() => setChip(c.name)}>{c.label}<span>{c.n}</span></button>
+          <button type="button" role="tab" aria-selected={on === ""} className={cn("mg-chip", on === "" && "is-on")} onClick={() => setChip("")}>
+            {L("全部", "All")}<span>{rows.length}</span>
+          </button>
+          {groups.map((g) => (
+            <button key={g.name} type="button" role="tab" aria-selected={on === g.name} data-group={g.name}
+              className={cn("mg-chip", on === g.name && "is-on", slot?.name === g.name && (slot.after ? "is-slot-after" : "is-slot-before"))}
+              onClick={() => setChip(g.name)} {...groupDragProps(g)} {...dropProps(g, true)}>{g.name}<span>{g.rows.length}</span></button>
           ))}
         </div>
         {ctl.error && <p className="mg-error" role="alert">{L(`分组没存上：${ctl.error}`, `Groups not saved: ${ctl.error}`)}</p>}
@@ -235,8 +289,8 @@ export function GroupedMembers({ rows, ctl, style, row, foldKey, onNewGroup, onR
         {groups.map((g) => {
           const open = opened.has(g.name);
           return (
-            <div key={g.name} className={cn("mg-group", open && "is-open", over === g.name && "is-over")} data-group={g.name} {...dropProps(g)}>
-              <button type="button" className="mg-tile-row" aria-expanded={open} onClick={() => toggleOpen(g.name)}>
+            <div key={g.name} className={cn("mg-group", open && "is-open", over === g.name && "is-over", slot?.name === g.name && (slot.after ? "is-slot-after" : "is-slot-before"))} data-group={g.name} {...dropProps(g)}>
+              <button type="button" className="mg-tile-row" aria-expanded={open} onClick={() => toggleOpen(g.name)} {...groupDragProps(g)}>
                 <span className="mg-tile" aria-hidden>{g.rows.slice(0, 4).map((r) => <Avatar key={r.st.agent.name} agent={r.st.agent} size={14} badge={false} />)}</span>
                 <span className="mg-tile-text">
                   <span className="mg-name">{g.name}<span className="mg-count">{g.rows.length}</span></span>
@@ -262,8 +316,8 @@ export function GroupedMembers({ rows, ctl, style, row, foldKey, onNewGroup, onR
         const open = !folded.has(g.name);
         const w = working(g.rows), a = asking(g.rows);
         return (
-          <div key={g.name} className={cn("mg-group", open && "is-open", over === g.name && "is-over")} data-group={g.name} {...dropProps(g)}>
-            <button type="button" className="mg-head" aria-expanded={open} onClick={() => toggleFold(g.name)}>
+          <div key={g.name} className={cn("mg-group", open && "is-open", over === g.name && "is-over", slot?.name === g.name && (slot.after ? "is-slot-after" : "is-slot-before"))} data-group={g.name} {...dropProps(g)}>
+            <button type="button" className="mg-head" aria-expanded={open} onClick={() => toggleFold(g.name)} {...groupDragProps(g)}>
               <ChevronRight className="mg-chev" />
               <span className="mg-name">{g.name}</span>
               <span className="mg-count">{g.rows.length}</span>

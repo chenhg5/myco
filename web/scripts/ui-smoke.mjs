@@ -401,12 +401,19 @@ async function menuPick(page, row, item) {
     await row.scrollIntoViewIfNeeded();
     await page.waitForTimeout(300);
     await row.click({ button: "right" });
-    const it = page.locator(".conv-menu").getByRole("menuitem", { name: item, exact: true });
+    const it = page.locator(".conv-menu").getByRole("menuitem", typeof item === "string" ? { name: item, exact: true } : { name: item });
     if (await it.waitFor({ timeout: 1_500 }).then(() => true, () => false)
       && await it.click({ timeout: 1_500 }).then(() => true, () => false)) return;
     await page.keyboard.press("Escape");
     if (i >= 4) throw new Error(`右键菜单没出现「${item}」`);
   }
+}
+
+/** A member's menu → 移到分组 → the group (a short list in the menu's place). */
+async function moveTo(page, row, group) {
+  await menuPick(page, row, /^移到分组/);
+  const it = page.locator(".conv-menu").getByRole("menuitem", { name: group, exact: true });
+  await it.click({ timeout: 5_000 });
 }
 
 async function closeDialog(page) {
@@ -5267,7 +5274,7 @@ async function runMatrix(browser, size, scheme) {
         await dlg.getByRole("button", { name: "好" }).click();
         await dlg.waitFor({ state: "detached", timeout: 5_000 });
       };
-      await groupsMenu("新建分组…");
+      await groupsMenu("新建分组");
       await page.locator(".app-modal input").waitFor({ timeout: 5_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "member-groups-new");
@@ -5275,8 +5282,12 @@ async function runMatrix(browser, size, scheme) {
       const group = (name) => side.locator(`.mg-group[data-group="${name}"]`);
       await group("前端").locator(".mg-empty").waitFor({ timeout: 10_000 });
       await group("其他").waitFor({ timeout: 5_000 });
-      // From its menu: docs-claude into 前端.
-      await menuPick(page, side.locator(".sp-member", { hasText: "docs-claude" }), "前端");
+      // From its menu: docs-claude into 前端 (移到分组 opens the short list of groups).
+      await menuPick(page, side.locator(".sp-member", { hasText: "docs-claude" }), /^移到分组/);
+      await page.locator(".conv-menu").getByRole("menuitem", { name: "前端", exact: true }).waitFor({ timeout: 5_000 });
+      await page.waitForTimeout(400);
+      await shot(page, size, scheme, "member-groups-move");
+      await page.locator(".conv-menu").getByRole("menuitem", { name: "前端", exact: true }).click();
       await group("前端").locator(".sp-member", { hasText: "docs-claude" }).waitFor({ timeout: 10_000 });
       // Dragged onto the group: Release too.
       {
@@ -5286,16 +5297,52 @@ async function runMatrix(browser, size, scheme) {
         await group("前端").dispatchEvent("drop", { dataTransfer: dt });
       }
       await group("前端").locator(".sp-member", { hasText: "Release (Claude 云端)" }).waitFor({ timeout: 10_000 });
+      // Groups in another order: one dragged by its heading above another
+      // (a line shows where it would go); in the chips too.
+      {
+        await groupsMenu("新建分组");
+        await named("后端");
+        await group("后端").waitFor({ timeout: 10_000 });
+        const order = () => side.locator(".mg-group[data-group]").evaluateAll((els) => els.map((e) => e.getAttribute("data-group")).filter((g) => g !== "其他"));
+        if ((await order()).join(",") !== "前端,后端") throw new Error(`新建的分组应排在最后：${(await order()).join(",")}`);
+        const dt = await page.evaluateHandle(() => new DataTransfer());
+        await group("后端").locator(".mg-head").dispatchEvent("dragstart", { dataTransfer: dt });
+        const box = await group("前端").boundingBox();
+        const at = { dataTransfer: dt, clientX: box.x + box.width / 2, clientY: box.y + 4 };
+        await group("前端").dispatchEvent("dragover", at);
+        if (!(await group("前端").evaluate((el) => el.classList.contains("is-slot-before")))) throw new Error("拖分组时应显示放下的位置");
+        await group("前端").dispatchEvent("drop", at);
+        await page.waitForFunction(() => [...document.querySelectorAll(".sp-side .mg-group[data-group]")].map((e) => e.getAttribute("data-group")).join(",").startsWith("后端,前端"), null, { timeout: 5_000 });
+        await page.waitForTimeout(6_000);
+        if ((await order()).join(",") !== "后端,前端") throw new Error(`拖动后的分组顺序应保存下来：${(await order()).join(",")}`);
+        // (the chips: 前端 dragged back before 后端)
+        await groupsMenu("顶部筛选");
+        const chip = (g) => side.locator(`.mg-chip[data-group="${g}"]`);
+        const dt2 = await page.evaluateHandle(() => new DataTransfer());
+        await chip("前端").dispatchEvent("dragstart", { dataTransfer: dt2 });
+        const cb = await chip("后端").boundingBox();
+        await chip("后端").dispatchEvent("dragover", { dataTransfer: dt2, clientX: cb.x + 2, clientY: cb.y + cb.height / 2 });
+        await chip("后端").dispatchEvent("drop", { dataTransfer: dt2, clientX: cb.x + 2, clientY: cb.y + cb.height / 2 });
+        await page.waitForFunction(() => [...document.querySelectorAll(".sp-side .mg-chip[data-group]")].map((e) => e.getAttribute("data-group")).filter((g) => g !== "其他").join(",") === "前端,后端", null, { timeout: 5_000 }).catch(async (e) => {
+          const got = await page.evaluate(() => [...document.querySelectorAll(".sp-side .mg-chip")].map((e) => `${e.getAttribute("data-group")}:${e.getAttribute("draggable")}:${e.className}`).join(" | "));
+          throw new Error(`拖动筛选标签后的顺序不对：${got}；${e.message}`);
+        });
+        await groupsMenu("可折叠的分组");
+        await group("后端").locator(".mg-head").hover();
+        await group("后端").locator(".mg-more").click();
+        await page.locator(".conv-menu").getByRole("menuitem", { name: /删除分组/ }).click();
+        await group("后端").waitFor({ state: "detached", timeout: 10_000 });
+      }
       // A slow hub (each save takes a few seconds) and two moves in a row:
       // what shows never falls back while the saves and the 5-second
       // refreshes cross (it went back to 0 on a real hub).
       {
         const slow = async (route) => { if (route.request().method() === "PATCH") await new Promise((ok) => setTimeout(ok, 3_000)); await route.continue(); };
         await page.route("**/app/hubs/hub_studio/projects/website", slow);
-        await menuPick(page, group("前端").locator(".sp-member", { hasText: "docs-claude" }), "其他");
-        await menuPick(page, side.locator(".sp-member", { hasText: "docs-claude" }), "前端");
-        await menuPick(page, group("前端").locator(".sp-member", { hasText: "Release (Claude 云端)" }), "其他");
-        await menuPick(page, side.locator(".sp-member", { hasText: "Release (Claude 云端)" }), "前端");
+        await moveTo(page, group("前端").locator(".sp-member", { hasText: "docs-claude" }), "其他");
+        await moveTo(page, side.locator(".sp-member", { hasText: "docs-claude" }), "前端");
+        await moveTo(page, group("前端").locator(".sp-member", { hasText: "Release (Claude 云端)" }), "其他");
+        await moveTo(page, side.locator(".sp-member", { hasText: "Release (Claude 云端)" }), "前端");
         const counts = [];
         for (let i = 0; i < 56; i++) { counts.push(await group("前端").locator(".sp-member").count()); await page.waitForTimeout(250); }
         await page.unroute("**/app/hubs/hub_studio/projects/website", slow);
@@ -5342,7 +5389,7 @@ async function runMatrix(browser, size, scheme) {
       await side.locator(".sp-side-tools button[aria-label='收起成员']").click();
       const foldedSide = page.locator(".sp-side.is-folded");
       await clickVisible(page, foldedSide.locator("[data-testid=member-groups-menu-folded]"));
-      await page.locator(".conv-menu").getByRole("menuitem", { name: "新建分组…" }).waitFor({ timeout: 5_000 });
+      await page.locator(".conv-menu").getByRole("menuitem", { name: "新建分组" }).waitFor({ timeout: 5_000 });
       await page.keyboard.press("Escape");
       await foldedSide.locator(".sp-side-fold").first().click();
       await side.waitFor({ timeout: 5_000 });

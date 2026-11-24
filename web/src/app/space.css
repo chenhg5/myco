@@ -3709,3 +3709,13 @@ body.is-resizing-rows { cursor: row-resize; user-select: none; }
 .sp-face-sep { flex: none; width: 18px; height: 1px; margin: 2px 0; background: var(--line); }
 .sp-strip-sep { flex: none; width: 1px; height: 20px; align-self: center; background: var(--line); }
 .mg-error { margin: 2px 6px 6px; font-size: 11.5px; color: var(--red); }
+/* A group dragged among the others: a line where it would go. */
+.mg-group { position: relative; }
+.mg-group.is-slot-before::before, .mg-group.is-slot-after::after {
+  content: ""; position: absolute; left: 6px; right: 6px; height: 2px; border-radius: 1px; background: var(--fg-2); pointer-events: none;
+}
+.mg-group.is-slot-before::before { top: -1px; }
+.mg-group.is-slot-after::after { bottom: -1px; }
+.mg-chip { position: relative; }
+.mg-chip.is-slot-before { box-shadow: -3px 0 0 -1px var(--fg-2); }
+.mg-chip.is-slot-after { box-shadow: 3px 0 0 -1px var(--fg-2); }

@@ -1351,7 +1351,7 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
     }
   };
   const styleMenu = (el: Element) => menu.openUnder(el, [
-    ...(groups?.canEdit ? [{ label: L("新建分组…", "New group…"), onSelect: () => setNaming({}) }, "sep" as const] : []),
+    ...(groups?.canEdit ? [{ label: L("新建分组", "New group"), onSelect: () => setNaming({}) }, "sep" as const] : []),
     { header: L("分组显示", "Show groups as") },
     ...([["fold", L("可折叠的分组", "Folding groups")], ["faces", L("每组一行头像", "A row of faces each")], ["chips", L("顶部筛选", "Filters on top")]] as [GroupStyle, string][])
       .map(([s, label]) => ({ label, checked: groupStyle === s, onSelect: () => setGroupStyle(s) })),
@@ -1366,7 +1366,7 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
       { label: L("资料", "Profile"), onSelect: () => onProfile(r) },
       ...(!ws ? forkItem(r, project) : []),
       ...(!ws ? handoverItem(r) : []),
-      ...(!ws && a.name !== coordinator ? moveItems(r, groups, () => setNaming({ with: a.name })) : []),
+      ...(!ws && a.name !== coordinator ? moveItems(r, groups, () => setNaming({ with: a.name }), menu.again) : []),
       // Chat: an agent that should work with others goes into a project.
       ...(!ws && onPutIn && projects.length ? [
         "sep" as const,
