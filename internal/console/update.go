@@ -53,9 +53,11 @@ type Updater struct {
 	Arch string // default runtime.GOARCH
 	OS   string // default runtime.GOOS: which program Exe is
 	HTTP *http.Client
-	// API and Download are the release API and download base
-	// (release.APIURL / release.DownloadURL honour the env overrides).
-	API, Download string
+	// API and Downloads are the release API and download bases
+	// (release.APIURL / release.DownloadURLs honour the env overrides):
+	// GitHub and Gitee, whichever answers faster.
+	API       string
+	Downloads []string
 
 	// launch starts the new program after an update on Windows (tests
 	// replace it); the default starts it detached from this one.
@@ -139,7 +141,7 @@ func (u *Updater) fetch(ctx context.Context, tag, asset string) ([]byte, error) 
 	var err error
 	for _, hc := range u.clients(30 * time.Minute) {
 		var b []byte
-		if b, err = release.FetchAsset(ctx, hc, u.Download, tag, asset, appZipMax); err == nil || ctx.Err() != nil || strings.Contains(err.Error(), "has no") {
+		if b, err = release.FetchAssetFrom(ctx, hc, u.Downloads, tag, asset, appZipMax); err == nil || ctx.Err() != nil || strings.Contains(err.Error(), "has no") {
 			return b, err
 		}
 	}
@@ -152,8 +154,8 @@ func downloadErr(err error) error {
 		return err
 	}
 	return &client.Error{Status: http.StatusBadGateway, Code: "download_failed",
-		Message:    "cannot download the update from GitHub: " + err.Error(),
-		Suggestion: "GitHub may be slow or blocked on this network: turn on your proxy app, or set a proxy under Settings › Proxy, then try again",
+		Message:    "cannot download the update from GitHub or Gitee: " + err.Error(),
+		Suggestion: "both may be slow or blocked on this network: turn on your proxy app, or set a proxy under Settings › Proxy, then try again",
 		Retryable:  true}
 }
 

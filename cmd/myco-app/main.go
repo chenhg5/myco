@@ -66,7 +66,7 @@ func main() {
 		keys.File = filepath.Join(filepath.Dir(storePath), "console-secrets.json")
 	}
 	b := &console.Backend{Store: console.NewStore(storePath), Secrets: keys, Version: version, Local: local,
-		Update: &console.Updater{Version: version, Bundle: appBundle(), Exe: appExe(), API: release.APIURL(os.Getenv), Download: release.DownloadURL(os.Getenv)}}
+		Update: &console.Updater{Version: version, Bundle: appBundle(), Exe: appExe(), API: release.APIURL(os.Getenv), Downloads: release.DownloadURLs(os.Getenv)}}
 	// Pages open with what they showed last time (MYCO_APP_CACHE=off: no).
 	if os.Getenv("MYCO_APP_CACHE") != "off" {
 		if c, err := openCache(version, keys); err != nil {

@@ -17,8 +17,8 @@ export function updateFailure(e: unknown): ErrorSummary | null {
   switch (code) {
     case "download_failed":
       return {
-        message: L("没能从 GitHub 下载新版本。", "Couldn't download the new version from GitHub."),
-        suggestion: L("这个网络可能访问 GitHub 很慢或被挡住了：打开你的代理软件，或在设置 › 代理里设一个，再重试。", "GitHub may be slow or blocked on this network: turn on your proxy app, or set one under Settings › Proxy, then try again."),
+        message: L("没能从 GitHub 或 Gitee 下载新版本。", "Couldn't download the new version from GitHub or Gitee."),
+        suggestion: L("这个网络访问 GitHub 和 Gitee 都可能很慢或被挡住了：打开你的代理软件，或在设置 › 代理里设一个，再重试。", "GitHub and Gitee may both be slow or blocked on this network: turn on your proxy app, or set one under Settings › Proxy, then try again."),
       };
     case "install_failed":
       return {

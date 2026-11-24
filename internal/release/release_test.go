@@ -132,6 +132,81 @@ func releaseServer(t *testing.T, asset string, body []byte, sum string) *httptes
 	return srv
 }
 
+// mirrorServer serves one release from one download base. delay slows every
+// answer (to make its speed obvious); tamper serves a binary that does not
+// match its SHA256SUMS.
+func mirrorServer(t *testing.T, delay time.Duration, tamper bool) (*httptest.Server, *atomic.Int32) {
+	t.Helper()
+	body := []byte("#!/bin/sh\necho new\n")
+	served := body
+	if tamper {
+		served = []byte("#!/bin/sh\necho tampered\n")
+	}
+	sum := sha256.Sum256(body)
+	asset := AssetName("linux", "amd64")
+	var assets atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(delay)
+		switch r.URL.Path {
+		case "/v0.17.0/SHA256SUMS":
+			fmt.Fprintf(w, "%s  %s\n", hex.EncodeToString(sum[:]), asset)
+		case "/v0.17.0/" + asset:
+			assets.Add(1)
+			w.Write(served)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv, &assets
+}
+
+func TestDownloadURLs(t *testing.T) {
+	get := func(k string) string {
+		if k == EnvDownload {
+			return "http://x/dl/"
+		}
+		return ""
+	}
+	if got := DownloadURLs(get); len(got) != 1 || got[0] != "http://x/dl" {
+		t.Fatalf("override: %q", got)
+	}
+	got := DownloadURLs(func(string) string { return "" })
+	if len(got) != 2 || got[0] != DefaultDownload || got[1] != DefaultMirror {
+		t.Fatalf("defaults: %q", got)
+	}
+}
+
+// The faster base answers the probe first and is used; the other is not
+// asked for the binary at all, whatever the order of the list.
+func TestFetchFromUsesTheFasterBase(t *testing.T) {
+	slow, slowAssets := mirrorServer(t, 250*time.Millisecond, false)
+	fast, fastAssets := mirrorServer(t, 0, false)
+	got, err := FetchFrom(context.Background(), fast.Client(), []string{slow.URL, fast.URL}, "v0.17.0", "linux", "amd64")
+	if err != nil || string(got) != "#!/bin/sh\necho new\n" {
+		t.Fatalf("FetchFrom: %q %v", got, err)
+	}
+	if fastAssets.Load() != 1 || slowAssets.Load() != 0 {
+		t.Fatalf("binaries served: fast %d, slow %d", fastAssets.Load(), slowAssets.Load())
+	}
+}
+
+// A base that serves a bad copy is skipped and the other one used.
+func TestFetchFromFallsBackToTheOtherBase(t *testing.T) {
+	bad, badAssets := mirrorServer(t, 0, true)
+	good, goodAssets := mirrorServer(t, 200*time.Millisecond, false)
+	got, err := FetchFrom(context.Background(), good.Client(), []string{bad.URL, good.URL}, "v0.17.0", "linux", "amd64")
+	if err != nil || string(got) != "#!/bin/sh\necho new\n" {
+		t.Fatalf("FetchFrom: %q %v", got, err)
+	}
+	if badAssets.Load() != 1 || goodAssets.Load() != 1 {
+		t.Fatalf("binaries served: bad %d, good %d", badAssets.Load(), goodAssets.Load())
+	}
+	if _, err := FetchAssetFrom(context.Background(), good.Client(), nil, "v0.17.0", "x", 1); err == nil {
+		t.Fatal("no download source must fail")
+	}
+}
+
 func TestFetchVerifiesChecksums(t *testing.T) {
 	ctx := context.Background()
 	body := []byte("#!/bin/sh\necho new\n")
