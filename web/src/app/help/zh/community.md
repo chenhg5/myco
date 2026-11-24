@@ -2,6 +2,13 @@
 
 有问题、有想法，或者想看看别人怎么用 myco，欢迎来社群聊聊。用法上的小问题，也可以先翻翻[常见问题](#help/faq)，或者直接问你的 agent。
 
+## Telegram 和 Discord
+
+也可以在这里找到我们：
+
+- Telegram：[加入群聊](https://t.me/+TegU5q0F3TE5ZjI1)
+- Discord：[加入服务器](https://discord.gg/DrQhZXGNZ6)
+
 ## 微信群
 
 用微信扫一扫加入：

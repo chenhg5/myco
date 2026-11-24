@@ -2,6 +2,13 @@
 
 Questions, ideas, or curious how others use myco? Come and talk with us. For a quick how-to, the [FAQ](#help/faq) or your own agents may already have the answer.
 
+## Telegram and Discord
+
+You can also find us there:
+
+- Telegram: [join the group](https://t.me/+TegU5q0F3TE5ZjI1)
+- Discord: [join the server](https://discord.gg/DrQhZXGNZ6)
+
 ## WeChat group
 
 Scan with WeChat to join:

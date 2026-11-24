@@ -16,6 +16,8 @@
 [![Build](https://img.shields.io/github/actions/workflow/status/myco-ai/myco/release.yml?branch=main&label=release&style=flat-square)](https://github.com/myco-ai/myco/actions/workflows/release.yml)
 ![Platforms](https://img.shields.io/badge/macOS%20·%20Windows%20·%20Linux-grey?style=flat-square)
 [![LINUX DO](https://img.shields.io/badge/LINUX-DO-ffb003?style=flat-square&labelColor=3f3f46)](https://linux.do)
+[![Telegram](https://img.shields.io/badge/Telegram-Join-26A5E4?style=flat-square)](https://t.me/+TegU5q0F3TE5ZjI1)
+[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square)](https://discord.gg/DrQhZXGNZ6)
 
 **[下载 Mac 版](https://github.com/myco-ai/myco/releases/latest/download/myco.dmg)** · [Windows 版（预览）](https://github.com/myco-ai/myco/releases/latest/download/myco-app-windows-amd64.exe) · [Linux 版](https://github.com/myco-ai/myco/releases/latest/download/myco-app-linux-amd64) · [全部下载](https://github.com/myco-ai/myco/releases/latest)
 
@@ -281,6 +283,8 @@ flowchart TB
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 构建和参与开发 |
 
 ## 社群
+
+也可以加入 [Telegram](https://t.me/+TegU5q0F3TE5ZjI1) 或 [Discord](https://discord.gg/DrQhZXGNZ6)，一起交流、提问。
 
 有问题、想法，或者想看看别人怎么用 myco，扫码加入微信群（二维码每隔几天更新一次，这里放的总是最新的）：
 

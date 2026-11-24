@@ -16,6 +16,8 @@ reach your other computers and your phone, put them on a schedule — all from o
 [![Build](https://img.shields.io/github/actions/workflow/status/myco-ai/myco/release.yml?branch=main&label=release&style=flat-square)](https://github.com/myco-ai/myco/actions/workflows/release.yml)
 ![Platforms](https://img.shields.io/badge/macOS%20·%20Windows%20·%20Linux-grey?style=flat-square)
 [![LINUX DO](https://img.shields.io/badge/LINUX-DO-ffb003?style=flat-square&labelColor=3f3f46)](https://linux.do)
+[![Telegram](https://img.shields.io/badge/Telegram-Join-26A5E4?style=flat-square)](https://t.me/+TegU5q0F3TE5ZjI1)
+[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square)](https://discord.gg/DrQhZXGNZ6)
 
 **[Download for Mac](https://github.com/myco-ai/myco/releases/latest/download/myco.dmg)** · [Windows (preview)](https://github.com/myco-ai/myco/releases/latest/download/myco-app-windows-amd64.exe) · [Linux](https://github.com/myco-ai/myco/releases/latest/download/myco-app-linux-amd64) · [All downloads](https://github.com/myco-ai/myco/releases/latest)
 
@@ -281,6 +283,8 @@ Other ways to connect:
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Building myco and contributing |
 
 ## Community
+
+Join us on [Telegram](https://t.me/+TegU5q0F3TE5ZjI1) or [Discord](https://discord.gg/DrQhZXGNZ6) to ask, share and follow along.
 
 Questions, ideas, or curious how others use myco? Scan to join the WeChat group (the code is renewed every few days; this file always has the latest):
 
