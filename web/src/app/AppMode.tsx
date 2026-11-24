@@ -324,12 +324,21 @@ export default function AppMode({ initialHubs, initialInfo }: {
   // Projects of the workspaces that answer are fetched again; a workspace that
   // did not answer this time (a network blip) keeps the projects it had, so
   // they do not vanish and the App does not ask for a first project.
+  // A project made here stays shown when a read that began before it was
+  // made comes back without it; a read begun after it has the hub's word.
+  const justMade = useRef(new Map<string, { hubId: string; p: Project; at: number }>());
   const loadProjects = useCallback(async (okIds: string[], allIds: string[] = okIds) => {
+    const began = Date.now();
     const lists = await Promise.all(okIds.map((id) =>
       appApi.projects(id).then((r) => r.projects.map((p) => ({ hubId: id, p }))).catch(() => null)));
     setProjects((prev) => {
       const keep = (id: string) => (prev || []).filter((x) => x.hubId === id);
-      return remember("projects", allIds.flatMap((id) => { const i = okIds.indexOf(id); return (i >= 0 ? lists[i] : null) ?? keep(id); }));
+      const next = allIds.flatMap((id) => { const i = okIds.indexOf(id); return (i >= 0 ? lists[i] : null) ?? keep(id); });
+      for (const [k, m] of justMade.current) {
+        if (Date.now() - m.at > 60_000) { justMade.current.delete(k); continue; }
+        if (m.at > began && allIds.includes(m.hubId) && !next.some((x) => x.hubId === m.hubId && x.p.name === m.p.name)) next.push({ hubId: m.hubId, p: m.p });
+      }
+      return remember("projects", next);
     });
   }, []);
   // Asked for while one runs (after a save, say): once more when it ends,
@@ -573,12 +582,26 @@ export default function AppMode({ initialHubs, initialInfo }: {
     setChatWith(null);
     setSpaceTap((t) => ({ ...t, [spaceKey(s)]: (t[spaceKey(s)] || 0) + 1 }));
   };
-  const projectCreated = (ref: { hubId: string; name: string }) => {
+  // A project just made shows at once: in the sidebar from what the hub
+  // answered, and opened, with its first step (bringing agents in). Only
+  // its own workspace's projects are read again, behind: waiting for every
+  // workspace (one far away or not answering) kept it out of the sidebar
+  // for up to a minute.
+  const projectCreated = (ref: { hubId: string; name: string; project?: Project }) => {
     setNewProjectOpen(false);
-    void loadProjects(hubs.map((h) => h.id)).then(() => {
-      openSpace(ref);
-      // A new project's first step: bring agents in.
-      setAddAgent(ref);
+    const at = { hubId: ref.hubId, name: ref.name };
+    if (ref.project) {
+      const made = ref.project;
+      justMade.current.set(`${at.hubId}\u0000${made.name}`, { hubId: at.hubId, p: made, at: Date.now() });
+      setProjects((prev) => remember("projects", [...(prev || []).filter((x) => !(x.hubId === at.hubId && x.p.name === made.name)), { hubId: at.hubId, p: made }]));
+      openSpace(at);
+      setAddAgent(at);
+      void loadProjects([at.hubId], hubs.map((h) => h.id));
+      return;
+    }
+    void loadProjects([at.hubId], hubs.map((h) => h.id)).then(() => {
+      openSpace(at);
+      setAddAgent(at);
     });
   };
   // A member's chat opens in a project it is in (else among the loose).

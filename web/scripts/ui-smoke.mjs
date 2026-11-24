@@ -5912,6 +5912,36 @@ async function runMatrix(browser, size, scheme) {
       if (narrow) await sidebar(page, false);
     });
 
+    // A project just made is in the sidebar at once, even while the
+    // workspaces answer slowly (reading them all again used to hold it back
+    // for up to a minute), and stays there.
+    await step("新建项目 · 立刻出现在边栏", async () => {
+      const slow = async (r) => {
+        if (r.request().method() !== "GET") return r.continue();
+        await new Promise((res) => setTimeout(res, 8000));
+        await r.continue().catch(() => undefined);
+      };
+      await page.route(/\/app\/hubs\/[^/]+\/projects(\?|$)/, slow);
+      await page.route("**/app/overview", slow);
+      try {
+        await sidebar(page, true);
+        await clickVisible(page, page.locator(".app-nav-add"));
+        const form = page.locator("[data-testid=new-project-form]");
+        await form.locator(".np-input").fill("发布清单");
+        const t0 = Date.now();
+        await clickVisible(page, form.getByRole("button", { name: "建好了" }));
+        await page.locator(".app-sidebar .app-nav-item", { hasText: "发布清单" }).first().waitFor({ timeout: 2_500 });
+        if (Date.now() - t0 > 2_500) throw new Error("新建的项目应立刻出现在边栏");
+        await closeDialog(page).catch(() => undefined);
+        await page.waitForTimeout(9_000); // the slow reads come back (from before it was made)
+        if (!(await page.locator(".app-sidebar .app-nav-item", { hasText: "发布清单" }).count())) throw new Error("新建的项目不该被慢回来的旧列表冲掉");
+      } finally {
+        await page.unroute(/\/app\/hubs\/[^/]+\/projects(\?|$)/, slow);
+        await page.unroute("**/app/overview", slow);
+      }
+      if (narrow) await sidebar(page, false);
+    });
+
     // The Mac's menu bar asks the page for what it offers (a "myco-menu"
     // event): search, then settings.
     await step("菜单栏 · 搜索、设置", async () => {

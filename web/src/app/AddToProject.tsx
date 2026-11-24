@@ -1384,7 +1384,8 @@ export function NewProjectDialog({ open, hubs, defaultHubId, onClose, onCreated 
   hubs: Hub[];
   defaultHubId?: string;
   onClose: () => void;
-  onCreated: (ref: { hubId: string; name: string }) => void;
+  /** the project as the hub made it (when known), to show at once */
+  onCreated: (ref: { hubId: string; name: string; project?: Project }) => void;
 }) {
   return (
     <Modal open={open} onOpenChange={(o) => !o && onClose()} title={L("新建项目", "New project")} className="np-modal"
@@ -1399,7 +1400,8 @@ const MAX_PROJECT_FILE = 20 << 20;
 export function NewProjectForm({ hubs, defaultHubId, onCreated, onCancel, big }: {
   hubs: Hub[];
   defaultHubId?: string;
-  onCreated: (ref: { hubId: string; name: string }) => void;
+  /** the project as the hub made it (when known), to show at once */
+  onCreated: (ref: { hubId: string; name: string; project?: Project }) => void;
   onCancel?: () => void;
   /** the first project, on its own page */
   big?: boolean;
@@ -1413,7 +1415,7 @@ export function NewProjectForm({ hubs, defaultHubId, onCreated, onCancel, big }:
   const [busy, setBusy] = useState<string>("");
   const [error, setError] = useState<unknown>(null);
   // Made, but some files did not go up: in anyway, or try them again.
-  const [made, setMade] = useState<{ hubId: string; name: string; failed: File[] } | null>(null);
+  const [made, setMade] = useState<{ hubId: string; name: string; failed: File[]; project?: Project } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const tooBig = files.filter((f) => f.size > MAX_PROJECT_FILE);
   const addFiles = (fs: File[]) => setFiles((have) => [...have, ...fs.filter((f) => !have.some((h) => h.name === f.name && h.size === f.size))]);
@@ -1435,8 +1437,8 @@ export function NewProjectForm({ hubs, defaultHubId, onCreated, onCancel, big }:
       const name = `${slug || "p"}-${Math.random().toString(36).slice(2, 6)}`;
       const p = await appApi.createProject(hubId, { name, title: title.trim(), ...(goal.trim() ? { goal: goal.trim() } : {}) });
       const failed = files.length ? await upload({ hubId, name: p.name }, files) : [];
-      if (failed.length) { setMade({ hubId, name: p.name, failed }); return; }
-      onCreated({ hubId, name: p.name });
+      if (failed.length) { setMade({ hubId, name: p.name, failed, project: p }); return; }
+      onCreated({ hubId, name: p.name, project: p });
     } catch (err) {
       setError(err);
     } finally {
@@ -1449,7 +1451,7 @@ export function NewProjectForm({ hubs, defaultHubId, onCreated, onCancel, big }:
     const failed = await upload(made, made.failed);
     setBusy("");
     if (failed.length) setMade({ ...made, failed });
-    else onCreated({ hubId: made.hubId, name: made.name });
+    else onCreated({ hubId: made.hubId, name: made.name, project: made.project });
   };
   if (made) {
     return (
@@ -1458,7 +1460,7 @@ export function NewProjectForm({ hubs, defaultHubId, onCreated, onCancel, big }:
         <ul className="np-files">{made.failed.map((f) => <li key={f.name} className="np-file"><FileText /><span>{f.name}</span><small>{bytes(f.size)}</small></li>)}</ul>
         <ErrorText error={error} />
         <div className="app-modal-actions">
-          <button type="button" className="app-btn" onClick={() => onCreated({ hubId: made.hubId, name: made.name })} disabled={!!busy}>{L("先进去，稍后再传", "Go in; upload later")}</button>
+          <button type="button" className="app-btn" onClick={() => onCreated({ hubId: made.hubId, name: made.name, project: made.project })} disabled={!!busy}>{L("先进去，稍后再传", "Go in; upload later")}</button>
           <button type="button" className="app-btn app-btn-primary" onClick={() => void retry()} disabled={!!busy}>{busy || L("再传一次", "Try again")}</button>
         </div>
       </div>
