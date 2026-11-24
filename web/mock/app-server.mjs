@@ -1786,6 +1786,9 @@ function projectView(hub, p, bodies) {
     ...(hub.id === "hub_lab" ? {} : { machines: p.machines || [] }),
     // The project's memory (hubs from v0.21.10; the lab hub is older).
     ...(hub.id === "hub_lab" ? {} : { memory: memoryOf(p) }),
+    // Member groups (hubs from v0.21.34; always present there, absent on
+    // the older lab hub).
+    ...(hub.id === "hub_lab" ? {} : { groups: p.groups || [] }),
     members: p.members.map((m) => ({ ...m, agent: hub.agents.find((a) => a.name === m.name && a.visibility !== "private") })),
     docs: p.docs.map((d) => ({ name: d.name, size: d.size ?? d.body.length, content_type: d.content_type, binary: !!d.binary, updated_by: d.updated_by, updated_at: d.updated_at, ...(bodies && !d.binary ? { body: d.body } : {}) })),
     can_edit: true, can_manage: p.owner_id === "mem_" + meName || meName === "glenn",
@@ -3639,6 +3642,20 @@ const server = http.createServer(async (req, res) => {
       if (parts.length === 5 && method === "PATCH") {
         const b = await readBody(req);
         for (const k of ["title", "goal", "brief", "links", "visibility", "archived"]) if (b[k] !== undefined) p[k] = b[k];
+        // Groups: the order (a member left in a group no longer listed is
+        // ungrouped), then who goes where.
+        if (b.groups !== undefined || b.member_groups !== undefined) {
+          if (hub.id === "hub_lab") return fail(res, 400, "invalid_argument", 'invalid JSON body: json: unknown field "groups"');
+          const groups = b.groups !== undefined ? b.groups : (p.groups || []);
+          if (new Set(groups).size !== groups.length || groups.some((g) => !String(g).trim())) return fail(res, 400, "invalid_argument", "group names must be unique and not empty");
+          for (const [a, g] of Object.entries(b.member_groups || {})) {
+            if (!p.members.some((m) => m.name === a)) return fail(res, 400, "invalid_argument", `${a} is not a member of the project`);
+            if (g && !groups.includes(g)) return fail(res, 400, "invalid_argument", `no group ${g}`);
+          }
+          p.groups = groups;
+          for (const m of p.members) if (m.group && !groups.includes(m.group)) delete m.group;
+          for (const [a, g] of Object.entries(b.member_groups || {})) { const m = p.members.find((x) => x.name === a); if (g) m.group = g; else delete m.group; }
+        }
         p.updated_at = iso();
         return send(res, 200, projectView(hub, p));
       }
@@ -3650,6 +3667,10 @@ const server = http.createServer(async (req, res) => {
           if (!m) { m = { name: parts[6], role: "member", note: "", added_by: meName, added_at: iso() }; p.members.push(m); }
           if (b.role) m.role = b.role;
           if (b.note !== undefined && b.note !== null) m.note = b.note;
+          if (b.group !== undefined && b.group !== null) {
+            if (b.group && !(p.groups || []).includes(b.group)) return fail(res, 400, "invalid_argument", `no group ${b.group}`);
+            if (b.group) m.group = b.group; else delete m.group;
+          }
           return send(res, 200, projectView(hub, p));
         }
         if (method === "DELETE") { p.members = p.members.filter((x) => x.name !== parts[6]); return send(res, 200, projectView(hub, p)); }

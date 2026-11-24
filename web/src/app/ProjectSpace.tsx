@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { activePaneId } from "@/app/ChatSearch";
 import { IntroCard, introOf } from "@/app/Onboard";
-import { Activity, ArrowLeft, ArrowUp, ChevronDown, AudioLines, Columns2, FileText, Loader2, PanelRightClose, PanelRightOpen, Plus, Users } from "lucide-react";
+import { Activity, ArrowLeft, ArrowUp, ChevronDown, AudioLines, Columns2, FileText, Loader2, MoreHorizontal, PanelRightClose, PanelRightOpen, Plus, Users } from "lucide-react";
 import { appApi, type RecentItem } from "@/appapi";
+import { GroupNameDialog, GroupedMembers, inGroupOrder, moveItems, useGroupStyle, type GroupStyle, type GroupsCtl } from "@/app/MemberGroups";
 import type { Message, Project } from "@/api";
 import type { AgentRow } from "@/app/types";
 import { agentKind, isMe, nodeName } from "@/app/nodes";
@@ -495,10 +496,43 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
   }, []);
   // Narrow windows have no members column: the faces in a row.
   const stripMenu = useContextMenu();
+  // 成员分组 (MemberGroups.tsx): from the project (hubs from v0.21.34 always
+  // say `groups`); a change shows at once, then the project is read again.
+  const [groupEdit, setGroupEdit] = useState<{ at: string; list: string[]; of: Record<string, string> } | null>(null);
+  useEffect(() => { setGroupEdit(null); }, [project?.updated_at, project?.name]);
+  const groupsCtl: GroupsCtl | undefined = project && Array.isArray(project.groups) ? (() => {
+    const base = Object.fromEntries(project.members.map((m) => [m.name, m.group || ""]));
+    const list = groupEdit ? groupEdit.list : project.groups!;
+    const of = groupEdit ? { ...base, ...groupEdit.of } : base;
+    return {
+      list,
+      groupOf: (a: string) => (list.includes(of[a] || "") ? of[a] : ""),
+      canEdit: project.can_edit,
+      save: async (groups: string[], members?: Record<string, string>) => {
+        setGroupEdit((g) => ({ at: project.updated_at, list: groups, of: { ...(g?.of || {}), ...(members || {}) } }));
+        try {
+          await appApi.updateProject(hubId, project.name, { groups, ...(members ? { member_groups: members } : {}) });
+        } catch (e) {
+          setGroupEdit(null);
+          throw e;
+        } finally {
+          onRefresh();
+        }
+      },
+    };
+  })() : undefined;
   const strip = (
     <div className="sp-strip">
-      {[...orderMembers(agents, coordinator, lastIn), ...workspaces].map((r) => (
-        <button key={r.st.agent.name} type="button" className="sp-strip-face" title={nodeName(r.st.agent, r.hub)}
+      {(() => {
+        // (in their groups' order, a thin line between groups)
+        const ord = orderMembers(agents, coordinator, lastIn);
+        const head = ord.filter((r) => r.st.agent.name === coordinator);
+        const parts = inGroupOrder(ord.filter((r) => r.st.agent.name !== coordinator), groupsCtl);
+        return [...head.map((r) => ({ r, sep: false })), ...parts.flatMap((g) => g.rows.map((r, i) => ({ r, sep: i === 0 && parts.length > 1 }))), ...workspaces.map((r) => ({ r, sep: false }))];
+      })().map(({ r, sep }) => (
+        <Fragment key={r.st.agent.name}>
+        {sep && <span className="sp-strip-sep" aria-hidden />}
+        <button type="button" className="sp-strip-face" title={nodeName(r.st.agent, r.hub)}
           onClick={() => open(r)} draggable onDragStart={(e) => dragAgent(e, { hubId, agent: r.st.agent.name })}
           onContextMenu={(e) => stripMenu.open(e, [
             { label: isWorkspace(r.st.agent) ? L("打开终端", "Open terminal") : L("打开", "Open"), onSelect: () => open(r) },
@@ -507,6 +541,7 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
           ])}>
           <Avatar agent={r.st.agent} size={30} state={r.st.state} badge={false} />
         </button>
+        </Fragment>
       ))}
       <button type="button" className="sp-strip-face is-add" onClick={onAddAgent} aria-label={L("添加 agent", "Add an agent")} title={L("添加 agent", "Add an agent")}><Plus /></button>
       {stripMenu.element}
@@ -672,6 +707,8 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
         onAddWorkspace={onAddWorkspace}
         folded={folded}
         onFold={setFolded}
+        groups={groupsCtl}
+        groupsKey={project ? `${hubId}\u0000${project.name}` : ""}
         projects={loose ? projects : []}
         onPutIn={(r, p) => void addToProject(hubId, p, rows, r.st.agent.name).then(onRefresh).catch(() => undefined)}
       />
@@ -1234,7 +1271,11 @@ export function orderMembers(agents: AgentRow[], coordinator?: string, lastIn?: 
   return [...agents].sort((a, b) => rank(a) - rank(b) || (rank(a) === 1 ? startedAt(b) - startedAt(a) : 0) || activeAt(b) - activeAt(a));
 }
 
-function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf, now, onSetCoordinator, onChat, onNewPane, onProfile, onAddAgent, onAddWorkspace, folded, onFold, projects = [], onPutIn, project, lastIn }: {
+function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf, now, onSetCoordinator, onChat, onNewPane, onProfile, onAddAgent, onAddWorkspace, folded, onFold, projects = [], onPutIn, project, lastIn, groups, groupsKey = "" }: {
+  /** the project's member groups (absent: an older hub, or chat) */
+  groups?: GroupsCtl;
+  /** where its folded groups are kept */
+  groupsKey?: string;
   /** when each took part in the space's conversations last (ms) */
   lastIn?: ReadonlyMap<string, number>;
   agents: AgentRow[];
@@ -1262,6 +1303,27 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
 }) {
   const menu = useContextMenu();
   const ordered = orderMembers(agents, coordinator, lastIn);
+  const [groupStyle, setGroupStyle] = useGroupStyle();
+  // (a group asked a name for: a new one, maybe with a member to put in it, or one renamed)
+  const [naming, setNaming] = useState<{ old?: string; with?: string } | null>(null);
+  const coordRow = ordered.find((r) => r.st.agent.name === coordinator);
+  const others = ordered.filter((r) => r !== coordRow);
+  const showGroups = !!groups && groups.list.length > 0;
+  const nameGroup = async (name: string) => {
+    if (!groups || !naming) return;
+    if (naming.old) {
+      const moved = Object.fromEntries(agents.filter((r) => groups.groupOf(r.st.agent.name) === naming.old).map((r) => [r.st.agent.name, name]));
+      await groups.save(groups.list.map((g) => (g === naming.old ? name : g)), moved);
+    } else {
+      await groups.save([...groups.list, name], naming.with ? { [naming.with]: name } : undefined);
+    }
+  };
+  const styleMenu = (el: Element) => menu.openUnder(el, [
+    ...(groups?.canEdit ? [{ label: L("新建分组…", "New group…"), onSelect: () => setNaming({}) }, "sep" as const] : []),
+    { header: L("分组显示", "Show groups as") },
+    ...([["fold", L("可折叠的分组", "Folding groups")], ["faces", L("每组一行头像", "A row of faces each")], ["chips", L("顶部筛选", "Filters on top")]] as [GroupStyle, string][])
+      .map(([s, label]) => ({ label, checked: groupStyle === s, onSelect: () => setGroupStyle(s) })),
+  ]);
   const menuOf = (r: AgentRow) => {
     const a = r.st.agent;
     const ws = isWorkspace(a);
@@ -1272,6 +1334,7 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
       { label: L("资料", "Profile"), onSelect: () => onProfile(r) },
       ...(!ws ? forkItem(r, project) : []),
       ...(!ws ? handoverItem(r) : []),
+      ...(!ws && a.name !== coordinator ? moveItems(r, groups, () => setNaming({ with: a.name })) : []),
       // Chat: an agent that should work with others goes into a project.
       ...(!ws && onPutIn && projects.length ? [
         "sep" as const,
@@ -1311,7 +1374,13 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
         <button type="button" className="sp-side-fold" onClick={() => onFold(false)} title={L("展开成员", "Show members")} aria-label={L("展开成员", "Show members")}>
           <PanelRightOpen />
         </button>
-        {ordered.map(face)}
+        {coordRow && face(coordRow)}
+        {inGroupOrder(others, groups).map((g, i) => (
+          <Fragment key={g.name || i}>
+            {showGroups && <span className="sp-face-sep" title={g.name} aria-hidden />}
+            {g.rows.map(face)}
+          </Fragment>
+        ))}
         <button type="button" className="sp-face is-add" onClick={onAddAgent} title={L("添加 agent", "Add an agent")} aria-label={L("添加 agent", "Add an agent")}><Plus /></button>
         <span className="sp-face-gap" aria-hidden />
         {workspaces.map(face)}
@@ -1359,10 +1428,20 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
           <span><Users />{L(`成员 ${agents.length}`, `Members ${agents.length}`)}</span>
           <span className="sp-side-tools">
             <button type="button" className="sp-side-add" onClick={onAddAgent} title={L("添加 agent", "Add an agent")} aria-label={L("添加 agent", "Add an agent")}><Plus /></button>
+            {groups && (groups.canEdit || showGroups) && (
+              <button type="button" className="sp-side-add" data-testid="member-groups-menu" onClick={(e) => styleMenu(e.currentTarget)}
+                title={L("分组", "Groups")} aria-label={L("成员分组", "Member groups")}><MoreHorizontal /></button>
+            )}
             <button type="button" className="sp-side-add" onClick={() => onFold(true)} title={L("收起成员，只留头像", "Fold to faces")} aria-label={L("收起成员", "Fold members")}><PanelRightClose /></button>
           </span>
         </div>
-        {ordered.map(row)}
+        {showGroups ? (
+          <>
+            <GroupedMembers rows={others} ctl={groups!} style={groupStyle} row={row} foldKey={groupsKey} lead={coordRow ? row(coordRow) : null}
+              onNewGroup={() => setNaming({})} onRename={(g) => setNaming({ old: g })}
+              onDelete={(g) => void groups!.save(groups!.list.filter((x) => x !== g)).catch(() => undefined)} />
+          </>
+        ) : ordered.map(row)}
         {agents.length === 0 && (
           <button type="button" className="sp-member is-add" onClick={onAddAgent}>
             <span className="sp-add-icon"><Plus /></span>
@@ -1385,6 +1464,10 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
         )}
       </div>
       {menu.element}
+      {groups && (
+        <GroupNameDialog open={!!naming} onClose={() => setNaming(null)} initial={naming?.old || ""}
+          taken={groups.list} title={naming?.old ? L("给分组改名", "Rename the group") : L("新建分组", "New group")} onDone={nameGroup} />
+      )}
     </aside>
   );
 }

@@ -94,6 +94,9 @@ export interface Project {
   docs: ProjectDoc[];
   /** edit the content (owner, admins, coordinators); manage it (people) */
   can_edit: boolean; can_manage: boolean;
+  /** its member groups, in order (hubs from v0.21.34: always present
+   *  there, even empty; absent before, and the App then groups nothing) */
+  groups?: string[];
   /** the computers (ids) its coordinators may start agents on (hubs from
    *  v0.21.2; absent before) */
   machines?: string[];
@@ -104,6 +107,8 @@ export interface Project {
 export interface ProjectLink { title?: string; url: string }
 export interface ProjectMember {
   name: string; role: "member" | "coordinator"; note?: string; added_by?: string; added_at: string;
+  /** its group in this project ("" or absent: none) */
+  group?: string;
   /** its card, when the viewer may see the node */
   agent?: Agent;
 }

@@ -5221,6 +5221,88 @@ async function runMatrix(browser, size, scheme) {
       } else if (narrow) await sidebar(page, false);
     });
 
+    // 成员分组: a project's members in groups (the members column's ⋯):
+    // a new group, a member moved in from its menu and one dragged in;
+    // folded, its faces and who is at work stay on its heading; the other
+    // two ways to show them; renamed, then deleted (all back in one list).
+    if (!narrow) await step("项目 · 成员分组", async () => {
+      await go(page, "官网改版", narrow);
+      // (from wherever the steps before left it: one pane, the members column open)
+      for (let i = 0; i < 4; i++) {
+        const close = page.locator(".pg-pane.sp-pane-right:not(.is-hidden)").getByRole("button", { name: "关掉这一栏" }).first();
+        if (!(await close.count())) break;
+        await close.click();
+        await page.waitForTimeout(200);
+      }
+      if (await page.locator(".sp-side.is-folded").count()) await page.locator(".sp-side.is-folded .sp-side-fold").click();
+      const side = page.locator(".sp-side:not(.is-folded)");
+      await side.waitFor({ timeout: 10_000 });
+      const groupsMenu = async (item) => {
+        await clickVisible(page, side.locator("[data-testid=member-groups-menu]"));
+        await page.locator(".conv-menu").getByRole("menuitem", { name: item }).click();
+      };
+      const named = async (name) => {
+        const dlg = page.locator(".app-modal");
+        await dlg.locator("input").waitFor({ timeout: 5_000 });
+        await dlg.locator("input").fill(name);
+        await dlg.getByRole("button", { name: "好" }).click();
+        await dlg.waitFor({ state: "detached", timeout: 5_000 });
+      };
+      await groupsMenu("新建分组…");
+      await named("前端");
+      const group = (name) => side.locator(`.mg-group[data-group="${name}"]`);
+      await group("前端").locator(".mg-empty").waitFor({ timeout: 10_000 });
+      await group("其他").waitFor({ timeout: 5_000 });
+      // From its menu: docs-claude into 前端.
+      await menuPick(page, side.locator(".sp-member", { hasText: "docs-claude" }), "前端");
+      await group("前端").locator(".sp-member", { hasText: "docs-claude" }).waitFor({ timeout: 10_000 });
+      // Dragged onto the group: Release too.
+      {
+        const dt = await page.evaluateHandle(() => new DataTransfer());
+        await side.locator(".sp-member", { hasText: "Release (Claude 云端)" }).dispatchEvent("dragstart", { dataTransfer: dt });
+        await group("前端").dispatchEvent("dragover", { dataTransfer: dt });
+        await group("前端").dispatchEvent("drop", { dataTransfer: dt });
+      }
+      await group("前端").locator(".sp-member", { hasText: "Release (Claude 云端)" }).waitFor({ timeout: 10_000 });
+      // The coordinator stays on top, in no group.
+      if (await side.locator(".mg-group .sp-member", { hasText: "PM (Codex)" }).count()) throw new Error("协调者不该进分组");
+      await settle(page, 200);
+      await shot(page, size, scheme, "member-groups");
+      // Folded: the rows go, its faces stay on the heading.
+      await group("前端").locator(".mg-head").click();
+      await group("前端").locator(".mg-faces").waitFor({ timeout: 5_000 });
+      if (await group("前端").locator(".sp-member").count()) throw new Error("折叠后不该显示组里的成员");
+      await settle(page, 200);
+      await shot(page, size, scheme, "member-groups-folded");
+      await group("前端").locator(".mg-head").click();
+      // A row of faces each.
+      await groupsMenu("每组一行头像");
+      await group("前端").locator(".mg-tile-row").click();
+      await group("前端").locator(".mg-inside .sp-member", { hasText: "docs-claude" }).waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "member-groups-faces");
+      // Filters on top: 前端 shows its two (and the coordinator).
+      await groupsMenu("顶部筛选");
+      await side.locator(".mg-chip", { hasText: "前端" }).click();
+      // (the chips first, under the column's title, then the coordinator)
+      await page.waitForFunction(() => document.querySelectorAll(".sp-side .mg .sp-member").length === 3, null, { timeout: 5_000 });
+      if (!(await side.locator(".mg > .mg-chips + .sp-member", { hasText: "PM (Codex)" }).count())) throw new Error("筛选标签应在最上面，协调者在它下面");
+      await settle(page, 200);
+      await shot(page, size, scheme, "member-groups-chips");
+      // Back to folding groups: renamed (its members with it), then deleted.
+      await groupsMenu("可折叠的分组");
+      await group("前端").locator(".mg-head").hover();
+      await group("前端").locator(".mg-more").click();
+      await page.locator(".conv-menu").getByRole("menuitem", { name: "改名" }).click();
+      await named("Web 前端");
+      await group("Web 前端").locator(".sp-member", { hasText: "docs-claude" }).waitFor({ timeout: 10_000 });
+      await group("Web 前端").locator(".mg-head").hover();
+      await group("Web 前端").locator(".mg-more").click();
+      await page.locator(".conv-menu").getByRole("menuitem", { name: /删除分组/ }).click();
+      await side.locator(".mg").waitFor({ state: "detached", timeout: 10_000 });
+      if ((await side.locator(".sp-member", { hasText: "docs-claude" }).count()) !== 1) throw new Error("删掉分组后成员应回到一列里");
+    });
+
     // A project with two members open beside the coordinator: switching to
     // another workspace and back puts the panes back as they were, at once
     // (the first one beside did widen and shrink back).

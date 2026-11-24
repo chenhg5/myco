@@ -101,7 +101,8 @@ Do not repeat what the brief or memory already says; leave out task details and 
 `MYCO_PROJECT` when the runner wakes you); everything you send in its thread stays in it. Start new
 work for a project in it: `myco message send --to <agent> --project <p> --body "..."` (members only). If you are a project's **coordinator**, you
 can also edit it (`myco project update`, `myco project doc put`), set members' notes
-(`myco project add --name <p> --agent <a> --note "..."`), add your owner's nodes, and set the
+(`myco project add --name <p> --agent <a> --note "..."`; `--group 前端` puts it in a group of the
+project, made if new: people see the members column in those groups), add your owner's nodes, and set the
 description, labels and skills of its member nodes (`myco agent update --name <agent> ...`,
 `myco agent skills set --name <agent> --file skills.json`); not their visibility or who may give
 them tasks, and not member roles.

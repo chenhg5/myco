@@ -3,6 +3,7 @@ package domain
 import (
 	"context"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -26,7 +27,10 @@ type Project struct {
 	// Machines are the computers (machine ids) its coordinators may start
 	// agent sessions on: a permission of its own, set by its owner, apart
 	// from the terminals it has (v0.21.2).
-	Machines  []string
+	Machines []string
+	// Groups are the groups its members are sorted into (e.g. frontend,
+	// backend), in display order; each member is in at most one.
+	Groups    []string
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
@@ -64,7 +68,10 @@ type ProjectMember struct {
 	Agent   AgentName
 	Role    ProjectRole
 	// Note says what it does in this project.
-	Note    string
+	Note string
+	// Group is its group in this project (one of Project.Groups); "" is
+	// ungrouped.
+	Group   string
 	AddedBy string // who added it (member or agent name, for display)
 	AddedAt time.Time
 }
@@ -94,8 +101,12 @@ const (
 	MaxProjectBrief = 16000
 	maxProjectLinks = 20
 	maxProjectNote  = 200
-	maxProjectDoc   = 64 << 10
-	MaxProjectDocs  = 100
+	// MaxProjectGroups bounds a project's groups, MaxGroupName a group's
+	// name (characters).
+	MaxProjectGroups = 30
+	MaxGroupName     = 40
+	maxProjectDoc    = 64 << 10
+	MaxProjectDocs   = 100
 	// MaxProjectFile bounds an uploaded file.
 	MaxProjectFile = 20 << 20
 	// MaxProjectText is the largest text file kept inline (read by agents
@@ -222,6 +233,103 @@ func CheckNote(s string) (string, error) {
 	return s, nil
 }
 
+// ParseGroupName checks a group's name: one trimmed line of at most
+// MaxGroupName characters.
+func ParseGroupName(s string) (string, error) {
+	s = strings.TrimSpace(s)
+	bad := s == "" || utf8.RuneCountInString(s) > MaxGroupName
+	for _, r := range s {
+		if r < 0x20 || r == 0x7f {
+			bad = true
+		}
+	}
+	if bad {
+		return "", Errf(CodeInvalidArgument, "invalid group name %q", s).
+			WithSuggestion("use a short name of at most 40 characters, such as frontend or 后端")
+	}
+	return s, nil
+}
+
+// ParseProjectGroups checks a project's full, ordered list of groups: each
+// name valid, no name twice, at most MaxProjectGroups.
+func ParseProjectGroups(list []string) ([]string, error) {
+	if len(list) > MaxProjectGroups {
+		return nil, Errf(CodeInvalidArgument, "a project has at most %d groups", MaxProjectGroups)
+	}
+	out := make([]string, 0, len(list))
+	for _, g := range list {
+		n, err := ParseGroupName(g)
+		if err != nil {
+			return nil, err
+		}
+		if slices.Contains(out, n) {
+			return nil, Errf(CodeInvalidArgument, "group %q is listed twice", n)
+		}
+		out = append(out, n)
+	}
+	return out, nil
+}
+
+// CheckMemberGroup checks that g ("" = ungrouped) is one of groups, and
+// returns it trimmed.
+func CheckMemberGroup(groups []string, g string) (string, error) {
+	g = strings.TrimSpace(g)
+	if g != "" && !slices.Contains(groups, g) {
+		return "", Errf(CodeInvalidArgument, "the project has no group %q", g).
+			WithSuggestion("create the group first (PATCH the project's groups), or pick one of its groups")
+	}
+	return g, nil
+}
+
+// ApplyGroups replaces the project's groups (when groups is non-nil) and
+// moves members into groups (assign: agent → group, "" = ungrouped).
+// Members whose group is no longer listed become ungrouped (deleting a
+// group); renaming one is a new list plus moving its members. It checks
+// everything before changing anything, and returns the members whose
+// group changed.
+func (p *Project) ApplyGroups(members []*ProjectMember, groups *[]string, assign map[AgentName]string, now time.Time) ([]*ProjectMember, error) {
+	next := p.Groups
+	if groups != nil {
+		var err error
+		if next, err = ParseProjectGroups(*groups); err != nil {
+			return nil, err
+		}
+	}
+	byName := make(map[AgentName]*ProjectMember, len(members))
+	for _, m := range members {
+		byName[m.Agent] = m
+	}
+	want := make(map[AgentName]string, len(assign))
+	for a, g := range assign {
+		if byName[a] == nil {
+			return nil, Errf(CodeInvalidArgument, "%s is not a member of project %s", a, p.Name).
+				WithSuggestion("add it to the project first")
+		}
+		g, err := CheckMemberGroup(next, g)
+		if err != nil {
+			return nil, err
+		}
+		want[a] = g
+	}
+	var changed []*ProjectMember
+	for _, m := range members {
+		g, ok := want[m.Agent]
+		if !ok {
+			g = m.Group
+			if g != "" && !slices.Contains(next, g) {
+				g = ""
+			}
+		}
+		if g != m.Group {
+			m.Group = g
+			changed = append(changed, m)
+		}
+	}
+	p.Groups = append([]string{}, next...)
+	p.UpdatedAt = now
+	return changed, nil
+}
+
 // CheckDocBody validates a document's body.
 func CheckDocBody(s string) error {
 	if len(s) > maxProjectDoc {
@@ -275,6 +383,9 @@ type ProjectRepository interface {
 	Delete(ctx context.Context, id string) error
 
 	PutMember(ctx context.Context, m *ProjectMember) error
+	// SaveGroups stores the project's groups and the groups of the given
+	// members in one transaction.
+	SaveGroups(ctx context.Context, p *Project, members []*ProjectMember) error
 	DeleteMember(ctx context.Context, project string, agent AgentName) error
 	Members(ctx context.Context, project string) ([]*ProjectMember, error)
 	// MembershipsOf lists the projects (ids) an agent is in.

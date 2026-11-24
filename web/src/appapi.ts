@@ -772,7 +772,9 @@ export const appApi = {
     request<Project>("GET", `app/hubs/${enc(hubId)}/projects/${enc(name)}${bodies ? "?docs=body" : ""}`),
   createProject: (hubId: string, input: { name: string; title?: string; goal?: string; visibility?: "members" | "team" }) =>
     request<Project>("POST", `app/hubs/${enc(hubId)}/projects`, input),
-  updateProject: (hubId: string, name: string, input: { title?: string; goal?: string; brief?: string; links?: ProjectLink[]; visibility?: "members" | "team"; archived?: boolean }) =>
+  updateProject: (hubId: string, name: string, input: { title?: string; goal?: string; brief?: string; links?: ProjectLink[]; visibility?: "members" | "team"; archived?: boolean;
+    /** the groups in order (hubs from v0.21.34: send only when the project has `groups`) */ groups?: string[];
+    /** who goes in which group ("": none) */ member_groups?: Record<string, string> }) =>
     request<Project>("PATCH", `app/hubs/${enc(hubId)}/projects/${enc(name)}`, input),
   deleteProject: (hubId: string, name: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/projects/${enc(name)}`),
   /** lets the project's coordinators start agents on a computer, or no longer (hubs from v0.21.2) */

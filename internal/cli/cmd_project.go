@@ -7,6 +7,7 @@ import (
 	"mime"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/chenhg5/myco/internal/api"
@@ -208,7 +209,7 @@ the project no longer has are left alone.`,
 				v := e.in.Bool("archive")
 				req.Archived = &v
 			}
-			if req == (api.UpdateProjectRequest{}) {
+			if req.Title == nil && req.Goal == nil && req.Brief == nil && req.Links == nil && req.Visibility == nil && req.Archived == nil {
 				return errorf("invalid_usage", ExitUsage, "pass --title, --goal, --brief-file, --link, --visibility or --archive", "nothing to update")
 			}
 			if e.in.Bool("dry-run") {
@@ -240,10 +241,12 @@ the project no longer has are left alone.`,
 			cmd.Examples = []string{
 				`myco project add --name myco --agent wsl-codex --note "后端"`,
 				`myco project add --name myco --agent cloud-lead --role coordinator   # people`,
+				`myco project add --name myco --agent wsl-codex --group 后端   # creates the group if needed`,
 				`myco project add --name myco   # join it yourself (an agent)`,
 			}
 			cmd.Flags = append(cmd.Flags, Flag{Name: "role", Kind: String, Help: "member or coordinator (people decide roles)"},
-				Flag{Name: "note", Kind: String, Help: "What it does in this project"})
+				Flag{Name: "note", Kind: String, Help: "What it does in this project"},
+				Flag{Name: "group", Kind: String, Help: "Its group in this project, created if the project has none of that name ('' = ungrouped; those who edit the project)"})
 		case "remove":
 			cmd.Summary = "Take a node out of a project"
 			cmd.Examples = []string{"myco project remove --name myco --agent wsl-codex"}
@@ -257,7 +260,11 @@ the project no longer has are left alone.`,
 				return errorf("invalid_usage", ExitUsage, "pass --agent <node>", "which node?")
 			}
 			if e.in.Bool("dry-run") {
-				return e.dryRun(map[string]any{"action": "project_" + verb, "project": e.in.String("name"), "agent": agent})
+				plan := map[string]any{"action": "project_" + verb, "project": e.in.String("name"), "agent": agent}
+				if verb == "add" && e.in.IsSet("group") {
+					plan["group"] = strings.TrimSpace(e.in.String("group"))
+				}
+				return e.dryRun(plan)
 			}
 			// A person adding a node or setting a role uses their credentials;
 			// an agent (joining, or coordinating) its own token.
@@ -279,7 +286,29 @@ the project no longer has are left alone.`,
 					v := e.in.String("note")
 					req.Note = &v
 				}
+				newGroup := ""
+				if e.in.IsSet("group") {
+					// Groups are sent only when asked for: older hubs have none.
+					cur, err := c.GetProject(e.in.Ctx, e.in.String("name"), false)
+					if err != nil {
+						return err
+					}
+					if cur.Groups == nil {
+						return errorf("not_supported", ExitNotFound, "the hub needs v0.21.34 or later (sudo myco upgrade on the server); until then, say it in --note", "this hub has no project groups yet")
+					}
+					g := strings.TrimSpace(e.in.String("group"))
+					if g == "" || slices.Contains(cur.Groups, g) {
+						req.Group = &g
+					} else {
+						newGroup = g
+					}
+				}
 				p, err = c.PutProjectMember(e.in.Ctx, e.in.String("name"), agent, req)
+				if err == nil && newGroup != "" {
+					// A new group: append it and move the node into it, in one change.
+					groups := append(slices.Clone(p.Groups), newGroup)
+					p, err = c.SetProjectGroups(e.in.Ctx, p.Name, &groups, map[string]string{agent: newGroup})
+				}
 			} else {
 				p, err = c.RemoveProjectMember(e.in.Ctx, e.in.String("name"), agent)
 			}
@@ -572,6 +601,9 @@ func projectMarkdown(p *api.Project, forFile bool) string {
 		role := ""
 		if m.Role == "coordinator" {
 			role = " (coordinator)"
+		}
+		if m.Group != "" {
+			role += " [" + m.Group + "]"
 		}
 		line := fmt.Sprintf("- `%s`%s", m.Name, role)
 		if m.Agent != nil {

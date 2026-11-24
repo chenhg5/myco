@@ -43,6 +43,18 @@ func TestProjectCommands(t *testing.T) {
 	if code, _, e := admin.run("project", "add", "--name", "myco", "--agent", "dev-worker", "--note", "后端"); code != 0 {
 		t.Fatalf("add worker: %s", e)
 	}
+	// Groups: --group creates the group when the project has none of that
+	// name, and puts the node in it; show lists it.
+	if code, out, _ := admin.run("project", "add", "--name", "myco", "--agent", "dev-worker", "--group", "后端", "--dry-run", "--format", "json"); code != ExitDryRun || !strings.Contains(out, "后端") {
+		t.Fatalf("add --group --dry-run: exit %d %s", code, out)
+	}
+	if code, out, e := admin.run("project", "add", "--name", "myco", "--agent", "dev-worker", "--group", "后端", "--format", "json"); code != 0 ||
+		!strings.Contains(out, `"groups": [`) || !strings.Contains(out, `"group": "后端"`) {
+		t.Fatalf("add --group: %s %s", out, e)
+	}
+	if code, _, e := admin.run("project", "add", "--name", "myco", "--agent", "dev-lead", "--group", "后端"); code != 0 {
+		t.Fatalf("add --group (existing group): %s", e)
+	}
 	// The coordinator writes the brief and a document with its own token.
 	brief := filepath.Join(home, "BRIEF.md")
 	os.WriteFile(brief, []byte("Run make check before pushing."), 0o600)
@@ -64,7 +76,7 @@ func TestProjectCommands(t *testing.T) {
 		t.Fatalf("list: %s", out)
 	}
 	_, out, _ = worker.run("project", "show", "--name", "myco", "--format", "text")
-	for _, want := range []string{"ship projects", "Run make check", "`dev-lead` (coordinator)", "后端", "conventions"} {
+	for _, want := range []string{"ship projects", "Run make check", "`dev-lead` (coordinator) [后端]", "`dev-worker` [后端]", "conventions"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("show lacks %q:\n%s", want, out)
 		}
