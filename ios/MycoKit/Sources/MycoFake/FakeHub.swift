@@ -77,7 +77,7 @@ public actor FakeHub: HubAPI {
         automationRuns = Dictionary(grouping: world.automations.compactMap(\.lastRun), by: { $0.automationId ?? "" })
         workflowList = world.workflows
         runList = world.runs
-        if scenario != .empty { seedNoticesAndUsage(now: now) }
+        if scenario != .empty { (noticeList, usageRows) = Self.seeded(now: now) }
         if scenario == .remote {
             remoteHosts = [RemoteComputer(machine: "app:fixture", name: "Fixture Mac", os: "darwin", control: true)]
             let page = Page(id: "pg_remote", name: "Remote controller probe", publisher: FakeHub.me, url: FakeHub.demoAddress.absoluteString + "/pages/pg_remote", createdAt: now, updatedAt: now)
@@ -107,8 +107,8 @@ public actor FakeHub: HubAPI {
 
     /// Two things waiting for me (运维 asks; a task of 后端工程师's failed),
     /// one settled; two weeks of tokens.
-    private func seedNoticesAndUsage(now: Date) {
-        noticeList = [
+    private static func seeded(now: Date) -> ([Notice], [UsageRow]) {
+        let noticeList = [
             Notice(seq: 1, id: "ntc_1", kind: "answered", tier: "results", target: "agent:studio-claude-c41f", actor: "studio-claude-c41f",
                    createdAt: now.addingTimeInterval(-7_200), readAt: now.addingTimeInterval(-7_000), resolvedAt: now.addingTimeInterval(-7_000)),
             Notice(seq: 2, id: "ntc_2", kind: "failed", target: "agent:studio-codex-7f3a", project: "myco-ios", actor: "studio-codex-7f3a",
@@ -123,6 +123,7 @@ public actor FakeHub: HubAPI {
         format.calendar = utc
         format.timeZone = utc.timeZone
         format.dateFormat = "yyyy-MM-dd"
+        var usageRows: [UsageRow] = []
         let people: [(agent: String, project: String, model: String, scale: Int64)] = [
             ("cloud-lead", "myco-ios", "claude-opus-5-5", 9),
             ("studio-codex-7f3a", "myco-ios", "gpt-6-sol", 14),
@@ -140,6 +141,7 @@ public actor FakeHub: HubAPI {
                     cacheReadTokens: wave * one.scale * 90_000, outputTokens: wave * one.scale * 6_500, costUsd: Double(wave * one.scale) * 0.41))
             }
         }
+        return (noticeList, usageRows)
     }
 
     public func notices(after: Int64?, limit: Int) async throws -> NoticePage {
