@@ -5952,6 +5952,13 @@ async function runMatrix(browser, size, scheme) {
         await r.continue().catch(() => undefined);
       };
       await sidebar(page, true);
+      // (in the demo workspace, which has agents to add; earlier steps may
+      // have left another on show)
+      await clickVisible(page, page.locator(".sp-switch .app-hub-trigger"));
+      const studio = page.locator(".app-hub-menu [role=menuitemradio]", { hasText: "Glenn" }).first();
+      if (await studio.getAttribute("aria-checked") === "true") await page.keyboard.press("Escape");
+      else await clickVisible(page, studio);
+      await page.locator(".app-hub-menu").waitFor({ state: "detached", timeout: 5_000 });
       await clickVisible(page, page.locator(".app-nav-add"));
       const form = page.locator("[data-testid=new-project-form]");
       await form.locator(".np-input").fill("加人测试");
@@ -5962,7 +5969,11 @@ async function runMatrix(browser, size, scheme) {
       await page.route(/\/app\/hubs\/[^/]+\/projects(\/[^/?]+)?(\?|$)/, slow);
       await page.route("**/app/overview", slow);
       try {
-        await clickVisible(page, dlg.getByRole("tab", { name: "工作区里已有的" }));
+        const have = dlg.getByRole("tab", { name: "工作区里已有的" });
+        if (!(await have.waitFor({ timeout: 5_000 }).then(() => true, () => false))) {
+          throw new Error(`添加 agent 里没有「工作区里已有的」：${(await dlg.innerText()).replace(/\s+/g, " ").slice(0, 300)}`);
+        }
+        await clickVisible(page, have);
         const row = dlg.locator(".add-local-row").first();
         const name = (await row.locator(".add-local-name").innerText()).trim();
         const t0 = Date.now();
