@@ -352,7 +352,7 @@ An automation:
 
 ```json
 {
-  "id": "aut_...", "name": "Daily report", "owner": "glenn", "from": "@console:glenn", "to": "pm",
+  "id": "aut_...", "name": "Daily report", "owner": "alice", "from": "@console:alice", "to": "pm",
   "project": "", "body": "Write today's daily report",
   "schedule": {"cron": "0 9 * * 1-5", "tz": "Asia/Shanghai"},
   "webhook": true, "webhook_url": "https://hub.example.com/hooks/aut_...",
@@ -461,7 +461,7 @@ A run:
 {
   "id": "run_...", "workflow_id": "wf_...", "name": "write-review-fix", "version": 2, "project": "myco",
   "status": "running|waiting|succeeded|failed|cancelled", "inputs": {"task": "Add an export button"},
-  "owner": "glenn", "by": "glenn", "trigger": "manual|agent|automation", "error": "",
+  "owner": "alice", "by": "alice", "trigger": "manual|agent|automation", "error": "",
   "current": ["review"],
   "steps": [{"id": "rs_...", "step": "write", "title": "", "kind": "agent", "attempt": 1, "status": "done",
              "target": "coder", "message_id": "msg_...", "input": "…the task as sent…", "payload": {"task": "Add an export button"},
@@ -476,7 +476,7 @@ A run:
 
 ## Superagents
 
-A person's own agent with the App's powers in its workspace (v0.21.1+). Only the person names it; it uses its **own agent token** on the App's routes, and the hub acts as that person, marked as through it (the audit log names it: `glenn（经 superagent shroom）`, the hub's Chinese for "glenn (via superagent shroom)"). Each route the App uses is listed in `internal/transport/httpapi/superagent.go`:
+A person's own agent with the App's powers in its workspace (v0.21.1+). Only the person names it; it uses its **own agent token** on the App's routes, and the hub acts as that person, marked as through it (the audit log names it: `alice（经 superagent shroom）`, the hub's Chinese for "alice (via superagent shroom)"). Each route the App uses is listed in `internal/transport/httpapi/superagent.go`:
 
 - **allowed**: reading what its owner sees (overview, conversations, traces, machines, members, audit, projects), and things that harm nothing that exists: creating projects and putting agents in them, project docs and files, starting an agent on its owner's computers (`POST /v1/machines/{id}/spawn`), run settings, running an automation once, renaming a computer;
 - **held for approval**: deleting or removing anything (projects, members of projects, docs, files, agents, computers), visibility and ownership, new or changed automations, stopping a task, upgrades and hub settings. The hub answers `409 {error: "approval_pending", message}` and keeps the request (with `X-Myco-Reason`, its why); the owner approves or denies it, and an approved one is carried out once, as it came. The agent gets a note from its owner either way. Pending ones lapse after 24 hours;

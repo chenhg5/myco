@@ -926,7 +926,7 @@ func TestConsoleTokens(t *testing.T) {
 	// The CLI on the hub machine (admin token) issues one; the plain token is
 	// printed once and is not stored.
 	adminCLI := newCLI(t, h, filepath.Join(home, "admin.yaml"))
-	out := adminCLI.must(c, "console", "token", "create", "--name", "glenn-mac")
+	out := adminCLI.must(c, "console", "token", "create", "--name", "alice-mac")
 	var created struct {
 		ConsoleToken api.ConsoleToken `json:"console_token"`
 		Token        string           `json:"token"`
@@ -935,7 +935,7 @@ func TestConsoleTokens(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &created); err != nil {
 		t.Fatalf("console token create: %s", out)
 	}
-	if !strings.HasPrefix(created.Token, app.ConsoleTokenPrefix) || created.ConsoleToken.Name != "glenn-mac" || !created.ConsoleToken.Active || created.Hub == "" {
+	if !strings.HasPrefix(created.Token, app.ConsoleTokenPrefix) || created.ConsoleToken.Name != "alice-mac" || !created.ConsoleToken.Active || created.Hub == "" {
 		t.Fatalf("created: %+v", created)
 	}
 	list := adminCLI.must(c, "console", "token", "list")
@@ -1041,12 +1041,12 @@ func TestMachinesAreUniqueAndSeparateFromNodes(t *testing.T) {
 	h := startHub(t, filepath.Join(t.TempDir(), "hub.db"), app.DefaultMessagePolicy())
 	tok := map[string]string{}
 	for _, r := range []api.RegisterRequest{
-		{Name: "mac-claude", Binding: api.Binding{Harness: "claude", Environment: "Glenns-MacBook.local"}},
-		{Name: "mac-codex", Binding: api.Binding{Harness: "codex", Environment: "glenns-macbook"}},
-		{Name: "old-codex", Binding: api.Binding{Harness: "codex", Environment: "192.168.1.210"}},
+		{Name: "mac-claude", Binding: api.Binding{Harness: "claude", Environment: "Alices-MacBook.local"}},
+		{Name: "mac-codex", Binding: api.Binding{Harness: "codex", Environment: "alices-macbook"}},
+		{Name: "old-codex", Binding: api.Binding{Harness: "codex", Environment: "192.168.1.42"}},
 		{Name: "cloud-a", Binding: api.Binding{Harness: "claude-cloud", Environment: "claude-cloud_default"}},
 		{Name: "vps-shell", Binding: api.Binding{Harness: "exec", Environment: "srv1"}},
-		{Name: "glenn"},
+		{Name: "alice"},
 	} {
 		tok[r.Name] = h.register(r)
 	}
@@ -1063,12 +1063,12 @@ func TestMachinesAreUniqueAndSeparateFromNodes(t *testing.T) {
 		return out
 	}
 	m := byName(ms)
-	if len(ms) != 3 || len(m["Glenns-MacBook.local"].Agents) != 2 || !m["Glenns-MacBook.local"].Legacy || len(m["srv1"].Agents) != 1 {
+	if len(ms) != 3 || len(m["Alices-MacBook.local"].Agents) != 2 || !m["Alices-MacBook.local"].Legacy || len(m["srv1"].Agents) != 1 {
 		t.Fatalf("legacy grouping: %+v", ms)
 	}
 	for _, x := range ms {
 		for _, a := range x.Agents {
-			if a == "glenn" {
+			if a == "alice" {
 				t.Fatal("a person is not on a machine")
 			}
 		}
@@ -1077,12 +1077,12 @@ func TestMachinesAreUniqueAndSeparateFromNodes(t *testing.T) {
 	// Both Mac agents report the same fingerprint (new runners), one even
 	// after a host name change: one machine, named after its join name.
 	fp := strings.Repeat("ab", 16)
-	r1 := api.MachineReport{Fingerprint: fp, Name: "glenn-mac", Hostname: "Glenns-MacBook.local", OS: "darwin", Arch: "arm64", MycoVersion: "v0.16.9"}
+	r1 := api.MachineReport{Fingerprint: fp, Name: "alice-mac", Hostname: "Alices-MacBook.local", OS: "darwin", Arch: "arm64", MycoVersion: "v0.16.9"}
 	if err := h.client(tok["mac-claude"]).ReportMachine(c, r1); err != nil {
 		t.Fatal(err)
 	}
 	r2 := r1
-	r2.Hostname, r2.Name = "Glenns-MacBook-2.local", "something-else"
+	r2.Hostname, r2.Name = "Alices-MacBook-2.local", "something-else"
 	if err := h.client(tok["mac-codex"]).ReportMachine(c, r2); err != nil {
 		t.Fatal(err)
 	}
@@ -1091,8 +1091,8 @@ func TestMachinesAreUniqueAndSeparateFromNodes(t *testing.T) {
 	}
 	ms, _ = h.admin().Machines(c)
 	m = byName(ms)
-	mac, ok := m["glenn-mac"]
-	if !ok || mac.Legacy || len(mac.Agents) != 2 || mac.OS != "darwin" || mac.Hostname != "Glenns-MacBook-2.local" || len(ms) != 3 {
+	mac, ok := m["alice-mac"]
+	if !ok || mac.Legacy || len(mac.Agents) != 2 || mac.OS != "darwin" || mac.Hostname != "Alices-MacBook-2.local" || len(ms) != 3 {
 		t.Fatalf("one machine for one device: %+v", ms)
 	}
 	if err := h.client(tok["old-codex"]).ReportMachine(c, api.MachineReport{Fingerprint: "x"}); err == nil {
@@ -1119,11 +1119,11 @@ func TestMachinesAreUniqueAndSeparateFromNodes(t *testing.T) {
 		if a.Agent.Name == "old-codex" && !strings.HasPrefix(a.Agent.MachineID, "env:") {
 			t.Fatalf("a legacy agent still gets its (legacy) machine: %+v", a.Agent)
 		}
-		if (a.Agent.Name == "cloud-a" || a.Agent.Name == "glenn") && a.Agent.MachineID != "" {
+		if (a.Agent.Name == "cloud-a" || a.Agent.Name == "alice") && a.Agent.MachineID != "" {
 			t.Fatalf("cloud sessions and people are not on machines: %+v", a.Agent)
 		}
 	}
-	if kinds["vps-shell"] != "shell" || kinds["glenn"] != "human" || kinds["cloud-a"] != "agent" {
+	if kinds["vps-shell"] != "shell" || kinds["alice"] != "human" || kinds["cloud-a"] != "agent" {
 		t.Fatalf("kinds: %v", kinds)
 	}
 	// Runtime survives actual strict HTTP decoding, SQLite and overview DTOs.
@@ -1152,7 +1152,7 @@ func TestMachinesAreUniqueAndSeparateFromNodes(t *testing.T) {
 	}
 
 	// Renaming: real machines yes, legacy ones say what to do.
-	if err := h.admin().RenameMachine(c, mac.ID, "Glenn 的 Mac"); err != nil {
+	if err := h.admin().RenameMachine(c, mac.ID, "Alice 的 Mac"); err != nil {
 		t.Fatal(err)
 	}
 	err = h.admin().RenameMachine(c, m["srv1"].ID, "VPS")
@@ -1232,7 +1232,7 @@ func TestConsoleConversations(t *testing.T) {
 	workerTok := h.register(api.RegisterRequest{Name: "worker", AllowFrom: []string{"lead"}})
 	otherTok := h.register(api.RegisterRequest{Name: "other"})
 	h.register(api.RegisterRequest{Name: "lead"})
-	ct, err := h.admin().CreateConsoleToken(c, "glenn-mac")
+	ct, err := h.admin().CreateConsoleToken(c, "alice-mac")
 	if err != nil {
 		t.Fatal(err)
 	}

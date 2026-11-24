@@ -523,7 +523,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     appApi.peers(target.hubId, target.agent).then((r) => {
       if (off) return;
       const all = new Set(target.also);
-      // Other AIs only: a terminal's commands (mac-exec running ls) are the
+      // Other AIs only: a terminal's commands (demo-shell running ls) are the
       // agent's tools at work, not work handed to someone; they stay out
       // (unless the project already lists that terminal).
       for (const p of r.peers || []) {

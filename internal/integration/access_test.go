@@ -18,20 +18,20 @@ func TestOnlyTheOwnerChoosesAnAgentsAccess(t *testing.T) {
 	c := ctx(t)
 	h := startHub(t, filepath.Join(t.TempDir(), "hub.db"), app.DefaultMessagePolicy())
 	admin := h.admin()
-	inv, err := admin.InviteMember(c, api.InviteRequest{Name: "laohu"})
+	inv, err := admin.InviteMember(c, api.InviteRequest{Name: "bob"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	paired, err := h.client("").Pair(c, inv.Link[strings.Index(inv.Link, "/c/")+3:], "laohu-mac")
+	paired, err := h.client("").Pair(c, inv.Link[strings.Index(inv.Link, "/c/")+3:], "bob-mac")
 	if err != nil {
 		t.Fatal(err)
 	}
-	laohu := h.client(paired.Token)
-	enr, err := laohu.CreateEnrollment(c, api.CreateEnrollmentRequest{NamePrefix: "laohu-", MaxUses: 1}, false)
+	bob := h.client(paired.Token)
+	enr, err := bob.CreateEnrollment(c, api.CreateEnrollmentRequest{NamePrefix: "bob-", MaxUses: 1}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, err := h.client(enr.Token).Enroll(c, api.EnrollRequest{Name: "laohu-codex", Binding: api.Binding{Harness: "codex", SessionID: "s"}}, false)
+	res, err := h.client(enr.Token).Enroll(c, api.EnrollRequest{Name: "bob-codex", Binding: api.Binding{Harness: "codex", SessionID: "s"}}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,28 +64,28 @@ func TestOnlyTheOwnerChoosesAnAgentsAccess(t *testing.T) {
 		return me.RunSettings != nil && me.RunSettings.MCPTools != nil && *me.RunSettings.MCPTools
 	}
 
-	if _, err := laohu.SetRunSettings(c, "laohu-codex", api.RunSettings{Access: "full"}); err != nil {
+	if _, err := bob.SetRunSettings(c, "bob-codex", api.RunSettings{Access: "full"}); err != nil {
 		t.Fatalf("owner sets access: %v", err)
 	}
 	if got := access(); got != "full" {
 		t.Fatalf("access = %q", got)
 	}
-	if _, err := laohu.SetRunSettings(c, "laohu-codex", api.RunSettings{MCPTools: &trueValue}); err != nil {
+	if _, err := bob.SetRunSettings(c, "bob-codex", api.RunSettings{MCPTools: &trueValue}); err != nil {
 		t.Fatalf("owner sets MCP: %v", err)
 	}
 	if !mcpEnabled() {
 		t.Fatal("owner's MCP choice was not stored")
 	}
-	_, err = admin.SetRunSettings(c, "laohu-codex", api.RunSettings{MCPTools: &falseValue})
+	_, err = admin.SetRunSettings(c, "bob-codex", api.RunSettings{MCPTools: &falseValue})
 	denied("hub owner changes someone else's MCP choice", err)
 	_, err = agent.SetRunSettings(c, "", api.RunSettings{MCPTools: &falseValue})
 	denied("agent changes own MCP choice", err)
-	_, err = admin.SetRunSettings(c, "laohu-codex", api.RunSettings{Access: "readonly"})
+	_, err = admin.SetRunSettings(c, "bob-codex", api.RunSettings{Access: "readonly"})
 	denied("the hub's owner changes someone's access", err)
 	_, err = agent.SetRunSettings(c, "", api.RunSettings{Access: "readonly"})
 	denied("the agent changes its own access", err)
 	// Choosing the model (the hub's owner, or the agent) keeps it.
-	if _, err := admin.SetRunSettings(c, "laohu-codex", api.RunSettings{Model: "m1"}); err != nil {
+	if _, err := admin.SetRunSettings(c, "bob-codex", api.RunSettings{Model: "m1"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := agent.SetRunSettings(c, "", api.RunSettings{Model: "m2", Effort: "high"}); err != nil {
@@ -97,13 +97,13 @@ func TestOnlyTheOwnerChoosesAnAgentsAccess(t *testing.T) {
 	if !mcpEnabled() {
 		t.Fatal("omitted MCP field should preserve the old value")
 	}
-	if _, err := laohu.SetRunSettings(c, "laohu-codex", api.RunSettings{MCPTools: &falseValue}); err != nil {
+	if _, err := bob.SetRunSettings(c, "bob-codex", api.RunSettings{MCPTools: &falseValue}); err != nil {
 		t.Fatalf("owner clears MCP: %v", err)
 	}
 	if mcpEnabled() {
 		t.Fatal("MCP choice was not cleared")
 	}
-	hist, err := laohu.AgentHistory(c, "laohu-codex", 0)
+	hist, err := bob.AgentHistory(c, "bob-codex", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +116,7 @@ func TestOnlyTheOwnerChoosesAnAgentsAccess(t *testing.T) {
 	if !found {
 		t.Fatal("MCP setting change missing from audit history")
 	}
-	if _, err := laohu.SetRunSettings(c, "laohu-codex", api.RunSettings{Access: "root"}); err == nil {
+	if _, err := bob.SetRunSettings(c, "bob-codex", api.RunSettings{Access: "root"}); err == nil {
 		t.Fatal("an unknown access level must be refused")
 	}
 }

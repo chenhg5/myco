@@ -17,8 +17,8 @@ import (
 func TestProjects(t *testing.T) {
 	c := ctx(t)
 	h := startHub(t, filepath.Join(t.TempDir(), "hub.db"), app.DefaultMessagePolicy())
-	glenn := h.admin()
-	if _, err := glenn.UpdateMember(c, "owner", api.MemberUpdateRequest{Name: "glenn"}); err != nil {
+	alice := h.admin()
+	if _, err := alice.UpdateMember(c, "owner", api.MemberUpdateRequest{Name: "alice"}); err != nil {
 		t.Fatal(err)
 	}
 	enroll := func(owner *client.Client, name string) *client.Client {
@@ -32,58 +32,58 @@ func TestProjects(t *testing.T) {
 		}
 		return h.client(res.Token)
 	}
-	inv, err := glenn.InviteMember(c, api.InviteRequest{Name: "laohu"})
+	inv, err := alice.InviteMember(c, api.InviteRequest{Name: "bob"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, err := h.client("").Pair(c, inv.Link[strings.Index(inv.Link, "/c/")+3:], "laohu-mac")
+	p, err := h.client("").Pair(c, inv.Link[strings.Index(inv.Link, "/c/")+3:], "bob-mac")
 	if err != nil {
 		t.Fatal(err)
 	}
-	laohu := h.client(p.Token)
-	lead, worker := enroll(glenn, "lead"), enroll(glenn, "worker")
-	enroll(glenn, "helper")
-	laohuBot := enroll(laohu, "laohu-bot")
-	enroll(laohu, "laohu-other")
+	bob := h.client(p.Token)
+	lead, worker := enroll(alice, "lead"), enroll(alice, "worker")
+	enroll(alice, "helper")
+	bobBot := enroll(bob, "bob-bot")
+	enroll(bob, "bob-other")
 
 	// Agents do not create projects; people do.
 	if _, err := lead.CreateProject(c, api.CreateProjectRequest{Name: "x"}); err == nil {
 		t.Fatal("an agent created a project")
 	}
-	pr, err := glenn.CreateProject(c, api.CreateProjectRequest{Name: "myco", Title: "myco 开发", Goal: "ship projects"})
-	if err != nil || pr.Visibility != "members" || pr.Owner != "glenn" || !pr.CanManage {
+	pr, err := alice.CreateProject(c, api.CreateProjectRequest{Name: "myco", Title: "myco 开发", Goal: "ship projects"})
+	if err != nil || pr.Visibility != "members" || pr.Owner != "alice" || !pr.CanManage {
 		t.Fatalf("create: %v %+v", err, pr)
 	}
-	// Members-only: laohu does not see it yet.
-	if l, _ := laohu.ListProjects(c, false); len(l) != 0 {
-		t.Fatalf("laohu sees %+v", l)
+	// Members-only: bob does not see it yet.
+	if l, _ := bob.ListProjects(c, false); len(l) != 0 {
+		t.Fatalf("bob sees %+v", l)
 	}
 	coord, member := "coordinator", "member"
-	if _, err := glenn.PutProjectMember(c, "myco", "lead", api.ProjectMemberRequest{Role: &coord}); err != nil {
+	if _, err := alice.PutProjectMember(c, "myco", "lead", api.ProjectMemberRequest{Role: &coord}); err != nil {
 		t.Fatal(err)
 	}
 	note := "后端"
-	if _, err := glenn.PutProjectMember(c, "myco", "worker", api.ProjectMemberRequest{Note: &note}); err != nil {
+	if _, err := alice.PutProjectMember(c, "myco", "worker", api.ProjectMemberRequest{Note: &note}); err != nil {
 		t.Fatal(err)
 	}
-	// The hub's owner manages every node, so he may add laohu's too; he
-	// takes it out again so laohu can add it himself below.
-	if _, err := glenn.PutProjectMember(c, "myco", "laohu-bot", api.ProjectMemberRequest{}); err != nil {
+	// The hub's owner manages every node, so he may add bob's too; he
+	// takes it out again so bob can add it himself below.
+	if _, err := alice.PutProjectMember(c, "myco", "bob-bot", api.ProjectMemberRequest{}); err != nil {
 		t.Fatalf("the hub's owner adds a member's node: %v", err)
 	}
-	if _, err := glenn.RemoveProjectMember(c, "myco", "laohu-bot"); err != nil {
-		t.Fatalf("remove laohu-bot again: %v", err)
+	if _, err := alice.RemoveProjectMember(c, "myco", "bob-bot"); err != nil {
+		t.Fatalf("remove bob-bot again: %v", err)
 	}
-	// Open to the team: laohu sees it and adds his own node.
+	// Open to the team: bob sees it and adds his own node.
 	team := "team"
-	if _, err := glenn.UpdateProject(c, "myco", api.UpdateProjectRequest{Visibility: &team}); err != nil {
+	if _, err := alice.UpdateProject(c, "myco", api.UpdateProjectRequest{Visibility: &team}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := laohu.PutProjectMember(c, "myco", "laohu-bot", api.ProjectMemberRequest{}); err != nil {
-		t.Fatalf("laohu adds his node: %v", err)
+	if _, err := bob.PutProjectMember(c, "myco", "bob-bot", api.ProjectMemberRequest{}); err != nil {
+		t.Fatalf("bob adds his node: %v", err)
 	}
-	if _, err := laohu.PutProjectMember(c, "myco", "helper", api.ProjectMemberRequest{}); err == nil {
-		t.Fatal("laohu added glenn's node")
+	if _, err := bob.PutProjectMember(c, "myco", "helper", api.ProjectMemberRequest{}); err == nil {
+		t.Fatal("bob added alice's node")
 	}
 
 	// The coordinator edits the content and the members' cards.
@@ -98,17 +98,17 @@ func TestProjects(t *testing.T) {
 	if _, err := lead.UpdateProfile(c, "worker", api.ProfileRequest{Description: &desc}); err != nil {
 		t.Fatalf("coordinator edits a member's card: %v", err)
 	}
-	if _, err := lead.SetSkills(c, "laohu-bot", []api.Skill{{Name: "ios-release"}}); err != nil {
-		t.Fatalf("coordinator edits laohu's member node: %v", err)
+	if _, err := lead.SetSkills(c, "bob-bot", []api.Skill{{Name: "ios-release"}}); err != nil {
+		t.Fatalf("coordinator edits bob's member node: %v", err)
 	}
-	if _, err := lead.SetSkills(c, "laohu-other", []api.Skill{{Name: "x"}}); err == nil {
+	if _, err := lead.SetSkills(c, "bob-other", []api.Skill{{Name: "x"}}); err == nil {
 		t.Fatal("coordinator edited a node outside the project")
 	}
-	// It adds glenn's other node, not laohu's; it does not change roles or visibility.
+	// It adds alice's other node, not bob's; it does not change roles or visibility.
 	if _, err := lead.PutProjectMember(c, "myco", "helper", api.ProjectMemberRequest{}); err != nil {
 		t.Fatalf("coordinator adds a node of its owner: %v", err)
 	}
-	if _, err := lead.PutProjectMember(c, "myco", "laohu-other", api.ProjectMemberRequest{}); err == nil {
+	if _, err := lead.PutProjectMember(c, "myco", "bob-other", api.ProjectMemberRequest{}); err == nil {
 		t.Fatal("coordinator added another member's node")
 	}
 	if _, err := lead.PutProjectMember(c, "myco", "worker", api.ProjectMemberRequest{Role: &coord}); err == nil {
@@ -127,7 +127,7 @@ func TestProjects(t *testing.T) {
 	if err != nil || len(mine) != 1 || mine[0].Name != "myco" {
 		t.Fatalf("worker's projects: %v %+v", err, mine)
 	}
-	full, err := laohuBot.GetProject(c, "myco", true)
+	full, err := bobBot.GetProject(c, "myco", true)
 	if err != nil || len(full.Docs) != 1 || !strings.Contains(full.Docs[0].Body, "co-author") || len(full.Members) != 4 {
 		t.Fatalf("pull: %v %+v", err, full)
 	}
@@ -140,20 +140,20 @@ func TestProjects(t *testing.T) {
 		}
 	}
 	// Taking a coordinator back to member is people's call too, and works.
-	if _, err := glenn.PutProjectMember(c, "myco", "lead", api.ProjectMemberRequest{Role: &member}); err != nil {
+	if _, err := alice.PutProjectMember(c, "myco", "lead", api.ProjectMemberRequest{Role: &member}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := lead.SetSkills(c, "worker", nil); err == nil {
 		t.Fatal("no longer a coordinator, still edits cards")
 	}
 	// Removing a node takes it out of its projects.
-	if _, err := laohu.RemoveAgent(c, "laohu-bot", false); err != nil {
+	if _, err := bob.RemoveAgent(c, "bob-bot", false); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := glenn.GetProject(c, "myco", false); len(got.Members) != 3 {
+	if got, _ := alice.GetProject(c, "myco", false); len(got.Members) != 3 {
 		t.Fatalf("after removing a node: %+v", got.Members)
 	}
-	if err := glenn.DeleteProject(c, "myco"); err != nil {
+	if err := alice.DeleteProject(c, "myco"); err != nil {
 		t.Fatal(err)
 	}
 }

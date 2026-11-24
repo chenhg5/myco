@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/browserautomation"
 	"github.com/myco-ai/myco/internal/browserpolicy"
 	"github.com/myco-ai/myco/internal/client"
 )
@@ -43,7 +44,7 @@ var browserActionList = func() []api.ActionDescriptor {
 // Discovery reads native persisted opt-ins without keeping the component alive.
 func (b *Backend) browserHostPolicies(h Hub) []browserHostPolicy {
 	st := b.browserComponent().Status()
-	if !st.Installed || !st.Supported || st.Protocol != 1 || st.Version != "0.1.0" {
+	if !st.Installed || !st.Supported || st.Protocol != 1 || !browserautomation.CompatibleComponentVersion(st.Version) {
 		return nil
 	}
 	scope, ok := b.cachedBrowserOwner(h, "")

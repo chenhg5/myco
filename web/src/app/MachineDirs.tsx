@@ -72,7 +72,7 @@ export function MachineDirs({ hubId, hub, machine, info, onChanged, prefill }: {
       {can ? (
         <form className="mdirs-add" onSubmit={(e) => { e.preventDefault(); if (value) void change({ add: [value] }); }}>
           <input className="app-input mono" value={adding} onChange={(e) => setAdding(e.target.value)} disabled={!!busy}
-            placeholder={L("再允许一个文件夹，比如 ~/code/tapnow", "Allow another folder, e.g. ~/code/tapnow")} aria-label={L("要允许的文件夹", "Folder to allow")} spellCheck={false} />
+            placeholder={L("再允许一个文件夹，比如 ~/code/acme", "Allow another folder, e.g. ~/code/acme")} aria-label={L("要允许的文件夹", "Folder to allow")} spellCheck={false} />
           <button type="submit" className="app-btn" disabled={!value || !!busy}><FolderPlus />{busy === "add" ? L("正在改…", "Saving…") : L("允许", "Allow")}</button>
         </form>
       ) : route === null && local ? (

@@ -74,12 +74,12 @@ export function NamePrompt({ hubsOv, onRefresh }: { hubsOv?: HubOverview[]; onRe
       <form onSubmit={(e) => { e.preventDefault(); void save(); }}>
         <label className="app-field">
           <span className="app-field-label">{L("用户名", "Handle")}</span>
-          <input className="app-input mono" value={f.name} onChange={(e) => setForm({ ...f, name: e.target.value })} placeholder="glenn" disabled={busy} required autoFocus />
-          <span className="app-small-note">{L("小写字母、数字和 - _ .，比如 glenn", "Lowercase letters, digits and - _ ., e.g. glenn")}</span>
+          <input className="app-input mono" value={f.name} onChange={(e) => setForm({ ...f, name: e.target.value })} placeholder="alice" disabled={busy} required autoFocus />
+          <span className="app-small-note">{L("小写字母、数字和 - _ .，比如 alice", "Lowercase letters, digits and - _ ., e.g. alice")}</span>
         </label>
         <label className="app-field">
           <span className="app-field-label">{L("名字（可选）", "Name (optional)")}</span>
-          <input className="app-input" value={f.display} onChange={(e) => setForm({ ...f, display: e.target.value })} placeholder="Glenn" disabled={busy} />
+          <input className="app-input" value={f.display} onChange={(e) => setForm({ ...f, display: e.target.value })} placeholder="Alice" disabled={busy} />
         </label>
         <ErrorText error={error} />
         <div className="app-modal-actions">

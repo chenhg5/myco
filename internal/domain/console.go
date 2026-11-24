@@ -28,7 +28,7 @@ func ParseConsoleName(s string) (string, error) {
 	s = strings.TrimSpace(s)
 	if s == "" || len(s) > 64 {
 		return "", Errf(CodeInvalidArgument, "console token name must be 1-64 characters").
-			WithSuggestion("name it after the device, e.g. --name glenn-mac")
+			WithSuggestion("name it after the device, e.g. --name alice-mac")
 	}
 	for _, r := range s {
 		if r < 0x20 || r == 0x7f {

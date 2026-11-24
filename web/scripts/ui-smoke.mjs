@@ -1645,7 +1645,7 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, dialog.getByRole("tab", { name: "用上面已有的会话" }));
       await dialog.locator(".add-local-row button", { hasText: "加入" }).first().waitFor({ timeout: 10_000 });
       // A session that joined two workspaces names both.
-      await dialog.locator(".add-local-row.is-taken .add-local-sub", { hasText: /已经加入了：.*的 glenn-mac-claude-x9k2、.*tapnow.* 的 glenn-mac-claude-x9k2-tn/ }).waitFor({ timeout: 5_000 });
+      await dialog.locator(".add-local-row.is-taken .add-local-sub", { hasText: /已经加入了：.*的 alice-mac-claude-x9k2、.*acme.* 的 alice-mac-claude-x9k2-tn/ }).waitFor({ timeout: 5_000 });
       await settle(page, 300);
       await shot(page, size, scheme, "add-agent");
       await dialog.locator(".add-local-row button", { hasText: "加入" }).first().click();
@@ -1674,9 +1674,9 @@ async function runMatrix(browser, size, scheme) {
       // A new one there: it lacks Codex (with the command to install it),
       // and keeps to its folder (a new one goes inside it).
       await clickVisible(page, dialog.getByRole("tab", { name: "新开一个" }));
-      await dialog.locator("[data-testid=allowed-dirs]", { hasText: "~/code/myco-team" }).waitFor({ timeout: 10_000 });
+      await dialog.locator("[data-testid=allowed-dirs]", { hasText: "~/code/demo-team" }).waitFor({ timeout: 10_000 });
       const vpsFolder = dialog.locator("input.app-input.mono").first();
-      if (!/^不填就新建 ~\/code\/myco-team\//.test(await vpsFolder.getAttribute("placeholder") || "")) throw new Error("只允许一个文件夹的电脑，新文件夹应建在它里面");
+      if (!/^不填就新建 ~\/code\/demo-team\//.test(await vpsFolder.getAttribute("placeholder") || "")) throw new Error("只允许一个文件夹的电脑，新文件夹应建在它里面");
       await clickVisible(page, dialog.locator(".ws-computer", { hasText: "Codex" }));
       await dialog.locator("[data-testid=remote-ai-missing] code", { hasText: "npm install -g @openai/codex" }).waitFor({ timeout: 5_000 });
       await vpsFolder.fill("~/elsewhere");
@@ -4516,13 +4516,13 @@ async function runMatrix(browser, size, scheme) {
       await pcTab(page, "AI 和工具");
       await detail.locator("[data-testid=pc-ais] .pcd-line", { hasText: "Codex" }).filter({ hasText: "没装" }).waitFor({ timeout: 10_000 });
       await pcTab(page, "权限");
-      await detail.locator("[data-testid=pc-details] .pcd-line", { hasText: "~/code/myco-team" }).waitFor({ timeout: 10_000 });
+      await detail.locator("[data-testid=pc-details] .pcd-line", { hasText: "~/code/demo-team" }).waitFor({ timeout: 10_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "computer-details");
       // Its folders are its own rule; this App reaches it over SSH, so it
       // changes them there (and puts them back: the other windows share the mock).
       const dirsBox = detail.locator("[data-testid=machine-dirs]");
-      const folder = `~/code/tapnow-${size.width}-${scheme}`;
+      const folder = `~/code/acme-${size.width}-${scheme}`;
       await dirsBox.getByRole("textbox", { name: "要允许的文件夹" }).fill(folder);
       await clickVisible(page, dirsBox.getByRole("button", { name: "允许" }));
       const chip = dirsBox.locator(".mdirs-chip", { hasText: folder });
@@ -5575,14 +5575,14 @@ async function runMatrix(browser, size, scheme) {
 
     await step("电脑 · 可能卡住的命令", async () => {
       await sidebar(page, true);
-      const pc = page.locator(".sp-nav-pc", { hasText: "mac-exec" });
+      const pc = page.locator(".sp-nav-pc", { hasText: "demo-shell" });
       await pc.waitFor({ timeout: 10_000 });
       // The hub says the command shows no life: not "working", only a quiet
       // ring (a command left open).
       if (!(await pc.locator(".sp-nav-busy.is-open").count())) {
-        throw new Error("mac-exec 只剩没收尾的命令：侧栏应是一个空心圈");
+        throw new Error("demo-shell 只剩没收尾的命令：侧栏应是一个空心圈");
       }
-      if (await pc.locator(".sp-nav-busy:not(.is-open)").count()) throw new Error("mac-exec 不该亮绿点或琥珀点");
+      if (await pc.locator(".sp-nav-busy:not(.is-open)").count()) throw new Error("demo-shell 不该亮绿点或琥珀点");
       await clickVisible(page, pc);
       if (narrow) await sidebar(page, false);
       await page.locator(".conv-detail").waitFor({ timeout: 20_000 });
@@ -5606,7 +5606,7 @@ async function runMatrix(browser, size, scheme) {
       // Stopping it leaves the computer idle: no green, no amber.
       await sidebar(page, true);
       await page.waitForFunction(() => {
-        const r = [...document.querySelectorAll(".sp-nav-pc")].find((e) => (e.textContent || "").includes("mac-exec"));
+        const r = [...document.querySelectorAll(".sp-nav-pc")].find((e) => (e.textContent || "").includes("demo-shell"));
         return !!r && !r.querySelector(".sp-nav-busy");
       }, null, { timeout: 15_000 });
       await shot(page, size, scheme, "computer-stuck-stopped");
@@ -6366,7 +6366,7 @@ async function runMatrix(browser, size, scheme) {
       // (in the demo workspace, which has agents to add; earlier steps may
       // have left another on show)
       await clickVisible(page, page.locator(".sp-switch .app-hub-trigger"));
-      const studio = page.locator(".app-hub-menu [role=menuitemradio]", { hasText: "Glenn" }).first();
+      const studio = page.locator(".app-hub-menu [role=menuitemradio]", { hasText: "Alice" }).first();
       if (await studio.getAttribute("aria-checked") === "true") await page.keyboard.press("Escape");
       else await clickVisible(page, studio);
       await page.locator(".app-hub-menu").waitFor({ state: "detached", timeout: 5_000 });

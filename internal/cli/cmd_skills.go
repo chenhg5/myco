@@ -194,8 +194,8 @@ func agentVisibilityCommand() *Command {
 	return &Command{
 		Name: "visibility", Summary: "Make a node visible to the team or private to its owner", Mutating: true,
 		Examples: []string{
-			"myco agent visibility --name laohu-claude --visibility private",
-			"myco agent visibility --name laohu-claude --visibility team",
+			"myco agent visibility --name bob-claude --visibility private",
+			"myco agent visibility --name bob-claude --visibility team",
 		},
 		Flags: []Flag{
 			{Name: "name", Kind: String, Required: true, Help: "The node"},

@@ -83,19 +83,19 @@ curl -fsSLO https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-h
 
 <table>
 <tr>
-<td width="33%"><img src="docs/assets/apps/motion.webp" alt="动效视频"><br><b>动效视频</b><br>宣传片、短视频：说一句话，agent 写好每个场景；配音乐和配音，在本机导出 MP4。</td>
-<td width="33%"><img src="docs/assets/apps/design-studio.webp" alt="设计工作台"><br><b>设计工作台</b><br>网页、应用界面、海报、演示文稿，在可编辑的画布上和 agent 一起迭代。</td>
-<td width="33%"><img src="docs/assets/apps/meeting.webp" alt="会议记录"><br><b>会议记录</b><br>录下 Zoom、腾讯会议、飞书里的会，在本机转成文字，让 agent 写纪要。</td>
+<td width="33%"><b>动效视频</b><br>宣传片、短视频：说一句话，agent 写好每个场景；配音乐和配音，在本机导出 MP4。</td>
+<td width="33%"><b>设计工作台</b><br>网页、应用界面、海报、演示文稿，在可编辑的画布上和 agent 一起迭代。</td>
+<td width="33%"><b>会议记录</b><br>录下 Zoom、腾讯会议、飞书里的会，在本机转成文字，让 agent 写纪要。</td>
 </tr>
 <tr>
-<td width="33%"><img src="docs/assets/apps/disk.webp" alt="空间清理"><br><b>空间清理</b><br>一圈一圈看清磁盘被谁占了，不要的移进废纸篓。</td>
+<td width="33%"><b>空间清理</b><br>一圈一圈看清磁盘被谁占了，不要的移进废纸篓。</td>
 <td width="33%"><img src="docs/assets/apps/remote-desktop.webp" alt="远程桌面"><br><b>远程桌面</b><br>从另一台电脑或 iPhone 查看、操作你的 Mac 和 Windows。</td>
 <td width="33%"><img src="docs/assets/apps/recorder.webp" alt="录屏工作台"><br><b>录屏工作台</b><br>录屏后直接裁剪、分割、加文字和重点放大，在本机导出 MP4。</td>
 </tr>
 <tr>
 <td width="33%"><img src="docs/assets/apps/stocks.webp" alt="行情工作台"><br><b>行情工作台</b><br>A 股、港股、美股共享自选，K 线、均线和观察笔记。</td>
 <td width="33%"><img src="docs/assets/apps/photo.webp" alt="修图"><br><b>修图</b><br>裁剪、调色、滤镜、文字、贴纸；说一句，agent 帮你调。</td>
-<td width="33%"><img src="docs/assets/apps/issues.webp" alt="任务追踪"><br><b>任务追踪</b><br>像 Linear 一样管问题；指给 agent，它改状态、写评论，你马上看到。</td>
+<td width="33%"><b>任务追踪</b><br>像 Linear 一样管问题；指给 agent，它改状态、写评论，你马上看到。</td>
 </tr>
 </table>
 
@@ -121,7 +121,7 @@ myco message send --to my-mac-claude --wait 15m --body "对本地数据库跑一
 
 ### 2. 把活直接交给同事的 agent
 
-和同事共用一个 Hub（设置 → 成员 → **邀请成员**）。然后说「问问 Matthew 的后端 agent，订单接口返回哪些字段」，你的 agent 就去他的 agent 那里拿答复。
+和同事共用一个 Hub（设置 → 成员 → **邀请成员**）。然后说「问问 Carol 的后端 agent，订单接口返回哪些字段」，你的 agent 就去他的 agent 那里拿答复。
 
 - **主人决定**谁能给自己的 agent 派活。
 - **收到任务的 agent 知道是谁在问**，也知道这是同事、不是主人。

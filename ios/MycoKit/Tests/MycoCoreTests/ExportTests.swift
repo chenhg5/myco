@@ -13,15 +13,15 @@ struct ExportTests {
     let morning = Date(timeIntervalSince1970: 1_794_907_800)
 
     @Test func aConversationReadsInTimeWithWhoSaidWhat() {
-        var sealed = Message(id: "t4", from: "coder", to: "@console:glenn", type: "note", body: "x", status: "done", createdAt: morning.addingTimeInterval(2_400))
+        var sealed = Message(id: "t4", from: "coder", to: "@console:alice", type: "note", body: "x", status: "done", createdAt: morning.addingTimeInterval(2_400))
         sealed.unreadable = "no key"
         let messages = [
-            Message(id: "r1", from: "coder", to: "@console:glenn", threadId: "t1", replyTo: "t1", type: "reply", body: "改好了。", status: "done",
+            Message(id: "r1", from: "coder", to: "@console:alice", threadId: "t1", replyTo: "t1", type: "reply", body: "改好了。", status: "done",
                     createdAt: morning.addingTimeInterval(600), attachments: [Attachment(fileId: "f1", name: "截图.png", size: 20_480, contentType: "image/png")]),
-            Message(id: "t1", from: "@console:glenn", to: "coder", body: "把首页的标题改短", status: "done", createdAt: morning),
-            Message(id: "t2", from: "@console:glenn", to: "coder", body: "再跑一遍测试", status: "failed", error: "stopped by the sender",
+            Message(id: "t1", from: "@console:alice", to: "coder", body: "把首页的标题改短", status: "done", createdAt: morning),
+            Message(id: "t2", from: "@console:alice", to: "coder", body: "再跑一遍测试", status: "failed", error: "stopped by the sender",
                     createdAt: morning.addingTimeInterval(1_200)),
-            Message(id: "t3", from: "@console:glenn", to: "coder", body: "发版", status: "failed", error: "lease expired",
+            Message(id: "t3", from: "@console:alice", to: "coder", body: "发版", status: "failed", error: "lease expired",
                     createdAt: morning.addingTimeInterval(1_800)),
             sealed,
         ]

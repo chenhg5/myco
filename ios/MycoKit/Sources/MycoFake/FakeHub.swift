@@ -30,7 +30,7 @@ public actor FakeHub: HubAPI {
     }
     public func disconnectRemote(_ id: String) async throws { remoteCalls[id] = nil; remoteDisconnected.append(id) }
 
-    public static let me = "@console:glenn"
+    public static let me = "@console:alice"
 
     private var agents: [AgentStatus]
     private var machines: [Machine]
@@ -263,7 +263,7 @@ public actor FakeHub: HubAPI {
 
     public func whoami() async throws -> Whoami {
         try await check()
-        return Whoami(member: Member(id: "mem_demo", name: "glenn", displayName: "Glenn"))
+        return Whoami(member: Member(id: "mem_demo", name: "alice", displayName: "Alice"))
     }
 
     public func overview() async throws -> Overview {
@@ -671,7 +671,7 @@ public actor FakeHub: HubAPI {
         let name = "\(host.name.lowercased())-\(request.cli)-\(String(format: "%04x", seq))"
         let agent = Agent(
             id: "agt_new\(seq)", name: name, displayName: request.displayName, description: "", binding: Binding(harness: request.cli, workdir: request.dir),
-            createdAt: Date(), owner: "glenn", machineId: machine, runtime: Runtime(cli: request.cli))
+            createdAt: Date(), owner: "alice", machineId: machine, runtime: Runtime(cli: request.cli))
         agents.append(AgentStatus(agent: agent, state: "idle"))
         return SpawnResult(agent: name)
     }
@@ -810,7 +810,7 @@ public actor FakeHub: HubAPI {
         try? await Task.sleep(for: .milliseconds(1_500))
         seq += 1
         var handover = Handover(
-            id: "hov_fake\(seq)", agent: agent, at: Date(), by: "glenn", note: request.note, from: side(of: agents[index].agent),
+            id: "hov_fake\(seq)", agent: agent, at: Date(), by: "alice", note: request.note, from: side(of: agents[index].agent),
             state: "waiting", back: request.back)
         if let back = request.back, let earlier = handoverList.first(where: { $0.id == back }) {
             take(
@@ -827,7 +827,7 @@ public actor FakeHub: HubAPI {
         let index = try await checkHandovers(agent)
         seq += 1
         let handover = Handover(
-            id: "hov_fake\(seq)", agent: agent, at: Date(), by: "glenn", note: note, from: side(of: agents[index].agent),
+            id: "hov_fake\(seq)", agent: agent, at: Date(), by: "alice", note: note, from: side(of: agents[index].agent),
             state: "waiting", back: back)
         handoverList.append(handover)
         takeoverComing = (Date().addingTimeInterval(4), handover.id)
@@ -1170,7 +1170,7 @@ public actor FakeHub: HubAPI {
         let id = "aut_fake\(seq)"
         let hook = request.webhook == true
         let made = Automation(
-            id: id, name: name, owner: "glenn", to: to, body: body, schedule: request.schedule, webhook: hook,
+            id: id, name: name, owner: "alice", to: to, body: body, schedule: request.schedule, webhook: hook,
             webhookUrl: hook ? "https://demo.myco.example/hooks/\(id)" : nil, skipIfBusy: request.skipIfBusy ?? true,
             enabled: request.enabled ?? true, nextRunAt: request.schedule == nil ? nil : Date().addingTimeInterval(3_600))
         automationList.insert(made, at: 0)

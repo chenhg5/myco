@@ -448,7 +448,7 @@ var (
 
 // hostname names this machine for bindings ("environment"). It must stay
 // stable: macOS often derives the BSD host name from DHCP (it becomes the
-// current IP), so there the LocalHostName (e.g. Glenns-MacBook-Pro) is used.
+// current IP), so there the LocalHostName (e.g. Alices-MacBook-Pro) is used.
 // MYCO_HOSTNAME overrides it.
 func hostname() string {
 	hostOnce.Do(func() {

@@ -296,7 +296,7 @@ func TestMachineSeveralHubs(t *testing.T) {
 	def := filepath.Join(dir, "config.yaml")
 	m := &Machine{}
 	m.Put(MachineHub{Hub: "https://home", Machine: "mac", EnrollToken: "t1", NamePrefix: "mac-"})
-	m.Put(MachineHub{Hub: "https://team.example.com/", Machine: "mac", EnrollToken: "t2", NamePrefix: "glenn-mac-"})
+	m.Put(MachineHub{Hub: "https://team.example.com/", Machine: "mac", EnrollToken: "t2", NamePrefix: "alice-mac-"})
 	m.Put(MachineHub{Hub: "https://HOME/", Machine: "mac", EnrollToken: "t3", NamePrefix: "mac-"})
 	m.Spawn.MaxAccess = "full"
 	if err := SaveMachine(def, m); err != nil {
@@ -311,7 +311,7 @@ func TestMachineSeveralHubs(t *testing.T) {
 		t.Fatal(err)
 	}
 	hubs := got.Hubs()
-	if len(hubs) != 2 || hubs[0].EnrollToken != "t3" || hubs[1].NamePrefix != "glenn-mac-" || got.Spawn.MaxAccess != "full" {
+	if len(hubs) != 2 || hubs[0].EnrollToken != "t3" || hubs[1].NamePrefix != "alice-mac-" || got.Spawn.MaxAccess != "full" {
 		t.Fatalf("hubs: %+v", got)
 	}
 	if h, ok := got.For("https://team.example.com"); !ok || h.EnrollToken != "t2" {

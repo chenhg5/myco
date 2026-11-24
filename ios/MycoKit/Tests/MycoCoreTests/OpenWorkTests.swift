@@ -27,7 +27,7 @@ struct OpenWorkTests {
 
     @Test func tasksFromElsewhereAreSaidInItsChat() {
         let current = [
-            task("mine", from: "@console:glenn", status: "acked", ago: 600),
+            task("mine", from: "@console:alice", status: "acked", ago: 600),
             task("old", from: "lead", status: "acked", ago: 6_000),
             task("ask", from: "tester", status: "held", ago: 900, asking: "q"),
             task("new", from: "lead", status: "acked", ago: 30),
@@ -40,7 +40,7 @@ struct OpenWorkTests {
         let elsewhere = OpenWork.elsewhere(status, agent: "coder", shown: ["mine"], now: now)
         #expect(elsewhere.map(\.id) == ["old", "ask", "left"])
         AppLanguage.$forced.withValue(.zh) {
-            let words = OpenWork.words(elsewhere, status: status, me: "@console:glenn", name: { $0 == "tester" ? "测试" : $0 })
+            let words = OpenWork.words(elsewhere, status: status, me: "@console:alice", name: { $0 == "tester" ? "测试" : $0 })
             #expect(words == "它还有 3 条别处来的任务没做完，其中 2 条好一阵没有动静，其中 1 条在等 测试 回答它的问题。")
         }
         #expect(OpenWork.elsewhere(nil, agent: "coder", shown: [], now: now).isEmpty)

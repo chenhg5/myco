@@ -8,7 +8,7 @@ import (
 // A manifest declares the computer's capabilities it uses (os) and the
 // hosts it reaches (net); unknown groups and malformed hosts are refused.
 func TestManifestOSAndNet(t *testing.T) {
-	base := `{"id":"glenn/sea","name":"航海","version":"1.0.0"%s}`
+	base := `{"id":"alice/sea","name":"航海","version":"1.0.0"%s}`
 	ok := func(extra string) *Manifest {
 		t.Helper()
 		m, err := ParseManifest([]byte(strings.Replace(base, "%s", extra, 1)))

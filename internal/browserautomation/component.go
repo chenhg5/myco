@@ -24,7 +24,7 @@ import (
 	"time"
 )
 
-const ComponentVersion = "0.1.0"
+const ComponentVersion = "0.1.1"
 const ComponentRelease = "https://github.com/myco-ai/myco/releases/download/browser-v" + ComponentVersion
 
 // Component owns only the optional process and its private directory. A new
@@ -48,7 +48,18 @@ func (c *Component) dir() string {
 // Only explicitly compatible protocol-1 releases may be reused. Never scan
 // arbitrary version directories, copy old binaries into a new version, or
 // download an unreviewed release just because the App has been upgraded.
-func compatibleComponentVersions() []string { return []string{ComponentVersion} }
+func compatibleComponentVersions() []string { return []string{ComponentVersion, "0.1.0"} }
+
+// CompatibleComponentVersion is the explicit protocol-1 allowlist shared by
+// the local process handshake and agent-host discovery.
+func CompatibleComponentVersion(version string) bool {
+	for _, allowed := range compatibleComponentVersions() {
+		if version == allowed {
+			return true
+		}
+	}
+	return false
+}
 
 func (c *Component) installedComponent() (string, string, bool) {
 	for _, version := range compatibleComponentVersions() {
@@ -102,20 +113,24 @@ func (c *Component) Status() ComponentStatus {
 	return c.statusLocked()
 }
 func (c *Component) Install(ctx context.Context) error {
+	if !browserSupported() {
+		return errors.New("unsupported_platform")
+	}
+	return c.install(ctx)
+}
+
+func (c *Component) install(ctx context.Context) error {
 	if !filepath.IsAbs(c.Home) {
 		return errors.New("home directory is unavailable")
 	}
 	c.mu.Lock()
-	if c.installing || c.process != nil {
+	if c.installing {
 		c.mu.Unlock()
 		return ErrBusy
 	}
 	c.installing = true
 	c.mu.Unlock()
 	defer func() { c.mu.Lock(); c.installing = false; c.mu.Unlock() }()
-	if !browserSupported() {
-		return errors.New("unsupported_platform")
-	}
 	name := "myco-browser_" + runtime.GOOS + "_" + runtime.GOARCH + ".zip"
 	fetch := func(name string, limit int64) ([]byte, error) {
 		req, e := http.NewRequestWithContext(ctx, "GET", ComponentRelease+"/"+name, nil)
@@ -182,13 +197,17 @@ func (c *Component) Install(ctx context.Context) error {
 	// An existing installation is kept until the new archive passed validation.
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.process != nil {
-		return ErrBusy
-	}
 	if _, e = os.Stat(c.dir()); e == nil {
 		return nil
 	}
-	return os.Rename(tmp, c.dir())
+	if e = os.Rename(tmp, c.dir()); e != nil {
+		return e
+	}
+	// Download, checksum and extraction failures leave the old process alive.
+	// Switch only after the new immutable version directory is in place. The
+	// next page call starts the new release; profiles stay in the shared store.
+	c.stopLocked()
+	return nil
 }
 func extractComponent(data []byte, dir string) error {
 	z, e := zip.NewReader(bytes.NewReader(data), int64(len(data)))
@@ -248,7 +267,7 @@ func (c *Component) Start(ctx context.Context) (ComponentStatus, error) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.process != nil {
+	if c.installing || c.process != nil {
 		return c.statusLocked(), ErrBusy
 	}
 	if !c.statusLocked().Installed {
@@ -257,7 +276,7 @@ func (c *Component) Start(ctx context.Context) (ComponentStatus, error) {
 	secret := nonce()
 	cfg := map[string]any{"secret": secret, "data_dir": filepath.Join(c.Home, ".myco", "browser")}
 	// The component is a child with no Hub credentials and no auto-start service.
-	dir, _, _ := c.installedComponent()
+	dir, selectedVersion, _ := c.installedComponent()
 	cmd := exec.Command(filepath.Join(dir, program("myco-browser")))
 	hideComponent(cmd)
 	for _, key := range []string{"HOME", "USERPROFILE", "LOCALAPPDATA", "APPDATA", "ProgramFiles", "ProgramFiles(x86)", "SystemRoot", "WINDIR", "TMP", "TEMP", "TMPDIR", "PATH", "LANG", "LC_ALL"} {
@@ -339,7 +358,7 @@ func (c *Component) Start(ctx context.Context) (ComponentStatus, error) {
 	}
 	err = json.NewDecoder(io.LimitReader(response.Body, 64<<10)).Decode(&actual)
 	response.Body.Close()
-	if err != nil || response.StatusCode != 200 || actual.Protocol != Protocol || actual.Version != ComponentVersion {
+	if err != nil || response.StatusCode != 200 || actual.Protocol != Protocol || actual.Version != selectedVersion || !CompatibleComponentVersion(actual.Version) {
 		return c.statusLocked(), errors.New("incompatible_component")
 	}
 	c.process, c.input, c.done, c.address, c.secret, c.cleanup = cmd, stdin, done, h.Address, secret, cleanup
@@ -399,6 +418,9 @@ func (c *Component) Call(ctx context.Context, scope, method, path string, in, ou
 func (c *Component) Stop() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.stopLocked()
+}
+func (c *Component) stopLocked() {
 	if c.process == nil {
 		return
 	}

@@ -47,7 +47,7 @@ machines that already joined. With --exec, machines that join become exec nodes 
 --allow-from run there as shell commands).`,
 		Examples: []string{
 			"myco link create",
-			`myco link create --uses 1 --expires 24h --note "Glenn's laptop"`,
+			`myco link create --uses 1 --expires 24h --note "Alice's laptop"`,
 			"myco link create --expires 0 --uses 0 --note claude.ai   # for a cloud environment's setup script",
 			"myco link create --exec --allow-from cloud-1 --uses 1    # one exec node",
 		},
@@ -210,7 +210,7 @@ node right away. --allow-shell also lets agents open a terminal (shell node) her
 		Examples: []string{
 			"curl -fsSL https://hub.example.com/j/<token> | bash      # the usual way",
 			"myco machine join --link https://hub.example.com/j/<token>",
-			"myco machine join --link https://hub.example.com/j/<token> --machine glenn-mac --no-service",
+			"myco machine join --link https://hub.example.com/j/<token> --machine alice-mac --no-service",
 			"myco machine join --link https://hub.example.com/j/<token> --allow-shell",
 		},
 		Flags: []Flag{

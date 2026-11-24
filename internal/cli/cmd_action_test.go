@@ -24,7 +24,7 @@ func TestActionCommandsGrantRunSave(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ct, err := admin.CreateConsoleToken(ctx, "glenn-mac")
+	ct, err := admin.CreateConsoleToken(ctx, "alice-mac")
 	if err != nil {
 		t.Fatal(err)
 	}

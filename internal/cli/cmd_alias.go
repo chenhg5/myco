@@ -146,7 +146,7 @@ dashboard. Pass an empty value (--display-name "") to clear it. To give an agent
 		Examples: []string{
 			`myco agent update --display-name "Mac Claude (loops)"`,
 			`myco agent update --name codex-loops-01a1a9c3 --display-name "Codex reviewer" --description "reviews PRs"`,
-			"myco agent update --name mac-exec --allow-from cloud-1,cloud-cc-connect   # admin; the token is unchanged",
+			"myco agent update --name demo-shell --allow-from cloud-1,cloud-sample-app   # admin; the token is unchanged",
 		},
 		Flags: []Flag{
 			{Name: "display-name", Kind: String, Help: "Human-friendly name, up to 80 bytes"},

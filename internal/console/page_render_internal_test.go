@@ -34,7 +34,7 @@ func TestPageExportThroughTheWindowRenderer(t *testing.T) {
 	hs := httptest.NewServer(h.Handler)
 	defer func() { hs.Close(); h.Close() }()
 	admin, _ := client.New(hs.URL, "admin-token-123456")
-	ct, err := admin.CreateConsoleToken(ctx, "glenn-mac")
+	ct, err := admin.CreateConsoleToken(ctx, "alice-mac")
 	if err != nil {
 		t.Fatal(err)
 	}

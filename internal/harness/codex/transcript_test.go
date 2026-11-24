@@ -20,7 +20,7 @@ func TestTranscriptEvents(t *testing.T) {
 		{`{"type":"response_item","payload":{"type":"function_call","call_id":"c6","name":"update_plan","arguments":"{\"plan\":[{\"step\":\"Read the handler\",\"status\":\"completed\"},{\"step\":\"Fix the check\",\"status\":\"in_progress\"},{\"step\":\"Run the tests\",\"status\":\"pending\"}]}"}}`, "tool", "TodoWrite", "[x] Read the handler\n[~] Fix the check\n[ ] Run the tests"},
 		{`{"type":"response_item","payload":{"type":"function_call","call_id":"c3","name":"spawn_agent","namespace":"collaboration","arguments":"{\"task_name\":\"brain\"}"}}`, "tool", "collaboration.spawn_agent", `{"task_name":"brain"}`},
 		{`{"type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"c1","output":[{"type":"input_text","text":"Script completed\n"},{"type":"input_text","text":"ok"}]}}`, "tool_result", "", "Script completed\nok"},
-		{`{"type":"response_item","payload":{"type":"function_call_output","call_id":"c3","output":"{\"task_name\":\"/root/brain\"}"}}`, "tool_result", "", `{"task_name":"/root/brain"}`},
+		{`{"type":"response_item","payload":{"type":"function_call_output","call_id":"c3","output":"{\"task_name\":\"/root/example\"}"}}`, "tool_result", "", `{"task_name":"/root/example"}`},
 	}
 	for _, c := range cases {
 		evs := TranscriptEvents([]byte(c.line))

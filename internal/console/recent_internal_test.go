@@ -35,7 +35,7 @@ func TestRefineRecentShellExitCode(t *testing.T) {
 func TestFilterRecent(t *testing.T) {
 	items := []api.RecentItem{
 		{Kind: "pair", Other: "lead", Node: "box", Last: api.Message{Body: `{"exit_code":0}`}},
-		{Kind: "thread", Participants: []string{"@console:glenn", "docs"}, First: api.Message{Body: "Write the release notes"}},
+		{Kind: "thread", Participants: []string{"@console:alice", "docs"}, First: api.Message{Body: "Write the release notes"}},
 	}
 	if got := filterRecent(append([]api.RecentItem{}, items...), "BOX"); len(got) != 1 || got[0].Node != "box" {
 		t.Fatalf("by node name: %+v", got)

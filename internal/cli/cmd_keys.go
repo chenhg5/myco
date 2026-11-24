@@ -84,7 +84,7 @@ func keysCommands() *Command {
 send to, or read from, an agent whose keys changed: the hub could have swapped them. When you know
 the agent made new keys (its machine or profile was set up again), compare the fingerprint with its
 owner (myco keys show on its machine), then trust the new keys.`,
-		Examples: []string{"myco keys trust --who laohu-claude"},
+		Examples: []string{"myco keys trust --who bob-claude"},
 		Flags:    []Flag{{Name: "who", Kind: String, Required: true, Help: "The agent whose keys changed"}},
 		Run: handler(func(e *env) error {
 			if err := e.in.Require("who"); err != nil {

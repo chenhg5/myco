@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sync"
 	"testing"
@@ -20,6 +21,7 @@ type pausedPopupClient struct {
 	events                                chan *cdp.Event
 	binding, preload, autoAttach, resumed bool
 	attaches, detaches                    int
+	attachWaits                           []bool
 }
 
 func (c *pausedPopupClient) Event() <-chan *cdp.Event { return c.events }
@@ -33,6 +35,14 @@ func (c *pausedPopupClient) Call(ctx context.Context, sid, method string, params
 		c.preload = true
 	case "Target.setAutoAttach":
 		c.autoAttach = true
+		raw, _ := json.Marshal(params)
+		var in struct {
+			Wait bool `json:"waitForDebuggerOnStart"`
+		}
+		if err := json.Unmarshal(raw, &in); err != nil {
+			return nil, err
+		}
+		c.attachWaits = append(c.attachWaits, in.Wait)
 	case "Runtime.runIfWaitingForDebugger":
 		if !c.binding || !c.preload || !c.autoAttach {
 			return nil, errors.New("resumed before collector installation")
@@ -220,5 +230,33 @@ func TestActionCancellationDoesNotCancelCollectorInstallation(t *testing.T) {
 	// A normal Rod helper still inherits cancellation even if it used root ctx.
 	if _, err := wire.Call(context.Background(), "primary", "Runtime.callFunctionOn", nil); !errors.Is(err, context.Canceled) {
 		t.Fatal("Rod helper escaped action cancellation", err)
+	}
+}
+
+// Exercise installation including Rod's page setup, not just a flag helper.
+func TestIframeDescendantsAttachWithoutPausing(t *testing.T) {
+	for _, kind := range []string{"page", "iframe"} {
+		t.Run(kind, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			wire := &pausedPopupClient{events: make(chan *cdp.Event)}
+			defer close(wire.events)
+			s := &session{ctx: ctx, pages: map[proto.TargetTargetID]*rod.Page{}, installs: map[proto.TargetTargetID]*targetInstall{}, targets: map[proto.TargetSessionID]proto.TargetTargetID{}, contexts: map[string]map[proto.RuntimeExecutionContextID]proto.PageFrameID{}}
+			s.browser = rod.New().Context(ctx).ControlURL("").Client(&sessionClient{base: wire, owner: s}).NoDefaultDevice()
+			if err := s.browser.Connect(); err != nil {
+				t.Fatal(err)
+			}
+			if err := s.installTarget(proto.TargetAttachedToTarget{SessionID: "primary", TargetInfo: &proto.TargetTargetInfo{TargetID: "target", Type: proto.TargetTargetInfoType(kind)}}); err != nil {
+				t.Fatal(err)
+			}
+			wire.mu.Lock()
+			defer wire.mu.Unlock()
+			if len(wire.attachWaits) != 1 || wire.attachWaits[0] != (kind == "page") {
+				t.Fatalf("%s auto-attach waits: %v", kind, wire.attachWaits)
+			}
+			if !wire.binding || !wire.preload || !wire.resumed {
+				t.Fatal("collector installation or initial-target resume lost")
+			}
+		})
 	}
 }

@@ -31,7 +31,7 @@ func TestConsoleServiceTouchesAtMostOncePerMinute(t *testing.T) {
 	if _, _, err := svc.Create(ctx, "  "); !domain.IsCode(err, domain.CodeInvalidArgument) {
 		t.Fatalf("blank name: %v", err)
 	}
-	tok, plain, err := svc.Create(ctx, "glenn-mac")
+	tok, plain, err := svc.Create(ctx, "alice-mac")
 	if err != nil || !strings.HasPrefix(plain, app.ConsoleTokenPrefix) || tok.TokenHash == "" || strings.Contains(tok.TokenHash, plain) {
 		t.Fatalf("create: %v %+v", err, tok)
 	}

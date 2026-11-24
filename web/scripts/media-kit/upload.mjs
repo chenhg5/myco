@@ -7,8 +7,11 @@ const args = process.argv.slice(2),
   value = (key, fallback) =>
     args.includes(key) ? args[args.indexOf(key) + 1] : fallback;
 const out = path.resolve(value("--out", "../media-kit-output"));
-const page = value("--page", "pg_h3ckpnrw4xgo4oox"),
-  project = value("--project", "myco-team");
+const page = value("--page"), project = value("--project");
+if (!page || page.startsWith("--") || !project || project.startsWith("--")) {
+  console.error("Usage: upload.mjs --page <page-id> --project <project-name> [--out <directory>] [--upload] [--metadata-only]");
+  process.exit(2);
+}
 const live = args.includes("--upload");
 const metadataOnly = args.includes("--metadata-only");
 const descriptions = {

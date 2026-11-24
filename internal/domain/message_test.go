@@ -425,7 +425,7 @@ func TestAskSenderWakesAgentSenders(t *testing.T) {
 	for _, tc := range []struct {
 		from AgentName
 		want Status
-	}{{"alice", StatusQueued}, {"@console:glenn", StatusDone}} {
+	}{{"alice", StatusQueued}, {"@console:alice", StatusDone}} {
 		m, err := NewMessage("msg_1", tc.from, "bob", TypeTask, "do it", "", "", "", now)
 		if err != nil {
 			t.Fatal(err)

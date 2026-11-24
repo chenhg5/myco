@@ -11,8 +11,8 @@ import (
 // newest, Open the one still unfinished, so the app can tell it may be stuck.
 func TestRecentRowKeepsAnOlderOpenTask(t *testing.T) {
 	now := time.Now()
-	stuck := &domain.Message{ID: "old", Type: domain.TypeTask, Status: domain.StatusAcked, From: "@console:glenn", To: "worker", CreatedAt: now.Add(-19 * time.Hour)}
-	done := &domain.Message{ID: "new", Type: domain.TypeTask, Status: domain.StatusDone, From: "@console:glenn", To: "worker", CreatedAt: now.Add(-time.Hour)}
+	stuck := &domain.Message{ID: "old", Type: domain.TypeTask, Status: domain.StatusAcked, From: "@console:alice", To: "worker", CreatedAt: now.Add(-19 * time.Hour)}
+	done := &domain.Message{ID: "new", Type: domain.TypeTask, Status: domain.StatusDone, From: "@console:alice", To: "worker", CreatedAt: now.Add(-time.Hour)}
 
 	it := threadItem(domain.ThreadRef{ID: "th"}, []*domain.Message{stuck, done}) // oldest first
 	if it.Task != done || it.Open != stuck || it.State != "working" {

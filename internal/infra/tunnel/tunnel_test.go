@@ -41,8 +41,8 @@ func TestCloudflaredConfig(t *testing.T) {
 }
 
 func TestTailscaleStatus(t *testing.T) {
-	state, dns := tailscaleStatus(`{"BackendState":"Running","Self":{"DNSName":"glenn-mac.tail1234.ts.net.","HostName":"glenn-mac"}}`)
-	if state != "Running" || dns != "glenn-mac.tail1234.ts.net" {
+	state, dns := tailscaleStatus(`{"BackendState":"Running","Self":{"DNSName":"alice-mac.tail1234.ts.net.","HostName":"alice-mac"}}`)
+	if state != "Running" || dns != "alice-mac.tail1234.ts.net" {
 		t.Fatalf("got %q %q", state, dns)
 	}
 	if state, dns := tailscaleStatus("Warning: client version \"1.104\" != tailscaled server version \"1.102\"\n" + `{"BackendState":"Running","Self":{"DNSName":"m.tail1.ts.net."}}`); state != "Running" || dns != "m.tail1.ts.net" {

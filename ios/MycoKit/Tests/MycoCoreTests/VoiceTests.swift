@@ -166,7 +166,7 @@ struct VoicePartsTests {
     }
 
     @Test func theModelIsToldWhoTheAgentIsAndHowThingsStand() {
-        let me = "@console:glenn", agent = "studio-claude"
+        let me = "@console:alice", agent = "studio-claude"
         let start = Date(timeIntervalSince1970: 1_800_000_000)
         var task = Message(id: "t1", from: me, to: agent, body: "把下载页改一下", status: "held", createdAt: start)
         task.asking = "q1"

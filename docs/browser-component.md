@@ -4,7 +4,14 @@ The desktop App can record and replay a linear workflow in a dedicated local Chr
 
 ## Install and use
 
-Open Web automation in the Mac or Windows App, then choose **Install browser component**. The App asks for confirmation in its own dialog, downloads the pinned `browser-v0.1.0` release, checks `SHA256SUMS`, and installs it under `~/.myco/components/browser/0.1.0/`. Installation is optional and never happens on a status request. An unpublished component release produces an installation error; it is not replaced with an arbitrary version.
+Open Web automation in the Mac or Windows App, then choose **Install browser component**. The App asks for confirmation in its own dialog, downloads the pinned `browser-v0.1.1` release, checks `SHA256SUMS`, and installs it under `~/.myco/components/browser/0.1.1/`. Installation is optional and never happens on a status request. An unpublished component release produces an installation error; it is not replaced with an arbitrary version.
+
+An existing 0.1.0 installation remains usable and reports `update_available`.
+Choose **Update component** to install 0.1.1. The App verifies and installs the
+new package before stopping the old process; download or checksum failures leave
+the old process available. The next browser operation starts the new version.
+Finish recording or playback before updating, because the old browser sessions
+will close. Profiles and login data are retained.
 
 Install Google Chrome yourself. On Windows, Microsoft Edge is used if Chrome is absent. No Chromium download, user-agent override, extension, system service, or everyday browser profile is used. Recording opens a normal visible browser. Log in there yourself when a workflow needs authentication.
 
@@ -42,6 +49,14 @@ The private component API is authenticated and not a public Hub API:
 | `GET /artifacts/{id}` | Scope-checked local artifacts |
 
 Recorded locator lists prefer test IDs, semantic role/name, label/placeholder, text, CSS, then XPath. Open shadow roots and frame chains are retained. The collector runs in an isolated CDP world and uses bindings/events, not Go polling. Renderer navigation is a `wait:url`, popup creation a `tab:popup`, downloads a `wait:download`, and dialogs explicit `dialog:accept/dismiss` nodes. Playback arms the next dialog before the triggering action. Tab indices are 0-based in each run. Navigation URLs omit queries to avoid persisting credentials; review any workflow requiring query parameters and supply an explicitly safe URL yourself.
+
+Iframe sessions attach their descendants without pausing them, so verification
+widgets can initialize normally. Pages and popups retain their paused collector
+bootstrap. New-document hooks and existing-context injection capture iframe
+events after installation; the earliest events before installation may be missed.
+The component adds `--disable-blink-features=AutomationControlled` while keeping
+Chrome's native user agent and avoiding stealth scripts. Website challenges can
+still require a person's interaction.
 
 M0/M1 accepts a single connected, acyclic sequence, up to 128 nodes. Branches, loops and subflows fail validation before the browser opens. Element actions wait for visibility/interactability, not inserted sleeps. Explicit `wait:time` is supported when a person deliberately adds it. `stop`, `skip`, and `retry:1..5` failure policies are supported. Unknown or ambiguous targets fail instead of clicking an arbitrary match.
 
@@ -90,7 +105,7 @@ job. Results and screenshots are private artifacts, not shared page records.
 
 All code fields must be fixed text without `${...}`, including human runs and
 code consuming extracted website values. Use declared parameters only for text,
-URL and selector fields. The installed 0.1.0 component still rejects branch,
+URL and selector fields. The installed 0.1.x component still rejects branch,
 loop and subflow nodes before opening a browser. Agent runs cannot use secret
 parameters, uploads, Start here or breakpoints. A profile already controlled by a
 person or another run is not taken over. No automatic restart or replay bypasses

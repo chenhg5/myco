@@ -57,11 +57,11 @@ func memberCommands() *Command {
 Members see every node and conversation and talk to any node, but manage only what they add;
 admins manage everyone's. Keep the link private.`,
 		Examples: []string{
-			`myco member invite --name laohu --display-name "老胡"`,
-			"myco member invite --name matthew --role admin",
+			`myco member invite --name bob --display-name "Bob"`,
+			"myco member invite --name carol --role admin",
 		},
 		Flags: []Flag{
-			{Name: "name", Kind: String, Required: true, Help: "Handle, e.g. laohu (shown as the sender of what they send)"},
+			{Name: "name", Kind: String, Required: true, Help: "Handle, e.g. bob (shown as the sender of what they send)"},
 			{Name: "display-name", Kind: String, Help: "Full name"},
 			{Name: "role", Kind: Enum, Values: []string{"member", "admin"}, Default: "member", Help: "member: manages own nodes; admin: manages everything and everyone"},
 			adminFlag,
@@ -90,9 +90,9 @@ admins manage everyone's. Keep the link private.`,
 		Summary:  "Rename someone or change their role (role owner hands over the hub)",
 		Mutating: true,
 		Examples: []string{
-			"myco member update --name owner --new-name glenn",
-			"myco member update --name laohu --role admin",
-			"myco member update --name matthew --role owner   # hand over ownership",
+			"myco member update --name owner --new-name alice",
+			"myco member update --name bob --role admin",
+			"myco member update --name carol --role owner   # hand over ownership",
 		},
 		Flags: []Flag{
 			{Name: "name", Kind: String, Required: true, Help: "The member's current handle"},
@@ -125,7 +125,7 @@ admins manage everyone's. Keep the link private.`,
 		Name:     "remove",
 		Summary:  "Take someone off the hub (their app links stop working; their nodes stay)",
 		Mutating: true,
-		Examples: []string{"myco member remove --name laohu"},
+		Examples: []string{"myco member remove --name bob"},
 		Flags:    []Flag{{Name: "name", Kind: String, Required: true, Help: "The member's handle"}, adminFlag},
 		Run: handler(func(e *env) error {
 			if err := e.in.Require("name"); err != nil {
@@ -153,7 +153,7 @@ func agentOwnerCommand() *Command {
 		Name:     "owner",
 		Summary:  "Give a node to another person on the hub (owner or admin)",
 		Mutating: true,
-		Examples: []string{"myco agent owner --name laohu-claude --owner glenn"},
+		Examples: []string{"myco agent owner --name bob-claude --owner alice"},
 		Flags: []Flag{
 			{Name: "name", Kind: String, Required: true, Help: "Node (agent) name"},
 			{Name: "owner", Kind: String, Required: true, Help: "Member handle"},
@@ -183,7 +183,7 @@ func auditCommand() *Command {
 		Summary: "Who did what on this hub: invites, removals, links, sessions started, tasks sent from the app",
 		Long: `Reads the hub's audit log (owner or admin), newest first. It records administrative actions and
 tasks people send from the app, never message bodies; messages between agents are in their threads.`,
-		Examples: []string{"myco audit", "myco audit --actor laohu --limit 50", "myco audit --target laohu-claude"},
+		Examples: []string{"myco audit", "myco audit --actor bob --limit 50", "myco audit --target bob-claude"},
 		Flags: []Flag{
 			{Name: "actor", Kind: String, Help: "Only actions by this member (or agent, or admin)"},
 			{Name: "target", Kind: String, Help: "Only actions on this node, member, machine or link"},

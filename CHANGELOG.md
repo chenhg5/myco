@@ -4,6 +4,28 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.22.8
+
+- **Web automation records inside cross-origin frames**: clicks and typing in a page's cross-site iframes, including frames nested inside them, are recorded with a selector path that replays on the right frame. Pages whose verification widget loads in a nested frame, such as Cloudflare Turnstile on V2EX, no longer stay stuck while the recorder attaches.
+- **Browser component 0.1.1**: the app now installs the new component. A component already installed as 0.1.0 keeps working until you choose "Update component" in the app; the update is verified before the old process stops, so a failed download or checksum check leaves the current component, its browser sessions and profiles untouched. Updating does interrupt sessions still using the old process, so finish recording or playback first.
+- **Agents' browser scripts are approved where they run**: when an agent asks to run a script, the computer's owner sees the exact version, every URL it visits, its executable code, its sub-scripts and the full snapshot before allowing. Approval belongs to that App setup, workspace, account, page and browser profile, and the agent still needs its own short-lived grant. A paused run waits at most 15 minutes and never past the grant, and results and screenshots stay private files.
+- **A resumed browser run keeps reporting**: after you confirm or start a paused run it goes on reporting steps and results instead of stopping at the first acknowledgement, and a pause with no new events no longer ends the job.
+- **Search shows the mushroom looking**: while ⌘K has not found anything yet, the pixel mushroom paces with a magnifying glass and names the words being searched; message search also no longer starts over on every overview refresh, which could keep it searching forever on a slow network.
+- **Context menus stay open while another pane scrolls**: a background chat scroll or scrolling inside the menu no longer closes it; only scrolling the pane the menu came from does.
+
+Upgrade: this App release needs no Hub upgrade. Agents using a computer's browser through the Hub still need Hub 0.22.7 on the server: run `sudo myco upgrade` there.
+
+**中文**
+
+- **网页自动化可以录制跨源 frame**：页面里跨站的 iframe（包括嵌套在其中的 frame）中的点击和输入也会被录下来，选择器路径能在正确的 frame 上回放。验证组件加载在嵌套 frame 里的页面，例如 V2EX 的 Cloudflare Turnstile，不会再因为录制器附加而卡住。
+- **浏览器组件 0.1.1**：应用会安装新的组件。已经装了 0.1.0 的照常可用，在应用里点「更新组件」即可升级；更新会先校验再停掉旧进程，下载或校验失败时现有组件、浏览器会话和资料都不受影响。更新会中断仍在使用旧进程的会话，请先结束录制或回放。
+- **agent 的浏览器脚本在运行它的电脑上批准**：agent 申请运行脚本时，电脑主人会先看到确切的版本、它访问的每个网址、可执行代码、子脚本和完整快照，然后再决定是否允许。批准只属于这个 App 的配置、工作区、账号、页面和浏览器资料，agent 仍需单独申请短期授权。暂停的运行最多等 15 分钟，且不会超过授权到期；结果和截图只作为私有文件返回。
+- **恢复后的浏览器运行继续上报**：确认或启动暂停的运行后，它会继续上报步骤和结果，不再在收到第一条确认后就停下；没有新事件的暂停心跳也不会结束任务。
+- **搜索时有蘑菇在找**：⌘K 还没搜到结果时，像素蘑菇拿着放大镜来回找，并显示正在搜索的词；消息搜索也不再随每次总览刷新重新开始，慢网络下不会一直搜不完。
+- **别的面板滚动时右键菜单不会关闭**：后台聊天自动滚动或在菜单内部滚动不再关掉菜单，只有菜单来源所在的面板滚动才会关闭。
+
+升级：这个 App 版本本身不需要升级 Hub。让 agent 通过 Hub 使用某台电脑的浏览器仍需要服务器上的 Hub 0.22.7（`sudo myco upgrade`）。
+
 ## v0.22.7
 
 - **Web automation records and replays a workflow in a dedicated browser profile**: the official Web automation app can record the clicks, typing and navigation you make in a visible browser window, then replay that sequence step by step or in one run, with a breakpoint or a confirmation before anything consequential. It needs the optional browser component, which the app installs from its own dialog on Mac (Apple silicon and Intel) and Windows; the component never downloads a browser or uses your everyday profile, and profiles, cookies, passwords and downloads stay on this computer.
@@ -266,7 +288,7 @@ Upgrade: this release needs the Hub updated as well. On the server run `sudo myc
 
 ## v0.21.26
 
-- **A member's chat leaves terminal commands out**: since v0.21.24 a member's chat in a project showed its exchanges with everyone, which brought each command it ran on a terminal (`ls`, `cat` on mac-exec) in as a card. Only its exchanges with other AIs show now; a terminal still shows when the project lists it.
+- **A member's chat leaves terminal commands out**: since v0.21.24 a member's chat in a project showed its exchanges with everyone, which brought each command it ran on a terminal (`ls`, `cat` on demo-shell) in as a card. Only its exchanges with other AIs show now; a terminal still shows when the project lists it.
 - **Pages play public audio and video**: a page can play a podcast or a video from a public address through the App, streamed as it plays (seeking works), instead of downloading it whole first.
 - **New apps**: Voyage (航海), a 3D sea to explore by boat, with a lifelike sea, sky and weather; a podcast globe to discover and listen to public podcasts by region; a shopping comparison where an agent finds offers with their sources.
 - Cinema's full screen works in the Mac desktop App, without corner overlays.
@@ -275,7 +297,7 @@ Upgrade: this release needs the Hub updated as well. On the server run `sudo myc
 
 **中文**
 
-- **成员对话里不再出现终端命令**：从 v0.21.24 起，项目里成员的对话会显示它和所有人的往来，结果它在终端上跑的每条命令（比如在 mac-exec 上的 `ls`、`cat`）也成了一张卡片。现在只显示它和其他 AI 的往来；项目里本来就列着的终端照常显示。
+- **成员对话里不再出现终端命令**：从 v0.21.24 起，项目里成员的对话会显示它和所有人的往来，结果它在终端上跑的每条命令（比如在 demo-shell 上的 `ls`、`cat`）也成了一张卡片。现在只显示它和其他 AI 的往来；项目里本来就列着的终端照常显示。
 - **页面可以播放公开的音频和视频**：页面能通过 App 播放公开地址上的播客或视频，边播边传（可以拖进度），不用先整个下载下来。
 - **新应用**：航海（坐船在 3D 海面上航行，海、天空和天气都很逼真）；播客地球（按地区发现并收听公开播客）；比价购物（agent 帮你找报价，并附上来源）。
 - 影视在 Mac 桌面 App 里可以正常全屏，四角也不再有遮挡。
@@ -913,7 +935,7 @@ Upgrade: this release needs the Hub updated as well. On the server run `sudo myc
 - **New Codex agents no longer fail with "not in a trusted directory"**: Codex used to refuse to start when the new folder wasn't a git repository.
 - **Open to the internet in one click**: the default is "One click (recommended)", which uses a temporary Cloudflare address and needs no account. If cloudflared isn't installed, the App downloads it (on a Mac through Homebrew if you have it, otherwise from Cloudflare's official releases, with the download verified). The address changes after this computer restarts; just click again.
 - **A freshly copied session no longer says "in use" right away**: when a session is briefly busy, the App first retries in place a few times, and only goes back to the queue if it really is in use.
-- **The name on a Mac is the computer name**: before, it could be the IP address your router assigned (like `192-168-1-210-…`); now it is the computer name from System Settings.
+- **The name on a Mac is the computer name**: before, it could be the IP address your router assigned (like `192-168-1-42-…`); now it is the computer name from System Settings.
 - Sent messages no longer appear twice.
 - "Meet your workspace" is ticked off as soon as you open Settings › Workspace.
 
@@ -922,7 +944,7 @@ Upgrade: this release needs the Hub updated as well. On the server run `sudo myc
 - **新开 Codex 不再报「不在受信任的目录」**：新建的文件夹不是 git 仓库时，Codex 以前会拒绝启动。
 - **开放到公网一键完成**：默认是「一键开放（推荐）」，用 Cloudflare 临时地址，不用账号。没装 cloudflared 时 App 会自己下载（Mac 上有 Homebrew 就用它，否则从 Cloudflare 的官方发布下载并校验）。这台电脑重启后地址会变，再点一次就行。
 - **刚复制的会话不再马上说「被占用」**：会话短暂被占用时先原地重试几次，真被占用才退回排队。
-- **Mac 上的名字用电脑名**：以前可能用的是路由器分的 IP（比如 `192-168-1-210-…`），现在用「系统设置」里的电脑名。
+- **Mac 上的名字用电脑名**：以前可能用的是路由器分的 IP（比如 `192-168-1-42-…`），现在用「系统设置」里的电脑名。
 - 发出去的消息不再出现两次。
 - 「认识你的工作区」打开设置 › 工作区就打勾。
 

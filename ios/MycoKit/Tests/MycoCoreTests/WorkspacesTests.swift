@@ -29,7 +29,7 @@ struct WorkspacesTests {
                     body = #"{"token":"myco_console_\#(Hubs.seen.count)","device":{"id":"con_1","name":"iphone"}}"#
                 }
             } else if url.path.hasSuffix("/v1/console/me") {
-                body = #"{"member":{"id":"mem_1","name":"glenn","role":"owner","created_at":"2026-11-13T09:21:30.593Z"},"device":{"id":"con_1","name":"iphone"},"can_manage":true}"#
+                body = #"{"member":{"id":"mem_1","name":"alice","role":"owner","created_at":"2026-11-13T09:21:30.593Z"},"device":{"id":"con_1","name":"iphone"},"can_manage":true}"#
             }
             let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil)!
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
@@ -107,7 +107,7 @@ struct WorkspacesTests {
         let (book, _) = book()
         // Hosts that are addresses say nothing: "my workspace", then numbered.
         let first = try await book.join(link: "http://192.168.1.20:7777/c/myco_pair_a")
-        let second = try await book.join(link: "https://193-46-198-17.sslip.io/c/myco_pair_b")
+        let second = try await book.join(link: "https://203-0-113-17.sslip.io/c/myco_pair_b")
         // A hub that serves several: the workspace's name in its address.
         let design = try await book.join(link: "https://hub.example.com/w/design/c/myco_pair_c")
         AppLanguage.$forced.withValue(.en) {

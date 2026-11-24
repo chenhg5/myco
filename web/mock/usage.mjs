@@ -3,11 +3,11 @@ export function usageFixture(hub, projects, { from, to, project }) {
   const available = hub.agents.filter((a) => (!a.kind || a.kind === "agent") && a.visibility !== "private")
     .sort((a, b) => Number((b.binding?.harness || "").includes("cloud")) - Number((a.binding?.harness || "").includes("cloud")));
   if (available.filter((a) => (a.binding?.harness || "").includes("cloud")).length < 2) {
-    available.splice(1, 0, { name: "usage-opus-planner", display_name: "Opus · Planning", owner: "glenn", binding: { harness: "claude-cloud" } });
+    available.splice(1, 0, { name: "usage-opus-planner", display_name: "Opus · Planning", owner: "alice", binding: { harness: "claude-cloud" } });
   }
-  const agents = available.slice(0, 8).map((a) => ({ name: a.name, display_name: a.display_name, owner: a.owner || "glenn", harness: a.binding?.harness, machine: hub.machines?.find((m) => m.id === a.machine_id)?.name || "Cloud" }));
+  const agents = available.slice(0, 8).map((a) => ({ name: a.name, display_name: a.display_name, owner: a.owner || "alice", harness: a.binding?.harness, machine: hub.machines?.find((m) => m.id === a.machine_id)?.name || "Cloud" }));
   const names = ["Opus · Research", "Opus · Planning", "Codex · Backend", "Codex · App", "DeepSeek · Docs", "DeepSeek · Review", "Codex · Tests", "Sonnet · Support"];
-  for (let i = agents.length; i < 8; i++) agents.push({ name: `usage-demo-${i}`, display_name: names[i], owner: "glenn", harness: i < 2 ? "claude-cloud" : "codex", machine: "Cloud" });
+  for (let i = agents.length; i < 8; i++) agents.push({ name: `usage-demo-${i}`, display_name: names[i], owner: "alice", harness: i < 2 ? "claude-cloud" : "codex", machine: "Cloud" });
   const models = ["claude-opus-4-5", "claude-opus-4-5", "gpt-5.1-codex", "gpt-5.1-codex", "deepseek-v3.2", "deepseek-v3.2", "gpt-5.1-codex", "claude-sonnet-4-5"];
   const projectNames = projects.map((p) => p.name).slice(0, 3);
   for (const name of ["website", "research", "infrastructure"]) if (projectNames.length < 3 && !projectNames.includes(name)) projectNames.push(name);

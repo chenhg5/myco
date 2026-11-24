@@ -861,7 +861,7 @@ func TestExecNodeViaEnrollment(t *testing.T) {
 	work := filepath.Join(home, "exec")
 	os.Mkdir(work, 0o700)
 	node := func(tok string) *harnessT {
-		return &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ENROLL_TOKEN": tok, "USER": "glenn"}}
+		return &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ENROLL_TOKEN": tok, "USER": "alice"}}
 	}
 	if code, _, _ := node(general).run("agent", "enroll", "--harness", "exec", "--name", "wsl-shell", "--workdir", work); code != ExitPermission {
 		t.Fatalf("a general enrollment must not create exec nodes, exit %d", code)
@@ -870,7 +870,7 @@ func TestExecNodeViaEnrollment(t *testing.T) {
 		t.Fatalf("exec enroll without --name, exit %d", code)
 	}
 	code, out, e := node(execTok).run("agent", "enroll", "--harness", "exec", "--name", "wsl-shell", "--workdir", work, "--format", "text")
-	if code != 0 || !strings.Contains(out, "commands from boss will run here as glenn") {
+	if code != 0 || !strings.Contains(out, "commands from boss will run here as alice") {
 		t.Fatalf("exec enroll: %d %s %s", code, out, e)
 	}
 	// Re-running recovers the same node even though the token's single use is spent.
@@ -1099,9 +1099,9 @@ func TestJoinLinks(t *testing.T) {
 	execTok := strings.TrimPrefix(link.JoinURL, hub+"/j/")
 	home2 := t.TempDir()
 	testutil.SetHome(t, home2)
-	ex := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_JOIN_TOKEN": execTok, "USER": "glenn"}}
+	ex := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_JOIN_TOKEN": execTok, "USER": "alice"}}
 	code, out, e = ex.run("machine", "join", "--machine", "box2", "--no-service", "--workdir", home2, "--format", "text")
-	if code != 0 || !strings.Contains(out, "exec node box2-shell ready: tasks from boss run here as glenn") {
+	if code != 0 || !strings.Contains(out, "exec node box2-shell ready: tasks from boss run here as alice") {
 		t.Fatalf("exec machine join: %d %s %s", code, out, e)
 	}
 	if b, err := os.ReadFile(filepath.Join(home2, ".myco", "agents", "box2-shell.yaml")); err != nil || !strings.Contains(string(b), "harness: exec") {
@@ -1117,7 +1117,7 @@ func TestJoinLinks(t *testing.T) {
 	}
 	_, out, _ = admin.run("link", "create", "--exec", "--allow-from", "boss", "--uses", "1", "--format", "json")
 	json.Unmarshal([]byte(out), &link)
-	ex2 := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_JOIN_TOKEN": strings.TrimPrefix(link.JoinURL, hub+"/j/"), "USER": "glenn"}}
+	ex2 := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_JOIN_TOKEN": strings.TrimPrefix(link.JoinURL, hub+"/j/"), "USER": "alice"}}
 	app := filepath.Join(home2, "code", "My App!")
 	if err := os.MkdirAll(app, 0o755); err != nil {
 		t.Fatal(err)
@@ -1283,7 +1283,7 @@ func TestRunnerSurvivesMachineRename(t *testing.T) {
 	admin := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(t.TempDir(), "a.yaml")}}
 	for _, s := range []struct{ name, session string }{{"here", "sess-here-1"}, {"elsewhere", "sess-away-2"}} {
 		admin.run("agent", "register", "--name", s.name, "--harness", "claude", "--session-id", s.session,
-			"--environment", "192.168.1.210", "--no-save", "--format", "json")
+			"--environment", "192.168.1.42", "--no-save", "--format", "json")
 		_, out, _ := admin.run("agent", "register", "--name", s.name, "--rotate-token", "--no-save", "--format", "json")
 		var reg struct{ Token string }
 		json.Unmarshal([]byte(out), &reg)
@@ -1308,7 +1308,7 @@ func TestRunnerSurvivesMachineRename(t *testing.T) {
 	if got := env("here"); got != hostname() {
 		t.Fatalf("local session should be taken over and rebound to %q, got %q", hostname(), got)
 	}
-	if got := env("elsewhere"); got != "192.168.1.210" {
+	if got := env("elsewhere"); got != "192.168.1.42" {
 		t.Fatalf("a session not on this machine must stay bound to its machine, got %q", got)
 	}
 }
@@ -1321,15 +1321,15 @@ func TestHubServeWithTunnels(t *testing.T) {
 	os.WriteFile(filepath.Join(bin, "cloudflared"), []byte("#!/bin/sh\necho 'INF Requesting new quick Tunnel on trycloudflare.com...' >&2\necho 'INF |  https://fake-quick-tunnel.trycloudflare.com  |' >&2\nexec sleep 60\n"), 0o755)
 	os.WriteFile(filepath.Join(bin, "tailscale"), []byte(`#!/bin/sh
 case "$1" in
-  status) echo '{"BackendState":"Running","Self":{"DNSName":"glenn-mac.tail1234.ts.net."}}' ;;
-  funnel) echo "funnel $*" >> "$(dirname "$0")/funnel.log"; echo "Available on the internet: https://glenn-mac.tail1234.ts.net/" ;;
+  status) echo '{"BackendState":"Running","Self":{"DNSName":"alice-mac.tail1234.ts.net."}}' ;;
+  funnel) echo "funnel $*" >> "$(dirname "$0")/funnel.log"; echo "Available on the internet: https://alice-mac.tail1234.ts.net/" ;;
 esac
 `), 0o755)
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	for _, tc := range []struct{ kind, want string }{
 		{"cloudflare", "https://fake-quick-tunnel.trycloudflare.com"},
-		{"tailscale", "https://glenn-mac.tail1234.ts.net"},
+		{"tailscale", "https://alice-mac.tail1234.ts.net"},
 	} {
 		t.Run(tc.kind, func(t *testing.T) {
 			dir := t.TempDir()

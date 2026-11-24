@@ -19,14 +19,14 @@ func TestSuperagentPowersAndApprovals(t *testing.T) {
 	c := ctx(t)
 	h := startHub(t, filepath.Join(t.TempDir(), "hub.db"), app.DefaultMessagePolicy())
 	admin := h.admin()
-	if _, err := admin.UpdateMember(c, "owner", api.MemberUpdateRequest{Name: "glenn"}); err != nil {
+	if _, err := admin.UpdateMember(c, "owner", api.MemberUpdateRequest{Name: "alice"}); err != nil {
 		t.Fatal(err)
 	}
-	ct, err := admin.CreateConsoleToken(c, "glenn-mac")
+	ct, err := admin.CreateConsoleToken(c, "alice-mac")
 	if err != nil {
 		t.Fatal(err)
 	}
-	glenn := h.client(ct.Token)
+	alice := h.client(ct.Token)
 	shroom := h.client(h.register(api.RegisterRequest{Name: "shroom", Binding: api.Binding{Harness: "claude", SessionID: "s1"}}))
 	h.register(api.RegisterRequest{Name: "helper", Binding: api.Binding{Harness: "codex", SessionID: "s2"}})
 
@@ -40,13 +40,13 @@ func TestSuperagentPowersAndApprovals(t *testing.T) {
 	if _, err := shroom.SetSuperagent(c, "shroom", false); err == nil {
 		t.Fatal("an agent named itself a superagent")
 	}
-	if _, err := glenn.SetSuperagent(c, "shroom", false); err != nil {
+	if _, err := alice.SetSuperagent(c, "shroom", false); err != nil {
 		t.Fatal(err)
 	}
-	if sa, err := glenn.Superagent(c); err != nil || sa.Agent == nil || sa.Agent.Name != "shroom" {
+	if sa, err := alice.Superagent(c); err != nil || sa.Agent == nil || sa.Agent.Name != "shroom" {
 		t.Fatalf("superagent: %+v %v", sa, err)
 	}
-	if me, err := shroom.MeSuperagent(c); err != nil || !me.Superagent || me.Owner != "glenn" {
+	if me, err := shroom.MeSuperagent(c); err != nil || !me.Superagent || me.Owner != "alice" {
 		t.Fatalf("me: %+v %v", me, err)
 	}
 
@@ -58,7 +58,7 @@ func TestSuperagentPowersAndApprovals(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Owner != "glenn" {
+	if p.Owner != "alice" {
 		t.Fatalf("project owner: %+v", p)
 	}
 	// Never: tokens, inviting people, speaking as its owner.
@@ -68,18 +68,18 @@ func TestSuperagentPowersAndApprovals(t *testing.T) {
 	if _, err := shroom.InviteMember(c, api.InviteRequest{Name: "eve"}); err == nil {
 		t.Fatal("a superagent invited someone")
 	}
-	if _, err := shroom.ConsoleSend(c, api.SendRequest{To: "helper", Type: "task", Body: "as glenn"}); err == nil {
+	if _, err := shroom.ConsoleSend(c, api.SendRequest{To: "helper", Type: "task", Body: "as alice"}); err == nil {
 		t.Fatal("a superagent spoke as its owner")
 	}
 
-	// Held: deleting the project waits for glenn.
+	// Held: deleting the project waits for alice.
 	shroom.Reason = "上线完了，项目不用了"
 	err = shroom.DeleteProject(c, "launch")
 	if e, ok := client.AsError(err); !ok || e.Code != "approval_pending" {
 		t.Fatalf("delete: %v", err)
 	}
 	shroom.Reason = ""
-	pending, err := glenn.Approvals(c, "pending")
+	pending, err := alice.Approvals(c, "pending")
 	if err != nil || len(pending) != 1 || pending[0].What != "删除项目 launch" || pending[0].Reason != "上线完了，项目不用了" {
 		t.Fatalf("pending: %+v %v", pending, err)
 	}
@@ -89,17 +89,17 @@ func TestSuperagentPowersAndApprovals(t *testing.T) {
 	if mine, err := shroom.MyApprovals(c); err != nil || len(mine) != 1 || mine[0].Status != "pending" {
 		t.Fatalf("its approvals: %+v %v", mine, err)
 	}
-	done, err := glenn.DecideApproval(c, pending[0].ID, true)
+	done, err := alice.DecideApproval(c, pending[0].ID, true)
 	if err != nil || done.Status != "done" || done.Result != 200 {
 		t.Fatalf("approve: %+v %v", done, err)
 	}
-	if _, err := glenn.DecideApproval(c, pending[0].ID, true); err == nil {
+	if _, err := alice.DecideApproval(c, pending[0].ID, true); err == nil {
 		t.Fatal("an approval was carried out twice")
 	}
-	if _, err := glenn.GetProject(c, "launch", false); err == nil {
+	if _, err := alice.GetProject(c, "launch", false); err == nil {
 		t.Fatal("the project is still there")
 	}
-	// It hears how it went (a note from glenn).
+	// It hears how it went (a note from alice).
 	ms, err := shroom.Pull(c, 5, time.Second)
 	if err != nil || len(ms) == 0 || !strings.Contains(ms[len(ms)-1].Body, "同意了：删除项目 launch") {
 		t.Fatalf("note: %+v %v", ms, err)
@@ -109,11 +109,11 @@ func TestSuperagentPowersAndApprovals(t *testing.T) {
 	if _, err := shroom.RemoveAgent(c, "helper", false); err == nil {
 		t.Fatal("removing an agent was not held")
 	}
-	pending, _ = glenn.Approvals(c, "pending")
+	pending, _ = alice.Approvals(c, "pending")
 	if len(pending) != 1 {
 		t.Fatalf("pending: %+v", pending)
 	}
-	if d, err := glenn.DecideApproval(c, pending[0].ID, false); err != nil || d.Status != "denied" {
+	if d, err := alice.DecideApproval(c, pending[0].ID, false); err != nil || d.Status != "denied" {
 		t.Fatalf("deny: %+v %v", d, err)
 	}
 	if ags, err := admin.ListAgents(c, "", false); err != nil || !hasAgent(ags, "helper") {
@@ -136,7 +136,7 @@ func TestSuperagentPowersAndApprovals(t *testing.T) {
 	}
 
 	// Taken away: an ordinary agent again.
-	if err := glenn.ClearSuperagent(c); err != nil {
+	if err := alice.ClearSuperagent(c); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := shroom.Members(c, false); err == nil {
@@ -159,20 +159,20 @@ func TestSuperagentJoinsThroughALink(t *testing.T) {
 	c := ctx(t)
 	h := startHub(t, filepath.Join(t.TempDir(), "hub.db"), app.DefaultMessagePolicy())
 	admin := h.admin()
-	if _, err := admin.UpdateMember(c, "owner", api.MemberUpdateRequest{Name: "glenn"}); err != nil {
+	if _, err := admin.UpdateMember(c, "owner", api.MemberUpdateRequest{Name: "alice"}); err != nil {
 		t.Fatal(err)
 	}
-	ct, err := admin.CreateConsoleToken(c, "glenn-mac")
+	ct, err := admin.CreateConsoleToken(c, "alice-mac")
 	if err != nil {
 		t.Fatal(err)
 	}
-	glenn := h.client(ct.Token)
+	alice := h.client(ct.Token)
 	// An agent cannot make one.
 	other := h.client(h.register(api.RegisterRequest{Name: "other", Binding: api.Binding{Harness: "claude", SessionID: "s0"}}))
 	if _, err := other.CreateEnrollment(c, api.CreateEnrollmentRequest{Kind: "link", MaxUses: 1, Superagent: true}, false); err == nil {
 		t.Fatal("an agent made a superagent link")
 	}
-	link, err := glenn.CreateEnrollment(c, api.CreateEnrollmentRequest{Kind: "link", MaxUses: 1, TTLSeconds: 3600, Superagent: true}, false)
+	link, err := alice.CreateEnrollment(c, api.CreateEnrollmentRequest{Kind: "link", MaxUses: 1, TTLSeconds: 3600, Superagent: true}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,17 +185,17 @@ func TestSuperagentJoinsThroughALink(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sa, err := glenn.Superagent(c); err != nil || sa.Agent == nil || sa.Agent.Name != res.Agent.Name {
+	if sa, err := alice.Superagent(c); err != nil || sa.Agent == nil || sa.Agent.Name != res.Agent.Name {
 		t.Fatalf("superagent after joining: %+v %v", sa, err)
 	}
-	if me, err := h.client(res.Token).MeSuperagent(c); err != nil || !me.Superagent || me.Owner != "glenn" {
-		t.Fatalf("the agent should know it is glenn's superagent: %+v %v", me, err)
+	if me, err := h.client(res.Token).MeSuperagent(c); err != nil || !me.Superagent || me.Owner != "alice" {
+		t.Fatalf("the agent should know it is alice's superagent: %+v %v", me, err)
 	}
-	// A superagent joins no project: it works for glenn across the workspace.
-	if _, err := glenn.CreateProject(c, api.CreateProjectRequest{Name: "site"}); err != nil {
+	// A superagent joins no project: it works for alice across the workspace.
+	if _, err := alice.CreateProject(c, api.CreateProjectRequest{Name: "site"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := glenn.PutProjectMember(c, "site", res.Agent.Name, api.ProjectMemberRequest{}); err == nil || !strings.Contains(err.Error(), "superagent") {
+	if _, err := alice.PutProjectMember(c, "site", res.Agent.Name, api.ProjectMemberRequest{}); err == nil || !strings.Contains(err.Error(), "superagent") {
 		t.Fatalf("a superagent was added to a project: %v", err)
 	}
 	if _, err := h.client(res.Token).PutProjectMember(c, "site", res.Agent.Name, api.ProjectMemberRequest{}); err == nil {
