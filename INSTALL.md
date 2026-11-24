@@ -456,7 +456,7 @@ myco runner start --all                       # runs in the foreground; newly en
 myco runner start --all --max-concurrent 2    # run at most 2 CLIs at the same time
 ```
 
-The default is 3 at once (`myco runner service install --max-concurrent <n>` changes it for the service). A task for an agent whose CLI can't start yet waits its turn; the agent stays online while it waits. If several agents on one computer work on long tasks, raise the number so the others are not kept waiting.
+The default is 3 at once (`myco runner service install --max-concurrent <n>` changes it for the service). A task for an agent whose CLI can't start yet waits its turn; the agent stays online while it waits. If several agents on one computer work on long tasks, raise the number so the others are not kept waiting (a waiting task shows as "starting" in the App). Command nodes and the computer's own node (upgrades, starting agents) don't count toward it and never wait.
 
 **Run it in the background for good (recommended)**: one command installs it as a system service that starts at boot or login and restarts if it crashes. It uses launchd on macOS and a systemd user service on Linux:
 ```bash

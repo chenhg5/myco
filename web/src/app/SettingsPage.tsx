@@ -84,13 +84,13 @@ function AboutSection({ info, local }: { info: AppInfo | null; local: LocalState
     case "checked": {
       const u = st.u;
       if (u.error) {
-        status = <span className="app-about-status bad">{L("连不上 GitHub", "Can’t reach GitHub")}</span>;
+        status = <span className="app-about-status bad">{L("连不上 GitHub 或 Gitee", "Can’t reach GitHub or Gitee")}</span>;
         action = <button type="button" className="app-btn" onClick={() => void check()}>{L("重试", "Retry")}</button>;
       } else if (u.available && u.can_install) {
         status = <span className="app-about-status new">{L(`有新版本 ${u.latest}`, `New version ${u.latest}`)}</span>;
         action = <button type="button" className="app-btn app-btn-primary" onClick={() => void install(u)}>{L("更新并重新打开", "Update and reopen")}</button>;
       } else if (u.available) {
-        status = <span className="app-about-status new">{L(`有新版本 ${u.latest}，请到 GitHub 下载`, `New version ${u.latest} — download it from GitHub`)}</span>;
+        status = <span className="app-about-status new">{L(`有新版本 ${u.latest}，请到 GitHub 或 Gitee 下载`, `New version ${u.latest} — download it from GitHub or Gitee`)}</span>;
       } else {
         status = <span className="app-about-status ok"><Check />{L("已是最新", "Up to date")}</span>;
         action = <button type="button" className="app-btn" onClick={() => void check()}>{L("再检查一次", "Check again")}</button>;
@@ -136,11 +136,11 @@ function AboutSection({ info, local }: { info: AppInfo | null; local: LocalState
       <p className="app-about-note">
         {isWindows
           ? lang() === "zh"
-            ? <>更新会下载 GitHub 上最新发布的 App，校验 SHA256 后替换正在运行的这个 exe，再自动重新打开；这台电脑上的 myco 命令行工具也会一起升级。</>
-            : <>Updating downloads the latest app release from GitHub, verifies its SHA256, replaces this exe and reopens it; the myco command-line tool on this computer is upgraded along with it.</>
+            ? <>更新会从 GitHub 和 Gitee 里较快的一个下载最新 App，校验 SHA256 后替换正在运行的这个 exe，再自动重新打开；这台电脑上的 myco 命令行工具也会一起升级。</>
+            : <>Updating downloads the latest app release from GitHub or Gitee, whichever answers faster, verifies its SHA256, replaces this exe and reopens it; the myco command-line tool on this computer is upgraded along with it.</>
           : lang() === "zh"
-            ? <>更新会下载 GitHub 上最新发布的 App，校验 SHA256 后替换「应用程序」里的 myco，再自动重新打开。命令行工具和 runner 服务另外用 <code>myco upgrade</code> 升级。</>
-            : <>Updating downloads the latest app release from GitHub, verifies its SHA256, replaces myco in Applications and reopens it. Upgrade the command-line tool and the runner service separately with <code>myco upgrade</code>.</>}
+            ? <>更新会从 GitHub 和 Gitee 里较快的一个下载最新 App，校验 SHA256 后替换「应用程序」里的 myco，再自动重新打开。命令行工具和 runner 服务另外用 <code>myco upgrade</code> 升级。</>
+            : <>Updating downloads the latest app release from GitHub or Gitee, whichever answers faster, verifies its SHA256, replaces myco in Applications and reopens it. Upgrade the command-line tool and the runner service separately with <code>myco upgrade</code>.</>}
       </p>
       <p className="app-about-note">{L("agent、任务和对话都由工作区提供，App 只负责显示和转发。", "Nodes, tasks and conversations come from the Hub; the app only displays and relays them.")}</p>
     </>

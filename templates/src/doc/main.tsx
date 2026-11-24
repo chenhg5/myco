@@ -178,7 +178,9 @@ function Doc({ initial, me, title0 }: { initial: PartialBlock<any, any, any>[]; 
       }
       if (c.by && c.by !== me) flash(uiText("{0} 刚改了", c.by));
     };
-    listen([docs, blocks], apply);
+    // (when the feed moved on past what this page holds, the editor starts
+    // again from the records: rarer than any edit, simpler than a merge)
+    listen([docs, blocks], apply, () => location.reload());
   }, [editor, me]);
 
   const saveTitle = (t: string) => {

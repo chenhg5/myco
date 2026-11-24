@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -34,7 +35,14 @@ const (
 	// DefaultDownload link fails: each asset's API link redirects straight
 	// to the storage host, which works when github.com's links answer 504.
 	DefaultTagAPI = "https://api.github.com/repos/chenhg5/myco/releases/tags"
-	// EnvAPI and EnvDownload override them (mirrors, tests).
+	// DefaultMirror is the Gitee mirror of the same release assets. FetchFrom
+	// times both sources and downloads from the faster one.
+	DefaultMirror = "https://gitee.com/cg33/myco/releases/download"
+	// DefaultMirrorAPI answers the latest-release question from the Gitee
+	// mirror, for when GitHub's API refuses or cannot be reached.
+	DefaultMirrorAPI = "https://gitee.com/api/v5/repos/cg33/myco/releases/latest"
+	// EnvAPI and EnvDownload override them (mirrors, tests). Setting
+	// EnvDownload also turns the Gitee mirror off.
 	EnvAPI      = "MYCO_RELEASE_API"
 	EnvDownload = "MYCO_RELEASE_DOWNLOAD"
 	// EnvNoCheck disables every automatic update check when set to 1/true.
@@ -63,6 +71,16 @@ func DownloadURL(getenv func(string) string) string {
 		return strings.TrimRight(u, "/")
 	}
 	return DefaultDownload
+}
+
+// DownloadURLs are the places to download release assets from: the single
+// override when EnvDownload is set, otherwise GitHub and its Gitee mirror.
+// FetchFrom times them and uses the faster one, falling back to the other.
+func DownloadURLs(getenv func(string) string) []string {
+	if u := strings.TrimSpace(getenv(EnvDownload)); u != "" {
+		return []string{strings.TrimRight(u, "/")}
+	}
+	return []string{DefaultDownload, DefaultMirror}
 }
 
 // Version is a parsed release version. Ahead marks a build made after the
@@ -117,13 +135,17 @@ func Newer(a, b string) bool {
 
 // Latest asks the release API for the latest published tag. When the API
 // refuses (it allows 60 unauthenticated requests an hour per address, so a
-// shared network soon gets 403) or cannot be reached, the release page's
-// redirect is asked instead: github.com/<owner>/<repo>/releases/latest
-// answers with the tag's page in its Location, without that limit.
+// shared network soon gets 403) or cannot be reached, the Gitee mirror is
+// asked, and then the release page's redirect:
+// github.com/<owner>/<repo>/releases/latest answers with the tag's page in
+// its Location, without that limit.
 func Latest(ctx context.Context, hc *http.Client, api string) (string, error) {
 	tag, err := latestFromAPI(ctx, hc, api)
 	if err == nil {
 		return tag, nil
+	}
+	if t, merr := latestFromMirror(ctx, hc, api); merr == nil {
+		return t, nil
 	}
 	if page := latestPage(api); page != "" {
 		if t, perr := latestFromPage(ctx, hc, page); perr == nil {
@@ -131,6 +153,18 @@ func Latest(ctx context.Context, hc *http.Client, api string) (string, error) {
 		}
 	}
 	return "", err
+}
+
+// mirrorAPI is DefaultMirrorAPI; tests point it elsewhere.
+var mirrorAPI = DefaultMirrorAPI
+
+// latestFromMirror asks the Gitee mirror for the latest tag, only when api
+// is GitHub's own (an EnvAPI override names its own sources).
+func latestFromMirror(ctx context.Context, hc *http.Client, api string) (string, error) {
+	if api != DefaultAPI {
+		return "", fmt.Errorf("no mirror for release API %s", api)
+	}
+	return latestFromAPI(ctx, hc, mirrorAPI)
 }
 
 func latestFromAPI(ctx context.Context, hc *http.Client, api string) (string, error) {
@@ -284,6 +318,101 @@ func CleanupOld(target string) { _ = os.Remove(target + OldSuffix) }
 // release's SHA256SUMS. It returns the verified bytes.
 func Fetch(ctx context.Context, hc *http.Client, download, tag, goos, goarch string) ([]byte, error) {
 	return FetchAsset(ctx, hc, download, tag, AssetName(goos, goarch), 256<<20)
+}
+
+// FetchFrom is Fetch over several download bases (DownloadURLs): the fastest
+// ones by a small probe first, the others as a fallback. An asset that one
+// base serves badly or not at all comes from the next; each copy is still
+// verified against that base's SHA256SUMS.
+func FetchFrom(ctx context.Context, hc *http.Client, bases []string, tag, goos, goarch string) ([]byte, error) {
+	return FetchAssetFrom(ctx, hc, bases, tag, AssetName(goos, goarch), 256<<20)
+}
+
+// FetchAssetFrom downloads one named asset of release tag from the first
+// download base that serves it (see FetchFrom).
+func FetchAssetFrom(ctx context.Context, hc *http.Client, bases []string, tag, asset string, max int64) ([]byte, error) {
+	if len(bases) == 0 {
+		return nil, errors.New("no release download source is configured")
+	}
+	if len(bases) == 1 {
+		return FetchAsset(ctx, hc, bases[0], tag, asset, max)
+	}
+	var errs []error
+	for _, base := range orderBySpeed(ctx, hc, bases, tag) {
+		b, err := FetchAsset(ctx, hc, base, tag, asset, max)
+		if err == nil {
+			return b, nil
+		}
+		errs = append(errs, fmt.Errorf("%s: %w", hostOf(base), err))
+		if ctx.Err() != nil || strings.Contains(err.Error(), " has no ") {
+			break // cancelled, or the release itself lacks the asset
+		}
+	}
+	return nil, errors.Join(errs...)
+}
+
+// probeTimeout bounds the speed test of one download base. A base that does
+// not serve the probe in time goes last (and is still tried as a fallback).
+var probeTimeout = 3 * time.Second
+
+// orderBySpeed fetches the release's SHA256SUMS from each base in parallel
+// and returns the bases fastest first. A base that fails the probe keeps its
+// place among the failures, after the working ones.
+func orderBySpeed(ctx context.Context, hc *http.Client, bases []string, tag string) []string {
+	if len(bases) < 2 {
+		return bases
+	}
+	type probe struct {
+		i  int
+		ok bool
+		d  time.Duration
+	}
+	probes := make([]probe, len(bases))
+	ch := make(chan probe, len(bases))
+	for i, base := range bases {
+		go func(i int, base string) {
+			pctx, cancel := context.WithTimeout(ctx, probeTimeout)
+			defer cancel()
+			req, err := http.NewRequestWithContext(pctx, http.MethodGet, base+"/"+tag+"/SHA256SUMS", nil)
+			if err != nil {
+				ch <- probe{i: i}
+				return
+			}
+			req.Header.Set("User-Agent", "myco-upgrade")
+			start := time.Now()
+			resp, err := hc.Do(req)
+			if err != nil {
+				ch <- probe{i: i}
+				return
+			}
+			io.Copy(io.Discard, io.LimitReader(resp.Body, 4<<10))
+			resp.Body.Close()
+			ch <- probe{i: i, ok: resp.StatusCode == http.StatusOK, d: time.Since(start)}
+		}(i, base)
+	}
+	for range bases {
+		p := <-ch
+		probes[p.i] = p
+	}
+	sort.SliceStable(probes, func(a, b int) bool {
+		if probes[a].ok != probes[b].ok {
+			return probes[a].ok
+		}
+		return probes[a].ok && probes[a].d < probes[b].d
+	})
+	ordered := make([]string, len(bases))
+	for i, p := range probes {
+		ordered[i] = bases[p.i]
+	}
+	return ordered
+}
+
+// hostOf names a download base in an error message.
+func hostOf(base string) string {
+	if u, err := url.Parse(base); err == nil && u.Host != "" {
+		return u.Host
+	}
+	return base
 }
 
 // FetchAsset downloads one named asset of release tag and verifies it

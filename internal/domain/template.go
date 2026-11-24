@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
@@ -92,9 +93,16 @@ type Manifest struct {
 	Entry       string                        `json:"entry,omitempty"`
 	Data        map[string]ManifestCollection `json:"data,omitempty"`
 	Permissions []string                      `json:"permissions,omitempty"`
-	Export      []string                      `json:"export,omitempty"`
-	Agent       string                        `json:"agent,omitempty"`
-	Sample      string                        `json:"sample,omitempty"`
+	// OS lists the groups of the computer's capabilities (myco.os) the app
+	// uses (hubs from v0.22.1; see TemplateOSGroups), so the App can ask the
+	// person for them, and refuse the rest.
+	OS []string `json:"os,omitempty"`
+	// Net lists the hosts its network requests may reach (hubs from
+	// v0.22.1): host, host:port, or *.domain for its subdomains.
+	Net    []string `json:"net,omitempty"`
+	Export []string `json:"export,omitempty"`
+	Agent  string   `json:"agent,omitempty"`
+	Sample string   `json:"sample,omitempty"`
 	// Icon is an SVG in the template (its shape is shown, tinted by the
 	// App; v0.20.7).
 	Icon string `json:"icon,omitempty"`
@@ -147,6 +155,17 @@ var TemplateKinds = []string{"table", "records", "doc", "slides", "board", "form
 
 // TemplatePermissions are what a template may ask for.
 var TemplatePermissions = []string{"send", "download"}
+
+// TemplateOSGroups are the groups of myco.os capabilities an app declares
+// (manifest "os"): files (look and read, and what the person picks), files.write,
+// files.delete, exec (commands, ending processes), screen, microphone, speech,
+// clipboard (reading it), notify, system, network (net.fetch, to the hosts in
+// "net"), ssh, database, proxy.
+var TemplateOSGroups = []string{"files", "files.write", "files.delete", "exec", "screen", "microphone", "speech", "clipboard", "notify", "system", "network", "ssh", "database", "proxy"}
+
+// netHost is a host a manifest's "net" names: a DNS name or an IP address,
+// with a port or not, or *. and a domain for its subdomains.
+var netHost = regexp.MustCompile(`^(\*\.)?([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(:[0-9]{1,5})?$`)
 
 var (
 	templateSlug = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,39}(/[a-z0-9][a-z0-9-]{0,39})?$`)
@@ -228,6 +247,22 @@ func ParseManifest(raw []byte) (*Manifest, error) {
 			return bad("permission %q: one of %s", p, strings.Join(TemplatePermissions, ", "))
 		}
 	}
+	for _, g := range m.OS {
+		if !has(TemplateOSGroups, g) {
+			return bad("os %q: one of %s", g, strings.Join(TemplateOSGroups, ", "))
+		}
+	}
+	if len(m.Net) > 50 {
+		return bad("net: at most 50 hosts")
+	}
+	for _, h := range m.Net {
+		if !netHost.MatchString(h) || len(h) > 260 {
+			return bad("net %q: a host in lowercase (api.example.com), with :port or not, or *.example.com", h)
+		}
+	}
+	if len(m.Net) > 0 && !has(m.OS, "network") {
+		return bad("net lists hosts but os has no \"network\"")
+	}
 	if m.Icon != "" {
 		if m.Icon, err = CleanPagePath(m.Icon); err != nil || !strings.HasSuffix(strings.ToLower(m.Icon), ".svg") {
 			return bad("icon %q: an .svg file in the template", m.Icon)
@@ -275,6 +310,13 @@ func CompareVersions(a, b string) int {
 // CheckRecord checks a record against a collection's fields: no fields it
 // does not have, each of its type (null clears one).
 func (c ManifestCollection) CheckRecord(collection, data string) error {
+	return c.CheckRecordKeeping(collection, data, nil)
+}
+
+// CheckRecordKeeping is CheckRecord, letting through the fields in kept
+// that the collection no longer has: a record written before its page was
+// upgraded to a version without them keeps them as they are.
+func (c ManifestCollection) CheckRecordKeeping(collection, data string, kept map[string]json.RawMessage) error {
 	var rec map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(data), &rec); err != nil {
 		return Errf(CodeInvalidArgument, "a record is a JSON object")
@@ -287,6 +329,9 @@ func (c ManifestCollection) CheckRecord(collection, data string) error {
 	for _, k := range keys {
 		t, ok := c.Fields[k]
 		if !ok {
+			if old, was := kept[k]; was && jsonEqual(old, rec[k]) {
+				continue
+			}
 			names := make([]string, 0, len(c.Fields))
 			for f := range c.Fields {
 				names = append(names, f)
@@ -362,4 +407,13 @@ func checkField(raw json.RawMessage, t string) error {
 		}
 	}
 	return nil
+}
+
+// jsonEqual reports whether two JSON values are the same value.
+func jsonEqual(a, b json.RawMessage) bool {
+	var x, y any
+	if json.Unmarshal(a, &x) != nil || json.Unmarshal(b, &y) != nil {
+		return false
+	}
+	return reflect.DeepEqual(x, y)
 }

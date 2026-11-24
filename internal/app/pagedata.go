@@ -116,7 +116,23 @@ func (s *PageDataService) Put(ctx context.Context, by Actor, page string, in Put
 				WithSuggestion("its template's myco.json says which collections it has (myco page data list shows them)")
 		}
 		if err := col.CheckRecord(coll, in.Data); err != nil {
-			return nil, err
+			// (a field the page's template no longer has, after an upgrade:
+			// the record already holds it, and writing it back unchanged is
+			// fine; a new unknown field is still refused)
+			if in.ID == "" {
+				return nil, err
+			}
+			cur, e := s.data.Record(ctx, page, coll, in.ID)
+			if e != nil {
+				return nil, err
+			}
+			var kept map[string]json.RawMessage
+			if json.Unmarshal([]byte(cur.Data), &kept) != nil {
+				return nil, err
+			}
+			if err := col.CheckRecordKeeping(coll, in.Data, kept); err != nil {
+				return nil, err
+			}
 		}
 		if col.Single {
 			if in.ID == "" {

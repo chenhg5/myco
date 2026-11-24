@@ -1598,6 +1598,10 @@ type PageTemplate struct {
 	Data    map[string]TemplateCollection `json:"data,omitempty"`
 	// Permissions it asked for (send, download).
 	Permissions []string `json:"permissions,omitempty"`
+	// OS and Net: the computer's capabilities and the hosts it declares
+	// (hubs from v0.22.1).
+	OS  []string `json:"os,omitempty"`
+	Net []string `json:"net,omitempty"`
 	// Latest is the app's newest version, when newer than the page's
 	// (hubs from v0.20.7): POST /v1/pages/{id}/upgrade takes it.
 	Latest string `json:"latest,omitempty"`
@@ -1772,7 +1776,11 @@ type Template struct {
 	Publisher   string                        `json:"publisher"`
 	Data        map[string]TemplateCollection `json:"data,omitempty"`
 	Permissions []string                      `json:"permissions,omitempty"`
-	Export      []string                      `json:"export,omitempty"`
+	// OS and Net: the computer's capabilities and the hosts it declares
+	// (hubs from v0.22.1).
+	OS     []string `json:"os,omitempty"`
+	Net    []string `json:"net,omitempty"`
+	Export []string `json:"export,omitempty"`
 	// Guide is its agent's guide (agent.md): how to fill its data.
 	Guide string `json:"guide,omitempty"`
 	// Official: one of myco's, in every workspace (hubs from v0.20.5).

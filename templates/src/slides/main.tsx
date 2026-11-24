@@ -377,7 +377,7 @@ async function start() {
     await Promise.all([deck.load(), slides.load()]);
     if (!ctx.render && !deck.get("main")) await deck.put({ title: "", theme: "light" }, "main")?.catch(() => deck.load());
   } catch { root.render(outside); return; }
-  listen([deck, slides], (c: MycoChange) => { emit(); if (c.by && c.by !== me) flash(uiText("{0} 刚改了", c.by)); });
+  listen([deck, slides], (c: MycoChange) => { emit(); if (c.by && c.by !== me) flash(uiText("{0} 刚改了", c.by)); }, emit);
   root.render(<App />);
 }
 void start();

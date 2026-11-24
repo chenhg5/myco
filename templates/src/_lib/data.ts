@@ -46,7 +46,7 @@ export class Sheet {
     listen([this.meta, this.rows], (c: MycoChange) => {
       this.emit();
       if (c.by && c.by !== this.me) this.flash(uiText("{0} 刚改了", c.by));
-    });
+    }, () => this.emit());
   }
   subscribe = (f: () => void) => { this.subs.add(f); return () => { this.subs.delete(f); }; };
   emit() { this.version++; for (const f of this.subs) f(); }

@@ -74,7 +74,7 @@ func TestAppUpdate(t *testing.T) {
 	os.MkdirAll(filepath.Join(bundle, "Contents", "MacOS"), 0o755)
 	os.WriteFile(filepath.Join(bundle, "Contents", "MacOS", "myco-app"), []byte("old app"), 0o755)
 
-	u := &Updater{Version: "v9.0.0", Bundle: bundle, Arch: "arm64", API: rel.URL + "/latest", Download: rel.URL + "/dl"}
+	u := &Updater{Version: "v9.0.0", Bundle: bundle, Arch: "arm64", API: rel.URL + "/latest", Downloads: []string{rel.URL + "/dl"}}
 	app := httptest.NewServer((&Backend{Store: NewStore(filepath.Join(dir, "hubs.json")), Update: u}).Handler())
 	defer app.Close()
 
@@ -196,7 +196,7 @@ func TestWindowsAppUpdate(t *testing.T) {
 		dir := t.TempDir()
 		exe := filepath.Join(dir, "myco-app-windows-amd64.exe")
 		os.WriteFile(exe, []byte("MZold app"), 0o755)
-		u := &Updater{Version: "v9.0.0", Exe: exe, Arch: "amd64", OS: "windows", API: rel.URL + "/latest", Download: rel.URL + "/dl", HTTP: rel.Client()}
+		u := &Updater{Version: "v9.0.0", Exe: exe, Arch: "amd64", OS: "windows", API: rel.URL + "/latest", Downloads: []string{rel.URL + "/dl"}, HTTP: rel.Client()}
 		u.launch = func(path string) (waiter, error) {
 			started = append(started, path)
 			if behaves == cannotStart {
@@ -302,7 +302,7 @@ func TestUpdateDownloadFailureSaysWhy(t *testing.T) {
 	dir := t.TempDir()
 	exe := filepath.Join(dir, "myco-app.exe")
 	os.WriteFile(exe, []byte("MZold app"), 0o755)
-	u := &Updater{Version: "v9.0.0", Exe: exe, Arch: "amd64", OS: "windows", API: rel.URL + "/latest", Download: rel.URL + "/dl", HTTP: rel.Client()}
+	u := &Updater{Version: "v9.0.0", Exe: exe, Arch: "amd64", OS: "windows", API: rel.URL + "/latest", Downloads: []string{rel.URL + "/dl"}, HTTP: rel.Client()}
 	u.SetRelaunch(func() {})
 	app := httptest.NewServer((&Backend{Store: NewStore(filepath.Join(dir, "hubs.json")), Update: u}).Handler())
 	defer app.Close()
@@ -385,7 +385,7 @@ func TestLinuxAppUpdate(t *testing.T) {
 		dir := t.TempDir()
 		exe := filepath.Join(dir, "myco-app")
 		os.WriteFile(exe, []byte("\x7fELFold app"), 0o755)
-		u := &Updater{Version: "v9.0.0", Exe: exe, Arch: "arm64", OS: "linux", API: rel.URL + "/latest", Download: rel.URL + "/dl"}
+		u := &Updater{Version: "v9.0.0", Exe: exe, Arch: "arm64", OS: "linux", API: rel.URL + "/latest", Downloads: []string{rel.URL + "/dl"}}
 		u.SetRelaunch(func() {})
 		app := httptest.NewServer((&Backend{Store: NewStore(filepath.Join(dir, "hubs.json")), Update: u}).Handler())
 		resp, err := http.Post(app.URL+"/app/update", "application/json", nil)
