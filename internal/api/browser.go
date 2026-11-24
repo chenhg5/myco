@@ -24,14 +24,15 @@ type BrowserProfile struct {
 	Agents  bool   `json:"agents"`
 }
 type BrowserStatus struct {
-	Protocol  int              `json:"protocol"`
-	Version   string           `json:"version"`
-	Installed bool             `json:"installed"`
-	Supported bool             `json:"supported"`
-	Reason    string           `json:"reason,omitempty"`
-	Browsers  []string         `json:"browsers"`
-	Machine   string           `json:"machine"`
-	Profiles  []BrowserProfile `json:"profiles"`
+	UpdateAvailable bool             `json:"update_available,omitempty"`
+	Protocol        int              `json:"protocol"`
+	Version         string           `json:"version"`
+	Installed       bool             `json:"installed"`
+	Supported       bool             `json:"supported"`
+	Reason          string           `json:"reason,omitempty"`
+	Browsers        []string         `json:"browsers"`
+	Machine         string           `json:"machine"`
+	Profiles        []BrowserProfile `json:"profiles"`
 }
 
 // BrowserApprovalRequest contains the script and child snapshots a page asks

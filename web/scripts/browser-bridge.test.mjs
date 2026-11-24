@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 const source=readFileSync(new URL('../../internal/console/pagebridge.js',import.meta.url),'utf8');
 const sent=[],handlers={};
-const parent={postMessage(message){sent.push(message);queueMicrotask(()=>handlers.message({source:parent,data:{myco:'result',id:message.id,value:message.method==='ready'?{page:{id:'pg_fixture'},state:{},version:1}:message.args.action==='snapshot'?{base64:'aW1hZ2U=',type:'image/jpeg'}:{ok:true}}}));}};
+const parent={postMessage(message){sent.push(message);queueMicrotask(()=>handlers.message({source:parent,data:{myco:'result',id:message.id,value:message.method==='ready'?{page:{id:'pg_fixture'},state:{},version:1}:message.args.action==='status'?{version:'0.1.0',update_available:true}:message.args.action==='snapshot'?{base64:'aW1hZ2U=',type:'image/jpeg'}:{ok:true}}}));}};
 const document={addEventListener(){},documentElement:{style:{},setAttribute(){}}};
 const window={parent,addEventListener(name,f){handlers[name]=f},matchMedia(){return{matches:false}},open(){}};
 const sandbox={window,parent,document,location:new URL('http://127.0.0.1:1234/p/mock/index.html'),navigator:{language:'en'},URL,URLSearchParams,Blob,Uint8Array,ArrayBuffer,atob,setTimeout(){},clearTimeout(){},console,crypto:globalThis.crypto,AbortController};
@@ -12,7 +12,7 @@ vm.runInNewContext(source.replace('/*__MYCO_BROWSER_FEATURE__*/','.concat(["brow
 const api=window.myco.browser;
 assert.ok(window.myco.features.includes('browser'));
 await api.install();
-await api.status();
+assert.equal((await api.status()).update_available,true);
 await api.profiles.create('Fixture');
 await api.profiles.open('p_fixture');
 await api.profiles.allowAgents('p_fixture',true);

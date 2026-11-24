@@ -26,7 +26,7 @@ func (f *policyFixtureComponent) Status() api.BrowserComponentStatus {
 	if version == "" {
 		version = "0.1.0"
 	}
-	return api.BrowserComponentStatus{Protocol: 1, Version: version, Installed: true, Supported: true, Running: true}
+	return api.BrowserComponentStatus{Protocol: 1, Version: version, UpdateAvailable: version == "0.1.0", Installed: true, Supported: true, Running: true}
 }
 func (f *policyFixtureComponent) EnsureRunning(context.Context) error { return nil }
 func (f *policyFixtureComponent) Install(context.Context) error       { return nil }
@@ -119,6 +119,9 @@ func TestBrowserLocalApprovalUsesNativeOwnerAndExactSnapshot(t *testing.T) {
 	value, err := call("status", nil, "")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !value.(api.BrowserStatus).UpdateAvailable || value.(api.BrowserStatus).Version != "0.1.0" {
+		t.Fatal("old component status lost update_available")
 	}
 	if value.(api.BrowserStatus).Profiles[0].Agents {
 		t.Fatal("legacy global opt-in was inherited")

@@ -30,7 +30,7 @@ Create a profile, record actions, stop recording, and review the resulting seque
 
 ## Page bridge (protocol 1)
 
-Supported Mac arm64/x64 and Windows x64 desktop hosts advertise `myco.features.includes("browser")` so an uninstalled component can be discovered. Check `await myco.browser.status()` for `installed`, `supported`, `reason`, `protocol`, `version`, browser names, machine name and profiles. Missing installations return an empty version and empty browser/profile arrays. Other platforms and the web-only console do not advertise the feature.
+Supported Mac arm64/x64 and Windows x64 desktop hosts advertise `myco.features.includes("browser")` so an uninstalled component can be discovered. Check `await myco.browser.status()` for `update_available` (an older compatible component is installed), `installed`, `supported`, `reason`, `protocol`, `version`, browser names, machine name and profiles. Missing installations return an empty version and empty browser/profile arrays. Other platforms and the web-only console do not advertise the feature.
 
 The bridge provides `install`, `profiles.create/open/allowAgents`, `record.start/events/stop`, `runs.start/get/control`, `locate`, `pick`, and `snapshot`. `install` and enabling `allowAgents` require a host-owned confirmation, bound to the page instance and action with a one-use, 60-second nonce. The child never receives that nonce. The browser capability also needs the App's per-page, once-per-App consent.
 

@@ -294,6 +294,7 @@ func (b *Backend) browserCall(ctx context.Context, c *client.Client, h Hub, in b
 			}
 		}
 
+		out.UpdateAvailable = status.UpdateAvailable
 		out.Installed = true
 		out.Supported = status.Supported
 		if len(out.Browsers) == 0 {
