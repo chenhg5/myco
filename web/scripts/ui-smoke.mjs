@@ -5438,11 +5438,22 @@ async function runMatrix(browser, size, scheme) {
       const wrap = page.locator(".sp-nav-pc-wrap").first();
       await wrap.hover();
       await clickVisible(page, wrap.locator(".sp-nav-more"));
+      const menu = page.getByRole("menu");
+      await menu.waitFor();
+      // A background conversation's scroll notification must not dismiss
+      // a menu belonging to the sidebar (streaming can emit it mid-click).
+      await page.locator(".conv-scroll:visible").first().dispatchEvent("scroll");
+      await menu.dispatchEvent("scroll");
       await clickVisible(page, page.getByRole("menuitem", { name: "谁能用、项目" }));
       const set = page.locator("[data-testid=computer-settings]");
       await set.waitFor({ timeout: 10_000 });
       await clickVisible(page, set.getByRole("button", { name: "好" }));
       await set.waitFor({ state: "hidden", timeout: 5_000 });
+      // Scrolling the source still dismisses its menu: its anchor moved.
+      await clickVisible(page, wrap.locator(".sp-nav-more"));
+      await menu.waitFor();
+      await page.locator(".app-nav").dispatchEvent("scroll");
+      await menu.waitFor({ state: "detached", timeout: 5_000 });
       // Right click: rename it in place, or go straight to removing it.
       const last = page.locator(".sp-nav-pc").last();
       const oldName = (await last.locator(".app-nav-label").innerText()).trim();

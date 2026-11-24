@@ -208,6 +208,8 @@ Use `Modal` and `ConfirmDialog` from `dialogs.tsx`; do not write your own overla
 
 Every clickable row has a context menu, built with `useContextMenu` from `ContextMenu.tsx`.
 
+A menu stays open when another panel scrolls (including a streaming chat), or when its own items scroll. Scrolling a container of the source row closes it because its anchor moved.
+
 - The first item is what a left click does ("Open", "View details").
 - In the middle, the object's other actions.
 - After a divider, the "Copy …" items.
