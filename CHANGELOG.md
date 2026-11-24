@@ -4,6 +4,18 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.22.4
+
+- **The repository moved to github.com/myco-ai/myco**: the old github.com/chenhg5/myco address redirects automatically, so existing App connections, update checks and `myco upgrade` on older versions keep working; new links and downloads use the new address.
+- **Removing a workspace is instant**: the dialog closes as soon as this App has forgotten the workspace; it leaves the list, the overview and the projects at once, and a space or chat shown in it closes (the next workspace shows) instead of pages going on asking the removed one and showing errors. The full refresh runs behind.
+- Upgrade: update the App for instant removal. Nothing else is needed for the move: the old address redirects and existing installs upgrade as before.
+
+**中文**
+
+- **仓库搬到 github.com/myco-ai/myco**：旧的 github.com/chenhg5/myco 地址会自动跳转，已有的 App 连接、更新检查和旧版本上的 `myco upgrade` 都照常工作；新的链接和下载使用新地址。
+- **移除工作区是即时的**：只要这个 App 忘掉了该工作区，对话框就关闭；它同时从列表、概览和项目里消失，正在显示它的空间或对话也会关闭（切换到下一个工作区），不会再出现页面去问已移除的工作区而报错。完整刷新在后台进行。
+- 升级：更新 App 即可获得即时移除。仓库迁移不需要其他操作：老地址会自动跳转，已有安装照常升级。
+
 ## v0.22.3
 
 - **素材库 finds the right picture, and opens it large**: filter the library by language, theme, platform and orientation, alone or together with the search box; click a picture to see it larger and step through the set. Uploading now asks for a one-line description, language and theme for each file, which is what the filters and search use.
