@@ -12,7 +12,7 @@ import (
 	"sync"
 	"unicode/utf8"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // ProjectService: projects, their members (nodes) and shared documents, and

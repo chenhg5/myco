@@ -2,7 +2,7 @@
 
 package main
 
-import "github.com/chenhg5/myco/internal/console"
+import "github.com/myco-ai/myco/internal/console"
 
 // No speech to text here (the page uses the browser's own when it has one).
 var (

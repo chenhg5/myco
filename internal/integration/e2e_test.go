@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/e2e"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/e2e"
 )
 
 // With end-to-end encryption on, only a message's two sides and the people

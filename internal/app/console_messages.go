@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // ConsoleSenderPrefix marks messages the hub's administrator sends from the

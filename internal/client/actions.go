@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
+	"github.com/myco-ai/myco/internal/api"
 )
 
 // Agent actions (hubs from v0.21.21): see api/actions.go.

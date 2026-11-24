@@ -2,7 +2,7 @@
 # GET a GitHub API path for the release scripts, signed in when possible:
 # GitHub allows 60 unauthenticated requests an hour per address, which a
 # poll every minute (and other tools on the same address) soon uses up.
-#   scripts/gh-get.sh repos/chenhg5/myco/actions/runs?head_sha=...
+#   scripts/gh-get.sh repos/myco-ai/myco/actions/runs?head_sha=...
 # Uses GH_TOKEN or GITHUB_TOKEN if set, else a signed-in gh, else none.
 # A refused request says why (rate limit and when it resets) on stderr.
 set -eu

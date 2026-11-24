@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // The agent's side of actions from the command line: ask for a grant, wait

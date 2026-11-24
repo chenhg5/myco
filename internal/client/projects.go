@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/chenhg5/myco/internal/api"
+	"github.com/myco-ai/myco/internal/api"
 )
 
 // ListProjects lists the projects the caller may see; mine keeps those it

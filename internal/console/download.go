@@ -10,7 +10,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // saveToDownloads writes a project file into the Downloads folder under a

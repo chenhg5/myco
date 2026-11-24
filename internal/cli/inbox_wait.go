@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // waitAgainHint ends every exit of `myco inbox wait` with messages;

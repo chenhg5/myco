@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/chenhg5/myco/internal/sshcap"
+	"github.com/myco-ai/myco/internal/sshcap"
 )
 
 var sshInitMu sync.Mutex

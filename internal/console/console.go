@@ -28,12 +28,12 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/console/notices"
-	"github.com/chenhg5/myco/internal/harness/execnode"
-	"github.com/chenhg5/myco/internal/release"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/console/notices"
+	"github.com/myco-ai/myco/internal/harness/execnode"
+	"github.com/myco-ai/myco/internal/release"
 )
 
 // maxAttachUpload caps a file the app uploads to attach (read into memory

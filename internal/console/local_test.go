@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chenhg5/myco/internal/config"
-	"github.com/chenhg5/myco/internal/console"
+	"github.com/myco-ai/myco/internal/config"
+	"github.com/myco-ai/myco/internal/console"
 )
 
 // fakeCLI stands in for the myco binary: `hub up` writes hub.env pointing

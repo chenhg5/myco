@@ -8,13 +8,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/chenhg5/myco/internal/app"
-	. "github.com/chenhg5/myco/internal/cli/cmdkit"
-	"github.com/chenhg5/myco/internal/config"
-	"github.com/chenhg5/myco/internal/hubserver"
-	"github.com/chenhg5/myco/internal/infra/tunnel"
-	"github.com/chenhg5/myco/internal/release"
-	"github.com/chenhg5/myco/internal/templates"
+	"github.com/myco-ai/myco/internal/app"
+	. "github.com/myco-ai/myco/internal/cli/cmdkit"
+	"github.com/myco-ai/myco/internal/config"
+	"github.com/myco-ai/myco/internal/hubserver"
+	"github.com/myco-ai/myco/internal/infra/tunnel"
+	"github.com/myco-ai/myco/internal/release"
+	"github.com/myco-ai/myco/internal/templates"
 )
 
 func hubCommands() *Command {

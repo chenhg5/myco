@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/chenhg5/myco/internal/harness"
+	"github.com/myco-ai/myco/internal/harness"
 )
 
 // A Codex session file (~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<thread>.jsonl)

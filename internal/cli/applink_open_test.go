@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chenhg5/myco/internal/testutil"
+	"github.com/myco-ai/myco/internal/testutil"
 )
 
 func TestAppLinkURLAndLoopback(t *testing.T) {

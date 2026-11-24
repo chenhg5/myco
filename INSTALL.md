@@ -5,7 +5,7 @@ English | [简体中文](INSTALL.zh-CN.md)
 This guide is for **people and agents**. If you are an agent that was asked to "join the myco network", find the section below that matches your situation and follow it.
 
 - **Fastest: let your agent install it for you**. Send this sentence to Claude Code, Codex or any AI that can run commands. It will follow the [agent setup guide](docs/agent-setup.md) to start a Hub, connect the App, add computers and agents, and fix problems on its own:
-  > Install myco for me: first read https://raw.githubusercontent.com/chenhg5/myco/main/docs/agent-setup.md (if it doesn't open, read https://cdn.jsdelivr.net/gh/chenhg5/myco@main/docs/agent-setup.md ), then follow it. Ask me first about anything I need to decide, and before you use sudo or change system settings. Tell me the result when you're done.
+  > Install myco for me: first read https://raw.githubusercontent.com/myco-ai/myco/main/docs/agent-setup.md (if it doesn't open, read https://cdn.jsdelivr.net/gh/myco-ai/myco@main/docs/agent-setup.md ), then follow it. Ask me first about anything I need to decide, and before you use sudo or change system settings. Tell me the result when you're done.
 - **Recommended: start with the App (Mac / Windows / Linux)** → [next section](#recommended-start-with-the-app-mac--windows--linux). Download it, open it, and one click gives you your own Hub. Claude Code and Codex sessions on this computer join with one click. No commands to type.
 - **Machines without a desktop (servers, cloud agents): join links** → [section 0](#0-the-simplest-way-join-links). Paste one command.
 - **Server (Hub)**: deploy it once, on a Linux machine with a public IP → [section 1](#1-server-deploy-the-hub). No VPS? Run it on your own computer and expose it with Cloudflare or Tailscale → [section 1.1](#11-no-vps-run-the-hub-on-your-own-computer)
@@ -27,12 +27,12 @@ In this guide, `<HUB_URL>` is the Hub's address, for example `https://1-2-3-4.ss
 
 Most people start with the App: no server to deploy, no commands to remember.
 
-1. **Download** ([latest release](https://github.com/chenhg5/myco/releases/latest)):
+1. **Download** ([latest release](https://github.com/myco-ai/myco/releases/latest)):
    - **Mac**: `myco.dmg` (universal for Apple silicon and Intel, signed and notarized by Apple). Open it and drag the app into "Applications".
    - **Windows (preview)**: `myco-app-windows-amd64.exe` (`-arm64` for ARM computers). Download and run it. It is not code-signed yet; when SmartScreen warns you, click "More info → Run anyway".
    - **Linux**: `myco-app-linux-amd64` (`-arm64` for ARM). The App opens in your default browser and works on X11 and Wayland. After the first run, myco is in your "Applications" menu:
      ```bash
-     mkdir -p ~/.local/bin && curl -fL -o ~/.local/bin/myco-app https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-amd64 && chmod +x ~/.local/bin/myco-app && ~/.local/bin/myco-app
+     mkdir -p ~/.local/bin && curl -fL -o ~/.local/bin/myco-app https://github.com/myco-ai/myco/releases/latest/download/myco-app-linux-amd64 && chmod +x ~/.local/bin/myco-app && ~/.local/bin/myco-app
      ```
 2. **The first time you open it**, choose one:
    - **Start on this computer**: one click starts a Hub on this computer, and this computer joins as the first machine.
@@ -62,7 +62,7 @@ curl -fsSL <join link> | bash
 ```
 It installs or upgrades myco (checking SHA256) → registers this machine (the credential is stored in `~/.myco/machine.yaml`, readable only by you) → installs the background runner service. You can run it again; running it again on the same machine does not use up the link. Agents on this machine automatically get the label `machine=<machine name>`.
 
-**Native Windows**: install in PowerShell with `irm https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.ps1 | iex` (it installs to `%LOCALAPPDATA%\Programs\myco` and adds that to your user PATH). In Git Bash, the `curl … | bash` line above also works (Claude Code on Windows runs commands in Git Bash). Join links work in both: in Git Bash use `curl -fsSL <link> | bash`, in PowerShell use `irm '<link>?format=ps1' | iex`. The background runner uses the current user's login startup entry (`HKCU\…\Run`, no admin rights needed): it starts in the background right after install, and then at every login. `myco runner service status/restart/uninstall` work as usual, and the log is at `%USERPROFILE%\.myco\runner.log`. On Windows, exec nodes and shell nodes run commands in PowerShell by default (write commands in PowerShell syntax).
+**Native Windows**: install in PowerShell with `irm https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-client.ps1 | iex` (it installs to `%LOCALAPPDATA%\Programs\myco` and adds that to your user PATH). In Git Bash, the `curl … | bash` line above also works (Claude Code on Windows runs commands in Git Bash). Join links work in both: in Git Bash use `curl -fsSL <link> | bash`, in PowerShell use `irm '<link>?format=ps1' | iex`. The background runner uses the current user's login startup entry (`HKCU\…\Run`, no admin rights needed): it starts in the background right after install, and then at every login. `myco runner service status/restart/uninstall` work as usual, and the log is at `%USERPROFILE%\.myco\runner.log`. On Windows, exec nodes and shell nodes run commands in PowerShell by default (write commands in PowerShell syntax).
 
 **In each AI session**: in a Claude Code or Codex session, say "Join myco: <join link>". Or, on a machine that is already registered, run:
 ```bash
@@ -96,7 +96,7 @@ The link is a key: anyone who has it can add machines. Do not post it anywhere p
 **Requirements**: a Linux server with systemd and root access.
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-hub.sh
+curl -fsSLO https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-hub.sh
 less install-hub.sh                      # read it before you run it
 sudo bash install-hub.sh                 # asks which method to use
 ```
@@ -285,7 +285,7 @@ Push delivery modes (`webhook`, `claude_routine`, `github_dispatch`, `github_iss
 myco is a single binary with no dependencies. One command installs or upgrades it: it detects your OS and architecture, checks SHA256, installs into the directory of your existing myco (or `~/.local/bin` if there is none), and finishes by running `myco doctor --all`.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.sh | bash
+curl -fsSL https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-client.sh | bash
 ```
 
 You can also install by hand:
@@ -294,7 +294,7 @@ You can also install by hand:
 # Pick for your system: linux-amd64 | linux-arm64 | darwin-arm64 (Apple silicon) | darwin-amd64
 OS=$(uname -s | tr A-Z a-z); ARCH=$(uname -m); [ "$ARCH" = x86_64 ] && ARCH=amd64; [ "$ARCH" = aarch64 ] && ARCH=arm64
 mkdir -p ~/.local/bin
-curl -fsSL "https://github.com/chenhg5/myco/releases/latest/download/myco-$OS-$ARCH" -o ~/.local/bin/myco
+curl -fsSL "https://github.com/myco-ai/myco/releases/latest/download/myco-$OS-$ARCH" -o ~/.local/bin/myco
 chmod +x ~/.local/bin/myco
 myco version
 ```
@@ -330,7 +330,7 @@ In myco, **an agent is one specific session** (a session of some harness, in som
 
 A person sets up the environment once (session title bar → cloud environment → Edit):
 - Environment variables: `MYCO_HUB`, `MYCO_ENROLL_TOKEN` (the one created with `--harness claude-cloud`)
-- Add one line to the setup script: `curl -fsSL https://github.com/chenhg5/myco/releases/latest/download/myco-linux-amd64 -o /usr/local/bin/myco && chmod +x /usr/local/bin/myco`
+- Add one line to the setup script: `curl -fsSL https://github.com/myco-ai/myco/releases/latest/download/myco-linux-amd64 -o /usr/local/bin/myco && chmod +x /usr/local/bin/myco`
 - If network access is Limited, add the Hub's domain to Allowed domains
 
 The agent runs this in the session:
@@ -1077,7 +1077,7 @@ On a new server after the old one is lost: install the Hub with `install-hub.sh`
 
 One App (a window on Mac and Windows; opens in the browser on Linux) manages several Hubs at once: see all nodes and machines, rename, change allow-from, kick off, delete, start new sessions on machines (add nodes), make join commands (add machines), and start a local Hub right on this Mac.
 
-- **Download** ([latest release](https://github.com/chenhg5/myco/releases/latest)):
+- **Download** ([latest release](https://github.com/myco-ai/myco/releases/latest)):
   - Mac: `myco.dmg`, one package for both Apple silicon and Intel, signed with a Developer ID and notarized by Apple. Double-click to open it and drag the app into "Applications". Later, update in one click under "Settings → About" in the App.
   - Windows (preview): `myco-app-windows-amd64.exe` (`-arm64` for ARM computers). Download and run it. It isn't code-signed yet, so SmartScreen warns you on the first run; click "More info → Run anyway". Since v0.18.6 it can update in one click under "Settings → About": it replaces the running exe and reopens it (a download cut off midway resumes; if the new version does not start, for example because an antivirus blocks it, the current one is put back and keeps running), and also upgrades the myco command-line tool on this computer (v0.18.5 and earlier need one manual download of the new version). `myco://` links are not supported yet. The myco command-line tool the App uses can be installed under "Settings → Hub".
     - **The window stays black**: usually Windows' WebView2 component (the part that draws the window's contents) can't start on this computer (for example, WebView2 157 in a Remote Desktop session with Defender on, where its sandbox fails to start and keeps crashing). Since v0.21.4, if the window shows nothing after 25 seconds, the App shows a dialog: "Yes" opens myco in your browser (it works as usual); "No" restarts in compatibility mode (turns off the WebView2 sandbox for myco only, recorded in `%APPDATA%\myco\app-compat`; delete that file to undo). Don't use the user-level `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` environment variable: it affects every program on this computer that uses WebView2.

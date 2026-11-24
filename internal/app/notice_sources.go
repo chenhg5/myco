@@ -3,7 +3,7 @@ package app
 import (
 	"context"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // The sources shipped with the hub: one per feature that has something to

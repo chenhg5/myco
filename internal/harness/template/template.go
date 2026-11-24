@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chenhg5/myco/internal/harness"
-	"github.com/chenhg5/myco/internal/osutil"
+	"github.com/myco-ai/myco/internal/harness"
+	"github.com/myco-ai/myco/internal/osutil"
 )
 
 // Name is the registry key of the user-configurable template harness.

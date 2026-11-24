@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/chenhg5/myco/internal/api"
+	"github.com/myco-ai/myco/internal/api"
 )
 
 // Superagents (hubs from v0.21.1).

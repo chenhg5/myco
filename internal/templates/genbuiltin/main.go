@@ -9,7 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/chenhg5/myco/internal/templates"
+	"github.com/myco-ai/myco/internal/templates"
 )
 
 func main() {

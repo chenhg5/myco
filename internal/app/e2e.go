@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // SettingE2E turns on end-to-end encryption for the hub's messages.

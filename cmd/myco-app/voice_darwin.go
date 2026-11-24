@@ -191,7 +191,7 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/chenhg5/myco/internal/console"
+	"github.com/myco-ai/myco/internal/console"
 )
 
 // macVoice is the Mac's microphone and speaker for voice calls.

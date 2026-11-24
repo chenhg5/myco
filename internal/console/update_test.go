@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 func appZip(t *testing.T, files map[string]string) []byte {

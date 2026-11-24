@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chenhg5/myco/internal/console"
+	"github.com/myco-ai/myco/internal/console"
 )
 
 // Allowing shell nodes from the app flips spawn.max_access in this

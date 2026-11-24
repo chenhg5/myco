@@ -7,8 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/remotedesktop"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/remotedesktop"
 )
 
 func TestRemoteConnectClosingPageDuringRequest(t *testing.T) {

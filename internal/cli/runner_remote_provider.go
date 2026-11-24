@@ -8,10 +8,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/config"
-	"github.com/chenhg5/myco/internal/provider"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/config"
+	"github.com/myco-ai/myco/internal/provider"
 )
 
 // Applying and acknowledging share a local lock across concurrent sessions.

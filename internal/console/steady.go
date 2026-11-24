@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // steadyFor is how long a hub's last good answer stands in for a failed

@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // The recent list grouped by pair: one row per two parties, whatever the

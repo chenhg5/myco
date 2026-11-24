@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // AdminSender is the sender of messages the hub sends on an administrator's

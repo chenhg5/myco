@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // Agent actions (see api/actions.go): the agent's routes under /v1/me, the

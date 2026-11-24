@@ -3,7 +3,7 @@ package console
 import (
 	"testing"
 
-	"github.com/chenhg5/myco/internal/api"
+	"github.com/myco-ai/myco/internal/api"
 )
 
 // A shell command that exited non-zero is a failure in the list; the hub

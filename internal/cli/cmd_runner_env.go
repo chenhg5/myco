@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 
-	. "github.com/chenhg5/myco/internal/cli/cmdkit"
-	"github.com/chenhg5/myco/internal/config"
+	. "github.com/myco-ai/myco/internal/cli/cmdkit"
+	"github.com/myco-ai/myco/internal/config"
 )
 
 // defaultCapturePrefixes / defaultCaptureVars cover Anthropic-compatible

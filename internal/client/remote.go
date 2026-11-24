@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/chenhg5/myco/internal/remotedesktop"
+	"github.com/myco-ai/myco/internal/remotedesktop"
 )
 
 func (c *Client) RemoteDevices(ctx context.Context) ([]remotedesktop.Device, error) {

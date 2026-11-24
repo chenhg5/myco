@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chenhg5/myco/internal/app"
+	"github.com/myco-ai/myco/internal/app"
 )
 
 // createLink creates a join link (admin) and returns its token, enrollment

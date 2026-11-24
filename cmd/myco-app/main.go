@@ -22,11 +22,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chenhg5/myco/internal/console"
-	"github.com/chenhg5/myco/internal/console/notices"
-	"github.com/chenhg5/myco/internal/release"
-	"github.com/chenhg5/myco/internal/service"
-	"github.com/chenhg5/myco/internal/web"
+	"github.com/myco-ai/myco/internal/console"
+	"github.com/myco-ai/myco/internal/console/notices"
+	"github.com/myco-ai/myco/internal/release"
+	"github.com/myco-ai/myco/internal/service"
+	"github.com/myco-ai/myco/internal/web"
 )
 
 // version is set at build time (-ldflags "-X main.version=...").

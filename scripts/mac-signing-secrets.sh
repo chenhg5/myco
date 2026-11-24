@@ -11,7 +11,7 @@
 # through stdin; nothing is printed or written elsewhere.
 set -eu
 P12=${1:-$HOME/Desktop/myco-sign.p12}
-REPO=${MYCO_REPO:-chenhg5/myco}
+REPO=${MYCO_REPO:-myco-ai/myco}
 [ -f "$P12" ] || { echo "no $P12: export the Developer ID Application certificate there first (Keychain Access > My Certificates > Export)" >&2; exit 1; }
 command -v gh >/dev/null || { echo "gh is not installed" >&2; exit 1; }
 

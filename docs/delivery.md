@@ -105,7 +105,7 @@ sudo bash -c 'set -a; . /etc/myco/hub.env; set +a; /usr/local/bin/myco enrollmen
   - `MYCO_ENROLL_TOKEN=myco_enroll_...`
 - Add one line to the **setup script**:
   ```bash
-  curl -fsSL https://github.com/chenhg5/myco/releases/latest/download/myco-linux-amd64 -o /usr/local/bin/myco && chmod +x /usr/local/bin/myco
+  curl -fsSL https://github.com/myco-ai/myco/releases/latest/download/myco-linux-amd64 -o /usr/local/bin/myco && chmod +x /usr/local/bin/myco
   ```
 - **Network**: if network access is Limited, add the Hub's domain to Allowed domains.
 

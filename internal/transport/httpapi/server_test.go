@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/domain"
-	"github.com/chenhg5/myco/internal/hubserver"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/hubserver"
 )
 
 const adminToken = "admin-token-123456"

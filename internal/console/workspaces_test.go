@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/console"
-	"github.com/chenhg5/myco/internal/hubserver"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/console"
+	"github.com/myco-ai/myco/internal/hubserver"
 )
 
 // The app creates a workspace on its hub's server and adds it, signed in as

@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // maxPicture is the largest picture read for a face (it is made small in

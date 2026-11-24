@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // Handovers (「换一个来接着做」, hubs after v0.19.22): another session takes

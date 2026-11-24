@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // What a person set for voice chats (the App's 设置 › 语音): the model the

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // TemplateService: the workspace's library of templates (templates.md).

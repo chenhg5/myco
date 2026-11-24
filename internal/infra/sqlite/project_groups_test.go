@@ -7,8 +7,8 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/chenhg5/myco/internal/domain"
-	"github.com/chenhg5/myco/internal/infra/sqlite"
+	"github.com/myco-ai/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/infra/sqlite"
 )
 
 // A hub database from before member groups: Open adds the columns, the old

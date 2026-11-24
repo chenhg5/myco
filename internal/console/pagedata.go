@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // maxPageDownload bounds a file a page saves to Downloads (myco.download);

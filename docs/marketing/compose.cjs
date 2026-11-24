@@ -17,7 +17,7 @@ const S = {
     { id: '04-chat', eyebrow: 'CONVERSATIONS', h: 'See the work, not just the answer', sub: 'What it read, what it ran, what it changed, folded into one line. Step in while it works.', img: 'chat' },
     { id: '05-apps', eyebrow: 'APPS', h: 'Apps your agents use too', sub: 'Docs, sheets, slides, a whiteboard, video and more. You and your agents work on the same page.', img: 'apps' },
     { id: '06-automations', eyebrow: 'AUTOMATIONS', h: 'Work that starts on its own', sub: 'A morning summary, a Friday report, a look when CI fails: on a schedule, or when something calls.', img: 'automations' },
-    { id: '07-phone', phone: true, pill: 'iPhone · Public beta on TestFlight', h: 'Your agents,<br>in your pocket', sub: 'Every conversation on every computer, on your phone. Follow the work and hand out the next task from anywhere.', url: 'github.com/chenhg5/myco' },
+    { id: '07-phone', phone: true, pill: 'iPhone · Public beta on TestFlight', h: 'Your agents,<br>in your pocket', sub: 'Every conversation on every computer, on your phone. Follow the work and hand out the next task from anywhere.', url: 'github.com/myco-ai/myco' },
   ],
   zh: [
     { id: '01-hero', eyebrow: '开源 · Mac · Windows · Linux', h: '你所有的 AI agent，<br>一个 App', sub: '你已经在用的 Claude Code、Codex 和其他 agent：和它们聊、同时跑好几个，在你的哪台电脑上都行。', img: 'home' },
@@ -26,7 +26,7 @@ const S = {
     { id: '04-chat', eyebrow: '对话', h: '不只看答案，也看它怎么做', sub: '读了什么、跑了什么、改了什么，收成一行。它干活时随时插话。', img: 'chat' },
     { id: '05-apps', eyebrow: '应用', h: 'agent 也能用的应用', sub: '文档、表格、幻灯片、白板、视频剪辑……你和 agent 在同一个页面上干活。', img: 'apps' },
     { id: '06-automations', eyebrow: '自动化', h: '到点自己开工', sub: '每天早上的汇总、周五的周报、CI 挂了去看一眼：按时间，或者有事件来时。', img: 'automations' },
-    { id: '07-phone', phone: true, pill: 'iPhone · TestFlight 公开测试', h: '口袋里的 agent', sub: '每台电脑上的每段对话，手机上都能看。在哪儿都能跟进进度、派下一件活。', url: 'github.com/chenhg5/myco' },
+    { id: '07-phone', phone: true, pill: 'iPhone · TestFlight 公开测试', h: '口袋里的 agent', sub: '每台电脑上的每段对话，手机上都能看。在哪儿都能跟进进度、派下一件活。', url: 'github.com/myco-ai/myco' },
   ],
 };
 const css = `

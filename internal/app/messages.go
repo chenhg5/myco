@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // MessagePolicy tunes delivery semantics.

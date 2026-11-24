@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/config"
-	"github.com/chenhg5/myco/internal/service"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/config"
+	"github.com/myco-ai/myco/internal/service"
 )
 
 // A workspace on this computer whose service is installed but not running

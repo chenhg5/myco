@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/domain"
-	"github.com/chenhg5/myco/internal/release"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/release"
 )
 
 // A hub upgraded from the App (POST /v1/admin/upgrade). A hub that

@@ -23,7 +23,7 @@ import (
 )
 
 const ComponentVersion = "0.2.0"
-const ComponentRelease = "https://github.com/chenhg5/myco/releases/download/remote-v" + ComponentVersion
+const ComponentRelease = "https://github.com/myco-ai/myco/releases/download/remote-v" + ComponentVersion
 
 // Component owns only the optional process and its private directory. A new
 // engine can implement the same HTTP protocol without changing the App or Hub.

@@ -2,7 +2,7 @@
 # Install or upgrade the myco CLI on macOS / Linux / Windows (Git Bash, MSYS2,
 # Cygwin), then run a health check. In PowerShell use install-client.ps1.
 #
-#   curl -fsSL https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-client.sh | bash
 #
 # Options (environment variables):
 #   MYCO_VERSION=v0.6.1     install a specific release (default: latest)
@@ -14,7 +14,7 @@
 # No secrets are read or printed.
 set -euo pipefail
 
-REPO="chenhg5/myco"
+REPO="myco-ai/myco"
 VERSION="${MYCO_VERSION:-latest}"
 
 EXE=""

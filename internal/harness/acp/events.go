@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/harness"
+	"github.com/myco-ai/myco/internal/harness"
 )
 
 // ACP session/update payloads (the subset myco shows).

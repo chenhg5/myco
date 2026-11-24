@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // Connecting a computer from the App over SSH or WSL: log in and look

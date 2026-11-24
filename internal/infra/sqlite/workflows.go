@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // WorkflowRepo implements domain.WorkflowRepository.

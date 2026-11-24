@@ -13,8 +13,8 @@ import (
 	"testing"
 	"testing/iotest"
 
-	"github.com/chenhg5/myco/internal/domain"
-	"github.com/chenhg5/myco/internal/testutil"
+	"github.com/myco-ai/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/testutil"
 )
 
 func readAll(t *testing.T, s FS, id string) string {

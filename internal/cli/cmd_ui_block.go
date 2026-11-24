@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
-	. "github.com/chenhg5/myco/internal/cli/cmdkit"
-	"github.com/chenhg5/myco/internal/uispec"
+	. "github.com/myco-ai/myco/internal/cli/cmdkit"
+	"github.com/myco-ai/myco/internal/uispec"
 )
 
 // uiFlag adds a checked myco-ui block to a message body.

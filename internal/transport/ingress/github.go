@@ -13,9 +13,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/chenhg5/myco/internal/domain"
-	"github.com/chenhg5/myco/internal/infra/wake"
-	"github.com/chenhg5/myco/internal/transport/httpapi"
+	"github.com/myco-ai/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/infra/wake"
+	"github.com/myco-ai/myco/internal/transport/httpapi"
 )
 
 var msgIDPattern = regexp.MustCompile(`msg_[a-z0-9]{16}`)

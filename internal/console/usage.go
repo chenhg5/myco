@@ -1,7 +1,7 @@
 package console
 
 import (
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/client"
 	"net/http"
 )
 

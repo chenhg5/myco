@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // Setting up a workspace (a hub) on a server over SSH, from the App: log in
@@ -40,7 +40,7 @@ func hubInstallScript(install bool, sudo, device string) string {
 set -e
 `)
 	if install {
-		b.WriteString(`curl -fsSL --retry 3 https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-hub.sh | ` + sudo + `bash -s -- --domain auto --yes 2>&1
+		b.WriteString(`curl -fsSL --retry 3 https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-hub.sh | ` + sudo + `bash -s -- --domain auto --yes 2>&1
 `)
 	}
 	b.WriteString(`M=/usr/local/bin/myco; [ -x "$M" ] || M="$(command -v myco)"
@@ -119,7 +119,7 @@ func (b *Backend) runHubOver(id string, rt Route) {
 	case found["root"] != "yes" && found["sudo"] != "yes":
 		// sudo would ask for a password nobody can type here.
 		fail(0, &RemoteError{Code: "needs_sudo", Message: "installing needs root, and sudo asks for a password there",
-			Command: "ssh -t " + rt.Target + " 'curl -fsSL https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-hub.sh | sudo bash -s -- --domain auto'"})
+			Command: "ssh -t " + rt.Target + " 'curl -fsSL https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-hub.sh | sudo bash -s -- --domain auto'"})
 		return
 	}
 	sudo := ""

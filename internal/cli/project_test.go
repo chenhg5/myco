@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chenhg5/myco/internal/testutil"
+	"github.com/myco-ai/myco/internal/testutil"
 )
 
 // The project commands from both sides: a person creates a project, adds a
@@ -58,7 +58,7 @@ func TestProjectCommands(t *testing.T) {
 	// The coordinator writes the brief and a document with its own token.
 	brief := filepath.Join(home, "BRIEF.md")
 	os.WriteFile(brief, []byte("Run make check before pushing."), 0o600)
-	if code, _, e := lead.run("project", "update", "--name", "myco", "--brief-file", brief, "--link", "repo=https://github.com/chenhg5/myco"); code != 0 {
+	if code, _, e := lead.run("project", "update", "--name", "myco", "--brief-file", brief, "--link", "repo=https://github.com/myco-ai/myco"); code != 0 {
 		t.Fatalf("coordinator updates: %s", e)
 	}
 	doc := filepath.Join(home, "conv.md")

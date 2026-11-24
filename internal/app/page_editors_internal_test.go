@@ -3,7 +3,7 @@ package app
 import (
 	"testing"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // Who may change a page's records: everyone who sees it, unless the page

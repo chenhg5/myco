@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/harness"
+	"github.com/myco-ai/myco/internal/harness"
 )
 
 // A real token_count line from a Codex session file (Codex 0.x, Nov 2026).

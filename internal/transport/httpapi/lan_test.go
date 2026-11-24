@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/hubserver"
-	"github.com/chenhg5/myco/internal/osutil"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/hubserver"
+	"github.com/myco-ai/myco/internal/osutil"
 )
 
 // A hub on the local network (no tunnel, every interface): links made from

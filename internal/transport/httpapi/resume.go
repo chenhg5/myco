@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 func (s *Server) resumeInfo(c *domain.ResumeCredential) api.ResumeInfo {
@@ -143,7 +143,7 @@ func (s *Server) resumePage(w http.ResponseWriter, r *http.Request) {
 	// process list; it is never passed to the installer.
 	fmt.Fprintf(w, `#!/usr/bin/env sh
 set -eu
-curl -fsSL --retry 5 --retry-delay 2 https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.sh | MYCO_NO_DOCTOR=1 MYCO_ADD_PATH=1 bash
+curl -fsSL --retry 5 --retry-delay 2 https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-client.sh | MYCO_NO_DOCTOR=1 MYCO_ADD_PATH=1 bash
 MYCO="$(command -v myco 2>/dev/null || true)"
 if [ -z "$MYCO" ]; then MYCO="${MYCO_INSTALL_DIR:-$HOME/.local/bin}/myco"; fi
 MYCO_RESUME=%s "$MYCO" agent resume --hub %s --format text

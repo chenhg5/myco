@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/config"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/config"
 )
 
 // The computer that runs the local hub is a machine like any other: it joins

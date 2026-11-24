@@ -3,7 +3,7 @@ package httpapi
 import (
 	"net/http"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 const selfAliasLimit = 3

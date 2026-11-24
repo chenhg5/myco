@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"crypto/rand"
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/remotedesktop"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/remotedesktop"
 )
 
 type remoteDesktop struct {

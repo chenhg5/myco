@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
+	"github.com/myco-ai/myco/internal/api"
 )
 
 // What a page may use of this computer: the groups of myco.os capabilities

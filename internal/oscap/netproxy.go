@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/chenhg5/myco/internal/sysproxy"
+	"github.com/myco-ai/myco/internal/sysproxy"
 )
 
 // Downloads (speech.install) go through the proxy the App or the

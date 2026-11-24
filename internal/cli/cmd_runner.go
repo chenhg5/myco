@@ -9,16 +9,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	. "github.com/chenhg5/myco/internal/cli/cmdkit"
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/config"
-	"github.com/chenhg5/myco/internal/harness"
-	"github.com/chenhg5/myco/internal/harness/acp"
-	"github.com/chenhg5/myco/internal/harness/builtin"
-	"github.com/chenhg5/myco/internal/harness/execnode"
-	"github.com/chenhg5/myco/internal/harness/machinenode"
-	"github.com/chenhg5/myco/internal/runner"
+	"github.com/myco-ai/myco/internal/api"
+	. "github.com/myco-ai/myco/internal/cli/cmdkit"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/config"
+	"github.com/myco-ai/myco/internal/harness"
+	"github.com/myco-ai/myco/internal/harness/acp"
+	"github.com/myco-ai/myco/internal/harness/builtin"
+	"github.com/myco-ai/myco/internal/harness/execnode"
+	"github.com/myco-ai/myco/internal/harness/machinenode"
+	"github.com/myco-ai/myco/internal/runner"
 )
 
 func runnerCommands() *Command {

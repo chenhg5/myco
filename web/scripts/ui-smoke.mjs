@@ -645,7 +645,7 @@ async function runMatrix(browser, size, scheme) {
       await frame.locator("#out").dispatchEvent("click");
       await page.waitForFunction(async () => {
         const r = await (await fetch("/app/mock/opened")).json();
-        return r.urls.includes("https://github.com/chenhg5/myco/releases");
+        return r.urls.includes("https://github.com/myco-ai/myco/releases");
       }, null, { timeout: 5_000 });
       // A newer version: said at the top; shown when asked.
       const v = await page.evaluate(async () => (await (await fetch("/app/mock/pages/pg_release/publish", { method: "POST" })).json()).version);

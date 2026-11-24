@@ -28,13 +28,13 @@ import (
 
 const (
 	// DefaultAPI returns the latest release (GitHub REST API).
-	DefaultAPI = "https://api.github.com/repos/chenhg5/myco/releases/latest"
+	DefaultAPI = "https://api.github.com/repos/myco-ai/myco/releases/latest"
 	// DefaultDownload is where release assets live: <base>/<tag>/<asset>.
-	DefaultDownload = "https://github.com/chenhg5/myco/releases/download"
+	DefaultDownload = "https://github.com/myco-ai/myco/releases/download"
 	// DefaultTagAPI lists a release's assets (<base>/<tag>); used when a
 	// DefaultDownload link fails: each asset's API link redirects straight
 	// to the storage host, which works when github.com's links answer 504.
-	DefaultTagAPI = "https://api.github.com/repos/chenhg5/myco/releases/tags"
+	DefaultTagAPI = "https://api.github.com/repos/myco-ai/myco/releases/tags"
 	// DefaultMirror is the Gitee mirror of the same release assets. FetchFrom
 	// times both sources and downloads from the faster one.
 	DefaultMirror = "https://gitee.com/cg33/myco/releases/download"

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // Looking at a computer this App can reach (over SSH or into WSL), and the
@@ -78,7 +78,7 @@ M="$(command -v myco 2>/dev/null)"; [ -z "$M" ] && M="$HOME/.local/bin/myco"
 	"upgrade": `cd "$HOME" 2>/dev/null
 OLD="$(command -v myco 2>/dev/null)"
 MYCO_INSTALLED_FILE="$(mktemp)"; export MYCO_INSTALLED_FILE
-curl -fsSL --retry 3 https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.sh | MYCO_NO_DOCTOR=1 bash 2>&1 || exit 1
+curl -fsSL --retry 3 https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-client.sh | MYCO_NO_DOCTOR=1 bash 2>&1 || exit 1
 NEW="$(cat "$MYCO_INSTALLED_FILE" 2>/dev/null)"; rm -f "$MYCO_INSTALLED_FILE"
 [ -n "$NEW" ] || NEW="$(command -v myco)"
 if [ "$NEW" = "$OLD" ]; then "$NEW" runner service restart 2>&1; else "$NEW" runner service install 2>&1; fi

@@ -17,11 +17,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/config"
-	"github.com/chenhg5/myco/internal/osutil"
-	"github.com/chenhg5/myco/internal/release"
-	"github.com/chenhg5/myco/internal/service"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/config"
+	"github.com/myco-ai/myco/internal/osutil"
+	"github.com/myco-ai/myco/internal/release"
+	"github.com/myco-ai/myco/internal/service"
 )
 
 // Local runs a hub on this computer through the myco CLI (`myco hub up`),
@@ -519,7 +519,7 @@ func (b *Backend) installMyco(w http.ResponseWriter, r *http.Request) {
 	p, err := install(ctx, dir)
 	if err != nil {
 		writeErr(w, &client.Error{Status: http.StatusBadGateway, Code: "install_failed", Message: err.Error(),
-			Suggestion: "check the network, or install it in a terminal: curl -fsSL https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.sh | bash"})
+			Suggestion: "check the network, or install it in a terminal: curl -fsSL https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-client.sh | bash"})
 		return
 	}
 	writeJSON(w, http.StatusOK, Tool{Path: p})

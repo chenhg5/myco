@@ -9,6 +9,6 @@ In short:
 
 ## Reporting a problem
 
-Report unacceptable behaviour privately to the maintainer through a [private security advisory](https://github.com/chenhg5/myco/security/advisories/new), or by contacting @chenhg5 on GitHub. Reports are handled confidentially.
+Report unacceptable behaviour privately to the maintainer through a [private security advisory](https://github.com/myco-ai/myco/security/advisories/new), or by contacting @chenhg5 on GitHub. Reports are handled confidentially.
 
 Maintainers may remove comments, commits and other contributions that break this code, and may block people who do so repeatedly.

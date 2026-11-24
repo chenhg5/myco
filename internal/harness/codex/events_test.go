@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/harness"
+	"github.com/myco-ai/myco/internal/harness"
 )
 
 func TestCodexEvents(t *testing.T) {

@@ -7,7 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/chenhg5/myco/internal/osutil"
+	"github.com/myco-ai/myco/internal/osutil"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -412,18 +412,18 @@ func TestLatestFallsBackToTheReleasePage(t *testing.T) {
 	var pageHits int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/repos/chenhg5/myco/releases/latest", "/elsewhere":
+		case "/repos/myco-ai/myco/releases/latest", "/elsewhere":
 			w.WriteHeader(http.StatusForbidden)
-		case "/chenhg5/myco/releases/latest":
+		case "/myco-ai/myco/releases/latest":
 			pageHits++
-			http.Redirect(w, r, "/chenhg5/myco/releases/tag/v0.20.7", http.StatusFound)
+			http.Redirect(w, r, "/myco-ai/myco/releases/tag/v0.20.7", http.StatusFound)
 		default:
 			t.Errorf("unexpected request %s", r.URL.Path)
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}))
 	defer srv.Close()
-	tag, err := Latest(context.Background(), srv.Client(), srv.URL+"/repos/chenhg5/myco/releases/latest")
+	tag, err := Latest(context.Background(), srv.Client(), srv.URL+"/repos/myco-ai/myco/releases/latest")
 	if err != nil || tag != "v0.20.7" || pageHits != 1 {
 		t.Fatalf("Latest = %q, %v (page asked %d times)", tag, err, pageHits)
 	}

@@ -10,8 +10,8 @@ import (
 	"runtime"
 	"strings"
 
-	. "github.com/chenhg5/myco/internal/cli/cmdkit"
-	"github.com/chenhg5/myco/skill"
+	. "github.com/myco-ai/myco/internal/cli/cmdkit"
+	"github.com/myco-ai/myco/skill"
 )
 
 // skillMarker marks a SKILL.md myco installed, so `myco upgrade` may

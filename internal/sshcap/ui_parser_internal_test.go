@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/testsshd"
+	"github.com/myco-ai/myco/internal/testsshd"
 )
 
 // Verify the template parser against a real SSH response. The rest of the SSH

@@ -30,5 +30,5 @@ make -j4 "$binary"
 cp "$binary" "$out/"
 cp COPYING.LGPLv2.1 "$out/LICENSE-FFmpeg.txt"
 printf '%s\n' 'FFmpeg n7.1.2, LGPL-2.1-or-later, https://ffmpeg.org/' \
- 'Source and build configuration: https://github.com/chenhg5/myco/tree/main/components/remote/scripts/build-ffmpeg.sh' \
+ 'Source and build configuration: https://github.com/myco-ai/myco/tree/main/components/remote/scripts/build-ffmpeg.sh' \
  "Source revision: $revision" > "$out/NOTICE-FFmpeg.txt"

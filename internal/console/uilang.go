@@ -3,7 +3,7 @@ package console
 import (
 	"net/http"
 
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/client"
 	"os"
 	"path/filepath"
 	"strings"

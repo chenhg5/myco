@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
+	"github.com/myco-ai/myco/internal/api"
 )
 
 // Notices returns the caller's notices after after (a console credential:

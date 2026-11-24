@@ -11,7 +11,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // PageService: web pages published to the hub ().

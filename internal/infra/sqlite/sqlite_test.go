@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/domain"
-	"github.com/chenhg5/myco/internal/infra/sqlite"
+	"github.com/myco-ai/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/infra/sqlite"
 )
 
 // t0 is a fixed, millisecond-aligned time: the repositories store times as

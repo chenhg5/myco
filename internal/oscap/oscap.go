@@ -24,7 +24,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/chenhg5/myco/internal/sshcap"
+	"github.com/myco-ai/myco/internal/sshcap"
 )
 
 // Error is a capability's error: a code the page can act on and a message.

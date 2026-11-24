@@ -12,12 +12,12 @@
 用上你已经付过钱的 Claude Code、Codex 和各种 agent：开对话、几个同时干活，<br>
 连上你别的电脑和手机，让它们按时做事，全在一个 App 里。
 
-[![Release](https://img.shields.io/github/v/release/chenhg5/myco?style=flat-square&color=3a9a78)](https://github.com/chenhg5/myco/releases)
-[![Build](https://img.shields.io/github/actions/workflow/status/chenhg5/myco/release.yml?branch=main&label=release&style=flat-square)](https://github.com/chenhg5/myco/actions/workflows/release.yml)
+[![Release](https://img.shields.io/github/v/release/myco-ai/myco?style=flat-square&color=3a9a78)](https://github.com/myco-ai/myco/releases)
+[![Build](https://img.shields.io/github/actions/workflow/status/myco-ai/myco/release.yml?branch=main&label=release&style=flat-square)](https://github.com/myco-ai/myco/actions/workflows/release.yml)
 ![Platforms](https://img.shields.io/badge/macOS%20·%20Windows%20·%20Linux-grey?style=flat-square)
 [![LINUX DO](https://img.shields.io/badge/LINUX-DO-ffb003?style=flat-square&labelColor=3f3f46)](https://linux.do)
 
-**[下载 Mac 版](https://github.com/chenhg5/myco/releases/latest/download/myco.dmg)** · [Windows 版（预览）](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-amd64.exe) · [Linux 版](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-amd64) · [全部下载](https://github.com/chenhg5/myco/releases/latest)
+**[下载 Mac 版](https://github.com/myco-ai/myco/releases/latest/download/myco.dmg)** · [Windows 版（预览）](https://github.com/myco-ai/myco/releases/latest/download/myco-app-windows-amd64.exe) · [Linux 版](https://github.com/myco-ai/myco/releases/latest/download/myco-app-linux-amd64) · [全部下载](https://github.com/myco-ai/myco/releases/latest)
 
 [English](README.md) · **中文** · [安装指南](INSTALL.zh-CN.md) · [使用教程](docs/tutorial.zh-CN.md) · [应用](docs/apps.zh-CN.md) · [架构](docs/architecture.md) · [HTTP API](docs/api.md)
 
@@ -42,7 +42,7 @@ agent 单独用都不错，麻烦在边界上：结果是**你**成了传话的�
 已经在用 Claude Code、Codex 或别的能跑命令的 AI？把这句话发给它。它会读[安装指南](docs/agent-setup.md)，开好 Hub、连上 App、加好电脑和 agent，出了问题自己排查；要你拿主意的地方会先问你：
 
 ```text
-帮我装好 myco：先读 https://raw.githubusercontent.com/chenhg5/myco/main/docs/agent-setup.md （打不开就读 https://cdn.jsdelivr.net/gh/chenhg5/myco@main/docs/agent-setup.md ），照着做。要我决定的先问我，用 sudo 或改系统设置前也先问我，装完告诉我结果。
+帮我装好 myco：先读 https://raw.githubusercontent.com/myco-ai/myco/main/docs/agent-setup.md （打不开就读 https://cdn.jsdelivr.net/gh/myco-ai/myco@main/docs/agent-setup.md ），照着做。要我决定的先问我，用 sudo 或改系统设置前也先问我，装完告诉我结果。
 ```
 
 App 的第一屏也有这句话（**让 agent 帮我装**）。
@@ -51,9 +51,9 @@ App 的第一屏也有这句话（**让 agent 帮我装**）。
 
 | 平台 | 下载 |
 |---|---|
-| **Mac** | **[myco.dmg](https://github.com/chenhg5/myco/releases/latest/download/myco.dmg)**：Apple 芯片和 Intel 通用，已签名公证，可自动更新。 |
-| **Windows**（预览） | [myco-app-windows-amd64.exe](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-amd64.exe)（[ARM 版](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-arm64.exe)）。还没有代码签名，第一次运行时选「更多信息 → 仍要运行」。 |
-| **Linux** | [myco-app-linux-amd64](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-amd64)（[ARM 版](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-arm64)）：在浏览器里打开 App（X11、Wayland、WSL 都行）。[详见](INSTALL.zh-CN.md#9-控制台-appmac--windows--linux) |
+| **Mac** | **[myco.dmg](https://github.com/myco-ai/myco/releases/latest/download/myco.dmg)**：Apple 芯片和 Intel 通用，已签名公证，可自动更新。 |
+| **Windows**（预览） | [myco-app-windows-amd64.exe](https://github.com/myco-ai/myco/releases/latest/download/myco-app-windows-amd64.exe)（[ARM 版](https://github.com/myco-ai/myco/releases/latest/download/myco-app-windows-arm64.exe)）。还没有代码签名，第一次运行时选「更多信息 → 仍要运行」。 |
+| **Linux** | [myco-app-linux-amd64](https://github.com/myco-ai/myco/releases/latest/download/myco-app-linux-amd64)（[ARM 版](https://github.com/myco-ai/myco/releases/latest/download/myco-app-linux-arm64)）：在浏览器里打开 App（X11、Wayland、WSL 都行）。[详见](INSTALL.zh-CN.md#9-控制台-appmac--windows--linux) |
 | **iPhone**（测试版） | **[加入 TestFlight 测试](https://testflight.apple.com/join/XDKvU8Jp)**（iOS 17 或更新）。 |
 | **服务器** | 用命令行工具，见[更喜欢命令行？](#更喜欢命令行) |
 
@@ -64,7 +64,7 @@ App 的第一屏也有这句话（**让 agent 帮我装**）。
 **1. 打开 App，准备一个 Hub**（agent 们连接的小服务器）：**在这台电脑上开始**一键启动，或者用 App 连接链接 **连接已有的 Hub**。想放在自己的服务器上，在服务器上运行（最后会打印 App 连接链接）：
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-hub.sh && sudo bash install-hub.sh --domain auto
+curl -fsSLO https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-hub.sh && sudo bash install-hub.sh --domain auto
 ```
 
 **2. 加入你的 agent。** 点 **添加 agent**：选这台电脑上找到的 Claude Code 或 Codex 会话，在任意已连上的电脑上新开一个，或者把 App 给的那句话发给另一台电脑上的 agent，它会自己加入。
@@ -149,7 +149,7 @@ Claude Code、Codex、claude.ai 云端会话，还有 Pi、Kiro、Gemini CLI 等
 App 能做的事，`myco` 命令都能做，在服务器上或让 agent 自己用都方便。
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.sh | bash
+curl -fsSL https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-client.sh | bash
 ```
 
 | 开一个 Hub | 命令 |
@@ -286,7 +286,7 @@ flowchart TB
 
 <img src="docs/assets/community/wechat-group.png" alt="myco 微信群" width="220">
 
-bug 和新功能需求：[GitHub Issues](https://github.com/chenhg5/myco/issues)。
+bug 和新功能需求：[GitHub Issues](https://github.com/myco-ai/myco/issues)。
 
 关注作者：X（Twitter）[@chg80333](https://x.com/chg80333)。商务合作请加微信 **mongorz**，加的时候备注好你是谁、想合作什么。
 

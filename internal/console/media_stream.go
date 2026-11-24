@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // A page cannot load media from the internet (its CSP allows only its own

@@ -10,7 +10,7 @@ import { L, lang } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 const INSTALL_COMMAND =
-  "curl -fsSL https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-hub.sh | sudo bash -s -- --domain auto";
+  "curl -fsSL https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-hub.sh | sudo bash -s -- --domain auto";
 
 /**
  * Adds a hub. The normal way is pasting the link the installer printed; the

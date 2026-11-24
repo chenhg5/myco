@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/app"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/app"
 )
 
 // The built whiteboard runs in Chromium, while the bridge's data port talks to

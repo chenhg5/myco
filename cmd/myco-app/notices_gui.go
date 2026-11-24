@@ -10,7 +10,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/events"
 	"github.com/wailsapp/wails/v3/pkg/services/notifications"
 
-	"github.com/chenhg5/myco/internal/console/notices"
+	"github.com/myco-ai/myco/internal/console/notices"
 )
 
 // systemNotices is notices.Presenter with the system's own notifications

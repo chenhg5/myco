@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 func TestStateOfOnlyAckedIsWorking(t *testing.T) {

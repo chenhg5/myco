@@ -101,7 +101,7 @@ public enum Scenario: Sendable {
                 name: "myco-ios", title: "myco 手机端", goal: "做出 iOS 第一版，上 TestFlight",
                 brief: "## 规则\n- 先跑通关键路径，再接真实数据。\n- 每一步都在真机上看。",
                 createdAt: ago(12 * 86_400),
-                links: [ProjectLink(title: "仓库", url: "https://github.com/chenhg5/myco")],
+                links: [ProjectLink(title: "仓库", url: "https://github.com/myco-ai/myco")],
                 members: [
                     ProjectMember(name: lead.name, role: "coordinator", note: "协调", addedAt: ago(12 * 86_400)),
                     ProjectMember(name: backend.name, note: "推送接口", addedAt: ago(11 * 86_400), group: "后端"),
@@ -199,7 +199,7 @@ public enum Scenario: Sendable {
             <li><label><input type="checkbox" checked> 聊天滚动</label></li>
             <li><label><input type="checkbox"> 导航返回</label></li>
             <li><label><input type="checkbox"> 运行中补充和停止</label></li></ul>
-            <p><a href="https://github.com/chenhg5/myco">仓库</a></p>
+            <p><a href="https://github.com/myco-ai/myco">仓库</a></p>
             <script src="app.js"></script></body></html>
             """),
             "style.css": ("text/css; charset=utf-8", "body{font:17px/1.6 -apple-system,sans-serif;margin:24px;color:#1c1c21}h1{font-size:24px}li{list-style:none;margin:10px 0}ul{padding:0}.v{color:#85858d}#n{color:#2f8a68}"),
@@ -208,7 +208,7 @@ public enum Scenario: Sendable {
         // The coordinator's conversation keeps the repository and the
         // first decision at hand.
         world.pins[lead.name] = [
-            Pin(id: "pin_repo", kind: "link", title: "仓库", target: "https://github.com/chenhg5/myco", addedBy: lead.name, at: ago(2_000)),
+            Pin(id: "pin_repo", kind: "link", title: "仓库", target: "https://github.com/myco-ai/myco", addedBy: lead.name, at: ago(2_000)),
             Pin(id: "pin_nav", kind: "message", title: "定了：底部三个 Tab", target: "m2", addedBy: me, at: ago(1_900)),
         ]
         // Two of myco's apps: a checklist kept as records (the bridge's

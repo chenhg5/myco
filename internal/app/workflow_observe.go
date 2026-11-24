@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // What a run did, cost, produced and scored: metrics worked out from its

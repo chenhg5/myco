@@ -12,14 +12,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	. "github.com/chenhg5/myco/internal/cli/cmdkit"
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/config"
-	"github.com/chenhg5/myco/internal/harness"
-	"github.com/chenhg5/myco/internal/harness/claude"
-	"github.com/chenhg5/myco/internal/harness/codex"
-	"github.com/chenhg5/myco/internal/runner"
+	"github.com/myco-ai/myco/internal/api"
+	. "github.com/myco-ai/myco/internal/cli/cmdkit"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/config"
+	"github.com/myco-ai/myco/internal/harness"
+	"github.com/myco-ai/myco/internal/harness/claude"
+	"github.com/myco-ai/myco/internal/harness/codex"
+	"github.com/myco-ai/myco/internal/runner"
 )
 
 // A session that receives with inbox wait is not started by a runner, so

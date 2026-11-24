@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // Projects: people create them and add their nodes; a project's
@@ -87,7 +87,7 @@ func TestProjects(t *testing.T) {
 	}
 
 	// The coordinator edits the content and the members' cards.
-	brief := "repo: chenhg5/myco; run make check before pushing"
+	brief := "repo: myco-ai/myco; run make check before pushing"
 	if got, err := lead.UpdateProject(c, "myco", api.UpdateProjectRequest{Brief: &brief}); err != nil || got.Brief != brief || !got.CanEdit || got.CanManage {
 		t.Fatalf("coordinator edits the brief: %v %+v", err, got)
 	}

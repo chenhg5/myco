@@ -31,7 +31,7 @@ static int mycoRequestScreenRecording(void) {
 */
 import "C"
 
-import "github.com/chenhg5/myco/internal/oscap"
+import "github.com/myco-ai/myco/internal/oscap"
 
 func init() {
 	var prompt screenPrompt

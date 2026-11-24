@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/templates"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/templates"
 )
 
 func appsZip(t *testing.T, apps map[string]string) []byte {

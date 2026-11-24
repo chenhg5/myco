@@ -5,8 +5,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/chenhg5/myco/internal/config"
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/config"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // EnvAgent names the agent profile (~/.myco/agents/<name>.yaml) to act as

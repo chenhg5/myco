@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // Skills: an agent describes what it can be asked to do, its owner (or an

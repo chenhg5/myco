@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/cli/cmdkit"
-	"github.com/chenhg5/myco/internal/config"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/cli/cmdkit"
+	"github.com/myco-ai/myco/internal/config"
 )
 
 type followHub struct {

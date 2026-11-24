@@ -13,13 +13,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/agenttools"
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/config"
-	"github.com/chenhg5/myco/internal/harness"
-	"github.com/chenhg5/myco/internal/harness/codex"
-	"github.com/chenhg5/myco/internal/machineid"
+	"github.com/myco-ai/myco/internal/agenttools"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/config"
+	"github.com/myco-ai/myco/internal/harness"
+	"github.com/myco-ai/myco/internal/harness/codex"
+	"github.com/myco-ai/myco/internal/machineid"
 )
 
 // runtimeReporter tells the hub, in the background and best effort, which

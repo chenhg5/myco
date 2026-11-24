@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chenhg5/myco/internal/testutil"
+	"github.com/myco-ai/myco/internal/testutil"
 )
 
 // One Claude Code session and two workspaces: joining the second joins a

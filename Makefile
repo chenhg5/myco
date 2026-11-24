@@ -1,5 +1,5 @@
 VERSION ?= $(shell git describe --tags --match 'v*' --always --dirty 2>/dev/null || echo dev)
-LDFLAGS := -s -w -X github.com/chenhg5/myco/internal/cli.Version=$(VERSION)
+LDFLAGS := -s -w -X github.com/myco-ai/myco/internal/cli.Version=$(VERSION)
 
 .PHONY: build test test-integration smoke check vet cross clean web templates app
 

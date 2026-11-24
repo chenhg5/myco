@@ -19,12 +19,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/domain"
-	"github.com/chenhg5/myco/internal/osutil"
-	"github.com/chenhg5/myco/internal/release"
-	"github.com/chenhg5/myco/internal/remotedesktop"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/osutil"
+	"github.com/myco-ai/myco/internal/release"
+	"github.com/myco-ai/myco/internal/remotedesktop"
 )
 
 // Server is the hub's HTTP adapter.

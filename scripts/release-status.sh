@@ -10,7 +10,7 @@ set -eu
 SHA=${1:?usage: scripts/release-status.sh <sha> [ci|release|all] [--wait]}
 WANT=${2:-all}
 WAIT=${3:-}
-REPO=${MYCO_REPO:-chenhg5/myco}
+REPO=${MYCO_REPO:-myco-ai/myco}
 while :; do
   out=$("$(dirname "$0")/gh-get.sh" "repos/$REPO/actions/runs?head_sha=$SHA" | python3 -c '
 import json, sys

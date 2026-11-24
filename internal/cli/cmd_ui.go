@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/chenhg5/myco/internal/release"
+	"github.com/myco-ai/myco/internal/release"
 	"net"
 	"net/http"
 	"os"
@@ -19,10 +19,10 @@ import (
 	"sync"
 	"time"
 
-	. "github.com/chenhg5/myco/internal/cli/cmdkit"
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/config"
-	"github.com/chenhg5/myco/internal/web"
+	. "github.com/myco-ai/myco/internal/cli/cmdkit"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/config"
+	"github.com/myco-ai/myco/internal/web"
 )
 
 func uiCommand() *Command {

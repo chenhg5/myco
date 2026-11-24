@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // An agent that receives in its own session (myco inbox wait) has no runner

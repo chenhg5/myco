@@ -2,12 +2,12 @@ package cli
 
 import (
 	"fmt"
-	"github.com/chenhg5/myco/internal/release"
+	"github.com/myco-ai/myco/internal/release"
 	"io"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	. "github.com/chenhg5/myco/internal/cli/cmdkit"
+	"github.com/myco-ai/myco/internal/api"
+	. "github.com/myco-ai/myco/internal/cli/cmdkit"
 )
 
 // checkBinding refuses to silently move an agent's session to another

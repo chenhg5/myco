@@ -3,8 +3,8 @@ package console
 import (
 	"net/http"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // Automations (hubs from v0.19.22): the App's 自动化 page, passed to the

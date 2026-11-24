@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chenhg5/myco/internal/console"
+	"github.com/myco-ai/myco/internal/console"
 )
 
 func TestParseAppLink(t *testing.T) {

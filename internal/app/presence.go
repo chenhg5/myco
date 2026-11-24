@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // Presence tracks, in memory, how each agent is currently receiving messages.

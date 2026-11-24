@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 func TestProxyConfigCheck(t *testing.T) {
@@ -92,7 +92,7 @@ func TestSystemModeFallsBackToSystemSettings(t *testing.T) {
 		return p
 	}
 	// No HTTPS_PROXY (an App started from the desktop): the system's.
-	if p := at("https://github.com/chenhg5/myco/releases"); p != sysURL {
+	if p := at("https://github.com/myco-ai/myco/releases"); p != sysURL {
 		t.Fatalf("github.com: %v", p)
 	}
 	// This computer and the local network still go direct, without asking.

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chenhg5/myco/internal/service"
+	"github.com/myco-ai/myco/internal/service"
 )
 
 // The local hub before v0.18.3: `myco hub up --tunnel none` made it listen on
