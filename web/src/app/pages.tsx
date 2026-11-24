@@ -111,8 +111,12 @@ const sends = new Map<string, number[]>();
 // A page's own storage (myco.storage), kept by the App: pages cannot see
 // each other's.
 const storeKey = (hubId: string, id: string) => `myco-page-store:${hubId}:${id}`;
-function storeOf(hubId: string, id: string): Record<string, unknown> {
-  try { return JSON.parse(localStorage.getItem(storeKey(hubId, id)) || "{}") as Record<string, unknown>; } catch { return {}; }
+function storeOf(key: string): Record<string, unknown> {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(key) || "{}");
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed as Record<string, unknown>;
+  } catch { /* unavailable or invalid */ }
+  return {};
 }
 
 // The panel as the top bar's toggle sees it (PageToggle), and the toggle
@@ -368,13 +372,36 @@ function PageView({ target, open, active, reload, onMeta }: {
   const [loadedKey, setLoadedKey] = useState("");
   const key = target.kind === "page" ? `${target.hubId}/${target.id}` : target.url;
 
+  const loadGeneration = useRef(0);
+  useEffect(() => () => { loadGeneration.current++; }, [key]);
+  const lease = opened?.lease;
+  useEffect(() => {
+    if (target.kind !== "page" || !lease) return;
+    const { hubId, id } = target;
+    return () => { void appApi.closePage(hubId, id, lease).catch(() => undefined); };
+  }, [key, lease]);
+
   const load = async (version?: number) => {
     if (target.kind !== "page") return;
+    const loadID = ++loadGeneration.current;
     setError("");
     try {
-      const [o, p] = await Promise.all([appApi.openPage(target.hubId, target.id, version), pageOf(target.hubId, target.id, true)]);
+      const p = await pageOf(target.hubId, target.id, true);
+      if (loadGeneration.current !== loadID) return;
+      const o = await appApi.openPage(target.hubId, target.id, version);
+      if (loadGeneration.current !== loadID) {
+        if (o.lease) void appApi.closePage(target.hubId, target.id, o.lease).catch(() => undefined);
+        return;
+      }
+      if (p.template?.requires_isolation && !o.isolated) {
+        if (o.lease) void appApi.closePage(target.hubId, target.id, o.lease).catch(() => undefined);
+        setOpened(null); setPage(p);
+        setError(L("这个应用需要独立的页面存储，请升级 myco App。", "This app requires isolated page storage. Update the myco App."));
+        return;
+      }
       setOpened(o); setPage(p);
     } catch (e) {
+      if (loadGeneration.current !== loadID) return;
       setOpened(null);
       setError(isOldHub(e) || (e instanceof ApiError && /not enabled/.test(e.message))
         ? L("这个工作区的 Hub 还不支持网页：在服务器上运行 sudo myco upgrade，升级到 v0.19.24 或更新。", "This workspace's hub has no pages yet: upgrade it to v0.19.24 or later (sudo myco upgrade on the server).")
@@ -424,10 +451,10 @@ function PageView({ target, open, active, reload, onMeta }: {
       const win = frame.current?.contentWindow;
       if (!win || e.source !== win) return;
       const d = e.data as { myco?: string; url?: string; id?: number; method?: string; args?: Record<string, unknown> } | null;
-      if (d?.myco === "open-url" && typeof d.url === "string" && /^(https?:|mailto:)/i.test(d.url)) { openOutside(d.url); return; }
-      if (d?.myco !== "call" || typeof d.id !== "number") return;
       const origin = (() => { try { return new URL(frame.current?.src || "").origin; } catch { return ""; } })();
       if (!origin || e.origin !== origin) return;
+      if (d?.myco === "open-url" && typeof d.url === "string" && /^(https?:|mailto:)/i.test(d.url)) { openOutside(d.url); return; }
+      if (d?.myco !== "call" || typeof d.id !== "number") return;
       const reply = (value: unknown, error?: string, code?: string, latest?: unknown) => {
         if (closed) return;
         win.postMessage(error ? { myco: "result", id: d.id, error, code, ...(latest ? { latest } : {}) } : { myco: "result", id: d.id, value }, origin);
@@ -477,7 +504,7 @@ function PageView({ target, open, active, reload, onMeta }: {
           bridged.current = true;
           const projectFiles = !!projectFileScope(p);
           // (can_edit: false when only those who manage it change it, and not you)
-          return { page: { id: t.id, url: p?.url || "", name: o?.name || p?.name || "", version: o?.version || 0 }, me: { name: meOf(t.hubId), can_edit: !p?.read_only, can_manage: !!p?.can_manage }, state: st.state, version: st.version, preferences: live.current.preferences, projectFiles, projectMedia: projectFiles };
+          return { page: { id: t.id, url: p?.url || "", name: o?.name || p?.name || "", version: o?.version || 0 }, me: { name: meOf(t.hubId), can_edit: !p?.read_only, can_manage: !!p?.can_manage }, state: st.state, version: st.version, preferences: live.current.preferences, isolation: o?.isolated === true, projectFiles, projectMedia: projectFiles };
         }
         case "update": {
           const r = await appApi.putPageState(t.hubId, t.id, args.state ?? null, Number(args.version) || 0);
@@ -507,17 +534,16 @@ function PageView({ target, open, active, reload, onMeta }: {
           });
           return { id: m.id };
         }
-        case "storage.get": {
-          const all = storeOf(t.hubId, t.id);
-          return all[String(args.key)] ?? null;
-        }
+        case "storage.get":
         case "storage.set": {
-          const all = storeOf(t.hubId, t.id);
+          const storageKey = o?.storage_scope ? `myco-page-store-isolated:${o.storage_scope}` : storeKey(t.hubId, t.id);
+          const all = storeOf(storageKey);
+          if (method === "storage.get") return all[String(args.key)] ?? null;
           if (args.value === null || args.value === undefined) delete all[String(args.key)];
           else all[String(args.key)] = args.value;
           const raw = JSON.stringify(all);
           if (raw.length > 1 << 20) throw Object.assign(new Error(L("这个网页的存储满了（1 MB）", "This page's storage is full (1 MB)")), { code: "too_large" });
-          try { localStorage.setItem(storeKey(t.hubId, t.id), raw); } catch { throw new Error(L("存不下", "Could not store it")); }
+          try { localStorage.setItem(storageKey, raw); } catch { throw new Error(L("存不下", "Could not store it")); }
           return true;
         }
       }
@@ -729,6 +755,26 @@ function PageView({ target, open, active, reload, onMeta }: {
   const newer = opened && page && page.version > opened.version ? page.version : 0;
   // Until the page has loaded: a loading scene over it, not a blank frame.
   const [upgrading, setUpgrading] = useState(false);
+  const oldPreferences = opened?.storage_scope && target.kind === "page" ? storeOf(storeKey(target.hubId, target.id)) : null;
+  const exportPreferences = () => {
+    if (!oldPreferences) return;
+    const url = URL.createObjectURL(new Blob([JSON.stringify(oldPreferences, null, 2)], { type: "application/json" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "myco-older-page-settings.json";
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 30000);
+  };
+  const [recovery, setRecovery] = useState<{ url?: string; error?: string } | null>(null);
+  const recover = async () => {
+    setRecovery({});
+    try {
+      const { url } = await appApi.openPageStorageRecovery();
+      setRecovery((current) => current && { url: localizedPageURL(url, preferences.language) });
+    } catch (e) {
+      setRecovery((current) => current && { error: (e as Error).message });
+    }
+  };
   const icon: PageMeta["icon"] = local ? "local" : opened?.live || page?.live ? "live" : "page";
   useEffect(() => {
     onMeta({ title, about, icon, copyUrl: page?.url ? pageFragmentURL(page.url, target.kind === "page" ? target.fragment : undefined) : undefined, localUrl: target.kind === "local" ? target.url : undefined, loaded: !!src });
@@ -750,6 +796,15 @@ function PageView({ target, open, active, reload, onMeta }: {
           }}>{upgrading ? L("正在升级…", "Upgrading…") : L("升级", "Upgrade")}</button>
         </div>
       )}
+      {(opened?.recovery || (oldPreferences && Object.keys(oldPreferences).length > 0)) && <div className="pg-new">
+        {opened?.recovery && <button type="button" className="app-btn app-btn-small" onClick={() => void recover()}>{L("恢复旧本机文件", "Recover older local files")}</button>}
+        {oldPreferences && Object.keys(oldPreferences).length > 0 && <button type="button" className="app-btn app-btn-small" onClick={exportPreferences}>{L("导出旧页面设置", "Export older page settings")}</button>}
+      </div>}
+      <Modal open={recovery !== null} onOpenChange={(value) => { if (!value) setRecovery(null); }} title={L("恢复旧本机文件", "Recover older local files")} wide>
+        {recovery?.error ? <p role="alert">{recovery.error}</p> : recovery?.url
+          ? <iframe title={L("旧本机文件", "Older local files")} className="w-full h-80 border-0" src={recovery.url} sandbox="allow-scripts allow-same-origin allow-downloads" referrerPolicy="no-referrer" />
+          : <p role="status">{L("正在打开旧库…", "Opening older storage…")}</p>}
+      </Modal>
       {local && <div className="pg-local-note"><Monitor />{L("这台电脑上正在运行的网页。是空白的话，可能这个端口没有在跑。", "A server running on this computer. Blank? Nothing may be running on this port.")}</div>}
       {error ? <p className="fp-note">{error}</p> : (
         <div className="pg-stage">

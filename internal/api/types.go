@@ -1610,6 +1610,19 @@ type Page struct {
 	Template *PageTemplate `json:"template,omitempty"`
 }
 
+// PageOpen is the desktop console's response for an opened static page.
+type PageOpen struct {
+	URL          string `json:"url"`
+	Lease        string `json:"lease"`
+	Isolated     bool   `json:"isolated"`
+	Recovery     bool   `json:"recovery,omitempty"`
+	StorageScope string `json:"storage_scope,omitempty"`
+	Version      int    `json:"version"`
+	Latest       int    `json:"latest"`
+	Name         string `json:"name"`
+	Entry        string `json:"entry"`
+}
+
 // PageTemplate says which template a page was made from, and its data's
 // structure (the manifest's collections).
 type PageTemplate struct {
@@ -1626,7 +1639,8 @@ type PageTemplate struct {
 	Net []string `json:"net,omitempty"`
 	// Latest is the app's newest version, when newer than the page's
 	// (hubs from v0.20.7): POST /v1/pages/{id}/upgrade takes it.
-	Latest string `json:"latest,omitempty"`
+	Latest            string `json:"latest,omitempty"`
+	RequiresIsolation bool   `json:"requires_isolation,omitempty"`
 }
 
 // PageVersion is one publish of a page.
@@ -1800,9 +1814,10 @@ type Template struct {
 	Permissions []string                      `json:"permissions,omitempty"`
 	// OS and Net: the computer's capabilities and the hosts it declares
 	// (hubs from v0.22.1).
-	OS     []string `json:"os,omitempty"`
-	Net    []string `json:"net,omitempty"`
-	Export []string `json:"export,omitempty"`
+	OS                []string `json:"os,omitempty"`
+	Net               []string `json:"net,omitempty"`
+	Export            []string `json:"export,omitempty"`
+	RequiresIsolation bool     `json:"requires_isolation,omitempty"`
 	// Guide is its agent's guide (agent.md): how to fill its data.
 	Guide string `json:"guide,omitempty"`
 	// Official: one of myco's, in every workspace (hubs from v0.20.5).

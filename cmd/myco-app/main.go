@@ -282,6 +282,17 @@ func guarded(h http.Handler, port int, k string) http.Handler {
 			http.Error(w, "forbidden host", http.StatusForbidden)
 			return
 		}
+		// A page origin shares this loopback hostname with the browser
+		// console. Reject requests from a different origin even if the
+		// browser attaches the console's HttpOnly cookie.
+		if strings.HasPrefix(r.URL.Path, "/app/") {
+			site := r.Header.Get("Sec-Fetch-Site")
+			origin := r.Header.Get("Origin")
+			if (site != "" && site != "same-origin" && site != "none") || (origin != "" && origin != "http://"+r.Host) {
+				http.Error(w, "forbidden origin", http.StatusForbidden)
+				return
+			}
+		}
 		if q := r.URL.Query().Get("key"); q != "" {
 			if subtle.ConstantTimeCompare([]byte(q), []byte(k)) != 1 {
 				http.Error(w, "invalid key", http.StatusForbidden)
@@ -295,7 +306,7 @@ func guarded(h http.Handler, port int, k string) http.Handler {
 			http.Error(w, "open the console with the URL printed by myco-app --serve (it contains a one-time key)", http.StatusUnauthorized)
 			return
 		}
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; frame-src http://127.0.0.1:* http://localhost:*")
 		h.ServeHTTP(w, r)
 	})
 }

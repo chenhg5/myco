@@ -4,10 +4,12 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -59,9 +61,18 @@ func TestPagesOpenOnTheirOwnOrigin(t *testing.T) {
 	if !strings.HasPrefix(u, "http://127.0.0.1:") || !strings.HasSuffix(u, "/index.html") || strings.HasPrefix(u, r.app.URL) {
 		t.Fatalf("its own origin: %s (app %s)", u, r.app.URL)
 	}
-	// the port is remembered, so the next start keeps the pages' origin
-	if raw, err := os.ReadFile(filepath.Join(filepath.Dir(r.store), "page-port")); err != nil || !strings.HasPrefix(u, "http://127.0.0.1:"+strings.TrimSpace(string(raw))+"/") {
-		t.Fatalf("page port remembered: %q %v (url %s)", raw, err, u)
+	// The port is remembered independently of the opening ticket.
+	registry := map[string]int{}
+	rawRegistry, err := os.ReadFile(filepath.Join(filepath.Dir(r.store), "page-origins.json"))
+	parsed, _ := url.Parse(u)
+	port, _ := strconv.Atoi(parsed.Port())
+	if err != nil || json.Unmarshal(rawRegistry, &registry) != nil || len(registry) != 1 {
+		t.Fatalf("page origin registry: %v", err)
+	}
+	for _, saved := range registry {
+		if saved != port {
+			t.Fatalf("saved port: %d, opened: %d", saved, port)
+		}
 	}
 	get := func(url, host string) (*http.Response, string) {
 		req, _ := http.NewRequest("GET", url, nil)
@@ -135,7 +146,7 @@ func TestPagesOpenOnTheirOwnOrigin(t *testing.T) {
 // the helper put in; when nothing forwards it, a page that says so.
 // The App serves pages on the port they had before (when it is free), so
 // what pages keep in the browser stays theirs across restarts.
-func TestPagesKeepTheirPortAcrossRestarts(t *testing.T) {
+func TestPageRecoveryUsesRetiredOrigin(t *testing.T) {
 	r := newRig(t)
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -164,8 +175,21 @@ func TestPagesKeepTheirPortAcrossRestarts(t *testing.T) {
 	}
 	_, h, _ := r.do("POST", "/app/hubs", map[string]string{"name": "Main", "url": r.hubURL, "token": r.consoleToken("t")})
 	code, o, raw := r.do("POST", "/app/hubs/"+h["id"].(string)+"/pages/"+p.ID+"/open", nil)
-	if code != 200 || !strings.HasPrefix(o["url"].(string), "http://127.0.0.1:"+strconv.Itoa(port)+"/") {
-		t.Fatalf("open on port %d: %d %s", port, code, raw)
+	prefix := "http://127.0.0.1:" + strconv.Itoa(port) + "/"
+	if code != 200 || o["recovery"] != true || strings.HasPrefix(o["url"].(string), prefix) {
+		t.Fatalf("new page used the retired origin: %d %s", code, raw)
+	}
+	code, recover, raw := r.do("POST", "/app/page-storage-recovery", nil)
+	if code != 200 || !strings.HasPrefix(recover["url"].(string), prefix) {
+		t.Fatalf("recovery should use the retired origin: %d %s", code, raw)
+	}
+	res, err := http.Get(recover["url"].(string))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 || strings.Contains(res.Header.Get("Content-Security-Policy"), "unsafe-eval") {
+		t.Fatalf("trusted recovery page: %d", res.StatusCode)
 	}
 }
 

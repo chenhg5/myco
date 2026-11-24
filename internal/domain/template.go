@@ -113,7 +113,8 @@ type Manifest struct {
 
 // ManifestRequires is what a template needs to run.
 type ManifestRequires struct {
-	Hub string `json:"hub,omitempty"`
+	Hub       string `json:"hub,omitempty"`
+	Isolation bool   `json:"isolation,omitempty"`
 }
 
 // MaxTemplateIcon bounds a template's icon (an SVG).

@@ -215,7 +215,7 @@ export interface Page {
   live?: boolean; port?: number; online?: boolean;
   /** the template it was made from (hubs from v0.20.5) */
   /** the app it was made from; latest: the app's newer version (hubs from v0.20.7) */
-  template?: { id: string; slug: string; name: string; version: string; permissions?: string[]; os?: string[]; net?: string[]; latest?: string };
+  template?: { id: string; slug: string; name: string; version: string; permissions?: string[]; os?: string[]; net?: string[]; latest?: string; requires_isolation?: boolean };
 }
 /** A template in the workspace's library (hubs from v0.20.5): official
  *  ones (myco's own) first. */
@@ -226,7 +226,7 @@ export interface Template {
   category?: string;
   /** its icon, SVG markup (hubs from v0.20.7): shown as a mask, tinted */
   icon?: string;
-  official?: boolean; can_manage: boolean; guide?: string; permissions?: string[]; os?: string[]; net?: string[]; export?: string[];
+  official?: boolean; requires_isolation?: boolean; can_manage: boolean; guide?: string; permissions?: string[]; os?: string[]; net?: string[]; export?: string[];
   /** its screenshots (hubs from v0.21.5): paths in its folder, a dark one
    *  beside when there is one; a workspace's own list them when got alone */
   shots?: { src: string; dark?: string }[];
@@ -236,7 +236,7 @@ export interface Template {
 }
 /** What opening a page gives: where its files are served (a loopback origin
  *  of the App's own), for which version. */
-export interface PageOpen { url: string; version: number; latest: number; name: string; entry: string; live?: boolean; online?: boolean; port?: number }
+export interface PageOpen { url: string; lease?: string; isolated?: boolean; recovery?: boolean; storage_scope?: string; version: number; latest: number; name: string; entry: string; live?: boolean; online?: boolean; port?: number }
 /** A page's shared state (the bridge's myco.update): null before anyone wrote. */
 export interface PageState { state: unknown; version: number; updated_by?: string; updated_at?: string }
 

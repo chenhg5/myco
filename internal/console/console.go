@@ -242,6 +242,10 @@ func (b *Backend) client(h Hub) (*client.Client, error) {
 		return nil, &client.Error{Code: "not_configured", Message: "no console token for hub " + h.Name + " in the keychain",
 			Suggestion: "remove the hub and add it again with a console token"}
 	}
+	return b.clientForToken(h, tok)
+}
+
+func (b *Backend) clientForToken(h Hub, tok string) (*client.Client, error) {
 	nc := b.NewClient
 	if nc == nil {
 		nc = client.New

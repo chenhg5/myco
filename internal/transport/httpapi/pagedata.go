@@ -222,7 +222,7 @@ func pageTemplateDTO(p *domain.Page) *api.PageTemplate {
 	if err != nil {
 		return nil
 	}
-	return &api.PageTemplate{ID: p.Template, Slug: m.ID, Name: m.Name, Version: p.TemplateVersion, Data: collectionsDTO(m.Data), Permissions: m.Permissions, OS: m.OS, Net: m.Net}
+	return &api.PageTemplate{ID: p.Template, Slug: m.ID, Name: m.Name, Version: p.TemplateVersion, Data: collectionsDTO(m.Data), Permissions: m.Permissions, OS: m.OS, Net: m.Net, RequiresIsolation: m.Requires != nil && m.Requires.Isolation}
 }
 
 func (s *Server) templateDTO(by app.Actor, tv *app.TemplateView) api.Template {
@@ -240,6 +240,7 @@ func (s *Server) templateDTO(by app.Actor, tv *app.TemplateView) api.Template {
 		out.Data, out.Permissions, out.Export = collectionsDTO(tv.Manifest.Data), tv.Manifest.Permissions, tv.Manifest.Export
 		out.OS, out.Net = tv.Manifest.OS, tv.Manifest.Net
 		out.Category = tv.Manifest.Category
+		out.RequiresIsolation = tv.Manifest.Requires != nil && tv.Manifest.Requires.Isolation
 	}
 	for _, sh := range tv.Shots {
 		out.Shots = append(out.Shots, api.TemplateShot{Src: sh.Src, Dark: sh.Dark})

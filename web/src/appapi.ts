@@ -1041,7 +1041,9 @@ export const appApi = {
   // Pages (hubs from v0.19.24; older ones answer 404): agents' web pages
   pages: (hubId: string, project?: string) => request<{ pages: Page[] }>("GET", `app/hubs/${enc(hubId)}/pages${project ? `?project=${enc(project)}` : ""}`),
   page: (hubId: string, id: string) => request<Page>("GET", `app/hubs/${enc(hubId)}/pages/${enc(id)}`),
-  openPage: (hubId: string, id: string, version?: number) => request<PageOpen>("POST", `app/hubs/${enc(hubId)}/pages/${enc(id)}/open`, version ? { version } : {}),
+  openPage: (hubId: string, id: string, version?: number, render = false) => request<PageOpen>("POST", `app/hubs/${enc(hubId)}/pages/${enc(id)}/open`, { ...(version ? { version } : {}), ...(render ? { render } : {}) }),
+  openPageStorageRecovery: () => request<{ url: string }>("POST", "app/page-storage-recovery", {}),
+  closePage: (hubId: string, id: string, lease: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/pages/${enc(id)}/open/${enc(lease)}`),
   deletePage: (hubId: string, id: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/pages/${enc(id)}`),
   /** who may change a page's records: everyone who sees it, or those who manage it (hubs from v0.22.2) */
   setPageEditors: (hubId: string, id: string, editors: "everyone" | "managers") => request<Page>("PATCH", `app/hubs/${enc(hubId)}/pages/${enc(id)}`, { editors }),

@@ -2,9 +2,8 @@ package console
 
 import (
 	"bytes"
-	"crypto/rand"
+	"crypto/sha256"
 	_ "embed"
-	"encoding/base32"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -17,7 +16,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/myco-ai/myco/internal/api"
@@ -53,90 +51,6 @@ const pageHelper = `<script src="/__myco/page.js"></script>`
 //
 //go:embed pagebridge.js
 var pageHelperJS string
-
-type pageKey struct {
-	hub, page, name, entry string
-	version                int
-}
-
-type pageServer struct {
-	mu    sync.Mutex
-	port  int
-	err   error
-	keys  map[string]pageKey
-	order []string
-	// live pages opened: a loopback port each (hub/page → port)
-	live map[string]int
-}
-
-const maxPageKeys = 500
-
-func (b *Backend) pageServer() (*pageServer, error) {
-	b.pagesOnce.Do(func() {
-		ps := &pageServer{keys: map[string]pageKey{}}
-		b.pages = ps
-		ln, err := b.listenPages()
-		if err != nil {
-			ps.err = err
-			return
-		}
-		ps.port = ln.Addr().(*net.TCPAddr).Port
-		srv := &http.Server{Handler: b.pageHandler(ps), ReadHeaderTimeout: 10 * time.Second}
-		go func() { _ = srv.Serve(ln) }()
-	})
-	return b.pages, b.pages.err
-}
-
-// listenPages listens on the port the pages had the last time, when it is
-// free. What a page keeps in the browser (IndexedDB, localStorage) belongs
-// to its origin, port included: the same port keeps it across restarts of
-// the App (视频剪辑 keeps the videos there). The port is remembered next to
-// the App's hubs.json; without a store it is any free port.
-func (b *Backend) listenPages() (net.Listener, error) {
-	file := ""
-	if b.Store != nil && b.Store.path != "" {
-		file = filepath.Join(filepath.Dir(b.Store.path), "page-port")
-	}
-	if file != "" {
-		if raw, err := os.ReadFile(file); err == nil {
-			if p, err := strconv.Atoi(strings.TrimSpace(string(raw))); err == nil && p > 1024 && p < 65536 {
-				if ln, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(p)); err == nil {
-					return ln, nil
-				}
-			}
-		}
-	}
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return nil, err
-	}
-	if file != "" && os.MkdirAll(filepath.Dir(file), 0o700) == nil {
-		_ = os.WriteFile(file, []byte(strconv.Itoa(ln.Addr().(*net.TCPAddr).Port)+"\n"), 0o600)
-	}
-	return ln, nil
-}
-
-func (ps *pageServer) add(k pageKey) string {
-	buf := make([]byte, 20)
-	_, _ = rand.Read(buf)
-	key := strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(buf))
-	ps.mu.Lock()
-	defer ps.mu.Unlock()
-	ps.keys[key] = k
-	ps.order = append(ps.order, key)
-	for len(ps.order) > maxPageKeys {
-		delete(ps.keys, ps.order[0])
-		ps.order = ps.order[1:]
-	}
-	return key
-}
-
-func (ps *pageServer) get(key string) (pageKey, bool) {
-	ps.mu.Lock()
-	defer ps.mu.Unlock()
-	k, ok := ps.keys[key]
-	return k, ok
-}
 
 func (b *Backend) pageRoutes(m *http.ServeMux) {
 	m.HandleFunc("GET /app/hubs/{id}/pages", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
@@ -209,16 +123,36 @@ func (b *Backend) pageRoutes(m *http.ServeMux) {
 		}
 		writeJSON(w, http.StatusOK, st)
 	}))
-	m.HandleFunc("POST /app/hubs/{id}/pages/{pid}/open", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+	m.HandleFunc("POST /app/hubs/{id}/pages/{pid}/open", b.withHub(func(w http.ResponseWriter, r *http.Request, _ *client.Client) {
 		var in struct {
-			Version int `json:"version"`
+			Version int  `json:"version"`
+			Render  bool `json:"render"`
 		}
 		if r.ContentLength != 0 && !decode(w, r, &in) {
 			return
 		}
-		p, err := c.Page(r.Context(), r.PathValue("pid"))
+		hub, err := b.find(r.PathValue("id"))
 		if err != nil {
 			writeErr(w, err)
+			return
+		}
+		token, err := b.Secrets.Get(hub.ID)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		pageClient, err := b.clientForToken(hub, token)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		p, err := pageClient.Page(r.Context(), r.PathValue("pid"))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		if in.Render && p.Template != nil && p.Template.RequiresIsolation {
+			writeErr(w, &client.Error{Code: "unsupported", Status: http.StatusForbidden, Message: "this page requires an interactive isolated App tab"})
 			return
 		}
 		v := api.PageVersion{N: p.Version, Entry: p.Entry}
@@ -249,12 +183,57 @@ func (b *Backend) pageRoutes(m *http.ServeMux) {
 				"name": p.Name, "entry": "", "live": true, "online": p.Online, "port": p.Port})
 			return
 		}
-		key := ps.add(pageKey{hub: r.PathValue("id"), page: p.ID, version: v.N, name: p.Name, entry: v.Entry})
-		writeJSON(w, http.StatusOK, map[string]any{
-			"url":     fmt.Sprintf("http://127.0.0.1:%d/p/%s/%s", ps.port, key, escPath(v.Entry)),
-			"version": v.N, "latest": p.Version, "name": p.Name, "entry": v.Entry,
+		me, err := pageClient.Whoami(r.Context())
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		account := "admin"
+		if me.Member != nil && me.Member.ID != "" {
+			account = "member:" + me.Member.ID
+		} else if !me.Admin {
+			writeErr(w, &client.Error{Status: http.StatusForbidden, Code: "permission_denied", Message: "a console account is required to open a page"})
+			return
+		}
+		scope := pageScope(hub.ID, account, p.ID)
+		if in.Render {
+			scope = "render:" + scope
+		}
+		address, lease, err := ps.open(b, scope, pageKey{
+			hub: hub.ID, page: p.ID, entry: v.Entry, version: v.N, client: pageClient,
+			credential: sha256.Sum256([]byte(token)),
+		})
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, api.PageOpen{
+			URL: address, Lease: lease, Isolated: !in.Render, Recovery: !in.Render && ps.hasRecovery(), StorageScope: scope, Version: v.N, Latest: p.Version, Name: p.Name, Entry: v.Entry,
 		})
 	}))
+	m.HandleFunc("DELETE /app/hubs/{id}/pages/{pid}/open/{lease}", func(w http.ResponseWriter, r *http.Request) {
+		ps, err := b.pageServer()
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		ps.release(r.PathValue("id"), r.PathValue("pid"), r.PathValue("lease"))
+		w.WriteHeader(http.StatusNoContent)
+	})
+	m.HandleFunc("POST /app/page-storage-recovery", func(w http.ResponseWriter, r *http.Request) {
+		ps, err := b.pageServer()
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		address, err := ps.openRecovery()
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"url": address})
+	})
+
 }
 
 func escPath(p string) string {
@@ -266,11 +245,11 @@ func escPath(p string) string {
 }
 
 // pageHandler serves the files of opened pages on the page server's port.
-func (b *Backend) pageHandler(ps *pageServer) http.Handler {
+func (b *Backend) pageHandler(ps *pageListener) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Only this computer, by this address (not a name that could be
 		// pointed here from elsewhere).
-		if r.Host != "127.0.0.1:"+strconv.Itoa(ps.port) && r.Host != "localhost:"+strconv.Itoa(ps.port) {
+		if r.Host != "127.0.0.1:"+strconv.Itoa(ps.port) {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
@@ -300,6 +279,13 @@ func (b *Backend) pageHandler(ps *pageServer) http.Handler {
 			_, _ = io.WriteString(w, `<!doctype html><meta charset="utf-8"><p style="font:14px system-ui;color:#85858d;margin:40px;text-align:center">这个网页的地址已经失效了，请在 myco App 里重新打开。</p>`)
 			return
 		}
+		token, err := b.Secrets.Get(k.hub)
+		if err != nil || sha256.Sum256([]byte(token)) != k.credential {
+			http.Error(w, "page access expired", http.StatusNotFound)
+			return
+		}
+		h.Set("Cross-Origin-Resource-Policy", "same-origin")
+		h.Set("Origin-Agent-Cluster", "?1")
 		if !slash {
 			http.Redirect(w, r, "/p/"+key+"/", http.StatusFound)
 			return
@@ -312,21 +298,12 @@ func (b *Backend) pageHandler(ps *pageServer) http.Handler {
 			b.serveStream(w, r)
 			return
 		}
-		hub, err := b.find(k.hub)
-		if err != nil {
-			writeErr(w, err)
-			return
-		}
-		c, err := b.client(hub)
-		if err != nil {
-			writeErr(w, err)
-			return
-		}
+
 		fwd := http.Header{}
 		if v := r.Header.Get("If-None-Match"); v != "" {
 			fwd.Set("If-None-Match", v)
 		}
-		res, err := c.OpenPageFile(r.Context(), k.page, strconv.Itoa(k.version), file, fwd)
+		res, err := k.client.OpenPageFile(r.Context(), k.page, strconv.Itoa(k.version), file, fwd)
 		if err != nil {
 			if e, ok := client.AsError(err); ok && e.Status == http.StatusNotFound {
 				http.Error(w, "not found", http.StatusNotFound)
@@ -404,7 +381,7 @@ func (b *Backend) livePort(ps *pageServer, hubID, pageID string) (int, error) {
 	if port, ok := ps.live[k]; ok {
 		return port, nil
 	}
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := ps.listen()
 	if err != nil {
 		return 0, err
 	}
