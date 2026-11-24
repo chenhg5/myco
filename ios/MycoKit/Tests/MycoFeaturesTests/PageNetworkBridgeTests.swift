@@ -117,7 +117,11 @@ struct PageNetworkBridgeTests {
         let view = WKWebView(frame: .zero, configuration: config)
         defer { view.stopLoading() }
         view.load(URLRequest(url: try #require(PageLinks.address(of: "pg_checklist"))))
+        // (the blank document a web view starts with is "complete" too:
+        // wait for the page's own, with the bridge in it)
+        try await wait(view, "location.protocol", for: PageLinks.scheme + ":")
         try await wait(view, "document.readyState", for: "complete")
+        try await wait(view, "typeof window.myco", for: "object")
         #expect(try await evaluate(view, "String(myco.features.includes('net-media'))") == "true")
         let target = "https://media.example/song.mp3?part=1&name=a+b#episode"
         let script = "myco.media.url('\(target)')"

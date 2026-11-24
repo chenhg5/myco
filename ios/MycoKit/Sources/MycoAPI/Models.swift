@@ -316,12 +316,15 @@ public struct ProjectMember: Codable, Sendable, Hashable {
     public var role: String
     public var note: String?
     public var addedAt: Date
+    /// Its group in this project (hub v0.21.34+); nil: ungrouped.
+    public var group: String?
 
-    public init(name: String, role: String = "member", note: String? = nil, addedAt: Date = Date()) {
+    public init(name: String, role: String = "member", note: String? = nil, addedAt: Date = Date(), group: String? = nil) {
         self.name = name
         self.role = role
         self.note = note
         self.addedAt = addedAt
+        self.group = group
     }
 }
 
@@ -350,6 +353,9 @@ public struct Project: Codable, Sendable, Hashable, Identifiable {
     @LossyList public var docs: [ProjectDoc]
     /// I may change who is in it and what it may use (its owner, an admin).
     public var canManage: Bool? = nil
+    /// The groups its members are sorted into, in order (hub v0.21.34+;
+    /// nil from an older hub).
+    public var groups: [String]? = nil
 
     public var id: String { name }
 

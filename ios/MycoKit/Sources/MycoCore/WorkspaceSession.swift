@@ -99,6 +99,25 @@ public final class WorkspaceSession {
         return model
     }
 
+    @ObservationIgnored private var waitingModel: NoticesModel?
+    @ObservationIgnored private var usageModel: UsageModel?
+
+    /// 待处理: what waits for me (an agent asking, a task that failed).
+    public var waiting: NoticesModel {
+        if let waitingModel { return waitingModel }
+        let model = NoticesModel(hub: hub)
+        waitingModel = model
+        return model
+    }
+
+    /// 用量: where the workspace's tokens go.
+    public var usage: UsageModel {
+        if let usageModel { return usageModel }
+        let model = UsageModel(hub: hub)
+        usageModel = model
+        return model
+    }
+
     @ObservationIgnored private var workflowsModel: WorkflowsModel?
 
     /// 工作流: decisions waiting for me, the workflows and their runs.
@@ -420,6 +439,13 @@ public final class WorkspaceSession {
 
     /// A project's members as the page lists them: the coordinator first,
     /// then those at work, those waiting, the free ones, and those away.
+    /// A project's members in its groups (the desktop's members column):
+    /// each group in order with its members, then those in none. Without
+    /// groups, one section without a title.
+    public func memberSections(of project: Project) -> [(group: String?, members: [AgentStatus])] {
+        MemberGroups.sections(groups: project.groups ?? [], members: project.members, statuses: memberStatuses(of: project))
+    }
+
     public func memberStatuses(of project: Project) -> [AgentStatus] {
         let lead = coordinator(of: project)
         func rank(_ s: AgentStatus) -> Int {
@@ -466,5 +492,22 @@ public enum ProjectFeed {
         }
         if let coordinator, coordinator != agent { names.insert(coordinator) }
         return names.sorted()
+    }
+}
+
+/// How a project's members are grouped.
+public enum MemberGroups {
+    public static func sections(groups: [String], members: [ProjectMember], statuses: [AgentStatus]) -> [(group: String?, members: [AgentStatus])] {
+        let groupOf = Dictionary(members.map { ($0.name, $0.group ?? "") }, uniquingKeysWith: { first, _ in first })
+        guard !groups.isEmpty else { return statuses.isEmpty ? [] : [(nil, statuses)] }
+        var sections: [(group: String?, members: [AgentStatus])] = []
+        for group in groups {
+            let these = statuses.filter { groupOf[$0.agent.name] == group }
+            if !these.isEmpty { sections.append((group, these)) }
+        }
+        // In none, or in a group the list no longer has.
+        let rest = statuses.filter { !groups.contains(groupOf[$0.agent.name] ?? "") }
+        if !rest.isEmpty { sections.append((sections.isEmpty ? nil : L("未分组", "Ungrouped"), rest)) }
+        return sections
     }
 }

@@ -170,7 +170,14 @@ struct ProjectInfoScreen: View {
                         }
                     }
                     CardSection(title: L("成员", "Members")) {
-                        ForEach(session.memberStatuses(of: project)) { status in
+                        // In the project's groups, as on the desktop.
+                        ForEach(Array(session.memberSections(of: project).enumerated()), id: \.offset) { _, section in
+                        if let group = section.group {
+                            Text(group).font(.caption.weight(.semibold)).foregroundStyle(MycoColor.muted)
+                                .padding(.top, 6)
+                                .accessibilityIdentifier("project.group")
+                        }
+                        ForEach(section.members) { status in
                             Button {
                                 router.sheet = .memberCard(status.agent.name)
                             } label: {
@@ -185,6 +192,7 @@ struct ProjectInfoScreen: View {
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
+                        }
                         }
                     }
                     ProjectComputers(project: project)
