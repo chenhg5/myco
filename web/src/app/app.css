@@ -4975,7 +4975,10 @@ html.fp-docked .app-main .sp-side {
 .md ul:has(> li.md-media), .md ol:has(> li.md-media) { padding-left: 0; list-style: none; }
 .md li.md-media {
   position: relative;
-  min-height: 64px;
+  /* (the picture and the padding around it: boxes here count padding in
+     their height, so a row with one short line still holds its picture) */
+  box-sizing: border-box;
+  min-height: 84px;
   margin: 0;
   padding: 10px 0 10px 78px;
   list-style: none;
@@ -9758,7 +9761,18 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
   box-shadow: 0 0 0 1px var(--line-2);
   overflow: hidden;
 }
-.ui-card:not(.tone-neutral) { box-shadow: inset 3px 0 0 var(--tone), 0 0 0 1px var(--line-2); }
+/* (a tone is a small dot before the title, not a bar down the side: a bar
+   reads as a quote) */
+.ui-card:not(.tone-neutral) .ui-card-head h4::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin: 0 7px 1px 0;
+  border-radius: 50%;
+  background: var(--tone);
+  vertical-align: middle;
+}
 .ui-card-head { padding: 12px 14px 0; }
 .ui-card-head h4 { margin: 0; font-size: 14px; font-weight: 600; }
 .ui-card-head p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
@@ -9877,7 +9891,7 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
 .ui-file-count { display: flex; gap: 6px; font: 11.5px ui-monospace, "SF Mono", Menlo, monospace; }
 .ui-file-count .is-add { color: var(--green); }
 .ui-file-count .is-del { color: var(--red); }
-.ui-tests { border-radius: 8px; box-shadow: inset 3px 0 0 var(--tone), 0 0 0 1px var(--line-2); background: var(--card); padding: 10px 12px; }
+.ui-tests { border-radius: 8px; box-shadow: 0 0 0 1px var(--line-2); background: var(--card); padding: 10px 12px; }
 .ui-tests-sum { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; font-size: 12.5px; }
 .ui-tests-sum > span { display: inline-flex; align-items: center; gap: 4px; }
 .ui-tests-sum svg { width: 13px; height: 13px; }
@@ -9893,3 +9907,37 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
 /* Actions */
 .ui-btn { text-decoration: none; }
 .ui-root .ui-stack.is-row > .ui-btn { flex: none; }
+
+/* ── 待处理 (NoticesPanel.tsx): what waits for you, as the Dock badge
+   counts it; one row each, a click goes there. ── */
+.nt-modal { width: min(560px, calc(100vw - 32px)); }
+.nt-empty { display: flex; justify-content: center; align-items: center; gap: 8px; padding: 28px 0; text-align: center; font-size: 13px; color: var(--muted); }
+.nt-list { display: flex; flex-direction: column; max-height: min(60vh, 520px); margin: 4px -8px 0; padding: 0; overflow-y: auto; list-style: none; }
+.nt-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+.nt-row:hover { background: var(--pill); }
+.nt-row:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--focus); }
+/* (black, white and grey: the words say what it is, not a colour) */
+.nt-icon { display: grid; place-items: center; flex: none; width: 28px; height: 28px; border-radius: 8px; color: var(--fg-2); background: var(--pill); }
+.nt-icon svg { width: 15px; height: 15px; }
+.nt-main { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.nt-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; font-size: 13px; }
+.nt-kind { font-weight: 500; color: var(--fg); }
+.nt-who { color: var(--muted); }
+.nt-hub { font-size: 11.5px; color: var(--muted); }
+.nt-subject { font-size: 12.5px; color: var(--fg-2); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.nt-time { flex: none; padding-top: 2px; font-size: 11.5px; color: var(--muted); }
+.nt-foot { display: flex; align-items: center; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line-2); }
+.nt-hint { flex: 1; font-size: 11.5px; line-height: 1.5; color: var(--muted); }

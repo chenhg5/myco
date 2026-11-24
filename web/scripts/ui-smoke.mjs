@@ -1094,6 +1094,68 @@ async function runMatrix(browser, size, scheme) {
       }
     });
 
+    // The notch's island (the Mac app's own window, /?island=1): how many
+    // are at work, never "0". A workspace that cannot be read keeps who was
+    // at work there; someone who stops before the window is ready leaves
+    // it folded away (a slow network made it stay out showing 0).
+    if (!narrow) await step("灵动岛 · 不显示 0", async () => {
+      const ip = await page.context().newPage();
+      try {
+        const real = await (await fetch(`http://${HOST}:${mockPort()}/app/overview`)).json();
+        let mode = "working";
+        const overview = () => {
+          const ov = JSON.parse(JSON.stringify(real));
+          for (const h of ov.hubs) {
+            if (h.id !== "hub_studio") continue;
+            if (mode === "down") { h.ok = false; delete h.overview; continue; }
+            for (const st of h.overview?.agents || []) {
+              const on = mode === "working" && st.agent.name === "review-cloud";
+              st.state = on ? "working" : "idle";
+              st.in_progress = on ? 1 : 0;
+              st.stale = 0;
+              st.stale_tasks = [];
+            }
+          }
+          for (const h of ov.hubs) if (h.id !== "hub_studio" && h.overview) for (const st of h.overview.agents || []) st.state = "idle";
+          return ov;
+        };
+        await ip.route("**/app/overview", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(overview()) }));
+        let frameDelay = 0;
+        await ip.route("**/app/island/frame", async (route) => {
+          if (frameDelay) await new Promise((ok) => setTimeout(ok, frameDelay));
+          await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+        });
+        await ip.setViewportSize({ width: 520, height: 320 });
+        await ip.goto(`${r.base}/?island=1&nw=200&nh=32&lang=zh`, { waitUntil: "domcontentloaded" });
+        // (every number the island ever draws, recorded)
+        await ip.evaluate(() => {
+          window.__islandNumbers = [];
+          const note = () => { const b = document.querySelector(".isl.is-shown .isl-wing.is-right"); if (b) window.__islandNumbers.push((b.textContent || "").trim()); };
+          new MutationObserver(note).observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
+        });
+        const right = ip.locator(".isl.is-shown .isl-wing.is-right b");
+        await right.filter({ hasText: /^1$/ }).waitFor({ timeout: 15_000 });
+        // The workspace cannot be read for a while: still 1, not gone.
+        mode = "down";
+        await ip.waitForTimeout(6_000);
+        if ((await right.innerText().catch(() => "")) !== "1") throw new Error("工作区暂时连不上时，灵动岛应保持原来的人数");
+        // Nobody at work: it folds away.
+        mode = "idle";
+        await ip.locator(".isl.is-shown").waitFor({ state: "detached", timeout: 10_000 });
+        // Someone starts and stops before the window is ready: it stays in.
+        frameDelay = 3_500;
+        mode = "working";
+        await ip.waitForTimeout(3_000);
+        mode = "idle";
+        await ip.waitForTimeout(6_000);
+        if (await ip.locator(".isl.is-shown").count()) throw new Error("开始又马上停下时，灵动岛不该停在外面");
+        const seen = await ip.evaluate(() => window.__islandNumbers);
+        if (seen.some((t) => t === "0" || /^0\D/.test(t))) throw new Error(`灵动岛不该显示 0：${JSON.stringify([...new Set(seen)])}`);
+      } finally {
+        await ip.close();
+      }
+    });
+
     // A name picked in the notch's island (the Mac app): a chat already on
     // screen stays as it is (its pane is pointed out); a member of the
     // project you look at opens beside the coordinator; from elsewhere
@@ -4576,6 +4638,9 @@ async function runMatrix(browser, size, scheme) {
       if (narrow) await sidebar(page, false);
     });
 
+    // (待处理, the list of what waits for you, is hidden for now: NOTICES_LIST
+    // in AppMode.tsx; its step comes back with it.)
+
     // A reply with more than words: a diagram (```mermaid) drawn, code in
     // colour, one diagram that does not parse showing why and its source,
     // pictures placed in the text side by side (and not listed again below).
@@ -4588,6 +4653,13 @@ async function runMatrix(browser, size, scheme) {
       await conv.locator(".conv-compose-input").press("Enter");
       const msg = conv.locator(".conv-msg", { has: page.locator(".md-mermaid") }).last();
       await msg.locator(".md-mermaid[data-state=drawn] svg").first().waitFor({ timeout: 30_000 });
+      // The progress update along the way placed its two sketches in its
+      // text: there, side by side, not "not found", not listed again.
+      const report = conv.locator(".trace-report", { hasText: "先放两张草图" }).last();
+      await report.waitFor({ timeout: 10_000 });
+      if (await report.locator(".md-img-missing").count()) throw new Error("进展里引用的附件应能找到");
+      if ((await report.locator(".md-gallery img").count()) !== 2) throw new Error("进展里的两张草图应并排显示在正文里");
+      if (await report.locator(".trace-report-files").count()) throw new Error("进展正文里已经显示的图不该在下面再列一次");
       const bad = msg.locator(".md-mermaid[data-state=error]");
       await bad.waitFor({ timeout: 15_000 });
       if (!(await bad.locator(".md-mermaid-why").innerText()).includes("没画出来")) throw new Error("画不出来的图应说明原因");
@@ -4601,6 +4673,9 @@ async function runMatrix(browser, size, scheme) {
       if ((await msg.locator("li.md-media").count()) !== 2) throw new Error("以图片开头的列表项应排成左图右文");
       const row = await msg.locator("li.md-media").first().evaluate((li) => { const i = li.querySelector("img").getBoundingClientRect(); const t = li.querySelector("strong").getBoundingClientRect(); return { img: i.right, text: t.left, top: Math.abs(i.top - t.top) }; });
       if (row.text < row.img || row.top > 12) throw new Error(`左图右文的排版不对：${JSON.stringify(row)}`);
+      // Each picture stays inside its row (not over the line below it).
+      const spill = await msg.locator("li.md-media").evaluateAll((lis) => lis.map((li) => Math.round(li.querySelector("img").getBoundingClientRect().bottom - li.getBoundingClientRect().bottom)));
+      if (spill.some((d) => d > 0)) throw new Error(`左图右文的图超出了这一行：${spill.join(", ")}px`);
       // Titled pictures side by side: each with its name and line under it.
       const figs = msg.locator(".md-gallery.is-captioned figure");
       if ((await figs.count()) !== 3) throw new Error(`带说明的图片组应有三张，实际 ${await figs.count()}`);

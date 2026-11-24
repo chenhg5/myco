@@ -63,6 +63,17 @@ function findAttachment(files: InlineFiles | undefined, ref: string): Attachment
   try { r = decodeURIComponent(ref); } catch { /* as written */ }
   return files?.items.find((a) => a.file_id === r) ?? files?.items.find((a) => a.name === r);
 }
+/** A message's files as the text sees them (none: undefined). */
+export function filesFor(hubId: string, items?: Attachment[]): InlineFiles | undefined {
+  return items && items.length > 0 ? { hubId, items } : undefined;
+}
+/** The files a body does not already show in its text: the ones to list
+ *  under it. */
+export function filesBelow(body: string, files?: InlineFiles): Attachment[] {
+  if (!files) return [];
+  const inText = inlineAttachmentIds(body, files);
+  return files.items.filter((a) => !inText.has(a.file_id));
+}
 /** The files a body shows in its text (so they are not listed again below). */
 export function inlineAttachmentIds(body: string, files: InlineFiles): Set<string> {
   const ids = new Set<string>();
@@ -120,8 +131,10 @@ const md = new Marked({
       let src = href;
       let att = "";
       if (/^attachment:/i.test(href)) {
+        // (drawn where the message's files are not known: its words only)
+        if (!parsing) return escapeHtml(text || "");
         const a = findAttachment(parsing, href.slice("attachment:".length));
-        if (!a || !parsing) return `<span class="md-img-missing">${escapeHtml(L(`没找到附件：${text || href}`, `Attachment not found: ${text || href}`))}</span>`;
+        if (!a) return `<span class="md-img-missing">${escapeHtml(L(`没找到附件：${text || href}`, `Attachment not found: ${text || href}`))}</span>`;
         src = appApi.attachmentUrl(parsing.hubId, a.file_id);
         att = ` data-att="${escapeAttr(a.file_id)}"`;
       }

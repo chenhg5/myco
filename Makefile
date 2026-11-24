@@ -42,9 +42,12 @@ web:
 	cd web && npm ci && npm run build
 
 # Rebuild myco's official templates (templates/src) into
-# internal/templates/official, which the hub embeds; output is committed.
+# internal/templates/official, and the few the binary carries into
+# internal/templates/builtin.zip (the rest come from the "apps" release);
+# output is committed.
 templates:
 	cd templates && npm ci && npm run build
+	go run ./internal/templates/genbuiltin
 
 # The console app (macOS only: the window links the system WebKit through cgo).
 # Produces bin/myco.app; signs it when MYCO_SIGN_IDENTITY names a Developer ID

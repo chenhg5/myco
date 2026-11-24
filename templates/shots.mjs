@@ -1,7 +1,7 @@
 import { installSSHFixture } from './server-console-fixture.mjs';
 // Screenshots of the official apps, for the App's new-page dialog: each app
 // opened with its sample data (an in-memory bridge stands in for the App)
-// in a 1040×650 window (at twice the pixels), light and dark, saved as
+// in a 1040×650 window (at twice the pixels, saved at most 1280 wide), light and dark, saved as
 // src/<app>/public/shots/<n>.webp and <n>.dark.webp. Run after building
 // (node build.mjs), then build again so the shots go into the apps:
 //
@@ -269,10 +269,15 @@ for (const app of apps) {
         const img = new Image();
         img.src = `data:image/png;base64,${b64}`;
         await img.decode();
+        // At most 1280 wide: plenty for the dialog on a 2× screen, and a
+        // third of the bytes a full 2080 takes (they ship in every hub).
+        const scale = Math.min(1, 1280 / img.width);
         const c = document.createElement("canvas");
-        c.width = img.width; c.height = img.height;
-        c.getContext("2d").drawImage(img, 0, 0);
-        const blob = await new Promise((r) => c.toBlob(r, "image/webp", 0.82));
+        c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+        const g = c.getContext("2d");
+        g.imageSmoothingQuality = "high";
+        g.drawImage(img, 0, 0, c.width, c.height);
+        const blob = await new Promise((r) => c.toBlob(r, "image/webp", 0.8));
         const buf = new Uint8Array(await blob.arrayBuffer());
         let s = "";
         for (let i = 0; i < buf.length; i += 0x8000) s += String.fromCharCode(...buf.subarray(i, i + 0x8000));

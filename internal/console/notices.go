@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"path/filepath"
+	"slices"
+	"time"
 
 	"github.com/chenhg5/myco/internal/api"
 	"github.com/chenhg5/myco/internal/client"
@@ -107,6 +109,16 @@ func (b *Backend) noticeRoutes(m *http.ServeMux) {
 		}
 		writeJSON(w, http.StatusOK, p)
 	}))
+	// What still waits for the person on this workspace: the App's 待处理
+	// list (the Dock badge counts the same).
+	m.HandleFunc("GET /app/hubs/{id}/notices/open", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		open, badge, err := openNotices(r.Context(), c)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, api.NoticeFeed{Notices: open, Badge: badge})
+	}))
 	m.HandleFunc("POST /app/hubs/{id}/notices/read", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		var in api.NoticeReadRequest
 		if !decode(w, r, &in) {
@@ -119,4 +131,45 @@ func (b *Backend) noticeRoutes(m *http.ServeMux) {
 		}
 		writeJSON(w, http.StatusOK, api.NoticeReadResponse{Changed: n})
 	}))
+}
+
+// noticeLister reads a person's notices (the hub client).
+type noticeLister interface {
+	Notices(ctx context.Context, after int64, limit int, wait time.Duration) (*api.NoticeFeed, error)
+}
+
+// openNoticePages bounds one read through the feed (notices are kept 30
+// days; 50 pages of 200 is far more than a person gets).
+const (
+	openNoticePage  = 200
+	openNoticePages = 50
+)
+
+// openNotices reads a person's whole notice feed and keeps what still needs
+// them (open needs_you notices), newest first, with the hub's badge. The
+// hub lists only forward from a seq, so the feed is read through.
+func openNotices(ctx context.Context, l noticeLister) ([]api.Notice, int, error) {
+	var open []api.Notice
+	var after int64
+	badge := 0
+	for i := 0; i < openNoticePages; i++ {
+		f, err := l.Notices(ctx, after, openNoticePage, 0)
+		if err != nil {
+			return nil, 0, err
+		}
+		badge = f.Badge
+		for _, n := range f.Notices {
+			if n.Tier == "needs_you" && n.ResolvedAt == nil {
+				open = append(open, n)
+			}
+			if n.Seq > after {
+				after = n.Seq
+			}
+		}
+		if len(f.Notices) < openNoticePage {
+			break
+		}
+	}
+	slices.Reverse(open)
+	return open, badge, nil
 }

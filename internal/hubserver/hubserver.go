@@ -65,6 +65,10 @@ type Options struct {
 	// in the background as they are published (Run starts it); else the
 	// ones the binary carries.
 	Apps *templates.Catalog
+	// OfficialDir, when Apps is not set, reads every official app from this
+	// folder (internal/templates/official in the source tree) instead of
+	// the few the binary carries: for tests and development.
+	OfficialDir string
 	// PathPrefix is where this hub is served under another's address
 	// ("/w/<name>": one workspace of several); "" for the hub itself.
 	PathPrefix string
@@ -307,6 +311,12 @@ func Build(o Options) (*Hub, error) {
 			return out
 		})
 		srv.SetAppFreshen(func(ctx context.Context) { o.Apps.Freshen(ctx, time.Hour) })
+	} else if o.OfficialDir != "" {
+		if official, err := templates.FromDir(os.DirFS(o.OfficialDir)); err == nil {
+			templateSvc.SetOfficial(official)
+		} else {
+			o.Log.Warn("official templates", "dir", o.OfficialDir, "err", err)
+		}
 	} else if official, err := templates.Official(); err == nil {
 		templateSvc.SetOfficial(official)
 	} else {

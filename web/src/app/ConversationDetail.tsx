@@ -6,7 +6,7 @@ import type { Agent, Message } from "@/api";
 import { SHROOM, useIsSuperagent } from "@/app/superagentMark";
 import type { AgentRow } from "@/app/types";
 import { agentKind, canManage, isInbox, isMe, lastActivityAt, machineOfRow, personLabel, possiblyStuck, quietFor, runnerAway, SEEN_SLACK_MS, seenNow, sessionBusy, nodeName } from "@/app/nodes";
-import { MessageContent, inlineAttachmentIds, type InlineFiles } from "@/app/Markdown";
+import { MessageContent, filesBelow, filesFor, inlineAttachmentIds, type InlineFiles } from "@/app/Markdown";
 import { UI_REPLY } from "@/app/ui/UiBlock";
 import { PromptSign, STOPPED, Terminal } from "@/app/Terminal";
 import { TraceView } from "@/app/TraceView";
@@ -2132,9 +2132,12 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                   ? <span className="conv-unreadable"><Lock />{L("已加密，只有双方的主人能看", "Encrypted: only the owners of both sides can read it")}</span>
                   : (() => {
                     const v = viaVoice(s.body);
-                    return v ? <><VoiceMark heard={v.heard} /><MessageContent body={v.text} /></> : <MessageContent body={s.body} />;
+                    return v ? <><VoiceMark heard={v.heard} /><MessageContent body={v.text} /></> : <MessageContent body={s.body} files={filesFor(target.hubId, s.attachments)} />;
                   })()}
-                {s.attachments && s.attachments.length > 0 && <MessageAttachments hubId={target.hubId} items={s.attachments} />}
+                {(() => {
+                  const rest = s.unreadable ? s.attachments || [] : filesBelow(s.body, filesFor(target.hubId, s.attachments));
+                  return rest.length > 0 ? <MessageAttachments hubId={target.hubId} items={rest} /> : null;
+                })()}
               </div>
             ))}
           </div>
