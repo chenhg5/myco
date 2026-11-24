@@ -280,7 +280,7 @@ function usageLine(u?: TraceStep): string {
  * as one line that opens, as the runner reported them. Live while the task
  * runs: the newest steps say what it is doing now.
  */
-export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaused, onActivity, until, borrow, said, steers, onUsage, answers, canAnswer, onAnswer, cli, onStatus, queueText }: {
+export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaused, onActivity, from, until, borrow, said, steers, onUsage, answers, canAnswer, onAnswer, cli, onStatus, queueText }: {
   hubId: string; task: Message; onGrow?: () => void;
   cli?: string;
   queueText?: string;
@@ -311,6 +311,9 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
   onActivity?: (taskId: string, at: number, ended: boolean) => void;
   /** your next message: steps after it show under that one, not here */
   until?: string;
+  /** shown under something you added later (drawn where it was sent): only
+   *  this run's steps from then on (the ones before are above it) */
+  from?: string;
   /** earlier tasks still open whose steps since this one was sent (since)
    *  show here (an agent in one long session goes on under the first) */
   borrow?: { ids: string[]; since: string; label?: string };
@@ -381,12 +384,13 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
   const events = useMemo(() => {
     if (!ownEvents) return ownEvents;
     const u = msOf(until) || Infinity;
-    const own = until ? ownEvents.filter((e) => !e.at || msOf(e.at) < u) : ownEvents;
+    const f = from ? msOf(from) : 0;
+    const own = until || from ? ownEvents.filter((e) => (!e.at ? !from : msOf(e.at) < u && msOf(e.at) >= f)) : ownEvents;
     const more = extra.filter((e) => msOf(e.at) < u);
     if (!more.length) return own;
     // (in time, numbered anew: steps of two runs do not share numbers)
     return [...own, ...more].sort((a, b) => msOf(a.at) - msOf(b.at) || a.seq - b.seq).map((e, i) => ({ ...e, seq: i + 1 }));
-  }, [ownEvents, extra, until]);
+  }, [ownEvents, extra, until, from]);
   const body = useRef<HTMLDivElement>(null);
   // New steps while live: follow them, inside the block and in the chat.
   useEffect(() => {
@@ -511,6 +515,7 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
     let t = new Date(task.created_at).getTime() || 0;
     const later = (iso?: string) => { const v = iso ? new Date(iso).getTime() : 0; if (v > t) t = v; };
     for (const m of steers || []) later(m.created_at);
+    later(from);
     const evs = events || [];
     for (let k = evs.length - 1; k >= 0; k--) {
       if (evs[k].data.kind === "turn_end") { later(evs[k + 1]?.at); break; }

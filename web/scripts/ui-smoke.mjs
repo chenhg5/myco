@@ -2687,6 +2687,52 @@ async function runMatrix(browser, size, scheme) {
       await noRound(page);
     });
 
+    // A line you add after something came in between (another member
+    // handed it work: a card) is drawn where you sent it; what the agent
+    // does after it goes under it, in time, not on growing above it.
+    await step("项目 · 插话排在后面", async () => {
+      await go(page, "官网改版", narrow);
+      await page.locator(".sp-home .conv-detail").waitFor({ timeout: 20_000 });
+      if (narrow) await clickVisible(page, page.locator('.sp-strip-face[title="Release (Claude 云端)"]'));
+      else await clickVisible(page, page.locator(".sp-side .sp-member:visible", { hasText: "Release (Claude 云端)" }));
+      const pane = page.locator(".conv-detail", { has: page.locator(".conv-head", { hasText: "Release (Claude 云端)" }) }).last();
+      await pane.waitFor({ timeout: 20_000 });
+      await noRound(page);
+      const box = pane.locator(".conv-compose-input");
+      await box.fill("插在别人后面：整理发布说明");
+      await box.press("Enter");
+      await pane.locator(".conv-msg.is-me", { hasText: "插在别人后面：整理发布说明" }).waitFor({ timeout: 10_000 });
+      await pane.locator(".handoff", { hasText: "顺手看一下 CI 为什么挂了" }).waitFor({ timeout: 20_000 });
+      await box.fill("插话：顺便把下载链接也更新了");
+      await box.press("Enter");
+      const added = pane.locator(".conv-msg.is-me", { hasText: "插话：顺便把下载链接也更新了" });
+      await added.waitFor({ timeout: 10_000 });
+      await pane.locator(".trace-report", { hasText: "收到补充" }).waitFor({ timeout: 20_000 });
+      await page.waitForTimeout(3000); // (a few more steps after it)
+      const order = await added.evaluate((el) => {
+        const y = el.getBoundingClientRect().top;
+        const report = [...el.closest(".conv-detail").querySelectorAll(".trace-report")].find((r) => r.textContent?.includes("收到补充"));
+        const under = el.nextElementSibling?.classList.contains("trace") ? el.nextElementSibling : null;
+        // the task's own run, above: its last step before the line you added
+        const runs = [...el.closest(".conv-detail").querySelectorAll(".trace")].filter((t) => t !== under && t.getBoundingClientRect().top < y);
+        return {
+          reportBelow: !!report && report.getBoundingClientRect().top > y,
+          reportUnder: !!under && !!report && under.contains(report),
+          stepsUnder: !!under && under.querySelectorAll(".trace-group, .trace-step, .trace-row").length > 0,
+          loadingAbove: runs.some((t) => t.classList.contains("is-live")),
+        };
+      });
+      if (!order.reportBelow) throw new Error("补充之后它说的话应在补充下面");
+      if (!order.reportUnder) throw new Error("补充之后的进展应接在补充下面的过程里");
+      if (!order.stepsUnder) throw new Error("补充之后它做的步骤应在补充下面");
+      if (order.loadingAbove) throw new Error("补充上面的过程不该还在转");
+      await added.scrollIntoViewIfNeeded();
+      await settle(page, 300);
+      await shot(page, size, scheme, "chat-addition-after-card");
+      await page.locator(".conv-detail .conv-msg", { hasText: "发布说明整理好了" }).last().waitFor({ timeout: 30_000 });
+      await noRound(page);
+    });
+
     // Finding a message (⌘F), and back to the bottom after reading above.
     await step("单聊 · 搜索和回到底部", async () => {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");

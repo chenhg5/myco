@@ -1366,7 +1366,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   }
   // What each run shows of what was reported, by the same windows.
   const saidIn = (taskId: string): Message[] | undefined => {
-    const until = untilOf.get(taskId);
+    const until = cutOf(taskId);
     const borrow = borrowOf.get(taskId);
     const own = (progressOf.get(taskId) || []).filter((m) => !until || m.created_at < until);
     const more = borrow ? borrow.ids.flatMap((id) => progressOf.get(id) || [])
@@ -1958,6 +1958,31 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     if (inRun(task)) { runSteers.set(task.id, [...(runSteers.get(task.id) || []), m]); continue; }
     steersOf.set(m.reply_to, [...(steersOf.get(m.reply_to) || []), m]);
   }
+  // What you added after something else came in between is drawn where it
+  // was sent; the task goes on, so in time its process stops there and
+  // what it does after goes on under that addition (with its loading),
+  // not above it. Each addition's window runs to the next one, or to your
+  // next task (untilOf).
+  const laterSteers = new Map<string, Message[]>();
+  for (const m of shown || []) {
+    if (m.type !== "steer" || m.answers || !m.reply_to || !isMe(m.from, row?.hub)) continue;
+    const task = byId.get(m.reply_to);
+    if (!task || !inRun(task) || runSteers.get(task.id)?.includes(m) || steersOf.get(task.id)?.includes(m)) continue;
+    const u = untilOf.get(task.id);
+    if (u && m.created_at >= u) continue;
+    laterSteers.set(task.id, [...(laterSteers.get(task.id) || []), m].sort((a, b) => a.created_at.localeCompare(b.created_at)));
+  }
+  const steerWindow = new Map<string, { task: Message; from: string; until?: string; last: boolean }>();
+  for (const [tid, list] of laterSteers) {
+    const task = byId.get(tid)!;
+    list.forEach((s, i) => steerWindow.set(s.id, { task, from: s.created_at, until: list[i + 1]?.created_at ?? untilOf.get(tid), last: i === list.length - 1 }));
+  }
+  // Where a run's own part ends: the first addition drawn later, else your
+  // next task.
+  const cutOf = (taskId: string) => laterSteers.get(taskId)?.[0]?.created_at ?? untilOf.get(taskId);
+  // Its loading (and what it reports about activity) belongs to the last
+  // part still open: under the last addition when that part has no end.
+  const goesOnBelow = (taskId: string) => { const l = laterSteers.get(taskId); return !!l?.length && !steerWindow.get(l[l.length - 1].id)?.until; };
   const answerAsk = (task: Message) => async (text: string) => {
     const m = await appApi.steer(target.hubId, task.id, text, undefined);
     setMessages((prev) => mergeById(prev || [], [m]));
@@ -2185,11 +2210,27 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             the start of its turn, on its side of the conversation. A task that
             went quiet after it was picked up may have lost its result: say so,
             and offer to stop it and send it again. */}
+        {/* What you added later, drawn where you sent it: the task's steps
+            and progress since then go on under it (its loading too, while
+            this is the last part). */}
+        {m.type === "steer" && steerWindow.has(m.id) && (() => {
+          const w = steerWindow.get(m.id)!;
+          const t = w.task;
+          const live = w.last && !w.until;
+          const said = (progressOf.get(t.id) || []).filter((x) => x.created_at >= w.from && (!w.until || x.created_at < w.until));
+          return (
+            <TraceView hubId={target.hubId} task={t} cli={rowOf(t.to)?.st.agent.runtime?.cli} onStatus={live ? onTraceStatus : undefined} onGrow={followBottom}
+              answered={answerOf.has(t.id)} quiet={!live || t.id !== liveId} footed={live && t.id === liveId && liveFoot}
+              onPaused={live ? onPaused : undefined} onActivity={live ? onActivity : undefined}
+              from={w.from} until={w.until} said={said.length ? said : undefined}
+              answers={answerTo} canAnswer={isMe(t.from, row?.hub)} onAnswer={answerAsk(t)} />
+          );
+        })()}
         {m.type === "task" && !m.e2e && isMe(m.from, row?.hub) && (
           <>
             {/* (its run stays: what it did and said; the line about being
                 stuck goes under it) */}
-            <TraceView hubId={target.hubId} task={m} cli={rowOf(m.to)?.st.agent.runtime?.cli} queueText={runnerQueueText(rowOf(m.to)?.st.agent, m.id)} onStatus={onTraceStatus} onGrow={followBottom} answered={answerOf.has(m.id)} quiet={m.id !== liveId} footed={m.id === liveId && liveFoot} onPaused={onPaused} onActivity={onActivity} until={untilOf.get(m.id)} borrow={borrowOf.get(m.id)} steers={runSteers.get(m.id)} said={saidIn(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined}
+            <TraceView hubId={target.hubId} task={m} cli={rowOf(m.to)?.st.agent.runtime?.cli} queueText={runnerQueueText(rowOf(m.to)?.st.agent, m.id)} onStatus={onTraceStatus} onGrow={followBottom} answered={answerOf.has(m.id)} quiet={m.id !== liveId || goesOnBelow(m.id)} footed={m.id === liveId && liveFoot} onPaused={goesOnBelow(m.id) ? undefined : onPaused} onActivity={goesOnBelow(m.id) ? undefined : onActivity} until={cutOf(m.id)} borrow={borrowOf.get(m.id)} steers={runSteers.get(m.id)} said={saidIn(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined}
           answers={answerTo} canAnswer={isMe(m.from, row?.hub)} onAnswer={answerAsk(m)} />
             {isStuck(m) && (<div className="conv-stuck" data-stuck={m.id}>
             <span className="dot pending" aria-hidden />

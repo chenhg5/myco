@@ -1356,6 +1356,50 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
     });
     return;
   }
+  // At work a while, another member hands it a task in the middle (a card
+  // in your chat), then you add a line: what it does after your addition
+  // goes under that addition, in time (the UI smoke "单聊 · 插话排在后面").
+  {
+    const task = hub.threads[threadId]?.find((m) => m.id === taskId);
+    if (task && /插在别人后面/.test(task.body)) {
+      const helper = agent === "pm-codex" ? "release-cloud" : "pm-codex";
+      const steps = [];
+      ["git status", "rg -n 'download' docs", "npm run build", "npm test", "ls dist", "git diff --stat", "node scripts/check-links.mjs"].forEach((cmd, i) => {
+        steps.push({ kind: "tool", tool: "Bash", id: `ins${i}`, input: cmd }, { kind: "tool_result", id: `ins${i}`, output: "ok" });
+      });
+      task.trace_pace = 1300;
+      // (each step with its time, as a hub's trace has: the App places them
+      // by it around what you add)
+      const t0 = Date.parse(task.created_at);
+      task.trace = [...steps, { kind: "usage", input_tokens: 1800, output_tokens: 200, duration_ms: 20000 }]
+        .map((d, i) => ({ ...d, at: new Date(t0 + (i + 1) * task.trace_pace).toISOString() }));
+      later(300, () => { if (["queued", "delivered"].includes(task.status)) Object.assign(task, { status: "acked", updated_at: iso(0) }); });
+      later(1500, () => {
+        if (task.status === "failed") return;
+        // (between the two agents: a thread of their own)
+        const th = `th_ins_${taskId}`;
+        if (hub.threads[th]) return; // (once: what you add starts the script again)
+        hub.threads[th] = [makeMessage({ thread_id: th, from: helper, to: agent, type: "task", status: "queued", body: "顺手看一下 CI 为什么挂了", created_at: iso(0), updated_at: iso(0) })];
+      });
+      // (after the line you add, which the smoke sends once the card is in)
+      const said = () => {
+        const msgs = hub.threads[threadId];
+        if (!msgs || task.status === "failed") return;
+        if (!msgs.some((m) => m.type === "steer" && m.reply_to === taskId)) { later(1000, said); return; }
+        msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "progress", status: "done", reply_to: taskId, body: "收到补充：下载链接也一起更新", created_at: iso(0), updated_at: iso(0) }));
+      };
+      later(4000, said);
+      later(24000, () => {
+        replyTimers.delete(taskId);
+        const msgs = hub.threads[threadId];
+        if (!msgs || task.status === "failed") return;
+        msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "reply", status: "done", reply_to: taskId, body: "发布说明整理好了，下载链接也更新了。", created_at: iso(0), updated_at: iso(0) }));
+        Object.assign(task, { status: "done", updated_at: iso(0) });
+        releaseAfter(hub, threadId, taskId);
+      });
+      return;
+    }
+  }
   // Asked to hand the work out: the agent sends a task to another member,
   // says so and ends its turn (turn_end) without answering; the task stays
   // open while the other works. When that one answers, it answers you.
