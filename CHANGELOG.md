@@ -4,6 +4,28 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.22.2
+
+- **A page asks before it uses your computer**: the first time a page calls a group of capabilities (files, writing files, deleting files, commands, the screen, the microphone, speech, the clipboard, notifications, the system, the network, SSH, databases, the proxy), the App asks you: don't allow, allow this time, or always allow. Commands, deleting files and the screen are only ever allowed this time; files you picked and writing the clipboard need no question. A page reaches the network hosts its app declares with the network's consent and is asked for any other host one by one. The answer is kept per workspace and page.
+- **A page can be read-only for everyone else**: its managers choose in the page card's menu, or with `myco page set --page <id> --editors managers`, whether everyone who sees it may change its records and shared state (as before) or only the publisher, their agents and the workspace's managers. Others see "you can only view"; a template can make one collection managers-only too.
+- **A task's question reaches an agent sender**: when the task came from an agent, `myco message ask` now queues the question to its inbox instead of storing it as a closed progress update, so a session waiting there or its runner wakes and answers, and the task no longer sits held.
+- **New app: 素材库 (Media Kit)**: screenshots, video files and links, with Chinese and English copy organized by feature, the originals and each entry's release status shared with the team and agents.
+- **Usage moved into the workspace menu**: it is looked at now and then, so it leaves the top of the sidebar and joins the workspace menu at the bottom, marked while its page is open; that menu now grows to fit its workspaces and items without scrolling.
+- **The user guide moved into Settings**: it leaves the workspace menu and becomes the last row of Settings' navigation (Settings › About still opens it too).
+- **iOS**: the phone gets the desktop changes to list screens, Markdown and UI blocks; media streaming is verified end to end.
+- Upgrade: update the hub to v0.22.2 for page editors and for questions reaching agent senders; update myco on computers that run `myco page set` or send `myco message ask`; update the App for the consent prompts, view-only pages, the new app and the moved Usage and user guide.
+
+**中文**
+
+- **网页用电脑之前先问你**：网页第一次调用某一组能力（读文件、写文件、删文件、执行命令、屏幕、麦克风、语音、剪贴板、通知、系统、网络、SSH、数据库、代理）时，App 会先问：「不允许」「这次允许」「一直允许」。执行命令、删文件和屏幕只能「这次允许」；你自己选的文件和写入剪贴板不用问。网页访问应用声明的网络主机时随网络这一组一起允许，其他主机逐个询问。回答按工作区和网页分别记住。
+- **网页可以对其他人只读**：网页的管理者可以在页面卡片的菜单里，或运行 `myco page set --page <id> --editors managers`，决定是所有能看到的人都能改它的记录和共享状态（和以前一样），还是只有发布者、其名下的 agent 和工作区管理员能改。其他人会看到「只能查看」；模板也可以让某一个集合只有管理者能改。
+- **任务的提问能叫醒 agent 发起方**：任务由 agent 发出时，`myco message ask` 现在把提问放进它的收件箱，而不是存成一条已关闭的进度；在那里等待的会话或它的 runner 会被叫醒并回答，任务不会再一直挂起。
+- **新应用：素材库**：按功能整理截图、视频文件和链接，配上中英文配文，原图和每条的发布状态与团队及 agent 共享。
+- **用量入口移到工作区菜单**：用量只是偶尔看，所以从侧栏顶部移到工作区菜单底部，打开它的页面时旁边有标记；这个菜单现在会随工作区和条目变高，不用滚动。
+- **使用文档移到设置里**：它从工作区菜单移出，成为设置导航的最后一项（设置 › 关于 里也仍然能打开）。
+- **iOS**：手机上也跟上了桌面的列表页、Markdown 和 UI 块改动；媒体串流已完成端到端验证。
+- 升级：把 Hub 升级到 v0.22.2 才能设置网页编辑权限、让提问送达 agent 发起方；需要运行 `myco page set` 或发送 `myco message ask` 的电脑更新 myco；更新 App 才能看到授权弹窗、只读提示、新应用，以及移动后的用量和使用文档入口。
+
 ## v0.22.1
 
 - **Updates come from GitHub or Gitee, whichever is faster**: `myco upgrade`, the hub's self-upgrade and the App's update time both sources first and download from the faster one; if a copy is missing (Gitee keeps only the newest release's binaries) or fails its checksum, the other is used. The version check does the same: GitHub's API, then the Gitee mirror, then the release page. `MYCO_RELEASE_DOWNLOAD` and `MYCO_RELEASE_API` still pin a single source.
