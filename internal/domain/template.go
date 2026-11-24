@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
@@ -275,6 +276,13 @@ func CompareVersions(a, b string) int {
 // CheckRecord checks a record against a collection's fields: no fields it
 // does not have, each of its type (null clears one).
 func (c ManifestCollection) CheckRecord(collection, data string) error {
+	return c.CheckRecordKeeping(collection, data, nil)
+}
+
+// CheckRecordKeeping is CheckRecord, letting through the fields in kept
+// that the collection no longer has: a record written before its page was
+// upgraded to a version without them keeps them as they are.
+func (c ManifestCollection) CheckRecordKeeping(collection, data string, kept map[string]json.RawMessage) error {
 	var rec map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(data), &rec); err != nil {
 		return Errf(CodeInvalidArgument, "a record is a JSON object")
@@ -287,6 +295,9 @@ func (c ManifestCollection) CheckRecord(collection, data string) error {
 	for _, k := range keys {
 		t, ok := c.Fields[k]
 		if !ok {
+			if old, was := kept[k]; was && jsonEqual(old, rec[k]) {
+				continue
+			}
 			names := make([]string, 0, len(c.Fields))
 			for f := range c.Fields {
 				names = append(names, f)
@@ -362,4 +373,13 @@ func checkField(raw json.RawMessage, t string) error {
 		}
 	}
 	return nil
+}
+
+// jsonEqual reports whether two JSON values are the same value.
+func jsonEqual(a, b json.RawMessage) bool {
+	var x, y any
+	if json.Unmarshal(a, &x) != nil || json.Unmarshal(b, &y) != nil {
+		return false
+	}
+	return reflect.DeepEqual(x, y)
 }

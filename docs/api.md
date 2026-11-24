@@ -238,7 +238,7 @@ A **Notice** is `{seq, id, kind, tier, key, ref?, target?, project?, actor?, sub
 
 ## Page records and templates
 
-From v0.20.5. A page's data can be **records**: JSON objects in named collections (`[a-z][a-z0-9_-]*`), each written on its own with a version, at most 64 KB a record and 20000 a page. Every write goes into the page's **change feed**. Whoever may see the page reads and writes its records (agent and console tokens alike). A page made from a template checks each record against the template's fields (no unknown fields; each of its type; `null` clears one); a `single` collection holds one record, `main`. Older hubs answer 404.
+From v0.20.5. A page's data can be **records**: JSON objects in named collections (`[a-z][a-z0-9_-]*`), each written on its own with a version, at most 64 KB a record and 20000 a page. Every write goes into the page's **change feed**. Whoever may see the page reads and writes its records (agent and console tokens alike). A page made from a template checks each record against the template's fields (no unknown fields; each of its type; `null` clears one; a field its template dropped in an upgrade may be written back unchanged where the record already has it); a `single` collection holds one record, `main`. Older hubs answer 404.
 
 | Endpoint | What |
 | --- | --- |
@@ -247,7 +247,7 @@ From v0.20.5. A page's data can be **records**: JSON objects in named collection
 | `POST /v1/pages/{id}/data/{collection}` | `{data}` → `201` a new record (its id made up) |
 | `PUT /v1/pages/{id}/data/{collection}/{record}` | `{data, if_version?}` → the record (`201` when new). `if_version` is the version read (0: it must be new); left out, it writes whatever it is. A conflict answers `409` with the record now in `latest` |
 | `DELETE /v1/pages/{id}/data/{collection}/{record}?if_version=` | `204` |
-| `GET /v1/pages/{id}/changes?after=&wait=` | `{changes: [{seq, collection, record, op: put\|delete, data?, version, by, at}], seq, reset?}` after `after`, oldest first; with `wait` (seconds, up to 60) it waits for one. The newest 5000 are kept: `reset` means list the records again |
+| `GET /v1/pages/{id}/changes?after=&wait=` | `{changes: [{seq, collection, record, op: put\|delete, data?, version, by, at}], seq, reset?}` after `after`, oldest first; with `wait` (seconds, up to 60) it waits for one. The newest 5000 are kept: `reset` means list the records again (a page hears it as `myco.on("reset")`, bridge feature `data-reset`) |
 
 **Templates**: a folder with `myco.json` (its manifest: `id` as `author/name`, `name`, `version` as `x.y.z`, `kind`, `category` (from v0.20.6: `office`, `dev`, `tools`, `life`, `creative`, `game` or `other`; the App's shelves), `icon` (from v0.20.7: an `.svg` in the template, at most 16 KB; the App shows its shape), `requires` (from v0.20.7: `{"hub": "0.20.7"}`; an older hub refuses it, saying which version it needs), `description`, `entry`, `data` (collections → `{fields: {name: type}, single?}`; types `text, markdown, number, bool, date, datetime, person, select, multi, url, file, json`), `permissions` (`send`, `download`), `export`, `agent` (default `agent.md`), `sample` (default `sample.json`)), its page files, the agent's guide and sample data (`{collection: [records…]}`). Everyone in the workspace sees the library and uses its templates; whoever published one (a person, or agents of the same owner) and the workspace's managers publish its versions and delete it. A page made from a template keeps its own copy of the files and the manifest.
 

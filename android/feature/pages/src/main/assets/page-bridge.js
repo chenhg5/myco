@@ -44,6 +44,7 @@
     if (d.myco === "remote-disconnect") {
       handlers.remote.slice().forEach(function(f){ f(); });
     } else if (d.myco === "data" && Array.isArray(d.changes)) {
+      if (d.reset) (handlers.reset || []).slice().forEach(function (f) { try { f({ reset: true }); } catch (x) { setTimeout(function () { throw x; }); } });
       d.changes.forEach(function (c) {
         handlers.data.slice().forEach(function (f) { try { f(c); } catch (x) { setTimeout(function () { throw x; }); } });
       });
@@ -57,7 +58,7 @@
   ready.catch(function () { /* (a page that does not use the bridge) */ });
   window.myco = {
     ready: ready,
-    features: ["preferences", "net", "net-media", "remote", "remote-controller"],
+    features: ["preferences", "net", "net-media", "remote", "remote-controller", "data-reset"],
     get preferences() { return preferences; },
     net: { fetch: function(args) {
       var a = args || {};

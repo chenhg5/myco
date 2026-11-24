@@ -14,6 +14,8 @@ type Ctx = { preferences?: PagePreferences; page: { id: string; name: string; ur
 interface Bridge {
   readonly preferences?: PagePreferences;
   on?(event: "preferences", callback: (value: PagePreferences) => void): () => void;
+  /** The change feed moved on past what this page has (feature "data-reset"): list the records again. */
+  on?(event: "reset", callback: (value: { reset: true }) => void): () => void;
   ready: Promise<Ctx>;
   data: {
     list(collection?: string): Promise<{ records: MycoRecord[]; seq: number }>;
@@ -265,12 +267,17 @@ export class Store<T extends Record<string, unknown> = Record<string, unknown>> 
   }
 }
 
-/** Listens once: each store takes what is its own. */
-export function listen(stores: Store<any>[], onAny?: (c: MycoChange) => void) {
+/** Listens once: each store takes what is its own. When the feed has
+ *  moved on past what this page holds (too much changed while it was
+ *  away), every store lists its records again and onReset follows. */
+export function listen(stores: Store<any>[], onAny?: (c: MycoChange) => void, onReset?: () => void) {
   myco!.data.on((c) => {
     let news = false;
     for (const s of stores) if (s.apply(c)) news = true;
     if (news && onAny) onAny(c);
+  });
+  myco!.on?.("reset", () => {
+    void Promise.all(stores.map((s) => s.load().catch(() => s.rows))).then(() => onReset?.());
   });
 }
 

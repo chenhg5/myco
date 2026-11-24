@@ -45,7 +45,7 @@ export class Kit {
       this.emit();
       onChange?.(c);
       if (!this.opts.quiet && c.by && c.by !== this.me) this.flash(uiText("{0} 刚改了", c.by));
-    });
+    }, () => this.emit());
   }
 }
 

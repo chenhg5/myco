@@ -47,6 +47,7 @@ enum PageBridgeScript {
     if (d.myco === "remote-disconnect") {
       handlers.remote.slice().forEach(function(f){ f(); });
     } else if (d.myco === "data" && Array.isArray(d.changes)) {
+      if (d.reset) (handlers.reset || []).slice().forEach(function (f) { try { f({ reset: true }); } catch (x) { setTimeout(function () { throw x; }); } });
       d.changes.forEach(function (c) {
         handlers.data.slice().forEach(function (f) { try { f(c); } catch (x) { setTimeout(function () { throw x; }); } });
       });
@@ -74,7 +75,7 @@ enum PageBridgeScript {
   document.addEventListener("play", function(e){ mediaEvent("media.resume",e); }, true);
   window.myco = {
     ready: ready,
-    features: ["preferences", "remote", "remote-controller", "net", "net-media"],
+    features: ["preferences", "remote", "remote-controller", "net", "net-media", "data-reset"],
     get preferences() { return preferences; },
     media: {url: function(u) {
       // location.origin can be "null" for a custom WebKit scheme.

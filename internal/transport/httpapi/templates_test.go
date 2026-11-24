@@ -217,6 +217,29 @@ func TestPageUpgradesToItsAppsNewVersion(t *testing.T) {
 	h.do("POST", "/v1/pages/"+page+"/upgrade", alice, nil).wantErr(t, 409, "conflict")
 }
 
+// A field the new version drops: records written before keep it, and
+// writing such a record back whole (as pages do) still works; a field the
+// template has never had, or a changed value of a dropped one, is refused.
+func TestUpgradeKeepsDroppedFieldsWritable(t *testing.T) {
+	h := newHub(t, app.DefaultMessagePolicy())
+	alice := h.register("alice", nil)
+	zipHdr := map[string]string{"Content-Type": "application/zip"}
+	h.doReq("POST", "/v1/templates", alice, zipOf(t, map[string]string{"myco.json": weeklyManifest, "index.html": "v1"}), zipHdr).want(t, 201)
+	page := str(h.do("POST", "/v1/templates/alice%2Fweekly/use", alice, map[string]any{"name": "第 48 周"}).want(t, 201).body, "page", "id")
+	h.do("PUT", "/v1/pages/"+page+"/data/items/r1", alice, map[string]any{"data": map[string]any{"title": "发版", "done": true}}).want(t, 201)
+	v2 := strings.Replace(strings.Replace(weeklyManifest, `"version": "1.0.0"`, `"version": "1.1.0"`, 1), `"done": "bool", `, ``, 1)
+	h.doReq("POST", "/v1/templates", alice, zipOf(t, map[string]string{"myco.json": v2, "index.html": "v2"}), zipHdr).want(t, 200)
+	h.do("POST", "/v1/pages/"+page+"/upgrade", alice, nil).want(t, 200)
+	// the old record, written back whole with a new title: fine
+	h.do("PUT", "/v1/pages/"+page+"/data/items/r1", alice, map[string]any{"data": map[string]any{"title": "发版 v2", "done": true}}).want(t, 200)
+	// a new record with the dropped field, a changed dropped value, a field never there: refused
+	h.do("PUT", "/v1/pages/"+page+"/data/items/r2", alice, map[string]any{"data": map[string]any{"title": "x", "done": true}}).wantErr(t, 400, "invalid_argument")
+	h.do("PUT", "/v1/pages/"+page+"/data/items/r1", alice, map[string]any{"data": map[string]any{"title": "y", "done": false}}).wantErr(t, 400, "invalid_argument")
+	h.do("PUT", "/v1/pages/"+page+"/data/items/r1", alice, map[string]any{"data": map[string]any{"title": "y", "done": true, "colour": "red"}}).wantErr(t, 400, "invalid_argument")
+	// and without the dropped field: fine (it goes)
+	h.do("PUT", "/v1/pages/"+page+"/data/items/r1", alice, map[string]any{"data": map[string]any{"title": "z"}}).want(t, 200)
+}
+
 // A template's screenshots (pictures in shots/, x.webp with x.dark.webp)
 // are listed with it and fetched one by one; nothing else of its folder is.
 func TestTemplateScreenshots(t *testing.T) {

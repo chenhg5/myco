@@ -96,6 +96,12 @@
     } else if (d.myco === "preferences") {
       applyPreferences(d.preferences);
     } else if (d.myco === "data" && Array.isArray(d.changes)) {
+      // The feed moved on past what this page has seen (too much changed
+      // while it was away): what it holds may be stale, so it should list
+      // its records again (myco.on("reset")).
+      if (d.reset) (handlers.reset || []).slice().forEach(function (f) {
+        try { f({ reset: true }); } catch (x) { setTimeout(function () { throw x; }); }
+      });
       // What others (an agent, another person) changed in the records.
       d.changes.forEach(function (c) {
         handlers.data.slice().forEach(function (f) {
@@ -267,7 +273,7 @@
     // "download-media": myco.download saves video and sound too (mp4, …);
     // "os": myco.os (this computer: files, commands, the screen…).
     // "net-media": myco.media.url plays a public audio or video address.
-    features: ["download-media", "os", "ssh", "preferences", "remote", "page-actions", "net-media"],
+    features: ["download-media", "os", "ssh", "preferences", "remote", "page-actions", "net-media", "data-reset"],
     // An address for <audio> / <video> of a public http(s) file (a podcast
     // episode): the App streams it, with seeking, since the page itself
     // cannot load media from the internet. Private addresses are refused.
