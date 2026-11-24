@@ -99,6 +99,25 @@ public final class WorkspaceSession {
         return model
     }
 
+    @ObservationIgnored private var noticesModel: NoticesModel?
+    @ObservationIgnored private var usageModel: UsageModel?
+
+    /// 待处理: what waits for me (an agent asking, a task that failed).
+    public var notices: NoticesModel {
+        if let noticesModel { return noticesModel }
+        let model = NoticesModel(hub: hub)
+        noticesModel = model
+        return model
+    }
+
+    /// 用量: where the workspace's tokens go.
+    public var usage: UsageModel {
+        if let usageModel { return usageModel }
+        let model = UsageModel(hub: hub)
+        usageModel = model
+        return model
+    }
+
     @ObservationIgnored private var workflowsModel: WorkflowsModel?
 
     /// 工作流: decisions waiting for me, the workflows and their runs.

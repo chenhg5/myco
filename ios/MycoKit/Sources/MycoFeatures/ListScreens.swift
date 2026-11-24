@@ -296,6 +296,7 @@ struct WorkbenchScreen: View {
                 workflows
                 apps
                 automations
+                usage
             }
             .padding(.horizontal, Space.page)
             .padding(.top, Space.m)
@@ -310,7 +311,9 @@ struct WorkbenchScreen: View {
                 async let a: Void = session.automations.load()
                 async let b: Void = session.apps.load()
                 async let c: Void = session.workflows.load()
-                _ = await (a, b, c)
+                async let d: Void = session.notices.load()
+                async let e: Void = session.usage.load()
+                _ = await (a, b, c, d, e)
                 try? await Task.sleep(for: .seconds(20))
             }
         }
@@ -327,13 +330,27 @@ struct WorkbenchScreen: View {
 
     // MARK: Parts
 
-    /// What waits for me: a workflow's decision, a request to approve.
+    /// What waits for me: an agent asking, a task that failed, a
+    /// workflow's decision, a request to approve.
     @ViewBuilder private var waiting: some View {
         let decisions = session.workflows.decisions
         let approvals = session.superagent.approvals
-        if !decisions.isEmpty || !approvals.isEmpty {
+        let notices = session.notices.waiting
+        if !decisions.isEmpty || !approvals.isEmpty || !notices.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
-                head(L("等你处理", "Waiting for you"), count: decisions.count + approvals.count)
+                head(L("等你处理", "Waiting for you"), count: decisions.count + approvals.count + notices.count)
+                if !notices.isEmpty {
+                    VStack(spacing: 0) {
+                        ForEach(notices) { notice in
+                            Button { open(notice) } label: { noticeLine(notice) }
+                                .buttonStyle(RowButtonStyle())
+                                .accessibilityIdentifier("workbench.notice")
+                            if notice.id != notices.last?.id { Divider().overlay(MycoColor.line).padding(.leading, 30) }
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .background(MycoColor.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
                 ForEach(decisions) { decision in
                     DecisionCard(decision: decision, model: session.workflows, showRun: true)
                 }
@@ -342,6 +359,49 @@ struct WorkbenchScreen: View {
                 }
             }
         }
+    }
+
+    private func noticeLine(_ notice: Notice) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: notice.kind == "asking" ? "questionmark.bubble.fill" : notice.kind == "stuck" ? "hourglass" : "exclamationmark.circle.fill")
+                .font(.subheadline)
+                .foregroundStyle(notice.kind == "asking" ? MycoColor.amber : MycoColor.red)
+                .frame(width: 20)
+                .padding(.top, 2)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(NoticesModel.words(notice) { session.displayName(of: $0) })
+                    .font(.subheadline.weight(.medium)).foregroundStyle(MycoColor.fg).lineLimit(1)
+                Text([notice.subject, notice.project, RelativeTime.short(notice.createdAt)].compactMap { $0 }.joined(separator: " · "))
+                    .font(.caption).foregroundStyle(MycoColor.muted).lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(MycoColor.faint).padding(.top, 6)
+        }
+        .padding(.vertical, 10)
+        .contentShape(Rectangle())
+    }
+
+    /// Where a notice leads; opened, it is read.
+    private func open(_ notice: Notice) {
+        let target = notice.target ?? ""
+        let parts = target.split(separator: ":", maxSplits: 1).map(String.init)
+        let what = parts.first ?? "", name = parts.count > 1 ? parts[1] : ""
+        switch what {
+        case "agent": router.push(.agent(name, focus: notice.messageId))
+        case "project": router.push(.project(name))
+        case "workflow":
+            let id = String(name.split(separator: "?").first ?? "")
+            if let run = URLComponents(string: "x://y/?" + (name.split(separator: "?", maxSplits: 1).dropFirst().first.map(String.init) ?? ""))?
+                .queryItems?.first(where: { $0.name == "run" })?.value {
+                router.push(.workflowRun(run))
+            } else if !id.isEmpty {
+                router.push(.workflow(id))
+            }
+        case "superagent":
+            if let agent = session.superagent.agent { router.sheet = .superagentChat(agent) }
+        default: break
+        }
+        Task { await session.notices.read(notice) }
     }
 
     /// The workflows: the runs going, step by step; one tap to run another.
@@ -516,6 +576,84 @@ struct WorkbenchScreen: View {
         .padding(.vertical, 10)
         .contentShape(Rectangle())
         .onTapGesture { router.push(.automations) }
+    }
+
+    /// Where the workspace's tokens go: in total, a bar a day, who most.
+    @ViewBuilder private var usage: some View {
+        let model = session.usage
+        if model.loaded, !model.unsupported {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(L("用量", "Usage")).font(.title3.weight(.semibold)).foregroundStyle(MycoColor.fg)
+                    Spacer(minLength: 0)
+                    Picker("", selection: SwiftUI.Binding(get: { model.days }, set: { days in Task { await model.load(days: days) } })) {
+                        Text(L("7 天", "7 d")).tag(7)
+                        Text(L("30 天", "30 d")).tag(30)
+                        Text(L("90 天", "90 d")).tag(90)
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 170)
+                    .accessibilityIdentifier("workbench.usage.days")
+                }
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(alignment: .firstTextBaseline, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(L("总 token", "Total tokens")).font(.caption).foregroundStyle(MycoColor.muted)
+                            Text(UsageModel.compact(model.total.total)).font(.title2.weight(.semibold)).foregroundStyle(MycoColor.fg)
+                                .accessibilityIdentifier("workbench.usage.total")
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(L("输出", "Output")).font(.caption).foregroundStyle(MycoColor.muted)
+                            Text(UsageModel.compact(model.total.output)).font(.headline).foregroundStyle(MycoColor.fg2)
+                        }
+                        if model.total.cost > 0 {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(L("费用（自报）", "Cost (reported)")).font(.caption).foregroundStyle(MycoColor.muted)
+                                Text(String(format: "$%.2f", model.total.cost)).font(.headline).foregroundStyle(MycoColor.fg2)
+                            }
+                        }
+                    }
+                    if model.total.total == 0 {
+                        Text(L("这段时间还没有成员报告用量（需要较新的 runner）。", "No member reported usage in this period (it needs a recent runner)."))
+                            .font(.footnote).foregroundStyle(MycoColor.muted)
+                    } else {
+                        // A bar a day.
+                        let peak = max(1, model.byDay.map(\.total).max() ?? 1)
+                        HStack(alignment: .bottom, spacing: model.byDay.count > 31 ? 1 : 3) {
+                            ForEach(model.byDay, id: \.day) { day in
+                                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                                    .fill(MycoColor.accent.opacity(day.total == 0 ? 0.15 : 0.85))
+                                    .frame(height: max(2, 56 * CGFloat(day.total) / CGFloat(peak)))
+                                    .frame(maxWidth: .infinity)
+                            }
+                        }
+                        .frame(height: 56, alignment: .bottom)
+                        .accessibilityHidden(true)
+                        // Who used most.
+                        VStack(spacing: 6) {
+                            ForEach(model.agents.prefix(3), id: \.name) { one in
+                                HStack(spacing: 8) {
+                                    Text(session.displayName(of: one.name)).font(.subheadline).foregroundStyle(MycoColor.fg).lineLimit(1)
+                                    Spacer(minLength: 8)
+                                    Text(UsageModel.compact(one.total)).font(.subheadline.monospacedDigit()).foregroundStyle(MycoColor.muted)
+                                    Text(String(format: "%.0f%%", Double(one.total) / Double(max(1, model.total.total)) * 100))
+                                        .font(.caption.monospacedDigit()).foregroundStyle(MycoColor.faint).frame(width: 36, alignment: .trailing)
+                                }
+                                .accessibilityElement(children: .combine)
+                                .accessibilityIdentifier("workbench.usage.member")
+                            }
+                        }
+                        if let model = model.models.first, !model.name.isEmpty {
+                            Text(L("用得最多的模型：", "Most used model: ") + model.name).font(.caption).foregroundStyle(MycoColor.muted)
+                        }
+                    }
+                }
+                .padding(12)
+                .background(MycoColor.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("workbench.usage")
+        }
     }
 
     private func head(_ title: String, count: Int? = nil, more: Route? = nil, id: String? = nil) -> some View {
