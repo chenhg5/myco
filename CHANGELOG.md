@@ -4,6 +4,20 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.22.5
+
+- **Project changes show at once**: adding an agent to a project, or changing a project's name, members or computers, appears in the App immediately instead of waiting for every workspace to be read again; a new project opens and joins the sidebar the same way.
+- **The connection notice lines up with the input box**: "网络不太好" and an unsent message now keep to the chat's column, as wide as the message box, instead of running across a wide window.
+- **Official apps moved to github.com/myco-ai/apps**: application source, the page SDK and app releases now live in that repository. Each myco release bundles a pinned set of official apps whose bytes are checked against `apps.lock.json`; a Hub still fetches the rolling catalog from myco-ai/apps, and older Hubs keep receiving the identical apps from the old address through the compatibility mirror. Existing workspaces, pages and apps need no change.
+- Upgrade: update the App for the two interface fixes. No hub upgrade is needed for the app move; older Hubs keep working through the mirror.
+
+**中文**
+
+- **项目改动立即显示**：往项目里加 agent，或修改项目名称、成员、电脑，App 立即显示，不再等把所有工作区重新读一遍；新建项目也会马上出现在侧栏并打开。
+- **网络提示与输入框对齐**：「网络不太好」和没发出去的消息现在和消息框同宽、同列，不会在大窗口里横跨整个面板。
+- **官方应用搬到 github.com/myco-ai/apps**：应用源码、网页 SDK 和应用发布现在都在这个仓库。每个 myco 版本会内置一组固定版本的官方应用，字节与 `apps.lock.json` 里的 SHA256 核对；Hub 仍从 myco-ai/apps 拉取滚动目录，旧 Hub 通过兼容镜像从老地址拿到完全相同的应用。已有的工作区、页面和应用不需要任何改动。
+- 升级：更新 App 即可获得两处界面修复。应用搬家不需要升级 Hub；旧 Hub 通过镜像照常工作。
+
 ## v0.22.4
 
 - **The repository moved to github.com/myco-ai/myco**: the old github.com/chenhg5/myco address redirects automatically, so existing App connections, update checks and `myco upgrade` on older versions keep working; new links and downloads use the new address.
