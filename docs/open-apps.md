@@ -106,7 +106,7 @@ Open an issue in [Issues](https://github.com/myco-ai/myco/issues). Include the a
 
 ### 4. Build an app yourself
 
-App development lives in [myco-ai/apps](https://github.com/myco-ai/apps), a separate repository with its own CI and releases. The main repository temporarily retains historical copies for existing builds; make changes in apps.
+App development lives in [myco-ai/apps](https://github.com/myco-ai/apps), a separate repository with its own CI and releases. Make app changes in that repository; the host embeds a verified release pinned by `apps.lock.json` ([build instructions](building.md)).
 
 Each app is a folder under `templates/src/`: a React page plus a few files in `public/`.
 

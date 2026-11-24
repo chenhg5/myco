@@ -84,7 +84,7 @@ func hubCommands() *Command {
 			}
 			// The official apps: the binary's, and newer ones as myco
 			// publishes them (fetched daily unless update checks are off).
-			apps := &templates.Catalog{Download: release.DownloadURL(in.Getenv), StateDir: filepath.Dir(in.String("db")), HubVersion: Version,
+			apps := &templates.Catalog{Download: templates.DownloadURL(in.Getenv), StateDir: filepath.Dir(in.String("db")), HubVersion: Version,
 				Offline: in.Bool("no-update-check") || release.Disabled(in.Getenv), Log: newLogger(in.String("log-level"))}
 			if err := apps.Load(); err != nil {
 				return errorf("internal", ExitError, "", "official apps: %v", err)

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/myco-ai/myco/internal/testutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,16 +20,10 @@ import (
 // Chromium. The App's parent renderer is simulated; native desktop acceptance
 // remains a separate check. Every export artifact must expire with its grant.
 func TestPageExportApplications(t *testing.T) {
+	root := testutil.AppsRoot(t)
 	node, err := exec.LookPath("node")
 	if err != nil {
 		t.Skip("Node.js is needed for page export acceptance")
-	}
-	root, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(root, "templates", "node_modules", "typescript", "package.json")); err != nil {
-		t.Skip("install template dependencies for page export acceptance")
 	}
 	c := ctx(t)
 	h := startHub(t, filepath.Join(t.TempDir(), "hub.db"), app.DefaultMessagePolicy())
@@ -59,6 +54,7 @@ func TestPageExportApplications(t *testing.T) {
 	deadline, cancel := context.WithTimeout(c, 60*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(deadline, node, filepath.Join(root, "templates", "page-actions.browser.mjs"), "--hub")
+	cmd.Env = testutil.AppsEnv(t)
 	cmd.Dir = root
 	cmd.Stdin = bytes.NewReader(input) // Disposable credentials never enter argv or logs.
 	output, err := cmd.CombinedOutput()

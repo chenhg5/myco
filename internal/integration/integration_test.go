@@ -50,9 +50,13 @@ type hub struct {
 
 func startHub(t *testing.T, db string, p app.MessagePolicy) *hub {
 	t.Helper()
-	// Every official app, as the hub has them once it fetched the "apps"
-	// release (the binary carries only a few).
-	h, err := hubserver.Build(hubserver.Options{DBPath: db, AdminToken: adminToken, Policy: p, OfficialDir: filepath.Join("..", "templates", "official"),
+	// Service tests use small fixtures; explicit cross-repository acceptance
+	// uses the pinned real app bundles in the separate checkout.
+	official := testutil.OfficialDir(t)
+	if os.Getenv("APPS_TEST_ROOT") != "" {
+		official = filepath.Join(testutil.AppsRoot(t), "dist", "official")
+	}
+	h, err := hubserver.Build(hubserver.Options{DBPath: db, AdminToken: adminToken, Policy: p, OfficialDir: official,
 		OnlineWindow: time.Minute, Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	if err != nil {
 		t.Fatal(err)

@@ -1,8 +1,0 @@
-import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import ts from 'typescript';
-const s=fs.readFileSync(new URL('src/database/engine.ts',import.meta.url),'utf8');const e=await import('data:text/javascript;base64,'+Buffer.from(ts.transpileModule(s,{compilerOptions:{target:99,module:99}}).outputText).toString('base64'));
-assert.equal(e.quoteIdentifier('订单"数据','postgres'),'"订单""数据"');assert.equal(e.quoteIdentifier('a`b','mysql'),'`a``b`');assert.equal(e.cellText({kind:'number',value:'9007199254740993'}),'9007199254740993');assert.equal(e.cellText({kind:'null'}),'NULL');
-const columns=[{name:'id',type:'BIGINT',primary:true},{name:'name',type:'TEXT'},{name:'generated',type:'TEXT',generated:true}];const row={values:[{kind:'number',value:'9007199254740993'},{kind:'text',value:''},{kind:'text',value:'readonly'}]};const values={id:row.values[0],name:{kind:'null'},generated:{kind:'text',value:'overwrite'}};assert.deepEqual(e.changedCells(columns,row,values,new Set(['id','name','generated'])),{name:{kind:'null'}});
-const result={columns:[{name:'id'},{name:'text'}],rows:[{values:[{kind:'number',value:'9007199254740993'},{kind:'text',value:'=HYPERLINK("evil")'}]}],truncated:false};assert(e.resultCSV(result).includes("'=HYPERLINK"));assert.equal(JSON.parse(e.resultJSON(result)).rows[0].values[0].value,'9007199254740993');assert(e.selectSQL({name:'订单',schema:'public'},'postgres').includes('"public"."订单"'));
-console.log('PASS typed result rendering, exact BIGINT, null/empty distinction, changed-field-only writes, generated-column exclusion, quoted identifiers and spreadsheet formula protection');

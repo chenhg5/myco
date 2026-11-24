@@ -63,8 +63,12 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - name: Check app preparation
+        run: python scripts/prepare-apps.test.py
       - name: vet
         run: go vet ./...
+      - name: Prepare pinned builtin apps
+        run: python scripts/prepare-apps.py
       - name: build
         run: go build -o bin/myco.exe ./cmd/myco
       - name: tests
@@ -147,6 +151,18 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: web/package-lock.json
+      - id: apps
+        run: |
+          commit=$(node -p 'require("./apps.lock.json").commit')
+          printf 'commit=%s\n' "$commit" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: myco-ai/apps
+          ref: ${{ steps.apps.outputs.commit }}
+          path: .cache/apps-source
+          persist-credentials: false
+      - name: Prepare pinned app UI fixtures
+        run: python3 scripts/prepare-apps.py --apps-dir .cache/apps-source/dist/official
       - name: Dependencies, Playwright and Chromium (with CJK fonts)
         timeout-minutes: 6
         run: |
@@ -168,3 +184,39 @@ jobs:
           name: ui-smoke-${{ matrix.combo }}
           path: web/ui-smoke/
           retention-days: 7
+
+  app-contract:
+    # Host changes must keep working with the exact released app SDK and UI.
+    # App-owned unit/browser suites remain in myco-ai/apps.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - id: apps
+        run: |
+          commit=$(node -p 'require("./apps.lock.json").commit')
+          printf 'commit=%s\n' "$commit" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: myco-ai/apps
+          ref: ${{ steps.apps.outputs.commit }}
+          path: .cache/apps-source
+          persist-credentials: false
+      - name: Dependencies for native/Hub contract fixtures
+        run: |
+          npm --prefix .cache/apps-source/templates ci
+          npm install -g playwright@1.57.0
+          playwright install --with-deps chromium
+          sudo apt-get install -y fonts-noto-cjk ffmpeg
+      - name: Prepare exact released app bundles
+        run: python3 scripts/prepare-apps.py --apps-dir .cache/apps-source/dist/official
+      - name: Real Hub, native adapters and application contracts
+        env:
+          APPS_TEST_ROOT: ${{ github.workspace }}/.cache/apps-source
+        run: go test -count=1 ./internal/integration ./internal/console ./internal/sshcap -run 'Test(AgentActionsSDK|PageExportApplications|WhiteboardSharedExport|PaletteAgentToPage|ShoppingComparisonAgentToPage|DatabaseNativeBridgeAndProductionUI|RealSSHOverviewTemplateParser)$'

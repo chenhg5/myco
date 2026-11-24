@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"github.com/myco-ai/myco/internal/testutil"
 	"net/http/httptest"
 	"os/exec"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 )
 
 func TestDatabaseNativeBridgeAndProductionUI(t *testing.T) {
+	root := testutil.AppsRoot(t)
 	node, err := exec.LookPath("node")
 	if err != nil {
 		t.Skip("Node is required for browser acceptance")
@@ -39,15 +41,12 @@ func TestDatabaseNativeBridgeAndProductionUI(t *testing.T) {
 	}
 	server := httptest.NewServer((&console.Backend{Local: &console.Local{Home: home}, Secrets: secrets}).Handler())
 	defer server.Close()
-	root, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
-		t.Fatal(err)
-	}
 	osAllow(t, server.URL, "https://workspace.example", "pg_native")
 	input, _ := json.Marshal(map[string]string{"url": server.URL, "connection": p.ID})
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, node, filepath.Join(root, "templates", "database.integration.mjs"))
+	cmd.Env = testutil.AppsEnv(t)
 	cmd.Dir = root
 	cmd.Stdin = bytes.NewReader(input)
 	out, err := cmd.CombinedOutput()

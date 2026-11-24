@@ -35,7 +35,7 @@ wait_for() {
 
 if [[ -z "${MYCO_BIN:-}" ]]; then
   step "build"
-  (cd "$ROOT" && CGO_ENABLED=0 go build -o "$T/myco" ./cmd/myco) || fail "go build"
+  (cd "$ROOT" && python3 scripts/prepare-apps.py && CGO_ENABLED=0 go build -o "$T/myco" ./cmd/myco) || fail "go build"
   MYCO_BIN="$T/myco"
   ok
 fi
@@ -50,7 +50,7 @@ ADMIN="smoke-admin-$(date +%s)-$RANDOM-$RANDOM"
 VERSION="$(myco version --format text 2>/dev/null || myco version)"
 
 step "hub serve"
-MYCO_ADMIN_TOKEN="$ADMIN" myco hub serve --addr 127.0.0.1:0 --db "$T/hub.db" --lease 30s >"$T/hub.log" 2>&1 &
+MYCO_ADMIN_TOKEN="$ADMIN" myco hub serve --addr 127.0.0.1:0 --db "$T/hub.db" --lease 30s --no-update-check >"$T/hub.log" 2>&1 &
 PIDS+=($!)
 wait_for 10 grep -q 'myco hub listening' "$T/hub.log" || fail "hub did not start"
 ADDR="$(grep -o 'addr=[0-9.:]*' "$T/hub.log" | head -1 | cut -d= -f2)"
@@ -84,6 +84,13 @@ runner:
     allow: ["echo *"]
 EOF
 ok "alice, worker (shell), ci (exec)"
+
+step "offline builtin applications"
+myco template list --full >"$T/templates.json" || fail "offline template list"
+for app in table doc whiteboard; do
+  grep -q "myco/$app" "$T/templates.json" || fail "missing bundled app: $app"
+done
+ok "real bundled apps available with catalog updates disabled"
 
 step "agent list"
 myco agent list | grep -q '"worker"' || fail "agent list"

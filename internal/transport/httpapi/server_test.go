@@ -15,6 +15,7 @@ import (
 	"github.com/myco-ai/myco/internal/app"
 	"github.com/myco-ai/myco/internal/domain"
 	"github.com/myco-ai/myco/internal/hubserver"
+	"github.com/myco-ai/myco/internal/testutil"
 )
 
 const adminToken = "admin-token-123456"
@@ -26,7 +27,7 @@ type hub struct {
 
 func newHub(t *testing.T, policy app.MessagePolicy) *hub {
 	t.Helper()
-	h, err := hubserver.Build(hubserver.Options{DBPath: ":memory:", AdminToken: adminToken, Policy: policy,
+	h, err := hubserver.Build(hubserver.Options{DBPath: ":memory:", AdminToken: adminToken, Policy: policy, OfficialDir: testutil.OfficialDir(t),
 		OnlineWindow: time.Minute, FilesDir: t.TempDir(), Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	if err != nil {
 		t.Fatal(err)

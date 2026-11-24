@@ -15,12 +15,13 @@ import (
 	"github.com/myco-ai/myco/internal/app"
 	"github.com/myco-ai/myco/internal/client"
 	"github.com/myco-ai/myco/internal/hubserver"
+	"github.com/myco-ai/myco/internal/testutil"
 )
 
 // startServer runs a hub with its workspaces, as `myco hub serve` does.
 func startServer(t *testing.T, db string) (url string, stop func()) {
 	t.Helper()
-	o := hubserver.Options{DBPath: db, AdminToken: adminToken, Policy: app.DefaultMessagePolicy(),
+	o := hubserver.Options{DBPath: db, OfficialDir: testutil.OfficialDir(t), AdminToken: adminToken, Policy: app.DefaultMessagePolicy(),
 		OnlineWindow: time.Minute, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	h, err := hubserver.Build(o)
 	if err != nil {

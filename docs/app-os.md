@@ -1,5 +1,8 @@
 # 应用用这台电脑：`myco.os`
 
+Application source paths and Node test commands below refer to the separate [myco-ai/apps](https://github.com/myco-ai/apps) checkout. Host bridge implementation remains in myco-ai/myco.
+
+
 在 myco App 里打开的网页（应用、agent 做的网页），可以用 App 所在的这台电脑：
 
 - 看系统和磁盘；

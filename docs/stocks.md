@@ -1,5 +1,8 @@
 # Stock Watch
 
+Application source paths and Node test commands below refer to the separate [myco-ai/apps](https://github.com/myco-ai/apps) checkout. Host bridge implementation remains in myco-ai/myco.
+
+
 `myco/stocks` (Tools shelf) is a shared watchlist and observation notebook for mainland China, Hong Kong, and US stocks. It displays unadjusted daily/weekly/monthly OHLCV, MA5/10/20 and closing-price lines using TradingView Lightweight Charts 5.3.0 (Apache-2.0, with attribution and license included).
 
 ## Use and storage

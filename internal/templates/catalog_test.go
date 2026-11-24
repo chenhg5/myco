@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/domain"
 	"github.com/myco-ai/myco/internal/templates"
 )
 
@@ -61,7 +62,11 @@ func TestCatalogFetchesPublishedApps(t *testing.T) {
 	defer srv.Close()
 
 	dir := t.TempDir()
-	c := &templates.Catalog{Download: srv.URL, StateDir: dir, HubVersion: "v0.20.7"}
+	base := []app.OfficialTemplate{
+		{Manifest: &domain.Manifest{ID: "myco/todo", Version: "1.0.0"}},
+		{Manifest: &domain.Manifest{ID: "myco/table", Version: "1.0.0"}},
+	}
+	c := &templates.Catalog{Download: srv.URL, StateDir: dir, HubVersion: "v0.20.7", Base: base}
 	if err := c.Load(); err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +91,7 @@ func TestCatalogFetchesPublishedApps(t *testing.T) {
 		t.Fatalf("the archive should be kept: %v", err)
 	}
 	// The next start uses what was kept, without the network.
-	again := &templates.Catalog{StateDir: dir, HubVersion: "v0.20.7", Offline: true}
+	again := &templates.Catalog{StateDir: dir, HubVersion: "v0.20.7", Offline: true, Base: base}
 	if err := again.Load(); err != nil {
 		t.Fatal(err)
 	}

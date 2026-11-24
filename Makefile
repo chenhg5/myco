@@ -1,12 +1,13 @@
 VERSION ?= $(shell git describe --tags --match 'v*' --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X github.com/myco-ai/myco/internal/cli.Version=$(VERSION)
 
-.PHONY: build test test-integration smoke check vet cross clean web templates app
+.PHONY: build test test-integration smoke check vet cross clean web prepare-apps app
 
-build:
+build: prepare-apps
 	CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o bin/myco ./cmd/myco
 
 test:
+	python3 scripts/prepare-apps.test.py
 	go test -race ./...
 
 # Hub + HTTP + client + CLI/runner wired together in one process (also part of `make test`).
@@ -26,7 +27,7 @@ vet:
 # The CLI for six platforms (GOOS_LIST=linux for one OS), built at the same
 # time; fails if any build does.
 GOOS_LIST ?= linux darwin windows
-cross:
+cross: prepare-apps
 	@pids=; for os in $(GOOS_LIST); do for arch in amd64 arm64; do \
 		ext=; [ $$os = windows ] && ext=.exe; \
 		echo "building $$os/$$arch"; \
@@ -41,19 +42,17 @@ clean:
 web:
 	cd web && npm ci && npm run build
 
-# Rebuild myco's official templates (templates/src) into
-# internal/templates/official, and the few the binary carries into
-# internal/templates/builtin.zip (the rest come from the "apps" release);
-# output is committed.
-templates:
-	cd templates && npm ci && npm run build
-	go run ./internal/templates/genbuiltin
+# Prepare the exact verified apps bundle pinned by apps.lock.json. Use
+# APPS_PREPARE_FLAGS=--offline with a populated cache for offline builds.
+APPS_PREPARE_FLAGS ?=
+prepare-apps:
+	python3 scripts/prepare-apps.py $(APPS_PREPARE_FLAGS)
 
 # The console app (macOS only: the window links the system WebKit through cgo).
 # Produces bin/myco.app; signs it when MYCO_SIGN_IDENTITY names a Developer ID
 # Application identity in the keychain, otherwise signs it ad hoc.
 APP_VERSION := $(patsubst v%,%,$(firstword $(subst -, ,$(VERSION))))
-app:
+app: prepare-apps
 	@test "$$(uname)" = Darwin || { echo "make app needs macOS (the release workflow builds it on a macOS runner)"; exit 1; }
 	CGO_ENABLED=1 CGO_CFLAGS=-mmacosx-version-min=12.0 CGO_LDFLAGS=-mmacosx-version-min=12.0 \
 		go build -tags production -ldflags '-s -w -X main.version=$(VERSION)' -o bin/myco-app ./cmd/myco-app

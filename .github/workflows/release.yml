@@ -54,6 +54,8 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - name: Prepare pinned builtin apps
+        run: python3 scripts/prepare-apps.py
       - name: build myco.app (arm64, amd64)
         run: |
           mkdir -p out
@@ -151,6 +153,8 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - name: Prepare pinned builtin apps
+        run: python3 scripts/prepare-apps.py
       - name: the CLI for ${{ matrix.goos }} (amd64, arm64)
         run: make cross GOOS_LIST=${{ matrix.goos }} VERSION=${{ needs.version.outputs.version }}
       - name: the Windows console app (no cgo needed)

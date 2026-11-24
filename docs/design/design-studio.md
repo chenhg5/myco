@@ -1,6 +1,9 @@
 # 设计工作台
 
-`myco/design-studio` 是「创意设计」类的应用，源代码在 `templates/src/design-studio`，构建产物在 `internal/templates/official/design-studio`。参考 [OpenDesign](https://github.com/nexu-io/open-design) 的「需求 → 预览 → 反馈 → 迭代」工作方式，使用 myco 原有的记录、消息和下载能力；没有复制其代码，也不要求额外的模型服务。
+Application source paths and Node test commands below refer to the separate [myco-ai/apps](https://github.com/myco-ai/apps) checkout. Host bridge implementation remains in myco-ai/myco.
+
+
+`myco/design-studio` 是「创意设计」类的应用，源代码在 `templates/src/design-studio`，构建产物在 `dist/official/design-studio`。参考 [OpenDesign](https://github.com/nexu-io/open-design) 的「需求 → 预览 → 反馈 → 迭代」工作方式，使用 myco 原有的记录、消息和下载能力；没有复制其代码，也不要求额外的模型服务。
 
 ## 使用
 

@@ -1,0 +1,15 @@
+{
+  "id": "myco/table",
+  "name": "Table fixture",
+  "version": "1.0.0",
+  "kind": "custom",
+  "category": "office",
+  "icon": "icon.svg",
+  "data": {
+    "records": {
+      "fields": {
+        "title": "text"
+      }
+    }
+  }
+}

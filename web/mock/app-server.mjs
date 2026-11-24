@@ -3,6 +3,7 @@
 // Serves the `app/...` contract with two hubs: one healthy, one unreachable.
 // Writes mutate in-memory state and are lost on restart.
 import http from "node:http";
+import { officialAppsURL } from "../apps-paths.mjs";
 import zlib from "node:zlib";
 import { usageFixture } from "./usage.mjs";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -232,10 +233,10 @@ const livePage = `<!doctype html><html lang="zh"><head><meta charset="utf-8"><ti
 const kit = (f) => readFileSync(new URL(`../../internal/cli/templatekit/${f}`, import.meta.url), "utf8")
   .replaceAll("{{ID}}", "release/progress").replaceAll("{{NAME}}", "发布进度表");
 const tableFiles = { "index.html": kit("index.html"), "myco.json": kit("myco.json") };
-// The template library: myco's own (read from internal/templates, as the hub
-// embeds them) and the workspace's (the starter above). Using one makes a
+// The template library: verified release apps from the separate apps checkout
+// and the workspace's starter above. Using one makes a
 // page with its files (madeFiles) and, if asked, its sample data.
-const officialRoot = new URL("../../internal/templates/official/", import.meta.url);
+const officialRoot = officialAppsURL();
 const officialFiles = (name) => {
   const out = {};
   const walk = (dir, prefix) => {

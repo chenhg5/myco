@@ -525,3 +525,40 @@ func TestRangeStart(t *testing.T) {
 		}
 	}
 }
+
+// Apps live in their own repository; a failed browser download must query that
+// release's API, rather than the main binary repository's release.
+func TestAppsAssetFallbackKeepsRepository(t *testing.T) {
+	body := []byte("verified app archive")
+	digest := sha256.Sum256(body)
+	sums := hex.EncodeToString(digest[:]) + "  apps.zip\n"
+	var calls []string
+	client := &http.Client{Transport: appAssetTransport(func(r *http.Request) (*http.Response, error) {
+		calls = append(calls, r.URL.String())
+		status, data := http.StatusOK, ""
+		switch r.URL.Host + r.URL.Path {
+		case "github.com/myco-ai/apps/releases/download/apps/apps.zip", "github.com/myco-ai/apps/releases/download/apps/SHA256SUMS":
+			status = http.StatusForbidden
+		case "api.github.com/repos/myco-ai/apps/releases/tags/apps":
+			data = `{"assets":[{"name":"SHA256SUMS","url":"https://api.github.com/assets/sums"},{"name":"apps.zip","url":"https://api.github.com/assets/zip"}]}`
+		case "api.github.com/assets/sums":
+			data = sums
+		case "api.github.com/assets/zip":
+			if r.Header.Get("Accept") != "application/octet-stream" {
+				t.Fatal("asset request lacks binary Accept")
+			}
+			data = string(body)
+		default:
+			t.Fatalf("unexpected repository or request: %s", r.URL)
+		}
+		return &http.Response{StatusCode: status, ContentLength: int64(len(data)), Body: io.NopCloser(strings.NewReader(data)), Header: make(http.Header), Request: r}, nil
+	})}
+	got, err := FetchAsset(context.Background(), client, "https://github.com/myco-ai/apps/releases/download", "apps", "apps.zip", 1024)
+	if err != nil || !bytes.Equal(got, body) {
+		t.Fatalf("FetchAsset: %q %v (calls %v)", got, err, calls)
+	}
+}
+
+type appAssetTransport func(*http.Request) (*http.Response, error)
+
+func (f appAssetTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }

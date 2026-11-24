@@ -1,0 +1,123 @@
+# Building myco with official applications
+
+Application source, the page SDK, JavaScript checks and application releases live
+in [myco-ai/apps](https://github.com/myco-ai/apps). The host repository keeps Go
+services, native bridges, the console UI and a small application lock file.
+
+## Production builds
+
+Use Go (the version in `go.mod`), Python 3 and Make. The committed console UI
+needs no Node unless you change it. macOS desktop builds also need Xcode tools.
+
+```sh
+make build                 # CLI and Hub
+make cross                 # CLI for supported platforms
+make app                   # macOS desktop
+```
+
+These targets prepare `internal/templates/builtin.zip` and its Go embed file
+before compiling. Both are ignored, generated files. `apps.lock.json` records
+the source repository, full commit, immutable `apps-<commit>` release, builtin
+membership, and expected SHA256 of `builtin.zip`, `builtin.json`,
+`app-locales.json` and `apps.zip`. Builds never resolve the moving `apps` tag.
+Downloads, cache entries and ZIP paths/membership are checked before embedding.
+A missing or corrupt bundle fails preparation; test fixtures are never used.
+
+Before a direct desktop `go build`, run `make prepare-apps` too. A raw Go build
+from an unprepared checkout succeeds for development with no bundled apps;
+its Hub can still fetch the live catalog when online. It is not a distribution
+build. Build every release with the preparation step.
+
+## Offline builds
+
+Populate the content-addressed cache while online, then use the same lock offline:
+
+```sh
+make prepare-apps
+make build APPS_PREPARE_FLAGS=--offline
+```
+
+The default cache is `.cache/apps/<sha256>/<artifact>`. Copy that directory to an
+offline builder (and prefetch Go modules), or transfer the exact release assets:
+
+```sh
+python3 scripts/prepare-apps.py --offline --artifacts-dir /path/to/release-assets
+make build APPS_PREPARE_FLAGS=--offline
+```
+
+`--cache-dir` selects another cache. Offline preparation never accesses the
+network and refuses missing or changed assets. `--download-base` selects a
+public release mirror while preserving the committed tag and hash checks.
+
+## Update or roll back a pin
+
+Choose an immutable release in myco-ai/apps and review its source commit,
+`SHA256SUMS` and builtin membership. Update all four hashes and the matching
+commit/tag in `apps.lock.json`; do not generate a pin from a moving tag during
+build or release. Run:
+
+```sh
+python3 scripts/prepare-apps.py --update-catalog
+make web                   # only if web/src/lib/app-locales.json changed
+make vet
+make test
+make smoke
+```
+
+Commit the lock and, if changed, the host's fallback localization metadata and
+rebuilt `internal/web/dist`. Default preparation checks the committed metadata
+and fails if it needs updating; it never rewrites tracked files implicitly.
+
+Rolling back an embedded pack means restoring a previously reviewed lock and
+its matching fallback metadata, then preparing and rebuilding. Verified cached
+old packs work offline. This does not downgrade pages already created or remove
+newer apps stored by a running Hub. Use an isolated fresh Hub and disable live
+catalog checks when validating the embedded pack alone.
+
+## Tests and application contracts
+
+`make test` runs no-network bundle-preparation checks and Go race tests. Ordinary
+service tests explicitly load the tiny fixtures in
+`internal/templates/testdata/official`; these are not production applications.
+Go tests work in a fresh checkout without preparing a bundle or installing Node.
+After preparation, a Go test also checks embedded bytes against the lock.
+
+For real application/native bridge acceptance, use a separate apps checkout at
+the locked source commit, install its template dependencies and Chromium, then
+unpack the exact released apps (not a locally rebuilt substitute):
+
+```sh
+npm --prefix /path/to/apps/templates ci
+python3 scripts/prepare-apps.py --apps-dir /path/to/apps/dist/official
+APPS_TEST_ROOT=/path/to/apps go test -count=1 ./internal/integration ./internal/console ./internal/sshcap -run 'Test(AgentActionsSDK|PageExportApplications|WhiteboardSharedExport|PaletteAgentToPage|ShoppingComparisonAgentToPage|DatabaseNativeBridgeAndProductionUI|RealSSHOverviewTemplateParser)$'
+```
+
+Host UI smoke, `npm --prefix web run dev:app` and promotional screenshot scenes
+also read that apps checkout and its released bundles. Set `APPS_TEST_ROOT`
+explicitly, or place the locked checkout at `.cache/apps-source`. They never read
+retired main-repository app copies; incomplete resources fail with setup guidance.
+The host UI CI prepares its own exact pinned checkout and release artifacts.
+
+Install Playwright 1.57.0 with Chromium and ffmpeg as in the `app-contract` CI
+job. Without `APPS_TEST_ROOT`, only these optional cross-repository tests skip;
+an explicitly supplied incomplete checkout fails. Application business, typing,
+localization and browser regression suites run in the apps repository's CI.
+
+## Runtime downloads and older Hubs
+
+New Hubs fetch the daily rolling catalog from
+`https://github.com/myco-ai/apps/releases/download/apps/`. Set
+`MYCO_APPS_DOWNLOAD` to a public release download base to override application
+fetches independently of binary updates. An explicitly configured legacy
+`MYCO_RELEASE_DOWNLOAD` remains a fallback override. The build lock controls
+bundled startup apps; it does not freeze a Hub's online catalog refreshes.
+
+For explicit public network acceptance, run
+`APPS_LIVE_ACCEPTANCE=1 go test -v ./internal/templates -run TestLiveCatalogSources`.
+It downloads and compares the new and historical URLs; ordinary tests skip it.
+
+The main repository's `apps-mirror.yml` verifies and mirrors public assets to
+its `apps` prerelease, preserving old Hub URLs including the former owner URL's
+GitHub redirect. It needs only the main repository's workflow token. Keep it
+for at least 90 days after cutover and two stable host releases; stopping it
+requires a maintenance decision.

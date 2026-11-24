@@ -1,7 +1,0 @@
-{
-  "saved": [
-    { "id": "s1", "tool": "json", "title": "接口返回示例", "input": "{\"code\":0,\"data\":{\"user\":{\"id\":42,\"name\":\"Ann\",\"roles\":[\"admin\",\"dev\"]},\"token\":\"eyJhbGciOiJIUzI1NiJ9\"},\"ok\":true}" },
-    { "id": "s2", "tool": "regex", "title": "手机号", "input": "张三 13812345678，李四 15900001111，座机 010-12345678", "extra": "1[3-9]\\d{9}" },
-    { "id": "s3", "tool": "time", "title": "发版时间", "input": "1763456400" }
-  ]
-}
