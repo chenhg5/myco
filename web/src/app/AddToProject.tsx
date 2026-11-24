@@ -1057,7 +1057,7 @@ export function usedFolders(rows: AgentRow[], hubId: string, machineId: string):
 }
 
 /** A folder as a chip shows it: the home directory as ~, and a deep one
- *  as its last two folders (~/…/tapnow/loops-harness); in full on hover. */
+ *  as its last two folders (~/…/acme/demo-service); in full on hover. */
 export function shortDir(dir: string): string {
   const d = dir.replace(/^(\/Users\/[^/]+|\/home\/[^/]+|\/root|[A-Za-z]:\\Users\\[^\\]+)(?=$|[\\/])/, "~");
   const sep = d.includes("\\") && !d.includes("/") ? "\\" : "/";

@@ -86,7 +86,7 @@ func TestHandover(t *testing.T) {
 
 	// Taken over by a Codex session.
 	anon, _ := client.New(h.url, "")
-	tk, err := anon.TakeOver(c, api.TakeOverRequest{Token: token, Binding: api.Binding{Harness: "codex", SessionID: "rollout-new", Environment: "mac-mini", Workdir: "/Users/g/myco"}})
+	tk, err := anon.TakeOver(c, api.TakeOverRequest{Token: token, Binding: api.Binding{Harness: "codex", SessionID: "rollout-new", Environment: "mac-mini", Workdir: "/Users/demo/myco"}})
 	if err != nil {
 		t.Fatal(err)
 	}

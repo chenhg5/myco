@@ -88,7 +88,7 @@ func TestEnsureCLIInstallsTheBundledOne(t *testing.T) {
 // stores that; the link then stops working.
 func TestAddHubByPairingLink(t *testing.T) {
 	r := newRig(t)
-	b := &console.Backend{Store: console.NewStore(r.store), Secrets: r.secrets, Local: &console.Local{Home: t.TempDir(), Device: "glenn-pc"}}
+	b := &console.Backend{Store: console.NewStore(r.store), Secrets: r.secrets, Local: &console.Local{Home: t.TempDir(), Device: "alice-pc"}}
 	r.app.Config.Handler = b.Handler()
 	pl, err := r.admin.CreatePairing(context.Background())
 	if err != nil {
@@ -106,7 +106,7 @@ func TestAddHubByPairingLink(t *testing.T) {
 		t.Fatal("a used link must not work again")
 	}
 	devs, err := r.admin.Devices(context.Background())
-	if err != nil || len(devs) == 0 || devs[len(devs)-1].Name != "glenn-pc" {
+	if err != nil || len(devs) == 0 || devs[len(devs)-1].Name != "alice-pc" {
 		t.Fatalf("devices: %v %+v", err, devs)
 	}
 }

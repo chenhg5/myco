@@ -26,9 +26,9 @@ func TestInviteOnTheCommandLine(t *testing.T) {
 	t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))
 	hub := newHub(t)
 	admin := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(t.TempDir(), "a.yaml")}}
-	admin.run("agent", "register", "--name", "glenn-bot")
+	admin.run("agent", "register", "--name", "alice-bot")
 
-	code, out, e := admin.run("member", "invite", "--name", "laohu", "--display-name", "老胡", "--format", "json")
+	code, out, e := admin.run("member", "invite", "--name", "bob", "--display-name", "Bob", "--format", "json")
 	if code != 0 {
 		t.Fatalf("invite: %s", e)
 	}
@@ -38,7 +38,7 @@ func TestInviteOnTheCommandLine(t *testing.T) {
 		t.Fatalf("invite: %s", out)
 	}
 	code0 := strings.TrimPrefix(inv.Link, hub+"/c/")
-	if _, text, _ := admin.run("member", "invite", "--name", "matthew", "--format", "text"); !strings.Contains(text, "curl -fsSL ") || !strings.Contains(text, "myco app") {
+	if _, text, _ := admin.run("member", "invite", "--name", "carol", "--format", "text"); !strings.Contains(text, "curl -fsSL ") || !strings.Contains(text, "myco app") {
 		t.Fatalf("invite text: %s", text)
 	}
 
@@ -67,10 +67,10 @@ func TestInviteOnTheCommandLine(t *testing.T) {
 		t.Fatalf("guide:\n%s", body)
 	}
 
-	// What the script runs, in a Claude Code session on laohu's machine.
+	// What the script runs, in a Claude Code session on bob's machine.
 	lh := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_INVITE_CODE": code0, "CLAUDE_CODE_SESSION_ID": "abcd-1234-ef56"}}
-	code, out, e = lh.run("member", "accept", "--machine", "laohu-mbp", "--no-service", "--format", "text")
-	if code != 0 || !strings.Contains(out, "you joined as laohu (老胡)") || !strings.Contains(out, `machine "laohu-mbp" joined`) {
+	code, out, e = lh.run("member", "accept", "--machine", "bob-mbp", "--no-service", "--format", "text")
+	if code != 0 || !strings.Contains(out, "you joined as bob (Bob)") || !strings.Contains(out, `machine "bob-mbp" joined`) {
 		t.Fatalf("accept: %d %s %s", code, out, e)
 	}
 	b, _ := os.ReadFile(filepath.Join(home, ".myco", "machine.yaml"))
@@ -78,57 +78,57 @@ func TestInviteOnTheCommandLine(t *testing.T) {
 		t.Fatalf("machine.yaml lacks the member credential:\n%s", b)
 	}
 	// Running it again is harmless (the code is spent, the credential kept).
-	if code, out, e := lh.run("member", "accept", "--machine", "laohu-mbp", "--no-service", "--format", "text"); code != 0 || !strings.Contains(out, "laohu") {
+	if code, out, e := lh.run("member", "accept", "--machine", "bob-mbp", "--no-service", "--format", "text"); code != 0 || !strings.Contains(out, "bob") {
 		t.Fatalf("accept again: %d %s %s", code, out, e)
 	}
 
 	sess := &harnessT{t, map[string]string{"CLAUDE_CODE_SESSION_ID": "abcd-1234-ef56"}}
 	code, out, e = sess.run("join", "--format", "json")
-	if code != 0 || !strings.Contains(out, `"name": "laohu-mbp-claude-ef56"`) {
+	if code != 0 || !strings.Contains(out, `"name": "bob-mbp-claude-ef56"`) {
 		t.Fatalf("join: %d %s %s", code, out, e)
 	}
-	// (The admin token alone: glenn-bot, saved in admin's config, no longer
-	// sees laohu's node, which is private to laohu by default.)
+	// (The admin token alone: alice-bot, saved in admin's config, no longer
+	// sees bob's node, which is private to bob by default.)
 	root := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(t.TempDir(), "root.yaml")}}
-	_, out, e = root.run("agent", "get", "--name", "laohu-mbp-claude-ef56", "--format", "json")
-	if !strings.Contains(out, `"owner": "laohu"`) || !strings.Contains(out, `"visibility": "private"`) {
-		t.Fatalf("the session must be laohu's, private to him: %s %s", out, e)
+	_, out, e = root.run("agent", "get", "--name", "bob-mbp-claude-ef56", "--format", "json")
+	if !strings.Contains(out, `"owner": "bob"`) || !strings.Contains(out, `"visibility": "private"`) {
+		t.Fatalf("the session must be bob's, private to him: %s %s", out, e)
 	}
 
 	// His credential manages his own nodes, not others', and pairs the app.
 	me := &harnessT{t, map[string]string{"MYCO_HUB": hub}}
-	if code, _, e := me.run("agent", "label", "add", "--name", "laohu-mbp-claude-ef56", "--label", "group=web"); code != 0 {
+	if code, _, e := me.run("agent", "label", "add", "--name", "bob-mbp-claude-ef56", "--label", "group=web"); code != 0 {
 		t.Fatalf("label own node: %s", e)
 	}
-	if code, _, _ := me.run("agent", "label", "add", "--name", "glenn-bot", "--label", "x"); code != ExitPermission {
+	if code, _, _ := me.run("agent", "label", "add", "--name", "alice-bot", "--label", "x"); code != ExitPermission {
 		t.Fatalf("labelling someone else's node: exit %d", code)
 	}
-	if code, _, e := me.run("agent", "alias", "set", "--alias", "laohu-reviewer", "--target", "laohu-mbp-claude-ef56"); code != 0 {
+	if code, _, e := me.run("agent", "alias", "set", "--alias", "bob-reviewer", "--target", "bob-mbp-claude-ef56"); code != 0 {
 		t.Fatalf("owner sets own node alias: %d %s", code, e)
 	}
-	if code, _, _ := me.run("agent", "alias", "set", "--alias", "stolen", "--target", "glenn-bot"); code != ExitPermission {
+	if code, _, _ := me.run("agent", "alias", "set", "--alias", "stolen", "--target", "alice-bot"); code != ExitPermission {
 		t.Fatalf("non-owner sets alias: exit %d", code)
 	}
 	// A role address that points at someone else's node is not his to take.
-	if code, _, e := root.run("agent", "alias", "set", "--alias", "team-reviewer", "--target", "glenn-bot"); code != 0 {
+	if code, _, e := root.run("agent", "alias", "set", "--alias", "team-reviewer", "--target", "alice-bot"); code != 0 {
 		t.Fatalf("admin sets alias: %d %s", code, e)
 	}
-	if code, _, _ := me.run("agent", "alias", "set", "--alias", "team-reviewer", "--target", "laohu-mbp-claude-ef56"); code != ExitConflict {
+	if code, _, _ := me.run("agent", "alias", "set", "--alias", "team-reviewer", "--target", "bob-mbp-claude-ef56"); code != ExitConflict {
 		t.Fatalf("member re-points someone else's alias to his node: exit %d", code)
 	}
-	if code, _, e := me.run("agent", "alias", "remove", "--alias", "laohu-reviewer", "--force"); code != 0 {
+	if code, _, e := me.run("agent", "alias", "remove", "--alias", "bob-reviewer", "--force"); code != 0 {
 		t.Fatalf("owner removes own node alias: %d %s", code, e)
 	}
 	if code, out, e := me.run("member", "pair", "--format", "text"); code != 0 || !strings.Contains(out, hub+"/c/myco_pair_") {
 		t.Fatalf("pair: %d %s %s", code, out, e)
 	}
 	// The member can remove their machine, but not the owner's machine.
-	ownedProfile, err := config.Load(filepath.Join(home, ".myco", "agents", "laohu-mbp-claude-ef56.yaml"))
+	ownedProfile, err := config.Load(filepath.Join(home, ".myco", "agents", "bob-mbp-claude-ef56.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	ownedClient, _ := client.New(hub, ownedProfile.Token)
-	if err := ownedClient.ReportMachine(context.Background(), api.MachineReport{Fingerprint: strings.Repeat("a", 32), Name: "laohu-mbp", Hostname: "laohu-mbp"}); err != nil {
+	if err := ownedClient.ReportMachine(context.Background(), api.MachineReport{Fingerprint: strings.Repeat("a", 32), Name: "bob-mbp", Hostname: "bob-mbp"}); err != nil {
 		t.Fatal(err)
 	}
 	adminClient, _ := client.New(hub, "admin-token-123456")

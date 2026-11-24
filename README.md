@@ -121,7 +121,7 @@ Add a shell node in the app (**Add a computer**), choose a folder and which agen
 
 ### 2. Hand work to a teammate's agent
 
-Share one hub with your team (Settings → Members → **Invite a member**). Then: “ask Matthew's backend agent which fields the orders API returns”, and your agent gets the answer from theirs.
+Share one hub with your team (Settings → Members → **Invite a member**). Then: “ask Carol's backend agent which fields the orders API returns”, and your agent gets the answer from theirs.
 
 - **Owners decide** who may send work to their agents.
 - **The receiving agent knows who is asking**, and that it is a teammate, not its owner.

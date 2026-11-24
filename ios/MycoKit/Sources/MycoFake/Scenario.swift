@@ -280,20 +280,20 @@ public enum Scenario: Sendable {
                 step("ok", "合并吗", "human", me, "done", summary: "合并", at: 88_000),
             ], durationMs: 2_400_000, createdAt: ago(90_000), updatedAt: ago(87_000), endedAt: ago(87_000))
         world.workflows = [Workflow(
-            id: "wf_wri", name: "写-审-改", description: "一个写、一个审，审过了问我要不要合并", project: project, owner: "glenn", version: 2,
+            id: "wf_wri", name: "写-审-改", description: "一个写、一个审，审过了问我要不要合并", project: project, owner: "alice", version: 2,
             steps: 3, active: 1, lastRun: waiting, definition: definition, createdAt: ago(200_000), updatedAt: ago(100_000))]
         world.runs = [waiting, done]
         // Two automations, except where the page with none is looked at.
         if self != .waiting {
             world.automations = [
                 Automation(
-                    id: "aut_morning", name: "每天早上汇总", owner: "glenn", to: lead.name,
+                    id: "aut_morning", name: "每天早上汇总", owner: "alice", to: lead.name,
                     body: "看一下昨天新开的 issue 和 PR，挑出要紧的，在这里回我一份清单。",
                     schedule: AutomationSchedule(cron: "0 9 * * 1-5", tz: TimeZone.current.identifier), skipIfBusy: true, enabled: true,
                     nextRunAt: ago(-50_000),
                     lastRun: AutomationRun(id: "arun_1", automationId: "aut_morning", at: ago(36_000), trigger: "schedule", outcome: "sent", messageId: "m1")),
                 Automation(
-                    id: "aut_ci", name: "CI 失败时排查", owner: "glenn", to: backend.name,
+                    id: "aut_ci", name: "CI 失败时排查", owner: "alice", to: backend.name,
                     body: "CI 构建失败了，看一下日志找出原因，能修就修，修不了告诉我卡在哪：\n{{payload}}",
                     webhook: true, webhookUrl: "https://demo.myco.example/hooks/aut_ci", skipIfBusy: true, enabled: false,
                     lastRun: AutomationRun(
@@ -323,7 +323,7 @@ public enum Scenario: Sendable {
             // its subscription ran out, and a session on the Studio Mac
             // took over.
             world.handovers = [Handover(
-                id: "hov_demo1", agent: backend.name, at: ago(172_900), by: "glenn", note: "原来的订阅到期了",
+                id: "hov_demo1", agent: backend.name, at: ago(172_900), by: "alice", note: "原来的订阅到期了",
                 from: HandoverSide(binding: Binding(harness: "claude-cloud", sessionId: "sess_before"), runtime: Runtime(cli: "claude-cloud")),
                 to: HandoverSide(binding: backend.binding, machineId: "mach_studio", machineName: "Studio Mac", runtime: backend.runtime),
                 state: "done", doneAt: ago(172_800), openTasks: [])]

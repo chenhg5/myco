@@ -199,7 +199,7 @@ func ParseManifest(raw []byte) (*Manifest, error) {
 		return nil, Errf(CodeInvalidArgument, "myco.json: "+format, a...)
 	}
 	if !templateSlug.MatchString(m.ID) {
-		return bad("id %q: use author/name in lowercase, e.g. glenn/weekly-report", m.ID)
+		return bad("id %q: use author/name in lowercase, e.g. alice/weekly-report", m.ID)
 	}
 	name, err := ParsePageName(m.Name)
 	if err != nil {

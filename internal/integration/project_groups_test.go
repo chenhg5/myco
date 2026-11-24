@@ -22,11 +22,11 @@ func TestProjectGroups(t *testing.T) {
 	c := ctx(t)
 	h := startHub(t, filepath.Join(t.TempDir(), "hub.db"), app.DefaultMessagePolicy())
 	admin := h.admin()
-	ct, err := admin.CreateConsoleToken(c, "glenn-mac")
+	ct, err := admin.CreateConsoleToken(c, "alice-mac")
 	if err != nil {
 		t.Fatal(err)
 	}
-	glenn := h.client(ct.Token)
+	alice := h.client(ct.Token)
 	enroll := func(name string) *client.Client {
 		enr, err := admin.CreateEnrollment(c, api.CreateEnrollmentRequest{NamePrefix: name, MaxUses: 1}, false)
 		if err != nil {
@@ -40,7 +40,7 @@ func TestProjectGroups(t *testing.T) {
 	}
 	lead, web := enroll("lead"), enroll("web")
 	enroll("api")
-	if _, err := glenn.CreateProject(c, api.CreateProjectRequest{Name: "myco"}); err != nil {
+	if _, err := alice.CreateProject(c, api.CreateProjectRequest{Name: "myco"}); err != nil {
 		t.Fatal(err)
 	}
 	coord := "coordinator"
@@ -78,7 +78,7 @@ func TestProjectGroups(t *testing.T) {
 	}
 	// A person (console token) creates groups and sorts members, in one PATCH.
 	groups := []string{"前端", "后端"}
-	p, err := glenn.SetProjectGroups(c, "myco", &groups, map[string]string{"web": "前端", "api": "后端"})
+	p, err := alice.SetProjectGroups(c, "myco", &groups, map[string]string{"web": "前端", "api": "后端"})
 	if err != nil || !slices.Equal(p.Groups, groups) || groupOf(p, "web") != "前端" || groupOf(p, "api") != "后端" || groupOf(p, "lead") != "" {
 		t.Fatalf("create groups: %v %+v", err, p)
 	}
@@ -99,29 +99,29 @@ func TestProjectGroups(t *testing.T) {
 		"duplicate":     {Groups: &[]string{"a", "a"}},
 		"empty name":    {Groups: &[]string{" "}},
 	} {
-		if _, err := glenn.UpdateProject(c, "myco", r); !isCode(err, "invalid_argument") {
+		if _, err := alice.UpdateProject(c, "myco", r); !isCode(err, "invalid_argument") {
 			t.Fatalf("%s: %v", name, err)
 		}
 	}
 	// PUT member sets or clears one member's group.
 	g := "服务端"
-	if p, err = glenn.PutProjectMember(c, "myco", "web", api.ProjectMemberRequest{Group: &g}); err != nil || groupOf(p, "web") != "服务端" {
+	if p, err = alice.PutProjectMember(c, "myco", "web", api.ProjectMemberRequest{Group: &g}); err != nil || groupOf(p, "web") != "服务端" {
 		t.Fatalf("put member group: %v", err)
 	}
 	g = "设计"
-	if _, err = glenn.PutProjectMember(c, "myco", "web", api.ProjectMemberRequest{Group: &g}); !isCode(err, "invalid_argument") {
+	if _, err = alice.PutProjectMember(c, "myco", "web", api.ProjectMemberRequest{Group: &g}); !isCode(err, "invalid_argument") {
 		t.Fatalf("unknown group on put: %v", err)
 	}
 	g = ""
-	if p, err = glenn.PutProjectMember(c, "myco", "web", api.ProjectMemberRequest{Group: &g}); err != nil || groupOf(p, "web") != "" {
+	if p, err = alice.PutProjectMember(c, "myco", "web", api.ProjectMemberRequest{Group: &g}); err != nil || groupOf(p, "web") != "" {
 		t.Fatalf("clear group: %v", err)
 	}
 	// Other edits keep the groups; the list shows them too.
 	title := "myco 开发"
-	if p, err = glenn.UpdateProject(c, "myco", api.UpdateProjectRequest{Title: &title}); err != nil || !slices.Equal(p.Groups, []string{"服务端"}) || groupOf(p, "api") != "服务端" {
+	if p, err = alice.UpdateProject(c, "myco", api.UpdateProjectRequest{Title: &title}); err != nil || !slices.Equal(p.Groups, []string{"服务端"}) || groupOf(p, "api") != "服务端" {
 		t.Fatalf("title edit: %v %+v", err, p)
 	}
-	list, err := glenn.ListProjects(c, false)
+	list, err := alice.ListProjects(c, false)
 	if err != nil || len(list) != 1 || !slices.Equal(list[0].Groups, []string{"服务端"}) {
 		t.Fatalf("list: %v %+v", err, list)
 	}

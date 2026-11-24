@@ -274,11 +274,11 @@ struct SessionTests {
     @Test func aWorkspaceAtAnAddressGetsAPlainName() {
         func record(_ name: String, _ url: String) -> WorkspaceRecord { WorkspaceRecord(id: "x", name: name, url: URL(string: url)!) }
         AppLanguage.$forced.withValue(.en) {
-            #expect(Workspaces.displayName(of: record("193-46-198-17.sslip.io", "https://193-46-198-17.sslip.io")) == "My workspace")
+            #expect(Workspaces.displayName(of: record("203-0-113-17.sslip.io", "https://203-0-113-17.sslip.io")) == "My workspace")
             #expect(Workspaces.displayName(of: record("192.168.1.20", "http://192.168.1.20:7777")) == "My workspace")
             #expect(Workspaces.displayName(of: record("hub.example.com", "https://hub.example.com")) == "hub.example.com")
             // A name someone gave it stays.
-            #expect(Workspaces.displayName(of: record("Studio", "https://193-46-198-17.sslip.io")) == "Studio")
+            #expect(Workspaces.displayName(of: record("Studio", "https://203-0-113-17.sslip.io")) == "Studio")
         }
     }
 
@@ -408,12 +408,12 @@ struct HandoverTests {
             #expect(HandoverWords.side(HandoverSide(), machines: []) == "另一个会话")
             #expect(HandoverWords.side(nil, machines: []) == "")
             // The line a conversation draws where it took effect.
-            var done = Handover(id: "hov_1", agent: "coder", at: Date(), by: "glenn", to: onMac, state: "done", doneAt: Date())
-            #expect(HandoverWords.line(done, machines: [studio], me: "@console:glenn") == "换成 Studio Mac · Codex 接着做（你换的）")
-            #expect(HandoverWords.line(done, machines: [studio], me: "@console:lee") == "换成 Studio Mac · Codex 接着做（glenn换的）")
+            var done = Handover(id: "hov_1", agent: "coder", at: Date(), by: "alice", to: onMac, state: "done", doneAt: Date())
+            #expect(HandoverWords.line(done, machines: [studio], me: "@console:alice") == "换成 Studio Mac · Codex 接着做（你换的）")
+            #expect(HandoverWords.line(done, machines: [studio], me: "@console:lee") == "换成 Studio Mac · Codex 接着做（alice换的）")
             done.back = "hov_0"
             done.by = "admin"
-            #expect(HandoverWords.line(done, machines: [studio], me: "@console:glenn") == "换回原来的会话 · Studio Mac · Codex（管理员换的）")
+            #expect(HandoverWords.line(done, machines: [studio], me: "@console:alice") == "换回原来的会话 · Studio Mac · Codex（管理员换的）")
             #expect(HandoverWords.state(done) == nil)
             done.state = "waiting"
             #expect(HandoverWords.state(done) == "等它接手")

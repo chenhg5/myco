@@ -60,15 +60,13 @@ actual language/theme/dimensions plus platform/aspect/kind/tags/description, and
 with Pillow is required for previews. It never uploads videos or debug files.
 
 ```sh
-node web/scripts/media-kit/upload.mjs --out ../media-kit-output
-node web/scripts/media-kit/upload.mjs --out ../media-kit-output --upload
+node web/scripts/media-kit/upload.mjs --page <page-id> --project <project-name> --out ../media-kit-output
+node web/scripts/media-kit/upload.mjs --page <page-id> --project <project-name> --out ../media-kit-output --upload
 # Update metadata for existing files without uploading the originals again:
-node web/scripts/media-kit/upload.mjs --out ../media-kit-output --upload --metadata-only
+node web/scripts/media-kit/upload.mjs --page <page-id> --project <project-name> --out ../media-kit-output --upload --metadata-only
 ```
 
-Default destination: page `pg_h3ckpnrw4xgo4oox`, project `myco-team`. Override
-`--page` and `--project` only when intentionally publishing to another
-user-authorized destination. Uploads reuse deterministic filenames and CAS
+Both `--page` and `--project` are required, including for a dry run. Choose a destination you are authorized to update; the helper has no default workspace, project or page. Uploads reuse deterministic filenames and CAS
 versions; a retry completes the same records instead of allocating duplicate
 file slots. Concurrent record conflicts stop for review. `uploaded.json` records
 the entry IDs and final project file count.

@@ -43,7 +43,7 @@ struct DecodingTests {
 
     @Test func readsAMessageWithoutOptionalFields() throws {
         let json = """
-        {"id":"msg_1","from":"@console:glenn","to":"coder","thread_id":"msg_1","type":"task","body":"hi",
+        {"id":"msg_1","from":"@console:alice","to":"coder","thread_id":"msg_1","type":"task","body":"hi",
          "status":"acked","attempts":1,"created_at":"2026-11-13T03:14:10.842Z","updated_at":"2026-11-13T03:14:16Z"}
         """
         let message = try HubJSON.decoder().decode(Message.self, from: Data(json.utf8))

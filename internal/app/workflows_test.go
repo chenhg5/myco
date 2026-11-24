@@ -24,7 +24,7 @@ type wfEnv struct {
 	svc    *app.WorkflowService
 	msgs   *app.MessageService
 	agents map[string]*domain.Agent
-	glenn  app.Caller
+	alice  app.Caller
 	aut    *app.AutomationService
 	reg    *app.AgentService
 	files  *sqlite.FileRepo
@@ -49,7 +49,7 @@ func newWF(t *testing.T, names ...string) *wfEnv {
 	msgs.SetFiles(files)
 	svc.SetTraces(traces)
 	e := &wfEnv{t: t, ctx: context.Background(), clock: clock, svc: svc, msgs: msgs, agents: map[string]*domain.Agent{},
-		glenn: app.Caller{Name: "glenn", MemberID: "mem_1"}, aut: aut, reg: reg, files: files, traces: traces}
+		alice: app.Caller{Name: "alice", MemberID: "mem_1"}, aut: aut, reg: reg, files: files, traces: traces}
 	for _, n := range names {
 		in := app.RegisterInput{Name: n}
 		if strings.HasPrefix(n, "box") {
@@ -70,7 +70,7 @@ func (e *wfEnv) apply(def string) *domain.Workflow {
 	if err != nil {
 		e.t.Fatal(err)
 	}
-	out, err := e.svc.Apply(e.ctx, e.glenn, d, false)
+	out, err := e.svc.Apply(e.ctx, e.alice, d, false)
 	if err != nil {
 		e.t.Fatal(err)
 	}
@@ -79,7 +79,7 @@ func (e *wfEnv) apply(def string) *domain.Workflow {
 
 func (e *wfEnv) start(name string, inputs map[string]any) *domain.WorkflowRun {
 	e.t.Helper()
-	d, _, err := e.svc.Start(e.ctx, e.glenn, name, app.StartInput{Inputs: inputs})
+	d, _, err := e.svc.Start(e.ctx, e.alice, name, app.StartInput{Inputs: inputs})
 	if err != nil {
 		e.t.Fatal(err)
 	}
@@ -118,7 +118,7 @@ func (e *wfEnv) reply(agent string, m *domain.Message, body string, result any) 
 
 func (e *wfEnv) run(id string) *app.RunDetail {
 	e.t.Helper()
-	d, err := e.svc.GetRun(e.ctx, e.glenn, id)
+	d, err := e.svc.GetRun(e.ctx, e.alice, id)
 	if err != nil {
 		e.t.Fatal(err)
 	}
@@ -150,7 +150,7 @@ func TestWorkflowWriteReviewLoopAndDecision(t *testing.T) {
 	run := e.start("写-审-改", map[string]any{"task": "加导出按钮"})
 
 	m := e.task("coder")
-	if m.Workflow != run.ID || m.From != app.ConsoleSender("glenn") || !strings.Contains(m.Body, "做：加导出按钮") ||
+	if m.Workflow != run.ID || m.From != app.ConsoleSender("alice") || !strings.Contains(m.Body, "做：加导出按钮") ||
 		!strings.Contains(m.Body, "--result") || strings.Contains(m.Body, "意见") {
 		t.Fatalf("first task: %+v\n%s", m, m.Body)
 	}
@@ -174,17 +174,17 @@ func TestWorkflowWriteReviewLoopAndDecision(t *testing.T) {
 	if d.Run.Status != domain.FlowWaiting {
 		t.Fatalf("waiting for the decision: %s %s", d.Run.Status, d.Run.Error)
 	}
-	ds, _ := e.svc.Decisions(e.ctx, e.glenn)
-	if len(ds) != 1 || ds[0].Step.Input != "合并 feat/x2 吗？" || ds[0].Step.Target != "glenn" {
+	ds, _ := e.svc.Decisions(e.ctx, e.alice)
+	if len(ds) != 1 || ds[0].Step.Input != "合并 feat/x2 吗？" || ds[0].Step.Target != "alice" {
 		t.Fatalf("decisions: %+v", ds)
 	}
-	if _, err := e.svc.Decide(e.ctx, e.glenn, run.ID, "approve", "随便", ""); err == nil {
+	if _, err := e.svc.Decide(e.ctx, e.alice, run.ID, "approve", "随便", ""); err == nil {
 		t.Fatal("a choice that is not an option was taken")
 	}
 	if _, err := e.svc.Decide(e.ctx, app.Caller{Name: "bob", MemberID: "mem_2"}, run.ID, "approve", "合并", ""); err == nil {
 		t.Fatal("someone else decided")
 	}
-	r, err := e.svc.Decide(e.ctx, e.glenn, run.ID, "approve", "合并", "好")
+	r, err := e.svc.Decide(e.ctx, e.alice, run.ID, "approve", "合并", "好")
 	if err != nil || r.Status != domain.FlowSucceeded {
 		t.Fatalf("after deciding: %+v %v", r, err)
 	}
@@ -301,14 +301,14 @@ func TestWorkflowCancelStopsItsTaskAndRetryStartsAgain(t *testing.T) {
 	if _, err := e.svc.Cancel(e.ctx, app.Caller{Name: "bob", MemberID: "mem_2"}, run.ID); err == nil {
 		t.Fatal("someone else cancelled it")
 	}
-	r, err := e.svc.Cancel(e.ctx, e.glenn, run.ID)
+	r, err := e.svc.Cancel(e.ctx, e.alice, run.ID)
 	if err != nil || r.Status != domain.FlowCancelled {
 		t.Fatalf("cancel: %+v %v", r, err)
 	}
 	if got, _ := e.msgs.Get(e.ctx, e.agents["coder"], m.ID); !got.Status.Terminal() {
 		t.Fatalf("the task was left open: %s", got.Status)
 	}
-	r, err = e.svc.Retry(e.ctx, e.glenn, run.ID, "")
+	r, err = e.svc.Retry(e.ctx, e.alice, run.ID, "")
 	if err != nil || r.Status != domain.FlowRunning {
 		t.Fatalf("retry: %+v %v", r, err)
 	}
@@ -320,7 +320,7 @@ func TestWorkflowInputsAreCheckedAndCoerced(t *testing.T) {
 	e := newWF(t, "coder")
 	e.apply(`{"name": "n", "inputs": {"required": ["count"], "properties": {"count": {"type": "integer"}, "dry": {"type": "boolean", "default": true}}},
 	  "steps": [{"id": "s", "agent": "coder", "prompt": "{{inputs.count}} {{inputs.dry}}"}]}`)
-	if _, _, err := e.svc.Start(e.ctx, e.glenn, "n", app.StartInput{Inputs: map[string]any{"count": "lots"}}); err == nil {
+	if _, _, err := e.svc.Start(e.ctx, e.alice, "n", app.StartInput{Inputs: map[string]any{"count": "lots"}}); err == nil {
 		t.Fatal("a word was taken for a number")
 	}
 	e.start("n", map[string]any{"count": "3"})
@@ -344,7 +344,7 @@ func TestWorkflowApplyVersionsAndOwnership(t *testing.T) {
 	}
 	d, _ := domain.ParseWorkflowDef([]byte(def))
 	if _, err := e.svc.Apply(e.ctx, app.Caller{Name: "bob", MemberID: "mem_2"}, d, false); !domain.IsCode(err, domain.CodePermissionDenied) {
-		t.Fatalf("bob changed glenn's: %v", err)
+		t.Fatalf("bob changed alice's: %v", err)
 	}
 	chk := e.svc.Check(e.ctx, &domain.WorkflowDef{Name: "x", Steps: []domain.StepDef{{ID: "s", Agent: "ghost", Prompt: "p"}}})
 	if len(chk.Problems) != 0 || len(chk.Warnings) != 1 {
@@ -357,7 +357,7 @@ func TestAutomationStartsAWorkflowFromAWebhookCall(t *testing.T) {
 	w := e.apply(writeReview)
 	str := func(v string) *string { return &v }
 	on := true
-	out, err := e.aut.Create(e.ctx, e.glenn, app.AutomationInput{Name: str("issue → 写-审-改"), Workflow: str("写-审-改"),
+	out, err := e.aut.Create(e.ctx, e.alice, app.AutomationInput{Name: str("issue → 写-审-改"), Workflow: str("写-审-改"),
 		Inputs: map[string]string{"task": "修 issue：{{payload.issue.title}}"}, Webhook: &on, SkipIfBusy: &on})
 	if err != nil {
 		t.Fatal(err)
@@ -376,29 +376,29 @@ func TestAutomationStartsAWorkflowFromAWebhookCall(t *testing.T) {
 	if m.Workflow != r.WorkflowRun || !strings.Contains(m.Body, "做：修 issue：登录闪退") {
 		t.Fatalf("task: %s", m.Body)
 	}
-	if d := e.run(r.WorkflowRun); d.Run.Trigger != domain.FlowByAutomation || d.Run.Owner != "glenn" {
+	if d := e.run(r.WorkflowRun); d.Run.Trigger != domain.FlowByAutomation || d.Run.Owner != "alice" {
 		t.Fatalf("run: %+v", d.Run)
 	}
 	// The last run is still going: skipped.
 	if r2, err := e.aut.Webhook(e.ctx, a.ID, secret, call); err != nil || r2.Outcome != domain.RunSkipped {
 		t.Fatalf("second: %+v %v", r2, err)
 	}
-	if _, err := e.svc.Cancel(e.ctx, e.glenn, r.WorkflowRun); err != nil {
+	if _, err := e.svc.Cancel(e.ctx, e.alice, r.WorkflowRun); err != nil {
 		t.Fatal(err)
 	}
-	if r3, err := e.aut.RunNow(e.ctx, e.glenn, a.ID); err != nil || r3.Outcome != domain.RunSent {
+	if r3, err := e.aut.RunNow(e.ctx, e.alice, a.ID); err != nil || r3.Outcome != domain.RunSent {
 		t.Fatalf("after it ended: %+v %v", r3, err)
 	}
 	// Someone who may not see the workflow cannot point one at it.
 	if _, err := e.aut.Create(e.ctx, app.Caller{Name: "bob", MemberID: "mem_2"}, app.AutomationInput{Name: str("x"), Workflow: str(w.ID), Webhook: &on}); err == nil {
-		t.Fatal("bob used glenn's workflow")
+		t.Fatal("bob used alice's workflow")
 	}
 }
 
 func TestWorkflowTellsTheAgentThatStartedIt(t *testing.T) {
 	e := newWF(t, "lead", "coder")
 	e.apply(`{"name": "one", "steps": [{"id": "do", "title": "做", "agent": "coder", "prompt": "x"}]}`)
-	lead := app.Caller{Name: "glenn", MemberID: "mem_1", Agent: "lead"}
+	lead := app.Caller{Name: "alice", MemberID: "mem_1", Agent: "lead"}
 	d, _, err := e.svc.Start(e.ctx, lead, "one", app.StartInput{})
 	if err != nil || d.Run.Trigger != domain.FlowByAgent || d.Run.By != "lead" {
 		t.Fatalf("start: %+v %v", d, err)
@@ -439,7 +439,7 @@ func TestWorkflowStepByRolePicksTheLeastBusy(t *testing.T) {
 	}
 	e.apply(`{"name": "r", "steps": [{"id": "rv", "title": "审", "role": "审查", "prompt": "看看"}]}`)
 	// rev-a is busy with something else: rev-b is free.
-	if _, err := e.msgs.SendFromMember(e.ctx, "glenn", "mem_1", app.SendInput{To: "rev-a", Body: "别的事"}); err != nil {
+	if _, err := e.msgs.SendFromMember(e.ctx, "alice", "mem_1", app.SendInput{To: "rev-a", Body: "别的事"}); err != nil {
 		t.Fatal(err)
 	}
 	run := e.start("r", nil)
@@ -477,7 +477,7 @@ func TestWorkflowInputsMapsJoinsAndFullSchemas(t *testing.T) {
 	    {"from": "split", "to": "left", "map": {"part": "{{output.parts[0]}}", "n": "{{len(output.parts)}}"}},
 	    {"from": "split", "to": "right"},
 	    {"from": "left", "to": "merge"}, {"from": "right", "to": "merge"}]}`)
-	if _, _, err := e.svc.Start(e.ctx, e.glenn, "flow", app.StartInput{Inputs: map[string]any{"title": "ab"}}); err == nil || !strings.Contains(err.Error(), "minLength") {
+	if _, _, err := e.svc.Start(e.ctx, e.alice, "flow", app.StartInput{Inputs: map[string]any{"title": "ab"}}); err == nil || !strings.Contains(err.Error(), "minLength") {
 		t.Fatalf("a title shorter than minLength was taken: %v", err)
 	}
 	run := e.start("flow", map[string]any{"title": "导出功能"})
@@ -576,7 +576,7 @@ func TestWorkflowObservability(t *testing.T) {
 	e.clock.t = start.Add(4 * time.Minute)
 	e.reply("reviewer", r, "好", map[string]any{"approved": true})
 	e.clock.t = start.Add(14 * time.Minute)
-	if _, err := e.svc.Decide(e.ctx, e.glenn, run.ID, "approve", "合并", ""); err != nil {
+	if _, err := e.svc.Decide(e.ctx, e.alice, run.ID, "approve", "合并", ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -605,7 +605,7 @@ func TestWorkflowObservability(t *testing.T) {
 	}
 
 	// The write step's log: what was sent, said, done and handed back.
-	l, err := e.svc.StepLog(e.ctx, e.glenn, run.ID, "write", true)
+	l, err := e.svc.StepLog(e.ctx, e.alice, run.ID, "write", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -622,17 +622,17 @@ func TestWorkflowObservability(t *testing.T) {
 	}
 
 	// Scores: by the person, and by an agent the run went to.
-	if _, err := e.svc.Evaluate(e.ctx, e.glenn, run.ID, app.EvaluateInput{Name: "quality", Value: 4, Unit: "分", Direction: "higher"}); err != nil {
+	if _, err := e.svc.Evaluate(e.ctx, e.alice, run.ID, app.EvaluateInput{Name: "quality", Value: 4, Unit: "分", Direction: "higher"}); err != nil {
 		t.Fatal(err)
 	}
-	rev := app.Caller{Name: "glenn", MemberID: "mem_9", Agent: "reviewer"}
+	rev := app.Caller{Name: "alice", MemberID: "mem_9", Agent: "reviewer"}
 	if _, err := e.svc.Evaluate(e.ctx, rev, run.ID, app.EvaluateInput{Name: "tests_failed", Value: 0, Direction: "lower", Step: "review"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.svc.Evaluate(e.ctx, e.glenn, run.ID, app.EvaluateInput{Name: "bad name!", Value: 1}); err == nil {
+	if _, err := e.svc.Evaluate(e.ctx, e.alice, run.ID, app.EvaluateInput{Name: "bad name!", Value: 1}); err == nil {
 		t.Fatal("a bad score name was taken")
 	}
-	if _, err := e.svc.Evaluate(e.ctx, e.glenn, run.ID, app.EvaluateInput{Name: "x", Value: 1, Step: "nope"}); err == nil {
+	if _, err := e.svc.Evaluate(e.ctx, e.alice, run.ID, app.EvaluateInput{Name: "x", Value: 1, Step: "nope"}); err == nil {
 		t.Fatal("a score for a step the workflow does not have was taken")
 	}
 
@@ -644,11 +644,11 @@ func TestWorkflowObservability(t *testing.T) {
 	e.reply("reviewer", e.task("reviewer"), "hmm", nil)
 	e.clock.t = start.Add(time.Hour + 5*time.Minute)
 	e.reply("reviewer", e.task("reviewer"), "still prose", nil)
-	if _, err := e.svc.Evaluate(e.ctx, e.glenn, run2.ID, app.EvaluateInput{Name: "quality", Value: 2, Unit: "分", Direction: "higher"}); err != nil {
+	if _, err := e.svc.Evaluate(e.ctx, e.alice, run2.ID, app.EvaluateInput{Name: "quality", Value: 2, Unit: "分", Direction: "higher"}); err != nil {
 		t.Fatal(err)
 	}
 
-	st, err := e.svc.Stats(e.ctx, e.glenn, "写-审-改", 0, 0)
+	st, err := e.svc.Stats(e.ctx, e.alice, "写-审-改", 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -674,7 +674,7 @@ func TestWorkflowObservability(t *testing.T) {
 	}
 
 	// Side by side: the first run scored better on quality.
-	cmp, err := e.svc.Compare(e.ctx, e.glenn, run.ID, run2.ID)
+	cmp, err := e.svc.Compare(e.ctx, e.alice, run.ID, run2.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -692,7 +692,7 @@ func TestWorkflowObservability(t *testing.T) {
 	}
 
 	// Runs by state.
-	failed, err := e.svc.RunsWhere(e.ctx, e.glenn, "写-审-改", domain.RunFilter{Status: domain.FlowFailed})
+	failed, err := e.svc.RunsWhere(e.ctx, e.alice, "写-审-改", domain.RunFilter{Status: domain.FlowFailed})
 	if err != nil || len(failed) != 1 || failed[0].ID != run2.ID {
 		t.Fatalf("failed runs: %v %v", failed, err)
 	}

@@ -45,7 +45,7 @@ func TestProjectMachinesLetCoordinatorsSpawn(t *testing.T) {
 		}
 		return a
 	}
-	reg("wsl-machine", "machine", "m_wsl", "glenn-bot")
+	reg("wsl-machine", "machine", "m_wsl", "alice-bot")
 	reg("wsl-shell", "exec", "m_wsl", "coord")
 	coord := reg("coord", "claude", "")
 	helper := reg("helper", "claude", "")

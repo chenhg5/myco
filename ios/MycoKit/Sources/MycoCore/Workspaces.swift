@@ -54,7 +54,7 @@ public struct Workspaces: WorkspaceBook {
     private func tokenKey(_ id: String) -> String { "workspace.\(id).token" }
 
     /// What a workspace is called on screen. A host that is an address
-    /// ("192.168.1.20", "193-46-198-17.sslip.io") says nothing to a person:
+    /// ("192.168.1.20", "203-0-113-17.sslip.io") says nothing to a person:
     /// it reads as "my workspace" until they name it.
     public static func displayName(of record: WorkspaceRecord) -> String {
         let host = record.url.host() ?? ""

@@ -36,9 +36,9 @@ func TestAutomationScheduleRunsOnTimeAndOnceAfterDowntime(t *testing.T) {
 	if _, err := agents.Register(ctx, app.RegisterInput{Name: "pm"}); err != nil {
 		t.Fatal(err)
 	}
-	glenn := app.Caller{Name: "glenn", MemberID: "mem_1"}
+	alice := app.Caller{Name: "alice", MemberID: "mem_1"}
 	s := func(v string) *string { return &v }
-	out, err := svc.Create(ctx, glenn, app.AutomationInput{Name: s("standup"), To: s("pm"), Body: s("standup notes"), Cron: s("0 9 * * 1-5"), TZ: s("UTC")})
+	out, err := svc.Create(ctx, alice, app.AutomationInput{Name: s("standup"), To: s("pm"), Body: s("standup notes"), Cron: s("0 9 * * 1-5"), TZ: s("UTC")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestAutomationScheduleRunsOnTimeAndOnceAfterDowntime(t *testing.T) {
 
 	// Turned off: nothing due, no next run.
 	off := false
-	if o, err := svc.Update(ctx, glenn, id, app.AutomationInput{Enabled: &off}); err != nil || !o.Automation.NextRunAt.IsZero() {
+	if o, err := svc.Update(ctx, alice, id, app.AutomationInput{Enabled: &off}); err != nil || !o.Automation.NextRunAt.IsZero() {
 		t.Fatalf("off: %v %+v", err, o)
 	}
 	clock.t = time.Date(2026, 11, 23, 9, 1, 0, 0, time.UTC)
@@ -116,7 +116,7 @@ func TestAutomationWebhookRateWindow(t *testing.T) {
 		t.Fatal(err)
 	}
 	on, s := true, func(v string) *string { return &v }
-	out, err := svc.Create(ctx, app.Caller{Name: "glenn"}, app.AutomationInput{Name: s("ci"), To: s("ci"), Body: s("{{payload}}"), Webhook: &on})
+	out, err := svc.Create(ctx, app.Caller{Name: "alice"}, app.AutomationInput{Name: s("ci"), To: s("ci"), Body: s("{{payload}}"), Webhook: &on})
 	if err != nil || out.Secret == "" {
 		t.Fatalf("create: %v %+v", err, out)
 	}

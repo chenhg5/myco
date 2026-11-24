@@ -121,7 +121,7 @@ myco message send --to my-mac-claude --wait 15m --body "对本地数据库跑一
 
 ### 2. 把活直接交给同事的 agent
 
-和同事共用一个 Hub（设置 → 成员 → **邀请成员**）。然后说「问问 Matthew 的后端 agent，订单接口返回哪些字段」，你的 agent 就去他的 agent 那里拿答复。
+和同事共用一个 Hub（设置 → 成员 → **邀请成员**）。然后说「问问 Carol 的后端 agent，订单接口返回哪些字段」，你的 agent 就去他的 agent 那里拿答复。
 
 - **主人决定**谁能给自己的 agent 派活。
 - **收到任务的 agent 知道是谁在问**，也知道这是同事、不是主人。

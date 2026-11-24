@@ -6,17 +6,17 @@ import (
 )
 
 func TestWindowsLogonPlan(t *testing.T) {
-	w := &WindowsLogon{Home: `C:\Users\Glenn O'Neil`, R: &fakeRunner{}}
-	sp := Spec{Binary: `C:\Users\Glenn O'Neil\AppData\Local\Programs\myco\myco.exe`, Args: []string{"runner", "start", "--all", "--max-concurrent", "3"},
-		Env: map[string]string{"PATH": `C:\Program Files\nodejs;C:\Windows`}, LogPath: `C:\Users\Glenn O'Neil\.myco\runner.log`}
+	w := &WindowsLogon{Home: `C:\Users\Alice O'Neil`, R: &fakeRunner{}}
+	sp := Spec{Binary: `C:\Users\Alice O'Neil\AppData\Local\Programs\myco\myco.exe`, Args: []string{"runner", "start", "--all", "--max-concurrent", "3"},
+		Env: map[string]string{"PATH": `C:\Program Files\nodejs;C:\Windows`}, LogPath: `C:\Users\Alice O'Neil\.myco\runner.log`}
 	p, err := w.PlanInstall(sp)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
 		`$env:PATH = 'C:\Program Files\nodejs;C:\Windows'`,
-		`Start-Process -WindowStyle Hidden -FilePath 'C:\Users\Glenn O''Neil\AppData\Local\Programs\myco\myco.exe'`,
-		`-ArgumentList 'runner start --all --max-concurrent 3 --log-file "C:\Users\Glenn O''Neil\.myco\runner.log"'`,
+		`Start-Process -WindowStyle Hidden -FilePath 'C:\Users\Alice O''Neil\AppData\Local\Programs\myco\myco.exe'`,
+		`-ArgumentList 'runner start --all --max-concurrent 3 --log-file "C:\Users\Alice O''Neil\.myco\runner.log"'`,
 		`if (Get-CimInstance Win32_Process -Filter "Name='myco.exe'" | Where-Object { $_.CommandLine -like '*runner start --all*' }) { exit 0 }`,
 	} {
 		if !strings.Contains(p.Content, want) {

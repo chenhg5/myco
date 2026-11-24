@@ -32,7 +32,7 @@ func TestEnrollCreatesAndRecoversSameSession(t *testing.T) {
 	ctx := context.Background()
 	enr, agents := setupEnroll(t)
 	e, tok, err := enr.Create(ctx, app.CreateEnrollmentInput{NamePrefix: "cloud-", Harness: "claude-cloud",
-		AllowFrom: []string{"glenn"}, Capabilities: []string{"code"}, MaxUses: 1})
+		AllowFrom: []string{"alice"}, Capabilities: []string{"code"}, MaxUses: 1})
 	if err != nil || tok == "" {
 		t.Fatalf("create: %v", err)
 	}

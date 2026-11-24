@@ -340,7 +340,7 @@ export function nodeName(a: Agent, hub?: HubOverview): string {
   const kind = agentKind(a);
   if (kind !== "agent" && kind !== "shell") return a.name;
   const machine = hub && a.machine_id ? machinesOfHub(hub).find((m) => m.id === a.machine_id) : undefined;
-  // A name someone chose ("mac-exec", "docs-claude") stays; one made up
+  // A name someone chose ("demo-shell", "docs-claude") stays; one made up
   // when the node joined (host name, CLI, a random suffix) is replaced by
   // what it is in plain words: an agent by the folder it works in ("myco
   // 助手"), a computer by which one and the folder ("Studio Mac · myco").

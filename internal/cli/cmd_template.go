@@ -40,7 +40,7 @@ collections and fields in myco.json, the page in index.html. Preview it as a liv
 work (myco page serve), then publish it with myco template publish.
 
 Field types: text, markdown, number, bool, date, datetime, person, select, multi, url, file, json.`,
-		Examples: []string{`myco template init --dir ./weekly --name 周报 --id glenn/weekly`},
+		Examples: []string{`myco template init --dir ./weekly --name 周报 --id alice/weekly`},
 		Flags: []Flag{
 			{Name: "dir", Kind: String, Required: true, Help: "The folder to write (made if missing; must be empty)"},
 			{Name: "name", Kind: String, Required: true, Help: "Its name, as people see it"},
@@ -176,7 +176,7 @@ versions) as the hub sends them.`,
 	get := &Command{
 		Name:     "get",
 		Summary:  "Show a template: its data structure, versions and agent's guide",
-		Examples: []string{"myco template get --template glenn/weekly"},
+		Examples: []string{"myco template get --template alice/weekly"},
 		Flags:    []Flag{tplFlag, adminFile},
 		Run: handler(func(e *env) error {
 			if err := e.in.Require("template"); err != nil {
@@ -206,7 +206,7 @@ versions) as the hub sends them.`,
 		Name:     "rm",
 		Summary:  "Take a template out of the library (pages made from it stay)",
 		Mutating: true,
-		Examples: []string{"myco template rm --template glenn/weekly"},
+		Examples: []string{"myco template rm --template alice/weekly"},
 		Flags:    []Flag{tplFlag, adminFile},
 		Run: handler(func(e *env) error {
 			if err := e.in.Require("template"); err != nil {
@@ -233,7 +233,7 @@ versions) as the hub sends them.`,
 		Long: `Makes a page with the template's files and data structure, and prints its address (write it in
 your reply: the App opens it next to the chat) and the template's guide for filling its data.
 With --sample it starts with the template's sample data.`,
-		Examples: []string{`myco template use --template glenn/weekly --name "周报 · 第 47 周" --project growth`},
+		Examples: []string{`myco template use --template alice/weekly --name "周报 · 第 47 周" --project growth`},
 		Flags: []Flag{tplFlag,
 			{Name: "name", Kind: String, Help: "The page's name (default: the template's)"},
 			{Name: "project", Kind: String, Help: "Put it in this project (its people see it)"},

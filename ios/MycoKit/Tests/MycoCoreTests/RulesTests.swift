@@ -91,10 +91,10 @@ struct NamingTests {
     }
 
     @Test func tellsGeneratedNamesFromChosenOnes() {
-        #expect(Naming.isGenerated("glenn-mac-claude-x9k2", hostname: nil) == false) // x9k2 is not hex
-        #expect(Naming.isGenerated("glenn-mac-claude-9f2a", hostname: nil))
+        #expect(Naming.isGenerated("alice-mac-claude-x9k2", hostname: nil) == false) // x9k2 is not hex
+        #expect(Naming.isGenerated("alice-mac-claude-9f2a", hostname: nil))
         #expect(Naming.isGenerated("studio-notes", hostname: "Studio.local"))
-        #expect(Naming.isGenerated("mac-exec", hostname: "studio") == false)
+        #expect(Naming.isGenerated("demo-shell", hostname: "studio") == false)
     }
 }
 
@@ -232,7 +232,7 @@ struct ConversationBuilderTests {
         let everything = [
             item("a", ["lead", "coder"], project: "p"),      // already in
             item("b", ["lead", "tester"]),                    // among members, in no project: in
-            item("c", ["@console:glenn", "coder"]),           // a person and a member: in
+            item("c", ["@console:alice", "coder"]),           // a person and a member: in
             item("d", ["lead", "outsider"]),                  // someone outside: out
             item("e", ["lead", "coder"], project: "other"),   // another project's: out
         ]

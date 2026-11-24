@@ -113,7 +113,7 @@ function makeMessage(over) {
   msgSeq += 1;
   const base = {
     id: `msg_${msgSeq}`,
-    from: "glenn", to: "agent", thread_id: "th_demo", type: "task",
+    from: "alice", to: "agent", thread_id: "th_demo", type: "task",
     body: "", status: "delivered", attempts: 1,
     created_at: iso(120), updated_at: iso(60),
   };
@@ -121,10 +121,10 @@ function makeMessage(over) {
 }
 
 const studioThreadRaw = [
-  makeMessage({ thread_id: "th_release", from: "glenn", to: "pm-codex", type: "task", body: "发布 v0.16.8：改 VERSION，跑 make check，打 tag 并推送。", created_at: iso(900), updated_at: iso(900) }),
-  makeMessage({ thread_id: "th_release", from: "pm-codex", to: "glenn", type: "progress", body: "已改好 VERSION，正在跑 make check（单测、smoke）。", created_at: iso(780), updated_at: iso(780) }),
-  makeMessage({ thread_id: "th_release", from: "pm-codex", to: "glenn", type: "reply", body: "release/v0.16.8 分支检查全部通过，等你确认后打 tag。", created_at: iso(600), updated_at: iso(600) }),
-  makeMessage({ thread_id: "th_release", from: "glenn", to: "pm-codex", type: "task", body: "可以，打 tag 吧。", created_at: iso(300), updated_at: iso(300) }),
+  makeMessage({ thread_id: "th_release", from: "alice", to: "pm-codex", type: "task", body: "发布 v0.16.8：改 VERSION，跑 make check，打 tag 并推送。", created_at: iso(900), updated_at: iso(900) }),
+  makeMessage({ thread_id: "th_release", from: "pm-codex", to: "alice", type: "progress", body: "已改好 VERSION，正在跑 make check（单测、smoke）。", created_at: iso(780), updated_at: iso(780) }),
+  makeMessage({ thread_id: "th_release", from: "pm-codex", to: "alice", type: "reply", body: "release/v0.16.8 分支检查全部通过，等你确认后打 tag。", created_at: iso(600), updated_at: iso(600) }),
+  makeMessage({ thread_id: "th_release", from: "alice", to: "pm-codex", type: "task", body: "可以，打 tag 吧。", created_at: iso(300), updated_at: iso(300) }),
 ];
 // A coordinator giving another node several tasks in a row: it answers
 // the first (after two progress updates), is on the second, and the third
@@ -167,7 +167,7 @@ const studioThread = process.env.MOCK_E2E
 
 // The App talks as "@console:<device>"; a thread counts as a conversation
 // only when it has one of these messages.
-const CONSOLE = `@console:${"glenn-mac"}`;
+const CONSOLE = `@console:${"alice-mac"}`;
 
 // A task the node picked up and then went quiet on: long enough ago that its
 // result may never come back. Kept in the node's current work and its chat,
@@ -192,7 +192,7 @@ const machineStuckTask = makeMessage({
   id: "msg_stuck_mac_exec",
   thread_id: "th_pm_mac_exec_stuck",
   from: "pm-codex",
-  to: "mac-exec",
+  to: "demo-shell",
   type: "task",
   status: "acked",
   body: "cd ~/code/myco && make app VERSION=v0.18.15-preview",
@@ -359,7 +359,7 @@ const pageStates = new Map([["pg_checklist", { state: { done: [0] }, version: 1,
 const pageKeys = new Map();
 // The helper and the myco bridge, as the App serves them.
 const pageHelperJS = readFileSync(new URL("../../internal/console/pagebridge.js", import.meta.url), "utf8");
-const stuckCurrent = new Map([["legacy-codex", stuckTask], ["mac-exec", machineStuckTask]]);
+const stuckCurrent = new Map([["legacy-codex", stuckTask], ["demo-shell", machineStuckTask]]);
 
 // A task picked up and quiet ever since, with a later task the sender stopped:
 // the newest message is closed, but the older one is still stuck, so stopping
@@ -428,11 +428,11 @@ const vpsMachine = () => ({
 });
 // Hosts in the mock SSH config, and computers being connected over SSH or WSL.
 const sshHosts = [
-  { name: "tokyo-vps", user: "glenn", host: "203.0.113.20", port: 22 },
+  { name: "tokyo-vps", user: "alice", host: "203.0.113.20", port: 22 },
   { name: "gpu-box", user: "ubuntu", host: "10.0.4.12", port: 22, jump: "bastion" },
   { name: "hk-vps", user: "root", host: "203.0.113.7", port: 2222 },
   { name: "old-pi", user: "pi", host: "192.168.1.40", port: 22 },
-  { name: "bastion", user: "glenn", host: "bastion.example.com", port: 22 },
+  { name: "bastion", user: "alice", host: "bastion.example.com", port: 22 },
 ];
 const connectJobs = new Map();
 // How agents this computer starts sign in to Claude (ClaudeAuthFix).
@@ -499,13 +499,13 @@ function connectView(job) {
     const hub = state.hubs.find((h) => h.id === job.hub);
     state.counter += 1;
     const wsl = job.route.via === "wsl";
-    job.machine = { ...vpsMachine(), id: `m_cx${state.counter}`, name: wsl ? `Glenn 的 Windows-wsl` : name, hostname: wsl ? "GLENN-PC" : name, last_seen_at: iso(0), myco_version: "0.20.17" };
+    job.machine = { ...vpsMachine(), id: `m_cx${state.counter}`, name: wsl ? `Alice 的 Windows-wsl` : name, hostname: wsl ? "ALICE-PC" : name, last_seen_at: iso(0), myco_version: "0.20.17" };
     if (hub) hub.machines = [...(hub.machines || []), job.machine];
   }
   return { ...view, done: true, machine_id: job.machine.id };
 }
 const vpsInfo = {
-  dirs: ["~/code/myco-team"], new_dir: "~/code/myco-team", max_access: "workspace", home: "/home/glenn",
+  dirs: ["~/code/demo-team"], new_dir: "~/code/demo-team", max_access: "workspace", home: "/home/alice",
   ais: [
     { cli: "claude", name: "Claude Code", state: "ready", version: "2.1.3 (Claude Code)", install: "curl -fsSL https://claude.ai/install.sh | bash", login: "claude" },
     { cli: "codex", name: "Codex", state: "missing", install: "npm install -g @openai/codex", login: "codex login" },
@@ -513,12 +513,12 @@ const vpsInfo = {
     { cli: "opencode", name: "OpenCode", state: "missing", install: "curl -fsSL https://opencode.ai/install | bash", login: "opencode auth login" },
   ],
   sessions: [
-    { cli: "claude", session_id: "7f3a2c10-1b2d-4e5f-8a9b-0c1d2e3f4a5b", workdir: "/home/glenn/code/myco-team/api", last_active: iso(12 * 60), title: "把订单接口的分页改成游标分页" },
-    { cli: "claude", session_id: "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f", workdir: "/home/glenn/code/myco-team/web", last_active: iso(3 * 3600), title: "修复登录页在 Safari 上的跳转" },
-    { cli: "claude", session_id: "9e8d7c6b-5a4f-4e3d-2c1b-0a9f8e7d6c5b", workdir: "/home/glenn/scratch", last_active: iso(26 * 3600), title: "试一下 bun 的启动速度" },
-    { cli: "claude", session_id: "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e", workdir: "/home/glenn/code/myco-team/ops", last_active: iso(2 * 86400), title: "给 nginx 加上 gzip", joined: "tokyo-vps-claude-ops" },
-    { cli: "codex", session_id: "019b0001-aaaa-7bbb-8ccc-000000000001", workdir: "/home/glenn/code/myco-team/api", last_active: iso(40 * 60), title: "跑一遍测试，把失败的列出来", auto: true },
-    { cli: "claude", session_id: "3c4d5e6f-7a8b-4c9d-8e0f-2a3b4c5d6e7f", workdir: "/home/glenn/code/myco-team/web", last_active: iso(5 * 3600), title: "生成本周的更新说明", auto: true },
+    { cli: "claude", session_id: "7f3a2c10-1b2d-4e5f-8a9b-0c1d2e3f4a5b", workdir: "/home/alice/code/demo-team/api", last_active: iso(12 * 60), title: "把订单接口的分页改成游标分页" },
+    { cli: "claude", session_id: "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f", workdir: "/home/alice/code/demo-team/web", last_active: iso(3 * 3600), title: "修复登录页在 Safari 上的跳转" },
+    { cli: "claude", session_id: "9e8d7c6b-5a4f-4e3d-2c1b-0a9f8e7d6c5b", workdir: "/home/alice/scratch", last_active: iso(26 * 3600), title: "试一下 bun 的启动速度" },
+    { cli: "claude", session_id: "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e", workdir: "/home/alice/code/demo-team/ops", last_active: iso(2 * 86400), title: "给 nginx 加上 gzip", joined: "tokyo-vps-claude-ops" },
+    { cli: "codex", session_id: "019b0001-aaaa-7bbb-8ccc-000000000001", workdir: "/home/alice/code/demo-team/api", last_active: iso(40 * 60), title: "跑一遍测试，把失败的列出来", auto: true },
+    { cli: "claude", session_id: "3c4d5e6f-7a8b-4c9d-8e0f-2a3b4c5d6e7f", workdir: "/home/alice/code/demo-team/web", last_active: iso(5 * 3600), title: "生成本周的更新说明", auto: true },
   ],
 };
 const versionBelow = (v, want) => {
@@ -528,13 +528,13 @@ const versionBelow = (v, want) => {
   return false;
 };
 const machineInfoOf = (m) => m.id === "m_vps" ? vpsInfo : {
-  dirs: ["~"], new_dir: "~/myco", max_access: m.id.startsWith("m_studio") ? "full" : "workspace", home: m.os === "darwin" ? "/Users/glenn" : "/home/glenn",
+  dirs: ["~"], new_dir: "~/myco", max_access: m.id.startsWith("m_studio") ? "full" : "workspace", home: m.os === "darwin" ? "/Users/alice" : "/home/alice",
   ais: [
     { cli: "claude", name: "Claude Code", state: "ready", version: "2.1.3 (Claude Code)", login: "claude",
       mcp: [{ name: "filesystem", transport: "stdio", scope: "user" }, { name: "figma", transport: "http", host: "mcp.figma.com", scope: "user" }],
       skills: [{ name: "myco", description: "Talk to agents", scope: "user", managed_by: "myco" }],
       plugins: [{ name: "review", marketplace: "official", enabled: true }],
-      tool_warnings: ["/Users/glenn/.claude/plugins/extra.json: invalid JSON"] },
+      tool_warnings: ["/Users/alice/.claude/plugins/extra.json: invalid JSON"] },
     { cli: "codex", name: "Codex", state: "ready", version: "codex-cli 0.52.0", login: "codex login", models: CODEX_MODELS,
       mcp: [{ name: "search", transport: "http", host: "search.example.com", scope: "user" }],
       skills: [{ name: "audit", description: "Review code", scope: "user" }], plugins: [] },
@@ -549,25 +549,25 @@ const machineDirs = new Map();
 const deletableMachine = () => ({
   id: "m_delete", name: "临时 Mac", hostname: "temp-mac.local", os: "darwin", arch: "arm64",
   myco_version: "0.18.39", online: true, last_seen_at: iso(5), can_spawn: true,
-  owner: "glenn", owner_id: "mem_glenn",
+  owner: "alice", owner_id: "mem_alice",
 });
 const deletableAgents = () => [
   makeAgent({
-    name: "temp-codex", owner: "glenn", owner_id: "mem_glenn", display_name: "临时 Codex",
+    name: "temp-codex", owner: "alice", owner_id: "mem_alice", display_name: "临时 Codex",
     description: "临时机器上的 Codex，用来演示删除机器。", kind: "agent", machine_id: "m_delete",
     runtime: { cli: "codex", cli_version: "0.52.0", model: "gpt-6-sol", access: "workspace", max_access: "full" },
     binding: { harness: "codex", environment: "macOS 26.1", workdir: "~/code/temp" },
     labels: ["machine=temp-mac"],
   }),
   makeAgent({
-    name: "temp-shell", owner: "glenn", owner_id: "mem_glenn", display_name: "临时 Shell",
+    name: "temp-shell", owner: "alice", owner_id: "mem_alice", display_name: "临时 Shell",
     description: "临时机器上的 shell 节点。", kind: "shell", machine_id: "m_delete",
     runtime: { cli: "shell", access: "workspace" },
     binding: { harness: "shell", environment: "macOS 26.1", workdir: "~/code/temp" },
     labels: ["machine=temp-mac"],
   }),
   makeAgent({
-    name: "temp-mac-machine", owner: "glenn", owner_id: "mem_glenn", display_name: "临时 Mac",
+    name: "temp-mac-machine", owner: "alice", owner_id: "mem_alice", display_name: "临时 Mac",
     kind: "machine", machine_id: "m_delete",
     labels: ["machine=temp-mac"], binding: { harness: "machine" },
   }),
@@ -686,29 +686,29 @@ const consoleThreads = {
 const localSessions = [
   {
     cli: "claude", session_id: "7c1d9f4e-2a6b-4c18-9e0d-4a1f2b3c5d6e",
-    workdir: "/Users/glenn/code/myco", last_active: iso(120),
+    workdir: "/Users/alice/code/myco", last_active: iso(120),
     title: "让 App 支持对话列表",
   },
   {
     cli: "codex", session_id: "019f20c1-a446-7812-bbc8-ce4ac3b889f6",
-    workdir: "/Users/glenn/code/app-web", last_active: iso(900),
+    workdir: "/Users/alice/code/app-web", last_active: iso(900),
     title: "整理 App 第二版上线清单",
   },
   {
     cli: "claude", session_id: "9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
-    workdir: "/Users/glenn/code/infra", last_active: iso(3600),
+    workdir: "/Users/alice/code/infra", last_active: iso(3600),
     title: "检查 Hub 的隧道配置",
-    joined: { agent: "glenn-mac-claude-x9k2", hub: "http://192.168.1.20:7780", hub_name: "Glenn 的 MacBook Pro 的工作区" },
+    joined: { agent: "alice-mac-claude-x9k2", hub: "http://192.168.1.20:7780", hub_name: "Alice 的 MacBook Pro 的工作区" },
     // The same session is an agent of a second workspace too.
     joined_all: [
-      { agent: "glenn-mac-claude-x9k2", hub: "http://192.168.1.20:7780", hub_name: "Glenn 的 MacBook Pro 的工作区" },
-      { agent: "glenn-mac-claude-x9k2-tn", hub: "https://hub.tapnow.example.com/w/tapnow" },
+      { agent: "alice-mac-claude-x9k2", hub: "http://192.168.1.20:7780", hub_name: "Alice 的 MacBook Pro 的工作区" },
+      { agent: "alice-mac-claude-x9k2-tn", hub: "https://hub.acme.example.com/w/acme" },
     ],
   },
   {
     cli: "codex", session_id: "019f0f11-3c2b-7a10-8d4e-9f8a7b6c5d4e",
-    workdir: "/Users/glenn/code/notes", last_active: iso(7200),
-    joined: { agent: "glenn-mac-codex-ab12", hub: "https://other-hub.example.com" },
+    workdir: "/Users/alice/code/notes", last_active: iso(7200),
+    joined: { agent: "alice-mac-codex-ab12", hub: "https://other-hub.example.com" },
   },
 ];
 // What was joined at the start: the smoke test's reset puts it back, so each
@@ -726,7 +726,7 @@ const state = {
     {
       id: "hub_studio",
       e2e: !!process.env.MOCK_E2E,
-      name: "Glenn 的 MacBook Pro 本机 Hub",
+      name: "Alice 的 MacBook Pro 本机 Hub",
       url: "http://192.168.1.20:7780",
       token: "myco_console_demo_studio",
       ok: true,
@@ -751,7 +751,7 @@ const state = {
       ],
       agents: [
         makeAgent({
-          name: "pm-codex", owner: "glenn", owner_id: "mem_glenn", display_name: "PM (Codex)", description: "规划发布并审查 PR。",
+          name: "pm-codex", owner: "alice", owner_id: "mem_alice", display_name: "PM (Codex)", description: "规划发布并审查 PR。",
           kind: "agent", machine_id: "m_studio",
           // Its 5-hour window is nearly used (amber), the weekly one is not.
           runtime: {
@@ -775,14 +775,14 @@ const state = {
             { name: "release", summary: "写发布说明、打 tag、发版" },
           ],
           binding: { harness: "codex", environment: "macOS 26.1", workdir: "~/code/myco", session_id: "01a1-pm-session" }, session_in_use: true,
-          aliases: ["pm"], allow_from: ["glenn"], enrolled_by: "console",
+          aliases: ["pm"], allow_from: ["alice"], enrolled_by: "console",
           // A resume line made five days ago and last used an hour ago in a
           // sandbox: the row shows when and where. Making or revoking one is
           // demoed by the smoke test.
           resume: { created_at: iso(86_400 * 5), last_used_at: iso(3_600), last_used_env: "codespaces-4f2a" },
         }),
         makeAgent({
-          name: "mcp-claude", owner: "glenn", owner_id: "mem_glenn", display_name: "MCP Claude", description: "用 Claude Code 处理文档和工具调用。",
+          name: "mcp-claude", owner: "alice", owner_id: "mem_alice", display_name: "MCP Claude", description: "用 Claude Code 处理文档和工具调用。",
           kind: "agent", machine_id: "m_studio",
           // Its runner lets the App switch its provider from here (remote_provider)
           // and lists the cc-switch providers on its computer (never a key).
@@ -812,7 +812,7 @@ const state = {
           binding: { harness: "claude", environment: "macOS 26.1", workdir: "~/code/myco" },
         }),
         makeAgent({
-          name: "docs-claude", owner: "laohu", owner_id: "mem_laohu", description: "保持 README 和 docs/ 与代码同步。", visibility: "private",
+          name: "docs-claude", owner: "bob", owner_id: "mem_bob", description: "保持 README 和 docs/ 与代码同步。", visibility: "private",
           kind: "agent", machine_id: "m_studio",
           runtime: {
             cli: "claude", cli_version: "2.1.240", model: "claude-opus-5-5", model_source: "observed",
@@ -833,7 +833,7 @@ const state = {
           binding: { harness: "claude", environment: "macOS 26.1", workdir: "~/code/myco" },
         }),
         makeAgent({
-          name: "ios-shell", owner: "matthew", owner_id: "mem_matthew", display_name: "iOS Shell", description: "按需构建和测试 iOS App。",
+          name: "ios-shell", owner: "carol", owner_id: "mem_carol", display_name: "iOS Shell", description: "按需构建和测试 iOS App。",
           kind: "shell", machine_id: "m_bench",
           runtime: { cli: "shell", access: "workspace" },
           status_text: "正在运行 make test-ios", status_at: iso(45),
@@ -842,25 +842,25 @@ const state = {
           delivery: { mode: "webhook", url: "http://bench-01:7790/hook", has_secret: true },
         }),
         makeAgent({
-          name: "mac-exec", owner: "glenn", owner_id: "mem_glenn", description: "在 Studio Mac 上执行命令。",
+          name: "demo-shell", owner: "alice", owner_id: "mem_alice", description: "在 Studio Mac 上执行命令。",
           kind: "shell", machine_id: "m_studio", runtime: { cli: "exec" },
           labels: ["machine=studio"], binding: { harness: "exec", environment: "macOS", workdir: "~" },
           delivery: { mode: "pull" }, allow_from: ["pm-codex"], status_at: iso(30),
         }),
         makeAgent({
-          name: "glenn", owner: "glenn", owner_id: "mem_glenn", display_name: "Glenn", description: "人。负责发任务和验收。",
+          name: "alice", owner: "alice", owner_id: "mem_alice", display_name: "Alice", description: "人。负责发任务和验收。",
           kind: "human", binding: { harness: "human" },
           labels: ["role=human"], status_at: iso(3),
         }),
         makeAgent({
-          name: "release-cloud", owner: "glenn", owner_id: "mem_glenn", display_name: "Release (Claude 云端)", description: "在 claude.ai 上整理发布说明。",
+          name: "release-cloud", owner: "alice", owner_id: "mem_alice", display_name: "Release (Claude 云端)", description: "在 claude.ai 上整理发布说明。",
           // It has not said which model it runs on (an older myco in that session).
           kind: "agent", runtime: { cli: "claude-cloud", access: "readonly" },
           status_text: "正在整理发布说明", status_at: iso(60),
           labels: ["group=release"], binding: { harness: "claude-cloud", environment: "claude.ai" },
         }),
         makeAgent({
-          name: "review-cloud", owner: "matthew", owner_id: "mem_matthew", display_name: "Review (Codex 云端)", description: "在 Codex 云端做代码审查。",
+          name: "review-cloud", owner: "carol", owner_id: "mem_carol", display_name: "Review (Codex 云端)", description: "在 Codex 云端做代码审查。",
           kind: "agent",
           runtime: {
             cli: "codex-cloud", model: "gpt-6-sol", model_source: "observed", access: "readonly",
@@ -873,7 +873,7 @@ const state = {
           labels: ["group=release"], binding: { harness: "codex-cloud", environment: "Codex 云端" },
         }),
         makeAgent({
-          name: "legacy-codex", owner: "laohu", owner_id: "mem_laohu", description: "旧版 runner，还没有上报运行信息。",
+          name: "legacy-codex", owner: "bob", owner_id: "mem_bob", description: "旧版 runner，还没有上报运行信息。",
           kind: "agent", machine_id: "m_bench",
           labels: ["machine=bench-01"], online: true, status_at: iso(20),
           binding: { harness: "codex", environment: "Linux 6.8", workdir: "~/code/legacy" },
@@ -881,7 +881,7 @@ const state = {
         // Joined from a session no runner can wake: it receives only while
         // `myco inbox wait` runs in that session.
         makeAgent({
-          name: "grok-agent-7c2e", owner: "glenn", owner_id: "mem_glenn", display_name: "Myco (Grok)", description: "在 Grok 会话里用 inbox wait 接收消息。",
+          name: "grok-agent-7c2e", owner: "alice", owner_id: "mem_alice", display_name: "Myco (Grok)", description: "在 Grok 会话里用 inbox wait 接收消息。",
           kind: "agent", machine_id: "m_studio", receiving: "session",
           // It runs its CLI in its own session and reports the model itself.
           runtime: { cli: "inbox", model: "grok-4", model_source: "self" },
@@ -906,9 +906,9 @@ const state = {
         ...deletableAgents(),
       ],
       recent: [
-        makeMessage({ thread_id: "th_release", from: "glenn", to: "pm-codex", type: "task", body: "可以，打 tag 吧。", created_at: iso(300), updated_at: iso(300) }),
-        makeMessage({ thread_id: "th_release", from: "pm-codex", to: "glenn", type: "reply", body: "release/v0.16.8 分支检查全部通过，等你确认后打 tag。", created_at: iso(600), updated_at: iso(600) }),
-        makeMessage({ thread_id: "th_ios", from: "glenn", to: "ios-shell", type: "task", body: "请跑一遍 iOS 测试套件，附上日志。", created_at: iso(240), updated_at: iso(240) }),
+        makeMessage({ thread_id: "th_release", from: "alice", to: "pm-codex", type: "task", body: "可以，打 tag 吧。", created_at: iso(300), updated_at: iso(300) }),
+        makeMessage({ thread_id: "th_release", from: "pm-codex", to: "alice", type: "reply", body: "release/v0.16.8 分支检查全部通过，等你确认后打 tag。", created_at: iso(600), updated_at: iso(600) }),
+        makeMessage({ thread_id: "th_ios", from: "alice", to: "ios-shell", type: "task", body: "请跑一遍 iOS 测试套件，附上日志。", created_at: iso(240), updated_at: iso(240) }),
         makeMessage({ thread_id: "th_console_release", from: "pm-codex", to: CONSOLE, type: "reply", status: "done", body: "v0.16.8 发布说明已整理好。", created_at: iso(6800), updated_at: iso(6800) }),
       ],
     },
@@ -1666,12 +1666,12 @@ const local = {
     cloudflared: { path: "/opt/homebrew/bin/cloudflared" },
     tailscale: null,
   },
-  device: "glenn-mac",
+  device: "alice-mac",
   machines: ["Studio Mac"],
   shell_allowed: false,
 };
 if (SHOWCASE) {
-  local.hostname = "glenns-mbp.local";
+  local.hostname = "alices-mbp.local";
   if (local.myco) local.myco.version = "0.17.2";
 }
 // What was there at the start: the smoke test starts another workspace and
@@ -1693,7 +1693,7 @@ function totals(agents) {
   return t;
 }
 
-// A node's demo history with the exec node mac-exec: one thread per
+// A node's demo history with the exec node demo-shell: one thread per
 // command, a couple of minutes apart, among them a long one-liner and a
 // few polls of what it started (as an agent driving a build does).
 const execHistories = {};
@@ -1719,9 +1719,9 @@ function execHistory(agent) {
   runs.forEach(([c, res], i) => {
     const t = 6 * 3600 - i * 70 + (i < 5 ? 2400 : 0);
     const th = `th_exec_${agent}_${i}`;
-    const task = makeMessage({ thread_id: th, from: agent, to: "mac-exec", type: "task", status: "done", body: c, created_at: iso(t), updated_at: iso(t) });
+    const task = makeMessage({ thread_id: th, from: agent, to: "demo-shell", type: "task", status: "done", body: c, created_at: iso(t), updated_at: iso(t) });
     out.push(task);
-    out.push(makeMessage({ thread_id: th, reply_to: task.id, from: "mac-exec", to: agent, type: "reply", status: "done",
+    out.push(makeMessage({ thread_id: th, reply_to: task.id, from: "demo-shell", to: agent, type: "reply", status: "done",
       body: JSON.stringify(res), created_at: iso(t - 30), updated_at: iso(t - 30) }));
   });
   if (process.env.MOCK_E2E) {
@@ -1747,12 +1747,12 @@ function agentStatus(a) {
   // Working nodes also have a stale queued answer waiting (dismissable).
   const staleId = "msg_stale_" + a.name;
   const stale = working && !SHOWCASE && !dismissed.has(staleId) // (not in README screenshots)
-    ? [makeMessage({ id: staleId, thread_id: "th_stale_" + a.name, from: "mac-exec", to: a.name, type: "reply", status: "queued",
+    ? [makeMessage({ id: staleId, thread_id: "th_stale_" + a.name, from: "demo-shell", to: a.name, type: "reply", status: "queued",
         body: '{"exit_code":124,"stdout":"v0.16.7\\n","stderr":"","duration_ms":60028,"timed_out":true,"error":"killed after 1m0s"}',
         created_at: iso(12 * 3600), updated_at: iso(12 * 3600) })]
     : [];
   const atWork = working
-    ? [stuck || makeMessage({ ...(a.current_id ? { id: a.current_id } : {}), thread_id: a.current_thread || "th_release", from: a.current_from || "glenn", to: a.name, status: "acked", body: a.status_text || "处理中…" })]
+    ? [stuck || makeMessage({ ...(a.current_id ? { id: a.current_id } : {}), thread_id: a.current_thread || "th_release", from: a.current_from || "alice", to: a.name, status: "acked", body: a.status_text || "处理中…" })]
     : [];
   if (heldForOtherOn && a.name === heldForOther.to && heldForOther.status === "held" && !dismissed.has(heldForOther.id)) {
     return { agent: a, state: a.online ? "pending" : "offline", queued: 0, in_progress: 0, held: 1, asking: 1, receiving: a.online ? "session" : undefined, current: [heldForOther] };
@@ -1807,23 +1807,23 @@ function overviewFor(h) {
   };
 }
 
-// People on the first hub (members): you are the owner; MOCK_ME=laohu views as a member.
+// People on the first hub (members): you are the owner; MOCK_ME=bob views as a member.
 const people = [
-  { id: "mem_glenn", name: "glenn", display_name: "Glenn", role: "owner", created_at: iso(86400 * 30) },
-  { id: "mem_laohu", name: "laohu", display_name: "老胡", role: "member", created_at: iso(86400 * 3) },
-  { id: "mem_matthew", name: "matthew", display_name: "Matthew", role: "admin", created_at: iso(86400 * 2) },
+  { id: "mem_alice", name: "alice", display_name: "Alice", role: "owner", created_at: iso(86400 * 30) },
+  { id: "mem_bob", name: "bob", display_name: "Bob", role: "member", created_at: iso(86400 * 3) },
+  { id: "mem_carol", name: "carol", display_name: "Carol", role: "admin", created_at: iso(86400 * 2) },
 ];
-const meName = process.env.MOCK_ME || "glenn";
+const meName = process.env.MOCK_ME || "alice";
 const audit = [
-  { id: "a1", at: iso(60), actor: "laohu", actor_kind: "member", action: "message.task", target: "pm-codex", detail: "msg_x1" },
-  { id: "a2", at: iso(900), actor: "matthew", actor_kind: "member", action: "machine.spawn", target: "studio-app-shell", detail: "shell node, commands from pm-codex in ~/code/app (m_studio)" },
-  { id: "a3", at: iso(3600), actor: "glenn", actor_kind: "member", action: "member.invite", target: "matthew", detail: "role admin" },
-  { id: "a4", at: iso(86400 * 3), actor: "glenn", actor_kind: "member", action: "member.invite", target: "laohu", detail: "role member" },
+  { id: "a1", at: iso(60), actor: "bob", actor_kind: "member", action: "message.task", target: "pm-codex", detail: "msg_x1" },
+  { id: "a2", at: iso(900), actor: "carol", actor_kind: "member", action: "machine.spawn", target: "studio-app-shell", detail: "shell node, commands from pm-codex in ~/code/app (m_studio)" },
+  { id: "a3", at: iso(3600), actor: "alice", actor_kind: "member", action: "member.invite", target: "carol", detail: "role admin" },
+  { id: "a4", at: iso(86400 * 3), actor: "alice", actor_kind: "member", action: "member.invite", target: "bob", detail: "role member" },
   { id: "a5", at: iso(86400 * 3 + 60), actor: "admin", actor_kind: "admin", action: "link.create", target: "enr_abc", detail: "link" },
 ];
 const devices = [
-  { id: "con_mac", name: "glenns-mbp", active: true, created_at: iso(86400 * 30), last_used_at: iso(5) },
-  { id: "con_win", name: "glenn-pc", active: true, created_at: iso(86400 * 2), last_used_at: iso(7200) },
+  { id: "con_mac", name: "alices-mbp", active: true, created_at: iso(86400 * 30), last_used_at: iso(5) },
+  { id: "con_win", name: "alice-pc", active: true, created_at: iso(86400 * 2), last_used_at: iso(7200) },
 ];
 if (process.env.MOCK_OWNER_UNNAMED) { people[0].name = "owner"; people[0].display_name = ""; }
 function whoami(h) {
@@ -1850,23 +1850,23 @@ const projects = [
     name: "website", coordinator_automations: false, coordinator_invites: false, title: "官网改版", goal: "11 月底前上线新版官网：首页、文档站和下载页，中英双语。",
     brief: "## 仓库\n- 代码在 `myco-web`，分支 `redesign`，PR 合到 `main` 才会部署。\n\n## 规则\n- 改文案先改中文，再同步英文。\n- 截图统一 2x。\n\n## 怎么测试\n`npm run build && npm run preview`，在 1280 和 390 两个宽度下看一遍。",
     links: [{ title: "仓库", url: "https://github.com/acme/myco-web" }, { title: "设计稿", url: "https://figma.com/file/demo" }],
-    visibility: "members", owner: "glenn", owner_id: "mem_glenn", archived: false, created_at: iso(86400 * 5), updated_at: iso(3600),
+    visibility: "members", owner: "alice", owner_id: "mem_alice", archived: false, created_at: iso(86400 * 5), updated_at: iso(3600),
     members: [
-      { name: "pm-codex", role: "coordinator", note: "拆任务、验收", added_by: "glenn", added_at: iso(86400 * 5) },
-      { name: "docs-claude", role: "member", note: "文档站", added_by: "laohu", added_at: iso(86400 * 4) },
-      { name: "release-cloud", role: "member", note: "部署和发版", added_by: "glenn", added_at: iso(86400 * 2) },
+      { name: "pm-codex", role: "coordinator", note: "拆任务、验收", added_by: "alice", added_at: iso(86400 * 5) },
+      { name: "docs-claude", role: "member", note: "文档站", added_by: "bob", added_at: iso(86400 * 4) },
+      { name: "release-cloud", role: "member", note: "部署和发版", added_by: "alice", added_at: iso(86400 * 2) },
     ],
     docs: [
       { name: "design.md", body: "# 设计约定\n\n- 主色 #2f6feb\n- 圆角 12px\n", content_type: "text/markdown; charset=utf-8", updated_by: "pm-codex", updated_at: iso(7200) },
-      { name: "首页设计稿.pdf", body: "", content_type: "application/pdf", binary: true, size: 2412032, updated_by: "glenn", updated_at: iso(5400) },
+      { name: "首页设计稿.pdf", body: "", content_type: "application/pdf", binary: true, size: 2412032, updated_by: "alice", updated_at: iso(5400) },
       { name: "copy-zh", body: "# 首页文案\n\n让你的 agent 互相派活。\n", updated_by: "docs-claude", updated_at: iso(86400) },
-      { name: "memory", body: "# Project memory\n- 下载页的安装命令以 INSTALL.md 为准，不要自己改写 (pm-codex, 2026-11-19)\n- glenn 希望汇报用中文、三条以内 (docs-claude, 2026-11-20)\n", updated_by: "docs-claude", updated_at: iso(86400) },
+      { name: "memory", body: "# Project memory\n- 下载页的安装命令以 INSTALL.md 为准，不要自己改写 (pm-codex, 2026-11-19)\n- alice 希望汇报用中文、三条以内 (docs-claude, 2026-11-20)\n", updated_by: "docs-claude", updated_at: iso(86400) },
     ],
   },
   {
     name: "ios", title: "iOS 客户端", goal: "", brief: "", links: [],
-    visibility: "team", owner: "matthew", owner_id: "mem_matthew", archived: false, created_at: iso(86400 * 2), updated_at: iso(86400),
-    members: [{ name: "ios-shell", role: "member", note: "", added_by: "matthew", added_at: iso(86400) }], docs: [],
+    visibility: "team", owner: "carol", owner_id: "mem_carol", archived: false, created_at: iso(86400 * 2), updated_at: iso(86400),
+    members: [{ name: "ios-shell", role: "member", note: "", added_by: "carol", added_at: iso(86400) }], docs: [],
   },
 ];
 if (process.env.MOCK_MEDIA_KIT === "1" && SHOWCASE) projects.splice(0, projects.length, ...state.hubs[0].projects);
@@ -1890,7 +1890,7 @@ function projectView(hub, p, bodies) {
     ...(hub.id === "hub_lab" ? {} : { groups: p.groups || [] }),
     members: p.members.map((m) => ({ ...m, agent: hub.agents.find((a) => a.name === m.name && a.visibility !== "private") })),
     docs: p.docs.map((d) => ({ name: d.name, size: d.size ?? d.body.length, content_type: d.content_type, binary: !!d.binary, updated_by: d.updated_by, updated_at: d.updated_at, ...(bodies && !d.binary ? { body: d.body } : {}) })),
-    can_edit: true, can_manage: p.owner_id === "mem_" + meName || meName === "glenn",
+    can_edit: true, can_manage: p.owner_id === "mem_" + meName || meName === "alice",
   };
 }
 
@@ -1967,7 +1967,7 @@ const server = http.createServer(async (req, res) => {
     const b = await readBody(req);
     if (!/\.(md|jsonl)$/.test(b?.name || "")) return fail(res, 400, "invalid_argument", "an export is a .md or .jsonl file");
     state.lastExport = { name: b.name, content: String(b.content || "") };
-    return send(res, 200, { path: `/Users/glenn/Downloads/${b.name}` });
+    return send(res, 200, { path: `/Users/alice/Downloads/${b.name}` });
   }
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "last-export" && method === "GET") return send(res, 200, state.lastExport || {});
 
@@ -2025,14 +2025,14 @@ const server = http.createServer(async (req, res) => {
     stuckTask.created_at = iso(46 * 60);
     stuckTask.updated_at = iso(45 * 60);
     stuckTask.active_at = iso(45 * 60);
-    // The command another agent left on mac-exec: the sidebar's amber dot and
+    // The command another agent left on demo-shell: the sidebar's amber dot and
     // the terminal's bar come back too, because the smoke test stops them.
     machineStuckTask.status = "acked";
     delete machineStuckTask.error;
     machineStuckTask.created_at = iso(65 * 60);
     machineStuckTask.updated_at = iso(60 * 60);
     machineStuckTask.active_at = iso(60 * 60);
-    stuckCurrent.set("mac-exec", machineStuckTask);
+    stuckCurrent.set("demo-shell", machineStuckTask);
     // Keep what was sent there since (a real hub never drops messages, and
     // the app may still show them): only the demo tasks go back.
     // Tasks sent there since count as finished, so the demo tasks are the
@@ -2159,7 +2159,7 @@ const server = http.createServer(async (req, res) => {
     // An agent that sees a page may export it without asking: its grant is
     // active at once, with no approval.
     if (body.kind === "page_grant") {
-      const g = { id: `agr_${state.counter}`, agent, owner: "glenn", target: { kind: "page", id: "pg_mock_board" }, target_name: body.page || "产品白板",
+      const g = { id: `agr_${state.counter}`, agent, owner: "alice", target: { kind: "page", id: "pg_mock_board" }, target_name: body.page || "产品白板",
         permissions: ["page.export"], requested: ["page.export"], reason: body.reason || "", state: "active", created_at: iso(0),
         expires_at: new Date(Date.now() + 10 * 60_000).toISOString() };
       (state.grants ||= {})[hub.id] = [...(state.grants[hub.id] || []), g];
@@ -2171,7 +2171,7 @@ const server = http.createServer(async (req, res) => {
     // pending grant too.
     if (body.kind === "action_grant") {
       const requested = body.permissions || ["remote.desktop.control", "remote.desktop.view"];
-      const g = { id: `agr_${state.counter}`, agent, owner: "glenn", target: { kind: "machine", id: "m_studio", ...(body.resource ? { resource: body.resource } : {}) }, target_name: body.machine || "Studio Mac",
+      const g = { id: `agr_${state.counter}`, agent, owner: "alice", target: { kind: "machine", id: "m_studio", ...(body.resource ? { resource: body.resource } : {}) }, target_name: body.machine || "Studio Mac",
         permissions: [], requested, reason: a.reason, approval_id: a.id, state: "pending", created_at: iso(0), ttl: 300 };
       (state.grants ||= {})[hub.id] = [...(state.grants[hub.id] || []), g];
       Object.assign(a, { kind: "action_grant", payload: { grant_id: g.id }, method: "", path: "",
@@ -2517,15 +2517,15 @@ const server = http.createServer(async (req, res) => {
       const body = (await readBody(req)) || {};
       const files = templateFiles.get(t.id);
       const id = `pg_t${(state.counter += 1)}`;
-      const p = { id, name: body.name || t.name, project: body.project || "", publisher: "glenn", version: 1, entry: "index.html",
+      const p = { id, name: body.name || t.name, project: body.project || "", publisher: "alice", version: 1, entry: "index.html",
         url: `http://192.168.1.20:7780/pages/${id}`, created_at: iso(0), updated_at: iso(0), can_manage: true,
-        versions: [{ n: 1, entry: "index.html", files: Object.keys(files).length, size: 30000, sha256: "x", by: "glenn", at: iso(0) }],
+        versions: [{ n: 1, entry: "index.html", files: Object.keys(files).length, size: 30000, sha256: "x", by: "alice", at: iso(0) }],
         template: { id: t.id, slug: t.slug, name: t.name, version: t.version, permissions: t.permissions, data: t.data } };
       pages.set(id, p);
       madeFiles.set(id, files);
       if (body.sample) {
         for (const [coll, recs] of Object.entries(JSON.parse(files["sample.json"]))) {
-          for (const r of recs) { const { id: rid, ...data } = r; putRecord(id, coll, rid || "", data, null, "glenn"); }
+          for (const r of recs) { const { id: rid, ...data } = r; putRecord(id, coll, rid || "", data, null, "alice"); }
         }
       }
       return send(res, 201, { page: p, template: t });
@@ -2554,7 +2554,7 @@ const server = http.createServer(async (req, res) => {
       if (method === "PUT") {
         const body = (await readBody(req)) || {};
         if ((body.if_version || 0) !== cur.version) return send(res, 409, { error: "conflict", message: "the page's state changed", latest: cur });
-        const next = { state: body.state ?? null, version: cur.version + 1, updated_by: "glenn", updated_at: iso(0) };
+        const next = { state: body.state ?? null, version: cur.version + 1, updated_by: "alice", updated_at: iso(0) };
         pageStates.set(p.id, next);
         return send(res, 200, next);
       }
@@ -2643,7 +2643,7 @@ const server = http.createServer(async (req, res) => {
     for await (const c of req) chunks.push(c);
     const buf = Buffer.concat(chunks);
     state.lastPageDownload = { name, size: buf.length, text: buf.toString("utf8").slice(0, 2000), base64: buf.length < 4e6 ? buf.toString("base64") : "" };
-    return send(res, 200, { path: `/Users/glenn/Downloads/${name}` });
+    return send(res, 200, { path: `/Users/alice/Downloads/${name}` });
   }
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "last-page-download" && method === "GET") return send(res, 200, state.lastPageDownload || {});
   // (the smoke test writes a page's state, as its agent would)
@@ -2868,7 +2868,7 @@ const server = http.createServer(async (req, res) => {
       await new Promise((r) => setTimeout(r, 1200));
       // MOCK_UPDATE_FAIL=download_failed|install_failed|start_failed: how an update fails
       const failCode = process.env.MOCK_UPDATE_FAIL;
-      if (failCode) return fail(res, 502, failCode, `${failCode}: GET https://github.com/myco-ai/myco/releases/download/${latest}/myco-app-windows-amd64.exe: dial tcp 20.205.243.166:443: i/o timeout (after 6 attempts)`);
+      if (failCode) return fail(res, 502, failCode, `${failCode}: GET https://github.com/myco-ai/myco/releases/download/${latest}/myco-app-windows-amd64.exe: dial tcp 203.0.113.30:443: i/o timeout (after 6 attempts)`);
       return send(res, 200, { installed: latest, relaunching: true });
     }
     return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
@@ -2975,7 +2975,7 @@ const server = http.createServer(async (req, res) => {
     if (parts.length === 3 && parts[2] === "myco" && method === "POST") {
       if (!local.myco) {
         await sleep(2000);
-        local.myco = { path: "/Users/glenn/.local/bin/myco", version: "0.16.8" };
+        local.myco = { path: "/Users/alice/.local/bin/myco", version: "0.16.8" };
       }
       return send(res, 200, local.myco);
     }
@@ -3006,7 +3006,7 @@ const server = http.createServer(async (req, res) => {
       if (tunnel === "cloudflare" && !local.tools.cloudflared) {
         // The App gets cloudflared itself (cloudflared.go).
         await sleep(1500);
-        local.tools.cloudflared = { path: "/Users/glenn/.local/bin/cloudflared" };
+        local.tools.cloudflared = { path: "/Users/alice/.local/bin/cloudflared" };
       }
       if (tunnel === "tailscale" && !local.tools.tailscale) {
         return fail(res, 409, "tailscale_missing", "没有找到 Tailscale。", "先安装 Tailscale 并为这台设备开启 Funnel。");
@@ -3026,7 +3026,7 @@ const server = http.createServer(async (req, res) => {
       const publicUrl = tunnel === "none"
         ? null
         : tunnel === "tailscale"
-          ? "https://glenn-mac.tail1a2b.ts.net"
+          ? "https://alice-mac.tail1a2b.ts.net"
           : hostname
             ? `https://${hostname}`
             : "https://quiet-forest-4821.trycloudflare.com";
@@ -3238,7 +3238,7 @@ const server = http.createServer(async (req, res) => {
       const fid = decodeURIComponent(parts[4]);
       const meta = uploads.get(fid) || (fid.startsWith("f_demo_shot_") ? { name: "首页截图.png" } : fid.startsWith("f_demo_") ? { name: "build.log" } : null);
       if (!meta) return fail(res, 404, "not_found", `file ${fid} not found`);
-      return send(res, 200, { path: `/Users/glenn/Downloads/${meta.name}` });
+      return send(res, 200, { path: `/Users/alice/Downloads/${meta.name}` });
     }
 
     if (parts.length === 4 && parts[3] === "messages" && method === "POST") {
@@ -3298,7 +3298,7 @@ const server = http.createServer(async (req, res) => {
       if (parts.length === 6 && parts[5] === "revoke" && method === "POST") {
         const g = list.find((x) => x.id === parts[4]);
         if (!g) return fail(res, 404, "not_found", "grant not found");
-        Object.assign(g, { state: "revoked", end_reason: "revoked by glenn", ended_at: iso(0) });
+        Object.assign(g, { state: "revoked", end_reason: "revoked by alice", ended_at: iso(0) });
         const { ttl, ...out } = g;
         return send(res, 200, out);
       }
@@ -3319,7 +3319,7 @@ const server = http.createServer(async (req, res) => {
           const body = await readBody(req);
           const a = (hub.agents || []).find((x) => x.name === body?.agent);
           if (!a) return fail(res, 404, "not_found", `no agent ${body?.agent}`);
-          if (a.owner_id !== "mem_glenn") return fail(res, 403, "permission_denied", `${a.name} is not your agent; a superagent must be one you added`);
+          if (a.owner_id !== "mem_alice") return fail(res, 403, "permission_denied", `${a.name} is not your agent; a superagent must be one you added`);
           if (state.superagents[hub.id] && state.superagents[hub.id] !== a.name) {
             for (const x of list) if (x.status === "pending") x.status = "withdrew";
           }
@@ -3341,7 +3341,7 @@ const server = http.createServer(async (req, res) => {
         if (!a) return fail(res, 404, "not_found", "no such approval");
         if (a.status !== "pending") return fail(res, 409, "conflict", `already ${a.status}`);
         a.status = parts[5] === "approve" ? "done" : "denied";
-        a.decided_by = "glenn";
+        a.decided_by = "alice";
         if (a.kind === "action_grant") {
           const body = await readBody(req);
           const g = (state.grants?.[hub.id] || []).find((x) => x.id === a.payload?.grant_id);
@@ -3373,7 +3373,7 @@ const server = http.createServer(async (req, res) => {
       if (hub.id === "hub_lab") return fail(res, 404, "not_found", "no such route"); // an older hub
       state.workflows ||= {};
       const wf = (state.workflows[hub.id] ||= seedWorkflows(hub));
-      const view = (w, def) => ({ id: w.id, name: w.name, description: w.def.description, project: w.def.project, owner: "glenn", version: w.version,
+      const view = (w, def) => ({ id: w.id, name: w.name, description: w.def.description, project: w.def.project, owner: "alice", version: w.version,
         enabled: w.enabled, steps: w.def.steps.length, created_at: w.created_at, updated_at: w.updated_at,
         active: wf.runs.filter((r) => r.workflow_id === w.id && (r.status === "running" || r.status === "waiting")).length,
         last_run: (() => { const r = wf.runs.find((x) => x.workflow_id === w.id); return r ? runView(r, false) : undefined; })(),
@@ -3454,14 +3454,14 @@ const server = http.createServer(async (req, res) => {
         if (typeof b.value !== "number" || !Number.isFinite(b.value)) return fail(res, 400, "invalid_argument", "the value must be a number");
         state.counter += 1;
         const e = { id: state.counter, run: r.id, name: b.name, value: b.value, ...(b.unit ? { unit: b.unit } : {}), ...(b.direction ? { direction: b.direction } : {}),
-          ...(b.note ? { note: b.note } : {}), ...(b.step ? { step: b.step } : {}), by: "glenn", at: iso(0) };
+          ...(b.note ? { note: b.note } : {}), ...(b.step ? { step: b.step } : {}), by: "alice", at: iso(0) };
         (r.evaluations ||= []).push(e);
         return send(res, 201, e);
       }
       if (parts.length === 6 && method === "POST") {
         const b = await readBody(req).catch(() => ({}));
         if (parts[5] === "cancel") {
-          if (r.status === "running" || r.status === "waiting") wfEnd(r, "cancelled", "glenn 取消了");
+          if (r.status === "running" || r.status === "waiting") wfEnd(r, "cancelled", "alice 取消了");
           return send(res, 200, runView(r, true));
         }
         if (parts[5] === "retry") {
@@ -3469,7 +3469,7 @@ const server = http.createServer(async (req, res) => {
           const from = b?.from || [...r.steps].reverse().find((x) => x.status === "failed" || x.status === "cancelled")?.step;
           if (!from) return fail(res, 400, "invalid_argument", "no step failed");
           r.status = "running"; r.error = undefined; r.ended_at = undefined;
-          r.events.push({ at: iso(0), kind: "retry", step: from, text: "glenn 从这一步重新开始" });
+          r.events.push({ at: iso(0), kind: "retry", step: from, text: "alice 从这一步重新开始" });
           wfActivate(hub, r, from);
           return send(res, 200, runView(r, true));
         }
@@ -3477,9 +3477,9 @@ const server = http.createServer(async (req, res) => {
           const st = r.steps.find((x) => x.step === b?.step && x.status === "waiting");
           if (!st) return fail(res, 409, "invalid_state", "not waiting for a decision");
           if (!(st.options || []).includes(b.choice)) return fail(res, 400, "invalid_argument", `choose one of: ${(st.options || []).join(", ")}`);
-          st.status = "done"; st.ended_at = iso(0); st.output = { choice: b.choice, note: b.note || "", by: "glenn" };
+          st.status = "done"; st.ended_at = iso(0); st.output = { choice: b.choice, note: b.note || "", by: "alice" };
           st.summary = b.choice + (b.note ? `：${b.note}` : "");
-          r.events.push({ at: iso(0), kind: "decided", step: st.step, text: `glenn 选了「${b.choice}」` });
+          r.events.push({ at: iso(0), kind: "decided", step: st.step, text: `alice 选了「${b.choice}」` });
           if (b.choice === st.options[0]) wfNext(hub, r, st);
           else wfEnd(r, "failed", `选了「${b.choice}」`);
           return send(res, 200, runView(r, true));
@@ -3548,7 +3548,7 @@ const server = http.createServer(async (req, res) => {
         const b = await readBody(req);
         if (!b?.name || (!b.workflow && (!b?.to || !b?.body)) || (!b.schedule && !b.webhook)) return fail(res, 400, "invalid_argument", "name, to, body (or a workflow) and a schedule or webhook are required");
         state.counter += 1;
-        const a = { once:false, id: `aut_${state.counter}`, owner: "glenn", from: CONSOLE, webhook: false, skip_if_busy: true, enabled: true, created_at: iso(0), runs: [] };
+        const a = { once:false, id: `aut_${state.counter}`, owner: "alice", from: CONSOLE, webhook: false, skip_if_busy: true, enabled: true, created_at: iso(0), runs: [] };
         const secret = apply(a, b);
         list.unshift(a);
         return send(res, 201, { automation: view(a), ...(secret ? { webhook_secret: secret } : {}) });
@@ -3641,7 +3641,7 @@ const server = http.createServer(async (req, res) => {
     if (parts[3] === "backups") {
       if (hub.id === "hub_lab") return fail(res, 404, "not_found", "no route for GET /v1/admin/backups");
       const bk = (hub.backupState ||= { server: [{ name: "myco-backup-hub-20261121-031502.tar.gz", size: 18_400_000, created_at: iso(5 * 3600) }], local: [], auto: false });
-      const dir = `/Users/glenn/myco-backups/${hub.name}`;
+      const dir = `/Users/alice/myco-backups/${hub.name}`;
       if (parts.length === 4 && method === "GET") {
         return send(res, 200, { backups: bk.server, keep: 7, daily: true, restore: "on the server, with the hub stopped: myco hub restore --from <backup> --db /var/lib/myco/hub.db", local: bk.local, dir, auto: bk.auto });
       }
@@ -3720,8 +3720,8 @@ const server = http.createServer(async (req, res) => {
       const ex = execHistory("release-cloud");
       const newest = ex.reduce((a, m) => (new Date(m.updated_at) > new Date(a.updated_at) ? m : a), ex[0]);
       const sorted = ex.slice().sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-      items.push({ kind: "pair", thread_id: newest.thread_id, other: "release-cloud", node: "mac-exec", participants: ["release-cloud", "mac-exec"],
-        updated_at: newest.updated_at, messages: ex.length, first: sorted[0], last: sorted[sorted.length - 1], ...stateOf(sorted, "mac-exec") });
+      items.push({ kind: "pair", thread_id: newest.thread_id, other: "release-cloud", node: "demo-shell", participants: ["release-cloud", "demo-shell"],
+        updated_at: newest.updated_at, messages: ex.length, first: sorted[0], last: sorted[sorted.length - 1], ...stateOf(sorted, "demo-shell") });
       // group=pair: one row per pair of parties (threads merged).
       if (sp.get("group") === "pair") {
         const byPair = new Map();
@@ -3781,7 +3781,7 @@ const server = http.createServer(async (req, res) => {
       const from = { binding: { ...agent.binding }, machine_id: agent.machine_id, machine_name: machineName(agent.machine_id), runtime: { cli: agent.runtime?.cli || agent.binding?.harness } };
       const id = "hov_" + Math.random().toString(36).slice(2, 10);
       if (parts[5] === "handover-link") {
-        const h = { id, agent: name, at: iso(), by: "glenn", note: body.note || "", from, to: { binding: {} }, state: "waiting", open_tasks: [], back: body.back || "", expires_at: iso(-86_400) };
+        const h = { id, agent: name, at: iso(), by: "alice", note: body.note || "", from, to: { binding: {} }, state: "waiting", open_tasks: [], back: body.back || "", expires_at: iso(-86_400) };
         list.unshift(h);
         const url = `${hub.url.replace(/^http:/, "https:")}/h/myco_takeover_9f3k2demo${id.slice(4)}`;
         return send(res, 201, { handover: h, url, command: `curl -fsSL '${url}' | sh`, command_ps1: `irm '${url}?format=ps1' | iex` });
@@ -3794,7 +3794,7 @@ const server = http.createServer(async (req, res) => {
       await sleep(1600);
       const cli = body.cli || agent.runtime?.cli || "claude";
       const h = {
-        id, agent: name, at: iso(2), by: "glenn", note: body.note || "", from,
+        id, agent: name, at: iso(2), by: "alice", note: body.note || "", from,
         to: { binding: { harness: cli, session_id: "new-" + id.slice(4), workdir: body.dir || agent.binding?.workdir }, machine_id: m.id, machine_name: m.name, runtime: { cli } },
         state: "done", done_at: iso(), open_tasks: [], back: body.back || "", expires_at: iso(-86_400),
       };
@@ -3807,24 +3807,24 @@ const server = http.createServer(async (req, res) => {
     if (parts.length === 6 && parts[3] === "agents" && parts[5] === "peers" && method === "GET") {
       if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
       const ex = execHistory(decodeURIComponent(parts[4]));
-      return send(res, 200, { peers: [{ agent: "mac-exec", messages: ex.length, last: ex[ex.length - 1] }] });
+      return send(res, 200, { peers: [{ agent: "demo-shell", messages: ex.length, last: ex[ex.length - 1] }] });
     }
     // /app/hubs/{id}/exchanges?a=&b=&before= — newest first, 4 per page (to show paging).
     if (parts.length === 4 && parts[3] === "exchanges" && method === "GET") {
       if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
       const q = new URL(req.url, "http://x").searchParams;
-      const a = q.get("a") === "mac-exec" ? q.get("b") : q.get("a");
+      const a = q.get("a") === "demo-shell" ? q.get("b") : q.get("a");
       const before = Number(q.get("before") || 0);
       const since = process.env.MOCK_OLD_HUB ? 0 : Number(q.get("updated_since") || 0);
       if (since) {
         const pair = [q.get("a"), q.get("b")];
-        const canned = pair.includes("mac-exec") ? execHistory(pair.find((n) => n !== "mac-exec")) : [];
+        const canned = pair.includes("demo-shell") ? execHistory(pair.find((n) => n !== "demo-shell")) : [];
         const changed = [...canned, ...Object.values(hub.threads || {}).flat()]
           .filter((m) => pair.includes(m.from) && pair.includes(m.to) && new Date(m.updated_at).getTime() > since)
           .sort((x, y) => new Date(x.updated_at) - new Date(y.updated_at));
         return send(res, 200, { messages: changed, more: false, since });
       }
-      if (q.get("a") !== "mac-exec" && q.get("b") !== "mac-exec") {
+      if (q.get("a") !== "demo-shell" && q.get("b") !== "demo-shell") {
         // Two parties: every message between them, all threads, newest first.
         const pair = [q.get("a"), q.get("b")];
         const all = Object.values(hub.threads || {}).flat()
@@ -3835,7 +3835,7 @@ const server = http.createServer(async (req, res) => {
       }
       // The canned history plus what was typed in this session.
       const typed = Object.values(hub.threads || {}).flat()
-        .filter((m) => (m.from === a && m.to === "mac-exec") || (m.from === "mac-exec" && m.to === a));
+        .filter((m) => (m.from === a && m.to === "demo-shell") || (m.from === "demo-shell" && m.to === a));
       const all = [...execHistory(a), ...typed]
         .sort((x, y) => new Date(y.created_at) - new Date(x.created_at))
         .filter((m) => !before || new Date(m.created_at).getTime() < before);
@@ -3906,7 +3906,7 @@ const server = http.createServer(async (req, res) => {
       if (parts[5] === "files" && parts.length >= 7) {
         const i = p.docs.findIndex((d) => d.name === parts[6]);
         if (parts.length === 8 && parts[7] === "save" && method === "POST") {
-          return i < 0 ? fail(res, 404, "not_found", "no such file") : send(res, 200, { path: `/Users/glenn/Downloads/${parts[6]}` });
+          return i < 0 ? fail(res, 404, "not_found", "no such file") : send(res, 200, { path: `/Users/alice/Downloads/${parts[6]}` });
         }
         if (method === "PUT") {
           const chunks = [];
@@ -4129,7 +4129,7 @@ const server = http.createServer(async (req, res) => {
         setTimeout(() => {
           state.counter += 1;
           const name = `cloud-shroom-${state.counter}`;
-          hub.agents.push(makeAgent({ name, display_name: "Shroom", owner: "glenn", owner_id: "mem_glenn", kind: "agent",
+          hub.agents.push(makeAgent({ name, display_name: "Shroom", owner: "alice", owner_id: "mem_alice", kind: "agent",
             binding: { harness: "claude-cloud", environment: "claude.ai" }, created_at: iso(0), last_seen_at: iso(0), status_text: "刚加入" }));
           state.superagents ||= {};
           state.superagents[hub.id] = name;
@@ -4141,7 +4141,7 @@ const server = http.createServer(async (req, res) => {
       if (process.env.MOCK_CLOUD_JOIN && !body?.superagent && !body?.shell_node && !state.cloudJoined) {
         state.cloudJoined = true;
         setTimeout(() => {
-          hub.agents.push(makeAgent({ name: "cloud-claude", display_name: "Claude (claude.ai)", owner: "glenn", owner_id: "mem_glenn", kind: "agent",
+          hub.agents.push(makeAgent({ name: "cloud-claude", display_name: "Claude (claude.ai)", owner: "alice", owner_id: "mem_alice", kind: "agent",
             description: "Claude Code session on claude.ai", runtime: { cli: "claude-cloud" },
             binding: { harness: "claude-cloud", environment: "claude.ai" }, created_at: iso(0), last_seen_at: iso(0), status_text: "" }));
         }, 4000);
@@ -4197,7 +4197,7 @@ const server = http.createServer(async (req, res) => {
         if (rt.target === "old-pi") return fail(res, 502, "auth", "pi@192.168.1.40: Permission denied (publickey).", "ssh old-pi");
         return send(res, 200, {
           route: rt,
-          found: { os: "Linux", myco: `v${st.version}`, myco_path: "/home/glenn/.local/bin/myco", service: st.service, since: "Wed 2026-11-18 02:17:35 CST", linger: "yes", running: "yes", proxy: "http://127.0.0.1:7890" },
+          found: { os: "Linux", myco: `v${st.version}`, myco_path: "/home/alice/.local/bin/myco", service: st.service, since: "Wed 2026-11-18 02:17:35 CST", linger: "yes", running: "yes", proxy: "http://127.0.0.1:7890" },
           hubs: [{ url: "https://hub.example.com", mine: true, direct: "200", proxy: st.proxyBroken ? "000" : "200" }],
           log: [
             "time=2026-11-19T08:59:41.521+08:00 level=WARN msg=\"pull failed\" agent=vps-claude err=\"unavailable: cannot reach hub https://hub.example.com: Post \\\"https://hub.example.com/v1/inbox/pull\\\": EOF\" retry_in=30s",
@@ -4211,7 +4211,7 @@ const server = http.createServer(async (req, res) => {
         if (body.action === "upgrade") { st.version = "0.20.17"; if (machine) machine.myco_version = "0.20.17"; }
         st.service = "active";
         return send(res, 200, { ok: true, log: body.action === "upgrade"
-          ? ["==> downloading https://github.com/myco-ai/myco/releases/latest/download/myco-linux-amd64", "==> checksum ok", "==> installed: /home/glenn/.local/bin/myco v0.20.17", "runner service restarted (systemd)"]
+          ? ["==> downloading https://github.com/myco-ai/myco/releases/latest/download/myco-linux-amd64", "==> checksum ok", "==> installed: /home/alice/.local/bin/myco v0.20.17", "runner service restarted (systemd)"]
           : ["runner service restarted (systemd)"] });
       }
     }
@@ -4346,8 +4346,8 @@ const server = http.createServer(async (req, res) => {
         await sleep(600);
         return fail(res, 502, "spawn_failed", "starting the claude session failed: claude reported an error: Failed to authenticate: OAuth session expired and could not be refreshed");
       }
-      if (machine.id === "m_vps" && !/^(~|\/home\/glenn)\/code\/myco-team(\/|$)/.test(dir)) {
-        return fail(res, 403, "permission_denied", `directory ${dir} is outside the folders this computer allows (~/code/myco-team); its owner can change spawn.dirs in ~/.myco/machine.yaml there`);
+      if (machine.id === "m_vps" && !/^(~|\/home\/alice)\/code\/demo-team(\/|$)/.test(dir)) {
+        return fail(res, 403, "permission_denied", `directory ${dir} is outside the folders this computer allows (~/code/demo-team); its owner can change spawn.dirs in ~/.myco/machine.yaml there`);
       }
       const access = body.access === undefined ? "workspace" : body.access;
       if (!["readonly", "workspace", "full"].includes(access)) {
@@ -4366,7 +4366,7 @@ const server = http.createServer(async (req, res) => {
       const model = typeof body.model === "string" ? body.model.trim() : "";
       const osLabel = { darwin: "macOS", linux: "Linux", windows: "Windows", cloud: "云端" }[machine.os] || machine.os;
       const agent = makeAgent({ ...(typeof body.display_name === "string" && body.display_name ? { display_name: body.display_name } : {}),
-        name, owner: "glenn", owner_id: "mem_glenn",
+        name, owner: "alice", owner_id: "mem_alice",
         description: typeof body.description === "string" ? body.description : "",
         kind: "agent",
         machine_id: machine.id,
@@ -4584,7 +4584,7 @@ const server = http.createServer(async (req, res) => {
         if (!body.manual.api_key) return fail(res, 400, "invalid_argument", "a key is required");
         if (u.username || u.password || u.search || u.hash) return fail(res, 400, "invalid_argument", "no credentials, query or fragment in base_url");
         // Sealed for the agent; its runner takes it before its next task.
-        agent.run_settings = { ...(agent.run_settings || {}), provider: "custom", provider_encrypted: { id: "pe_demo", from: "glenn", body: "(sealed)" } };
+        agent.run_settings = { ...(agent.run_settings || {}), provider: "custom", provider_encrypted: { id: "pe_demo", from: "alice", body: "(sealed)" } };
         rt.provider = u.host; rt.provider_host = u.host; rt.provider_source = "env_file";
         lastRunSettings = { hub: hub.id, agent: agent.name, body: { manual: { ...body.manual, api_key: "(sealed)" } } };
         return send(res, 200, agent);
@@ -4611,11 +4611,11 @@ const server = http.createServer(async (req, res) => {
       if (parts.length === 6 && parts[5] === "history" && method === "GET") {
         const t = (min) => new Date(Date.now() - min * 60000).toISOString();
         return send(res, 200, { entries: [
-          { id: "aud_5", at: t(3), actor: "glenn", actor_kind: "member", action: "agent.edit", target: agent.name, detail: "skills: +release ~review" },
+          { id: "aud_5", at: t(3), actor: "alice", actor_kind: "member", action: "agent.edit", target: agent.name, detail: "skills: +release ~review" },
           { id: "aud_4", at: t(40), actor: agent.name, actor_kind: "agent", action: "agent.edit", target: agent.name, detail: "description: 规划发布并审查 PR。\nlabels: +group=官网改版 −group=web" },
-          { id: "aud_3", at: t(180), actor: "glenn", actor_kind: "member", action: "agent.visibility", target: agent.name, detail: "team" },
+          { id: "aud_3", at: t(180), actor: "alice", actor_kind: "member", action: "agent.visibility", target: agent.name, detail: "team" },
           { id: "aud_2", at: t(60 * 26), actor: agent.name, actor_kind: "agent", action: "agent.edit", target: agent.name, detail: "skills: +review" },
-          { id: "aud_1", at: t(60 * 50), actor: "glenn", actor_kind: "member", action: "agent.edit", target: agent.name, detail: "display_name: — → PM (Codex)" },
+          { id: "aud_1", at: t(60 * 50), actor: "alice", actor_kind: "member", action: "agent.edit", target: agent.name, detail: "display_name: — → PM (Codex)" },
         ] });
       }
       if (parts.length === 6 && parts[5] === "coordinator" && method === "PUT") {
@@ -4694,9 +4694,9 @@ function seedHandovers(name) {
   const cloud = { binding: { harness: "claude-cloud", session_id: "session_01PmCloud7f2", environment: "claude.ai" }, runtime: { cli: "claude-cloud" } };
   const studio = { binding: { harness: "codex", session_id: "01a1-pm-session", workdir: "~/code/myco" }, machine_id: "m_studio", machine_name: "Studio Mac", runtime: { cli: "codex" } };
   return [
-    { id: "hov_pm2", agent: name, at: iso(2 * 86_400 + 300), by: "glenn", note: "claude.ai 的订阅到期了，换到 Studio Mac 上用 Codex 继续",
+    { id: "hov_pm2", agent: name, at: iso(2 * 86_400 + 300), by: "alice", note: "claude.ai 的订阅到期了，换到 Studio Mac 上用 Codex 继续",
       from: cloud, to: studio, state: "done", done_at: iso(2 * 86_400), open_tasks: ["m_pm_open"], back: "", expires_at: iso(86_400) },
-    { id: "hov_pm1", agent: name, at: iso(3 * 86_400), by: "glenn", note: "",
+    { id: "hov_pm1", agent: name, at: iso(3 * 86_400), by: "alice", note: "",
       from: cloud, to: { binding: {} }, state: "expired", open_tasks: [], back: "", expires_at: iso(2 * 86_400) },
   ];
 }
@@ -4705,9 +4705,9 @@ function seedHandovers(name) {
 function wfStartRun(hub, wf, w, inputs, trigger) {
   state.counter += 1;
   const r = { id: `run_${state.counter}`, workflow_id: w.id, name: w.name, version: w.version, status: "running", inputs,
-    owner: "glenn", by: "glenn", trigger, created_at: iso(0), updated_at: iso(0), steps: [], events: [], def: w.def };
+    owner: "alice", by: "alice", trigger, created_at: iso(0), updated_at: iso(0), steps: [], events: [], def: w.def };
   wf.runs.unshift(r);
-  r.events.push({ at: iso(0), kind: "started", text: trigger === "automation" ? "自动化启动了" : "glenn 启动了" });
+  r.events.push({ at: iso(0), kind: "started", text: trigger === "automation" ? "自动化启动了" : "alice 启动了" });
   wfActivate(hub, r, w.def.steps[0].id);
   return r;
 }
@@ -4725,12 +4725,12 @@ function wfActivate(hub, r, id, payload) {
   if (!def || r.status === "failed" || r.status === "cancelled") return;
   const kind = def.computer ? "computer" : def.human ? "human" : "agent";
   const st = { id: `rs_${r.id}_${r.steps.length + 1}`, step: id, title: def.title, kind, attempt: r.steps.filter((x) => x.step === id).length + 1,
-    status: kind === "human" ? "waiting" : "running", target: kind === "human" ? "glenn" : def.agent || def.computer || (def.role ? "docs-claude" : undefined), started_at: iso(0),
+    status: kind === "human" ? "waiting" : "running", target: kind === "human" ? "alice" : def.agent || def.computer || (def.role ? "docs-claude" : undefined), started_at: iso(0),
     input: kind === "computer" ? wfFill(def.run, r) : wfFill(def.prompt || def.title, r), payload: payload ?? r.inputs };
   if (kind === "human") { st.options = def.options; st.due_at = iso(-20 * 3600); }
   r.steps.push(st);
   r.status = kind === "human" && !r.steps.some((x) => x.status === "running") ? "waiting" : "running";
-  r.events.push({ at: iso(0), kind: "step", step: id, text: kind === "human" ? "等 glenn 决定" : def.role ? `按分工「${def.role}」交给 ${st.target}（空闲）` : `交给 ${st.target}` });
+  r.events.push({ at: iso(0), kind: "step", step: id, text: kind === "human" ? "等 alice 决定" : def.role ? `按分工「${def.role}」交给 ${st.target}（空闲）` : `交给 ${st.target}` });
   if (kind === "human") return;
   const threadId = `th_wf_${r.id}_${r.steps.length}`;
   const m = makeMessage({ thread_id: threadId, from: CONSOLE, to: st.target, type: "task", status: "acked", body: `[工作流「${r.name}」· ${def.title || id}]\n\n${st.input}`, workflow: r.id, created_at: iso(0), updated_at: iso(0) });
@@ -4930,7 +4930,7 @@ function seedWorkflows(hub) {
     inputs: { required: ["task"], properties: { task: { type: "string", title: "要改什么", format: "textarea" }, command: { type: "string", title: "测试命令", default: "make test" } } },
     steps: [
       { id: "fix", title: "改", agent: "pm-codex", prompt: "{{inputs.task}}" },
-      { id: "test", title: "跑测试", computer: "mac-exec", run: "{{inputs.command}}" },
+      { id: "test", title: "跑测试", computer: "demo-shell", run: "{{inputs.command}}" },
     ],
     edges: [{ from: "fix", to: "test" }, { from: "test", to: "fix", onError: true, maxIterations: 3, else: "$fail" }],
   };
@@ -4957,7 +4957,7 @@ function seedWorkflows(hub) {
   const a = "run_seed_a";
   const runA = {
     id: a, workflow_id: "wf_review", name: review.name, version: 2, status: "waiting", inputs: { task: "设置页加一个「导出对话」按钮" },
-    owner: "glenn", by: "glenn", trigger: "manual", created_at: iso(5400), updated_at: iso(300), def: review,
+    owner: "alice", by: "alice", trigger: "manual", created_at: iso(5400), updated_at: iso(300), def: review,
     steps: [
       st(a, 1, "write", "agent", 1, "done", "pm-codex", 5400, 1500, { title: "做", summary: "加好了导出按钮，放在设置 › 对话", payload: { task: "设置页加一个「导出对话」按钮" }, output: { where: "feat/export-chat", summary: "加好了导出按钮，放在设置 › 对话" },
         bounces: 1, usage: { input_tokens: 182400, output_tokens: 9100, cost_usd: 0.84 },
@@ -4973,14 +4973,14 @@ function seedWorkflows(hub) {
         input: "完成这件事：设置页加一个「导出对话」按钮\n上一轮审查的意见：导出失败时没有提示；按钮文字和别处不一致", message_id: task("pm-codex", "[工作流「写-审-改」· 第 1 步 做 · 第 2 次]\n\n补上审查意见", "补上失败提示，按钮改成「导出这段对话」。", 3300, a) }),
       st(a, 4, "review", "agent", 2, "done", "docs-claude", 2000, 500, { title: "审", summary: "通过", output: { approved: true }, input: "审一下这个改动：补上失败提示", usage: { input_tokens: 58000, output_tokens: 1100, cost_usd: 0.24 },
         message_id: task("docs-claude", "[工作流「写-审-改」· 第 2 步 审 · 第 2 次]\n\n审一下这个改动", "通过，没有别的问题。", 2000, a) }),
-      st(a, 5, "ok", "human", 1, "waiting", "glenn", 1500, 0, { title: "你来定", input: "「补上失败提示，按钮改成「导出这段对话」」审过了。就这样吗？", options: ["就这样", "不要了"], due_at: iso(-20 * 3600) }),
+      st(a, 5, "ok", "human", 1, "waiting", "alice", 1500, 0, { title: "你来定", input: "「补上失败提示，按钮改成「导出这段对话」」审过了。就这样吗？", options: ["就这样", "不要了"], due_at: iso(-20 * 3600) }),
     ],
     events: [
-      { at: iso(5400), kind: "started", text: "glenn 启动了（第 2 版）" }, { at: iso(5400), kind: "step", step: "write", text: "交给 pm-codex" },
+      { at: iso(5400), kind: "started", text: "alice 启动了（第 2 版）" }, { at: iso(5400), kind: "step", step: "write", text: "交给 pm-codex" },
       { at: iso(3900), kind: "done", step: "write", text: "加好了导出按钮，放在设置 › 对话" }, { at: iso(3900), kind: "edge", step: "write", text: "write → review" },
       { at: iso(3300), kind: "done", step: "review", text: "少了导出失败时的提示" }, { at: iso(3300), kind: "edge", step: "review", text: "review → write" },
       { at: iso(2000), kind: "done", step: "write", text: "补上失败提示，按钮改成「导出这段对话」" },
-      { at: iso(1500), kind: "done", step: "review", text: "通过" }, { at: iso(1500), kind: "step", step: "ok", text: "等 glenn 决定" },
+      { at: iso(1500), kind: "done", step: "review", text: "通过" }, { at: iso(1500), kind: "step", step: "ok", text: "等 alice 决定" },
       { at: iso(4700), kind: "bounced", step: "write", text: "结果不符合，退回重交：where is missing" },
     ].sort((x, y) => x.at.localeCompare(y.at)),
     artifacts: [
@@ -4988,20 +4988,20 @@ function seedWorkflows(hub) {
       { step: "write", step_run: `rs_${a}_1`, try: 2, kind: "reply", message: "m", from: "pm-codex", at: iso(3910), ...shot },
       { step: "write", step_run: `rs_${a}_1`, try: 2, kind: "reply", message: "m", from: "pm-codex", at: iso(3910), ...notes },
     ].map(({ sha256, ...x }) => x).filter((x, i, all) => all.findIndex((y) => y.file_id === x.file_id && y.step_run === x.step_run) === i),
-    evaluations: [{ id: 1, run: a, name: "quality", value: 4, unit: "分", direction: "higher", note: "失败提示加得好", by: "glenn", at: iso(1200) },
+    evaluations: [{ id: 1, run: a, name: "quality", value: 4, unit: "分", direction: "higher", note: "失败提示加得好", by: "alice", at: iso(1200) },
       { id: 2, run: a, step: "review", name: "comments", value: 2, unit: "条", direction: "lower", by: "docs-claude", at: iso(3300) }],
   };
   const b = "run_seed_b";
   const runB = {
     id: b, workflow_id: "wf_review", name: review.name, version: 1, status: "succeeded", inputs: { task: "README 补上 Windows 安装说明" },
-    owner: "glenn", by: "pm-codex", trigger: "agent", created_at: iso(30 * 3600), updated_at: iso(28 * 3600), ended_at: iso(28 * 3600), def: review,
+    owner: "alice", by: "pm-codex", trigger: "agent", created_at: iso(30 * 3600), updated_at: iso(28 * 3600), ended_at: iso(28 * 3600), def: review,
     steps: [
       st(b, 1, "write", "agent", 1, "done", "pm-codex", 30 * 3600, 1800, { title: "做", summary: "写好了 Windows 安装一节", input: "完成这件事：README 补上 Windows 安装说明", usage: { input_tokens: 96000, output_tokens: 6100, cost_usd: 0.46 } }),
       st(b, 2, "review", "agent", 1, "done", "docs-claude", 29.4 * 3600, 900, { title: "审", summary: "通过", output: { approved: true }, usage: { input_tokens: 41000, output_tokens: 900, cost_usd: 0.17 } }),
-      st(b, 3, "ok", "human", 1, "done", "glenn", 29 * 3600, 3600, { title: "你来定", summary: "就这样", output: { choice: "就这样", by: "glenn" }, options: ["就这样", "不要了"] }),
+      st(b, 3, "ok", "human", 1, "done", "alice", 29 * 3600, 3600, { title: "你来定", summary: "就这样", output: { choice: "就这样", by: "alice" }, options: ["就这样", "不要了"] }),
     ],
     events: [{ at: iso(30 * 3600), kind: "started", text: "pm-codex 启动了（第 1 版）" }, { at: iso(28 * 3600), kind: "finished", text: "完成了" }],
-    evaluations: [{ id: 3, run: b, name: "quality", value: 5, unit: "分", direction: "higher", by: "glenn", at: iso(28 * 3600) },
+    evaluations: [{ id: 3, run: b, name: "quality", value: 5, unit: "分", direction: "higher", by: "alice", at: iso(28 * 3600) },
       { id: 4, run: b, step: "review", name: "comments", value: 0, unit: "条", direction: "lower", by: "docs-claude", at: iso(29 * 3600) }],
   };
   // Earlier runs: enough for the figures to say something.
@@ -5021,29 +5021,29 @@ function seedWorkflows(hub) {
       steps.push(st(id, 2, "review", "agent", 1, "failed", "docs-claude", at - w1, 1800, { title: "审", error: "超时了（30m）", retries: 1, usage: cost(0.2) }));
     } else {
       steps.push(st(id, 2, "review", "agent", 1, "done", "docs-claude", at - w1, r1, { title: "审", summary: "通过", output: { approved: true }, usage: cost(0.12 + (i % 3) * 0.05) }));
-      steps.push(st(id, 3, "ok", "human", 1, status === "cancelled" ? "cancelled" : "done", "glenn", at - w1 - r1, d1, { title: "你来定", summary: status === "cancelled" ? undefined : "就这样", options: ["就这样", "不要了"] }));
+      steps.push(st(id, 3, "ok", "human", 1, status === "cancelled" ? "cancelled" : "done", "alice", at - w1 - r1, d1, { title: "你来定", summary: status === "cancelled" ? undefined : "就这样", options: ["就这样", "不要了"] }));
     }
     const last = steps[steps.length - 1];
     const ended = last.ended_at;
     return {
-      id, workflow_id: "wf_review", name: review.name, version: v, status, inputs: { task: t }, owner: "glenn", by: i % 3 === 0 ? "pm-codex" : "glenn",
+      id, workflow_id: "wf_review", name: review.name, version: v, status, inputs: { task: t }, owner: "alice", by: i % 3 === 0 ? "pm-codex" : "alice",
       trigger: i % 3 === 0 ? "agent" : "manual", created_at: iso(at), updated_at: ended, ended_at: ended, def: review, steps,
-      ...(status === "failed" ? { error: last.error } : status === "cancelled" ? { error: "glenn 取消了" } : {}),
-      events: [{ at: iso(at), kind: "started", text: `glenn 启动了（第 ${v} 版）` }],
-      evaluations: status === "succeeded" ? [{ id: 100 + i, run: id, name: "quality", value: [4, 3, 5, 4, 4, 3, 5, 4, 5, 4, 3, 4][i], unit: "分", direction: "higher", by: "glenn", at: ended }] : [],
+      ...(status === "failed" ? { error: last.error } : status === "cancelled" ? { error: "alice 取消了" } : {}),
+      events: [{ at: iso(at), kind: "started", text: `alice 启动了（第 ${v} 版）` }],
+      evaluations: status === "succeeded" ? [{ id: 100 + i, run: id, name: "quality", value: [4, 3, 5, 4, 4, 3, 5, 4, 5, 4, 3, 4][i], unit: "分", direction: "higher", by: "alice", at: ended }] : [],
     };
   });
   const c = "run_seed_c";
   const runC = {
     id: c, workflow_id: "wf_test", name: test.name, version: 1, status: "failed", inputs: { task: "修 Safari 上登录闪退", command: "make test" },
-    owner: "glenn", by: "glenn", trigger: "manual", created_at: iso(3 * 86400), updated_at: iso(3 * 86400 - 3000), ended_at: iso(3 * 86400 - 3000), def: test,
+    owner: "alice", by: "alice", trigger: "manual", created_at: iso(3 * 86400), updated_at: iso(3 * 86400 - 3000), ended_at: iso(3 * 86400 - 3000), def: test,
     error: "test → fix 到了最多 3 次",
     steps: [1, 2, 3, 4].flatMap((n) => [
       st(c, n * 2 - 1, "fix", "agent", n, "done", "pm-codex", 3 * 86400 - (n - 1) * 700, 400, { title: "改", summary: n === 1 ? "改了登录页的 cookie 处理" : `第 ${n} 次修：调整了重试` }),
-      st(c, n * 2, "test", "computer", n, "failed", "mac-exec", 3 * 86400 - (n - 1) * 700 - 400, 120, { title: "跑测试", error: "退出码 2：FAIL web/login.test.ts › keeps the session", input: "make test",
+      st(c, n * 2, "test", "computer", n, "failed", "demo-shell", 3 * 86400 - (n - 1) * 700 - 400, 120, { title: "跑测试", error: "退出码 2：FAIL web/login.test.ts › keeps the session", input: "make test",
         output: { exit_code: 2, stdout: "", stderr: "FAIL web/login.test.ts › keeps the session\n" } }),
     ]).slice(0, 8),
-    events: [{ at: iso(3 * 86400), kind: "started", text: "glenn 启动了（第 1 版）" }, { at: iso(3 * 86400 - 3000), kind: "finished", text: "失败了：test → fix 到了最多 3 次" }],
+    events: [{ at: iso(3 * 86400), kind: "started", text: "alice 启动了（第 1 版）" }, { at: iso(3 * 86400 - 3000), kind: "finished", text: "失败了：test → fix 到了最多 3 次" }],
   };
   return { list, runs: [runA, runB, ...history, runC].sort((x, y) => y.created_at.localeCompare(x.created_at)) };
 }
@@ -5090,19 +5090,19 @@ function seedAutomations(hub) {
       request: { content_type: "application/json", size: issueBody.length, headers: { "User-Agent": "GitHub-Hookshot/5c3a2e1", "X-Github-Event": "issues" }, body: issueBody } },
   ];
   return [{
-    id: "aut_morning", name: "每天早上汇总 issue", owner: "glenn", from: CONSOLE, to: "pm-codex",
+    id: "aut_morning", name: "每天早上汇总 issue", owner: "alice", from: CONSOLE, to: "pm-codex",
     body: "看一下昨天新开的 issue，挑出要紧的，在这里回我一份清单。", schedule: { cron: "0 9 * * 1-5", tz: "Asia/Shanghai" },
     webhook: false, skip_if_busy: true, enabled: true, created_at: iso(7 * 86400), updated_at: iso(86400),
     next_run_at: new Date(Date.now() + 14 * 3600e3).toISOString(),
     last_run: morning[0], runs: morning,
   }, {
-    id: "aut_ci", name: "CI 失败时排查", owner: "glenn", from: CONSOLE, to: "release-cloud",
+    id: "aut_ci", name: "CI 失败时排查", owner: "alice", from: CONSOLE, to: "release-cloud",
     body: "CI 构建失败了，看一下日志找出原因，能修就修，修不了告诉我卡在哪：\n{{payload}}",
     webhook: true, webhook_url: `${hub.url.replace(/\/+$/, "")}/hooks/aut_ci`, skip_if_busy: true, enabled: true, created_at: iso(10 * 86400), updated_at: iso(10 * 86400),
     last_run: hooks[0], runs: hooks,
   }, {
     // Starts a workflow: each new issue goes through 写-审-改.
-    id: "aut_issue", name: "新 issue 走写-审-改", owner: "glenn", from: CONSOLE, to: "",
+    id: "aut_issue", name: "新 issue 走写-审-改", owner: "alice", from: CONSOLE, to: "",
     body: "", workflow: "wf_review", inputs: { task: "修 issue：{{payload.issue.title}}" },
     webhook: true, webhook_url: `${hub.url.replace(/\/+$/, "")}/hooks/aut_issue`, skip_if_busy: false, enabled: true, created_at: iso(4 * 86400), updated_at: iso(4 * 86400),
     last_task: "run_seed_a",

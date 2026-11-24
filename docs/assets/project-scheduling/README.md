@@ -11,7 +11,3 @@ Regenerate with the pinned separate apps checkout:
 APPS_TEST_ROOT=/path/to/apps node web/scripts/media-kit-shots.mjs \
   --scene project-scheduling,automation-window --out /tmp/project-scheduling
 ```
-
-Media-kit draft: `project-scheduling`, page `pg_h3ckpnrw4xgo4oox`.
-Originals live here because the media-kit project's shared 100-file quota is
-full. The draft has previews and links to these originals.

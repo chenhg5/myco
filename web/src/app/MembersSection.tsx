@@ -165,11 +165,11 @@ export function MembersSection({ hubsOv, onRefresh }: { hubsOv?: HubOverview[]; 
           <form onSubmit={(e) => { e.preventDefault(); void invite(); }}>
             <label className="app-field">
               <span className="app-field-label">{L("用户名", "Handle")}</span>
-              <input className="app-input mono" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="laohu" disabled={busy} required autoFocus />
+              <input className="app-input mono" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="bob" disabled={busy} required autoFocus />
             </label>
             <label className="app-field">
               <span className="app-field-label">{L("名字（可选）", "Name (optional)")}</span>
-              <input className="app-input" value={form.display_name} onChange={(e) => setForm({ ...form, display_name: e.target.value })} placeholder={L("老胡", "Lao Hu")} disabled={busy} />
+              <input className="app-input" value={form.display_name} onChange={(e) => setForm({ ...form, display_name: e.target.value })} placeholder={L("Bob", "Bob")} disabled={busy} />
             </label>
             <div className="app-field">
               <span className="app-field-label">{L("角色", "Role")}</span>

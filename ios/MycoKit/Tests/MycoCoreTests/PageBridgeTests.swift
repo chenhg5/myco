@@ -18,7 +18,7 @@ struct PageBridgeTests {
         let page = try #require(try await hub.pages().first { $0.id == id })
         let doors = Doors()
         let bridge = PageBridge(
-            hub: hub, page: page, me: FakeHub.me, workspace: "ws_test", names: { $0 == FakeHub.me ? "Glenn" : $0 },
+            hub: hub, page: page, me: FakeHub.me, workspace: "ws_test", names: { $0 == FakeHub.me ? "Alice" : $0 },
             doors: PageBridge.Doors(
                 askToSend: { text, to in
                     doors.asked.append((text, to))
@@ -54,7 +54,7 @@ struct PageBridgeTests {
         let hub = FakeHub()
         let (one, _) = try await bridge(hub)
         let ready = object(try await one.answer("ready", [:]))
-        #expect((ready["me"] as? [String: Any])?["name"] as? String == "Glenn")
+        #expect((ready["me"] as? [String: Any])?["name"] as? String == "Alice")
         #expect(ready["version"] as? Int == 0)
         let wrote = object(try await one.answer("update", ["state": ["n": 1], "version": 0]))
         #expect(wrote["ok"] as? Bool == true)

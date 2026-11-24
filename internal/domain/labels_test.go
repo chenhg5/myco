@@ -7,7 +7,7 @@ func TestLabelsAndSelector(t *testing.T) {
 		t.Fatal("uppercase key must be rejected")
 	}
 	// Letters of any script: groups and tags in Chinese.
-	if zh, err := ParseLabels([]string{"group=官网改版", "前端", "owner=Glenn"}); err != nil || len(zh) != 3 {
+	if zh, err := ParseLabels([]string{"group=官网改版", "前端", "owner=Alice"}); err != nil || len(zh) != 3 {
 		t.Fatalf("unicode labels: %v %v", zh, err)
 	}
 	if s, err := ParseSelector("group=官网改版,前端"); err != nil || !s.Matches(&Agent{Labels: []string{"group=官网改版", "前端"}}) {

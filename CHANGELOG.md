@@ -266,7 +266,7 @@ Upgrade: this release needs the Hub updated as well. On the server run `sudo myc
 
 ## v0.21.26
 
-- **A member's chat leaves terminal commands out**: since v0.21.24 a member's chat in a project showed its exchanges with everyone, which brought each command it ran on a terminal (`ls`, `cat` on mac-exec) in as a card. Only its exchanges with other AIs show now; a terminal still shows when the project lists it.
+- **A member's chat leaves terminal commands out**: since v0.21.24 a member's chat in a project showed its exchanges with everyone, which brought each command it ran on a terminal (`ls`, `cat` on demo-shell) in as a card. Only its exchanges with other AIs show now; a terminal still shows when the project lists it.
 - **Pages play public audio and video**: a page can play a podcast or a video from a public address through the App, streamed as it plays (seeking works), instead of downloading it whole first.
 - **New apps**: Voyage (航海), a 3D sea to explore by boat, with a lifelike sea, sky and weather; a podcast globe to discover and listen to public podcasts by region; a shopping comparison where an agent finds offers with their sources.
 - Cinema's full screen works in the Mac desktop App, without corner overlays.
@@ -275,7 +275,7 @@ Upgrade: this release needs the Hub updated as well. On the server run `sudo myc
 
 **中文**
 
-- **成员对话里不再出现终端命令**：从 v0.21.24 起，项目里成员的对话会显示它和所有人的往来，结果它在终端上跑的每条命令（比如在 mac-exec 上的 `ls`、`cat`）也成了一张卡片。现在只显示它和其他 AI 的往来；项目里本来就列着的终端照常显示。
+- **成员对话里不再出现终端命令**：从 v0.21.24 起，项目里成员的对话会显示它和所有人的往来，结果它在终端上跑的每条命令（比如在 demo-shell 上的 `ls`、`cat`）也成了一张卡片。现在只显示它和其他 AI 的往来；项目里本来就列着的终端照常显示。
 - **页面可以播放公开的音频和视频**：页面能通过 App 播放公开地址上的播客或视频，边播边传（可以拖进度），不用先整个下载下来。
 - **新应用**：航海（坐船在 3D 海面上航行，海、天空和天气都很逼真）；播客地球（按地区发现并收听公开播客）；比价购物（agent 帮你找报价，并附上来源）。
 - 影视在 Mac 桌面 App 里可以正常全屏，四角也不再有遮挡。
@@ -913,7 +913,7 @@ Upgrade: this release needs the Hub updated as well. On the server run `sudo myc
 - **New Codex agents no longer fail with "not in a trusted directory"**: Codex used to refuse to start when the new folder wasn't a git repository.
 - **Open to the internet in one click**: the default is "One click (recommended)", which uses a temporary Cloudflare address and needs no account. If cloudflared isn't installed, the App downloads it (on a Mac through Homebrew if you have it, otherwise from Cloudflare's official releases, with the download verified). The address changes after this computer restarts; just click again.
 - **A freshly copied session no longer says "in use" right away**: when a session is briefly busy, the App first retries in place a few times, and only goes back to the queue if it really is in use.
-- **The name on a Mac is the computer name**: before, it could be the IP address your router assigned (like `192-168-1-210-…`); now it is the computer name from System Settings.
+- **The name on a Mac is the computer name**: before, it could be the IP address your router assigned (like `192-168-1-42-…`); now it is the computer name from System Settings.
 - Sent messages no longer appear twice.
 - "Meet your workspace" is ticked off as soon as you open Settings › Workspace.
 
@@ -922,7 +922,7 @@ Upgrade: this release needs the Hub updated as well. On the server run `sudo myc
 - **新开 Codex 不再报「不在受信任的目录」**：新建的文件夹不是 git 仓库时，Codex 以前会拒绝启动。
 - **开放到公网一键完成**：默认是「一键开放（推荐）」，用 Cloudflare 临时地址，不用账号。没装 cloudflared 时 App 会自己下载（Mac 上有 Homebrew 就用它，否则从 Cloudflare 的官方发布下载并校验）。这台电脑重启后地址会变，再点一次就行。
 - **刚复制的会话不再马上说「被占用」**：会话短暂被占用时先原地重试几次，真被占用才退回排队。
-- **Mac 上的名字用电脑名**：以前可能用的是路由器分的 IP（比如 `192-168-1-210-…`），现在用「系统设置」里的电脑名。
+- **Mac 上的名字用电脑名**：以前可能用的是路由器分的 IP（比如 `192-168-1-42-…`），现在用「系统设置」里的电脑名。
 - 发出去的消息不再出现两次。
 - 「认识你的工作区」打开设置 › 工作区就打勾。
 

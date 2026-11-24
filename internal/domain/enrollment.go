@@ -236,7 +236,7 @@ func ParseMachineName(s string) (string, error) {
 	}
 	if out == "" {
 		return "", Errf(CodeInvalidArgument, "invalid machine name %q", s).
-			WithSuggestion("pass --machine with letters and digits, e.g. --machine glenn-mac")
+			WithSuggestion("pass --machine with letters and digits, e.g. --machine alice-mac")
 	}
 	return out, nil
 }

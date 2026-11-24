@@ -54,7 +54,7 @@
 **服务端**装好后（[第 1 节](#1-服务端部署-hub)，一条命令），会打印一个入网链接，形如 `https://1-2-3-4.sslip.io/j/myco_enroll_...`。以后随时可以在服务器上再生成：
 ```bash
 sudo /usr/local/bin/myco link create                                  # 默认 7 天内有效，最多 10 台机器
-sudo /usr/local/bin/myco link create --uses 1 --expires 24h --note "Glenn 的笔记本"
+sudo /usr/local/bin/myco link create --uses 1 --expires 24h --note "Alice 的笔记本"
 sudo /usr/local/bin/myco link create --expires 0 --uses 0 --note claude.ai   # 长期有效，给云端环境的安装脚本用
 ```
 
@@ -222,7 +222,7 @@ sudo bash -c 'set -a; . /etc/myco/hub.env; set +a; /usr/local/bin/myco <命令> 
 
 **控制台令牌（给 Mac 控制台 App 用）**：管理员令牌只留在 Hub 机器上，每台要管理网络的设备单独签发一把控制台令牌，丢了就单独作废：
 ```bash
-sudo /usr/local/bin/myco console token create --name glenn-mac   # 只显示这一次，同时打印 Hub 的公网地址
+sudo /usr/local/bin/myco console token create --name alice-mac   # 只显示这一次，同时打印 Hub 的公网地址
 sudo /usr/local/bin/myco console token list                      # 每把令牌最近一次使用的时间
 sudo /usr/local/bin/myco console token revoke --id con_xxx       # 作废，立即生效
 ```
@@ -238,7 +238,7 @@ sudo /usr/local/bin/myco console token revoke --id con_xxx       # 作废，立�
 
 推荐**按机器或环境建**。比如你自己的电脑建一个不限 harness 的令牌，这台电脑上的 Claude Code、Codex 都用它：
 ```bash
-myco enrollment create --name-prefix mac- --note "Glenn 的 Mac（任意 harness）"
+myco enrollment create --name-prefix mac- --note "Alice 的 Mac（任意 harness）"
 ```
 也可以按类型建，并限定 harness：
 ```bash
@@ -270,7 +270,7 @@ myco enrollment revoke --id enr_xxx --force      # 已入网的 agent 不受影�
 适合人类用户，或者有特殊投递方式（webhook、GitHub 等）的 agent：
 
 ```bash
-myco agent register --name glenn --description "人类：Glenn"
+myco agent register --name alice --description "人类：Alice"
 myco agent register --name x --harness claude --session-id <id> --no-save --format text   # 打印 token，交给对应的 agent
 myco agent register --name x --rotate-token --no-save                                      # 换发 token，旧的立即失效；其他字段只改你传了的
 # 把换发的 token 存到 agent 所在的机器上（会按绑定的会话生成身份文件）：
@@ -697,7 +697,7 @@ myco agent spawn --on wsl --dir ~/code/app --prompt "先读 README.md，总结�
 **三条规则都在那台机器上检查**，Hub 说了不算：
 | | 默认 | 怎么改 |
 |---|---|---|
-| 谁能在这台机器上开会话 | 继承入网链接的 allow-from；链接没设就是 Hub 上任何 agent。另外，项目可以单独设置「可以开 agent 的电脑」：勾上的电脑，项目的协调者能在上面开会话（和项目里有没有这台电脑的终端无关） | 管理员：`myco agent update --name wsl-machine --allow-from cloud-1,glenn`；或者在项目资料里勾上这台电脑（`myco project machine allow --project 项目 --machine wsl`） |
+| 谁能在这台机器上开会话 | 继承入网链接的 allow-from；链接没设就是 Hub 上任何 agent。另外，项目可以单独设置「可以开 agent 的电脑」：勾上的电脑，项目的协调者能在上面开会话（和项目里有没有这台电脑的终端无关） | 管理员：`myco agent update --name wsl-machine --allow-from cloud-1,alice`；或者在项目资料里勾上这台电脑（`myco project machine allow --project 项目 --machine wsl`） |
 | 允许的目录 | 家目录下（解析符号链接后判断；`~/.ssh`、`~/.aws`、`~/.gnupg`、`~/.myco` 一律拒绝） | 在那台机器上运行 `myco machine dirs --add ~/code/项目`（`--remove` 去掉一个，不带参数列出来），也就是改它 `~/.myco/machine.yaml` 的 `spawn.dirs`；App 的电脑页「它允许什么」里也能加减：这台电脑，或 App 用 SSH / WSL 连上的电脑，直接改；别的电脑给出要在它上面运行的命令。工作区本身改不了。下一个新建的会话就按新的来，不用重启 |
 | 新会话的权限 | `workspace`，上限也是 `workspace` | 在那台机器的 `machine.yaml` 里设 `spawn.max_access`；`full` 只能这样在本机打开 |
 
@@ -790,7 +790,7 @@ myco agent handover-link --name docs-claude
 一个 Hub 可以有好几个人，每个人在自己的 App 里用自己的身份：
 - **成员**只存在于这个 Hub 里，没有注册和密码。升级后的 Hub 自动有一个所有者（名字叫 `owner`，在 App 的"设置 → 成员"里改成你的名字），原来的节点和机器都归他。
 - **你的名字**：每个 Hub 上各起各的名字。第一次打开自己建的 Hub（名字还是 `owner`）时，App 会问"你在这个 Hub 上叫什么？"；通过邀请加入别人的 Hub 时也会问一次。之后在"设置 → 成员 → 改名"里改。
-- **邀请**：设置 → 成员 → 邀请成员，填用户名、选角色，把生成的链接私下发给对方。命令行：`myco member invite --name laohu`。对方二选一：
+- **邀请**：设置 → 成员 → 邀请成员，填用户名、选角色，把生成的链接私下发给对方。命令行：`myco member invite --name bob`。对方二选一：
   - **不用装 App**：让自己电脑上的 Claude Code 或 Codex 执行 `curl -fsSL <邀请链接> | bash`（或者直接对它说"接入 myco：<邀请链接>"）。这一条命令会装好 myco、以对方的身份加入、把这台电脑加成对方的机器、装好后台 runner，并把执行命令的那个 agent 会话也接进来，都归对方管。对方的凭据存在 `~/.myco/machine.yaml`（权限 600），之后在这台电脑上：别的会话里 `myco join` 接入（同样归对方）；`myco agent …` 管理自己的节点；想用 App 了，`myco member pair` 打印一个一次性的 App 链接。
   - **用 App**：在 myco App 里"添加 Hub"时粘贴链接。
 - **链接只用一次**：邀请链接和 `myco console link` 打印的链接都是一次性的，24 小时内有效，App 和命令行二选一。App（或命令行）用它换一个属于这台设备的凭据，链接随即作废，之后泄露也没用。命令行加入的电脑也会出现在"我的设备"里。
@@ -912,7 +912,7 @@ myco superagent guide                  # superagent 自己读的说明
 
 - 它用自己的 agent 令牌调用 App 的接口，Hub 按每个接口登记的级别放行：直接做、要你点头、不能做（令牌、邀请、成员角色、认定 superagent 等）。没登记的接口它还是普通 agent。
 - 要你点头的请求 Hub 先存下，24 小时没人处理就作废；同意后 Hub 替它执行一次，并告诉它结果。它调用时用 `MYCO_APPROVAL_REASON` 写一句为什么，卡片上会显示。
-- 审计里它做的事记成「glenn（经 superagent shroom）」。
+- 审计里它做的事记成「alice（经 superagent shroom）」。
 
 接口和权限表见 [docs/api.md](docs/api.md#superagents)。
 
@@ -957,12 +957,12 @@ myco pin rm --with @console:ann --pin pin_xxx
 
 需要 Hub v0.20.5 或更新。App 里叫「应用」，命令行和 API 里叫 template（模板），是同一个东西。一个应用是一个文件夹：网页文件 + `myco.json`（名字、版本、数据有哪些集合和字段）+ `agent.md`（告诉 agent 怎么填）+ `sample.json`（示例数据）。用应用新建出来的就是一个网页，人在 App 里打开、改，agent 用命令行读写同一份数据，两边都能马上看到对方改了什么。
 ```bash
-myco template init --dir ./weekly --name 周报 --id glenn/weekly   # 起一个能用的模板：一张能编辑的表
+myco template init --dir ./weekly --name 周报 --id alice/weekly   # 起一个能用的模板：一张能编辑的表
 myco template publish --dir ./weekly                              # 发布到工作区的模板库（改了 version 再发就是新版本）
 myco template list [--category life] [--query 记账]               # 一个应用一行：叫什么、做什么用、分类（--full 全部字段）
-myco template get --template glenn/weekly                         # 数据结构、版本、给 agent 的说明
-myco template use --template glenn/weekly --name "周报 · 第 47 周" [--project growth] [--sample]
-myco template rm --template glenn/weekly                          # 已经做好的网页不受影响
+myco template get --template alice/weekly                         # 数据结构、版本、给 agent 的说明
+myco template use --template alice/weekly --name "周报 · 第 47 周" [--project growth] [--sample]
+myco template rm --template alice/weekly                          # 已经做好的网页不受影响
 
 myco page data list --page pg_xxx [--collection rows]
 myco page data put --page pg_xxx --collection rows --json '{"title": "发版", "status": "待办"}'

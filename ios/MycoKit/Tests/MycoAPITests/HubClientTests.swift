@@ -169,11 +169,11 @@ struct HubClientTests {
     @Test func aConsoleSenderSurvivesTheQuery() async throws {
         let hub = client()
         Stub.handler = { _ in (200, try! RealAnswersTests.fixture("exchanges")) }
-        let page = try await hub.exchanges(between: "@console:glenn", and: "cloud-lead", before: Date(timeIntervalSince1970: 1_800_000_000.5))
+        let page = try await hub.exchanges(between: "@console:alice", and: "cloud-lead", before: Date(timeIntervalSince1970: 1_800_000_000.5))
         #expect(page.messages.count == 3)
         #expect(page.more == false)
         let items = URLComponents(url: try #require(Stub.seen.first?.url), resolvingAgainstBaseURL: false)?.queryItems ?? []
-        #expect(items.first { $0.name == "a" }?.value == "@console:glenn")
+        #expect(items.first { $0.name == "a" }?.value == "@console:alice")
         #expect(items.first { $0.name == "b" }?.value == "cloud-lead")
         // Paging back: the hub takes the time in milliseconds.
         #expect(items.first { $0.name == "before" }?.value == "1800000000500")
@@ -198,7 +198,7 @@ struct HubClientTests {
 
     @Test func aFileGoesUpAsItIsUnderItsName() async throws {
         let hub = client()
-        Stub.handler = { _ in (201, Data(#"{"id":"f_1","name":"a+b 图.png","size":3,"sha256":"x","content_type":"image/png","owner":"@console:glenn","created_at":"2026-11-13T10:00:00Z"}"#.utf8)) }
+        Stub.handler = { _ in (201, Data(#"{"id":"f_1","name":"a+b 图.png","size":3,"sha256":"x","content_type":"image/png","owner":"@console:alice","created_at":"2026-11-13T10:00:00Z"}"#.utf8)) }
         let file = try await hub.upload(Data([1, 2, 3]), name: "a+b 图.png", contentType: "image/png")
         #expect(file == HubFile(id: "f_1", name: "a+b 图.png", size: 3, contentType: "image/png"))
         let request = try #require(Stub.seen.first)

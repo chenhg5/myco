@@ -83,7 +83,7 @@ func TestProjectContextInPrompt(t *testing.T) {
 // changes, the next message of the session gets the project again.
 func TestProjectMemoryInPrompt(t *testing.T) {
 	long := "\n" + strings.Repeat("背景资料。", 1500) + "\nThe staging port is 7443."
-	hub := &projectHub{brief: long, memory: &api.ProjectDoc{Name: "memory", Body: "# Project memory\n- glenn wants reports in Chinese (lead, 2026-11-21)\n"},
+	hub := &projectHub{brief: long, memory: &api.ProjectDoc{Name: "memory", Body: "# Project memory\n- alice wants reports in Chinese (lead, 2026-11-21)\n"},
 		fakeHub: newFakeHub(
 			api.Message{ID: "t1", Type: "task", From: "lead", ThreadID: "th", Project: "myco", Body: "one"},
 			api.Message{ID: "t2", Type: "task", From: "lead", ThreadID: "th", Project: "myco", Body: "two"},
@@ -103,7 +103,7 @@ func TestProjectMemoryInPrompt(t *testing.T) {
 	if len(prompts) != 3 {
 		t.Fatalf("runs: %d", len(prompts))
 	}
-	for _, want := range []string{"The staging port is 7443.", "Project memory", "glenn wants reports in Chinese", "myco project memory add --name myco"} {
+	for _, want := range []string{"The staging port is 7443.", "Project memory", "alice wants reports in Chinese", "myco project memory add --name myco"} {
 		if !strings.Contains(prompts[0], want) {
 			t.Fatalf("prompt lacks %q", want)
 		}

@@ -504,8 +504,8 @@ sentences; myco adds who wrote it and the date. Members are given the memory whe
 project; it is the document "memory" (memory.md after myco project pull), which the project's
 owner and coordinators edit or tidy like any document.`,
 		Examples: []string{
-			`myco project memory add --name myco --text "Release only when glenn asks; VERSION and CHANGELOG go in one commit"`,
-			`myco project memory add --name myco --text "glenn wants progress reports in Chinese, at most three bullets"`,
+			`myco project memory add --name myco --text "Release only when alice asks; VERSION and CHANGELOG go in one commit"`,
+			`myco project memory add --name myco --text "alice wants progress reports in Chinese, at most three bullets"`,
 		},
 		Flags: []Flag{nameFlag, {Name: "text", Kind: String, Required: true, Help: "The entry: one or two sentences, up to 1000 characters"}, adminFile},
 		Run: handler(func(e *env) error {
