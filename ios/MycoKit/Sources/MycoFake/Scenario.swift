@@ -20,6 +20,12 @@ public enum Scenario: Sendable {
     /// The team, with a page that reports deep links into it, linked by
     /// 运维 with a fragment (for UI tests).
     case links
+    /// The team, with a page that plays a public podcast through the
+    /// phone's network (for UI tests; needs the internet).
+    case media
+    /// The team, with 运维 answering in structured parts: code, a
+    /// diagram, a myco-ui block and pictures placed in its text.
+    case rich
     /// Joined, but nobody is here yet.
     case empty
 
@@ -98,13 +104,15 @@ public enum Scenario: Sendable {
                 links: [ProjectLink(title: "仓库", url: "https://github.com/chenhg5/myco")],
                 members: [
                     ProjectMember(name: lead.name, role: "coordinator", note: "协调", addedAt: ago(12 * 86_400)),
-                    ProjectMember(name: backend.name, note: "推送接口", addedAt: ago(11 * 86_400)),
-                    ProjectMember(name: frontend.name, note: "界面", addedAt: ago(10 * 86_400)),
-                    ProjectMember(name: tester.name, note: "验证", addedAt: ago(9 * 86_400)),
-                    ProjectMember(name: writer.name, note: "文档", addedAt: ago(8 * 86_400)),
+                    ProjectMember(name: backend.name, note: "推送接口", addedAt: ago(11 * 86_400), group: "后端"),
+                    ProjectMember(name: frontend.name, note: "界面", addedAt: ago(10 * 86_400), group: "前端"),
+                    ProjectMember(name: tester.name, note: "验证", addedAt: ago(9 * 86_400), group: "质量"),
+                    ProjectMember(name: writer.name, note: "文档", addedAt: ago(8 * 86_400), group: "质量"),
                 ],
                 docs: [ProjectDoc(name: "mobile-ios.md", size: 8_412, updatedAt: ago(3_600))]),
         ]
+        // Its members in groups (the coordinator in none).
+        world.projects[0].groups = ["前端", "后端", "质量"]
 
         // A few files, to see messages that carry them.
         func file(_ id: String, _ name: String, _ type: String, _ data: Data) -> Attachment {
@@ -324,6 +332,45 @@ public enum Scenario: Sendable {
                 id: "pgm", from: tester.name, to: me, type: "note",
                 body: "清单做成了一个网页，可以直接勾：\(FakeHub.demoAddress.absoluteString)/pages/pg_checklist\n\n有改动我会再发一版。", status: "done",
                 createdAt: ago(1_050)))
+        }
+        if self == .rich {
+            let screen = file("f_screen", "首页.png", "image/png", SamplePicture.png(hue: 0.52, width: 750, height: 1000))
+            let log = file("f_log", "build.log", "text/plain", Data("ok\n".utf8))
+            let block = """
+            {"type": "Card", "props": {"title": "发版检查", "tone": "success"}, "children": [
+              {"type": "Grid", "props": {"columns": 3}, "children": [
+                {"type": "Metric", "props": {"label": "测试", "value": "412", "delta": "+12", "tone": "success"}},
+                {"type": "Metric", "props": {"label": "失败", "value": "0", "tone": "success"}},
+                {"type": "Metric", "props": {"label": "包大小", "value": "7.4 MB", "delta": "+2.6 MB", "tone": "warning"}}]},
+              {"type": "Steps", "props": {"items": [{"title": "构建", "status": "done"}, {"title": "签名", "status": "doing"}, {"title": "发布", "status": "todo"}]}},
+              {"type": "Callout", "props": {"tone": "warning", "title": "注意", "text": "包大了 **2.6 MB**，主要是新字体。"}},
+              {"type": "Image", "props": {"src": "attachment:首页.png", "caption": "新的首页"}},
+              {"type": "Button", "props": {"label": "发吧", "action": "reply", "value": "发吧", "primary": true}}]}
+            """
+            world.messages.append(Message(
+                id: "rich", from: ops.name, to: me, type: "note",
+                body: """
+                检查完了，可以发。
+
+                ```myco-ui
+                \(block)
+                ```
+
+                改的地方：
+
+                ```swift
+                // 首页的标题
+                let title = "myco"   // 12 个字以内
+                if title.count > 12 { return }
+                ```
+
+                ```mermaid
+                graph LR; 构建 --> 签名 --> 发布
+                ```
+
+                ![首页截图](attachment:首页.png)
+                """,
+                status: "done", createdAt: ago(40), attachments: [screen, log]))
         }
         if self == .long {
             // Four hundred messages with the notes helper, oldest first,

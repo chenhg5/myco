@@ -214,6 +214,23 @@ public struct HubClient: HubAPI {
         return envelope.approvals
     }
 
+    public func notices(after: Int64?, limit: Int) async throws -> HubNoticePage {
+        var query = ["limit": String(limit)]
+        if let after { query["after"] = String(after) }
+        return try await get("/v1/console/notices", query, timeout: Self.pollTimeout)
+    }
+
+    public func readNotices(target: String?) async throws {
+        struct Body: Encodable { var target: String? }
+        _ = try await call("POST", "/v1/console/notices/read", body: HubJSON.encoder().encode(Body(target: target)))
+    }
+
+    public func usage(from: String, to: String, project: String?) async throws -> UsageReport {
+        var query = ["from": from, "to": to]
+        if let project { query["project"] = project }
+        return try await get("/v1/console/usage", query, timeout: Self.pollTimeout)
+    }
+
     public func decide(approval id: String, approve: Bool) async throws -> Approval {
         let data = try await call("POST", "/v1/console/approvals/\(Self.segment(id))/\(approve ? "approve" : "deny")", timeout: 60)
         return try Self.decode(Approval.self, from: data)

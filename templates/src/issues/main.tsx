@@ -20,6 +20,8 @@ import {
 } from "./model";
 import { Avatar, LabelDot, PriorityIcon, StatusIcon } from "./icons";
 
+import { NO_FILTERS, readViews, sameView, shortcutKey, type View, type Filters, type SavedView, type Snapshot } from "./views";
+
 const teamTitle = titleSaver(kit, team);
 
 // ---- markdown: what people and agents wrote, kept to text formatting
@@ -47,9 +49,6 @@ function clean(html: string) {
 const md = (s: string) => ({ __html: clean(marked.parse(s || "")) });
 
 // ---- views ----
-type View = { kind: "mine" | "all" | "active" | "backlog" | "projects" } | { kind: "project"; id: string };
-type Filters = { status: string[]; priority: number[]; assignee: string[]; labels: string[] };
-const NO_FILTERS: Filters = { status: [], priority: [], assignee: [], labels: [] };
 const VIEW_NAME: Record<string, string> = { mine: "我的问题", all: "全部问题", active: "进行中", backlog: "待规划", projects: "项目" };
 
 const store = {
@@ -63,6 +62,18 @@ function save(id: string, patch: Partial<Issue>) {
   const next: Issue & Record<string, unknown> = { ...cur.data, ...patch };
   if (patch.status !== undefined) next.done_at = isClosed(String(patch.status)) ? (cur.data.done_at || nowIso()) : null;
   void kit.track(issues.put(next, id));
+}
+
+function ShortcutDialog({ value, error, onChange, onClose, onSave, onRemove }: { value: { name: string }; error: string; onChange: (name: string) => void; onClose: () => void; onSave: () => void; onRemove?: () => void }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => { ref.current?.showModal(); }, []);
+  return <dialog ref={ref} className="modal is-shortcut-editor" aria-labelledby="shortcut-title" onCancel={e => { e.preventDefault(); onClose(); }}><form onSubmit={e => { e.preventDefault(); onSave(); }}>
+    <h2 id="shortcut-title">{uiText(onRemove ? "管理快捷入口" : "保存筛选入口")}</h2>
+    <p>{uiText("保存当前范围、搜索词、筛选条件和显示方式。仅保存在这台设备的当前页面，不影响其他成员。")}{onRemove && <span>{uiText("这里只修改名称；修改条件后请点击更新入口。")}</span>}</p>
+    <label>{uiText("入口名称")}<input className="inp" aria-label={uiText("入口名称")} autoFocus maxLength={40} value={value.name} onChange={e => onChange(e.target.value)} /></label>
+    {error && <p role="alert">{error}</p>}
+    <footer>{onRemove && <button type="button" className="tool" onClick={onRemove}>{uiText("删除入口")}</button>}<span className="top-gap" /><button type="button" className="btn" onClick={onClose}>{uiText("取消")}</button><button type="submit" className="btn btn-primary">{uiText("保存入口")}</button></footer>
+  </form></dialog>;
 }
 
 // ---- a small popover with a list to pick from (type to narrow, ↑↓ ⏎) ----
@@ -96,8 +107,8 @@ function Pick({ at, opts, placeholder, multi, create, onPick, onClose }: {
   const [q, setQ] = useState("");
   const [i, setI] = useState(0);
   const list = opts.filter((o) => !q || o.label.toLowerCase().includes(q.toLowerCase()));
-  const extra = q && create && !opts.some((o) => o.label === q.trim()) ? create(q.trim()) : null;
-  const all = extra ? [...list, extra] : list;
+  const extra = q.trim() && create && !opts.some((o) => o.label === q.trim()) ? create(q.trim()) : null;
+  const all = extra ? [extra, ...list] : list;
   const pick = (o: Opt | undefined) => { if (!o) return; onPick(o.id); if (!multi) onClose(); else setQ(""); };
   return (
     <Pop at={at} onClose={onClose}>
@@ -131,7 +142,7 @@ function PropMenu({ kind, ids, at, onClose, me }: { kind: MenuKind; ids: string[
     opts={STATUSES.map((s, k) => ({ id: s.id, label: s.name, icon: <StatusIcon s={s.id} />, hint: String(k + 1), on: first.status === s.id }))} />;
   if (kind === "priority") return <Pick at={at} placeholder={uiText("改优先级…")} onClose={onClose} onPick={(p) => setAll({ priority: Number(p) })}
     opts={PRIORITIES.map((p) => ({ id: String(p.id), label: p.name, icon: <PriorityIcon p={p.id} />, on: num(first.priority, 0) === p.id }))} />;
-  if (kind === "assignee") return <Pick at={at} placeholder={uiText("指派给…（可以写 agent 的名字）")} onClose={onClose}
+  if (kind === "assignee") return <Pick at={at} placeholder={uiText("选择或输入负责人（可填 agent 名称）")} onClose={onClose}
     onPick={(a) => setAll({ assignee: a === "\u0000" ? null : a })}
     create={(q) => ({ id: q, label: uiText("指派给「{0}」", q), icon: <Avatar name={q} /> })}
     opts={[{ id: "\u0000", label: uiText("不指派"), icon: <Avatar name={null} />, on: !first.assignee },
@@ -169,6 +180,32 @@ function App() {
   const [layout, setLayoutState] = useState<"list" | "board">(() => (store.get("layout") === "board" ? "board" : "list"));
   const [q, setQ] = useState("");
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
+  const localKey = shortcutKey(kit.page, me);
+  const [savedViews, setSavedViews] = useState<SavedView[]>(() => { try { return readViews(localStorage.getItem(localKey)); } catch { return []; } });
+  const [activeShortcut, setActiveShortcut] = useState("");
+  const [shortcutEditor, setShortcutEditor] = useState<(Snapshot & { id?: string; name: string }) | null>(null);
+  const [shortcutError, setShortcutError] = useState("");
+  const currentSnapshot: Snapshot = { view, filters, query: q, layout };
+  const activeSaved = savedViews.find(p => p.id === activeShortcut);
+  const writeViews = (next: SavedView[]) => {
+    try { const encoded = JSON.stringify(next); if (readViews(encoded).length !== next.length) { setShortcutError(uiText("筛选内容过长，无法保存入口")); return false; } localStorage.setItem(localKey, encoded); setSavedViews(next); return true; }
+    catch { setShortcutError(uiText("此浏览器无法保存快捷入口，请检查本机存储设置。")); return false; }
+  };
+  useEffect(() => {
+    const changed = (e: StorageEvent) => { if (e.key === localKey || e.key === null) setSavedViews(readViews(e.key === null ? null : e.newValue)); };
+    window.addEventListener("storage", changed); return () => window.removeEventListener("storage", changed);
+  }, [localKey]);
+  const editShortcut = (p?: SavedView) => { setShortcutError(""); setShortcutEditor(p ? { ...p } : { ...currentSnapshot, name: "" }); };
+  const persistShortcut = () => {
+    if (!shortcutEditor) return;
+    const name = shortcutEditor.name.trim();
+    if (!name) { setShortcutError(uiText("请填写快捷入口名称")); return; }
+    if (savedViews.some(p => p.id !== shortcutEditor.id && p.name.toLowerCase() === name.toLowerCase())) { setShortcutError(uiText("已存在同名快捷入口")); return; }
+    if (!shortcutEditor.id && savedViews.length >= 20) { setShortcutError(uiText("最多保存 20 个快捷入口")); return; }
+    const next: SavedView = { ...shortcutEditor, name, id: shortcutEditor.id || uid("v") };
+    if (!readViews(JSON.stringify([next])).length) { setShortcutError(uiText("筛选内容过长，无法保存入口")); return; }
+    if (writeViews(shortcutEditor.id ? savedViews.map(p => p.id === next.id ? next : p) : [...savedViews, next])) { setActiveShortcut(next.id); setShortcutEditor(null); kit.flash(uiText("快捷入口已保存")); }
+  };
   const [open, setOpen] = useState<string | null>(null);
   const [focus, setFocus] = useState<string | null>(null);
   const [menu, setMenu] = useState<null | { kind: MenuKind; ids: string[]; at: Anchor }>(null);
@@ -179,8 +216,13 @@ function App() {
   const [teamAt, setTeamAt] = useState<Anchor | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  const setView = (v: View) => { setViewState(v); if (v.kind !== "project") store.set("view", v.kind); setFocus(null); };
+  const setView = (v: View) => { setActiveShortcut(""); setViewState(v); if (v.kind !== "project") store.set("view", v.kind); setFocus(null); };
   const setLayout = (l: "list" | "board") => { setLayoutState(l); store.set("layout", l); };
+
+  const applyShortcut = (p: SavedView) => {
+    setView(p.view); setFilters(p.filters); setQ(p.query); setLayout(p.layout); setActiveShortcut(p.id); setOpen(null);
+    if (p.view.kind === "project" && !projects.get(p.view.id)) kit.flash(uiText("此快捷入口的项目已不存在，结果可能为空。"));
+  };
 
   // the issues of this view, filtered and searched
   const shown = useMemo(() => {
@@ -211,7 +253,7 @@ function App() {
       const typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
       const mod = e.metaKey || e.ctrlKey;
       if (mod && e.key.toLowerCase() === "k") { e.preventDefault(); setPalette((x) => !x); return; }
-      if (typing || menu || creating || palette) return;
+      if (typing || menu || creating || palette || shortcutEditor) return;
       const cur = focus || open;
       const idx = flat.findIndex((r) => r.id === focus);
       const anchorOf = (id: string) => {
@@ -237,7 +279,7 @@ function App() {
 
   const nOpen = (pred: (r: IssueRec) => boolean) => issues.rows.filter((r) => !isClosed(statusOf(r)) && pred(r)).length;
   const filterCount = filters.status.length + filters.priority.length + filters.assignee.length + filters.labels.length;
-  const title = view.kind === "project" ? String(projects.get(view.id)?.data.name || "项目") : VIEW_NAME[view.kind];
+  const title = view.kind === "project" ? String(projects.get(view.id)?.data.name || "项目") : uiText(VIEW_NAME[view.kind]);
 
   return (
     <div className="app is">
@@ -270,6 +312,11 @@ function App() {
           ))}
           {!projects.rows.length && <div className="is-nav-empty">{uiText("还没有项目")}</div>}
         </nav>
+        <div className="is-nav-head"><span className="is-nav-title">{uiText("快捷入口")}</span></div>
+        <nav className="is-nav" aria-label={uiText("保存的筛选")}>
+          {savedViews.map(p => <NavItem key={p.id} icon={<SlidersHorizontal className="ico" />} on={p.id === activeShortcut && sameView(p, currentSnapshot)} label={p.name} onClick={() => applyShortcut(p)} />)}
+          {!savedViews.length && <div className="is-nav-empty">{uiText("将常用筛选保存到这里")}</div>}
+        </nav>
         <div className="is-side-foot">
           <span className="faint">{kit.pending ? uiText("正在保存…") : kit.failed ? uiText("没保存上") : uiText("已保存")}</span>
           {me && <span className="faint">{uiText("你是")}{" "}{me}</span>}
@@ -287,13 +334,17 @@ function App() {
             <>
               <label className="is-search">
                 <Search className="ico" />
-                <input ref={searchRef} value={q} placeholder={uiText("搜索")} onChange={(e) => setQ(e.target.value)}
+                <input ref={searchRef} maxLength={500} aria-label={uiText("搜索问题")} value={q} placeholder={uiText("搜索")} onChange={(e) => setQ(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Escape") { setQ(""); (e.target as HTMLInputElement).blur(); } }} />
                 {!q && <kbd>/</kbd>}
               </label>
               <button type="button" className={`tool${filterCount ? " is-on" : ""}`} onClick={(e) => setFilterAt(rectOf(e.currentTarget))}>
                 <SlidersHorizontal className="ico" />{uiText("筛选")}{filterCount ? ` ${filterCount}` : ""}
               </button>
+              <select className="sel is-shortcut-select" aria-label={uiText("快捷入口")} value={activeSaved?.id || ""} onChange={e => { const p = savedViews.find(p => p.id === e.target.value); if (p) applyShortcut(p); }}><option value="">{uiText("快捷入口")}</option>{savedViews.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+              <button type="button" className="tool is-shortcut-action" title={uiText("保存筛选入口")} aria-label={uiText("保存筛选入口")} onClick={() => editShortcut()}><Plus className="ico" />{uiText("保存筛选")}</button>
+              {activeSaved && <button type="button" className="tool is-shortcut-action" title={uiText("管理快捷入口")} aria-label={uiText("管理快捷入口")} onClick={() => editShortcut(activeSaved)}>{uiText("管理入口")}</button>}
+              {activeSaved && !sameView(activeSaved, currentSnapshot) && <button type="button" className="tool is-shortcut-action" title={uiText("更新快捷入口")} aria-label={uiText("更新快捷入口")} onClick={() => { if (writeViews(savedViews.map(p => p.id === activeSaved.id ? { ...p, ...currentSnapshot } : p))) kit.flash(uiText("快捷入口已保存")); }}>{uiText("更新入口")}</button>}
               <div className="seg" role="radiogroup" aria-label={uiText("显示")}>
                 <button type="button" role="radio" aria-checked={layout === "list"} className={layout === "list" ? "is-on" : ""} title={uiText("列表")} onClick={() => setLayout("list")}><LayoutList className="ico" /></button>
                 <button type="button" role="radio" aria-checked={layout === "board"} className={layout === "board" ? "is-on" : ""} title={uiText("看板")} onClick={() => setLayout("board")}><Columns3 className="ico" /></button>
@@ -318,6 +369,8 @@ function App() {
         )}
       </main>
 
+      {shortcutError && !shortcutEditor && <div className="is-shortcut-error" role="alert">{shortcutError}<button className="icon-btn" aria-label={uiText("关闭")} onClick={() => setShortcutError("")}><X className="ico" /></button></div>}
+      {shortcutEditor && <ShortcutDialog value={shortcutEditor} error={shortcutError} onChange={name => setShortcutEditor({ ...shortcutEditor, name })} onClose={() => { setShortcutEditor(null); setShortcutError(""); }} onSave={persistShortcut} onRemove={shortcutEditor.id ? () => { if (writeViews(savedViews.filter(p => p.id !== shortcutEditor.id))) { setActiveShortcut(""); setShortcutEditor(null); } } : undefined} />}
       {menu && <PropMenu kind={menu.kind} ids={menu.ids} at={menu.at} me={me} onClose={() => setMenu(null)} />}
       {teamAt && <TeamPop at={teamAt} onClose={() => setTeamAt(null)} />}
       {filterAt && <FilterPop at={filterAt} filters={filters} setFilters={setFilters} me={me} onClose={() => setFilterAt(null)} />}
@@ -370,7 +423,7 @@ function TeamPop({ at, onClose }: { at: Anchor; onClose: () => void }) {
 
 function NavItem({ icon, label, on, n, onClick }: { icon: ReactNode; label: string; on: boolean; n?: number; onClick: () => void }) {
   return (
-    <button type="button" className={`is-nav-item${on ? " is-on" : ""}`} onClick={onClick}>
+    <button type="button" className={`is-nav-item${on ? " is-on" : ""}`} title={label} aria-label={label} onClick={onClick}>
       {icon}<span className="is-nav-label">{label}</span>{n ? <span className="is-nav-n">{n}</span> : null}
     </button>
   );
@@ -423,7 +476,7 @@ function Row({ r, focus, open, me, onOpen, onMenu }: { r: IssueRec; focus: boole
         {proj && <span className="chip"><FolderKanban className="ico" />{String(proj.data.name || "项目")}</span>}
         {d.due && <span className={`chip${late ? " is-late" : ""}`}><Calendar className="ico" />{String(d.due).slice(5)}</span>}
         <span className="is-date faint">{timeAgo(String(d.created || ""))}</span>
-        <button type="button" className="is-cell" title={d.assignee ? uiText("负责人：{0}{1}", d.assignee, d.assignee === me ? "（我）" : "") : uiText("指派")} onClick={m("assignee")}><Avatar name={d.assignee ? String(d.assignee) : null} /></button>
+        <button type="button" className="is-cell is-assignee" aria-label={uiText("设置负责人")} title={d.assignee ? uiText("负责人：{0}{1}", d.assignee, d.assignee === me ? "（我）" : "") : uiText("指派")} onClick={m("assignee")}><Avatar name={d.assignee ? String(d.assignee) : null} /><span>{d.assignee ? String(d.assignee) : uiText("未指派")}</span></button>
       </span>
     </div>
   );
@@ -471,7 +524,7 @@ function Board({ groups, focus, open, onOpen, onMenu, onAdd }: {
                   <div className="is-card-top">
                     <span className="is-key">{keyOf(r)}</span>
                     <span className="top-gap" />
-                    <button type="button" className="is-cell" onClick={(e) => { e.stopPropagation(); onMenu("assignee", r.id, rectOf(e.currentTarget)); }}><Avatar name={d.assignee ? String(d.assignee) : null} /></button>
+                    <button type="button" className="is-cell is-assignee" aria-label={uiText("设置负责人")} title={uiText("设置负责人")} onClick={(e) => { e.stopPropagation(); onMenu("assignee", r.id, rectOf(e.currentTarget)); }}><Avatar name={d.assignee ? String(d.assignee) : null} /><span>{d.assignee ? String(d.assignee) : uiText("未指派")}</span></button>
                   </div>
                   <div className="is-card-title">{d.title || uiText("（没有标题）")}</div>
                   <div className="is-card-meta">
@@ -545,7 +598,7 @@ function Panel({ id, me, onClose, onMenu }: { id: string; me: string; onClose: (
         <div className="is-props">
           <button type="button" className="is-prop" onClick={m("status")}><StatusIcon s={s} />{statusName(s)}</button>
           <button type="button" className="is-prop" onClick={m("priority")}><PriorityIcon p={num(d.priority, 0)} />{priorityName(num(d.priority, 0))}</button>
-          <button type="button" className="is-prop" onClick={m("assignee")}><Avatar name={d.assignee ? String(d.assignee) : null} />{d.assignee ? String(d.assignee) : uiText("未指派")}</button>
+          <button type="button" className="is-prop" aria-label={uiText("设置负责人")} onClick={m("assignee")}><Avatar name={d.assignee ? String(d.assignee) : null} />{d.assignee ? String(d.assignee) : uiText("未指派")}</button>
           <button type="button" className="is-prop" onClick={m("labels")}><Tag className="ico" />{(d.labels || []).length ? (d.labels || []).join("、") : uiText("标签")}</button>
           <button type="button" className="is-prop" onClick={m("project")}><FolderKanban className="ico" />{proj ? String(proj.data.name || "项目") : uiText("项目")}</button>
           <button type="button" className="is-prop" onClick={m("due")}><Calendar className="ico" />{d.due ? uiText("截止 {0}", d.due) : uiText("截止日期")}</button>
@@ -615,7 +668,7 @@ function Create({ init, me, onClose, onMade }: { init: Partial<Issue>; me: strin
         <div className="is-props">
           <button type="button" className="is-prop" onClick={(e) => pick("status", rectOf(e.currentTarget))}><StatusIcon s={String(d.status)} />{statusName(String(d.status))}</button>
           <button type="button" className="is-prop" onClick={(e) => pick("priority", rectOf(e.currentTarget))}><PriorityIcon p={num(d.priority, 0)} />{priorityName(num(d.priority, 0))}</button>
-          <button type="button" className="is-prop" onClick={(e) => pick("assignee", rectOf(e.currentTarget))}><Avatar name={d.assignee || null} />{d.assignee || uiText("负责人")}</button>
+          <button type="button" className="is-prop" aria-label={uiText("设置负责人")} onClick={(e) => pick("assignee", rectOf(e.currentTarget))}><Avatar name={d.assignee || null} />{d.assignee || uiText("负责人")}</button>
           <button type="button" className="is-prop" onClick={(e) => pick("labels", rectOf(e.currentTarget))}><Tag className="ico" />{d.labels?.length ? d.labels.join("、") : uiText("标签")}</button>
           <button type="button" className="is-prop" onClick={(e) => pick("project", rectOf(e.currentTarget))}><FolderKanban className="ico" />{proj ? String(proj.data.name || "项目") : uiText("项目")}</button>
         </div>
@@ -636,7 +689,7 @@ function DraftMenu({ kind, at, d, setD, me, onClose }: { kind: MenuKind; at: Anc
     opts={STATUSES.map((s) => ({ id: s.id, label: s.name, icon: <StatusIcon s={s.id} />, on: d.status === s.id }))} />;
   if (kind === "priority") return <Pick at={at} placeholder={uiText("优先级…")} onClose={onClose} onPick={(p) => setD({ ...d, priority: Number(p) })}
     opts={PRIORITIES.map((p) => ({ id: String(p.id), label: p.name, icon: <PriorityIcon p={p.id} />, on: num(d.priority, 0) === p.id }))} />;
-  if (kind === "assignee") return <Pick at={at} placeholder={uiText("指派给…")} onClose={onClose} onPick={(a) => setD({ ...d, assignee: a === "\u0000" ? null : a })}
+  if (kind === "assignee") return <Pick at={at} placeholder={uiText("选择或输入负责人（可填 agent 名称）")} onClose={onClose} onPick={(a) => setD({ ...d, assignee: a === "\u0000" ? null : a })}
     create={(q) => ({ id: q, label: uiText("指派给「{0}」", q), icon: <Avatar name={q} /> })}
     opts={[{ id: "\u0000", label: uiText("不指派"), icon: <Avatar name={null} /> }, ...people(me).map((p) => ({ id: p, label: p === me ? `${p}（我）` : p, icon: <Avatar name={p} />, on: d.assignee === p }))]} />;
   if (kind === "labels") return <Pick at={at} multi placeholder={uiText("标签…")} onClose={onClose}

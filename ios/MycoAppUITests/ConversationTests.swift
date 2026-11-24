@@ -827,6 +827,132 @@ final class ConversationTests: XCTestCase {
         snap("project-handoffs")
     }
     @MainActor
+    func testAnAnswerInStructuredPartsIsDrawnAsComponents() {
+        // A myco-ui block, coloured code, a diagram's source and a picture
+        // placed in the text, as the desktop draws them.
+        let app = launch(["-myco-start", "rich", "-myco-route", "agent:vps-codex-90aa"])
+        let block = app.descendants(matching: .any)["uiblock"]
+        XCTAssertTrue(block.waitForExistence(timeout: 20), app.debugDescription)
+        // (it opens at the end: up to the block)
+        for _ in 0..<4 where !app.staticTexts["412"].isHittable { app.swipeDown() }
+        XCTAssertTrue(app.staticTexts["发版检查"].exists, "the card's title")
+        XCTAssertTrue(app.staticTexts["412"].exists, "a metric")
+        XCTAssertTrue(app.staticTexts["签名"].exists, "a step")
+        XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "\"type\"")).firstMatch.exists, "not its JSON")
+        snap("rich-block")
+        // The code and the diagram, further down.
+        let code = app.descendants(matching: .any).matching(identifier: "code.block")
+        XCTAssertGreaterThanOrEqual(code.count, 2, "the Swift and the diagram's source")
+        XCTAssertTrue(app.staticTexts["Diagram (Mermaid)"].exists)
+        // The picture is drawn where the text puts it, not listed again
+        // below; the log still is.
+        XCTAssertGreaterThanOrEqual(app.descendants(matching: .any).matching(identifier: "placed.picture").count, 2)
+        XCTAssertEqual(app.buttons.matching(identifier: "attachment.picture").count, 0)
+        app.swipeUp()
+        snap("rich-code")
+        // The block's button puts its words in the input.
+        for _ in 0..<4 where !app.buttons.matching(identifier: "uiblock.button").firstMatch.isHittable { app.swipeDown() }
+        let ship = app.buttons.matching(identifier: "uiblock.button").firstMatch
+        XCTAssertTrue(ship.waitForExistence(timeout: 5))
+        ship.tap()
+        let input = app.descendants(matching: .any)["composer.input"]
+        expectation(for: NSPredicate(format: "value CONTAINS %@", "发吧"), evaluatedWith: input)
+        waitForExpectations(timeout: 5)
+    }
+
+    /// The whole seconds a "Time: n" line says.
+    private func seconds(_ element: XCUIElement) -> Int {
+        Int(element.label.replacingOccurrences(of: "Time: ", with: "")) ?? -1
+    }
+
+    @MainActor
+    func testPublicMediaPlaysPausesSeeksAndStaysPublic() {
+        // A page plays a publisher's public podcast through myco.media.url:
+        // the feed read through the network bridge, the audio streamed by
+        // the app over the phone's own network (this needs the internet).
+        // MYCO_MEDIA_TRACK: a public audio address to play instead of the
+        // feed's first episode (where the feed's host is not reachable
+        // directly, as behind a desktop proxy).
+        let track = ProcessInfo.processInfo.environment["MYCO_MEDIA_TRACK"].flatMap { $0.isEmpty ? nil : $0 }
+        let app = launch(["-myco-start", "media", "-myco-route", "page:pg_media" + (track.map { "#track=" + $0 } ?? "")])
+        let web = app.webViews.firstMatch
+        func line(_ prefix: String) -> XCUIElement {
+            web.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", prefix)).firstMatch
+        }
+        let feed = line("Feed: "), state = line("State: "), time = line("Time: ")
+        XCTAssertTrue(feed.waitForExistence(timeout: 20), web.debugDescription)
+        expectation(for: NSPredicate(format: "label CONTAINS 'episodes' OR label CONTAINS 'failed'"), evaluatedWith: feed)
+        waitForExpectations(timeout: 45)
+        XCTAssertFalse(feed.label.contains("failed") || feed.label.contains("none"), feed.label)
+        XCTAssertFalse(web.staticTexts["Note: no net-media"].exists, "the app says it streams media")
+        // Play: it plays, and time goes on.
+        web.buttons["Play"].tap()
+        expectation(for: NSPredicate(format: "label == 'State: playing'"), evaluatedWith: state)
+        waitForExpectations(timeout: 45)
+        expectation(for: NSPredicate { _, _ in self.seconds(time) >= 3 }, evaluatedWith: nil)
+        waitForExpectations(timeout: 30)
+        snap("media-playing")
+        // Pause: time stands still.
+        web.buttons["Pause"].tap()
+        expectation(for: NSPredicate(format: "label == 'State: pause'"), evaluatedWith: state)
+        waitForExpectations(timeout: 10)
+        let paused = seconds(time)
+        Thread.sleep(forTimeInterval: 3)
+        XCTAssertLessThanOrEqual(abs(seconds(time) - paused), 1, "paused: \(paused), now \(time.label)")
+        // Play again: on from where it was.
+        web.buttons["Play"].tap()
+        expectation(for: NSPredicate { _, _ in self.seconds(time) >= paused + 2 }, evaluatedWith: nil)
+        waitForExpectations(timeout: 45)
+        // Seek far ahead (a range of the file): it plays from there.
+        web.buttons["Seek 180"].tap()
+        expectation(for: NSPredicate { _, _ in self.seconds(time) >= 182 }, evaluatedWith: nil)
+        waitForExpectations(timeout: 45)
+        XCTAssertTrue(["State: playing", "State: seeked"].contains(state.label), state.label)
+        snap("media-seeked")
+        // What the stream refuses: a private address, and what is not media.
+        web.buttons["Try private"].tap()
+        let refusedPrivate = line("Private: ")
+        expectation(for: NSPredicate(format: "NOT (label CONTAINS 'not tried')"), evaluatedWith: refusedPrivate)
+        waitForExpectations(timeout: 20)
+        XCTAssertFalse(refusedPrivate.label.hasPrefix("Private: 2"), refusedPrivate.label)
+        web.buttons["Try feed as media"].tap()
+        let refusedType = line("Type: ")
+        expectation(for: NSPredicate(format: "NOT (label CONTAINS 'not tried')"), evaluatedWith: refusedType)
+        waitForExpectations(timeout: 30)
+        XCTAssertFalse(refusedType.label.hasPrefix("Type: 2"), refusedType.label)
+        snap("media-refused")
+        // Closed while playing: it closes, and the app goes on.
+        web.buttons["Play"].tap()
+        app.buttons["page.close"].tap()
+        XCTAssertTrue(app.buttons["page.close"].waitForNonExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["tab.chats"].waitForExistence(timeout: 10))
+    }
+
+    @MainActor
+    func testTheWorldPodcastsAppPlaysAFeed() throws {
+        // The official podcast app as built (its folder on the Mac, given
+        // by MYCO_PODCAST_DIR): a public feed pasted into its search, an
+        // episode played. Skipped where the folder is not given.
+        guard let folder = ProcessInfo.processInfo.environment["MYCO_PODCAST_DIR"], !folder.isEmpty else {
+            throw XCTSkip("MYCO_PODCAST_DIR is not set")
+        }
+        let app = launch(["-myco-page-dir", folder, "-myco-route", "page:pg_dir"])
+        let web = app.webViews.firstMatch
+        let search = web.textFields.firstMatch.exists ? web.textFields.firstMatch : web.searchFields.firstMatch
+        XCTAssertTrue(web.waitForExistence(timeout: 20))
+        _ = web.textFields.firstMatch.waitForExistence(timeout: 20) || web.searchFields.firstMatch.waitForExistence(timeout: 5)
+        snap("podcast-open")
+        let field = web.textFields.firstMatch.exists ? web.textFields.firstMatch : search
+        field.tap()
+        field.typeText("https://podcasts.files.bbci.co.uk/p02nq0gn.rss\n")
+        Thread.sleep(forTimeInterval: 12)
+        snap("podcast-feed")
+        if let dir = ProcessInfo.processInfo.environment["MYCO_SHOTS_DIR"], !dir.isEmpty {
+            try? web.debugDescription.write(to: URL(fileURLWithPath: dir).appendingPathComponent("podcast-feed.txt"), atomically: true, encoding: .utf8)
+        }
+    }
+
+    @MainActor
     func testAPageLinkOpensWhereItPointsAndMovesWithinThePage() {
         // Opened from a link with a place in it: at that place, Chinese
         // and all, and the bridge gives the page its public address.

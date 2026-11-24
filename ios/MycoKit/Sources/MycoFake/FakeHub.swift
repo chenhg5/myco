@@ -77,11 +77,17 @@ public actor FakeHub: HubAPI {
         automationRuns = Dictionary(grouping: world.automations.compactMap(\.lastRun), by: { $0.automationId ?? "" })
         workflowList = world.workflows
         runList = world.runs
+        if scenario != .empty { (noticeList, usageRows) = Self.seeded(now: now) }
         if scenario == .remote {
             remoteHosts = [RemoteComputer(machine: "app:fixture", name: "Fixture Mac", os: "darwin", control: true)]
             let page = Page(id: "pg_remote", name: "Remote controller probe", publisher: FakeHub.me, url: FakeHub.demoAddress.absoluteString + "/pages/pg_remote", createdAt: now, updatedAt: now)
             pageList.insert(page, at: 0)
             pageFiles[page.id] = ["index.html": ("text/html; charset=utf-8", RemotePageFixture.html)]
+        }
+        if scenario == .media {
+            let page = Page(id: MediaPageFixture.id, name: "Media probe", publisher: FakeHub.me, url: FakeHub.demoAddress.absoluteString + "/pages/" + MediaPageFixture.id, createdAt: now, updatedAt: now)
+            pageList.insert(page, at: 0)
+            pageFiles[page.id] = ["index.html": ("text/html; charset=utf-8", MediaPageFixture.html)]
         }
         if scenario == .links {
             let page = Page(id: LinkPageFixture.id, name: "影视", publisher: "vps-codex-90aa", url: FakeHub.demoAddress.absoluteString + "/pages/" + LinkPageFixture.id, createdAt: now, updatedAt: now)
@@ -92,6 +98,88 @@ public actor FakeHub: HubAPI {
                 body: "第一集在这：\(LinkPageFixture.link(episode: "第1集"))\n\n第二集：\(LinkPageFixture.link(episode: "第2集"))", status: "done",
                 createdAt: now.addingTimeInterval(-30)))
         }
+    }
+
+    // MARK: Notices and usage
+
+    private var noticeList: [HubNotice] = []
+    private var usageRows: [UsageRow] = []
+
+    /// Two things waiting for me (运维 asks; a task of 后端工程师's failed),
+    /// one settled; two weeks of tokens.
+    private static func seeded(now: Date) -> ([HubNotice], [UsageRow]) {
+        let noticeList = [
+            HubNotice(seq: 1, id: "ntc_1", kind: "answered", tier: "results", target: "agent:studio-claude-c41f", actor: "studio-claude-c41f",
+                   createdAt: now.addingTimeInterval(-7_200), readAt: now.addingTimeInterval(-7_000), resolvedAt: now.addingTimeInterval(-7_000)),
+            HubNotice(seq: 2, id: "ntc_2", kind: "failed", target: "agent:studio-codex-7f3a", project: "myco-ios", actor: "studio-codex-7f3a",
+                   subject: "跑测试", createdAt: now.addingTimeInterval(-3_600)),
+            HubNotice(seq: 3, id: "ntc_3", kind: "asking", target: "agent:vps-codex-90aa", actor: "vps-codex-90aa",
+                   subject: "要不要现在重启 hub", createdAt: now.addingTimeInterval(-900)),
+        ]
+        let calendar = Calendar(identifier: .gregorian)
+        var utc = calendar
+        utc.timeZone = TimeZone(identifier: "UTC")!
+        let format = DateFormatter()
+        format.calendar = utc
+        format.timeZone = utc.timeZone
+        format.dateFormat = "yyyy-MM-dd"
+        var usageRows: [UsageRow] = []
+        let people: [(agent: String, project: String, model: String, scale: Int64)] = [
+            ("cloud-lead", "myco-ios", "claude-opus-5-5", 9),
+            ("studio-codex-7f3a", "myco-ios", "gpt-6-sol", 14),
+            ("studio-claude-2b9c", "myco-ios", "claude-sonnet-5-5", 6),
+            ("vps-codex-90aa", "", "gpt-6-sol", 3),
+        ]
+        for back in 0..<14 {
+            guard let day = utc.date(byAdding: .day, value: -back, to: now) else { continue }
+            for (index, one) in people.enumerated() {
+                // (a little different each day, the same every launch)
+                let wave = Int64((back * 7 + index * 3) % 5 + 3)
+                usageRows.append(UsageRow(
+                    day: format.string(from: day), agent: one.agent, project: one.project.isEmpty ? nil : one.project, model: one.model,
+                    calls: wave * one.scale, inputTokens: wave * one.scale * 21_000, cacheWriteTokens: wave * one.scale * 4_000,
+                    cacheReadTokens: wave * one.scale * 90_000, outputTokens: wave * one.scale * 6_500, costUsd: Double(wave * one.scale) * 0.41))
+            }
+        }
+        return (noticeList, usageRows)
+    }
+
+    public func notices(after: Int64?, limit: Int) async throws -> HubNoticePage {
+        try await check()
+        let list = noticeList.filter { $0.seq > (after ?? 0) }.prefix(limit)
+        return HubNoticePage(notices: Array(list), last: noticeList.last?.seq ?? 0, badge: noticeList.filter(\.open).count)
+    }
+
+    public func readNotices(target: String?) async throws {
+        try await check()
+        let now = Date()
+        for index in noticeList.indices where target == nil || noticeList[index].target == target {
+            noticeList[index].readAt = noticeList[index].readAt ?? now
+            // (asking, decision and approval are settled by answering them)
+            if !["asking", "decision", "approval"].contains(noticeList[index].kind) {
+                noticeList[index].resolvedAt = noticeList[index].resolvedAt ?? now
+            }
+        }
+    }
+
+    /// Settles what was asking for an answer that came (as the hub does).
+    func settleAsking(of agent: String) {
+        for index in noticeList.indices where noticeList[index].kind == "asking" && noticeList[index].target == "agent:" + agent {
+            noticeList[index].resolvedAt = noticeList[index].resolvedAt ?? Date()
+        }
+    }
+
+    public func usage(from: String, to: String, project: String?) async throws -> UsageReport {
+        try await check()
+        let rows = usageRows.filter { $0.day >= from && $0.day <= to && (project == nil || ($0.project ?? "-") == project || (project == "-" && $0.project == nil)) }
+        return UsageReport(from: from, to: to, rows: rows)
+    }
+
+    /// Adds a page made of these files (by path, with their types): to
+    /// open a built app in the demo (`-myco-page-dir`).
+    public func addPage(_ page: Page, files: [String: (type: String, text: String)]) {
+        pageList.insert(page, at: 0)
+        pageFiles[page.id] = files
     }
 
     public func setLatency(_ value: Duration) {
@@ -335,6 +423,7 @@ public actor FakeHub: HubAPI {
             id: nextID(), from: Self.me, to: request.to, threadId: request.threadId, after: request.after, body: request.body,
             status: "queued", project: request.project, createdAt: now, attachments: try attached(request.attachments ?? []))
         messages.append(message)
+        settleAsking(of: request.to)
         simulated[message.id] = now
         return message
     }

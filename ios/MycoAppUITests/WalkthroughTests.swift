@@ -550,6 +550,41 @@ final class WalkthroughTests: XCTestCase {
     }
 
     @MainActor
+    func testTheWorkbenchSaysWhatWaitsAndWhereTokensGo() {
+        // 运维 asks; a task of 后端工程师's failed: both wait on the workbench.
+        let app = launch(["-myco-route", "tab:workbench"])
+        let notices = app.buttons.matching(identifier: "workbench.notice")
+        XCTAssertTrue(notices.firstMatch.waitForExistence(timeout: 15))
+        XCTAssertEqual(notices.count, 2)
+        XCTAssertTrue(notices.firstMatch.label.contains("is asking you"), notices.firstMatch.label)
+        // Opened: the failure is read, and no longer waits.
+        notices.element(boundBy: 1).tap()
+        XCTAssertTrue(app.descendants(matching: .any)["composer.input"].waitForExistence(timeout: 10))
+        back(app)
+        expectation(for: NSPredicate(format: "count == 1"), evaluatedWith: notices)
+        waitForExpectations(timeout: 10)
+        // Where the tokens go, further down.
+        let total = app.staticTexts["workbench.usage.total"]
+        for _ in 0..<5 where !total.isHittable { app.swipeUp() }
+        XCTAssertTrue(total.waitForExistence(timeout: 10))
+        let seven = total.label
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "workbench.usage.member").firstMatch.exists)
+        shot("workbench-usage")
+        app.segmentedControls["workbench.usage.days"].buttons["30 d"].tap()
+        expectation(for: NSPredicate(format: "label != %@", seven), evaluatedWith: total)
+        waitForExpectations(timeout: 10)
+    }
+
+    @MainActor
+    func testAProjectsMembersAreInTheirGroups() {
+        let app = launch(["-myco-route", "info:myco-ios"])
+        let groups = app.staticTexts.matching(identifier: "project.group")
+        XCTAssertTrue(groups.firstMatch.waitForExistence(timeout: 15))
+        XCTAssertEqual(groups.allElementsBoundByIndex.map(\.label), ["前端", "后端", "质量", "Ungrouped"])
+        shot("project-groups")
+    }
+
+    @MainActor
     func testASuperagentIsNamedAndItsRequestApproved() {
         let app = launch(["-myco-route", "sheet:workspace"])
         let setup = app.buttons["workspace.superagent.setup"]

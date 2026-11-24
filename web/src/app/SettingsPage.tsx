@@ -85,7 +85,7 @@ function AboutSection({ info, local }: { info: AppInfo | null; local: LocalState
     case "checked": {
       const u = st.u;
       if (u.error) {
-        status = <span className="app-about-status bad">{L("连不上 GitHub", "Can’t reach GitHub")}</span>;
+        status = <span className="app-about-status bad">{L("连不上 GitHub 或 Gitee", "Can’t reach GitHub or Gitee")}</span>;
         action = <button type="button" className="app-btn" onClick={() => void check()}>{L("重试", "Retry")}</button>;
       } else if (u.available && u.can_install) {
         status = <span className="app-about-status new">{L(`有新版本 ${u.latest}`, `New version ${u.latest}`)}</span>;

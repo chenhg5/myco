@@ -116,6 +116,17 @@ public final class AppModel {
     public init(session: WorkspaceSession? = nil, doors: Doors) {
         FilePreview.words = { (L("关闭", "Close"), L("分享或存储", "Share or save")) }
         FilePreview.markdownWords = { (L("排版", "Formatted"), L("原文", "Source")) }
+        UIBlockWords.words = {
+            var words = UIBlockWords.Words()
+            words.cannotDraw = L("这一块画不出来，原文：", "This block could not be drawn; its source:")
+            words.diagram = L("图（Mermaid）", "Diagram (Mermaid)")
+            words.passed = L("通过", "passed")
+            words.failed = L("失败", "failed")
+            words.skipped = L("跳过", "skipped")
+            words.copied = L("已复制", "Copied")
+            words.diff = L("改动", "Changes")
+            return words
+        }
         self.session = session
         self.doors = doors
         started = session != nil
