@@ -199,7 +199,12 @@ func collectionsDTO(m map[string]domain.ManifestCollection) map[string]api.Templ
 // app's newer version when there is one.
 func (s *Server) pageTemplate(ctx context.Context, p *domain.Page) *api.PageTemplate {
 	t := pageTemplateDTO(p)
+	if t != nil {
+		// what it does not list in os and permissions it does not declare
+		t.Declares = true
+	}
 	if t != nil && s.templates != nil {
+		t.Official = s.templates.IsOfficial(p.Template)
 		if l := s.templates.LatestOf(ctx, p.Template); l != "" && domain.CompareVersions(l, t.Version) > 0 {
 			t.Latest = l
 		}

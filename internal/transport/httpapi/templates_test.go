@@ -285,6 +285,11 @@ func TestTemplateDeclaresOSAndNet(t *testing.T) {
 	if net, _ := tpl["net"].([]any); len(net) != 1 || net[0] != "api.example.com" {
 		t.Fatalf("page template net: %s", g.raw)
 	}
+	// what it does not list it does not declare (Apps refuse it); a
+	// workspace's app is not one of myco's own
+	if tpl["declares"] != true || tpl["official"] != nil {
+		t.Fatalf("page template declares, not official: %s", g.raw)
+	}
 	bad := strings.Replace(weeklyManifest, `"export": ["xlsx"]`, `"export": ["xlsx"], "os": ["everything"]`, 1)
 	h.doReq("POST", "/v1/templates", alice, zipOf(t, map[string]string{"myco.json": bad, "index.html": "v1"}), zipHdr).wantErr(t, 400, "invalid_argument")
 }

@@ -26,6 +26,7 @@ import dev.myco.network.PageMedia
 import dev.myco.network.PageNetwork
 import dev.myco.network.RemoteSessions
 import dev.myco.network.WebViewMediaInput
+import dev.myco.network.requireDeclared
 import dev.myco.ui.*
 import java.io.ByteArrayInputStream
 import kotlin.coroutines.resume
@@ -192,7 +193,10 @@ private fun PageContent(
                 }
             }
             "net.fetch" -> network.fetch(args)
-            "download" -> JsonPrimitive(saveDownload(args))
+            "download" -> {
+                requireDeclared(page, "download")
+                JsonPrimitive(saveDownload(args))
+            }
             "remote.call" ->
                 remote.call(arg("action"), args["args"] as? JsonObject ?: buildJsonObject {})
             "data.list" ->
@@ -260,6 +264,7 @@ private fun PageContent(
                 JsonPrimitive(true)
             }
             "send" -> {
+                requireDeclared(page, "send")
                 val text = arg("text").trim()
                 require(text.isNotEmpty()) { "The message is empty" }
                 val to = page.field("publisher")

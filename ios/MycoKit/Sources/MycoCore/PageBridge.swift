@@ -151,6 +151,7 @@ public final class PageBridge {
             known = max(known, version)
             return Self.json(["ok": true, "state": body["state"] ?? NSNull(), "version": version] as [String: Any])
         case "send":
+            try declared("send")
             return Self.json(["id": try await send(((args["text"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines))])
         case "storage.get":
             return Self.json(stored()[(args["key"] as? String) ?? ""] ?? NSNull())
@@ -194,6 +195,7 @@ public final class PageBridge {
             watching = true
             return Self.json(true)
         case "download":
+            try declared("download")
             let name = (args["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "download"
             guard let data = Data(base64Encoded: (args["base64"] as? String) ?? "") else {
                 throw Refusal(message: L("文件内容读不出来", "The file could not be read"), code: "invalid_argument")
@@ -216,6 +218,17 @@ public final class PageBridge {
 
     private func stored() -> [String: Any] {
         storage.data(forKey: storageKey).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
+    }
+
+    /// An app may not use what it does not declare (hubs from v0.22.8).
+    private func declared(_ permission: String) throws {
+        if let template = page.template, !template.allows(permission) {
+            throw Refusal(
+                message: L(
+                    "这个应用没有在 myco.json 的 \"permissions\" 里写 \"\(permission)\"，不能用",
+                    "This app does not declare \"\(permission)\" in myco.json's \"permissions\""),
+                code: "permission_denied")
+        }
     }
 
     /// A task to the page's agent, as me: asked once a page, at most five

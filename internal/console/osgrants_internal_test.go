@@ -156,3 +156,57 @@ func TestOSNetworkConsent(t *testing.T) {
 		t.Fatal("a private address the app does not declare is refused")
 	}
 }
+
+// From hubs that say an app's declarations are all it declares (v0.22.8),
+// an app may not use what it does not declare: refused, not asked. Pages
+// with no app, older hubs and myco's own apps that declare nothing yet are
+// asked as before; the person's own pick is no way around it.
+func TestOSUndeclaredRefused(t *testing.T) {
+	b := &Backend{}
+	g := b.grants()
+	set := func(page string, d osDecl) { d.at = time.Now(); g.decl[osKey("h1", page)] = d }
+	call := func(page, name string, args any) osCallIn {
+		raw, _ := json.Marshal(args)
+		return osCallIn{Name: name, Args: raw, Page: osPage{Hub: "h1", ID: page}}
+	}
+	refused := func(page, name string, args any) bool {
+		c, err := b.osCheck(t.Context(), call(page, name, args))
+		re, ok := err.(*osRefusal)
+		return c == nil && ok && re.Code == "permission_denied" && strings.Contains(re.Message, `"os"`)
+	}
+	asks := func(page, name string, args any) bool {
+		c, err := b.osCheck(t.Context(), call(page, name, args))
+		return err == nil && c != nil && c.Error == "consent_required"
+	}
+	set("strict", osDecl{app: true, declares: true, os: []string{"files"}})
+	if !refused("strict", "exec.run", map[string]string{"cmd": "ls"}) || !refused("strict", "net.fetch", map[string]string{"url": "https://api.example.com"}) {
+		t.Fatal("an undeclared group is refused")
+	}
+	if !asks("strict", "fs.read", map[string]string{"path": "~/a"}) {
+		t.Fatal("a declared group is asked for")
+	}
+	set("nofiles", osDecl{app: true, declares: true, os: []string{"notify"}})
+	if !refused("nofiles", "fs.pick", map[string]any{}) {
+		t.Fatal("picking is files too: refused when files is not declared")
+	}
+	g.perm("h1", "nofiles").picked = []string{"/tmp/picked.txt"}
+	if !refused("nofiles", "fs.read", map[string]string{"path": "/tmp/picked.txt"}) {
+		t.Fatal("a picked file is not a way around the declaration")
+	}
+	set("old", osDecl{app: true, os: []string{"files"}})
+	if !asks("old", "exec.run", map[string]string{"cmd": "ls"}) {
+		t.Fatal("an older hub does not say: asked as before")
+	}
+	set("plain", osDecl{declares: true})
+	if !asks("plain", "exec.run", map[string]string{"cmd": "ls"}) {
+		t.Fatal("a page with no app is asked")
+	}
+	set("official", osDecl{app: true, declares: true, official: true})
+	if !asks("official", "fs.scan", map[string]string{"path": "~"}) {
+		t.Fatal("myco's own app that declares nothing yet is asked for now")
+	}
+	set("official2", osDecl{app: true, declares: true, official: true, os: []string{"files"}})
+	if !refused("official2", "exec.run", map[string]string{"cmd": "ls"}) {
+		t.Fatal("myco's own app that declares is held to it")
+	}
+}

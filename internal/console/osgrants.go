@@ -3,6 +3,7 @@ package console
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -108,10 +109,20 @@ type osGrants struct {
 
 // osDecl is what a page's app declares (from the hub), kept a minute.
 type osDecl struct {
-	app      bool // made from an app (a template): it can declare
-	os, net  []string
-	at       time.Time
+	app     bool // made from an app (a template): it can declare
+	os, net []string
+	at      time.Time
+	// declares: the hub says os is all the app declares (hubs from v0.22.8)
+	declares bool
+	// official: one of myco's own apps (the hub says so)
 	official bool
+}
+
+// strict: what the app does not declare is refused, not asked. Pages with
+// no app have nothing to declare in, and older hubs do not say; for a
+// while, myco's own apps that declare nothing yet are asked as before.
+func (d osDecl) strict() bool {
+	return d.app && d.declares && !(d.official && len(d.os) == 0)
 }
 
 func osKey(hub, page string) string { return hub + "\x00" + page }
@@ -225,7 +236,7 @@ func declOf(p *api.Page) osDecl {
 	if p.Template != nil {
 		d.app = true
 		d.os, d.net = p.Template.OS, p.Template.Net
-		d.official = strings.HasPrefix(p.Template.Slug, "myco/")
+		d.declares, d.official = p.Template.Declares, p.Template.Official
 	}
 	return d
 }
@@ -257,14 +268,18 @@ func (b *Backend) osCheck(ctx context.Context, in osCallIn) (*osConsent, error) 
 	picked := append([]string(nil), p.picked...)
 	denied, allowed := p.denied[group], p.once[group] || p.always[group]
 	g.mu.Unlock()
-	if pickFree[in.Name] {
-		return nil, nil
-	}
-	if (group == "files" || group == "files.write" || in.Name == "fs.open") && within(osPaths(in.Name, in.Args), picked) {
+	if pickFree[in.Name] || (group == "files" || group == "files.write" || in.Name == "fs.open") && within(osPaths(in.Name, in.Args), picked) {
+		// (the person's own pick: still only for an app that says it uses files)
+		if d := b.declared(ctx, in.Page.Hub, in.Page.ID); d.strict() && !hasString(d.os, group) {
+			return nil, undeclaredOS(group)
+		}
 		return nil, nil
 	}
 	d := b.declared(ctx, in.Page.Hub, in.Page.ID)
 	declared := !d.app || hasString(d.os, group)
+	if !declared && d.strict() {
+		return nil, undeclaredOS(group)
+	}
 	if group == "network" {
 		host := fetchHost(in.Args)
 		if host == "" {
@@ -292,6 +307,12 @@ func (b *Backend) osCheck(ctx context.Context, in osCallIn) (*osConsent, error) 
 		return nil, nil
 	}
 	return &osConsent{Error: "consent_required", Message: "ask the person first", Group: group, Declared: declared, OnceOnly: osOnceOnly[group]}, nil
+}
+
+// undeclaredOS: an app may not use a group of the computer's capabilities
+// it does not declare.
+func undeclaredOS(group string) *osRefusal {
+	return &osRefusal{Code: "permission_denied", Message: fmt.Sprintf("this app does not declare %q in myco.json's \"os\": add it there to use it", group)}
 }
 
 type osRefusal struct{ Code, Message string }

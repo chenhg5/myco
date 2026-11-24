@@ -89,6 +89,13 @@ func (s *TemplateService) officialOf(idOrSlug string) *OfficialTemplate {
 	return nil
 }
 
+// IsOfficial says whether a template id is one of myco's own (offered by
+// this hub, not a workspace's).
+func (s *TemplateService) IsOfficial(id string) bool {
+	o := s.officialOf(id)
+	return o != nil && officialID(o.Manifest) == id
+}
+
 func (s *TemplateService) officialView(o *OfficialTemplate) *TemplateView {
 	m := o.Manifest
 	var size int64
