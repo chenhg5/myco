@@ -4,6 +4,22 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.22.1
+
+- **Updates come from GitHub or Gitee, whichever is faster**: `myco upgrade`, the hub's self-upgrade and the App's update time both sources first and download from the faster one; if a copy is missing (Gitee keeps only the newest release's binaries) or fails its checksum, the other is used. The version check does the same: GitHub's API, then the Gitee mirror, then the release page. `MYCO_RELEASE_DOWNLOAD` and `MYCO_RELEASE_API` still pin a single source.
+- **Member groups can be dragged into order** in the members column, with a line where the group will land. A member's menu has one 移到分组 row that opens the group list where the menu was, so many groups no longer make the menu long.
+- **Runner slots are for agent CLIs only**: with `--max-concurrent`, shell commands and the machine node's own work (upgrading, starting an agent) no longer queue behind running agents.
+- **Pages keep up and stay writable**: after a page was away and the change feed reset, it now hears the reset and lists its records again; records also keep a field that a template upgrade dropped writable, instead of refusing every save.
+- Upgrade: update myco on computers that upgrade or run runner nodes, and the hub to v0.22.1 for the page fixes; update the App for group dragging and the update copy.
+
+**中文**
+
+- **更新从 GitHub 和 Gitee 里较快的那个下载**：`myco upgrade`、Hub 自升级和 App 内更新都会先测两边速度再下载；一边没有这个版本的文件（Gitee 只保留最新一版的二进制）或校验不过，就自动换另一边。版本检测也一样：先问 GitHub API，再问 Gitee 镜像，最后看 release 页面。设置 `MYCO_RELEASE_DOWNLOAD` 或 `MYCO_RELEASE_API` 时仍然只使用指定的源。
+- **成员分组可以拖动排序**：在成员栏里拖动分组，落点处会显示一条线。成员菜单里的「移到分组」只占一行，点开后在菜单原来的位置列出分组，分组再多也不会把菜单撑得很长。
+- **runner 的并发名额只算 agent CLI**：设置 `--max-concurrent` 后，shell 命令和机器节点自己的活（升级、启动 agent）不会再排在正在运行的 agent 后面。
+- **页面不掉队、也能继续保存**：页面离开后变更过多、变更流重置时，现在能收到重置并重新拉取记录；模板升级去掉的字段也不会再让记录永远保存失败。
+- 升级：需要升级或跑 runner 节点的电脑更新 myco；要修页面的问题，把 Hub 升级到 v0.22.1；更新 App 才能拖动分组并看到新的更新文案。
+
 ## v0.22.0
 
 - **The Usage page is live**: totals, a day-by-day chart and members, projects and models ranked by tokens, for 7, 30 or 90 days, for the whole workspace or one project. The chart has a daily-average line and compares the last seven days with the seven before; tables rank by tokens with each row's share. It is laid out like the Automations page and fits beside the sidebar in a narrow window.
