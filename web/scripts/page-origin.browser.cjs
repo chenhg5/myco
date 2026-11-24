@@ -1,7 +1,8 @@
 const assert = require("node:assert/strict");
 const { execFileSync } = require("node:child_process");
 const { createHash } = require("node:crypto");
-const { readFile } = require("node:fs/promises");
+const { mkdtemp, readFile, rm } = require("node:fs/promises");
+const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 const globalModules = execFileSync("npm", ["root", "-g"], { encoding: "utf8" }).trim();
 const { chromium } = require(join(globalModules, "playwright"));
@@ -25,20 +26,26 @@ async function storage(page, write) {
       tx.onabort = () => reject(tx.error);
     });
     db.close();
-    return [localStorage.getItem("origin-fixture"), value];
+    const cache = await caches.open("origin-fixture");
+    const cacheKey = new URL("/cache-fixture", location.href).href;
+    if (write) await cache.put(cacheKey, new Response("only this page"));
+    const cached = await cache.match(cacheKey);
+    return [localStorage.getItem("origin-fixture"), value, cached ? await cached.text() : null];
   }, write);
 }
 
 (async () => {
-  const browser = await chromium.launch({ executablePath: process.env.UI_SMOKE_EXECUTABLE });
+  const profile = await mkdtemp(join(tmpdir(), "myco-page-origin-browser-"));
+  const start = () => chromium.launchPersistentContext(profile, { executablePath: process.env.UI_SMOKE_EXECUTABLE });
+  let context;
   try {
-    const context = await browser.newContext();
-    const page = await context.newPage();
+    context = await start();
+    let page = context.pages()[0];
     await page.goto(origins[0]);
-    assert.deepEqual(await storage(page, true), ["only this page", "only this page"]);
+    assert.deepEqual(await storage(page, true), ["only this page", "only this page", "only this page"]);
     for (const address of origins.slice(1, 4)) {
       await page.goto(address);
-      assert.deepEqual(await storage(page, false), [null, null]);
+      assert.deepEqual(await storage(page, false), [null, null, null]);
     }
     await page.goto(control + "/dom");
     await page.frameLocator("#one").getByText("Isolated page").waitFor();
@@ -50,8 +57,11 @@ async function storage(page, write) {
     }), true);
     const restarted = await (await fetch(control + "/restart")).text();
     assert.equal(new URL(restarted).origin, new URL(origins[0]).origin);
+    await context.close();
+    context = await start();
+    page = context.pages()[0];
     await page.goto(restarted);
-    assert.deepEqual(await storage(page, false), ["only this page", "only this page"]);
+    assert.deepEqual(await storage(page, false), ["only this page", "only this page", "only this page"]);
     await page.goto(old);
     await page.evaluate(() => new Promise((resolve, reject) => {
       const request = indexedDB.open("myco-video", 1);
@@ -108,5 +118,8 @@ async function storage(page, write) {
     }
     console.log("PASS Chromium isolated page/workspace/account storage, restart, and repeat recovery SHA-256");
     if (vault) console.log("PASS actual vault bundle and bridge: old-client gate, isolated create and lock");
-  } finally { await browser.close(); }
+  } finally {
+    await context?.close();
+    await rm(profile, { recursive: true, force: true });
+  }
 })().catch(error => { console.error(error); process.exitCode = 1; });
