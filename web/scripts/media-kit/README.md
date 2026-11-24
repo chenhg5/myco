@@ -29,7 +29,7 @@ node web/scripts/media-kit-shots.mjs --out ../media-kit-check --scene coedit --l
 # Rerender one failed case without losing the other completed shots.
 node web/scripts/media-kit-shots.mjs --out ../media-kit-output --scene motion --lang en --resume
 # Optional local videos of the scenes that have interaction actions.
-# Requires ffmpeg; 18-second WebM clips stay on disk and are never uploaded.
+# Requires ffmpeg; WebM clips capped at 18 seconds stay on disk and are never uploaded.
 node web/scripts/media-kit-shots.mjs --out ../media-kit-video --scene teamwork,progress,terminal,workflow,automation,focus --video
 ```
 
