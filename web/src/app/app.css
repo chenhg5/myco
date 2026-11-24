@@ -2687,6 +2687,19 @@ textarea.app-input {
 .app-setting-line + .app-setting-line {
   border-top: 1px solid var(--line-2);
 }
+/* Settings › 应用权限: a page's row, then what it may do, set in a little. */
+.app-perm-page + .app-perm-page {
+  border-top: 1px solid var(--line-2);
+}
+.app-perm-item {
+  padding: 7px 0 7px 16px;
+}
+.app-perm-item + .app-perm-item {
+  border-top: 0;
+}
+.app-perm-item .app-setting-line-text b {
+  font-weight: 400;
+}
 .app-setting-line-text {
   flex: 1;
   min-width: 0;

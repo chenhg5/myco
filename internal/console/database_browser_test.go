@@ -43,6 +43,7 @@ func TestDatabaseNativeBridgeAndProductionUI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	osAllow(t, server.URL, "https://workspace.example", "pg_native")
 	input, _ := json.Marshal(map[string]string{"url": server.URL, "connection": p.ID})
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()

@@ -278,6 +278,7 @@ func (b *Backend) Handler() http.Handler {
 		m.HandleFunc("POST /app/local/shell-access", b.postShellAccess)
 		// (pages using this computer: only an App on it)
 		b.osRoutes(m)
+		b.grantRoutes(m)
 		m.HandleFunc("GET /app/local/agents", b.getLocalAgents)
 		b.remoteRoutes(m)
 		m.HandleFunc("GET /app/local/claude-auth", b.getClaudeAuth)

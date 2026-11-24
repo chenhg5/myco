@@ -31,10 +31,12 @@ import (
 const maxOSBody = 96 << 20
 
 type osState struct {
-	once sync.Once
-	env  *oscap.Env
-	jobs *oscap.Jobs
-	logM sync.Mutex
+	once       sync.Once
+	env        *oscap.Env
+	jobs       *oscap.Jobs
+	logM       sync.Mutex
+	grantsOnce sync.Once
+	grants     *osGrants
 }
 
 func (b *Backend) osInit() (*oscap.Env, *oscap.Jobs) {
@@ -107,6 +109,9 @@ func (b *Backend) osRoutes(m *http.ServeMux) {
 			writeOSErr(w, &oscap.Error{Code: oscap.CodeInvalid, Message: "controller calls require a workspace and page"})
 			return
 		}
+		if !b.osAllowed(w, r, in) {
+			return
+		}
 		env, _ := b.osInit()
 		start := time.Now()
 		scoped := *env
@@ -120,12 +125,16 @@ func (b *Backend) osRoutes(m *http.ServeMux) {
 			writeOSErr(w, err)
 			return
 		}
+		b.osPicked(in, v)
 		writeJSON(w, http.StatusOK, map[string]any{"value": v})
 	})
 	m.HandleFunc("POST /app/os/jobs", func(w http.ResponseWriter, r *http.Request) {
 		var in osCallIn
 		r.Body = http.MaxBytesReader(w, r.Body, maxOSBody)
 		if !decode(w, r, &in) {
+			return
+		}
+		if !b.osAllowed(w, r, in) {
 			return
 		}
 		_, jobs := b.osInit()
@@ -231,4 +240,24 @@ func (b *Backend) osLog(in osCallIn, job string, start time.Time, err *oscap.Err
 	}
 	defer f.Close()
 	_ = json.NewEncoder(f).Encode(line)
+}
+
+// osAllowed answers a call the page may not make now (a consent to ask the
+// person for, or a refusal) and says false; true lets it go on.
+func (b *Backend) osAllowed(w http.ResponseWriter, r *http.Request, in osCallIn) bool {
+	consent, err := b.osCheck(r.Context(), in)
+	switch {
+	case err != nil:
+		b.osLog(in, "", time.Now(), &oscap.Error{Code: oscap.CodePermission, Message: err.Error()})
+		msg := err.Error()
+		if re, ok := err.(*osRefusal); ok {
+			msg = re.Message
+		}
+		writeOSErr(w, &oscap.Error{Code: oscap.CodePermission, Message: msg})
+		return false
+	case consent != nil:
+		writeJSON(w, http.StatusForbidden, consent)
+		return false
+	}
+	return true
 }

@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { AppWindow, Check, Copy, ExternalLink, Link2, Monitor, PanelRight, PanelRightClose, Pin as PinIcon, PinOff, Radio, RotateCw, X } from "lucide-react";
 import type { Page, PageOpen } from "@/api";
-import { ApiError, appApi, isOldHub } from "@/appapi";
+import { ApiError, appApi, isOldHub, type OsAnswer, type OsConsent } from "@/appapi";
 import { copyText } from "@/app/copy";
 import { useContextMenu, type MenuItem } from "@/app/ContextMenu";
 import { DockPanel } from "@/app/preview";
@@ -400,6 +400,8 @@ function PageView({ target, open, active, reload, onMeta }: {
   const dataWatch = useRef(false);
   const dataSeq = useRef(0);
   const [asking, setAsking] = useState<{ text: string; to: string; answer: (ok: boolean) => void } | null>(null);
+  // a page wanting a group of the computer's capabilities the person has not allowed yet
+  const [consent, setConsent] = useState<(OsConsent & { name: string; answer: (a: OsAnswer) => void }) | null>(null);
   const [remoteAsking, setRemoteAsking] = useState<{text:string; answer:(ok:boolean)=>void} | null>(null);
   const remoteConsent = useRef<((ok:boolean)=>void) | null>(null);
   // (while the page is there: tucked away, it still runs and is answered,
@@ -589,6 +591,32 @@ function PageView({ target, open, active, reload, onMeta }: {
       }
       jobs.delete(id);
     };
+    // The person's say before a page uses the computer (consent_required):
+    // one question at a time; calls waiting on the same thing share it.
+    const asks = new Map<string, Promise<OsAnswer>>();
+    let askChain: Promise<unknown> = Promise.resolve();
+    const withConsent = async <T,>(who: { hub: string; id: string; name: string }, run: () => Promise<T>): Promise<T> => {
+      try {
+        return await run();
+      } catch (err) {
+        const c = (err as ApiError).consent;
+        if (!c || closed) throw err;
+        const k = `${c.group}/${c.host || ""}`;
+        let a = asks.get(k);
+        if (!a) {
+          a = (askChain = askChain.then(() => new Promise<OsAnswer>((resolve) => setConsent({ ...c, name: who.name, answer: resolve }))))
+            .then(async (answer) => {
+              setConsent(null);
+              await appApi.osGrant(who, c.group, answer as OsAnswer, c.host);
+              return answer as OsAnswer;
+            })
+            .finally(() => asks.delete(k)) as Promise<OsAnswer>;
+          asks.set(k, a);
+        }
+        if ((await a) === "deny") throw Object.assign(new Error(L("你没有允许这个应用这样用这台电脑", "You did not let this app do that on this computer")), { code: "permission_denied" });
+        return run();
+      }
+    };
     const answerOS = async (t: { hubId: string; id: string }, method: string, args: Record<string, unknown>): Promise<unknown> => {
       const { page: p, opened: o } = live.current;
       const who = { hub: t.hubId, id: t.id, name: o?.name || p?.name || "" };
@@ -596,9 +624,9 @@ function PageView({ target, open, active, reload, onMeta }: {
         case "os.list":
           return appApi.osList();
         case "os.call":
-          return appApi.osCall(String(args.name || ""), args.args ?? {}, who);
+          return withConsent(who, () => appApi.osCall(String(args.name || ""), args.args ?? {}, who));
         case "os.start": {
-          const id = await appApi.osStart(String(args.name || ""), args.args ?? {}, who);
+          const id = await withConsent(who, () => appApi.osStart(String(args.name || ""), args.args ?? {}, who));
           jobs.add(id);
           // (after the page has the id: its job is waiting for these)
           window.setTimeout(() => void pump(id), 0);
@@ -729,6 +757,18 @@ function PageView({ target, open, active, reload, onMeta }: {
         <button type="button" className="app-btn app-btn-primary" onClick={() => remoteAsking?.answer(true)}>{L("允许", "Allow")}</button>
       </div>
     </Modal>
+    <Modal open={!!consent} onOpenChange={(o) => { if (!o) consent?.answer("deny"); }} className="pg-ask"
+      title={consent ? L(`允许「${consent.name || "这个应用"}」${osWant(consent.group, consent.host).zh}吗？`, `Let "${consent.name || "this app"}" ${osWant(consent.group, consent.host).en}?`) : ""}
+      description={consent ? [
+        consent.declared ? "" : L("这个应用没有在说明里声明要用这一项。", "This app does not declare that it uses this."),
+        consent.once_only ? L("这一项只能这次允许：下次打开 App 会再问你。", "This can only be allowed for now: the App asks again next time.") : L("「一直允许」可以在设置 → 应用权限里收回。", "You can take back \"Always\" in Settings → App permissions."),
+      ].filter(Boolean).join(" ") : ""}>
+      <div className="app-modal-actions">
+        <button type="button" className="app-btn" onClick={() => consent?.answer("deny")}>{L("不允许", "Don't allow")}</button>
+        {consent && !consent.once_only && <button type="button" className="app-btn" onClick={() => consent?.answer("once")}>{L("这次允许", "Allow this time")}</button>}
+        <button type="button" className="app-btn app-btn-primary" onClick={() => consent?.answer(consent.once_only ? "once" : "always")}>{consent?.once_only ? L("允许", "Allow") : L("一直允许", "Always allow")}</button>
+      </div>
+    </Modal>
     <Modal open={!!asking} onOpenChange={(o) => { if (!o) asking?.answer(false); }} className="pg-ask"
       title={L(`允许这个网页以你的名义给 ${asking?.to || ""} 发消息吗？`, `Let this page message ${asking?.to || ""} as you?`)}
       description={L("网页是 agent 写的。允许后，这次打开 App 期间它可以直接发，一分钟最多 5 条；发出的消息在你和它的对话里。", "An agent wrote this page. If you allow it, it may send messages until you quit the App, at most 5 a minute; they show in your chat with the agent.")}>
@@ -776,3 +816,23 @@ function PageLoading({ name, seed, who }: { name: string; seed: string; who: str
   );
 }
 
+
+/** What a group of the computer's capabilities lets a page do, said plainly. */
+export function osWant(group: string, host?: string): { zh: string; en: string } {
+  switch (group) {
+    case "files": return { zh: "读这台电脑上的文件", en: "read files on this computer" };
+    case "files.write": return { zh: "在这台电脑上新建和修改文件", en: "create and change files on this computer" };
+    case "files.delete": return { zh: "删除这台电脑上的文件", en: "delete files on this computer" };
+    case "exec": return { zh: "在这台电脑上运行命令和程序", en: "run commands and programs on this computer" };
+    case "screen": return { zh: "截取或录制屏幕", en: "capture or record the screen" };
+    case "microphone": return { zh: "录下麦克风和电脑里的声音", en: "record the microphone and the computer's sound" };
+    case "speech": return { zh: "在这台电脑上把语音转成文字", en: "turn speech into text on this computer" };
+    case "clipboard": return { zh: "读取剪贴板", en: "read the clipboard" };
+    case "notify": return { zh: "发系统通知", en: "show system notifications" };
+    case "network": return host ? { zh: `访问 ${host}`, en: `reach ${host}` } : { zh: "联网", en: "use the network" };
+    case "ssh": return { zh: "连接你保存的服务器", en: "connect to servers you saved" };
+    case "database": return { zh: "连接你保存的数据库", en: "connect to databases you saved" };
+    case "proxy": return { zh: "控制这台电脑上的代理", en: "control this computer's proxy" };
+    default: return { zh: "查看这台电脑的信息（系统、磁盘、进程、已装的应用）", en: "see this computer's details (system, disks, processes, apps)" };
+  }
+}

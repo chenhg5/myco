@@ -277,6 +277,18 @@ const mockTemplates = officialOrder.filter((name) => existsSync(new URL(`${name}
 const madeFiles = new Map();
 // 这台电脑: a page trying myco.os (only with MOCK_OS_URL).
 if (OS_URL) madeFiles.set("pg_os", { "index.html": readFileSync(new URL("./os-page.html", import.meta.url), "utf8") });
+// 提醒我: a page that wants a system notification (myco.os.notify): the App
+// asks the person first (consent_required, below, until they allow it).
+madeFiles.set("pg_consent", { "index.html": `<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>提醒我</title></head>
+<body style="font:14px -apple-system,sans-serif;padding:48px 64px">
+<button id="go" type="button">提醒我</button> <span id="out"></span>
+<script>
+document.getElementById("go").onclick = async () => {
+  const out = document.getElementById("out");
+  try { await window.myco.os.notify({ title: "到点了" }); out.textContent = "已提醒"; }
+  catch (e) { out.textContent = "没提醒：" + (e.code || e.message); }
+};
+</script></body></html>` });
 const pageFilesOf = (id, n) => madeFiles.has(id) ? madeFiles.get(id) : (id === "pg_live" ? { "index.html": livePage } : id === "pg_checklist" ? { "index.html": checklistPage, "style.css": checklistCss, "app.js": checklistJs } : id === "pg_table" ? tableFiles : pageFiles(n));
 const pageFiles = (n) => ({
   "index.html": `<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>v0.16.8 发布说明</title><link rel="stylesheet" href="style.css"></head>
@@ -304,6 +316,11 @@ if (OS_URL) pages.set("pg_os", {
   id: "pg_os", name: "这台电脑", project: "website", publisher: "release-cloud", version: 1, entry: "index.html",
   url: "http://192.168.1.20:7780/pages/pg_os", created_at: iso(100), updated_at: iso(100), can_manage: true,
   versions: [{ n: 1, entry: "index.html", files: 1, size: 4000, sha256: "o1", by: "release-cloud", at: iso(100) }],
+});
+pages.set("pg_consent", {
+  id: "pg_consent", name: "提醒我", project: "website", publisher: "release-cloud", version: 1, entry: "index.html",
+  url: "http://192.168.1.20:7780/pages/pg_consent", created_at: iso(90), updated_at: iso(90), can_manage: true,
+  versions: [{ n: 1, entry: "index.html", files: 1, size: 600, sha256: "n1", by: "release-cloud", at: iso(90) }],
 });
 pages.set("pg_live", {
   id: "pg_live", name: "下载页（实时）", project: "website", publisher: "release-cloud", version: 0, entry: "",
@@ -698,6 +715,11 @@ const localSessions = [
 const localJoinedAtStart = localSessions.map((s) => s.joined);
 
 
+// What the person allowed pages to use of this computer (Settings › 应用权限).
+const osGrants = [
+  { hub: "hub_studio", page: "pg_disk", name: "空间清理", always: ["files"], once: ["files.delete"], denied: [], hosts: [] },
+  { hub: "hub_studio", page: "pg_meeting", name: "会议记录", always: ["microphone", "speech"], once: [], denied: ["notify"], hosts: [] },
+];
 const state = {
   hubs: [
     {
@@ -2242,6 +2264,25 @@ const server = http.createServer(async (req, res) => {
   // /app/os: a page using this computer (myco.os). Nothing to use in the
   // mock, unless MOCK_OS_URL names a real App backend to pass it to (go run
   // ./internal/console/devos), with a page to try it (这台电脑).
+  // What the person allowed pages (Settings › 应用权限; the consent dialog).
+  if (parts[0] === "app" && parts[1] === "os" && parts[2] === "grants" && !OS_URL) {
+    const q = new URL(req.url, "http://x").searchParams;
+    if (method === "GET") return send(res, 200, { grants: osGrants.filter((g) => [g.always, g.once, g.denied, g.hosts].some((l) => l && l.length)) });
+    if (method === "DELETE") {
+      const g = osGrants.find((x) => x.hub === q.get("hub") && x.page === q.get("page"));
+      if (g) for (const k of ["always", "once", "denied", ...(q.get("group") === "network" || !q.get("group") ? ["hosts"] : [])]) g[k] = q.get("group") ? (g[k] || []).filter((x) => x !== q.get("group") && k !== "hosts") : [];
+      res.writeHead(204); return res.end();
+    }
+    if (method === "POST") {
+      const b = await readBody(req);
+      let g = osGrants.find((x) => x.hub === b.hub && x.page === b.page);
+      if (!g) osGrants.push(g = { hub: b.hub, page: b.page, name: b.name, always: [], once: [], denied: [], hosts: [] });
+      const answer = b.answer === "always" && ["exec", "files.delete", "screen"].includes(b.group) ? "once" : b.answer;
+      for (const k of ["always", "once", "denied"]) g[k] = (g[k] || []).filter((x) => x !== b.group);
+      g[answer === "deny" ? "denied" : answer].push(b.group);
+      return send(res, 200, { group: b.group, answer });
+    }
+  }
   if (parts[0] === "app" && parts[1] === "os") {
     if (OS_URL) {
       const up = await fetch(OS_URL + req.url, { method, headers: { "Content-Type": "application/json" }, body: method === "GET" || method === "DELETE" ? undefined : await rawBody(req) });
@@ -2249,6 +2290,16 @@ const server = http.createServer(async (req, res) => {
       return res.end(Buffer.from(await up.arrayBuffer()));
     }
     if (parts.length === 2 && method === "GET") return send(res, 200, { os: "mock", arch: "", caps: [] });
+    // a notification (提醒我): asked for first, as the App backend does
+    if (parts[2] === "call" && method === "POST") {
+      const b = await readBody(req);
+      if (b.name === "notify") {
+        const g = osGrants.find((x) => x.hub === b.page?.hub && x.page === b.page?.id) || {};
+        if ((g.denied || []).includes("notify")) return fail(res, 403, "permission_denied", "the person did not allow this app: notify");
+        if ([...(g.always || []), ...(g.once || [])].includes("notify")) return send(res, 200, { value: true });
+        return send(res, 403, { error: "consent_required", message: "ask the person first", group: "notify", declared: true, once_only: false });
+      }
+    }
     return fail(res, 501, "unsupported", "the mock App does not use this computer");
   }
   // /app/page-render: no exports in the mock; the renderer waits and asks again.

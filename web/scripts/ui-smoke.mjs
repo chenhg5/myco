@@ -248,6 +248,9 @@ function watchPage(page, size, scheme) {
     if (msg.text().includes("502") && where.includes("/machines/m_studio/spawn")) return;
     // On purpose: 单聊 · 网络不好 cuts the chat's polls off.
     if (msg.text().includes("ERR_FAILED") && /\/(exchanges|thread)\b/.test(where)) return;
+    // On purpose: a page asks before it uses this computer (网页 · 用电脑前先问:
+    // the App backend answers consent_required, a 403, and the App asks).
+    if (msg.text().includes("403") && /\/app\/os\/call\b/.test(where)) return;
     // This fixture deliberately returns the real backend's not-ready status.
     if (intentionalPublicNotReady.has(page) && msg.text().includes("503") && /\/app\/local\/hub:/.test(where)) return;
     addProblem(r, "console", msg.text(), where);
@@ -3124,6 +3127,49 @@ async function runMatrix(browser, size, scheme) {
     });
 
     // 只看进度: runs show what the agent reported, not its steps.
+    // Before a page uses this computer the App asks the person (one
+    // question; 一直允许 is kept); Settings › 应用权限 lists what pages may
+    // do and takes it back, after which the page is asked again.
+    await step("网页 · 用电脑前先问", async () => {
+      await go(page, "官网改版", narrow);
+      await page.evaluate(() => window.dispatchEvent(new CustomEvent("myco-open-page", { detail: { kind: "page", hubId: "hub_studio", id: "pg_consent" } })));
+      const frame = page.frameLocator('iframe.pg-frame[aria-label="提醒我"]');
+      await frame.locator("#go").waitFor({ timeout: 15_000 });
+      await page.locator("[data-testid=page-loading]").waitFor({ state: "detached", timeout: 10_000 });
+      await settle(page, 300);
+      // (a click event on the button: the docked frame's hit test is not what is tried here)
+      await frame.locator("#go").dispatchEvent("click");
+      const ask = page.locator(".pg-ask", { hasText: "发系统通知" });
+      await ask.waitFor({ timeout: 10_000 });
+      if (!(await ask.innerText()).includes("「提醒我」")) throw new Error(`应写明是哪个应用要用：${await ask.innerText()}`);
+      if (!(await ask.getByRole("button", { name: "这次允许" }).count())) throw new Error("应能只允许这一次");
+      await settle(page, 200);
+      await shot(page, size, scheme, "page-os-consent");
+      await ask.getByRole("button", { name: "一直允许" }).click();
+      await frame.locator("#out", { hasText: "已提醒" }).waitFor({ timeout: 10_000 });
+      // the second time: no question
+      await frame.locator("#go").dispatchEvent("click");
+      await settle(page, 400);
+      if (await ask.count()) throw new Error("一直允许后不该再问");
+      // (the page panel goes away first: in a narrow window it covers the sidebar)
+      const panel = page.locator(".pg-panel:visible");
+      if (await panel.count()) {
+        await clickVisible(page, panel.getByRole("button", { name: "收起" }).first());
+        await panel.waitFor({ state: "hidden", timeout: 5_000 });
+      }
+      await go(page, "设置", narrow);
+      await clickVisible(page, page.locator(".app-settings-tab", { hasText: "应用权限" }));
+      const card = page.locator(".app-setting-card[data-setting='app-permissions']");
+      const row = card.locator(".app-perm-page", { hasText: "提醒我" });
+      await row.waitFor({ timeout: 10_000 });
+      if (!(await row.innerText()).includes("发系统通知") || !(await row.innerText()).includes("一直允许")) throw new Error(`应用权限应列出它：${await row.innerText()}`);
+      if (!(await card.locator(".app-perm-page", { hasText: "空间清理" }).innerText()).includes("这次允许")) throw new Error("应分清一直允许和这次允许");
+      await settle(page, 200);
+      await shot(page, size, scheme, "settings-app-permissions");
+      await row.locator(".app-perm-item", { hasText: "发系统通知" }).getByRole("button", { name: "收回" }).click();
+      await row.waitFor({ state: "detached", timeout: 5_000 });
+    });
+
     await step("设置 · 只看进度", async () => {
       await go(page, "设置", narrow);
       await clickVisible(page, page.locator(".app-settings-tab", { hasText: "外观" }));

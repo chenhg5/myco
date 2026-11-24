@@ -5,11 +5,11 @@ import { TailscaleSetup } from "@/app/TailscaleSetup";
 import { IntroCard, introOf, noteDone } from "@/app/Onboard";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  AlertTriangle, AudioLines, Bot, Check, Cloud, Globe, Info, Keyboard, Languages, Palette, Pencil, Plus, RotateCcw, ScrollText, Search, Server, Terminal, Users,
+  AlertTriangle, AudioLines, Bot, Check, Cloud, Globe, Info, Keyboard, Languages, Palette, Pencil, Plus, RotateCcw, ScrollText, Search, Server, ShieldCheck, Terminal, Users,
 } from "lucide-react";
 import {
   appApi, ApiError, type AppInfo, type CacheStats, type AppUpdate, type Hub, type HubOverview, type LocalState,
-  type LocalTunnel, type StartLocalHubResult, type VoiceInfo, type VoiceTTSProvider, type TTSVoice, type ProxySetting, type ProxyInput,
+  type LocalTunnel, type StartLocalHubResult, type VoiceInfo, type VoiceTTSProvider, type TTSVoice, type ProxySetting, type ProxyInput, type OsGrantRow,
 } from "@/appapi";
 import { ver } from "@/app/nodes";
 import { renameHub } from "@/app/hubNames";
@@ -20,6 +20,7 @@ import { ErrorText, Modal, ConfirmDialog } from "@/app/dialogs";
 import { updateFailure } from "@/app/UpdateNotice";
 import { accessLabel, localWorkspaceOf, localWorkspaces, type LocalWorkspace } from "@/app/localHubs";
 import { AuditSection, MembersSection, MyDevices } from "@/app/MembersSection";
+import { osWant } from "@/app/pages";
 import { LocalAgentsSection } from "@/app/LocalAgents";
 import { setSimpleMode, useSimpleMode } from "@/app/simpleMode";
 import type { TextSize, ThemeMode } from "@/lib/theme";
@@ -33,7 +34,7 @@ import { ShortcutsSection } from "@/app/Shortcuts";
 import { HubUpgrade, useLatestRelease } from "@/app/MycoUpgrade";
 import { BackupRow } from "@/app/Backups";
 
-type Section = "hubs" | "agents" | "members" | "audit" | "appearance" | "translate" | "voice" | "network" | "shortcuts" | "about";
+type Section = "hubs" | "agents" | "members" | "audit" | "appearance" | "translate" | "voice" | "network" | "apps" | "shortcuts" | "about";
 
 type UpdateState =
   | { step: "checking" }
@@ -191,6 +192,7 @@ const SECTIONS: { key: Section; label: string; icon: typeof Server }[] = [
   { key: "translate", get label() { return L("翻译", "Translation"); }, icon: Languages },
   { key: "voice", get label() { return L("语音", "Voice"); }, icon: AudioLines },
   { key: "network", get label() { return L("代理", "Proxy"); }, icon: Globe },
+  { key: "apps", get label() { return L("应用权限", "App permissions"); }, icon: ShieldCheck },
   { key: "shortcuts", get label() { return L("快捷键", "Shortcuts"); }, icon: Keyboard },
   { key: "about", get label() { return L("关于", "About"); }, icon: Info },
 ];
@@ -198,7 +200,7 @@ const SECTIONS: { key: Section; label: string; icon: typeof Server }[] = [
 /** The nav in groups: what is about this computer, what is about the
  *  workspace (shared with the others in it), and About. */
 const GROUPS: { title: () => string; keys: Section[] }[] = [
-  { title: () => L("这台电脑", "This computer"), keys: ["appearance", "voice", "translate", "network", "agents"] },
+  { title: () => L("这台电脑", "This computer"), keys: ["appearance", "voice", "translate", "network", "apps", "agents"] },
   { title: () => L("工作区", "Workspace"), keys: ["hubs", "members", "audit"] },
   { title: () => "", keys: ["shortcuts", "about"] },
 ];
@@ -213,6 +215,7 @@ const SECTION_ABOUT: Record<Section, () => string> = {
   translate: () => L("把 agent 说的话翻译成你的语言。", "Translate what agents say into your language."),
   voice: () => L("和 agent 语音聊天，以及语音输入。", "Voice chat with agents, and dictation."),
   network: () => L("这台电脑连外网时走的代理。", "The proxy this computer uses to reach the internet."),
+  apps: () => L("你允许了哪些应用用这台电脑：读写文件、录音、运行命令、联网……可以随时收回。", "What you let apps do on this computer (files, recording, commands, the network…); take any of it back."),
   shortcuts: () => L("App 里能用的键盘快捷键。", "The keyboard shortcuts in this app."),
   about: () => L("版本、更新和这个 App。", "Version, updates and this app."),
 };
@@ -231,6 +234,7 @@ const FINDABLE: { section: Section; key?: string; title: () => string; words: st
   { section: "voice", key: "voice-keep", title: () => L("把语音设置存到工作区", "Keep voice settings on the workspaces"), words: "语音 设置 存到工作区 同步 voice sync" },
   { section: "translate", key: "translate", title: () => L("自动翻译", "Translate automatically"), words: "翻译 自动翻译 密钥 api key translate deepl" },
   { section: "network", key: "proxy", title: () => L("代理", "Proxy"), words: "代理 网络 http socks proxy network" },
+  { section: "apps", key: "app-permissions", title: () => L("应用权限", "App permissions"), words: "应用权限 授权 允许 收回 文件 麦克风 录音 命令 联网 app permissions allow revoke files microphone commands network" },
   { section: "agents", key: "local-agents", title: () => L("这台电脑上的 agent", "Agents on this computer"), words: "本机 agent claude code codex gemini 安装 登录 cli install sign in" },
   { section: "hubs", title: () => L("工作区", "Workspaces"), words: "工作区 服务器 连接 加入 新建 停止 公网 cloudflare tailscale workspace hub server" },
   { section: "members", title: () => L("成员", "People"), words: "成员 邀请 角色 管理员 权限 people invite role admin member" },
@@ -795,6 +799,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
         {section === "agents" && <LocalAgentsSection />}
         {section === "voice" && <VoiceSection />}
         {section === "network" && <ProxySection hubsOv={hubsOv} />}
+        {section === "apps" && <AppPermissionsSection hubs={hubs} />}
         {section === "about" && <AboutSection info={info} local={local} />}
         {section === "hubs" && simple && <MyDevices hubsOv={hubsOv} />}
         {section === "members" && <MembersSection hubsOv={hubsOv} onRefresh={onRefresh} />}
@@ -1631,3 +1636,56 @@ function ChatBgLine() {
   );
 }
 
+
+/** What pages may use of this computer (myco.os), as the person allowed it
+ *  in the App's dialogs: kept ("always"), for this run, refused; each can be
+ *  taken back (the page asks again next time). */
+function AppPermissionsSection({ hubs }: { hubs: Hub[] }) {
+  const [rows, setRows] = useState<OsGrantRow[] | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const load = useCallback(() => { appApi.osGrants().then(setRows, (e) => { setError(e); setRows([]); }); }, []);
+  useEffect(load, [load]);
+  const hubName = (id: string) => hubs.find((h) => h.id === id)?.name || "";
+  const revoke = (r: OsGrantRow, group = "") => { appApi.osRevoke(r.hub, r.page, group).then(load, setError); };
+  if (!rows) return <section className="app-setting-card"><div className="app-empty-note">{L("正在读取…", "Loading…")}</div></section>;
+  return (
+    <section className="app-setting-card app-setting-lines" data-setting="app-permissions">
+      {error ? <ErrorText error={error} /> : null}
+      {!rows.length && <div className="app-empty-note">{L("还没有应用用过这台电脑。应用第一次要读文件、录音、联网这些时，App 会先问你。", "No app has used this computer yet. The first time one wants to read files, record, use the network and the like, the App asks you.")}</div>}
+      {rows.map((r) => {
+        const items: { key: string; group: string; host?: string; note: string; denied?: boolean }[] = [
+          ...(r.always || []).map((g) => ({ key: `a${g}`, group: g, note: L("一直允许", "Always") })),
+          ...(r.once || []).filter((g) => !(r.always || []).includes(g)).map((g) => ({ key: `o${g}`, group: g, note: L("这次允许，App 关掉就失效", "This time, until the App quits") })),
+          ...(r.hosts || []).map((h) => ({ key: `h${h}`, group: "network", host: h, note: L("允许", "Allowed") })),
+          ...(r.denied || []).map((g) => ({ key: `d${g}`, group: g, note: L("不允许", "Refused"), denied: true })),
+        ];
+        return (
+          <div key={`${r.hub}/${r.page}`} className="app-perm-page">
+            <div className="app-setting-line">
+              <div className="app-setting-line-text">
+                <b>{r.name || r.page}</b>
+                <span>{[hubName(r.hub), r.page].filter(Boolean).join(" · ")}</span>
+              </div>
+              <button type="button" className="app-btn app-btn-small" onClick={() => revoke(r)}>{L("全部收回", "Take all back")}</button>
+            </div>
+            {items.map((it) => {
+              const w = osWant(it.group, it.host);
+              return (
+                <div key={it.key} className="app-setting-line app-perm-item">
+                  <div className="app-setting-line-text">
+                    <b>{L(w.zh, w.en)}</b>
+                    <span>{it.note}</span>
+                  </div>
+                  <button type="button" className="app-btn app-btn-small" onClick={() => revoke(r, it.group)}
+                    title={L("收回以后，这个应用下次要用时会再问你", "Once taken back, the app asks you again next time")}>
+                    {it.denied ? L("不再拒绝", "Stop refusing") : L("收回", "Take back")}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+    </section>
+  );
+}

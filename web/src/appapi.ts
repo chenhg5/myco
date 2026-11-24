@@ -421,6 +421,11 @@ export interface OsList {
 }
 /** The page that uses them (for the App's log). */
 export interface OsPage { hub: string; id: string; name: string }
+/** A page asking for a group of the computer's capabilities the person has not allowed (consent_required). */
+export interface OsConsent { group: string; host?: string; declared: boolean; once_only: boolean }
+export type OsAnswer = "once" | "always" | "deny";
+/** What the person allowed a page: always (kept), once (this run), denied, and hosts beyond its declared ones. */
+export interface OsGrantRow { hub: string; page: string; name?: string; always?: string[]; once?: string[]; denied?: string[]; hosts?: string[] }
 /** What a job (fs.scan, exec.spawn) sent since the last read, and its end. */
 export interface OsBatch {
   events: { n: number; type: string; data?: unknown }[] | null;
@@ -436,6 +441,8 @@ export class ApiError extends Error {
   status: number;
   /** what a conflict answers with (a page's latest state) */
   latest?: unknown;
+  /** consent_required: what to ask the person for (myco.os) */
+  consent?: OsConsent;
   code?: string;
   suggestion?: string;
   constructor(message: string, status: number, code?: string, suggestion?: string) {
@@ -576,10 +583,11 @@ async function request<T>(method: string, path: string, body?: unknown, signal?:
   let data: unknown = null;
   try { data = text ? JSON.parse(text) : null; } catch { /* non-JSON */ }
   if (!r.ok) {
-    const e = (data ?? {}) as { error?: string; message?: string; suggestion?: string; latest?: unknown };
+    const e = (data ?? {}) as { error?: string; message?: string; suggestion?: string; latest?: unknown; group?: string; host?: string; declared?: boolean; once_only?: boolean };
     // A gateway's own page (no JSON) still says why: keep its first words for 详细信息.
     const page = data === null && r.status >= 500 ? text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 300) : "";
-    throw Object.assign(new ApiError(e.message || page || `HTTP ${r.status}`, r.status, typeof e.error === "string" ? e.error : undefined, e.suggestion), e.latest ? { latest: e.latest } : {});
+    throw Object.assign(new ApiError(e.message || page || `HTTP ${r.status}`, r.status, typeof e.error === "string" ? e.error : undefined, e.suggestion), e.latest ? { latest: e.latest } : {},
+      e.error === "consent_required" && e.group ? { consent: { group: e.group, host: e.host || undefined, declared: !!e.declared, once_only: !!e.once_only } } : {});
   }
   return data as T;
 }
@@ -985,6 +993,13 @@ export const appApi = {
   osCall: (name: string, args: unknown, page: OsPage) =>
     request<{ value: unknown }>("POST", "app/os/call", { name, args, page }).then((r) => r.value),
   osStart: (name: string, args: unknown, page: OsPage) => request<{ id: string }>("POST", "app/os/jobs", { name, args, page }).then((r) => r.id),
+  // What the person allowed pages (App backend osgrants.go): the answer to a
+  // consent_required, the list for settings, and taking one back.
+  osGrants: () => request<{ grants: OsGrantRow[] }>("GET", "app/os/grants").then((r) => r.grants || []),
+  osGrant: (page: OsPage, group: string, answer: OsAnswer, host?: string) =>
+    request<{ group: string; answer: OsAnswer }>("POST", "app/os/grants", { hub: page.hub, page: page.id, name: page.name, group, host: host || "", answer }),
+  osRevoke: (hub: string, page: string, group = "") =>
+    request<void>("DELETE", `app/os/grants?hub=${enc(hub)}&page=${enc(page)}&group=${enc(group)}`),
   osJob: (id: string, after: number, waitMs: number) =>
     request<OsBatch>("GET", `app/os/jobs/${enc(id)}?after=${after}&wait=${waitMs}`, undefined, undefined, waitMs + 15_000),
   osInput: (id: string, data: string, close: boolean) => request<{ ok: boolean }>("POST", `app/os/jobs/${enc(id)}/input`, { data, close }),
