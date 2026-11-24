@@ -446,6 +446,7 @@ function PageView({ target, open, active, reload, onMeta }: {
           dataWatch.current = true;
           return true;
         case "download": {
+          undeclared("download");
           // a Blob from the page (its bridge since the video app), or base64 (older pages' bridge)
           if (args.blob instanceof Blob) return appApi.pageDownload(String(args.name || ""), args.blob, String(args.type || ""));
           const bin = atob(String(args.base64 || ""));
@@ -471,6 +472,7 @@ function PageView({ target, open, active, reload, onMeta }: {
           return { ok: r.ok, state: r.state, version: r.version };
         }
         case "send": {
+          undeclared("send");
           const text = String(args.text || "").trim();
           if (!text) throw new Error(L("消息是空的", "The message is empty"));
           const to = p?.publisher || "";
@@ -550,6 +552,16 @@ function PageView({ target, open, active, reload, onMeta }: {
       const win = frame.current?.contentWindow;
       const origin = (() => { try { return new URL(frame.current?.src || "").origin; } catch { return ""; } })();
       if (win && origin) win.postMessage(msg, origin);
+    };
+    // What an app does that its myco.json does not declare (permissions:
+    // send, download): allowed for now, with a warning in the page's
+    // console (once each); a later App refuses it.
+    const warned = new Set<string>();
+    const undeclared = (perm: "send" | "download") => {
+      const tp = live.current.page?.template;
+      if (!tp || (tp.permissions || []).includes(perm) || warned.has(perm)) return;
+      warned.add(perm);
+      toPage({ myco: "warn", text: `myco: this app uses ${perm} without declaring it in myco.json ("permissions": ["${perm}"]); a later myco App will refuse it` });
     };
     const pump = async (id: string) => {
       let after = 0, fails = 0;

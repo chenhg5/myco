@@ -14,6 +14,20 @@
 App 版本里有了这一项，桥的 `myco.features` 里会有 `"os"`。
 
 > **现在没有任何限制**：任何在 App 里打开的网页都能用这些能力，不会先问人。这一版先把能力做出来，授权和分级下一步再加。每次调用都记在 `~/.myco/logs/app-os.jsonl` 里（哪个网页、调了什么、结果怎样；参数仅记字节数，不记录内容）。
+>
+> **先在 myco.json 里声明**（Hub v0.22.1 起认得）：`"os"` 列出用到的能力组，`"net"` 列出要访问的域名。接下来的 App 会在第一次用某一组时问人，没声明的拒绝：
+>
+> | 组 | 包括 |
+> | --- | --- |
+> | `files` | 看和读：`fs.paths/list/stat/read/search/scan/watch/thumbnail`，人自己选的 `pick/saveAs/reveal/open` |
+> | `files.write` / `files.delete` | `fs.write/mkdir/move/copy`；`fs.delete/trash` |
+> | `exec` | `exec.run/spawn`、`process.kill` |
+> | `screen` / `microphone` / `speech` | `screen.*`；`audio.*`；`speech.*` |
+> | `clipboard` / `notify` / `system` | 读剪贴板；`notify`；`system.*` |
+> | `network` | `net.fetch`，只到 `"net"` 里的域名（`api.example.com`、`api.example.com:8443`、`*.example.com`） |
+> | `ssh` / `database` / `proxy` | `ssh.*`；`db.*`；`proxy.*` |
+>
+> `"permissions"` 里的 `send`、`download` 也一样：没声明却用了，现在 App 会在网页的控制台里提醒，以后的 App 会拒绝。
 
 ## 怎么调
 

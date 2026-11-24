@@ -266,3 +266,25 @@ func TestTemplateScreenshots(t *testing.T) {
 	h.do("GET", "/v1/templates/"+id+"/files/shots/notes.txt", bob, nil).wantErr(t, 404, "not_found")
 	h.do("GET", "/v1/templates/"+id+"/files/shots/9.png", bob, nil).wantErr(t, 404, "not_found")
 }
+
+// What an app declares of the computer (os) and the network (net) comes
+// back with the template and with each page made from it, for the App to
+// ask the person and refuse the rest.
+func TestTemplateDeclaresOSAndNet(t *testing.T) {
+	h := newHub(t, app.DefaultMessagePolicy())
+	alice := h.register("alice", nil)
+	zipHdr := map[string]string{"Content-Type": "application/zip"}
+	m := strings.Replace(weeklyManifest, `"export": ["xlsx"]`, `"export": ["xlsx"], "os": ["files", "network"], "net": ["api.example.com"]`, 1)
+	r := h.doReq("POST", "/v1/templates", alice, zipOf(t, map[string]string{"myco.json": m, "index.html": "v1"}), zipHdr).want(t, 201)
+	if os, _ := r.body["os"].([]any); len(os) != 2 || os[1] != "network" {
+		t.Fatalf("template os: %s", r.raw)
+	}
+	page := str(h.do("POST", "/v1/templates/alice%2Fweekly/use", alice, map[string]any{"name": "x"}).want(t, 201).body, "page", "id")
+	g := h.do("GET", "/v1/pages/"+page, alice, nil).want(t, 200)
+	tpl, _ := g.body["template"].(map[string]any)
+	if net, _ := tpl["net"].([]any); len(net) != 1 || net[0] != "api.example.com" {
+		t.Fatalf("page template net: %s", g.raw)
+	}
+	bad := strings.Replace(weeklyManifest, `"export": ["xlsx"]`, `"export": ["xlsx"], "os": ["everything"]`, 1)
+	h.doReq("POST", "/v1/templates", alice, zipOf(t, map[string]string{"myco.json": bad, "index.html": "v1"}), zipHdr).wantErr(t, 400, "invalid_argument")
+}

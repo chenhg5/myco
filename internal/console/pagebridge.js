@@ -95,6 +95,9 @@
       takeAction(d);
     } else if (d.myco === "preferences") {
       applyPreferences(d.preferences);
+    } else if (d.myco === "warn" && typeof d.text === "string") {
+      // the App's word to whoever builds this app (an undeclared permission…)
+      try { console.warn(d.text); } catch (x) { /* (no console) */ }
     } else if (d.myco === "data" && Array.isArray(d.changes)) {
       // The feed moved on past what this page has seen (too much changed
       // while it was away): what it holds may be stale, so it should list

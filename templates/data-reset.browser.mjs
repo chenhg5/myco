@@ -76,8 +76,14 @@ try {
   await p.evaluate(() => window.resetFeed());
   await p.waitForFunction(() => document.getElementById("f").contentWindow.log.length >= 4);
   assert.deepEqual(await log(), ["loaded a", "listening true", "change b", "reset c,d"], "the store holds what the hub holds after a reset");
+  // the App's word to the app's maker (an undeclared permission) lands in the page's console
+  const warnings = [];
+  p.on("console", (m) => { if (m.type() === "warning") warnings.push(m.text()); });
+  await p.evaluate(() => document.getElementById("f").contentWindow.postMessage({ myco: "warn", text: "myco: this app uses download without declaring it" }, "*"));
+  await p.waitForTimeout(200);
+  assert.deepEqual(warnings, ["myco: this app uses download without declaring it"]);
   assert.deepEqual(errors, []);
-  console.log("PASS data reset: the bridge passes it on, the stores list again");
+  console.log("PASS data reset: the bridge passes it on, the stores list again; warnings reach the console");
 } finally {
   await browser.close();
   server.close();
