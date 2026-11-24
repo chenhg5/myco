@@ -951,6 +951,15 @@ const SHOWCASE = process.env.MOCK_SHOWCASE;
 if (SHOWCASE) {
   const sc = showcase(SHOWCASE, { makeAgent, makeMessage, iso, CONSOLE });
   state.hubs = sc.hubs;
+  // Media scenes reuse the isolated studio fixtures (workflows, pages, usage).
+  if (process.env.MOCK_MEDIA_KIT === "1") {
+    state.hubs[0].id = "hub_studio";
+    state.hubs[0].hub_version = "0.22.1";
+    const backend = state.hubs[0].agents.find(a => a.name === "build-backend");
+    Object.assign(backend.runtime, { max_access: "full", features: ["remote_provider"],
+      provider: "Team gateway", provider_host: "gateway.example", provider_source: "machine",
+      providers: [{ref:"cc-switch:team",name:"Team gateway",host:"gateway.example"}, {ref:"cc-switch:direct",name:"Direct provider",host:"api.example"}] });
+  }
   localSessions.splice(0, localSessions.length, ...sc.localSessions);
 }
 
@@ -1794,6 +1803,7 @@ const projects = [
     members: [{ name: "ios-shell", role: "member", note: "", added_by: "matthew", added_at: iso(86400) }], docs: [],
   },
 ];
+if (process.env.MOCK_MEDIA_KIT === "1" && SHOWCASE) projects.splice(0, projects.length, ...state.hubs[0].projects);
 // Each project's members as they start: the smoke test puts them back
 // between widths and themes (it adds members to a project).
 const projectMembersAtStart = projects.map((p) => JSON.stringify(p.members));
@@ -2024,6 +2034,16 @@ const server = http.createServer(async (req, res) => {
     const last = state.quickOpen || null;
     if (method === "DELETE") state.quickOpen = null;
     return send(res, 200, { open: last });
+  }
+
+  // Isolated promotional scenes: never enabled in the real App backend.
+  if (process.env.MOCK_MEDIA_KIT === "1" && parts.join("/") === "app/mock/media-message" && method === "POST") {
+    const b = await readBody(req), hub = state.hubs[0];
+    const thread = hub.threads.th_api;
+    const m = makeMessage({ thread_id: "th_api", from: "build-backend", to: CONSOLE,
+      type: "reply", status: "done", body: String(b.body || ""), reply_to: thread[0].id, created_at: iso(0), updated_at: iso(0) });
+    thread.push(m); hub.recent.unshift(m);
+    return send(res, 201, m);
   }
 
   // /app/mock/superagent-ask — the superagent asks to do something that
