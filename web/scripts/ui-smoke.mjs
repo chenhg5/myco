@@ -6081,6 +6081,7 @@ async function runMatrix(browser, size, scheme) {
       const slowOverview = async (r) => { await new Promise((res) => setTimeout(res, 6000)); await r.continue().catch(() => undefined); };
       await page.route("**/app/overview", slowOverview);
       const asked = [];
+      let removed = "";
       const onResponse = (r) => { if (r.status() === 404 && /\/app\/hubs\//.test(r.url())) asked.push(r.url()); };
       page.on("response", onResponse);
       try {
@@ -6088,6 +6089,8 @@ async function runMatrix(browser, size, scheme) {
         await clickVisible(page, rm);
         const dlg = page.locator(".app-modal", { hasText: "只会从这个 App 里移除" });
         await dlg.waitFor({ timeout: 5_000 });
+        removed = ((await dlg.innerText()).match(/移除 (.+?)？/) || [])[1] || "";
+        if (!removed) throw new Error("移除的确认框应写着要移除哪个工作区");
         const t0 = Date.now();
         await clickVisible(page, dlg.getByRole("button", { name: "移除工作区" }));
         await dlg.waitFor({ state: "detached", timeout: 3_000 });
@@ -6101,7 +6104,11 @@ async function runMatrix(browser, size, scheme) {
       await closeSettings(page);
       await sidebar(page, true);
       const shownAfter = (await page.locator(".sp-switch .app-hub-name").first().innerText()).trim();
-      if (shownBefore && shownAfter === shownBefore) throw new Error(`移除了正在看的工作区，应换到别的：还是「${shownAfter}」`);
+      if (removed === shownBefore && shownAfter === removed) throw new Error(`移除了正在看的工作区，应换到别的：还是「${shownAfter}」`);
+      await clickVisible(page, page.locator(".sp-switch .app-hub-trigger"));
+      const names = await page.locator(".app-hub-menu [role=menuitemradio] .app-hub-menu-name").allInnerTexts();
+      await page.keyboard.press("Escape");
+      if (names.map((n) => n.trim()).includes(removed)) throw new Error(`移除的「${removed}」不该还在工作区菜单里`);
     });
   } finally {
     await context.close().catch(() => undefined);
