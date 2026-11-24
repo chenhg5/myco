@@ -313,11 +313,17 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 		alog.Warn("provider: "+initial.warn, "provider", initial.name)
 	}
 	acp.ClientVersion = Version
+	// The cap is on agent CLIs: a command node's shell commands and a
+	// machine node's own work (upgrade, start an agent) never wait for one.
+	slots := sh.slots
+	if h.Name() == execnode.Name || h.Name() == machinenode.Name {
+		slots = nil
+	}
 	alog.Info("runner ready", "hub", cfg.Hub, "provider", initial.name, "provider_source", initial.source, "harness", h.Name(), "access", orDefault(string(access), "default"), "workdir", workdir, "environment", host,
 		"session_scope", sh.scope, "session_id", me.Binding.SessionID)
 	return runner.New(c, h, sessions, runner.DefaultPrompt{Owner: me.Owner}, runner.Options{
 		Self: me.Name, Timeout: timeout, PollWait: pollWait, Workdir: workdir, Once: sh.once, Scope: sh.scope,
-		BusyRetry: sh.busyRetry, BusyWindow: sh.busyWindow, Slots: sh.slots, Trace: sh.trace, SessionLocks: sh.locks,
+		BusyRetry: sh.busyRetry, BusyWindow: sh.busyWindow, Slots: slots, Trace: sh.trace, SessionLocks: sh.locks,
 		StatePath:      runnerStatePath(e.defaultPath, me.Name),
 		HubURL:         cfg.Hub,
 		AttachmentsDir: filepath.Join(config.Dir(e.defaultPath), "attachments", me.Name),
