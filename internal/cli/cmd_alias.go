@@ -5,9 +5,9 @@ import (
 	"io"
 	"strings"
 
-	"github.com/chenhg5/myco/internal/api"
-	. "github.com/chenhg5/myco/internal/cli/cmdkit"
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/api"
+	. "github.com/myco-ai/myco/internal/cli/cmdkit"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // agentAliasCommands manages re-pointable role addresses.

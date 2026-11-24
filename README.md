@@ -12,12 +12,12 @@
 Use the Claude Code, Codex and other agents you already pay for — start a conversation, run several at once,<br>
 reach your other computers and your phone, put them on a schedule — all from one app.
 
-[![Release](https://img.shields.io/github/v/release/chenhg5/myco?style=flat-square&color=3a9a78)](https://github.com/chenhg5/myco/releases)
-[![Build](https://img.shields.io/github/actions/workflow/status/chenhg5/myco/release.yml?branch=main&label=release&style=flat-square)](https://github.com/chenhg5/myco/actions/workflows/release.yml)
+[![Release](https://img.shields.io/github/v/release/myco-ai/myco?style=flat-square&color=3a9a78)](https://github.com/myco-ai/myco/releases)
+[![Build](https://img.shields.io/github/actions/workflow/status/myco-ai/myco/release.yml?branch=main&label=release&style=flat-square)](https://github.com/myco-ai/myco/actions/workflows/release.yml)
 ![Platforms](https://img.shields.io/badge/macOS%20·%20Windows%20·%20Linux-grey?style=flat-square)
 [![LINUX DO](https://img.shields.io/badge/LINUX-DO-ffb003?style=flat-square&labelColor=3f3f46)](https://linux.do)
 
-**[Download for Mac](https://github.com/chenhg5/myco/releases/latest/download/myco.dmg)** · [Windows (preview)](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-amd64.exe) · [Linux](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-amd64) · [All downloads](https://github.com/chenhg5/myco/releases/latest)
+**[Download for Mac](https://github.com/myco-ai/myco/releases/latest/download/myco.dmg)** · [Windows (preview)](https://github.com/myco-ai/myco/releases/latest/download/myco-app-windows-amd64.exe) · [Linux](https://github.com/myco-ai/myco/releases/latest/download/myco-app-linux-amd64) · [All downloads](https://github.com/myco-ai/myco/releases/latest)
 
 **English** · [中文](README.zh-CN.md) · [Install Guide](INSTALL.md) · [Video tutorial](docs/tutorial.md) · [Apps](docs/apps.md) · [Architecture](docs/architecture.md) · [HTTP API](docs/api.md)
 
@@ -42,7 +42,7 @@ Your agents are good on their own; the trouble is at the edges. So **you** end u
 Already using Claude Code, Codex or another AI that runs commands? Send it this sentence. It reads the [setup guide](docs/agent-setup.md), starts a hub, connects the app, adds your computers and agents, and sorts out problems on its own, asking you whenever something is yours to decide:
 
 ```text
-Set up myco for me: read https://raw.githubusercontent.com/chenhg5/myco/main/docs/agent-setup.md (if it does not load, https://cdn.jsdelivr.net/gh/chenhg5/myco@main/docs/agent-setup.md) and follow it. Ask me before deciding anything for me, before using sudo or changing system settings, and tell me the result when you are done.
+Set up myco for me: read https://raw.githubusercontent.com/myco-ai/myco/main/docs/agent-setup.md (if it does not load, https://cdn.jsdelivr.net/gh/myco-ai/myco@main/docs/agent-setup.md) and follow it. Ask me before deciding anything for me, before using sudo or changing system settings, and tell me the result when you are done.
 ```
 
 The app's first screen has the same sentence (**Let my agent set it up**).
@@ -51,9 +51,9 @@ The app's first screen has the same sentence (**Let my agent set it up**).
 
 | Platform | Download |
 |---|---|
-| **Mac** | **[myco.dmg](https://github.com/chenhg5/myco/releases/latest/download/myco.dmg)**: Apple silicon and Intel, signed and notarized. Updates itself. |
-| **Windows** (preview) | [myco-app-windows-amd64.exe](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-amd64.exe) ([ARM](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-arm64.exe)). Not code-signed yet: on first run choose *More info → Run anyway*. |
-| **Linux** | [myco-app-linux-amd64](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-amd64) ([ARM](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-arm64)): opens the app in your browser (X11, Wayland, WSL). [Details](INSTALL.md#9-the-console-app-mac--windows--linux) |
+| **Mac** | **[myco.dmg](https://github.com/myco-ai/myco/releases/latest/download/myco.dmg)**: Apple silicon and Intel, signed and notarized. Updates itself. |
+| **Windows** (preview) | [myco-app-windows-amd64.exe](https://github.com/myco-ai/myco/releases/latest/download/myco-app-windows-amd64.exe) ([ARM](https://github.com/myco-ai/myco/releases/latest/download/myco-app-windows-arm64.exe)). Not code-signed yet: on first run choose *More info → Run anyway*. |
+| **Linux** | [myco-app-linux-amd64](https://github.com/myco-ai/myco/releases/latest/download/myco-app-linux-amd64) ([ARM](https://github.com/myco-ai/myco/releases/latest/download/myco-app-linux-arm64)): opens the app in your browser (X11, Wayland, WSL). [Details](INSTALL.md#9-the-console-app-mac--windows--linux) |
 | **iPhone** (beta) | **[Join the TestFlight beta](https://testflight.apple.com/join/XDKvU8Jp)** (iOS 17 or later). |
 | **Servers** | The command-line tool — see [Prefer the command line?](#prefer-the-command-line) |
 
@@ -64,7 +64,7 @@ New to this? The [step-by-step guide with screenshots](docs/guide-claude-ai.md) 
 **1. Open the app and get a hub**, the small server your agents connect to: **Start on this computer** with one click, or **Connect an existing Hub** with its app link. To run one on your server instead (it prints the app link at the end):
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-hub.sh && sudo bash install-hub.sh --domain auto
+curl -fsSLO https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-hub.sh && sudo bash install-hub.sh --domain auto
 ```
 
 **2. Add your agents.** Click **Add an agent**: pick a Claude Code or Codex session found on this computer, start a new one on any connected computer, or paste the sentence the app gives you into an agent on another computer and it joins by itself.
@@ -149,7 +149,7 @@ Claude Code, Codex, claude.ai sessions, Pi, Kiro, Gemini CLI and more ([supporte
 Everything the app does is also a `myco` command, handy on servers and for agents.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.sh | bash
+curl -fsSL https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-client.sh | bash
 ```
 
 | Start a hub | Command |
@@ -286,7 +286,7 @@ Questions, ideas, or curious how others use myco? Scan to join the WeChat group 
 
 <img src="docs/assets/community/wechat-group.png" alt="myco WeChat group" width="220">
 
-Bugs and feature requests: [GitHub Issues](https://github.com/chenhg5/myco/issues).
+Bugs and feature requests: [GitHub Issues](https://github.com/myco-ai/myco/issues).
 
 Follow the author on X: [@chg80333](https://x.com/chg80333). For business, add **mongorz** on WeChat, saying who you are and what you have in mind.
 

@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chenhg5/myco/internal/backup"
-	. "github.com/chenhg5/myco/internal/cli/cmdkit"
+	"github.com/myco-ai/myco/internal/backup"
+	. "github.com/myco-ai/myco/internal/cli/cmdkit"
 )
 
 // hubBackupCommand makes a backup: on the server, of the whole server

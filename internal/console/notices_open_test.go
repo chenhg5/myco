@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
+	"github.com/myco-ai/myco/internal/api"
 )
 
 // fakeNotices pages a fixed feed the way the hub does: after a seq, at

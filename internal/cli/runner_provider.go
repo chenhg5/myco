@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/chenhg5/myco/internal/config"
-	"github.com/chenhg5/myco/internal/harness"
-	"github.com/chenhg5/myco/internal/provider"
+	"github.com/myco-ai/myco/internal/config"
+	"github.com/myco-ai/myco/internal/harness"
+	"github.com/myco-ai/myco/internal/provider"
 )
 
 // providerChoice is the provider an agent's next run uses, and how it was

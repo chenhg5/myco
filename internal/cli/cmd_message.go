@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	. "github.com/chenhg5/myco/internal/cli/cmdkit"
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/api"
+	. "github.com/myco-ai/myco/internal/cli/cmdkit"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 var idFlag = Flag{Name: "id", Kind: String, Required: true, Env: "MYCO_MESSAGE_ID",

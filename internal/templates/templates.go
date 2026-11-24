@@ -22,8 +22,8 @@ import (
 	"path"
 	"sort"
 
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // Builtin are the official apps the binary carries: the everyday ones, so

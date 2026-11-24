@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/harness"
+	"github.com/myco-ai/myco/internal/harness"
 )
 
 // The test binary doubles as a fake ACP agent (MYCO_FAKE_ACP=<scenario>).

@@ -5,7 +5,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // AgentState summarizes what an agent is doing right now.

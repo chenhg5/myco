@@ -1,7 +1,7 @@
 package cli
 
 import (
-	"github.com/chenhg5/myco/internal/testutil"
+	"github.com/myco-ai/myco/internal/testutil"
 	"path/filepath"
 	"testing"
 )

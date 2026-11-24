@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 
-	. "github.com/chenhg5/myco/internal/cli/cmdkit"
+	. "github.com/myco-ai/myco/internal/cli/cmdkit"
 )
 
 // Which computers a project's coordinators may start agents on: a setting

@@ -14,7 +14,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/chenhg5/myco/internal/console"
+	"github.com/myco-ai/myco/internal/console"
 )
 
 func main() {

@@ -13,9 +13,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/backup"
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/backup"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // Backups of a workspace kept on this computer: a backup on the server's

@@ -6,9 +6,9 @@ Questions, ideas, or curious how others use myco? Come and talk with us. For a q
 
 Scan with WeChat to join:
 
-![myco WeChat group](https://raw.githubusercontent.com/chenhg5/myco/main/docs/assets/community/wechat-group.png)
+![myco WeChat group](https://raw.githubusercontent.com/myco-ai/myco/main/docs/assets/community/wechat-group.png)
 
-The group's QR code is renewed every few days. If it does not scan, has expired or does not show, [open it on GitHub](https://github.com/chenhg5/myco/blob/main/docs/assets/community/wechat-group.png) for the latest.
+The group's QR code is renewed every few days. If it does not scan, has expired or does not show, [open it on GitHub](https://github.com/myco-ai/myco/blob/main/docs/assets/community/wechat-group.png) for the latest.
 
 The group is a good place to:
 
@@ -26,7 +26,7 @@ Add the author on WeChat: **mongorz**. Please say who you are and what you have 
 
 ## Reporting problems
 
-For bugs or feature requests, open an issue on [GitHub Issues](https://github.com/chenhg5/myco/issues). It gets sorted faster when you include:
+For bugs or feature requests, open an issue on [GitHub Issues](https://github.com/myco-ai/myco/issues). It gets sorted faster when you include:
 
 1. what you did, what you expected, and what happened instead;
 2. the App version (in Settings › About), and whether you are on Mac, Windows or Linux;

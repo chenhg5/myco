@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	. "github.com/chenhg5/myco/internal/cli/cmdkit"
-	"github.com/chenhg5/myco/internal/config"
-	"github.com/chenhg5/myco/internal/provider"
+	. "github.com/myco-ai/myco/internal/cli/cmdkit"
+	"github.com/myco-ai/myco/internal/config"
+	"github.com/myco-ai/myco/internal/provider"
 )
 
 // agentProfilePath is the profile of --agent, or of the current session.

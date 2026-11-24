@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/chenhg5/myco/internal/oscap"
+	"github.com/myco-ai/myco/internal/oscap"
 )
 
 var screenPickerInstall func()

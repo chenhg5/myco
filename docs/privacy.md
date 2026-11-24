@@ -2,7 +2,7 @@
 
 For the myco iOS app. Last updated: November 19, 2026.
 
-**We collect no data about you.** myco is open source ([github.com/chenhg5/myco](https://github.com/chenhg5/myco)). The app has no analytics, ads, crash reporting or tracking of any kind; its developers receive none of your messages, files, accounts or usage.
+**We collect no data about you.** myco is open source ([github.com/myco-ai/myco](https://github.com/myco-ai/myco)). The app has no analytics, ads, crash reporting or tracking of any kind; its developers receive none of your messages, files, accounts or usage.
 
 **Where your data goes:**
 
@@ -15,4 +15,4 @@ For the myco iOS app. Last updated: November 19, 2026.
 
 **Children:** myco is not directed at children under 13.
 
-**Contact:** please open an issue on [GitHub](https://github.com/chenhg5/myco/issues).
+**Contact:** please open an issue on [GitHub](https://github.com/myco-ai/myco/issues).

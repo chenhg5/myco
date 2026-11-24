@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/chenhg5/myco/internal/api"
-	. "github.com/chenhg5/myco/internal/cli/cmdkit"
-	"github.com/chenhg5/myco/internal/e2e"
+	"github.com/myco-ai/myco/internal/api"
+	. "github.com/myco-ai/myco/internal/cli/cmdkit"
+	"github.com/myco-ai/myco/internal/e2e"
 )
 
 // hubSettingsCommand shows or changes the hub's settings (end-to-end

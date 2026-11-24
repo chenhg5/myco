@@ -24,12 +24,12 @@ struct PinTests {
         #expect(pins.supported)
         #expect(pins.list.map(\.title) == ["仓库", "定了：底部三个 Tab"])
         #expect(pins.pin(message: "m2") != nil)
-        #expect(pins.pin(link: "https://github.com/chenhg5/myco") != nil)
+        #expect(pins.pin(link: "https://github.com/myco-ai/myco") != nil)
 
         #expect(await pins.pinMessage("d1", title: "推送接口"))
         #expect(pins.list.count == 3)
         // The same thing again: not twice.
-        #expect(await pins.pinLink("https://github.com/chenhg5/myco"))
+        #expect(await pins.pinLink("https://github.com/myco-ai/myco"))
         #expect(pins.list.count == 3)
         let added = pins.list.last!
         await pins.remove(added)

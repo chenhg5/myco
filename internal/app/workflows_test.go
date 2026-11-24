@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/domain"
-	"github.com/chenhg5/myco/internal/infra/jsonschema"
-	"github.com/chenhg5/myco/internal/infra/notify"
-	"github.com/chenhg5/myco/internal/infra/security"
-	"github.com/chenhg5/myco/internal/infra/sqlite"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/infra/jsonschema"
+	"github.com/myco-ai/myco/internal/infra/notify"
+	"github.com/myco-ai/myco/internal/infra/security"
+	"github.com/myco-ai/myco/internal/infra/sqlite"
 )
 
 type wfEnv struct {

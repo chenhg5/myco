@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/harness"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/harness"
 )
 
 type pendingRun struct {

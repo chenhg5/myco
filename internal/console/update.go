@@ -16,9 +16,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/osutil"
-	"github.com/chenhg5/myco/internal/release"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/osutil"
+	"github.com/myco-ai/myco/internal/release"
 )
 
 // AppAsset is the release asset holding the app for a Mac architecture:

@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/domain"
-	"github.com/chenhg5/myco/internal/infra/sqlite"
+	"github.com/myco-ai/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/infra/sqlite"
 )
 
 // Each take-over retires the credential it replaces (at most

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/app"
+	"github.com/myco-ai/myco/internal/app"
 )
 
 // A runner yields to a session that keeps `inbox wait` running, and takes

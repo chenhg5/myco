@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // A voice call is with one agent, in the person's conversation with it (as

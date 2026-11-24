@@ -20,7 +20,7 @@ V=${1:?usage: GITEE_TOKEN=... scripts/gitee-sync.sh vX.Y.Z [--dry-run]}
 DRY=0
 if [ "${2:-}" = --dry-run ]; then DRY=1; fi
 
-REPO=${MYCO_REPO:-chenhg5/myco}
+REPO=${MYCO_REPO:-myco-ai/myco}
 GREPO=${MYCO_GITEE_REPO:-cg33/myco}
 LOGIN=${MYCO_GITEE_LOGIN:-cg33}
 API=https://gitee.com/api/v5/repos/$GREPO

@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/console"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/console"
 )
 
 // Connecting a computer over SSH: the App logs in, looks around, runs the

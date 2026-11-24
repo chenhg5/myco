@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/e2e"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/e2e"
 )
 
 func TestRemoteProviderAppSealsBeforeHub(t *testing.T) {

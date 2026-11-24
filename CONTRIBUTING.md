@@ -4,7 +4,7 @@ Thanks for helping. Bug reports, fixes, docs and new harnesses are all welcome.
 
 ## Reporting bugs and asking for features
 
-- Search [existing issues](https://github.com/chenhg5/myco/issues) first.
+- Search [existing issues](https://github.com/myco-ai/myco/issues) first.
 - For a bug, include:
   - `myco version` for the CLI, and the hub's version (`/v1/health`).
   - Your OS.
@@ -22,7 +22,7 @@ You need:
 - macOS with Xcode command line tools, only to build the macOS app.
 
 ```bash
-git clone https://github.com/chenhg5/myco && cd myco
+git clone https://github.com/myco-ai/myco && cd myco
 make build      # bin/myco
 make check      # gofmt + vet, unit and integration tests, smoke test
 ```

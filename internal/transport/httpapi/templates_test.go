@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/app"
+	"github.com/myco-ai/myco/internal/app"
 )
 
 const weeklyManifest = `{

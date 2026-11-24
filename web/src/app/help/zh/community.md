@@ -6,9 +6,9 @@
 
 用微信扫一扫加入：
 
-![myco 微信群](https://raw.githubusercontent.com/chenhg5/myco/main/docs/assets/community/wechat-group.png)
+![myco 微信群](https://raw.githubusercontent.com/myco-ai/myco/main/docs/assets/community/wechat-group.png)
 
-群二维码每隔几天会更新一次。扫不了、过期了或者图片显示不出来，可以[在 GitHub 上打开](https://github.com/chenhg5/myco/blob/main/docs/assets/community/wechat-group.png)看最新的。
+群二维码每隔几天会更新一次。扫不了、过期了或者图片显示不出来，可以[在 GitHub 上打开](https://github.com/myco-ai/myco/blob/main/docs/assets/community/wechat-group.png)看最新的。
 
 群里适合：
 
@@ -26,7 +26,7 @@
 
 ## 反馈问题
 
-遇到 bug 或想要新功能，欢迎在 [GitHub Issues](https://github.com/chenhg5/myco/issues) 里提。写清楚这几样，能更快解决：
+遇到 bug 或想要新功能，欢迎在 [GitHub Issues](https://github.com/myco-ai/myco/issues) 里提。写清楚这几样，能更快解决：
 
 1. 你做了什么，期望发生什么，实际发生了什么；
 2. App 的版本（「设置 › 关于」里能看到），用的是 Mac、Windows 还是 Linux；

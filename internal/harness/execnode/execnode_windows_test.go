@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/harness"
+	"github.com/myco-ai/myco/internal/harness"
 )
 
 // The default shell on Windows is PowerShell: exit codes, stdout and stderr,

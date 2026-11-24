@@ -10,9 +10,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/chenhg5/myco/internal/api"
-	. "github.com/chenhg5/myco/internal/cli/cmdkit"
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/api"
+	. "github.com/myco-ai/myco/internal/cli/cmdkit"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // projectClient: an agent's own token when this is an agent (its projects,
@@ -159,7 +159,7 @@ the project no longer has are left alone.`,
 		Name: "update", Summary: "Change a project's title, goal, brief or links (its owner and coordinators); visibility and archiving (people)", Mutating: true,
 		Examples: []string{
 			`myco project update --name myco --brief-file BRIEF.md`,
-			`myco project update --name myco --link "repo=https://github.com/chenhg5/myco" --link "spec=https://example.com/spec"`,
+			`myco project update --name myco --link "repo=https://github.com/myco-ai/myco" --link "spec=https://example.com/spec"`,
 			`myco project update --name myco --visibility team`,
 		},
 		Flags: []Flag{nameFlag, {Name: "title", Kind: String, Help: "Display title"}, {Name: "goal", Kind: String, Help: "Goal"},

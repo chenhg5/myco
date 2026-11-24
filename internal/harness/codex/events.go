@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chenhg5/myco/internal/harness"
+	"github.com/myco-ai/myco/internal/harness"
 )
 
 // streamLine is one line of `codex exec --json`, for the live view.

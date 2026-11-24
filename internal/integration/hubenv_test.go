@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/chenhg5/myco/internal/app"
+	"github.com/myco-ai/myco/internal/app"
 )
 
 // A saved identity talks to the hub that issued its token, even when

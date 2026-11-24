@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chenhg5/myco/internal/templates"
+	"github.com/myco-ai/myco/internal/templates"
 )
 
 // Every official template reads, has its page, the agent's

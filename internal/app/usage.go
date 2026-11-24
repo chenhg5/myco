@@ -7,8 +7,8 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 type UsageService struct {

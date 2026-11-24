@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/app"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/app"
 )
 
 // A command another agent sent to a shell node, picked up and then lost

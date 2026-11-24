@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/oscap"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/oscap"
 )
 
 // What a page (an app) can use of this computer: myco.os.* in its bridge,

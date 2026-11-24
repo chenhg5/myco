@@ -3,8 +3,8 @@ package console
 import (
 	"net/http"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // pinRoutes: what a conversation keeps at hand (置顶), on its hub.

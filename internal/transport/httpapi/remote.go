@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/chenhg5/myco/internal/domain"
-	"github.com/chenhg5/myco/internal/remotedesktop"
+	"github.com/myco-ai/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/remotedesktop"
 )
 
 // These routes require a person's credential, never an agent token. Owning a

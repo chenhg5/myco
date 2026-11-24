@@ -209,7 +209,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/oscap"
+	"github.com/myco-ai/myco/internal/oscap"
 )
 
 type regionAnswer struct {

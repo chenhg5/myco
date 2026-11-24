@@ -41,7 +41,7 @@ quota or commercial terms.
    run it with Node. No npm dependencies or global SkillHub setup is needed:
 
    ```sh
-   curl -fSL --max-time 30 https://raw.githubusercontent.com/chenhg5/myco/main/templates/src/price-compare/public/agent-api.mjs -o agent-api.mjs
+   curl -fSL --max-time 30 https://raw.githubusercontent.com/myco-ai/myco/main/templates/src/price-compare/public/agent-api.mjs -o agent-api.mjs
    node agent-api.mjs --help
    node agent-api.mjs --query "WH-1000XM6" --spec "Black, new, one pair, China delivery" --platforms taobao,jd,pdd --config-file /private/path/maishou.json --out comparison.json --page <pg_id> --id headphones
    ```

@@ -143,7 +143,7 @@ case "$CMD" in
     if [[ $KEEP_APP == 1 ]]; then
       say "Open the myco App to start as a new user."
     else
-      say "Download the App (https://github.com/chenhg5/myco/releases/latest) to start as a new user."
+      say "Download the App (https://github.com/myco-ai/myco/releases/latest) to start as a new user."
     fi
     say "Afterwards: bash scripts/mac-fresh-start.sh restore"
     ;;

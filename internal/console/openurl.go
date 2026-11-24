@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // openURL: POST /app/open-url {url} opens a link in the default browser

@@ -16,14 +16,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/client"
 
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/config"
-	"github.com/chenhg5/myco/internal/hubserver"
-	"github.com/chenhg5/myco/internal/osutil"
-	"github.com/chenhg5/myco/internal/testutil"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/config"
+	"github.com/myco-ai/myco/internal/hubserver"
+	"github.com/myco-ai/myco/internal/osutil"
+	"github.com/myco-ai/myco/internal/testutil"
 )
 
 type harnessT struct {

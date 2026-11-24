@@ -5,7 +5,7 @@ import (
 	"io"
 	"strings"
 
-	. "github.com/chenhg5/myco/internal/cli/cmdkit"
+	. "github.com/myco-ai/myco/internal/cli/cmdkit"
 )
 
 func machineRemoveCommand() *Command {

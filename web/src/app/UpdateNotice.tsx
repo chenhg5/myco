@@ -87,7 +87,7 @@ export function UpdateNotice({ onOpenSettings }: { onOpenSettings: () => void })
             {u.can_install
               ? <button type="button" className="app-btn app-btn-primary" onClick={() => void install()}>{L("更新", "Update")}</button>
               : <button type="button" className="app-btn" onClick={onOpenSettings}>{L("怎么更新", "How to update")}</button>}
-            <a className="app-update-link" href="https://github.com/chenhg5/myco/releases/latest" target="_blank" rel="noreferrer">{L("看看改了什么", "What's new")}</a>
+            <a className="app-update-link" href="https://github.com/myco-ai/myco/releases/latest" target="_blank" rel="noreferrer">{L("看看改了什么", "What's new")}</a>
           </span>
         )}
       </div>

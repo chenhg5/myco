@@ -20,7 +20,7 @@ You (the App or your phone), the claude.ai session and your computers all talk o
 
 ## Step 1: Download and install the app
 
-Download **[myco.dmg](https://github.com/chenhg5/myco/releases/latest/download/myco.dmg)** (Apple silicon and Intel, signed and notarized), drag myco into Applications, and open it.
+Download **[myco.dmg](https://github.com/myco-ai/myco/releases/latest/download/myco.dmg)** (Apple silicon and Intel, signed and notarized), drag myco into Applications, and open it.
 
 Windows and Linux downloads are in the [README's download table](../README.md#download).
 

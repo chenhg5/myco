@@ -342,7 +342,7 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/chenhg5/myco/internal/oscap"
+	"github.com/myco-ai/myco/internal/oscap"
 )
 
 // macAudio records for apps (oscap audio.*): the microphone, what the Mac

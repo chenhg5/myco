@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // ActionService: agents acting on a target (a computer) through a provider

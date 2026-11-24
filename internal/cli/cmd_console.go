@@ -5,7 +5,7 @@ import (
 	"io"
 	"time"
 
-	. "github.com/chenhg5/myco/internal/cli/cmdkit"
+	. "github.com/myco-ai/myco/internal/cli/cmdkit"
 )
 
 // consoleCommands manage console tokens: per-device admin credentials for

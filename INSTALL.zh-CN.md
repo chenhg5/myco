@@ -5,7 +5,7 @@
 这份文档写给**人和 agent**。如果你是被要求"接入 myco 网络"的 agent，按下面的目录找到和你情况对应的那一节，照着执行即可。
 
 - **最快：让你的 agent 帮你装**。把这句话发给 Claude Code、Codex 或任何能跑命令的 AI，它会照着[给 agent 的安装指南](docs/agent-setup.md)开 Hub、连 App、加电脑和 agent，并自己排查问题：
-  > 帮我装好 myco：先读 https://raw.githubusercontent.com/chenhg5/myco/main/docs/agent-setup.md （打不开就读 https://cdn.jsdelivr.net/gh/chenhg5/myco@main/docs/agent-setup.md ），照着做。要我决定的先问我，用 sudo 或改系统设置前也先问我，装完告诉我结果。
+  > 帮我装好 myco：先读 https://raw.githubusercontent.com/myco-ai/myco/main/docs/agent-setup.md （打不开就读 https://cdn.jsdelivr.net/gh/myco-ai/myco@main/docs/agent-setup.md ），照着做。要我决定的先问我，用 sudo 或改系统设置前也先问我，装完告诉我结果。
 - **推荐：先装 App（Mac / Windows / Linux）**→ [下一节](#推荐先装-appmac--windows--linux)。下载、打开、点一下就有自己的 Hub，本机的 Claude Code、Codex 会话点一下就能加入，不用敲命令。
 - **没有图形界面的机器（服务器、云端 agent）：入网链接** → [第 0 节](#0-最简单的方式入网链接)，粘贴一行命令。
 - **服务端（Hub）**：部署一次，放在一台有公网 IP 的 Linux 机器上 → [第 1 节](#1-服务端部署-hub)；没有 VPS 时放在自己电脑上，用 Cloudflare 或 Tailscale 穿透 → [1.1 节](#11-没有-vps在自己的电脑上开-hub)
@@ -27,12 +27,12 @@
 
 大多数人从 App 开始：不用部署服务器，也不用记命令。
 
-1. **下载**（[最新发布](https://github.com/chenhg5/myco/releases/latest)）：
+1. **下载**（[最新发布](https://github.com/myco-ai/myco/releases/latest)）：
    - **Mac**：`myco.dmg`（Apple 芯片和 Intel 通用，已签名并经 Apple 公证），打开后拖进「应用程序」。
    - **Windows（预览）**：`myco-app-windows-amd64.exe`（ARM 电脑用 `-arm64`），下载后直接运行；还没有代码签名，SmartScreen 提示时点「更多信息 → 仍要运行」。
    - **Linux**：`myco-app-linux-amd64`（ARM 用 `-arm64`）。App 在默认浏览器里打开，X11、Wayland 都能用；第一次运行后「应用程序」菜单里就有 myco：
      ```bash
-     mkdir -p ~/.local/bin && curl -fL -o ~/.local/bin/myco-app https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-amd64 && chmod +x ~/.local/bin/myco-app && ~/.local/bin/myco-app
+     mkdir -p ~/.local/bin && curl -fL -o ~/.local/bin/myco-app https://github.com/myco-ai/myco/releases/latest/download/myco-app-linux-amd64 && chmod +x ~/.local/bin/myco-app && ~/.local/bin/myco-app
      ```
 2. **第一次打开**，二选一：
    - **在这台电脑上开始**：一键在本机开一个 Hub，这台电脑自动作为第一台机器加入。
@@ -62,7 +62,7 @@ curl -fsSL <入网链接> | bash
 ```
 它会：安装或升级 myco（校验 SHA256）→ 登记这台机器（凭据存在 `~/.myco/machine.yaml`，只有你能读）→ 安装后台 runner 服务。可以重复执行；同一台机器再执行不会消耗链接的次数。这台机器上的 agent 会自动带上 `machine=<机器名>` 标签。
 
-**原生 Windows**：在 PowerShell 里执行 `irm https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.ps1 | iex` 安装（装到 `%LOCALAPPDATA%\Programs\myco`，并加进用户 PATH）；Git Bash 里也可以用上面那行 `curl … | bash`（Windows 上的 Claude Code 就是在 Git Bash 里执行命令）。入网链接两种都支持：Git Bash 用 `curl -fsSL <链接> | bash`，PowerShell 用 `irm '<链接>?format=ps1' | iex`。后台 runner 用当前用户的登录启动项（`HKCU\…\Run`，不需要管理员权限）：安装后立即在后台启动，之后每次登录自动启动；`myco runner service status/restart/uninstall` 照常可用，日志在 `%USERPROFILE%\.myco\runner.log`。exec 节点和 shell 节点在 Windows 上默认用 PowerShell 执行命令（命令要写 PowerShell 语法）。
+**原生 Windows**：在 PowerShell 里执行 `irm https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-client.ps1 | iex` 安装（装到 `%LOCALAPPDATA%\Programs\myco`，并加进用户 PATH）；Git Bash 里也可以用上面那行 `curl … | bash`（Windows 上的 Claude Code 就是在 Git Bash 里执行命令）。入网链接两种都支持：Git Bash 用 `curl -fsSL <链接> | bash`，PowerShell 用 `irm '<链接>?format=ps1' | iex`。后台 runner 用当前用户的登录启动项（`HKCU\…\Run`，不需要管理员权限）：安装后立即在后台启动，之后每次登录自动启动；`myco runner service status/restart/uninstall` 照常可用，日志在 `%USERPROFILE%\.myco\runner.log`。exec 节点和 shell 节点在 Windows 上默认用 PowerShell 执行命令（命令要写 PowerShell 语法）。
 
 **每个 AI 会话**：在 Claude Code 或 Codex 会话里说一句"接入 myco：<入网链接>"，或者在已登记的机器上直接执行：
 ```bash
@@ -96,7 +96,7 @@ sudo /usr/local/bin/myco link revoke --id enr_xxx --force  # 作废链接；已�
 **要求**：一台 Linux 服务器，有 systemd 和 root 权限。
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-hub.sh
+curl -fsSLO https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-hub.sh
 less install-hub.sh                      # 先看一遍再执行
 sudo bash install-hub.sh                 # 会问你用哪种方式
 ```
@@ -285,7 +285,7 @@ myco agent remove --name x --force
 myco 是单个二进制文件，没有任何依赖。一条命令完成安装或升级：自动识别系统和架构、校验 SHA256、装到已有 myco 所在的目录（没有就装到 `~/.local/bin`），最后执行一次 `myco doctor --all`。
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.sh | bash
+curl -fsSL https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-client.sh | bash
 ```
 
 也可以手动安装：
@@ -294,7 +294,7 @@ curl -fsSL https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-cl
 # 根据系统选择：linux-amd64 | linux-arm64 | darwin-arm64（Apple 芯片）| darwin-amd64
 OS=$(uname -s | tr A-Z a-z); ARCH=$(uname -m); [ "$ARCH" = x86_64 ] && ARCH=amd64; [ "$ARCH" = aarch64 ] && ARCH=arm64
 mkdir -p ~/.local/bin
-curl -fsSL "https://github.com/chenhg5/myco/releases/latest/download/myco-$OS-$ARCH" -o ~/.local/bin/myco
+curl -fsSL "https://github.com/myco-ai/myco/releases/latest/download/myco-$OS-$ARCH" -o ~/.local/bin/myco
 chmod +x ~/.local/bin/myco
 myco version
 ```
@@ -330,7 +330,7 @@ myco version
 
 人类先配置一次环境（会话标题栏 → 云端环境 → Edit）：
 - 环境变量：`MYCO_HUB`、`MYCO_ENROLL_TOKEN`（用 `--harness claude-cloud` 创建的那个）
-- 安装脚本加一行：`curl -fsSL https://github.com/chenhg5/myco/releases/latest/download/myco-linux-amd64 -o /usr/local/bin/myco && chmod +x /usr/local/bin/myco`
+- 安装脚本加一行：`curl -fsSL https://github.com/myco-ai/myco/releases/latest/download/myco-linux-amd64 -o /usr/local/bin/myco && chmod +x /usr/local/bin/myco`
 - 网络权限如果是 Limited，把 Hub 的域名加到 Allowed domains
 
 agent 在 session 里执行：
@@ -1077,7 +1077,7 @@ sudo myco hub restore --from myco-backup-hub-20261121-093000.tar.gz --db /var/li
 
 一个 App（Mac、Windows 是窗口，Linux 在浏览器里打开），可以同时管理多个 Hub：查看所有节点和机器、改名、改 allow-from、踢下线、删除，在机器上开新会话（添加节点），生成入网命令（添加机器），还能在这台 Mac 上直接开一个本机 Hub。
 
-- **下载**（[最新发布](https://github.com/chenhg5/myco/releases/latest)）：
+- **下载**（[最新发布](https://github.com/myco-ai/myco/releases/latest)）：
   - Mac：`myco.dmg`，一个包同时支持 Apple 芯片和 Intel，已用 Developer ID 签名并经 Apple 公证，双击打开后拖进「应用程序」即可。以后在 App 的「设置 → 关于」里一键更新。
   - Windows（预览）：`myco-app-windows-amd64.exe`（ARM 电脑用 `-arm64`），下载后直接运行。还没有代码签名，第一次运行 SmartScreen 会提示，点「更多信息 → 仍要运行」。v0.18.6 起支持在「设置 → 关于」里一键更新：替换正在运行的 exe 并重新打开（下载中断会接着下；新版本起不来，比如被杀毒软件拦住，会换回当前版本继续用），这台电脑上的 myco 命令行工具也一起升级（v0.18.5 及之前的版本要手动下载一次新版）。还不支持 `myco://` 链接。App 用到的 myco 命令行工具可以在「设置 → Hub」里安装。
     - **窗口一直是黑的**：通常是 Windows 的 WebView2 组件（显示窗口内容的部分）在这台电脑上起不来（比如 WebView2 157 在开了 Defender 的远程桌面里，它的沙箱初始化失败、反复崩溃）。v0.21.4 起，窗口 25 秒还没显示出内容，App 会弹框：「是」在浏览器里打开 myco（照常能用）；「否」用兼容模式重启（只对 myco 关掉 WebView2 的沙箱，记在 `%APPDATA%\myco\app-compat`，删掉这个文件就恢复）。不要用用户级的 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` 环境变量，它会影响这台电脑上所有用 WebView2 的程序。

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chenhg5/myco/internal/sshcap"
-	"github.com/chenhg5/myco/internal/testsshd"
+	"github.com/myco-ai/myco/internal/sshcap"
+	"github.com/myco-ai/myco/internal/testsshd"
 )
 
 func TestSSHNativePrivateProfilesAndFixedCalls(t *testing.T) {

@@ -5,7 +5,7 @@ package api
 
 import (
 	"encoding/json"
-	"github.com/chenhg5/myco/internal/remotedesktop"
+	"github.com/myco-ai/myco/internal/remotedesktop"
 	"time"
 )
 

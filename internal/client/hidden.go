@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/chenhg5/myco/internal/api"
+	"github.com/myco-ai/myco/internal/api"
 )
 
 // Hidden lists the messages the caller (a person, by console token) took

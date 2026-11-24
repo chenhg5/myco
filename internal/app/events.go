@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // EventBus hands the hub's events (domain.Event) to whoever subscribed.

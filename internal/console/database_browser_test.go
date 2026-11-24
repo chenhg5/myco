@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/console"
-	"github.com/chenhg5/myco/internal/dbstudio"
+	"github.com/myco-ai/myco/internal/console"
+	"github.com/myco-ai/myco/internal/dbstudio"
 )
 
 func TestDatabaseNativeBridgeAndProductionUI(t *testing.T) {

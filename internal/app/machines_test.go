@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/domain"
-	"github.com/chenhg5/myco/internal/infra/security"
-	"github.com/chenhg5/myco/internal/infra/sqlite"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/infra/security"
+	"github.com/myco-ai/myco/internal/infra/sqlite"
 )
 
 // Two computers in a workspace never share a name: renaming one to

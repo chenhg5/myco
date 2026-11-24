@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/domain"
-	"github.com/chenhg5/myco/internal/release"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/release"
 )
 
 // minHandoverMachine: machines whose myco is not newer than this ignore a
@@ -361,7 +361,7 @@ func (s *Server) handoverPage(w http.ResponseWriter, r *http.Request) {
   $env:MYCO_TAKEOVER = %s
   $env:MYCO_NO_DOCTOR = '1'
   try {
-    Invoke-RestMethod 'https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.ps1' | Invoke-Expression
+    Invoke-RestMethod 'https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-client.ps1' | Invoke-Expression
     $myco = (Get-Command myco.exe -ErrorAction SilentlyContinue).Source
     if (-not $myco) { $myco = Join-Path $env:LOCALAPPDATA 'Programs\myco\myco.exe' }
     & $myco join --hub %s --format text
@@ -378,7 +378,7 @@ func (s *Server) handoverPage(w http.ResponseWriter, r *http.Request) {
 # Take over the myco agent %s in this session. The token below is a
 # credential: do not paste it into chats or repositories.
 set -eu
-curl -fsSL --retry 5 --retry-delay 2 https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.sh | MYCO_NO_DOCTOR=1 MYCO_ADD_PATH=1 bash
+curl -fsSL --retry 5 --retry-delay 2 https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-client.sh | MYCO_NO_DOCTOR=1 MYCO_ADD_PATH=1 bash
 MYCO="$(command -v myco 2>/dev/null || true)"
 if [ -z "$MYCO" ]; then MYCO="${MYCO_INSTALL_DIR:-$HOME/.local/bin}/myco"; fi
 MYCO_TAKEOVER=%s "$MYCO" join --hub %s --format text

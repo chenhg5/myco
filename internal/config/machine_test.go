@@ -2,8 +2,8 @@ package config
 
 import (
 	"encoding/json"
-	"github.com/chenhg5/myco/internal/osutil"
-	"github.com/chenhg5/myco/internal/testutil"
+	"github.com/myco-ai/myco/internal/osutil"
+	"github.com/myco-ai/myco/internal/testutil"
 	"os"
 	"path/filepath"
 	"reflect"

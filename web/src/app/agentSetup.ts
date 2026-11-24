@@ -5,9 +5,9 @@ import { L } from "@/lib/i18n";
  * claude.ai…): it reads docs/agent-setup.md and sets myco up, or looks
  * into an error, asking before it decides anything for them.
  */
-export const SETUP_GUIDE = "https://raw.githubusercontent.com/chenhg5/myco/main/docs/agent-setup.md";
+export const SETUP_GUIDE = "https://raw.githubusercontent.com/myco-ai/myco/main/docs/agent-setup.md";
 /** The same file through jsDelivr, for networks where GitHub's raw host is slow or blocked. */
-export const SETUP_GUIDE_MIRROR = "https://cdn.jsdelivr.net/gh/chenhg5/myco@main/docs/agent-setup.md";
+export const SETUP_GUIDE_MIRROR = "https://cdn.jsdelivr.net/gh/myco-ai/myco@main/docs/agent-setup.md";
 
 /** Set myco up from nothing: a hub, the App connected, computers and agents. */
 export function setupPrompt(): string {

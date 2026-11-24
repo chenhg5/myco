@@ -15,7 +15,7 @@
 set -eu
 SHA=${1:-}
 TIMEOUT=${2:-900}
-REPO=${MYCO_REPO:-chenhg5/myco}
+REPO=${MYCO_REPO:-myco-ai/myco}
 REQUIRED="go windows web app-macos"
 
 say() { echo "release-wait: $*"; }

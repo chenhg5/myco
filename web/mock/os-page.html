@@ -68,7 +68,7 @@ if (!os) {
     .then(() => os.clipboard.read()).then((r) => show("miscout", "剪贴板里：" + r.text), fail("miscout"));
   $("notify").onclick = () => os.notify({ title: "这台电脑", body: "来自 myco 网页的通知", sound: true }).then(() => show("miscout", "发了"), fail("miscout"));
   $("shot").onclick = () => os.screen.capture({ format: "jpeg", quality: 70 }).then((s) => { show("miscout", `${s.width}×${s.height}，${(s.bytes / 1024).toFixed(0)} KB`); $("img").src = `data:${s.type};base64,${s.base64}`; $("img").hidden = false; }, fail("miscout"));
-  $("fetch").onclick = () => os.net.fetch({ url: "https://api.github.com/repos/chenhg5/myco" })
+  $("fetch").onclick = () => os.net.fetch({ url: "https://api.github.com/repos/myco-ai/myco" })
     .then((r) => { const j = JSON.parse(r.body); show("miscout", `HTTP ${r.status}：${j.full_name} ★ ${j.stargazers_count}`); }, fail("miscout"));
 }
 </script>

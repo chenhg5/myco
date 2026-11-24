@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // SuperagentService: a person's own agent with the App's powers in its

@@ -5,9 +5,9 @@ import Foundation
 /// into an error, asking before it decides anything for them. The desktop
 /// app's `agentSetup.ts`, word for word.
 public enum AgentSetup {
-    public static let guide = "https://raw.githubusercontent.com/chenhg5/myco/main/docs/agent-setup.md"
+    public static let guide = "https://raw.githubusercontent.com/myco-ai/myco/main/docs/agent-setup.md"
     /// The same file through jsDelivr, for networks where GitHub's raw host is slow or blocked.
-    public static let mirror = "https://cdn.jsdelivr.net/gh/chenhg5/myco@main/docs/agent-setup.md"
+    public static let mirror = "https://cdn.jsdelivr.net/gh/myco-ai/myco@main/docs/agent-setup.md"
 
     /// Set myco up from nothing: a hub, the app connected, computers and agents.
     public static var setup: String {

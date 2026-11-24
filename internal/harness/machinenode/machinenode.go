@@ -27,9 +27,9 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/harness"
-	"github.com/chenhg5/myco/internal/osutil"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/harness"
+	"github.com/myco-ai/myco/internal/osutil"
 )
 
 // Name is the harness name of machine nodes.

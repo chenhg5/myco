@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
+	"github.com/myco-ai/myco/internal/api"
 )
 
 // A hub that keeps one person's voice settings, as the real one does

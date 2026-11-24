@@ -4,7 +4,7 @@ package main
 import (
 	"os"
 
-	"github.com/chenhg5/myco/internal/cli"
+	"github.com/myco-ai/myco/internal/cli"
 )
 
 func main() { os.Exit(cli.Main(os.Args[1:])) }

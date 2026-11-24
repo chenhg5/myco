@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/chenhg5/myco/internal/osutil"
+	"github.com/myco-ai/myco/internal/osutil"
 )
 
 // Manual is a local-only endpoint configuration. APIKey must never be returned

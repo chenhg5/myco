@@ -4,7 +4,7 @@
 #   scripts/release-verify.sh vX.Y.Z
 set -eu
 V=${1:?usage: scripts/release-verify.sh vX.Y.Z}
-REPO=${MYCO_REPO:-chenhg5/myco}
+REPO=${MYCO_REPO:-myco-ai/myco}
 d=$(mktemp -d)
 trap 'rm -rf "$d"' EXIT
 for f in SHA256SUMS myco.dmg myco-app-darwin-universal.zip; do

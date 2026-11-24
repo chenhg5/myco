@@ -8,7 +8,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/chenhg5/myco/internal/app"
+	"github.com/myco-ai/myco/internal/app"
 )
 
 // inviteView fills the pages of an app link (https://<hub>/c/<code>).
@@ -84,7 +84,7 @@ export MYCO_HUB={{shq .Hub}}
 export MYCO_INVITE_CODE={{shq .Code}}
 
 echo "==> installing myco"
-curl -fsSL --retry 5 --retry-delay 2 https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.sh | MYCO_NO_DOCTOR=1 MYCO_ADD_PATH=1 bash
+curl -fsSL --retry 5 --retry-delay 2 https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-client.sh | MYCO_NO_DOCTOR=1 MYCO_ADD_PATH=1 bash
 MYCO="$(command -v myco 2>/dev/null || true)"
 if [ -z "$MYCO" ]; then
   MYCO="${MYCO_INSTALL_DIR:-$HOME/.local/bin}/myco"

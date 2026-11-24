@@ -23,7 +23,7 @@ import sys
 import urllib.request
 from collections import defaultdict
 
-REPO = os.environ.get("MYCO_REPO", "chenhg5/myco")
+REPO = os.environ.get("MYCO_REPO", "myco-ai/myco")
 
 # What a release file is, in the order the report lists them.
 KINDS = [

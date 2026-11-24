@@ -296,7 +296,7 @@ const pageFiles = (n) => ({
 <div id="bars"></div>
 <section><h2>新功能</h2><ul><li>对话页支持 Markdown 表格与代码块</li><li>本机会话一键接入</li></ul></section>
 <section><h2>修复</h2><ul><li>runner 断线后重连</li></ul></section>
-<p><a href="https://github.com/chenhg5/myco/releases" id="out">看完整的变更记录</a></p></main>
+<p><a href="https://github.com/myco-ai/myco/releases" id="out">看完整的变更记录</a></p></main>
 <script src="app.js"></script></body></html>`,
   "style.css": "body{font:15px/1.6 -apple-system,system-ui,sans-serif;margin:0;color:#1c1c21;background:#fff}main{max-width:640px;margin:0 auto;padding:28px 24px}h1{margin:0;font-size:24px}.sub{color:#85858d;margin:4px 0 20px}.bar{display:flex;align-items:center;gap:10px;margin:6px 0}.bar i{display:block;height:14px;border-radius:4px;background:#3a9a78}h2{font-size:16px;margin:22px 0 6px}a{color:#2f8a68}",
   "app.js": `const data=[["新功能",${n + 5}],["修复",${n + 2}],["文档",3]];document.getElementById("bars").innerHTML=data.map(([k,v])=>'<div class="bar"><span style="width:56px">'+k+'</span><i style="width:'+v*24+'px"></i><b>'+v+'</b></div>').join("");`,
@@ -451,7 +451,7 @@ function hubJobView(job) {
   if (name === "old-pi") {
     steps[0].state = "failed";
     return { ...view, done: true, error: { code: "needs_sudo", message: "installing needs root, and sudo asks for a password there",
-      command: "ssh -t old-pi 'curl -fsSL https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-hub.sh | sudo bash -s -- --domain auto'" } };
+      command: "ssh -t old-pi 'curl -fsSL https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-hub.sh | sudo bash -s -- --domain auto'" } };
   }
   steps[0].state = "done";
   view.found = { os: "Linux", host: name, root: "yes", hub: "no" };
@@ -1152,7 +1152,7 @@ function consoleReply() {
     return {
       body: JSON.stringify({
         exit_code: 0,
-        stdout: "go test ./...\nok  github.com/chenhg5/myco/internal/app\nok  github.com/chenhg5/myco/internal/console",
+        stdout: "go test ./...\nok  github.com/myco-ai/myco/internal/app\nok  github.com/myco-ai/myco/internal/console",
         stderr: "",
         duration_ms: 12340,
       }, null, 2),
@@ -1506,12 +1506,12 @@ function releaseAfter(hub, threadId, taskId) {
 // A shell command that prints a line every 0.7 s, for the live terminal.
 const execLines = () => [
   "Resolving dependencies…",
-  "go: downloading github.com/chenhg5/myco v0.18.31",
-  "ok  	github.com/chenhg5/myco/internal/domain	0.018s",
-  "ok  	github.com/chenhg5/myco/internal/app	1.001s",
-  "ok  	github.com/chenhg5/myco/internal/runner	1.158s",
+  "go: downloading github.com/myco-ai/myco v0.18.31",
+  "ok  	github.com/myco-ai/myco/internal/domain	0.018s",
+  "ok  	github.com/myco-ai/myco/internal/app	1.001s",
+  "ok  	github.com/myco-ai/myco/internal/runner	1.158s",
   "--- warning: 2 tests skipped on this platform",
-  "ok  	github.com/chenhg5/myco/internal/integration	6.265s",
+  "ok  	github.com/myco-ai/myco/internal/integration	6.265s",
   "PASS",
 ];
 const EXEC_LINE_MS = 700;
@@ -1641,7 +1641,7 @@ function execHistory(agent) {
     ["uptime", ok("up 3 days, 4:12, 2 users, load averages: 1.92 2.10 2.31\n")],
     ["df -h /", ok("Filesystem   Size  Used Avail Capacity\n/dev/disk3s1 926Gi 412Gi 498Gi  46%\n")],
     ["cd ~/code/myco && go test ./...", ok(["domain", "app", "infra/sqlite", "infra/notify", "infra/security", "infra/wake", "transport/httpapi", "hubserver", "client", "cli", "runner", "harness/claude", "harness/codex", "integration"]
-      .map((p, i) => `ok  \tgithub.com/chenhg5/myco/internal/${p}\t${(0.2 + i * 0.37).toFixed(3)}s`).join("\n") + "\n", 48200)],
+      .map((p, i) => `ok  \tgithub.com/myco-ai/myco/internal/${p}\t${(0.2 + i * 0.37).toFixed(3)}s`).join("\n") + "\n", 48200)],
     ["pgrep -fl \"mac-sign|notarytool|make app\" || echo idle", ok("idle\n", 313)],
     [build, ok("", 14)],
     [poll, ok("RUNNING\n", 41)],
@@ -2757,7 +2757,7 @@ const server = http.createServer(async (req, res) => {
       await new Promise((r) => setTimeout(r, 1200));
       // MOCK_UPDATE_FAIL=download_failed|install_failed|start_failed: how an update fails
       const failCode = process.env.MOCK_UPDATE_FAIL;
-      if (failCode) return fail(res, 502, failCode, `${failCode}: GET https://github.com/chenhg5/myco/releases/download/${latest}/myco-app-windows-amd64.exe: dial tcp 20.205.243.166:443: i/o timeout (after 6 attempts)`);
+      if (failCode) return fail(res, 502, failCode, `${failCode}: GET https://github.com/myco-ai/myco/releases/download/${latest}/myco-app-windows-amd64.exe: dial tcp 20.205.243.166:443: i/o timeout (after 6 attempts)`);
       return send(res, 200, { installed: latest, relaunching: true });
     }
     return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
@@ -4092,7 +4092,7 @@ const server = http.createServer(async (req, res) => {
         if (body.action === "upgrade") { st.version = "0.20.17"; if (machine) machine.myco_version = "0.20.17"; }
         st.service = "active";
         return send(res, 200, { ok: true, log: body.action === "upgrade"
-          ? ["==> downloading https://github.com/chenhg5/myco/releases/latest/download/myco-linux-amd64", "==> checksum ok", "==> installed: /home/glenn/.local/bin/myco v0.20.17", "runner service restarted (systemd)"]
+          ? ["==> downloading https://github.com/myco-ai/myco/releases/latest/download/myco-linux-amd64", "==> checksum ok", "==> installed: /home/glenn/.local/bin/myco v0.20.17", "runner service restarted (systemd)"]
           : ["runner service restarted (systemd)"] });
       }
     }

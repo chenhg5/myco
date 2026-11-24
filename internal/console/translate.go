@@ -18,7 +18,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // Translating what agents write into the language the person reads, with

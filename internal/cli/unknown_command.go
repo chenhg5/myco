@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/config"
-	"github.com/chenhg5/myco/internal/release"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/config"
+	"github.com/myco-ai/myco/internal/release"
 )
 
 // unknownCommandUpgradeHint makes a best-effort, bounded health check only

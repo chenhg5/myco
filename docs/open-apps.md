@@ -68,7 +68,7 @@ We ask three questions:
 |---|---|
 | Available | 26 / 100 |
 | Categories | Creative design 7 · Office 5 · Development 3 · Productivity 6 · Everyday life 3 · Games 2 |
-| Next batch | Nominated and voted on by you in [Discussions](https://github.com/chenhg5/myco/discussions) |
+| Next batch | Nominated and voted on by you in [Discussions](https://github.com/myco-ai/myco/discussions) |
 
 ## How to take part
 
@@ -76,23 +76,23 @@ We ask three questions:
 
 | Platform | Download |
 |---|---|
-| **Mac** | [myco.dmg](https://github.com/chenhg5/myco/releases/latest/download/myco.dmg): one download for Apple silicon and Intel, signed and notarized by Apple, updates itself |
-| **Windows** (preview) | [myco-app-windows-amd64.exe](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-amd64.exe) ([ARM](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-arm64.exe)). Not code-signed yet: on first run choose *More info → Run anyway* |
-| **Linux** | [myco-app-linux-amd64](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-amd64) ([ARM](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-arm64)), opens the app in your browser |
+| **Mac** | [myco.dmg](https://github.com/myco-ai/myco/releases/latest/download/myco.dmg): one download for Apple silicon and Intel, signed and notarized by Apple, updates itself |
+| **Windows** (preview) | [myco-app-windows-amd64.exe](https://github.com/myco-ai/myco/releases/latest/download/myco-app-windows-amd64.exe) ([ARM](https://github.com/myco-ai/myco/releases/latest/download/myco-app-windows-arm64.exe)). Not code-signed yet: on first run choose *More info → Run anyway* |
+| **Linux** | [myco-app-linux-amd64](https://github.com/myco-ai/myco/releases/latest/download/myco-app-linux-amd64) ([ARM](https://github.com/myco-ai/myco/releases/latest/download/myco-app-linux-arm64)), opens the app in your browser |
 
 Open the app, follow the first screen to start a hub on this computer, and every app is under **Apps** in the sidebar.
 
 Already using Claude Code, Codex or another agent that can run commands? Send it this and it will set things up for you:
 
 ```text
-Set up myco for me: read https://raw.githubusercontent.com/chenhg5/myco/main/docs/agent-setup.md (if it doesn't open, read https://cdn.jsdelivr.net/gh/chenhg5/myco@main/docs/agent-setup.md) and follow it. Ask me before anything I need to decide, and before using sudo or changing system settings. Tell me the result when you're done.
+Set up myco for me: read https://raw.githubusercontent.com/myco-ai/myco/main/docs/agent-setup.md (if it doesn't open, read https://cdn.jsdelivr.net/gh/myco-ai/myco@main/docs/agent-setup.md) and follow it. Ask me before anything I need to decide, and before using sudo or changing system settings. Tell me the result when you're done.
 ```
 
 More ways to install are in the [install guide](../INSTALL.md) and the [tutorial](tutorial.md).
 
 ### 2. Nominate the next app
 
-Start a post in [Discussions](https://github.com/chenhg5/myco/discussions) and cover three things:
+Start a post in [Discussions](https://github.com/myco-ai/myco/discussions) and cover three things:
 
 - **Which app**, and what you use it for.
 - **What makes it good**: the two or three features you can't do without.
@@ -102,7 +102,7 @@ Upvote other people's nominations. The ones with the most votes get built first.
 
 ### 3. Tell us what's wrong
 
-Open an issue in [Issues](https://github.com/chenhg5/myco/issues). Include the app's name, the output of `myco version`, your OS, and how to reproduce it; a screenshot helps. Security problems go through [SECURITY.md](../SECURITY.md), not a public issue.
+Open an issue in [Issues](https://github.com/myco-ai/myco/issues). Include the app's name, the output of `myco version`, your OS, and how to reproduce it; a screenshot helps. Security problems go through [SECURITY.md](../SECURITY.md), not a public issue.
 
 ### 4. Build an app yourself
 
@@ -122,7 +122,7 @@ The page reads and writes its data with `myco.data.*` (see the [HTTP API](api.md
 **The quickest start:** copy an existing app, such as `templates/src/todo` (To-do list).
 
 ```bash
-git clone https://github.com/chenhg5/myco && cd myco
+git clone https://github.com/myco-ai/myco && cd myco
 cd templates && npm ci
 cp -r src/todo src/my-app        # start from an existing app, then change the id, name and fields in public/myco.json
 npm run build                    # type-check and build into internal/templates/official/
@@ -142,7 +142,7 @@ All contributions are open under the [MIT License](../LICENSE).
 
 ### 5. Spread the word
 
-Star the [repository](https://github.com/chenhg5/myco), and share your favourite app with a friend who needs it.
+Star the [repository](https://github.com/myco-ai/myco), and share your favourite app with a friend who needs it.
 
 ---
 

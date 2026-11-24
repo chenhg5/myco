@@ -7,7 +7,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // AutomationRepo implements domain.AutomationRepository.

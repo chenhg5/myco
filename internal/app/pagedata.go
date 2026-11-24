@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // PageDataService: a page's records (templates.md). Whoever may see a page

@@ -1,4 +1,4 @@
-module github.com/chenhg5/myco
+module github.com/myco-ai/myco
 
 go 1.26.0
 

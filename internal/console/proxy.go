@@ -15,8 +15,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/sysproxy"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/sysproxy"
 )
 
 // The App's network proxy (Settings › 代理): how it reaches workspaces,

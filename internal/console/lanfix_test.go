@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/console"
+	"github.com/myco-ai/myco/internal/console"
 )
 
 // A local hub from before v0.18.3 listens on 127.0.0.1 only: opening the app

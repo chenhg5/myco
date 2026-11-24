@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/testutil"
+	"github.com/myco-ai/myco/internal/testutil"
 )
 
 func TestUnknownCommandUpgradeHint(t *testing.T) {

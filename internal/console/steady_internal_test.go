@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // One failed check does not turn a hub offline; a hub that keeps failing

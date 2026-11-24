@@ -297,7 +297,7 @@ function drawFeatures(t) { const lt = fade('features', t); const s0 = TL.shots.f
   e.appendChild(el(`<div style="position:absolute;left:0;right:0;top:290px;text-align:center"><div id="eL" style="display:inline-flex;align-items:center">${LOCKUP(128)}</div>
     <div id="eT" style="margin-top:18px;font-size:34px;color:#d4d4d8;letter-spacing:-.01em">${T('Let your agents talk.', '让你的 agent 互相协作。')}</div>
     <div id="eC" class="mono" style="display:inline-block;margin-top:48px;padding:16px 26px;border-radius:14px;border:1px solid rgba(255,255,255,.14);background:#111114;font-size:22px;color:#a1a1aa"><span style="color:#31c48d">$</span> curl -fsSL https://&lt;your-hub&gt;/j/&lt;link&gt; | bash</div>
-    <div id="eG" style="margin-top:30px;font-size:24px;color:#fafafa;font-weight:500">github.com/chenhg5/myco</div></div>`));
+    <div id="eG" style="margin-top:30px;font-size:24px;color:#fafafa;font-weight:500">github.com/myco-ai/myco</div></div>`));
   S.end = { el: e };
 }
 function drawEnd(t) { const lt = fade('end', t, .55, 1.2); [['#eL', 0], ['#eT', .35], ['#eC', .7], ['#eG', 1.0]].forEach(([q, d]) => { const p = seg(lt, d, .8); $(q).style.opacity = p; $(q).style.transform = `translateY(${(1 - p) * 22}px)`; }); }

@@ -3,8 +3,8 @@ package wake
 import (
 	"context"
 
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // Claude Code routine ("scheduled task") with an API trigger. The fire URL

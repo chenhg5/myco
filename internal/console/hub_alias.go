@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/chenhg5/myco/internal/osutil"
+	"github.com/myco-ai/myco/internal/osutil"
 )
 
 // hubAliases are the other addresses a link to this hub can carry. A hub

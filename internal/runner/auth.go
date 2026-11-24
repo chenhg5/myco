@@ -1,6 +1,6 @@
 package runner
 
-import "github.com/chenhg5/myco/internal/client"
+import "github.com/myco-ai/myco/internal/client"
 
 // IsCredentialRejected reports a permanent authentication failure. The Hub
 // also returns this after a machine and its nodes have been removed.

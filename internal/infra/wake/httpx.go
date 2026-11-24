@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // Doer is the HTTP dependency of all wakers (swap for tests).

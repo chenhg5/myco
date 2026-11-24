@@ -17,8 +17,8 @@ import (
 
 	"github.com/hashicorp/yamux"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // A page opened in the App: served on a loopback port of its own, under a

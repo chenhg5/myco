@@ -12,7 +12,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/chenhg5/myco/internal/console"
+	"github.com/myco-ai/myco/internal/console"
 )
 
 // fakeAgents makes a home with the given agent CLIs installed in ~/bin and a

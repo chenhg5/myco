@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chenhg5/myco/internal/provider"
+	"github.com/myco-ai/myco/internal/provider"
 )
 
 // FakeDB writes a cc-switch database with the columns we read.

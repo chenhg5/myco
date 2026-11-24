@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/cli/cmdkit"
-	"github.com/chenhg5/myco/internal/config"
+	"github.com/myco-ai/myco/internal/cli/cmdkit"
+	"github.com/myco-ai/myco/internal/config"
 )
 
 func TestInboxWaitAutomaticTimeoutsAndHint(t *testing.T) {

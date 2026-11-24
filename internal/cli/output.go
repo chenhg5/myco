@@ -7,8 +7,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/chenhg5/myco/internal/cli/cmdkit"
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/cli/cmdkit"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // Exit codes are a stable contract (documented in `myco --help`).

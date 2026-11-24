@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // LocalAgent is an agent CLI on this computer: whether it is installed and
