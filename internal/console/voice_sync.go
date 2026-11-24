@@ -111,10 +111,11 @@ type VoiceSyncHub struct {
 
 // voiceSync is the last look at the hubs.
 type voiceSync struct {
-	mu   sync.Mutex
-	hubs []VoiceSyncHub
-	at   time.Time
-	once sync.Once
+	mu         sync.Mutex
+	hubs       []VoiceSyncHub
+	at         time.Time
+	once       sync.Once
+	background sync.WaitGroup // initial GET sync outlives its HTTP request
 	// One change to the settings at a time: a save (keys, then choices)
 	// and a look at the hubs never see each other half done.
 	changing sync.Mutex
@@ -285,7 +286,7 @@ func (b *Backend) lastVoiceSync() []VoiceSyncHub {
 // settings page asks when it opens), then answer as GET /app/voice.
 func (b *Backend) syncVoiceRoute(w http.ResponseWriter, r *http.Request) {
 	b.syncVoice(r.Context())
-	b.getVoice(w, r)
+	b.voiceResponse(w, r)
 }
 
 func trimVoiceConfig(c *VoiceConfig) {

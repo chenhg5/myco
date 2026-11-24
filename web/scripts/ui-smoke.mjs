@@ -835,6 +835,13 @@ async function runMatrix(browser, size, scheme) {
       await page.locator('iframe[title="Recovery inventory"][data-checked="true"]').waitFor({ state: "attached" });
       if (await more.count() || await panel.locator(".fp-title-hint").count()) throw Error("the recovered app must stay hidden after reopening");
       await closePage();
+      // These interceptions and language belong only to the recovery scene.
+      for (const pattern of ["**/app/hubs/*/pages/pg_release", "**/app/hubs/*/pages/pg_release/open",
+        "**/app/hubs/*/browser", "**/app/page-storage-recovery", `${recovery}**`]) await page.unroute(pattern);
+      // Restore the suite's fixture language even at narrow widths, where
+      // the next (multi-tab) scene is skipped.
+      await page.goto(`${r.base}/?lang=zh`);
+      await page.locator(".app-shell").waitFor();
     });
 
     // Several pages open: a tab each, under the panel's head; opening one
@@ -861,7 +868,7 @@ async function runMatrix(browser, size, scheme) {
       // button in the corner brings them back as they were.
       const mainRight = () => page.evaluate(() => document.querySelector(".app-main").getBoundingClientRect().right);
       const docked = await mainRight();
-      await clickVisible(page, panel.getByRole("button", { name: "收起" }));
+      await clickVisible(page, panel.getByRole("button", { name: "收起", exact: true }));
       // (the panel is one for the whole App: its toggle is at the top bar's right end)
       const restore = page.locator(".app-crumbbar .pg-toggle");
       await restore.waitFor({ timeout: 5_000 });
@@ -2921,11 +2928,17 @@ async function runMatrix(browser, size, scheme) {
     await step("项目 · 插话排在后面", async () => {
       await go(page, "官网改版", narrow);
       await page.locator(".sp-home .conv-detail").waitFor({ timeout: 20_000 });
-      if (narrow) await clickVisible(page, page.locator('.sp-strip-face[title="Release (Claude 云端)"]'));
-      else await clickVisible(page, page.locator(".sp-side .sp-member:visible", { hasText: "Release (Claude 云端)" }));
+      // Earlier scenes may leave multiple panes open: even a wide window
+      // then shows member faces rather than the expanded members column.
+      const member = page.locator(".sp-side .sp-member:visible", { hasText: "Release (Claude 云端)" })
+        .or(page.locator('.sp-side .sp-face:visible[aria-label="Release (Claude 云端)"]'))
+        .or(page.locator('.sp-strip-face:visible[title="Release (Claude 云端)"]'));
+      await clickVisible(page, member);
       const pane = page.locator(".conv-detail", { has: page.locator(".conv-head", { hasText: "Release (Claude 云端)" }) }).last();
       await pane.waitFor({ timeout: 20_000 });
-      await noRound(page);
+      // The coordinator's pane can be idle while this member is still
+      // working on the task sent by the page-bridge scene.
+      await pane.locator('.conv-compose-input:not([placeholder*="补充"])').waitFor({ timeout: 30_000 });
       const box = pane.locator(".conv-compose-input");
       await box.fill("插在别人后面：整理发布说明");
       await box.press("Enter");

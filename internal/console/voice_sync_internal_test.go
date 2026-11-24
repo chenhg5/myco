@@ -164,6 +164,28 @@ func TestVoiceSettingsFromBeforeSharing(t *testing.T) {
 	}
 }
 
+// A synchronous settings mutation must not start an unowned second sync
+// merely to render its response (which could rewrite files after teardown).
+func TestVoiceMutationResponseDoesNotStartBackgroundSync(t *testing.T) {
+	for _, route := range []struct{ method, path, body string }{
+		{"POST", "/app/voice/sync", ""},
+		{"PUT", "/app/voice/config", `{}`},
+	} {
+		t.Run(route.path, func(t *testing.T) {
+			b := &Backend{Secrets: &memKeys{m: map[string]string{}}}
+			srv := httptestServer(t, b)
+			if code, body := srv(route.method, route.path, route.body); code != http.StatusOK {
+				t.Fatalf("response: %d %s", code, body)
+			}
+			unused := false
+			b.voiceState().sync.once.Do(func() { unused = true })
+			if !unused {
+				t.Fatal("rendering a mutation response started the initial background sync")
+			}
+		})
+	}
+}
+
 // Keys that call back when one is set: a look at the hubs can be started
 // in the middle of a save.
 type hookKeys struct {

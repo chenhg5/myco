@@ -376,7 +376,14 @@ func TestVoiceSettingsKeepKeysOutOfSight(t *testing.T) {
 func httptestServer(t *testing.T, b *Backend) func(method, path, body string) (int, string) {
 	t.Helper()
 	s := httptest.NewServer(b.Handler())
-	t.Cleanup(s.Close)
+	t.Cleanup(func() {
+		s.Close()
+		// Server.Close joins handlers, but not the initial settings sync they
+		// launch. Join it before the hubs and TempDirs are removed.
+		v := b.voiceState()
+		v.sync.once.Do(func() {})
+		v.sync.background.Wait()
+	})
 	return func(method, path, body string) (int, string) {
 		req, _ := http.NewRequest(method, s.URL+path, strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")

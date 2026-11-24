@@ -346,6 +346,24 @@ func (b *Backend) effectiveVoiceConfig() VoiceConfig {
 
 func (b *Backend) getVoice(w http.ResponseWriter, r *http.Request) {
 	v := b.voiceState()
+	// The first look at the hubs for the settings kept there, in the
+	// background: a device set up elsewhere becomes ready by itself.
+	v.sync.once.Do(func() {
+		v.sync.background.Add(1)
+		go func() {
+			defer v.sync.background.Done()
+			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+			defer cancel()
+			b.syncVoice(ctx)
+		}()
+	})
+	b.voiceResponse(w, r)
+}
+
+// Mutation routes already synchronized their settings. Rendering their response
+// must not launch another sync after the request has finished.
+func (b *Backend) voiceResponse(w http.ResponseWriter, r *http.Request) {
+	v := b.voiceState()
 	c := b.effectiveVoiceConfig()
 	llm, tts := b.voiceKeys(c)
 	v.mu.Lock()
@@ -359,15 +377,6 @@ func (b *Backend) getVoice(w http.ResponseWriter, r *http.Request) {
 	// ready: a call can start (this App has a microphone, and the model and
 	// the voice are set up); the App shows the way in only then.
 	ready := b.Voice != nil && c.LLMBaseURL != "" && c.LLMModel != "" && llm != "" && tts != ""
-	// The first look at the hubs for the settings kept there, in the
-	// background: a device set up elsewhere becomes ready by itself.
-	v.sync.once.Do(func() {
-		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-			defer cancel()
-			b.syncVoice(ctx)
-		}()
-	})
 	writeJSON(w, http.StatusOK, map[string]any{
 		"available": b.Voice != nil, "ready": ready, "config": c, "has_llm_key": llm != "", "has_tts_key": tts != "",
 		"session": session,
@@ -439,7 +448,7 @@ func (b *Backend) putVoiceConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	// The person's other devices get it from the hubs.
 	b.syncVoiceLocked(r.Context())
-	b.getVoice(w, r)
+	b.voiceResponse(w, r)
 }
 
 func (b *Backend) startVoice(w http.ResponseWriter, r *http.Request) {
@@ -532,7 +541,7 @@ func (b *Backend) startVoice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	call.begin()
-	b.getVoice(w, r)
+	b.voiceResponse(w, r)
 }
 
 // consoleAddress: the person's own address in a workspace (what their
@@ -559,7 +568,7 @@ func (b *Backend) stopVoice(w http.ResponseWriter, r *http.Request) {
 	if call != nil {
 		call.hangUp()
 	}
-	b.getVoice(w, r)
+	b.voiceResponse(w, r)
 }
 
 func (b *Backend) muteVoice(w http.ResponseWriter, r *http.Request) {
@@ -576,7 +585,7 @@ func (b *Backend) muteVoice(w http.ResponseWriter, r *http.Request) {
 	}
 	v.wakeLocked()
 	v.mu.Unlock()
-	b.getVoice(w, r)
+	b.voiceResponse(w, r)
 }
 
 // voiceEvents: the lines after `after`, waiting up to 25 seconds for one.
