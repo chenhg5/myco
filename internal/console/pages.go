@@ -158,6 +158,21 @@ func (b *Backend) pageRoutes(m *http.ServeMux) {
 		}
 		writeJSON(w, http.StatusOK, p)
 	}))
+	// who may change its records: {editors: everyone | managers} (hubs from v0.22.2)
+	m.HandleFunc("PATCH /app/hubs/{id}/pages/{pid}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in struct {
+			Editors string `json:"editors"`
+		}
+		if !decode(w, r, &in) {
+			return
+		}
+		p, err := c.SetPageEditors(r.Context(), r.PathValue("pid"), in.Editors)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, p)
+	}))
 	m.HandleFunc("DELETE /app/hubs/{id}/pages/{pid}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		if err := c.DeletePage(r.Context(), r.PathValue("pid")); err != nil {
 			writeErr(w, err)

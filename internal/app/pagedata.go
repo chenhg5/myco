@@ -101,6 +101,9 @@ func (s *PageDataService) Put(ctx context.Context, by Actor, page string, in Put
 	if err != nil {
 		return nil, err
 	}
+	if !s.pages.CanEdit(by, p, coll) {
+		return nil, readOnly(p, coll)
+	}
 	if len(in.Data) > domain.MaxPageRecord {
 		return nil, domain.Errf(domain.CodeInvalidArgument, "the record is larger than %d KB", domain.MaxPageRecord>>10).
 			WithSuggestion("keep files as attachments and put their ids in the record")
@@ -174,8 +177,12 @@ func (s *PageDataService) Put(ctx context.Context, by Actor, page string, in Put
 
 // Remove deletes a record (ifVersion as for Put).
 func (s *PageDataService) Remove(ctx context.Context, by Actor, page, collection, id string, ifVersion int, byName string) error {
-	if _, err := s.page(ctx, by, page); err != nil {
+	p, err := s.page(ctx, by, page)
+	if err != nil {
 		return err
+	}
+	if !s.pages.CanEdit(by, p, collection) {
+		return readOnly(p, collection)
 	}
 	ch, err := s.data.Remove(ctx, page, collection, id, ifVersion, byName, s.clock.Now())
 	if err != nil {

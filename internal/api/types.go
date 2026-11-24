@@ -1579,6 +1579,11 @@ type Page struct {
 	UpdatedAt time.Time     `json:"updated_at"`
 	// CanManage: the caller may publish versions of it and delete it.
 	CanManage bool `json:"can_manage"`
+	// Editors is who may change its records and shared state (hubs from
+	// v0.22.2): "managers" only those who manage it; empty everyone who sees
+	// it. ReadOnly: the caller may not (their writes are refused).
+	Editors  string `json:"editors,omitempty"`
+	ReadOnly bool   `json:"read_only,omitempty"`
 	// Live: a server on its publisher's computer (on Port there), forwarded
 	// while `myco page serve` runs; Online says whether it is now.
 	Live   bool `json:"live,omitempty"`
@@ -1817,6 +1822,14 @@ type AppSync struct {
 type TemplateCollection struct {
 	Fields map[string]string `json:"fields"`
 	Single bool              `json:"single,omitempty"`
+	// Write "managers": only those who manage the page change it (v0.22.2).
+	Write string `json:"write,omitempty"`
+}
+
+// PageUpdate changes a page's settings (PATCH /v1/pages/{id}; hubs from
+// v0.22.2): who may change its records, "everyone" or "managers".
+type PageUpdate struct {
+	Editors *string `json:"editors,omitempty"`
 }
 
 // TemplateVersion is one publish of a template.

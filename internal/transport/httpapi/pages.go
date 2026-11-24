@@ -29,6 +29,7 @@ func (s *Server) pageRoutes(m *http.ServeMux) {
 	m.HandleFunc("GET /v1/pages", s.pageCaller(s.listPages))
 	m.HandleFunc("POST /v1/pages", s.pageCaller(s.publishPage))
 	m.HandleFunc("GET /v1/pages/{id}", s.pageCaller(s.getPage))
+	m.HandleFunc("PATCH /v1/pages/{id}", s.pageCaller(s.patchPage))
 	m.HandleFunc("POST /v1/pages/{id}/versions", s.pageCaller(s.publishPage))
 	m.HandleFunc("DELETE /v1/pages/{id}", s.pageCaller(s.deletePage))
 	m.HandleFunc("GET /v1/pages/{id}/v/{n}/{path...}", s.pageCaller(s.pageFile))
@@ -66,7 +67,8 @@ func (s *Server) pageDTO(r *http.Request, by app.Actor, v *app.PageView) api.Pag
 	p := v.Page
 	out := api.Page{ID: p.ID, Name: p.Name, Project: p.Project, Publisher: p.Publisher, Version: p.Latest,
 		URL: s.publicBase(r) + "/pages/" + p.ID, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
-		CanManage: s.pages.Manages(by, p), Versions: []api.PageVersion{}, Live: p.Live, Port: p.Port, Template: s.pageTemplate(r.Context(), p)}
+		CanManage: s.pages.Manages(by, p), Versions: []api.PageVersion{}, Live: p.Live, Port: p.Port, Template: s.pageTemplate(r.Context(), p),
+		Editors: p.Editors, ReadOnly: !s.pages.CanEdit(by, p, "")}
 	if p.Live {
 		out.Online = s.online(p.ID)
 	}
@@ -235,4 +237,22 @@ func (s *Server) putPageState(w http.ResponseWriter, r *http.Request, c pageCall
 		return
 	}
 	writeJSON(w, http.StatusOK, pageStateDTO(st))
+}
+
+// patchPage: {editors} → the page; who may change its records (v0.22.2).
+func (s *Server) patchPage(w http.ResponseWriter, r *http.Request, c pageCall) {
+	var req api.PageUpdate
+	if !decode(w, r, &req) {
+		return
+	}
+	if req.Editors == nil {
+		writeError(w, domain.Errf(domain.CodeInvalidArgument, "nothing to change").WithSuggestion(`send {"editors": "everyone" | "managers"}`))
+		return
+	}
+	v, err := s.pages.SetEditors(r.Context(), c.by, r.PathValue("id"), *req.Editors)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.pageDTO(r, c.by, v))
 }

@@ -2392,6 +2392,15 @@ const server = http.createServer(async (req, res) => {
     if (!p) return fail(res, 404, "not_found", `page ${parts[4]} not found`);
     if (parts.length === 5 && method === "GET") return send(res, 200, p);
     if (parts.length === 5 && method === "DELETE") { pages.delete(p.id); res.writeHead(204); return res.end(); }
+    if (parts.length === 5 && method === "PATCH") {
+      const body = (await readBody(req)) || {};
+      if (body.editors !== undefined) {
+        if (!p.can_manage) return fail(res, 403, "permission_denied", "only those who manage this page can say who may change it");
+        if (!["", "everyone", "managers"].includes(body.editors)) return fail(res, 400, "invalid_argument", "editors is everyone or managers");
+        p.editors = body.editors === "managers" ? "managers" : "";
+      }
+      return send(res, 200, p);
+    }
     if (parts.length === 6 && parts[5] === "state") {
       const cur = pageStates.get(p.id) || { state: null, version: 0 };
       if (method === "GET") return send(res, 200, cur);

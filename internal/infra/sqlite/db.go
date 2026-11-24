@@ -503,7 +503,9 @@ func Open(path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 	if err := addColumns(db, "pages", [][2]string{{"live", "INTEGER NOT NULL DEFAULT 0"}, {"port", "INTEGER NOT NULL DEFAULT 0"},
-		{"template", "TEXT NOT NULL DEFAULT ''"}, {"template_version", "TEXT NOT NULL DEFAULT ''"}, {"manifest", "TEXT NOT NULL DEFAULT ''"}}); err != nil {
+		{"template", "TEXT NOT NULL DEFAULT ''"}, {"template_version", "TEXT NOT NULL DEFAULT ''"}, {"manifest", "TEXT NOT NULL DEFAULT ''"},
+		// Who may change its records ('' everyone who sees it, managers; v0.22.2).
+		{"editors", "TEXT NOT NULL DEFAULT ''"}}); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}

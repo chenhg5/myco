@@ -75,6 +75,13 @@ func (c *Client) UpgradePage(ctx context.Context, id string) (*api.Page, error) 
 	return &out, c.do(ctx, http.MethodPost, "/v1/pages/"+esc(id)+"/upgrade", nil, nil, &out)
 }
 
+// SetPageEditors says who may change a page's records and shared state:
+// "everyone" who sees it, or "managers" (hubs from v0.22.2).
+func (c *Client) SetPageEditors(ctx context.Context, id, editors string) (*api.Page, error) {
+	var out api.Page
+	return &out, c.do(ctx, http.MethodPatch, "/v1/pages/"+esc(id), nil, api.PageUpdate{Editors: &editors}, &out)
+}
+
 // DeletePage removes a page and its versions.
 func (c *Client) DeletePage(ctx context.Context, id string) error {
 	return c.do(ctx, http.MethodDelete, "/v1/pages/"+esc(id), nil, nil, nil)

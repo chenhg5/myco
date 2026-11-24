@@ -140,6 +140,9 @@ func RequiredHub(raw []byte) string {
 type ManifestCollection struct {
 	Fields map[string]string `json:"fields"`
 	Single bool              `json:"single,omitempty"`
+	// Write "managers": only those who manage the page change this
+	// collection (hubs from v0.22.2; its settings, say), whoever else may.
+	Write string `json:"write,omitempty"`
 }
 
 // FieldTypes are the types a field may have.
@@ -240,6 +243,9 @@ func ParseManifest(raw []byte) (*Manifest, error) {
 			if !has(FieldTypes, t) {
 				return bad("data.%s.%s: type %q is not one of %s", c, f, t, strings.Join(FieldTypes, ", "))
 			}
+		}
+		if col.Write != "" && col.Write != PageEditorsManagers {
+			return bad("data.%s.write %q: managers, or leave it out", c, col.Write)
 		}
 	}
 	for _, p := range m.Permissions {

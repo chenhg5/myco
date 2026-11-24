@@ -3581,5 +3581,7 @@
   "此浏览器无法保存快捷入口，请检查本机存储设置。": "This browser cannot save shortcuts. Check local storage settings.",
   "此快捷入口的项目已不存在，结果可能为空。": "This shortcut’s project no longer exists. Results may be empty.",
   "这里只修改名称；修改条件后请点击更新入口。": "Only the name is edited here. Use Update shortcut after changing conditions.",
-  "筛选内容过长，无法保存入口": "The filter settings are too long to save."
+  "筛选内容过长，无法保存入口": "The filter settings are too long to save.",
+  "只能看": "View only",
+  "只有管理这个页面的人能改": "Only those who manage this page can change it"
 }

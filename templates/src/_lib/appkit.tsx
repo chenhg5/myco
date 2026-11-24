@@ -7,6 +7,8 @@ import { Store, listen, myco, type MycoChange } from "./myco";
 
 export class Kit {
   me = "";
+  /** false: only those who manage the page change it, and not this person (their writes are refused) */
+  canEdit = true;
   page = "";
   pending = 0;
   failed = false;
@@ -38,6 +40,7 @@ export class Kit {
   async start(init?: () => Promise<unknown>, onChange?: (c: MycoChange) => void) {
     const ctx = await myco!.ready;
     this.me = ctx.me?.name || "";
+    this.canEdit = ctx.me?.can_edit !== false;
     this.page = ctx.page?.id || "";
     await Promise.all(this.stores.map((s) => s.load()));
     if (init) await init();
@@ -59,12 +62,12 @@ export const uid = (p = "") => p + Math.random().toString(36).slice(2, 9);
 export function Bar({ kit, title, placeholder, onTitle, children }: {
   kit: Kit; title: string; placeholder: string; onTitle: (t: string) => void; children?: ReactNode;
 }) {
-  const state = kit.pending ? "saving" : kit.failed ? "error" : "saved";
+  const state = !kit.canEdit ? "readonly" : kit.pending ? "saving" : kit.failed ? "error" : "saved";
   return (
     <header className="top">
       <input className="top-title" value={title} placeholder={placeholder} aria-label={uiText("标题")} maxLength={120}
         onChange={(e) => onTitle(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
-      <span className={`top-state is-${state}`}>{state === "saving" ? uiText("正在保存…") : state === "error" ? uiText("没保存上") : uiText("已保存")}</span>
+      <span className={`top-state is-${state}`} title={state === "readonly" ? uiText("只有管理这个页面的人能改") : undefined}>{state === "readonly" ? uiText("只能看") : state === "saving" ? uiText("正在保存…") : state === "error" ? uiText("没保存上") : uiText("已保存")}</span>
       <span className="top-gap" />
       {kit.me && <span className="top-me">{uiText("你是")}{" "}{kit.me}</span>}
       {children}

@@ -35,9 +35,30 @@ type Page struct {
 	TemplateVersion string
 	// Manifest is that template's myco.json, kept with the page so that it
 	// stands on its own (its data's structure, its permissions).
-	Manifest  string
+	Manifest string
+	// Editors is who may change its records and shared state (v0.22.2):
+	// "" everyone who sees it, PageEditorsManagers only those who manage it.
+	Editors   string
 	CreatedAt time.Time
 	UpdatedAt time.Time
+}
+
+// Who may change a page's records and shared state.
+const (
+	PageEditorsEveryone = ""
+	PageEditorsManagers = "managers"
+)
+
+// ParsePageEditors checks who may change a page ("everyone" or "" for all who
+// see it, "managers").
+func ParsePageEditors(s string) (string, error) {
+	switch s {
+	case "", "everyone":
+		return PageEditorsEveryone, nil
+	case PageEditorsManagers:
+		return PageEditorsManagers, nil
+	}
+	return "", Errf(CodeInvalidArgument, "editors %q: everyone or managers", s)
 }
 
 // PageVersion is one publish of a page.

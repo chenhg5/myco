@@ -1020,6 +1020,8 @@ export const appApi = {
   page: (hubId: string, id: string) => request<Page>("GET", `app/hubs/${enc(hubId)}/pages/${enc(id)}`),
   openPage: (hubId: string, id: string, version?: number) => request<PageOpen>("POST", `app/hubs/${enc(hubId)}/pages/${enc(id)}/open`, version ? { version } : {}),
   deletePage: (hubId: string, id: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/pages/${enc(id)}`),
+  /** who may change a page's records: everyone who sees it, or those who manage it (hubs from v0.22.2) */
+  setPageEditors: (hubId: string, id: string, editors: "everyone" | "managers") => request<Page>("PATCH", `app/hubs/${enc(hubId)}/pages/${enc(id)}`, { editors }),
   pageState: (hubId: string, id: string) => request<PageState>("GET", `app/hubs/${enc(hubId)}/pages/${enc(id)}/state`),
   // Pages rendered for agents (page.export): the next export the backend
   // wants this window to make (null: none came in time), and its file.

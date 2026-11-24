@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { AppWindow, Check, Copy, ExternalLink, Link2, Monitor, PanelRight, PanelRightClose, Pin as PinIcon, PinOff, Radio, RotateCw, X } from "lucide-react";
+import { AppWindow, Check, Copy, ExternalLink, Link2, Lock, Monitor, PanelRight, PanelRightClose, Pin as PinIcon, PinOff, Radio, RotateCw, Users, X } from "lucide-react";
 import type { Page, PageOpen } from "@/api";
 import { ApiError, appApi, isOldHub, type OsAnswer, type OsConsent } from "@/appapi";
 import { copyText } from "@/app/copy";
@@ -181,12 +181,20 @@ export function PageCard({ hubId, id, url }: { hubId: string; id: string; url: s
   const who = page ? nameOf(hubId, page.publisher) : "";
   const about = !page ? ""
     : page.live ? L(`${who} 电脑上的 ${page.port} 端口`, `Port ${page.port} on ${who}'s computer`)
-      : [page.version > 1 ? L(`第 ${page.version} 版`, `Version ${page.version}`) : "", L(`${who} 发布`, `by ${who}`), timeAgo(page.updated_at)].filter(Boolean).join(" · ");
+      : [page.version > 1 ? L(`第 ${page.version} 版`, `Version ${page.version}`) : "", L(`${who} 发布`, `by ${who}`), timeAgo(page.updated_at),
+        page.editors === "managers" ? (page.read_only ? L("你只能看", "View only for you") : L("只有管理者能改", "Only managers edit")) : ""].filter(Boolean).join(" · ");
   // Right-click: open, pin it above the conversation (or unpin), copy its link.
   const pinned = !!pins?.pinned(id);
+  const managersOnly = page?.editors === "managers";
+  const setEditors = (editors: "everyone" | "managers") => {
+    appApi.setPageEditors(hubId, id, editors).then((p) => { known.set(`${hubId}/${id}`, Promise.resolve(p)); setPage(p); }, () => undefined);
+  };
   const items: MenuItem[] = [
     { label: L("打开", "Open"), icon: PanelRight, onSelect: () => openPage({ kind: "page", hubId, id, fragment: pageLinkOf(url)?.fragment }) },
     ...(pins ? [{ label: pinned ? L("取消置顶", "Unpin") : L("置顶到对话上方", "Pin above the chat"), icon: pinned ? PinOff : PinIcon, onSelect: () => pins.toggle({ id, url, name: page?.name || L("网页", "Page") }) }] : []),
+    ...(page?.can_manage && !page.live ? [managersOnly
+      ? { label: L("让能看到的人都能改", "Let everyone who sees it edit"), icon: Users, onSelect: () => setEditors("everyone") }
+      : { label: L("只让管理者改", "Only managers may edit"), icon: Lock, onSelect: () => setEditors("managers") }] : []),
     "sep",
     { label: L("复制链接", "Copy the link"), icon: Copy, onSelect: () => void copyText(url) },
   ];
@@ -466,7 +474,8 @@ function PageView({ target, open, active, reload, onMeta }: {
           const st = await appApi.pageState(t.hubId, t.id);
           known.current = st.version;
           bridged.current = true;
-          return { page: { id: t.id, url: p?.url || "", name: o?.name || p?.name || "", version: o?.version || 0 }, me: { name: meOf(t.hubId) }, state: st.state, version: st.version, preferences: live.current.preferences };
+          // (can_edit: false when only those who manage it change it, and not you)
+          return { page: { id: t.id, url: p?.url || "", name: o?.name || p?.name || "", version: o?.version || 0 }, me: { name: meOf(t.hubId), can_edit: !p?.read_only, can_manage: !!p?.can_manage }, state: st.state, version: st.version, preferences: live.current.preferences };
         }
         case "update": {
           const r = await appApi.putPageState(t.hubId, t.id, args.state ?? null, Number(args.version) || 0);

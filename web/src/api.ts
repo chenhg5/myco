@@ -198,6 +198,8 @@ export interface PageVersion { n: number; entry: string; files: number; size: nu
 export interface Page {
   id: string; name: string; project?: string; publisher: string; version: number; entry: string; url: string;
   versions: PageVersion[]; created_at: string; updated_at: string; can_manage: boolean;
+  /** who may change its records (hubs from v0.22.2): "managers", or everyone who sees it (absent); read_only: not you */
+  editors?: "managers"; read_only?: boolean;
   /** a server on its publisher's computer (port there), forwarded while
    *  `myco page serve` runs; online: forwarded now */
   live?: boolean; port?: number; online?: boolean;

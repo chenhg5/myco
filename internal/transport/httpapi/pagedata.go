@@ -181,7 +181,7 @@ func collectionsDTO(m map[string]domain.ManifestCollection) map[string]api.Templ
 	}
 	out := make(map[string]api.TemplateCollection, len(m))
 	for k, v := range m {
-		out[k] = api.TemplateCollection{Fields: v.Fields, Single: v.Single}
+		out[k] = api.TemplateCollection{Fields: v.Fields, Single: v.Single, Write: v.Write}
 	}
 	return out
 }

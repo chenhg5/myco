@@ -288,3 +288,27 @@ func TestTemplateDeclaresOSAndNet(t *testing.T) {
 	bad := strings.Replace(weeklyManifest, `"export": ["xlsx"]`, `"export": ["xlsx"], "os": ["everything"]`, 1)
 	h.doReq("POST", "/v1/templates", alice, zipOf(t, map[string]string{"myco.json": bad, "index.html": "v1"}), zipHdr).wantErr(t, 400, "invalid_argument")
 }
+
+// Who may change a page's records is set by those who manage it
+// (PATCH /v1/pages/{id} {editors}); the page says so, and to whom it is read-only.
+func TestPageEditorsSetting(t *testing.T) {
+	h := newHub(t, app.DefaultMessagePolicy())
+	alice := h.register("alice", nil)
+	zipHdr := map[string]string{"Content-Type": "application/zip"}
+	h.doReq("POST", "/v1/templates", alice, zipOf(t, map[string]string{"myco.json": weeklyManifest, "index.html": "v1"}), zipHdr).want(t, 201)
+	page := str(h.do("POST", "/v1/templates/alice%2Fweekly/use", alice, map[string]any{"name": "第 49 周"}).want(t, 201).body, "page", "id")
+	if g := h.do("GET", "/v1/pages/"+page, alice, nil).want(t, 200); g.body["editors"] != nil || g.body["read_only"] != nil {
+		t.Fatalf("everyone by default, writable: %s", g.raw)
+	}
+	p := h.do("PATCH", "/v1/pages/"+page, alice, map[string]any{"editors": "managers"}).want(t, 200)
+	if p.body["editors"] != "managers" || p.body["read_only"] != nil {
+		t.Fatalf("managers; alice manages it: %s", p.raw)
+	}
+	// she still writes it
+	h.do("POST", "/v1/pages/"+page+"/data/items", alice, map[string]any{"data": map[string]any{"title": "发版"}}).want(t, 201)
+	h.do("PATCH", "/v1/pages/"+page, alice, map[string]any{"editors": "friends"}).wantErr(t, 400, "invalid_argument")
+	h.do("PATCH", "/v1/pages/"+page, alice, map[string]any{}).wantErr(t, 400, "invalid_argument")
+	if p := h.do("PATCH", "/v1/pages/"+page, alice, map[string]any{"editors": "everyone"}).want(t, 200); p.body["editors"] != nil {
+		t.Fatalf("back to everyone: %s", p.raw)
+	}
+}

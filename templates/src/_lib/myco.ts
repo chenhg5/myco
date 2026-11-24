@@ -9,7 +9,9 @@ export type PageActionFile = { media_type: string; data: Blob | Uint8Array | Arr
 export type PageActionBridge = {
   register(descriptors: PageActionDescriptor[], invoke: (request: PageActionRequest) => Promise<PageActionFile>): () => void;
 };
-type Ctx = { preferences?: PagePreferences; page: { id: string; name: string; url?: string }; me: { name: string }; render?: { instance: string } };
+/** me.can_edit is false when only those who manage the page change it and
+ *  this person does not (Apps from v0.22.2; absent: they may). */
+type Ctx = { preferences?: PagePreferences; page: { id: string; name: string; url?: string }; me: { name: string; can_edit?: boolean; can_manage?: boolean }; render?: { instance: string } };
 
 interface Bridge {
   readonly preferences?: PagePreferences;

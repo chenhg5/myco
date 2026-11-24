@@ -271,7 +271,8 @@ hub release: see what this workspace has with `myco template list` (one short en
 narrow it with `--category` or `--query`), then read only the one you use with
 `myco template get --template <slug>` (its data structure and guide). Use one when the person wants something to fill in together; follow the template's guide (`myco template get`): which collections and fields, what goes
 where. Write with `--if-version` when you read first; on a conflict read again. In a page
-you write, `myco.data.list/put/remove/on` reads and writes the records (when `myco.on("reset")`
+you write, `myco.data.list/put/remove/on` reads and writes the records (`myco page set --page <pg_id> --editors managers`
+lets only those who manage it change them; `ready()` says `me.can_edit`; when `myco.on("reset")`
 fires, too much changed while it was away: list them again) and
 `myco.download(name, content, type)` saves an export to the person's Downloads. A page open
 in the App can also use that computer with `myco.os` (files, commands, the screen, the clipboard,
