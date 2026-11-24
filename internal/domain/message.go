@@ -340,6 +340,12 @@ func (m *Message) AskSender(by AgentName, id, body string, now time.Time) (*Mess
 		return nil, err
 	}
 	p.Ask = true
+	// An agent that sent the task (not a person in the app, "@console:…")
+	// gets the question in its inbox, so a session waiting there or its
+	// runner wakes to answer it; a progress update alone wakes no one.
+	if !strings.HasPrefix(string(m.From), "@") {
+		p.Status = StatusQueued
+	}
 	if m.Status != StatusHeld {
 		if err := m.Hold(by, now); err != nil {
 			return nil, err
