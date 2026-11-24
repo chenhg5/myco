@@ -102,9 +102,13 @@ export function GroupNameDialog({ open, onClose, initial, taken, onDone, title }
     try { await onDone(name); onClose(); } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
   return (
-    <Modal open={open} onOpenChange={(o) => !o && onClose()} title={title}>
+    <Modal open={open} onOpenChange={(o) => !o && onClose()} title={title}
+      description={initial ? L("组里的成员会跟着到新名字下。", "Its members move with it.") : L("把做类似事情的成员放在一起，只在这个项目里。", "Members who do similar work, together; only in this project.")}>
       <form onSubmit={(e) => { e.preventDefault(); void go(); }}>
-        <input className="app-input" autoFocus value={v} onChange={(e) => setV(e.target.value)} placeholder={L("比如：前端、后端、应用", "e.g. Frontend, Backend, Apps")} aria-label={L("分组的名字", "Group name")} />
+        <label className="app-field">
+          <span className="app-field-label">{L("名字", "Name")}</span>
+          <input className="app-input" autoFocus value={v} onChange={(e) => setV(e.target.value)} placeholder={L("比如：前端、后端、应用", "e.g. Frontend, Backend, Apps")} />
+        </label>
         <div className="app-modal-actions">
           <span className="app-modal-hint">{why || err}</span>
           <button type="button" className="app-btn" onClick={onClose}>{L("取消", "Cancel")}</button>

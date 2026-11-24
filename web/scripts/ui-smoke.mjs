@@ -5268,6 +5268,9 @@ async function runMatrix(browser, size, scheme) {
         await dlg.waitFor({ state: "detached", timeout: 5_000 });
       };
       await groupsMenu("新建分组…");
+      await page.locator(".app-modal input").waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "member-groups-new");
       await named("前端");
       const group = (name) => side.locator(`.mg-group[data-group="${name}"]`);
       await group("前端").locator(".mg-empty").waitFor({ timeout: 10_000 });
