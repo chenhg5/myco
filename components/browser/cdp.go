@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -47,7 +49,11 @@ func (s *session) attach() error {
 			s.event(msg)
 		}
 	}()
-	_, err := s.browser.Call(s.ctx, "", "Browser.setDownloadBehavior", map[string]any{"behavior": "allowAndName", "downloadPath": s.e.dir + "/downloads/" + s.id, "eventsEnabled": true})
+	dir, err := s.e.downloadDir(s.id)
+	if err != nil {
+		return err
+	}
+	_, err = s.browser.Call(s.ctx, "", "Browser.setDownloadBehavior", map[string]any{"behavior": "allowAndName", "downloadPath": dir, "eventsEnabled": true})
 	if err != nil {
 		return err
 	}
@@ -533,4 +539,28 @@ func navigationURL(raw string) string {
 		u.Fragment = ""
 	}
 	return u.String()
+}
+
+// Chrome requires a writable native path; do not rely on it creating a
+// missing directory or interpreting POSIX separators on Windows.
+func (e *engine) downloadDir(id string) (string, error) {
+	if !idPattern.MatchString(id) {
+		return "", errors.New("invalid_argument")
+	}
+	parent := filepath.Join(e.dir, "downloads")
+	if err := os.Mkdir(parent, 0700); err != nil && !os.IsExist(err) {
+		return "", err
+	}
+	if actual, err := filepath.EvalSymlinks(parent); err != nil || actual != parent {
+		return "", errors.New("storage_failed")
+	}
+	dir := filepath.Join(parent, id)
+	if err := os.Mkdir(dir, 0700); err != nil && !os.IsExist(err) {
+		return "", err
+	}
+	actual, err := filepath.EvalSymlinks(dir)
+	if err != nil || actual != dir {
+		return "", errors.New("storage_failed")
+	}
+	return dir, nil
 }

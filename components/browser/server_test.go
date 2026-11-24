@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -147,4 +149,41 @@ func TestProfileOSLease(t *testing.T) {
 		t.Fatal("lease not released", err)
 	}
 	b.Close()
+}
+
+func TestDownloadDirectoryExistsAndUsesNativePrivatePath(t *testing.T) {
+	e, err := newEngine(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir, err := e.downloadDir("p_native")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dir != filepath.Join(e.dir, "downloads", "p_native") {
+		t.Fatal("non-native download path", dir)
+	}
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		t.Fatal("Chrome was handed a missing download directory", err)
+	}
+	if _, err := e.downloadDir("../outside"); err == nil {
+		t.Fatal("download path escaped the private store")
+	}
+}
+
+func TestDownloadDirectoryRejectsSymlinkBeforeCreatingFiles(t *testing.T) {
+	e, err := newEngine(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(e.dir, "downloads")); err != nil {
+		t.Skip("symlinks unavailable", err)
+	}
+	if _, err := e.downloadDir("p_native"); err == nil {
+		t.Fatal("accepted symlinked download store")
+	}
+	if _, err := os.Stat(filepath.Join(outside, "p_native")); !os.IsNotExist(err) {
+		t.Fatal("wrote outside the private store")
+	}
 }
