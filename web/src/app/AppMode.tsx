@@ -367,6 +367,21 @@ export default function AppMode({ initialHubs, initialInfo }: {
       if (refreshAgain.current) void refresh();
     }
   }, [loadProjects]);
+  // A workspace removed in Settings goes at once: from the list, what it
+  // said and its projects; the space and chat shown in it close (the next
+  // workspace shows), so no page goes on asking one this App no longer
+  // has. The full refresh (every workspace, slow when one is far) follows
+  // in the background instead of holding the dialog open.
+  const dropHub = useCallback((id: string) => {
+    setHubs((h) => h.filter((x) => x.id !== id));
+    setOv((o) => (o ? remember("overview", { ...o, hubs: o.hubs.filter((x) => x.id !== id) }) : o));
+    setProjects((p) => (p ? remember("projects", p.filter((x) => x.hubId !== id)) : p));
+    delete places.current[id];
+    setSpaceState((s) => (s?.hubId === id ? null : s));
+    setChatWith((c) => (c?.space.hubId === id ? null : c));
+    setProfile((p) => (p && p.hubId === id ? null : p));
+    void refresh();
+  }, [refresh]);
   // A profile saved here (appApi.updateProfile): its name and face show
   // everywhere at once, not at the next refresh.
   useEffect(() => {
@@ -1511,6 +1526,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
               onLangChoice={chooseLang}
               refreshKey={localTick}
               onRefresh={refresh}
+              onRemoved={dropHub}
               onAddHub={() => setConnectOpen(true)}
             />
           </SettingsDialog>
