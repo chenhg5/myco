@@ -1,5 +1,8 @@
 # Links to a view inside an app
 
+Application source paths and Node test commands below refer to the separate [myco-ai/apps](https://github.com/myco-ai/apps) checkout. Host bridge implementation remains in myco-ai/myco.
+
+
 A public page link opens one myco app page. Recent clients can also preserve an
 application-owned URL fragment to select a view inside that page:
 

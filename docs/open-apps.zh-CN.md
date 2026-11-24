@@ -106,7 +106,7 @@ agent 改变了这件事。今天，一个人带着几个 agent，就能把一�
 
 ### 4. 自己做一个应用
 
-应用开发已迁到独立仓库 [myco-ai/apps](https://github.com/myco-ai/apps)，独立检查和发布。主仓库暂留旧副本供现有构建使用，应用改动请提交到 apps。
+应用开发已迁到独立仓库 [myco-ai/apps](https://github.com/myco-ai/apps)，独立检查和发布。应用改动请提交到 apps；主程序按 `apps.lock.json` 嵌入经过校验的发布包（[构建说明](building.md)）。
 
 每个应用就是 `templates/src/` 下的一个文件夹：一个 React 页面，加上 `public/` 里的几份文件。
 

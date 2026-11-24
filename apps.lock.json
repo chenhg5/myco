@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "repository": "myco-ai/apps",
+  "commit": "932a0d9a0ef8476f0268d2175b2dd812404914b5",
+  "tag": "apps-932a0d9a0ef8476f0268d2175b2dd812404914b5",
+  "builtin": [
+    "table",
+    "base",
+    "doc",
+    "slides",
+    "meeting",
+    "scheduling",
+    "issues",
+    "todo",
+    "notes",
+    "whiteboard",
+    "mindmap"
+  ],
+  "artifacts": {
+    "apps.zip": {
+      "sha256": "b1476467cb22a3ec9d078d21a2d50f86adef740c0769d25a9b1ac5d861bae8a2"
+    },
+    "builtin.zip": {
+      "sha256": "2ed10b7a34df3298c13f8da9f4c641a1dce90c019585ba7e9d0b4b75b9018255"
+    },
+    "app-locales.json": {
+      "sha256": "2cb543a29a96eaa2a666b67e980d285b0686ead909ee5bf5cbed477939c7d718"
+    },
+    "builtin.json": {
+      "sha256": "2020e7b056137ded84c7283be35218348aeaee0e8e0276f76289500e85df0932"
+    }
+  }
+}

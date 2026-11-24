@@ -1,5 +1,8 @@
 # Agent actions SDK
 
+Application source paths and Node test commands below refer to the separate [myco-ai/apps](https://github.com/myco-ai/apps) checkout. Host bridge implementation remains in myco-ai/myco.
+
+
 Applications have two ways to collaborate with an agent:
 
 - **Shared data:** use page records and document their schema in `agent.md`.
@@ -100,7 +103,7 @@ using the file. A missing or mismatched export is stale; a large board reports
 `too_large` rather than truncating its output. The application owns its renderer,
 schema and size limit. This contains no desktop screenshot or local assets and
 does not advertise a new grant, SDK action or offline rendering service. See the
-[Whiteboard guide](../templates/src/whiteboard/public/agent.md) for extraction.
+[Whiteboard guide](https://github.com/myco-ai/apps/blob/main/templates/src/whiteboard/public/agent.md) for extraction.
 
 The producer observes synchronized stores only after writes settle and reads
 its singleton output with `data.get`. It does not repeatedly call `data.list`:
@@ -191,7 +194,7 @@ invalid keys and batches exceeding 64 events fail before dispatch. Keep each
 shortcut or drag in one batch: the native provider releases held input after
 every batch. These helpers belong to the remote application, not the generic SDK.
 
-Agents using the CLI should read the [Remote Desktop agent guide](../templates/src/remote-desktop/public/agent.md),
+Agents using the CLI should read the [Remote Desktop agent guide](https://github.com/myco-ai/apps/blob/main/templates/src/remote-desktop/public/agent.md),
 which documents discovery, screenshot files, normalized coordinates, `--key`,
 input events and stopping. `myco action run` prints `{job, saved}`; the frame
 is `job.result` and `saved` contains local image paths. Inspect `job.state` and

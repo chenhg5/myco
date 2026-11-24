@@ -66,7 +66,7 @@ type Options struct {
 	// ones the binary carries.
 	Apps *templates.Catalog
 	// OfficialDir, when Apps is not set, reads every official app from this
-	// folder (internal/templates/official in the source tree) instead of
+	// unpacked folder (for example, an explicitly downloaded apps release) instead of
 	// the few the binary carries: for tests and development.
 	OfficialDir string
 	// PathPrefix is where this hub is served under another's address

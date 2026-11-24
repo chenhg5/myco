@@ -91,8 +91,10 @@ Before you finish a change, run `make vet` and `make test`. Run `make smoke` whe
   - `README.md`/`README.zh-CN.md` and `INSTALL.md`/`INSTALL.zh-CN.md` are kept in sync (English first).
   - `docs/design/app-ui.md` is the one design doc kept here (the UI spec); the team's other design notes live in the maintainers' internal repository.
 
-## Official apps migration (phase 1)
+## Official applications and locked bundles
 
-Official app development has moved to [myco-ai/apps](https://github.com/myco-ai/apps). Use an independent clone of that repository for `templates/`, the `_lib` SDK, app tests and app releases. The copies under `templates/` and `internal/templates/official` in this repository are temporarily retained for existing builds; do not edit or rebuild them. Host bridges, Go services and `web/` stay here.
+Official app sources, `_lib` SDK, app builds, browser tests and releases live in [myco-ai/apps](https://github.com/myco-ai/apps). The three app agents each use an independent apps clone. Host bridges, Go services and `web/` stay here; do not recreate `templates/` or generated application trees in this repository.
 
-The apps repository publishes the rolling catalog and immutable versioned artifacts. `.github/workflows/apps-mirror.yml` verifies and mirrors those public assets to this repository's `apps` prerelease for older Hubs. Keep the compatibility mirror for at least 90 days after cutover and two stable host releases; removal requires a maintenance decision. Phase 2 (locked builtin downloads and deleting these copies) needs separate authorization.
+`apps.lock.json` pins immutable release artifacts and their SHA256. Production `make build`, `make cross` and `make app` first run `make prepare-apps` (Python 3), producing ignored `internal/templates/builtin.zip` and `builtin_generated.go`. Never commit these outputs. Offline builds use `APPS_PREPARE_FLAGS=--offline` with the verified cache or explicit local artifacts. Plain Go tests use tiny fixed fixtures, do not download applications, and need no Node. A raw Go build without preparation has no bundled applications; use the Make targets for distribution. See [docs/building.md](docs/building.md) for preparation, pin updates, offline builds and cross-repository contract tests.
+
+The apps repository publishes the rolling catalog and immutable artifacts. `.github/workflows/apps-mirror.yml` verifies and mirrors public assets to this repository's `apps` prerelease for older Hubs. Keep the compatibility mirror for at least 90 days after cutover and two stable host releases; removal requires a maintenance decision. New Hubs fetch from myco-ai/apps; runtime catalog updates remain independent of the builtin build lock.

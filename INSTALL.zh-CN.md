@@ -1089,6 +1089,8 @@ sudo myco hub restore --from myco-backup-hub-20261121-093000.tar.gz --db /var/li
     - **本机 Hub**：没有 `systemd --user` 的机器（部分 WSL、容器），App 自己运行本机 Hub；这时 runner 也没法装成服务，要在终端里运行 `myco runner start --all`。
     - 还不支持：语音、听写（只有 Mac 有），`myco://` 链接（和 Windows 一样，把链接粘贴进 App）。
 - **自己构建**：Mac 上 `make app` 生成 `bin/myco.app`（需要 Go 和 Xcode 命令行工具），`scripts/mac-sign.sh` 生成签名、公证后的通用版和 DMG；Windows 版 `GOOS=windows go build ./cmd/myco-app` 即可（不需要 cgo），Linux 版 `go build ./cmd/myco-app` 也一样。
+
+源码构建需要 Python 3，按 `apps.lock.json` 准备官方应用包。CLI/Hub 使用 `make build`，macOS 使用 `make app`；直接用 Go 构建 Windows/Linux 桌面端前先执行 `make prepare-apps`。离线构建先预热校验缓存，再运行 `make build APPS_PREPARE_FLAGS=--offline`。本地包、更新锁定版本与测试见[源码构建说明](docs/building.md)。
 - **第一次打开**：两个选择。
   - **在这台电脑上开始**：一键在本机启动 Hub（默认只在本机和局域网可用），App 自动接入它，这台电脑也作为第一台机器加入，可以直接在上面开新会话。之前已经启动过本机 Hub、但这台电脑还不在「机器」页的，v0.18.11 起 App 打开时会自动补上（不会重启正在运行的 runner）。本机的工作区或 runner 服务装着却停了（不是在 App 里点「停止」停的，那会把服务删掉），App 发现后会把它重新启动，用原来的设置；更新 App 时，这台电脑上的 myco 命令行也会一起升级（后台服务下次重启时换成新版，可以在添加 agent 弹窗里点「修复」马上重启）。
   - **连接已有的 Hub**：粘贴 **App 连接链接**（`https://<hub>/c/<令牌>`，同时带了 Hub 地址和控制台令牌）。`install-hub.sh` 首次安装时会打印一条；以后在 Hub 机器上再生成：

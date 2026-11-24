@@ -6,18 +6,12 @@
 /web/node_modules/
 /web/ui-smoke/
 runner.log
-/templates/node_modules/
 /dist/
 
-/templates/design-studio-shots/
 
-/templates/stocks-shots/
 
-/templates/proxy-console-shots/
 
-/templates/localization-shots/
 
-/templates/remote-desktop-shots/
 
 /component-out/
 /ffmpeg-source/
@@ -26,6 +20,12 @@ runner.log
 /myco-remote_*.zip
 /myco-remote_*.sha256
 
-/templates/remote-mobile-shots/
 
-/templates/reader-shots/
+
+# Retired local app outputs and verified release preparations.
+/templates/
+/.cache/
+/internal/templates/builtin.zip
+/internal/templates/builtin_generated.go
+
+__pycache__/

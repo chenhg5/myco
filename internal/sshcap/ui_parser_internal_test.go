@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"os"
+	"github.com/myco-ai/myco/internal/testutil"
 	"os/exec"
 	"path/filepath"
 	"testing"
@@ -16,13 +16,10 @@ import (
 // Verify the template parser against a real SSH response. The rest of the SSH
 // authorization tests remain independent of Node and template dependencies.
 func TestRealSSHOverviewTemplateParser(t *testing.T) {
+	root := testutil.AppsRoot(t)
 	node, err := exec.LookPath("node")
 	if err != nil {
 		t.Skip("Node not installed")
-	}
-	root := filepath.Join("..", "..")
-	if _, err := os.Stat(filepath.Join(root, "templates", "node_modules", "typescript", "lib", "typescript.js")); err != nil {
-		t.Skip("template dependencies not installed")
 	}
 	home, config := testsshd.Start(t)
 	m := &Manager{Home: home, Config: config}
@@ -44,6 +41,8 @@ func TestRealSSHOverviewTemplateParser(t *testing.T) {
 		t.Fatal(err)
 	}
 	cmd := exec.CommandContext(ctx, node, filepath.Join(root, "templates", "server-console-protocol-runner.mjs"))
+	cmd.Env = testutil.AppsEnv(t)
+	cmd.Dir = root
 	cmd.Stdin = bytes.NewReader(data)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("template parser: %v\n%s", err, output)
