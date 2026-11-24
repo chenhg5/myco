@@ -777,7 +777,7 @@ Hub never infers usage from traces. Reports are self-reported, not billing recor
 
 Input tokens exclude cache reads and cache writes in this API. Existing trace
 `input_tokens` retains its original total-input semantics. `owner` is the member
-ID and `machine` is the machine ID; model/machine can be empty when not reported.
+name (as in the public agent view) and `machine` is the machine ID; model/machine can be empty when not reported.
 Costs are only included when reported by the CLI; zero can also mean unknown.
 Claude Code estimates use Anthropic pricing and may not match a compatible proxy
 or another provider's actual bill. No price lookup or trace backfill is performed.

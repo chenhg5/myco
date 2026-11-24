@@ -37,6 +37,9 @@ func (s *Server) usageRoutes(m *http.ServeMux) {
 			writeError(w, err)
 			return
 		}
+		for i := range out.Agents {
+			out.Agents[i].Owner = s.ownerName(out.Agents[i].Owner)
+		}
 		writeJSON(w, 200, out)
 	}))
 }

@@ -158,7 +158,7 @@ func TestUsageMemberVisibilityAndProjectFilters(t *testing.T) {
 		}
 	}
 	for _, a := range own.Agents {
-		if a.Name != "members-agent" {
+		if a.Name != "members-agent" || a.Owner != "member" {
 			t.Fatal("other member metadata leaked")
 		}
 	}
