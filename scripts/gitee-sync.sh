@@ -9,8 +9,9 @@
 # other release and points their notes at GitHub, then uploads this release's
 # assets and checks names, sizes and SHA256SUMS.
 #
-# The gitee workflow runs it after each release (on its own run, so Gitee
-# never holds up the release). Locally: GITEE_TOKEN=$(...) scripts/gitee-sync.sh vX.Y.Z
+# Run it from the release machine after the GitHub release is out. Not from a
+# GitHub-hosted runner: Gitee throttles those uploads (a 45-minute job mirrored
+# one file), which is why there is no workflow for it.
 #
 # Environment: GITEE_TOKEN, GH_TOKEN (or a signed-in gh), MYCO_REPO,
 # MYCO_GITEE_REPO, MYCO_GITEE_LOGIN (default cg33, the token's owner).
