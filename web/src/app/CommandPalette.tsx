@@ -7,6 +7,7 @@ import type { AgentRow } from "@/app/types";
 import { isMe, nodeName } from "@/app/nodes";
 import { Avatar, isWorkspace } from "@/app/persona";
 import { recentChats } from "@/app/recentChats";
+import { SeekMushroom } from "@/app/Working";
 import { L } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
 
@@ -65,14 +66,20 @@ export function CommandPalette({ open, onOpenChange, rows, hubs, projects, now, 
   const list = useRef<HTMLDivElement>(null);
   useEffect(() => { if (open) { setQ(""); setSel(0); setFound({ q: "", items: [], busy: false }); } }, [open]);
 
-  // Messages: each workspace's hub, a moment after typing stops.
+  // Messages: each workspace's hub, a moment after typing stops. Asked
+  // again only when the words or the workspaces change, not on every
+  // refresh of the overview: a slow search would start over each time and
+  // never finish.
+  const hubsNow = useRef(hubs);
+  hubsNow.current = hubs;
+  const hubKey = hubs.filter((h) => h.ok).map((h) => h.id).join("\u0000");
   useEffect(() => {
     const text = q.trim();
     if (!open || text.length < 2) { setFound({ q: text, items: [], busy: false }); return; }
     setFound((f) => ({ ...f, busy: true }));
     let live = true;
     const t = window.setTimeout(() => {
-      Promise.all(hubs.filter((h) => h.ok).map((hub) => appApi.recent(hub.id, { q: text, group: "pair", side: "me" })
+      Promise.all(hubsNow.current.filter((h) => h.ok).map((hub) => appApi.recent(hub.id, { q: text, group: "pair", side: "me" })
         .then((r) => r.items.map((item) => ({ hub, item }))).catch(() => [])))
         .then((all) => {
           if (!live) return;
@@ -81,7 +88,7 @@ export function CommandPalette({ open, onOpenChange, rows, hubs, projects, now, 
         });
     }, 250);
     return () => { live = false; window.clearTimeout(t); };
-  }, [q, open, hubs]);
+  }, [q, open, hubKey]);
 
   const results = useMemo<Result[]>(() => {
     const text = norm(q.trim());
@@ -178,7 +185,7 @@ export function CommandPalette({ open, onOpenChange, rows, hubs, projects, now, 
             {found.busy && <span className="cp-busy">{L("正在找消息…", "Searching messages…")}</span>}
           </div>
           <div className="cp-list" ref={list} role="listbox">
-            {results.length === 0 && <p className="cp-empty">{found.busy ? L("正在找…", "Searching…") : L("没找到", "Nothing found")}</p>}
+            {results.length === 0 && (found.busy ? <Seeking q={q} /> : <p className="cp-empty">{L("没找到", "Nothing found")}</p>)}
             {results.map((r, i) => {
               const head = r.group !== lastGroup ? r.group : "";
               lastGroup = r.group;
@@ -198,5 +205,34 @@ export function CommandPalette({ open, onOpenChange, rows, hubs, projects, now, 
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
+  );
+}
+
+// What the mushroom says while it looks, a new line every couple of seconds.
+const SEEK_LINES: ((q: string) => [string, string])[] = [
+  (q) => [`翻遍聊天记录，找「${q}」`, `Leafing through chats for “${q}”`],
+  () => ["顺着菌丝一路摸过去", "Following the mycelium along"],
+  () => ["挨个问问成员和项目", "Asking every member and project"],
+  (q) => [`「${q}」…好像在哪见过`, `“${q}”… seen that somewhere`],
+  () => ["翻翻最近的消息", "Turning over recent messages"],
+  () => ["快找到了", "Nearly there"],
+];
+
+/** Searching with nothing found yet: the mushroom paces with its magnifying
+ *  glass, and a line under it says what it is up to. */
+function Seeking({ q }: { q: string }) {
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    const t = window.setInterval(() => setI((v) => (v + 1) % SEEK_LINES.length), 2200);
+    return () => window.clearInterval(t);
+  }, []);
+  const short = [...q.trim()].length > 12 ? `${[...q.trim()].slice(0, 12).join("")}…` : q.trim();
+  const [zh, en] = SEEK_LINES[i](short);
+  return (
+    <div className="cp-seek" role="status">
+      <div className="seek-track"><span className="seek-walker"><SeekMushroom /></span></div>
+      {/* keyed, so each new line fades in */}
+      <span key={i} className="work-verb cp-seek-line">{L(zh, en)}</span>
+    </div>
   );
 }

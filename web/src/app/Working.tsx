@@ -57,6 +57,42 @@ export function Mushroom({ idle }: { idle?: boolean }) {
   );
 }
 
+// A magnifying glass held up beside the cap, on the same grid (from x 6,
+// y 1): R rim, l lens, h handle, a its arm out of the stem.
+const LENS = [
+  "..........RRR.",
+  ".........RlllR",
+  ".........RlllR",
+  ".........RlllR",
+  "..........RRR.",
+  "........h.....",
+  "......hh......",
+  "...aaa........",
+];
+const LENS_KIND: Record<string, string> = { R: "is-rim", l: "is-lens", h: "is-handle", a: "is-stem" };
+
+/** The mushroom looking for something: it holds a magnifying glass up and,
+ *  in `.seek-track`, paces back and forth and peers about. */
+export function SeekMushroom() {
+  return (
+    <svg className="work-sprite seek-sprite" viewBox="0 -4 21 16" width="52" height="40" shapeRendering="crispEdges" aria-hidden="true">
+      <g className="work-body">
+        {cells(BODY).map((c) => <rect key={`${c.x},${c.y}`} className={KIND[c.k]} x={c.x} y={c.y} width="1" height="1" />)}
+        <g className="seek-lens">
+          {cells(LENS, 1).map((c) => <rect key={`l${c.x},${c.y}`} className={LENS_KIND[c.k]} x={c.x + 6} y={c.y} width="1" height="1" />)}
+          {/* a glint that comes and goes on the glass */}
+          <rect className="seek-glint" x="16" y="2" width="1" height="1" />
+        </g>
+      </g>
+      {FEET.map((frame, i) => (
+        <g key={i} className={cn("work-feet", i === 1 && "is-b")}>
+          {cells(frame, 10).map((c) => <rect key={`${c.x},${c.y}`} className="is-stem" x={c.x} y={c.y} width="1" height="1" />)}
+        </g>
+      ))}
+    </svg>
+  );
+}
+
 const VERBS: [string, string][] = [
   ["埋头干活", "Heads down"],
   ["琢磨中", "Mulling it over"],

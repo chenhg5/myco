@@ -3097,9 +3097,20 @@ async function runMatrix(browser, size, scheme) {
       const asked = new Set();
       const onReq = (req) => { const m = /\/app\/hubs\/([^/]+)\/recent/.exec(req.url()); if (m) asked.add(decodeURIComponent(m[1])); };
       page.on("request", onReq);
+      // (a slow search: the mushroom with its magnifying glass, not a bare line)
+      const slow = async (route) => { await new Promise((ok) => setTimeout(ok, 1500)); await route.continue(); };
+      await page.route("**/app/hubs/*/recent*", slow);
       await cp.locator("input").fill("芒果布丁");
+      const seek = cp.locator(".cp-seek");
+      await seek.waitFor({ timeout: 3_000 });
+      if (!(await seek.locator("svg.seek-sprite").count())) throw new Error("搜索中应有拿放大镜的蘑菇");
+      if (!/芒果布丁|菌丝|成员|消息|快找到/.test(await seek.innerText())) throw new Error(`搜索中的提示不对：${await seek.innerText()}`);
+      await settle(page, 300);
+      await shot(page, size, scheme, "search-seeking");
       const msg = cp.locator(".cp-item", { hasText: "芒果布丁" }).first();
       await msg.waitFor({ timeout: 8_000 });
+      await page.unroute("**/app/hubs/*/recent*", slow);
+      if (await seek.count()) throw new Error("找到以后蘑菇应该收起来");
       page.off("request", onReq);
       if ([...asked].some((h) => h !== "hub_studio")) throw new Error(`⌘K 只该在当前工作区里搜，实际还问了：${[...asked].join("、")}`);
       await msg.click();

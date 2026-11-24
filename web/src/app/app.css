@@ -7710,6 +7710,79 @@ body.is-resizing {
   font-size: 12.5px;
   color: var(--muted);
 }
+/* Searching, nothing found yet: the mushroom with its magnifying glass
+   paces along a little track, stops at each end to peer about, turns. */
+.cp-seek {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 22px 12px 18px;
+  font-size: 12.5px;
+}
+.seek-track {
+  position: relative;
+  width: 220px;
+  height: 48px;
+  border-bottom: 1px dashed var(--line);
+}
+.seek-walker {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  display: block;
+  width: 63px;
+  height: 48px;
+  animation: seek-walk 6.4s ease-in-out infinite;
+}
+.seek-walker .seek-sprite {
+  display: block;
+  width: 63px;
+  height: 48px;
+  animation: seek-turn 6.4s steps(1) infinite;
+}
+@keyframes seek-walk {
+  0%, 8% { transform: translateX(0); }
+  42%, 58% { transform: translateX(157px); }
+  92%, 100% { transform: translateX(0); }
+}
+/* facing the way it walks */
+@keyframes seek-turn {
+  0% { transform: scaleX(1); }
+  50% { transform: scaleX(-1); }
+}
+.seek-sprite .is-rim { fill: var(--work-eye); }
+.seek-sprite .is-handle { fill: #8a6b45; }
+.seek-sprite .is-lens { fill: rgba(120, 180, 240, 0.35); }
+.dark .seek-sprite .is-rim { fill: #cfc4b0; }
+.seek-sprite .seek-glint {
+  fill: #fff;
+  animation: seek-glint 1.6s steps(1) infinite;
+}
+/* At each end it lifts the glass and peers. */
+.seek-lens {
+  animation: seek-peer 6.4s ease-in-out infinite;
+}
+@keyframes seek-peer {
+  0%, 2%, 12%, 38%, 62%, 88%, 100% { transform: translateY(0); }
+  5%, 9%, 45%, 55% { transform: translateY(-2px); }
+}
+@keyframes seek-glint {
+  0% { opacity: 0; }
+  60% { opacity: 1; }
+}
+.cp-seek-line {
+  max-width: 100%;
+  text-align: center;
+}
+@media (prefers-reduced-motion: reduce) {
+  .seek-walker,
+  .seek-walker .seek-sprite,
+  .seek-lens,
+  .seek-sprite .seek-glint {
+    animation: none;
+  }
+}
 .cp-foot {
   flex: none;
   padding: 7px 14px;
