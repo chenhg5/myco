@@ -219,6 +219,11 @@ jobs:
     #   gh secret set GITEE_TOKEN
     needs: [version, release]
     if: needs.version.outputs.skip != 'true' && !inputs.sign_only
+    # Gitee is a mirror: a Gitee outage or a slow upload must not fail the
+    # release run (GitHub has published already). A failed mirror shows as a
+    # failed job and is retried by running the script by hand.
+    continue-on-error: true
+    timeout-minutes: 45
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
