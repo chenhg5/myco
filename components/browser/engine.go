@@ -16,6 +16,7 @@ import (
 )
 
 type engine struct {
+	trace      func(string, string, bool) // Optional test diagnostics; never exposed over HTTP.
 	ctx        context.Context
 	dir        string
 	mu         sync.Mutex

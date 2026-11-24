@@ -37,6 +37,7 @@ func TestNativeChromeSideEffectsAndDebugger(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer e.close()
+	diagnose := nativeDiagnostics(t, e)
 	handler := e.handler()
 	invoke := func(method, path string, in, out any) {
 		t.Helper()
@@ -46,6 +47,7 @@ func TestNativeChromeSideEffectsAndDebugger(t *testing.T) {
 		w := httptest.NewRecorder()
 		handler.ServeHTTP(w, req)
 		if w.Code != 200 {
+			diagnose()
 			t.Fatalf("%s %s: %d %s", method, path, w.Code, w.Body.String())
 		}
 		if out != nil {
@@ -92,6 +94,7 @@ func TestNativeChromeSideEffectsAndDebugger(t *testing.T) {
 			}
 			cursor = out.Next
 			if out.State == "running" && out.Node == "popup" && last.Node == out.Node && len(out.Steps) == 0 {
+				diagnose()
 				var stack bytes.Buffer
 				_ = pprof.Lookup("goroutine").WriteTo(&stack, 2)
 				t.Logf("stalled popup goroutines:\n%s", stack.String())

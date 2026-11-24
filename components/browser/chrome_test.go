@@ -39,6 +39,7 @@ func TestNativeChromeRecordAndReplayTenTimes(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer e.close()
+	diagnose := nativeDiagnostics(t, e)
 	handler := e.handler()
 	invoke := func(method, path string, input any, out any) {
 		t.Helper()
@@ -48,6 +49,7 @@ func TestNativeChromeRecordAndReplayTenTimes(t *testing.T) {
 		w := httptest.NewRecorder()
 		handler.ServeHTTP(w, req)
 		if w.Code != 200 {
+			diagnose()
 			t.Fatalf("%s %s: HTTP %d %s", method, path, w.Code, w.Body.String())
 		}
 		if out != nil {

@@ -20,7 +20,14 @@ var recorderSource string
 
 const recorderWorld = "myco-browser-collector"
 
+func (s *session) trace(method string, sid proto.TargetSessionID, done bool) {
+	if s.e != nil && s.e.trace != nil {
+		s.e.trace(string(sid), method, done)
+	}
+}
 func (s *session) call(sid proto.TargetSessionID, method string, args any, out any) error {
+	s.trace(method, sid, false)
+	defer s.trace(method, sid, true)
 	ctx, cancel := context.WithTimeout(s.ctx, 10*time.Second)
 	defer cancel()
 	raw, err := s.browser.Call(ctx, string(sid), method, args)

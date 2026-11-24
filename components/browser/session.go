@@ -182,10 +182,12 @@ func (e *engine) openSession(ctx context.Context, owner, id string, headless boo
 		s.mu.Unlock()
 		return nil, context.Canceled
 	}
+	s.trace("stage:process-start", "", false)
 	if err = cmd.Start(); err != nil {
 		s.mu.Unlock()
 		return nil, err
 	}
+	s.trace("stage:process-start", "", true)
 	s.cmd = cmd
 	s.mu.Unlock()
 	go func() { _ = cmd.Wait(); close(s.done); s.cancel() }()
@@ -205,6 +207,7 @@ func (e *engine) openSession(ctx context.Context, owner, id string, headless boo
 	s.mu.Unlock()
 	startup, stop := context.WithTimeout(ctx, 20*time.Second)
 	defer stop()
+	s.trace("stage:DevTools-port", "", false)
 	endpoint := ""
 	tick := time.NewTicker(30 * time.Millisecond)
 	defer tick.Stop()
@@ -228,18 +231,23 @@ func (e *engine) openSession(ctx context.Context, owner, id string, headless boo
 		case <-tick.C:
 		}
 	}
+	s.trace("stage:DevTools-port", "", true)
 	b := rod.New().Context(run).ControlURL(endpoint).NoDefaultDevice().Trace(false).SlowMotion(0).Logger(quietLog{})
+	s.trace("stage:Rod-connect", "", false)
 	if err = b.Connect(); err != nil {
 		return nil, err
 	}
+	s.trace("stage:Rod-connect", "", true)
 	s.browser = b
 	if err = s.attach(); err != nil {
 		return nil, err
 	}
+	s.trace("stage:Rod-pages", "", false)
 	pages, err := b.Pages()
 	if err != nil {
 		return nil, err
 	}
+	s.trace("stage:Rod-pages", "", true)
 	for _, p := range pages {
 		if err = s.installTarget(proto.TargetAttachedToTarget{SessionID: p.SessionID, TargetInfo: &proto.TargetTargetInfo{TargetID: p.TargetID, Type: "page"}}); err != nil {
 			return nil, err
