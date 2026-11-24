@@ -708,6 +708,7 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
         folded={folded}
         onFold={setFolded}
         groups={groupsCtl}
+        groupsNeedUpgrade={!!project && !Array.isArray(project.groups) && project.can_edit}
         groupsKey={project ? `${hubId}\u0000${project.name}` : ""}
         projects={loose ? projects : []}
         onPutIn={(r, p) => void addToProject(hubId, p, rows, r.st.agent.name).then(onRefresh).catch(() => undefined)}
@@ -1271,11 +1272,13 @@ export function orderMembers(agents: AgentRow[], coordinator?: string, lastIn?: 
   return [...agents].sort((a, b) => rank(a) - rank(b) || (rank(a) === 1 ? startedAt(b) - startedAt(a) : 0) || activeAt(b) - activeAt(a));
 }
 
-function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf, now, onSetCoordinator, onChat, onNewPane, onProfile, onAddAgent, onAddWorkspace, folded, onFold, projects = [], onPutIn, project, lastIn, groups, groupsKey = "" }: {
+function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf, now, onSetCoordinator, onChat, onNewPane, onProfile, onAddAgent, onAddWorkspace, folded, onFold, projects = [], onPutIn, project, lastIn, groups, groupsKey = "", groupsNeedUpgrade = false }: {
   /** the project's member groups (absent: an older hub, or chat) */
   groups?: GroupsCtl;
   /** where its folded groups are kept */
   groupsKey?: string;
+  /** a project on a hub too old for groups: the ⋯ says so */
+  groupsNeedUpgrade?: boolean;
   /** when each took part in the space's conversations last (ms) */
   lastIn?: ReadonlyMap<string, number>;
   agents: AgentRow[];
@@ -1428,6 +1431,13 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
           <span><Users />{L(`成员 ${agents.length}`, `Members ${agents.length}`)}</span>
           <span className="sp-side-tools">
             <button type="button" className="sp-side-add" onClick={onAddAgent} title={L("添加 agent", "Add an agent")} aria-label={L("添加 agent", "Add an agent")}><Plus /></button>
+            {groupsNeedUpgrade && !groups && (
+              <button type="button" className="sp-side-add" data-testid="member-groups-menu" title={L("分组", "Groups")} aria-label={L("成员分组", "Member groups")}
+                onClick={(e) => menu.openUnder(e.currentTarget, [
+                  { header: L("成员分组", "Member groups") },
+                  { label: L("要先把工作区升级到 v0.21.34 或更新", "Upgrade the workspace to v0.21.34 or later first"), disabled: true, onSelect: () => undefined },
+                ])}><MoreHorizontal /></button>
+            )}
             {groups && (groups.canEdit || showGroups) && (
               <button type="button" className="sp-side-add" data-testid="member-groups-menu" onClick={(e) => styleMenu(e.currentTarget)}
                 title={L("分组", "Groups")} aria-label={L("成员分组", "Member groups")}><MoreHorizontal /></button>

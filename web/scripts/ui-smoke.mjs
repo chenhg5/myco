@@ -5236,6 +5236,25 @@ async function runMatrix(browser, size, scheme) {
       }
       if (await page.locator(".sp-side.is-folded").count()) await page.locator(".sp-side.is-folded .sp-side-fold").click();
       const side = page.locator(".sp-side:not(.is-folded)");
+      // A hub too old for groups (its projects carry no `groups`): the ⋯
+      // says the workspace needs upgrading, instead of nothing at all.
+      {
+        const strip = async (route) => {
+          const r = await route.fetch();
+          const j = await r.json();
+          const drop = (p) => { if (p && typeof p === "object") delete p.groups; };
+          if (Array.isArray(j.projects)) j.projects.forEach(drop); else drop(j);
+          await route.fulfill({ response: r, json: j });
+        };
+        await page.route("**/app/hubs/hub_studio/projects**", strip);
+        await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+        await page.waitForTimeout(6_000);
+        await clickVisible(page, side.locator("[data-testid=member-groups-menu]"));
+        await page.locator(".conv-menu").getByText("要先把工作区升级到 v0.21.34 或更新").waitFor({ timeout: 5_000 });
+        await page.keyboard.press("Escape");
+        await page.unroute("**/app/hubs/hub_studio/projects**", strip);
+        await page.waitForTimeout(6_000);
+      }
       await side.waitFor({ timeout: 10_000 });
       const groupsMenu = async (item) => {
         await clickVisible(page, side.locator("[data-testid=member-groups-menu]"));
