@@ -32,7 +32,7 @@ Choose a unique entry ID of 1–42 lowercase letters, digits, underscores or hyp
 
 1. Choose a unique lowercase alphanumeric suffix of 8–32 characters. Form the file name `mk-${PAGE}-${ENTRY}-${SUFFIX}.png` (or `.jpg`, `.webp`, `.gif`, `.mp4`, or `.webm`). Keep the entry ID in the file name.
 2. Upload the original: `myco project file put --name "$PROJECT" --path ./screenshot.png --as "$FILENAME"`.
-3. Create an `images` record with `myco page data put --page "$PAGE" --collection images --id "img_$SUFFIX" --if-version 0 --file image.json`. Include `kind` (`video` for MP4/WebM and `image` for PNG/JPEG/WebP/GIF; old records without it are images), `entry` (entry ID), `file` (project file name), `name` (display name), `language` (`zh`, `en`, `none`), `theme` (`light`, `dark`), `width` and `height` (pixels), `bytes`, and `order` (ascending, the gallery uses the first available thumbnail). Optionally include `caption` and a PNG, JPEG or WebP data URI `preview` of up to 18,000 characters for the gallery. For a video, use a still of the first frame as its preview. If record creation fails after upload, use the same file name to finish the record.
+3. Create an `images` record with `myco page data put --page "$PAGE" --collection images --id "img_$SUFFIX" --if-version 0 --file image.json`. Include `kind` (`video` for MP4/WebM, `gif` for GIF, `screenshot` for other images; legacy `image` records still work), `entry` (entry ID), `file` (project file name), `name` (display name), `language` (`zh`, `en`, `none`), `theme` (`light`, `dark`), `width` and `height` (pixels), `bytes`, and `order` (ascending, the gallery uses the first available thumbnail). Optionally include `caption` and a PNG, JPEG or WebP data URI `preview` of up to 18,000 characters for the gallery. For a video, use a still of the first frame as its preview. If record creation fails after upload, use the same file name to finish the record.
 
 The whole project has 100 file slots shared with its documents. Each upload is capped at 20 MiB. Project membership controls access to the originals. The desktop app needs the project image bridge to upload, play, download or copy supported originals. Agents use the CLI.
 
@@ -43,3 +43,19 @@ Set the optional `video_links` field on an `entries` record. It is an array of u
 ```json
 {"video_links":[{"url":"https://example.com/launch-demo","label":"Launch demo"}]}
 ```
+
+## Find images by language or theme
+
+For every file, fill in `language` (`zh`, `en`, or `none`), `theme` (`light` or `dark`), `platform` (`app`, `mobile`, `cli`, or `web`), `aspect` (`landscape` when width exceeds height, `portrait` when height exceeds width, and `square` when equal), `kind`, `tags` (an array of short asset labels), and `description` (non-empty). The upload form derives `kind` and `aspect` automatically. Use one or two sentences in Chinese that describe what viewers can actually see, naming the screen and its important elements. Example “用量页，30 天柱状图和成员排行，浅色”。
+
+```sh
+myco page data list --page "$PAGE" --collection images |
+  jq --arg keyword 工作流 '
+    [.records[] | select(.data.kind != "video"
+      and .data.language == "en" and .data.theme == "dark"
+      and .data.aspect == "landscape" and .data.platform == "app"
+      and ([.data.description // "", (.data.tags // [])[]] | join(" ") | contains($keyword)))]
+      | sort_by(.data.order)'
+```
+
+Add `and .data.entry == $entry` and pass `--arg entry "$ENTRY"` to restrict the query to one entry. Download each returned `data.file` with `myco project file get`.

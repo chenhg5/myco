@@ -1,7 +1,7 @@
 {
   "id": "myco/media-kit",
   "name": "素材库",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "kind": "custom",
   "category": "creative",
   "icon": "icon.svg",
@@ -35,7 +35,11 @@
         "caption": "text",
         "preview": "text",
         "order": "number",
-        "kind": "select"
+        "kind": "select",
+        "platform": "select",
+        "aspect": "select",
+        "tags": "multi",
+        "description": "text"
       }
     }
   },

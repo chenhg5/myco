@@ -7,8 +7,13 @@ export type Entry = {
   title: string; date: string; version: string; pitch_zh: string; pitch_en: string;
   copy_zh: string; copy_en: string; tags: string[]; status: Status; channels: string; video_links?: VideoLink[];
 };
+export const platforms = ["app", "mobile", "cli", "web"] as const;
+export const aspects = ["landscape", "portrait", "square"] as const;
+export type Platform = (typeof platforms)[number];
+export type Aspect = (typeof aspects)[number];
 export type Picture = {
-  kind?: "image" | "video";
+  kind?: "image" | "screenshot" | "video" | "gif";
+  platform?: Platform; aspect?: Aspect; tags?: string[]; description?: string;
   entry: string; file: string; name: string; language: "zh" | "en" | "none";
   theme: "light" | "dark"; width: number; height: number; bytes: number;
   caption: string; preview: string; order: number;
@@ -63,4 +68,17 @@ export function pictures(entry: string) {
 export function thumbnail(value: string | undefined) {
   return typeof value === "string" && value.length <= 18000 &&
     /^data:image\/(?:jpeg|png|webp);base64,[a-z\d+/]+=*$/i.test(value) ? value : "";
+}
+
+export function mediaAspect(width: number, height: number): Aspect | undefined {
+  if (!(width > 0 && height > 0)) return undefined;
+  return width === height ? "square" : width > height ? "landscape" : "portrait";
+}
+
+export function mediaKind(data: Picture) {
+  return data.kind === "video" ? "video" : data.kind === "gif" || /\.gif$/i.test(data.file || "") ? "gif" : "screenshot";
+}
+
+export function mediaTags(value: string) {
+  return [...new Set(value.split(/[,，]/).map(tag => tag.trim().slice(0, 40)).filter(Boolean))].slice(0, 12);
 }

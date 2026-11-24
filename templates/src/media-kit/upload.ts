@@ -1,8 +1,10 @@
 import { myco } from "../_lib/myco";
 import { savePicture } from "./edit";
-import { canUseMedia, imageTypes, kit, maxFile, mediaTypes, type Picture } from "./model";
+import { canUseMedia, imageTypes, kit, maxFile, mediaAspect, mediaTypes, type Platform, type Picture } from "./model";
 
-export type PictureOptions = Pick<Picture, "language" | "theme" | "caption">;
+export type PictureOptions = Pick<Picture, "language" | "theme" | "caption"> & { platform: Platform; tags: string[]; description: string };
+export type PendingFile = { id: string; file: File; options: PictureOptions };
+export const blankPicture = (): PictureOptions => ({ language: "none", theme: "light", caption: "", platform: "app", tags: [], description: "" });
 
 function makePreview(source: CanvasImageSource, width: number, height: number) {
   const scale = Math.min(1, 350 / Math.max(width, height));
@@ -57,7 +59,7 @@ async function inspectImage(blob: Blob) {
 }
 
 export async function upload(entry: string, file: File, options: PictureOptions) {
-  const types = Object.entries(canUseMedia ? mediaTypes : imageTypes);
+  const types = Object.entries<string>(canUseMedia ? mediaTypes : imageTypes);
   const extension = file.name.split(".").pop()?.toLowerCase();
   const format = file.type && file.type !== "application/octet-stream"
     ? types.find(([, type]) => type === file.type)
@@ -67,14 +69,14 @@ export async function upload(entry: string, file: File, options: PictureOptions)
   if (!bridge) throw new Error("bridge_missing");
   const [suffix, type] = format;
   const blob = file.type === type ? file : file.slice(0, file.size, type);
-  const kind = type.startsWith("video/") ? "video" : "image";
+  const kind = type.startsWith("video/") ? "video" : type === "image/gif" ? "gif" : "screenshot";
   const info = await (kind === "video" ? inspectVideo(blob) : inspectImage(blob));
   const id = crypto.randomUUID().replace(/-/g, "").slice(0, 20);
   const name = "mk-" + kit.page + "-" + entry + "-" + id + "." + suffix;
   await bridge.put(name, blob);
   try {
     await savePicture("img_" + id, {
-      entry, file: name, name: file.name.slice(0, 200), kind, bytes: file.size, order: Date.now(), ...info, ...options,
+      entry, file: name, name: file.name.slice(0, 200), kind, bytes: file.size, order: Date.now(), ...info, ...options, aspect: mediaAspect(info.width, info.height), description: options.description.trim(),
     }, 0);
   } catch {
     // Keep the already uploaded file identifiable for a retry by an agent.

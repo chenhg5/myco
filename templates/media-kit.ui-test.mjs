@@ -23,6 +23,9 @@ const files = new Map();
 const rows = new Map();
 let lastDownload;
 let downloaded;
+const downloadOrder = [];
+let failDownload;
+let projectFileBase = 91;
 let requests = 0;
 const json = (res, data) => res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(data));
 const host = `
@@ -91,14 +94,15 @@ const server = createServer(async (req, res) => {
     } catch { return res.writeHead(404).end(); }
   }
   if (route === "/app/hubs/hub/projects/pilot") {
-    return json(res, { docs: Array.from({ length: 91 + files.size }, () => ({})) });
+    return json(res, { docs: Array.from({ length: projectFileBase + files.size }, () => ({})) });
   }
   const fileRoute = /^\/app\/hubs\/hub\/projects\/pilot\/files\/([^/]+)(\/save)?$/.exec(route);
   if (fileRoute) {
     requests++;
     const [, filename, save] = fileRoute;
     if (save) {
-      const file = files.get(filename);
+      downloadOrder.push(filename);
+      const file = filename === failDownload ? undefined : files.get(filename);
       if (!file) return res.writeHead(404).end();
       lastDownload = filename;
       downloaded = file.bytes;
@@ -162,8 +166,16 @@ try {
     { name: "usage.png", mimeType: "image/png", buffer: original },
     { name: "alt.png", mimeType: "image/png", buffer: sourcePNG },
   ]);
-  await content.getByLabel("Media language").selectOption("en");
-  await content.getByLabel("Media theme").selectOption("dark");
+  await content.getByLabel("Media language").first().selectOption("en");
+  await content.getByLabel("Media theme").first().selectOption("dark");
+  await content.getByLabel("Media language").nth(1).selectOption("en");
+  await content.getByLabel("Media theme").nth(1).selectOption("dark");
+  await content.getByLabel("Visual description").first().fill("   ");
+  await content.getByLabel("Visual description").nth(1).fill("Usage dashboard");
+  await content.getByRole("button", { name: "Save", exact: true }).click();
+  await content.getByRole("alert").getByText("Describe what is visible in each file.").waitFor();
+  await content.getByLabel("Visual description").first().fill("Monthly activity overview");
+  await content.getByLabel("Asset tags").first().fill("Rankings, Charts");
   await content.getByRole("button", { name: "Save", exact: true }).click();
   await content.getByText("Uploaded 2 files").waitFor();
   const [first, second] = [...rows.values()].filter(row => row.collection === "images");
@@ -172,7 +184,9 @@ try {
   assert.equal(first.data.language, "en");
   assert.match(first.data.file, /^mk-pg_test-entry_[a-z0-9]+-[a-z0-9]{20}\.png$/);
   assert.ok(files.get(first.data.file).bytes.equals(original));
-  assert.equal(first.data.kind, "image");
+  assert.equal(first.data.kind, "screenshot");
+  assert.equal(first.data.aspect, "landscape");
+  assert.deepEqual(first.data.tags, ["Rankings", "Charts"]);
   // Exercise records made before the kind field existed.
   delete first.data.kind;
   await content.getByRole("button", { name: "Next asset" }).click();
@@ -186,9 +200,38 @@ try {
   await content.getByText("Downloaded", { exact: true }).waitFor();
   assert.equal(lastDownload, second.data.file);
   await content.getByRole("button", { name: "Edit media details" }).click();
-  await content.getByLabel("Media note").fill("Dark layout");
+  await content.getByLabel("Media note").fill("Light layout");
+  await content.getByLabel("Media language").selectOption("zh");
+  await content.getByLabel("Media theme").selectOption("light");
+  await content.locator("form").getByLabel("Platform").selectOption("mobile");
   await content.getByRole("button", { name: "Save", exact: true }).click();
-  await content.getByText(/Dark layout/).waitFor();
+  await content.getByText(/Light layout/).waitFor();
+  await content.locator(".mk-image-badge").getByText("中 · Light", { exact: true }).waitFor();
+  await content.getByLabel("Language", { exact: true }).selectOption("zh");
+  await content.getByText("1 / 1", { exact: true }).waitFor();
+  assert.ok(await content.getByRole("button", { name: "Next asset" }).isDisabled());
+  await content.getByLabel("Theme", { exact: true }).selectOption("dark");
+  await content.getByText("No entries match these filters.").waitFor();
+  assert.ok(await content.getByRole("button", { name: "Download this set" }).isDisabled());
+  await content.getByLabel("Theme", { exact: true }).selectOption("light");
+  await content.getByRole("button", { name: "Download this set" }).click();
+  await content.getByText("Images saved (1)", { exact: true }).waitFor();
+  assert.equal(lastDownload, second.data.file);
+  await content.getByLabel("Platform", { exact: true }).selectOption("app");
+  await content.getByText("No entries match these filters.").waitFor();
+  await content.getByLabel("Platform", { exact: true }).selectOption("mobile");
+  await content.getByLabel("Orientation", { exact: true }).selectOption("landscape");
+  await content.getByText("1 / 1", { exact: true }).waitFor();
+  await content.getByLabel("Platform", { exact: true }).selectOption("");
+  await content.getByLabel("Orientation", { exact: true }).selectOption("");
+  await content.getByLabel("Language", { exact: true }).selectOption("");
+  await content.getByLabel("Theme", { exact: true }).selectOption("");
+  downloadOrder.length = 0;
+  failDownload = first.data.file;
+  await content.getByRole("button", { name: "Download this set" }).click();
+  await content.getByText("Images saved (1). 1 could not be downloaded.").waitFor();
+  assert.deepEqual(downloadOrder, [first.data.file, second.data.file]);
+  failDownload = undefined;
   await content.getByRole("button", { name: "Edit or add files" }).click();
   await content.getByLabel("Status").selectOption("published");
   await content.getByLabel("Published to").fill("Community group");
@@ -197,6 +240,10 @@ try {
   await content.getByRole("button", { name: "Back", exact: true }).click();
   await content.getByLabel("Search assets").fill("missing");
   await content.getByText("No entries match these filters.").waitFor();
+  await content.getByLabel("Search assets").fill("rankings");
+  await content.getByRole("button", { name: /Usage reporting/ }).waitFor();
+  await content.getByLabel("Search assets").fill("activity overview");
+  await content.getByRole("button", { name: /Usage reporting/ }).waitFor();
   await content.getByLabel("Search assets").fill("Track tokens");
   await content.getByLabel("Labels", { exact: true }).selectOption("CLI");
   await content.getByLabel("Status", { exact: true }).selectOption("published");
@@ -234,6 +281,7 @@ try {
     { name: "launch.gif", mimeType: "image/gif", buffer: gif },
     { name: "launch.webm", mimeType: "video/webm", buffer: webm },
   ]);
+  for (const field of await content.getByLabel("Visual description").all()) await field.fill("Animated test pattern");
   await content.getByRole("button", { name: "Save", exact: true }).click();
   await content.getByText("Uploaded 3 files").waitFor();
   const shot = content.locator("video");
@@ -253,7 +301,7 @@ try {
     { url: "http://example.com/replay", label: "Full replay" },
   ]);
   const launchFiles = [...rows.values()].filter(row => row.data.entry === launch.id);
-  assert.deepEqual(launchFiles.map(row => [row.data.kind, row.data.bytes]), [["video", originalVideo.length], ["image", gif.length], ["video", webm.length]]);
+  assert.deepEqual(launchFiles.map(row => [row.data.kind, row.data.bytes]), [["video", originalVideo.length], ["gif", gif.length], ["video", webm.length]]);
   assert.ok(launchFiles.every(row => row.data.preview.startsWith("data:image/jpeg;base64,")));
   await content.getByRole("button", { name: "Download original file" }).click();
   await content.getByText("Downloaded", { exact: true }).waitFor();
@@ -277,14 +325,48 @@ try {
   assert.match(await card.locator("img").getAttribute("src"), /^data:image\/jpeg/);
   assert.ok(await card.locator(".mk-play-mark").isVisible());
 
+  const usage = content.getByRole("button", { name: /Usage reporting/ });
+  await content.getByLabel("Language", { exact: true }).selectOption("zh");
+  await usage.locator(".mk-image-badge").getByText("中 · Light", { exact: true }).waitFor();
+  assert.ok(await card.isVisible(), "entries without the chosen language keep their default cover");
+  await content.getByLabel("Platform", { exact: true }).selectOption("mobile");
+  await content.getByLabel("Orientation", { exact: true }).selectOption("landscape");
+  assert.ok(await usage.isVisible());
+  assert.equal(await card.count(), 0);
+  await content.getByLabel("Platform", { exact: true }).selectOption("");
+  await content.getByLabel("Orientation", { exact: true }).selectOption("");
+  await usage.click();
+  await content.getByLabel("Language", { exact: true }).selectOption("en");
+  await content.getByLabel("Theme", { exact: true }).selectOption("dark");
+  await page.reload();
+  assert.equal(await content.getByLabel("Language", { exact: true }).inputValue(), "zh");
+  await usage.click();
+  assert.equal(await content.getByLabel("Language", { exact: true }).inputValue(), "en");
+  assert.equal(await content.getByLabel("Theme", { exact: true }).inputValue(), "dark");
+  await content.locator(".mk-image-badge").getByText("EN · Dark", { exact: true }).waitFor();
+
   // Agent-authored values pass the same URL checks before any link is rendered.
   launch.data.video_links.push({ url: "data:text/html,unsafe", label: "Unsafe link" });
   const shots = process.env.MEDIA_KIT_SHOTS;
+  if (shots && process.env.MEDIA_KIT_DEMO) {
+    projectFileBase = 20;
+    for (const [item, name, description] of [
+      [first, "en.png", "Member groups on the project sidebar, dark theme."],
+      [second, "zh.png", "用量页，30 天柱状图和成员排行，浅色。"],
+    ]) {
+      const bytes = readFileSync(path.join(process.env.MEDIA_KIT_DEMO, name));
+      const data = rows.get(item.collection + "/" + item.id).data;
+      const width = bytes.readUInt32BE(16);
+      const height = bytes.readUInt32BE(20);
+      files.set(data.file, { type: "image/png", bytes });
+      Object.assign(data, { width, height, aspect: width > height ? "landscape" : width < height ? "portrait" : "square", platform: "app", caption: "", tags: [], description });
+    }
+  }
   if (shots) mkdirSync(shots, { recursive: true });
   for (const width of [400, 1200]) {
     for (const theme of ["light", "dark"]) {
       for (const locale of ["en", "zh"]) {
-        const view = await browser.newPage({ viewport: { width, height: 800 }, colorScheme: theme });
+        const view = await browser.newPage({ viewport: { width, height: 800 }, colorScheme: theme, deviceScaleFactor: shots ? 2 : 1 });
         const query = [theme, locale].join("&");
         await view.goto(base + "?" + query);
         const frame = view.frameLocator("iframe");
@@ -294,9 +376,13 @@ try {
         assert.equal(await frame.locator(".mk-app").evaluate(el => el.scrollWidth), width);
         const video = frame.locator("video");
         await video.evaluate(async media => { await media.play(); media.pause(); });
-        if (shots && ((width === 400 && theme === "dark" && locale === "en") || (width === 1200 && theme === "light" && locale === "zh"))) {
-          await view.screenshot({ path: path.join(shots, `media-kit-${width}-${theme}-${locale}.png`) });
-        }
+        await frame.getByRole("button", { name: locale === "zh" ? "返回" : "Back", exact: true }).click();
+        await frame.getByRole("button", { name: /Usage reporting/ }).click();
+        await frame.getByLabel(locale === "zh" ? "语言" : "Language", { exact: true }).selectOption(locale);
+        await frame.locator(".mk-image-badge").waitFor();
+        await frame.locator('.mk-photo img[src^="blob:"]').evaluate(image => image.decode());
+        assert.equal(await frame.locator(".mk-app").evaluate(el => el.scrollWidth), width);
+        if (shots) await view.screenshot({ path: path.join(shots, `media-kit-${width}-${theme}-${locale}.png`) });
         await view.close();
       }
     }
@@ -326,7 +412,7 @@ try {
   await fallback.getByRole("button", { name: /Usage reporting/ }).click();
   assert.equal(await fallback.getByRole("button", { name: "Edit or add files" }).count(), 0);
   assert.ok(await fallback.getByRole("button", { name: "Download original" }).isEnabled());
-  console.log("Media Kit: scoped files, 11 MiB PNG, 15 MiB MP4 playback and byte-for-byte download, WebM, GIF, validated links, legacy bridge and bilingual responsive views passed");
+  console.log("Media Kit: scoped files, 11 MiB PNG, 15 MiB MP4 playback and byte-for-byte download, WebM, GIF, validated links, legacy bridge, asset filters, ordered batch download and bilingual responsive views passed");
 } finally {
   await browser.close();
   server.close();

@@ -62,3 +62,10 @@
 .mk-video-links a span { overflow-wrap: anywhere; }
 .mk-video-links svg, .mk-video-links .btn { flex-shrink: 0; }
 @media (max-width: 540px) { .mk-link-fields { grid-template-columns: minmax(0, 1fr) auto; } .mk-link-fields label:first-child { grid-column: 1 / -1; } }
+.mk-asset-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+.mk-filter { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); }
+.mk-photo { position: relative; }
+.mk-image-badge { position: absolute; z-index: 1; inset: 8px auto auto 8px; border-radius: 5px; padding: 2px 6px; background: var(--accent); color: var(--on-accent); font-size: 11px; font-weight: 650; pointer-events: none; }
+.mk-file-fields { display: grid; gap: 8px; min-width: 0; margin: 8px 0 0; border: 1px solid var(--line); padding: 10px; overflow-wrap: anywhere; }
+.mk-file-fields > .btn { justify-self: start; }
+.mk-description { overflow-wrap: anywhere; }
