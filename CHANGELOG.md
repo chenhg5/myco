@@ -4,6 +4,20 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.21.33
+
+- **Disk usage is right on Windows, and capacity units are clear**: compressed and sparse files show the storage they actually take, and a file that takes 0 bytes shows 0. The Disk app's capacity selector defaults to binary GiB on Windows and decimal GB elsewhere, applies to the disk cards, scans, map, file lists and cleanup basket on that computer, and never changes the underlying byte counts. The Windows allocation fix needs the updated desktop App; updating the Disk app alone is not enough.
+- **⌘K searches only the workspace you are in**: members, projects, computers, messages and recent chats from other workspaces are no longer mixed in; switch workspace to search there.
+- **Panes stay put when you switch workspaces**: the members column is measured before the first paint, so in a wide window the panes beside the coordinator no longer jump wider and back.
+- Upgrade: update the App for the Windows disk accounting, the ⌘K scope and the workspace-switch layout. No hub upgrade needed.
+
+**中文**
+
+- **Windows 上的磁盘占用更准确，容量单位也更清楚**：压缩和稀疏文件显示实际占用的空间，占用为 0 的文件显示 0。磁盘应用的容量单位选择器默认在 Windows 上用二进制 GiB、其他平台用十进制 GB，作用于这台电脑上的磁盘卡片、扫描、地图、文件列表和清理篮，不会改变底层字节数。Windows 的实际占用查询需要更新桌面 App，单独更新磁盘应用不够。
+- **⌘K 只搜索当前工作区**：成员、项目、电脑、消息和最近会话不再混入其他工作区；要搜别的工作区，先切换过去。
+- **切换工作区时，旁边的面板不再跳动**：成员列在第一次绘制前就量好宽度，宽窗口下协调者旁边的面板不会再先变宽再缩回。
+- 升级：更新 App 才能获得 Windows 磁盘占用、⌘K 搜索范围和切换工作区布局的修复。不需要升级 Hub。
+
 ## v0.21.32
 
 - **The notch island no longer shows 0**: a workspace that cannot be read keeps who was at work there, the island only comes out if someone is still at work once its window is ready, and it always folds away when nobody is. While folding it keeps the last number.
