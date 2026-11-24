@@ -91,39 +91,21 @@ async function storage(page, write) {
       await frame.getByLabel("Master password", { exact: true }).fill("fixture master password only!");
       await frame.getByLabel("Confirm master password").fill("fixture master password only!");
       await frame.getByRole("button", { name: "Create vault" }).click();
+      const add = frame.getByRole("button", { name: "Add", exact: true });
+      await add.click({ timeout: 8000 }).catch(async error => {
+        console.error(await frame.locator("body").innerText());
+        throw error;
+      });
+      await frame.getByLabel("Title").fill("Studio mail");
+      await frame.getByLabel("Password", { exact: true }).fill("Synthetic fixture only");
+      await frame.getByRole("button", { name: "Save", exact: true }).click();
+      await frame.getByRole("heading", { name: "Studio mail" }).waitFor();
+      if (process.env.MYCO_IN_APP_VAULT_SHOT) {
+        await page.locator("#vault").screenshot({ path: process.env.MYCO_IN_APP_VAULT_SHOT });
+      }
       await frame.getByRole("button", { name: "Lock", exact: true }).click();
       await frame.getByRole("heading", { name: "Unlock vault" }).waitFor();
     }
-    const gallery = process.env.MYCO_VAULT_SHOTS;
-    if (vault && gallery) {
-      for (const [lang, colorScheme] of [["en", "dark"], ["zh", "light"]]) {
-        const artwork = await browser.newContext({ colorScheme, viewport: { width: 1200, height: 760 }, deviceScaleFactor: 2 });
-        const scene = await artwork.newPage();
-        await scene.goto(control + "/vault?lang=" + lang);
-        const frame = scene.frameLocator("#vault");
-        const zh = lang === "zh";
-        await frame.getByLabel(zh ? "主密码" : "Master password", { exact: true }).fill("fixture master password only!");
-        await frame.getByLabel(zh ? "确认主密码" : "Confirm master password").fill("fixture master password only!");
-        await frame.getByRole("button", { name: zh ? "创建密码库" : "Create vault" }).click();
-        for (const [title, site] of [
-          [zh ? "知识库" : "Knowledge base", "notes.example.invalid"],
-          [zh ? "设计工作台" : "Design workspace", "canvas.example.invalid"],
-          [zh ? "工作室邮箱" : "Studio mail", "mail.example.invalid"],
-        ]) {
-          await frame.getByRole("button", { name: zh ? "新增" : "Add", exact: true }).click();
-          await frame.getByLabel(zh ? "标题" : "Title").fill(title);
-          await frame.getByLabel(zh ? "网站" : "Website").fill(site);
-          await frame.getByLabel(zh ? "用户名" : "Username").fill("alex@example.invalid");
-          await frame.getByLabel(zh ? "密码" : "Password", { exact: true }).fill("Synthetic fixture only");
-          await frame.getByLabel(zh ? "备注" : "Note").fill(zh ? "工作室项目通知与协作邀请。" : "Studio project notices and invitations.");
-          await frame.getByRole("button", { name: zh ? "保存" : "Save", exact: true }).click();
-          await frame.getByRole("heading", { name: title }).waitFor();
-        }
-        await scene.locator("#vault").screenshot({ path: join(gallery, `vault-${lang}-${colorScheme}.png`) });
-        await artwork.close();
-      }
-    }
-
     console.log("PASS Chromium isolated page/workspace/account storage, restart, and repeat recovery SHA-256");
     if (vault) console.log("PASS actual vault bundle and bridge: old-client gate, isolated create and lock");
   } finally { await browser.close(); }
