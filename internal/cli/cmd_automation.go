@@ -14,7 +14,7 @@ import (
 
 // automationCommands manage automations: tasks the hub sends, as you, to an
 // agent on a schedule or when a webhook is called (the hub's admin token, or
-// a member's console token).
+// a member's console token), or the project-scoped coordinator interface.
 func automationCommands() *Command {
 	adminFlag := Flag{Name: "admin-token-file", Kind: String, Help: "File containing the admin token (instead of MYCO_ADMIN_TOKEN)"}
 	idFlag := Flag{Name: "id", Kind: String, Required: true, Help: "Automation id (aut_...)"}
@@ -22,15 +22,32 @@ func automationCommands() *Command {
 		Name:     "list",
 		Summary:  "List automations (yours; everyone's for those who manage the hub)",
 		Examples: []string{"myco automation list"},
-		Flags:    []Flag{adminFlag},
+		Flags:    []Flag{adminFlag, {Name: "project", Kind: String, Help: "Project name (required for coordinator agents)"}},
 		Run: handler(func(e *env) error {
-			c, err := e.adminClient()
+			c, agent, err := e.automationClient()
 			if err != nil {
 				return err
 			}
-			as, err := c.Automations(e.in.Ctx)
+			var as []api.Automation
+			if agent {
+				as, err = c.ProjectAutomations(e.in.Ctx, e.in.String("project"))
+			} else {
+				as, err = c.Automations(e.in.Ctx)
+			}
 			if err != nil {
+				if agent {
+					return automationUpgradeError(err)
+				}
 				return err
+			}
+			if project := e.in.String("project"); project != "" && !agent {
+				filtered := []api.Automation{}
+				for _, a := range as {
+					if a.Project == project {
+						filtered = append(filtered, a)
+					}
+				}
+				as = filtered
 			}
 			return e.p.Print(api.AutomationList{Automations: as}, func(w io.Writer) {
 				tw := tabwriter.NewWriter(w, 0, 2, 2, ' ', 0)
@@ -102,6 +119,9 @@ func automationCommands() *Command {
 		}),
 	}
 	scheduleFlags := []Flag{
+		{Name: "starts", Kind: String, Help: "Start at YYYY-MM-DD (UTC) or RFC3339; empty clears"},
+		{Name: "ends", Kind: String, Help: "Stop after YYYY-MM-DD (inclusive UTC day) or at RFC3339; empty clears"},
+		{Name: "once", Kind: Bool, Help: "Disable after one execution attempt (--once=false to clear)"},
 		{Name: "cron", Kind: String, Help: `Schedule, 5 fields: minute hour day-of-month month day-of-week (e.g. "0 9 * * 1-5"); runs at least 10 minutes apart`},
 		{Name: "tz", Kind: String, Help: "IANA time zone of the schedule, e.g. Asia/Shanghai (default UTC)"},
 	}
@@ -170,16 +190,22 @@ plain text (not end-to-end encrypted).`,
 			if req.Schedule == nil && req.Webhook == nil {
 				return errorf("invalid_argument", ExitUsage, `pass --cron "0 9 * * *" and/or --webhook`, "an automation needs a schedule or a webhook")
 			}
+			if err := e.automationBounds(&req); err != nil {
+				return err
+			}
+			c, agent, err := e.automationClient()
+			if err != nil {
+				return err
+			}
 			if e.in.Bool("dry-run") {
 				return e.dryRun(map[string]any{"action": "automation_create", "request": req})
 			}
-			c, err := e.adminClient()
-			if err != nil {
-				return err
+			if agent {
+				return e.changeProjectAutomation(c, "create", "", req)
 			}
 			res, err := c.CreateAutomation(e.in.Ctx, req)
 			if err != nil {
-				return err
+				return automationUpgradeError(err)
 			}
 			return e.p.Print(res, func(w io.Writer) { printAutomation(w, res.Automation, res.WebhookSecret) })
 		}),
@@ -261,16 +287,22 @@ plain text (not end-to-end encrypted).`,
 			if e.in.Bool("disabled") {
 				req.Enabled = boolPtr(false)
 			}
+			if err := e.automationBounds(&req); err != nil {
+				return err
+			}
+			c, agent, err := e.automationClient()
+			if err != nil {
+				return err
+			}
 			if e.in.Bool("dry-run") {
 				return e.dryRun(map[string]any{"action": "automation_update", "id": e.in.String("id"), "request": req})
 			}
-			c, err := e.adminClient()
-			if err != nil {
-				return err
+			if agent {
+				return e.changeProjectAutomation(c, "update", e.in.String("id"), req)
 			}
 			res, err := c.UpdateAutomation(e.in.Ctx, e.in.String("id"), req)
 			if err != nil {
-				return err
+				return automationUpgradeError(err)
 			}
 			return e.p.Print(res, func(w io.Writer) { printAutomation(w, res.Automation, res.WebhookSecret) })
 		}),
@@ -280,18 +312,21 @@ plain text (not end-to-end encrypted).`,
 		Summary:  "Remove an automation and its runs (the messages it sent stay)",
 		Mutating: true,
 		Examples: []string{"myco automation remove --id aut_abc123"},
-		Flags:    []Flag{idFlag, adminFlag},
+		Flags:    []Flag{idFlag, adminFlag, {Name: "project", Kind: String, Help: "Project name (required for coordinator agents)"}},
 		Run: handler(func(e *env) error {
 			if err := e.in.Require("id"); err != nil {
 				return err
 			}
 			id := e.in.String("id")
+			c, agent, err := e.automationClient()
+			if err != nil {
+				return err
+			}
 			if e.in.Bool("dry-run") {
 				return e.dryRun(map[string]any{"action": "automation_remove", "id": id})
 			}
-			c, err := e.adminClient()
-			if err != nil {
-				return err
+			if agent {
+				return e.changeProjectAutomation(c, "delete", id, api.AutomationRequest{})
 			}
 			if err := c.DeleteAutomation(e.in.Ctx, id); err != nil {
 				return err
@@ -326,7 +361,7 @@ plain text (not end-to-end encrypted).`,
 			})
 		}),
 	}
-	return (&Command{Name: "automation", Summary: "Send tasks to agents on a schedule or from a webhook (run by the hub)"}).
+	return (&Command{Name: "automation", Summary: "Schedule tasks and webhooks; project coordinators use --project", Long: "Project coordinators use their own credential with --project. Changes await the project owner when approval is required. --starts, --ends and --once bound scheduled execution."}).
 		Add(list, show, create, update, remove, run)
 }
 
@@ -355,6 +390,18 @@ func automationWhen(a api.Automation) string {
 	if !a.Enabled {
 		parts = append(parts, "off")
 	}
+	if a.StartsAt != nil {
+		parts = append(parts, "from "+a.StartsAt.UTC().Format("2006-01-02T15:04Z"))
+	}
+	if a.EndsAt != nil {
+		parts = append(parts, "until "+a.EndsAt.UTC().Format("2006-01-02T15:04Z"))
+	}
+	if a.Once {
+		parts = append(parts, "once")
+	}
+	if a.DisabledReason != "" {
+		parts = append(parts, a.DisabledReason)
+	}
 	return strings.Join(parts, " + ")
 }
 
@@ -373,6 +420,18 @@ func automationLast(r *api.AutomationRun) string {
 }
 
 func printAutomation(w io.Writer, a api.Automation, secret string) {
+	if a.StartsAt != nil {
+		fmt.Fprintln(w, "starts:", a.StartsAt.UTC().Format(time.RFC3339))
+	}
+	if a.EndsAt != nil {
+		fmt.Fprintln(w, "ends:", a.EndsAt.UTC().Format(time.RFC3339))
+	}
+	if a.Once {
+		fmt.Fprintln(w, "once: true")
+	}
+	if a.DisabledReason != "" {
+		fmt.Fprintln(w, "disabled:", a.DisabledReason)
+	}
 	to := a.To
 	if a.Workflow != "" {
 		to = "workflow " + a.WorkflowName

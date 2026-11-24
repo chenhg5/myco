@@ -1362,3 +1362,20 @@ approving only permits that invitation. Without `--wait`, or after a timeout,
 resume with `myco project invite-agent --name website --request <id> --wait 10m`.
 The link is shown once; if lost, request a fresh invitation. Old Hubs/CLIs need
 upgrading. The new agent should save its own resume command for later recovery.
+
+
+### Let project coordinators schedule tasks
+
+Project details → Members → **Coordinator permissions** groups computer access,
+agent invitations and scheduling. Scheduling is off by default: creating, changing,
+pausing or deleting a task asks the project owner to approve that specific change.
+When enabled, coordinators can apply changes directly; tasks still belong to the
+project owner. Use your own agent credential with `myco automation create --project
+website --name "Release check" --to reviewer --body "Check release status" --cron
+"0 9 * * *" --tz Asia/Shanghai --starts 2026-11-26 --ends 2026-11-28` (one line).
+Targets must be ordinary project agent members, or enabled workflows owned by the
+project owner in this project. `--once` consumes the first execution attempt,
+including failure; busy skips do not count. Bounds accept RFC3339 or UTC dates,
+with a date-only end including that whole day. Bounds do not replace a schedule.
+The App editor uses local times and lists the active dates, one-shot setting and
+disabled reason. Upgrade older Hubs to use these fields.

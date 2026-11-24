@@ -532,7 +532,7 @@ func Open(path string) (*sql.DB, error) {
 		"machines": {{"owner", "TEXT NOT NULL DEFAULT ''"}},
 		// The computers a project's coordinators may start agents on (v0.21.2).
 		// Member groups (JSON list, in display order; v0.21.34).
-		"projects": {{"coordinator_invites", "INTEGER NOT NULL DEFAULT 0"}, {"machines", "TEXT NOT NULL DEFAULT '[]'"}, {"member_groups", "TEXT NOT NULL DEFAULT '[]'"}},
+		"projects": {{"coordinator_automations", "INTEGER NOT NULL DEFAULT 0"}, {"coordinator_invites", "INTEGER NOT NULL DEFAULT 0"}, {"machines", "TEXT NOT NULL DEFAULT '[]'"}, {"member_groups", "TEXT NOT NULL DEFAULT '[]'"}},
 		// A member's group in its project ('' = ungrouped).
 		"project_members": {{"group_name", "TEXT NOT NULL DEFAULT ''"}},
 		"console_tokens":  {{"member_id", "TEXT NOT NULL DEFAULT ''"}},
@@ -548,7 +548,7 @@ func Open(path string) (*sql.DB, error) {
 			// Send-backs, the tasks sent, and what they cost (v0.21.1).
 			{"bounces", "INTEGER NOT NULL DEFAULT 0"}, {"tasks", "TEXT NOT NULL DEFAULT ''"}, {"usage", "TEXT NOT NULL DEFAULT ''"}},
 		// A workflow an automation starts, and the run's inputs (v0.21).
-		"automations": {{"workflow", "TEXT NOT NULL DEFAULT ''"}, {"inputs", "TEXT NOT NULL DEFAULT ''"}},
+		"automations": {{"project_scoped", "INTEGER NOT NULL DEFAULT 0"}, {"starts_at", "INTEGER NOT NULL DEFAULT 0"}, {"ends_at", "INTEGER NOT NULL DEFAULT 0"}, {"once_only", "INTEGER NOT NULL DEFAULT 0"}, {"disabled_reason", "TEXT NOT NULL DEFAULT ''"}, {"created_by", "TEXT NOT NULL DEFAULT ''"}, {"approved_by", "TEXT NOT NULL DEFAULT ''"}, {"workflow", "TEXT NOT NULL DEFAULT ''"}, {"inputs", "TEXT NOT NULL DEFAULT ''"}},
 	} {
 		if err := addColumns(db, table, cols); err != nil {
 			db.Close()

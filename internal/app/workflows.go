@@ -219,6 +219,9 @@ func (s *WorkflowService) find(ctx context.Context, c Caller, ref string) (*doma
 	if err != nil {
 		return nil, err
 	}
+	if c.ProjectScope != "" && w.Project != c.ProjectScope {
+		return nil, domain.Errf(domain.CodePermissionDenied, "workflow left the scheduled project")
+	}
 	if !ownsBy(c, w.Owner, w.OwnerID) {
 		return nil, domain.Errf(domain.CodeNotFound, "workflow %s not found", ref)
 	}

@@ -121,3 +121,48 @@ func TestProjectInvitationCLIJoinIgnoresMachineEnrollment(t *testing.T) {
 		t.Fatal("invitation altered machine membership")
 	}
 }
+
+func TestAutomationCoordinatorCLIAndWindowCompatibility(t *testing.T) {
+	var paths []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.Method+" "+r.URL.Path)
+		if r.Method == "GET" {
+			_ = json.NewEncoder(w).Encode(api.AutomationList{Automations: []api.Automation{}})
+			return
+		}
+		var req api.AutomationRequest
+		if r.Method != "DELETE" {
+			if e := json.NewDecoder(r.Body).Decode(&req); e != nil {
+				t.Error(e)
+			}
+		}
+		if r.Method == "POST" && (req.StartsAt == nil || *req.StartsAt != "2026-11-26T00:00:00Z" || req.EndsAt == nil || *req.EndsAt != "2026-11-29T00:00:00Z" || req.Once == nil || !*req.Once) {
+			t.Error("CLI lost date/once fields")
+		}
+		_ = json.NewEncoder(w).Encode(api.ProjectAutomationResponse{Status: "pending", ApprovalID: "approval_fixture"})
+	}))
+	defer server.Close()
+	cli := &harnessT{t, map[string]string{"MYCO_HUB": server.URL, "MYCO_TOKEN": "agent-fixture", "MYCO_CONFIG": filepath.Join(t.TempDir(), "agent.yaml")}}
+	if code, _, err := cli.run("automation", "list"); code == 0 || !strings.Contains(err, "--project") {
+		t.Fatalf("agent did not require project %d %s", code, err)
+	}
+	commands := [][]string{{"automation", "create", "--project", "demo", "--name", "demo", "--to", "worker", "--body", "check", "--cron", "0 9 * * *", "--starts", "2026-11-26", "--ends", "2026-11-28", "--once"}, {"automation", "list", "--project", "demo"}, {"automation", "update", "--project", "demo", "--id", "aut_demo", "--disabled"}, {"automation", "remove", "--project", "demo", "--id", "aut_demo"}}
+	for _, args := range commands {
+		if code, _, err := cli.run(args...); code != 0 {
+			t.Fatalf("%v: %d %s", args, code, err)
+		}
+	}
+	if len(paths) != 4 || paths[0] != "POST /v1/projects/demo/automations" || paths[1] != "GET /v1/projects/demo/automations" || paths[2] != "PATCH /v1/projects/demo/automations/aut_demo" || paths[3] != "DELETE /v1/projects/demo/automations/aut_demo" {
+		t.Fatalf("wrong identity route %v", paths)
+	}
+	old := httptest.NewServer(http.NotFoundHandler())
+	defer old.Close()
+	cli.env["MYCO_HUB"] = old.URL
+	if code, _, err := cli.run("automation", "list", "--project", "demo"); code == 0 || !strings.Contains(err, "upgrade") {
+		t.Fatal("no old Hub hint", err)
+	}
+	// The existing human route also gives an actionable error for new fields.
+	if err := automationUpgradeError(&client.Error{Status: 400, Message: `json: unknown field "starts_at"`}); !strings.Contains(err.Error(), "Hub") {
+		t.Fatal("new date field did not recommend upgrade")
+	}
+}

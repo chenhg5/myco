@@ -237,7 +237,8 @@ func Build(o Options) (*Hub, error) {
 		return err == nil && m != nil
 	})
 	srv.SetProjects(projectSvc)
-	srv.SetProjectInvitations(app.NewProjectInvitationService(sqlite.NewProjectInvitationRepo(db), projectSvc, sqlite.NewMemberRepo(db), superagents, enroll, audit, ids, clock))
+	projectInvites := app.NewProjectInvitationService(sqlite.NewProjectInvitationRepo(db), projectSvc, sqlite.NewMemberRepo(db), superagents, enroll, audit, ids, clock)
+	srv.SetProjectInvitations(projectInvites)
 	enroll.SetDefaultVisibility(defaultVisibility)
 	srv.SetHidden(app.NewHiddenService(sqlite.NewSettingRepo(db)))
 	srv.SetPins(app.NewPinService(sqlite.NewSettingRepo(db), ids, clock))
@@ -258,6 +259,7 @@ func Build(o Options) (*Hub, error) {
 	srv.SetTraces(traces)
 	automations := app.NewAutomationService(sqlite.NewAutomationRepo(db), messages, msgRepo, security.Tokens{}, ids, clock, o.Log)
 	srv.SetAutomations(automations)
+	srv.SetProjectAutomations(app.NewProjectAutomationService(projectInvites, automations))
 	domain.CompleteContracts = jsonschema.New()
 	workflowRepo := app.ObserveWorkflows(sqlite.NewWorkflowRepo(db), bus)
 	workflows := app.NewWorkflowService(workflowRepo, messages, msgRepo, ids, clock, o.Log)

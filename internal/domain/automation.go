@@ -40,8 +40,15 @@ type Automation struct {
 	// Workflow, when set, is the workflow it starts (its id) instead of
 	// sending Body to To; Inputs are the run's inputs, each a template
 	// that may use the webhook call ({{payload}}, {{payload.issue.title}}).
-	Workflow string
-	Inputs   map[string]string
+	Workflow       string
+	Inputs         map[string]string
+	StartsAt       time.Time
+	EndsAt         time.Time
+	Once           bool
+	DisabledReason string
+	ProjectScoped  bool // last changed through project coordinator permissions
+	CreatedBy      string
+	ApprovedBy     string
 }
 
 // StartsWorkflow reports whether it starts a workflow rather than sending a
@@ -121,6 +128,9 @@ type AutomationRepository interface {
 
 // ValidateAutomation checks what people set.
 func (a *Automation) Validate() error {
+	if !a.StartsAt.IsZero() && !a.EndsAt.IsZero() && !a.StartsAt.Before(a.EndsAt) {
+		return Errf(CodeInvalidArgument, "starts_at must be before ends_at")
+	}
 	a.Name = strings.TrimSpace(a.Name)
 	if a.Name == "" {
 		return Errf(CodeInvalidArgument, "an automation needs a name")

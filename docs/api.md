@@ -892,3 +892,82 @@ new clients retry without `runner_slots` **only** for that field's unknown-field
 Single-agent runners with no shared limit omit the field. Independent runner
 processes are separate pools; one `runner start --all` is required for fairness
 across that computer's workspaces.
+
+### Project coordinator scheduling and automation date bounds
+
+Projects expose `coordinator_automations: false` by default. A human project owner
+or workspace administrator can change it with
+`PUT /v1/projects/{name}/automation-permission` and `{ "allowed": true|false }`.
+The App proxies this as `PUT /app/hubs/{id}/projects/{name}/automation-permission`.
+The Members tab groups this switch, invitation access and computer access under
+**Coordinator permissions**. An absent field means an older Hub.
+
+Coordinator agents use their own agent credential on these routes:
+
+| Method and route | Result |
+| --- | --- |
+| `GET /v1/projects/{name}/automations` | `{automations:[Automation]}` for the project owner's schedule-only tasks tagged with this project (webhooks and their request payloads are excluded); read access does not require a mutation approval |
+| `POST /v1/projects/{name}/automations` | Create a scheduled task, using `AutomationRequest` |
+| `PATCH /v1/projects/{name}/automations/{id}` | Change a scheduled task; `{enabled:false}` pauses it |
+| `DELETE /v1/projects/{name}/automations/{id}` | Remove a task and its run history |
+
+Only an active project's `coordinator` may call these routes. `project` is fixed by
+the URL, `to` resolves to a current ordinary agent member, and workflow targets
+must be enabled workflows belonging to the same project and project owner.
+Targets are resolved before approval and checked again before dispatch. The
+result belongs to the project owner, even if the coordinator belongs to someone
+else. A changed/archived project, missing target membership, or a workflow moved
+out of scope stops future dispatches with `disabled_reason: "project_scope_changed"`.
+The project interface manages schedules only: it cannot create/rotate webhook
+secrets or manage webhook-based configurations. Existing console endpoints retain
+human credential behavior.
+
+With permission enabled, a mutation returns `200` with
+`{status:"applied",automation?:Automation,removed?:id}`. With permission off, it
+returns `202 {status:"pending",approval_id}`. Nothing changes until the project
+owner approves the `project_automation` card using the existing approval API.
+The approval holds that exact request; an owner/target/configuration change
+invalidates it. Approval permits only this change and leaves the switch off.
+Approval reserves the action durably before executing it, preventing repeated
+clicks from creating duplicate tasks. If a process dies during execution the
+approval may remain `executing`; inspect the project's task list before asking
+again, since that action is never automatically replayed. Approval outcomes name
+the task ID in the coordinator's notification. Requests, approval/denial, settings
+and applied changes are audited, including the acting agent and approving person.
+`Automation.created_by` and `approved_by` provide attribution.
+
+Both console and project automation requests additionally accept:
+
+- `starts_at?: string`: RFC3339 timestamp, inclusive; empty string clears it.
+- `ends_at?: string`: RFC3339 timestamp, exclusive; empty string clears it.
+- `once?: boolean`: disable before the first execution attempt; skips due to a
+  busy preceding task do not consume it. A failed attempt still consumes it.
+
+When both dates are present, start must be earlier than end. Date bounds apply
+to schedule, webhook and manual runs; they do not create a trigger themselves.
+Date bounds stop future dispatches; they do not cancel tasks or workflows already sent.
+Dates are persisted in UTC. `Automation` returns optional timestamp fields,
+`once` (always present on supporting Hubs), and `disabled_reason` (`expired`,
+`once`, or `project_scope_changed`). The scheduler disables expired tasks even
+when they have no next cron run, and skips windows missed entirely during
+Hub downtime. An explicit `{enabled:true}` resets the reason and allows a fresh
+one-shot attempt, subject to date bounds. Repeated concurrent callbacks reload
+the task under the dispatch lock and cannot dispatch a consumed one-shot again.
+
+CLI agents use `myco automation create/update/list/remove --project <name>`.
+`--starts/--ends` accept RFC3339 or `YYYY-MM-DD` in UTC; a date-only `--ends`
+includes the whole named day. Example:
+
+```sh
+myco automation create --project release --name "Daily release check" \
+  --to reviewer --body "Check the release status" --cron "0 9 * * *" \
+  --tz Asia/Shanghai --starts 2026-11-26 --ends 2026-11-28
+myco automation update --project release --id aut_example --once
+myco automation update --project release --id aut_example --disabled
+```
+
+Without explicit human credentials the CLI uses the agent's own token and
+requires `--project`; it never borrows App credentials for a coordinator action.
+A missing project route or a strictly rejected new date field gives an upgrade
+Hub hint. Older clients can continue using the unchanged console routes and
+ignore the new response fields.

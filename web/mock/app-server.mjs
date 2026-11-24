@@ -1791,7 +1791,7 @@ function appOverview() {
 // Projects (studio hub only).
 const projects = [
   {
-    name: "website", coordinator_invites: false, title: "官网改版", goal: "11 月底前上线新版官网：首页、文档站和下载页，中英双语。",
+    name: "website", coordinator_automations: false, coordinator_invites: false, title: "官网改版", goal: "11 月底前上线新版官网：首页、文档站和下载页，中英双语。",
     brief: "## 仓库\n- 代码在 `myco-web`，分支 `redesign`，PR 合到 `main` 才会部署。\n\n## 规则\n- 改文案先改中文，再同步英文。\n- 截图统一 2x。\n\n## 怎么测试\n`npm run build && npm run preview`，在 1280 和 390 两个宽度下看一遍。",
     links: [{ title: "仓库", url: "https://github.com/acme/myco-web" }, { title: "设计稿", url: "https://figma.com/file/demo" }],
     visibility: "members", owner: "glenn", owner_id: "mem_glenn", archived: false, created_at: iso(86400 * 5), updated_at: iso(3600),
@@ -2121,7 +2121,7 @@ const server = http.createServer(async (req, res) => {
       Object.assign(a, { kind: "action_grant", payload: { grant_id: g.id }, method: "", path: "",
         what: body.what || `${requested.includes("remote.desktop.control") ? "看并操作" : "看"}电脑 ${g.target_name} 的屏幕（键盘和鼠标），5 分钟` });
     }
-    if (body.kind === "project_invite") Object.assign(a, {kind: body.kind, payload: body.payload || {project: "website", project_title: "官网改版", display_name: "文档助手"}, method: "", path: ""});
+    if (["project_invite", "project_automation"].includes(body.kind)) Object.assign(a, {kind: body.kind, payload: body.payload || {project: "website", project_title: "官网改版", display_name: "文档助手"}, method: "", path: ""});
     (state.approvals[hub.id] ||= []).push(a);
     return send(res, 201, a);
   }
@@ -3439,7 +3439,7 @@ const server = http.createServer(async (req, res) => {
         return { ...rest, workflow_name: wfs.list.find((w) => w.id === a.workflow)?.name || a.workflow };
       };
       const apply = (a, b) => {
-        for (const k of ["name", "to", "project", "body", "skip_if_busy", "enabled", "workflow", "inputs"]) if (b?.[k] !== undefined) a[k] = b[k];
+        for (const k of ["name", "to", "project", "body", "skip_if_busy", "enabled", "workflow", "inputs", "starts_at", "ends_at", "once"]) if (b?.[k] !== undefined) a[k] = b[k];
         if (a.workflow === "") { delete a.workflow; delete a.inputs; }
         if (b?.schedule) { a.schedule = b.schedule; a.next_run_at = new Date(Date.now() + 3600e3).toISOString(); }
         if (b?.clear_schedule) { delete a.schedule; delete a.next_run_at; }
@@ -3455,7 +3455,7 @@ const server = http.createServer(async (req, res) => {
         const b = await readBody(req);
         if (!b?.name || (!b.workflow && (!b?.to || !b?.body)) || (!b.schedule && !b.webhook)) return fail(res, 400, "invalid_argument", "name, to, body (or a workflow) and a schedule or webhook are required");
         state.counter += 1;
-        const a = { id: `aut_${state.counter}`, owner: "glenn", from: CONSOLE, webhook: false, skip_if_busy: true, enabled: true, created_at: iso(0), runs: [] };
+        const a = { once:false, id: `aut_${state.counter}`, owner: "glenn", from: CONSOLE, webhook: false, skip_if_busy: true, enabled: true, created_at: iso(0), runs: [] };
         const secret = apply(a, b);
         list.unshift(a);
         return send(res, 201, { automation: view(a), ...(secret ? { webhook_secret: secret } : {}) });
@@ -3765,6 +3765,7 @@ const server = http.createServer(async (req, res) => {
       if (!p) return fail(res, 404, "not_found", `no project ${parts[4]}`);
       if (parts.length === 5 && method === "GET") return send(res, 200, projectView(hub, p, url.searchParams.get("docs") === "body"));
       if (parts[5] === "agent-invites" && method === "PUT") { const b = await readBody(req); p.coordinator_invites = !!b.allowed; return send(res, 200, projectView(hub,p)); }
+      if (parts[5] === "automation-permission" && method === "PUT") { const b = await readBody(req); p.coordinator_automations = !!b.allowed; return send(res, 200, projectView(hub,p)); }
       if (parts.length === 5 && method === "PATCH") {
         const b = await readBody(req);
         for (const k of ["title", "goal", "brief", "links", "visibility", "archived"]) if (b[k] !== undefined) p[k] = b[k];

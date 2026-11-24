@@ -110,6 +110,7 @@ export interface Project {
   machines?: string[];
   /** Absent on older workspaces; only people managing the project may change it. */
   coordinator_invites?: boolean;
+  coordinator_automations?: boolean;
   /** the project's memory document, with its body (hubs from v0.21.10;
    *  absent before): what members learned and all keep in mind */
   memory?: ProjectDoc;
@@ -311,6 +312,7 @@ export interface PinCreate { a?: string; with: string; kind: Pin["kind"]; title?
 
 export interface Automation {
   id: string; name: string; owner: string; from: string; to: string; project?: string; body: string;
+  starts_at?: string; ends_at?: string; once?: boolean; disabled_reason?: string; created_by?: string; approved_by?: string;
   schedule?: AutomationSchedule; webhook: boolean; webhook_url?: string; skip_if_busy: boolean; enabled: boolean;
   created_at: string; updated_at: string; next_run_at?: string; last_run?: AutomationRun;
   /** It starts this workflow instead of sending a task (hubs from v0.21). */
@@ -318,6 +320,7 @@ export interface Automation {
 }
 export interface AutomationRequest {
   name?: string; to?: string; project?: string; body?: string;
+  starts_at?: string; ends_at?: string; once?: boolean;
   schedule?: AutomationSchedule; clear_schedule?: boolean;
   webhook?: boolean; rotate_secret?: boolean; skip_if_busy?: boolean; enabled?: boolean;
   workflow?: string; inputs?: Record<string, string>;
@@ -524,7 +527,7 @@ export interface AuditEntry { id: string; at: string; actor: string; actor_kind:
 export interface SuperagentState { agent?: Agent; pending?: number }
 export interface Approval {
   id: string; agent: string; what: string; reason?: string; method: string; path: string; body?: string;
-  status: "pending" | "done" | "denied" | "expired" | "withdrew"; result?: number; result_body?: string; decided_by?: string;
+  status: "pending" | "executing" | "done" | "denied" | "expired" | "withdrew"; result?: number; result_body?: string; decided_by?: string;
   created_at: string; expires_at: string; decided_at?: string;
   /** "" (absent): a superagent's held request; "action_grant": an agent asks to act on a computer
    *  (payload {grant_id}; approving may send {permissions?, ttl_seconds?} to allow less). v0.21.21 */
@@ -556,3 +559,5 @@ export type RemoteOffer = {description:RemoteDescription; pairing_code?:string; 
 export type RemoteSession = {id:string; machine:string; state:"pending"|"connected"|"failed"|"closed"; answer?:RemoteDescription; error?:string};
 
 export interface ProjectInviteResponse { id: string; approval_id?: string; link: string; sentence: string; expires_at: string; status: "pending" | "approved" | "ready" | "used" | "denied" | "expired" }
+
+export interface ProjectAutomationResponse { status: "pending"|"applied"|"dry_run"; approval_id?: string; automation?: Automation; removed?: string }

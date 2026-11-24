@@ -29,7 +29,8 @@ type Project struct {
 	// from the terminals it has (v0.21.2).
 	Machines []string
 	// CoordinatorInvites allows coordinators to invite ordinary agents without approval.
-	CoordinatorInvites bool
+	CoordinatorInvites     bool
+	CoordinatorAutomations bool
 	// Groups are the groups its members are sorted into (e.g. frontend,
 	// backend), in display order; each member is in at most one.
 	Groups    []string

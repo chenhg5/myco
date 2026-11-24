@@ -38,7 +38,7 @@ const HOST = "127.0.0.1";
 // A 1x1 PNG, for choosing a picture as a face.
 const TINY_PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 const APP_PORT = Number(process.env.UI_SMOKE_PORT || 5173);
-const MOCK_PORT = 7781;
+const MOCK_PORT = Number(process.env.UI_SMOKE_MOCK_PORT || 7781);
 const VIEWPORTS = [
   { width: 1200, height: 800 },
   { width: 760, height: 800 },
@@ -4310,6 +4310,39 @@ async function runMatrix(browser, size, scheme) {
     // Automations: a task sent for you on a schedule or by webhook. The list
     // says to whom and when; a new one with a webhook shows its address and
     // secret once; running one now sends it, marked 自动 in the chat.
+    await step("项目 · 协调者定时任务", async () => {
+      await go(page,"官网改版",narrow);
+      await clickVisible(page,page.locator(".sp-head").getByRole("button",{name:"项目资料"}));
+      await clickVisible(page,page.locator("[data-testid=project-tabs]").getByRole("tab",{name:/^成员/}));
+      const group=page.locator("[data-testid=coordinator-permissions]");
+      const permission=group.locator("[data-testid=project-automation-permission]");await permission.waitFor();
+      if(!await group.locator("[data-testid=project-agent-invites]").count()||!await group.locator("[data-testid=project-machines]").count())throw Error("Coordinator permissions must be grouped together");
+      const toggle=permission.getByRole("switch");if(await toggle.getAttribute("aria-checked")!=="false")throw Error("Scheduling permission must default off");
+      await clickVisible(page,toggle);await page.waitForFunction(()=>document.querySelector("[data-testid=project-automation-permission] [role=switch]")?.getAttribute("aria-checked")==="true");
+      await clickVisible(page,toggle);await page.waitForFunction(()=>document.querySelector("[data-testid=project-automation-permission] [role=switch]")?.getAttribute("aria-checked")==="false");
+      await group.scrollIntoViewIfNeeded();await settle(page,200);await shot(page,size,scheme,"coordinator-permissions");
+      await navBackClick(page);await page.locator(".sp-home .conv-detail").waitFor();
+      const ask=async()=>{const response=await fetch(`http://${HOST}:${mockPort()}/app/mock/superagent-ask`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({agent:"pm-codex",kind:"project_automation",payload:{project:"website",action:"create",input:{name:"发布检查",body:"核对项目发布状态，列出检查清单。",to:"docs-claude",cron:"0 9 * * *",tz:"Asia/Shanghai",starts_at:"2026-11-26T00:00:00Z",ends_at:"2026-11-29T00:00:00Z",once:true}}})});if(!response.ok)throw Error("Automation approval mock failed")};
+      const card=page.locator(".sp-home [data-testid=approvals] .sa-approval");await ask();await card.waitFor();
+      const text=await card.innerText();if(!text.includes("发布检查")||!text.includes("只跑一次")||!text.includes("2026-11-26"))throw Error("Approval must show the specific task and timing");
+      await clickVisible(page,card.getByText("查看任务内容",{exact:true}));await card.locator(".sa-approval-content",{hasText:"核对项目发布状态"}).waitFor();
+      await shot(page,size,scheme,"project-automation-approval");await clickVisible(page,card.getByRole("button",{name:"不同意",exact:true}));await card.waitFor({state:"hidden"});
+      await ask();await card.waitFor();await clickVisible(page,card.getByRole("button",{name:"同意",exact:true}));await card.waitFor({state:"hidden"});
+    });
+
+    await step("自动化 · 起止日期",async()=>{
+      await go(page,"自动化",narrow);await clickVisible(page,page.locator(".ph").getByRole("button",{name:"新建自动化"}));
+      const ed=page.locator("[data-testid=automation-editor]");await ed.waitFor();
+      const name=`定期发布检查 ${size.width} ${scheme}`;await ed.getByPlaceholder("比如：每天早上汇总 issue").fill(name);await ed.locator("textarea").fill("核对项目发布状态");
+      await ed.getByLabel("开始时间",{exact:true}).fill("2026-11-26T09:00");await ed.getByLabel("结束时间",{exact:true}).fill("2026-11-28T18:00");
+      await ed.getByRole("checkbox",{name:/^只跑一次/}).check();await ed.locator("[data-testid=automation-date-editor]").scrollIntoViewIfNeeded();
+      await shot(page,size,scheme,"automation-date-editor");
+      const response=page.waitForResponse(r=>r.url().includes("/automations")&&r.request().method()==="POST");await clickVisible(page,ed.getByRole("button",{name:"创建",exact:true}));
+      const json=await(await response).json();if(!json.automation.once||!json.automation.starts_at||!json.automation.ends_at)throw Error("Date/once fields lost when saving");
+      await ed.waitFor({state:"detached"});const row=page.locator(".au-row",{hasText:name});await row.locator("[data-testid=automation-bounds]",{hasText:"只跑一次"}).waitFor();
+      await shot(page,size,scheme,"automation-date-list");
+    });
+
     await step("自动化", async () => {
       // None yet: what it is for, and a few common ones to start from.
       const empty = /\/app\/hubs\/[^/]+\/automations$/;

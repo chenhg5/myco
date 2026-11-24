@@ -3719,3 +3719,4 @@ body.is-resizing-rows { cursor: row-resize; user-select: none; }
 .mg-chip { position: relative; }
 .mg-chip.is-slot-before { box-shadow: -3px 0 0 -1px var(--fg-2); }
 .mg-chip.is-slot-after { box-shadow: 3px 0 0 -1px var(--fg-2); }
+.sa-approval-content { margin: 6px 0 0; max-height: 180px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }

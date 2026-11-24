@@ -30,6 +30,7 @@ import (
 // Server is the hub's HTTP adapter.
 type Server struct {
 	projectInvites *app.ProjectInvitationService
+	projectAutos   *app.ProjectAutomationService
 	usage          *app.UsageService
 	runSettingsMu  sync.Mutex
 	enroll         *app.EnrollmentService
