@@ -4,6 +4,16 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.22.3
+
+- **素材库 finds the right picture, and opens it large**: filter the library by language, theme, platform and orientation, alone or together with the search box; click a picture to see it larger and step through the set. Uploading now asks for a one-line description, language and theme for each file, which is what the filters and search use.
+- Upgrade: the official apps reach the workspace by themselves (or `myco template sync` fetches them now), and an existing 素材库 page takes the new version with `myco page upgrade`. No hub or CLI upgrade is needed.
+
+**中文**
+
+- **素材库更好找图，也能看大图**：可以按语言、主题、平台和横竖方向筛选，也可以和搜索框一起用；点开图片看大图，并能在当前套图里前后翻。上传时每个文件会要求填一句画面描述、语言和主题，筛选和搜索用的就是这些信息。
+- 升级：官方应用会自动同步到工作区（也可以用 `myco template sync` 立即获取），已有的素材库页面用 `myco page upgrade` 升级到新版本。不需要升级 Hub 或 myco。
+
 ## v0.22.2
 
 - **A page asks before it uses your computer**: the first time a page calls a group of capabilities (files, writing files, deleting files, commands, the screen, the microphone, speech, the clipboard, notifications, the system, the network, SSH, databases, the proxy), the App asks you: don't allow, allow this time, or always allow. Commands, deleting files and the screen are only ever allowed this time; files you picked and writing the clipboard need no question. A page reaches the network hosts its app declares with the network's consent and is asked for any other host one by one. The answer is kept per workspace and page.
