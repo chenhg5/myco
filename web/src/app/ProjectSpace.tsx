@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 import { activePaneId } from "@/app/ChatSearch";
 import { IntroCard, introOf } from "@/app/Onboard";
 import { Activity, ArrowLeft, ArrowUp, ChevronDown, AudioLines, Columns2, FileText, Loader2, MoreHorizontal, PanelRightClose, PanelRightOpen, Plus, Users } from "lucide-react";
-import { appApi, type RecentItem } from "@/appapi";
+import { appApi, errorMessage, type RecentItem } from "@/appapi";
 import { GroupNameDialog, GroupedMembers, inGroupOrder, moveItems, useGroupStyle, type GroupStyle, type GroupsCtl } from "@/app/MemberGroups";
 import type { Message, Project } from "@/api";
 import type { AgentRow } from "@/app/types";
@@ -497,25 +497,54 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
   // Narrow windows have no members column: the faces in a row.
   const stripMenu = useContextMenu();
   // 成员分组 (MemberGroups.tsx): from the project (hubs from v0.21.34 always
-  // say `groups`); a change shows at once, then the project is read again.
-  const [groupEdit, setGroupEdit] = useState<{ at: string; list: string[]; of: Record<string, string> } | null>(null);
-  useEffect(() => { setGroupEdit(null); }, [project?.updated_at, project?.name]);
+  // say `groups`). A change shows at once and stays so until the project as
+  // read again says the same (a read that left before the save landed, or
+  // the 5-second refresh, must not put it back); a failed save goes back
+  // and says why.
+  const [groupEdit, setGroupEdit] = useState<{ list?: string[]; of: Record<string, string>; until: number } | null>(null);
+  const [groupErr, setGroupErr] = useState("");
+  // (saves still on their way, and the project as the last one left it:
+  // only a read at least that new, with none on the way, settles what shows)
+  const groupSaves = useRef({ inflight: 0, at: "" });
+  const [groupTick, setGroupTick] = useState(0);
+  useEffect(() => {
+    if (!groupEdit || !project) return;
+    if (Date.now() > groupEdit.until) { setGroupEdit(null); return; }
+    if (groupSaves.current.inflight > 0 || (project.updated_at || "") < groupSaves.current.at) return;
+    const sameList = !groupEdit.list || JSON.stringify(groupEdit.list) === JSON.stringify(project.groups || []);
+    const left = Object.fromEntries(Object.entries(groupEdit.of).filter(([a, g]) => (project.members.find((m) => m.name === a)?.group || "") !== g));
+    if (sameList && !Object.keys(left).length) setGroupEdit(null);
+    else if (sameList !== !groupEdit.list || Object.keys(left).length !== Object.keys(groupEdit.of).length) setGroupEdit({ ...groupEdit, list: sameList ? undefined : groupEdit.list, of: left });
+  }, [project, groupEdit, groupTick]);
+  useEffect(() => { setGroupEdit(null); }, [project?.name]);
+  useEffect(() => {
+    if (!groupErr) return;
+    const t = window.setTimeout(() => setGroupErr(""), 6000);
+    return () => window.clearTimeout(t);
+  }, [groupErr]);
   const groupsCtl: GroupsCtl | undefined = project && Array.isArray(project.groups) ? (() => {
     const base = Object.fromEntries(project.members.map((m) => [m.name, m.group || ""]));
-    const list = groupEdit ? groupEdit.list : project.groups!;
+    const list = groupEdit?.list || project.groups!;
     const of = groupEdit ? { ...base, ...groupEdit.of } : base;
     return {
       list,
       groupOf: (a: string) => (list.includes(of[a] || "") ? of[a] : ""),
       canEdit: project.can_edit,
+      error: groupErr,
       save: async (groups: string[], members?: Record<string, string>) => {
-        setGroupEdit((g) => ({ at: project.updated_at, list: groups, of: { ...(g?.of || {}), ...(members || {}) } }));
+        setGroupErr("");
+        setGroupEdit((g) => ({ list: groups, of: { ...(g?.of || {}), ...(members || {}) }, until: Date.now() + 30_000 }));
+        groupSaves.current.inflight++;
         try {
-          await appApi.updateProject(hubId, project.name, { groups, ...(members ? { member_groups: members } : {}) });
+          const p = await appApi.updateProject(hubId, project.name, { groups, ...(members ? { member_groups: members } : {}) });
+          if ((p?.updated_at || "") > groupSaves.current.at) groupSaves.current.at = p.updated_at;
         } catch (e) {
           setGroupEdit(null);
+          setGroupErr(errorMessage(e));
           throw e;
         } finally {
+          groupSaves.current.inflight--;
+          setGroupTick((n) => n + 1);
           onRefresh();
         }
       },

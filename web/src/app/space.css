@@ -3708,3 +3708,4 @@ body.is-resizing-rows { cursor: row-resize; user-select: none; }
 /* the folded column and the narrow strip: a thin line between groups */
 .sp-face-sep { flex: none; width: 18px; height: 1px; margin: 2px 0; background: var(--line); }
 .sp-strip-sep { flex: none; width: 1px; height: 20px; align-self: center; background: var(--line); }
+.mg-error { margin: 2px 6px 6px; font-size: 11.5px; color: var(--red); }

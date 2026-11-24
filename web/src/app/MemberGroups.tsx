@@ -53,6 +53,8 @@ export type GroupsCtl = {
   groupOf: (agent: string) => string;
   /** may change them (can_edit) */
   canEdit: boolean;
+  /** why the last change did not save ("" when it did) */
+  error?: string;
   /** saves the groups in order and who goes where (only those given) */
   save: (groups: string[], members?: Record<string, string>) => Promise<void>;
 };
@@ -213,6 +215,7 @@ export function GroupedMembers({ rows, ctl, style, row, foldKey, onNewGroup, onR
               onClick={() => setChip(c.name)}>{c.label}<span>{c.n}</span></button>
           ))}
         </div>
+        {ctl.error && <p className="mg-error" role="alert">{L(`分组没存上：${ctl.error}`, `Groups not saved: ${ctl.error}`)}</p>}
         {lead}
         {shown.map(row)}
         {menu.element}
@@ -223,6 +226,7 @@ export function GroupedMembers({ rows, ctl, style, row, foldKey, onNewGroup, onR
   if (style === "faces") {
     return (
       <div className="mg mg-faces-style">
+        {ctl.error && <p className="mg-error" role="alert">{L(`分组没存上：${ctl.error}`, `Groups not saved: ${ctl.error}`)}</p>}
         {lead}
         {groups.map((g) => {
           const open = opened.has(g.name);
@@ -248,6 +252,7 @@ export function GroupedMembers({ rows, ctl, style, row, foldKey, onNewGroup, onR
 
   return (
     <div className="mg mg-fold-style">
+      {ctl.error && <p className="mg-error" role="alert">{L(`分组没存上：${ctl.error}`, `Groups not saved: ${ctl.error}`)}</p>}
       {lead}
       {groups.map((g) => {
         const open = !folded.has(g.name);

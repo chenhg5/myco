@@ -5283,6 +5283,21 @@ async function runMatrix(browser, size, scheme) {
         await group("前端").dispatchEvent("drop", { dataTransfer: dt });
       }
       await group("前端").locator(".sp-member", { hasText: "Release (Claude 云端)" }).waitFor({ timeout: 10_000 });
+      // A slow hub (each save takes a few seconds) and two moves in a row:
+      // what shows never falls back while the saves and the 5-second
+      // refreshes cross (it went back to 0 on a real hub).
+      {
+        const slow = async (route) => { if (route.request().method() === "PATCH") await new Promise((ok) => setTimeout(ok, 3_000)); await route.continue(); };
+        await page.route("**/app/hubs/hub_studio/projects/website", slow);
+        await menuPick(page, group("前端").locator(".sp-member", { hasText: "docs-claude" }), "其他");
+        await menuPick(page, side.locator(".sp-member", { hasText: "docs-claude" }), "前端");
+        await menuPick(page, group("前端").locator(".sp-member", { hasText: "Release (Claude 云端)" }), "其他");
+        await menuPick(page, side.locator(".sp-member", { hasText: "Release (Claude 云端)" }), "前端");
+        const counts = [];
+        for (let i = 0; i < 56; i++) { counts.push(await group("前端").locator(".sp-member").count()); await page.waitForTimeout(250); }
+        await page.unroute("**/app/hubs/hub_studio/projects/website", slow);
+        if (counts.some((n) => n !== 2)) throw new Error(`保存慢的时候分组里的人数不该跳回去：${[...new Set(counts)].join(" → ")}`);
+      }
       // The coordinator stays on top, in no group.
       if (await side.locator(".mg-group .sp-member", { hasText: "PM (Codex)" }).count()) throw new Error("协调者不该进分组");
       await settle(page, 200);
