@@ -125,6 +125,18 @@ export interface HubOverview {
 /** Said on window when an agent's profile was saved from this App. */
 export const AGENT_UPDATED = "myco-agent-updated";
 export interface AgentUpdated { hubId: string; agent: Agent }
+/** Said on window when a project was changed from this App (made, edited,
+ *  a member added or taken out): the project as the hub returned it, so
+ *  every list shows it at once instead of at the next refresh. */
+export const PROJECT_UPDATED = "myco-project-updated";
+export interface ProjectUpdated { hubId: string; project: Project }
+async function announced(hubId: string, made: Promise<Project>): Promise<Project> {
+  const project = await made;
+  if (project && typeof project === "object" && project.name) {
+    window.dispatchEvent(new CustomEvent<ProjectUpdated>(PROJECT_UPDATED, { detail: { hubId, project } }));
+  }
+  return project;
+}
 
 export interface AppOverview {
   generated_at: string;
@@ -785,19 +797,19 @@ export const appApi = {
   project: (hubId: string, name: string, bodies = false) =>
     request<Project>("GET", `app/hubs/${enc(hubId)}/projects/${enc(name)}${bodies ? "?docs=body" : ""}`),
   createProject: (hubId: string, input: { name: string; title?: string; goal?: string; visibility?: "members" | "team" }) =>
-    request<Project>("POST", `app/hubs/${enc(hubId)}/projects`, input),
+    announced(hubId, request<Project>("POST", `app/hubs/${enc(hubId)}/projects`, input)),
   updateProject: (hubId: string, name: string, input: { title?: string; goal?: string; brief?: string; links?: ProjectLink[]; visibility?: "members" | "team"; archived?: boolean;
     /** the groups in order (hubs from v0.21.34: send only when the project has `groups`) */ groups?: string[];
     /** who goes in which group ("": none) */ member_groups?: Record<string, string> }) =>
-    request<Project>("PATCH", `app/hubs/${enc(hubId)}/projects/${enc(name)}`, input),
+    announced(hubId, request<Project>("PATCH", `app/hubs/${enc(hubId)}/projects/${enc(name)}`, input)),
   deleteProject: (hubId: string, name: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/projects/${enc(name)}`),
   /** lets the project's coordinators start agents on a computer, or no longer (hubs from v0.21.2) */
   setProjectMachine: (hubId: string, name: string, machine: string, allow: boolean) =>
-    request<Project>(allow ? "PUT" : "DELETE", `app/hubs/${enc(hubId)}/projects/${enc(name)}/machines/${enc(machine)}`),
+    announced(hubId, request<Project>(allow ? "PUT" : "DELETE", `app/hubs/${enc(hubId)}/projects/${enc(name)}/machines/${enc(machine)}`)),
   putProjectMember: (hubId: string, name: string, agent: string, input: { role?: "member" | "coordinator"; note?: string } = {}) =>
-    request<Project>("PUT", `app/hubs/${enc(hubId)}/projects/${enc(name)}/members/${enc(agent)}`, input),
+    announced(hubId, request<Project>("PUT", `app/hubs/${enc(hubId)}/projects/${enc(name)}/members/${enc(agent)}`, input)),
   removeProjectMember: (hubId: string, name: string, agent: string) =>
-    request<Project>("DELETE", `app/hubs/${enc(hubId)}/projects/${enc(name)}/members/${enc(agent)}`),
+    announced(hubId, request<Project>("DELETE", `app/hubs/${enc(hubId)}/projects/${enc(name)}/members/${enc(agent)}`)),
   /** Uploads a file into a project (any kind, up to 20 MB). */
   uploadProjectFile: (hubId: string, name: string, file: File, as?: string) =>
     request<ProjectDoc>("PUT", `app/hubs/${enc(hubId)}/projects/${enc(name)}/files/${enc(as || file.name)}`, file),

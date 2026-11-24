@@ -7,7 +7,7 @@ import { WorkflowsPage } from "@/app/Workflows";
 import { TemplatesPage } from "@/app/Templates";
 import "@/app/app.css";
 import "@/app/space.css";
-import { AGENT_UPDATED, appApi, errorMessage, type AgentUpdated, type AppInfo, type AppOverview, type Hub, type LocalState, type WorkspaceState } from "@/appapi";
+import { AGENT_UPDATED, PROJECT_UPDATED, appApi, errorMessage, type AgentUpdated, type ProjectUpdated, type AppInfo, type AppOverview, type Hub, type LocalState, type WorkspaceState } from "@/appapi";
 import type { AgentRow } from "@/app/types";
 import type { Project } from "@/api";
 import { ConnectHubDialog } from "@/app/ConnectHubDialog";
@@ -324,8 +324,9 @@ export default function AppMode({ initialHubs, initialInfo }: {
   // Projects of the workspaces that answer are fetched again; a workspace that
   // did not answer this time (a network blip) keeps the projects it had, so
   // they do not vanish and the App does not ask for a first project.
-  // A project made here stays shown when a read that began before it was
-  // made comes back without it; a read begun after it has the hub's word.
+  // A project changed here (made, a member added...) keeps what the hub
+  // answered when a read that began before the change comes back without
+  // it; a read begun after it has the hub's word.
   const justMade = useRef(new Map<string, { hubId: string; p: Project; at: number }>());
   const loadProjects = useCallback(async (okIds: string[], allIds: string[] = okIds) => {
     const began = Date.now();
@@ -336,7 +337,9 @@ export default function AppMode({ initialHubs, initialInfo }: {
       const next = allIds.flatMap((id) => { const i = okIds.indexOf(id); return (i >= 0 ? lists[i] : null) ?? keep(id); });
       for (const [k, m] of justMade.current) {
         if (Date.now() - m.at > 60_000) { justMade.current.delete(k); continue; }
-        if (m.at > began && allIds.includes(m.hubId) && !next.some((x) => x.hubId === m.hubId && x.p.name === m.p.name)) next.push({ hubId: m.hubId, p: m.p });
+        if (m.at <= began || !allIds.includes(m.hubId)) continue;
+        const i = next.findIndex((x) => x.hubId === m.hubId && x.p.name === m.p.name);
+        if (i >= 0) next[i] = { hubId: m.hubId, p: m.p }; else next.push({ hubId: m.hubId, p: m.p });
       }
       return remember("projects", next);
     });
@@ -376,6 +379,23 @@ export default function AppMode({ initialHubs, initialInfo }: {
       if (refreshAgain.current) void refresh();
     }
   }, [loadProjects]);
+  // A project changed from anywhere in this App (appApi announces it):
+  // shown at once, its workspace's projects read again behind.
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<ProjectUpdated>).detail;
+      if (!d?.project?.name) return;
+      justMade.current.set(`${d.hubId}\u0000${d.project.name}`, { hubId: d.hubId, p: d.project, at: Date.now() });
+      setProjects((prev) => {
+        const list = prev || [];
+        const i = list.findIndex((x) => x.hubId === d.hubId && x.p.name === d.project.name);
+        const next = i >= 0 ? list.map((x, j) => (j === i ? { hubId: d.hubId, p: d.project } : x)) : [...list, { hubId: d.hubId, p: d.project }];
+        return remember("projects", next);
+      });
+    };
+    window.addEventListener(PROJECT_UPDATED, on);
+    return () => window.removeEventListener(PROJECT_UPDATED, on);
+  }, []);
   // A workspace removed in Settings goes at once: from the list, what it
   // said and its projects; the space and chat shown in it close (the next
   // workspace shows), so no page goes on asking one this App no longer

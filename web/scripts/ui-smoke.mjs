@@ -5942,6 +5942,46 @@ async function runMatrix(browser, size, scheme) {
       if (narrow) await sidebar(page, false);
     });
 
+    // Adding a member already in the workspace: it shows in the members
+    // column at once, while the workspaces answer slowly (the column used
+    // to wait for every workspace to be read again).
+    await step("项目 · 加成员立刻出现", async () => {
+      const slow = async (r) => {
+        if (r.request().method() !== "GET") return r.continue();
+        await new Promise((res) => setTimeout(res, 8000));
+        await r.continue().catch(() => undefined);
+      };
+      await sidebar(page, true);
+      await clickVisible(page, page.locator(".app-nav-add"));
+      const form = page.locator("[data-testid=new-project-form]");
+      await form.locator(".np-input").fill("加人测试");
+      await clickVisible(page, form.getByRole("button", { name: "建好了" }));
+      // (a new project opens with 添加 agent)
+      const dlg = page.locator(".app-modal-add");
+      await dlg.waitFor({ timeout: 10_000 });
+      await page.route(/\/app\/hubs\/[^/]+\/projects(\/[^/?]+)?(\?|$)/, slow);
+      await page.route("**/app/overview", slow);
+      try {
+        await clickVisible(page, dlg.getByRole("tab", { name: "工作区里已有的" }));
+        const row = dlg.locator(".add-local-row").first();
+        const name = (await row.locator(".add-local-name").innerText()).trim();
+        const t0 = Date.now();
+        await clickVisible(page, row.getByRole("button", { name: "加进来" }));
+        // (done when the other rows' buttons work again)
+        await page.waitForFunction(() => [...document.querySelectorAll(".app-modal-add .add-local-row button")].every((b) => !b.disabled), null, { timeout: 3_000 });
+        await closeDialog(page);
+        if (narrow) await page.locator(".sp-strip, .sp-side").first().waitFor({ timeout: 5_000 });
+        await page.locator(".sp-side .sp-member, .sp-strip .sp-strip-face", { hasText: narrow ? undefined : name }).first().waitFor({ timeout: 3_000 });
+        if (Date.now() - t0 > 3_000) throw new Error(`加进项目的「${name}」应立刻出现在成员栏`);
+        await page.waitForTimeout(9_000);
+        if (!narrow && !(await page.locator(".sp-side .sp-member", { hasText: name }).count())) throw new Error(`「${name}」不该被慢回来的旧列表冲掉`);
+      } finally {
+        await page.unroute(/\/app\/hubs\/[^/]+\/projects(\/[^/?]+)?(\?|$)/, slow);
+        await page.unroute("**/app/overview", slow);
+      }
+      if (narrow) await sidebar(page, false);
+    });
+
     // The Mac's menu bar asks the page for what it offers (a "myco-menu"
     // event): search, then settings.
     await step("菜单栏 · 搜索、设置", async () => {
