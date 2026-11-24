@@ -78,6 +78,9 @@ type Options struct {
 	// Slots, if set, is shared by several runners in one process to cap the
 	// number of harness processes running at once.
 	Slots chan struct{}
+	// SlotPool replaces Slots with workspace-fair admission for runner --all.
+	SlotPool *SlotPool
+	OnSlots  func(*api.RunnerSlots)
 	// SlotTouch is how often a message waiting for a free slot checks in
 	// with the Hub (default 30s): the agent stays online while it waits, and
 	// a task ended meanwhile is not run.
@@ -502,7 +505,13 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		}
 		defer unlockSession()
 	}
-	if r.opts.Slots != nil {
+	if r.opts.SlotPool != nil {
+		ticket := r.opts.SlotPool.Request(r.opts.HubURL, SlotOwner(r.opts.HubURL, r.opts.Self), m.ID)
+		defer ticket.Done()
+		if !r.waitPoolSlot(ctx, log, m, ticket) {
+			return
+		}
+	} else if r.opts.Slots != nil {
 		if !r.waitSlot(ctx, log, m) {
 			return
 		}
@@ -1178,6 +1187,38 @@ func (r *Runner) waitSlot(ctx context.Context, log *slog.Logger, m api.Message) 
 			cur, err := r.hub.GetMessage(ctx, m.ID)
 			if err == nil && (cur.Status == "done" || cur.Status == "failed") {
 				log.Info("closed while waiting for a slot; not running it", "status", cur.Status)
+				return false
+			}
+		}
+	}
+}
+
+// waitPoolSlot keeps the task alive while the fair scheduler holds it.
+func (r *Runner) waitPoolSlot(ctx context.Context, log *slog.Logger, m api.Message, t *SlotTicket) bool {
+	report := func() {
+		if r.opts.OnSlots != nil {
+			r.opts.OnSlots(r.opts.SlotPool.Snapshot(SlotOwner(r.opts.HubURL, r.opts.Self)))
+		}
+	}
+	report()
+	defer report()
+	tick := time.NewTicker(r.opts.SlotTouch)
+	defer tick.Stop()
+	for {
+		select {
+		case <-t.Ready:
+			// Revalidate before starting: a task may have been stopped just before
+			// a release admitted it. Never turn a stopped waiter into a new run.
+			cur, err := r.hub.GetMessage(ctx, m.ID)
+			return ctx.Err() == nil && !(err == nil && (cur.Status == "done" || cur.Status == "failed" || cur.Status == "held"))
+		case <-ctx.Done():
+			t.Done()
+			return false
+		case <-tick.C:
+			cur, err := r.hub.GetMessage(ctx, m.ID)
+			if err == nil && (cur.Status == "done" || cur.Status == "failed" || cur.Status == "held") {
+				t.Done()
+				log.Info("closed while waiting for a slot", "status", cur.Status)
 				return false
 			}
 		}

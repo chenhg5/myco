@@ -860,3 +860,27 @@ entry identifies both the joined agent and inviter. All invitation responses and
 join pages disable caching. The App proxies the setting through
 `PUT /app/hubs/{id}/projects/{name}/agent-invites` with the selected Hub's console
 credentials. The CLI translates an old Hub's HTTP 404 into an upgrade hint.
+
+### Runner admission and queue visibility
+
+`PUT /v1/me/runtime` and agent runtime responses optionally include
+`runner_slots: {max_concurrent, in_use, waiting, at, queue?: [{message_id, position}]}`.
+The counts describe the reporting runner **process** across all its workspaces;
+`queue` contains only the reporting agent's waiting task IDs, never another
+workspace's IDs or address. `at` is the snapshot's RFC3339 time. Counts are
+nonnegative, `max_concurrent` is positive, `in_use` cannot exceed it, and queue
+positions are positive and no greater than `waiting` (at most 256 entries).
+Admissions and cancellations update snapshots; a running runner refreshes them
+at least every 20 seconds. On admission the task disappears from `queue`.
+Apps ignore stopped or older-than-90-second snapshots and ignore queue metadata
+on finished tasks. Queue metadata remains visible with execution tracing off;
+it contains no task body or execution details. A stopped task is rechecked
+before admission starts a CLI.
+
+The runtime JSON is stored with the existing agent runtime; no migration is
+needed. Older clients ignore the optional property. Against a strict older Hub,
+new clients retry without `runner_slots` **only** for that field's unknown-field
+400 error; authentication and other validation errors are never downgraded.
+Single-agent runners with no shared limit omit the field. Independent runner
+processes are separate pools; one `runner start --all` is required for fairness
+across that computer's workspaces.

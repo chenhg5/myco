@@ -32,7 +32,7 @@ node web/scripts/media-kit-shots.mjs --out ../media-kit-check --scene coedit --l
 node web/scripts/media-kit-shots.mjs --out ../media-kit-output --scene motion --lang en --resume
 # Optional local videos of the scenes that have interaction actions.
 # Requires ffmpeg; WebM clips capped at 18 seconds stay on disk and are never uploaded.
-node web/scripts/media-kit-shots.mjs --out ../media-kit-video --scene teamwork,progress,terminal,workflow,automation,focus --video
+node web/scripts/media-kit-shots.mjs --out ../media-kit-video --scene teamwork,progress,terminal,workflow,automation,focus-mode --video
 ```
 
 Add a scene in `scenes.mjs`: a stable `id`, bilingual title and pitches, category
@@ -89,3 +89,10 @@ node web/scripts/media-kit-shots.mjs --out ../interaction-clips --scene agent-sw
 side-by-side conversations. The separate `focus-mode` entry demonstrates the
 quiet single-task view. This batch allocates twelve new image files and replaces
 the two existing split-view images; it never starts an actual session handover.
+
+The `runner-queue` scene demonstrates a task waiting for the computer's shared
+CLI capacity, in both languages, using the mock admission fixture:
+
+```sh
+APPS_TEST_ROOT=/path/to/apps node web/scripts/media-kit-shots.mjs --out ../runner-queue-shots --scene runner-queue
+```

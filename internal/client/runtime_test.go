@@ -103,3 +103,53 @@ func TestRuntimeProvidersEmptyListOlderHubHidesControls(t *testing.T) {
 		t.Fatal("empty inventory did not probe older Hub compatibility")
 	}
 }
+
+func TestRuntimeSlotsOlderHubStrictDecoder(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		var old struct {
+			CLI   string `json:"cli"`
+			Model string `json:"model"`
+		}
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&old); err != nil {
+			w.WriteHeader(400)
+			json.NewEncoder(w).Encode(api.Error{Code: "invalid_argument", Message: err.Error()})
+			return
+		}
+		if old.CLI != "codex" || old.Model != "example" {
+			t.Error("lost old runtime fields")
+		}
+		w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+	c, _ := New(srv.URL, "test")
+	if err := c.ReportRuntime(context.Background(), api.Runtime{CLI: "codex", Model: "example", RunnerSlots: &api.RunnerSlots{MaxConcurrent: 3, InUse: 3, Waiting: 2}}); err != nil {
+		t.Fatal(err)
+	}
+	if calls.Load() != 2 {
+		t.Fatalf("got %d requests", calls.Load())
+	}
+}
+func TestRuntimeSlotsDoesNotDowngradeOtherErrors(t *testing.T) {
+	for _, status := range []int{400, 401, 403, 500} {
+		t.Run(fmt.Sprint(status), func(t *testing.T) {
+			var calls atomic.Int32
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls.Add(1)
+				w.WriteHeader(status)
+				json.NewEncoder(w).Encode(api.Error{Code: "invalid_argument", Message: "unrelated validation"})
+			}))
+			defer srv.Close()
+			c, _ := New(srv.URL, "test")
+			if err := c.ReportRuntime(context.Background(), api.Runtime{RunnerSlots: &api.RunnerSlots{MaxConcurrent: 3}}); err == nil {
+				t.Fatal("error swallowed")
+			}
+			if calls.Load() != 1 {
+				t.Fatal("retried unrelated error")
+			}
+		})
+	}
+}

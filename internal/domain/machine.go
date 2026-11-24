@@ -62,6 +62,8 @@ type MachineRepository interface {
 // Runtime is what an agent runs on: its CLI, the CLI's version and model,
 // and the permission level, as reported by its runner.
 type Runtime struct {
+	// RunnerSlots is JSON, like Models, to keep Runtime comparable.
+	RunnerSlots string `json:"runner_slots,omitempty"`
 	CLI         string `json:"cli,omitempty"`
 	CLIVersion  string `json:"cli_version,omitempty"`
 	Model       string `json:"model,omitempty"`
@@ -265,6 +267,9 @@ func (r Runtime) Validate() error {
 	}
 	if len(r.Features) > 400 || strings.ContainsAny(r.Features, "\x00\n\r\t") {
 		return Errf(CodeInvalidArgument, "runtime features must be short names")
+	}
+	if len(r.RunnerSlots) > 32768 {
+		return Errf(CodeInvalidArgument, "runtime slot report is too large")
 	}
 	if len(r.Tools) > 65536 {
 		return Errf(CodeInvalidArgument, "runtime tool inventory is too large")

@@ -2077,6 +2077,31 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, page.locator(".conv-head button").first());
     });
 
+    await step("单聊 · 等待电脑名额", async () => {
+      await openMember(page,narrow,"聊天","Review (Codex 云端)");
+      await noRound(page);
+      const box=page.locator(".conv-detail .conv-compose-input");
+      await box.fill("名额排队预览");await box.press("Enter");
+      const queue=page.locator('[data-testid="runner-queue"]').last();
+      await queue.waitFor({timeout:15000});
+      if (!(await queue.innerText()).includes("3/3 在忙，排第 2")) throw Error("未显示名额和排队位置");
+      if (await page.locator('.conv-detail .trace.is-live').count()) throw Error("等名额时不能假装正在启动");
+      if (await page.locator(".conv-detail .conv-stuck").count()) throw Error("等待名额20分钟的任务不能误报卡住");
+      await shot(page,size,scheme,"runner-queue");
+      await go(page,"电脑",narrow);
+      await clickVisible(page,page.locator(".pc-card",{hasText:"Studio Mac"}));
+      const slots=page.locator('[data-testid="computer-runner-slots"]');await slots.waitFor();
+      if (!(await slots.innerText()).includes("3/3 在忙，2 个排队中") || !(await slots.innerText()).includes("myco runner service install --max-concurrent N")) throw Error("电脑详情未显示名额和调整命令");
+      await shot(page,size,scheme,"computer-runner-slots");
+      await navBackClick(page);
+      await openMember(page,narrow,"聊天","Review (Codex 云端)");
+      await fetch(`http://${HOST}:${mockPort()}/app/mock/runner-queue`,{method:"DELETE"});
+      await page.locator('[data-testid="runner-queue"]').waitFor({state:"hidden",timeout:15000});
+      await page.locator(".conv-detail .conv-send.is-stop").click();
+      await noRound(page);
+      await clickVisible(page,page.locator(".conv-head button").first());
+    });
+
     await step("单聊 · delta 正在长出来", async () => {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");
       await noRound(page);

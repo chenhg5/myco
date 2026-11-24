@@ -280,9 +280,10 @@ function usageLine(u?: TraceStep): string {
  * as one line that opens, as the runner reported them. Live while the task
  * runs: the newest steps say what it is doing now.
  */
-export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaused, onActivity, until, borrow, said, steers, onUsage, answers, canAnswer, onAnswer, cli, onStatus }: {
+export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaused, onActivity, until, borrow, said, steers, onUsage, answers, canAnswer, onAnswer, cli, onStatus, queueText }: {
   hubId: string; task: Message; onGrow?: () => void;
   cli?: string;
+  queueText?: string;
   onStatus?: (taskId: string, status: string) => void;
   /** where the finished run's time, tokens and cost go (next to the
    *  answer's time and copy); without it they end the run */
@@ -465,7 +466,7 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
     const last = all[all.length - 1]?.data.kind;
     onActivity(task.id, at, (traceStatus || task.status) === "held" || last === "turn_end" || last === "usage");
   }, [onActivity, task.id, running, ownEvents, extra, traceStatus, task.status]);
-  const verb = useVerb(running && !quiet && !paused && !footed);
+  const verb = useVerb(running && !queueText && !quiet && !paused && !footed);
   // 只看进度 (Settings): only what it reported, not its steps.
   const onlyReports = useReportsOnly();
   // Still open, but not the newest at work: no loading, a quiet line.
@@ -490,6 +491,9 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
   const withSteers = (node: React.ReactNode) => (steerList.length
     ? <>{steerList.map((m) => <SteerBubble key={m.id} hubId={hubId} msg={m} />)}{node}</>
     : node);
+  if (running && isOpen(traceStatus || task.status) && queueText) return withSteers(
+    <div className="trace" data-testid="runner-queue"><div className="trace-head trace-wait"><span className="trace-title">{queueText}</span></div></div>
+  );
   if (running && (traceStatus || task.status) !== "acked" && (traceStatus || task.status) !== "held" && !events?.length && !reports.length) {
     // (said under your message, not as a line here: ConversationDetail)
     return withSteers(null);

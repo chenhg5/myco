@@ -1204,6 +1204,15 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
   };
   // Slow startup and live blocks for the conversation streaming smoke cases.
   const preview = hub.threads[threadId]?.find((m) => m.id === taskId);
+  // Synthetic slot admission fixture: no CLI or external task is started.
+  if (preview && /名额排队预览|Slot queue preview/.test(preview.body)) {
+    Object.assign(preview,{status:"acked",trace:[],updated_at:iso(0),active_at:iso(20*60)});
+    for (const a of hub.agents) if (a.machine_id==="m_studio" || a.name===agent) {
+      a.runtime ||= {cli:"codex"};
+      a.runtime.runner_slots={max_concurrent:3,in_use:3,waiting:2,at:iso(0),queue:a.name===agent?[{message_id:preview.id,position:2}]:[]};
+    }
+    return;
+  }
   // MOCK_CLOUD_JOIN: the claude.ai session answers the guide's first task
   // (in the task's language).
   if (preview && process.env.MOCK_CLOUD_JOIN && agent === "cloud-claude") {
@@ -2035,6 +2044,13 @@ const server = http.createServer(async (req, res) => {
     const last = state.quickOpen || null;
     if (method === "DELETE") state.quickOpen = null;
     return send(res, 200, { open: last });
+  }
+
+  if (parts.join("/")==="app/mock/runner-queue" && method==="DELETE") {
+    for (const h of state.hubs) for (const a of h.agents) if (a.runtime?.runner_slots) {
+      a.runtime.runner_slots={max_concurrent:3,in_use:2,waiting:0,queue:[],at:iso(0)};
+    }
+    return send(res,200,{ok:true});
   }
 
   // Synthetic completed turns for interaction captures; never calls an agent.

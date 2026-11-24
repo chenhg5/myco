@@ -899,23 +899,31 @@ func (c *Client) ReportRuntime(ctx context.Context, r api.Runtime) error {
 			}
 		}
 	}
-	err := c.do(ctx, http.MethodPut, "/v1/me/runtime", nil, r, nil)
-	// Older hubs reject unknown JSON fields. Retry only that specific schema
-	// rejection, leaving authentication and other validation failures intact.
-	var apiErr *Error
-	if (r.ProviderHost != "" || r.Providers != nil) && errors.As(err, &apiErr) && apiErr.Status == http.StatusBadRequest && (strings.Contains(apiErr.Message, `unknown field "provider_host"`) || strings.Contains(apiErr.Message, `unknown field "providers"`)) {
-		if strings.Contains(apiErr.Message, `unknown field "provider_host"`) {
-			r.ProviderHost = ""
+	var err error
+	for attempt := 0; attempt < 4; attempt++ {
+		err = c.do(ctx, http.MethodPut, "/v1/me/runtime", nil, r, nil)
+		// Older hubs reject unknown JSON fields. Retry only that specific schema
+		// rejection, leaving authentication and other validation failures intact.
+		var apiErr *Error
+		if r.RunnerSlots != nil && errors.As(err, &apiErr) && apiErr.Status == http.StatusBadRequest && strings.Contains(apiErr.Message, `unknown field "runner_slots"`) {
+			r.RunnerSlots = nil
+			continue
 		}
-		r.Providers = nil
-		features := make([]string, 0, len(r.Features))
-		for _, f := range r.Features {
-			if f != "remote_provider" {
-				features = append(features, f)
+		if (r.ProviderHost != "" || r.Providers != nil) && errors.As(err, &apiErr) && apiErr.Status == http.StatusBadRequest && (strings.Contains(apiErr.Message, `unknown field "provider_host"`) || strings.Contains(apiErr.Message, `unknown field "providers"`)) {
+			if strings.Contains(apiErr.Message, `unknown field "provider_host"`) {
+				r.ProviderHost = ""
 			}
+			r.Providers = nil
+			features := make([]string, 0, len(r.Features))
+			for _, f := range r.Features {
+				if f != "remote_provider" {
+					features = append(features, f)
+				}
+			}
+			r.Features = features
+			continue
 		}
-		r.Features = features
-		return c.do(ctx, http.MethodPut, "/v1/me/runtime", nil, r, nil)
+		break
 	}
 	return err
 }

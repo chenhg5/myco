@@ -1865,7 +1865,23 @@ func (s *Server) reportRuntime(w http.ResponseWriter, r *http.Request, a *domain
 		Plugins  []api.ToolPlugin `json:"plugins,omitempty"`
 		Warnings []string         `json:"tool_warnings,omitempty"`
 	}{in.MCP, in.Skills, in.Plugins, in.ToolWarnings})
-	if err := s.machines.SetRuntime(r.Context(), a, domain.Runtime{CLI: in.CLI, CLIVersion: in.CLIVersion, Model: in.Model,
+	slots := ""
+	if in.RunnerSlots != nil {
+		v := in.RunnerSlots
+		if v.MaxConcurrent < 1 || v.InUse < 0 || v.InUse > v.MaxConcurrent || v.Waiting < 0 || len(v.Queue) > 256 || v.At.IsZero() {
+			writeError(w, domain.Errf(domain.CodeInvalidArgument, "invalid runner slot counts"))
+			return
+		}
+		for _, q := range v.Queue {
+			if q.MessageID == "" || len(q.MessageID) > 128 || q.Position < 1 || q.Position > v.Waiting {
+				writeError(w, domain.Errf(domain.CodeInvalidArgument, "invalid runner queue position"))
+				return
+			}
+		}
+		b, _ := json.Marshal(v)
+		slots = string(b)
+	}
+	if err := s.machines.SetRuntime(r.Context(), a, domain.Runtime{RunnerSlots: slots, CLI: in.CLI, CLIVersion: in.CLIVersion, Model: in.Model,
 		ModelSource: in.ModelSource, Access: in.Access, Provider: in.Provider, ProviderSource: in.ProviderSource, ProviderHost: in.ProviderHost, Providers: encodeProviderOptions(in.Providers),
 		Effort: in.Effort, EffortSource: in.EffortSource, MaxAccess: in.MaxAccess, Quota: quotaFromAPI(in.Quota),
 		Features: domain.JoinFeatures(in.Features), Away: in.Away, Env: in.Env, Models: domain.EncodeModels(modelsFromAPI(in.Models)), Tools: string(toolJSON)}); err != nil {

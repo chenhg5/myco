@@ -48,7 +48,15 @@ export interface RuntimeModel { id: string; name?: string; efforts?: string[] }
 export interface MCPServer { name: string; transport: string; host?: string; scope: "user" | "project" | "plugin"; enabled?: boolean }
 export interface ToolSkill { name: string; description?: string; scope: "user" | "project"; managed_by?: string }
 export interface ToolPlugin { name: string; marketplace?: string; enabled: boolean }
+export interface RunnerSlots {
+  max_concurrent: number;
+  in_use: number;
+  waiting: number;
+  at: string;
+  queue?: { message_id: string; position: number }[];
+}
 export interface Runtime {
+  runner_slots?: RunnerSlots;
   cli: string;
   cli_version?: string;
   model?: string;

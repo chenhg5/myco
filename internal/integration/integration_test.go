@@ -1086,7 +1086,7 @@ func TestMachinesAreUniqueAndSeparateFromNodes(t *testing.T) {
 	if err := h.client(tok["mac-codex"]).ReportMachine(c, r2); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.client(tok["mac-claude"]).ReportRuntime(c, api.Runtime{CLI: "claude", CLIVersion: "2.1.240", Model: "claude-opus-5-5", ModelSource: "configured", Access: "workspace"}); err != nil {
+	if err := h.client(tok["mac-claude"]).ReportRuntime(c, api.Runtime{CLI: "claude", CLIVersion: "2.1.240", Model: "claude-opus-5-5", ModelSource: "configured", Access: "workspace", RunnerSlots: &api.RunnerSlots{MaxConcurrent: 3, InUse: 3, Waiting: 2, At: time.Now(), Queue: []api.RunnerQueuedTask{{MessageID: "msg_waiting", Position: 2}}}}); err != nil {
 		t.Fatal(err)
 	}
 	ms, _ = h.admin().Machines(c)
@@ -1125,6 +1125,26 @@ func TestMachinesAreUniqueAndSeparateFromNodes(t *testing.T) {
 	}
 	if kinds["vps-shell"] != "shell" || kinds["glenn"] != "human" || kinds["cloud-a"] != "agent" {
 		t.Fatalf("kinds: %v", kinds)
+	}
+	// Runtime survives actual strict HTTP decoding, SQLite and overview DTOs.
+	for _, v := range ov.Agents {
+		if v.Agent.Name == "mac-claude" {
+			slots := v.Agent.Runtime.RunnerSlots
+			if slots == nil || slots.Waiting != 2 || len(slots.Queue) != 1 || slots.Queue[0].Position != 2 {
+				t.Fatalf("lost runtime slots: %+v", slots)
+			}
+		}
+	}
+	rc := h.client(tok["mac-claude"])
+	if err := rc.ReportRuntime(c, api.Runtime{CLI: "claude", RunnerSlots: &api.RunnerSlots{MaxConcurrent: 3, InUse: 3, At: time.Now()}}); err != nil {
+		t.Fatal(err)
+	}
+	fresh, err := rc.Me(c)
+	if err != nil || fresh.Runtime == nil || fresh.Runtime.RunnerSlots == nil || len(fresh.Runtime.RunnerSlots.Queue) != 0 {
+		t.Fatalf("queue not cleared: %+v %v", fresh, err)
+	}
+	if err := rc.ReportRuntime(c, api.Runtime{RunnerSlots: &api.RunnerSlots{MaxConcurrent: 3, InUse: 4, At: time.Now()}}); err == nil {
+		t.Fatal("invalid slot counts accepted")
 	}
 	// An agent's own overview does not list machines.
 	if ov, _ := h.client(tok["mac-claude"]).Overview(c, 5); len(ov.Machines) != 0 {

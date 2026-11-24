@@ -1,3 +1,4 @@
+import { currentSlots } from "@/app/RunnerQueue";
 import { useEffect, useState } from "react";
 import { useContextMenu } from "@/app/ContextMenu";
 import { useNavSub } from "@/app/nav";
@@ -148,6 +149,7 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, on
   if (opened) {
     const { m, hub } = opened;
     const { agents, terminals } = split(hub.id, m);
+    const slots = onIt(hub.id,m).map((r) => currentSlots(r.st.agent)).filter((s) => !!s).sort((a,b) => Date.parse(b.at)-Date.parse(a.at))[0];
     const tabs: { key: PcTab; label: string; n?: number }[] = [
       { key: "work", label: L("Agent 和终端", "Agents and terminals"), n: agents.length + terminals.length },
       { key: "access", label: L("权限", "Access") },
@@ -198,6 +200,10 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, on
         </div>
 
         {tab === "work" && (<>
+          {m.online && slots && <div className="app-note" data-testid="computer-runner-slots">
+            <div>{L(`并行任务：${slots.in_use}/${slots.max_concurrent} 在忙，${slots.waiting} 个排队中`, `Parallel tasks: ${slots.in_use}/${slots.max_concurrent} in use, ${slots.waiting} waiting`)}</div>
+            <div>{L("在这台电脑上调整名额：", "Change the limit on this computer:")} <code>myco runner service install --max-concurrent N</code></div>
+          </div>}
           <SectionHead title="Agent" count={agents.length} />
           {agents.length ? <div className="pc-list">{agents.map(agentRow)}</div> : (
             <div className="pcd-empty">

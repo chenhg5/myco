@@ -9,6 +9,7 @@ import { agentKind, canManage, isInbox, isMe, lastActivityAt, machineOfRow, pers
 import { MessageContent, filesBelow, filesFor, inlineAttachmentIds, type InlineFiles } from "@/app/Markdown";
 import { UI_REPLY } from "@/app/ui/UiBlock";
 import { PromptSign, STOPPED, Terminal } from "@/app/Terminal";
+import { runnerQueueText } from "@/app/RunnerQueue";
 import { TraceView } from "@/app/TraceView";
 import { WorkingLine } from "@/app/Working";
 import { AccessPill, RunPill } from "@/app/RunSettings";
@@ -973,8 +974,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // (what shows reaches as far as the last answer: see syncedAt)
   const seenAt = syncedAt.current || syncOpened.current;
   const behind = !!(target.peer || target.threadId) && now - seenAt > SEEN_SLACK_MS;
+  const rowOf = (name: string) => rows.find((x) => x.hub.id === target.hubId && x.st.agent.name === name);
   const isStuck = (m: Message): boolean => {
     const offline = row?.st.state === "offline";
+    if (!offline && runnerQueueText(rowOf(m.to)?.st.agent,m.id)) return false;
     if (hubStale.has(m.id)) return true;
     if (!offline && runActivity.get(m.id)?.ended) return false;
     return possiblyStuck({ ...m, active_at: new Date(activeAt(m)).toISOString() }, { agent: row?.st.agent, receiving: row?.st.receiving, offline, seenAt }, now);
@@ -1251,7 +1254,6 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // Someone else's task that its node is still on (two nodes working
   // together): the foot of the conversation shows it at work. Your own
   // tasks show their run as it goes (TraceView) instead.
-  const rowOf = (name: string) => rows.find((x) => x.hub.id === target.hubId && x.st.agent.name === name);
   // (the handoff cards, with the rest of what goes between the messages)
   const baseInserts = handoffs.length
     ? [...(inserts || []), ...handoffs.map((h) => ({
@@ -1391,7 +1393,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     }
     return newest;
   })();
-  const footLive = !!working && !working.queued
+  const footLive = !!working && !working.queued && !runnerQueueText(rowOf(working.task.to)?.st.agent,working.task.id)
     && (!liveRun || new Date(working.task.created_at).getTime() > new Date(liveRun.created_at).getTime());
   const liveId = footLive ? "" : liveRun?.id || "";
   // The one at work, wherever its loading is (another waits behind it).
@@ -1402,6 +1404,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const receiptOf = (m: Message): { text: string; title?: string } | null => {
     if (m.type !== "task" || m.e2e || !isMe(m.from, row?.hub) || !isOpen(m.status) || answerOf.has(m.id) || m.asking || isStuck(m)) return null;
     const st = traceStatuses.get(m.id) || m.status;
+    if (runnerQueueText(rowOf(m.to)?.st.agent,m.id)) return null;
     if (st === "held") return { text: L("稍后回复", "Will answer later") };
     if (st === "acked" || progressOf.get(m.id)?.length) return null;
     if (waitingShort) return { text: waitingShort, title: waitingReason };
@@ -2186,7 +2189,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           <>
             {/* (its run stays: what it did and said; the line about being
                 stuck goes under it) */}
-            <TraceView hubId={target.hubId} task={m} cli={rowOf(m.to)?.st.agent.runtime?.cli} onStatus={onTraceStatus} onGrow={followBottom} answered={answerOf.has(m.id)} quiet={m.id !== liveId} footed={m.id === liveId && liveFoot} onPaused={onPaused} onActivity={onActivity} until={untilOf.get(m.id)} borrow={borrowOf.get(m.id)} steers={runSteers.get(m.id)} said={saidIn(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined}
+            <TraceView hubId={target.hubId} task={m} cli={rowOf(m.to)?.st.agent.runtime?.cli} queueText={runnerQueueText(rowOf(m.to)?.st.agent, m.id)} onStatus={onTraceStatus} onGrow={followBottom} answered={answerOf.has(m.id)} quiet={m.id !== liveId} footed={m.id === liveId && liveFoot} onPaused={onPaused} onActivity={onActivity} until={untilOf.get(m.id)} borrow={borrowOf.get(m.id)} steers={runSteers.get(m.id)} said={saidIn(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined}
           answers={answerTo} canAnswer={isMe(m.from, row?.hub)} onAnswer={answerAsk(m)} />
             {isStuck(m) && (<div className="conv-stuck" data-stuck={m.id}>
             <span className="dot pending" aria-hidden />
@@ -2214,7 +2217,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         )}
         {/* What it did for a task someone else gave it, the same way. */}
         {m.type === "task" && !m.e2e && fromOther && m.to === target.agent && (
-          <TraceView hubId={target.hubId} task={m} cli={rowOf(m.to)?.st.agent.runtime?.cli} onStatus={onTraceStatus} onGrow={followBottom} answered={answerOf.has(m.id)} quiet={m.id !== liveId} footed={m.id === liveId && liveFoot} onPaused={onPaused} steers={runSteers.get(m.id)} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined} answers={answerTo} />
+          <TraceView hubId={target.hubId} task={m} cli={rowOf(m.to)?.st.agent.runtime?.cli} queueText={runnerQueueText(rowOf(m.to)?.st.agent, m.id)} onStatus={onTraceStatus} onGrow={followBottom} answered={answerOf.has(m.id)} quiet={m.id !== liveId} footed={m.id === liveId && liveFoot} onPaused={onPaused} steers={runSteers.get(m.id)} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined} answers={answerTo} />
         )}
         </Fragment>
       );
@@ -2514,7 +2517,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               </div>
             )}
             {/* The run at work, when messages sit under it. */}
-            {liveFoot && liveRun && (() => {
+            {liveFoot && liveRun && !runnerQueueText(rowOf(liveRun.to)?.st.agent,liveRun.id) && (() => {
               // What it is doing now, not what it said when it took this one
               // up: an agent in one long session goes on answering newer
               // messages while this task stays open. Its newest progress

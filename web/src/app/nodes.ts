@@ -6,6 +6,7 @@ import type { Agent, AgentStatus, Machine, ModelSource, RuntimeAccess } from "@/
 import type { AgentRow, NodeKind } from "@/app/types";
 import type { HubOverview } from "@/appapi";
 import { L } from "@/lib/i18n";
+import { currentSlots } from "@/app/RunnerQueue";
 import { isSuperagent, SHROOM } from "@/app/superagentMark";
 
 /** `machine` nodes (`xxx-machine`) are not nodes in the UI. */
@@ -290,7 +291,7 @@ export function receivesInSession(a?: Agent, receiving?: string): boolean {
  * cannot finish the task while it is away.
  */
 export function possiblyStuck(
-  m: { status: string; active_at?: string; updated_at: string; asking?: string },
+  m: { id?: string; status: string; active_at?: string; updated_at: string; asking?: string },
   node: { agent?: Agent; receiving?: string; offline?: boolean; seenAt?: number } | undefined,
   now: number,
 ): boolean {
@@ -298,6 +299,7 @@ export function possiblyStuck(
   // Held on a question to its sender: it waits for an answer, it is not stuck.
   if (m.status === "held" && m.asking) return false;
   if (node?.offline) return true;
+  if (m.id && currentSlots(node?.agent, now)?.queue?.some((q) => q.message_id === m.id)) return false;
   const wait = receivesInSession(node?.agent, node?.receiving) ? STUCK_AFTER_SESSION_MS : STUCK_AFTER_MS;
   const at = lastActivityAt(m);
   return Number.isFinite(at) && seenNow(now, node?.seenAt) - at >= wait;

@@ -167,4 +167,33 @@ export const interactionScenes = [
       await lastChat(c.page).locator(".cbg-layer").waitFor();
     },
   },
+  {
+    id: "runner-queue",
+    title: "电脑名额与任务排队 / See when a task is waiting",
+    zh: "看清任务排第几、电脑有多忙，不再把排队误当成启动卡住。",
+    en: "See your task’s queue position and the computer’s capacity instead of guessing why it has not started.",
+    tags: ["可见性"],
+    description: "任务对话中的排队提示，显示电脑3/3名额在忙、任务排第2",
+    prepare: async (c) => {
+      await c.api("/app/hubs/hub_studio/messages", "POST", {
+        to: "build-backend",
+        body: c.T("名额排队预览", "Slot queue preview"),
+      });
+      await c.page
+        .locator(".sp-side .sp-member:visible", {
+          hasText: c.T("后端（Codex）", "Backend (Codex)"),
+        })
+        .first()
+        .click();
+      await c.page.locator('[data-testid="runner-queue"]').last().waitFor();
+      await c.page
+        .locator(".conv-detail:visible")
+        .last()
+        .getByRole("button", {
+          name: c.T("只看这一栏", "Show only this pane"),
+          exact: true,
+        })
+        .click();
+    },
+  },
 ];

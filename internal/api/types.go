@@ -119,10 +119,25 @@ type EncryptedProvider struct {
 }
 
 // Runtime is what an agent runs on.
+// RunnerSlots describes one runner process, shared across its workspaces.
+// Queue contains only the reporting agent's waiting message IDs.
+type RunnerSlots struct {
+	MaxConcurrent int                `json:"max_concurrent"`
+	InUse         int                `json:"in_use"`
+	Waiting       int                `json:"waiting"`
+	Queue         []RunnerQueuedTask `json:"queue,omitempty"`
+	At            time.Time          `json:"at"`
+}
+type RunnerQueuedTask struct {
+	MessageID string `json:"message_id"`
+	Position  int    `json:"position"`
+}
+
 type Runtime struct {
-	CLI        string `json:"cli,omitempty"`
-	CLIVersion string `json:"cli_version,omitempty"`
-	Model      string `json:"model,omitempty"`
+	RunnerSlots *RunnerSlots `json:"runner_slots,omitempty"`
+	CLI         string       `json:"cli,omitempty"`
+	CLIVersion  string       `json:"cli_version,omitempty"`
+	Model       string       `json:"model,omitempty"`
 	// ModelSource: configured (the agent's runner.model), cli-config (the
 	// CLI's own settings), observed (seen in its last turn), or default.
 	ModelSource string `json:"model_source,omitempty"`
