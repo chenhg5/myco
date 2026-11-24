@@ -280,6 +280,7 @@ try {
             if (scene.id === "permissions")
               await api("/app/mock/superagent-ask", "DELETE");
             const video = page.video();
+            await page.keyboard.up("Control").catch(() => {});
             await context.close();
             if (
               record &&

@@ -70,3 +70,20 @@ user-authorized destination. Uploads reuse deterministic filenames and CAS
 versions; a retry completes the same records instead of allocating duplicate
 file slots. Concurrent record conflicts stop for review. `uploaded.json` records
 the entry IDs and final project file count.
+
+## Interaction collection
+
+The interaction batch adds `agent-switcher`, `focus-mode`, `next-suggestion`,
+`turn-nav`, `session-handover`, and `chat-background`. Each uses the real App UI
+with synthetic completed turns. Capture both languages in light mode:
+
+```sh
+node web/scripts/media-kit-shots.mjs --out ../interaction-shots --scene focus,agent-switcher,focus-mode,next-suggestion,turn-nav,session-handover,chat-background
+# The two required interaction videos stay local:
+node web/scripts/media-kit-shots.mjs --out ../interaction-clips --scene agent-switcher,focus-mode --video
+```
+
+`focus` retains its existing media entry/file IDs but now demonstrates only
+side-by-side conversations. The separate `focus-mode` entry demonstrates the
+quiet single-task view. This batch allocates twelve new image files and replaces
+the two existing split-view images; it never starts an actual session handover.

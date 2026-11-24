@@ -2036,6 +2036,22 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { open: last });
   }
 
+  // Synthetic completed turns for interaction captures; never calls an agent.
+  if (process.env.MOCK_MEDIA_KIT === "1" && parts.join("/") === "app/mock/media-interactions" && method === "POST") {
+    const b = await readBody(req), hub = state.hubs[0], T = (zh, en) => b.lang === "en" ? en : zh;
+    const questions = [T("检查当前的页面结构", "Inspect the current page structure"),T("设计新的定价页", "Design the new pricing page"),T("加上月付与年付切换", "Add monthly and yearly billing"),T("检查深色模式", "Check dark mode"),T("补齐常见问题", "Add frequently asked questions"),T("运行测试并检查结果", "Run the tests and review results"),T("准备发布说明", "Prepare release notes"),T("总结这次改动", "Summarize the changes")];
+    const thread = questions.flatMap((body, i) => {
+      const at = 2400 - i * 240;
+      const task = makeMessage({thread_id:"th_api",from:CONSOLE,to:"build-backend",type:"task",status:"done",trace:[],body,created_at:iso(at),updated_at:iso(at-90),...(i===7?{suggest:T("再检查一下手机上的布局", "Check the mobile layout next")}:{})});
+      const reply = makeMessage({thread_id:"th_api",from:"build-backend",to:CONSOLE,type:"reply",status:"done",reply_to:task.id,body:T("已完成：", "Completed: ")+body+"\n\n"+T("- 页面与文案保持一致\n- 深浅色下检查通过\n- 下一步由你决定", "- Layout and copy are consistent\n- Light and dark checks pass\n- You choose the next step"),created_at:iso(at-90),updated_at:iso(at-90)});
+      return [task,reply];
+    });
+    const backend = hub.agents.find(a=>a.name==="build-backend");
+    delete backend.current_thread;delete backend.current_from;delete backend.current_id;backend.queued=0;backend.status_text=T("随时可以接着做", "Ready for the next step");
+    hub.threads.th_api=thread;hub.recent=hub.recent.filter(m=>m.thread_id!=="th_api").concat(thread).sort((a,b)=>b.updated_at.localeCompare(a.updated_at));
+    return send(res,200,{ok:true});
+  }
+
   // Isolated promotional scenes: never enabled in the real App backend.
   if (process.env.MOCK_MEDIA_KIT === "1" && parts.join("/") === "app/mock/media-message" && method === "POST") {
     const b = await readBody(req), hub = state.hubs[0];

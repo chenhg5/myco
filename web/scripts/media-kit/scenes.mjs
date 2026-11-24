@@ -1,3 +1,4 @@
+import { interactionScenes } from "./interactions.mjs";
 import { coedit, design, motion, disk, servers } from "./apps.mjs";
 const click = async (x) => {
   await x.first().click();
@@ -142,13 +143,15 @@ export const scenes = [
   },
   {
     id: "focus",
-    title: "分屏与专注模式 / Split view and focus mode",
-    zh: "需要并行时同时看多个对话，需要专注时只留当前任务。",
-    en: "Follow several conversations side by side, then focus on one task.",
+    title: "多对话分屏 / Side-by-side chats",
+    zh: "把协调者和成员的对话并排放，少切窗口也能掌握上下文。",
+    en: "Keep coordinator and member chats side by side without losing context.",
+    description:
+      "项目中的双栏对话，左侧协调者、右侧成员，同时查看上下文和任务进展",
     tags: ["协作", "可见性"],
-    prepare: async ({ page }) => {
-      await page.keyboard.press("Control+Shift+f");
-      await page.locator(".app-shell.is-focus").waitFor();
+    prepare: async ({ page, T }) => {
+      await member(page, T);
+      await page.locator(".conv-detail:visible").nth(1).waitFor();
     },
   },
   {
@@ -281,6 +284,8 @@ export const scenes = [
   },
 ];
 
+scenes.push(...interactionScenes);
+
 // Optional local video actions. Capture the interaction, not a motionless screenshot.
 const videos = {
   motion: async ({ page }) => {
@@ -320,11 +325,6 @@ const videos = {
       .first()
       .click();
     await page.locator("[data-testid=automation-detail]").waitFor();
-  },
-  focus: async ({ page }) => {
-    await page.locator(".focus-exit").click();
-    await page.waitForTimeout(700);
-    await page.keyboard.press("Control+Shift+f");
   },
 };
 for (const s of scenes) if (videos[s.id]) s.video = videos[s.id];
