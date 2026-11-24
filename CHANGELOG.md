@@ -4,6 +4,28 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.22.8
+
+- **Web automation records inside cross-origin frames**: clicks and typing in a page's cross-site iframes, including frames nested inside them, are recorded with a selector path that replays on the right frame. Pages whose verification widget loads in a nested frame, such as Cloudflare Turnstile on V2EX, no longer stay stuck while the recorder attaches.
+- **Browser component 0.1.1**: the app now installs the new component. A component already installed as 0.1.0 keeps working until you choose "Update component" in the app; the update is verified before the old process stops, so a failed download or checksum check leaves the current component, its browser sessions and profiles untouched. Updating does interrupt sessions still using the old process, so finish recording or playback first.
+- **Agents' browser scripts are approved where they run**: when an agent asks to run a script, the computer's owner sees the exact version, every URL it visits, its executable code, its sub-scripts and the full snapshot before allowing. Approval belongs to that App setup, workspace, account, page and browser profile, and the agent still needs its own short-lived grant. A paused run waits at most 15 minutes and never past the grant, and results and screenshots stay private files.
+- **A resumed browser run keeps reporting**: after you confirm or start a paused run it goes on reporting steps and results instead of stopping at the first acknowledgement, and a pause with no new events no longer ends the job.
+- **Search shows the mushroom looking**: while ⌘K has not found anything yet, the pixel mushroom paces with a magnifying glass and names the words being searched; message search also no longer starts over on every overview refresh, which could keep it searching forever on a slow network.
+- **Context menus stay open while another pane scrolls**: a background chat scroll or scrolling inside the menu no longer closes it; only scrolling the pane the menu came from does.
+
+Upgrade: this App release needs no Hub upgrade. Agents using a computer's browser through the Hub still need Hub 0.22.7 on the server: run `sudo myco upgrade` there.
+
+**中文**
+
+- **网页自动化可以录制跨源 frame**：页面里跨站的 iframe（包括嵌套在其中的 frame）中的点击和输入也会被录下来，选择器路径能在正确的 frame 上回放。验证组件加载在嵌套 frame 里的页面，例如 V2EX 的 Cloudflare Turnstile，不会再因为录制器附加而卡住。
+- **浏览器组件 0.1.1**：应用会安装新的组件。已经装了 0.1.0 的照常可用，在应用里点「更新组件」即可升级；更新会先校验再停掉旧进程，下载或校验失败时现有组件、浏览器会话和资料都不受影响。更新会中断仍在使用旧进程的会话，请先结束录制或回放。
+- **agent 的浏览器脚本在运行它的电脑上批准**：agent 申请运行脚本时，电脑主人会先看到确切的版本、它访问的每个网址、可执行代码、子脚本和完整快照，然后再决定是否允许。批准只属于这个 App 的配置、工作区、账号、页面和浏览器资料，agent 仍需单独申请短期授权。暂停的运行最多等 15 分钟，且不会超过授权到期；结果和截图只作为私有文件返回。
+- **恢复后的浏览器运行继续上报**：确认或启动暂停的运行后，它会继续上报步骤和结果，不再在收到第一条确认后就停下；没有新事件的暂停心跳也不会结束任务。
+- **搜索时有蘑菇在找**：⌘K 还没搜到结果时，像素蘑菇拿着放大镜来回找，并显示正在搜索的词；消息搜索也不再随每次总览刷新重新开始，慢网络下不会一直搜不完。
+- **别的面板滚动时右键菜单不会关闭**：后台聊天自动滚动或在菜单内部滚动不再关掉菜单，只有菜单来源所在的面板滚动才会关闭。
+
+升级：这个 App 版本本身不需要升级 Hub。让 agent 通过 Hub 使用某台电脑的浏览器仍需要服务器上的 Hub 0.22.7（`sudo myco upgrade`）。
+
 ## v0.22.7
 
 - **Web automation records and replays a workflow in a dedicated browser profile**: the official Web automation app can record the clicks, typing and navigation you make in a visible browser window, then replay that sequence step by step or in one run, with a breakpoint or a confirmation before anything consequential. It needs the optional browser component, which the app installs from its own dialog on Mac (Apple silicon and Intel) and Windows; the component never downloads a browser or uses your everyday profile, and profiles, cookies, passwords and downloads stay on this computer.
