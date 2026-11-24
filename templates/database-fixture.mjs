@@ -1,18 +1,19 @@
 // A strict-CAS bridge with event delivery and the built app's ordinary CSP.
-// Browser transport for color databases; every shared write uses strict versions.
+// Test transport for official apps; every shared write uses strict versions.
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
-const here=path.dirname(fileURLToPath(import.meta.url)),root=path.resolve(here,"../internal/templates/official/database");
-export async function startFixture() {
-  const sample=JSON.parse(fs.readFileSync(path.join(here,"src/database/public/sample.json"),"utf8")),recs=new Map();
+const here=path.dirname(fileURLToPath(import.meta.url));
+export async function startFixture(app = "database") {
+  const root=path.resolve(here,"../internal/templates/official/"+app);
+  const sample=JSON.parse(fs.readFileSync(path.join(here,"src",app,"public/sample.json"),"utf8")),recs=new Map();
   let seq=0,events=[];const writes=[];
   function reset(empty=false){recs.clear();seq=0;events=[];writes.length=0;for(const[c,rows]of Object.entries(empty?{}:sample))for(const{id,...data}of rows)recs.set(c+"/"+id,{collection:c,id,data,version:1});}
   function write(c,id,data){const old=recs.get(c+"/"+id);const row={collection:c,id,data,version:(old?.version||0)+1};recs.set(c+"/"+id,row);events.push({seq:++seq,collection:c,record:id,op:"put",data,version:row.version,by:"agent"});return row;}
-  const bridge=`(()=>{const request=async(url,options)=>{const r=await fetch(url,options),v=await r.json();if(!r.ok)throw v;return v;};window.__downloads=[];window.__messages=[];window.__clipboard='';Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async x=>{if(window.__copyFail)throw Error('clipboard');window.__clipboard=x;}}});window.myco={features:["os"],os:window.__FAKE_OS__,ready:Promise.resolve({page:{id:'pg_test',name:'Database studio',url:'https://workspace.example/pages/pg_test'},me:{name:'tester'}}),send:async message=>{if(window.__sendFail)throw Error('send failed');window.__messages.push(message);return{id:'msg_test'}},data:{list:c=>request('/data?c='+encodeURIComponent(c)),put:(c,data,o)=>request('/data',{method:'POST',body:JSON.stringify({c,data,o})}),get:(c,id)=>request('/record?c='+encodeURIComponent(c)+'&id='+encodeURIComponent(id)),remove:(c,id)=>request('/data',{method:'DELETE',body:JSON.stringify({c,id})}),on:f=>{let seen=0,active=true;const t=setInterval(async()=>{try{for(const e of await request('/events?since='+seen)){seen=Math.max(seen,e.seq);if(active)f(e);}}catch{}},75);return()=>{active=false;clearInterval(t)}}},download:async(name,content,type)=>{window.__downloads.push({name,content,type});return{path:'~/Downloads/'+name}}};Date.now=()=>Date.parse('2026-11-23T02:00:00Z');})();`;
+  const bridge=`(()=>{const request=async(url,options)=>{const r=await fetch(url,options),v=await r.json();if(!r.ok)throw v;return v;};window.__downloads=[];window.__messages=[];window.__clipboard='';Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async x=>{if(window.__copyFail)throw Error('clipboard');window.__clipboard=x;}}});window.myco={features:["os"],os:window.__FAKE_OS__,ready:Promise.resolve({page:{id:new URL(location.href).searchParams.get('test_page')||window.__TEST_PAGE_ID__||'pg_test',name:'Database studio',url:'https://workspace.example/pages/pg_test'},me:{name:new URL(location.href).searchParams.get('test_me')||window.__TEST_ME__||'tester'}}),send:async message=>{if(window.__sendFail)throw Error('send failed');window.__messages.push(message);return{id:'msg_test'}},data:{list:c=>request('/data?c='+encodeURIComponent(c)),put:(c,data,o)=>request('/data',{method:'POST',body:JSON.stringify({c,data,o})}),get:(c,id)=>request('/record?c='+encodeURIComponent(c)+'&id='+encodeURIComponent(id)),remove:(c,id)=>request('/data',{method:'DELETE',body:JSON.stringify({c,id})}),on:f=>{let seen=0,active=true;const t=setInterval(async()=>{try{for(const e of await request('/events?since='+seen)){seen=Math.max(seen,e.seq);if(active)f(e);}}catch{}},75);return()=>{active=false;clearInterval(t)}}},download:async(name,content,type)=>{window.__downloads.push({name,content,type});return{path:'~/Downloads/'+name}}};Date.now=()=>Date.parse('2026-11-23T02:00:00Z');})();`;
   const server=http.createServer(async(req,res)=>{const u=new URL(req.url,"http://test");
     const json=x=>{res.setHeader("Content-Type","application/json");res.end(JSON.stringify(x));};
     if(u.pathname==="/database-os.js"){res.setHeader("Content-Type","text/javascript");res.end(fs.readFileSync(path.join(here,"database-shots.js")));return;}
