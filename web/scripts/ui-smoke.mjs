@@ -922,10 +922,12 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, chat.getByRole("button", { name: "关掉这一栏" }));
     });
 
-    // A page made from a template (the table myco template init writes):
-    // its records through the bridge; you edit a cell (saved with its
-    // version), the agent adds a row (it shows up), and it exports a CSV to
-    // Downloads.
+    // A page made from the starter `myco template init` writes: its own
+    // small HTML table (internal/cli/templatekit), not the official 表格 app
+    // (that one is the canvas grid, made from the locked apps checkout and
+    // checked in 应用 · 应用库和官方应用). Its records go through the
+    // bridge; you edit a cell (saved with its version), the agent adds a row
+    // (it shows up), and it exports a CSV to Downloads.
     await step("应用 · 人和 agent 一起填表", async () => {
       await go(page, "官网改版", narrow);
       await page.evaluate(() => window.dispatchEvent(new CustomEvent("myco-open-page", { detail: { kind: "page", hubId: "hub_studio", id: "pg_table" } })));
