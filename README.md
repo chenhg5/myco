@@ -83,19 +83,19 @@ We are rebuilding the apps we use every day on Mac, Windows and phone so that **
 
 <table>
 <tr>
-<td width="33%"><img src="docs/assets/apps/motion.webp" alt="Motion video"><br><b>Motion video</b><br>Promo and short videos: describe it and the agent writes each scene; add music and voice-over, export MP4.</td>
-<td width="33%"><img src="docs/assets/apps/design-studio.webp" alt="Design studio"><br><b>Design studio</b><br>Web pages, app screens, posters and slides on an editable canvas, iterated with the agent.</td>
-<td width="33%"><img src="docs/assets/apps/meeting.webp" alt="Meeting notes"><br><b>Meeting notes</b><br>Record a Zoom or Feishu call, transcribe it on your computer, and let the agent write the minutes.</td>
+<td width="33%"><b>Motion video</b><br>Promo and short videos: describe it and the agent writes each scene; add music and voice-over, export MP4.</td>
+<td width="33%"><b>Design studio</b><br>Web pages, app screens, posters and slides on an editable canvas, iterated with the agent.</td>
+<td width="33%"><b>Meeting notes</b><br>Record a Zoom or Feishu call, transcribe it on your computer, and let the agent write the minutes.</td>
 </tr>
 <tr>
-<td width="33%"><img src="docs/assets/apps/disk.webp" alt="Disk cleanup"><br><b>Disk cleanup</b><br>See what fills your disk, ring by ring, and move what you don't need to the Trash.</td>
+<td width="33%"><b>Disk cleanup</b><br>See what fills your disk, ring by ring, and move what you don't need to the Trash.</td>
 <td width="33%"><img src="docs/assets/apps/remote-desktop.webp" alt="Remote desktop"><br><b>Remote desktop</b><br>See and control your Mac or Windows PC from another computer or your iPhone.</td>
 <td width="33%"><img src="docs/assets/apps/recorder.webp" alt="Screen recorder"><br><b>Screen recorder</b><br>Record the screen, then trim, split, add text and zoom, and export MP4 locally.</td>
 </tr>
 <tr>
 <td width="33%"><img src="docs/assets/apps/stocks.webp" alt="Stock watch"><br><b>Stock watch</b><br>A shared watchlist for China, Hong Kong and US stocks with candlestick charts and notes.</td>
 <td width="33%"><img src="docs/assets/apps/photo.webp" alt="Photo editor"><br><b>Photo editor</b><br>Crop, adjust, filters, text and stickers; the agent can make the edits you describe.</td>
-<td width="33%"><img src="docs/assets/apps/issues.webp" alt="Issue tracker"><br><b>Issue tracker</b><br>Track issues Linear-style, assign one to an agent, and watch it update the status and comment.</td>
+<td width="33%"><b>Issue tracker</b><br>Track issues Linear-style, assign one to an agent, and watch it update the status and comment.</td>
 </tr>
 </table>
 
