@@ -16,10 +16,17 @@ import (
 	"github.com/myco-ai/myco/internal/client"
 )
 
-type policyFixtureComponent struct{ calls atomic.Int32 }
+type policyFixtureComponent struct {
+	calls   atomic.Int32
+	version string
+}
 
 func (f *policyFixtureComponent) Status() api.BrowserComponentStatus {
-	return api.BrowserComponentStatus{Protocol: 1, Version: "0.1.0", Installed: true, Supported: true, Running: true}
+	version := f.version
+	if version == "" {
+		version = "0.1.0"
+	}
+	return api.BrowserComponentStatus{Protocol: 1, Version: version, Installed: true, Supported: true, Running: true}
 }
 func (f *policyFixtureComponent) EnsureRunning(context.Context) error { return nil }
 func (f *policyFixtureComponent) Install(context.Context) error       { return nil }
@@ -123,6 +130,14 @@ func TestBrowserLocalApprovalUsesNativeOwnerAndExactSnapshot(t *testing.T) {
 	if _, err := call("profiles.allowAgents", flag, confirm("profiles.allowAgents", flag)); err != nil {
 		t.Fatal(err)
 	}
+	// Updating the component must not silently remove an opted-in agent host.
+	for version, want := range map[string]int{"0.1.0": 1, "0.1.1": 1, "0.1.2": 0} {
+		native.version = version
+		if got := len(b.browserHostPolicies(h)); got != want {
+			t.Fatalf("component %s hosts: %d, want %d", version, got, want)
+		}
+	}
+	native.version = ""
 	request := browserpolicy.Request{ScriptID: "report", Version: 3, Profile: "profile_work", Script: json.RawMessage(`{"name":"Monthly report","profile":"profile_work","start_url":"https://example.com/reports","params":[],"graph":{"nodes":[{"id":"title","type":"js","code":"return document.title"}],"edges":[]},"on_error":"stop"}`), Scripts: map[string]json.RawMessage{}}
 	raw, _ := json.Marshal(request)
 	value, err = call("approvals.review", raw, "")

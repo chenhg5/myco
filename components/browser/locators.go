@@ -65,18 +65,44 @@ func (s *session) frameChain(p *rod.Page, id proto.PageFrameID) ([]string, error
 		FrameTree *structFrameTree `json:"frameTree"`
 	}
 	_ = s.call(p.SessionID, "Page.getFrameTree", map[string]any{}, &tree)
+	s.mu.Lock()
+	sessions := []proto.TargetSessionID{}
+	for sid := range s.targets {
+		sessions = append(sessions, sid)
+	}
+	s.mu.Unlock()
+	sort.Slice(sessions, func(i, j int) bool { return sessions[i] < sessions[j] })
 	parents := map[proto.PageFrameID]proto.PageFrameID{}
 	var walk func(*structFrameTree, proto.PageFrameID)
 	walk = func(n *structFrameTree, parent proto.PageFrameID) {
 		if n == nil {
 			return
 		}
-		parents[n.Frame.ID] = parent
+		if parent == "" {
+			parent = n.Frame.ParentID
+		}
+		if parent != "" || parents[n.Frame.ID] == "" {
+			parents[n.Frame.ID] = parent
+		}
 		for _, child := range n.Children {
 			walk(child, n.Frame.ID)
 		}
 	}
 	walk(tree.FrameTree, "")
+	// Recent Chrome versions omit OOPIF descendants from the top-level tree.
+	// Each attached renderer reports its own root and parentId; merge those
+	// read-only snapshots before deriving the recorded selector chain.
+	for _, sid := range sessions {
+		if sid == p.SessionID {
+			continue
+		}
+		var subtree struct {
+			FrameTree *structFrameTree `json:"frameTree"`
+		}
+		if s.call(sid, "Page.getFrameTree", map[string]any{}, &subtree) == nil {
+			walk(subtree.FrameTree, "")
+		}
+	}
 	chain := []proto.PageFrameID{}
 	seen := map[proto.PageFrameID]bool{}
 	for fid := id; fid != "" && fid != p.FrameID; fid = parents[fid] {
@@ -89,13 +115,6 @@ func (s *session) frameChain(p *rod.Page, id proto.PageFrameID) ([]string, error
 			return nil, errors.New("frame_unavailable")
 		}
 	}
-	s.mu.Lock()
-	sessions := []proto.TargetSessionID{}
-	for sid := range s.targets {
-		sessions = append(sessions, sid)
-	}
-	s.mu.Unlock()
-	sort.Slice(sessions, func(i, j int) bool { return sessions[i] < sessions[j] })
 	out := []string{}
 	for i := len(chain) - 1; i >= 0; i-- {
 		selector := ""

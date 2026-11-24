@@ -110,7 +110,15 @@ func (s *session) installTarget(evt proto.TargetAttachedToTarget) (err error) {
 	if err = s.call(sid, "Page.addScriptToEvaluateOnNewDocument", map[string]any{"source": recorderSource, "worldName": recorderWorld, "runImmediately": true}, nil); err != nil {
 		return err
 	}
-	if err = s.call(sid, "Target.setAutoAttach", autoAttach(), nil); err != nil {
+	// Iframe descendants must run immediately: pausing them can deadlock
+	// verification widgets before their attachment arrives. Preloads and
+	// existing-context injection still install the collector. Pages/popups
+	// retain their paused bootstrap so their collector is installed first.
+	nested := autoAttach()
+	if info.Type == "iframe" {
+		nested["waitForDebuggerOnStart"] = false
+	}
+	if err = s.call(sid, "Target.setAutoAttach", nested, nil); err != nil {
 		return err
 	}
 	// A renderer-created popup is paused at window.open. Rod's attachment

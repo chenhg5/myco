@@ -165,7 +165,7 @@ func (e *engine) openSession(ctx context.Context, owner, id string, headless boo
 	}()
 	// Never reuse a stale DevTools endpoint: it might belong to an old browser.
 	_ = os.Remove(filepath.Join(dir, "DevToolsActivePort"))
-	args := []string{"--user-data-dir=" + dir, "--remote-debugging-port=0", "--remote-debugging-address=127.0.0.1", "--no-first-run", "--no-default-browser-check", "--disable-sync", "--window-size=1280,900", "about:blank"}
+	args := []string{"--user-data-dir=" + dir, "--remote-debugging-port=0", "--remote-debugging-address=127.0.0.1", "--no-first-run", "--no-default-browser-check", "--disable-sync", "--disable-blink-features=AutomationControlled", "--window-size=1280,900", "about:blank"}
 	if headless {
 		args = append([]string{"--headless=new"}, args...)
 	}
