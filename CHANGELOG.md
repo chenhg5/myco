@@ -4,6 +4,16 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.21.32
+
+- **The notch island no longer shows 0**: a workspace that cannot be read keeps who was at work there, the island only comes out if someone is still at work once its window is ready, and it always folds away when nobody is. While folding it keeps the last number.
+- Upgrade: update the App to see the island fix. No hub upgrade needed.
+
+**中文**
+
+- **灵动岛不再显示 0**：读不到的工作区会保留原来在工作的人；窗口就绪时仍然有人在工作，灵动岛才会展开，没人时总是收起；收起过程中保留上一个数字。
+- 升级：更新 App 才能看到灵动岛的修复。不需要升级 Hub。
+
 ## v0.21.31
 
 - **The Dock's red dot clears when you bring the App to the front**: it counts only what came after you last looked.
