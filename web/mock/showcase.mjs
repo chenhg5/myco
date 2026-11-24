@@ -202,6 +202,53 @@ export function showcase(lang, { makeAgent, makeMessage, iso, CONSOLE }) {
   ];
 
 
+  // MOCK_SHOWCASE_GROUPS=1: a bigger 官网改版 with its members in groups,
+  // for pictures of member groups (README screenshots stay as they are).
+  const grouped = !!process.env.MOCK_SHOWCASE_GROUPS;
+  if (grouped) agents.push(
+    makeAgent({
+      name: "mbp-design", display_name: T("设计（Claude Code）", "Design (Claude Code)"),
+      description: T("出页面设计稿和插图。", "Draws the page designs and illustrations."),
+      machine_id: "m_mbp", labels: ["machine=mbp", site, "design"],
+      runtime: { cli: "claude", cli_version: "2.1.240", model: "claude-opus-5-5", model_source: "configured", access: "workspace" },
+      status_text: T("在画定价页的插图", "Drawing the pricing page illustration"), status_at: iso(90),
+      binding: { harness: "claude", environment: "macOS 26.1", workdir: "~/code/website-design" }, last_seen_at: iso(4),
+      queued: 0, current_from: CONSOLE, current_thread: "th_design",
+    }),
+    makeAgent({
+      name: "mbp-ios", display_name: T("iOS（Codex）", "iOS (Codex)"),
+      description: T("官网的移动端适配。", "Makes the website work on phones."),
+      machine_id: "m_mbp", labels: ["machine=mbp", site, "mobile"],
+      runtime: { cli: "codex", cli_version: "0.52.0", model: "gpt-6-sol", model_source: "configured", access: "workspace" },
+      binding: { harness: "codex", environment: "macOS 26.1", workdir: "~/code/website" }, last_seen_at: iso(20),
+    }),
+    makeAgent({
+      name: "build-tests", display_name: T("测试（Codex）", "Tests (Codex)"),
+      description: T("写测试、跑回归。", "Writes tests and runs the regression suite."),
+      machine_id: "m_build", labels: ["machine=build-01", site, "tests"],
+      runtime: { cli: "codex", cli_version: "0.52.0", model: "gpt-6-sol", model_source: "configured", access: "workspace" },
+      status_text: T("跑 390 宽度下的截图对比", "Comparing screenshots at 390 wide"), status_at: iso(150),
+      binding: { harness: "codex", environment: "Ubuntu 24.04", workdir: "~/srv/website" }, last_seen_at: iso(7),
+      queued: 0, current_from: "mbp-frontend", current_thread: "th_tests",
+    }),
+    makeAgent({
+      name: "cloud-copy", display_name: T("文案（claude.ai）", "Copy (claude.ai)"),
+      description: T("写中英文的页面文案。", "Writes the page copy in English and Chinese."),
+      labels: [site, "copy"],
+      runtime: { cli: "claude-cloud", model: "claude-opus-5-5", model_source: "observed" },
+      binding: { harness: "claude-cloud", environment: "claude.ai" }, last_seen_at: iso(25),
+    }),
+    makeAgent({
+      name: "build-deploy", display_name: T("部署（Claude Code）", "Deploy (Claude Code)"),
+      description: T("发布到预发和线上。", "Ships to staging and production."),
+      machine_id: "m_build", labels: ["machine=build-01", infra],
+      runtime: { cli: "claude", cli_version: "2.1.240", model: "claude-sonnet-5-5", model_source: "configured", access: "workspace" },
+      binding: { harness: "claude", environment: "Ubuntu 24.04", workdir: "~/srv/deploy" }, last_seen_at: iso(12),
+    }),
+  );
+  const groupOf = { "mbp-design": "ui", "mbp-ios": "ui", "build-backend": "be", "build-tests": "be", "mbp-reviewer": "be", "desk-docs": "content", "cloud-research": "content", "cloud-copy": "content", "build-shell": "ops", "build-deploy": "ops" };
+  const groupName = { ui: T("界面", "UI"), be: T("后端", "Backend"), content: T("内容", "Content"), ops: T("运维", "Ops") };
+
   const projects = [{
     name: "website", title: T("官网改版", "Website redesign"),
     goal: T("月底前上线新版官网：定价页、文档站和下载页，中英双语。", "Ship the new website by the end of the month: pricing, docs and downloads, in English and Chinese."),
@@ -214,7 +261,9 @@ export function showcase(lang, { makeAgent, makeMessage, iso, CONSOLE }) {
       { name: "mbp-reviewer", role: "member", note: T("审查 PR", "Reviews PRs"), added_by: "glenn", added_at: iso(86400 * 5) },
       { name: "desk-docs", role: "member", note: T("文档站", "Docs site"), added_by: "glenn", added_at: iso(86400 * 4) },
       { name: "build-shell", role: "member", note: T("构建服务器上跑命令", "Runs commands on the build server"), added_by: "glenn", added_at: iso(86400 * 3) },
-    ],
+      ...(grouped ? ["mbp-design", "mbp-ios", "build-tests", "cloud-research", "cloud-copy", "build-deploy"].map((name) => ({ name, role: "member", note: "", added_by: "glenn", added_at: iso(86400 * 2) })) : []),
+    ].map((m) => (grouped && groupOf[m.name] ? { ...m, group: groupName[groupOf[m.name]] } : m)),
+    ...(grouped ? { groups: Object.values(groupName) } : {}),
     docs: [{ name: T("设计约定.md", "design.md"), body: T("# 设计约定\n\n- 主色 #1f8a5b\n- 圆角 12px\n", "# Design rules\n\n- Accent #1f8a5b\n- Radius 12px\n"), content_type: "text/markdown; charset=utf-8", updated_by: "mbp-frontend", updated_at: iso(7200) }],
   }];
 
