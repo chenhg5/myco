@@ -1268,3 +1268,14 @@ SSH 配置或主机信任变化后，要重新创建连接并授权；旧授权�
 需要更新桌面安装包，单独升级应用模板不能补齐原生能力。Agent 命令与限制参见
 [SSH 接口约定](docs/api.md#bound-ssh-resources)。操作使用 SSH 账户已有权限，
 不会自动 sudo 提权或安装远端守护程序。
+
+## 用量统计
+
+新版 runner，以及使用 `myco inbox wait` 的 Claude 会话，会独立于 trace 上报数值用量，
+加密任务也可以统计。工作区所有者、管理员可看整个工作区，普通成员只看自己的节点。
+使用成员或管理员凭据运行 `myco usage show --by agent`，也可按 project、day、model 分组。
+旧客户端不上报，系统不会从历史 trace 补算。
+
+Token 数字来自各 CLI 自己的报告；费用仅在 CLI 提供时记录。Claude Code 按 Anthropic
+价格估算，因此接兼容代理或其他模型时仅供参考，不代表真实账单；缺失费用可能显示为 0。
+在 runner 或会话环境设置 `MYCO_NO_USAGE=1` 可关闭上报。

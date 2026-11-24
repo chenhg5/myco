@@ -301,6 +301,7 @@ func (b *Backend) Handler() http.Handler {
 	b.automationRoutes(m)
 	b.workflowRoutes(m)
 	b.superagentRoutes(m)
+	b.usageRoutes(m)
 	b.pageRoutes(m)
 	b.handoverRoutes(m)
 	m.HandleFunc("POST /app/hubs", b.addHub)

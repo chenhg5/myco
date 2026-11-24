@@ -29,6 +29,7 @@ import (
 
 // Server is the hub's HTTP adapter.
 type Server struct {
+	usage         *app.UsageService
 	runSettingsMu sync.Mutex
 	enroll        *app.EnrollmentService
 	agents        *app.AgentService
@@ -156,6 +157,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			limit = 300 << 10
 		}
 	}
+	if r.Method == http.MethodPost && r.URL.Path == "/v1/me/usage" {
+		limit = 1 << 20
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	if r = s.superagentGate(w, r); r == nil {
 		return // held for its owner's approval
@@ -165,6 +169,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) routes() {
 	m := s.mux
+	s.usageRoutes(m)
 	m.HandleFunc("GET /v1/health", func(w http.ResponseWriter, r *http.Request) {
 		h := api.Health{OK: true, Version: api.Version, PublicURL: s.PublicURL(), ServerVersion: s.version, Workspace: strings.TrimPrefix(s.prefix, "/w/")}
 		if h.PublicURL != "" {

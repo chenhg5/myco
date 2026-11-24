@@ -763,3 +763,49 @@ only on the target computer. Private local receipts make lost-ack retries avoid
 overwriting local changes with the same delivery again. Clearing or selecting a
 channel cancels pending ciphertext. The existing run_settings/runtime JSON stores
 are used; no database migration is required.
+
+## Workspace usage
+
+Usage is numeric CLI accounting, independent of trace storage and encryption.
+No message content is reported. Older runners/sessions contribute no rows; the
+Hub never infers usage from traces. Reports are self-reported, not billing records.
+
+| Route | Who | Contract |
+|---|---|---|
+| `POST /v1/me/usage` | authenticated agent | `{source?:"runner"\|"session",reports:[{key?,day,model?,project?,message_id?,calls,input_tokens,cache_write_tokens?,cache_read_tokens?,output_tokens,cost_usd?}]}` → `{recorded:n}`. `source` defaults to `runner`; at most 100 reports. `day` is UTC YYYY-MM-DD. Numbers must be finite, nonnegative and at most 1e11 per field per report. An omitted project is taken from `message_id` when provided and visible to the agent. A supplied project takes precedence. |
+| `GET /v1/console/usage?from=&to=&project=` | console/admin | `{from,to,rows:[{day,agent,project,model,source,calls,input_tokens,cache_write_tokens,cache_read_tokens,output_tokens,cost_usd}],agents:[{name,display_name,owner,harness,machine}]}`. Inclusive UTC days; defaults to the last seven days ending at `to` (today if omitted), at most 366 days. `project=-` selects unassigned rows. Owners/admins see all rows; ordinary members see only their currently owned nodes and metadata. |
+
+Input tokens exclude cache reads and cache writes in this API. Existing trace
+`input_tokens` retains its original total-input semantics. `owner` is the member
+ID and `machine` is the machine ID; model/machine can be empty when not reported.
+Costs are only included when reported by the CLI; zero can also mean unknown.
+Claude Code estimates use Anthropic pricing and may not match a compatible proxy
+or another provider's actual bill. No price lookup or trace backfill is performed.
+
+Rows accumulate by `(day,agent,project,model,source)` in each workspace database.
+A nonempty key is consumed once per agent, atomically with the increment. Retry
+keys are retained for 30 days. `recorded` counts newly applied reports, excluding
+duplicates. The Go client silently skips an old Hub's 404 without retrying.
+
+The local desktop backend proxies `GET /app/hubs/{id}/usage` with the same query
+and response. `myco usage show --from YYYY-MM-DD --to YYYY-MM-DD --project name
+--by agent|project|day|model` uses console/admin credentials like `myco audit`;
+JSON returns the raw response, text groups and sorts by total token consumption.
+
+New runners advertise runtime feature `usage` and report usage events for every
+invocation, including TraceOff and encrypted tasks. `MYCO_NO_USAGE=1` disables
+reporting. Claude cache input is split explicitly; missing model/cost information
+is left unknown rather than inferred from content.
+
+For non-runner Claude sessions, `myco inbox wait` accounts assistant transcript
+usage once per message ID (content-block lines repeat usage). Synthetic models
+are ignored. On first read only timestamps in the preceding seven days count.
+Complete lines are consumed incrementally; a partial tail waits for the next
+invocation. Private 0600 `~/.myco/state/<agent>.usage` checkpoints retain the last
+message ID, previous wait's project context, and an immutable pending numeric
+batch. Cursor advancement follows successful reporting only; retries reuse keys
+even if the transcript has grown. All reporting failures are best effort and do
+not fail inbox waiting. Runner-owned subprocesses skip session accounting to
+avoid duplication. For multi-workspace sessions, the previous receiving identity
+is used once, not once per workspace. Codex rollout-session collection is not yet
+supported (runner Codex usage events remain supported).

@@ -47,3 +47,7 @@ export function compactUsage(n: number): string {
   for (const [size, suffix] of [[1e9, "B"], [1e6, "M"], [1e3, "K"]] as const) if (n >= size) return `${(n / size).toFixed(1).replace(/\.0$/, "")}${suffix}`;
   return String(Math.round(n));
 }
+
+/** Shared aliases for numeric usage API consumers. */
+export type UsageList = UsageResponse;
+export interface UsageFilter { from?: string; to?: string; project?: string }

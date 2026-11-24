@@ -61,6 +61,7 @@ var superRules = map[string]superRule{
 	"GET /v1/console/hidden":                        allow("看隐藏的对话"),
 	"GET /v1/machines":                              allow("看电脑"),
 	"GET /v1/members":                               allow("看成员"),
+	"GET /v1/console/usage":                         allow("看工作区用量"),
 	"GET /v1/audit":                                 allow("看审计日志"),
 	"GET /v1/agents/{name}/history":                 allow("看 {name} 的变更"),
 	"GET /v1/agents/{name}/handovers":               allow("看 {name} 的交接"),

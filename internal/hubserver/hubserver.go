@@ -246,6 +246,7 @@ func Build(o Options) (*Hub, error) {
 	// Agents acting on a computer through its App, with its owner's approval.
 	actionSvc := app.NewActionService(superagents, machineSvc, members, messages, e2e.Enabled, audit, ids, clock)
 	srv.SetActions(actionSvc)
+	srv.SetUsage(app.NewUsageService(sqlite.NewUsageRepo(db), agentsRepo, messages, clock))
 	messages.SetMemberNames(func(ctx context.Context, id string) string {
 		if m, err := members.Get(ctx, id); err == nil {
 			return m.Name

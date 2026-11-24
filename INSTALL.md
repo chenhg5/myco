@@ -1330,3 +1330,16 @@ The native capability needs an updated desktop build (updating a template alone
 is insufficient). See the [SSH API contract](docs/api.md#bound-ssh-resources)
 for agent commands and limits. Commands use the SSH account's existing rights;
 there is no automatic sudo or remote daemon installation.
+
+## Usage accounting
+
+Updated runners and Claude sessions using `myco inbox wait` report numeric token
+usage independently of traces, including encrypted tasks. Workspace owners/admins
+can see the whole workspace; ordinary members see only their own agents. Use
+`myco usage show --by agent` (or project, day, model) with member/admin credentials.
+Older clients do not report usage and traces are not backfilled.
+
+Token numbers come from each CLI. Costs are present only when that CLI reports
+them: Claude Code uses Anthropic pricing, so figures for compatible proxies or
+other models are reference estimates, not invoices. Missing costs may appear as
+zero. Set `MYCO_NO_USAGE=1` in the runner/session environment to disable reporting.
