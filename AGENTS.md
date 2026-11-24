@@ -52,7 +52,7 @@ make smoke              # build, then scripts/smoke.sh against the real binary
 make check              # vet + test + smoke: what CI runs on Linux
 make web                # rebuild web/ into internal/web/dist (Node 18+)
 cd web && npm run typecheck
-cd web && npm run dev:app   # UI against the mock App backend (web/mock/app-server.mjs)
+cd web && npm run dev:app   # UI against the mock App backend; prepare locked apps first (docs/building.md)
 make app                # macOS only: bin/myco.app
 scripts/ship.sh         # push to main: rebuilds dist if web/ changed, rebases (dist-only conflicts rebuilt), pushes; --check runs vet+test first
 ```
@@ -95,6 +95,6 @@ Before you finish a change, run `make vet` and `make test`. Run `make smoke` whe
 
 Official app sources, `_lib` SDK, app builds, browser tests and releases live in [myco-ai/apps](https://github.com/myco-ai/apps). The three app agents each use an independent apps clone. Host bridges, Go services and `web/` stay here; do not recreate `templates/` or generated application trees in this repository.
 
-`apps.lock.json` pins immutable release artifacts and their SHA256. Production `make build`, `make cross` and `make app` first run `make prepare-apps` (Python 3), producing ignored `internal/templates/builtin.zip` and `builtin_generated.go`. Never commit these outputs. Offline builds use `APPS_PREPARE_FLAGS=--offline` with the verified cache or explicit local artifacts. Plain Go tests use tiny fixed fixtures, do not download applications, and need no Node. A raw Go build without preparation has no bundled applications; use the Make targets for distribution. See [docs/building.md](docs/building.md) for preparation, pin updates, offline builds and cross-repository contract tests.
+`apps.lock.json` pins immutable release artifacts and their SHA256. Production `make build`, `make cross` and `make app` first run `make prepare-apps` (Python 3), producing ignored `internal/templates/builtin.zip` and `builtin_generated.go`. Never commit these outputs. Offline builds use `APPS_PREPARE_FLAGS=--offline` with the verified cache or explicit local artifacts. Plain Go tests use tiny fixed fixtures, do not download applications, and need no Node. A raw Go build without preparation has no bundled applications; use the Make targets for distribution. Host UI mocks, UI smoke and screenshot scenes use that same separate apps checkout through `APPS_TEST_ROOT` (default `.cache/apps-source`). See [docs/building.md](docs/building.md) for preparation, pin updates, offline builds and cross-repository contract tests.
 
 The apps repository publishes the rolling catalog and immutable artifacts. `.github/workflows/apps-mirror.yml` verifies and mirrors public assets to this repository's `apps` prerelease for older Hubs. Keep the compatibility mirror for at least 90 days after cutover and two stable host releases; removal requires a maintenance decision. New Hubs fetch from myco-ai/apps; runtime catalog updates remain independent of the builtin build lock.

@@ -151,6 +151,18 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: web/package-lock.json
+      - id: apps
+        run: |
+          commit=$(node -p 'require("./apps.lock.json").commit')
+          printf 'commit=%s\n' "$commit" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: myco-ai/apps
+          ref: ${{ steps.apps.outputs.commit }}
+          path: .cache/apps-source
+          persist-credentials: false
+      - name: Prepare pinned app UI fixtures
+        run: python3 scripts/prepare-apps.py --apps-dir .cache/apps-source/dist/official
       - name: Dependencies, Playwright and Chromium (with CJK fonts)
         timeout-minutes: 6
         run: |

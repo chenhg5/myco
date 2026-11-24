@@ -5,8 +5,10 @@ serves the actual App through Vite on unused loopback ports, and closes its
 servers and browser afterward. It clears inherited myco, model-provider and mock
 configuration from the child mock's environment, does not attach a real OS
 backend, and blocks browser requests outside loopback. No screenshots are uploaded
-by this command. Built official templates must already exist in
-`internal/templates/official/`.
+by this command. Use the separate apps checkout at `apps.lock.json`'s source commit (`APPS_TEST_ROOT`,
+or `.cache/apps-source`). Prepare its verified release bundles with
+`python3 scripts/prepare-apps.py --apps-dir /path/to/apps/dist/official` first.
+See [host build instructions](../../../docs/building.md).
 
 From the repository root (Node 18+, `npm --prefix web ci`, global Playwright with
 Chromium installed):

@@ -92,6 +92,12 @@ python3 scripts/prepare-apps.py --apps-dir /path/to/apps/dist/official
 APPS_TEST_ROOT=/path/to/apps go test -count=1 ./internal/integration ./internal/console ./internal/sshcap -run 'Test(AgentActionsSDK|PageExportApplications|WhiteboardSharedExport|PaletteAgentToPage|ShoppingComparisonAgentToPage|DatabaseNativeBridgeAndProductionUI|RealSSHOverviewTemplateParser)$'
 ```
 
+Host UI smoke, `npm --prefix web run dev:app` and promotional screenshot scenes
+also read that apps checkout and its released bundles. Set `APPS_TEST_ROOT`
+explicitly, or place the locked checkout at `.cache/apps-source`. They never read
+retired main-repository app copies; incomplete resources fail with setup guidance.
+The host UI CI prepares its own exact pinned checkout and release artifacts.
+
 Install Playwright 1.57.0 with Chromium and ffmpeg as in the `app-contract` CI
 job. Without `APPS_TEST_ROOT`, only these optional cross-repository tests skip;
 an explicitly supplied incomplete checkout fails. Application business, typing,

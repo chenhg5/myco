@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
-import path from "node:path";
-import { installSSHFixture } from "../../../templates/server-console-fixture.mjs";
+import { pathToFileURL } from "node:url";
+import { appsPath } from "../../apps-paths.mjs";
+const { installSSHFixture } = await import(pathToFileURL(appsPath("templates", "server-console-fixture.mjs")).href);
 export async function appScene(c, slug, sample) {
   const { page, api, lang, T, root } = c;
   const { page: p } = await api(
@@ -14,7 +15,7 @@ export async function appScene(c, slug, sample) {
     sample ||
     JSON.parse(
       await readFile(
-        path.join(root, "templates/src", slug, "public/sample.json"),
+        appsPath("dist", "official", slug, "sample.json"),
         "utf8",
       ),
     );
@@ -182,7 +183,7 @@ export async function design(c) {
 export async function motion(c) {
   const data = JSON.parse(
     await readFile(
-      path.join(c.root, "templates/src/motion/public/sample.json"),
+      appsPath("dist", "official", "motion", "sample.json"),
       "utf8",
     ),
   );
@@ -224,7 +225,7 @@ export async function motion(c) {
 }
 export async function disk(c) {
   const script = await readFile(
-    path.join(c.root, "templates/shots-os.js"),
+    appsPath("templates", "shots-os.js"),
     "utf8",
   );
   await c.context.addInitScript({
