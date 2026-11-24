@@ -148,3 +148,5 @@
   .dk-side { width: auto; border-left: 0; border-top: 1px solid var(--line2); }
   .dk-list { overflow: visible; }
 }
+
+.dk-units{display:inline-flex;align-items:center;gap:8px;font-size:12px;flex-shrink:0}.dk-home-head .dk-units{margin-top:12px}.dk-accounting{max-width:980px;margin:16px auto;font-size:12px;line-height:1.7}.dk-top{flex-wrap:wrap;height:auto;min-height:50px}.dk-top .dk-units .sel{max-width:140px}

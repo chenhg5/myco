@@ -38,7 +38,7 @@ interface Bridge {
 }
 
 /** An error from myco.os: err.code is one of these. */
-export type OSErrorCode = "invalid_argument" | "not_found" | "exists" | "permission_denied" | "unsupported" | "timeout" | "cancelled" | "too_large" | "failed";
+export type OSErrorCode = "conflict" | "outcome_unknown" | "invalid_argument" | "not_found" | "exists" | "permission_denied" | "unsupported" | "timeout" | "cancelled" | "too_large" | "failed";
 
 /** A job: a capability that runs a while (fs.scan, exec.spawn). */
 export interface OSJob<T> {

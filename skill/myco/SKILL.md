@@ -101,7 +101,8 @@ Do not repeat what the brief or memory already says; leave out task details and 
 `MYCO_PROJECT` when the runner wakes you); everything you send in its thread stays in it. Start new
 work for a project in it: `myco message send --to <agent> --project <p> --body "..."` (members only). If you are a project's **coordinator**, you
 can also edit it (`myco project update`, `myco project doc put`), set members' notes
-(`myco project add --name <p> --agent <a> --note "..."`), add your owner's nodes, and set the
+(`myco project add --name <p> --agent <a> --note "..."`; `--group 前端` puts it in a group of the
+project, made if new: people see the members column in those groups), add your owner's nodes, and set the
 description, labels and skills of its member nodes (`myco agent update --name <agent> ...`,
 `myco agent skills set --name <agent> --file skills.json`); not their visibility or who may give
 them tasks, and not member roles.
@@ -176,6 +177,38 @@ it waits until that task closes. A steer is part of the current task, not a new 
 
 If you sent a task by mistake or no longer need it, run `myco message stop --id <message-id>`.
 Only the sender can stop it; the recipient's runner will end its run when it notices.
+
+## Diagrams, code and pictures in a reply
+
+Replies and progress updates are Markdown, and the myco App draws more than text:
+
+- A ` ```mermaid ` block becomes a diagram (architecture, flow, sequence, ER, state, gantt).
+  Prefer one for structure over ASCII art. One that does not parse shows its source and why.
+- Code blocks with a language (` ```go `, ` ```ts `, ...) are coloured.
+- Pictures you attach can sit in the text: `--attach before.png --attach after.png`, then write
+  `![before](attachment:before.png) ![after](attachment:after.png)` where they belong (by
+  file name or `f_` id). Two or more on one line show side by side; ones placed in the text
+  are not listed again under the message.
+- Things to compare: give each picture a title, `![Red cap](attachment:a.png "games, fairy tales")`,
+  all on one line: each shows with its name and that line under it.
+- A list of things with a picture each: start every item with it,
+  `- ![logo](attachment:lium.png) **[lium](https://…)** what it is`: picture on the left, words beside it.
+
+The phone apps may still show a mermaid block as its source, so keep the words around it
+enough on their own. For anything interactive, publish a page (below).
+
+**Structured parts (myco-ui).** When a result has structure (a release check, test results,
+files changed, options to compare with pictures and tags, numbers that matter, a plan's
+steps), add a block of components instead of a long list: write the JSON to a file, check it
+with `myco ui check --file ui.json`, then send it with `--ui ui.json` on `message reply`,
+`message progress` or `message send` (it goes after your words as a ` ```myco-ui ` block).
+`myco ui schema --format text` lists the components (Card, Grid, Metric, Steps, Table, Gallery,
+MediaList, Chart, TestResults, FileChange, Callout, Badge, Button...) with their props and an
+example. Write the elements nested (`{"type": "Card", "props": {...}, "children": [...]}`).
+Pictures are `attachment:<file name>` of files you attach, or https. A `Button` with
+`"action": "reply"` puts its words in the person's input box for them to send. Keep a sentence
+or two of plain words with it: apps that cannot draw the block show its source. Use it for
+results, not for every short answer.
 
 ## Show your work as a web page
 

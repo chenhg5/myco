@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -47,6 +48,7 @@ func (b *Backend) osInit() (*oscap.Env, *oscap.Jobs) {
 		s.env.Secrets = b.Secrets
 		if b.Local != nil && b.Local.Home != "" {
 			s.env.Home = b.Local.Home
+			s.env.SSH.Home = b.Local.Home
 		}
 		s.jobs = &oscap.Jobs{Env: s.env}
 	})
@@ -72,7 +74,7 @@ func osStatus(code string) int {
 		return http.StatusBadRequest
 	case oscap.CodeNotFound:
 		return http.StatusNotFound
-	case oscap.CodeExists, oscap.CodeCancelled:
+	case oscap.CodeExists, oscap.CodeCancelled, "conflict":
 		return http.StatusConflict
 	case oscap.CodePermission:
 		return http.StatusForbidden
@@ -101,7 +103,7 @@ func (b *Backend) osRoutes(m *http.ServeMux) {
 		if !decode(w, r, &in) {
 			return
 		}
-		if (in.Name == "proxy.profile" || in.Name == "proxy.control") && (in.Page.ID == "" || in.Page.Hub == "") {
+		if (in.Name == "proxy.profile" || in.Name == "proxy.control" || strings.HasPrefix(in.Name, "db.")) && (in.Page.ID == "" || in.Page.Hub == "") {
 			writeOSErr(w, &oscap.Error{Code: oscap.CodeInvalid, Message: "controller calls require a workspace and page"})
 			return
 		}
@@ -111,6 +113,9 @@ func (b *Backend) osRoutes(m *http.ServeMux) {
 		scoped.Scope = in.Page.Hub + "\x00" + in.Page.ID
 		v, err := oscap.Call(r.Context(), &scoped, in.Name, in.Args)
 		b.osLog(in, "", start, err)
+		if err == nil && in.Name == "ssh.profiles" && b.Local != nil && b.Store != nil {
+			go b.reconcileActionHosts()
+		}
 		if err != nil {
 			writeOSErr(w, err)
 			return

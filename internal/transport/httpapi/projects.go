@@ -2,9 +2,11 @@ package httpapi
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"mime"
 	"net/http"
+	"strconv"
 
 	"github.com/chenhg5/myco/internal/api"
 	"github.com/chenhg5/myco/internal/app"
@@ -75,7 +77,8 @@ func (s *Server) projectDTO(r *http.Request, c projectCall, v *app.ProjectView, 
 	p := v.Project
 	out := api.Project{Name: p.Name, Title: p.Title, Goal: p.Goal, Brief: p.Brief, Visibility: string(p.Visibility),
 		OwnerID: p.Owner, Archived: p.Archived, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt, Machines: append([]string{}, p.Machines...),
-		Links: make([]api.ProjectLink, 0, len(p.Links)), Members: make([]api.ProjectMember, 0, len(v.Members)), Docs: make([]api.ProjectDoc, 0, len(v.Docs))}
+		Groups: append([]string{}, p.Groups...),
+		Links:  make([]api.ProjectLink, 0, len(p.Links)), Members: make([]api.ProjectMember, 0, len(v.Members)), Docs: make([]api.ProjectDoc, 0, len(v.Docs))}
 	if p.Owner != "" && s.members != nil {
 		if m, err := s.members.Get(r.Context(), p.Owner); err == nil {
 			out.Owner = m.Name
@@ -85,7 +88,7 @@ func (s *Server) projectDTO(r *http.Request, c projectCall, v *app.ProjectView, 
 		out.Links = append(out.Links, api.ProjectLink{Title: l.Title, URL: l.URL})
 	}
 	for _, m := range v.Members {
-		pm := api.ProjectMember{Name: string(m.Agent), Role: string(m.Role), Note: m.Note, AddedBy: m.AddedBy, AddedAt: m.AddedAt}
+		pm := api.ProjectMember{Name: string(m.Agent), Role: string(m.Role), Note: m.Note, Group: m.Group, AddedBy: m.AddedBy, AddedAt: m.AddedAt}
 		if a, err := s.agents.Get(r.Context(), string(m.Agent)); err == nil && c.viewer.Sees(a) {
 			dto := s.agentDTO(a)
 			s.enrich(r.Context(), &dto)
@@ -190,6 +193,17 @@ func (s *Server) updateProject(w http.ResponseWriter, r *http.Request, c project
 		}
 		s.recordAs(r, c.by, "project.edit", v.Project.Name, joinComma(what))
 	}
+	if req.Groups != nil || req.MemberGroups != nil {
+		if v, err = s.projects.SetGroups(r.Context(), c.by, name, req.Groups, req.MemberGroups); err != nil {
+			writeError(w, err)
+			return
+		}
+		detail := joinComma(v.Project.Groups)
+		if len(req.MemberGroups) > 0 {
+			detail += fmt.Sprintf(" (%d members moved)", len(req.MemberGroups))
+		}
+		s.recordAs(r, c.by, "project.groups", v.Project.Name, detail)
+	}
 	if v == nil {
 		if v, err = s.projects.Get(r.Context(), c.by, name); err != nil {
 			writeError(w, err)
@@ -226,12 +240,16 @@ func (s *Server) putProjectMember(w http.ResponseWriter, r *http.Request, c proj
 		return
 	}
 	agent := r.PathValue("agent")
-	v, m, err := s.projects.PutMember(r.Context(), c.by, r.PathValue("name"), agent, app.MemberEdit{Role: req.Role, Note: req.Note}, c.by.Name())
+	v, m, err := s.projects.PutMember(r.Context(), c.by, r.PathValue("name"), agent, app.MemberEdit{Role: req.Role, Note: req.Note, Group: req.Group}, c.by.Name())
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	s.recordAs(r, c.by, "project.member", v.Project.Name, string(m.Agent)+" "+string(m.Role))
+	detail := string(m.Agent) + " " + string(m.Role)
+	if req.Group != nil {
+		detail += ", group " + strconv.Quote(m.Group)
+	}
+	s.recordAs(r, c.by, "project.member", v.Project.Name, detail)
 	writeJSON(w, http.StatusOK, s.projectDTO(r, c, v, false))
 }
 

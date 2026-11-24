@@ -16,6 +16,7 @@ type streamLine struct {
 	Type    string `json:"type"`
 	Message struct {
 		ID      string `json:"id"`
+		Model   string `json:"model"`
 		Content []struct {
 			Type      string          `json:"type"`
 			Text      string          `json:"text"`
@@ -65,7 +66,7 @@ type streamEvent struct {
 // thinking of a block while it is being written (Kind "delta", Stream
 // "text" or "thinking", ID "<message>/<block>"). The finished block still
 // arrives as its own text or thinking step and replaces the deltas.
-type liveParser struct{ msg string }
+type liveParser struct{ msg, model string }
 
 func (p *liveParser) events(line []byte) []harness.Event {
 	var l streamEvent
@@ -73,7 +74,21 @@ func (p *liveParser) events(line []byte) []harness.Event {
 		return nil
 	}
 	if l.Type != "stream_event" {
-		return lineEvents(line)
+		var meta struct {
+			Message struct {
+				Model string `json:"model"`
+			} `json:"message"`
+		}
+		if json.Unmarshal(line, &meta) == nil && meta.Message.Model != "" {
+			p.model = meta.Message.Model
+		}
+		out := lineEvents(line)
+		for i := range out {
+			if out[i].Kind == "usage" {
+				out[i].Model = p.model
+			}
+		}
+		return out
 	}
 	e := l.Event
 	switch e.Type {
@@ -131,6 +146,7 @@ func lineEvents(line []byte) []harness.Event {
 	case "result":
 		u := l.Usage
 		out = append(out, harness.Event{Kind: "usage", InputTokens: u.InputTokens + u.CacheReadInputTokens + u.CacheCreationInputTokens,
+			CacheReadTokens: u.CacheReadInputTokens, CacheWriteTokens: u.CacheCreationInputTokens,
 			OutputTokens: u.OutputTokens, CostUSD: l.TotalCostUSD, DurationMS: l.DurationMS})
 		if l.IsError && l.Result != "" {
 			out = append(out, harness.Event{Kind: "error", Text: l.Result})

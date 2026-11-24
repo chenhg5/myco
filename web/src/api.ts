@@ -94,6 +94,9 @@ export interface Project {
   docs: ProjectDoc[];
   /** edit the content (owner, admins, coordinators); manage it (people) */
   can_edit: boolean; can_manage: boolean;
+  /** its member groups, in order (hubs from v0.21.34: always present
+   *  there, even empty; absent before, and the App then groups nothing) */
+  groups?: string[];
   /** the computers (ids) its coordinators may start agents on (hubs from
    *  v0.21.2; absent before) */
   machines?: string[];
@@ -104,6 +107,8 @@ export interface Project {
 export interface ProjectLink { title?: string; url: string }
 export interface ProjectMember {
   name: string; role: "member" | "coordinator"; note?: string; added_by?: string; added_at: string;
+  /** its group in this project ("" or absent: none) */
+  group?: string;
   /** its card, when the viewer may see the node */
   agent?: Agent;
 }
@@ -515,8 +520,18 @@ export interface Approval {
 }
 
 /** What an agent may do on a computer, approved by its owner (agent actions, v0.21.21). */
+export interface ActionResource {
+  provider: "server.ssh"; id: string; binding: string; name?: string; summary?: string;
+}
+export interface ActionTarget { kind: "machine" | "page"; id: string; resource?: ActionResource }
+export interface ActionTargetList { targets: ActionTarget[] }
+export interface SSHProfile {
+  id: string; name: string; destination: string; host: string; user: string; port: number;
+  binding: string; agent_enabled: boolean; agent_hub?: string;
+}
+export interface SSHResult { stdout: string; stderr: string; exit_code: number; truncated: boolean; duration_ms: number }
 export interface ActionGrant {
-  id: string; agent: string; owner: string; target: { kind: "machine" | "page"; id: string }; target_name?: string;
+  id: string; agent: string; owner: string; target: ActionTarget; target_name?: string;
   permissions: string[]; requested?: string[]; reason?: string; message_id?: string; approval_id: string;
   state: "pending" | "active" | "denied" | "expired" | "revoked" | "ended"; end_reason?: string;
   created_at: string; expires_at?: string; ended_at?: string;

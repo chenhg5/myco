@@ -1,0 +1,34 @@
+import assert from "node:assert/strict";
+import { transform } from "esbuild";
+import { readFile } from "node:fs/promises";
+import { usageFixture } from "../mock/usage.mjs";
+const { code } = await transform(await readFile(new URL("../src/lib/usage.ts", import.meta.url), "utf8"), { loader: "ts", format: "esm" });
+const { summarizeUsage, compactUsage, usageRange, usageDays } = await import(`data:text/javascript;base64,${Buffer.from(code).toString("base64")}`);
+const row = { day: "2026-11-23", agent: "a", project: "p", model: "opus", source: "runner", calls: 2, input_tokens: 100, cache_write_tokens: 200, cache_read_tokens: 300, output_tokens: 400, cost_usd: 0 };
+const summary = summarizeUsage([row, { ...row, agent: "b", project: "", model: "codex", source: "session", cost_usd: 1.25 }, { ...row, agent: "b", project: "p", calls: 3 }]);
+assert.equal(summary.total.total, 3000, "all four token categories contribute");
+assert.equal(summary.total.calls, 7);
+assert.equal(summary.total.cost, 1.25, "missing costs do not invalidate reported costs");
+assert.deepEqual(summary.agents.map(([name]) => name), ["b", "a"]);
+assert.equal(summary.agents[0][1].models.size, 2);
+assert.equal(summary.projects[0][1].agents.size, 2);
+assert.equal(summary.models.length, 2);
+assert.equal(summarizeUsage([]).total.total, 0);
+assert.equal(compactUsage(1_234_567), "1.2M");
+assert.equal(compactUsage(34_500), "34.5K");
+assert.deepEqual(usageRange(7, new Date("2024-03-01T23:00:00Z")), { from: "2024-02-24", to: "2024-03-01" });
+assert.equal(usageDays("2024-02-24", "2024-03-01").length, 7);
+assert.equal(usageDays(...Object.values(usageRange(90))).length, 90);
+const hub = { agents: [{ name: "cloud-a", binding: { harness: "claude-cloud" } }, { name: "cloud-b", binding: { harness: "claude-cloud" } }], machines: [] };
+const range = usageRange(30);
+const fixture = usageFixture(hub, [{ name: "one" }, { name: "two" }, { name: "three" }], range);
+assert.equal(fixture.agents.length, 8);
+assert.equal(new Set(fixture.rows.map((r) => r.day)).size, 30);
+assert.equal(new Set(fixture.rows.map((r) => r.project).filter(Boolean)).size, 3);
+const top = summarizeUsage(fixture.rows).agents.slice(0, 2).map(([name]) => name);
+assert.deepEqual(top, ["cloud-a", "cloud-b"]);
+for (const project of ["one", "-"]) {
+  const selected = usageFixture(hub, [], { ...range, project });
+  assert.ok(selected.rows.every((r) => project === "-" ? !r.project : r.project === project));
+}
+console.log("usage: aggregation, UTC ranges, formatting and 30-day fixtures passed");

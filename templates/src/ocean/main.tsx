@@ -15,7 +15,7 @@ import { Sound } from "./audio";
 import { SEAS } from "./waves";
 import type { Course } from "./map";
 import { distText } from "./map";
-import { BigMap, Compass, Gauges, IslandCard, KeysHelp, Labels, MiniMap, SettingsPanel, TouchPad } from "./hud";
+import { BigMap, Compass, Gauges, IslandCard, KeysHelp, Labels, MiniMap, SettingsPanel, TouchPad, clock, weatherName } from "./hud";
 
 const coarse = () => window.matchMedia?.("(pointer: coarse)").matches ?? false;
 
@@ -59,8 +59,10 @@ function App() {
     world.onFrame = (st) => {
       statusRef.current = st;
       const now = performance.now();
-      if (now - at > 120) { at = now; setStatus({ ...st }); sound.current.update(st.boat.speed, st.boat.throttle, SEAS[settingsOf().sea].height / 1.9); }
+      if (now - at > 120) { at = now; setStatus({ ...st }); const s = settingsOf(); sound.current.update(st.boat.speed, st.boat.throttle, SEAS[s.sea].height / 1.9, s.weather === "storm" ? 1 : s.weather === "rain" ? 0.6 : 0); }
     };
+    // thunder after the flash: later the further off it struck
+    world.onStrike = (d) => sound.current.thunder(d);
     const unbind = world.controls.bind(window);
     world.controls.onAny = () => { setFresh(false); sound.current.start(); };
     const wake = () => sound.current.start();
@@ -85,7 +87,7 @@ function App() {
   const change = (s: Settings) => {
     setDraft(s);
     window.clearTimeout(saveTimer.current);
-    saveTimer.current = window.setTimeout(() => { void setWorld({ time: s.time, weather: s.weather, sea: s.sea, wind: s.wind }).finally(() => setDraft(null)); }, 450);
+    saveTimer.current = window.setTimeout(() => { void setWorld({ time: Math.round(s.time * 1000) / 1000, time_at: s.at, time_speed: s.speed, weather: s.weather, sea: s.sea, wind: s.wind }).finally(() => setDraft(null)); }, 450);
   };
   const titleTimer = useRef(0);
   const rename = (t: string) => {
@@ -142,7 +144,7 @@ function App() {
       <canvas ref={canvas} className="oc-canvas" tabIndex={0} aria-label={uiText("海面：用 W A S D 或方向键开船")} />
       {status && <Labels labels={status.labels} />}
       <div className="oc-top">
-        <div className="oc-chip"><b>{name}</b><span>{where}</span></div>
+        <div className="oc-chip"><b>{name}</b><span className="oc-num">{clock(status?.hour ?? settings.time)} · {weatherName(settings.weather)}</span><span>{where}</span></div>
         <span className="top-gap" />
         <div className="oc-chip oc-tools">
           <button type="button" className="icon-btn" onClick={() => setOpen(open === "map" ? "" : "map")} aria-label={uiText("地图（M）")} title={uiText("地图（M）")}><MapIcon className="ico" /></button>
@@ -165,7 +167,7 @@ function App() {
       )}
       {fresh && !touch && open === "" && <div className="oc-hint">{uiText("W/S 油门 · A/D 转舵 · 拖动看四周 · M 地图")}</div>}
       {touch && status && worldRef.current && <TouchPad controls={worldRef.current.controls} />}
-      {open === "settings" && <SettingsPanel value={settings} title={name} onChange={change} onTitle={rename} onStartHere={startHere} onGoStart={goStart} onClose={() => setOpen("")} />}
+      {open === "settings" && <SettingsPanel value={settings} hour={status?.hour ?? settings.time} title={name} onChange={change} onTitle={rename} onStartHere={startHere} onGoStart={goStart} onClose={() => setOpen("")} />}
       {open === "keys" && <KeysHelp onClose={() => setOpen("")} />}
       {open === "map" && <BigMap get={get} isles={isles} found={found} course={course} onCourse={setCourse} onClose={() => setOpen("")} />}
       {kit.note && <div className="note" role="status">{kit.note.text}</div>}

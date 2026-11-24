@@ -4,6 +4,142 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.22.0
+
+- **The Usage page is live**: totals, a day-by-day chart and members, projects and models ranked by tokens, for 7, 30 or 90 days, for the whole workspace or one project. The chart has a daily-average line and compares the last seven days with the seven before; tables rank by tokens with each row's share. It is laid out like the Automations page and fits beside the sidebar in a narrow window.
+- **Token usage is now reported and kept**: updated runners and Claude sessions (`myco inbox wait`) report numeric token usage independently of traces, so it works with tracing off and in end-to-end encrypted workspaces. The hub stores per-day figures per agent, project and model. Members see their own agents; owners and admins see the whole workspace. Set `MYCO_NO_USAGE=1` to turn reporting off.
+- **`myco usage show`**: `--by agent` (default), project, day or model, with `--from`, `--to` and `--project`, using member or admin credentials.
+- **Member groups**: they are reachable from the folded members column too (the ⋯ under its unfold button), and moving a member between groups stays put while slow saves and refreshes cross; a failed save goes back and says why in the members column.
+- Costs are present only when the CLI reports them: Claude Code uses Anthropic pricing, so figures for compatible proxies or other models are reference estimates. Older clients do not report usage and traces are not backfilled.
+- Upgrade: update the hub to v0.22.0 for usage storage and the API, and update myco on computers that should report usage or run `myco usage show`. Update the App for the Usage page and the group fixes. No other hub upgrade needed.
+
+**中文**
+
+- **用量页正式可用**：显示总量、按天的柱状图和按 token 排名的成员、项目、模型，可以看 7、30 或 90 天，范围是整个工作区或单个项目。图表有日均虚线，并把最近 7 天和前 7 天做对比；表格按 token 排名并显示每行占比。版式与「自动化」页一致，窄窗口下也能放在侧栏旁边。
+- **token 用量开始上报和保存**：更新后的 runner 和 Claude 会话（`myco inbox wait`）会独立于 trace 上报数字用量，关闭 trace 和端到端加密的工作区也不会漏报。Hub 按天保存每个 agent、项目和模型的数字。成员只能看自己的 agent，所有者和管理员可以看整个工作区。设置 `MYCO_NO_USAGE=1` 可以关闭上报。
+- **`myco usage show`**：`--by agent`（默认）、project、day 或 model，支持 `--from`、`--to` 和 `--project`，用成员或管理员凭证查询。
+- **成员分组**：成员栏折叠后也能进入分组（展开按钮下面的 ⋯）；在保存慢、刷新交叉时，成员在分组间移动后不会再跳回去；保存失败会退回并说明原因。
+- 费用只有 CLI 自己上报时才有：Claude Code 按 Anthropic 价格计算，经过兼容代理或其他模型时仅供参考。旧客户端不会上报，trace 也不会回填。
+- 升级：把工作区（Hub）升级到 v0.22.0 才能保存用量和提供接口；需要上报用量或运行 `myco usage show` 的电脑更新 myco；更新 App 才能看到用量页和分组修复。其他改动不需要升级 Hub。
+
+## v0.21.34
+
+- **A project's members can be grouped**: put people into 前端, 后端, 应用 or any group of your own. The workspace keeps the groups per project (up to 30, each name 1–40 characters). In the members column's ⋯ create a group; move a member from its own menu or drag it onto a group; a group's ⋯ renames, moves or deletes it. The coordinator stays on top and members in no group are under 其他. The column can show the groups folded (the default: a folded group's heading still shows its faces and who is at work or asking), as a row of faces per group, or as filter chips on top; the choice is kept on this computer. An older workspace says to upgrade first instead of hiding the ⋯.
+- The CLI can group too: `myco project add --group 后端` puts a member in a group and creates it if it is new; `myco project show` lists each member's group.
+- **A Usage page**: next to Automations and Workflows, totals, a bar a day, and members, projects and models ranked by tokens, for 7, 30 or 90 days, for the whole workspace or one project. The figures come from what each member's CLI reports, so the page fills in as members upgrade myco; a workspace whose hub cannot report usage yet says to upgrade the hub.
+- Upgrade: update the hub to v0.21.34 to use groups; update the App for the grouped members column and the Usage page; update myco on computers that run `myco project add --group` or should report usage.
+
+**中文**
+
+- **项目成员可以分组**：把成员按前端、后端、应用或你自己起的名字分组。工作区为每个项目保存分组（最多 30 个，组名 1–40 个字符）。在成员栏的 ⋯ 里新建分组；成员可以从自己的菜单移动，也可以直接拖到组上；分组自己的 ⋯ 可以改名、调整顺序或删除。协调者始终在最上面，没有分组的成员在「其他」下面。成员栏的分组可以折叠显示（默认；折叠时标题上仍然显示组里的面孔，以及正在工作或提问的人）、每组一行面孔，或用顶部的筛选标签；这个选择保存在这台电脑上。旧工作区会在成员栏提示先升级，而不是把 ⋯ 藏起来。
+- 命令行也能分组：`myco project add --group 后端` 把成员放进分组，分组不存在时会顺带创建；`myco project show` 会列出每个成员所在的分组。
+- **用量页**：在「自动化」和「工作流」旁边，显示总量、每天一根柱子，以及按 token 排名的成员、项目和模型，可以看 7、30 或 90 天，范围是整个工作区或单个项目。数字来自各成员的 CLI 上报，成员升级 myco 后会陆续出现；工作区的 Hub 还不支持用量统计时，页面会提示升级 Hub。
+- 升级：把工作区（Hub）升级到 v0.21.34 才能使用分组；更新 App 才能看到分组后的成员栏和用量页；需要用 `myco project add --group` 或需要上报用量的电脑更新 myco。
+
+## v0.21.33
+
+- **Disk usage is right on Windows, and capacity units are clear**: compressed and sparse files show the storage they actually take, and a file that takes 0 bytes shows 0. The Disk app's capacity selector defaults to binary GiB on Windows and decimal GB elsewhere, applies to the disk cards, scans, map, file lists and cleanup basket on that computer, and never changes the underlying byte counts. The Windows allocation fix needs the updated desktop App; updating the Disk app alone is not enough.
+- **⌘K searches only the workspace you are in**: members, projects, computers, messages and recent chats from other workspaces are no longer mixed in; switch workspace to search there.
+- **Panes stay put when you switch workspaces**: the members column is measured before the first paint, so in a wide window the panes beside the coordinator no longer jump wider and back.
+- Upgrade: update the App for the Windows disk accounting, the ⌘K scope and the workspace-switch layout. No hub upgrade needed.
+
+**中文**
+
+- **Windows 上的磁盘占用更准确，容量单位也更清楚**：压缩和稀疏文件显示实际占用的空间，占用为 0 的文件显示 0。磁盘应用的容量单位选择器默认在 Windows 上用二进制 GiB、其他平台用十进制 GB，作用于这台电脑上的磁盘卡片、扫描、地图、文件列表和清理篮，不会改变底层字节数。Windows 的实际占用查询需要更新桌面 App，单独更新磁盘应用不够。
+- **⌘K 只搜索当前工作区**：成员、项目、电脑、消息和最近会话不再混入其他工作区；要搜别的工作区，先切换过去。
+- **切换工作区时，旁边的面板不再跳动**：成员列在第一次绘制前就量好宽度，宽窗口下协调者旁边的面板不会再先变宽再缩回。
+- 升级：更新 App 才能获得 Windows 磁盘占用、⌘K 搜索范围和切换工作区布局的修复。不需要升级 Hub。
+
+## v0.21.32
+
+- **The notch island no longer shows 0**: a workspace that cannot be read keeps who was at work there, the island only comes out if someone is still at work once its window is ready, and it always folds away when nobody is. While folding it keeps the last number.
+- Upgrade: update the App to see the island fix. No hub upgrade needed.
+
+**中文**
+
+- **灵动岛不再显示 0**：读不到的工作区会保留原来在工作的人；窗口就绪时仍然有人在工作，灵动岛才会展开，没人时总是收起；收起过程中保留上一个数字。
+- 升级：更新 App 才能看到灵动岛的修复。不需要升级 Hub。
+
+## v0.21.31
+
+- **The Dock's red dot clears when you bring the App to the front**: it counts only what came after you last looked.
+- Pictures that a progress update or a follow-up places in its text now show there, instead of "attachment not found", and are not listed again below.
+- Picture rows in messages (a list item that starts with a picture) no longer overlap the line below.
+- myco-ui cards: a card's colour is a small dot before its title, not a bar down the side.
+- The binary ships only the everyday official apps, compressed, with smaller screenshots.
+- Upgrade: update the App for the Dock dot, pictures in progress updates and the card dot; the smaller binary comes with the normal update. No hub upgrade needed.
+
+**中文**
+
+- **把 App 切到前台，Dock 上的红点就会消失**：只计算你上次看过之后新来的。
+- 进展更新、补充消息里插在正文中的图片，现在会显示在原位，不再提示「没找到附件」，下面也不会重复列出。
+- 消息里「左图右文」的列表行，图片不再压到下一行。
+- myco-ui 卡片的颜色改成标题前的小圆点，不再是左侧的竖条。
+- 安装包只带日常用的官方应用，并做了压缩，截图也更小。
+- 升级：更新 App 才能看到 Dock 红点、进展更新里的图片和卡片小圆点；安装包变小随正常更新生效。不需要升级 Hub。
+
+## v0.21.30
+
+- **Messages can carry diagrams, coloured code and pictures**: a fenced `mermaid` block is drawn as a diagram (flowchart, sequence, ER, state, gantt), and one that does not parse shows its source and why. Code blocks that name a language are coloured, quietly in light and dark. Attach pictures and place them in the text with `![words](attachment:<name>)`: several on one line sit side by side, titled ones show their name and a line under it, and pictures placed in the text are not listed again below. Click a picture or diagram to see it large. Older Apps and the phone Apps show all of it as readable text.
+- **Structured UI in a message (myco-ui)**: an agent can put a `myco-ui` block of JSON in a message, and the App draws it with a fixed set of components — cards, grids, tabs, headings, text, callouts, badges, key–value lists, tables, metrics, progress, steps, images, galleries, media lists, diagrams, charts, code, changed files, test results and buttons (a button can put words in your input, open a link or copy text). Anything outside that set is left out. Agents can print the components with `myco ui schema` and check a block with `myco ui check`; older clients show the message as text.
+- Upgrade: update the App to see diagrams, code colours, pictures in the text and myco-ui blocks; update myco on computers where agents should write and check these blocks. No hub upgrade needed.
+
+**中文**
+
+- **消息里可以放图表、彩色代码和图片**：标了 `mermaid` 的代码块会画成图（流程图、时序图、ER 图、状态图、甘特图），解析失败会显示原文和原因。标了语言的代码块会着色，深浅色下都很克制。把图片作为附件上传后，可以用 `![说明](attachment:<文件名>)` 放进正文：同一行放几张会并排显示，带标题的会显示名称和下面一行说明，放进正文的图片不会在下面重复列出。点图片或图表可以放大看。旧版 App 和手机 App 会把它当普通文字显示。
+- **消息里的结构化界面（myco-ui）**：agent 可以在消息里放一个 `myco-ui` 的 JSON 代码块，App 会用固定的组件把它画出来——卡片、网格、标签页、标题、文字、提示、徽章、键值列表、表格、指标、进度、步骤、图片、画廊、媒体列表、示意图、图表、代码、改动文件、测试结果和按钮（按钮可以把文字放进你的输入框、打开链接或复制文字）。不在固定组件里的内容不会画出来。agent 可以用 `myco ui schema` 查看组件，用 `myco ui check` 检查代码块；旧客户端会把消息当文字显示。
+- 升级：更新 App 才能看到图表、代码着色、正文图片和 myco-ui 块；跑 agent 的电脑更新 myco 后，agent 才能写和检查这些块。不需要升级 Hub。
+
+## v0.21.29
+
+- **App updates work behind a system proxy, and a failed update no longer leaves you without an App**: with the proxy set to "System" and no proxy variables in the environment, the App now also reads the proxy in Windows' or macOS' network settings — the system proxy Clash or v2rayN turns on — and connects directly when that proxy program is not running. A release download cut off midway resumes where it stopped, reconnects after 60 seconds without data, and goes direct when the proxy fails. On Windows, a new version that cannot start is stopped and the current version is put back and keeps running. When an update fails, Settings says "更新失败" and explains the reason in plain words, with the raw error under details.
+- **Sessions keep the variables they use to reach their model**: adding a Codex or Claude Code session (or running `myco join`) now saves the variables that session uses for its model into the agent's private env file (`~/.myco/env/<agent>.env`, mode 600): `CODEX_HOME`, the keys of magpie / cc-switch providers, `OPENAI_*` / `ANTHROPIC_*` and proxy settings. The runner no longer loses them when the shell's exports are gone. The App reads your login shell's environment (including a `CODEX_HOME` set there) and lists sessions under it, `codex exec` ones included. `myco join --no-env` skips this.
+- **Focus mode backgrounds**: a palette button beside the exit button opens a small panel with quiet background tones (each in a light and a dark shade), the chat backgrounds' gradients and patterns, and a custom colour from the system picker, kept separately for light and dark. Choose to recolour the whole page or only around the conversation ("只改外面"); when text would be hard to read on a whole-page colour, the panel says so and offers "改成只改外面". Dark tones are softer, cards sit a shade above the background, and the chat header, pinned row and search line up with the messages. ⌘⇧F no longer also opens the chat search.
+- Saving an agent's name or face in the App now shows at once, without waiting for the next refresh.
+- Upgrade: update the App (updates behind a proxy, focus backgrounds, profiles showing at once); update myco on computers that run agents. Sessions added from then on keep their model variables — for an existing agent, run `myco runner env capture --agent <name>` in a shell where those variables are set. No hub upgrade needed.
+
+**中文**
+
+- **App 更新在系统代理下也能用，更新失败也不会把 App 弄没**：代理选「系统」且环境里没有代理变量时，App 现在会读 Windows / macOS 网络设置里的系统代理（Clash、v2rayN 打开的那个），代理程序没在运行就直连。下载中断会断点续传，60 秒没有数据自动重连，代理失败再直连。Windows 上新版本启动不了会被停掉，自动换回旧版，当前版本继续运行。更新失败时「设置」里显示「更新失败」，用大白话说明原因，原始错误收在详情里。
+- **会话会带上连模型用的变量**：添加 Codex 或 Claude Code 会话（或运行 `myco join`）时，会把该会话连模型用的变量存进这个 agent 的私有 env 文件（`~/.myco/env/<agent>.env`，权限 600）：`CODEX_HOME`、magpie / cc-switch 各 provider 的 key、`OPENAI_*` / `ANTHROPIC_*` 和代理设置。shell 里 export 的变量没了，runner 唤醒时也照样能连上模型。App 会读登录 shell 的环境（包括在 shell 里设置的 `CODEX_HOME`），连 `codex exec` 的会话也能找到。`myco join --no-env` 可以跳过保存。
+- **专注模式的背景**：退出按钮旁的调色按钮会打开一个小面板，里面有安静的背景色调（每个都有深浅两档）、聊天背景的渐变和图案，以及用系统取色器的自定义颜色，浅色和深色分别记住。可以选改整个页面，或只改对话外面（「只改外面」）；整页颜色会让文字难读时，面板会提示，并给出「改成只改外面」。深色色调更柔和，卡片比背景亮一档；对话标题、置顶行和搜索与消息对齐。⌘⇧F 也不会再顺带打开聊天搜索。
+- 在 App 里改 agent 的名字或头像，保存后马上就会显示，不用等下一次刷新。
+- 升级：更新 App（代理下的更新、专注模式背景、资料即时显示）；跑 agent 的电脑更新 myco。之后添加的会话才会带上模型变量——已有的 agent 可以在设了这些变量的 shell 里运行 `myco runner env capture --agent <名字>`。不需要升级 Hub。
+
+## v0.21.28
+
+- **New app: Server Console (服务器)**: manage Linux hosts over the OpenSSH setup already on your computer — CPU, memory and disk overview with hostname and online CPU count, systemd services and Docker containers, logs, and reviewed start/stop/restart. Profiles, host trust and keys stay on the computer that connects, and a shared page never runs a command. An agent can be given a grant for one exact server that expires: read-only for status and logs, or read and manage for services and containers. Needs the updated desktop App and Hub (`sudo myco upgrade`); ProxyJump and end-to-end encrypted workspaces are not supported yet.
+- **New app: Database studio (数据库工作台)**: connect to MySQL, PostgreSQL, SQLite and MongoDB from the desktop App, browse schemas and tables, edit rows and documents with concurrent-write checks, run one SQL statement or MongoDB find/aggregate, and export results as CSV or typed JSON. Passwords and results stay on your computer; only a saved query draft is shared with the page. Needs the updated desktop App.
+- **New app: Color studio (配色助手)**: build palettes of 2–12 colors, extract up to six colors from a local image, generate harmonies, check text/background contrast, and export SVG, CSS or JSON. Palettes, favorites and notes are shared with the page, so its agents can create and revise them too.
+- **New app: AIGC Canvas (AIGC 画布)**: connect notes, text, images and videos into a workflow on a canvas, run a node with its upstream chain using your own OpenRouter (text) and Replicate (images, video) keys, and share nodes and results. Keys stay in the session; generated media links can expire, so save what you want to keep.
+- **Voyage 1.2 (航海)**: a full day passes on the sea — the sun crosses the sky with dawn and dusk colors, a moon and stars light the night, and the boat shows its navigation lights. Weather now changes the scene: clear, cloudy, overcast, rain, storm with lightning and thunder, and sea fog. Time is shared in the page (still, a day in 48 or 12 minutes), so everyone sees the same hour.
+- Text in Server Console and Database studio is larger and easier to read: table values and SQL at 14px, supporting text at least 12px, including in narrow windows.
+- Upgrade: run `sudo myco upgrade` on the hub and update the App for Server Console; the other new apps and Voyage need only the updated App.
+
+**中文**
+
+- **新应用：服务器（Server Console）**：用电脑上已有的 OpenSSH 管理 Linux 主机——查看 CPU、内存和磁盘概览（含主机名和在线 CPU 数）、systemd 服务与 Docker 容器、日志，以及确认后的启动/停止/重启。连接配置、主机信任和密钥都留在发起连接的电脑上，共享页面里不会执行命令。可以给 agent 一个只针对某台服务器、会过期的授权：只读可看状态和日志，读写还能启停服务和容器。需要新版桌面 App 和 Hub（`sudo myco upgrade`）；暂不支持 ProxyJump 和端到端加密工作区。
+- **新应用：数据库工作台（Database studio）**：在桌面 App 里连接 MySQL、PostgreSQL、SQLite 和 MongoDB，浏览库表结构，编辑数据行和文档（并发写入有校验），执行单条 SQL 或 MongoDB 的 find/aggregate，结果可导出 CSV 或带类型的 JSON。密码和结果都留在本机，只有主动保存的查询草稿会共享给页面。需要新版桌面 App。
+- **新应用：配色助手（Color studio）**：创建 2–12 种颜色的色卡，从本地图片提取最多 6 种主色，生成邻近色、互补色等搭配，检查文字与背景的对比度，导出 SVG、CSS 或 JSON。色卡、收藏和笔记与页面共享，agent 也能一起创建和修改。
+- **新应用：AIGC 画布（AIGC Canvas）**：在画布上把便签、文本、图片和视频连成工作流，用自己的 OpenRouter（文本）和 Replicate（图片、视频）密钥运行节点及其上游链路，节点和结果共享给页面。密钥只留在当前会话；生成的媒体链接可能过期，想留的请及时保存。
+- **航海 1.2（Voyage）**：海上过完一整天的昼夜——太阳划过天空，早晚有金色和玫红色，夜里月亮和星星照亮海面，船会亮起航行灯。天气会改变画面：晴、多云、阴、雨、带闪电和雷声的暴风雨，还有海雾。时间在页面里共享（静止、48 分钟或 12 分钟一天），大家看到的是同一个时刻。
+- 服务器和数据库工作台的文字更大更好读：表格数值和 SQL 为 14px，辅助文字至少 12px，窄窗口里也一样。
+- 升级：服务器应用需要在 Hub 上执行 `sudo myco upgrade` 并更新 App；其他新应用和航海只需更新 App。
+
+## v0.21.27
+
+- **Focus mode**: a chat can fill the whole window on its own — press ⌘⇧F (Ctrl+Shift+F) or use the chat's ⋯ menu, which now shows the shortcut. The sidebar, top bar, members, pane tabs and a docked page hide, and the pane you were in zooms in with the chat centred on a plain background. ⌃Tab and ⌥↑/⌥↓ still switch chats; Esc, the shortcut again, or the button at the top right brings everything back.
+- **Shopping comparison queried by an agent**: the app now works with a Maishou API adapter that an agent runs on its own computer; the agent queries prices and purchase links directly and writes them into the shared page. Bring your own Maishou access (`MAISHOU_OPENID`, an optional invitation code and token, or a private config file); credentials never go into page records, a chat or the repository. Authenticated results still depend on your own provider account — until then the page says what it could not confirm.
+- The members column's hover cards show only the first line of what a member is doing, cut short.
+- No hub upgrade needed: update the App for focus mode. The shopping comparison app reaches hubs through the official apps update (v0.20.7 and later); run `sudo myco upgrade` only if your hub is older than that.
+
+**中文**
+
+- **专注模式**：一个对话可以单独铺满整个窗口——按 ⌘⇧F（Ctrl+Shift+F），或用对话的 ⋯ 菜单（菜单里现在会显示这个快捷键）。侧栏、顶栏、成员、面板标签和停靠的页面都会藏起来，你正在用的面板放大，对话居中放在干净的背景上。⌃Tab 和 ⌥↑/⌥↓ 还能切换对话；按 Esc、再按一次快捷键，或点右上角的按钮就全部回来。
+- **比价购物可以由 agent 来查了**：应用现在连上 agent 自己电脑上跑的 Maishou API 适配器，agent 直接查价格和购买链接，写进大家共享的页面。要带你自己的 Maishou 访问权限（`MAISHOU_OPENID`，可选的邀请码和 token，或一个私有的配置文件）；密钥不会写进页面记录、聊天或仓库。真正登录后的结果仍取决于你自己的服务商账号，在那之前页面会标明哪些没能确认。
+- 成员栏的悬浮卡片只显示成员在做什么的第一行，超出部分截断。
+- 不需要升级 hub：专注模式更新 App 即可。比价购物应用通过官方应用更新分发（v0.20.7 及以后的 hub）；hub 比这旧才需要 `sudo myco upgrade`。
+
 ## v0.21.26
 
 - **A member's chat leaves terminal commands out**: since v0.21.24 a member's chat in a project showed its exchanges with everyone, which brought each command it ran on a terminal (`ls`, `cat` on mac-exec) in as a card. Only its exchanges with other AIs show now; a terminal still shows when the project lists it.

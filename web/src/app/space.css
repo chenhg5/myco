@@ -3615,3 +3615,107 @@ body.is-resizing-rows { cursor: row-resize; user-select: none; }
    发送中 and a small spinner, until the feed has it. */
 .sp-card.is-pending { opacity: 0.6; cursor: default; }
 .sp-card.is-pending .sp-card-state svg { width: 12px; height: 12px; }
+
+/* ── 成员分组 (MemberGroups.tsx): the members column in groups ── */
+.mg { display: flex; flex-direction: column; }
+.mg-group { border-radius: 9px; }
+.mg-group.is-over { background: color-mix(in srgb, var(--green) 9%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--green) 35%, transparent); }
+/* folding groups: a quiet heading each */
+.mg-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  height: 28px;
+  margin-top: 4px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11.5px;
+  text-align: left;
+  cursor: default;
+}
+.mg-head:hover { background: var(--nav-hover); color: var(--fg-2); }
+.mg-chev { flex: none; width: 12px; height: 12px; color: var(--muted); transition: transform .15s; }
+.mg-group.is-open .mg-head .mg-chev, .mg-group.is-open .mg-tile-row .mg-chev { transform: rotate(90deg); }
+.mg-name { color: var(--fg-2); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.mg-count { margin-left: 4px; color: var(--muted); font-weight: 400; }
+.mg-head-end { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; flex: none; }
+.mg-faces { display: inline-flex; }
+.mg-faces > * { border-radius: 5px; box-shadow: 0 0 0 1.5px var(--side-bg, var(--bg)); }
+.mg-faces > * + * { margin-left: -5px; }
+.mg-busy { font-size: 11px; color: var(--muted); }
+.mg-more { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 5px; color: var(--muted); opacity: 0; }
+.mg-head:hover .mg-more, .mg-tile-row:hover .mg-more, .mg-more:focus-visible { opacity: 1; }
+.mg-more:hover { background: var(--pill-hover); color: var(--fg); }
+.mg-more svg { width: 13px; height: 13px; }
+.mg-empty { margin: 2px 6px 6px 22px; font-size: 11.5px; color: var(--faint); }
+.mg-new {
+  margin: 6px 0 2px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px dashed var(--line);
+  border-radius: 7px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11.5px;
+  text-align: left;
+  cursor: default;
+}
+.mg-new:hover { color: var(--fg-2); border-color: var(--faint); }
+/* a row of faces each */
+.mg-tile-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+.mg-tile-row:hover { background: var(--nav-hover); }
+.mg-tile {
+  flex: none;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  width: 32px;
+  height: 32px;
+  padding: 2px;
+  border-radius: 9px;
+  background: var(--pill);
+}
+.mg-tile > * { width: 100% !important; height: 100% !important; border-radius: 4px; }
+.mg-tile-text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.mg-tile-text .mg-name { font-size: 13px; color: var(--fg); }
+.mg-sum { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mg-inside { margin: 0 0 4px 16px; padding-left: 6px; border-left: 1px solid var(--line-2); }
+/* filters on top */
+.mg-chips { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 4px 6px; }
+.mg-chip { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 9px; border: 0; border-radius: 999px; background: var(--pill); color: var(--fg-2); font: inherit; font-size: 11.5px; cursor: default; }
+.mg-chip:hover { background: var(--pill-hover); }
+.mg-chip.is-on { background: var(--fg); color: var(--bg); }
+.mg-chip > span { opacity: .6; }
+/* the folded column and the narrow strip: a thin line between groups */
+.sp-face-sep { flex: none; width: 18px; height: 1px; margin: 2px 0; background: var(--line); }
+.sp-strip-sep { flex: none; width: 1px; height: 20px; align-self: center; background: var(--line); }
+.mg-error { margin: 2px 6px 6px; font-size: 11.5px; color: var(--red); }
+/* A group dragged among the others: a line where it would go. */
+.mg-group { position: relative; }
+.mg-group.is-slot-before::before, .mg-group.is-slot-after::after {
+  content: ""; position: absolute; left: 6px; right: 6px; height: 2px; border-radius: 1px; background: var(--fg-2); pointer-events: none;
+}
+.mg-group.is-slot-before::before { top: -1px; }
+.mg-group.is-slot-after::after { bottom: -1px; }
+.mg-chip { position: relative; }
+.mg-chip.is-slot-before { box-shadow: -3px 0 0 -1px var(--fg-2); }
+.mg-chip.is-slot-after { box-shadow: 3px 0 0 -1px var(--fg-2); }

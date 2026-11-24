@@ -1,12 +1,13 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRightLeft, ArrowUp, ArrowUpRight, Check, ChevronRight, Copy, AudioLines, Download, Images, Loader2, Lock, MoreHorizontal, Paintbrush, Pin as PinIcon, PinOff, Search, Settings2, Square, Trash2, WifiOff, X } from "lucide-react";
+import { Focus as FocusIcon, AlertTriangle, ArrowDown, ArrowLeft, ArrowRightLeft, ArrowUp, ArrowUpRight, Check, ChevronRight, Copy, AudioLines, Download, Images, Loader2, Lock, MoreHorizontal, Paintbrush, Pin as PinIcon, PinOff, Search, Settings2, Square, Trash2, WifiOff, X } from "lucide-react";
 import { ExportChat } from "@/app/ExportChat";
 import { appApi, isTransient } from "@/appapi";
 import type { Agent, Message } from "@/api";
 import { SHROOM, useIsSuperagent } from "@/app/superagentMark";
 import type { AgentRow } from "@/app/types";
 import { agentKind, canManage, isInbox, isMe, lastActivityAt, machineOfRow, personLabel, possiblyStuck, quietFor, runnerAway, SEEN_SLACK_MS, seenNow, sessionBusy, nodeName } from "@/app/nodes";
-import { MessageContent } from "@/app/Markdown";
+import { MessageContent, filesBelow, filesFor, inlineAttachmentIds, type InlineFiles } from "@/app/Markdown";
+import { UI_REPLY } from "@/app/ui/UiBlock";
 import { PromptSign, STOPPED, Terminal } from "@/app/Terminal";
 import { TraceView } from "@/app/TraceView";
 import { WorkingLine } from "@/app/Working";
@@ -90,6 +91,17 @@ function dayTime(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   return d.toLocaleString(locale(), { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
+/** 专注模式's keys, as the menu shows them: ⌘⇧F on a Mac, Ctrl+Shift+F elsewhere. */
+export function focusKey(): string {
+  return /Mac/i.test(navigator.platform || navigator.userAgent) ? "⌘⇧F" : "Ctrl+Shift+F";
+}
+
+/** Turns 专注模式 on or off (AppMode listens), for the chat whose pane el is in. */
+export function toggleFocus(el?: Element | null) {
+  if (el) markActivePane(el as HTMLElement);
+  window.dispatchEvent(new CustomEvent("myco-focus-mode"));
 }
 
 // A pause this long between two messages gets a divider with the time.
@@ -795,11 +807,28 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
 
   // Finding a message (ChatSearch): ⌘F in the chat last clicked in.
   const rootRef = useRef<HTMLDivElement>(null);
+  // A button in a message's block of components (ui/UiBlock, action
+  // "reply"): its words go to this chat's box, for you to send or change.
+  const writeDraftRef = useRef(writeDraft);
+  writeDraftRef.current = writeDraft;
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const on = (e: Event) => {
+      const text = (e as CustomEvent<{ text?: string }>).detail?.text;
+      if (typeof text !== "string" || !text) return;
+      writeDraftRef.current(text);
+      window.setTimeout(() => { const box = inputRef.current; if (box) { box.focus(); box.setSelectionRange(text.length, text.length); } }, 0);
+    };
+    el.addEventListener(UI_REPLY, on);
+    return () => el.removeEventListener(UI_REPLY, on);
+  }, []);
   const [searching, setSearching] = useState(false);
   const [findFirst, setFindFirst] = useState("");
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.key.toLowerCase() !== "f") return;
+      // Not ⌘⇧F: that is 专注模式 (AppMode).
+      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== "f") return;
       if (document.querySelector(".app-modal, .fp-panel, .lightbox") || !ownsFind(rootRef.current)) return;
       e.preventDefault();
       setSearching(true);
@@ -1946,6 +1975,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // What the first load brought (however long it took): already there, so
   // it never grows in again.
   if (messages && !arrived.current.first) arrived.current.first = new Set(messages.map((m) => m.id));
+  // A message's own files, for pictures its text places (attachment:…).
+  const filesOf = (m: Message): InlineFiles | undefined => (m.attachments && m.attachments.length > 0 ? { hubId: target.hubId, items: m.attachments } : undefined);
   const growsIn = (m: Message) => m.type === "reply" && !isMe(m.from, row?.hub) && !m.unreadable && !revealed.has(m.id)
     && !(m.reply_to && drafted.has(m.reply_to))
     && !arrived.current.first?.has(m.id)
@@ -2077,13 +2108,20 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {m.unreadable
               ? <span className="conv-unreadable"><Lock />{L("已加密，只有双方的主人能看", "Encrypted: only the owners of both sides can read it")}</span>
               : mine && voiced ? <MessageContent body={voiced.text} />
-              : growsIn(m) ? <Reveal body={m.body} foldId={m.id} finish={m.id !== newestId} onDone={() => { revealed.add(m.id); setRevealedTick((n) => n + 1); }} />
+              : growsIn(m) ? <Reveal body={m.body} foldId={m.id} files={filesOf(m)} finish={m.id !== newestId} onDone={() => { revealed.add(m.id); setRevealedTick((n) => n + 1); }} />
               // What an agent wrote can be read in the App's language.
-              : !mine && m.type !== "event" ? <TranslatableBody id={m.id} body={m.body} />
-              : <MessageContent body={m.body} foldId={m.id} />}
+              : !mine && m.type !== "event" ? <TranslatableBody id={m.id} body={m.body} files={filesOf(m)} />
+              : <MessageContent body={m.body} foldId={m.id} files={filesOf(m)} />}
             {/* (after its text has grown in: pictures first, then the
                 words filling in above them, reads oddly) */}
-            {!growsIn(m) && m.attachments && m.attachments.length > 0 && <MessageAttachments hubId={target.hubId} items={m.attachments} />}
+            {/* (less those its text already shows: attachment:…) */}
+            {!growsIn(m) && (() => {
+              const f = filesOf(m);
+              if (!f) return null;
+              const inText = m.unreadable ? new Set<string>() : inlineAttachmentIds(m.body, f);
+              const rest = f.items.filter((a) => !inText.has(a.file_id));
+              return rest.length > 0 ? <MessageAttachments hubId={target.hubId} items={rest} /> : null;
+            })()}
             {!growsIn(m) && !m.unreadable && <PageCards body={m.body} />}
             {(steersOf.get(m.id) || []).map((s) => (
               <div className="conv-supplement" key={s.id} data-supplement={s.id}>
@@ -2094,9 +2132,12 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                   ? <span className="conv-unreadable"><Lock />{L("已加密，只有双方的主人能看", "Encrypted: only the owners of both sides can read it")}</span>
                   : (() => {
                     const v = viaVoice(s.body);
-                    return v ? <><VoiceMark heard={v.heard} /><MessageContent body={v.text} /></> : <MessageContent body={s.body} />;
+                    return v ? <><VoiceMark heard={v.heard} /><MessageContent body={v.text} /></> : <MessageContent body={s.body} files={filesFor(target.hubId, s.attachments)} />;
                   })()}
-                {s.attachments && s.attachments.length > 0 && <MessageAttachments hubId={target.hubId} items={s.attachments} />}
+                {(() => {
+                  const rest = s.unreadable ? s.attachments || [] : filesBelow(s.body, filesFor(target.hubId, s.attachments));
+                  return rest.length > 0 ? <MessageAttachments hubId={target.hubId} items={rest} /> : null;
+                })()}
               </div>
             ))}
           </div>
@@ -2202,6 +2243,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       "sep" as const,
     ] : []),
     ...(!termMode && pins ? [{ label: L("置顶一个网址", "Pin an address"), icon: PinIcon, onSelect: () => setPinAdding(true) }] : []),
+    // 专注模式 (AppMode): this chat alone, full screen, centred.
+    { label: L("专注模式", "Focus mode"), icon: FocusIcon, hint: focusKey(), onSelect: () => toggleFocus(rootRef.current) },
     ...(hoEntry.show ? [{ label: hoEntry.why ? L("换一个来接着做（现在不行）", "Hand over (not now)") : L("换一个来接着做", "Hand over to another session"), icon: ArrowRightLeft, disabled: !!hoEntry.why, onSelect: () => openHandover({ hubId: target.hubId, name: target.agent }) }] : []),
     ...(!observed && (shown?.length || 0) > 0 ? [{ label: L("导出这段对话", "Export this conversation"), icon: Download, onSelect: () => setExporting(true) }] : []),
   ].filter((it, i, all) => it !== "sep" || i < all.length - 1);

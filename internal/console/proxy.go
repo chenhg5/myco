@@ -16,11 +16,13 @@ import (
 	"time"
 
 	"github.com/chenhg5/myco/internal/client"
+	"github.com/chenhg5/myco/internal/sysproxy"
 )
 
 // The App's network proxy (Settings › 代理): how it reaches workspaces,
-// update checks, translation and voice services. By default, as before,
-// the proxy in the environment (HTTPS_PROXY and friends); or none; or one
+// update checks, translation and voice services. By default the proxy in
+// the environment (HTTPS_PROXY and friends), else the system's (Windows'
+// and macOS' network settings); or none; or one
 // set here, HTTP or SOCKS5, with a user and password if it needs them (the
 // password in the keychain). Addresses on this computer and the local
 // network always go direct: a workspace there keeps working.
@@ -31,7 +33,7 @@ import (
 
 // ProxyConfig is the App's proxy setting.
 type ProxyConfig struct {
-	// Mode: "system" (the environment's), "none", or "manual".
+	// Mode: "system" (the environment's, else the system settings'), "none", or "manual".
 	Mode string `json:"mode"`
 	// Type of a manual proxy: "http", "https" or "socks5".
 	Type string `json:"type,omitempty"`
@@ -120,6 +122,14 @@ func (c ProxyConfig) proxyURL(password string) *url.URL {
 	return u
 }
 
+// envProxy and systemProxyFor are the environment's proxy for a request
+// and the system settings' proxy for a host (tests replace them: Go reads
+// the environment once per process).
+var (
+	envProxy       = http.ProxyFromEnvironment
+	systemProxyFor = sysproxy.For
+)
+
 // direct says whether a host is on this computer or the local network.
 func direct(host string) bool {
 	h := strings.ToLower(strings.TrimSuffix(host, "."))
@@ -144,14 +154,24 @@ func proxyFor(c ProxyConfig, password string) func(*http.Request) (*url.URL, err
 			return u, nil
 		}
 	}
-	// The environment's proxy, but not for this computer or the local
-	// network: a proxy app's HTTPS_PROXY without NO_PROXY would otherwise
-	// send a workspace at 192.168.x.x through it, and that usually fails.
+	// The environment's proxy, else the one in the system's network
+	// settings (an App started from the desktop has no HTTPS_PROXY, and in
+	// some places GitHub is reachable only through a proxy app's "system
+	// proxy"), but not for this computer or the local network: a proxy
+	// app's HTTPS_PROXY without NO_PROXY would otherwise send a workspace at
+	// 192.168.x.x through it, and that usually fails. A system proxy that is
+	// not listening (its app quit) is skipped.
 	return func(r *http.Request) (*url.URL, error) {
 		if direct(r.URL.Hostname()) {
 			return nil, nil
 		}
-		return http.ProxyFromEnvironment(r)
+		if u, err := envProxy(r); u != nil || err != nil {
+			return u, err
+		}
+		if u := systemProxyFor(r.URL.Hostname()); u != nil {
+			return u, nil
+		}
+		return nil, nil
 	}
 }
 

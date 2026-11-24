@@ -63,11 +63,12 @@ var actionProviders = map[string][]string{
 	"remote.desktop": {"remote.desktop.view", "remote.desktop.control"},
 	// A shared page's own content, rendered by its app (page.export: a
 	// file of what the agent can already read).
-	"page": {"page.export"},
+	"page":       {"page.export"},
+	"server.ssh": {"server.ssh.read", "server.ssh.manage"},
 }
 
 // providerTarget is the kind of target each provider acts on.
-var providerTarget = map[string]string{"remote.desktop": "machine", "page": "page"}
+var providerTarget = map[string]string{"remote.desktop": "machine", "page": "page", "server.ssh": "machine"}
 
 // providerOf is the provider a permission or action name belongs to.
 func providerOf(name string) string {
@@ -184,6 +185,9 @@ func (s *ActionService) RequestGrant(ctx context.Context, agent *domain.Agent, r
 		return nil, err
 	}
 	if req.Target.Kind == "page" {
+		if req.Target.Resource != nil {
+			return nil, domain.Errf(domain.CodeInvalidArgument, "page targets do not accept resource")
+		}
 		return s.requestPageGrant(ctx, agent, req, dry)
 	}
 	if req.Target.Kind != "machine" {
@@ -197,6 +201,32 @@ func (s *ActionService) RequestGrant(ctx context.Context, agent *domain.Agent, r
 	perms, err := checkPermissions(req.Permissions, "machine")
 	if err != nil {
 		return nil, err
+	}
+	targetName := m.Name
+	if req.Target.Resource != nil || contains(perms, "server.ssh.read") {
+		if req.Target.Resource == nil || req.Target.Resource.Provider != "server.ssh" {
+			return nil, domain.Errf(domain.CodeInvalidArgument, "SSH grants require an enabled, bound profile resource")
+		}
+		for _, p := range perms {
+			if providerOf(p) != "server.ssh" {
+				return nil, domain.Errf(domain.CodeInvalidArgument, "a resource grant cannot mix providers")
+			}
+		}
+		s.mu.Lock()
+		var found *api.ActionResource
+		for _, h := range s.hosts {
+			if h.MachineID == m.ID && h.Provider == "server.ssh" && sameResource(h.Resource, req.Target.Resource) && s.clock.Now().Sub(h.LastSeenAt) <= actionHostStale {
+				cp := *h.Resource
+				found = &cp
+				break
+			}
+		}
+		s.mu.Unlock()
+		if found == nil {
+			return nil, domain.Errf(domain.CodeUnsupported, "this SSH profile is not enabled on the controller App, or its binding changed")
+		}
+		req.Target.Resource = found
+		targetName += " / " + found.Name + " / " + found.Summary
 	}
 	reason := strings.TrimSpace(req.Reason)
 	if reason == "" {
@@ -227,7 +257,7 @@ func (s *ActionService) RequestGrant(ctx context.Context, agent *domain.Agent, r
 	}
 	now := s.clock.Now()
 	g := &actionGrant{agentOwner: agent.Owner, ttl: ttl, idem: map[string]string{}, idemHash: map[string]string{}}
-	g.ActionGrant = api.ActionGrant{ID: s.ids.New("agr"), Agent: string(agent.Name), Owner: owner.Name, Target: req.Target, TargetName: m.Name,
+	g.ActionGrant = api.ActionGrant{ID: s.ids.New("agr"), Agent: string(agent.Name), Owner: owner.Name, Target: req.Target, TargetName: targetName,
 		Requested: perms, Reason: clipRunes(reason, 500), MessageID: req.MessageID, State: api.GrantPending, CreatedAt: now}
 	if dry {
 		g.Permissions = perms
@@ -237,7 +267,7 @@ func (s *ActionService) RequestGrant(ctx context.Context, agent *domain.Agent, r
 		return &out, nil
 	}
 	payload, _ := json.Marshal(map[string]string{"grant_id": g.ID})
-	ap, err := s.approvals.AskTyped(ctx, owner, agent.Name, domain.ApprovalKindActionGrant, grantWhat(g.Agent, m.Name, perms, ttl), reason, string(payload))
+	ap, err := s.approvals.AskTyped(ctx, owner, agent.Name, domain.ApprovalKindActionGrant, grantWhat(g.Agent, targetName, perms, ttl), reason, string(payload))
 	if err != nil {
 		return nil, err
 	}
@@ -339,9 +369,20 @@ func (s *ActionService) machineByIDOrName(ctx context.Context, idOrName string) 
 func grantWhat(agent, machine string, perms []string, ttl time.Duration) string {
 	do := "看电脑 " + machine + " 的屏幕"
 	for _, p := range perms {
+		if p == "server.ssh.read" {
+			do = "读取服务器 " + machine + " 的状态与日志"
+		}
+		if p == "server.ssh.manage" {
+			do = "读取服务器 " + machine + " 并启动、停止或重启服务与容器"
+		}
 		if p == "remote.desktop.control" {
 			do = "看并操作电脑 " + machine + " 的屏幕（键盘和鼠标）"
 		}
+	}
+	// Manage implies read, so its more powerful description must win regardless
+	// of the normalized permission order.
+	if contains(perms, "server.ssh.manage") {
+		do = "读取服务器 " + machine + " 并启动、停止或重启服务与容器"
 	}
 	_ = agent // (the card says who asks)
 	return fmt.Sprintf("%s，%d 分钟", do, int(ttl.Round(time.Minute)/time.Minute))
@@ -368,6 +409,9 @@ func checkPermissions(in []string, kind string) ([]string, error) {
 			return nil, domain.Errf(domain.CodeInvalidArgument, "%s is not for a %s target", p, kind)
 		}
 		set[p] = true
+	}
+	if set["server.ssh.manage"] {
+		set["server.ssh.read"] = true
 	}
 	if set["remote.desktop.control"] {
 		set["remote.desktop.view"] = true
@@ -724,10 +768,19 @@ func (s *ActionService) RegisterHost(ctx context.Context, by Actor, req api.Acti
 		if err != nil {
 			return nil, err
 		}
-		if mach.Owner != m.ID && !by.Manages() {
+		if mach.Owner != m.ID && (!by.Manages() || req.Provider == "server.ssh") {
 			return nil, domain.Errf(domain.CodePermissionDenied, "%s is not your computer", mach.Name)
 		}
 		where, machineID = mach.Name, mach.ID
+	}
+	if req.Provider == "server.ssh" {
+		if err := validateSSHResource(req.Resource); err != nil {
+			return nil, err
+		}
+		cp := *req.Resource
+		req.Resource = &cp
+	} else if req.Resource != nil {
+		return nil, domain.Errf(domain.CodeInvalidArgument, "this provider does not accept resource")
 	}
 	if strings.TrimSpace(req.Generation) == "" {
 		return nil, domain.Errf(domain.CodeInvalidArgument, "generation is required (a fresh value each time the host starts)")
@@ -745,7 +798,7 @@ func (s *ActionService) RegisterHost(ctx context.Context, by Actor, req api.Acti
 	}
 	now := s.clock.Now()
 	h := &actionHost{owner: m.ID, actions: req.Actions}
-	h.ActionHost = api.ActionHost{ID: s.ids.New("ahs"), MachineID: machineID, Provider: req.Provider, Generation: req.Generation, LastSeenAt: now}
+	h.ActionHost = api.ActionHost{ID: s.ids.New("ahs"), MachineID: machineID, Resource: req.Resource, Provider: req.Provider, Generation: req.Generation, LastSeenAt: now}
 	s.mu.Lock()
 	for id, old := range s.hosts {
 		// A computer has one host per provider: a new registration replaces
@@ -755,7 +808,7 @@ func (s *ActionService) RegisterHost(ctx context.Context, by Actor, req api.Acti
 		// made two Apps take it from each other in a tight loop. Hosts long
 		// gone are dropped whoever they belong to.
 		gone := now.Sub(old.LastSeenAt) > actionHostGone
-		same := old.Provider == h.Provider && old.MachineID == h.MachineID &&
+		same := old.Provider == h.Provider && old.MachineID == h.MachineID && sameResourceID(old.Resource, h.Resource) &&
 			(machineID != "" || (old.owner == h.owner && now.Sub(old.LastSeenAt) > actionHostStale))
 		if !gone && !same {
 			continue
@@ -766,7 +819,9 @@ func (s *ActionService) RegisterHost(ctx context.Context, by Actor, req api.Acti
 			continue // its grants find out in refresh
 		}
 		for _, g := range s.grants {
-			if g.hostSeen == old.ID {
+			if same && !sameResource(old.Resource, h.Resource) && g.Target.ID == h.MachineID && sameResourceID(g.Target.Resource, old.Resource) {
+				s.close(g, api.GrantRevoked, "SSH target binding changed")
+			} else if g.hostSeen == old.ID {
 				g.hostSeen = h.ID
 			}
 		}
@@ -811,12 +866,12 @@ func (s *ActionService) hostServes(ctx context.Context, h *actionHost, g *action
 	if g.Target.Kind == "page" {
 		return s.memberSees(ctx, h.owner, g.Target.ID)
 	}
-	return h.MachineID == g.Target.ID
+	return h.MachineID == g.Target.ID && sameResource(h.Resource, g.Target.Resource)
 }
 
 func (s *ActionService) hostOf(by Actor, id, generation string) (*actionHost, error) {
 	h := s.hosts[id]
-	if h == nil || (by.Member != nil && h.owner != by.Member.ID && !by.Manages()) {
+	if h == nil || (by.Member != nil && h.owner != by.Member.ID && (!by.Manages() || h.Provider == "server.ssh")) {
 		return nil, domain.Errf(domain.CodeNotFound, "host %s not found", id).WithSuggestion("register it again")
 	}
 	if generation != "" && generation != h.Generation {
@@ -888,6 +943,9 @@ func (s *ActionService) HostJob(ctx context.Context, by Actor, jobID, hostID, ge
 		if j == nil || j.hostID != h.ID {
 			return nil, true, domain.Errf(domain.CodeNotFound, "job %s not found on this host", jobID)
 		}
+		// A host checking a running job is still alive, including while a batch
+		// of bounded SSH jobs is being processed between queue polls.
+		h.LastSeenAt = s.clock.Now()
 		out := &api.ActionHostJobState{Job: j.ActionJob, GrantState: api.GrantEnded}
 		if g := s.grants[j.GrantID]; g != nil {
 			s.refresh(ctx, g)

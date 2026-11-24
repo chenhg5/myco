@@ -4907,6 +4907,116 @@ html.fp-docked .app-main .sp-side {
   color: var(--fg);
   opacity: 1;
 }
+/* ── Beyond text (mdRich.ts) ──
+   A diagram (```mermaid): a picture on a quiet card, its source one click
+   away; drawn in the theme's colours. Until it is drawn, a line saying so;
+   one that cannot be drawn says why and shows its source. */
+.md-mermaid {
+  margin: 8px 0;
+  border-radius: 8px;
+  box-shadow: 0 0 0 1px var(--line-2);
+  background: var(--card);
+  overflow: hidden;
+}
+.md-mermaid-pic {
+  display: flex;
+  justify-content: center;
+  padding: 14px 12px 6px;
+  overflow-x: auto;
+  cursor: zoom-in;
+}
+.md-mermaid-pic svg { max-width: 100%; height: auto; }
+.md-mermaid-wait { padding: 18px 0; font-size: 12px; color: var(--muted); }
+.md-mermaid:not([data-state=drawn]) .md-mermaid-pic { cursor: default; }
+.md-mermaid[data-state=error] .md-mermaid-pic { display: none; }
+.md-mermaid-why { display: none; padding: 10px 12px 0; font-size: 12px; color: var(--muted); }
+.md-mermaid[data-state=error] .md-mermaid-why { display: block; }
+.md-mermaid-src > summary {
+  display: inline-block;
+  margin: 2px 10px 8px;
+  font-size: 11.5px;
+  color: var(--muted);
+  list-style: none;
+  cursor: default;
+}
+.md-mermaid-src > summary::-webkit-details-marker { display: none; }
+.md-mermaid-src > summary:hover { color: var(--fg); }
+.md-mermaid-src[open] > summary { margin-bottom: 0; }
+.md-mermaid-src .md-code { margin: 6px 10px 10px; }
+.md-mermaid[data-state=error] .md-mermaid-src > summary { display: none; }
+.md-mermaid[data-state=error] .md-mermaid-src .md-code { margin-top: 8px; }
+/* Pictures side by side (two or more alone in a paragraph). */
+.md-gallery {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin: 8px 0;
+}
+.md-gallery[data-n="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.md-gallery img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-height: 260px;
+  object-fit: cover;
+  border-radius: 6px;
+  box-shadow: 0 0 0 0.5px var(--line);
+  background: var(--pill);
+}
+/* …with names and a line each under them (titled pictures). */
+.md-gallery.is-captioned { gap: 14px 10px; }
+.md-gallery.is-captioned img { aspect-ratio: 1; height: auto; max-height: none; }
+.md-fig { margin: 0; min-width: 0; }
+.md-fig figcaption { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; font-size: 12.5px; line-height: 1.45; }
+.md-fig figcaption b { font-weight: 600; color: var(--fg); }
+.md-fig figcaption span { color: var(--muted); }
+/* A list of things, each starting with its picture: rows, the picture on
+   the left, its name and words beside it, a hairline between them. */
+.md ul:has(> li.md-media), .md ol:has(> li.md-media) { padding-left: 0; list-style: none; }
+.md li.md-media {
+  position: relative;
+  /* (the picture and the padding around it: boxes here count padding in
+     their height, so a row with one short line still holds its picture) */
+  box-sizing: border-box;
+  min-height: 84px;
+  margin: 0;
+  padding: 10px 0 10px 78px;
+  list-style: none;
+}
+.md li.md-media + li.md-media { border-top: 1px solid var(--line-2); }
+.md li.md-media > p { margin: 0; }
+.md img.md-media-pic {
+  position: absolute;
+  left: 0;
+  top: 10px;
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 12px;
+  box-shadow: 0 0 0 0.5px var(--line);
+  background: var(--pill);
+}
+.md img { cursor: zoom-in; }
+.md a img { cursor: pointer; }
+/* Code colours (highlight.js), quiet, from the theme. */
+.md .hljs-comment, .md .hljs-quote { color: var(--muted); font-style: italic; }
+.md .hljs-keyword, .md .hljs-selector-tag, .md .hljs-literal, .md .hljs-type, .md .hljs-meta .hljs-keyword { color: #a2439b; }
+.md .hljs-string, .md .hljs-regexp, .md .hljs-addition, .md .hljs-attribute, .md .hljs-meta .hljs-string { color: #2f7d32; }
+.md .hljs-number, .md .hljs-symbol, .md .hljs-bullet, .md .hljs-link { color: #b25b00; }
+.md .hljs-title, .md .hljs-title.function_, .md .hljs-section, .md .hljs-name { color: #2c62c6; }
+.md .hljs-built_in, .md .hljs-class .hljs-title, .md .hljs-title.class_, .md .hljs-variable.language_ { color: #0f7f8f; }
+.md .hljs-attr, .md .hljs-variable, .md .hljs-template-variable, .md .hljs-property, .md .hljs-params { color: #8a5a00; }
+.md .hljs-deletion { color: #c03535; }
+.md .hljs-meta { color: var(--muted); }
+.md .hljs-emphasis { font-style: italic; }
+.md .hljs-strong { font-weight: 600; }
+.dark .md .hljs-keyword, .dark .md .hljs-selector-tag, .dark .md .hljs-literal, .dark .md .hljs-type, .dark .md .hljs-meta .hljs-keyword { color: #d58fd0; }
+.dark .md .hljs-string, .dark .md .hljs-regexp, .dark .md .hljs-addition, .dark .md .hljs-attribute, .dark .md .hljs-meta .hljs-string { color: #8fcf8a; }
+.dark .md .hljs-number, .dark .md .hljs-symbol, .dark .md .hljs-bullet, .dark .md .hljs-link { color: #e8a865; }
+.dark .md .hljs-title, .dark .md .hljs-title.function_, .dark .md .hljs-section, .dark .md .hljs-name { color: #84aef0; }
+.dark .md .hljs-built_in, .dark .md .hljs-class .hljs-title, .dark .md .hljs-title.class_, .dark .md .hljs-variable.language_ { color: #6cc6d1; }
+.dark .md .hljs-attr, .dark .md .hljs-variable, .dark .md .hljs-template-variable, .dark .md .hljs-property, .dark .md .hljs-params { color: #dcb46c; }
+.dark .md .hljs-deletion { color: #f08080; }
 .md-fold-body {
   position: relative;
 }
@@ -9442,3 +9552,392 @@ html.os-other ::-webkit-scrollbar-thumb:hover, html.os-other ::-webkit-scrollbar
 /* A choice that can't be made from here (a remote custom address without
    end-to-end encryption): its name faded, the reason left readable. */
 .app-provider-opt.is-off b, .app-provider-opt.is-off input { opacity: 0.45; }
+.conv-menu-hint { margin-left: auto; padding-left: 12px; font-size: 11px; color: var(--muted); }
+
+/* ---------- 专注模式 (focus mode) ----------
+   The chat you are in alone, on a plain background: no sidebar, no top
+   bar, no members; the zoomed pane's conversation centred at a reading
+   width. A small button at the top right (and Esc) leaves it. */
+.app-shell.is-focus { background: var(--bg); }
+/* The background you pick (FocusBg.tsx): its light and dark shade come as
+   --focus-bg-l / --focus-bg-d. A solid tone over the whole page becomes the
+   page's own colour; a pattern, or any tone "outside only", is drawn behind
+   the page, and the conversation's column keeps the theme's colour then,
+   like a sheet on a desk. */
+.app-shell.is-focus[data-focus-bg] { --focus-bg: var(--focus-bg-l); background: var(--focus-bg); }
+.dark .app-shell.is-focus[data-focus-bg] { --focus-bg: var(--focus-bg-d); }
+.app-shell.is-focus[data-focus-kind="solid"][data-focus-scope="all"] { --bg: var(--focus-bg); }
+/* (in the dark, cards and bubbles a shade above that tone, not darker than it) */
+.dark .app-shell.is-focus[data-focus-kind="solid"][data-focus-scope="all"] {
+  --card: color-mix(in srgb, var(--focus-bg) 93%, #fff);
+  --pill: color-mix(in srgb, var(--focus-bg) 88%, #fff);
+  --pill-hover: color-mix(in srgb, var(--focus-bg) 84%, #fff);
+}
+.app-shell.is-focus[data-focus-kind="pattern"] .app-main,
+.app-shell.is-focus[data-focus-scope="outside"] .app-main { background: transparent; }
+.app-shell.is-focus[data-focus-kind="pattern"][data-focus-scope="all"] .conv-compose { background: transparent; }
+.app-shell.is-focus[data-focus-scope="outside"] .sp-main {
+  background: var(--bg);
+  box-shadow: 0 0 0 1px var(--line-2), 0 0 48px rgba(15, 20, 30, 0.07);
+}
+.app-shell.is-focus .app-sidebar,
+.app-shell.is-focus .app-crumbbar,
+.app-shell.is-focus .sp-side,
+.app-shell.is-focus .sp-strip,
+.app-shell.is-focus .sp-pane-zoom,
+.app-shell.is-focus .pg-tabs { display: none !important; }
+/* A page docked beside the chat waits until you leave. */
+html.is-focus .fp-panel.is-docked { display: none !important; }
+.app-shell.is-focus .app-main,
+.app-shell.is-focus.collapsed .app-main {
+  margin: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+/* Room on each side for the button at the top right. */
+.app-shell.is-focus .sp-main {
+  max-width: min(880px, calc(100% - 112px));
+  width: 100%;
+  margin: 0 auto;
+}
+/* The header shares the column of the messages and the box you write in:
+   its line and its edges end where the box's do, not 90px further out. */
+.app-shell.is-focus .conv-detail > .conv-head,
+.app-shell.is-focus .conv-detail > .pin-bar,
+.app-shell.is-focus .conv-detail > .shell-stuck {
+  --conv-box: min(calc(var(--conv-col) - var(--conv-pad) - var(--conv-pad-l)), calc(100% - var(--conv-pad) - var(--conv-pad-l)));
+  margin-left: calc(var(--conv-pad-l) + (100% - var(--conv-pad) - var(--conv-pad-l) - var(--conv-box)) / 2);
+  margin-right: calc(var(--conv-pad) + (100% - var(--conv-pad) - var(--conv-pad-l) - var(--conv-box)) / 2);
+}
+.app-shell.is-focus .conv-detail > .conv-head { padding: 0 2px; }
+.app-shell.is-focus .conv-detail > .pin-bar { padding-left: 2px; }
+/* The search in the chat ends where the column does. */
+.app-shell.is-focus .conv-body > .conv-search {
+  right: calc(var(--conv-pad) + (100% - var(--conv-pad) - var(--conv-pad-l) - min(calc(var(--conv-col) - var(--conv-pad) - var(--conv-pad-l)), calc(100% - var(--conv-pad) - var(--conv-pad-l)))) / 2);
+}
+/* The buttons at the top right, together: the background and the way out.
+   Quiet until pointed at, so they stay out of the work. */
+.focus-tools {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.focus-tone {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  opacity: .35;
+  transition: opacity .15s, color .15s, background .15s, border-color .15s;
+}
+.focus-tools:hover .focus-tone { opacity: .7; }
+.focus-tone:hover,
+.focus-tone:focus-visible { opacity: 1 !important; color: var(--fg); background: var(--bg); border-color: var(--line); }
+.focus-tone svg { width: 13px; height: 13px; }
+.focus-tone.is-open { opacity: 1; color: var(--fg); background: var(--bg); border-color: var(--line); }
+/* Its panel: where the background goes, and the tones as swatches. */
+.focus-bg { position: relative; }
+.focus-bg-pop {
+  position: fixed;
+  top: 48px;
+  right: 12px;
+  z-index: 60;
+  width: 312px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: 0 0 0 1px var(--line), 0 12px 32px rgba(15, 20, 30, 0.16);
+  color: var(--fg);
+}
+.focus-bg-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; font-size: 12.5px; font-weight: 500; }
+.focus-bg-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px 6px; }
+.focus-bg-tile { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; padding: 0; border: 0; background: none; font: inherit; cursor: default; }
+.focus-bg-sw {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--sw-l);
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--fg);
+}
+.dark .focus-bg-sw { background: var(--sw-d); }
+.focus-bg-tile.is-theme .focus-bg-sw { background: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--fg) 7%, transparent) 6px 7px), var(--bg); }
+.focus-bg-sw svg { width: 14px; height: 14px; }
+.focus-bg-tile:hover .focus-bg-sw { box-shadow: inset 0 0 0 1px var(--line), 0 2px 8px rgba(15, 20, 30, 0.12); }
+.focus-bg-tile.is-on .focus-bg-sw { box-shadow: inset 0 0 0 2px var(--fg); }
+.focus-bg-tile:focus-visible { outline: none; }
+.focus-bg-tile:focus-visible .focus-bg-sw { outline: 2px solid var(--focus); outline-offset: 2px; }
+.focus-bg-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; color: var(--muted); }
+.focus-bg-tile.is-on .focus-bg-name { color: var(--fg); }
+/* 自定义: a rainbow until you pick a colour; the picker is the system's own. */
+.focus-bg-tile { position: relative; }
+.focus-bg-tile.is-pick .focus-bg-sw { background: conic-gradient(from 200deg, #f2b6b6, #f2dfa6, #b8e2b4, #a9d4ef, #c9b5ef, #f2b6b6); color: rgba(20, 20, 25, 0.7); }
+.focus-bg-input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: default; }
+.focus-bg-hint { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 10px 0 0; font-size: 11.5px; color: var(--muted); }
+/* Just the icon, quiet, at the top right; pointed at, it says what it
+   does and its key. */
+.focus-exit {
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  min-width: 30px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: .6;
+  transition: opacity .15s, color .15s;
+}
+.focus-exit:hover,
+.focus-exit:focus-visible { opacity: 1; color: var(--fg); }
+.focus-exit svg { flex: none; width: 13px; height: 13px; }
+.focus-exit-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 0;
+  overflow: hidden;
+  transition: max-width .18s ease, margin .18s ease;
+}
+.focus-exit:hover .focus-exit-label,
+.focus-exit:focus-visible .focus-exit-label { max-width: 140px; margin-left: 6px; }
+.focus-exit kbd {
+  font: 11px ui-monospace, "SF Mono", Menlo, monospace;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--pill-hover);
+  color: var(--muted);
+}
+
+/* ── myco-ui blocks (ui/UiBlock.tsx): an agent's structured parts of a
+   message, drawn with the shared catalog's components in the App's look:
+   quiet cards with hairlines, tones as tints, nothing louder than the
+   conversation around it. ── */
+.md-parts { width: 100%; min-width: 0; }
+/* (an agent's message sizes to its words; with a block of components in
+   it, it takes the column's width) */
+.conv-bubble:has(> .md-parts > .ui-root), .conv-bubble:has(.md-fold-body > .md-parts > .ui-root) { align-self: stretch; }
+.md-parts > * + * { margin-top: 8px; }
+/* (as wide as the message: a container query box does not size to its
+   content, and the column around it shrinks what is in it) */
+.ui-root {
+  width: 100%;
+  box-sizing: border-box;
+  --ui-info: #3c6fd1;
+  container-type: inline-size;
+  margin: 8px 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--fg);
+}
+.dark .ui-root { --ui-info: #84aef0; }
+.ui-root .tone-neutral { --tone: var(--muted); }
+.ui-root .tone-info { --tone: var(--ui-info); }
+.ui-root .tone-success { --tone: var(--green); }
+.ui-root .tone-warning { --tone: var(--amber); }
+.ui-root .tone-danger { --tone: var(--red); }
+.ui-wait { margin: 8px 0; font-size: 12px; color: var(--muted); }
+.ui-muted { color: var(--muted); font-size: 12px; }
+.ui-unknown { display: inline-block; font-size: 12px; color: var(--muted); }
+.ui-broken > .ui-muted { margin-bottom: 4px; }
+/* Layout */
+.ui-card {
+  border-radius: 10px;
+  background: var(--card);
+  box-shadow: 0 0 0 1px var(--line-2);
+  overflow: hidden;
+}
+/* (a tone is a small dot before the title, not a bar down the side: a bar
+   reads as a quote) */
+.ui-card:not(.tone-neutral) .ui-card-head h4::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin: 0 7px 1px 0;
+  border-radius: 50%;
+  background: var(--tone);
+  vertical-align: middle;
+}
+.ui-card-head { padding: 12px 14px 0; }
+.ui-card-head h4 { margin: 0; font-size: 14px; font-weight: 600; }
+.ui-card-head p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+.ui-card-body { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px 14px; }
+.ui-stack { display: flex; flex-direction: column; gap: 10px; }
+.ui-stack.is-row { flex-direction: row; flex-wrap: wrap; align-items: center; }
+.ui-stack.gap-small { gap: 6px; }
+.ui-stack.gap-large { gap: 16px; }
+.ui-grid { display: grid; grid-template-columns: repeat(var(--ui-cols, 2), minmax(0, 1fr)); gap: 10px; }
+@container (max-width: 460px) {
+  .ui-grid { grid-template-columns: repeat(min(var(--ui-cols, 2), 2), minmax(0, 1fr)); }
+  .ui-gallery { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+}
+.ui-tabs-body { margin-top: 10px; }
+/* Content */
+.ui-heading { font-weight: 600; }
+.ui-heading.is-1 { font-size: 16px; }
+.ui-heading.is-2 { font-size: 14.5px; }
+.ui-heading.is-3 { font-size: 13.5px; color: var(--fg-2); }
+.ui-text.is-muted .md { color: var(--muted); }
+.ui-root .md > :first-child { margin-top: 0; }
+.ui-root .md > :last-child { margin-bottom: 0; }
+.ui-callout {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--tone) 9%, transparent);
+  box-shadow: inset 3px 0 0 var(--tone);
+}
+.ui-callout > b { display: block; margin-bottom: 2px; font-weight: 600; color: var(--tone); }
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--tone, var(--fg-2));
+  background: color-mix(in srgb, var(--tone, var(--muted)) 13%, transparent);
+}
+.ui-kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
+.ui-kv > div { display: contents; }
+.ui-kv dt { color: var(--muted); font-size: 12.5px; }
+.ui-kv dd { margin: 0; }
+.ui-kv dd:not(.tone-neutral) { color: var(--tone); }
+.ui-table { overflow-x: auto; }
+.ui-table table { margin: 0; }
+.ui-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--pill);
+  min-width: 0;
+}
+.ui-metric-label { font-size: 12px; color: var(--muted); }
+.ui-metric-value { font-size: 20px; font-weight: 600; line-height: 1.25; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.ui-metric-delta { font-size: 12px; font-weight: 500; color: var(--tone); }
+.ui-progress-top { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px; color: var(--muted); }
+.ui-progress-track { height: 6px; border-radius: 3px; background: var(--pill); overflow: hidden; }
+.ui-progress-bar { height: 100%; border-radius: 3px; background: var(--tone); transition: width .3s; }
+.ui-steps { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.ui-steps li { display: flex; gap: 8px; align-items: flex-start; }
+.ui-step-icon { display: grid; place-items: center; flex: none; width: 18px; height: 18px; margin-top: 1px; border-radius: 50%; color: var(--muted); }
+.ui-step-icon svg { width: 14px; height: 14px; }
+.ui-steps li.is-done .ui-step-icon { background: var(--green); color: #fff; }
+.ui-steps li.is-done .ui-step-icon svg { width: 11px; height: 11px; }
+.ui-steps li.is-doing .ui-step-icon { color: var(--fg); }
+.ui-steps li.is-failed .ui-step-icon { background: var(--red); color: #fff; }
+.ui-steps li.is-failed .ui-step-icon svg { width: 11px; height: 11px; }
+.ui-steps li.is-skipped .ui-step-text, .ui-steps li.is-todo .ui-step-text > span { color: var(--muted); }
+.ui-step-text { display: flex; flex-direction: column; min-width: 0; }
+.ui-step-text small { font-size: 12px; color: var(--muted); }
+.ui-spin { animation: ui-spin 1s linear infinite; }
+@keyframes ui-spin { to { transform: rotate(360deg); } }
+/* Media */
+.ui-pic { display: block; max-width: 100%; border-radius: 8px; box-shadow: 0 0 0 0.5px var(--line); background: var(--pill); cursor: zoom-in; }
+.ui-pic-missing { display: grid; place-items: center; min-height: 64px; padding: 8px; border-radius: 8px; background: var(--pill); font-size: 11.5px; color: var(--muted); }
+.ui-image { margin: 0; }
+.ui-image figcaption, .ui-diagram figcaption { margin-top: 6px; font-size: 12px; color: var(--muted); }
+.ui-gallery { display: grid; grid-template-columns: repeat(var(--ui-cols, 3), minmax(0, 1fr)); gap: 14px 10px; }
+.ui-gallery figure { margin: 0; min-width: 0; }
+.ui-gallery .ui-pic, .ui-gallery .ui-pic-missing { width: 100%; aspect-ratio: 1; object-fit: cover; }
+.ui-gallery figcaption { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin-top: 8px; }
+.ui-gallery figcaption b { font-weight: 600; }
+.ui-media { margin: 0; padding: 0; list-style: none; }
+.ui-media li { display: flex; gap: 14px; padding: 12px 0; }
+.ui-media li + li { border-top: 1px solid var(--line-2); }
+.ui-media-pic.ui-pic, .ui-media .ui-pic-missing { flex: none; width: 72px; height: 72px; object-fit: cover; border-radius: 14px; }
+.ui-media-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ui-media-title { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-weight: 600; }
+.ui-media-title a { color: var(--fg); text-decoration: underline dotted; text-underline-offset: 3px; }
+.ui-diagram { margin: 0; }
+.ui-diagram .md-mermaid { margin: 0; }
+.ui-chart { margin: 0; }
+.ui-chart figcaption { margin-bottom: 6px; font-size: 12.5px; font-weight: 600; }
+.ui-chart-xy { display: block; width: 100%; height: 200px; overflow: visible; }
+.ui-chart-pie { display: block; width: 160px; height: 160px; margin: 0 auto; }
+.ui-chart-grid { stroke: var(--line-2); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.ui-chart-tick { fill: var(--muted); font-size: 11px; }
+.ui-chart-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; font-size: 12px; color: var(--fg-2); }
+.ui-chart-legend i { display: inline-block; width: 8px; height: 8px; margin-right: 5px; border-radius: 2px; }
+/* Engineering */
+.ui-code-title { margin-bottom: -4px; font-size: 12px; color: var(--muted); }
+.ui-file { border-radius: 8px; box-shadow: 0 0 0 1px var(--line-2); background: var(--card); overflow: hidden; }
+.ui-file > summary, .ui-file-line { display: flex; align-items: center; gap: 8px; padding: 7px 10px; font-size: 12.5px; list-style: none; cursor: default; }
+.ui-file > summary::-webkit-details-marker { display: none; }
+.ui-file > summary:hover { background: var(--pill); }
+.ui-file .md-code { margin: 0; border-radius: 0; }
+.ui-file-status { flex: none; font-size: 11px; font-weight: 500; padding: 1px 6px; border-radius: 5px; background: var(--pill); color: var(--fg-2); }
+.ui-file-status.is-added { color: var(--green); background: color-mix(in srgb, var(--green) 12%, transparent); }
+.ui-file-status.is-deleted { color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent); }
+.ui-file-path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px ui-monospace, "SF Mono", Menlo, monospace; background: none !important; padding: 0 !important; }
+.ui-file-count { display: flex; gap: 6px; font: 11.5px ui-monospace, "SF Mono", Menlo, monospace; }
+.ui-file-count .is-add { color: var(--green); }
+.ui-file-count .is-del { color: var(--red); }
+.ui-tests { border-radius: 8px; box-shadow: 0 0 0 1px var(--line-2); background: var(--card); padding: 10px 12px; }
+.ui-tests-sum { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; font-size: 12.5px; }
+.ui-tests-sum > span { display: inline-flex; align-items: center; gap: 4px; }
+.ui-tests-sum svg { width: 13px; height: 13px; }
+.ui-tests-sum .is-pass { color: var(--green); }
+.ui-tests-sum .is-fail { color: var(--red); font-weight: 600; }
+.ui-tests ul { margin: 8px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.ui-tests li { font-size: 12.5px; }
+.ui-tests li::before { content: "●"; margin-right: 6px; font-size: 8px; vertical-align: middle; color: var(--green); }
+.ui-tests li.is-failed::before { color: var(--red); }
+.ui-tests li.is-skipped::before { color: var(--faint); }
+.ui-test-name { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
+.ui-tests li pre { margin: 4px 0 2px 14px; padding: 6px 8px; border-radius: 6px; background: var(--pill); font-size: 11.5px; white-space: pre-wrap; color: var(--fg-2); }
+/* Actions */
+.ui-btn { text-decoration: none; }
+.ui-root .ui-stack.is-row > .ui-btn { flex: none; }
+
+/* ── 待处理 (NoticesPanel.tsx): what waits for you, as the Dock badge
+   counts it; one row each, a click goes there. ── */
+.nt-modal { width: min(560px, calc(100vw - 32px)); }
+.nt-empty { display: flex; justify-content: center; align-items: center; gap: 8px; padding: 28px 0; text-align: center; font-size: 13px; color: var(--muted); }
+.nt-list { display: flex; flex-direction: column; max-height: min(60vh, 520px); margin: 4px -8px 0; padding: 0; overflow-y: auto; list-style: none; }
+.nt-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+.nt-row:hover { background: var(--pill); }
+.nt-row:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--focus); }
+/* (black, white and grey: the words say what it is, not a colour) */
+.nt-icon { display: grid; place-items: center; flex: none; width: 28px; height: 28px; border-radius: 8px; color: var(--fg-2); background: var(--pill); }
+.nt-icon svg { width: 15px; height: 15px; }
+.nt-main { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.nt-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; font-size: 13px; }
+.nt-kind { font-weight: 500; color: var(--fg); }
+.nt-who { color: var(--muted); }
+.nt-hub { font-size: 11.5px; color: var(--muted); }
+.nt-subject { font-size: 12.5px; color: var(--fg-2); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.nt-time { flex: none; padding-top: 2px; font-size: 11.5px; color: var(--muted); }
+.nt-foot { display: flex; align-items: center; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line-2); }
+.nt-hint { flex: 1; font-size: 11.5px; line-height: 1.5; color: var(--muted); }

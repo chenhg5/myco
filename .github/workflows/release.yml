@@ -210,3 +210,4 @@ jobs:
           else
             gh release create "$v" bin/* --target "$GITHUB_SHA" --generate-notes
           fi
+

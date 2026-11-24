@@ -381,6 +381,8 @@ myco runner provider show --agent <agent 名>                         # 看下�
 ```
 固定的服务商只记 cc-switch 里的 ID，每次唤醒前重新读取，所以在 cc-switch 里改了密钥会自动生效，密钥也不会被复制一份。如果它在 cc-switch 里被删掉了，节点会退回跟随本机，App 里会显示"指定的服务商已不存在"。在 App 里"手动填写"的地址和密钥，会写进这个节点的 env 文件（`~/.myco/env/<agent>.env`，权限 600）。改动从节点收到的下一条消息开始生效，不用重启 runner。支持 Claude Code 和 Codex 节点（`myco runner provider list --cli codex`）：Codex 的服务商通过 `codex -c` 参数逐次覆盖，只覆盖和服务商有关的设置（地址、模型、密钥），不动权限和其他配置，也不影响会话续接。
 
+**会话加入时带上它用的变量**：后台服务（launchd/systemd）不加载 shell 配置，所以 `myco join`（以及在 App 里加会话）会把这个会话连模型用的变量留给 runner。Codex：`CODEX_HOME`、`config.toml` 里各服务商 `env_key` 指定的变量（magpie 这类网关、cc-switch 服务商的密钥），用内置 OpenAI 服务商时还有 `OPENAI_API_KEY`、`OPENAI_BASE_URL`。Claude Code：`ANTHROPIC_*` 和它的服务商开关，但和 `~/.claude/settings.json` 里相同的值不带（继续从文件读，cc-switch 里切换服务商照常生效）。两者都带代理变量。这些变量写进该 agent 的 env 文件（`~/.myco/env/<agent>.env`，权限 600，和已有内容合并），只显示变量名。App 会从你的登录 shell 读取这些变量（从 Dock、访达打开的 App 拿不到 `~/.zshrc` 里 export 的东西），也会按那里设置的 `CODEX_HOME`、`CLAUDE_CONFIG_DIR` 找会话。`myco join --no-env` 可以不带。
+
 **后台服务里的 CLI 认证失败**（比如 claude 报 `OAuth session expired and could not be refreshed`）：后台服务（launchd/systemd）**不会加载你的 shell 配置**。如果你的 CLI 是靠 shell 里导出的变量来配置的，比如第三方 Anthropic 兼容服务的 `ANTHROPIC_BASE_URL` 加 `ANTHROPIC_API_KEY`（或 `ANTHROPIC_AUTH_TOKEN`），后台的 claude 就拿不到这些变量。在一个 CLI 能正常工作的终端里执行：
 ```bash
 myco runner env capture --agent <agent 名> --dry-run   # 先看会抓取哪些变量（只显示变量名）
@@ -468,7 +470,7 @@ myco runner service uninstall          # 停止并删除
 
 **要走代理才能上网的机器**：后台服务不会读 `~/.zshrc`、`~/.bashrc`，代理只写在那里的话，runner 启动的 claude、codex 连不上模型（报 `Network unreachable`、`request timed out`）。在设置了代理的终端里重新执行一次 `myco runner service install`，就会把 `HTTPS_PROXY`、`HTTP_PROXY`、`ALL_PROXY`、`NO_PROXY`（大小写都算）一起写进服务定义。带用户名或密码的代理地址不会写进去（服务定义其他用户可读），会提示你改放到 agent 的 `env_file` 里。Linux 上安装时会顺手打开 linger（`loginctl enable-linger`），注销、关掉最后一个 SSH 或 WSL 窗口后 runner 也继续运行；系统不让你自己打开时，安装结果里会提示执行 `sudo loginctl enable-linger <用户名>`。
 
-**App 走代理**：桌面 App（和它连的工作区、更新检查、翻译、语音服务）的代理在 App 的「设置 › 代理」里设：跟系统环境（默认，读 `HTTPS_PROXY` 等环境变量）、不用代理，或者手动填 SOCKS5 / HTTP 代理（比如本机 Clash 的 `127.0.0.1:7890`），可以先「试一下」再保存。本机和局域网里的地址总是直连。这只管 App 自己；runner 启动的 agent 用上面说的服务环境。 iPhone 上的 App 也有「设置 › 代理」：默认跟 iPhone 自己的代理和 VPN 设置，也可以不用代理，或手动填一个 SOCKS5 / HTTP 代理（比如电脑上的 Clash，要填电脑在局域网里的地址，并在 Clash 里打开「允许局域网连接」）。
+**App 走代理**：桌面 App（和它连的工作区、更新检查、翻译、语音服务）的代理在 App 的「设置 › 代理」里设：跟系统（默认：读 `HTTPS_PROXY` 等环境变量，没有就用 Windows、macOS 网络设置里的代理，比如 Clash、v2rayN 打开的「系统代理」；代理软件没在运行时直连）、不用代理，或者手动填 SOCKS5 / HTTP 代理（比如本机 Clash 的 `127.0.0.1:7890`），可以先「试一下」再保存。本机和局域网里的地址总是直连。这只管 App 自己；runner 启动的 agent 用上面说的服务环境。 iPhone 上的 App 也有「设置 › 代理」：默认跟 iPhone 自己的代理和 VPN 设置，也可以不用代理，或手动填一个 SOCKS5 / HTTP 代理（比如电脑上的 Clash，要填电脑在局域网里的地址，并在 Clash 里打开「允许局域网连接」）。
 
 每个 agent 的运行参数写在它自己的身份文件里，比如模型和权限：
 ```yaml
@@ -969,7 +971,7 @@ myco page data watch --page pg_xxx            # 等着看人在网页里改了�
 给 agent 的内容是一层层给的，应用再多也不会一下子塞给它：技能里只有一小段怎么用应用（不列应用）；`myco template list` 每个应用只有一行（叫什么、做什么用、分类，不带图标、数据结构和说明，可以按 `--category`、`--query` 筛）；选中一个再用 `myco template get` 或 `use` 拿到它自己的数据结构和说明（`agent.md`）。
 - **数据**：每条记录单独存、带版本号，同时改同一条时后到的会被拒，并拿到最新的那条；改不同的行互不影响。用应用建的网页会按应用的字段检查每条记录。一条最多 64KB，一个网页最多 2 万条。
 - **网页里**：myco 桥多了 `myco.data.list / get / put / remove / on`（读写记录、收到别人改的）和 `myco.download(文件名, 内容, 类型)`（导出的 CSV、Excel、PDF、图片，以及视频剪辑导出的 mp4，存到「下载」，在访达 / 资源管理器里显示出来；存视频要新版本的 App）。
-- **官方应用**（Hub v0.20.5 起，每个工作区都有）：`myco/table` 表格（像飞书表格：列有类型，单选、多选是彩色标签；框选复制、从 Excel 粘贴、拖填充柄往下填；拖列宽、拖动行和列；筛选、排序、Ctrl+F 搜索；导出 Excel / CSV）、`myco/base` 多维表格（同一套表格，加上看板、日历、画廊、表单视图，点一条在右侧展开）、`myco/doc` 文档（像飞书文档：输入「/」插入标题、列表、待办、表格、代码块，选中文字改格式，拖动段落；每段单独保存，两个人改不同段落不冲突；导出 Markdown / 网页）、`myco/slides` 幻灯片（agent 写每页的版式和内容，网页按主题排好：封面、要点、图表、数字卡片、表格、引言；点哪改哪，拖动换顺序，全屏放映，导出能接着改的 PowerPoint）。Hub v0.20.6 起官方应用按类分栏，还有：编程开发的「代码编辑器」（VS Code 同款编辑器，文件树、多标签、HTML 预览、下载 zip）、「任务追踪」（像 Linear：问题有编号、状态、优先级、负责人、标签，列表和看板，键盘操作，问题可以指给 agent，它改状态、写评论）和「开发者工具箱」（JSON、Base64、URL、MD5/SHA、时间戳、UUID、JWT、正则、文本对比等）；效率工具的「笔记」（像 Notion：一层层的页面、图标和封面、「/」插入各种块、搜索、收藏、回收站，agent 能建页面、往里写）「待办清单」；生活的「记账本」「习惯打卡」；创意设计的「白板」「思维导图」「视频剪辑」（导入 mp4，时间线上分割、裁剪、调顺序、变速，加文字、模糊和马赛克，在本机导出 mp4；视频只存在这台电脑上，Hub 只存剪辑方案，agent 按备注帮你剪）；游戏的「五子棋」（能和 agent 下）「数独」。官方应用从 Hub v0.20.7 起单独发布：Hub 每天自己拉新的（`myco template sync` 或应用页的「检查官方应用更新」立刻拉），不用为了新应用升级 Hub；用应用建的网页在应用出新版本时会提示「升级」（`myco page upgrade --page <id>`），数据不变。表格里直接打字（英文、数字）就开始编辑；输入中文时先按回车或双击格子再打字。在 App 里点边栏的「应用」，选一个、起个名字就新建一份；agent 用 `myco template use --template myco/base --name 招聘进度 --sample`。
+- **官方应用**（Hub v0.20.5 起，每个工作区都有）：`myco/table` 表格（像飞书表格：列有类型，单选、多选是彩色标签；框选复制、从 Excel 粘贴、拖填充柄往下填；拖列宽、拖动行和列；筛选、排序、Ctrl+F 搜索；导出 Excel / CSV）、`myco/base` 多维表格（同一套表格，加上看板、日历、画廊、表单视图，点一条在右侧展开）、`myco/doc` 文档（像飞书文档：输入「/」插入标题、列表、待办、表格、代码块，选中文字改格式，拖动段落；每段单独保存，两个人改不同段落不冲突；导出 Markdown / 网页）、`myco/slides` 幻灯片（agent 写每页的版式和内容，网页按主题排好：封面、要点、图表、数字卡片、表格、引言；点哪改哪，拖动换顺序，全屏放映，导出能接着改的 PowerPoint）。Hub v0.20.6 起官方应用按类分栏，还有：编程开发的「代码编辑器」（VS Code 同款编辑器，文件树、多标签、HTML 预览、下载 zip）、「任务追踪」（像 Linear：问题有编号、状态、优先级、负责人、标签，列表和看板，键盘操作，问题可以指给 agent，它改状态、写评论）和「开发者工具箱」（JSON、Base64、URL、MD5/SHA、时间戳、UUID、JWT、正则、文本对比等）；效率工具的「笔记」（像 Notion：一层层的页面、图标和封面、「/」插入各种块、搜索、收藏、回收站，agent 能建页面、往里写）「待办清单」；生活的「记账本」「习惯打卡」；创意设计的「白板」「思维导图」「视频剪辑」（导入 mp4，时间线上分割、裁剪、调顺序、变速，加文字、模糊和马赛克，在本机导出 mp4；视频只存在这台电脑上，Hub 只存剪辑方案，agent 按备注帮你剪）；游戏的「五子棋」（能和 agent 下）「数独」。官方应用从 Hub v0.20.7 起单独发布：Hub 每天自己拉新的（`myco template sync` 或应用页的「检查官方应用更新」立刻拉），不用为了新应用升级 Hub。为了让下载包小一些，myco 程序本身只带日常应用（表格、多维表格、文档、幻灯片、会议记录、日历、任务追踪、待办清单、笔记、白板、思维导图），其余的在 Hub 启动后第一次拉取时到（一分钟内；连不上 GitHub 就每隔几分钟再试），拉到后会留在本地；用 `--no-update-check` 或 `MYCO_NO_UPDATE_CHECK=1` 启动的 Hub 只有自带的这些。用应用建的网页在应用出新版本时会提示「升级」（`myco page upgrade --page <id>`），数据不变。表格里直接打字（英文、数字）就开始编辑；输入中文时先按回车或双击格子再打字。在 App 里点边栏的「应用」，选一个、起个名字就新建一份；agent 用 `myco template use --template myco/base --name 招聘进度 --sample`。
 - **行情工作台**（`myco/stocks`）：共享 A 股、港股、美股的自选与观察笔记，查看日周月 K 线、成交量和均线，支持导出。可切换独立数据源或接入统一行情网关；价格由桌面 App 获取并在本机缓存，不存进共享记录。需要支持 `myco.os` 的 App，详情见 [Stock Watch](docs/stocks.md)。
 - **谁能用**：工作区里的人和 agent 都能看到应用、用应用新建网页；发布应用的人（或同一个主人的 agent）和管理员能发新版本、删除。网页谁能看、谁能改数据，和普通网页一样。
 
@@ -1077,7 +1079,7 @@ sudo myco hub restore --from myco-backup-hub-20261121-093000.tar.gz --db /var/li
 
 - **下载**（[最新发布](https://github.com/chenhg5/myco/releases/latest)）：
   - Mac：`myco.dmg`，一个包同时支持 Apple 芯片和 Intel，已用 Developer ID 签名并经 Apple 公证，双击打开后拖进「应用程序」即可。以后在 App 的「设置 → 关于」里一键更新。
-  - Windows（预览）：`myco-app-windows-amd64.exe`（ARM 电脑用 `-arm64`），下载后直接运行。还没有代码签名，第一次运行 SmartScreen 会提示，点「更多信息 → 仍要运行」。v0.18.6 起支持在「设置 → 关于」里一键更新：替换正在运行的 exe 并重新打开，这台电脑上的 myco 命令行工具也一起升级（v0.18.5 及之前的版本要手动下载一次新版）。还不支持 `myco://` 链接。App 用到的 myco 命令行工具可以在「设置 → Hub」里安装。
+  - Windows（预览）：`myco-app-windows-amd64.exe`（ARM 电脑用 `-arm64`），下载后直接运行。还没有代码签名，第一次运行 SmartScreen 会提示，点「更多信息 → 仍要运行」。v0.18.6 起支持在「设置 → 关于」里一键更新：替换正在运行的 exe 并重新打开（下载中断会接着下；新版本起不来，比如被杀毒软件拦住，会换回当前版本继续用），这台电脑上的 myco 命令行工具也一起升级（v0.18.5 及之前的版本要手动下载一次新版）。还不支持 `myco://` 链接。App 用到的 myco 命令行工具可以在「设置 → Hub」里安装。
     - **窗口一直是黑的**：通常是 Windows 的 WebView2 组件（显示窗口内容的部分）在这台电脑上起不来（比如 WebView2 157 在开了 Defender 的远程桌面里，它的沙箱初始化失败、反复崩溃）。v0.21.4 起，窗口 25 秒还没显示出内容，App 会弹框：「是」在浏览器里打开 myco（照常能用）；「否」用兼容模式重启（只对 myco 关掉 WebView2 的沙箱，记在 `%APPDATA%\myco\app-compat`，删掉这个文件就恢复）。不要用用户级的 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` 环境变量，它会影响这台电脑上所有用 WebView2 的程序。
   - Linux（v0.20.13 起）：`myco-app-linux-amd64`（ARM 用 `-arm64`），一个程序，放进 `~/.local/bin` 运行即可（命令见[开头](#推荐先装-appmac--windows--linux)）。
     - **在浏览器里打开**：它在本机 `127.0.0.1` 上开一个端口，用默认浏览器打开（`$BROWSER`、`xdg-open`），不依赖任何窗口库，X11、Wayland、WSL 都一样。只有本机能访问，地址里带一个密钥，换成浏览器 cookie 后才能看页面；端口和密钥存在 `~/.config/myco/app-window.json`（0600），重启、更新后不变，开着的标签页可以接着用。
@@ -1248,3 +1250,32 @@ agent 的服务商。旧 runner 或旧 Hub 的远程控制保持只读。
 等待 runner 应用。Hub 不保存明文密钥，也不用普通消息传递密钥。没有开启端到端
 加密时，请在目标电脑上的 App 或 CLI 中填写。远程选择 cc-switch 渠道不需要 E2E，
 因为传递的只是渠道标识。
+
+## 通过 SSH 管理 Linux 服务器
+
+桌面 App 可以复用 OpenSSH 别名或 `user@host`，查看 Linux 的 CPU、内存和磁盘、
+systemd 服务、Docker 容器，并执行固定的启动、停止和重启操作。请先在本机安装
+OpenSSH，通过可信渠道核对服务器指纹，再在终端完成一次连接。复用 `~/.ssh/config`、
+本机密钥和 ssh-agent，不要向应用粘贴私钥或密码。加密密钥需要先在 ssh-agent 中解锁，
+App 不弹出密码验证窗口。
+
+连接配置只保存在控制端电脑。默认不向 agent 开放；为当前工作区显式启用后，agent
+还需要为这台具体服务器申请限时授权。读取与服务、容器管理分别授权，不开放任意
+agent shell，也不会因为共享页面数据发生变化就执行命令。控制端 App 需要保持打开。
+SSH 配置或主机信任变化后，要重新创建连接并授权；旧授权不会悄悄转向另一台服务器。
+目前端到端加密工作区不支持动作授权。
+
+需要更新桌面安装包，单独升级应用模板不能补齐原生能力。Agent 命令与限制参见
+[SSH 接口约定](docs/api.md#bound-ssh-resources)。操作使用 SSH 账户已有权限，
+不会自动 sudo 提权或安装远端守护程序。
+
+## 用量统计
+
+新版 runner，以及使用 `myco inbox wait` 的 Claude 会话，会独立于 trace 上报数值用量，
+加密任务也可以统计。工作区所有者、管理员可看整个工作区，普通成员只看自己的节点。
+使用成员或管理员凭据运行 `myco usage show --by agent`，也可按 project、day、model 分组。
+旧客户端不上报，系统不会从历史 trace 补算。
+
+Token 数字来自各 CLI 自己的报告；费用仅在 CLI 提供时记录。Claude Code 按 Anthropic
+价格估算，因此接兼容代理或其他模型时仅供参考，不代表真实账单；缺失费用可能显示为 0。
+在 runner 或会话环境设置 `MYCO_NO_USAGE=1` 可关闭上报。

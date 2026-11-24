@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { MouseEvent, ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Check } from "lucide-react";
@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 /** One line of a menu, "sep" for a divider, or a small heading over a group
  * of choices. A choice that is currently on carries `checked`. */
 export type MenuItem =
-  | { label: string; icon?: IconType; onSelect: () => void; danger?: boolean; disabled?: boolean; checked?: boolean }
+  | { label: string; icon?: IconType; onSelect: () => void; danger?: boolean; disabled?: boolean; checked?: boolean; hint?: string }
   | { header: string }
   | "sep";
 
@@ -46,9 +46,17 @@ export function useContextMenu(): {
   open: (e: MouseEvent, items: MenuItem[]) => void;
   /** The same menu dropped under a button, right edges aligned. */
   openUnder: (el: Element, items: MenuItem[]) => void;
+  /** Another set of items where the last menu was (an item that leads to
+   *  a short list of its own, instead of a long menu). */
+  again: (items: MenuItem[]) => void;
   element: ReactNode;
 } {
-  const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  const [menu, setMenuState] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  const last = useRef<{ x: number; y: number } | null>(null);
+  const setMenu = (m: { x: number; y: number; items: MenuItem[] } | null) => {
+    if (m) last.current = { x: m.x, y: m.y };
+    setMenuState(m);
+  };
 
   useEffect(() => {
     if (!menu) return;
@@ -132,6 +140,7 @@ export function useContextMenu(): {
             {it.checked !== undefined ? (it.checked ? <Check /> : <span className="conv-menu-noicon" />)
               : it.icon ? <it.icon /> : <span className="conv-menu-noicon" />}
             <span className="conv-menu-label">{it.label}</span>
+            {it.hint && <span className="conv-menu-hint">{it.hint}</span>}
           </button>
         ))}
       </div>,
@@ -139,5 +148,16 @@ export function useContextMenu(): {
     )
     : null;
 
-  return { open, openUnder, element };
+  const again = useCallback((items: MenuItem[]) => {
+    const at = last.current;
+    if (!at || items.length === 0) return;
+    const k = scales();
+    const vh = window.innerHeight / k.zoom;
+    const height = Math.min(heightOf(items), vh - 16);
+    // (a moment later: the click that chose the item closes menus first)
+    window.setTimeout(() => setMenu({ x: at.x, y: Math.max(4, Math.min(at.y, vh - height - 8)), items }), 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return { open, openUnder, again, element };
 }

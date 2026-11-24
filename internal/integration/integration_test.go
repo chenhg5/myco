@@ -50,7 +50,9 @@ type hub struct {
 
 func startHub(t *testing.T, db string, p app.MessagePolicy) *hub {
 	t.Helper()
-	h, err := hubserver.Build(hubserver.Options{DBPath: db, AdminToken: adminToken, Policy: p,
+	// Every official app, as the hub has them once it fetched the "apps"
+	// release (the binary carries only a few).
+	h, err := hubserver.Build(hubserver.Options{DBPath: db, AdminToken: adminToken, Policy: p, OfficialDir: filepath.Join("..", "templates", "official"),
 		OnlineWindow: time.Minute, Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	if err != nil {
 		t.Fatal(err)

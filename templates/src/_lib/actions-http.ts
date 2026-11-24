@@ -1,7 +1,7 @@
 /** HTTP adapter for the framework action API. The caller supplies its existing
  * authenticated request function; no credential storage, login or App-token
  * fallback is introduced by this SDK. */
-import { ActionError, type ActionDescriptor, type ActionGrant, type ActionInvocation, type ActionJob, type ActionOptions, type ActionTransport, type GrantRequest } from "./actions";
+import { ActionError, type ActionTarget, type ActionDescriptor, type ActionGrant, type ActionInvocation, type ActionJob, type ActionOptions, type ActionTransport, type GrantRequest } from "./actions";
 
 export type ActionRequest = (path: string, init: RequestInit) => Promise<Response>;
 const grants = "/v1/me/action-grants";
@@ -45,6 +45,47 @@ export class ActionHTTPTransport implements ActionTransport {
     const response = await this.response(path, method, body, options);
     try { return await response.json() as T; }
     catch { throw new ActionError({ code: "invalid_response", message: "The action service returned invalid JSON.", retryable: false }); }
+  }
+  async listTargets(options?: ActionOptions): Promise<ActionTarget[]> {
+    try {
+      const result = await this.json<{ targets: ActionTarget[] }>(
+        "/v1/me/action-targets",
+        "GET",
+        undefined,
+        options,
+      );
+      if (
+        !Array.isArray(result.targets) ||
+        result.targets.some(
+          (t) =>
+            !t ||
+            !["machine", "page"].includes(t.kind) ||
+            typeof t.id !== "string" ||
+            !t.id ||
+            (t.resource &&
+              [t.resource.provider, t.resource.id, t.resource.binding].some(
+                (v) => typeof v !== "string" || !v,
+              )),
+        )
+      )
+        throw new ActionError({
+          code: "invalid_response",
+          message: "The service returned invalid action targets.",
+          retryable: false,
+        });
+      return result.targets;
+    } catch (e) {
+      if (e instanceof ActionError && e.status === 404)
+        throw new ActionError(
+          {
+            code: "unsupported",
+            message: "This Hub does not support resource discovery.",
+            retryable: false,
+          },
+          404,
+        );
+      throw e;
+    }
   }
   requestGrant(request: GrantRequest, options?: ActionOptions) { return this.json<ActionGrant>(grants, "POST", request, options); }
   async listGrants(options?: ActionOptions): Promise<ActionGrant[]> {

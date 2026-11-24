@@ -1,11 +1,17 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { knownSize, noteSize } from "@/app/imageSizes";
-import DOMPurify from "dompurify";
+import createDOMPurify from "dompurify";
 import { Marked } from "marked";
 import { ChevronDown } from "lucide-react";
 import { copyText } from "@/app/copy";
 import { cn } from "@/lib/utils";
 import { L } from "@/lib/i18n";
+import type { Attachment } from "@/api";
+import { appApi } from "@/appapi";
+import { Lightbox, type Picture } from "@/app/lightbox";
+import { colourCode, diagramPicture, drawDiagrams, onThemeChange, redrawDiagrams } from "@/app/mdRich";
+import { splitUi } from "@/app/ui/spec";
+import { UiBlock } from "@/app/ui/UiBlock";
 
 /** Rough line budget for one message before it starts collapsed. */
 const COLLAPSE_LINES = 30;
@@ -45,6 +51,49 @@ export function bareLinkEnd(src: string): string | null {
   return /^(?:https?:\/\/[^/?#\s]|www\.\S)/i.test(raw) ? raw : null;
 }
 
+/** A message's own files, for pictures its text places with
+ *  ![words](attachment:<file id or name>). */
+export type InlineFiles = { hubId: string; items: Attachment[] };
+// (the files of the message being parsed: md.parse is synchronous)
+let parsing: InlineFiles | undefined;
+
+const ATTACH_REF = /attachment:([^)\s"']+)/g;
+function findAttachment(files: InlineFiles | undefined, ref: string): Attachment | undefined {
+  let r = ref;
+  try { r = decodeURIComponent(ref); } catch { /* as written */ }
+  return files?.items.find((a) => a.file_id === r) ?? files?.items.find((a) => a.name === r);
+}
+/** A message's files as the text sees them (none: undefined). */
+export function filesFor(hubId: string, items?: Attachment[]): InlineFiles | undefined {
+  return items && items.length > 0 ? { hubId, items } : undefined;
+}
+/** The files a body does not already show in its text: the ones to list
+ *  under it. */
+export function filesBelow(body: string, files?: InlineFiles): Attachment[] {
+  if (!files) return [];
+  const inText = inlineAttachmentIds(body, files);
+  return files.items.filter((a) => !inText.has(a.file_id));
+}
+/** The files a body shows in its text (so they are not listed again below). */
+export function inlineAttachmentIds(body: string, files: InlineFiles): Set<string> {
+  const ids = new Set<string>();
+  for (const m of body.matchAll(ATTACH_REF)) {
+    const a = findAttachment(files, m[1]);
+    if (a) ids.add(a.file_id);
+  }
+  return ids;
+}
+
+function codeBlock(text: string, lang?: string): string {
+  const langClass = lang ? ` class="language-${escapeAttr(lang)}"` : "";
+  return (
+    `<div class="md-code">` +
+    `<button type="button" class="md-code-copy" data-code="${encodeURIComponent(text)}">${L("复制", "Copy")}</button>` +
+    `<pre><code${langClass}>${escapeHtml(text)}</code></pre>` +
+    `</div>`
+  );
+}
+
 // Code blocks carry their own copy button so every block gets one, without
 // mounting a React tree inside the rendered HTML. Links open outside the App.
 const md = new Marked({
@@ -64,13 +113,53 @@ const md = new Marked({
       return `<span class="md-check ${checked ? "is-done" : "is-todo"}"></span>`;
     },
     code({ text, lang }) {
-      const langClass = lang ? ` class="language-${escapeAttr(lang)}"` : "";
-      return (
-        `<div class="md-code">` +
-        `<button type="button" class="md-code-copy" data-code="${encodeURIComponent(text)}">${L("复制", "Copy")}</button>` +
-        `<pre><code${langClass}>${escapeHtml(text)}</code></pre>` +
-        `</div>`
-      );
+      // A diagram (mdRich draws it): its source stays one click away, and
+      // is what shows where it cannot be drawn.
+      if ((lang || "").trim().toLowerCase() === "mermaid") {
+        return (
+          `<div class="md-mermaid" data-src="${encodeURIComponent(text)}">` +
+          `<div class="md-mermaid-pic" title="${escapeAttr(L("点一下看大图", "Click to enlarge"))}"><span class="md-mermaid-wait">${L("正在画图…", "Drawing…")}</span></div>` +
+          `<div class="md-mermaid-why"></div>` +
+          `<details class="md-mermaid-src"><summary>${L("源码", "Source")}</summary>${codeBlock(text, "mermaid")}</details>` +
+          `</div>`
+        );
+      }
+      return codeBlock(text, lang);
+    },
+    // A picture of the message's own (attachment:…) shows from its file.
+    image({ href, title, text }) {
+      let src = href;
+      let att = "";
+      if (/^attachment:/i.test(href)) {
+        // (drawn where the message's files are not known: its words only)
+        if (!parsing) return escapeHtml(text || "");
+        const a = findAttachment(parsing, href.slice("attachment:".length));
+        if (!a) return `<span class="md-img-missing">${escapeHtml(L(`没找到附件：${text || href}`, `Attachment not found: ${text || href}`))}</span>`;
+        src = appApi.attachmentUrl(parsing.hubId, a.file_id);
+        att = ` data-att="${escapeAttr(a.file_id)}"`;
+      }
+      const titleAttr = title ? ` title="${escapeAttr(title)}"` : "";
+      return `<img src="${escapeAttr(src)}" alt="${escapeAttr(text || "")}"${titleAttr}${att} loading="lazy">`;
+    },
+    // Pictures side by side in one paragraph (two or more, nothing else):
+    // a gallery.
+    paragraph({ tokens }) {
+      const pics = tokens.filter((t) => t.type === "image");
+      const rest = tokens.filter((t) => t.type !== "image" && !(t.type === "text" && !t.raw.trim()) && t.type !== "br");
+      const inner = this.parser.parseInline(tokens);
+      if (pics.length >= 2 && rest.length === 0) {
+        // With titles (![name](src "a line on it")): each with its name and
+        // line under it, as a set of things to compare.
+        const titled = pics.some((t) => t.type === "image" && t.title);
+        const cells = titled
+          ? pics.map((t) => {
+            const im = t as { text?: string; title?: string | null };
+            return `<figure class="md-fig">${this.parser.parseInline([t])}<figcaption>${im.text ? `<b>${escapeHtml(im.text)}</b>` : ""}${im.title ? `<span>${escapeHtml(im.title)}</span>` : ""}</figcaption></figure>`;
+          }).join("")
+          : this.parser.parseInline(pics);
+        return `<div class="md-gallery${titled ? " is-captioned" : ""}" data-n="${Math.min(pics.length, 4)}">${cells}</div>\n`;
+      }
+      return `<p>${inner}</p>\n`;
     },
     // Short cells (a status, a number, a name) stay on one line: a narrow
     // column would otherwise break 被拒绝 into 被拒 / 绝.
@@ -88,6 +177,16 @@ const md = new Marked({
     },
   },
 });
+
+// Our own sanitizer, not the shared one: mermaid (mdRich), in the same
+// bundle, adds hooks and settings to that one while it draws.
+const DOMPurify = createDOMPurify(window);
+
+/** A list item that starts with a picture (- ![logo](…) **[name](…)** what it
+ *  is): a row, the picture on the left and its words beside it. */
+function mediaRows(html: string): string {
+  return html.replace(/<li>(\s*(?:<p>)?\s*)<img /g, '<li class="md-media">$1<img class="md-media-pic" ');
+}
 
 function sanitize(raw: string): string {
   return DOMPurify.sanitize(raw, {
@@ -124,9 +223,54 @@ function doingItems(text: string): string {
 
 /** Rendered, sanitized markdown. Raw HTML is allowed through marked but
  *  DOMPurify removes scripts, event handlers and unsafe URLs. */
-export function Markdown({ text }: { text: string }) {
-  const html = useMemo(() => sanitize(md.parse(doingItems(text), { async: false }) as string), [text]);
+/** growing: the text is still coming in (Reveal): diagrams wait for all of it.
+ *  zoom false: the page around it opens pictures itself (the user guide). */
+export function Markdown({ text, files, growing, zoom = true }: { text: string; files?: InlineFiles; growing?: boolean; zoom?: boolean }) {
+  const filesKey = files ? `${files.hubId}\u0000${files.items.map((a) => a.file_id).join(",")}` : "";
+  const html = useMemo(() => {
+    parsing = files;
+    try { return sanitize(mediaRows(md.parse(doingItems(text), { async: false }) as string)); } finally { parsing = undefined; }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text, filesKey]);
   const ref = useRef<HTMLDivElement>(null);
+  // Diagrams and code colours (mdRich), after the HTML is in; diagrams
+  // again in the other theme's colours when it changes.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (!growing) drawDiagrams(el);
+    colourCode(el);
+    if (!el.querySelector(".md-mermaid")) return;
+    return onThemeChange(() => redrawDiagrams(el));
+  }, [html, growing]);
+  // A picture or a diagram, clicked: large, with the message's others.
+  const [big, setBig] = useState<{ items: Picture[]; index: number } | null>(null);
+  const onClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    onCopyClick(e);
+    const t = e.target as HTMLElement;
+    const el = ref.current;
+    if (!zoom || !el || t.closest("a")) return;
+    const pic = t.closest<HTMLElement>(".md-mermaid[data-state=drawn] .md-mermaid-pic");
+    const img = t instanceof HTMLImageElement ? t : null;
+    if (!pic && !img) return;
+    const items: Picture[] = [];
+    let index = 0;
+    el.querySelectorAll<HTMLElement>("img, .md-mermaid[data-state=drawn]").forEach((n) => {
+      if (n.closest("a")) return;
+      if (n instanceof HTMLImageElement) {
+        if (!n.naturalWidth) return;
+        if (n === img) index = items.length;
+        const att = n.dataset.att;
+        items.push({ name: n.alt || L("图片", "Picture"), src: n.currentSrc || n.src, ...(att && files ? { save: () => appApi.saveAttachment(files.hubId, att) } : {}) });
+      } else {
+        const src = diagramPicture(n);
+        if (!src) return;
+        if (pic && n.contains(pic)) index = items.length;
+        items.push({ name: L("图", "Diagram"), src });
+      }
+    });
+    if (items.length) setBig({ items, index });
+  };
   // Before it is painted: pictures seen before get their size (the box is
   // there before they load: imageSizes); each one loading notes its size.
   useLayoutEffect(() => {
@@ -167,7 +311,12 @@ export function Markdown({ text }: { text: string }) {
     el.addEventListener("error", onError, true);
     return () => el.removeEventListener("error", onError, true);
   }, [html]);
-  return <div ref={ref} className="md" onClick={onCopyClick} dangerouslySetInnerHTML={{ __html: html }} />;
+  return (
+    <>
+      <div ref={ref} className="md" onClick={onClick} dangerouslySetInnerHTML={{ __html: html }} />
+      {big && <Lightbox items={big.items} index={big.index} onIndex={(i) => setBig({ ...big, index: i })} onClose={() => setBig(null)} />}
+    </>
+  );
 }
 
 export interface ExecResult {
@@ -254,7 +403,7 @@ export function parseExecResult(body: string): ExecResult | null {
 
 export { duration as execDuration };
 
-function RenderedBody({ body }: { body: string }) {
+function RenderedBody({ body, files, growing }: { body: string; files?: InlineFiles; growing?: boolean }) {
   const parsed = parseJSON(body);
   if (parsed) {
     if (!Array.isArray(parsed.value) && isExec(parsed.value as object)) {
@@ -262,7 +411,18 @@ function RenderedBody({ body }: { body: string }) {
     }
     return <PrettyJSON data={parsed.value} />;
   }
-  return <Markdown text={body} />;
+  // ```myco-ui blocks (ui/): drawn as components between the Markdown;
+  // while the reply is still coming in, a line in their place.
+  const parts = splitUi(body);
+  if (parts.length === 1 && parts[0].kind === "md") return <Markdown text={body} files={files} growing={growing} />;
+  return (
+    <div className="md-parts">
+      {parts.map((p, i) => p.kind === "md"
+        ? <Markdown key={i} text={p.text} files={files} growing={growing} />
+        : growing ? <div key={i} className="ui-wait">{L("正在准备界面…", "Preparing…")}</div>
+        : <UiBlock key={i} src={p.src} files={files} />)}
+    </div>
+  );
 }
 
 /** Long bodies unfolded in this window (MessageContent). */
@@ -272,8 +432,9 @@ const unfolded = new Set<string>();
  * A message body: markdown, an exec result, or a JSON object. Bodies longer
  * than 30 lines start folded so one long reply cannot take over the thread.
  */
-export function MessageContent({ body, foldId }: { body: string; foldId?: string }) {
-  const lines = body.split("\n").length;
+export function MessageContent({ body, foldId, files, growing }: { body: string; foldId?: string; files?: InlineFiles; growing?: boolean }) {
+  // (a block of components counts as a few lines, not its JSON's)
+  const lines = splitUi(body).reduce((n, p) => n + (p.kind === "md" ? p.text.split("\n").length : 12), 0);
   const collapsible = lines > COLLAPSE_LINES;
   // Unfolded stays unfolded while this window is open, even when the
   // message is drawn anew (a reply that finished growing, one shown
@@ -290,11 +451,11 @@ export function MessageContent({ body, foldId }: { body: string; foldId?: string
     }
     return n;
   });
-  if (!collapsible) return <RenderedBody body={body} />;
+  if (!collapsible) return <RenderedBody body={body} files={files} growing={growing} />;
   return (
     <div className="md-fold">
       <div className={cn("md-fold-body", !open && "is-collapsed")}>
-        <RenderedBody body={body} />
+        <RenderedBody body={body} files={files} growing={growing} />
       </div>
       <button type="button" className="md-fold-btn" onClick={() => setOpen((o) => !o)}>
         {open ? L("收起", "Show less") : L(`展开（共 ${lines} 行）`, `Show all (${lines} lines)`)}

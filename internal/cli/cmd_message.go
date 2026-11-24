@@ -43,12 +43,13 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 			{Name: "wait", Kind: Duration, Default: "0s", Help: "Wait this long for the reply (tasks only)"},
 			{Name: "progress", Kind: Enum, Values: []string{"last", "all"}, Default: "last", Help: "While waiting: last = the reply, how many progress updates came and the latest; all = every update too (the person sees them all in the app either way)"},
 			attachFlag,
+			uiFlag,
 		},
 		Run: handler(func(e *env) error {
 			if err := e.in.Require("to"); err != nil {
 				return err
 			}
-			body, err := e.readBody("body", "body-file")
+			body, err := e.messageBody("body", "body-file")
 			if err != nil {
 				return err
 			}
@@ -160,6 +161,7 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 			`myco message reply --id msg_abc123 --body "Done: PR #42 opened"`,
 			"myco message reply --body-file result.md   # inside a runner, --id defaults to $MYCO_MESSAGE_ID",
 			`myco message reply --body "审完了" --result result.json   # a workflow step's structured result`,
+			`myco message reply --body "Release check: all green, ready to ship." --ui check.json   # plus a myco-ui block (myco ui schema)`,
 		},
 		Flags: []Flag{idFlag,
 			{Name: "body", Kind: String, Help: "Reply text"},
@@ -168,12 +170,13 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 			{Name: "anyway", Kind: Bool, Help: "Reply even if unread corrections from the sender remain"},
 			suggestFlag,
 			attachFlag,
+			uiFlag,
 		},
 		Run: handler(func(e *env) error {
 			if err := e.in.Require("id"); err != nil {
 				return err
 			}
-			body, err := e.readBody("body", "body-file")
+			body, err := e.messageBody("body", "body-file")
 			if err != nil {
 				return err
 			}
@@ -368,10 +371,25 @@ status everyone can see, use myco agent status set.`,
 			`myco message progress --id msg_abc123 --body "found the cause: a race in the lease check"`,
 			`myco message progress --body "the new home page so far" --attach home.png   # a screenshot shows in the app`,
 		},
-		Flags: []Flag{idFlag, {Name: "body", Kind: String, Required: true, Help: "Update text"}, attachFlag},
+		Flags: []Flag{idFlag, {Name: "body", Kind: String, Help: "Update text (required unless --ui is given)"}, attachFlag, uiFlag},
 		Run: handler(func(e *env) error {
-			if err := e.in.Require("id", "body"); err != nil {
+			if err := e.in.Require("id"); err != nil {
 				return err
+			}
+			if strings.TrimSpace(e.in.String("ui")) == "" {
+				if err := e.in.Require("body"); err != nil {
+					return err
+				}
+			}
+			body := e.in.String("body")
+			if e.in.String("ui") != "" {
+				data, err := e.readUIFile("ui")
+				if err != nil {
+					return err
+				}
+				if body, err = appendUIBlock(body, data); err != nil {
+					return err
+				}
 			}
 			c, err := e.agentClient()
 			if err != nil {
@@ -382,7 +400,7 @@ status everyone can see, use myco agent status set.`,
 			if err != nil {
 				return err
 			}
-			m, err := c.ProgressWith(e.in.Ctx, e.in.String("id"), e.in.String("body"), atts, dry)
+			m, err := c.ProgressWith(e.in.Ctx, e.in.String("id"), body, atts, dry)
 			if err != nil {
 				return err
 			}
@@ -640,6 +658,11 @@ After every exit, process the inbox and run myco inbox wait again.`,
 			if err != nil {
 				return err
 			}
+			cfg := e.cfg
+			var usage *sessionUsageTracker
+			if cfg != nil {
+				usage = e.sessionUsage([]sessionUsageTarget{{Hub: cfg.Hub, Agent: cfg.Agent, Client: c}})
+			}
 			duration, raw, label, err := inboxWaitTimeout(e, c)
 			if err != nil {
 				return err
@@ -660,6 +683,9 @@ After every exit, process the inbox and run myco inbox wait again.`,
 			}
 			if len(msgs) == 0 {
 				return &Error{Code: "timeout", Message: "no messages arrived", Retryable: true, Exit: ExitTimeout}
+			}
+			if usage != nil {
+				usage.remember(cfg.Hub, cfg.Agent, msgs)
 			}
 			out := inboxResult{Messages: nonNilMsgs(msgs), Hint: inboxWaitHint(inboxTaskHint(msgs)), Timeout: raw}
 			return e.p.Print(out, func(w io.Writer) {

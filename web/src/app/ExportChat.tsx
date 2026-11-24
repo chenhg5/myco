@@ -3,7 +3,7 @@ import { Check } from "lucide-react";
 import type { Message } from "@/api";
 import { appApi } from "@/appapi";
 import { ErrorText, Modal } from "@/app/dialogs";
-import { exportName, stepsOf, toJsonl, toMarkdown, type ExportFormat, type ExportStep } from "@/app/exportChat";
+import { exportName, stepsOf, toJsonl, toMarkdown, type ExportFormat, type ExportStep } from "@/app/chatExport";
 import { L } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 

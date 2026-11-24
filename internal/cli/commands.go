@@ -40,6 +40,7 @@ per-agent inboxes. A runner turns any agent CLI into an always-reachable worker.
 		handoverCommand(),
 		keysCommands(),
 		auditCommand(),
+		usageCommands(),
 		consoleCommands(),
 		workspaceCommands(),
 		machineCommands(),

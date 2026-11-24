@@ -35,9 +35,10 @@ const guiShell = "browser"
 
 // runGUI opens the console as a Windows app: a window with the system title
 // bar, and a notification-area icon; closing the window hides it, and the
-// app keeps running until quit from that icon. setRelaunch receives how to
-// reopen the app after an update put a new exe in place. myco:// links are
-// not registered.
+// app keeps running until quit from that icon. setRelaunch receives how the
+// app quits after an update put a new exe in place and started it (the
+// updater starts it and waits for it to report in, so a new version that
+// cannot start leaves this one running). myco:// links are not registered.
 func runGUI(h http.Handler, _ func(string), setRelaunch func(func())) error {
 	// Whether the window's page asked for anything yet: when WebView2 cannot
 	// start (its process crashes at once on some machines), nothing ever
@@ -99,6 +100,15 @@ func runGUI(h http.Handler, _ func(string), setRelaunch func(func())) error {
 		window.Show()
 		window.Focus()
 	}
+	setFullscreen = func(on bool) {
+		application.InvokeAsync(func() {
+			if on && !window.IsFullscreen() {
+				window.Fullscreen()
+			} else if !on && window.IsFullscreen() {
+				window.UnFullscreen()
+			}
+		})
+	}
 	// Notices: a toast for what needs the person; a click opens the App
 	// where it leads.
 	setUpNotices(app, func(hub, target, actor string) {
@@ -117,17 +127,11 @@ func runGUI(h http.Handler, _ func(string), setRelaunch func(func())) error {
 	tray.OnClick(show)
 	menu.keepFresh(30 * time.Second)
 
-	// The path as started: an update renames this exe and puts the new one here.
+	// The new version is already running (console.Updater.handOver): quit.
+	setRelaunch(app.Quit)
+
+	// The path as started, for a restart in compatibility mode.
 	exe, exeErr := os.Executable()
-	setRelaunch(func() {
-		// Start the new exe, then quit this one.
-		if exeErr == nil {
-			cmd := exec.Command(exe)
-			cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x00000200 | 0x00000008} // new process group, detached
-			_ = cmd.Start()
-		}
-		app.Quit()
-	})
 
 	go pageWatch(&seen, compat, h, window, func(u string) error { return app.Browser.OpenURL(u) }, func() {
 		if exeErr == nil {

@@ -386,3 +386,68 @@ ten minutes) and are cancelled on navigation, reload, close or backgrounding.
 No workspace authorization, saved HTTP credentials or ambient cookies are
 attached, and cross-origin redirects strip credential headers. The sandbox's
 external connection policy is unchanged; all requests use this bridge.
+
+## SSH server administration
+
+Desktop builds with OpenSSH offer `ssh.profiles` and `ssh.run`; see the
+[local SSH capability contract](api.md#local-ssh-capabilities). These calls reuse
+local SSH configuration, keys and ssh-agent with strict existing host trust.
+Profiles are private to this computer; agent access requires explicit opt-in
+for the current workspace and a separate human-approved, target-bound grant.
+An old desktop or mobile bridge returns unsupported; updating a template alone
+cannot install this native capability. There is no arbitrary agent terminal.
+
+## Local databases (`db.*`)
+
+A desktop build advertising `db.profile` can connect to MySQL, PostgreSQL,
+SQLite and MongoDB. These are **local App capabilities**, not Hub/agent-token
+endpoints. An older App must be upgraded; publishing a template cannot install
+native drivers. The Database studio template uses the existing `os.call`
+transport, with a workspace/page scope supplied by the host.
+
+| Capability | Arguments | Result |
+| --- | --- | --- |
+| `db.profile` | `{action:"list"}` | Local connection metadata, with `has_password` / `has_uri` flags; no credentials |
+| `db.profile` | `{action:"save",profile:{id?,version?,name,engine,host,port,user,database,path,tls,auth_source,read_only,password?,uri?}}` | Saved profile; version CAS protects concurrent edits |
+| `db.profile` | `{action:"test",profile:{…}}` | `{connected:true}` after a bounded connection test; does not save |
+| `db.profile` | `{action:"forget",id,version}` | Removes the scoped local profile and credential entry, never the database |
+| `db.catalog` | `{connection,database?,action:"databases"\|"tables"\|"columns",schema?,table?,request_id?}` | Database names, `{schema,name,kind}` objects or column metadata |
+| `db.rows` | `{connection,database?,schema?,table,action:"browse",offset?,limit?,order_by?,descending?,request_id?}` | Bounded typed rows with primary keys and original-snapshot tokens |
+| `db.rows` | `{…,action:"insert"\|"update"\|"delete",values?,key?,token?,request_id?}` | Affected row count; edits/deletes require the exact returned key/token |
+| `db.query` | `{connection,database?,sql,mode:"query"\|"execute",limit?,timeout_ms?,request_id?}` | Typed rows or affected count; one statement, no automatic retries |
+| `db.mongo` | `{connection,database?,table,action:"find"\|"aggregate"\|"insert"\|"replace"\|"delete",query?,document?,original?,token?,limit?,offset?,request_id?}` | Typed rows with canonical Extended JSON documents, or an affected count |
+| `db.cancel` | `{request_id}` | `{cancel_requested:boolean}`; only this page's matching request is cancelled |
+
+`engine` is `mysql`, `postgres`, `sqlite` or `mongodb`. TLS modes are `verify`,
+`require` (encrypted without certificate verification), or `disable`. New
+profiles default to `read_only:true`. SQLite opens an existing absolute file
+path. MongoDB URIs support normal/SRV addresses; URI authentication and TLS
+options apply. An explicit database overrides the URI database path.
+
+Omitting a password/URI preserves it only for the same server/account;
+`password:""` / `uri:""` explicitly clears it. Full MongoDB URIs and passwords
+use the desktop credential store; profile metadata is a 0600 local file, scoped
+by workspace and page. Query text, values and results are not written to the
+native audit: it records only capability name, argument byte count and error
+code. Query requests use independent sessions; manual transaction/session control is rejected. SQL row CRUD requires a primary key; MySQL row editing additionally
+requires InnoDB transactions. No SQL string interpolation is used for values.
+
+A result has `{columns,rows,affected?,truncated,read_only,duration_ms}`. Each row
+has `values:Cell[]` and optional `key`, `token`, `document`. A cell is
+`{kind,value?}` where `kind` is `null`, `text`, `number`, `bool`, `binary` (base64)
+or `json`. `value` is always a **string**, including numbers, preserving int64
+and DECIMAL precision. MongoDB `query`, `document` and `original` are Extended
+JSON strings; replacements preserve `_id` and atomically compare `original`.
+
+Limits: 1,000 returned rows, 512 KiB per cell/document, approximately 4 MiB per
+result, 30-second default / 120-second maximum execution timeout. Requests with
+IDs are limited to four concurrent operations per page. `conflict` means the
+profile/row/document changed. `outcome_unknown` means a write was not
+acknowledged: inspect current database state before retrying. Cancellation does
+not mean a write was rolled back. Read-only transactions are not a substitute
+for server-side read-only account privileges, especially for external effects
+in stored functions. MongoDB aggregation rejects `$out` and `$merge`.
+
+## Disk usage accounting
+
+`system.disks` reports byte counts from the OS; displayed GB/GiB units do not change them. `fs.scan` keeps logical file length in `size` and allocated storage in `disk`. New Windows builds query allocation information, including compressed/sparse storage; older Windows builds approximate `disk` with logical length. Zero allocation is valid. Filesystem query failures may fall back to logical length. See [Disk usage and capacity units](disk.md) for system comparison limits and Space cleaner's local unit selector.

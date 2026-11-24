@@ -401,12 +401,19 @@ async function menuPick(page, row, item) {
     await row.scrollIntoViewIfNeeded();
     await page.waitForTimeout(300);
     await row.click({ button: "right" });
-    const it = page.locator(".conv-menu").getByRole("menuitem", { name: item, exact: true });
+    const it = page.locator(".conv-menu").getByRole("menuitem", typeof item === "string" ? { name: item, exact: true } : { name: item });
     if (await it.waitFor({ timeout: 1_500 }).then(() => true, () => false)
       && await it.click({ timeout: 1_500 }).then(() => true, () => false)) return;
     await page.keyboard.press("Escape");
     if (i >= 4) throw new Error(`右键菜单没出现「${item}」`);
   }
+}
+
+/** A member's menu → 移到分组 → the group (a short list in the menu's place). */
+async function moveTo(page, row, group) {
+  await menuPick(page, row, /^移到分组/);
+  const it = page.locator(".conv-menu").getByRole("menuitem", { name: group, exact: true });
+  await it.click({ timeout: 5_000 });
 }
 
 async function closeDialog(page) {
@@ -1091,6 +1098,68 @@ async function runMatrix(browser, size, scheme) {
       } finally {
         await page.unroute(pattern);
         await page.goto(`${r.base}/?lang=zh`,{waitUntil:"domcontentloaded"});await page.locator(".app-shell").waitFor();
+      }
+    });
+
+    // The notch's island (the Mac app's own window, /?island=1): how many
+    // are at work, never "0". A workspace that cannot be read keeps who was
+    // at work there; someone who stops before the window is ready leaves
+    // it folded away (a slow network made it stay out showing 0).
+    if (!narrow) await step("灵动岛 · 不显示 0", async () => {
+      const ip = await page.context().newPage();
+      try {
+        const real = await (await fetch(`http://${HOST}:${mockPort()}/app/overview`)).json();
+        let mode = "working";
+        const overview = () => {
+          const ov = JSON.parse(JSON.stringify(real));
+          for (const h of ov.hubs) {
+            if (h.id !== "hub_studio") continue;
+            if (mode === "down") { h.ok = false; delete h.overview; continue; }
+            for (const st of h.overview?.agents || []) {
+              const on = mode === "working" && st.agent.name === "review-cloud";
+              st.state = on ? "working" : "idle";
+              st.in_progress = on ? 1 : 0;
+              st.stale = 0;
+              st.stale_tasks = [];
+            }
+          }
+          for (const h of ov.hubs) if (h.id !== "hub_studio" && h.overview) for (const st of h.overview.agents || []) st.state = "idle";
+          return ov;
+        };
+        await ip.route("**/app/overview", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(overview()) }));
+        let frameDelay = 0;
+        await ip.route("**/app/island/frame", async (route) => {
+          if (frameDelay) await new Promise((ok) => setTimeout(ok, frameDelay));
+          await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+        });
+        await ip.setViewportSize({ width: 520, height: 320 });
+        await ip.goto(`${r.base}/?island=1&nw=200&nh=32&lang=zh`, { waitUntil: "domcontentloaded" });
+        // (every number the island ever draws, recorded)
+        await ip.evaluate(() => {
+          window.__islandNumbers = [];
+          const note = () => { const b = document.querySelector(".isl.is-shown .isl-wing.is-right"); if (b) window.__islandNumbers.push((b.textContent || "").trim()); };
+          new MutationObserver(note).observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
+        });
+        const right = ip.locator(".isl.is-shown .isl-wing.is-right b");
+        await right.filter({ hasText: /^1$/ }).waitFor({ timeout: 15_000 });
+        // The workspace cannot be read for a while: still 1, not gone.
+        mode = "down";
+        await ip.waitForTimeout(6_000);
+        if ((await right.innerText().catch(() => "")) !== "1") throw new Error("工作区暂时连不上时，灵动岛应保持原来的人数");
+        // Nobody at work: it folds away.
+        mode = "idle";
+        await ip.locator(".isl.is-shown").waitFor({ state: "detached", timeout: 10_000 });
+        // Someone starts and stops before the window is ready: it stays in.
+        frameDelay = 3_500;
+        mode = "working";
+        await ip.waitForTimeout(3_000);
+        mode = "idle";
+        await ip.waitForTimeout(6_000);
+        if (await ip.locator(".isl.is-shown").count()) throw new Error("开始又马上停下时，灵动岛不该停在外面");
+        const seen = await ip.evaluate(() => window.__islandNumbers);
+        if (seen.some((t) => t === "0" || /^0\D/.test(t))) throw new Error(`灵动岛不该显示 0：${JSON.stringify([...new Set(seen)])}`);
+      } finally {
+        await ip.close();
       }
     });
 
@@ -1825,7 +1894,7 @@ async function runMatrix(browser, size, scheme) {
       // Automations and apps are rows on top, like the rows below, with an icon.
       const tops = await page.evaluate(() => [...document.querySelectorAll(".sp-nav-autos .sp-nav-top")].map((e) => ({ text: (e.querySelector(".app-nav-label")?.textContent || "").trim(), icon: !!e.querySelector("svg"), size: getComputedStyle(e).fontSize })));
       const row = await page.evaluate(() => getComputedStyle(document.querySelector(".sp-nav-projects .app-nav-item")).fontSize);
-      if (tops.map((t) => t.text).join("|") !== "自动化|工作流|应用|电脑" || tops.some((t) => !t.icon || t.size !== row)) throw new Error(`顶上应是带图标的「自动化」「工作流」「应用」「电脑」四行，和项目一样大：${JSON.stringify(tops)} ${row}`);
+      if (tops.map((t) => t.text).join("|") !== "自动化|工作流|用量|应用|电脑" || tops.some((t) => !t.icon || t.size !== row)) throw new Error(`顶上应是带图标的「自动化」「工作流」「用量」「应用」「电脑」五行，和项目一样大：${JSON.stringify(tops)} ${row}`);
       if (new Set(heads.map((h) => h.size)).size !== 1 || heads.some((h) => h.icon)) throw new Error(`边栏标题字号应一致、不带图标：${JSON.stringify(heads)}`);
       // Projects fold, and stay folded.
       await clickVisible(page, page.locator(".sp-nav-projects .sp-nav-fold"));
@@ -2657,9 +2726,15 @@ async function runMatrix(browser, size, scheme) {
       if (narrow) await sidebar(page, false);
       await page.keyboard.press("Control+k");
       await cp.waitFor({ timeout: 5_000 });
+      // (only the workspace you are in is searched: no other one is asked)
+      const asked = new Set();
+      const onReq = (req) => { const m = /\/app\/hubs\/([^/]+)\/recent/.exec(req.url()); if (m) asked.add(decodeURIComponent(m[1])); };
+      page.on("request", onReq);
       await cp.locator("input").fill("芒果布丁");
       const msg = cp.locator(".cp-item", { hasText: "芒果布丁" }).first();
       await msg.waitFor({ timeout: 8_000 });
+      page.off("request", onReq);
+      if ([...asked].some((h) => h !== "hub_studio")) throw new Error(`⌘K 只该在当前工作区里搜，实际还问了：${[...asked].join("、")}`);
       await msg.click();
       await page.locator(".conv-detail .conv-search input").first().waitFor({ timeout: 10_000 });
       const v = await page.locator(".conv-detail .conv-search input").first().inputValue();
@@ -3650,7 +3725,8 @@ async function runMatrix(browser, size, scheme) {
       await page.waitForFunction(() => {
         const cap = document.querySelector(".ms .ms-face .pa")?.style.getPropertyValue("--av-cap");
         return cap && cap.toLowerCase() === "#e7a33e";
-      }, null, { timeout: 10_000 });
+      // at once: the saved agent comes back with the save (not the next refresh)
+      }, null, { timeout: 2_000 });
       await clickVisible(page, page.locator(".ms .ms-face-btn"));
       await face.waitFor({ timeout: 5_000 });
       // Only a picture: anything else is turned away with a word.
@@ -3663,13 +3739,13 @@ async function runMatrix(browser, size, scheme) {
       await page.waitForFunction(() => {
         const img = document.querySelector(".ms .ms-face .pa-pic");
         return img && img.complete && img.naturalWidth > 0;
-      }, null, { timeout: 10_000 });
+      }, null, { timeout: 2_000 });
       await clickVisible(page, page.locator(".ms .ms-face-btn"));
       await face.waitFor({ timeout: 5_000 });
       await face.getByRole("button", { name: "用回原来的" }).click();
       await face.getByRole("button", { name: "用这个头像" }).click();
       await face.waitFor({ state: "hidden", timeout: 5_000 });
-      await page.locator(".ms .ms-face .pa-pic").waitFor({ state: "detached", timeout: 10_000 });
+      await page.locator(".ms .ms-face .pa-pic").waitFor({ state: "detached", timeout: 2_000 });
       await page.keyboard.press("Escape");
       await page.locator(".ms").waitFor({ state: "hidden" });
     });
@@ -4575,6 +4651,253 @@ async function runMatrix(browser, size, scheme) {
       if (narrow) await sidebar(page, false);
     });
 
+    // (待处理, the list of what waits for you, is hidden for now: NOTICES_LIST
+    // in AppMode.tsx; its step comes back with it.)
+
+    // A reply with more than words: a diagram (```mermaid) drawn, code in
+    // colour, one diagram that does not parse showing why and its source,
+    // pictures placed in the text side by side (and not listed again below).
+    await step("消息 · 图、代码和插图", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      if (narrow) await sidebar(page, false);
+      await noRound(page);
+      const conv = page.locator(".conv-detail:visible").last();
+      await conv.locator(".conv-compose-input").fill("画一张架构图");
+      await conv.locator(".conv-compose-input").press("Enter");
+      const msg = conv.locator(".conv-msg", { has: page.locator(".md-mermaid") }).last();
+      await msg.locator(".md-mermaid[data-state=drawn] svg").first().waitFor({ timeout: 30_000 });
+      // The progress update along the way placed its two sketches in its
+      // text: there, side by side, not "not found", not listed again.
+      const report = conv.locator(".trace-report", { hasText: "先放两张草图" }).last();
+      await report.waitFor({ timeout: 10_000 });
+      if (await report.locator(".md-img-missing").count()) throw new Error("进展里引用的附件应能找到");
+      if ((await report.locator(".md-gallery img").count()) !== 2) throw new Error("进展里的两张草图应并排显示在正文里");
+      if (await report.locator(".trace-report-files").count()) throw new Error("进展正文里已经显示的图不该在下面再列一次");
+      const bad = msg.locator(".md-mermaid[data-state=error]");
+      await bad.waitFor({ timeout: 15_000 });
+      if (!(await bad.locator(".md-mermaid-why").innerText()).includes("没画出来")) throw new Error("画不出来的图应说明原因");
+      if (!(await bad.locator(".md-code").isVisible())) throw new Error("画不出来的图应直接显示源码");
+      await msg.locator("code.hljs .hljs-keyword").first().waitFor({ timeout: 10_000 });
+      // (a long reply starts folded: opened to see it all)
+      if (await msg.locator(".md-fold-body.is-collapsed").count()) await msg.locator(".md-fold-btn").click();
+      const gallery = msg.locator(".md-gallery:not(.is-captioned) img");
+      if ((await gallery.count()) !== 2) throw new Error(`正文里应有两张并排的图，实际 ${await gallery.count()}`);
+      // A list whose items start with a picture: rows, picture on the left.
+      if ((await msg.locator("li.md-media").count()) !== 2) throw new Error("以图片开头的列表项应排成左图右文");
+      const row = await msg.locator("li.md-media").first().evaluate((li) => { const i = li.querySelector("img").getBoundingClientRect(); const t = li.querySelector("strong").getBoundingClientRect(); return { img: i.right, text: t.left, top: Math.abs(i.top - t.top) }; });
+      if (row.text < row.img || row.top > 12) throw new Error(`左图右文的排版不对：${JSON.stringify(row)}`);
+      // Each picture stays inside its row (not over the line below it).
+      const spill = await msg.locator("li.md-media").evaluateAll((lis) => lis.map((li) => Math.round(li.querySelector("img").getBoundingClientRect().bottom - li.getBoundingClientRect().bottom)));
+      if (spill.some((d) => d > 0)) throw new Error(`左图右文的图超出了这一行：${spill.join(", ")}px`);
+      // Titled pictures side by side: each with its name and line under it.
+      const figs = msg.locator(".md-gallery.is-captioned figure");
+      if ((await figs.count()) !== 3) throw new Error(`带说明的图片组应有三张，实际 ${await figs.count()}`);
+      if ((await figs.nth(1).locator("figcaption").innerText()).replace(/\s+/g, " ").trim() !== "棕色香菇 自然、食物") throw new Error("图片下面应显示名字和说明");
+      await page.waitForFunction(() => [...document.querySelectorAll(".md-gallery img")].every((i) => i.complete && i.naturalWidth > 0), null, { timeout: 10_000 });
+      await msg.locator(".md-gallery.is-captioned").evaluate((el) => el.scrollIntoView({ block: "center" }));
+      await settle(page, 300);
+      await shot(page, size, scheme, "message-rich-cards");
+      // The two placed in the text are not listed again; the log still is.
+      if (await msg.locator(".conv-shots").count()) throw new Error("正文里已经显示的图不该在下面再列一次");
+      await msg.locator(".conv-attach-list", { hasText: "build.log" }).waitFor({ timeout: 5_000 });
+      await msg.locator(".md-mermaid").first().evaluate((el) => el.scrollIntoView({ block: "start" }));
+      await settle(page, 300);
+      await shot(page, size, scheme, "message-rich");
+      // The diagram opens large; so do the pictures.
+      await msg.locator(".md-mermaid[data-state=drawn] .md-mermaid-pic").first().click();
+      const lb = page.locator(".lightbox");
+      await lb.waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "message-rich-diagram");
+      await page.keyboard.press("Escape");
+      await lb.waitFor({ state: "detached", timeout: 5_000 });
+      await gallery.nth(1).click();
+      await lb.waitFor({ timeout: 5_000 });
+      await page.keyboard.press("Escape");
+      await lb.waitFor({ state: "detached", timeout: 5_000 });
+      if (narrow) await sidebar(page, false);
+    });
+
+    // A ```myco-ui block (ui/UiBlock.tsx): the catalog's components drawn
+    // in place of its JSON; an unknown one is a small note; a reply button
+    // puts its words in the box.
+    await step("消息 · 界面块", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      if (narrow) await sidebar(page, false);
+      await noRound(page);
+      const conv = page.locator(".conv-detail:visible").last();
+      await conv.locator(".conv-compose-input").fill("做一下发版检查");
+      await conv.locator(".conv-compose-input").press("Enter");
+      const msg = conv.locator(".conv-msg", { has: page.locator(".ui-root") }).last();
+      await msg.locator(".ui-root .ui-card").first().waitFor({ timeout: 30_000 });
+      if (await msg.locator(".md-fold-body.is-collapsed").count()) await msg.locator(".md-fold-btn").click();
+      if (await msg.getByText('"type": "Card"').count()) throw new Error("界面块不该显示成 JSON 原文");
+      for (const [sel, n] of [[".ui-metric", 3], [".ui-steps li", 4], [".ui-gallery figure", 3], [".ui-media li", 1], [".ui-kv dt", 2], [".ui-table tbody tr", 2], [".ui-btn", 3]]) {
+        const c = await msg.locator(sel).count();
+        if (c !== n) throw new Error(`${sel} 应有 ${n} 个，实际 ${c}`);
+      }
+      await msg.locator(".ui-unknown", { hasText: "Sparkles" }).waitFor({ timeout: 5_000 });
+      await page.waitForFunction(() => [...document.querySelectorAll(".ui-gallery img")].length === 3 && [...document.querySelectorAll(".ui-gallery img")].every((i) => i.complete && i.naturalWidth > 0), null, { timeout: 10_000 });
+      // The pictures it shows are not listed again below.
+      if (await msg.locator(".conv-shots").count()) throw new Error("界面块里用过的图不该在下面再列一次");
+      await msg.locator(".ui-card").first().evaluate((el) => el.scrollIntoView({ block: "start" }));
+      await settle(page, 300);
+      await shot(page, size, scheme, "message-ui");
+      // (and the whole block on its own, top to bottom)
+      await page.setViewportSize({ width: size.width, height: 2600 });
+      await settle(page, 300);
+      await msg.locator(".ui-root").first().evaluate((el) => el.scrollIntoView({ block: "center" }));
+      await settle(page, 200);
+      await msg.locator(".ui-root").first().screenshot({ path: path.join(OUT, `${size.width}x${size.height}-${scheme}-message-ui-block.png`) });
+      await page.setViewportSize(size);
+      await settle(page, 300);
+      // Tabs: the changes, then the chart.
+      await msg.locator(".ui-tabs").getByRole("tab", { name: "改动" }).click();
+      await msg.locator(".ui-file").first().waitFor({ timeout: 5_000 });
+      await msg.locator(".ui-tabs").getByRole("tab", { name: "体积" }).click();
+      if ((await msg.locator(".ui-chart-xy rect").count()) !== 8) throw new Error("柱状图应有 8 根柱子");
+      await msg.locator(".ui-gallery").evaluate((el) => el.scrollIntoView({ block: "center" }));
+      await settle(page, 200);
+      await shot(page, size, scheme, "message-ui-more");
+      // 「发吧」: into the box, not sent.
+      await msg.locator(".ui-btn", { hasText: "发吧" }).click();
+      await page.waitForFunction(() => (document.querySelector(".conv-detail .conv-compose-input")?.value || "") === "发吧", null, { timeout: 5_000 });
+      await conv.locator(".conv-compose-input").fill("");
+      if (narrow) await sidebar(page, false);
+    });
+
+    // 专注模式: ⋯ › 专注模式 (or ⌘⇧F) leaves one chat alone in the middle;
+    // ⌃Tab still switches; Esc puts everything back.
+    await step("专注模式", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      if (narrow) await sidebar(page, false);
+      const conv = page.locator(".conv-detail:visible").last();
+      await clickVisible(page, conv.getByRole("button", { name: "更多" }).first());
+      const item = page.locator(".conv-menu").getByRole("menuitem", { name: /专注模式/ });
+      await item.waitFor({ timeout: 5_000 });
+      if (!/⌘⇧F|Ctrl\+Shift\+F/.test(await item.innerText())) throw new Error("菜单里应写着专注模式的快捷键");
+      await item.click();
+      await page.locator(".app-shell.is-focus").waitFor({ timeout: 5_000 });
+      for (const sel of [".app-sidebar", ".app-crumbbar", ".sp-side", ".sp-strip", ".sp-pane-zoom"]) {
+        if (await page.locator(sel).first().isVisible().catch(() => false)) throw new Error(`专注模式下 ${sel} 应藏起来`);
+      }
+      if ((await page.locator("[data-pane]:visible").count()) !== 1) throw new Error("专注模式下只留一栏");
+      const box = await page.locator(".conv-detail:visible").first().boundingBox();
+      const vw = page.viewportSize().width;
+      if (!box || Math.abs(box.x + box.width / 2 - vw / 2) > 24) throw new Error("对话应在中间");
+      const ex = await page.locator(".focus-exit").boundingBox();
+      if (!ex || ex.x < box.x + box.width) throw new Error("退出按钮不该压在对话上");
+      await page.locator(".focus-exit").waitFor({ timeout: 5_000 });
+      // A pinned tab above the chat: its row lines up too.
+      // (as whoever this App is on the hub now: read off its own request)
+      const pinAs = await page.waitForFunction(() => {
+        const hit = performance.getEntriesByType("resource").map((e) => e.name).filter((n) => n.includes("/pins?with=review-cloud")).pop();
+        return hit ? new URL(hit).searchParams.get("a") || "" : null;
+      }, null, { timeout: 10_000 }).then((h) => h.jsonValue());
+      const asQ = pinAs ? `&a=${encodeURIComponent(pinAs)}` : "";
+      const pinApi = (method, path, data) => fetch(`http://${HOST}:${mockPort()}/app/hubs/hub_studio/pins${path}`, { method, headers: { "Content-Type": "application/json" }, body: data ? JSON.stringify(data) : undefined });
+      for (const p of (await (await pinApi("GET", `?with=review-cloud${asQ}`)).json()).pins) await pinApi("DELETE", `/${p.id}?with=review-cloud${asQ}`);
+      await pinApi("POST", "", { ...(pinAs ? { a: pinAs } : {}), with: "review-cloud", kind: "link", target: "http://192.168.1.20:7780/pages/pg_release", title: "审查清单", by: "review-cloud" });
+      await page.evaluate(() => window.dispatchEvent(new CustomEvent("myco-pins-changed", { detail: { hubId: "hub_studio" } })));
+      await page.locator(".conv-detail:visible .pin-bar").first().waitFor({ timeout: 10_000 });
+      // The header's line, the pinned row's and the box you write in end at
+      // the same place.
+      const cbox = await page.locator(".conv-detail:visible .conv-compose-box").first().boundingBox();
+      for (const sel of [".conv-head", ".pin-bar"]) {
+        const b = await page.locator(`.conv-detail:visible > ${sel}`).first().boundingBox();
+        if (!b || !cbox || Math.abs(b.x - cbox.x) > 2 || Math.abs(b.x + b.width - cbox.x - cbox.width) > 2) {
+          throw new Error(`专注模式的 ${sel} 应和输入框对齐（${b?.x}–${b && b.x + b.width}，输入框 ${cbox?.x}–${cbox && cbox.x + cbox.width}）`);
+        }
+      }
+      await settle(page, 250);
+      await shot(page, size, scheme, "focus-mode");
+      // The background: the quiet button beside the way out opens its panel.
+      const colourOf = (sel) => page.locator(sel).first().evaluate((el) => getComputedStyle(el).backgroundColor);
+      const themeBg = await colourOf(".app-shell");
+      await clickVisible(page, page.locator(".focus-tone"));
+      const pop = page.locator(".focus-bg-pop");
+      await pop.waitFor({ timeout: 5_000 });
+      if ((await pop.locator(".focus-bg-tile").count()) < 12) throw new Error("专注背景应有十几种可选");
+      await pop.getByRole("radio", { name: "纸张" }).click();
+      await page.locator(".app-shell[data-focus-bg=paper]").waitFor({ timeout: 5_000 });
+      if ((await colourOf(".app-main")) === themeBg) throw new Error("整个页面换成纸张，对话也应换色");
+      await settle(page, 200);
+      await shot(page, size, scheme, "focus-bg-panel");
+      // Outside only: the chat keeps the theme's colour, around it changes.
+      await pop.getByRole("radio", { name: "只改外面" }).click();
+      await page.locator(".app-shell[data-focus-scope=outside]").waitFor({ timeout: 5_000 });
+      if ((await colourOf(".sp-main")) !== themeBg) throw new Error("只改外面时，对话应保持主题的底色");
+      if ((await colourOf(".app-shell")) === themeBg) throw new Error("只改外面时，对话外面应换色");
+      // Esc closes the panel, not 专注模式.
+      await page.keyboard.press("Escape");
+      await pop.waitFor({ state: "detached", timeout: 5_000 });
+      if (!(await page.locator(".app-shell.is-focus").count())) throw new Error("Esc 应只关掉背景面板");
+      await settle(page, 200);
+      await shot(page, size, scheme, "focus-bg-outside");
+      // A pattern, outside only.
+      await clickVisible(page, page.locator(".focus-tone"));
+      await pop.getByRole("radio", { name: "点阵" }).click();
+      await page.locator(".app-shell[data-focus-kind=pattern]").waitFor({ timeout: 5_000 });
+      await page.mouse.click(5, 400);
+      await pop.waitFor({ state: "detached", timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "focus-bg-dots");
+      // A colour of your own (the system's picker): it applies to the theme
+      // you are in; one the words cannot be read on says so, with a way out.
+      await clickVisible(page, page.locator(".focus-tone"));
+      await pop.getByRole("radio", { name: "整个页面" }).click();
+      const picker = pop.locator("input[type=color]");
+      const good = scheme === "dark" ? "#24323a" : "#fbe9d0";
+      await picker.fill(good);
+      await page.locator(".app-shell[data-focus-bg=custom]").waitFor({ timeout: 5_000 });
+      const want = `rgb(${[1, 3, 5].map((i) => parseInt(good.slice(i, i + 2), 16)).join(", ")})`;
+      if ((await colourOf(".app-main")) !== want) throw new Error(`自定义颜色应成为背景：${await colourOf(".app-main")}，应为 ${want}`);
+      if (await pop.locator(".focus-bg-hint").count()) throw new Error("能看清的颜色不该提示");
+      await picker.fill(scheme === "dark" ? "#f0f0f0" : "#202020");
+      await pop.locator(".focus-bg-hint").waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "focus-bg-custom-hint");
+      await pop.locator(".focus-bg-hint").getByRole("button", { name: "改成只改外面" }).click();
+      await page.locator(".app-shell[data-focus-scope=outside]").waitFor({ timeout: 5_000 });
+      await picker.fill(good);
+      await page.keyboard.press("Escape");
+      await pop.waitFor({ state: "detached", timeout: 5_000 });
+      // Back to how it was, for the steps after.
+      await clickVisible(page, page.locator(".focus-tone"));
+      await pop.getByRole("radio", { name: "整个页面" }).click();
+      await pop.getByRole("radio", { name: "跟随主题" }).click();
+      await page.locator(".app-shell[data-focus-bg]").waitFor({ state: "detached", timeout: 5_000 });
+      await page.keyboard.press("Escape");
+      await pop.waitFor({ state: "detached", timeout: 5_000 });
+      for (const p of (await (await pinApi("GET", `?with=review-cloud${asQ}`)).json()).pins) await pinApi("DELETE", `/${p.id}?with=review-cloud${asQ}`);
+      await page.evaluate(() => window.dispatchEvent(new CustomEvent("myco-pins-changed", { detail: { hubId: "hub_studio" } })));
+      // ⌃Tab still switches, and the one opened stays alone.
+      // (the chat shown: the start of its pane; the sidebar may be closed)
+      const activeChat = async () => ((await page.locator("[data-pane]:visible").first().innerText().catch(() => "")) || "").slice(0, 80);
+      const before = await activeChat();
+      await page.keyboard.down("Control");
+      await page.keyboard.press("Tab");
+      await page.locator("[data-testid=agent-switcher]").waitFor({ timeout: 5_000 });
+      await page.keyboard.up("Control");
+      await page.locator("[data-testid=agent-switcher]").waitFor({ state: "detached", timeout: 5_000 });
+      await settle(page, 400);
+      if (!(await page.locator(".app-shell.is-focus").count())) throw new Error("⌃Tab 换对话后应还在专注模式");
+      if ((await activeChat()) === before) throw new Error("⌃Tab 应换到别的对话");
+      if ((await page.locator("[data-pane]:visible").count()) !== 1) throw new Error("换过去的对话也只留一栏");
+      // Esc leaves; the key comes back in.
+      await page.keyboard.press("Escape");
+      await page.locator(".app-shell.is-focus").waitFor({ state: "detached", timeout: 5_000 });
+      if (!(await page.locator(".app-crumbbar").isVisible())) throw new Error("退出专注后顶栏应回来");
+      await page.keyboard.press("ControlOrMeta+Shift+KeyF");
+      await page.locator(".app-shell.is-focus").waitFor({ timeout: 5_000 });
+      // ⌘⇧F is focus mode only, not the search in the chat (⌘F) as well.
+      await settle(page, 200);
+      if (await page.locator(".conv-search").first().isVisible().catch(() => false)) throw new Error("⌘⇧F 不该同时打开对话里的搜索");
+      await clickVisible(page, page.locator(".focus-exit"));
+      await page.locator(".app-shell.is-focus").waitFor({ state: "detached", timeout: 5_000 });
+      if (narrow) await sidebar(page, false);
+    });
+
     // ‹ › at the top: back to where you were and forward again, pages and
     // what they had open; no back buttons on the pages themselves.
     await step("导航 · 后退前进", async () => {
@@ -4903,6 +5226,226 @@ async function runMatrix(browser, size, scheme) {
         if (narrow) await sidebar(page, false);
         await page.locator(".conv-detail .conv-head h2", { hasText: "Review" }).waitFor({ timeout: 10_000 });
       } else if (narrow) await sidebar(page, false);
+    });
+
+    // 成员分组: a project's members in groups (the members column's ⋯):
+    // a new group, a member moved in from its menu and one dragged in;
+    // folded, its faces and who is at work stay on its heading; the other
+    // two ways to show them; renamed, then deleted (all back in one list).
+    if (!narrow) await step("项目 · 成员分组", async () => {
+      await go(page, "官网改版", narrow);
+      // (from wherever the steps before left it: one pane, the members column open)
+      for (let i = 0; i < 4; i++) {
+        const close = page.locator(".pg-pane.sp-pane-right:not(.is-hidden)").getByRole("button", { name: "关掉这一栏" }).first();
+        if (!(await close.count())) break;
+        await close.click();
+        await page.waitForTimeout(200);
+      }
+      if (await page.locator(".sp-side.is-folded").count()) await page.locator(".sp-side.is-folded .sp-side-fold").click();
+      const side = page.locator(".sp-side:not(.is-folded)");
+      // A hub too old for groups (its projects carry no `groups`): the ⋯
+      // says the workspace needs upgrading, instead of nothing at all.
+      {
+        const strip = async (route) => {
+          const r = await route.fetch();
+          const j = await r.json();
+          const drop = (p) => { if (p && typeof p === "object") delete p.groups; };
+          if (Array.isArray(j.projects)) j.projects.forEach(drop); else drop(j);
+          await route.fulfill({ response: r, json: j });
+        };
+        await page.route("**/app/hubs/hub_studio/projects**", strip);
+        await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+        await page.waitForTimeout(6_000);
+        await clickVisible(page, side.locator("[data-testid=member-groups-menu]"));
+        await page.locator(".conv-menu").getByText("要先把工作区升级到 v0.21.34 或更新").waitFor({ timeout: 5_000 });
+        await page.keyboard.press("Escape");
+        await page.unroute("**/app/hubs/hub_studio/projects**", strip);
+        await page.waitForTimeout(6_000);
+      }
+      await side.waitFor({ timeout: 10_000 });
+      const groupsMenu = async (item) => {
+        await clickVisible(page, side.locator("[data-testid=member-groups-menu]"));
+        await page.locator(".conv-menu").getByRole("menuitem", { name: item }).click();
+      };
+      const named = async (name) => {
+        const dlg = page.locator(".app-modal");
+        await dlg.locator("input").waitFor({ timeout: 5_000 });
+        await dlg.locator("input").fill(name);
+        await dlg.getByRole("button", { name: "好" }).click();
+        await dlg.waitFor({ state: "detached", timeout: 5_000 });
+      };
+      await groupsMenu("新建分组");
+      await page.locator(".app-modal input").waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "member-groups-new");
+      await named("前端");
+      const group = (name) => side.locator(`.mg-group[data-group="${name}"]`);
+      await group("前端").locator(".mg-empty").waitFor({ timeout: 10_000 });
+      await group("其他").waitFor({ timeout: 5_000 });
+      // From its menu: docs-claude into 前端 (移到分组 opens the short list of groups).
+      await menuPick(page, side.locator(".sp-member", { hasText: "docs-claude" }), /^移到分组/);
+      await page.locator(".conv-menu").getByRole("menuitem", { name: "前端", exact: true }).waitFor({ timeout: 5_000 });
+      await page.waitForTimeout(400);
+      await shot(page, size, scheme, "member-groups-move");
+      await page.locator(".conv-menu").getByRole("menuitem", { name: "前端", exact: true }).click();
+      await group("前端").locator(".sp-member", { hasText: "docs-claude" }).waitFor({ timeout: 10_000 });
+      // Dragged onto the group: Release too.
+      {
+        const dt = await page.evaluateHandle(() => new DataTransfer());
+        await side.locator(".sp-member", { hasText: "Release (Claude 云端)" }).dispatchEvent("dragstart", { dataTransfer: dt });
+        await group("前端").dispatchEvent("dragover", { dataTransfer: dt });
+        await group("前端").dispatchEvent("drop", { dataTransfer: dt });
+      }
+      await group("前端").locator(".sp-member", { hasText: "Release (Claude 云端)" }).waitFor({ timeout: 10_000 });
+      // Groups in another order: one dragged by its heading above another
+      // (a line shows where it would go); in the chips too.
+      {
+        await groupsMenu("新建分组");
+        await named("后端");
+        await group("后端").waitFor({ timeout: 10_000 });
+        const order = () => side.locator(".mg-group[data-group]").evaluateAll((els) => els.map((e) => e.getAttribute("data-group")).filter((g) => g !== "其他"));
+        if ((await order()).join(",") !== "前端,后端") throw new Error(`新建的分组应排在最后：${(await order()).join(",")}`);
+        const dt = await page.evaluateHandle(() => new DataTransfer());
+        await group("后端").locator(".mg-head").dispatchEvent("dragstart", { dataTransfer: dt });
+        const box = await group("前端").boundingBox();
+        const at = { dataTransfer: dt, clientX: box.x + box.width / 2, clientY: box.y + 4 };
+        await group("前端").dispatchEvent("dragover", at);
+        if (!(await group("前端").evaluate((el) => el.classList.contains("is-slot-before")))) throw new Error("拖分组时应显示放下的位置");
+        await group("前端").dispatchEvent("drop", at);
+        await page.waitForFunction(() => [...document.querySelectorAll(".sp-side .mg-group[data-group]")].map((e) => e.getAttribute("data-group")).join(",").startsWith("后端,前端"), null, { timeout: 5_000 });
+        await page.waitForTimeout(6_000);
+        if ((await order()).join(",") !== "后端,前端") throw new Error(`拖动后的分组顺序应保存下来：${(await order()).join(",")}`);
+        // (the chips: 前端 dragged back before 后端)
+        await groupsMenu("顶部筛选");
+        const chip = (g) => side.locator(`.mg-chip[data-group="${g}"]`);
+        const dt2 = await page.evaluateHandle(() => new DataTransfer());
+        await chip("前端").dispatchEvent("dragstart", { dataTransfer: dt2 });
+        const cb = await chip("后端").boundingBox();
+        await chip("后端").dispatchEvent("dragover", { dataTransfer: dt2, clientX: cb.x + 2, clientY: cb.y + cb.height / 2 });
+        await chip("后端").dispatchEvent("drop", { dataTransfer: dt2, clientX: cb.x + 2, clientY: cb.y + cb.height / 2 });
+        await page.waitForFunction(() => [...document.querySelectorAll(".sp-side .mg-chip[data-group]")].map((e) => e.getAttribute("data-group")).filter((g) => g !== "其他").join(",") === "前端,后端", null, { timeout: 5_000 }).catch(async (e) => {
+          const got = await page.evaluate(() => [...document.querySelectorAll(".sp-side .mg-chip")].map((e) => `${e.getAttribute("data-group")}:${e.getAttribute("draggable")}:${e.className}`).join(" | "));
+          throw new Error(`拖动筛选标签后的顺序不对：${got}；${e.message}`);
+        });
+        await groupsMenu("可折叠的分组");
+        await group("后端").locator(".mg-head").hover();
+        await group("后端").locator(".mg-more").click();
+        await page.locator(".conv-menu").getByRole("menuitem", { name: /删除分组/ }).click();
+        await group("后端").waitFor({ state: "detached", timeout: 10_000 });
+      }
+      // A slow hub (each save takes a few seconds) and two moves in a row:
+      // what shows never falls back while the saves and the 5-second
+      // refreshes cross (it went back to 0 on a real hub).
+      {
+        const slow = async (route) => { if (route.request().method() === "PATCH") await new Promise((ok) => setTimeout(ok, 3_000)); await route.continue(); };
+        await page.route("**/app/hubs/hub_studio/projects/website", slow);
+        await moveTo(page, group("前端").locator(".sp-member", { hasText: "docs-claude" }), "其他");
+        await moveTo(page, side.locator(".sp-member", { hasText: "docs-claude" }), "前端");
+        await moveTo(page, group("前端").locator(".sp-member", { hasText: "Release (Claude 云端)" }), "其他");
+        await moveTo(page, side.locator(".sp-member", { hasText: "Release (Claude 云端)" }), "前端");
+        const counts = [];
+        for (let i = 0; i < 56; i++) { counts.push(await group("前端").locator(".sp-member").count()); await page.waitForTimeout(250); }
+        await page.unroute("**/app/hubs/hub_studio/projects/website", slow);
+        if (counts.some((n) => n !== 2)) throw new Error(`保存慢的时候分组里的人数不该跳回去：${[...new Set(counts)].join(" → ")}`);
+      }
+      // The coordinator stays on top, in no group.
+      if (await side.locator(".mg-group .sp-member", { hasText: "PM (Codex)" }).count()) throw new Error("协调者不该进分组");
+      await settle(page, 200);
+      await shot(page, size, scheme, "member-groups");
+      // Folded: the rows go, its faces stay on the heading.
+      await group("前端").locator(".mg-head").click();
+      await group("前端").locator(".mg-faces").waitFor({ timeout: 5_000 });
+      if (await group("前端").locator(".sp-member").count()) throw new Error("折叠后不该显示组里的成员");
+      await settle(page, 200);
+      await shot(page, size, scheme, "member-groups-folded");
+      await group("前端").locator(".mg-head").click();
+      // A row of faces each.
+      await groupsMenu("每组一行头像");
+      await group("前端").locator(".mg-tile-row").click();
+      await group("前端").locator(".mg-inside .sp-member", { hasText: "docs-claude" }).waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "member-groups-faces");
+      // Filters on top: 前端 shows its two (and the coordinator).
+      await groupsMenu("顶部筛选");
+      await side.locator(".mg-chip", { hasText: "前端" }).click();
+      // (the chips first, under the column's title, then the coordinator)
+      await page.waitForFunction(() => document.querySelectorAll(".sp-side .mg .sp-member").length === 3, null, { timeout: 5_000 });
+      if (!(await side.locator(".mg > .mg-chips + .sp-member", { hasText: "PM (Codex)" }).count())) throw new Error("筛选标签应在最上面，协调者在它下面");
+      await settle(page, 200);
+      await shot(page, size, scheme, "member-groups-chips");
+      // Back to folding groups: renamed (its members with it), then deleted.
+      await groupsMenu("可折叠的分组");
+      await group("前端").locator(".mg-head").hover();
+      await group("前端").locator(".mg-more").click();
+      await page.locator(".conv-menu").getByRole("menuitem", { name: "改名" }).click();
+      await named("Web 前端");
+      await group("Web 前端").locator(".sp-member", { hasText: "docs-claude" }).waitFor({ timeout: 10_000 });
+      await group("Web 前端").locator(".mg-head").hover();
+      await group("Web 前端").locator(".mg-more").click();
+      await page.locator(".conv-menu").getByRole("menuitem", { name: /删除分组/ }).click();
+      await side.locator(".mg").waitFor({ state: "detached", timeout: 10_000 });
+      if ((await side.locator(".sp-member", { hasText: "docs-claude" }).count()) !== 1) throw new Error("删掉分组后成员应回到一列里");
+      // Folded to faces, the column still offers groups (its own ⋯).
+      await side.locator(".sp-side-tools button[aria-label='收起成员']").click();
+      const foldedSide = page.locator(".sp-side.is-folded");
+      await clickVisible(page, foldedSide.locator("[data-testid=member-groups-menu-folded]"));
+      await page.locator(".conv-menu").getByRole("menuitem", { name: "新建分组" }).waitFor({ timeout: 5_000 });
+      await page.keyboard.press("Escape");
+      await foldedSide.locator(".sp-side-fold").first().click();
+      await side.waitFor({ timeout: 5_000 });
+    });
+
+    // A project with two members open beside the coordinator: switching to
+    // another workspace and back puts the panes back as they were, at once
+    // (the first one beside did widen and shrink back).
+    if (!narrow) await step("项目 · 多栏 · 切换工作区不抖", async () => {
+      // (a wide window, where the members column has room beside two panes)
+      const vp = page.viewportSize();
+      await page.setViewportSize({ width: 1800, height: 900 });
+      await go(page, "官网改版", narrow);
+      await page.locator(".pg-pane[data-pane=main]").waitFor({ timeout: 10_000 });
+      const members = page.locator(".sp-side .sp-member:not(.is-add)");
+      await clickVisible(page, members.nth(1));
+      await page.locator(".pg-pane.sp-pane-right").first().waitFor({ timeout: 10_000 });
+      await menuPick(page, page.locator(".sp-nav-person", { hasText: "docs-claude" }), "在新的一栏打开");
+      await page.locator(".pg-pane.sp-pane-right").nth(1).waitFor({ timeout: 10_000 });
+      await settle(page, 400);
+      const steady = await page.locator(".pg-pane.sp-pane-right").evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().width)));
+      // (every frame: the panes beside, their widths)
+      await page.evaluate(() => {
+        window.__paneWidths = [];
+        const tick = () => {
+          window.__paneWidths.push([...document.querySelectorAll(".pg-pane.sp-pane-right:not(.is-hidden)")].map((e) => Math.round(e.getBoundingClientRect().width)).join(","));
+          if (window.__paneWidths.length < 600) requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      });
+      await clickVisible(page, page.locator(".sp-switch .app-hub-trigger"));
+      await page.locator(".app-hub-menu").waitFor();
+      const hubs = await page.locator(".app-hub-menu-item[role=menuitemradio]").evaluateAll((els) => els.map((e) => ({ on: e.getAttribute("aria-checked") === "true", ok: !!e.querySelector(".dot.working"), name: e.querySelector(".app-hub-menu-name")?.textContent || "" })));
+      await page.keyboard.press("Escape");
+      const here = hubs.findIndex((h) => h.on);
+      const other = hubs.findIndex((h, i) => i !== here && h.ok);
+      await page.keyboard.press(`Control+${other + 1}`);
+      await page.locator(".sp-switch .app-hub-name", { hasText: hubs[other].name }).waitFor({ timeout: 10_000 });
+      await settle(page, 300);
+      await page.evaluate(() => { window.__paneWidths.push("|back|"); });
+      await page.keyboard.press(`Control+${here + 1}`);
+      await page.locator(".sp-switch .app-hub-name", { hasText: hubs[here].name }).waitFor({ timeout: 10_000 });
+      await page.locator(".pg-pane.sp-pane-right").nth(1).waitFor({ timeout: 10_000 });
+      await settle(page, 600);
+      const seen = await page.evaluate(() => window.__paneWidths);
+      const after = seen.slice(seen.indexOf("|back|") + 1).filter((x) => x !== "");
+      const want = steady.join(",");
+      const odd = [...new Set(after)].filter((x) => x !== want);
+      if (odd.length) throw new Error(`切回工作区时旁边的栏宽度不该变来变去：应一直是 ${want}，实际出现过 ${odd.join(" / ")}`);
+      // Close them: the coordinator's pane alone again.
+      for (let i = 0; i < 2; i++) {
+        await page.locator(".pg-pane.sp-pane-right:not(.is-hidden)").getByRole("button", { name: "关掉这一栏" }).first().click();
+        await page.waitForTimeout(200);
+      }
+      await page.locator(".pg-pane.sp-pane-right").first().waitFor({ state: "detached", timeout: 5_000 });
+      await page.setViewportSize(vp);
     });
 
     // Superagent: set up from the bottom-left menu (a new Shroom on a
@@ -5312,6 +5855,37 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".cp").waitFor({ state: "detached", timeout: 5_000 });
       await page.evaluate(() => window.dispatchEvent(new CustomEvent("myco-menu", { detail: "settings" })));
       await page.locator(".app-settings-tab").first().waitFor({ timeout: 5_000 });
+    });
+
+    await step("用量", async () => {
+      await go(page, "用量", narrow);
+      const usage = page.locator(".usage-page");
+      await usage.locator(".usage-metrics dd").first().waitFor({ timeout: 15000 });
+      if (await usage.locator(".usage-metrics dd").count() !== 4) throw new Error("用量页应有四项概览");
+      if (await usage.locator(".usage-agents tbody tr").count() < 8) throw new Error("成员用量应有八个成员");
+      if (await usage.locator(".usage-projects tbody tr").count() < 3) throw new Error("项目用量应包含三个项目");
+      if (await usage.locator(".usage-model-table tbody tr").count() < 3) throw new Error("模型汇总应有内容");
+      if (await usage.locator(".usage-day").count() !== 30) throw new Error("默认显示 30 天");
+      const width = await page.evaluate(() => document.documentElement.scrollWidth);
+      if (width > size.width) throw new Error(`用量页横向溢出：${width} > ${size.width}`);
+      await shot(page, size, scheme, "usage");
+      await usage.getByRole("button", { name: "7 天", exact: true }).click();
+      await page.waitForFunction(() => document.querySelectorAll(".usage-day").length === 7);
+      const project = usage.getByRole("combobox", { name: "项目", exact: true });
+      const name = await project.locator('option').nth(1).getAttribute("value");
+      await project.selectOption(name);
+      await usage.locator(".usage-agents tbody tr").first().waitFor({ timeout: 10000 });
+      if (await usage.locator(".usage-projects").count()) throw new Error("指定项目时不应再显示项目汇总");
+      await project.selectOption("-");
+      await usage.locator(".usage-agents tbody tr").first().waitFor({ timeout: 10000 });
+      await project.selectOption("");
+      await usage.getByRole("button", { name: "30 天", exact: true }).click();
+      await usage.locator(".usage-projects tbody tr").first().waitFor({ timeout: 10000 });
+      await usage.locator(".usage-member").first().click();
+      await page.locator(".conv-detail").first().waitFor({ timeout: 15000 });
+      await go(page, "用量", narrow);
+      await usage.locator(".usage-metrics dd").first().waitFor({ timeout: 10000 });
+      if (await usage.locator(".usage-day").count() !== 30) throw new Error("返回用量页应记住时间范围");
     });
 
     await step("设置", async () => {

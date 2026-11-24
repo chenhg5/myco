@@ -22,6 +22,14 @@ Errors (any non-2xx):
 
 ## Endpoints
 
+The desktop App also provides the generic `GET /app/os` and `POST /app/os/call`
+transport documented in [App capabilities](app-os.md). Database studio adds
+scoped local `db.*` capabilities through this existing transport, with no new
+Hub or agent-token database endpoints. Local database operations may return
+`conflict` (409) or `outcome_unknown` (500); an unacknowledged write must not be
+automatically retried. Capability discovery, rather than a Hub version check,
+determines whether the installed desktop App supports database connections.
+
 The App's local backend also exposes `GET /app/local`: `hub` remains the default
 hub for older App clients, while `hubs` lists every locally configured hub as
 `{name, running, local_url, public_url, version, added}` (`name: ""` for the
@@ -153,12 +161,12 @@ A project groups the nodes that work on one thing, with a shared goal, a brief, 
 
 | Endpoint | Who | Notes |
 |---|---|---|
-| `GET /v1/projects?mine=true` | anyone | `{projects: [project]}`: the projects you can see (`mine`: only those you or your nodes are in). A project: `{name, title, goal, brief, links: [{title, url}], visibility, owner, owner_id, archived, created_at, updated_at, members: [{name, role, note, added_by, added_at, agent?}], docs: [{name, size, updated_by, updated_at}], can_edit, can_manage, machines}`; `agent` is the node's card when you can see it; `machines` (v0.21.2+) are the computers (ids) its coordinators may start agents on |
+| `GET /v1/projects?mine=true` | anyone | `{projects: [project]}`: the projects you can see (`mine`: only those you or your nodes are in). A project: `{name, title, goal, brief, links: [{title, url}], visibility, owner, owner_id, archived, created_at, updated_at, members: [{name, role, note, added_by, added_at, agent?}], docs: [{name, size, updated_by, updated_at}], can_edit, can_manage, machines, groups}`; `agent` is the node's card when you can see it; `machines` (v0.21.2+) are the computers (ids) its coordinators may start agents on; `groups` (v0.21.34+) are the groups its members are sorted into, in display order, always present (`[]` when none; absent from older hubs, which have no groups), and a member's `group` is its group in this project (absent: ungrouped) |
 | `POST /v1/projects` | people (not agents) | `{name, title?, goal?, visibility?}`; `name` is a short lowercase address; you become its owner |
 | `GET /v1/projects/{name}?docs=body` | who can see it | One project; `docs=body` includes the documents' text. From v0.21.10 it also has `memory`: the project's memory document with its body (`{name: "memory", body: ""}` while nobody has added to it; absent from older hubs) |
-| `PATCH /v1/projects/{name}` | editors: its owner, the hub's owner/admins, its coordinators | `{title?, goal?, brief?, links?}`; the brief is up to 16,000 characters (8 KB before v0.21.10). `visibility` (`members`\|`team`) and `archived`: its owner and hub owner/admins only |
+| `PATCH /v1/projects/{name}` | editors: its owner, the hub's owner/admins, its coordinators | `{title?, goal?, brief?, links?, groups?, member_groups?}`; the brief is up to 16,000 characters (8 KB before v0.21.10). `visibility` (`members`\|`team`) and `archived`: its owner and hub owner/admins only. From v0.21.34 (older hubs reject them): `groups` replaces the list of groups (up to 30 unique names of 1-40 characters, trimmed; members of a group left out become ungrouped, which is how a group is deleted); `member_groups` (`{agent: group}`, `""` = ungrouped) moves members of the project into groups of the resulting list; anything else is `invalid_argument`. Both are applied together in one transaction (rename: the new list plus moving the old group's members). Audited as `project.groups` |
 | `DELETE /v1/projects/{name}` | its owner, hub owner/admins | Deletes members, documents and links; nodes stay |
-| `PUT /v1/projects/{name}/members/{agent}` | see below | `{role?, note?}`. Adding: a person adds nodes they own (admins any), an agent adds itself, a coordinator adds nodes of its own owner. `role` (`member`\|`coordinator`): its owner and hub owner/admins only. `note` (what it does here): editors or the node's owner |
+| `PUT /v1/projects/{name}/members/{agent}` | see below | `{role?, note?, group?}`. Adding: a person adds nodes they own (admins any), an agent adds itself, a coordinator adds nodes of its own owner. `role` (`member`\|`coordinator`): its owner and hub owner/admins only. `note` (what it does here): editors or the node's owner. `group` (v0.21.34+): one of the project's `groups`, `""` = ungrouped (else `invalid_argument`; create a group with `PATCH` first): editors |
 | `GET /v1/projects/{name}/machines` | anyone who sees it | `{project, machines: [{id, name, os, online, can_spawn, spawn_node?, allowed}]}`: the workspace's computers, and which the project's coordinators may start agents on (`allowed`; v0.21.2+) |
 | `PUT /v1/projects/{name}/machines/{machine}` | who manages it | Let its coordinators start agents on a computer (`{machine}`: id, name or machine node). A spawn request from a coordinator to that computer's machine node then passes without being on the node's `allow_from` (the message carries `granted_by: "project:<name>"`); the computer's own folder and access rules still apply. Not related to the terminals (shell nodes) in the project. `DELETE` takes it back. Both answer the project, with `machines` (ids) |
 | `POST /v1/projects/{name}/machines/{machine}/request` | a coordinator (agent) | `{reason?}` → `202` approval (`pending`): a card for the project's owner, shown in the coordinator's chat; approving carries out the `PUT` above as the owner, and the agent gets a note either way. Asking again while it waits gives the same approval; an allowed computer answers `200 {allowed: true}` |
@@ -429,6 +437,7 @@ From v0.21.21, an agent can act on a computer through a provider that computer's
 | Route | Who | |
 |---|---|---|
 | `POST /v1/me/action-grants` | agent | `{target: {kind: "machine", id}, permissions, reason, message_id?, page_id?, ttl_seconds?}` → `201` a pending grant `{id, agent, owner, target, target_name, permissions, requested, reason, message_id?, approval_id, state, end_reason?, created_at, expires_at?, ended_at?}`; the target's owner gets an `action_grant` approval. `id` may be the computer's name. Permissions: `remote.desktop.view`, `remote.desktop.control` (control includes view). TTL 5 minutes by default, 30 at most. With `message_id`, the grant ends when that task ends. `?dry_run=1` checks only |
+| `GET /v1/me/action-targets` | agent | `{targets: [{kind:"machine",id,resource:{provider:"server.ssh",id,binding,name,summary}}]}`: enabled SSH resources belonging to the agent's own person in this workspace. Discovery is not permission to execute. Older hubs return 404 |
 | `GET /v1/me/action-grants` | agent | `{grants: [...]}`, its own |
 | `GET /v1/me/action-grants/{id}?wait_seconds=30` | agent | the grant; waits while it is pending (`wait=30s` works too; 60 seconds at most) |
 | `POST /v1/me/action-grants/{id}/end` | agent | ends it → the grant |
@@ -447,6 +456,84 @@ From v0.21.21, an agent can act on a computer through a provider that computer's
 
 The CLI: `myco action grant request|list|get|end`, `myco action list`, `myco action run` (waits, and saves screenshots to files), `myco action job`, `myco action cancel`.
 
+### Bound SSH resources
+
+The desktop App can host `server.ssh` for a private, immutable OpenSSH profile.
+A grant must supply `target: {kind:"machine", id:controller_machine_id,
+resource:{provider:"server.ssh", id:profile_id, binding:sha256}}`. The trusted
+host, not the agent, supplies the profile name and resolved `user@host:port`
+summary shown in the approval. `server.ssh.read` allows overview, service and
+container lists/status/logs; `server.ssh.manage` additionally allows fixed
+start/stop/restart operations and implies read. Providers cannot be mixed in a
+resource grant. There is no arbitrary agent shell action.
+
+Host registration includes the same `resource` with `name` and `summary`.
+Only the controller machine's actual owner may register or poll an SSH host;
+hub management privileges do not substitute for ownership. Different profiles
+on one machine have separate hosts. Matching requires the same provider, profile
+ID and SHA256 binding at both the Hub and the native host. A changed binding
+revokes existing grants, including pending requests; a restarted host with the
+same binding can serve the same target. Old hubs/Apps are unsupported: clients
+must never retry SSH grants without their resource binding.
+
+Action names (v1): `server.ssh.overview`, `server.ssh.services.list`,
+`server.ssh.services.status`, `server.ssh.services.logs`,
+`server.ssh.services.start|stop|restart`, `server.ssh.containers.list`,
+`server.ssh.containers.logs`, `server.ssh.containers.start|stop|restart`.
+Arguments only contain `{name?,lines?}` (systemd `.service` unit/container name, log lines 1–200,
+default 100); a profile or host override is rejected. Results are
+`{stdout,stderr,exit_code,truncated,duration_ms}`. The SDK parses the fixed text
+formats (`overview` uses `@@myco:` section markers, container lists use Docker
+JSON lines). The optional `@@myco:identity` section contains `hostname=<value>`
+and `cpus=<positive online CPU count>` lines, read with `uname -n` and
+`getconf _NPROCESSORS_ONLN`. Empty values mean unavailable, never zero cores.
+Older hosts omit this section; parsers must ignore unknown sections and preserve
+unknown/missing fields. Nonzero remote exit codes are returned as results, not success
+claims about the service. Output is capped at 256 KiB total and each operation
+at 30 seconds. JSON results over 200 KiB use a private `application/json` action
+artifact; the job result then contains `{artifact,exit_code,truncated,duration_ms}`.
+Cancellation/disconnection during a mutation returns `outcome_unknown`, never an
+automatic retry. Read current status before deciding to retry.
+
+`myco action targets` discovers resources; request using
+`myco action grant request --machine mch_... --ssh-profile ssh_... --binding
+<sha256> --permission server.ssh.read --reason "inspect server"`. Grants,
+expiry, private results and audit follow the same framework lifecycle as desktop
+actions, including its current restriction in encrypted workspaces.
+
+### Local SSH capabilities
+
+Updated desktop bridges advertise `ssh` and offer `myco.os.ssh.profiles(args)` /
+`myco.os.ssh.run(args)` (also `myco.os.call("ssh.profiles", args)` and
+`myco.os.call("ssh.run", args)`). Detect capability availability before use;
+missing OpenSSH or an old/mobile bridge is unsupported.
+
+Profiles use `~/.myco/ssh/<stable-id>.json` (0600). `ssh.profiles` accepts
+`{op:"list"}` → `{profiles:[...]}`;
+`{op:"create",name,destination,user?,port?}` → a profile;
+`{op:"delete",id}` → `{ok:true}`;
+`{op:"agent_enabled",id,agent_enabled:boolean}` → updated profile.
+Public profiles contain `{id,name,destination,host,user,port,binding,
+agent_enabled,agent_hub?}`; no config, key paths, passwords or key contents.
+Opt-in binds agent access to the page's current workspace (`agent_hub`), not all
+workspaces on this computer. Enabling authenticates and verifies Linux first.
+A profile's destination cannot be edited in place: recreate it and approve again.
+
+`ssh.run` accepts `{profile_id,binding?,action,name?,lines?}` with the short
+native action names (`overview`, `services.list`, etc.; `probe` returns `uname -s`).
+These human calls do not create agent grants or execute shared page records.
+Both native and agent calls use local OpenSSH/config/ssh-agent, BatchMode,
+strict existing known_hosts, no PTY/password prompts, forwarding or automatic
+host trust. Verify an unknown server's host fingerprint independently and connect
+once with OpenSSH locally. SSH config and known_hosts are snapshotted and hashed;
+changes cause `target_changed` rather than silently retargeting an approval.
+The first version rejects `ProxyJump` configurations: a flattened single-host
+snapshot cannot safely preserve a second host's settings. Use a directly
+reachable address (including a VPN address) instead.
+The original profile and trust remain local; only explicitly enabled resource
+display metadata reaches the workspace. Execution uses the SSH account's normal
+permissions; it never adds sudo, daemon privileges or remote software.
+
 ## Message object
 
 ```json
@@ -463,6 +550,8 @@ The CLI: `myco action grant request|list|get|end`, `myco action list`, `myco act
 ```
 
 `after` is optional and omitted when empty (from v0.19.2). `automation` names the automation that sent the message, omitted otherwise. `workflow` (v0.21+) is the workflow run that sent a task; `result` is the structured result on a reply that has one. `granted_by` (v0.21.2+), on a task, says why the hub let it past its recipient's `allow_from`: `project:<name>` for a spawn request (`myco agent spawn`) to a computer's machine node from a coordinator of an active project that allows that computer (see [Projects](#projects): `machines`); not for new terminals or sealed bodies. The machine node accepts such a request; its own folder and access rules still apply. Adding fields is non-breaking; renaming/removing fields requires `/v2`.
+
+`body` is Markdown; what the App draws beyond plain Markdown (diagrams, pictures in the text, `myco-ui` blocks) is in [rich-messages.md](rich-messages.md).
 
 ## Exec nodes
 
@@ -674,3 +763,49 @@ only on the target computer. Private local receipts make lost-ack retries avoid
 overwriting local changes with the same delivery again. Clearing or selecting a
 channel cancels pending ciphertext. The existing run_settings/runtime JSON stores
 are used; no database migration is required.
+
+## Workspace usage
+
+Usage is numeric CLI accounting, independent of trace storage and encryption.
+No message content is reported. Older runners/sessions contribute no rows; the
+Hub never infers usage from traces. Reports are self-reported, not billing records.
+
+| Route | Who | Contract |
+|---|---|---|
+| `POST /v1/me/usage` | authenticated agent | `{source?:"runner"\|"session",reports:[{key?,day,model?,project?,message_id?,calls,input_tokens,cache_write_tokens?,cache_read_tokens?,output_tokens,cost_usd?}]}` → `{recorded:n}`. `source` defaults to `runner`; at most 100 reports. `day` is UTC YYYY-MM-DD. Numbers must be finite, nonnegative and at most 1e11 per field per report. An omitted project is taken from `message_id` when provided and visible to the agent. A supplied project takes precedence. |
+| `GET /v1/console/usage?from=&to=&project=` | console/admin | `{from,to,rows:[{day,agent,project,model,source,calls,input_tokens,cache_write_tokens,cache_read_tokens,output_tokens,cost_usd}],agents:[{name,display_name,owner,harness,machine}]}`. Inclusive UTC days; defaults to the last seven days ending at `to` (today if omitted), at most 366 days. `project=-` selects unassigned rows. Owners/admins see all rows; ordinary members see only their currently owned nodes and metadata. |
+
+Input tokens exclude cache reads and cache writes in this API. Existing trace
+`input_tokens` retains its original total-input semantics. `owner` is the member
+name (as in the public agent view) and `machine` is the machine ID; model/machine can be empty when not reported.
+Costs are only included when reported by the CLI; zero can also mean unknown.
+Claude Code estimates use Anthropic pricing and may not match a compatible proxy
+or another provider's actual bill. No price lookup or trace backfill is performed.
+
+Rows accumulate by `(day,agent,project,model,source)` in each workspace database.
+A nonempty key is consumed once per agent, atomically with the increment. Retry
+keys are retained for 30 days. `recorded` counts newly applied reports, excluding
+duplicates. The Go client silently skips an old Hub's 404 without retrying.
+
+The local desktop backend proxies `GET /app/hubs/{id}/usage` with the same query
+and response. `myco usage show --from YYYY-MM-DD --to YYYY-MM-DD --project name
+--by agent|project|day|model` uses console/admin credentials like `myco audit`;
+JSON returns the raw response, text groups and sorts by total token consumption.
+
+New runners advertise runtime feature `usage` and report usage events for every
+invocation, including TraceOff and encrypted tasks. `MYCO_NO_USAGE=1` disables
+reporting. Claude cache input is split explicitly; missing model/cost information
+is left unknown rather than inferred from content.
+
+For non-runner Claude sessions, `myco inbox wait` accounts assistant transcript
+usage once per message ID (content-block lines repeat usage). Synthetic models
+are ignored. On first read only timestamps in the preceding seven days count.
+Complete lines are consumed incrementally; a partial tail waits for the next
+invocation. Private 0600 `~/.myco/state/<agent>.usage` checkpoints retain the last
+message ID, previous wait's project context, and an immutable pending numeric
+batch. Cursor advancement follows successful reporting only; retries reuse keys
+even if the transcript has grown. All reporting failures are best effort and do
+not fail inbox waiting. Runner-owned subprocesses skip session accounting to
+avoid duplication. For multi-workspace sessions, the previous receiving identity
+is used once, not once per workspace. Codex rollout-session collection is not yet
+supported (runner Codex usage events remain supported).

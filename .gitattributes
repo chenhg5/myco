@@ -2,3 +2,14 @@ skill/myco/SKILL.md text eol=lf
 
 # Keep vendored PDF.js data and licenses byte-for-byte.
 internal/templates/official/reader/pdf/** -whitespace
+
+# Official apps are packed into builtin.zip byte-for-byte (PackBuiltin): check
+# them out with LF on Windows too, where core.autocrlf would otherwise add CRLF
+# and make TestBuiltinIsCurrent report the zip as stale.
+internal/templates/official/** text eol=lf
+internal/templates/official/**/*.webp -text
+internal/templates/official/**/*.pfb -text
+internal/templates/official/**/*.ttf -text
+internal/templates/official/**/*.wasm -text
+internal/templates/official/**/*.bcmap -text
+internal/templates/official/**/*.icc -text

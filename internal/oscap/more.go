@@ -104,7 +104,7 @@ func systemApps(ctx context.Context, env *Env, args json.RawMessage, _ Emit) (an
 // dirSize is what a folder's files take on the disk.
 func dirSize(ctx context.Context, root string) int64 {
 	var total int64
-	_ = filepath.WalkDir(root, func(_ string, d fs.DirEntry, err error) error {
+	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}
@@ -113,7 +113,7 @@ func dirSize(ctx context.Context, root string) int64 {
 		}
 		if !d.IsDir() {
 			if fi, err := d.Info(); err == nil {
-				total += diskOf(fi)
+				total += diskOf(path, fi)
 			}
 		}
 		return nil

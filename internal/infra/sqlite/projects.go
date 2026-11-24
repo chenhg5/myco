@@ -17,7 +17,7 @@ func NewProjectRepo(db *sql.DB) *ProjectRepo { return &ProjectRepo{db: db} }
 
 var _ domain.ProjectRepository = (*ProjectRepo)(nil)
 
-const projectCols = `id, name, title, goal, brief, links, visibility, owner, archived, created_at, updated_at, machines`
+const projectCols = `id, name, title, goal, brief, links, visibility, owner, archived, created_at, updated_at, machines, member_groups`
 
 func machinesJSON(m []string) string {
 	if len(m) == 0 {
@@ -36,14 +36,16 @@ func linksJSON(l []domain.ProjectLink) string {
 }
 
 func (r *ProjectRepo) Create(ctx context.Context, p *domain.Project) error {
-	_, err := r.db.ExecContext(ctx, `INSERT INTO projects (`+projectCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-		p.ID, p.Name, p.Title, p.Goal, p.Brief, linksJSON(p.Links), string(p.Visibility), p.Owner, p.Archived, ms(p.CreatedAt), ms(p.UpdatedAt), machinesJSON(p.Machines))
+	_, err := r.db.ExecContext(ctx, `INSERT INTO projects (`+projectCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		p.ID, p.Name, p.Title, p.Goal, p.Brief, linksJSON(p.Links), string(p.Visibility), p.Owner, p.Archived, ms(p.CreatedAt), ms(p.UpdatedAt), machinesJSON(p.Machines), machinesJSON(p.Groups))
 	if isUniqueViolation(err) {
 		return domain.Errf(domain.CodeConflict, "a project named %s already exists", p.Name)
 	}
 	return internal(err)
 }
 
+// Save stores the project's fields except its groups, which SaveGroups
+// changes (with its members' groups, in one transaction).
 func (r *ProjectRepo) Save(ctx context.Context, p *domain.Project) error {
 	res, err := r.db.ExecContext(ctx, `UPDATE projects SET title=?, goal=?, brief=?, links=?, visibility=?, owner=?, archived=?, updated_at=?, machines=? WHERE id=?`,
 		p.Title, p.Goal, p.Brief, linksJSON(p.Links), string(p.Visibility), p.Owner, p.Archived, ms(p.UpdatedAt), machinesJSON(p.Machines), p.ID)
@@ -58,15 +60,16 @@ func (r *ProjectRepo) Save(ctx context.Context, p *domain.Project) error {
 
 func scanProject(s scanner) (*domain.Project, error) {
 	var (
-		p                domain.Project
-		links, vis, mach string
-		created, updated int64
+		p                        domain.Project
+		links, vis, mach, groups string
+		created, updated         int64
 	)
-	if err := s.Scan(&p.ID, &p.Name, &p.Title, &p.Goal, &p.Brief, &links, &vis, &p.Owner, &p.Archived, &created, &updated, &mach); err != nil {
+	if err := s.Scan(&p.ID, &p.Name, &p.Title, &p.Goal, &p.Brief, &links, &vis, &p.Owner, &p.Archived, &created, &updated, &mach, &groups); err != nil {
 		return nil, err
 	}
 	_ = json.Unmarshal([]byte(links), &p.Links)
 	_ = json.Unmarshal([]byte(mach), &p.Machines)
+	_ = json.Unmarshal([]byte(groups), &p.Groups)
 	p.Visibility = domain.ProjectVisibility(vis)
 	p.CreatedAt, p.UpdatedAt = fromMS(created), fromMS(updated)
 	return &p, nil
@@ -109,10 +112,35 @@ func (r *ProjectRepo) Delete(ctx context.Context, id string) error {
 }
 
 func (r *ProjectRepo) PutMember(ctx context.Context, m *domain.ProjectMember) error {
-	_, err := r.db.ExecContext(ctx, `INSERT INTO project_members (project, agent, role, note, added_by, added_at) VALUES (?,?,?,?,?,?)
-		ON CONFLICT(project, agent) DO UPDATE SET role=excluded.role, note=excluded.note`,
-		m.Project, m.Agent, string(m.Role), m.Note, m.AddedBy, ms(m.AddedAt))
+	_, err := r.db.ExecContext(ctx, `INSERT INTO project_members (project, agent, role, note, group_name, added_by, added_at) VALUES (?,?,?,?,?,?,?)
+		ON CONFLICT(project, agent) DO UPDATE SET role=excluded.role, note=excluded.note, group_name=excluded.group_name`,
+		m.Project, m.Agent, string(m.Role), m.Note, m.Group, m.AddedBy, ms(m.AddedAt))
 	return internal(err)
+}
+
+func (r *ProjectRepo) SaveGroups(ctx context.Context, p *domain.Project, members []*domain.ProjectMember) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return internal(err)
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, `UPDATE projects SET member_groups=?, updated_at=? WHERE id=?`, machinesJSON(p.Groups), ms(p.UpdatedAt), p.ID)
+	if err != nil {
+		return internal(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return domain.Errf(domain.CodeNotFound, "project %s not found", p.Name)
+	}
+	for _, m := range members {
+		res, err := tx.ExecContext(ctx, `UPDATE project_members SET group_name=? WHERE project=? AND agent=?`, m.Group, p.ID, m.Agent)
+		if err != nil {
+			return internal(err)
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return domain.Errf(domain.CodeNotFound, "%s is not in project %s", m.Agent, p.Name)
+		}
+	}
+	return internal(tx.Commit())
 }
 
 func (r *ProjectRepo) DeleteMember(ctx context.Context, project string, agent domain.AgentName) error {
@@ -127,7 +155,7 @@ func (r *ProjectRepo) DeleteMember(ctx context.Context, project string, agent do
 }
 
 func (r *ProjectRepo) members(ctx context.Context, where string, arg any) ([]*domain.ProjectMember, error) {
-	rows, err := r.db.QueryContext(ctx, `SELECT project, agent, role, note, added_by, added_at FROM project_members WHERE `+where+` ORDER BY added_at`, arg)
+	rows, err := r.db.QueryContext(ctx, `SELECT project, agent, role, note, group_name, added_by, added_at FROM project_members WHERE `+where+` ORDER BY added_at`, arg)
 	if err != nil {
 		return nil, internal(err)
 	}
@@ -139,7 +167,7 @@ func (r *ProjectRepo) members(ctx context.Context, where string, arg any) ([]*do
 			role  string
 			added int64
 		)
-		if err := rows.Scan(&m.Project, &m.Agent, &role, &m.Note, &m.AddedBy, &added); err != nil {
+		if err := rows.Scan(&m.Project, &m.Agent, &role, &m.Note, &m.Group, &m.AddedBy, &added); err != nil {
 			return nil, internal(err)
 		}
 		m.Role, m.AddedAt = domain.ProjectRole(role), fromMS(added)

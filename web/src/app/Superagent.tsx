@@ -295,6 +295,8 @@ export function GrantStrip({ hubId, agent, name }: { hubId: string; agent: strin
       {items.map((g) => {
         const control = g.permissions.includes("remote.desktop.control");
         const page = g.target.kind === "page";
+        const ssh = g.target.resource?.provider === "server.ssh";
+        const manage = g.permissions.includes("server.ssh.manage");
         const what = g.target_name || g.target.id;
         const left = g.expires_at ? Math.max(0, Math.round((new Date(g.expires_at).getTime() - now) / 60_000)) : 0;
         return (
@@ -304,6 +306,10 @@ export function GrantStrip({ hubId, agent, name }: { hubId: string; agent: strin
               <div className="sa-approval-what">
                 {page
                   ? L(`${name || agent} 可以导出「${what}」`, `${name || agent} may export "${what}"`)
+                  : ssh
+                  ? manage
+                    ? L(`${name || agent} 可以读取并管理 ${what} 的服务与容器`, `${name || agent} may inspect and manage services and containers on ${what}`)
+                    : L(`${name || agent} 可以读取 ${what} 的状态与日志`, `${name || agent} may read status and logs on ${what}`)
                   : control
                   ? L(`${name || agent} 可以看并操作 ${what} 的屏幕`, `${name || agent} may see and use ${what}'s screen`)
                   : L(`${name || agent} 可以看 ${what} 的屏幕`, `${name || agent} may see ${what}'s screen`)}

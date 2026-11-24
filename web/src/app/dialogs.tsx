@@ -86,19 +86,23 @@ function errorDetail(error: unknown): string {
  * (详细信息) and, when the caller can try again, a 重试 button. Nothing
  * here retries by itself, so it never says it will.
  */
-export function ErrorText({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
+/** What an error means in words of its own (summary on ErrorText): the
+ *  raw error then stays under 详细信息. */
+export type ErrorSummary = { message: string; suggestion?: string };
+
+export function ErrorText({ error, onRetry, summary }: { error: unknown; onRetry?: () => void; summary?: ErrorSummary | null }) {
   const [details, setDetails] = React.useState(false);
   React.useEffect(() => setDetails(false), [error]);
   const ask = useCopy(error ? debugPrompt(errorDetail(error)) : "");
   if (!error) return null;
-  const transient = isTransient(error);
-  const old = isOldHub(error);
-  const message = old
+  const old = !summary && isOldHub(error);
+  const transient = !summary && isTransient(error);
+  const message = summary ? summary.message : old
     ? L("你的工作区版本有点旧，还不支持这个功能。", "This hub runs an older version that doesn't support this yet.")
     : transient
       ? L("暂时连不上，或者响应太慢。", "Can't reach this hub right now, or it is answering too slowly.")
       : error instanceof Error ? error.message : String(error);
-  const suggestion = old
+  const suggestion = summary ? summary.suggestion : old
     ? L("到设置里升级一下再试。", "Upgrade the hub in Settings → Hubs, then try again.")
     : transient
       ? onRetry
@@ -106,7 +110,7 @@ export function ErrorText({ error, onRetry }: { error: unknown; onRetry?: () => 
         : L("等一下再试。一直这样的话，看看左下角工作区连没连上，或者到设置 › 代理里看看。", "Try again in a moment. If it keeps happening, check that the workspace shows as connected (bottom left), or look at Settings › Proxy.")
       : (error as { suggestion?: string } | null)?.suggestion;
   // The raw text is only hidden when it was replaced by words above.
-  const detail = transient || old ? errorDetail(error) : "";
+  const detail = transient || old || summary ? errorDetail(error) : "";
   return (
     <div className="app-error-text">
       <div>{message}</div>

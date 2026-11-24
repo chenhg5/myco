@@ -83,3 +83,11 @@ func TestSessionTokensFromTheRolloutFile(t *testing.T) {
 		t.Fatal("a session without a file is not known")
 	}
 }
+
+func TestUsageCacheIsTheRunsShare(t *testing.T) {
+	s := newEventStream(time.Now(), tokenTotal{Input: 100, Cached: 70, Output: 20}, true)
+	events := s.line([]byte(`{"type":"turn.completed","usage":{"input_tokens":150,"cached_input_tokens":105,"output_tokens":30}}`))
+	if len(events) != 1 || events[0].InputTokens != 50 || events[0].CacheReadTokens != 35 || events[0].OutputTokens != 10 {
+		t.Fatalf("cached usage %+v", events)
+	}
+}

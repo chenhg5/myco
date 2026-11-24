@@ -46,3 +46,29 @@ func TestOpenURLRoute(t *testing.T) {
 		t.Fatalf("opened %v", opened)
 	}
 }
+
+func TestFullscreenRoute(t *testing.T) {
+	put := func(b *Backend, body string) int {
+		rec := httptest.NewRecorder()
+		b.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPut, "/app/window/fullscreen", strings.NewReader(body)))
+		return rec.Code
+	}
+	// A browser: the page uses the browser's own full screen.
+	if c := put(&Backend{}, `{"on":true}`); c != http.StatusNotFound {
+		t.Fatalf("no window: %d", c)
+	}
+	var got []bool
+	b := &Backend{Fullscreen: func(on bool) error { got = append(got, on); return nil }}
+	if c := put(b, `{"on":true}`); c != http.StatusNoContent {
+		t.Fatalf("on: %d", c)
+	}
+	if c := put(b, `{"on":false}`); c != http.StatusNoContent {
+		t.Fatalf("off: %d", c)
+	}
+	if c := put(b, `not json`); c != http.StatusBadRequest {
+		t.Fatalf("bad body: %d", c)
+	}
+	if len(got) != 2 || !got[0] || got[1] {
+		t.Fatalf("calls %v", got)
+	}
+}

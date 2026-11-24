@@ -1,6 +1,7 @@
+import { installSSHFixture } from './server-console-fixture.mjs';
 // Screenshots of the official apps, for the App's new-page dialog: each app
 // opened with its sample data (an in-memory bridge stands in for the App)
-// in a 1040×650 window (at twice the pixels), light and dark, saved as
+// in a 1040×650 window (at twice the pixels, saved at most 1280 wide), light and dark, saved as
 // src/<app>/public/shots/<n>.webp and <n>.dark.webp. Run after building
 // (node build.mjs), then build again so the shots go into the apps:
 //
@@ -66,6 +67,7 @@ function serve() {
     let p = decodeURIComponent(new URL(req.url, "http://x").pathname);
     if (p.endsWith("/")) p += "index.html";
     if (p === "/__bridge.js") { res.writeHead(200, { "Content-Type": "text/javascript" }); res.end(bridge); return; }
+    if (p === "/__database.js") { res.writeHead(200, { "Content-Type": "text/javascript" }); res.end(readFileSync(path.join(here, "database-shots.js"))); return; }
     if (p === "/__os.js") { res.writeHead(200, { "Content-Type": "text/javascript" }); res.end(readFileSync(path.join(here, "shots-os.js"))); return; }
     const f = path.join(official, p);
     if (!f.startsWith(official) || !existsSync(f)) { res.writeHead(404); res.end(); return; }
@@ -73,7 +75,7 @@ function serve() {
     if (f.endsWith(".html")) {
       // (a made-up computer first, for the apps that use one)
       const os = new URL(req.url, "http://x").searchParams.get("os") ? '<script src="/__os.js"></script>' : "";
-      body = Buffer.from(String(body).replace("<head>", `<head>${os}<script src="/__bridge.js"></script>`));
+      body = Buffer.from(String(body).replace("<head>", `<head>${os}${p.startsWith("/database/") ? '<script src="/__database.js"></script>' : ""}<script src="/__bridge.js"></script>`));
     }
     res.writeHead(200, { "Content-Type": types[path.extname(f)] || "application/octet-stream" });
     res.end(body);
@@ -106,6 +108,10 @@ function photo() {
 // sample data is there before the first).
 const wait = (p, ms = 400) => p.waitForTimeout(ms);
 const plans = {
+  "aigc-canvas": [async p => { await p.locator(".ac-node").filter({ hasText: "写一句海报文案" }).click(); }],
+
+  database: { viewport: { width: 1400, height: 900 }, steps: [async p => { await p.locator(".db-grid tbody tr").first().waitFor(); }, async p => { await p.getByRole("button", { name: "SQL 工作台", exact: true }).click(); await p.getByLabel("SQL 查询内容").fill("SELECT category, COUNT(*) AS products,\n       SUM(stock) AS total_stock\nFROM public.products\nGROUP BY category\nORDER BY total_stock DESC;"); await p.getByRole("button", { name: "执行", exact: true }).click(); }] },
+  "palette": { viewport: { width: 1400, height: 1000 }, steps: [null, async p => { await p.getByRole("button", { name: "编辑配色", exact: true }).click(); }] },
   "price-compare": { viewport: { width: 1400, height: 1000 }, steps: [null] },
   reader: { viewport: { width: 1040, height: 800 }, steps: [async (p) => {
     await p.getByRole("button", { name: "先读一篇示例", exact: true }).click();
@@ -152,6 +158,16 @@ const plans = {
     await wait(p);
     await p.locator(".tu-figure").scrollIntoViewIfNeeded();
   }],
+  "server-console": [async (p) => {
+    const theme = await p.evaluate(() => matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    await p.addInitScript(installSSHFixture, {lang:'zh',theme});
+    await p.reload();
+    await p.getByRole('button',{name:'添加 SSH 主机',exact:true}).click();
+    await p.getByLabel('显示名称',{exact:true}).fill('示例 Linux');
+    await p.getByLabel('SSH 配置别名或 user@host',{exact:true}).fill('fixture');
+    await p.getByRole('button',{name:'保存并连接',exact:true}).click();
+    await p.locator('.sv-metrics').waitFor();
+  }, async(p)=>{await p.locator('.sv-sidebar nav button').nth(1).click();await wait(p);}],
   podcast: [null],
   personality: [null, async (p) => { await p.getByRole("button", { name: "16 种偏好", exact: true }).click(); await wait(p); }],
   scheduling: [async (p) => { await p.getByRole("combobox", { name: "时区", exact: true }).selectOption("Asia/Shanghai"); await wait(p); }, async (p) => { await p.getByRole("combobox", { name: "日历视图" }).selectOption("week"); await p.getByRole("button", { name: "下一页", exact: true }).click(); await wait(p, 600); }],
@@ -253,10 +269,15 @@ for (const app of apps) {
         const img = new Image();
         img.src = `data:image/png;base64,${b64}`;
         await img.decode();
+        // At most 1280 wide: plenty for the dialog on a 2× screen, and a
+        // third of the bytes a full 2080 takes (they ship in every hub).
+        const scale = Math.min(1, 1280 / img.width);
         const c = document.createElement("canvas");
-        c.width = img.width; c.height = img.height;
-        c.getContext("2d").drawImage(img, 0, 0);
-        const blob = await new Promise((r) => c.toBlob(r, "image/webp", 0.82));
+        c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+        const g = c.getContext("2d");
+        g.imageSmoothingQuality = "high";
+        g.drawImage(img, 0, 0, c.width, c.height);
+        const blob = await new Promise((r) => c.toBlob(r, "image/webp", 0.8));
         const buf = new Uint8Array(await blob.arrayBuffer());
         let s = "";
         for (let i = 0; i < buf.length; i += 0x8000) s += String.fromCharCode(...buf.subarray(i, i + 0x8000));

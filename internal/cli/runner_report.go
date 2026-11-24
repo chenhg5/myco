@@ -313,12 +313,12 @@ func runnerFeatures(h harness.Harness) []string {
 	// Codex MCP calls are not controlled by its shell sandbox flag, so this
 	// capability is advertised only for the harness whose flag we change.
 	if h.Name() == "claude" {
-		return []string{"mcp_tools", "remote_provider"}
+		return []string{"mcp_tools", "remote_provider", "usage"}
 	}
 	if h.Name() == "codex" {
-		return []string{"remote_provider"}
+		return []string{"remote_provider", "usage"}
 	}
-	return nil
+	return []string{"usage"}
 }
 
 // Goodbye tells the hub this runner is stopping (best effort, a few

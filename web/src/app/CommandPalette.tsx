@@ -52,7 +52,7 @@ function snippet(body: string, q: string): string {
 export function CommandPalette({ open, onOpenChange, rows, hubs, projects, now, onPick }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** every member and computer, in every workspace */
+  /** the members and computers of the workspace you are in */
   rows: AgentRow[];
   hubs: HubOverview[];
   projects: PaletteProject[];

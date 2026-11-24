@@ -88,11 +88,15 @@ type Event struct {
 	// Output is the result (tool_result), Failed whether it failed.
 	Output string `json:"output,omitempty"`
 	Failed bool   `json:"failed,omitempty"`
-	// Usage (kind usage).
-	InputTokens  int64   `json:"input_tokens,omitempty"`
-	OutputTokens int64   `json:"output_tokens,omitempty"`
-	CostUSD      float64 `json:"cost_usd,omitempty"`
-	DurationMS   int64   `json:"duration_ms,omitempty"`
+	// Usage (kind usage). InputTokens preserves trace semantics: total input
+	// including cache. Cache fields are subdivisions, not extra input.
+	Model            string  `json:"model,omitempty"`
+	CacheReadTokens  int64   `json:"cache_read_tokens,omitempty"`
+	CacheWriteTokens int64   `json:"cache_write_tokens,omitempty"`
+	InputTokens      int64   `json:"input_tokens,omitempty"`
+	OutputTokens     int64   `json:"output_tokens,omitempty"`
+	CostUSD          float64 `json:"cost_usd,omitempty"`
+	DurationMS       int64   `json:"duration_ms,omitempty"`
 	// Quota (kind quota): the account's usage limits as the CLI reports
 	// them. Not a step of the run: the runner reports it with the runtime.
 	Quota *Quota `json:"-"`

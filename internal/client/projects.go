@@ -43,6 +43,14 @@ func (c *Client) UpdateProject(ctx context.Context, name string, req api.UpdateP
 	return &out, c.do(ctx, http.MethodPatch, "/v1/projects/"+esc(name), nil, req, &out)
 }
 
+// SetProjectGroups replaces the project's groups (groups non-nil: the full,
+// ordered list) and moves members between them (agent → group, "" =
+// ungrouped), in one change. Hubs before v0.21.34 have no groups and
+// reject it.
+func (c *Client) SetProjectGroups(ctx context.Context, name string, groups *[]string, memberGroups map[string]string) (*api.Project, error) {
+	return c.UpdateProject(ctx, name, api.UpdateProjectRequest{Groups: groups, MemberGroups: memberGroups})
+}
+
 // DeleteProject removes a project with its members and documents.
 func (c *Client) DeleteProject(ctx context.Context, name string) error {
 	return c.do(ctx, http.MethodDelete, "/v1/projects/"+esc(name), nil, nil, nil)

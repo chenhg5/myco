@@ -34,12 +34,13 @@ this way are marked done, so they do not show up again in your inbox.`,
 			{Name: "include-self", Kind: Bool, Help: "Also deliver to yourself if you match"},
 			{Name: "wait", Kind: Duration, Default: "0s", Help: "Wait this long for all replies (tasks only)"},
 			attachFlag,
+			uiFlag,
 		},
 		Run: handler(func(e *env) error {
 			if err := e.in.Require("selector"); err != nil {
 				return err
 			}
-			body, err := e.readBody("body", "body-file")
+			body, err := e.messageBody("body", "body-file")
 			if err != nil {
 				return err
 			}

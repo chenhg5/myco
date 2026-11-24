@@ -26,9 +26,9 @@ import (
 )
 
 func uiCommand() *Command {
-	return &Command{
+	return (&Command{
 		Name:    "ui",
-		Summary: "Open a local, read-only dashboard of the network",
+		Summary: "Open a local, read-only dashboard of the network; describe and check myco-ui blocks",
 		Long: `Serves the embedded web dashboard on 127.0.0.1 and proxies its requests to the hub with this
 node's identity (the token never reaches the browser). With MYCO_ADMIN_TOKEN (or
 --admin-token-file) the page can also switch to the admin view, which shows message contents
@@ -100,7 +100,7 @@ Host header are rejected (DNS rebinding).`,
 			}
 			return nil
 		}),
-	}
+	}).Add(uiSchemaCommand(), uiCheckCommand())
 }
 
 type uiServer struct {

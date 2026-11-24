@@ -22,7 +22,7 @@ func disks() ([]Disk, error)                   { return nil, unsupported("system
 func isVolumeRoot(string) bool                 { return false }
 func crossDevice(error) bool                   { return false }
 func devOf(fs.FileInfo) (uint64, bool)         { return 0, false }
-func diskOf(fi fs.FileInfo) int64              { return fi.Size() }
+func diskOf(_ string, fi fs.FileInfo) int64    { return fi.Size() }
 func inodeOf(fs.FileInfo) ([2]uint64, bool)    { return [2]uint64{}, false }
 func linksOf(fs.FileInfo) uint64               { return 1 }
 func shellArgv(_ *Env, script string) []string { return []string{"/bin/sh", "-c", script} }

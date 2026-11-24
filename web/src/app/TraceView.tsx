@@ -8,7 +8,7 @@ import { L, locale } from "@/lib/i18n";
 import { Elapsed, Mushroom, useVerb } from "@/app/Working";
 import { useReportsOnly } from "@/app/quietRuns";
 import { TranslatableBody } from "@/app/translate";
-import { MessageContent } from "@/app/Markdown";
+import { MessageContent, filesBelow, filesFor } from "@/app/Markdown";
 import { MessageAttachments } from "@/app/attachments";
 import { PageCards } from "@/app/pages";
 import { AskCard } from "@/app/AskCard";
@@ -659,9 +659,13 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
             <li key={r.key} className={cn("trace-report", movingHere && i === segments.length - 1 && j === seg.items.length - 1 && "is-latest")}>
               <span className="trace-report-dot" aria-hidden />
               <div className="trace-report-text">
-                <TranslatableBody id={r.key} body={r.text} />
-                {/* What it showed along the way: a screenshot, a draft. */}
-                {r.files && r.files.length > 0 && <div className="trace-report-files"><MessageAttachments hubId={hubId} items={r.files} /></div>}
+                <TranslatableBody id={r.key} body={r.text} files={filesFor(hubId, r.files)} />
+                {/* What it showed along the way: a screenshot, a draft
+                    (less those its text already shows). */}
+                {(() => {
+                  const rest = filesBelow(r.text, filesFor(hubId, r.files));
+                  return rest.length > 0 ? <div className="trace-report-files"><MessageAttachments hubId={hubId} items={rest} /></div> : null;
+                })()}
                 <PageCards body={r.text} />
               </div>
               {r.when && <time className="trace-report-time" dateTime={r.when}>{clock(r.when)}</time>}
@@ -698,8 +702,11 @@ function SteerBubble({ hubId, msg }: { hubId: string; msg: Message }) {
       <div className="conv-bubble">
         {msg.unreadable
           ? <span className="conv-unreadable">{L("已加密，只有双方的主人能看", "Encrypted: only the owners of both sides can read it")}</span>
-          : <MessageContent body={msg.body} />}
-        {msg.attachments && msg.attachments.length > 0 && <MessageAttachments hubId={hubId} items={msg.attachments} />}
+          : <MessageContent body={msg.body} files={filesFor(hubId, msg.attachments)} />}
+        {(() => {
+          const rest = msg.unreadable ? msg.attachments || [] : filesBelow(msg.body, filesFor(hubId, msg.attachments));
+          return rest.length > 0 ? <MessageAttachments hubId={hubId} items={rest} /> : null;
+        })()}
       </div>
     </div>
   );

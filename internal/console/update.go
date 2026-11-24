@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -56,9 +57,19 @@ type Updater struct {
 	// (release.APIURL / release.DownloadURL honour the env overrides).
 	API, Download string
 
+	// launch starts the new program after an update on Windows (tests
+	// replace it); the default starts it detached from this one.
+	launch func(exe string) (waiter, error)
+
 	mu       sync.Mutex
 	relaunch func()
 	busy     bool
+}
+
+// waiter is a started program: Wait returns when it exits, Kill ends it.
+type waiter interface {
+	Wait() error
+	Kill() error
 }
 
 // SetRelaunch sets how the app quits and reopens itself (the window app
@@ -90,6 +101,62 @@ func (u *Updater) client(timeout time.Duration) *http.Client {
 	return &http.Client{Timeout: timeout}
 }
 
+// clients are the ways to reach GitHub, in order: as set (Settings › 代理,
+// the environment's or the system's proxy), then direct when that goes
+// through a proxy, so a proxy that is set but broken does not block updates.
+func (u *Updater) clients(timeout time.Duration) []*http.Client {
+	first := u.client(timeout)
+	if u.HTTP != nil {
+		return []*http.Client{first}
+	}
+	probe, _ := http.NewRequest(http.MethodGet, release.DefaultDownload, nil)
+	if p, err := client.Proxy(probe); err != nil || p == nil {
+		return []*http.Client{first}
+	}
+	base, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return []*http.Client{first}
+	}
+	direct := base.Clone()
+	direct.Proxy = nil
+	return []*http.Client{first, {Timeout: timeout, Transport: direct}}
+}
+
+// latest asks for the latest release, each way in turn.
+func (u *Updater) latest(ctx context.Context, timeout time.Duration) (string, error) {
+	var err error
+	for _, hc := range u.clients(timeout) {
+		var tag string
+		if tag, err = release.Latest(ctx, hc, u.API); err == nil || ctx.Err() != nil {
+			return tag, err
+		}
+	}
+	return "", err
+}
+
+// fetch downloads and verifies a release asset, each way in turn.
+func (u *Updater) fetch(ctx context.Context, tag, asset string) ([]byte, error) {
+	var err error
+	for _, hc := range u.clients(30 * time.Minute) {
+		var b []byte
+		if b, err = release.FetchAsset(ctx, hc, u.Download, tag, asset, appZipMax); err == nil || ctx.Err() != nil || strings.Contains(err.Error(), "has no") {
+			return b, err
+		}
+	}
+	return nil, err
+}
+
+// downloadErr says what a failed download means for the person.
+func downloadErr(err error) error {
+	if strings.Contains(err.Error(), "has no") || strings.Contains(err.Error(), "checksum mismatch") {
+		return err
+	}
+	return &client.Error{Status: http.StatusBadGateway, Code: "download_failed",
+		Message:    "cannot download the update from GitHub: " + err.Error(),
+		Suggestion: "GitHub may be slow or blocked on this network: turn on your proxy app, or set a proxy under Settings › Proxy, then try again",
+		Retryable:  true}
+}
+
 // UpdateInfo is GET /app/update.
 type UpdateInfo struct {
 	Current   string `json:"current"`
@@ -119,7 +186,7 @@ func (u *Updater) check(ctx context.Context) UpdateInfo {
 	info.CanInstall, info.Reason = u.canInstall()
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	latest, err := release.Latest(ctx, u.client(20*time.Second), u.API)
+	latest, err := u.latest(ctx, 20*time.Second)
 	if err != nil {
 		info.Error = err.Error()
 		return info
@@ -159,21 +226,35 @@ func (b *Backend) postUpdate(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Minute)
 	defer cancel()
-	hc := u.client(30 * time.Minute)
-	latest, err := release.Latest(ctx, hc, u.API)
+	latest, err := u.latest(ctx, 30*time.Second)
 	if err != nil {
-		writeErr(w, fmt.Errorf("cannot find the latest release: %w", err))
+		writeErr(w, downloadErr(fmt.Errorf("cannot find the latest release: %w", err)))
 		return
 	}
 	if u.Exe != "" {
-		exe, err := release.FetchAsset(ctx, hc, u.Download, latest, exeAsset(u.goos(), u.arch()), appZipMax)
+		exe, err := u.fetch(ctx, latest, exeAsset(u.goos(), u.arch()))
 		if err != nil {
-			writeErr(w, err)
+			writeErr(w, downloadErr(err))
 			return
 		}
-		if err := installExe(u.Exe, exe, u.goos()); err != nil {
-			writeErr(w, err)
+		old, err := installExe(u.Exe, exe, u.goos())
+		if err != nil {
+			writeErr(w, &client.Error{Status: http.StatusConflict, Code: "install_failed", Message: err.Error(),
+				Suggestion: "another program (often antivirus or a sync app such as OneDrive) is holding the myco app's file; try again in a moment, or download the new version from GitHub"})
 			return
+		}
+		if u.goos() == "windows" {
+			// Start the new version here and wait for it to report in;
+			// if it does not (an antivirus blocked it, it crashed), the
+			// current one is put back and keeps running.
+			if err := u.handOver(u.Exe); err != nil {
+				if rerr := restoreExe(u.Exe, old); rerr != nil {
+					err = fmt.Errorf("%w; putting the current version back failed too: %v", err, rerr)
+				}
+				writeErr(w, &client.Error{Status: http.StatusBadGateway, Code: "start_failed", Message: err.Error(),
+					Suggestion: "the current version was kept; if an antivirus blocked the new myco app, allow it there, or download the new version from GitHub"})
+				return
+			}
 		}
 		// The myco CLI on this computer goes along; it runs on after the
 		// app quits (a runner keeps running until it is restarted).
@@ -181,6 +262,8 @@ func (b *Backend) postUpdate(w http.ResponseWriter, r *http.Request) {
 			b.Local.upgradeCLIDetached()
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"installed": latest, "relaunching": true})
+		// Let the answer reach the page before the app quits (on Windows
+		// the new one is already running; elsewhere relaunch starts it).
 		go func() {
 			time.Sleep(500 * time.Millisecond)
 			relaunch()
@@ -188,12 +271,12 @@ func (b *Backend) postUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// The signed universal build when the release has it, else this Mac's own.
-	zipped, err := release.FetchAsset(ctx, hc, u.Download, latest, AppAsset("universal"), appZipMax)
+	zipped, err := u.fetch(ctx, latest, AppAsset("universal"))
 	if err != nil && strings.Contains(err.Error(), "has no") {
-		zipped, err = release.FetchAsset(ctx, hc, u.Download, latest, AppAsset(u.arch()), appZipMax)
+		zipped, err = u.fetch(ctx, latest, AppAsset(u.arch()))
 	}
 	if err != nil {
-		writeErr(w, err)
+		writeErr(w, downloadErr(err))
 		return
 	}
 	if err := installBundle(u.Bundle, zipped); err != nil {
@@ -240,47 +323,163 @@ func installBundle(bundle string, zipped []byte) error {
 	return nil
 }
 
+// renameTries and renameWait bound retries of a rename that failed: on
+// Windows an antivirus scanning a new program, or a sync app (OneDrive)
+// uploading it, holds the file for a moment.
+var (
+	renameTries = 20
+	renameWait  = 500 * time.Millisecond
+)
+
+func renameRetry(from, to string) error {
+	var err error
+	for i := 0; i < renameTries; i++ {
+		if err = os.Rename(from, to); err == nil || errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		time.Sleep(renameWait)
+	}
+	return err
+}
+
 // installExe puts a new exe in place of the running one: the new one is
 // written next to it, the running one renamed to <exe>.old (Windows allows
-// that, not overwriting it), then the new one takes its name. The old one
-// is removed when the new app starts (CleanOldExe).
-func installExe(exe string, data []byte, goos string) error {
+// that, not overwriting it), then the new one takes its name. It returns
+// where the running one went (restoreExe puts it back). The old one is
+// removed when the new app starts (CleanOldExe).
+func installExe(exe string, data []byte, goos string) (string, error) {
 	if goos == "windows" && !bytes.HasPrefix(data, []byte("MZ")) {
-		return errors.New("the downloaded app is not a Windows program")
+		return "", errors.New("the downloaded app is not a Windows program")
 	}
 	if goos != "windows" && !bytes.HasPrefix(data, []byte("\x7fELF")) {
-		return errors.New("the downloaded app is not a Linux program")
+		return "", errors.New("the downloaded app is not a Linux program")
 	}
 	fresh := exe + ".new"
+	_ = os.Remove(fresh)
 	if err := os.WriteFile(fresh, data, 0o755); err != nil {
-		return fmt.Errorf("cannot write next to %s (permissions?): %w", exe, err)
+		_ = os.Remove(fresh)
+		return "", fmt.Errorf("cannot write next to %s (permissions?): %w", exe, err)
+	}
+	if st, err := os.Stat(fresh); err != nil || st.Size() != int64(len(data)) {
+		// An antivirus took it away as soon as it was written.
+		_ = os.Remove(fresh)
+		return "", fmt.Errorf("the new app was removed right after it was written next to %s (an antivirus?)", exe)
 	}
 	old := exe + ".old"
 	if err := os.Remove(old); err != nil && !errors.Is(err, os.ErrNotExist) {
 		// A previous old exe still in use: set this one aside under another name.
 		old = fmt.Sprintf("%s.old-%d", exe, time.Now().UnixNano())
 	}
-	if err := os.Rename(exe, old); err != nil {
+	if err := renameRetry(exe, old); err != nil {
 		_ = os.Remove(fresh)
-		return fmt.Errorf("cannot move the current app aside: %w", err)
+		return "", fmt.Errorf("cannot move the current app aside: %w", err)
 	}
-	if err := os.Rename(fresh, exe); err != nil {
-		_ = os.Rename(old, exe)
+	if err := renameRetry(fresh, exe); err != nil {
+		_ = renameRetry(old, exe)
 		_ = os.Remove(fresh)
-		return fmt.Errorf("cannot put the new app in place: %w", err)
+		return "", fmt.Errorf("cannot put the new app in place: %w", err)
 	}
+	return old, nil
+}
+
+// restoreExe undoes installExe: the new exe is set aside (removed at the
+// next start) and the old one takes its name back.
+func restoreExe(exe, old string) error {
+	failed := fmt.Sprintf("%s.failed-%d", exe, time.Now().UnixNano())
+	if err := renameRetry(exe, failed); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("cannot move the new app aside: %w", err)
+	}
+	if err := renameRetry(old, exe); err != nil {
+		return fmt.Errorf("cannot put the current app back: %w", err)
+	}
+	_ = os.Remove(failed)
 	return nil
 }
 
-// CleanOldExe removes what installExe set aside (best effort: an old exe
-// still running stays until next time).
+// handOverWait is how long a new version may take to report in: the first
+// start of a new program can wait on an antivirus scan.
+var handOverWait = 60 * time.Second
+
+// startedMarker is the file a new version removes when it starts
+// (ConfirmStarted), telling the one that started it that it came up.
+func startedMarker(exe string) string { return exe + ".starting" }
+
+// ConfirmStarted tells an update waiting for this program that it started
+// (the app calls it once it is up).
+func ConfirmStarted(exe string) {
+	if exe != "" {
+		_ = os.Remove(startedMarker(exe))
+	}
+}
+
+// handOver starts the program at exe and waits until it reports in. If it
+// quits first, or does not report in time, it is stopped and an error says
+// why.
+func (u *Updater) handOver(exe string) error {
+	marker := startedMarker(exe)
+	if err := os.WriteFile(marker, nil, 0o600); err != nil {
+		return fmt.Errorf("cannot start the new version: %w", err)
+	}
+	launch := u.launch
+	if launch == nil {
+		launch = launchApp
+	}
+	p, err := launch(exe)
+	if err != nil {
+		_ = os.Remove(marker)
+		return fmt.Errorf("cannot start the new version: %w", err)
+	}
+	started := func() bool {
+		_, err := os.Stat(marker)
+		return errors.Is(err, os.ErrNotExist)
+	}
+	exited := make(chan error, 1)
+	go func() { exited <- p.Wait() }()
+	tick := time.NewTicker(100 * time.Millisecond)
+	defer tick.Stop()
+	deadline := time.NewTimer(handOverWait)
+	defer deadline.Stop()
+	for {
+		select {
+		case <-tick.C:
+			if started() {
+				return nil
+			}
+		case werr := <-exited:
+			if started() {
+				return nil
+			}
+			_ = os.Remove(marker)
+			if werr != nil {
+				return fmt.Errorf("the new version quit as soon as it started (%v)", werr)
+			}
+			return errors.New("the new version quit as soon as it started")
+		case <-deadline.C:
+			if started() {
+				return nil
+			}
+			_ = p.Kill()
+			select { // let it go before its file is moved
+			case <-exited:
+			case <-time.After(5 * time.Second):
+			}
+			_ = os.Remove(marker)
+			return fmt.Errorf("the new version did not start within %s", handOverWait)
+		}
+	}
+}
+
+// CleanOldExe removes what installExe and restoreExe set aside (best
+// effort: an old exe still running stays until next time).
 func CleanOldExe(exe string) {
 	if exe == "" {
 		return
 	}
-	olds, _ := filepath.Glob(exe + ".old*")
-	for _, o := range olds {
-		_ = os.Remove(o)
+	for _, pat := range []string{exe + ".old*", exe + ".failed-*"} {
+		olds, _ := filepath.Glob(pat)
+		for _, o := range olds {
+			_ = os.Remove(o)
+		}
 	}
 	_ = os.Remove(exe + ".new")
 }
@@ -347,3 +546,9 @@ func readAll(f *zip.File) ([]byte, error) {
 	defer rc.Close()
 	return io.ReadAll(io.LimitReader(rc, appZipMax))
 }
+
+// cmdWaiter is a started command as a waiter.
+type cmdWaiter struct{ cmd *exec.Cmd }
+
+func (c cmdWaiter) Wait() error { return c.cmd.Wait() }
+func (c cmdWaiter) Kill() error { return c.cmd.Process.Kill() }

@@ -235,6 +235,29 @@ func (s *ProjectService) Edit(ctx context.Context, by Actor, name string, e doma
 	return v, s.projects.Save(ctx, v.Project)
 }
 
+// SetGroups replaces the project's groups (groups non-nil: the full,
+// ordered list) and moves members between them (assign: agent → group, ""
+// = ungrouped), in one transaction. Members of a group no longer listed
+// become ungrouped. Whoever edits the project may.
+func (s *ProjectService) SetGroups(ctx context.Context, by Actor, name string, groups *[]string, assign map[string]string) (*ProjectView, error) {
+	v, err := s.Get(ctx, by, name)
+	if err != nil {
+		return nil, err
+	}
+	if !s.edits(by, v) {
+		return nil, denied("change the groups of project " + v.Project.Name)
+	}
+	a := make(map[domain.AgentName]string, len(assign))
+	for k, g := range assign {
+		a[domain.AgentName(k)] = g
+	}
+	changed, err := v.Project.ApplyGroups(v.Members, groups, a, s.clock.Now())
+	if err != nil {
+		return nil, err
+	}
+	return v, s.projects.SaveGroups(ctx, v.Project, changed)
+}
+
 // Settle changes what only people decide: visibility and archiving.
 func (s *ProjectService) Settle(ctx context.Context, by Actor, name string, visibility *string, archived *bool) (*ProjectView, error) {
 	v, err := s.Get(ctx, by, name)
@@ -278,11 +301,14 @@ func (s *ProjectService) Delete(ctx context.Context, by Actor, name string) (*Pr
 	return v, nil
 }
 
-// MemberEdit adds a node to a project or changes its role or note; nil
-// fields stay as they are (a new member defaults to member, no note).
+// MemberEdit adds a node to a project or changes its role, note or group;
+// nil fields stay as they are (a new member defaults to member, no note,
+// ungrouped).
 type MemberEdit struct {
 	Role *string
 	Note *string
+	// Group is one of the project's groups; "" takes it out of its group.
+	Group *string
 }
 
 // PutMember adds agent to the project, or changes its role or note.
@@ -335,6 +361,16 @@ func (s *ProjectService) PutMember(ctx context.Context, by Actor, name string, a
 			return nil, nil, denied("change what " + string(a.Name) + " does in project " + v.Project.Name)
 		}
 		m.Note = note
+	}
+	if e.Group != nil {
+		g, err := domain.CheckMemberGroup(v.Project.Groups, *e.Group)
+		if err != nil {
+			return nil, nil, err
+		}
+		if g != m.Group && !s.edits(by, v) {
+			return nil, nil, denied("change the group of " + string(a.Name) + " in project " + v.Project.Name)
+		}
+		m.Group = g
 	}
 	return v, m, s.projects.PutMember(ctx, m)
 }

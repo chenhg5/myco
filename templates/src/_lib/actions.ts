@@ -1,7 +1,8 @@
 /** Agent actions, independent of providers, browser bridges and HTTP routing.
  * The trusted transport enforces authorization. Client checks are usability
  * guards; constructing these types never grants access to a computer or page. */
-export type ActionTarget = { kind: "machine" | "page"; id: string };
+export type ActionResource = { provider: string; id: string; binding: string; name?: string; summary?: string };
+export type ActionTarget = { kind: "machine" | "page"; id: string; resource?: ActionResource };
 export type ActionDescriptor = {
   name: string;
   version: number;
@@ -65,6 +66,7 @@ export type ActionOptions = { signal?: AbortSignal; wait_seconds?: number };
 /** Implemented by an authenticated framework adapter, never by forwarding
  * arbitrary page JavaScript to myco.os. An absent adapter means unsupported. */
 export interface ActionTransport {
+  listTargets?(options?: ActionOptions): Promise<ActionTarget[]>;
   requestGrant(request: GrantRequest, options?: ActionOptions): Promise<ActionGrant>;
   listGrants(options?: ActionOptions): Promise<ActionGrant[]>;
   getGrant(id: string, options?: ActionOptions): Promise<ActionGrant>;
@@ -116,6 +118,10 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
 /** Framework lifecycle SDK. Does not know any provider's action names. */
 export class ActionClient {
   constructor(private readonly transport: ActionTransport) {}
+  async targets(options?: ActionOptions): Promise<ActionTarget[]> {
+    if (!this.transport.listTargets) throw new ActionError({ code: "unsupported", message: "Resource discovery is unavailable on this transport.", retryable: false });
+    return call(() => this.transport.listTargets!(options), options);
+  }
   request(request: GrantRequest, options?: ActionOptions) {
     return call(() => this.transport.requestGrant(request, options), options);
   }

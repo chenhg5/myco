@@ -26,6 +26,9 @@ func actionCommands() *Command {
 you asked for; they may allow less, or say no. With --wait, the command waits for their decision.
 A grant lasts 5 minutes by default (30 at most) and ends with your task (--task) if you name it.
 remote.desktop.view lets you take screenshots; remote.desktop.control also lets you type and click.
+For an enabled SSH profile, use action targets to get --machine, --ssh-profile and --binding.
+server.ssh.read inspects Linux status/logs; server.ssh.manage also starts/stops/restarts services
+and containers. The owner approves the resolved SSH endpoint; no arbitrary shell is offered.
 A shared page you can see (--page) needs no approval: page.export lets its app make a file of it
 (an SVG, PNG or what the app offers), run by the App of a person who sees the page.`,
 		Examples: []string{
@@ -35,8 +38,10 @@ A shared page you can see (--page) needs no approval: page.export lets its app m
 		},
 		Flags: []Flag{
 			{Name: "machine", Kind: String, Help: "The computer: its name or id (or --page)"},
+			{Name: "ssh-profile", Kind: String, Help: "An enabled SSH profile id from action targets (requires --machine and --binding)"},
+			{Name: "binding", Kind: String, Help: "The SSH profile SHA256 binding from action targets"},
 			{Name: "page", Kind: String, Help: "A shared page (pg_...) instead of a computer"},
-			{Name: "permission", Kind: List, Required: true, Help: "remote.desktop.view or remote.desktop.control for a computer; page.export for a page (repeatable)"},
+			{Name: "permission", Kind: List, Required: true, Help: "remote.desktop.view or remote.desktop.control for a computer; server.ssh.read/manage for a bound SSH profile; page.export for a page (repeatable)"},
 			{Name: "reason", Kind: String, Required: true, Help: "Why: its owner reads this before approving"},
 			{Name: "ttl", Kind: Duration, Default: "5m", Help: "How long you need it (at most 30m; its owner may give less)"},
 			{Name: "task", Kind: String, Help: "The task it is for (msg_...): the grant ends with it"},
@@ -52,6 +57,12 @@ A shared page you can see (--page) needs no approval: page.export lets its app m
 			}
 			if (e.in.String("machine") == "") == (e.in.String("page") == "") {
 				return errorf("invalid_usage", ExitUsage, "pass --machine <computer> or --page <pg_...>", "name one target")
+			}
+			if id := e.in.String("ssh-profile"); id != "" || e.in.String("binding") != "" {
+				if target.Kind != "machine" || id == "" || e.in.String("binding") == "" {
+					return errorf("invalid_usage", ExitUsage, "SSH needs --machine, --ssh-profile and --binding", "name the bound target")
+				}
+				target.Resource = &api.ActionResource{Provider: "server.ssh", ID: id, Binding: e.in.String("binding")}
 			}
 			c, err := e.agentClient()
 			if err != nil {
@@ -307,7 +318,22 @@ fails with outcome_unknown, observe again before trying anything else.`,
 			return e.p.Print(j, func(w io.Writer) { fmt.Fprintf(w, "%s %s: %s\n", j.ID, j.Action, j.State) })
 		}),
 	}
-	return (&Command{Name: "action", Summary: "Act on a computer with its owner's approval: screenshots, keyboard and mouse"}).Add(grant, actions, run, job, cancel)
+	targets := &Command{Name: "targets", Summary: "Enabled private resources on your computers (request a grant before use)", Run: handler(func(e *env) error {
+		c, err := e.agentClient()
+		if err != nil {
+			return err
+		}
+		ts, err := c.ActionTargets(e.in.Ctx)
+		if err != nil {
+			return err
+		}
+		return e.p.Print(api.ActionTargetList{Targets: ts}, func(w io.Writer) {
+			for _, t := range ts {
+				fmt.Fprintf(w, "%s  %s  %s  %s\n", t.ID, t.Resource.ID, t.Resource.Binding, t.Resource.Summary)
+			}
+		})
+	})}
+	return (&Command{Name: "action", Summary: "Act on a computer with its owner's approval: screenshots, keyboard and mouse"}).Add(grant, targets, actions, run, job, cancel)
 }
 
 func printGrant(w io.Writer, g *api.ActionGrant) {

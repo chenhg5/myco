@@ -375,6 +375,7 @@ func (s *stream) finish(resp *promptResponse) {
 		ev.DurationMS = time.Since(s.start).Milliseconds()
 	}
 	if u := resp.usage(); u != nil {
+		ev.CacheReadTokens = u.CachedReadTokens
 		// Input counts cached tokens too, as Claude Code's does: the
 		// total less the output where the agent gives a total.
 		ev.InputTokens, ev.OutputTokens = u.InputTokens+u.CachedReadTokens, u.OutputTokens

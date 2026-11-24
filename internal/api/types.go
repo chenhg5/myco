@@ -1266,6 +1266,12 @@ type Project struct {
 	// Machines are the computers (ids) its coordinators may start agents
 	// on (v0.21.2+; absent on older hubs).
 	Machines []string `json:"machines"`
+	// Groups are the groups its members are sorted into, in display order
+	// (from v0.21.34). Hubs that have groups always send the key ([] when
+	// there are none); it is absent from older hubs, which is how a client
+	// tells whether the hub supports groups. omitzero keeps it absent when
+	// a project from an older hub is passed on.
+	Groups []string `json:"groups,omitzero"`
 	// What the caller may do: edit the content (owner, admins,
 	// coordinators), manage it (people: roles, visibility, archive, delete).
 	CanEdit   bool `json:"can_edit"`
@@ -1300,9 +1306,11 @@ type ProjectLink struct {
 // ProjectMember is a node in a project. Agent is its card when the caller
 // may see the node (a private node of someone else shows only its name).
 type ProjectMember struct {
-	Name    string    `json:"name"`
-	Role    string    `json:"role"` // member | coordinator
-	Note    string    `json:"note,omitempty"`
+	Name string `json:"name"`
+	Role string `json:"role"` // member | coordinator
+	Note string `json:"note,omitempty"`
+	// Group is its group in this project ("" or absent: ungrouped).
+	Group   string    `json:"group,omitempty"`
 	AddedBy string    `json:"added_by,omitempty"`
 	AddedAt time.Time `json:"added_at"`
 	Agent   *Agent    `json:"agent,omitempty"`
@@ -1345,12 +1353,23 @@ type UpdateProjectRequest struct {
 	Links      *[]ProjectLink `json:"links,omitempty"`
 	Visibility *string        `json:"visibility,omitempty"`
 	Archived   *bool          `json:"archived,omitempty"`
+	// Groups replaces the project's groups (the full list, in order);
+	// members of a group left out become ungrouped. MemberGroups moves
+	// members (agent → group, "" = ungrouped) into groups of the resulting
+	// list. Both are applied together, in one transaction, by those who
+	// edit the project (from v0.21.34; older hubs reject them, so send them
+	// only when the project has the groups key).
+	Groups       *[]string         `json:"groups,omitempty"`
+	MemberGroups map[string]string `json:"member_groups,omitempty"`
 }
 
 // ProjectMemberRequest is the body of PUT /v1/projects/{name}/members/{agent}.
 type ProjectMemberRequest struct {
 	Role *string `json:"role,omitempty"`
 	Note *string `json:"note,omitempty"`
+	// Group sets its group: one of the project's groups, "" takes it out
+	// (from v0.21.34; send it only to hubs that have groups).
+	Group *string `json:"group,omitempty"`
 }
 
 // ProjectDocRequest is the body of PUT /v1/projects/{name}/docs/{doc}.

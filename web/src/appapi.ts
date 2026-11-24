@@ -1,4 +1,5 @@
-import type { Page, PageChanges, PageOpen, PageRecord, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Backup, Backups, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, MCPServer, ToolSkill, ToolPlugin, SuperagentState, Approval, ActionGrant, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, NoticePrefs, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
+import type { UsageResponse } from "@/lib/usage";
+import type { Page, PageChanges, PageOpen, PageRecord, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Backup, Backups, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, MCPServer, ToolSkill, ToolPlugin, SuperagentState, Approval, ActionGrant, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, NoticeFeed, NoticePrefs, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
 import { L } from "@/lib/i18n";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
@@ -120,6 +121,10 @@ export interface HubOverview {
    *  network the answer may simply not have come through. */
   seen_at?: number;
 }
+
+/** Said on window when an agent's profile was saved from this App. */
+export const AGENT_UPDATED = "myco-agent-updated";
+export interface AgentUpdated { hubId: string; agent: Agent }
 
 export interface AppOverview {
   generated_at: string;
@@ -343,6 +348,8 @@ export interface AppInfo {
   pick_image?: boolean;
   /** the desktop app opens links in the default browser (POST /app/open-url) */
   open_url?: boolean;
+  /** the desktop app puts its window in full screen (PUT /app/window/fullscreen) */
+  fullscreen?: boolean;
 }
 /** Everything the boot probe needs to decide the mode and lay out the shell. */
 export interface AppBootstrap { hubs: Hub[]; info: AppInfo }
@@ -624,6 +631,11 @@ export interface AppUpdate {
 export interface CacheStats { enabled: boolean; entries: number; bytes: number }
 
 export const appApi = {
+  usage: (hubId: string, range: { from: string; to: string; project?: string }) => {
+    const query = new URLSearchParams({ from: range.from, to: range.to });
+    if (range.project) query.set("project", range.project);
+    return request<UsageResponse>("GET", `app/hubs/${enc(hubId)}/usage?${query}`);
+  },
   cacheStats: () => request<CacheStats>("GET", "app/cache/stats"),
   info: () => request<AppInfo>("GET", "app/info"),
   /** Speech to text in lang (desktop app): "system" types into the focused
@@ -738,8 +750,16 @@ export const appApi = {
   /** An agent's picture face; v (its avatar word) changes with the picture. */
   avatarUrl: (hubId: string, name: string, v: string) =>
     `app/hubs/${enc(hubId)}/agents/${enc(name)}/avatar?v=${encodeURIComponent(v)}`,
-  updateProfile: (hubId: string, name: string, input: ProfileInput) =>
-    request<void>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/profile`, input),
+  /** Saves an agent's name, description or face. The agent as saved comes
+   *  back and is announced ("myco-agent-updated", AppMode), so every list
+   *  shows it at once instead of at the next refresh. */
+  updateProfile: async (hubId: string, name: string, input: ProfileInput) => {
+    const agent = await request<Agent | null>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/profile`, input);
+    if (agent && typeof agent === "object" && agent.name === name) {
+      window.dispatchEvent(new CustomEvent<AgentUpdated>(AGENT_UPDATED, { detail: { hubId, agent } }));
+    }
+    return agent;
+  },
   /** Makes the agent's resume line (the old one stops working): the command
    *  to run in a new sandbox to bring the same agent back. Hubs before
    *  v0.19.5 answer not_found. */
@@ -758,7 +778,9 @@ export const appApi = {
     request<Project>("GET", `app/hubs/${enc(hubId)}/projects/${enc(name)}${bodies ? "?docs=body" : ""}`),
   createProject: (hubId: string, input: { name: string; title?: string; goal?: string; visibility?: "members" | "team" }) =>
     request<Project>("POST", `app/hubs/${enc(hubId)}/projects`, input),
-  updateProject: (hubId: string, name: string, input: { title?: string; goal?: string; brief?: string; links?: ProjectLink[]; visibility?: "members" | "team"; archived?: boolean }) =>
+  updateProject: (hubId: string, name: string, input: { title?: string; goal?: string; brief?: string; links?: ProjectLink[]; visibility?: "members" | "team"; archived?: boolean;
+    /** the groups in order (hubs from v0.21.34: send only when the project has `groups`) */ groups?: string[];
+    /** who goes in which group ("": none) */ member_groups?: Record<string, string> }) =>
     request<Project>("PATCH", `app/hubs/${enc(hubId)}/projects/${enc(name)}`, input),
   deleteProject: (hubId: string, name: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/projects/${enc(name)}`),
   /** lets the project's coordinators start agents on a computer, or no longer (hubs from v0.21.2) */
@@ -1088,7 +1110,13 @@ export const appApi = {
   /** Notices shown on this computer (the desktop app; `available` false in a browser). */
   notices: () => request<NoticeState>("GET", "app/notices"),
   /** What is on screen: the window in front, the conversation in it. Coming to one marks its notices read. */
+  /** 专注模式: the desktop app's window in full screen, or back. */
+  windowFullscreen: (on: boolean) => request<void>("PUT", "app/window/fullscreen", { on }),
   noticeFocus: (f: { front: boolean; hub?: string; target?: string }) => request<void>("PUT", "app/notices/focus", f),
+  /** What still waits for you on a workspace (open needs-you notices, newest first) and its badge: the 待处理 list. */
+  openNotices: (hubId: string) => request<NoticeFeed>("GET", `app/hubs/${enc(hubId)}/notices/open`),
+  /** Marks as read what leads to target ("" or absent: all). Reading settles what is not an ask, a decision or an approval. */
+  readNotices: (hubId: string, target?: string) => request<{ changed: number }>("POST", `app/hubs/${enc(hubId)}/notices/read`, target ? { target } : {}),
   noticePrefs: (hubId: string) => request<NoticePrefs>("GET", `app/hubs/${encodeURIComponent(hubId)}/notice-prefs`),
   setNoticePrefs: (hubId: string, p: NoticePrefs) => request<NoticePrefs>("PUT", `app/hubs/${encodeURIComponent(hubId)}/notice-prefs`, p),
   /** The language these pages show, for what the desktop app draws itself (its tray menu). */

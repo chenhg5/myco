@@ -56,7 +56,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	local := &console.Local{Home: home, Device: deviceName(), Bundled: bundledCLI(), ShellPath: console.LoginShellPath,
+	local := &console.Local{Home: home, Device: deviceName(), Bundled: bundledCLI(), ShellPath: console.LoginShellPath, ShellEnv: console.LoginShellEnv,
 		// No launchd/systemd --user (Windows; Linux in WSL, a container,
 		// a su shell): the app runs the local hub itself.
 		NoServiceManager: !serviceManager(home)}
@@ -109,6 +109,14 @@ func main() {
 		}
 		return openURL(u)
 	}
+	// 专注模式: the window in full screen (set by runGUI where it can).
+	b.Fullscreen = func(on bool) error {
+		if setFullscreen == nil {
+			return fmt.Errorf("not ready")
+		}
+		setFullscreen(on)
+		return nil
+	}
 	// The pages' language changed: the tray menu (when there is one) follows.
 	b.OnUILang = func(l string) {
 		if f := uiLangHook; f != nil {
@@ -120,6 +128,9 @@ func main() {
 	if os.Getenv("MYCO_APP_NOTICES") != "off" {
 		startNotices = func(p notices.Presenter) { b.StartNotices(p) }
 	}
+	// An update that started this program waits for it to report in
+	// (Windows): it got this far.
+	console.ConfirmStarted(b.Update.Exe)
 	if err := runGUI(handler(b), b.SetPendingLink, b.Update.SetRelaunch); err != nil {
 		fmt.Fprintln(os.Stderr, "myco-app:", err)
 		os.Exit(1)
@@ -145,6 +156,10 @@ var pickImage func() (string, error)
 
 // openURL opens a link in the default browser (set by runGUI).
 var openURL func(string) error
+
+// setFullscreen puts the window in full screen or takes it out (set by
+// runGUI where the window can).
+var setFullscreen func(on bool)
 
 // uiLangHook, when the tray menu is up, redraws it in the pages' language.
 var uiLangHook func(lang string)

@@ -4,6 +4,7 @@
 // Writes mutate in-memory state and are lost on restart.
 import http from "node:http";
 import zlib from "node:zlib";
+import { usageFixture } from "./usage.mjs";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { showcase } from "./showcase.mjs";
 
@@ -255,7 +256,7 @@ const shotsOf = (names) => {
   const out = light.map((src) => ({ src, ...(names.includes(src.replace(/(\.[a-z]+)$/i, ".dark$1")) ? { dark: src.replace(/(\.[a-z]+)$/i, ".dark$1") } : {}) }));
   return out.length ? out : undefined;
 };
-const officialOrder = ["table", "base", "doc", "slides", "meeting", "tutor", "scheduling", "code", "issues", "devtools", "todo", "notes", "disk", "stocks", "proxy-console", "remote-desktop", "ledger", "habit", "reader", "price-compare", "cinema", "podcast", "personality", "design-studio", "logo-studio", "whiteboard", "mindmap", "video", "motion", "photo", "arcade", "ocean", "gomoku", "sudoku"];
+const officialOrder = ["table", "base", "doc", "slides", "meeting", "tutor", "scheduling", "database", "code", "issues", "devtools", "todo", "notes", "disk", "stocks", "proxy-console", "server-console", "remote-desktop", "ledger", "habit", "reader", "price-compare", "cinema", "podcast", "personality", "palette", "aigc-canvas", "design-studio", "logo-studio", "whiteboard", "mindmap", "video", "motion", "photo", "arcade", "ocean", "gomoku", "sudoku"];
 const mockTemplates = officialOrder.filter((name) => existsSync(new URL(`${name}/myco.json`, officialRoot))).map((name) => {
   const files = officialFiles(name);
   const m = JSON.parse(files["myco.json"]);
@@ -983,6 +984,116 @@ function demoNotes(n) {
   ].join("\n");
 }
 
+// A reply with a ```myco-ui block (internal/uispec/catalog.json): most of
+// the catalog's components, and one the App does not know.
+function uiReply() {
+  const n = (state.counter += 1);
+  const spec = {
+    type: "Card", props: { title: "发版检查 v0.21.30", subtitle: "main · 889ed5e", tone: "success" },
+    children: [
+      { type: "Grid", props: { columns: 3 }, children: [
+        { type: "Metric", props: { label: "测试", value: "412", delta: "+12", tone: "success" } },
+        { type: "Metric", props: { label: "失败", value: "0", tone: "success" } },
+        { type: "Metric", props: { label: "安装包", value: "7.4 MB", delta: "+2.6 MB", tone: "warning" } },
+      ] },
+      { type: "Steps", props: { items: [
+        { title: "构建", status: "done", note: "3 分 12 秒" },
+        { title: "签名和公证", status: "doing" },
+        { title: "发布", status: "todo" },
+        { title: "旧版 Windows 安装包", status: "skipped" },
+      ] } },
+      { type: "Progress", props: { label: "上传", value: 64 } },
+      { type: "Callout", props: { tone: "warning", title: "注意", text: "安装包变大了，主要是 **mermaid**。" } },
+      { type: "Tabs", children: [
+        { type: "TestResults", props: { label: "测试", passed: 410, failed: 2, skipped: 3, duration: "2 分 5 秒", items: [
+          { name: "TestHubServe", status: "passed" },
+          { name: "TestRunnerResume", status: "failed", message: "expected 3 tasks, got 2" },
+        ] } },
+        { type: "Stack", props: { label: "改动" }, children: [
+          { type: "FileChange", props: { path: "web/src/app/Markdown.tsx", status: "modified", additions: 120, deletions: 8, diff: "@@ -1,3 +1,4 @@\n import x\n-old line\n+new line\n+another" } },
+          { type: "FileChange", props: { path: "web/src/app/mdRich.ts", status: "added", additions: 140 } },
+        ] },
+        { type: "Chart", props: { label: "体积", kind: "bar", title: "安装包（MB）", labels: ["v0.21.27", "v0.21.28", "v0.21.29", "v0.21.30"], series: [{ name: "macOS", values: [4.6, 4.7, 4.8, 7.4] }, { name: "Windows", values: [4.1, 4.2, 4.3, 6.9] }] } },
+      ] },
+      { type: "KeyValue", props: { items: [{ label: "分支", value: "main" }, { label: "状态", value: "可以发", tone: "success" }] } },
+      { type: "Table", props: { columns: ["平台", "大小", "状态"], rows: [["macOS", 7.4, "已签名"], ["Windows", 6.9, "待签名"]] } },
+      { type: "Gallery", props: { items: [
+        { src: `attachment:f_demo_shot_ui_a${n}`, title: "红色斑点蘑菇", badge: "误解风险较高", tone: "danger", text: "游戏、童话" },
+        { src: "attachment:棕色香菇.png", title: "棕色香菇", badge: "误解风险较低", text: "自然、食物" },
+        { src: `attachment:f_demo_shot_ui_a${n}`, title: "抽象科技蘑菇", badge: "较推荐", tone: "success", text: "网络、协作" },
+      ] } },
+      { type: "MediaList", props: { items: [
+        { image: "attachment:棕色香菇.png", title: "lium", href: "https://example.com/lium", text: "GPU 计算平台，发光的蓝色蘑菇。", meta: "方向：计算基础设施", badges: ["科技感"] },
+      ] } },
+      { type: "Sparkles", props: {} },
+      { type: "Stack", props: { direction: "horizontal" }, children: [
+        { type: "Button", props: { label: "发吧", action: "reply", value: "发吧", primary: true } },
+        { type: "Button", props: { label: "看发布页", action: "open", value: "https://example.com/release" } },
+        { type: "Button", props: { label: "复制版本号", action: "copy", value: "v0.21.30" } },
+      ] },
+    ],
+  };
+  return {
+    body: ["检查完了，结果在下面。", "", "```myco-ui", JSON.stringify(spec, null, 2), "```", "", "要发就点「发吧」。"].join("\n"),
+    attachments: [
+      { file_id: `f_demo_shot_ui_a${n}`, name: "红色斑点.png", size: DEMO_PNG.length, sha256: "demo", content_type: "image/png" },
+      { file_id: `f_demo_shot_ui_b${n}`, name: "棕色香菇.png", size: DEMO_PNG.length, sha256: "demo", content_type: "image/png" },
+    ],
+  };
+}
+
+function richReply() {
+  const n = (state.counter += 1);
+  return {
+    body: [
+      "## 架构",
+      "",
+      "```mermaid",
+      "flowchart LR",
+      "  A[App] -->|HTTP| H[Hub]",
+      "  R[Runner] -->|long poll| H",
+      "  H --> D[(SQLite)]",
+      "  R --> C[Claude Code]",
+      "```",
+      "",
+      "入口在这里：",
+      "",
+      "```go",
+      "func main() {",
+      "\t// start the hub",
+      "\tif err := hub.Serve(ctx, \"127.0.0.1:7780\"); err != nil {",
+      "\t\tlog.Fatal(err)",
+      "\t}",
+      "}",
+      "```",
+      "",
+      "```mermaid",
+      "this is not a diagram",
+      "```",
+      "",
+      "改之前和改之后：",
+      "",
+      `![改之前](attachment:f_demo_shot_rich_a${n}) ![改之后](attachment:改之后.png)`,
+      "",
+      "## 参考的几个产品",
+      "",
+      `- ![lium](attachment:改之前.png) **[lium](https://example.com/lium)** GPU 计算平台，发光的蓝色蘑菇。`,
+      "  方向：计算基础设施、科技感",
+      `- ![Mushroom](attachment:改之后.png) **[Mushroom](https://example.com/mushroom)** 桌面休息提醒，像素蘑菇做常驻伙伴。`,
+      "  方向：开发者工具、桌面伙伴",
+      "",
+      "## 三种造型",
+      "",
+      `![红色斑点](attachment:改之前.png "游戏、童话联想强") ![棕色香菇](attachment:改之后.png "自然、食物") ![抽象科技](attachment:改之前.png "网络、协作、科技品牌")`,
+    ].join("\n"),
+    attachments: [
+      { file_id: `f_demo_shot_rich_a${n}`, name: "改之前.png", size: DEMO_PNG.length, sha256: "demo", content_type: "image/png" },
+      { file_id: `f_demo_shot_rich_b${n}`, name: "改之后.png", size: DEMO_PNG.length, sha256: "demo", content_type: "image/png" },
+      { file_id: `f_demo_rich_log${n}`, name: "build.log", size: 17, sha256: "demo", content_type: "text/plain" },
+    ],
+  };
+}
+
 function consoleReply() {
   replySeq += 1;
   const form = (replySeq - 1) % 4;
@@ -1293,6 +1404,23 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
       return;
     }
   }
+  // Asked for an architecture diagram: a progress update along the way that
+  // places its two sketches in its text.
+  later(3000, () => {
+    const msgs = hub.threads[threadId];
+    const task = msgs?.find((m) => m.id === taskId);
+    if (!msgs || !/架构图|diagram/i.test(task?.body || "")) return;
+    const n = (state.counter += 1);
+    msgs.push(makeMessage({
+      thread_id: threadId, from: agent, to: CONSOLE, type: "progress", status: "done", reply_to: taskId,
+      body: `先放两张草图：\n\n![草图一](attachment:草图一.png) ![草图二](attachment:f_demo_shot_sketch_b${n})`,
+      attachments: [
+        { file_id: `f_demo_shot_sketch_a${n}`, name: "草图一.png", size: DEMO_PNG.length, sha256: "", content_type: "image/png" },
+        { file_id: `f_demo_shot_sketch_b${n}`, name: "草图二.png", size: DEMO_PNG.length, sha256: "", content_type: "image/png" },
+      ],
+      created_at: iso(0), updated_at: iso(0),
+    }));
+  });
   // Asked for a screenshot: one comes along the way, with what it shows.
   later(3800, () => {
     const msgs = hub.threads[threadId];
@@ -1309,7 +1437,11 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
     replyTimers.delete(taskId);
     const msgs = hub.threads[threadId];
     if (!msgs || msgs.find((m) => m.id === taskId)?.status === "failed") return; // stopped
-    const r = consoleReply();
+    // Asked for an architecture diagram: a reply with more than words (a
+    // diagram, coloured code, pictures placed in the text, one diagram that
+    // does not parse).
+    const asked = msgs.find((m) => m.id === taskId)?.body || "";
+    const r = /发版检查|myco-ui/i.test(asked) ? uiReply() : /架构图|diagram/i.test(asked) ? richReply() : consoleReply();
     msgs.push(makeMessage({
       thread_id: threadId, from: agent, to: CONSOLE, type: "reply", status: "done",
       body: r.body, ...(r.attachments ? { attachments: r.attachments } : {}),
@@ -1655,6 +1787,9 @@ function projectView(hub, p, bodies) {
     ...(hub.id === "hub_lab" ? {} : { machines: p.machines || [] }),
     // The project's memory (hubs from v0.21.10; the lab hub is older).
     ...(hub.id === "hub_lab" ? {} : { memory: memoryOf(p) }),
+    // Member groups (hubs from v0.21.34; always present there, absent on
+    // the older lab hub).
+    ...(hub.id === "hub_lab" ? {} : { groups: p.groups || [] }),
     members: p.members.map((m) => ({ ...m, agent: hub.agents.find((a) => a.name === m.name && a.visibility !== "private") })),
     docs: p.docs.map((d) => ({ name: d.name, size: d.size ?? d.body.length, content_type: d.content_type, binary: !!d.binary, updated_by: d.updated_by, updated_at: d.updated_at, ...(bodies && !d.binary ? { body: d.body } : {}) })),
     can_edit: true, can_manage: p.owner_id === "mem_" + meName || meName === "glenn",
@@ -2333,6 +2468,29 @@ const server = http.createServer(async (req, res) => {
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "opened" && parts.length === 3) {
     return send(res, 200, { urls: openedLinks });
   }
+  // /app/hubs/{id}/notices/open and …/read: what waits for the person (the
+  // 待处理 list). Studio starts with an ask, a failed task and a project
+  // task that seems stuck; reading settles all but asks, decisions and
+  // approvals.
+  if (parts[0] === "app" && parts[1] === "hubs" && parts[3] === "notices" && (parts[4] === "open" || parts[4] === "read")) {
+    state.notices ||= {
+      hub_studio: [
+        { seq: 3, id: "nt_ask", kind: "asking", tier: "needs_you", key: "k3", target: "agent:review-cloud", actor: "review-cloud", subject: "要不要顺手把旧的测试也删掉？", announce: true, created_at: iso(600) },
+        { seq: 2, id: "nt_failed", kind: "failed", tier: "needs_you", key: "k2", target: "agent:pm-codex", actor: "pm-codex", subject: "整理 v0.17 的发布计划：没完成（超时）", announce: true, created_at: iso(3600) },
+        { seq: 1, id: "nt_stuck", kind: "stuck", tier: "needs_you", key: "k1", target: "project:官网改版", project: "官网改版", actor: "release-cloud", subject: "首页改版：半小时没有动静", announce: true, created_at: iso(7200) },
+      ],
+    };
+    // (a workspace that cannot be reached answers as the real backend does)
+    const nh = state.hubs.find((h) => h.id === parts[2]);
+    if (nh && !nh.ok) return fail(res, 502, "hub_unreachable", nh.error || "Hub 连不上");
+    const list = (state.notices[parts[2]] ||= []);
+    if (parts[4] === "open") return send(res, 200, { notices: list, last: 3, badge: list.length });
+    const body = await readBody(req);
+    const keep = list.filter((n) => (n.kind === "asking" || n.kind === "decision" || n.kind === "approval") || (body?.target && n.target !== body.target && !n.target.startsWith(`${body.target}?`)));
+    const changed = list.length - keep.length;
+    state.notices[parts[2]] = keep;
+    return send(res, 200, { changed });
+  }
   // /app/notices: this mock is a browser, so it shows none; the pages
   // still say what is on screen (recorded for tests).
   if (parts[0] === "app" && parts[1] === "notices" && parts.length === 2) {
@@ -2497,10 +2655,13 @@ const server = http.createServer(async (req, res) => {
     const current = SHOWCASE ? "v0.18.39" : "v0.16.8-demo";
     const latest = process.env.MOCK_UPDATE === "none" || SHOWCASE ? current : "v0.17.2";
     if (method === "GET") {
-      return send(res, 200, { current, latest, available: latest !== current, can_install: SHELL === "mac" });
+      return send(res, 200, { current, latest, available: latest !== current, can_install: SHELL === "mac" || !!process.env.MOCK_UPDATE_FAIL });
     }
     if (method === "POST") {
       await new Promise((r) => setTimeout(r, 1200));
+      // MOCK_UPDATE_FAIL=download_failed|install_failed|start_failed: how an update fails
+      const failCode = process.env.MOCK_UPDATE_FAIL;
+      if (failCode) return fail(res, 502, failCode, `${failCode}: GET https://github.com/chenhg5/myco/releases/download/${latest}/myco-app-windows-amd64.exe: dial tcp 20.205.243.166:443: i/o timeout (after 6 attempts)`);
       return send(res, 200, { installed: latest, relaunching: true });
     }
     return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
@@ -2811,6 +2972,16 @@ const server = http.createServer(async (req, res) => {
         .filter(Boolean)
         .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
       return send(res, 200, { conversations: list.slice(0, 30) });
+    }
+
+    // GET usage works in the standard and SHOWCASE data sets.
+    if (parts.length === 4 && parts[3] === "usage" && method === "GET") {
+      if (process.env.MOCK_OLD_HUB) return fail(res, 404, "not_found", "no route for GET usage");
+      const to = url.searchParams.get("to") || new Date().toISOString().slice(0, 10);
+      const from = url.searchParams.get("from") || to;
+      const project = url.searchParams.get("project") || "";
+      const list = SHOWCASE ? hub.projects || [] : projects;
+      return send(res, 200, usageFixture(hub, list || [], { from, to, project }));
     }
 
     // /app/hubs/{id}/messages — a task from the console.
@@ -3482,6 +3653,20 @@ const server = http.createServer(async (req, res) => {
       if (parts.length === 5 && method === "PATCH") {
         const b = await readBody(req);
         for (const k of ["title", "goal", "brief", "links", "visibility", "archived"]) if (b[k] !== undefined) p[k] = b[k];
+        // Groups: the order (a member left in a group no longer listed is
+        // ungrouped), then who goes where.
+        if (b.groups !== undefined || b.member_groups !== undefined) {
+          if (hub.id === "hub_lab") return fail(res, 400, "invalid_argument", 'invalid JSON body: json: unknown field "groups"');
+          const groups = b.groups !== undefined ? b.groups : (p.groups || []);
+          if (new Set(groups).size !== groups.length || groups.some((g) => !String(g).trim())) return fail(res, 400, "invalid_argument", "group names must be unique and not empty");
+          for (const [a, g] of Object.entries(b.member_groups || {})) {
+            if (!p.members.some((m) => m.name === a)) return fail(res, 400, "invalid_argument", `${a} is not a member of the project`);
+            if (g && !groups.includes(g)) return fail(res, 400, "invalid_argument", `no group ${g}`);
+          }
+          p.groups = groups;
+          for (const m of p.members) if (m.group && !groups.includes(m.group)) delete m.group;
+          for (const [a, g] of Object.entries(b.member_groups || {})) { const m = p.members.find((x) => x.name === a); if (g) m.group = g; else delete m.group; }
+        }
         p.updated_at = iso();
         return send(res, 200, projectView(hub, p));
       }
@@ -3493,6 +3678,10 @@ const server = http.createServer(async (req, res) => {
           if (!m) { m = { name: parts[6], role: "member", note: "", added_by: meName, added_at: iso() }; p.members.push(m); }
           if (b.role) m.role = b.role;
           if (b.note !== undefined && b.note !== null) m.note = b.note;
+          if (b.group !== undefined && b.group !== null) {
+            if (b.group && !(p.groups || []).includes(b.group)) return fail(res, 400, "invalid_argument", `no group ${b.group}`);
+            if (b.group) m.group = b.group; else delete m.group;
+          }
           return send(res, 200, projectView(hub, p));
         }
         if (method === "DELETE") { p.members = p.members.filter((x) => x.name !== parts[6]); return send(res, 200, projectView(hub, p)); }

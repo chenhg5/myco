@@ -41,10 +41,16 @@ function enabled(): boolean {
   try { return localStorage.getItem(ISLAND_KEY) !== "off"; } catch { return true; }
 }
 
-function busyOf(ov: AppOverview): Busy[] {
+/** Who is at work. A workspace that cannot be read now (a bad network)
+ *  keeps who was at work there before: it is not "nobody". */
+function busyOf(ov: AppOverview, before: Busy[] = []): Busy[] {
   const out: Busy[] = [];
   for (const h of ov.hubs) {
-    for (const st of h.overview?.agents || []) {
+    if (!h.ok || !h.overview) {
+      out.push(...before.filter((b) => b.hubId === h.id));
+      continue;
+    }
+    for (const st of h.overview.agents || []) {
       const k = agentKind(st.agent);
       if (st.state !== "working" || (k !== "agent" && k !== "shell")) continue;
       // An older hub calls tasks left open "working" too: only live ones.
@@ -87,6 +93,13 @@ export function Island() {
   const [now, setNow] = useState(Date.now());
   const closing = useRef<number | null>(null);
   const live = busy.length > 0;
+  const liveRef = useRef(live);
+  liveRef.current = live;
+  const busyNow = useRef(busy);
+  busyNow.current = busy;
+  // The number while it folds back: the last one, never 0.
+  const lastCount = useRef(0);
+  if (busy.length > 0) lastCount.current = busy.length;
 
   // Start out of the way (one point, clicks pass through) until someone works.
   useEffect(() => { void frame(false); }, []);
@@ -96,7 +109,7 @@ export function Island() {
     const tick = async () => {
       try {
         const ov = await appApi.overview();
-        if (!off) setBusy(enabled() ? busyOf(ov) : []);
+        if (!off) setBusy(enabled() ? busyOf(ov, busyNow.current) : []);
       } catch { /* keep what we have */ }
       if (!off) setNow(Date.now());
     };
@@ -114,11 +127,12 @@ export function Island() {
   useEffect(() => {
     if (live) {
       if (closing.current) { window.clearTimeout(closing.current); closing.current = null; }
-      void frame(true, COMPACT_W, NH).then(() => requestAnimationFrame(() => setShown(true)));
-    } else if (shown) {
+      // (still at work once the window is ready: else it stays in)
+      void frame(true, COMPACT_W, NH).then(() => requestAnimationFrame(() => { if (liveRef.current) setShown(true); }));
+    } else {
       setOpen(false);
       setShown(false);
-      closing.current = window.setTimeout(() => { void frame(false); closing.current = null; }, 520);
+      if (!closing.current) closing.current = window.setTimeout(() => { if (!liveRef.current) void frame(false); closing.current = null; }, 520);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [live]);
@@ -176,6 +190,7 @@ export function Island() {
   const pillW = !shown ? Math.max(NW, 40) : open ? OPEN_W : COMPACT_W;
   const pillH = open ? openH : NH;
   const first = busy[0];
+  const count = busy.length || lastCount.current;
 
   return (
     <div className="isl-root">
@@ -192,11 +207,11 @@ export function Island() {
           </span>
           {NW > 0 && <span className="isl-notch" />}
           <span className="isl-wing is-right">
-            {NW > 0 ? (
-              <b>{busy.length}</b>
+            {count > 0 && (NW > 0 ? (
+              <b>{count}</b>
             ) : (
-              <span className="isl-line">{busy.length === 1 && first ? first.status : L(`${busy.length} 个在干活`, `${busy.length} at work`)}</span>
-            )}
+              <span className="isl-line">{count === 1 && first ? first.status : L(`${count} 个在干活`, `${count} at work`)}</span>
+            ))}
           </span>
         </div>
         <div className="isl-list">

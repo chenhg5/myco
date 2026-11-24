@@ -61,16 +61,15 @@ func resolveProvider(cli, ref, envFile string) providerChoice {
 				base, model := env["ANTHROPIC_BASE_URL"], env["ANTHROPIC_MODEL"]
 				ps := &harness.ProviderSettings{Env: env}
 				if app == "codex" {
-					// Custom URLs select an isolated provider. Legacy key-only env
-					// captures still use Codex's built-in OpenAI provider.
+					// Custom URLs select an isolated provider. A key alone (as
+					// myco join keeps from the session) is only passed on:
+					// Codex's config.toml keeps choosing the provider, which
+					// may well be a custom one whose env_key is OPENAI_API_KEY.
 					base, model = env["OPENAI_BASE_URL"], env["OPENAI_MODEL"]
 					if base != "" {
 						ps.ConfigArgs, ps.Env = provider.CustomCodex(base, env["OPENAI_API_KEY"], model, env["OPENAI_WIRE_API"])
-					} else {
-						ps.ConfigArgs = []string{"-c", `model_provider="openai"`}
-						if model != "" {
-							ps.ConfigArgs = append(ps.ConfigArgs, "-c", "model="+strconv.Quote(model))
-						}
+					} else if model != "" {
+						ps.ConfigArgs = []string{"-c", "model=" + strconv.Quote(model)}
 					}
 				}
 				ps.Model = model

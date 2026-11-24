@@ -12,6 +12,10 @@
 
 ## 创意设计
 
+**AIGC 画布**把便签、文本、图片和视频连成共享工作流。文本通过 OpenRouter 生成，图片和视频通过 Replicate 生成。生成需使用自己的服务密钥，密钥只留在当前会话。生成的媒体链接可能过期，请及时保存。
+
+[配色助手](palette.md)：从本地图片提色，保存色卡与喜欢的配色，生成搭配、检查文字对比度，并导出 SVG、CSS 或 JSON。设计师与 agent 共用同一份色卡。
+
 <table>
 <tr>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/motion-dark.webp"><img src="assets/apps/motion.webp" alt="动效视频"></picture><br><b>动效视频</b><br>做产品宣传、数据快报、竖版短视频这类动效视频：从模板开始改文字、图片和配色，或者说一句话让 agent 写好每个场景（HTML 加动画）；在时间点上批注让 agent 改，照一段参考视频重做；配上音乐和配音，场景切换对上节拍，配音转成字幕；存成模板给大家用；在本机导出 mp4。</td>
@@ -30,6 +34,8 @@
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/logo-studio-dark.webp"><img src="assets/apps/logo-studio.webp" alt="标志工坊"></picture><br><b>标志工坊</b><br>写下品牌需求，请 agent 创作原创几何标志。可以对比方案、回放构图、编辑形状、位置与颜色，并导出 SVG。</td>
 </tr>
 </table>
+
+[数据库工作台](database.md)：在支持数据库能力的桌面 App 中连接 MySQL、PostgreSQL、SQLite 与 MongoDB，管理连接、编辑数据并执行 SQL / Extended JSON。凭证与结果留在本机，仅主动共享的查询草稿进入页面。
 
 ## 办公套件
 
@@ -79,6 +85,10 @@
 <tr>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/stocks-dark.webp"><img src="assets/apps/stocks.webp" alt="行情工作台"></picture><br><b>行情工作台</b><br>在同一个工作台关注 A 股、港股、美股：共享自选与观察笔记，查看日周月 K 线、成交量和均线，导出行情。数据源可切换，支持接入自己的行情网关；行情由打开应用的电脑获取。</td>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/proxy-console-dark.webp"><img src="assets/apps/proxy-console.webp" alt="代理工作台"></picture><br><b>代理工作台</b><br>管理本机 Mihomo 与 sing-box：实时流量、策略组切换、节点测速、连接查看与断开、运行配置摘要。控制密钥留在本机，不与工作区共享。需启用内核 Clash API，并使用支持 proxy.profile 的桌面 App。</td>
+</tr>
+<tr>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/apps/server-console-dark.webp"><img src="assets/apps/server-console.webp" alt="Server Console"></picture><br><b>服务器</b><br>通过本机 SSH 管理 Linux 主机：资源概览、系统服务、Docker 容器、日志和确认后的启停操作。Agent 使用绑定主机的限时授权。需新版桌面 App 与 Hub。<a href="server-console.md">使用说明</a>。</td>
+<td width="50%"></td>
 </tr>
 </table>
 

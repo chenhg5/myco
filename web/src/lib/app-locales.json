@@ -342,11 +342,51 @@
   "myco/price-compare": {
     "en": {
       "name": "Shopping comparison",
-      "description": "Agents research; you choose. Compare matching offers with coupon conditions, shipping, sources and observation times. Save candidates, add shared notes and link to a comparison. No built-in marketplace login or automatic scraping."
+      "description": "Connect the Maishou product API for direct agent queries of offers, discounts and purchase links, with sources and query times. Save offers and shared buying notes. Requires your own Maishou credentials configured on the executing agent."
     },
     "zh": {
       "name": "购物比价",
-      "description": "agent 查价，你来选：并排查看同款报价、优惠条件、运费、来源和查询时间，收藏候选并记录购买考虑。支持分享直达；不内置电商登录或自动抓价。"
+      "description": "对接买手商品 API，由 agent 直接查询报价、优惠与购买链接，保留来源和查询时间。支持收藏与购买笔记；需在执行端配置自己的买手授权凭证，开通后使用。"
+    }
+  },
+  "myco/aigc-canvas": {
+    "en": {
+      "name": "AIGC Canvas",
+      "description": "Connect notes, text, images, and videos into workflows, run them with your own provider keys, and share nodes and results."
+    },
+    "zh": {
+      "name": "AIGC 画布",
+      "description": "把便签、文本、图片和视频连成工作流，使用自己的生成服务密钥，与协作者共享节点和结果。"
+    }
+  },
+  "myco/palette": {
+    "en": {
+      "name": "Color studio",
+      "description": "Extract colors from images, create and save palettes, explore color harmonies, and check text contrast. Share design notes with your team and agent; export SVG, CSS and JSON."
+    },
+    "zh": {
+      "name": "配色助手",
+      "description": "从图片提色，生成、调整与收藏配色方案，分析文字对比度，预览实际设计搭配。与团队和 agent 共享色卡及设计笔记，支持 SVG、CSS、JSON 导出。"
+    }
+  },
+  "myco/database": {
+    "en": {
+      "name": "Database studio",
+      "description": "Manage local MySQL, PostgreSQL, SQLite and MongoDB connections. Browse schemas, edit records, run SQL or Extended JSON, and share query drafts with agents. Requires a desktop App with database capabilities; credentials and results stay on this computer."
+    },
+    "zh": {
+      "name": "数据库工作台",
+      "description": "连接 MySQL、PostgreSQL、SQLite 与 MongoDB，管理本机连接、浏览结构、增删改查及执行 SQL 或 Extended JSON。可与 agent 共享查询草稿；凭证与结果留在本机，需支持数据库能力的桌面 App。"
+    }
+  },
+  "myco/server-console": {
+    "en": {
+      "name": "Server Console",
+      "description": "Manage Linux hosts over your local SSH connection. Inspect resources, systemd services and Docker containers, read logs and review fixed management actions. Agents use host-bound expiring grants. Requires a desktop App with SSH support; credentials and results stay private."
+    },
+    "zh": {
+      "name": "服务器",
+      "description": "通过本机 SSH 管理 Linux 主机：查看资源、系统服务与 Docker 容器，读取日志并确认启停操作。支持绑定具体主机的 Agent 限时授权。连接信息与命令结果不写入共享页面，需支持 SSH 的桌面 App。"
     }
   }
 }

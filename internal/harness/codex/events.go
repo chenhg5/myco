@@ -57,6 +57,7 @@ type eventStream struct {
 
 // tokenTotal is Codex's total_token_usage (input counts cached tokens).
 type tokenTotal struct {
+	Cached int64 `json:"cached_input_tokens"`
 	Input  int64 `json:"input_tokens"`
 	Output int64 `json:"output_tokens"`
 }
@@ -82,6 +83,10 @@ func (s *eventStream) line(b []byte) []harness.Event {
 		in, out := l.Usage.InputTokens-s.before.Input, l.Usage.OutputTokens-s.before.Output
 		if s.known && in >= 0 && out >= 0 {
 			ev.InputTokens, ev.OutputTokens = in, out
+			cached := l.Usage.CachedInputTokens - s.before.Cached
+			if cached >= 0 && cached <= in {
+				ev.CacheReadTokens = cached
+			}
 		}
 		return []harness.Event{ev}
 	case "turn.failed":

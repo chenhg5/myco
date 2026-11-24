@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ArrowUpCircle, X } from "lucide-react";
-import { appApi, type AppUpdate } from "@/appapi";
-import { ErrorText } from "@/app/dialogs";
+import { ApiError, appApi, type AppUpdate } from "@/appapi";
+import { ErrorText, type ErrorSummary } from "@/app/dialogs";
 import { L } from "@/lib/i18n";
 
 const DISMISSED_KEY = "myco-update-dismissed";
@@ -9,6 +9,29 @@ const CHECK_EVERY = 6 * 60 * 60 * 1000;
 
 function dismissed(): string {
   try { return localStorage.getItem(DISMISSED_KEY) || ""; } catch { return ""; }
+}
+
+/** What a failed app update (POST /app/update) means, in the person's words. */
+export function updateFailure(e: unknown): ErrorSummary | null {
+  const code = e instanceof ApiError ? e.code : undefined;
+  switch (code) {
+    case "download_failed":
+      return {
+        message: L("没能从 GitHub 下载新版本。", "Couldn't download the new version from GitHub."),
+        suggestion: L("这个网络可能访问 GitHub 很慢或被挡住了：打开你的代理软件，或在设置 › 代理里设一个，再重试。", "GitHub may be slow or blocked on this network: turn on your proxy app, or set one under Settings › Proxy, then try again."),
+      };
+    case "install_failed":
+      return {
+        message: L("新版本下载好了，但没能替换当前的 App。", "The new version downloaded, but couldn't replace the current app."),
+        suggestion: L("可能有别的程序（杀毒软件、OneDrive 这类同步软件）正占用 myco 的文件。稍等片刻再试，或到 GitHub 手动下载新版本。", "Another program (antivirus, or a sync app such as OneDrive) may be holding myco's file. Try again in a moment, or download the new version from GitHub."),
+      };
+    case "start_failed":
+      return {
+        message: L("新版本没能启动，已换回当前版本，可以照常使用。", "The new version didn't start, so the current version was kept and keeps working."),
+        suggestion: L("如果杀毒软件拦住了新的 myco，在杀毒软件里放行后再试，或到 GitHub 手动下载新版本。", "If an antivirus blocked the new myco, allow it there and try again, or download the new version from GitHub."),
+      };
+  }
+  return null;
 }
 
 /**
@@ -58,7 +81,7 @@ export function UpdateNotice({ onOpenSettings }: { onOpenSettings: () => void })
             : step === "relaunching" ? L("正在重新打开…", "Reopening…")
             : L(`当前 ${u.current}`, `You have ${u.current}`)}
         </span>
-        {error !== null && <ErrorText error={error} />}
+        {error !== null && <ErrorText error={error} summary={updateFailure(error)} />}
         {step === "idle" && (
           <span className="app-update-actions">
             {u.can_install

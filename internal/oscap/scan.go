@@ -239,7 +239,7 @@ func (s *scanner) file(p string, fi fs.FileInfo, disk int64) bool {
 func (s *scanner) walk(p string, fi fs.FileInfo, dev uint64, level int) *Node {
 	n := &Node{Path: p, Name: fi.Name(), Dir: fi.IsDir(), Modified: fi.ModTime().UnixMilli()}
 	if !fi.IsDir() {
-		n.Size, n.Disk = fi.Size(), diskOf(fi)
+		n.Size, n.Disk = fi.Size(), diskOf(p, fi)
 		if fi.Mode().IsRegular() {
 			n.Files = 1
 			if !s.file(p, fi, n.Disk) {

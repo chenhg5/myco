@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpDown, ChevronLeft, ChevronRight, LayoutGrid, Monitor, MoreHorizontal, Pin, Plus, Search, WifiOff, Workflow, X, Zap } from "lucide-react";
+import { Gauge, ArrowUpDown, Bell, ChevronLeft, ChevronRight, LayoutGrid, Minimize2, Monitor, MoreHorizontal, Pin, Plus, Search, WifiOff, Workflow, X, Zap } from "lucide-react";
 import { ComputerSettings } from "@/app/ComputerSettings";
+import { UsagePage } from "@/app/Usage";
 import { AutomationsPage } from "@/app/Automations";
 import { WorkflowsPage } from "@/app/Workflows";
 import { TemplatesPage } from "@/app/Templates";
 import "@/app/app.css";
 import "@/app/space.css";
-import { appApi, errorMessage, type AppInfo, type AppOverview, type Hub, type LocalState, type WorkspaceState } from "@/appapi";
+import { AGENT_UPDATED, appApi, errorMessage, type AgentUpdated, type AppInfo, type AppOverview, type Hub, type LocalState, type WorkspaceState } from "@/appapi";
 import type { AgentRow } from "@/app/types";
 import type { Project } from "@/api";
 import { ConnectHubDialog } from "@/app/ConnectHubDialog";
@@ -39,6 +40,9 @@ import { LogoWordmark } from "@/components/brand";
 import { IconSidebar } from "@/components/icons";
 import { recentChats } from "@/app/recentChats";
 import { useContextMenu } from "@/app/ContextMenu";
+import { FocusBgButton, focusBgProps, useFocusBg } from "@/app/FocusBg";
+import { NoticesPanel } from "@/app/NoticesPanel";
+import type { Notice } from "@/api";
 import { useSortable } from "@/app/sortable";
 import { useTextSize, useThemeMode } from "@/lib/theme";
 import { L, lang, setLangChoice, storedLangChoice, type LangChoice } from "@/lib/i18n";
@@ -78,7 +82,7 @@ function readPendingLink(): Promise<string> {
  * agents work together and hand out tasks; Members is everyone you work
  * with; Settings holds the rest (team spaces, computers, the app itself).
  */
-type Page = "space" | "members" | "computers" | "automations" | "workflows" | "templates" | "settings" | "about" | "help";
+type Page = "space" | "members" | "computers" | "usage" | "automations" | "workflows" | "templates" | "settings" | "about" | "help";
 
 function initialCollapsed() {
   try {
@@ -195,7 +199,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const setHubPick = (v: string) => {
     // Leaving a workspace: where you were in it is kept, to come back to.
     if (v !== hubId && hubId) {
-      places.current[hubId] = { space: shown || undefined, page: page === "members" || page === "computers" || page === "automations" || page === "workflows" || page === "templates" ? page : "space" };
+      places.current[hubId] = { space: shown || undefined, page: page === "members" || page === "computers" || page === "automations" || page === "workflows" || page === "templates" || page === "usage" ? page : "space" };
       try { localStorage.setItem(PLACES_KEY, JSON.stringify(places.current)); } catch { /* not kept */ }
     }
     setHubPickState(v);
@@ -328,9 +332,13 @@ export default function AppMode({ initialHubs, initialInfo }: {
       return remember("projects", allIds.flatMap((id) => { const i = okIds.indexOf(id); return (i >= 0 ? lists[i] : null) ?? keep(id); }));
     });
   }, []);
-  const refresh = useCallback(async () => {
-    if (refreshing.current) return;
+  // Asked for while one runs (after a save, say): once more when it ends,
+  // since the one running may have read the hub before the change.
+  const refreshAgain = useRef(false);
+  const refresh = useCallback(async (): Promise<void> => {
+    if (refreshing.current) { refreshAgain.current = true; return; }
     refreshing.current = true;
+    refreshAgain.current = false;
     try {
       const [h, o, pending, l] = await Promise.all([appApi.hubs(), appApi.overview(), readPendingLink(),
         appApi.local().catch(() => null)]);
@@ -356,8 +364,33 @@ export default function AppMode({ initialHubs, initialInfo }: {
       setOv((o) => (o ? unreached(o, e) : o));
     } finally {
       refreshing.current = false;
+      if (refreshAgain.current) void refresh();
     }
   }, [loadProjects]);
+  // A profile saved here (appApi.updateProfile): its name and face show
+  // everywhere at once, not at the next refresh.
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<AgentUpdated>).detail;
+      if (!d?.agent) return;
+      setOv((o) => {
+        if (!o) return o;
+        let hit = false;
+        const hubs = o.hubs.map((h) => {
+          if (h.id !== d.hubId || !h.overview) return h;
+          const agents = h.overview.agents.map((st) => {
+            if (st.agent.name !== d.agent.name) return st;
+            hit = true;
+            return { ...st, agent: { ...st.agent, ...d.agent } };
+          });
+          return { ...h, overview: { ...h.overview, agents } };
+        });
+        return hit ? remember("overview", { ...o, hubs }) : o;
+      });
+    };
+    window.addEventListener(AGENT_UPDATED, on);
+    return () => window.removeEventListener(AGENT_UPDATED, on);
+  }, []);
 
   useEffect(() => {
     void refresh();
@@ -552,6 +585,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
     if (!hubId) return;
     navRecord({ hub: hubId, page, space: page === "space" || page === "about" ? shownKey : undefined, chat: navChatNow });
   }, [hubId, page, shownKey, navChatNow]);
+  // A workflow (and run) to open on the workflows page.
+  const [wfOpen, setWfOpen] = useState<{ workflow: string; run?: string; at: number } | undefined>();
   // What is on screen, for notices on this computer: a chat in front is
   // not announced (and is marked read on its workspace, for every device).
   useEffect(() => {
@@ -559,7 +594,13 @@ export default function AppMode({ initialHubs, initialInfo }: {
     const say = () => {
       const front = document.visibilityState === "visible" && document.hasFocus();
       const [h, a] = (navChatNow || "").split("\u0000");
-      const f = { front, hub: a ? h : hubId || undefined, target: a ? `agent:${a}` : undefined };
+      // (else a project's group in front, or a workflow's run: their
+      // notices are read too)
+      const other = a ? null
+        : page === "space" && shown && !isLoose(shown) ? { hub: shown.hubId, target: `project:${shown.name}` }
+        : page === "workflows" && wfOpen ? { hub: hubId || undefined, target: `workflow:${wfOpen.workflow}` }
+        : null;
+      const f = a ? { front, hub: h, target: `agent:${a}` } : other ? { front, ...other } : { front, hub: hubId || undefined, target: undefined };
       const key = JSON.stringify(f);
       if (key === last) return;
       last = key;
@@ -574,7 +615,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
       window.removeEventListener("blur", say);
       document.removeEventListener("visibilitychange", say);
     };
-  }, [hubId, navChatNow]);
+  }, [hubId, navChatNow, page, shown ? spaceKey(shown) : "", wfOpen?.workflow]);
   const navApply = useRef<(p: NavPlace) => void>(() => undefined);
   navApply.current = (p) => {
     if (p.hub !== hubId && hubs.some((h) => h.id === p.hub)) setHubPick(p.hub);
@@ -676,6 +717,54 @@ export default function AppMode({ initialHubs, initialInfo }: {
   // (preventDefault) does not reach the menu, so each acts once.
   const keysRef = useRef({ settingsOpen, hasHub: false });
   keysRef.current = { settingsOpen, hasHub: !!hub };
+  // 专注模式: the chat you are in alone, full screen, centred on a plain
+  // background; the sidebar, the top bar and the members are hidden. ⌃Tab
+  // still switches chats (the zoomed pane takes whoever you pick). From a
+  // chat's ⋯ menu or ⌘⇧F (Ctrl+Shift+F); Esc, ⌘⇧F or the button at the top
+  // right leave it. Only on a page with chats.
+  const [focusMode, setFocusMode] = useState(false);
+  const focusRef = useRef(false);
+  focusRef.current = focusMode;
+  const pageRef = useRef(page);
+  pageRef.current = page;
+  useEffect(() => {
+    const on = () => setFocusMode((f) => !f && pageRef.current === "space");
+    window.addEventListener("myco-focus-mode", on);
+    return () => window.removeEventListener("myco-focus-mode", on);
+  }, []);
+  useEffect(() => { if (page !== "space") setFocusMode(false); }, [page]);
+  // Its background (FocusBg.tsx): the whole page or only around the chat.
+  const [focusBg, setFocusBg] = useFocusBg();
+  const focusLook = focusBgProps(focusBg);
+  // The window too: the desktop App's own full screen, else the browser's;
+  // leaving the browser's (its Esc) leaves 专注模式 as well.
+  const winFull = !!info?.fullscreen;
+  useEffect(() => {
+    if (winFull) void appApi.windowFullscreen(focusMode).catch(() => undefined);
+    else if (focusMode && !document.fullscreenElement) void document.documentElement.requestFullscreen?.()?.catch(() => undefined);
+    else if (!focusMode && document.fullscreenElement) void document.exitFullscreen?.()?.catch(() => undefined);
+    if (!focusMode) return;
+    // Esc, first (a docked page, hidden here, would take it), unless
+    // something on top takes it: a dialog, a menu, the search in the chat.
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.isComposing || keysRef.current.settingsOpen) return;
+      if (document.querySelector(".app-modal, .cp, .app-menu, .lightbox, .conv-menu, .focus-bg-pop, [data-radix-popper-content-wrapper], [role=listbox]")) return;
+      if ((document.activeElement as HTMLElement | null)?.closest(".conv-search")) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setFocusMode(false);
+    };
+    let was = !!document.fullscreenElement;
+    const changed = () => {
+      const now = !!document.fullscreenElement;
+      if (was && !now && !winFull) setFocusMode(false);
+      was = now;
+    };
+    window.addEventListener("keydown", key, true);
+    document.addEventListener("fullscreenchange", changed);
+    document.documentElement.classList.add("is-focus");
+    return () => { document.documentElement.classList.remove("is-focus"); window.removeEventListener("keydown", key, true); document.removeEventListener("fullscreenchange", changed); };
+  }, [focusMode, winFull]);
   useEffect(() => {
     const overlay = () => !!document.querySelector(".app-modal, .cp, .app-menu, .lightbox");
     const onKey = (e: KeyboardEvent) => {
@@ -702,6 +791,11 @@ export default function AppMode({ initialHubs, initialInfo }: {
         if (e.code === "KeyL") {
           e.preventDefault();
           setTheme(document.documentElement.classList.contains("dark") ? "light" : "dark");
+        }
+        // ⌘⇧F: 专注模式, the chat you are in alone (or back).
+        if (e.code === "KeyF" && !overlay() && (focusRef.current || pageRef.current === "space")) {
+          e.preventDefault();
+          window.dispatchEvent(new CustomEvent("myco-focus-mode"));
         }
         return;
       }
@@ -772,7 +866,6 @@ export default function AppMode({ initialHubs, initialInfo }: {
     return () => { off = true; window.clearInterval(t); window.removeEventListener("myco-automations", on); };
   }, [hubId, page]);
   // A workflow run to open on the 工作流 page (from an automation's runs).
-  const [wfOpen, setWfOpen] = useState<{ workflow: string; run?: string; at: number } | undefined>();
   // A notice clicked in the system's notifications (the desktop app): open
   // where it leads, in its workspace (a workflow's run, or a chat: the
   // agent it is about, or the one that sent it).
@@ -788,12 +881,54 @@ export default function AppMode({ initialHubs, initialInfo }: {
         setPage("workflows");
         return;
       }
+      // (a project's group: its space)
+      if (t.startsWith("project:")) {
+        setNavChat(null);
+        setSpace({ hubId: d.hubId, name: t.slice("project:".length) });
+        setChatWith(null);
+        setPage("space");
+        return;
+      }
       const agent = t.startsWith("agent:") ? t.slice("agent:".length) : d.actor;
       if (agent) setToOpen({ hubId: d.hubId, agent });
     };
     window.addEventListener("myco-open-notice", on);
     return () => window.removeEventListener("myco-open-notice", on);
   }, []);
+  // 待处理 (NoticesPanel): what waits for you, the Dock badge's number. The
+  // desktop app's watcher keeps it; in a browser (no watcher) each
+  // workspace is asked now and then.
+  // (hidden for now, the maintainers' call, 2026-11-23: looking at the App
+  // clears the Dock's number instead; the list stays for later)
+  const [noticesOpen, setNoticesOpen] = useState(false);
+  const [noticeCount, setNoticeCount] = useState(0);
+  const hubIdsKey = hubs.filter((h) => h.ok).map((h) => h.id).join(",");
+  const readNoticeCount = useRef<() => void>(() => undefined);
+  useEffect(() => {
+    if (!NOTICES_LIST) return;
+    let off = false;
+    let inBrowser: boolean | null = null;
+    let last = 0;
+    const read = async () => {
+      try {
+        if (inBrowser !== true) {
+          const st = await appApi.notices();
+          inBrowser = !st.available;
+          if (!inBrowser) { if (!off) setNoticeCount(st.badge || 0); return; }
+        }
+        if (Date.now() - last < 60_000) return;
+        last = Date.now();
+        const counts = await Promise.all(hubs.filter((h) => h.ok).map((h) => appApi.openNotices(h.id).then((f) => f.badge || 0, () => 0)));
+        if (!off) setNoticeCount(counts.reduce((a, b) => a + b, 0));
+      } catch { /* kept as it was */ }
+    };
+    readNoticeCount.current = () => { last = 0; void read(); };
+    void read();
+    const t = window.setInterval(() => void read(), POLL_MS);
+    return () => { off = true; window.clearInterval(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hubIdsKey]);
+  const goNotice = (h: string, n: Notice) => window.dispatchEvent(new CustomEvent("myco-open-notice", { detail: { hubId: h, target: n.target, actor: n.actor } }));
   // Decisions a workflow waits on you for: a count on its nav item.
   const [decisionCount, setDecisionCount] = useState(0);
   useEffect(() => {
@@ -961,6 +1096,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const addWsProject = addWorkspace && !isLoose(addWorkspace) ? liveProjects.find((x) => x.hubId === addWorkspace.hubId && x.p.name === addWorkspace.name)?.p : undefined;
   const title = page === "members" ? L("成员", "Members")
     : page === "computers" ? L("电脑", "Computers")
+    : page === "usage" ? L("用量", "Usage")
     : page === "automations" ? L("自动化", "Automations")
     : page === "help" ? L("使用文档", "User guide")
     : page === "workflows" ? L("工作流", "Workflows")
@@ -1002,8 +1138,18 @@ export default function AppMode({ initialHubs, initialInfo }: {
   };
 
   return (
-    <div key={lang()} className={cn("app-shell", isMac && "shell-mac", collapsed && "collapsed")}
-      style={{ ["--sidebar-w" as string]: `${sidebar.width}px` }}>
+    <div key={lang()} className={cn("app-shell", isMac && "shell-mac", collapsed && "collapsed", focusMode && "is-focus")}
+      {...(focusMode ? focusLook.attrs : {})}
+      style={{ ["--sidebar-w" as string]: `${sidebar.width}px`, ...(focusMode ? focusLook.style : {}) }}>
+      {focusMode && (
+        <div className="focus-tools" style={{ ["--wails-draggable" as string]: "no-drag" }}>
+          <FocusBgButton value={focusBg} onChange={setFocusBg} />
+          <button type="button" className="focus-exit" onClick={() => setFocusMode(false)}
+            title={L("退出专注模式（Esc）", "Leave focus mode (Esc)")} aria-label={L("退出专注模式", "Leave focus mode")}>
+            <Minimize2 /><span className="focus-exit-label">{L("退出专注", "Leave focus")}<kbd>Esc</kbd></span>
+          </button>
+        </div>
+      )}
       {!collapsed && (
         <aside className="app-sidebar">
           {/* Its right edge: drag to make it wider or narrower. */}
@@ -1026,6 +1172,13 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 order you pick; the height left, scrolling), computers last.
                 The three lists fold. */}
             <div className="app-nav-group sp-nav-autos">
+              {NOTICES_LIST && (
+                <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-notices", noticesOpen && "active")} data-testid="nav-notices"
+                  onClick={() => setNoticesOpen(true)}>
+                  <Bell /><span className="app-nav-label">{L("待处理", "Needs you")}</span>
+                  {noticeCount > 0 && <span className="wf-nav-badge" title={L(`${noticeCount} 件事在等你`, `${noticeCount} things wait for you`)}>{noticeCount}</span>}
+                </button>
+              )}
               <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-auto", page === "automations" && "active")} aria-current={page === "automations" ? "page" : undefined}
                 onClick={() => { setNavChat(null); toPage("automations"); }}>
                 <Zap /><span className="app-nav-label">{L("自动化", "Automations")}</span>
@@ -1034,6 +1187,10 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 onClick={() => { setNavChat(null); toPage("workflows"); }}>
                 <Workflow /><span className="app-nav-label">{L("工作流", "Workflows")}</span>
                 {decisionCount > 0 && <span className="wf-nav-badge" title={L(`${decisionCount} 个决定在等你`, `${decisionCount} decisions wait for you`)}>{decisionCount}</span>}
+              </button>
+              <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-usage", page === "usage" && "active")} aria-current={page === "usage" ? "page" : undefined}
+                onClick={() => { setNavChat(null); toPage("usage"); }}>
+                <Gauge /><span className="app-nav-label">{L("用量", "Usage")}</span>
               </button>
               <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-templates", page === "templates" && "active")} aria-current={page === "templates" ? "page" : undefined}
                 onClick={() => { setNavChat(null); toPage("templates"); }}>
@@ -1233,6 +1390,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
 
         {page === "space" && (shown ? (
           <ProjectSpace
+            focus={focusMode}
             key={spaceKey(shown)}
             space={shown}
             project={shownProject}
@@ -1264,6 +1422,22 @@ export default function AppMode({ initialHubs, initialInfo }: {
         {page === "members" && (
           <div className="app-scroll">
             <MembersPage rows={rows} projects={hubProjects} now={now} onOpen={(r) => setProfile({ hubId: r.hub.id, name: r.st.agent.name })} />
+          </div>
+        )}
+
+        {page === "usage" && hub && (
+          <div className="app-scroll">
+            <UsagePage key={hub.id} hubId={hub.id} projects={hubProjects.map((x) => x.p)} rows={rows}
+              onOpenAgent={(name) => {
+                const r = rows.find((x) => x.st.agent.name === name);
+                if (r) chatWithMember(r);
+                else {
+                  // A usage record can outlive its member's current presence.
+                  const target: SpaceRef = { hubId: hub.id, loose: true };
+                  setSpace(target); setPage("space");
+                  setChatWith({ space: target, agent: name, n: Date.now() });
+                }
+              }} />
           </div>
         )}
 
@@ -1347,6 +1521,9 @@ export default function AppMode({ initialHubs, initialInfo }: {
       </div>
 
       {navMenu.element}
+      <NoticesPanel open={noticesOpen} onOpenChange={setNoticesOpen} hubs={hubs.filter((h) => h.ok).map((h) => ({ id: h.id, name: h.name }))}
+        nameOf={(h, a) => { const r = allRows.find((x) => x.hub.id === h && x.st.agent.name === a); return r ? nodeName(r.st.agent, r.hub) : a; }}
+        onGo={goNotice} onChanged={() => readNoticeCount.current()} />
       <ComputerSettings focus={pcSettings?.focus} row={pcSettings ? rows.find((r) => r.hub.id === pcSettings.hubId && r.st.agent.name === pcSettings.name) || null : null}
         rows={rows} projects={hubProjects} onClose={() => setPcSettings(null)} onChanged={() => { setProjectReload((n) => n + 1); void refresh(); void loadProjects(hubs.map((h) => h.id)); }}
         onOpenTerminal={(r) => chatWithMember(r)} />
@@ -1384,8 +1561,10 @@ export default function AppMode({ initialHubs, initialInfo }: {
       <AgentSwitcher hubId={hubId} rows={chatRows} current={navChatNow ? navChatNow.split("\u0000")[1] : undefined}
         project={page === "space" && shownProject ? shownProject.members.map((m) => m.name) : undefined}
         onPick={(r) => { setNavChat(`${r.hub.id}\u0000${r.st.agent.name}`); chatWithMember(r); }} />
-      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} rows={allRows} hubs={namedOv?.hubs || []} now={now}
-        projects={(projects || []).filter((x) => !x.p.archived).map((x) => ({ hubId: x.hubId, name: x.p.name, title: x.p.title || x.p.name, goal: x.p.goal }))}
+      {/* ⌘K finds in the workspace you are in, not in every one. */}
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} rows={allRows.filter((r) => r.hub.id === hubId)}
+        hubs={(namedOv?.hubs || []).filter((h) => h.id === hubId)} now={now}
+        projects={(projects || []).filter((x) => !x.p.archived && x.hubId === hubId).map((x) => ({ hubId: x.hubId, name: x.p.name, title: x.p.title || x.p.name, goal: x.p.goal }))}
         onPick={(t) => {
           setProfile(null);
           if (t.kind === "page") { setPage(t.page); return; }
@@ -1403,6 +1582,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
 }
 
 const SPACE_KEY = "myco-app-space";
+/** 待处理 in the sidebar (NoticesPanel): off for now. */
+const NOTICES_LIST = false;
 // Computers listed in the sidebar before "All N".
 const NAV_COMPUTERS = 6;
 type ChatSort = "recent" | "busy" | "name";
