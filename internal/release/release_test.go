@@ -387,6 +387,25 @@ func TestFetchFallsBackToReleaseAPI(t *testing.T) {
 	}
 }
 
+// When GitHub's API refuses or cannot be reached, the Gitee mirror knows the
+// same releases; a caller's own API URL keeps to its own sources.
+func TestLatestFallsBackToTheGiteeMirror(t *testing.T) {
+	defer func(m string) { mirrorAPI = m }(mirrorAPI)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"tag_name":"v0.23.0","name":"v0.23.0"}`)
+	}))
+	defer srv.Close()
+	mirrorAPI = srv.URL
+	ctx := context.Background()
+	tag, err := latestFromMirror(ctx, srv.Client(), DefaultAPI)
+	if err != nil || tag != "v0.23.0" {
+		t.Fatalf("mirror: %q %v", tag, err)
+	}
+	if _, err := latestFromMirror(ctx, srv.Client(), "http://example.test/api/latest"); err == nil {
+		t.Fatal("a custom API must not ask the mirror")
+	}
+}
+
 // GitHub allows 60 unauthenticated API requests an hour per address: when
 // the API refuses, the release page's redirect gives the latest tag.
 func TestLatestFallsBackToTheReleasePage(t *testing.T) {

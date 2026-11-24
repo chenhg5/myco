@@ -38,6 +38,9 @@ const (
 	// DefaultMirror is the Gitee mirror of the same release assets. FetchFrom
 	// times both sources and downloads from the faster one.
 	DefaultMirror = "https://gitee.com/cg33/myco/releases/download"
+	// DefaultMirrorAPI answers the latest-release question from the Gitee
+	// mirror, for when GitHub's API refuses or cannot be reached.
+	DefaultMirrorAPI = "https://gitee.com/api/v5/repos/cg33/myco/releases/latest"
 	// EnvAPI and EnvDownload override them (mirrors, tests). Setting
 	// EnvDownload also turns the Gitee mirror off.
 	EnvAPI      = "MYCO_RELEASE_API"
@@ -132,13 +135,17 @@ func Newer(a, b string) bool {
 
 // Latest asks the release API for the latest published tag. When the API
 // refuses (it allows 60 unauthenticated requests an hour per address, so a
-// shared network soon gets 403) or cannot be reached, the release page's
-// redirect is asked instead: github.com/<owner>/<repo>/releases/latest
-// answers with the tag's page in its Location, without that limit.
+// shared network soon gets 403) or cannot be reached, the Gitee mirror is
+// asked, and then the release page's redirect:
+// github.com/<owner>/<repo>/releases/latest answers with the tag's page in
+// its Location, without that limit.
 func Latest(ctx context.Context, hc *http.Client, api string) (string, error) {
 	tag, err := latestFromAPI(ctx, hc, api)
 	if err == nil {
 		return tag, nil
+	}
+	if t, merr := latestFromMirror(ctx, hc, api); merr == nil {
+		return t, nil
 	}
 	if page := latestPage(api); page != "" {
 		if t, perr := latestFromPage(ctx, hc, page); perr == nil {
@@ -146,6 +153,18 @@ func Latest(ctx context.Context, hc *http.Client, api string) (string, error) {
 		}
 	}
 	return "", err
+}
+
+// mirrorAPI is DefaultMirrorAPI; tests point it elsewhere.
+var mirrorAPI = DefaultMirrorAPI
+
+// latestFromMirror asks the Gitee mirror for the latest tag, only when api
+// is GitHub's own (an EnvAPI override names its own sources).
+func latestFromMirror(ctx context.Context, hc *http.Client, api string) (string, error) {
+	if api != DefaultAPI {
+		return "", fmt.Errorf("no mirror for release API %s", api)
+	}
+	return latestFromAPI(ctx, hc, mirrorAPI)
 }
 
 func latestFromAPI(ctx context.Context, hc *http.Client, api string) (string, error) {
