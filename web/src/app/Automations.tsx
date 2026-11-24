@@ -34,7 +34,10 @@ const outcomeWords = (r: AutomationRun) =>
   r.outcome === "sent" ? L("已发送", "Sent")
     : r.outcome === "skipped" ? L(`跳过了${r.error ? `：${skipWhy(r.error)}` : ""}`, `Skipped${r.error ? `: ${r.error}` : ""}`)
       : L(`没发出去${r.error ? `：${r.error}` : ""}`, `Not sent${r.error ? `: ${r.error}` : ""}`);
-const skipWhy = (e: string) => (/not finished/.test(e) ? "上一次的任务还没做完" : e);
+const skipWhy = (e: string) => e === "expired" ? "已到结束时间" : e === "once" ? "已经执行过一次" : e === "project_scope_changed" ? "项目或目标权限已变更" : /starts_at|active period has not started/.test(e) ? "还没到开始时间" : /not finished/.test(e) ? "上一次的任务还没做完" : e;
+const boundLocal = (value?: string) => value ? new Date(new Date(value).getTime() - new Date(value).getTimezoneOffset() * 60000).toISOString().slice(0,16) : "";
+const disabledWords = (a: Automation) => a.disabled_reason === "expired" ? L("已到期", "Expired") : a.disabled_reason === "once" ? L("已执行一次", "Single attempt used") : a.disabled_reason === "project_scope_changed" ? L("项目范围已变更", "Project scope changed") : L("已暂停", "Paused");
+const boundsWords = (a: Automation) => [a.starts_at ? L(`从 ${new Date(a.starts_at).toLocaleString()}`, `From ${new Date(a.starts_at).toLocaleString()}`) : "", a.ends_at ? L(`至 ${new Date(a.ends_at).toLocaleString()}`, `Until ${new Date(a.ends_at).toLocaleString()}`) : "", a.once ? L("只跑一次", "Run once") : ""].filter(Boolean).join(" · ");
 const triggerWords = (t: AutomationRun["trigger"]) => (t === "schedule" ? L("到点", "On schedule") : t === "webhook" ? L("Webhook", "Webhook") : L("手动", "By hand"));
 const outcomeTone = (r: AutomationRun) => (r.outcome === "sent" ? "is-ok" : r.outcome === "failed" ? "is-bad" : "is-skip");
 
@@ -244,8 +247,9 @@ export function AutomationsPage({ hubId, rows, now, onOpenMessage, onOpenRun }: 
                         </span>
                       )}
                     </span>
+                    {boundsWords(a) && <span className="au-row-what" data-testid="automation-bounds">{boundsWords(a)}</span>}
                     <span className="au-row-status">
-                      {!a.enabled ? <span>{L("已暂停", "Paused")}</span>
+                      {!a.enabled ? <span>{disabledWords(a)}</span>
                         : a.next_run_at ? <span>{L(`下次 ${soonLabel(new Date(a.next_run_at), new Date(now))}`, `Next ${soonLabel(new Date(a.next_run_at), new Date(now))}`)}</span>
                           : a.webhook ? <span>{L("等外部调用", "Waiting for a call")}</span> : null}
                       {a.last_run && (
@@ -325,7 +329,7 @@ function AutomationDetail({ hubId, a, row, now, stamp, busy, error, onEdit, onRu
         <div className="pcd-titles">
           <h1><span>{a.name}</span></h1>
           <p className="pcd-sub">
-            <span className={cn("pc-online", a.enabled && "is-on")}>{a.enabled ? L("在运行", "Running") : L("已暂停", "Paused")}</span>
+            <span className={cn("pc-online", a.enabled && "is-on")}>{a.enabled ? L("在运行", "Running") : disabledWords(a)}</span>
             <span>{when}</span>
             {a.enabled && a.next_run_at && <span>{L(`下次 ${soonLabel(new Date(a.next_run_at), new Date(now))}`, `Next ${soonLabel(new Date(a.next_run_at), new Date(now))}`)}</span>}
           </p>
@@ -354,7 +358,7 @@ function AutomationDetail({ hubId, a, row, now, stamp, busy, error, onEdit, onRu
             <span className="app-kv-value aud-to">{row && <Avatar agent={row.st.agent} size={18} badge={false} />}<b>{row ? nodeName(row.st.agent, row.hub) : a.to}</b></span></div>
         )}
         <div className="app-kv"><span className="app-kv-label">{L("什么时候", "When")}</span>
-          <span className="app-kv-value">{when}{a.schedule && <span className="app-kv-sub">{L(`按 ${a.schedule.tz || "UTC"} 时间`, `${a.schedule.tz || "UTC"} time`)}</span>}</span></div>
+          <span className="app-kv-value">{boundsWords(a) && <span className="app-kv-sub">{boundsWords(a)}</span>}{when}{a.schedule && <span className="app-kv-sub">{L(`按 ${a.schedule.tz || "UTC"} 时间`, `${a.schedule.tz || "UTC"} time`)}</span>}</span></div>
         {a.webhook && a.webhook_url && (
           <div className="app-kv"><span className="app-kv-label">{L("Webhook 地址", "Webhook address")}</span>
             <span className="app-kv-value mono aud-url"><span>{a.webhook_url}</span><CopyButton value={a.webhook_url} /></span></div>
@@ -487,6 +491,9 @@ function AutomationEditor({ hubId, rows, editing, now, onClose, onChanged }: {
   const [name, setName] = useState("");
   const [to, setTo] = useState("");
   const [body, setBody] = useState("");
+  const [starts, setStarts] = useState("");
+  const [ends, setEnds] = useState("");
+  const [once, setOnce] = useState(false);
   const [timed, setTimed] = useState(true);
   const [mode, setMode] = useState<Mode>("weekdays");
   const [hour, setHour] = useState(9);
@@ -519,6 +526,7 @@ function AutomationEditor({ hubId, rows, editing, now, onClose, onChanged }: {
   useEffect(() => {
     if (!editing) return;
     setError(null); setSecret(null); setDeleting(false);
+    setStarts(""); setEnds(""); setOnce(false);
     if ("start" in editing) {
       const s = editing.start;
       setName(s.name); setTo(agents[0]?.st.agent.name || ""); setBody(s.body); setTimed(!!s.every); setHook(s.hook); setSkip(true);
@@ -527,6 +535,7 @@ function AutomationEditor({ hubId, rows, editing, now, onClose, onChanged }: {
       setEvery(s.every || blank.every!);
       return;
     }
+    setStarts(boundLocal(editing.starts_at)); setEnds(boundLocal(editing.ends_at)); setOnce(!!editing.once);
     setName(editing.name); setTo(editing.to || agents[0]?.st.agent.name || ""); setBody(editing.body); setHook(editing.webhook); setSkip(editing.skip_if_busy);
     setTarget(editing.workflow ? "workflow" : "task"); setWfId(editing.workflow || ""); setWfInputs(editing.inputs || {});
     setTimed(!!editing.schedule); setTz(editing.schedule?.tz || localZone());
@@ -572,16 +581,18 @@ function AutomationEditor({ hubId, rows, editing, now, onClose, onChanged }: {
     setBusy(true);
     setError(null);
     try {
+      if (starts && ends && new Date(starts) >= new Date(ends)) throw new Error(L("结束时间必须晚于开始时间", "End time must be after start time"));
       const what = target === "workflow" ? { workflow: wfId, inputs: wfInputs } : { to, body, ...(a?.workflow ? { workflow: "" } : {}) };
       const input = {
         name: name.trim(), ...what, skip_if_busy: skip, webhook: hook,
+        ...((a?.once !== undefined || starts || ends || once) ? { starts_at: starts ? new Date(starts).toISOString() : "", ends_at: ends ? new Date(ends).toISOString() : "", once } : {}),
         ...(timed ? { schedule: { cron: toCron(every), tz } } : a?.schedule ? { clear_schedule: true } : {}),
       };
       const r = a ? await appApi.updateAutomation(hubId, a.id, input) : await appApi.createAutomation(hubId, { ...input, enabled: true });
       onChanged();
       if (r.webhook_secret) setSecret({ url: r.automation.webhook_url || "", secret: r.webhook_secret });
       else onClose();
-    } catch (e) { setError(e); } finally { setBusy(false); }
+    } catch (e) { setError(e instanceof Error && /unknown field "(?:starts_at|ends_at|once)"/.test(e.message) ? new Error(L("这个工作区的 Hub 需要升级，才能设置起止时间和只跑一次。", "Upgrade this workspace's Hub to set active dates and a single run.")) : e); } finally { setBusy(false); }
   };
   const rotate = async () => {
     if (!a) return;
@@ -739,6 +750,13 @@ function AutomationEditor({ hubId, rows, editing, now, onClose, onChanged }: {
             {hook && !timed && <div className="au-summary au-hook-note">{L("保存后给出调用地址和密钥。", "The address and secret come after saving.")}</div>}
           </div>
 
+          <div className="app-field" data-testid="automation-date-editor">
+            <span className="app-field-label">{L("有效期", "Active dates")}</span>
+            <label className="app-field"><span className="app-field-label">{L("开始时间", "Starts at")}</span><input className="app-input" type="datetime-local" aria-label={L("开始时间", "Starts at")} value={starts} onChange={e=>setStarts(e.target.value)} disabled={busy}/></label>
+            <label className="app-field"><span className="app-field-label">{L("结束时间", "Ends at")}</span><input className="app-input" type="datetime-local" aria-label={L("结束时间", "Ends at")} value={ends} min={starts || undefined} onChange={e=>setEnds(e.target.value)} disabled={busy}/></label>
+            <span className="app-small-note">{L("按这台电脑的本地时间填写。留空表示不限；结束时自动停用。", "Use this computer's local time. Leave blank for no limit; the task stops at the end time.")}</span>
+            <label className="app-check-line"><input type="checkbox" checked={once} onChange={e=>setOnce(e.target.checked)} disabled={busy}/><span>{L("只跑一次", "Run once")}<small>{L("第一次执行尝试后停用；忙碌时跳过不算一次。", "Disable after the first execution attempt; busy skips do not count.")}</small></span></label>
+          </div>
           <label className="app-check-line au-skip">
             <input type="checkbox" checked={skip} onChange={(e) => setSkip(e.target.checked)} disabled={busy} />
             <span>{target === "workflow" ? L("上一次的运行还没结束，就跳过这次", "Skip a run while the last one is still going") : L("上一次的任务还没做完，就跳过这次", "Skip a run while the last task is not finished")}<small>{L("免得 agent 那边越堆越多。", "So that work does not pile up at the agent.")}</small></span>

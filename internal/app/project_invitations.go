@@ -46,14 +46,14 @@ func (s *ProjectService) SetCoordinatorInvites(ctx context.Context, by Actor, na
 }
 func (s *ProjectInvitationService) coordinator(ctx context.Context, a *domain.Agent, name string) (*ProjectView, error) {
 	if a == nil {
-		return nil, domain.Errf(domain.CodePermissionDenied, "only a project coordinator agent may invite agents")
+		return nil, domain.Errf(domain.CodePermissionDenied, "only a project coordinator agent may use coordinator permissions")
 	}
 	v, ok, err := s.projects.Coordinates(ctx, a, name)
 	if err != nil {
 		return nil, err
 	}
 	if !ok {
-		return nil, domain.Errf(domain.CodePermissionDenied, "only a coordinator of an active project may invite agents").WithSuggestion("ask the project owner to assign the coordinator role; ordinary members cannot invite")
+		return nil, domain.Errf(domain.CodePermissionDenied, "only a coordinator of an active project may use coordinator permissions").WithSuggestion("ask the project owner to assign the coordinator role, then enable the permission or approve the request")
 	}
 	if v.Project.Owner == "" {
 		return nil, domain.Errf(domain.CodeInvalidState, "project has no owner").WithSuggestion("ask an administrator to assign a project owner")

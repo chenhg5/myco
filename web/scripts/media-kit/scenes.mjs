@@ -283,6 +283,42 @@ export const scenes = [
     prepare: servers,
   },
   {
+    id: "project-scheduling",
+    title: "协调者的权限 / Coordinator permissions",
+    zh: "在一处决定协调者能在哪开 Agent、邀请成员和安排定时任务。",
+    en: "Choose where coordinators can start agents, invite teammates and schedule tasks in one place.",
+    tags: ["协作", "权限与安全", "自动化"], themes: ["light", "dark"],
+    description: "项目成员页的协调者权限，集中展示定时任务、邀请和电脑授权",
+    prepare: async ({ api, page, T }) => {
+      await api("/app/hubs/hub_studio/projects/website/automation-permission", "PUT", { allowed: false });
+      await api("/app/hubs/hub_studio/projects/website/agent-invites", "PUT", { allowed: false });
+      await page.reload();
+      await click(page.locator(".app-nav-item:visible", {hasText:T("官网改版", "Website redesign")}));
+      await click(page.locator(".sp-head").getByRole("button", {name:T("项目资料", "Project notes")}));
+      await click(page.locator("[data-testid=project-tabs]").getByRole("tab", {name:T("成员", "Members"), exact:false}));
+      await page.locator("[data-testid=coordinator-permissions]").scrollIntoViewIfNeeded();
+    },
+  },
+  {
+    id: "automation-window",
+    title: "有起止日期的自动化 / Bounded schedules",
+    zh: "给定时任务设好起止时间，也可以只执行一次，到期自动停用。",
+    en: "Set active dates or run a scheduled task once, with automatic stopping.",
+    tags: ["自动化", "协作"], themes: ["light", "dark"],
+    description: "自动化编辑器中的开始时间、结束时间和只跑一次选项",
+    prepare: async ({page,T}) => {
+      await click(page.locator(".sp-nav-auto:visible"));
+      await click(page.locator(".ph").getByRole("button", {name:T("新建自动化", "New automation")}));
+      const editor=page.locator("[data-testid=automation-editor]");await editor.waitFor();
+      await editor.getByPlaceholder(T("比如：每天早上汇总 issue", "e.g. Morning issue summary")).fill(T("发布前检查", "Pre-release checks"));
+      await editor.locator("textarea").fill(T("核对项目进展，整理发布检查清单。", "Review project progress and prepare the release checklist."));
+      await editor.getByLabel(T("开始时间", "Starts at"),{exact:true}).fill("2026-11-26T09:00");
+      await editor.getByLabel(T("结束时间", "Ends at"),{exact:true}).fill("2026-11-28T18:00");
+      await editor.getByRole("checkbox",{name:T("只跑一次", "Run once"),exact:false}).check();
+      await editor.locator("[data-testid=automation-date-editor]").scrollIntoViewIfNeeded();
+    },
+  },
+  {
     id: "project-invites",
     title: "项目协调者邀请 Agent / Coordinator invitations",
     zh: "让项目协调者邀请新 Agent，是否需要逐次批准由你决定。",

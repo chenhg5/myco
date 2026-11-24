@@ -1262,20 +1262,21 @@ type HubSettings struct {
 
 // Project is a piece of work several agents and people do together.
 type Project struct {
-	CoordinatorInvites bool            `json:"coordinator_invites"`
-	Name               string          `json:"name"`
-	Title              string          `json:"title"`
-	Goal               string          `json:"goal,omitempty"`
-	Brief              string          `json:"brief,omitempty"`
-	Links              []ProjectLink   `json:"links"`
-	Visibility         string          `json:"visibility"` // members | team
-	Owner              string          `json:"owner,omitempty"`
-	OwnerID            string          `json:"owner_id,omitempty"`
-	Archived           bool            `json:"archived,omitempty"`
-	CreatedAt          time.Time       `json:"created_at"`
-	UpdatedAt          time.Time       `json:"updated_at"`
-	Members            []ProjectMember `json:"members"`
-	Docs               []ProjectDoc    `json:"docs"`
+	CoordinatorAutomations bool            `json:"coordinator_automations"`
+	CoordinatorInvites     bool            `json:"coordinator_invites"`
+	Name                   string          `json:"name"`
+	Title                  string          `json:"title"`
+	Goal                   string          `json:"goal,omitempty"`
+	Brief                  string          `json:"brief,omitempty"`
+	Links                  []ProjectLink   `json:"links"`
+	Visibility             string          `json:"visibility"` // members | team
+	Owner                  string          `json:"owner,omitempty"`
+	OwnerID                string          `json:"owner_id,omitempty"`
+	Archived               bool            `json:"archived,omitempty"`
+	CreatedAt              time.Time       `json:"created_at"`
+	UpdatedAt              time.Time       `json:"updated_at"`
+	Members                []ProjectMember `json:"members"`
+	Docs                   []ProjectDoc    `json:"docs"`
 	// Memory is the project's memory document, with its body (empty when
 	// nobody added to it yet), on GET /v1/projects/{name} from v0.21.10;
 	// nil from older hubs, which have no project memory.
@@ -1527,9 +1528,15 @@ type Automation struct {
 	LastRun    *AutomationRun `json:"last_run,omitempty"`
 	// Workflow (v0.21+): the workflow it starts instead of sending a task
 	// (its id and name), with the run's inputs (templates over {{payload}}).
-	Workflow     string            `json:"workflow,omitempty"`
-	WorkflowName string            `json:"workflow_name,omitempty"`
-	Inputs       map[string]string `json:"inputs,omitempty"`
+	Workflow       string            `json:"workflow,omitempty"`
+	WorkflowName   string            `json:"workflow_name,omitempty"`
+	Inputs         map[string]string `json:"inputs,omitempty"`
+	StartsAt       *time.Time        `json:"starts_at,omitempty"`
+	EndsAt         *time.Time        `json:"ends_at,omitempty"`
+	Once           bool              `json:"once"`
+	DisabledReason string            `json:"disabled_reason,omitempty"`
+	CreatedBy      string            `json:"created_by,omitempty"`
+	ApprovedBy     string            `json:"approved_by,omitempty"`
 }
 
 // AutomationRequest is POST /v1/console/automations (create) and PATCH
@@ -1552,6 +1559,9 @@ type AutomationRequest struct {
 	// run's inputs.
 	Workflow *string           `json:"workflow,omitempty"`
 	Inputs   map[string]string `json:"inputs,omitempty"`
+	StartsAt *string           `json:"starts_at,omitempty"`
+	EndsAt   *string           `json:"ends_at,omitempty"`
+	Once     *bool             `json:"once,omitempty"`
 }
 
 // AutomationResponse answers create and update. WebhookSecret is set only

@@ -17,7 +17,7 @@ func NewProjectRepo(db *sql.DB) *ProjectRepo { return &ProjectRepo{db: db} }
 
 var _ domain.ProjectRepository = (*ProjectRepo)(nil)
 
-const projectCols = `id, name, title, goal, brief, links, visibility, owner, archived, created_at, updated_at, machines, member_groups, coordinator_invites`
+const projectCols = `id, name, title, goal, brief, links, visibility, owner, archived, created_at, updated_at, machines, member_groups, coordinator_invites, coordinator_automations`
 
 func machinesJSON(m []string) string {
 	if len(m) == 0 {
@@ -36,8 +36,8 @@ func linksJSON(l []domain.ProjectLink) string {
 }
 
 func (r *ProjectRepo) Create(ctx context.Context, p *domain.Project) error {
-	_, err := r.db.ExecContext(ctx, `INSERT INTO projects (`+projectCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		p.ID, p.Name, p.Title, p.Goal, p.Brief, linksJSON(p.Links), string(p.Visibility), p.Owner, p.Archived, ms(p.CreatedAt), ms(p.UpdatedAt), machinesJSON(p.Machines), machinesJSON(p.Groups), p.CoordinatorInvites)
+	_, err := r.db.ExecContext(ctx, `INSERT INTO projects (`+projectCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		p.ID, p.Name, p.Title, p.Goal, p.Brief, linksJSON(p.Links), string(p.Visibility), p.Owner, p.Archived, ms(p.CreatedAt), ms(p.UpdatedAt), machinesJSON(p.Machines), machinesJSON(p.Groups), p.CoordinatorInvites, p.CoordinatorAutomations)
 	if isUniqueViolation(err) {
 		return domain.Errf(domain.CodeConflict, "a project named %s already exists", p.Name)
 	}
@@ -47,8 +47,8 @@ func (r *ProjectRepo) Create(ctx context.Context, p *domain.Project) error {
 // Save stores the project's fields except its groups, which SaveGroups
 // changes (with its members' groups, in one transaction).
 func (r *ProjectRepo) Save(ctx context.Context, p *domain.Project) error {
-	res, err := r.db.ExecContext(ctx, `UPDATE projects SET title=?, goal=?, brief=?, links=?, visibility=?, owner=?, archived=?, updated_at=?, machines=?, coordinator_invites=? WHERE id=?`,
-		p.Title, p.Goal, p.Brief, linksJSON(p.Links), string(p.Visibility), p.Owner, p.Archived, ms(p.UpdatedAt), machinesJSON(p.Machines), p.CoordinatorInvites, p.ID)
+	res, err := r.db.ExecContext(ctx, `UPDATE projects SET title=?, goal=?, brief=?, links=?, visibility=?, owner=?, archived=?, updated_at=?, machines=?, coordinator_invites=?, coordinator_automations=? WHERE id=?`,
+		p.Title, p.Goal, p.Brief, linksJSON(p.Links), string(p.Visibility), p.Owner, p.Archived, ms(p.UpdatedAt), machinesJSON(p.Machines), p.CoordinatorInvites, p.CoordinatorAutomations, p.ID)
 	if err != nil {
 		return internal(err)
 	}
@@ -64,7 +64,7 @@ func scanProject(s scanner) (*domain.Project, error) {
 		links, vis, mach, groups string
 		created, updated         int64
 	)
-	if err := s.Scan(&p.ID, &p.Name, &p.Title, &p.Goal, &p.Brief, &links, &vis, &p.Owner, &p.Archived, &created, &updated, &mach, &groups, &p.CoordinatorInvites); err != nil {
+	if err := s.Scan(&p.ID, &p.Name, &p.Title, &p.Goal, &p.Brief, &links, &vis, &p.Owner, &p.Archived, &created, &updated, &mach, &groups, &p.CoordinatorInvites, &p.CoordinatorAutomations); err != nil {
 		return nil, err
 	}
 	_ = json.Unmarshal([]byte(links), &p.Links)

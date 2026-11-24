@@ -517,6 +517,20 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, 200, out)
 	}))
+	m.HandleFunc("PUT /app/hubs/{id}/projects/{name}/automation-permission", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in struct {
+			Allowed bool `json:"allowed"`
+		}
+		if !decode(w, r, &in) {
+			return
+		}
+		out, err := c.SetProjectCoordinatorAutomations(r.Context(), r.PathValue("name"), in.Allowed)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, 200, out)
+	}))
 	// Which computers the project's coordinators may start agents on (hubs
 	// from v0.21.2): set with PUT, taken back with DELETE.
 	m.HandleFunc("PUT /app/hubs/{id}/projects/{name}/machines/{machine}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {

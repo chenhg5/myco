@@ -318,6 +318,14 @@ func (s *SuperagentService) decideTyped(ctx context.Context, by Actor, m *domain
 		return nil, domain.Errf(domain.CodeUnsupported, "this hub cannot decide %q approvals", a.Kind)
 	}
 	if !approve {
+		// The scheduling handler claims approvals before applying a change.
+		// A denial must compete for the same claim so it cannot overwrite an
+		// action that another App is already carrying out.
+		if a.Kind == domain.ApprovalKindProjectAutomation {
+			if err := s.approvals.Claim(ctx, a.ID); err != nil {
+				return nil, err
+			}
+		}
 		a.Status = domain.ApprovalDenied
 		if err := s.approvals.Save(ctx, a); err != nil {
 			return nil, err

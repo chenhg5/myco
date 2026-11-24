@@ -804,6 +804,8 @@ export const appApi = {
     announced(hubId, request<Project>("PATCH", `app/hubs/${enc(hubId)}/projects/${enc(name)}`, input)),
   deleteProject: (hubId: string, name: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/projects/${enc(name)}`),
   /** lets the project's coordinators start agents on a computer, or no longer (hubs from v0.21.2) */
+  setProjectCoordinatorAutomations: (hubId: string, name: string, allowed: boolean) =>
+    announced(hubId, request<Project>("PUT", `app/hubs/${enc(hubId)}/projects/${enc(name)}/automation-permission`, { allowed })),
   setProjectCoordinatorInvites: (hubId: string, name: string, allowed: boolean) =>
     announced(hubId, request<Project>("PUT", `app/hubs/${enc(hubId)}/projects/${enc(name)}/agent-invites`, { allowed })),
   setProjectMachine: (hubId: string, name: string, machine: string, allow: boolean) =>

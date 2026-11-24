@@ -28,20 +28,22 @@ type SuperagentRepository interface {
 
 // Approval states.
 const (
-	ApprovalPending  = "pending"
-	ApprovalDone     = "done"     // approved and carried out (Result says how it went)
-	ApprovalDenied   = "denied"   // its owner said no
-	ApprovalExpired  = "expired"  // nobody decided in time
-	ApprovalWithdrew = "withdrew" // the agent is no longer a superagent
+	ApprovalExecuting = "executing" // a durably reserved project scheduling change
+	ApprovalPending   = "pending"
+	ApprovalDone      = "done"     // approved and carried out (Result says how it went)
+	ApprovalDenied    = "denied"   // its owner said no
+	ApprovalExpired   = "expired"  // nobody decided in time
+	ApprovalWithdrew  = "withdrew" // the agent is no longer a superagent
 )
 
 // Approval kinds: "" is a superagent's held HTTP request (carried out once
 // when approved); the others are typed requests any agent may make, whose
 // payload the service that made them reads.
 const (
-	ApprovalKindProjectInvite = "project_invite"
-	ApprovalKindRequest       = ""
-	ApprovalKindActionGrant   = "action_grant" // payload {"grant_id": …}: an agent asks to act on a computer
+	ApprovalKindProjectAutomation = "project_automation"
+	ApprovalKindProjectInvite     = "project_invite"
+	ApprovalKindRequest           = ""
+	ApprovalKindActionGrant       = "action_grant" // payload {"grant_id": …}: an agent asks to act on a computer
 )
 
 // ApprovalTTL is how long a request waits for its owner.
@@ -71,6 +73,8 @@ type Approval struct {
 
 // ApprovalRepository stores approvals.
 type ApprovalRepository interface {
+	// Claim reserves a pending typed action before any side effect (at most once).
+	Claim(context.Context, string) error
 	Create(ctx context.Context, a *Approval) error
 	Get(ctx context.Context, id string) (*Approval, error)
 	Save(ctx context.Context, a *Approval) error

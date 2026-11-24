@@ -332,7 +332,30 @@ export function GrantStrip({ hubId, agent, name }: { hubId: string; agent: strin
 /** What an agent waits on you for, above its chat's composer (your
  *  superagent's requests, a coordinator asking for a computer): what, why,
  *  and 同意 / 不同意. */
+function automationRequestSummary(input: Record<string, unknown>): string {
+  return [input.to ? L(`发给 ${input.to}`, `To ${input.to}`) : input.workflow ? L(`工作流 ${input.workflow}`, `Workflow ${input.workflow}`) : "",
+    input.cron ? `${input.cron} (${input.tz || "UTC"})` : "",
+    input.starts_at !== undefined ? (input.starts_at ? L(`开始 ${input.starts_at}`, `Starts ${input.starts_at}`) : L("清除开始限制", "No start bound")) : "",
+    input.ends_at !== undefined ? (input.ends_at ? L(`结束 ${input.ends_at}`, `Ends ${input.ends_at}`) : L("清除结束限制", "No end bound")) : "",
+    input.once === true ? L("只跑一次", "Run once") : input.once === false ? L("按计划重复执行", "Repeat on schedule") : "",
+    input.enabled === false ? L("暂停", "Pause") : input.enabled === true ? L("启用", "Enable") : "",
+    input.skip_if_busy === true ? L("忙碌时跳过", "Skip while busy") : input.skip_if_busy === false ? L("忙碌时也发送", "Send while busy") : "",
+    input.webhook === false ? L("关闭 Webhook", "Disable webhook") : ""].filter(Boolean).join(" · ");
+}
+function automationRequestContent(a: Approval): string {
+  const input = a.payload?.input as Record<string, unknown> | undefined;
+  return typeof input?.body === "string" ? input.body : input?.inputs ? JSON.stringify(input.inputs, null, 2) : "";
+}
+
 function invitationWhat(a: Approval): string {
+  if (a.kind === "project_automation") {
+    const action = String(a.payload?.action || "update");
+    const input = a.payload?.input as Record<string, unknown> | undefined;
+    const name = String(input?.name || a.payload?.task_name || a.payload?.id || L("定时任务", "scheduled task"));
+    const project = String(a.payload?.project || "");
+    const verb = action === "create" ? L("创建", "Create") : action === "delete" ? L("删除", "Delete") : L("修改", "Update");
+    return L(`${verb}项目「${project}」的定时任务「${name}」`, `${verb} “${name}” in project “${project}”`);
+  }
   if (a.kind !== "project_invite") return a.what;
   const project = String(a.payload?.project_title || a.payload?.project || "");
   const name = String(a.payload?.display_name || L("新 agent", "a new agent"));
@@ -366,6 +389,9 @@ export function ApprovalStrip({ hubId, agent, name }: { hubId: string; agent: st
           <ShieldQuestion className="sa-approval-icon" />
           <div className="sa-approval-text">
             <div className="sa-approval-what">{L(`${who} 想：`, `${who} wants to: `)}{invitationWhat(a)}</div>
+            {a.kind === "project_automation" && <div className="sa-approval-why">{L("仅批准这一次变更，不会打开项目的长期权限。任务归项目主人所有。", "Approve this change only; ongoing coordinator access stays unchanged. The task belongs to the project owner.")}</div>}
+            {a.kind === "project_automation" && !!a.payload?.input && <div className="sa-approval-why">{automationRequestSummary(a.payload.input as Record<string, unknown>)}</div>}
+            {a.kind === "project_automation" && automationRequestContent(a) && <details className="sa-approval-why"><summary>{L("查看任务内容", "Review task content")}</summary><pre className="sa-approval-content">{automationRequestContent(a)}</pre></details>}
             {a.kind === "project_invite" && <div className="sa-approval-why">{L("仅这一次邀请：链接 24 小时有效，只能用一次。新 agent 归项目主人所有，只加入为普通成员。", "This invitation only: the link lasts 24 hours and works once. The new agent belongs to the project owner and joins as an ordinary member.")}</div>}
             {a.reason && <div className="sa-approval-why">{a.reason}</div>}
             <div className="sa-approval-meta">{leftOf(a.expires_at, now)}</div>

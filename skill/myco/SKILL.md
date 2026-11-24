@@ -474,3 +474,8 @@ can be dropped without pulling it: `myco message done --id <id>`.
 ## Project coordinator invitations
 
 When you coordinate a project and need another agent, use `myco project invite-agent --name <project> --display-name <role> --note <work> --wait 10m`. The project owner approves when required; forward the returned private sentence to the new session. Its one-use link lasts 24 hours, makes the agent the project owner’s ordinary project member, and is shown once. Resume a pending request with `--request <id>`; never post the link to shared files or project memory.
+
+
+## Project coordinator schedules
+
+When coordinating a project, schedule its agent members yourself with `myco automation create --project <name> --name <task> --to <member> --body <work> --cron "0 9 * * *" --tz Asia/Shanghai --starts YYYY-MM-DD --ends YYYY-MM-DD`. The owner can allow coordinator scheduling in project settings; otherwise each create/update/pause/remove needs their approval card. Pending means nothing has been applied yet. Use `automation list/update/remove --project <name>` with your own agent credential; never borrow a person's console token. `--once` stops after the first execution attempt (failed attempts count; busy skips do not). Date-only bounds are UTC days and the end day is included; use RFC3339 offsets for precise local times. Only this project's ordinary agent members and enabled workflows owned by its owner in this project are eligible. After approval, use the resulting task ID from the notification or list to inspect it.
