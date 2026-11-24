@@ -1377,6 +1377,11 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
         <button type="button" className="sp-side-fold" onClick={() => onFold(false)} title={L("展开成员", "Show members")} aria-label={L("展开成员", "Show members")}>
           <PanelRightOpen />
         </button>
+        {/* (folded too: groups, and how they show) */}
+        {groups && (groups.canEdit || showGroups) && (
+          <button type="button" className="sp-side-fold" data-testid="member-groups-menu-folded" onClick={(e) => styleMenu(e.currentTarget)}
+            title={L("成员分组", "Member groups")} aria-label={L("成员分组", "Member groups")}><MoreHorizontal /></button>
+        )}
         {coordRow && face(coordRow)}
         {inGroupOrder(others, groups).map((g, i) => (
           <Fragment key={g.name || i}>
@@ -1388,6 +1393,10 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
         <span className="sp-face-gap" aria-hidden />
         {workspaces.map(face)}
         <button type="button" className="sp-face is-add" onClick={onAddWorkspace} title={L("加一个终端", "Add a terminal")} aria-label={L("加一个终端", "Add a terminal")}><Plus /></button>
+        {groups && (
+          <GroupNameDialog open={!!naming} onClose={() => setNaming(null)} initial={naming?.old || ""}
+            taken={groups.list} title={naming?.old ? L("给分组改名", "Rename the group") : L("新建分组", "New group")} onDone={nameGroup} />
+        )}
         {menu.element}
       </aside>
     );

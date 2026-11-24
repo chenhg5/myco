@@ -5320,6 +5320,14 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".conv-menu").getByRole("menuitem", { name: /删除分组/ }).click();
       await side.locator(".mg").waitFor({ state: "detached", timeout: 10_000 });
       if ((await side.locator(".sp-member", { hasText: "docs-claude" }).count()) !== 1) throw new Error("删掉分组后成员应回到一列里");
+      // Folded to faces, the column still offers groups (its own ⋯).
+      await side.locator(".sp-side-tools button[aria-label='收起成员']").click();
+      const foldedSide = page.locator(".sp-side.is-folded");
+      await clickVisible(page, foldedSide.locator("[data-testid=member-groups-menu-folded]"));
+      await page.locator(".conv-menu").getByRole("menuitem", { name: "新建分组…" }).waitFor({ timeout: 5_000 });
+      await page.keyboard.press("Escape");
+      await foldedSide.locator(".sp-side-fold").first().click();
+      await side.waitFor({ timeout: 5_000 });
     });
 
     // A project with two members open beside the coordinator: switching to
