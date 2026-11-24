@@ -63,3 +63,24 @@ struct NoticesTests {
         #expect(model.agents.first?.name == "studio-codex-7f3a")
     }
 }
+
+/// A project's members in its groups.
+struct MemberGroupsTests {
+    static func status(_ name: String) -> AgentStatus {
+        AgentStatus(agent: Agent(id: name, name: name), state: "idle")
+    }
+
+    @Test func membersAreShownInTheirGroupsThenTheRest() {
+        let statuses = ["lead", "a", "b", "c"].map(Self.status)
+        let members = [
+            ProjectMember(name: "lead"), ProjectMember(name: "a", group: "后端"),
+            ProjectMember(name: "b", group: "前端"), ProjectMember(name: "c", group: "旧组"),
+        ]
+        let sections = MemberGroups.sections(groups: ["前端", "后端", "空组"], members: members, statuses: statuses)
+        #expect(sections.map(\.group) == ["前端", "后端", L("未分组", "Ungrouped")])
+        #expect(sections.map { $0.members.map(\.agent.name) } == [["b"], ["a"], ["lead", "c"]])
+        // No groups (or an older hub): one section, no title.
+        let plain = MemberGroups.sections(groups: [], members: members, statuses: statuses)
+        #expect(plain.count == 1 && plain[0].group == nil && plain[0].members.count == 4)
+    }
+}

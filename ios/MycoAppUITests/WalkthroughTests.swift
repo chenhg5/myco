@@ -576,6 +576,15 @@ final class WalkthroughTests: XCTestCase {
     }
 
     @MainActor
+    func testAProjectsMembersAreInTheirGroups() {
+        let app = launch(["-myco-route", "info:myco-ios"])
+        let groups = app.staticTexts.matching(identifier: "project.group")
+        XCTAssertTrue(groups.firstMatch.waitForExistence(timeout: 15))
+        XCTAssertEqual(groups.allElementsBoundByIndex.map(\.label), ["前端", "后端", "质量", "Ungrouped"])
+        shot("project-groups")
+    }
+
+    @MainActor
     func testASuperagentIsNamedAndItsRequestApproved() {
         let app = launch(["-myco-route", "sheet:workspace"])
         let setup = app.buttons["workspace.superagent.setup"]

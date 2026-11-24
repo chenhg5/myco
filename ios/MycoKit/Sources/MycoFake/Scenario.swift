@@ -104,13 +104,15 @@ public enum Scenario: Sendable {
                 links: [ProjectLink(title: "仓库", url: "https://github.com/chenhg5/myco")],
                 members: [
                     ProjectMember(name: lead.name, role: "coordinator", note: "协调", addedAt: ago(12 * 86_400)),
-                    ProjectMember(name: backend.name, note: "推送接口", addedAt: ago(11 * 86_400)),
-                    ProjectMember(name: frontend.name, note: "界面", addedAt: ago(10 * 86_400)),
-                    ProjectMember(name: tester.name, note: "验证", addedAt: ago(9 * 86_400)),
-                    ProjectMember(name: writer.name, note: "文档", addedAt: ago(8 * 86_400)),
+                    ProjectMember(name: backend.name, note: "推送接口", addedAt: ago(11 * 86_400), group: "后端"),
+                    ProjectMember(name: frontend.name, note: "界面", addedAt: ago(10 * 86_400), group: "前端"),
+                    ProjectMember(name: tester.name, note: "验证", addedAt: ago(9 * 86_400), group: "质量"),
+                    ProjectMember(name: writer.name, note: "文档", addedAt: ago(8 * 86_400), group: "质量"),
                 ],
                 docs: [ProjectDoc(name: "mobile-ios.md", size: 8_412, updatedAt: ago(3_600))]),
         ]
+        // Its members in groups (the coordinator in none).
+        world.projects[0].groups = ["前端", "后端", "质量"]
 
         // A few files, to see messages that carry them.
         func file(_ id: String, _ name: String, _ type: String, _ data: Data) -> Attachment {

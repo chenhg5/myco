@@ -776,7 +776,14 @@ public final class ConversationModel {
         var colleagues: [String] = []
         for project in scanned {
             let names = ProjectFeed.colleagues(of: agent, in: feed(project), coordinator: session.coordinator(of: project))
-            for name in names where !colleagues.contains(name) { colleagues.append(name) }
+            // Other AIs only: what it ran on a terminal (mac-exec running
+            // ls) is its tools at work, not work handed to someone; a
+            // terminal the project lists still shows.
+            let listed = Set(project.members.map(\.name))
+            for name in names where !colleagues.contains(name) {
+                let kind = session.agent(name).map(Naming.kind(of:)) ?? .agent
+                if kind == .agent || listed.contains(name) { colleagues.append(name) }
+            }
         }
         // And its exchanges with each colleague, together too.
         let pages = await Self.gather(Array(colleagues.prefix(Self.maxColleagues))) { colleague in
