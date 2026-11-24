@@ -5968,8 +5968,10 @@ async function runMatrix(browser, size, scheme) {
       await usage.getByRole("button", { name: "7 天", exact: true }).click();
       await page.waitForFunction(() => document.querySelectorAll(".usage-day").length === 7);
       const project = usage.getByRole("combobox", { name: "项目", exact: true });
-      const name = await project.locator('option').nth(1).getAttribute("value");
-      await project.selectOption(name);
+      // (a project with usage: the first in the projects table; a project
+      // made by an earlier step has none)
+      const title = (await usage.locator(".usage-projects tbody th").first().innerText()).trim();
+      await project.selectOption({ label: title });
       await usage.locator(".usage-agents tbody tr").first().waitFor({ timeout: 10000 });
       if (await usage.locator(".usage-projects").count()) throw new Error("指定项目时不应再显示项目汇总");
       await project.selectOption("-");
