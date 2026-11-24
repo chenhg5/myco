@@ -2359,6 +2359,13 @@ const server = http.createServer(async (req, res) => {
     }
     if (method === "DELETE") { cacheStore.clear(); return send(res, 204); }
   }
+  // Every page closes optional browser sessions on unmount, even without
+  // browser capabilities. Cleanup is a no-op in this UI fixture.
+  if (parts[0] === "app" && parts[1] === "hubs" && parts[3] === "browser" && method === "POST") {
+    const body = await readBody(req);
+    if (body.action === "close") return send(res, 200, true);
+    return fail(res, 501, "unsupported", "The UI preview does not run a browser component.");
+  }
   // Remote Desktop: a deterministic UI fixture, never a real host.
   if (parts[0] === "app" && parts[1] === "hubs" && parts[3] === "remote" && method === "POST") {
     const body = await readBody(req);
