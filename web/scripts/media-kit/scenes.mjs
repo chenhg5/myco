@@ -18,6 +18,23 @@ const member = async (page, T) => {
 const home = async () => {};
 export const scenes = [
   {
+    id: "browser-approved-version",
+    title: "批准固定版本的网页自动化 / Approve a fixed browser script",
+    zh: "先看清网址和代码，再让 Agent 在专用浏览器里运行你批准的版本。",
+    en: "Review the URLs and code before an agent runs your approved version in a dedicated browser profile.",
+    tags: ["应用", "权限与安全", "自动化"], themes: ["light", "dark"],
+    description: "宿主的浏览器脚本批准框，展示固定版本、profile、网址和只读代码",
+    prepare: async ({page,T}) => {
+      await click(page.locator(".app-nav-item:visible",{hasText:T("官网改版","Website redesign")}));
+      await page.evaluate(()=>window.dispatchEvent(new CustomEvent("myco-open-page",{detail:{kind:"page",hubId:"hub_studio",id:"pg_browser_review"}})));
+      const frame=page.frameLocator(".pg-frame");await frame.locator("h1").waitFor();
+      const request={script_id:"monthly_report",version:3,profile:"profile_work",script:{name:T("月报检查","Monthly report check"),profile:"profile_work",start_url:"https://example.com/reports",params:[],on_error:"stop",graph:{nodes:[{id:"check-title",type:"js",code:"return document.title;"},{id:"open-summary",type:"navigate",url:"https://example.com/summary"}],edges:[["check-title","open-summary"]]}},scripts:{}};
+      await frame.locator("body").evaluate((_body,request)=>{window.myco.browser.approvals.request(request).catch(()=>{});},request);
+      await page.locator("[data-testid=browser-script-review]").waitFor();
+    },
+  },
+
+  {
     id: "teamwork",
     title: "多 Agent 项目协作 / Multi-agent teamwork",
     zh: "把不同电脑上的 AI 组成团队，在一个项目里一起推进工作。",

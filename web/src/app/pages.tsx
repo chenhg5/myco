@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { AppWindow, Check, Copy, ExternalLink, Link2, Lock, Monitor, MoreHorizontal, PanelRight, PanelRightClose, Pin as PinIcon, PinOff, Radio, RotateCw, Users, X } from "lucide-react";
 import type { Page, PageOpen } from "@/api";
-import { ApiError, appApi, isOldHub, type OsAnswer, type OsConsent, type BrowserStatus } from "@/appapi";
+import { ApiError, appApi, isOldHub, type OsAnswer, type OsConsent, type BrowserStatus, type BrowserApprovalReview } from "@/appapi";
 import { copyText } from "@/app/copy";
 import { useContextMenu, type MenuItem } from "@/app/ContextMenu";
 import { DockPanel } from "@/app/preview";
@@ -463,7 +463,7 @@ function PageView({ target, open, active, reload, onMeta }: {
   const [asking, setAsking] = useState<{ text: string; to: string; answer: (ok: boolean) => void } | null>(null);
   // a page wanting a group of the computer's capabilities the person has not allowed yet
   const [consent, setConsent] = useState<(OsConsent & { name: string; answer: (a: OsAnswer) => void }) | null>(null);
-  const [remoteAsking, setRemoteAsking] = useState<{text:string; title?:string; answer:(ok:boolean)=>void} | null>(null);
+  const [remoteAsking, setRemoteAsking] = useState<{text:string; title?:string; review?:BrowserApprovalReview; answer:(ok:boolean)=>void} | null>(null);
   const remoteConsent = useRef<((ok:boolean)=>void) | null>(null);
   // (while the page is there: tucked away, it still runs and is answered,
   // and what it started on the computer goes on)
@@ -581,27 +581,34 @@ function PageView({ target, open, active, reload, onMeta }: {
         const action = String(args.action || "");
         const input = (args.args && typeof args.args === "object" ? args.args : {}) as Record<string, unknown>;
         const who = { hub: t.hubId, id: t.id, name: o?.name || p?.name || "" };
-        if (action === "install" || (action === "profiles.allowAgents" && input.allowed === true)) {
+        if (action === "install" || action === "approvals.request" || (action === "profiles.allowAgents" && input.allowed === true)) {
+          let review: BrowserApprovalReview | undefined;
+          let confirmedInput = input;
           let text = L("安装浏览器组件，用 myco 专用的浏览器资料录制和回放网页操作。它不使用你日常的 Chrome 资料，也不会自动开放 agent 控制。", "Install the browser component to record and replay web actions in a dedicated myco browser profile. It does not use your everyday Chrome profile or enable agent control automatically.");
           if (action === "profiles.allowAgents") {
             const status = await withConsent(who, () => appApi.browserCall<BrowserStatus>(t.hubId, t.id, remoteInstance, "status"));
             const profile = status.profiles.find(item => item.id === String(input.id || ""));
             if (!profile) throw Object.assign(new Error(L("找不到这个浏览器资料", "Browser profile not found")), { code: "not_found" });
-            text = L(`允许 agent 申请使用「${profile.name}」浏览器资料？当前版本只保存本机偏好；开放控制仍需后续单独授权。`, `Allow agents to request access to the “${profile.name}” browser profile? This version only saves your local preference; control still requires a separate grant.`);
+            text = L(`允许 agent 在当前工作区申请使用「${profile.name}」浏览器资料？它们仍需你批准短期授权，并且只能运行你在本机批准的脚本版本。`, `Allow agents in this workspace to request access to “${profile.name}”? They still need your approval for a short-lived grant and can run only script versions you approved on this computer.`);
+          }
+          if (action === "approvals.request") {
+            review = await withConsent(who, () => appApi.browserCall<BrowserApprovalReview>(t.hubId, t.id, remoteInstance, "approvals.review", input));
+            confirmedInput = {script_id: review.script_id, version: review.version, profile: review.profile, script: review.script, scripts: review.scripts};
+            text = L("允许 agent 使用此浏览器资料的登录状态运行这个脚本版本？批准会结束该资料现有的 agent 授权；后续运行仍需你批准新的短期授权。", "Allow agents to run this script version using this profile’s sign-ins? Approving ends its current agent grants. Future runs still require a new short-lived grant approved by you.");
           }
           if (closed) throw Object.assign(new Error("cancelled"), { code: "cancelled" });
           if (remoteConsent.current) throw Object.assign(new Error(L("请先处理当前的授权请求", "Finish the current permission request first")), { code: "busy" });
           const accepted = await new Promise<boolean>(resolve => {
             remoteConsent.current = resolve;
-            setRemoteAsking({ text, title: L("浏览器自动化授权", "Browser automation permission"), answer: resolve });
+            setRemoteAsking({ text, title: L("浏览器自动化授权", "Browser automation permission"), review, answer: resolve });
           });
           remoteConsent.current = null;
           setRemoteAsking(null);
           if (!accepted || closed) throw Object.assign(new Error(L("已取消", "Cancelled")), { code: "cancelled" });
           // Minted after the host modal, never supplied by or returned to the child.
-          const approved = await appApi.browserConfirm(t.hubId, t.id, remoteInstance, action, input);
+          const approved = await appApi.browserConfirm(t.hubId, t.id, remoteInstance, action, confirmedInput);
           if (closed) throw Object.assign(new Error("cancelled"), { code: "cancelled" });
-          return withConsent(who, () => appApi.browserCall(t.hubId, t.id, remoteInstance, action, input, approved.confirmation));
+          return withConsent(who, () => appApi.browserCall(t.hubId, t.id, remoteInstance, action, confirmedInput, approved.confirmation));
         }
         const result = await withConsent(who, () => appApi.browserCall(t.hubId, t.id, remoteInstance, action, input));
         if (closed) throw Object.assign(new Error("cancelled"), { code: "cancelled" });
@@ -850,8 +857,9 @@ function PageView({ target, open, active, reload, onMeta }: {
           )}
         </div>
       )}
-    <Modal className="pg-remote-ask" open={!!remoteAsking} onOpenChange={(o) => {if (!o) remoteAsking?.answer(false);}}
+    <Modal className="pg-remote-ask" wide={!!remoteAsking?.review} open={!!remoteAsking} onOpenChange={(o) => {if (!o) remoteAsking?.answer(false);}}
       title={remoteAsking?.title || L(`允许「${opened?.name || page?.name || "此应用"}」使用远程桌面？`, `Allow “${opened?.name || page?.name || "this app"}” to use Remote Desktop?`)} description={remoteAsking?.text || ""}>
+      {remoteAsking?.review && <BrowserApprovalDetails review={remoteAsking.review} />}
       <div className="app-modal-actions">
         <button type="button" className="app-btn" onClick={() => remoteAsking?.answer(false)}>{L("不允许", "Don't allow")}</button>
         <button type="button" className="app-btn app-btn-primary" onClick={() => remoteAsking?.answer(true)}>{L("允许", "Allow")}</button>
@@ -936,4 +944,19 @@ export function osWant(group: string, host?: string): { zh: string; en: string }
     case "proxy": return { zh: "控制这台电脑上的代理", en: "control this computer's proxy" };
     default: return { zh: "查看这台电脑的信息（系统、磁盘、进程、已装的应用）", en: "see this computer's details (system, disks, processes, apps)" };
   }
+}
+
+function BrowserApprovalDetails({review}: {review: BrowserApprovalReview}) {
+  return <div className="pg-browser-approval" data-testid="browser-script-review">
+    <div className="pg-browser-approval-title">{review.name} · v{review.version}</div>
+    <div>{L("浏览器资料", "Browser profile")}: {review.profile_name}</div>
+    <p>{L("仅批准此版本及列出的子流程。脚本会使用这个资料的登录状态，请检查地址和代码；带变量的地址由运行参数决定。", "Only this version and the listed child snapshots are approved. The script uses this profile’s sign-ins: review its addresses and code. Variable addresses depend on run parameters.")}</p>
+    <h4>{L("地址概览", "Addresses")}</h4>
+    <ul>{review.urls.map((url,i)=><li key={i}><code>{url}</code></li>)}</ul>
+    <h4>{L("JavaScript 与表达式", "JavaScript and expressions")}</h4>
+    {review.code.length ? review.code.map((item,i)=><div key={i}><div className="app-muted">{item.script} / {item.node} · {item.type}</div><pre>{item.code}</pre></div>) : <div className="app-muted">{L("没有代码步骤", "No code steps")}</div>}
+    <h4>{L("子流程快照", "Child snapshots")}</h4>
+    <div>{review.children.length ? review.children.join(", ") : L("无", "None")}</div>
+    <details><summary>{L("完整脚本快照", "Full script snapshots")}</summary><pre>{JSON.stringify({script:review.script,scripts:review.scripts},null,2)}</pre></details>
+  </div>;
 }

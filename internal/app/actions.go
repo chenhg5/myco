@@ -552,6 +552,10 @@ func contains(list []string, v string) bool {
 
 // refresh ends a grant whose time, host or task is over (mu held).
 func (s *ActionService) refresh(ctx context.Context, g *actionGrant) {
+	if (g.State == api.GrantPending || g.State == api.GrantActive) && s.enabled(ctx) != nil {
+		s.close(g, api.GrantRevoked, "agent actions are unavailable in an encrypted workspace")
+		return
+	}
 	now := s.clock.Now()
 	switch g.State {
 	case api.GrantPending:
@@ -868,9 +872,6 @@ func (s *ActionService) UnregisterHost(ctx context.Context, by Actor, id, genera
 	if err != nil {
 		return err
 	}
-	if err := s.enabled(ctx); err != nil {
-		return err
-	}
 	if generation == "" {
 		return domain.Errf(domain.CodeInvalidArgument, "generation is required")
 	}
@@ -1074,6 +1075,9 @@ func (s *ActionService) UploadArtifact(ctx context.Context, by Actor, jobID, hos
 		return nil, domain.Errf(domain.CodeNotFound, "running job %s not found on this host", jobID)
 	}
 	g := s.grants[j.GrantID]
+	if g != nil {
+		s.refresh(ctx, g)
+	}
 	if g == nil || g.State != api.GrantActive {
 		return nil, domain.Errf(domain.CodeInvalidState, "its grant has ended")
 	}

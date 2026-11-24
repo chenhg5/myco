@@ -545,7 +545,7 @@ mapping, and the host registers only capabilities its installed component suppor
 | Action | Permission | Arguments |
 |---|---|---|
 | `browser.profiles.list` | `browser.view` | `{}`; only the bound, enabled profile is disclosed |
-| `browser.script.run` | `browser.run` | `{script_id,version,params?,headless?}` |
+| `browser.script.run` | `browser.run` | `{script_id,version,page_id?,params?,headless?}` |
 | `browser.run.status` | `browser.view` | `{run_id}` |
 | `browser.run.resume` | `browser.run` | `{run_id,choice?}` |
 | `browser.run.cancel` | `browser.run` | `{run_id}` |
@@ -561,6 +561,26 @@ screenshots use private job artifacts; they are not automatically published in
 shared page data. A paused confirmation is reported to the caller, never approved
 by merely changing a shared record.
 
+`script.run` and `run.resume` keep their job running until the native run finishes
+or pauses. A paused result is a successful action job with `result.state:"paused"`
+and `run_id`; it is not a completed script. Results contain `run_id`, `state`,
+`node`, masked `output`, optional `question` / error details, and an optional
+`screenshot` private artifact descriptor. Supply `page_id` to disambiguate script
+ids; omitting it only works for a unique locally approved id/version. Resume uses
+the original grant, agent and profile, with `choice:"ok"` or `"cancel"`. Stop a
+running script by cancelling its action job; `run.cancel` handles paused runs.
+Paused native sessions are cancelled at the earlier of grant expiry and 15
+minutes after pausing. A revoked grant cannot resume, even before local cleanup.
+
+Agent arguments cannot carry executable scripts, child snapshots, nodes, uploads,
+secrets, `start_at` or breakpoints. `params` accepts only declared non-secret
+fields. All executable `code` fields must be fixed text: `${...}` is rejected as
+`invalid_graph` with its node, for both human and agent runs. Dynamic text/URL
+fields remain supported. Unsupported graph nodes fail before the browser opens;
+the current 0.1.0 component supports connected acyclic sequences, not subflows.
+A failed or cancelled run may already have changed a website. Inspect the result
+before retrying; the host never automatically repeats an uncertain operation.
+
 Live `browser.page.snapshot`, `browser.page.act` and `browser.control` are reserved
 for M3 and are not offered in M2. Hard calls return `unsupported`. Future control
 approval must explicitly warn that it can read all websites signed in through the
@@ -575,7 +595,7 @@ myco action grant request --machine COMPUTER --browser-profile PROFILE --binding
   --permission browser.view --permission browser.run --reason "Run the approved report" --wait 5m
 myco action list --grant GRANT
 myco action run --grant GRANT --action browser.script.run \
-  --args '{"script_id":"report","version":3,"params":{"month":"2026-11"}}'
+  --args '{"script_id":"report","version":3,"page_id":"pg_reports","params":{"month":"2026-11"}}'
 myco action grant end --id GRANT
 ```
 

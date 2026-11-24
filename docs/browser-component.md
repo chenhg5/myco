@@ -63,3 +63,35 @@ The optional native fixture records a local form with an iframe and shadow root,
 For website acceptance, use the official application with a fresh dedicated visible profile. On both the CSDN article editor and V2EX post form: record once, omit submission, replay ten times, and report successful/attempted runs separately with screenshots and failure details. Also exercise single-step, a breakpoint, and Start here. Do not publish a post. Authentication, CAPTCHA, editor differences and site changes may require manual handling. If the browser cannot start, record **not run**, not a zero-percent trial result.
 
 `browser-component.yml` runs Go tests and native Chrome/Edge fixtures on macOS arm64/x64 and Windows x64, and builds three zip archives with dependency notices. `browser-component-release.yml` takes a successful main build run, checks its provenance, signs/notarizes Mac binaries, and stages a **draft** `browser-v*` prerelease with `SHA256SUMS`. Published releases are immutable. A release owner must verify acceptance and publish the draft before installation works. This process does not change the main `VERSION`.
+
+
+## Owner-approved agent runs (M2)
+
+In the Web Automation application, enable **Allow agents** for a dedicated
+profile in the current workspace, then save and approve a script version under
+**Agent runs**. The desktop confirmation shows the profile, version, all visited
+URLs, executable code, child scripts and complete snapshot. Approval is local to
+this App configuration, workspace URL, signed-in account, page and profile. It
+never grants authority through a shared page record, and the component's legacy
+global agent preference does not enable other workspaces.
+
+The native host stores immutable private snapshots and a SHA256 digest. Adding
+or revoking an approval, disabling access or changing accounts invalidates old
+bindings and stops their native runs. The agent separately requests a short grant
+for `browser.view` and/or `browser.run`; neither permission implies the other.
+There is no live page control or arbitrary script submission in M2. See the
+[bound browser action API](api.md#bound-browser-profiles) for CLI examples.
+
+Run jobs wait until completion or confirmation. A paused result keeps `run_id`
+under the same grant and agent; resumption creates another job. Paused native
+sessions survive at most 15 minutes and never past grant expiry. Ending the grant
+prevents resumption; already applied website actions cannot be undone by ending a
+job. Results and screenshots are private artifacts, not shared page records.
+
+All code fields must be fixed text without `${...}`, including human runs and
+code consuming extracted website values. Use declared parameters only for text,
+URL and selector fields. The installed 0.1.0 component still rejects branch,
+loop and subflow nodes before opening a browser. Agent runs cannot use secret
+parameters, uploads, Start here or breakpoints. A profile already controlled by a
+person or another run is not taken over. No automatic restart or replay bypasses
+a native error or run limit.

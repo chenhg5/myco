@@ -54,6 +54,10 @@ type Client struct {
 	Sealer *Sealer
 }
 
+// CredentialFingerprint binds native account caches to this exact client's
+// credential without storing or exposing the credential itself.
+func (c *Client) CredentialFingerprint() [32]byte { return sha256.Sum256([]byte(c.token)) }
+
 // New returns a client for hub base URL authenticated with token.
 func New(base, token string) (*Client, error) {
 	u, err := ValidateHubURL(base)

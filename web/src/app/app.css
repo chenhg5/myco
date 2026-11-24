@@ -9977,3 +9977,11 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
 .pg-recovery-files li + li { border-top: 1px solid var(--line-2); }
 .pg-recovery-files li > span { min-width: 0; overflow-wrap: anywhere; }
 .pg-recovery-files li > :last-child { flex-shrink: 0; }
+
+/* The trusted host reviews the exact local browser snapshot, outside its iframe. */
+.pg-browser-approval { max-height: 48vh; overflow: auto; margin-top: 12px; font-size: 12px; overflow-wrap: anywhere; }
+.pg-browser-approval-title { font-weight: 600; }
+.pg-browser-approval h4 { margin: 14px 0 6px; font-size: 12px; font-weight: 600; }
+.pg-browser-approval ul { padding-left: 18px; margin: 6px 0; }
+.pg-browser-approval pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; padding: 8px; background: var(--pill); border-radius: 6px; }
+.pg-browser-approval details { margin-top: 14px; }

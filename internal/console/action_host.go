@@ -148,11 +148,18 @@ func (b *Backend) reconcileActionHosts() {
 	// its id (its page renderer, while the window runs the renderer).
 	want := map[string]Hub{}
 	sshWant := map[string]sshcap.Profile{}
+	browserWant := map[string]browserHostPolicy{}
+	b.browserRuns()
 	_, profiles := b.sshProfiles()
 	hubs, _ := b.Store.List()
 	desktop := st.Supported && st.Installed && remotedesktop.AgentActions(st.Version)
 	pages := b.pageRender.active()
 	for _, h := range hubs {
+		for _, p := range b.browserHostPolicies(h) {
+			key := "browser:" + h.ID + ":" + p.Scope.Owner + ":" + p.Policy.Profile + ":" + p.Policy.Binding
+			want[key] = h
+			browserWant[key] = p
+		}
 		for _, p := range profiles {
 			if p.AgentEnabled && p.AgentHub == h.ID {
 				key := "ssh:" + h.ID + ":" + p.ID + ":" + p.Binding
@@ -193,7 +200,9 @@ func (b *Backend) reconcileActionHosts() {
 		epoch := a.epochs[key]
 		go func() {
 			var wait time.Duration
-			if p, ok := sshWant[key]; ok {
+			if p, ok := browserWant[key]; ok {
+				wait = b.hostBrowser(ctx, h, p)
+			} else if p, ok := sshWant[key]; ok {
 				wait = b.hostSSH(ctx, h, p)
 			} else if strings.HasPrefix(key, "page:") {
 				wait = b.hostPages(ctx, h)

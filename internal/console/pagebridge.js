@@ -290,7 +290,7 @@
     // Remote sessions are separate from local OS calls and need App consent.
     browser: (function () {
       function invoke(action, args) {
-        return ready.then(function () { return call("browser.call", {action:action,args:args||{}}, action === "install" ? 600000 : action === "pick" ? 150000 : 45000); });
+        return ready.then(function () { return call("browser.call", {action:action,args:args||{}}, (action === "install" || action === "approvals.request") ? 600000 : action === "pick" ? 150000 : 45000); });
       }
       return {
         status:function(){return invoke("status");},
@@ -309,6 +309,11 @@
           start:function(options){return invoke("runs.start",options);},
           get:function(id,after){return invoke("runs.get",{id:String(id),after:after});},
           control:function(id,action,choice){return invoke("runs.control",{id:String(id),action:action,choice:choice});}
+        },
+        approvals:{
+          list:function(){return invoke("approvals.list");},
+          request:function(options){return invoke("approvals.request",options);},
+          revoke:function(script_id,version){return invoke("approvals.revoke",{script_id:String(script_id),version:version});}
         },
         locate:function(options){return invoke("locate",options);},
         pick:function(options){return invoke("pick",options);},

@@ -18,13 +18,30 @@ import (
 
 	"github.com/myco-ai/myco/internal/api"
 	"github.com/myco-ai/myco/internal/browserautomation"
+	"github.com/myco-ai/myco/internal/browserpolicy"
 	"github.com/myco-ai/myco/internal/client"
 )
 
+// browserComponentAPI is the local optional-process boundary; tests supply
+// the same HTTP protocol without launching a browser or depending on an OS.
+type browserComponentAPI interface {
+	Status() api.BrowserComponentStatus
+	EnsureRunning(context.Context) error
+	Install(context.Context) error
+	Call(context.Context, string, string, string, any, any) error
+	Artifact(context.Context, string, string) ([]byte, string, error)
+	Stop()
+}
+
 type browserState struct {
 	mu            sync.Mutex
-	component     *browserautomation.Component
+	component     browserComponentAPI
 	confirmations map[string]browserConfirmation
+	policies      *browserpolicy.Store
+	identities    map[string]browserOwnerIdentity
+	blocked       map[string]bool
+	runs          *browserRunBook
+	cancelAgents  func(hub, profile string)
 }
 type browserConfirmation struct {
 	Scope, Action, Profile string
@@ -38,7 +55,7 @@ type browserCall struct {
 	Confirmation string          `json:"confirmation,omitempty"`
 }
 
-func (b *Backend) browserComponent() *browserautomation.Component {
+func (b *Backend) browserComponent() browserComponentAPI {
 	b.browser.mu.Lock()
 	defer b.browser.mu.Unlock()
 	if b.browser.component == nil {
@@ -92,11 +109,11 @@ func (b *Backend) browserRoutes(m *http.ServeMux) {
 			return
 		}
 		var in browserCall
-		r.Body = http.MaxBytesReader(w, r.Body, 8<<10)
+		r.Body = http.MaxBytesReader(w, r.Body, 2<<20)
 		if !decode(w, r, &in) {
 			return
 		}
-		if !validBrowserCall(in) || (in.Action != "install" && in.Action != "profiles.allowAgents") {
+		if !validBrowserCall(in) || (in.Action != "install" && in.Action != "profiles.allowAgents" && in.Action != "approvals.request") {
 			writeErr(w, browserFailure("invalid_argument", 400))
 			return
 		}
@@ -117,7 +134,34 @@ func (b *Backend) browserRoutes(m *http.ServeMux) {
 			ID string `json:"id"`
 		}
 		json.Unmarshal(in.Args, &args)
-		nonce := b.confirmBrowser(browserScope(h.ID, in.Page, in.Instance), in.Action, args.ID)
+		bound := args.ID
+		if in.Action == "profiles.allowAgents" {
+			owner, err := b.browserOwner(r.Context(), c, h, in.Page)
+			if err != nil {
+				writeErr(w, err)
+				return
+			}
+			bound += "\x00" + owner.Owner + "\x00" + owner.Workspace
+		}
+		if in.Action == "approvals.request" {
+			scope, err := b.browserOwner(r.Context(), c, h, in.Page)
+			if err != nil {
+				writeErr(w, err)
+				return
+			}
+			var req browserpolicy.Request
+			if err := browserDecode(in.Args, &req); err != nil {
+				writeErr(w, err)
+				return
+			}
+			review, err := browserpolicy.Prepare(scope, req)
+			if err != nil {
+				writeErr(w, browserPolicyError(err))
+				return
+			}
+			bound = req.Profile + "\x00" + review.Digest + "\x00" + scope.Owner + "\x00" + scope.Workspace
+		}
+		nonce := b.confirmBrowser(browserScope(h.ID, in.Page, in.Instance), in.Action, bound)
 		if nonce == "" {
 			writeErr(w, browserFailure("busy", 409))
 			return
@@ -126,7 +170,7 @@ func (b *Backend) browserRoutes(m *http.ServeMux) {
 	}))
 	m.HandleFunc("POST /app/hubs/{id}/browser", b.withHubAndHubTimeout(10*time.Minute, func(w http.ResponseWriter, r *http.Request, c *client.Client, h Hub) {
 		var in browserCall
-		r.Body = http.MaxBytesReader(w, r.Body, 256<<10)
+		r.Body = http.MaxBytesReader(w, r.Body, 2<<20)
 		if !decode(w, r, &in) {
 			return
 		}
@@ -161,9 +205,21 @@ func (b *Backend) browserCall(ctx context.Context, c *client.Client, h Hub, in b
 		err := comp.Call(ctx, scope, "DELETE", "/sessions", nil, &out)
 		return out, err
 	}
+	if value, handled, err := b.browserLocalRevocation(h, in); handled {
+		return value, err
+	}
 	page, err := c.Page(ctx, in.Page)
 	if err != nil {
 		return nil, err
+	}
+	if isBrowserApproval(in.Action) {
+		check := osCallIn{Name: "browser.call", Page: osPage{Hub: h.ID, ID: in.Page, Name: page.Name}}
+		if consent, err := b.osCheck(ctx, check); err != nil {
+			return nil, browserFailure("permission_denied", 403)
+		} else if consent != nil {
+			return nil, &browserNeedsConsent{consent}
+		}
+		return b.browserApprovalCall(ctx, c, h, in)
 	}
 	status := comp.Status()
 	if in.Action == "status" && !status.Installed {
@@ -213,6 +269,31 @@ func (b *Backend) browserCall(ctx context.Context, c *client.Client, h Hub, in b
 		if err = comp.Call(ctx, scope, "GET", "/status", nil, &out); err != nil {
 			return nil, browserFailure(browserError(err), 409)
 		}
+		// Human browser use remains available to legacy/admin credentials;
+		// only a resolved native console account can expose agent opt-ins.
+		owner, known := b.cachedBrowserOwner(h, in.Page)
+		if !known {
+			owner, err = b.browserOwner(ctx, c, h, in.Page)
+			known = err == nil
+		}
+		if known {
+			policies, err := b.browserPolicies()
+			if err != nil {
+				return nil, err
+			}
+			for i := range out.Profiles {
+				p, err := policies.Policy(owner, out.Profiles[i].ID)
+				if err != nil {
+					return nil, browserPolicyError(err)
+				}
+				out.Profiles[i].Agents = p.Enabled && !b.browserAgentsBlocked(h.ID, p.Profile)
+			}
+		} else {
+			for i := range out.Profiles {
+				out.Profiles[i].Agents = false
+			}
+		}
+
 		out.Installed = true
 		out.Supported = status.Supported
 		if len(out.Browsers) == 0 {
@@ -238,7 +319,20 @@ func (b *Backend) browserCall(ctx context.Context, c *client.Client, h Hub, in b
 		if who.Device == nil {
 			return nil, browserFailure("permission_denied", 403)
 		}
-		if allowed && !b.consumeBrowserConfirmation(in.Confirmation, scope, in.Action, text("id")) {
+		owner, err := b.browserOwner(ctx, c, h, in.Page)
+		if err != nil {
+			return nil, err
+		}
+		if allowed {
+			settings, err := c.HubSettings(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if settings.E2E {
+				return nil, browserFailure("unsupported", 501)
+			}
+		}
+		if allowed && !b.consumeBrowserConfirmation(in.Confirmation, scope, in.Action, text("id")+"\x00"+owner.Owner+"\x00"+owner.Workspace) {
 			return nil, browserFailure("permission_denied", 403)
 		}
 		path = "/profiles/" + url.PathEscape(text("id")) + "/agents"
@@ -253,6 +347,18 @@ func (b *Backend) browserCall(ctx context.Context, c *client.Client, h Hub, in b
 		method = "GET"
 		path = "/record/events?id=" + url.QueryEscape(text("id")) + "&after=" + browserAfter(args["after"])
 	case "runs.start":
+		if err := browserpolicy.CheckFixedCode(args["script"]); err != nil {
+			return nil, browserPolicyError(err)
+		}
+		var children map[string]json.RawMessage
+		if len(args["scripts"]) > 0 && json.Unmarshal(args["scripts"], &children) != nil {
+			return nil, browserFailure("invalid_argument", 400)
+		}
+		for _, child := range children {
+			if err := browserpolicy.CheckFixedCode(child); err != nil {
+				return nil, browserPolicyError(err)
+			}
+		}
 		// The web page cannot approve local file uploads by adding private fields.
 		delete(args, "uploads")
 		picked := []string{}
@@ -298,6 +404,33 @@ func (b *Backend) browserCall(ctx context.Context, c *client.Client, h Hub, in b
 	var out any
 	if err = comp.Call(ctx, scope, method, path, body, &out); err != nil {
 		return nil, browserFailure(browserError(err), 409)
+	}
+	if in.Action == "profiles.allowAgents" {
+		owner, err := b.browserOwner(ctx, c, h, in.Page)
+		if err != nil {
+			return nil, err
+		}
+		var allowed bool
+		_ = json.Unmarshal(args["allowed"], &allowed)
+		raw, _ := json.Marshal(out)
+		var profile api.BrowserProfile
+		if json.Unmarshal(raw, &profile) != nil || profile.ID != text("id") {
+			return nil, browserFailure("incompatible_component", 409)
+		}
+		store, err := b.browserPolicies()
+		if err != nil {
+			return nil, err
+		}
+		b.blockBrowserAgents(h.ID, profile.ID)
+		if _, err := store.SetEnabled(owner, profile.ID, allowed, profile.Name); err != nil {
+			return nil, browserPolicyError(err)
+		}
+		b.unblockBrowserAgents(h.ID, profile.ID)
+		profile.Agents = allowed
+		if b.Local != nil && b.Store != nil {
+			go b.reconcileActionHosts()
+		}
+		return profile, nil
 	}
 	if in.Action == "profiles.open" || in.Action == "record.stop" || in.Action == "runs.control" {
 		return true, nil

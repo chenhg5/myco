@@ -105,3 +105,15 @@ func TestBrowserTargetsVisibilityAndE2E(t *testing.T) {
 		t.Fatalf("encrypted host: %v", err)
 	}
 }
+
+func TestEncryptionToggleRevokesExistingBrowserGrant(t *testing.T) {
+	clock := &actionResourceClock{now: time.Now()}
+	expiry := clock.now.Add(time.Minute)
+	grant := &actionGrant{ActionGrant: api.ActionGrant{ID: "grant", State: api.GrantActive, ExpiresAt: &expiry}}
+	job := &actionJob{ActionJob: api.ActionJob{ID: "job", GrantID: "grant", State: api.JobRunning}}
+	s := &ActionService{wake: make(chan struct{}), clock: clock, e2e: func(context.Context) bool { return true }, grants: map[string]*actionGrant{"grant": grant}, jobs: map[string]*actionJob{"job": job}}
+	s.refresh(context.Background(), grant)
+	if grant.State != api.GrantRevoked || !job.CancelRequested {
+		t.Fatal("encryption toggle kept a running action authorized")
+	}
+}

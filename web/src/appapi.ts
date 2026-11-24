@@ -14,6 +14,9 @@ export interface NoticeState {
 export interface BrowserProfile { id: string; name: string; running: boolean; agents: boolean }
 export interface BrowserStatus { protocol: number; version: string; installed: boolean; supported: boolean; reason?: string; browsers: string[]; machine: string; profiles: BrowserProfile[] }
 
+export interface BrowserApproval { script_id: string; version: number; digest: string; profile: string; approved_at: string; name: string }
+export interface BrowserApprovalReview { script_id: string; version: number; profile: string; profile_name: string; name: string; digest: string; urls: string[]; code: {script: string; node: string; type: string; code: string}[]; children: string[]; script: unknown; scripts: Record<string, unknown> }
+
 export interface Hub {
   id: string;
   name: string;
@@ -1018,7 +1021,7 @@ export const appApi = {
   browserConfirm: (hubId: string, page: string, instance: string, action: string, args: unknown) =>
     request<{ confirmation: string }>("POST", `app/hubs/${enc(hubId)}/browser/confirm`, { page, instance, action, args }, undefined, 30_000, { "X-Myco-Browser-Owner": "1" }),
   browserCall: <T = unknown>(hubId: string, page: string, instance: string, action: string, args: unknown = {}, confirmation = "") =>
-    request<T>("POST", `app/hubs/${enc(hubId)}/browser`, { page, instance, action, args, confirmation }, undefined, action === "install" ? 600_000 : action === "pick" ? 150_000 : 45_000),
+    request<T>("POST", `app/hubs/${enc(hubId)}/browser`, { page, instance, action, args, confirmation }, undefined, (action === "install" || action === "approvals.request") ? 600_000 : action === "pick" ? 150_000 : 45_000),
   remoteCall: <T = unknown>(hubId: string, page: string, action: string, args: unknown = {}, instance: string = "") =>
     request<T>("POST", `app/hubs/${enc(hubId)}/remote`, {page, instance, action, args}, undefined, action === "install" ? 600_000 : 30_000),
   osList: () => request<OsList>("GET", "app/os"),

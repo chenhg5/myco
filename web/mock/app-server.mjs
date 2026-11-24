@@ -956,6 +956,10 @@ if (SHOWCASE) {
   if (process.env.MOCK_MEDIA_KIT === "1") {
     state.hubs[0].id = "hub_studio";
     state.hubs[0].hub_version = "0.22.1";
+    const en=SHOWCASE==="en";
+    pages.set("pg_browser_review",{...pages.get("pg_checklist"),id:"pg_browser_review",name:en?"Browser automation":"网页自动化",publisher:"build-backend",url:"http://192.168.1.20:7780/pages/pg_browser_review"});
+    madeFiles.set("pg_browser_review",{"index.html":`<!doctype html><html lang="${en?"en":"zh"}"><head><meta charset="utf-8"><style>body{font:15px system-ui;margin:36px;color:#252529}p{color:#777780}.row{padding:20px 0;border-bottom:1px solid #ddd}small{color:#777780}h1{font-size:27px}@media(prefers-color-scheme:dark){body{background:#1b1b1f;color:#ececf0}.row{border-color:#35353d}}</style></head><body><h1>${en?"Browser automation":"网页自动化"}</h1><p>${en?"Dedicated profiles · Reviewed script versions":"专用浏览器资料 · 已审阅的脚本版本"}</p><div class="row"><strong>${en?"Monthly report check":"月报检查"}</strong><p>v3 · example.com</p><small>${en?"Review the version before allowing agent runs.":"允许 Agent 运行前，先审阅这个版本。"}</small></div></body></html>`});
+
     const backend = state.hubs[0].agents.find(a => a.name === "build-backend");
     Object.assign(backend.runtime, { max_access: "full", features: ["remote_provider"],
       provider: "Team gateway", provider_host: "gateway.example", provider_source: "machine",
@@ -2359,12 +2363,42 @@ const server = http.createServer(async (req, res) => {
     }
     if (method === "DELETE") { cacheStore.clear(); return send(res, 204); }
   }
-  // Every page closes optional browser sessions on unmount, even without
-  // browser capabilities. Cleanup is a no-op in this UI fixture.
+  // Browser owner-consent fixture; never starts a browser or contacts a site.
+  // Native scope, nonce and persistence checks are covered by Go tests.
   if (parts[0] === "app" && parts[1] === "hubs" && parts[3] === "browser" && method === "POST") {
-    const body = await readBody(req);
-    if (body.action === "close") return send(res, 200, true);
-    return fail(res, 501, "unsupported", "The UI preview does not run a browser component.");
+    const body = await readBody(req), input = body.args || {}, key = `${parts[2]}/${body.page}`;
+    const english = process.env.MOCK_SHOWCASE === "en";
+    const profile = {id:"profile_work",name:english ? "Work" : "工作资料",running:false,agents:!!state.browserFlags?.[parts[2]]};
+    state.browserApprovals ||= {}; state.browserApprovals[key] ||= []; state.browserConfirmations ||= {};
+    if (parts[4] === "confirm") {
+      if (req.headers["x-myco-browser-owner"] !== "1") return fail(res,403,"permission_denied","host only");
+      const nonce = `bcn_mock_${++state.counter}`;
+      state.browserConfirmations[nonce] = JSON.stringify({key,instance:body.instance,action:body.action,input});
+      return send(res,200,{confirmation:nonce});
+    }
+    if (body.action === "status") return send(res,200,{protocol:1,version:"0.1.0",installed:true,supported:true,browsers:["chrome"],machine:"Studio Mac",profiles:[profile]});
+    if (body.action === "approvals.review") {
+      const code=[],urls=[],scripts={ [input.script_id]:input.script,...input.scripts };
+      for (const [id,script] of Object.entries(scripts)) {
+        if (script.start_url) urls.push(script.start_url);
+        for (const node of script.graph?.nodes || []) { if (node.url) urls.push(node.url); if(node.code) code.push({script:id,node:node.id,type:node.type,code:node.code}); }
+      }
+      return send(res,200,{script_id:input.script_id,version:input.version,profile:input.profile,profile_name:profile.name,name:input.script.name,digest:"a".repeat(64),urls,code,children:Object.keys(input.scripts || {}),script:input.script,scripts:input.scripts || {}});
+    }
+    if (body.action === "approvals.request" || (body.action === "profiles.allowAgents" && input.allowed)) {
+      const expected=JSON.stringify({key,instance:body.instance,action:body.action,input});
+      const actual=state.browserConfirmations[body.confirmation]; delete state.browserConfirmations[body.confirmation];
+      if(actual!==expected)return fail(res,403,"permission_denied","owner confirmation required");
+    }
+    if (body.action === "profiles.allowAgents") {state.browserFlags ||= {};state.browserFlags[parts[2]]=input.allowed;return send(res,200,{...profile,agents:input.allowed});}
+    if (body.action === "approvals.request") {
+      const approval={script_id:input.script_id,version:input.version,profile:input.profile,name:input.script.name,digest:"a".repeat(64),approved_at:iso(0)};
+      state.browserApprovals[key].push(approval);return send(res,200,approval);
+    }
+    if(body.action==="approvals.list")return send(res,200,state.browserApprovals[key]);
+    if(body.action==="approvals.revoke"){state.browserApprovals[key]=state.browserApprovals[key].filter(a=>a.script_id!==input.script_id||(input.version&&a.version!==input.version));return send(res,200,true);}
+    if(body.action==="close")return send(res,200,true);
+    return fail(res,501,"unsupported","UI fixture only");
   }
   // Remote Desktop: a deterministic UI fixture, never a real host.
   if (parts[0] === "app" && parts[1] === "hubs" && parts[3] === "remote" && method === "POST") {

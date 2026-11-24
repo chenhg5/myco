@@ -904,6 +904,33 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, chat.getByRole("button", { name: "关掉这一栏" }));
     });
 
+    await step("浏览器 · 主人批准固定版本", async () => {
+      await go(page, "官网改版", narrow);
+      if (narrow) await clickVisible(page, page.locator('.sp-strip-face[title="Release (Claude 云端)"]'));
+      else await clickVisible(page, page.locator(".sp-side .sp-member:visible", { hasText: "Release (Claude 云端)" }));
+      await clickVisible(page, page.locator(".sp-pane-right .pg-card", {hasText:"上线清单"}));
+      const frame=page.frameLocator(".pg-frame");
+      await frame.locator("h1").waitFor({timeout:15000});
+      const request={script_id:"monthly_report",version:3,profile:"profile_work",script:{name:"月报检查",profile:"profile_work",start_url:"https://example.com/reports",params:[],on_error:"stop",graph:{nodes:[{id:"check-title",type:"js",code:"return document.title;"},{id:"open-summary",type:"navigate",url:"https://example.com/summary"}],edges:[["check-title","open-summary"]]}},scripts:{}};
+      const ask=()=>frame.locator("body").evaluate((_body,request)=>{
+        window.__browserApprovalResult=null;
+        window.myco.browser.approvals.request(request).then(value=>window.__browserApprovalResult={value},error=>window.__browserApprovalResult={error:error.code});
+      },request);
+      await ask();
+      const modal=page.getByRole("dialog",{name:"浏览器自动化授权"});await modal.waitFor();
+      const review=modal.locator("[data-testid=browser-script-review]");await review.waitFor();
+      const text=await review.innerText();
+      if(!text.includes("v3")||!text.includes("document.title")||!text.includes("https://example.com/reports")||!text.includes("https://example.com/summary"))throw new Error("Trusted review omitted version, URL or executable code");
+      await shot(page,size,scheme,"browser-script-owner-review");
+      await clickVisible(page,modal.getByRole("button",{name:"不允许",exact:true}));await modal.waitFor({state:"hidden"});
+      await frame.locator("body").evaluate(async()=>{for(let i=0;i<50&&!window.__browserApprovalResult;i++)await new Promise(r=>setTimeout(r,20));if(window.__browserApprovalResult?.error!=="cancelled")throw new Error("declined script was not cancelled");});
+      const before=await frame.locator("body").evaluate(()=>window.myco.browser.approvals.list());if(before.length)throw new Error("Decline saved approval");
+      await ask();await modal.waitFor();await clickVisible(page,modal.getByRole("button",{name:"允许",exact:true}));await modal.waitFor({state:"hidden"});
+      const result=await frame.locator("body").evaluate(async()=>{for(let i=0;i<100&&!window.__browserApprovalResult;i++)await new Promise(r=>setTimeout(r,20));return window.__browserApprovalResult;});
+      if(result?.value?.version!==3||result?.value?.script_id!=="monthly_report"||"confirmation" in result.value||"script" in result.value)throw new Error("Page did not receive private-safe approval metadata");
+      await clickVisible(page,page.locator(".pg-panel").getByRole("button",{name:"关闭",exact:true}));
+    });
+
     // The myco bridge: the page's shared state, written by you, changed by
     // its agent (it comes to the page), and a message to its agent, asked
     // once. (The four windows share the mock: versions are read, not assumed.)

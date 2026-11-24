@@ -359,7 +359,7 @@ myco action grant end --id agr_…                                              
 Use `myco action targets` to discover browser profiles explicitly enabled by your
 owner in this workspace. Request a grant with `--machine`, `--browser-profile`
 and `--binding` from that result, `--permission browser.run` (and `browser.view`
-for status), a reason and your task id. Run `browser.script.run` with `script_id`
+for status), a reason and your task id. Run `browser.script.run` with `page_id`, `script_id`
 and **version**: only a snapshot your owner approved locally may execute. Editing
 shared page records never approves a script; ask the owner to review the new
 version. `myco action list --grant ID` is authoritative for installed capabilities.
@@ -492,3 +492,12 @@ When you coordinate a project and need another agent, use `myco project invite-a
 ## Project coordinator schedules
 
 When coordinating a project, schedule its agent members yourself with `myco automation create --project <name> --name <task> --to <member> --body <work> --cron "0 9 * * *" --tz Asia/Shanghai --starts YYYY-MM-DD --ends YYYY-MM-DD`. The owner can allow coordinator scheduling in project settings; otherwise each create/update/pause/remove needs their approval card. Pending means nothing has been applied yet. Use `automation list/update/remove --project <name>` with your own agent credential; never borrow a person's console token. `--once` stops after the first execution attempt (failed attempts count; busy skips do not). Date-only bounds are UTC days and the end day is included; use RFC3339 offsets for precise local times. Only this project's ordinary agent members and enabled workflows owned by its owner in this project are eligible. After approval, use the resulting task ID from the notification or list to inspect it.
+
+A browser run job waits until it finishes or pauses. A paused result keeps its
+`run_id`; resume it with the same grant, agent and profile using
+`browser.run.resume` (`choice: "ok"` or `"cancel"`). Paused runs expire within 15
+minutes and never outlive the grant. Cancel a running action job to stop it;
+`browser.run.cancel` stops a paused run. Never blindly replay a failed or
+`outcome_unknown` run: earlier website steps may already have applied. Only
+non-secret parameters declared by the approved version are accepted; code,
+secret values, uploads, Start here and breakpoints cannot be supplied by agents.
