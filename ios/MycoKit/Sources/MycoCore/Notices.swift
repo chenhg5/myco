@@ -11,7 +11,7 @@ public final class NoticesModel {
     private let hub: any HubAPI
 
     /// What waits for me, newest first, that is not shown elsewhere.
-    public private(set) var waiting: [Notice] = []
+    public private(set) var waiting: [HubNotice] = []
     /// Open needs-you notices, as the hub counts them (the app's badge).
     public private(set) var badge = 0
     /// The workspace is from before notices (v0.21.21).
@@ -29,7 +29,7 @@ public final class NoticesModel {
     public func load() async {
         do {
             // The newest 200 are enough: they are kept 30 days.
-            var all: [Notice] = []
+            var all: [HubNotice] = []
             var after: Int64? = nil
             for _ in 0..<5 {
                 let page = try await hub.notices(after: after, limit: 200)
@@ -56,13 +56,13 @@ public final class NoticesModel {
 
     /// Opened: what leads there is read (and settled, if nothing more is
     /// asked of me).
-    public func read(_ notice: Notice) async {
+    public func read(_ notice: HubNotice) async {
         try? await hub.readNotices(target: notice.target)
         await load()
     }
 
     /// What a notice says, in a line: who, and what.
-    public static func words(_ notice: Notice, name: (String) -> String) -> String {
+    public static func words(_ notice: HubNotice, name: (String) -> String) -> String {
         let who = notice.actor.map(name) ?? ""
         let what: String
         switch notice.kind {

@@ -26,10 +26,10 @@ struct NoticesTests {
 
     @Test func aDecisionOrAnApprovalIsLeftToWhereItIsAnswered() async {
         let notices = [
-            Notice(seq: 1, id: "a", kind: "decision", target: "workflow:w1?run=r1", createdAt: Date()),
-            Notice(seq: 2, id: "b", kind: "approval", target: "superagent", createdAt: Date()),
-            Notice(seq: 3, id: "c", kind: "stuck", target: "agent:x", createdAt: Date()),
-            Notice(seq: 4, id: "d", kind: "failed", target: "agent:x", createdAt: Date().addingTimeInterval(-60)),
+            HubNotice(seq: 1, id: "a", kind: "decision", target: "workflow:w1?run=r1", createdAt: Date()),
+            HubNotice(seq: 2, id: "b", kind: "approval", target: "superagent", createdAt: Date()),
+            HubNotice(seq: 3, id: "c", kind: "stuck", target: "agent:x", createdAt: Date()),
+            HubNotice(seq: 4, id: "d", kind: "failed", target: "agent:x", createdAt: Date().addingTimeInterval(-60)),
         ]
         #expect(notices.filter { $0.open && !NoticesModel.shownElsewhere.contains($0.kind) }.map(\.id) == ["c", "d"])
     }

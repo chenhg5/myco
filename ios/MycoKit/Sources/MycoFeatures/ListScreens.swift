@@ -311,7 +311,7 @@ struct WorkbenchScreen: View {
                 async let a: Void = session.automations.load()
                 async let b: Void = session.apps.load()
                 async let c: Void = session.workflows.load()
-                async let d: Void = session.notices.load()
+                async let d: Void = session.waiting.load()
                 async let e: Void = session.usage.load()
                 _ = await (a, b, c, d, e)
                 try? await Task.sleep(for: .seconds(20))
@@ -335,7 +335,7 @@ struct WorkbenchScreen: View {
     @ViewBuilder private var waiting: some View {
         let decisions = session.workflows.decisions
         let approvals = session.superagent.approvals
-        let notices = session.notices.waiting
+        let notices = session.waiting.waiting
         if !decisions.isEmpty || !approvals.isEmpty || !notices.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
                 head(L("等你处理", "Waiting for you"), count: decisions.count + approvals.count + notices.count)
@@ -361,7 +361,7 @@ struct WorkbenchScreen: View {
         }
     }
 
-    private func noticeLine(_ notice: Notice) -> some View {
+    private func noticeLine(_ notice: HubNotice) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: notice.kind == "asking" ? "questionmark.bubble.fill" : notice.kind == "stuck" ? "hourglass" : "exclamationmark.circle.fill")
                 .font(.subheadline)
@@ -382,7 +382,7 @@ struct WorkbenchScreen: View {
     }
 
     /// Where a notice leads; opened, it is read.
-    private func open(_ notice: Notice) {
+    private func open(_ notice: HubNotice) {
         let target = notice.target ?? ""
         let parts = target.split(separator: ":", maxSplits: 1).map(String.init)
         let what = parts.first ?? "", name = parts.count > 1 ? parts[1] : ""
@@ -401,7 +401,7 @@ struct WorkbenchScreen: View {
             if let agent = session.superagent.agent { router.sheet = .superagentChat(agent) }
         default: break
         }
-        Task { await session.notices.read(notice) }
+        Task { await session.waiting.read(notice) }
     }
 
     /// The workflows: the runs going, step by step; one tap to run another.

@@ -3,7 +3,7 @@ import Foundation
 /// Something a person should hear about (hub v0.21.21+): an agent asking
 /// them, a decision, an approval, a failure, an answer. `GET
 /// /v1/console/notices`.
-public struct Notice: Codable, Sendable, Hashable, Identifiable {
+public struct HubNotice: Codable, Sendable, Hashable, Identifiable {
     public var seq: Int64
     public var id: String
     /// asking, decision, approval, failed, run_failed, stuck (needs_you);
@@ -49,13 +49,13 @@ public struct Notice: Codable, Sendable, Hashable, Identifiable {
 }
 
 /// A page of notices: those after a `seq`, and how many wait.
-public struct NoticePage: Codable, Sendable {
-    @LossyList public var notices: [Notice]
+public struct HubNoticePage: Codable, Sendable {
+    @LossyList public var notices: [HubNotice]
     public var last: Int64?
     /// Open needs-you notices.
     public var badge: Int?
 
-    public init(notices: [Notice], last: Int64? = nil, badge: Int? = nil) {
+    public init(notices: [HubNotice], last: Int64? = nil, badge: Int? = nil) {
         _notices = LossyList(wrappedValue: notices)
         self.last = last
         self.badge = badge

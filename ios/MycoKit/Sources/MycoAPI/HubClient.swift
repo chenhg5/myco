@@ -214,7 +214,7 @@ public struct HubClient: HubAPI {
         return envelope.approvals
     }
 
-    public func notices(after: Int64?, limit: Int) async throws -> NoticePage {
+    public func notices(after: Int64?, limit: Int) async throws -> HubNoticePage {
         var query = ["limit": String(limit)]
         if let after { query["after"] = String(after) }
         return try await get("/v1/console/notices", query, timeout: Self.pollTimeout)

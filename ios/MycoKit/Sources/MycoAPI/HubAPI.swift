@@ -196,7 +196,7 @@ public protocol HubAPI: Sendable {
     // Notices (v0.21.21+) and usage (v0.21.34+); older workspaces answer 404
     /// `GET /v1/console/notices?after=&limit=`: what this person should
     /// hear about, oldest first.
-    func notices(after: Int64?, limit: Int) async throws -> NoticePage
+    func notices(after: Int64?, limit: Int) async throws -> HubNoticePage
     /// `POST /v1/console/notices/read`: what leads to `target` (nil: all)
     /// is read; one that does not wait for an answer is settled.
     func readNotices(target: String?) async throws

@@ -102,18 +102,18 @@ public actor FakeHub: HubAPI {
 
     // MARK: Notices and usage
 
-    private var noticeList: [Notice] = []
+    private var noticeList: [HubNotice] = []
     private var usageRows: [UsageRow] = []
 
     /// Two things waiting for me (运维 asks; a task of 后端工程师's failed),
     /// one settled; two weeks of tokens.
-    private static func seeded(now: Date) -> ([Notice], [UsageRow]) {
+    private static func seeded(now: Date) -> ([HubNotice], [UsageRow]) {
         let noticeList = [
-            Notice(seq: 1, id: "ntc_1", kind: "answered", tier: "results", target: "agent:studio-claude-c41f", actor: "studio-claude-c41f",
+            HubNotice(seq: 1, id: "ntc_1", kind: "answered", tier: "results", target: "agent:studio-claude-c41f", actor: "studio-claude-c41f",
                    createdAt: now.addingTimeInterval(-7_200), readAt: now.addingTimeInterval(-7_000), resolvedAt: now.addingTimeInterval(-7_000)),
-            Notice(seq: 2, id: "ntc_2", kind: "failed", target: "agent:studio-codex-7f3a", project: "myco-ios", actor: "studio-codex-7f3a",
+            HubNotice(seq: 2, id: "ntc_2", kind: "failed", target: "agent:studio-codex-7f3a", project: "myco-ios", actor: "studio-codex-7f3a",
                    subject: "跑测试", createdAt: now.addingTimeInterval(-3_600)),
-            Notice(seq: 3, id: "ntc_3", kind: "asking", target: "agent:vps-codex-90aa", actor: "vps-codex-90aa",
+            HubNotice(seq: 3, id: "ntc_3", kind: "asking", target: "agent:vps-codex-90aa", actor: "vps-codex-90aa",
                    subject: "要不要现在重启 hub", createdAt: now.addingTimeInterval(-900)),
         ]
         let calendar = Calendar(identifier: .gregorian)
@@ -144,10 +144,10 @@ public actor FakeHub: HubAPI {
         return (noticeList, usageRows)
     }
 
-    public func notices(after: Int64?, limit: Int) async throws -> NoticePage {
+    public func notices(after: Int64?, limit: Int) async throws -> HubNoticePage {
         try await check()
         let list = noticeList.filter { $0.seq > (after ?? 0) }.prefix(limit)
-        return NoticePage(notices: Array(list), last: noticeList.last?.seq ?? 0, badge: noticeList.filter(\.open).count)
+        return HubNoticePage(notices: Array(list), last: noticeList.last?.seq ?? 0, badge: noticeList.filter(\.open).count)
     }
 
     public func readNotices(target: String?) async throws {
