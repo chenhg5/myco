@@ -6069,6 +6069,40 @@ async function runMatrix(browser, size, scheme) {
       } finally { intentionalPublicNotReady.delete(page); await page.unroute(localHubRoute, publicHandler); }
       await pub.waitFor({ state: "hidden", timeout: 5_000 });
     });
+
+    // Removing a workspace (last: it changes what the later steps would
+    // see) only touches this App, so it is done at once even when the
+    // workspaces answer slowly; the one removed leaves every page and
+    // nothing asks it again.
+    await step("设置 · 移除工作区", async () => {
+      await closeSettings(page);
+      const shownBefore = (await page.locator(".sp-switch .app-hub-name, .app-hub-pill-name").first().innerText().catch(() => "")).trim();
+      await go(page, "设置", narrow);
+      const slowOverview = async (r) => { await new Promise((res) => setTimeout(res, 6000)); await r.continue().catch(() => undefined); };
+      await page.route("**/app/overview", slowOverview);
+      const asked = [];
+      const onResponse = (r) => { if (r.status() === 404 && /\/app\/hubs\//.test(r.url())) asked.push(r.url()); };
+      page.on("response", onResponse);
+      try {
+        const rm = page.locator("[data-testid=settings-dialog]").getByRole("button", { name: /^移除/ }).first();
+        await clickVisible(page, rm);
+        const dlg = page.locator(".app-modal", { hasText: "只会从这个 App 里移除" });
+        await dlg.waitFor({ timeout: 5_000 });
+        const t0 = Date.now();
+        await clickVisible(page, dlg.getByRole("button", { name: "移除工作区" }));
+        await dlg.waitFor({ state: "detached", timeout: 3_000 });
+        if (Date.now() - t0 > 2_000) throw new Error(`移除工作区不该等工作区回话：用了 ${Date.now() - t0}ms`);
+        await page.waitForTimeout(1_500);
+        if (asked.length) throw new Error(`移除后不该再问那个工作区：${asked[0]}`);
+      } finally {
+        page.off("response", onResponse);
+        await page.unroute("**/app/overview", slowOverview);
+      }
+      await closeSettings(page);
+      await sidebar(page, true);
+      const shownAfter = (await page.locator(".sp-switch .app-hub-name").first().innerText()).trim();
+      if (shownBefore && shownAfter === shownBefore) throw new Error(`移除了正在看的工作区，应换到别的：还是「${shownAfter}」`);
+    });
   } finally {
     await context.close().catch(() => undefined);
   }

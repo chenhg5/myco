@@ -318,7 +318,7 @@ const TUNNELS: { key: LocalTunnel; title: string; desc: string; needsDomain?: bo
 type TunnelChoice = 0 | 1 | 2;
 
 /** Settings: hubs (including the local one), appearance and about. */
-export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onTextSize, langChoice, onLangChoice, refreshKey, sectionRequest, onRefresh, onAddHub, titleId }: {
+export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onTextSize, langChoice, onLangChoice, refreshKey, sectionRequest, onRefresh, onRemoved, onAddHub, titleId }: {
   hubs: Hub[];
   hubsOv?: HubOverview[];
   info: AppInfo | null;
@@ -333,6 +333,8 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
   /** Bumped when the Hub switcher asks for the Hub section. */
   sectionRequest?: number;
   onRefresh: () => Promise<void>;
+  /** a workspace was removed: the App drops it at once (and refreshes behind) */
+  onRemoved?: (id: string) => void;
   onAddHub: () => void;
   /** in a dialog: the title at the top of the nav (labels the dialog) */
   titleId?: string;
@@ -493,17 +495,25 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
     }
   };
 
+  // Removing only touches this App (its list and the saved token), so it
+  // is quick: the dialog closes as soon as that is done and the workspace
+  // leaves every page at once, without waiting on any workspace's answer.
+  const [removing, setRemoving] = useState(false);
   const removeHub = async () => {
-    if (!removeTarget) return;
+    if (!removeTarget || removing) return;
+    const id = removeTarget.id;
     setActionError(null);
+    setRemoving(true);
     try {
-      await appApi.removeHub(removeTarget.id);
-      forgetHub(removeTarget.id);
-      setRemoveTarget(null);
-      await onRefresh();
+      await appApi.removeHub(id);
     } catch (e) {
-      setActionError(e);
+      // Already gone (removed in another window): as good as done.
+      if ((e as { status?: number })?.status !== 404) { setActionError(e); setRemoving(false); return; }
     }
+    forgetHub(id);
+    setRemoveTarget(null);
+    setRemoving(false);
+    if (onRemoved) onRemoved(id); else void onRefresh();
   };
 
   const localWs = localWorkspaces(local);
@@ -888,6 +898,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
         description={L("只会从这个 App 里移除。工作区本身和它上面的 agent 都不受影响，仍在照常运行。", "Removes it from this app only. The Hub and its agents aren’t affected and keep running.")}
         consequences={<p>{L("你将看不到这个工作区的 agent，之后只能凭 App 连接链接重新添加。", "You won’t see this Hub’s nodes. To add it back later, you’ll need its app link.")}</p>}
         confirmLabel={L("移除工作区", "Remove Hub")}
+        busy={removing}
         error={actionError ? <ErrorText error={actionError} /> : undefined}
         onConfirm={() => void removeHub()}
       />
