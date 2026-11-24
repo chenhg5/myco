@@ -1133,7 +1133,9 @@ async function runMatrix(browser, size, scheme) {
             if (h.id !== "hub_studio") continue;
             if (mode === "down") { h.ok = false; delete h.overview; continue; }
             for (const st of h.overview?.agents || []) {
-              const on = mode === "working" && st.agent.name === "review-cloud";
+              // Its shell nodes run commands too: they are not counted.
+              const shell = st.agent.kind === "shell" || ["shell", "exec"].includes(st.agent.binding?.harness);
+              const on = mode === "working" && (st.agent.name === "review-cloud" || shell);
               st.state = on ? "working" : "idle";
               st.in_progress = on ? 1 : 0;
               st.stale = 0;

@@ -1264,7 +1264,9 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 const ref = { hubId: x.hubId, name: x.p.name };
                 const active = page === "space" && !!shown && spaceKey(shown) === spaceKey(ref);
                 const names = new Set(x.p.members.map((m) => m.name));
-                const dot = workDot(rows.filter((r) => r.hub.id === x.hubId && names.has(r.st.agent.name)));
+                // Only its agents: a workspace (shell node) running commands
+                // for them is not the project at work.
+                const dot = workDot(rows.filter((r) => r.hub.id === x.hubId && names.has(r.st.agent.name) && agentKind(r.st.agent) === "agent"));
                 return (
                   <button key={`${x.hubId}/${x.p.name}`} type="button" {...projectSort.bind(x.p.name)}
                     className={cn("app-nav-item sp-nav", active && "active", projectSort.dragging === x.p.name && "is-dragging")}

@@ -8,7 +8,9 @@ import (
 	"strings"
 )
 
-// trayStatus counts agents across all hubs (machine nodes left out).
+// trayStatus counts agents across all hubs. Only agents: machine and shell
+// nodes (a workspace running commands for an agent) are left out, as in the
+// App's sidebar and the notch island.
 type trayStatus struct {
 	Working, Pending, Idle, Offline int
 	Down                            []string // hubs the app cannot reach
@@ -40,6 +42,7 @@ func readTrayStatus(h http.Handler) trayStatus {
 						Name        string `json:"name"`
 						DisplayName string `json:"display_name"`
 						StatusText  string `json:"status_text"`
+						Kind        string `json:"kind"`
 						Binding     struct {
 							Harness string `json:"harness"`
 						} `json:"binding"`
@@ -61,7 +64,7 @@ func readTrayStatus(h http.Handler) trayStatus {
 			continue
 		}
 		for _, a := range hub.Overview.Agents {
-			if a.Agent.Binding.Harness == "machine" {
+			if !trayCounts(a.Agent.Kind, a.Agent.Binding.Harness) {
 				continue
 			}
 			node := trayNode{Name: a.Agent.DisplayName, Status: strings.TrimSpace(a.Agent.StatusText)}
@@ -85,6 +88,19 @@ func readTrayStatus(h http.Handler) trayStatus {
 	}
 	st.Busy = append(st.Busy, waiting...)
 	return st
+}
+
+// trayCounts says whether a node is an agent (the App's agentKind): the
+// hub's kind when it gives one, else from the harness.
+func trayCounts(kind, harness string) bool {
+	if kind != "" {
+		return kind == "agent"
+	}
+	switch harness {
+	case "machine", "shell", "exec", "human":
+		return false
+	}
+	return true
 }
 
 // trayText picks the Chinese or English text.
