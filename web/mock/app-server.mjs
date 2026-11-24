@@ -4,6 +4,7 @@
 // Writes mutate in-memory state and are lost on restart.
 import http from "node:http";
 import zlib from "node:zlib";
+import { usageFixture } from "./usage.mjs";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { showcase } from "./showcase.mjs";
 
@@ -2971,6 +2972,16 @@ const server = http.createServer(async (req, res) => {
         .filter(Boolean)
         .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
       return send(res, 200, { conversations: list.slice(0, 30) });
+    }
+
+    // GET usage works in the standard and SHOWCASE data sets.
+    if (parts.length === 4 && parts[3] === "usage" && method === "GET") {
+      if (process.env.MOCK_OLD_HUB) return fail(res, 404, "not_found", "no route for GET usage");
+      const to = url.searchParams.get("to") || new Date().toISOString().slice(0, 10);
+      const from = url.searchParams.get("from") || to;
+      const project = url.searchParams.get("project") || "";
+      const list = SHOWCASE ? hub.projects || [] : projects;
+      return send(res, 200, usageFixture(hub, list || [], { from, to, project }));
     }
 
     // /app/hubs/{id}/messages — a task from the console.

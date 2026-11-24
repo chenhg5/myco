@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpDown, Bell, ChevronLeft, ChevronRight, LayoutGrid, Minimize2, Monitor, MoreHorizontal, Pin, Plus, Search, WifiOff, Workflow, X, Zap } from "lucide-react";
+import { Gauge, ArrowUpDown, Bell, ChevronLeft, ChevronRight, LayoutGrid, Minimize2, Monitor, MoreHorizontal, Pin, Plus, Search, WifiOff, Workflow, X, Zap } from "lucide-react";
 import { ComputerSettings } from "@/app/ComputerSettings";
+import { UsagePage } from "@/app/Usage";
 import { AutomationsPage } from "@/app/Automations";
 import { WorkflowsPage } from "@/app/Workflows";
 import { TemplatesPage } from "@/app/Templates";
@@ -81,7 +82,7 @@ function readPendingLink(): Promise<string> {
  * agents work together and hand out tasks; Members is everyone you work
  * with; Settings holds the rest (team spaces, computers, the app itself).
  */
-type Page = "space" | "members" | "computers" | "automations" | "workflows" | "templates" | "settings" | "about" | "help";
+type Page = "space" | "members" | "computers" | "usage" | "automations" | "workflows" | "templates" | "settings" | "about" | "help";
 
 function initialCollapsed() {
   try {
@@ -198,7 +199,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const setHubPick = (v: string) => {
     // Leaving a workspace: where you were in it is kept, to come back to.
     if (v !== hubId && hubId) {
-      places.current[hubId] = { space: shown || undefined, page: page === "members" || page === "computers" || page === "automations" || page === "workflows" || page === "templates" ? page : "space" };
+      places.current[hubId] = { space: shown || undefined, page: page === "members" || page === "computers" || page === "automations" || page === "workflows" || page === "templates" || page === "usage" ? page : "space" };
       try { localStorage.setItem(PLACES_KEY, JSON.stringify(places.current)); } catch { /* not kept */ }
     }
     setHubPickState(v);
@@ -1095,6 +1096,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const addWsProject = addWorkspace && !isLoose(addWorkspace) ? liveProjects.find((x) => x.hubId === addWorkspace.hubId && x.p.name === addWorkspace.name)?.p : undefined;
   const title = page === "members" ? L("成员", "Members")
     : page === "computers" ? L("电脑", "Computers")
+    : page === "usage" ? L("用量", "Usage")
     : page === "automations" ? L("自动化", "Automations")
     : page === "help" ? L("使用文档", "User guide")
     : page === "workflows" ? L("工作流", "Workflows")
@@ -1185,6 +1187,10 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 onClick={() => { setNavChat(null); toPage("workflows"); }}>
                 <Workflow /><span className="app-nav-label">{L("工作流", "Workflows")}</span>
                 {decisionCount > 0 && <span className="wf-nav-badge" title={L(`${decisionCount} 个决定在等你`, `${decisionCount} decisions wait for you`)}>{decisionCount}</span>}
+              </button>
+              <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-usage", page === "usage" && "active")} aria-current={page === "usage" ? "page" : undefined}
+                onClick={() => { setNavChat(null); toPage("usage"); }}>
+                <Gauge /><span className="app-nav-label">{L("用量", "Usage")}</span>
               </button>
               <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-templates", page === "templates" && "active")} aria-current={page === "templates" ? "page" : undefined}
                 onClick={() => { setNavChat(null); toPage("templates"); }}>
@@ -1416,6 +1422,22 @@ export default function AppMode({ initialHubs, initialInfo }: {
         {page === "members" && (
           <div className="app-scroll">
             <MembersPage rows={rows} projects={hubProjects} now={now} onOpen={(r) => setProfile({ hubId: r.hub.id, name: r.st.agent.name })} />
+          </div>
+        )}
+
+        {page === "usage" && hub && (
+          <div className="app-scroll">
+            <UsagePage key={hub.id} hubId={hub.id} projects={hubProjects.map((x) => x.p)} rows={rows}
+              onOpenAgent={(name) => {
+                const r = rows.find((x) => x.st.agent.name === name);
+                if (r) chatWithMember(r);
+                else {
+                  // A usage record can outlive its member's current presence.
+                  const target: SpaceRef = { hubId: hub.id, loose: true };
+                  setSpace(target); setPage("space");
+                  setChatWith({ space: target, agent: name, n: Date.now() });
+                }
+              }} />
           </div>
         )}
 

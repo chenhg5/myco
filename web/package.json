@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b",
     "test:ui": "node scripts/ui-smoke.mjs",
-    "dev:app": "node mock/app-server.mjs & vite"
+    "dev:app": "node mock/app-server.mjs & vite",
+    "test:usage": "node scripts/usage.test.mjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "1.1.2",

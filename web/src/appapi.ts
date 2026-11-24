@@ -1,3 +1,4 @@
+import type { UsageResponse } from "@/lib/usage";
 import type { Page, PageChanges, PageOpen, PageRecord, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Backup, Backups, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, MCPServer, ToolSkill, ToolPlugin, SuperagentState, Approval, ActionGrant, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, NoticeFeed, NoticePrefs, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
 import { L } from "@/lib/i18n";
 
@@ -630,6 +631,11 @@ export interface AppUpdate {
 export interface CacheStats { enabled: boolean; entries: number; bytes: number }
 
 export const appApi = {
+  usage: (hubId: string, range: { from: string; to: string; project?: string }) => {
+    const query = new URLSearchParams({ from: range.from, to: range.to });
+    if (range.project) query.set("project", range.project);
+    return request<UsageResponse>("GET", `app/hubs/${enc(hubId)}/usage?${query}`);
+  },
   cacheStats: () => request<CacheStats>("GET", "app/cache/stats"),
   info: () => request<AppInfo>("GET", "app/info"),
   /** Speech to text in lang (desktop app): "system" types into the focused

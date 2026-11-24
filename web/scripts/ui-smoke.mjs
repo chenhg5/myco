@@ -5784,6 +5784,37 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".app-settings-tab").first().waitFor({ timeout: 5_000 });
     });
 
+    await step("用量", async () => {
+      await go(page, "用量", narrow);
+      const usage = page.locator(".usage-page");
+      await usage.locator(".usage-metrics dd").first().waitFor({ timeout: 15000 });
+      if (await usage.locator(".usage-metrics dd").count() !== 4) throw new Error("用量页应有四项概览");
+      if (await usage.locator(".usage-agents tbody tr").count() < 8) throw new Error("成员用量应有八个成员");
+      if (await usage.locator(".usage-projects tbody tr").count() < 3) throw new Error("项目用量应包含三个项目");
+      if (await usage.locator(".usage-model-table tbody tr").count() < 3) throw new Error("模型汇总应有内容");
+      if (await usage.locator(".usage-day").count() !== 30) throw new Error("默认显示 30 天");
+      const width = await page.evaluate(() => document.documentElement.scrollWidth);
+      if (width > size.width) throw new Error(`用量页横向溢出：${width} > ${size.width}`);
+      await shot(page, size, scheme, "usage");
+      await usage.getByRole("button", { name: "7 天", exact: true }).click();
+      await page.waitForFunction(() => document.querySelectorAll(".usage-day").length === 7);
+      const project = usage.getByRole("combobox", { name: "项目", exact: true });
+      const name = await project.locator('option').nth(1).getAttribute("value");
+      await project.selectOption(name);
+      await usage.locator(".usage-agents tbody tr").first().waitFor({ timeout: 10000 });
+      if (await usage.locator(".usage-projects").count()) throw new Error("指定项目时不应再显示项目汇总");
+      await project.selectOption("-");
+      await usage.locator(".usage-agents tbody tr").first().waitFor({ timeout: 10000 });
+      await project.selectOption("");
+      await usage.getByRole("button", { name: "30 天", exact: true }).click();
+      await usage.locator(".usage-projects tbody tr").first().waitFor({ timeout: 10000 });
+      await usage.locator(".usage-member").first().click();
+      await page.locator(".conv-detail").first().waitFor({ timeout: 15000 });
+      await go(page, "用量", narrow);
+      await usage.locator(".usage-metrics dd").first().waitFor({ timeout: 10000 });
+      if (await usage.locator(".usage-day").count() !== 30) throw new Error("返回用量页应记住时间范围");
+    });
+
     await step("设置", async () => {
       await go(page, "设置", narrow);
       await page.locator(".app-settings").waitFor({ timeout: 20_000 });
