@@ -4,6 +4,24 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.22.0
+
+- **The Usage page is live**: totals, a day-by-day chart and members, projects and models ranked by tokens, for 7, 30 or 90 days, for the whole workspace or one project. The chart has a daily-average line and compares the last seven days with the seven before; tables rank by tokens with each row's share. It is laid out like the Automations page and fits beside the sidebar in a narrow window.
+- **Token usage is now reported and kept**: updated runners and Claude sessions (`myco inbox wait`) report numeric token usage independently of traces, so it works with tracing off and in end-to-end encrypted workspaces. The hub stores per-day figures per agent, project and model. Members see their own agents; owners and admins see the whole workspace. Set `MYCO_NO_USAGE=1` to turn reporting off.
+- **`myco usage show`**: `--by agent` (default), project, day or model, with `--from`, `--to` and `--project`, using member or admin credentials.
+- **Member groups**: they are reachable from the folded members column too (the ⋯ under its unfold button), and moving a member between groups stays put while slow saves and refreshes cross; a failed save goes back and says why in the members column.
+- Costs are present only when the CLI reports them: Claude Code uses Anthropic pricing, so figures for compatible proxies or other models are reference estimates. Older clients do not report usage and traces are not backfilled.
+- Upgrade: update the hub to v0.22.0 for usage storage and the API, and update myco on computers that should report usage or run `myco usage show`. Update the App for the Usage page and the group fixes. No other hub upgrade needed.
+
+**中文**
+
+- **用量页正式可用**：显示总量、按天的柱状图和按 token 排名的成员、项目、模型，可以看 7、30 或 90 天，范围是整个工作区或单个项目。图表有日均虚线，并把最近 7 天和前 7 天做对比；表格按 token 排名并显示每行占比。版式与「自动化」页一致，窄窗口下也能放在侧栏旁边。
+- **token 用量开始上报和保存**：更新后的 runner 和 Claude 会话（`myco inbox wait`）会独立于 trace 上报数字用量，关闭 trace 和端到端加密的工作区也不会漏报。Hub 按天保存每个 agent、项目和模型的数字。成员只能看自己的 agent，所有者和管理员可以看整个工作区。设置 `MYCO_NO_USAGE=1` 可以关闭上报。
+- **`myco usage show`**：`--by agent`（默认）、project、day 或 model，支持 `--from`、`--to` 和 `--project`，用成员或管理员凭证查询。
+- **成员分组**：成员栏折叠后也能进入分组（展开按钮下面的 ⋯）；在保存慢、刷新交叉时，成员在分组间移动后不会再跳回去；保存失败会退回并说明原因。
+- 费用只有 CLI 自己上报时才有：Claude Code 按 Anthropic 价格计算，经过兼容代理或其他模型时仅供参考。旧客户端不会上报，trace 也不会回填。
+- 升级：把工作区（Hub）升级到 v0.22.0 才能保存用量和提供接口；需要上报用量或运行 `myco usage show` 的电脑更新 myco；更新 App 才能看到用量页和分组修复。其他改动不需要升级 Hub。
+
 ## v0.21.34
 
 - **A project's members can be grouped**: put people into 前端, 后端, 应用 or any group of your own. The workspace keeps the groups per project (up to 30, each name 1–40 characters). In the members column's ⋯ create a group; move a member from its own menu or drag it onto a group; a group's ⋯ renames, moves or deletes it. The coordinator stays on top and members in no group are under 其他. The column can show the groups folded (the default: a folded group's heading still shows its faces and who is at work or asking), as a row of faces per group, or as filter chips on top; the choice is kept on this computer. An older workspace says to upgrade first instead of hiding the ⋯.
