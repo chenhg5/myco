@@ -9,8 +9,8 @@
 # other release and points their notes at GitHub, then uploads this release's
 # assets and checks names, sizes and SHA256SUMS.
 #
-# The release workflow runs it when the repository has a GITEE_TOKEN secret.
-# Locally: GITEE_TOKEN=$(...) scripts/gitee-sync.sh vX.Y.Z
+# The gitee workflow runs it after each release (on its own run, so Gitee
+# never holds up the release). Locally: GITEE_TOKEN=$(...) scripts/gitee-sync.sh vX.Y.Z
 #
 # Environment: GITEE_TOKEN, GH_TOKEN (or a signed-in gh), MYCO_REPO,
 # MYCO_GITEE_REPO, MYCO_GITEE_LOGIN (default cg33, the token's owner).
@@ -66,6 +66,15 @@ print(json.load(open(sys.argv[1]))["sha"])
 PY
 )
 say "$V at $SHA"
+
+# A late run must not undo a newer release: Gitee keeps only the newest
+# release's binaries, so mirroring an older one would remove them.
+latest=$(gh api "repos/$REPO/releases/latest" --jq .tag_name 2>/dev/null || true)
+if [ -n "$latest" ] && [ "$latest" != "$V" ] &&
+  [ "$(printf '%s\n%s\n' "$V" "$latest" | sort -V | tail -1)" = "$latest" ]; then
+  say "$latest is newer than $V; nothing to mirror"
+  exit 0
+fi
 
 mkdir "$tmp/assets"
 if [ "$DRY" = 0 ]; then

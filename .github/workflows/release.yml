@@ -211,32 +211,3 @@ jobs:
             gh release create "$v" bin/* --target "$GITHUB_SHA" --generate-notes
           fi
 
-  gitee:
-    # Mirror the release to gitee.com/cg33/myco. Gitee gives a repository
-    # 1 GB of release attachments, so scripts/gitee-sync.sh keeps only the
-    # newest release's binaries and points the older notes at GitHub.
-    # Skipped until GITEE_TOKEN is a repository secret:
-    #   gh secret set GITEE_TOKEN
-    needs: [version, release]
-    if: needs.version.outputs.skip != 'true' && !inputs.sign_only
-    # Gitee is a mirror: a Gitee outage or a slow upload must not fail the
-    # release run (GitHub has published already). A failed mirror shows as a
-    # failed job and is retried by running the script by hand.
-    continue-on-error: true
-    timeout-minutes: 45
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          fetch-tags: true
-      - name: Mirror to Gitee
-        env:
-          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if [ -z "$GITEE_TOKEN" ]; then
-            echo "GITEE_TOKEN is not set: skipping the Gitee mirror."
-            exit 0
-          fi
-          scripts/gitee-sync.sh "${{ needs.version.outputs.version }}"
