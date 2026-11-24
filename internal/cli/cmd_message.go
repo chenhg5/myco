@@ -658,6 +658,11 @@ After every exit, process the inbox and run myco inbox wait again.`,
 			if err != nil {
 				return err
 			}
+			cfg := e.cfg
+			var usage *sessionUsageTracker
+			if cfg != nil {
+				usage = e.sessionUsage([]sessionUsageTarget{{Hub: cfg.Hub, Agent: cfg.Agent, Client: c}})
+			}
 			duration, raw, label, err := inboxWaitTimeout(e, c)
 			if err != nil {
 				return err
@@ -678,6 +683,9 @@ After every exit, process the inbox and run myco inbox wait again.`,
 			}
 			if len(msgs) == 0 {
 				return &Error{Code: "timeout", Message: "no messages arrived", Retryable: true, Exit: ExitTimeout}
+			}
+			if usage != nil {
+				usage.remember(cfg.Hub, cfg.Agent, msgs)
 			}
 			out := inboxResult{Messages: nonNilMsgs(msgs), Hint: inboxWaitHint(inboxTaskHint(msgs)), Timeout: raw}
 			return e.p.Print(out, func(w io.Writer) {

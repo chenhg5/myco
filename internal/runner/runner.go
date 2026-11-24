@@ -588,7 +588,11 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		lastActive.Store(time.Now().UnixNano())
 		req.Model, req.Effort, req.Access = run.Model, run.Effort, harness.Access(run.Access)
 		req.MCPTools = run.MCPTools != nil && *run.MCPTools
+		usage := &runUsage{}
 		req.OnEvent = func(ev harness.Event) {
+			if os.Getenv("MYCO_NO_USAGE") != "1" {
+				usage.add(ev, req.Model, m.Project, m.ID)
+			}
 			lastActive.Store(time.Now().UnixNano())
 			if ev.Kind == "quota" { // not a step of the run: it goes with the runtime
 				if ev.Quota != nil && r.opts.OnQuota != nil {
@@ -621,6 +625,7 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 				res, runErr = r.harness.Run(runCtx, req)
 			}
 		}
+		r.postUsage(ctx, usage)
 		steered := errors.Is(context.Cause(runCtx), errSteered)
 		switch cause := context.Cause(runCtx); {
 		case runErr == nil:

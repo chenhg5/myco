@@ -28,7 +28,7 @@ func TestLineEvents(t *testing.T) {
 		{Kind: "tool_result", ID: "t1", Output: "FAIL x_test.go", Failed: true},
 		{Kind: "tool", Tool: "Read", ID: "t2", Input: "/repo/x.go"},
 		{Kind: "tool_result", ID: "t2", Output: "package x"},
-		{Kind: "usage", InputTokens: 100, OutputTokens: 40, CostUSD: 0.03, DurationMS: 4200},
+		{Kind: "usage", InputTokens: 100, CacheReadTokens: 90, OutputTokens: 40, CostUSD: 0.03, DurationMS: 4200},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("got %d events: %+v", len(got), got)
@@ -97,5 +97,14 @@ func TestTranscriptTurnEnd(t *testing.T) {
 	// stream-json (a runner) has its own end: the result line.
 	if evs := lineEvents([]byte(`{"type":"assistant","message":{"stop_reason":"end_turn","content":[{"type":"text","text":"x"}]}}`)); len(evs) != 1 {
 		t.Fatalf("lineEvents adds no turn_end: %+v", evs)
+	}
+}
+
+func TestUsageCacheSplitKeepsTraceTotal(t *testing.T) {
+	p := &liveParser{}
+	p.events([]byte(`{"type":"assistant","message":{"id":"m","model":"claude-test","content":[]}}`))
+	events := p.events([]byte(`{"type":"result","usage":{"input_tokens":10,"cache_read_input_tokens":30,"cache_creation_input_tokens":7,"output_tokens":9}}`))
+	if len(events) != 1 || events[0].InputTokens != 47 || events[0].CacheReadTokens != 30 || events[0].CacheWriteTokens != 7 || events[0].OutputTokens != 9 || events[0].Model != "claude-test" {
+		t.Fatalf("trace/cache semantics %+v", events)
 	}
 }
