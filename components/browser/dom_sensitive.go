@@ -34,5 +34,5 @@ var sensitivePatterns = func() struct{ Name, Autocomplete *regexp.Regexp } {
 
 func sensitiveAttributes(attrs map[string]string) bool {
 	_, marked := attrs["data-sensitive"]
-	return marked || strings.EqualFold(attrs["type"], "password") || sensitivePatterns.Name.MatchString(attrs["name"]) || sensitivePatterns.Autocomplete.MatchString(attrs["autocomplete"])
+	return marked || strings.EqualFold(attrs["type"], "password") || (!strings.EqualFold(attrs["tag"], "form") && sensitivePatterns.Name.MatchString(attrs["name"])) || sensitivePatterns.Autocomplete.MatchString(attrs["autocomplete"])
 }

@@ -155,6 +155,7 @@ func (c *controlSession) act(ctx context.Context, p *rod.Page, in controlInput) 
 	c.navigationUntil = time.Time{}
 	c.navigationPending = false
 	c.navigationLoads = map[proto.TargetTargetID]bool{}
+	c.navigationRequests = map[proto.NetworkRequestID]proto.TargetTargetID{}
 	c.navigationTracked = map[proto.TargetTargetID]bool{p.TargetID: true}
 	c.pendingPopupURL = ""
 	c.pendingURL = ""
@@ -162,6 +163,9 @@ func (c *controlSession) act(ctx context.Context, p *rod.Page, in controlInput) 
 	c.navigationNode = ""
 	c.popupNode = ""
 	c.pending = true
+	if c.hostRecovered != nil {
+		c.hostRecovered[p.TargetID] = false
+	}
 	if derived {
 		c.reservedWait, c.reservedPopup = true, true
 		c.navigationTab = p.TargetID
@@ -441,7 +445,7 @@ func (c *controlSession) act(ctx context.Context, p *rod.Page, in controlInput) 
 		return nil, errors.New("host_not_allowed")
 	}
 	if dispatched {
-		if err = c.waitEffects(ctx, p, after, oldTabs); err != nil {
+		if err = c.waitEffects(ctx, p, after, oldTabs, in.Op == "click" || in.Op == "dblclick" || in.Op == "press" || in.Op == "select" || in.Op == "dialog" || in.Op == "navigate" || in.Op == "back" || in.Op == "forward" || in.Op == "reload"); err != nil {
 			return nil, err
 		}
 	}

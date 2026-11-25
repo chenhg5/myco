@@ -22,6 +22,86 @@ func (s *session) controlEvent(msg *rod.Message) {
 	popup := false
 	top := false
 	switch msg.Method {
+	case "Page.frameStoppedLoading", "Page.downloadWillBegin", "Browser.downloadWillBegin":
+		var frameID proto.PageFrameID
+		switch msg.Method {
+		case "Page.frameStoppedLoading":
+			var event proto.PageFrameStoppedLoading
+			msg.Load(&event)
+			frameID = event.FrameID
+		case "Page.downloadWillBegin":
+			var event proto.PageDownloadWillBegin
+			msg.Load(&event)
+			frameID = event.FrameID
+		case "Browser.downloadWillBegin":
+			var event proto.BrowserDownloadWillBegin
+			msg.Load(&event)
+			frameID = event.FrameID
+		}
+		s.mu.Lock()
+		for id, target := range s.installs {
+			if target.kind == "page" && target.rootFrame == frameID {
+				tid = id
+				top = true
+				break
+			}
+		}
+		s.mu.Unlock()
+		if top {
+			c.finishNavigation(tid)
+		}
+		return
+	case "Network.requestWillBeSent":
+		var event proto.NetworkRequestWillBeSent
+		msg.Load(&event)
+		s.mu.Lock()
+		top = s.topNavigationLocked(msg.SessionID, event.FrameID)
+		s.mu.Unlock()
+		if top && event.Type == proto.NetworkResourceTypeDocument {
+			c.mu.Lock()
+			if c.pending && c.navigationTracked[tid] {
+				if c.navigationRequests == nil {
+					c.navigationRequests = map[proto.NetworkRequestID]proto.TargetTargetID{}
+				}
+				c.navigationRequests[event.RequestID] = tid
+			}
+			c.mu.Unlock()
+		}
+		return
+	case "Network.loadingFailed", "Network.responseReceived":
+		var requestID proto.NetworkRequestID
+		finished := false
+		if msg.Method == "Network.loadingFailed" {
+			var event proto.NetworkLoadingFailed
+			msg.Load(&event)
+			requestID = event.RequestID
+			finished = true
+		} else {
+			var event proto.NetworkResponseReceived
+			msg.Load(&event)
+			requestID = event.RequestID
+			finished = event.Response != nil && event.Response.Status == 204
+		}
+		if finished {
+			c.mu.Lock()
+			page := c.navigationRequests[requestID]
+			delete(c.navigationRequests, requestID)
+			c.mu.Unlock()
+			if page != "" {
+				c.finishNavigation(page)
+			}
+		}
+		return
+	case "Page.javascriptDialogClosed":
+		var event proto.PageJavascriptDialogClosed
+		msg.Load(&event)
+		s.mu.Lock()
+		kind := s.dialogs[msg.SessionID]
+		s.mu.Unlock()
+		if kind == "beforeunload" && !event.Result {
+			c.finishNavigation(tid)
+		}
+		return
 	case "Page.frameRequestedNavigation", "Page.frameStartedNavigating":
 		var frameID proto.PageFrameID
 		full := true
@@ -195,7 +275,7 @@ func (c *controlSession) captureNavigation(tab proto.TargetTargetID, raw string,
 	c.captureNavigationLocked(tab, raw, popup)
 }
 func (c *controlSession) captureNavigationLocked(tab proto.TargetTargetID, raw string, popup bool) {
-	if c.closed || tab != c.navigationTab {
+	if c.closed || tab != c.navigationTab || c.violation != nil || raw != "" && !controlHostAllowed(c.hosts, raw) {
 		return
 	}
 	value := recordedControlURL(raw)
@@ -282,4 +362,19 @@ func recordedControlURL(raw string) string {
 		}
 	}
 	return string(runes[:low])
+}
+
+func (c *controlSession) finishNavigation(tab proto.TargetTargetID) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.navigationTracked[tab] {
+		delete(c.navigationLoads, tab)
+		for id, page := range c.navigationRequests {
+			if page == tab {
+				delete(c.navigationRequests, id)
+			}
+		}
+		c.navigationPending = len(c.navigationLoads) > 0
+		c.signalEffectsLocked()
+	}
 }

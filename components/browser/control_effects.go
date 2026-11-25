@@ -8,10 +8,10 @@ import (
 	"time"
 )
 
-// A successful input is not a settled page. Keep the two-second causal window
-// open, and wait for navigations begun inside it to commit even if a server is
-// slow. Domain correction completes before the logical action enters a draft.
-func (c *controlSession) waitEffects(ctx context.Context, p *rod.Page, after uint64, oldTabs map[proto.TargetTargetID]bool) error {
+// Observe a short lookahead only for operations likely to navigate. A
+// navigation already begun must settle even if its server is slow. The broader
+// two-second recorder window continues in the background after a fast action.
+func (c *controlSession) waitEffects(ctx context.Context, p *rod.Page, after uint64, oldTabs map[proto.TargetTargetID]bool, lookahead bool) error {
 	if c.dialogOpen() {
 		return nil
 	}
@@ -23,7 +23,10 @@ func (c *controlSession) waitEffects(ctx context.Context, p *rod.Page, after uin
 			return errors.New("host_not_allowed")
 		}
 		c.mu.Lock()
-		until, pending, popup, wake := c.navigationUntil, c.navigationPending, c.pendingPopup, c.wake
+		until, pending, popup, wake := c.navigationUntil.Add(-1500*time.Millisecond), c.navigationPending, c.pendingPopup, c.wake
+		if !lookahead {
+			until = time.Time{}
+		}
 		c.mu.Unlock()
 		if popup && !popupHandled {
 			event, err := c.browser.waitObserved(ctx, after, func(evt observation) bool { return evt.Kind == "target" && !oldTabs[evt.Target] })
