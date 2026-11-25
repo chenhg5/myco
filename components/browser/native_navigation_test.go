@@ -146,6 +146,23 @@ func TestNativeChromeRecordsOnlyUserTopLevelNavigation(t *testing.T) {
 				watchMu.Lock()
 				observed = append(observed, fmt.Sprintf("requested frame=%s reason=%s url=%s", evt.FrameID, evt.Reason, evt.URL))
 				watchMu.Unlock()
+			case "Page.frameNavigated":
+				var evt proto.PageFrameNavigated
+				msg.Load(&evt)
+				if evt.Frame != nil {
+					watchMu.Lock()
+					observed = append(observed, fmt.Sprintf("committed frame=%s url=%s", evt.Frame.ID, evt.Frame.URL))
+					watchMu.Unlock()
+				}
+			case "Runtime.bindingCalled":
+				var evt proto.RuntimeBindingCalled
+				msg.Load(&evt)
+				var action struct{ Type string }
+				if evt.Name == "__mycoBrowserEvent" && json.Unmarshal([]byte(evt.Payload), &action) == nil {
+					watchMu.Lock()
+					observed = append(observed, fmt.Sprintf("collector context=%d type=%s", evt.ExecutionContextID, action.Type))
+					watchMu.Unlock()
+				}
 			}
 		}
 	}()

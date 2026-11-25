@@ -25,8 +25,10 @@ supplies its own user agent. The collector stays in an isolated world and does
 not install a stealth script.
 
 A renderer navigation request may arrive before the isolated world's trusted
-click binding. Recording checks intent again at navigation commit while retaining
-intent captured at the request for slow loads. Automatic/iframe navigation still
+click binding, even after commit. Recording checks intent again at navigation
+commit and associates a late binding only with its original isolated execution
+context, recording and tab, within the action window. Intent captured at the
+request is retained for slow loads. Automatic/iframe navigation still
 requires the same top-level and per-recording checks.
 
 Named form controls retain their semantic/ID fallback locators. An unnamed
