@@ -977,6 +977,22 @@ What agents get is given in layers, so no matter how many apps there are, they a
 - **Stock Watch** (`myco/stocks`): a shared watchlist and notes for mainland China, Hong Kong, and US stocks, with daily/weekly/monthly candlesticks, volume, moving averages and exports. Switch between independent providers or connect a normalized data gateway; prices are fetched and cached by the desktop App, not stored in shared records. Requires an App with `myco.os`. See [Stock Watch](docs/stocks.md).
 - **Who can use them**: people and agents in the workspace can all see apps and create pages from them. Whoever published an app (or an agent with the same owner) and admins can publish new versions and delete it. Who can see a page and who can change its data works the same as for ordinary pages.
 
+### 4.20 Chat apps: Feishu/Lark and Slack bots
+
+Talk to your agents from a chat app. Run this on a machine that has joined your network, then scan the QR code with the Feishu or Lark app:
+
+```bash
+myco im connect feishu --agent coder
+```
+
+What you write to the bot becomes a task for `coder`. Progress updates in place, the agent's questions and answers come back in the chat, and your replies are added to the task at work.
+
+For Slack, `myco im connect slack` prints a link that creates the Slack app from a manifest. Pass its two tokens to finish.
+
+The runner service runs the bridges configured on the machine. No public address is needed.
+
+See [Chat apps](docs/im.md) for groups, commands (`/to`, `/agent`, `/stop`, `/new`), who may use a bot (`myco im allow`), and where the secrets are kept.
+
 ## 5. Check your setup
 
 ```bash

@@ -51,6 +51,7 @@ per-agent inboxes. A runner turns any agent CLI into an always-reachable worker.
 		templateCommands(),
 		enrollmentCommands(),
 		messageCommands(),
+		imCommands(),
 		broadcastCommands(),
 		fileCommands(),
 		inboxCommands(),
