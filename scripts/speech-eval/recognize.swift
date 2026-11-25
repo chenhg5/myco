@@ -37,8 +37,16 @@ func emit(_ l: Line) {
 let sem = DispatchSemaphore(value: 0)
 SFSpeechRecognizer.requestAuthorization { _ in sem.signal() }
 sem.wait()
-guard SFSpeechRecognizer.authorizationStatus() == .authorized else {
-    FileHandle.standardError.write("speech recognition is not allowed: System Settings › Privacy & Security › Speech Recognition\n".data(using: .utf8)!)
+switch SFSpeechRecognizer.authorizationStatus() {
+case .authorized:
+    break
+case .notDetermined:
+    // No one could be asked: macOS asks on the screen of a logged-in user,
+    // not over SSH.
+    FileHandle.standardError.write("speech recognition was never allowed for this tool, and macOS could not ask: run scripts/speech-eval/run.sh once in Terminal on the Mac's screen and click Allow\n".data(using: .utf8)!)
+    exit(3)
+default:
+    FileHandle.standardError.write("speech recognition is not allowed: System Settings › Privacy & Security › Speech Recognition (allow the terminal you run this from)\n".data(using: .utf8)!)
     exit(3)
 }
 guard let rec = SFSpeechRecognizer(locale: Locale(identifier: locale)) else {

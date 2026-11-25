@@ -17,7 +17,7 @@ if [ "$(uname)" != Darwin ]; then
   exit 2
 fi
 here=scripts/speech-eval
-out=.cache/speech-eval
+out="$(pwd)/.cache/speech-eval"
 mkdir -p "$out/audio" "$out/bin"
 MODES=${MODES:-"base-ondevice hints-ondevice base-server hints-server lm-ondevice"}
 ZH_VOICE=${ZH_VOICE:-Tingting}
@@ -41,6 +41,9 @@ fi
 # The words to listen for: the common ones and the workspace stand-ins.
 SPEECH_EVAL_HINTS="$out/hints.txt" go test -count=1 -run TestSpeechEvalHints ./internal/console >/dev/null
 
+# frames: the audio file has sound in it (say can write an empty file).
+frames() { afinfo "$1" 2>/dev/null | awk '/audio packets|valid frames/ { if ($NF + 0 > 0) ok = 1 } END { exit !ok }'; }
+
 # The audio: a recording when there is one, else a macOS voice saying it.
 zh=() en=()
 while IFS=$'\t' read -r id lang said _; do
@@ -48,11 +51,14 @@ while IFS=$'\t' read -r id lang said _; do
   wav="$out/audio/$id.wav"
   if [ -f "$here/recordings/$id.wav" ]; then
     cp "$here/recordings/$id.wav" "$wav"
-  elif [ ! -f "$wav" ]; then
+  elif [ ! -s "$wav" ] || ! frames "$wav"; then
     voice=$ZH_VOICE; [ "${lang%%-*}" = en ] && voice=$EN_VOICE
-    say -v "$voice" -o "$out/audio/$id.aiff" "$said"
-    afconvert -f WAVE -d LEI16@16000 -c 1 "$out/audio/$id.aiff" "$wav"
-    rm -f "$out/audio/$id.aiff"
+    say -v "$voice" -o "$wav" --file-format=WAVE --data-format=LEI16@16000 "$said"
+  fi
+  if ! frames "$wav"; then
+    rm -f "$wav"
+    echo "$id: no audio came out of say -v $voice: check the voice (say -v ?) and try in Terminal on the Mac" >&2
+    exit 1
   fi
   if [ "${lang%%-*}" = en ]; then en+=("$wav"); else zh+=("$wav"); fi
 done < "$here/samples.tsv"
