@@ -114,7 +114,7 @@ func (a *Adapter) event(sm *socketmode.Client, ev socketmode.Event, handle func(
 		if ev.Request != nil {
 			sm.Ack(*ev.Request)
 		}
-		// "/myco agent coder" is "/agent coder" written to the bot.
+		// "/myco stop" is "/stop" written to the bot.
 		text := "/" + strings.TrimSpace(cmd.Text)
 		if strings.TrimSpace(cmd.Text) == "" {
 			text = "/help"
@@ -236,6 +236,7 @@ func Mrkdwn(s string) string {
 
 // Manifest is the app manifest a bridge needs: a bot over Socket Mode that
 // hears mentions, direct messages and replies in threads, with /myco.
+// name is what the bot is called in Slack (the agent's name).
 func Manifest(name string) map[string]any {
 	return map[string]any{
 		"_metadata":           map[string]any{"major_version": 2, "minor_version": 1},
@@ -243,8 +244,8 @@ func Manifest(name string) map[string]any {
 		"features": map[string]any{
 			"app_home": map[string]any{"messages_tab_enabled": true, "messages_tab_read_only_enabled": false},
 			"bot_user": map[string]any{"display_name": name, "always_online": true},
-			"slash_commands": []map[string]any{{"command": "/myco", "description": "Talk to the myco bridge: help, agent, to, agents, stop, new",
-				"usage_hint": "help | agent <name> | to <name> <task> | agents | stop | new", "should_escape": false}},
+			"slash_commands": []map[string]any{{"command": "/myco", "description": "Talk to the agent's bot: help, stop, new",
+				"usage_hint": "help | stop | new", "should_escape": false}},
 		},
 		"oauth_config": map[string]any{"scopes": map[string]any{"bot": []string{
 			"app_mentions:read", "chat:write", "commands", "im:history", "im:read", "im:write",

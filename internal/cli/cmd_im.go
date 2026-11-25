@@ -29,11 +29,12 @@ import (
 )
 
 func imCommands() *Command {
-	g := &Command{Name: "im", Summary: "Chat-app bots (Feishu/Lark, Slack) that pass messages to your agents",
-		Long: `A bridge is a bot in a chat app that you talk to like an agent: what you write
-becomes a task for an agent (the default one, or /to <name>), its progress
-updates one message in place, and its answer comes back in the same chat.
-While a task is open, what you write is added to it, and answers its question.
+	g := &Command{Name: "im", Summary: "Chat-app bots (Feishu/Lark, Slack): one per agent, to talk to it from the chat app",
+		Long: `A bridge is an agent's bot in a chat app: what you write to it becomes a task
+for that agent, its progress updates one message in place, and its answer
+comes back in the same chat. While a task is open, what you write is added to
+it, and answers its question. Each agent has its own bot (as voice is per
+agent).
 
 The bot speaks as a node of yours on the hub (im-<name>, receiving through its
 inbox). It connects out to the chat app (Feishu long connection, Slack Socket
@@ -45,20 +46,39 @@ bridges configured here; myco im serve runs them in the foreground.`}
 
 func (e *env) imDir() string { return im.Dir(config.Dir(e.defaultPath)) }
 
+// BridgeName is the default name of an agent's bot on a platform:
+// "feishu-coder", cut to fit and made of what a bridge name may hold.
+func BridgeName(platform, agent string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(agent) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case b.Len() > 0 && !strings.HasSuffix(b.String(), "-"):
+			b.WriteByte('-')
+		}
+	}
+	n := strings.Trim(platform+"-"+b.String(), "-")
+	if len(n) > 32 {
+		n = strings.TrimRight(n[:32], "-")
+	}
+	return n
+}
+
 var imPlatforms = []string{"feishu", "lark", "slack"}
 
 func imConnectCommand() *Command {
 	return &Command{Name: "connect", Summary: "Create or connect a bot: Feishu/Lark by scanning a QR code, Slack from an app manifest", Mutating: true,
 		Args: "<feishu|lark|slack>",
 		Examples: []string{
-			"myco im connect feishu --agent coder            # scan the QR code with the Feishu app",
+			"myco im connect feishu --agent coder            # coder's bot: scan the QR code with the Feishu app",
 			"myco im connect feishu --app-id cli_xxx --app-secret-file secret.txt --agent coder",
 			"myco im connect slack --agent coder             # prints the link that creates the Slack app",
 			"myco im connect slack --bot-token-file bot.txt --app-token-file app.txt --agent coder",
 		},
 		Flags: []Flag{
-			{Name: "name", Kind: String, Help: "Bridge name (default: the platform), 1–32 lowercase letters, digits or hyphens"},
-			{Name: "agent", Kind: String, Help: "Agent that gets what is written to the bot (change later with /agent in the chat or myco im set)"},
+			{Name: "agent", Kind: String, Required: true, Help: "The agent this bot is for: what is written to the bot goes to it"},
+			{Name: "name", Kind: String, Help: "Bridge name (default: <platform>-<agent>), 1–32 lowercase letters, digits or hyphens"},
 			{Name: "project", Kind: String, Help: "Put new conversations in this project"},
 			{Name: "lang", Kind: Enum, Values: []string{"zh", "en"}, Help: "What the bot speaks (default: zh for Feishu, en otherwise)"},
 			{Name: "app-id", Kind: String, Help: "Feishu/Lark: an existing app's App ID (skips the QR code)"},
@@ -78,9 +98,12 @@ func imConnectCommand() *Command {
 			if !slices.Contains(imPlatforms, platform) {
 				return errorf("invalid_argument", ExitUsage, "use feishu, lark or slack", "unknown platform %q", platform)
 			}
+			if err := e.in.Require("agent"); err != nil {
+				return err
+			}
 			name := e.in.String("name")
 			if name == "" {
-				name = platform
+				name = BridgeName(platform, e.in.String("agent"))
 			}
 			if !im.ValidName(name) {
 				return errorf("invalid_argument", ExitUsage, "use 1–32 lowercase letters, digits or hyphens", "invalid bridge name %q", name)
@@ -129,7 +152,7 @@ func imConnectCommand() *Command {
 				}
 				if bot == "" || app == "" {
 					return errorf("not_configured", ExitUsage,
-						"1) open "+imslack.CreateURL("myco")+" and create the app (the manifest is filled in); "+
+						"1) open "+imslack.CreateURL(e.in.String("agent"))+" and create the app (the manifest is filled in); "+
 							"2) install it to your workspace and copy the Bot User OAuth Token (OAuth & Permissions); "+
 							"3) under Basic Information, create an app-level token with connections:write; "+
 							"4) run again with --bot-token-file and --app-token-file (or paste them when asked)",
@@ -167,10 +190,7 @@ func imConnectCommand() *Command {
 				out["claim"] = "send /claim " + cfg.Claim + " to the bot in a direct message to become its owner"
 			}
 			return e.p.Print(out, func(w io.Writer) {
-				fmt.Fprintf(w, "connected %s bot %q as bridge %s\n", platform, botName, name)
-				if cfg.Agent == "" {
-					fmt.Fprintln(w, "no default agent yet: write /agent <name> to the bot, or run myco im set --name "+name+" --agent <name>")
-				}
+				fmt.Fprintf(w, "connected %s bot %q for %s as bridge %s\n", platform, botName, cfg.Agent, name)
 				if cfg.Claim != "" {
 					fmt.Fprintf(w, "to become its owner, send this to the bot in a direct message: /claim %s\n", cfg.Claim)
 				}
@@ -313,7 +333,7 @@ func (e *env) bridgeNode(cfg *im.Config, dry bool) (string, string, error) {
 
 func imServeCommand() *Command {
 	return &Command{Name: "serve", Summary: "Run bridges in the foreground (the runner service also runs them)",
-		Examples: []string{"myco im serve", "myco im serve --name feishu"},
+		Examples: []string{"myco im serve", "myco im serve --name feishu-coder"},
 		Flags:    []Flag{{Name: "name", Kind: String, Help: "Only this bridge (default: all configured here)"}},
 		Run: handler(func(e *env) error {
 			names, err := im.List(e.imDir())
@@ -520,7 +540,7 @@ func (e *env) loadBridge() (*im.Config, error) {
 
 func imAllowCommand() *Command {
 	return &Command{Name: "allow", Summary: "Let another chat-app user give tasks through a bridge (or stop letting them)", Mutating: true,
-		Examples: []string{"myco im allow --name feishu --user ou_123", "myco im allow --name slack --user U0123 --remove"},
+		Examples: []string{"myco im allow --name feishu-coder --user ou_123", "myco im allow --name slack-coder --user U0123 --remove"},
 		Flags: []Flag{{Name: "name", Kind: String, Required: true, Help: "Bridge name"},
 			{Name: "user", Kind: String, Required: true, Help: "Their user id in the chat app (they see it with /whoami); * for everyone"},
 			{Name: "remove", Kind: Bool, Help: "Remove them instead"}},
@@ -548,19 +568,15 @@ func imAllowCommand() *Command {
 }
 
 func imSetCommand() *Command {
-	return &Command{Name: "set", Summary: "Change a bridge's default agent, project or language", Mutating: true,
-		Examples: []string{"myco im set --name feishu --agent reviewer"},
+	return &Command{Name: "set", Summary: "Change a bridge's project or language", Mutating: true,
+		Examples: []string{"myco im set --name feishu-coder --project website"},
 		Flags: []Flag{{Name: "name", Kind: String, Required: true, Help: "Bridge name"},
-			{Name: "agent", Kind: String, Help: "Default agent"},
 			{Name: "project", Kind: String, Help: "Project for new conversations (\"\" for none)"},
 			{Name: "lang", Kind: Enum, Values: []string{"zh", "en"}, Help: "What the bot speaks"}},
 		Run: handler(func(e *env) error {
 			c, err := e.loadBridge()
 			if err != nil {
 				return err
-			}
-			if e.in.IsSet("agent") {
-				c.Agent = e.in.String("agent")
 			}
 			if e.in.IsSet("project") {
 				c.Project = e.in.String("project")
@@ -575,7 +591,7 @@ func imSetCommand() *Command {
 				return err
 			}
 			return e.p.Print(c.Redacted(), func(w io.Writer) {
-				fmt.Fprintf(w, "%s: agent=%s project=%s (a running bridge picks this up within seconds)\n", c.Name, orDash(c.Agent), orDash(c.Project))
+				fmt.Fprintf(w, "%s: project=%s lang=%s (a running bridge picks this up within seconds)\n", c.Name, orDash(c.Project), orDash(c.Lang))
 			})
 		}),
 	}

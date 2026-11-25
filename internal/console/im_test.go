@@ -28,7 +28,8 @@ func TestIMBridges(t *testing.T) {
 		case cmd == "im list":
 			return []byte(`{"dir":"/nowhere","bridges":[` +
 				`{"name":"feishu","platform":"feishu","agent":"coder","owner":"ou_1","hub":"` + r.hubURL + `","node":"im-feishu","online":true},` +
-				`{"name":"slack","platform":"slack","hub":"https://other.example","online":false}]}`), nil
+				`{"name":"feishu-rev","platform":"feishu","agent":"reviewer","hub":"` + r.hubURL + `","online":true},` +
+				`{"name":"slack-coder","platform":"slack","agent":"coder","hub":"https://other.example","online":false}]}`), nil
 		case strings.HasPrefix(cmd, "im connect slack"):
 			connect = args
 			i := slices.Index(args, "--bot-token-file")
@@ -37,8 +38,8 @@ func TestIMBridges(t *testing.T) {
 				return nil, err
 			}
 			secret = string(b)
-			return []byte(`{"bridge":{"name":"slack-2","platform":"slack","agent":"coder","owner":""}}`), nil
-		case strings.HasPrefix(cmd, "im set") || strings.HasPrefix(cmd, "im remove"):
+			return []byte(`{"bridge":{"name":"slack-coder","platform":"slack","agent":"coder","owner":""}}`), nil
+		case strings.HasPrefix(cmd, "im remove"):
 			return []byte(`{}`), nil
 		}
 		return nil, errors.New("unexpected: " + cmd)
@@ -47,7 +48,7 @@ func TestIMBridges(t *testing.T) {
 		Local: &console.Local{Home: t.TempDir(), Run: run, LookPath: func(string) (string, error) { return "/usr/local/bin/myco", nil }}}
 	r.app.Config.Handler = b.Handler()
 
-	code, m, raw := r.do("GET", "/app/im?hub_id="+hubID, nil)
+	code, m, raw := r.do("GET", "/app/im?hub_id="+hubID+"&agent=coder", nil)
 	if code != 200 {
 		t.Fatalf("list: %d %s", code, raw)
 	}
@@ -63,7 +64,7 @@ func TestIMBridges(t *testing.T) {
 		t.Fatalf("bad token: %d %v", code, m)
 	}
 	code, m, raw = r.do("POST", "/app/im/slack", map[string]string{"hub_id": hubID, "agent": "coder", "bot_token": " xoxb-1-2 ", "app_token": "xapp-3"})
-	if code != 200 || m["bridge"].(map[string]any)["name"] != "slack-2" {
+	if code != 200 || m["bridge"].(map[string]any)["name"] != "slack-coder" {
 		t.Fatalf("connect: %d %s", code, raw)
 	}
 	if secret != "xoxb-1-2" {
@@ -74,11 +75,11 @@ func TestIMBridges(t *testing.T) {
 			t.Fatalf("a token on the command line: %v", connect)
 		}
 	}
-	if !slices.Contains(connect, "--name") || connect[slices.Index(connect, "--name")+1] != "slack-2" || !slices.Contains(connect, r.hubURL) {
+	if !slices.Contains(connect, "--agent") || connect[slices.Index(connect, "--agent")+1] != "coder" || !slices.Contains(connect, r.hubURL) {
 		t.Fatalf("connect args %v", connect)
 	}
-	if code, _, raw := r.do("PUT", "/app/im/feishu", map[string]string{"agent": "reviewer"}); code != 200 {
-		t.Fatalf("set: %d %s", code, raw)
+	if code, _, _ := r.do("POST", "/app/im/slack", map[string]string{"hub_id": hubID, "bot_token": "xoxb-1", "app_token": "xapp-1"}); code != 400 {
+		t.Fatalf("no agent: %d", code)
 	}
 	if code, _, _ := r.do("DELETE", "/app/im/Bad..Name", nil); code != 400 {
 		t.Fatalf("bad name: %d", code)

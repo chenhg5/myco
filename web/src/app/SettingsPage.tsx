@@ -5,7 +5,7 @@ import { TailscaleSetup } from "@/app/TailscaleSetup";
 import { IntroCard, introOf, noteDone } from "@/app/Onboard";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  AlertTriangle, ArrowUpRight, AudioLines, BookOpen, Bot, Check, Cloud, Globe, Info, Keyboard, Languages, Palette, Pencil, Plus, RotateCcw, ScrollText, Search, Server, ShieldCheck, Terminal, Users, MessageSquare,
+  AlertTriangle, ArrowUpRight, AudioLines, BookOpen, Bot, Check, Cloud, Globe, Info, Keyboard, Languages, Palette, Pencil, Plus, RotateCcw, ScrollText, Search, Server, ShieldCheck, Terminal, Users,
 } from "lucide-react";
 import {
   appApi, ApiError, type AppInfo, type CacheStats, type AppUpdate, type Hub, type HubOverview, type LocalState,
@@ -22,7 +22,6 @@ import { accessLabel, localWorkspaceOf, localWorkspaces, type LocalWorkspace } f
 import { AuditSection, MembersSection, MyDevices } from "@/app/MembersSection";
 import { osWant } from "@/app/pages";
 import { LocalAgentsSection } from "@/app/LocalAgents";
-import { ChatAppsSection } from "@/app/ChatApps";
 import { setSimpleMode, useSimpleMode } from "@/app/simpleMode";
 import type { TextSize, ThemeMode } from "@/lib/theme";
 import { setReportsOnly, useReportsOnly } from "@/app/quietRuns";
@@ -36,7 +35,7 @@ import { HubUpgrade, useLatestRelease } from "@/app/MycoUpgrade";
 import { ProjectStorageSettings } from "@/app/ProjectStorageSettings";
 import { BackupRow } from "@/app/Backups";
 
-type Section = "hubs" | "agents" | "im" | "members" | "audit" | "appearance" | "translate" | "voice" | "network" | "apps" | "shortcuts" | "about";
+type Section = "hubs" | "agents" | "members" | "audit" | "appearance" | "translate" | "voice" | "network" | "apps" | "shortcuts" | "about";
 
 type UpdateState =
   | { step: "checking" }
@@ -193,7 +192,6 @@ const SECTIONS: { key: Section; label: string; icon: typeof Server }[] = [
   { key: "appearance", get label() { return L("外观", "Appearance"); }, icon: Palette },
   { key: "translate", get label() { return L("翻译", "Translation"); }, icon: Languages },
   { key: "voice", get label() { return L("语音", "Voice"); }, icon: AudioLines },
-  { key: "im", get label() { return L("聊天软件", "Chat apps"); }, icon: MessageSquare },
   { key: "network", get label() { return L("代理", "Proxy"); }, icon: Globe },
   { key: "apps", get label() { return L("应用权限", "App permissions"); }, icon: ShieldCheck },
   { key: "shortcuts", get label() { return L("快捷键", "Shortcuts"); }, icon: Keyboard },
@@ -203,7 +201,7 @@ const SECTIONS: { key: Section; label: string; icon: typeof Server }[] = [
 /** The nav in groups: what is about this computer, what is about the
  *  workspace (shared with the others in it), and About. */
 const GROUPS: { title: () => string; keys: Section[] }[] = [
-  { title: () => L("这台电脑", "This computer"), keys: ["appearance", "voice", "translate", "network", "apps", "agents", "im"] },
+  { title: () => L("这台电脑", "This computer"), keys: ["appearance", "voice", "translate", "network", "apps", "agents"] },
   { title: () => L("工作区", "Workspace"), keys: ["hubs", "members", "audit"] },
   { title: () => "", keys: ["shortcuts", "about"] },
 ];
@@ -217,7 +215,6 @@ const SECTION_ABOUT: Record<Section, () => string> = {
   appearance: () => L("主题、文字大小、语言，以及对话怎么显示。", "Theme, text size, language, and how chats look."),
   translate: () => L("把 agent 说的话翻译成你的语言。", "Translate what agents say into your language."),
   voice: () => L("和 agent 语音聊天，以及语音输入。", "Voice chat with agents, and dictation."),
-  im: () => L("在飞书、Slack 里给机器人发消息，交给 agent 做事。", "Give agents work by messaging a bot in Feishu or Slack."),
   network: () => L("这台电脑连外网时走的代理。", "The proxy this computer uses to reach the internet."),
   apps: () => L("你允许了哪些应用用这台电脑：读写文件、录音、运行命令、联网……可以随时收回。", "What you let apps do on this computer (files, recording, commands, the network…); take any of it back."),
   shortcuts: () => L("App 里能用的键盘快捷键。", "The keyboard shortcuts in this app."),
@@ -239,7 +236,6 @@ const FINDABLE: { section: Section; key?: string; title: () => string; words: st
   { section: "translate", key: "translate", title: () => L("自动翻译", "Translate automatically"), words: "翻译 自动翻译 密钥 api key translate deepl" },
   { section: "network", key: "proxy", title: () => L("代理", "Proxy"), words: "代理 网络 http socks proxy network" },
   { section: "apps", key: "app-permissions", title: () => L("应用权限", "App permissions"), words: "应用权限 授权 允许 收回 文件 麦克风 录音 命令 联网 app permissions allow revoke files microphone commands network" },
-  { section: "im", key: "chat-apps", title: () => L("聊天软件（飞书、Slack）", "Chat apps (Feishu, Slack)"), words: "聊天软件 飞书 lark slack 机器人 扫码 绑定 im bot chat app feishu" },
   { section: "agents", key: "local-agents", title: () => L("这台电脑上的 agent", "Agents on this computer"), words: "本机 agent claude code codex gemini 安装 登录 cli install sign in" },
   { section: "hubs", title: () => L("工作区", "Workspaces"), words: "工作区 服务器 连接 加入 新建 停止 公网 cloudflare tailscale workspace hub server" },
   { section: "members", title: () => L("成员", "People"), words: "成员 邀请 角色 管理员 权限 people invite role admin member" },
@@ -822,7 +818,6 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
 
         {section === "translate" && <TranslateSection />}
         {section === "agents" && <LocalAgentsSection />}
-        {section === "im" && <ChatAppsSection hubsOv={hubsOv} />}
         {section === "voice" && <VoiceSection />}
         {section === "network" && <ProxySection hubsOv={hubsOv} />}
         {section === "apps" && <AppPermissionsSection hubs={hubs} />}

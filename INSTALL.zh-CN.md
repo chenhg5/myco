@@ -985,13 +985,13 @@ myco page data watch --page pg_xxx            # 等着看人在网页里改了�
 myco im connect feishu --agent coder
 ```
 
-之后发给机器人的话就成了交给 `coder` 的任务。进度在原消息上更新；agent 的提问和回复都发回聊天里；任务没完时你再说的话，会补充到这个任务上。
+这样就给 `coder` 建好了它自己的机器人（一个 agent 一个）。之后发给机器人的话，就成了交给 `coder` 的任务。进度在原消息上更新；agent 的提问和回复都发回聊天里；任务没完时你再说的话，会补充到这个任务上。
 
 Slack 用 `myco im connect slack`：它给出一个链接，按 manifest 建好 Slack 应用，再把两个令牌传进来即可。
 
 本机配置的机器人由 runner 服务负责运行，不需要公网地址。
 
-群聊、命令（`/to`、`/agent`、`/stop`、`/new`）、谁能用（`myco im allow`）以及密钥存在哪里，见 [Chat apps](docs/im.md)。
+群聊、App 里的入口（agent 资料 › 聊天软件）、命令（`/stop`、`/new`）、谁能用（`myco im allow`）以及密钥存在哪里，见 [Chat apps](docs/im.md)。
 
 ## 5. 接入后的自检
 
