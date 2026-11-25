@@ -56,6 +56,20 @@ type workspaceHub struct {
 	hub     *Hub
 	stop    context.CancelFunc
 	created time.Time
+	workers sync.WaitGroup
+}
+
+func (w *workspaceHub) run(ctx context.Context, run func(context.Context)) {
+	w.workers.Go(func() { run(ctx) })
+}
+
+func (w *workspaceHub) close() error {
+	w.stop()
+	// Cancellation starts shutdown; workers may still hold database or file
+	// handles until they return. In particular, Windows cannot move their
+	// workspace directory aside while those handles are open.
+	w.workers.Wait()
+	return w.hub.Close()
 }
 
 // Serve wraps hub (the default workspace, built from o) with the other
@@ -130,17 +144,17 @@ func (ws *workspaces) open(name string) (*workspaceHub, error) {
 		h.Server.SetVersion(ws.base.Version, ws.base.UpdateCheck.Latest)
 	}
 	ctx, stop := context.WithCancel(ws.ctx)
-	go h.Dispatcher.Run(ctx)
-	go h.PageAttachments.Run(ctx, o.Log)
-	go h.Files.Run(ctx, time.Hour)
-	go h.Traces.Run(ctx, time.Hour)
-	go h.Automations.Run(ctx, AutomationTick)
-	go h.Workflows.Run(ctx, WorkflowTick)
+	w := &workspaceHub{hub: h, stop: stop, created: time.Now()}
+	w.run(ctx, h.Dispatcher.Run)
+	w.run(ctx, func(ctx context.Context) { h.PageAttachments.Run(ctx, o.Log) })
+	w.run(ctx, func(ctx context.Context) { h.Files.Run(ctx, time.Hour) })
+	w.run(ctx, func(ctx context.Context) { h.Traces.Run(ctx, time.Hour) })
+	w.run(ctx, func(ctx context.Context) { h.Automations.Run(ctx, AutomationTick) })
+	w.run(ctx, func(ctx context.Context) { h.Workflows.Run(ctx, WorkflowTick) })
 	if h.RunBackups != nil {
-		go h.RunBackups(ctx)
+		w.run(ctx, h.RunBackups)
 	}
 	info, _ := os.Stat(o.DBPath)
-	w := &workspaceHub{hub: h, stop: stop, created: time.Now()}
 	if info != nil {
 		w.created = info.ModTime()
 	}
@@ -176,8 +190,7 @@ func (ws *workspaces) close() {
 	ws.mu.Lock()
 	defer ws.mu.Unlock()
 	for name, h := range ws.hubs {
-		h.stop()
-		_ = h.hub.Close()
+		_ = h.close()
 		delete(ws.hubs, name)
 	}
 }
@@ -272,16 +285,23 @@ func (ws *workspaces) serveAdmin(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusNotFound, "not_found", fmt.Sprintf("no workspace %q on this hub", name), "list them: myco workspace list")
 			return
 		}
-		h.stop()
-		_ = h.hub.Close()
+		if err := h.close(); err != nil {
+			writeErr(w, http.StatusInternalServerError, "internal", "closing the workspace failed: "+err.Error(), "")
+			return
+		}
 		// Kept aside, not deleted: removing a workspace is easy to regret.
 		from := filepath.Join(ws.dir, name)
 		to := filepath.Join(ws.dir, ".removed", name+"-"+time.Now().UTC().Format("20060102-150405"))
-		if err := os.MkdirAll(filepath.Dir(to), 0o700); err == nil {
+		err := os.MkdirAll(filepath.Dir(to), 0o700)
+		if err == nil {
 			err = os.Rename(from, to)
-			if err != nil && ws.base.Log != nil {
+		}
+		if err != nil {
+			if ws.base.Log != nil {
 				ws.base.Log.Error("moving a removed workspace aside failed", "workspace", name, "err", err)
 			}
+			writeErr(w, http.StatusInternalServerError, "internal", "moving the workspace aside failed: "+err.Error(), "the data is still in its original directory; restart the hub before retrying removal")
+			return
 		}
 		if ws.base.Log != nil {
 			ws.base.Log.Info("workspace removed", "workspace", name, "kept_in", to)
