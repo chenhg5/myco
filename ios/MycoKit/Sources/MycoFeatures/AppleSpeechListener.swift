@@ -163,6 +163,11 @@ private final class Ear: @unchecked Sendable {
         request.addsPunctuation = true
         // What is said stays on the phone when the language can be heard there.
         if recognizer.supportsOnDeviceRecognition { request.requiresOnDeviceRecognition = true }
+        // The names and words to listen for (agents, projects, Claude,
+        // GitHub...); what is heard is corrected for them.
+        let vocabulary = SpeechVocabulary.shared.current(language: recognizer.locale.identifier)
+        request.contextualStrings = vocabulary.words
+        let fixer = vocabulary.fixer
         feeding.lock()
         self.request?.endAudio()
         self.request = request
@@ -170,7 +175,7 @@ private final class Ear: @unchecked Sendable {
         session += 1
         let session = session
         task = recognizer.recognitionTask(with: request) { result, error in
-            let text = result?.bestTranscription.formattedString ?? ""
+            let text = fixer.fix(result?.bestTranscription.formattedString ?? "")
             let final = result?.isFinal ?? false
             let failure = error.map { ($0 as NSError).code == Ear.noSpeech ? "" : $0.localizedDescription }
             self.queue.async { self.heard(text, final: final, failure: failure, in: session) }

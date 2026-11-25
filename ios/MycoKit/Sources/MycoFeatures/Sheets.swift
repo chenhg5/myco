@@ -559,6 +559,8 @@ struct VoiceSettingsScreen: View {
     /// Trying the voice: while it is being made, and why it could not be.
     @State private var trying = false
     @State private var tryProblem: String?
+    /// The person's words to hear right, one per line.
+    @AppStorage(SpeechVocabulary.defaultsKey) private var speechWords = ""
 
     private var hasModelKey: Bool { app.voiceHasModelKey && !forgetModelKey }
     /// (The key on this device is the one of the service in use.)
@@ -666,6 +668,22 @@ struct VoiceSettingsScreen: View {
             } footer: {
                 Text((AppLanguage.current == .zh ? service.help : service.englishHelp)
                      + L(" 没有密钥时用 iPhone 自带的声音。", " Without a key, the iPhone's own voice is used."))
+            }
+            Section {
+                // Kept on this iPhone as it is typed (as on the desktop, not
+                // on the workspaces).
+                TextField(L("Kettu\n前端小王\nClaude = 克劳德, cloud", "Kettu\nFrontend Wang\nClaude = clod, cloud"), text: $speechWords, axis: .vertical)
+                    .font(.body.monospaced())
+                    .lineLimit(3...8)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .onChange(of: speechWords) { _, text in SpeechVocabulary.shared.setMine(text.components(separatedBy: "\n")) }
+                    .accessibilityIdentifier("voice.words")
+            } header: {
+                Text(L("要听准的词", "Words to hear right"))
+            } footer: {
+                Text(L("语音聊天和语音输入都会留意这些词，听成别的也会改回来。agent、项目和成员的名字，还有 Claude、Codex、GitHub 这些常用词已经自动加上了。一行一个；常被听错的写成「Claude = 克劳德, cloud」。",
+                       "Voice chat and dictation listen for these words, and fix them when they are heard as something else. The names of agents, projects and members, and common words such as Claude, Codex and GitHub, are already included. One per line; for one often misheard, write \"Claude = clod, cloud\"."))
             }
             Section {
                 Toggle(L("存到工作区，多设备同步", "Keep on the workspaces"), isOn: $settings.share)
