@@ -17,6 +17,17 @@ Bridges connect out to the chat app, so the machine needs no public address:
 
 The machine's runner service, the one a join link installs, runs the bridges configured on it. A bridge starts within 30 seconds of being connected.
 
+## In the App
+
+Open **Settings › Chat apps** and pick the agent that gets the messages. Then:
+
+- **Feishu / Lark:** click "Connect" and scan the QR code shown there with the Feishu or Lark phone app.
+- **Slack:** click "Connect", then "Create in Slack" (the app's settings are filled in), and paste its two tokens.
+
+The same page lists the bots this computer runs for the workspace, whether each is online, and the `/claim` code of one that has no owner yet. From there you can change a bot's agent or disconnect it.
+
+The App does the same as the commands below. It runs the QR code itself and passes secrets to `myco im connect` in files, never on its command line.
+
 ## Feishu / Lark: scan a QR code
 
 On a machine that has joined your myco network:
