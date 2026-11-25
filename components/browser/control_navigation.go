@@ -22,6 +22,13 @@ func (s *session) controlEvent(msg *rod.Message) {
 	popup := false
 	top := false
 	switch msg.Method {
+	case "Target.targetInfoChanged":
+		var event proto.TargetTargetInfoChanged
+		msg.Load(&event)
+		if event.TargetInfo != nil && event.TargetInfo.Type == "page" && event.TargetInfo.URL != "" {
+			c.enforceHostsSoon()
+		}
+		return
 	case "Page.frameStoppedLoading", "Page.downloadWillBegin", "Browser.downloadWillBegin":
 		var frameID proto.PageFrameID
 		switch msg.Method {
