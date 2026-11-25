@@ -6225,6 +6225,9 @@ async function runMatrix(browser, size, scheme) {
       if (!compactText(await call.innerText()).includes("和 Review")) throw new Error(`语音条应写明和谁聊，实际「${compactText(await call.innerText())}」`);
       await call.locator(".vc-line.is-me", { hasText: "帮我看一下下载页的链接对不对" }).waitFor({ timeout: 10_000 });
       await call.locator(".vc-line.is-them", { hasText: "核对完我告诉你" }).waitFor({ timeout: 10_000 });
+      // The voice is the agent itself: its lines carry its face, not a "语音" label.
+      if (!(await call.locator(".vc-line.is-them .vc-line-who.is-face .pa").count())) throw new Error("语音里 agent 说的行前面应是它的头像");
+      if (compactText(await call.locator(".vc-line.is-them .vc-line-who").first().innerText()) === "语音") throw new Error("不该再标「语音」");
       if (await call.locator(".vc-line.is-hearing").count() > 1) throw new Error("听到一半的字应该只有一行");
       const sent = page.locator(".conv-detail .conv-msg.is-me", { hasText: "核对下载页上的每个下载链接" }).last();
       await sent.waitFor({ timeout: 10_000 });
