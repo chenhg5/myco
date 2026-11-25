@@ -47,6 +47,8 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - name: Release source regression checks
+        run: python3 scripts/release-source.test.py
       - name: gofmt and vet
         run: make vet
       - name: Unit and integration tests (race detector)

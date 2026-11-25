@@ -1,7 +1,8 @@
 name: release
+run-name: release ${{ inputs.release_ref || github.sha }}
 
 # Bump VERSION on main to publish a release (tag + binaries). Pushing a v* tag
-# or running the workflow manually works too.
+# or dispatching an immutable release_ref works too.
 on:
   push:
     branches: [main]
@@ -9,6 +10,10 @@ on:
     tags: ["v*"]
   workflow_dispatch:
     inputs:
+      release_ref:
+        description: "Full commit SHA to build (a green main commit plus VERSION/CHANGELOG only)"
+        type: string
+        default: ""
       sign_only:
         description: "Only build and sign the Mac app (checks the signing secrets; publishes nothing)"
         type: boolean
@@ -16,26 +21,53 @@ on:
 
 permissions:
   contents: write
+  actions: read
+
+# Publishing two versions at once can race tags and the latest release pointer.
+concurrency:
+  group: release-${{ inputs.sign_only && github.run_id || 'publish' }}
+  cancel-in-progress: false
 
 jobs:
   version:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.v.outputs.version }}
+      sha: ${{ steps.v.outputs.sha }}
       skip: ${{ steps.exists.outputs.skip }}
     steps:
       - uses: actions/checkout@v4
-      - name: Resolve version
+        with:
+          fetch-depth: 0
+      - name: Resolve and validate immutable source
         id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_REF: ${{ inputs.release_ref || github.sha }}
+          SIGN_ONLY: ${{ inputs.sign_only || false }}
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then v="$GITHUB_REF_NAME"; else v="$(tr -d '[:space:]' < VERSION)"; fi
-          echo "version=$v" >> "$GITHUB_OUTPUT"
+          # A SHA input is data, never interpolated into shell source.
+          if ! [[ "$RELEASE_REF" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::release_ref must be a full commit SHA"
+            exit 1
+          fi
+          git fetch origin "$RELEASE_REF"
+          python3 scripts/release-source.py --ref "$RELEASE_REF" --sign-only --output "$GITHUB_OUTPUT"
       - name: Skip if already released
         id: exists
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           if gh release view "${{ steps.v.outputs.version }}" >/dev/null 2>&1; then echo "skip=true" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Require green source before building
+        if: steps.exists.outputs.skip != 'true' && !inputs.sign_only
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ steps.v.outputs.sha }}
+        run: |
+          python3 scripts/release-source.py --ref "$RELEASE_SHA"
+          echo "Release source: $RELEASE_SHA (immutable; later main pushes are excluded)" >> "$GITHUB_STEP_SUMMARY"
 
   # The Mac app for both architectures, zipped (ad-hoc signed), and with the
   # signing secrets also the signed, notarized universal app and DMG.
@@ -51,6 +83,8 @@ jobs:
       SIGN: ${{ secrets.MAC_CERT_P12_BASE64 != '' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.sha }}
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -150,6 +184,8 @@ jobs:
         goos: [linux, darwin, windows]
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.sha }}
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -189,10 +225,12 @@ jobs:
     needs: [version, app, cross]
     # The Mac job may never get a runner (GitHub's macOS queue): publish the
     # rest anyway, and a Mac adds the app afterwards (the maintainers' release runbook).
-    if: always() && needs.version.outputs.skip != 'true' && !inputs.sign_only && needs.cross.result == 'success'
+    if: always() && needs.version.result == 'success' && needs.version.outputs.skip != 'true' && !inputs.sign_only && needs.cross.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.sha }}
       - uses: actions/download-artifact@v4
         with:
           pattern: cross-*
@@ -206,12 +244,19 @@ jobs:
       - run: cd bin && sha256sum myco-* $([ -f myco.dmg ] && echo myco.dmg) > SHA256SUMS && cat SHA256SUMS
       - env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ needs.version.outputs.sha }}
         run: |
           v="${{ needs.version.outputs.version }}"
-          scripts/changelog-section.sh "$v" > notes.md || true
+          scripts/changelog-section.sh "$v" > notes.md
+          # A pre-existing tag must never publish bytes built from another commit.
+          tag_sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$v" --jq .sha 2>/dev/null || true)
+          if [ -n "$tag_sha" ] && [ "$tag_sha" != "$RELEASE_SHA" ]; then
+            echo "::error::tag already points to a different commit"
+            exit 1
+          fi
           if [ -s notes.md ]; then
-            gh release create "$v" bin/* --target "$GITHUB_SHA" --notes-file notes.md
+            gh release create "$v" bin/* --target "$RELEASE_SHA" --notes-file notes.md
           else
-            gh release create "$v" bin/* --target "$GITHUB_SHA" --generate-notes
+            gh release create "$v" bin/* --target "$RELEASE_SHA" --generate-notes
           fi
 
