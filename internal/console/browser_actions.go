@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/url"
 	"slices"
 	"strconv"
@@ -425,6 +426,9 @@ func (b *Backend) runBrowserJob(ctx context.Context, c *client.Client, host *api
 		if e != nil || record.id == "" || closed {
 			b.cancelBrowserRun(record)
 			b.closeBrowserNative(record)
+			if errors.Is(e, browserautomation.ErrUnsupportedNode) {
+				return actionFailure("unsupported_node", "update the browser component before running a script with a screenshot clip", false, nil)
+			}
 			return actionFailure("outcome_unknown", "native startup was not confirmed; its session was closed, check before retrying", false, nil)
 		}
 	} else {

@@ -12,13 +12,13 @@
   let model, host, render = () => {}, collapsed = false;
   let localTarget = null, menuTarget = null, pendingDelete = null;
   let selectedKey = '', renderedSteps = '', previousID = '', previousStep = '';
-  let noticeTimer, menu, removeDialog, highlight, highlightLabel;
+  let noticeTimer, menu, removeDialog, highlight, highlightLabel, region, regionDrag, closeRegion = () => {};
   const command = (action, fields = {}) => {
     if (!model) return;
     window.__mycoBrowserEvent(JSON.stringify({type:'panel', action, recording_id:model.id, ...fields}));
   };
   state.ignoreEvent = ev => !!host && (ev.composedPath().includes(host) ||
-    (ev.type === 'keydown' && ((menu && !menu.hidden) || pendingDelete)));
+    (ev.type === 'keydown' && ((menu && !menu.hidden) || pendingDelete || (region && !region.hidden))));
   const short = (value, limit = 110) => String(value || '').slice(0, limit);
   const summary = target => {
     const locator = target?.locators?.find(l => l.name || l.value);
@@ -42,6 +42,7 @@
       .highlight{pointer-events:none;position:fixed;border:2px solid #82dee4;border-radius:4px;box-shadow:0 0 0 2px #77c0fc63;transition:all .15s cubic-bezier(.4,0,.2,1)}.highlight-label{pointer-events:none;position:fixed;background:linear-gradient(135deg,#1e293b,#0f172a);color:#94a3b8;border:1px solid #ffffff1a;border-radius:6px;padding:6px 12px;box-shadow:0 4px 12px #0005;font:600 11px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;max-width:min(500px,calc(100vw - 20px));overflow-wrap:anywhere;white-space:pre-line}.highlight-label b{display:block;color:#60a5fa;font-size:12px;margin-bottom:2px}
       @keyframes record-pulse{0%,100%{opacity:1}50%{opacity:.5}}@keyframes step-in{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
     `;
+    style.textContent += `.region{pointer-events:auto;position:fixed;inset:0;width:100vw;height:100vh;background:#0005;cursor:crosshair;touch-action:none;outline:none}.region-box{position:fixed;border:2px dashed #6366f1;background:#6366f11a;pointer-events:none}.region-hint{position:fixed;top:10px;left:50%;transform:translateX(-50%);background:white;color:#0f172a;padding:8px 16px;border-radius:6px;box-shadow:0 2px 8px #0003;font:13px/1.5 system-ui;pointer-events:none}`;
     root.append(style);
     const make = (tag, text, cls) => {const el=document.createElement(tag);if(text)el.textContent=text;if(cls)el.className=cls;return el;};
     const button = (text, action, cls) => {
@@ -55,7 +56,9 @@
     const toggle=button('−',()=>{collapsed=!collapsed;menu.hidden=true;render();},'toggle');toggle.dataset.action='collapse';
     header.append(dot,title,count,toggle);box.append(header);
     const body=make('div',null,'body'),toolbar=make('div',null,'toolbar');
-    const pick=button(t('抓取数据 ▾','Extract data ▾'),ev=>{state.flush();openMenu(null,ev.currentTarget.getBoundingClientRect());},'tool');pick.dataset.action='pick';toolbar.append(pick);body.append(toolbar);
+    const pick=button(t('抓取数据 ▾','Extract data ▾'),ev=>{state.flush();openMenu(null,ev.currentTarget.getBoundingClientRect());},'tool');pick.dataset.action='pick';
+    const screenshot=button(t('区域截图','Region screenshot'),()=>{state.flush();menu.hidden=true;hideHighlight();regionHint.textContent=t('拖动选择区域，按 Esc 取消','Drag to select a region. Esc cancels.');region.hidden=false;box.hidden=true;region.focus();},'tool');screenshot.dataset.action='region';
+    toolbar.append(pick,screenshot);body.append(toolbar);
     const list=make('ol'),empty=make('div',t('开始操作网页，步骤会显示在这里','Interact with the page to record your steps'),'empty');body.append(list,empty);
     const current=make('div',null,'current');current.setAttribute('role','status');current.hidden=true;
     const showAction=text=>{clearTimeout(noticeTimer);current.textContent=text;current.hidden=!text;noticeTimer=setTimeout(()=>{current.hidden=true;},3000);};
@@ -98,13 +101,35 @@
     }
     root.append(menu);
     highlight=make('div',null,'highlight');highlightLabel=make('div',null,'highlight-label');hideHighlight();root.append(highlight,highlightLabel);
+    region=make('div',null,'region');region.hidden=true;region.tabIndex=-1;region.setAttribute('role','region');region.setAttribute('aria-label',t('选择截图区域','Select screenshot region'));
+    const regionBox=make('div',null,'region-box'),regionHint=make('div',t('拖动选择区域，按 Esc 取消','Drag to select a region. Esc cancels.'),'region-hint');regionBox.hidden=true;region.append(regionBox,regionHint);root.append(region);
+    closeRegion=()=>{if(regionDrag&&region.hasPointerCapture(regionDrag.pointer))region.releasePointerCapture(regionDrag.pointer);region.hidden=true;regionBox.hidden=true;regionDrag=null;box.hidden=false;};
+    const regionPoint=ev=>({x:Math.max(0,Math.min(innerWidth,ev.clientX)),y:Math.max(0,Math.min(innerHeight,ev.clientY))});
+    const regionRect=ev=>{const point=regionPoint(ev);return {x:Math.min(regionDrag.x,point.x),y:Math.min(regionDrag.y,point.y),width:Math.abs(point.x-regionDrag.x),height:Math.abs(point.y-regionDrag.y)};};
+    region.addEventListener('pointerdown',ev=>{
+      if(!ev.isTrusted||ev.button!==0||!model?.recording)return;
+      ev.preventDefault();regionDrag={...regionPoint(ev),id:model.id,pointer:ev.pointerId};region.setPointerCapture(ev.pointerId);regionBox.hidden=false;Object.assign(regionBox.style,{left:regionDrag.x+'px',top:regionDrag.y+'px',width:'0px',height:'0px'});
+    });
+    region.addEventListener('pointermove',ev=>{
+      if(!ev.isTrusted||!regionDrag||ev.pointerId!==regionDrag.pointer)return;
+      const clip=regionRect(ev);Object.assign(regionBox.style,{left:clip.x+'px',top:clip.y+'px',width:clip.width+'px',height:clip.height+'px'});
+      regionHint.textContent=Math.round(clip.width)+' × '+Math.round(clip.height)+' · '+t('Esc 取消','Esc cancels');
+    });
+    region.addEventListener('pointerup',ev=>{
+      if(!ev.isTrusted||!regionDrag||ev.pointerId!==regionDrag.pointer)return;
+      ev.preventDefault();const clip=regionRect(ev),id=regionDrag.id;closeRegion();
+      if(model?.recording&&model.id===id&&clip.width>=10&&clip.height>=10)command('screenshot',{clip});
+    });
+    region.addEventListener('contextmenu',ev=>{if(ev.isTrusted)ev.preventDefault();});
+    region.addEventListener('pointercancel',ev=>{if(ev.isTrusted)closeRegion();});
+    window.addEventListener('resize',closeRegion);
     state.contextMenu=(ev,element)=>{
       if(!ev.isTrusted||!element||!model?.recording||state.picking||state.ignoreEvent(ev))return false;
       ev.preventDefault();ev.stopImmediatePropagation();
       openMenu(window.__mycoDescribe(element),{left:ev.clientX,bottom:ev.clientY});return true;
     };
     document.addEventListener('pointermove',ev=>{
-      if(!ev.isTrusted||!model?.recording||model.hide||!menu.hidden||pendingDelete||state.ignoreEvent(ev)){hideHighlight();return;}
+      if(!ev.isTrusted||!model?.recording||model.hide||!menu.hidden||pendingDelete||!region.hidden||state.ignoreEvent(ev)){hideHighlight();return;}
       const element=ev.composedPath()[0];if(!element||element.nodeType!==1||element===document.body||element===document.documentElement){hideHighlight();return;}
       const rect=element.getBoundingClientRect();if(!rect.width||!rect.height){hideHighlight();return;}
       const target=window.__mycoDescribe(element);highlight.hidden=highlightLabel.hidden=false;
@@ -114,24 +139,24 @@
       highlightLabel.style.top=Math.max(10,Math.min(innerHeight-highlightLabel.offsetHeight-10,rect.top-highlightLabel.offsetHeight-8>10?rect.top-highlightLabel.offsetHeight-8:rect.bottom+8))+'px';
     },true);
     document.addEventListener('pointerdown',ev=>{if(ev.isTrusted&&!state.ignoreEvent(ev)){menu.hidden=true;hideHighlight();}},true);
-    document.addEventListener('keydown',ev=>{if(ev.isTrusted&&ev.key==='Escape'){menu.hidden=true;pendingDelete=null;localTarget=null;hideHighlight();render();}},true);
+    document.addEventListener('keydown',ev=>{if(ev.isTrusted&&ev.key==='Escape'){menu.hidden=true;pendingDelete=null;localTarget=null;closeRegion();hideHighlight();render();}},true);
     window.addEventListener('blur',hideHighlight);
     const types={click:['↖',t('点击','Click')],type:['⌨',t('输入','Type')],navigate:['↗',t('打开网址','Navigate')],wait:['◷',t('等待','Wait')],extract:['▤',t('抓取','Extract')],press:['⌨',t('按键','Key')],select:['≡',t('选择','Select')],scroll:['↕',t('滚动','Scroll')],tab:['▣',t('标签页','Tab')],drag:['↔',t('拖动','Drag')],upload:['↑',t('上传','Upload')],dialog:['▢',t('对话框','Dialog')],screenshot:['▧',t('截图','Screenshot')]};
-    const stepName=step=>{const [icon,name]=types[step.type]||['·',step.type];return icon+' '+(step.title||(step.type==='extract'&&step.into?name+' '+({text:t('文本','text'),attribute:t('属性','attribute'),html:'HTML'}[step.what]||'')+' → '+step.into:name));};
+    const stepName=step=>{const [icon,name]=types[step.type]||['·',step.type];return icon+' '+(step.title||(step.type==='screenshot'&&step.clip?name+' '+Math.round(step.clip.width)+' × '+Math.round(step.clip.height):'' )||(step.type==='extract'&&step.into?name+' '+({text:t('文本','text'),attribute:t('属性','attribute'),html:'HTML'}[step.what]||'')+' → '+step.into:name));};
     render=()=>{
       const steps=model.steps||[];
-      if(previousID!==model.id){previousID=model.id;previousStep='';localTarget=null;pendingDelete=null;menu.hidden=true;selectedKey='';}
-      if(!model.recording){localTarget=null;pendingDelete=null;menu.hidden=true;hideHighlight();current.hidden=true;clearTimeout(noticeTimer);}
+      if(previousID!==model.id){previousID=model.id;previousStep='';closeRegion();localTarget=null;pendingDelete=null;menu.hidden=true;selectedKey='';}
+      if(!model.recording){closeRegion();localTarget=null;pendingDelete=null;menu.hidden=true;hideHighlight();current.hidden=true;clearTimeout(noticeTimer);}
       box.classList.toggle('idle',!model.recording);title.textContent=model.recording?t('正在录制','Recording'):t('myco 网页录制','myco web recorder');
       dot.hidden=count.hidden=!model.recording;count.textContent=t(`${steps.length} 步`,`${steps.length} steps`);
       toggle.textContent=collapsed?'+':'−';toggle.setAttribute('aria-label',collapsed?t('展开','Expand'):t('收起','Collapse'));toggle.setAttribute('aria-expanded',String(!collapsed));body.hidden=footer.hidden=collapsed;
-      toolbar.hidden=!model.recording;start.hidden=!!model.recording;stop.hidden=!model.recording;start.disabled=!!model.busy&&!model.recording;pick.disabled=!!model.picking||!!model.selected||!!localTarget;
+      screenshot.hidden=!(model.features||[]).includes('screenshot_clip');screenshot.disabled=!!model.picking||!!model.selected||!!localTarget;toolbar.hidden=!model.recording;start.hidden=!!model.recording;stop.hidden=!model.recording;start.disabled=!!model.busy&&!model.recording;pick.disabled=!!model.picking||!!model.selected||!!localTarget;
       const stepKey=JSON.stringify(steps);
       if(stepKey!==renderedSteps){
         renderedSteps=stepKey;const wasNearEnd=list.scrollHeight-list.scrollTop-list.clientHeight<45;list.replaceChildren();
         for(const [index,step]of steps.entries()){
           const row=make('li'),info=make('div',null,'step'),name=make('span',null,'name');
-          name.append(make('span','#'+(index+1),'number'),document.createTextNode(stepName(step)));info.append(name,make('span',step.target||'—','target'));
+          name.append(make('span','#'+(index+1),'number'),document.createTextNode(stepName(step)));info.append(name,make('span',step.clip?t(`区域 · x ${step.clip.x}, y ${step.clip.y}`,`Region · x ${step.clip.x}, y ${step.clip.y}`):step.target||'—','target'));
           const del=button('×',()=>{pendingDelete={id:step.id,name:stepName(step)};menu.hidden=true;render();confirmRemove.focus();},'delete');del.dataset.stepId=step.id;del.setAttribute('aria-label',t('删除步骤','Delete step')+' '+stepName(step));row.append(info,del);list.append(row);
         }
         const latest=steps.at(-1);
@@ -155,7 +180,7 @@
   };
   const reconcile=next=>{
     model=next;
-    if(next.hide){if(host)host.remove();clearTimeout(noticeTimer);return;}
+    if(next.hide){closeRegion();if(host)host.remove();clearTimeout(noticeTimer);return;}
     if(!document.documentElement)return;
     if(!host)mount();else if(!host.isConnected)document.documentElement.append(host);
     render();

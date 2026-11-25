@@ -113,7 +113,7 @@ func (r *recording) worker() {
 				n.Target.Frame = chain
 			}
 		}
-		if c.page != nil && !n.Sensitive {
+		if c.page != nil && !n.Sensitive && n.Clip == nil {
 			id, err := r.session.e.snapshot(r.scope, c.page, n.Target)
 			if err == nil {
 				if n.Target == nil {

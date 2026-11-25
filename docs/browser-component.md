@@ -205,6 +205,22 @@ the application may rename them to avoid existing script outputs. The component
 does not generate references to these names in other recorded steps. Esc cancels selection. Frames retain their
 locator paths. Password values are never shown in the panel's step summaries.
 
+The **Region screenshot** control is shown only when `status.features` includes
+`screenshot_clip`. Drag a rectangle in the top-level viewport; Esc cancels. The
+panel, menus and highlights are hidden during selection, and these gestures never
+become click, drag or key steps. A completed selection adds
+`{type:"screenshot",clip:{x,y,width,height}}`. Coordinates are finite, nonnegative
+CSS viewport pixels with positive dimensions; `target` and `full` cannot coexist
+with `clip`. Playback validates viewport bounds and converts CSS coordinates to
+the current document offset; device scaling affects image resolution, not the
+saved rectangle. A changed layout does not make the region follow an element.
+
+Clip results are private PNG artifacts containing only the chosen pixels. No
+full-page thumbnail or DOM snapshot is attached, including on capture failure.
+Secret-bearing runs and sensitive pages refuse region screenshots. The native
+host negotiates `screenshot_clip` before posting a run to a legacy component;
+unsupported clips return `unsupported_node`, never a full-page screenshot.
+
 Protocol 1 adds optional `myco.browser.record.active()` on newer hosts. It calls
 component `GET /status` and returns its scope-filtered `recordings` list:
 

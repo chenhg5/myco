@@ -78,6 +78,11 @@ func TestNativeChromeRecorderPanel(t *testing.T) {
 				t.Fatal(err)
 			}
 			sid := s.primarySession(page.TargetID)
+			// Short desktop viewports must scroll the capture form rather than
+			// clip its buttons. Use the same geometry on every native platform.
+			if err := s.call(sid, "Emulation.setDeviceMetricsOverride", map[string]any{"width": 1000, "height": 500, "deviceScaleFactor": 1, "mobile": false}, nil); err != nil {
+				t.Fatal(err)
+			}
 			wait := func(check func() bool) {
 				t.Helper()
 				for deadline := time.Now().Add(15 * time.Second); time.Now().Before(deadline); {
@@ -177,6 +182,9 @@ func TestNativeChromeRecorderPanel(t *testing.T) {
 					"objectId": object.Object.ObjectID, "awaitPromise": true, "returnByValue": true,
 					"functionDeclaration": `async function(){
                     const before=document.hasFocus();
+                    // The panel body scrolls on short native desktop windows.
+                    // Reveal this control exactly as a person would before hit testing.
+                    this.scrollIntoView({block:'nearest',inline:'nearest'});
                     await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
                     const r=this.getBoundingClientRect(),x=r.left+r.width/2,y=r.top+r.height/2;
                     const hit=this.getRootNode().elementFromPoint(x,y);
@@ -497,11 +505,41 @@ func TestNativeChromeRecorderPanel(t *testing.T) {
 			if got := nodesOfType("press"); len(got) != 0 {
 				t.Fatalf("page navigation recorded both key and scroll: %+v", got)
 			}
+			// Region mode is an isolated overlay. Esc cancels without creating
+			// a key/screenshot step; a trusted drag adds one clip-only node.
+			click(`[data-action="region"]`)
+			nodeEval("section", `function(){if(!this.hidden)throw Error('panel covers selection')}`)
+			nodeEval(".region", `function(){this.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,clientX:60,clientY:50,pointerId:2,button:0}));this.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,clientX:240,clientY:190,pointerId:2,button:0}))}`)
+			for _, kind := range []string{"keyDown", "keyUp"} {
+				if err := s.call(sid, "Input.dispatchKeyEvent", map[string]any{"type": kind, "key": "Escape", "code": "Escape", "windowsVirtualKeyCode": 27}, nil); err != nil {
+					t.Fatal(err)
+				}
+			}
+			nodeEval(".region", `function(){if(!this.hidden)throw Error('Esc did not cancel region')}`)
+			if len(nodesOfType("screenshot")) != 0 {
+				t.Fatal("synthetic region or cancel created a screenshot")
+			}
+			click(`[data-action="region"]`)
+			for _, event := range []struct {
+				kind    string
+				x, y    float64
+				buttons int
+			}{{"mousePressed", 60, 50, 1}, {"mouseMoved", 240, 190, 1}, {"mouseReleased", 240, 190, 0}} {
+				if err := s.call(sid, "Input.dispatchMouseEvent", map[string]any{"type": event.kind, "x": event.x, "y": event.y, "buttons": event.buttons, "button": "left", "clickCount": 1}, nil); err != nil {
+					t.Fatal(err)
+				}
+			}
+			wait(func() bool { return len(nodesOfType("screenshot")) == 1 })
+			regionStep := nodesOfType("screenshot")[0]
+			if regionStep.Target != nil || regionStep.Full || regionStep.Clip == nil || *regionStep.Clip != (screenshotClip{X: 60, Y: 50, Width: 180, Height: 140}) {
+				t.Fatalf("region not a clip-only node: %+v", regionStep)
+			}
 			if *panelShots != "" {
 				if err := s.call(sid, "Emulation.setDeviceMetricsOverride", map[string]any{"width": 1280, "height": 900, "deviceScaleFactor": 2, "mobile": false}, nil); err != nil {
 					t.Fatal(err)
 				}
 				nodeEval("ol", `function(){this.scrollTop=0}`)
+				nodeEval("section", `function(){const host=this.getRootNode().host;host.style.removeProperty('left');host.style.setProperty('right','20px','important');host.style.setProperty('top','20px','important')}`)
 				if err = button.Hover(); err != nil {
 					t.Fatal(err)
 				}
@@ -545,7 +583,7 @@ func TestNativeChromeRecorderPanel(t *testing.T) {
 					}
 				}
 				switch n.Type {
-				case "extract", "click", "type":
+				case "extract", "click", "type", "screenshot":
 				case "scroll":
 					if n.Target == nil || len(n.Target.Shadow) != 0 || len(n.Target.Frame) != 1 || n.Target.Frame[0] != "#child" {
 						t.Fatalf("not a page scroll: %+v", n)
@@ -566,7 +604,7 @@ func TestNativeChromeRecorderPanel(t *testing.T) {
 					t.Fatalf("unexpected recorded action: %+v", n)
 				}
 			}
-			if counts["extract"] != 7 || counts["click"] != 1 || counts["type"] != 1 || counts["scroll"] != 2 {
+			if counts["extract"] != 7 || counts["click"] != 1 || counts["type"] != 1 || counts["scroll"] != 2 || counts["screenshot"] != 1 {
 				t.Fatalf("wrong recorded actions: %v", counts)
 			}
 			var fromPage struct {

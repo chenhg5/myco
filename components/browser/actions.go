@@ -230,6 +230,12 @@ func (r *playRun) act(ctx context.Context, n node) (any, error) {
 		}
 		return result.Value.Val(), nil
 	case "screenshot":
+		if n.Clip != nil {
+			if len(r.secrets) > 0 {
+				return nil, errors.New("sensitive_snapshot")
+			}
+			return s.e.clipSnapshot(r.scope, p, n.Clip)
+		}
 		id, e := s.e.snapshot(r.scope, p, n.Target)
 		return id, e
 	case "tab":

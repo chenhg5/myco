@@ -1123,6 +1123,22 @@ ignore the new response fields.
 
 The optional local browser component uses protocol 1 and its own loopback listener; it is not a Hub endpoint. Application manifests may request `permissions.os: [browser]`. Supported desktop hosts advertise the `browser` feature so pages can present the installer; `myco.browser.status()` distinguishes supported and installed states. The bridge provides local profiles, recording, linear runs, controls, locator inspection, and image snapshots. Installation and enabling an agent preference require a separate, one-use host confirmation. Agent actions and cross-machine browser providers are outside M0/M1. See [component and bridge contract](browser-component.md#page-bridge-protocol-1).
 
+### Browser screenshot regions
+
+The component's `GET /status` and `myco.browser.status()` advertise optional
+`features:["screenshot_clip"]`. Absence means region screenshots are unsupported;
+pages hide the region selector and refuse runs containing clip nodes. The host
+also checks the same component process before dispatching a run, including child
+script snapshots, and returns `unsupported_node` without posting to an old engine.
+
+A `screenshot` node can contain `clip:{x,y,width,height}` in top-level viewport CSS
+pixels. Every coordinate must be finite, x/y nonnegative, and width/height positive.
+`clip` cannot be null or combined with `target` or `full`. Out-of-viewport regions
+are rejected at capture time. The result and the step's screenshot both contain
+only the selected pixels, in the private artifact store; there is no full-page
+thumbnail fallback. Secret-bearing runs and sensitive pages refuse region capture.
+See [component contract](browser-component.md#recording-inside-chrome).
+
 ### Local browser profile settings
 
 `myco.browser.profiles.configure?(id, settings)` is an optional protocol-1
