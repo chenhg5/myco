@@ -147,3 +147,13 @@ func TestProfilePasswordRetainedOnlyForSameProxyIdentity(t *testing.T) {
 		t.Fatal("unproxied profile changed WebRTC policy")
 	}
 }
+
+func TestDefaultChromeArgsAvoidUnsupportedWarning(t *testing.T) {
+	for _, arg := range defaultChromeArgs(t.TempDir()) {
+		// Chrome warns about experimental Blink flags, including the former
+		// AutomationControlled switch. Do not reintroduce them in defaults.
+		if strings.HasPrefix(arg, "--disable-blink-features=") || strings.HasPrefix(arg, "--enable-blink-features=") || arg == "--enable-automation" {
+			t.Fatalf("default launch flag can expose an automation warning: %s", arg)
+		}
+	}
+}

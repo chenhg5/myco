@@ -167,7 +167,7 @@ func (e *engine) openSession(ctx context.Context, owner, id string, headless boo
 	}()
 	// Never reuse a stale DevTools endpoint: it might belong to an old browser.
 	_ = os.Remove(filepath.Join(dir, "DevToolsActivePort"))
-	args := []string{"--user-data-dir=" + dir, "--remote-debugging-port=0", "--remote-debugging-address=127.0.0.1", "--no-first-run", "--no-default-browser-check", "--disable-sync", "--disable-blink-features=AutomationControlled", "--window-size=1280,900", "about:blank"}
+	args := defaultChromeArgs(dir)
 	localProxy := ""
 	if settings.Proxy != nil {
 		proxy, e2 := newForwardProxy(run, *settings.Proxy, password)
@@ -388,4 +388,10 @@ func (s *session) commands(ctx context.Context) func() {
 		}
 		s.mu.Unlock()
 	}
+}
+
+// Keep defaults to supported Chrome flags; experimental Blink switches can
+// display an unsupported-command-line warning over the recording controls.
+func defaultChromeArgs(dir string) []string {
+	return []string{"--user-data-dir=" + dir, "--remote-debugging-port=0", "--remote-debugging-address=127.0.0.1", "--no-first-run", "--no-default-browser-check", "--disable-sync", "--window-size=1280,900", "about:blank"}
 }

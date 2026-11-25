@@ -18,9 +18,11 @@ using `parentId` before recording a selector path. Rod 0.116.2 does not issue it
 own `Target.setAutoAttach`; the unit test also checks the calls made during its
 page initialization.
 
-The component adds `--disable-blink-features=AutomationControlled` to its existing
-Chrome launch flags. Chrome supplies its own user agent. The collector stays in
-an isolated world and does not install a stealth script.
+Default launch flags omit experimental Blink switches such as
+`--disable-blink-features=AutomationControlled`, which display Chrome’s unsupported
+command-line warning. The component does not set `--enable-automation`. Chrome
+supplies its own user agent. The collector stays in an isolated world and does
+not install a stealth script.
 
 Run `go test -race ./...` and `go vet ./...` in this directory. On a machine with
 an installed Chrome or Edge, enable the existing native fixture flag:
