@@ -10074,3 +10074,18 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
 
 /* A page (an app) in a window of its own (PageWindow.tsx): the page fills it. */
 .pg-window { position: fixed; inset: 0; display: flex; flex-direction: column; background: hsl(var(--background)); }
+
+/* Settings › Chat apps (ChatApps.tsx) */
+.im-icon { flex: none; width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; background: var(--hover); color: var(--fg); }
+.im-name { color: var(--muted); font-weight: 400; }
+.app-setting-line-text .im-status { display: flex; align-items: center; gap: 6px; }
+.app-select-field.im-agent { flex: none; width: 200px; max-width: 45%; }
+.im-claim { display: block; margin-top: 6px; color: var(--fg); }
+.im-claim .app-command { margin-top: 6px; }
+.im-scan { align-items: center; gap: 16px; }
+.im-qr { flex: none; width: 168px; height: 168px; border-radius: 8px; background: #fff; padding: 8px; border: 1px solid var(--line); image-rendering: pixelated; }
+.im-slack { flex-direction: column; align-items: stretch; gap: 10px; }
+.im-steps { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 10px; font-size: 12.5px; color: var(--fg-2); }
+.im-steps .app-input { display: block; width: 100%; margin-top: 6px; }
+.im-steps a { color: var(--accent); }
+.im-actions { display: flex; justify-content: flex-end; gap: 8px; }

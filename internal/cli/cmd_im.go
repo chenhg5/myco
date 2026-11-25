@@ -65,6 +65,7 @@ func imConnectCommand() *Command {
 			{Name: "app-secret-file", Kind: String, Help: "Feishu/Lark: file with that app's App Secret"},
 			{Name: "bot-token-file", Kind: String, Env: "MYCO_SLACK_BOT_TOKEN_FILE", Help: "Slack: file with the Bot User OAuth Token (xoxb-…)"},
 			{Name: "app-token-file", Kind: String, Env: "MYCO_SLACK_APP_TOKEN_FILE", Help: "Slack: file with the app-level token (xapp-…, scope connections:write)"},
+			{Name: "owner", Kind: String, Help: "Feishu/Lark: the owner's open_id when already known (the App passes it after its own scan)"},
 			{Name: "qr-png", Kind: String, Help: "Feishu/Lark: also save the QR code as a PNG here"},
 			{Name: "timeout", Kind: Duration, Default: "10m", Help: "Feishu/Lark: how long to wait for the scan"},
 			{Name: "profile", Kind: String, Help: "Speak as this existing agent profile instead of a new im-<name> node"},
@@ -104,7 +105,7 @@ func imConnectCommand() *Command {
 					if err != nil {
 						return err
 					}
-					cfg.AppID, cfg.AppSecret = id, secret
+					cfg.AppID, cfg.AppSecret, cfg.Owner = id, secret, e.in.String("owner")
 				} else if dry {
 					return e.dryRun(map[string]any{"action": "im connect", "platform": platform, "name": name,
 						"steps": []string{"show a QR code to scan with the Feishu/Lark app", "create node im-" + name, "save " + filepath.Join(dir, name+".json")}})
@@ -387,48 +388,70 @@ func (e *env) runBridge(ctx context.Context, name string, log *slog.Logger) erro
 	return b.Run(ctx)
 }
 
-// serveBridges runs the bridges configured on this machine and starts new
-// ones as they appear (the runner service calls it).
+// serveBridges runs the bridges configured on this machine: new ones start,
+// changed ones restart and removed ones stop within a few seconds (the
+// runner service calls it, so the App and myco im need no restart).
 func (e *env) serveBridges(ctx context.Context, log *slog.Logger) {
-	started := map[string]bool{}
-	var mu sync.Mutex
+	type running struct {
+		mod    time.Time
+		cancel context.CancelFunc
+	}
+	dir := e.imDir()
+	live := map[string]*running{}
+	modOf := func(n string) time.Time {
+		st, err := os.Stat(filepath.Join(dir, n+".json"))
+		if err != nil {
+			return time.Time{}
+		}
+		return st.ModTime()
+	}
+	start := func(n string, mod time.Time) {
+		bctx, cancel := context.WithCancel(ctx)
+		live[n] = &running{mod: mod, cancel: cancel}
+		go func() {
+			for bctx.Err() == nil {
+				err := e.runBridge(bctx, n, log)
+				if bctx.Err() != nil {
+					return
+				}
+				log.Error("bridge stopped; restarting in a minute", "bridge", n, "err", err)
+				select {
+				case <-bctx.Done():
+					return
+				case <-time.After(time.Minute):
+				}
+			}
+		}()
+	}
 	scan := func() {
-		names, err := im.List(e.imDir())
+		names, err := im.List(dir)
 		if err != nil {
 			log.Warn("reading bridges failed", "err", err)
 			return
 		}
-		mu.Lock()
-		defer mu.Unlock()
+		seen := map[string]bool{}
 		for _, n := range names {
-			if started[n] {
-				continue
-			}
-			started[n] = true
-			go func() {
-				for ctx.Err() == nil {
-					err := e.runBridge(ctx, n, log)
-					if ctx.Err() != nil {
-						return
-					}
-					if _, lerr := im.Load(e.imDir(), n); lerr != nil {
-						mu.Lock()
-						delete(started, n) // removed
-						mu.Unlock()
-						return
-					}
-					log.Error("bridge stopped; restarting in a minute", "bridge", n, "err", err)
-					select {
-					case <-ctx.Done():
-						return
-					case <-time.After(time.Minute):
-					}
+			seen[n] = true
+			mod := modOf(n)
+			if r := live[n]; r != nil {
+				if r.mod.Equal(mod) {
+					continue
 				}
-			}()
+				r.cancel() // its config changed: start it again
+				log.Info("bridge settings changed; restarting it", "bridge", n)
+			}
+			start(n, mod)
+		}
+		for n, r := range live {
+			if !seen[n] {
+				r.cancel()
+				delete(live, n)
+				log.Info("bridge removed; stopped it", "bridge", n)
+			}
 		}
 	}
 	scan()
-	t := time.NewTicker(30 * time.Second)
+	t := time.NewTicker(5 * time.Second)
 	defer t.Stop()
 	for {
 		select {
@@ -450,9 +473,22 @@ func imListCommand() *Command {
 			}
 			var out []map[string]any
 			for _, n := range names {
-				if c, err := im.Load(dir, n); err == nil {
-					out = append(out, c.Redacted())
+				c, err := im.Load(dir, n)
+				if err != nil {
+					continue
 				}
+				r := c.Redacted()
+				if pc, err := config.Load(c.Profile); err == nil && pc.Token != "" {
+					r["hub"], r["node"] = pc.Hub, pc.Agent
+					if cl, err := client.New(pc.Hub, pc.Token); err == nil {
+						cctx, cancel := context.WithTimeout(e.in.Ctx, 5*time.Second)
+						if me, err := cl.Me(cctx); err == nil {
+							r["online"] = me.Online
+						}
+						cancel()
+					}
+				}
+				out = append(out, r)
 			}
 			return e.p.Print(map[string]any{"bridges": nonNilSlice(out), "dir": dir}, func(w io.Writer) {
 				if len(out) == 0 {
@@ -505,7 +541,7 @@ func imAllowCommand() *Command {
 				return err
 			}
 			return e.p.Print(c.Redacted(), func(w io.Writer) {
-				fmt.Fprintf(w, "%s allows: owner %s %s (a running bridge picks this up when restarted)\n", c.Name, orDash(c.Owner), strings.Join(c.AllowFrom, " "))
+				fmt.Fprintf(w, "%s allows: owner %s %s (a running bridge picks this up within seconds)\n", c.Name, orDash(c.Owner), strings.Join(c.AllowFrom, " "))
 			})
 		}),
 	}
@@ -539,7 +575,7 @@ func imSetCommand() *Command {
 				return err
 			}
 			return e.p.Print(c.Redacted(), func(w io.Writer) {
-				fmt.Fprintf(w, "%s: agent=%s project=%s (a running bridge picks this up when restarted)\n", c.Name, orDash(c.Agent), orDash(c.Project))
+				fmt.Fprintf(w, "%s: agent=%s project=%s (a running bridge picks this up within seconds)\n", c.Name, orDash(c.Agent), orDash(c.Project))
 			})
 		}),
 	}

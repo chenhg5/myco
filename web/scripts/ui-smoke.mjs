@@ -3513,6 +3513,32 @@ async function runMatrix(browser, size, scheme) {
       if (narrow) await sidebar(page, false);
     });
 
+    // Settings › Chat apps: connected bots, a Feishu QR code to scan, and
+    // Slack's tokens (ChatApps.tsx).
+    await step("设置 · 聊天软件", async () => {
+      await go(page, "设置", narrow);
+      await clickVisible(page, page.locator(".app-settings-tab", { hasText: "聊天软件" }));
+      await page.locator('.im-bridge[data-bridge="feishu"]').waitFor({ timeout: 10_000 });
+      await page.locator(".im-bridge .im-status .dot.working").first().waitFor({ timeout: 5_000 });
+      await page.locator(".app-setting-line", { hasText: "飞书 / Lark" }).getByRole("button", { name: "扫码连接" }).click();
+      await page.locator(".im-qr").waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "settings-chat-apps");
+      await page.locator('[data-testid="feishu-scan"]').getByRole("button", { name: "取消" }).click();
+      await page.locator(".app-setting-line", { hasText: "Slack" }).getByRole("button", { name: "连接" }).click();
+      const form = page.locator('[data-testid="slack-form"]');
+      await form.locator('input[placeholder="xoxb-…"]').fill("xoxb-1-2-3");
+      await form.locator('input[placeholder="xapp-…"]').fill("xapp-1-2-3");
+      await form.getByRole("button", { name: "连接" }).click();
+      await page.locator('.im-bridge[data-bridge="slack"] .im-claim code', { hasText: "/claim" }).waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "settings-chat-apps-slack");
+      await page.locator('.im-bridge[data-bridge="slack"]').getByRole("button", { name: "断开" }).click();
+      await page.locator('.im-bridge[data-bridge="slack"]').getByRole("button", { name: "确定断开" }).click();
+      await page.locator('.im-bridge[data-bridge="slack"]').waitFor({ state: "detached", timeout: 5_000 });
+      if (narrow) await sidebar(page, false);
+    });
+
     // A proxy for the App: from the environment (as before), none, or one
     // set here; tried before it is saved, in force once saved.
     await step("设置 · 代理", async () => {
