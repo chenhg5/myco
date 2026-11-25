@@ -131,6 +131,7 @@ func (ws *workspaces) open(name string) (*workspaceHub, error) {
 	}
 	ctx, stop := context.WithCancel(ws.ctx)
 	go h.Dispatcher.Run(ctx)
+	go h.PageAttachments.Run(ctx, o.Log)
 	go h.Files.Run(ctx, time.Hour)
 	go h.Traces.Run(ctx, time.Hour)
 	go h.Automations.Run(ctx, AutomationTick)

@@ -394,3 +394,65 @@ func TestPageAttachmentPolicyBounds(t *testing.T) {
 		}
 	}
 }
+
+func TestPageAttachmentExpiredUploadCannotBeLinkedAndRetryReplacesIt(t *testing.T) {
+	f := pageAttachmentFixture(t, PageAttachmentPolicy{1, 4})
+	ctx := context.Background()
+	admin := Actor{Admin: true}
+	old := f.put(t, "retry", []byte{1, 2, 3, 4})
+	if _, err := f.db.Exec(`UPDATE page_attachments SET expires_at=? WHERE id=?`, time.Now().Add(-time.Minute).UnixMilli(), old.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.data.Put(ctx, admin, old.Page, PutInput{Collection: "assets", ID: "image", Data: fmt.Sprintf(`{"attachment":{"file_id":%q}}`, old.ID), By: "admin"}); !domain.IsCode(err, domain.CodeInvalidArgument) {
+		t.Fatalf("expired upload linked: %v", err)
+	}
+	fresh, err := f.service.Put(ctx, admin, PageAttachmentInput{Page: old.Page, Collection: old.Collection, Name: old.Name, ContentType: old.ContentType, Key: "retry", By: "admin"}, bytes.NewReader([]byte{1, 2, 3, 4}))
+	if err != nil || fresh.ID == old.ID {
+		t.Fatalf("expired retry: %+v %v", fresh, err)
+	}
+	f.record(t, fresh.Page, "assets", "image", fmt.Sprintf(`{"attachment":{"file_id":%q}}`, fresh.ID))
+	if err = f.service.Cleanup(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if rc, e := f.store.Open(ctx, old.Blob); e == nil {
+		rc.Close()
+		t.Fatal("expired blob survived cleanup")
+	}
+	rc, err := f.store.Open(ctx, fresh.Blob)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rc.Close()
+	b, err := io.ReadAll(rc)
+	if err != nil || !bytes.Equal(b, []byte{1, 2, 3, 4}) {
+		t.Fatal("retry blob changed", err)
+	}
+	usage, err := f.service.Usage(ctx, admin, fresh.Page)
+	if err != nil || usage.FilesUsed != 1 || usage.BytesUsed != 4 {
+		t.Fatal(usage, err)
+	}
+}
+
+func TestPageAttachmentMigrationLeavesAmbiguousLegacyNames(t *testing.T) {
+	f := pageAttachmentFixture(t, DefaultPageAttachmentPolicy())
+	ctx := context.Background()
+	admin := Actor{Admin: true}
+	original, err := f.project.PutFile(ctx, admin, "demo", "original.png", "image/png", "owner", bytes.NewReader([]byte{1, 2, 3}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.project.PutFile(ctx, admin, "demo", original.Blob, "image/png", "owner", bytes.NewReader([]byte{4, 5, 6})); err != nil {
+		t.Fatal(err)
+	}
+	f.record(t, "pg_demo", "assets", "first", `{"file":"original.png"}`)
+	f.record(t, "pg_demo", "assets", "second", fmt.Sprintf(`{"file":%q}`, original.Blob))
+	f.record(t, "pg_demo", "settings", "typed", fmt.Sprintf(`{"document":{"file_id":%q}}`, original.Blob))
+	report, err := f.service.Migrate(ctx, admin, "demo", false, 100)
+	if err != nil || report.Moved != 0 || len(report.Skipped) != 3 {
+		t.Fatalf("ambiguous migration: %+v %v", report, err)
+	}
+	p, err := f.project.Get(ctx, admin, "demo")
+	if err != nil || len(p.Docs) != 2 {
+		t.Fatal("ambiguous sources were removed", err)
+	}
+}

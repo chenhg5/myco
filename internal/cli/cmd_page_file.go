@@ -24,6 +24,9 @@ func pageFileCommand() *Command {
 		if err := e.in.Require("page"); err != nil {
 			return err
 		}
+		if n := e.in.Int("limit"); n < 1 || n > 1000 {
+			return errorf("invalid_argument", ExitUsage, "", "limit must be 1..1000")
+		}
 		c, err := e.projectClient()
 		if err != nil {
 			return err

@@ -65,6 +65,17 @@ func attachmentCandidates(ctx context.Context, q sqlQueryer, project string) ([]
 	if err != nil {
 		return nil, nil, internal(err)
 	}
+	// A legacy filename can look like another document's blob ID. Refuse
+	// that ambiguous namespace rather than silently binding either original.
+	ambiguous := map[*domain.PageAttachmentMigration]bool{}
+	for _, source := range docs {
+		if source.Doc.Blob == "" {
+			continue
+		}
+		if named := docs[source.ProjectName+"\x00"+source.Doc.Blob]; named != nil && named != source {
+			ambiguous[source], ambiguous[named] = true, true
+		}
+	}
 	rows, err = q.QueryContext(ctx, `SELECT p.id,p.project,p.manifest,r.collection,r.id,r.data,r.version FROM page_records r JOIN pages p ON p.id=r.page WHERE (?='' OR p.project=?) ORDER BY p.id,r.collection,r.id`, project, project)
 	if err != nil {
 		return nil, nil, internal(err)
@@ -89,8 +100,8 @@ func attachmentCandidates(ctx context.Context, q sqlQueryer, project string) ([]
 			if source == nil && !ref.Legacy {
 				source = byBlob[proj+"\x00"+ref.Value]
 			}
-			if source == nil {
-				if aliases[page+"\x00"+ref.Value] {
+			if source == nil || ambiguous[source] {
+				if source == nil && aliases[page+"\x00"+ref.Value] {
 					continue
 				}
 				if len(issues) < 1000 {

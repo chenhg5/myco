@@ -16,7 +16,7 @@ func (c *Client) pageAttachmentsSupported(ctx context.Context, page string) erro
 		return err
 	}
 	if p.AttachmentVersion < 1 {
-		return &Error{Code: "unsupported", Message: "this Hub does not support page-owned files", Suggestion: "upgrade the Hub; do not upload application media to project files"}
+		return &Error{Status: http.StatusNotImplemented, Code: "unsupported", Message: "this Hub does not support page-owned files", Suggestion: "upgrade the Hub; do not upload application media to project files"}
 	}
 	return nil
 }
@@ -113,7 +113,7 @@ func (c *Client) MigratePageAttachments(ctx context.Context, in api.PageAttachme
 	var out api.PageAttachmentMigrationReport
 	err := c.do(ctx, http.MethodPost, "/v1/page-attachments/migrate", nil, in, &out)
 	if e, ok := err.(*Error); ok && e.Status == 404 {
-		return nil, &Error{Code: "unsupported", Message: "this Hub does not support page file migration", Suggestion: "upgrade the Hub"}
+		return nil, &Error{Status: http.StatusNotImplemented, Code: "unsupported", Message: "this Hub does not support page file migration", Suggestion: "upgrade the Hub"}
 	}
 	return &out, err
 }

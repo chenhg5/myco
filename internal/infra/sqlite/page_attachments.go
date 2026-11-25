@@ -83,15 +83,19 @@ func (r *PageAttachmentRepo) Reserve(ctx context.Context, a *domain.PageAttachme
 	}
 	old, err := scanAttachment(tx.QueryRowContext(ctx, `SELECT `+attachmentCols+` FROM page_attachments WHERE page=? AND request_key=?`, a.Page, a.Key))
 	if err == nil {
-		if old.Name != a.Name || old.Collection != a.Collection || old.Size != a.Size || old.SHA256 != a.SHA256 || old.ContentType != a.ContentType || old.LegacyName != a.LegacyName {
-			return nil, false, domain.Errf(domain.CodeConflict, "upload key already used for different content")
+		expired := old.State != "ready" && !old.ExpiresAt.IsZero() && !old.ExpiresAt.After(a.CreatedAt)
+		if expired {
+			if err = queueAttachmentDelete(ctx, tx, old.ID); err != nil {
+				return nil, false, err
+			}
+		} else {
+			if old.Name != a.Name || old.Collection != a.Collection || old.Size != a.Size || old.SHA256 != a.SHA256 || old.ContentType != a.ContentType || old.LegacyName != a.LegacyName {
+				return nil, false, domain.Errf(domain.CodeConflict, "upload key already used for different content")
+			}
+			return old, old.State == "uploading", nil
 		}
-		if old.State == "uploading" {
-			return old, true, nil
-		}
-		return old, false, nil
 	}
-	if !domain.IsCode(err, domain.CodeNotFound) {
+	if err != nil && !domain.IsCode(err, domain.CodeNotFound) {
 		return nil, false, err
 	}
 	n, size, err := attachmentUsage(ctx, tx, a.Page)
@@ -277,7 +281,8 @@ func syncPageAttachmentRefs(ctx context.Context, tx *sql.Tx, rec *domain.PageRec
 			}
 		}
 		var state string
-		if err := tx.QueryRowContext(ctx, `SELECT state FROM page_attachments WHERE page=? AND id=?`, rec.Page, id).Scan(&state); err != nil || state == "uploading" {
+		var expires int64
+		if err := tx.QueryRowContext(ctx, `SELECT state,expires_at FROM page_attachments WHERE page=? AND id=?`, rec.Page, id).Scan(&state, &expires); err != nil || state == "uploading" || (expires != 0 && expires <= ms(rec.UpdatedAt)) {
 			return domain.Errf(domain.CodeInvalidArgument, "file field %s must refer to an uploaded attachment of this page", ref.Field)
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO page_attachment_refs(page,collection,record,field,attachment) VALUES(?,?,?,?,?)`, rec.Page, rec.Collection, rec.ID, ref.Field, id); err != nil {
