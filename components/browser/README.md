@@ -24,6 +24,11 @@ command-line warning. The component does not set `--enable-automation`. Chrome
 supplies its own user agent. The collector stays in an isolated world and does
 not install a stealth script.
 
+A renderer navigation request may arrive before the isolated world's trusted
+click binding. Recording checks intent again at navigation commit while retaining
+intent captured at the request for slow loads. Automatic/iframe navigation still
+requires the same top-level and per-recording checks.
+
 Run `go test -race ./...` and `go vet ./...` in this directory. On a machine with
 an installed Chrome or Edge, enable the existing native fixture flag:
 

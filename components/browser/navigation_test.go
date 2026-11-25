@@ -130,3 +130,30 @@ func TestRecordingDistinguishesBrowserFragmentFromScriptHash(t *testing.T) {
 	send(&proto.PageNavigatedWithinDocument{FrameID: "top", URL: "https://example.com/#unrelated"})
 	queuedNavigation(t, r)
 }
+
+func TestRecordingNavigationRequestCanPrecedeCollectorClick(t *testing.T) {
+	for _, within := range []bool{false, true} {
+		name := "new document"
+		if within {
+			name = "fragment"
+		}
+		t.Run(name, func(t *testing.T) {
+			_, r, send := navigationFixture(t)
+			url := "https://example.com/click"
+			if within {
+				url += "#section"
+			}
+			// Page navigation is reported by the browser process; the trusted
+			// click binding can arrive later from the renderer process.
+			send(&proto.PageFrameRequestedNavigation{FrameID: "top", URL: url, Reason: proto.PageClientNavigationReasonAnchorClick})
+			send(&proto.RuntimeBindingCalled{Name: "__mycoBrowserEvent", ExecutionContextID: 1,
+				Payload: `{"type":"click","button":"left","target":{"locators":[{"kind":"css","value":"#go"}]}}`})
+			if within {
+				send(&proto.PageNavigatedWithinDocument{FrameID: "top", URL: url})
+			} else {
+				send(&proto.PageFrameNavigated{Frame: &proto.PageFrame{ID: "top", URL: url}})
+			}
+			queuedNavigation(t, r, "click", "wait")
+		})
+	}
+}

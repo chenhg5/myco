@@ -375,7 +375,10 @@ func (s *session) event(msg *rod.Message) {
 			return
 		}
 		if renderer {
-			if request.RecordID == rec.id && request.User {
+			// Browser navigation events can precede the renderer's trusted
+			// click binding. Keep a request's earlier intent for slow loads,
+			// and also accept intent received before this commit.
+			if request.RecordID == rec.id && (request.User || rec.recentNavigationAction(p.TargetID, time.Now())) {
 				rec.enqueue(node{Type: "wait", Wait: "url", Value: stableURL(evt.Frame.URL)}, p)
 			}
 		} else {
@@ -399,7 +402,10 @@ func (s *session) event(msg *rod.Message) {
 			return
 		}
 		if renderer {
-			if request.RecordID == rec.id && request.User {
+			// Browser navigation events can precede the renderer's trusted
+			// click binding. Keep a request's earlier intent for slow loads,
+			// and also accept intent received before this commit.
+			if request.RecordID == rec.id && (request.User || rec.recentNavigationAction(p.TargetID, time.Now())) {
 				rec.enqueue(node{Type: "wait", Wait: "url", Value: stableURL(evt.URL)}, p)
 			}
 		} else if browserStart.RecordID == rec.id && browserStart.URL == evt.URL {

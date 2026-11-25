@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/cdp"
 	"github.com/go-rod/rod/lib/proto"
 )
 
@@ -138,11 +140,21 @@ func TestNativeChromeRecordsOnlyUserTopLevelNavigation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = link.Click(proto.InputMouseButtonLeft, 1); err != nil {
-		t.Fatal(err)
+	// A fast document swap may invalidate the input RPC's reply after the
+	// trusted click was delivered. Verify its navigation and recorded click
+	// below instead of requiring the old document to survive the reply.
+	clickErr := link.Click(proto.InputMouseButtonLeft, 1)
+	if clickErr != nil {
+		var rpcErr *cdp.Error
+		if !errors.As(clickErr, &rpcErr) || rpcErr.Code != -32000 || rpcErr.Message != "Inspected target navigated or closed" {
+			t.Fatal(clickErr)
+		}
 	}
 	if err = page.Wait(rod.Eval(`()=>location.pathname==='/landed'`)); err != nil {
-		t.Fatal(err)
+		t.Fatalf("link did not navigate: click=%v navigation=%v", clickErr, err)
+	}
+	if clickErr != nil {
+		t.Logf("click delivered before its document changed: %v", clickErr)
 	}
 	waitCount := func(n int) {
 		t.Helper()
