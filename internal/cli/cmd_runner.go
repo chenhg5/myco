@@ -468,6 +468,11 @@ func (e *env) runAll(sh runnerShared, log *slog.Logger) error {
 		return len(profiles)
 	}
 	n := scan()
+	if !sh.once {
+		// Chat-app bots configured here (myco im connect) run with the
+		// agents, so connecting one needs no other service.
+		go e.serveBridges(e.in.Ctx, log)
+	}
 	if n == 0 && sh.once {
 		return errorf("not_found", ExitNotFound, "enroll an agent first: myco agent enroll", "no agent profiles in %s", dir)
 	}
