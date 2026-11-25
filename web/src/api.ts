@@ -568,6 +568,8 @@ export interface SSHProfile {
   binding: string; agent_enabled: boolean; agent_hub?: string;
 }
 export interface SSHResult { stdout: string; stderr: string; exit_code: number; truncated: boolean; duration_ms: number }
+export type BrowserActionPermission = "browser.view" | "browser.run" | "browser.control";
+
 export interface ActionGrant {
   id: string; agent: string; owner: string; target: ActionTarget; target_name?: string;
   permissions: string[]; requested?: string[]; reason?: string; message_id?: string; approval_id: string;

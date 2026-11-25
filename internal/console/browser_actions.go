@@ -101,7 +101,7 @@ func (b *Backend) browserRuns() *browserRunBook {
 	b.browser.mu.Lock()
 	defer b.browser.mu.Unlock()
 	if b.browser.runs == nil {
-		b.browser.runs = &browserRunBook{runs: map[string]*browserAgentRun{}}
+		b.browser.runs = &browserRunBook{runs: map[string]*browserAgentRun{}, controls: map[string]*browserControlSession{}}
 	}
 	if b.browser.cancelAgents == nil {
 		b.browser.cancelAgents = b.stopBrowserProfile
@@ -121,6 +121,7 @@ func (b *Backend) stopBrowserProfile(hub, profile string) {
 	for _, r := range runs {
 		b.cancelBrowserRun(r)
 	}
+	b.stopBrowserControls(hub, profile, "", "profile_disabled")
 	b.actionHosts.mu.Lock()
 	for key, stop := range b.actionHosts.running {
 		if strings.HasPrefix(key, "browser:"+hub+":") && strings.Contains(key, ":"+profile+":") {
@@ -158,6 +159,7 @@ func (b *Backend) hostBrowser(ctx context.Context, h Hub, p browserHostPolicy) t
 	}
 	run, cancel := context.WithCancel(ctx)
 	defer cancel()
+	componentVersion := b.browserComponent().Status().Version
 	go func() {
 		tick := time.NewTicker(time.Second)
 		defer tick.Stop()
@@ -166,7 +168,8 @@ func (b *Backend) hostBrowser(ctx context.Context, h Hub, p browserHostPolicy) t
 			case <-run.Done():
 				return
 			case <-tick.C:
-				if !b.browserPolicyCurrent(h, p) {
+				status := b.browserComponent().Status()
+				if !b.browserPolicyCurrent(h, p) || !status.Installed || status.Version != componentVersion {
 					cancel()
 					return
 				}
@@ -174,6 +177,7 @@ func (b *Backend) hostBrowser(ctx context.Context, h Hub, p browserHostPolicy) t
 		}
 	}()
 	var host *api.ActionHost
+	defer b.stopBrowserControls(h.ID, p.Policy.Profile, p.Policy.Binding, "host_closed")
 	defer func() {
 		if run.Err() != nil {
 			book := b.browserRuns()
@@ -201,7 +205,7 @@ func (b *Backend) hostBrowser(ctx context.Context, h Hub, p browserHostPolicy) t
 			break
 		}
 		check, stop = context.WithTimeout(run, 10*time.Second)
-		host, e = c.RegisterActionHost(check, api.ActionHostRegister{MachineID: machine, Provider: "browser", Resource: &api.ActionResource{Provider: "browser", ID: p.Policy.Profile, Binding: p.Policy.Binding, Name: p.Policy.Name, Summary: "Owner-approved fixed script versions"}, Generation: "browser-" + rand.Text(), Actions: browserActionList})
+		host, e = b.registerBrowserHost(check, c, machine, p)
 		stop()
 		if e == nil {
 			for run.Err() == nil {
@@ -218,6 +222,7 @@ func (b *Backend) hostBrowser(ctx context.Context, h Hub, p browserHostPolicy) t
 				}
 			}
 		}
+		b.stopBrowserControls(h.ID, p.Policy.Profile, p.Policy.Binding, "host_closed")
 		// A transient poll failure retakes without revoking valid paused grants.
 		select {
 		case <-run.Done():
@@ -229,8 +234,9 @@ func (b *Backend) hostBrowser(ctx context.Context, h Hub, p browserHostPolicy) t
 }
 
 type browserRunBook struct {
-	mu   sync.Mutex
-	runs map[string]*browserAgentRun
+	mu       sync.Mutex
+	runs     map[string]*browserAgentRun
+	controls map[string]*browserControlSession
 }
 type browserAgentRun struct {
 	mu                                             sync.Mutex
@@ -312,6 +318,9 @@ func (b *Backend) runBrowserJob(ctx context.Context, c *client.Client, host *api
 	if !b.browserPolicyCurrent(h, p) || g.State != api.GrantActive || g.Agent == "" || g.Target.Kind != "machine" || g.Target.ID != host.MachineID || host.Resource == nil || r == nil || r.Provider != "browser" || r.ID != p.Policy.Profile || r.Binding != p.Policy.Binding || *r != *host.Resource || g.ExpiresAt == nil || !time.Now().Before(*g.ExpiresAt) || !slices.Contains(g.Permissions, permission) {
 		return actionFailure("permission_denied", "the grant does not allow this operation on this browser profile", false, nil)
 	}
+	if permission == api.BrowserControlPermission {
+		return b.runBrowserControlJob(ctx, c, host, hj, h, p)
+	}
 	raw := hj.Args
 	if len(raw) == 0 {
 		raw = json.RawMessage(`{}`)
@@ -384,7 +393,7 @@ func (b *Backend) runBrowserJob(ctx context.Context, c *client.Client, host *api
 		}
 		book := b.browserRuns()
 		book.mu.Lock()
-		busy := false
+		busy := book.controlBusy(p.Policy.Profile)
 		now := time.Now()
 		for key, v := range book.runs {
 			v.mu.Lock()
@@ -427,7 +436,7 @@ func (b *Backend) runBrowserJob(ctx context.Context, c *client.Client, host *api
 			b.cancelBrowserRun(record)
 			b.closeBrowserNative(record)
 			if errors.Is(e, browserautomation.ErrUnsupportedNode) {
-				return actionFailure("unsupported_node", "update the browser component before running a script with a screenshot clip", false, nil)
+				return actionFailure("unsupported_node", "update the browser component before running a script with these nodes", false, nil)
 			}
 			return actionFailure("outcome_unknown", "native startup was not confirmed; its session was closed, check before retrying", false, nil)
 		}

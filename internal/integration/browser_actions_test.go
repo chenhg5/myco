@@ -194,3 +194,103 @@ func TestBrowserBoundProfileGrantJob(t *testing.T) {
 	}
 
 }
+
+func TestLiveBrowserGrantValidatesAuditsAndStops(t *testing.T) {
+	c := ctx(t)
+	h := startHub(t, filepath.Join(t.TempDir(), "hub.db"), app.DefaultMessagePolicy())
+	token, err := h.admin().CreateConsoleToken(c, "control-test-console")
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner := h.client(token.Token)
+	machineClient := h.client(h.register(api.RegisterRequest{Name: "control-machine", Binding: api.Binding{Harness: "machine"}}))
+	if err := machineClient.ReportMachine(c, api.MachineReport{Fingerprint: "control-fp-0123456789abcdef", Name: "control-computer", OS: "darwin"}); err != nil {
+		t.Fatal(err)
+	}
+	machines, err := owner.Machines(c)
+	if err != nil || len(machines) != 1 {
+		t.Fatalf("machines: %v %v", machines, err)
+	}
+	agent := h.client(h.register(api.RegisterRequest{Name: "control-agent", Binding: api.Binding{Harness: "claude", SessionID: "control-session"}}))
+	resource := &api.ActionResource{Provider: "browser", ID: "work", Binding: strings.Repeat("a", 64), Name: "Work"}
+	target := api.ActionTarget{Kind: "machine", ID: machines[0].ID, Resource: resource}
+	req := api.ActionGrantRequest{Target: target, Permissions: []string{api.BrowserControlPermission}, Reason: "Check the sample report", TTLSeconds: 3600}
+	reg := api.ActionHostRegister{MachineID: target.ID, Provider: "browser", Resource: resource, Generation: "control-1",
+		Actions: []api.ActionDescriptor{{Name: "browser.run.status", Version: 1, Permission: "browser.view"}}}
+	if _, err := owner.RegisterActionHost(c, reg); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := agent.RequestActionGrant(c, req, false); err == nil {
+		t.Fatal("an older component should not accept a control grant")
+	}
+	reg.Actions = append(reg.Actions, api.BrowserControlDescriptors()...)
+	reg.Generation = "control-2"
+	host, err := owner.RegisterActionHost(c, reg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	grant, err := agent.RequestActionGrant(c, req, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := owner.DecideActionGrant(c, grant.ApprovalID, api.ActionGrantNarrow{}); err != nil {
+		t.Fatal(err)
+	}
+	grant, err = agent.ActionGrant(c, grant.ID, 0)
+	if err != nil || grant.ExpiresAt == nil || time.Until(*grant.ExpiresAt) > 30*time.Minute {
+		t.Fatalf("grant: %+v %v", grant, err)
+	}
+	actions, err := agent.GrantActions(c, grant.ID)
+	if err != nil || len(actions) != 6 {
+		t.Fatalf("expected six control-only actions: %+v %v", actions, err)
+	}
+	run := func(action, key, args string) (*api.ActionJob, error) {
+		return agent.RunAction(c, api.ActionInvocation{GrantID: grant.ID, Action: "browser." + action,
+			Version: 1, Args: json.RawMessage(args), IdempotencyKey: key})
+	}
+	for _, args := range []string{`{"profile":"other"}`, `{"profile":"work","headless":true}`, `{"profile":"work","actor":"someone-else"}`} {
+		if _, err := run("page.open", args, args); err == nil {
+			t.Fatal("unsafe or unbound open was accepted")
+		}
+	}
+	if _, err := run("run.status", "run-status", `{"run_id":"run-sample"}`); err == nil {
+		t.Fatal("a control grant included view")
+	}
+	if _, err := run("page.act", "bad-op", `{"session":"session","op":"eval","value":"0"}`); err == nil {
+		t.Fatal("unknown action operation was accepted")
+	}
+	job, err := run("page.act", "safe-act", `{"session":"session","op":"type","ref":"e1","value":"not-for-audit"}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	jobs, err := owner.ActionHostJobs(c, host.ID, 0)
+	if err != nil || len(jobs) != 1 || jobs[0].Job.ID != job.ID {
+		t.Fatalf("host jobs: %+v %v", jobs, err)
+	}
+	done := api.ActionJobComplete{HostID: host.ID, Generation: host.Generation, State: api.JobSucceeded,
+		Result: json.RawMessage(`{"snapshot_error":{"code":"timeout"},"step_ids":["step1"]}`), BrowserHost: "example.com"}
+	bad := done
+	bad.BrowserHost = "example.com/private?q=secret"
+	if _, err := owner.CompleteActionJob(c, job.ID, bad); err == nil {
+		t.Fatal("a complete URL was accepted as the audit hostname")
+	}
+	if _, err := owner.CompleteActionJob(c, job.ID, done); err != nil {
+		t.Fatal(err)
+	}
+	_, _ = owner.CompleteActionJob(c, job.ID, done)
+	audit, err := owner.Audit(c, client.AuditFilter{Target: "example.com"})
+	if err != nil || len(audit) != 1 || audit[0].Action != "browser.page.act" || audit[0].Target != "example.com" || audit[0].Detail != "" {
+		t.Fatalf("expected one hostname-only audit entry: %+v %v", audit, err)
+	}
+	replay, err := run("page.act", "safe-act", `{"session":"session","op":"type","ref":"e1","value":"not-for-audit"}`)
+	if err != nil || replay.ID != job.ID || !bytes.Contains(replay.Result, []byte("snapshot_error")) {
+		t.Fatalf("completed idempotent job lost its snapshot status: %+v %v", replay, err)
+	}
+	if _, err := owner.RevokeActionGrantWithReason(c, grant.ID, api.BrowserControlOwnerStopped); err != nil {
+		t.Fatal(err)
+	}
+	closed, err := run("page.close", "close-after-stop", `{"session":"session"}`)
+	if err != nil || closed.State != api.JobFailed || closed.Error == nil || closed.Error.Code != "session_closed" || closed.Error.Reason != api.BrowserControlOwnerStopped {
+		t.Fatalf("after owner stop: %+v %v", closed, err)
+	}
+}

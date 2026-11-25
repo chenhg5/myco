@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type Dispatch, type SetStateAction } from "react";
 import { FileDown, Monitor, ShieldQuestion } from "lucide-react";
-import type { ActionGrant, Agent, Approval, SuperagentState } from "@/api";
+import type { ActionGrant, BrowserActionPermission, Agent, Approval, SuperagentState } from "@/api";
 import { appApi, type JoinLink } from "@/appapi";
 import { CopyButton } from "@/app/copy";
 import { joinSentence } from "@/app/AddToProject";
@@ -298,7 +298,7 @@ export function GrantStrip({ hubId, agent, name }: { hubId: string; agent: strin
         const page = g.target.kind === "page";
         const ssh = g.target.resource?.provider === "server.ssh";
         const browser = g.target.resource?.provider === "browser";
-        const browserControl = g.permissions.includes("browser.control");
+        const browserControl = g.permissions.includes("browser.control" satisfies BrowserActionPermission);
         const browserRun = g.permissions.includes("browser.run");
         const manage = g.permissions.includes("server.ssh.manage");
         const what = g.target_name || g.target.id;
@@ -312,8 +312,7 @@ export function GrantStrip({ hubId, agent, name }: { hubId: string; agent: strin
                   ? L(`${name || agent} 可以导出「${what}」`, `${name || agent} may export "${what}"`)
                   : browser
                   ? browserControl
-                    // Reserved M3 copy; M2 refuses browser.control grants.
-                    ? L(`${name || agent} 可以操作浏览器 profile ${what}，能读到这个 profile 登录的所有网站`, `${name || agent} may control browser profile ${what} and read all websites signed in through it`)
+                    ? L(`${name || agent} 可以操作浏览器 profile ${what}。操作会显示在你的屏幕上，你随时可以收回授权`, `${name || agent} may control browser profile ${what}. Actions appear on your screen, and you can revoke access at any time`)
                     : browserRun
                       ? g.permissions.includes("browser.view")
                         ? L(`${name || agent} 可以在 ${what} 上查看状态与运行结果，并运行主人批准的脚本`, `${name || agent} may view status and run results, and run owner-approved scripts on ${what}`)
@@ -367,7 +366,6 @@ function invitationWhat(a: Approval, grants?: ActionGrant[]): string {
     const permissions = grant.requested || [];
     const minutes = /，(\d+) 分钟$/.exec(a.what)?.[1];
     const ttl = minutes ? L(`，${minutes} 分钟`, `, for ${minutes} minutes`) : "";
-    // Reserved M3 copy; M2 refuses browser.control grants.
     if (permissions.includes("browser.control")) return L(`操作浏览器 profile「${profile}」`, `Control browser profile “${profile}”`) + ttl;
     if (permissions.includes("browser.run")) return (permissions.includes("browser.view")
       ? L(`在「${profile}」上查看状态与运行结果，并运行主人批准的脚本`, `View status and run results, and run owner-approved scripts in “${profile}”`)
@@ -426,7 +424,7 @@ export function ApprovalStrip({ hubId, agent, name }: { hubId: string; agent: st
             {a.kind === "project_automation" && !!a.payload?.input && <div className="sa-approval-why">{automationRequestSummary(a.payload.input as Record<string, unknown>)}</div>}
             {a.kind === "project_automation" && automationRequestContent(a) && <details className="sa-approval-why"><summary>{L("查看任务内容", "Review task content")}</summary><pre className="sa-approval-content">{automationRequestContent(a)}</pre></details>}
             {a.kind === "project_invite" && <div className="sa-approval-why">{L("仅这一次邀请：链接 24 小时有效，只能用一次。新 agent 归项目主人所有，只加入为普通成员。", "This invitation only: the link lasts 24 hours and works once. The new agent belongs to the project owner and joins as an ordinary member.")}</div>}
-            {a.kind === "action_grant" && (s?.grants?.some(g => g.approval_id === a.id && (g.requested || []).includes("browser.control")) || /能读到这个 profile 登录的所有网站/.test(a.what)) && <div className="sa-approval-why">{L("能读到这个 profile 登录的所有网站，包括登录后的页面和数据。仅在你信任该 agent 时批准。", "Can read all websites signed in through this profile, including authenticated pages and data. Approve only if you trust this agent.")}</div>}
+            {a.kind === "action_grant" && (s?.grants?.some(g => g.approval_id === a.id && (g.requested || []).includes("browser.control")) || /这个 profile 登录的所有网站/.test(a.what)) && <div className="sa-approval-why">{L("agent 能看到并操作这个 profile 登录的所有网站，操作会显示在你的屏幕上，你随时可以停止。", "The agent can see and interact with all websites signed in through this profile. Its actions appear on your screen. You can stop it at any time.")}</div>}
             {a.reason && <div className="sa-approval-why">{a.reason}</div>}
             <div className="sa-approval-meta">{leftOf(a.expires_at, now)}</div>
             {!!errors[a.id] && <ErrorText error={errors[a.id]} />}

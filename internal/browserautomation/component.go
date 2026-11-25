@@ -414,8 +414,8 @@ func (c *Component) Call(ctx context.Context, scope, method, path string, in, ou
 	req.Header.Set("Content-Type", "application/json")
 	hc := &http.Client{Transport: &http.Transport{Proxy: nil}, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("component redirect refused") }}
 	defer hc.CloseIdleConnections()
-	if needsClipPreflight(method, path, b) {
-		if err := requireScreenshotClip(ctx, hc, address, secret, scope); err != nil {
+	if required := browserRunPreflight(method, path, b); len(required) != 0 {
+		if err := requireBrowserFeatures(ctx, hc, address, secret, scope, required...); err != nil {
 			return err
 		}
 	}
@@ -427,9 +427,13 @@ func (c *Component) Call(ctx context.Context, scope, method, path string, in, ou
 	if res.StatusCode >= 400 {
 		var v struct {
 			Error  string `json:"error"`
+			Code   string `json:"code"`
 			Reason string `json:"reason"`
 		}
 		_ = json.NewDecoder(io.LimitReader(res.Body, 4096)).Decode(&v)
+		if v.Code != "" {
+			return &ComponentError{Code: v.Code, Reason: v.Reason}
+		}
 		if v.Error == "" {
 			v.Error = "component_failed"
 		}

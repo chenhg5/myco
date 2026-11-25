@@ -39,14 +39,11 @@ func TestSSHManageApprovalDoesNotUnderstatePermission(t *testing.T) {
 }
 
 func TestBrowserPermissionsAreIndependent(t *testing.T) {
-	for _, permission := range []string{"browser.view", "browser.run"} {
+	for _, permission := range []string{"browser.view", "browser.run", "browser.control"} {
 		got, err := checkPermissions([]string{permission}, "machine")
 		if err != nil || len(got) != 1 || got[0] != permission {
 			t.Fatalf("%s: %v %v", permission, got, err)
 		}
-	}
-	if _, err := checkPermissions([]string{"browser.control"}, "machine"); !domain.IsCode(err, domain.CodeUnsupported) {
-		t.Fatalf("M2 control: %v", err)
 	}
 	if _, err := checkPermissions([]string{"browser.*"}, "machine"); err == nil {
 		t.Fatal("wildcard accepted")
@@ -58,7 +55,7 @@ func TestBrowserPermissionsAreIndependent(t *testing.T) {
 
 func TestBrowserControlWarning(t *testing.T) {
 	for _, perms := range [][]string{{"browser.control"}, {"browser.control", "browser.view", "browser.run"}} {
-		if !strings.Contains(grantWhat("agent", "profile", perms, time.Minute), "能读到这个 profile 登录的所有网站") {
+		if !strings.Contains(grantWhat("agent", "profile", perms, time.Minute), "能看到并操作这个 profile 登录的所有网站") {
 			t.Fatal("control warning missing")
 		}
 	}

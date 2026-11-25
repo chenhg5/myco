@@ -137,8 +137,12 @@ func (c *Client) OwnerActionGrants(ctx context.Context, state string) ([]api.Act
 
 // RevokeActionGrant ends a grant its owner no longer allows.
 func (c *Client) RevokeActionGrant(ctx context.Context, id string) (*api.ActionGrant, error) {
+	return c.RevokeActionGrantWithReason(ctx, id, "")
+}
+
+func (c *Client) RevokeActionGrantWithReason(ctx context.Context, id, reason string) (*api.ActionGrant, error) {
 	var out api.ActionGrant
-	if err := c.do(ctx, http.MethodPost, "/v1/console/action-grants/"+esc(id)+"/revoke", nil, struct{}{}, &out); err != nil {
+	if err := c.do(ctx, http.MethodPost, "/v1/console/action-grants/"+esc(id)+"/revoke", nil, api.ActionGrantRevoke{Reason: reason}, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil

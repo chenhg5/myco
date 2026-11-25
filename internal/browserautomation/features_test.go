@@ -3,8 +3,10 @@ package browserautomation
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -66,13 +68,36 @@ func TestClipDetectionIncludesChildrenAndMalformedFields(t *testing.T) {
 		`{"script":{"graph":{"nodes":[{"type":"screenshot","clip":null}]}}}`,
 		`{"scripts":{"child":{"graph":{"nodes":[{"type":"screenshot","clip":{}}]}}}}`,
 	} {
-		if !runNeedsScreenshotClip([]byte(body)) {
+		if !slices.Contains(runRequiredFeatures([]byte(body)), "screenshot_clip") {
 			t.Fatal("clip field ignored", body)
 		}
 	}
 	for _, body := range []string{`{}`, `{"script":{"graph":{"nodes":[{"type":"screenshot","full":true}]}}}`} {
-		if runNeedsScreenshotClip([]byte(body)) {
+		if slices.Contains(runRequiredFeatures([]byte(body)), "screenshot_clip") {
 			t.Fatal("ordinary script requires new feature", body)
 		}
+	}
+}
+
+func TestBrowserDraftRequiresPlaybackSupport(t *testing.T) {
+	for _, node := range []string{`{"type":"back"}`, `{"type":"forward"}`, `{"type":"reload"}`, `{"type":"tab","tab":"close"}`, `{"type":"screenshot","full":true}`} {
+		body := []byte(`{"scripts":{"child":{"graph":{"nodes":[` + node + `]}}}}`)
+		if got := runRequiredFeatures(body); !slices.Equal(got, []string{"agent_control"}) {
+			t.Fatalf("%s: %v", node, got)
+		}
+	}
+}
+
+func TestBrowserControlErrorPreservesStableCode(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+		w.Write([]byte(`{"error":"page text must stay private","code":"session_closed","reason":"stopped_by_owner"}`))
+	}))
+	defer server.Close()
+	component := &Component{address: strings.TrimPrefix(server.URL, "http://"), secret: "fixture"}
+	err := component.Call(context.Background(), "scope", http.MethodPost, "/control/act", nil, nil)
+	var native *ComponentError
+	if !errors.As(err, &native) || native.Code != "session_closed" || native.Reason != "stopped_by_owner" || err.Error() != "session_closed" {
+		t.Fatalf("unexpected native error: %v", err)
 	}
 }

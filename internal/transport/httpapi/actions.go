@@ -217,7 +217,11 @@ func (s *Server) revokeActionGrant(w http.ResponseWriter, r *http.Request) {
 	if !s.actionsEnabled(w) {
 		return
 	}
-	g, err := s.actions.Revoke(r.Context(), s.actorOf(r), r.PathValue("id"))
+	var req api.ActionGrantRevoke
+	if r.ContentLength != 0 && !decode(w, r, &req) {
+		return
+	}
+	g, err := s.actions.RevokeWithReason(r.Context(), s.actorOf(r), r.PathValue("id"), req.Reason)
 	if err != nil {
 		writeError(w, err)
 		return

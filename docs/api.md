@@ -560,6 +560,43 @@ mapping, and the host registers only capabilities its installed component suppor
 | `browser.run.resume` | `browser.run` | `{run_id,choice?}` |
 | `browser.run.cancel` | `browser.run` | `{run_id}` |
 
+Live browser control adds six v1 actions when the component advertises
+`agent_control`. They require the independently approved `browser.control`
+permission on the exact machine and browser profile. Grants last at most 30
+minutes. The browser opens visibly so the owner can watch and stop it.
+
+| Action | Arguments | Result |
+|---|---|---|
+| `browser.page.open` | `{profile,url?}` | `session,active_tab,tabs,snapshot,expires_at,idle_expires_at,start_url` |
+| `browser.page.snapshot` | `{session,tab?,mode?,max_nodes?,screenshot?}` | A snapshot with `snapshot_id,frames,node_count,truncated` and accessibility nodes or text |
+| `browser.page.act` | `{session,op,tab?,ref?,value?,key?,url?,dy?,wait?,choice?,timeout_ms?}` | `active_tab,tabs,new_tab?,step_ids,snapshot?,snapshot_error?` |
+| `browser.page.extract` | `{session,tab?,ref,what,attr?}` | Extracted text |
+| `browser.page.screenshot` | `{session,tab?,ref?,clip?,full?}` | Screenshot metadata and a private job artifact |
+| `browser.page.close` | `{session}` | `steps,removed,next,done:true,reason:"closed"` |
+
+Operations are limited to `navigate`, `click`, `dblclick`, `hover`, `type`, `select`,
+`press`, `scroll`, `back`, `forward`, `reload`, `switch_tab`, `close_tab`,
+`wait`, and `dialog`. Extra fields and URL schemes other than HTTP(S) are
+rejected. A wait uses `wait:"element"` with `ref`, `wait:"url"` with `value`,
+or `wait:"network"`. The maximum operation timeout is 30 seconds. Screenshot
+targets `ref`, `clip` and `full` are mutually exclusive. Each image is kept
+as a private job artifact up to 4 MiB.
+
+Refs are scoped to a session, tab, frame and document. A stale ref returns
+`stale_ref`. Take a fresh snapshot before retrying. A successful operation
+with a failed follow-up snapshot still succeeds and returns `snapshot_error`.
+An `outcome_unknown` error calls for observing the page before another action.
+The component limits a draft to 200 steps and 192 KiB. Close explicitly to
+retrieve the draft. Idle sessions end after five minutes. Grant expiry,
+revocation, or owner stop ends the session and discards its draft. Subsequent
+calls on an owner-stopped grant return `session_closed` with
+`reason:"stopped_by_owner"`.
+
+When completing a live browser job, the trusted desktop can send the optional
+`browser_host` field containing only the observed hostname or IP address.
+The Hub audits the action, host and time once per job. Request arguments and
+page contents stay out of the audit log.
+
 Shared page records are **not** approval. The desktop executes only the immutable
 script version and child-script snapshots the computer's owner reviewed and
 approved locally for that profile. An absent, revoked or mismatching version is

@@ -2219,6 +2219,27 @@ async function runMatrix(browser, size, scheme) {
       await grant.waitFor({ state: "hidden", timeout: 10_000 });
     });
 
+    await step("agent 浏览器实时控制授权", async () => {
+      await go(page, "官网改版", narrow);
+      await page.locator(".sp-home .conv-detail").waitFor({ timeout: 10_000 });
+      const ask = await fetch(`http://${HOST}:${mockPort()}/app/mock/superagent-ask`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agent: "pm-codex", kind: "action_grant", permissions: ["browser.control"],
+          resource: { provider: "browser", id: "profile_sample", binding: "policy-2", name: "示例浏览器" },
+          machine: "Studio Mac / 示例浏览器", what: "操作浏览器，30 分钟", reason: "检查示例站点。" }),
+      });
+      if (!ask.ok) throw new Error(`浏览器实时控制申请失败：HTTP ${ask.status}`);
+      const card = page.locator(".sp-home [data-testid=approvals] .sa-approval", { hasText: "示例浏览器" });
+      await card.waitFor({ timeout: 25_000 });
+      const copy = compactText(await card.innerText());
+      for (const fragment of ["登录的所有网站", "显示在你的屏幕上", "随时可以停止", "30 分钟"]) {
+        if (!copy.includes(fragment)) throw new Error(`控制授权卡缺少提示：${fragment}`);
+      }
+      await shot(page, size, scheme, "browser-control-grant");
+      await clickVisible(page, card.getByRole("button", { name: "不同意", exact: true }));
+      await card.waitFor({ state: "hidden", timeout: 10_000 });
+    });
+
     // An agent asks to act on one of your computers (agent actions,
     // v0.21.21): the card says which computer and how, and can allow
     // seeing only; what it may do then shows above its chat, revocable.

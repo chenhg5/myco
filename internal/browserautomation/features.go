@@ -7,26 +7,29 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"slices"
+
+	"github.com/myco-ai/myco/internal/api"
 )
 
 // ErrUnsupportedNode means capability negotiation rejected the run before its POST.
 var ErrUnsupportedNode = errors.New("unsupported_node")
 
-// Old protocol-1 engines ignore unknown node fields. Detect clip even when it
-// is null/malformed: an older engine must never turn that node into a full-page
-// screenshot. Check main and child script snapshots before sending any run.
-func runNeedsScreenshotClip(raw []byte) bool {
+// Check the main and child scripts before handing a run to an older component.
+// A clip requires support even when its value is null or malformed.
+func runRequiredFeatures(raw []byte) []string {
 	var envelope struct {
 		Script  json.RawMessage            `json:"script"`
 		Scripts map[string]json.RawMessage `json:"scripts"`
 	}
 	if json.Unmarshal(raw, &envelope) != nil {
-		return false
+		return nil
 	}
 	scripts := []json.RawMessage{envelope.Script}
 	for _, script := range envelope.Scripts {
 		scripts = append(scripts, script)
 	}
+	clip, control := false, false
 	for _, script := range scripts {
 		var value struct {
 			Graph struct {
@@ -37,15 +40,27 @@ func runNeedsScreenshotClip(raw []byte) bool {
 			continue
 		}
 		for _, node := range value.Graph.Nodes {
-			if _, present := node["clip"]; present {
-				return true
-			}
+			clip = clip || node["clip"] != nil
+			var kind, tab string
+			var full bool
+			_ = json.Unmarshal(node["type"], &kind)
+			_ = json.Unmarshal(node["tab"], &tab)
+			_ = json.Unmarshal(node["full"], &full)
+			control = control || kind == "back" || kind == "forward" || kind == "reload" ||
+				kind == "tab" && tab == "close" || kind == "screenshot" && full
 		}
 	}
-	return false
+	var required []string
+	if clip {
+		required = append(required, "screenshot_clip")
+	}
+	if control {
+		required = append(required, api.BrowserControlFeature)
+	}
+	return required
 }
 
-func requireScreenshotClip(ctx context.Context, hc *http.Client, address, secret, scope string) error {
+func requireBrowserFeatures(ctx context.Context, hc *http.Client, address, secret, scope string, required ...string) error {
 	req, err := http.NewRequestWithContext(ctx, "GET", "http://"+address+"/status", nil)
 	if err != nil {
 		return err
@@ -70,16 +85,19 @@ func requireScreenshotClip(ctx context.Context, hc *http.Client, address, secret
 		}
 		return errors.New("component_failed")
 	}
-	for _, feature := range status.Features {
-		if feature == "screenshot_clip" {
-			return nil
+	for _, feature := range required {
+		if !slices.Contains(status.Features, feature) {
+			return ErrUnsupportedNode
 		}
 	}
-	return ErrUnsupportedNode
+	return nil
 }
 
 // Keep the preflight tied to the very same process endpoint/credential as the
 // run POST; checking c.Call recursively could race a component replacement.
-func needsClipPreflight(method, path string, raw []byte) bool {
-	return method == http.MethodPost && path == "/runs" && len(bytes.TrimSpace(raw)) > 0 && runNeedsScreenshotClip(raw)
+func browserRunPreflight(method, path string, raw []byte) []string {
+	if method != http.MethodPost || path != "/runs" || len(bytes.TrimSpace(raw)) == 0 {
+		return nil
+	}
+	return runRequiredFeatures(raw)
 }

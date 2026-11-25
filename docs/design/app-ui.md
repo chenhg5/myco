@@ -641,3 +641,9 @@ the removal cannot restore its workspace list, overview or projects when they
 finish. Leaving the usage page, switching workspaces or changing its filters
 cancels the outstanding usage request. The UI smoke removal scenario keeps
 Usage open behind Settings and releases an older refresh after removal.
+
+### Browser control approvals
+
+A live browser control request names the browser profile and the duration.
+The approval card explains that the agent can see and operate signed-in sites,
+that its actions are visible on the owner's screen, and that the owner can stop it.

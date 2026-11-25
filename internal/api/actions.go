@@ -127,6 +127,7 @@ type ActionError struct {
 	Message   string `json:"message"`
 	Retryable bool   `json:"retryable"`
 	Applied   *int   `json:"applied,omitempty"`
+	Reason    string `json:"reason,omitempty"`
 }
 
 // ActionArtifact is a private, short-lived file a job made (a screenshot):
@@ -151,6 +152,11 @@ type ActionJob struct {
 	CancelRequested bool             `json:"cancel_requested,omitempty"`
 	CreatedAt       time.Time        `json:"created_at"`
 	FinishedAt      *time.Time       `json:"finished_at,omitempty"`
+}
+
+// ActionGrantRevoke can identify a stop from the browser's local owner panel.
+type ActionGrantRevoke struct {
+	Reason string `json:"reason,omitempty"`
 }
 
 // ActionHostRegister is POST /v1/console/action-hosts: the trusted App on
@@ -206,6 +212,7 @@ type ActionJobComplete struct {
 	Result      json.RawMessage `json:"result,omitempty"`
 	Error       *ActionError    `json:"error,omitempty"`
 	ArtifactIDs []string        `json:"artifact_ids,omitempty"`
+	BrowserHost string          `json:"browser_host,omitempty"`
 }
 
 // ActionTargetList contains enabled private resources of the agent's owner.
