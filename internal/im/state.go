@@ -26,8 +26,6 @@ type state struct {
 	mu    sync.Mutex
 	path  string
 	Convs map[string]*conversation `json:"conversations"`
-	// Agents is each chat's own default agent (/agent).
-	Agents map[string]string `json:"agents,omitempty"`
 }
 
 const keepConversations = 90 * 24 * time.Hour
@@ -35,7 +33,7 @@ const keepConversations = 90 * 24 * time.Hour
 func statePath(dir, name string) string { return filepath.Join(dir, name+".state.json") }
 
 func loadState(dir, name string) (*state, error) {
-	s := &state{path: statePath(dir, name), Convs: map[string]*conversation{}, Agents: map[string]string{}}
+	s := &state{path: statePath(dir, name), Convs: map[string]*conversation{}}
 	b, err := os.ReadFile(s.path)
 	if errors.Is(err, os.ErrNotExist) {
 		return s, nil
@@ -48,9 +46,6 @@ func loadState(dir, name string) (*state, error) {
 	}
 	if s.Convs == nil {
 		s.Convs = map[string]*conversation{}
-	}
-	if s.Agents == nil {
-		s.Agents = map[string]string{}
 	}
 	return s, nil
 }

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { MessageSquare, RotateCcw } from "lucide-react";
-import { appApi, type HubOverview, type IMBridge } from "@/appapi";
+import { RotateCcw } from "lucide-react";
+import { appApi, isOldHub, type IMBridge } from "@/appapi";
+import type { AgentRow } from "@/app/types";
+import { agentKind, nodeName } from "@/app/nodes";
 import { CopyButton } from "@/app/copy";
-import { ErrorText } from "@/app/dialogs";
-import { nodeName } from "@/app/nodes";
+import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
 import { L } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -15,143 +16,100 @@ const PLATFORM: Record<string, () => string> = {
 
 type Scan = { id: string; qr: string; url: string; state: string; error?: string };
 
-/** Settings › Chat apps: bots in Feishu/Lark or Slack that people talk to
- *  like an agent. Feishu is a QR code scanned with the phone app; Slack is
- *  an app made from a manifest, and its two tokens. The bots run on this
- *  computer (its runner service) and speak as a node of yours. */
-export function ChatAppsSection({ hubsOv }: { hubsOv?: HubOverview[] }) {
-  const hub = (hubsOv || []).find((h) => h.ok) || hubsOv?.[0];
-  const agents = (hub?.overview?.agents || [])
-    .map((s) => s.agent)
-    .filter((a) => (!a.kind || a.kind === "agent") && !a.name.includes("im-"));
+/** An agent's chat-app bots, in its details ("Name and access"): each agent
+ *  can have its own Feishu/Lark bot and Slack bot (as voice is per agent);
+ *  what is written to the bot goes to this agent. Bind one by scanning a
+ *  QR code (Feishu) or pasting a Slack app's two tokens; it runs on this
+ *  computer. Only for those who may manage the agent, in an App that runs
+ *  on a computer (the route is absent otherwise, and so is the row). */
+export function ChatAppsRow({ row, mayManage }: { row: AgentRow; mayManage: boolean }) {
+  const ag = row.st.agent;
   const [bridges, setBridges] = useState<IMBridge[] | null>(null);
   const [slackURL, setSlackURL] = useState("");
+  const [gone, setGone] = useState(false);
   const [error, setError] = useState<unknown>(null);
-  const [agent, setAgent] = useState("");
   const [adding, setAdding] = useState<"" | "feishu" | "slack">("");
+  const [removing, setRemoving] = useState<IMBridge | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
-    if (!hub) return;
     try {
-      const r = await appApi.imBridges(hub.id);
+      const r = await appApi.imBridges(row.hub.id, ag.name);
       setBridges(r.bridges);
       setSlackURL(r.slack_create_url);
       setError(null);
     } catch (e) {
-      setError(e);
+      if (isOldHub(e)) setGone(true); else setError(e);
     }
-  }, [hub?.id]);
-
-  useEffect(() => { void load(); }, [load]);
+  }, [row.hub.id, ag.name]);
+  const show = mayManage && agentKind(ag) === "agent" && !gone;
+  useEffect(() => { if (show) void load(); }, [show, load]);
   // A new bot comes online within seconds of being saved: look again.
   useEffect(() => {
     if (!bridges?.some((b) => !b.online)) return;
     const t = window.setInterval(() => void load(), 5000);
     return () => window.clearInterval(t);
   }, [bridges, load]);
-  useEffect(() => {
-    if (!agent && agents.length) setAgent(agents[0].name);
-  }, [agents.length]);
+  if (!show) return null;
 
-  if (!hub) {
-    return <div className="app-empty-note">{L("先连上一个工作区。", "Connect a workspace first.")}</div>;
-  }
-  const agentPicker = (
-    <select className="app-select-field im-agent" value={agent} onChange={(e) => setAgent(e.target.value)} aria-label={L("交给哪个 agent", "Which agent")}>
-      {agents.length === 0 && <option value="">{L("（还没有 agent）", "(no agents yet)")}</option>}
-      {agents.map((a) => <option key={a.name} value={a.name}>{nodeName(a, hub)}</option>)}
-    </select>
-  );
+  const has = (p: string) => bridges?.some((b) => b.platform === p || (p === "feishu" && b.platform === "lark"));
+  const name = nodeName(ag, row.hub);
+  const label = (b: IMBridge) => PLATFORM[b.platform]?.() || b.platform;
+  // "Slack 机器人", "飞书机器人": a space only after a Latin name.
+  const sp = (b: IMBridge) => (/[A-Za-z]$/.test(label(b)) ? " " : "");
+  const remove = async (b: IMBridge) => {
+    setBusy(true); setError(null);
+    try { await appApi.removeIMBridge(b.name); setRemoving(null); await load(); } catch (e) { setError(e); } finally { setBusy(false); }
+  };
 
   return (
     <>
-      <section className="app-setting-card app-setting-lines">
-        <div data-setting="chat-apps" className="app-setting-line">
-          <div className="app-setting-line-text">
-            <b>{L("在聊天软件里找 agent", "Talk to agents from a chat app")}</b>
-            <span>{L("连上后，在飞书或 Slack 里给机器人发消息，就是交给下面选的 agent 做事：进度在原消息上更新，它有问题会在聊天里问你，做完把结果发回来。机器人跑在这台电脑上，不需要公网地址。",
-              "Once connected, what you send the bot in Feishu or Slack goes to the agent chosen below: progress updates in place, it asks you there when it has a question, and its answer comes back in the chat. The bot runs on this computer; no public address is needed.")}</span>
-          </div>
-        </div>
-        <div className="app-setting-line">
-          <div className="app-setting-line-text">
-            <b>{L("交给哪个 agent", "Which agent gets the messages")}</b>
-            <span>{L("在聊天里也能随时换：发 /agent 名字，或者 /to 名字 要做的事。", "It can be changed in the chat too: /agent name, or /to name what to do.")}</span>
-          </div>
-          {agentPicker}
-        </div>
-      </section>
-
-      <h4 className="app-setting-group">{L("已连接", "Connected")}</h4>
-      <section className="app-setting-card app-setting-lines" data-testid="im-bridges">
-        {bridges === null && !error && <div className="app-setting-line"><span className="app-empty-note">{L("正在读取…", "Loading…")}</span></div>}
-        {bridges?.length === 0 && (
-          <div className="app-setting-line"><span className="app-empty-note">{L("还没有连接聊天软件。", "No chat apps connected yet.")}</span></div>
-        )}
-        {bridges?.map((b) => <BridgeRow key={b.name} b={b} agents={agents.map((a) => ({ name: a.name, label: nodeName(a, hub) }))} onChanged={load} />)}
-        {error ? <div className="app-setting-line"><ErrorText error={error} onRetry={() => void load()} /></div> : null}
-      </section>
-
-      <h4 className="app-setting-group">{L("添加", "Add")}</h4>
-      <section className="app-setting-card app-setting-lines">
-        <div className="app-setting-line">
-          <span className="im-icon"><MessageSquare className="h-4 w-4" /></span>
-          <div className="app-setting-line-text">
-            <b>{L("飞书 / Lark", "Feishu / Lark")}</b>
-            <span>{L("用飞书手机 App 扫一下码，就建好一个你自己的机器人。", "Scan a code with the Feishu or Lark phone app and your own bot is made.")}</span>
-          </div>
-          {adding !== "feishu" && <button type="button" className="app-btn app-btn-quiet" disabled={!agent} onClick={() => setAdding("feishu")}>{L("扫码连接", "Connect")}</button>}
-        </div>
-        {adding === "feishu" && <FeishuScan hubId={hub.id} agent={agent} onDone={() => { setAdding(""); void load(); }} onCancel={() => setAdding("")} />}
-        <div className="app-setting-line">
-          <span className="im-icon"><MessageSquare className="h-4 w-4" /></span>
-          <div className="app-setting-line-text">
-            <b>Slack</b>
-            <span>{L("在 Slack 里建一个应用（设置都已填好），装到你的工作区，再把两个令牌粘到这里。", "Make an app in Slack (its settings are filled in), install it to your workspace, and paste its two tokens here.")}</span>
-          </div>
-          {adding !== "slack" && <button type="button" className="app-btn app-btn-quiet" disabled={!agent} onClick={() => setAdding("slack")}>{L("连接", "Connect")}</button>}
-        </div>
-        {adding === "slack" && <SlackForm hubId={hub.id} agent={agent} createURL={slackURL} onDone={() => { setAdding(""); void load(); }} onCancel={() => setAdding("")} />}
-      </section>
-    </>
-  );
-}
-
-function BridgeRow({ b, agents, onChanged }: { b: IMBridge; agents: { name: string; label: string }[]; onChanged: () => Promise<void> }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<unknown>(null);
-  const [confirm, setConfirm] = useState(false);
-  const act = async (f: () => Promise<unknown>) => {
-    setBusy(true); setError(null);
-    try { await f(); await onChanged(); } catch (e) { setError(e); } finally { setBusy(false); }
-  };
-  const status = b.online
-    ? { dot: "working", text: L("在线", "Online") }
-    : { dot: "pending", text: L("正在启动…（这台电脑的 runner 几秒内会接上）", "Starting… (this computer's runner picks it up in a few seconds)") };
-  return (
-    <div className="app-setting-line im-bridge" data-bridge={b.name}>
-      <span className="im-icon"><MessageSquare className="h-4 w-4" /></span>
-      <div className="app-setting-line-text">
-        <b>{PLATFORM[b.platform]?.() || b.platform}{b.name !== b.platform && <span className="im-name"> · {b.name}</span>}</b>
-        <span className="im-status"><i className={cn("dot", status.dot)} aria-hidden />{status.text}</span>
-        {b.claim && (
-          <span className="im-claim">
-            {L("还没有主人：在飞书或 Slack 里私聊机器人，发这一行就成为它的主人：", "No owner yet: send the bot this line in a direct message to become its owner:")}
+      <div className="app-kv has-help" data-testid="chat-apps-row">
+        <span className="app-kv-label">{L("聊天软件", "Chat apps")}</span>
+        <span className="app-kv-value app-resume-actions">
+          {bridges?.length ? bridges.map((b) => (
+            <span key={b.name} className="im-bot" data-bridge={b.name}>
+              <i className={cn("dot", b.online ? "working" : "pending")} aria-hidden />
+              {label(b)}
+              <span className="app-kv-note">{b.online ? L("在线", "online") : L("启动中…", "starting…")}</span>
+              <button type="button" className="app-kv-link" disabled={busy} onClick={() => setRemoving(b)}>{L("解绑", "Unbind")}</button>
+            </span>
+          )) : <span className="app-kv-note">{bridges ? L("还没有绑定", "None yet") : L("正在读取…", "Loading…")}</span>}
+          {bridges && !has("feishu") && <button type="button" className="app-kv-link" onClick={() => setAdding("feishu")}>{L("绑定飞书", "Bind Feishu")}</button>}
+          {bridges && !has("slack") && <button type="button" className="app-kv-link" onClick={() => setAdding("slack")}>{L("绑定 Slack", "Bind Slack")}</button>}
+        </span>
+        <span className="app-kv-help">
+          {L(`给它一个飞书或 Slack 机器人：在聊天软件里发消息，就是交给 ${name} 做事，进度和结果都回到聊天里。机器人跑在这台电脑上。`,
+            `Give it a Feishu or Slack bot: what you send the bot goes to ${name}, and its progress and answer come back in the chat. The bot runs on this computer.`)}
+        </span>
+        {bridges?.filter((b) => b.claim).map((b) => (
+          <span key={b.name} className="im-claim">
+            {L(`${label(b)}${sp(b)}机器人还没有主人：私聊机器人发这一行，就成为它的主人：`, `The ${label(b)} bot has no owner yet: send it this line in a direct message to become its owner:`)}
             <span className="app-command"><code>/claim {b.claim}</code><CopyButton value={`/claim ${b.claim}`} /></span>
           </span>
-        )}
-        {error ? <ErrorText error={error} /> : null}
+        ))}
+        <ErrorText error={error} />
       </div>
-      <select className="app-select-field im-agent" value={b.agent || ""} disabled={busy} aria-label={L("交给哪个 agent", "Which agent")}
-        onChange={(e) => void act(() => appApi.setIMBridge(b.name, e.target.value))}>
-        {!b.agent && <option value="">{L("（未设置）", "(not set)")}</option>}
-        {b.agent && !agents.some((a) => a.name === b.agent) && <option value={b.agent}>{b.agent}</option>}
-        {agents.map((a) => <option key={a.name} value={a.name}>{a.label}</option>)}
-      </select>
-      {confirm
-        ? <button type="button" className="app-btn app-btn-danger" disabled={busy} onClick={() => void act(() => appApi.removeIMBridge(b.name))}>{L("确定断开", "Disconnect")}</button>
-        : <button type="button" className="app-btn app-btn-quiet" disabled={busy} onClick={() => setConfirm(true)}>{L("断开", "Disconnect")}</button>}
-    </div>
+
+      <Modal open={adding !== ""} onOpenChange={(o) => !o && setAdding("")}
+        title={adding === "slack" ? L(`给 ${name} 绑定 Slack 机器人`, `A Slack bot for ${name}`) : L(`给 ${name} 绑定飞书机器人`, `A Feishu bot for ${name}`)}
+        description={adding === "slack"
+          ? L("在 Slack 里建一个应用（设置都已填好），装到你的工作区，再把两个令牌粘到这里。", "Make an app in Slack (its settings are filled in), install it to your workspace, and paste its two tokens here.")
+          : L("用飞书或 Lark 手机 App 扫码，在手机上确认，飞书就建好这个机器人；你就是它的主人。", "Scan with the Feishu or Lark phone app and approve: Feishu makes the bot, with you as its owner.")}>
+        {adding === "feishu" && <FeishuScan hubId={row.hub.id} agent={ag.name} onDone={() => { setAdding(""); void load(); }} onCancel={() => setAdding("")} />}
+        {adding === "slack" && <SlackForm hubId={row.hub.id} agent={ag.name} createURL={slackURL} onDone={() => { setAdding(""); void load(); }} onCancel={() => setAdding("")} />}
+      </Modal>
+
+      <ConfirmDialog
+        open={!!removing}
+        onOpenChange={(o) => !o && setRemoving(null)}
+        title={L("解绑这个机器人？", "Unbind this bot?")}
+        description={L("这台电脑不再运行它，聊天软件里的消息不会再交给这个 agent。飞书或 Slack 里的应用还在，可以到那边删掉。", "This computer stops running it, and messages in the chat app no longer reach this agent. The app stays in Feishu or Slack; delete it there if you like.")}
+        confirmLabel={L("解绑", "Unbind")}
+        busy={busy}
+        onConfirm={() => { if (removing) void remove(removing); }}
+      />
+    </>
   );
 }
 
@@ -184,22 +142,25 @@ function FeishuScan({ hubId, agent, onDone, onCancel }: { hubId: string; agent: 
   }, [scan?.id, scan?.state]);
 
   return (
-    <div className="app-setting-line im-scan" data-testid="feishu-scan">
-      {scan?.qr && scan.state === "waiting" && <img className="im-qr" src={scan.qr} alt={L("飞书扫码", "Feishu QR code")} width={168} height={168} />}
-      <div className="app-setting-line-text">
-        {!scan && !error && <span>{L("正在向飞书要二维码…", "Getting a QR code from Feishu…")}</span>}
-        {scan?.state === "waiting" && <>
-          <b>{L("用飞书或 Lark 手机 App 扫码", "Scan with the Feishu or Lark phone app")}</b>
-          <span>{L("扫码后在手机上确认，飞书会建好机器人；你就是它的主人。二维码 10 分钟内有效。", "Approve on the phone and Feishu makes the bot, with you as its owner. The code works for 10 minutes.")}</span>
-        </>}
-        {scan?.state === "connecting" && <span>{L("扫好了，正在连接…", "Scanned; connecting…")}</span>}
-        {scan?.state === "failed" && <span className="app-error-text">{scan.error || L("没有连上。", "It did not connect.")}</span>}
-        {error ? <ErrorText error={error} /> : null}
+    <div className="im-scan" data-testid="feishu-scan">
+      <div className="im-qr-box">
+        {scan?.qr && scan.state === "waiting"
+          ? <img className="im-qr" src={scan.qr} alt={L("飞书扫码", "Feishu QR code")} width={184} height={184} />
+          : <div className="im-qr im-qr-empty" />}
       </div>
-      {(scan?.state === "failed" || !!error) && (
-        <button type="button" className="app-btn app-btn-quiet" onClick={() => void start()}><RotateCcw className="h-3.5 w-3.5" />{L("再来一次", "Try again")}</button>
-      )}
-      <button type="button" className="app-btn app-btn-quiet" onClick={onCancel}>{L("取消", "Cancel")}</button>
+      <p className="im-scan-note">
+        {!scan && !error && L("正在向飞书要二维码…", "Getting a QR code from Feishu…")}
+        {scan?.state === "waiting" && L("二维码 10 分钟内有效。扫好后这里会自动完成。", "The code works for 10 minutes. This finishes by itself once scanned.")}
+        {scan?.state === "connecting" && L("扫好了，正在连接…", "Scanned; connecting…")}
+        {scan?.state === "failed" && <span className="app-error-text">{scan.error || L("没有连上。", "It did not connect.")}</span>}
+      </p>
+      <ErrorText error={error} />
+      <div className="app-modal-actions">
+        {(scan?.state === "failed" || !!error) && (
+          <button type="button" className="app-btn app-btn-quiet" onClick={() => void start()}><RotateCcw className="h-3.5 w-3.5" />{L("再来一次", "Try again")}</button>
+        )}
+        <button type="button" className="app-btn" onClick={onCancel}>{L("取消", "Cancel")}</button>
+      </div>
     </div>
   );
 }
@@ -215,7 +176,7 @@ function SlackForm({ hubId, agent, createURL, onDone, onCancel }: { hubId: strin
   };
   const ok = bot.trim().startsWith("xoxb-") && app.trim().startsWith("xapp-");
   return (
-    <div className="app-setting-line im-slack" data-testid="slack-form">
+    <div className="im-slack" data-testid="slack-form">
       <ol className="im-steps">
         <li>{L("打开 Slack 的建应用页（设置都已填好），选你的工作区，创建：", "Open Slack's create-app page (the settings are filled in), pick your workspace and create it:")}{" "}
           <a href={createURL} target="_blank" rel="noreferrer">{L("在 Slack 里创建", "Create in Slack")} ↗</a></li>
@@ -224,10 +185,10 @@ function SlackForm({ hubId, agent, createURL, onDone, onCancel }: { hubId: strin
         <li>{L("「Basic Information」里生成一个 App-Level Token，权限选 connections:write（xapp- 开头）：", "Under Basic Information, generate an app-level token with connections:write (starts xapp-):")}
           <input className="app-input mono" type="password" value={app} onChange={(e) => setApp(e.target.value)} placeholder="xapp-…" autoComplete="off" spellCheck={false} /></li>
       </ol>
-      <span className="app-small-note">{L("令牌只存在这台电脑上。连好后在 Slack 里私聊机器人，发这里给出的 /claim 码，就成为它的主人。", "The tokens stay on this computer. Once connected, send the bot the /claim code shown here to become its owner.")}</span>
-      {error ? <ErrorText error={error} /> : null}
-      <div className="im-actions">
-        <button type="button" className="app-btn app-btn-quiet" onClick={onCancel}>{L("取消", "Cancel")}</button>
+      <p className="app-small-note">{L("令牌只存在这台电脑上。连好后会给出一行 /claim 码，私聊机器人发一下就成为它的主人。", "The tokens stay on this computer. Once connected you get a /claim line; send it to the bot in a direct message to become its owner.")}</p>
+      <ErrorText error={error} />
+      <div className="app-modal-actions">
+        <button type="button" className="app-btn" onClick={onCancel}>{L("取消", "Cancel")}</button>
         <button type="button" className="app-btn app-btn-primary" disabled={!ok || busy} onClick={() => void save()}>{busy ? L("连接中…", "Connecting…") : L("连接", "Connect")}</button>
       </div>
     </div>

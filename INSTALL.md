@@ -985,13 +985,13 @@ Talk to your agents from a chat app. Run this on a machine that has joined your 
 myco im connect feishu --agent coder
 ```
 
-What you write to the bot becomes a task for `coder`. Progress updates in place, the agent's questions and answers come back in the chat, and your replies are added to the task at work.
+This makes `coder`'s own bot (one bot per agent): what you write to it becomes a task for `coder`. Progress updates in place, the agent's questions and answers come back in the chat, and your replies are added to the task at work.
 
 For Slack, `myco im connect slack` prints a link that creates the Slack app from a manifest. Pass its two tokens to finish.
 
 The runner service runs the bridges configured on the machine. No public address is needed.
 
-See [Chat apps](docs/im.md) for groups, commands (`/to`, `/agent`, `/stop`, `/new`), who may use a bot (`myco im allow`), and where the secrets are kept.
+See [Chat apps](docs/im.md) for groups, the App (the agent's details › Chat apps), commands (`/stop`, `/new`), who may use a bot (`myco im allow`), and where the secrets are kept.
 
 ## 5. Check your setup
 

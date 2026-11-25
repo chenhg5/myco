@@ -1,6 +1,0 @@
-<<<<<<<< HEAD:internal/web/dist/assets/infoDiagram-A4XQUW5V-BtoJorBw.js
-import{_ as e,l as s,G as n,e as i,H as p}from"./mermaid.core-BXei5Lcq.js";import{p as g}from"./gitGraph-YCYPL57B-C9bJ1-su.js";import"./index-BkSwPo6n.js";import"./min-Wyff4B1R.js";import"./_baseUniq-CWEg9P-0.js";var v={parse:e(async r=>{const a=await g("info",r);s.debug(a)},"parse")},d={version:p},m=e(()=>d.version,"getVersion"),c={getVersion:m},l=e((r,a,o)=>{s.debug(`rendering info diagram
-========
-import{_ as e,l as s,G as n,e as i,H as p}from"./mermaid.core-WukGONJu.js";import{p as g}from"./gitGraph-YCYPL57B-BfDM2FxJ.js";import"./index-BRmDrgNU.js";import"./min-Br6mdiTP.js";import"./_baseUniq-BrGRI70i.js";var v={parse:e(async r=>{const a=await g("info",r);s.debug(a)},"parse")},d={version:p},m=e(()=>d.version,"getVersion"),c={getVersion:m},l=e((r,a,o)=>{s.debug(`rendering info diagram
->>>>>>>> 319b57f (Add Settings › Chat apps: connect Feishu and Slack bots from the App):internal/web/dist/assets/infoDiagram-A4XQUW5V-yM_avnmb.js
-`+r);const t=n(a);i(t,100,400,!0),t.append("g").append("text").attr("x",100).attr("y",40).attr("class","version").attr("font-size",32).style("text-anchor","middle").text(`v${o}`)},"draw"),f={draw:l},S={parser:v,db:c,renderer:f};export{S as diagram};

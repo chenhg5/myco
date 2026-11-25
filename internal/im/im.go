@@ -1,8 +1,8 @@
 // Package im connects chat apps (Feishu/Lark, Slack) to myco agents.
 //
-// A bridge is one chat-app bot and one myco node (harness "inbox") owned by
-// the person who set it up. What they write to the bot becomes a task for an
-// agent, sent by that node; the agent's progress updates one status message
+// A bridge is one chat-app bot for one agent, speaking as one myco node
+// (harness "inbox") owned by the person who set it up. What they write to the
+// bot becomes a task for that agent, sent by the node; the agent's progress updates one status message
 // in place, its answer comes back as a new message in the same conversation,
 // and a question it asks is shown there for them to answer by replying.
 //
@@ -65,8 +65,8 @@ type Adapter interface {
 
 // command is a command (/help, /to …) at the start of a message.
 type command struct {
-	name string // "", "help", "agent", "to", "new", "stop", "agents", "whoami", "claim"
-	arg  string // the agent for agent/to
+	name string // "", "help", "new", "stop", "whoami", "claim"
+	arg  string // claim's code
 	rest string // the text after it
 }
 
@@ -79,11 +79,11 @@ func parseCommand(text string) command {
 	word, rest, _ := strings.Cut(t[1:], " ")
 	rest = strings.TrimSpace(rest)
 	switch w := strings.ToLower(word); w {
-	case "help", "new", "stop", "agents", "whoami":
+	case "help", "new", "stop", "whoami":
 		return command{name: w, rest: rest}
-	case "agent", "to", "claim":
+	case "claim":
 		arg, more, _ := strings.Cut(rest, " ")
-		return command{name: w, arg: strings.TrimPrefix(strings.TrimSpace(arg), "@"), rest: strings.TrimSpace(more)}
+		return command{name: w, arg: strings.TrimSpace(arg), rest: strings.TrimSpace(more)}
 	}
 	return command{rest: t} // not ours: a path, say
 }

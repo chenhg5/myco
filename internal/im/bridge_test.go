@@ -158,9 +158,6 @@ func (h *fakeHub) Reply(_ context.Context, id, body string) error {
 	h.replied = append(h.replied, id)
 	return nil
 }
-func (h *fakeHub) Online(context.Context) ([]api.Agent, error) {
-	return []api.Agent{{Name: "coder", DisplayName: "Coder", Description: "writes code"}}, nil
-}
 func (h *fakeHub) nsent() int { h.mu.Lock(); defer h.mu.Unlock(); return len(h.sent) }
 
 func eventually(t *testing.T, what string, ok func() bool) {
@@ -251,9 +248,9 @@ func TestStrangersAndGroups(t *testing.T) {
 		t.Fatalf("sent %d, posts %d", hub.nsent(), ad.count())
 	}
 	// The owner mentioning the bot in a group: answered in the topic.
-	b.Handle(Inbound{ChatID: "oc_g", Group: true, MessageID: "om_3", ThreadKey: "msg:om_3", UserID: "ou_owner", Text: "/to reviewer check PR 9", Mentioned: true})
+	b.Handle(Inbound{ChatID: "oc_g", Group: true, MessageID: "om_3", ThreadKey: "msg:om_3", UserID: "ou_owner", Text: "check PR 9", Mentioned: true})
 	eventually(t, "sent", func() bool { return hub.nsent() == 1 })
-	if hub.sent[0].To != "reviewer" || !strings.HasPrefix(hub.sent[0].Body, "check PR 9") {
+	if hub.sent[0].To != "coder" || !strings.HasPrefix(hub.sent[0].Body, "check PR 9") {
 		t.Fatalf("sent %+v", hub.sent[0])
 	}
 	eventually(t, "status", func() bool { return ad.last("status").ref.Thread })
@@ -269,23 +266,27 @@ func TestCommands(t *testing.T) {
 	in := func(id, text string) Inbound {
 		return Inbound{ChatID: "oc_1", MessageID: id, ThreadKey: key, UserID: "ou_owner", Text: text}
 	}
-	b.Handle(in("1", "/agent writer"))
-	eventually(t, "agent set", func() bool { return strings.Contains(ad.last("post").text, "writer") })
+	b.Handle(in("1", "/help"))
+	eventually(t, "help", func() bool { return strings.Contains(ad.last("post").text, "coder") })
 	b.Handle(in("2", "draft a post"))
 	eventually(t, "sent", func() bool { return hub.nsent() == 1 })
-	if hub.sent[0].To != "writer" {
+	if hub.sent[0].To != "coder" {
 		t.Fatalf("to %q", hub.sent[0].To)
 	}
 	b.Handle(in("3", "!stop"))
 	eventually(t, "stopped", func() bool { hub.mu.Lock(); defer hub.mu.Unlock(); return len(hub.stopped) == 1 })
 	b.Handle(in("4", "/new"))
 	eventually(t, "forgot", func() bool { return b.conv(key) == nil })
-	b.Handle(in("5", "/agents"))
-	eventually(t, "agents", func() bool { return strings.Contains(ad.last("post").text, "Coder") })
-	b.Handle(in("6", "/path/to/file is broken"))
+	// Others are not commands: a path, or a command of another bot.
+	b.Handle(in("5", "/path/to/file is broken"))
 	eventually(t, "not a command", func() bool { return hub.nsent() == 2 })
 	if hub.sent[1].ThreadID != "" || !strings.HasPrefix(hub.sent[1].Body, "/path/to/file") {
 		t.Fatalf("sent %+v", hub.sent[1])
+	}
+	b.Handle(in("6", "/to reviewer check it"))
+	eventually(t, "steer", func() bool { hub.mu.Lock(); defer hub.mu.Unlock(); return len(hub.steers) == 1 })
+	if !strings.Contains(hub.steers[0], "/to reviewer check it") {
+		t.Fatalf("steer %q", hub.steers[0])
 	}
 }
 
@@ -383,8 +384,8 @@ func TestConfigFiles(t *testing.T) {
 func TestParseCommand(t *testing.T) {
 	for in, want := range map[string]command{
 		"hello":           {rest: "hello"},
-		"/to @coder fix":  {name: "to", arg: "coder", rest: "fix"},
-		"!agent writer":   {name: "agent", arg: "writer"},
+		"/claim ab12":     {name: "claim", arg: "ab12"},
+		"!new go":         {name: "new", rest: "go"},
 		"/STOP":           {name: "stop"},
 		"/usr/bin is odd": {rest: "/usr/bin is odd"},
 	} {

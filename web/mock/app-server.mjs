@@ -2062,7 +2062,7 @@ const localAgents = [
     install: "curl -fsSL https://opencode.ai/install | bash", install_mirror: "npm install -g opencode-ai" + npmMirror, login: "opencode auth login" },
 ];
 
-let imBridges = [{ name: "feishu", platform: "feishu", agent: "", has_owner: true, node: "studio-im-feishu", online: true }];
+let imBridges = [{ name: "feishu-pm-codex", platform: "feishu", agent: "pm-codex", has_owner: true, node: "studio-im-feishu-pm-codex", online: true }];
 let imScan = null;
 // A QR-code-looking placeholder (the real App gets a PNG from Feishu's link).
 const MOCK_QR = "data:image/svg+xml;base64," + Buffer.from(
@@ -3144,7 +3144,8 @@ const server = http.createServer(async (req, res) => {
   // /app/im: chat-app bots (ChatApps.tsx).
   if (parts[0] === "app" && parts[1] === "im") {
     if (parts.length === 2 && method === "GET") {
-      return send(res, 200, { bridges: imBridges, slack_create_url: "https://api.slack.com/apps?new_app=1&manifest_json=%7B%7D" });
+      const agent = url.searchParams.get("agent");
+      return send(res, 200, { bridges: imBridges.filter((b) => !agent || b.agent === agent), slack_create_url: "https://api.slack.com/apps?new_app=1&manifest_json=%7B%7D" });
     }
     if (parts.length === 3 && parts[2] === "feishu" && method === "POST") {
       const body = await readBody(req);
@@ -3161,15 +3162,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (parts.length === 3 && parts[2] === "slack" && method === "POST") {
       const body = await readBody(req);
-      const b = { name: "slack", platform: "slack", agent: body.agent, has_owner: false, claim: "3f9a1c2e", node: "studio-im-slack", online: true };
+      const b = { name: `slack-${body.agent}`, platform: "slack", agent: body.agent, has_owner: false, claim: "3f9a1c2e", node: "studio-im-slack", online: true };
       imBridges.push(b);
       return send(res, 200, { bridge: b });
-    }
-    if (parts.length === 3 && method === "PUT") {
-      const body = await readBody(req);
-      const b = imBridges.find((x) => x.name === parts[2]);
-      if (b) b.agent = body.agent;
-      return send(res, 200, { name: parts[2], agent: body.agent });
     }
     if (parts.length === 3 && method === "DELETE") {
       imBridges = imBridges.filter((x) => x.name !== parts[2]);

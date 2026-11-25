@@ -1,20 +1,20 @@
 package console
 
-// Chat-app bots (myco im) from the App: connect a Feishu/Lark bot by
-// scanning a QR code shown in the App, or a Slack bot from its two tokens;
-// see them, change the agent they hand work to, remove them.
+// An agent's chat-app bots (myco im) from the App: each agent can have its
+// own Feishu/Lark bot (a QR code shown in the App, scanned with the phone)
+// and Slack bot (an app made from a manifest, and its two tokens). The App
+// shows them in the agent's details, and can remove them.
 //
 // The QR code is Feishu's app registration flow, run here so the App can
 // show the code; the rest is the myco CLI (myco im connect/list/set/remove),
 // which creates the bot's node on the hub and keeps the bot's secrets in
 // ~/.myco/im. This computer's runner service runs the bots configured there.
 //
-//	GET    /app/im?hub_id=            {bridges: [...], slack_create_url}
+//	GET    /app/im?hub_id=&agent=     {bridges: [...], slack_create_url}  (that agent's bots)
 //	POST   /app/im/feishu             {hub_id, agent}  → {id, url, qr}  a QR code to scan
 //	GET    /app/im/feishu/{id}        {state: waiting|connecting|done|failed, error?, bridge?}
 //	DELETE /app/im/feishu/{id}        stop waiting for the scan
-//	POST   /app/im/slack              {hub_id, agent, bot_token, app_token} → {bridge, claim?}
-//	PUT    /app/im/{name}             {agent}
+//	POST   /app/im/slack              {hub_id, agent, bot_token, app_token} → {bridge}
 //	DELETE /app/im/{name}
 
 import (
@@ -47,7 +47,6 @@ func (b *Backend) imRoutes(m *http.ServeMux) {
 	m.HandleFunc("GET /app/im/feishu/{id}", b.getIMFeishu)
 	m.HandleFunc("DELETE /app/im/feishu/{id}", b.deleteIMFeishu)
 	m.HandleFunc("POST /app/im/slack", b.postIMSlack)
-	m.HandleFunc("PUT /app/im/{name}", b.putIM)
 	m.HandleFunc("DELETE /app/im/{name}", b.deleteIM)
 }
 
@@ -130,29 +129,14 @@ func (b *Backend) getIM(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	hub := b.hubURL(r)
+	hub, agent := b.hubURL(r), r.URL.Query().Get("agent")
 	list := []IMBridge{}
 	for _, br := range all {
-		if hub == "" || config.SameHub(br.Hub, hub) {
+		if (hub == "" || config.SameHub(br.Hub, hub)) && (agent == "" || br.Agent == agent) {
 			list = append(list, br)
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"bridges": list, "slack_create_url": imslack.CreateURL("myco")})
-}
-
-// imName picks an unused bridge name for a platform: feishu, feishu-2, …
-func (b *Backend) imName(ctx context.Context, platform string) string {
-	taken := map[string]bool{}
-	if all, err := b.imList(ctx); err == nil {
-		for _, br := range all {
-			taken[br.Name] = true
-		}
-	}
-	name := platform
-	for i := 2; taken[name]; i++ {
-		name = fmt.Sprintf("%s-%d", platform, i)
-	}
-	return name
+	writeJSON(w, http.StatusOK, map[string]any{"bridges": list, "slack_create_url": imslack.CreateURL(orStr(agent, "myco"))})
 }
 
 // imConnect runs myco im connect with secrets passed in files that only
@@ -201,6 +185,10 @@ func (b *Backend) postIMFeishu(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &in) {
 		return
 	}
+	if in.Agent == "" {
+		writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument", Message: "which agent the bot is for (agent) is required"})
+		return
+	}
 	hub, err := b.find(in.HubID)
 	if err != nil {
 		writeErr(w, err)
@@ -236,10 +224,7 @@ func (b *Backend) postIMFeishu(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		set("connecting", "", nil)
-		args := []string{reg.Platform, "--name", b.imName(ctx, reg.Platform), "--app-id", reg.AppID, "--owner", reg.OwnerOpenID}
-		if in.Agent != "" {
-			args = append(args, "--agent", in.Agent)
-		}
+		args := []string{reg.Platform, "--agent", in.Agent, "--app-id", reg.AppID, "--owner", reg.OwnerOpenID}
 		br, err := b.imConnect(ctx, hub.URL, args, map[string]string{"app-secret-file": reg.AppSecret})
 		if err != nil {
 			set("failed", errText(err), nil)
@@ -290,6 +275,10 @@ func (b *Backend) postIMSlack(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in.BotToken, in.AppToken = strings.TrimSpace(in.BotToken), strings.TrimSpace(in.AppToken)
+	if in.Agent == "" {
+		writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument", Message: "which agent the bot is for (agent) is required"})
+		return
+	}
 	if !strings.HasPrefix(in.BotToken, "xoxb-") || !strings.HasPrefix(in.AppToken, "xapp-") {
 		writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument",
 			Message: "the bot token starts with xoxb- and the app-level token with xapp-"})
@@ -300,35 +289,13 @@ func (b *Backend) postIMSlack(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	args := []string{"slack", "--name", b.imName(r.Context(), "slack")}
-	if in.Agent != "" {
-		args = append(args, "--agent", in.Agent)
-	}
+	args := []string{"slack", "--agent", in.Agent}
 	br, err := b.imConnect(r.Context(), hub.URL, args, map[string]string{"bot-token-file": in.BotToken, "app-token-file": in.AppToken})
 	if err != nil {
 		writeErr(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"bridge": br})
-}
-
-func (b *Backend) putIM(w http.ResponseWriter, r *http.Request) {
-	var in struct {
-		Agent string `json:"agent"`
-	}
-	if !decode(w, r, &in) {
-		return
-	}
-	name := r.PathValue("name")
-	if !im.ValidName(name) {
-		writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument", Message: "invalid bridge name"})
-		return
-	}
-	if _, err := b.imRun(r.Context(), "set", "--name", name, "--agent", in.Agent); err != nil {
-		writeErr(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"name": name, "agent": in.Agent})
 }
 
 func (b *Backend) deleteIM(w http.ResponseWriter, r *http.Request) {

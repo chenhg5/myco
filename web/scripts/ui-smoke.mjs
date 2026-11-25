@@ -4818,6 +4818,44 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".ms").waitFor({ state: "hidden" });
     });
 
+    // An agent's own chat-app bots (ChatApps.tsx), in its details: PM has a
+    // Feishu bot; binding Slack pastes two tokens and shows the /claim line;
+    // binding Feishu shows a QR code; unbinding asks first.
+    await step("成员 · 聊天软件机器人", async () => {
+      await go(page, "成员", narrow);
+      const pm = page.locator(".mb-card", { hasText: "PM (Codex)" });
+      await pm.scrollIntoViewIfNeeded();
+      await pm.click();
+      await page.locator(".ms").waitFor({ timeout: 10_000 });
+      await clickVisible(page, page.locator(".ms .ms-fold"));
+      await clickVisible(page, page.locator(".ms [data-testid=ms-tabs] [data-tab=identity]"));
+      const row = page.locator('.ms [data-testid="chat-apps-row"]');
+      await row.locator('.im-bot[data-bridge="feishu-pm-codex"] .dot.working').waitFor({ timeout: 5_000 });
+      await row.scrollIntoViewIfNeeded();
+      await row.getByRole("button", { name: "绑定 Slack" }).click();
+      const form = page.locator('.app-modal [data-testid="slack-form"]');
+      await form.locator('input[placeholder="xoxb-…"]').fill("xoxb-1-2-3");
+      await form.locator('input[placeholder="xapp-…"]').fill("xapp-1-2-3");
+      await settle(page, 200);
+      await shot(page, size, scheme, "member-chat-apps-slack");
+      await form.getByRole("button", { name: "连接" }).click();
+      await row.locator(".im-claim code", { hasText: "/claim" }).waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "member-chat-apps");
+      // Unbind Feishu, then bind it again with a QR code.
+      await row.locator('.im-bot[data-bridge="feishu-pm-codex"]').getByRole("button", { name: "解绑" }).click();
+      const confirm = page.locator(".app-modal.app-confirm");
+      await confirm.getByRole("button", { name: "解绑" }).click();
+      await row.locator('.im-bot[data-bridge="feishu-pm-codex"]').waitFor({ state: "detached", timeout: 5_000 });
+      await row.getByRole("button", { name: "绑定飞书" }).click();
+      await page.locator('.app-modal [data-testid="feishu-scan"] img.im-qr').waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "member-chat-apps-feishu");
+      await page.locator('.app-modal [data-testid="feishu-scan"]').getByRole("button", { name: "取消" }).click();
+      await page.keyboard.press("Escape");
+      await page.locator(".ms").waitFor({ state: "hidden" });
+    });
+
     // 「换一个来接着做」: PM was taken over from a claude.ai session; its card
     // lists that, with a way back, and the dialog offers a new session on a
     // computer (old computers need an update first) or a one-time command.
