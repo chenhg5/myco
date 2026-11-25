@@ -4,6 +4,38 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.22.13
+
+- **The recorder looks and works like BrowserWing, and can capture one part of the page**: actions are listed in recording order with a status line for the latest one, deleting a step asks inside the panel, hovering outlines top-level elements, and **Extract data** offers text, HTML or an attribute — also by right-clicking an element. **Region screenshot** lets you drag a rectangle in the page; the panel and highlights hide while you do, and that drag never becomes a recorded step. This needs browser component 0.4.0, which the App offers to install or update; an installed 0.3.x keeps working until you update, without region screenshots.
+- **Recording no longer treats ad or embedded-frame jumps as steps**: only navigations you start in the top-level page are recorded, so redirects inside iframes (ads, widgets) no longer add steps of their own.
+- **A page open in another myco App says so**: opening a page that another copy of the App is using now says "This page is open in another myco App. Quit that App, then try again" instead of a generic error. Quit that App rather than only closing its page or window, since the page's local address stays in use.
+- **CodeBuddy, Qoder and Qwen sign-in is detected properly**: when a configured account can be seen, the CLI shows as ready; when the sign-in cannot be told, it now shows **Installed** with an optional **Go to sign in** instead of guessing "Sign in", so a CLI that already works needs nothing. A local agent that finished a task successfully in the last 24 hours also counts as available.
+- **A task on hold resumes when what it waited for is done**: inside a runner, an agent can hold a task until a delegated task ends (`myco message hold --until`), and it resumes with that task's reply or failure. A hold left over from before an upgrade or restart is requeued once after 30 minutes with a progress note; intentional manual holds and tasks waiting on a question stay put. The App now shows held tasks separately as **Held**.
+- **The plan of the task at work is pinned at the top of the chat**: while a task has a plan (Claude Code's to-do list, Codex's plan, a checklist), a bar under the title shows "Plan 2/5 · Doing: …" with how far it is; a click opens the whole list, and × unpins it for that task. Once everything is done it says so for a moment and goes.
+- **Handoff cards are quieter**: on cards for work between agents, only **Working** keeps the accent (with a small breathing dot); Done, Handed back, Waiting and Queued are grey and a finished card's words go quiet, while Trouble keeps its colour. An exchange opened from a card in a chat gets a back button to that chat.
+- **Pages can keep their own files on the Hub**: a page can now store attachments of its own, separate from project files, following the page's permissions; they do not appear in project files, project pull or an agent's project context. Unlinked uploads expire after 24 hours; defaults are 1,000 files, 2 GiB in total and 20 MiB each per page. The CLI has `myco page file put/list/get/remove/migrate`, and the Hub automatically migrates project files that page records reference. This needs a Hub upgrade to use; an App with an older Hub works as before, and the media kit switches over later.
+
+- **Voice calls and dictation know the words to listen for**: the workspace's agents, projects and members, common words (Claude, Codex, GitHub, PR, CI, DeepSeek…) and your own, added under Settings › Voice › Words to hear right, are passed to the recognizer as hints, and only those words are corrected afterwards — casing ("github" → "GitHub"), words said apart ("Deep Seek"), and how a Chinese recognizer writes them ("克劳德", a lone "cloud" → "Claude"); English words next to other English are left alone.
+- **Agents learn structured replies as they join**: an agent's joining notes and the runner's first project context now show when to reply with a myco-ui block — test results, changed files, release checks, comparisons, key numbers, plan steps — and that ordinary short answers stay text, so the App gets cards instead of a wall of text.
+- **A workspace removed during a refresh no longer comes back**: removing a workspace closes its views at once and reads that were already running cannot restore it; leaving the usage page, switching workspaces or changing its filters cancels the outstanding usage request.
+Upgrade: update the App. The recorder changes need browser component 0.4.0, which the App offers to install or update. Page attachments need a Hub upgrade to use; nothing breaks without it.
+
+**中文**
+
+- **录制面板改成 BrowserWing 的样子，还能只截页面的一部分**：动作按录制顺序列出，最新一步有一行状态提示；删除步骤会在面板里再确认；鼠标悬停会框出顶层元素；「提取数据」可以取文字、HTML 或某个属性，右键元素也能选。**区域截图**可以在页面里拖一个矩形，选择时面板和框选提示会隐藏，这次拖动也不会变成录制步骤。这需要浏览器组件 0.4.0，应用会提示安装或更新；已安装的 0.3.x 在更新前继续可用，只是没有区域截图。
+- **录制不再把广告和嵌入框的跳转记成步骤**：只记录你在顶层页面发起的导航，iframe（广告、挂件）里的跳转不再单独产生步骤。
+- **页面在另一个 myco App 里打开时会说清楚**：如果另一个 App 副本正占着这个页面，现在会提示「这个页面正在另一个 myco App 里打开，请先退出另一个 App 再试」，而不是笼统报错。请退出那个 App，只关它的页面或窗口不行，因为页面的本机地址仍被占用。
+- **CodeBuddy、Qoder、Qwen 的登录状态能正确识别**：能看到已配置的账号时显示为可用；看不出登录状态时显示「已安装」，可选「去登录」，不再误显示成「登录」，本来就能用的不用做任何事。本机 agent 在最近 24 小时内成功跑过任务也算可用。
+- **暂挂的任务会在等的条件满足后自动恢复**：在 runner 里，agent 可以先把活派给别的 agent，再用 `myco message hold --until` 暂挂原任务，等那个任务结束（成功或失败）后带着结果恢复。升级或重启前留下的旧暂挂，30 分钟后会带一条进展说明重新排队一次；人为的手动暂挂和还在等答复的任务不会动。App 里把暂挂任务单独显示成「暂挂」。
+- **在做的任务的计划固定在聊天顶部**：任务有计划时（Claude Code 的待办、Codex 的计划、清单），标题下方用一行显示「计划 2/5 · 正在：……」，带一条进度细线；点击展开完整列表，× 可以对该任务取消固定。全部完成后会提示一下就收起。
+- **交接卡片安静下来了**：agent 之间的工作卡片上，只有「进行中」保留强调色（带一个轻微呼吸的小点）；「完成」「已交回」「等待」「排队」都是灰色，完成卡片的文字也变淡，「出问题」保留原来的颜色。从聊天里的卡片打开往来记录时，多了一个返回那个聊天的按钮。
+- **页面可以在 Hub 上存自己的文件**：页面现在能存自己的附件，和项目文件分开，权限跟随页面；不会出现在项目文件、项目拉取或 agent 的项目上下文里。没被记录引用的上传 24 小时后过期；默认每页 1,000 个文件、总共 2 GiB、单个 20 MiB。CLI 有 `myco page file put/list/get/remove/migrate`，Hub 会自动把页面记录引用到的项目文件迁移过来。这需要升级 Hub 才能用；旧 Hub 上应用照常工作，素材库之后切换。
+
+- **语音通话和听写知道该听哪些词**：工作区里的 agent、项目和成员，常用词（Claude、Codex、GitHub、PR、CI、DeepSeek……）以及你自己在「设置 › 语音 › 要听对的词」里加的词，会作为提示交给识别器，之后只对这些词做纠正——大小写（「github」→「GitHub」）、分开说的词（「Deep Seek」），以及中文识别器写出来的样子（「克劳德」、单独一个「cloud」→「Claude」）；和其他英文连在一起的英文保持原样。
+- **agent 加入时就知道怎么发结构化回复**：agent 的加入说明和 runner 第一次给的项目上下文里，现在会说明什么时候该用 myco-ui 块回复——测试结果、改动的文件、发版检查、对比、关键数字、计划步骤——以及普通的简短回答继续用文字，这样应用里看到的是卡片而不是一大段文字。
+- **刷新期间删除的工作区不会再回来**：删除工作区会立刻关掉它的各个视图，删除前已经开始的读取也无法把它恢复；离开用量页、切换工作区或改它的筛选条件时，会取消还没返回的用量请求。
+升级：更新应用即可。录制改动需要浏览器组件 0.4.0，应用会提示安装或更新。页面附件需要升级 Hub 才能用，不升级也不影响现有功能。
+
 ## v0.22.12
 
 - **Recording no longer picks up scrolling you did not make**: the browser recorder adds a scroll step only after a deliberate wheel gesture, a page-navigation key (Page Up/Down, Home/End, space) or a scrollbar drag in that area, and waits for a short quiet moment after other actions. Clicking, typing, focusing, layout changes and scrolling done by the page itself no longer create steps of their own, so a recording replays the scrolls you actually made.
