@@ -70,13 +70,15 @@ func controlFailure(code, reason string) *controlError {
 }
 
 type controlRequest struct {
-	created time.Time
-	digest  [32]byte
-	done    chan struct{}
-	raw     []byte
-	status  int
-	session string
-	method  string
+	retainUntil time.Time
+	terminal    *controlError
+	created     time.Time
+	digest      [32]byte
+	done        chan struct{}
+	raw         []byte
+	status      int
+	session     string
+	method      string
 }
 type controlRef struct {
 	sid        proto.TargetSessionID
@@ -128,12 +130,14 @@ type controlSession struct {
 	wake             chan struct{}
 	lastAction       string
 	lastHost         string
+	hostRecovered    map[proto.TargetTargetID]bool
 	// A trusted input may cause one top-level navigation and one popup. Reserve
 	// both before dispatch, coalesce redirects, and never record iframe traffic.
 	navigationUntil           time.Time
 	navigationPending         bool
 	navigationLoads           map[proto.TargetTargetID]bool
 	navigationTracked         map[proto.TargetTargetID]bool
+	navigationRequests        map[proto.NetworkRequestID]proto.TargetTargetID
 	pendingPopupURL           string
 	navigationTab             proto.TargetTargetID
 	navigationNode, popupNode string
@@ -281,7 +285,7 @@ func (e *engine) controlCall(w http.ResponseWriter, r *http.Request, method stri
 		e.controlRequests = map[string]*controlRequest{}
 	}
 	c := e.controls[in.Session]
-	if method != "open" && (c == nil || c.scope != owner) {
+	if method != "open" && (c != nil && c.scope != owner || c == nil && e.controlRequests[key] == nil) {
 		e.mu.Unlock()
 		fail(w, "not_found", 404)
 		return
@@ -307,6 +311,13 @@ func (e *engine) controlCall(w http.ResponseWriter, r *http.Request, method stri
 		case <-r.Context().Done():
 			return
 		}
+		e.mu.Lock()
+		terminal, status, outcome := old.terminal, old.status, old.raw
+		e.mu.Unlock()
+		if terminal != nil {
+			jsonControlError(w, terminal)
+			return
+		}
 		if old.session != "" {
 			e.mu.Lock()
 			previous := e.controls[old.session]
@@ -319,8 +330,13 @@ func (e *engine) controlCall(w http.ResponseWriter, r *http.Request, method stri
 			}
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(old.status)
-		_, _ = w.Write(old.raw)
+		w.WriteHeader(status)
+		_, _ = w.Write(outcome)
+		return
+	}
+	if method != "open" && c == nil {
+		e.mu.Unlock()
+		fail(w, "not_found", 404)
 		return
 	}
 	if len(e.controlRequests) >= 4096 || e.controlCacheBytes+(256<<10) > 64<<20 {
@@ -345,11 +361,15 @@ func (e *engine) controlCall(w http.ResponseWriter, r *http.Request, method stri
 	// after dispatch. A dropped response can never repeat a click or extraction.
 	e.mu.Lock()
 	e.controlCacheBytes += len(data) - (256 << 10)
-	e.mu.Unlock()
 	request.raw, request.status = data, status
 	if method == "open" && x == nil {
 		request.session = result["session"].(string)
+		request.retainUntil = in.ExpiresAt
 	}
+	if method == "close" {
+		request.retainUntil = c.expires
+	}
+	e.mu.Unlock()
 	close(request.done)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -537,8 +557,13 @@ func (e *engine) controlExecute(ctx context.Context, owner, method string, in co
 		return nil, x
 	}
 	c.enforceHosts(call)
-	if denied := c.takeHostViolation(); denied != nil {
-		return nil, denied
+	// A completed logical action stays successful if a later background
+	// navigation crosses the scope while its brief snapshot is being built.
+	// The pending violation belongs to the next call in that case.
+	if method != "act" || err != nil {
+		if denied := c.takeHostViolation(); denied != nil {
+			return nil, denied
+		}
 	}
 	if err != nil {
 		return nil, controlNativeError(err)

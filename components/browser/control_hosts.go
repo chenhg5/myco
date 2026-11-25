@@ -114,7 +114,9 @@ func (c *controlSession) enforceHosts(ctx context.Context) *controlError {
 		if err != nil {
 			continue
 		}
-		if controlHostAllowed(c.hosts, info.URL) {
+		// An attached target may have no committed document during startup. It
+		// has not navigated anywhere yet; explicit navigation is preflighted.
+		if info.URL == "" || controlHostAllowed(c.hosts, info.URL) {
 			continue
 		}
 		x := c.hostViolation(info.URL)
@@ -122,9 +124,20 @@ func (c *controlSession) enforceHosts(ctx context.Context) *controlError {
 		c.recordHostViolation(x)
 		c.mu.Lock()
 		previous := c.allowedURLs[p.TargetID]
+		if c.hostRecovered == nil {
+			c.hostRecovered = map[proto.TargetTargetID]bool{}
+		}
+		alreadyRecovered := c.hostRecovered[p.TargetID]
+		c.hostRecovered[p.TargetID] = true
 		c.mu.Unlock()
 		if p.TargetID != c.initialTab && previous == "" {
 			_ = p.Context(ctx).Close()
+			continue
+		}
+		if alreadyRecovered {
+			if p.Context(ctx).Navigate("about:blank") != nil {
+				_ = p.Context(ctx).Close()
+			}
 			continue
 		}
 		sid := c.browser.primarySession(p.TargetID)
@@ -140,15 +153,14 @@ func (c *controlSession) enforceHosts(ctx context.Context) *controlError {
 				}
 			}
 		}
+		if !restored && previous != "" {
+			restored = p.Context(ctx).Navigate(previous) == nil
+		}
 		if restored {
 			restored = c.waitAllowed(ctx, p)
 		}
 		if !restored {
-			fallback := previous
-			if fallback == "" {
-				fallback = "about:blank"
-			}
-			if p.Context(ctx).Navigate(fallback) != nil || !c.waitAllowed(ctx, p) {
+			if p.Context(ctx).Navigate("about:blank") != nil {
 				_ = p.Context(ctx).Close()
 			}
 		}

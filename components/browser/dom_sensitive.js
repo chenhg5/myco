@@ -2,7 +2,7 @@ function isSensitive(element, descendants=false) {
   const policy=__MYCO_SENSITIVE_CONFIG__;
   const namePattern=new RegExp(policy.name,'i'), autoPattern=new RegExp(policy.autocomplete,'i');
   const parent=n=>n?.parentElement||n?.getRootNode?.().host||null;
-  const own=n=>!!n&&n.nodeType===1&&(String(n.type||n.getAttribute?.('type')||'').toLowerCase()==='password'||n.hasAttribute?.('data-sensitive')||namePattern.test(n.name||n.getAttribute?.('name')||'')||autoPattern.test(n.autocomplete||n.getAttribute?.('autocomplete')||''));
+  const own=n=>!!n&&n.nodeType===1&&(String(n.type||n.getAttribute?.('type')||'').toLowerCase()==='password'||n.hasAttribute?.('data-sensitive')||String(n.localName||n.tagName||'').toLowerCase()!=='form'&&namePattern.test(n.getAttribute?.('name')||'')||autoPattern.test(n.autocomplete||n.getAttribute?.('autocomplete')||''));
   for(let n=element;n;n=parent(n))if(own(n))return true;
   if(!descendants)return false;
   const seen=new Set(),pending=[element];let count=0;

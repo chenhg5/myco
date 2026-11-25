@@ -113,8 +113,15 @@ console.log('recorder: explicit container intent, quiet window, scrollbar/key pa
 // and common OTP aliases. The recorder must never read their values.
 window.__mycoRecorder.enabled=true;
 for(const fields of [{type:'text',autocomplete:'current-password'},{type:'text',autocomplete:'',name:'otp_code'},{type:'text',autocomplete:'',name:'sms_otp'}]){
- const field=Object.assign(Object.create(password),fields);const before=sent.length;
+ const field=Object.assign(Object.create(password),fields,{getAttribute(name){return name==='name'?this.name||'':''}});const before=sent.length;
  handlers.input({isTrusted:true,composedPath(){return[field]}});window.__mycoRecorder.flush();
  assert.equal(sent.length,before+1);assert.equal(sent.at(-1).sensitive,true);assert.equal(sent.at(-1).value,'${password}');
 }
 assert.equal(valueRead,false,'sensitive alias value read');
+
+const sharedSensitive=vm.runInNewContext('('+policySource+')');
+for(const name of ['footprint','passwordless','totp'])assert.equal(sharedSensitive({nodeType:1,localName:'input',getAttribute(key){return key==='name'?name:''}}),false);
+const namedInput={nodeType:1,localName:'input',getAttribute(){return ''}};
+const form={nodeType:1,localName:'form',name:namedInput,getAttribute(key){return key==='name'?'reset_password_form':''}};
+assert.equal(sharedSensitive(form),false,'form name tainted its descendants');
+assert.equal(sharedSensitive({...namedInput,parentElement:form}),false,'named form access tainted public field');

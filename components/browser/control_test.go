@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"github.com/go-rod/rod"
@@ -10,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -467,9 +469,34 @@ func TestNativeChromeControlHostsAndForcedEnd(t *testing.T) {
 		t.Skip("enable -browser-smoke with installed Chrome")
 	}
 	var base string
+	var deniedVisits atomic.Int32
+	lateRelease := make(chan struct{})
+	defer func() {
+		select {
+		case <-lateRelease:
+		default:
+			close(lateRelease)
+		}
+	}()
 	fixture := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
+		if strings.HasPrefix(r.Host, "ads.localhost") && r.URL.Path == "/blocked" {
+			deniedVisits.Add(1)
+		}
 		switch r.URL.Path {
+		case "/release-late":
+			select {
+			case <-lateRelease:
+			case <-r.Context().Done():
+			}
+		case "/empty":
+			w.WriteHeader(http.StatusNoContent)
+		case "/download":
+			w.Header().Set("Content-Disposition", `attachment; filename="demo.txt"`)
+			fmt.Fprint(w, "demo file")
+		case "/loop":
+			fmt.Fprint(w, `<!doctype html><script>addEventListener('pageshow',()=>setTimeout(()=>location.href='`+strings.Replace(base, "127.0.0.1", "ads.localhost", 1)+`/blocked',100))</script>`)
+
 		case "/slow-redirect":
 			select {
 			case <-r.Context().Done():
@@ -480,7 +507,7 @@ func TestNativeChromeControlHostsAndForcedEnd(t *testing.T) {
 		case "/redirect":
 			http.Redirect(w, r, strings.Replace(base, "127.0.0.1", "ads.localhost", 1)+"/blocked", 302)
 		default:
-			fmt.Fprint(w, `<!doctype html><title>Domain fixture</title><a href="/redirect">Redirect outside</a><a href="/slow-redirect">Slow redirect</a><a target="_blank" href="/slow-redirect">Slow popup</a><a href="#waiting" onclick="setTimeout(()=>location.href='/redirect',600)">Delayed script</a><a target="_blank" href="http://ads.localhost:`+strings.Split(base, ":")[2]+`/blocked">Popup outside</a><button id="count" onclick="this.dataset.count=String(+(this.dataset.count||0)+1)">Count</button>`)
+			fmt.Fprint(w, `<!doctype html><title>Domain fixture</title><label>Title<input></label><a href="/empty">No document</a><a href="/download">Download file</a><a href="/loop">Reload loop</a><a href="/redirect">Redirect outside</a><a href="/slow-redirect">Slow redirect</a><a target="_blank" href="/slow-redirect">Slow popup</a><a href="#waiting" onclick="setTimeout(()=>location.href='/redirect',300)">Early script</a><a href="#later" onclick="setTimeout(()=>fetch('/release-late').then(()=>location.href='/redirect'),600)">Delayed script</a><a target="_blank" href="http://ads.localhost:`+strings.Split(base, ":")[2]+`/blocked">Popup outside</a><button id="count" onclick="this.dataset.count=String(+(this.dataset.count||0)+1)">Count</button>`)
 		}
 	}))
 	defer fixture.Close()
@@ -520,6 +547,10 @@ func TestNativeChromeControlHostsAndForcedEnd(t *testing.T) {
 	e.mu.Unlock()
 	code, out = call("/control/act", map[string]any{"request_id": "direct", "session": session, "op": "navigate", "url": "https://outside.example.com"})
 	if code != 403 || out["code"] != "host_not_allowed" || out["host"] != "outside.example.com" {
+		c.mu.Lock()
+		t.Logf("scope=%v events=%+v", c.hosts, c.events)
+		c.mu.Unlock()
+		diagnose()
 		t.Fatal("navigate preflight", code, out)
 	}
 	find := func(name string) string {
@@ -545,7 +576,7 @@ func TestNativeChromeControlHostsAndForcedEnd(t *testing.T) {
 	if !c.waitAllowed(ctx, page) {
 		t.Fatal("outside tab not restored")
 	}
-	for _, name := range []string{"Slow redirect", "Delayed script", "Slow popup"} {
+	for _, name := range []string{"Slow redirect", "Early script", "Slow popup"} {
 		c.mu.Lock()
 		before := len(c.steps)
 		c.mu.Unlock()
@@ -577,6 +608,54 @@ func TestNativeChromeControlHostsAndForcedEnd(t *testing.T) {
 	if pages != 1 {
 		t.Fatal("outside popup survived", pages)
 	}
+	for _, name := range []string{"No document", "Download file"} {
+		code, out = call("/control/act", map[string]any{"request_id": randID(), "session": session, "op": "click", "ref": find(name), "timeout_ms": 1000})
+		if code != 200 {
+			t.Fatal("non-document navigation did not settle", name, code, out)
+		}
+	}
+	code, out = call("/control/act", map[string]any{"request_id": "fast-click", "session": session, "op": "click", "ref": find("No document"), "timeout_ms": 1000})
+	if code != 200 {
+		t.Fatal("short click timeout became ambiguous", code, out)
+	}
+	code, out = call("/control/act", map[string]any{"request_id": "late-script", "session": session, "op": "click", "ref": find("Delayed script")})
+	if code != 200 {
+		t.Fatal("late script blocked originating response", code, out)
+	}
+	close(lateRelease)
+	deadline := time.Now().Add(5 * time.Second)
+	for !c.hasHostViolation() && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	code, out = call("/control/snapshot", map[string]any{"request_id": "late-script-result", "session": session})
+	if code != 403 || out["code"] != "host_not_allowed" {
+		t.Fatal("late script not reported on next call", code, out)
+	}
+	if !c.waitAllowed(ctx, page) {
+		t.Fatal("late script was not rolled back")
+	}
+	beforeVisits := deniedVisits.Load()
+	code, out = call("/control/act", map[string]any{"request_id": "loop", "session": session, "op": "click", "ref": find("Reload loop")})
+	if code != 403 || out["code"] != "host_not_allowed" {
+		t.Fatal("loop crossing not rejected", code, out)
+	}
+	deadline = time.Now().Add(5 * time.Second)
+	for {
+		info, err := page.Context(ctx).Info()
+		if err == nil && info.URL == "about:blank" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("rollback loop did not stop at blank: info=%+v err=%v visits=%d", info, err, deniedVisits.Load()-beforeVisits)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	settledVisits := deniedVisits.Load()
+	time.Sleep(600 * time.Millisecond)
+	if settledVisits-beforeVisits > 2 || deniedVisits.Load() != settledVisits {
+		t.Fatal("rollback repeatedly visited denied host", beforeVisits, settledVisits, deniedVisits.Load())
+	}
+	c.takeHostViolation()
 	// Force an in-flight wait to end via the trusted App route, not voluntary close.
 	done := make(chan struct{})
 	go func() {
@@ -662,7 +741,16 @@ func TestNativeChromeControlOperationsAndReplay(t *testing.T) {
 		return out
 	}
 	public := find("textbox", "Title")
-	act("type", map[string]any{"ref": public, "value": "Demo"})
+	started := time.Now()
+	act("type", map[string]any{"ref": public, "value": "Demo", "timeout_ms": 500})
+	if time.Since(started) >= 500*time.Millisecond {
+		t.Fatal("typing waited for navigation window")
+	}
+	started = time.Now()
+	act("scroll", map[string]any{"dy": 1, "timeout_ms": 500})
+	if time.Since(started) >= 500*time.Millisecond {
+		t.Fatal("scroll waited for navigation window")
+	}
 	act("press", map[string]any{"ref": public, "key": "End"})
 	act("select", map[string]any{"ref": find("combobox", "Priority"), "value": "high"})
 	act("click", map[string]any{"ref": find("generic", "Custom control")})
@@ -753,15 +841,16 @@ func TestControlClosedSessionsExpireWithoutLifetimeQuota(t *testing.T) {
 		e.mu.Unlock()
 		for n := 0; n < 170; n++ {
 			input, _ := json.Marshal(map[string]any{"request_id": fmt.Sprint("request", requests), "session": id})
-			r := httptest.NewRequest("POST", "/control/close", bytes.NewReader(input))
+			r := httptest.NewRequest("POST", "/control/snapshot", bytes.NewReader(input))
 			r.Header.Set("X-Myco-Scope", c.scope)
 			w := httptest.NewRecorder()
 			e.handler().ServeHTTP(w, r)
-			if w.Code != 200 {
+			if w.Code != 404 {
 				t.Fatalf("round %d request %d: %d %s", round, requests, w.Code, w.Body.String())
 			}
 			requests++
 		}
+		c.terminate("session_closed", "closed")
 		e.pruneControls(time.Now())
 		if e.controls[id] == nil {
 			t.Fatal("retry window was not retained")
@@ -804,8 +893,10 @@ func TestSensitiveFieldPolicyAliases(t *testing.T) {
 			t.Fatal("sensitive alias accepted", attrs)
 		}
 	}
-	if sensitiveAttributes(map[string]string{"name": "title", "type": "text"}) {
-		t.Fatal("ordinary text marked sensitive")
+	for _, attrs := range []map[string]string{{"name": "title"}, {"name": "footprint"}, {"name": "passwordless"}, {"name": "reset_password_form", "tag": "FORM"}} {
+		if sensitiveAttributes(attrs) {
+			t.Fatal("ordinary text marked sensitive", attrs)
+		}
 	}
 }
 
@@ -830,5 +921,92 @@ func TestControlRejectsOverlongGrantBeforeOpening(t *testing.T) {
 	_, err := e.controlOpen(context.Background(), "demo/scope", controlInput{Profile: "demo", GrantID: "grant", Actor: controlActor{ID: "demo-agent"}, ExpiresAt: time.Now().Add(31 * time.Minute)})
 	if err == nil || err.Code != "invalid_argument" {
 		t.Fatal("overlong grant accepted", err)
+	}
+}
+
+func TestControlOpenAndCloseRetrySurviveSessionCleanup(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	e, err := newEngine(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer e.close()
+	life, stop := context.WithCancel(ctx)
+	expires := time.Now().Add(15 * time.Minute)
+	c := &controlSession{e: e, id: "demo-retired", scope: "demo/cache", ctx: life, cancel: stop, expires: expires, last: time.Now(), wake: make(chan struct{}), browser: &session{e: e, id: "p_demo", closeComplete: true}, steps: []node{{ID: "n1", Type: "click"}}}
+	openInput, _ := json.Marshal(map[string]any{"request_id": "open", "profile": "demo", "grant_id": "grant", "actor": controlActor{ID: "demo-agent"}, "expires_at": expires})
+	_, canonical, err := controlDecode(httptest.NewRequest("POST", "/control/open", bytes.NewReader(openInput)), "open")
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	close(done)
+	stored := []byte(`{"snapshot":"private-observation"}`)
+	e.controls = map[string]*controlSession{c.id: c}
+	e.controlRequests = map[string]*controlRequest{c.scope + "\x00open": {created: time.Now(), retainUntil: expires, digest: sha256.Sum256(append([]byte("open\x00"), canonical...)), done: done, raw: stored, status: 200, session: c.id, method: "open"}}
+	e.controlCacheBytes = len(stored)
+	call := func(path string, data []byte) *httptest.ResponseRecorder {
+		r := httptest.NewRequest("POST", path, bytes.NewReader(data))
+		r.Header.Set("X-Myco-Scope", c.scope)
+		w := httptest.NewRecorder()
+		e.handler().ServeHTTP(w, r)
+		return w
+	}
+	closeInput, _ := json.Marshal(map[string]string{"request_id": "close", "session": c.id})
+	first := call("/control/close", closeInput)
+	if first.Code != 200 {
+		t.Fatal(first.Code, first.Body.String())
+	}
+	e.pruneControls(time.Now().Add(3 * time.Minute))
+	if len(e.controls) != 0 {
+		t.Fatal("retired browser session retained")
+	}
+	if e.controlRequests[c.scope+"\x00open"].raw != nil {
+		t.Fatal("closed open retained private snapshot")
+	}
+	retry := call("/control/close", closeInput)
+	if retry.Code != 200 || retry.Body.String() != first.Body.String() {
+		t.Fatal("close retry lost draft", retry.Code, retry.Body.String())
+	}
+	reopen := call("/control/open", openInput)
+	if reopen.Code != 409 || !strings.Contains(reopen.Body.String(), "session_closed") || len(e.controls) != 0 {
+		t.Fatal("open retry recreated browser", reopen.Code, reopen.Body.String())
+	}
+	e.pruneControls(expires.Add(time.Second))
+	if len(e.controlRequests) != 0 || e.controlCacheBytes != 0 {
+		t.Fatal("grant-expired outcomes retained")
+	}
+}
+
+func TestControlNavigationNonDocumentCompletion(t *testing.T) {
+	for _, kind := range []string{"stopped", "download", "failed", "no-content", "beforeunload"} {
+		t.Run(kind, func(t *testing.T) {
+			s, _, send := navigationFixture(t)
+			s.recorder = nil
+			c := &controlSession{browser: s, pending: true, navigationTab: "page", navigationUntil: time.Now().Add(time.Second), navigationTracked: map[proto.TargetTargetID]bool{"page": true}, navigationLoads: map[proto.TargetTargetID]bool{}, navigationRequests: map[proto.NetworkRequestID]proto.TargetTargetID{}, wake: make(chan struct{})}
+			s.control = c
+			send(&proto.PageFrameRequestedNavigation{FrameID: "top", URL: "https://example.com/next"})
+			if !c.navigationPending {
+				t.Fatal("navigation was not tracked")
+			}
+			send(&proto.NetworkRequestWillBeSent{RequestID: "nav-request", FrameID: "top", Type: proto.NetworkResourceTypeDocument})
+			switch kind {
+			case "stopped":
+				send(&proto.PageFrameStoppedLoading{FrameID: "top"})
+			case "download":
+				send(&proto.PageDownloadWillBegin{FrameID: "top"})
+			case "failed":
+				send(&proto.NetworkLoadingFailed{RequestID: "nav-request", Type: proto.NetworkResourceTypeDocument, Canceled: true})
+			case "no-content":
+				send(&proto.NetworkResponseReceived{RequestID: "nav-request", Type: proto.NetworkResourceTypeDocument, Response: &proto.NetworkResponse{Status: 204}})
+			case "beforeunload":
+				s.dialogs = map[proto.TargetSessionID]string{"sid": "beforeunload"}
+				send(&proto.PageJavascriptDialogClosed{Result: false})
+			}
+			if c.navigationPending || len(c.navigationLoads) != 0 || len(c.navigationRequests) != 0 {
+				t.Fatal("non-document navigation never settled")
+			}
+		})
 	}
 }

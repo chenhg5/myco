@@ -38,6 +38,12 @@ func (c *controlSession) layout(ctx context.Context, frame controlFrame, snapsho
 				continue
 			}
 			attrs := map[string]string{}
+			if index < len(doc.Nodes.NodeName) {
+				name := int(doc.Nodes.NodeName[index])
+				if name >= 0 && name < len(snapshot.Strings) {
+					attrs["tag"] = snapshot.Strings[name]
+				}
+			}
 			pairs := doc.Nodes.Attributes[index]
 			for j := 0; j+1 < len(pairs); j += 2 {
 				a, b := int(pairs[j]), int(pairs[j+1])

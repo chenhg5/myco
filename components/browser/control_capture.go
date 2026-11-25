@@ -103,7 +103,7 @@ func (c *controlSession) safeScreenshot(ctx context.Context, p *rod.Page) error 
 			if n == nil {
 				return true
 			}
-			attrs := map[string]string{}
+			attrs := map[string]string{"tag": n.NodeName}
 			for i := 0; i+1 < len(n.Attributes); i += 2 {
 				attrs[strings.ToLower(n.Attributes[i])] = strings.ToLower(n.Attributes[i+1])
 			}

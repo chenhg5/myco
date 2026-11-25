@@ -9,11 +9,11 @@ const controlRetryWindow = 2 * time.Minute
 func (e *engine) pruneControls(now time.Time) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	expired := map[string]bool{}
+	expired := map[string]*controlError{}
 	for id, c := range e.controls {
 		c.mu.Lock()
 		if c.closed && !c.closedAt.IsZero() && !now.Before(c.closedAt.Add(controlRetryWindow)) {
-			expired[id] = true
+			expired[id] = controlFailure(c.code, c.reason)
 			c.steps = nil
 			delete(e.controls, id)
 		}
@@ -26,7 +26,17 @@ func (e *engine) pruneControls(now time.Time) {
 			continue
 		}
 		orphan := request.session == "" && !now.Before(request.created.Add(controlRetryWindow))
-		if expired[request.session] || orphan {
+		terminal := expired[request.session]
+		if terminal != nil && !request.retainUntil.IsZero() && now.Before(request.retainUntil) {
+			if request.method == "open" {
+				request.terminal = terminal
+				e.controlCacheBytes -= len(request.raw)
+				request.raw = nil
+			}
+			continue
+		}
+		retired := !request.retainUntil.IsZero() && !now.Before(request.retainUntil) && e.controls[request.session] == nil
+		if terminal != nil || orphan || retired {
 			delete(e.controlRequests, key)
 			e.controlCacheBytes -= len(request.raw)
 		}

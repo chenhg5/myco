@@ -1,1 +1,1 @@
-{"name":"password|one[-_ ]?time|otp|verification[-_ ]?code|security[-_ ]?code","autocomplete":"password|one[-_ ]?time|otp"}
+{"name":"(^|[-_ ])(password|one[-_ ]?time|otp|verification[-_ ]?code|security[-_ ]?code)([-_ ]|$)","autocomplete":"password|one[-_ ]?time|otp"}

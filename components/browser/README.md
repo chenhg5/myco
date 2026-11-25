@@ -77,8 +77,10 @@ an ID with the same operation and parameters reuses its immutable outcome;
 changing parameters returns `conflict`. Outcomes are never replayed to a closed
 session, except the voluntary close response. Requests arriving while another
 operation runs return `busy`; a forced close bypasses that operation lock.
-Closed sessions and their cached responses expire after a two-minute retry window,
-so cache limits do not become lifetime limits for a running component.
+Closed browser sessions and ordinary observations expire after a two-minute retry
+window. Open request tombstones and close outcomes remain until the grant expires
+(at most thirty minutes), so a lost close can retrieve its draft and a repeated
+open cannot recreate a closed browser. Cache limits remain bounded.
 
 Open takes `profile`, optional HTTP(S) `url`, and desktop-injected `grant_id`,
 `actor: {id, name}`, `expires_at` (RFC 3339, within thirty minutes), and optional
@@ -161,8 +163,15 @@ Explicit navigation is
 checked before dispatch. A top-level redirect or link crossing the scope is
 rolled back; a new disallowed tab is closed. The response and event use
 `host_not_allowed` on the originating action, before it enters the draft.
-Actions observe a two-second causal window and wait for navigations started
-inside it to commit, including slow redirects and popup documents. Derived URL
+Input, scroll and hover return immediately after the event barrier when no
+navigation is pending. Operations likely to navigate observe an additional
+500 ms, then wait for any navigation already started to commit, including slow
+redirects and popup documents. Downloads, HTTP 204 and cancelled navigations
+finish without a new document. Later jumps (including a 600 ms script timer)
+are corrected in the background and reported on the next call; the completed
+action remains in the draft. The two-second recording window does not make
+every action wait two seconds. A tab gets one rollback attempt per deliberate
+action; repeated automatic crossings go to `about:blank` to stop reload loops. Derived URL
 waits use a literal prefix capped at 8 KiB of JSON, with parameter-like fragments
 removed. Iframes and subresources are outside this top-level scope.
 
