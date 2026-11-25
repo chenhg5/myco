@@ -31,6 +31,7 @@ func readEvalSamples(t *testing.T) []evalSample {
 	}
 	var out []evalSample
 	for _, l := range strings.Split(string(b), "\n") {
+		l = strings.TrimSuffix(l, "\r") // a Windows checkout may end lines with CRLF
 		if l == "" || strings.HasPrefix(l, "#") {
 			continue
 		}
@@ -53,6 +54,7 @@ func evalWords(t *testing.T) ([]string, map[string][]string) {
 	}
 	var lines []string
 	for _, l := range strings.Split(string(b), "\n") {
+		l = strings.TrimSuffix(l, "\r")
 		if !strings.HasPrefix(strings.TrimSpace(l), "#") {
 			lines = append(lines, l)
 		}
