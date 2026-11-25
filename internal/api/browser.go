@@ -59,6 +59,7 @@ type BrowserRecording struct {
 	Origin    string    `json:"origin"`
 }
 type BrowserStatus struct {
+	Features        []string           `json:"features,omitempty"`
 	Recordings      []BrowserRecording `json:"recordings,omitempty"`
 	UpdateAvailable bool               `json:"update_available,omitempty"`
 	Protocol        int                `json:"protocol"`

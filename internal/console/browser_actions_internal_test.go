@@ -13,11 +13,13 @@ import (
 	"time"
 
 	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/browserautomation"
 	"github.com/myco-ai/myco/internal/browserpolicy"
 	"github.com/myco-ai/myco/internal/client"
 )
 
 type actionBrowserFixture struct {
+	startError       error
 	resumePending    bool
 	resumeHeartbeats int
 	next             int
@@ -35,6 +37,10 @@ func (f *actionBrowserFixture) Call(ctx context.Context, scope, method, path str
 	var value any
 	switch {
 	case method == "POST" && path == "/runs":
+		if f.startError != nil {
+			f.mu.Unlock()
+			return f.startError
+		}
 		if !strings.HasPrefix(scope, "agent-") {
 			f.mu.Unlock()
 			return fmt.Errorf("human scope reused")
@@ -169,6 +175,11 @@ func TestBrowserHostUsesApprovedSnapshotAndOriginalGrant(t *testing.T) {
 	if done := call("browser.script.run", `{"script_id":"report","version":3}`, denied); done.Error == nil || done.Error.Code != "permission_denied" {
 		t.Fatal("view escalated to run")
 	}
+	comp.startError = browserautomation.ErrUnsupportedNode
+	if rejected := call("browser.script.run", `{"script_id":"report","version":3,"page_id":"pg_test"}`, grant); rejected.Error == nil || rejected.Error.Code != "unsupported_node" {
+		t.Fatalf("preflight refusal lost: %+v", rejected)
+	}
+	comp.startError = nil
 	done := call("browser.script.run", `{"script_id":"report","version":3,"page_id":"pg_test","params":{"month":"11"}}`, grant)
 	if done.State != api.JobSucceeded || !strings.Contains(string(done.Result), `"state":"paused"`) || len(done.ArtifactIDs) != 1 {
 		t.Fatalf("paused job result: %+v", done)

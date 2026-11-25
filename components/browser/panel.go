@@ -26,14 +26,16 @@ func (s *session) collectorScript() string {
 var panelVariable = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,63}$`)
 
 type panelStep struct {
-	ID     string `json:"id"`
-	Type   string `json:"type"`
-	Title  string `json:"title"`
-	Target string `json:"target"`
-	What   string `json:"what,omitempty"`
-	Into   string `json:"into,omitempty"`
+	Clip   *screenshotClip `json:"clip,omitempty"`
+	ID     string          `json:"id"`
+	Type   string          `json:"type"`
+	Title  string          `json:"title"`
+	Target string          `json:"target"`
+	What   string          `json:"what,omitempty"`
+	Into   string          `json:"into,omitempty"`
 }
 type panelState struct {
+	Features     []string    `json:"features"`
 	Hide         bool        `json:"hide"`
 	Revision     uint64      `json:"revision"`
 	ID           string      `json:"id"`
@@ -67,7 +69,7 @@ func (s *session) recordingPanelState(code string) panelState {
 	s.mu.Lock()
 	rec, controller := s.recorder, s.controller
 	s.mu.Unlock()
-	out := panelState{Revision: s.panelRevision, Hide: controller != "" && !strings.HasPrefix(controller, "rec_"), Busy: controller != "", Steps: []panelStep{}, Error: code}
+	out := panelState{Features: []string{"screenshot_clip"}, Revision: s.panelRevision, Hide: controller != "" && !strings.HasPrefix(controller, "rec_"), Busy: controller != "", Steps: []panelStep{}, Error: code}
 	if rec == nil {
 		return out
 	}
@@ -80,7 +82,7 @@ func (s *session) recordingPanelState(code string) panelState {
 	}
 	for _, n := range rec.steps {
 		if !rec.removed[n.ID] {
-			out.Steps = append(out.Steps, panelStep{ID: n.ID, Type: n.Type, Title: n.Title, Target: targetSummary(n.Target), What: n.What, Into: n.Into})
+			out.Steps = append(out.Steps, panelStep{Clip: n.Clip, ID: n.ID, Type: n.Type, Title: n.Title, Target: targetSummary(n.Target), What: n.What, Into: n.Into})
 		}
 	}
 	return out
@@ -111,13 +113,14 @@ func (s *session) updatePanel(code string) error {
 // selection messages can come from a child frame and retain that frame path.
 func (s *session) panelCommand(sid proto.TargetSessionID, frame proto.PageFrameID, raw string) {
 	var in struct {
-		Action      string  `json:"action"`
-		RecordingID string  `json:"recording_id"`
-		ID          string  `json:"id"`
-		Target      *target `json:"target"`
-		What        string  `json:"what"`
-		Attr        string  `json:"attr"`
-		Into        string  `json:"into"`
+		Action      string          `json:"action"`
+		RecordingID string          `json:"recording_id"`
+		ID          string          `json:"id"`
+		Target      *target         `json:"target"`
+		What        string          `json:"what"`
+		Attr        string          `json:"attr"`
+		Into        string          `json:"into"`
+		Clip        *screenshotClip `json:"clip"`
 	}
 	if json.Unmarshal([]byte(raw), &in) != nil {
 		return
@@ -185,6 +188,17 @@ func (s *session) panelCommand(sid proto.TargetSessionID, frame proto.PageFrameI
 			rec.selected = &captured{node: node{Target: in.Target}, page: p, frame: frame}
 		}
 		rec.mu.Unlock()
+	case "screenshot":
+		if rec == nil || p == nil || !in.Clip.valid() {
+			err = errors.New("invalid_argument")
+			break
+		}
+		rec.mu.Lock()
+		active := !rec.closing && !rec.done && !rec.picking
+		rec.mu.Unlock()
+		if active {
+			rec.enqueue(node{Type: "screenshot", Clip: in.Clip}, p)
+		}
 	case "extract-target":
 		// A top-frame trusted context-menu choice supplies its own target. Keep
 		// target, format and variable in one command rather than racing a pick

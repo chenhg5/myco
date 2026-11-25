@@ -414,6 +414,11 @@ func (c *Component) Call(ctx context.Context, scope, method, path string, in, ou
 	req.Header.Set("Content-Type", "application/json")
 	hc := &http.Client{Transport: &http.Transport{Proxy: nil}, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("component redirect refused") }}
 	defer hc.CloseIdleConnections()
+	if needsClipPreflight(method, path, b) {
+		if err := requireScreenshotClip(ctx, hc, address, secret, scope); err != nil {
+			return err
+		}
+	}
 	res, e := hc.Do(req)
 	if e != nil {
 		return errors.New("component_unavailable")

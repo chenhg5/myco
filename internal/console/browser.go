@@ -513,7 +513,7 @@ func browserError(err error) string {
 	if errors.Is(err, context.DeadlineExceeded) {
 		return "timeout"
 	}
-	for _, code := range []string{"busy", "not_found", "cancelled", "timeout", "permission_denied", "invalid_argument", "unsupported", "incompatible_component", "profile_locked", "sensitive_literal", "secret_required", "invalid_graph", "unsupported_node", "artifact_limit", "recording_limit"} {
+	for _, code := range []string{"sensitive_snapshot", "busy", "not_found", "cancelled", "timeout", "permission_denied", "invalid_argument", "unsupported", "incompatible_component", "profile_locked", "sensitive_literal", "secret_required", "invalid_graph", "unsupported_node", "artifact_limit", "recording_limit"} {
 		if err.Error() == code {
 			return code
 		}

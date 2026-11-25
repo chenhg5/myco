@@ -313,7 +313,11 @@ func (r *playRun) play(seq []node, onError string) {
 		shot := ""
 		// Secret-bearing runs deliberately omit snapshots. A plain text secret
 		// can be rendered anywhere by a site, not only inside a password input.
-		if r.session != nil && r.session.e != nil && len(r.secrets) == 0 {
+		if n.Clip != nil {
+			if err == nil && len(r.secrets) == 0 {
+				shot, _ = value.(string)
+			}
+		} else if r.session != nil && r.session.e != nil && len(r.secrets) == 0 {
 			if p, e := r.session.page(); e == nil {
 				shot, _ = r.session.e.snapshot(r.scope, p, n.Target)
 			}

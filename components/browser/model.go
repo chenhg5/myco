@@ -36,34 +36,35 @@ type target struct {
 	Snapshot string    `json:"snapshot,omitempty"`
 }
 type node struct {
-	Dialog    string     `json:"dialog,omitempty"`
-	ID        string     `json:"id"`
-	Type      string     `json:"type"`
-	Pos       [2]float64 `json:"pos"`
-	Title     string     `json:"title,omitempty"`
-	Target    *target    `json:"target,omitempty"`
-	To        *target    `json:"to,omitempty"`
-	URL       string     `json:"url,omitempty"`
-	Value     string     `json:"value,omitempty"`
-	Key       string     `json:"key,omitempty"`
-	Code      string     `json:"code,omitempty"`
-	Message   string     `json:"message,omitempty"`
-	Note      string     `json:"note,omitempty"`
-	Button    string     `json:"button,omitempty"`
-	Count     int        `json:"count,omitempty"`
-	Clear     bool       `json:"clear,omitempty"`
-	Sensitive bool       `json:"sensitive,omitempty"`
-	Wait      string     `json:"wait,omitempty"`
-	MS        int        `json:"ms,omitempty"`
-	DY        float64    `json:"dy,omitempty"`
-	Check     string     `json:"check,omitempty"`
-	What      string     `json:"what,omitempty"`
-	Attr      string     `json:"attr,omitempty"`
-	Into      string     `json:"into,omitempty"`
-	Tab       string     `json:"tab,omitempty"`
-	Full      bool       `json:"full,omitempty"`
-	OnError   string     `json:"on_error,omitempty"`
-	TimeoutMS int        `json:"timeout_ms,omitempty"`
+	Clip      *screenshotClip `json:"clip,omitempty"`
+	Dialog    string          `json:"dialog,omitempty"`
+	ID        string          `json:"id"`
+	Type      string          `json:"type"`
+	Pos       [2]float64      `json:"pos"`
+	Title     string          `json:"title,omitempty"`
+	Target    *target         `json:"target,omitempty"`
+	To        *target         `json:"to,omitempty"`
+	URL       string          `json:"url,omitempty"`
+	Value     string          `json:"value,omitempty"`
+	Key       string          `json:"key,omitempty"`
+	Code      string          `json:"code,omitempty"`
+	Message   string          `json:"message,omitempty"`
+	Note      string          `json:"note,omitempty"`
+	Button    string          `json:"button,omitempty"`
+	Count     int             `json:"count,omitempty"`
+	Clear     bool            `json:"clear,omitempty"`
+	Sensitive bool            `json:"sensitive,omitempty"`
+	Wait      string          `json:"wait,omitempty"`
+	MS        int             `json:"ms,omitempty"`
+	DY        float64         `json:"dy,omitempty"`
+	Check     string          `json:"check,omitempty"`
+	What      string          `json:"what,omitempty"`
+	Attr      string          `json:"attr,omitempty"`
+	Into      string          `json:"into,omitempty"`
+	Tab       string          `json:"tab,omitempty"`
+	Full      bool            `json:"full,omitempty"`
+	OnError   string          `json:"on_error,omitempty"`
+	TimeoutMS int             `json:"timeout_ms,omitempty"`
 }
 type param struct {
 	Name     string `json:"name"`
@@ -134,6 +135,9 @@ func linearOrder(s script, start string) ([]node, error) {
 		seenIDs[n.ID] = true
 		if !validPolicy(n.OnError) {
 			return nil, errors.New("unsupported_branch")
+		}
+		if n.Clip != nil && (n.Type != "screenshot" || !n.Clip.valid() || n.Target != nil || n.Full) {
+			return nil, errors.New("invalid_argument")
 		}
 		if !allowed[n.Type] {
 			return nil, fmt.Errorf("unsupported_node: %s", n.Type)

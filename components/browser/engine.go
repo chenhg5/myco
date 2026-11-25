@@ -155,7 +155,7 @@ func (e *engine) handler() http.Handler {
 		}
 		sort.Strings(browsers)
 		machine, _ := os.Hostname()
-		jsonReply(w, map[string]any{"protocol": protocol, "version": version, "browsers": browsers, "machine": machine, "profiles": profiles, "recordings": e.activeRecordings(scope(r)), "agent_actions": []string{}})
+		jsonReply(w, map[string]any{"protocol": protocol, "version": version, "features": []string{"screenshot_clip"}, "browsers": browsers, "machine": machine, "profiles": profiles, "recordings": e.activeRecordings(scope(r)), "agent_actions": []string{}})
 	})
 	m.HandleFunc("POST /profiles", func(w http.ResponseWriter, r *http.Request) {
 		var in struct {
@@ -283,7 +283,7 @@ func (e *engine) handler() http.Handler {
 // Neither errors from CDP (which may contain typed secrets) nor browser stderr
 // are returned to a page or written to logs.
 func publicError(err error) string {
-	for _, s := range []string{"busy", "not_found", "browser_missing", "profile_locked", "invalid_argument", "unsupported_node", "invalid_graph", "storage_failed", "cancelled", "timeout", "target_not_found", "start_not_found", "sensitive_literal", "secret_required", "invalid_param", "unsupported_branch", "cycle", "many_starts"} {
+	for _, s := range []string{"sensitive_snapshot", "busy", "not_found", "browser_missing", "profile_locked", "invalid_argument", "unsupported_node", "invalid_graph", "storage_failed", "cancelled", "timeout", "target_not_found", "start_not_found", "sensitive_literal", "secret_required", "invalid_param", "unsupported_branch", "cycle", "many_starts"} {
 		if strings.HasPrefix(err.Error(), s) {
 			return s
 		}
