@@ -37,7 +37,7 @@ export function isLoose(s: SpaceRef): s is { hubId: string; loose: true } {
 }
 
 /** What the right pane shows: a member's work, or a computer's terminal. */
-type Side = { agent: string; peer?: string; focus?: string; also?: string[] };
+type Side = { agent: string; peer?: string; focus?: string; also?: string[]; back?: Side };
 
 /** The last request to open a chat (AppMode's openChat.n) that was done. */
 let openedChatN = 0;
@@ -79,7 +79,7 @@ type View =
   | { kind: "activity" }
   | { kind: "chat"; agent: string; peer?: string; focus?: string; also?: string[] }
   | { kind: "thread"; threadId: string; agent: string }
-  | { kind: "pair"; agent: string; peer: string; focus?: string };
+  | { kind: "pair"; agent: string; peer: string; focus?: string; back?: View };
 
 const POLL_MS = 4000;
 
@@ -599,12 +599,15 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
             rows={rows}
             now={now}
             showBack
-            backLabel={loose ? L("返回", "Back") : L(`返回「${project?.title || project?.name}」`, `Back to ${project?.title || project?.name}`)}
-            onBack={() => setView({ kind: "home" })}
+            backLabel={view.kind === "pair" && view.back
+              ? (() => { const b = view.back; const who = b.kind === "chat" || b.kind === "pair" || b.kind === "thread" ? nameOf(b.agent) : ""; return who ? L(`返回和 ${who} 的对话`, `Back to ${who}`) : L("返回", "Back"); })()
+              : loose ? L("返回", "Back") : L(`返回「${project?.title || project?.name}」`, `Back to ${project?.title || project?.name}`)}
+            // (a conversation opened from a card in another: back to that one)
+            onBack={() => setView(view.kind === "pair" && view.back ? view.back : { kind: "home" })}
             role={view.kind === "chat" && view.agent === coordinator ? L("协调者", "Coordinator") : undefined}
             onNewConversation={(_h, agent) => void chatWith(agent)}
-            onOpen={(_h, agent, peer) => (peer ? setView({ kind: "pair", agent, peer }) : void chatWith(agent))}
-            onOpenExchange={(agent, other, focus) => setView({ kind: "pair", agent, peer: other, focus })}
+            onOpen={(_h, agent, peer) => (peer ? setView({ kind: "pair", agent, peer, back: view }) : void chatWith(agent))}
+            onOpenExchange={(agent, other, focus) => setView({ kind: "pair", agent, peer: other, focus, back: view })}
             onRefresh={onRefresh}
             headActions={actions}
           />
@@ -688,12 +691,14 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
             target={{ hubId, hubName, threadId: "", agent: side.agent, peer: side.peer, project: project?.name, focus: side.focus, also: side.also }}
             rows={rows}
             now={now}
-            showBack={false}
-            onBack={() => closeSide(side.id)}
+            showBack={!!side.back}
+            backLabel={side.back ? L(`返回和 ${nameOf(side.back.agent)} 的对话`, `Back to ${nameOf(side.back.agent)}`) : undefined}
+            // (opened from a card in this pane: back to what was here)
+            onBack={() => (side.back ? updateSide(side.id, (x) => ({ ...x.back!, id: x.id })) : closeSide(side.id))}
             headActions={actions}
             onNewConversation={(_h, agent) => void chatWith(agent)}
             onOpen={(_h, agent) => void chatWith(agent)}
-            onOpenExchange={(agent, other, focus) => updateSide(side.id, (x) => ({ id: x.id, agent, peer: other, focus }))}
+            onOpenExchange={(agent, other, focus) => updateSide(side.id, (x) => ({ id: x.id, agent, peer: other, focus, back: { agent: x.agent, peer: x.peer, focus: x.focus, also: x.also, back: x.back } }))}
             onRefresh={onRefresh}
           />
       ),

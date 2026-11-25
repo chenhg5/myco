@@ -7942,10 +7942,36 @@ body.is-resizing {
   font-size: 10.5px;
   line-height: 17px;
 }
-.handoff-state.is-done { color: var(--green); background: color-mix(in srgb, var(--green) 12%, transparent); }
+/* Only what is being worked on stands out (with a dot that breathes);
+   done, handed back, waiting on a reply and queued are grey, and a
+   finished card's words go quiet too. Trouble keeps its colour. */
 .handoff-state.is-failed { color: var(--red); background: var(--red-soft); }
-.handoff-state.is-working { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
-.handoff-state.is-waiting { color: var(--amber); background: var(--amber-soft); }
+.handoff-state.is-working {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  font-weight: 500;
+}
+.handoff-state.is-working::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: handoff-breathe 1.6s ease-in-out infinite;
+}
+@keyframes handoff-breathe {
+  50% { opacity: 0.3; }
+}
+.handoff.is-settled .handoff-text,
+.handoff.is-settled .handoff-result {
+  color: var(--muted);
+}
+@media (prefers-reduced-motion: reduce) {
+  .handoff-state.is-working::before { animation: none; }
+}
 .handoff-time {
   flex: none;
   font-size: 10.5px;

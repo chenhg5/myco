@@ -3086,6 +3086,24 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "chat-addition-after-card");
       await page.locator(".conv-detail .conv-msg", { hasText: "发布说明整理好了" }).last().waitFor({ timeout: 30_000 });
       await noRound(page);
+      // Only work in progress stands out on a card: done and handed back
+      // are grey, like the words of a finished card.
+      const tones = await page.evaluate(() => {
+        const probe = document.createElement("span");
+        probe.style.color = "var(--muted)";
+        document.querySelector(".conv-detail")?.appendChild(probe);
+        const muted = getComputedStyle(probe).color;
+        probe.remove();
+        return [...document.querySelectorAll(".handoff-state.is-done")].map((x) => getComputedStyle(x).color === muted);
+      });
+      if (tones.some((grey) => !grey)) throw new Error("「做完了 / 交回了」应是灰色，只有「在做」显眼");
+      // A card opens the two agents' exchange; its back button returns to
+      // the chat the card was in.
+      await clickVisible(page, pane.locator(".handoff", { hasText: "顺手看一下 CI 为什么挂了" }));
+      const backBtn = page.getByRole("button", { name: "返回和 Release (Claude 云端) 的对话" }).first();
+      await backBtn.waitFor({ timeout: 10_000 });
+      await clickVisible(page, backBtn);
+      await page.locator(".conv-detail .conv-msg.is-me", { hasText: "插话：顺便把下载链接也更新了" }).last().waitFor({ timeout: 10_000 });
     });
 
     // Finding a message (⌘F), and back to the bottom after reading above.
