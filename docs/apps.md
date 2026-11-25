@@ -8,6 +8,8 @@ This is part of **[Rebuild 100 great apps with agents, free and open, always imp
 
 Apps that need the computer itself (files, the screen, the microphone, the network) ask it through the myco app; see [`myco.os`](app-os.md). Recordings, photos and videos stay on the computer that opened them.
 
+In the desktop app (from v0.22.11), right-click an app's page and choose **Open in its own window** to use it in a window of its own, or **Install as app** (macOS) to add it to Applications (`~/Applications/myco 应用`) with its own icon: open it from Launchpad, Spotlight or the Dock like any other app. The myco app opens it; its data, permissions and agents are the same as in the panel. **Remove from Applications** takes the launcher away again.
+
 Agent access currently uses shared page records. The [agent actions SDK](app-actions.md) separates framework authorization, SDK transport and application logic for future runtime actions; it does not yet enable agent remote control on existing installations.
 
 ## Creative
