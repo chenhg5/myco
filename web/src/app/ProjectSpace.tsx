@@ -1137,7 +1137,7 @@ function Composer({ hubId, project, agents, onSending, onSent, onCall }: {
   const [sent, setSent] = useState(() => keptSent(sentKey));
   const history = useInputHistory(sent, draft, setDraft);
   // Files going with the task (pasted, dropped or picked).
-  const att = useAttachments(hubId);
+  const att = useAttachments(hubId, groupDraftKey(hubId, project?.name));
   const menu = useContextMenu();
   const input = useRef<HTMLTextAreaElement>(null);
   // Grows with what is typed, as chat apps do; past COMPOSE_MAX it scrolls.

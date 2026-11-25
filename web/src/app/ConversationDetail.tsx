@@ -430,7 +430,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // at once instead: it is queued, not sending.)
   const [pending, setPending] = useState<{ body: string; files: { id: string; name: string; size: number; preview?: string }[]; queued?: boolean } | null>(null);
   // Files going with the next message (pasted, dropped or picked).
-  const att = useAttachments(target.hubId);
+  const att = useAttachments(target.hubId, draftKey);
   // Messages put after the running one, while the workspace cannot hold
   // them (older hubs): kept here, like drafts, and sent when the round ends.
   const queueKey = chatQueueKey(target.hubId, target.agent);
@@ -2100,6 +2100,23 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           </div>
         );
       }
+      // What you decided on an agent's request: the hub tells the agent in
+      // a note from you, with the ids it needs; here it is one quiet line.
+      const decided = m.type === "note" ? decisionOf(m.body) : null;
+      if (decided) {
+        const who = isMe(m.from, row?.hub) ? L("你", "You") : decided.who;
+        return (
+          <div className={cn("conv-decision", !decided.ok && "is-denied", decided.failed && "is-failed")} key={m.id} data-msg={m.id} title={clockTime(m.created_at)}>
+            {decided.ok && !decided.failed ? <Check /> : <X />}
+            <span>
+              {decided.ok
+                ? L(`${who}同意了：${decided.what}`, `${who} approved: ${decided.what}`)
+                : L(`${who}没有同意：${decided.what}`, `${who} declined: ${decided.what}`)}
+              {decided.failed && <span className="conv-decision-fail">{L("，但没做成", ", but it did not go through")}</span>}
+            </span>
+          </div>
+        );
+      }
       if (m.type === "event") {
         return (
           <div className="conv-event" key={m.id}>
@@ -2830,4 +2847,19 @@ function SendTrouble({ error, stop, onRetry, onClose }: { error: unknown; stop: 
       <button type="button" className="conv-trouble-x" onClick={onClose} aria-label={L("关掉", "Dismiss")}><X /></button>
     </div>
   );
+}
+
+/** A note the hub sends an agent when you decide on its request
+ *  ("[myco] glenn 同意了：create scheduled task "x" in project p（apr_…）。…"):
+ *  who, what in words, and how it went. Anything else: null. */
+export function decisionOf(body: string): { who: string; ok: boolean; what: string; failed: boolean } | null {
+  const m = /^\[myco\] (.+?) (同意了|没有同意)：([\s\S]+?)（apr_[A-Za-z0-9]+）[，。]?([\s\S]*)$/.exec(body.trim());
+  if (!m) return null;
+  const [, who, verb, raw, rest] = m;
+  const task = /^(create|update|delete) scheduled task "(.+)" in project (.+)$/.exec(raw.trim());
+  const what = task
+    ? L(`${task[1] === "create" ? "创建" : task[1] === "delete" ? "删除" : "修改"}项目「${task[3]}」的定时任务「${task[2]}」`,
+      `${task[1] === "create" ? "create" : task[1] === "delete" ? "delete" : "change"} “${task[2]}” in project “${task[3]}”`)
+    : raw.trim();
+  return { who, ok: verb === "同意了", what, failed: /^但没做成/.test(rest.trim()) };
 }

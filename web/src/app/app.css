@@ -3789,6 +3789,34 @@ button.conv-quote:hover {
   background: var(--faint);
   transform: translateY(-2px);
 }
+/* What you decided on an agent's request: one quiet centred line. */
+.conv-decision {
+  align-self: center;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: min(560px, 100%);
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--nav-hover);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.conv-decision svg {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  margin-top: 2.5px;
+  color: var(--green);
+}
+.conv-decision.is-denied svg,
+.conv-decision.is-failed svg {
+  color: var(--muted);
+}
+.conv-decision-fail {
+  color: var(--red);
+}
 .conv-event {
   align-self: stretch;
   display: flex;

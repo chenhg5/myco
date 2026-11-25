@@ -3391,6 +3391,19 @@ const server = http.createServer(async (req, res) => {
         }
         a.decided_at = iso(0);
         if (a.status === "done") a.result = 200;
+        // The hub tells the agent how it went, as a note from you (with the
+        // ids it needs), in your chat with it.
+        if (hub.threads && a.agent) {
+          const own = Object.entries(hub.threads).filter(([, ms]) => ms.some((x) => (x.from === CONSOLE && x.to === a.agent) || (x.from === a.agent && x.to === CONSOLE)));
+          const th = own.sort(([, x], [, y]) => (y[y.length - 1]?.created_at || "").localeCompare(x[x.length - 1]?.created_at || ""))[0]?.[0] || `th_note_${a.agent}`;
+          const what = a.kind === "project_automation"
+            ? `${a.payload?.action || "update"} scheduled task "${a.payload?.input?.name || "task"}" in project ${a.payload?.project || ""}`
+            : a.what;
+          const body = a.status === "done"
+            ? `[myco] alice-mac 同意了：${what}（${a.id}）。${a.kind === "project_automation" ? "Project automation aut_mock: create" : "做好了。"}`
+            : `[myco] alice-mac 没有同意：${what}（${a.id}）。不要再用别的办法去做这件事；需要的话先问清楚。`;
+          (hub.threads[th] ||= []).push(makeMessage({ thread_id: th, from: CONSOLE, to: a.agent, type: "note", status: "done", body, created_at: iso(0), updated_at: iso(0) }));
+        }
         // A coordinator's request for a computer: carried out as you.
         const pm = a.status === "done" && a.method === "PUT" && /^\/v1\/projects\/([^/]+)\/machines\/([^/]+)$/.exec(a.path);
         if (pm) {

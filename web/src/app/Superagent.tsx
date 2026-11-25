@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type Dispatch, type SetStateAction } from "react";
 import { FileDown, Monitor, ShieldQuestion } from "lucide-react";
 import type { ActionGrant, Agent, Approval, SuperagentState } from "@/api";
 import { appApi, type JoinLink } from "@/appapi";
@@ -390,22 +390,29 @@ function invitationWhat(a: Approval, grants?: ActionGrant[]): string {
 
 export function ApprovalStrip({ hubId, agent, name }: { hubId: string; agent: string; name?: string }) {
   const s = useSuperagent(hubId);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<unknown>(null);
-  const items = (s?.approvals || []).filter((a) => a.agent === agent && a.status === "pending");
+  // Each request on its own: deciding one leaves the others to click
+  // (a slow workspace used to grey them all out until it answered). One
+  // decided goes at once; the list is read again behind.
+  const [busy, setBusy] = useState<Set<string>>(() => new Set());
+  const [done, setDone] = useState<Set<string>>(() => new Set());
+  const [errors, setErrors] = useState<Record<string, unknown>>({});
+  const items = (s?.approvals || []).filter((a) => a.agent === agent && a.status === "pending" && !done.has(a.id));
   const who = name || (s?.state?.agent?.name === agent ? SHROOM : agent);
   if (!items.length) return null;
   const now = Date.now();
+  const mark = (set: Dispatch<SetStateAction<Set<string>>>, id: string, on: boolean) =>
+    set((x) => { const n = new Set(x); if (on) n.add(id); else n.delete(id); return n; });
   const decide = async (a: Approval, ok: boolean, viewOnly = false) => {
-    setBusy(a.id);
-    setError(null);
+    mark(setBusy, a.id, true);
+    setErrors(({ [a.id]: _, ...rest }) => rest);
     try {
       await appApi.decideApproval(hubId, a.id, ok, viewOnly ? { permissions: ["remote.desktop.view"] } : undefined);
-      await refreshSuperagent(hubId);
+      mark(setDone, a.id, true);
+      void refreshSuperagent(hubId).catch(() => undefined);
     } catch (e) {
-      setError(e);
+      setErrors((x) => ({ ...x, [a.id]: e }));
     } finally {
-      setBusy(null);
+      mark(setBusy, a.id, false);
     }
   };
   return (
@@ -422,20 +429,20 @@ export function ApprovalStrip({ hubId, agent, name }: { hubId: string; agent: st
             {a.kind === "action_grant" && (s?.grants?.some(g => g.approval_id === a.id && (g.requested || []).includes("browser.control")) || /能读到这个 profile 登录的所有网站/.test(a.what)) && <div className="sa-approval-why">{L("能读到这个 profile 登录的所有网站，包括登录后的页面和数据。仅在你信任该 agent 时批准。", "Can read all websites signed in through this profile, including authenticated pages and data. Approve only if you trust this agent.")}</div>}
             {a.reason && <div className="sa-approval-why">{a.reason}</div>}
             <div className="sa-approval-meta">{leftOf(a.expires_at, now)}</div>
+            {!!errors[a.id] && <ErrorText error={errors[a.id]} />}
           </div>
           <div className="sa-approval-actions">
-            <button type="button" className="app-btn app-btn-small" disabled={!!busy} onClick={() => void decide(a, false)}>{L("不同意", "Deny")}</button>
+            <button type="button" className="app-btn app-btn-small" disabled={busy.has(a.id)} onClick={() => void decide(a, false)}>{L("不同意", "Deny")}</button>
             {a.kind === "action_grant" && wantsControl(a, s?.grants) && (
-              <button type="button" className="app-btn app-btn-small" disabled={!!busy} onClick={() => void decide(a, true, true)}
+              <button type="button" className="app-btn app-btn-small" disabled={busy.has(a.id)} onClick={() => void decide(a, true, true)}
                 title={L("只让它看屏幕，不能用键盘和鼠标", "Let it see the screen only, without keyboard or mouse")}>{L("只让它看", "View only")}</button>
             )}
-            <button type="button" className="app-btn app-btn-small app-btn-primary" disabled={!!busy} onClick={() => void decide(a, true)}>
-              {busy === a.id ? <span className="app-spinner" /> : null}{L("同意", "Approve")}
+            <button type="button" className="app-btn app-btn-small app-btn-primary" disabled={busy.has(a.id)} onClick={() => void decide(a, true)}>
+              {busy.has(a.id) ? <span className="app-spinner" /> : null}{L("同意", "Approve")}
             </button>
           </div>
         </div>
       ))}
-      <ErrorText error={error} />
     </div>
   );
 }

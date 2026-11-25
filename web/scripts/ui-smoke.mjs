@@ -2538,6 +2538,16 @@ async function runMatrix(browser, size, scheme) {
       if (Math.abs(fit.mid - (56 + (fit.h - 88) / 2)) > 4) throw new Error(`长图应上下居中，中线在 ${Math.round(fit.mid)}`);
       await page.keyboard.press("Escape");
       await big.waitFor({ state: "detached", timeout: 5_000 });
+      // Files not sent yet stay with their chat, as typed words do: to
+      // another chat (its box has none) and back, they are still there.
+      await openMember(page, narrow, "聊天", "legacy-codex");
+      await page.locator(".conv-detail .conv-head h2", { hasText: "legacy-codex" }).waitFor({ timeout: 10_000 });
+      if (await page.locator(".conv-compose-box .att-chip").count()) throw new Error("别的会话的输入框不该带着这里没发的文件");
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await box.locator(".att-chip").nth(2).waitFor({ timeout: 10_000 });
+      if ((await box.locator(".att-chip").count()) !== 3) throw new Error("切走再回来，没发的文件应还在");
+      await page.waitForFunction(() => { const img = [...document.querySelectorAll(".conv-compose-box .att-chip.is-picture .att-thumb")].pop(); return !!img && img.complete && img.naturalWidth > 0; }, null, { timeout: 5_000 })
+        .catch(() => { throw new Error("切回来后图片缩略图应还能显示"); });
       await box.locator(".att-chip").nth(2).locator(".att-x").click();
       await page.waitForFunction(() => document.querySelectorAll(".conv-compose-box .att-chip").length === 2, null, { timeout: 5_000 });
       await page.locator(".conv-compose-input").focus();
@@ -4748,6 +4758,24 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page,card.getByText("查看任务内容",{exact:true}));await card.locator(".sa-approval-content",{hasText:"核对项目发布状态"}).waitFor();
       await shot(page,size,scheme,"project-automation-approval");await clickVisible(page,card.getByRole("button",{name:"不同意",exact:true}));await card.waitFor({state:"hidden"});
       await ask();await card.waitFor();await clickVisible(page,card.getByRole("button",{name:"同意",exact:true}));await card.waitFor({state:"hidden"});
+      // What you decided shows in the chat as one quiet line, in words (the
+      // note the hub sends the agent carries ids, for the agent).
+      const line=page.locator(".sp-home .conv-detail .conv-decision",{hasText:"同意了：创建项目「website」的定时任务「发布检查」"});
+      await line.waitFor({timeout:15_000});
+      if(/\[myco\]|apr_|aut_/.test(await line.innerText()))throw Error("同意后的那行不该带 [myco] 和编号");
+      if(await page.locator(".sp-home .conv-detail .conv-msg",{hasText:"[myco]"}).count())throw Error("同意的通知不该再是一条备注消息");
+      await line.scrollIntoViewIfNeeded();await settle(page,200);await shot(page,size,scheme,"approval-decided-line");
+      // Two at once, the workspace slow to answer: deciding one leaves the
+      // other to click (they all went grey until it answered).
+      const slowDecide=async(route)=>{await new Promise((ok)=>setTimeout(ok,2500));await route.continue();};
+      await page.route("**/app/hubs/*/approvals/*/approve",slowDecide);
+      await ask();await ask();await card.nth(1).waitFor();
+      await clickVisible(page,card.first().getByRole("button",{name:"同意",exact:true}));
+      await card.first().locator(".app-spinner").waitFor({timeout:2_000});
+      if(await card.nth(1).getByRole("button",{name:"同意",exact:true}).isDisabled())throw Error("同意了一条，另一条的「同意」不该变灰");
+      await clickVisible(page,card.nth(1).getByRole("button",{name:"同意",exact:true}));
+      await page.waitForFunction(()=>!document.querySelector(".sp-home [data-testid=approvals] .sa-approval"),null,{timeout:10_000});
+      await page.unroute("**/app/hubs/*/approvals/*/approve",slowDecide);
     });
 
     await step("自动化 · 起止日期",async()=>{

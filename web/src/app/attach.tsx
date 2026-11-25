@@ -40,25 +40,48 @@ export function bytes(n: number): string {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
-export function useAttachments(hubId: string) {
-  const [items, setItems] = useState<Pending[]>([]);
+// Files put in a box and not sent yet, per box (keep): switch to another
+// chat or page and back and they are still there, as typed words are
+// (drafts.ts). Kept while the App runs; a file still uploading when you
+// leave finishes and is recorded here.
+const kept = new Map<string, Pending[]>();
+
+export function useAttachments(hubId: string, keep?: string) {
+  const [items, setItems] = useState<Pending[]>(() => (keep !== undefined && kept.get(keep)) || []);
   const live = useRef(true);
+  const keyRef = useRef(keep);
+  keyRef.current = keep;
   useEffect(() => {
     live.current = true;
     return () => { live.current = false; };
   }, []);
-  const patch = (key: string, p: Partial<Pending>) => {
-    if (live.current) setItems((all) => all.map((x) => (x.key === key ? { ...x, ...p } : x)));
+  // (another box shown in this one's place: its own files)
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) { first.current = false; return; }
+    setItems((keep !== undefined && kept.get(keep)) || []);
+  }, [keep]);
+  /** Changes the files of box k (the one shown when it was asked). */
+  const update = (k: string | undefined, f: (all: Pending[]) => Pending[]) => {
+    if (k === undefined) {
+      if (live.current) setItems(f);
+      return;
+    }
+    const next = f(kept.get(k) || []);
+    if (next.length) kept.set(k, next); else kept.delete(k);
+    if (live.current && keyRef.current === k) setItems(next);
   };
   const add = (files: File[]) => {
+    const k = keyRef.current;
     for (const f of files) {
       const key = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const name = nameOf(f);
       const preview = f.type.startsWith("image/") ? URL.createObjectURL(f) : undefined;
-      setItems((all) => [...all, { key, name, size: f.size, preview, state: "uploading" }]);
+      const patch = (p: Partial<Pending>) => update(k, (all) => all.map((x) => (x.key === key ? { ...x, ...p } : x)));
+      update(k, (all) => [...all, { key, name, size: f.size, preview, state: "uploading" }]);
       appApi.uploadAttachment(hubId, f, name)
-        .then((r) => patch(key, { state: "done", id: r.id }))
-        .catch((e: { code?: string; message?: string }) => patch(key, {
+        .then((r) => patch({ state: "done", id: r.id }))
+        .catch((e: { code?: string; message?: string }) => patch({
           state: "error",
           error: e?.code === "not_found"
             ? L("这个工作区还不能从 App 发文件，升级它的 myco 就可以", "This workspace can't take files from the app yet; update its myco")
@@ -69,17 +92,17 @@ export function useAttachments(hubId: string) {
   /** Files already on the workspace (a queued message taken back to edit):
    *  in the box again as they were, nothing uploaded twice. */
   const restore = (files: { id: string; name: string; size?: number; preview?: string }[]) => {
-    setItems((all) => [...all, ...files.map((f) => ({
+    update(keyRef.current, (all) => [...all, ...files.map((f) => ({
       key: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       name: f.name, size: f.size ?? 0, preview: f.preview, state: "done" as const, id: f.id,
     }))]);
   };
-  const remove = (key: string) => setItems((all) => {
+  const remove = (key: string) => update(keyRef.current, (all) => {
     const gone = all.find((x) => x.key === key);
     if (gone?.preview?.startsWith("blob:")) URL.revokeObjectURL(gone.preview);
     return all.filter((x) => x.key !== key);
   });
-  const clear = () => setItems((all) => {
+  const clear = () => update(keyRef.current, (all) => {
     all.forEach((x) => x.preview?.startsWith("blob:") && URL.revokeObjectURL(x.preview));
     return [];
   });
@@ -89,7 +112,7 @@ export function useAttachments(hubId: string) {
    *  to put them back (restore). */
   const take = () => {
     const out = ready.map((x) => ({ id: x.id!, name: x.name, size: x.size, preview: x.preview }));
-    setItems([]);
+    update(keyRef.current, () => []);
     return out;
   };
   return {
