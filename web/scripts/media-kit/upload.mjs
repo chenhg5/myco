@@ -230,7 +230,7 @@ const projectAfter = cli("project", "show", "--name", project);
 const result = {
   entries: [...groups.keys()].map((id) => "feature-" + id),
   files: planned.length,
-  projectFiles: projectAfter.files_used ?? projectAfter.docs.length,
+  projectFiles: projectAfter.files_max > 0 ? projectAfter.files_used : projectAfter.docs.length,
 };
 await writeFile(
   path.join(out, "uploaded.json"),
