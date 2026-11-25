@@ -4,6 +4,20 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.22.10
+
+- **A browser settings change is allowed only after the whole list is read**: the confirmation now shows every proxy, bypass rule, user agent, language and launch argument in a monospace layout that also fits narrow windows, and **Allow** stays disabled until all of them have been scrolled into view. Declining or closing the dialog changes nothing.
+- **An Android preview APK is attached to the release**: `myco-android-debug.apk` is the Android app's CI debug build, provided next to the desktop downloads. It is a preview for trying the Android app, not a signed store release: it is debug-signed, its signature can differ between releases, so uninstall an older APK before installing a new one.
+
+Upgrade: this App release needs no Hub upgrade. Update the App, and for browser profile settings use browser component 0.2.0, which the App offers to install or update.
+
+**中文**
+
+- **浏览器设置的确认框要看完才能允许**：确认框会列出代理地址、不走代理的地址、User-Agent、语言和每个启动参数，这些值用等宽字体显示，窄窗口下也能完整排版；在所有内容都滚动显示过之前，「允许」按钮保持不可用。拒绝或关闭确认框不会有任何改动。
+- **发布中附带 Android 预览 APK**：`myco-android-debug.apk` 是 CI 构建的 Android 应用 debug 版，和桌面版安装包一起提供。它只是用来试用 Android 应用的预览版，不是签名的商店版本：它使用 debug 签名，不同版本之间的签名可能不同，安装新版本前请先卸载旧的 APK。
+
+升级：本次应用发布不需要升级 Hub。更新应用即可；使用浏览器资料设置需要浏览器组件 0.2.0，应用会提示安装或更新。
+
 ## v0.22.9
 
 - **A browser profile can use a proxy, custom user agent, language and launch arguments**: Web automation can ask to change these for a profile, and the App shows its own confirmation with the exact proxy, bypass list, user agent, language and arguments before anything changes; a proxy password is never displayed, and a saved one is kept only when the server and user stay the same. Settings apply the next time the browser starts and do not restart a browser that is open. This needs browser component 0.2.0, which the App offers to install.
