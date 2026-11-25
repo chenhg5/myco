@@ -206,7 +206,9 @@ func (e *engine) openSession(ctx context.Context, owner, id string, headless boo
 	if err != nil {
 		return nil, err
 	}
-	cmd.Stderr = e.launchLog
+	if e.launchLog != nil {
+		cmd.Stderr = e.launchLog
+	}
 	for _, key := range browserEnvironmentKeys() {
 		if value := os.Getenv(key); value != "" {
 			cmd.Env = append(cmd.Env, key+"="+value)
