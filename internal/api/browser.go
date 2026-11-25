@@ -44,7 +44,11 @@ type BrowserProfileSettingsInput struct {
 	Lang      string                     `json:"lang"`
 	Args      []string                   `json:"args"`
 }
+
+const BrowserAgentProfile = "agent"
+
 type BrowserProfile struct {
+	Kind     string                  `json:"kind,omitempty"`
 	Settings *BrowserProfileSettings `json:"settings,omitempty"`
 	ID       string                  `json:"id"`
 	Name     string                  `json:"name"`

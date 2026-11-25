@@ -645,5 +645,12 @@ Usage open behind Settings and releases an older refresh after removal.
 ### Browser control approvals
 
 A live browser control request names the browser profile and the duration.
-The approval card explains that the agent can see and operate signed-in sites,
-that its actions are visible on the owner's screen, and that the owner can stop it.
+The approval defaults to the dedicated agent profile. A personal profile
+shows its name and a prominent warning that the agent can see and operate
+sites the owner is signed in to. The card says that actions appear on the
+owner's screen and that the owner can stop control at any time.
+
+List each requested domain as a checked option the owner can remove. Disable
+approval if all requested domains are removed. When the request has no domain
+scope, show “No domain restriction.” The UI smoke scene checks both profile
+types and verifies that only the selected domain is sent when approving.

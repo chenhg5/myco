@@ -69,6 +69,11 @@ func (b *Backend) browserHostPolicies(h Hub) []browserHostPolicy {
 	if e != nil {
 		return nil
 	}
+	if b.Local != nil && !slices.ContainsFunc(ps, func(p browserpolicy.Policy) bool { return p.Kind == api.BrowserAgentProfile }) {
+		if dedicated, ok := b.provisionBrowserAgentProfile(h, scope, store); ok {
+			ps = append(ps, dedicated)
+		}
+	}
 	var out []browserHostPolicy
 	for _, p := range ps {
 		if p.Enabled && p.Binding != "" && !b.browserAgentsBlocked(h.ID, p.Profile) {
@@ -484,7 +489,11 @@ func (b *Backend) runBrowserJob(ctx context.Context, c *client.Client, host *api
 	return b.waitBrowserRun(run, c, host, hj.Job.ID, record, cursor)
 }
 func validBrowserRunID(id string) bool {
-	if !strings.HasPrefix(id, "run_") || len(id) > 100 {
+	return validBrowserID(id, "run_", 100)
+}
+
+func validBrowserID(id, prefix string, max int) bool {
+	if !strings.HasPrefix(id, prefix) || len(id) <= len(prefix) || len(id) > max {
 		return false
 	}
 	for _, v := range id {

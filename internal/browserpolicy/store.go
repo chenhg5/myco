@@ -37,6 +37,7 @@ type Snapshot struct {
 }
 type Policy struct {
 	Profile   string     `json:"profile"`
+	Kind      string     `json:"kind,omitempty"`
 	Name      string     `json:"name"`
 	Version   int        `json:"version"`
 	Enabled   bool       `json:"enabled"`
@@ -124,6 +125,50 @@ func (s *Store) save(path string, p Policy) error {
 // Every expansion or revocation gets a fresh generation; old grants never
 // silently gain newly approved scripts. Callers cancel native runs first.
 func (s *Store) SetEnabled(scope Scope, profile string, enabled bool, name ...string) (Policy, error) {
+	return s.setEnabled(scope, profile, enabled, "", name...)
+}
+
+// EnsureAgentProfile coordinates first-time provisioning across desktop processes.
+func (s *Store) EnsureAgentProfile(scope Scope, create func() (string, string, error), activate func(string) error) (Policy, error) {
+	path, err := s.path(scope, "@dedicated-agent-profile")
+	if err != nil {
+		return Policy{}, err
+	}
+	unlock, err := s.lock(path)
+	if err != nil {
+		return Policy{}, err
+	}
+	defer unlock()
+	profiles, err := s.Profiles(scope)
+	if err != nil {
+		return Policy{}, err
+	}
+	var pending Policy
+	for _, p := range profiles {
+		switch p.Kind {
+		case "agent":
+			return p, nil
+		case "agent_pending":
+			pending = p
+		}
+	}
+	if pending.Profile == "" {
+		id, name, err := create()
+		if err != nil {
+			return Policy{}, err
+		}
+		pending, err = s.setEnabled(scope, id, false, "agent_pending", name)
+		if err != nil {
+			return Policy{}, err
+		}
+	}
+	if err := activate(pending.Profile); err != nil {
+		return Policy{}, err
+	}
+	return s.setEnabled(scope, pending.Profile, true, "agent")
+}
+
+func (s *Store) setEnabled(scope Scope, profile string, enabled bool, kind string, name ...string) (Policy, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	path, err := s.path(scope, profile)
@@ -143,10 +188,13 @@ func (s *Store) SetEnabled(scope Scope, profile string, enabled bool, name ...st
 	if len(name) > 0 && name[0] != "" {
 		profileName = name[0]
 	}
-	if p.Enabled == enabled && p.Name == profileName {
+	if kind == "" {
+		kind = p.Kind
+	}
+	if p.Enabled == enabled && p.Name == profileName && p.Kind == kind {
 		return p, nil
 	}
-	p.Name = profileName
+	p.Name, p.Kind = profileName, kind
 	p.Enabled, p.Binding = enabled, "bp_"+rand.Text()
 	if err = s.save(path, p); err != nil {
 		return Policy{}, err

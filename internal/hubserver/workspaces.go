@@ -147,6 +147,7 @@ func (ws *workspaces) open(name string) (*workspaceHub, error) {
 	w := &workspaceHub{hub: h, stop: stop, created: time.Now()}
 	w.run(ctx, h.Dispatcher.Run)
 	w.run(ctx, func(ctx context.Context) { h.PageAttachments.Run(ctx, o.Log) })
+	w.run(ctx, func(ctx context.Context) { h.Actions.RunBrowserScreenshotPrune(ctx, o.Log) })
 	w.run(ctx, func(ctx context.Context) { h.Files.Run(ctx, time.Hour) })
 	w.run(ctx, func(ctx context.Context) { h.Traces.Run(ctx, time.Hour) })
 	w.run(ctx, func(ctx context.Context) { h.Automations.Run(ctx, AutomationTick) })
@@ -292,7 +293,15 @@ func (ws *workspaces) serveAdmin(w http.ResponseWriter, r *http.Request) {
 		// Kept aside, not deleted: removing a workspace is easy to regret.
 		from := filepath.Join(ws.dir, name)
 		to := filepath.Join(ws.dir, ".removed", name+"-"+time.Now().UTC().Format("20060102-150405"))
-		err := os.MkdirAll(filepath.Dir(to), 0o700)
+		// Retention jobs stop with the workspace. Exclude expiring private
+		// screenshots from the parked data.
+		err := os.Remove(h.hub.browserScreenshotsPath)
+		if errors.Is(err, os.ErrNotExist) {
+			err = nil
+		}
+		if err == nil {
+			err = os.MkdirAll(filepath.Dir(to), 0o700)
+		}
 		if err == nil {
 			err = os.Rename(from, to)
 		}

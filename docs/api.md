@@ -505,7 +505,7 @@ A route not listed treats it as the ordinary agent it also is. Nothing widens wh
 | `GET /v1/me/superagent` | agent | `{superagent, owner?}` |
 | `GET /v1/me/approvals` | agent | what it asked for |
 
-Approvals also carry `kind` and `payload` (v0.21.21): an empty `kind` is a superagent's held request as above; `kind: "action_grant"` is any agent asking to act on a computer (see [Agent actions](#agent-actions)), with `payload: {grant_id}`. Approving one may send `{permissions?, ttl_seconds?}` to allow less than was asked (never more); an empty body allows all of it.
+Approvals also carry `kind` and `payload` (v0.21.21): an empty `kind` is a superagent's held request as above; `kind: "action_grant"` is any agent asking to act on a computer (see [Agent actions](#agent-actions)), with `payload: {grant_id}`. Approving one may send `{permissions?, ttl_seconds?, hosts?}` to allow less than was asked (never more); an empty body allows all of it.
 
 ## Agent actions
 
@@ -524,7 +524,7 @@ From v0.21.21, an agent can act on a computer through a provider that computer's
 | `POST /v1/me/action-jobs` | agent | `{grant_id, action, version, args, idempotency_key}` → `201 {id, grant_id, action, version, state, result?, error?: {code, message, retryable}, artifacts?, cancel_requested?, created_at, finished_at?}`. The same key and body returns the first job; a different body is `409`. `unsupported` when the computer does not offer that action now |
 | `GET /v1/me/action-jobs/{id}?wait_seconds=30` | agent | the job; waits until it ends. `state`: queued running succeeded failed cancelled |
 | `POST /v1/me/action-jobs/{id}/cancel` | agent | cancels a queued job; asks a running one to stop (what it did stays done) |
-| `GET /v1/me/action-artifacts/{id}` | agent (the grant's) | the file (a screenshot), `Cache-Control: no-store`; `410` once its grant ends or it expires (10 minutes at most) |
+| `GET /v1/me/action-artifacts/{id}` | agent (the grant's) | the file (a screenshot), `Cache-Control: no-store`; `410` when it expires (usually within 10 minutes or when the grant ends, except live browser screenshots below) |
 | `GET /v1/console/action-grants?state=active` | console | `{grants}` the caller decides (all, for owners and admins) |
 | `POST /v1/console/action-grants/{id}/revoke` | console | ends it at once: queued jobs are cancelled, a running job's late result is dropped, artifacts are gone |
 | `POST /v1/console/action-hosts` | console (the computer's owner) | the trusted App offers a provider there: `{machine_id, provider, generation, actions}` (a page renderer: `provider: "page"`, no `machine_id`) → `201 {id, machine_id, provider, generation, last_seen_at}`. Registering a computer's provider again replaces its host (its running jobs fail as `host_restarted`). A person may run several page renderers (one per App); a new one replaces only theirs that stopped polling (45 s). A host not seen for 10 minutes is dropped. After `404`/`409` on its job poll, an App waits 30 s before registering again |
@@ -565,6 +565,21 @@ Live browser control adds six v1 actions when the component advertises
 permission on the exact machine and browser profile. Grants last at most 30
 minutes. The browser opens visibly so the owner can watch and stop it.
 
+A request without a target resource defaults to the selected machine’s
+dedicated agent profile (`kind:"agent"`). The desktop creates this clean
+profile when live control first becomes available. An explicit profile
+resource must include its current binding. The approval identifies the
+profile and warns about existing sign-ins when using a personal profile.
+
+A control request can include `hosts` (CLI `--host`, repeat it for each domain).
+Entries are exact hostnames or subdomain patterns such as `*.example.com`.
+The wildcard does not include the parent hostname. Omitting the list permits
+all domains. The owner can approve a subset by sending `hosts` in the approval
+body. To allow none, deny the request. The approved list applies to top-level
+navigation, including redirects and new tabs. A blocked navigation returns
+`host_not_allowed` and is audited. Scoped requests require support in the Hub
+and in the controller App.
+
 | Action | Arguments | Result |
 |---|---|---|
 | `browser.page.open` | `{profile,url?}` | `session,active_tab,tabs,snapshot,expires_at,idle_expires_at,start_url` |
@@ -580,7 +595,16 @@ Operations are limited to `navigate`, `click`, `dblclick`, `hover`, `type`, `sel
 rejected. A wait uses `wait:"element"` with `ref`, `wait:"url"` with `value`,
 or `wait:"network"`. The maximum operation timeout is 30 seconds. Screenshot
 targets `ref`, `clip` and `full` are mutually exclusive. Each image is kept
-as a private job artifact up to 4 MiB.
+as a private job artifact up to 4 MiB. A successful live browser job retains
+its screenshot for seven days. Only the initiating agent and the computer's
+owner can download it, including after the grant ends. The Hub deletes
+expired screenshots and excludes them from workspace backups and archives.
+
+- The initiating agent downloads a screenshot at `GET /v1/me/action-artifacts/{id}`.
+- The computer owner signs in directly and lists their 100 most recent
+  available screenshots at `GET /v1/console/action-artifacts` (`{artifacts}`).
+  The owner downloads one at `GET /v1/console/action-artifacts/{id}`.
+
 
 Refs are scoped to a session, tab, frame and document. A stale ref returns
 `stale_ref`. Take a fresh snapshot before retrying. A successful operation
@@ -594,8 +618,10 @@ calls on an owner-stopped grant return `session_closed` with
 
 When completing a live browser job, the trusted desktop can send the optional
 `browser_host` field containing only the observed hostname or IP address.
-The Hub audits the action, host and time once per job. Request arguments and
-page contents stay out of the audit log.
+The Hub audits the action, host and time once per job. The detail records
+`host_not_allowed` for a blocked host or `screenshot` when a screenshot
+was retained. Request arguments, page contents and image bytes stay out of
+the audit log.
 
 Shared page records are **not** approval. The desktop executes only the immutable
 script version and child-script snapshots the computer's owner reviewed and

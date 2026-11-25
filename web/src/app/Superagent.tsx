@@ -366,7 +366,7 @@ function invitationWhat(a: Approval, grants?: ActionGrant[]): string {
     const permissions = grant.requested || [];
     const minutes = /，(\d+) 分钟$/.exec(a.what)?.[1];
     const ttl = minutes ? L(`，${minutes} 分钟`, `, for ${minutes} minutes`) : "";
-    if (permissions.includes("browser.control")) return L(`操作浏览器 profile「${profile}」`, `Control browser profile “${profile}”`) + ttl;
+    if (permissions.includes("browser.control")) return L(`操作浏览器配置「${profile}」`, `Control browser profile “${profile}”`) + ttl;
     if (permissions.includes("browser.run")) return (permissions.includes("browser.view")
       ? L(`在「${profile}」上查看状态与运行结果，并运行主人批准的脚本`, `View status and run results, and run owner-approved scripts in “${profile}”`)
       : L(`运行「${profile}」中主人批准的脚本`, `Run owner-approved scripts in “${profile}”`)) + ttl;
@@ -394,17 +394,18 @@ export function ApprovalStrip({ hubId, agent, name }: { hubId: string; agent: st
   const [busy, setBusy] = useState<Set<string>>(() => new Set());
   const [done, setDone] = useState<Set<string>>(() => new Set());
   const [errors, setErrors] = useState<Record<string, unknown>>({});
+  const [excludedHosts, setExcludedHosts] = useState<Record<string, string[]>>({});
   const items = (s?.approvals || []).filter((a) => a.agent === agent && a.status === "pending" && !done.has(a.id));
   const who = name || (s?.state?.agent?.name === agent ? SHROOM : agent);
   if (!items.length) return null;
   const now = Date.now();
   const mark = (set: Dispatch<SetStateAction<Set<string>>>, id: string, on: boolean) =>
     set((x) => { const n = new Set(x); if (on) n.add(id); else n.delete(id); return n; });
-  const decide = async (a: Approval, ok: boolean, viewOnly = false) => {
+  const decide = async (a: Approval, ok: boolean, narrow?: { permissions?: string[]; hosts?: string[] }) => {
     mark(setBusy, a.id, true);
     setErrors(({ [a.id]: _, ...rest }) => rest);
     try {
-      await appApi.decideApproval(hubId, a.id, ok, viewOnly ? { permissions: ["remote.desktop.view"] } : undefined);
+      await appApi.decideApproval(hubId, a.id, ok, narrow);
       mark(setDone, a.id, true);
       void refreshSuperagent(hubId).catch(() => undefined);
     } catch (e) {
@@ -415,8 +416,15 @@ export function ApprovalStrip({ hubId, agent, name }: { hubId: string; agent: st
   };
   return (
     <div className="sa-approvals" data-testid="approvals">
-      {items.map((a) => (
-        <div className="sa-approval" key={a.id}>
+      {items.map((a) => {
+        const grant = s?.grants?.find(g => g.approval_id === a.id);
+        const control = a.kind === "action_grant" && (a.payload?.browser_control === true
+          || grant?.requested?.includes("browser.control") || /这个 profile 登录的所有网站/.test(a.what));
+        const scoped = grant?.hosts ?? [];
+        const excluded = excludedHosts[a.id] ?? [];
+        const hosts = scoped.filter(host => !excluded.includes(host));
+        const canApprove = !busy.has(a.id) && (!control || (!!grant && (!scoped.length || !!hosts.length)));
+        return <div className="sa-approval" key={a.id}>
           <ShieldQuestion className="sa-approval-icon" />
           <div className="sa-approval-text">
             <div className="sa-approval-what">{L(`${who} 想：`, `${who} wants to: `)}{invitationWhat(a, s?.grants)}</div>
@@ -424,7 +432,23 @@ export function ApprovalStrip({ hubId, agent, name }: { hubId: string; agent: st
             {a.kind === "project_automation" && !!a.payload?.input && <div className="sa-approval-why">{automationRequestSummary(a.payload.input as Record<string, unknown>)}</div>}
             {a.kind === "project_automation" && automationRequestContent(a) && <details className="sa-approval-why"><summary>{L("查看任务内容", "Review task content")}</summary><pre className="sa-approval-content">{automationRequestContent(a)}</pre></details>}
             {a.kind === "project_invite" && <div className="sa-approval-why">{L("仅这一次邀请：链接 24 小时有效，只能用一次。新 agent 归项目主人所有，只加入为普通成员。", "This invitation only: the link lasts 24 hours and works once. The new agent belongs to the project owner and joins as an ordinary member.")}</div>}
-            {a.kind === "action_grant" && (s?.grants?.some(g => g.approval_id === a.id && (g.requested || []).includes("browser.control")) || /这个 profile 登录的所有网站/.test(a.what)) && <div className="sa-approval-why">{L("agent 能看到并操作这个 profile 登录的所有网站，操作会显示在你的屏幕上，你随时可以停止。", "The agent can see and interact with all websites signed in through this profile. Its actions appear on your screen. You can stop it at any time.")}</div>}
+            {control && <div className="sa-approval-why">
+              {grant && grant.target.resource?.kind !== "agent" && (
+                <div><strong>{L("这个配置里可能有你的登录状态，agent 能看到并操作这些网站。", "This profile may have sites you’re signed in to. The agent can see and interact with those sites.")}</strong></div>
+              )}
+              <div>{L("操作会显示在你的屏幕上，你随时可以停止。", "Actions appear on your screen. You can stop control at any time.")}</div>
+              {grant && (scoped.length ? <fieldset className="sa-approval-hosts">
+                <legend>{L("允许访问的域名", "Allowed domains")}</legend>
+                {scoped.map(host => <label key={host}>
+                  <input type="checkbox" checked={hosts.includes(host)} disabled={busy.has(a.id)}
+                    onChange={e => {
+                      const next = e.currentTarget.checked ? excluded.filter(value => value !== host) : [...excluded, host];
+                      setExcludedHosts(old => ({ ...old, [a.id]: next }));
+                    }} />
+                  <span>{host}</span>
+                </label>)}
+              </fieldset> : <div>{L("不限域名", "No domain restriction")}</div>)}
+            </div>}
             {a.reason && <div className="sa-approval-why">{a.reason}</div>}
             <div className="sa-approval-meta">{leftOf(a.expires_at, now)}</div>
             {!!errors[a.id] && <ErrorText error={errors[a.id]} />}
@@ -432,15 +456,15 @@ export function ApprovalStrip({ hubId, agent, name }: { hubId: string; agent: st
           <div className="sa-approval-actions">
             <button type="button" className="app-btn app-btn-small" disabled={busy.has(a.id)} onClick={() => void decide(a, false)}>{L("不同意", "Deny")}</button>
             {a.kind === "action_grant" && wantsControl(a, s?.grants) && (
-              <button type="button" className="app-btn app-btn-small" disabled={busy.has(a.id)} onClick={() => void decide(a, true, true)}
+              <button type="button" className="app-btn app-btn-small" disabled={busy.has(a.id)} onClick={() => void decide(a, true, { permissions: ["remote.desktop.view"] })}
                 title={L("只让它看屏幕，不能用键盘和鼠标", "Let it see the screen only, without keyboard or mouse")}>{L("只让它看", "View only")}</button>
             )}
-            <button type="button" className="app-btn app-btn-small app-btn-primary" disabled={busy.has(a.id)} onClick={() => void decide(a, true)}>
+            <button type="button" className="app-btn app-btn-small app-btn-primary" disabled={!canApprove} onClick={() => void decide(a, true, excluded.length ? { hosts } : undefined)}>
               {busy.has(a.id) ? <span className="app-spinner" /> : null}{L("同意", "Approve")}
             </button>
           </div>
-        </div>
-      ))}
+        </div>;
+      })}
     </div>
   );
 }

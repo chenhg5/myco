@@ -34,14 +34,15 @@ type browserComponentAPI interface {
 }
 
 type browserState struct {
-	mu            sync.Mutex
-	component     browserComponentAPI
-	confirmations map[string]browserConfirmation
-	policies      *browserpolicy.Store
-	identities    map[string]browserOwnerIdentity
-	blocked       map[string]bool
-	runs          *browserRunBook
-	cancelAgents  func(hub, profile string)
+	mu                    sync.Mutex
+	component             browserComponentAPI
+	confirmations         map[string]browserConfirmation
+	policies              *browserpolicy.Store
+	identities            map[string]browserOwnerIdentity
+	blocked               map[string]bool
+	runs                  *browserRunBook
+	cancelAgents          func(hub, profile string)
+	nextAgentProfileProbe map[browserpolicy.Scope]time.Time
 }
 type browserConfirmation struct {
 	Scope, Action, Profile string

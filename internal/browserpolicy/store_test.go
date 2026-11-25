@@ -158,3 +158,39 @@ func TestBrowserPolicyFileLockCorruptionAndPermissions(t *testing.T) {
 		t.Fatal("failed persistence reported approval")
 	}
 }
+
+func TestDedicatedProfileRetriesActivationAndHonorsDisable(t *testing.T) {
+	scope, _ := policyFixture()
+	store := New(t.TempDir())
+	created, attempts := 0, 0
+	create := func() (string, string, error) {
+		created++
+		return "p_agent", "agent 专用", nil
+	}
+	retry := errors.New("component interrupted activation")
+	activate := func(id string) error {
+		if id != "p_agent" {
+			t.Fatalf("activated the wrong profile: %q", id)
+		}
+		attempts++
+		if attempts == 1 {
+			return retry
+		}
+		return nil
+	}
+	if _, err := store.EnsureAgentProfile(scope, create, activate); !errors.Is(err, retry) {
+		t.Fatalf("first activation: %v", err)
+	}
+	store = New(store.dir)
+	p, err := store.EnsureAgentProfile(scope, create, activate)
+	if err != nil || created != 1 || attempts != 2 || !p.Enabled || p.Kind != "agent" {
+		t.Fatalf("retry: %+v %v (created %d, activation attempts %d)", p, err, created, attempts)
+	}
+	if _, err := store.SetEnabled(scope, p.Profile, false); err != nil {
+		t.Fatal(err)
+	}
+	p, err = store.EnsureAgentProfile(scope, create, activate)
+	if err != nil || p.Enabled || p.Kind != "agent" || attempts != 2 {
+		t.Fatalf("profile re-enabled after owner disabled it: %+v %v", p, err)
+	}
+}

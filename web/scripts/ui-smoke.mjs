@@ -2232,12 +2232,41 @@ async function runMatrix(browser, size, scheme) {
       const card = page.locator(".sp-home [data-testid=approvals] .sa-approval", { hasText: "示例浏览器" });
       await card.waitFor({ timeout: 25_000 });
       const copy = compactText(await card.innerText());
-      for (const fragment of ["登录的所有网站", "显示在你的屏幕上", "随时可以停止", "30 分钟"]) {
+      for (const fragment of ["可能有你的登录状态", "显示在你的屏幕上", "随时可以停止", "30 分钟", "不限域名"]) {
         if (!copy.includes(fragment)) throw new Error(`控制授权卡缺少提示：${fragment}`);
       }
       await shot(page, size, scheme, "browser-control-grant");
       await clickVisible(page, card.getByRole("button", { name: "不同意", exact: true }));
       await card.waitFor({ state: "hidden", timeout: 10_000 });
+
+      const dedicated = await fetch(`http://${HOST}:${mockPort()}/app/mock/superagent-ask`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agent: "pm-codex", kind: "action_grant", permissions: ["browser.control"],
+          resource: { provider: "browser", id: "p_agent", binding: "policy-agent", name: "agent 专用", kind: "agent" },
+          hosts: ["example.com", "*.docs.example.com"], reason: "检查公开文档。" }),
+      });
+      if (!dedicated.ok) throw new Error(`专用浏览器申请失败：HTTP ${dedicated.status}`);
+      const approval = await dedicated.json();
+      const scoped = page.locator(".sp-home [data-testid=approvals] .sa-approval", { hasText: "操作浏览器配置「agent 专用」" });
+      await scoped.waitFor({ timeout: 25_000 });
+      if ((await scoped.innerText()).includes("可能有你的登录状态")) throw new Error("专用配置显示了个人配置提示");
+      const exact = scoped.getByRole("checkbox", { name: "example.com", exact: true });
+      const wildcard = scoped.getByRole("checkbox", { name: "*.docs.example.com", exact: true });
+      const approve = scoped.getByRole("button", { name: "同意", exact: true });
+      await shot(page, size, scheme, "browser-control-scoped-grant");
+      await exact.uncheck();
+      await wildcard.uncheck();
+      if (await approve.isEnabled()) throw new Error("能把有域名限制的申请批准为不限域名");
+      await wildcard.check();
+      await clickVisible(page, approve);
+      await scoped.waitFor({ state: "hidden", timeout: 10_000 });
+      const grants = await page.evaluate(async () => {
+        const hub = await fetch("/app/hubs").then(r => r.json());
+        return fetch(`/app/hubs/${(hub.hubs || hub)[0].id}/action-grants?state=active`).then(r => r.json());
+      });
+      if (grants.grants.find(g => g.approval_id === approval.id)?.hosts?.join() !== "*.docs.example.com") {
+        throw new Error("批准后仍包含已取消的域名");
+      }
     });
 
     // An agent asks to act on one of your computers (agent actions,

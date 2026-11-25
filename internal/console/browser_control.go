@@ -15,6 +15,7 @@ import (
 
 	"github.com/myco-ai/myco/internal/api"
 	"github.com/myco-ai/myco/internal/browserautomation"
+	"github.com/myco-ai/myco/internal/browserpolicy"
 	"github.com/myco-ai/myco/internal/client"
 )
 
@@ -41,19 +42,64 @@ type browserControlSession struct {
 func (b *Backend) registerBrowserHost(ctx context.Context, c *client.Client, machine string, p browserHostPolicy) (*api.ActionHost, error) {
 	req := api.ActionHostRegister{
 		MachineID: machine, Provider: "browser", Generation: "browser-" + rand.Text(),
-		Resource: &api.ActionResource{Provider: "browser", ID: p.Policy.Profile, Binding: p.Policy.Binding, Name: p.Policy.Name, Summary: "Owner-approved fixed script versions"},
+		Resource: &api.ActionResource{Provider: "browser", ID: p.Policy.Profile, Binding: p.Policy.Binding, Name: p.Policy.Name, Kind: p.Policy.Kind, Summary: "Owner-approved fixed script versions"},
 		Actions:  browserActionList,
 	}
 	if b.browserControlAvailable(ctx, "control-discovery") {
 		req.Actions = append(slices.Clone(req.Actions), api.BrowserControlDescriptors()...)
+		req.BrowserHostScope = true
 		host, err := c.RegisterActionHost(ctx, req)
 		ce, ok := client.AsError(err)
 		if !ok || ce.Code != "invalid_argument" || !strings.Contains(ce.Message, "browser.page.") {
 			return host, err
 		}
 		req.Actions = browserActionList
+		req.BrowserHostScope = false
 	}
 	return c.RegisterActionHost(ctx, req)
+}
+
+func (b *Backend) provisionBrowserAgentProfile(h Hub, scope browserpolicy.Scope, store *browserpolicy.Store) (browserpolicy.Policy, bool) {
+	b.browser.mu.Lock()
+	if time.Now().Before(b.browser.nextAgentProfileProbe[scope]) {
+		b.browser.mu.Unlock()
+		return browserpolicy.Policy{}, false
+	}
+	if b.browser.nextAgentProfileProbe == nil {
+		b.browser.nextAgentProfileProbe = make(map[browserpolicy.Scope]time.Time)
+	}
+	b.browser.nextAgentProfileProbe[scope] = time.Now().Add(2 * time.Minute)
+	b.browser.mu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
+	defer cancel()
+	c, err := b.client(h)
+	if err != nil {
+		return browserpolicy.Policy{}, false
+	}
+	settings, err := c.HubSettings(ctx)
+	if err != nil || settings.E2E {
+		return browserpolicy.Policy{}, false
+	}
+	if _, err = b.thisMachine(ctx, c); err != nil || !b.browserControlAvailable(ctx, "control-discovery") {
+		return browserpolicy.Policy{}, false
+	}
+	native := b.browserComponent()
+	p, err := store.EnsureAgentProfile(scope, func() (string, string, error) {
+		var profile api.BrowserProfile
+		if err := native.Call(ctx, "control-discovery", http.MethodPost, "/profiles", map[string]string{
+			"name": "agent 专用", "kind": api.BrowserAgentProfile,
+		}, &profile); err != nil {
+			return "", "", err
+		}
+		if profile.Kind != api.BrowserAgentProfile || !validBrowserID(profile.ID, "p_", 80) {
+			return "", "", errors.New("component returned an invalid dedicated browser profile")
+		}
+		return profile.ID, profile.Name, nil
+	}, func(id string) error {
+		return native.Call(ctx, "control-discovery", http.MethodPost, "/profiles/"+url.PathEscape(id)+"/agents", map[string]bool{"allowed": true}, nil)
+	})
+	return p, err == nil
 }
 
 func (b *Backend) browserControlAvailable(ctx context.Context, scope string) bool {
@@ -239,7 +285,7 @@ func (b *Backend) watchBrowserControl(c *client.Client, s *browserControlSession
 		if err == nil {
 			after = max(after, events.Next)
 			for _, event := range events.Events {
-				if api.ValidBrowserAuditHost(event.Host) && event.Host != "" {
+				if event.Code != "host_not_allowed" && event.Host != "" && api.ValidBrowserAuditHost(event.Host) {
 					s.mu.Lock()
 					s.host = event.Host
 					s.mu.Unlock()
@@ -392,6 +438,9 @@ func (b *Backend) openBrowserControl(hostCtx, jobCtx context.Context, c *client.
 	}
 	args["request_id"], _ = json.Marshal(hj.Job.ID)
 	args["grant_id"], _ = json.Marshal(g.ID)
+	if len(g.Hosts) != 0 {
+		args["hosts"], _ = json.Marshal(g.Hosts)
+	}
 	actor := api.BrowserControlActor{ID: g.Agent, Name: g.Agent}
 	labelCtx, labelCancel := context.WithTimeout(jobCtx, 2*time.Second)
 	if agent, err := c.GetAgent(labelCtx, g.Agent); err == nil && agent.DisplayName != "" && len(agent.DisplayName) <= 160 {

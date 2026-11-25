@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -28,14 +29,25 @@ func waitQuery(wait time.Duration) url.Values {
 
 // RequestActionGrant asks a target's owner to let this agent act on it.
 func (c *Client) RequestActionGrant(ctx context.Context, req api.ActionGrantRequest, dry bool) (*api.ActionGrant, error) {
-	if dry {
+	if dry || len(req.Hosts) != 0 {
 		var out struct {
 			Grant api.ActionGrant `json:"grant"`
 		}
 		if err := c.do(ctx, http.MethodPost, "/v1/me/action-grants", dryQuery(true), req, &out); err != nil {
 			return nil, sshGrantCompatibility(err, req.Target.Resource)
 		}
-		return &out.Grant, nil
+		if len(req.Hosts) != 0 {
+			hosts, err := api.NormalizeBrowserHosts(req.Hosts)
+			if err != nil {
+				return nil, &Error{Status: http.StatusBadRequest, Code: "invalid_argument", Message: err.Error()}
+			}
+			if !slices.Equal(hosts, out.Grant.Hosts) {
+				return nil, &Error{Status: http.StatusNotImplemented, Code: "unsupported", Message: "this Hub does not support browser domain restrictions", Suggestion: "Upgrade the Hub before requesting scoped browser control."}
+			}
+		}
+		if dry {
+			return &out.Grant, nil
+		}
 	}
 	var out api.ActionGrant
 	if err := c.do(ctx, http.MethodPost, "/v1/me/action-grants", nil, req, &out); err != nil {
@@ -120,6 +132,19 @@ func (c *Client) CancelActionJob(ctx context.Context, id string) (*api.ActionJob
 // ActionArtifact downloads a file one of this agent's jobs made.
 func (c *Client) ActionArtifact(ctx context.Context, id string) ([]byte, string, error) {
 	return c.raw(ctx, http.MethodGet, "/v1/me/action-artifacts/"+esc(id), nil, nil, "")
+}
+
+// OwnerBrowserScreenshot downloads a retained screenshot for the computer's owner.
+func (c *Client) OwnerBrowserScreenshot(ctx context.Context, id string) ([]byte, string, error) {
+	return c.raw(ctx, http.MethodGet, "/v1/console/action-artifacts/"+esc(id), nil, nil, "")
+}
+
+func (c *Client) OwnerBrowserScreenshots(ctx context.Context) ([]api.ActionArtifact, error) {
+	var result struct {
+		Artifacts []api.ActionArtifact `json:"artifacts"`
+	}
+	err := c.do(ctx, http.MethodGet, "/v1/console/action-artifacts", nil, nil, &result)
+	return result.Artifacts, err
 }
 
 // OwnerActionGrants lists the grants the caller decides (state "" for all).

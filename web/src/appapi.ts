@@ -13,7 +13,7 @@ export interface NoticeState {
 /** The optional local browser component, without credentials or profile paths. */
 export interface BrowserProfileSettings { proxy: {server: string; bypass: string[]; username: string; has_password: boolean} | null; user_agent: string; lang: string; args: string[] }
 export interface BrowserProfileSettingsInput { proxy: {server: string; bypass: string[]; username: string; password?: string} | null; user_agent: string; lang: string; args: string[] }
-export interface BrowserProfile { id: string; name: string; running: boolean; agents: boolean; settings?: BrowserProfileSettings }
+export interface BrowserProfile { kind?: "agent"; id: string; name: string; running: boolean; agents: boolean; settings?: BrowserProfileSettings }
 export interface BrowserRecording { id: string; profile: string; url: string; started_at: string; origin: "browser" | "page" }
 export interface BrowserStatus { features?: string[]; recordings?: BrowserRecording[]; update_available?: boolean; protocol: number; version: string; installed: boolean; supported: boolean; reason?: string; browsers: string[]; machine: string; profiles: BrowserProfile[] }
 
@@ -1164,7 +1164,7 @@ export const appApi = {
   clearSuperagent: (hubId: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/superagent`),
   approvals: (hubId: string, status = "pending") =>
     request<{ approvals: Approval[] }>("GET", `app/hubs/${enc(hubId)}/approvals${status ? `?status=${enc(status)}` : ""}`),
-  decideApproval: (hubId: string, id: string, approve: boolean, narrow?: { permissions?: string[]; ttl_seconds?: number }) =>
+  decideApproval: (hubId: string, id: string, approve: boolean, narrow?: { permissions?: string[]; ttl_seconds?: number; hosts?: string[] }) =>
     request<Approval>("POST", `app/hubs/${enc(hubId)}/approvals/${enc(id)}/${approve ? "approve" : "deny"}`, narrow || {}),
   /** What agents may do on computers you decide for (v0.21.21 hubs). */
   actionGrants: (hubId: string, state = "active") =>

@@ -30,6 +30,7 @@ For an enabled SSH profile, use action targets to get --machine, --ssh-profile a
 server.ssh.read inspects Linux status/logs; server.ssh.manage also starts/stops/restarts services
 and containers. The owner approves the resolved SSH endpoint; no arbitrary shell is offered.
 For an enabled browser profile, action targets gives --machine, --browser-profile and --binding.
+Omit --browser-profile and --binding to request browser.control on the dedicated agent profile.
 browser.view reads status/results, browser.run runs owner-approved saved scripts, and
 browser.control allows visible live control of the approved profile. Permissions are
 independent. The actions offered depend on the installed browser component.
@@ -45,6 +46,7 @@ A shared page you can see (--page) needs no approval: page.export lets its app m
 			{Name: "machine", Kind: String, Help: "The computer: its name or id (or --page)"},
 			{Name: "ssh-profile", Kind: String, Help: "An enabled SSH profile id from action targets (requires --machine and --binding)"},
 			{Name: "browser-profile", Kind: String, Help: "An enabled browser profile id from action targets (requires --machine and --binding)"},
+			{Name: "host", Kind: List, Help: "Restrict browser control to this hostname or *.example.com (repeatable)"},
 			{Name: "binding", Kind: String, Help: "The profile policy binding from action targets"},
 			{Name: "page", Kind: String, Help: "A shared page (pg_...) instead of a computer"},
 			{Name: "permission", Kind: List, Required: true, Help: "remote.desktop.view or remote.desktop.control for a computer; server.ssh.read/manage for a bound SSH profile; browser.view/run/control for a bound browser profile; page.export for a page (repeatable)"},
@@ -82,7 +84,7 @@ A shared page you can see (--page) needs no approval: page.export lets its app m
 			if err != nil {
 				return err
 			}
-			req := api.ActionGrantRequest{Target: target, Permissions: e.in.List("permission"),
+			req := api.ActionGrantRequest{Target: target, Permissions: e.in.List("permission"), Hosts: e.in.List("host"),
 				Reason: e.in.String("reason"), MessageID: e.in.String("task"), TTLSeconds: int(e.in.Duration("ttl") / time.Second)}
 			if e.in.Bool("dry-run") {
 				g, err := c.RequestActionGrant(e.in.Ctx, req, true)

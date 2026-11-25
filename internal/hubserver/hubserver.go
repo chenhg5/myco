@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"github.com/myco-ai/myco/internal/templates"
 	"log/slog"
 	"math/rand/v2"
@@ -94,6 +95,7 @@ const WorkflowTick = app.WorkflowTick
 // Hub is an assembled hub: the HTTP handler plus background workers.
 type Hub struct {
 	PageAttachments *app.PageAttachmentService
+	Actions         *app.ActionService
 	Handler         http.Handler
 	// Server is the HTTP adapter (Handler), for the workspace router.
 	Server     *httpapi.Server
@@ -110,7 +112,8 @@ type Hub struct {
 	// SetLAN makes links created from this machine use its LAN address.
 	SetLAN func(bool)
 	// RunBackups makes the daily backups until ctx ends (nil: none).
-	RunBackups func(ctx context.Context)
+	RunBackups             func(ctx context.Context)
+	browserScreenshotsPath string
 }
 
 // DefaultWakers are the push delivery modes shipped with myco.
@@ -355,8 +358,18 @@ func Build(o Options) (*Hub, error) {
 	handovers.SetContext(projectRepo, sqlite.NewMachineRepo(db), messages)
 	srv.SetHandovers(handovers)
 	messages.SetCredentialCheck(handovers.StillCurrent)
-	h := &Hub{PageAttachments: pageAttachments, Handler: srv, Server: srv, Dispatcher: dispatcher, Files: files, Traces: traces, Automations: automations, Workflows: workflows,
-		Close: db.Close, SetPublicURL: srv.SetPublicURL, SetLAN: srv.SetLAN}
+	screenshotPath := ":memory:"
+	if o.DBPath != ":memory:" {
+		screenshotPath = filepath.Join(o.DBPath+".private", "browser-screenshots.sqlite")
+	}
+	screenshots, err := sqlite.OpenBrowserScreenshots(screenshotPath)
+	if err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("open private browser screenshots: %w", err)
+	}
+	actionSvc.SetBrowserScreenshots(screenshots)
+	h := &Hub{PageAttachments: pageAttachments, Actions: actionSvc, Handler: srv, Server: srv, Dispatcher: dispatcher, Files: files, Traces: traces, Automations: automations, Workflows: workflows,
+		browserScreenshotsPath: screenshotPath, Close: func() error { return errors.Join(screenshots.Close(), db.Close()) }, SetPublicURL: srv.SetPublicURL, SetLAN: srv.SetLAN}
 	if bk != nil {
 		// The first a few minutes after start, spread so that the
 		// workspaces of a server do not all copy at once.
@@ -384,6 +397,7 @@ func Run(ctx context.Context, o Options) error {
 		go o.Apps.Run(ctx)
 	}
 	go hub.PageAttachments.Run(ctx, o.Log)
+	go hub.Actions.RunBrowserScreenshotPrune(ctx, o.Log)
 	go hub.Files.Run(ctx, time.Hour)
 	go hub.Traces.Run(ctx, time.Hour)
 	go hub.Automations.Run(ctx, AutomationTick)

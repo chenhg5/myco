@@ -30,6 +30,8 @@ func (s *Server) actionRoutes(m *http.ServeMux) {
 	m.HandleFunc("POST /v1/me/action-jobs/{id}/cancel", s.agent(s.cancelActionJob))
 	m.HandleFunc("GET /v1/me/action-artifacts/{id}", s.agent(s.getActionArtifact))
 	// The owner.
+	m.HandleFunc("GET /v1/console/action-artifacts", s.admin(s.listOwnerBrowserScreenshots))
+	m.HandleFunc("GET /v1/console/action-artifacts/{id}", s.admin(s.getOwnerBrowserScreenshot))
 	m.HandleFunc("GET /v1/console/action-grants", s.admin(s.listOwnerActionGrants))
 	m.HandleFunc("POST /v1/console/action-grants/{id}/revoke", s.admin(s.revokeActionGrant))
 	// The trusted App on the target computer.
@@ -191,6 +193,34 @@ func (s *Server) getActionArtifact(w http.ResponseWriter, r *http.Request, a *do
 		writeError(w, err)
 		return
 	}
+	writeActionArtifact(w, art, data)
+}
+
+func (s *Server) listOwnerBrowserScreenshots(w http.ResponseWriter, r *http.Request) {
+	if !s.actionsEnabled(w) {
+		return
+	}
+	artifacts, err := s.actions.OwnerBrowserScreenshots(r.Context(), s.actorOf(r))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"artifacts": artifacts})
+}
+
+func (s *Server) getOwnerBrowserScreenshot(w http.ResponseWriter, r *http.Request) {
+	if !s.actionsEnabled(w) {
+		return
+	}
+	art, data, err := s.actions.OwnerBrowserScreenshot(r.Context(), s.actorOf(r), r.PathValue("id"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeActionArtifact(w, art, data)
+}
+
+func writeActionArtifact(w http.ResponseWriter, art *api.ActionArtifact, data []byte) {
 	w.Header().Set("Content-Type", art.MediaType)
 	w.Header().Set("Cache-Control", "no-store")
 	// A file for the agent, never a page to show (an SVG can hold script).

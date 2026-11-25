@@ -551,7 +551,7 @@ export interface Approval {
   status: "pending" | "executing" | "done" | "denied" | "expired" | "withdrew"; result?: number; result_body?: string; decided_by?: string;
   created_at: string; expires_at: string; decided_at?: string;
   /** "" (absent): a superagent's held request; "action_grant": an agent asks to act on a computer
-   *  (payload {grant_id}; approving may send {permissions?, ttl_seconds?} to allow less). v0.21.21 */
+   *  (payload {grant_id}; approving may send {permissions?, ttl_seconds?, hosts?} to allow less). v0.21.21 */
   kind?: string; payload?: { grant_id?: string } & Record<string, unknown>;
 }
 
@@ -559,7 +559,7 @@ export interface Approval {
 // Disabling a profile withdraws its native host with exact-generation DELETE;
 // all grants for this provider/profile id end, including older policy bindings.
 export interface ActionResource {
-  provider: "server.ssh" | "browser"; id: string; binding: string; name?: string; summary?: string;
+  provider: "server.ssh" | "browser"; id: string; binding: string; name?: string; summary?: string; kind?: "agent";
 }
 export interface ActionTarget { kind: "machine" | "page"; id: string; resource?: ActionResource }
 export interface ActionTargetList { targets: ActionTarget[] }
@@ -572,7 +572,7 @@ export type BrowserActionPermission = "browser.view" | "browser.run" | "browser.
 
 export interface ActionGrant {
   id: string; agent: string; owner: string; target: ActionTarget; target_name?: string;
-  permissions: string[]; requested?: string[]; reason?: string; message_id?: string; approval_id: string;
+  permissions: string[]; requested?: string[]; hosts?: string[]; reason?: string; message_id?: string; approval_id: string;
   state: "pending" | "active" | "denied" | "expired" | "revoked" | "ended"; end_reason?: string;
   created_at: string; expires_at?: string; ended_at?: string;
 }

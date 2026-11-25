@@ -292,4 +292,27 @@ type BrowserControlEvents struct {
 
 type BrowserControlEvent struct {
 	Host string `json:"host,omitempty"`
+	Code string `json:"code,omitempty"`
+}
+
+// NormalizeBrowserHosts freezes the domain scope presented on the approval card.
+func NormalizeBrowserHosts(input []string) ([]string, error) {
+	if len(input) > 64 {
+		return nil, fmt.Errorf("use at most 64 hosts")
+	}
+	var out []string
+	seen := make(map[string]bool, len(input))
+	for _, raw := range input {
+		host := strings.TrimSuffix(strings.ToLower(strings.TrimSpace(raw)), ".")
+		name := strings.TrimPrefix(host, "*.")
+		if name == "" || strings.Contains(name, ":") || !ValidBrowserAuditHost(name) ||
+			(name != host && net.ParseIP(name) != nil) {
+			return nil, fmt.Errorf("use hostnames or subdomain patterns such as *.example.com")
+		}
+		if !seen[host] {
+			seen[host] = true
+			out = append(out, host)
+		}
+	}
+	return out, nil
 }

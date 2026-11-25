@@ -212,9 +212,9 @@ func TestLiveBrowserGrantValidatesAuditsAndStops(t *testing.T) {
 		t.Fatalf("machines: %v %v", machines, err)
 	}
 	agent := h.client(h.register(api.RegisterRequest{Name: "control-agent", Binding: api.Binding{Harness: "claude", SessionID: "control-session"}}))
-	resource := &api.ActionResource{Provider: "browser", ID: "work", Binding: strings.Repeat("a", 64), Name: "Work"}
+	resource := &api.ActionResource{Provider: "browser", ID: "work", Binding: strings.Repeat("a", 64), Name: "agent 专用", Kind: api.BrowserAgentProfile}
 	target := api.ActionTarget{Kind: "machine", ID: machines[0].ID, Resource: resource}
-	req := api.ActionGrantRequest{Target: target, Permissions: []string{api.BrowserControlPermission}, Reason: "Check the sample report", TTLSeconds: 3600}
+	req := api.ActionGrantRequest{Target: api.ActionTarget{Kind: "machine", ID: target.ID}, Hosts: []string{"EXAMPLE.com.", "*.docs.example.com"}, Permissions: []string{api.BrowserControlPermission}, Reason: "Check the sample report", TTLSeconds: 3600}
 	reg := api.ActionHostRegister{MachineID: target.ID, Provider: "browser", Resource: resource, Generation: "control-1",
 		Actions: []api.ActionDescriptor{{Name: "browser.run.status", Version: 1, Permission: "browser.view"}}}
 	if _, err := owner.RegisterActionHost(c, reg); err != nil {
@@ -225,6 +225,13 @@ func TestLiveBrowserGrantValidatesAuditsAndStops(t *testing.T) {
 	}
 	reg.Actions = append(reg.Actions, api.BrowserControlDescriptors()...)
 	reg.Generation = "control-2"
+	if _, err := owner.RegisterActionHost(c, reg); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := agent.RequestActionGrant(c, req, false); err == nil {
+		t.Fatal("a desktop without host scope support accepted a scoped grant")
+	}
+	reg.Generation, reg.BrowserHostScope = "control-3", true
 	host, err := owner.RegisterActionHost(c, reg)
 	if err != nil {
 		t.Fatal(err)
@@ -233,7 +240,16 @@ func TestLiveBrowserGrantValidatesAuditsAndStops(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := owner.DecideActionGrant(c, grant.ApprovalID, api.ActionGrantNarrow{}); err != nil {
+	if grant.Target.Resource == nil || grant.Target.Resource.ID != resource.ID || grant.Target.Resource.Kind != api.BrowserAgentProfile {
+		t.Fatalf("expected dedicated profile to be selected: %+v", grant)
+	}
+	for _, invalid := range [][]string{{"other.example"}, {}} {
+		if _, err := owner.DecideActionGrant(c, grant.ApprovalID, api.ActionGrantNarrow{Hosts: &invalid}); err == nil {
+			t.Fatal("approval broadened the requested scope")
+		}
+	}
+	approved := []string{"*.docs.example.com"}
+	if _, err := owner.DecideActionGrant(c, grant.ApprovalID, api.ActionGrantNarrow{Hosts: &approved}); err != nil {
 		t.Fatal(err)
 	}
 	grant, err = agent.ActionGrant(c, grant.ID, 0)
@@ -267,7 +283,7 @@ func TestLiveBrowserGrantValidatesAuditsAndStops(t *testing.T) {
 		t.Fatal(err)
 	}
 	jobs, err := owner.ActionHostJobs(c, host.ID, 0)
-	if err != nil || len(jobs) != 1 || jobs[0].Job.ID != job.ID {
+	if err != nil || len(jobs) != 1 || jobs[0].Job.ID != job.ID || strings.Join(jobs[0].Grant.Hosts, ",") != approved[0] {
 		t.Fatalf("host jobs: %+v %v", jobs, err)
 	}
 	done := api.ActionJobComplete{HostID: host.ID, Generation: host.Generation, State: api.JobSucceeded,
@@ -289,8 +305,79 @@ func TestLiveBrowserGrantValidatesAuditsAndStops(t *testing.T) {
 	if err != nil || replay.ID != job.ID || !bytes.Contains(replay.Result, []byte("snapshot_error")) {
 		t.Fatalf("completed idempotent job lost its snapshot status: %+v %v", replay, err)
 	}
+	blocked, err := run("page.act", "outside-scope", `{"session":"session","op":"navigate","url":"https://elsewhere.example/path"}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if jobs, err := owner.ActionHostJobs(c, host.ID, 0); err != nil || len(jobs) != 1 || jobs[0].Job.ID != blocked.ID {
+		t.Fatalf("host jobs: %+v %v", jobs, err)
+	}
+	if _, err := owner.CompleteActionJob(c, blocked.ID, api.ActionJobComplete{
+		HostID: host.ID, Generation: host.Generation, State: api.JobFailed, BrowserHost: "elsewhere.example",
+		Error: &api.ActionError{Code: "host_not_allowed", Message: "outside the approved domains"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if audit, err := owner.Audit(c, client.AuditFilter{Target: "elsewhere.example"}); err != nil || len(audit) != 1 || audit[0].Action != "browser.page.act" || audit[0].Detail != "host_not_allowed" {
+		t.Fatalf("expected audit for rejected navigation: %+v %v", audit, err)
+	}
+	snap, err := run("page.screenshot", "screen", `{"session":"session"}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if jobs, err := owner.ActionHostJobs(c, host.ID, 0); err != nil || len(jobs) != 1 || jobs[0].Job.ID != snap.ID {
+		t.Fatalf("host jobs: %+v %v", jobs, err)
+	}
+	image := []byte("private raster test data")
+	artifact, err := owner.UploadActionArtifact(c, snap.ID, host.ID, host.Generation, "image/png", image)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if left := time.Until(artifact.ExpiresAt); left > 7*24*time.Hour || left < 7*24*time.Hour-time.Minute {
+		t.Fatalf("unexpected screenshot lifetime: %s", left)
+	}
+	if _, _, err := agent.ActionArtifact(c, artifact.ID); err == nil {
+		t.Fatal("staged screenshot was accessible")
+	}
+	if _, err := owner.CompleteActionJob(c, snap.ID, api.ActionJobComplete{
+		HostID: host.ID, Generation: host.Generation, State: api.JobSucceeded,
+		BrowserHost: "screenshot.docs.example.com", ArtifactIDs: []string{artifact.ID},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	invitation, err := h.admin().InviteMember(c, api.InviteRequest{Name: "browser-outsider"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pair, err := h.client("").Pair(c, invitation.Link[strings.Index(invitation.Link, "/c/")+3:], "other-computer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherOwner := h.client(pair.Token)
+	if _, _, err := otherOwner.OwnerBrowserScreenshot(c, artifact.ID); err == nil {
+		t.Fatal("another member read a private screenshot")
+	}
+	if list, err := otherOwner.OwnerBrowserScreenshots(c); err != nil || len(list) != 0 {
+		t.Fatalf("another member could list screenshot metadata: %+v %v", list, err)
+	}
+	otherAgent := h.client(h.register(api.RegisterRequest{Name: "other-control-agent", Binding: api.Binding{Harness: "claude", SessionID: "other-control-session"}}))
+	if _, _, err := otherAgent.ActionArtifact(c, artifact.ID); err == nil {
+		t.Fatal("another agent of the same owner read the screenshot")
+	}
+	if audit, err := owner.Audit(c, client.AuditFilter{Target: "screenshot.docs.example.com"}); err != nil || len(audit) != 1 || audit[0].Detail != "screenshot" {
+		t.Fatalf("expected presence-only screenshot audit: %+v %v", audit, err)
+	}
 	if _, err := owner.RevokeActionGrantWithReason(c, grant.ID, api.BrowserControlOwnerStopped); err != nil {
 		t.Fatal(err)
+	}
+	if data, _, err := agent.ActionArtifact(c, artifact.ID); err != nil || !bytes.Equal(data, image) {
+		t.Fatalf("agent could not read the retained screenshot: %v", err)
+	}
+	if data, _, err := owner.OwnerBrowserScreenshot(c, artifact.ID); err != nil || !bytes.Equal(data, image) {
+		t.Fatalf("owner could not read the retained screenshot: %v", err)
+	}
+	if list, err := owner.OwnerBrowserScreenshots(c); err != nil || len(list) != 1 || list[0].ID != artifact.ID {
+		t.Fatalf("owner screenshot list: %+v %v", list, err)
 	}
 	closed, err := run("page.close", "close-after-stop", `{"session":"session"}`)
 	if err != nil || closed.State != api.JobFailed || closed.Error == nil || closed.Error.Code != "session_closed" || closed.Error.Reason != api.BrowserControlOwnerStopped {

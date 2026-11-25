@@ -2205,9 +2205,9 @@ const server = http.createServer(async (req, res) => {
     if (body.kind === "action_grant") {
       const requested = body.permissions || ["remote.desktop.control", "remote.desktop.view"];
       const g = { id: `agr_${state.counter}`, agent, owner: "alice", target: { kind: "machine", id: "m_studio", ...(body.resource ? { resource: body.resource } : {}) }, target_name: body.machine || "Studio Mac",
-        permissions: [], requested, reason: a.reason, approval_id: a.id, state: "pending", created_at: iso(0), ttl: 300 };
+        permissions: [], requested, hosts: body.hosts, reason: a.reason, approval_id: a.id, state: "pending", created_at: iso(0), ttl: 300 };
       (state.grants ||= {})[hub.id] = [...(state.grants[hub.id] || []), g];
-      Object.assign(a, { kind: "action_grant", payload: { grant_id: g.id }, method: "", path: "",
+      Object.assign(a, { kind: "action_grant", payload: { grant_id: g.id, browser_control: requested.includes("browser.control") }, method: "", path: "",
         what: body.what || `${requested.includes("remote.desktop.control") ? "看并操作" : "看"}电脑 ${g.target_name} 的屏幕（键盘和鼠标），5 分钟` });
     }
     if (["project_invite", "project_automation"].includes(body.kind)) Object.assign(a, {kind: body.kind, payload: body.payload || {project: "website", project_title: "官网改版", display_name: "文档助手"}, method: "", path: ""});
@@ -3393,6 +3393,7 @@ const server = http.createServer(async (req, res) => {
           const g = (state.grants?.[hub.id] || []).find((x) => x.id === a.payload?.grant_id);
           if (g && a.status === "done") {
             g.permissions = body?.permissions?.length ? body.permissions : g.requested;
+            if (body?.hosts) g.hosts = body.hosts;
             g.state = "active";
             g.expires_at = new Date(Date.now() + (body?.ttl_seconds || g.ttl) * 1000).toISOString();
           } else if (g) g.state = "denied";
