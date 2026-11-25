@@ -3562,6 +3562,55 @@ async function runMatrix(browser, size, scheme) {
       if (narrow) await sidebar(page, false);
     });
 
+    await step("设置 · CLI 登录状态", async () => {
+      const zh = scheme === "dark";
+      let checked = false;
+      const fixtures = [
+        { cli: "codebuddy", name: "CodeBuddy Code", state: "unknown" },
+        { cli: "qoder", name: "Qoder CLI", state: "ready" },
+        { cli: "kimi", name: "Kimi Code", state: "unknown" },
+        { cli: "gemini", name: "Gemini CLI", state: "signed_out" },
+      ].map(a => ({ ...a, path: `/demo/bin/${a.cli}`, version: "1.0.0", install: "example-install", login: a.cli }));
+      await page.route("**/app/local/agents", route => route.fulfill({ json: {
+        agents: fixtures.map(a => a.cli === "codebuddy" && checked ? { ...a, state: "ready" } : a),
+      } }));
+      let loginRequested = false;
+      await page.route("**/app/local/agents/kimi/terminal", async route => {
+        if (route.request().postDataJSON().action !== "login") throw Error("secondary link must request login");
+        loginRequested = true;
+        await route.fulfill({ json: { opened: true, command: "kimi" } });
+      });
+      await page.goto(`${r.base}/?lang=${zh ? "zh" : "en"}`);
+      await page.locator(".app-shell").waitFor();
+      await sidebar(page, true);
+      await clickVisible(page, page.locator(".sp-switch .app-hub-trigger"));
+      await clickVisible(page, page.locator(".app-hub-menu-item", { hasText: zh ? "设置" : "Settings" }));
+      await clickVisible(page, page.locator(".app-settings-tab", { hasText: zh ? "本机 agent" : "Agents" }));
+      const unknown = page.locator('.la-line[data-agent-cli="codebuddy"]');
+      await unknown.locator(".app-pill", { hasText: zh ? "已安装" : "Installed" }).waitFor();
+      await unknown.getByText(zh ? "看不出是否登录，能用就不用管。需要时可以去登录。" : "Sign-in status is unknown. If it works, no action is needed. Sign in only if needed.", { exact: true }).waitFor();
+      await unknown.locator(".app-linklike", { hasText: zh ? "去登录" : "Go to sign in" }).waitFor();
+      if (await unknown.locator(".app-btn").count()) throw Error("unknown auth must not have a primary sign-in button");
+      await page.locator('.la-line[data-agent-cli="gemini"]').getByRole("button", { name: zh ? "登录" : "Sign in", exact: true }).waitFor();
+      const kimi = page.locator('.la-line[data-agent-cli="kimi"]');
+      await kimi.getByRole("button", { name: zh ? "去登录" : "Go to sign in", exact: true }).click();
+      await kimi.locator(".la-opened").waitFor();
+      if (!loginRequested) throw Error("secondary sign-in must remain available");
+      checked = true;
+      await page.locator(".la-foot").getByRole("button", { name: zh ? "重新检查" : "Check again", exact: true }).click();
+      for (const cli of ["codebuddy", "qoder"]) {
+        const line = page.locator(`.la-line[data-agent-cli="${cli}"][data-agent-state="ready"]`);
+        await line.waitFor();
+        if (await line.locator("button").count()) throw Error("ready CLI must not ask for login");
+      }
+      await shot(page, size, scheme, "settings-cli-auth");
+      await closeSettings(page);
+      await page.unroute("**/app/local/agents");
+      await page.unroute("**/app/local/agents/kimi/terminal");
+      await page.goto(`${r.base}/?lang=zh`);
+      await page.locator(".app-shell").waitFor();
+    });
+
     // A proxy for the App: from the environment (as before), none, or one
     // set here; tried before it is saved, in force once saved.
     await step("设置 · 代理", async () => {

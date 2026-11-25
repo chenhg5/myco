@@ -23,7 +23,7 @@ function stateText(a: LocalAgent): string {
   switch (a.state) {
     case "ready": return a.version ? L(`可以用了 · ${a.version}`, `Ready · ${a.version}`) : L("可以用了", "Ready");
     case "signed_out": return L("装好了，还没登录", "Installed, not signed in");
-    case "unknown": return L("装好了。看不出有没有登录：用的时候不行，就点「登录」", "Installed. Whether it is signed in cannot be told: if it does not work, sign in");
+    case "unknown": return L("看不出是否登录，能用就不用管。需要时可以去登录。", "Sign-in status is unknown. If it works, no action is needed. Sign in only if needed.");
     default: return a.needs === "npm"
       ? L("这台电脑上没装。安装要用 npm（装了 Node.js 就有）", "Not installed. Installing it needs npm (comes with Node.js)")
       : L("这台电脑上没装", "Not installed on this computer");
@@ -139,8 +139,11 @@ export function LocalAgentLines({ only, onReady, hideReady }: { only?: string[];
                 {L("安装", "Install")}{a.install_mirror && <ChevronDown className="h-3.5 w-3.5" />}
               </button>
             )}
-            {(a.state === "signed_out" || a.state === "unknown") && (
+            {a.state === "signed_out" && (
               <button type="button" className="app-btn app-btn-quiet" disabled={busy === a.cli} onClick={() => void open(a.cli, "login")}>{L("登录", "Sign in")}</button>
+            )}
+            {a.state === "unknown" && (
+              <button type="button" className="app-linklike" disabled={busy === a.cli} onClick={() => void open(a.cli, "login")}>{L("去登录", "Go to sign in")}</button>
             )}
           </div>
         );

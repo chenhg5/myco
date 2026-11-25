@@ -8656,6 +8656,7 @@ body.is-resizing {
 .la-line > .app-pill, .la-line > .app-btn { margin-top: 2px; flex: none; }
 /* The status tag sits level with the button beside it (28px high). */
 .la-line > .app-pill { margin-top: 6.5px; }
+.la-line > .app-linklike { margin-top: 6.5px; flex: none; font-size: 12px; }
 .la-icon {
   flex: none;
   width: 28px;

@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -25,9 +26,32 @@ type pendingRun struct {
 	Requeued bool `json:"requeued,omitempty"`
 }
 
+// RunSuccess records successful local CLI use, without task or credential data.
+type RunSuccess struct {
+	CLI string    `json:"cli"`
+	At  time.Time `json:"at"`
+}
+
+// ReadSuccess reads only success metadata. Older runner files have none.
+func ReadSuccess(path string) *RunSuccess {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	var st struct {
+		Success *RunSuccess `json:"success"`
+	}
+	if json.NewDecoder(io.LimitReader(f, 8<<20)).Decode(&st) != nil {
+		return nil
+	}
+	return st.Success
+}
+
 type runnerState struct {
-	Runs  map[string]int64      `json:"runs"`
-	Tasks map[string]pendingRun `json:"tasks"`
+	Success *RunSuccess           `json:"success,omitempty"`
+	Runs    map[string]int64      `json:"runs"`
+	Tasks   map[string]pendingRun `json:"tasks"`
 }
 
 func loadPending(path string) map[string]pendingRun {
@@ -52,7 +76,7 @@ func (r *Runner) saveState() {
 	if r.opts.StatePath == "" {
 		return
 	}
-	st := runnerState{Runs: map[string]int64{}, Tasks: r.pending}
+	st := runnerState{Runs: map[string]int64{}, Tasks: r.pending, Success: r.lastSuccess}
 	for k, v := range r.ownRunEnd {
 		st.Runs[k] = v.UnixMilli()
 	}

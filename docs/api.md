@@ -835,6 +835,15 @@ responses use the existing desktop `net.fetch` shape documented in
 this feature; embedded apps must show an update hint instead of assuming that
 all platforms provide desktop computer access.
 
+### Local CLI readiness
+
+`GET /app/local/agents` retains its existing `missing`, `signed_out`, `ready`
+and `unknown` state values. `unknown` means installed with opaque sign-in;
+it is not a signed-out result. CodeBuddy/Qoder local credentials and a matching
+active local profile's successful CLI task within24 hours can establish
+readiness. No model requests or credential values enter this response. See
+[Local CLI sign-in detection](cli-auth-detection.md) for paths and limitations.
+
 ### Local model-provider selection
 
 `GET/PUT /app/local/agents/{name}/provider?hub_id={id}` is an App-local

@@ -20,7 +20,7 @@ import (
 // signed in, and the commands that install it or sign in
 // (GET /app/local/agents).
 type LocalAgent struct {
-	CLI  string `json:"cli"`  // claude | codex | gemini | opencode
+	CLI  string `json:"cli"`  // claude | codex | gemini | opencode | qoder | codebuddy | ...
 	Name string `json:"name"` // Claude Code, Codex, ...
 	// State: missing (not installed), signed_out, ready, or unknown
 	// (installed; whether it is signed in cannot be told without spending
@@ -123,6 +123,9 @@ func (l *Local) localAgent(ctx context.Context, a agentCLI) LocalAgent {
 	}
 	la.Version = l.version(ctx, la.Path)
 	la.State = l.signedIn(ctx, a.cli, la.Path)
+	if la.State == "unknown" && l.recentAgentSuccess(a.cli, time.Now()) {
+		la.State = "ready"
+	}
 	return la
 }
 
@@ -254,6 +257,18 @@ func (l *Local) signedIn(ctx context.Context, cli, path string) string {
 			return "ready"
 		}
 		return "unknown" // an API key in the shell's environment is invisible here
+	case "codebuddy":
+		return l.codebuddyAuthState()
+	case "qoder":
+		if l.qoderSignedIn() {
+			return "ready"
+		}
+		return "unknown"
+	case "qwen":
+		if l.qwenSignedIn() {
+			return "ready"
+		}
+		return "unknown"
 	case "opencode":
 		if fileExists(filepath.Join(l.Home, ".local", "share", "opencode", "auth.json")) {
 			return "ready"

@@ -109,12 +109,13 @@ type Runner struct {
 
 	threadLocks sync.Map // thread_id -> *sync.Mutex
 
-	mu         sync.Mutex
-	settings   api.RunSettings       // the agent's run settings, as last read from the hub
-	ownRunEnd  map[string]time.Time  // session id -> when our last run ended
-	pending    map[string]pendingRun // acked tasks not yet durably finished
-	finishing  map[string]bool       // results currently being delivered by Handle
-	busyStreak map[string]int        // session key -> consecutive busy releases
+	mu          sync.Mutex
+	settings    api.RunSettings       // the agent's run settings, as last read from the hub
+	lastSuccess *RunSuccess           // most recent successful task on this CLI
+	ownRunEnd   map[string]time.Time  // session id -> when our last run ended
+	pending     map[string]pendingRun // acked tasks not yet durably finished
+	finishing   map[string]bool       // results currently being delivered by Handle
+	busyStreak  map[string]int        // session key -> consecutive busy releases
 	// projectSeen: session key + project whose context this run already
 	// gave, and which version of it (projectVersion); key alone: that
 	// session did project work.
@@ -209,7 +210,7 @@ func New(hub Hub, h harness.Harness, sessions SessionStore, prompt PromptBuilder
 		opts.Concurrency = 1
 	}
 	return &Runner{hub: hub, harness: h, sessions: sessions, prompt: prompt, opts: opts, log: log,
-		ownRunEnd: loadState(opts.StatePath), pending: loadPending(opts.StatePath), busyStreak: map[string]int{},
+		lastSuccess: ReadSuccess(opts.StatePath), ownRunEnd: loadState(opts.StatePath), pending: loadPending(opts.StatePath), busyStreak: map[string]int{},
 		tasks: map[string]*activeTask{}, pendingSteers: map[string][]api.Message{}, stopEvery: stopCheckEvery,
 		finishRetryMin: time.Second, finishTimeout: 3 * time.Minute, idleCheck: 15 * time.Second}
 }
@@ -738,6 +739,12 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 			r.keepIntended(m, res.Output, runErr)
 		}
 		return
+	}
+	if m.Type == "task" && !executor && runErr == nil && (cur.Status == "acked" || cur.Status == "done") {
+		r.mu.Lock()
+		r.lastSuccess = &RunSuccess{CLI: r.harness.Name(), At: r.opts.Now()}
+		r.saveState()
+		r.mu.Unlock()
 	}
 	if cur.Status != "acked" {
 		r.clearPending(m.ID)
