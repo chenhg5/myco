@@ -1,5 +1,5 @@
 name: release
-run-name: release ${{ inputs.release_ref || github.sha }}
+run-name: ${{ inputs.sign_only && 'sign-only' || 'release' }} ${{ inputs.release_ref || github.sha }}
 
 # Bump VERSION on main to publish a release (tag + binaries). Pushing a v* tag
 # or dispatching an immutable release_ref works too.
