@@ -269,6 +269,11 @@ func (l *Local) signedIn(ctx context.Context, cli, path string) string {
 			return "ready"
 		}
 		return "unknown"
+	case "kimi", "copilot", "auggie", "kilo", "cline", "grok", "antigravity", "goose":
+		if l.moreCLISignedIn(ctx, cli) {
+			return "ready"
+		}
+		return "unknown"
 	case "opencode":
 		if fileExists(filepath.Join(l.Home, ".local", "share", "opencode", "auth.json")) {
 			return "ready"
