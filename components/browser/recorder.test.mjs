@@ -35,3 +35,60 @@ console.log('recorder: panel events excluded, iframe has no UI, stale state reje
 window.__mycoRecorder.updatePanel({revision:3,id:'rec',recording:false},true);
 window.__mycoRecorder.updatePanel({revision:2,id:'rec',recording:true},true);
 assert.equal(window.__mycoRecorder.enabled,false,'late context update restarted a stopped collector');
+
+
+// Deterministic intent/quiet-window coverage; actual trusted input is also
+// exercised by the native Chrome fixture.
+function scrollFixture(){
+  let now=0,sequence=0;const timers=new Map(),events={},output=[];
+  const doc={addEventListener(name,fn){(events[name]??=[]).push(fn)},getElementById(){return null}};
+  const el=(id,parent=null,tag='DIV')=>({id,nodeType:1,tagName:tag,localName:tag.toLowerCase(),parentElement:parent,clientLeft:0,clientWidth:100,scrollWidth:100,clientHeight:100,scrollHeight:600,scrollTop:0,labels:[],hasAttribute(){return false},getAttribute(){return ''},getRootNode(){return doc},getBoundingClientRect(){return{left:0,top:0,right:110,bottom:110}},closest(selector){return /input,textarea/.test(selector)&&['INPUT','TEXTAREA','SELECT','BUTTON'].includes(this.tagName)?this:null}});
+  // closest() for ordinary divs must not invent an editable ancestor.
+  const root=el('root',null,'HTML');root.closest=()=>null;doc.scrollingElement=root;
+  const target=el('content',root);target.closest=selector=>/input,textarea/.test(selector)?null:target;
+  const win={top:null,addEventListener(){},__mycoBrowserEvent(raw){output.push(JSON.parse(raw))}};win.top=win;
+  const set=(fn,ms)=>{const id=++sequence;timers.set(id,{fn,at:now+ms});return id};
+  vm.runInNewContext(readFileSync(new URL('./recorder.js',import.meta.url),'utf8'),{window:win,document:doc,CSS:{escape:s=>s},Date:{now:()=>now},WeakMap,innerWidth:110,innerHeight:110,getComputedStyle(){return{overflowY:'auto'}},setTimeout:set,clearTimeout:id=>timers.delete(id)});
+  win.__mycoRecorder.enabled=true;win.__mycoRecorder.ignoreEvent=e=>!!e.panel;
+  const advance=ms=>{const end=now+ms;for(;;){const next=[...timers].filter(([,v])=>v.at<=end).sort((a,b)=>a[1].at-b[1].at)[0];if(!next)break;now=next[1].at;timers.delete(next[0]);next[1].fn()}now=end};
+  const event=(name,e=target,extra={})=>{const ev={type:name,target:e,isTrusted:true,button:0,buttons:1,pointerId:1,clientX:50,clientY:50,deltaY:80,composedPath(){return[e,doc]},...extra};for(const fn of events[name]||[])fn(ev)};
+  const scroll=(value,e=target)=>{e.scrollTop=value;event('scroll',e)};
+  return{win,doc,root,target,el,event,scroll,advance,output,steps:()=>output.filter(n=>n.type==='scroll')};
+}
+{
+ const f=scrollFixture();f.scroll(50);f.advance(1000);assert.equal(f.steps().length,0,'unprompted scroll recorded');
+ f.event('wheel');f.scroll(90);f.advance(180);assert.equal(f.steps().length,1,'wheel scroll missing');
+ f.advance(901);f.scroll(100);f.advance(180);assert.equal(f.steps().length,1,'expired intent recorded a programmatic scroll');
+}
+{
+ const f=scrollFixture();f.event('click');f.event('wheel');f.scroll(80);f.advance(401);assert.equal(f.steps().length,0,'click side-effect scroll recorded');
+ f.event('wheel');f.scroll(120);f.advance(180);assert.equal(f.steps().length,1);
+ f.event('focusin');f.scroll(150);f.advance(500);assert.equal(f.steps().length,1,'focus side-effect scroll recorded');
+ const input=f.el('field',f.target,'INPUT');input.type='text';input.value='fixture';input.closest=()=>input;
+ f.event('input',input);f.event('wheel');f.scroll(180);f.advance(500);assert.equal(f.steps().length,1,'input side-effect scroll recorded');
+}
+{
+ const f=scrollFixture();f.event('wheel');f.scroll(20,f.root);f.advance(180);assert.equal(f.steps().length,0,'intent leaked into another container');
+ f.scroll(80);f.advance(180);assert.equal(f.steps().length,1);
+ f.event('wheel');f.target.scrollHeight+=20;f.scroll(100);f.advance(180);assert.equal(f.steps().length,1,'layout change used stale intent');
+}
+{
+ const f=scrollFixture();f.event('keydown',f.target,{key:'PageDown'});f.scroll(80);f.advance(180);assert.equal(f.steps().length,1,'keyboard page scroll missing');
+ assert.equal(f.output.filter(n=>n.type==='press').length,0,'keyboard scrolling recorded twice');
+ const input=f.el('field',f.target,'INPUT');input.closest=()=>input;
+ f.event('keydown',input,{key:'ArrowDown'});f.scroll(100);f.advance(500);assert.equal(f.steps().length,1,'caret-following scroll recorded');
+}
+{
+ const f=scrollFixture();f.event('pointerdown',f.target,{clientX:105});f.event('pointermove',f.target,{clientX:105});f.scroll(80);f.event('pointerup',f.target,{clientX:105});f.event('click',f.target,{clientX:105});f.advance(180);
+ assert.equal(f.steps().length,1,'scrollbar drag missing');assert.equal(f.output.filter(n=>n.type==='click').length,0,'scrollbar click recorded twice');
+}
+{
+ const f=scrollFixture();for(const kind of ['wheel','pointerdown','keydown'])f.event(kind,f.target,{panel:true,key:'PageDown'});f.scroll(80);f.advance(500);assert.equal(f.steps().length,0,'panel armed page scrolling');
+ f.event('wheel');f.scroll(100);f.win.__mycoRecorder.updatePanel({revision:1,id:'rec',picking:true});f.advance(500);assert.equal(f.steps().length,0,'pending scroll survived selection mode');
+ f.win.__mycoRecorder.updatePanel({revision:2,id:'rec',picking:false});f.advance(401);
+ f.event('wheel',f.target,{isTrusted:false});f.scroll(130);f.advance(500);assert.equal(f.steps().length,0,'synthetic wheel armed scrolling');
+}
+{
+ const f=scrollFixture();f.event('wheel');f.event('keydown',f.target,{panel:true,key:'PageDown'});f.scroll(80);f.advance(500);assert.equal(f.steps().length,0,'panel key retained page scroll intent');
+}
+console.log('recorder: explicit container intent, quiet window, scrollbar/key paths and side-effect exclusions passed');

@@ -224,3 +224,11 @@ to replay pending changes. Ending from either surface
 flushes pending inputs and returns `done:true` once the buffer is drained. Older
 components may omit `recordings`/`removed`; newer hosts return an empty active
 list for components that do not advertise recordings.
+
+### Recorded scrolling
+
+The recorder captures page scrolling only after a trusted wheel gesture, page-navigation
+key, or scrollbar drag on that scroll container. It waits for a 400 ms quiet interval
+after other recording actions. Focus, typing, clicks, layout changes, and programmatic
+scrolling do not independently create scroll steps. Recorder-panel controls and their
+scrolling are excluded. Scroll positions remain absolute replay destinations.
