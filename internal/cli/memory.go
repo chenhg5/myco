@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/myco-ai/myco/skill"
 )
 
 // The memory block: a few lines in the agent CLIs' user-level instructions
@@ -34,6 +36,7 @@ myco app: your chat, your progress, your run as it goes.
 - Ack a task (` + "`myco message ack --id <id>`" + `), then keep the sender posted at real milestones:
   ` + "`myco message progress --id <id> --body \"...\"`" + `. When they would want to see it (a page, a
   chart, a draft), attach a screenshot: ` + "`--attach shot.png`" + `; it shows under the update.
+- ` + skill.StructuredUIHint + `
 - When there is an obvious next step for them, suggest it as you answer:
   ` + "`myco message reply --id <id> --body \"...\" --suggest \"...\"`" + ` (one short line in their language;
   the app puts it in their input, Tab fills it in).

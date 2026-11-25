@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/skill"
 )
 
 // DefaultPrompt frames incoming messages for an agent CLI. Owner is the
@@ -193,6 +194,7 @@ func projectSection(self string, p *api.Project) string {
 		fmt.Fprintf(&b, " (%s)", p.Title)
 	}
 	b.WriteString(". What you send in this thread stays in the project.\n")
+	b.WriteString(skill.StructuredUIHint + "\n")
 	if p.Goal != "" {
 		fmt.Fprintf(&b, "Goal: %s\n", p.Goal)
 	}

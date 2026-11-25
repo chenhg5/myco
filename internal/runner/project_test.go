@@ -103,7 +103,7 @@ func TestProjectMemoryInPrompt(t *testing.T) {
 	if len(prompts) != 3 {
 		t.Fatalf("runs: %d", len(prompts))
 	}
-	for _, want := range []string{"The staging port is 7443.", "Project memory", "alice wants reports in Chinese", "myco project memory add --name myco"} {
+	for _, want := range []string{"The staging port is 7443.", "Project memory", "alice wants reports in Chinese", "myco project memory add --name myco", "--ui ui.json", "myco ui schema --format text"} {
 		if !strings.Contains(prompts[0], want) {
 			t.Fatalf("prompt lacks %q", want)
 		}
@@ -114,8 +114,14 @@ func TestProjectMemoryInPrompt(t *testing.T) {
 	if strings.Contains(prompts[1], "Project memory") {
 		t.Fatalf("unchanged project: one line:\n%s", prompts[1])
 	}
+	if strings.Contains(prompts[1], "--ui") {
+		t.Fatal("structured UI guidance must not repeat on every task")
+	}
 	if !strings.Contains(prompts[2], "updated since you last saw it") || !strings.Contains(prompts[2], "use port 7443 for staging") {
 		t.Fatalf("changed memory is given again:\n%s", prompts[2])
+	}
+	if !strings.Contains(prompts[2], "myco ui schema --format text") {
+		t.Fatal("updated project context must include structured UI guidance")
 	}
 }
 

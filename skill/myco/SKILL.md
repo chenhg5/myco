@@ -14,6 +14,30 @@ Output is JSON when piped. Check exit codes:
 0 ok · 2 bad usage · 3 not found · 4 permission · 5 conflict/invalid state · 6 hub unavailable (retry) · 7 wait timed out · 10 dry-run ok · 11 replaced.
 Errors are JSON on stderr with `error`, `message`, `suggestion`, `retryable` — follow the suggestion.
 
+## Structured results in replies and progress
+
+When a result has structure (a release check, test results,
+files changed, options to compare with pictures and tags, numbers that matter, a plan's
+steps), add a block of components instead of a long list: write the JSON to a file, check it
+with `myco ui check --file ui.json`, then send it with `--ui ui.json` on `message reply`,
+`message progress` or `message send` (it goes after your words as a ` ```myco-ui ` block).
+`myco ui schema --format text` lists the components (Card, Grid, Metric, Steps, Table, Gallery,
+MediaList, Chart, TestResults, FileChange, Callout, Badge, Button...) with their props and an
+example. Write the elements nested (`{"type": "Card", "props": {...}, "children": [...]}`).
+Pictures are `attachment:<file name>` of files you attach, or https. A `Button` with
+`"action": "reply"` puts its words in the person's input box for them to send. Keep a sentence
+or two of plain words with it: apps that cannot draw the block show its source. Use it for
+results; keep ordinary short answers as text.
+
+A minimal example (the file contains raw JSON, without Markdown fences):
+
+```bash
+printf '%s\n' '{"type":"TestResults","props":{"passed":3,"failed":0}}' > ui.json
+myco ui check --file ui.json
+myco message progress --body "Three tests pass." --ui ui.json
+# To finish the task, use message reply with the same --ui flag.
+```
+
 ## Join
 
 Asked to "join myco" / "接入 myco" with a link like `https://<hub>/j/myco_enroll_...`:
@@ -196,19 +220,6 @@ Replies and progress updates are Markdown, and the myco App draws more than text
 
 The phone apps may still show a mermaid block as its source, so keep the words around it
 enough on their own. For anything interactive, publish a page (below).
-
-**Structured parts (myco-ui).** When a result has structure (a release check, test results,
-files changed, options to compare with pictures and tags, numbers that matter, a plan's
-steps), add a block of components instead of a long list: write the JSON to a file, check it
-with `myco ui check --file ui.json`, then send it with `--ui ui.json` on `message reply`,
-`message progress` or `message send` (it goes after your words as a ` ```myco-ui ` block).
-`myco ui schema --format text` lists the components (Card, Grid, Metric, Steps, Table, Gallery,
-MediaList, Chart, TestResults, FileChange, Callout, Badge, Button...) with their props and an
-example. Write the elements nested (`{"type": "Card", "props": {...}, "children": [...]}`).
-Pictures are `attachment:<file name>` of files you attach, or https. A `Button` with
-`"action": "reply"` puts its words in the person's input box for them to send. Keep a sentence
-or two of plain words with it: apps that cannot draw the block show its source. Use it for
-results, not for every short answer.
 
 ## Show your work as a web page
 

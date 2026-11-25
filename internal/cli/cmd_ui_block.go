@@ -15,7 +15,7 @@ import (
 var uiFlag = Flag{Name: "ui", Kind: String,
 	Help: "Append a myco-ui block (structured UI the app draws) from this JSON file ('-' = stdin); checked first, see myco ui schema"}
 
-const uiSuggestion = "fix these and run myco ui check again; myco ui schema lists the components"
+const uiSuggestion = "fix the reported errors, then run myco ui check --file <file>; myco ui schema --format text lists components, props and examples"
 
 func uiSchemaCommand() *Command {
 	return &Command{
