@@ -61,3 +61,119 @@ Proxy passwords currently live as plaintext in the private 0600 profile index,
 not an OS keychain. The random loopback forwarder has no additional
 authentication: other local processes can use its upstream access while the
 browser session is open. A future keychain integration is separate work.
+
+## Live agent control
+
+Builds advertising `status.features: ["agent_control", ...]` implement protocol-1
+`POST /control/open`, `/control/snapshot`, `/control/act`, `/control/extract`,
+`/control/screenshot`, `/control/close`, and the App-only
+`GET /control/events?session=<id>&after=0`. These are private loopback endpoints,
+protected by the component bearer and `X-Myco-Scope`. They are not a public
+browser-control server. The trusted desktop verifies the agent's grant and
+binds its scope to the workspace, owner, profile and grant.
+
+Every POST requires `request_id` (the desktop passes the Hub job ID). Repeating
+an ID with the same operation and parameters reuses its immutable outcome;
+changing parameters returns `conflict`. Outcomes are never replayed to a closed
+session, except the voluntary close response. Requests arriving while another
+operation runs return `busy`; a forced close bypasses that operation lock.
+
+Open takes `profile`, optional HTTP(S) `url`, and desktop-injected `grant_id`,
+`actor: {id, name}`, `expires_at` (RFC 3339), and optional `hosts`. A profile may
+have `kind: "agent"` to identify a clean, dedicated agent profile. Agent access
+still requires the owner's explicit profile preference and grant. Sessions are
+headed and exclusive; opening a profile already in use returns `busy`.
+
+The six operation bodies and their additional fields are:
+
+| Endpoint | Fields |
+| --- | --- |
+| `open` | `profile`, `url?`, `grant_id`, `actor`, `expires_at`, `hosts?` |
+| `snapshot` | `session`, `tab?`, `mode?: "a11y" or "text"`, `max_nodes?`, `include_screenshot?` |
+| `act` | `session`, `tab?`, `op`, operation-specific fields below, `timeout_ms?` |
+| `extract` | `session`, `tab?`, `ref`, `what: "text", "html" or "attribute"`, `attr?` |
+| `screenshot` | `session`, `tab?`, at most one of `ref`, `clip`, `full` |
+| `close` | `session`, desktop-only `reason?` |
+
+Unknown fields are rejected, including fields irrelevant to the selected
+operation. The `act` whitelist is:
+
+| Operation | Additional fields |
+| --- | --- |
+| `navigate` | HTTP(S) `url` |
+| `click`, `dblclick`, `hover` | `ref` |
+| `type` | `ref`, `value`, optional `clear` (defaults to true) |
+| `select` | `ref`, `value` (native option value) |
+| `press` | `key`, optional `ref` |
+| `scroll` | finite CSS-pixel `dy`, optional `ref` |
+| `wait` | `wait: "element"` plus `ref`, `"url"` plus `value`, or `"network"` |
+| `back`, `forward`, `reload` | none |
+| `switch_tab`, `close_tab` | `tab` |
+| `dialog` | `choice: "accept" or "dismiss"` |
+
+Timeouts default to ten seconds and cannot exceed thirty seconds. Live control
+does not accept JavaScript execution, uploads or clipboard paste. Parameter
+expressions such as `${name}` are rejected in live inputs: enter an example,
+then parameterize the returned draft before review.
+
+Snapshots contain `snapshot_id`, `tab`, `url`, `title`, `frames`, `nodes` (or
+`text`), `node_count` and `truncated`. Nodes have `id`, optional `parent` and
+`ref`, `frame`, `role`, `name`, optional `text`, `value` and `rect`, plus
+`interactive`, `disabled`, `redacted` and `in_viewport`. Rectangles use CSS pixels
+in the identified frame's viewport. Accessibility information is supplemented
+with pointer-cursor and clickable custom controls; visible nodes are prioritized.
+The default and maximum are 400 nodes and 64 KiB of serialized JSON. Action
+responses contain a brief snapshot capped at 80 nodes and 16 KiB. Truncation
+preserves valid JSON. Unavailable child frames are reported explicitly.
+
+Refs are monotonically allocated within a session, bound to the original tab,
+frame, document epoch and backend node. Navigation, frame replacement or node
+detachment produces `stale_ref`; the component never substitutes a similar
+locator. Draft targets use the recorder's multiple locators, frame paths and
+shadow paths instead. Password, one-time-code and `data-sensitive` values are
+redacted; typing into a sensitive field is refused. HTML and text extraction
+sanitize sensitive descendants. Screenshots fail closed when child documents
+cannot be inspected or contain sensitive elements, including closed shadow roots.
+The owner's control panel is excluded from snapshots, screenshots and drafts.
+
+Screenshot `clip` coordinates are relative to the top viewport in CSS pixels.
+`full` captures the actual document bounds. Native results contain
+`screenshot: {id, type, size}` and `image: {width, height, scale}`. The desktop
+retrieves the artifact through the existing scoped `/artifacts/<id>` endpoint
+and uploads a private action artifact; local paths and image bytes are not
+returned to agents. The artifact size limit is 4 MiB.
+
+A successful action returns `ok`, `active_tab`, `tabs` (each with `id`, `url`,
+`title`, `active`), `new_tab`, `step_ids` and `snapshot`. An observation failure
+after a successful action is reported as `snapshot_error`, not a failed action.
+Errors have `code`, `error`, optional `reason`, `host`, `message` and `applied`.
+An ambiguous dispatched action returns `outcome_unknown` and must not be retried
+with a new request ID. Normal results include the observed URL's `host` for audit;
+request parameters, full URLs and page contents do not belong in audit records.
+
+`hosts` accepts exact hostnames or subdomain patterns such as `*.example.com`.
+A wildcard excludes its bare parent domain. Ports do not change hostname matching.
+An omitted or empty list means unrestricted domains. Explicit navigation is
+checked before dispatch. A top-level redirect or link crossing the scope is
+rolled back; a new disallowed tab is closed. The response and event use
+`host_not_allowed`. Iframes and subresources are outside this top-level scope.
+
+The draft budget is 200 steps and 192 KiB for serialized `steps`; operations
+reserve their logical step and any derived navigation or popup before dispatch.
+Successful extraction and screenshots allocate shared `data1`, `data2`, ...
+variables. A voluntary close returns `steps`, `removed`, `next`, `done: true`,
+`reason: "closed"`, `profile` and `start_url`, and closes the browser process.
+New replay node types are `back`, `forward`, `reload` and `tab: "close"`.
+
+Only voluntary close exports a draft. The native panel shows the agent's name
+and last operation without input contents, with an owner stop button. Stopping
+immediately cancels work, closes the browser and discards the draft. Later calls
+return `session_closed` with `reason: "stopped_by_owner"`. Five minutes of
+inactivity, grant expiry or revocation, profile disablement and desktop shutdown
+also discard the draft. Trusted desktop close reasons `grant_ended`,
+`host_closed`, `profile_disabled` and `idle_timeout` have the same discard behavior.
+
+The events response is `{session, events, next, done, reason}`. Each event has
+`time`, `done`, and optional `action`, `host`, `code` and `reason`; it contains no
+steps or page contents. `after` is a replayable cursor. Polling does not renew
+session inactivity. A terminal event lets the desktop revoke its grant promptly.

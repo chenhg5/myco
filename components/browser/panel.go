@@ -35,6 +35,9 @@ type panelStep struct {
 	Into   string          `json:"into,omitempty"`
 }
 type panelState struct {
+	Mode         string      `json:"mode,omitempty"`
+	Actor        string      `json:"actor,omitempty"`
+	LastAction   string      `json:"last_action,omitempty"`
 	Features     []string    `json:"features"`
 	Hide         bool        `json:"hide"`
 	Revision     uint64      `json:"revision"`
@@ -67,9 +70,16 @@ func (s *session) recordingPanelState(code string) panelState {
 	defer s.panelMu.Unlock()
 	s.panelRevision++
 	s.mu.Lock()
-	rec, controller := s.recorder, s.controller
+	rec, controller, control := s.recorder, s.controller, s.control
 	s.mu.Unlock()
 	out := panelState{Features: []string{"screenshot_clip"}, Revision: s.panelRevision, Hide: controller != "" && !strings.HasPrefix(controller, "rec_"), Busy: controller != "", Steps: []panelStep{}, Error: code}
+	if control != nil {
+		control.mu.Lock()
+		out.Mode, out.Actor, out.LastAction = "agent", control.actor.Name, control.lastAction
+		out.ID, out.Hide, out.Recording, out.Busy = control.id, false, !control.closed, true
+		control.mu.Unlock()
+		return out
+	}
 	if rec == nil {
 		return out
 	}
@@ -126,12 +136,19 @@ func (s *session) panelCommand(sid proto.TargetSessionID, frame proto.PageFrameI
 		return
 	}
 	s.mu.Lock()
-	rec, p := s.recorder, s.pages[s.targets[sid]]
+	rec, p, control := s.recorder, s.pages[s.targets[sid]], s.control
 	if p == nil {
 		p = s.pages[s.current]
 	}
 	top := frame != "" && s.frames[frame].Parent == "" && s.pages[s.targets[sid]] != nil
 	s.mu.Unlock()
+	if control != nil {
+		if top && in.Action == "stop" && in.RecordingID == control.id {
+			control.terminate("session_closed", "stopped_by_owner")
+			go s.close()
+		}
+		return
+	}
 	if !top && in.Action != "picked" && in.Action != "cancel-pick" {
 		return
 	}

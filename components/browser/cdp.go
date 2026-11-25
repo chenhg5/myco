@@ -99,6 +99,18 @@ func (s *session) installTarget(evt proto.TargetAttachedToTarget) (err error) {
 	s.observed = make(chan struct{})
 	s.mu.Unlock()
 	defer func() { installed.err = err; close(installed.ready) }()
+	s.mu.Lock()
+	control := s.control
+	s.mu.Unlock()
+	if control != nil && info.Type == "page" && info.OpenerID != "" {
+		// A headed cross-site popup can block even Page.enable until its
+		// debugger pause is resumed. Agent control records explicit actions,
+		// so it can resume first and wait for its isolated world before use.
+		// Human recording retains installation-before-resume ordering.
+		if err = s.call(sid, "Runtime.runIfWaitingForDebugger", map[string]any{}, nil); err != nil {
+			return err
+		}
+	}
 	for _, domain := range []string{"Page", "Runtime", "DOM", "Overlay", "Network"} {
 		if err = s.call(sid, domain+".enable", map[string]any{}, nil); err != nil {
 			return err
@@ -170,8 +182,18 @@ func (s *session) installTarget(evt proto.TargetAttachedToTarget) (err error) {
 		if s.current == "" {
 			s.current = info.TargetID
 		}
-		rec := s.recorder
+		rec, control := s.recorder, s.control
 		s.mu.Unlock()
+		if control != nil {
+			control.tabName(info.TargetID)
+			if info.OpenerID != "" {
+				s.mu.Lock()
+				s.current = info.TargetID
+				s.mu.Unlock()
+			}
+			control.enforceHostsSoon()
+			go s.updatePanel("")
+		}
 		if rec != nil {
 			rec.tabIndex(info.TargetID)
 			s.mu.Lock()
@@ -195,6 +217,7 @@ func (s *session) event(msg *rod.Message) {
 			return
 		}
 	}
+	s.controlEvent(msg)
 	switch msg.Method {
 	case "Target.attachedToTarget":
 		var evt proto.TargetAttachedToTarget

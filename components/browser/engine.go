@@ -16,17 +16,21 @@ import (
 )
 
 type engine struct {
-	trace      func(string, string, bool) // Optional test diagnostics; never exposed over HTTP.
-	ctx        context.Context
-	dir        string
-	mu         sync.Mutex
-	last       time.Time
-	profiles   map[string]profile
-	passwords  map[string]string
-	sessions   map[string]*session
-	recordings map[string]*recording
-	runs       map[string]*playRun
-	artifacts  map[string]artifact
+	trace             func(string, string, bool) // Optional test diagnostics; never exposed over HTTP.
+	ctx               context.Context
+	dir               string
+	mu                sync.Mutex
+	last              time.Time
+	profiles          map[string]profile
+	passwords         map[string]string
+	sessions          map[string]*session
+	recordings        map[string]*recording
+	runs              map[string]*playRun
+	artifacts         map[string]artifact
+	controls          map[string]*controlSession
+	controlOpening    map[string]bool
+	controlRequests   map[string]*controlRequest
+	controlCacheBytes int
 }
 type artifact struct {
 	Thumbnail string `json:"thumbnail,omitempty"`
@@ -155,13 +159,18 @@ func (e *engine) handler() http.Handler {
 		}
 		sort.Strings(browsers)
 		machine, _ := os.Hostname()
-		jsonReply(w, map[string]any{"protocol": protocol, "version": version, "features": []string{"screenshot_clip"}, "browsers": browsers, "machine": machine, "profiles": profiles, "recordings": e.activeRecordings(scope(r)), "agent_actions": []string{}})
+		jsonReply(w, map[string]any{"protocol": protocol, "version": version, "features": []string{"screenshot_clip", "agent_control"}, "browsers": browsers, "machine": machine, "profiles": profiles, "recordings": e.activeRecordings(scope(r)), "agent_actions": []string{}})
 	})
 	m.HandleFunc("POST /profiles", func(w http.ResponseWriter, r *http.Request) {
 		var in struct {
 			Name string `json:"name"`
+			Kind string `json:"kind"`
 		}
 		if !readJSON(w, r, &in) {
+			return
+		}
+		if in.Kind != "" && in.Kind != "agent" {
+			fail(w, "invalid_argument", 400)
 			return
 		}
 		in.Name = strings.TrimSpace(in.Name)
@@ -175,7 +184,7 @@ func (e *engine) handler() http.Handler {
 			fail(w, "profile_limit", 409)
 			return
 		}
-		p := profile{ID: "p_" + rand.Text(), Name: in.Name, Settings: profileSettings{Args: []string{}}}
+		p := profile{Kind: in.Kind, ID: "p_" + rand.Text(), Name: in.Name, Settings: profileSettings{Args: []string{}}}
 		e.profiles[p.ID] = p
 		if err := e.saveProfilesLocked(); err != nil {
 			delete(e.profiles, p.ID)
@@ -208,6 +217,17 @@ func (e *engine) handler() http.Handler {
 			e.profiles[p.ID] = old
 			fail(w, "storage_failed", 500)
 			return
+		}
+		if !in.Allowed {
+			if s := e.sessions[p.ID]; s != nil {
+				s.mu.Lock()
+				control := s.control
+				s.mu.Unlock()
+				if control != nil {
+					control.terminate("session_closed", "profile_disabled")
+					go s.close()
+				}
+			}
 		}
 		p.Running = e.sessions[p.ID] != nil
 		jsonReply(w, p)
@@ -257,6 +277,7 @@ func (e *engine) handler() http.Handler {
 		jsonReply(w, true)
 	})
 	e.recordRoutes(m)
+	e.controlRoutes(m)
 	e.runRoutes(m)
 	e.debugRoutes(m)
 	m.HandleFunc("GET /artifacts/{id}", func(w http.ResponseWriter, r *http.Request) {

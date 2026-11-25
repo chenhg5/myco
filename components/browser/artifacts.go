@@ -208,3 +208,28 @@ func passiveElementScreenshot(page proto.Client, id proto.RuntimeRemoteObjectID,
 	}
 	return view.Data, nil
 }
+
+// Full-page evidence must use the document bounds, rather than silently
+// recording only the viewport. Keep the legacy sensitive-page guard.
+func (e *engine) fullSnapshot(owner string, p *rod.Page) (string, error) {
+	shape, err := p.Eval(snapshotSource)
+	if err != nil {
+		return "", err
+	}
+	if shape.Value.Get("unsafe").Bool() {
+		return "", errors.New("sensitive_snapshot")
+	}
+	metrics, err := (proto.PageGetLayoutMetrics{}).Call(p)
+	if err != nil {
+		return "", err
+	}
+	box := metrics.CSSContentSize
+	if box == nil || box.Width <= 0 || box.Height <= 0 || box.Width*box.Height > 32<<20 {
+		return "", errors.New("artifact_too_large")
+	}
+	shot, err := (proto.PageCaptureScreenshot{Format: proto.PageCaptureScreenshotFormatPng, FromSurface: true, CaptureBeyondViewport: true, Clip: &proto.PageViewport{X: box.X, Y: box.Y, Width: box.Width, Height: box.Height, Scale: 1}}).Call(p)
+	if err != nil {
+		return "", err
+	}
+	return e.storeArtifact(owner, "image/png", shot.Data)
+}

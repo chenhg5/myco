@@ -17,6 +17,7 @@ var variableName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,39}$`)
 var idPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,80}$`)
 
 type profile struct {
+	Kind     string          `json:"kind,omitempty"`
 	Settings profileSettings `json:"settings"`
 	ID       string          `json:"id"`
 	Name     string          `json:"name"`
@@ -116,7 +117,7 @@ type runUpdate struct {
 // M0/M1 intentionally accept one connected acyclic sequence. Unsupported
 // graph types fail before opening a browser instead of silently misrunning.
 func linearOrder(s script, start string) ([]node, error) {
-	if len(s.Graph.Nodes) > 128 {
+	if len(s.Graph.Nodes) > controlStepLimit {
 		return nil, errors.New("invalid_graph")
 	}
 	if !validPolicy(s.OnError) {
@@ -125,7 +126,7 @@ func linearOrder(s script, start string) ([]node, error) {
 	seenIDs := map[string]bool{}
 	byID, incoming, next := map[string]node{}, map[string]int{}, map[string]string{}
 	allowed := map[string]bool{}
-	for _, k := range []string{"navigate", "click", "type", "select", "press", "hover", "drag", "scroll", "upload", "wait", "assert", "extract", "js", "screenshot", "tab", "dialog", "confirm", "note"} {
+	for _, k := range []string{"back", "forward", "reload", "navigate", "click", "type", "select", "press", "hover", "drag", "scroll", "upload", "wait", "assert", "extract", "js", "screenshot", "tab", "dialog", "confirm", "note"} {
 		allowed[k] = true
 	}
 	for _, n := range s.Graph.Nodes {
@@ -217,7 +218,7 @@ func validPolicy(policy string) bool {
 }
 
 func validTab(tab string) bool {
-	if tab == "popup" || tab == "new" || tab == "opener" {
+	if tab == "popup" || tab == "new" || tab == "opener" || tab == "close" {
 		return true
 	}
 	index, err := strconv.Atoi(tab)

@@ -52,6 +52,21 @@ func (r *playRun) act(ctx context.Context, n node) (any, error) {
 			err = p.WaitLoad()
 		}
 
+	case "back", "forward":
+		history, e := (proto.PageGetNavigationHistory{}).Call(p)
+		if e != nil {
+			return nil, e
+		}
+		index := history.CurrentIndex - 1
+		if n.Type == "forward" {
+			index = history.CurrentIndex + 1
+		}
+		if index < 0 || index >= len(history.Entries) {
+			return nil, errors.New("target_not_found")
+		}
+		err = (proto.PageNavigateToHistoryEntry{EntryID: history.Entries[index].ID}).Call(p)
+	case "reload":
+		err = (proto.PageReload{}).Call(p)
 	case "click":
 		count := max(1, min(2, n.Count))
 		button := proto.InputMouseButtonLeft
@@ -230,6 +245,12 @@ func (r *playRun) act(ctx context.Context, n node) (any, error) {
 		}
 		return result.Value.Val(), nil
 	case "screenshot":
+		if n.Full {
+			if len(r.secrets) > 0 {
+				return nil, errors.New("sensitive_snapshot")
+			}
+			return s.e.fullSnapshot(r.scope, p)
+		}
 		if n.Clip != nil {
 			if len(r.secrets) > 0 {
 				return nil, errors.New("sensitive_snapshot")
