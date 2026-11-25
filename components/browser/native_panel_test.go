@@ -150,23 +150,68 @@ func TestNativeChromeRecorderPanel(t *testing.T) {
 					}
 					return true
 				})
-				var box struct {
-					Model struct {
-						Border []float64 `json:"border"`
-					} `json:"model"`
+
+				// DOM insertion is not a presented frame. In headed Chrome a
+				// first input can otherwise focus the window or hit the old
+				// compositor frame behind the freshly mounted controls.
+				focusBeforeActivation, focusErr := page.Eval(`()=>document.hasFocus()`)
+				if focusErr != nil {
+					t.Fatal(focusErr)
 				}
-				if err := s.call(sid, "DOM.getBoxModel", map[string]any{"nodeId": query(selector)}, &box); err != nil {
+				if err := s.call(sid, "Page.bringToFront", map[string]any{}, nil); err != nil {
 					t.Fatal(err)
 				}
-				q := box.Model.Border
-				if len(q) != 8 {
-					t.Fatal("button has no box")
+				var object struct {
+					Object *proto.RuntimeRemoteObject `json:"object"`
 				}
-				for _, kind := range []string{"mousePressed", "mouseReleased"} {
-					if err := s.call(sid, "Input.dispatchMouseEvent", map[string]any{"type": kind, "x": (q[0] + q[4]) / 2, "y": (q[1] + q[5]) / 2, "button": "left", "clickCount": 1}, nil); err != nil {
+				if err := s.call(sid, "DOM.resolveNode", map[string]any{"nodeId": query(selector)}, &object); err != nil || object.Object == nil {
+					t.Fatal("resolve click target", err)
+				}
+				defer s.call(sid, "Runtime.releaseObject", map[string]any{"objectId": object.Object.ObjectID}, nil)
+				var ready struct {
+					Result *proto.RuntimeRemoteObject `json:"result"`
+				}
+				err := s.call(sid, "Runtime.callFunctionOn", map[string]any{
+					"objectId": object.Object.ObjectID, "awaitPromise": true, "returnByValue": true,
+					"functionDeclaration": `async function(){
+                    const before=document.hasFocus();
+                    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+                    const r=this.getBoundingClientRect(),x=r.left+r.width/2,y=r.top+r.height/2;
+                    const hit=this.getRootNode().elementFromPoint(x,y);
+                    this.__nativePanelClick=null;
+                    this.addEventListener('click',e=>{this.__nativePanelClick={trusted:e.isTrusted,focused:document.hasFocus()}},{once:true});
+                    return {x,y,hit:hit===this||this.contains(hit),focused:document.hasFocus(),before};
+                  }`,
+				}, &ready)
+				if err != nil || ready.Result == nil {
+					t.Fatal("panel presentation", err)
+				}
+				raw, _ := json.Marshal(ready.Result.Value.Val())
+				var point struct {
+					X, Y                 float64
+					Hit, Focused, Before bool
+				}
+				if json.Unmarshal(raw, &point) != nil || !point.Hit {
+					t.Fatalf("panel button not hit-testable: %s %s", selector, raw)
+				}
+				if selector == `[data-action="start"]` {
+					t.Logf("presented start button: focused=%v before-frame=%v before-activation=%v", point.Focused, point.Before, focusBeforeActivation.Value.Bool())
+				}
+				for _, kind := range []string{"mouseMoved", "mousePressed", "mouseReleased"} {
+					if err := s.call(sid, "Input.dispatchMouseEvent", map[string]any{"type": kind, "x": point.X, "y": point.Y, "button": "left", "clickCount": 1}, nil); err != nil {
 						t.Fatal(err)
 					}
 				}
+				var received struct {
+					Result *proto.RuntimeRemoteObject `json:"result"`
+				}
+				if err := s.call(sid, "Runtime.callFunctionOn", map[string]any{"objectId": object.Object.ObjectID, "functionDeclaration": "function(){return this.__nativePanelClick}", "returnByValue": true}, &received); err != nil || received.Result == nil {
+					t.Fatal("panel click receipt", err)
+				}
+				if !received.Result.Value.Get("trusted").Bool() {
+					t.Fatalf("panel button did not receive trusted input: %s %s", selector, received.Result.Value.JSON("", ""))
+				}
+
 			}
 			nodeEval := func(selector, fn string) {
 				t.Helper()
@@ -259,27 +304,39 @@ func TestNativeChromeRecorderPanel(t *testing.T) {
 			if err = button.Click(proto.InputMouseButtonLeft, 1); err != nil {
 				t.Fatal(err)
 			}
-			wait(func() bool { rec.mu.Lock(); defer rec.mu.Unlock(); return len(rec.steps) == 1 })
+			nodesOfType := func(kind string) []node {
+				rec.mu.Lock()
+				defer rec.mu.Unlock()
+				out := []node{}
+				for _, n := range rec.steps {
+					if n.Type == kind {
+						out = append(out, n)
+					}
+				}
+				return out
+			}
+			wait(func() bool { return len(nodesOfType("click")) == 1 })
 			var first struct {
 				Steps   []node   `json:"steps"`
 				Next    int      `json:"next"`
 				Removed []string `json:"removed"`
 			}
 			invoke("GET", "/record/events?id="+rec.id+"&after=0", nil, &first)
-			if len(first.Steps) != 1 {
-				t.Fatal("recorded site click missing", first)
+			firstClick := nodesOfType("click")[0]
+			if firstClick.Target == nil {
+				t.Fatal("recorded site click missing")
 			}
 			invoke("GET", "/status", nil, &status)
 			if len(status.Recordings) != 0 {
 				t.Fatal("claimed browser recording still active")
 			}
-			click(`.delete`)
-			wait(func() bool { rec.mu.Lock(); defer rec.mu.Unlock(); return rec.removed[first.Steps[0].ID] })
+			click(`[data-step-id="` + firstClick.ID + `"]`)
+			wait(func() bool { rec.mu.Lock(); defer rec.mu.Unlock(); return rec.removed[firstClick.ID] })
 			var deleted struct {
 				Removed []string `json:"removed"`
 			}
 			invoke("GET", fmt.Sprintf("/record/events?id=%s&after=%d", rec.id, first.Next), nil, &deleted)
-			if len(deleted.Removed) != 1 || deleted.Removed[0] != first.Steps[0].ID {
+			if len(deleted.Removed) != 1 || deleted.Removed[0] != firstClick.ID {
 				t.Fatal("sent deletion missing", deleted)
 			}
 			for i, what := range []string{"text", "attribute", "html"} {
@@ -303,10 +360,8 @@ func TestNativeChromeRecorderPanel(t *testing.T) {
 					t.Fatal(err)
 				}
 				click(`[data-action="extract"]`)
-				wait(func() bool { rec.mu.Lock(); defer rec.mu.Unlock(); return len(rec.steps) == i+2 })
-				rec.mu.Lock()
-				n := rec.steps[len(rec.steps)-1]
-				rec.mu.Unlock()
+				wait(func() bool { return len(nodesOfType("extract")) == i+1 })
+				n := nodesOfType("extract")[i]
 				if n.Type != "extract" || n.What != what || n.Into != fmt.Sprintf("data%d", i+1) {
 					t.Fatalf("wrong capture node: %+v", n)
 				}
@@ -322,10 +377,8 @@ func TestNativeChromeRecorderPanel(t *testing.T) {
 			}
 			wait(func() bool { rec.mu.Lock(); defer rec.mu.Unlock(); return rec.selected != nil })
 			click(`[data-action="extract"]`)
-			wait(func() bool { rec.mu.Lock(); defer rec.mu.Unlock(); return len(rec.steps) == 5 })
-			rec.mu.Lock()
-			childStep := rec.steps[4]
-			rec.mu.Unlock()
+			wait(func() bool { return len(nodesOfType("extract")) == 4 })
+			childStep := nodesOfType("extract")[3]
 			if childStep.Type != "extract" || childStep.Target == nil || len(childStep.Target.Frame) != 1 {
 				t.Fatalf("child selection lost frame: %+v", childStep)
 			}
@@ -339,7 +392,21 @@ func TestNativeChromeRecorderPanel(t *testing.T) {
 			if err = input.Input("Public draft fixture"); err != nil {
 				t.Fatal(err)
 			}
-			wait(func() bool { rec.mu.Lock(); defer rec.mu.Unlock(); return len(rec.steps) >= 7 })
+			wait(func() bool { return len(nodesOfType("type")) == 1 })
+			// Real document scrolling is recorded even when Chrome scrolls to
+			// reveal/focus an element. A scroll inside our controls is not.
+			nodeEval("ol", `function(){this.scrollTop=this.scrollHeight}`)
+			if _, err = child.Eval(`()=>{scrollTo(0,0);scrollTo(0,200);return scrollY}`); err != nil {
+				t.Fatal(err)
+			}
+			wait(func() bool {
+				for _, n := range nodesOfType("scroll") {
+					if n.Target != nil && len(n.Target.Frame) == 1 && n.DY > 0 {
+						return true
+					}
+				}
+				return false
+			})
 			for _, scheme := range []string{"light", "dark"} {
 				if err := s.call(sid, "Emulation.setEmulatedMedia", map[string]any{"features": []map[string]string{{"name": "prefers-color-scheme", "value": scheme}}}, nil); err != nil {
 					t.Fatal(err)
@@ -364,8 +431,42 @@ func TestNativeChromeRecorderPanel(t *testing.T) {
 				Done  bool   `json:"done"`
 			}
 			invoke("GET", "/record/events?id="+rec.id+"&after=0", nil, &all)
-			if !all.Done || len(all.Steps) != 6 {
-				t.Fatal("stop/capture/self-event result", all)
+			if !all.Done {
+				t.Fatal("stop did not finish recording")
+			}
+			counts := map[string]int{}
+			for _, n := range all.Steps {
+				counts[n.Type]++
+				if n.Target != nil {
+					encoded, _ := json.Marshal(n.Target)
+					if strings.Contains(string(encoded), "__myco_recording_panel__") {
+						t.Fatalf("recorded own control: %s", encoded)
+					}
+				}
+				switch n.Type {
+				case "extract", "click", "type":
+				case "scroll":
+					if n.Target == nil || len(n.Target.Shadow) != 0 {
+						t.Fatalf("not a page scroll: %+v", n)
+					}
+					pageScroller := false
+					for _, l := range n.Target.Locators {
+						if l.Kind == "css" && (l.Value == "html" || l.Value == "html > body") {
+							pageScroller = true
+						}
+					}
+					if !pageScroller {
+						raw, _ := json.Marshal(n)
+						t.Fatalf("unexpected scroll target: %s", raw)
+					}
+					raw, _ := json.Marshal(n)
+					t.Logf("retained document scroll: %s", raw)
+				default:
+					t.Fatalf("unexpected recorded action: %+v", n)
+				}
+			}
+			if counts["extract"] != 4 || counts["click"] != 1 || counts["type"] != 1 || counts["scroll"] < 1 {
+				t.Fatalf("wrong recorded actions: %v", counts)
 			}
 			var fromPage struct {
 				ID string `json:"id"`
