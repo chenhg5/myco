@@ -28,6 +28,7 @@ type targetInstall struct {
 }
 
 type session struct {
+	proxy               *forwardProxy
 	commandCtx          context.Context
 	commandToken        uint64
 	headless            bool
@@ -129,6 +130,7 @@ func (e *engine) openSession(ctx context.Context, owner, id string, headless boo
 		e.mu.Unlock()
 		return nil, errors.New("not_found")
 	}
+	settings, password := e.profiles[id].Settings, e.passwords[id]
 	browsers := installedBrowsers()
 	binary := browsers["chrome"]
 	if binary == "" {
@@ -166,6 +168,24 @@ func (e *engine) openSession(ctx context.Context, owner, id string, headless boo
 	// Never reuse a stale DevTools endpoint: it might belong to an old browser.
 	_ = os.Remove(filepath.Join(dir, "DevToolsActivePort"))
 	args := []string{"--user-data-dir=" + dir, "--remote-debugging-port=0", "--remote-debugging-address=127.0.0.1", "--no-first-run", "--no-default-browser-check", "--disable-sync", "--disable-blink-features=AutomationControlled", "--window-size=1280,900", "about:blank"}
+	localProxy := ""
+	if settings.Proxy != nil {
+		proxy, e2 := newForwardProxy(run, *settings.Proxy, password)
+		if e2 != nil {
+			return nil, errors.New("proxy_unavailable")
+		}
+		s.mu.Lock()
+		if s.closed {
+			s.mu.Unlock()
+			proxy.Close()
+			return nil, context.Canceled
+		}
+		s.proxy = proxy
+		s.mu.Unlock()
+		localProxy = proxy.Address()
+	}
+	args = append(args[:len(args)-1], profileLaunchArgs(settings, localProxy)...)
+	args = append(args, "about:blank")
 	if headless {
 		args = append([]string{"--headless=new"}, args...)
 	}
@@ -278,7 +298,11 @@ func (s *session) close() {
 		rec := s.recorder
 		cmd := s.cmd
 		guard := s.guard
+		proxy := s.proxy
 		s.mu.Unlock()
+		if proxy != nil {
+			proxy.Close()
+		}
 		if rec != nil {
 			rec.finish()
 		}

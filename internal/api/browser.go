@@ -17,11 +17,39 @@ type BrowserComponentStatus struct {
 	Reason          string `json:"reason,omitempty"`
 	DownloadBytes   int64  `json:"download_bytes,omitempty"`
 }
+
+// BrowserProfileSettings never contains a proxy password. Input credentials
+// are write-only and stay on the local computer, outside Hub/page data.
+type BrowserProxySettings struct {
+	Server      string   `json:"server"`
+	Bypass      []string `json:"bypass"`
+	Username    string   `json:"username"`
+	HasPassword bool     `json:"has_password"`
+}
+type BrowserProfileSettings struct {
+	Proxy     *BrowserProxySettings `json:"proxy"`
+	UserAgent string                `json:"user_agent"`
+	Lang      string                `json:"lang"`
+	Args      []string              `json:"args"`
+}
+type BrowserProxySettingsInput struct {
+	Server   string   `json:"server"`
+	Bypass   []string `json:"bypass"`
+	Username string   `json:"username"`
+	Password *string  `json:"password,omitempty"`
+}
+type BrowserProfileSettingsInput struct {
+	Proxy     *BrowserProxySettingsInput `json:"proxy"`
+	UserAgent string                     `json:"user_agent"`
+	Lang      string                     `json:"lang"`
+	Args      []string                   `json:"args"`
+}
 type BrowserProfile struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Running bool   `json:"running"`
-	Agents  bool   `json:"agents"`
+	Settings *BrowserProfileSettings `json:"settings,omitempty"`
+	ID       string                  `json:"id"`
+	Name     string                  `json:"name"`
+	Running  bool                    `json:"running"`
+	Agents   bool                    `json:"agents"`
 }
 type BrowserStatus struct {
 	UpdateAvailable bool             `json:"update_available,omitempty"`

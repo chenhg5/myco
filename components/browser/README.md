@@ -39,3 +39,14 @@ installs 0.1.1 before stopping the old process; the next browser operation start
 the new process. A failed download or checksum check leaves the old process and
 profiles intact. Updating interrupts any browser sessions still using that
 process, so finish recording or playback before updating.
+
+Profile proxy/UA/locale/launch settings are owner-confirmed, local-only and take
+effect when a new browser session starts. See
+[the settings contract](../../docs/browser-component.md#per-profile-network-and-launch-settings).
+`TestNativeChromeProfileSettingsAndBypass` verifies real Chrome's UA, language,
+Accept-Language, explicit bypass and saving settings without restarting.
+
+Proxy passwords currently live as plaintext in the private 0600 profile index,
+not an OS keychain. The random loopback forwarder has no additional
+authentication: other local processes can use its upstream access while the
+browser session is open. A future keychain integration is separate work.

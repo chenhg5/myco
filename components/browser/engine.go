@@ -22,6 +22,7 @@ type engine struct {
 	mu         sync.Mutex
 	last       time.Time
 	profiles   map[string]profile
+	passwords  map[string]string
 	sessions   map[string]*session
 	recordings map[string]*recording
 	runs       map[string]*playRun
@@ -36,11 +37,16 @@ type artifact struct {
 }
 
 func newEngine(ctx context.Context, dir string) (*engine, error) {
-	e := &engine{ctx: ctx, dir: dir, last: time.Now(), profiles: map[string]profile{}, sessions: map[string]*session{}, recordings: map[string]*recording{}, runs: map[string]*playRun{}, artifacts: map[string]artifact{}}
+	e := &engine{ctx: ctx, dir: dir, last: time.Now(), profiles: map[string]profile{}, passwords: map[string]string{}, sessions: map[string]*session{}, recordings: map[string]*recording{}, runs: map[string]*playRun{}, artifacts: map[string]artifact{}}
 	raw, err := os.ReadFile(filepath.Join(dir, "profiles.json"))
 	if err == nil {
-		if err = json.Unmarshal(raw, &e.profiles); err != nil {
+		var stored map[string]storedProfile
+		if err = json.Unmarshal(raw, &stored); err != nil {
 			return nil, errors.New("invalid profile index")
+		}
+		for id, p := range stored {
+			e.profiles[id] = p.profile
+			e.passwords[id] = p.ProxyPassword
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
@@ -50,6 +56,16 @@ func newEngine(ctx context.Context, dir string) (*engine, error) {
 			return nil, errors.New("invalid profile index")
 		}
 		p.Running = false
+		input := profileSettingsInput{UserAgent: p.Settings.UserAgent, Lang: p.Settings.Lang, Args: p.Settings.Args}
+		if x := p.Settings.Proxy; x != nil {
+			input.Proxy = &proxySettingsInput{Server: x.Server, Bypass: x.Bypass, Username: x.Username}
+		}
+		settings, password, e2 := validatedSettings(input, p.Settings.Proxy, e.passwords[id])
+		if e2 != nil {
+			return nil, errors.New("invalid profile index")
+		}
+		p.Settings = settings
+		e.passwords[id] = password
 		e.profiles[id] = p
 	}
 	canonical, err := filepath.EvalSymlinks(dir)
@@ -80,7 +96,11 @@ func (e *engine) close() {
 	}
 }
 func (e *engine) saveProfilesLocked() error {
-	data, err := json.Marshal(e.profiles)
+	stored := map[string]storedProfile{}
+	for id, p := range e.profiles {
+		stored[id] = storedProfile{profile: p, ProxyPassword: e.passwords[id]}
+	}
+	data, err := json.Marshal(stored)
 	if err != nil {
 		return err
 	}
@@ -151,7 +171,7 @@ func (e *engine) handler() http.Handler {
 			fail(w, "profile_limit", 409)
 			return
 		}
-		p := profile{ID: "p_" + rand.Text(), Name: in.Name}
+		p := profile{ID: "p_" + rand.Text(), Name: in.Name, Settings: profileSettings{Args: []string{}}}
 		e.profiles[p.ID] = p
 		if err := e.saveProfilesLocked(); err != nil {
 			delete(e.profiles, p.ID)
@@ -160,6 +180,7 @@ func (e *engine) handler() http.Handler {
 		}
 		jsonReply(w, p)
 	})
+	m.HandleFunc("PATCH /profiles/{id}", e.configureProfile)
 	m.HandleFunc("POST /profiles/{id}/agents", func(w http.ResponseWriter, r *http.Request) {
 		var in struct {
 			Allowed bool `json:"allowed"`

@@ -2368,7 +2368,7 @@ const server = http.createServer(async (req, res) => {
   if (parts[0] === "app" && parts[1] === "hubs" && parts[3] === "browser" && method === "POST") {
     const body = await readBody(req), input = body.args || {}, key = `${parts[2]}/${body.page}`;
     const english = process.env.MOCK_SHOWCASE === "en";
-    const profile = {id:"profile_work",name:english ? "Work" : "工作资料",running:false,agents:!!state.browserFlags?.[parts[2]]};
+    const profile = {id:"profile_work",name:english ? "Work" : "工作资料",running:false,agents:!!state.browserFlags?.[parts[2]],settings:state.browserProfileSettings?.[parts[2]]||{proxy:null,user_agent:"",lang:"",args:[]}};
     state.browserApprovals ||= {}; state.browserApprovals[key] ||= []; state.browserConfirmations ||= {};
     if (parts[4] === "confirm") {
       if (req.headers["x-myco-browser-owner"] !== "1") return fail(res,403,"permission_denied","host only");
@@ -2385,10 +2385,16 @@ const server = http.createServer(async (req, res) => {
       }
       return send(res,200,{script_id:input.script_id,version:input.version,profile:input.profile,profile_name:profile.name,name:input.script.name,digest:"a".repeat(64),urls,code,children:Object.keys(input.scripts || {}),script:input.script,scripts:input.scripts || {}});
     }
-    if (body.action === "approvals.request" || (body.action === "profiles.allowAgents" && input.allowed)) {
+    if (body.action === "approvals.request" || body.action === "profiles.configure" || (body.action === "profiles.allowAgents" && input.allowed)) {
       const expected=JSON.stringify({key,instance:body.instance,action:body.action,input});
       const actual=state.browserConfirmations[body.confirmation]; delete state.browserConfirmations[body.confirmation];
       if(actual!==expected)return fail(res,403,"permission_denied","owner confirmation required");
+    }
+    if (body.action === "profiles.configure") {
+      const p=input.settings.proxy;
+      const settings={...input.settings,proxy:p?{server:p.server,bypass:p.bypass,username:p.username,has_password:p.password===undefined?!!profile.settings.proxy?.has_password&&profile.settings.proxy.server===p.server&&profile.settings.proxy.username===p.username:!!p.password}:null};
+      state.browserProfileSettings ||= {};state.browserProfileSettings[parts[2]]=settings;
+      return send(res,200,{...profile,settings});
     }
     if (body.action === "profiles.allowAgents") {state.browserFlags ||= {};state.browserFlags[parts[2]]=input.allowed;return send(res,200,{...profile,agents:input.allowed});}
     if (body.action === "approvals.request") {

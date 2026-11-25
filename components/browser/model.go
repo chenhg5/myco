@@ -17,10 +17,11 @@ var variableName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,39}$`)
 var idPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,80}$`)
 
 type profile struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Running bool   `json:"running"`
-	Agents  bool   `json:"agents"`
+	Settings profileSettings `json:"settings"`
+	ID       string          `json:"id"`
+	Name     string          `json:"name"`
+	Running  bool            `json:"running"`
+	Agents   bool            `json:"agents"`
 }
 type locator struct {
 	Kind  string `json:"kind"`

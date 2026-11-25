@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { AppWindow, Check, Copy, ExternalLink, Link2, Lock, Monitor, MoreHorizontal, PanelRight, PanelRightClose, Pin as PinIcon, PinOff, Radio, RotateCw, Users, X } from "lucide-react";
 import type { Page, PageOpen } from "@/api";
-import { ApiError, appApi, isOldHub, type OsAnswer, type OsConsent, type BrowserStatus, type BrowserApprovalReview } from "@/appapi";
+import { ApiError, appApi, isOldHub, type OsAnswer, type OsConsent, type BrowserStatus, type BrowserApprovalReview, type BrowserProfileSettingsInput } from "@/appapi";
 import { copyText } from "@/app/copy";
 import { useContextMenu, type MenuItem } from "@/app/ContextMenu";
 import { DockPanel } from "@/app/preview";
@@ -9,6 +9,7 @@ import { looksOf, MushroomFace } from "@/app/persona";
 import { Modal } from "@/app/dialogs";
 import { openOutside, setInAppLinks } from "@/app/links";
 import { L } from "@/lib/i18n";
+import { BrowserProfileSettingsDetails, browserSettingsReview, type BrowserSettingsReview } from "./browser-profile-settings";
 import { answerProjectFiles, projectFileScope } from "./page-project-files";
 import { canRecoverTemplate, PageRecovery, recoveryLabel } from "./page-recovery";
 import { usePagePreferences, localizedPageURL } from "./page-preferences";
@@ -463,7 +464,7 @@ function PageView({ target, open, active, reload, onMeta }: {
   const [asking, setAsking] = useState<{ text: string; to: string; answer: (ok: boolean) => void } | null>(null);
   // a page wanting a group of the computer's capabilities the person has not allowed yet
   const [consent, setConsent] = useState<(OsConsent & { name: string; answer: (a: OsAnswer) => void }) | null>(null);
-  const [remoteAsking, setRemoteAsking] = useState<{text:string; title?:string; review?:BrowserApprovalReview; answer:(ok:boolean)=>void} | null>(null);
+  const [remoteAsking, setRemoteAsking] = useState<{text:string; title?:string; review?:BrowserApprovalReview; settingsReview?:BrowserSettingsReview; answer:(ok:boolean)=>void} | null>(null);
   const remoteConsent = useRef<((ok:boolean)=>void) | null>(null);
   // (while the page is there: tucked away, it still runs and is answered,
   // and what it started on the computer goes on)
@@ -581,15 +582,24 @@ function PageView({ target, open, active, reload, onMeta }: {
         const action = String(args.action || "");
         const input = (args.args && typeof args.args === "object" ? args.args : {}) as Record<string, unknown>;
         const who = { hub: t.hubId, id: t.id, name: o?.name || p?.name || "" };
-        if (action === "install" || action === "approvals.request" || (action === "profiles.allowAgents" && input.allowed === true)) {
+        if (action === "install" || action === "approvals.request" || action === "profiles.configure" || (action === "profiles.allowAgents" && input.allowed === true)) {
           let review: BrowserApprovalReview | undefined;
-          let confirmedInput = input;
+          let settingsReview: BrowserSettingsReview | undefined;
+          let confirmedInput = JSON.parse(JSON.stringify(input)) as Record<string,unknown>;
           let text = L("安装浏览器组件，用 myco 专用的浏览器资料录制和回放网页操作。它不使用你日常的 Chrome 资料，也不会自动开放 agent 控制。", "Install the browser component to record and replay web actions in a dedicated myco browser profile. It does not use your everyday Chrome profile or enable agent control automatically.");
           if (action === "profiles.allowAgents") {
             const status = await withConsent(who, () => appApi.browserCall<BrowserStatus>(t.hubId, t.id, remoteInstance, "status"));
             const profile = status.profiles.find(item => item.id === String(input.id || ""));
             if (!profile) throw Object.assign(new Error(L("找不到这个浏览器资料", "Browser profile not found")), { code: "not_found" });
             text = L(`允许 agent 在当前工作区申请使用「${profile.name}」浏览器资料？它们仍需你批准短期授权，并且只能运行你在本机批准的脚本版本。`, `Allow agents in this workspace to request access to “${profile.name}”? They still need your approval for a short-lived grant and can run only script versions you approved on this computer.`);
+          }
+          if (action === "profiles.configure") {
+            const status = await withConsent(who, () => appApi.browserCall<BrowserStatus>(t.hubId, t.id, remoteInstance, "status"));
+            const profile = status.profiles.find(item => item.id === String(confirmedInput.id || ""));
+            if (!profile) throw Object.assign(new Error(L("找不到这个浏览器资料", "Browser profile not found")), {code:"not_found"});
+            if (!profile.settings) throw Object.assign(new Error(L("请先更新浏览器组件", "Update the browser component first")), {code:"unsupported"});
+            settingsReview = browserSettingsReview(profile, confirmedInput.settings as BrowserProfileSettingsInput);
+            text = L("更改这个浏览器资料的网络与启动设置？", "Change this browser profile’s network and launch settings?");
           }
           if (action === "approvals.request") {
             review = await withConsent(who, () => appApi.browserCall<BrowserApprovalReview>(t.hubId, t.id, remoteInstance, "approvals.review", input));
@@ -600,7 +610,7 @@ function PageView({ target, open, active, reload, onMeta }: {
           if (remoteConsent.current) throw Object.assign(new Error(L("请先处理当前的授权请求", "Finish the current permission request first")), { code: "busy" });
           const accepted = await new Promise<boolean>(resolve => {
             remoteConsent.current = resolve;
-            setRemoteAsking({ text, title: L("浏览器自动化授权", "Browser automation permission"), review, answer: resolve });
+            setRemoteAsking({ text, title: L("浏览器自动化授权", "Browser automation permission"), review, settingsReview, answer: resolve });
           });
           remoteConsent.current = null;
           setRemoteAsking(null);
@@ -862,9 +872,10 @@ function PageView({ target, open, active, reload, onMeta }: {
           )}
         </div>
       )}
-    <Modal className="pg-remote-ask" wide={!!remoteAsking?.review} open={!!remoteAsking} onOpenChange={(o) => {if (!o) remoteAsking?.answer(false);}}
+    <Modal className="pg-remote-ask" wide={!!remoteAsking?.review || !!remoteAsking?.settingsReview} open={!!remoteAsking} onOpenChange={(o) => {if (!o) remoteAsking?.answer(false);}}
       title={remoteAsking?.title || L(`允许「${opened?.name || page?.name || "此应用"}」使用远程桌面？`, `Allow “${opened?.name || page?.name || "this app"}” to use Remote Desktop?`)} description={remoteAsking?.text || ""}>
       {remoteAsking?.review && <BrowserApprovalDetails review={remoteAsking.review} />}
+      {remoteAsking?.settingsReview && <BrowserProfileSettingsDetails review={remoteAsking.settingsReview} />}
       <div className="app-modal-actions">
         <button type="button" className="app-btn" onClick={() => remoteAsking?.answer(false)}>{L("不允许", "Don't allow")}</button>
         <button type="button" className="app-btn app-btn-primary" onClick={() => remoteAsking?.answer(true)}>{L("允许", "Allow")}</button>

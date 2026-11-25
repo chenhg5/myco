@@ -290,7 +290,7 @@
     // Remote sessions are separate from local OS calls and need App consent.
     browser: (function () {
       function invoke(action, args) {
-        return ready.then(function () { return call("browser.call", {action:action,args:args||{}}, (action === "install" || action === "approvals.request") ? 600000 : action === "pick" ? 150000 : 45000); });
+        return ready.then(function () { return call("browser.call", {action:action,args:args||{}}, (action === "install" || action === "approvals.request" || action === "profiles.configure") ? 600000 : action === "pick" ? 150000 : 45000); });
       }
       return {
         status:function(){return invoke("status");},
@@ -298,7 +298,8 @@
         profiles:{
           create:function(name){return invoke("profiles.create",{name:String(name)});},
           open:function(id){return invoke("profiles.open",{id:String(id)});},
-          allowAgents:function(id,allowed){return invoke("profiles.allowAgents",{id:String(id),allowed:allowed===true});}
+          allowAgents:function(id,allowed){return invoke("profiles.allowAgents",{id:String(id),allowed:allowed===true});},
+          configure:function(id,settings){return invoke("profiles.configure",{id:String(id),settings:settings});}
         },
         record:{
           start:function(options){return invoke("record.start",options);},

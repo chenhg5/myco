@@ -938,6 +938,43 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page,page.locator(".pg-panel").getByRole("button",{name:"关闭",exact:true}));
     });
 
+    await step("浏览器 · 配置需要主人确认", async () => {
+      await go(page, "官网改版", narrow);
+      if (narrow) await clickVisible(page, page.locator('.sp-strip-face[title="Release (Claude 云端)"]'));
+      else await clickVisible(page, page.locator(".sp-side .sp-member:visible", {hasText:"Release (Claude 云端)"}));
+      await clickVisible(page,page.locator(".sp-pane-right .pg-card",{hasText:"上线清单"}));
+      const frame=page.frameLocator(".pg-frame");await frame.locator("h1").waitFor({timeout:15000});
+      const settings={proxy:{server:"http://proxy.example:8080",bypass:["*.local","<local>"],username:"fixture-user",password:"write-only-fixture"},user_agent:"Mozilla/5.0 Fixture/1.0",lang:"zh-CN",args:["--window-size=1280,900","--disable-gpu"]};
+      const ask=(requested=settings)=>frame.locator("body").evaluate((_body,settings)=>{window.__browserSettingsResult=null;window.myco.browser.profiles.configure("profile_work",settings).then(value=>window.__browserSettingsResult={value},error=>window.__browserSettingsResult={error:error.code});},requested);
+      await ask();
+      const modal=page.getByRole("dialog",{name:"浏览器自动化授权"});await modal.waitFor();
+      const review=modal.locator("[data-testid=browser-settings-review]");await review.waitFor();
+      const text=await review.innerText();
+      for(const value of ["proxy.example:8080","*.local","Mozilla/5.0 Fixture/1.0","zh-CN","--window-size=1280,900","--disable-gpu"])if(!text.includes(value))throw new Error("Settings review omitted "+value);
+      if(text.includes("write-only-fixture"))throw new Error("Settings modal disclosed proxy password");
+      await shot(page,size,scheme,"browser-profile-settings-owner-review");
+      await clickVisible(page,modal.getByRole("button",{name:"不允许",exact:true}));await modal.waitFor({state:"hidden"});
+      let result=await frame.locator("body").evaluate(async()=>{for(let i=0;i<100&&!window.__browserSettingsResult;i++)await new Promise(r=>setTimeout(r,20));return window.__browserSettingsResult;});
+      if(result?.error!=="cancelled")throw new Error("Declined settings were not cancelled");
+      const before=await frame.locator("body").evaluate(()=>window.myco.browser.status());if(before.profiles[0].settings.proxy)throw new Error("Decline changed profile settings");
+      await ask();await modal.waitFor();await clickVisible(page,modal.getByRole("button",{name:"允许",exact:true}));await modal.waitFor({state:"hidden"});
+      result=await frame.locator("body").evaluate(async()=>{for(let i=0;i<100&&!window.__browserSettingsResult;i++)await new Promise(r=>setTimeout(r,20));return window.__browserSettingsResult;});
+      if(!result?.value?.settings?.proxy?.has_password||JSON.stringify(result).includes("write-only-fixture")||"confirmation" in result.value)throw new Error("Configured profile returned private credentials");
+      const {password:_password,...storedProxy}=settings.proxy;
+      for(const [kind,proxy,retains] of [
+        ["same",storedProxy,true],
+        ["server",{...storedProxy,server:"http://other.example:8080"},false],
+        ["scheme",{...storedProxy,server:"https://proxy.example:8080"},false],
+        ["username",{...storedProxy,username:"other-user"},false],
+      ]) {
+        await ask({...settings,proxy});await modal.waitFor();
+        const summary=await review.innerText();
+        if(!summary.includes(retains?"保留已保存的密码":"清除已保存的密码"))throw new Error("Wrong saved-password review for "+kind);
+        await clickVisible(page,modal.getByRole("button",{name:"不允许",exact:true}));await modal.waitFor({state:"hidden"});
+      }
+      await clickVisible(page,page.locator(".pg-panel").getByRole("button",{name:"关闭",exact:true}));
+    });
+
     // The myco bridge: the page's shared state, written by you, changed by
     // its agent (it comes to the page), and a message to its agent, asked
     // once. (The four windows share the mock: versions are read, not assumed.)

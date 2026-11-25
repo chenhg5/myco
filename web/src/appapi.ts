@@ -11,7 +11,9 @@ export interface NoticeState {
   badge: number;
 }
 /** The optional local browser component, without credentials or profile paths. */
-export interface BrowserProfile { id: string; name: string; running: boolean; agents: boolean }
+export interface BrowserProfileSettings { proxy: {server: string; bypass: string[]; username: string; has_password: boolean} | null; user_agent: string; lang: string; args: string[] }
+export interface BrowserProfileSettingsInput { proxy: {server: string; bypass: string[]; username: string; password?: string} | null; user_agent: string; lang: string; args: string[] }
+export interface BrowserProfile { id: string; name: string; running: boolean; agents: boolean; settings?: BrowserProfileSettings }
 export interface BrowserStatus { update_available?: boolean; protocol: number; version: string; installed: boolean; supported: boolean; reason?: string; browsers: string[]; machine: string; profiles: BrowserProfile[] }
 
 export interface BrowserApproval { script_id: string; version: number; digest: string; profile: string; approved_at: string; name: string }

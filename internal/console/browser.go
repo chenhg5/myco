@@ -113,7 +113,7 @@ func (b *Backend) browserRoutes(m *http.ServeMux) {
 		if !decode(w, r, &in) {
 			return
 		}
-		if !validBrowserCall(in) || (in.Action != "install" && in.Action != "profiles.allowAgents" && in.Action != "approvals.request") {
+		if !validBrowserCall(in) || (in.Action != "install" && in.Action != "profiles.allowAgents" && in.Action != "profiles.configure" && in.Action != "approvals.request") {
 			writeErr(w, browserFailure("invalid_argument", 400))
 			return
 		}
@@ -142,6 +142,14 @@ func (b *Backend) browserRoutes(m *http.ServeMux) {
 				return
 			}
 			bound += "\x00" + owner.Owner + "\x00" + owner.Workspace
+		}
+		if in.Action == "profiles.configure" {
+			_, key, err := browserConfigureBound(in.Args)
+			if err != nil {
+				writeErr(w, err)
+				return
+			}
+			bound = key
 		}
 		if in.Action == "approvals.request" {
 			scope, err := b.browserOwner(r.Context(), c, h, in.Page)
@@ -305,6 +313,36 @@ func (b *Backend) browserCall(ctx context.Context, c *client.Client, h Hub, in b
 	case "profiles.create":
 		path = "/profiles"
 		body = map[string]string{"name": text("name")}
+	case "profiles.configure":
+		inSettings, bound, e := browserConfigureBound(in.Args)
+		if e != nil {
+			return nil, e
+		}
+		who, e := c.Whoami(ctx)
+		if e != nil {
+			return nil, e
+		}
+		if who.Device == nil || !b.consumeBrowserConfirmation(in.Confirmation, scope, in.Action, bound) {
+			return nil, browserFailure("permission_denied", 403)
+		}
+		var profile api.BrowserProfile
+		if e = comp.Call(ctx, scope, "PATCH", "/profiles/"+url.PathEscape(inSettings.ID), map[string]any{"settings": inSettings.Settings}, &profile); e != nil {
+			return nil, browserFailure(browserError(e), 409)
+		}
+		if profile.ID != inSettings.ID {
+			return nil, browserFailure("incompatible_component", 409)
+		}
+		// Keep the workspace-local agent policy instead of the legacy global flag.
+		if owner, known := b.cachedBrowserOwner(h, in.Page); known {
+			if store, e := b.browserPolicies(); e == nil {
+				if policy, e := store.Policy(owner, profile.ID); e == nil {
+					profile.Agents = policy.Enabled && !b.browserAgentsBlocked(h.ID, profile.ID)
+				}
+			}
+		} else {
+			profile.Agents = false
+		}
+		return profile, nil
 	case "profiles.open":
 		path = "/sessions"
 		body = map[string]any{"profile": text("id"), "headless": false}

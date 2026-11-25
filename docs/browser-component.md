@@ -110,3 +110,66 @@ loop and subflow nodes before opening a browser. Agent runs cannot use secret
 parameters, uploads, Start here or breakpoints. A profile already controlled by a
 person or another run is not taken over. No automatic restart or replay bypasses
 a native error or run limit.
+
+## Per-profile network and launch settings
+
+On desktop hosts that expose `myco.browser.profiles.configure`, Web Automation
+can ask to change a profile's proxy, user agent, language and launch arguments.
+The App shows its own confirmation listing the proxy address and bypass rules,
+whether credentials are present, the user agent, language and every argument.
+Passwords are never displayed. Declining changes nothing. The confirmation is
+single-use and bound to the exact profile and settings, including a write-only
+password change. This is a local human capability, not an agent or Hub action.
+Older Apps omit the optional method; older components omit profile `settings`.
+
+`GET /status` profiles include this public object:
+
+```json
+{"settings":{"proxy":{"server":"https://proxy.example:8443","bypass":["*.local","<local>"],"username":"proxy-user","has_password":true},"user_agent":"","lang":"zh-CN","args":["--window-size=1280,900"]}}
+```
+
+The authenticated private component endpoint `PATCH /profiles/{id}` accepts
+`{"settings":{...}}`. This replaces all settings. Its `proxy` input omits the
+read-only `has_password` and may include a write-only `password`: omission keeps
+the saved password only when both server and username are unchanged; otherwise
+it clears the old secret. Explicit `""` clears it, and `proxy:null` clears the proxy and password.
+Responses contain `has_password` only. The private index
+`~/.myco/browser/profiles.json` is written atomically with mode 0600; credentials
+are never stored in shared page records or passed on Chrome's command line.
+The index currently stores passwords in plaintext inside this private file;
+system-keychain storage is a possible later improvement. The loopback forwarder
+has no separate authentication: other local processes can use its random port
+while the browser session is open.
+
+A configured proxy starts an IPv4-loopback forwarding proxy on a random port
+for that browser session. HTTP/HTTPS upstreams receive proxy authentication;
+SOCKS5 upstreams use username/password authentication. HTTPS upstreams require a
+valid TLS certificate. CONNECT and upgraded connections close with the session.
+Chrome receives only the local proxy address and its bypass rules, so bypass
+matching follows Chrome's rules (including its default loopback exemptions).
+When a proxy is configured, Chrome also receives
+`--force-webrtc-ip-handling-policy=disable_non_proxied_udp` to prevent direct
+WebRTC UDP traffic from bypassing it. This flag is automatic and cannot be
+supplied through the user argument allowlist. No CDP Fetch interception is installed. Custom UA uses `--user-agent`; language
+uses `--lang` and `--accept-lang`. A custom UA can disagree with Chrome's version
+and client hints; retaining the default is recommended.
+
+Allowed launch arguments match the application editor:
+
+- `--start-maximized`, `--disable-gpu`, `--disable-background-timer-throttling`,
+  `--disable-backgrounding-occluded-windows`, `--disable-renderer-backgrounding`.
+- `--window-size=W,H` (2–5 decimal digits per dimension),
+  `--force-device-scale-factor=0..4` (up to two decimals below 4).
+- `--disable-features=` / `--enable-features=` with comma-separated names
+  containing only ASCII letters, digits and underscores.
+- `--blink-settings=imagesEnabled=true` or `false`.
+
+Other flags, malformed proxy addresses and control characters return
+`invalid_argument`. Proxy addresses must be `http://host:port`,
+`https://host:port` or `socks5://host:port`, without embedded credentials, paths,
+queries or fragments. Username/password are separate fields. Language is an
+optional language tag such as `en-US` or `zh-CN`; a UA is at most 512 printable
+ASCII characters. A profile can save settings while running without restarting
+or changing that session. Close its browser before starting a session with the
+new settings. Updating settings does not revoke script approvals; settings
+fingerprints and approval-change indicators are reserved for a later change.

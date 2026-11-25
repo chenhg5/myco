@@ -35,4 +35,13 @@ assert.deepEqual(actions.map(m=>m.args.action),['install','status','profiles.cre
 assert.equal(actions[6].args.args.after,3);assert.equal(actions[9].args.args.after,7);
 assert.equal(actions[10].args.args.action,'step');assert.equal(actions[11].args.args.choice,'ok');
 assert.ok(actions.every(m=>!('confirmation' in m.args)&&!('uploads' in m.args)));
+// Protocol 1 adds configure optionally. The page forwards write-only settings
+// to its trusted host; it cannot supply or obtain the confirmation nonce.
+const settings={proxy:{server:'http://proxy.example:8080',bypass:['<local>'],username:'fixture-user',password:'write-only-fixture'},user_agent:'Mozilla/5.0',lang:'zh-CN',args:['--disable-gpu']};
+assert.equal(typeof api.profiles.configure,'function');
+await api.profiles.configure('p_fixture',settings);
+const configured=sent.filter(m=>m.method==='browser.call').at(-1);
+assert.equal(configured.args.action,'profiles.configure');
+assert.deepEqual(JSON.parse(JSON.stringify(configured.args.args)),{id:'p_fixture',settings});
+assert.ok(!('confirmation' in configured.args));
 console.log('browser bridge: install, profiles, recording/run cursors, controls and image Blob passed');
