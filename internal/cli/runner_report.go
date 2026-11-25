@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"log/slog"
 	"os"
@@ -23,13 +24,16 @@ import (
 	"github.com/myco-ai/myco/internal/runner"
 )
 
+var runnerInstance = rand.Text()
+
 // runtimeReporter tells the hub, in the background and best effort, which
 // CLI, model and provider an agent runs with; it reports again whenever the
 // provider changes (e.g. picked in the console, or switched in cc-switch).
 type runtimeReporter struct {
-	c   *client.Client
-	log *slog.Logger
-	cfg string // runner.model, if set
+	c           *client.Client
+	log         *slog.Logger
+	restartPath string
+	cfg         string // runner.model, if set
 
 	mu     sync.Mutex
 	base   *api.Runtime // nil until the CLI version is known
@@ -55,8 +59,9 @@ type runtimeReporter struct {
 func (e *env) reportToHub(c *client.Client, me *api.Agent, h harness.Harness, rc config.Runner, access, maxAccess harness.Access, choice providerChoice, workdir string, log *slog.Logger) *runtimeReporter {
 	// Capacity reports must not wait for CLI version/tool discovery (which
 	// may take seconds on a busy computer). Enrich the same base later.
-	base := api.Runtime{CLI: h.Name(), Access: string(access), MaxAccess: string(maxAccess), Features: runnerFeatures(h), Env: runnerEnv()}
-	rep := &runtimeReporter{c: c, log: log, cfg: rc.Model, choice: choice, models: cliModels(h.Name()), base: &base}
+	base := api.Runtime{RunnerInstance: runnerInstance, CLI: h.Name(), Access: string(access), MaxAccess: string(maxAccess), Features: runnerFeatures(h), Env: runnerEnv()}
+	rep := &runtimeReporter{restartPath: runnerRestartPath(e.defaultPath), c: c, log: log, cfg: rc.Model, choice: choice, models: cliModels(h.Name()), base: &base}
+	rep.flushLater() // clear any prior restart lease before slow CLI/tool discovery
 	go func() {
 		ctx, cancel := context.WithTimeout(e.in.Ctx, 30*time.Second)
 		defer cancel()
@@ -196,7 +201,8 @@ func (r *runtimeReporter) flush(ctx context.Context) {
 			r.mu.Unlock()
 			return
 		}
-		rt := *r.base
+		base := *r.base
+		rt := base
 		if supportsRemoteProvider(rt.CLI) {
 			options := localProviderOptions(rt.CLI)
 			rt.Providers = &options
@@ -239,7 +245,7 @@ func (r *runtimeReporter) flush(ctx context.Context) {
 		if err == nil {
 			r.last = rt
 		}
-		again := err == nil && (r.choice.name != ch.name || r.choice.host != ch.host || r.choice.source != ch.source || r.choice.model != ch.model || !reflect.DeepEqual(r.slots, rt.RunnerSlots))
+		again := err == nil && (!reflect.DeepEqual(*r.base, base) || r.choice.name != ch.name || r.choice.host != ch.host || r.choice.source != ch.source || r.choice.model != ch.model || !reflect.DeepEqual(r.slots, rt.RunnerSlots))
 		r.mu.Unlock()
 		if err != nil {
 			r.log.Debug("runtime report failed (older hub?)", "err", err)
@@ -349,6 +355,9 @@ func (r *runtimeReporter) Goodbye() {
 	}
 	r.mu.Unlock()
 	rt.Away = "stopped"
+	if until := runnerRestartUntil(r.restartPath); !until.IsZero() {
+		rt.Away, rt.RestartingUntil = "updating", until
+	}
 	rt.RunnerSlots = nil
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()

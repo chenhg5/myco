@@ -1,3 +1,4 @@
+import { runnerUpdating } from "@/lib/runner-state";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { activePaneId } from "@/app/ChatSearch";
 import { IntroCard, introOf } from "@/app/Onboard";
@@ -1253,6 +1254,7 @@ function Composer({ hubId, project, agents, onSending, onSent, onCall }: {
 /** What a member is doing now, in a line, and since when and for whom. */
 function liveLine(r: AgentRow, nameOf: (n: string) => string, now: number): { text: string; meta?: string } {
   const a = r.st.agent;
+  if (runnerUpdating(a, now)) return { text: L("正在更新", "Updating") };
   if (r.st.state === "offline") return { text: L("不在线", "Away"), meta: a.last_seen_at ? timeAgo(a.last_seen_at, now) : undefined };
   const open = (r.st.current || []).filter((m) => m.to === a.name && m.type === "task");
   // Working means the node acknowledged a task. A task it only pulled

@@ -56,6 +56,8 @@ export interface RunnerSlots {
   queue?: { message_id: string; position: number }[];
 }
 export interface Runtime {
+  runner_instance?: string;
+  restarting_until?: string;
   runner_slots?: RunnerSlots;
   cli: string;
   cli_version?: string;
@@ -146,6 +148,7 @@ export interface ProjectDoc {
   binary?: boolean;
 }
 export interface Agent {
+  updating?: boolean;
   id: string; name: string; display_name?: string; aliases?: string[]; description: string;
   /** the face people chose: "look:c3-p1-f2-s1" (a drawn one) or "pic:<hash>"
    *  (a picture: GET /v1/agents/{name}/avatar); absent = drawn from the id */
@@ -180,6 +183,7 @@ export interface AgentResume {
 }
 /** A real computer (or server) that runs nodes. Cloud sessions are not machines. */
 export interface Machine {
+  updating?: boolean;
   id: string; name: string; hostname: string;
   os: "darwin" | "linux" | "windows" | "cloud";
   arch?: string; myco_version?: string;

@@ -32,6 +32,7 @@ type Delivery struct {
 
 // Agent is the public view of a registered agent.
 type Agent struct {
+	Updating    bool        `json:"updating,omitempty"`
 	ID          string      `json:"id"`
 	Resume      *ResumeInfo `json:"resume,omitempty"`
 	Name        string      `json:"name"`
@@ -134,10 +135,14 @@ type RunnerQueuedTask struct {
 }
 
 type Runtime struct {
-	RunnerSlots *RunnerSlots `json:"runner_slots,omitempty"`
-	CLI         string       `json:"cli,omitempty"`
-	CLIVersion  string       `json:"cli_version,omitempty"`
-	Model       string       `json:"model,omitempty"`
+	// RunnerInstance identifies a runner process; RestartingUntil is a
+	// short lease for planned restarts, cleared by the next instance.
+	RunnerInstance  string       `json:"runner_instance,omitempty"`
+	RestartingUntil time.Time    `json:"restarting_until,omitzero"`
+	RunnerSlots     *RunnerSlots `json:"runner_slots,omitempty"`
+	CLI             string       `json:"cli,omitempty"`
+	CLIVersion      string       `json:"cli_version,omitempty"`
+	Model           string       `json:"model,omitempty"`
 	// ModelSource: configured (the agent's runner.model), cli-config (the
 	// CLI's own settings), observed (seen in its last turn), or default.
 	ModelSource string `json:"model_source,omitempty"`
@@ -164,7 +169,8 @@ type Runtime struct {
 	// "changes", "ask_access"); apps show a feature's controls only when it
 	// is listed. Absent from runners that predate it.
 	Features []string `json:"features,omitempty"`
-	// Away says why the runner went offline, sent as it stops: "stopped"
+	// Away says why the runner went offline: "updating" during a planned
+	// restart (bounded by RestartingUntil), or "stopped"
 	// (it was stopped: by hand, its service, logging out or shutting down).
 	// A runner that is running sends none. Env is where it runs when that
 	// explains going offline: "wsl" (Windows shuts WSL down when idle).
@@ -259,6 +265,7 @@ type RunSettingsPatch struct {
 
 // Machine is a computer, server or cloud environment agents run on.
 type Machine struct {
+	Updating    bool       `json:"updating,omitempty"`
 	ID          string     `json:"id"`
 	Name        string     `json:"name"`
 	Hostname    string     `json:"hostname,omitempty"`

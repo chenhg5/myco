@@ -1,3 +1,4 @@
+import { runnerUpdating } from "@/lib/runner-state";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Focus as FocusIcon, AlertTriangle, ArrowDown, ArrowLeft, ArrowRightLeft, ArrowUp, ArrowUpRight, Check, ChevronRight, Copy, AudioLines, Download, Images, Loader2, Lock, MoreHorizontal, Paintbrush, Pin as PinIcon, PinOff, Search, Settings2, Square, Trash2, WifiOff, X } from "lucide-react";
 import { ExportChat } from "@/app/ExportChat";
@@ -1100,7 +1101,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // The runner found the agent's session open elsewhere (a terminal, an
   // editor, the Codex app): it waits and retries rather than write into it.
   // Why a task has not started: said in the chat instead of a spinner.
-  const waitingReason = busy
+  const updating = !!agent && runnerUpdating(agent);
+  const waitingReason = updating ? L("对方正在更新，完成后会继续处理", "The node is updating; it continues when ready") : busy
     ? L("对方的会话正开在别处（终端、编辑器或桌面版），空出来后会处理", "The session is open elsewhere (a terminal, an editor or a desktop app); it starts when that is free")
     : offline
       ? agent && isInbox(agent)
@@ -1111,7 +1113,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         : undefined;
   // The same, in a few words: under your message that waits (the full
   // sentence when the pointer is on it).
-  const waitingShort = busy ? L("会话开在别处，空出来再看", "Its session is busy elsewhere")
+  const waitingShort = updating ? L("正在更新，完成后继续", "Updating; continues when ready") : busy ? L("会话开在别处，空出来再看", "Its session is busy elsewhere")
     : offline ? L("对方离线，上线后再看", "Offline; it reads it when back")
     : waitingReason ? L("对方的 myco 没在运行，恢复后再看", "Its runner is not running")
     : "";

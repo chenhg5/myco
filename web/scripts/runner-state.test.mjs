@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import { transform } from 'esbuild';
+import { readFile } from 'node:fs/promises';
+const {code}=await transform(await readFile(new URL('../src/lib/runner-state.ts',import.meta.url),'utf8'),{loader:'ts',format:'esm'});
+const {runnerUpdating,machineUpdating}=await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
+const now=Date.parse('2026-01-01T00:00:00Z');
+const agent={machine_id:'demo',last_seen_at:new Date(now).toISOString(),runtime:{away:'updating',restarting_until:new Date(now+90000).toISOString()}};
+assert.equal(runnerUpdating(agent,now),true);
+assert.equal(runnerUpdating(agent,now+90001),false);
+assert.equal(runnerUpdating({...agent,runtime:{away:'stopped'}},now),false);
+assert.equal(runnerUpdating({...agent,runtime:{away:'updating'}},now),true,'old Hub fallback');
+assert.equal(runnerUpdating({...agent,runtime:{away:'updating',restarting_until:'invalid'}},now),false);
+assert.equal(machineUpdating({id:'demo'},[agent],now),true);
+assert.equal(machineUpdating({id:'other'},[agent],now),false);
+assert.equal(machineUpdating({id:'demo',updating:true,last_seen_at:agent.last_seen_at},[],now+90001),false);
+console.log('runner restart: active, expired, failed and old-Hub states passed');

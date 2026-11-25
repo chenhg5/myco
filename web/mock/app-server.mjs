@@ -2110,6 +2110,27 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { open: last });
   }
 
+  // Synthetic restart lifecycle only; never stops a real process.
+  if (parts.join("/") === "app/mock/runner-restart") {
+    for (const h of state.hubs) {
+      for (const m of (h.machines || []).filter((m) => m.id === "m_studio")) {
+        if (method === "DELETE") {
+          if (m._beforeRestart) { const before=m._beforeRestart; delete m._beforeRestart; Object.assign(m,before); }
+        } else { m._beforeRestart ||= {online:m.online}; m.online=false; }
+      }
+      for (const a of h.agents.filter((a) => a.machine_id === "m_studio")) {
+        if (method === "DELETE") {
+          if (a._beforeRestart) { const before = a._beforeRestart; delete a._beforeRestart; delete a.updating; Object.assign(a, before); }
+        } else {
+          a._beforeRestart ||= { online: a.online, last_seen_at: a.last_seen_at, runtime: structuredClone(a.runtime || {}) };
+          a.online = false; a.updating = true; a.last_seen_at = iso(0);
+          a.runtime = { ...a.runtime, away: "updating", runner_instance: "fixture-old", restarting_until: new Date(Date.now() + (url.searchParams.get("phase") === "expired" ? -1000 : 90000)).toISOString() };
+        }
+      }
+    }
+    return send(res, 200, {ok:true});
+  }
+
   if (parts.join("/")==="app/mock/runner-queue" && method==="DELETE") {
     for (const h of state.hubs) for (const a of h.agents) if (a.runtime?.runner_slots) {
       a.runtime.runner_slots={max_concurrent:3,in_use:2,waiting:0,queue:[],at:iso(0)};

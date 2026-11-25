@@ -4053,6 +4053,28 @@ async function runMatrix(browser, size, scheme) {
 
     // An offline agent says why, as far as can be told: here its runner
     // said goodbye as it was stopped.
+    await step("成员 · 正在更新", async () => {
+      const change = (phase) => fetch(`http://${HOST}:${mockPort()}/app/mock/runner-restart${phase ? `?phase=${phase}` : ""}`, {method: phase ? "POST" : "DELETE"});
+      await change("updating");
+      try {
+        await go(page, "成员", narrow);
+        const card = page.locator(".mb-card", {hasText: "docs-claude"}).first();
+        await card.getByText("正在更新", {exact:true}).waitFor({timeout:15000});
+        await clickVisible(page, card);
+        const updating = page.locator('[data-testid="runner-updating"]');
+        await updating.waitFor({timeout:10000});
+        if (await page.locator('.ms .app-offline-why').count()) throw Error("更新时不能显示停止/离线诊断");
+        await shot(page,size,scheme,"runner-updating");
+        await page.keyboard.press("Escape");
+        await go(page,"电脑",narrow);
+        const computer=page.locator(".pc-card",{hasText:"Studio Mac"});
+        await computer.locator(".pc-online").filter({hasText:"正在更新"}).waitFor({timeout:15000});
+        await shot(page,size,scheme,"computer-updating");
+        await change("expired");
+        await computer.locator(".pc-online").filter({hasText:"不在线"}).waitFor({timeout:15000});
+      } finally { await change(""); }
+    });
+
     await step("成员 · 离线原因", async () => {
       await go(page, "成员", narrow);
       await clickVisible(page, page.locator(".mb-card", { hasText: "docs-claude" }).first());

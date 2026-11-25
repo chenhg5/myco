@@ -132,14 +132,17 @@ func (r *Runner) finishPending(ctx context.Context, onlyKept bool) {
 	r.mu.Lock()
 	items := make([]pendingRun, 0, len(r.pending))
 	for _, v := range r.pending {
-		if !onlyKept || v.Finish != "" {
+		if !onlyKept || (v.Finish != "" && !r.finishing[v.MessageID]) {
 			items = append(items, v)
 		}
 	}
 	r.mu.Unlock()
 	for _, item := range items {
+		if ctx.Err() != nil {
+			return
+		}
 		log := r.log.With("message_id", item.MessageID, "agent", item.Agent, "started_at", item.StartedAt)
-		finishCtx, cancel := r.finishContext(ctx)
+		finishCtx, cancel := context.WithTimeout(ctx, r.finishTimeout)
 		var status string
 		err, exhausted := r.retryFinish(finishCtx, log, "recover get message", func(c context.Context) error {
 			m, err := r.hub.GetMessage(c, item.MessageID)

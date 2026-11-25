@@ -1,6 +1,8 @@
 package service
 
 import (
+	"os/exec"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -57,5 +59,19 @@ func TestWindowsLogonStatus(t *testing.T) {
 	st, err := w.Status()
 	if err != nil || !st.Running || st.PID != 4242 {
 		t.Fatalf("status %+v %v", st, err)
+	}
+}
+
+// Parse the generated stop protocol on native Windows without stopping any process.
+func TestWindowsStopScriptParses(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell parser is Windows-only")
+	}
+	w := &WindowsLogon{Home: t.TempDir()}
+	script := w.stop()
+	body := script[len(script)-1]
+	out, err := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", "[void][scriptblock]::Create("+psq(body)+")").CombinedOutput()
+	if err != nil {
+		t.Fatalf("stop script syntax: %v %s", err, out)
 	}
 }

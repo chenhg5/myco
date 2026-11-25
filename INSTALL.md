@@ -1046,6 +1046,8 @@ myco upgrade --version v0.16.5        # install a specific version (also works f
 ```
 - It downloads the release file for your OS and architecture and checks it against the release's `SHA256SUMS`. If the check fails, nothing is changed. The replacement is atomic.
 - When run inside an agent's turn (a session woken by the runner), it only replaces the binary and doesn't restart services, so the turn doesn't interrupt itself. It tells you to run `myco runner service restart` later.
+- Runner restarts cancel current work promptly rather than waiting up to ten minutes. Cleanup is bounded to 20 seconds, with a 30-second service stop limit (Windows requests graceful shutdown, then force-stops after 25 seconds). Interrupted agent tasks are recovered once after restart; interrupted command-node tasks are not replayed because their commands may have run in part. Completed results saved locally are delivered without rerunning the task.
+- Before a managed restart, nodes and computers briefly show **Updating**. A new runner clears this automatically; if it never returns, the update indication expires after 90 seconds. Older Hubs remain usable, with a best-effort status fallback. Reinstalling an older service preserves its arguments and environment while updating the stop policy.
 - To skip restarting services: add `--no-restart`.
 - The Hub and each machine are upgraded separately: on the Hub's machine run `sudo myco upgrade` (or `myco upgrade` if it was started with `hub up`), and on each machine run `myco upgrade`. Versions before v0.16.6 don't have this command yet; the first time, upgrade with the original install script.
 - **Upgrading in the App** (since v0.20.29, no terminal needed):

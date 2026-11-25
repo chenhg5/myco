@@ -1,3 +1,4 @@
+import { runnerUpdating } from "@/lib/runner-state";
 import { useEffect, useMemo, useState } from "react";
 import type { LocalSession, LocalState, RecentItem } from "@/appapi";
 import { Camera, MessageCircle, Plus, Search, X } from "lucide-react";
@@ -94,15 +95,15 @@ function Section({ title, rows, projects, now, onOpen }: { title?: string; rows:
           const a = r.st.agent;
           const ps = projectsOf(r, projects);
           return (
-            <button key={`${r.hub.id}/${a.name}`} type="button" className={cn("mb-card", r.st.state === "offline" && "is-away")} onClick={() => onOpen(r)}>
+            <button key={`${r.hub.id}/${a.name}`} type="button" className={cn("mb-card", r.st.state === "offline" && !runnerUpdating(a) && "is-away")} onClick={() => onOpen(r)}>
               <Avatar agent={a} size={44} state={r.st.state} />
               <span className="mb-card-text">
                 <span className="mb-card-name">{nodeName(a, r.hub)}</span>
-                <span className="mb-card-desc">{isWorkspace(a) ? whereOf(r) : a.description || stateWords(r.st.state, a.status_text)}</span>
+                <span className="mb-card-desc">{runnerUpdating(a) ? stateWords(r.st.state, undefined, true) : isWorkspace(a) ? whereOf(r) : a.description || stateWords(r.st.state, a.status_text, runnerUpdating(a))}</span>
                 <span className="mb-card-foot">
                   {ps.length > 0 ? ps.slice(0, 2).map((p) => <span key={p.name} className="mb-chip">{p.title || p.name}</span>) : <span className="mb-chip is-none">{L("还没进项目", "No project yet")}</span>}
                   {ps.length > 2 && <span className="mb-chip">+{ps.length - 2}</span>}
-                  {r.st.state === "offline" && <span className="mb-seen">{timeAgo(a.last_seen_at || a.created_at, now)}{L("在线", " online")}</span>}
+                  {r.st.state === "offline" && !runnerUpdating(a) && <span className="mb-seen">{timeAgo(a.last_seen_at || a.created_at, now)}{L("在线", " online")}</span>}
                 </span>
               </span>
             </button>
@@ -194,7 +195,7 @@ export function MemberSheet({ row, details, projects, rows, now, onClose, onChat
         <input className="ms-desc" value={desc} title={desc} onChange={(e) => setDesc(e.target.value)}
           placeholder={ws ? L("这个文件夹是做什么的", "What this folder is for") : L("它负责什么？比如 维护后端接口和数据库", "What does it do? e.g. Looks after the backend and the database")} aria-label={L("分工", "What it does")} />
         {a.invited_by && <div className="ms-state" data-testid="member-invited-by">{L(`由 ${a.invited_by} 邀请`, `Invited by ${a.invited_by}`)}</div>}
-        <div className="ms-state">{ws ? whereOf(row) : stateWords(row.st.state, a.status_text)}</div>
+        <div className="ms-state">{runnerUpdating(a) ? stateWords(row.st.state, undefined, true) : ws ? whereOf(row) : stateWords(row.st.state, a.status_text, runnerUpdating(a))}</div>
         {dirty && <div className="ms-save"><button type="button" className="app-btn app-btn-primary app-btn-small" disabled={busy || !name.trim()} onClick={() => void save()}>{L("保存", "Save")}</button></div>}
 
         <button type="button" className="app-btn ms-chat" onClick={() => onChat(row)}>

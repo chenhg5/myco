@@ -1152,3 +1152,25 @@ these deletions by step ID, continue with the opaque `next` cursor, and finish o
 `done:true`. Deleted steps not yet sent are omitted. The browser's isolated panel
 can start/stop, delete, and capture text/attribute/HTML extracts; these are local
 human controls, not Hub or agent actions. See [recorder contract](browser-component.md#recording-inside-chrome).
+
+## Planned runner restarts
+
+`PUT /v1/me/runtime` accepts optional `runner_instance` (one opaque ID per process),
+`away: "updating"`, and `restarting_until` (RFC3339). The Hub caps a restart
+lease at 90 seconds. Further reports from the stopping instance preserve the
+lease; a healthy report from a new instance clears it. Late goodbyes from an
+older instance cannot replace the new process's runtime. These fields live in
+existing runtime JSON; no schema migration is needed.
+
+Agent and machine responses include optional `updating: true` while the lease
+is active. This is a temporary display state, not readiness: the existing
+`state`, `online`, and `can_spawn` contract is unchanged. Apps display Updating
+before other presence labels and expire cached leases locally too. A failed
+restart therefore returns to ordinary offline status rather than appearing to
+update forever. Runners clear the lease in their first runtime report, before
+slow CLI version discovery.
+
+Older Hubs may reject unknown fields. On only that specific 400 schema error,
+the client retries without the new fields, retaining existing runtime metadata
+and `away`; authentication and other validation errors are not retried. Apps
+can bound this legacy updating indication using `last_seen_at + 90 seconds`.

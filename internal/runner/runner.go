@@ -57,9 +57,12 @@ type Options struct {
 	// OnQuota hears the account's usage limits whenever a run reports them.
 	OnQuota func(harness.Quota)
 	// OnStop runs once when Run returns because its context ended (the
-	// runner was stopped), after the runs in progress finished: the runner
+	// runner was stopped), after bounded cleanup of in-flight runs: the runner
 	// says goodbye to the hub there, so the app can tell why it is offline.
 	OnStop func()
+	// ShutdownTimeout bounds cancellation/cleanup of in-flight work (default 20s).
+	// Unfinished tasks remain on disk for recovery by the next process.
+	ShutdownTimeout time.Duration
 	// Once processes at most one pull batch and returns.
 	Once bool
 	// Scope selects agent-level (default) or per-thread sessions.
@@ -110,6 +113,7 @@ type Runner struct {
 	settings   api.RunSettings       // the agent's run settings, as last read from the hub
 	ownRunEnd  map[string]time.Time  // session id -> when our last run ended
 	pending    map[string]pendingRun // acked tasks not yet durably finished
+	finishing  map[string]bool       // results currently being delivered by Handle
 	busyStreak map[string]int        // session key -> consecutive busy releases
 	// projectSeen: session key + project whose context this run already
 	// gave, and which version of it (projectVersion); key alone: that
@@ -322,7 +326,7 @@ func (r *Runner) releaseWithContext(ctx context.Context, log *slog.Logger, m api
 }
 
 // Run processes messages until ctx is cancelled (or after one batch if Once).
-// In-flight work is allowed to finish before Run returns.
+// In-flight work is cancelled on shutdown, with bounded cleanup time.
 func (r *Runner) Run(ctx context.Context) error {
 	if r.opts.OnStop != nil {
 		defer func() {
@@ -348,7 +352,27 @@ func (r *Runner) Run(ctx context.Context) error {
 	}()
 	slots := make(chan struct{}, r.opts.Concurrency)
 	var wg sync.WaitGroup
-	defer wg.Wait()
+	defer func() {
+		done := make(chan struct{})
+		go func() { wg.Wait(); close(done) }()
+		// Once still waits for its batch; cancellation must interrupt that wait too.
+		select {
+		case <-done:
+			return
+		case <-ctx.Done():
+		}
+		budget := r.opts.ShutdownTimeout
+		if budget <= 0 {
+			budget = 20 * time.Second
+		}
+		timer := time.NewTimer(budget)
+		defer timer.Stop()
+		select {
+		case <-done:
+		case <-timer.C:
+			r.log.Warn("runner cleanup timed out; unfinished tasks remain for restart recovery")
+		}
+	}()
 	backoff := time.Second
 	for ctx.Err() == nil {
 		// Wait for at least one free slot, then pull as many as are free.
@@ -403,7 +427,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			go func(m api.Message) {
 				defer wg.Done()
 				defer func() { <-slots }()
-				r.Handle(context.WithoutCancel(ctx), m)
+				r.Handle(ctx, m)
 			}(m)
 		}
 		if r.opts.Once {
@@ -415,6 +439,9 @@ func (r *Runner) Run(ctx context.Context) error {
 
 // Handle processes one pulled message end to end.
 func (r *Runner) Handle(ctx context.Context, m api.Message) {
+	if ctx.Err() != nil {
+		return
+	}
 	log := r.log.With("message_id", m.ID, "from", m.From, "type", m.Type, "thread_id", m.ThreadID)
 	rerun := false
 	if m.Type == "task" {
@@ -659,6 +686,19 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		r.mu.Unlock()
 		log.Info("task interrupted by a steer; resuming the session", "session_id", sessionID)
 	}
+	// Save a completed result before any network delivery: shutdown may
+	// happen while that request is retrying. The next process sends the
+	// saved result instead of executing a completed task a second time.
+	if m.Type == "task" && (ctx.Err() == nil || runErr == nil) && !errors.Is(runErr, harness.ErrSessionBusy) {
+		r.mu.Lock()
+		if r.finishing == nil {
+			r.finishing = map[string]bool{}
+		}
+		r.finishing[m.ID] = true
+		r.mu.Unlock()
+		defer func() { r.mu.Lock(); delete(r.finishing, m.ID); r.mu.Unlock() }()
+		r.keepIntended(m, res.Output, runErr)
+	}
 	if tr != nil {
 		tr.close() // the whole trace is on the hub before the task finishes
 	}
@@ -670,6 +710,15 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 	r.mu.Unlock()
 	if err := r.sessions.Put(key, sessionID); err != nil {
 		log.Warn("saving session failed", "err", err)
+	}
+	// A process stop is not a task failure or a partial reply. Keep the
+	// persisted task intact, including a previously retained result, so the
+	// next runner applies the existing one-time replay/command safety rules.
+	if ctx.Err() != nil {
+		if runErr != nil {
+			log.Info("runner stopped; keeping interrupted task for restart recovery")
+			return
+		}
 	}
 	log = log.With("duration", time.Since(start).Round(time.Millisecond))
 

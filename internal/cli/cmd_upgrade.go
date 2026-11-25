@@ -128,7 +128,7 @@ schema migrates on start. Nothing is upgraded automatically: run this when 'myco
 				// runner would kill this very turn.
 				notes = append(notes, "running inside an agent turn, so services were not restarted: run `myco runner service restart` (and restart the hub) when this turn is done")
 			default:
-				restarted, notes = restartMycoServices()
+				restarted, notes = e.restartMycoServices()
 			}
 			out["restarted"], out["notes"] = restarted, notes
 			return e.p.Print(out, func(w io.Writer) {
@@ -163,7 +163,7 @@ func upgradeTarget(getenv func(string) string) (string, error) {
 // restartMycoServices restarts what runs myco on this machine: the user's
 // runner and `hub up` services, and, as root on systemd, active myco-*
 // system units (install-hub.sh's myco-hub, exec nodes, ...).
-func restartMycoServices() (restarted, notes []string) {
+func (e *env) restartMycoServices() (restarted, notes []string) {
 	if home, err := os.UserHomeDir(); err == nil {
 		for _, id := range localHubServiceIDs(config.Dir(config.DefaultPath())) {
 			m, err := service.DetectID(home, service.ExecRunner{}, id)
@@ -173,6 +173,9 @@ func restartMycoServices() (restarted, notes []string) {
 			st, err := m.Status()
 			if err != nil || !st.Installed || !st.Running {
 				continue
+			}
+			if id == service.RunnerID {
+				e.announceRunnerRestart()
 			}
 			if err := m.Restart(); err != nil {
 				notes = append(notes, fmt.Sprintf("could not restart %s: %v", id.Description, err))
@@ -184,7 +187,10 @@ func restartMycoServices() (restarted, notes []string) {
 	if runtime.GOOS == "windows" {
 		// No service manager integration on Windows yet: the runner and hub
 		// run in a terminal, and keep the old binary until restarted.
-		return nil, []string{"restart any running `myco runner start` / `myco hub` processes to use the new version"}
+		if len(restarted) == 0 {
+			notes = append(notes, "restart any running `myco runner start` / `myco hub` processes to use the new version")
+		}
+		return restarted, notes
 	}
 	if runtime.GOOS == "linux" && os.Geteuid() == 0 {
 		if _, err := exec.LookPath("systemctl"); err == nil {

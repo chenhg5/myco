@@ -20,12 +20,12 @@ export function StatusDot({ state, className }: { state: State; className?: stri
   );
 }
 
-export function StateBadge({ state }: { state: State }) {
+export function StateBadge({ state, updating = false }: { state: State; updating?: boolean }) {
   const m = stateMeta[state];
   return (
     <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border bg-card px-2 py-0.5 text-[11px] font-medium text-foreground/80">
-      <StatusDot state={state} />
-      {m.label}
+      <StatusDot state={updating ? "pending" : state} />
+      {updating ? L("正在更新", "Updating") : m.label}
     </span>
   );
 }

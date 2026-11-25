@@ -1,3 +1,4 @@
+import { runnerUpdating } from "@/lib/runner-state";
 import { useEffect, useState } from "react";
 import { useCached } from "@/lib/memo";
 import { ArrowRightLeft, Check, ChevronRight, Copy, Pencil, Plus, Power, Trash2, UserCheck, X } from "lucide-react";
@@ -644,6 +645,9 @@ export function OfflineCard({ row, now, onRefresh }: { row: AgentRow; now: numbe
     }
   };
 
+  if (runnerUpdating(ag, now)) return <section className="app-notice" data-testid="runner-updating">
+    <span className="app-spinner" /><div><b>{L("正在更新", "Updating")}</b><p>{L("更新完成后会自动恢复，任务状态会随后刷新。", "It returns automatically after updating; task status refreshes when it reconnects.")}</p></div>
+  </section>;
   const seen = ag.last_seen_at ? timeAgo(ag.last_seen_at, now) : "";
   // An inbox node has no runner behind it: it comes back when its session
   // runs `myco inbox wait` again, not by restarting a runner.

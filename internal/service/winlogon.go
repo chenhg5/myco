@@ -89,7 +89,17 @@ func (w *WindowsLogon) launch() []string {
 }
 
 func (w *WindowsLogon) stop() []string {
-	return powershell(findProcess + " | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }")
+	// Hidden logon processes cannot receive POSIX signals. New runners watch
+	// a PID-specific request file; allow bounded cleanup before the legacy
+	// force-stop fallback. Never use taskkill /T here: the detached restart
+	// helper can itself be a descendant of the runner it is replacing.
+	dir := filepath.Join(w.Home, ".myco")
+	return powershell("$runners = @(" + findProcess + "); " +
+		"New-Item -ItemType Directory -Force -Path " + psq(dir) + " | Out-Null; " +
+		"$runners | ForEach-Object { [IO.File]::WriteAllText((Join-Path " + psq(dir) + " ('runner-stop-' + $_.ProcessId)), 'stop') }; " +
+		"$until = [DateTime]::UtcNow.AddSeconds(25); " +
+		"while (($runners | Where-Object { Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue }) -and [DateTime]::UtcNow -lt $until) { Start-Sleep -Milliseconds 100 }; " +
+		"$runners | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }")
 }
 
 func (w *WindowsLogon) PlanInstall(sp Spec) (Plan, error) {

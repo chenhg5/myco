@@ -62,6 +62,8 @@ type MachineRepository interface {
 // Runtime is what an agent runs on: its CLI, the CLI's version and model,
 // and the permission level, as reported by its runner.
 type Runtime struct {
+	RunnerInstance  string    `json:"runner_instance,omitempty"`
+	RestartingUntil time.Time `json:"restarting_until,omitzero"`
 	// RunnerSlots is JSON, like Models, to keep Runtime comparable.
 	RunnerSlots string `json:"runner_slots,omitempty"`
 	CLI         string `json:"cli,omitempty"`
@@ -260,7 +262,7 @@ func (r Runtime) Validate() error {
 	if len(r.Providers) > 32768 {
 		return Errf(CodeInvalidArgument, "provider inventory too large")
 	}
-	for _, s := range []string{r.CLI, r.CLIVersion, r.Model, r.ModelSource, r.Access, r.Provider, r.ProviderSource, r.ProviderHost, r.Effort, r.EffortSource, r.MaxAccess, r.Away, r.Env} {
+	for _, s := range []string{r.CLI, r.CLIVersion, r.Model, r.ModelSource, r.Access, r.Provider, r.ProviderSource, r.ProviderHost, r.Effort, r.EffortSource, r.MaxAccess, r.Away, r.Env, r.RunnerInstance} {
 		if len(s) > 120 || strings.ContainsAny(s, "\x00\n\r") {
 			return Errf(CodeInvalidArgument, "runtime fields must be single lines under 120 characters")
 		}
@@ -332,4 +334,11 @@ func (a *Agent) Kind() string {
 // network knows, and nothing else can be started there.
 func (a *Agent) InCloud() bool {
 	return strings.HasSuffix(a.Binding.Harness, "-cloud") || strings.HasPrefix(a.Binding.Environment, "claude-cloud")
+}
+
+// RestartLease bounds planned outages even if a service never returns.
+const RestartLease = 90 * time.Second
+
+func (r Runtime) Updating(now time.Time) bool {
+	return r.Away == "updating" && r.RestartingUntil.After(now) && !r.RestartingUntil.After(now.Add(RestartLease))
 }

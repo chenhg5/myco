@@ -34,7 +34,7 @@ func skillsFromAPI(in []api.Skill) []domain.Skill {
 
 func (s *Server) agentDTO(a *domain.Agent) api.Agent {
 	out := api.Agent{
-		ID: a.ID, Name: string(a.Name), DisplayName: a.DisplayName, Avatar: a.Avatar, Description: a.Description,
+		Updating: a.Runtime.Updating(s.agents.Now()), ID: a.ID, Name: string(a.Name), DisplayName: a.DisplayName, Avatar: a.Avatar, Description: a.Description,
 		Capabilities: nonNil(a.Capabilities),
 		Skills:       skillsDTO(a.Skills),
 		Visibility:   string(domain.VisibilityTeam),
@@ -57,7 +57,7 @@ func (s *Server) agentDTO(a *domain.Agent) api.Agent {
 	if rt := a.Runtime; rt != (domain.Runtime{}) {
 		out.Runtime = &api.Runtime{CLI: rt.CLI, CLIVersion: rt.CLIVersion, Model: rt.Model, ModelSource: rt.ModelSource, Access: rt.Access,
 			Provider: rt.Provider, ProviderSource: rt.ProviderSource, ProviderHost: rt.ProviderHost, Effort: rt.Effort, EffortSource: rt.EffortSource, MaxAccess: rt.MaxAccess, Quota: quotaDTO(rt.Quota),
-			Features: rt.FeatureList(), Away: rt.Away, Env: rt.Env, Models: modelsDTO(rt.ModelList())}
+			RunnerInstance: rt.RunnerInstance, RestartingUntil: rt.RestartingUntil, Features: rt.FeatureList(), Away: rt.Away, Env: rt.Env, Models: modelsDTO(rt.ModelList())}
 		if rt.RunnerSlots != "" {
 			var slots api.RunnerSlots
 			if json.Unmarshal([]byte(rt.RunnerSlots), &slots) == nil {
@@ -94,7 +94,7 @@ func (s *Server) agentDTO(a *domain.Agent) api.Agent {
 
 func (s *Server) machineDTO(v *app.MachineView) api.Machine {
 	out := api.Machine{ID: v.ID, Name: v.Name, Hostname: v.Hostname, OS: v.OS, Arch: v.Arch, MycoVersion: v.MycoVersion,
-		Online: v.Online, LastSeenAt: timePtr(v.LastSeenAt), CanSpawn: v.SpawnNode != "", Legacy: v.Legacy, Agents: []string{},
+		Updating: v.Updating, Online: v.Online, LastSeenAt: timePtr(v.LastSeenAt), CanSpawn: v.SpawnNode != "", Legacy: v.Legacy, Agents: []string{},
 		OwnerID: v.Owner, Owner: s.ownerName(v.Owner)}
 	for _, a := range v.Agents {
 		out.Agents = append(out.Agents, string(a))

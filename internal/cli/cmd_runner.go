@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -61,6 +63,16 @@ notes are never auto-answered. Logs go to stderr.`,
 			{Name: "trace", Kind: Enum, Values: []string{"full", "summary", "off"}, Default: "full", Help: "How much of a task's run the sender sees live in the app: full (what the agent says, thinks and does), summary (which tools ran), off"},
 		},
 		Run: handler(func(e *env) error {
+			_ = os.Remove(runnerRestartPath(e.defaultPath)) // this is the replacement process
+			if runtime.GOOS == "windows" {
+				home, err := os.UserHomeDir()
+				if err != nil {
+					return err
+				}
+				ctx, cancel := watchRunnerStop(e.in.Ctx, filepath.Join(home, ".myco", "runner-stop-"+strconv.Itoa(os.Getpid())))
+				defer cancel()
+				e.in.Ctx = ctx
+			}
 			log := newLogger(e.in.String("log-level"))
 			if path := e.in.String("log-file"); path != "" {
 				f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)

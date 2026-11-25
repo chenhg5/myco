@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/myco-ai/myco/internal/api"
 )
@@ -149,6 +150,37 @@ func TestRuntimeSlotsDoesNotDowngradeOtherErrors(t *testing.T) {
 			}
 			if calls.Load() != 1 {
 				t.Fatal("retried unrelated error")
+			}
+		})
+	}
+}
+
+func TestRuntimeRestartFieldsFallBackOnlyForOlderSchema(t *testing.T) {
+	for _, status := range []int{400, 403} {
+		t.Run(fmt.Sprint(status), func(t *testing.T) {
+			calls := 0
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				var body map[string]any
+				json.NewDecoder(r.Body).Decode(&body)
+				if calls == 1 {
+					w.WriteHeader(status)
+					fmt.Fprint(w, `{"error":"invalid_argument","message":"invalid JSON body: json: unknown field \"runner_instance\""}`)
+					return
+				}
+				if body["runner_instance"] != nil || body["restarting_until"] != nil || body["away"] != "updating" || body["model"] != "demo" {
+					t.Errorf("fallback lost fields: %+v", body)
+				}
+				fmt.Fprint(w, `{}`)
+			}))
+			defer srv.Close()
+			c, _ := New(srv.URL, "token")
+			err := c.ReportRuntime(context.Background(), api.Runtime{RunnerInstance: "process", Away: "updating", RestartingUntil: time.Now().Add(time.Minute), Model: "demo"})
+			if status == 400 && (err != nil || calls != 2) {
+				t.Fatalf("old Hub fallback: %v calls%d", err, calls)
+			}
+			if status == 403 && (err == nil || calls != 1) {
+				t.Fatalf("auth failure retried: %v calls%d", err, calls)
 			}
 		})
 	}

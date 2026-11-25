@@ -1,3 +1,4 @@
+import { runnerUpdating } from "@/lib/runner-state";
 import {
   IconAsterisk, IconBot, IconCloud, IconCode, IconLaptop, IconMachine, IconPerson, IconPointer, IconPrompt,
   IconServer, IconStar, IconTerminal, type IconType,
@@ -250,7 +251,8 @@ export function sessionBusy(st: { state: string; session_in_use?: boolean; recei
 }
 
 /** The state shown for a node: a busy session reads as such, not "Working". */
-export function stateLabel(st: { state: string; session_in_use?: boolean; receiving?: string }, label: string): { dot: string; label: string } {
+export function stateLabel(st: { agent?: Agent; state: string; session_in_use?: boolean; receiving?: string }, label: string): { dot: string; label: string } {
+  if (st.agent && runnerUpdating(st.agent)) return { dot: "pending", label: L("正在更新", "Updating") };
   return sessionBusy(st) ? { dot: "pending", label: L("会话被占用", "Session in use") } : { dot: st.state, label };
 }
 
@@ -298,6 +300,7 @@ export function possiblyStuck(
   if (m.status !== "acked" && m.status !== "held") return false;
   // Held on a question to its sender: it waits for an answer, it is not stuck.
   if (m.status === "held" && m.asking) return false;
+  if (node?.agent && runnerUpdating(node.agent, now)) return false;
   if (node?.offline) return true;
   if (m.id && currentSlots(node?.agent, now)?.queue?.some((q) => q.message_id === m.id)) return false;
   const wait = receivesInSession(node?.agent, node?.receiving) ? STUCK_AFTER_SESSION_MS : STUCK_AFTER_MS;
