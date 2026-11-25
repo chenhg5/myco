@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"image/draw"
 	"image/png"
 	"net/http"
 	"net/http/httptest"
@@ -156,10 +157,15 @@ func TestNativeChromeUnavailableFramesAreMaskedBeforeArtifactStorage(t *testing.
 		if err != nil {
 			t.Fatal(err)
 		}
+		// Scan the entire stored artifact directly, avoiding per-pixel interface
+		// conversion/allocation overhead under the race detector.
+		pixels := image.NewNRGBA(img.Bounds())
+		draw.Draw(pixels, pixels.Bounds(), img, img.Bounds().Min, draw.Src)
 		black, public := 0, 0
-		for y := img.Bounds().Min.Y; y < img.Bounds().Max.Y; y++ {
-			for x := img.Bounds().Min.X; x < img.Bounds().Max.X; x++ {
-				pixel := color.NRGBAModel.Convert(img.At(x, y)).(color.NRGBA)
+		for y := pixels.Bounds().Min.Y; y < pixels.Bounds().Max.Y; y++ {
+			for x := pixels.Bounds().Min.X; x < pixels.Bounds().Max.X; x++ {
+				i := pixels.PixOffset(x, y)
+				pixel := color.NRGBA{R: pixels.Pix[i], G: pixels.Pix[i+1], B: pixels.Pix[i+2], A: pixels.Pix[i+3]}
 				if pixel.R > 200 && pixel.G < 60 && pixel.B < 40 {
 					t.Fatalf("%s artifact leaked iframe pixels at %d,%d", name, x, y)
 				}

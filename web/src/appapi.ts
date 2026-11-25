@@ -13,6 +13,7 @@ export interface NoticeState {
 /** The optional local browser component, without credentials or profile paths. */
 export interface BrowserProfileSettings { proxy: {server: string; bypass: string[]; username: string; has_password: boolean} | null; user_agent: string; lang: string; args: string[] }
 export interface BrowserProfileSettingsInput { proxy: {server: string; bypass: string[]; username: string; password?: string} | null; user_agent: string; lang: string; args: string[] }
+export interface BrowserProfileRemoveInput { id: string }
 export interface BrowserProfile { kind?: "agent"; id: string; name: string; running: boolean; agents: boolean; settings?: BrowserProfileSettings }
 export interface BrowserRecording { id: string; profile: string; url: string; started_at: string; origin: "browser" | "page" }
 export interface BrowserStatus { features?: string[]; recordings?: BrowserRecording[]; update_available?: boolean; protocol: number; version: string; installed: boolean; supported: boolean; reason?: string; browsers: string[]; machine: string; profiles: BrowserProfile[] }

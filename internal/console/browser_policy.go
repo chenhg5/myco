@@ -123,7 +123,7 @@ func (b *Backend) unblockBrowserAgents(hub, profile string) {
 func (b *Backend) browserAgentsBlocked(hub, profile string) bool {
 	b.browser.mu.Lock()
 	defer b.browser.mu.Unlock()
-	return b.browser.blocked[hub+"/"+profile]
+	return b.browser.deletedProfiles[profile] || b.browser.blocked[hub+"/"+profile]
 }
 func (b *Backend) hasBrowserConsent(hub, page string) bool {
 	g := b.grants()

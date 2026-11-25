@@ -61,6 +61,13 @@ func TestBrowserControlWarning(t *testing.T) {
 	}
 }
 
+func TestBrowserControlWarningUsesRequestedHosts(t *testing.T) {
+	got := grantWhat("agent", "profile", []string{"browser.control"}, time.Minute, "example.com", "*.docs.example.com")
+	if !strings.Contains(got, "example.com") || !strings.Contains(got, "*.docs.example.com") || strings.Contains(got, "登录的所有网站") {
+		t.Fatal(got)
+	}
+}
+
 func TestBrowserResourceValidation(t *testing.T) {
 	valid := api.ActionResource{Provider: "browser", ID: "profile-one", Binding: strings.Repeat("a", 64), Name: "Work"}
 	if err := validateProfileResource("browser", &valid); err != nil {

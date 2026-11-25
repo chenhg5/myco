@@ -69,9 +69,12 @@ func (b *Backend) browserHostPolicies(h Hub) []browserHostPolicy {
 	if e != nil {
 		return nil
 	}
-	if b.Local != nil && !slices.ContainsFunc(ps, func(p browserpolicy.Policy) bool { return p.Kind == api.BrowserAgentProfile }) {
-		if dedicated, ok := b.provisionBrowserAgentProfile(h, scope, store); ok {
-			ps = append(ps, dedicated)
+	if b.Local != nil {
+		if _, ok := b.provisionBrowserAgentProfile(h, scope, store); ok {
+			ps, e = store.Profiles(scope)
+			if e != nil {
+				return nil
+			}
 		}
 	}
 	var out []browserHostPolicy

@@ -14,6 +14,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 )
@@ -128,8 +129,9 @@ func (s *Store) SetEnabled(scope Scope, profile string, enabled bool, name ...st
 	return s.setEnabled(scope, profile, enabled, "", name...)
 }
 
-// EnsureAgentProfile coordinates first-time provisioning across desktop processes.
-func (s *Store) EnsureAgentProfile(scope Scope, create func() (string, string, error), activate func(string) error) (Policy, error) {
+// EnsureAgentProfile resolves the machine-wide native agent profile, while
+// permissions and approved scripts remain scoped to this account/workspace.
+func (s *Store) EnsureAgentProfile(scope Scope, resolve func() (string, string, error), activate func(string) error, nativeDedicated ...string) (Policy, error) {
 	path, err := s.path(scope, "@dedicated-agent-profile")
 	if err != nil {
 		return Policy{}, err
@@ -139,33 +141,100 @@ func (s *Store) EnsureAgentProfile(scope Scope, create func() (string, string, e
 		return Policy{}, err
 	}
 	defer unlock()
+	id, name, err := resolve()
+	if err != nil {
+		return Policy{}, err
+	}
 	profiles, err := s.Profiles(scope)
 	if err != nil {
 		return Policy{}, err
 	}
-	var pending Policy
+	var current Policy
 	for _, p := range profiles {
-		switch p.Kind {
-		case "agent":
-			return p, nil
-		case "agent_pending":
-			pending = p
+		if p.Profile == id {
+			current = p
+			continue
+		}
+		if p.Kind == "agent" || p.Kind == "agent_pending" || slices.Contains(nativeDedicated, p.Profile) {
+			if _, err = s.setEnabled(scope, p.Profile, false, "agent_duplicate"); err != nil {
+				return Policy{}, err
+			}
 		}
 	}
-	if pending.Profile == "" {
-		id, name, err := create()
+	if current.Kind == "agent" {
+		return current, nil
+	} // Honor an owner's disabled opt-in.
+	if current.Kind != "agent_pending" {
+		current, err = s.setEnabled(scope, id, false, "agent_pending", name)
 		if err != nil {
 			return Policy{}, err
 		}
-		pending, err = s.setEnabled(scope, id, false, "agent_pending", name)
-		if err != nil {
-			return Policy{}, err
-		}
 	}
-	if err := activate(pending.Profile); err != nil {
+	if err = activate(id); err != nil {
 		return Policy{}, err
 	}
-	return s.setEnabled(scope, pending.Profile, true, "agent")
+	return s.setEnabled(scope, id, true, "agent", name)
+}
+
+// AgentProfileCreationAllowed preserves an owner's deletion of the last
+// dedicated profile across App restarts. Personal profiles remain available.
+func (s *Store) AgentProfileCreationAllowed() (bool, error) {
+	_, err := os.Lstat(filepath.Join(s.dir, "dedicated-profile-deleted"))
+	if errors.Is(err, os.ErrNotExist) {
+		return true, nil
+	}
+	return false, err
+}
+
+// ForgetProfile removes local approvals for a natively deleted profile from
+// every account/workspace. No other profile file is read or changed.
+func (s *Store) ForgetProfile(profile string, stopDefaultCreation ...bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(stopDefaultCreation) > 0 && stopDefaultCreation[0] {
+		if err := os.MkdirAll(s.dir, 0700); err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(s.dir, "dedicated-profile-deleted"), []byte("Owner deleted the last dedicated profile.\n"), 0600); err != nil {
+			return err
+		}
+	}
+	sum := sha256.Sum256([]byte(profile))
+	name := hex.EncodeToString(sum[:]) + ".json"
+	entries, err := os.ReadDir(s.dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		path := filepath.Join(s.dir, entry.Name(), name)
+		if _, err = os.Lstat(path); errors.Is(err, os.ErrNotExist) {
+			continue
+		} else if err != nil {
+			return err
+		}
+		unlock, e := s.lock(path)
+		if e != nil {
+			return e
+		}
+		p, e := s.load(path)
+		if e == nil && p.Profile != profile {
+			e = ErrDenied
+		}
+		if e == nil {
+			e = os.Remove(path)
+		}
+		unlock()
+		if e != nil {
+			return e
+		}
+	}
+	return nil
 }
 
 func (s *Store) setEnabled(scope Scope, profile string, enabled bool, kind string, name ...string) (Policy, error) {

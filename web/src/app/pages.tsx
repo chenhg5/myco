@@ -624,7 +624,7 @@ function PageView({ target, open, active, reload, onMeta }: {
         const action = String(args.action || "");
         const input = (args.args && typeof args.args === "object" ? args.args : {}) as Record<string, unknown>;
         const who = { hub: t.hubId, id: t.id, name: o?.name || p?.name || "" };
-        if (action === "install" || action === "approvals.request" || action === "profiles.configure" || (action === "profiles.allowAgents" && input.allowed === true)) {
+        if (action === "install" || action === "approvals.request" || action === "profiles.configure" || action === "profiles.remove" || (action === "profiles.allowAgents" && input.allowed === true)) {
           let review: BrowserApprovalReview | undefined;
           let settingsReview: BrowserSettingsReview | undefined;
           let confirmedInput = JSON.parse(JSON.stringify(input)) as Record<string,unknown>;
@@ -634,6 +634,14 @@ function PageView({ target, open, active, reload, onMeta }: {
             const profile = status.profiles.find(item => item.id === String(input.id || ""));
             if (!profile) throw Object.assign(new Error(L("找不到这个浏览器资料", "Browser profile not found")), { code: "not_found" });
             text = L(`允许 agent 在当前工作区申请使用「${profile.name}」浏览器资料？它们仍需你批准短期授权，并且只能运行你在本机批准的脚本版本。`, `Allow agents in this workspace to request access to “${profile.name}”? They still need your approval for a short-lived grant and can run only script versions you approved on this computer.`);
+          }
+          if (action === "profiles.remove") {
+            const status = await withConsent(who, () => appApi.browserCall<BrowserStatus>(t.hubId,t.id,remoteInstance,"status"));
+            const profile = status.profiles.find(item=>item.id===String(confirmedInput.id||""));
+            if (!profile) throw Object.assign(new Error(L("找不到这个浏览器资料","Browser profile not found")),{code:"not_found"});
+            if (profile.running) throw Object.assign(new Error(L("请先关闭这个 profile 的浏览器窗口或停止运行","Close this profile’s browser window or stop its run first")),{code:"busy"});
+            if (!status.features?.includes("profile_delete")) throw Object.assign(new Error(L("请先更新浏览器组件","Update the browser component first")),{code:"unsupported"});
+            text=L(`永久删除「${profile.name}」？这会删除它的登录状态、本机下载和所有工作区中的脚本授权，不能恢复。`,`Permanently delete “${profile.name}”? This removes its sign-ins, local downloads and script approvals in every workspace. This cannot be undone.`);
           }
           if (action === "profiles.configure") {
             const status = await withConsent(who, () => appApi.browserCall<BrowserStatus>(t.hubId, t.id, remoteInstance, "status"));

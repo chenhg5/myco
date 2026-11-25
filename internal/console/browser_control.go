@@ -86,21 +86,57 @@ func (b *Backend) provisionBrowserAgentProfile(h Hub, scope browserpolicy.Scope,
 		return browserpolicy.Policy{}, false
 	}
 	native := b.browserComponent()
-	p, err := store.EnsureAgentProfile(scope, func() (string, string, error) {
-		var profile api.BrowserProfile
-		if err := native.Call(ctx, "control-discovery", http.MethodPost, "/profiles", map[string]string{
-			"name": "agent 专用", "kind": api.BrowserAgentProfile,
-		}, &profile); err != nil {
-			return "", "", err
-		}
-		if profile.Kind != api.BrowserAgentProfile || !validBrowserID(profile.ID, "p_", 80) {
-			return "", "", errors.New("component returned an invalid dedicated browser profile")
-		}
-		return profile.ID, profile.Name, nil
-	}, func(id string) error {
+	allowCreate, err := store.AgentProfileCreationAllowed()
+	if err != nil {
+		return browserpolicy.Policy{}, false
+	}
+	profile, dedicated, err := b.resolveBrowserAgentProfile(ctx, native, allowCreate)
+	if err != nil {
+		return browserpolicy.Policy{}, false
+	}
+	p, err := store.EnsureAgentProfile(scope, func() (string, string, error) { return profile.ID, profile.Name, nil }, func(id string) error {
 		return native.Call(ctx, "control-discovery", http.MethodPost, "/profiles/"+url.PathEscape(id)+"/agents", map[string]bool{"allowed": true}, nil)
-	})
+	}, dedicated...)
 	return p, err == nil
+}
+
+// Native profiles are machine-wide; approval policies are deliberately not.
+// Serialize discovery/create across workspaces, including older components
+// whose POST /profiles is not itself idempotent.
+func (b *Backend) resolveBrowserAgentProfile(ctx context.Context, native browserComponentAPI, allowCreate ...bool) (api.BrowserProfile, []string, error) {
+	b.browser.profileMu.Lock()
+	defer b.browser.profileMu.Unlock()
+	var status api.BrowserStatus
+	if err := native.Call(ctx, "control-discovery", http.MethodGet, "/status", nil, &status); err != nil {
+		return api.BrowserProfile{}, nil, err
+	}
+	var canonical api.BrowserProfile
+	ids := []string{}
+	for _, p := range status.Profiles {
+		if p.Kind != api.BrowserAgentProfile {
+			continue
+		}
+		if !validBrowserID(p.ID, "p_", 80) {
+			return api.BrowserProfile{}, nil, errors.New("invalid dedicated profile")
+		}
+		ids = append(ids, p.ID)
+		if canonical.ID == "" || p.ID < canonical.ID {
+			canonical = p
+		}
+	}
+	if canonical.ID == "" {
+		if len(allowCreate) > 0 && !allowCreate[0] {
+			return api.BrowserProfile{}, nil, errors.New("dedicated profile creation disabled")
+		}
+		if err := native.Call(ctx, "control-discovery", http.MethodPost, "/profiles", map[string]string{"name": "agent 专用", "kind": api.BrowserAgentProfile}, &canonical); err != nil {
+			return api.BrowserProfile{}, nil, err
+		}
+		if canonical.Kind != api.BrowserAgentProfile || !validBrowserID(canonical.ID, "p_", 80) {
+			return api.BrowserProfile{}, nil, errors.New("invalid dedicated profile")
+		}
+		ids = append(ids, canonical.ID)
+	}
+	return canonical, ids, nil
 }
 
 func (b *Backend) browserControlAvailable(ctx context.Context, scope string) bool {
@@ -236,6 +272,9 @@ func browserControlFailure(err error, effectful bool) api.ActionJobComplete {
 			"artifact_limit", "component_unavailable", "storage_failed", "outcome_unknown", "host_not_allowed":
 			out := actionFailure(native.Code, "browser control: "+strings.ReplaceAll(native.Code, "_", " "), false, native.Applied)
 			out.Error.Reason = browserControlReason(native.Reason)
+			if out.Error.Reason == "owner_window_open" {
+				out.Error.Message = "Close this profile's browser window before opening agent control."
+			}
 			if api.ValidBrowserAuditHost(native.Host) {
 				out.BrowserHost = native.Host
 			}
@@ -251,7 +290,7 @@ func browserControlFailure(err error, effectful bool) api.ActionJobComplete {
 func browserControlReason(reason string) string {
 	switch reason {
 	case "closed", api.BrowserControlOwnerStopped, "idle_timeout", "grant_expired", "grant_ended",
-		"expired", "profile_disabled", "host_closed", "app_exit", "browser_closed", "cleanup_pending", "component_unavailable", "cancelled":
+		"expired", "profile_disabled", "owner_window_open", "profile_in_use", "profile_starting", "host_closed", "app_exit", "browser_closed", "cleanup_pending", "component_unavailable", "cancelled":
 		return reason
 	default:
 		return ""

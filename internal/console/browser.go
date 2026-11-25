@@ -34,12 +34,14 @@ type browserComponentAPI interface {
 }
 
 type browserState struct {
+	profileMu             sync.Mutex
 	mu                    sync.Mutex
 	component             browserComponentAPI
 	confirmations         map[string]browserConfirmation
 	policies              *browserpolicy.Store
 	identities            map[string]browserOwnerIdentity
 	blocked               map[string]bool
+	deletedProfiles       map[string]bool
 	runs                  *browserRunBook
 	cancelAgents          func(hub, profile string)
 	nextAgentProfileProbe map[browserpolicy.Scope]time.Time
@@ -114,7 +116,7 @@ func (b *Backend) browserRoutes(m *http.ServeMux) {
 		if !decode(w, r, &in) {
 			return
 		}
-		if !validBrowserCall(in) || (in.Action != "install" && in.Action != "profiles.allowAgents" && in.Action != "profiles.configure" && in.Action != "approvals.request") {
+		if !validBrowserCall(in) || (in.Action != "install" && in.Action != "profiles.allowAgents" && in.Action != "profiles.configure" && in.Action != "profiles.remove" && in.Action != "approvals.request") {
 			writeErr(w, browserFailure("invalid_argument", 400))
 			return
 		}
@@ -311,6 +313,8 @@ func (b *Backend) browserCall(ctx context.Context, c *client.Client, h Hub, in b
 			out.Reason = "no_browser"
 		}
 		return out, nil
+	case "profiles.remove":
+		return b.removeBrowserProfile(ctx, c, h, in, scope)
 	case "profiles.create":
 		path = "/profiles"
 		body = map[string]string{"name": text("name")}
@@ -564,6 +568,16 @@ func (e *browserReasonError) Error() string         { return e.cause.Error() }
 func (e *browserReasonError) Unwrap() error         { return e.cause }
 func (e *browserReasonError) BrowserReason() string { return e.reason }
 func browserComponentFailure(err error) error {
+	var native *browserautomation.ComponentError
+	if errors.As(err, &native) && native.Code == "busy" {
+		reason := browserControlReason(native.Reason)
+		message := "This profile is in use."
+		if reason == "owner_window_open" {
+			message = "Close this profile's browser window before opening agent control."
+		}
+		return &browserReasonError{cause: &client.Error{Code: "busy", Status: 409, Message: message}, reason: reason}
+	}
+
 	var pe *browserautomation.ProfileError
 	if errors.As(err, &pe) {
 		reason := pe.Reason
