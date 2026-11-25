@@ -3,6 +3,10 @@ name: ci
 # Runs on every push and pull request. (release.yml publishes when VERSION changes on main.)
 on:
   push:
+    # Release snapshots contain only VERSION/CHANGELOG atop a source already
+    # checked by release-source.py; avoid duplicating every OS/UI job while
+    # the publishing workflow needs those same runners.
+    branches-ignore: ["release/v*"]
   pull_request:
 
 permissions:
