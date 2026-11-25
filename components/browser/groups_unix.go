@@ -28,6 +28,7 @@ type groupProcess struct {
 }
 type browserGroup struct {
 	Version int            `json:"version"`
+	Profile string         `json:"profile"`
 	Nonce   string         `json:"nonce"`
 	PGID    int            `json:"pgid"`
 	Owner   groupProcess   `json:"owner"`
@@ -77,6 +78,9 @@ func validProfileDir(dir string) error {
 	return nil
 }
 func saveBrowserGroup(dir string, r browserGroup) error {
+	if r.Profile == "" {
+		r.Profile = filepath.Base(dir)
+	}
 	raw, err := json.Marshal(r)
 	if err != nil {
 		return err
@@ -125,7 +129,7 @@ func readBrowserGroup(dir string) (browserGroup, error) {
 	defer f.Close()
 	dec := json.NewDecoder(io.LimitReader(f, 64<<10))
 	dec.DisallowUnknownFields()
-	if dec.Decode(&r) != nil || r.Version != 1 || len(r.Nonce) < 20 || r.PGID <= 1 || r.PGID > math.MaxInt32 || r.PGID == syscall.Getpgrp() || len(r.Members) == 0 || len(r.Members) > 512 {
+	if dec.Decode(&r) != nil || r.Version != 1 || !idPattern.MatchString(r.Profile) || len(r.Nonce) < 20 || r.PGID <= 1 || r.PGID > math.MaxInt32 || r.PGID == syscall.Getpgrp() || len(r.Members) == 0 || len(r.Members) > 512 {
 		return r, groupError("leftover_unverified")
 	}
 	for _, p := range r.Members {
@@ -238,6 +242,12 @@ func terminateBrowserGroup(dir string, r browserGroup, reapLeader bool) error {
 		if gone {
 			return removeBrowserGroup(dir)
 		}
+		// Copied profile data must not authorize terminating the source
+		// profile's live browser, even within this same component.
+		if r.Profile != filepath.Base(dir) {
+			return groupError("leftover_unverified")
+		}
+
 		err = snapshotGroup(dir, &r)
 		if err != nil && !errors.Is(err, errBrowserGroupZombies) {
 			var pe *profileProcessError
@@ -256,10 +266,8 @@ func terminateBrowserGroup(dir string, r browserGroup, reapLeader bool) error {
 		until := time.Now().Add(phase.wait)
 		for time.Now().Before(until) {
 			// Linux subreaper adopts orphaned Chrome helpers. Cmd.Wait owns the leader.
-			for _, p := range r.Members {
-				if reapLeader || p.PID != r.PGID {
-					reapBrowserChild(p.PID)
-				}
+			if current, scanErr := groupProcesses(r.PGID); scanErr == nil {
+				reapKnownBrowserChildren(r, current, reapLeader)
 			}
 			gone, err = groupGone(r.PGID)
 			if err != nil {
@@ -494,7 +502,7 @@ func guardBrowser(cmd *exec.Cmd, dir string) (func() error, error) {
 	for {
 		var err error
 		r, err = readBrowserGroup(dir)
-		if err == nil && r.PGID == cmd.Process.Pid {
+		if err == nil && r.PGID == cmd.Process.Pid && r.Profile == filepath.Base(dir) {
 			break
 		}
 		if gone, _ := groupGone(cmd.Process.Pid); gone {
@@ -566,4 +574,18 @@ func recoverFailedBrowserCommand(cmd *exec.Cmd, dir string) error {
 func (e *profileProcessError) Unwrap() error { return e.cause }
 func groupCause(reason string, cause error) error {
 	return &profileProcessError{Reason: reason, cause: cause}
+}
+
+func reapKnownBrowserChildren(record browserGroup, current []groupProcess, reapLeader bool) {
+	for _, p := range current {
+		if p.PGID != record.PGID || (!reapLeader && p.PID == record.PGID) {
+			continue
+		}
+		for _, known := range record.Members {
+			if sameProcess(p, known) {
+				reapBrowserChild(p.PID)
+				break
+			}
+		}
+	}
 }

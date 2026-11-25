@@ -237,8 +237,9 @@ scrolling are excluded. Scroll positions remain absolute replay destinations.
 
 Each managed browser starts in its own process group. A private launcher writes a
 0600 record in that profile before executing the locally selected Chrome/Edge;
-no arbitrary executable is accepted. Records contain a generation, component
-identity, and process start fingerprints, never browser credentials. Member
+no arbitrary executable is accepted. Records bind the profile ID, generation, component
+identity, and process start fingerprints, never browser credentials. Copied
+profile records cannot authorize closing another profile's browser. Member
 snapshots refresh every ten seconds and immediately before shutdown.
 
 Shutdown sends SIGTERM to the verified group, waits up to five seconds, then

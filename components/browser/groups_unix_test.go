@@ -102,7 +102,7 @@ func groupFixture(t *testing.T, profileArgument ...bool) (string, *exec.Cmd, bro
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := browserGroup{Version: 1, Nonce: "test-fixture-generation", PGID: cmd.Process.Pid, Owner: owner, Members: members}
+	r := browserGroup{Version: 1, Profile: filepath.Base(dir), Nonce: "test-fixture-generation", PGID: cmd.Process.Pid, Owner: owner, Members: members}
 	if err = saveBrowserGroup(dir, r); err != nil {
 		t.Fatal(err)
 	}
@@ -416,5 +416,22 @@ func TestBrowserRecordRejectsUnsafeGroupNumbers(t *testing.T) {
 		if _, err := readBrowserGroup(dir); err == nil {
 			t.Fatalf("unsafe group number accepted: %d", value)
 		}
+	}
+}
+
+func TestCopiedProfileRecordCannotKillSourceBrowser(t *testing.T) {
+	dir, _, record, _ := groupFixture(t)
+	copyDir := filepath.Join(filepath.Dir(dir), "p_another")
+	if err := os.MkdirAll(copyDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := saveBrowserGroup(copyDir, record); err != nil {
+		t.Fatal(err)
+	}
+	if err := recoverProfileProcesses(copyDir, nil); err == nil {
+		t.Fatal("copied record authorized another profile's group")
+	}
+	if gone, _ := groupGone(record.PGID); gone {
+		t.Fatal("source profile browser was killed")
 	}
 }
