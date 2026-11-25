@@ -196,18 +196,22 @@ public struct SilentSpeech: VoiceSpeech {
 extension ScriptedVoiceModel {
     /// The demo's model: it answers a question about progress itself and
     /// passes a request on, as the real one is told to.
-    public static func demo() -> ScriptedVoiceModel {
+    public static func demo(language: AppLanguage = .current) -> ScriptedVoiceModel {
         ScriptedVoiceModel { messages in
+            func say(_ zh: String, _ en: String) -> String { language == .zh ? zh : en }
             let last = messages.last
             if last?.role == "tool" {
-                return Answer(L("好，已经转给它了。", "Done, I passed that on."))
+                return Answer(say("好，我已经开始做了。", "I'm on it."))
             }
             if last?.role == "system" {
-                return Answer(L("它那边有新消息了，详细的放在对话里了。", "There is news from it; the details are in the chat."))
+                if last?.content.contains("电话刚接通") == true || last?.content.contains("call has just connected") == true {
+                    return Answer(say("我在，有什么要我做的？", "Hi, I'm here. What can I do for you?"))
+                }
+                return Answer(say("我这边有新进展了，详细的我写在对话里了。", "I have an update; I put the details in the chat."))
             }
             let said = last?.content ?? ""
             if said.contains("到哪") || said.lowercased().contains("how far") {
-                return Answer(L("它还在做，刚把下载页的版式改完，正在核对链接。", "Still at it: the download page's layout is done, and it is checking the links."))
+                return Answer(say("我还在做，刚把下载页的版式改完，正在核对链接。", "I'm still at it: I finished the download page's layout, and I'm checking the links."))
             }
             let arguments = ["text": said, "what": String(said.prefix(12)), "their_words": said]
             let json = (try? JSONSerialization.data(withJSONObject: arguments)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"

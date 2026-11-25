@@ -761,7 +761,7 @@ struct ConversationBody: View {
                 }
                 return VoiceBarView.Line(id: line.id, kind: kind, text: line.text)
             },
-            meLabel: L("你", "You"), voiceLabel: L("语音", "Voice"),
+            meLabel: L("你", "You"), voiceLabel: name,
             muteLabel: call.muted ? L("取消静音", "Unmute") : L("静音", "Mute"), hangUpLabel: L("挂断", "Hang up"),
             onMute: { call.setMuted(!call.muted) },
             onHangUp: { call.hangUp() })

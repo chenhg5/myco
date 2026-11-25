@@ -62,6 +62,16 @@ The remote App UI test uses a demo workspace to exercise real WebKit offer
 creation, native consent, background revocation and controller-only permissions.
 A fixture is not a substitute for testing video and input against a real host.
 
+## Voice calls
+
+The voice is the agent in the current chat: it greets you when the call connects,
+speaks about its own work, and reports its results and questions in the call's
+language (Chinese or English). Requests start work or add to the current task;
+stopping and checking progress use that same conversation. Speaking interrupts
+the greeting or an answer. Voice captions use the agent's name, and voice samples
+use the same wording as desktop. Messages keep the shared voice-origin marker,
+so older desktop and phone clients still show the request and its original words.
+
 ## Layout
 
 ```
