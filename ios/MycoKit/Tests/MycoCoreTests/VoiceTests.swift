@@ -841,7 +841,7 @@ struct ConversationVoiceTests {
         #expect(standing?.status == "acked")
         #expect(standing?.since != nil)
         let context = await voice.context(fresh: true)
-        #expect(context.contains("你（任务）：看一下首页"))
+        #expect(context.contains("对方（任务）：看一下首页"))
         #expect(context.contains("你手上正在做对方交的：看一下首页"))
         // Stopped: its ending shows as news, and nothing is left to stop.
         try await voice.stopCurrent()

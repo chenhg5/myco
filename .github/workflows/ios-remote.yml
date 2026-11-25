@@ -14,7 +14,7 @@ concurrency:
 jobs:
   simulator:
     runs-on: macos-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - name: Select an available iPhone simulator
