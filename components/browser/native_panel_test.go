@@ -492,8 +492,12 @@ func TestNativeChromeRecorderPanel(t *testing.T) {
 				return false
 			})
 			beforeKeys := len(nodesOfType("scroll"))
-			if _, err = child.Eval(`()=>document.body.focus()`); err != nil {
+			position, err := child.Eval(`()=>{document.body.focus({preventScroll:true});return scrollY}`)
+			if err != nil {
 				t.Fatal(err)
+			}
+			if position.Value.Num() <= 0 {
+				t.Fatal("wheel position was lost before the native Home key")
 			}
 			time.Sleep(450 * time.Millisecond) // Focus is an action; wait for the quiet window.
 			for _, kind := range []string{"keyDown", "keyUp"} {
@@ -501,7 +505,16 @@ func TestNativeChromeRecorderPanel(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			wait(func() bool { return len(nodesOfType("scroll")) > beforeKeys })
+			// Focus and native scrolling can produce intermediate document
+			// positions. Wait for Home's destination, not the next scroll event.
+			wait(func() bool {
+				for _, n := range nodesOfType("scroll")[beforeKeys:] {
+					if n.DY == 0 {
+						return true
+					}
+				}
+				return false
+			})
 			if got := nodesOfType("press"); len(got) != 0 {
 				t.Fatalf("page navigation recorded both key and scroll: %+v", got)
 			}
@@ -574,6 +587,7 @@ func TestNativeChromeRecorderPanel(t *testing.T) {
 				t.Fatal("stop did not finish recording")
 			}
 			counts := map[string]int{}
+			wheelScroll, homeScroll := false, false
 			for _, n := range all.Steps {
 				counts[n.Type]++
 				if n.Target != nil {
@@ -600,11 +614,13 @@ func TestNativeChromeRecorderPanel(t *testing.T) {
 					}
 					raw, _ := json.Marshal(n)
 					t.Logf("retained document scroll: %s", raw)
+					wheelScroll = wheelScroll || n.DY > 0
+					homeScroll = wheelScroll && n.DY == 0
 				default:
 					t.Fatalf("unexpected recorded action: %+v", n)
 				}
 			}
-			if counts["extract"] != 7 || counts["click"] != 1 || counts["type"] != 1 || counts["scroll"] != 2 || counts["screenshot"] != 1 {
+			if counts["extract"] != 7 || counts["click"] != 1 || counts["type"] != 1 || !wheelScroll || !homeScroll || counts["screenshot"] != 1 {
 				t.Fatalf("wrong recorded actions: %v", counts)
 			}
 			var fromPage struct {
