@@ -2,7 +2,7 @@
 function(op,arg) {
   const original=this, el=this.nodeType===1?this:this.parentElement;
   const parent=n=>n.parentElement||(n.getRootNode?.().host)||null;
-  const sensitive=n=>n?.nodeType===1&&(n.matches('input[type="password"],[data-sensitive],[autocomplete="one-time-code"]')||/^(?:otp|one.?time(?:.?code)?|verification.?code|security.?code)$/i.test(n.getAttribute('name')||'')||/otp|one.?time/i.test(n.getAttribute('autocomplete')||''));
+  const sensitive=__MYCO_SENSITIVE_POLICY__;
   let secret=false,panel=false;
   for(let n=el;n;n=parent(n)){if(sensitive(n))secret=true;if(n.id==='__myco_recording_panel__')panel=true;}
   const connected=!!original.isConnected&&!!el&&el.ownerDocument===document;
@@ -23,7 +23,7 @@ function(op,arg) {
   const descendants=n=>[n,...(n.querySelectorAll?.('*')||[])];
   let axisAligned=true;
   for(let n=el;n;n=parent(n)){const m=getComputedStyle(n).transform;if(m&&m!=='none'){const t=new DOMMatrix(m);if(Math.abs(t.b)>0.0001||Math.abs(t.c)>0.0001||t.a<=0||t.d<=0)axisAligned=false;}}
-  const info={generation,node_type:original.nodeType,scale_x:rect&&el.offsetWidth?rect.width/el.offsetWidth:1,scale_y:rect&&el.offsetHeight?rect.height/el.offsetHeight:1,axis_aligned:axisAligned,border_x:el?.clientLeft||0,border_y:el?.clientTop||0,connected,panel,sensitive:secret,disabled,interactive,visible,in_viewport:visible&&rect.bottom>0&&rect.right>0&&rect.top<innerHeight&&rect.left<innerWidth,rect:rect?{x:rect.x,y:rect.y,width:rect.width,height:rect.height}:null,value:!secret&&'value'in(el||{})?String(el.value):''};
+  const info={sensitive_descendants:sensitive(el,true),generation,node_type:original.nodeType,scale_x:rect&&el.offsetWidth?rect.width/el.offsetWidth:1,scale_y:rect&&el.offsetHeight?rect.height/el.offsetHeight:1,axis_aligned:axisAligned,border_x:el?.clientLeft||0,border_y:el?.clientTop||0,connected,panel,sensitive:secret,disabled,interactive,visible,in_viewport:visible&&rect.bottom>0&&rect.right>0&&rect.top<innerHeight&&rect.left<innerWidth,rect:rect?{x:rect.x,y:rect.y,width:rect.width,height:rect.height}:null,value:!secret&&'value'in(el||{})?String(el.value):''};
   if(op==='inspect')return info;
   if(op==='verify_focus'){
     const root=el?.getRootNode();let active=root?.activeElement;
@@ -36,7 +36,16 @@ function(op,arg) {
     const hit=root.elementFromPoint?.(x,y)||document.elementFromPoint(x,y);
     return {hit:!!hit&&(hit===el||el.contains(hit))};
   }
-  if(op==='describe')return connected&&!panel?window.__mycoDescribe(original):null;
+  if(op==='describe') {
+    if(!connected||panel)return null;
+    const target=window.__mycoDescribe(original);
+    if(secret||sensitive(el,true)||arg?.private){
+      const css=node=>{const path=[];for(let n=node;n&&n.nodeType===1;n=n.parentElement){let part=n.localName;const siblings=n.parentElement&&[...n.parentElement.children].filter(x=>x.localName===n.localName);if(siblings?.length>1)part+=':nth-of-type('+(siblings.indexOf(n)+1)+')';path.unshift(part);}return path.join(' > ');};
+      target.locators=[{kind:'css',value:css(el)}];target.shadow=[];
+      for(let root=el.getRootNode();root?.host;root=root.host.getRootNode())target.shadow.unshift(css(root.host));
+    }
+    return target;
+  }
   if(op==='select') {
     if(secret||disabled||!el.matches('select'))return {error:'target_not_interactable'};
     const option=[...el.options].find(o=>o.value===arg&&!o.disabled);

@@ -1,5 +1,5 @@
 () => {
-  const nodes=[],seen=new Set();let unsafe=false;
+  const nodes=[],seen=new Set(),isSensitive=__MYCO_SENSITIVE_POLICY__;let unsafe=false;
   function walk(root,parent,depth) {
     if(!root||depth>40||nodes.length>=2000||seen.has(root))return;
     seen.add(root);
@@ -7,7 +7,7 @@
       if(nodes.length>=2000)break;
       const i=nodes.length;
       nodes.push({tag:e.localName,role:e.getAttribute('role')||'',parent});
-      if(e.type==='password'||/password|one-time-code/i.test(e.autocomplete||'')||e.hasAttribute('data-sensitive'))unsafe=true;
+      if(isSensitive(e))unsafe=true;
       if(e.localName==='iframe'||e.localName==='frame') {
         try {if(e.contentDocument)walk(e.contentDocument,i,depth+1);else unsafe=true;}catch(_){unsafe=true;}
       }

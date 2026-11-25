@@ -18,7 +18,8 @@ import (
 )
 
 //go:embed recorder.js
-var recorderSource string
+var recorderTemplate string
+var recorderSource = withSensitivePolicy(recorderTemplate)
 
 type engineInternal struct{}
 
@@ -185,6 +186,11 @@ func (s *session) installTarget(evt proto.TargetAttachedToTarget) (err error) {
 		rec, control := s.recorder, s.control
 		s.mu.Unlock()
 		if control != nil {
+			control.mu.Lock()
+			if control.pending && time.Now().Before(control.navigationUntil) {
+				control.navigationTracked[info.TargetID] = true
+			}
+			control.mu.Unlock()
 			control.tabName(info.TargetID)
 			if info.OpenerID != "" {
 				s.mu.Lock()

@@ -77,9 +77,12 @@ an ID with the same operation and parameters reuses its immutable outcome;
 changing parameters returns `conflict`. Outcomes are never replayed to a closed
 session, except the voluntary close response. Requests arriving while another
 operation runs return `busy`; a forced close bypasses that operation lock.
+Closed sessions and their cached responses expire after a two-minute retry window,
+so cache limits do not become lifetime limits for a running component.
 
 Open takes `profile`, optional HTTP(S) `url`, and desktop-injected `grant_id`,
-`actor: {id, name}`, `expires_at` (RFC 3339), and optional `hosts`. A profile may
+`actor: {id, name}`, `expires_at` (RFC 3339, within thirty minutes), and optional
+`hosts`. A profile may
 have `kind: "agent"` to identify a clean, dedicated agent profile. Agent access
 still requires the owner's explicit profile preference and grant. Sessions are
 headed and exclusive; opening a profile already in use returns `busy`.
@@ -153,10 +156,15 @@ request parameters, full URLs and page contents do not belong in audit records.
 
 `hosts` accepts exact hostnames or subdomain patterns such as `*.example.com`.
 A wildcard excludes its bare parent domain. Ports do not change hostname matching.
-An omitted or empty list means unrestricted domains. Explicit navigation is
+An omitted list means unrestricted domains; an explicit empty list is rejected.
+Explicit navigation is
 checked before dispatch. A top-level redirect or link crossing the scope is
 rolled back; a new disallowed tab is closed. The response and event use
-`host_not_allowed`. Iframes and subresources are outside this top-level scope.
+`host_not_allowed` on the originating action, before it enters the draft.
+Actions observe a two-second causal window and wait for navigations started
+inside it to commit, including slow redirects and popup documents. Derived URL
+waits use a literal prefix capped at 8 KiB of JSON, with parameter-like fragments
+removed. Iframes and subresources are outside this top-level scope.
 
 The draft budget is 200 steps and 192 KiB for serialized `steps`; operations
 reserve their logical step and any derived navigation or popup before dispatch.

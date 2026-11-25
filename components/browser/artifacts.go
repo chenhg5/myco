@@ -98,7 +98,8 @@ func (e *engine) storeArtifact(owner, kind string, data []byte) (string, error) 
 }
 
 //go:embed snapshot.js
-var snapshotSource string
+var snapshotTemplate string
+var snapshotSource = withSensitivePolicy(snapshotTemplate)
 
 func (e *engine) snapshot(owner string, p *rod.Page, t *target) (string, error) {
 	ctx, cancel := context.WithTimeout(p.GetContext(), 4*time.Second)

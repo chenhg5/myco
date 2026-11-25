@@ -70,6 +70,7 @@ func controlFailure(code, reason string) *controlError {
 }
 
 type controlRequest struct {
+	created time.Time
 	digest  [32]byte
 	done    chan struct{}
 	raw     []byte
@@ -112,6 +113,7 @@ type controlSession struct {
 	mu               sync.Mutex
 	expires, last    time.Time
 	closed           bool
+	closedAt         time.Time
 	code, reason     string
 	steps            []node
 	variable         int
@@ -129,6 +131,10 @@ type controlSession struct {
 	// A trusted input may cause one top-level navigation and one popup. Reserve
 	// both before dispatch, coalesce redirects, and never record iframe traffic.
 	navigationUntil           time.Time
+	navigationPending         bool
+	navigationLoads           map[proto.TargetTargetID]bool
+	navigationTracked         map[proto.TargetTargetID]bool
+	pendingPopupURL           string
 	navigationTab             proto.TargetTargetID
 	navigationNode, popupNode string
 	pending                   bool
@@ -237,11 +243,16 @@ func controlDecode(r *http.Request, method string) (controlInput, []byte, error)
 	if method != "open" && in.Session == "" {
 		return in, nil, errors.New("invalid_argument")
 	}
+	if method == "open" {
+		if _, present := fields["hosts"]; present && len(in.Hosts) == 0 {
+			return in, nil, errors.New("invalid_argument")
+		}
+	}
 	if method == "snapshot" && (in.MaxNodes < 0 || in.MaxNodes > 400 || (in.Mode != "" && in.Mode != "a11y" && in.Mode != "text")) {
 		return in, nil, errors.New("invalid_argument")
 	}
 	// Normalize key ordering for retries from different JSON encoders.
-	canonical, _ := json.Marshal(fields)
+	canonical, _ := json.Marshal(in)
 	return in, canonical, nil
 }
 func (e *engine) controlCall(w http.ResponseWriter, r *http.Request, method string) {
@@ -263,6 +274,7 @@ func (e *engine) controlCall(w http.ResponseWriter, r *http.Request, method stri
 	}
 	key := owner + "\x00" + in.RequestID
 	digest := sha256.Sum256(append([]byte(method+"\x00"), raw...))
+	e.pruneControls(time.Now())
 	e.mu.Lock()
 	if e.controls == nil {
 		e.controls = map[string]*controlSession{}
@@ -316,7 +328,7 @@ func (e *engine) controlCall(w http.ResponseWriter, r *http.Request, method stri
 		fail(w, "busy", 409)
 		return
 	}
-	request := &controlRequest{digest: digest, done: make(chan struct{}), session: in.Session, method: method}
+	request := &controlRequest{created: time.Now(), digest: digest, done: make(chan struct{}), session: in.Session, method: method}
 	e.controlRequests[key] = request
 	e.controlCacheBytes += 256 << 10
 	e.mu.Unlock()
@@ -397,6 +409,7 @@ func (c *controlSession) terminateLocked(code, reason string) {
 		return
 	}
 	c.closed = true
+	c.closedAt = time.Now()
 	c.code = code
 	c.reason = reason
 	c.cancel()
@@ -567,7 +580,7 @@ func controlNativeError(err error) *controlError {
 	return controlFailure(code, "")
 }
 func (e *engine) controlOpen(ctx context.Context, owner string, in controlInput) (map[string]any, *controlError) {
-	if in.Profile == "" || in.GrantID == "" || in.Actor.ID == "" || len(in.Actor.ID) > 160 || len(in.Actor.Name) > 160 || !in.ExpiresAt.After(time.Now()) || (!in.ExpiresAt.Before(time.Now().Add(24 * time.Hour))) || in.URL != "" && checkedURL(in.URL) != nil {
+	if in.Profile == "" || in.GrantID == "" || in.Actor.ID == "" || len(in.Actor.ID) > 160 || len(in.Actor.Name) > 160 || !in.ExpiresAt.After(time.Now()) || (!in.ExpiresAt.Before(time.Now().Add(30 * time.Minute))) || in.URL != "" && checkedURL(in.URL) != nil {
 		return nil, controlFailure("invalid_argument", "")
 	}
 	hosts, err := normalizeControlHosts(in.Hosts)
@@ -737,7 +750,7 @@ func (c *controlSession) budgetLocked(nodes ...node) error {
 	all := append(append([]node{}, c.steps...), nodes...)
 	if time.Now().Before(c.navigationUntil) {
 		if c.reservedWait {
-			all = append(all, node{ID: "n_reserved", Type: "wait", Wait: "url", Value: strings.Repeat("<", 8192)})
+			all = append(all, node{ID: "n_reserved", Type: "wait", Wait: "url", Value: reservedNavigationValue()})
 		}
 		if c.reservedPopup {
 			all = append(all, node{ID: "n_reserved", Type: "tab", Tab: "popup"})

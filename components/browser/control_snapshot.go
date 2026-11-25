@@ -16,7 +16,8 @@ import (
 )
 
 //go:embed control_dom.js
-var controlDOM string
+var controlDOMTemplate string
+var controlDOM = withSensitivePolicy(controlDOMTemplate)
 
 type controlRect struct {
 	X      float64 `json:"x"`
@@ -40,24 +41,25 @@ type controlNode struct {
 	InViewport  bool         `json:"in_viewport"`
 }
 type controlDOMInfo struct {
-	Generation  uint64       `json:"generation"`
-	NodeType    int          `json:"node_type"`
-	ScaleX      float64      `json:"scale_x"`
-	ScaleY      float64      `json:"scale_y"`
-	AxisAligned bool         `json:"axis_aligned"`
-	BorderX     float64      `json:"border_x"`
-	BorderY     float64      `json:"border_y"`
-	Connected   bool         `json:"connected"`
-	Panel       bool         `json:"panel"`
-	Sensitive   bool         `json:"sensitive"`
-	Unsafe      bool         `json:"unsafe"`
-	Disabled    bool         `json:"disabled"`
-	Visible     bool         `json:"visible"`
-	InViewport  bool         `json:"in_viewport"`
-	Interactive bool         `json:"interactive"`
-	Rect        *controlRect `json:"rect"`
-	Text        string       `json:"text"`
-	Value       string       `json:"value"`
+	SensitiveDescendants bool         `json:"sensitive_descendants"`
+	Generation           uint64       `json:"generation"`
+	NodeType             int          `json:"node_type"`
+	ScaleX               float64      `json:"scale_x"`
+	ScaleY               float64      `json:"scale_y"`
+	AxisAligned          bool         `json:"axis_aligned"`
+	BorderX              float64      `json:"border_x"`
+	BorderY              float64      `json:"border_y"`
+	Connected            bool         `json:"connected"`
+	Panel                bool         `json:"panel"`
+	Sensitive            bool         `json:"sensitive"`
+	Unsafe               bool         `json:"unsafe"`
+	Disabled             bool         `json:"disabled"`
+	Visible              bool         `json:"visible"`
+	InViewport           bool         `json:"in_viewport"`
+	Interactive          bool         `json:"interactive"`
+	Rect                 *controlRect `json:"rect"`
+	Text                 string       `json:"text"`
+	Value                string       `json:"value"`
 }
 type controlFrame struct {
 	id      proto.PageFrameID
@@ -114,11 +116,8 @@ func (c *controlSession) framesFor(p *rod.Page) []controlFrame {
 		}
 	}
 	sort.Slice(out, func(i, j int) bool {
-		if out[i].id == root {
-			return true
-		}
-		if out[j].id == root {
-			return false
+		if out[i].id == root || out[j].id == root {
+			return out[i].id == root && out[j].id != root
 		}
 		return out[i].name < out[j].name
 	})
@@ -173,6 +172,44 @@ func (c *controlSession) inspect(ctx context.Context, r controlRef) (controlDOMI
 	}
 	defer c.call(ctx, r.sid, "Runtime.releaseObject", map[string]any{"objectId": id}, nil)
 	err = c.function(ctx, r.sid, id, "inspect", nil, &info)
+	if err == nil && info.Connected && !info.Panel && !info.Sensitive {
+		c.browser.mu.Lock()
+		parent := c.browser.frames[r.frame].Parent
+		c.browser.mu.Unlock()
+		if parent != "" {
+			p := pForRef(c.browser, r)
+			if p == nil {
+				return info, errors.New("stale_ref")
+			}
+			var ownerFrame controlFrame
+			found := false
+			for _, f := range c.framesFor(p) {
+				if f.id == parent {
+					ownerFrame = f
+					found = true
+					break
+				}
+			}
+			if !found {
+				return info, errors.New("stale_ref")
+			}
+			var owner struct {
+				Backend proto.DOMBackendNodeID `json:"backendNodeId"`
+			}
+			if c.call(ctx, ownerFrame.sid, "DOM.getFrameOwner", map[string]any{"frameId": r.frame}, &owner) != nil {
+				return info, errors.New("stale_ref")
+			}
+			inherited, e := c.inspect(ctx, controlRef{sid: ownerFrame.sid, frame: parent, tab: r.tab, backend: owner.Backend, epoch: ownerFrame.epoch})
+			if e != nil {
+				return info, e
+			}
+			if inherited.Sensitive {
+				info.Sensitive = true
+				info.Value = ""
+				info.Text = ""
+			}
+		}
+	}
 	if err == nil && (!info.Connected || info.Panel || r.bound && r.generation != info.Generation) {
 		err = errors.New("stale_ref")
 	}
@@ -225,6 +262,7 @@ func (c *controlSession) snapshot(ctx context.Context, p *rod.Page, mode string,
 	truncated := false
 	layouts := map[proto.TargetSessionID]*proto.DOMSnapshotCaptureSnapshotResult{}
 	for _, frame := range frames {
+		candidates := []controlNode{}
 		if _, exists := layouts[frame.sid]; !exists {
 			var raw proto.DOMSnapshotCaptureSnapshotResult
 			if c.call(ctx, frame.sid, "DOMSnapshot.captureSnapshot", map[string]any{"computedStyles": []string{"cursor"}}, &raw) == nil {
@@ -243,6 +281,18 @@ func (c *controlSession) snapshot(ctx context.Context, p *rod.Page, mode string,
 		frameResults = append(frameResults, map[string]any{"id": frame.name, "status": status})
 		if err != nil {
 			continue
+		}
+		tainted := map[proto.AccessibilityAXNodeID]bool{}
+		parents := map[proto.AccessibilityAXNodeID]proto.AccessibilityAXNodeID{}
+		for _, a := range tree.Nodes {
+			parents[a.NodeID] = a.ParentID
+		}
+		for _, a := range tree.Nodes {
+			if layout[a.BackendDOMNodeID].sensitive {
+				for id, depth := a.NodeID, 0; id != "" && depth < 128; id, depth = parents[id], depth+1 {
+					tainted[id] = true
+				}
+			}
 		}
 		sort.SliceStable(tree.Nodes, func(i, j int) bool {
 			return layout[tree.Nodes[i].BackendDOMNodeID].visible && !layout[tree.Nodes[j].BackendDOMNodeID].visible
@@ -267,7 +317,8 @@ func (c *controlSession) snapshot(ctx context.Context, p *rod.Page, mode string,
 			if a.ParentID != "" {
 				n.Parent = frame.name + "n" + string(a.ParentID)
 			}
-			if info.Sensitive {
+			if info.Sensitive || info.SensitiveDescendants || tainted[a.NodeID] {
+				n.Redacted = true
 				n.Name = "[redacted]"
 			} else {
 				n.Value = truncate(info.Value, 1024)
@@ -280,7 +331,7 @@ func (c *controlSession) snapshot(ctx context.Context, p *rod.Page, mode string,
 				r.bound = true
 				n.Ref = c.ref(r)
 				if n.Ref == "" {
-					return nil, errors.New("stale_ref")
+					continue
 				}
 			} else {
 				n.Interactive = false
@@ -294,7 +345,7 @@ func (c *controlSession) snapshot(ctx context.Context, p *rod.Page, mode string,
 				}
 			}
 			seen[a.BackendDOMNodeID] = true
-			nodes = append(nodes, n)
+			candidates = append(candidates, n)
 		}
 		supplemented := 0
 		for id, l := range layout {
@@ -306,8 +357,19 @@ func (c *controlSession) snapshot(ctx context.Context, p *rod.Page, mode string,
 				break
 			}
 			if n, ok := c.pointerNode(ctx, p.TargetID, frame, id); ok {
-				nodes = append(nodes, n)
+				candidates = append(candidates, n)
 				supplemented++
+			}
+		}
+		c.mu.Lock()
+		sameDocument := c.epochs[frame.id] == frame.epoch
+		c.mu.Unlock()
+		if sameDocument {
+			nodes = append(nodes, candidates...)
+		} else {
+			frameResults[len(frameResults)-1]["status"] = "unavailable"
+			if frame.id == frames[0].id {
+				return nil, errors.New("stale_ref")
 			}
 		}
 	}

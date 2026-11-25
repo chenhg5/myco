@@ -31,6 +31,9 @@ type engine struct {
 	controlOpening    map[string]bool
 	controlRequests   map[string]*controlRequest
 	controlCacheBytes int
+	controlStop       chan struct{}
+	controlDone       chan struct{}
+	controlStopOnce   sync.Once
 }
 type artifact struct {
 	Thumbnail string `json:"thumbnail,omitempty"`
@@ -84,6 +87,9 @@ func newEngine(ctx context.Context, dir string) (*engine, error) {
 	if err = e.loadArtifacts(); err != nil {
 		return nil, err
 	}
+	e.controlStop = make(chan struct{})
+	e.controlDone = make(chan struct{})
+	go e.reapControls()
 	return e, nil
 }
 func (e *engine) idle(d time.Duration) bool {
@@ -93,6 +99,10 @@ func (e *engine) idle(d time.Duration) bool {
 }
 func (e *engine) touch() { e.mu.Lock(); e.last = time.Now(); e.mu.Unlock() }
 func (e *engine) close() {
+	if e.controlStop != nil {
+		e.controlStopOnce.Do(func() { close(e.controlStop) })
+		<-e.controlDone
+	}
 	e.mu.Lock()
 	all := []*session{}
 	for _, s := range e.sessions {
