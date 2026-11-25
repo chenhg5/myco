@@ -85,7 +85,7 @@ func (s *session) installTarget(evt proto.TargetAttachedToTarget) (err error) {
 		}
 		return s.call(sid, "Runtime.runIfWaitingForDebugger", map[string]any{}, nil)
 	}
-	installed := &targetInstall{sid: sid, ready: make(chan struct{}), configured: make(chan struct{})}
+	installed := &targetInstall{kind: info.Type, sid: sid, ready: make(chan struct{}), configured: make(chan struct{})}
 	s.installs[info.TargetID] = installed
 	var configuredOnce sync.Once
 	configured := func() { configuredOnce.Do(func() { close(installed.configured) }) }
@@ -132,6 +132,11 @@ func (s *session) installTarget(evt proto.TargetAttachedToTarget) (err error) {
 		FrameTree *structFrameTree `json:"frameTree"`
 	}
 	if s.call(sid, "Page.getFrameTree", map[string]any{}, &tree) == nil {
+		if info.Type == "page" && tree.FrameTree != nil {
+			s.mu.Lock()
+			installed.rootFrame = tree.FrameTree.Frame.ID
+			s.mu.Unlock()
+		}
 		var create func(*structFrameTree)
 		create = func(frame *structFrameTree) {
 			if frame == nil {
@@ -308,51 +313,99 @@ func (s *session) event(msg *rod.Message) {
 			rec.enqueue(node{Type: "tab", Tab: strconv.Itoa(rec.tabIndex(tid))}, p)
 		}
 		s.mu.Unlock()
+		if p != nil {
+			rec.noteNavigationAction(p.TargetID, n, time.Now())
+		}
 		rec.enqueueFrame(n, p, frame)
+	case "Page.frameStartedNavigating":
+		var evt frameStartedNavigation
+		msg.Load(&evt)
+		s.mu.Lock()
+		delete(s.browserNavigations, evt.FrameID)
+		if evt.NavigationType == "sameDocument" && s.recorder != nil && s.topNavigationLocked(msg.SessionID, evt.FrameID) {
+			if s.browserNavigations == nil {
+				s.browserNavigations = map[proto.PageFrameID]recordedBrowserNavigation{}
+			}
+			s.browserNavigations[evt.FrameID] = recordedBrowserNavigation{RecordID: s.recorder.id, URL: evt.URL}
+		}
+		s.mu.Unlock()
 	case "Page.frameRequestedNavigation":
 		var evt proto.PageFrameRequestedNavigation
 		msg.Load(&evt)
 		s.mu.Lock()
-		if s.rendererNavigations == nil {
-			s.rendererNavigations = map[proto.PageFrameID]bool{}
+		top := s.topNavigationLocked(msg.SessionID, evt.FrameID)
+		rec := s.recorder
+		p := s.pages[s.targets[msg.SessionID]]
+		s.mu.Unlock()
+		if !top {
+			return
 		}
-		s.rendererNavigations[evt.FrameID] = true
+		request := recordedNavigationRequest{}
+		if rec != nil && p != nil {
+			request.RecordID = rec.id
+			request.User = rec.recentNavigationAction(p.TargetID, time.Now())
+		}
+		s.mu.Lock()
+		if s.rendererNavigations == nil {
+			s.rendererNavigations = map[proto.PageFrameID]recordedNavigationRequest{}
+		}
+		s.rendererNavigations[evt.FrameID] = request
 		s.mu.Unlock()
 	case "Page.frameNavigated":
 		var evt proto.PageFrameNavigated
 		msg.Load(&evt)
+		if evt.Frame == nil {
+			return
+		}
 		s.mu.Lock()
 		rec := s.recorder
 		previous := s.frames[evt.Frame.ID]
 		s.frames[evt.Frame.ID] = frameInfo{Parent: evt.Frame.ParentID, URL: evt.Frame.URL, Selector: previous.Selector}
-		observed := s.rendererNavigations[evt.Frame.ID]
-		delete(s.rendererNavigations, evt.Frame.ID)
-		tid := s.targets[msg.SessionID]
-		p := s.pages[tid]
-		if p == nil {
-			p = s.pages[s.current]
+		installed := s.installs[s.targets[msg.SessionID]]
+		if installed != nil && installed.kind == "page" && evt.Frame.ParentID == "" {
+			installed.rootFrame = evt.Frame.ID
 		}
+		top := evt.Frame.ParentID == "" && s.topNavigationLocked(msg.SessionID, evt.Frame.ID)
+		request, renderer := s.rendererNavigations[evt.Frame.ID]
+		delete(s.rendererNavigations, evt.Frame.ID)
+		delete(s.browserNavigations, evt.Frame.ID)
+		p := s.pages[s.targets[msg.SessionID]]
 		s.mu.Unlock()
-		if rec != nil && checkedURL(evt.Frame.URL) == nil {
-			if observed {
-				rec.enqueueFrame(node{Type: "wait", Wait: "url", Value: stableURL(evt.Frame.URL)}, p, evt.Frame.ID)
-			} else {
-				rec.enqueueFrame(node{Type: "navigate", URL: navigationURL(evt.Frame.URL)}, p, evt.Frame.ID)
+		if !top || rec == nil || p == nil || checkedURL(evt.Frame.URL) != nil {
+			return
+		}
+		if renderer {
+			if request.RecordID == rec.id && request.User {
+				rec.enqueue(node{Type: "wait", Wait: "url", Value: stableURL(evt.Frame.URL)}, p)
 			}
+		} else {
+			// Browser-initiated navigation (including address-bar entry) has no
+			// renderer request. Preserve it as an explicit navigation step.
+			rec.enqueue(node{Type: "navigate", URL: navigationURL(evt.Frame.URL)}, p)
 		}
 	case "Page.navigatedWithinDocument":
 		var evt proto.PageNavigatedWithinDocument
 		msg.Load(&evt)
 		s.mu.Lock()
 		rec := s.recorder
-		tid := s.targets[msg.SessionID]
-		p := s.pages[tid]
-		if p == nil {
-			p = s.pages[s.current]
-		}
+		top := s.topNavigationLocked(msg.SessionID, evt.FrameID)
+		p := s.pages[s.targets[msg.SessionID]]
+		request, renderer := s.rendererNavigations[evt.FrameID]
+		delete(s.rendererNavigations, evt.FrameID)
+		browserStart := s.browserNavigations[evt.FrameID]
+		delete(s.browserNavigations, evt.FrameID)
 		s.mu.Unlock()
-		if rec != nil && checkedURL(evt.URL) == nil {
-			rec.enqueueFrame(node{Type: "wait", Wait: "url", Value: stableURL(evt.URL)}, p, evt.FrameID)
+		if !top || rec == nil || p == nil || checkedURL(evt.URL) != nil {
+			return
+		}
+		if renderer {
+			if request.RecordID == rec.id && request.User {
+				rec.enqueue(node{Type: "wait", Wait: "url", Value: stableURL(evt.URL)}, p)
+			}
+		} else if browserStart.RecordID == rec.id && browserStart.URL == evt.URL {
+			rec.enqueue(node{Type: "navigate", URL: navigationURL(evt.URL)}, p)
+		} else if rec.recentNavigationAction(p.TargetID, time.Now()) {
+			rec.enqueue(node{Type: "wait", Wait: "url", Value: stableURL(evt.URL)}, p)
 		}
 	case "Page.windowOpen":
 		var evt proto.PageWindowOpen

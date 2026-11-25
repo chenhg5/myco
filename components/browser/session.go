@@ -20,6 +20,8 @@ import (
 )
 
 type targetInstall struct {
+	kind       proto.TargetTargetInfoType
+	rootFrame  proto.PageFrameID
 	sid        proto.TargetSessionID
 	ready      chan struct{}
 	configured chan struct{}
@@ -62,7 +64,8 @@ type session struct {
 	frames              map[proto.PageFrameID]frameInfo
 	contexts            map[string]map[proto.RuntimeExecutionContextID]proto.PageFrameID
 	targets             map[proto.TargetSessionID]proto.TargetTargetID
-	rendererNavigations map[proto.PageFrameID]bool
+	rendererNavigations map[proto.PageFrameID]recordedNavigationRequest
+	browserNavigations  map[proto.PageFrameID]recordedBrowserNavigation
 }
 type frameInfo struct {
 	Parent   proto.PageFrameID
