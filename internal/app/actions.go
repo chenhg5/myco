@@ -551,10 +551,21 @@ func contains(list []string, v string) bool {
 }
 
 // refresh ends a grant whose time, host or task is over (mu held).
-func (s *ActionService) refresh(ctx context.Context, g *actionGrant) {
-	if (g.State == api.GrantPending || g.State == api.GrantActive) && s.enabled(ctx) != nil {
-		s.close(g, api.GrantRevoked, "agent actions are unavailable in an encrypted workspace")
-		return
+// A cancelled read is not evidence of lost authorization: abort this request
+// without ending the grant or deleting artifacts used by other requests.
+func (s *ActionService) refresh(ctx context.Context, g *actionGrant) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if g.State == api.GrantPending || g.State == api.GrantActive {
+		enabledErr := s.enabled(ctx)
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if enabledErr != nil {
+			s.close(g, api.GrantRevoked, "agent actions are unavailable in an encrypted workspace")
+			return nil
+		}
 	}
 	now := s.clock.Now()
 	switch g.State {
@@ -565,17 +576,21 @@ func (s *ActionService) refresh(ctx context.Context, g *actionGrant) {
 	case api.GrantActive:
 		if g.ExpiresAt != nil && !now.Before(*g.ExpiresAt) {
 			s.close(g, api.GrantExpired, "its time ran out")
-			return
+			return nil
 		}
-		if !s.agentSees(ctx, g) {
+		sees := s.agentSees(ctx, g)
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if !sees {
 			s.close(g, api.GrantEnded, "its agent may no longer see the page")
-			return
+			return nil
 		}
 		if g.hostSeen != "" {
 			if h := s.hosts[g.hostSeen]; h == nil || now.Sub(h.LastSeenAt) > actionHostStale {
 				if g.Target.Kind != "page" {
 					s.close(g, api.GrantEnded, "the computer went offline (or its App closed)")
-					return
+					return nil
 				}
 				// A page is rendered by any App of a person who sees it: the
 				// grant stays; what that App was running is lost.
@@ -584,11 +599,16 @@ func (s *ActionService) refresh(ctx context.Context, g *actionGrant) {
 			}
 		}
 		if g.MessageID != "" && s.messages != nil {
-			if m, err := s.messages.Get(ctx, &domain.Agent{Name: domain.AgentName(g.Agent)}, g.MessageID); err != nil || m.Status.Terminal() {
+			m, readErr := s.messages.Get(ctx, &domain.Agent{Name: domain.AgentName(g.Agent)}, g.MessageID)
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			if readErr != nil || m.Status.Terminal() {
 				s.close(g, api.GrantEnded, "its task ended")
 			}
 		}
 	}
+	return nil
 }
 
 // close ends a grant: its queued jobs are cancelled, running ones can no
@@ -625,7 +645,9 @@ func (s *ActionService) grantOf(ctx context.Context, agent domain.AgentName, id 
 	if g == nil || g.Agent != string(agent) {
 		return nil, domain.Errf(domain.CodeNotFound, "grant %s not found", id)
 	}
-	s.refresh(ctx, g)
+	if err := s.refresh(ctx, g); err != nil {
+		return nil, err
+	}
 	return g, nil
 }
 
@@ -679,8 +701,9 @@ func (s *ActionService) Grants(ctx context.Context, agent *domain.Agent) []api.A
 	out := []api.ActionGrant{}
 	for _, g := range s.grants {
 		if g.Agent == string(agent.Name) {
-			s.refresh(ctx, g)
-			out = append(out, g.ActionGrant)
+			if s.refresh(ctx, g) == nil {
+				out = append(out, g.ActionGrant)
+			}
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
@@ -741,7 +764,9 @@ func (s *ActionService) OwnerGrants(ctx context.Context, by Actor, state string)
 		if g.Owner != m.Name && !by.Manages() {
 			continue
 		}
-		s.refresh(ctx, g)
+		if err := s.refresh(ctx, g); err != nil {
+			return nil, err
+		}
 		if state == "" || g.State == state {
 			out = append(out, g.ActionGrant)
 		}
@@ -1000,7 +1025,9 @@ func (s *ActionService) HostJobs(ctx context.Context, by Actor, hostID string, w
 			if g == nil || !s.hostServes(ctx, h, g) {
 				continue
 			}
-			s.refresh(ctx, g)
+			if err := s.refresh(ctx, g); err != nil {
+				return nil, true, err
+			}
 			if g.State != api.GrantActive {
 				continue
 			}
@@ -1040,7 +1067,9 @@ func (s *ActionService) HostJob(ctx context.Context, by Actor, jobID, hostID, ge
 		h.LastSeenAt = s.clock.Now()
 		out := &api.ActionHostJobState{Job: j.ActionJob, GrantState: api.GrantEnded}
 		if g := s.grants[j.GrantID]; g != nil {
-			s.refresh(ctx, g)
+			if err := s.refresh(ctx, g); err != nil {
+				return nil, true, err
+			}
 			out.GrantState = g.State
 			if g.ExpiresAt != nil {
 				t := *g.ExpiresAt
@@ -1076,7 +1105,9 @@ func (s *ActionService) UploadArtifact(ctx context.Context, by Actor, jobID, hos
 	}
 	g := s.grants[j.GrantID]
 	if g != nil {
-		s.refresh(ctx, g)
+		if err := s.refresh(ctx, g); err != nil {
+			return nil, err
+		}
 	}
 	if g == nil || g.State != api.GrantActive {
 		return nil, domain.Errf(domain.CodeInvalidState, "its grant has ended")
@@ -1120,12 +1151,14 @@ func (s *ActionService) CompleteJob(ctx context.Context, by Actor, jobID string,
 	if j.State != api.JobRunning {
 		return nil, domain.Errf(domain.CodeInvalidState, "job %s is %s already", jobID, j.State)
 	}
-	now := s.clock.Now()
-	j.FinishedAt = &now
 	g := s.grants[j.GrantID]
 	if g != nil {
-		s.refresh(ctx, g) // (a page's agent may no longer see it)
+		if err := s.refresh(ctx, g); err != nil {
+			return nil, err
+		}
 	}
+	now := s.clock.Now()
+	j.FinishedAt = &now
 	if g == nil || g.State != api.GrantActive {
 		j.State = api.JobCancelled
 		j.Error = &api.ActionError{Code: "grant_ended", Message: "its grant ended while it ran; whatever it did happened, but its result is not kept"}
@@ -1226,7 +1259,9 @@ func (s *ActionService) Job(ctx context.Context, agent *domain.Agent, id string,
 			return nil, true, domain.Errf(domain.CodeNotFound, "job %s not found", id)
 		}
 		if g := s.grants[j.GrantID]; g != nil {
-			s.refresh(ctx, g)
+			if err := s.refresh(ctx, g); err != nil {
+				return nil, true, err
+			}
 		}
 		out := j.ActionJob
 		return &out, j.State != api.JobQueued && j.State != api.JobRunning, nil
@@ -1266,7 +1301,9 @@ func (s *ActionService) Artifact(ctx context.Context, agent *domain.Agent, id st
 	if g == nil || g.Agent != string(agent.Name) {
 		return nil, nil, domain.Errf(domain.CodeNotFound, "artifact %s not found (or no longer kept)", id)
 	}
-	s.refresh(ctx, g)
+	if err := s.refresh(ctx, g); err != nil {
+		return nil, nil, err
+	}
 	if _, still := s.arts[id]; !still || !s.clock.Now().Before(a.ExpiresAt) {
 		delete(s.arts, id)
 		return nil, nil, domain.Errf(domain.CodeNotFound, "artifact %s is no longer kept", id)
