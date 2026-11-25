@@ -4,10 +4,10 @@ The desktop App can record and replay a linear workflow in a dedicated local Chr
 
 ## Install and use
 
-Open Web automation in the Mac or Windows App, then choose **Install browser component**. The App asks for confirmation in its own dialog, downloads the pinned `browser-v0.1.1` release, checks `SHA256SUMS`, and installs it under `~/.myco/components/browser/0.1.1/`. Installation is optional and never happens on a status request. An unpublished component release produces an installation error; it is not replaced with an arbitrary version.
+Open Web automation in the Mac or Windows App, then choose **Install browser component**. The App asks for confirmation in its own dialog, downloads the pinned `browser-v0.2.0` release, checks `SHA256SUMS`, and installs it under `~/.myco/components/browser/0.2.0/`. Installation is optional and never happens on a status request. An unpublished component release produces an installation error; it is not replaced with an arbitrary version.
 
-An existing 0.1.0 installation remains usable and reports `update_available`.
-Choose **Update component** to install 0.1.1. The App verifies and installs the
+Existing 0.1.0 and 0.1.1 installations remain usable and report `update_available`.
+Choose **Update component** to install 0.2.0. The App verifies and installs the
 new package before stopping the old process; download or checksum failures leave
 the old process available. The next browser operation starts the new version.
 Finish recording or playback before updating, because the old browser sessions
