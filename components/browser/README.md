@@ -137,8 +137,10 @@ detachment produces `stale_ref`; the component never substitutes a similar
 locator. Draft targets use the recorder's multiple locators, frame paths and
 shadow paths instead. Password, one-time-code and `data-sensitive` values are
 redacted; typing into a sensitive field is refused. HTML and text extraction
-sanitize sensitive descendants. Screenshots fail closed when child documents
-cannot be inspected or contain sensitive elements, including closed shadow roots.
+sanitize sensitive descendants. Screenshots redact unreadable iframe rectangles to opaque black before storing
+artifacts. Readable documents containing sensitive elements, including closed
+shadow roots, still refuse screenshots. A frame that cannot be located, or a
+layout/document change during capture, also refuses the screenshot.
 The owner's control panel is excluded from snapshots, screenshots and drafts.
 
 Screenshot `clip` coordinates are relative to the top viewport in CSS pixels.

@@ -26,9 +26,10 @@ type controlFixtureComponent struct {
 	openCount int
 	stopped   bool
 	forced    chan string
+	closeHook func(context.Context, api.BrowserControlArgs) error
 }
 
-func (f *controlFixtureComponent) Call(_ context.Context, scope, method, path string, in, out any) error {
+func (f *controlFixtureComponent) Call(ctx context.Context, scope, method, path string, in, out any) error {
 	if !strings.HasPrefix(scope, "agent-") {
 		return errors.New("wrong control scope")
 	}
@@ -72,6 +73,11 @@ func (f *controlFixtureComponent) Call(_ context.Context, scope, method, path st
 		if fields, ok := in.(map[string]string); ok {
 			f.forced <- fields["reason"]
 			break
+		}
+		if f.closeHook != nil {
+			if err := f.closeHook(ctx, in.(api.BrowserControlArgs)); err != nil {
+				return err
+			}
 		}
 		value = map[string]any{"steps": []map[string]string{{"id": "step1", "type": "click"}}, "removed": []string{}, "next": 1, "done": true, "reason": "closed"}
 	default:
@@ -216,5 +222,69 @@ func TestBrowserControlHostLifecycle(t *testing.T) {
 	wantCode(stopped, "session_closed")
 	if stopped.Error.Reason != api.BrowserControlOwnerStopped || len(stopped.Result) != 0 {
 		t.Fatalf("stopped control exposed its draft: %+v", stopped)
+	}
+}
+
+func TestBrowserControlCloseKeepsReceiptAfterTerminalEvent(t *testing.T) {
+	expiry := time.Now().Add(time.Minute)
+	hub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("wait") == "30" {
+			<-r.Context().Done()
+			return
+		}
+		json.NewEncoder(w).Encode(api.ActionHostJobState{GrantState: api.GrantActive, GrantExpiresAt: &expiry})
+	}))
+	defer hub.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	h := Hub{ID: "hub", URL: hub.URL}
+	c, _ := client.New(h.URL, "fixture")
+	b := &Backend{Store: NewStore(filepath.Join(t.TempDir(), "hubs.json")), Secrets: &policyFixtureSecrets{token: "fixture"}}
+	comp := &controlFixtureComponent{forced: make(chan string, 1)}
+	b.browser.component = comp
+	scope := browserpolicy.Scope{Workspace: h.URL, Owner: "owner"}
+	b.browser.identities = map[string]browserOwnerIdentity{h.ID: {URL: h.URL, Owner: scope.Owner, Credential: c.CredentialFingerprint()}}
+	policies, _ := b.browserPolicies()
+	policy, err := policies.SetEnabled(scope, "work", true, "Work")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := browserHostPolicy{scope, policy}
+	resource := &api.ActionResource{Provider: "browser", ID: "work", Binding: policy.Binding, Name: "Work"}
+	host := &api.ActionHost{ID: "host", MachineID: "machine", Generation: "gen", Provider: "browser", Resource: resource}
+	grant := api.ActionGrant{ID: "grant", Agent: "browser-agent", State: api.GrantActive, ExpiresAt: &expiry, Permissions: []string{"browser.control"}, Target: api.ActionTarget{Kind: "machine", ID: "machine", Resource: resource}}
+	s := b.reserveBrowserControl(ctx, h, p, grant, "session1")
+	s.id = "session1"
+	var ids []string
+	comp.closeHook = func(call context.Context, args api.BrowserControlArgs) error {
+		ids = append(ids, args.String("request_id"))
+		b.closeBrowserControl(s, "closed", true) // Terminal event overtakes HTTP response.
+		select {
+		case <-s.ctx.Done():
+		case <-time.After(time.Second):
+			t.Error("session did not end")
+		}
+		select {
+		case <-call.Done():
+			return call.Err()
+		case <-time.After(25 * time.Millisecond):
+			return nil
+		}
+	}
+	for _, job := range []string{"close-first", "close-retry"} {
+		done := b.runBrowserJob(ctx, c, host, api.ActionHostJob{Job: api.ActionJob{ID: job, Action: "browser.page.close", Version: 1}, Args: json.RawMessage(`{"session":"session1"}`), Grant: grant}, h, p)
+		if done.State != api.JobSucceeded || !strings.Contains(string(done.Result), `"steps"`) {
+			t.Fatalf("close lost retained draft: %+v", done)
+		}
+	}
+	if len(ids) != 2 || ids[0] != "close-first" || ids[1] != ids[0] {
+		t.Fatalf("close retry lost original request ID: %v", ids)
+	}
+	stopped := b.reserveBrowserControl(ctx, h, p, grant, "stopped")
+	stopped.id = "stopped"
+	b.closeBrowserControl(stopped, api.BrowserControlOwnerStopped, true)
+	done := b.runBrowserJob(ctx, c, host, api.ActionHostJob{Job: api.ActionJob{ID: "stop-retry", Action: "browser.page.close", Version: 1}, Args: json.RawMessage(`{"session":"stopped"}`), Grant: grant}, h, p)
+	if done.Error == nil || done.Error.Reason != api.BrowserControlOwnerStopped || len(ids) != 2 {
+		t.Fatalf("forced stop exported draft: %+v", done)
 	}
 }
