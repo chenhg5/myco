@@ -29,7 +29,7 @@ func TestNativeChromeRecordAndReplayTenTimes(t *testing.T) {
 			w.Write([]byte(`<label>Child<input id="child-value" data-testid="child-value"></label>`))
 			return
 		}
-		w.Write([]byte(`<!doctype html><title>Automation fixture</title><form id="form"><label>Title<input id="title" data-testid="title"></label><label>Body<textarea id="body" placeholder="Body"></textarea></label><div id="host"></div><iframe id="child" src="/child"></iframe><button id="finish" type="button">Finish editing</button><button id="submit" type="submit">Do not submit</button></form><script>window.submitted=0;document.querySelector('form').onsubmit=e=>{e.preventDefault();window.submitted++};document.querySelector('#host').attachShadow({mode:'open'}).innerHTML='<label>Shadow<input id="shadow" aria-label="Shadow"></label>';</script>`))
+		w.Write([]byte(`<!doctype html><title>Automation fixture</title><form id="form"><label>Title<input id="title" data-testid="title"></label><label>Body<textarea id="body" placeholder="Body"></textarea></label><div id="host"></div><iframe id="child" src="/child"></iframe><button id="finish" type="button">Finish editing</button><button id="submit" type="submit">Do not submit</button></form><div class="blank" style="width:48px;height:20px"></div><script>window.submitted=0;document.querySelector('form').onsubmit=e=>{e.preventDefault();window.submitted++};document.querySelector('#host').attachShadow({mode:'open'}).innerHTML='<label>Shadow<input id="shadow" aria-label="Shadow"></label>';</script>`))
 	}))
 	defer fixture.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
@@ -114,6 +114,15 @@ func TestNativeChromeRecordAndReplayTenTimes(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err = child.Input("Frame text"); err != nil {
+		t.Fatal(err)
+	}
+	// An unnamed document element has no semantic locator or ID: CSS is
+	// its valid locator, and recording/replay must preserve that click too.
+	blank, err := page.Element("body > .blank")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = blank.Click(proto.InputMouseButtonLeft, 1); err != nil {
 		t.Fatal(err)
 	}
 	finish, err := page.Element("#finish")
