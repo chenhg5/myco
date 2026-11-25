@@ -322,6 +322,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
   }, []);
 
   const refreshing = useRef(false);
+  // Removing a workspace invalidates reads begun while it still existed.
+  const workspaceRevision = useRef(0);
   // Projects of the workspaces that answer are fetched again; a workspace that
   // did not answer this time (a network blip) keeps the projects it had, so
   // they do not vanish and the App does not ask for a first project.
@@ -331,9 +333,11 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const justMade = useRef(new Map<string, { hubId: string; p: Project; at: number }>());
   const loadProjects = useCallback(async (okIds: string[], allIds: string[] = okIds) => {
     const began = Date.now();
+    const revision = workspaceRevision.current;
     const lists = await Promise.all(okIds.map((id) =>
       appApi.projects(id).then((r) => r.projects.map((p) => ({ hubId: id, p }))).catch(() => null)));
     setProjects((prev) => {
+      if (revision !== workspaceRevision.current) return prev;
       const keep = (id: string) => (prev || []).filter((x) => x.hubId === id);
       const next = allIds.flatMap((id) => { const i = okIds.indexOf(id); return (i >= 0 ? lists[i] : null) ?? keep(id); });
       for (const [k, m] of justMade.current) {
@@ -352,9 +356,11 @@ export default function AppMode({ initialHubs, initialInfo }: {
     if (refreshing.current) { refreshAgain.current = true; return; }
     refreshing.current = true;
     refreshAgain.current = false;
+    const revision = workspaceRevision.current;
     try {
       const [h, o, pending, l] = await Promise.all([appApi.hubs(), appApi.overview(), readPendingLink(),
         appApi.local().catch(() => null)]);
+      if (revision !== workspaceRevision.current) return;
       setHubs(h);
       if (l) setLocal(l);
       // The overview says what is on each hub; the hub list says which
@@ -403,6 +409,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   // has. The full refresh (every workspace, slow when one is far) follows
   // in the background instead of holding the dialog open.
   const dropHub = useCallback((id: string) => {
+    workspaceRevision.current += 1;
     setHubs((h) => h.filter((x) => x.id !== id));
     setOv((o) => (o ? remember("overview", { ...o, hubs: o.hubs.filter((x) => x.id !== id) }) : o));
     setProjects((p) => (p ? remember("projects", p.filter((x) => x.hubId !== id)) : p));

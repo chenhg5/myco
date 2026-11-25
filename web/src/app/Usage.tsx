@@ -152,13 +152,13 @@ export function UsagePage({ hubId, projects, rows, onOpenAgent }: {
   const current = result?.key === key ? result : undefined;
   const data = current?.data;
   useEffect(() => {
-    let off = false;
-    appApi.usage(hubId, { ...range, project: project || undefined }).then((data) => {
-      if (!off) setResult({ key, data });
+    const request = new AbortController();
+    appApi.usage(hubId, { ...range, project: project || undefined }, request.signal).then((data) => {
+      if (!request.signal.aborted) setResult({ key, data });
     }).catch((error) => {
-      if (!off) setResult(isOldHub(error) || (error as { status?: number })?.status === 404 ? { key, old: true } : { key, error });
+      if (!request.signal.aborted) setResult(isOldHub(error) || (error as { status?: number })?.status === 404 ? { key, old: true } : { key, error });
     });
-    return () => { off = true; };
+    return () => request.abort();
   }, [key, hubId, range.from, range.to, project]);
   const summary = useMemo(() => summarizeUsage(data?.rows || []), [data]);
   const members = new Map((data?.agents || []).map((a) => [a.name, a]));

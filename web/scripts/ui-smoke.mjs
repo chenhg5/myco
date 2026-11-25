@@ -6957,10 +6957,30 @@ async function runMatrix(browser, size, scheme) {
 
     await step("设置 · 移除工作区", async () => {
       await closeSettings(page);
+      await sidebar(page, true);
+      await clickVisible(page, page.locator(".sp-switch .app-hub-trigger"));
+      const studio = page.locator(".app-hub-menu [role=menuitemradio]", { hasText: "Alice" }).first();
+      if (await studio.getAttribute("aria-checked") === "true") await page.keyboard.press("Escape");
+      else await clickVisible(page, studio);
+      await go(page, "用量", narrow);
+      await page.locator(".usage-metrics dd").first().waitFor({ timeout: 10_000 });
       const shownBefore = (await page.locator(".sp-switch .app-hub-name, .app-hub-pill-name").first().innerText().catch(() => "")).trim();
       await go(page, "设置", narrow);
-      const slowOverview = async (r) => { await new Promise((res) => setTimeout(res, 6000)); await r.continue().catch(() => undefined); };
+      // Hold a refresh that read the workspace list before the removal.
+      // Its late overview must not restore that list and remount UsagePage.
+      let releaseOverview;
+      const held = new Promise((resolve) => { releaseOverview = resolve; });
+      let overviewRead;
+      const ready = new Promise((resolve) => { overviewRead = resolve; });
+      const slowOverview = async (r) => {
+        const response = await r.fetch();
+        overviewRead();
+        await held;
+        await r.fulfill({ response }).catch(() => undefined);
+      };
       await page.route("**/app/overview", slowOverview);
+      await page.evaluate(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "r", ctrlKey: true, metaKey: true, bubbles: true })));
+      await Promise.race([ready, page.waitForTimeout(10_000).then(() => { throw new Error("工作区刷新没有开始"); })]);
       const asked = [];
       let removed = "";
       const onResponse = (r) => { if (r.status() === 404 && /\/app\/hubs\//.test(r.url())) asked.push(r.url()); };
@@ -6976,9 +6996,11 @@ async function runMatrix(browser, size, scheme) {
         await clickVisible(page, dlg.getByRole("button", { name: "移除工作区" }));
         await dlg.waitFor({ state: "detached", timeout: 3_000 });
         if (Date.now() - t0 > 2_000) throw new Error(`移除工作区不该等工作区回话：用了 ${Date.now() - t0}ms`);
+        releaseOverview();
         await page.waitForTimeout(1_500);
         if (asked.length) throw new Error(`移除后不该再问那个工作区：${asked[0]}`);
       } finally {
+        releaseOverview();
         page.off("response", onResponse);
         await page.unroute("**/app/overview", slowOverview);
       }

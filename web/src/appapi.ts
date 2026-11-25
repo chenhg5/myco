@@ -672,10 +672,10 @@ export interface AppUpdate {
 export interface CacheStats { enabled: boolean; entries: number; bytes: number }
 
 export const appApi = {
-  usage: (hubId: string, range: { from: string; to: string; project?: string }) => {
+  usage: (hubId: string, range: { from: string; to: string; project?: string }, signal?: AbortSignal) => {
     const query = new URLSearchParams({ from: range.from, to: range.to });
     if (range.project) query.set("project", range.project);
-    return request<UsageResponse>("GET", `app/hubs/${enc(hubId)}/usage?${query}`);
+    return request<UsageResponse>("GET", `app/hubs/${enc(hubId)}/usage?${query}`, undefined, signal);
   },
   cacheStats: () => request<CacheStats>("GET", "app/cache/stats"),
   info: () => request<AppInfo>("GET", "app/info"),

@@ -633,3 +633,11 @@ its sign-in and permission troubleshooting guidance becomes available again.
 项目成员设置中的「邀请 agent」开关默认关闭，项目主人或管理员可更改。关闭时，协调者的邀请在现有批准卡中展示项目和预填的 agent 资料，并明确说明一次性、24 小时、归项目主人所有和普通成员权限；批准卡不含邀请凭据。成员资料显示邀请来源。旧 Hub 未提供此字段时隐藏设置。
 
 项目成员页用「协调者的权限」一组展示电脑启动、邀请和定时任务授权，定时任务默认关闭。批准卡展示具体操作、任务、收件人、时间范围和只跑一次，并明确只批准当前变更。自动化编辑器按本机时间输入有效期，列表与详情显示起止时间、一次性执行和到期/已执行/项目范围变更的停用原因；旧 Hub 保持普通编辑可用。
+
+### Removing a workspace during a refresh
+
+Removing a workspace closes its current views immediately. Reads started before
+the removal cannot restore its workspace list, overview or projects when they
+finish. Leaving the usage page, switching workspaces or changing its filters
+cancels the outstanding usage request. The UI smoke removal scenario keeps
+Usage open behind Settings and releases an older refresh after removal.
