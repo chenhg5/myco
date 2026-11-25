@@ -39,8 +39,8 @@ type browserControlSpec struct{ required, optional string }
 
 var browserControlSpecs = map[string]browserControlSpec{
 	"open":       {"profile", "url"},
-	"snapshot":   {"session", "tab mode max_nodes screenshot"},
-	"act":        {"session op", "tab ref value key url dy wait choice timeout_ms"},
+	"snapshot":   {"session", "tab mode max_nodes include_screenshot"},
+	"act":        {"session op", "tab ref value key url dy wait choice timeout_ms clear"},
 	"extract":    {"session ref what", "tab attr"},
 	"screenshot": {"session", "tab ref clip full"},
 	"close":      {"session", ""},
@@ -51,7 +51,7 @@ var browserActSpecs = map[string]browserControlSpec{
 	"click":      {"ref", "tab"},
 	"dblclick":   {"ref", "tab"},
 	"hover":      {"ref", "tab"},
-	"type":       {"ref value", "tab"},
+	"type":       {"ref value", "tab clear"},
 	"select":     {"ref value", "tab"},
 	"press":      {"key", "tab ref"},
 	"scroll":     {"dy", "tab ref"},
@@ -70,7 +70,7 @@ func browserControlFieldType(field string) string {
 		return "integer"
 	case "dy":
 		return "number"
-	case "screenshot", "full":
+	case "include_screenshot", "full", "clear":
 		return "boolean"
 	case "clip":
 		return "object"
@@ -272,9 +272,19 @@ type BrowserControlStatus struct {
 	IdleExpiresAt time.Time `json:"idle_expires_at"`
 }
 
+type BrowserControlActor struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 type BrowserControlEvents struct {
-	Done   bool   `json:"done"`
-	Reason string `json:"reason"`
-	Host   string `json:"host"`
-	Next   int    `json:"next"`
+	Session string                `json:"session"`
+	Done    bool                  `json:"done"`
+	Reason  string                `json:"reason"`
+	Next    int                   `json:"next"`
+	Events  []BrowserControlEvent `json:"events"`
+}
+
+type BrowserControlEvent struct {
+	Host string `json:"host,omitempty"`
 }

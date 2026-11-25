@@ -39,16 +39,18 @@ func (f *controlFixtureComponent) Call(_ context.Context, scope, method, path st
 		value = map[string]any{"protocol": 1, "features": []string{"agent_control"}}
 	case method == "POST" && path == "/control/open":
 		args := in.(api.BrowserControlArgs)
-		if args.String("actor") != "browser-agent" || args.String("grant_id") != "grant" ||
+		var actor api.BrowserControlActor
+		_ = json.Unmarshal(args["actor"], &actor)
+		if actor.ID != "browser-agent" || actor.Name == "" || args.String("grant_id") != "grant" ||
 			args.String("request_id") == "" || args.String("profile") != "work" || len(args["expires_at"]) == 0 || args["headless"] != nil {
 			return errors.New("host sent invalid native authorization")
 		}
 		f.openCount++
 		value = map[string]any{"session": fmt.Sprintf("session%d", f.openCount), "active_tab": "tab1", "start_url": "https://example.com/", "snapshot": map[string]any{"snapshot_id": "snapshot1"}}
 	case method == "GET" && strings.HasPrefix(path, "/control/events?"):
-		value = api.BrowserControlEvents{Next: 1, Host: "example.com"}
+		value = api.BrowserControlEvents{Next: 1, Events: []api.BrowserControlEvent{{Host: "example.com"}}}
 		if f.stopped {
-			value = api.BrowserControlEvents{Done: true, Reason: api.BrowserControlOwnerStopped, Next: 2, Host: "example.com"}
+			value = api.BrowserControlEvents{Done: true, Reason: api.BrowserControlOwnerStopped, Next: 2}
 		}
 	case method == "POST" && path == "/control/snapshot":
 		value = map[string]any{"snapshot_id": "snapshot2", "active_tab": "tab1", "nodes": []map[string]string{{"ref": "e1"}}}
@@ -64,7 +66,7 @@ func (f *controlFixtureComponent) Call(_ context.Context, scope, method, path st
 	case method == "POST" && path == "/control/extract":
 		value = map[string]string{"text": "Sample"}
 	case method == "POST" && path == "/control/screenshot":
-		value = map[string]any{"artifact_id": "a_fixture", "width": 800, "height": 600}
+		value = map[string]any{"screenshot": map[string]string{"id": "a_fixture"}, "image": map[string]int{"width": 800, "height": 600}}
 	case method == "POST" && path == "/control/close":
 		value = map[string]any{"steps": []map[string]string{{"id": "step1", "type": "click"}}, "removed": []string{}, "next": 1, "done": true, "reason": "closed"}
 	default:

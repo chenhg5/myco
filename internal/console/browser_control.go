@@ -180,7 +180,7 @@ func browserControlFailure(err error, effectful bool) api.ActionJobComplete {
 			"stale_ref", "target_not_found", "target_not_interactable", "sensitive_field", "sensitive_snapshot",
 			"session_closed", "session_expired", "cancelled", "timeout", "recording_limit", "artifact_too_large",
 			"artifact_limit", "component_unavailable", "storage_failed", "outcome_unknown":
-			out := actionFailure(native.Code, "browser control: "+strings.ReplaceAll(native.Code, "_", " "), false, nil)
+			out := actionFailure(native.Code, "browser control: "+strings.ReplaceAll(native.Code, "_", " "), false, native.Applied)
 			out.Error.Reason = browserControlReason(native.Reason)
 			return out
 		}
@@ -194,7 +194,7 @@ func browserControlFailure(err error, effectful bool) api.ActionJobComplete {
 func browserControlReason(reason string) string {
 	switch reason {
 	case "closed", api.BrowserControlOwnerStopped, "idle_timeout", "grant_expired", "grant_ended",
-		"expired", "profile_disabled", "host_closed", "app_exit", "component_unavailable", "cancelled":
+		"expired", "profile_disabled", "host_closed", "app_exit", "browser_closed", "cleanup_pending", "component_unavailable", "cancelled":
 		return reason
 	default:
 		return ""
@@ -228,10 +228,12 @@ func (b *Backend) watchBrowserControl(c *client.Client, s *browserControlSession
 		cancel()
 		if err == nil {
 			after = max(after, events.Next)
-			if api.ValidBrowserAuditHost(events.Host) && events.Host != "" {
-				s.mu.Lock()
-				s.host = events.Host
-				s.mu.Unlock()
+			for _, event := range events.Events {
+				if api.ValidBrowserAuditHost(event.Host) && event.Host != "" {
+					s.mu.Lock()
+					s.host = event.Host
+					s.mu.Unlock()
+				}
 			}
 			if events.Done {
 				reason := browserControlReason(events.Reason)
@@ -378,7 +380,13 @@ func (b *Backend) openBrowserControl(hostCtx, jobCtx context.Context, c *client.
 	}
 	args["request_id"], _ = json.Marshal(hj.Job.ID)
 	args["grant_id"], _ = json.Marshal(g.ID)
-	args["actor"], _ = json.Marshal(g.Agent)
+	actor := api.BrowserControlActor{ID: g.Agent, Name: g.Agent}
+	labelCtx, labelCancel := context.WithTimeout(jobCtx, 2*time.Second)
+	if agent, err := c.GetAgent(labelCtx, g.Agent); err == nil && agent.DisplayName != "" && len(agent.DisplayName) <= 160 {
+		actor.Name = agent.DisplayName
+	}
+	labelCancel()
+	args["actor"], _ = json.Marshal(actor)
 	args["expires_at"], _ = json.Marshal(g.ExpiresAt)
 	ctx, cancel := context.WithCancel(jobCtx)
 	defer cancel()
@@ -428,23 +436,21 @@ func (b *Backend) browserControlResult(ctx context.Context, c *client.Client, ho
 		failure.BrowserHost = auditHost
 		return failure
 	}
-	var artifact struct {
-		ID   string `json:"artifact_id"`
-		Shot string `json:"shot"`
+	var result struct {
+		Screenshot *struct {
+			ID string `json:"id"`
+		} `json:"screenshot"`
 	}
-	if json.Unmarshal(raw, &artifact) != nil {
+	if json.Unmarshal(raw, &result) != nil {
 		return fail("component_unavailable", "the browser component returned an invalid result")
 	}
-	if artifact.ID == "" {
-		artifact.ID = artifact.Shot
-	}
-	if artifact.ID == "" {
+	if result.Screenshot == nil || result.Screenshot.ID == "" {
 		if op == "screenshot" {
 			return fail("component_unavailable", "the browser component returned no screenshot")
 		}
 		return out
 	}
-	data, kind, err := b.browserComponent().Artifact(ctx, scope, artifact.ID)
+	data, kind, err := b.browserComponent().Artifact(ctx, scope, result.Screenshot.ID)
 	if err != nil {
 		return fail("storage_failed", "could not read the private screenshot")
 	}
@@ -460,8 +466,7 @@ func (b *Backend) browserControlResult(ctx context.Context, c *client.Client, ho
 	}
 	var fields map[string]json.RawMessage
 	_ = json.Unmarshal(raw, &fields)
-	delete(fields, "artifact_id")
-	delete(fields, "shot")
+	delete(fields, "screenshot")
 	out.Result, _ = json.Marshal(fields)
 	out.ArtifactIDs = []string{file.ID}
 	return out

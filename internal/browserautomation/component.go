@@ -426,13 +426,17 @@ func (c *Component) Call(ctx context.Context, scope, method, path string, in, ou
 	defer res.Body.Close()
 	if res.StatusCode >= 400 {
 		var v struct {
-			Error  string `json:"error"`
-			Code   string `json:"code"`
-			Reason string `json:"reason"`
+			Error   string `json:"error"`
+			Code    string `json:"code"`
+			Reason  string `json:"reason"`
+			Applied *int   `json:"applied"`
 		}
 		_ = json.NewDecoder(io.LimitReader(res.Body, 4096)).Decode(&v)
-		if v.Code != "" {
-			return &ComponentError{Code: v.Code, Reason: v.Reason}
+		if v.Code != "" || strings.HasPrefix(path, "/control/") && v.Error != "" {
+			if v.Code == "" {
+				v.Code = v.Error
+			}
+			return &ComponentError{Code: v.Code, Reason: v.Reason, Applied: v.Applied}
 		}
 		if v.Error == "" {
 			v.Error = "component_failed"

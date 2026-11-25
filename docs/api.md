@@ -568,8 +568,8 @@ minutes. The browser opens visibly so the owner can watch and stop it.
 | Action | Arguments | Result |
 |---|---|---|
 | `browser.page.open` | `{profile,url?}` | `session,active_tab,tabs,snapshot,expires_at,idle_expires_at,start_url` |
-| `browser.page.snapshot` | `{session,tab?,mode?,max_nodes?,screenshot?}` | A snapshot with `snapshot_id,frames,node_count,truncated` and accessibility nodes or text |
-| `browser.page.act` | `{session,op,tab?,ref?,value?,key?,url?,dy?,wait?,choice?,timeout_ms?}` | `active_tab,tabs,new_tab?,step_ids,snapshot?,snapshot_error?` |
+| `browser.page.snapshot` | `{session,tab?,mode?,max_nodes?,include_screenshot?}` | A snapshot with `snapshot_id,frames,node_count,truncated` and accessibility nodes or text |
+| `browser.page.act` | `{session,op,tab?,ref?,value?,key?,url?,dy?,wait?,choice?,timeout_ms?,clear?}` | `active_tab,tabs,new_tab?,step_ids,snapshot?,snapshot_error?` |
 | `browser.page.extract` | `{session,tab?,ref,what,attr?}` | Extracted text |
 | `browser.page.screenshot` | `{session,tab?,ref?,clip?,full?}` | Screenshot metadata and a private job artifact |
 | `browser.page.close` | `{session}` | `steps,removed,next,done:true,reason:"closed"` |

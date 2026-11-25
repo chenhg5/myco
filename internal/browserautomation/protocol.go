@@ -11,8 +11,9 @@ type ComponentStatus = api.BrowserComponentStatus
 // ComponentError preserves the stable native protocol code and terminal reason.
 // Native error text can contain page content and never crosses into a Hub job.
 type ComponentError struct {
-	Code   string
-	Reason string
+	Code    string
+	Reason  string
+	Applied *int
 }
 
 func (e *ComponentError) Error() string { return e.Code }
