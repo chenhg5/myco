@@ -16,3 +16,22 @@ assert.ok(sent[0].target.locators.length>=2);
 handlers.input({isTrusted:false,composedPath(){return[password]}});
 window.__mycoRecorder.flush();assert.equal(sent.length,1,'untrusted synthetic input was recorded');
 console.log('recorder: password values never read; parameter reference and fallback locators retained');
+
+window.__mycoRecorder.ignoreEvent=ev=>ev.panel===true;
+handlers.click({isTrusted:true,panel:true,composedPath(){return[password]}});
+handlers.input({isTrusted:true,panel:true,composedPath(){return[password]}});
+window.__mycoRecorder.flush();
+assert.equal(sent.length,1,'panel clicks/inputs must not become recording steps');
+// Subframes get state synchronization but never mount controls. Reordered
+// host responses must not roll a newer picking state back.
+window.top={};
+vm.runInNewContext(readFileSync(new URL('./panel.js',import.meta.url),'utf8'),{window,document:{createElement(){throw Error('iframe panel mounted')}}});
+window.__mycoRecorder.updatePanel({revision:2,id:'rec',picking:true});
+window.__mycoRecorder.updatePanel({revision:1,id:'old',picking:false});
+assert.equal(window.__mycoRecorder.picking,true);
+assert.equal(window.__mycoRecorder.recordingID,'rec');
+console.log('recorder: panel events excluded, iframe has no UI, stale state rejected');
+
+window.__mycoRecorder.updatePanel({revision:3,id:'rec',recording:false},true);
+window.__mycoRecorder.updatePanel({revision:2,id:'rec',recording:true},true);
+assert.equal(window.__mycoRecorder.enabled,false,'late context update restarted a stopped collector');

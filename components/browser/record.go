@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -19,19 +20,37 @@ type captured struct {
 	page  *rod.Page
 	frame proto.PageFrameID
 }
+type recordingInfo struct {
+	ID        string    `json:"id"`
+	Profile   string    `json:"profile"`
+	URL       string    `json:"url"`
+	StartedAt time.Time `json:"started_at"`
+	Origin    string    `json:"origin"`
+}
+type recordChange struct {
+	added   int
+	removed string
+}
 type recording struct {
-	tabs      []proto.TargetTargetID
-	id, scope string
-	session   *session
-	mu        sync.Mutex
-	steps     []node
-	done      bool
-	err       string
-	wake      chan struct{}
-	queue     chan captured
-	closing   bool
-	barriers  map[string]chan struct{}
-	bytes     int
+	info         recordingInfo
+	changes      []recordChange
+	removed      map[string]bool
+	claimed      bool
+	picking      bool
+	selected     *captured
+	extractCount int
+	tabs         []proto.TargetTargetID
+	id, scope    string
+	session      *session
+	mu           sync.Mutex
+	steps        []node
+	done         bool
+	err          string
+	wake         chan struct{}
+	queue        chan captured
+	closing      bool
+	barriers     map[string]chan struct{}
+	bytes        int
 }
 
 func (r *recording) signalLocked()               { close(r.wake); r.wake = make(chan struct{}) }
@@ -71,6 +90,7 @@ func (r *recording) worker() {
 		r.done = true
 		r.signalLocked()
 		r.mu.Unlock()
+		s.setRecording(false)
 	}()
 
 	for c := range r.queue {
@@ -110,9 +130,11 @@ func (r *recording) worker() {
 			return
 		}
 		r.steps = append(r.steps, n)
+		r.changes = append(r.changes, recordChange{added: len(r.steps) - 1})
 		r.bytes += len(raw)
 		r.signalLocked()
 		r.mu.Unlock()
+		r.session.updatePanel("")
 	}
 }
 func (r *recording) events(ctx context.Context, after int) (map[string]any, error) {
@@ -120,18 +142,36 @@ func (r *recording) events(ctx context.Context, after int) (map[string]any, erro
 	defer timer.Stop()
 	for {
 		r.mu.Lock()
-		if after < 0 || after > len(r.steps) {
+		if after < 0 || after > len(r.changes) {
 			r.mu.Unlock()
 			return nil, errors.New("invalid_argument")
 		}
-		if len(r.steps) > after || r.done || r.err != "" {
-			steps := append([]node{}, r.steps[after:]...)
-			next, done, err := len(r.steps), r.done, r.err
+		if len(r.changes) > after || r.done || r.err != "" {
+			steps := []node{}
+			removed := []string{}
+			for _, change := range r.changes[after:] {
+				n := r.steps[change.added]
+				if change.removed == "" {
+					if !r.removed[n.ID] {
+						steps = append(steps, n)
+					}
+				} else {
+					// A deletion is only needed if this reader's cursor has
+					// already passed the step's original add event.
+					for _, original := range r.changes[:after] {
+						if original.removed == "" && original.added == change.added {
+							removed = append(removed, change.removed)
+							break
+						}
+					}
+				}
+			}
+			next, done, err := len(r.changes), r.done, r.err
 			r.mu.Unlock()
 			if err != "" {
 				return nil, errors.New(err)
 			}
-			return map[string]any{"steps": steps, "next": next, "done": done}, nil
+			return map[string]any{"steps": steps, "removed": removed, "next": next, "done": done}, nil
 		}
 		wake := r.wake
 		r.mu.Unlock()
@@ -140,7 +180,7 @@ func (r *recording) events(ctx context.Context, after int) (map[string]any, erro
 			return nil, ctx.Err()
 		case <-wake:
 		case <-timer.C:
-			return map[string]any{"steps": []node{}, "next": after, "done": false}, nil
+			return map[string]any{"steps": []node{}, "removed": []string{}, "next": after, "done": false}, nil
 		}
 	}
 }
@@ -163,44 +203,11 @@ func (e *engine) recordRoutes(m *http.ServeMux) {
 			fail(w, publicError(err), 409)
 			return
 		}
-		e.mu.Lock()
-		full := len(e.recordings) >= 256
-		e.mu.Unlock()
-		if full {
-			fail(w, "recording_limit", 409)
-			return
-		}
-		rec := &recording{id: "rec_" + rand.Text(), scope: scope(r), session: s, steps: []node{}, wake: make(chan struct{}), queue: make(chan captured, 128), barriers: map[string]chan struct{}{}}
-		if err = s.claim(rec.id); err != nil {
-			fail(w, "busy", 409)
-			return
-		}
-		p, err := s.page()
+		rec, err := e.startRecording(r.Context(), s, nil, in.URL, "page")
 		if err != nil {
-			s.release(rec.id)
-			fail(w, "target_not_found", 409)
-			return
-		}
-		// Navigate first, then enable capture: the script already stores start_url.
-		if err = p.Context(r.Context()).Navigate(in.URL); err != nil {
-			s.release(rec.id)
 			fail(w, publicError(err), 409)
 			return
 		}
-		if err = p.Context(r.Context()).WaitLoad(); err != nil {
-			s.release(rec.id)
-			fail(w, publicError(err), 409)
-			return
-		}
-		rec.tabIndex(p.TargetID)
-		s.mu.Lock()
-		s.recorder = rec
-		s.mu.Unlock()
-		e.mu.Lock()
-		e.recordings[rec.id] = rec
-		e.mu.Unlock()
-		go rec.worker()
-		s.setRecording(true)
 		jsonReply(w, map[string]string{"id": rec.id})
 	})
 	m.HandleFunc("GET /record/events", func(w http.ResponseWriter, r *http.Request) {
@@ -216,6 +223,14 @@ func (e *engine) recordRoutes(m *http.ServeMux) {
 			fail(w, "not_found", 404)
 			return
 		}
+		rec.mu.Lock()
+		if after < 0 || after > len(rec.changes) {
+			rec.mu.Unlock()
+			fail(w, "invalid_argument", 400)
+			return
+		}
+		rec.claimed = true
+		rec.mu.Unlock()
 		out, err := rec.events(r.Context(), after)
 		if err != nil {
 			fail(w, publicError(err), 409)
@@ -286,4 +301,88 @@ func (r *recording) tabIndex(id proto.TargetTargetID) int {
 	}
 	r.tabs = append(r.tabs, id)
 	return len(r.tabs) - 1
+}
+
+func (e *engine) startRecording(ctx context.Context, s *session, p *rod.Page, url, origin string) (*recording, error) {
+	rec := &recording{id: "rec_" + rand.Text(), scope: s.scope, session: s, steps: []node{}, removed: map[string]bool{}, wake: make(chan struct{}), queue: make(chan captured, 128), barriers: map[string]chan struct{}{}}
+	if err := s.claim(rec.id); err != nil {
+		return nil, err
+	}
+	success := false
+	defer func() {
+		if !success {
+			s.release(rec.id)
+		}
+	}()
+	var err error
+	if p == nil {
+		p, err = s.page()
+		if err != nil {
+			return nil, err
+		}
+	}
+	if origin == "page" {
+		if err = p.Context(ctx).Navigate(url); err != nil {
+			return nil, err
+		}
+		if err = p.Context(ctx).WaitLoad(); err != nil {
+			return nil, err
+		}
+	}
+	if checkedURL(url) != nil {
+		return nil, errors.New("invalid_argument")
+	}
+	if origin == "browser" {
+		url = navigationURL(url)
+	}
+	rec.info = recordingInfo{ID: rec.id, Profile: s.id, URL: url, StartedAt: time.Now().UTC(), Origin: origin}
+	rec.tabIndex(p.TargetID)
+	e.mu.Lock()
+	if len(e.recordings) >= 256 {
+		e.mu.Unlock()
+		return nil, errors.New("recording_limit")
+	}
+	e.recordings[rec.id] = rec
+	e.mu.Unlock()
+	s.mu.Lock()
+	s.current = p.TargetID
+	s.recorder = rec
+	s.mu.Unlock()
+	success = true
+	go rec.worker()
+	s.setRecording(true)
+	return rec, nil
+}
+func (e *engine) activeRecordings(scope string) []recordingInfo {
+	out := []recordingInfo{}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for _, rec := range e.recordings {
+		if rec.scope != scope {
+			continue
+		}
+		rec.mu.Lock()
+		if (rec.info.Origin == "browser" && !rec.claimed) || (rec.info.Origin == "page" && !rec.done) {
+			out = append(out, rec.info)
+		}
+		rec.mu.Unlock()
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].StartedAt.Before(out[j].StartedAt) })
+	return out
+}
+func (r *recording) remove(id string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.done || r.closing || r.removed[id] {
+		return false
+	}
+	for i, n := range r.steps {
+		if n.ID == id {
+			r.removed[id] = true
+			r.changes = append(r.changes, recordChange{added: i, removed: id})
+			r.signalLocked()
+			return true
+		}
+	}
+	return false
 }

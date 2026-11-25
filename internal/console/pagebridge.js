@@ -302,6 +302,7 @@
           configure:function(id,settings){return invoke("profiles.configure",{id:String(id),settings:settings});}
         },
         record:{
+          active:function(){return invoke("record.active");},
           start:function(options){return invoke("record.start",options);},
           events:function(id,after){return invoke("record.events",{id:String(id),after:after});},
           stop:function(id){return invoke("record.stop",{id:String(id)});}

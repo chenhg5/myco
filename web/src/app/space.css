@@ -2408,12 +2408,34 @@ body.is-resizing {
 }
 /* A long thing it said between steps: the first six lines until clicked,
    as thinking reads (the markdown's own block layout stays). */
-.trace-say.is-long {
+.trace-say.is-clamped {
+  max-height: 12em;
+  overflow: hidden;
+  cursor: pointer;
+  /* fading out, so a line cut through reads as more below, not as lost */
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 3.2em), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 3.2em), transparent);
+}
+.trace-say-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 2px;
+  padding: 2px 6px 2px 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
   cursor: pointer;
 }
-.trace-say.is-clamped {
-  max-height: 10em;
-  overflow: hidden;
+.trace-say-more:hover {
+  color: var(--fg);
+}
+.trace-say-more svg {
+  width: 13px;
+  height: 13px;
+  transform: rotate(90deg);
 }
 /* The whole process in one line (steps and time); a click opens it. The
    newest few things while it works, all of them once opened. */

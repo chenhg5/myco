@@ -1,7 +1,15 @@
-// Collector only: no DOM UI, network requests, polling or password values.
+// Isolated-world collector. Controls live in panel.js; password values never leave the page.
 (() => {
   if (window.__mycoRecorder) return;
   const state = window.__mycoRecorder = {enabled:false, pending:null, timer:0};
+  state.updatePanel = (next,sync=false) => {
+    if(next.revision < (state.revision || 0)) return;
+    state.revision=next.revision;
+    if(sync) state.enabled=!!next.recording;
+    state.picking=!!next.picking;
+    state.recordingID=next.id;
+    if(state.renderPanel) state.renderPanel(next);
+  };
   const cut = (s,n=160) => String(s || '').slice(0,n);
   const css = e => {
     const path=[];
@@ -40,10 +48,11 @@
   const send = node => {if(state.enabled && typeof window.__mycoBrowserEvent==='function')window.__mycoBrowserEvent(JSON.stringify(node));};
   const flush = () => {clearTimeout(state.timer);if(state.pending){send(state.pending);state.pending=null;}};
   state.flush=flush;
+  const ignored = ev => state.ignoreEvent && state.ignoreEvent(ev);
   const element = ev => {const n=ev.composedPath()[0];return n && n.nodeType===1?n:null;};
   const meaningful = e => e.closest('button,a,input,textarea,select,[role],label,[contenteditable]') || e;
   document.addEventListener('input',ev=>{
-    if(!state.enabled || !ev.isTrusted)return;
+    if(!state.enabled || !ev.isTrusted || ignored(ev) || state.picking)return;
     const e=element(ev);if(!e || e.tagName==='SELECT' || ['file','checkbox','radio'].includes(e.type))return;
     if(state.pending && state.pendingElement!==e)flush();
     const sensitive=e.type==='password' || /password/i.test(e.autocomplete||'') || e.hasAttribute('data-sensitive');
@@ -52,19 +61,26 @@
     clearTimeout(state.timer);state.timer=setTimeout(flush,250);
   },true);
   for(const kind of ['click','contextmenu'])document.addEventListener(kind,ev=>{
-    if(!state.enabled || !ev.isTrusted)return;flush();const raw=element(ev);if(!raw)return;const e=meaningful(raw);
+    if(!ev.isTrusted || ignored(ev))return;
+    if(state.picking){
+      ev.preventDefault();ev.stopImmediatePropagation();
+      if(kind==='click'){const e=element(ev);if(e){state.picking=false;window.__mycoBrowserEvent(JSON.stringify({type:'panel',action:'picked',recording_id:state.recordingID,target:window.__mycoDescribe(e)}));}}
+      return;
+    }
+    if(!state.enabled)return;flush();const raw=element(ev);if(!raw)return;const e=meaningful(raw);
     if(e.tagName==='SELECT'||e.tagName==='OPTION'||e.type==='file')return;
     // Keep the two native click events of a double click in order. The
     // second event's CDP clickCount=2 reproduces its dblclick event too.
     send({type:'click',target:window.__mycoDescribe(e),button:kind==='contextmenu'?'right':ev.button===1?'middle':'left',count:ev.detail===2?2:1});
   },true);
   document.addEventListener('change',ev=>{
-    if(!state.enabled || !ev.isTrusted)return;const e=element(ev);if(!e)return;flush();
+    if(!state.enabled || !ev.isTrusted || ignored(ev) || state.picking)return;const e=element(ev);if(!e)return;flush();
     if(e.tagName==='SELECT')send({type:'select',target:window.__mycoDescribe(e),value:cut(e.value,4000)});
     if(e.type==='file')send({type:'upload',target:window.__mycoDescribe(e),value:'${upload}',note:'Choose the file again at run time; local file paths are not recorded.'});
   },true);
   document.addEventListener('keydown',ev=>{
-    if(!state.enabled || !ev.isTrusted || ['Control','Meta','Alt','Shift'].includes(ev.key))return;
+    if(state.picking && ev.isTrusted && ev.key==='Escape'){ev.preventDefault();ev.stopImmediatePropagation();window.__mycoBrowserEvent(JSON.stringify({type:'panel',action:'cancel-pick',recording_id:state.recordingID}));return;}
+    if(!state.enabled || !ev.isTrusted || ignored(ev) || state.picking || ['Control','Meta','Alt','Shift'].includes(ev.key))return;
     if(ev.key==='Tab' || ev.key==='Enter' || ev.key==='Escape' || ev.ctrlKey || ev.metaKey || ev.altKey || /^Arrow/.test(ev.key)) {
       flush();const e=element(ev);
       const key=[ev.ctrlKey?'Control':'',ev.metaKey?'Meta':'',ev.altKey?'Alt':'',ev.shiftKey?'Shift':'',ev.key].filter(Boolean).join('+');
@@ -72,11 +88,11 @@
     }
   },true);
   let scrollTimer=0;
-  document.addEventListener('scroll',ev=>{if(!state.enabled || !ev.isTrusted)return;clearTimeout(scrollTimer);const e=ev.target===document?document.scrollingElement:ev.target;
+  document.addEventListener('scroll',ev=>{if(!state.enabled || !ev.isTrusted || ignored(ev) || state.picking)return;clearTimeout(scrollTimer);const e=ev.target===document?document.scrollingElement:ev.target;
     scrollTimer=setTimeout(()=>{flush();send({type:'scroll',target:window.__mycoDescribe(e),dy:e.scrollTop,value:'absolute'});},180);
   },true);
-  document.addEventListener('dragstart',ev=>{if(state.enabled && ev.isTrusted)state.drag=element(ev)},true);
-  document.addEventListener('drop',ev=>{if(!state.enabled || !ev.isTrusted || !state.drag)return;flush();send({type:'drag',target:window.__mycoDescribe(state.drag),to:window.__mycoDescribe(element(ev))});state.drag=null},true);
+  document.addEventListener('dragstart',ev=>{if(state.enabled && ev.isTrusted && !ignored(ev) && !state.picking)state.drag=element(ev)},true);
+  document.addEventListener('drop',ev=>{if(!state.enabled || !ev.isTrusted || ignored(ev) || state.picking || !state.drag)return;flush();send({type:'drag',target:window.__mycoDescribe(state.drag),to:window.__mycoDescribe(element(ev))});state.drag=null},true);
   window.addEventListener('beforeunload',flush,true);
   document.addEventListener('focusout',flush,true);
 })();

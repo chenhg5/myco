@@ -3888,6 +3888,34 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "conversation-tool-trace");
     });
 
+    // A long thing said between steps is held short: fading out, with
+    // 展开全文 under it, never cut through a line with nothing to say so.
+    await step("单聊 · 过程里的长段话", async () => {
+      const body = "长段汇总：各个循环现在怎么样";
+      await openMember(page, narrow, "聊天", "legacy-codex");
+      await sendFromElsewhere("hub_studio", "legacy-codex", body);
+      await page.locator(".conv-msg", { hasText: body }).last().waitFor({ timeout: 20_000 });
+      await page.waitForTimeout(7_500);
+      const fold = page.locator(".conv-detail .trace-fold").last();
+      if ((await fold.getAttribute("aria-expanded")) !== "true") await fold.click();
+      const said = page.locator(".conv-detail .trace-say", { hasText: "先说结论" }).last();
+      await said.waitFor({ timeout: 10_000 });
+      if (!(await said.evaluate((el) => el.classList.contains("is-clamped")))) throw new Error("长段话在过程里应先收起");
+      const mask = await said.evaluate((el) => getComputedStyle(el).maskImage || getComputedStyle(el).webkitMaskImage || "");
+      if (!/gradient/.test(mask)) throw new Error("收起的长段话底部应渐隐，而不是一刀切");
+      const more = said.locator("xpath=following-sibling::*[1]");
+      if (!(await more.evaluate((el) => el.classList.contains("trace-say-more")))) throw new Error("收起的长段话下面应有「展开全文」");
+      await said.scrollIntoViewIfNeeded();
+      await settle(page, 300);
+      await shot(page, size, scheme, "conversation-long-said");
+      await clickVisible(page, more);
+      await page.waitForFunction(() => {
+        const el = [...document.querySelectorAll(".conv-detail .trace-say")].filter((x) => x.textContent?.includes("先说结论")).pop();
+        return !!el && !el.classList.contains("is-clamped") && el.scrollHeight <= el.clientHeight + 2 && el.textContent.includes("最后一行");
+      }, null, { timeout: 5_000 });
+      if (await page.locator(".conv-detail .trace-say-more").count()) throw new Error("展开以后「展开全文」应收起来");
+    });
+
     // A task the node accepted long ago and went quiet on may have lost its
     // result: the chat says so instead of spinning, and one click stops it
     // and sends the same message again.

@@ -4,10 +4,10 @@ The desktop App can record and replay a linear workflow in a dedicated local Chr
 
 ## Install and use
 
-Open Web automation in the Mac or Windows App, then choose **Install browser component**. The App asks for confirmation in its own dialog, downloads the pinned `browser-v0.2.0` release, checks `SHA256SUMS`, and installs it under `~/.myco/components/browser/0.2.0/`. Installation is optional and never happens on a status request. An unpublished component release produces an installation error; it is not replaced with an arbitrary version.
+Open Web automation in the Mac or Windows App, then choose **Install browser component**. The App asks for confirmation in its own dialog, downloads the pinned `browser-v0.3.0` release, checks `SHA256SUMS`, and installs it under `~/.myco/components/browser/0.3.0/`. Installation is optional and never happens on a status request. An unpublished component release produces an installation error; it is not replaced with an arbitrary version.
 
-Existing 0.1.0 and 0.1.1 installations remain usable and report `update_available`.
-Choose **Update component** to install 0.2.0. The App verifies and installs the
+Existing 0.2.0, 0.1.1 and 0.1.0 installations remain usable and report `update_available`.
+Choose **Update component** to install 0.3.0. The App verifies and installs the
 new package before stopping the old process; download or checksum failures leave
 the old process available. The next browser operation starts the new version.
 Finish recording or playback before updating, because the old browser sessions
@@ -32,7 +32,7 @@ Create a profile, record actions, stop recording, and review the resulting seque
 
 Supported Mac arm64/x64 and Windows x64 desktop hosts advertise `myco.features.includes("browser")` so an uninstalled component can be discovered. Check `await myco.browser.status()` for `update_available` (an older compatible component is installed), `installed`, `supported`, `reason`, `protocol`, `version`, browser names, machine name and profiles. Missing installations return an empty version and empty browser/profile arrays. Other platforms and the web-only console do not advertise the feature.
 
-The bridge provides `install`, `profiles.create/open/allowAgents`, `record.start/events/stop`, `runs.start/get/control`, `locate`, `pick`, and `snapshot`. `install` and enabling `allowAgents` require a host-owned confirmation, bound to the page instance and action with a one-use, 60-second nonce. The child never receives that nonce. The browser capability also needs the App's per-page, once-per-App consent.
+The bridge provides `install`, `profiles.create/open/allowAgents`, `record.active/start/events/stop`, `runs.start/get/control`, `locate`, `pick`, and `snapshot`. `install` and enabling `allowAgents` require a host-owned confirmation, bound to the page instance and action with a one-use, 60-second nonce. The child never receives that nonce. The browser capability also needs the App's per-page, once-per-App consent.
 
 Long polls use cursor deltas (20 seconds maximum); keep the returned cursor. `snapshot(id)` returns an image Blob. Methods follow the [application SDK](https://github.com/myco-ai/apps/tree/main/templates/src/web-automation).
 
@@ -54,9 +54,10 @@ Iframe sessions attach their descendants without pausing them, so verification
 widgets can initialize normally. Pages and popups retain their paused collector
 bootstrap. New-document hooks and existing-context injection capture iframe
 events after installation; the earliest events before installation may be missed.
-The component adds `--disable-blink-features=AutomationControlled` while keeping
-Chrome's native user agent and avoiding stealth scripts. Website challenges can
-still require a person's interaction.
+Default flags omit experimental Blink switches that display Chrome’s unsupported
+command-line warning, including `--disable-blink-features=AutomationControlled`.
+Chrome keeps its native user agent, with no stealth scripts. Website challenges
+can still require a person’s interaction.
 
 M0/M1 accepts a single connected, acyclic sequence, up to 128 nodes. Branches, loops and subflows fail validation before the browser opens. Element actions wait for visibility/interactability, not inserted sleeps. Explicit `wait:time` is supported when a person deliberately adds it. `stop`, `skip`, and `retry:1..5` failure policies are supported. Unknown or ambiguous targets fail instead of clicking an arbitrary match.
 
@@ -175,3 +176,51 @@ ASCII characters. A profile can save settings while running without restarting
 or changing that session. Close its browser before starting a session with the
 new settings. Updating settings does not revoke script approvals; settings
 fingerprints and approval-change indicators are reserved for a later change.
+
+## Recording inside Chrome
+
+Every headed profile browser opened by myco has a small recorder at the top
+right of its top-level pages. Headless sessions never inject panel code. While
+a run or native debugging action owns the session, the entire panel host is
+removed before execution and restored after release, so it cannot intercept
+playback clicks, screenshots or hit testing. Drag its header to move it or collapse it. It follows the
+browser's language (Chinese/English) and light/dark appearance. Its controls
+run in the isolated collector world inside a closed shadow root, outside the
+website's script context. Frames collect actions but never display another panel.
+The panel's controls are excluded from recorded actions.
+
+Choose **Start recording** on the current page, interact with the site, then
+**Stop recording**. Page-started recordings use the same panel. The list shows
+recent actions first, with type, name and target; any step can be deleted.
+**Capture** enters element selection: clicking an element is intercepted rather
+than activating it or recording a click. Choose text, an attribute (with its
+name), or HTML and save an `extract` node with `what`, `attr` when needed, and
+`into` (default `data1`, `data2`, ...). These are suggested output names only;
+the application may rename them to avoid existing script outputs. The component
+does not generate references to these names in other recorded steps. Esc cancels selection. Frames retain their
+locator paths. Password values are never shown in the panel's step summaries.
+
+Protocol 1 adds optional `myco.browser.record.active()` on newer hosts. It calls
+component `GET /status` and returns its scope-filtered `recordings` list:
+
+```json
+[{"id":"rec_example","profile":"p_work","url":"https://example.com/","started_at":"2026-11-25T00:00:00Z","origin":"browser"}]
+```
+
+`origin` is `browser` for panel starts or `page` for `record.start`. Unclaimed
+browser recordings remain discoverable even after they stop. The first valid
+`record.events(id, after)` request claims a recording and removes it from browser
+discovery; known IDs remain readable, including replay from `after=0`. Page-origin
+recordings can appear while running. Scope is the existing workspace/page/instance
+session scope; another scope cannot discover or read these recordings. Buffers
+keep the existing limits (128 added steps, 48 KiB, 256 recordings per component).
+
+`record.events` now returns `{steps, removed, next, done}`. `next` is an opaque,
+monotonic cursor that also advances for deletions. Remove the IDs in `removed`
+from the script, then continue with `next`. Already-deleted steps that were not
+sent before the supplied cursor are omitted from `steps`; they need no tombstone.
+Deletion never renumbers or shrinks cursors; retry from the last saved cursor
+to replay pending changes. Ending from either surface
+flushes pending inputs and returns `done:true` once the buffer is drained. Older
+components may omit `recordings`/`removed`; newer hosts return an empty active
+list for components that do not advertise recordings.

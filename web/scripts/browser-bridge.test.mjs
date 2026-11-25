@@ -45,3 +45,10 @@ assert.equal(configured.args.action,'profiles.configure');
 assert.deepEqual(JSON.parse(JSON.stringify(configured.args.args)),{id:'p_fixture',settings});
 assert.ok(!('confirmation' in configured.args));
 console.log('browser bridge: install, profiles, recording/run cursors, controls and image Blob passed');
+
+const metadata=[{id:'rec_browser',profile:'p_fixture',url:'https://example.com',started_at:'2026-11-25T00:00:00Z',origin:'browser'}];
+parent.postMessage=function(message){sent.push(message);queueMicrotask(()=>handlers.message({source:parent,data:{myco:'result',id:message.id,value:message.args.action==='record.active'?metadata:{steps:[],removed:['n_deleted'],next:9,done:true}}}));};
+assert.deepEqual(JSON.parse(JSON.stringify(await api.record.active())),metadata);
+assert.deepEqual(JSON.parse(JSON.stringify(await api.record.events('rec_browser',8))),{steps:[],removed:['n_deleted'],next:9,done:true});
+assert.equal(sent.at(-2).args.action,'record.active');
+console.log('browser bridge: active browser recordings and removed steps preserved');
