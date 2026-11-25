@@ -90,7 +90,10 @@ type osGrant struct {
 	Name   string   `json:"name,omitempty"` // the page's name when allowed, to show
 	Groups []string `json:"groups"`
 	Hosts  []string `json:"hosts,omitempty"` // network: hosts allowed beyond its manifest's
-	At     int64    `json:"at"`
+	// Version: the page's code these were allowed for (osDecl.ver); a
+	// newer one is asked again. Grants kept before v0.22.11 have none.
+	Version string `json:"version,omitempty"`
+	At      int64  `json:"at"`
 }
 
 type osPerm struct {
@@ -98,6 +101,21 @@ type osPerm struct {
 	hosts, onceHosts     map[string]bool // network: allowed always (kept), for this run
 	picked               []string
 	name                 string
+	// ver: the page's code its allows are for; denials hold for every version
+	ver string
+}
+
+// forVersion keeps the allows only for the code they were given for: a
+// page republished, or its app upgraded, is asked again (as Claude's
+// installed apps are). Says whether anything was dropped.
+func (p *osPerm) forVersion(ver string) bool {
+	if p.ver == ver {
+		return false
+	}
+	dropped := len(p.once)+len(p.always)+len(p.hosts)+len(p.onceHosts) > 0
+	p.once, p.always, p.hosts, p.onceHosts = map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}
+	p.ver = ver
+	return dropped
 }
 
 type osGrants struct {
@@ -116,6 +134,8 @@ type osDecl struct {
 	declares bool
 	// official: one of myco's own apps (the hub says so)
 	official bool
+	// ver: which code the page runs: its version, and its app's
+	ver string
 }
 
 // strict: what the app does not declare is refused, not asked. Pages with
@@ -160,7 +180,7 @@ func (g *osGrants) load() {
 	}
 	for _, e := range list {
 		p := g.perm(e.Hub, e.Page)
-		p.name = e.Name
+		p.name, p.ver = e.Name, e.Version
 		for _, gr := range e.Groups {
 			if !osOnceOnly[gr] {
 				p.always[gr] = true
@@ -180,7 +200,7 @@ func (g *osGrants) saveLocked() {
 	var list []osGrant
 	for k, p := range g.pages {
 		hub, page, _ := strings.Cut(k, "\x00")
-		e := osGrant{Hub: hub, Page: page, Name: p.name, At: time.Now().Unix()}
+		e := osGrant{Hub: hub, Page: page, Name: p.name, Version: p.ver, At: time.Now().Unix()}
 		for gr := range p.always {
 			e.Groups = append(e.Groups, gr)
 		}
@@ -238,6 +258,12 @@ func declOf(p *api.Page) osDecl {
 		d.os, d.net = p.Template.OS, p.Template.Net
 		d.declares, d.official = p.Template.Declares, p.Template.Official
 	}
+	if p.Version > 0 || p.Template != nil {
+		d.ver = fmt.Sprintf("%d", p.Version)
+		if p.Template != nil {
+			d.ver += "/" + p.Template.Version
+		}
+	}
 	return d
 }
 
@@ -259,23 +285,26 @@ func (b *Backend) osCheck(ctx context.Context, in osCallIn) (*osConsent, error) 
 		// (no page: the App itself, or a tool of its own)
 		return nil, nil
 	}
+	d := b.declared(ctx, in.Page.Hub, in.Page.ID)
 	g := b.grants()
 	g.mu.Lock()
 	p := g.perm(in.Page.Hub, in.Page.ID)
 	if in.Page.Name != "" {
 		p.name = in.Page.Name
 	}
+	if p.forVersion(d.ver) {
+		g.saveLocked()
+	}
 	picked := append([]string(nil), p.picked...)
 	denied, allowed := p.denied[group], p.once[group] || p.always[group]
 	g.mu.Unlock()
 	if pickFree[in.Name] || (group == "files" || group == "files.write" || in.Name == "fs.open") && within(osPaths(in.Name, in.Args), picked) {
 		// (the person's own pick: still only for an app that says it uses files)
-		if d := b.declared(ctx, in.Page.Hub, in.Page.ID); d.strict() && !hasString(d.os, group) {
+		if d.strict() && !hasString(d.os, group) {
 			return nil, undeclaredOS(group)
 		}
 		return nil, nil
 	}
-	d := b.declared(ctx, in.Page.Hub, in.Page.ID)
 	declared := !d.app || hasString(d.os, group)
 	if !declared && d.strict() {
 		return nil, undeclaredOS(group)
@@ -515,6 +544,7 @@ func (b *Backend) grantRoutes(m *http.ServeMux) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_argument", "message": "hub, page, group and answer (once, always or deny)"})
 			return
 		}
+		ver := b.declared(r.Context(), in.Hub, in.Page).ver
 		g := b.grants()
 		g.mu.Lock()
 		defer g.mu.Unlock()
@@ -522,6 +552,8 @@ func (b *Backend) grantRoutes(m *http.ServeMux) {
 		if in.Name != "" {
 			p.name = in.Name
 		}
+		// (an answer is for the code the page runs now)
+		p.forVersion(ver)
 		answer := in.Answer
 		if answer == "always" && osOnceOnly[in.Group] {
 			answer = "once"
