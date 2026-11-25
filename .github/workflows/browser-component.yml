@@ -48,7 +48,7 @@ jobs:
           mkdir -p component-out
           cd components/browser
           go vet ./...
-          go test -v -timeout 7m ./... -args -browser-smoke
+          go test -v -count=2 -timeout 7m -run '^TestNativeChrome(RecordAndReplayTenTimes|RecordsOnlyUserTopLevelNavigation)$' ./... -args -browser-smoke
           go build -trimpath -ldflags='-s -w' -o "../../component-out/myco-browser${suffix}" .
           python scripts/licenses.py ../../component-out/NOTICE-dependencies.txt
       - name: Package

@@ -156,7 +156,7 @@ func TestNativeChromeRecordAndReplayTenTimes(t *testing.T) {
 			foundFrame = foundFrame || len(n.Target.Frame) > 0
 			foundShadow = foundShadow || len(n.Target.Shadow) > 0
 			if len(n.Target.Locators) > 0 && len(n.Target.Locators) < 2 {
-				t.Fatal("missing fallback locators")
+				t.Fatalf("missing fallback locators for captured node: %+v target=%+v", n, n.Target)
 			}
 		}
 	}

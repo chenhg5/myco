@@ -155,7 +155,10 @@ func TestNativeChromeRecordsOnlyUserTopLevelNavigation(t *testing.T) {
 				return
 			}
 			if time.Now().After(until) {
-				t.Fatalf("recorded %d steps, wanted %d", got, n)
+				rec.mu.Lock()
+				steps := append([]node(nil), rec.steps...)
+				rec.mu.Unlock()
+				t.Fatalf("recorded %d steps, wanted %d: %+v", got, n, steps)
 			}
 			time.Sleep(20 * time.Millisecond)
 		}
