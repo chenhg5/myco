@@ -78,6 +78,31 @@ func (s *Server) recordAs(r *http.Request, by app.Actor, action, target, detail 
 }
 
 func (s *Server) projectDTO(r *http.Request, c projectCall, v *app.ProjectView, bodies bool) api.Project {
+	return s.projectDTOs(r, c, []*app.ProjectView{v}, bodies)[0]
+}
+
+// projectDTOs maps projects, their members' agents enriched in one go:
+// enrich reads every agent's state, so once per member (23 members, a few
+// projects) made a project read take over 20 seconds on a busy hub, past
+// the App's 12-second limit for a call.
+func (s *Server) projectDTOs(r *http.Request, c projectCall, views []*app.ProjectView, bodies bool) []api.Project {
+	out := make([]api.Project, 0, len(views))
+	var agents []*api.Agent
+	for _, v := range views {
+		p, a := s.projectDTOBare(r, c, v, bodies)
+		out = append(out, p)
+		agents = append(agents, a...)
+	}
+	if len(agents) > 0 {
+		s.enrich(r.Context(), agents...)
+	}
+	return out
+}
+
+// projectDTOBare maps a project, leaving its members' agents for the
+// caller to enrich (returned).
+func (s *Server) projectDTOBare(r *http.Request, c projectCall, v *app.ProjectView, bodies bool) (api.Project, []*api.Agent) {
+	var agents []*api.Agent
 	p := v.Project
 	out := api.Project{CoordinatorInvites: p.CoordinatorInvites, CoordinatorAutomations: p.CoordinatorAutomations, Name: p.Name, Title: p.Title, Goal: p.Goal, Brief: p.Brief, Visibility: string(p.Visibility),
 		OwnerID: p.Owner, Archived: p.Archived, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt, Machines: append([]string{}, p.Machines...),
@@ -95,8 +120,8 @@ func (s *Server) projectDTO(r *http.Request, c projectCall, v *app.ProjectView, 
 		pm := api.ProjectMember{Name: string(m.Agent), Role: string(m.Role), Note: m.Note, Group: m.Group, AddedBy: m.AddedBy, AddedAt: m.AddedAt}
 		if a, err := s.agents.Get(r.Context(), string(m.Agent)); err == nil && c.viewer.Sees(a) {
 			dto := s.agentDTO(a)
-			s.enrich(r.Context(), &dto)
 			pm.Agent = &dto
+			agents = append(agents, &dto)
 		}
 		out.Members = append(out.Members, pm)
 	}
@@ -109,7 +134,7 @@ func (s *Server) projectDTO(r *http.Request, c projectCall, v *app.ProjectView, 
 	}
 	out.ProjectStorage = s.projectStorageDTO(c, v)
 	out.CanEdit, out.CanManage = s.projects.Rights(c.by, v)
-	return out
+	return out, agents
 }
 
 func (s *Server) listProjects(w http.ResponseWriter, r *http.Request, c projectCall) {
@@ -118,11 +143,7 @@ func (s *Server) listProjects(w http.ResponseWriter, r *http.Request, c projectC
 		writeError(w, err)
 		return
 	}
-	out := api.ProjectList{Projects: make([]api.Project, 0, len(list))}
-	for _, v := range list {
-		out.Projects = append(out.Projects, s.projectDTO(r, c, v, false))
-	}
-	writeJSON(w, http.StatusOK, out)
+	writeJSON(w, http.StatusOK, api.ProjectList{Projects: s.projectDTOs(r, c, list, false)})
 }
 
 func (s *Server) createProject(w http.ResponseWriter, r *http.Request, c projectCall) {

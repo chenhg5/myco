@@ -445,7 +445,7 @@ func (b *Backend) Handler() http.Handler {
 		writeJSON(w, http.StatusOK, out)
 	}))
 	// Projects of a hub (proxied as they are).
-	m.HandleFunc("GET /app/hubs/{id}/projects", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+	m.HandleFunc("GET /app/hubs/{id}/projects", b.withHubTimeout(projectWriteTimeout, func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		list, err := c.ListProjects(r.Context(), r.URL.Query().Get("mine") == "true")
 		if err != nil {
 			writeErr(w, err)
@@ -453,7 +453,7 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, api.ProjectList{Projects: list})
 	}))
-	m.HandleFunc("POST /app/hubs/{id}/projects", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+	m.HandleFunc("POST /app/hubs/{id}/projects", b.withHubTimeout(projectWriteTimeout, func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		var in api.CreateProjectRequest
 		if !decode(w, r, &in) {
 			return
@@ -473,7 +473,7 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, p)
 	}))
-	m.HandleFunc("PATCH /app/hubs/{id}/projects/{name}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+	m.HandleFunc("PATCH /app/hubs/{id}/projects/{name}", b.withHubTimeout(projectWriteTimeout, func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		var in api.UpdateProjectRequest
 		if !decode(w, r, &in) {
 			return
@@ -492,7 +492,7 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, map[string]bool{"deleted": true})
 	}))
-	m.HandleFunc("PUT /app/hubs/{id}/projects/{name}/members/{agent}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+	m.HandleFunc("PUT /app/hubs/{id}/projects/{name}/members/{agent}", b.withHubTimeout(projectWriteTimeout, func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		var in api.ProjectMemberRequest
 		if !decode(w, r, &in) {
 			return
@@ -504,7 +504,7 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, p)
 	}))
-	m.HandleFunc("DELETE /app/hubs/{id}/projects/{name}/members/{agent}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+	m.HandleFunc("DELETE /app/hubs/{id}/projects/{name}/members/{agent}", b.withHubTimeout(projectWriteTimeout, func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		p, err := c.RemoveProjectMember(r.Context(), r.PathValue("name"), r.PathValue("agent"))
 		if err != nil {
 			writeErr(w, err)
@@ -1339,6 +1339,13 @@ func (b *Backend) withHubAndHubTimeout(d time.Duration, h func(http.ResponseWrit
 
 // withHubTimeout is withHub with its own bound (starting a session takes
 // minutes).
+// projectWriteTimeout bounds reading a hub's projects and changing one
+// (made, edited, a member added or moved). The hub answers with whole
+// projects, which older hubs took over 20 seconds to put together when a
+// project had many members: past the 12-second default a change looked
+// failed (and went back in the App), and a new project did not show.
+const projectWriteTimeout = time.Minute
+
 func (b *Backend) withHubTimeout(d time.Duration, h func(http.ResponseWriter, *http.Request, *client.Client)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		hub, err := b.find(r.PathValue("id"))

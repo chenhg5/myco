@@ -510,8 +510,10 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
   const [groupTick, setGroupTick] = useState(0);
   useEffect(() => {
     if (!groupEdit || !project) return;
+    // (a save still on its way holds it however long the hub takes)
+    if (groupSaves.current.inflight > 0) return;
     if (Date.now() > groupEdit.until) { setGroupEdit(null); return; }
-    if (groupSaves.current.inflight > 0 || (project.updated_at || "") < groupSaves.current.at) return;
+    if (Date.parse(project.updated_at || "") < Date.parse(groupSaves.current.at || "")) return;
     const sameList = !groupEdit.list || JSON.stringify(groupEdit.list) === JSON.stringify(project.groups || []);
     const left = Object.fromEntries(Object.entries(groupEdit.of).filter(([a, g]) => (project.members.find((m) => m.name === a)?.group || "") !== g));
     if (sameList && !Object.keys(left).length) setGroupEdit(null);
@@ -538,7 +540,8 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
         groupSaves.current.inflight++;
         try {
           const p = await appApi.updateProject(hubId, project.name, { groups, ...(members ? { member_groups: members } : {}) });
-          if ((p?.updated_at || "") > groupSaves.current.at) groupSaves.current.at = p.updated_at;
+          // (as times: the hub drops trailing zeros, so "15.4Z" is not after "15.45Z" as text)
+          if (!groupSaves.current.at || Date.parse(p?.updated_at || "") > Date.parse(groupSaves.current.at)) groupSaves.current.at = p?.updated_at || groupSaves.current.at;
         } catch (e) {
           setGroupEdit(null);
           setGroupErr(errorMessage(e));
