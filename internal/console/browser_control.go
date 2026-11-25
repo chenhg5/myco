@@ -36,6 +36,7 @@ type browserControlSession struct {
 
 	// Protected by mu. A closed entry remains until its grant expires.
 	id, reason, host string
+	closeRequestID   string
 	lastActive       time.Time
 }
 
@@ -373,19 +374,41 @@ func (b *Backend) runBrowserControlJob(hostCtx context.Context, c *client.Client
 	if reason == "" {
 		s.lastActive = time.Now()
 	}
+	requestID := hj.Job.ID
+	if op == "close" {
+		if s.closeRequestID == "" {
+			s.closeRequestID = requestID
+		}
+		requestID = s.closeRequestID
+	}
 	s.mu.Unlock()
-	if reason != "" {
+	if reason != "" && !(op == "close" && reason == "closed") {
 		return browserControlClosed(reason)
 	}
-	ctx, cancel := context.WithCancel(jobCtx)
+	ctx, cancel := context.WithDeadline(jobCtx, s.expires)
 	defer cancel()
-	unwatch := context.AfterFunc(s.ctx, cancel)
-	defer unwatch()
-	args["request_id"], _ = json.Marshal(hj.Job.ID)
+	// A voluntary close ends the session before its response necessarily arrives.
+	// Keep receipt retrieval bound to the job/grant, not that ended session.
+	if op != "close" {
+		unwatch := context.AfterFunc(s.ctx, cancel)
+		defer unwatch()
+	}
+	args["request_id"], _ = json.Marshal(requestID)
 
 	var result json.RawMessage
 	err = b.browserComponent().Call(ctx, s.scope, http.MethodPost, "/control/"+op, args, &result)
 	if err != nil {
+		var native *browserautomation.ComponentError
+		if op == "close" && errors.As(err, &native) && native.Code != "outcome_unknown" {
+			// A definite native error (for example busy or cleanup_pending)
+			// may need a fresh close attempt. Ambiguous transport outcomes reuse
+			// the original ID to retrieve its retained response safely.
+			s.mu.Lock()
+			if s.closeRequestID == requestID {
+				s.closeRequestID = ""
+			}
+			s.mu.Unlock()
+		}
 		done := browserControlFailure(err, op == "act" || op == "close")
 		if done.BrowserHost == "" {
 			done.BrowserHost = auditHost
