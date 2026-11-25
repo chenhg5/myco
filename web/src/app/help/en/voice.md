@@ -54,6 +54,8 @@ Open **Settings › Voice**:
 3. Choose a **Voice** (grouped by language) and **Speed**, and click **Try it** to hear a sentence. For a cloned voice, choose "Other (type a voice ID)".
 4. Click **Save**.
 
+**Words to hear right**: voice chat and dictation listen for these words, and fix them when they are heard as something else. The names of agents, projects and members, and common words such as Claude, Codex, GitHub and PR, are already included; add others one per line. For a word often misheard, write `Claude = clod, cloud`: what follows the equals sign is how it tends to be heard, and that is changed back to the word before it. Only these words are changed; nothing else you say is touched.
+
 ![Settings › Voice: the model and the speech service](shot:settings-voice)
 
 Keys are kept in this computer's system keychain; the page only says "Kept in the system keychain (not shown)".

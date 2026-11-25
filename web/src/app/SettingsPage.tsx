@@ -1463,6 +1463,7 @@ function VoiceSection() {
   const [provider, setProvider] = useState("doubao");
   const [speaker, setSpeaker] = useState("");
   const [rate, setRate] = useState(0);
+  const [words, setWords] = useState("");
   const [ttsKey, setTtsKey] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -1478,6 +1479,7 @@ function VoiceSection() {
     setProvider(pid);
     const sp = v.config.tts_speaker || "";
     setSpeaker(sp); setRate(v.config.tts_rate || 0);
+    setWords((v.config.words || []).join("\n"));
     const list = v.tts_providers?.find((p) => p.id === pid)?.voices || [];
     setTyping(!!sp && list.length > 0 && !list.some((x) => x.id === sp));
   };
@@ -1510,6 +1512,7 @@ function VoiceSection() {
     try {
       const v = await appApi.putVoiceConfig({
         llm_base_url: baseUrl.trim(), llm_model: model.trim(), tts_provider: provider, tts_speaker: speaker.trim(), tts_rate: rate,
+        words: words.split("\n").map((w) => w.trim()).filter(Boolean),
         ...(llmKey.trim() ? { llm_key: llmKey.trim() } : {}), ...(ttsKey.trim() ? { tts_key: ttsKey.trim() } : {}), ...extra,
       });
       load(v); setLlmKey(""); setTtsKey(""); setSaved(true);
@@ -1614,6 +1617,21 @@ function VoiceSection() {
           {saved && <span className="tr-tried"><Check />{L("已保存", "Saved")}</span>}
         </div>
         <ErrorText error={error} />
+      </section>
+      <h4 className="app-setting-group">{L("要听准的词", "Words to hear right")}</h4>
+      <section className="app-setting-card app-setting-lines" data-setting="voice-words">
+        <div className="app-setting-line">
+          <p className="tr-note">{L("语音聊天和语音输入都会留意这些词，听成别的也会改回来。agent、项目和成员的名字，还有 Claude、Codex、GitHub 这些常用词已经自动加上了。一行一个；常被听错的写成「Claude = 克劳德, cloud」。",
+            "Voice chat and dictation listen for these words, and fix them when they are heard as something else. The names of agents, projects and members, and common words such as Claude, Codex and GitHub, are already included. One per line; for one often misheard, write \"Claude = clod, cloud\".")}</p>
+        </div>
+        <div className="app-setting-line">
+          <textarea className="app-input mono vs-words" rows={4} value={words} onChange={(e) => { setWords(e.target.value); setSaved(false); }} spellCheck={false}
+            aria-label={L("要听准的词", "Words to hear right")} placeholder={L("Kettu\n前端小王\nClaude = 克劳德, cloud", "Kettu\nFrontend Wang\nClaude = clod, cloud")} />
+        </div>
+        <div className="app-setting-line tr-actions">
+          <button type="button" className="app-btn app-btn-primary" disabled={busy} onClick={() => void save()}>{L("保存", "Save")}</button>
+          {saved && <span className="tr-tried"><Check />{L("已保存", "Saved")}</span>}
+        </div>
       </section>
       <h4 className="app-setting-group">{L("多设备同步", "On your other devices")}</h4>
       <section className="app-setting-card app-setting-lines">

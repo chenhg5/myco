@@ -292,4 +292,13 @@ func (b *Backend) syncVoiceRoute(w http.ResponseWriter, r *http.Request) {
 func trimVoiceConfig(c *VoiceConfig) {
 	c.LLMBaseURL, c.LLMModel = strings.TrimSpace(c.LLMBaseURL), strings.TrimSpace(c.LLMModel)
 	c.TTSProvider, c.TTSSpeaker = strings.TrimSpace(c.TTSProvider), strings.TrimSpace(c.TTSSpeaker)
+	if c.Words != nil {
+		words := []string{}
+		for _, w := range c.Words {
+			if w = strings.TrimSpace(w); w != "" && len(words) < maxSpeechWords {
+				words = append(words, clipRunes(w, 120))
+			}
+		}
+		c.Words = words
+	}
 }

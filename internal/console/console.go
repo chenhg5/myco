@@ -229,7 +229,9 @@ type Backend struct {
 	pages     *pageServer
 	// the voice assistant (voice.go)
 	voiceOnce sync.Once
-	voice     *voice
+	// The workspace's names, for speech recognition (speech_words.go).
+	vocab vocabCache
+	voice *voice
 	// the pages' language (uilang.go)
 	uiLang uiLang
 	// notices shown on this computer (notices.go; nil in a browser)

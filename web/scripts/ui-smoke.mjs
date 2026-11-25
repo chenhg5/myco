@@ -6545,6 +6545,16 @@ async function runMatrix(browser, size, scheme) {
       await pick.selectOption({ label: "其他（填音色 ID）" });
       await page.locator("input[placeholder='S_…']").waitFor({ timeout: 5_000 });
       await pick.selectOption("zh_female_vv_uranus_bigtts");
+      // Words to hear right: one per line, saved with the rest.
+      const wordsBox = page.locator("[data-setting=voice-words] textarea");
+      await wordsBox.fill("Kettu\nClaude = 克劳德, cloud");
+      await clickVisible(page, page.locator("[data-setting=voice-words] .app-btn-primary"));
+      for (let i = 0; ; i++) {
+        const got = (await (await fetch(`http://${HOST}:${mockPort()}/app/voice`)).json()).config?.words || [];
+        if (got.join("|") === "Kettu|Claude = 克劳德, cloud") break;
+        if (i > 50) throw new Error(`要听准的词应一行一个存下，实际「${got.join("|")}」`);
+        await settle(page, 200);
+      }
       await settle(page, 200);
       await shot(page, size, scheme, "settings-voice");
       // Turned off: nothing says where any more; and back on.

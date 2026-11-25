@@ -1,0 +1,17 @@
+# id	lang	what is said (also the expected text)	terms that must come out exactly (comma-separated)
+zh01	zh-CN	让 Claude 看一下这个 PR	Claude,PR
+zh02	zh-CN	把代码 push 到 GitHub 上	push,GitHub
+zh03	zh-CN	问问 Codex 测试过了没有	Codex
+zh04	zh-CN	用 DeepSeek 跑一下这个评测	DeepSeek
+zh05	zh-CN	Claude Code 装好了吗	Claude Code
+zh06	zh-CN	CI 挂了，帮我看看 commit 记录	CI,commit
+zh07	zh-CN	在 myco 里把这个任务发给 Kettu	myco,Kettu
+zh08	zh-CN	让前端小王把 release 说明写一下	前端小王,release
+zh09	zh-CN	merge 之前先 rebase 一下 main	merge,rebase,main
+zh10	zh-CN	Codex 和 Claude 谁先做完	Codex,Claude
+zh11	zh-CN	打开 Xcode 跑一下 iOS 的测试	Xcode,iOS
+zh12	zh-CN	把 README 里的 API 示例更新一下	README,API
+en01	en-US	Ask Claude to review the PR on GitHub	Claude,PR,GitHub
+en02	en-US	Did Codex push the release branch	Codex,push,release
+en03	en-US	Run the eval with DeepSeek and send it to Kettu	DeepSeek,Kettu
+en04	en-US	Open myco and check the Hub	myco,Hub

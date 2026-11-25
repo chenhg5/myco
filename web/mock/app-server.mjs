@@ -2789,7 +2789,7 @@ const server = http.createServer(async (req, res) => {
     if (parts[2] === "config" && method === "PUT") {
       const b = await readBody(req);
       if (b?.tts_provider && b.tts_provider !== "doubao") return fail(res, 400, "invalid_argument", "unknown speech service " + b.tts_provider);
-      for (const k of ["llm_base_url", "llm_model", "tts_provider", "tts_speaker", "tts_rate"]) if (b?.[k] !== undefined) v.cfg[k] = b[k];
+      for (const k of ["llm_base_url", "llm_model", "tts_provider", "tts_speaker", "tts_rate", "words"]) if (b?.[k] !== undefined) v.cfg[k] = b[k];
       if (typeof b?.share === "boolean") v.share = b.share;
       if (b?.llm_key) v.llmKey = true;
       if (b?.tts_key) v.ttsKey = true;

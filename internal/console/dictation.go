@@ -37,6 +37,10 @@ type Hearing struct {
 	changed chan struct{}
 	stop    func()
 	at      time.Time
+	// Hints: words for the recognizer to listen for (the platform reads
+	// them when it starts); fix corrects what it heard for those words.
+	Hints []string
+	fix   *speechFixer
 }
 
 func newHearing() *Hearing { return &Hearing{changed: make(chan struct{}), at: time.Now()} }
@@ -46,7 +50,7 @@ func (h *Hearing) Heard(text string, final bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.seq++
-	h.text, h.final = text, final
+	h.text, h.final = h.fix.Fix(text), final
 	h.wake()
 }
 
@@ -127,6 +131,9 @@ func (b *Backend) dictationRoutes(m *http.ServeMux) {
 		switch {
 		case b.Listen != nil:
 			h := newHearing()
+			var aliases map[string][]string
+			h.Hints, aliases = b.speechVocab(r.Context())
+			h.fix = newSpeechFixer(lang, h.Hints, aliases)
 			hs.mu.Lock()
 			for id, old := range hs.all {
 				// One at a time: the one before stops; the finished ones go.

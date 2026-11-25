@@ -39,6 +39,10 @@ type voiceDeps struct {
 	// ended gets what was said in this one when it ends.
 	memo  string
 	ended func(history []chatMsg)
+	// hints: words for the recognizer to listen for; fix corrects what it
+	// heard for those words (speech_words.go).
+	hints []string
+	fix   *speechFixer
 	// greet: the agent speaks first once the call is on, as one does
 	// picking up the phone (off in tests unless they ask for it).
 	greet bool
@@ -169,8 +173,11 @@ func (c *voiceCall) hangUp() {
 // --- what the platform says (VoiceEvents) ---
 
 func (c *voiceCall) Heard(text string, final bool) {
-	c.do(func() { c.heard(strings.TrimSpace(text), final) })
+	c.do(func() { c.heard(c.d.fix.Fix(strings.TrimSpace(text)), final) })
 }
+
+// Hints are the words the platform's recognizer should listen for.
+func (c *voiceCall) Hints() []string { return c.d.hints }
 
 func (c *voiceCall) Played() {
 	c.do(func() {

@@ -7873,6 +7873,7 @@ body.is-resizing {
 /* Who said it in a column of its own, so what was said starts in one place
    (你 and 语音 differ in width); what it did and notices line up with it. */
 .vc-line { display: grid; grid-template-columns: 30px minmax(0, 1fr); align-items: baseline; font-size: 13px; line-height: 1.5; color: var(--fg); white-space: pre-wrap; overflow-wrap: anywhere; }
+.vs-words { width: 100%; min-height: 84px; resize: vertical; font-size: 12px; line-height: 1.5; }
 .vc-line-who { font-size: 11px; color: var(--faint); white-space: nowrap; }
 /* The voice is the agent: its lines carry its face (16px, level with the
    first line of text; the column keeps every line starting in one place). */

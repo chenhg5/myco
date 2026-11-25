@@ -30,7 +30,7 @@ import (
 // voice is not heard as the person's and background noise is held down).
 //
 //	GET  /app/voice                 {available, ready, config, has_llm_key, has_tts_key, tts_providers, share, sync, session}
-//	PUT  /app/voice/config          {llm_base_url, llm_model, llm_key?, tts_provider, tts_speaker, tts_key?, share?, clear_*}
+//	PUT  /app/voice/config          {llm_base_url, llm_model, llm_key?, tts_provider, tts_speaker, words?, tts_key?, share?, clear_*}
 //	POST /app/voice/preview         {tts_provider, tts_speaker, tts_rate, tts_key?, lang?}  a line in that voice (audio/wav)
 //	POST /app/voice/sync            looks at the hubs for newer settings, then answers as GET
 //	POST /app/voice/start           {hub_id, agent, peer?, lang}  starts a call with one agent
@@ -63,6 +63,13 @@ type VoiceEvents interface {
 	Ended(err string)
 }
 
+// VoiceHints is what a call (VoiceEvents) also says when the platform asks:
+// the words its recognizer should listen for (names, terms; Apple's
+// contextualStrings).
+type VoiceHints interface {
+	Hints() []string
+}
+
 // VoiceConfig is what the person chose for voice (no keys).
 type VoiceConfig struct {
 	LLMBaseURL string `json:"llm_base_url,omitempty"`
@@ -73,6 +80,10 @@ type VoiceConfig struct {
 	TTSSpeaker  string `json:"tts_speaker,omitempty"`
 	// TTSRate: how fast it talks, -50..100 (0 = normal).
 	TTSRate int `json:"tts_rate,omitempty"`
+	// Words: what speech recognition should listen for (voice calls and
+	// dictation), one per line, optionally with how it is misheard:
+	// "Claude = 克劳德, cloud" (speech_words.go).
+	Words []string `json:"words,omitempty"`
 	// Share: keep these settings (keys too) on the hubs this App is signed
 	// in to, so the person's other devices have them. On unless turned off.
 	Share *bool `json:"share,omitempty"`
@@ -420,6 +431,10 @@ func (b *Backend) putVoiceConfig(w http.ResponseWriter, r *http.Request) {
 	if c.Share == nil {
 		c.Share = was.Share
 	}
+	// An App or phone that does not know the words leaves them as they are.
+	if c.Words == nil {
+		c.Words = was.Words
+	}
 	// Later than what it replaces, also within the same second: the
 	// hubs keep the newer by this time.
 	c.UpdatedAt = time.Now().UTC().Truncate(time.Second)
@@ -531,6 +546,8 @@ func (b *Backend) startVoice(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, &client.Error{Status: http.StatusConflict, Code: "conflict", Message: "a voice call is already on"})
 		return
 	}
+	// What recognition listens for, and corrects to.
+	words, aliases := b.speechVocab(r.Context())
 	call := newVoiceCall(v, voiceDeps{
 		audio: b.Voice,
 		model: &openAIModel{base: c.LLMBaseURL, model: c.LLMModel, key: llmKey, session: "myco-voice-" + requestID()},
@@ -538,6 +555,8 @@ func (b *Backend) startVoice(w http.ResponseWriter, r *http.Request) {
 		hub:   &hubActions{hubID: hub.ID, agent: in.Agent, peer: peer, c: hc, en: strings.HasPrefix(lang, "en")},
 		lang:  lang,
 		greet: true,
+		hints: words,
+		fix:   newSpeechFixer(lang, words, aliases),
 		memo:  memoPrompt(lang, v.memo(memoKey(hub.ID, in.Agent))),
 		ended: func(history []chatMsg) { v.keepMemo(memoKey(hub.ID, in.Agent), history) },
 	})

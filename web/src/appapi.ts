@@ -41,6 +41,9 @@ export interface VoiceConfig {
   tts_speaker?: string;
   /** how fast it talks, -50..100 (0 = normal) */
   tts_rate?: number;
+  /** words speech recognition should listen for (calls and dictation), one
+   *  per line, optionally with how they are misheard: "Claude = 克劳德, cloud" */
+  words?: string[];
 }
 /** A speech service this App can speak with: the settings page draws these. */
 export interface VoiceTTSProvider {
