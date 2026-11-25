@@ -141,7 +141,11 @@ func (l *Local) auggieSignedIn() bool {
 		}
 	}
 	// AUGMENT_CODING_AGENT_DIR relocates agent settings, not this session store.
-	dir := expandAuthHome(l.authDir("AUGMENT_CACHE_DIR", ".augment"), l.Home)
+	dir := filepath.Join(l.Home, ".augment")
+	if override := strings.TrimSpace(l.userGetenv("AUGMENT_CACHE_DIR")); override != "" {
+		// Expand the CLI's literal ~/ syntax before cleaning native separators.
+		dir = filepath.Clean(expandAuthHome(override, l.Home))
+	}
 	if valid(authObject(filepath.Join(dir, "session.json"))) {
 		return true
 	}
