@@ -7842,6 +7842,10 @@ body.is-resizing {
    (你 and 语音 differ in width); what it did and notices line up with it. */
 .vc-line { display: grid; grid-template-columns: 30px minmax(0, 1fr); align-items: baseline; font-size: 13px; line-height: 1.5; color: var(--fg); white-space: pre-wrap; overflow-wrap: anywhere; }
 .vc-line-who { font-size: 11px; color: var(--faint); white-space: nowrap; }
+/* The voice is the agent: its lines carry its face (16px, level with the
+   first line of text; the column keeps every line starting in one place). */
+.vc-line-who.is-face { display: flex; align-self: start; padding-top: 2px; }
+.vc-line-who.is-face .pa { flex: none; }
 .vc-line.is-hearing, .vc-line.is-cut { color: var(--muted); }
 .vc-line.is-cut::after { content: " …"; }
 .vc-action, .vc-notice { padding-left: 30px; font-size: 12px; line-height: 1.5; color: var(--muted); overflow-wrap: anywhere; }

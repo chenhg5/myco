@@ -4,6 +4,8 @@ import { appApi, type VoiceLine, type VoiceState } from "@/appapi";
 import { ErrorText } from "@/app/dialogs";
 import { L, lang } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import type { Agent } from "@/api";
+import { Avatar } from "@/app/persona";
 
 /*
  * Talking with an agent out loud, in your chat with it (voice.go), as voice
@@ -156,8 +158,9 @@ function stateText(l: Live): string {
 }
 
 /** The call, docked in the chat with whom it is with (the chat says when
- *  it is: hubId and agent match). */
-export function VoiceBar() {
+ *  it is: hubId and agent match). The voice is that agent: its lines carry
+ *  its face, not a "Voice" label. */
+export function VoiceBar({ agent }: { agent?: Agent }) {
   const { call: c, live: l } = useVoiceCall();
   useEffect(() => {
     barsShown++;
@@ -187,7 +190,14 @@ export function VoiceBar() {
           <div key={x.id} className="vc-notice" title={x.text}>{shortNotice(x.text)}</div>
         ) : (
           <div key={x.id} className={cn("vc-line", x.kind === "assistant" ? "is-them" : "is-me", x.kind === "hearing" && "is-hearing", x.interrupted && "is-cut")}>
-            <span className="vc-line-who">{x.kind === "assistant" ? L("语音", "Voice") : L("你", "You")}</span>
+            {x.kind === "assistant" && agent ? (
+              <span className="vc-line-who is-face" title={c.agentName}>
+                <Avatar agent={agent} size={16} badge={false} />
+                <span className="app-sr-only">{c.agentName}</span>
+              </span>
+            ) : (
+              <span className="vc-line-who">{x.kind === "assistant" ? c.agentName : L("你", "You")}</span>
+            )}
             {x.text || "…"}
           </div>
         ))}

@@ -2687,7 +2687,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         )}
         {queueRows.length > 0 && <ErrorText error={queueError} />}
         {voiceOn && !shellMode && (
-          <VoiceBar />
+          <VoiceBar agent={agent} />
         )}
         <ApprovalStrip hubId={target.hubId} agent={target.agent} name={agentName} />
         <GrantStrip hubId={target.hubId} agent={target.agent} name={agentName} />

@@ -66,7 +66,7 @@ Once set up, the round button on the right of a chat's box becomes **Voice chat*
 
 1. Click the waveform to connect.
 2. A voice bar appears above the box. The small dot on the left shows its state (Listening, Thinking, Speaking, Muted), next to "Voice chat with …".
-3. Captions run below, each line starting with "You" or "Voice". What it takes on shows as a small line with an arrow, such as "→ On it: check the download links".
+3. Captions run below: your lines start with "You", its lines with its small face (it is the agent itself talking). What it takes on shows as a small line with an arrow, such as "→ On it: check the download links".
 4. Two small round buttons on the right: **Mute** and the red **Hang up**. **Esc** hangs up too.
 
 What you hand the agent by voice shows in the chat as usual, with a small "By voice" tag above it; hover to see your words as you said them.
