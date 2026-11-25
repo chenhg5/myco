@@ -4,6 +4,22 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.22.12
+
+- **Recording no longer picks up scrolling you did not make**: the browser recorder adds a scroll step only after a deliberate wheel gesture, a page-navigation key (Page Up/Down, Home/End, space) or a scrollbar drag in that area, and waits for a short quiet moment after other actions. Clicking, typing, focusing, layout changes and scrolling done by the page itself no longer create steps of their own, so a recording replays the scrolls you actually made.
+- **Closing a browser stops all of it, and a crash no longer keeps the profile locked**: on macOS and Linux every browser myco opens runs in its own process group, so closing it — or quitting the App — stops the whole group instead of leaving helper processes behind with the profile. After a crash, the next start verifies the leftover processes and cleans them up before opening the profile again, and never signals a process it cannot verify as its own.
+- **A profile that is still in use says why**: when a previous browser still holds a profile, the page now receives a specific reason — a leftover it could not verify, cleanup still running, or cleanup failed — and can tell you to close the earlier window and try again, or restart the computer, instead of showing a generic error.
+
+Upgrade: this App release needs no Hub upgrade. The recorder change needs browser component 0.3.1, which the App offers to install or update; an installed 0.3.0 keeps working until you update.
+
+**中文**
+
+- **录制不再带上你没做的滚动**：浏览器录制只在你有明确意图时才加滚动步骤——滚轮、翻页键（Page Up/Down、Home/End、空格），或在那个区域拖动滚动条，并且会等其他动作安静一小会儿再记。点击、输入、聚焦、页面布局变化和网页自己触发的滚动都不再单独产生步骤，回放的就是你真正做过的滚动。
+- **关浏览器会把整组进程都停掉，崩溃后也不再占着配置**：macOS 和 Linux 上，myco 打开的每个浏览器都在自己的进程组里运行，关闭它（或退出应用）会停掉整组进程，不再留下占着配置的辅助进程。崩溃后，下次启动会先核对残留进程并清理，再打开配置；核对不了的进程一律不动。
+- **配置还被占用时会说明原因**：之前的浏览器还占着配置时，网页现在会收到具体原因——无法核对的残留、正在清理、清理失败——可以据此提示你先关掉之前的窗口再试，或重启电脑，而不是只给一个笼统的错误。
+
+升级：本次应用发布不需要升级 Hub。录制改动需要浏览器组件 0.3.1，应用会提示安装或更新；已安装的 0.3.0 在更新前继续可用。
+
 ## v0.22.11
 
 - **Record a browser workflow inside Chrome**: every browser myco opens for a profile now shows a small recorder in the page corner. Start recording, review the recent steps, delete any of them, or capture an element's text, an attribute or its HTML as an extract step; the panel hides itself while a run or a debugging action uses the browser. A recording started in the panel is also listed for the app, so Web automation can pick it up and continue from the page. This needs browser component 0.3.0, which the App offers to install or update; an installed 0.2.0 keeps working until you update.
