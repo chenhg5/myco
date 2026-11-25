@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 
 	"github.com/myco-ai/myco/internal/domain"
 )
@@ -22,11 +23,12 @@ import (
 // Its owner, its owner's agents and the hub's managers publish new versions
 // and delete it.
 type PageService struct {
-	pages    domain.PageRepository
-	blobs    domain.BlobStore
-	projects *ProjectService
-	ids      IDGenerator
-	clock    Clock
+	attachmentMu *sync.Mutex
+	pages        domain.PageRepository
+	blobs        domain.BlobStore
+	projects     *ProjectService
+	ids          IDGenerator
+	clock        Clock
 	// encrypted reports whether the hub keeps end-to-end encrypted content
 	// (pages would be in plain text: refused).
 	encrypted func(context.Context) bool
@@ -392,6 +394,10 @@ func (c closeBoth) Close() error {
 
 // Delete removes a page and all its versions.
 func (s *PageService) Delete(ctx context.Context, by Actor, id string) (*domain.Page, error) {
+	if s.attachmentMu != nil {
+		s.attachmentMu.Lock()
+		defer s.attachmentMu.Unlock()
+	}
 	pv, err := s.Get(ctx, by, id)
 	if err != nil {
 		return nil, err

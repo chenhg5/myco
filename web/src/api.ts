@@ -216,6 +216,7 @@ export interface WebhookRequest { content_type?: string; headers?: Record<string
  *  files, in versions, opened in the App's page panel. */
 export interface PageVersion { n: number; entry: string; files: number; size: number; sha256: string; by: string; at: string }
 export interface Page {
+  attachments_version?: number;
   id: string; name: string; project?: string; publisher: string; version: number; entry: string; url: string;
   versions: PageVersion[]; created_at: string; updated_at: string; can_manage: boolean;
   /** who may change its records (hubs from v0.22.2): "managers", or everyone who sees it (absent); read_only: not you */
@@ -581,3 +582,12 @@ export type RemoteSession = {id:string; machine:string; state:"pending"|"connect
 export interface ProjectInviteResponse { id: string; approval_id?: string; link: string; sentence: string; expires_at: string; status: "pending" | "approved" | "ready" | "used" | "denied" | "expired" }
 
 export interface ProjectAutomationResponse { status: "pending"|"applied"|"dry_run"; approval_id?: string; automation?: Automation; removed?: string }
+
+/** Page-owned files have page permissions and no message-file TTL. */
+export interface PageAttachment {
+ file_id: string; page: string; collection: string; name: string; size: number;
+ sha256: string; content_type: string; by: string; state: "uploading" | "pending" | "ready";
+ legacy_name?: string; created_at: string; expires_at?: string;
+}
+export interface PageAttachmentUsage { files_used: number; files_max: number; bytes_used: number; bytes_max: number; max_file_bytes: number }
+export interface PageAttachmentList { attachments_version: number; attachments: PageAttachment[]; usage: PageAttachmentUsage; next?: string }

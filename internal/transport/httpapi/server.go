@@ -44,45 +44,46 @@ type Server struct {
 	lan atomic.Bool
 	// prefix is this workspace's path under the hub ("/w/<name>"), or ""
 	// for the default one: links it makes carry it.
-	prefix        string
-	e2e           *app.E2EService
-	version       string        // this hub's myco build
-	latest        func() string // newest known release ("" = unknown)
-	upgrade       func(ctx context.Context, version string) (api.HubUpgrade, error)
-	backups       Backups
-	mux           *http.ServeMux
-	ingress       map[string]Ingress
-	files         *app.FileService
-	overview      *app.OverviewService
-	console       *app.ConsoleService
-	machines      *app.MachineService
-	members       *app.MemberService
-	audit         *app.AuditService
-	projects      *app.ProjectService
-	resume        *app.ResumeService
-	traces        *app.TraceService
-	automations   *app.AutomationService
-	workflows     *app.WorkflowService
-	superagents   *app.SuperagentService
-	actions       *app.ActionService
-	pages         *app.PageService
-	remote        remotedesktop.Broker
-	tun           tunnels
-	handovers     *app.HandoverService
-	hidden        *app.HiddenService
-	pins          *app.PinService
-	notices       *app.NoticeService
-	noticeMessage func(ctx context.Context, id string) (*domain.Message, error)
-	pageData      *app.PageDataService
-	templates     *app.TemplateService
-	appSync       func(context.Context) api.AppSync
-	appFreshen    func(context.Context)
-	voice         *app.VoiceSettingsService
-	activity      sync.Map   // message id -> time.Time; transient task heartbeat
-	aliasesMu     sync.Mutex // serialize alias permission checks with writes
-	namesMu       sync.Mutex
-	names         map[string]string // member id -> name (see ownerName)
-	namesAt       time.Time
+	prefix          string
+	e2e             *app.E2EService
+	version         string        // this hub's myco build
+	latest          func() string // newest known release ("" = unknown)
+	upgrade         func(ctx context.Context, version string) (api.HubUpgrade, error)
+	backups         Backups
+	mux             *http.ServeMux
+	ingress         map[string]Ingress
+	files           *app.FileService
+	overview        *app.OverviewService
+	console         *app.ConsoleService
+	machines        *app.MachineService
+	members         *app.MemberService
+	audit           *app.AuditService
+	projects        *app.ProjectService
+	resume          *app.ResumeService
+	traces          *app.TraceService
+	automations     *app.AutomationService
+	workflows       *app.WorkflowService
+	superagents     *app.SuperagentService
+	actions         *app.ActionService
+	pages           *app.PageService
+	pageAttachments *app.PageAttachmentService
+	remote          remotedesktop.Broker
+	tun             tunnels
+	handovers       *app.HandoverService
+	hidden          *app.HiddenService
+	pins            *app.PinService
+	notices         *app.NoticeService
+	noticeMessage   func(ctx context.Context, id string) (*domain.Message, error)
+	pageData        *app.PageDataService
+	templates       *app.TemplateService
+	appSync         func(context.Context) api.AppSync
+	appFreshen      func(context.Context)
+	voice           *app.VoiceSettingsService
+	activity        sync.Map   // message id -> time.Time; transient task heartbeat
+	aliasesMu       sync.Mutex // serialize alias permission checks with writes
+	namesMu         sync.Mutex
+	names           map[string]string // member id -> name (see ownerName)
+	namesAt         time.Time
 }
 
 // SetMachines enables machine reporting, /v1/machines and machines in the
@@ -161,6 +162,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Method == http.MethodPost && r.URL.Path == "/v1/me/usage" {
 		limit = 1 << 20
+	}
+	if r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/v1/pages/") && strings.HasSuffix(r.URL.Path, "/attachments") {
+		limit = domain.MaxPageAttachment + 1
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	if r = s.superagentGate(w, r); r == nil {

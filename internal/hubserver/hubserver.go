@@ -46,8 +46,9 @@ type Options struct {
 	// FilesDir stores attachment contents (default: <db dir>/files).
 	FilesDir string
 	// Files bounds uploads (zero value: DefaultFilePolicy).
-	ProjectStorage *app.ProjectStoragePolicy
-	Files          app.FilePolicy
+	ProjectStorage  *app.ProjectStoragePolicy
+	PageAttachments *app.PageAttachmentPolicy
+	Files           app.FilePolicy
 	// GitHubWebhookSecret enables POST /v1/ingress/github.
 	GitHubWebhookSecret string
 	// GitHubReplyFrom restricts which GitHub logins can answer messages.
@@ -92,7 +93,8 @@ const WorkflowTick = app.WorkflowTick
 
 // Hub is an assembled hub: the HTTP handler plus background workers.
 type Hub struct {
-	Handler http.Handler
+	PageAttachments *app.PageAttachmentService
+	Handler         http.Handler
 	// Server is the HTTP adapter (Handler), for the workspace router.
 	Server     *httpapi.Server
 	Dispatcher *app.Dispatcher
@@ -123,6 +125,13 @@ func Build(o Options) (*Hub, error) {
 		storage = *o.ProjectStorage
 	}
 	if err := storage.Validate(); err != nil {
+		return nil, err
+	}
+	pagePolicy := app.DefaultPageAttachmentPolicy()
+	if o.PageAttachments != nil {
+		pagePolicy = *o.PageAttachments
+	}
+	if err := pagePolicy.Validate(); err != nil {
 		return nil, err
 	}
 	db, err := sqlite.Open(o.DBPath)
@@ -313,6 +322,8 @@ func Build(o Options) (*Hub, error) {
 	actionSvc.SetPages(pages)
 	pages.SetEncrypted(e2e.Enabled)
 	srv.SetPages(pages)
+	pageAttachments := app.NewPageAttachmentService(pages, sqlite.NewPageAttachmentRepo(db), blob.FS{Dir: filesDir}, ids, clock, pagePolicy, diskspace.Guard([]string{filepath.Dir(o.DBPath), filesDir}, storage.DiskMinFreeBytes, storage.DiskMinFreePercent))
+	srv.SetPageAttachments(pageAttachments)
 	pageData := app.NewPageDataService(pages, sqlite.NewPageDataRepo(db), ids, clock)
 	srv.SetPageData(pageData)
 	templateSvc := app.NewTemplateService(sqlite.NewTemplateRepo(db), blob.FS{Dir: filesDir}, pages, pageData, ids, clock)
@@ -344,7 +355,7 @@ func Build(o Options) (*Hub, error) {
 	handovers.SetContext(projectRepo, sqlite.NewMachineRepo(db), messages)
 	srv.SetHandovers(handovers)
 	messages.SetCredentialCheck(handovers.StillCurrent)
-	h := &Hub{Handler: srv, Server: srv, Dispatcher: dispatcher, Files: files, Traces: traces, Automations: automations, Workflows: workflows,
+	h := &Hub{PageAttachments: pageAttachments, Handler: srv, Server: srv, Dispatcher: dispatcher, Files: files, Traces: traces, Automations: automations, Workflows: workflows,
 		Close: db.Close, SetPublicURL: srv.SetPublicURL, SetLAN: srv.SetLAN}
 	if bk != nil {
 		// The first a few minutes after start, spread so that the
@@ -372,6 +383,7 @@ func Run(ctx context.Context, o Options) error {
 	if o.Apps != nil {
 		go o.Apps.Run(ctx)
 	}
+	go hub.PageAttachments.Run(ctx, o.Log)
 	go hub.Files.Run(ctx, time.Hour)
 	go hub.Traces.Run(ctx, time.Hour)
 	go hub.Automations.Run(ctx, AutomationTick)

@@ -26,6 +26,7 @@ func (s *Server) SetPages(p *app.PageService) { s.pages = p }
 const pageSandbox = "sandbox allow-scripts allow-forms allow-popups allow-modals allow-downloads"
 
 func (s *Server) pageRoutes(m *http.ServeMux) {
+	s.pageAttachmentRoutes(m)
 	m.HandleFunc("GET /v1/pages", s.pageCaller(s.listPages))
 	m.HandleFunc("POST /v1/pages", s.pageCaller(s.publishPage))
 	m.HandleFunc("GET /v1/pages/{id}", s.pageCaller(s.getPage))
@@ -69,6 +70,9 @@ func (s *Server) pageDTO(r *http.Request, by app.Actor, v *app.PageView) api.Pag
 		URL: s.publicBase(r) + "/pages/" + p.ID, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
 		CanManage: s.pages.Manages(by, p), Versions: []api.PageVersion{}, Live: p.Live, Port: p.Port, Template: s.pageTemplate(r.Context(), p),
 		Editors: p.Editors, ReadOnly: !s.pages.CanEdit(by, p, "")}
+	if s.pageAttachments != nil && !p.Live {
+		out.AttachmentVersion = 1
+	}
 	if p.Live {
 		out.Online = s.online(p.ID)
 	}

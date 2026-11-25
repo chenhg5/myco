@@ -385,7 +385,7 @@ takes up a live page it published before (same address).`,
 			return nil
 		}),
 	}
-	return (&Command{Name: "page", Summary: "Web pages people open in the App (reports, slides, prototypes)"}).Add(publish, serve, list, get, set, rm, upgrade, state, pageDataCommand())
+	return (&Command{Name: "page", Summary: "Web pages people open in the App (reports, slides, prototypes)"}).Add(publish, serve, list, get, set, rm, upgrade, state, pageDataCommand(), pageFileCommand())
 }
 
 // pageErr says what to do on a hub without pages.

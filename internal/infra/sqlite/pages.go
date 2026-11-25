@@ -85,6 +85,14 @@ func (r *PageRepo) Delete(ctx context.Context, id string) error {
 		return internal(err)
 	}
 	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO page_attachment_garbage(blob) SELECT blob FROM page_attachments WHERE page=?`, id); err != nil {
+		return internal(err)
+	}
+	for _, table := range []string{"page_attachment_refs", "page_attachment_aliases", "page_attachments"} {
+		if _, err := tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE page=?", id); err != nil {
+			return internal(err)
+		}
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM page_versions WHERE page=?`, id); err != nil {
 		return internal(err)
 	}

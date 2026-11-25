@@ -1616,10 +1616,11 @@ type WebhookResponse struct {
 // Page is a web page published to the hub (from v0.19.24): GET /v1/pages,
 // GET /v1/pages/{id}, POST /v1/pages.
 type Page struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Project   string `json:"project,omitempty"`
-	Publisher string `json:"publisher"`
+	AttachmentVersion int    `json:"attachments_version,omitempty"`
+	ID                string `json:"id"`
+	Name              string `json:"name"`
+	Project           string `json:"project,omitempty"`
+	Publisher         string `json:"publisher"`
 	// Version is the latest version's number.
 	Version int `json:"version"`
 	// Entry is the file the latest version opens on.

@@ -39,6 +39,8 @@ func hubCommands() *Command {
 			{Name: "github-webhook-secret-file", Kind: String, Help: "Enable POST /v1/ingress/github with this webhook secret"},
 			{Name: "github-reply-from", Kind: List, Help: "Only accept GitHub replies from these logins"},
 			{Name: "files-dir", Kind: String, Help: "Where attachment contents are stored (default: <db dir>/files)"},
+			{Name: "page-files-max", Kind: Int, Default: "1000", Env: "MYCO_PAGE_FILES_MAX", Help: "Page-owned attachments per page (1..10000)"},
+			{Name: "page-bytes-max", Kind: String, Default: "2147483648", Env: "MYCO_PAGE_BYTES_MAX", Help: "Logical attachment bytes per page (up to 21474836480)"},
 			{Name: "project-files-max", Kind: Int, Default: "1000", Env: "MYCO_PROJECT_FILES_MAX", Help: "Default non-context files per project (1..10000)"},
 			{Name: "project-bytes-max", Kind: String, Default: "2147483648", Env: "MYCO_PROJECT_BYTES_MAX", Help: "Default total logical bytes per project (up to 21474836480)"},
 			{Name: "disk-min-free-bytes", Kind: String, Default: "2147483648", Env: "MYCO_DISK_MIN_FREE_BYTES", Help: "Disk space reserved after project uploads, in bytes"},
@@ -102,10 +104,15 @@ func hubCommands() *Command {
 			if err != nil {
 				return err
 			}
+			pagePolicy, err := pageAttachmentPolicy(in)
+			if err != nil {
+				return err
+			}
 			return hubserver.Run(ctx, hubserver.Options{
-				ProjectStorage: &storage,
-				Upgrade:        hubUpgrader(in.Getenv, in.String("db"), stop),
-				Tunnel:         tun, Version: Version, UpdateCheck: check, Apps: apps,
+				PageAttachments: &pagePolicy,
+				ProjectStorage:  &storage,
+				Upgrade:         hubUpgrader(in.Getenv, in.String("db"), stop),
+				Tunnel:          tun, Version: Version, UpdateCheck: check, Apps: apps,
 				Addr: in.String("addr"), DBPath: in.String("db"), AdminToken: tok, Policy: p,
 				OnlineWindow: in.Duration("online-window"), Log: newLogger(in.String("log-level")),
 				Dispatch:            app.DispatchPolicy{Cooldown: in.Duration("wake-cooldown"), PublicURL: in.String("public-url")},
@@ -170,4 +177,18 @@ func projectStoragePolicy(in *Invocation) (app.ProjectStoragePolicy, error) {
 	}
 
 	return storage, nil
+}
+
+func pageAttachmentPolicy(in *Invocation) (app.PageAttachmentPolicy, error) {
+	p := app.DefaultPageAttachmentPolicy()
+	var err error
+	p.FilesMax, err = strconv.Atoi(in.String("page-files-max"))
+	if err != nil {
+		return p, errorf("invalid_argument", ExitUsage, "", "--page-files-max must be an integer")
+	}
+	p.BytesMax, err = strconv.ParseInt(in.String("page-bytes-max"), 10, 64)
+	if err != nil {
+		return p, errorf("invalid_argument", ExitUsage, "", "--page-bytes-max must be an integer byte count")
+	}
+	return p, p.Validate()
 }

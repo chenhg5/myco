@@ -336,6 +336,22 @@ func (s *Server) putProjectFile(w http.ResponseWriter, r *http.Request, c projec
 // getProjectFile serves a file's content.
 func (s *Server) getProjectFile(w http.ResponseWriter, r *http.Request, c projectCall) {
 	d, rc, err := s.projects.OpenFile(r.Context(), c.by, r.PathValue("name"), r.PathValue("file"))
+	if domain.IsCode(err, domain.CodeNotFound) && s.pageAttachments != nil {
+		a, reader, e := s.pageAttachments.LegacyOpen(r.Context(), c.by, r.PathValue("name"), r.PathValue("file"))
+		if e == nil {
+			defer reader.Close()
+			w.Header().Set("Content-Type", a.ContentType)
+			w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": a.Name}))
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+			w.Header().Set("Cache-Control", "private, no-store")
+			io.Copy(w, reader)
+			return
+		}
+		if !domain.IsCode(e, domain.CodeNotFound) {
+			writeError(w, e)
+			return
+		}
+	}
 	if err != nil {
 		writeError(w, err)
 		return

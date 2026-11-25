@@ -500,3 +500,16 @@ can be up to 20 MiB. `info()` keeps `{used, max, maxBytes}` and adds optional
 quota (default 1,000 non-context files, 2 GiB total logical bytes). Older Hubs
 fall back to the original shared 100-slot limit and omit total-byte fields.
 These are hints for the UI; the Hub enforces admission under concurrent uploads.
+
+## Page attachment storage
+
+The Hub page DTO's optional `attachments_version: 1` advertises page-owned
+attachment storage. Page files have their own quota (1000 files / 2 GiB by default,
+20 MiB per file), follow page permissions, and never enter project pull or agent
+project context. Hosts must negotiate this capability before enabling uploads;
+on older Hubs they can read existing project media but must present an upgrade
+message for writes. The Hub retains read-only legacy project-file aliases after
+migration, checked against the current page's permissions. See
+[Page-owned files](api.md#page-owned-files) for the HTTP contract and lifecycle.
+Native page bridge availability is a separate host capability; a new Hub alone
+does not add it to older desktop or mobile clients.

@@ -1181,3 +1181,57 @@ persisted process group cannot be verified. Other safe recovery reasons are
 `cleanup_pending` and `cleanup_failed`. The desktop page bridge preserves the
 optional `reason` on its rejected Error; older Apps omit it. See
 [the browser component contract](browser-component.md#browser-process-groups-and-recovery-unix).
+
+### Page-owned files
+
+Static pages advertise `attachments_version: 1` in their page DTO. Absence means
+unsupported: clients must not substitute project-file uploads. Attachments inherit
+the page's read permissions and the named collection's write permissions. They do
+not appear in project files, project pull, or agents' project context. Deleting a
+page removes its attachment metadata and schedules its independent blobs for cleanup;
+application upgrades and version rollback leave attachments intact.
+
+| Method | Path | Result |
+| --- | --- | --- |
+| GET | `/v1/pages/{id}/attachments?limit=100&after=...` | `{attachments_version:1, attachments:[...], usage:{files_used,files_max,bytes_used,bytes_max,max_file_bytes}, next?}` |
+| POST | `/v1/pages/{id}/attachments?collection=assets&name=picture.png` | Upload raw body; `Content-Type` and `Idempotency-Key` required; returns attachment metadata |
+| GET | `/v1/pages/{id}/attachments/{file_id}` | Attachment metadata |
+| GET | `/v1/pages/{id}/attachments/{file_id}/content` | Original bytes; supports HTTP Range, 206 and 416 |
+| DELETE | `/v1/pages/{id}/attachments/{file_id}` | 204; refuses while a record references the attachment |
+| GET | `/v1/pages/{id}/attachments?name=old-name.png` | Resolve a legacy project-file name within this page |
+| POST | `/v1/page-attachments/migrate` | Workspace owner/admin only; body `{project?,dry_run?,limit?}`; migration report |
+
+Metadata contains `file_id`, `page`, `collection`, `name`, `size`, `sha256`,
+`content_type`, `by`, `state`, `created_at`, and pending `expires_at`. Uploads count
+against quota immediately. Save `{file_id: "paf_..."}` (optionally with the other
+metadata) in a declared `file` field to associate the upload with a record. Unlinked
+uploads expire after 24 hours. Associated files remain until explicitly removed or
+the page is deleted. Remove all record references before removing a file. A repeated
+upload key with identical inputs returns the same ID; different inputs conflict.
+List limits are 1–1000; `next` is an attachment ID cursor. File responses are marked
+as downloads, `nosniff`, and private/no-store.
+
+Defaults per page: 1000 files, 2 GiB total, 20 MiB per file. Hub flags
+`--page-files-max` / `MYCO_PAGE_FILES_MAX` and `--page-bytes-max` /
+`MYCO_PAGE_BYTES_MAX` configure defaults (at most 10000 files / 20 GiB). The same
+Hub disk-reserve settings as project uploads apply. Existing files remain readable
+when limits are lowered; migration preserves pre-existing content even over quota.
+
+The Hub automatically migrates project files referenced by declared page `file`
+fields or a legacy text field named `file`, only within the page's own project.
+It copies and verifies independent page blobs before transactionally saving aliases,
+record associations, and removing project entries. Record data and versions do not
+change. Shared originals get independent copies per page. Missing, ambiguous, changed,
+or unreadable sources stay in place and appear in the migration report. The old
+project-file GET route resolves migrated names subject to the current page ACL;
+legacy aliases never reappear in project listings. Migration batch size is 1–100
+(default 25). Administrators can preview or resume with:
+
+```sh
+myco page file migrate --project demo --dry-run
+myco page file migrate --project demo
+myco page file put --page pg_demo --collection assets --path picture.png
+myco page file list --page pg_demo
+myco page file get --page pg_demo --file paf_example --out picture.png
+myco page file remove --page pg_demo --file paf_example --dry-run
+```

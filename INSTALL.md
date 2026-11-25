@@ -1398,3 +1398,11 @@ Set Hub defaults in its service environment (server installations use `/etc/myco
 | `MYCO_DISK_MIN_FREE_PERCENT` | `--disk-min-free-percent` | `5` |
 
 Workspace owners and admins can change individual projects under **Settings → Workspaces → Project storage**, or restore the workspace defaults there. Project owners and agents cannot raise quotas. Hard protection caps are 10,000 files and 20 GiB per project. `myco project show --name <project>` reports current usage. The Hub refuses project uploads if the pending write would leave less than the larger of the configured absolute disk reserve and percentage reserve, checking both database and file-storage volumes; free space on the Hub and retry. Disk checks use space available to the server process. Lowering limits never removes files; reading and deletion remain available.
+
+Page-owned files are separate from project documents. Each static page defaults to
+1000 files / 2 GiB total, with a fixed 20 MiB per-file limit. Configure the Hub with
+`MYCO_PAGE_FILES_MAX` (`--page-files-max`, maximum 10000) and
+`MYCO_PAGE_BYTES_MAX` (`--page-bytes-max`, maximum 21474836480). Project upload disk
+reserves also protect page uploads. Page files follow page permissions and are
+removed with the page; they never enter project pull or agent project context.
+See [the page file API](docs/api.md#page-owned-files) for migration and CLI commands.
