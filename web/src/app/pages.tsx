@@ -464,7 +464,9 @@ function PageView({ target, open, active, reload, onMeta }: {
     } catch (e) {
       if (loadGeneration.current !== loadID) return;
       setOpened(null);
-      setError(isOldHub(e) || (e instanceof ApiError && /not enabled/.test(e.message))
+      setError(e instanceof ApiError && e.code === "page_origin_unavailable"
+        ? L("这个页面正在另一个 myco App 里打开，请先退出另一个 App 再试。", "This page is open in another myco App. Quit that App, then try again.")
+        : isOldHub(e) || (e instanceof ApiError && /not enabled/.test(e.message))
         ? L("这个工作区的 Hub 还不支持网页：在服务器上运行 sudo myco upgrade，升级到 v0.19.24 或更新。", "This workspace's hub has no pages yet: upgrade it to v0.19.24 or later (sudo myco upgrade on the server).")
         : e instanceof ApiError && e.status === 404
           ? L("这个网页已经删除了，或者你没有权限看。", "This page was deleted, or you may not see it.")

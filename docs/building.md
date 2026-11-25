@@ -103,6 +103,19 @@ job. Without `APPS_TEST_ROOT`, only these optional cross-repository tests skip;
 an explicitly supplied incomplete checkout fails. Application business, typing,
 localization and browser regression suites run in the apps repository's CI.
 
+## Running multiple desktop App copies
+
+Desktop App copies using the same profile share the saved local addresses for
+pages. If a page says it is open in another myco App, quit that other App, then
+close and reopen the page in the App you want to use. Closing only its page or
+window may leave the local address in use.
+
+Do not delete the address registry or assign a different port as a workaround:
+the address is part of the browser origin used by the page's local storage.
+A different address can make existing local files and settings inaccessible.
+Preview builds using the same bundle identity do not guarantee a separate
+WebKit data store; changing their addresses requires a storage migration.
+
 ## Runtime downloads and older Hubs
 
 New Hubs fetch the daily rolling catalog from

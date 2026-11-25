@@ -222,7 +222,7 @@ func (s *pageServer) open(b *Backend, scope string, key pageKey) (string, string
 			ln, err = net.Listen("tcp4", "127.0.0.1:"+strconv.Itoa(port))
 		}
 		if err != nil {
-			return "", "", &client.Error{Code: "page_origin_unavailable", Status: http.StatusServiceUnavailable, Message: "the page's local storage address is unavailable; close the other app using it and retry"}
+			return "", "", &client.Error{Code: "page_origin_unavailable", Status: http.StatusServiceUnavailable, Message: "This page is open in another myco App. Quit that App, then try again."}
 		}
 		if port == 0 {
 			port = ln.Addr().(*net.TCPAddr).Port

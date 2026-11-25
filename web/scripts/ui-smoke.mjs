@@ -236,6 +236,7 @@ function reportProblems() {
 }
 
 const intentionalPublicNotReady = new WeakSet();
+const intentionalPageOriginBusy = new WeakSet();
 
 function watchPage(page, size, scheme) {
   // Page events come outside this run's async context: keep it here.
@@ -254,6 +255,8 @@ function watchPage(page, size, scheme) {
     if (msg.text().includes("403") && /\/app\/os\/call\b/.test(where)) return;
     // This fixture deliberately returns the real backend's not-ready status.
     if (intentionalPublicNotReady.has(page) && msg.text().includes("503") && /\/app\/local\/hub:/.test(where)) return;
+    // This fixture deliberately keeps the saved page origin occupied.
+    if (intentionalPageOriginBusy.has(page) && msg.text().includes("503") && /\/app\/hubs\/[^/]+\/pages\/pg_release\/open:/.test(where)) return;
     addProblem(r, "console", msg.text(), where);
   });
   page.on("pageerror", (err) => {
@@ -736,6 +739,42 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, panel.getByRole("button",{name:"关闭",exact:true}));
       await panel.waitFor({state:"detached"});
       await clickVisible(page,chat.getByRole("button",{name:"关掉这一栏"}));
+    });
+
+    await step("网页 · 另一个 App 正在打开", async () => {
+      const zh = scheme === "dark";
+      await page.goto(`${r.base}/?lang=${zh ? "zh" : "en"}`);
+      await page.locator(".app-shell").waitFor();
+      const routeURL = "**/app/hubs/*/pages/pg_release/open";
+      let busy = true;
+      intentionalPageOriginBusy.add(page);
+      await page.route(routeURL, route => busy
+        // An older backend's wording must also receive the localized guidance.
+        ? route.fulfill({ status: 503, json: { error: "page_origin_unavailable", message: "the page's local storage address is unavailable; close the other app using it and retry" } })
+        : route.continue());
+      const panel = page.locator(".pg-panel");
+      const openPage = () => page.evaluate(() => window.dispatchEvent(new CustomEvent("myco-open-page", {
+        detail: { kind: "page", hubId: "hub_studio", id: "pg_release" },
+      })));
+      const closePage = async () => {
+        await panel.getByRole("button", { name: zh ? "关闭" : "Close", exact: true }).click();
+        await panel.waitFor({ state: "detached" });
+      };
+      await openPage();
+      await panel.getByText(zh
+        ? "这个页面正在另一个 myco App 里打开，请先退出另一个 App 再试。"
+        : "This page is open in another myco App. Quit that App, then try again.", { exact: true }).waitFor();
+      if (await panel.locator(".pg-frame").count()) throw Error("a busy page origin must not open a fallback frame");
+      await shot(page, size, scheme, "page-origin-in-use");
+      await closePage();
+      busy = false; // The other App has quit; retry the same page.
+      intentionalPageOriginBusy.delete(page);
+      await openPage();
+      await panel.frameLocator(".pg-frame").locator("h1").waitFor();
+      await closePage();
+      await page.unroute(routeURL);
+      await page.goto(`${r.base}/?lang=zh`);
+      await page.locator(".app-shell").waitFor();
     });
 
     await step("网页 · 恢复旧本机文件", async () => {

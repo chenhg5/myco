@@ -66,6 +66,9 @@ func TestPageOriginTakenPortNeverReassignsStorage(t *testing.T) {
 	if !errors.As(err, &apiErr) || apiErr.Code != "page_origin_unavailable" {
 		t.Fatalf("expected a conflict on the original port: %v", err)
 	}
+	if apiErr.Status != http.StatusServiceUnavailable || apiErr.Message != "This page is open in another myco App. Quit that App, then try again." {
+		t.Fatalf("unexpected page conflict guidance: %#v", apiErr)
+	}
 	closeTestPageOrigins(s)
 	t.Cleanup(func() { closeTestPageOrigins(other) })
 	if got, _ := testPageOrigin(t, other, "one", "owner", "page"); got != address {
