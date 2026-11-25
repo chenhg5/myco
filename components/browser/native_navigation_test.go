@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"runtime/pprof"
 	"strconv"
 	"strings"
 	"sync"
@@ -218,42 +217,6 @@ func TestNativeChromeRecordsOnlyUserTopLevelNavigation(t *testing.T) {
 	if clickErr != nil {
 		t.Logf("click delivered before its document changed: %v", clickErr)
 	}
-	waitCount := func(n int) {
-		t.Helper()
-		until := time.Now().Add(5 * time.Second)
-		for {
-			rec.mu.Lock()
-			got := len(rec.steps)
-			rec.mu.Unlock()
-			if got >= n {
-				return
-			}
-			if time.Now().After(until) {
-				rec.mu.Lock()
-				steps := append([]node(nil), rec.steps...)
-				t.Logf("recording queue=%d closing=%v error=%s navActions=%v", len(rec.queue), rec.closing, rec.err, rec.navActions)
-				rec.mu.Unlock()
-				s.mu.Lock()
-				t.Logf("navigation requests=%+v late=%+v current=%s targets=%v", s.rendererNavigations, s.lateNavigations, s.current, s.targets)
-				for id, installed := range s.installs {
-					t.Logf("installed target=%s kind=%s session=%s root=%s", id, installed.kind, installed.sid, installed.rootFrame)
-				}
-				s.mu.Unlock()
-				var stacks bytes.Buffer
-				_ = pprof.Lookup("goroutine").WriteTo(&stacks, 2)
-				t.Log(stacks.String())
-				t.Fatalf("recorded %d steps, wanted %d: %+v", got, n, steps)
-			}
-			time.Sleep(20 * time.Millisecond)
-		}
-	}
-	waitCount(2)
-	rec.mu.Lock()
-	first := append([]node(nil), rec.steps...)
-	rec.mu.Unlock()
-	if len(first) != 2 || first[0].Type != "click" || first[1].Type != "wait" || first[1].Wait != "url" || first[1].Value != base+"/landed" {
-		t.Fatalf("expected click + top wait: %+v", first)
-	}
 	hashLink, err := page.Element("#hash")
 	if err != nil {
 		t.Fatal(err)
@@ -262,7 +225,6 @@ func TestNativeChromeRecordsOnlyUserTopLevelNavigation(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitDocument(base + "/landed#section")
-	waitCount(4)
 	// Timer-driven navigation outside the user's action window is not a step.
 	time.Sleep(navigationActionWindow + 100*time.Millisecond)
 	if _, err = page.Eval(`()=>setTimeout(()=>location.assign('/automatic'),0)`); err != nil {
@@ -285,11 +247,13 @@ func TestNativeChromeRecordsOnlyUserTopLevelNavigation(t *testing.T) {
 	if err = stay.Click(proto.InputMouseButtonLeft, 1); err != nil {
 		t.Fatal(err)
 	}
-	waitCount(6)
 	if err = page.Navigate(base + "/typed#section"); err != nil {
 		t.Fatal(err)
 	}
 	waitDocument(base + "/typed#section")
+	// Per-step evidence and panel updates run on the recording worker. A
+	// committed document can precede that work; verify steps only after
+	// stop has flushed collector events and the worker has drained its queue.
 	invoke("POST", "/record/stop", map[string]string{"id": started.ID}, nil)
 	var result struct {
 		Steps []node `json:"steps"`
@@ -306,6 +270,11 @@ func TestNativeChromeRecordsOnlyUserTopLevelNavigation(t *testing.T) {
 	for i, want := range []string{"click", "wait", "click", "wait", "navigate", "click", "navigate"} {
 		if result.Steps[i].Type != want {
 			t.Fatalf("step %d: %+v", i, result.Steps[i])
+		}
+	}
+	for i, want := range map[int]string{1: base + "/landed", 3: base + "/landed#section"} {
+		if result.Steps[i].Wait != "url" || result.Steps[i].Value != want {
+			t.Fatalf("click navigation lost at %d: %+v", i, result.Steps[i])
 		}
 	}
 	if result.Steps[4].URL != base+"/typed" || result.Steps[6].URL != base+"/typed#section" {

@@ -24,16 +24,14 @@ command-line warning. The component does not set `--enable-automation`. Chrome
 supplies its own user agent. The collector stays in an isolated world and does
 not install a stealth script.
 
-A renderer navigation request may arrive before the isolated world's trusted
-click binding, even after commit. Recording checks intent again at navigation
-commit and associates a late binding only with its original isolated execution
-context, recording and tab, within the action window. Intent captured at the
-request is retained for slow loads. Automatic/iframe navigation still
-requires the same top-level and per-recording checks.
-
 Named form controls retain their semantic/ID fallback locators. An unnamed
 document element may have only a structural CSS locator; this remains a valid
 recording target. The native fixture verifies both kinds and replays them.
+
+Native navigation assertions wait for the new document's readiness, then verify
+the complete recording after stop has flushed the collector and drained its
+evidence queue. A navigation commit alone does not mean screenshots and panel
+updates for preceding steps have finished.
 
 Run `go test -race ./...` and `go vet ./...` in this directory. On a machine with
 an installed Chrome or Edge, enable the existing native fixture flag:

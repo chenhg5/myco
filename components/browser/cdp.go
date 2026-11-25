@@ -317,9 +317,6 @@ func (s *session) event(msg *rod.Message) {
 			rec.noteNavigationAction(p.TargetID, n, time.Now())
 		}
 		rec.enqueueFrame(n, p, frame)
-		if url := s.lateNavigation(rec, msg.SessionID, evt.ExecutionContextID, n, time.Now()); url != "" {
-			rec.enqueue(node{Type: "wait", Wait: "url", Value: stableURL(url)}, p)
-		}
 	case "Page.frameStartedNavigating":
 		var evt frameStartedNavigation
 		msg.Load(&evt)
@@ -347,16 +344,8 @@ func (s *session) event(msg *rod.Message) {
 		if rec != nil && p != nil {
 			request.RecordID = rec.id
 			request.User = rec.recentNavigationAction(p.TargetID, time.Now())
-			request.Page = p.TargetID
-			request.Started = time.Now()
 		}
 		s.mu.Lock()
-		delete(s.lateNavigations, request.Page)
-		for id, frame := range s.contexts[string(msg.SessionID)] {
-			if frame == evt.FrameID {
-				request.Contexts = append(request.Contexts, id)
-			}
-		}
 		if s.rendererNavigations == nil {
 			s.rendererNavigations = map[proto.PageFrameID]recordedNavigationRequest{}
 		}
@@ -381,21 +370,13 @@ func (s *session) event(msg *rod.Message) {
 		delete(s.rendererNavigations, evt.Frame.ID)
 		delete(s.browserNavigations, evt.Frame.ID)
 		p := s.pages[s.targets[msg.SessionID]]
-		if top {
-			delete(s.lateNavigations, s.targets[msg.SessionID])
-		}
 		s.mu.Unlock()
 		if !top || rec == nil || p == nil || checkedURL(evt.Frame.URL) != nil {
 			return
 		}
 		if renderer {
-			// Browser navigation events can precede the renderer's trusted
-			// click binding. Keep a request's earlier intent for slow loads,
-			// and also accept intent received before this commit.
-			if request.RecordID == rec.id && (request.User || rec.recentNavigationAction(p.TargetID, time.Now())) {
+			if request.RecordID == rec.id && request.User {
 				rec.enqueue(node{Type: "wait", Wait: "url", Value: stableURL(evt.Frame.URL)}, p)
-			} else if request.RecordID == rec.id {
-				s.keepLateNavigation(request, evt.Frame.URL)
 			}
 		} else {
 			// Browser-initiated navigation (including address-bar entry) has no
@@ -409,9 +390,6 @@ func (s *session) event(msg *rod.Message) {
 		rec := s.recorder
 		top := s.topNavigationLocked(msg.SessionID, evt.FrameID)
 		p := s.pages[s.targets[msg.SessionID]]
-		if top {
-			delete(s.lateNavigations, s.targets[msg.SessionID])
-		}
 		request, renderer := s.rendererNavigations[evt.FrameID]
 		delete(s.rendererNavigations, evt.FrameID)
 		browserStart := s.browserNavigations[evt.FrameID]
@@ -421,13 +399,8 @@ func (s *session) event(msg *rod.Message) {
 			return
 		}
 		if renderer {
-			// Browser navigation events can precede the renderer's trusted
-			// click binding. Keep a request's earlier intent for slow loads,
-			// and also accept intent received before this commit.
-			if request.RecordID == rec.id && (request.User || rec.recentNavigationAction(p.TargetID, time.Now())) {
+			if request.RecordID == rec.id && request.User {
 				rec.enqueue(node{Type: "wait", Wait: "url", Value: stableURL(evt.URL)}, p)
-			} else if request.RecordID == rec.id {
-				s.keepLateNavigation(request, evt.URL)
 			}
 		} else if browserStart.RecordID == rec.id && browserStart.URL == evt.URL {
 			rec.enqueue(node{Type: "navigate", URL: navigationURL(evt.URL)}, p)

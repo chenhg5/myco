@@ -65,7 +65,6 @@ type session struct {
 	contexts            map[string]map[proto.RuntimeExecutionContextID]proto.PageFrameID
 	targets             map[proto.TargetSessionID]proto.TargetTargetID
 	rendererNavigations map[proto.PageFrameID]recordedNavigationRequest
-	lateNavigations     map[proto.TargetTargetID]recordedNavigationRequest
 	browserNavigations  map[proto.PageFrameID]recordedBrowserNavigation
 }
 type frameInfo struct {
