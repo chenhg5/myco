@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -43,7 +44,10 @@ type groupCleanup struct {
 	Owner    *groupProcess `json:"owner,omitempty"`
 	OwnerPID int           `json:"owner_pid,omitempty"`
 }
-type profileProcessError struct{ Reason string }
+type profileProcessError struct {
+	Reason string
+	cause  error
+}
 
 func (e *profileProcessError) Error() string { return "profile_locked: " + e.Reason }
 func groupError(reason string) error         { return &profileProcessError{Reason: reason} }
@@ -121,11 +125,11 @@ func readBrowserGroup(dir string) (browserGroup, error) {
 	defer f.Close()
 	dec := json.NewDecoder(io.LimitReader(f, 64<<10))
 	dec.DisallowUnknownFields()
-	if dec.Decode(&r) != nil || r.Version != 1 || len(r.Nonce) < 20 || r.PGID <= 1 || r.PGID == syscall.Getpgrp() || len(r.Members) == 0 || len(r.Members) > 512 {
+	if dec.Decode(&r) != nil || r.Version != 1 || len(r.Nonce) < 20 || r.PGID <= 1 || r.PGID > math.MaxInt32 || r.PGID == syscall.Getpgrp() || len(r.Members) == 0 || len(r.Members) > 512 {
 		return r, groupError("leftover_unverified")
 	}
 	for _, p := range r.Members {
-		if p.PID <= 1 || p.PGID != r.PGID || p.Start == "" {
+		if p.PID <= 1 || p.PID > math.MaxInt32 || p.PGID != r.PGID || p.Start == "" {
 			return r, groupError("leftover_unverified")
 		}
 	}
@@ -135,6 +139,9 @@ func groupGone(pgid int) (bool, error) {
 	err := syscall.Kill(-pgid, 0)
 	if errors.Is(err, syscall.ESRCH) {
 		return true, nil
+	}
+	if errors.Is(err, syscall.EPERM) {
+		return false, nil
 	}
 	return false, err
 }
@@ -163,6 +170,9 @@ func verifiedGroup(dir string, r browserGroup, all []groupProcess) bool {
 	}
 	return false
 }
+
+var errBrowserGroupZombies = errors.New("browser group awaiting reap")
+
 func snapshotGroup(dir string, r *browserGroup) error {
 	all, err := groupProcesses(r.PGID)
 	if err != nil {
@@ -177,9 +187,25 @@ func snapshotGroup(dir string, r *browserGroup) error {
 			return nil
 		}
 	}
+	onlyZombies := len(all) > 0
+	for _, p := range all {
+		if !p.Zombie {
+			onlyZombies = false
+		}
+	}
+	if onlyZombies {
+		return errBrowserGroupZombies
+	}
 	if !verifiedGroup(dir, *r, all) {
 		return groupError("leftover_unverified")
 	}
+	identified := all[:0]
+	for _, p := range all {
+		if p.Start != "" {
+			identified = append(identified, p)
+		}
+	}
+	all = identified
 	sort.Slice(all, func(i, j int) bool { return all[i].PID < all[j].PID })
 	if len(all) > 512 {
 		return groupError("leftover_unverified")
@@ -207,20 +233,25 @@ func terminateBrowserGroup(dir string, r browserGroup, reapLeader bool) error {
 	}{{syscall.SIGTERM, 5 * time.Second}, {syscall.SIGKILL, 5 * time.Second}} {
 		gone, err := groupGone(r.PGID)
 		if err != nil {
-			return groupError("cleanup_failed")
+			return groupCause("cleanup_failed", err)
 		}
 		if gone {
 			return removeBrowserGroup(dir)
 		}
-		if err = snapshotGroup(dir, &r); err != nil {
+		err = snapshotGroup(dir, &r)
+		if err != nil && !errors.Is(err, errBrowserGroupZombies) {
 			var pe *profileProcessError
 			if errors.As(err, &pe) {
 				return err
 			}
-			return groupError("cleanup_failed")
+			return groupCause("cleanup_failed", err)
 		}
-		if err = syscall.Kill(-r.PGID, phase.signal); err != nil && !errors.Is(err, syscall.ESRCH) {
-			return groupError("cleanup_failed")
+		// macOS may clear zombie credentials/start metadata before launchd
+		// reaps it. Do not signal an unidentified dead group; only await ESRCH.
+		if !errors.Is(err, errBrowserGroupZombies) {
+			if err = syscall.Kill(-r.PGID, phase.signal); err != nil && !errors.Is(err, syscall.ESRCH) && !errors.Is(err, syscall.EPERM) {
+				return groupCause("cleanup_failed", err)
+			}
 		}
 		until := time.Now().Add(phase.wait)
 		for time.Now().Before(until) {
@@ -232,7 +263,7 @@ func terminateBrowserGroup(dir string, r browserGroup, reapLeader bool) error {
 			}
 			gone, err = groupGone(r.PGID)
 			if err != nil {
-				return groupError("cleanup_failed")
+				return groupCause("cleanup_failed", err)
 			}
 			if gone {
 				return removeBrowserGroup(dir)
@@ -271,6 +302,14 @@ func recoverBrowserGroups(in groupCleanup) error {
 	if !filepath.IsAbs(in.DataDir) {
 		return errors.New("invalid private configuration")
 	}
+	canonical, err := filepath.EvalSymlinks(in.DataDir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	in.DataDir = canonical
 	entries, err := os.ReadDir(filepath.Join(in.DataDir, "profiles"))
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -499,7 +538,7 @@ func removeBrowserGroup(dir string) error {
 		return nil
 	}
 	if err != nil {
-		return groupError("cleanup_failed")
+		return groupCause("cleanup_failed", err)
 	}
 	return nil
 }
@@ -513,7 +552,7 @@ func browserCommandArguments(cmd *exec.Cmd) ([]string, error) {
 
 func recoverFailedBrowserCommand(cmd *exec.Cmd, dir string) error {
 	if gone, err := groupGone(cmd.Process.Pid); err != nil {
-		return groupError("cleanup_failed")
+		return groupCause("cleanup_failed", err)
 	} else if gone {
 		return removeBrowserGroup(dir)
 	}
@@ -522,4 +561,9 @@ func recoverFailedBrowserCommand(cmd *exec.Cmd, dir string) error {
 		return groupError("leftover_unverified")
 	}
 	return terminateBrowserGroup(dir, r, false)
+}
+
+func (e *profileProcessError) Unwrap() error { return e.cause }
+func groupCause(reason string, cause error) error {
+	return &profileProcessError{Reason: reason, cause: cause}
 }

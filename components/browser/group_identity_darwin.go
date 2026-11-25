@@ -20,13 +20,17 @@ func groupProcesses(pgid int) ([]groupProcess, error) {
 		if pgid != 0 && int(p.Eproc.Pgid) != pgid {
 			continue
 		}
-		if int(p.Eproc.Ucred.Uid) != os.Getuid() {
+		if p.Proc.P_stat != 5 && int(p.Eproc.Ucred.Uid) != os.Getuid() {
 			if pgid != 0 {
 				return nil, errors.New("foreign process group")
 			}
 			continue
 		}
-		out = append(out, groupProcess{PID: int(p.Proc.P_pid), PGID: int(p.Eproc.Pgid), Start: fmt.Sprintf("%d:%d", p.Proc.P_starttime.Sec, p.Proc.P_starttime.Usec), Zombie: p.Proc.P_stat == 5})
+		start := fmt.Sprintf("%d:%d", p.Proc.P_starttime.Sec, p.Proc.P_starttime.Usec)
+		if p.Proc.P_starttime.Sec == 0 && p.Proc.P_starttime.Usec == 0 {
+			start = ""
+		}
+		out = append(out, groupProcess{PID: int(p.Proc.P_pid), PGID: int(p.Eproc.Pgid), Start: start, Zombie: p.Proc.P_stat == 5})
 	}
 	return out, nil
 }

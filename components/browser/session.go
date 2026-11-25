@@ -326,7 +326,11 @@ func (s *session) close() error {
 				return err
 			}
 		} else {
-			_ = cmd.Process.Kill()
+			// Engine shutdown can race the guard installation immediately
+			// after Start. Recover the recorded group, never just its leader.
+			if err := recoverFailedBrowserCommand(cmd, filepath.Join(s.e.dir, "profiles", s.id)); err != nil {
+				return err
+			}
 		}
 		select {
 		case <-s.done:

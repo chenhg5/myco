@@ -63,6 +63,11 @@ func groupFixture(t *testing.T, profileArgument ...bool) (string, *exec.Cmd, bro
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		t.Fatal(err)
 	}
+	canonical, canonicalErr := filepath.EvalSymlinks(dir)
+	if canonicalErr != nil {
+		t.Fatal(canonicalErr)
+	}
+	dir = canonical
 	marker := filepath.Join(dir, "child.pid")
 	self, err := os.Executable()
 	if err != nil {
@@ -343,7 +348,7 @@ func TestBrowserFailedCloseRetainsLeaseAndCanRetry(t *testing.T) {
 	}
 	retry = true
 	if err = s.close(); err != nil {
-		t.Fatal("cleanup cannot retry", err)
+		t.Fatalf("cleanup cannot retry: %v; cause=%v", err, errors.Unwrap(err))
 	}
 	if extra, e := lockProfile(filepath.Join(dir, ".myco-lease")); e != nil {
 		t.Fatal("successful retry retained lease", e)
@@ -364,5 +369,52 @@ func TestBrowserRecoveryDoesNotKillAnotherLiveOwner(t *testing.T) {
 	}
 	if gone, _ := groupGone(record.PGID); gone {
 		t.Fatal("another live owner's browser was killed")
+	}
+}
+
+func TestBrowserCloseDuringGuardInstallation(t *testing.T) {
+	dir, cmd, record, done := groupFixture(t)
+	lease, err := lockProfile(filepath.Join(dir, ".myco-lease"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	e := &engine{dir: filepath.Dir(filepath.Dir(dir)), sessions: map[string]*session{}}
+	// The process is started and recorded, but its normal guard is not yet set.
+	s := &session{e: e, id: "p_fixture", ctx: ctx, cancel: cancel, cmd: cmd, done: done, lock: lease}
+	e.sessions[s.id] = s
+	finished := make(chan error, 1)
+	go func() { finished <- s.close() }()
+	time.Sleep(150 * time.Millisecond)
+	if extra, e := lockProfile(filepath.Join(dir, ".myco-lease")); e == nil {
+		extra.Close()
+		t.Fatal("startup cancellation released a live group's lease")
+	}
+	select {
+	case err = <-finished:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(12 * time.Second):
+		t.Fatal("startup group cleanup did not finish")
+	}
+	if gone, _ := groupGone(record.PGID); !gone {
+		t.Fatal("startup cancellation left descendants")
+	}
+}
+
+func TestBrowserRecordRejectsUnsafeGroupNumbers(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "profiles", "p_fixture")
+	os.MkdirAll(dir, 0700)
+	maxPID := int64(1<<31 - 1)
+	for _, value := range []int64{-1, 0, 1, maxPID + 1, 1 << 62} {
+		r := browserGroup{Version: 1, Nonce: "invalid-group-fixture", PGID: int(value), Members: []groupProcess{{PID: 2, PGID: int(value), Start: "fixture"}}}
+		if err := saveBrowserGroup(dir, r); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := readBrowserGroup(dir); err == nil {
+			t.Fatalf("unsafe group number accepted: %d", value)
+		}
 	}
 }
