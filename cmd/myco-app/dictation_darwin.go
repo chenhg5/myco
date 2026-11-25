@@ -32,6 +32,25 @@ static BOOL mycoStopping;
 static int mycoQuiet;
 // Guards mycoRequest between the audio thread and the main queue.
 static NSObject *mycoLock;
+// Words to listen for, for each session of this listening.
+static NSArray<NSString *> *mycoHints;
+
+// The words to listen for (names, terms), newline-separated from Go, as
+// the recognizer's contextual strings; nil for none. (Retained.)
+static NSArray<NSString *> *mycoHintsFrom(const char *hints) {
+	if (!hints || !*hints) return nil;
+	NSArray<NSString *> *kept = nil;
+	@autoreleasepool {
+		NSString *all = [NSString stringWithUTF8String:hints];
+		NSMutableArray<NSString *> *out = [NSMutableArray array];
+		for (NSString *w in [all componentsSeparatedByString:@"\n"]) {
+			if ([w length]) [out addObject:w];
+		}
+		if ([out count]) kept = [[NSArray alloc] initWithArray:out];
+	}
+	return kept;
+}
+
 
 // Stops the microphone; the recognizer then gives its last words. (Main queue.)
 static void mycoEndAudio(void) {
@@ -66,6 +85,7 @@ static void mycoSession(int sid) {
 	if (@available(macOS 10.15, *)) {
 		if (mycoRecognizer.supportsOnDeviceRecognition) req.requiresOnDeviceRecognition = YES;
 	}
+	if (mycoHints) req.contextualStrings = mycoHints;
 	@synchronized(mycoLock) {
 		if (mycoRequest) { [mycoRequest endAudio]; [mycoRequest release]; }
 		mycoRequest = req;
@@ -114,10 +134,13 @@ static void mycoStart(int sid, NSString *loc) {
 	if (![mycoEngine startAndReturnError:&err]) { mycoEndAudio(); mycoHeardDone(sid, "microphone"); return; }
 }
 
-static void mycoListen(int sid, const char *locale) {
+static void mycoListen(int sid, const char *locale, const char *hints) {
 	NSString *loc = [[NSString alloc] initWithUTF8String:locale];
+	NSArray<NSString *> *words = mycoHintsFrom(hints);
 	dispatch_async(dispatch_get_main_queue(), ^{
 		mycoSid = sid;
+		if (mycoHints) [mycoHints release];
+		mycoHints = words;
 		[SFSpeechRecognizer requestAuthorization:^(SFSpeechRecognizerAuthorizationStatus status) {
 			if (status != SFSpeechRecognizerAuthorizationStatusAuthorized) { mycoHeardDone(sid, "speech-denied"); [loc release]; return; }
 			[AVCaptureDevice requestAccessForMediaType:AVMediaTypeAudio completionHandler:^(BOOL granted) {
@@ -143,6 +166,7 @@ static void mycoStopListening(int sid) {
 import "C"
 
 import (
+	"strings"
 	"sync"
 	"unsafe"
 
@@ -173,7 +197,9 @@ var listen = func(lang string, h *console.Hearing) (func(), error) {
 	hearingsMu.Unlock()
 	cs := C.CString(lang)
 	defer C.free(unsafe.Pointer(cs))
-	C.mycoListen(C.int(sid), cs)
+	ch := C.CString(strings.Join(h.Hints, "\n"))
+	defer C.free(unsafe.Pointer(ch))
+	C.mycoListen(C.int(sid), cs, ch)
 	return func() { C.mycoStopListening(C.int(sid)) }, nil
 }
 
