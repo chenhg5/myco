@@ -122,7 +122,7 @@ func TestNativeChromeRecordAndReplayTenTimes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = blank.Click(proto.InputMouseButtonLeft, 1); err != nil {
+	if err = blank.Click("left", 1); err != nil {
 		t.Fatal(err)
 	}
 	finish, err := page.Element("#finish")
