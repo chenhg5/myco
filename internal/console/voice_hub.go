@@ -14,10 +14,12 @@ import (
 )
 
 // A voice call is with one agent, in the person's conversation with it (as
-// ChatGPT's and Claude's voice are in one chat). What the person wants done
-// goes to that agent as if typed: a new task when it is free, an addition
-// to its task at work otherwise (the App's rule for Enter). The fast model
-// answers the rest itself ("how far is it?") from the conversation.
+// ChatGPT's and Claude's voice are in one chat). The voice is that agent:
+// a fast model speaks for it, in the first person, while its working
+// session does the work. What the person wants done goes to that session
+// as if typed: a new task when it is free, an addition to its task at work
+// otherwise (the App's rule for Enter). The fast model answers the rest
+// itself ("how far are you?") from the conversation.
 type voiceHub interface {
 	// Name: what the person calls the agent.
 	Name() string
@@ -51,6 +53,8 @@ type hubActions struct {
 	hubID       string
 	agent, peer string
 	c           *client.Client
+	// en: what the model reads is in English (else Chinese).
+	en bool
 
 	mu      sync.Mutex
 	profile *api.Agent
@@ -123,20 +127,32 @@ func (h *hubActions) loadProfile(ctx context.Context) (*api.Agent, string) {
 
 var kindWords = map[string]string{"task": "任务", "reply": "回复", "progress": "进展", "steer": "补充", "event": "通知", "note": "留言"}
 
+// Context is written for the model as the agent itself: "you" are the
+// agent, "they" are the person on the call.
 func (h *hubActions) Context(ctx context.Context) (string, error) {
 	var b strings.Builder
+	L := func(zh, en string) string {
+		if h.en {
+			return en
+		}
+		return zh
+	}
 	p, state := h.loadProfile(ctx)
-	b.WriteString("这个 agent：" + h.agent)
+	b.WriteString(L("你是：", "You are: ") + h.agent)
 	if p != nil {
 		if p.DisplayName != "" {
-			b.WriteString("（" + p.DisplayName + "）")
+			b.WriteString(L("（"+p.DisplayName+"）", " ("+p.DisplayName+")"))
 		}
 		if p.Description != "" {
-			b.WriteString("，" + clipRunes(p.Description, 200))
+			b.WriteString(L("，", ", ") + clipRunes(p.Description, 200))
 		}
 	}
-	if w := map[string]string{"working": "在干活", "pending": "有活在排队", "idle": "空闲", "offline": "离线"}[state]; w != "" {
-		b.WriteString("。现在" + w)
+	states := map[string]string{"working": "你在干活", "pending": "你有活在排队", "idle": "你空着", "offline": "你的工作会话离线了"}
+	if h.en {
+		states = map[string]string{"working": "you are at work", "pending": "you have work queued", "idle": "you are free", "offline": "your working session is offline"}
+	}
+	if w := states[state]; w != "" {
+		b.WriteString(L("。现在"+w, ". Right now "+w))
 	}
 	b.WriteString("\n")
 	ms, err := h.conversation(ctx)
@@ -144,36 +160,37 @@ func (h *hubActions) Context(ctx context.Context) (string, error) {
 		return b.String(), err
 	}
 	if len(ms) == 0 {
-		b.WriteString("\n你们还没有说过话。\n")
+		b.WriteString(L("\n你们还没有说过话。\n", "\nYou have not talked yet.\n"))
 		return b.String(), nil
 	}
-	b.WriteString("\n对话里最近的消息（旧的在前；「你」是正在通话的这个人）：\n")
+	b.WriteString(L("\n对话里最近的消息（旧的在前；「你」是你自己，「对方」是正在和你通话的这个人）：\n",
+		"\nThe latest messages in your chat (oldest first; \"You\" is you, \"They\" is the person on the call):\n"))
 	shown := ms
 	if len(shown) > 14 {
 		shown = shown[len(shown)-14:]
 	}
 	for _, m := range shown {
-		who := "你"
+		who := L("对方", "They")
 		if m.From == h.agent {
-			who = h.agent
+			who = L("你", "You")
 		}
-		kind := kindWords[m.Type]
-		if kind == "" {
-			kind = m.Type
+		kind := m.Type
+		if !h.en && kindWords[m.Type] != "" {
+			kind = kindWords[m.Type]
 		}
-		fmt.Fprintf(&b, "- %s %s（%s）：%s\n", m.CreatedAt.Local().Format("15:04"), who, kind, clipRunes(strings.TrimSpace(m.Body), 240))
+		fmt.Fprintf(&b, L("- %s %s（%s）：%s\n", "- %s %s (%s): %s\n"), m.CreatedAt.Local().Format("15:04"), who, kind, clipRunes(strings.TrimSpace(m.Body), 240))
 	}
 	if cur := currentTask(ms, h.agent, h.peer); cur != nil {
-		fmt.Fprintf(&b, "\n它手上正在做你交的：%s（%s）\n", clipRunes(cur.Body, 120), statusWord(cur.Status))
+		fmt.Fprintf(&b, L("\n你手上正在做对方交的：%s（%s）\n", "\nYou are working on what they asked: %s (%s)\n"), clipRunes(cur.Body, 120), statusWord(h.en, cur.Status))
 		if cur.Asking != "" {
 			for _, m := range ms {
 				if m.ID == cur.Asking {
-					fmt.Fprintf(&b, "它在等你回答：%s\n", clipRunes(m.Body, 300))
+					fmt.Fprintf(&b, L("你问了对方，在等回答：%s\n", "You asked them and are waiting for the answer: %s\n"), clipRunes(m.Body, 300))
 				}
 			}
 		}
 	} else {
-		b.WriteString("\n它手上没有你交的活。\n")
+		b.WriteString(L("\n你手上没有对方交的活。\n", "\nYou have nothing of theirs at work.\n"))
 	}
 	return b.String(), nil
 }
@@ -219,7 +236,7 @@ func (h *hubActions) StopCurrent(ctx context.Context) (VoiceTaskRef, error) {
 	}
 	cur := currentTask(ms, h.agent, h.peer)
 	if cur == nil {
-		return VoiceTaskRef{}, fmt.Errorf("%s has no task of yours at work", h.agent)
+		return VoiceTaskRef{}, fmt.Errorf("nothing of theirs is at work")
 	}
 	if _, err := h.c.ConsoleStop(ctx, cur.ID); err != nil {
 		return VoiceTaskRef{}, err
@@ -227,8 +244,13 @@ func (h *hubActions) StopCurrent(ctx context.Context) (VoiceTaskRef, error) {
 	return h.ref(cur), nil
 }
 
-func statusWord(s string) string {
-	if w := map[string]string{"queued": "排队中", "delivered": "已送达，还没开始", "acked": "在做", "held": "先放着了", "done": "完成了", "failed": "失败或被停了"}[s]; w != "" {
+// statusWord: a task's status as the agent would say it of its own work.
+func statusWord(en bool, s string) string {
+	words := map[string]string{"queued": "排队中", "delivered": "收到了，还没开始", "acked": "在做", "held": "先放着了", "done": "做完了", "failed": "没做成或被停了"}
+	if en {
+		words = map[string]string{"queued": "queued", "delivered": "received, not started", "acked": "in progress", "held": "set aside", "done": "done", "failed": "failed or stopped"}
+	}
+	if w := words[s]; w != "" {
 		return w
 	}
 	return s
@@ -264,9 +286,15 @@ func (h *hubActions) TaskNews(ctx context.Context, ref VoiceTaskRef) (taskNews, 
 	}
 	if !news.Finished && (m.Status == "done" || m.Status == "failed") {
 		news.Finished = true
-		news.Summary = "（结束了，没有回复）"
+		news.Summary = "（结束了，没写回复）"
+		if h.en {
+			news.Summary = "(ended without a reply)"
+		}
 		if m.Error != "" {
 			news.Summary = "没做成：" + m.Error
+			if h.en {
+				news.Summary = "did not work out: " + m.Error
+			}
 		}
 	}
 	return news, nil
@@ -284,15 +312,17 @@ func tool(name, desc string, props map[string]any, required ...string) toolDef {
 
 func str(desc string) map[string]any { return map[string]any{"type": "string", "description": desc} }
 
+// The tools are named and described as the agent's own work, so the model
+// speaks of it as its own ("I'll fix it"), not as someone else's.
 var voiceTools = []toolDef{
-	tool("tell_agent", "Pass on to the agent what the person wants done or added, or their answer to its question (no need to confirm first). It goes to the task it is doing if it has one, else as a new task.",
+	tool("do_work", "Take on what the person wants done, changed or added, or record their answer to a question you asked them (no need to confirm first). It is added to what you are working on if you have something at work, else it starts as new work.",
 		map[string]any{
-			"text":        str("What to tell the agent, written clearly and completely for it, in the person's language"),
+			"text":        str("The request as the person would type it in the chat, clear and complete, in their language (it goes into the chat as their message)"),
 			"what":        str("A few words naming it, to tell the person about it later"),
 			"their_words": str("What the person said, as heard"),
 		}, "text", "what"),
-	tool("stop_agent", "Stop the task the agent is doing.", map[string]any{}),
-	tool("check_agent", "Read the conversation again now: the agent's latest progress, answer or question.", map[string]any{}),
+	tool("stop_work", "Stop what you are working on.", map[string]any{}),
+	tool("check_work", "Read your chat again now: your latest progress, result or question.", map[string]any{}),
 }
 
 // runTool does what the model asked and says how it went (for the model).
@@ -304,9 +334,15 @@ func (c *voiceCall) runTool(ctx context.Context, call toolCall) string {
 		c.v.add(VoiceEvent{Kind: vAction, Text: text, Task: ref})
 		c.v.mu.Unlock()
 	}
-	name := c.d.hub.Name()
+	en := strings.HasPrefix(c.d.lang, "en")
+	L := func(zh, en2 string) string {
+		if en {
+			return en2
+		}
+		return zh
+	}
 	switch call.Function.Name {
-	case "tell_agent":
+	case "do_work":
 		text := strings.TrimSpace(args["text"])
 		if text == "" {
 			return "error: text is required"
@@ -326,19 +362,19 @@ func (c *voiceCall) runTool(ctx context.Context, call toolCall) string {
 		}
 		c.watchTask(ref, what)
 		if steered {
-			act("补充给 "+name+"："+what, &ref)
-			return "added to the task it is doing"
+			act(L("加到手上的活里："+what, "Added to what I'm doing: "+what), &ref)
+			return "added to what you are working on"
 		}
-		act("交给 "+name+"："+what, &ref)
-		return "sent as a new task"
-	case "stop_agent":
+		act(L("开始做："+what, "On it: "+what), &ref)
+		return "started: you are working on it now"
+	case "stop_work":
 		ref, err := c.d.hub.StopCurrent(ctx)
 		if err != nil {
 			return "error: " + err.Error()
 		}
-		act("让 "+name+" 停下了", &ref)
+		act(L("停下了手上的活", "Stopped what I was doing"), &ref)
 		return "stopped"
-	case "check_agent":
+	case "check_work":
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 		s, err := c.d.hub.Context(cctx)

@@ -18,8 +18,9 @@ import (
 
 // Talking with an agent by voice, in the person's
 // chat with it: the App hears the person (speech recognition), a fast text
-// model reads the chat and talks with them, passing what they want done to
-// the agent as they would type it (a new task, or an addition to the one at
+// model reads the chat and talks with them as the agent itself (in the
+// first person: the voice and the agent are one), taking on what they want
+// done as they would type it (a new task, or an addition to the one at
 // work), and answers out loud (Doubao speech synthesis), all streaming. It
 // stops talking as soon as the person speaks, and tells them, in a pause,
 // when the agent has answered or is asking something.
@@ -525,7 +526,7 @@ func (b *Backend) startVoice(w http.ResponseWriter, r *http.Request) {
 		audio: b.Voice,
 		model: &openAIModel{base: c.LLMBaseURL, model: c.LLMModel, key: llmKey, session: "myco-voice-" + requestID()},
 		tts:   provider.speech(ttsKey, c),
-		hub:   &hubActions{hubID: hub.ID, agent: in.Agent, peer: peer, c: hc},
+		hub:   &hubActions{hubID: hub.ID, agent: in.Agent, peer: peer, c: hc, en: strings.HasPrefix(lang, "en")},
 		lang:  lang,
 		memo:  memoPrompt(lang, v.memo(memoKey(hub.ID, in.Agent))),
 		ended: func(history []chatMsg) { v.keepMemo(memoKey(hub.ID, in.Agent), history) },

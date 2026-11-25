@@ -1538,17 +1538,17 @@ function VoiceSection() {
           <div className="app-setting-line-text">
             <b>{L("和 agent 语音聊天", "Voice chat with an agent")}</b>
             <span>{info.available
-              ? L("配好下面的模型和语音合成后，对话里输入框空着时，右边的圆按钮就是语音聊天。你说的话转给这个 agent（有活就补充，空着就是新任务），它的回复和提问挑空档说给你听；你一开口它就停下来听。录音不保存。",
-                "Once the model and the speech service below are set up, the round button beside an empty box starts a voice chat with that agent. What you ask goes to it (added to its task at work, or a new task); its answers and questions are told in a pause; it stops as soon as you speak. No recordings are kept.")
+              ? L("配好下面的模型和语音合成后，对话里输入框空着时，右边的圆按钮就是语音聊天：像给这个 agent 本人打电话。要它做的事它直接接下（有活就补充，空着就是新任务），做完了或有问题要问你，它挑空档告诉你；你一开口它就停下来听。录音不保存。",
+                "Once the model and the speech service below are set up, the round button beside an empty box starts a voice chat: a call with that agent itself. It takes on what you ask (added to its task at work, or a new task), and tells you in a pause when it is done or has a question; it stops as soon as you speak. No recordings are kept.")
               : L("语音聊天目前只在 Mac 版 App 和手机 App 里有。这里的设置会同步过去。", "Voice chat is in the Mac app and the phone app for now. What is set here is shared with them.")}</span>
           </div>
         </div>
       </section>
-      <h4 className="app-setting-group">{L("语音助手用的模型", "The assistant's model")}</h4>
+      <h4 className="app-setting-group">{L("语音用的模型", "The voice's model")}</h4>
       <section className="app-setting-card app-setting-lines">
         <div className="app-setting-line">
-          <p className="tr-note">{L("任意 OpenAI 兼容接口（OpenAI、DeepSeek、豆包、OpenRouter…）。选反应快的模型，它不用很聪明，难的事都交给 agent。不填就用「翻译」里配好的那个。",
-            "Any OpenAI-compatible API (OpenAI, DeepSeek, Doubao, OpenRouter…). Pick a fast model: the hard work goes to the agents. Left empty, the one set up under Translation is used.")}</p>
+          <p className="tr-note">{L("任意 OpenAI 兼容接口（OpenAI、DeepSeek、豆包、OpenRouter…）。选反应快的模型，它不用很聪明：它只替 agent 在电话里开口，真正的活还是 agent 在自己的会话里做。不填就用「翻译」里配好的那个。",
+            "Any OpenAI-compatible API (OpenAI, DeepSeek, Doubao, OpenRouter…). Pick a fast model; it need not be clever: it only speaks for the agent on the call, while the agent does the real work in its own session. Left empty, the one set up under Translation is used.")}</p>
         </div>
         <div className="app-setting-line tr-fields">
           <label>{L("地址", "Address")}<input className="app-input mono" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://api.deepseek.com/v1" spellCheck={false} /></label>
@@ -1573,7 +1573,7 @@ function VoiceSection() {
               </button>
             ))}
           </div>
-          <p className="tr-note">{svcHelp || L("它把语音助手的话说出来。", "It says what the assistant answers out loud.")}</p>
+          <p className="tr-note">{svcHelp || L("它把 agent 在电话里的话说出来。", "It says the agent's words out loud on the call.")}</p>
         </div>
         <div className="app-setting-line tr-fields">
           {voices.length > 0 && (

@@ -56,9 +56,15 @@ func TestVoiceHubActionsOnAHub(t *testing.T) {
 		t.Fatal("no name")
 	}
 	s, err := ha.Context(ctx)
-	if err != nil || !strings.Contains(s, "backend（后端），修 bug") || !strings.Contains(s, "修好登录页") || !strings.Contains(s, "它手上正在做你交的") {
+	if err != nil || !strings.Contains(s, "你是：backend（后端），修 bug") || !strings.Contains(s, "修好登录页") || !strings.Contains(s, "你手上正在做对方交的") || strings.Contains(s, "它") {
 		t.Fatalf("context: %v %q", err, s)
 	}
+	// In English, the agent is "you" too.
+	ha.en = true
+	if s, err := ha.Context(ctx); err != nil || !strings.Contains(s, "You are: backend (后端), 修 bug") || !strings.Contains(s, "You are working on what they asked") || strings.Contains(s, "the agent") {
+		t.Fatalf("context (en): %v %q", err, s)
+	}
+	ha.en = false
 	if ha.Name() != "后端" {
 		t.Fatalf("name: %q", ha.Name())
 	}

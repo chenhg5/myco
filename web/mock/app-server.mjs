@@ -2825,11 +2825,11 @@ const server = http.createServer(async (req, res) => {
         (hub.threads ||= {})[threadId] = [msg];
         hub.recent = [msg, ...(hub.recent || [])].slice(0, 20);
         scheduleReply(hub, threadId, agent.name, msg.id);
-        line("action", `交给 ${name}：核对下载页链接`, { task: { hub_id: hub.id, id: msg.id, agent: agent.name, thread_id: threadId } });
+        line("action", "开始做：核对下载页链接", { task: { hub_id: hub.id, id: msg.id, agent: agent.name, thread_id: threadId } });
       });
       let said = "";
       const a = { id: 0 };
-      at(2400, () => { v.st = "speaking"; a.id = line("assistant", "好，交给它了，"); said = "好，交给它了，"; });
+      at(2400, () => { v.st = "speaking"; a.id = line("assistant", "好，我这就去核对，"); said = "好，我这就去核对，"; });
       at(2900, () => { said += "核对完我告诉你。"; line("assistant", said, { id: a.id }); });
       at(3600, () => { v.st = "listening"; });
       return send(res, 200, info());

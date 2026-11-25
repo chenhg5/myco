@@ -11,7 +11,8 @@ import (
 
 // A voice call: what the person says goes to the model; what the model says
 // is spoken, a sentence at a time, as it is written; what it does in myco
-// is done as the person, in their conversation with one agent. The person
+// is done as the person, in their conversation with one agent, and the
+// model speaks as that agent. The person
 // speaking cuts it off. The agent's task at work is watched, and its answer
 // or question is told in a pause.
 
@@ -319,7 +320,11 @@ func (c *voiceCall) maybeTellNews() {
 	}
 	news := strings.Join(c.notices, "\n")
 	c.notices = nil
-	c.history = append(c.history, chatMsg{Role: "system", Content: "（系统消息，不是对方说的）刚收到这些消息，用一两句自然的话告诉对方，别念原文：\n" + news})
+	lead := "（系统消息，不是对方说的）你自己干活那边有了新情况。用第一人称（「我……」）、一两句自然的话告诉对方，别念原文：\n"
+	if c.en() {
+		lead = "(System message, not said by the person.) There is news from your own work. Tell them in a sentence or two, in the first person (\"I...\"), in your own words; do not read it out:\n"
+	}
+	c.history = append(c.history, chatMsg{Role: "system", Content: lead + news})
 	c.startTurn()
 }
 
@@ -376,7 +381,7 @@ func (c *voiceCall) runTurn(ctx context.Context, t *voiceTurn, history []chatMsg
 				}
 			})
 			if err != nil && ctx.Err() == nil {
-				c.notice("说不出声：" + err.Error())
+				c.notice(c.say("说不出声：", "Could not speak: ") + err.Error())
 			}
 		}
 	}()
@@ -448,7 +453,7 @@ func (c *voiceCall) runTurn(ctx context.Context, t *voiceTurn, history []chatMsg
 		c.turn = nil
 		if failed != nil && ctx.Err() == nil {
 			c.v.mu.Lock()
-			c.v.add(VoiceEvent{Kind: vNotice, Text: "语音助手没能回答：" + failed.Error()})
+			c.v.add(VoiceEvent{Kind: vNotice, Text: c.say("语音没能回答：", "The voice could not answer: ") + failed.Error()})
 			c.v.mu.Unlock()
 		}
 		said := strings.TrimSpace(t.said.String())
@@ -556,17 +561,18 @@ func (c *voiceCall) watch() {
 			c.do(func() {
 				what := ""
 				if w.what != "" {
-					what = "「" + w.what + "」"
+					what = c.say("「"+w.what+"」", " \""+w.what+"\"")
 				}
 				switch {
 				case st.Finished:
 					w.finished = true
 					w.toldAt = time.Now()
-					c.notices = append(c.notices, fmt.Sprintf("它回复了%s：%s", what, st.Summary))
+					c.notices = append(c.notices, fmt.Sprintf(c.say("你做完了%s，你在对话里的回复：%s", "You finished%s; your reply in the chat: %s"), what, st.Summary))
 				case st.Question != "" && st.Question != w.asked:
 					w.asked = st.Question
 					w.toldAt = time.Now()
-					c.notices = append(c.notices, fmt.Sprintf("它在问你%s：%s（它在等回答；对方回答了就用 tell_agent 转给它）", what, st.Question))
+					c.notices = append(c.notices, fmt.Sprintf(c.say("你做%s时有个问题要问对方：%s（你在等对方回答；对方回答了就用 do_work 记下来）",
+						"While working on%s you need to ask them: %s (you are waiting for the answer; when they answer, record it with do_work)"), what, st.Question))
 				case st.Question == "" && c.stillWorkingDue(w):
 					w.toldAt = time.Now()
 					c.notices = append(c.notices, c.stillWorking(what, w, st))
@@ -577,30 +583,41 @@ func (c *voiceCall) watch() {
 }
 
 // toolAck is what is said when the model starts an action before saying
-// anything.
+// anything: the agent speaking of its own work.
 func toolAck(lang, tool string) string {
 	en := strings.HasPrefix(lang, "en")
 	switch tool {
-	case "tell_agent":
+	case "do_work":
 		if en {
-			return "Sure, I'll tell it. "
+			return "Sure, I'm on it. "
 		}
-		return "好，我跟它说。"
-	case "stop_agent":
+		return "好，我这就去做。"
+	case "stop_work":
 		if en {
-			return "OK, I'll stop it. "
+			return "OK, I'll stop. "
 		}
-		return "好，我让它停下。"
-	case "check_agent":
+		return "好，我先停下。"
+	case "check_work":
 		if en {
 			return "Let me check. "
 		}
-		return "我看一眼。"
+		return "我看一下。"
 	}
 	if en {
 		return "One moment. "
 	}
 	return "稍等。"
+}
+
+// en: the call is in English.
+func (c *voiceCall) en() bool { return strings.HasPrefix(c.d.lang, "en") }
+
+// say picks the call's language.
+func (c *voiceCall) say(zh, en string) string {
+	if c.en() {
+		return en
+	}
+	return zh
 }
 
 // readConvo starts reading the conversation with the agent, unless one is
@@ -660,19 +677,25 @@ func (c *voiceCall) stillWorkingDue(w *watchedTask) bool {
 }
 
 // stillWorking is the notice that a task is still going: how it stands,
-// for how long, and its newest progress note if not told yet.
+// for how long, and its newest progress note if not told yet (all of it
+// the agent's own work, said as "I").
 func (c *voiceCall) stillWorking(what string, w *watchedTask, st taskNews) string {
 	var b strings.Builder
-	b.WriteString("（不是回复，只是让对方知道还在进行）" + what + "：它" + statusWord(st.Status))
+	if c.en() {
+		b.WriteString("(Not a result, only so they know you are still at it) Your work" + what + ": " + statusWord(true, st.Status))
+	} else {
+		b.WriteString("（不是结果，只是让对方知道你还在做）你手上的" + what + "：" + statusWord(false, st.Status))
+	}
 	if !st.Since.IsZero() {
 		if m := int(time.Since(st.Since).Minutes()); m >= 1 {
-			fmt.Fprintf(&b, "，已经 %d 分钟了", m)
+			fmt.Fprintf(&b, c.say("，已经 %d 分钟了", ", for %d min now"), m)
 		}
 	}
 	if st.Progress != "" && st.Progress != w.progress {
 		w.progress = st.Progress
-		b.WriteString("；它最新报的进展：" + st.Progress)
+		b.WriteString(c.say("；你最新写的进展：", "; your latest progress note: ") + st.Progress)
 	}
-	b.WriteString("。用一句很短的话告诉对方还在进行（可以带上它在做什么），别说做完了，也不用问对方要不要等。")
+	b.WriteString(c.say("。用一句很短的话、用「我」告诉对方你还在做（可以带上在做什么），别说做完了，也不用问对方要不要等。",
+		". In one short sentence, in the first person, tell them you are still on it (you can say what you are doing); do not say it is done, and do not ask whether they want to wait."))
 	return b.String()
 }
