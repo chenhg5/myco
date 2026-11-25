@@ -210,3 +210,64 @@ func TestOSUndeclaredRefused(t *testing.T) {
 		t.Fatal("myco's own app that declares is held to it")
 	}
 }
+
+// An allow is for the code the page runs when it is given: republished, or
+// its app upgraded, the page is asked again; a "no" holds for every version.
+func TestOSGrantsAreForOneVersion(t *testing.T) {
+	dir := t.TempDir()
+	b := &Backend{Local: &Local{Home: filepath.Join(dir, "home")}, Store: &Store{path: filepath.Join(dir, "hubs.json")}}
+	g := b.grants()
+	set := func(ver string) {
+		g.decl[osKey("h1", "pg_v")] = osDecl{app: true, os: []string{"files", "notify"}, ver: ver, at: time.Now()}
+	}
+	call := func(name string) (*osConsent, error) {
+		raw, _ := json.Marshal(map[string]string{"path": "~/a", "body": "hi"})
+		return b.osCheck(t.Context(), osCallIn{Name: name, Args: raw, Page: osPage{Hub: "h1", ID: "pg_v"}})
+	}
+	srv := httptest.NewServer(b.Handler())
+	defer srv.Close()
+	answer := func(group, a string) {
+		raw, _ := json.Marshal(map[string]string{"hub": "h1", "page": "pg_v", "group": group, "answer": a})
+		r, err := http.Post(srv.URL+"/app/os/grants", "application/json", strings.NewReader(string(raw)))
+		if err != nil || r.StatusCode != 200 {
+			t.Fatalf("answer %s: %v %v", group, r, err)
+		}
+		r.Body.Close()
+	}
+	set("1/1.0.0")
+	answer("files", "always")
+	answer("notify", "deny")
+	if c, err := call("fs.read"); c != nil || err != nil {
+		t.Fatalf("allowed for this version: %+v %v", c, err)
+	}
+	// kept with its version
+	raw, _ := os.ReadFile(filepath.Join(dir, "app-grants.json"))
+	if !strings.Contains(string(raw), `"version": "1/1.0.0"`) {
+		t.Fatalf("grants file: %s", raw)
+	}
+	// the app upgraded: asked again; the "no" still holds
+	set("1/1.1.0")
+	if c, err := call("fs.read"); err != nil || c == nil || c.Error != "consent_required" {
+		t.Fatalf("a new version is asked again: %+v %v", c, err)
+	}
+	if _, err := call("notify"); err == nil {
+		t.Fatal("a no holds for every version")
+	}
+	answer("files", "always")
+	if c, err := call("fs.read"); c != nil || err != nil {
+		t.Fatalf("allowed again: %+v %v", c, err)
+	}
+	// republished (the page's own version): asked again
+	set("2/1.1.0")
+	if c, _ := call("fs.read"); c == nil {
+		t.Fatal("a republished page is asked again")
+	}
+	// grants kept before versions (no version): asked once more
+	b2 := &Backend{Store: &Store{path: filepath.Join(t.TempDir(), "hubs.json")}}
+	os.WriteFile(filepath.Join(filepath.Dir(b2.Store.path), "app-grants.json"), []byte(`[{"hub":"h1","page":"pg_v","groups":["files"],"at":1}]`), 0o600)
+	b2.grants().decl[osKey("h1", "pg_v")] = osDecl{app: true, os: []string{"files"}, ver: "2/1.1.0", at: time.Now()}
+	raw2, _ := json.Marshal(map[string]string{"path": "~/a"})
+	if c, _ := b2.osCheck(t.Context(), osCallIn{Name: "fs.read", Args: raw2, Page: osPage{Hub: "h1", ID: "pg_v"}}); c == nil {
+		t.Fatal("an old grant with no version is asked again")
+	}
+}
