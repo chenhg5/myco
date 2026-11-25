@@ -2555,7 +2555,7 @@ const server = http.createServer(async (req, res) => {
       const body = (await readBody(req)) || {};
       const files = templateFiles.get(t.id);
       const id = `pg_t${(state.counter += 1)}`;
-      const p = { id, name: body.name || t.name, project: body.project || "", publisher: "alice", version: 1, entry: "index.html",
+      const p = { attachments_version: 1, id, name: body.name || t.name, project: body.project || "", publisher: "alice", version: 1, entry: "index.html",
         url: `http://192.168.1.20:7780/pages/${id}`, created_at: iso(0), updated_at: iso(0), can_manage: true,
         versions: [{ n: 1, entry: "index.html", files: Object.keys(files).length, size: 30000, sha256: "x", by: "alice", at: iso(0) }],
         template: { id: t.id, slug: t.slug, name: t.name, version: t.version, permissions: t.permissions, data: t.data } };
@@ -2575,7 +2575,8 @@ const server = http.createServer(async (req, res) => {
     if (parts.length === 4 && method === "GET") return send(res, 200, { pages: mine ? [...pages.values()] : [] });
     const p = mine ? pages.get(parts[4]) : undefined;
     if (!p) return fail(res, 404, "not_found", `page ${parts[4]} not found`);
-    if (parts.length === 5 && method === "GET") return send(res, 200, p);
+    if (parts.length === 5 && method === "GET") return send(res, 200, {...p, attachments_version:p.live?undefined:1});
+    if (parts.length === 6 && parts[5] === "attachments" && method === "GET") return send(res,200,{attachments_version:1,attachments:[],usage:{files_used:0,files_max:1000,bytes_used:0,bytes_max:2*1024**3,max_file_bytes:20*1024**2}});
     if (parts.length === 5 && method === "DELETE") { pages.delete(p.id); res.writeHead(204); return res.end(); }
     if (parts.length === 5 && method === "PATCH") {
       const body = (await readBody(req)) || {};

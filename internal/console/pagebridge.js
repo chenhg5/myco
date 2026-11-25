@@ -278,7 +278,7 @@
     // "download-media": myco.download saves video and sound too (mp4, …);
     // "os": myco.os (this computer: files, commands, the screen…).
     // "net-media": myco.media.url plays a public audio or video address.
-    features: ["download-media", "os", "ssh", "preferences", "remote", "page-actions", "net-media", "data-reset", "data-query"] /*__MYCO_BROWSER_FEATURE__*/,
+    features: ["download-media", "os", "ssh", "preferences", "remote", "page-actions", "net-media", "data-reset", "data-query", "page-files"] /*__MYCO_BROWSER_FEATURE__*/,
     // An address for <audio> / <video> of a public http(s) file (a podcast
     // episode): the App streams it, with seeking, since the page itself
     // cannot load media from the internet. Private addresses are refused.
@@ -399,6 +399,15 @@
       var blob = content instanceof Blob ? content
         : new Blob([typeof content === "string" ? content : content instanceof ArrayBuffer ? new Uint8Array(content) : content], { type: type || "" });
       return call("download", { name: String(name), type: type || blob.type || "", blob: blob }, 600000);
+    },
+    pageFiles: {
+      info: function () { return call("pageFiles.info", {}); },
+      list: function (options) { return call("pageFiles.list", options || {}); },
+      put: function (collection, name, blob, options) { return call("pageFiles.put", { collection: collection, name: name, blob: blob, key: options && options.key }, 300000); },
+      resolve: function (name) { return call("pageFiles.resolve", { name: name }); },
+      get: function (file) { return call("pageFiles.get", { file: file }, 300000); },
+      download: function (file) { return call("pageFiles.download", { file: file }, 300000); },
+      remove: function (file) { return call("pageFiles.remove", { file: file }); },
     },
     projectFiles: {
       info: function () { return call("projectFiles.info", {}); },

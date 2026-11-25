@@ -317,6 +317,7 @@ func (b *Backend) Handler() http.Handler {
 	b.superagentRoutes(m)
 	b.usageRoutes(m)
 	b.pageRoutes(m)
+	b.pageAttachmentRoutes(m)
 	b.handoverRoutes(m)
 	m.HandleFunc("POST /app/hubs", b.addHub)
 	m.HandleFunc("DELETE /app/hubs/{id}", b.removeHub)

@@ -1196,6 +1196,83 @@ async function runMatrix(browser, size, scheme) {
       }
     });
 
+    await step("网页 · 页面附件", async () => {
+      await go(page, "官网改版", narrow);
+      const meta = "**/app/hubs/hub_studio/pages/pg_checklist";
+      const files = "**/app/hubs/hub_studio/pages/pg_checklist/attachments**";
+      let oldHub = false, stored, bytes = Buffer.alloc(0), projectWrites = 0;
+      const observe = request => { if (/\/projects\/.*\/files\//.test(request.url()) && ["POST", "PUT"].includes(request.method())) projectWrites++; };
+      page.on("request", observe);
+      await page.route(meta, async route => {
+        const response = await route.fetch(), value = await response.json();
+        value.template = { id: "tp_myco_media-kit", name: "Media Kit", version: oldHub ? "1.3.1" : "1.4.0", permissions: ["download"], declares: !oldHub };
+        if (oldHub) delete value.attachments_version;
+        else value.attachments_version = 1;
+        await route.fulfill({json:value});
+      });
+      await page.route(files, async route => {
+        const request=route.request(), url=new URL(request.url());
+        if(request.method()==="POST" && url.pathname.endsWith("/attachments")) {
+          bytes=request.postDataBuffer();
+          const key=request.headers()["idempotency-key"];
+          if(url.searchParams.get("collection")==="items" ? key!=="stable-key" : !/^desktop:[a-f0-9]{64}$/.test(key)) throw new Error("upload key was lost");
+          stored={file_id:"paf_fixture",page:"pg_checklist",collection:url.searchParams.get("collection"),name:url.searchParams.get("name"),size:bytes.length,sha256:"fixture",content_type:request.headers()["content-type"],state:"pending",created_at:new Date().toISOString()};
+          if(url.searchParams.get("legacy_name")) stored.legacy_name=url.searchParams.get("legacy_name");
+          return route.fulfill({status:201,json:stored});
+        }
+        if(url.pathname.endsWith("/content")) return route.fulfill({contentType:stored?.content_type || "text/plain",body:bytes});
+        if(url.pathname.endsWith("/save")) return route.fulfill({json:{path:"/Downloads/sample.txt"}});
+        if(request.method()==="DELETE") {stored=undefined;return route.fulfill({status:204});}
+        if(url.searchParams.has("name")) return route.fulfill({json:stored});
+        return route.fulfill({json:{attachments_version:1,attachments:stored?[stored]:[],usage:{files_used:stored?1:0,files_max:1000,bytes_used:stored?bytes.length:0,bytes_max:2*1024**3,max_file_bytes:20*1024**2}}});
+      });
+      const open = async () => {
+        await page.evaluate(() => window.dispatchEvent(new CustomEvent("myco-open-page", {detail:{kind:"page",hubId:"hub_studio",id:"pg_checklist"}})));
+        await page.frameLocator(".pg-frame").locator("#who").waitFor();
+        return page.frames().find(f=>f.url().includes("/p/"));
+      };
+      const close = () => clickVisible(page,page.locator(".pg-panel").getByRole("button",{name:/关闭/}).first());
+      try {
+        const frame=await open();
+        await frame.evaluate(async () => {
+          const ctx=await myco.ready;
+          if(!ctx.pageFiles||!myco.features.includes("page-files")) throw new Error("missing page file negotiation: " + JSON.stringify({ctx, features:myco.features}));
+          const file=await myco.pageFiles.put("items","sample.txt",new Blob(["page bytes"],{type:"text/plain"}),{key:"stable-key"});
+          if(await (await myco.pageFiles.get({...file,page:"pg_other"})).text()!=="page bytes") throw new Error("page file bytes changed");
+          if((await myco.pageFiles.info()).files_used!==1||(await myco.pageFiles.list({limit:1})).attachments[0].file_id!==file.file_id) throw new Error("page quota/list changed");
+          if((await myco.pageFiles.resolve("old.txt")).file_id!==file.file_id) throw new Error("legacy resolution changed");
+          await myco.pageFiles.download(file);
+          await myco.pageFiles.remove(file);
+          if((await myco.pageFiles.info()).files_used!==0) throw new Error("remove did not release quota");
+          const legacyName="mk-pg_checklist-entry-valid000.png";
+          await myco.projectFiles.put(legacyName,new Blob(["png"],{type:"image/png"}));
+          const resolved=await myco.pageFiles.resolve(legacyName);
+          if(resolved.legacy_name!==legacyName||resolved.collection!=="images") throw new Error("legacy upload did not become a page attachment");
+          const row=await myco.data.put("images",{file:legacyName},{id:"legacy-file",ifVersion:0});
+          if(await (await myco.projectFiles.get(legacyName)).text()!=="png") throw new Error("legacy read lost original bytes");
+          if((await myco.projectFiles.info()).max!==1000) throw new Error("legacy bridge did not report page quota");
+          await myco.projectFiles.download(legacyName);
+          await myco.data.remove("images",row.id,{ifVersion:row.version});
+          await myco.pageFiles.remove(resolved);
+
+        });
+        await close();oldHub=true;
+        const legacy=await open();
+        await page.getByText("当前只能查看。请更新工作区后使用页面附件。",{exact:true}).waitFor();
+        await legacy.evaluate(async () => {
+          const ctx=await myco.ready;
+          if(ctx.pageFiles||ctx.me.can_edit!==false) throw new Error("old Hub must be view only");
+          for(const run of [()=>myco.pageFiles.put("images","sample.png",new Blob(["png"])),()=>myco.projectFiles.put("mk-pg_checklist-entry-valid000.png",new Blob(["png"],{type:"image/png"})),()=>myco.data.put("images",{}),()=>myco.update({})]) {
+            try { await run(); throw new Error("old Hub write was accepted"); } catch(error) {if(error.code!=="unsupported") throw error;}
+          }
+        });
+        if(projectWrites) throw new Error("page storage fell back to project uploads");
+        await shot(page,size,scheme,"page-files-upgrade");
+      } finally {
+        page.off("request",observe);await page.unroute(meta);await page.unroute(files);await close();
+      }
+    });
+
     // A page made from the starter `myco template init` writes: its own
     // small HTML table (internal/cli/templatekit), not the official 表格 app
     // (that one is the canvas grid, made from the locked apps checkout and

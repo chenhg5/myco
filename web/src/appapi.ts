@@ -1,5 +1,5 @@
 import type { UsageResponse } from "@/lib/usage";
-import type { Page, PageChanges, PageOpen, PageRecord, PageRecordQuery, PageRecordList, PageRecordCount, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Backup, Backups, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, MCPServer, ToolSkill, ToolPlugin, SuperagentState, Approval, ActionGrant, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, NoticeFeed, NoticePrefs, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
+import type { PageAttachment, PageAttachmentList, Page, PageChanges, PageOpen, PageRecord, PageRecordQuery, PageRecordList, PageRecordCount, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Backup, Backups, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, MCPServer, ToolSkill, ToolPlugin, SuperagentState, Approval, ActionGrant, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, NoticeFeed, NoticePrefs, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
 import { L } from "@/lib/i18n";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
@@ -834,6 +834,29 @@ export const appApi = {
     announced(hubId, request<Project>("PUT", `app/hubs/${enc(hubId)}/projects/${enc(name)}/members/${enc(agent)}`, input)),
   removeProjectMember: (hubId: string, name: string, agent: string) =>
     announced(hubId, request<Project>("DELETE", `app/hubs/${enc(hubId)}/projects/${enc(name)}/members/${enc(agent)}`)),
+  pageAttachments: (hubId: string, page: string, options: {limit?: number; after?: string} = {}) => {
+    const q = new URLSearchParams();
+    if (options.limit !== undefined) q.set("limit", String(options.limit));
+    if (options.after) q.set("after", options.after);
+    return request<PageAttachmentList>("GET", `app/hubs/${enc(hubId)}/pages/${enc(page)}/attachments?${q}`);
+  },
+  resolvePageAttachment: (hubId: string, page: string, name: string) =>
+    request<PageAttachment>("GET", `app/hubs/${enc(hubId)}/pages/${enc(page)}/attachments?name=${enc(name)}`),
+  uploadPageAttachment: (hubId: string, page: string, collection: string, name: string, blob: Blob, key: string, legacyName?: string) => {
+    const q = new URLSearchParams({ collection, name });
+    if (legacyName) q.set("legacy_name", legacyName);
+    return request<PageAttachment>("POST", `app/hubs/${enc(hubId)}/pages/${enc(page)}/attachments?${q}`, blob, undefined, 300000, { "Idempotency-Key": key });
+  },
+  readPageAttachment: async (hubId: string, page: string, file: string): Promise<Blob> => {
+    const response = await fetch(`app/hubs/${enc(hubId)}/pages/${enc(page)}/attachments/${enc(file)}/content`, { credentials: "same-origin" });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({})) as {message?: string; error?: string};
+      throw new ApiError(error.message || `HTTP ${response.status}`, response.status, error.error);
+    }
+    return response.blob();
+  },
+  savePageAttachment: (hubId: string, page: string, file: string) => request<{path:string}>("POST", `app/hubs/${enc(hubId)}/pages/${enc(page)}/attachments/${enc(file)}/save`),
+  removePageAttachment: (hubId: string, page: string, file: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/pages/${enc(page)}/attachments/${enc(file)}`),
   /** Uploads a file into a project (any kind, up to 20 MB). */
   uploadProjectFile: (hubId: string, name: string, file: File, as?: string) =>
     request<ProjectDoc>("PUT", `app/hubs/${enc(hubId)}/projects/${enc(name)}/files/${enc(as || file.name)}`, file),

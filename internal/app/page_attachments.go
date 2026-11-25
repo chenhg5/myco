@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -239,6 +240,12 @@ type PageAttachmentMigrationResult = domain.PageAttachmentMigrationResult
 type PageAttachmentMigrationReport = domain.PageAttachmentMigrationReport
 
 func (s *PageAttachmentService) Migrate(ctx context.Context, by Actor, project string, dry bool, limit int) (*PageAttachmentMigrationReport, error) {
+	return s.migrate(ctx, by, project, dry, limit, "")
+}
+
+// Background batches resume after their last attempted source, so an unreadable
+// original cannot keep unrelated files waiting behind the same failed batch.
+func (s *PageAttachmentService) migrate(ctx context.Context, by Actor, project string, dry bool, limit int, after string) (*PageAttachmentMigrationReport, error) {
 	if !by.Manages() || by.Agent != nil || by.Via != nil {
 		return nil, denied("migrate page attachments (workspace owner/admin only)")
 	}
@@ -254,6 +261,11 @@ func (s *PageAttachmentService) Migrate(ctx context.Context, by Actor, project s
 	sources, skipped, err := s.repo.Candidates(ctx, project)
 	if err != nil {
 		return nil, err
+	}
+	if after != "" {
+		i := sort.Search(len(sources), func(i int) bool { return sources[i].ProjectName+"\x00"+sources[i].Doc.Name > after })
+		ordered := append([]domain.PageAttachmentMigration{}, sources[i:]...)
+		sources = append(ordered, sources[:i]...)
 	}
 	report := &PageAttachmentMigrationReport{DryRun: dry, Sources: len(sources), Skipped: skipped, Results: []PageAttachmentMigrationResult{}}
 	if len(sources) > limit {
@@ -385,8 +397,13 @@ func (s *PageAttachmentService) Cleanup(ctx context.Context) error {
 func (s *PageAttachmentService) Run(ctx context.Context, log *slog.Logger) {
 	tick := time.NewTicker(time.Minute)
 	defer tick.Stop()
+	after := ""
 	for {
-		r, err := s.Migrate(ctx, Actor{Admin: true}, "", false, 25)
+		r, err := s.migrate(ctx, Actor{Admin: true}, "", false, 25, after)
+		if r != nil && len(r.Results) > 0 {
+			last := r.Results[len(r.Results)-1]
+			after = last.Project + "\x00" + last.Name
+		}
 		if log != nil {
 			if err != nil && ctx.Err() == nil {
 				log.Warn("page attachment migration failed", "error", err)

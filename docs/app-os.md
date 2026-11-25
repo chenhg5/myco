@@ -485,31 +485,44 @@ in stored functions. MongoDB aggregation rejects `$out` and `$merge`.
 
 `system.disks` reports byte counts from the OS; displayed GB/GiB units do not change them. `fs.scan` keeps logical file length in `size` and allocated storage in `disk`. New Windows builds query allocation information, including compressed/sparse storage; older Windows builds approximate `disk` with logical length. Zero allocation is valid. Filesystem query failures may fall back to logical length. See [Disk usage and capacity units](disk.md) for system comparison limits and Space cleaner's local unit selector.
 
-## Media Kit project media
+## Page-owned files
 
-Media Kit pages inside a project can detect desktop support with
-`(await myco.ready).projectFiles`. The desktop host exposes
-`myco.projectFiles.info()` (used and maximum project file slots, maximum file
-bytes), `put(name, blob)`, `get(name)` (returns a Blob), and `download(name)`
-(saves to Downloads). The host derives the project from the open page and
-accepts only Media Kit media names with the current page's ID as a prefix.
-It uses the signed-in person's existing project file permissions. Check
-`(await myco.ready).projectMedia` before using GIF, MP4, or WebM. Each file
-can be up to 20 MiB. `info()` keeps `{used, max, maxBytes}` and adds optional
-`bytesUsed`, `bytesMax`, `docsUsed`, `docsMax`. The desktop reads the real Hub
-quota (default 1,000 non-context files, 2 GiB total logical bytes). Older Hubs
-fall back to the original shared 100-slot limit and omit total-byte fields.
-These are hints for the UI; the Hub enforces admission under concurrent uploads.
+The optional desktop feature `"page-files"` provides `myco.pageFiles`. Check
+`(await myco.ready).pageFiles` as well: it is true only when both this desktop
+host and the current Hub support page attachments. Native iOS and Android bridges
+are separate capabilities and may not provide it.
 
-## Page attachment storage
+| Method | Result |
+| --- | --- |
+| `info()` | `{files_used, files_max, bytes_used, bytes_max, max_file_bytes}` |
+| `list({limit?, after?})` | `{attachments_version, attachments, usage, next?}` |
+| `put(collection, name, blob, {key?})` | Metadata including `file_id`, `size` and `sha256` |
+| `resolve(oldName)` | Metadata for a migrated legacy filename |
+| `get(file)` | Original bytes as a Blob |
+| `download(file)` | Saves the original in Downloads; returns true |
+| `remove(file)` | Removes an unreferenced original; returns true |
 
-The Hub page DTO's optional `attachments_version: 1` advertises page-owned
-attachment storage. Page files have their own quota (1000 files / 2 GiB by default,
-20 MiB per file), follow page permissions, and never enter project pull or agent
-project context. Hosts must negotiate this capability before enabling uploads;
-on older Hubs they can read existing project media but must present an upgrade
-message for writes. The Hub retains read-only legacy project-file aliases after
-migration, checked against the current page's permissions. See
-[Page-owned files](api.md#page-owned-files) for the HTTP contract and lifecycle.
-Native page bridge availability is a separate host capability; a new Hub alone
-does not add it to older desktop or mobile clients.
+`file` is an ID or an object containing `file_id`. The host always derives the
+page from the trusted open frame; a renderer cannot choose another page or project.
+Writes follow the named collection's permissions, and view-only frames cannot
+upload or remove files. Templates using the managed Downloads action must declare
+`"permissions": ["download"]`. Content proxies preserve Range requests, 206/416
+responses, and cancellation; downloads verify size and SHA256 before saving.
+
+Save the upload metadata in a declared `file` field within 24 hours. Unassociated
+uploads expire; associated originals survive application upgrades and page version
+rollback. Delete record references before removing the attachment. Files follow
+page permissions and are cleaned up with the page, and never enter project files,
+project pull or agent project context. Defaults are 1000 files / 2 GiB per page,
+20 MiB per file. Read actual limits from `info()`.
+
+### Legacy Media Kit compatibility
+
+The older scoped `myco.projectFiles` methods remain readable. On a new Hub, the
+desktop host redirects old uploads into page attachments, binds their old filenames,
+and returns page quota information. GET/download resolve migrated names first;
+not-yet-migrated originals can still read through the old project route. No legacy
+upload falls back to project storage. On old Hubs the new desktop host makes these
+pages view-only and shows an update notice. New apps must use `pageFiles`, not the
+legacy names. See [Page-owned files](api.md#page-owned-files) for HTTP migration,
+CLI commands, and Hub configuration.

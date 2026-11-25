@@ -1,15 +1,16 @@
 #!/usr/bin/env node
 // Explicit publication step. Screenshots never upload while being generated.
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readFile, writeFile, mkdir, stat } from "node:fs/promises";
 import path from "node:path";
 const args = process.argv.slice(2),
   value = (key, fallback) =>
     args.includes(key) ? args[args.indexOf(key) + 1] : fallback;
 const out = path.resolve(value("--out", "../media-kit-output"));
-const page = value("--page"), project = value("--project");
-if (!page || page.startsWith("--") || !project || project.startsWith("--")) {
-  console.error("Usage: upload.mjs --page <page-id> --project <project-name> [--out <directory>] [--upload] [--metadata-only]");
+const page = value("--page");
+if (!page || page.startsWith("--")) {
+  console.error("Usage: upload.mjs --page <page-id> [--out <directory>] [--upload] [--metadata-only]");
   process.exit(2);
 }
 const live = args.includes("--upload");
@@ -68,10 +69,26 @@ const pictures = cli(
   "--collection",
   "images",
 ).records;
-const projectBefore = cli("project", "show", "--name", project);
-const modernQuota = Number.isInteger(projectBefore.files_max) && projectBefore.files_max > 0;
-const before = modernQuota ? projectBefore.files_used : projectBefore.docs.length;
-const filesMax = modernQuota ? projectBefore.files_max : 100;
+const pageInfo = cli("page", "get", "--page", page);
+if (pageInfo.template?.data?.images?.fields?.attachment !== "file")
+  throw Error("Upgrade this Media Kit page before uploading page attachments.");
+const stored = [];
+let cursor = "", quota;
+do {
+  const result = cli("page", "file", "list", "--page", page, "--limit", "1000", ...(cursor ? ["--after", cursor] : []));
+  if (result.attachments_version !== 1) throw Error("Update the CLI and Hub for page attachments; project uploads are not supported.");
+  stored.push(...result.attachments); quota = result.usage; cursor = result.next || "";
+} while (cursor);
+const before = quota.files_used, filesMax = quota.files_max;
+const priorPicture = p => pictures.find(r => r.id === "img_" + p.suffix || r.data.attachment?.name === p.name || r.data.file === p.name);
+const priorAttachment = p => {
+  const picture = priorPicture(p);
+  return stored.find(f => picture?.data.attachment?.file_id === f.file_id || f.name === p.name || (picture?.data.file && f.legacy_name === picture.data.file));
+};
+const reusable = p => {
+  const f = priorAttachment(p);
+  return f && f.sha256 === p.sha256 && f.size === p.bytes && (!f.expires_at || Date.parse(f.expires_at) > Date.now() || f.state === "ready") ? f : undefined;
+};
 const planned = [];
 for (const [id, shots] of groups) {
   const prior = existing.find((r) => r.id === "feature-" + id);
@@ -94,33 +111,31 @@ for (const [id, shots] of groups) {
         "Screenshot dimensions do not match the 2× manifest: " + s.file,
       );
     if (meta.size > 20 * 1024 * 1024) throw Error("File too large: " + s.file);
-    planned.push({ s, entry, name, suffix, bytes: meta.size });
+    planned.push({ s, entry, name, suffix, bytes: meta.size, sha256: createHash("sha256").update(png).digest("hex") });
   }
 }
-if (
-  metadataOnly &&
-  planned.some((p) => !pictures.some((x) => x.data.file === p.name))
-)
-  throw Error("Metadata-only mode requires all images to exist already.");
-const uploads = metadataOnly ? [] : planned;
-const oldFile = (p) => projectBefore.docs.find((d) => d.name === p.name);
-const newFiles = uploads.filter((p) => modernQuota ? !oldFile(p)?.binary : !oldFile(p)).length;
-const addedBytes = uploads.reduce((n, p) => n + p.bytes - (oldFile(p)?.size || 0), 0);
-if (uploads.length && before + newFiles > filesMax)
-  throw Error(`Project file quota exceeded: ${before}+${newFiles}>${filesMax}. Remove files or ask a workspace owner/admin to raise the limit.`);
-if (uploads.length && modernQuota && projectBefore.bytes_used + addedBytes > projectBefore.bytes_max)
-  throw Error(`Project byte quota exceeded: ${projectBefore.bytes_used}+${addedBytes}>${projectBefore.bytes_max}. Remove files or ask a workspace owner/admin to raise the limit.`);
+if (planned.some(p => priorPicture(p)?.data.file && !priorAttachment(p)))
+  throw Error("A legacy original has not migrated yet. Wait for migration or inspect its report before replacing it.");
+if (metadataOnly && planned.some(p => !priorPicture(p) || !reusable(p)))
+  throw Error("Metadata-only mode requires matching originals already stored as page attachments.");
+const uploads = metadataOnly ? [] : planned.filter(p => !reusable(p));
+const newFiles = uploads.length;
+const addedBytes = uploads.reduce((n,p)=>n+p.bytes,0);
+if (newFiles && before + newFiles > filesMax)
+  throw Error(`Page file quota exceeded: ${before}+${newFiles}>${filesMax}. Remove unused attachments or ask the Hub administrator to adjust defaults.`);
+if (newFiles && quota.bytes_used + addedBytes > quota.bytes_max)
+  throw Error(`Page byte quota exceeded: ${quota.bytes_used}+${addedBytes}>${quota.bytes_max}. Remove unused attachments or ask the Hub administrator to adjust defaults.`);
 console.log(
   JSON.stringify(
     {
       dryRun: !live,
       entries: groups.size,
       files: planned.length,
-      projectFilesBefore: before,
+      pageFilesBefore: before,
       newFiles,
-      projectFilesAfter: before + newFiles,
-      projectFilesMax: filesMax,
-      ...(modernQuota ? {projectBytesAfter: projectBefore.bytes_used + addedBytes, projectBytesMax: projectBefore.bytes_max} : {}),
+      pageFilesAfter: before + newFiles,
+      pageFilesMax: filesMax,
+      pageBytesAfter: quota.bytes_used + addedBytes, pageBytesMax: quota.bytes_max,
     },
     null,
     2,
@@ -162,21 +177,11 @@ for (const [id, shots] of groups) {
     file,
   );
   for (const p of planned.filter((p) => p.entry === entry)) {
-    const oldPic = pictures.find((r) => r.data.file === p.name);
+    const oldPic = priorPicture(p);
     const imageId = oldPic?.id || "img_" + p.suffix;
-    // Retry uses the same project filename; no extra file slot is consumed.
-    if (!metadataOnly)
-      cli(
-        "project",
-        "file",
-        "put",
-        "--name",
-        project,
-        "--path",
-        p.s.file,
-        "--as",
-        p.name,
-      );
+    const priorFile = priorAttachment(p);
+    // Stable content keys recover pending uploads without consuming another slot.
+    const attachment = reusable(p) || cli("page", "file", "put", "--page", page, "--collection", "images", "--path", p.s.file, "--as", p.name, "--key", "media-kit:" + createHash("sha256").update(page + "\0" + p.name + "\0" + p.sha256).digest("hex"));
     const preview = execFileSync(
       "python3",
       [
@@ -194,7 +199,8 @@ for (const [id, shots] of groups) {
       tags: p.s.tags,
       description: `${p.s.description || descriptions[p.s.id] || p.s.title.split(" / ")[0]}，${p.s.lang === "zh" ? "中文" : "英文"}界面、${p.s.theme === "light" ? "浅色" : "深色"}。模拟数据。`,
       entry,
-      file: p.name,
+      attachment,
+      file: priorFile?.file_id === attachment.file_id ? oldPic?.data.file || "" : "",
       name: p.s.lang + " · " + p.s.theme,
       language: p.s.lang,
       theme: p.s.theme,
@@ -226,11 +232,12 @@ for (const [id, shots] of groups) {
     console.log("uploaded " + entry + " " + p.s.lang + "/" + p.s.theme);
   }
 }
-const projectAfter = cli("project", "show", "--name", project);
+const after = cli("page", "file", "list", "--page", page, "--limit", "1").usage;
 const result = {
   entries: [...groups.keys()].map((id) => "feature-" + id),
   files: planned.length,
-  projectFiles: projectAfter.files_max > 0 ? projectAfter.files_used : projectAfter.docs.length,
+  pageFiles: after.files_used,
+  pageBytes: after.bytes_used,
 };
 await writeFile(
   path.join(out, "uploaded.json"),

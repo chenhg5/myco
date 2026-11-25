@@ -12,6 +12,7 @@ import { openOutside, setInAppLinks } from "@/app/links";
 import { L } from "@/lib/i18n";
 import { BrowserProfileSettingsDetails, browserSettingsReview, type BrowserSettingsReview } from "./browser-profile-settings";
 import { answerProjectFiles, projectFileScope } from "./page-project-files";
+import { answerPageFiles, pageFileScope, pageFilesUpgrade } from "./page-files";
 import { canRecoverTemplate, PageRecovery, recoveryLabel } from "./page-recovery";
 import { usePagePreferences, localizedPageURL } from "./page-preferences";
 import { parsePageLink, pageFragmentURL, type PageLink } from "@/lib/page-links";
@@ -564,6 +565,8 @@ function PageView({ target, open, active, reload, onMeta }: {
     };
     const answer = async (t: { hubId: string; id: string }, method: string, args: Record<string, unknown>): Promise<unknown> => {
       const { page: p, opened: o } = live.current;
+      const legacyFilesReadOnly = !!projectFileScope(p) && !pageFileScope(p);
+      if (legacyFilesReadOnly && ["data.put", "data.remove", "update"].includes(method)) throw pageFilesUpgrade();
       switch (method) {
         case "ready": {
           const st = await appApi.pageState(t.hubId, t.id);
@@ -571,7 +574,7 @@ function PageView({ target, open, active, reload, onMeta }: {
           bridged.current = true;
           const projectFiles = !!projectFileScope(p);
           // (can_edit: false when only those who manage it change it, and not you)
-          return { page: { id: t.id, url: p?.url || "", name: o?.name || p?.name || "", version: o?.version || 0 }, me: { name: meOf(t.hubId), can_edit: !p?.read_only, can_manage: !!p?.can_manage }, state: st.state, version: st.version, preferences: live.current.preferences, isolation: o?.isolated === true, projectFiles, projectMedia: projectFiles };
+          return { page: { id: t.id, url: p?.url || "", name: o?.name || p?.name || "", version: o?.version || 0 }, me: { name: meOf(t.hubId), can_edit: !p?.read_only && !legacyFilesReadOnly, can_manage: !!p?.can_manage }, state: st.state, version: st.version, preferences: live.current.preferences, isolation: o?.isolated === true, pageFiles: !!pageFileScope(p), projectFiles, projectMedia: projectFiles };
         }
         case "update": {
           const r = await appApi.putPageState(t.hubId, t.id, args.state ?? null, Number(args.version) || 0);
@@ -614,6 +617,7 @@ function PageView({ target, open, active, reload, onMeta }: {
           return true;
         }
       }
+      if (method.startsWith("pageFiles.")) return answerPageFiles(t.hubId, p, method, args);
       if (method.startsWith("projectFiles.")) return answerProjectFiles(t.hubId, p, method, args);
       if (method.startsWith("data.") || method === "download") return answerData(t, method, args);
       if (method === "browser.call") {
@@ -898,6 +902,7 @@ function PageView({ target, open, active, reload, onMeta }: {
           }}>{upgrading ? L("正在升级…", "Upgrading…") : L("升级", "Upgrade")}</button>
         </div>
       )}
+      {projectFileScope(page) && !pageFileScope(page) && <div className="pg-local-note" role="status">{L("当前只能查看。请更新工作区后使用页面附件。", "View only. Update this workspace to use page attachments.")}</div>}
       {local && <div className="pg-local-note"><Monitor />{L("这台电脑上正在运行的网页。是空白的话，可能这个端口没有在跑。", "A server running on this computer. Blank? Nothing may be running on this port.")}</div>}
       {error ? <p className="fp-note">{error}</p> : (
         <div className="pg-stage">

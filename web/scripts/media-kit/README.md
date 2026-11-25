@@ -54,22 +54,22 @@ their screenshots are UI demonstrations, not native execution evidence.
 Inspect the paired images, check `manifest.json` for errors, and review the
 English `.text.txt` files for untranslated fixture copy. The upload helper
 requires an explicit `--upload` and refuses a failed capture run. It checks the
-project's 100-file quota before writing, preserves existing published entries,
+page's actual attachment count and byte quota before writing, preserves existing published entries,
 creates separate `feature-*` drafts, includes `App` and category tags, records
 actual language/theme/dimensions plus platform/aspect/kind/tags/description, and adds small JPEG gallery previews. Python 3
 with Pillow is required for previews. It never uploads videos or debug files.
 
 ```sh
-node web/scripts/media-kit/upload.mjs --page <page-id> --project <project-name> --out ../media-kit-output
-node web/scripts/media-kit/upload.mjs --page <page-id> --project <project-name> --out ../media-kit-output --upload
+node web/scripts/media-kit/upload.mjs --page <page-id> --out ../media-kit-output
+node web/scripts/media-kit/upload.mjs --page <page-id> --out ../media-kit-output --upload
 # Update metadata for existing files without uploading the originals again:
-node web/scripts/media-kit/upload.mjs --page <page-id> --project <project-name> --out ../media-kit-output --upload --metadata-only
+node web/scripts/media-kit/upload.mjs --page <page-id> --out ../media-kit-output --upload --metadata-only
 ```
 
-Both `--page` and `--project` are required, including for a dry run. Choose a destination you are authorized to update; the helper has no default workspace, project or page. Uploads reuse deterministic filenames and CAS
+`--page` is required, including for a dry run. Upgrade the Hub, CLI, and destination Media Kit page first. Application originals are never uploaded to project files. Choose a destination you are authorized to update; the helper has no default workspace, project or page. Uploads reuse stable content keys and CAS
 versions; a retry completes the same records instead of allocating duplicate
 file slots. Concurrent record conflicts stop for review. `uploaded.json` records
-the entry IDs and final project file count.
+the entry IDs and final page attachment count and size.
 
 ## Interaction collection
 
@@ -85,8 +85,10 @@ node web/scripts/media-kit-shots.mjs --out ../interaction-clips --scene agent-sw
 
 `focus` retains its existing media entry/file IDs but now demonstrates only
 side-by-side conversations. The separate `focus-mode` entry demonstrates the
-quiet single-task view. This batch allocates twelve new image files and replaces
-the two existing split-view images; it never starts an actual session handover.
+quiet single-task view. This batch adds twelve image records and updates the two existing split-view
+records. Originals are immutable: changed captures allocate new attachments;
+previous originals remain until explicitly removed. It never starts an actual
+session handover.
 
 The `runner-queue` scene demonstrates a task waiting for the computer's shared
 CLI capacity, in both languages, using the mock admission fixture:

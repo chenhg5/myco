@@ -460,3 +460,34 @@ func TestPageAttachmentMigrationLeavesAmbiguousLegacyNames(t *testing.T) {
 		t.Fatal("ambiguous sources were removed", err)
 	}
 }
+
+func TestPageAttachmentBackgroundBatchContinuesAfterUnreadableSource(t *testing.T) {
+	f := pageAttachmentFixture(t, DefaultPageAttachmentPolicy())
+	ctx := context.Background()
+	admin := Actor{Admin: true}
+	bad, err := f.project.PutFile(ctx, admin, "demo", "a-missing.png", "image/png", "owner", bytes.NewReader([]byte{1, 2, 3}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = f.store.Delete(ctx, bad.Blob); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.project.PutFile(ctx, admin, "demo", "b-good.png", "image/png", "owner", bytes.NewReader([]byte{4, 5, 6})); err != nil {
+		t.Fatal(err)
+	}
+	f.record(t, "pg_demo", "assets", "bad", `{"file":"a-missing.png"}`)
+	f.record(t, "pg_demo", "assets", "good", `{"file":"b-good.png"}`)
+	first, err := f.service.migrate(ctx, admin, "demo", false, 1, "")
+	if err != nil || len(first.Results) != 1 || first.Results[0].Error == "" {
+		t.Fatalf("missing original report: %+v %v", first, err)
+	}
+	last := first.Results[0]
+	next, err := f.service.migrate(ctx, admin, "demo", false, 1, last.Project+"\x00"+last.Name)
+	if err != nil || next.Moved != 1 || next.Results[0].Name != "b-good.png" {
+		t.Fatalf("failed original blocked next batch: %+v %v", next, err)
+	}
+	p, err := f.project.Get(ctx, admin, "demo")
+	if err != nil || len(p.Docs) != 1 || p.Docs[0].Name != "a-missing.png" {
+		t.Fatal("unreadable original was removed", err)
+	}
+}
