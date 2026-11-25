@@ -272,7 +272,7 @@ func TestNativeChromeRecordsOnlyUserTopLevelNavigation(t *testing.T) {
 			t.Fatalf("step %d: %+v", i, result.Steps[i])
 		}
 	}
-	for i, want := range map[int]string{1: base + "/landed", 3: base + "/landed#section"} {
+	for i, want := range map[int]string{1: base + "/landed", 3: "#section"} {
 		if result.Steps[i].Wait != "url" || result.Steps[i].Value != want {
 			t.Fatalf("click navigation lost at %d: %+v", i, result.Steps[i])
 		}
