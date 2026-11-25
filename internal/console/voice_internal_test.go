@@ -671,3 +671,16 @@ func TestVoiceReceiptsAreFirstPerson(t *testing.T) {
 		}
 	}
 }
+
+// What the call tells the person about the microphone follows its language.
+func TestVoiceMicNoticesFollowTheLanguage(t *testing.T) {
+	if got := micError(true, "mic-denied"); !strings.HasPrefix(got, "No microphone access") {
+		t.Fatalf("en: %q", got)
+	}
+	if got := micError(false, "mic-denied"); !strings.HasPrefix(got, "没有麦克风权限") {
+		t.Fatalf("zh: %q", got)
+	}
+	if got := micError(true, "boom"); got != "The microphone stopped: boom" {
+		t.Fatalf("en other: %q", got)
+	}
+}

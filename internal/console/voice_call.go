@@ -179,22 +179,30 @@ func (c *voiceCall) Played() {
 func (c *voiceCall) Ended(err string) {
 	if err != "" {
 		c.v.mu.Lock()
-		c.v.add(VoiceEvent{Kind: vNotice, Text: micError(err)})
+		c.v.add(VoiceEvent{Kind: vNotice, Text: micError(c.en(), err)})
 		c.v.mu.Unlock()
 	}
 	c.hangUp()
 }
 
-func micError(err string) string {
+func micError(en bool, err string) string {
+	say := func(zh, en2 string) string {
+		if en {
+			return en2
+		}
+		return zh
+	}
 	switch err {
 	case "mic-denied":
-		return "没有麦克风权限：在「系统设置 › 隐私与安全性 › 麦克风」里允许 myco。"
+		return say("没有麦克风权限：在「系统设置 › 隐私与安全性 › 麦克风」里允许 myco。",
+			"No microphone access: allow myco under System Settings › Privacy & Security › Microphone.")
 	case "speech-denied":
-		return "没有语音识别权限：在「系统设置 › 隐私与安全性 › 语音识别」里允许 myco。"
+		return say("没有语音识别权限：在「系统设置 › 隐私与安全性 › 语音识别」里允许 myco。",
+			"No speech recognition access: allow myco under System Settings › Privacy & Security › Speech Recognition.")
 	case "unavailable":
-		return "这台电脑上现在用不了语音识别。"
+		return say("这台电脑上现在用不了语音识别。", "Speech recognition is not available on this computer right now.")
 	}
-	return "麦克风停了：" + err
+	return say("麦克风停了：", "The microphone stopped: ") + err
 }
 
 // heard: the person's words so far. While the assistant talks, real words
@@ -279,7 +287,7 @@ func (c *voiceCall) interrupt() {
 		c.v.update(t.id, said, true)
 		c.v.mu.Unlock()
 		if said != "" {
-			c.history = append(c.history, chatMsg{Role: "assistant", Content: said + "（被打断了）"})
+			c.history = append(c.history, chatMsg{Role: "assistant", Content: said + c.say("（被打断了）", " (cut off)")})
 		}
 	}
 	c.v.setState(stListening)
@@ -639,7 +647,7 @@ func (c *voiceCall) readConvo() <-chan struct{} {
 		convo, err := c.d.hub.Context(ctx)
 		cancel()
 		if err != nil && convo == "" {
-			convo = "（这会儿读不到对话：" + err.Error() + "）"
+			convo = c.say("（这会儿读不到对话：", "(The chat cannot be read right now: ") + err.Error() + c.say("）", ")")
 		}
 		c.convoMu.Lock()
 		c.convo, c.convoAt, c.convoIn = convo, time.Now(), nil

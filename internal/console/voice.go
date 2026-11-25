@@ -485,18 +485,27 @@ func (b *Backend) startVoice(w http.ResponseWriter, r *http.Request) {
 		llmKey, ttsKey = b.voiceKeys(c)
 	}
 	provider := ttsProviderOf(c.TTSProvider)
+	// The hints follow the call's language (zh-CN unless it is English).
+	en := strings.HasPrefix(strings.TrimSpace(in.Lang), "en")
+	hint := func(zh, en2 string) string {
+		if en {
+			return en2
+		}
+		return zh
+	}
 	if c.LLMBaseURL == "" || c.LLMModel == "" || llmKey == "" {
 		writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "not_configured", Message: "choose the model the voice assistant talks with",
-			Suggestion: "设置 › 语音：填 OpenAI 兼容接口的地址、模型和密钥（或在「翻译」里配好 OpenAI 兼容接口）"})
+			Suggestion: hint("设置 › 语音：填 OpenAI 兼容接口的地址、模型和密钥（或在「翻译」里配好 OpenAI 兼容接口）",
+				"Settings › Voice: fill in the address, model and key of an OpenAI-compatible API (or set one up under Translation)")})
 		return
 	}
 	if provider == nil || ttsKey == "" {
 		name := c.TTSProvider
 		if provider != nil {
-			name = provider.Name
+			name = hint(provider.Name, provider.NameEn)
 		}
 		writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "not_configured", Message: "add the speech service's key (" + c.TTSProvider + ")",
-			Suggestion: "设置 › 语音：填语音合成（" + name + "）的 API Key"})
+			Suggestion: hint("设置 › 语音：填语音合成（"+name+"）的 API Key", "Settings › Voice: add the API key for speech ("+name+")")})
 		return
 	}
 	hc, err := b.client(hub)
