@@ -14,12 +14,12 @@
 
 [![Release](https://img.shields.io/github/v/release/myco-ai/myco?style=flat-square&color=3a9a78)](https://github.com/myco-ai/myco/releases)
 [![Build](https://img.shields.io/github/actions/workflow/status/myco-ai/myco/release.yml?branch=main&label=release&style=flat-square)](https://github.com/myco-ai/myco/actions/workflows/release.yml)
-![Platforms](https://img.shields.io/badge/macOS%20·%20Windows%20·%20Linux-grey?style=flat-square)
+![Platforms](https://img.shields.io/badge/macOS%20·%20Windows%20·%20Linux%20·%20Android-grey?style=flat-square)
 [![LINUX DO](https://img.shields.io/badge/LINUX-DO-ffb003?style=flat-square&labelColor=3f3f46)](https://linux.do)
 [![Telegram](https://img.shields.io/badge/Telegram-Join-26A5E4?style=flat-square)](https://t.me/+TegU5q0F3TE5ZjI1)
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square)](https://discord.gg/DrQhZXGNZ6)
 
-**[下载 Mac 版](https://github.com/myco-ai/myco/releases/latest/download/myco.dmg)** · [Windows 版（预览）](https://github.com/myco-ai/myco/releases/latest/download/myco-app-windows-amd64.exe) · [Linux 版](https://github.com/myco-ai/myco/releases/latest/download/myco-app-linux-amd64) · [全部下载](https://github.com/myco-ai/myco/releases/latest)
+**[下载 Mac 版](https://github.com/myco-ai/myco/releases/latest/download/myco.dmg)** · [Windows 版（预览）](https://github.com/myco-ai/myco/releases/latest/download/myco-app-windows-amd64.exe) · [Linux 版](https://github.com/myco-ai/myco/releases/latest/download/myco-app-linux-amd64) · [Android 版（预览）](https://github.com/myco-ai/myco/releases/latest/download/myco-android-debug.apk) · [全部下载](https://github.com/myco-ai/myco/releases/latest)
 
 [English](README.md) · **中文** · [安装指南](INSTALL.zh-CN.md) · [使用教程](docs/tutorial.zh-CN.md) · [应用](docs/apps.zh-CN.md) · [架构](docs/architecture.md) · [HTTP API](docs/api.md)
 
@@ -57,6 +57,7 @@ App 的第一屏也有这句话（**让 agent 帮我装**）。
 | **Windows**（预览） | [myco-app-windows-amd64.exe](https://github.com/myco-ai/myco/releases/latest/download/myco-app-windows-amd64.exe)（[ARM 版](https://github.com/myco-ai/myco/releases/latest/download/myco-app-windows-arm64.exe)）。还没有代码签名，第一次运行时选「更多信息 → 仍要运行」。 |
 | **Linux** | [myco-app-linux-amd64](https://github.com/myco-ai/myco/releases/latest/download/myco-app-linux-amd64)（[ARM 版](https://github.com/myco-ai/myco/releases/latest/download/myco-app-linux-arm64)）：在浏览器里打开 App（X11、Wayland、WSL 都行）。[详见](INSTALL.zh-CN.md#9-控制台-appmac--windows--linux) |
 | **iPhone**（测试版） | **[加入 TestFlight 测试](https://testflight.apple.com/join/XDKvU8Jp)**（iOS 17 或更新）。 |
+| **Android**（预览） | [myco-android-debug.apk](https://github.com/myco-ai/myco/releases/latest/download/myco-android-debug.apk)：Android 8.0 或更新。debug 签名的预览版 APK，不是应用商店版本，功能还在追赶 iPhone 版；安装新版前先卸载旧的预览版。 |
 | **服务器** | 用命令行工具，见[更喜欢命令行？](#更喜欢命令行) |
 
 ## 三步上手

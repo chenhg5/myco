@@ -14,12 +14,12 @@ reach your other computers and your phone, put them on a schedule — all from o
 
 [![Release](https://img.shields.io/github/v/release/myco-ai/myco?style=flat-square&color=3a9a78)](https://github.com/myco-ai/myco/releases)
 [![Build](https://img.shields.io/github/actions/workflow/status/myco-ai/myco/release.yml?branch=main&label=release&style=flat-square)](https://github.com/myco-ai/myco/actions/workflows/release.yml)
-![Platforms](https://img.shields.io/badge/macOS%20·%20Windows%20·%20Linux-grey?style=flat-square)
+![Platforms](https://img.shields.io/badge/macOS%20·%20Windows%20·%20Linux%20·%20Android-grey?style=flat-square)
 [![LINUX DO](https://img.shields.io/badge/LINUX-DO-ffb003?style=flat-square&labelColor=3f3f46)](https://linux.do)
 [![Telegram](https://img.shields.io/badge/Telegram-Join-26A5E4?style=flat-square)](https://t.me/+TegU5q0F3TE5ZjI1)
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square)](https://discord.gg/DrQhZXGNZ6)
 
-**[Download for Mac](https://github.com/myco-ai/myco/releases/latest/download/myco.dmg)** · [Windows (preview)](https://github.com/myco-ai/myco/releases/latest/download/myco-app-windows-amd64.exe) · [Linux](https://github.com/myco-ai/myco/releases/latest/download/myco-app-linux-amd64) · [All downloads](https://github.com/myco-ai/myco/releases/latest)
+**[Download for Mac](https://github.com/myco-ai/myco/releases/latest/download/myco.dmg)** · [Windows (preview)](https://github.com/myco-ai/myco/releases/latest/download/myco-app-windows-amd64.exe) · [Linux](https://github.com/myco-ai/myco/releases/latest/download/myco-app-linux-amd64) · [Android (preview)](https://github.com/myco-ai/myco/releases/latest/download/myco-android-debug.apk) · [All downloads](https://github.com/myco-ai/myco/releases/latest)
 
 **English** · [中文](README.zh-CN.md) · [Install Guide](INSTALL.md) · [Video tutorial](docs/tutorial.md) · [Apps](docs/apps.md) · [Architecture](docs/architecture.md) · [HTTP API](docs/api.md)
 
@@ -57,6 +57,7 @@ The app's first screen has the same sentence (**Let my agent set it up**).
 | **Windows** (preview) | [myco-app-windows-amd64.exe](https://github.com/myco-ai/myco/releases/latest/download/myco-app-windows-amd64.exe) ([ARM](https://github.com/myco-ai/myco/releases/latest/download/myco-app-windows-arm64.exe)). Not code-signed yet: on first run choose *More info → Run anyway*. |
 | **Linux** | [myco-app-linux-amd64](https://github.com/myco-ai/myco/releases/latest/download/myco-app-linux-amd64) ([ARM](https://github.com/myco-ai/myco/releases/latest/download/myco-app-linux-arm64)): opens the app in your browser (X11, Wayland, WSL). [Details](INSTALL.md#9-the-console-app-mac--windows--linux) |
 | **iPhone** (beta) | **[Join the TestFlight beta](https://testflight.apple.com/join/XDKvU8Jp)** (iOS 17 or later). |
+| **Android** (preview) | [myco-android-debug.apk](https://github.com/myco-ai/myco/releases/latest/download/myco-android-debug.apk): Android 8.0 or later. A debug-signed preview APK, not a Play Store release, and still catching up with the iPhone app. Uninstall an older preview before installing a new one. |
 | **Servers** | The command-line tool — see [Prefer the command line?](#prefer-the-command-line) |
 
 ## Get started in three steps
