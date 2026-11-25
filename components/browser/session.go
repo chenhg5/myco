@@ -61,6 +61,7 @@ type session struct {
 	current             proto.TargetTargetID
 	controller          string
 	recorder            *recording
+	control             *controlSession
 	frames              map[proto.PageFrameID]frameInfo
 	contexts            map[string]map[proto.RuntimeExecutionContextID]proto.PageFrameID
 	targets             map[proto.TargetSessionID]proto.TargetTargetID
@@ -316,7 +317,11 @@ func (s *session) close() error {
 	s.mu.Lock()
 	s.closed = true
 	rec, cmd, guard, proxy := s.recorder, s.cmd, s.guard, s.proxy
+	control := s.control
 	s.mu.Unlock()
+	if control != nil {
+		control.terminate("session_closed", "session_closed")
+	}
 	if proxy != nil {
 		proxy.Close()
 	}

@@ -124,12 +124,13 @@
     region.addEventListener('pointercancel',ev=>{if(ev.isTrusted)closeRegion();});
     window.addEventListener('resize',closeRegion);
     state.contextMenu=(ev,element)=>{
+      if(model?.mode==='agent')return false;
       if(!ev.isTrusted||!element||!model?.recording||state.picking||state.ignoreEvent(ev))return false;
       ev.preventDefault();ev.stopImmediatePropagation();
       openMenu(window.__mycoDescribe(element),{left:ev.clientX,bottom:ev.clientY});return true;
     };
     document.addEventListener('pointermove',ev=>{
-      if(!ev.isTrusted||!model?.recording||model.hide||!menu.hidden||pendingDelete||!region.hidden||state.ignoreEvent(ev)){hideHighlight();return;}
+      if(!ev.isTrusted||!model?.recording||model.mode==='agent'||model.hide||!menu.hidden||pendingDelete||!region.hidden||state.ignoreEvent(ev)){hideHighlight();return;}
       const element=ev.composedPath()[0];if(!element||element.nodeType!==1||element===document.body||element===document.documentElement){hideHighlight();return;}
       const rect=element.getBoundingClientRect();if(!rect.width||!rect.height){hideHighlight();return;}
       const target=window.__mycoDescribe(element);highlight.hidden=highlightLabel.hidden=false;
@@ -144,13 +145,16 @@
     const types={click:['↖',t('点击','Click')],type:['⌨',t('输入','Type')],navigate:['↗',t('打开网址','Navigate')],wait:['◷',t('等待','Wait')],extract:['▤',t('抓取','Extract')],press:['⌨',t('按键','Key')],select:['≡',t('选择','Select')],scroll:['↕',t('滚动','Scroll')],tab:['▣',t('标签页','Tab')],drag:['↔',t('拖动','Drag')],upload:['↑',t('上传','Upload')],dialog:['▢',t('对话框','Dialog')],screenshot:['▧',t('截图','Screenshot')]};
     const stepName=step=>{const [icon,name]=types[step.type]||['·',step.type];return icon+' '+(step.title||(step.type==='screenshot'&&step.clip?name+' '+Math.round(step.clip.width)+' × '+Math.round(step.clip.height):'' )||(step.type==='extract'&&step.into?name+' '+({text:t('文本','text'),attribute:t('属性','attribute'),html:'HTML'}[step.what]||'')+' → '+step.into:name));};
     render=()=>{
-      const steps=model.steps||[];
+      const agent=model.mode==='agent';
+      const steps=agent?[]:(model.steps||[]);
       if(previousID!==model.id){previousID=model.id;previousStep='';closeRegion();localTarget=null;pendingDelete=null;menu.hidden=true;selectedKey='';}
       if(!model.recording){closeRegion();localTarget=null;pendingDelete=null;menu.hidden=true;hideHighlight();current.hidden=true;clearTimeout(noticeTimer);}
-      box.classList.toggle('idle',!model.recording);title.textContent=model.recording?t('正在录制','Recording'):t('myco 网页录制','myco web recorder');
-      dot.hidden=count.hidden=!model.recording;count.textContent=t(`${steps.length} 步`,`${steps.length} steps`);
-      toggle.textContent=collapsed?'+':'−';toggle.setAttribute('aria-label',collapsed?t('展开','Expand'):t('收起','Collapse'));toggle.setAttribute('aria-expanded',String(!collapsed));body.hidden=footer.hidden=collapsed;
-      screenshot.hidden=!(model.features||[]).includes('screenshot_clip');screenshot.disabled=!!model.picking||!!model.selected||!!localTarget;toolbar.hidden=!model.recording;start.hidden=!!model.recording;stop.hidden=!model.recording;start.disabled=!!model.busy&&!model.recording;pick.disabled=!!model.picking||!!model.selected||!!localTarget;
+      box.classList.toggle('idle',!model.recording);title.textContent=agent?t('Agent 正在操作','Agent is controlling'):model.recording?t('正在录制','Recording'):t('myco 网页录制','myco web recorder');
+      dot.hidden=!model.recording;count.hidden=agent||!model.recording;count.textContent=t(`${steps.length} 步`,`${steps.length} steps`);
+      toggle.textContent=collapsed?'+':'−';toggle.setAttribute('aria-label',collapsed?t('展开','Expand'):t('收起','Collapse'));toggle.setAttribute('aria-expanded',String(!collapsed));body.hidden=collapsed;footer.hidden=collapsed&&!agent;
+      screenshot.hidden=!(model.features||[]).includes('screenshot_clip');screenshot.disabled=!!model.picking||!!model.selected||!!localTarget;toolbar.hidden=agent||!model.recording;start.hidden=!!model.recording;stop.hidden=!model.recording;start.disabled=!!model.busy&&!model.recording;pick.disabled=!!model.picking||!!model.selected||!!localTarget;
+      stop.textContent=agent?t('停止 Agent 操作','Stop agent control'):t('结束录制','Stop recording');
+      if(agent){current.textContent=[model.actor,types[model.last_action]?.[1]||({snapshot:t('读取页面','Read page'),open:t('打开页面','Open page'),back:t('后退','Back'),forward:t('前进','Forward'),reload:t('刷新','Reload')}[model.last_action])||''].filter(Boolean).join(' · ');current.hidden=false;}
       const stepKey=JSON.stringify(steps);
       if(stepKey!==renderedSteps){
         renderedSteps=stepKey;const wasNearEnd=list.scrollHeight-list.scrollTop-list.clientHeight<45;list.replaceChildren();
@@ -163,7 +167,7 @@
         if(latest&&latest.id!==previousStep){showAction(stepName(latest));if(wasNearEnd)list.scrollTop=list.scrollHeight;}
         previousStep=latest?.id||'';
       }
-      list.hidden=!model.recording||!steps.length;empty.hidden=!model.recording||!!steps.length;
+      list.hidden=!model.recording||!steps.length;empty.hidden=agent||!model.recording||!!steps.length;
       const selected=localTarget?summary(localTarget):model.selected;
       capture.hidden=!model.recording||!selected;
       if(selected!==selectedKey){selectedKey=selected||'';into.value=model.next_variable||'data1';what.value=pickedWhat;attr.value='';}

@@ -262,6 +262,39 @@ func (r *playRun) download(ctx context.Context) (string, error) {
 func (r *playRun) tab(ctx context.Context, n node) (any, error) {
 	s := r.session
 	switch n.Tab {
+	case "close":
+		page, err := s.page()
+		if err != nil {
+			return nil, err
+		}
+		var previous proto.TargetTargetID
+		for _, id := range r.tabOrder {
+			if id == page.TargetID {
+				break
+			}
+			s.mu.Lock()
+			exists := s.pages[id] != nil
+			s.mu.Unlock()
+			if exists {
+				previous = id
+			}
+		}
+		if previous == "" {
+			return nil, errors.New("target_not_found")
+		}
+		if err = page.Context(ctx).Close(); err != nil {
+			return nil, err
+		}
+		next, err := s.waitPage(ctx, previous)
+		if err != nil {
+			return nil, err
+		}
+		s.mu.Lock()
+		s.current = previous
+		s.mu.Unlock()
+		_, err = next.Context(ctx).Activate()
+		return nil, err
+
 	case "new":
 		p, err := s.newPage(ctx, n.URL)
 		if err != nil {
