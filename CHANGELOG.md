@@ -4,6 +4,24 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.22.9
+
+- **A browser profile can use a proxy, custom user agent, language and launch arguments**: Web automation can ask to change these for a profile, and the App shows its own confirmation with the exact proxy, bypass list, user agent, language and arguments before anything changes; a proxy password is never displayed, and a saved one is kept only when the server and user stay the same. Settings apply the next time the browser starts and do not restart a browser that is open. This needs browser component 0.2.0, which the App offers to install.
+- **An installed browser component now shows when it can be updated**: the browser status a page sees reports a compatible but older component, so Web automation shows "Update component" on a computer still running 0.1.1 or 0.1.0 instead of only reporting the component as installed.
+- **Project storage is counted and limited separately**: a project's files and total size no longer share the context-document allowance (still 100 documents), and a workspace owner or admin can set a project's own limits in Settings → Workspaces — 1 to 10,000 files, up to 20 GiB, defaults 1,000 files and 2 GiB — or return it to the workspace defaults. Lowering a limit never hides or deletes existing files; new uploads must fit. This part needs Hub 0.22.9 on the server, which also runs a database migration on upgrade.
+- **Apps may only use what they declare**: on a Hub that says an app's manifest is complete, an operating-system capability the app does not declare in `myco.json`, or `myco.send`/`myco.download` without the matching permission, is refused with the group to add instead of asking the person each time; a file the person picks is no exception. Public network hosts outside the app's `net` list are still asked one by one, and pages with no app, myco's own apps that declare nothing yet, and older Hubs keep the previous behaviour. This part needs Hub 0.22.9.
+
+Upgrade: update the Hub on the server to 0.22.9 (`sudo myco upgrade`) for project storage limits and app-declaration enforcement. The browser changes only need the new browser component, which the App installs or offers to update.
+
+**中文**
+
+- **浏览器资料可以使用代理、自定义 User-Agent、语言和启动参数**：网页自动化可以申请修改某个资料的这些设置，应用会先用自己的确认框列出确切的代理地址、不走代理的列表、UA、语言和每个启动参数，确认后才生效；代理密码从不显示，只有服务器和账号都没变时才保留已保存的密码。设置在下次启动浏览器时生效，不会重启已经打开的浏览器。这需要浏览器组件 0.2.0，应用会提示安装。
+- **装了旧版浏览器组件时页面会提示更新**：页面看到的浏览器状态会说明装的是可兼容但较旧的组件，还停留在 0.1.1 或 0.1.0 的电脑上，网页自动化会显示「更新组件」，而不只是显示已安装。
+- **项目存储单独计算、上限可配置**：项目的文件数和总大小不再占用上下文文档的额度（文档仍限 100 个），工作区所有者或管理员可以在「设置 → 工作区」里为单个项目设置上限——1 到 10,000 个文件、最多 20 GiB，默认 1,000 个文件和 2 GiB——也可以恢复为工作区默认值。调低上限不会隐藏或删除已有文件，只影响新的上传。这部分需要服务器上的 Hub 0.22.9，升级时会执行数据库迁移。
+- **应用只能使用声明过的能力**：如果 Hub 说明某个应用的清单就是它的全部声明，那么 `myco.json` 的 `"os"` 里没有的操作系统能力，或 `"permissions"` 里没有的 `myco.send`/`myco.download`，会直接拒绝并提示要补哪一组，不再每次询问；人自己选的文件也不例外。应用 `"net"` 之外的公网地址仍会逐个询问；没有清单的普通页面、暂时没写声明的 myco 官方应用和旧 Hub 保持原来的行为。这部分需要 Hub 0.22.9。
+
+升级：为了让项目存储额度和应用声明拦截生效，请把服务器上的 Hub 升级到 0.22.9（`sudo myco upgrade`）。浏览器相关的改动只需要新的浏览器组件，应用会安装或提示更新。
+
 ## v0.22.8
 
 - **Web automation records inside cross-origin frames**: clicks and typing in a page's cross-site iframes, including frames nested inside them, are recorded with a selector path that replays on the right frame. Pages whose verification widget loads in a nested frame, such as Cloudflare Turnstile on V2EX, no longer stay stuck while the recorder attaches.
