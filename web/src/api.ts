@@ -149,6 +149,8 @@ export interface ProjectDoc {
 }
 export interface Agent {
   updating?: boolean;
+  /** what it is watching for in the background (myco watch); absent on older hubs */
+  watching?: number;
   id: string; name: string; display_name?: string; aliases?: string[]; description: string;
   /** the face people chose: "look:c3-p1-f2-s1" (a drawn one) or "pic:<hash>"
    *  (a picture: GET /v1/agents/{name}/avatar); absent = drawn from the id */
@@ -600,32 +602,7 @@ export interface PageAttachmentUsage { files_used: number; files_max: number; by
 export interface PageAttachmentList { attachments_version: number; attachments: PageAttachment[]; usage: PageAttachmentUsage; next?: string }
 
 /** Something an agent waits for in the background (myco watch): a reply,
- *  a task, a workflow run, later a command's output. The hub checks it
- *  and wakes the agent when it is met, or when the time is up. */
-export interface Watch {
-  id: string;
-  /** who is watching */
-  agent: string;
-  project?: string;
-  /** the task it set aside to wait (held) */
-  task?: string;
-  /** for people: "mac2 的回复" */
-  what: string;
-  kind: "reply" | "task" | "workflow" | "command";
-  target?: string;
-  command?: string;
-  match?: string;
-  every_sec?: number;
-  started_at: string;
-  deadline: string;
-  last_check_at?: string;
-  /** the last check, one line (at most 200 characters, redacted) */
-  last_result?: string;
-  checks: number;
-  state: "watching" | "met" | "expired" | "stopped";
-  ended_at?: string;
-  ended_by?: string;
-  /** what came of it: met, timed out, stopped */
-  outcome?: string;
-}
-export interface WatchList { watches: Watch[] }
+ *  a task, a workflow run. The hub checks it and wakes the agent when it is
+ *  met, or when the time is up. (web/src/lib/watch.ts, shared with the
+ *  backend's contract) */
+export type { Watch, WatchList, WatchStartRequest } from "@/lib/watch";
