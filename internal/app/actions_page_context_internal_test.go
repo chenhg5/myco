@@ -22,8 +22,18 @@ func (r contextPageRepo) Versions(ctx context.Context, _ string) ([]*domain.Page
 	return r.versions(ctx)
 }
 
+type cancelledPollMessageRepo struct {
+	domain.MessageRepository
+	cancel context.CancelFunc
+}
+
+func (r cancelledPollMessageRepo) Get(ctx context.Context, _ string) (*domain.Message, error) {
+	r.cancel()
+	return &domain.Message{To: "maker", Status: domain.StatusAcked}, ctx.Err()
+}
+
 func TestCancelledHostPollPreservesPageGrantAndArtifact(t *testing.T) {
-	for _, phase := range []string{"before lookup", "during page lookup", "during versions lookup", "visibility revoked"} {
+	for _, phase := range []string{"before lookup", "during page lookup", "during versions lookup", "during task lookup", "visibility revoked"} {
 		t.Run(phase, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -56,6 +66,10 @@ func TestCancelledHostPollPreservesPageGrantAndArtifact(t *testing.T) {
 				grants: map[string]*actionGrant{"grant": grant}, arts: map[string]*actionArtifact{"artifact": artifact},
 				hosts: map[string]*actionHost{"host": {owner: "owner", ActionHost: api.ActionHost{ID: "host", Generation: "g"}}},
 				jobs:  map[string]*actionJob{"job": {hostID: "host", ActionJob: api.ActionJob{ID: "job", GrantID: "grant", State: api.JobSucceeded}}}}
+			if phase == "during task lookup" {
+				grant.MessageID = "task"
+				s.messages = &MessageService{messages: cancelledPollMessageRepo{cancel: cancel}}
+			}
 			if phase == "before lookup" {
 				cancel()
 			}

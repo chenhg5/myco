@@ -29,6 +29,10 @@ click binding. Recording checks intent again at navigation commit while retainin
 intent captured at the request for slow loads. Automatic/iframe navigation still
 requires the same top-level and per-recording checks.
 
+Named form controls retain their semantic/ID fallback locators. An unnamed
+document element may have only a structural CSS locator; this remains a valid
+recording target. The native fixture verifies both kinds and replays them.
+
 Run `go test -race ./...` and `go vet ./...` in this directory. On a machine with
 an installed Chrome or Edge, enable the existing native fixture flag:
 

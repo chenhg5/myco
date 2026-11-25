@@ -79,6 +79,52 @@ func TestNativeChromeRecordsOnlyUserTopLevelNavigation(t *testing.T) {
 		t.Fatal(err)
 	}
 	page = page.Context(ctx)
+	// Runtime reads issued during a document swap may target its old
+	// execution context. First observe the browser's URL, then require the
+	// new document itself to be ready, without retaining a JS object ID.
+	waitDocument := func(want string) {
+		t.Helper()
+		deadline := time.NewTimer(5 * time.Second)
+		defer deadline.Stop()
+		tick := time.NewTicker(20 * time.Millisecond)
+		defer tick.Stop()
+		var lastURL string
+		var lastErr error
+		for {
+			info, err := page.Info()
+			if err != nil {
+				t.Fatal(err)
+			}
+			lastURL = info.URL
+			if info.URL == want {
+				var state struct {
+					Result *proto.RuntimeRemoteObject `json:"result"`
+				}
+				lastErr = s.call(page.SessionID, "Runtime.evaluate", map[string]any{
+					"expression": "({href:location.href,ready:document.readyState})", "returnByValue": true,
+				}, &state)
+				if lastErr == nil && state.Result != nil && state.Result.Value.Get("href").Str() == want {
+					ready := state.Result.Value.Get("ready").Str()
+					if ready == "interactive" || ready == "complete" {
+						return
+					}
+				}
+				if lastErr != nil {
+					var rpcErr *cdp.Error
+					if !errors.As(lastErr, &rpcErr) || rpcErr.Code != -32000 {
+						t.Fatal(lastErr)
+					}
+				}
+			}
+			select {
+			case <-ctx.Done():
+				t.Fatal(ctx.Err())
+			case <-deadline.C:
+				t.Fatalf("document did not become ready: want=%s got=%s error=%v", want, lastURL, lastErr)
+			case <-tick.C:
+			}
+		}
+	}
 	watchCtx, stopWatch := context.WithCancel(ctx)
 	watch := s.browser.Context(watchCtx).Event()
 	var watchMu sync.Mutex
@@ -150,9 +196,7 @@ func TestNativeChromeRecordsOnlyUserTopLevelNavigation(t *testing.T) {
 			t.Fatal(clickErr)
 		}
 	}
-	if err = page.Wait(rod.Eval(`()=>location.pathname==='/landed'`)); err != nil {
-		t.Fatalf("link did not navigate: click=%v navigation=%v", clickErr, err)
-	}
+	waitDocument(base + "/landed")
 	if clickErr != nil {
 		t.Logf("click delivered before its document changed: %v", clickErr)
 	}
@@ -189,31 +233,23 @@ func TestNativeChromeRecordsOnlyUserTopLevelNavigation(t *testing.T) {
 	if err = hashLink.Click(proto.InputMouseButtonLeft, 1); err != nil {
 		t.Fatal(err)
 	}
-	if err = page.Wait(rod.Eval(`()=>location.hash==='#section'`)); err != nil {
-		t.Fatal(err)
-	}
+	waitDocument(base + "/landed#section")
 	waitCount(4)
 	// Timer-driven navigation outside the user's action window is not a step.
 	time.Sleep(navigationActionWindow + 100*time.Millisecond)
 	if _, err = page.Eval(`()=>setTimeout(()=>location.assign('/automatic'),0)`); err != nil {
 		t.Fatal(err)
 	}
-	if err = page.Wait(rod.Eval(`()=>location.pathname==='/automatic'`)); err != nil {
-		t.Fatal(err)
-	}
+	waitDocument(base + "/automatic")
 	if _, err = page.Eval(`()=>{history.pushState({},'','/history');location.hash='automatic'}`); err != nil {
 		t.Fatal(err)
 	}
-	if err = page.Wait(rod.Eval(`()=>location.hash==='#automatic'`)); err != nil {
-		t.Fatal(err)
-	}
+	waitDocument(base + "/history#automatic")
 	// CDP Page.navigate models browser/address-bar initiated navigation.
 	if err = page.Navigate(base + "/typed"); err != nil {
 		t.Fatal(err)
 	}
-	if err = page.WaitLoad(); err != nil {
-		t.Fatal(err)
-	}
+	waitDocument(base + "/typed")
 	stay, err := page.Element("#stay")
 	if err != nil {
 		t.Fatal(err)
@@ -225,9 +261,7 @@ func TestNativeChromeRecordsOnlyUserTopLevelNavigation(t *testing.T) {
 	if err = page.Navigate(base + "/typed#section"); err != nil {
 		t.Fatal(err)
 	}
-	if err = page.Wait(rod.Eval(`()=>location.hash==='#section'`)); err != nil {
-		t.Fatal(err)
-	}
+	waitDocument(base + "/typed#section")
 	invoke("POST", "/record/stop", map[string]string{"id": started.ID}, nil)
 	var result struct {
 		Steps []node `json:"steps"`

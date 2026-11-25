@@ -15,7 +15,12 @@ assert.equal(sent[0].sensitive,true);assert.equal(sent[0].value,'${password}');
 assert.ok(sent[0].target.locators.length>=2);
 handlers.input({isTrusted:false,composedPath(){return[password]}});
 window.__mycoRecorder.flush();assert.equal(sent.length,1,'untrusted synthetic input was recorded');
-console.log('recorder: password values never read; parameter reference and fallback locators retained');
+const unnamed={nodeType:1,localName:'div',tagName:'DIV',id:'',labels:[],parentElement:null,hasAttribute(){return false},getAttribute(){return ''},getRootNode(){return document}};
+const unnamedTarget=window.__mycoDescribe(unnamed);
+assert.equal(unnamedTarget.locators.length,1,'unnamed elements have only a structural CSS locator');
+assert.equal(unnamedTarget.locators[0].kind,'css');
+assert.equal(unnamedTarget.locators[0].value,'div');
+console.log('recorder: password values never read; semantic fallbacks and valid CSS-only targets retained');
 
 window.__mycoRecorder.ignoreEvent=ev=>ev.panel===true;
 handlers.click({isTrusted:true,panel:true,composedPath(){return[password]}});

@@ -552,6 +552,9 @@ func contains(list []string, v string) bool {
 
 // refresh ends a grant whose time, host or task is over (mu held).
 func (s *ActionService) refresh(ctx context.Context, g *actionGrant) {
+	if ctx.Err() != nil {
+		return
+	}
 	if (g.State == api.GrantPending || g.State == api.GrantActive) && s.enabled(ctx) != nil {
 		s.close(g, api.GrantRevoked, "agent actions are unavailable in an encrypted workspace")
 		return
@@ -590,7 +593,7 @@ func (s *ActionService) refresh(ctx context.Context, g *actionGrant) {
 			}
 		}
 		if g.MessageID != "" && s.messages != nil {
-			if m, err := s.messages.Get(ctx, &domain.Agent{Name: domain.AgentName(g.Agent)}, g.MessageID); err != nil || m.Status.Terminal() {
+			if m, err := s.messages.Get(ctx, &domain.Agent{Name: domain.AgentName(g.Agent)}, g.MessageID); ctx.Err() == nil && (err != nil || m.Status.Terminal()) {
 				s.close(g, api.GrantEnded, "its task ended")
 			}
 		}

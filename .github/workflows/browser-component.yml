@@ -48,7 +48,10 @@ jobs:
           mkdir -p component-out
           cd components/browser
           go vet ./...
-          go test -v -count=1 -failfast -timeout 7m -run '^TestNativeChromeRecordAndReplayTenTimes$' ./... -args -browser-smoke
+          for round in $(seq 1 12); do
+            echo "Native stability round $round/12"
+            go test -v -count=1 -failfast -timeout 7m ./... -args -browser-smoke
+          done
           go build -trimpath -ldflags='-s -w' -o "../../component-out/myco-browser${suffix}" .
           python scripts/licenses.py ../../component-out/NOTICE-dependencies.txt
       - name: Package
