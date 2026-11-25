@@ -713,6 +713,26 @@ func (b *Backend) Handler() http.Handler {
 		revealExport(path)
 		writeJSON(w, http.StatusOK, map[string]string{"path": path})
 	})
+	m.HandleFunc("GET /app/hubs/{id}/projects/{name}/storage", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		out, err := c.ProjectStorage(r.Context(), r.PathValue("name"))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+	}))
+	m.HandleFunc("PUT /app/hubs/{id}/projects/{name}/storage", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in api.ProjectStorageRequest
+		if !decode(w, r, &in) {
+			return
+		}
+		out, err := c.SetProjectStorage(r.Context(), r.PathValue("name"), in)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+	}))
 	m.HandleFunc("PUT /app/hubs/{id}/projects/{name}/files/{file}", b.withHubTimeout(5*time.Minute, func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		d, err := c.PutProjectFile(r.Context(), r.PathValue("name"), r.PathValue("file"), r.Header.Get("Content-Type"), r.Body, r.ContentLength)
 		if err != nil {

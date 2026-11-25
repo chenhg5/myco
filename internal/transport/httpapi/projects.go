@@ -21,6 +21,8 @@ import (
 func (s *Server) routeProjects(m *http.ServeMux) {
 	m.HandleFunc("GET /v1/projects", s.projectCaller(s.listProjects))
 	m.HandleFunc("POST /v1/projects", s.projectCaller(s.createProject))
+	m.HandleFunc("GET /v1/projects/{name}/storage", s.projectCaller(s.getProjectStorage))
+	m.HandleFunc("PUT /v1/projects/{name}/storage", s.projectCaller(s.setProjectStorage))
 	m.HandleFunc("GET /v1/projects/{name}", s.projectCaller(s.getProject))
 	m.HandleFunc("PATCH /v1/projects/{name}", s.projectCaller(s.updateProject))
 	m.HandleFunc("DELETE /v1/projects/{name}", s.projectCaller(s.deleteProject))
@@ -105,6 +107,7 @@ func (s *Server) projectDTO(r *http.Request, c projectCall, v *app.ProjectView, 
 		}
 		out.Docs = append(out.Docs, doc)
 	}
+	out.ProjectStorage = s.projectStorageDTO(c, v)
 	out.CanEdit, out.CanManage = s.projects.Rights(c.by, v)
 	return out
 }
@@ -368,4 +371,30 @@ func (s *Server) deleteProjectDoc(w http.ResponseWriter, r *http.Request, c proj
 	}
 	s.recordAs(r, c.by, "project.doc_remove", r.PathValue("name"), doc)
 	writeJSON(w, http.StatusOK, map[string]any{"deleted": true})
+}
+
+func (s *Server) projectStorageDTO(c projectCall, v *app.ProjectView) api.ProjectStorage {
+	u := s.projects.Storage(v)
+	return api.ProjectStorage{FilesUsed: u.FilesUsed, FilesMax: u.FilesMax, BytesUsed: u.BytesUsed, BytesMax: u.BytesMax, DocsUsed: u.DocsUsed, DocsMax: domain.MaxProjectDocs, FilesMaxOverride: v.Project.FilesMax, BytesMaxOverride: v.Project.BytesMax, CanManageStorage: c.by.Manages() && c.by.Agent == nil && c.by.Via == nil}
+}
+func (s *Server) getProjectStorage(w http.ResponseWriter, r *http.Request, c projectCall) {
+	v, err := s.projects.Get(r.Context(), c.by, r.PathValue("name"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.projectStorageDTO(c, v))
+}
+func (s *Server) setProjectStorage(w http.ResponseWriter, r *http.Request, c projectCall) {
+	var in api.ProjectStorageRequest
+	if !decode(w, r, &in) {
+		return
+	}
+	v, err := s.projects.SetStorageLimits(r.Context(), c.by, r.PathValue("name"), in.FilesMax, in.BytesMax)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	s.recordAs(r, c.by, "project.storage", v.Project.Name, fmt.Sprintf("files=%d bytes=%d", in.FilesMax, in.BytesMax))
+	writeJSON(w, http.StatusOK, s.projectStorageDTO(c, v))
 }

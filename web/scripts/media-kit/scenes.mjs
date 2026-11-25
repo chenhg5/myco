@@ -18,6 +18,33 @@ const member = async (page, T) => {
 const home = async () => {};
 export const scenes = [
   {
+    id: "project-storage",
+    title: "项目文件独立额度 / Project storage limits",
+    zh: "图片和视频不再挤占文档名额，还能为每个项目单独增加文件空间。",
+    en: "Keep images and videos separate from document slots, and give each project the storage it needs.",
+    tags: ["设置", "用量"], themes: ["light", "dark"],
+    description: "工作区设置中的项目文件额度，展示文件数量、总大小、独立上限和恢复默认值",
+    prepare: async ({page,T}) => {
+      const usage={files_used:76,docs_used:24,bytes_used:416*1024**2};
+      await page.route("**/app/hubs/hub_studio/projects",async route=>{
+        const response=await route.fetch(),data=await response.json();
+        await route.fulfill({response,json:{...data,projects:data.projects.map(p=>p.name==="website"?{...p,...usage}:p)}});
+      });
+      await page.route("**/app/hubs/hub_studio/projects/website/storage",async route=>{
+        const response=await route.fetch();await route.fulfill({response,json:{...await response.json(),...usage}});
+      });
+      await page.evaluate(()=>window.dispatchEvent(new CustomEvent("myco-open-settings",{detail:{section:"hubs"}})));
+      const card=page.locator('[data-setting="project-storage"][data-hub="hub_studio"]');
+      await card.locator("select").selectOption("website");
+      await card.getByRole("spinbutton",{name:T("文件数上限","File count limit"),exact:true}).fill("2000");
+      await card.getByRole("spinbutton",{name:T("项目总大小上限（GiB）","Total project size limit (GiB)"),exact:true}).fill("4");
+      await card.getByRole("button",{name:T("保存","Save"),exact:true}).click();
+      await card.getByRole("status").filter({hasText:T("已保存","Saved")}).waitFor();
+      await card.scrollIntoViewIfNeeded();
+    },
+  },
+
+  {
     id: "browser-approved-version",
     title: "批准固定版本的网页自动化 / Approve a fixed browser script",
     zh: "先看清网址和代码，再让 Agent 在专用浏览器里运行你批准的版本。",

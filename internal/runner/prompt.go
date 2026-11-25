@@ -234,7 +234,12 @@ func projectSection(self string, p *api.Project) string {
 			"`myco project memory add --name %s --text \"...\"`. Do not repeat what the brief or memory already says, and leave out task details and secrets.\n", p.Name)
 	}
 	names := make([]string, 0, len(p.Docs))
+	otherFiles := 0
 	for _, d := range p.Docs {
+		if d.Binary {
+			otherFiles++
+			continue
+		}
 		if p.Memory != nil && d.Name == p.Memory.Name {
 			continue
 		}
@@ -242,6 +247,9 @@ func projectSection(self string, p *api.Project) string {
 	}
 	if len(names) > 0 {
 		fmt.Fprintf(&b, "Shared documents: %s. `myco project pull --name %s` writes them to .myco/projects/%s/.\n", strings.Join(names, ", "), p.Name, p.Name)
+	}
+	if otherFiles > 0 {
+		fmt.Fprintf(&b, "Other shared files: %d. `myco project show --name %s` lists them; `myco project file get --name %s --file <name>` downloads one.\n", otherFiles, p.Name, p.Name)
 	}
 	return b.String()
 }

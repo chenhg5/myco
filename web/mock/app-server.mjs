@@ -1877,9 +1877,17 @@ function memoryOf(p) {
   const d = p.docs.find((x) => x.name === "memory");
   return d ? { name: d.name, body: d.body, size: d.body.length, updated_by: d.updated_by, updated_at: d.updated_at } : { name: "memory", size: 0, updated_at: "0001-01-01T00:00:00Z" };
 }
+function projectStorageView(hub,p) {
+ if(hub.id==="hub_lab")return {};
+ const docs=p.docs||[];
+ return {files_used:docs.filter(d=>d.binary).length,files_max:p.storage_limits?.files_max||1000,
+ bytes_used:docs.reduce((n,d)=>n+(d.size??Buffer.byteLength(d.body||"")),0),bytes_max:p.storage_limits?.bytes_max||2*1024**3,
+ docs_used:docs.filter(d=>!d.binary).length,docs_max:100,files_max_override:p.storage_limits?.files_max||0,
+ bytes_max_override:p.storage_limits?.bytes_max||0,can_manage_storage:meName==="alice"};
+}
 function projectView(hub, p, bodies) {
   return {
-    ...p,
+    ...p, ...projectStorageView(hub,p),
     // The computers its coordinators may start agents on (hubs from v0.21.2;
     // the lab hub is older and has none).
     ...(hub.id === "hub_lab" ? {} : { machines: p.machines || [] }),
@@ -3862,6 +3870,16 @@ const server = http.createServer(async (req, res) => {
       }
       const p = list.find((x) => x.name === parts[4]);
       if (!p) return fail(res, 404, "not_found", `no project ${parts[4]}`);
+      if(parts[5]==="storage") {
+        if(hub.id==="hub_lab")return fail(res,404,"not_found","no storage endpoint");
+        if(method==="PUT") {
+          if(meName!=="alice")return fail(res,403,"permission_denied","workspace managers only");
+          const q=await readBody(req);
+          if(!Number.isInteger(q.files_max)||q.files_max<0||q.files_max>10000||!Number.isInteger(q.bytes_max)||q.bytes_max<0||q.bytes_max>20*1024**3)return fail(res,400,"invalid_argument","invalid project storage limit");
+          p.storage_limits=q;
+        }
+        return send(res,200,projectStorageView(hub,p));
+      }
       if (parts.length === 5 && method === "GET") return send(res, 200, projectView(hub, p, url.searchParams.get("docs") === "body"));
       if (parts[5] === "agent-invites" && method === "PUT") { const b = await readBody(req); p.coordinator_invites = !!b.allowed; return send(res, 200, projectView(hub,p)); }
       if (parts[5] === "automation-permission" && method === "PUT") { const b = await readBody(req); p.coordinator_automations = !!b.allowed; return send(res, 200, projectView(hub,p)); }

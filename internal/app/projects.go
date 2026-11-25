@@ -33,8 +33,11 @@ type ProjectService struct {
 	// superagent tells whether an agent is someone's superagent (nil:
 	// none are): a superagent works for its owner across the workspace and
 	// is in no project.
-	superagent func(ctx context.Context, agent domain.AgentName) bool
-	memMu      sync.Mutex // one memory entry added at a time
+	superagent    func(ctx context.Context, agent domain.AgentName) bool
+	storagePolicy ProjectStoragePolicy
+	checkDisk     func(int64) error
+	storageMu     sync.Mutex // serialize quota checks and file metadata mutations
+	memMu         sync.Mutex // one memory entry added at a time
 }
 
 // SetSuperagents tells projects which agents are superagents.
@@ -47,7 +50,7 @@ func (s *ProjectService) SetBlobs(b domain.BlobStore) { s.blobs = b }
 
 // NewProjectService wires the project use cases.
 func NewProjectService(projects domain.ProjectRepository, agents domain.AgentRepository, ids IDGenerator, clock Clock) *ProjectService {
-	return &ProjectService{projects: projects, agents: agents, ids: ids, clock: clock}
+	return &ProjectService{projects: projects, agents: agents, ids: ids, clock: clock, storagePolicy: DefaultProjectStoragePolicy()}
 }
 
 // ProjectView is a project with its members and documents.
@@ -283,6 +286,8 @@ func (s *ProjectService) Settle(ctx context.Context, by Actor, name string, visi
 
 // Delete removes a project with its members and documents.
 func (s *ProjectService) Delete(ctx context.Context, by Actor, name string) (*ProjectView, error) {
+	s.storageMu.Lock()
+	defer s.storageMu.Unlock()
 	v, err := s.Get(ctx, by, name)
 	if err != nil {
 		return nil, err
@@ -421,6 +426,8 @@ func (s *ProjectService) RemoveMember(ctx context.Context, by Actor, name, agent
 
 // PutDoc writes a shared document.
 func (s *ProjectService) PutDoc(ctx context.Context, by Actor, name, doc, body, byName string) (*domain.ProjectDoc, error) {
+	s.storageMu.Lock()
+	defer s.storageMu.Unlock()
 	v, err := s.Get(ctx, by, name)
 	if err != nil {
 		return nil, err
@@ -435,21 +442,19 @@ func (s *ProjectService) PutDoc(ctx context.Context, by Actor, name, doc, body, 
 	if err := domain.CheckDocBody(body); err != nil {
 		return nil, err
 	}
-	exists := false
-	for _, d := range v.Docs {
-		exists = exists || d.Name == n
-	}
-	if !exists && len(v.Docs) >= domain.MaxProjectDocs {
-		return nil, domain.Errf(domain.CodeInvalidArgument, "project %s already has %d documents", v.Project.Name, domain.MaxProjectDocs).
-			WithSuggestion("merge or remove some, or keep longer material in the repository")
-	}
 	d := &domain.ProjectDoc{Project: v.Project.ID, Name: n, Body: body, UpdatedBy: byName, UpdatedAt: s.clock.Now()}
-	return d, s.projects.PutDoc(ctx, d)
+	d.Size = int64(len(d.Body))
+	if err := s.checkStorage(v, d); err != nil {
+		return nil, err
+	}
+	return d, s.saveContextDoc(ctx, v, d)
 }
 
 // AddMemory appends an entry to the project's memory: any member node may,
 // besides those who edit the project, and the people who see it.
 func (s *ProjectService) AddMemory(ctx context.Context, by Actor, name, text, byName string) (*domain.ProjectDoc, error) {
+	s.storageMu.Lock()
+	defer s.storageMu.Unlock()
 	v, err := s.Get(ctx, by, name)
 	if err != nil {
 		return nil, err
@@ -463,15 +468,11 @@ func (s *ProjectService) AddMemory(ctx context.Context, by Actor, name, text, by
 	}
 	s.memMu.Lock()
 	defer s.memMu.Unlock()
-	body, exists := "", false
+	body := ""
 	if d, err := s.projects.GetDoc(ctx, v.Project.ID, domain.ProjectMemoryDoc); err == nil {
-		body, exists = d.Body, true
+		body = d.Body
 	} else if !domain.IsCode(err, domain.CodeNotFound) {
 		return nil, err
-	}
-	if !exists && len(v.Docs) >= domain.MaxProjectDocs {
-		return nil, domain.Errf(domain.CodeInvalidArgument, "project %s already has %d documents", v.Project.Name, domain.MaxProjectDocs).
-			WithSuggestion("remove a document to make room for the project memory")
 	}
 	now := s.clock.Now()
 	body, err = domain.AppendMemory(body, text, byName, now)
@@ -479,12 +480,18 @@ func (s *ProjectService) AddMemory(ctx context.Context, by Actor, name, text, by
 		return nil, err
 	}
 	d := &domain.ProjectDoc{Project: v.Project.ID, Name: domain.ProjectMemoryDoc, Body: body, UpdatedBy: byName, UpdatedAt: now}
-	return d, s.projects.PutDoc(ctx, d)
+	d.Size = int64(len(d.Body))
+	if err := s.checkStorage(v, d); err != nil {
+		return nil, err
+	}
+	return d, s.saveContextDoc(ctx, v, d)
 }
 
 // DeleteDoc removes a shared document or file: its editors, or whoever
 // uploaded it.
 func (s *ProjectService) DeleteDoc(ctx context.Context, by Actor, name, doc, byName string) error {
+	s.storageMu.Lock()
+	defer s.storageMu.Unlock()
 	v, err := s.Get(ctx, by, name)
 	if err != nil {
 		return err
@@ -557,13 +564,13 @@ func (s *ProjectService) PutFile(ctx context.Context, by Actor, name, file, cont
 	if err != nil {
 		return nil, err
 	}
-	prev := v.doc(n)
-	if prev != nil && !s.edits(by, v) && prev.UpdatedBy != byName {
-		return nil, denied("replace " + n + " (uploaded by " + prev.UpdatedBy + "); upload it under another name")
+	if err := s.mayWriteFile(ctx, by, v, n, byName); err != nil {
+		return nil, err
 	}
-	if prev == nil && len(v.Docs) >= domain.MaxProjectDocs {
-		return nil, domain.Errf(domain.CodeInvalidArgument, "project %s already has %d files", v.Project.Name, domain.MaxProjectDocs).
-			WithSuggestion("remove some, or keep large material in the repository and add a link")
+	if s.checkDisk != nil {
+		if err := s.checkDisk(0); err != nil {
+			return nil, err
+		}
 	}
 	data, err := io.ReadAll(io.LimitReader(r, domain.MaxProjectFile+1))
 	if err != nil {
@@ -580,6 +587,18 @@ func (s *ProjectService) PutFile(ctx context.Context, by Actor, name, file, cont
 			contentType = http.DetectContentType(data)
 		}
 	}
+	// Do not hold admission while a client streams its request body. Reload
+	// after acquiring it so simultaneous uploads cannot oversubscribe quotas.
+	s.storageMu.Lock()
+	defer s.storageMu.Unlock()
+	v, err = s.Get(ctx, by, name)
+	if err != nil {
+		return nil, err
+	}
+	if err = s.mayWriteFile(ctx, by, v, n, byName); err != nil {
+		return nil, err
+	}
+	prev := v.doc(n)
 	d := &domain.ProjectDoc{Project: v.Project.ID, Name: n, ContentType: contentType, Size: int64(len(data)), UpdatedBy: byName, UpdatedAt: s.clock.Now()}
 	if len(data) <= domain.MaxProjectText && isText(n, contentType, data) {
 		d.Body = string(data)
@@ -588,6 +607,11 @@ func (s *ProjectService) PutFile(ctx context.Context, by Actor, name, file, cont
 			return nil, domain.Errf(domain.CodeInvalidArgument, "this hub keeps text files only (up to 64 KB)")
 		}
 		d.Blob = s.ids.New("pfile")
+	}
+	if err := s.checkStorage(v, d); err != nil {
+		return nil, err
+	}
+	if d.IsBlob() {
 		if _, _, err := s.blobs.Put(ctx, d.Blob, bytes.NewReader(data), domain.MaxProjectFile); err != nil {
 			return nil, err
 		}
@@ -739,4 +763,26 @@ func (s *ProjectService) Coordinates(ctx context.Context, agent *domain.Agent, n
 		return nil, false, err
 	}
 	return v, !v.Project.Archived && v.coordinates(agent), nil
+}
+
+func (s *ProjectService) mayWriteFile(ctx context.Context, by Actor, v *ProjectView, n, byName string) error {
+	if !s.edits(by, v) && !s.involved(ctx, by, v) {
+		return denied("add files to project " + v.Project.Name)
+	}
+	if v.Project.Archived {
+		return domain.Errf(domain.CodeInvalidState, "project %s is archived", v.Project.Name)
+	}
+	if prev := v.doc(n); prev != nil && !s.edits(by, v) && prev.UpdatedBy != byName {
+		return denied("replace " + n + " (uploaded by " + prev.UpdatedBy + "); upload it under another name")
+	}
+	return nil
+}
+func (s *ProjectService) saveContextDoc(ctx context.Context, v *ProjectView, d *domain.ProjectDoc) error {
+	if err := s.projects.PutDoc(ctx, d); err != nil {
+		return err
+	}
+	if old := v.doc(d.Name); old != nil && old.IsBlob() && s.blobs != nil {
+		_ = s.blobs.Delete(ctx, old.Blob)
+	}
+	return nil
 }

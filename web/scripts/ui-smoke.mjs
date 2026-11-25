@@ -6605,6 +6605,27 @@ async function runMatrix(browser, size, scheme) {
     // see) only touches this App, so it is done at once even when the
     // workspaces answer slowly; the one removed leaves every page and
     // nothing asks it again.
+    await step("设置 · 项目文件额度", async () => {
+      await go(page,"设置",narrow);
+      await clickVisible(page,page.locator(".app-settings-tab",{hasText:"工作区"}));
+      const card=page.locator('[data-setting="project-storage"][data-hub="hub_studio"]');
+      await card.locator("select").selectOption("website");
+      const files=card.getByRole("spinbutton",{name:"文件数上限",exact:true});
+      const capacity=card.getByRole("spinbutton",{name:"项目总大小上限（GiB）",exact:true});
+      await files.waitFor();
+      await files.fill("10001");
+      if(!await card.getByRole("button",{name:"保存",exact:true}).isDisabled())throw Error("file limit must enforce hard cap");
+      await files.fill("2000");await capacity.fill("4");
+      await card.getByRole("button",{name:"保存",exact:true}).click();
+      await card.getByRole("status").filter({hasText:"已保存"}).waitFor();
+      const quota=await page.evaluate(async()=>await(await fetch("/app/hubs/hub_studio/projects/website/storage")).json());
+      if(quota.files_max!==2000||quota.bytes_max!==4*1024**3)throw Error("saved project quota did not round-trip");
+      await shot(page,size,scheme,"project-storage");
+      await card.getByRole("button",{name:"使用工作区默认值",exact:true}).click();
+      await page.waitForFunction(()=>document.querySelector('[data-setting="project-storage"][data-hub="hub_studio"] input[type=number]')?.value==="1000");
+      await closeSettings(page);
+    });
+
     await step("设置 · 移除工作区", async () => {
       await closeSettings(page);
       const shownBefore = (await page.locator(".sp-switch .app-hub-name, .app-hub-pill-name").first().innerText().catch(() => "")).trim();

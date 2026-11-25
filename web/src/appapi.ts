@@ -805,6 +805,8 @@ export const appApi = {
   projects: (hubId: string) => request<{ projects: Project[] }>("GET", `app/hubs/${enc(hubId)}/projects`),
   project: (hubId: string, name: string, bodies = false) =>
     request<Project>("GET", `app/hubs/${enc(hubId)}/projects/${enc(name)}${bodies ? "?docs=body" : ""}`),
+  projectStorage: (hubId: string, name: string) => request<import("@/api").ProjectStorage>("GET", `app/hubs/${enc(hubId)}/projects/${enc(name)}/storage`),
+  setProjectStorage: (hubId: string, name: string, files_max: number, bytes_max: number) => request<import("@/api").ProjectStorage>("PUT", `app/hubs/${enc(hubId)}/projects/${enc(name)}/storage`, { files_max, bytes_max }),
   createProject: (hubId: string, input: { name: string; title?: string; goal?: string; visibility?: "members" | "team" }) =>
     announced(hubId, request<Project>("POST", `app/hubs/${enc(hubId)}/projects`, input)),
   updateProject: (hubId: string, name: string, input: { title?: string; goal?: string; brief?: string; links?: ProjectLink[]; visibility?: "members" | "team"; archived?: boolean;

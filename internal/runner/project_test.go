@@ -118,3 +118,12 @@ func TestProjectMemoryInPrompt(t *testing.T) {
 		t.Fatalf("changed memory is given again:\n%s", prompts[2])
 	}
 }
+
+// Raising binary file quotas must not inject thousands of file names into a prompt.
+func TestProjectContextSummarizesBinaryFiles(t *testing.T) {
+	p := &api.Project{Name: "large", Docs: []api.ProjectDoc{{Name: "guide"}, {Name: "first.png", Binary: true}, {Name: "second.mp4", Binary: true}}}
+	text := projectSection("me", p)
+	if !strings.Contains(text, "Shared documents: guide") || !strings.Contains(text, "Other shared files: 2") || strings.Contains(text, "first.png") || strings.Contains(text, "second.mp4") {
+		t.Fatal(text)
+	}
+}

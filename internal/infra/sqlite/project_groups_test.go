@@ -29,6 +29,10 @@ func TestProjectGroupsMigrateAndRoundTrip(t *testing.T) {
 	INSERT INTO projects (id, name, title, created_at, updated_at) VALUES ('prj_1', 'myco', 'myco', 1000, 1000);
 	INSERT INTO project_members (project, agent, role, note, added_at) VALUES ('prj_1', 'web', 'member', 'UI', 1000), ('prj_1', 'api', 'member', '', 1001);`)
 	mustNoErr(t, err)
+	_, err = raw.Exec(`CREATE TABLE project_docs (project TEXT NOT NULL,name TEXT NOT NULL,body TEXT NOT NULL DEFAULT '',content_type TEXT NOT NULL DEFAULT '',size INTEGER NOT NULL DEFAULT 0,blob TEXT NOT NULL DEFAULT '',updated_by TEXT NOT NULL DEFAULT '',updated_at INTEGER NOT NULL,PRIMARY KEY(project,name));
+ INSERT INTO project_docs (project,name,body,size,updated_at) VALUES ('prj_1','legacy','old text',8,1000);
+ INSERT INTO project_docs (project,name,blob,size,updated_at) VALUES ('prj_1','legacy.png','pfile_legacy',42,1000);`)
+	mustNoErr(t, err)
 	mustNoErr(t, raw.Close())
 
 	db, err := sqlite.Open(path)
@@ -43,6 +47,24 @@ func TestProjectGroupsMigrateAndRoundTrip(t *testing.T) {
 		t.Fatalf("migrated: %+v %+v", p, ms[0])
 	}
 
+	if p.FilesMax != 0 || p.BytesMax != 0 {
+		t.Fatal("legacy projects must inherit storage defaults")
+	}
+	p.FilesMax = 2000
+	p.BytesMax = 4 << 30
+	mustNoErr(t, r.SaveStorage(ctx, p))
+	docs, err := r.Docs(ctx, p.ID)
+	mustNoErr(t, err)
+	if len(docs) != 2 {
+		t.Fatalf("migration lost files: %+v", docs)
+	}
+	oldText, err := r.GetDoc(ctx, p.ID, "legacy")
+	mustNoErr(t, err)
+	oldBinary, err := r.GetDoc(ctx, p.ID, "legacy.png")
+	mustNoErr(t, err)
+	if oldText.Body != "old text" || oldBinary.Blob != "pfile_legacy" || oldBinary.Size != 42 {
+		t.Fatal("migration changed file content or metadata")
+	}
 	groups := []string{"前端", "后端"}
 	changed, err := p.ApplyGroups(ms, &groups, map[domain.AgentName]string{"web": "前端", "api": "后端"}, t0)
 	mustNoErr(t, err)

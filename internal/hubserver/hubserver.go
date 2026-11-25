@@ -20,6 +20,7 @@ import (
 	"github.com/myco-ai/myco/internal/app"
 	"github.com/myco-ai/myco/internal/domain"
 	"github.com/myco-ai/myco/internal/infra/blob"
+	"github.com/myco-ai/myco/internal/infra/diskspace"
 	"github.com/myco-ai/myco/internal/infra/jsonschema"
 	"github.com/myco-ai/myco/internal/infra/notify"
 	"github.com/myco-ai/myco/internal/infra/security"
@@ -45,7 +46,8 @@ type Options struct {
 	// FilesDir stores attachment contents (default: <db dir>/files).
 	FilesDir string
 	// Files bounds uploads (zero value: DefaultFilePolicy).
-	Files app.FilePolicy
+	ProjectStorage *app.ProjectStoragePolicy
+	Files          app.FilePolicy
 	// GitHubWebhookSecret enables POST /v1/ingress/github.
 	GitHubWebhookSecret string
 	// GitHubReplyFrom restricts which GitHub logins can answer messages.
@@ -116,6 +118,13 @@ func DefaultWakers() app.Wakers {
 
 // Build assembles the hub. Call hub.Dispatcher.Run in the background.
 func Build(o Options) (*Hub, error) {
+	storage := app.DefaultProjectStoragePolicy()
+	if o.ProjectStorage != nil {
+		storage = *o.ProjectStorage
+	}
+	if err := storage.Validate(); err != nil {
+		return nil, err
+	}
 	db, err := sqlite.Open(o.DBPath)
 	if err != nil {
 		return nil, err
@@ -232,6 +241,10 @@ func Build(o Options) (*Hub, error) {
 	messages.SetProjects(projectRepo)
 	projectSvc := app.NewProjectService(projectRepo, agentsRepo, ids, clock)
 	projectSvc.SetBlobs(blob.FS{Dir: filesDir})
+	if err := projectSvc.SetStoragePolicy(storage, diskspace.Guard([]string{filepath.Dir(o.DBPath), filesDir}, storage.DiskMinFreeBytes, storage.DiskMinFreePercent)); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 	projectSvc.SetSuperagents(func(ctx context.Context, n domain.AgentName) bool {
 		m, err := superagents.OwnerOf(ctx, n)
 		return err == nil && m != nil

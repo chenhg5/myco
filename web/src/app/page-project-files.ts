@@ -16,6 +16,15 @@ export async function answerProjectFiles(
   const scope = projectFileScope(page);
   if (!scope) throw new ApiError(L("这个页面无法访问素材原文件。", "This page cannot access project media."), 403, "permission_denied");
   if (method === "projectFiles.info") {
+    try {
+      const q = await appApi.projectStorage(hubId, scope.project);
+      if (q.files_max) return { used: q.files_used ?? 0, max: q.files_max, maxBytes: maxSize,
+        bytesUsed: q.bytes_used ?? 0, bytesMax: q.bytes_max, docsUsed: q.docs_used ?? 0, docsMax: q.docs_max };
+    } catch (error) {
+      if (!(error instanceof ApiError) || ![404, 501].includes(error.status)) throw error;
+    }
+    // Older Hubs share a single 100-slot collection; do not silently apply
+    // the new default to a server that still enforces the old quota.
     const { docs } = await appApi.project(hubId, scope.project);
     return { used: docs.length, max: 100, maxBytes: maxSize };
   }

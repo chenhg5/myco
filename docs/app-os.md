@@ -494,4 +494,8 @@ bytes), `put(name, blob)`, `get(name)` (returns a Blob), and `download(name)`
 accepts only Media Kit media names with the current page's ID as a prefix.
 It uses the signed-in person's existing project file permissions. Check
 `(await myco.ready).projectMedia` before using GIF, MP4, or WebM. Each file
-can be up to 20 MiB and counts toward the project's 100-file quota.
+can be up to 20 MiB. `info()` keeps `{used, max, maxBytes}` and adds optional
+`bytesUsed`, `bytesMax`, `docsUsed`, `docsMax`. The desktop reads the real Hub
+quota (default 1,000 non-context files, 2 GiB total logical bytes). Older Hubs
+fall back to the original shared 100-slot limit and omit total-byte fields.
+These are hints for the UI; the Hub enforces admission under concurrent uploads.

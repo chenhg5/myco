@@ -1261,7 +1261,26 @@ type HubSettings struct {
 }
 
 // Project is a piece of work several agents and people do together.
+// ProjectStorage describes logical usage. Zero overrides inherit Hub defaults.
+// Files count excludes inline text documents. A missing files_max means an older Hub.
+type ProjectStorage struct {
+	FilesUsed        int   `json:"files_used"`
+	FilesMax         int   `json:"files_max,omitempty"`
+	BytesUsed        int64 `json:"bytes_used"`
+	BytesMax         int64 `json:"bytes_max,omitempty"`
+	DocsUsed         int   `json:"docs_used"`
+	DocsMax          int   `json:"docs_max,omitempty"`
+	FilesMaxOverride int   `json:"files_max_override,omitempty"`
+	BytesMaxOverride int64 `json:"bytes_max_override,omitempty"`
+	CanManageStorage bool  `json:"can_manage_storage,omitempty"`
+}
+type ProjectStorageRequest struct {
+	FilesMax int   `json:"files_max"`
+	BytesMax int64 `json:"bytes_max"`
+}
+
 type Project struct {
+	ProjectStorage
 	CoordinatorAutomations bool            `json:"coordinator_automations"`
 	CoordinatorInvites     bool            `json:"coordinator_invites"`
 	Name                   string          `json:"name"`

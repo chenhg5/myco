@@ -537,7 +537,7 @@ func Open(path string) (*sql.DB, error) {
 		"machines": {{"owner", "TEXT NOT NULL DEFAULT ''"}},
 		// The computers a project's coordinators may start agents on (v0.21.2).
 		// Member groups (JSON list, in display order; v0.21.34).
-		"projects": {{"coordinator_automations", "INTEGER NOT NULL DEFAULT 0"}, {"coordinator_invites", "INTEGER NOT NULL DEFAULT 0"}, {"machines", "TEXT NOT NULL DEFAULT '[]'"}, {"member_groups", "TEXT NOT NULL DEFAULT '[]'"}},
+		"projects": {{"files_max", "INTEGER NOT NULL DEFAULT 0"}, {"bytes_max", "INTEGER NOT NULL DEFAULT 0"}, {"coordinator_automations", "INTEGER NOT NULL DEFAULT 0"}, {"coordinator_invites", "INTEGER NOT NULL DEFAULT 0"}, {"machines", "TEXT NOT NULL DEFAULT '[]'"}, {"member_groups", "TEXT NOT NULL DEFAULT '[]'"}},
 		// A member's group in its project ('' = ungrouped).
 		"project_members": {{"group_name", "TEXT NOT NULL DEFAULT ''"}},
 		"console_tokens":  {{"member_id", "TEXT NOT NULL DEFAULT ''"}},

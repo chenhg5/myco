@@ -32,6 +32,7 @@ import { bytes, cn } from "@/lib/utils";
 import { ChatBgDialog } from "@/app/ChatBgDialog";
 import { ShortcutsSection } from "@/app/Shortcuts";
 import { HubUpgrade, useLatestRelease } from "@/app/MycoUpgrade";
+import { ProjectStorageSettings } from "@/app/ProjectStorageSettings";
 import { BackupRow } from "@/app/Backups";
 
 type Section = "hubs" | "agents" | "members" | "audit" | "appearance" | "translate" | "voice" | "network" | "apps" | "shortcuts" | "about";
@@ -583,6 +584,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
             <IntroCard id="workspaces" {...introOf("workspaces")} />
             <ErrorText error={localError} />
             <ErrorText error={actionError} />
+            {hubs.filter(h=>h.ok && hubsOv?.find(o=>o.id===h.id)?.me?.can_manage).map(h=><ProjectStorageSettings key={h.id} hub={h}/>)}
 
             {/* The workspaces this computer runs: one row each, with what they
                 are reachable at and how they are opened. */}

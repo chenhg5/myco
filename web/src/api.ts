@@ -92,7 +92,12 @@ export interface Runtime {
 export interface Skill { name: string; summary?: string; examples?: string[] }
 
 /** A project: nodes working together on a goal (hubs from v0.18.25). */
-export interface Project {
+export interface ProjectStorage {
+ files_used?: number; files_max?: number; bytes_used?: number; bytes_max?: number;
+ docs_used?: number; docs_max?: number; files_max_override?: number; bytes_max_override?: number;
+ can_manage_storage?: boolean;
+}
+export interface Project extends ProjectStorage {
   name: string; title: string; goal?: string; brief?: string;
   links: ProjectLink[];
   visibility: "members" | "team";

@@ -1381,3 +1381,18 @@ including failure; busy skips do not count. Bounds accept RFC3339 or UTC dates,
 with a date-only end including that whole day. Bounds do not replace a schedule.
 The App editor uses local times and lists the active dates, one-shot setting and
 disabled reason. Upgrade older Hubs to use these fields.
+
+### Project storage limits
+
+Inline text documents (up to 64 KiB, read with the project by agents) keep their own 100-document limit. Other files (images, videos, archives and larger text files) default to 1,000 per project. All project file content together defaults to **2 GiB of logical bytes**, including inline text; each file remains limited to **20 MiB**. Existing files are retained and recounted automatically on upgrade.
+
+Set Hub defaults in its service environment (server installations use `/etc/myco/hub.env`; restart the service afterward), or pass the corresponding `myco hub serve` flags:
+
+| Environment variable | Flag | Default |
+| --- | --- | --- |
+| `MYCO_PROJECT_FILES_MAX` | `--project-files-max` | `1000` |
+| `MYCO_PROJECT_BYTES_MAX` | `--project-bytes-max` | `2147483648` (2 GiB) |
+| `MYCO_DISK_MIN_FREE_BYTES` | `--disk-min-free-bytes` | `2147483648` (2 GiB) |
+| `MYCO_DISK_MIN_FREE_PERCENT` | `--disk-min-free-percent` | `5` |
+
+Workspace owners and admins can change individual projects under **Settings → Workspaces → Project storage**, or restore the workspace defaults there. Project owners and agents cannot raise quotas. Hard protection caps are 10,000 files and 20 GiB per project. `myco project show --name <project>` reports current usage. The Hub refuses project uploads if the pending write would leave less than the larger of the configured absolute disk reserve and percentage reserve, checking both database and file-storage volumes; free space on the Hub and retry. Disk checks use space available to the server process. Lowering limits never removes files; reading and deletion remain available.

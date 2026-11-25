@@ -165,3 +165,13 @@ func (c *Client) RequestProjectMachine(ctx context.Context, project, machine, re
 	var ap api.Approval
 	return &ap, false, json.Unmarshal(raw, &ap)
 }
+
+// ProjectStorage reads quotas without transferring all project file metadata.
+func (c *Client) ProjectStorage(ctx context.Context, name string) (*api.ProjectStorage, error) {
+	var out api.ProjectStorage
+	return &out, c.do(ctx, http.MethodGet, "/v1/projects/"+esc(name)+"/storage", nil, nil, &out)
+}
+func (c *Client) SetProjectStorage(ctx context.Context, name string, in api.ProjectStorageRequest) (*api.ProjectStorage, error) {
+	var out api.ProjectStorage
+	return &out, c.do(ctx, http.MethodPut, "/v1/projects/"+esc(name)+"/storage", nil, in, &out)
+}

@@ -76,7 +76,7 @@ func TestProjectCommands(t *testing.T) {
 		t.Fatalf("list: %s", out)
 	}
 	_, out, _ = worker.run("project", "show", "--name", "myco", "--format", "text")
-	for _, want := range []string{"ship projects", "Run make check", "`dev-lead` (coordinator) [后端]", "`dev-worker` [后端]", "conventions"} {
+	for _, want := range []string{"**Storage:**", "/1000 files", "/2147483648 bytes", "ship projects", "Run make check", "`dev-lead` (coordinator) [后端]", "`dev-worker` [后端]", "conventions"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("show lacks %q:\n%s", want, out)
 		}

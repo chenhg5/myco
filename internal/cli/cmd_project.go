@@ -590,6 +590,9 @@ func projectMarkdown(p *api.Project, forFile bool) string {
 		b.WriteString(" Archived.")
 	}
 	b.WriteString("\n\n")
+	if !forFile && p.FilesMax > 0 {
+		fmt.Fprintf(&b, "**Storage:** %d/%d files, %d/%d bytes; %d/%d context documents.\n\n", p.FilesUsed, p.FilesMax, p.BytesUsed, p.BytesMax, p.DocsUsed, p.DocsMax)
+	}
 	if p.Brief != "" {
 		fmt.Fprintf(&b, "## Brief\n\n%s\n\n", p.Brief)
 	}
