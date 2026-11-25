@@ -1208,6 +1208,9 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
   };
   // Slow startup and live blocks for the conversation streaming smoke cases.
   const preview = hub.threads[threadId]?.find((m) => m.id === taskId);
+  // Answers go to whoever asked: the App's address in that chat (a voice
+  // call passes its own, which may be the member's rather than this device's).
+  const asker = preview?.from?.startsWith("@console:") ? preview.from : CONSOLE;
   // Synthetic slot admission fixture: no CLI or external task is started.
   if (preview && /名额排队预览|Slot queue preview/.test(preview.body)) {
     Object.assign(preview,{status:"acked",trace:[],updated_at:iso(0),active_at:iso(20*60)});
@@ -1229,7 +1232,7 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
       const body = en
         ? "Done. The three most important changes this week:\n\n1. **Login moved to a new token flow**: old sessions sign in again once.\n2. **The orders API returns `currency`**: the app's price display uses it now.\n3. **CI runs on Windows too**: two tests that assumed `/` paths were fixed."
         : "看完了，这周最重要的三件事：\n\n1. **登录换成了新的令牌流程**：老的登录状态会要求重新登录一次。\n2. **订单接口多返回了 `currency` 字段**：App 的价格显示已经用上了。\n3. **CI 加上了 Windows**：顺手修了两个默认路径是 `/` 的测试。";
-      msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "reply", status: "done", reply_to: taskId, body, created_at: iso(0), updated_at: iso(0) }));
+      msgs.push(makeMessage({ thread_id: threadId, from: agent, to: asker, type: "reply", status: "done", reply_to: taskId, body, created_at: iso(0), updated_at: iso(0) }));
       Object.assign(preview, { status: "done", updated_at: iso(0) });
       releaseAfter(hub, threadId, taskId);
     });
@@ -1243,7 +1246,7 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
       replyTimers.delete(taskId);
       const msgs = hub.threads[threadId];
       if (!msgs || preview.status === "failed") return;
-      msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "reply", status: "done", reply_to: taskId, body: "登录页改好了，表单校验也加上了。", created_at: iso(0), updated_at: iso(0) }));
+      msgs.push(makeMessage({ thread_id: threadId, from: agent, to: asker, type: "reply", status: "done", reply_to: taskId, body: "登录页改好了，表单校验也加上了。", created_at: iso(0), updated_at: iso(0) }));
       const suggest = /长建议/.test(preview.body)
         ? "把注册页、找回密码页和个人设置页也按同样的方式检查一遍，顺便补上缺的表单校验和错误提示，再跑一遍完整测试"
         : "再跑一遍完整测试";
@@ -1294,7 +1297,7 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
     });
     later(6000, () => {
       replyTimers.delete(taskId);
-      msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "reply", status: "done", reply_to: taskId, body: "群消息拉完了。", created_at: iso(0), updated_at: iso(0) }));
+      msgs.push(makeMessage({ thread_id: threadId, from: agent, to: asker, type: "reply", status: "done", reply_to: taskId, body: "群消息拉完了。", created_at: iso(0), updated_at: iso(0) }));
       Object.assign(preview, { status: "done", updated_at: iso(0) });
       firstMsgs.push(makeMessage({ thread_id: first.thread_id, from: agent, to: CONSOLE, type: "reply", status: "done", reply_to: first.id, body: "授权这件事好了。", created_at: iso(0), updated_at: iso(0) }));
       Object.assign(first, { status: "done", updated_at: iso(0) });
@@ -1321,12 +1324,12 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
     later(300, () => { if (["queued", "delivered"].includes(preview.status)) Object.assign(preview, { status: "acked", updated_at: iso(0) }); });
     later(1100, () => { if (preview.status === "acked") Object.assign(preview, { status: "held", updated_at: iso(0) }); });
     later(1600, () => {
-      msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "progress", status: "done", reply_to: taskId, body: "已派给 release，等它做完再汇总给你。", created_at: iso(0), updated_at: iso(0) }));
+      msgs.push(makeMessage({ thread_id: threadId, from: agent, to: asker, type: "progress", status: "done", reply_to: taskId, body: "已派给 release，等它做完再汇总给你。", created_at: iso(0), updated_at: iso(0) }));
     });
     later(9000, () => {
       replyTimers.delete(taskId);
       if (preview.status !== "held") return;
-      msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "reply", status: "done", reply_to: taskId, body: "release 那边做完了。", created_at: iso(0), updated_at: iso(0) }));
+      msgs.push(makeMessage({ thread_id: threadId, from: agent, to: asker, type: "reply", status: "done", reply_to: taskId, body: "release 那边做完了。", created_at: iso(0), updated_at: iso(0) }));
       Object.assign(preview, { status: "done", updated_at: iso(0) });
     });
     return;
@@ -1354,7 +1357,7 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
       replyTimers.delete(taskId);
       const msgs = hub.threads[threadId];
       if (!msgs || preview.status === "failed") return;
-      msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "reply", status: "done", reply_to: taskId, body: "预览检查完成。", created_at: iso(0), updated_at: iso(0) }));
+      msgs.push(makeMessage({ thread_id: threadId, from: agent, to: asker, type: "reply", status: "done", reply_to: taskId, body: "预览检查完成。", created_at: iso(0), updated_at: iso(0) }));
       Object.assign(preview, { status: "done", updated_at: iso(0) });
       releaseAfter(hub, threadId, taskId);
     });
@@ -1390,14 +1393,14 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
         const msgs = hub.threads[threadId];
         if (!msgs || task.status === "failed") return;
         if (!msgs.some((m) => m.type === "steer" && m.reply_to === taskId)) { later(1000, said); return; }
-        msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "progress", status: "done", reply_to: taskId, body: "收到补充：下载链接也一起更新", created_at: iso(0), updated_at: iso(0) }));
+        msgs.push(makeMessage({ thread_id: threadId, from: agent, to: asker, type: "progress", status: "done", reply_to: taskId, body: "收到补充：下载链接也一起更新", created_at: iso(0), updated_at: iso(0) }));
       };
       later(4000, said);
       later(24000, () => {
         replyTimers.delete(taskId);
         const msgs = hub.threads[threadId];
         if (!msgs || task.status === "failed") return;
-        msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "reply", status: "done", reply_to: taskId, body: "发布说明整理好了，下载链接也更新了。", created_at: iso(0), updated_at: iso(0) }));
+        msgs.push(makeMessage({ thread_id: threadId, from: agent, to: asker, type: "reply", status: "done", reply_to: taskId, body: "发布说明整理好了，下载链接也更新了。", created_at: iso(0), updated_at: iso(0) }));
         Object.assign(task, { status: "done", updated_at: iso(0) });
         releaseAfter(hub, threadId, taskId);
       });
@@ -1446,7 +1449,7 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
         replyTimers.delete(taskId);
         const msgs = hub.threads[threadId];
         if (!msgs || task.status === "failed") return;
-        msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "reply", status: "done", reply_to: taskId, body: "下载页核对完了：三个系统的链接都能下，校验和也对。", created_at: iso(0), updated_at: iso(0) }));
+        msgs.push(makeMessage({ thread_id: threadId, from: agent, to: asker, type: "reply", status: "done", reply_to: taskId, body: "下载页核对完了：三个系统的链接都能下，校验和也对。", created_at: iso(0), updated_at: iso(0) }));
         Object.assign(task, { status: "done", updated_at: iso(0) });
         releaseAfter(hub, threadId, taskId);
       });
@@ -1463,7 +1466,7 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
   const plan = (body) => () => {
     const msgs = hub.threads[threadId];
     if (!msgs) return;
-    msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "progress", status: "done", reply_to: taskId, body, created_at: iso(0), updated_at: iso(0) }));
+    msgs.push(makeMessage({ thread_id: threadId, from: agent, to: asker, type: "progress", status: "done", reply_to: taskId, body, created_at: iso(0), updated_at: iso(0) }));
   };
   // (after it is acknowledged and before its first step: the App says which
   // CLI it is starting in between)
@@ -1473,7 +1476,7 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
     const msgs = hub.threads[threadId];
     if (!msgs) return;
     msgs.push(makeMessage({
-      thread_id: threadId, from: agent, to: CONSOLE, type: "progress", status: "done",
+      thread_id: threadId, from: agent, to: asker, type: "progress", status: "done",
       body: "正在处理…", created_at: iso(0), updated_at: iso(0),
     }));
   });
@@ -1488,7 +1491,7 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
         replyTimers.delete(taskId);
         for (const t of timers) clearTimeout(t);
         const q = makeMessage({
-          thread_id: threadId, from: agent, to: CONSOLE, type: "progress", status: "done", reply_to: taskId, ask: true,
+          thread_id: threadId, from: agent, to: asker, type: "progress", status: "done", reply_to: taskId, ask: true,
           body: "开场先放哪个？\n\n1. 先放结果 — 一开头就看到剪好的成片\n2. 先放操作 — 从打开 App 开始一步步来",
           created_at: iso(0), updated_at: iso(0),
         });
@@ -1509,7 +1512,7 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
     if (!msgs || !/架构图|diagram/i.test(task?.body || "")) return;
     const n = (state.counter += 1);
     msgs.push(makeMessage({
-      thread_id: threadId, from: agent, to: CONSOLE, type: "progress", status: "done", reply_to: taskId,
+      thread_id: threadId, from: agent, to: asker, type: "progress", status: "done", reply_to: taskId,
       body: `先放两张草图：\n\n![草图一](attachment:草图一.png) ![草图二](attachment:f_demo_shot_sketch_b${n})`,
       attachments: [
         { file_id: `f_demo_shot_sketch_a${n}`, name: "草图一.png", size: DEMO_PNG.length, sha256: "", content_type: "image/png" },
@@ -1525,7 +1528,7 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
     if (!msgs || !/截图|screenshot/i.test(task?.body || "")) return;
     const id = `f_demo_shot_${(state.counter += 1)}`;
     msgs.push(makeMessage({
-      thread_id: threadId, from: agent, to: CONSOLE, type: "progress", status: "done", reply_to: taskId,
+      thread_id: threadId, from: agent, to: asker, type: "progress", status: "done", reply_to: taskId,
       body: "首页改好一半了，先看看效果", attachments: [{ file_id: id, name: "首页-进行中.png", size: DEMO_PNG.length, sha256: "", content_type: "image/png" }],
       created_at: iso(0), updated_at: iso(0),
     }));
@@ -1540,7 +1543,7 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
     const asked = msgs.find((m) => m.id === taskId)?.body || "";
     const r = /发版检查|myco-ui/i.test(asked) ? uiReply() : /架构图|diagram/i.test(asked) ? richReply() : consoleReply();
     msgs.push(makeMessage({
-      thread_id: threadId, from: agent, to: CONSOLE, type: "reply", status: "done",
+      thread_id: threadId, from: agent, to: asker, type: "reply", status: "done",
       body: r.body, ...(r.attachments ? { attachments: r.attachments } : {}),
       reply_to: taskId, created_at: iso(0), updated_at: iso(0),
     }));
@@ -2811,6 +2814,9 @@ const server = http.createServer(async (req, res) => {
       if (!hub || !agent) return fail(res, 404, "not_found", `没有 ${b.agent}`);
       stopAll();
       v.on = true; v.st = "listening"; v.muted = false; v.hubId = hub.id; v.agent = agent.name;
+      // The App says whose chat the call is in (the real backend files what
+      // it passes on from that address); the device's when it does not.
+      const peer = typeof b.peer === "string" && b.peer.startsWith("@console:") ? b.peer : CONSOLE;
       const name = agent.display_name || agent.name;
       const at = (ms, f) => v.timers.push(setTimeout(f, ms));
       // It speaks first, as when picking up the phone.
@@ -2822,7 +2828,7 @@ const server = http.createServer(async (req, res) => {
       at(2100, () => {
         // What it passed on is in the chat, as if typed, with the mark.
         const threadId = `th_c_${state.counter += 1}`;
-        const msg = makeMessage({ thread_id: threadId, from: CONSOLE, to: agent.name, type: "task", status: "queued",
+        const msg = makeMessage({ thread_id: threadId, from: peer, to: agent.name, type: "task", status: "queued",
           body: "核对下载页上的每个下载链接，确认都能下到对的文件；有问题列出来。\n\n——\n（经语音转述。原话：帮我看一下下载页的链接对不对）",
           created_at: iso(0), updated_at: iso(0) });
         (hub.threads ||= {})[threadId] = [msg];
