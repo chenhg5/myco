@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"io"
 	"net"
 	"net/url"
 	"os"
@@ -198,8 +197,9 @@ func (e *engine) openSession(ctx context.Context, owner, id string, headless boo
 		}
 	}
 	cmd.Stdin = nil
-	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
+	// Leave output nil: os/exec connects it directly to the null device.
+	// io.Discard instead creates copy pipes, and Wait then waits forever
+	// if a Chrome descendant inherits a pipe after the browser PID exits.
 	// Environment is inherited from the component, whose App launcher keeps
 	// only OS paths and locale. No Hub/provider credentials reach Chrome.
 	s.mu.Lock()
