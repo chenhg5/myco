@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"runtime/pprof"
 	"strconv"
 	"strings"
 	"sync"
@@ -230,7 +231,17 @@ func TestNativeChromeRecordsOnlyUserTopLevelNavigation(t *testing.T) {
 			if time.Now().After(until) {
 				rec.mu.Lock()
 				steps := append([]node(nil), rec.steps...)
+				t.Logf("recording queue=%d closing=%v error=%s navActions=%v", len(rec.queue), rec.closing, rec.err, rec.navActions)
 				rec.mu.Unlock()
+				s.mu.Lock()
+				t.Logf("navigation requests=%+v late=%+v current=%s targets=%v", s.rendererNavigations, s.lateNavigations, s.current, s.targets)
+				for id, installed := range s.installs {
+					t.Logf("installed target=%s kind=%s session=%s root=%s", id, installed.kind, installed.sid, installed.rootFrame)
+				}
+				s.mu.Unlock()
+				var stacks bytes.Buffer
+				_ = pprof.Lookup("goroutine").WriteTo(&stacks, 2)
+				t.Log(stacks.String())
 				t.Fatalf("recorded %d steps, wanted %d: %+v", got, n, steps)
 			}
 			time.Sleep(20 * time.Millisecond)
