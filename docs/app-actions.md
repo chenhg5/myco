@@ -82,7 +82,9 @@ Existing page visibility is required; this read-only transformation becomes
 active without a human approval. The grant remains bound to its requesting
 agent, is audited and can be revoked. Retrieve private bytes before ending
 the grant with `myco action grant end --id GRANT_ID`. Expiry/end/revocation
-invalidates its artifacts. A grant ID is never a public download link.
+invalidates its artifacts. Finishing or disconnecting a host's job-status poll
+only stops that request; it does not end the grant or discard an export. A grant
+ID is never a public download link.
 
 Run `node templates/page-actions.test.mjs` for registration/cancellation checks
 and `node templates/page-actions.browser.mjs` for production template handlers

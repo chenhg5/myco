@@ -568,6 +568,12 @@ func (s *ActionService) refresh(ctx context.Context, g *actionGrant) {
 			return
 		}
 		if !s.agentSees(ctx, g) {
+			// A host stops its long poll when rendering finishes. A cancelled
+			// page lookup says nothing about visibility and must not revoke
+			// the shared grant or erase a completed export's artifact.
+			if ctx.Err() != nil {
+				return
+			}
 			s.close(g, api.GrantEnded, "its agent may no longer see the page")
 			return
 		}
