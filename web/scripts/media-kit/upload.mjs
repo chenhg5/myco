@@ -68,7 +68,10 @@ const pictures = cli(
   "--collection",
   "images",
 ).records;
-const before = cli("project", "show", "--name", project).docs.length;
+const projectBefore = cli("project", "show", "--name", project);
+const modernQuota = Number.isInteger(projectBefore.files_max) && projectBefore.files_max > 0;
+const before = modernQuota ? projectBefore.files_used : projectBefore.docs.length;
+const filesMax = modernQuota ? projectBefore.files_max : 100;
 const planned = [];
 for (const [id, shots] of groups) {
   const prior = existing.find((r) => r.id === "feature-" + id);
@@ -99,13 +102,14 @@ if (
   planned.some((p) => !pictures.some((x) => x.data.file === p.name))
 )
   throw Error("Metadata-only mode requires all images to exist already.");
-const newFiles = planned.filter(
-  (p) => !pictures.some((x) => x.data.file === p.name),
-).length;
-if (before + newFiles > 100)
-  throw Error(
-    `Project quota: ${before}+${newFiles}>100; ask before uploading.`,
-  );
+const uploads = metadataOnly ? [] : planned;
+const oldFile = (p) => projectBefore.docs.find((d) => d.name === p.name);
+const newFiles = uploads.filter((p) => modernQuota ? !oldFile(p)?.binary : !oldFile(p)).length;
+const addedBytes = uploads.reduce((n, p) => n + p.bytes - (oldFile(p)?.size || 0), 0);
+if (uploads.length && before + newFiles > filesMax)
+  throw Error(`Project file quota exceeded: ${before}+${newFiles}>${filesMax}. Remove files or ask a workspace owner/admin to raise the limit.`);
+if (uploads.length && modernQuota && projectBefore.bytes_used + addedBytes > projectBefore.bytes_max)
+  throw Error(`Project byte quota exceeded: ${projectBefore.bytes_used}+${addedBytes}>${projectBefore.bytes_max}. Remove files or ask a workspace owner/admin to raise the limit.`);
 console.log(
   JSON.stringify(
     {
@@ -115,6 +119,8 @@ console.log(
       projectFilesBefore: before,
       newFiles,
       projectFilesAfter: before + newFiles,
+      projectFilesMax: filesMax,
+      ...(modernQuota ? {projectBytesAfter: projectBefore.bytes_used + addedBytes, projectBytesMax: projectBefore.bytes_max} : {}),
     },
     null,
     2,
@@ -220,10 +226,11 @@ for (const [id, shots] of groups) {
     console.log("uploaded " + entry + " " + p.s.lang + "/" + p.s.theme);
   }
 }
+const projectAfter = cli("project", "show", "--name", project);
 const result = {
   entries: [...groups.keys()].map((id) => "feature-" + id),
   files: planned.length,
-  projectFiles: cli("project", "show", "--name", project).docs.length,
+  projectFiles: projectAfter.files_used ?? projectAfter.docs.length,
 };
 await writeFile(
   path.join(out, "uploaded.json"),

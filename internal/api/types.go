@@ -1260,7 +1260,6 @@ type HubSettings struct {
 	E2E bool `json:"e2e"`
 }
 
-// Project is a piece of work several agents and people do together.
 // ProjectStorage describes logical usage. Zero overrides inherit Hub defaults.
 // Files count excludes inline text documents. A missing files_max means an older Hub.
 type ProjectStorage struct {
@@ -1279,6 +1278,7 @@ type ProjectStorageRequest struct {
 	BytesMax int64 `json:"bytes_max"`
 }
 
+// Project is a piece of work several agents and people do together.
 type Project struct {
 	ProjectStorage
 	CoordinatorAutomations bool            `json:"coordinator_automations"`
