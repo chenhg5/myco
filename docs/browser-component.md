@@ -191,11 +191,16 @@ The panel's controls are excluded from recorded actions.
 
 Choose **Start recording** on the current page, interact with the site, then
 **Stop recording**. Page-started recordings use the same panel. The list shows
-recent actions first, with type, name and target; any step can be deleted.
-**Capture** enters element selection: clicking an element is intercepted rather
+actions in recording order, with type, name and target; deleting a step asks
+for confirmation inside the panel. Hovering highlights top-level elements;
+iframe contents are represented by their frame boundary. A brief status line
+shows the latest recorded action.
+**Extract data** offers text, HTML or attribute selection: clicking an element is intercepted rather
 than activating it or recording a click. Choose text, an attribute (with its
 name), or HTML and save an `extract` node with `what`, `attr` when needed, and
-`into` (default `data1`, `data2`, ...). These are suggested output names only;
+`into` (default `data1`, `data2`, ...). Right-click a top-level element for the same extraction choices without recording
+the context-menu click. Attribute names are entered inside the panel, never in
+a website prompt. These are suggested output names only;
 the application may rename them to avoid existing script outputs. The component
 does not generate references to these names in other recorded steps. Esc cancels selection. Frames retain their
 locator paths. Password values are never shown in the panel's step summaries.

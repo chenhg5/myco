@@ -17,6 +17,8 @@ import (
 	"github.com/go-rod/rod/lib/proto"
 )
 
+var panelDemo = flag.Bool("browser-panel-demo", false, "pace trusted panel interactions for an optional demonstration recording")
+
 var panelShots = flag.String("browser-panel-shots", "", "optional directory for native recorder panel screenshots")
 
 func TestNativeChromeRecorderPanel(t *testing.T) {
@@ -211,6 +213,9 @@ func TestNativeChromeRecorderPanel(t *testing.T) {
 				if !received.Result.Value.Get("trusted").Bool() {
 					t.Fatalf("panel button did not receive trusted input: %s %s", selector, received.Result.Value.JSON("", ""))
 				}
+				if *panelDemo {
+					time.Sleep(350 * time.Millisecond)
+				}
 
 			}
 			nodeEval := func(selector, fn string) {
@@ -222,8 +227,11 @@ func TestNativeChromeRecorderPanel(t *testing.T) {
 					t.Fatal("resolve panel node", err)
 				}
 				defer s.call(sid, "Runtime.releaseObject", map[string]any{"objectId": obj.Object.ObjectID}, nil)
-				if err := s.call(sid, "Runtime.callFunctionOn", map[string]any{"objectId": obj.Object.ObjectID, "functionDeclaration": fn}, nil); err != nil {
-					t.Fatal(err)
+				var result struct {
+					ExceptionDetails *proto.RuntimeExceptionDetails `json:"exceptionDetails"`
+				}
+				if err := s.call(sid, "Runtime.callFunctionOn", map[string]any{"objectId": obj.Object.ObjectID, "functionDeclaration": fn, "awaitPromise": true}, &result); err != nil || result.ExceptionDetails != nil {
+					t.Fatal(err, result.ExceptionDetails)
 				}
 			}
 			if out, err := page.Eval(`()=>({closed:document.querySelector('#__myco_recording_panel__').shadowRoot===null,binding:typeof window.__mycoBrowserEvent})`); err != nil || !strings.Contains(out.Value.JSON("", ""), `"closed":true`) || !strings.Contains(out.Value.JSON("", ""), `"binding":"undefined"`) {
@@ -240,6 +248,30 @@ func TestNativeChromeRecorderPanel(t *testing.T) {
 			child = child.Context(ctx)
 			if out, err := child.Eval(`()=>!!document.querySelector('#__myco_recording_panel__')`); err != nil || out.Value.Bool() {
 				t.Fatal("panel injected into iframe", err)
+			}
+			if *panelDemo {
+				if err := s.call(sid, "Emulation.setEmulatedMedia", map[string]any{"features": []map[string]string{{"name": "prefers-color-scheme", "value": "dark"}}}, nil); err != nil {
+					t.Fatal(err)
+				}
+				time.Sleep(time.Second)
+			}
+			if *panelShots != "" {
+				if err := os.MkdirAll(*panelShots, 0700); err != nil {
+					t.Fatal(err)
+				}
+				for _, scheme := range []string{"light", "dark"} {
+					if err := s.call(sid, "Emulation.setEmulatedMedia", map[string]any{"features": []map[string]string{{"name": "prefers-color-scheme", "value": scheme}}}, nil); err != nil {
+						t.Fatal(err)
+					}
+					nodeEval("section", `async function(){getComputedStyle(this).color;await Promise.all(this.getAnimations({subtree:true}).filter(a=>a.effect.getComputedTiming().iterations!==Infinity).map(a=>a.finished.catch(()=>{})))}`)
+					data, err := page.Screenshot(false, &proto.PageCaptureScreenshot{Format: proto.PageCaptureScreenshotFormatPng})
+					if err != nil {
+						t.Fatal(err)
+					}
+					if err = os.WriteFile(filepath.Join(*panelShots, "idle-"+lang+"-"+scheme+".png"), data, 0600); err != nil {
+						t.Fatal(err)
+					}
+				}
 			}
 			click(`[data-action="start"]`)
 			var rec *recording
@@ -301,6 +333,10 @@ func TestNativeChromeRecorderPanel(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			if err = button.Hover(); err != nil {
+				t.Fatal(err)
+			}
+			nodeEval(".highlight", `function(){if(this.hidden||this.getBoundingClientRect().width<=0)throw Error('trusted pointer hover did not highlight')}`)
 			if err = button.Click(proto.InputMouseButtonLeft, 1); err != nil {
 				t.Fatal(err)
 			}
@@ -316,6 +352,7 @@ func TestNativeChromeRecorderPanel(t *testing.T) {
 				return out
 			}
 			wait(func() bool { return len(nodesOfType("click")) == 1 })
+			nodeEval(".current", `function(){if(this.hidden||!this.textContent.trim())throw Error('current action cue missing')}`)
 			var first struct {
 				Steps   []node   `json:"steps"`
 				Next    int      `json:"next"`
@@ -331,6 +368,7 @@ func TestNativeChromeRecorderPanel(t *testing.T) {
 				t.Fatal("claimed browser recording still active")
 			}
 			click(`[data-step-id="` + firstClick.ID + `"]`)
+			click(`[data-action="confirm-remove"]`)
 			wait(func() bool { rec.mu.Lock(); defer rec.mu.Unlock(); return rec.removed[firstClick.ID] })
 			var deleted struct {
 				Removed []string `json:"removed"`
@@ -341,6 +379,7 @@ func TestNativeChromeRecorderPanel(t *testing.T) {
 			}
 			for i, what := range []string{"text", "attribute", "html"} {
 				click(`[data-action="pick"]`)
+				click(`[data-action="capture-text"]`)
 				wait(func() bool { rec.mu.Lock(); defer rec.mu.Unlock(); return rec.picking })
 				target, err := page.Element("#text")
 				if err != nil {
@@ -367,6 +406,7 @@ func TestNativeChromeRecorderPanel(t *testing.T) {
 				}
 			}
 			click(`[data-action="pick"]`)
+			click(`[data-action="capture-text"]`)
 			wait(func() bool { rec.mu.Lock(); defer rec.mu.Unlock(); return rec.picking })
 			childText, err := child.Element("#text")
 			if err != nil {
@@ -381,6 +421,27 @@ func TestNativeChromeRecorderPanel(t *testing.T) {
 			childStep := nodesOfType("extract")[3]
 			if childStep.Type != "extract" || childStep.Target == nil || len(childStep.Target.Frame) != 1 {
 				t.Fatalf("child selection lost frame: %+v", childStep)
+			}
+			// A trusted context-menu extraction is one atomic command: it does
+			// not record the right click or open a native prompt/dialog.
+			contextTarget, err := page.Element("#text")
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i, what := range []string{"text", "html", "attribute"} {
+				if err = contextTarget.Click(proto.InputMouseButtonRight, 1); err != nil {
+					t.Fatal(err)
+				}
+				click(`[data-action="capture-` + what + `"]`)
+				if what == "attribute" {
+					nodeEval(".capture label:nth-of-type(2) input", `function(){this.value='data-kind'}`)
+					click(`[data-action="extract"]`)
+				}
+				wait(func() bool { return len(nodesOfType("extract")) == 5+i })
+				step := nodesOfType("extract")[4+i]
+				if step.What != what || step.Into != fmt.Sprintf("data%d", 5+i) {
+					t.Fatalf("wrong context extraction: %+v", step)
+				}
 			}
 			if err = button.Click(proto.InputMouseButtonLeft, 1); err != nil {
 				t.Fatal(err)
@@ -436,6 +497,15 @@ func TestNativeChromeRecorderPanel(t *testing.T) {
 			if got := nodesOfType("press"); len(got) != 0 {
 				t.Fatalf("page navigation recorded both key and scroll: %+v", got)
 			}
+			if *panelShots != "" {
+				if err := s.call(sid, "Emulation.setDeviceMetricsOverride", map[string]any{"width": 1280, "height": 900, "deviceScaleFactor": 2, "mobile": false}, nil); err != nil {
+					t.Fatal(err)
+				}
+				nodeEval("ol", `function(){this.scrollTop=0}`)
+				if err = button.Hover(); err != nil {
+					t.Fatal(err)
+				}
+			}
 			for _, scheme := range []string{"light", "dark"} {
 				if err := s.call(sid, "Emulation.setEmulatedMedia", map[string]any{"features": []map[string]string{{"name": "prefers-color-scheme", "value": scheme}}}, nil); err != nil {
 					t.Fatal(err)
@@ -444,6 +514,8 @@ func TestNativeChromeRecorderPanel(t *testing.T) {
 					if err := os.MkdirAll(*panelShots, 0700); err != nil {
 						t.Fatal(err)
 					}
+					// Wait for the actual theme transitions, not a guessed delay.
+					nodeEval("section", `async function(){getComputedStyle(this).color;await Promise.all(this.getAnimations({subtree:true}).filter(a=>a.effect.getComputedTiming().iterations!==Infinity).map(a=>a.finished.catch(()=>{})))}`)
 					data, err := page.Screenshot(false, &proto.PageCaptureScreenshot{Format: proto.PageCaptureScreenshotFormatPng})
 					if err != nil {
 						t.Fatal(err)
@@ -494,7 +566,7 @@ func TestNativeChromeRecorderPanel(t *testing.T) {
 					t.Fatalf("unexpected recorded action: %+v", n)
 				}
 			}
-			if counts["extract"] != 4 || counts["click"] != 1 || counts["type"] != 1 || counts["scroll"] != 2 {
+			if counts["extract"] != 7 || counts["click"] != 1 || counts["type"] != 1 || counts["scroll"] != 2 {
 				t.Fatalf("wrong recorded actions: %v", counts)
 			}
 			var fromPage struct {

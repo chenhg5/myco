@@ -22,6 +22,14 @@ handlers.click({isTrusted:true,panel:true,composedPath(){return[password]}});
 handlers.input({isTrusted:true,panel:true,composedPath(){return[password]}});
 window.__mycoRecorder.flush();
 assert.equal(sent.length,1,'panel clicks/inputs must not become recording steps');
+let contextChoices=0;
+window.__mycoRecorder.contextMenu=()=>{contextChoices++;return true};
+handlers.contextmenu({isTrusted:true,composedPath(){return[password]}});
+handlers.contextmenu({isTrusted:false,composedPath(){return[password]}});
+assert.equal(contextChoices,1,'only trusted context-menu events reach the panel');
+assert.equal(sent.length,1,'panel context menu became a right-click step');
+delete window.__mycoRecorder.contextMenu;
+
 // Subframes get state synchronization but never mount controls. Reordered
 // host responses must not roll a newer picking state back.
 window.top={};

@@ -130,6 +130,7 @@
     if(!ev.isTrusted)return;
     if(ignored(ev)){activity();return;}
     if(scrollClick(ev))return;
+    if(kind==='contextmenu' && state.enabled && !state.picking && state.contextMenu && state.contextMenu(ev,element(ev))){activity();flush();return;}
     if(state.picking){
       ev.preventDefault();ev.stopImmediatePropagation();
       if(kind==='click'){const e=element(ev);if(e){state.picking=false;window.__mycoBrowserEvent(JSON.stringify({type:'panel',action:'picked',recording_id:state.recordingID,target:window.__mycoDescribe(e)}));}}
