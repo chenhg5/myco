@@ -8551,6 +8551,7 @@ body.is-resizing {
    where one ended. */
 .watch-bar {
   flex: none;
+  container-type: inline-size;
   padding: 4px 8px 4px 12px;
   border-bottom: 1px solid var(--line-2);
   animation: app-fade 0.2s ease-out;
@@ -8582,7 +8583,7 @@ body.is-resizing {
 .watch-eye { flex: none; width: 14px; height: 14px; color: var(--accent); }
 .watch-what {
   flex: 0 1 auto;
-  min-width: 0;
+  min-width: 6em;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -8658,9 +8659,16 @@ body.is-resizing {
 .watch-ended.is-met svg { color: var(--green); }
 .watch-ended-time { flex: none; font-size: 10.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
 .app-shell.is-focus .conv-detail > .watch-bar { padding-left: 2px; padding-right: 2px; }
-@media (max-width: 560px) {
+/* A narrow chat (a phone, a pane beside another): the buttons keep their
+   icons, so what it watches and the clock keep the room. */
+@container (max-width: 700px) {
   .watch-btn-label { display: none; }
   .watch-btn { padding: 0 6px; }
+}
+@container (max-width: 520px) {
+  .watch-line .watch-toggle { flex-wrap: wrap; height: auto; min-height: 28px; padding: 4px 6px; row-gap: 0; }
+  .watch-line .watch-chev { order: 2; }
+  .watch-line .watch-time { order: 3; flex-basis: 100%; padding-left: 22px; font-size: 12px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .watch-bar { animation: none; }

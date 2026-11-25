@@ -1749,6 +1749,18 @@ function watchesOf(h) {
   if (!watchStore.has(h.id)) {
     const min = (n) => n * 60;
     const w = (o) => ({ checks: 0, kind: "reply", ...o });
+    // (the showcase: neutral demo names, in its language, on the hub its demo agents are on)
+    if (process.env.MOCK_SHOWCASE) {
+      const T = (zh, en) => (process.env.MOCK_SHOWCASE === "en" ? en : zh);
+      watchStore.set(h.id, !(h.agents || []).some((a) => a.name === "build-backend") ? [] : [
+        w({ id: "wat_review", agent: "build-backend", project: "website", what: T("代码审查（Codex）的审查意见", "Reviewer (Codex)'s review"), started_at: iso(min(12)), deadline: new Date(Date.now() + 18 * 60_000).toISOString(), last_check_at: iso(30), last_result: T("还没回复：审查仍在进行", "No reply yet: the review is still going"), checks: 24, state: "watching" }),
+        w({ id: "wat_ci", agent: "build-backend", project: "website", what: T("CI 流水线跑完", "The CI pipeline"), kind: "workflow", started_at: iso(min(150)), deadline: iso(min(120)), ended_at: iso(min(131)), state: "met", checks: 38 }),
+        w({ id: "wat_docs", agent: "build-backend", project: "website", what: T("文档（Claude Code）的回复", "Docs (Claude Code)'s reply"), started_at: iso(min(260)), deadline: iso(min(230)), ended_at: iso(min(230)), state: "expired", checks: 60 }),
+        w({ id: "wat_tests", agent: "mbp-reviewer", project: "website", what: T("测试跑完", "The test run"), kind: "workflow", started_at: iso(min(4)), deadline: new Date(Date.now() + 26 * 60_000).toISOString(), last_check_at: iso(20), last_result: T("第 3/5 步：跑测试", "Step 3 of 5: tests"), checks: 6, state: "watching" }),
+        w({ id: "wat_front", agent: "mbp-reviewer", project: "website", what: T("前端（Claude Code）的改动", "Frontend (Claude Code)'s changes"), started_at: iso(min(9)), deadline: new Date(Date.now() + 51 * 60_000).toISOString(), last_check_at: iso(40), checks: 10, state: "watching" }),
+      ]);
+      return watchStore.get(h.id);
+    }
     watchStore.set(h.id, h.id !== "hub_studio" ? [] : [
       w({ id: "wat_mac2", agent: "legacy-codex", project: "", task: "msg_watch_task", what: "mac2 的回复", target: "msg_mac2_q", started_at: iso(min(12)), deadline: new Date(Date.now() + 18 * 60_000).toISOString(), last_check_at: iso(30), last_result: "还没回复：mac2 的任务仍在处理中", checks: 24, state: "watching" }),
       w({ id: "wat_release", agent: "legacy-codex", what: "Release 的发布说明", started_at: iso(min(140)), deadline: iso(min(110)), ended_at: iso(min(122)), state: "met", checks: 36, outcome: "Release 回复了：发布说明写好了" }),

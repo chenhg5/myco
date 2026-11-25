@@ -399,6 +399,21 @@ export const scenes = [
     },
   },
 
+  {
+    id: "watch",
+    title: "后台盯着，一眼看到 / Watching in the background",
+    zh: "Agent 在后台等回复、等流水线时，会话顶部写着在等什么、还剩多久，可以延长或停止。",
+    en: "While an agent waits for a reply or a pipeline, its chat says what it is waiting for and for how long, with Extend and Stop.",
+    tags: ["可见性", "协作"], themes: ["light", "dark"],
+    description: "Agent 会话顶部的「正在盯」条（展开：最近一次检查、起止时间），会话里结束的灰字，成员栏的「盯着 N」",
+    prepare: async ({ page, T }) => {
+      await member(page, T);
+      const bar = page.locator(".conv-detail:visible [data-testid=watch-bar]").last();
+      await bar.waitFor();
+      await bar.locator(".watch-toggle").click();
+      await bar.locator(".watch-result").waitFor();
+    },
+  },
 ];
 
 scenes.push(...interactionScenes);
