@@ -1039,6 +1039,18 @@ async function runMatrix(browser, size, scheme) {
         if(!summary.includes(retains?"保留已保存的密码":"清除已保存的密码"))throw new Error("Wrong saved-password review for "+kind);
         await clickVisible(page,modal.getByRole("button",{name:"不允许",exact:true}));await modal.waitFor({state:"hidden"});
       }
+      const remove=()=>frame.locator("body").evaluate(()=>{window.__browserRemoval=null;window.myco.browser.profiles.remove("profile_work").then(value=>window.__browserRemoval={value},error=>window.__browserRemoval={error:error.code});});
+      await remove();await modal.waitFor();
+      const deletionText=await modal.innerText();
+      for(const part of ["永久删除","工作资料","登录状态","本机下载","所有工作区","不能恢复"])if(!deletionText.includes(part))throw new Error("Deletion review omitted "+part);
+      await shot(page,size,scheme,"browser-profile-delete-owner-review");
+      await clickVisible(page,modal.getByRole("button",{name:"不允许",exact:true}));await modal.waitFor({state:"hidden"});
+      let removal=await frame.locator("body").evaluate(async()=>{for(let i=0;i<100&&!window.__browserRemoval;i++)await new Promise(r=>setTimeout(r,20));return window.__browserRemoval;});
+      if(removal?.error!=="cancelled")throw new Error("Declined profile deletion was not cancelled");
+      if(!(await frame.locator("body").evaluate(()=>window.myco.browser.status())).profiles.length)throw new Error("Decline deleted a profile");
+      await remove();await modal.waitFor();await clickVisible(page,modal.getByRole("button",{name:"允许",exact:true}));await modal.waitFor({state:"hidden"});
+      removal=await frame.locator("body").evaluate(async()=>{for(let i=0;i<100&&!window.__browserRemoval;i++)await new Promise(r=>setTimeout(r,20));return window.__browserRemoval;});
+      if(removal?.value!==true || (await frame.locator("body").evaluate(()=>window.myco.browser.status())).profiles.length)throw new Error("Confirmed deletion did not remove the profile");
       await clickVisible(page,page.locator(".pg-panel").getByRole("button",{name:"关闭",exact:true}));
     });
 
@@ -2239,11 +2251,22 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, card.getByRole("button", { name: "不同意", exact: true }));
       await card.waitFor({ state: "hidden", timeout: 10_000 });
 
+      const limitedPersonal = await fetch(`http://${HOST}:${mockPort()}/app/mock/superagent-ask`, {
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({agent:"pm-codex",kind:"action_grant",permissions:["browser.control"],
+          resource:{provider:"browser",id:"profile_sample",binding:"policy-2",name:"示例浏览器"},hosts:["example.com"],reason:"检查示例站点。"}),
+      });
+      if(!limitedPersonal.ok)throw new Error("Scoped personal-profile request failed");
+      await card.waitFor();
+      const limitedText=await card.innerText();
+      if(!limitedText.includes("只能在所选网站（example.com）中看到并使用这个配置的登录状态") || limitedText.includes("agent 能看到并操作这些网站"))throw new Error("Personal-profile warning broadened the allowed hosts: "+limitedText);
+      await clickVisible(page,card.getByRole("button",{name:"不同意",exact:true}));await card.waitFor({state:"hidden"});
+
       const dedicated = await fetch(`http://${HOST}:${mockPort()}/app/mock/superagent-ask`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ agent: "pm-codex", kind: "action_grant", permissions: ["browser.control"],
           resource: { provider: "browser", id: "p_agent", binding: "policy-agent", name: "agent 专用", kind: "agent" },
-          hosts: ["example.com", "*.docs.example.com"], reason: "检查公开文档。" }),
+          machine: "Studio Mac / agent 专用", hosts: ["example.com", "*.docs.example.com"], reason: "检查公开文档。" }),
       });
       if (!dedicated.ok) throw new Error(`专用浏览器申请失败：HTTP ${dedicated.status}`);
       const approval = await dedicated.json();
@@ -2267,6 +2290,9 @@ async function runMatrix(browser, size, scheme) {
       if (grants.grants.find(g => g.approval_id === approval.id)?.hosts?.join() !== "*.docs.example.com") {
         throw new Error("批准后仍包含已取消的域名");
       }
+      const scopedGrant=page.locator(".sp-home [data-testid=action-grants] .sa-grant",{hasText:"agent 专用"});
+      await scopedGrant.waitFor();await clickVisible(page,scopedGrant.getByRole("button",{name:"收回",exact:true}));
+      await scopedGrant.waitFor({state:"hidden"});
     });
 
     // An agent asks to act on one of your computers (agent actions,

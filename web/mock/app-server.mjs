@@ -2429,7 +2429,7 @@ const server = http.createServer(async (req, res) => {
       state.browserConfirmations[nonce] = JSON.stringify({key,instance:body.instance,action:body.action,input});
       return send(res,200,{confirmation:nonce});
     }
-    if (body.action === "status") return send(res,200,{protocol:1,version:"0.1.0",installed:true,supported:true,browsers:["chrome"],machine:"Studio Mac",profiles:[profile]});
+    if (body.action === "status") return send(res,200,{protocol:1,version:"0.5.1",features:["profile_delete"],installed:true,supported:true,browsers:["chrome"],machine:"Studio Mac",profiles:state.browserProfileDeleted?.[parts[2]]?[]:[profile]});
     if (body.action === "approvals.review") {
       const code=[],urls=[],scripts={ [input.script_id]:input.script,...input.scripts };
       for (const [id,script] of Object.entries(scripts)) {
@@ -2438,10 +2438,14 @@ const server = http.createServer(async (req, res) => {
       }
       return send(res,200,{script_id:input.script_id,version:input.version,profile:input.profile,profile_name:profile.name,name:input.script.name,digest:"a".repeat(64),urls,code,children:Object.keys(input.scripts || {}),script:input.script,scripts:input.scripts || {}});
     }
-    if (body.action === "approvals.request" || body.action === "profiles.configure" || (body.action === "profiles.allowAgents" && input.allowed)) {
+    if (body.action === "approvals.request" || body.action === "profiles.configure" || body.action === "profiles.remove" || (body.action === "profiles.allowAgents" && input.allowed)) {
       const expected=JSON.stringify({key,instance:body.instance,action:body.action,input});
       const actual=state.browserConfirmations[body.confirmation]; delete state.browserConfirmations[body.confirmation];
       if(actual!==expected)return fail(res,403,"permission_denied","owner confirmation required");
+    }
+    if (body.action === "profiles.remove") {
+      state.browserProfileDeleted ||= {};state.browserProfileDeleted[parts[2]]=true;
+      state.browserApprovals[key]=[];return send(res,200,true);
     }
     if (body.action === "profiles.configure") {
       const p=input.settings.proxy;

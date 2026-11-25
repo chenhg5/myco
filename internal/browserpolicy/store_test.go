@@ -164,8 +164,10 @@ func TestDedicatedProfileRetriesActivationAndHonorsDisable(t *testing.T) {
 	store := New(t.TempDir())
 	created, attempts := 0, 0
 	create := func() (string, string, error) {
-		created++
-		return "p_agent", "agent 专用", nil
+		if created == 0 {
+			created++
+		} // Native resolution is idempotent across retries.
+		return "p_agent", "Dedicated agent", nil
 	}
 	retry := errors.New("component interrupted activation")
 	activate := func(id string) error {
@@ -192,5 +194,64 @@ func TestDedicatedProfileRetriesActivationAndHonorsDisable(t *testing.T) {
 	p, err = store.EnsureAgentProfile(scope, create, activate)
 	if err != nil || p.Enabled || p.Kind != "agent" || attempts != 2 {
 		t.Fatalf("profile re-enabled after owner disabled it: %+v %v", p, err)
+	}
+}
+
+func TestDedicatedProfileReusesNativeIdentityWithoutSharingApprovals(t *testing.T) {
+	s := New(t.TempDir())
+	one := Scope{Workspace: "https://one.example/w/demo", Owner: "demo-owner"}
+	two := Scope{Workspace: "https://two.example/w/demo", Owner: "demo-owner"}
+	_, err := s.setEnabled(one, "p_duplicate", true, "agent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.SetEnabled(one, "p_legacy_duplicate", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolve := func() (string, string, error) { return "p_canonical", "Dedicated agent", nil }
+	activate := func(string) error { return nil }
+	p, err := s.EnsureAgentProfile(one, resolve, activate, "p_duplicate", "p_legacy_duplicate", "p_canonical")
+	if err != nil {
+		t.Fatal(err)
+	}
+	q, err := s.EnsureAgentProfile(two, resolve, activate, "p_canonical")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Profile != q.Profile || p.Binding == q.Binding {
+		t.Fatal("native identity was duplicated or workspace binding shared")
+	}
+	for _, id := range []string{"p_duplicate", "p_legacy_duplicate"} {
+		old, err := s.Policy(one, id)
+		if err != nil || old.Enabled || old.Kind != "agent_duplicate" {
+			t.Fatal("duplicate still advertised", old, err)
+		}
+	}
+	if err = s.ForgetProfile("p_canonical"); err != nil {
+		t.Fatal(err)
+	}
+	for _, scope := range []Scope{one, two} {
+		old, err := s.Policy(scope, "p_canonical")
+		if err != nil || old.Enabled || old.Binding != "" {
+			t.Fatal("deleted native profile kept local authorization", old, err)
+		}
+	}
+	old, err := s.Policy(one, "p_duplicate")
+	if err != nil || old.Kind != "agent_duplicate" {
+		t.Fatal("forgot unrelated profile", old, err)
+	}
+}
+
+func TestDeletedLastDedicatedProfileIsNotAutomaticallyRecreated(t *testing.T) {
+	store := New(t.TempDir())
+	if allowed, err := store.AgentProfileCreationAllowed(); err != nil || !allowed {
+		t.Fatal(allowed, err)
+	}
+	if err := store.ForgetProfile("p_deleted", true); err != nil {
+		t.Fatal(err)
+	}
+	if allowed, err := store.AgentProfileCreationAllowed(); err != nil || allowed {
+		t.Fatal(allowed, err)
 	}
 }

@@ -340,6 +340,24 @@ func recordedControlURL(raw string) string {
 		parsed.RawFragment = ""
 	}
 	value := stableURL(parsed.String())
+	// Retain a distinguishing routing parameter without persisting unrelated
+	// authentication or tracking values. Preserve its original bytes: URL waits
+	// compare a literal substring, not a normalized query string.
+	for _, pair := range strings.Split(parsed.RawQuery, "&") {
+		key, val, found := strings.Cut(pair, "=")
+		decodedKey, keyErr := url.QueryUnescape(key)
+		decodedValue, valErr := url.QueryUnescape(val)
+		if !found || keyErr != nil || valErr != nil || len(val) == 0 || len(val) > 256 || strings.Contains(decodedValue, "${") || strings.Contains(pair, "${") {
+			continue
+		}
+		switch decodedKey {
+		case "tab", "page", "view", "section", "category", "sort":
+			value = pair
+		default:
+			continue
+		}
+		break
+	}
 	if strings.HasPrefix(value, "#") {
 		value = "#" + parsed.EscapedFragment()
 	}

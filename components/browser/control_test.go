@@ -54,7 +54,7 @@ func TestNativeChromeControlRefAndDraft(t *testing.T) {
 	}
 	fixture := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, `<!doctype html><title>Control fixture</title><button onclick="this.dataset.count=String(+(this.dataset.count||0)+1)">Count clicks</button><label>Public title<input id="public"></label><a href="/next">Next article</a><p>Public content</p><div style="height:1900px">Long page</div>`)
+		fmt.Fprint(w, `<!doctype html><title>Control fixture</title><button onclick="this.dataset.count=String(+(this.dataset.count||0)+1)">Count clicks</button><label>Public title<input id="public"></label><a href="/?tab=tech">Next article</a><p>Public content</p><div style="height:1900px">Long page</div>`)
 	}))
 	defer fixture.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -161,10 +161,14 @@ func TestNativeChromeControlRefAndDraft(t *testing.T) {
 	if shot["image"].(map[string]any)["height"].(float64) < 1900 {
 		t.Fatal("full screenshot clipped", shot)
 	}
+	if code, out := call("/control/act", map[string]any{"request_id": "query-navigation", "session": session, "op": "click", "ref": find("link", "Next article")}); code != 200 {
+		t.Fatal(code, out)
+	}
 	if code, out := call("/control/close", map[string]any{"request_id": "close", "session": session}); code != 200 {
 		t.Fatal(out)
 	} else {
-		if len(out["steps"].([]any)) != 2 {
+		steps := out["steps"].([]any)
+		if len(steps) != 4 || steps[3].(map[string]any)["wait"] != "url" || steps[3].(map[string]any)["value"] != "tab=tech" {
 			t.Fatal(out)
 		}
 	}
@@ -1008,5 +1012,35 @@ func TestControlNavigationNonDocumentCompletion(t *testing.T) {
 				t.Fatal("non-document navigation never settled")
 			}
 		})
+	}
+}
+
+func TestControlRecordedRoutingQueryAndOwnerWindowReason(t *testing.T) {
+	for _, raw := range []string{"https://example.com/?tab=tech", "https://example.com/?token=private-fixture&tab=tech&utm_source=demo"} {
+		if got := recordedControlURL(raw); got != "tab=tech" {
+			t.Fatal("routing query lost", got)
+		}
+	}
+	for _, raw := range []string{"https://example.com/?token=private-fixture", "https://example.com/?tab=%24%7Bx%7D", "https://example.com/?session=private-fixture"} {
+		if got := recordedControlURL(raw); got != "https://example.com/" {
+			t.Fatal("secret or parameter retained", got)
+		}
+	}
+	e := &engine{profiles: map[string]profile{"p_demo": {Agents: true}}, sessions: map[string]*session{"p_demo": {}}, controlOpening: map[string]bool{}}
+	input := controlInput{Profile: "p_demo", GrantID: "grant", Actor: controlActor{ID: "demo-agent"}, ExpiresAt: time.Now().Add(time.Minute)}
+	_, err := e.controlOpen(context.Background(), "scope", input)
+	if err == nil || err.Code != "busy" || err.Reason != "owner_window_open" {
+		t.Fatal(err)
+	}
+	e.sessions["p_demo"].controller = "recording"
+	_, err = e.controlOpen(context.Background(), "scope", input)
+	if err == nil || err.Reason != "profile_in_use" {
+		t.Fatal(err)
+	}
+	delete(e.sessions, "p_demo")
+	e.controlOpening["p_demo"] = true
+	_, err = e.controlOpen(context.Background(), "scope", input)
+	if err == nil || err.Reason != "profile_starting" {
+		t.Fatal(err)
 	}
 }

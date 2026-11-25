@@ -196,3 +196,13 @@ The events response is `{session, events, next, done, reason}`. Each event has
 `time`, `done`, and optional `action`, `host`, `code` and `reason`; it contains no
 steps or page contents. `after` is a replayable cursor. Polling does not renew
 session inactivity. A terminal event lets the desktop revoke its grant promptly.
+
+Profiles are machine-local. `POST /profiles` with `kind: "agent"` resolves the
+existing dedicated agent profile instead of creating another per workspace.
+The `profile_delete` feature enables `DELETE /profiles/{id}` for idle profiles;
+active windows/controllers, pending opens and process leases return `busy`.
+Deletion removes the profile directory, its downloads and saved proxy password.
+Owner confirmation and workspace-local approval cleanup belong to the App.
+`/control/open` uses `busy.reason: "owner_window_open"` for a profile window
+opened by the person, `profile_in_use` for another controller and
+`profile_starting` for an existing startup reservation.

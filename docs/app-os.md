@@ -526,3 +526,9 @@ upload falls back to project storage. On old Hubs the new desktop host makes the
 pages view-only and shows an update notice. New apps must use `pageFiles`, not the
 legacy names. See [Page-owned files](api.md#page-owned-files) for HTTP migration,
 CLI commands, and Hub configuration.
+
+The optional `myco.browser.profiles.remove(id)` deletes an idle local browser
+profile after the App obtains the owner's exact-profile confirmation. Check
+that the method exists and `browser.status().features` includes `profile_delete`.
+It removes local sign-ins/downloads and script approvals across workspaces;
+active browser windows or controlled profiles return `busy` and stay open.

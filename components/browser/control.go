@@ -644,8 +644,18 @@ func (e *engine) controlOpen(ctx context.Context, owner string, in controlInput)
 	if !p.Agents {
 		return nil, controlFailure("permission_denied", "")
 	}
-	if old != nil || opening {
-		return nil, controlFailure("busy", "")
+	if old != nil {
+		old.mu.Lock()
+		ownerWindow := !old.headless && old.controller == ""
+		old.mu.Unlock()
+		reason := "profile_in_use"
+		if ownerWindow {
+			reason = "owner_window_open"
+		}
+		return nil, controlFailure("busy", reason)
+	}
+	if opening {
+		return nil, controlFailure("busy", "profile_starting")
 	}
 	s, err := e.openSession(ctx, owner, in.Profile, false)
 	if err != nil {

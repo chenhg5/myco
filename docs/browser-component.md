@@ -286,3 +286,27 @@ Component errors may add a safe `reason` to `profile_locked`:
 this optional field as `error.reason` on the page bridge. Close the profile's
 previous browser and retry, or restart the computer. Error responses never
 expose process IDs, filesystem paths, or command lines.
+
+### Removing a local profile
+
+On App/component versions exposing `profiles.remove` and `profile_delete`, the
+Profile dialog offers deletion of an idle profile. The trusted App confirms
+which profile and warns that sign-ins, local downloads and local script
+approvals in every workspace are removed permanently. Close its browser window
+and finish any recording, run or agent control first. Older Apps/components
+keep the dialog usable without showing deletion.
+
+The dedicated agent profile is shared on the computer and reused when another
+workspace connects; its grants and approved scripts remain separate for each
+workspace/account. Older duplicate dedicated profiles are disabled as action
+targets and can be removed after their browser windows are closed.
+
+A URL wait recorded after a click keeps a distinguishing routing query (such
+as `tab=tech`) when available, while omitting authentication/tracking parameters.
+For `busy` with `owner_window_open`, close the profile's browser window before
+asking an agent to open control. Live grants with a host restriction name the
+allowed sites in the approval card.
+
+Deleting the last dedicated agent profile also disables its automatic recreation
+on this App configuration. Create a new personal profile and explicitly allow
+agent access if you want to use browser actions again.
