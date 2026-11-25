@@ -134,7 +134,7 @@ func TestBrowserLocalApprovalUsesNativeOwnerAndExactSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Updating the component must not silently remove an opted-in agent host.
-	for version, want := range map[string]int{"0.1.0": 1, "0.1.1": 1, "0.2.0": 1, "0.3.0": 1, "0.3.1": 1, "0.1.2": 0} {
+	for version, want := range map[string]int{"0.1.0": 1, "0.1.1": 1, "0.2.0": 1, "0.3.0": 1, "0.3.1": 1, "0.4.0": 1, "0.1.2": 0} {
 		native.version = version
 		if got := len(b.browserHostPolicies(h)); got != want {
 			t.Fatalf("component %s hosts: %d, want %d", version, got, want)
