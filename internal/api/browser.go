@@ -51,16 +51,24 @@ type BrowserProfile struct {
 	Running  bool                    `json:"running"`
 	Agents   bool                    `json:"agents"`
 }
+type BrowserRecording struct {
+	ID        string    `json:"id"`
+	Profile   string    `json:"profile"`
+	URL       string    `json:"url"`
+	StartedAt time.Time `json:"started_at"`
+	Origin    string    `json:"origin"`
+}
 type BrowserStatus struct {
-	UpdateAvailable bool             `json:"update_available,omitempty"`
-	Protocol        int              `json:"protocol"`
-	Version         string           `json:"version"`
-	Installed       bool             `json:"installed"`
-	Supported       bool             `json:"supported"`
-	Reason          string           `json:"reason,omitempty"`
-	Browsers        []string         `json:"browsers"`
-	Machine         string           `json:"machine"`
-	Profiles        []BrowserProfile `json:"profiles"`
+	Recordings      []BrowserRecording `json:"recordings,omitempty"`
+	UpdateAvailable bool               `json:"update_available,omitempty"`
+	Protocol        int                `json:"protocol"`
+	Version         string             `json:"version"`
+	Installed       bool               `json:"installed"`
+	Supported       bool               `json:"supported"`
+	Reason          string             `json:"reason,omitempty"`
+	Browsers        []string           `json:"browsers"`
+	Machine         string             `json:"machine"`
+	Profiles        []BrowserProfile   `json:"profiles"`
 }
 
 // BrowserApprovalRequest contains the script and child snapshots a page asks

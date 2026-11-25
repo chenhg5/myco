@@ -376,6 +376,17 @@ func (b *Backend) browserCall(ctx context.Context, c *client.Client, h Hub, in b
 		}
 		path = "/profiles/" + url.PathEscape(text("id")) + "/agents"
 		body = map[string]bool{"allowed": allowed}
+	case "record.active":
+		var out struct {
+			Recordings []api.BrowserRecording `json:"recordings"`
+		}
+		if err := comp.Call(ctx, scope, "GET", "/status", nil, &out); err != nil {
+			return nil, browserFailure(browserError(err), 409)
+		}
+		if out.Recordings == nil {
+			out.Recordings = []api.BrowserRecording{}
+		}
+		return out.Recordings, nil
 	case "record.start":
 		path = "/record/start"
 		body = map[string]string{"profile": text("profile"), "url": text("url")}

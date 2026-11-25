@@ -1137,3 +1137,16 @@ or settings return `invalid_argument`. See
 [network, UA and launch settings](browser-component.md#per-profile-network-and-launch-settings)
 for validation and forwarding semantics. These methods do not change component
 protocol 1 or broaden any agent grant.
+
+### Local browser recording discovery
+
+Newer desktop hosts optionally expose `myco.browser.record.active()`, returning
+`[{id, profile, url, started_at, origin:"browser"|"page"}]` from the current
+component session scope. Component `GET /status` includes the same `recordings`
+metadata. Browser-started recordings remain discoverable until the first valid
+`record.events` call claims them, including recordings already stopped. Known
+IDs can be replayed from cursor 0. `record.events` adds `removed:string[]`; apply
+these deletions by step ID, continue with the opaque `next` cursor, and finish on
+`done:true`. Deleted steps not yet sent are omitted. The browser's isolated panel
+can start/stop, delete, and capture text/attribute/HTML extracts; these are local
+human controls, not Hub or agent actions. See [recorder contract](browser-component.md#recording-inside-chrome).

@@ -179,99 +179,101 @@ func TestInstallChecksDigestAndKeepsPrivateProfiles(t *testing.T) {
 // Exercise the real child handshake, download and process replacement on every
 // CI platform; Install's public platform gate remains Mac/Windows-only.
 func TestUpdateCompatibleComponent(t *testing.T) {
-	for _, valid := range []bool{false, true} {
-		t.Run(fmt.Sprint(valid), func(t *testing.T) {
-			c := &Component{Home: t.TempDir()}
-			defer c.Stop()
-			oldDir := filepath.Join(c.Home, ".myco", "components", "browser", "0.1.0")
-			if err := os.MkdirAll(oldDir, 0700); err != nil {
-				t.Fatal(err)
-			}
-			binary, err := os.Executable()
-			if err != nil {
-				t.Fatal(err)
-			}
-			data, err := os.ReadFile(binary)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err = os.WriteFile(filepath.Join(oldDir, program("myco-browser")), data, 0700); err != nil {
-				t.Fatal(err)
-			}
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
-			if err = c.EnsureRunning(ctx); err != nil {
-				t.Fatal(err)
-			}
-			before := c.Status()
-			if before.Version != "0.1.0" || !before.UpdateAvailable || !before.Running {
-				t.Fatal(before)
-			}
-			c.mu.Lock()
-			oldDone := c.done
-			c.mu.Unlock()
-			name := "myco-browser_" + runtime.GOOS + "_" + runtime.GOARCH + ".zip"
-			payload := archive(t, map[string]string{program("myco-browser"): string(data)})
-			sum := sha256.Sum256(payload)
-			digest := hex.EncodeToString(sum[:])
-			if !valid {
-				digest = strings.Repeat("0", 64)
-			}
-			requests := 0
-			c.HTTP = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-				requests++
-				if !strings.HasPrefix(r.URL.String(), ComponentRelease+"/") || !strings.Contains(r.URL.Path, "/browser-v0.2.0/") {
-					t.Errorf("wrong release: %s", r.URL)
+	for _, oldVersion := range []string{"0.1.0", "0.1.1", "0.2.0"} {
+		for _, valid := range []bool{false, true} {
+			t.Run(oldVersion+"/"+fmt.Sprint(valid), func(t *testing.T) {
+				c := &Component{Home: t.TempDir()}
+				defer c.Stop()
+				oldDir := filepath.Join(c.Home, ".myco", "components", "browser", oldVersion)
+				if err := os.MkdirAll(oldDir, 0700); err != nil {
+					t.Fatal(err)
 				}
-				if !c.Status().Running {
-					t.Error("stopped old child before verifying download")
+				binary, err := os.Executable()
+				if err != nil {
+					t.Fatal(err)
 				}
-				body := payload
-				if strings.HasSuffix(r.URL.Path, "SHA256SUMS") {
-					body = []byte(digest + "  " + name + "\n")
+				data, err := os.ReadFile(binary)
+				if err != nil {
+					t.Fatal(err)
 				}
-				return &http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewReader(body)), Request: r}, nil
-			})}
-			if err = c.install(ctx); !valid {
-				if err == nil || !c.Status().Running || c.Status().Version != "0.1.0" {
-					t.Fatalf("failed update lost old installation: %v %+v", err, c.Status())
+				if err = os.WriteFile(filepath.Join(oldDir, program("myco-browser")), data, 0700); err != nil {
+					t.Fatal(err)
+				}
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				if err = c.EnsureRunning(ctx); err != nil {
+					t.Fatal(err)
+				}
+				before := c.Status()
+				if before.Version != oldVersion || !before.UpdateAvailable || !before.Running {
+					t.Fatal(before)
+				}
+				c.mu.Lock()
+				oldDone := c.done
+				c.mu.Unlock()
+				name := "myco-browser_" + runtime.GOOS + "_" + runtime.GOARCH + ".zip"
+				payload := archive(t, map[string]string{program("myco-browser"): string(data)})
+				sum := sha256.Sum256(payload)
+				digest := hex.EncodeToString(sum[:])
+				if !valid {
+					digest = strings.Repeat("0", 64)
+				}
+				requests := 0
+				c.HTTP = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+					requests++
+					if !strings.HasPrefix(r.URL.String(), ComponentRelease+"/") || !strings.Contains(r.URL.Path, "/browser-v0.3.0/") {
+						t.Errorf("wrong release: %s", r.URL)
+					}
+					if !c.Status().Running {
+						t.Error("stopped old child before verifying download")
+					}
+					body := payload
+					if strings.HasSuffix(r.URL.Path, "SHA256SUMS") {
+						body = []byte(digest + "  " + name + "\n")
+					}
+					return &http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewReader(body)), Request: r}, nil
+				})}
+				if err = c.install(ctx); !valid {
+					if err == nil || !c.Status().Running || c.Status().Version != oldVersion {
+						t.Fatalf("failed update lost old installation: %v %+v", err, c.Status())
+					}
+					select {
+					case <-oldDone:
+						t.Fatal("failed update stopped old process")
+					default:
+					}
+					return
+				} else if err != nil {
+					t.Fatal(err)
+				}
+				if requests != 2 {
+					t.Fatalf("downloads: %d", requests)
 				}
 				select {
 				case <-oldDone:
-					t.Fatal("failed update stopped old process")
 				default:
+					t.Fatal("upgrade did not stop old child")
 				}
-				return
-			} else if err != nil {
-				t.Fatal(err)
-			}
-			if requests != 2 {
-				t.Fatalf("downloads: %d", requests)
-			}
-			select {
-			case <-oldDone:
-			default:
-				t.Fatal("upgrade did not stop old child")
-			}
-			after := c.Status()
-			if after.Version != ComponentVersion || after.UpdateAvailable || after.Running {
-				t.Fatal(after)
-			}
-			if err = c.EnsureRunning(ctx); err != nil {
-				t.Fatal(err)
-			}
-			var actual struct {
-				Version string `json:"version"`
-			}
-			if err = c.Call(ctx, "upgrade-fixture", "GET", "/status", nil, &actual); err != nil || actual.Version != ComponentVersion {
-				t.Fatalf("new process: %+v %v", actual, err)
-			}
-		})
+				after := c.Status()
+				if after.Version != ComponentVersion || after.UpdateAvailable || after.Running {
+					t.Fatal(after)
+				}
+				if err = c.EnsureRunning(ctx); err != nil {
+					t.Fatal(err)
+				}
+				var actual struct {
+					Version string `json:"version"`
+				}
+				if err = c.Call(ctx, "upgrade-fixture", "GET", "/status", nil, &actual); err != nil || actual.Version != ComponentVersion {
+					t.Fatalf("new process: %+v %v", actual, err)
+				}
+			})
+		}
 	}
 }
 
 func TestCompatibleComponentVersions(t *testing.T) {
-	for version, want := range map[string]bool{"0.1.0": true, "0.1.1": true, "0.2.0": true, "0.1.2": false, "": false} {
+	for version, want := range map[string]bool{"0.1.0": true, "0.1.1": true, "0.2.0": true, "0.3.0": true, "0.1.2": false, "": false} {
 		if CompatibleComponentVersion(version) != want {
 			t.Errorf("version %q compatibility", version)
 		}

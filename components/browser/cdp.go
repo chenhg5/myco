@@ -107,7 +107,7 @@ func (s *session) installTarget(evt proto.TargetAttachedToTarget) (err error) {
 	if err = s.call(sid, "Runtime.addBinding", map[string]any{"name": "__mycoBrowserEvent", "executionContextName": recorderWorld}, nil); err != nil {
 		return err
 	}
-	if err = s.call(sid, "Page.addScriptToEvaluateOnNewDocument", map[string]any{"source": recorderSource, "worldName": recorderWorld, "runImmediately": true}, nil); err != nil {
+	if err = s.call(sid, "Page.addScriptToEvaluateOnNewDocument", map[string]any{"source": s.collectorScript(), "worldName": recorderWorld, "runImmediately": true}, nil); err != nil {
 		return err
 	}
 	// Iframe descendants must run immediately: pausing them can deadlock
@@ -276,6 +276,13 @@ func (s *session) event(msg *rod.Message) {
 			p = s.pages[s.current]
 		}
 		s.mu.Unlock()
+		var command struct {
+			Type string `json:"type"`
+		}
+		if json.Unmarshal([]byte(evt.Payload), &command) == nil && command.Type == "panel" {
+			go s.panelCommand(msg.SessionID, frame, evt.Payload)
+			return
+		}
 		if rec == nil {
 			return
 		}
@@ -425,15 +432,8 @@ func (s *session) event(msg *rod.Message) {
 }
 
 func (s *session) setContextRecording(sid proto.TargetSessionID, id proto.RuntimeExecutionContextID, _ bool) {
-	s.mu.Lock()
-	enabled := s.recorder != nil
-	s.mu.Unlock()
-	expression := recorderSource + ";if(window.__mycoRecorder)window.__mycoRecorder.enabled="
-	if enabled {
-		expression += "true"
-	} else {
-		expression += "false"
-	}
+	raw, _ := json.Marshal(s.recordingPanelState(""))
+	expression := s.collectorScript() + ";if(window.__mycoRecorder)window.__mycoRecorder.updatePanel(" + string(raw) + ",true)"
 	_ = s.call(sid, "Runtime.evaluate", map[string]any{"expression": expression, "contextId": id}, nil)
 }
 func (s *session) setRecording(enabled bool) {

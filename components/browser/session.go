@@ -28,6 +28,8 @@ type targetInstall struct {
 }
 
 type session struct {
+	panelMu             sync.Mutex
+	panelRevision       uint64
 	proxy               *forwardProxy
 	commandCtx          context.Context
 	commandToken        uint64
@@ -345,19 +347,36 @@ func (e *engine) session(owner, id string) (*session, error) {
 }
 func (s *session) claim(id string) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.controller != "" {
+		s.mu.Unlock()
 		return errors.New("busy")
 	}
 	s.controller = id
+	s.mu.Unlock()
+	// Remove controls before any native/debug action can hit their coordinates.
+	if !strings.HasPrefix(id, "rec_") {
+		if err := s.updatePanel(""); err != nil {
+			s.mu.Lock()
+			if s.controller == id {
+				s.controller = ""
+			}
+			s.mu.Unlock()
+			go func() { _ = s.updatePanel("") }()
+			return err
+		}
+	}
 	return nil
 }
 func (s *session) release(id string) {
 	s.mu.Lock()
-	if s.controller == id {
+	changed := s.controller == id
+	if changed {
 		s.controller = ""
 	}
 	s.mu.Unlock()
+	if changed && !strings.HasPrefix(id, "rec_") {
+		_ = s.updatePanel("")
+	}
 }
 func (s *session) page() (*rod.Page, error) {
 	s.mu.Lock()

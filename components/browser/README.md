@@ -35,9 +35,9 @@ go test -race -timeout 5m -run TestNativeChrome -args -browser-smoke
 iframe and workers, and trusted input capture in both iframe levels. These
 fixtures only use local pages and fresh dedicated profiles.
 
-The desktop pins component 0.2.0 and also accepts an already installed 0.1.1 or 0.1.0
+The desktop pins component 0.3.0 and also accepts an already installed 0.2.0, 0.1.1 or 0.1.0
 until the owner chooses **Update component**. A successful update verifies and
-installs 0.2.0 before stopping the old process; the next browser operation starts
+installs 0.3.0 before stopping the old process; the next browser operation starts
 the new process. A failed download or checksum check leaves the old process and
 profiles intact. Updating interrupts any browser sessions still using that
 process, so finish recording or playback before updating.
