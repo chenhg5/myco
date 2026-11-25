@@ -10071,3 +10071,6 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
   .pg-browser-settings dl { grid-template-columns: minmax(0, 1fr); row-gap: 3px; }
   .pg-browser-settings dd { margin-bottom: 8px; }
 }
+
+/* A page (an app) in a window of its own (PageWindow.tsx): the page fills it. */
+.pg-window { position: fixed; inset: 0; display: flex; flex-direction: column; background: hsl(var(--background)); }

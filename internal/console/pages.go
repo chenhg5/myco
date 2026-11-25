@@ -123,6 +123,28 @@ func (b *Backend) pageRoutes(m *http.ServeMux) {
 		}
 		writeJSON(w, http.StatusOK, st)
 	}))
+	// A page in a window of its own (the desktop App).
+	m.HandleFunc("POST /app/hubs/{id}/pages/{pid}/window", func(w http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Name string `json:"name"`
+		}
+		if r.ContentLength != 0 && !decode(w, r, &in) {
+			return
+		}
+		if b.OpenPageWindow == nil {
+			writeErr(w, &client.Error{Status: http.StatusNotImplemented, Code: "unsupported", Message: "pages open in windows of their own only in the desktop App"})
+			return
+		}
+		if _, err := b.find(r.PathValue("id")); err != nil {
+			writeErr(w, err)
+			return
+		}
+		if err := b.OpenPageWindow(r.PathValue("id"), r.PathValue("pid"), in.Name); err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	})
 	m.HandleFunc("POST /app/hubs/{id}/pages/{pid}/open", b.withHub(func(w http.ResponseWriter, r *http.Request, _ *client.Client) {
 		var in struct {
 			Version int  `json:"version"`

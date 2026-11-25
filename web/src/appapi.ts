@@ -371,7 +371,13 @@ export interface AppInfo {
   open_url?: boolean;
   /** the desktop app puts its window in full screen (PUT /app/window/fullscreen) */
   fullscreen?: boolean;
+  /** the desktop app opens a page in a window of its own (POST app/hubs/{id}/pages/{pid}/window) */
+  page_windows?: boolean;
+  /** the desktop app installs a page as an app (a launcher; macOS) */
+  install_apps?: boolean;
 }
+/** A page installed as an app on this computer. */
+export interface InstalledApp { hub: string; page: string; name: string; path: string; at: number }
 /** Everything the boot probe needs to decide the mode and lay out the shell. */
 export interface AppBootstrap { hubs: Hub[]; info: AppInfo }
 
@@ -1059,6 +1065,10 @@ export const appApi = {
   page: (hubId: string, id: string) => request<Page>("GET", `app/hubs/${enc(hubId)}/pages/${enc(id)}`),
   openPage: (hubId: string, id: string, version?: number, render = false) => request<PageOpen>("POST", `app/hubs/${enc(hubId)}/pages/${enc(id)}/open`, { ...(version ? { version } : {}), ...(render ? { render } : {}) }),
   openPageStorageRecovery: () => request<{ url: string }>("POST", "app/page-storage-recovery", {}),
+  installs: () => request<{ supported: boolean; installs: InstalledApp[] }>("GET", "app/installs"),
+  installPage: (hubId: string, id: string, name: string, icon: string) => request<InstalledApp>("POST", `app/hubs/${enc(hubId)}/pages/${enc(id)}/install`, { name, icon }),
+  uninstallPage: (hubId: string, id: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/pages/${enc(id)}/install`),
+  openPageWindow: (hubId: string, id: string, name: string) => request<{ ok: boolean }>("POST", `app/hubs/${enc(hubId)}/pages/${enc(id)}/window`, { name }),
   closePage: (hubId: string, id: string, lease: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/pages/${enc(id)}/open/${enc(lease)}`),
   deletePage: (hubId: string, id: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/pages/${enc(id)}`),
   /** who may change a page's records: everyone who sees it, or those who manage it (hubs from v0.22.2) */

@@ -200,6 +200,12 @@ type Backend struct {
 	// desktop app, for 专注模式). Nil elsewhere: a browser page uses the
 	// browser's own full screen.
 	Fullscreen func(on bool) error
+	// OpenPageWindow opens a page (an app) in a window of its own (the
+	// desktop App): POST /app/hubs/{id}/pages/{pid}/window. Nil elsewhere.
+	OpenPageWindow func(hub, page, title string) error
+
+	installsOnce sync.Once
+	installed    *installs
 	// Update, when set, enables /app/update (the app updating itself).
 	Update *Updater
 	// Cache, when set, keeps what the pages fetched across restarts
@@ -265,7 +271,7 @@ func (b *Backend) Handler() http.Handler {
 	b.pageRenderRoutes(m)
 	b.backupRoutes(m)
 	m.HandleFunc("GET /app/info", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{"version": b.Version, "shell": orStr(b.Shell, "browser"), "dictation": b.Dictate != nil || b.Listen != nil, "pick_image": b.PickImage != nil, "open_url": b.OpenURL != nil, "fullscreen": b.Fullscreen != nil})
+		writeJSON(w, http.StatusOK, map[string]any{"version": b.Version, "shell": orStr(b.Shell, "browser"), "dictation": b.Dictate != nil || b.Listen != nil, "pick_image": b.PickImage != nil, "open_url": b.OpenURL != nil, "fullscreen": b.Fullscreen != nil, "page_windows": b.OpenPageWindow != nil, "install_apps": b.launcherDir() != ""})
 	})
 	if b.Update != nil {
 		m.HandleFunc("GET /app/update", b.getUpdate)
@@ -285,6 +291,7 @@ func (b *Backend) Handler() http.Handler {
 		b.osRoutes(m)
 		b.browserRoutes(m)
 		b.grantRoutes(m)
+		b.installRoutes(m)
 		m.HandleFunc("GET /app/local/agents", b.getLocalAgents)
 		b.remoteRoutes(m)
 		m.HandleFunc("GET /app/local/claude-auth", b.getClaudeAuth)

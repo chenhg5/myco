@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { AppWindow, Check, Copy, ExternalLink, Link2, Lock, Monitor, MoreHorizontal, PanelRight, PanelRightClose, Pin as PinIcon, PinOff, Radio, RotateCw, Users, X } from "lucide-react";
+import { AppWindow, Check, Copy, Download, ExternalLink, Link2, Lock, Monitor, MoreHorizontal, PanelRight, PanelRightClose, Pin as PinIcon, PinOff, Radio, RotateCw, Trash2, Users, X } from "lucide-react";
+import { canInstall, installApp, installed, isInstalled, uninstallApp } from "@/app/install";
 import type { Page, PageOpen } from "@/api";
 import { ApiError, appApi, isOldHub, type OsAnswer, type OsConsent, type BrowserStatus, type BrowserApprovalReview, type BrowserProfileSettingsInput } from "@/appapi";
 import { copyText } from "@/app/copy";
@@ -176,6 +177,8 @@ export function PageCards({ body }: { body: string }) {
 export function PageCard({ hubId, id, url }: { hubId: string; id: string; url: string }) {
   const [page, setPage] = useState<Page | null>(null);
   const [gone, setGone] = useState(false);
+  const [inst, setInst] = useState(false);
+  useEffect(() => { if (canInstall()) void isInstalled(hubId, id).then(setInst); }, [hubId, id]);
   const pins = useContext(PagePinsContext);
   const menu = useContextMenu();
   useEffect(() => {
@@ -198,6 +201,10 @@ export function PageCard({ hubId, id, url }: { hubId: string; id: string; url: s
   };
   const items: MenuItem[] = [
     { label: L("打开", "Open"), icon: PanelRight, onSelect: () => openPage({ kind: "page", hubId, id, fragment: pageLinkOf(url)?.fragment }) },
+    ...(pageWindows && !page?.live ? [{ label: L("在单独窗口打开", "Open in its own window"), icon: AppWindow, onSelect: () => openPageWindow(hubId, id, page?.name || "") }] : []),
+    ...(canInstall() && page && !page.live ? [inst
+      ? { label: L("从「应用程序」里移除", "Remove from Applications"), icon: Trash2, onSelect: () => { uninstallApp(hubId, id).then(() => setInst(false), (e) => console.error(e)); } }
+      : { label: L("装成应用", "Install as app"), icon: Download, onSelect: () => { installApp(hubId, id, page.name, page.template?.id).then(() => { setInst(true); openPageWindow(hubId, id, page.name); }, (e) => console.error(e)); } }] : []),
     ...(pins ? [{ label: pinned ? L("取消置顶", "Unpin") : L("置顶到对话上方", "Pin above the chat"), icon: pinned ? PinOff : PinIcon, onSelect: () => pins.toggle({ id, url, name: page?.name || L("网页", "Page") }) }] : []),
     ...(page?.can_manage && !page.live ? [managersOnly
       ? { label: L("让能看到的人都能改", "Let everyone who sees it edit"), icon: Users, onSelect: () => setEditors("everyone") }
@@ -229,7 +236,7 @@ export function PageCard({ hubId, id, url }: { hubId: string; id: string; url: s
 /** The page panel: one, for the whole App; links and cards open it. */
 type Tab = { key: string; target: PageTarget; reload: number; meta: PageMeta };
 /** What a tab says about itself, for the panel's head and its tab. */
-type PageMeta = { title: string; about: string; icon: "page" | "live" | "local"; copyUrl?: string; localUrl?: string; loaded: boolean; recover?: string; exportPreferences?: boolean };
+export type PageMeta = { title: string; about: string; icon: "page" | "live" | "local"; copyUrl?: string; localUrl?: string; loaded: boolean; recover?: string; exportPreferences?: boolean };
 const keyOf = (t: PageTarget) => (t.kind === "page" ? `${t.hubId}/${t.id}` : t.url);
 const MAX_TABS = 8;
 
@@ -244,6 +251,9 @@ export function PageHost() {
   const [available, setAvailable] = useState<string[]>([]);
   const recoveryMenu = useContextMenu("pg-recovery-menu");
   const preferences = usePagePreferences();
+  const [inst, setInst] = useState<Set<string>>(new Set());
+  const refreshInstalled = () => { if (canInstall()) void installed().then(setInst); };
+  useEffect(refreshInstalled, [tabs.length]);
   useEffect(() => {
     const on = (e: Event) => {
       const t = (e as CustomEvent<PageTarget>).detail;
@@ -315,6 +325,18 @@ export function PageHost() {
   const m = cur.meta;
   const recoverable = !!m.recover && available.includes(m.recover);
   const items: MenuItem[] = [];
+  if (pageWindows && cur.target.kind === "page" && m.icon === "page") {
+    const t = cur.target;
+    items.push({ label: L("在单独窗口打开", "Open in its own window"), onSelect: () => { openPageWindow(t.hubId, t.id, m.title); close(cur.key); } });
+  }
+  if (canInstall() && cur.target.kind === "page" && m.icon === "page") {
+    const t = cur.target;
+    items.push(inst.has(`${t.hubId}/${t.id}`)
+      ? { label: L("从「应用程序」里移除", "Remove from Applications"), onSelect: () => { uninstallApp(t.hubId, t.id).then(refreshInstalled, (e) => console.error(e)); } }
+      : { label: L("装成应用", "Install as app"), onSelect: () => {
+        void pageOf(t.hubId, t.id).then((p) => installApp(t.hubId, t.id, p.name, p.template?.id)).then(() => { refreshInstalled(); openPageWindow(t.hubId, t.id, m.title); close(cur.key); }, (e) => console.error(e));
+      } });
+  }
   if (recoverable) items.push({ label: recoveryLabel(), onSelect: () => setRecovery(cur.key) });
   if (m.exportPreferences && cur.target.kind === "page") {
     const previous = storeOf(storeKey(cur.target.hubId, cur.target.id));
@@ -383,6 +405,19 @@ export function PageHost() {
       showing={open && recovery === cur.key} onClose={() => setRecovery("")} onAvailable={setAvailable} />
     </>
   );
+}
+
+// Whether this App opens pages in windows of their own (the desktop App).
+let pageWindows = false;
+export function setPageWindows(on: boolean) { pageWindows = on; }
+/** Opens a page in a window of its own (the desktop App). */
+export function openPageWindow(hubId: string, id: string, name: string) {
+  void appApi.openPageWindow(hubId, id, name).catch(() => openPage({ kind: "page", hubId, id }));
+}
+
+/** A page alone, filling a window of its own (PageWindow.tsx). */
+export function PageWindowView({ target, onMeta }: { target: PageTarget; onMeta: (m: PageMeta) => void }) {
+  return <PageView target={target} open active reload={0} onMeta={onMeta} />;
 }
 
 /** One page in the panel (a tab): its frame, its bridge, its notices. It
@@ -869,7 +904,7 @@ function PageView({ target, open, active, reload, onMeta }: {
             sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads allow-same-origin" referrerPolicy="no-referrer"
             allow="clipboard-write; fullscreen" onLoad={() => { setLoadedKey(frameKey); sendPreferences(); }} />}
           {loadedKey !== frameKey && (
-            <PageLoading key={frameKey} name={title} seed={page?.publisher || (target.kind === "local" ? target.url : target.hubId)} who={page && target.kind === "page" ? nameOf(target.hubId, page.publisher) : ""} />
+            <PageLoading key={`loading:${frameKey}`} name={title} seed={page?.publisher || (target.kind === "local" ? target.url : target.hubId)} who={page && target.kind === "page" ? nameOf(target.hubId, page.publisher) : ""} />
           )}
         </div>
       )}

@@ -51,7 +51,8 @@ import { setSystemDictation } from "@/app/Dictate";
 import { setSystemPicker } from "@/app/AvatarPicker";
 import { handleLinkClick, setOpenLinksViaApp } from "@/app/links";
 import { CommandPalette } from "@/app/CommandPalette";
-import { PageHost, PageToggle, setPageHubs, setPageMe, setPageNames } from "@/app/pages";
+import { PageHost, PageToggle, setPageHubs, setPageMe, setPageNames, setPageWindows } from "@/app/pages";
+import { setInstallSupport } from "@/app/install";
 import { PageRenderer } from "@/app/PageRenderer";
 import { VoiceChip } from "@/app/VoiceBar";
 import { modKey } from "@/app/ConversationDetail";
@@ -1078,6 +1079,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
   });
   const dragStyle = { "--wails-draggable": "drag" } as React.CSSProperties;
   const isMac = info?.shell === "mac";
+  setPageWindows(!!info?.page_windows);
+  setInstallSupport(!!info?.install_apps);
   // On the page's root too: what opens over the window (a picture, a file in
   // full screen) keeps clear of the traffic lights.
   useEffect(() => { document.documentElement.classList.toggle("shell-mac", isMac); }, [isMac]);

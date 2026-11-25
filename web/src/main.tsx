@@ -29,6 +29,10 @@ const root = ReactDOM.createRoot(document.getElementById("root")!);
 // loaded apart, so its styles (a transparent page) stay out of the app's.
 if (new URLSearchParams(window.location.search).has("island")) {
   void import("./island/Island").then(({ Island }) => root.render(<Island />));
+} else if (new URLSearchParams(window.location.search).has("pagewin")) {
+  // A page (an app) in a window of its own (the desktop App).
+  const [hubId, id] = (new URLSearchParams(window.location.search).get("pagewin") || "").split("/");
+  void import("./app/PageWindow").then(({ PageWindow }) => root.render(<PageWindow hubId={hubId || ""} id={id || ""} />));
 } else if (new URLSearchParams(window.location.search).has("quick")) {
   // The ⌘⇧Space panel (Mac app): its own small window too.
   void import("./quick/Quick").then(({ Quick }) => root.render(<Quick />));

@@ -117,6 +117,15 @@ func main() {
 		setFullscreen(on)
 		return nil
 	}
+	// A page in a window of its own (an app opened apart from the App).
+	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
+		b.OpenPageWindow = func(hub, page, title string) error {
+			if openPageWindow == nil {
+				return fmt.Errorf("not ready")
+			}
+			return openPageWindow(hub, page, title)
+		}
+	}
 	// The pages' language changed: the tray menu (when there is one) follows.
 	b.OnUILang = func(l string) {
 		if f := uiLangHook; f != nil {
@@ -156,6 +165,10 @@ var pickImage func() (string, error)
 
 // openURL opens a link in the default browser (set by runGUI).
 var openURL func(string) error
+
+// openPageWindow opens a page (an app) in a window of its own (set by runGUI
+// where windows can be made).
+var openPageWindow func(hub, page, title string) error
 
 // setFullscreen puts the window in full screen or takes it out (set by
 // runGUI where the window can).

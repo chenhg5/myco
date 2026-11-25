@@ -66,6 +66,7 @@ func runGUI(h http.Handler, _ func(string), setRelaunch func(func())) error {
 
 	// Links from the pages open in the default browser.
 	openURL = func(u string) error { return app.Browser.OpenURL(u) }
+	openPageWindow = newPageWindows(app).show
 
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:  "main",
