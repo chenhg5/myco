@@ -29,7 +29,7 @@ func TestNativeChromeRecordAndReplayTenTimes(t *testing.T) {
 			w.Write([]byte(`<label>Child<input id="child-value" data-testid="child-value"></label>`))
 			return
 		}
-		w.Write([]byte(`<!doctype html><title>Automation fixture</title><form id="form"><label>Title<input id="title" data-testid="title"></label><label>Body<textarea id="body" placeholder="Body"></textarea></label><div id="host"></div><iframe id="child" src="/child"></iframe><button id="finish" type="button">Finish editing</button><button id="submit" type="submit">Do not submit</button></form><script>window.submitted=0;document.querySelector('form').onsubmit=e=>{e.preventDefault();window.submitted++};document.querySelector('#host').attachShadow({mode:'open'}).innerHTML='<label>Shadow<input id="shadow" aria-label="Shadow"></label>';</script>`))
+		w.Write([]byte(`<!doctype html><title>Automation fixture</title><form id="form"><label>Title<input id="title" data-testid="title"></label><label>Body<textarea id="body" placeholder="Body"></textarea></label><div id="host"></div><iframe id="child" src="/child"></iframe><button id="finish" type="button">Finish editing</button><button id="submit" type="submit">Do not submit</button></form><div class="blank" style="width:48px;height:20px"></div><script>window.submitted=0;document.querySelector('form').onsubmit=e=>{e.preventDefault();window.submitted++};document.querySelector('#host').attachShadow({mode:'open'}).innerHTML='<label>Shadow<input id="shadow" aria-label="Shadow"></label>';</script>`))
 	}))
 	defer fixture.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
@@ -116,6 +116,15 @@ func TestNativeChromeRecordAndReplayTenTimes(t *testing.T) {
 	if err = child.Input("Frame text"); err != nil {
 		t.Fatal(err)
 	}
+	// An unnamed document element has no semantic locator or ID: CSS is
+	// its valid locator, and recording/replay must preserve that click too.
+	blank, err := page.Element("body > .blank")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = blank.Click("left", 1); err != nil {
+		t.Fatal(err)
+	}
 	finish, err := page.Element("#finish")
 	if err != nil {
 		t.Fatal(err)
@@ -147,18 +156,41 @@ func TestNativeChromeRecordAndReplayTenTimes(t *testing.T) {
 			break
 		}
 	}
-	if len(steps) < 5 {
+	if len(steps) < 6 {
 		t.Fatalf("not enough captured actions: %d", len(steps))
 	}
-	foundFrame, foundShadow := false, false
+	foundFrame, foundShadow, foundCSSOnly := false, false, false
+	formActions := map[string]string{"#title": "type", "#body": "type", "#shadow": "type", "#child-value": "type", "#finish": "click"}
+	foundForm := map[string]bool{}
 	for _, n := range steps {
 		if n.Target != nil {
 			foundFrame = foundFrame || len(n.Target.Frame) > 0
 			foundShadow = foundShadow || len(n.Target.Shadow) > 0
-			if len(n.Target.Locators) > 0 && len(n.Target.Locators) < 2 {
-				t.Fatal("missing fallback locators")
+			for _, l := range n.Target.Locators {
+				if l.Kind != "css" {
+					continue
+				}
+				// Named controls in this fixture have semantic/ID fallbacks.
+				// Unnamed document targets may legitimately have only CSS.
+				if want := formActions[l.Value]; want != "" && n.Type == want {
+					if len(n.Target.Locators) < 2 {
+						t.Fatalf("missing form fallback: node=%+v target=%+v", n, n.Target)
+					}
+					foundForm[l.Value] = true
+				}
+				if n.Type == "click" && l.Value == "html > body > div" && len(n.Target.Locators) == 1 && len(n.Target.Frame) == 0 && len(n.Target.Shadow) == 0 {
+					foundCSSOnly = true
+				}
 			}
 		}
+	}
+	for selector := range formActions {
+		if !foundForm[selector] {
+			t.Fatalf("required form action missing: %s; steps=%+v", selector, steps)
+		}
+	}
+	if !foundCSSOnly {
+		t.Fatalf("unnamed document click with a CSS-only target missing: %+v", steps)
 	}
 	if !foundFrame || !foundShadow {
 		t.Fatalf("capture paths missing: frame=%v shadow=%v", foundFrame, foundShadow)
