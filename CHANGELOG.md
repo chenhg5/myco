@@ -4,6 +4,18 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.22.15
+
+- After a separate grant (up to 30 minutes), an agent can operate the browser directly in a dedicated clean agent profile, optionally restricted to the domains you allow; the panel shows the agent is operating and you can stop it at any time.
+- Actions an agent performs in the browser are recorded into a draft script you can review, edit and run later; an interrupted session discards unfinished drafts, and private screenshots stay on your machine.
+- Live browser control needs browser component 0.5.0, and the App prompts you to update the component; older component versions remain usable for existing recording and playback.
+
+**中文**
+
+- 在你单独授权后（最长 30 分钟），agent 可以直接操作浏览器：默认使用 agent 专用的干净配置，可限定域名；面板会显示 agent 正在操作，并可随时停止。
+- agent 在浏览器里的操作会录成草稿脚本，你可以查看、修改后再运行；会话中断会丢弃未完成的草稿，截图等私有产物只保存在本机。
+- 实时浏览器控制需要浏览器组件 0.5.0，App 会提示更新组件；旧版组件仍可用于原有的录制与回放。
+
 ## v0.22.14
 
 - **The Windows App icon is the mushroom alone**: on Windows the icon now fills its square edge to edge — the mushroom with a thin cream rim, drawn as the tray icon is — instead of a small mushroom on a cream tile that vanished on light taskbars. The Mac icon keeps its tile.
