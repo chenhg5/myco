@@ -32,6 +32,7 @@ type recordChange struct {
 	removed string
 }
 type recording struct {
+	navActions   map[proto.TargetTargetID]time.Time
 	info         recordingInfo
 	changes      []recordChange
 	removed      map[string]bool
