@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // A plain member's nodes are private to them by default: other people and
@@ -17,12 +17,12 @@ import (
 func TestPrivateNodes(t *testing.T) {
 	c := ctx(t)
 	h := startHub(t, filepath.Join(t.TempDir(), "hub.db"), app.DefaultMessagePolicy())
-	glenn := h.admin()
-	if _, err := glenn.UpdateMember(c, "owner", api.MemberUpdateRequest{Name: "glenn"}); err != nil {
+	alice := h.admin()
+	if _, err := alice.UpdateMember(c, "owner", api.MemberUpdateRequest{Name: "alice"}); err != nil {
 		t.Fatal(err)
 	}
 	member := func(name string) *client.Client {
-		inv, err := glenn.InviteMember(c, api.InviteRequest{Name: name})
+		inv, err := alice.InviteMember(c, api.InviteRequest{Name: name})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -32,7 +32,7 @@ func TestPrivateNodes(t *testing.T) {
 		}
 		return h.client(p.Token)
 	}
-	laohu, matthew := member("laohu"), member("matthew")
+	bob, carol := member("bob"), member("carol")
 	enroll := func(owner *client.Client, name string) (*client.Client, *api.Agent) {
 		enr, err := owner.CreateEnrollment(c, api.CreateEnrollmentRequest{NamePrefix: name, MaxUses: 1}, false)
 		if err != nil {
@@ -44,9 +44,9 @@ func TestPrivateNodes(t *testing.T) {
 		}
 		return h.client(res.Token), &res.Agent
 	}
-	glennBot, gb := enroll(glenn, "glenn-bot")
-	laohuBot, lb := enroll(laohu, "laohu-claude")
-	laohuHelper, _ := enroll(laohu, "laohu-helper")
+	aliceBot, gb := enroll(alice, "alice-bot")
+	bobBot, lb := enroll(bob, "bob-claude")
+	bobHelper, _ := enroll(bob, "bob-helper")
 	if gb.Visibility != "team" || lb.Visibility != "private" {
 		t.Fatalf("defaults: owner's %q, member's %q", gb.Visibility, lb.Visibility)
 	}
@@ -63,85 +63,85 @@ func TestPrivateNodes(t *testing.T) {
 		}
 		return strings.Join(out, ",")
 	}
-	// Other people's agents do not find it, nor does matthew's app.
-	if strings.Contains(names(glennBot), "laohu-claude") {
-		t.Fatal("glenn's agent lists laohu's private node")
+	// Other people's agents do not find it, nor does carol's app.
+	if strings.Contains(names(aliceBot), "bob-claude") {
+		t.Fatal("alice's agent lists bob's private node")
 	}
-	if _, err := glennBot.GetAgent(c, "laohu-claude"); err == nil {
-		t.Fatal("glenn's agent looked up laohu's private node")
+	if _, err := aliceBot.GetAgent(c, "bob-claude"); err == nil {
+		t.Fatal("alice's agent looked up bob's private node")
 	}
-	ov, err := matthew.Overview(c, 10)
+	ov, err := carol.Overview(c, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, a := range ov.Agents {
-		if strings.HasPrefix(a.Agent.Name, "laohu-") {
-			t.Fatalf("matthew's app sees %s", a.Agent.Name)
+		if strings.HasPrefix(a.Agent.Name, "bob-") {
+			t.Fatalf("carol's app sees %s", a.Agent.Name)
 		}
 	}
-	// laohu's own agent and app do; the hub's owner sees it, marked private.
-	if !strings.Contains(names(laohuHelper), "laohu-claude") {
-		t.Fatal("laohu's own agent does not find his node")
+	// bob's own agent and app do; the hub's owner sees it, marked private.
+	if !strings.Contains(names(bobHelper), "bob-claude") {
+		t.Fatal("bob's own agent does not find his node")
 	}
-	if a, err := glenn.GetAgent(c, "laohu-claude"); err != nil || a.Visibility != "private" {
+	if a, err := alice.GetAgent(c, "bob-claude"); err != nil || a.Visibility != "private" {
 		t.Fatalf("owner's view: %v %+v", err, a)
 	}
 
-	// Sending: others are refused; laohu and his agents are not.
-	if _, err := glennBot.Send(c, api.SendRequest{To: "laohu-claude", Body: "hi"}, false); err == nil {
-		t.Fatal("glenn's agent gave laohu's private node a task")
+	// Sending: others are refused; bob and his agents are not.
+	if _, err := aliceBot.Send(c, api.SendRequest{To: "bob-claude", Body: "hi"}, false); err == nil {
+		t.Fatal("alice's agent gave bob's private node a task")
 	}
-	if _, err := glenn.ConsoleSend(c, api.SendRequest{To: "laohu-claude", Body: "hi"}); err == nil {
+	if _, err := alice.ConsoleSend(c, api.SendRequest{To: "bob-claude", Body: "hi"}); err == nil {
 		t.Fatal("the hub's owner gave a member's private node a task")
 	}
-	if _, err := laohu.ConsoleSend(c, api.SendRequest{To: "laohu-claude", Body: "from laohu"}); err != nil {
-		t.Fatalf("laohu from his app: %v", err)
+	if _, err := bob.ConsoleSend(c, api.SendRequest{To: "bob-claude", Body: "from bob"}); err != nil {
+		t.Fatalf("bob from his app: %v", err)
 	}
-	if _, err := laohuHelper.Send(c, api.SendRequest{To: "laohu-claude", Body: "from helper"}, false); err != nil {
-		t.Fatalf("laohu's own agent: %v", err)
+	if _, err := bobHelper.Send(c, api.SendRequest{To: "bob-claude", Body: "from helper"}, false); err != nil {
+		t.Fatalf("bob's own agent: %v", err)
 	}
 	// A broadcast to everyone leaves it out.
-	if bc, err := glennBot.Broadcast(c, api.BroadcastRequest{Selector: "harness=claude", Body: "status?", IncludeSelf: true}, false); err != nil {
+	if bc, err := aliceBot.Broadcast(c, api.BroadcastRequest{Selector: "harness=claude", Body: "status?", IncludeSelf: true}, false); err != nil {
 		t.Fatal(err)
 	} else {
 		for _, m := range bc.Messages {
-			if strings.HasPrefix(m.To, "laohu-") {
+			if strings.HasPrefix(m.To, "bob-") {
 				t.Fatalf("broadcast reached %s", m.To)
 			}
 		}
 		for _, sk := range bc.Skipped {
-			if strings.HasPrefix(sk.Agent, "laohu-") {
+			if strings.HasPrefix(sk.Agent, "bob-") {
 				t.Fatalf("broadcast names the private node as skipped: %+v", sk)
 			}
 		}
 	}
 	// It can still ask others, and their replies get back.
-	q, err := laohuBot.Send(c, api.SendRequest{To: "glenn-bot", Body: "which API?"}, false)
+	q, err := bobBot.Send(c, api.SendRequest{To: "alice-bot", Body: "which API?"}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	glennBot.Pull(c, 10, 0)
-	if _, err := glennBot.Reply(c, q.Message.ID, "the orders API", false); err != nil {
+	aliceBot.Pull(c, 10, 0)
+	if _, err := aliceBot.Reply(c, q.Message.ID, "the orders API", false); err != nil {
 		t.Fatalf("reply to a private node: %v", err)
 	}
 
 	// Only people change visibility: not the agent, not another member.
-	if _, err := laohuBot.SetVisibility(c, "laohu-claude", "team"); err == nil {
+	if _, err := bobBot.SetVisibility(c, "bob-claude", "team"); err == nil {
 		t.Fatal("an agent changed its own visibility")
 	}
-	if _, err := matthew.SetVisibility(c, "laohu-claude", "team"); err == nil {
-		t.Fatal("another member changed laohu's node")
+	if _, err := carol.SetVisibility(c, "bob-claude", "team"); err == nil {
+		t.Fatal("another member changed bob's node")
 	}
-	if a, err := laohu.SetVisibility(c, "laohu-claude", "team"); err != nil || a.Visibility != "team" {
-		t.Fatalf("laohu shares his node: %v %+v", err, a)
+	if a, err := bob.SetVisibility(c, "bob-claude", "team"); err != nil || a.Visibility != "team" {
+		t.Fatalf("bob shares his node: %v %+v", err, a)
 	}
-	if !strings.Contains(names(glennBot), "laohu-claude") {
+	if !strings.Contains(names(aliceBot), "bob-claude") {
 		t.Fatal("shared node still hidden")
 	}
-	if _, err := glennBot.Send(c, api.SendRequest{To: "laohu-claude", Body: "now ok"}, false); err != nil {
+	if _, err := aliceBot.Send(c, api.SendRequest{To: "bob-claude", Body: "now ok"}, false); err != nil {
 		t.Fatalf("after sharing: %v", err)
 	}
-	if _, err := laohu.SetVisibility(c, "laohu-claude", "secret"); err == nil {
+	if _, err := bob.SetVisibility(c, "bob-claude", "secret"); err == nil {
 		t.Fatal("accepted an unknown visibility")
 	}
 }

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
+	"github.com/myco-ai/myco/internal/api"
 )
 
 var (
@@ -16,16 +16,16 @@ var (
 
 func sample() []api.Message {
 	return []api.Message{
-		{ID: "m1", ThreadID: "m1", Project: "web", From: "@console:glenn", To: "pm", Type: "task", Status: "done",
+		{ID: "m1", ThreadID: "m1", Project: "web", From: "@console:alice", To: "pm", Type: "task", Status: "done",
 			Body: "把 README 的截图换成新版的。\n", CreatedAt: t0,
 			Attachments: []api.Attachment{{FileID: "f1", Name: "a.png", Size: 12 * 1024, ContentType: "image/png"}, {FileID: "f2", Name: "b.log", Size: 300}}},
-		{ID: "m2", ThreadID: "m1", From: "pm", To: "@console:glenn", Type: "reply", ReplyTo: "m1", Status: "done",
+		{ID: "m2", ThreadID: "m1", From: "pm", To: "@console:alice", Type: "reply", ReplyTo: "m1", Status: "done",
 			Body: "换好了。", CreatedAt: t0.Add(5 * time.Minute)},
-		{ID: "m3", ThreadID: "m1", From: "@console:glenn", To: "pm", Type: "task", Status: "failed",
+		{ID: "m3", ThreadID: "m1", From: "@console:alice", To: "pm", Type: "task", Status: "failed",
 			Error: "delivery attempts exhausted: recipient pulled but never acknowledged", Body: "再跑一遍测试", CreatedAt: t0.Add(6 * time.Minute)},
-		{ID: "m4", ThreadID: "m1", From: "@console:glenn", To: "pm", Type: "task", Status: "failed",
+		{ID: "m4", ThreadID: "m1", From: "@console:alice", To: "pm", Type: "task", Status: "failed",
 			Error: "stopped by the sender", Body: "算了", CreatedAt: t0.Add(7 * time.Minute)},
-		{ID: "m5", ThreadID: "m1", From: "pm", To: "@console:glenn", Type: "note", Status: "done",
+		{ID: "m5", ThreadID: "m1", From: "pm", To: "@console:alice", Type: "note", Status: "done",
 			Unreadable: "no key for this device", Body: "e2e:envelope", CreatedAt: t0.Add(8 * time.Minute)},
 	}
 }
@@ -55,7 +55,7 @@ func TestMarkdown(t *testing.T) {
 	want := "# 对话导出\n\n" +
 		"导出时间：2026-11-16 11:03 · 共 5 条消息\n" +
 		"\n---\n\n" +
-		"**@console:glenn** → pm · 11-16 10:03 · 任务\n\n" +
+		"**@console:alice** → pm · 11-16 10:03 · 任务\n\n" +
 		"把 README 的截图换成新版的。\n" +
 		"\n附件：a.png（12 KB）、b.log（300 B）\n" +
 		"\n<details><summary>过程：2 步</summary>\n\n" +
@@ -63,16 +63,16 @@ func TestMarkdown(t *testing.T) {
 		"- Read `README.md`\n" +
 		"\n</details>\n" +
 		"\n---\n\n" +
-		"**pm** → @console:glenn · 11-16 10:08 · 回复\n\n" +
+		"**pm** → @console:alice · 11-16 10:08 · 回复\n\n" +
 		"换好了。\n" +
 		"\n---\n\n" +
-		"**@console:glenn** → pm · 11-16 10:09 · 任务 · 失败：delivery attempts exhausted: recipient pulled but never acknowledged\n\n" +
+		"**@console:alice** → pm · 11-16 10:09 · 任务 · 失败：delivery attempts exhausted: recipient pulled but never acknowledged\n\n" +
 		"再跑一遍测试\n" +
 		"\n---\n\n" +
-		"**@console:glenn** → pm · 11-16 10:10 · 任务 · 已停止\n\n" +
+		"**@console:alice** → pm · 11-16 10:10 · 任务 · 已停止\n\n" +
 		"算了\n" +
 		"\n---\n\n" +
-		"**pm** → @console:glenn · 11-16 10:11 · 留言\n\n" +
+		"**pm** → @console:alice · 11-16 10:11 · 留言\n\n" +
 		"（无法解密：no key for this device）\n"
 	if got != want {
 		t.Fatalf("markdown:\n%s\n--- want ---\n%s", got, want)
@@ -92,7 +92,7 @@ func TestJSONL(t *testing.T) {
 	if len(lines) != 5 {
 		t.Fatalf("%d lines:\n%s", len(lines), out)
 	}
-	want := `{"id":"m1","thread_id":"m1","project":"web","from":"@console:glenn","to":"pm","type":"task","status":"done","body":"把 README 的截图换成新版的。\n","attachments":[{"name":"a.png","size":12288,"content_type":"image/png"},{"name":"b.log","size":300}],"created_at":"2026-11-16T02:03:00Z","steps":[{"tool":"Bash","input":"make test"}]}`
+	want := `{"id":"m1","thread_id":"m1","project":"web","from":"@console:alice","to":"pm","type":"task","status":"done","body":"把 README 的截图换成新版的。\n","attachments":[{"name":"a.png","size":12288,"content_type":"image/png"},{"name":"b.log","size":300}],"created_at":"2026-11-16T02:03:00Z","steps":[{"tool":"Bash","input":"make test"}]}`
 	if lines[0] != want {
 		t.Fatalf("line 1:\n%s\nwant\n%s", lines[0], want)
 	}

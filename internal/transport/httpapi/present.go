@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 func skillsDTO(in []domain.Skill) []api.Skill {
@@ -34,7 +34,7 @@ func skillsFromAPI(in []api.Skill) []domain.Skill {
 
 func (s *Server) agentDTO(a *domain.Agent) api.Agent {
 	out := api.Agent{
-		ID: a.ID, Name: string(a.Name), DisplayName: a.DisplayName, Avatar: a.Avatar, Description: a.Description,
+		Updating: a.Runtime.Updating(s.agents.Now()), ID: a.ID, Name: string(a.Name), DisplayName: a.DisplayName, Avatar: a.Avatar, Description: a.Description,
 		Capabilities: nonNil(a.Capabilities),
 		Skills:       skillsDTO(a.Skills),
 		Visibility:   string(domain.VisibilityTeam),
@@ -44,9 +44,9 @@ func (s *Server) agentDTO(a *domain.Agent) api.Agent {
 		Delivery: api.Delivery{Mode: a.Delivery.Mode, URL: redactURL(a.Delivery.URL),
 			HasSecret: a.Delivery.Secret != "", Params: a.Delivery.Params},
 		AllowFrom:  make([]string, 0, len(a.AllowFrom)),
-		EnrolledBy: a.EnrolledBy,
-		Online:     a.IsOnline(s.agents.Now(), s.agents.OnlineWindow()),
-		CreatedAt:  a.CreatedAt, LastSeenAt: timePtr(a.LastSeenAt),
+		EnrolledBy: a.EnrolledBy, InvitedBy: a.InvitedBy,
+		Online:    a.IsOnline(s.agents.Now(), s.agents.OnlineWindow()),
+		CreatedAt: a.CreatedAt, LastSeenAt: timePtr(a.LastSeenAt),
 		StatusText: a.StatusText, StatusAt: timePtr(a.StatusAt),
 	}
 	for _, n := range a.AllowFrom {
@@ -57,7 +57,13 @@ func (s *Server) agentDTO(a *domain.Agent) api.Agent {
 	if rt := a.Runtime; rt != (domain.Runtime{}) {
 		out.Runtime = &api.Runtime{CLI: rt.CLI, CLIVersion: rt.CLIVersion, Model: rt.Model, ModelSource: rt.ModelSource, Access: rt.Access,
 			Provider: rt.Provider, ProviderSource: rt.ProviderSource, ProviderHost: rt.ProviderHost, Effort: rt.Effort, EffortSource: rt.EffortSource, MaxAccess: rt.MaxAccess, Quota: quotaDTO(rt.Quota),
-			Features: rt.FeatureList(), Away: rt.Away, Env: rt.Env, Models: modelsDTO(rt.ModelList())}
+			RunnerInstance: rt.RunnerInstance, RestartingUntil: rt.RestartingUntil, Features: rt.FeatureList(), Away: rt.Away, Env: rt.Env, Models: modelsDTO(rt.ModelList())}
+		if rt.RunnerSlots != "" {
+			var slots api.RunnerSlots
+			if json.Unmarshal([]byte(rt.RunnerSlots), &slots) == nil {
+				out.Runtime.RunnerSlots = &slots
+			}
+		}
 		if rt.Tools != "" {
 			var tools struct {
 				MCP      []api.MCPServer  `json:"mcp"`
@@ -88,7 +94,7 @@ func (s *Server) agentDTO(a *domain.Agent) api.Agent {
 
 func (s *Server) machineDTO(v *app.MachineView) api.Machine {
 	out := api.Machine{ID: v.ID, Name: v.Name, Hostname: v.Hostname, OS: v.OS, Arch: v.Arch, MycoVersion: v.MycoVersion,
-		Online: v.Online, LastSeenAt: timePtr(v.LastSeenAt), CanSpawn: v.SpawnNode != "", Legacy: v.Legacy, Agents: []string{},
+		Updating: v.Updating, Online: v.Online, LastSeenAt: timePtr(v.LastSeenAt), CanSpawn: v.SpawnNode != "", Legacy: v.Legacy, Agents: []string{},
 		OwnerID: v.Owner, Owner: s.ownerName(v.Owner)}
 	for _, a := range v.Agents {
 		out.Agents = append(out.Agents, string(a))
@@ -150,6 +156,9 @@ func messageDTO(m *domain.Message) api.Message {
 		Error: m.Error, IdempotencyKey: m.IdempotencyKey, BroadcastID: m.BroadcastID, Project: m.Project, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
 		FromOwner: m.FromOwner, E2E: domain.IsSealed(m.Body),
 		Ask: m.Ask, Asking: m.Asking, Answers: m.Answers, Suggest: m.Suggest, Automation: m.Automation, Workflow: m.Workflow, GrantedBy: m.GrantedBy,
+	}
+	if m.Status == domain.StatusHeld && m.HoldUntil != "" && m.HoldUntil != domain.ManualHold {
+		out.HeldFor = "reply"
 	}
 	if m.Status == domain.StatusDelivered {
 		out.LeaseUntil = timePtr(m.LeaseUntil)

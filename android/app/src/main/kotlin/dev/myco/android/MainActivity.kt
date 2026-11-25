@@ -17,10 +17,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
+import androidx.core.view.WindowCompat
 import dev.myco.model.*
 import dev.myco.network.HubClient
 import dev.myco.storage.DeviceStore
 import dev.myco.ui.*
+import dev.myco.workspace.SettingsScreen
 import dev.myco.workspace.WorkspaceScreen
 import java.io.File
 import kotlinx.coroutines.*
@@ -34,9 +36,67 @@ class MainActivity : ComponentActivity() {
         incoming.value = intent.dataString
         val store = DeviceStore(applicationContext)
         setContent {
-            MycoTheme {
-                MycoApp(store, incoming.value, { incoming.value = null }, ::shareText, ::openFile)
+            val scope = rememberCoroutineScope()
+            var preferences by remember { mutableStateOf<AppPreferences?>(null) }
+            var preferenceFailure by remember { mutableStateOf(false) }
+            LaunchedEffect(store) {
+                try {
+                    store.preferences.collect { preferences = it }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    preferences = AppPreferences()
+                    preferenceFailure = true
+                }
             }
+            val chosen = preferences
+            if (chosen != null)
+                MycoTheme(preferences = chosen) {
+                    val dark = appAppearance() == "dark"
+                    SideEffect {
+                        WindowCompat.getInsetsController(window, window.decorView).apply {
+                            isAppearanceLightStatusBars = !dark
+                            isAppearanceLightNavigationBars = !dark
+                        }
+                    }
+                    MycoApp(
+                        store,
+                        incoming.value,
+                        { incoming.value = null },
+                        ::shareText,
+                        ::openFile,
+                        chosen,
+                        { change ->
+                            scope.launch {
+                                try {
+                                    store.updatePreferences(change)
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (_: Exception) {
+                                    preferenceFailure = true
+                                }
+                            }
+                        },
+                    )
+                    if (preferenceFailure)
+                        AlertDialog(
+                            onDismissRequest = { preferenceFailure = false },
+                            title = { Text(words("设置没有保存", "Settings were not saved")) },
+                            text = {
+                                Text(
+                                    words(
+                                        "无法读写此设备的设置，请重试。",
+                                        "The settings on this device could not be read or saved. Try again.",
+                                    )
+                                )
+                            },
+                            confirmButton = {
+                                TextButton(onClick = { preferenceFailure = false }) {
+                                    Text(words("关闭", "Close"))
+                                }
+                            },
+                        )
+                }
         }
     }
 
@@ -101,6 +161,8 @@ private fun MycoApp(
     consumed: () -> Unit,
     share: (String) -> Unit,
     file: suspend (String, String, ByteArray) -> Unit,
+    preferences: AppPreferences,
+    changePreferences: ((AppPreferences) -> AppPreferences) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     var all by remember { mutableStateOf<List<Workspace>>(emptyList()) }
@@ -171,10 +233,20 @@ private fun MycoApp(
             settings ->
                 SettingsScreen(
                     current,
+                    preferences,
+                    changePreferences,
                     back = { settings = false },
                     join = {
                         settings = false
                         join = true
+                    },
+                    rename = { name ->
+                        val before = current ?: error("No workspace")
+                        val renamed =
+                            if (before.id == "demo") before.copy(name = name)
+                            else store.rename(before.id, name)
+                        if (before.id != "demo") all = store.workspaces()
+                        current = renamed
                     },
                     leave = {
                         scope.launch {
@@ -216,6 +288,7 @@ private fun MycoApp(
             else ->
                 Welcome(
                     join = { join = true },
+                    settings = { settings = true },
                     demo = {
                         current = Workspace("demo", "Demo", "https://demo.invalid")
                         hub = demo
@@ -236,32 +309,41 @@ private fun MycoApp(
 }
 
 @Composable
-private fun Welcome(join: () -> Unit, demo: () -> Unit) {
-    Column(
-        Modifier.fillMaxSize().safeDrawingPadding().padding(32.dp),
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Mushroom("myco", Modifier.size(72.dp))
-        Spacer(Modifier.height(32.dp))
-        Text(
-            words("你的 AI 伙伴，\n随时在身边", "Your AI colleagues,\nwherever you are"),
-            style = MaterialTheme.typography.headlineLarge,
-        )
-        Spacer(Modifier.height(16.dp))
-        Text(
-            words(
-                "和电脑上的智能体交流，跟进项目，把事情做成。",
-                "Talk with your agents, follow your projects, and keep things moving.",
-            ),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(40.dp))
-        Button(onClick = join, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-            Text(words("加入工作区", "Join a workspace"))
-        }
-        TextButton(onClick = demo, modifier = Modifier.fillMaxWidth()) {
-            Text(words("先看看", "Look around first"))
+private fun Welcome(join: () -> Unit, demo: () -> Unit, settings: () -> Unit) {
+    BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
+        val viewport = maxHeight
+        Column(
+            Modifier.fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .heightIn(min = viewport)
+                .padding(32.dp),
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Mushroom("myco", Modifier.size(72.dp))
+            Spacer(Modifier.height(32.dp))
+            Text(
+                words("你的 AI 伙伴，\n随时在身边", "Your AI colleagues,\nwherever you are"),
+                style = MaterialTheme.typography.headlineLarge,
+            )
+            Spacer(Modifier.height(16.dp))
+            Text(
+                words(
+                    "和电脑上的智能体交流，跟进项目，把事情做成。",
+                    "Talk with your agents, follow your projects, and keep things moving.",
+                ),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(40.dp))
+            Button(onClick = join, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+                Text(words("加入工作区", "Join a workspace"))
+            }
+            TextButton(onClick = demo, modifier = Modifier.fillMaxWidth()) {
+                Text(words("先看看", "Look around first"))
+            }
+            TextButton(onClick = settings, modifier = Modifier.fillMaxWidth()) {
+                Text(words("外观与语言", "Appearance and language"))
+            }
         }
     }
 }
@@ -323,63 +405,4 @@ private fun JoinScreen(initial: String, back: () -> Unit, joined: (Credentials) 
             }
         }
     }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SettingsScreen(
-    workspace: Workspace?,
-    back: () -> Unit,
-    join: () -> Unit,
-    leave: () -> Unit,
-) {
-    var confirm by remember { mutableStateOf(false) }
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(words("设置", "Settings")) },
-                navigationIcon = { TextButton(onClick = back) { Text(words("返回", "Back")) } },
-            )
-        }
-    ) { padding ->
-        Column(
-            Modifier.padding(padding).padding(24.dp).verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Text(workspace?.name.orEmpty(), style = MaterialTheme.typography.titleLarge)
-            Text(workspace?.url.orEmpty(), style = MaterialTheme.typography.bodySmall)
-            OutlinedButton(onClick = join) { Text(words("加入另一个工作区", "Join another workspace")) }
-            OutlinedButton(onClick = { confirm = true }) {
-                Text(words("离开此工作区", "Leave this workspace"))
-            }
-            Spacer(Modifier.height(20.dp))
-            Text("myco for Android · 0.1.0", style = MaterialTheme.typography.bodySmall)
-        }
-    }
-    if (confirm)
-        AlertDialog(
-            onDismissRequest = { confirm = false },
-            title = { Text(words("离开工作区？", "Leave workspace?")) },
-            text = {
-                Text(
-                    words(
-                        "此设备上保存的登录和缓存将被移除。",
-                        "This device’s sign-in and saved conversations will be removed.",
-                    )
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        confirm = false
-                        leave()
-                    }
-                ) {
-                    Text(words("离开", "Leave"))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirm = false }) { Text(words("取消", "Cancel")) }
-            },
-        )
 }

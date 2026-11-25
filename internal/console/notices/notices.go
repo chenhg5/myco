@@ -28,9 +28,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // Feed is a workspace's notice feed (a *client.Client).

@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // usageSchema is an additive, idempotent migration for existing workspaces.

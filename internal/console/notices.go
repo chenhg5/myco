@@ -7,9 +7,9 @@ import (
 	"slices"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/console/notices"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/console/notices"
 )
 
 // Notices on this computer (package notices): the desktop app makes a

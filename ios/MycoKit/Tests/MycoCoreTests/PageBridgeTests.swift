@@ -18,7 +18,7 @@ struct PageBridgeTests {
         let page = try #require(try await hub.pages().first { $0.id == id })
         let doors = Doors()
         let bridge = PageBridge(
-            hub: hub, page: page, me: FakeHub.me, workspace: "ws_test", names: { $0 == FakeHub.me ? "Glenn" : $0 },
+            hub: hub, page: page, me: FakeHub.me, workspace: "ws_test", names: { $0 == FakeHub.me ? "Alice" : $0 },
             doors: PageBridge.Doors(
                 askToSend: { text, to in
                     doors.asked.append((text, to))
@@ -54,7 +54,7 @@ struct PageBridgeTests {
         let hub = FakeHub()
         let (one, _) = try await bridge(hub)
         let ready = object(try await one.answer("ready", [:]))
-        #expect((ready["me"] as? [String: Any])?["name"] as? String == "Glenn")
+        #expect((ready["me"] as? [String: Any])?["name"] as? String == "Alice")
         #expect(ready["version"] as? Int == 0)
         let wrote = object(try await one.answer("update", ["state": ["n": 1], "version": 0]))
         #expect(wrote["ok"] as? Bool == true)
@@ -116,6 +116,44 @@ struct PageBridgeTests {
         await #expect(throws: PageBridge.Refusal.self) { _ = try await one.answer("send", ["text": "太多了"]) }
         // Empty text is not sent.
         await #expect(throws: PageBridge.Refusal.self) { _ = try await one.answer("send", ["text": "  "]) }
+    }
+
+    @Test func anAppMayNotUseWhatItDoesNotDeclare() async throws {
+        let hub = FakeHub()
+        func bridge(_ template: PageTemplate) -> (PageBridge, Doors) {
+            let doors = Doors()
+            let page = Page(id: "pg_strict", name: "严格", publisher: "studio-claude-55d0", template: template)
+            let one = PageBridge(
+                hub: hub, page: page, me: FakeHub.me, workspace: "ws_test", names: { $0 },
+                doors: PageBridge.Doors(
+                    askToSend: { _, _ in true }, save: { name, data, _ in doors.saved.append((name, data)) },
+                    send: { to, body, project in try await hub.send(SendRequest(to: to, body: body, project: project)).id }),
+                storage: UserDefaults(suiteName: "page-bridge-\(UUID().uuidString)")!)
+            return (one, doors)
+        }
+        let file = ["name": "a.txt", "base64": Data("a".utf8).base64EncodedString(), "type": "text/plain"]
+        // From a hub that says what it lists is all it declares: refused.
+        let (strict, saved) = bridge(PageTemplate(id: "tp_a", slug: "alice/a", permissions: ["send"], declares: true))
+        do {
+            _ = try await strict.answer("download", file)
+            Issue.record("an undeclared download was let through")
+        } catch let refusal as PageBridge.Refusal {
+            #expect(refusal.code == "permission_denied")
+        }
+        #expect(saved.saved.isEmpty)
+        _ = try await strict.answer("send", ["text": "看一下"])
+        // An older hub does not say, nor a hub for a page of myco's own apps
+        // kept from before declarations: as before.
+        for template in [
+            PageTemplate(id: "tp_a", slug: "alice/a", permissions: ["send"]),
+            PageTemplate(id: "tp_myco_doc", slug: "myco/doc", latest: "2.2.0", official: true),
+        ] {
+            let (one, doors) = bridge(template)
+            _ = try await one.answer("download", file)
+            #expect(doors.saved.count == 1)
+        }
+        let (held, _) = bridge(PageTemplate(id: "tp_myco_disk", slug: "myco/disk", os: ["files"], declares: true, official: true))
+        await #expect(throws: PageBridge.Refusal.self) { _ = try await held.answer("download", file) }
     }
 
     @Test func itKeepsALittleOfItsOwnAndHandsFilesOver() async throws {

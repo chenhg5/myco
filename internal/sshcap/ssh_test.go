@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chenhg5/myco/internal/testsshd"
+	"github.com/myco-ai/myco/internal/testsshd"
 )
 
 func isolated(t *testing.T) (*Manager, Create) {

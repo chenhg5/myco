@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // ProjectRepo implements domain.ProjectRepository.
@@ -17,7 +17,7 @@ func NewProjectRepo(db *sql.DB) *ProjectRepo { return &ProjectRepo{db: db} }
 
 var _ domain.ProjectRepository = (*ProjectRepo)(nil)
 
-const projectCols = `id, name, title, goal, brief, links, visibility, owner, archived, created_at, updated_at, machines, member_groups`
+const projectCols = `id, name, title, goal, brief, links, visibility, owner, archived, created_at, updated_at, machines, member_groups, coordinator_invites, coordinator_automations, files_max, bytes_max`
 
 func machinesJSON(m []string) string {
 	if len(m) == 0 {
@@ -36,19 +36,19 @@ func linksJSON(l []domain.ProjectLink) string {
 }
 
 func (r *ProjectRepo) Create(ctx context.Context, p *domain.Project) error {
-	_, err := r.db.ExecContext(ctx, `INSERT INTO projects (`+projectCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		p.ID, p.Name, p.Title, p.Goal, p.Brief, linksJSON(p.Links), string(p.Visibility), p.Owner, p.Archived, ms(p.CreatedAt), ms(p.UpdatedAt), machinesJSON(p.Machines), machinesJSON(p.Groups))
+	_, err := r.db.ExecContext(ctx, `INSERT INTO projects (`+projectCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		p.ID, p.Name, p.Title, p.Goal, p.Brief, linksJSON(p.Links), string(p.Visibility), p.Owner, p.Archived, ms(p.CreatedAt), ms(p.UpdatedAt), machinesJSON(p.Machines), machinesJSON(p.Groups), p.CoordinatorInvites, p.CoordinatorAutomations, p.FilesMax, p.BytesMax)
 	if isUniqueViolation(err) {
 		return domain.Errf(domain.CodeConflict, "a project named %s already exists", p.Name)
 	}
 	return internal(err)
 }
 
-// Save stores the project's fields except its groups, which SaveGroups
-// changes (with its members' groups, in one transaction).
+// Save stores ordinary project fields. SaveGroups changes groups (with
+// member groups in one transaction); SaveStorage independently changes quotas.
 func (r *ProjectRepo) Save(ctx context.Context, p *domain.Project) error {
-	res, err := r.db.ExecContext(ctx, `UPDATE projects SET title=?, goal=?, brief=?, links=?, visibility=?, owner=?, archived=?, updated_at=?, machines=? WHERE id=?`,
-		p.Title, p.Goal, p.Brief, linksJSON(p.Links), string(p.Visibility), p.Owner, p.Archived, ms(p.UpdatedAt), machinesJSON(p.Machines), p.ID)
+	res, err := r.db.ExecContext(ctx, `UPDATE projects SET title=?, goal=?, brief=?, links=?, visibility=?, owner=?, archived=?, updated_at=?, machines=?, coordinator_invites=?, coordinator_automations=? WHERE id=?`,
+		p.Title, p.Goal, p.Brief, linksJSON(p.Links), string(p.Visibility), p.Owner, p.Archived, ms(p.UpdatedAt), machinesJSON(p.Machines), p.CoordinatorInvites, p.CoordinatorAutomations, p.ID)
 	if err != nil {
 		return internal(err)
 	}
@@ -64,7 +64,7 @@ func scanProject(s scanner) (*domain.Project, error) {
 		links, vis, mach, groups string
 		created, updated         int64
 	)
-	if err := s.Scan(&p.ID, &p.Name, &p.Title, &p.Goal, &p.Brief, &links, &vis, &p.Owner, &p.Archived, &created, &updated, &mach, &groups); err != nil {
+	if err := s.Scan(&p.ID, &p.Name, &p.Title, &p.Goal, &p.Brief, &links, &vis, &p.Owner, &p.Archived, &created, &updated, &mach, &groups, &p.CoordinatorInvites, &p.CoordinatorAutomations, &p.FilesMax, &p.BytesMax); err != nil {
 		return nil, err
 	}
 	_ = json.Unmarshal([]byte(links), &p.Links)
@@ -248,4 +248,16 @@ func (r *ProjectRepo) Docs(ctx context.Context, project string) ([]*domain.Proje
 		out = append(out, &d)
 	}
 	return out, internal(rows.Err())
+}
+
+// SaveStorage changes only quota overrides, so concurrent ordinary edits cannot reset them.
+func (r *ProjectRepo) SaveStorage(ctx context.Context, p *domain.Project) error {
+	res, err := r.db.ExecContext(ctx, `UPDATE projects SET files_max=?,bytes_max=?,updated_at=? WHERE id=?`, p.FilesMax, p.BytesMax, ms(p.UpdatedAt), p.ID)
+	if err != nil {
+		return internal(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return domain.Errf(domain.CodeNotFound, "project %s not found", p.Name)
+	}
+	return nil
 }

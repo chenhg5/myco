@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/harness"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/harness"
 )
 
 type projectHub struct {
@@ -83,7 +83,7 @@ func TestProjectContextInPrompt(t *testing.T) {
 // changes, the next message of the session gets the project again.
 func TestProjectMemoryInPrompt(t *testing.T) {
 	long := "\n" + strings.Repeat("背景资料。", 1500) + "\nThe staging port is 7443."
-	hub := &projectHub{brief: long, memory: &api.ProjectDoc{Name: "memory", Body: "# Project memory\n- glenn wants reports in Chinese (lead, 2026-11-21)\n"},
+	hub := &projectHub{brief: long, memory: &api.ProjectDoc{Name: "memory", Body: "# Project memory\n- alice wants reports in Chinese (lead, 2026-11-21)\n"},
 		fakeHub: newFakeHub(
 			api.Message{ID: "t1", Type: "task", From: "lead", ThreadID: "th", Project: "myco", Body: "one"},
 			api.Message{ID: "t2", Type: "task", From: "lead", ThreadID: "th", Project: "myco", Body: "two"},
@@ -103,7 +103,7 @@ func TestProjectMemoryInPrompt(t *testing.T) {
 	if len(prompts) != 3 {
 		t.Fatalf("runs: %d", len(prompts))
 	}
-	for _, want := range []string{"The staging port is 7443.", "Project memory", "glenn wants reports in Chinese", "myco project memory add --name myco"} {
+	for _, want := range []string{"The staging port is 7443.", "Project memory", "alice wants reports in Chinese", "myco project memory add --name myco", "--ui ui.json", "myco ui schema --format text"} {
 		if !strings.Contains(prompts[0], want) {
 			t.Fatalf("prompt lacks %q", want)
 		}
@@ -114,7 +114,22 @@ func TestProjectMemoryInPrompt(t *testing.T) {
 	if strings.Contains(prompts[1], "Project memory") {
 		t.Fatalf("unchanged project: one line:\n%s", prompts[1])
 	}
+	if strings.Contains(prompts[1], "--ui") {
+		t.Fatal("structured UI guidance must not repeat on every task")
+	}
 	if !strings.Contains(prompts[2], "updated since you last saw it") || !strings.Contains(prompts[2], "use port 7443 for staging") {
 		t.Fatalf("changed memory is given again:\n%s", prompts[2])
+	}
+	if !strings.Contains(prompts[2], "myco ui schema --format text") {
+		t.Fatal("updated project context must include structured UI guidance")
+	}
+}
+
+// Raising binary file quotas must not inject thousands of file names into a prompt.
+func TestProjectContextSummarizesBinaryFiles(t *testing.T) {
+	p := &api.Project{Name: "large", Docs: []api.ProjectDoc{{Name: "guide"}, {Name: "first.png", Binary: true}, {Name: "second.mp4", Binary: true}}}
+	text := projectSection("me", p)
+	if !strings.Contains(text, "Shared documents: guide") || !strings.Contains(text, "Other shared files: 2") || strings.Contains(text, "first.png") || strings.Contains(text, "second.mp4") {
+		t.Fatal(text)
 	}
 }

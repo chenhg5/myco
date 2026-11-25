@@ -11,7 +11,7 @@ export function showcase(lang, { makeAgent, makeMessage, iso, CONSOLE }) {
   const infra = group("运维", "infra");
 
   const machines = [
-    { id: "m_mbp", name: "MacBook Pro", hostname: "glenns-mbp.local", os: "darwin", arch: "arm64", myco_version: "0.20.12", online: true, last_seen_at: iso(4), can_spawn: true },
+    { id: "m_mbp", name: "MacBook Pro", hostname: "alices-mbp.local", os: "darwin", arch: "arm64", myco_version: "0.20.12", online: true, last_seen_at: iso(4), can_spawn: true },
     { id: "m_build", name: T("构建服务器", "Build server"), hostname: "build-01", os: "linux", arch: "x86_64", myco_version: "0.20.12", online: true, last_seen_at: iso(9), can_spawn: true },
     { id: "m_win", name: T("Windows 台式机", "Windows desktop"), hostname: "desk-win", os: "windows", arch: "amd64", myco_version: "0.20.12", online: false, last_seen_at: iso(3 * 3600), can_spawn: false },
   ];
@@ -202,19 +202,68 @@ export function showcase(lang, { makeAgent, makeMessage, iso, CONSOLE }) {
   ];
 
 
+  // MOCK_SHOWCASE_GROUPS=1: a bigger 官网改版 with its members in groups,
+  // for pictures of member groups (README screenshots stay as they are).
+  const grouped = !!process.env.MOCK_SHOWCASE_GROUPS;
+  if (grouped) agents.push(
+    makeAgent({
+      name: "mbp-design", display_name: T("设计（Claude Code）", "Design (Claude Code)"),
+      description: T("出页面设计稿和插图。", "Draws the page designs and illustrations."),
+      machine_id: "m_mbp", labels: ["machine=mbp", site, "design"],
+      runtime: { cli: "claude", cli_version: "2.1.240", model: "claude-opus-5-5", model_source: "configured", access: "workspace" },
+      status_text: T("在画定价页的插图", "Drawing the pricing page illustration"), status_at: iso(90),
+      binding: { harness: "claude", environment: "macOS 26.1", workdir: "~/code/website-design" }, last_seen_at: iso(4),
+      queued: 0, current_from: CONSOLE, current_thread: "th_design",
+    }),
+    makeAgent({
+      name: "mbp-ios", display_name: T("iOS（Codex）", "iOS (Codex)"),
+      description: T("官网的移动端适配。", "Makes the website work on phones."),
+      machine_id: "m_mbp", labels: ["machine=mbp", site, "mobile"],
+      runtime: { cli: "codex", cli_version: "0.52.0", model: "gpt-6-sol", model_source: "configured", access: "workspace" },
+      binding: { harness: "codex", environment: "macOS 26.1", workdir: "~/code/website" }, last_seen_at: iso(20),
+    }),
+    makeAgent({
+      name: "build-tests", display_name: T("测试（Codex）", "Tests (Codex)"),
+      description: T("写测试、跑回归。", "Writes tests and runs the regression suite."),
+      machine_id: "m_build", labels: ["machine=build-01", site, "tests"],
+      runtime: { cli: "codex", cli_version: "0.52.0", model: "gpt-6-sol", model_source: "configured", access: "workspace" },
+      status_text: T("跑 390 宽度下的截图对比", "Comparing screenshots at 390 wide"), status_at: iso(150),
+      binding: { harness: "codex", environment: "Ubuntu 24.04", workdir: "~/srv/website" }, last_seen_at: iso(7),
+      queued: 0, current_from: "mbp-frontend", current_thread: "th_tests",
+    }),
+    makeAgent({
+      name: "cloud-copy", display_name: T("文案（claude.ai）", "Copy (claude.ai)"),
+      description: T("写中英文的页面文案。", "Writes the page copy in English and Chinese."),
+      labels: [site, "copy"],
+      runtime: { cli: "claude-cloud", model: "claude-opus-5-5", model_source: "observed" },
+      binding: { harness: "claude-cloud", environment: "claude.ai" }, last_seen_at: iso(25),
+    }),
+    makeAgent({
+      name: "build-deploy", display_name: T("部署（Claude Code）", "Deploy (Claude Code)"),
+      description: T("发布到预发和线上。", "Ships to staging and production."),
+      machine_id: "m_build", labels: ["machine=build-01", infra],
+      runtime: { cli: "claude", cli_version: "2.1.240", model: "claude-sonnet-5-5", model_source: "configured", access: "workspace" },
+      binding: { harness: "claude", environment: "Ubuntu 24.04", workdir: "~/srv/deploy" }, last_seen_at: iso(12),
+    }),
+  );
+  const groupOf = { "mbp-design": "ui", "mbp-ios": "ui", "build-backend": "be", "build-tests": "be", "mbp-reviewer": "be", "desk-docs": "content", "cloud-research": "content", "cloud-copy": "content", "build-shell": "ops", "build-deploy": "ops" };
+  const groupName = { ui: T("界面", "UI"), be: T("后端", "Backend"), content: T("内容", "Content"), ops: T("运维", "Ops") };
+
   const projects = [{
     name: "website", title: T("官网改版", "Website redesign"),
     goal: T("月底前上线新版官网：定价页、文档站和下载页，中英双语。", "Ship the new website by the end of the month: pricing, docs and downloads, in English and Chinese."),
     brief: T("## 仓库\n代码在 `website`，PR 合到 `main` 才会部署。\n\n## 怎么测试\n`npm run build && npm test`，在 1280 和 390 两个宽度下看一遍。", "## Repository\nThe code is in `website`; only PRs merged to `main` deploy.\n\n## Testing\n`npm run build && npm test`, then check at 1280 and 390 wide."),
     links: [{ title: T("设计稿", "Design"), url: "https://figma.com/file/demo" }],
-    visibility: "members", owner: "glenn", owner_id: "mem_glenn", archived: false, created_at: iso(86400 * 6), updated_at: iso(1800),
+    visibility: "members", owner: "alice", owner_id: "mem_alice", archived: false, created_at: iso(86400 * 6), updated_at: iso(1800),
     members: [
-      { name: "mbp-frontend", role: "coordinator", note: T("页面和组件，拆任务", "Pages and components; splits the work"), added_by: "glenn", added_at: iso(86400 * 6) },
-      { name: "build-backend", role: "member", note: T("API", "API"), added_by: "glenn", added_at: iso(86400 * 6) },
-      { name: "mbp-reviewer", role: "member", note: T("审查 PR", "Reviews PRs"), added_by: "glenn", added_at: iso(86400 * 5) },
-      { name: "desk-docs", role: "member", note: T("文档站", "Docs site"), added_by: "glenn", added_at: iso(86400 * 4) },
-      { name: "build-shell", role: "member", note: T("构建服务器上跑命令", "Runs commands on the build server"), added_by: "glenn", added_at: iso(86400 * 3) },
-    ],
+      { name: "mbp-frontend", role: "coordinator", note: T("页面和组件，拆任务", "Pages and components; splits the work"), added_by: "alice", added_at: iso(86400 * 6) },
+      { name: "build-backend", role: "member", note: T("API", "API"), added_by: "alice", added_at: iso(86400 * 6) },
+      { name: "mbp-reviewer", role: "member", note: T("审查 PR", "Reviews PRs"), added_by: "alice", added_at: iso(86400 * 5) },
+      { name: "desk-docs", role: "member", note: T("文档站", "Docs site"), added_by: "alice", added_at: iso(86400 * 4) },
+      { name: "build-shell", role: "member", note: T("构建服务器上跑命令", "Runs commands on the build server"), added_by: "alice", added_at: iso(86400 * 3) },
+      ...(grouped ? ["mbp-design", "mbp-ios", "build-tests", "cloud-research", "cloud-copy", "build-deploy"].map((name) => ({ name, role: "member", note: "", added_by: "alice", added_at: iso(86400 * 2) })) : []),
+    ].map((m) => (grouped && groupOf[m.name] ? { ...m, group: groupName[groupOf[m.name]] } : m)),
+    ...(grouped ? { groups: Object.values(groupName) } : {}),
     docs: [{ name: T("设计约定.md", "design.md"), body: T("# 设计约定\n\n- 主色 #1f8a5b\n- 圆角 12px\n", "# Design rules\n\n- Accent #1f8a5b\n- Radius 12px\n"), content_type: "text/markdown; charset=utf-8", updated_by: "mbp-frontend", updated_at: iso(7200) }],
   }];
 
@@ -233,9 +282,9 @@ export function showcase(lang, { makeAgent, makeMessage, iso, CONSOLE }) {
   ];
 
   const localSessions = [
-    { cli: "claude", session_id: "7c1d9f4e-2a6b-4c18-9e0d-4a1f2b3c5d6e", workdir: "/Users/glenn/code/website", last_active: iso(300), title: T("把首页的 hero 区改成新设计", "Redo the home page hero from the new design") },
-    { cli: "codex", session_id: "019f20c1-a446-7812-bbc8-ce4ac3b889f6", workdir: "/Users/glenn/code/mobile", last_active: iso(1800), title: T("修复 iOS 上登录页的布局", "Fix the login screen layout on iOS") },
-    { cli: "claude", session_id: "9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d", workdir: "/Users/glenn/code/infra", last_active: iso(7200), title: T("检查 Hub 的隧道配置", "Check the hub's tunnel settings"), joined: { agent: "mbp-infra", hub: "http://192.168.1.20:7780" } },
+    { cli: "claude", session_id: "7c1d9f4e-2a6b-4c18-9e0d-4a1f2b3c5d6e", workdir: "/Users/alice/code/website", last_active: iso(300), title: T("把首页的 hero 区改成新设计", "Redo the home page hero from the new design") },
+    { cli: "codex", session_id: "019f20c1-a446-7812-bbc8-ce4ac3b889f6", workdir: "/Users/alice/code/mobile", last_active: iso(1800), title: T("修复 iOS 上登录页的布局", "Fix the login screen layout on iOS") },
+    { cli: "claude", session_id: "9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d", workdir: "/Users/alice/code/infra", last_active: iso(7200), title: T("检查 Hub 的隧道配置", "Check the hub's tunnel settings"), joined: { agent: "mbp-infra", hub: "http://192.168.1.20:7780" } },
   ];
 
   return { hubs, localSessions };

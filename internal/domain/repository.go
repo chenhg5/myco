@@ -102,6 +102,8 @@ type MessageRepository interface {
 	DueRecipients(ctx context.Context, now time.Time) ([]AgentName, error)
 	// Mutate loads message id, applies fn and persists the result atomically.
 	Mutate(ctx context.Context, id string, fn MutateFunc) (*Message, error)
+	// WakeHeld requeues ready held tasks and records their resumption atomically.
+	WakeHeld(ctx context.Context, recipient AgentName, now, cutoff time.Time, limit int, recovery func(*Message) *Message) (changed, created []*Message, err error)
 	// ClaimDue atomically selects up to limit due messages for recipient
 	// (oldest first), applies claim to each and persists them. It returns
 	// the messages for which claim returned true.

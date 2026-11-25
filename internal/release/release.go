@@ -28,13 +28,13 @@ import (
 
 const (
 	// DefaultAPI returns the latest release (GitHub REST API).
-	DefaultAPI = "https://api.github.com/repos/chenhg5/myco/releases/latest"
+	DefaultAPI = "https://api.github.com/repos/myco-ai/myco/releases/latest"
 	// DefaultDownload is where release assets live: <base>/<tag>/<asset>.
-	DefaultDownload = "https://github.com/chenhg5/myco/releases/download"
+	DefaultDownload = "https://github.com/myco-ai/myco/releases/download"
 	// DefaultTagAPI lists a release's assets (<base>/<tag>); used when a
 	// DefaultDownload link fails: each asset's API link redirects straight
 	// to the storage host, which works when github.com's links answer 504.
-	DefaultTagAPI = "https://api.github.com/repos/chenhg5/myco/releases/tags"
+	DefaultTagAPI = "https://api.github.com/repos/myco-ai/myco/releases/tags"
 	// DefaultMirror is the Gitee mirror of the same release assets. FetchFrom
 	// times both sources and downloads from the faster one.
 	DefaultMirror = "https://gitee.com/cg33/myco/releases/download"
@@ -455,10 +455,22 @@ var (
 // download base) it falls back to the release API's link for the asset.
 func fetchAsset(ctx context.Context, hc *http.Client, download, tag, name string, max int64) ([]byte, error) {
 	b, err := get(ctx, hc, download+"/"+tag+"/"+name, max, "")
-	if err == nil || download != fallbackBase || ctx.Err() != nil {
+	if err == nil || ctx.Err() != nil {
 		return b, err
 	}
-	u, aerr := assetAPIURL(ctx, hc, tag, name)
+	api := ""
+	if download == fallbackBase {
+		api = tagAPI
+	} else if parsed, parseErr := url.Parse(download); parseErr == nil && parsed.Scheme == "https" && parsed.Host == "github.com" && parsed.User == nil && parsed.RawQuery == "" && parsed.Fragment == "" {
+		parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+		if len(parts) == 4 && parts[2] == "releases" && parts[3] == "download" {
+			api = "https://api.github.com/repos/" + parts[0] + "/" + parts[1] + "/releases/tags"
+		}
+	}
+	if api == "" {
+		return b, err
+	}
+	u, aerr := assetAPIURLAt(ctx, hc, api, tag, name)
 	if aerr != nil {
 		return nil, fmt.Errorf("%w; release API fallback: %v", err, aerr)
 	}
@@ -471,7 +483,11 @@ func fetchAsset(ctx context.Context, hc *http.Client, download, tag, name string
 
 // assetAPIURL finds the API link of a release's asset.
 func assetAPIURL(ctx context.Context, hc *http.Client, tag, name string) (string, error) {
-	raw, err := get(ctx, hc, tagAPI+"/"+tag, 4<<20, "application/vnd.github+json")
+	return assetAPIURLAt(ctx, hc, tagAPI, tag, name)
+}
+
+func assetAPIURLAt(ctx context.Context, hc *http.Client, api, tag, name string) (string, error) {
+	raw, err := get(ctx, hc, api+"/"+tag, 4<<20, "application/vnd.github+json")
 	if err != nil {
 		return "", err
 	}

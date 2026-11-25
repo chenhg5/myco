@@ -9,11 +9,12 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
+	"github.com/myco-ai/myco/internal/api"
 )
 
 // Agent actions (hubs from v0.21.21): see api/actions.go.
@@ -28,14 +29,25 @@ func waitQuery(wait time.Duration) url.Values {
 
 // RequestActionGrant asks a target's owner to let this agent act on it.
 func (c *Client) RequestActionGrant(ctx context.Context, req api.ActionGrantRequest, dry bool) (*api.ActionGrant, error) {
-	if dry {
+	if dry || len(req.Hosts) != 0 {
 		var out struct {
 			Grant api.ActionGrant `json:"grant"`
 		}
 		if err := c.do(ctx, http.MethodPost, "/v1/me/action-grants", dryQuery(true), req, &out); err != nil {
 			return nil, sshGrantCompatibility(err, req.Target.Resource)
 		}
-		return &out.Grant, nil
+		if len(req.Hosts) != 0 {
+			hosts, err := api.NormalizeBrowserHosts(req.Hosts)
+			if err != nil {
+				return nil, &Error{Status: http.StatusBadRequest, Code: "invalid_argument", Message: err.Error()}
+			}
+			if !slices.Equal(hosts, out.Grant.Hosts) {
+				return nil, &Error{Status: http.StatusNotImplemented, Code: "unsupported", Message: "this Hub does not support browser domain restrictions", Suggestion: "Upgrade the Hub before requesting scoped browser control."}
+			}
+		}
+		if dry {
+			return &out.Grant, nil
+		}
 	}
 	var out api.ActionGrant
 	if err := c.do(ctx, http.MethodPost, "/v1/me/action-grants", nil, req, &out); err != nil {
@@ -122,6 +134,19 @@ func (c *Client) ActionArtifact(ctx context.Context, id string) ([]byte, string,
 	return c.raw(ctx, http.MethodGet, "/v1/me/action-artifacts/"+esc(id), nil, nil, "")
 }
 
+// OwnerBrowserScreenshot downloads a retained screenshot for the computer's owner.
+func (c *Client) OwnerBrowserScreenshot(ctx context.Context, id string) ([]byte, string, error) {
+	return c.raw(ctx, http.MethodGet, "/v1/console/action-artifacts/"+esc(id), nil, nil, "")
+}
+
+func (c *Client) OwnerBrowserScreenshots(ctx context.Context) ([]api.ActionArtifact, error) {
+	var result struct {
+		Artifacts []api.ActionArtifact `json:"artifacts"`
+	}
+	err := c.do(ctx, http.MethodGet, "/v1/console/action-artifacts", nil, nil, &result)
+	return result.Artifacts, err
+}
+
 // OwnerActionGrants lists the grants the caller decides (state "" for all).
 func (c *Client) OwnerActionGrants(ctx context.Context, state string) ([]api.ActionGrant, error) {
 	q := url.Values{}
@@ -137,8 +162,12 @@ func (c *Client) OwnerActionGrants(ctx context.Context, state string) ([]api.Act
 
 // RevokeActionGrant ends a grant its owner no longer allows.
 func (c *Client) RevokeActionGrant(ctx context.Context, id string) (*api.ActionGrant, error) {
+	return c.RevokeActionGrantWithReason(ctx, id, "")
+}
+
+func (c *Client) RevokeActionGrantWithReason(ctx context.Context, id, reason string) (*api.ActionGrant, error) {
 	var out api.ActionGrant
-	if err := c.do(ctx, http.MethodPost, "/v1/console/action-grants/"+esc(id)+"/revoke", nil, struct{}{}, &out); err != nil {
+	if err := c.do(ctx, http.MethodPost, "/v1/console/action-grants/"+esc(id)+"/revoke", nil, api.ActionGrantRevoke{Reason: reason}, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -162,6 +191,12 @@ func (c *Client) RegisterActionHost(ctx context.Context, req api.ActionHostRegis
 		return nil, err
 	}
 	return &out, nil
+}
+
+// UnregisterActionHost withdraws exactly this generation and revokes its
+// machine/profile grants. A 404 is safe to ignore; never retry as another host.
+func (c *Client) UnregisterActionHost(ctx context.Context, hostID, generation string) error {
+	return c.do(ctx, http.MethodDelete, "/v1/console/action-hosts/"+esc(hostID), url.Values{"generation": {generation}}, nil, nil)
 }
 
 // ActionHostJobs takes the jobs waiting for a host, waiting up to wait.

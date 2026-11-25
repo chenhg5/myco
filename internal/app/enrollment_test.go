@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/domain"
-	"github.com/chenhg5/myco/internal/infra/security"
-	"github.com/chenhg5/myco/internal/infra/sqlite"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/infra/security"
+	"github.com/myco-ai/myco/internal/infra/sqlite"
 )
 
 func setupEnroll(t *testing.T) (*app.EnrollmentService, *app.AgentService) {
@@ -32,7 +32,7 @@ func TestEnrollCreatesAndRecoversSameSession(t *testing.T) {
 	ctx := context.Background()
 	enr, agents := setupEnroll(t)
 	e, tok, err := enr.Create(ctx, app.CreateEnrollmentInput{NamePrefix: "cloud-", Harness: "claude-cloud",
-		AllowFrom: []string{"glenn"}, Capabilities: []string{"code"}, MaxUses: 1})
+		AllowFrom: []string{"alice"}, Capabilities: []string{"code"}, MaxUses: 1})
 	if err != nil || tok == "" {
 		t.Fatalf("create: %v", err)
 	}

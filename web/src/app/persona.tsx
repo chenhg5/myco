@@ -1,3 +1,4 @@
+import { runnerUpdating } from "@/lib/runner-state";
 import { useState } from "react";
 import type { Agent } from "@/api";
 import { appApi } from "@/appapi";
@@ -235,6 +236,7 @@ export function Avatar({ agent, size = 32, state, badge = true, className }: {
   badge?: boolean;
   className?: string;
 }) {
+  if (runnerUpdating(agent)) state = "pending";
   const ws = isWorkspace(agent);
   // Your superagent wears a crown.
   const isSuper = useIsSuperagent(agent);
@@ -285,7 +287,8 @@ export function AvatarStack({ agents, size = 22, max = 4 }: { agents: Agent[]; s
 }
 
 /** What a state is called, in plain words. */
-export function stateWords(state: string, statusText?: string): string {
+export function stateWords(state: string, statusText?: string, updating = false): string {
+  if (updating) return L("正在更新", "Updating");
   if (state === "working") return statusText || L("在干活", "Working");
   if (state === "pending") return L("等着接活", "About to start");
   if (state === "offline") return L("不在线", "Away");

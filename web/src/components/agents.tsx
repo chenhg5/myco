@@ -1,3 +1,4 @@
+import { runnerUpdating } from "@/lib/runner-state";
 import { Inbox, Loader2, PauseCircle, Server } from "lucide-react";
 import type { AgentStatus } from "@/api";
 import { Badge } from "@/components/ui/badge";
@@ -106,7 +107,7 @@ export function AgentCard({ a, onOpen, onLabel, now }: { a: AgentStatus; onOpen:
         <div className="min-w-0 flex-1">
           <h3 className="text-sm leading-5"><AgentName name={ag.name} displayName={ag.display_name} /></h3>
         </div>
-        <StateBadge state={a.state} />
+        <StateBadge state={a.state} updating={runnerUpdating(a.agent)} />
       </div>
 
       <p className="line-clamp-2 min-h-[2.5rem] text-[13px] leading-5 text-muted-foreground">{ag.description || <span className="opacity-50">没有描述</span>}</p>
@@ -157,7 +158,7 @@ export function AgentTable({ agents, onOpen, onLabel, now }: { agents: AgentStat
                     ? <div className="truncate text-xs text-working">● {a.agent.status_text}</div>
                     : <div className="truncate text-xs text-muted-foreground">{a.agent.description}</div>}
                 </td>
-                <td className="px-4 py-3"><StateBadge state={a.state} /></td>
+                <td className="px-4 py-3"><StateBadge state={a.state} updating={runnerUpdating(a.agent)} /></td>
                 <td className="px-4 py-3"><HarnessBadge harness={a.agent.binding.harness} /></td>
                 <td className="max-w-[200px] px-4 py-3">
                   <div className="truncate text-xs">{a.agent.binding.environment || "—"}</div>

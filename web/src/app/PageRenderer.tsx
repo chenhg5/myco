@@ -23,7 +23,7 @@ function toBase64(buf: ArrayBuffer): string {
 // once (the frame cancelled and removed) when the Hub says the job may no
 // longer run, or when the App's window closes (signal).
 async function render(j: PageRenderJob, signal: AbortSignal): Promise<PageRenderResult> {
-  const opened = await appApi.openPage(j.hub_id, j.page_id);
+  const opened = await appApi.openPage(j.hub_id, j.page_id, undefined, true);
   const lang = document.documentElement.lang.startsWith("zh") ? "zh" : "en";
   const src = localizedPageURL(opened.url, lang);
   const origin = new URL(src).origin;
@@ -79,7 +79,7 @@ async function render(j: PageRenderJob, signal: AbortSignal): Promise<PageRender
                 return { page: { id: j.page_id, name: opened.name, version: opened.version }, me: { name: "" }, state: st.state, version: st.version,
                   preferences: { language: lang, theme: "light" }, render: { instance } };
               }
-              case "data.list": return appApi.pageRenderData(j.id, coll);
+              case "data.list": return appApi.pageRenderData(j.id, coll, undefined, args.query as import("@/api").PageRecordQuery|undefined);
               case "data.get": return appApi.pageRenderData(j.id, coll, String(args.id || ""));
               case "data.watch": return true;
               case "storage.get": return null;
@@ -128,6 +128,7 @@ async function render(j: PageRenderJob, signal: AbortSignal): Promise<PageRender
     if (stopRef) signal.removeEventListener("abort", stopRef);
     if (onMessage) window.removeEventListener("message", onMessage);
     frame.remove();
+    if (opened.lease) void appApi.closePage(j.hub_id, j.page_id, opened.lease).catch(() => undefined);
   }
 }
 

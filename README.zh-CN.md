@@ -12,12 +12,14 @@
 用上你已经付过钱的 Claude Code、Codex 和各种 agent：开对话、几个同时干活，<br>
 连上你别的电脑和手机，让它们按时做事，全在一个 App 里。
 
-[![Release](https://img.shields.io/github/v/release/chenhg5/myco?style=flat-square&color=3a9a78)](https://github.com/chenhg5/myco/releases)
-[![Build](https://img.shields.io/github/actions/workflow/status/chenhg5/myco/release.yml?branch=main&label=release&style=flat-square)](https://github.com/chenhg5/myco/actions/workflows/release.yml)
-![Platforms](https://img.shields.io/badge/macOS%20·%20Windows%20·%20Linux-grey?style=flat-square)
+[![Release](https://img.shields.io/github/v/release/myco-ai/myco?style=flat-square&color=3a9a78)](https://github.com/myco-ai/myco/releases)
+[![Build](https://img.shields.io/github/actions/workflow/status/myco-ai/myco/release.yml?branch=main&label=release&style=flat-square)](https://github.com/myco-ai/myco/actions/workflows/release.yml)
+![Platforms](https://img.shields.io/badge/macOS%20·%20Windows%20·%20Linux%20·%20Android-grey?style=flat-square)
 [![LINUX DO](https://img.shields.io/badge/LINUX-DO-ffb003?style=flat-square&labelColor=3f3f46)](https://linux.do)
+[![Telegram](https://img.shields.io/badge/Telegram-Join-26A5E4?style=flat-square)](https://t.me/+TegU5q0F3TE5ZjI1)
+[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square)](https://discord.gg/DrQhZXGNZ6)
 
-**[下载 Mac 版](https://github.com/chenhg5/myco/releases/latest/download/myco.dmg)** · [Windows 版（预览）](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-amd64.exe) · [Linux 版](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-amd64) · [全部下载](https://github.com/chenhg5/myco/releases/latest)
+**[下载 Mac 版](https://github.com/myco-ai/myco/releases/latest/download/myco.dmg)** · [Windows 版（预览）](https://github.com/myco-ai/myco/releases/latest/download/myco-app-windows-amd64.exe) · [Linux 版](https://github.com/myco-ai/myco/releases/latest/download/myco-app-linux-amd64) · [Android 版（预览）](https://github.com/myco-ai/myco/releases/latest/download/myco-android-debug.apk) · [全部下载](https://github.com/myco-ai/myco/releases/latest)
 
 [English](README.md) · **中文** · [安装指南](INSTALL.zh-CN.md) · [使用教程](docs/tutorial.zh-CN.md) · [应用](docs/apps.zh-CN.md) · [架构](docs/architecture.md) · [HTTP API](docs/api.md)
 
@@ -42,7 +44,7 @@ agent 单独用都不错，麻烦在边界上：结果是**你**成了传话的�
 已经在用 Claude Code、Codex 或别的能跑命令的 AI？把这句话发给它。它会读[安装指南](docs/agent-setup.md)，开好 Hub、连上 App、加好电脑和 agent，出了问题自己排查；要你拿主意的地方会先问你：
 
 ```text
-帮我装好 myco：先读 https://raw.githubusercontent.com/chenhg5/myco/main/docs/agent-setup.md （打不开就读 https://cdn.jsdelivr.net/gh/chenhg5/myco@main/docs/agent-setup.md ），照着做。要我决定的先问我，用 sudo 或改系统设置前也先问我，装完告诉我结果。
+帮我装好 myco：先读 https://raw.githubusercontent.com/myco-ai/myco/main/docs/agent-setup.md （打不开就读 https://cdn.jsdelivr.net/gh/myco-ai/myco@main/docs/agent-setup.md ），照着做。要我决定的先问我，用 sudo 或改系统设置前也先问我，装完告诉我结果。
 ```
 
 App 的第一屏也有这句话（**让 agent 帮我装**）。
@@ -51,10 +53,11 @@ App 的第一屏也有这句话（**让 agent 帮我装**）。
 
 | 平台 | 下载 |
 |---|---|
-| **Mac** | **[myco.dmg](https://github.com/chenhg5/myco/releases/latest/download/myco.dmg)**：Apple 芯片和 Intel 通用，已签名公证，可自动更新。 |
-| **Windows**（预览） | [myco-app-windows-amd64.exe](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-amd64.exe)（[ARM 版](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-arm64.exe)）。还没有代码签名，第一次运行时选「更多信息 → 仍要运行」。 |
-| **Linux** | [myco-app-linux-amd64](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-amd64)（[ARM 版](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-arm64)）：在浏览器里打开 App（X11、Wayland、WSL 都行）。[详见](INSTALL.zh-CN.md#9-控制台-appmac--windows--linux) |
+| **Mac** | **[myco.dmg](https://github.com/myco-ai/myco/releases/latest/download/myco.dmg)**：Apple 芯片和 Intel 通用，已签名公证，可自动更新。 |
+| **Windows**（预览） | [myco-app-windows-amd64.exe](https://github.com/myco-ai/myco/releases/latest/download/myco-app-windows-amd64.exe)（[ARM 版](https://github.com/myco-ai/myco/releases/latest/download/myco-app-windows-arm64.exe)）。还没有代码签名，第一次运行时选「更多信息 → 仍要运行」。 |
+| **Linux** | [myco-app-linux-amd64](https://github.com/myco-ai/myco/releases/latest/download/myco-app-linux-amd64)（[ARM 版](https://github.com/myco-ai/myco/releases/latest/download/myco-app-linux-arm64)）：在浏览器里打开 App（X11、Wayland、WSL 都行）。[详见](INSTALL.zh-CN.md#9-控制台-appmac--windows--linux) |
 | **iPhone**（测试版） | **[加入 TestFlight 测试](https://testflight.apple.com/join/XDKvU8Jp)**（iOS 17 或更新）。 |
+| **Android**（预览） | [myco-android-debug.apk](https://github.com/myco-ai/myco/releases/latest/download/myco-android-debug.apk)：Android 8.0 或更新。debug 签名的预览版 APK，不是应用商店版本，功能还在追赶 iPhone 版；安装新版前先卸载旧的预览版。 |
 | **服务器** | 用命令行工具，见[更喜欢命令行？](#更喜欢命令行) |
 
 ## 三步上手
@@ -64,7 +67,7 @@ App 的第一屏也有这句话（**让 agent 帮我装**）。
 **1. 打开 App，准备一个 Hub**（agent 们连接的小服务器）：**在这台电脑上开始**一键启动，或者用 App 连接链接 **连接已有的 Hub**。想放在自己的服务器上，在服务器上运行（最后会打印 App 连接链接）：
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-hub.sh && sudo bash install-hub.sh --domain auto
+curl -fsSLO https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-hub.sh && sudo bash install-hub.sh --domain auto
 ```
 
 **2. 加入你的 agent。** 点 **添加 agent**：选这台电脑上找到的 Claude Code 或 Codex 会话，在任意已连上的电脑上新开一个，或者把 App 给的那句话发给另一台电脑上的 agent，它会自己加入。
@@ -81,19 +84,19 @@ curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-h
 
 <table>
 <tr>
-<td width="33%"><img src="docs/assets/apps/motion.webp" alt="动效视频"><br><b>动效视频</b><br>宣传片、短视频：说一句话，agent 写好每个场景；配音乐和配音，在本机导出 MP4。</td>
-<td width="33%"><img src="docs/assets/apps/design-studio.webp" alt="设计工作台"><br><b>设计工作台</b><br>网页、应用界面、海报、演示文稿，在可编辑的画布上和 agent 一起迭代。</td>
-<td width="33%"><img src="docs/assets/apps/meeting.webp" alt="会议记录"><br><b>会议记录</b><br>录下 Zoom、腾讯会议、飞书里的会，在本机转成文字，让 agent 写纪要。</td>
+<td width="33%"><b>动效视频</b><br>宣传片、短视频：说一句话，agent 写好每个场景；配音乐和配音，在本机导出 MP4。</td>
+<td width="33%"><b>设计工作台</b><br>网页、应用界面、海报、演示文稿，在可编辑的画布上和 agent 一起迭代。</td>
+<td width="33%"><b>会议记录</b><br>录下 Zoom、腾讯会议、飞书里的会，在本机转成文字，让 agent 写纪要。</td>
 </tr>
 <tr>
-<td width="33%"><img src="docs/assets/apps/disk.webp" alt="空间清理"><br><b>空间清理</b><br>一圈一圈看清磁盘被谁占了，不要的移进废纸篓。</td>
+<td width="33%"><b>空间清理</b><br>一圈一圈看清磁盘被谁占了，不要的移进废纸篓。</td>
 <td width="33%"><img src="docs/assets/apps/remote-desktop.webp" alt="远程桌面"><br><b>远程桌面</b><br>从另一台电脑或 iPhone 查看、操作你的 Mac 和 Windows。</td>
 <td width="33%"><img src="docs/assets/apps/recorder.webp" alt="录屏工作台"><br><b>录屏工作台</b><br>录屏后直接裁剪、分割、加文字和重点放大，在本机导出 MP4。</td>
 </tr>
 <tr>
 <td width="33%"><img src="docs/assets/apps/stocks.webp" alt="行情工作台"><br><b>行情工作台</b><br>A 股、港股、美股共享自选，K 线、均线和观察笔记。</td>
 <td width="33%"><img src="docs/assets/apps/photo.webp" alt="修图"><br><b>修图</b><br>裁剪、调色、滤镜、文字、贴纸；说一句，agent 帮你调。</td>
-<td width="33%"><img src="docs/assets/apps/issues.webp" alt="任务追踪"><br><b>任务追踪</b><br>像 Linear 一样管问题；指给 agent，它改状态、写评论，你马上看到。</td>
+<td width="33%"><b>任务追踪</b><br>像 Linear 一样管问题；指给 agent，它改状态、写评论，你马上看到。</td>
 </tr>
 </table>
 
@@ -119,7 +122,7 @@ myco message send --to my-mac-claude --wait 15m --body "对本地数据库跑一
 
 ### 2. 把活直接交给同事的 agent
 
-和同事共用一个 Hub（设置 → 成员 → **邀请成员**）。然后说「问问 Matthew 的后端 agent，订单接口返回哪些字段」，你的 agent 就去他的 agent 那里拿答复。
+和同事共用一个 Hub（设置 → 成员 → **邀请成员**）。然后说「问问 Carol 的后端 agent，订单接口返回哪些字段」，你的 agent 就去他的 agent 那里拿答复。
 
 - **主人决定**谁能给自己的 agent 派活。
 - **收到任务的 agent 知道是谁在问**，也知道这是同事、不是主人。
@@ -149,7 +152,7 @@ Claude Code、Codex、claude.ai 云端会话，还有 Pi、Kiro、Gemini CLI 等
 App 能做的事，`myco` 命令都能做，在服务器上或让 agent 自己用都方便。
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.sh | bash
+curl -fsSL https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-client.sh | bash
 ```
 
 | 开一个 Hub | 命令 |
@@ -282,11 +285,13 @@ flowchart TB
 
 ## 社群
 
+也可以加入 [Telegram](https://t.me/+TegU5q0F3TE5ZjI1) 或 [Discord](https://discord.gg/DrQhZXGNZ6)，一起交流、提问。
+
 有问题、想法，或者想看看别人怎么用 myco，扫码加入微信群（二维码每隔几天更新一次，这里放的总是最新的）：
 
 <img src="docs/assets/community/wechat-group.png" alt="myco 微信群" width="220">
 
-bug 和新功能需求：[GitHub Issues](https://github.com/chenhg5/myco/issues)。
+bug 和新功能需求：[GitHub Issues](https://github.com/myco-ai/myco/issues)。
 
 关注作者：X（Twitter）[@chg80333](https://x.com/chg80333)。商务合作请加微信 **mongorz**，加的时候备注好你是谁、想合作什么。
 

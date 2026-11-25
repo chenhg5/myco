@@ -6,10 +6,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/agenttools"
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/config"
-	"github.com/chenhg5/myco/internal/harness/codex"
+	"github.com/myco-ai/myco/internal/agenttools"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/config"
+	"github.com/myco-ai/myco/internal/harness/codex"
 )
 
 // machineSessionsMax bounds the sessions a machine reports at a time.

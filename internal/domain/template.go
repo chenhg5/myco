@@ -113,7 +113,8 @@ type Manifest struct {
 
 // ManifestRequires is what a template needs to run.
 type ManifestRequires struct {
-	Hub string `json:"hub,omitempty"`
+	Hub       string `json:"hub,omitempty"`
+	Isolation bool   `json:"isolation,omitempty"`
 }
 
 // MaxTemplateIcon bounds a template's icon (an SVG).
@@ -140,6 +141,9 @@ func RequiredHub(raw []byte) string {
 type ManifestCollection struct {
 	Fields map[string]string `json:"fields"`
 	Single bool              `json:"single,omitempty"`
+	// Write "managers": only those who manage the page change this
+	// collection (hubs from v0.22.2; its settings, say), whoever else may.
+	Write string `json:"write,omitempty"`
 }
 
 // FieldTypes are the types a field may have.
@@ -160,8 +164,8 @@ var TemplatePermissions = []string{"send", "download"}
 // (manifest "os"): files (look and read, and what the person picks), files.write,
 // files.delete, exec (commands, ending processes), screen, microphone, speech,
 // clipboard (reading it), notify, system, network (net.fetch, to the hosts in
-// "net"), ssh, database, proxy.
-var TemplateOSGroups = []string{"files", "files.write", "files.delete", "exec", "screen", "microphone", "speech", "clipboard", "notify", "system", "network", "ssh", "database", "proxy"}
+// "net"), ssh, database, proxy, browser (dedicated browser profiles).
+var TemplateOSGroups = []string{"files", "files.write", "files.delete", "exec", "screen", "microphone", "speech", "clipboard", "notify", "system", "network", "ssh", "database", "proxy", "browser"}
 
 // netHost is a host a manifest's "net" names: a DNS name or an IP address,
 // with a port or not, or *. and a domain for its subdomains.
@@ -195,7 +199,7 @@ func ParseManifest(raw []byte) (*Manifest, error) {
 		return nil, Errf(CodeInvalidArgument, "myco.json: "+format, a...)
 	}
 	if !templateSlug.MatchString(m.ID) {
-		return bad("id %q: use author/name in lowercase, e.g. glenn/weekly-report", m.ID)
+		return bad("id %q: use author/name in lowercase, e.g. alice/weekly-report", m.ID)
 	}
 	name, err := ParsePageName(m.Name)
 	if err != nil {
@@ -240,6 +244,9 @@ func ParseManifest(raw []byte) (*Manifest, error) {
 			if !has(FieldTypes, t) {
 				return bad("data.%s.%s: type %q is not one of %s", c, f, t, strings.Join(FieldTypes, ", "))
 			}
+		}
+		if col.Write != "" && col.Write != PageEditorsManagers {
+			return bad("data.%s.write %q: managers, or leave it out", c, col.Write)
 		}
 	}
 	for _, p := range m.Permissions {

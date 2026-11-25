@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/e2e"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/e2e"
 )
 
 // The app reads and writes end-to-end encrypted messages as this device:

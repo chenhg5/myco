@@ -30,7 +30,7 @@ func TestLANHubFallsBackToThisComputer(t *testing.T) {
 	}))
 	defer hub.Close()
 	port := hub.URL[strings.LastIndex(hub.URL, ":")+1:]
-	u, _ := url.Parse("http://192.168.66.160:" + port + "/w/team")
+	u, _ := url.Parse("http://192.168.50.25:" + port + "/w/team")
 
 	var direct atomic.Int32
 	base := rtFunc(func(r *http.Request) (*http.Response, error) {

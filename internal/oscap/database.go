@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/dbstudio"
+	"github.com/myco-ai/myco/internal/dbstudio"
 )
 
 func init() {

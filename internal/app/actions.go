@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // ActionService: agents acting on a target (a computer) through a provider
@@ -34,12 +34,13 @@ type ActionService struct {
 	ids       IDGenerator
 	clock     Clock
 
-	mu     sync.Mutex
-	wake   chan struct{} // closed (and replaced) when anything changes
-	grants map[string]*actionGrant
-	hosts  map[string]*actionHost
-	jobs   map[string]*actionJob
-	arts   map[string]*actionArtifact
+	mu                 sync.Mutex
+	wake               chan struct{} // closed (and replaced) when anything changes
+	browserScreenshots domain.BrowserScreenshotRepository
+	grants             map[string]*actionGrant
+	hosts              map[string]*actionHost
+	jobs               map[string]*actionJob
+	arts               map[string]*actionArtifact
 }
 
 // Limits.
@@ -65,10 +66,11 @@ var actionProviders = map[string][]string{
 	// file of what the agent can already read).
 	"page":       {"page.export"},
 	"server.ssh": {"server.ssh.read", "server.ssh.manage"},
+	"browser":    {"browser.view", "browser.run", api.BrowserControlPermission},
 }
 
 // providerTarget is the kind of target each provider acts on.
-var providerTarget = map[string]string{"remote.desktop": "machine", "page": "page", "server.ssh": "machine"}
+var providerTarget = map[string]string{"remote.desktop": "machine", "page": "page", "server.ssh": "machine", "browser": "machine"}
 
 // providerOf is the provider a permission or action name belongs to.
 func providerOf(name string) string {
@@ -92,15 +94,17 @@ type actionGrant struct {
 
 type actionHost struct {
 	api.ActionHost
-	owner   string // the member who registered it
-	actions []api.ActionDescriptor
+	browserHostScope bool
+	owner            string // the member who registered it
+	actions          []api.ActionDescriptor
 }
 
 type actionJob struct {
 	api.ActionJob
-	agent  string
-	args   json.RawMessage
-	hostID string
+	agent   string
+	agentID string
+	args    json.RawMessage
+	hostID  string
 }
 
 type actionArtifact struct {
@@ -202,28 +206,54 @@ func (s *ActionService) RequestGrant(ctx context.Context, agent *domain.Agent, r
 	if err != nil {
 		return nil, err
 	}
+	control := contains(perms, api.BrowserControlPermission)
+	if len(req.Hosts) > 0 && !control {
+		return nil, domain.Errf(domain.CodeInvalidArgument, "hosts require browser.control")
+	}
+	hosts, err := api.NormalizeBrowserHosts(req.Hosts)
+	if err != nil {
+		return nil, domain.Errf(domain.CodeInvalidArgument, "%s", err)
+	}
 	targetName := m.Name
-	if req.Target.Resource != nil || contains(perms, "server.ssh.read") {
-		if req.Target.Resource == nil || req.Target.Resource.Provider != "server.ssh" {
-			return nil, domain.Errf(domain.CodeInvalidArgument, "SSH grants require an enabled, bound profile resource")
+	boundProvider := ""
+	for _, p := range perms {
+		if profileProvider(providerOf(p)) {
+			boundProvider = providerOf(p)
+		}
+	}
+	if req.Target.Resource != nil || boundProvider != "" {
+		useDefault := control && req.Target.Resource == nil
+		if !useDefault && (req.Target.Resource == nil || !profileProvider(req.Target.Resource.Provider)) {
+			return nil, domain.Errf(domain.CodeInvalidArgument, "profile grants require an enabled, bound profile resource")
+		}
+		if !useDefault {
+			boundProvider = req.Target.Resource.Provider
 		}
 		for _, p := range perms {
-			if providerOf(p) != "server.ssh" {
+			if providerOf(p) != boundProvider {
 				return nil, domain.Errf(domain.CodeInvalidArgument, "a resource grant cannot mix providers")
 			}
 		}
 		s.mu.Lock()
 		var found *api.ActionResource
 		for _, h := range s.hosts {
-			if h.MachineID == m.ID && h.Provider == "server.ssh" && sameResource(h.Resource, req.Target.Resource) && s.clock.Now().Sub(h.LastSeenAt) <= actionHostStale {
+			matches := sameResource(h.Resource, req.Target.Resource)
+			if useDefault {
+				matches = h.Resource != nil && h.Resource.Kind == api.BrowserAgentProfile
+			}
+			if h.MachineID == m.ID && h.Provider == boundProvider && matches && s.clock.Now().Sub(h.LastSeenAt) <= actionHostStale {
+				if control && (!supportsBrowserControl(h.actions) || (len(hosts) > 0 && !h.browserHostScope)) {
+					continue
+				}
 				cp := *h.Resource
-				found = &cp
-				break
+				if found == nil || cp.ID < found.ID {
+					found = &cp
+				}
 			}
 		}
 		s.mu.Unlock()
 		if found == nil {
-			return nil, domain.Errf(domain.CodeUnsupported, "this SSH profile is not enabled on the controller App, or its binding changed")
+			return nil, domain.Errf(domain.CodeUnsupported, "this %s profile is not enabled on the controller App, or its binding changed", boundProvider)
 		}
 		req.Target.Resource = found
 		targetName += " / " + found.Name + " / " + found.Summary
@@ -258,7 +288,7 @@ func (s *ActionService) RequestGrant(ctx context.Context, agent *domain.Agent, r
 	now := s.clock.Now()
 	g := &actionGrant{agentOwner: agent.Owner, ttl: ttl, idem: map[string]string{}, idemHash: map[string]string{}}
 	g.ActionGrant = api.ActionGrant{ID: s.ids.New("agr"), Agent: string(agent.Name), Owner: owner.Name, Target: req.Target, TargetName: targetName,
-		Requested: perms, Reason: clipRunes(reason, 500), MessageID: req.MessageID, State: api.GrantPending, CreatedAt: now}
+		Requested: perms, Hosts: hosts, Reason: clipRunes(reason, 500), MessageID: req.MessageID, State: api.GrantPending, CreatedAt: now}
 	if dry {
 		g.Permissions = perms
 		exp := now.Add(ttl)
@@ -266,7 +296,11 @@ func (s *ActionService) RequestGrant(ctx context.Context, agent *domain.Agent, r
 		out := g.ActionGrant
 		return &out, nil
 	}
-	payload, _ := json.Marshal(map[string]string{"grant_id": g.ID})
+	approvalPayload := map[string]any{"grant_id": g.ID}
+	if control {
+		approvalPayload["browser_control"] = true
+	}
+	payload, _ := json.Marshal(approvalPayload)
 	ap, err := s.approvals.AskTyped(ctx, owner, agent.Name, domain.ApprovalKindActionGrant, grantWhat(g.Agent, targetName, perms, ttl), reason, string(payload))
 	if err != nil {
 		return nil, err
@@ -286,6 +320,10 @@ func (s *ActionService) RequestGrant(ctx context.Context, agent *domain.Agent, r
 // the page's owner to see and revoke. Its visibility is checked again at
 // every job and artifact.
 func (s *ActionService) requestPageGrant(ctx context.Context, agent *domain.Agent, req api.ActionGrantRequest, dry bool) (*api.ActionGrant, error) {
+	if len(req.Hosts) != 0 {
+		return nil, domain.Errf(domain.CodeInvalidArgument, "hosts require browser.control")
+	}
+
 	p, err := s.pageFor(ctx, Actor{Agent: agent}, req.Target.ID)
 	if err != nil {
 		return nil, err
@@ -384,6 +422,18 @@ func grantWhat(agent, machine string, perms []string, ttl time.Duration) string 
 	if contains(perms, "server.ssh.manage") {
 		do = "读取服务器 " + machine + " 并启动、停止或重启服务与容器"
 	}
+	if contains(perms, "browser.view") {
+		do = "在 " + machine + " 上查看状态与运行结果"
+	}
+	if contains(perms, "browser.run") {
+		do = "在 " + machine + " 上运行主人批准的脚本"
+		if contains(perms, "browser.view") {
+			do = "在 " + machine + " 上查看状态与运行结果，并运行主人批准的脚本"
+		}
+	}
+	if contains(perms, api.BrowserControlPermission) {
+		do = "操作浏览器 " + machine + "。agent 能看到并操作这个 profile 登录的所有网站，操作会显示在你的屏幕上，你随时可以停止"
+	}
 	_ = agent // (the card says who asks)
 	return fmt.Sprintf("%s，%d 分钟", do, int(ttl.Round(time.Minute)/time.Minute))
 }
@@ -480,6 +530,27 @@ func (h actionApprovals) Approve(ctx context.Context, a *domain.Approval, by *do
 		}
 		perms = narrowed
 	}
+	hosts := g.Hosts
+	if n.Hosts != nil {
+		if !contains(perms, api.BrowserControlPermission) {
+			return "", domain.Errf(domain.CodeInvalidArgument, "hosts require browser.control")
+		}
+		narrowed, err := api.NormalizeBrowserHosts(*n.Hosts)
+		if err != nil {
+			return "", domain.Errf(domain.CodeInvalidArgument, "%s", err)
+		}
+		if len(hosts) > 0 {
+			if len(narrowed) == 0 {
+				return "", domain.Errf(domain.CodeInvalidArgument, "keep at least one requested host or deny the grant")
+			}
+			for _, host := range narrowed {
+				if !contains(hosts, host) {
+					return "", domain.Errf(domain.CodeInvalidArgument, "approve only hosts in the request")
+				}
+			}
+		}
+		hosts = narrowed
+	}
 	ttl := g.ttl
 	if n.TTLSeconds > 0 {
 		t := time.Duration(n.TTLSeconds) * time.Second
@@ -490,7 +561,7 @@ func (h actionApprovals) Approve(ctx context.Context, a *domain.Approval, by *do
 	}
 	now := s.clock.Now()
 	exp := now.Add(ttl)
-	g.Permissions, g.State, g.ExpiresAt = perms, api.GrantActive, &exp
+	g.Permissions, g.Hosts, g.State, g.ExpiresAt = perms, hosts, api.GrantActive, &exp
 	s.changed()
 	return fmt.Sprintf("授权 %s 生效到 %s（%s）；用 myco action run --grant %s 执行动作。", g.ID, exp.Format(time.RFC3339), strings.Join(perms, "、"), g.ID), nil
 }
@@ -517,6 +588,20 @@ func artifactTypeAllowed(t string) bool {
 	return strings.HasPrefix(t, "image/") || strings.HasPrefix(t, "application/vnd.openxmlformats-officedocument.")
 }
 
+func supportsBrowserControl(actions []api.ActionDescriptor) bool {
+	expectedActions := api.BrowserControlDescriptors()
+	count := 0
+	for _, expected := range expectedActions {
+		for _, offered := range actions {
+			if offered.Name == expected.Name && offered.Version == expected.Version && offered.Permission == expected.Permission {
+				count++
+				break
+			}
+		}
+	}
+	return count == len(expectedActions)
+}
+
 func contains(list []string, v string) bool {
 	for _, x := range list {
 		if x == v {
@@ -527,7 +612,22 @@ func contains(list []string, v string) bool {
 }
 
 // refresh ends a grant whose time, host or task is over (mu held).
-func (s *ActionService) refresh(ctx context.Context, g *actionGrant) {
+// A cancelled read is not evidence of lost authorization: abort this request
+// without ending the grant or deleting artifacts used by other requests.
+func (s *ActionService) refresh(ctx context.Context, g *actionGrant) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if g.State == api.GrantPending || g.State == api.GrantActive {
+		enabledErr := s.enabled(ctx)
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if enabledErr != nil {
+			s.close(g, api.GrantRevoked, "agent actions are unavailable in an encrypted workspace")
+			return nil
+		}
+	}
 	now := s.clock.Now()
 	switch g.State {
 	case api.GrantPending:
@@ -537,17 +637,21 @@ func (s *ActionService) refresh(ctx context.Context, g *actionGrant) {
 	case api.GrantActive:
 		if g.ExpiresAt != nil && !now.Before(*g.ExpiresAt) {
 			s.close(g, api.GrantExpired, "its time ran out")
-			return
+			return nil
 		}
-		if !s.agentSees(ctx, g) {
+		sees := s.agentSees(ctx, g)
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if !sees {
 			s.close(g, api.GrantEnded, "its agent may no longer see the page")
-			return
+			return nil
 		}
 		if g.hostSeen != "" {
 			if h := s.hosts[g.hostSeen]; h == nil || now.Sub(h.LastSeenAt) > actionHostStale {
 				if g.Target.Kind != "page" {
 					s.close(g, api.GrantEnded, "the computer went offline (or its App closed)")
-					return
+					return nil
 				}
 				// A page is rendered by any App of a person who sees it: the
 				// grant stays; what that App was running is lost.
@@ -556,11 +660,16 @@ func (s *ActionService) refresh(ctx context.Context, g *actionGrant) {
 			}
 		}
 		if g.MessageID != "" && s.messages != nil {
-			if m, err := s.messages.Get(ctx, &domain.Agent{Name: domain.AgentName(g.Agent)}, g.MessageID); err != nil || m.Status.Terminal() {
+			m, readErr := s.messages.Get(ctx, &domain.Agent{Name: domain.AgentName(g.Agent)}, g.MessageID)
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			if readErr != nil || m.Status.Terminal() {
 				s.close(g, api.GrantEnded, "its task ended")
 			}
 		}
 	}
+	return nil
 }
 
 // close ends a grant: its queued jobs are cancelled, running ones can no
@@ -579,6 +688,9 @@ func (s *ActionService) close(g *actionGrant, state, reason string) {
 		case api.JobQueued:
 			j.State, j.FinishedAt = api.JobCancelled, &now
 			j.Error = &api.ActionError{Code: "grant_ended", Message: "the grant ended before it ran: " + reason}
+			if e := browserGrantEndError(g, j.Action); e != nil {
+				j.Error = e
+			}
 		case api.JobRunning:
 			j.CancelRequested = true
 		}
@@ -597,7 +709,9 @@ func (s *ActionService) grantOf(ctx context.Context, agent domain.AgentName, id 
 	if g == nil || g.Agent != string(agent) {
 		return nil, domain.Errf(domain.CodeNotFound, "grant %s not found", id)
 	}
-	s.refresh(ctx, g)
+	if err := s.refresh(ctx, g); err != nil {
+		return nil, err
+	}
 	return g, nil
 }
 
@@ -651,8 +765,9 @@ func (s *ActionService) Grants(ctx context.Context, agent *domain.Agent) []api.A
 	out := []api.ActionGrant{}
 	for _, g := range s.grants {
 		if g.Agent == string(agent.Name) {
-			s.refresh(ctx, g)
-			out = append(out, g.ActionGrant)
+			if s.refresh(ctx, g) == nil {
+				out = append(out, g.ActionGrant)
+			}
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
@@ -713,7 +828,9 @@ func (s *ActionService) OwnerGrants(ctx context.Context, by Actor, state string)
 		if g.Owner != m.Name && !by.Manages() {
 			continue
 		}
-		s.refresh(ctx, g)
+		if err := s.refresh(ctx, g); err != nil {
+			return nil, err
+		}
 		if state == "" || g.State == state {
 			out = append(out, g.ActionGrant)
 		}
@@ -725,6 +842,13 @@ func (s *ActionService) OwnerGrants(ctx context.Context, by Actor, state string)
 // Revoke ends a grant its owner (or someone who manages the hub) no longer
 // allows.
 func (s *ActionService) Revoke(ctx context.Context, by Actor, id string) (*api.ActionGrant, error) {
+	return s.RevokeWithReason(ctx, by, id, "")
+}
+
+func (s *ActionService) RevokeWithReason(ctx context.Context, by Actor, id, reason string) (*api.ActionGrant, error) {
+	if reason != "" && reason != api.BrowserControlOwnerStopped {
+		return nil, domain.Errf(domain.CodeInvalidArgument, "unknown grant revoke reason")
+	}
 	m, err := person(by, "revoke an agent's grant")
 	if err != nil {
 		return nil, err
@@ -735,7 +859,14 @@ func (s *ActionService) Revoke(ctx context.Context, by Actor, id string) (*api.A
 		s.mu.Unlock()
 		return nil, domain.Errf(domain.CodeNotFound, "grant %s not found", id)
 	}
-	s.close(g, api.GrantRevoked, "revoked by "+m.Name)
+	if reason == api.BrowserControlOwnerStopped && !contains(g.Permissions, api.BrowserControlPermission) {
+		s.mu.Unlock()
+		return nil, domain.Errf(domain.CodeInvalidArgument, "the grant does not allow browser control")
+	}
+	if reason == "" {
+		reason = "revoked by " + m.Name
+	}
+	s.close(g, api.GrantRevoked, reason)
 	out := g.ActionGrant
 	s.mu.Unlock()
 	s.audit.Record(ctx, by, "action.grant.revoke", out.TargetName, fmt.Sprintf("%s (%s)", out.Agent, out.ID))
@@ -768,13 +899,16 @@ func (s *ActionService) RegisterHost(ctx context.Context, by Actor, req api.Acti
 		if err != nil {
 			return nil, err
 		}
-		if mach.Owner != m.ID && (!by.Manages() || req.Provider == "server.ssh") {
+		if mach.Owner != m.ID && (!by.Manages() || profileProvider(req.Provider)) {
 			return nil, domain.Errf(domain.CodePermissionDenied, "%s is not your computer", mach.Name)
 		}
 		where, machineID = mach.Name, mach.ID
 	}
-	if req.Provider == "server.ssh" {
-		if err := validateSSHResource(req.Resource); err != nil {
+	if profileProvider(req.Provider) {
+		if req.Resource != nil && req.Resource.Kind != "" && (req.Provider != "browser" || req.Resource.Kind != api.BrowserAgentProfile) {
+			return nil, domain.Errf(domain.CodeInvalidArgument, "invalid profile kind")
+		}
+		if err := validateProfileResource(req.Provider, req.Resource); err != nil {
 			return nil, err
 		}
 		cp := *req.Resource
@@ -792,12 +926,15 @@ func (s *ActionService) RegisterHost(ctx context.Context, by Actor, req api.Acti
 		if !strings.HasPrefix(d.Name, req.Provider+".") || d.Version < 1 || !contains(perms, d.Permission) {
 			return nil, domain.Errf(domain.CodeInvalidArgument, "action %q (v%d, %s) is not one of %s's", d.Name, d.Version, d.Permission, req.Provider)
 		}
+		if req.Provider == "browser" && (d.Version != 1 || api.BrowserActionPermission(d.Name) == "" || api.BrowserActionPermission(d.Name) != d.Permission) {
+			return nil, domain.Errf(domain.CodeInvalidArgument, "browser action %q has an invalid version or permission", d.Name)
+		}
 		if len(d.InputSchema) > actionSchemaMax || len(d.OutputSchema) > actionSchemaMax {
 			return nil, domain.Errf(domain.CodeInvalidArgument, "action %s's schema is too large", d.Name)
 		}
 	}
 	now := s.clock.Now()
-	h := &actionHost{owner: m.ID, actions: req.Actions}
+	h := &actionHost{owner: m.ID, actions: req.Actions, browserHostScope: req.Provider == "browser" && req.BrowserHostScope}
 	h.ActionHost = api.ActionHost{ID: s.ids.New("ahs"), MachineID: machineID, Resource: req.Resource, Provider: req.Provider, Generation: req.Generation, LastSeenAt: now}
 	s.mu.Lock()
 	for id, old := range s.hosts {
@@ -820,7 +957,7 @@ func (s *ActionService) RegisterHost(ctx context.Context, by Actor, req api.Acti
 		}
 		for _, g := range s.grants {
 			if same && !sameResource(old.Resource, h.Resource) && g.Target.ID == h.MachineID && sameResourceID(g.Target.Resource, old.Resource) {
-				s.close(g, api.GrantRevoked, "SSH target binding changed")
+				s.close(g, api.GrantRevoked, "profile target binding changed")
 			} else if g.hostSeen == old.ID {
 				g.hostSeen = h.ID
 			}
@@ -832,6 +969,67 @@ func (s *ActionService) RegisterHost(ctx context.Context, by Actor, req api.Acti
 	s.mu.Unlock()
 	s.audit.Record(ctx, by, "action.host.register", where, req.Provider)
 	return &out, nil
+}
+
+// UnregisterHost withdraws the current host generation. Profile grants match
+// resource identity, so stale policy bindings and pending approvals end too.
+func (s *ActionService) UnregisterHost(ctx context.Context, by Actor, id, generation string) error {
+	member, err := person(by, "withdraw agent action hosts")
+	if err != nil {
+		return err
+	}
+	if generation == "" {
+		return domain.Errf(domain.CodeInvalidArgument, "generation is required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	h, err := s.hostOf(by, id, generation)
+	if err != nil {
+		return err
+	}
+	if h.owner != member.ID {
+		return domain.Errf(domain.CodePermissionDenied, "only the host's actual owner may withdraw it")
+	}
+	delete(s.hosts, id)
+	affected := map[string]bool{}
+	for _, g := range s.grants {
+		if h.MachineID != "" && g.Target.Kind == "machine" && g.Target.ID == h.MachineID && sameResourceID(g.Target.Resource, h.Resource) {
+			matches := false
+			for _, p := range g.Requested {
+				matches = matches || providerOf(p) == h.Provider
+			}
+			if matches && (g.State == api.GrantPending || g.State == api.GrantActive) {
+				affected[g.ID] = true
+				wasPending := g.State == api.GrantPending
+				s.close(g, api.GrantRevoked, "revoked: host withdrawn")
+				if wasPending && s.approvals != nil {
+					s.approvals.withdrawActionGrant(ctx, g.ApprovalID, g.ID)
+				}
+			}
+		}
+	}
+	now := s.clock.Now()
+	for _, j := range s.jobs {
+		newlyCancelled := affected[j.GrantID] && j.State == api.JobCancelled && j.Error != nil && j.Error.Code == "grant_ended"
+		if j.State != api.JobQueued && j.State != api.JobRunning && !newlyCancelled {
+			continue
+		}
+		if j.hostID != id && !affected[j.GrantID] {
+			continue
+		}
+		wasRunning := j.State == api.JobRunning
+		j.State, j.FinishedAt, j.CancelRequested = api.JobCancelled, &now, true
+		if j.Error == nil || j.Error.Code == "grant_ended" {
+			message := "Authorization revoked: the action host was withdrawn before this job completed."
+			if wasRunning {
+				message += " Earlier side effects may remain; inspect before retrying."
+			}
+			j.Error = &api.ActionError{Code: "revoked", Message: message}
+		}
+	}
+	s.changed()
+	s.audit.Record(ctx, by, "action.host.unregister", h.MachineID, h.Provider)
+	return nil
 }
 
 // failRunning fails a host's running jobs as outcome unknown (mu held).
@@ -866,12 +1064,13 @@ func (s *ActionService) hostServes(ctx context.Context, h *actionHost, g *action
 	if g.Target.Kind == "page" {
 		return s.memberSees(ctx, h.owner, g.Target.ID)
 	}
-	return h.MachineID == g.Target.ID && sameResource(h.Resource, g.Target.Resource)
+	return h.MachineID == g.Target.ID && sameResource(h.Resource, g.Target.Resource) &&
+		(len(g.Hosts) == 0 || h.browserHostScope)
 }
 
 func (s *ActionService) hostOf(by Actor, id, generation string) (*actionHost, error) {
 	h := s.hosts[id]
-	if h == nil || (by.Member != nil && h.owner != by.Member.ID && (!by.Manages() || h.Provider == "server.ssh")) {
+	if h == nil || (by.Member != nil && h.owner != by.Member.ID && (!by.Manages() || profileProvider(h.Provider))) {
 		return nil, domain.Errf(domain.CodeNotFound, "host %s not found", id).WithSuggestion("register it again")
 	}
 	if generation != "" && generation != h.Generation {
@@ -908,7 +1107,9 @@ func (s *ActionService) HostJobs(ctx context.Context, by Actor, hostID string, w
 			if g == nil || !s.hostServes(ctx, h, g) {
 				continue
 			}
-			s.refresh(ctx, g)
+			if err := s.refresh(ctx, g); err != nil {
+				return nil, true, err
+			}
 			if g.State != api.GrantActive {
 				continue
 			}
@@ -948,7 +1149,9 @@ func (s *ActionService) HostJob(ctx context.Context, by Actor, jobID, hostID, ge
 		h.LastSeenAt = s.clock.Now()
 		out := &api.ActionHostJobState{Job: j.ActionJob, GrantState: api.GrantEnded}
 		if g := s.grants[j.GrantID]; g != nil {
-			s.refresh(ctx, g)
+			if err := s.refresh(ctx, g); err != nil {
+				return nil, true, err
+			}
 			out.GrantState = g.State
 			if g.ExpiresAt != nil {
 				t := *g.ExpiresAt
@@ -960,7 +1163,7 @@ func (s *ActionService) HostJob(ctx context.Context, by Actor, jobID, hostID, ge
 	})
 }
 
-// UploadArtifact keeps a file a running job made, for its agent only.
+// UploadArtifact accepts a file from the host of a running job.
 func (s *ActionService) UploadArtifact(ctx context.Context, by Actor, jobID, hostID, generation, mediaType string, data []byte) (*api.ActionArtifact, error) {
 	if _, err := person(by, "host agent actions"); err != nil {
 		return nil, err
@@ -983,11 +1186,30 @@ func (s *ActionService) UploadArtifact(ctx context.Context, by Actor, jobID, hos
 		return nil, domain.Errf(domain.CodeNotFound, "running job %s not found on this host", jobID)
 	}
 	g := s.grants[j.GrantID]
+	if g != nil {
+		if err := s.refresh(ctx, g); err != nil {
+			return nil, err
+		}
+	}
 	if g == nil || g.State != api.GrantActive {
 		return nil, domain.Errf(domain.CodeInvalidState, "its grant has ended")
 	}
 	exp := s.clock.Now().Add(actionArtifactTTL)
-	if g.ExpiresAt != nil && g.ExpiresAt.Before(exp) {
+	if api.BrowserActionPermission(j.Action) == api.BrowserControlPermission {
+		if mediaType != "image/png" && mediaType != "image/jpeg" && mediaType != "image/webp" {
+			return nil, domain.Errf(domain.CodeInvalidArgument, "browser control artifacts must be raster screenshots")
+		}
+		for _, staged := range s.arts {
+			if staged.jobID == j.ID {
+				if staged.MediaType == mediaType && bytes.Equal(staged.data, data) {
+					out := staged.ActionArtifact
+					return &out, nil
+				}
+				return nil, domain.Errf(domain.CodeConflict, "this job already has a screenshot")
+			}
+		}
+		exp = s.clock.Now().Add(browserScreenshotTTL).Truncate(time.Millisecond)
+	} else if g.ExpiresAt != nil && g.ExpiresAt.Before(exp) {
 		exp = *g.ExpiresAt
 	}
 	a := &actionArtifact{grantID: g.ID, jobID: j.ID, hostID: h.ID, data: data}
@@ -1012,8 +1234,14 @@ func (s *ActionService) CompleteJob(ctx context.Context, by Actor, jobID string,
 	if len(c.Result) > 0 && !json.Valid(c.Result) {
 		return nil, domain.Errf(domain.CodeInvalidArgument, "the result is not JSON")
 	}
+	var auditAction, auditAgent, auditDetail string
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	defer func() {
+		s.mu.Unlock()
+		if auditAction != "" {
+			s.audit.Record(ctx, Actor{Agent: &domain.Agent{Name: domain.AgentName(auditAgent)}}, auditAction, c.BrowserHost, auditDetail)
+		}
+	}()
 	h, err := s.hostOf(by, c.HostID, c.Generation)
 	if err != nil {
 		return nil, err
@@ -1025,15 +1253,59 @@ func (s *ActionService) CompleteJob(ctx context.Context, by Actor, jobID string,
 	if j.State != api.JobRunning {
 		return nil, domain.Errf(domain.CodeInvalidState, "job %s is %s already", jobID, j.State)
 	}
-	now := s.clock.Now()
-	j.FinishedAt = &now
+	control := api.BrowserActionPermission(j.Action) == api.BrowserControlPermission
+	if c.BrowserHost != "" && (!control || !api.ValidBrowserAuditHost(c.BrowserHost)) {
+		return nil, domain.Errf(domain.CodeInvalidArgument, "invalid browser audit host")
+	}
 	g := s.grants[j.GrantID]
 	if g != nil {
-		s.refresh(ctx, g) // (a page's agent may no longer see it)
+		if err := s.refresh(ctx, g); err != nil {
+			return nil, err
+		}
+	}
+	if g != nil && g.State == api.GrantActive {
+		for _, id := range c.ArtifactIDs {
+			a := s.arts[id]
+			if a == nil || a.jobID != j.ID {
+				return nil, domain.Errf(domain.CodeInvalidArgument, "artifact %s is not this job's", id)
+			}
+		}
+	}
+	if control && g != nil && g.State == api.GrantActive && c.State == api.JobSucceeded && len(c.ArtifactIDs) > 0 {
+		if len(c.ArtifactIDs) != 1 {
+			return nil, domain.Errf(domain.CodeInvalidArgument, "a browser action may publish one screenshot")
+		}
+		a := s.arts[c.ArtifactIDs[0]]
+		var stored bool
+		if s.browserScreenshots != nil && j.agentID != "" {
+			stored = s.browserScreenshots.Save(ctx, domain.BrowserScreenshot{
+				ID: a.ID, AgentID: j.agentID, OwnerID: h.owner, MediaType: a.MediaType,
+				ExpiresAt: a.ExpiresAt, Data: a.data,
+			}) == nil
+		}
+		if stored {
+			auditDetail = "screenshot"
+		} else {
+			c.State, c.Result = api.JobFailed, nil
+			c.Error = &api.ActionError{Code: "storage_failed", Message: "could not retain the browser screenshot"}
+		}
+	}
+	now := s.clock.Now()
+	j.FinishedAt = &now
+	if control {
+		auditAction, auditAgent = j.Action, j.agent
+		if c.Error != nil && c.Error.Code == "host_not_allowed" {
+			auditDetail = "host_not_allowed"
+		}
 	}
 	if g == nil || g.State != api.GrantActive {
 		j.State = api.JobCancelled
 		j.Error = &api.ActionError{Code: "grant_ended", Message: "its grant ended while it ran; whatever it did happened, but its result is not kept"}
+		if g != nil {
+			if e := browserGrantEndError(g, j.Action); e != nil {
+				j.Error = e
+			}
+		}
 		for id, a := range s.arts {
 			if a.jobID == j.ID {
 				delete(s.arts, id)
@@ -1045,15 +1317,33 @@ func (s *ActionService) CompleteJob(ctx context.Context, by Actor, jobID string,
 	}
 	j.State, j.Result, j.Error = c.State, c.Result, c.Error
 	for _, id := range c.ArtifactIDs {
-		a := s.arts[id]
-		if a == nil || a.jobID != j.ID {
-			return nil, domain.Errf(domain.CodeInvalidArgument, "artifact %s is not this job's", id)
+		if !control || c.State == api.JobSucceeded {
+			j.Artifacts = append(j.Artifacts, s.arts[id].ActionArtifact)
 		}
-		j.Artifacts = append(j.Artifacts, a.ActionArtifact)
+	}
+	if control {
+		for id, a := range s.arts {
+			if a.jobID == j.ID {
+				delete(s.arts, id)
+			}
+		}
 	}
 	s.changed()
 	out := j.ActionJob
 	return &out, nil
+}
+
+func browserGrantEndError(g *actionGrant, action string) *api.ActionError {
+	if api.BrowserActionPermission(action) != api.BrowserControlPermission || !contains(g.Permissions, api.BrowserControlPermission) {
+		return nil
+	}
+	if g.EndReason == api.BrowserControlOwnerStopped {
+		return &api.ActionError{Code: "session_closed", Reason: api.BrowserControlOwnerStopped, Message: "the owner stopped browser control"}
+	}
+	if g.State == api.GrantExpired {
+		return &api.ActionError{Code: "session_expired", Reason: "grant_expired", Message: "the browser control grant expired"}
+	}
+	return &api.ActionError{Code: "session_closed", Reason: "grant_ended", Message: "the browser control grant ended"}
 }
 
 // ---- jobs (the agent) ----
@@ -1090,7 +1380,33 @@ func (s *ActionService) RunAction(ctx context.Context, agent *domain.Agent, inv 
 		out := s.jobs[id].ActionJob
 		return &out, nil
 	}
+	control := api.BrowserActionPermission(inv.Action) == api.BrowserControlPermission
+	if control {
+		if inv.Version != 1 {
+			return nil, domain.Errf(domain.CodeUnsupported, "browser control uses action version 1")
+		}
+		fields, err := api.DecodeBrowserControlArgs(inv.Action, args)
+		if err != nil {
+			return nil, domain.Errf(domain.CodeInvalidArgument, "%s", err)
+		}
+		if inv.Action == "browser.page.open" && g.Target.Resource != nil && fields.String("profile") != g.Target.Resource.ID {
+			return nil, domain.Errf(domain.CodePermissionDenied, "profile is outside the grant")
+		}
+	}
 	if g.State != api.GrantActive {
+		if g.State == api.GrantRevoked || g.State == api.GrantExpired || g.State == api.GrantEnded {
+			if failure := browserGrantEndError(g, inv.Action); failure != nil {
+				if g.jobsCount >= actionJobsPerGrant {
+					return nil, domain.Errf(domain.CodeRateLimited, "grant %s has run %d actions; request a new one", g.ID, actionJobsPerGrant)
+				}
+				now := s.clock.Now()
+				job := api.ActionJob{ID: s.ids.New("ajb"), GrantID: g.ID, Action: inv.Action, Version: inv.Version, State: api.JobFailed, Error: failure, CreatedAt: now, FinishedAt: &now}
+				s.jobs[job.ID] = &actionJob{ActionJob: job, agent: string(agent.Name)}
+				g.idem[key], g.idemHash[key] = job.ID, hash
+				g.jobsCount++
+				return &job, nil
+			}
+		}
 		return nil, domain.Errf(domain.CodeInvalidState, "grant %s is %s", g.ID, g.State).WithSuggestion("request a new grant")
 	}
 	var desc *api.ActionDescriptor
@@ -1113,7 +1429,7 @@ func (s *ActionService) RunAction(ctx context.Context, agent *domain.Agent, inv 
 	if g.jobsCount >= actionJobsPerGrant {
 		return nil, domain.Errf(domain.CodeRateLimited, "grant %s has run %d actions; request a new one", g.ID, actionJobsPerGrant)
 	}
-	j := &actionJob{agent: string(agent.Name), args: args}
+	j := &actionJob{agent: string(agent.Name), agentID: agent.ID, args: args}
 	j.ActionJob = api.ActionJob{ID: s.ids.New("ajb"), GrantID: g.ID, Action: inv.Action, Version: inv.Version, State: api.JobQueued, CreatedAt: s.clock.Now()}
 	s.jobs[j.ID] = j
 	g.idem[key], g.idemHash[key] = j.ID, hash
@@ -1131,7 +1447,9 @@ func (s *ActionService) Job(ctx context.Context, agent *domain.Agent, id string,
 			return nil, true, domain.Errf(domain.CodeNotFound, "job %s not found", id)
 		}
 		if g := s.grants[j.GrantID]; g != nil {
-			s.refresh(ctx, g)
+			if err := s.refresh(ctx, g); err != nil {
+				return nil, true, err
+			}
 		}
 		out := j.ActionJob
 		return &out, j.State != api.JobQueued && j.State != api.JobRunning, nil
@@ -1159,19 +1477,25 @@ func (s *ActionService) CancelJob(ctx context.Context, agent *domain.Agent, id s
 	return &out, nil
 }
 
-// Artifact returns a file one of agent's jobs made, while its grant lasts.
+// Artifact returns a file from an agent's job for its retention period.
 func (s *ActionService) Artifact(ctx context.Context, agent *domain.Agent, id string) (*api.ActionArtifact, []byte, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	a := s.arts[id]
 	if a == nil {
-		return nil, nil, domain.Errf(domain.CodeNotFound, "artifact %s not found (or no longer kept)", id)
+		s.mu.Unlock()
+		return s.browserScreenshot(ctx, id, agent.ID, "")
 	}
+	defer s.mu.Unlock()
 	g := s.grants[a.grantID]
+	if j := s.jobs[a.jobID]; j != nil && api.BrowserActionPermission(j.Action) == api.BrowserControlPermission {
+		return nil, nil, domain.Errf(domain.CodeNotFound, "browser screenshot is not available")
+	}
 	if g == nil || g.Agent != string(agent.Name) {
 		return nil, nil, domain.Errf(domain.CodeNotFound, "artifact %s not found (or no longer kept)", id)
 	}
-	s.refresh(ctx, g)
+	if err := s.refresh(ctx, g); err != nil {
+		return nil, nil, err
+	}
 	if _, still := s.arts[id]; !still || !s.clock.Now().Before(a.ExpiresAt) {
 		delete(s.arts, id)
 		return nil, nil, domain.Errf(domain.CodeNotFound, "artifact %s is no longer kept", id)

@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/client"
 	_ "modernc.org/sqlite" // registers the "sqlite" driver
 )
 

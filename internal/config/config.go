@@ -12,8 +12,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/chenhg5/myco/internal/harness"
-	"github.com/chenhg5/myco/internal/osutil"
+	"github.com/myco-ai/myco/internal/harness"
+	"github.com/myco-ai/myco/internal/osutil"
 )
 
 // Env variable names.

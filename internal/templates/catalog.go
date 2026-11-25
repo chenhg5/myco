@@ -15,9 +15,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/domain"
-	"github.com/chenhg5/myco/internal/release"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/release"
 )
 
 // The official apps are also published on their own (templates.md), so a
@@ -37,8 +37,11 @@ const (
 
 // Catalog is the official apps a hub offers.
 type Catalog struct {
-	// Download is where release assets live (release.DownloadURL).
+	// Download is where app release assets live (DownloadURL).
 	Download string
+	// Base explicitly supplies a bootstrap catalog for isolated tests or embedding.
+	// A nil value uses the production bundle, if one was prepared.
+	Base []app.OfficialTemplate
 	// StateDir keeps the last archive fetched ("" keeps nothing).
 	StateDir string
 	// HubVersion is this hub's build: apps needing a newer one are left out.
@@ -80,7 +83,7 @@ func (c *Catalog) keptPath() string {
 
 // Load starts from the binary's apps and the archive kept from before.
 func (c *Catalog) Load() error {
-	built, err := Official()
+	built, err := c.builtin()
 	if err != nil {
 		return err
 	}
@@ -108,7 +111,7 @@ func (c *Catalog) Attach(set func([]app.OfficialTemplate)) {
 	cur := c.current
 	c.mu.Unlock()
 	if cur == nil {
-		if built, err := Official(); err == nil {
+		if built, err := c.builtin(); err == nil {
 			cur = built
 		}
 	}
@@ -161,7 +164,7 @@ func (c *Catalog) Sync(ctx context.Context) SyncResult {
 	if err != nil {
 		return c.result(nil, err.Error())
 	}
-	built, err := Official()
+	built, err := c.builtin()
 	if err != nil {
 		return c.result(nil, err.Error())
 	}
@@ -383,4 +386,12 @@ func changed(before, after []app.OfficialTemplate) []string {
 		}
 	}
 	return out
+}
+
+// builtin keeps explicit fixtures separate from the generated production bundle.
+func (c *Catalog) builtin() ([]app.OfficialTemplate, error) {
+	if c.Base != nil {
+		return c.Base, nil
+	}
+	return Official()
 }

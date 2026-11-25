@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -70,7 +71,11 @@ func (s *Systemd) Unit(sp Spec) string {
 	for _, k := range sortedKeys(sp.Env) {
 		b.WriteString("Environment=" + quote(k+"="+sp.Env[k]) + "\n")
 	}
-	b.WriteString("Restart=always\nRestartSec=5\nTimeoutStopSec=600\nKillMode=mixed\n")
+	stop := "600"
+	if s.ID.orDefault() == RunnerID {
+		stop = "30"
+	}
+	b.WriteString("Restart=always\nRestartSec=5\nTimeoutStopSec=" + stop + "\nKillMode=mixed\n")
 	b.WriteString("StandardOutput=append:" + sp.LogPath + "\nStandardError=append:" + sp.LogPath + "\n")
 	b.WriteString("\n[Install]\nWantedBy=default.target\n")
 	return b.String()
@@ -80,9 +85,8 @@ func (s *Systemd) PlanInstall(sp Spec) (Plan, error) {
 	cmds := [][]string{
 		{"systemctl", "--user", "daemon-reload"},
 		{"systemctl", "--user", "enable", s.unit()},
-		// Without blocking: a running runner first lets its tasks finish
-		// (up to TimeoutStopSec), and an install that waited would look
-		// stuck; one interrupted then left the runner stopped.
+		// Queue the restart before returning; the runner cancels unfinished
+		// work and its next process recovers the persisted tasks.
 		{"systemctl", "--user", "restart", "--no-block", s.unit()},
 	}
 	// Keep it running after logout. Turning linger on for yourself needs no
@@ -120,6 +124,29 @@ func (s *Systemd) Status() (Status, error) {
 }
 
 func (s *Systemd) Restart() error {
+	// Apply the bound to already-installed units too, before stopping an old
+	// binary that still drains tasks indefinitely. Preserve args/environment.
+	if s.ID.orDefault() == RunnerID {
+		b, err := os.ReadFile(s.file())
+		if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		if err == nil {
+			re := regexp.MustCompile(`(?m)^TimeoutStopSec=.*$`)
+			updated := re.ReplaceAllString(string(b), "TimeoutStopSec=30")
+			if !re.Match(b) {
+				updated = strings.Replace(updated, "[Service]\n", "[Service]\nTimeoutStopSec=30\n", 1)
+			}
+			if updated != string(b) {
+				if err := os.WriteFile(s.file(), []byte(updated), 0o644); err != nil {
+					return err
+				}
+				if _, err := s.R.Run("systemctl", "--user", "daemon-reload"); err != nil {
+					return err
+				}
+			}
+		}
+	}
 	_, err := s.R.Run("systemctl", "--user", "restart", s.unit())
 	return err
 }

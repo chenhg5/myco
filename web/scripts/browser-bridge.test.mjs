@@ -1,0 +1,62 @@
+// Execute the shipped helper against a fake trusted parent; no browser process.
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import vm from 'node:vm';
+const source=readFileSync(new URL('../../internal/console/pagebridge.js',import.meta.url),'utf8');
+const sent=[],handlers={};
+const parent={postMessage(message){sent.push(message);queueMicrotask(()=>handlers.message({source:parent,data:{myco:'result',id:message.id,value:message.method==='ready'?{page:{id:'pg_fixture'},state:{},version:1}:message.args.action==='status'?{version:'0.1.0',update_available:true,features:['screenshot_clip']}:message.args.action==='snapshot'?{base64:'aW1hZ2U=',type:'image/jpeg'}:{ok:true}}}));}};
+const document={addEventListener(){},documentElement:{style:{},setAttribute(){}}};
+const window={parent,addEventListener(name,f){handlers[name]=f},matchMedia(){return{matches:false}},open(){}};
+const sandbox={window,parent,document,location:new URL('http://127.0.0.1:1234/p/mock/index.html'),navigator:{language:'en'},URL,URLSearchParams,Blob,Uint8Array,ArrayBuffer,atob,setTimeout(){},clearTimeout(){},console,crypto:globalThis.crypto,AbortController};
+vm.runInNewContext(source.replace('/*__MYCO_BROWSER_FEATURE__*/','.concat(["browser"])'),sandbox);
+const api=window.myco.browser;
+assert.ok(window.myco.features.includes('browser'));
+await api.install();
+const browserStatus=await api.status();
+assert.equal(browserStatus.update_available,true);
+assert.deepEqual(JSON.parse(JSON.stringify(browserStatus.features)),['screenshot_clip']);
+await api.profiles.create('Fixture');
+await api.profiles.open('p_fixture');
+await api.profiles.allowAgents('p_fixture',true);
+await api.record.start({profile:'p_fixture',url:'https://example.com'});
+await api.record.events('rec_fixture',3);
+await api.record.stop('rec_fixture');
+const clip={x:10,y:20,width:30,height:40};
+await api.runs.start({profile:'p_fixture',script:{graph:{nodes:[{id:'shot',type:'screenshot',clip}],edges:[]}},secrets:{password:'run-only'}});
+await api.runs.get('run_fixture',7);
+await api.runs.control('run_fixture','step');
+await api.runs.control('run_fixture','resume','ok');
+await api.locate({profile:'p_fixture',target:{locators:[]}});
+await api.pick({profile:'p_fixture'});
+const shot=await api.snapshot('a_fixture');
+assert.equal(shot.type,'image/jpeg');assert.equal(await shot.text(),'image');
+await api.approvals.list();
+await api.approvals.request({script_id:'script',version:3,profile:'p_fixture',script:{name:'Report'},scripts:{}});
+await api.approvals.revoke('script',3);
+const actions=sent.filter(m=>m.method==='browser.call');
+assert.deepEqual(actions.map(m=>m.args.action),['install','status','profiles.create','profiles.open','profiles.allowAgents','record.start','record.events','record.stop','runs.start','runs.get','runs.control','runs.control','locate','pick','snapshot','approvals.list','approvals.request','approvals.revoke']);
+assert.deepEqual(JSON.parse(JSON.stringify(actions[8].args.args.script.graph.nodes[0].clip)),clip);
+assert.equal(actions[6].args.args.after,3);assert.equal(actions[9].args.args.after,7);
+assert.equal(actions[10].args.args.action,'step');assert.equal(actions[11].args.args.choice,'ok');
+assert.ok(actions.every(m=>!('confirmation' in m.args)&&!('uploads' in m.args)));
+// Protocol 1 adds configure optionally. The page forwards write-only settings
+// to its trusted host; it cannot supply or obtain the confirmation nonce.
+const settings={proxy:{server:'http://proxy.example:8080',bypass:['<local>'],username:'fixture-user',password:'write-only-fixture'},user_agent:'Mozilla/5.0',lang:'zh-CN',args:['--disable-gpu']};
+assert.equal(typeof api.profiles.configure,'function');
+await api.profiles.configure('p_fixture',settings);
+const configured=sent.filter(m=>m.method==='browser.call').at(-1);
+assert.equal(configured.args.action,'profiles.configure');
+assert.deepEqual(JSON.parse(JSON.stringify(configured.args.args)),{id:'p_fixture',settings});
+assert.ok(!('confirmation' in configured.args));
+console.log('browser bridge: install, profiles, recording/run cursors, controls and image Blob passed');
+
+const metadata=[{id:'rec_browser',profile:'p_fixture',url:'https://example.com',started_at:'2026-11-25T00:00:00Z',origin:'browser'}];
+parent.postMessage=function(message){sent.push(message);queueMicrotask(()=>handlers.message({source:parent,data:{myco:'result',id:message.id,value:message.args.action==='record.active'?metadata:{steps:[],removed:['n_deleted'],next:9,done:true}}}));};
+assert.deepEqual(JSON.parse(JSON.stringify(await api.record.active())),metadata);
+assert.deepEqual(JSON.parse(JSON.stringify(await api.record.events('rec_browser',8))),{steps:[],removed:['n_deleted'],next:9,done:true});
+assert.equal(sent.at(-2).args.action,'record.active');
+console.log('browser bridge: active browser recordings and removed steps preserved');
+
+parent.postMessage=function(message){queueMicrotask(()=>handlers.message({source:parent,data:{myco:'result',id:message.id,error:'Close the previous browser and retry.',code:'profile_locked',reason:'leftover_unverified'}}));};
+await assert.rejects(api.profiles.open('p_fixture'),e=>e.code==='profile_locked'&&e.reason==='leftover_unverified');
+console.log('browser bridge: profile recovery reason preserved');

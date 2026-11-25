@@ -5,20 +5,22 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	. "github.com/chenhg5/myco/internal/cli/cmdkit"
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/config"
-	"github.com/chenhg5/myco/internal/harness"
-	"github.com/chenhg5/myco/internal/harness/acp"
-	"github.com/chenhg5/myco/internal/harness/builtin"
-	"github.com/chenhg5/myco/internal/harness/execnode"
-	"github.com/chenhg5/myco/internal/harness/machinenode"
-	"github.com/chenhg5/myco/internal/runner"
+	"github.com/myco-ai/myco/internal/api"
+	. "github.com/myco-ai/myco/internal/cli/cmdkit"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/config"
+	"github.com/myco-ai/myco/internal/harness"
+	"github.com/myco-ai/myco/internal/harness/acp"
+	"github.com/myco-ai/myco/internal/harness/builtin"
+	"github.com/myco-ai/myco/internal/harness/execnode"
+	"github.com/myco-ai/myco/internal/harness/machinenode"
+	"github.com/myco-ai/myco/internal/runner"
 )
 
 func runnerCommands() *Command {
@@ -41,7 +43,7 @@ notes are never auto-answered. Logs go to stderr.`,
 		},
 		Flags: []Flag{
 			{Name: "all", Kind: Bool, Help: "Serve every agent profile in ~/.myco/agents"},
-			{Name: "max-concurrent", Kind: Int, Default: "3", Help: "With --all: max agent CLIs running at once"},
+			{Name: "max-concurrent", Kind: Int, Default: "3", Help: "With --all: max agent CLIs running at once, shared fairly between workspaces"},
 			{Name: "harness", Kind: Enum, Values: harnesses.Names(), Help: "Agent CLI adapter (default from config, else claude); see: myco harness list"},
 			{Name: "access", Kind: Enum, Values: []string{"readonly", "workspace", "full"}, Help: "Permission level mapped to CLI flags (default: config, else the CLI's own headless default)"},
 			{Name: "model", Kind: String, Help: "Model in the CLI's own naming"},
@@ -61,6 +63,16 @@ notes are never auto-answered. Logs go to stderr.`,
 			{Name: "trace", Kind: Enum, Values: []string{"full", "summary", "off"}, Default: "full", Help: "How much of a task's run the sender sees live in the app: full (what the agent says, thinks and does), summary (which tools ran), off"},
 		},
 		Run: handler(func(e *env) error {
+			_ = os.Remove(runnerRestartPath(e.defaultPath)) // this is the replacement process
+			if runtime.GOOS == "windows" {
+				home, err := os.UserHomeDir()
+				if err != nil {
+					return err
+				}
+				ctx, cancel := watchRunnerStop(e.in.Ctx, filepath.Join(home, ".myco", "runner-stop-"+strconv.Itoa(os.Getpid())))
+				defer cancel()
+				e.in.Ctx = ctx
+			}
 			log := newLogger(e.in.String("log-level"))
 			if path := e.in.String("log-file"); path != "" {
 				f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
@@ -96,7 +108,7 @@ notes are never auto-answered. Logs go to stderr.`,
 				return r.Run(e.in.Ctx)
 			}
 			if n := e.in.Int("max-concurrent"); n > 0 {
-				shared.slots = make(chan struct{}, n)
+				shared.slots = runner.NewSlotPool(n)
 			}
 			return e.runAll(shared, log)
 		}),
@@ -112,7 +124,7 @@ type runnerShared struct {
 	scope      runner.SessionScope
 	rebind     bool
 	trace      string
-	slots      chan struct{}
+	slots      *runner.SlotPool
 	// locks: one turn at a time per CLI session, across every agent
 	// (several workspaces can share a session) and runner process.
 	locks    *runner.SessionLocks
@@ -203,6 +215,8 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 			return nil, errorf("invalid_argument", ExitUsage, "available harnesses: "+strings.Join(sh.registry.Names(), ", "), "%v", err)
 		}
 	}
+	_, commandExecutor := h.(harness.CommandExecutor)
+	c.WakeHeld = !commandExecutor
 	// The provider (runner.provider, or provider variables in the env file)
 	// is resolved again before every run, like the env file itself.
 	currentProvider := func() providerChoice {
@@ -227,6 +241,9 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 	if !sh.once {
 		rep = e.reportToHub(c, me, h, config.Runner{Model: first(ov.model, rc.Model)}, access, maxAccess, initial, workdir, log)
 		go rep.watchMaxAccess(e.in.Ctx, 20*time.Second, maxAccess, e.machineMaxAccess)
+		if sh.slots != nil {
+			go rep.watchSlots(e.in.Ctx, sh.slots, runner.SlotOwner(cfg.Hub, me.Name))
+		}
 	}
 	timeout := ov.timeout
 	if timeout == 0 {
@@ -323,7 +340,7 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 		"session_scope", sh.scope, "session_id", me.Binding.SessionID)
 	return runner.New(c, h, sessions, runner.DefaultPrompt{Owner: me.Owner}, runner.Options{
 		Self: me.Name, Timeout: timeout, PollWait: pollWait, Workdir: workdir, Once: sh.once, Scope: sh.scope,
-		BusyRetry: sh.busyRetry, BusyWindow: sh.busyWindow, Slots: slots, Trace: sh.trace, SessionLocks: sh.locks,
+		BusyRetry: sh.busyRetry, BusyWindow: sh.busyWindow, SlotPool: slots, OnSlots: rep.Slots, Trace: sh.trace, SessionLocks: sh.locks,
 		StatePath:      runnerStatePath(e.defaultPath, me.Name),
 		HubURL:         cfg.Hub,
 		AttachmentsDir: filepath.Join(config.Dir(e.defaultPath), "attachments", me.Name),
@@ -456,7 +473,11 @@ func (e *env) runAll(sh runnerShared, log *slog.Logger) error {
 	if n == 0 && sh.once {
 		return errorf("not_found", ExitNotFound, "enroll an agent first: myco agent enroll", "no agent profiles in %s", dir)
 	}
-	log.Info("runner serving all agents", "profiles_dir", dir, "profiles", n, "max_concurrent", cap(sh.slots))
+	limit := 0
+	if sh.slots != nil {
+		limit = sh.slots.Snapshot("").MaxConcurrent
+	}
+	log.Info("runner serving all agents", "profiles_dir", dir, "profiles", n, "max_concurrent", limit)
 	if n == 0 {
 		hint := "enroll or register an agent on this machine (myco agent enroll / myco agent register --harness exec ...)"
 		if _, err := os.Stat(e.defaultPath); err == nil {

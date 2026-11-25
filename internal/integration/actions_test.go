@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // An agent asks to act on a computer; its owner approves (less than asked);
@@ -22,19 +22,19 @@ func TestAgentActionsGrantJobArtifact(t *testing.T) {
 	c := ctx(t)
 	h := startHub(t, filepath.Join(t.TempDir(), "hub.db"), app.DefaultMessagePolicy())
 	admin := h.admin()
-	if _, err := admin.UpdateMember(c, "owner", api.MemberUpdateRequest{Name: "glenn"}); err != nil {
+	if _, err := admin.UpdateMember(c, "owner", api.MemberUpdateRequest{Name: "alice"}); err != nil {
 		t.Fatal(err)
 	}
-	ct, err := admin.CreateConsoleToken(c, "glenn-mac")
+	ct, err := admin.CreateConsoleToken(c, "alice-mac")
 	if err != nil {
 		t.Fatal(err)
 	}
-	glenn := h.client(ct.Token)
+	alice := h.client(ct.Token)
 	node := h.client(h.register(api.RegisterRequest{Name: "mac-machine", Binding: api.Binding{Harness: "machine"}}))
 	if err := node.ReportMachine(c, api.MachineReport{Fingerprint: "fp-mac-0123456789abcdef", Name: "studio", Hostname: "studio", OS: "darwin"}); err != nil {
 		t.Fatal(err)
 	}
-	ms, err := glenn.Machines(c)
+	ms, err := alice.Machines(c)
 	if err != nil || len(ms) == 0 {
 		t.Fatalf("machines: %v %v", ms, err)
 	}
@@ -55,7 +55,7 @@ func TestAgentActionsGrantJobArtifact(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if g.State != api.GrantPending || g.Owner != "glenn" || len(g.Requested) != 2 {
+	if g.State != api.GrantPending || g.Owner != "alice" || len(g.Requested) != 2 {
 		t.Fatalf("grant: %+v", g)
 	}
 	// Pending: nothing runs.
@@ -63,14 +63,14 @@ func TestAgentActionsGrantJobArtifact(t *testing.T) {
 		t.Fatal("a pending grant ran an action")
 	}
 	// The owner sees a typed approval and allows view only, for 2 minutes.
-	aps, err := glenn.Approvals(c, "pending")
+	aps, err := alice.Approvals(c, "pending")
 	if err != nil || len(aps) != 1 || aps[0].Kind != "action_grant" {
 		t.Fatalf("approvals: %+v %v", aps, err)
 	}
-	if _, err := glenn.DecideActionGrant(c, aps[0].ID, api.ActionGrantNarrow{TTLSeconds: 3600}); err == nil {
+	if _, err := alice.DecideActionGrant(c, aps[0].ID, api.ActionGrantNarrow{TTLSeconds: 3600}); err == nil {
 		t.Fatal("approved for longer than asked")
 	}
-	if _, err := glenn.DecideActionGrant(c, aps[0].ID, api.ActionGrantNarrow{Permissions: []string{"remote.desktop.view"}, TTLSeconds: 120}); err != nil {
+	if _, err := alice.DecideActionGrant(c, aps[0].ID, api.ActionGrantNarrow{Permissions: []string{"remote.desktop.view"}, TTLSeconds: 120}); err != nil {
 		t.Fatal(err)
 	}
 	g, err = agent.ActionGrant(c, g.ID, time.Second)
@@ -97,10 +97,10 @@ func TestAgentActionsGrantJobArtifact(t *testing.T) {
 	if _, err := agent.RegisterActionHost(c, reg); err == nil {
 		t.Fatal("an agent registered a host")
 	}
-	if _, err := glenn.RegisterActionHost(c, api.ActionHostRegister{MachineID: machine, Provider: "os.shell", Generation: "g", Actions: reg.Actions}); err == nil {
+	if _, err := alice.RegisterActionHost(c, api.ActionHostRegister{MachineID: machine, Provider: "os.shell", Generation: "g", Actions: reg.Actions}); err == nil {
 		t.Fatal("an unknown provider was registered")
 	}
-	host, err := glenn.RegisterActionHost(c, reg)
+	host, err := alice.RegisterActionHost(c, reg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,24 +125,24 @@ func TestAgentActionsGrantJobArtifact(t *testing.T) {
 	if _, err := agent.RunAction(c, api.ActionInvocation{GrantID: g.ID, Action: "remote.desktop.observe", Version: 1, IdempotencyKey: "obs1", Args: json.RawMessage(`{"max_width":900}`)}); err == nil {
 		t.Fatal("same key, different body was accepted")
 	}
-	jobs, err := glenn.ActionHostJobs(c, host.ID, 2*time.Second)
+	jobs, err := alice.ActionHostJobs(c, host.ID, 2*time.Second)
 	if err != nil || len(jobs) != 1 || jobs[0].Job.ID != job.ID || jobs[0].Grant.ID != g.ID || string(jobs[0].Args) != `{"max_width":800}` {
 		t.Fatalf("host jobs: %+v %v", jobs, err)
 	}
 	png := []byte("\x89PNG fake screenshot")
-	if _, err := glenn.UploadActionArtifact(c, job.ID, host.ID, "gen0", "image/png", png); err == nil {
+	if _, err := alice.UploadActionArtifact(c, job.ID, host.ID, "gen0", "image/png", png); err == nil {
 		t.Fatal("an old generation uploaded")
 	}
-	art, err := glenn.UploadActionArtifact(c, job.ID, host.ID, "gen1", "image/png", png)
+	art, err := alice.UploadActionArtifact(c, job.ID, host.ID, "gen1", "image/png", png)
 	if err != nil {
 		t.Fatal(err)
 	}
 	result, _ := json.Marshal(map[string]any{"frame_id": "f1", "width": 800, "height": 500, "artifact": art})
-	if _, err := glenn.CompleteActionJob(c, job.ID, api.ActionJobComplete{HostID: host.ID, Generation: "gen1", State: api.JobSucceeded,
+	if _, err := alice.CompleteActionJob(c, job.ID, api.ActionJobComplete{HostID: host.ID, Generation: "gen1", State: api.JobSucceeded,
 		Result: result, ArtifactIDs: []string{art.ID}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := glenn.CompleteActionJob(c, job.ID, api.ActionJobComplete{HostID: host.ID, Generation: "gen1", State: api.JobFailed}); err == nil {
+	if _, err := alice.CompleteActionJob(c, job.ID, api.ActionJobComplete{HostID: host.ID, Generation: "gen1", State: api.JobFailed}); err == nil {
 		t.Fatal("a finished job was changed")
 	}
 	done, err := agent.ActionJob(c, job.ID, time.Second)
@@ -163,28 +163,28 @@ func TestAgentActionsGrantJobArtifact(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if jobs, err := glenn.ActionHostJobs(c, host.ID, 2*time.Second); err != nil || len(jobs) != 1 {
+	if jobs, err := alice.ActionHostJobs(c, host.ID, 2*time.Second); err != nil || len(jobs) != 1 {
 		t.Fatalf("host jobs 2: %+v %v", jobs, err)
 	}
 	// The host asks whether to stop while it runs: not yet; the agent
 	// cancelling says stop at once, and so does a revoke (waking a wait).
-	if st, err := glenn.ActionHostJob(c, job2.ID, host.ID, "gen1", 0); err != nil || st.Stop || st.GrantState != api.GrantActive || st.GrantExpiresAt == nil {
+	if st, err := alice.ActionHostJob(c, job2.ID, host.ID, "gen1", 0); err != nil || st.Stop || st.GrantState != api.GrantActive || st.GrantExpiresAt == nil {
 		t.Fatalf("host job state: %+v %v", st, err)
 	}
-	if _, err := glenn.ActionHostJob(c, job2.ID, host.ID, "gen0", 0); err == nil {
+	if _, err := alice.ActionHostJob(c, job2.ID, host.ID, "gen0", 0); err == nil {
 		t.Fatal("an old generation read a job")
 	}
 	stopped := make(chan *api.ActionHostJobState, 1)
-	go func() { st, _ := glenn.ActionHostJob(c, job2.ID, host.ID, "gen1", 20*time.Second); stopped <- st }()
+	go func() { st, _ := alice.ActionHostJob(c, job2.ID, host.ID, "gen1", 20*time.Second); stopped <- st }()
 	time.Sleep(200 * time.Millisecond)
-	owned, err := glenn.OwnerActionGrants(c, api.GrantActive)
+	owned, err := alice.OwnerActionGrants(c, api.GrantActive)
 	if err != nil || len(owned) != 1 {
 		t.Fatalf("owner grants: %+v %v", owned, err)
 	}
 	if _, err := agent.RevokeActionGrant(c, g.ID); err == nil {
 		t.Fatal("an agent revoked through the owner's route")
 	}
-	if rg, err := glenn.RevokeActionGrant(c, g.ID); err != nil || rg.State != api.GrantRevoked {
+	if rg, err := alice.RevokeActionGrant(c, g.ID); err != nil || rg.State != api.GrantRevoked {
 		t.Fatalf("revoke: %+v %v", rg, err)
 	}
 	select {
@@ -195,7 +195,7 @@ func TestAgentActionsGrantJobArtifact(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("the host was not told to stop when the grant was revoked")
 	}
-	late, err := glenn.CompleteActionJob(c, job2.ID, api.ActionJobComplete{HostID: host.ID, Generation: "gen1", State: api.JobSucceeded, Result: json.RawMessage(`{"secret":1}`)})
+	late, err := alice.CompleteActionJob(c, job2.ID, api.ActionJobComplete{HostID: host.ID, Generation: "gen1", State: api.JobSucceeded, Result: json.RawMessage(`{"secret":1}`)})
 	if err != nil || late.State != api.JobCancelled || len(late.Result) != 0 {
 		t.Fatalf("late result: %+v %v", late, err)
 	}
@@ -211,11 +211,11 @@ func TestAgentActionsGrantJobArtifact(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	aps, _ = glenn.Approvals(c, "pending")
+	aps, _ = alice.Approvals(c, "pending")
 	if len(aps) != 1 {
 		t.Fatalf("pending approvals: %+v", aps)
 	}
-	if _, err := glenn.DecideApproval(c, aps[0].ID, false); err != nil {
+	if _, err := alice.DecideApproval(c, aps[0].ID, false); err != nil {
 		t.Fatal(err)
 	}
 	if g2, err = agent.ActionGrant(c, g2.ID, 0); err != nil || g2.State != api.GrantDenied {
@@ -228,8 +228,8 @@ func TestAgentActionsGrantJobArtifact(t *testing.T) {
 	if g3, err = agent.EndActionGrant(c, g3.ID, false); err != nil || g3.State != api.GrantEnded {
 		t.Fatalf("ended: %+v %v", g3, err)
 	}
-	aps, _ = glenn.Approvals(c, "pending")
-	if _, err := glenn.DecideActionGrant(c, aps[0].ID, api.ActionGrantNarrow{}); err == nil {
+	aps, _ = alice.Approvals(c, "pending")
+	if _, err := alice.DecideActionGrant(c, aps[0].ID, api.ActionGrantNarrow{}); err == nil {
 		t.Fatal("approved a request its agent had ended")
 	}
 }
@@ -242,14 +242,14 @@ func TestPageExportGrantsAndRenderers(t *testing.T) {
 	c := ctx(t)
 	h := startHub(t, filepath.Join(t.TempDir(), "hub.db"), app.DefaultMessagePolicy())
 	admin := h.admin()
-	if _, err := admin.UpdateMember(c, "owner", api.MemberUpdateRequest{Name: "glenn"}); err != nil {
+	if _, err := admin.UpdateMember(c, "owner", api.MemberUpdateRequest{Name: "alice"}); err != nil {
 		t.Fatal(err)
 	}
-	ct, err := admin.CreateConsoleToken(c, "glenn-mac")
+	ct, err := admin.CreateConsoleToken(c, "alice-mac")
 	if err != nil {
 		t.Fatal(err)
 	}
-	glenn := h.client(ct.Token)
+	alice := h.client(ct.Token)
 	maker := h.client(h.register(api.RegisterRequest{Name: "maker", Binding: api.Binding{Harness: "claude", SessionID: "s1"}}))
 	var buf bytes.Buffer
 	z := zip.NewWriter(&buf)
@@ -261,20 +261,20 @@ func TestPageExportGrantsAndRenderers(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Another person, with an agent of their own: they do not see the page.
-	inv, err := admin.InviteMember(c, api.InviteRequest{Name: "laohu"})
+	inv, err := admin.InviteMember(c, api.InviteRequest{Name: "bob"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	paired, err := h.client("").Pair(c, inv.Link[strings.Index(inv.Link, "/c/")+3:], "laohu-mac")
+	paired, err := h.client("").Pair(c, inv.Link[strings.Index(inv.Link, "/c/")+3:], "bob-mac")
 	if err != nil {
 		t.Fatal(err)
 	}
-	laohu := h.client(paired.Token)
-	enr, err := laohu.CreateEnrollment(c, api.CreateEnrollmentRequest{NamePrefix: "laohu-", MaxUses: 1}, false)
+	bob := h.client(paired.Token)
+	enr, err := bob.CreateEnrollment(c, api.CreateEnrollmentRequest{NamePrefix: "bob-", MaxUses: 1}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, err := h.client(enr.Token).Enroll(c, api.EnrollRequest{Name: "laohu-codex", Binding: api.Binding{Harness: "codex", SessionID: "s"}}, false)
+	res, err := h.client(enr.Token).Enroll(c, api.EnrollRequest{Name: "bob-codex", Binding: api.Binding{Harness: "codex", SessionID: "s"}}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -282,10 +282,10 @@ func TestPageExportGrantsAndRenderers(t *testing.T) {
 
 	target := api.ActionTarget{Kind: "page", ID: page.ID}
 	g, err := maker.RequestActionGrant(c, api.ActionGrantRequest{Target: target, Permissions: []string{"page.export"}, Reason: "export the board"}, false)
-	if err != nil || g.State != api.GrantActive || g.Owner != "glenn" || g.ExpiresAt == nil || g.ApprovalID != "" {
+	if err != nil || g.State != api.GrantActive || g.Owner != "alice" || g.ExpiresAt == nil || g.ApprovalID != "" {
 		t.Fatalf("page grant: %+v %v", g, err)
 	}
-	if aps, _ := glenn.Approvals(c, "pending"); len(aps) != 0 {
+	if aps, _ := alice.Approvals(c, "pending"); len(aps) != 0 {
 		t.Fatalf("a page export asked for approval: %+v", aps)
 	}
 	if _, err := outsider.RequestActionGrant(c, api.ActionGrantRequest{Target: target, Permissions: []string{"page.export"}, Reason: "x"}, false); err == nil {
@@ -302,53 +302,53 @@ func TestPageExportGrantsAndRenderers(t *testing.T) {
 		t.Fatal("an export ran with no renderer")
 	}
 	// A renderer of someone who cannot see the page does not count.
-	lh, err := laohu.RegisterActionHost(c, api.ActionHostRegister{Provider: "page", Generation: "l1", Actions: []api.ActionDescriptor{export}})
+	lh, err := bob.RegisterActionHost(c, api.ActionHostRegister{Provider: "page", Generation: "l1", Actions: []api.ActionDescriptor{export}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := run("k1"); err == nil {
 		t.Fatal("an export ran on a renderer whose person cannot see the page")
 	}
-	host, err := glenn.RegisterActionHost(c, api.ActionHostRegister{Provider: "page", Generation: "g1", Actions: []api.ActionDescriptor{export}})
+	host, err := alice.RegisterActionHost(c, api.ActionHostRegister{Provider: "page", Generation: "g1", Actions: []api.ActionDescriptor{export}})
 	if err != nil || host.MachineID != "" {
 		t.Fatalf("renderer: %+v %v", host, err)
 	}
 	// A second App of the same person (another computer, or a preview
 	// beside the released App) renders too: it does not push the first one
 	// out, which made two Apps take the host from each other in a loop.
-	second, err := glenn.RegisterActionHost(c, api.ActionHostRegister{Provider: "page", Generation: "g2", Actions: []api.ActionDescriptor{export}})
+	second, err := alice.RegisterActionHost(c, api.ActionHostRegister{Provider: "page", Generation: "g2", Actions: []api.ActionDescriptor{export}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := glenn.ActionHostJobs(c, host.ID, 0); err != nil {
+	if _, err := alice.ActionHostJobs(c, host.ID, 0); err != nil {
 		t.Fatalf("the first App's renderer was replaced: %v", err)
 	}
-	if _, err := glenn.ActionHostJobs(c, second.ID, 0); err != nil {
+	if _, err := alice.ActionHostJobs(c, second.ID, 0); err != nil {
 		t.Fatalf("the second App's renderer: %v", err)
 	}
 	job, err := run("k2")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if jobs, err := laohu.ActionHostJobs(c, lh.ID, 0); err != nil || len(jobs) != 0 {
+	if jobs, err := bob.ActionHostJobs(c, lh.ID, 0); err != nil || len(jobs) != 0 {
 		t.Fatalf("the other person's renderer got the job: %+v %v", jobs, err)
 	}
-	jobs, err := glenn.ActionHostJobs(c, host.ID, 2*time.Second)
+	jobs, err := alice.ActionHostJobs(c, host.ID, 2*time.Second)
 	if err != nil || len(jobs) != 1 || jobs[0].Job.ID != job.ID || jobs[0].Grant.Target.ID != page.ID {
 		t.Fatalf("renderer jobs: %+v %v", jobs, err)
 	}
-	if _, err := glenn.UploadActionArtifact(c, job.ID, host.ID, "g1", "application/x-msdownload", []byte("MZ")); err == nil {
+	if _, err := alice.UploadActionArtifact(c, job.ID, host.ID, "g1", "application/x-msdownload", []byte("MZ")); err == nil {
 		t.Fatal("an executable was taken as an export")
 	}
-	if _, err := glenn.UploadActionArtifact(c, job.ID, host.ID, "g1", "text/html", []byte("<p>design</p>")); err != nil {
+	if _, err := alice.UploadActionArtifact(c, job.ID, host.ID, "g1", "text/html", []byte("<p>design</p>")); err != nil {
 		t.Fatalf("an HTML export: %v", err)
 	}
-	art, err := glenn.UploadActionArtifact(c, job.ID, host.ID, "g1", "image/svg+xml", []byte("<svg/>"))
+	art, err := alice.UploadActionArtifact(c, job.ID, host.ID, "g1", "image/svg+xml", []byte("<svg/>"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	result, _ := json.Marshal(map[string]any{"media_type": "image/svg+xml", "artifact": art})
-	if _, err := glenn.CompleteActionJob(c, job.ID, api.ActionJobComplete{HostID: host.ID, Generation: "g1", State: api.JobSucceeded, Result: result, ArtifactIDs: []string{art.ID}}); err != nil {
+	if _, err := alice.CompleteActionJob(c, job.ID, api.ActionJobComplete{HostID: host.ID, Generation: "g1", State: api.JobSucceeded, Result: result, ArtifactIDs: []string{art.ID}}); err != nil {
 		t.Fatal(err)
 	}
 	if data, typ, err := maker.ActionArtifact(c, art.ID); err != nil || string(data) != "<svg/>" || typ != "image/svg+xml" {
@@ -358,11 +358,11 @@ func TestPageExportGrantsAndRenderers(t *testing.T) {
 		t.Fatal("another agent downloaded the export")
 	}
 	// The page's owner sees the grant and can revoke it.
-	owned, err := glenn.OwnerActionGrants(c, api.GrantActive)
+	owned, err := alice.OwnerActionGrants(c, api.GrantActive)
 	if err != nil || len(owned) != 1 || owned[0].ID != g.ID {
 		t.Fatalf("owner grants: %+v %v", owned, err)
 	}
-	if _, err := glenn.RevokeActionGrant(c, g.ID); err != nil {
+	if _, err := alice.RevokeActionGrant(c, g.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := run("k3"); err == nil {

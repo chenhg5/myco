@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // PairingCodePrefix marks one-time pairing codes (app links that a device

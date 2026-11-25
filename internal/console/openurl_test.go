@@ -9,7 +9,7 @@ import (
 
 func TestOpenable(t *testing.T) {
 	for in, want := range map[string]bool{
-		"https://github.com/chenhg5/myco/pull/1": true,
+		"https://github.com/myco-ai/myco/pull/1": true,
 		"http://localhost:5173/":                 true,
 		"mailto:someone@example.com":             true,
 		"file:///etc/passwd":                     false,

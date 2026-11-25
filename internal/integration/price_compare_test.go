@@ -4,26 +4,24 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/myco-ai/myco/internal/testutil"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/app"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/app"
 )
 
 // Exercise the published schema and the production UI against real Hub data.
 // The test agent token stays on stdin and in the Node process, never in the page.
 func TestShoppingComparisonAgentToPage(t *testing.T) {
+	root := testutil.AppsRoot(t)
 	node, err := exec.LookPath("node")
 	if err != nil {
 		t.Skip("Node.js is needed for shopping comparison browser acceptance")
-	}
-	root, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
-		t.Fatal(err)
 	}
 	c := ctx(t)
 	h := startHub(t, filepath.Join(t.TempDir(), "hub.db"), app.DefaultMessagePolicy())
@@ -44,6 +42,7 @@ func TestShoppingComparisonAgentToPage(t *testing.T) {
 	deadline, cancel := context.WithTimeout(c, 45*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(deadline, node, filepath.Join(root, "templates", "price-compare.integration.mjs"))
+	cmd.Env = testutil.AppsEnv(t)
 	cmd.Dir = root
 	cmd.Stdin = bytes.NewReader(input)
 	result, err := cmd.CombinedOutput()

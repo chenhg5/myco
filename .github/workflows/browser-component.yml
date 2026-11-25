@@ -1,0 +1,73 @@
+name: Optional browser automation component
+on:
+  push:
+    paths: ['components/browser/**', '.github/workflows/browser-component.yml', 'internal/console/pagebridge.js', 'web/scripts/browser-bridge.test.mjs']
+  pull_request:
+    paths: ['components/browser/**', '.github/workflows/browser-component.yml', 'internal/console/pagebridge.js', 'web/scripts/browser-bridge.test.mjs']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: components/browser/go.mod
+          cache-dependency-path: components/browser/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node components/browser/recorder.test.mjs && node web/scripts/browser-bridge.test.mjs
+      - run: go test -race ./...
+        working-directory: components/browser
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest
+            target: darwin_arm64
+          - runner: macos-15-intel
+            target: darwin_amd64
+          - runner: windows-latest
+            target: windows_amd64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: components/browser/go.mod
+          cache-dependency-path: components/browser/go.sum
+      - name: Build the optional engine
+        shell: bash
+        run: |
+          suffix=''
+          if [[ "$RUNNER_OS" == Windows ]]; then suffix=.exe; fi
+          mkdir -p component-out
+          cd components/browser
+          go vet ./...
+          go test -v -timeout 7m ./... -args -browser-smoke
+          go build -trimpath -ldflags='-s -w' -o "../../component-out/myco-browser${suffix}" .
+          python scripts/licenses.py ../../component-out/NOTICE-dependencies.txt
+      - name: Package
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          cp LICENSE component-out/LICENSE-myco.txt
+          python - <<'PY'
+          import os,pathlib,zipfile,hashlib
+          root=pathlib.Path('component-out')
+          output=pathlib.Path('myco-browser_'+os.environ['TARGET']+'.zip')
+          with zipfile.ZipFile(output,'w',zipfile.ZIP_DEFLATED) as z:
+            for p in root.iterdir(): z.write(p,p.name)
+          pathlib.Path(output.name+'.sha256').write_text(hashlib.sha256(output.read_bytes()).hexdigest()+'  '+output.name+'\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: myco-browser_${{ matrix.target }}
+          path: |
+            myco-browser_*.zip
+            myco-browser_*.sha256

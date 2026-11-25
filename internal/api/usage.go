@@ -1,6 +1,6 @@
 package api
 
-import "github.com/chenhg5/myco/internal/domain"
+import "github.com/myco-ai/myco/internal/domain"
 
 type UsageReport = domain.UsageReport
 type UsageRow = domain.UsageRow

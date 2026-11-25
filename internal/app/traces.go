@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // TraceService keeps the steps of the runs that handled tasks (what the

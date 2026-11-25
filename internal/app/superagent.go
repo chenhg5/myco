@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // SuperagentService: a person's own agent with the App's powers in its
@@ -318,6 +318,14 @@ func (s *SuperagentService) decideTyped(ctx context.Context, by Actor, m *domain
 		return nil, domain.Errf(domain.CodeUnsupported, "this hub cannot decide %q approvals", a.Kind)
 	}
 	if !approve {
+		// The scheduling handler claims approvals before applying a change.
+		// A denial must compete for the same claim so it cannot overwrite an
+		// action that another App is already carrying out.
+		if a.Kind == domain.ApprovalKindProjectAutomation {
+			if err := s.approvals.Claim(ctx, a.ID); err != nil {
+				return nil, err
+			}
+		}
 		a.Status = domain.ApprovalDenied
 		if err := s.approvals.Save(ctx, a); err != nil {
 			return nil, err
@@ -354,4 +362,22 @@ func (s *SuperagentService) tell(ctx context.Context, owner *domain.Member, a *d
 		return
 	}
 	_, _ = s.messages.SendFromMember(ctx, owner.Name, owner.ID, SendInput{To: string(a.Agent), Type: string(domain.TypeNote), Body: body})
+}
+
+// withdrawActionGrant removes a now-revoked pending grant's approval card.
+// The grant itself is closed first, so a concurrently loaded approval cannot
+// authorize execution even if its database update races this cleanup.
+func (s *SuperagentService) withdrawActionGrant(ctx context.Context, id, grantID string) {
+	a, err := s.approvals.Get(ctx, id)
+	if err != nil || a.Status != domain.ApprovalPending || a.Kind != domain.ApprovalKindActionGrant {
+		return
+	}
+	var payload struct {
+		GrantID string `json:"grant_id"`
+	}
+	if json.Unmarshal([]byte(a.Payload), &payload) != nil || payload.GrantID != grantID {
+		return
+	}
+	a.Status, a.DecidedAt = domain.ApprovalWithdrew, s.clock.Now()
+	_ = s.approvals.Save(ctx, a)
 }

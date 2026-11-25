@@ -12,12 +12,14 @@
 Use the Claude Code, Codex and other agents you already pay for — start a conversation, run several at once,<br>
 reach your other computers and your phone, put them on a schedule — all from one app.
 
-[![Release](https://img.shields.io/github/v/release/chenhg5/myco?style=flat-square&color=3a9a78)](https://github.com/chenhg5/myco/releases)
-[![Build](https://img.shields.io/github/actions/workflow/status/chenhg5/myco/release.yml?branch=main&label=release&style=flat-square)](https://github.com/chenhg5/myco/actions/workflows/release.yml)
-![Platforms](https://img.shields.io/badge/macOS%20·%20Windows%20·%20Linux-grey?style=flat-square)
+[![Release](https://img.shields.io/github/v/release/myco-ai/myco?style=flat-square&color=3a9a78)](https://github.com/myco-ai/myco/releases)
+[![Build](https://img.shields.io/github/actions/workflow/status/myco-ai/myco/release.yml?branch=main&label=release&style=flat-square)](https://github.com/myco-ai/myco/actions/workflows/release.yml)
+![Platforms](https://img.shields.io/badge/macOS%20·%20Windows%20·%20Linux%20·%20Android-grey?style=flat-square)
 [![LINUX DO](https://img.shields.io/badge/LINUX-DO-ffb003?style=flat-square&labelColor=3f3f46)](https://linux.do)
+[![Telegram](https://img.shields.io/badge/Telegram-Join-26A5E4?style=flat-square)](https://t.me/+TegU5q0F3TE5ZjI1)
+[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square)](https://discord.gg/DrQhZXGNZ6)
 
-**[Download for Mac](https://github.com/chenhg5/myco/releases/latest/download/myco.dmg)** · [Windows (preview)](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-amd64.exe) · [Linux](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-amd64) · [All downloads](https://github.com/chenhg5/myco/releases/latest)
+**[Download for Mac](https://github.com/myco-ai/myco/releases/latest/download/myco.dmg)** · [Windows (preview)](https://github.com/myco-ai/myco/releases/latest/download/myco-app-windows-amd64.exe) · [Linux](https://github.com/myco-ai/myco/releases/latest/download/myco-app-linux-amd64) · [Android (preview)](https://github.com/myco-ai/myco/releases/latest/download/myco-android-debug.apk) · [All downloads](https://github.com/myco-ai/myco/releases/latest)
 
 **English** · [中文](README.zh-CN.md) · [Install Guide](INSTALL.md) · [Video tutorial](docs/tutorial.md) · [Apps](docs/apps.md) · [Architecture](docs/architecture.md) · [HTTP API](docs/api.md)
 
@@ -42,7 +44,7 @@ Your agents are good on their own; the trouble is at the edges. So **you** end u
 Already using Claude Code, Codex or another AI that runs commands? Send it this sentence. It reads the [setup guide](docs/agent-setup.md), starts a hub, connects the app, adds your computers and agents, and sorts out problems on its own, asking you whenever something is yours to decide:
 
 ```text
-Set up myco for me: read https://raw.githubusercontent.com/chenhg5/myco/main/docs/agent-setup.md (if it does not load, https://cdn.jsdelivr.net/gh/chenhg5/myco@main/docs/agent-setup.md) and follow it. Ask me before deciding anything for me, before using sudo or changing system settings, and tell me the result when you are done.
+Set up myco for me: read https://raw.githubusercontent.com/myco-ai/myco/main/docs/agent-setup.md (if it does not load, https://cdn.jsdelivr.net/gh/myco-ai/myco@main/docs/agent-setup.md) and follow it. Ask me before deciding anything for me, before using sudo or changing system settings, and tell me the result when you are done.
 ```
 
 The app's first screen has the same sentence (**Let my agent set it up**).
@@ -51,10 +53,11 @@ The app's first screen has the same sentence (**Let my agent set it up**).
 
 | Platform | Download |
 |---|---|
-| **Mac** | **[myco.dmg](https://github.com/chenhg5/myco/releases/latest/download/myco.dmg)**: Apple silicon and Intel, signed and notarized. Updates itself. |
-| **Windows** (preview) | [myco-app-windows-amd64.exe](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-amd64.exe) ([ARM](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-arm64.exe)). Not code-signed yet: on first run choose *More info → Run anyway*. |
-| **Linux** | [myco-app-linux-amd64](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-amd64) ([ARM](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-arm64)): opens the app in your browser (X11, Wayland, WSL). [Details](INSTALL.md#9-the-console-app-mac--windows--linux) |
+| **Mac** | **[myco.dmg](https://github.com/myco-ai/myco/releases/latest/download/myco.dmg)**: Apple silicon and Intel, signed and notarized. Updates itself. |
+| **Windows** (preview) | [myco-app-windows-amd64.exe](https://github.com/myco-ai/myco/releases/latest/download/myco-app-windows-amd64.exe) ([ARM](https://github.com/myco-ai/myco/releases/latest/download/myco-app-windows-arm64.exe)). Not code-signed yet: on first run choose *More info → Run anyway*. |
+| **Linux** | [myco-app-linux-amd64](https://github.com/myco-ai/myco/releases/latest/download/myco-app-linux-amd64) ([ARM](https://github.com/myco-ai/myco/releases/latest/download/myco-app-linux-arm64)): opens the app in your browser (X11, Wayland, WSL). [Details](INSTALL.md#9-the-console-app-mac--windows--linux) |
 | **iPhone** (beta) | **[Join the TestFlight beta](https://testflight.apple.com/join/XDKvU8Jp)** (iOS 17 or later). |
+| **Android** (preview) | [myco-android-debug.apk](https://github.com/myco-ai/myco/releases/latest/download/myco-android-debug.apk): Android 8.0 or later. A debug-signed preview APK, not a Play Store release, and still catching up with the iPhone app. Uninstall an older preview before installing a new one. |
 | **Servers** | The command-line tool — see [Prefer the command line?](#prefer-the-command-line) |
 
 ## Get started in three steps
@@ -64,7 +67,7 @@ New to this? The [step-by-step guide with screenshots](docs/guide-claude-ai.md) 
 **1. Open the app and get a hub**, the small server your agents connect to: **Start on this computer** with one click, or **Connect an existing Hub** with its app link. To run one on your server instead (it prints the app link at the end):
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-hub.sh && sudo bash install-hub.sh --domain auto
+curl -fsSLO https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-hub.sh && sudo bash install-hub.sh --domain auto
 ```
 
 **2. Add your agents.** Click **Add an agent**: pick a Claude Code or Codex session found on this computer, start a new one on any connected computer, or paste the sentence the app gives you into an agent on another computer and it joins by itself.
@@ -81,19 +84,19 @@ We are rebuilding the apps we use every day on Mac, Windows and phone so that **
 
 <table>
 <tr>
-<td width="33%"><img src="docs/assets/apps/motion.webp" alt="Motion video"><br><b>Motion video</b><br>Promo and short videos: describe it and the agent writes each scene; add music and voice-over, export MP4.</td>
-<td width="33%"><img src="docs/assets/apps/design-studio.webp" alt="Design studio"><br><b>Design studio</b><br>Web pages, app screens, posters and slides on an editable canvas, iterated with the agent.</td>
-<td width="33%"><img src="docs/assets/apps/meeting.webp" alt="Meeting notes"><br><b>Meeting notes</b><br>Record a Zoom or Feishu call, transcribe it on your computer, and let the agent write the minutes.</td>
+<td width="33%"><b>Motion video</b><br>Promo and short videos: describe it and the agent writes each scene; add music and voice-over, export MP4.</td>
+<td width="33%"><b>Design studio</b><br>Web pages, app screens, posters and slides on an editable canvas, iterated with the agent.</td>
+<td width="33%"><b>Meeting notes</b><br>Record a Zoom or Feishu call, transcribe it on your computer, and let the agent write the minutes.</td>
 </tr>
 <tr>
-<td width="33%"><img src="docs/assets/apps/disk.webp" alt="Disk cleanup"><br><b>Disk cleanup</b><br>See what fills your disk, ring by ring, and move what you don't need to the Trash.</td>
+<td width="33%"><b>Disk cleanup</b><br>See what fills your disk, ring by ring, and move what you don't need to the Trash.</td>
 <td width="33%"><img src="docs/assets/apps/remote-desktop.webp" alt="Remote desktop"><br><b>Remote desktop</b><br>See and control your Mac or Windows PC from another computer or your iPhone.</td>
 <td width="33%"><img src="docs/assets/apps/recorder.webp" alt="Screen recorder"><br><b>Screen recorder</b><br>Record the screen, then trim, split, add text and zoom, and export MP4 locally.</td>
 </tr>
 <tr>
 <td width="33%"><img src="docs/assets/apps/stocks.webp" alt="Stock watch"><br><b>Stock watch</b><br>A shared watchlist for China, Hong Kong and US stocks with candlestick charts and notes.</td>
 <td width="33%"><img src="docs/assets/apps/photo.webp" alt="Photo editor"><br><b>Photo editor</b><br>Crop, adjust, filters, text and stickers; the agent can make the edits you describe.</td>
-<td width="33%"><img src="docs/assets/apps/issues.webp" alt="Issue tracker"><br><b>Issue tracker</b><br>Track issues Linear-style, assign one to an agent, and watch it update the status and comment.</td>
+<td width="33%"><b>Issue tracker</b><br>Track issues Linear-style, assign one to an agent, and watch it update the status and comment.</td>
 </tr>
 </table>
 
@@ -119,7 +122,7 @@ Add a shell node in the app (**Add a computer**), choose a folder and which agen
 
 ### 2. Hand work to a teammate's agent
 
-Share one hub with your team (Settings → Members → **Invite a member**). Then: “ask Matthew's backend agent which fields the orders API returns”, and your agent gets the answer from theirs.
+Share one hub with your team (Settings → Members → **Invite a member**). Then: “ask Carol's backend agent which fields the orders API returns”, and your agent gets the answer from theirs.
 
 - **Owners decide** who may send work to their agents.
 - **The receiving agent knows who is asking**, and that it is a teammate, not its owner.
@@ -149,7 +152,7 @@ Claude Code, Codex, claude.ai sessions, Pi, Kiro, Gemini CLI and more ([supporte
 Everything the app does is also a `myco` command, handy on servers and for agents.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.sh | bash
+curl -fsSL https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-client.sh | bash
 ```
 
 | Start a hub | Command |
@@ -282,11 +285,13 @@ Other ways to connect:
 
 ## Community
 
+Join us on [Telegram](https://t.me/+TegU5q0F3TE5ZjI1) or [Discord](https://discord.gg/DrQhZXGNZ6) to ask, share and follow along.
+
 Questions, ideas, or curious how others use myco? Scan to join the WeChat group (the code is renewed every few days; this file always has the latest):
 
 <img src="docs/assets/community/wechat-group.png" alt="myco WeChat group" width="220">
 
-Bugs and feature requests: [GitHub Issues](https://github.com/chenhg5/myco/issues).
+Bugs and feature requests: [GitHub Issues](https://github.com/myco-ai/myco/issues).
 
 Follow the author on X: [@chg80333](https://x.com/chg80333). For business, add **mongorz** on WeChat, saying who you are and what you have in mind.
 

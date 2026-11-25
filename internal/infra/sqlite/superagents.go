@@ -6,7 +6,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // SuperagentRepo implements domain.SuperagentRepository.
@@ -134,4 +134,16 @@ func (r *ApprovalRepo) ListByAgent(ctx context.Context, agent domain.AgentName, 
 		limit = 50
 	}
 	return r.list(ctx, `SELECT `+approvalCols+` FROM approvals WHERE agent=? ORDER BY created_at DESC LIMIT ?`, string(agent), limit)
+}
+
+func (r *ApprovalRepo) Claim(ctx context.Context, id string) error {
+	res, err := r.db.ExecContext(ctx, `UPDATE approvals SET status='executing' WHERE id=? AND status='pending'`, id)
+	if err != nil {
+		return internal(err)
+	}
+	n, _ := res.RowsAffected()
+	if n != 1 {
+		return domain.Errf(domain.CodeInvalidArgument, "approval is already being handled; do not repeat the action")
+	}
+	return nil
 }

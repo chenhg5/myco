@@ -5,7 +5,7 @@ myco hubs hold agent tokens and route work between agents that can run commands 
 ## Reporting a vulnerability
 
 Please **do not open a public issue**. Report privately through GitHub:
-[Report a vulnerability](https://github.com/chenhg5/myco/security/advisories/new).
+[Report a vulnerability](https://github.com/myco-ai/myco/security/advisories/new).
 
 Include what you found, how to reproduce it, the affected version (`myco version`, hub `/v1/health`), and the impact you expect. We aim to reply within a few days and will keep you updated until a fix is released. Credit is given in the release notes unless you prefer otherwise.
 

@@ -417,3 +417,29 @@ func TestIsDueByStatus(t *testing.T) {
 		}
 	}
 }
+
+// A question goes to an agent sender's inbox (so it wakes), and only shows
+// in the conversation for a person in the app.
+func TestAskSenderWakesAgentSenders(t *testing.T) {
+	now := time.Unix(100, 0)
+	for _, tc := range []struct {
+		from AgentName
+		want Status
+	}{{"alice", StatusQueued}, {"@console:alice", StatusDone}} {
+		m, err := NewMessage("msg_1", tc.from, "bob", TypeTask, "do it", "", "", "", now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		m.Claim(now, time.Minute, 3)
+		if err := m.Ack("bob", now); err != nil {
+			t.Fatal(err)
+		}
+		q, err := m.AskSender("bob", "msg_q", "which one?", now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if q.Status != tc.want || !q.Ask || q.To != tc.from || m.Status != StatusHeld || m.Asking != "msg_q" {
+			t.Fatalf("%s: question %+v, task %s asking %q", tc.from, q, m.Status, m.Asking)
+		}
+	}
+}

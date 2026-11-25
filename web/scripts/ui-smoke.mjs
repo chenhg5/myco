@@ -24,20 +24,21 @@ import { spawn, spawnSync, execFileSync } from "node:child_process";
 import { createServer } from "node:net";
 import http from "node:http";
 import ts from "typescript";
+import { appsPath } from "../apps-paths.mjs";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { mkdir, access, readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-const pageRouteScript = ts.transpileModule(await readFile(new URL("../../templates/src/_lib/page-route.ts", import.meta.url),"utf8"),{compilerOptions:{module:ts.ModuleKind.ES2022,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^export /gm,"") + "\nwindow.__routeModule={subscribeAppRoute};";
+const pageRouteScript = ts.transpileModule(await readFile(appsPath("templates", "src", "_lib", "page-route.ts"),"utf8"),{compilerOptions:{module:ts.ModuleKind.ES2022,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^export /gm,"") + "\nwindow.__routeModule={subscribeAppRoute};";
 const WEB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = path.join(WEB, "ui-smoke");
 const HOST = "127.0.0.1";
 // A 1x1 PNG, for choosing a picture as a face.
 const TINY_PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 const APP_PORT = Number(process.env.UI_SMOKE_PORT || 5173);
-const MOCK_PORT = 7781;
+const MOCK_PORT = Number(process.env.UI_SMOKE_MOCK_PORT || 7781);
 const VIEWPORTS = [
   { width: 1200, height: 800 },
   { width: 760, height: 800 },
@@ -235,6 +236,7 @@ function reportProblems() {
 }
 
 const intentionalPublicNotReady = new WeakSet();
+const intentionalPageOriginBusy = new WeakSet();
 
 function watchPage(page, size, scheme) {
   // Page events come outside this run's async context: keep it here.
@@ -248,8 +250,13 @@ function watchPage(page, size, scheme) {
     if (msg.text().includes("502") && where.includes("/machines/m_studio/spawn")) return;
     // On purpose: 单聊 · 网络不好 cuts the chat's polls off.
     if (msg.text().includes("ERR_FAILED") && /\/(exchanges|thread)\b/.test(where)) return;
+    // On purpose: a page asks before it uses this computer (网页 · 用电脑前先问:
+    // the App backend answers consent_required, a 403, and the App asks).
+    if (msg.text().includes("403") && /\/app\/os\/call\b/.test(where)) return;
     // This fixture deliberately returns the real backend's not-ready status.
     if (intentionalPublicNotReady.has(page) && msg.text().includes("503") && /\/app\/local\/hub:/.test(where)) return;
+    // This fixture deliberately keeps the saved page origin occupied.
+    if (intentionalPageOriginBusy.has(page) && msg.text().includes("503") && /\/app\/hubs\/[^/]+\/pages\/pg_release\/open:/.test(where)) return;
     addProblem(r, "console", msg.text(), where);
   });
   page.on("pageerror", (err) => {
@@ -331,6 +338,17 @@ async function noRound(page) {
   }, null, { timeout: 30_000 });
 }
 
+/** Opens every run's process in the chat: answered ones fold to one line,
+ *  and a long one keeps its earlier parts behind a line. */
+async function revealRuns(page) {
+  for (const b of await page.locator(".conv-detail .trace-fold").all()) {
+    if ((await b.getAttribute("aria-expanded")) === "false") await b.click();
+  }
+  for (const b of await page.locator(".conv-detail .trace-more").all()) {
+    if (await b.isVisible().catch(() => false)) await b.click();
+  }
+}
+
 /** Opens your chat with a member of a space (a project, or the agents in
  *  none): from the members column, or the row of faces in a narrow window. */
 async function openMember(page, narrow, space, name) {
@@ -345,6 +363,19 @@ async function go(page, label, narrow) {
   // Settings is a dialog over the page: closed first (as Esc does).
   await closeSettings(page);
   await sidebar(page, true);
+  if (label === "用量") {
+    // Usage sits in the workspace menu too, not at the top of the sidebar;
+    // the menu shows all its items without scrolling.
+    await clickVisible(page, page.locator(".sp-switch .app-hub-trigger"));
+    const menu = page.locator(".app-hub-menu");
+    await menu.waitFor({ timeout: 5_000 });
+    if (await menu.evaluate((el) => el.scrollHeight > el.clientHeight + 1)) throw new Error("工作区菜单不该要滚动");
+    if ((await menu.innerText()).includes("使用文档")) throw new Error("使用文档在设置里，不在工作区菜单");
+    await clickVisible(page, page.locator("[data-testid=menu-usage]"));
+    await page.locator(".usage-page").waitFor({ timeout: 10_000 });
+    if (narrow) await sidebar(page, false);
+    return;
+  }
   if (label === "设置") {
     // Settings sit in the workspace menu at the bottom of the sidebar.
     await clickVisible(page, page.locator(".sp-switch .app-hub-trigger"));
@@ -629,7 +660,7 @@ async function runMatrix(browser, size, scheme) {
       await frame.locator("#out").dispatchEvent("click");
       await page.waitForFunction(async () => {
         const r = await (await fetch("/app/mock/opened")).json();
-        return r.urls.includes("https://github.com/chenhg5/myco/releases");
+        return r.urls.includes("https://github.com/myco-ai/myco/releases");
       }, null, { timeout: 5_000 });
       // A newer version: said at the top; shown when asked.
       const v = await page.evaluate(async () => (await (await fetch("/app/mock/pages/pg_release/publish", { method: "POST" })).json()).version);
@@ -710,6 +741,148 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page,chat.getByRole("button",{name:"关掉这一栏"}));
     });
 
+    await step("网页 · 另一个 App 正在打开", async () => {
+      const zh = scheme === "dark";
+      await page.goto(`${r.base}/?lang=${zh ? "zh" : "en"}`);
+      await page.locator(".app-shell").waitFor();
+      const routeURL = "**/app/hubs/*/pages/pg_release/open";
+      let busy = true;
+      intentionalPageOriginBusy.add(page);
+      await page.route(routeURL, route => busy
+        // An older backend's wording must also receive the localized guidance.
+        ? route.fulfill({ status: 503, json: { error: "page_origin_unavailable", message: "the page's local storage address is unavailable; close the other app using it and retry" } })
+        : route.continue());
+      const panel = page.locator(".pg-panel");
+      const openPage = () => page.evaluate(() => window.dispatchEvent(new CustomEvent("myco-open-page", {
+        detail: { kind: "page", hubId: "hub_studio", id: "pg_release" },
+      })));
+      const closePage = async () => {
+        await panel.getByRole("button", { name: zh ? "关闭" : "Close", exact: true }).click();
+        await panel.waitFor({ state: "detached" });
+      };
+      await openPage();
+      await panel.getByText(zh
+        ? "这个页面正在另一个 myco App 里打开，请先退出另一个 App 再试。"
+        : "This page is open in another myco App. Quit that App, then try again.", { exact: true }).waitFor();
+      if (await panel.locator(".pg-frame").count()) throw Error("a busy page origin must not open a fallback frame");
+      await shot(page, size, scheme, "page-origin-in-use");
+      await closePage();
+      busy = false; // The other App has quit; retry the same page.
+      intentionalPageOriginBusy.delete(page);
+      await openPage();
+      await panel.frameLocator(".pg-frame").locator("h1").waitFor();
+      await closePage();
+      await page.unroute(routeURL);
+      await page.goto(`${r.base}/?lang=zh`);
+      await page.locator(".app-shell").waitFor();
+    });
+
+    await step("网页 · 恢复旧本机文件", async () => {
+      const zh = scheme === "dark";
+      await page.goto(`${r.base}/?lang=${zh ? "zh" : "en"}`);
+      await page.locator(".app-shell").waitFor();
+      const recoveryOrigin = `http://${HOST}:${mockPort()}`;
+      const recovery = `${recoveryOrigin}/__myco/recovery-test/`;
+      let scans = 0;
+      await page.route("**/app/hubs/*/pages/pg_release", async route => {
+        const response = await route.fetch();
+        await route.fulfill({ response, json: { ...await response.json(), template: { id: "tp_myco_photo", name: "Photo", version: "1.0.0" } } });
+      });
+      await page.route("**/app/hubs/*/pages/pg_release/open", async route => {
+        const response = await route.fetch();
+        await route.fulfill({ response, json: { ...await response.json(), recovery: true } });
+      });
+      await page.route("**/app/hubs/*/browser", route => route.fulfill({ json: { ok: true } }));
+      await page.route("**/app/page-storage-recovery", route => route.fulfill({ json: { url: recovery } }));
+      await page.route(`${recovery}**`, async route => {
+        const url = new URL(route.request().url());
+        if (url.pathname.endsWith("/seed")) return route.fulfill({ contentType: "text/html", body: "<!doctype html><title>Seed</title>" });
+        if (url.pathname.endsWith("/recover.js")) return route.fulfill({ contentType: "text/javascript", body: await readFile(path.join(WEB, "../internal/console/page_recovery.js")) });
+        if (url.searchParams.has("probe")) scans++;
+        return route.fulfill({ contentType: "text/html", body: await readFile(path.join(WEB, "../internal/console/page_recovery.html")) });
+      });
+      const panel = page.locator(".pg-panel");
+      const more = panel.getByRole("button", { name: zh ? "更多页面操作" : "More page actions" });
+      const recover = zh ? "恢复旧本机文件" : "Recover older local files";
+      const close = zh ? "关闭" : "Close";
+      const openPage = () => page.evaluate(() => window.dispatchEvent(new CustomEvent("myco-open-page", {
+        detail: { kind: "page", hubId: "hub_studio", id: "pg_release" },
+      })));
+      const closePage = async () => {
+        await panel.getByRole("button", { name: close, exact: true }).click();
+        await panel.waitFor({ state: "detached" });
+      };
+      await openPage();
+      await page.frameLocator(".pg-frame").locator("h1").waitFor();
+      for (let i = 0; !scans && i < 30; i++) await page.waitForTimeout(100);
+      if (scans !== 1) throw Error("host should probe the retired origin once");
+      await page.locator('iframe[title="Recovery inventory"][data-checked="true"]').waitFor({ state: "attached" });
+      if (await more.count() || await panel.locator(".fp-title-hint").count()) throw Error("empty legacy storage must not show a recovery menu or hint");
+      await shot(page, size, scheme, "page-recovery-empty");
+      await closePage();
+
+      const seedNavigation = page.waitForEvent("framenavigated", frame => frame.url() === recovery + "seed");
+      await page.evaluate(url => {
+        const frame = document.createElement("iframe"); frame.id = "recovery-seed"; frame.hidden = true; frame.src = url; document.body.append(frame);
+      }, recovery + "seed");
+      await (await seedNavigation).evaluate(() => Promise.all(["myco-photo", "myco-video"].map(name => new Promise((resolve, reject) => {
+        const request = indexedDB.open(name, 1);
+        request.onupgradeneeded = () => request.result.createObjectStore("files");
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          const db = request.result;
+          const tx = db.transaction("files", "readwrite");
+          tx.objectStore("files").put({ file: new Blob(["synthetic fixture"]), name: name + ".png" }, "fixture");
+          tx.oncomplete = () => { db.close(); resolve(); };
+          tx.onabort = () => reject(tx.error);
+        };
+      }))));
+      await page.locator("#recovery-seed").evaluate(node => node.remove());
+      await openPage();
+      await more.waitFor();
+      await panel.locator(".fp-title-hint").waitFor();
+      if (await panel.locator(".pg-new").count()) throw Error("recovery must only appear in the title bar");
+      const show = async () => {
+        await more.click();
+        await page.getByRole("menuitem", { name: recover, exact: true }).click();
+        const dialog = page.getByRole("dialog", { name: recover, exact: true });
+        await dialog.getByText("myco-photo.png", { exact: false }).waitFor();
+        if (await dialog.locator("select option").count() !== 2 || await dialog.locator("select").inputValue() !== "1") throw Error("the viewer should select Photo and only list sources with data");
+        return dialog;
+      };
+      let dialog = await show();
+      await shot(page, size, scheme, "page-recovery-available");
+      await dialog.getByRole("button", { name: close, exact: true }).click();
+      await dialog.waitFor({ state: "detached" });
+      dialog = await show();
+      await page.keyboard.press("Escape");
+      await dialog.waitFor({ state: "detached" });
+      dialog = await show();
+      const [download] = await Promise.all([
+        page.waitForRequest(request => request.method() === "POST" && new URL(request.url()).pathname === "/app/page-download", { timeout: 10_000 }),
+        dialog.getByRole("button", { name: zh ? "保存副本" : "Save copy", exact: true }).click({ timeout: 7_000 }),
+      ]);
+      if (!download.url().endsWith("name=myco-photo.png") || download.postData() !== "synthetic fixture") throw Error("could not save the original");
+      await dialog.getByRole("button", { name: zh ? "标记已恢复" : "Mark recovered", exact: true }).click();
+      await more.waitFor({ state: "detached" });
+      await dialog.getByRole("button", { name: close, exact: true }).click();
+      await closePage();
+      const previousScans = scans;
+      await openPage();
+      for (let i = 0; scans === previousScans && i < 30; i++) await page.waitForTimeout(100);
+      if (scans !== previousScans + 1) throw Error("reopening should check once");
+      await page.locator('iframe[title="Recovery inventory"][data-checked="true"]').waitFor({ state: "attached" });
+      if (await more.count() || await panel.locator(".fp-title-hint").count()) throw Error("the recovered app must stay hidden after reopening");
+      await closePage();
+      // These interceptions and language belong only to the recovery scene.
+      for (const pattern of ["**/app/hubs/*/pages/pg_release", "**/app/hubs/*/pages/pg_release/open",
+        "**/app/hubs/*/browser", "**/app/page-storage-recovery", `${recovery}**`]) await page.unroute(pattern);
+      // Restore the suite's fixture language even at narrow widths, where
+      // the next (multi-tab) scene is skipped.
+      await page.goto(`${r.base}/?lang=zh`);
+      await page.locator(".app-shell").waitFor();
+    });
+
     // Several pages open: a tab each, under the panel's head; opening one
     // already open shows it; each keeps its page while another is shown.
     if (!narrow) await step("网页 · 多个标签", async () => {
@@ -734,7 +907,7 @@ async function runMatrix(browser, size, scheme) {
       // button in the corner brings them back as they were.
       const mainRight = () => page.evaluate(() => document.querySelector(".app-main").getBoundingClientRect().right);
       const docked = await mainRight();
-      await clickVisible(page, panel.getByRole("button", { name: "收起" }));
+      await clickVisible(page, panel.getByRole("button", { name: "收起", exact: true }));
       // (the panel is one for the whole App: its toggle is at the top bar's right end)
       const restore = page.locator(".app-crumbbar .pg-toggle");
       await restore.waitFor({ timeout: 5_000 });
@@ -775,6 +948,98 @@ async function runMatrix(browser, size, scheme) {
       await panel.waitFor({ state: "detached", timeout: 5_000 });
       if (await page.locator(".pg-toggle").count()) throw new Error("全部关闭后顶栏不该再有「网页」");
       await clickVisible(page, chat.getByRole("button", { name: "关掉这一栏" }));
+    });
+
+    await step("浏览器 · 主人批准固定版本", async () => {
+      await go(page, "官网改版", narrow);
+      if (narrow) await clickVisible(page, page.locator('.sp-strip-face[title="Release (Claude 云端)"]'));
+      else await clickVisible(page, page.locator(".sp-side .sp-member:visible", { hasText: "Release (Claude 云端)" }));
+      await clickVisible(page, page.locator(".sp-pane-right .pg-card", {hasText:"上线清单"}));
+      const frame=page.frameLocator(".pg-frame");
+      await frame.locator("h1").waitFor({timeout:15000});
+      const request={script_id:"monthly_report",version:3,profile:"profile_work",script:{name:"月报检查",profile:"profile_work",start_url:"https://example.com/reports",params:[],on_error:"stop",graph:{nodes:[{id:"check-title",type:"js",code:"return document.title;"},{id:"open-summary",type:"navigate",url:"https://example.com/summary"}],edges:[["check-title","open-summary"]]}},scripts:{}};
+      const ask=()=>frame.locator("body").evaluate((_body,request)=>{
+        window.__browserApprovalResult=null;
+        window.myco.browser.approvals.request(request).then(value=>window.__browserApprovalResult={value},error=>window.__browserApprovalResult={error:error.code});
+      },request);
+      await ask();
+      const modal=page.getByRole("dialog",{name:"浏览器自动化授权"});await modal.waitFor();
+      const review=modal.locator("[data-testid=browser-script-review]");await review.waitFor();
+      const text=await review.innerText();
+      if(!text.includes("v3")||!text.includes("document.title")||!text.includes("https://example.com/reports")||!text.includes("https://example.com/summary"))throw new Error("Trusted review omitted version, URL or executable code");
+      await shot(page,size,scheme,"browser-script-owner-review");
+      await clickVisible(page,modal.getByRole("button",{name:"不允许",exact:true}));await modal.waitFor({state:"hidden"});
+      await frame.locator("body").evaluate(async()=>{for(let i=0;i<50&&!window.__browserApprovalResult;i++)await new Promise(r=>setTimeout(r,20));if(window.__browserApprovalResult?.error!=="cancelled")throw new Error("declined script was not cancelled");});
+      const before=await frame.locator("body").evaluate(()=>window.myco.browser.approvals.list());if(before.length)throw new Error("Decline saved approval");
+      await ask();await modal.waitFor();await clickVisible(page,modal.getByRole("button",{name:"允许",exact:true}));await modal.waitFor({state:"hidden"});
+      const result=await frame.locator("body").evaluate(async()=>{for(let i=0;i<100&&!window.__browserApprovalResult;i++)await new Promise(r=>setTimeout(r,20));return window.__browserApprovalResult;});
+      if(result?.value?.version!==3||result?.value?.script_id!=="monthly_report"||"confirmation" in result.value||"script" in result.value)throw new Error("Page did not receive private-safe approval metadata");
+      await clickVisible(page,page.locator(".pg-panel").getByRole("button",{name:"关闭",exact:true}));
+    });
+
+    await step("浏览器 · 配置需要主人确认", async () => {
+      await go(page, "官网改版", narrow);
+      if (narrow) await clickVisible(page, page.locator('.sp-strip-face[title="Release (Claude 云端)"]'));
+      else await clickVisible(page, page.locator(".sp-side .sp-member:visible", {hasText:"Release (Claude 云端)"}));
+      await clickVisible(page,page.locator(".sp-pane-right .pg-card",{hasText:"上线清单"}));
+      const frame=page.frameLocator(".pg-frame");await frame.locator("h1").waitFor({timeout:15000});
+      const settings={proxy:{server:"http://proxy.example:8080",bypass:["*.local","<local>"],username:"fixture-user",password:"write-only-fixture"},user_agent:"Mozilla/5.0 Fixture/1.0",lang:"zh-CN",args:["--window-size=1280,900","--disable-gpu"]};
+      const ask=(requested=settings)=>frame.locator("body").evaluate((_body,settings)=>{window.__browserSettingsResult=null;window.myco.browser.profiles.configure("profile_work",settings).then(value=>window.__browserSettingsResult={value},error=>window.__browserSettingsResult={error:error.code});},requested);
+      await ask();
+      const modal=page.getByRole("dialog",{name:"浏览器自动化授权"});await modal.waitFor();
+      const review=modal.locator("[data-testid=browser-settings-review]");await review.waitFor();
+      const text=await review.innerText();
+      for(const value of ["proxy.example:8080","*.local","Mozilla/5.0 Fixture/1.0","zh-CN","--window-size=1280,900","--disable-gpu"])if(!text.includes(value))throw new Error("Settings review omitted "+value);
+      if(text.includes("write-only-fixture"))throw new Error("Settings modal disclosed proxy password");
+      const allow=modal.getByRole("button",{name:"允许",exact:true});
+      const readAll=async()=>{
+        await review.evaluate(el=>{el.scrollTop=el.scrollHeight;});
+        await allow.waitFor({state:"visible"});
+        await page.waitForFunction(()=>!document.querySelector('.pg-remote-ask .app-btn-primary')?.disabled);
+      };
+      await modal.evaluate(el=>Promise.all(el.getAnimations().map(a=>a.finished)));
+      const actionsInitial=await modal.locator('.app-modal-actions').boundingBox();
+      const overflow=await review.evaluate(el=>el.scrollHeight>el.clientHeight+2);
+      if(overflow && !await allow.isDisabled())throw new Error("Overflowing settings can be allowed before reading");
+      await readAll();
+      // Check geometry inside the scroll viewport: locator visibility alone does
+      // not detect content clipped by a scroll container.
+      const visible=await review.evaluate(el=>{
+        const box=el.getBoundingClientRect();
+        const args=el.querySelector('dd:last-of-type').getBoundingClientRect();
+        const warning=el.querySelector('p:last-child').getBoundingClientRect();
+        return args.top>=box.top && args.bottom<=box.bottom+1 && warning.bottom<=box.bottom+1;
+      });
+      if(!visible)throw new Error("Launch arguments or UA warning cannot be scrolled into view");
+      const actionsBefore=await modal.locator('.app-modal-actions').boundingBox();
+      if(Math.abs(actionsInitial.y-actionsBefore.y)>1)throw new Error("Reading settings shifted approval buttons");
+      await review.evaluate(el=>{el.scrollTop=0;});
+      const actionsAfter=await modal.locator('.app-modal-actions').boundingBox();
+      if(Math.abs(actionsBefore.y-actionsAfter.y)>1)throw new Error("Review scrolling moved approval buttons");
+      await readAll();
+      await shot(page,size,scheme,"browser-profile-settings-owner-review-bottom");
+      await clickVisible(page,modal.getByRole("button",{name:"不允许",exact:true}));await modal.waitFor({state:"hidden"});
+      let result=await frame.locator("body").evaluate(async()=>{for(let i=0;i<100&&!window.__browserSettingsResult;i++)await new Promise(r=>setTimeout(r,20));return window.__browserSettingsResult;});
+      if(result?.error!=="cancelled")throw new Error("Declined settings were not cancelled");
+      const before=await frame.locator("body").evaluate(()=>window.myco.browser.status());if(before.profiles[0].settings.proxy)throw new Error("Decline changed profile settings");
+      await ask();await modal.waitFor();
+      if(overflow && !await allow.isDisabled())throw new Error("New settings review did not reset the read requirement");
+      await readAll();await clickVisible(page,allow);await modal.waitFor({state:"hidden"});
+      result=await frame.locator("body").evaluate(async()=>{for(let i=0;i<100&&!window.__browserSettingsResult;i++)await new Promise(r=>setTimeout(r,20));return window.__browserSettingsResult;});
+      if(!result?.value?.settings?.proxy?.has_password||JSON.stringify(result).includes("write-only-fixture")||"confirmation" in result.value)throw new Error("Configured profile returned private credentials");
+      const {password:_password,...storedProxy}=settings.proxy;
+      for(const [kind,proxy,retains] of [
+        ["same",storedProxy,true],
+        ["server",{...storedProxy,server:"http://other.example:8080"},false],
+        ["scheme",{...storedProxy,server:"https://proxy.example:8080"},false],
+        ["username",{...storedProxy,username:"other-user"},false],
+      ]) {
+        await ask({...settings,proxy});await modal.waitFor();
+        const summary=await review.innerText();
+        if(!summary.includes(retains?"保留已保存的密码":"清除已保存的密码"))throw new Error("Wrong saved-password review for "+kind);
+        await clickVisible(page,modal.getByRole("button",{name:"不允许",exact:true}));await modal.waitFor({state:"hidden"});
+      }
+      await clickVisible(page,page.locator(".pg-panel").getByRole("button",{name:"关闭",exact:true}));
     });
 
     // The myco bridge: the page's shared state, written by you, changed by
@@ -894,10 +1159,126 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, chat.getByRole("button", { name: "关掉这一栏" }));
     });
 
-    // A page made from a template (the table myco template init writes):
-    // its records through the bridge; you edit a cell (saved with its
-    // version), the agent adds a row (it shows up), and it exports a CSV to
-    // Downloads.
+    await step("网页 · 记录查询", async () => {
+      await go(page, "官网改版", narrow);
+      const pattern = "**/app/hubs/hub_studio/pages/pg_checklist/data?*";
+      const queries = [];
+      await page.route(pattern, async route => {
+        const q = new URL(route.request().url()).searchParams;
+        queries.push(q);
+        const queried = q.has("query_version");
+        await route.fulfill({ json: q.get("count") === "true"
+          ? { count: 1, seq: 999, query_version: 1 }
+          : { records: [{ collection: "issues", id: "i42", version: 3, data: queried ? { n: 42 } : { n: 42, title: "Demo" } }], seq: queried ? 999 : 10, query_version: 1 } });
+      });
+      try {
+        await page.evaluate(() => window.dispatchEvent(new CustomEvent("myco-open-page", { detail: { kind: "page", hubId: "hub_studio", id: "pg_checklist" } })));
+        const frame = () => page.frames().find(f => f.url().includes("/p/"));
+        await page.frameLocator(".pg-frame").locator("#who").waitFor();
+        await frame().evaluate(async () => {
+          await window.myco.ready;
+          await window.myco.data.list("issues");
+          const r = await window.myco.data.list("issues", { fields: ["n"], where: ["status:in:todo,progress", "assignee:alex"], sort: "-n", limit: 1 });
+          if (r.records[0].data.n !== 42 || "title" in r.records[0].data) throw new Error("projection was lost");
+          const c = await window.myco.data.list("issues", { count: true });
+          if (c.count !== 1 || "records" in c) throw new Error("count was lost");
+        });
+        const q = queries.find(q => q.get("fields") === "n");
+        if (!q || q.getAll("where").join("|") !== "status:in:todo,progress|assignee:alex" || q.get("sort") !== "-n" || q.get("limit") !== "1") throw new Error("bridge query options changed in transit");
+        const watch = page.waitForRequest(r => r.url().includes("/pages/pg_checklist/changes?"), { timeout: 10_000 });
+        await frame().evaluate(() => { window.stopQueryWatch = window.myco.data.on(() => {}); });
+        const request = await watch;
+        if (new URL(request.url()).searchParams.get("after") !== "10") throw new Error("query/count advanced the shared editor watch cursor");
+        await frame().evaluate(() => window.stopQueryWatch());
+      } finally {
+        await page.unroute(pattern);
+        await clickVisible(page, page.locator(".pg-panel").getByRole("button", { name: /关闭/ }).first());
+      }
+    });
+
+    await step("网页 · 页面附件", async () => {
+      await go(page, "官网改版", narrow);
+      const meta = "**/app/hubs/hub_studio/pages/pg_checklist";
+      const files = "**/app/hubs/hub_studio/pages/pg_checklist/attachments**";
+      let oldHub = false, stored, bytes = Buffer.alloc(0), projectWrites = 0;
+      const observe = request => { if (/\/projects\/.*\/files\//.test(request.url()) && ["POST", "PUT"].includes(request.method())) projectWrites++; };
+      page.on("request", observe);
+      await page.route(meta, async route => {
+        const response = await route.fetch(), value = await response.json();
+        value.template = { id: "tp_myco_media-kit", name: "Media Kit", version: oldHub ? "1.3.1" : "1.4.0", permissions: ["download"], declares: !oldHub };
+        if (oldHub) delete value.attachments_version;
+        else value.attachments_version = 1;
+        await route.fulfill({json:value});
+      });
+      await page.route(files, async route => {
+        const request=route.request(), url=new URL(request.url());
+        if(request.method()==="POST" && url.pathname.endsWith("/attachments")) {
+          bytes=request.postDataBuffer();
+          const key=request.headers()["idempotency-key"];
+          if(url.searchParams.get("collection")==="items" ? key!=="stable-key" : !/^desktop:[a-f0-9]{64}$/.test(key)) throw new Error("upload key was lost");
+          stored={file_id:"paf_fixture",page:"pg_checklist",collection:url.searchParams.get("collection"),name:url.searchParams.get("name"),size:bytes.length,sha256:"fixture",content_type:request.headers()["content-type"],state:"pending",created_at:new Date().toISOString()};
+          if(url.searchParams.get("legacy_name")) stored.legacy_name=url.searchParams.get("legacy_name");
+          return route.fulfill({status:201,json:stored});
+        }
+        if(url.pathname.endsWith("/content")) return route.fulfill({contentType:stored?.content_type || "text/plain",body:bytes});
+        if(url.pathname.endsWith("/save")) return route.fulfill({json:{path:"/Downloads/sample.txt"}});
+        if(request.method()==="DELETE") {stored=undefined;return route.fulfill({status:204});}
+        if(url.searchParams.has("name")) return route.fulfill({json:stored});
+        return route.fulfill({json:{attachments_version:1,attachments:stored?[stored]:[],usage:{files_used:stored?1:0,files_max:1000,bytes_used:stored?bytes.length:0,bytes_max:2*1024**3,max_file_bytes:20*1024**2}}});
+      });
+      const open = async () => {
+        await page.evaluate(() => window.dispatchEvent(new CustomEvent("myco-open-page", {detail:{kind:"page",hubId:"hub_studio",id:"pg_checklist"}})));
+        await page.frameLocator(".pg-frame").locator("#who").waitFor();
+        return page.frames().find(f=>f.url().includes("/p/"));
+      };
+      const close = () => clickVisible(page,page.locator(".pg-panel").getByRole("button",{name:/关闭/}).first());
+      try {
+        const frame=await open();
+        await frame.evaluate(async () => {
+          const ctx=await myco.ready;
+          if(!ctx.pageFiles||!myco.features.includes("page-files")) throw new Error("missing page file negotiation: " + JSON.stringify({ctx, features:myco.features}));
+          const file=await myco.pageFiles.put("items","sample.txt",new Blob(["page bytes"],{type:"text/plain"}),{key:"stable-key"});
+          if(await (await myco.pageFiles.get({...file,page:"pg_other"})).text()!=="page bytes") throw new Error("page file bytes changed");
+          if((await myco.pageFiles.info()).files_used!==1||(await myco.pageFiles.list({limit:1})).attachments[0].file_id!==file.file_id) throw new Error("page quota/list changed");
+          if((await myco.pageFiles.resolve("old.txt")).file_id!==file.file_id) throw new Error("legacy resolution changed");
+          await myco.pageFiles.download(file);
+          await myco.pageFiles.remove(file);
+          if((await myco.pageFiles.info()).files_used!==0) throw new Error("remove did not release quota");
+          const legacyName="mk-pg_checklist-entry-valid000.png";
+          await myco.projectFiles.put(legacyName,new Blob(["png"],{type:"image/png"}));
+          const resolved=await myco.pageFiles.resolve(legacyName);
+          if(resolved.legacy_name!==legacyName||resolved.collection!=="images") throw new Error("legacy upload did not become a page attachment");
+          const row=await myco.data.put("images",{file:legacyName},{id:"legacy-file",ifVersion:0});
+          if(await (await myco.projectFiles.get(legacyName)).text()!=="png") throw new Error("legacy read lost original bytes");
+          if((await myco.projectFiles.info()).max!==1000) throw new Error("legacy bridge did not report page quota");
+          await myco.projectFiles.download(legacyName);
+          await myco.data.remove("images",row.id,{ifVersion:row.version});
+          await myco.pageFiles.remove(resolved);
+
+        });
+        await close();oldHub=true;
+        const legacy=await open();
+        await page.getByText("当前只能查看。请更新工作区后使用页面附件。",{exact:true}).waitFor();
+        await legacy.evaluate(async () => {
+          const ctx=await myco.ready;
+          if(ctx.pageFiles||ctx.me.can_edit!==false) throw new Error("old Hub must be view only");
+          for(const run of [()=>myco.pageFiles.put("images","sample.png",new Blob(["png"])),()=>myco.projectFiles.put("mk-pg_checklist-entry-valid000.png",new Blob(["png"],{type:"image/png"})),()=>myco.data.put("images",{}),()=>myco.update({})]) {
+            try { await run(); throw new Error("old Hub write was accepted"); } catch(error) {if(error.code!=="unsupported") throw error;}
+          }
+        });
+        if(projectWrites) throw new Error("page storage fell back to project uploads");
+        await shot(page,size,scheme,"page-files-upgrade");
+      } finally {
+        page.off("request",observe);await page.unroute(meta);await page.unroute(files);await close();
+      }
+    });
+
+    // A page made from the starter `myco template init` writes: its own
+    // small HTML table (internal/cli/templatekit), not the official 表格 app
+    // (that one is the canvas grid, made from the locked apps checkout and
+    // checked in 应用 · 应用库和官方应用). Its records go through the
+    // bridge; you edit a cell (saved with its version), the agent adds a row
+    // (it shows up), and it exports a CSV to Downloads.
     await step("应用 · 人和 agent 一起填表", async () => {
       await go(page, "官网改版", narrow);
       await page.evaluate(() => window.dispatchEvent(new CustomEvent("myco-open-page", { detail: { kind: "page", hubId: "hub_studio", id: "pg_table" } })));
@@ -1116,7 +1497,9 @@ async function runMatrix(browser, size, scheme) {
             if (h.id !== "hub_studio") continue;
             if (mode === "down") { h.ok = false; delete h.overview; continue; }
             for (const st of h.overview?.agents || []) {
-              const on = mode === "working" && st.agent.name === "review-cloud";
+              // Its shell nodes run commands too: they are not counted.
+              const shell = st.agent.kind === "shell" || ["shell", "exec"].includes(st.agent.binding?.harness);
+              const on = mode === "working" && (st.agent.name === "review-cloud" || shell);
               st.state = on ? "working" : "idle";
               st.in_progress = on ? 1 : 0;
               st.stale = 0;
@@ -1443,7 +1826,7 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, dialog.getByRole("tab", { name: "用上面已有的会话" }));
       await dialog.locator(".add-local-row button", { hasText: "加入" }).first().waitFor({ timeout: 10_000 });
       // A session that joined two workspaces names both.
-      await dialog.locator(".add-local-row.is-taken .add-local-sub", { hasText: /已经加入了：.*的 glenn-mac-claude-x9k2、.*tapnow.* 的 glenn-mac-claude-x9k2-tn/ }).waitFor({ timeout: 5_000 });
+      await dialog.locator(".add-local-row.is-taken .add-local-sub", { hasText: /已经加入了：.*的 alice-mac-claude-x9k2、.*acme.* 的 alice-mac-claude-x9k2-tn/ }).waitFor({ timeout: 5_000 });
       await settle(page, 300);
       await shot(page, size, scheme, "add-agent");
       await dialog.locator(".add-local-row button", { hasText: "加入" }).first().click();
@@ -1472,9 +1855,9 @@ async function runMatrix(browser, size, scheme) {
       // A new one there: it lacks Codex (with the command to install it),
       // and keeps to its folder (a new one goes inside it).
       await clickVisible(page, dialog.getByRole("tab", { name: "新开一个" }));
-      await dialog.locator("[data-testid=allowed-dirs]", { hasText: "~/code/myco-team" }).waitFor({ timeout: 10_000 });
+      await dialog.locator("[data-testid=allowed-dirs]", { hasText: "~/code/demo-team" }).waitFor({ timeout: 10_000 });
       const vpsFolder = dialog.locator("input.app-input.mono").first();
-      if (!/^不填就新建 ~\/code\/myco-team\//.test(await vpsFolder.getAttribute("placeholder") || "")) throw new Error("只允许一个文件夹的电脑，新文件夹应建在它里面");
+      if (!/^不填就新建 ~\/code\/demo-team\//.test(await vpsFolder.getAttribute("placeholder") || "")) throw new Error("只允许一个文件夹的电脑，新文件夹应建在它里面");
       await clickVisible(page, dialog.locator(".ws-computer", { hasText: "Codex" }));
       await dialog.locator("[data-testid=remote-ai-missing] code", { hasText: "npm install -g @openai/codex" }).waitFor({ timeout: 5_000 });
       await vpsFolder.fill("~/elsewhere");
@@ -1737,6 +2120,36 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".sp-home").waitFor({ timeout: 10_000 });
     });
 
+    await step("项目 · 邀请 agent", async () => {
+      await go(page, "官网改版", narrow);
+      await clickVisible(page, page.locator(".sp-head").getByRole("button", {name:"项目资料"}));
+      await clickVisible(page, page.locator("[data-testid=project-tabs]").getByRole("tab", {name:/^成员/}));
+      const section=page.locator("[data-testid=project-agent-invites]");
+      await section.waitFor({timeout:20000});
+      const toggle=section.getByRole("switch");
+      if(await toggle.getAttribute("aria-checked")!=="false")throw new Error("Invitations should default off");
+      await clickVisible(page,toggle);
+      await page.waitForFunction(()=>document.querySelector("[data-testid=project-agent-invites] [role=switch]")?.getAttribute("aria-checked")==="true");
+      await clickVisible(page,toggle);
+      await page.waitForFunction(()=>document.querySelector("[data-testid=project-agent-invites] [role=switch]")?.getAttribute("aria-checked")==="false");
+      await section.scrollIntoViewIfNeeded();await settle(page,200);
+      await shot(page,size,scheme,"project-agent-invites");
+      await navBackClick(page);
+      await page.locator(".sp-home .conv-detail").waitFor({timeout:10000});
+      const request=async()=>{
+        const response=await fetch(`http://${HOST}:${mockPort()}/app/mock/superagent-ask`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({agent:"pm-codex",kind:"project_invite",reason:"协助整理项目文档",payload:{invitation_id:"pinv_fixture",project:"website",project_title:"官网改版",display_name:"文档助手",description:"整理与校对项目文档",note:"文档"}})});
+        if(!response.ok)throw new Error("Invitation mock request failed");
+      };
+      const card=page.locator(".sp-home [data-testid=approvals] .sa-approval");
+      await request();await card.waitFor({timeout:25000});
+      const text=await card.innerText();
+      if(!text.includes("文档助手")||!text.includes("普通成员")||!text.includes("24 小时"))throw new Error("Approval must show invitee and limited permissions");
+      await settle(page,200);await shot(page,size,scheme,"project-invite-request");
+      await clickVisible(page,card.getByRole("button",{name:"不同意",exact:true}));await card.waitFor({state:"hidden"});
+      await request();await card.waitFor({timeout:25000});
+      await clickVisible(page,card.getByRole("button",{name:"同意",exact:true}));await card.waitFor({state:"hidden"});
+    });
+
     // Which computers the project's coordinator may start agents on: a
     // setting of the project (项目资料), apart from its terminals; the
     // coordinator asks for another, and you approve it in its chat.
@@ -1779,6 +2192,81 @@ async function runMatrix(browser, size, scheme) {
       if ((await office.getAttribute("aria-checked")) !== "true") throw new Error("同意后，项目应能在 Office PC 上开 agent");
       await navBackClick(page);
       await page.locator(".sp-home").waitFor({ timeout: 10_000 });
+    });
+
+    await step("agent 浏览器授权 · 版本快照 · 收回", async () => {
+      await go(page, "官网改版", narrow);
+      await page.locator(".sp-home .conv-detail").waitFor({ timeout: 10_000 });
+      const ask = await fetch(`http://${HOST}:${mockPort()}/app/mock/superagent-ask`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agent: "pm-codex", kind: "action_grant", permissions: ["browser.view", "browser.run"],
+          resource: { provider: "browser", id: "profile_reports", binding: "policy-1", name: "报告专用", summary: "Dedicated profile" },
+          machine: "Studio Mac / 报告专用", what: "运行主人批准的报告脚本，5 分钟", reason: "运行已批准的月报 v3，不读取共享脚本的最新版本。" }),
+      });
+      if (!ask.ok) throw new Error(`浏览器申请失败：HTTP ${ask.status}`);
+      const card = page.locator(".sp-home [data-testid=approvals] .sa-approval", { hasText: "报告专用" });
+      await card.waitFor({ timeout: 25_000 });
+      const text = compactText(await card.innerText());
+      if (!text.includes("主人批准的脚本") || text.includes("键盘") || await card.getByRole("button", { name: "只让它看", exact: true }).count()) throw new Error(`浏览器申请不应使用桌面权限文案：${text}`);
+      await shot(page, size, scheme, "browser-grant-request");
+      await clickVisible(page, card.getByRole("button", { name: "同意", exact: true }));
+      await card.waitFor({ state: "hidden", timeout: 10_000 });
+      const grant = page.locator(".sp-home [data-testid=action-grants] .sa-grant", { hasText: "报告专用" });
+      await grant.waitFor({ timeout: 10_000 });
+      if (!(await grant.innerText()).includes("主人批准的脚本")) throw new Error("浏览器授权范围文案丢失");
+      await shot(page, size, scheme, "browser-grant-active");
+      await clickVisible(page, grant.getByRole("button", { name: "收回", exact: true }));
+      await grant.waitFor({ state: "hidden", timeout: 10_000 });
+    });
+
+    await step("agent 浏览器实时控制授权", async () => {
+      await go(page, "官网改版", narrow);
+      await page.locator(".sp-home .conv-detail").waitFor({ timeout: 10_000 });
+      const ask = await fetch(`http://${HOST}:${mockPort()}/app/mock/superagent-ask`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agent: "pm-codex", kind: "action_grant", permissions: ["browser.control"],
+          resource: { provider: "browser", id: "profile_sample", binding: "policy-2", name: "示例浏览器" },
+          machine: "Studio Mac / 示例浏览器", what: "操作浏览器，30 分钟", reason: "检查示例站点。" }),
+      });
+      if (!ask.ok) throw new Error(`浏览器实时控制申请失败：HTTP ${ask.status}`);
+      const card = page.locator(".sp-home [data-testid=approvals] .sa-approval", { hasText: "示例浏览器" });
+      await card.waitFor({ timeout: 25_000 });
+      const copy = compactText(await card.innerText());
+      for (const fragment of ["可能有你的登录状态", "显示在你的屏幕上", "随时可以停止", "30 分钟", "不限域名"]) {
+        if (!copy.includes(fragment)) throw new Error(`控制授权卡缺少提示：${fragment}`);
+      }
+      await shot(page, size, scheme, "browser-control-grant");
+      await clickVisible(page, card.getByRole("button", { name: "不同意", exact: true }));
+      await card.waitFor({ state: "hidden", timeout: 10_000 });
+
+      const dedicated = await fetch(`http://${HOST}:${mockPort()}/app/mock/superagent-ask`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agent: "pm-codex", kind: "action_grant", permissions: ["browser.control"],
+          resource: { provider: "browser", id: "p_agent", binding: "policy-agent", name: "agent 专用", kind: "agent" },
+          hosts: ["example.com", "*.docs.example.com"], reason: "检查公开文档。" }),
+      });
+      if (!dedicated.ok) throw new Error(`专用浏览器申请失败：HTTP ${dedicated.status}`);
+      const approval = await dedicated.json();
+      const scoped = page.locator(".sp-home [data-testid=approvals] .sa-approval", { hasText: "操作浏览器配置「agent 专用」" });
+      await scoped.waitFor({ timeout: 25_000 });
+      if ((await scoped.innerText()).includes("可能有你的登录状态")) throw new Error("专用配置显示了个人配置提示");
+      const exact = scoped.getByRole("checkbox", { name: "example.com", exact: true });
+      const wildcard = scoped.getByRole("checkbox", { name: "*.docs.example.com", exact: true });
+      const approve = scoped.getByRole("button", { name: "同意", exact: true });
+      await shot(page, size, scheme, "browser-control-scoped-grant");
+      await exact.uncheck();
+      await wildcard.uncheck();
+      if (await approve.isEnabled()) throw new Error("能把有域名限制的申请批准为不限域名");
+      await wildcard.check();
+      await clickVisible(page, approve);
+      await scoped.waitFor({ state: "hidden", timeout: 10_000 });
+      const grants = await page.evaluate(async () => {
+        const hub = await fetch("/app/hubs").then(r => r.json());
+        return fetch(`/app/hubs/${(hub.hubs || hub)[0].id}/action-grants?state=active`).then(r => r.json());
+      });
+      if (grants.grants.find(g => g.approval_id === approval.id)?.hosts?.join() !== "*.docs.example.com") {
+        throw new Error("批准后仍包含已取消的域名");
+      }
     });
 
     // An agent asks to act on one of your computers (agent actions,
@@ -1894,7 +2382,7 @@ async function runMatrix(browser, size, scheme) {
       // Automations and apps are rows on top, like the rows below, with an icon.
       const tops = await page.evaluate(() => [...document.querySelectorAll(".sp-nav-autos .sp-nav-top")].map((e) => ({ text: (e.querySelector(".app-nav-label")?.textContent || "").trim(), icon: !!e.querySelector("svg"), size: getComputedStyle(e).fontSize })));
       const row = await page.evaluate(() => getComputedStyle(document.querySelector(".sp-nav-projects .app-nav-item")).fontSize);
-      if (tops.map((t) => t.text).join("|") !== "自动化|工作流|用量|应用|电脑" || tops.some((t) => !t.icon || t.size !== row)) throw new Error(`顶上应是带图标的「自动化」「工作流」「用量」「应用」「电脑」五行，和项目一样大：${JSON.stringify(tops)} ${row}`);
+      if (tops.map((t) => t.text).join("|") !== "自动化|工作流|应用|电脑" || tops.some((t) => !t.icon || t.size !== row)) throw new Error(`顶上应是带图标的「自动化」「工作流」「应用」「电脑」四行，和项目一样大（用量在左下角的工作区菜单里）：${JSON.stringify(tops)} ${row}`);
       if (new Set(heads.map((h) => h.size)).size !== 1 || heads.some((h) => h.icon)) throw new Error(`边栏标题字号应一致、不带图标：${JSON.stringify(heads)}`);
       // Projects fold, and stay folded.
       await clickVisible(page, page.locator(".sp-nav-projects .sp-nav-fold"));
@@ -2030,6 +2518,31 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, page.locator(".conv-head button").first());
     });
 
+    await step("单聊 · 等待电脑名额", async () => {
+      await openMember(page,narrow,"聊天","Review (Codex 云端)");
+      await noRound(page);
+      const box=page.locator(".conv-detail .conv-compose-input");
+      await box.fill("名额排队预览");await box.press("Enter");
+      const queue=page.locator('[data-testid="runner-queue"]').last();
+      await queue.waitFor({timeout:15000});
+      if (!(await queue.innerText()).includes("3/3 在忙，排第 2")) throw Error("未显示名额和排队位置");
+      if (await page.locator('.conv-detail .trace.is-live').count()) throw Error("等名额时不能假装正在启动");
+      if (await page.locator(".conv-detail .conv-stuck").count()) throw Error("等待名额20分钟的任务不能误报卡住");
+      await shot(page,size,scheme,"runner-queue");
+      await go(page,"电脑",narrow);
+      await clickVisible(page,page.locator(".pc-card",{hasText:"Studio Mac"}));
+      const slots=page.locator('[data-testid="computer-runner-slots"]');await slots.waitFor();
+      if (!(await slots.innerText()).includes("3/3 在忙，2 个排队中") || !(await slots.innerText()).includes("myco runner service install --max-concurrent N")) throw Error("电脑详情未显示名额和调整命令");
+      await shot(page,size,scheme,"computer-runner-slots");
+      await navBackClick(page);
+      await openMember(page,narrow,"聊天","Review (Codex 云端)");
+      await fetch(`http://${HOST}:${mockPort()}/app/mock/runner-queue`,{method:"DELETE"});
+      await page.locator('[data-testid="runner-queue"]').waitFor({state:"hidden",timeout:15000});
+      await page.locator(".conv-detail .conv-send.is-stop").click();
+      await noRound(page);
+      await clickVisible(page,page.locator(".conv-head button").first());
+    });
+
     await step("单聊 · delta 正在长出来", async () => {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");
       await noRound(page);
@@ -2065,6 +2578,29 @@ async function runMatrix(browser, size, scheme) {
       // Opening the existing step line exposes the completed thinking once.
       await run.locator(".trace-group").first().locator("button.trace-head").click();
       if (await run.locator(".trace-row.is-thinking").count() !== 1) throw new Error("完整思考应替换增量思考");
+      // The answer is in (20 s after it was sent): the whole process folds
+      // to one line, steps and time, and opening that line shows the steps.
+      await page.locator(".conv-detail .conv-msg", { hasText: "预览检查完成。" }).last().waitFor({ timeout: 25_000 });
+      await page.waitForFunction(() => !document.querySelector(".conv-detail .trace.is-live, .conv-detail .trace.is-waiting"), null, { timeout: 10_000 });
+      const folded = await run.evaluate((el) => {
+        const btn = el.querySelector(".trace-fold");
+        return { has: !!btn, open: btn?.getAttribute("aria-expanded"),
+          head: btn?.querySelector(".trace-title")?.textContent || "" };
+      });
+      if (!folded.has) throw new Error("回复到了之后，过程应有可折叠的一行");
+      if (folded.open !== "false") throw new Error("回复到了之后，过程应默认收起");
+      if (!/^(过程 · \d+ 步 · |Steps · \d+ · )/.test(folded.head)) throw new Error(`收起的过程应写明步数和用时，实际是「${folded.head}」`);
+      await shot(page, size, scheme, "conversation-process-folded");
+      await run.locator(".trace-fold").click();
+      await page.waitForFunction(() => [...document.querySelectorAll(".conv-detail .trace")].pop()
+        ?.querySelector(".trace-fold")?.getAttribute("aria-expanded") === "true", null, { timeout: 5_000 });
+      const inside = await run.evaluate((el) => ({
+        steps: el.querySelectorAll(".trace-group, .trace-row, .trace-say").length,
+        live: el.classList.contains("is-live"),
+      }));
+      if (inside.steps === 0) throw new Error("点开收起的过程后应能看到里面的步骤");
+      if (inside.live) throw new Error("回复到了之后不该还有在动的过程");
+      await shot(page, size, scheme, "conversation-process-opened");
       await noRound(page);
       await clickVisible(page, page.locator(".conv-head button").first());
     });
@@ -2168,6 +2704,16 @@ async function runMatrix(browser, size, scheme) {
       if (Math.abs(fit.mid - (56 + (fit.h - 88) / 2)) > 4) throw new Error(`长图应上下居中，中线在 ${Math.round(fit.mid)}`);
       await page.keyboard.press("Escape");
       await big.waitFor({ state: "detached", timeout: 5_000 });
+      // Files not sent yet stay with their chat, as typed words do: to
+      // another chat (its box has none) and back, they are still there.
+      await openMember(page, narrow, "聊天", "legacy-codex");
+      await page.locator(".conv-detail .conv-head h2", { hasText: "legacy-codex" }).waitFor({ timeout: 10_000 });
+      if (await page.locator(".conv-compose-box .att-chip").count()) throw new Error("别的会话的输入框不该带着这里没发的文件");
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await box.locator(".att-chip").nth(2).waitFor({ timeout: 10_000 });
+      if ((await box.locator(".att-chip").count()) !== 3) throw new Error("切走再回来，没发的文件应还在");
+      await page.waitForFunction(() => { const img = [...document.querySelectorAll(".conv-compose-box .att-chip.is-picture .att-thumb")].pop(); return !!img && img.complete && img.naturalWidth > 0; }, null, { timeout: 5_000 })
+        .catch(() => { throw new Error("切回来后图片缩略图应还能显示"); });
       await box.locator(".att-chip").nth(2).locator(".att-x").click();
       await page.waitForFunction(() => document.querySelectorAll(".conv-compose-box .att-chip").length === 2, null, { timeout: 5_000 });
       await page.locator(".conv-compose-input").focus();
@@ -2193,6 +2739,26 @@ async function runMatrix(browser, size, scheme) {
         return wait >= 0 && wait < say;
       });
       if (wrongOrder) throw new Error("“捣鼓中”应在进展下面");
+      // The plan of the task at work is pinned at the top of the chat, by
+      // itself: one line with how far it is, opened to the list, folded
+      // back, and closed for this task.
+      const bar = page.locator(".conv-detail [data-testid=plan-bar]");
+      await bar.waitFor({ timeout: 10_000 });
+      await page.waitForFunction(() => /计划 2\/3/.test(document.querySelector(".conv-detail [data-testid=plan-bar]")?.textContent || ""), null, { timeout: 10_000 });
+      if (!/正在：跑测试/.test(await bar.innerText())) throw new Error(`置顶的计划应说正在做哪一步，实际「${await bar.innerText()}」`);
+      const barTop = await bar.evaluate((el) => el.getBoundingClientRect().top);
+      const scrollTop = await page.locator(".conv-detail .conv-scroll").evaluate((el) => el.getBoundingClientRect().top);
+      if (barTop > scrollTop) throw new Error("置顶的计划应在聊天内容上面，不随聊天滚动");
+      await bar.locator(".plan-bar-toggle").click();
+      await bar.locator(".trace-plan-item", { hasText: "动手改" }).waitFor({ timeout: 5_000 });
+      await settle(page, 300);
+      await shot(page, size, scheme, "chat-plan-bar");
+      await bar.locator(".plan-bar-toggle").click();
+      await bar.locator(".trace-plan").waitFor({ state: "detached", timeout: 5_000 });
+      await bar.locator(".plan-bar-close").click();
+      await bar.waitFor({ state: "detached", timeout: 5_000 });
+      await page.waitForTimeout(2500);
+      if (await page.locator(".conv-detail [data-testid=plan-bar]").count()) throw new Error("关掉的计划不该再置顶回来");
       await clickVisible(page, page.locator(".conv-head button").first());
     });
 
@@ -2226,6 +2792,14 @@ async function runMatrix(browser, size, scheme) {
       try {
         await page.locator("[data-testid=chat-behind]").waitFor({ timeout: 40_000 });
         if (await page.locator(".conv-detail .conv-stuck").count()) throw new Error("网络不好时不该说任务卡住");
+        // (in the chat's column: as wide as the input box, not the pane)
+        {
+          const note = await page.locator("[data-testid=chat-behind]").boundingBox();
+          const box = await page.locator("[data-testid=chat-behind]").locator("xpath=..").locator(".conv-compose-box").boundingBox();
+          if (!note || !box || Math.abs(note.x - box.x) > 1 || Math.abs(note.width - box.width) > 1) {
+            throw new Error(`「网络不太好」应和输入框一样宽、对齐：提示 ${Math.round(note?.x)}+${Math.round(note?.width)}，输入框 ${Math.round(box?.x)}+${Math.round(box?.width)}`);
+          }
+        }
         await settle(page, 150);
         await shot(page, size, scheme, "chat-behind");
       } finally {
@@ -2418,7 +2992,9 @@ async function runMatrix(browser, size, scheme) {
         const d = document.querySelector(".conv-detail");
         return !!d && d.querySelectorAll(".trace.is-live, .trace.is-waiting").length === 0;
       }, null, { timeout: 45_000 });
-      // A screenshot sent with a progress update shows under that update.
+      // A screenshot sent with a progress update shows under that update
+      // (in the run's process: answered, it is folded to one line first).
+      await revealRuns(page);
       const along = page.locator(".conv-detail .trace-report-files .conv-attach.is-image img").last();
       await along.waitFor({ timeout: 5_000 });
       if (!await along.evaluate((img) => img.complete && img.naturalWidth > 0)) throw new Error("进展里的截图应显示缩略图");
@@ -2552,7 +3128,7 @@ async function runMatrix(browser, size, scheme) {
       await settle(page, 300);
       const lines = await page.locator(".conv-detail .trace").last().innerText();
       if (/在等|还没做完|先放着/.test(lines)) throw new Error(`它这一轮停了，不该再挂一行状态，实际有「${compactText(lines)}」`);
-      if (await page.locator(".conv-detail .conv-msg.is-me .conv-receipt").count()) throw new Error("开始做之后，消息下面不该还有「还没开始看」");
+      await page.locator(".conv-detail .conv-msg.is-me .conv-receipt", { hasText: "暂挂：在等其他 agent 回复" }).last().waitFor({ timeout: 15_000 });
       // It stopped: the box is a plain one again (a new message, nothing to stop).
       const ph = await page.locator(".conv-detail .conv-compose-input").getAttribute("placeholder");
       if ((ph || "").startsWith("补充给")) throw new Error(`它这一轮停了，输入框不该还是「补充给…」，实际「${ph}」`);
@@ -2605,6 +3181,76 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "chat-supplement-in-run");
       await page.locator(".conv-detail .conv-msg", { hasText: "下载页核对完了" }).last().waitFor({ timeout: 25_000 });
       await noRound(page);
+    });
+
+    // A line you add after something came in between (another member
+    // handed it work: a card) is drawn where you sent it; what the agent
+    // does after it goes under it, in time, not on growing above it.
+    await step("项目 · 插话排在后面", async () => {
+      await go(page, "官网改版", narrow);
+      await page.locator(".sp-home .conv-detail").waitFor({ timeout: 20_000 });
+      // Earlier scenes may leave multiple panes open: even a wide window
+      // then shows member faces rather than the expanded members column.
+      const member = page.locator(".sp-side .sp-member:visible", { hasText: "Release (Claude 云端)" })
+        .or(page.locator('.sp-side .sp-face:visible[aria-label="Release (Claude 云端)"]'))
+        .or(page.locator('.sp-strip-face:visible[title="Release (Claude 云端)"]'));
+      await clickVisible(page, member);
+      const pane = page.locator(".conv-detail", { has: page.locator(".conv-head", { hasText: "Release (Claude 云端)" }) }).last();
+      await pane.waitFor({ timeout: 20_000 });
+      // The coordinator's pane can be idle while this member is still
+      // working on the task sent by the page-bridge scene.
+      await pane.locator('.conv-compose-input:not([placeholder*="补充"])').waitFor({ timeout: 30_000 });
+      const box = pane.locator(".conv-compose-input");
+      await box.fill("插在别人后面：整理发布说明");
+      await box.press("Enter");
+      await pane.locator(".conv-msg.is-me", { hasText: "插在别人后面：整理发布说明" }).waitFor({ timeout: 10_000 });
+      await pane.locator(".handoff", { hasText: "顺手看一下 CI 为什么挂了" }).waitFor({ timeout: 20_000 });
+      await box.fill("插话：顺便把下载链接也更新了");
+      await box.press("Enter");
+      const added = pane.locator(".conv-msg.is-me", { hasText: "插话：顺便把下载链接也更新了" });
+      await added.waitFor({ timeout: 10_000 });
+      await pane.locator(".trace-report", { hasText: "收到补充" }).waitFor({ timeout: 20_000 });
+      await page.waitForTimeout(3000); // (a few more steps after it)
+      const order = await added.evaluate((el) => {
+        const y = el.getBoundingClientRect().top;
+        const report = [...el.closest(".conv-detail").querySelectorAll(".trace-report")].find((r) => r.textContent?.includes("收到补充"));
+        const under = el.nextElementSibling?.classList.contains("trace") ? el.nextElementSibling : null;
+        // the task's own run, above: its last step before the line you added
+        const runs = [...el.closest(".conv-detail").querySelectorAll(".trace")].filter((t) => t !== under && t.getBoundingClientRect().top < y);
+        return {
+          reportBelow: !!report && report.getBoundingClientRect().top > y,
+          reportUnder: !!under && !!report && under.contains(report),
+          stepsUnder: !!under && under.querySelectorAll(".trace-group, .trace-step, .trace-row").length > 0,
+          loadingAbove: runs.some((t) => t.classList.contains("is-live")),
+        };
+      });
+      if (!order.reportBelow) throw new Error("补充之后它说的话应在补充下面");
+      if (!order.reportUnder) throw new Error("补充之后的进展应接在补充下面的过程里");
+      if (!order.stepsUnder) throw new Error("补充之后它做的步骤应在补充下面");
+      if (order.loadingAbove) throw new Error("补充上面的过程不该还在转");
+      await added.scrollIntoViewIfNeeded();
+      await settle(page, 300);
+      await shot(page, size, scheme, "chat-addition-after-card");
+      await page.locator(".conv-detail .conv-msg", { hasText: "发布说明整理好了" }).last().waitFor({ timeout: 30_000 });
+      await noRound(page);
+      // Only work in progress stands out on a card: done and handed back
+      // are grey, like the words of a finished card.
+      const tones = await page.evaluate(() => {
+        const probe = document.createElement("span");
+        probe.style.color = "var(--muted)";
+        document.querySelector(".conv-detail")?.appendChild(probe);
+        const muted = getComputedStyle(probe).color;
+        probe.remove();
+        return [...document.querySelectorAll(".handoff-state.is-done")].map((x) => getComputedStyle(x).color === muted);
+      });
+      if (tones.some((grey) => !grey)) throw new Error("「做完了 / 交回了」应是灰色，只有「在做」显眼");
+      // A card opens the two agents' exchange; its back button returns to
+      // the chat the card was in.
+      await clickVisible(page, pane.locator(".handoff", { hasText: "顺手看一下 CI 为什么挂了" }));
+      const backBtn = page.getByRole("button", { name: "返回和 Release (Claude 云端) 的对话" }).first();
+      await backBtn.waitFor({ timeout: 10_000 });
+      await clickVisible(page, backBtn);
+      await page.locator(".conv-detail .conv-msg.is-me", { hasText: "插话：顺便把下载链接也更新了" }).last().waitFor({ timeout: 10_000 });
     });
 
     // Finding a message (⌘F), and back to the bottom after reading above.
@@ -2730,9 +3376,27 @@ async function runMatrix(browser, size, scheme) {
       const asked = new Set();
       const onReq = (req) => { const m = /\/app\/hubs\/([^/]+)\/recent/.exec(req.url()); if (m) asked.add(decodeURIComponent(m[1])); };
       page.on("request", onReq);
+      // (a slow search: the mushroom with its magnifying glass, not a bare line)
+      const slow = async (route) => {
+        await new Promise((ok) => setTimeout(ok, 1500));
+        try { await route.continue(); }
+        catch (error) {
+          // A cancelled search may have completed this route while delayed.
+          if (!String(error).includes("Route is already handled!")) throw error;
+        }
+      };
+      await page.route("**/app/hubs/*/recent*", slow);
       await cp.locator("input").fill("芒果布丁");
+      const seek = cp.locator(".cp-seek");
+      await seek.waitFor({ timeout: 3_000 });
+      if (!(await seek.locator("svg.seek-sprite").count())) throw new Error("搜索中应有拿放大镜的蘑菇");
+      if (!/芒果布丁|菌丝|成员|消息|快找到/.test(await seek.innerText())) throw new Error(`搜索中的提示不对：${await seek.innerText()}`);
+      await settle(page, 300);
+      await shot(page, size, scheme, "search-seeking");
       const msg = cp.locator(".cp-item", { hasText: "芒果布丁" }).first();
       await msg.waitFor({ timeout: 8_000 });
+      await page.unroute("**/app/hubs/*/recent*", slow);
+      if (await seek.count()) throw new Error("找到以后蘑菇应该收起来");
       page.off("request", onReq);
       if ([...asked].some((h) => h !== "hub_studio")) throw new Error(`⌘K 只该在当前工作区里搜，实际还问了：${[...asked].join("、")}`);
       await msg.click();
@@ -2753,7 +3417,7 @@ async function runMatrix(browser, size, scheme) {
 
     // Set aside as the skill says (hold, then a progress saying what it
     // waits for), still in its session: waiting, not at work — no loading,
-    // 稍后回复 under your message, a plain box.
+    // a waiting receipt under your message and a plain compose box.
     await step("单聊 · 挂起后说明在等", async () => {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");
       await noRound(page);
@@ -2761,7 +3425,7 @@ async function runMatrix(browser, size, scheme) {
       await box.fill(`挂起说明：定时和 Webhook 先做第一步（${size.width}-${scheme}）`);
       await box.press("Enter");
       await page.locator(".conv-detail .trace-report", { hasText: "已派给 release" }).last().waitFor({ timeout: 15_000 });
-      await page.locator(".conv-detail .conv-receipt", { hasText: "稍后回复" }).last().waitFor({ timeout: 10_000 });
+      await page.locator(".conv-detail .conv-receipt", { hasText: "暂挂：在等其他 agent 回复" }).last().waitFor({ timeout: 10_000 });
       await page.waitForTimeout(2500);
       if (await page.locator(".conv-detail .work-sprite").count()) throw new Error("挂起后只是说明在等什么，不该一直显示 loading");
       const ph = await box.getAttribute("placeholder");
@@ -2783,7 +3447,7 @@ async function runMatrix(browser, size, scheme) {
       await box.fill(`长会话：先查授权（${tag}）`);
       await box.press("Enter");
       await page.locator(".conv-detail .trace-say", { hasText: "需要你在会话里允许授权" }).last().waitFor({ timeout: 15_000 });
-      await page.locator(".conv-detail .conv-receipt", { hasText: "稍后回复" }).last().waitFor({ timeout: 15_000 });
+      await page.locator(".conv-detail .conv-receipt", { hasText: "暂挂中，没人在做" }).last().waitFor({ timeout: 15_000 });
       await box.fill(`长会话：接着拉群消息（${tag}）`);
       await box.press("Enter");
       const second = page.locator(".conv-detail .conv-msg.is-me", { hasText: `长会话：接着拉群消息（${tag}）` }).last();
@@ -2935,15 +3599,22 @@ async function runMatrix(browser, size, scheme) {
       await closeSettings(page);
     });
 
-    // 使用文档: from Settings › About (and the workspace menu); pages in
+    // 使用文档: from the last row of Settings' nav (and Settings › About;
+    // no longer in the workspace menu); pages in
     // groups on the left, the page on the right, links between pages, a
     // search; a narrow window picks the page from one list.
     await step("使用文档", async () => {
       await go(page, "设置", narrow);
-      const box = page.locator(".app-settings-search input");
-      await box.fill("使用文档");
-      await box.press("Enter");
-      await clickVisible(page, page.locator("[data-testid=settings-guide]"));
+      const navGuide = page.locator("[data-testid=settings-nav-guide]");
+      if (await navGuide.isVisible()) {
+        await clickVisible(page, navGuide);
+      } else {
+        // (a narrow window: Settings' search finds it under About)
+        const box = page.locator(".app-settings-search input");
+        await box.fill("使用文档");
+        await box.press("Enter");
+        await clickVisible(page, page.locator("[data-testid=settings-guide]"));
+      }
       const help = page.locator("[data-testid=help]");
       await help.waitFor({ timeout: 10_000 });
       const doc = help.locator("[data-testid=help-doc]");
@@ -3056,6 +3727,55 @@ async function runMatrix(browser, size, scheme) {
       if (narrow) await sidebar(page, false);
     });
 
+    await step("设置 · CLI 登录状态", async () => {
+      const zh = scheme === "dark";
+      let checked = false;
+      const fixtures = [
+        { cli: "codebuddy", name: "CodeBuddy Code", state: "unknown" },
+        { cli: "qoder", name: "Qoder CLI", state: "ready" },
+        { cli: "kimi", name: "Kimi Code", state: "unknown" },
+        { cli: "gemini", name: "Gemini CLI", state: "signed_out" },
+      ].map(a => ({ ...a, path: `/demo/bin/${a.cli}`, version: "1.0.0", install: "example-install", login: a.cli }));
+      await page.route("**/app/local/agents", route => route.fulfill({ json: {
+        agents: fixtures.map(a => a.cli === "codebuddy" && checked ? { ...a, state: "ready" } : a),
+      } }));
+      let loginRequested = false;
+      await page.route("**/app/local/agents/kimi/terminal", async route => {
+        if (route.request().postDataJSON().action !== "login") throw Error("secondary link must request login");
+        loginRequested = true;
+        await route.fulfill({ json: { opened: true, command: "kimi" } });
+      });
+      await page.goto(`${r.base}/?lang=${zh ? "zh" : "en"}`);
+      await page.locator(".app-shell").waitFor();
+      await sidebar(page, true);
+      await clickVisible(page, page.locator(".sp-switch .app-hub-trigger"));
+      await clickVisible(page, page.locator(".app-hub-menu-item", { hasText: zh ? "设置" : "Settings" }));
+      await clickVisible(page, page.locator(".app-settings-tab", { hasText: zh ? "本机 agent" : "Agents" }));
+      const unknown = page.locator('.la-line[data-agent-cli="codebuddy"]');
+      await unknown.locator(".app-pill", { hasText: zh ? "已安装" : "Installed" }).waitFor();
+      await unknown.getByText(zh ? "看不出是否登录，能用就不用管。需要时可以去登录。" : "Sign-in status is unknown. If it works, no action is needed. Sign in only if needed.", { exact: true }).waitFor();
+      await unknown.locator(".app-linklike", { hasText: zh ? "去登录" : "Go to sign in" }).waitFor();
+      if (await unknown.locator(".app-btn").count()) throw Error("unknown auth must not have a primary sign-in button");
+      await page.locator('.la-line[data-agent-cli="gemini"]').getByRole("button", { name: zh ? "登录" : "Sign in", exact: true }).waitFor();
+      const kimi = page.locator('.la-line[data-agent-cli="kimi"]');
+      await kimi.getByRole("button", { name: zh ? "去登录" : "Go to sign in", exact: true }).click();
+      await kimi.locator(".la-opened").waitFor();
+      if (!loginRequested) throw Error("secondary sign-in must remain available");
+      checked = true;
+      await page.locator(".la-foot").getByRole("button", { name: zh ? "重新检查" : "Check again", exact: true }).click();
+      for (const cli of ["codebuddy", "qoder"]) {
+        const line = page.locator(`.la-line[data-agent-cli="${cli}"][data-agent-state="ready"]`);
+        await line.waitFor();
+        if (await line.locator("button").count()) throw Error("ready CLI must not ask for login");
+      }
+      await shot(page, size, scheme, "settings-cli-auth");
+      await closeSettings(page);
+      await page.unroute("**/app/local/agents");
+      await page.unroute("**/app/local/agents/kimi/terminal");
+      await page.goto(`${r.base}/?lang=zh`);
+      await page.locator(".app-shell").waitFor();
+    });
+
     // A proxy for the App: from the environment (as before), none, or one
     // set here; tried before it is saved, in force once saved.
     await step("设置 · 代理", async () => {
@@ -3124,6 +3844,49 @@ async function runMatrix(browser, size, scheme) {
     });
 
     // 只看进度: runs show what the agent reported, not its steps.
+    // Before a page uses this computer the App asks the person (one
+    // question; 一直允许 is kept); Settings › 应用权限 lists what pages may
+    // do and takes it back, after which the page is asked again.
+    await step("网页 · 用电脑前先问", async () => {
+      await go(page, "官网改版", narrow);
+      await page.evaluate(() => window.dispatchEvent(new CustomEvent("myco-open-page", { detail: { kind: "page", hubId: "hub_studio", id: "pg_consent" } })));
+      const frame = page.frameLocator('iframe.pg-frame[aria-label="提醒我"]');
+      await frame.locator("#go").waitFor({ timeout: 15_000 });
+      await page.locator("[data-testid=page-loading]").waitFor({ state: "detached", timeout: 10_000 });
+      await settle(page, 300);
+      // (a click event on the button: the docked frame's hit test is not what is tried here)
+      await frame.locator("#go").dispatchEvent("click");
+      const ask = page.locator(".pg-ask", { hasText: "发系统通知" });
+      await ask.waitFor({ timeout: 10_000 });
+      if (!(await ask.innerText()).includes("「提醒我」")) throw new Error(`应写明是哪个应用要用：${await ask.innerText()}`);
+      if (!(await ask.getByRole("button", { name: "这次允许" }).count())) throw new Error("应能只允许这一次");
+      await settle(page, 200);
+      await shot(page, size, scheme, "page-os-consent");
+      await ask.getByRole("button", { name: "一直允许" }).click();
+      await frame.locator("#out", { hasText: "已提醒" }).waitFor({ timeout: 10_000 });
+      // the second time: no question
+      await frame.locator("#go").dispatchEvent("click");
+      await settle(page, 400);
+      if (await ask.count()) throw new Error("一直允许后不该再问");
+      // (the page panel goes away first: in a narrow window it covers the sidebar)
+      const panel = page.locator(".pg-panel:visible");
+      if (await panel.count()) {
+        await clickVisible(page, panel.getByRole("button", { name: "收起" }).first());
+        await panel.waitFor({ state: "hidden", timeout: 5_000 });
+      }
+      await go(page, "设置", narrow);
+      await clickVisible(page, page.locator(".app-settings-tab", { hasText: "应用权限" }));
+      const card = page.locator(".app-setting-card[data-setting='app-permissions']");
+      const row = card.locator(".app-perm-page", { hasText: "提醒我" });
+      await row.waitFor({ timeout: 10_000 });
+      if (!(await row.innerText()).includes("发系统通知") || !(await row.innerText()).includes("一直允许")) throw new Error(`应用权限应列出它：${await row.innerText()}`);
+      if (!(await card.locator(".app-perm-page", { hasText: "空间清理" }).innerText()).includes("这次允许")) throw new Error("应分清一直允许和这次允许");
+      await settle(page, 200);
+      await shot(page, size, scheme, "settings-app-permissions");
+      await row.locator(".app-perm-item", { hasText: "发系统通知" }).getByRole("button", { name: "收回" }).click();
+      await row.waitFor({ state: "detached", timeout: 5_000 });
+    });
+
     await step("设置 · 只看进度", async () => {
       await go(page, "设置", narrow);
       await clickVisible(page, page.locator(".app-settings-tab", { hasText: "外观" }));
@@ -3388,6 +4151,81 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "conversation-tool-trace");
     });
 
+    // A long thing said between steps is held short: fading out, with
+    // 展开全文 under it, never cut through a line with nothing to say so.
+    await step("单聊 · 过程里的长段话", async () => {
+      const body = "长段汇总：各个循环现在怎么样";
+      await openMember(page, narrow, "聊天", "legacy-codex");
+      await sendFromElsewhere("hub_studio", "legacy-codex", body);
+      await page.locator(".conv-msg", { hasText: body }).last().waitFor({ timeout: 20_000 });
+      await page.waitForTimeout(7_500);
+      const fold = page.locator(".conv-detail .trace-fold").last();
+      if ((await fold.getAttribute("aria-expanded")) !== "true") await fold.click();
+      const said = page.locator(".conv-detail .trace-say", { hasText: "先说结论" }).last();
+      await said.waitFor({ timeout: 10_000 });
+      if (!(await said.evaluate((el) => el.classList.contains("is-clamped")))) throw new Error("长段话在过程里应先收起");
+      const mask = await said.evaluate((el) => getComputedStyle(el).maskImage || getComputedStyle(el).webkitMaskImage || "");
+      if (!/gradient/.test(mask)) throw new Error("收起的长段话底部应渐隐，而不是一刀切");
+      const more = said.locator("xpath=following-sibling::*[1]");
+      if (!(await more.evaluate((el) => el.classList.contains("trace-say-more")))) throw new Error("收起的长段话下面应有「展开全文」");
+      await said.scrollIntoViewIfNeeded();
+      await settle(page, 300);
+      await shot(page, size, scheme, "conversation-long-said");
+      await clickVisible(page, more);
+      await page.waitForFunction(() => {
+        const el = [...document.querySelectorAll(".conv-detail .trace-say")].filter((x) => x.textContent?.includes("先说结论")).pop();
+        return !!el && !el.classList.contains("is-clamped") && el.scrollHeight <= el.clientHeight + 2 && el.textContent.includes("最后一行");
+      }, null, { timeout: 5_000 });
+      if (await page.locator(".conv-detail .trace-say-more").count()) throw new Error("展开以后「展开全文」应收起来");
+    });
+
+    // 盯着 (myco watch): what an agent waits for in the background is at the
+    // top of its chat, the clock moving, with 延长 and 停止; how earlier
+    // ones ended is a grey line each; members show 盯着 N.
+    await step("单聊 · 盯着", async () => {
+      await openMember(page, narrow, "聊天", "legacy-codex");
+      const bar = page.locator(".conv-detail [data-testid=watch-bar]");
+      await bar.waitFor({ timeout: 10_000 });
+      const first = (await bar.locator(".watch-line").innerText()).replace(/\s+/g, "");
+      if (!/正在盯：mac2的回复/.test(first) || !/已12分钟/.test(first) || !/剩1[78]分钟/.test(first) || !/秒前看过/.test(first)) throw new Error(`盯着的那条不对：「${first}」`);
+      await page.waitForTimeout(2200);
+      if ((await bar.locator(".watch-line").innerText()).replace(/\s+/g, "") === first) throw new Error("「多久前看过」应每秒在走");
+      // Its last check and times, opened.
+      await bar.locator(".watch-toggle").click();
+      await bar.locator(".watch-result", { hasText: "mac2 的任务仍在处理中" }).waitFor({ timeout: 5_000 });
+      if (!/开始.*截止/.test(await bar.locator(".watch-times").innerText())) throw new Error("展开后应有开始和截止时间");
+      await settle(page, 300);
+      await shot(page, size, scheme, "chat-watching");
+      // Longer: from now, an hour.
+      await bar.getByRole("button", { name: "延长" }).click();
+      await page.locator(".conv-menu").getByRole("menuitem", { name: "1 小时" }).click();
+      await page.waitForFunction(() => /剩(1小时|59分钟)/.test((document.querySelector(".conv-detail [data-testid=watch-bar] .watch-line")?.textContent || "").replace(/\s+/g, "")), null, { timeout: 5_000 });
+      // How the ones before ended: met, the time up, stopped.
+      for (const t of ["盯到了：Release 的发布说明", "没等到：CI 跑完", "你停止了盯：Review 的审查意见"]) {
+        if (!(await page.locator(".conv-detail .watch-ended", { hasText: t }).count())) throw new Error(`会话里应有一行「${t}」`);
+      }
+      // Stopped, after asking: the bar goes, a grey line stays.
+      await bar.getByRole("button", { name: "停止" }).click();
+      const ask = page.locator(".app-confirm");
+      await ask.waitFor({ timeout: 5_000 });
+      await ask.getByRole("button", { name: "停止", exact: true }).click();
+      await bar.waitFor({ state: "detached", timeout: 5_000 });
+      await page.locator(".conv-detail .watch-ended", { hasText: "你停止了盯：mac2 的回复" }).waitFor({ timeout: 5_000 });
+      // Members: 盯着 2 beside Myco (Grok); its chat says 正在盯 2 件事.
+      const grok = page.locator(".sp-side .sp-member", { hasText: "Myco (Grok)" }).first();
+      if (!narrow) {
+        await grok.locator(".sp-watch-tag", { hasText: "盯着 2" }).waitFor({ timeout: 10_000 });
+      }
+      await openMember(page, narrow, "聊天", "Myco (Grok)");
+      const two = page.locator(".conv-detail [data-testid=watch-bar]");
+      await two.locator(".watch-what", { hasText: "正在盯 2 件事" }).waitFor({ timeout: 10_000 });
+      await two.locator(".watch-toggle").click();
+      await two.locator(".watch-item", { hasText: "构建流水线跑完" }).waitFor({ timeout: 5_000 });
+      if ((await two.locator(".watch-item").count()) !== 2) throw new Error("展开后应列出两件");
+      await settle(page, 300);
+      await shot(page, size, scheme, "chat-watching-two");
+    });
+
     // A task the node accepted long ago and went quiet on may have lost its
     // result: the chat says so instead of spinning, and one click stops it
     // and sends the same message again.
@@ -3525,6 +4363,28 @@ async function runMatrix(browser, size, scheme) {
 
     // An offline agent says why, as far as can be told: here its runner
     // said goodbye as it was stopped.
+    await step("成员 · 正在更新", async () => {
+      const change = (phase) => fetch(`http://${HOST}:${mockPort()}/app/mock/runner-restart${phase ? `?phase=${phase}` : ""}`, {method: phase ? "POST" : "DELETE"});
+      await change("updating");
+      try {
+        await go(page, "成员", narrow);
+        const card = page.locator(".mb-card", {hasText: "docs-claude"}).first();
+        await card.getByText("正在更新", {exact:true}).waitFor({timeout:15000});
+        await clickVisible(page, card);
+        const updating = page.locator('[data-testid="runner-updating"]');
+        await updating.waitFor({timeout:10000});
+        if (await page.locator('.ms .app-offline-why').count()) throw Error("更新时不能显示停止/离线诊断");
+        await shot(page,size,scheme,"runner-updating");
+        await page.keyboard.press("Escape");
+        await go(page,"电脑",narrow);
+        const computer=page.locator(".pc-card",{hasText:"Studio Mac"});
+        await computer.locator(".pc-online").filter({hasText:"正在更新"}).waitFor({timeout:15000});
+        await shot(page,size,scheme,"computer-updating");
+        await change("expired");
+        await computer.locator(".pc-online").filter({hasText:"不在线"}).waitFor({timeout:15000});
+      } finally { await change(""); }
+    });
+
     await step("成员 · 离线原因", async () => {
       await go(page, "成员", narrow);
       await clickVisible(page, page.locator(".mb-card", { hasText: "docs-claude" }).first());
@@ -4088,13 +4948,13 @@ async function runMatrix(browser, size, scheme) {
       await pcTab(page, "AI 和工具");
       await detail.locator("[data-testid=pc-ais] .pcd-line", { hasText: "Codex" }).filter({ hasText: "没装" }).waitFor({ timeout: 10_000 });
       await pcTab(page, "权限");
-      await detail.locator("[data-testid=pc-details] .pcd-line", { hasText: "~/code/myco-team" }).waitFor({ timeout: 10_000 });
+      await detail.locator("[data-testid=pc-details] .pcd-line", { hasText: "~/code/demo-team" }).waitFor({ timeout: 10_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "computer-details");
       // Its folders are its own rule; this App reaches it over SSH, so it
       // changes them there (and puts them back: the other windows share the mock).
       const dirsBox = detail.locator("[data-testid=machine-dirs]");
-      const folder = `~/code/tapnow-${size.width}-${scheme}`;
+      const folder = `~/code/acme-${size.width}-${scheme}`;
       await dirsBox.getByRole("textbox", { name: "要允许的文件夹" }).fill(folder);
       await clickVisible(page, dirsBox.getByRole("button", { name: "允许" }));
       const chip = dirsBox.locator(".mdirs-chip", { hasText: folder });
@@ -4180,6 +5040,57 @@ async function runMatrix(browser, size, scheme) {
     // Automations: a task sent for you on a schedule or by webhook. The list
     // says to whom and when; a new one with a webhook shows its address and
     // secret once; running one now sends it, marked 自动 in the chat.
+    await step("项目 · 协调者定时任务", async () => {
+      await go(page,"官网改版",narrow);
+      await clickVisible(page,page.locator(".sp-head").getByRole("button",{name:"项目资料"}));
+      await clickVisible(page,page.locator("[data-testid=project-tabs]").getByRole("tab",{name:/^成员/}));
+      const group=page.locator("[data-testid=coordinator-permissions]");
+      const permission=group.locator("[data-testid=project-automation-permission]");await permission.waitFor();
+      if(!await group.locator("[data-testid=project-agent-invites]").count()||!await group.locator("[data-testid=project-machines]").count())throw Error("Coordinator permissions must be grouped together");
+      const toggle=permission.getByRole("switch");if(await toggle.getAttribute("aria-checked")!=="false")throw Error("Scheduling permission must default off");
+      await clickVisible(page,toggle);await page.waitForFunction(()=>document.querySelector("[data-testid=project-automation-permission] [role=switch]")?.getAttribute("aria-checked")==="true");
+      await clickVisible(page,toggle);await page.waitForFunction(()=>document.querySelector("[data-testid=project-automation-permission] [role=switch]")?.getAttribute("aria-checked")==="false");
+      await group.scrollIntoViewIfNeeded();await settle(page,200);await shot(page,size,scheme,"coordinator-permissions");
+      await navBackClick(page);await page.locator(".sp-home .conv-detail").waitFor();
+      const ask=async()=>{const response=await fetch(`http://${HOST}:${mockPort()}/app/mock/superagent-ask`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({agent:"pm-codex",kind:"project_automation",payload:{project:"website",action:"create",input:{name:"发布检查",body:"核对项目发布状态，列出检查清单。",to:"docs-claude",cron:"0 9 * * *",tz:"Asia/Shanghai",starts_at:"2026-11-26T00:00:00Z",ends_at:"2026-11-29T00:00:00Z",once:true}}})});if(!response.ok)throw Error("Automation approval mock failed")};
+      const card=page.locator(".sp-home [data-testid=approvals] .sa-approval");await ask();await card.waitFor();
+      const text=await card.innerText();if(!text.includes("发布检查")||!text.includes("只跑一次")||!text.includes("2026-11-26"))throw Error("Approval must show the specific task and timing");
+      await clickVisible(page,card.getByText("查看任务内容",{exact:true}));await card.locator(".sa-approval-content",{hasText:"核对项目发布状态"}).waitFor();
+      await shot(page,size,scheme,"project-automation-approval");await clickVisible(page,card.getByRole("button",{name:"不同意",exact:true}));await card.waitFor({state:"hidden"});
+      await ask();await card.waitFor();await clickVisible(page,card.getByRole("button",{name:"同意",exact:true}));await card.waitFor({state:"hidden"});
+      // What you decided shows in the chat as one quiet line, in words (the
+      // note the hub sends the agent carries ids, for the agent).
+      const line=page.locator(".sp-home .conv-detail .conv-decision",{hasText:"同意了：创建项目「website」的定时任务「发布检查」"});
+      await line.waitFor({timeout:15_000});
+      if(/\[myco\]|apr_|aut_/.test(await line.innerText()))throw Error("同意后的那行不该带 [myco] 和编号");
+      if(await page.locator(".sp-home .conv-detail .conv-msg",{hasText:"[myco]"}).count())throw Error("同意的通知不该再是一条备注消息");
+      await line.scrollIntoViewIfNeeded();await settle(page,200);await shot(page,size,scheme,"approval-decided-line");
+      // Two at once, the workspace slow to answer: deciding one leaves the
+      // other to click (they all went grey until it answered).
+      const slowDecide=async(route)=>{await new Promise((ok)=>setTimeout(ok,2500));await route.continue();};
+      await page.route("**/app/hubs/*/approvals/*/approve",slowDecide);
+      await ask();await ask();await card.nth(1).waitFor();
+      await clickVisible(page,card.first().getByRole("button",{name:"同意",exact:true}));
+      await card.first().locator(".app-spinner").waitFor({timeout:2_000});
+      if(await card.nth(1).getByRole("button",{name:"同意",exact:true}).isDisabled())throw Error("同意了一条，另一条的「同意」不该变灰");
+      await clickVisible(page,card.nth(1).getByRole("button",{name:"同意",exact:true}));
+      await page.waitForFunction(()=>!document.querySelector(".sp-home [data-testid=approvals] .sa-approval"),null,{timeout:10_000});
+      await page.unroute("**/app/hubs/*/approvals/*/approve",slowDecide);
+    });
+
+    await step("自动化 · 起止日期",async()=>{
+      await go(page,"自动化",narrow);await clickVisible(page,page.locator(".ph").getByRole("button",{name:"新建自动化"}));
+      const ed=page.locator("[data-testid=automation-editor]");await ed.waitFor();
+      const name=`定期发布检查 ${size.width} ${scheme}`;await ed.getByPlaceholder("比如：每天早上汇总 issue").fill(name);await ed.locator("textarea").fill("核对项目发布状态");
+      await ed.getByLabel("开始时间",{exact:true}).fill("2026-11-26T09:00");await ed.getByLabel("结束时间",{exact:true}).fill("2026-11-28T18:00");
+      await ed.getByRole("checkbox",{name:/^只跑一次/}).check();await ed.locator("[data-testid=automation-date-editor]").scrollIntoViewIfNeeded();
+      await shot(page,size,scheme,"automation-date-editor");
+      const response=page.waitForResponse(r=>r.url().includes("/automations")&&r.request().method()==="POST");await clickVisible(page,ed.getByRole("button",{name:"创建",exact:true}));
+      const json=await(await response).json();if(!json.automation.once||!json.automation.starts_at||!json.automation.ends_at)throw Error("Date/once fields lost when saving");
+      await ed.waitFor({state:"detached"});const row=page.locator(".au-row",{hasText:name});await row.locator("[data-testid=automation-bounds]",{hasText:"只跑一次"}).waitFor();
+      await shot(page,size,scheme,"automation-date-list");
+    });
+
     await step("自动化", async () => {
       // None yet: what it is for, and a few common ones to start from.
       const empty = /\/app\/hubs\/[^/]+\/automations$/;
@@ -4666,6 +5577,11 @@ async function runMatrix(browser, size, scheme) {
       await conv.locator(".conv-compose-input").press("Enter");
       const msg = conv.locator(".conv-msg", { has: page.locator(".md-mermaid") }).last();
       await msg.locator(".md-mermaid[data-state=drawn] svg").first().waitFor({ timeout: 30_000 });
+      // The reply is in: the run before it is folded to its one line, so
+      // read it opened.
+      for (const b of await conv.locator(".trace-fold").all()) {
+        if ((await b.getAttribute("aria-expanded")) === "false") await b.click();
+      }
       // The progress update along the way placed its two sketches in its
       // text: there, side by side, not "not found", not listed again.
       const report = conv.locator(".trace-report", { hasText: "先放两张草图" }).last();
@@ -4983,11 +5899,22 @@ async function runMatrix(browser, size, scheme) {
       const wrap = page.locator(".sp-nav-pc-wrap").first();
       await wrap.hover();
       await clickVisible(page, wrap.locator(".sp-nav-more"));
+      const menu = page.getByRole("menu");
+      await menu.waitFor();
+      // A background conversation's scroll notification must not dismiss
+      // a menu belonging to the sidebar (streaming can emit it mid-click).
+      await page.locator(".conv-scroll:visible").first().dispatchEvent("scroll");
+      await menu.dispatchEvent("scroll");
       await clickVisible(page, page.getByRole("menuitem", { name: "谁能用、项目" }));
       const set = page.locator("[data-testid=computer-settings]");
       await set.waitFor({ timeout: 10_000 });
       await clickVisible(page, set.getByRole("button", { name: "好" }));
       await set.waitFor({ state: "hidden", timeout: 5_000 });
+      // Scrolling the source still dismisses its menu: its anchor moved.
+      await clickVisible(page, wrap.locator(".sp-nav-more"));
+      await menu.waitFor();
+      await page.locator(".app-nav").dispatchEvent("scroll");
+      await menu.waitFor({ state: "detached", timeout: 5_000 });
       // Right click: rename it in place, or go straight to removing it.
       const last = page.locator(".sp-nav-pc").last();
       const oldName = (await last.locator(".app-nav-label").innerText()).trim();
@@ -5098,14 +6025,14 @@ async function runMatrix(browser, size, scheme) {
 
     await step("电脑 · 可能卡住的命令", async () => {
       await sidebar(page, true);
-      const pc = page.locator(".sp-nav-pc", { hasText: "mac-exec" });
+      const pc = page.locator(".sp-nav-pc", { hasText: "demo-shell" });
       await pc.waitFor({ timeout: 10_000 });
       // The hub says the command shows no life: not "working", only a quiet
       // ring (a command left open).
       if (!(await pc.locator(".sp-nav-busy.is-open").count())) {
-        throw new Error("mac-exec 只剩没收尾的命令：侧栏应是一个空心圈");
+        throw new Error("demo-shell 只剩没收尾的命令：侧栏应是一个空心圈");
       }
-      if (await pc.locator(".sp-nav-busy:not(.is-open)").count()) throw new Error("mac-exec 不该亮绿点或琥珀点");
+      if (await pc.locator(".sp-nav-busy:not(.is-open)").count()) throw new Error("demo-shell 不该亮绿点或琥珀点");
       await clickVisible(page, pc);
       if (narrow) await sidebar(page, false);
       await page.locator(".conv-detail").waitFor({ timeout: 20_000 });
@@ -5129,7 +6056,7 @@ async function runMatrix(browser, size, scheme) {
       // Stopping it leaves the computer idle: no green, no amber.
       await sidebar(page, true);
       await page.waitForFunction(() => {
-        const r = [...document.querySelectorAll(".sp-nav-pc")].find((e) => (e.textContent || "").includes("mac-exec"));
+        const r = [...document.querySelectorAll(".sp-nav-pc")].find((e) => (e.textContent || "").includes("demo-shell"));
         return !!r && !r.querySelector(".sp-nav-busy");
       }, null, { timeout: 15_000 });
       await shot(page, size, scheme, "computer-stuck-stopped");
@@ -5626,6 +6553,9 @@ async function runMatrix(browser, size, scheme) {
       if (!compactText(await call.innerText()).includes("和 Review")) throw new Error(`语音条应写明和谁聊，实际「${compactText(await call.innerText())}」`);
       await call.locator(".vc-line.is-me", { hasText: "帮我看一下下载页的链接对不对" }).waitFor({ timeout: 10_000 });
       await call.locator(".vc-line.is-them", { hasText: "核对完我告诉你" }).waitFor({ timeout: 10_000 });
+      // The voice is the agent itself: its lines carry its face, not a "语音" label.
+      if (!(await call.locator(".vc-line.is-them .vc-line-who.is-face .pa").count())) throw new Error("语音里 agent 说的行前面应是它的头像");
+      if (compactText(await call.locator(".vc-line.is-them .vc-line-who").first().innerText()) === "语音") throw new Error("不该再标「语音」");
       if (await call.locator(".vc-line.is-hearing").count() > 1) throw new Error("听到一半的字应该只有一行");
       const sent = page.locator(".conv-detail .conv-msg.is-me", { hasText: "核对下载页上的每个下载链接" }).last();
       await sent.waitFor({ timeout: 10_000 });
@@ -5712,6 +6642,16 @@ async function runMatrix(browser, size, scheme) {
       await pick.selectOption({ label: "其他（填音色 ID）" });
       await page.locator("input[placeholder='S_…']").waitFor({ timeout: 5_000 });
       await pick.selectOption("zh_female_vv_uranus_bigtts");
+      // Words to hear right: one per line, saved with the rest.
+      const wordsBox = page.locator("[data-setting=voice-words] textarea");
+      await wordsBox.fill("Kettu\nClaude = 克劳德, cloud");
+      await clickVisible(page, page.locator("[data-setting=voice-words] .app-btn-primary"));
+      for (let i = 0; ; i++) {
+        const got = (await (await fetch(`http://${HOST}:${mockPort()}/app/voice`)).json()).config?.words || [];
+        if (got.join("|") === "Kettu|Claude = 克劳德, cloud") break;
+        if (i > 50) throw new Error(`要听准的词应一行一个存下，实际「${got.join("|")}」`);
+        await settle(page, 200);
+      }
       await settle(page, 200);
       await shot(page, size, scheme, "settings-voice");
       // Turned off: nothing says where any more; and back on.
@@ -5846,6 +6786,87 @@ async function runMatrix(browser, size, scheme) {
       if (narrow) await sidebar(page, false);
     });
 
+    // A project just made is in the sidebar at once, even while the
+    // workspaces answer slowly (reading them all again used to hold it back
+    // for up to a minute), and stays there.
+    await step("新建项目 · 立刻出现在边栏", async () => {
+      const slow = async (r) => {
+        if (r.request().method() !== "GET") return r.continue();
+        await new Promise((res) => setTimeout(res, 8000));
+        await r.continue().catch(() => undefined);
+      };
+      await page.route(/\/app\/hubs\/[^/]+\/projects(\?|$)/, slow);
+      await page.route("**/app/overview", slow);
+      try {
+        await sidebar(page, true);
+        await clickVisible(page, page.locator(".app-nav-add"));
+        const form = page.locator("[data-testid=new-project-form]");
+        await form.locator(".np-input").fill("发布清单");
+        const t0 = Date.now();
+        await clickVisible(page, form.getByRole("button", { name: "建好了" }));
+        await page.locator(".app-sidebar .app-nav-item", { hasText: "发布清单" }).first().waitFor({ timeout: 2_500 });
+        if (Date.now() - t0 > 2_500) throw new Error("新建的项目应立刻出现在边栏");
+        await closeDialog(page).catch(() => undefined);
+        await page.waitForTimeout(9_000); // the slow reads come back (from before it was made)
+        if (!(await page.locator(".app-sidebar .app-nav-item", { hasText: "发布清单" }).count())) throw new Error("新建的项目不该被慢回来的旧列表冲掉");
+      } finally {
+        await page.unroute(/\/app\/hubs\/[^/]+\/projects(\?|$)/, slow);
+        await page.unroute("**/app/overview", slow);
+      }
+      if (narrow) await sidebar(page, false);
+    });
+
+    // Adding a member already in the workspace: it shows in the members
+    // column at once, while the workspaces answer slowly (the column used
+    // to wait for every workspace to be read again).
+    await step("项目 · 加成员立刻出现", async () => {
+      const slow = async (r) => {
+        if (r.request().method() !== "GET") return r.continue();
+        await new Promise((res) => setTimeout(res, 8000));
+        await r.continue().catch(() => undefined);
+      };
+      await sidebar(page, true);
+      // (in the demo workspace, which has agents to add; earlier steps may
+      // have left another on show)
+      await clickVisible(page, page.locator(".sp-switch .app-hub-trigger"));
+      const studio = page.locator(".app-hub-menu [role=menuitemradio]", { hasText: "Alice" }).first();
+      if (await studio.getAttribute("aria-checked") === "true") await page.keyboard.press("Escape");
+      else await clickVisible(page, studio);
+      await page.locator(".app-hub-menu").waitFor({ state: "detached", timeout: 5_000 });
+      await clickVisible(page, page.locator(".app-nav-add"));
+      const form = page.locator("[data-testid=new-project-form]");
+      await form.locator(".np-input").fill("加人测试");
+      await clickVisible(page, form.getByRole("button", { name: "建好了" }));
+      // (a new project opens with 添加 agent)
+      const dlg = page.locator(".app-modal-add");
+      await dlg.waitFor({ timeout: 10_000 });
+      await page.route(/\/app\/hubs\/[^/]+\/projects(\/[^/?]+)?(\?|$)/, slow);
+      await page.route("**/app/overview", slow);
+      try {
+        const have = dlg.getByRole("tab", { name: "工作区里已有的" });
+        if (!(await have.waitFor({ timeout: 5_000 }).then(() => true, () => false))) {
+          throw new Error(`添加 agent 里没有「工作区里已有的」：${(await dlg.innerText()).replace(/\s+/g, " ").slice(0, 300)}`);
+        }
+        await clickVisible(page, have);
+        const row = dlg.locator(".add-local-row").first();
+        const name = (await row.locator(".add-local-name").innerText()).trim();
+        const t0 = Date.now();
+        await clickVisible(page, row.getByRole("button", { name: "加进来" }));
+        // (done when the other rows' buttons work again)
+        await page.waitForFunction(() => [...document.querySelectorAll(".app-modal-add .add-local-row button")].every((b) => !b.disabled), null, { timeout: 3_000 });
+        await closeDialog(page);
+        if (narrow) await page.locator(".sp-strip, .sp-side").first().waitFor({ timeout: 5_000 });
+        await page.locator(".sp-side .sp-member, .sp-strip .sp-strip-face", { hasText: narrow ? undefined : name }).first().waitFor({ timeout: 3_000 });
+        if (Date.now() - t0 > 3_000) throw new Error(`加进项目的「${name}」应立刻出现在成员栏`);
+        await page.waitForTimeout(9_000);
+        if (!narrow && !(await page.locator(".sp-side .sp-member", { hasText: name }).count())) throw new Error(`「${name}」不该被慢回来的旧列表冲掉`);
+      } finally {
+        await page.unroute(/\/app\/hubs\/[^/]+\/projects(\/[^/?]+)?(\?|$)/, slow);
+        await page.unroute("**/app/overview", slow);
+      }
+      if (narrow) await sidebar(page, false);
+    });
+
     // The Mac's menu bar asks the page for what it offers (a "myco-menu"
     // event): search, then settings.
     await step("菜单栏 · 搜索、设置", async () => {
@@ -5872,8 +6893,10 @@ async function runMatrix(browser, size, scheme) {
       await usage.getByRole("button", { name: "7 天", exact: true }).click();
       await page.waitForFunction(() => document.querySelectorAll(".usage-day").length === 7);
       const project = usage.getByRole("combobox", { name: "项目", exact: true });
-      const name = await project.locator('option').nth(1).getAttribute("value");
-      await project.selectOption(name);
+      // (a project with usage: the first in the projects table; a project
+      // made by an earlier step has none)
+      const title = (await usage.locator(".usage-projects tbody th").first().innerText()).trim();
+      await project.selectOption({ label: title });
       await usage.locator(".usage-agents tbody tr").first().waitFor({ timeout: 10000 });
       if (await usage.locator(".usage-projects").count()) throw new Error("指定项目时不应再显示项目汇总");
       await project.selectOption("-");
@@ -6002,6 +7025,90 @@ async function runMatrix(browser, size, scheme) {
         await clickVisible(page, pub.getByRole("button", { name: "完成", exact: true }));
       } finally { intentionalPublicNotReady.delete(page); await page.unroute(localHubRoute, publicHandler); }
       await pub.waitFor({ state: "hidden", timeout: 5_000 });
+    });
+
+    // Removing a workspace (last: it changes what the later steps would
+    // see) only touches this App, so it is done at once even when the
+    // workspaces answer slowly; the one removed leaves every page and
+    // nothing asks it again.
+    await step("设置 · 项目文件额度", async () => {
+      await go(page,"设置",narrow);
+      await clickVisible(page,page.locator(".app-settings-tab",{hasText:"工作区"}));
+      const card=page.locator('[data-setting="project-storage"][data-hub="hub_studio"]');
+      await card.locator("select").selectOption("website");
+      const files=card.getByRole("spinbutton",{name:"文件数上限",exact:true});
+      const capacity=card.getByRole("spinbutton",{name:"项目总大小上限（GiB）",exact:true});
+      await files.waitFor();
+      await files.fill("10001");
+      if(!await card.getByRole("button",{name:"保存",exact:true}).isDisabled())throw Error("file limit must enforce hard cap");
+      await files.fill("2000");await capacity.fill("4");
+      await card.getByRole("button",{name:"保存",exact:true}).click();
+      await card.getByRole("status").filter({hasText:"已保存"}).waitFor();
+      const quota=await page.evaluate(async()=>await(await fetch("/app/hubs/hub_studio/projects/website/storage")).json());
+      if(quota.files_max!==2000||quota.bytes_max!==4*1024**3)throw Error("saved project quota did not round-trip");
+      await shot(page,size,scheme,"project-storage");
+      await card.getByRole("button",{name:"使用工作区默认值",exact:true}).click();
+      await page.waitForFunction(()=>document.querySelector('[data-setting="project-storage"][data-hub="hub_studio"] input[type=number]')?.value==="1000");
+      await closeSettings(page);
+    });
+
+    await step("设置 · 移除工作区", async () => {
+      await closeSettings(page);
+      await sidebar(page, true);
+      await clickVisible(page, page.locator(".sp-switch .app-hub-trigger"));
+      const studio = page.locator(".app-hub-menu [role=menuitemradio]", { hasText: "Alice" }).first();
+      if (await studio.getAttribute("aria-checked") === "true") await page.keyboard.press("Escape");
+      else await clickVisible(page, studio);
+      await go(page, "用量", narrow);
+      await page.locator(".usage-metrics dd").first().waitFor({ timeout: 10_000 });
+      const shownBefore = (await page.locator(".sp-switch .app-hub-name, .app-hub-pill-name").first().innerText().catch(() => "")).trim();
+      await go(page, "设置", narrow);
+      // Hold a refresh that read the workspace list before the removal.
+      // Its late overview must not restore that list and remount UsagePage.
+      let releaseOverview;
+      const held = new Promise((resolve) => { releaseOverview = resolve; });
+      let overviewRead;
+      const ready = new Promise((resolve) => { overviewRead = resolve; });
+      const slowOverview = async (r) => {
+        const response = await r.fetch();
+        overviewRead();
+        await held;
+        await r.fulfill({ response }).catch(() => undefined);
+      };
+      await page.route("**/app/overview", slowOverview);
+      await page.evaluate(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "r", ctrlKey: true, metaKey: true, bubbles: true })));
+      await Promise.race([ready, page.waitForTimeout(10_000).then(() => { throw new Error("工作区刷新没有开始"); })]);
+      const asked = [];
+      let removed = "";
+      const onResponse = (r) => { if (r.status() === 404 && /\/app\/hubs\//.test(r.url())) asked.push(r.url()); };
+      page.on("response", onResponse);
+      try {
+        const rm = page.locator("[data-testid=settings-dialog]").getByRole("button", { name: /^移除/ }).first();
+        await clickVisible(page, rm);
+        const dlg = page.locator(".app-modal", { hasText: "只会从这个 App 里移除" });
+        await dlg.waitFor({ timeout: 5_000 });
+        removed = ((await dlg.innerText()).match(/移除 (.+?)？/) || [])[1] || "";
+        if (!removed) throw new Error("移除的确认框应写着要移除哪个工作区");
+        const t0 = Date.now();
+        await clickVisible(page, dlg.getByRole("button", { name: "移除工作区" }));
+        await dlg.waitFor({ state: "detached", timeout: 3_000 });
+        if (Date.now() - t0 > 2_000) throw new Error(`移除工作区不该等工作区回话：用了 ${Date.now() - t0}ms`);
+        releaseOverview();
+        await page.waitForTimeout(1_500);
+        if (asked.length) throw new Error(`移除后不该再问那个工作区：${asked[0]}`);
+      } finally {
+        releaseOverview();
+        page.off("response", onResponse);
+        await page.unroute("**/app/overview", slowOverview);
+      }
+      await closeSettings(page);
+      await sidebar(page, true);
+      const shownAfter = (await page.locator(".sp-switch .app-hub-name").first().innerText()).trim();
+      if (removed === shownBefore && shownAfter === removed) throw new Error(`移除了正在看的工作区，应换到别的：还是「${shownAfter}」`);
+      await clickVisible(page, page.locator(".sp-switch .app-hub-trigger"));
+      const names = await page.locator(".app-hub-menu [role=menuitemradio] .app-hub-menu-name").allInnerTexts();
+      await page.keyboard.press("Escape");
+      if (names.map((n) => n.trim()).includes(removed)) throw new Error(`移除的「${removed}」不该还在工作区菜单里`);
     });
   } finally {
     await context.close().catch(() => undefined);

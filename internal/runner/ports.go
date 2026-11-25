@@ -8,7 +8,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
+	"github.com/myco-ai/myco/internal/api"
 )
 
 // Hub is the subset of the hub API the runner needs.

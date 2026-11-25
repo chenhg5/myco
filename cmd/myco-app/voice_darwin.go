@@ -31,6 +31,25 @@ static SFSpeechAudioBufferRecognitionRequest *vRequest;
 static SFSpeechRecognitionTask *vTask;
 static NSObject *vLock;
 static BOOL vOn;
+// Words to listen for (names, terms) during this call.
+static NSArray<NSString *> *vHints;
+
+// The words to listen for (names, terms), newline-separated from Go, as
+// the recognizer's contextual strings; nil for none. (Retained.)
+static NSArray<NSString *> *vHintsFrom(const char *hints) {
+	if (!hints || !*hints) return nil;
+	NSArray<NSString *> *kept = nil;
+	@autoreleasepool {
+		NSString *all = [NSString stringWithUTF8String:hints];
+		NSMutableArray<NSString *> *out = [NSMutableArray array];
+		for (NSString *w in [all componentsSeparatedByString:@"\n"]) {
+			if ([w length]) [out addObject:w];
+		}
+		if ([out count]) kept = [[NSArray alloc] initWithArray:out];
+	}
+	return kept;
+}
+
 // Buffers queued and not yet played, and which flush they belong to (a
 // flush makes the older ones not count).
 static int vPending;
@@ -43,6 +62,7 @@ static void vSession(void) {
 	SFSpeechAudioBufferRecognitionRequest *req = [[SFSpeechAudioBufferRecognitionRequest alloc] init];
 	req.shouldReportPartialResults = YES;
 	if (@available(macOS 13, *)) req.addsPunctuation = YES;
+	if (vHints) req.contextualStrings = vHints;
 	if (@available(macOS 10.15, *)) {
 		if (vRecognizer.supportsOnDeviceRecognition) req.requiresOnDeviceRecognition = YES;
 	}
@@ -131,9 +151,12 @@ static void vStartOnMain(NSString *loc) {
 	vSession();
 }
 
-static void mycoVoiceStart(const char *locale) {
+static void mycoVoiceStart(const char *locale, const char *hints) {
 	NSString *loc = [[NSString alloc] initWithUTF8String:locale];
+	NSArray<NSString *> *words = vHintsFrom(hints);
 	dispatch_async(dispatch_get_main_queue(), ^{
+		if (vHints) [vHints release];
+		vHints = words;
 		[SFSpeechRecognizer requestAuthorization:^(SFSpeechRecognizerAuthorizationStatus status) {
 			if (status != SFSpeechRecognizerAuthorizationStatusAuthorized) { mycoVoiceEnded("speech-denied"); [loc release]; return; }
 			[AVCaptureDevice requestAccessForMediaType:AVMediaTypeAudio completionHandler:^(BOOL granted) {
@@ -188,10 +211,11 @@ static void mycoVoiceStop(void) {
 import "C"
 
 import (
+	"strings"
 	"sync"
 	"unsafe"
 
-	"github.com/chenhg5/myco/internal/console"
+	"github.com/myco-ai/myco/internal/console"
 )
 
 // macVoice is the Mac's microphone and speaker for voice calls.
@@ -210,7 +234,13 @@ func (m *macVoice) Start(lang string, ev console.VoiceEvents) error {
 	m.mu.Unlock()
 	cs := C.CString(lang)
 	defer C.free(unsafe.Pointer(cs))
-	C.mycoVoiceStart(cs)
+	var hints []string
+	if h, ok := ev.(console.VoiceHints); ok {
+		hints = h.Hints()
+	}
+	ch := C.CString(strings.Join(hints, "\n"))
+	defer C.free(unsafe.Pointer(ch))
+	C.mycoVoiceStart(cs, ch)
 	return nil
 }
 

@@ -18,8 +18,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/e2e"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/e2e"
 )
 
 // BroadcastTo is the recipient a broadcast is sealed for (one envelope for

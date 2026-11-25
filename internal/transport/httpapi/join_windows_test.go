@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chenhg5/myco/internal/app"
+	"github.com/myco-ai/myco/internal/app"
 )
 
 // parsePowerShell reports PowerShell's syntax errors in a script file.

@@ -1,3 +1,4 @@
+import { runnerUpdating } from "@/lib/runner-state";
 import { Component, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   CircleDot, Filter, LayoutGrid, List, Moon, RefreshCw, Search, ShieldCheck, Sun, Users, WifiOff, X,
@@ -352,7 +353,7 @@ function HubApp() {
                   <SheetTitle className={cn("text-lg font-semibold", !current.agent.display_name && "font-mono")}>
                     {current.agent.display_name || current.agent.name}
                   </SheetTitle>
-                  <StateBadge state={current.state} />
+                  <StateBadge state={current.state} updating={runnerUpdating(current.agent)} />
                 </div>
                 {current.agent.display_name && <div className="mt-0.5 font-mono text-xs text-muted-foreground"><CopyText text={current.agent.name} display={current.agent.name} /></div>}
                 <SheetDescription className="mt-1.5 text-sm text-muted-foreground">{current.agent.description || "（没有描述）"}</SheetDescription>

@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/e2e"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/e2e"
 )
 
 // With end-to-end encryption on, only a message's two sides and the people
@@ -39,7 +39,7 @@ func TestEndToEndEncryption(t *testing.T) {
 		}
 		return dc
 	}
-	laohuApp, matthewApp := device("laohu"), device("matthew")
+	bobApp, carolApp := device("bob"), device("carol")
 
 	// Agents, each owned by someone, with keys.
 	agent := func(name, owner string, sealed bool) *client.Client {
@@ -60,20 +60,20 @@ func TestEndToEndEncryption(t *testing.T) {
 	if _, err := admin.SetHubSettings(c, api.HubSettings{E2E: true}); err != nil {
 		t.Fatal(err)
 	}
-	glennBot := agent("glenn-bot", "owner", true)
-	laohuBot := agent("laohu-bot", "laohu", true)
-	matthewBot := agent("matthew-bot", "matthew", true)
-	oldBot := agent("old-bot", "laohu", false)
+	aliceBot := agent("alice-bot", "owner", true)
+	bobBot := agent("bob-bot", "bob", true)
+	carolBot := agent("carol-bot", "carol", true)
+	oldBot := agent("old-bot", "bob", false)
 
-	// glenn's agent asks laohu's agent.
-	sent, err := glennBot.Send(c, api.SendRequest{To: "laohu-bot", Body: "the launch date is secret"}, false)
+	// alice's agent asks bob's agent.
+	sent, err := aliceBot.Send(c, api.SendRequest{To: "bob-bot", Body: "the launch date is secret"}, false)
 	if err != nil || sent.Message.Body != "the launch date is secret" || !sent.Message.E2E {
 		t.Fatalf("send: %v %+v", err, sent)
 	}
 	// What the hub holds (read with its admin token, no keys).
 	rawOf := func(id string) api.Message {
 		t.Helper()
-		ex, err := admin.Exchanges(c, "glenn-bot", "laohu-bot", 0, 200)
+		ex, err := admin.Exchanges(c, "alice-bot", "bob-bot", 0, 200)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -88,45 +88,45 @@ func TestEndToEndEncryption(t *testing.T) {
 	if raw := rawOf(sent.Message.ID); !e2e.IsSealed(raw.Body) || strings.Contains(raw.Body, "launch") || !raw.E2E {
 		t.Fatalf("the hub must only hold ciphertext: %q", raw.Body)
 	}
-	got, err := laohuBot.Pull(c, 1, 0)
+	got, err := bobBot.Pull(c, 1, 0)
 	if err != nil || len(got) != 1 || got[0].Body != "the launch date is secret" {
 		t.Fatalf("recipient: %v %+v", err, got)
 	}
 	// The recipient's suggested next message is sealed for the sender too.
-	if _, err := laohuBot.Suggest(c, sent.Message.ID, "ask marketing for the date", false); err != nil {
+	if _, err := bobBot.Suggest(c, sent.Message.ID, "ask marketing for the date", false); err != nil {
 		t.Fatal(err)
 	}
 	if raw := rawOf(sent.Message.ID); !e2e.IsSealed(raw.Suggest) || strings.Contains(raw.Suggest, "marketing") {
 		t.Fatalf("the hub must only hold a sealed suggestion: %q", raw.Suggest)
 	}
-	if m, err := glennBot.GetMessage(c, sent.Message.ID); err != nil || m.Suggest != "ask marketing for the date" {
+	if m, err := aliceBot.GetMessage(c, sent.Message.ID); err != nil || m.Suggest != "ask marketing for the date" {
 		t.Fatalf("the sender reads the suggestion: %v %+v", err, m)
 	}
-	// laohu (the recipient's owner) reads it in the app; matthew cannot.
-	th, err := laohuApp.Thread(c, sent.Message.ThreadID)
+	// bob (the recipient's owner) reads it in the app; carol cannot.
+	th, err := bobApp.Thread(c, sent.Message.ThreadID)
 	if err != nil || len(th) != 1 || th[0].Body != "the launch date is secret" {
 		t.Fatalf("owner's app: %v %+v", err, th)
 	}
 	// Another member's app does not even list it: the thread is not theirs.
-	if th, err = matthewApp.Thread(c, sent.Message.ThreadID); err == nil {
+	if th, err = carolApp.Thread(c, sent.Message.ThreadID); err == nil {
 		t.Fatalf("another member must not get the thread: %+v", th)
 	}
 	// The answer comes back encrypted too.
-	if _, err := laohuBot.Reply(c, got[0].ID, "next friday", false); err != nil {
+	if _, err := bobBot.Reply(c, got[0].ID, "next friday", false); err != nil {
 		t.Fatal(err)
 	}
-	reply, err := glennBot.WaitReply(c, sent.Message.ID, time.Second)
+	reply, err := aliceBot.WaitReply(c, sent.Message.ID, time.Second)
 	if err != nil || reply == nil || reply.Body != "next friday" {
 		t.Fatalf("reply: %v %+v", err, reply)
 	}
 
 	// A failure reason is sealed for the sender as well.
-	task, _ := glennBot.Send(c, api.SendRequest{To: "laohu-bot", Body: "do the impossible"}, false)
-	laohuBot.Pull(c, 1, 0)
-	if _, err := laohuBot.Fail(c, task.Message.ID, "cannot: no budget", false); err != nil {
+	task, _ := aliceBot.Send(c, api.SendRequest{To: "bob-bot", Body: "do the impossible"}, false)
+	bobBot.Pull(c, 1, 0)
+	if _, err := bobBot.Fail(c, task.Message.ID, "cannot: no budget", false); err != nil {
 		t.Fatal(err)
 	}
-	ev, err := glennBot.WaitReply(c, task.Message.ID, time.Second)
+	ev, err := aliceBot.WaitReply(c, task.Message.ID, time.Second)
 	if err != nil || ev == nil || !strings.Contains(ev.Body, "no budget") {
 		t.Fatalf("failure event: %v %+v", err, ev)
 	}
@@ -138,18 +138,18 @@ func TestEndToEndEncryption(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "plan.txt")
 	os.WriteFile(src, []byte("step 1: profit"), 0o600)
-	f, err := glennBot.UploadFile(c, src)
+	f, err := aliceBot.UploadFile(c, src)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := glennBot.Send(c, api.SendRequest{To: "laohu-bot", Body: "see attached", Attachments: []string{f.ID}}, false); err != nil {
+	if _, err := aliceBot.Send(c, api.SendRequest{To: "bob-bot", Body: "see attached", Attachments: []string{f.ID}}, false); err != nil {
 		t.Fatal(err)
 	}
-	in, _ := laohuBot.Pull(c, 1, 0)
+	in, _ := bobBot.Pull(c, 1, 0)
 	if len(in) != 1 || len(in[0].Attachments) != 1 || in[0].Attachments[0].Name != "plan.txt" {
 		t.Fatalf("attachment metadata: %+v", in)
 	}
-	_, path, err := laohuBot.DownloadFile(c, f.ID, t.TempDir())
+	_, path, err := bobBot.DownloadFile(c, f.ID, t.TempDir())
 	if b, _ := os.ReadFile(path); err != nil || string(b) != "step 1: profit" || filepath.Base(path) != "plan.txt" {
 		t.Fatalf("download: %v %s %q", err, path, b)
 	}
@@ -159,15 +159,15 @@ func TestEndToEndEncryption(t *testing.T) {
 	}
 
 	// A broadcast is sealed for every recipient.
-	for _, n := range []string{"laohu-bot", "matthew-bot"} {
+	for _, n := range []string{"bob-bot", "carol-bot"} {
 		if _, err := admin.SetLabels(c, n, api.LabelsRequest{Add: []string{"team"}}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, err := glennBot.Broadcast(c, api.BroadcastRequest{Selector: "team", Type: "note", Body: "all hands at 3"}, false); err != nil {
+	if _, err := aliceBot.Broadcast(c, api.BroadcastRequest{Selector: "team", Type: "note", Body: "all hands at 3"}, false); err != nil {
 		t.Fatal(err)
 	}
-	for _, bc := range []*client.Client{laohuBot, matthewBot} {
+	for _, bc := range []*client.Client{bobBot, carolBot} {
 		ms, _ := bc.Pull(c, 5, 0)
 		ok := false
 		for _, m := range ms {
@@ -179,7 +179,7 @@ func TestEndToEndEncryption(t *testing.T) {
 	}
 
 	// An agent too old to have keys gets plain messages.
-	plain, err := glennBot.Send(c, api.SendRequest{To: "old-bot", Body: "hello old friend"}, false)
+	plain, err := aliceBot.Send(c, api.SendRequest{To: "old-bot", Body: "hello old friend"}, false)
 	if err != nil || plain.Message.E2E {
 		t.Fatalf("to an old agent: %v %+v", err, plain)
 	}
@@ -189,15 +189,15 @@ func TestEndToEndEncryption(t *testing.T) {
 
 	// Swapped keys are refused until trusted again.
 	evil, _ := e2e.NewIdentity()
-	laohuBot.Sealer = &client.Sealer{Me: "laohu-bot", ID: evil, Known: known}
-	if err := laohuBot.RegisterKeys(c); err != nil {
+	bobBot.Sealer = &client.Sealer{Me: "bob-bot", ID: evil, Known: known}
+	if err := bobBot.RegisterKeys(c); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := glennBot.Send(c, api.SendRequest{To: "laohu-bot", Body: "still there?"}, false); err == nil || !strings.Contains(err.Error(), "changed") {
+	if _, err := aliceBot.Send(c, api.SendRequest{To: "bob-bot", Body: "still there?"}, false); err == nil || !strings.Contains(err.Error(), "changed") {
 		t.Fatalf("changed keys must stop the send: %v", err)
 	}
-	known.Trust("laohu-bot")
-	if _, err := glennBot.Send(c, api.SendRequest{To: "laohu-bot", Body: "still there?"}, false); err != nil {
+	known.Trust("bob-bot")
+	if _, err := aliceBot.Send(c, api.SendRequest{To: "bob-bot", Body: "still there?"}, false); err != nil {
 		t.Fatalf("after trusting: %v", err)
 	}
 }

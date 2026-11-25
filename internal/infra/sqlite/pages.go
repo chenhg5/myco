@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"errors"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // PageRepo implements domain.PageRepository.
@@ -16,11 +16,11 @@ func NewPageRepo(db *sql.DB) *PageRepo { return &PageRepo{db: db} }
 
 var _ domain.PageRepository = (*PageRepo)(nil)
 
-const pageCols = `id, name, project, publisher, owner, latest, live, port, template, template_version, manifest, created_at, updated_at`
+const pageCols = `id, name, project, publisher, owner, latest, live, port, template, template_version, manifest, editors, created_at, updated_at`
 
 func (r *PageRepo) Create(ctx context.Context, p *domain.Page) error {
-	_, err := r.db.ExecContext(ctx, `INSERT INTO pages (`+pageCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		p.ID, p.Name, p.Project, p.Publisher, p.Owner, p.Latest, p.Live, p.Port, p.Template, p.TemplateVersion, p.Manifest, ms(p.CreatedAt), ms(p.UpdatedAt))
+	_, err := r.db.ExecContext(ctx, `INSERT INTO pages (`+pageCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		p.ID, p.Name, p.Project, p.Publisher, p.Owner, p.Latest, p.Live, p.Port, p.Template, p.TemplateVersion, p.Manifest, p.Editors, ms(p.CreatedAt), ms(p.UpdatedAt))
 	if isUniqueViolation(err) {
 		return domain.Errf(domain.CodeConflict, "page %s exists", p.ID)
 	}
@@ -28,8 +28,8 @@ func (r *PageRepo) Create(ctx context.Context, p *domain.Page) error {
 }
 
 func (r *PageRepo) Save(ctx context.Context, p *domain.Page) error {
-	res, err := r.db.ExecContext(ctx, `UPDATE pages SET name=?, project=?, latest=?, port=?, template=?, template_version=?, manifest=?, updated_at=? WHERE id=?`,
-		p.Name, p.Project, p.Latest, p.Port, p.Template, p.TemplateVersion, p.Manifest, ms(p.UpdatedAt), p.ID)
+	res, err := r.db.ExecContext(ctx, `UPDATE pages SET name=?, project=?, latest=?, port=?, template=?, template_version=?, manifest=?, editors=?, updated_at=? WHERE id=?`,
+		p.Name, p.Project, p.Latest, p.Port, p.Template, p.TemplateVersion, p.Manifest, p.Editors, ms(p.UpdatedAt), p.ID)
 	if err != nil {
 		return internal(err)
 	}
@@ -44,7 +44,7 @@ func scanPage(s scanner) (*domain.Page, error) {
 		p                domain.Page
 		created, updated int64
 	)
-	if err := s.Scan(&p.ID, &p.Name, &p.Project, &p.Publisher, &p.Owner, &p.Latest, &p.Live, &p.Port, &p.Template, &p.TemplateVersion, &p.Manifest, &created, &updated); err != nil {
+	if err := s.Scan(&p.ID, &p.Name, &p.Project, &p.Publisher, &p.Owner, &p.Latest, &p.Live, &p.Port, &p.Template, &p.TemplateVersion, &p.Manifest, &p.Editors, &created, &updated); err != nil {
 		return nil, err
 	}
 	p.CreatedAt, p.UpdatedAt = fromMS(created), fromMS(updated)
@@ -85,6 +85,14 @@ func (r *PageRepo) Delete(ctx context.Context, id string) error {
 		return internal(err)
 	}
 	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO page_attachment_garbage(blob) SELECT blob FROM page_attachments WHERE page=?`, id); err != nil {
+		return internal(err)
+	}
+	for _, table := range []string{"page_attachment_refs", "page_attachment_aliases", "page_attachments"} {
+		if _, err := tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE page=?", id); err != nil {
+			return internal(err)
+		}
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM page_versions WHERE page=?`, id); err != nil {
 		return internal(err)
 	}

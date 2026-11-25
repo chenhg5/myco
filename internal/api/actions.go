@@ -18,11 +18,12 @@ import (
 // machine. Its immutable binding freezes the actual target; display metadata
 // comes from the trusted host, never from the requesting agent.
 type ActionResource struct {
-	Provider string `json:"provider"`
+	Provider string `json:"provider"` // "server.ssh" or "browser"; profile-scoped
 	ID       string `json:"id"`
 	Binding  string `json:"binding"`
 	Name     string `json:"name,omitempty"`
 	Summary  string `json:"summary,omitempty"`
+	Kind     string `json:"kind,omitempty"`
 }
 
 // ActionTarget is where actions run.
@@ -52,6 +53,7 @@ type ActionGrantRequest struct {
 	Target      ActionTarget `json:"target"`
 	Permissions []string     `json:"permissions"`
 	Reason      string       `json:"reason"`
+	Hosts       []string     `json:"hosts,omitempty"`
 	MessageID   string       `json:"message_id,omitempty"` // the task it is for; the grant ends with it
 	PageID      string       `json:"page_id,omitempty"`    // context only, not authority
 	TTLSeconds  int          `json:"ttl_seconds,omitempty"`
@@ -78,6 +80,7 @@ type ActionGrant struct {
 	TargetName  string       `json:"target_name,omitempty"`
 	Permissions []string     `json:"permissions"`
 	Requested   []string     `json:"requested,omitempty"`
+	Hosts       []string     `json:"hosts,omitempty"`
 	Reason      string       `json:"reason,omitempty"`
 	MessageID   string       `json:"message_id,omitempty"`
 	ApprovalID  string       `json:"approval_id"`
@@ -97,8 +100,9 @@ type ActionGrantList struct {
 // ActionGrantNarrow is the optional body of approving an action_grant
 // approval: less than was asked (never more).
 type ActionGrantNarrow struct {
-	Permissions []string `json:"permissions,omitempty"`
-	TTLSeconds  int      `json:"ttl_seconds,omitempty"`
+	Permissions []string  `json:"permissions,omitempty"`
+	TTLSeconds  int       `json:"ttl_seconds,omitempty"`
+	Hosts       *[]string `json:"hosts,omitempty"`
 }
 
 // ActionInvocation is POST /v1/me/action-jobs.
@@ -127,10 +131,11 @@ type ActionError struct {
 	Message   string `json:"message"`
 	Retryable bool   `json:"retryable"`
 	Applied   *int   `json:"applied,omitempty"`
+	Reason    string `json:"reason,omitempty"`
 }
 
-// ActionArtifact is a private, short-lived file a job made (a screenshot):
-// GET /v1/me/action-artifacts/{id}, by the grant's agent only.
+// ActionArtifact is a private file a job made. Live browser screenshots are
+// also available to the computer owner and can outlive the grant.
 type ActionArtifact struct {
 	ID        string    `json:"id"`
 	MediaType string    `json:"media_type"`
@@ -153,17 +158,25 @@ type ActionJob struct {
 	FinishedAt      *time.Time       `json:"finished_at,omitempty"`
 }
 
+// ActionGrantRevoke can identify a stop from the browser's local owner panel.
+type ActionGrantRevoke struct {
+	Reason string `json:"reason,omitempty"`
+}
+
 // ActionHostRegister is POST /v1/console/action-hosts: the trusted App on
 // a computer offering a provider's actions there.
 type ActionHostRegister struct {
-	Resource   *ActionResource    `json:"resource,omitempty"`
-	MachineID  string             `json:"machine_id"`
-	Provider   string             `json:"provider"`
-	Generation string             `json:"generation"`
-	Actions    []ActionDescriptor `json:"actions"`
+	BrowserHostScope bool               `json:"browser_host_scope,omitempty"`
+	Resource         *ActionResource    `json:"resource,omitempty"`
+	MachineID        string             `json:"machine_id"`
+	Provider         string             `json:"provider"`
+	Generation       string             `json:"generation"`
+	Actions          []ActionDescriptor `json:"actions"`
 }
 
-// ActionHost is a registered host.
+// ActionHost is a registered host. DELETE /v1/console/action-hosts/{id}
+// requires ?generation=<Generation> and its actual owner; it revokes all
+// machine/provider/profile grants, including pending ones, across bindings.
 type ActionHost struct {
 	Resource   *ActionResource `json:"resource,omitempty"`
 	ID         string          `json:"id"`
@@ -204,6 +217,7 @@ type ActionJobComplete struct {
 	Result      json.RawMessage `json:"result,omitempty"`
 	Error       *ActionError    `json:"error,omitempty"`
 	ArtifactIDs []string        `json:"artifact_ids,omitempty"`
+	BrowserHost string          `json:"browser_host,omitempty"`
 }
 
 // ActionTargetList contains enabled private resources of the agent's owner.

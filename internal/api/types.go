@@ -5,7 +5,7 @@ package api
 
 import (
 	"encoding/json"
-	"github.com/chenhg5/myco/internal/remotedesktop"
+	"github.com/myco-ai/myco/internal/remotedesktop"
 	"time"
 )
 
@@ -32,6 +32,7 @@ type Delivery struct {
 
 // Agent is the public view of a registered agent.
 type Agent struct {
+	Updating    bool        `json:"updating,omitempty"`
 	ID          string      `json:"id"`
 	Resume      *ResumeInfo `json:"resume,omitempty"`
 	Name        string      `json:"name"`
@@ -66,6 +67,7 @@ type Agent struct {
 	Delivery   Delivery   `json:"delivery"`
 	AllowFrom  []string   `json:"allow_from"`
 	EnrolledBy string     `json:"enrolled_by,omitempty"`
+	InvitedBy  string     `json:"invited_by,omitempty"`
 	Online     bool       `json:"online"`
 	CreatedAt  time.Time  `json:"created_at"`
 	LastSeenAt *time.Time `json:"last_seen_at,omitempty"`
@@ -118,10 +120,29 @@ type EncryptedProvider struct {
 }
 
 // Runtime is what an agent runs on.
+// RunnerSlots describes one runner process, shared across its workspaces.
+// Queue contains only the reporting agent's waiting message IDs.
+type RunnerSlots struct {
+	MaxConcurrent int                `json:"max_concurrent"`
+	InUse         int                `json:"in_use"`
+	Waiting       int                `json:"waiting"`
+	Queue         []RunnerQueuedTask `json:"queue,omitempty"`
+	At            time.Time          `json:"at"`
+}
+type RunnerQueuedTask struct {
+	MessageID string `json:"message_id"`
+	Position  int    `json:"position"`
+}
+
 type Runtime struct {
-	CLI        string `json:"cli,omitempty"`
-	CLIVersion string `json:"cli_version,omitempty"`
-	Model      string `json:"model,omitempty"`
+	// RunnerInstance identifies a runner process; RestartingUntil is a
+	// short lease for planned restarts, cleared by the next instance.
+	RunnerInstance  string       `json:"runner_instance,omitempty"`
+	RestartingUntil time.Time    `json:"restarting_until,omitzero"`
+	RunnerSlots     *RunnerSlots `json:"runner_slots,omitempty"`
+	CLI             string       `json:"cli,omitempty"`
+	CLIVersion      string       `json:"cli_version,omitempty"`
+	Model           string       `json:"model,omitempty"`
 	// ModelSource: configured (the agent's runner.model), cli-config (the
 	// CLI's own settings), observed (seen in its last turn), or default.
 	ModelSource string `json:"model_source,omitempty"`
@@ -148,7 +169,8 @@ type Runtime struct {
 	// "changes", "ask_access"); apps show a feature's controls only when it
 	// is listed. Absent from runners that predate it.
 	Features []string `json:"features,omitempty"`
-	// Away says why the runner went offline, sent as it stops: "stopped"
+	// Away says why the runner went offline: "updating" during a planned
+	// restart (bounded by RestartingUntil), or "stopped"
 	// (it was stopped: by hand, its service, logging out or shutting down).
 	// A runner that is running sends none. Env is where it runs when that
 	// explains going offline: "wsl" (Windows shuts WSL down when idle).
@@ -243,6 +265,7 @@ type RunSettingsPatch struct {
 
 // Machine is a computer, server or cloud environment agents run on.
 type Machine struct {
+	Updating    bool       `json:"updating,omitempty"`
 	ID          string     `json:"id"`
 	Name        string     `json:"name"`
 	Hostname    string     `json:"hostname,omitempty"`
@@ -320,6 +343,10 @@ type Message struct {
 	Ask     bool   `json:"ask,omitempty"`
 	Asking  string `json:"asking,omitempty"`
 	Answers string `json:"answers,omitempty"`
+	// HeldFor is "reply" when an agent is waiting for another agent.
+	HeldFor string `json:"held_for,omitempty"`
+	// HoldWake is the reply, answer or recovery marker returned to runners.
+	HoldWake string `json:"hold_wake,omitempty"`
 	// Suggest, on a task: what its recipient thinks the sender may want to
 	// say next (POST /v1/messages/{id}/suggest, v0.19.15+); the app offers
 	// it in the input and Tab takes it.
@@ -534,6 +561,11 @@ type PullRequest struct {
 	// Via is "runner" when an agent's runner pulls; such pulls get nothing
 	// while a session of the agent keeps `inbox wait` running.
 	Via string `json:"via,omitempty"`
+}
+
+// HoldUntilRequest identifies the delegated task whose completion resumes this task.
+type HoldUntilRequest struct {
+	Until string `json:"until"`
 }
 
 // MessageList wraps a list of messages.
@@ -1058,7 +1090,7 @@ type RecentItem struct {
 	// (a task stuck behind a newer one that finished). Hubs before v0.18.40
 	// leave it out.
 	Open *Message `json:"open,omitempty"`
-	// State: "queued", "working", "done", "failed" or "" (no task). A shell
+	// State: "queued", "held", "working", "done", "failed" or "" (no task). A shell
 	// command that exited non-zero is "done" here; its exit code is in
 	// Answer's body.
 	State string `json:"state,omitempty"`
@@ -1244,21 +1276,42 @@ type HubSettings struct {
 	E2E bool `json:"e2e"`
 }
 
+// ProjectStorage describes logical usage. Zero overrides inherit Hub defaults.
+// Files count excludes inline text documents. A missing files_max means an older Hub.
+type ProjectStorage struct {
+	FilesUsed        int   `json:"files_used"`
+	FilesMax         int   `json:"files_max,omitempty"`
+	BytesUsed        int64 `json:"bytes_used"`
+	BytesMax         int64 `json:"bytes_max,omitempty"`
+	DocsUsed         int   `json:"docs_used"`
+	DocsMax          int   `json:"docs_max,omitempty"`
+	FilesMaxOverride int   `json:"files_max_override,omitempty"`
+	BytesMaxOverride int64 `json:"bytes_max_override,omitempty"`
+	CanManageStorage bool  `json:"can_manage_storage,omitempty"`
+}
+type ProjectStorageRequest struct {
+	FilesMax int   `json:"files_max"`
+	BytesMax int64 `json:"bytes_max"`
+}
+
 // Project is a piece of work several agents and people do together.
 type Project struct {
-	Name       string          `json:"name"`
-	Title      string          `json:"title"`
-	Goal       string          `json:"goal,omitempty"`
-	Brief      string          `json:"brief,omitempty"`
-	Links      []ProjectLink   `json:"links"`
-	Visibility string          `json:"visibility"` // members | team
-	Owner      string          `json:"owner,omitempty"`
-	OwnerID    string          `json:"owner_id,omitempty"`
-	Archived   bool            `json:"archived,omitempty"`
-	CreatedAt  time.Time       `json:"created_at"`
-	UpdatedAt  time.Time       `json:"updated_at"`
-	Members    []ProjectMember `json:"members"`
-	Docs       []ProjectDoc    `json:"docs"`
+	ProjectStorage
+	CoordinatorAutomations bool            `json:"coordinator_automations"`
+	CoordinatorInvites     bool            `json:"coordinator_invites"`
+	Name                   string          `json:"name"`
+	Title                  string          `json:"title"`
+	Goal                   string          `json:"goal,omitempty"`
+	Brief                  string          `json:"brief,omitempty"`
+	Links                  []ProjectLink   `json:"links"`
+	Visibility             string          `json:"visibility"` // members | team
+	Owner                  string          `json:"owner,omitempty"`
+	OwnerID                string          `json:"owner_id,omitempty"`
+	Archived               bool            `json:"archived,omitempty"`
+	CreatedAt              time.Time       `json:"created_at"`
+	UpdatedAt              time.Time       `json:"updated_at"`
+	Members                []ProjectMember `json:"members"`
+	Docs                   []ProjectDoc    `json:"docs"`
 	// Memory is the project's memory document, with its body (empty when
 	// nobody added to it yet), on GET /v1/projects/{name} from v0.21.10;
 	// nil from older hubs, which have no project memory.
@@ -1510,9 +1563,15 @@ type Automation struct {
 	LastRun    *AutomationRun `json:"last_run,omitempty"`
 	// Workflow (v0.21+): the workflow it starts instead of sending a task
 	// (its id and name), with the run's inputs (templates over {{payload}}).
-	Workflow     string            `json:"workflow,omitempty"`
-	WorkflowName string            `json:"workflow_name,omitempty"`
-	Inputs       map[string]string `json:"inputs,omitempty"`
+	Workflow       string            `json:"workflow,omitempty"`
+	WorkflowName   string            `json:"workflow_name,omitempty"`
+	Inputs         map[string]string `json:"inputs,omitempty"`
+	StartsAt       *time.Time        `json:"starts_at,omitempty"`
+	EndsAt         *time.Time        `json:"ends_at,omitempty"`
+	Once           bool              `json:"once"`
+	DisabledReason string            `json:"disabled_reason,omitempty"`
+	CreatedBy      string            `json:"created_by,omitempty"`
+	ApprovedBy     string            `json:"approved_by,omitempty"`
 }
 
 // AutomationRequest is POST /v1/console/automations (create) and PATCH
@@ -1535,6 +1594,9 @@ type AutomationRequest struct {
 	// run's inputs.
 	Workflow *string           `json:"workflow,omitempty"`
 	Inputs   map[string]string `json:"inputs,omitempty"`
+	StartsAt *string           `json:"starts_at,omitempty"`
+	EndsAt   *string           `json:"ends_at,omitempty"`
+	Once     *bool             `json:"once,omitempty"`
 }
 
 // AutomationResponse answers create and update. WebhookSecret is set only
@@ -1563,10 +1625,11 @@ type WebhookResponse struct {
 // Page is a web page published to the hub (from v0.19.24): GET /v1/pages,
 // GET /v1/pages/{id}, POST /v1/pages.
 type Page struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Project   string `json:"project,omitempty"`
-	Publisher string `json:"publisher"`
+	AttachmentVersion int    `json:"attachments_version,omitempty"`
+	ID                string `json:"id"`
+	Name              string `json:"name"`
+	Project           string `json:"project,omitempty"`
+	Publisher         string `json:"publisher"`
 	// Version is the latest version's number.
 	Version int `json:"version"`
 	// Entry is the file the latest version opens on.
@@ -1579,6 +1642,11 @@ type Page struct {
 	UpdatedAt time.Time     `json:"updated_at"`
 	// CanManage: the caller may publish versions of it and delete it.
 	CanManage bool `json:"can_manage"`
+	// Editors is who may change its records and shared state (hubs from
+	// v0.22.2): "managers" only those who manage it; empty everyone who sees
+	// it. ReadOnly: the caller may not (their writes are refused).
+	Editors  string `json:"editors,omitempty"`
+	ReadOnly bool   `json:"read_only,omitempty"`
 	// Live: a server on its publisher's computer (on Port there), forwarded
 	// while `myco page serve` runs; Online says whether it is now.
 	Live   bool `json:"live,omitempty"`
@@ -1586,6 +1654,19 @@ type Page struct {
 	Online bool `json:"online,omitempty"`
 	// Template: the template it was made from (hubs from v0.20.5).
 	Template *PageTemplate `json:"template,omitempty"`
+}
+
+// PageOpen is the desktop console's response for an opened static page.
+type PageOpen struct {
+	URL          string `json:"url"`
+	Lease        string `json:"lease"`
+	Isolated     bool   `json:"isolated"`
+	Recovery     bool   `json:"recovery,omitempty"`
+	StorageScope string `json:"storage_scope,omitempty"`
+	Version      int    `json:"version"`
+	Latest       int    `json:"latest"`
+	Name         string `json:"name"`
+	Entry        string `json:"entry"`
 }
 
 // PageTemplate says which template a page was made from, and its data's
@@ -1604,7 +1685,14 @@ type PageTemplate struct {
 	Net []string `json:"net,omitempty"`
 	// Latest is the app's newest version, when newer than the page's
 	// (hubs from v0.20.7): POST /v1/pages/{id}/upgrade takes it.
-	Latest string `json:"latest,omitempty"`
+	Latest            string `json:"latest,omitempty"`
+	RequiresIsolation bool   `json:"requires_isolation,omitempty"`
+	// Declares (hubs from v0.22.9): Permissions and OS are all the app
+	// declares; Apps refuse what they leave out. Older hubs leave it out,
+	// and Apps only warn.
+	Declares bool `json:"declares,omitempty"`
+	// Official: one of myco's own apps (hubs from v0.22.9).
+	Official bool `json:"official,omitempty"`
 }
 
 // PageVersion is one publish of a page.
@@ -1712,8 +1800,13 @@ type PageRecord struct {
 // PageRecords is GET /v1/pages/{id}/data: the records (in their order) and
 // the page's latest change, to watch from.
 type PageRecords struct {
-	Records []PageRecord `json:"records"`
-	Seq     int64        `json:"seq"`
+	Next         string `json:"next,omitempty"`
+	Count        *int   `json:"count,omitempty"`
+	QueryVersion int    `json:"query_version,omitempty"`
+	// LocalFallback is client-side provenance, never part of the Hub contract.
+	LocalFallback bool         `json:"-"`
+	Records       []PageRecord `json:"records"`
+	Seq           int64        `json:"seq"`
 }
 
 // PageRecordWrite is PUT /v1/pages/{id}/data/{collection}/{record} and
@@ -1778,9 +1871,10 @@ type Template struct {
 	Permissions []string                      `json:"permissions,omitempty"`
 	// OS and Net: the computer's capabilities and the hosts it declares
 	// (hubs from v0.22.1).
-	OS     []string `json:"os,omitempty"`
-	Net    []string `json:"net,omitempty"`
-	Export []string `json:"export,omitempty"`
+	OS                []string `json:"os,omitempty"`
+	Net               []string `json:"net,omitempty"`
+	Export            []string `json:"export,omitempty"`
+	RequiresIsolation bool     `json:"requires_isolation,omitempty"`
 	// Guide is its agent's guide (agent.md): how to fill its data.
 	Guide string `json:"guide,omitempty"`
 	// Official: one of myco's, in every workspace (hubs from v0.20.5).
@@ -1817,6 +1911,14 @@ type AppSync struct {
 type TemplateCollection struct {
 	Fields map[string]string `json:"fields"`
 	Single bool              `json:"single,omitempty"`
+	// Write "managers": only those who manage the page change it (v0.22.2).
+	Write string `json:"write,omitempty"`
+}
+
+// PageUpdate changes a page's settings (PATCH /v1/pages/{id}; hubs from
+// v0.22.2): who may change its records, "everyone" or "managers".
+type PageUpdate struct {
+	Editors *string `json:"editors,omitempty"`
 }
 
 // TemplateVersion is one publish of a template.

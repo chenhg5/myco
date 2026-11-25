@@ -162,7 +162,7 @@ export function HandoffCard({ h, row, name, now, onOpen }: {
     ? <span className="handoff-label">{h.task ? L("派给", "To") : L("发给", "To")}</span>
     : <span className="handoff-label">{h.task ? L("派来", "From") : L("发来", "From")}</span>;
   return (
-    <button type="button" className={cn("handoff", `is-${h.dir}`)} data-handoff={h.id} onClick={onOpen}
+    <button type="button" className={cn("handoff", `is-${h.dir}`, (h.state === "done" || h.state === "note") && "is-settled")} data-handoff={h.id} onClick={onOpen}
       title={L("看它们之间的完整往来", "See their whole exchange")}>
       <span className="handoff-line">
         {h.dir === "out" ? <>{label}{who}</> : <>{who}{label}</>}

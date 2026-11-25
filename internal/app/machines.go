@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // AdminSender is the sender of messages the hub sends on an administrator's
@@ -19,6 +20,7 @@ const AdminSender domain.AgentName = "@admin"
 // MachineService tracks the machines agents run on, from what their
 // runners report, and starts sessions on them for administrators.
 type MachineService struct {
+	runtimeMu    sync.Mutex
 	machines     domain.MachineRepository
 	agents       domain.AgentRepository
 	agentService *AgentService
@@ -231,8 +233,31 @@ func defaultMachineName(r domain.MachineReport) string {
 
 // SetRuntime records an agent's CLI and model as its runner reports them.
 func (s *MachineService) SetRuntime(ctx context.Context, a *domain.Agent, rt domain.Runtime) error {
+	s.runtimeMu.Lock()
+	defer s.runtimeMu.Unlock()
 	if err := rt.Validate(); err != nil {
 		return err
+	}
+	// Re-read: authentication may have raced a restart announcement/report.
+	current, err := s.agents.Get(ctx, a.Name)
+	if err != nil {
+		return err
+	}
+	now := s.clock.Now()
+	if rt.Away == "updating" {
+		if rt.RestartingUntil.IsZero() || rt.RestartingUntil.After(now.Add(domain.RestartLease)) {
+			rt.RestartingUntil = now.Add(domain.RestartLease)
+		}
+	}
+	old := current.Runtime
+	// Reports from the stopping process must not erase its lease. A new
+	// instance's healthy report clears it immediately, including after force-kill.
+	if old.Updating(now) && (rt.RunnerInstance == "" || rt.RunnerInstance == old.RunnerInstance) {
+		rt.Away, rt.RestartingUntil = "updating", old.RestartingUntil
+	}
+	if rt.Away != "" && old.RunnerInstance != "" && old.RunnerInstance != rt.RunnerInstance {
+		a.Runtime = old
+		return nil // a late goodbye from a process the new runner replaced
 	}
 	a.Runtime = rt
 	return s.agents.SetRuntime(ctx, a.Name, rt)
@@ -245,8 +270,9 @@ type MachineView struct {
 	domain.Machine
 	Legacy bool
 	// Agents are the names of the nodes on it (machine nodes excluded).
-	Agents []domain.AgentName
-	Online bool
+	Agents   []domain.AgentName
+	Online   bool
+	Updating bool
 	// SpawnNode is its online machine node ("" = cannot start sessions).
 	SpawnNode domain.AgentName
 }
@@ -297,6 +323,7 @@ func (s *MachineService) List(ctx context.Context) ([]*MachineView, map[domain.A
 			}
 		}
 		v := views[id]
+		v.Updating = v.Updating || a.Runtime.Updating(now)
 		online := a.IsOnline(now, s.window)
 		if online {
 			v.Online = true

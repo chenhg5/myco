@@ -3,10 +3,9 @@ import Observation
 
 // Talking with an agent by voice, in the person's
 // chat with it: the phone hears the person (speech recognition), a fast
-// text model reads the chat and talks with them, passing what they want
-// done to the agent as they would type it, and answers out loud. It stops
-// talking as soon as the person speaks, and tells them, in a pause, when
-// the agent has answered or is asking something.
+// text model speaks as the agent while its working session does the
+// work requested, as if typed in this chat. It stops talking as soon as
+// the person speaks, and reports its own results and questions in a pause.
 //
 // On the desktop this loop is in the App's local backend
 // (internal/console/voice_call.go). A phone has no such backend: the same
@@ -99,6 +98,8 @@ public final class VoiceCall {
         /// done before it says that it still is (a long task would
         /// otherwise be minutes of silence).
         public var stillWorkingEvery: Duration
+        /// Whether the agent says hello when the microphone opens.
+        public var greet: Bool
         /// The end of the last call with this agent, for the model's
         /// instructions (`VoiceMemo.prompt`); empty when there was none.
         public var memo: String
@@ -108,7 +109,7 @@ public final class VoiceCall {
         public init(
             audio: any VoiceAudio, model: any VoiceModel, speech: any VoiceSpeech, hub: any VoiceHub, language: AppLanguage = .current,
             endOfSpeech: Duration = .milliseconds(900), quietBeforeNews: Duration = .milliseconds(1500), watchEvery: Duration = .seconds(2),
-            stillWorkingEvery: Duration = .seconds(120), memo: String = "", ended: (@MainActor @Sendable ([ChatMessage]) -> Void)? = nil
+            stillWorkingEvery: Duration = .seconds(120), memo: String = "", greet: Bool = true, ended: (@MainActor @Sendable ([ChatMessage]) -> Void)? = nil
         ) {
             self.audio = audio
             self.model = model
@@ -120,6 +121,7 @@ public final class VoiceCall {
             self.watchEvery = watchEvery
             self.stillWorkingEvery = stillWorkingEvery
             self.memo = memo
+            self.greet = greet
             self.ended = ended
         }
     }
@@ -158,7 +160,7 @@ public final class VoiceCall {
     /// News about tasks, waiting for a quiet moment.
     @ObservationIgnored private var news: [String] = []
     @ObservationIgnored private var watched: [String: Watched] = [:]
-    /// The voice passed something on or stopped the agent: the
+    /// The voice started or stopped work: the
     /// conversation is read again before the next answer.
     @ObservationIgnored private var acted = false
     @ObservationIgnored private var nextLine = 0
@@ -285,6 +287,7 @@ public final class VoiceCall {
             lastSound = clock.now
             // What the agent is doing already: its answer is news too.
             if let current = parts.hub.current { watch(current, what: "") }
+            if parts.greet { greet() }
         case .heard(let text, let final):
             heard(text.trimmingCharacters(in: .whitespacesAndNewlines), final: final)
         case .played:
@@ -425,7 +428,7 @@ public final class VoiceCall {
                     $0.text = said
                     $0.interrupted = true
                 }
-                history.append(ChatMessage(role: "assistant", content: said + "（被打断了）"))
+                history.append(ChatMessage(role: "assistant", content: said + text("（被打断了）", " (cut off)")))
             }
             lastSaid = turn.said
         }
@@ -472,6 +475,16 @@ public final class VoiceCall {
 
     // MARK: Answering
 
+    /// Says hello once the call is on. A person speaking first interrupts
+    /// this like any other turn, and a prior utterance is never greeted over.
+    private func greet() {
+        guard turn == nil, partial.isEmpty, history.isEmpty else { return }
+        history.append(ChatMessage(role: "system", content: text(
+            "（系统消息，不是对方说的）电话刚接通，你先开口：用一句很短的话打招呼，像接起电话那样，用第一人称（比如「我在，有什么要我做的？」）。你手上有活在做、或者在等对方回答，就顺带用半句话提一下；没有就不提。别说你是语音助手，别念对话原文。",
+            "(System message, not said by the person.) The call has just connected and you speak first: one short sentence of hello, as when picking up the phone, in the first person (e.g. \"Hi, I'm here. What can I do for you?\"). If you have work in progress or are waiting on their answer, mention it in half a sentence; otherwise do not. Do not call yourself a voice assistant, and do not read out the chat.")))
+        startTurn()
+    }
+
     /// In a quiet moment, news about the tasks becomes a turn of its own.
     private func maybeTellNews() {
         guard state == .listening, !news.isEmpty, turn == nil, !speaking, partial.isEmpty, !muted else { return }
@@ -479,7 +492,9 @@ public final class VoiceCall {
         let told = news.joined(separator: "\n")
         news = []
         history.append(ChatMessage(
-            role: "system", content: "（系统消息，不是对方说的）刚收到这些消息，用一两句自然的话告诉对方，别念原文：\n" + told))
+            role: "system", content: text(
+                "（系统消息，不是对方说的）你自己干活那边有了新情况。用第一人称（「我……」）、一两句自然的话告诉对方，别念原文：\n",
+                "(System message, not said by the person.) There is news from your own work. Tell them in a sentence or two, in the first person (\"I...\"), in your own words; do not read it out:\n") + told))
         startTurn()
     }
 
@@ -588,7 +603,7 @@ public final class VoiceCall {
             return
         }
         self.turn = nil
-        if let failure { add(.notice, text("语音助手没能回答：", "The voice could not answer: ") + failure) }
+        if let failure { add(.notice, text("语音没能回答：", "The voice could not answer: ") + failure) }
         let said = turn.said.trimmingCharacters(in: .whitespacesAndNewlines)
         // Nothing said (only actions): no empty line.
         if said.isEmpty { lines.removeAll { $0.id == turn.line } }
@@ -605,7 +620,7 @@ public final class VoiceCall {
         guard self.turn === turn, !sentence.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         turn.said += sentence
         let said = turn.said.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Its first words go under what it did meanwhile ("Handed to ...").
+        // Its first words go under what it started meanwhile ("On it: ...").
         if let index = lines.lastIndex(where: { $0.id == turn.line }), lines[index].text.isEmpty, index != lines.count - 1 {
             lines.append(lines.remove(at: index))
         }
@@ -627,7 +642,6 @@ public final class VoiceCall {
 
     /// Does what the model asked and says how it went (for the model).
     private func use(_ call: ToolCall) async -> String {
-        let name = parts.hub.name
         switch call.name {
         case VoiceTools.tell:
             acted = true
@@ -640,11 +654,11 @@ public final class VoiceCall {
                 if what.isEmpty { what = VoiceContext.clip(text, 20) }
                 watch(task, what: what)
                 if steered {
-                    add(.action, self.text("补充给 \(name)：\(what)", "Added for \(name): \(what)"))
-                    return "added to the task it is doing"
+                    add(.action, self.text("加到手上的活里：\(what)", "Added to what I'm doing: \(what)"))
+                    return "added to what you are working on"
                 }
-                add(.action, self.text("交给 \(name)：\(what)", "Handed to \(name): \(what)"))
-                return "sent as a new task"
+                add(.action, self.text("开始做：\(what)", "On it: \(what)"))
+                return "started: you are working on it now"
             } catch {
                 return "error: " + Self.words(of: error)
             }
@@ -655,7 +669,7 @@ public final class VoiceCall {
                 try await parts.hub.stopCurrent()
                 // Its ending is no news: the person asked for it.
                 if let current { watched[current, default: Watched(what: "", toldAt: clock.now)].finished = true }
-                add(.action, self.text("让 \(name) 停下了", "Stopped \(name)"))
+                add(.action, self.text("停下了手上的活", "Stopped what I was doing"))
                 return "stopped"
             } catch {
                 return "error: " + Self.words(of: error)
@@ -684,19 +698,20 @@ public final class VoiceCall {
         if let current = parts.hub.current { watch(current, what: "") }
         for (task, entry) in watched where !entry.finished {
             guard let found = parts.hub.news(of: task) else { continue }
-            let what = entry.what.isEmpty ? "" : "「" + entry.what + "」"
+            let what = entry.what.isEmpty ? "" : text("「" + entry.what + "」", " \"" + entry.what + "\"")
             if found.finished {
                 watched[task]?.finished = true
                 watched[task]?.toldAt = clock.now
-                news.append("它回复了\(what)：\(found.summary)")
+                news.append(text("你做完了\(what)，你在对话里的回复：\(found.summary)", "You finished\(what); your reply in the chat: \(found.summary)"))
             } else if !found.question.isEmpty, found.question != entry.asked {
                 watched[task]?.asked = found.question
                 watched[task]?.toldAt = clock.now
-                news.append("它在问你\(what)：\(found.question)（它在等回答；对方回答了就用 tell_agent 转给它）")
+                news.append(text("你做\(what)时有个问题要问对方：\(found.question)（你在等对方回答；对方回答了就用 do_work 记下来）",
+                                 "While working on\(what) you need to ask them: \(found.question) (you are waiting for the answer; when they answer, record it with do_work)"))
             } else if found.question.isEmpty, stillWorkingDue(entry) {
                 watched[task]?.toldAt = clock.now
                 if !found.progress.isEmpty { watched[task]?.progress = found.progress }
-                news.append(Self.stillWorking(what: what, found, told: entry.progress, now: Date()))
+                news.append(Self.stillWorking(what: what, found, told: entry.progress, now: Date(), language: parts.language))
             }
         }
     }
@@ -712,14 +727,18 @@ public final class VoiceCall {
     /// The notice that a task is still going: how it stands, for how
     /// long, and its newest progress note if not told yet. The desktop
     /// app's `stillWorking`.
-    nonisolated static func stillWorking(what: String, _ found: TaskNews, told: String, now: Date) -> String {
-        var out = "（不是回复，只是让对方知道还在进行）" + what + "：它" + VoiceContext.statusWord(found.status)
+    nonisolated static func stillWorking(what: String, _ found: TaskNews, told: String, now: Date, language: AppLanguage = .zh) -> String {
+        let en = language == .en
+        func say(_ zh: String, _ english: String) -> String { en ? english : zh }
+        var out = say("（不是结果，只是让对方知道你还在做）你手上的", "(Not a result, only so they know you are still at it) Your work")
+            + what + say("：", ": ") + VoiceContext.statusWord(found.status, language: language)
         if let since = found.since {
             let minutes = Int(now.timeIntervalSince(since) / 60)
-            if minutes >= 1 { out += "，已经 \(minutes) 分钟了" }
+            if minutes >= 1 { out += say("，已经 \(minutes) 分钟了", ", for \(minutes) min now") }
         }
-        if !found.progress.isEmpty, found.progress != told { out += "；它最新报的进展：" + found.progress }
-        return out + "。用一句很短的话告诉对方还在进行（可以带上它在做什么），别说做完了，也不用问对方要不要等。"
+        if !found.progress.isEmpty, found.progress != told { out += say("；你最新写的进展：", "; your latest progress note: ") + found.progress }
+        return out + say("。用一句很短的话、用「我」告诉对方你还在做（可以带上在做什么），别说做完了，也不用问对方要不要等。",
+                         ". In one short sentence, in the first person, tell them you are still on it (you can say what you are doing); do not say it is done, and do not ask whether they want to wait.")
     }
 
     // MARK: Lines

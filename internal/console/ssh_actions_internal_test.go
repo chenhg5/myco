@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -12,12 +13,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/hubserver"
-	"github.com/chenhg5/myco/internal/sshcap"
-	"github.com/chenhg5/myco/internal/testsshd"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/hubserver"
+	"github.com/myco-ai/myco/internal/sshcap"
+	"github.com/myco-ai/myco/internal/testsshd"
 )
 
 // A real Hub, human approval, trusted host, real OpenSSH client and isolated sshd.
@@ -145,6 +146,31 @@ esac
 	if err != nil {
 		t.Fatal(err)
 	}
+	// A temporary Hub poll failure is a retake, not withdrawal of owner consent.
+	fault := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/jobs") {
+			http.Error(w, "temporary", http.StatusServiceUnavailable)
+			return
+		}
+		h.Handler.ServeHTTP(w, r)
+	}))
+	faultOwner, _ := client.New(fault.URL, ct.Token)
+	wait := pollSSHHost(ctx, faultOwner, host, p, m, "test-hub")
+	fault.Close()
+	if wait != actionHostRetake {
+		t.Fatalf("poll fault did not retake: %v", wait)
+	}
+	if live, err := agent.ActionGrant(ctx, g.ID, 0); err != nil || live.State != api.GrantActive {
+		t.Fatalf("network fault revoked consent: %+v %v", live, err)
+	}
+	host, err = owner.RegisterActionHost(ctx, api.ActionHostRegister{MachineID: machine, Resource: sshResource(p), Provider: "server.ssh", Generation: "g1-retake", Actions: sshActionList})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if live, err := agent.ActionGrant(ctx, g.ID, 0); err != nil || live.State != api.GrantActive {
+		t.Fatalf("retake lost grant: %+v %v", live, err)
+	}
+
 	run := func(grant, action, args string) *api.ActionJob {
 		t.Helper()
 		j, err := agent.RunAction(ctx, api.ActionInvocation{GrantID: grant, Action: action, Version: 1, IdempotencyKey: action + args, Args: json.RawMessage(args)})

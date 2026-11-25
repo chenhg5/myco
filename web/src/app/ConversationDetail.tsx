@@ -1,3 +1,4 @@
+import { runnerUpdating } from "@/lib/runner-state";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Focus as FocusIcon, AlertTriangle, ArrowDown, ArrowLeft, ArrowRightLeft, ArrowUp, ArrowUpRight, Check, ChevronRight, Copy, AudioLines, Download, Images, Loader2, Lock, MoreHorizontal, Paintbrush, Pin as PinIcon, PinOff, Search, Settings2, Square, Trash2, WifiOff, X } from "lucide-react";
 import { ExportChat } from "@/app/ExportChat";
@@ -5,11 +6,12 @@ import { appApi, isTransient } from "@/appapi";
 import type { Agent, Message } from "@/api";
 import { SHROOM, useIsSuperagent } from "@/app/superagentMark";
 import type { AgentRow } from "@/app/types";
-import { agentKind, canManage, isInbox, isMe, lastActivityAt, machineOfRow, personLabel, possiblyStuck, quietFor, runnerAway, SEEN_SLACK_MS, seenNow, sessionBusy, nodeName } from "@/app/nodes";
+import { heldTaskLabel, agentKind, canManage, isInbox, isMe, lastActivityAt, machineOfRow, personLabel, possiblyStuck, quietFor, runnerAway, SEEN_SLACK_MS, seenNow, sessionBusy, nodeName } from "@/app/nodes";
 import { MessageContent, filesBelow, filesFor, inlineAttachmentIds, type InlineFiles } from "@/app/Markdown";
 import { UI_REPLY } from "@/app/ui/UiBlock";
 import { PromptSign, STOPPED, Terminal } from "@/app/Terminal";
-import { TraceView } from "@/app/TraceView";
+import { runnerQueueText } from "@/app/RunnerQueue";
+import { TraceView, type PlanItem } from "@/app/TraceView";
 import { WorkingLine } from "@/app/Working";
 import { AccessPill, RunPill } from "@/app/RunSettings";
 import { forkAgent } from "@/app/Fork";
@@ -41,6 +43,8 @@ import { takePendingFind } from "@/app/CommandPalette";
 import { setHidden, useHidden } from "@/app/hidden";
 import { noteChat } from "@/app/recentChats";
 import { PinBar, pinThing, pinsChanged, titleOfMessage, usePins } from "@/app/pins";
+import { PlanBar } from "@/app/PlanBar";
+import { useWatches, WatchBar, WatchEnded } from "@/app/Watches";
 import { useContextMenu, type MenuItem } from "@/app/ContextMenu";
 import { isPicture } from "@/app/attachments";
 
@@ -408,6 +412,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const [, setRevealedTick] = useState(0);
   const [loadError, setLoadError] = useState<unknown>(null);
   const [sendError, setSendError] = useState<unknown>(null);
+  // What it waits for in the background (myco watch): at the top while it
+  // watches, a grey line in the chat once that ends.
+  const watches = useWatches(target.hubId, target.agent);
   // What was typed and not sent stays with the conversation (drafts.ts).
   const draftKey = chatDraftKey(target.hubId, target.agent);
   const [draft, setDraft] = useState(() => draftOf(draftKey));
@@ -428,7 +435,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // at once instead: it is queued, not sending.)
   const [pending, setPending] = useState<{ body: string; files: { id: string; name: string; size: number; preview?: string }[]; queued?: boolean } | null>(null);
   // Files going with the next message (pasted, dropped or picked).
-  const att = useAttachments(target.hubId);
+  const att = useAttachments(target.hubId, draftKey);
   // Messages put after the running one, while the workspace cannot hold
   // them (older hubs): kept here, like drafts, and sent when the round ends.
   const queueKey = chatQueueKey(target.hubId, target.agent);
@@ -522,7 +529,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     appApi.peers(target.hubId, target.agent).then((r) => {
       if (off) return;
       const all = new Set(target.also);
-      // Other AIs only: a terminal's commands (mac-exec running ls) are the
+      // Other AIs only: a terminal's commands (demo-shell running ls) are the
       // agent's tools at work, not work handed to someone; they stay out
       // (unless the project already lists that terminal).
       for (const p of r.peers || []) {
@@ -776,6 +783,16 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       return o && o.at === at && o.ended === ended ? s : new Map(s).set(taskId, { at, ended });
     });
   }, []);
+  // The plans the runs drawn here work through (PlanReport), by who drew
+  // them: a run cut at your addition and its part below it each say theirs.
+  const [runPlans, setRunPlans] = useState<ReadonlyMap<string, { taskId: string; items: PlanItem[]; at: string }>>(() => new Map());
+  const onPlan = useCallback((key: string, taskId: string, plan: { items: PlanItem[]; at: string } | null) =>
+    setRunPlans((s) => {
+      const o = s.get(key);
+      if (!plan) { if (!o) return s; const n = new Map(s); n.delete(key); return n; }
+      if (o && o.at === plan.at && JSON.stringify(o.items) === JSON.stringify(plan.items)) return s;
+      return new Map(s).set(key, { taskId, ...plan });
+    }), []);
   const [runPaused, setRunPaused] = useState<ReadonlyMap<string, boolean>>(() => new Map());
   const onPaused = useCallback((taskId: string, paused: boolean) =>
     setRunPaused((s) => (s.get(taskId) === paused ? s : new Map(s).set(taskId, paused))), []);
@@ -795,7 +812,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     const ro = new ResizeObserver(() => {
       const nh = el.offsetHeight;
       if (nh > h && Date.now() - openedAt.current < 1000) {
-        atBottom.current = sc.scrollHeight - sc.scrollTop - sc.clientHeight < 80;
+        // (a jump up the conversation is not over yet: what arrives at the
+        // bottom must not pull the view back down)
+        atBottom.current = Date.now() >= jumpUntil.current
+          && sc.scrollHeight - sc.scrollTop - sc.clientHeight < 80;
         restoreBelow.current = 0;
       } else if (nh !== h && restoring()) putBack(sc);
       else if (nh !== h && atBottom.current) sc.scrollTop = sc.scrollHeight;
@@ -848,11 +868,26 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     const el = scrollRef.current;
     if (!el) return;
     const below = el.scrollHeight - el.scrollTop - el.clientHeight;
-    const yours = pointerHeld.current || Date.now() - userScrollAt.current <= 300 || Date.now() < jumpUntil.current;
+    const mine = pointerHeld.current || Date.now() - userScrollAt.current <= 300;
+    if (mine) jumpUntil.current = 0; // you took over
+    const yours = mine || Date.now() < jumpUntil.current;
     if (yours) restoreBelow.current = 0; // you took over
     else if (restoring()) {
       putBack(el);
       const far0 = restoreBelow.current > 400;
+      if (far0 !== away) {
+        if (far0) awaySince.current = Date.now();
+        setAway(far0);
+      }
+      return;
+    }
+    if (Date.now() < jumpUntil.current) {
+      // A jump you made is on its way: where it takes the view is up to it,
+      // not to the scrolls on the way there (its own, or what grows at the
+      // bottom meanwhile).
+      atBottom.current = false;
+      belowNow.current = below;
+      const far0 = below > 400;
       if (far0 !== away) {
         if (far0) awaySince.current = Date.now();
         setAway(far0);
@@ -973,8 +1008,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // (what shows reaches as far as the last answer: see syncedAt)
   const seenAt = syncedAt.current || syncOpened.current;
   const behind = !!(target.peer || target.threadId) && now - seenAt > SEEN_SLACK_MS;
+  const rowOf = (name: string) => rows.find((x) => x.hub.id === target.hubId && x.st.agent.name === name);
   const isStuck = (m: Message): boolean => {
     const offline = row?.st.state === "offline";
+    if (!offline && runnerQueueText(rowOf(m.to)?.st.agent,m.id)) return false;
     if (hubStale.has(m.id)) return true;
     if (!offline && runActivity.get(m.id)?.ended) return false;
     return possiblyStuck({ ...m, active_at: new Date(activeAt(m)).toISOString() }, { agent: row?.st.agent, receiving: row?.st.receiving, offline, seenAt }, now);
@@ -1079,7 +1116,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // The runner found the agent's session open elsewhere (a terminal, an
   // editor, the Codex app): it waits and retries rather than write into it.
   // Why a task has not started: said in the chat instead of a spinner.
-  const waitingReason = busy
+  const updating = !!agent && runnerUpdating(agent);
+  const waitingReason = updating ? L("对方正在更新，完成后会继续处理", "The node is updating; it continues when ready") : busy
     ? L("对方的会话正开在别处（终端、编辑器或桌面版），空出来后会处理", "The session is open elsewhere (a terminal, an editor or a desktop app); it starts when that is free")
     : offline
       ? agent && isInbox(agent)
@@ -1090,7 +1128,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         : undefined;
   // The same, in a few words: under your message that waits (the full
   // sentence when the pointer is on it).
-  const waitingShort = busy ? L("会话开在别处，空出来再看", "Its session is busy elsewhere")
+  const waitingShort = updating ? L("正在更新，完成后继续", "Updating; continues when ready") : busy ? L("会话开在别处，空出来再看", "Its session is busy elsewhere")
     : offline ? L("对方离线，上线后再看", "Offline; it reads it when back")
     : waitingReason ? L("对方的 myco 没在运行，恢复后再看", "Its runner is not running")
     : "";
@@ -1251,7 +1289,6 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // Someone else's task that its node is still on (two nodes working
   // together): the foot of the conversation shows it at work. Your own
   // tasks show their run as it goes (TraceView) instead.
-  const rowOf = (name: string) => rows.find((x) => x.hub.id === target.hubId && x.st.agent.name === name);
   // (the handoff cards, with the rest of what goes between the messages)
   const baseInserts = handoffs.length
     ? [...(inserts || []), ...handoffs.map((h) => ({
@@ -1264,7 +1301,12 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const handoverLines = row ? handovers.filter((h) => h.state === "done").map((h) => ({
     id: "ho_" + h.id, at: h.done_at || h.at, node: <HandoverDivider h={h} hub={row.hub} />,
   })) : [];
-  const allInserts = handoverLines.length ? [...(baseInserts || []), ...handoverLines] : baseInserts;
+  // What it watched for and how that ended (met, the time up, stopped):
+  // one grey line where it ended.
+  const watchLines = watches.ended.map((w) => ({
+    id: "wat_" + w.id, at: w.ended_at!, node: <WatchEnded w={w} nameOf={(n) => (isMe(n, row?.hub) ? L("你", "You") : nameOf(n))} />,
+  }));
+  const allInserts = handoverLines.length || watchLines.length ? [...(baseInserts || []), ...handoverLines, ...watchLines] : baseInserts;
 
   // What each task got, by the task's id. Answers and progress updates
   // point at their task (reply_to). One without it (older runners) answers
@@ -1311,7 +1353,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     if (termMode || !shown) return null;
     // (one that has gone quiet may be stuck: the lists say so; no mushroom)
     const open = shown.filter((m) => {
-      if (m.type !== "task" || isMe(m.from, row?.hub) || !isOpen(m.status) || answerOf.has(m.id)) return false;
+      if (m.type !== "task" || isMe(m.from, row?.hub) || !isOpen(m.status) || m.status === "held" || answerOf.has(m.id)) return false;
       // A task someone else gave the member shown here has its own line of
       // work under it (with the mushroom): not a second one at the bottom.
       if (!observed && alsoSet.has(m.from) && m.to === target.agent) return false;
@@ -1321,7 +1363,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     });
     if (!open.length) return null;
     // Only an acknowledged task is at work: queued, pulled-but-not-acked
-    // (delivered) and held all wait.
+    // (delivered) tasks wait for a turn.
     const task = open.find((m) => m.status === "acked") || open[0];
     const said = progressOf.get(task.id);
     return {
@@ -1364,7 +1406,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   }
   // What each run shows of what was reported, by the same windows.
   const saidIn = (taskId: string): Message[] | undefined => {
-    const until = untilOf.get(taskId);
+    const until = cutOf(taskId);
     const borrow = borrowOf.get(taskId);
     const own = (progressOf.get(taskId) || []).filter((m) => !until || m.created_at < until);
     const more = borrow ? borrow.ids.flatMap((id) => progressOf.get(id) || [])
@@ -1391,18 +1433,31 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     }
     return newest;
   })();
-  const footLive = !!working && !working.queued
+  const footLive = !!working && !working.queued && !runnerQueueText(rowOf(working.task.to)?.st.agent,working.task.id)
     && (!liveRun || new Date(working.task.created_at).getTime() > new Date(liveRun.created_at).getTime());
   const liveId = footLive ? "" : liveRun?.id || "";
   // The one at work, wherever its loading is (another waits behind it).
   const atWorkId = liveId || (footLive && working ? working.task.id : "");
+  // Its plan, pinned at the top (PlanBar): the newest any of its parts
+  // drew. Kept a moment once it stops, to say all is done.
+  const planOf = (taskId: string) => {
+    let best: { items: PlanItem[]; at: string } | null = null;
+    for (const p of runPlans.values()) if (p.taskId === taskId && (!best || p.at >= best.at)) best = p;
+    return best;
+  };
+  const [planTask, setPlanTask] = useState("");
+  const atWorkPlan = atWorkId ? planOf(atWorkId) : null;
+  useEffect(() => { if (atWorkId && atWorkPlan) setPlanTask(atWorkId); }, [atWorkId, !!atWorkPlan]);
+  const pinnedPlan = planTask ? planOf(planTask) : null;
   // A task of yours not opened yet, or set aside: a few words under it,
   // like a receipt, not a line of its own (it is a message, not a state).
   // Gone once it starts; nothing is said while it works or after it stops.
   const receiptOf = (m: Message): { text: string; title?: string } | null => {
-    if (m.type !== "task" || m.e2e || !isMe(m.from, row?.hub) || !isOpen(m.status) || answerOf.has(m.id) || m.asking || isStuck(m)) return null;
-    const st = traceStatuses.get(m.id) || m.status;
-    if (st === "held") return { text: L("稍后回复", "Will answer later") };
+    if (m.type !== "task" || m.e2e || !isMe(m.from, row?.hub) || !isOpen(m.status) || answerOf.has(m.id) || isStuck(m)) return null;
+    const st = m.status === "held" ? m.status : traceStatuses.get(m.id) || m.status;
+    if (st === "held") return { text: heldTaskLabel(m, nameOf(m.from)) };
+    if (m.asking) return null;
+    if (runnerQueueText(rowOf(m.to)?.st.agent,m.id)) return null;
     if (st === "acked" || progressOf.get(m.id)?.length) return null;
     if (waitingShort) return { text: waitingShort, title: waitingReason };
     if (atWorkId && atWorkId !== m.id) return { text: L("排在后面", "Queued behind the current one"), title: L("它做完手上这件就看这条", "It reads this once it is done with the one at hand") };
@@ -1955,6 +2010,31 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     if (inRun(task)) { runSteers.set(task.id, [...(runSteers.get(task.id) || []), m]); continue; }
     steersOf.set(m.reply_to, [...(steersOf.get(m.reply_to) || []), m]);
   }
+  // What you added after something else came in between is drawn where it
+  // was sent; the task goes on, so in time its process stops there and
+  // what it does after goes on under that addition (with its loading),
+  // not above it. Each addition's window runs to the next one, or to your
+  // next task (untilOf).
+  const laterSteers = new Map<string, Message[]>();
+  for (const m of shown || []) {
+    if (m.type !== "steer" || m.answers || !m.reply_to || !isMe(m.from, row?.hub)) continue;
+    const task = byId.get(m.reply_to);
+    if (!task || !inRun(task) || runSteers.get(task.id)?.includes(m) || steersOf.get(task.id)?.includes(m)) continue;
+    const u = untilOf.get(task.id);
+    if (u && m.created_at >= u) continue;
+    laterSteers.set(task.id, [...(laterSteers.get(task.id) || []), m].sort((a, b) => a.created_at.localeCompare(b.created_at)));
+  }
+  const steerWindow = new Map<string, { task: Message; from: string; until?: string; last: boolean }>();
+  for (const [tid, list] of laterSteers) {
+    const task = byId.get(tid)!;
+    list.forEach((s, i) => steerWindow.set(s.id, { task, from: s.created_at, until: list[i + 1]?.created_at ?? untilOf.get(tid), last: i === list.length - 1 }));
+  }
+  // Where a run's own part ends: the first addition drawn later, else your
+  // next task.
+  const cutOf = (taskId: string) => laterSteers.get(taskId)?.[0]?.created_at ?? untilOf.get(taskId);
+  // Its loading (and what it reports about activity) belongs to the last
+  // part still open: under the last addition when that part has no end.
+  const goesOnBelow = (taskId: string) => { const l = laterSteers.get(taskId); return !!l?.length && !steerWindow.get(l[l.length - 1].id)?.until; };
   const answerAsk = (task: Message) => async (text: string) => {
     const m = await appApi.steer(target.hubId, task.id, text, undefined);
     setMessages((prev) => mergeById(prev || [], [m]));
@@ -2049,6 +2129,23 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           <div key={m.id} className={cn("conv-msg is-progress", m.from === target.agent ? "is-me" : "is-agent")}>
             {showName && <div className="conv-msg-name">{nameOf(m.from)}</div>}
             <ProgressFold items={items} />
+          </div>
+        );
+      }
+      // What you decided on an agent's request: the hub tells the agent in
+      // a note from you, with the ids it needs; here it is one quiet line.
+      const decided = m.type === "note" ? decisionOf(m.body) : null;
+      if (decided) {
+        const who = isMe(m.from, row?.hub) ? L("你", "You") : decided.who;
+        return (
+          <div className={cn("conv-decision", !decided.ok && "is-denied", decided.failed && "is-failed")} key={m.id} data-msg={m.id} title={clockTime(m.created_at)}>
+            {decided.ok && !decided.failed ? <Check /> : <X />}
+            <span>
+              {decided.ok
+                ? L(`${who}同意了：${decided.what}`, `${who} approved: ${decided.what}`)
+                : L(`${who}没有同意：${decided.what}`, `${who} declined: ${decided.what}`)}
+              {decided.failed && <span className="conv-decision-fail">{L("，但没做成", ", but it did not go through")}</span>}
+            </span>
           </div>
         );
       }
@@ -2182,11 +2279,27 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             the start of its turn, on its side of the conversation. A task that
             went quiet after it was picked up may have lost its result: say so,
             and offer to stop it and send it again. */}
+        {/* What you added later, drawn where you sent it: the task's steps
+            and progress since then go on under it (its loading too, while
+            this is the last part). */}
+        {m.type === "steer" && steerWindow.has(m.id) && (() => {
+          const w = steerWindow.get(m.id)!;
+          const t = w.task;
+          const live = w.last && !w.until;
+          const said = (progressOf.get(t.id) || []).filter((x) => x.created_at >= w.from && (!w.until || x.created_at < w.until));
+          return (
+            <TraceView hubId={target.hubId} task={t} cli={rowOf(t.to)?.st.agent.runtime?.cli} onStatus={live ? onTraceStatus : undefined} onGrow={followBottom} onPlan={onPlan}
+              answered={answerOf.has(t.id)} quiet={!live || t.id !== liveId} footed={live && t.id === liveId && liveFoot}
+              onPaused={live ? onPaused : undefined} onActivity={live ? onActivity : undefined}
+              from={w.from} until={w.until} said={said.length ? said : undefined}
+              answers={answerTo} canAnswer={isMe(t.from, row?.hub)} onAnswer={answerAsk(t)} />
+          );
+        })()}
         {m.type === "task" && !m.e2e && isMe(m.from, row?.hub) && (
           <>
             {/* (its run stays: what it did and said; the line about being
                 stuck goes under it) */}
-            <TraceView hubId={target.hubId} task={m} cli={rowOf(m.to)?.st.agent.runtime?.cli} onStatus={onTraceStatus} onGrow={followBottom} answered={answerOf.has(m.id)} quiet={m.id !== liveId} footed={m.id === liveId && liveFoot} onPaused={onPaused} onActivity={onActivity} until={untilOf.get(m.id)} borrow={borrowOf.get(m.id)} steers={runSteers.get(m.id)} said={saidIn(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined}
+            <TraceView hubId={target.hubId} task={m} cli={rowOf(m.to)?.st.agent.runtime?.cli} queueText={runnerQueueText(rowOf(m.to)?.st.agent, m.id)} onStatus={onTraceStatus} onGrow={followBottom} onPlan={onPlan} answered={answerOf.has(m.id)} quiet={m.id !== liveId || goesOnBelow(m.id)} footed={m.id === liveId && liveFoot} onPaused={goesOnBelow(m.id) ? undefined : onPaused} onActivity={goesOnBelow(m.id) ? undefined : onActivity} until={cutOf(m.id)} borrow={borrowOf.get(m.id)} steers={runSteers.get(m.id)} said={saidIn(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined}
           answers={answerTo} canAnswer={isMe(m.from, row?.hub)} onAnswer={answerAsk(m)} />
             {isStuck(m) && (<div className="conv-stuck" data-stuck={m.id}>
             <span className="dot pending" aria-hidden />
@@ -2214,7 +2327,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         )}
         {/* What it did for a task someone else gave it, the same way. */}
         {m.type === "task" && !m.e2e && fromOther && m.to === target.agent && (
-          <TraceView hubId={target.hubId} task={m} cli={rowOf(m.to)?.st.agent.runtime?.cli} onStatus={onTraceStatus} onGrow={followBottom} answered={answerOf.has(m.id)} quiet={m.id !== liveId} footed={m.id === liveId && liveFoot} onPaused={onPaused} steers={runSteers.get(m.id)} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined} answers={answerTo} />
+          <TraceView hubId={target.hubId} task={m} cli={rowOf(m.to)?.st.agent.runtime?.cli} queueText={runnerQueueText(rowOf(m.to)?.st.agent, m.id)} onStatus={onTraceStatus} onGrow={followBottom} onPlan={onPlan} answered={answerOf.has(m.id)} quiet={m.id !== liveId} footed={m.id === liveId && liveFoot} onPaused={onPaused} steers={runSteers.get(m.id)} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined} answers={answerTo} />
         )}
         </Fragment>
       );
@@ -2336,6 +2449,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         <PinBar hubId={target.hubId} withWhom={target.agent} a={target.peer} pins={pins} setPins={(p) => pinState.setPins(p)}
           onJump={(id) => setSeek({ id, tries: 0 })} adding={pinAdding} onAdding={setPinAdding} />
       )}
+      {pinnedPlan && <PlanBar key={planTask} taskId={planTask} items={pinnedPlan.items} live={planTask === atWorkId} />}
+      <WatchBar hubId={target.hubId} watches={watches.active} onChanged={watches.put} />
       {pinMenu.element}
       {headMenu.element}
       {!termMode && <ChatBgDialog open={bgOpen} onClose={() => setBgOpen(false)} chat={chatKey(target.hubId, target.agent)} name={agentName} />}
@@ -2514,7 +2629,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               </div>
             )}
             {/* The run at work, when messages sit under it. */}
-            {liveFoot && liveRun && (() => {
+            {liveFoot && liveRun && !runnerQueueText(rowOf(liveRun.to)?.st.agent,liveRun.id) && (() => {
               // What it is doing now, not what it said when it took this one
               // up: an agent in one long session goes on answering newer
               // messages while this task stays open. Its newest progress
@@ -2623,7 +2738,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         )}
         {queueRows.length > 0 && <ErrorText error={queueError} />}
         {voiceOn && !shellMode && (
-          <VoiceBar />
+          <VoiceBar agent={agent} />
         )}
         <ApprovalStrip hubId={target.hubId} agent={target.agent} name={agentName} />
         <GrantStrip hubId={target.hubId} agent={target.agent} name={agentName} />
@@ -2766,4 +2881,19 @@ function SendTrouble({ error, stop, onRetry, onClose }: { error: unknown; stop: 
       <button type="button" className="conv-trouble-x" onClick={onClose} aria-label={L("关掉", "Dismiss")}><X /></button>
     </div>
   );
+}
+
+/** A note the hub sends an agent when you decide on its request
+ *  ("[myco] glenn 同意了：create scheduled task "x" in project p（apr_…）。…"):
+ *  who, what in words, and how it went. Anything else: null. */
+export function decisionOf(body: string): { who: string; ok: boolean; what: string; failed: boolean } | null {
+  const m = /^\[myco\] (.+?) (同意了|没有同意)：([\s\S]+?)（apr_[A-Za-z0-9]+）[，。]?([\s\S]*)$/.exec(body.trim());
+  if (!m) return null;
+  const [, who, verb, raw, rest] = m;
+  const task = /^(create|update|delete) scheduled task "(.+)" in project (.+)$/.exec(raw.trim());
+  const what = task
+    ? L(`${task[1] === "create" ? "创建" : task[1] === "delete" ? "删除" : "修改"}项目「${task[3]}」的定时任务「${task[2]}」`,
+      `${task[1] === "create" ? "create" : task[1] === "delete" ? "delete" : "change"} “${task[2]}” in project “${task[3]}”`)
+    : raw.trim();
+  return { who, ok: verb === "同意了", what, failed: /^但没做成/.test(rest.trim()) };
 }

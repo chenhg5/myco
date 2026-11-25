@@ -35,11 +35,12 @@ When this computer has no speech recognition the App can use (in a browser that 
 
 ## Voice chat
 
-Voice chat is like a call with this agent (as in ChatGPT and Claude: one chat, one call). You talk, and a quick voice assistant that reads this conversation talks with you:
+Voice chat is like a call with this agent itself (as in ChatGPT and Claude: one chat, one call). It is the agent who answers, saying "I'll fix that" or "let me check": on the call it speaks through a quick model, while the real work happens in its own session.
 
-- ask how things are going and it answers itself;
-- ask for something to be done and it passes it to the agent: as an addition if the agent is busy, as a new task if it is free, just as pressing Enter would, with no extra confirmation;
-- when the agent replies or asks you something, it tells you in a sentence or two at a quiet moment, or says it is in the chat when it is long;
+- once connected, it says hello first, mentioning any work in progress or a question it is waiting on;
+- ask how things are going and it answers;
+- ask for something to be done and it takes it on: as an addition if it is busy, as a new task if it is free, just as pressing Enter would, with no extra confirmation;
+- when it is done or has a question for you, it tells you in a sentence or two at a quiet moment, or says the rest is in the chat when it is long;
 - start talking while it speaks and it stops to listen.
 
 Voice chat is in the **Mac App** and the phone app for now.
@@ -48,10 +49,12 @@ Voice chat is in the **Mac App** and the phone app for now.
 
 Open **Settings › Voice**:
 
-1. **The assistant's model**: fill in **Address**, **Model** and **Key**. Any OpenAI-compatible service works (OpenAI, DeepSeek, Doubao, OpenRouter…); pick a quick one, since it hands anything hard to the agent. Left empty, the one set up under Translation is used.
-2. **Speech**: the service that says the assistant's words out loud. For now that is **Doubao voice**: in the Volcano Engine console, under Doubao voice, turn on speech synthesis, create an API key and paste it here.
+1. **The voice's model**: fill in **Address**, **Model** and **Key**. Any OpenAI-compatible service works (OpenAI, DeepSeek, Doubao, OpenRouter…); pick a quick one: it only does the talking, while the agent does the hard work in its own session. Left empty, the one set up under Translation is used.
+2. **Speech**: the service that says the agent's words out loud on the call. For now that is **Doubao voice**: in the Volcano Engine console, under Doubao voice, turn on speech synthesis, create an API key and paste it here.
 3. Choose a **Voice** (grouped by language) and **Speed**, and click **Try it** to hear a sentence. For a cloned voice, choose "Other (type a voice ID)".
 4. Click **Save**.
+
+**Words to hear right**: voice chat and dictation listen for these words, and fix them when they are heard as something else. The names of agents, projects and members, and common words such as Claude, Codex, GitHub and PR, are already included; add others one per line. For a word often misheard, write `Claude = clod, cloud`: what follows the equals sign is how it tends to be heard, and that is changed back to the word before it. Only these words are changed; nothing else you say is touched.
 
 ![Settings › Voice: the model and the speech service](shot:settings-voice)
 
@@ -65,7 +68,7 @@ Once set up, the round button on the right of a chat's box becomes **Voice chat*
 
 1. Click the waveform to connect.
 2. A voice bar appears above the box. The small dot on the left shows its state (Listening, Thinking, Speaking, Muted), next to "Voice chat with …".
-3. Captions run below, each line starting with "You" or "Voice". What it passed on to the agent shows as a small line with an arrow, such as "→ Handed to …: check the download links".
+3. Captions run below: your lines start with "You", its lines with its small face (it is the agent itself talking). What it takes on shows as a small line with an arrow, such as "→ On it: check the download links".
 4. Two small round buttons on the right: **Mute** and the red **Hang up**. **Esc** hangs up too.
 
 What you hand the agent by voice shows in the chat as usual, with a small "By voice" tag above it; hover to see your words as you said them.
@@ -87,4 +90,4 @@ The box on a project's home works the same way: the waveform opens the chat with
 
 **Are recordings kept?** No. The small talk in the voice bar stays on this computer and recordings are not kept; what you hand the agent stays in the chat as an ordinary message.
 
-**What if it mishears and sets off the wrong work?** What it passes on is written in the captions, and the message in the chat shows your words as said. If it is wrong, add a correction or stop it in the chat right away; see [Chatting with agents](#help/chat).
+**What if it mishears and sets off the wrong work?** What it takes on is written in the captions, and the message in the chat shows your words as said. If it is wrong, add a correction or stop it in the chat right away; see [Chatting with agents](#help/chat).

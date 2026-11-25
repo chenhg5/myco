@@ -1,0 +1,24 @@
+# Keep old Hubs' /myco/releases/download/apps URL working after the app split.
+name: Mirror official apps
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+# Share the old publisher's lock until its verified retirement.
+concurrency:
+  group: official-apps
+  cancel-in-progress: false
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check mirror failure and retry behavior
+        run: python3 scripts/mirror-apps.test.py
+      - name: Mirror verified public artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/mirror-apps.sh

@@ -19,68 +19,71 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/domain"
-	"github.com/chenhg5/myco/internal/osutil"
-	"github.com/chenhg5/myco/internal/release"
-	"github.com/chenhg5/myco/internal/remotedesktop"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/osutil"
+	"github.com/myco-ai/myco/internal/release"
+	"github.com/myco-ai/myco/internal/remotedesktop"
 )
 
 // Server is the hub's HTTP adapter.
 type Server struct {
-	usage         *app.UsageService
-	runSettingsMu sync.Mutex
-	enroll        *app.EnrollmentService
-	agents        *app.AgentService
-	messages      *app.MessageService
-	adminToken    string
-	log           *slog.Logger
-	publicURL     atomic.Value // string
+	projectInvites *app.ProjectInvitationService
+	projectAutos   *app.ProjectAutomationService
+	usage          *app.UsageService
+	runSettingsMu  sync.Mutex
+	enroll         *app.EnrollmentService
+	agents         *app.AgentService
+	messages       *app.MessageService
+	adminToken     string
+	log            *slog.Logger
+	publicURL      atomic.Value // string
 	// lan: the hub listens on every interface without a public URL, so
 	// links made over localhost use this machine's LAN address instead.
 	lan atomic.Bool
 	// prefix is this workspace's path under the hub ("/w/<name>"), or ""
 	// for the default one: links it makes carry it.
-	prefix        string
-	e2e           *app.E2EService
-	version       string        // this hub's myco build
-	latest        func() string // newest known release ("" = unknown)
-	upgrade       func(ctx context.Context, version string) (api.HubUpgrade, error)
-	backups       Backups
-	mux           *http.ServeMux
-	ingress       map[string]Ingress
-	files         *app.FileService
-	overview      *app.OverviewService
-	console       *app.ConsoleService
-	machines      *app.MachineService
-	members       *app.MemberService
-	audit         *app.AuditService
-	projects      *app.ProjectService
-	resume        *app.ResumeService
-	traces        *app.TraceService
-	automations   *app.AutomationService
-	workflows     *app.WorkflowService
-	superagents   *app.SuperagentService
-	actions       *app.ActionService
-	pages         *app.PageService
-	remote        remotedesktop.Broker
-	tun           tunnels
-	handovers     *app.HandoverService
-	hidden        *app.HiddenService
-	pins          *app.PinService
-	notices       *app.NoticeService
-	noticeMessage func(ctx context.Context, id string) (*domain.Message, error)
-	pageData      *app.PageDataService
-	templates     *app.TemplateService
-	appSync       func(context.Context) api.AppSync
-	appFreshen    func(context.Context)
-	voice         *app.VoiceSettingsService
-	activity      sync.Map   // message id -> time.Time; transient task heartbeat
-	aliasesMu     sync.Mutex // serialize alias permission checks with writes
-	namesMu       sync.Mutex
-	names         map[string]string // member id -> name (see ownerName)
-	namesAt       time.Time
+	prefix          string
+	e2e             *app.E2EService
+	version         string        // this hub's myco build
+	latest          func() string // newest known release ("" = unknown)
+	upgrade         func(ctx context.Context, version string) (api.HubUpgrade, error)
+	backups         Backups
+	mux             *http.ServeMux
+	ingress         map[string]Ingress
+	files           *app.FileService
+	overview        *app.OverviewService
+	console         *app.ConsoleService
+	machines        *app.MachineService
+	members         *app.MemberService
+	audit           *app.AuditService
+	projects        *app.ProjectService
+	resume          *app.ResumeService
+	traces          *app.TraceService
+	automations     *app.AutomationService
+	workflows       *app.WorkflowService
+	superagents     *app.SuperagentService
+	actions         *app.ActionService
+	pages           *app.PageService
+	pageAttachments *app.PageAttachmentService
+	remote          remotedesktop.Broker
+	tun             tunnels
+	handovers       *app.HandoverService
+	hidden          *app.HiddenService
+	pins            *app.PinService
+	notices         *app.NoticeService
+	noticeMessage   func(ctx context.Context, id string) (*domain.Message, error)
+	pageData        *app.PageDataService
+	templates       *app.TemplateService
+	appSync         func(context.Context) api.AppSync
+	appFreshen      func(context.Context)
+	voice           *app.VoiceSettingsService
+	activity        sync.Map   // message id -> time.Time; transient task heartbeat
+	aliasesMu       sync.Mutex // serialize alias permission checks with writes
+	namesMu         sync.Mutex
+	names           map[string]string // member id -> name (see ownerName)
+	namesAt         time.Time
 }
 
 // SetMachines enables machine reporting, /v1/machines and machines in the
@@ -159,6 +162,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Method == http.MethodPost && r.URL.Path == "/v1/me/usage" {
 		limit = 1 << 20
+	}
+	if r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/v1/pages/") && strings.HasSuffix(r.URL.Path, "/attachments") {
+		limit = domain.MaxPageAttachment + 1
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	if r = s.superagentGate(w, r); r == nil {
@@ -310,6 +316,7 @@ func (s *Server) routes() {
 	m.HandleFunc("GET /v1/messages/{id}/steers", s.agent(s.getSteers))
 	m.HandleFunc("POST /v1/messages/{id}/ack", s.agent(s.transition(app.TransitionAck)))
 	m.HandleFunc("POST /v1/messages/{id}/hold", s.agent(s.transition(app.TransitionHold)))
+	m.HandleFunc("POST /v1/messages/{id}/hold-until", s.agent(s.holdUntil))
 	m.HandleFunc("POST /v1/messages/{id}/done", s.agent(s.transition(app.TransitionComplete)))
 	m.HandleFunc("POST /v1/messages/{id}/reply", s.agent(s.reply))
 	m.HandleFunc("POST /v1/messages/{id}/progress", s.agent(s.followUp("progress")))
@@ -1410,13 +1417,37 @@ func (s *Server) getSteers(w http.ResponseWriter, r *http.Request, a *domain.Age
 func (s *Server) transition(t app.Transition) func(http.ResponseWriter, *http.Request, *domain.Agent) {
 	return func(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
 		dry := dryRun(r)
-		m, err := s.messages.Transition(r.Context(), a, r.PathValue("id"), t, dry)
+		var m *domain.Message
+		var err error
+		if t == app.TransitionHold && r.URL.Query().Get("manual") == "1" {
+			m, err = s.messages.HoldUntil(r.Context(), a, r.PathValue("id"), "", dry)
+		} else {
+			m, err = s.messages.Transition(r.Context(), a, r.PathValue("id"), t, dry)
+		}
 		if err != nil {
 			writeError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, api.MessageResult{Message: s.messageDTO(m), DryRun: dry})
 	}
+}
+
+func (s *Server) holdUntil(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
+	var req api.HoldUntilRequest
+	if !decode(w, r, &req) {
+		return
+	}
+	if req.Until == "" {
+		writeError(w, domain.Errf(domain.CodeInvalidArgument, "until is required"))
+		return
+	}
+	dry := dryRun(r)
+	m, err := s.messages.HoldUntil(r.Context(), a, r.PathValue("id"), req.Until, dry)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, api.MessageResult{Message: s.messageDTO(m), DryRun: dry})
 }
 
 func (s *Server) reply(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
@@ -1571,6 +1602,9 @@ func (s *Server) pull(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
 	pull := s.messages.Pull
 	if req.Via == "runner" {
 		pull = s.messages.PullForRunner
+		if r.URL.Query().Get("wake_held") == "1" {
+			pull = s.messages.PullWakingHeld
+		}
 	}
 	msgs, err := pull(r.Context(), a, req.Limit, time.Duration(req.WaitSeconds)*time.Second, types...)
 	if err != nil {
@@ -1585,6 +1619,9 @@ func (s *Server) pull(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
 	// app calls it.
 	names := map[string]string{}
 	for i := range out.Messages {
+		if req.Via == "runner" && r.URL.Query().Get("wake_held") == "1" {
+			out.Messages[i].HoldWake = msgs[i].HoldWake
+		}
 		from := out.Messages[i].From
 		if strings.HasPrefix(from, "@") {
 			continue
@@ -1864,13 +1901,30 @@ func (s *Server) reportRuntime(w http.ResponseWriter, r *http.Request, a *domain
 		Plugins  []api.ToolPlugin `json:"plugins,omitempty"`
 		Warnings []string         `json:"tool_warnings,omitempty"`
 	}{in.MCP, in.Skills, in.Plugins, in.ToolWarnings})
-	if err := s.machines.SetRuntime(r.Context(), a, domain.Runtime{CLI: in.CLI, CLIVersion: in.CLIVersion, Model: in.Model,
+	slots := ""
+	if in.RunnerSlots != nil {
+		v := in.RunnerSlots
+		if v.MaxConcurrent < 1 || v.InUse < 0 || v.InUse > v.MaxConcurrent || v.Waiting < 0 || len(v.Queue) > 256 || v.At.IsZero() {
+			writeError(w, domain.Errf(domain.CodeInvalidArgument, "invalid runner slot counts"))
+			return
+		}
+		for _, q := range v.Queue {
+			if q.MessageID == "" || len(q.MessageID) > 128 || q.Position < 1 || q.Position > v.Waiting {
+				writeError(w, domain.Errf(domain.CodeInvalidArgument, "invalid runner queue position"))
+				return
+			}
+		}
+		b, _ := json.Marshal(v)
+		slots = string(b)
+	}
+	if err := s.machines.SetRuntime(r.Context(), a, domain.Runtime{RunnerInstance: in.RunnerInstance, RestartingUntil: in.RestartingUntil, RunnerSlots: slots, CLI: in.CLI, CLIVersion: in.CLIVersion, Model: in.Model,
 		ModelSource: in.ModelSource, Access: in.Access, Provider: in.Provider, ProviderSource: in.ProviderSource, ProviderHost: in.ProviderHost, Providers: encodeProviderOptions(in.Providers),
 		Effort: in.Effort, EffortSource: in.EffortSource, MaxAccess: in.MaxAccess, Quota: quotaFromAPI(in.Quota),
 		Features: domain.JoinFeatures(in.Features), Away: in.Away, Env: in.Env, Models: domain.EncodeModels(modelsFromAPI(in.Models)), Tools: string(toolJSON)}); err != nil {
 		writeError(w, err)
 		return
 	}
+	in.RunnerInstance, in.RestartingUntil, in.Away = a.Runtime.RunnerInstance, a.Runtime.RestartingUntil, a.Runtime.Away
 	writeJSON(w, http.StatusOK, in)
 }
 

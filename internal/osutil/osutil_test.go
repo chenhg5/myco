@@ -59,8 +59,8 @@ func TestInCredentialDir(t *testing.T) {
 }
 
 func TestUserName(t *testing.T) {
-	env := map[string]string{"USERNAME": "glenn"}
-	if got := UserName(func(k string) string { return env[k] }); got != "glenn" {
+	env := map[string]string{"USERNAME": "alice"}
+	if got := UserName(func(k string) string { return env[k] }); got != "alice" {
 		t.Errorf("USERNAME fallback = %q", got)
 	}
 	env["USER"] = "me"

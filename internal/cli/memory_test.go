@@ -36,6 +36,9 @@ func TestMemoryBlockAddRefreshRemove(t *testing.T) {
 	if !strings.HasPrefix(string(b), "# My rules\nBe terse.\n\n"+memoryBegin) || !strings.Contains(string(b), "--attach shot.png") || !strings.Contains(string(b), "--suggest") {
 		t.Fatalf("claude:\n%s", b)
 	}
+	if !strings.Contains(string(b), "--ui ui.json") || !strings.Contains(string(b), "myco ui schema --format text") {
+		t.Fatal("joined agent memory lacks structured UI guidance")
+	}
 	// Again: nothing changes; an old block is replaced in place.
 	if ch, _, _ := installMemory(targets, memoryAdd); len(ch) != 0 {
 		t.Fatalf("second add: %v", ch)

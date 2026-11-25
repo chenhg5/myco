@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // maxPageDownload bounds a file a page saves to Downloads (myco.download);
@@ -61,12 +61,28 @@ func (c *capReader) Read(p []byte) (int, error) {
 // files a page saves to Downloads.
 func (b *Backend) pageDataRoutes(m *http.ServeMux) {
 	m.HandleFunc("GET /app/hubs/{id}/pages/{pid}/data", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
-		l, err := c.PageRecords(r.Context(), r.PathValue("pid"), r.URL.Query().Get("collection"))
+		var l *api.PageRecords
+		var err error
+		if api.HasPageQuery(r.URL.Query()) {
+			var in api.PageQuery
+			in, err = api.ParsePageQuery(r.URL.Query())
+			if err != nil {
+				writeErr(w, &client.Error{Status: 400, Code: "invalid_argument", Message: err.Error()})
+				return
+			}
+			l, err = c.QueryPageRecords(r.Context(), r.PathValue("pid"), r.URL.Query().Get("collection"), in)
+		} else {
+			l, err = c.PageRecords(r.Context(), r.PathValue("pid"), r.URL.Query().Get("collection"))
+		}
 		if err != nil {
 			writeErr(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, l)
+		if l.Count != nil {
+			writeJSON(w, http.StatusOK, api.PageRecordCount{Count: *l.Count, Seq: l.Seq, QueryVersion: l.QueryVersion})
+		} else {
+			writeJSON(w, http.StatusOK, l)
+		}
 	}))
 	put := b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		var in api.PageRecordWrite

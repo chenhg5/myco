@@ -19,13 +19,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	. "github.com/chenhg5/myco/internal/cli/cmdkit"
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/config"
-	"github.com/chenhg5/myco/internal/infra/tunnel"
-	"github.com/chenhg5/myco/internal/osutil"
-	"github.com/chenhg5/myco/internal/service"
+	"github.com/myco-ai/myco/internal/api"
+	. "github.com/myco-ai/myco/internal/cli/cmdkit"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/config"
+	"github.com/myco-ai/myco/internal/infra/tunnel"
+	"github.com/myco-ai/myco/internal/osutil"
+	"github.com/myco-ai/myco/internal/service"
 )
 
 // hubDir is where `myco hub up` keeps a personal hub: hub.env (admin token,
@@ -526,7 +526,7 @@ func hubUpAgain(e *env) string {
 
 // agentSetupGuide is the setup guide an agent follows for its person
 // (docs/agent-setup.md); the App's welcome screen hands out the same.
-const agentSetupGuide = "https://raw.githubusercontent.com/chenhg5/myco/main/docs/agent-setup.md"
+const agentSetupGuide = "https://raw.githubusercontent.com/myco-ai/myco/main/docs/agent-setup.md"
 
 // agentSetupSentence is what to tell one's agent once a hub is up.
 const agentSetupSentence = "帮我把电脑和 agent 加进这个 myco 工作区：读 " + agentSetupGuide + " ，照着做，要我决定的先问我。"

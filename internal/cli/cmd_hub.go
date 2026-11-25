@@ -6,15 +6,16 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
-	"github.com/chenhg5/myco/internal/app"
-	. "github.com/chenhg5/myco/internal/cli/cmdkit"
-	"github.com/chenhg5/myco/internal/config"
-	"github.com/chenhg5/myco/internal/hubserver"
-	"github.com/chenhg5/myco/internal/infra/tunnel"
-	"github.com/chenhg5/myco/internal/release"
-	"github.com/chenhg5/myco/internal/templates"
+	"github.com/myco-ai/myco/internal/app"
+	. "github.com/myco-ai/myco/internal/cli/cmdkit"
+	"github.com/myco-ai/myco/internal/config"
+	"github.com/myco-ai/myco/internal/hubserver"
+	"github.com/myco-ai/myco/internal/infra/tunnel"
+	"github.com/myco-ai/myco/internal/release"
+	"github.com/myco-ai/myco/internal/templates"
 )
 
 func hubCommands() *Command {
@@ -38,6 +39,12 @@ func hubCommands() *Command {
 			{Name: "github-webhook-secret-file", Kind: String, Help: "Enable POST /v1/ingress/github with this webhook secret"},
 			{Name: "github-reply-from", Kind: List, Help: "Only accept GitHub replies from these logins"},
 			{Name: "files-dir", Kind: String, Help: "Where attachment contents are stored (default: <db dir>/files)"},
+			{Name: "page-files-max", Kind: Int, Default: "1000", Env: "MYCO_PAGE_FILES_MAX", Help: "Page-owned attachments per page (1..10000)"},
+			{Name: "page-bytes-max", Kind: String, Default: "2147483648", Env: "MYCO_PAGE_BYTES_MAX", Help: "Logical attachment bytes per page (up to 21474836480)"},
+			{Name: "project-files-max", Kind: Int, Default: "1000", Env: "MYCO_PROJECT_FILES_MAX", Help: "Default non-context files per project (1..10000)"},
+			{Name: "project-bytes-max", Kind: String, Default: "2147483648", Env: "MYCO_PROJECT_BYTES_MAX", Help: "Default total logical bytes per project (up to 21474836480)"},
+			{Name: "disk-min-free-bytes", Kind: String, Default: "2147483648", Env: "MYCO_DISK_MIN_FREE_BYTES", Help: "Disk space reserved after project uploads, in bytes"},
+			{Name: "disk-min-free-percent", Kind: Int, Default: "5", Env: "MYCO_DISK_MIN_FREE_PERCENT", Help: "Disk percentage reserved after project uploads (0..99)"},
 			{Name: "max-file-size", Kind: Int, Default: "50", Help: "Max attachment size in MB"},
 			{Name: "file-ttl", Kind: Duration, Default: "168h", Help: "Delete attachments after this long (0 = keep)"},
 			{Name: "tunnel", Kind: Enum, Values: tunnel.Kinds, Help: "Publish the hub through cloudflare (cloudflared) or tailscale (Funnel); its URL becomes --public-url"},
@@ -84,7 +91,7 @@ func hubCommands() *Command {
 			}
 			// The official apps: the binary's, and newer ones as myco
 			// publishes them (fetched daily unless update checks are off).
-			apps := &templates.Catalog{Download: release.DownloadURL(in.Getenv), StateDir: filepath.Dir(in.String("db")), HubVersion: Version,
+			apps := &templates.Catalog{Download: templates.DownloadURL(in.Getenv), StateDir: filepath.Dir(in.String("db")), HubVersion: Version,
 				Offline: in.Bool("no-update-check") || release.Disabled(in.Getenv), Log: newLogger(in.String("log-level"))}
 			if err := apps.Load(); err != nil {
 				return errorf("internal", ExitError, "", "official apps: %v", err)
@@ -93,9 +100,19 @@ func hubCommands() *Command {
 			// service manager starts the new binary): as on SIGTERM.
 			ctx, stop := context.WithCancel(in.Ctx)
 			defer stop()
+			storage, err := projectStoragePolicy(in)
+			if err != nil {
+				return err
+			}
+			pagePolicy, err := pageAttachmentPolicy(in)
+			if err != nil {
+				return err
+			}
 			return hubserver.Run(ctx, hubserver.Options{
-				Upgrade: hubUpgrader(in.Getenv, in.String("db"), stop),
-				Tunnel:  tun, Version: Version, UpdateCheck: check, Apps: apps,
+				PageAttachments: &pagePolicy,
+				ProjectStorage:  &storage,
+				Upgrade:         hubUpgrader(in.Getenv, in.String("db"), stop),
+				Tunnel:          tun, Version: Version, UpdateCheck: check, Apps: apps,
 				Addr: in.String("addr"), DBPath: in.String("db"), AdminToken: tok, Policy: p,
 				OnlineWindow: in.Duration("online-window"), Log: newLogger(in.String("log-level")),
 				Dispatch:            app.DispatchPolicy{Cooldown: in.Duration("wake-cooldown"), PublicURL: in.String("public-url")},
@@ -134,4 +151,44 @@ func newLoggerTo(w io.Writer, level string) *slog.Logger {
 	var l slog.Level
 	_ = l.UnmarshalText([]byte(level))
 	return slog.New(slog.NewTextHandler(w, &slog.HandlerOptions{Level: l}))
+}
+
+func projectStoragePolicy(in *Invocation) (app.ProjectStoragePolicy, error) {
+	storage := app.DefaultProjectStoragePolicy()
+	var parseErr error
+	storage.FilesMax, parseErr = strconv.Atoi(in.String("project-files-max"))
+	if parseErr != nil {
+		return storage, errorf("invalid_argument", ExitUsage, "", "--project-files-max must be an integer")
+	}
+	storage.DiskMinFreePercent, parseErr = strconv.Atoi(in.String("disk-min-free-percent"))
+	if parseErr != nil {
+		return storage, errorf("invalid_argument", ExitUsage, "", "--disk-min-free-percent must be an integer")
+	}
+	storage.BytesMax, parseErr = strconv.ParseInt(in.String("project-bytes-max"), 10, 64)
+	if parseErr != nil {
+		return storage, errorf("invalid_argument", ExitUsage, "", "--project-bytes-max must be an integer byte count")
+	}
+	storage.DiskMinFreeBytes, parseErr = strconv.ParseInt(in.String("disk-min-free-bytes"), 10, 64)
+	if parseErr != nil {
+		return storage, errorf("invalid_argument", ExitUsage, "", "--disk-min-free-bytes must be an integer byte count")
+	}
+	if err := storage.Validate(); err != nil {
+		return storage, err
+	}
+
+	return storage, nil
+}
+
+func pageAttachmentPolicy(in *Invocation) (app.PageAttachmentPolicy, error) {
+	p := app.DefaultPageAttachmentPolicy()
+	var err error
+	p.FilesMax, err = strconv.Atoi(in.String("page-files-max"))
+	if err != nil {
+		return p, errorf("invalid_argument", ExitUsage, "", "--page-files-max must be an integer")
+	}
+	p.BytesMax, err = strconv.ParseInt(in.String("page-bytes-max"), 10, 64)
+	if err != nil {
+		return p, errorf("invalid_argument", ExitUsage, "", "--page-bytes-max must be an integer byte count")
+	}
+	return p, p.Validate()
 }

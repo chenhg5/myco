@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // SetE2E enables the end-to-end encryption endpoints (public keys, readers,

@@ -776,7 +776,7 @@ public final class ConversationModel {
         var colleagues: [String] = []
         for project in scanned {
             let names = ProjectFeed.colleagues(of: agent, in: feed(project), coordinator: session.coordinator(of: project))
-            // Other AIs only: what it ran on a terminal (mac-exec running
+            // Other AIs only: what it ran on a terminal (demo-shell running
             // ls) is its tools at work, not work handed to someone; a
             // terminal the project lists still shows.
             let listed = Set(project.members.map(\.name))

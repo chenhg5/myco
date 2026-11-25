@@ -1,0 +1,556 @@
+package console
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/url"
+	"slices"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/browserautomation"
+	"github.com/myco-ai/myco/internal/browserpolicy"
+	"github.com/myco-ai/myco/internal/client"
+)
+
+const (
+	browserControlIdle = 5 * time.Minute
+	browserControlPoll = 2 * time.Second
+)
+
+type browserControlSession struct {
+	mu sync.Mutex
+
+	// Immutable after reservation.
+	profile, hub, binding, agent, grant, scope string
+	expires                                    time.Time
+
+	ctx    context.Context
+	cancel context.CancelFunc
+
+	// Protected by mu. A closed entry remains until its grant expires.
+	id, reason, host string
+	lastActive       time.Time
+}
+
+func (b *Backend) registerBrowserHost(ctx context.Context, c *client.Client, machine string, p browserHostPolicy) (*api.ActionHost, error) {
+	req := api.ActionHostRegister{
+		MachineID: machine, Provider: "browser", Generation: "browser-" + rand.Text(),
+		Resource: &api.ActionResource{Provider: "browser", ID: p.Policy.Profile, Binding: p.Policy.Binding, Name: p.Policy.Name, Kind: p.Policy.Kind, Summary: "Owner-approved fixed script versions"},
+		Actions:  browserActionList,
+	}
+	if b.browserControlAvailable(ctx, "control-discovery") {
+		req.Actions = append(slices.Clone(req.Actions), api.BrowserControlDescriptors()...)
+		req.BrowserHostScope = true
+		host, err := c.RegisterActionHost(ctx, req)
+		ce, ok := client.AsError(err)
+		if !ok || ce.Code != "invalid_argument" || !strings.Contains(ce.Message, "browser.page.") {
+			return host, err
+		}
+		req.Actions = browserActionList
+		req.BrowserHostScope = false
+	}
+	return c.RegisterActionHost(ctx, req)
+}
+
+func (b *Backend) provisionBrowserAgentProfile(h Hub, scope browserpolicy.Scope, store *browserpolicy.Store) (browserpolicy.Policy, bool) {
+	b.browser.mu.Lock()
+	if time.Now().Before(b.browser.nextAgentProfileProbe[scope]) {
+		b.browser.mu.Unlock()
+		return browserpolicy.Policy{}, false
+	}
+	if b.browser.nextAgentProfileProbe == nil {
+		b.browser.nextAgentProfileProbe = make(map[browserpolicy.Scope]time.Time)
+	}
+	b.browser.nextAgentProfileProbe[scope] = time.Now().Add(2 * time.Minute)
+	b.browser.mu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
+	defer cancel()
+	c, err := b.client(h)
+	if err != nil {
+		return browserpolicy.Policy{}, false
+	}
+	settings, err := c.HubSettings(ctx)
+	if err != nil || settings.E2E {
+		return browserpolicy.Policy{}, false
+	}
+	if _, err = b.thisMachine(ctx, c); err != nil || !b.browserControlAvailable(ctx, "control-discovery") {
+		return browserpolicy.Policy{}, false
+	}
+	native := b.browserComponent()
+	p, err := store.EnsureAgentProfile(scope, func() (string, string, error) {
+		var profile api.BrowserProfile
+		if err := native.Call(ctx, "control-discovery", http.MethodPost, "/profiles", map[string]string{
+			"name": "agent 专用", "kind": api.BrowserAgentProfile,
+		}, &profile); err != nil {
+			return "", "", err
+		}
+		if profile.Kind != api.BrowserAgentProfile || !validBrowserID(profile.ID, "p_", 80) {
+			return "", "", errors.New("component returned an invalid dedicated browser profile")
+		}
+		return profile.ID, profile.Name, nil
+	}, func(id string) error {
+		return native.Call(ctx, "control-discovery", http.MethodPost, "/profiles/"+url.PathEscape(id)+"/agents", map[string]bool{"allowed": true}, nil)
+	})
+	return p, err == nil
+}
+
+func (b *Backend) browserControlAvailable(ctx context.Context, scope string) bool {
+	comp := b.browserComponent()
+	if comp.EnsureRunning(ctx) != nil {
+		return false
+	}
+	var status api.BrowserStatus
+	return comp.Call(ctx, scope, http.MethodGet, "/status", nil, &status) == nil &&
+		status.Protocol == 1 && slices.Contains(status.Features, api.BrowserControlFeature)
+}
+
+// controlBusy and reserveBrowserControl share the run-book lock with M2.
+func (book *browserRunBook) controlBusy(profile string) bool {
+	for key, s := range book.controls {
+		s.mu.Lock()
+		closed, expires := s.reason != "", s.expires
+		s.mu.Unlock()
+		if closed && !time.Now().Before(expires) {
+			delete(book.controls, key)
+		} else if !closed && s.profile == profile {
+			return true
+		}
+	}
+	return false
+}
+
+func (b *Backend) reserveBrowserControl(ctx context.Context, h Hub, p browserHostPolicy, g api.ActionGrant, key string) *browserControlSession {
+	book := b.browserRuns()
+	book.mu.Lock()
+	defer book.mu.Unlock()
+	if book.controlBusy(p.Policy.Profile) {
+		return nil
+	}
+	for _, r := range book.runs {
+		r.mu.Lock()
+		busy := r.profile == p.Policy.Profile && !r.closed &&
+			(r.id == "" || r.update.State == "running" || r.update.State == "paused")
+		r.mu.Unlock()
+		if busy {
+			return nil
+		}
+	}
+	if len(book.controls) >= 512 {
+		return nil
+	}
+	run, cancel := context.WithDeadline(ctx, *g.ExpiresAt)
+	s := &browserControlSession{
+		profile: p.Policy.Profile, hub: h.ID, binding: p.Policy.Binding, agent: g.Agent, grant: g.ID,
+		scope: browserNativeScope(p, g), expires: *g.ExpiresAt, ctx: run, cancel: cancel, lastActive: time.Now(),
+	}
+	book.controls[key] = s
+	return s
+}
+
+func (b *Backend) ownedBrowserControl(id, hub, agent, grant, profile, binding string) *browserControlSession {
+	book := b.browserRuns()
+	book.mu.Lock()
+	defer book.mu.Unlock()
+	s := book.controls[id]
+	if s == nil || s.hub != hub || s.agent != agent || s.grant != grant || s.profile != profile || s.binding != binding {
+		return nil
+	}
+	return s
+}
+
+// markClosed wins the race with other teardown paths and cancels in-flight calls.
+func (s *browserControlSession) markClosed(reason string) (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.reason != "" {
+		return "", false
+	}
+	s.reason = reason
+	s.cancel()
+	return s.id, true
+}
+
+func (b *Backend) closeBrowserControl(s *browserControlSession, reason string, nativeAlreadyClosed bool) {
+	id, changed := s.markClosed(reason)
+	if changed && id != "" && !nativeAlreadyClosed {
+		b.closeBrowserControlNative(s.scope, id, reason)
+	}
+}
+
+func (b *Backend) closeBrowserControlNative(scope, id, reason string) {
+	switch reason {
+	case "grant_expired":
+		reason = "grant_ended"
+	case "grant_ended", "profile_disabled", "idle_timeout":
+	default:
+		reason = "host_closed"
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = b.browserComponent().Call(ctx, scope, http.MethodPost, "/control/close", map[string]string{
+		"session": id, "request_id": "close-" + rand.Text(), "reason": reason,
+	}, nil)
+}
+
+func (b *Backend) stopBrowserControls(hub, profile, binding, reason string) {
+	book := b.browserRuns()
+	book.mu.Lock()
+	var sessions []*browserControlSession
+	for _, s := range book.controls {
+		if s.hub == hub && s.profile == profile && (binding == "" || s.binding == binding) {
+			sessions = append(sessions, s)
+		}
+	}
+	book.mu.Unlock()
+	for _, s := range sessions {
+		b.closeBrowserControl(s, reason, false)
+	}
+}
+
+func browserControlClosed(reason string) api.ActionJobComplete {
+	code := "session_closed"
+	if reason == "idle_timeout" || reason == "grant_expired" || reason == "expired" {
+		code = "session_expired"
+	}
+	out := actionFailure(code, "the browser control session ended", false, nil)
+	out.Error.Reason = reason
+	return out
+}
+
+func browserControlFailure(err error, effectful bool) api.ActionJobComplete {
+	var native *browserautomation.ComponentError
+	if errors.As(err, &native) {
+		switch native.Code {
+		case "invalid_argument", "unsupported", "permission_denied", "not_found", "busy", "conflict",
+			"stale_ref", "target_not_found", "target_not_interactable", "sensitive_field", "sensitive_snapshot",
+			"session_closed", "session_expired", "cancelled", "timeout", "recording_limit", "artifact_too_large",
+			"artifact_limit", "component_unavailable", "storage_failed", "outcome_unknown", "host_not_allowed":
+			out := actionFailure(native.Code, "browser control: "+strings.ReplaceAll(native.Code, "_", " "), false, native.Applied)
+			out.Error.Reason = browserControlReason(native.Reason)
+			if api.ValidBrowserAuditHost(native.Host) {
+				out.BrowserHost = native.Host
+			}
+			return out
+		}
+	}
+	if effectful && err.Error() != "component_not_running" {
+		return actionFailure("outcome_unknown", "the component did not confirm the outcome", false, nil)
+	}
+	return actionFailure("component_unavailable", "the browser component did not respond", true, nil)
+}
+
+func browserControlReason(reason string) string {
+	switch reason {
+	case "closed", api.BrowserControlOwnerStopped, "idle_timeout", "grant_expired", "grant_ended",
+		"expired", "profile_disabled", "host_closed", "app_exit", "browser_closed", "cleanup_pending", "component_unavailable", "cancelled":
+		return reason
+	default:
+		return ""
+	}
+}
+
+func (b *Backend) watchBrowserControl(c *client.Client, s *browserControlSession, id string) {
+	ctx := s.ctx
+	tick := time.NewTicker(browserControlPoll)
+	defer tick.Stop()
+	after := 0
+	for {
+		select {
+		case <-ctx.Done():
+			reason := "host_closed"
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				reason = "grant_expired"
+			}
+			b.closeBrowserControl(s, reason, false)
+			return
+		case <-tick.C:
+		}
+
+		// The component's event wait is bounded locally so remote revocation
+		// is checked even when no actions are running.
+		check, cancel := context.WithTimeout(ctx, browserControlPoll)
+		var events api.BrowserControlEvents
+		query := url.Values{"session": {id}, "after": {strconv.Itoa(after)}}
+		err := b.browserComponent().Call(check, s.scope, http.MethodGet, "/control/events?"+query.Encode(), nil, &events)
+		timedOut := errors.Is(check.Err(), context.DeadlineExceeded)
+		cancel()
+		if err == nil {
+			after = max(after, events.Next)
+			for _, event := range events.Events {
+				if event.Code != "host_not_allowed" && event.Host != "" && api.ValidBrowserAuditHost(event.Host) {
+					s.mu.Lock()
+					s.host = event.Host
+					s.mu.Unlock()
+				}
+			}
+			if events.Done {
+				reason := browserControlReason(events.Reason)
+				if reason == "" {
+					reason = "closed"
+				}
+				b.closeBrowserControl(s, reason, true)
+				if reason == api.BrowserControlOwnerStopped {
+					b.revokeStoppedBrowserControl(c, s.grant, s.expires)
+				}
+				return
+			}
+		} else if !timedOut && ctx.Err() == nil {
+			b.closeBrowserControl(s, "component_unavailable", false)
+			return
+		}
+		check, cancel = context.WithTimeout(ctx, 5*time.Second)
+		grants, err := c.OwnerActionGrants(check, api.GrantActive)
+		cancel()
+		if err != nil || !slices.ContainsFunc(grants, func(g api.ActionGrant) bool {
+			return g.ID == s.grant && g.ExpiresAt != nil && time.Now().Before(*g.ExpiresAt)
+		}) {
+			b.closeBrowserControl(s, "grant_ended", false)
+			return
+		}
+		s.mu.Lock()
+		idle := time.Since(s.lastActive) >= browserControlIdle
+		s.mu.Unlock()
+		if idle {
+			b.closeBrowserControl(s, "idle_timeout", false)
+			return
+		}
+	}
+}
+
+func (b *Backend) revokeStoppedBrowserControl(c *client.Client, grant string, expires time.Time) {
+	ctx, cancel := context.WithDeadline(context.Background(), expires)
+	defer cancel()
+	for ctx.Err() == nil {
+		check, stop := context.WithTimeout(ctx, 5*time.Second)
+		_, err := c.RevokeActionGrantWithReason(check, grant, api.BrowserControlOwnerStopped)
+		stop()
+		if err == nil {
+			return
+		}
+		if ce, ok := client.AsError(err); ok && ce.Status >= 400 && ce.Status < 500 {
+			return
+		}
+		select {
+		case <-ctx.Done():
+		case <-time.After(browserControlPoll):
+		}
+	}
+}
+
+func (b *Backend) runBrowserControlJob(hostCtx context.Context, c *client.Client, host *api.ActionHost, hj api.ActionHostJob, h Hub, p browserHostPolicy) api.ActionJobComplete {
+	g := hj.Grant
+	args, err := api.DecodeBrowserControlArgs(hj.Job.Action, hj.Args)
+	if err != nil {
+		return actionFailure("invalid_argument", err.Error(), false, nil)
+	}
+	op := strings.TrimPrefix(hj.Job.Action, "browser.page.")
+	if op == "open" && args.String("profile") != p.Policy.Profile {
+		return actionFailure("permission_denied", "profile is outside the grant", false, nil)
+	}
+	jobCtx, stop, _, early := watchHostJob(hostCtx, c, host, hj.Job.ID)
+	if early != nil {
+		return *early
+	}
+	defer stop()
+
+	if op == "open" {
+		return b.openBrowserControl(hostCtx, jobCtx, c, hj, h, p, args)
+	}
+	s := b.ownedBrowserControl(args.String("session"), h.ID, g.Agent, g.ID, p.Policy.Profile, p.Policy.Binding)
+	if s == nil {
+		return actionFailure("not_found", "no such browser control session for this grant", false, nil)
+	}
+	s.mu.Lock()
+	reason, auditHost := s.reason, s.host
+	if reason == "" {
+		s.lastActive = time.Now()
+	}
+	s.mu.Unlock()
+	if reason != "" {
+		return browserControlClosed(reason)
+	}
+	ctx, cancel := context.WithCancel(jobCtx)
+	defer cancel()
+	unwatch := context.AfterFunc(s.ctx, cancel)
+	defer unwatch()
+	args["request_id"], _ = json.Marshal(hj.Job.ID)
+
+	var result json.RawMessage
+	err = b.browserComponent().Call(ctx, s.scope, http.MethodPost, "/control/"+op, args, &result)
+	if err != nil {
+		done := browserControlFailure(err, op == "act" || op == "close")
+		if done.BrowserHost == "" {
+			done.BrowserHost = auditHost
+		}
+		if done.Error.Code == "session_closed" || done.Error.Code == "session_expired" {
+			reason := done.Error.Reason
+			if reason == "" {
+				reason = "closed"
+			}
+			b.closeBrowserControl(s, reason, true)
+			if reason == api.BrowserControlOwnerStopped {
+				go b.revokeStoppedBrowserControl(c, s.grant, s.expires)
+			}
+		}
+		return done
+	}
+	if op == "close" {
+		b.closeBrowserControl(s, "closed", true)
+	} else {
+		s.mu.Lock()
+		s.lastActive = time.Now()
+		s.mu.Unlock()
+	}
+	done := b.browserControlResult(ctx, c, host, hj.Job.ID, s.scope, op, result, auditHost)
+	if done.BrowserHost != "" {
+		s.mu.Lock()
+		s.host = done.BrowserHost
+		s.mu.Unlock()
+	}
+	return done
+}
+
+func (b *Backend) openBrowserControl(hostCtx, jobCtx context.Context, c *client.Client, hj api.ActionHostJob, h Hub, p browserHostPolicy, args api.BrowserControlArgs) api.ActionJobComplete {
+	g := hj.Grant
+	key := "pending:" + hj.Job.ID
+	s := b.reserveBrowserControl(hostCtx, h, p, g, key)
+	if s == nil {
+		return actionFailure("busy", "this browser profile already has a controller", false, nil)
+	}
+	book := b.browserRuns()
+	// The open can race profile shutdown or a grant expiry before the
+	// component has returned its session ID.
+	var result json.RawMessage
+	if !b.browserControlAvailable(jobCtx, s.scope) {
+		b.closeBrowserControl(s, "component_unavailable", true)
+		book.mu.Lock()
+		delete(book.controls, key)
+		book.mu.Unlock()
+		return actionFailure("unsupported", "the browser component does not offer live control", false, nil)
+	}
+	args["request_id"], _ = json.Marshal(hj.Job.ID)
+	args["grant_id"], _ = json.Marshal(g.ID)
+	if len(g.Hosts) != 0 {
+		args["hosts"], _ = json.Marshal(g.Hosts)
+	}
+	actor := api.BrowserControlActor{ID: g.Agent, Name: g.Agent}
+	labelCtx, labelCancel := context.WithTimeout(jobCtx, 2*time.Second)
+	if agent, err := c.GetAgent(labelCtx, g.Agent); err == nil && agent.DisplayName != "" && len(agent.DisplayName) <= 160 {
+		actor.Name = agent.DisplayName
+	}
+	labelCancel()
+	args["actor"], _ = json.Marshal(actor)
+	args["expires_at"], _ = json.Marshal(g.ExpiresAt)
+	ctx, cancel := context.WithCancel(jobCtx)
+	defer cancel()
+	unwatch := context.AfterFunc(s.ctx, cancel)
+	defer unwatch()
+	err := b.browserComponent().Call(ctx, s.scope, http.MethodPost, "/control/open", args, &result)
+	var opened api.BrowserControlStatus
+	jsonErr := json.Unmarshal(result, &opened)
+	book.mu.Lock()
+	delete(book.controls, key)
+	s.mu.Lock()
+	reason := s.reason
+	aborted := reason != "" || ctx.Err() != nil
+	if err == nil && jsonErr == nil && opened.Session != "" && book.controls[opened.Session] == nil && !aborted {
+		s.id = opened.Session
+		s.lastActive = time.Now()
+		book.controls[s.id] = s
+	}
+	id := s.id
+	s.mu.Unlock()
+	book.mu.Unlock()
+	if id == "" {
+		if opened.Session != "" && aborted {
+			b.closeBrowserControlNative(s.scope, opened.Session, reason)
+		}
+		b.closeBrowserControl(s, "closed", true)
+		if err != nil {
+			return browserControlFailure(err, true)
+		}
+		return actionFailure("outcome_unknown", "the component returned no usable control session", false, nil)
+	}
+	auditHost := browserControlResultHost(result)
+	s.mu.Lock()
+	s.host = auditHost
+	s.mu.Unlock()
+	go b.watchBrowserControl(c, s, id)
+	return api.ActionJobComplete{State: api.JobSucceeded, Result: result, BrowserHost: auditHost}
+}
+
+func (b *Backend) browserControlResult(ctx context.Context, c *client.Client, host *api.ActionHost, job, scope, op string, raw json.RawMessage, fallbackHost string) api.ActionJobComplete {
+	auditHost := browserControlResultHost(raw)
+	if auditHost == "" {
+		auditHost = fallbackHost
+	}
+	out := api.ActionJobComplete{State: api.JobSucceeded, Result: raw, BrowserHost: auditHost}
+	fail := func(code, message string) api.ActionJobComplete {
+		failure := actionFailure(code, message, false, nil)
+		failure.BrowserHost = auditHost
+		return failure
+	}
+	var result struct {
+		Screenshot *struct {
+			ID string `json:"id"`
+		} `json:"screenshot"`
+	}
+	if json.Unmarshal(raw, &result) != nil {
+		return fail("component_unavailable", "the browser component returned an invalid result")
+	}
+	if result.Screenshot == nil || result.Screenshot.ID == "" {
+		if op == "screenshot" {
+			return fail("component_unavailable", "the browser component returned no screenshot")
+		}
+		return out
+	}
+	data, kind, err := b.browserComponent().Artifact(ctx, scope, result.Screenshot.ID)
+	if err != nil {
+		return fail("storage_failed", "could not read the private screenshot")
+	}
+	if len(data) == 0 || len(data) > 4<<20 {
+		return fail("artifact_too_large", "the private screenshot exceeded the artifact limit")
+	}
+	if kind != "image/png" && kind != "image/jpeg" && kind != "image/webp" {
+		return fail("storage_failed", "unexpected screenshot media type")
+	}
+	file, err := c.UploadActionArtifact(ctx, job, host.ID, host.Generation, kind, data)
+	if err != nil {
+		return fail("storage_failed", "could not store the private screenshot")
+	}
+	var fields map[string]json.RawMessage
+	_ = json.Unmarshal(raw, &fields)
+	delete(fields, "screenshot")
+	out.Result, _ = json.Marshal(fields)
+	out.ArtifactIDs = []string{file.ID}
+	return out
+}
+
+func browserControlResultHost(raw json.RawMessage) string {
+	var result struct {
+		Host     string          `json:"host"`
+		URL      string          `json:"url"`
+		Snapshot json.RawMessage `json:"snapshot"`
+	}
+	if json.Unmarshal(raw, &result) != nil {
+		return ""
+	}
+	if result.Host != "" && api.ValidBrowserAuditHost(result.Host) {
+		return result.Host
+	}
+	if parsed, err := url.Parse(result.URL); err == nil && parsed.Hostname() != "" && api.ValidBrowserAuditHost(parsed.Hostname()) {
+		return parsed.Hostname()
+	}
+	if len(result.Snapshot) > 0 {
+		return browserControlResultHost(result.Snapshot)
+	}
+	return ""
+}

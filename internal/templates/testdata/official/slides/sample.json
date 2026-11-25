@@ -1,0 +1,20 @@
+{
+  "records": [
+    {
+      "id": "r0",
+      "title": "Fixture 0"
+    },
+    {
+      "id": "r1",
+      "title": "Fixture 1"
+    },
+    {
+      "id": "r2",
+      "title": "Fixture 2"
+    },
+    {
+      "id": "r3",
+      "title": "Fixture 3"
+    }
+  ]
+}

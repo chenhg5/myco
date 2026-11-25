@@ -16,14 +16,16 @@ func TestTrayStatus(t *testing.T) {
 				{"agent":{"name":"pm","display_name":"PM (Codex)","status_text":"reviewing the\n multihub branch","binding":{"harness":"claude"}},"state":"working"},
 				{"agent":{"name":"waiter","binding":{"harness":"claude"}},"state":"pending"},
 				{"agent":{"name":"coder","binding":{"harness":"codex"}},"state":"working"},
-				{"agent":{"binding":{"harness":"exec"}},"state":"idle"},
+				{"agent":{"name":"idler","binding":{"harness":"claude"}},"state":"idle"},
+				{"agent":{"name":"runs","binding":{"harness":"exec"}},"state":"working"},
+				{"agent":{"name":"sh","kind":"shell","binding":{"harness":"shell"}},"state":"working"},
 				{"agent":{"binding":{"harness":"claude"}},"state":"offline"},
 				{"agent":{"binding":{"harness":"machine"}},"state":"offline"}]}},
 			{"name":"VPS-hub","ok":false,"error":"timeout"}]}`))
 	})
 	st := readTrayStatus(h)
 	if st.Working != 2 || st.Idle != 1 || st.Offline != 1 || st.Pending != 1 || st.Hubs != 2 || len(st.Down) != 1 || st.Down[0] != "VPS-hub" {
-		t.Fatalf("status: %+v (machine nodes must not count)", st)
+		t.Fatalf("status: %+v (machine and shell nodes must not count)", st)
 	}
 	if len(st.Busy) != 3 || st.Busy[0].Name != "PM (Codex)" || st.Busy[1].Name != "coder" || st.Busy[2].Working {
 		t.Fatalf("busy: %+v (working first, then waiting)", st.Busy)

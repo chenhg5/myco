@@ -52,7 +52,7 @@ make smoke              # build, then scripts/smoke.sh against the real binary
 make check              # vet + test + smoke: what CI runs on Linux
 make web                # rebuild web/ into internal/web/dist (Node 18+)
 cd web && npm run typecheck
-cd web && npm run dev:app   # UI against the mock App backend (web/mock/app-server.mjs)
+cd web && npm run dev:app   # UI against the mock App backend; prepare locked apps first (docs/building.md)
 make app                # macOS only: bin/myco.app
 scripts/ship.sh         # push to main: rebuilds dist if web/ changed, rebases (dist-only conflicts rebuilt), pushes; --check runs vet+test first
 ```
@@ -66,8 +66,7 @@ Before you finish a change, run `make vet` and `make test`. Run `make smoke` whe
 - **App UI.** New pages, components and dialogs in `web/src/app` follow `docs/design/app-ui.md`: use the existing classes and components it lists, and run its checklist (`npm run test:ui`, light and dark, two widths) before you finish.
 - **Releases.** Do not touch `VERSION`. Bumping it on `main` publishes a release. Only maintainers do that, and only when they ask for it.
   When a release is asked for, add its section to `CHANGELOG.md` (`## vX.Y.Z`, newest first, user-facing changes in English, then the same in Chinese under a `**中文**` line) in the same commit as `VERSION`: the release workflow publishes that section as the release notes.
-  Speed matters: a release reaches GitHub within about ten minutes of pushing `VERSION`. Push it as soon as `main`'s CI is green; do not run the UI smoke, Go tests or other checks in front of it (CI and the release workflow's own build cover them). The Gitee mirror is separate and must never hold the release open: run `scripts/gitee-sync.sh vX.Y.Z` from the release machine after the GitHub release is out, not from a GitHub-hosted runner (Gitee throttles those uploads to a few files an hour).
-  The steps (and the Mac preview build) are in the maintainers' internal repository, chenhg5/myco-harness: its `myco-release` and `myco-preview` skills and `context/runbooks/release.md`.
+  Maintainer-only release procedures live in the private `chenhg5/myco-harness` repository.
 - **Windows.** CI builds and tests on native Windows too. Keep OS-specific code in `_unix.go`, `_windows.go` or `_other.go` files. Tests that need a POSIX shell must skip themselves on Windows.
 - **CLI design.**
   - Commands are `noun verb` with long flags.
@@ -90,3 +89,11 @@ Before you finish a change, run `make vet` and `make test`. Run `make smoke` whe
   - Write docs, comments and commit messages in English: most users read English.
   - `README.md`/`README.zh-CN.md` and `INSTALL.md`/`INSTALL.zh-CN.md` are kept in sync (English first).
   - `docs/design/app-ui.md` is the one design doc kept here (the UI spec); the team's other design notes live in the maintainers' internal repository.
+
+## Official applications and locked bundles
+
+Official app sources, `_lib` SDK, app builds, browser tests and releases live in [myco-ai/apps](https://github.com/myco-ai/apps). The three app agents each use an independent apps clone. Host bridges, Go services and `web/` stay here; do not recreate `templates/` or generated application trees in this repository.
+
+`apps.lock.json` pins immutable release artifacts and their SHA256. Production `make build`, `make cross` and `make app` first run `make prepare-apps` (Python 3), producing ignored `internal/templates/builtin.zip` and `builtin_generated.go`. Never commit these outputs. Offline builds use `APPS_PREPARE_FLAGS=--offline` with the verified cache or explicit local artifacts. Plain Go tests use tiny fixed fixtures, do not download applications, and need no Node. A raw Go build without preparation has no bundled applications; use the Make targets for distribution. Host UI mocks, UI smoke and screenshot scenes use that same separate apps checkout through `APPS_TEST_ROOT` (default `.cache/apps-source`). See [docs/building.md](docs/building.md) for preparation, pin updates, offline builds and cross-repository contract tests.
+
+The apps repository publishes the rolling catalog and immutable artifacts. `.github/workflows/apps-mirror.yml` verifies and mirrors public assets to this repository's `apps` prerelease for older Hubs. Keep the compatibility mirror for at least 90 days after cutover and two stable host releases; removal requires a maintenance decision. New Hubs fetch from myco-ai/apps; runtime catalog updates remain independent of the builtin build lock.

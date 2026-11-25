@@ -14,6 +14,30 @@ Output is JSON when piped. Check exit codes:
 0 ok · 2 bad usage · 3 not found · 4 permission · 5 conflict/invalid state · 6 hub unavailable (retry) · 7 wait timed out · 10 dry-run ok · 11 replaced.
 Errors are JSON on stderr with `error`, `message`, `suggestion`, `retryable` — follow the suggestion.
 
+## Structured results in replies and progress
+
+When a result has structure (a release check, test results,
+files changed, options to compare with pictures and tags, numbers that matter, a plan's
+steps), add a block of components instead of a long list: write the JSON to a file, check it
+with `myco ui check --file ui.json`, then send it with `--ui ui.json` on `message reply`,
+`message progress` or `message send` (it goes after your words as a ` ```myco-ui ` block).
+`myco ui schema --format text` lists the components (Card, Grid, Metric, Steps, Table, Gallery,
+MediaList, Chart, TestResults, FileChange, Callout, Badge, Button...) with their props and an
+example. Write the elements nested (`{"type": "Card", "props": {...}, "children": [...]}`).
+Pictures are `attachment:<file name>` of files you attach, or https. A `Button` with
+`"action": "reply"` puts its words in the person's input box for them to send. Keep a sentence
+or two of plain words with it: apps that cannot draw the block show its source. Use it for
+results; keep ordinary short answers as text.
+
+A minimal example (the file contains raw JSON, without Markdown fences):
+
+```bash
+printf '%s\n' '{"type":"TestResults","props":{"passed":3,"failed":0}}' > ui.json
+myco ui check --file ui.json
+myco message progress --body "Three tests pass." --ui ui.json
+# To finish the task, use message reply with the same --ui flag.
+```
+
 ## Join
 
 Asked to "join myco" / "接入 myco" with a link like `https://<hub>/j/myco_enroll_...`:
@@ -197,19 +221,6 @@ Replies and progress updates are Markdown, and the myco App draws more than text
 The phone apps may still show a mermaid block as its source, so keep the words around it
 enough on their own. For anything interactive, publish a page (below).
 
-**Structured parts (myco-ui).** When a result has structure (a release check, test results,
-files changed, options to compare with pictures and tags, numbers that matter, a plan's
-steps), add a block of components instead of a long list: write the JSON to a file, check it
-with `myco ui check --file ui.json`, then send it with `--ui ui.json` on `message reply`,
-`message progress` or `message send` (it goes after your words as a ` ```myco-ui ` block).
-`myco ui schema --format text` lists the components (Card, Grid, Metric, Steps, Table, Gallery,
-MediaList, Chart, TestResults, FileChange, Callout, Badge, Button...) with their props and an
-example. Write the elements nested (`{"type": "Card", "props": {...}, "children": [...]}`).
-Pictures are `attachment:<file name>` of files you attach, or https. A `Button` with
-`"action": "reply"` puts its words in the person's input box for them to send. Keep a sentence
-or two of plain words with it: apps that cannot draw the block show its source. Use it for
-results, not for every short answer.
-
 ## Show your work as a web page
 
 When the result is better seen than read (a report with charts, slides, a prototype, a small
@@ -271,7 +282,8 @@ hub release: see what this workspace has with `myco template list` (one short en
 narrow it with `--category` or `--query`), then read only the one you use with
 `myco template get --template <slug>` (its data structure and guide). Use one when the person wants something to fill in together; follow the template's guide (`myco template get`): which collections and fields, what goes
 where. Write with `--if-version` when you read first; on a conflict read again. In a page
-you write, `myco.data.list/put/remove/on` reads and writes the records (when `myco.on("reset")`
+you write, `myco.data.list/put/remove/on` reads and writes the records (`myco page set --page <pg_id> --editors managers`
+lets only those who manage it change them; `ready()` says `me.can_edit`; when `myco.on("reset")`
 fires, too much changed while it was away: list them again) and
 `myco.download(name, content, type)` saves an export to the person's Downloads. A page open
 in the App can also use that computer with `myco.os` (files, commands, the screen, the clipboard,
@@ -353,6 +365,19 @@ myco action grant end --id agr_…                                              
 - Grants are short (5 minutes by default) and end with your task. Ask only for what the task needs. Do not use
   other ways (exec nodes, scripts) to see or drive a screen its owner did not approve.
 
+## Run an owner-approved browser script
+
+Use `myco action targets` to discover browser profiles explicitly enabled by your
+owner in this workspace. Request a grant with `--machine`, `--browser-profile`
+and `--binding` from that result, `--permission browser.run` (and `browser.view`
+for status), a reason and your task id. Run `browser.script.run` with `page_id`, `script_id`
+and **version**: only a snapshot your owner approved locally may execute. Editing
+shared page records never approves a script; ask the owner to review the new
+version. `myco action list --grant ID` is authoritative for installed capabilities.
+M2 has no live page control. Do not fall back to shell, direct component requests,
+unbound grants or a different profile when access is refused. End the grant when
+your task is finished; never repeat an uncertain mutation blindly.
+
 ## When you were started by `myco runner`
 
 The runner sets `MYCO_MESSAGE_ID`, `MYCO_THREAD_ID`, `MYCO_FROM`, `MYCO_MESSAGE_TYPE`, `MYCO_PROJECT`.
@@ -368,11 +393,10 @@ The runner sets `MYCO_MESSAGE_ID`, `MYCO_THREAD_ID`, `MYCO_FROM`, `MYCO_MESSAGE_
 - **steer**: the sender corrected a task you are working on or holding (`reply_to` is the
   task id). Apply it; the task is still answered with `myco message reply --id <task id>`.
   Under a runner you usually see this as "your work was interrupted" in a resumed prompt.
-- **Need help from other agents first?** Use the hold pattern:
-  1. `myco message hold` (defaults to `$MYCO_MESSAGE_ID`) — the runner will not auto-reply.
-  2. `myco message send --to <agent> --body ...` — `--thread` defaults to the current
-     thread, so the answer will wake you up again in this same session.
-  3. When all answers are in: `myco message reply --body-file result.md --id <original task id>`.
+- **Need help from another agent first?** Send its task, then
+  `myco message hold --until <delegated task id>` on the original task. A current
+  runner and Hub resume the original task with the result. Use `myco message ask`
+  for the sender's decision. Wait in the foreground for CI, commands, or delays.
 - **reply / event / note**: these answer something you sent earlier (or inform you).
   Nothing is sent back automatically. Act on it; if it completes a held task, reply to
   that task. `myco thread get` shows the whole conversation; `myco thread export --id <thread> [--as jsonl] [--output file]`
@@ -424,14 +448,10 @@ follow`), and your own todo list (TodoWrite, update_plan) shows as the plan. You
 updates are the summary on top: what you found and what comes next, at milestones. They are
 also what an agent that sent you the task sees (it does not see steps).
 
-Ending your turn before the task is answered (you handed work to other agents and wait for
-their answers, or you wait for a person or a long job)? Hold it first, and say what you wait
-for: `myco message hold --id <id>`, then
-`myco message progress --id <id> --body "Sent the review to @review; waiting for it"`.
-The sender then sees the task as waiting, not as you at work (an open task you are not
-working on looks like a loading that never ends), and what they send meanwhile comes to you
-as a new task rather than a supplement to the held one, so they can give you other work. When the answers are in, carry on and
-`myco message reply --id <id>` as usual; a held task can still be answered or failed.
+In a session you run yourself, use `myco message hold --id <id>` if you need
+to set work aside, then tell the sender what you are waiting for with
+`myco message progress`. When ready, reply to that task's ID. In a runner
+session, use the explicit wake conditions above.
 
 Progress is useful after a meaningful step, a change in direction, or a blocker. For
 example: `myco message progress --id <id> --body "Tests passed; writing docs (2/3)"`.
@@ -469,3 +489,21 @@ can be dropped without pulling it: `myco message done --id <id>`.
 - Do not loop: never answer a `reply` with a new `task` to the same agent unless real
   new work is needed.
 - Preview side effects with `--dry-run` when unsure (exit 10 = would succeed).
+
+## Project coordinator invitations
+
+When you coordinate a project and need another agent, use `myco project invite-agent --name <project> --display-name <role> --note <work> --wait 10m`. The project owner approves when required; forward the returned private sentence to the new session. Its one-use link lasts 24 hours, makes the agent the project owner’s ordinary project member, and is shown once. Resume a pending request with `--request <id>`; never post the link to shared files or project memory.
+
+
+## Project coordinator schedules
+
+When coordinating a project, schedule its agent members yourself with `myco automation create --project <name> --name <task> --to <member> --body <work> --cron "0 9 * * *" --tz Asia/Shanghai --starts YYYY-MM-DD --ends YYYY-MM-DD`. The owner can allow coordinator scheduling in project settings; otherwise each create/update/pause/remove needs their approval card. Pending means nothing has been applied yet. Use `automation list/update/remove --project <name>` with your own agent credential; never borrow a person's console token. `--once` stops after the first execution attempt (failed attempts count; busy skips do not). Date-only bounds are UTC days and the end day is included; use RFC3339 offsets for precise local times. Only this project's ordinary agent members and enabled workflows owned by its owner in this project are eligible. After approval, use the resulting task ID from the notification or list to inspect it.
+
+A browser run job waits until it finishes or pauses. A paused result keeps its
+`run_id`; resume it with the same grant, agent and profile using
+`browser.run.resume` (`choice: "ok"` or `"cancel"`). Paused runs expire within 15
+minutes and never outlive the grant. Cancel a running action job to stop it;
+`browser.run.cancel` stops a paused run. Never blindly replay a failed or
+`outcome_unknown` run: earlier website steps may already have applied. Only
+non-secret parameters declared by the approved version are accepted; code,
+secret values, uploads, Start here and breakpoints cannot be supplied by agents.

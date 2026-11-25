@@ -4,8 +4,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/config"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/config"
 )
 
 // A Codex session that joins gets workspace access (Codex's own default

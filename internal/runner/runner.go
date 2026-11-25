@@ -13,8 +13,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/harness"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/harness"
 )
 
 // Options tunes the runner.
@@ -57,9 +57,12 @@ type Options struct {
 	// OnQuota hears the account's usage limits whenever a run reports them.
 	OnQuota func(harness.Quota)
 	// OnStop runs once when Run returns because its context ended (the
-	// runner was stopped), after the runs in progress finished: the runner
+	// runner was stopped), after bounded cleanup of in-flight runs: the runner
 	// says goodbye to the hub there, so the app can tell why it is offline.
 	OnStop func()
+	// ShutdownTimeout bounds cancellation/cleanup of in-flight work (default 20s).
+	// Unfinished tasks remain on disk for recovery by the next process.
+	ShutdownTimeout time.Duration
 	// Once processes at most one pull batch and returns.
 	Once bool
 	// Scope selects agent-level (default) or per-thread sessions.
@@ -78,6 +81,9 @@ type Options struct {
 	// Slots, if set, is shared by several runners in one process to cap the
 	// number of harness processes running at once.
 	Slots chan struct{}
+	// SlotPool replaces Slots with workspace-fair admission for runner --all.
+	SlotPool *SlotPool
+	OnSlots  func(*api.RunnerSlots)
 	// SlotTouch is how often a message waiting for a free slot checks in
 	// with the Hub (default 30s): the agent stays online while it waits, and
 	// a task ended meanwhile is not run.
@@ -103,11 +109,13 @@ type Runner struct {
 
 	threadLocks sync.Map // thread_id -> *sync.Mutex
 
-	mu         sync.Mutex
-	settings   api.RunSettings       // the agent's run settings, as last read from the hub
-	ownRunEnd  map[string]time.Time  // session id -> when our last run ended
-	pending    map[string]pendingRun // acked tasks not yet durably finished
-	busyStreak map[string]int        // session key -> consecutive busy releases
+	mu          sync.Mutex
+	settings    api.RunSettings       // the agent's run settings, as last read from the hub
+	lastSuccess *RunSuccess           // most recent successful task on this CLI
+	ownRunEnd   map[string]time.Time  // session id -> when our last run ended
+	pending     map[string]pendingRun // acked tasks not yet durably finished
+	finishing   map[string]bool       // results currently being delivered by Handle
+	busyStreak  map[string]int        // session key -> consecutive busy releases
 	// projectSeen: session key + project whose context this run already
 	// gave, and which version of it (projectVersion); key alone: that
 	// session did project work.
@@ -202,7 +210,7 @@ func New(hub Hub, h harness.Harness, sessions SessionStore, prompt PromptBuilder
 		opts.Concurrency = 1
 	}
 	return &Runner{hub: hub, harness: h, sessions: sessions, prompt: prompt, opts: opts, log: log,
-		ownRunEnd: loadState(opts.StatePath), pending: loadPending(opts.StatePath), busyStreak: map[string]int{},
+		lastSuccess: ReadSuccess(opts.StatePath), ownRunEnd: loadState(opts.StatePath), pending: loadPending(opts.StatePath), busyStreak: map[string]int{},
 		tasks: map[string]*activeTask{}, pendingSteers: map[string][]api.Message{}, stopEvery: stopCheckEvery,
 		finishRetryMin: time.Second, finishTimeout: 3 * time.Minute, idleCheck: 15 * time.Second}
 }
@@ -319,7 +327,7 @@ func (r *Runner) releaseWithContext(ctx context.Context, log *slog.Logger, m api
 }
 
 // Run processes messages until ctx is cancelled (or after one batch if Once).
-// In-flight work is allowed to finish before Run returns.
+// In-flight work is cancelled on shutdown, with bounded cleanup time.
 func (r *Runner) Run(ctx context.Context) error {
 	if r.opts.OnStop != nil {
 		defer func() {
@@ -345,7 +353,27 @@ func (r *Runner) Run(ctx context.Context) error {
 	}()
 	slots := make(chan struct{}, r.opts.Concurrency)
 	var wg sync.WaitGroup
-	defer wg.Wait()
+	defer func() {
+		done := make(chan struct{})
+		go func() { wg.Wait(); close(done) }()
+		// Once still waits for its batch; cancellation must interrupt that wait too.
+		select {
+		case <-done:
+			return
+		case <-ctx.Done():
+		}
+		budget := r.opts.ShutdownTimeout
+		if budget <= 0 {
+			budget = 20 * time.Second
+		}
+		timer := time.NewTimer(budget)
+		defer timer.Stop()
+		select {
+		case <-done:
+		case <-timer.C:
+			r.log.Warn("runner cleanup timed out; unfinished tasks remain for restart recovery")
+		}
+	}()
 	backoff := time.Second
 	for ctx.Err() == nil {
 		// Wait for at least one free slot, then pull as many as are free.
@@ -400,7 +428,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			go func(m api.Message) {
 				defer wg.Done()
 				defer func() { <-slots }()
-				r.Handle(context.WithoutCancel(ctx), m)
+				r.Handle(ctx, m)
 			}(m)
 		}
 		if r.opts.Once {
@@ -412,6 +440,9 @@ func (r *Runner) Run(ctx context.Context) error {
 
 // Handle processes one pulled message end to end.
 func (r *Runner) Handle(ctx context.Context, m api.Message) {
+	if ctx.Err() != nil {
+		return
+	}
 	log := r.log.With("message_id", m.ID, "from", m.From, "type", m.Type, "thread_id", m.ThreadID)
 	rerun := false
 	if m.Type == "task" {
@@ -457,13 +488,13 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		log.Info("exec node ignores non-task message")
 		return
 	}
+	key := r.sessionKey(m)
+	unlock := r.lockThread(key)
+	defer unlock()
 	if m.Type == "task" && !executor {
 		r.trackTask(m.ID)
 		defer r.untrackTask(m.ID)
 	}
-	key := r.sessionKey(m)
-	unlock := r.lockThread(key)
-	defer unlock()
 
 	sessionID := r.sessions.Get(key)
 	// A copied node's first run makes the copy: it runs on the source
@@ -502,7 +533,13 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		}
 		defer unlockSession()
 	}
-	if r.opts.Slots != nil {
+	if r.opts.SlotPool != nil {
+		ticket := r.opts.SlotPool.Request(r.opts.HubURL, SlotOwner(r.opts.HubURL, r.opts.Self), m.ID)
+		defer ticket.Done()
+		if !r.waitPoolSlot(ctx, log, m, ticket) {
+			return
+		}
+	} else if r.opts.Slots != nil {
 		if !r.waitSlot(ctx, log, m) {
 			return
 		}
@@ -520,6 +557,11 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 	project := ""
 	if !executor {
 		project = r.superagentContext(ctx, key, sessionID) + r.projectContext(ctx, log, key, sessionID, m)
+		if m.HoldWake != "" {
+			section, dirs := r.heldWakeContext(ctx, log, m.HoldWake)
+			project += section
+			extraDirs = append(extraDirs, dirs...)
+		}
 	}
 	if rerun {
 		project += rerunNote
@@ -581,6 +623,9 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 			Env: append(r.env(),
 				"MYCO_MESSAGE_ID="+m.ID, "MYCO_THREAD_ID="+m.ThreadID, "MYCO_FROM="+m.From, "MYCO_MESSAGE_TYPE="+m.Type,
 				"MYCO_PROJECT="+m.Project),
+		}
+		if !executor {
+			req.Env = append(req.Env, "MYCO_RUNNER_HOLD=1")
 		}
 		// Every step the harness reports counts as activity: a long run that
 		// keeps working is not cut off, a silent one is.
@@ -650,6 +695,19 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		r.mu.Unlock()
 		log.Info("task interrupted by a steer; resuming the session", "session_id", sessionID)
 	}
+	// Save a completed result before any network delivery: shutdown may
+	// happen while that request is retrying. The next process sends the
+	// saved result instead of executing a completed task a second time.
+	if m.Type == "task" && (ctx.Err() == nil || runErr == nil) && !errors.Is(runErr, harness.ErrSessionBusy) {
+		r.mu.Lock()
+		if r.finishing == nil {
+			r.finishing = map[string]bool{}
+		}
+		r.finishing[m.ID] = true
+		r.mu.Unlock()
+		defer func() { r.mu.Lock(); delete(r.finishing, m.ID); r.mu.Unlock() }()
+		r.keepIntended(m, res.Output, runErr)
+	}
 	if tr != nil {
 		tr.close() // the whole trace is on the hub before the task finishes
 	}
@@ -661,6 +719,15 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 	r.mu.Unlock()
 	if err := r.sessions.Put(key, sessionID); err != nil {
 		log.Warn("saving session failed", "err", err)
+	}
+	// A process stop is not a task failure or a partial reply. Keep the
+	// persisted task intact, including a previously retained result, so the
+	// next runner applies the existing one-time replay/command safety rules.
+	if ctx.Err() != nil {
+		if runErr != nil {
+			log.Info("runner stopped; keeping interrupted task for restart recovery")
+			return
+		}
 	}
 	log = log.With("duration", time.Since(start).Round(time.Millisecond))
 
@@ -680,6 +747,12 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 			r.keepIntended(m, res.Output, runErr)
 		}
 		return
+	}
+	if m.Type == "task" && !executor && runErr == nil && (cur.Status == "acked" || cur.Status == "done") {
+		r.mu.Lock()
+		r.lastSuccess = &RunSuccess{CLI: r.harness.Name(), At: r.opts.Now()}
+		r.saveState()
+		r.mu.Unlock()
 	}
 	if cur.Status != "acked" {
 		r.clearPending(m.ID)
@@ -1178,6 +1251,38 @@ func (r *Runner) waitSlot(ctx context.Context, log *slog.Logger, m api.Message) 
 			cur, err := r.hub.GetMessage(ctx, m.ID)
 			if err == nil && (cur.Status == "done" || cur.Status == "failed") {
 				log.Info("closed while waiting for a slot; not running it", "status", cur.Status)
+				return false
+			}
+		}
+	}
+}
+
+// waitPoolSlot keeps the task alive while the fair scheduler holds it.
+func (r *Runner) waitPoolSlot(ctx context.Context, log *slog.Logger, m api.Message, t *SlotTicket) bool {
+	report := func() {
+		if r.opts.OnSlots != nil {
+			r.opts.OnSlots(r.opts.SlotPool.Snapshot(SlotOwner(r.opts.HubURL, r.opts.Self)))
+		}
+	}
+	report()
+	defer report()
+	tick := time.NewTicker(r.opts.SlotTouch)
+	defer tick.Stop()
+	for {
+		select {
+		case <-t.Ready:
+			// Revalidate before starting: a task may have been stopped just before
+			// a release admitted it. Never turn a stopped waiter into a new run.
+			cur, err := r.hub.GetMessage(ctx, m.ID)
+			return ctx.Err() == nil && !(err == nil && (cur.Status == "done" || cur.Status == "failed" || cur.Status == "held"))
+		case <-ctx.Done():
+			t.Done()
+			return false
+		case <-tick.C:
+			cur, err := r.hub.GetMessage(ctx, m.ID)
+			if err == nil && (cur.Status == "done" || cur.Status == "failed" || cur.Status == "held") {
+				t.Done()
+				log.Info("closed while waiting for a slot", "status", cur.Status)
 				return false
 			}
 		}

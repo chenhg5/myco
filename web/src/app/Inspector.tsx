@@ -1,3 +1,4 @@
+import { runnerUpdating } from "@/lib/runner-state";
 import { useEffect, useState } from "react";
 import { useCached } from "@/lib/memo";
 import { ArrowRightLeft, Check, ChevronRight, Copy, Pencil, Plus, Power, Trash2, UserCheck, X } from "lucide-react";
@@ -5,7 +6,7 @@ import { IconChat } from "@/components/icons";
 import { appApi, isOldHub, type AgentProvider, type ManualProvider, type ProviderList, type MachineInfo, type WireAPI } from "@/appapi";
 import type { AgentRow } from "@/app/types";
 import type { AuditEntry, Member, Peer, Project, Runtime, Skill } from "@/api";
-import {
+import { heldTaskLabel,
   agentKind, cliName, cliVersion, cloudLabel, isCloud, isInbox, kindLabel, machineLabel,
   canManage, cleanLabel, groupsOf, isMe, machineOfRow, nodeIcon, personLabel, tagsOf,
   sessionBusy, stateLabel, stuckCounts, possiblyStuck, nodeName } from "@/app/nodes";
@@ -545,7 +546,7 @@ function openStatusLabel(status: string, stuck = false): string {
   if (stuck) return L("可能卡住", "May be stuck");
   // delivered: the node pulled it but has not acknowledged it yet.
   if (status === "queued" || status === "delivered") return L("待处理", "Queued");
-  if (status === "held") return L("已挂起", "Held");
+  if (status === "held") return L("暂挂", "On hold");
   return L("处理中", "In progress");
 }
 
@@ -644,6 +645,9 @@ export function OfflineCard({ row, now, onRefresh }: { row: AgentRow; now: numbe
     }
   };
 
+  if (runnerUpdating(ag, now)) return <section className="app-notice" data-testid="runner-updating">
+    <span className="app-spinner" /><div><b>{L("正在更新", "Updating")}</b><p>{L("更新完成后会自动恢复，任务状态会随后刷新。", "It returns automatically after updating; task status refreshes when it reconnects.")}</p></div>
+  </section>;
   const seen = ag.last_seen_at ? timeAgo(ag.last_seen_at, now) : "";
   // An inbox node has no runner behind it: it comes back when its session
   // runs `myco inbox wait` again, not by restarting a runner.
@@ -1075,6 +1079,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
   );
   const row_owner = (
     <>
+      {ag.invited_by && <div className="app-kv" data-testid="agent-invited-by"><span className="app-kv-label">{L("邀请来源", "Invitation")}</span><span className="app-kv-value">{L(`由 ${ag.invited_by} 邀请`, `Invited by ${ag.invited_by}`)}</span></div>}
               {ag.owner && (
                 <div className="app-kv">
                   <span className="app-kv-label">{L("主人", "Owner")}</span>
@@ -1240,7 +1245,8 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
               <div className="app-counts">
                 <span>{L("处理中", "In progress")}<b>{Math.max(0, row.st.in_progress - stuck.in_progress)}</b></span>
                 <span>{L("待处理", "Queued")}<b>{row.st.queued}</b></span>
-                <span>{L("已挂起", "Held")}<b>{Math.max(0, row.st.held - stuck.held)}</b></span>
+                <span>{L("暂挂", "On hold")}<b>{row.st.held}</b></span>
+                {(row.st.watching || 0) > 0 && <span className="is-watching">{L("盯着", "Watching")}<b>{row.st.watching}</b></span>}
                 {stuck.total > 0 && <span className="is-stuck">{L("可能卡住", "May be stuck")}<b>{stuck.total}</b></span>}
               </div>
               {current.length === 0 && <div className="app-empty-note">{row.st.queued + row.st.in_progress + row.st.held > 0
@@ -1250,8 +1256,8 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
                 <div key={m.id} className="app-msg-wrap">
                   <button type="button" className="app-msg" onClick={() => onThread(hubId, m.thread_id, ag.name)}>
                     <span className="meta">
-                      <span className={cn("app-msg-status", m.status, isStuck(m) && "is-stuck")}>{m.status === "held" && m.asking
-                        ? L(`在等 ${nodeLabel(m.from)} 回答`, `Waiting on ${nodeLabel(m.from)}'s answer`)
+                      <span className={cn("app-msg-status", m.status, isStuck(m) && "is-stuck")}>{m.status === "held"
+                        ? heldTaskLabel(m, nodeLabel(m.from))
                         : (row.st.stale_tasks || []).includes(m.id) ? L("没收尾", "Left open") : openStatusLabel(m.status, isStuck(m))}</span>
                       <span className="who">{nodeLabel(m.from)}</span>→<span className="who">{nodeLabel(m.to)}</span>
                       <span className="time">{timeAgo(m.active_at || m.updated_at, now)}</span>

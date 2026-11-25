@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/domain"
-	"github.com/chenhg5/myco/internal/infra/notify"
-	"github.com/chenhg5/myco/internal/infra/security"
-	"github.com/chenhg5/myco/internal/infra/sqlite"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/infra/notify"
+	"github.com/myco-ai/myco/internal/infra/security"
+	"github.com/myco-ai/myco/internal/infra/sqlite"
 )
 
 func newNotices(t *testing.T) (*app.NoticeService, *app.EventBus) {
@@ -54,8 +54,8 @@ func (panickySource) Notices(context.Context, domain.Event) app.NoticeChange {
 }
 
 func person(_ context.Context, name string) string {
-	if name == "@console:glenn" || name == "glenn" {
-		return "mem_glenn"
+	if name == "@console:alice" || name == "alice" {
+		return "mem_alice"
 	}
 	return ""
 }
@@ -74,37 +74,37 @@ func TestNoticeMessagesAndSinks(t *testing.T) {
 		return &domain.Message{ID: id, From: domain.AgentName(from), To: domain.AgentName(to), Type: typ, ReplyTo: reply, Ask: ask, Project: "site"}
 	}
 	bus.Publish(c, domain.MessageCreated{Message: msg("m1", "codex", "claude", domain.TypeTask, "", false)}) // between agents
-	bus.Publish(c, domain.MessageCreated{Message: msg("m2", "@console:glenn", "codex", domain.TypeTask, "", false)})
-	bus.Publish(c, domain.MessageCreated{Message: msg("m3", "codex", "@console:glenn", domain.TypeProgress, "m2", true)})
-	bus.Publish(c, domain.MessageCreated{Message: msg("m3", "codex", "@console:glenn", domain.TypeProgress, "m2", true)}) // told once
+	bus.Publish(c, domain.MessageCreated{Message: msg("m2", "@console:alice", "codex", domain.TypeTask, "", false)})
+	bus.Publish(c, domain.MessageCreated{Message: msg("m3", "codex", "@console:alice", domain.TypeProgress, "m2", true)})
+	bus.Publish(c, domain.MessageCreated{Message: msg("m3", "codex", "@console:alice", domain.TypeProgress, "m2", true)}) // told once
 	bus.Publish(c, domain.MessageCreated{Message: msg("m4", "codex", "@console:stranger", domain.TypeReply, "x", false)})
 	svc.Drain()
-	feed, err := svc.Feed(c, "mem_glenn", 0, 0, 0)
+	feed, err := svc.Feed(c, "mem_alice", 0, 0, 0)
 	if err != nil || len(feed.Notices) != 1 || feed.Badge != 1 {
-		t.Fatalf("one question for glenn: %v %+v", err, feed)
+		t.Fatalf("one question for alice: %v %+v", err, feed)
 	}
 	n := feed.Notices[0]
 	if n.Kind != domain.NoticeAsking || n.Project != "site" || n.Ref != "task:m2" || !n.Announce || n.MessageID != "m3" {
 		t.Fatalf("question: %+v", n)
 	}
-	if len(sink.delivered) != 1 || len(sink.changed) != 1 || sink.changed[0] != "mem_glenn" {
+	if len(sink.delivered) != 1 || len(sink.changed) != 1 || sink.changed[0] != "mem_alice" {
 		t.Fatalf("sink: %d delivered, changed %v", len(sink.delivered), sink.changed)
 	}
 	// The task fails: the question is settled, the failure needs them.
-	task := msg("m2", "@console:glenn", "codex", domain.TypeTask, "", false)
+	task := msg("m2", "@console:alice", "codex", domain.TypeTask, "", false)
 	task.Status = domain.StatusFailed
 	bus.Publish(c, domain.MessageChanged{Message: task})
-	bus.Publish(c, domain.MessageCreated{Message: msg("m5", "codex", "@console:glenn", domain.TypeEvent, "m2", false)})
+	bus.Publish(c, domain.MessageCreated{Message: msg("m5", "codex", "@console:alice", domain.TypeEvent, "m2", false)})
 	svc.Drain()
-	feed, _ = svc.Feed(c, "mem_glenn", 0, 0, 0)
+	feed, _ = svc.Feed(c, "mem_alice", 0, 0, 0)
 	if len(feed.Notices) != 2 || feed.Notices[0].Open() || feed.Notices[1].Kind != domain.NoticeFailed || feed.Badge != 1 {
 		t.Fatalf("after the failure: %+v", feed)
 	}
 	// Reading a failure settles it (it is not actionable).
-	if k, err := svc.Read(c, "mem_glenn", "agent:codex", 0); err != nil || k != 2 {
+	if k, err := svc.Read(c, "mem_alice", "agent:codex", 0); err != nil || k != 2 {
 		t.Fatalf("read: %v %d", err, k)
 	}
-	if feed, _ = svc.Feed(c, "mem_glenn", 0, 0, 0); feed.Badge != 0 {
+	if feed, _ = svc.Feed(c, "mem_alice", 0, 0, 0); feed.Badge != 0 {
 		t.Fatalf("badge after reading: %d", feed.Badge)
 	}
 }
@@ -118,25 +118,25 @@ func TestNoticeApprovalsAndDecisions(t *testing.T) {
 	svc.AddSource(app.WorkflowNotices{Runs: runs, Person: person})
 	c := context.Background()
 
-	a := &domain.Approval{ID: "ap1", Owner: "mem_glenn", Agent: "shroom", What: "删除项目 old", Status: domain.ApprovalPending}
+	a := &domain.Approval{ID: "ap1", Owner: "mem_alice", Agent: "shroom", What: "删除项目 old", Status: domain.ApprovalPending}
 	bus.Publish(c, domain.ApprovalChanged{Approval: a})
-	step := &domain.RunStep{ID: "s1", RunID: "r1", StepID: "review", Status: domain.StepWaiting, Target: "glenn"}
+	step := &domain.RunStep{ID: "s1", RunID: "r1", StepID: "review", Status: domain.StepWaiting, Target: "alice"}
 	bus.Publish(c, domain.StepChanged{Step: step})
 	svc.Drain()
-	glenn, _ := svc.Feed(c, "mem_glenn", 0, 0, 0)
+	alice, _ := svc.Feed(c, "mem_alice", 0, 0, 0)
 	owner, _ := svc.Feed(c, "mem_owner", 0, 0, 0)
-	if len(glenn.Notices) != 2 || glenn.Badge != 2 || glenn.Notices[0].Target != "superagent" || glenn.Notices[0].Subject != "删除项目 old" {
-		t.Fatalf("glenn: %+v", glenn)
+	if len(alice.Notices) != 2 || alice.Badge != 2 || alice.Notices[0].Target != "superagent" || alice.Notices[0].Subject != "删除项目 old" {
+		t.Fatalf("alice: %+v", alice)
 	}
 	if len(owner.Notices) != 1 || owner.Notices[0].Kind != domain.NoticeDecision || owner.Notices[0].Target != "workflow:wf1?run=r1" {
 		t.Fatalf("owner: %+v", owner)
 	}
 	// Reading does not settle what waits for an action.
-	if _, err := svc.Read(c, "mem_glenn", "", 0); err != nil {
+	if _, err := svc.Read(c, "mem_alice", "", 0); err != nil {
 		t.Fatal(err)
 	}
-	if glenn, _ = svc.Feed(c, "mem_glenn", 0, 0, 0); glenn.Badge != 2 {
-		t.Fatalf("still waiting after reading: %d", glenn.Badge)
+	if alice, _ = svc.Feed(c, "mem_alice", 0, 0, 0); alice.Badge != 2 {
+		t.Fatalf("still waiting after reading: %d", alice.Badge)
 	}
 	a.Status = domain.ApprovalDone
 	bus.Publish(c, domain.ApprovalChanged{Approval: a})
@@ -144,10 +144,10 @@ func TestNoticeApprovalsAndDecisions(t *testing.T) {
 	bus.Publish(c, domain.StepChanged{Step: step})
 	bus.Publish(c, domain.RunChanged{Run: &domain.WorkflowRun{ID: "r1", WorkflowID: "wf1", Name: "Release", OwnerID: "mem_owner", Status: domain.FlowFailed}})
 	svc.Drain()
-	glenn, _ = svc.Feed(c, "mem_glenn", 0, 0, 0)
+	alice, _ = svc.Feed(c, "mem_alice", 0, 0, 0)
 	owner, _ = svc.Feed(c, "mem_owner", 0, 0, 0)
-	if glenn.Badge != 0 || owner.Badge != 1 || owner.Notices[len(owner.Notices)-1].Kind != domain.NoticeRunFail {
-		t.Fatalf("after deciding: glenn %+v owner %+v", glenn, owner)
+	if alice.Badge != 0 || owner.Badge != 1 || owner.Notices[len(owner.Notices)-1].Kind != domain.NoticeRunFail {
+		t.Fatalf("after deciding: alice %+v owner %+v", alice, owner)
 	}
 }
 
@@ -158,10 +158,10 @@ func TestNoticeFeedWaits(t *testing.T) {
 	c := context.Background()
 	go func() {
 		time.Sleep(50 * time.Millisecond)
-		bus.Publish(c, domain.ApprovalChanged{Approval: &domain.Approval{ID: "ap1", Owner: "mem_glenn", Status: domain.ApprovalPending}})
+		bus.Publish(c, domain.ApprovalChanged{Approval: &domain.Approval{ID: "ap1", Owner: "mem_alice", Status: domain.ApprovalPending}})
 	}()
 	start := time.Now()
-	feed, err := svc.Feed(c, "mem_glenn", 0, 0, 5*time.Second)
+	feed, err := svc.Feed(c, "mem_alice", 0, 0, 5*time.Second)
 	if err != nil || len(feed.Notices) != 1 || time.Since(start) > 4*time.Second {
 		t.Fatalf("wait: %v %+v after %v", err, feed, time.Since(start))
 	}

@@ -5,11 +5,11 @@ import { TailscaleSetup } from "@/app/TailscaleSetup";
 import { IntroCard, introOf, noteDone } from "@/app/Onboard";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  AlertTriangle, AudioLines, Bot, Check, Cloud, Globe, Info, Keyboard, Languages, Palette, Pencil, Plus, RotateCcw, ScrollText, Search, Server, Terminal, Users,
+  AlertTriangle, ArrowUpRight, AudioLines, BookOpen, Bot, Check, Cloud, Globe, Info, Keyboard, Languages, Palette, Pencil, Plus, RotateCcw, ScrollText, Search, Server, ShieldCheck, Terminal, Users,
 } from "lucide-react";
 import {
   appApi, ApiError, type AppInfo, type CacheStats, type AppUpdate, type Hub, type HubOverview, type LocalState,
-  type LocalTunnel, type StartLocalHubResult, type VoiceInfo, type VoiceTTSProvider, type TTSVoice, type ProxySetting, type ProxyInput,
+  type LocalTunnel, type StartLocalHubResult, type VoiceInfo, type VoiceTTSProvider, type TTSVoice, type ProxySetting, type ProxyInput, type OsGrantRow,
 } from "@/appapi";
 import { ver } from "@/app/nodes";
 import { renameHub } from "@/app/hubNames";
@@ -20,6 +20,7 @@ import { ErrorText, Modal, ConfirmDialog } from "@/app/dialogs";
 import { updateFailure } from "@/app/UpdateNotice";
 import { accessLabel, localWorkspaceOf, localWorkspaces, type LocalWorkspace } from "@/app/localHubs";
 import { AuditSection, MembersSection, MyDevices } from "@/app/MembersSection";
+import { osWant } from "@/app/pages";
 import { LocalAgentsSection } from "@/app/LocalAgents";
 import { setSimpleMode, useSimpleMode } from "@/app/simpleMode";
 import type { TextSize, ThemeMode } from "@/lib/theme";
@@ -31,9 +32,10 @@ import { bytes, cn } from "@/lib/utils";
 import { ChatBgDialog } from "@/app/ChatBgDialog";
 import { ShortcutsSection } from "@/app/Shortcuts";
 import { HubUpgrade, useLatestRelease } from "@/app/MycoUpgrade";
+import { ProjectStorageSettings } from "@/app/ProjectStorageSettings";
 import { BackupRow } from "@/app/Backups";
 
-type Section = "hubs" | "agents" | "members" | "audit" | "appearance" | "translate" | "voice" | "network" | "shortcuts" | "about";
+type Section = "hubs" | "agents" | "members" | "audit" | "appearance" | "translate" | "voice" | "network" | "apps" | "shortcuts" | "about";
 
 type UpdateState =
   | { step: "checking" }
@@ -191,6 +193,7 @@ const SECTIONS: { key: Section; label: string; icon: typeof Server }[] = [
   { key: "translate", get label() { return L("翻译", "Translation"); }, icon: Languages },
   { key: "voice", get label() { return L("语音", "Voice"); }, icon: AudioLines },
   { key: "network", get label() { return L("代理", "Proxy"); }, icon: Globe },
+  { key: "apps", get label() { return L("应用权限", "App permissions"); }, icon: ShieldCheck },
   { key: "shortcuts", get label() { return L("快捷键", "Shortcuts"); }, icon: Keyboard },
   { key: "about", get label() { return L("关于", "About"); }, icon: Info },
 ];
@@ -198,7 +201,7 @@ const SECTIONS: { key: Section; label: string; icon: typeof Server }[] = [
 /** The nav in groups: what is about this computer, what is about the
  *  workspace (shared with the others in it), and About. */
 const GROUPS: { title: () => string; keys: Section[] }[] = [
-  { title: () => L("这台电脑", "This computer"), keys: ["appearance", "voice", "translate", "network", "agents"] },
+  { title: () => L("这台电脑", "This computer"), keys: ["appearance", "voice", "translate", "network", "apps", "agents"] },
   { title: () => L("工作区", "Workspace"), keys: ["hubs", "members", "audit"] },
   { title: () => "", keys: ["shortcuts", "about"] },
 ];
@@ -213,6 +216,7 @@ const SECTION_ABOUT: Record<Section, () => string> = {
   translate: () => L("把 agent 说的话翻译成你的语言。", "Translate what agents say into your language."),
   voice: () => L("和 agent 语音聊天，以及语音输入。", "Voice chat with agents, and dictation."),
   network: () => L("这台电脑连外网时走的代理。", "The proxy this computer uses to reach the internet."),
+  apps: () => L("你允许了哪些应用用这台电脑：读写文件、录音、运行命令、联网……可以随时收回。", "What you let apps do on this computer (files, recording, commands, the network…); take any of it back."),
   shortcuts: () => L("App 里能用的键盘快捷键。", "The keyboard shortcuts in this app."),
   about: () => L("版本、更新和这个 App。", "Version, updates and this app."),
 };
@@ -231,6 +235,7 @@ const FINDABLE: { section: Section; key?: string; title: () => string; words: st
   { section: "voice", key: "voice-keep", title: () => L("把语音设置存到工作区", "Keep voice settings on the workspaces"), words: "语音 设置 存到工作区 同步 voice sync" },
   { section: "translate", key: "translate", title: () => L("自动翻译", "Translate automatically"), words: "翻译 自动翻译 密钥 api key translate deepl" },
   { section: "network", key: "proxy", title: () => L("代理", "Proxy"), words: "代理 网络 http socks proxy network" },
+  { section: "apps", key: "app-permissions", title: () => L("应用权限", "App permissions"), words: "应用权限 授权 允许 收回 文件 麦克风 录音 命令 联网 app permissions allow revoke files microphone commands network" },
   { section: "agents", key: "local-agents", title: () => L("这台电脑上的 agent", "Agents on this computer"), words: "本机 agent claude code codex gemini 安装 登录 cli install sign in" },
   { section: "hubs", title: () => L("工作区", "Workspaces"), words: "工作区 服务器 连接 加入 新建 停止 公网 cloudflare tailscale workspace hub server" },
   { section: "members", title: () => L("成员", "People"), words: "成员 邀请 角色 管理员 权限 people invite role admin member" },
@@ -314,7 +319,7 @@ const TUNNELS: { key: LocalTunnel; title: string; desc: string; needsDomain?: bo
 type TunnelChoice = 0 | 1 | 2;
 
 /** Settings: hubs (including the local one), appearance and about. */
-export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onTextSize, langChoice, onLangChoice, refreshKey, sectionRequest, onRefresh, onAddHub, titleId }: {
+export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onTextSize, langChoice, onLangChoice, refreshKey, sectionRequest, onRefresh, onRemoved, onAddHub, titleId }: {
   hubs: Hub[];
   hubsOv?: HubOverview[];
   info: AppInfo | null;
@@ -329,6 +334,8 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
   /** Bumped when the Hub switcher asks for the Hub section. */
   sectionRequest?: number;
   onRefresh: () => Promise<void>;
+  /** a workspace was removed: the App drops it at once (and refreshes behind) */
+  onRemoved?: (id: string) => void;
   onAddHub: () => void;
   /** in a dialog: the title at the top of the nav (labels the dialog) */
   titleId?: string;
@@ -489,17 +496,25 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
     }
   };
 
+  // Removing only touches this App (its list and the saved token), so it
+  // is quick: the dialog closes as soon as that is done and the workspace
+  // leaves every page at once, without waiting on any workspace's answer.
+  const [removing, setRemoving] = useState(false);
   const removeHub = async () => {
-    if (!removeTarget) return;
+    if (!removeTarget || removing) return;
+    const id = removeTarget.id;
     setActionError(null);
+    setRemoving(true);
     try {
-      await appApi.removeHub(removeTarget.id);
-      forgetHub(removeTarget.id);
-      setRemoveTarget(null);
-      await onRefresh();
+      await appApi.removeHub(id);
     } catch (e) {
-      setActionError(e);
+      // Already gone (removed in another window): as good as done.
+      if ((e as { status?: number })?.status !== 404) { setActionError(e); setRemoving(false); return; }
     }
+    forgetHub(id);
+    setRemoveTarget(null);
+    setRemoving(false);
+    if (onRemoved) onRemoved(id); else void onRefresh();
   };
 
   const localWs = localWorkspaces(local);
@@ -545,6 +560,15 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
                   <span>{s.label}</span>
                 </button>
               ))}
+              {/* The user guide, last: not a section here; it opens the
+                  guide's own page (and closes Settings). */}
+              {gi === GROUPS.length - 1 && (
+                <button type="button" className="app-settings-tab app-settings-link" onClick={() => openHelp()} data-testid="settings-nav-guide">
+                  <BookOpen strokeWidth={1.75} />
+                  <span>{L("使用文档", "User guide")}</span>
+                  <ArrowUpRight className="app-settings-link-arrow" strokeWidth={1.75} aria-hidden />
+                </button>
+              )}
             </div>
           );
         })}
@@ -560,6 +584,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
             <IntroCard id="workspaces" {...introOf("workspaces")} />
             <ErrorText error={localError} />
             <ErrorText error={actionError} />
+            {hubs.filter(h=>h.ok && hubsOv?.find(o=>o.id===h.id)?.me?.can_manage).map(h=><ProjectStorageSettings key={h.id} hub={h}/>)}
 
             {/* The workspaces this computer runs: one row each, with what they
                 are reachable at and how they are opened. */}
@@ -795,6 +820,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
         {section === "agents" && <LocalAgentsSection />}
         {section === "voice" && <VoiceSection />}
         {section === "network" && <ProxySection hubsOv={hubsOv} />}
+        {section === "apps" && <AppPermissionsSection hubs={hubs} />}
         {section === "about" && <AboutSection info={info} local={local} />}
         {section === "hubs" && simple && <MyDevices hubsOv={hubsOv} />}
         {section === "members" && <MembersSection hubsOv={hubsOv} onRefresh={onRefresh} />}
@@ -874,6 +900,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
         description={L("只会从这个 App 里移除。工作区本身和它上面的 agent 都不受影响，仍在照常运行。", "Removes it from this app only. The Hub and its agents aren’t affected and keep running.")}
         consequences={<p>{L("你将看不到这个工作区的 agent，之后只能凭 App 连接链接重新添加。", "You won’t see this Hub’s nodes. To add it back later, you’ll need its app link.")}</p>}
         confirmLabel={L("移除工作区", "Remove Hub")}
+        busy={removing}
         error={actionError ? <ErrorText error={actionError} /> : undefined}
         onConfirm={() => void removeHub()}
       />
@@ -1436,6 +1463,7 @@ function VoiceSection() {
   const [provider, setProvider] = useState("doubao");
   const [speaker, setSpeaker] = useState("");
   const [rate, setRate] = useState(0);
+  const [words, setWords] = useState("");
   const [ttsKey, setTtsKey] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -1451,6 +1479,7 @@ function VoiceSection() {
     setProvider(pid);
     const sp = v.config.tts_speaker || "";
     setSpeaker(sp); setRate(v.config.tts_rate || 0);
+    setWords((v.config.words || []).join("\n"));
     const list = v.tts_providers?.find((p) => p.id === pid)?.voices || [];
     setTyping(!!sp && list.length > 0 && !list.some((x) => x.id === sp));
   };
@@ -1483,6 +1512,7 @@ function VoiceSection() {
     try {
       const v = await appApi.putVoiceConfig({
         llm_base_url: baseUrl.trim(), llm_model: model.trim(), tts_provider: provider, tts_speaker: speaker.trim(), tts_rate: rate,
+        words: words.split("\n").map((w) => w.trim()).filter(Boolean),
         ...(llmKey.trim() ? { llm_key: llmKey.trim() } : {}), ...(ttsKey.trim() ? { tts_key: ttsKey.trim() } : {}), ...extra,
       });
       load(v); setLlmKey(""); setTtsKey(""); setSaved(true);
@@ -1511,17 +1541,17 @@ function VoiceSection() {
           <div className="app-setting-line-text">
             <b>{L("和 agent 语音聊天", "Voice chat with an agent")}</b>
             <span>{info.available
-              ? L("配好下面的模型和语音合成后，对话里输入框空着时，右边的圆按钮就是语音聊天。你说的话转给这个 agent（有活就补充，空着就是新任务），它的回复和提问挑空档说给你听；你一开口它就停下来听。录音不保存。",
-                "Once the model and the speech service below are set up, the round button beside an empty box starts a voice chat with that agent. What you ask goes to it (added to its task at work, or a new task); its answers and questions are told in a pause; it stops as soon as you speak. No recordings are kept.")
+              ? L("配好下面的模型和语音合成后，对话里输入框空着时，右边的圆按钮就是语音聊天：像给这个 agent 本人打电话。要它做的事它直接接下（有活就补充，空着就是新任务），做完了或有问题要问你，它挑空档告诉你；你一开口它就停下来听。录音不保存。",
+                "Once the model and the speech service below are set up, the round button beside an empty box starts a voice chat: a call with that agent itself. It takes on what you ask (added to its task at work, or a new task), and tells you in a pause when it is done or has a question; it stops as soon as you speak. No recordings are kept.")
               : L("语音聊天目前只在 Mac 版 App 和手机 App 里有。这里的设置会同步过去。", "Voice chat is in the Mac app and the phone app for now. What is set here is shared with them.")}</span>
           </div>
         </div>
       </section>
-      <h4 className="app-setting-group">{L("语音助手用的模型", "The assistant's model")}</h4>
+      <h4 className="app-setting-group">{L("语音用的模型", "The voice's model")}</h4>
       <section className="app-setting-card app-setting-lines">
         <div className="app-setting-line">
-          <p className="tr-note">{L("任意 OpenAI 兼容接口（OpenAI、DeepSeek、豆包、OpenRouter…）。选反应快的模型，它不用很聪明，难的事都交给 agent。不填就用「翻译」里配好的那个。",
-            "Any OpenAI-compatible API (OpenAI, DeepSeek, Doubao, OpenRouter…). Pick a fast model: the hard work goes to the agents. Left empty, the one set up under Translation is used.")}</p>
+          <p className="tr-note">{L("任意 OpenAI 兼容接口（OpenAI、DeepSeek、豆包、OpenRouter…）。选反应快的模型，它不用很聪明：它只替 agent 在电话里开口，真正的活还是 agent 在自己的会话里做。不填就用「翻译」里配好的那个。",
+            "Any OpenAI-compatible API (OpenAI, DeepSeek, Doubao, OpenRouter…). Pick a fast model; it need not be clever: it only speaks for the agent on the call, while the agent does the real work in its own session. Left empty, the one set up under Translation is used.")}</p>
         </div>
         <div className="app-setting-line tr-fields">
           <label>{L("地址", "Address")}<input className="app-input mono" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://api.deepseek.com/v1" spellCheck={false} /></label>
@@ -1546,7 +1576,7 @@ function VoiceSection() {
               </button>
             ))}
           </div>
-          <p className="tr-note">{svcHelp || L("它把语音助手的话说出来。", "It says what the assistant answers out loud.")}</p>
+          <p className="tr-note">{svcHelp || L("它把 agent 在电话里的话说出来。", "It says the agent's words out loud on the call.")}</p>
         </div>
         <div className="app-setting-line tr-fields">
           {voices.length > 0 && (
@@ -1587,6 +1617,21 @@ function VoiceSection() {
           {saved && <span className="tr-tried"><Check />{L("已保存", "Saved")}</span>}
         </div>
         <ErrorText error={error} />
+      </section>
+      <h4 className="app-setting-group">{L("要听准的词", "Words to hear right")}</h4>
+      <section className="app-setting-card app-setting-lines" data-setting="voice-words">
+        <div className="app-setting-line">
+          <p className="tr-note">{L("语音聊天和语音输入都会留意这些词，听成别的也会改回来。agent、项目和成员的名字，还有 Claude、Codex、GitHub 这些常用词已经自动加上了。一行一个；常被听错的写成「Claude = 克劳德, cloud」。",
+            "Voice chat and dictation listen for these words, and fix them when they are heard as something else. The names of agents, projects and members, and common words such as Claude, Codex and GitHub, are already included. One per line; for one often misheard, write \"Claude = clod, cloud\".")}</p>
+        </div>
+        <div className="app-setting-line">
+          <textarea className="app-input mono vs-words" rows={4} value={words} onChange={(e) => { setWords(e.target.value); setSaved(false); }} spellCheck={false}
+            aria-label={L("要听准的词", "Words to hear right")} placeholder={L("Kettu\n前端小王\nClaude = 克劳德, cloud", "Kettu\nFrontend Wang\nClaude = clod, cloud")} />
+        </div>
+        <div className="app-setting-line tr-actions">
+          <button type="button" className="app-btn app-btn-primary" disabled={busy} onClick={() => void save()}>{L("保存", "Save")}</button>
+          {saved && <span className="tr-tried"><Check />{L("已保存", "Saved")}</span>}
+        </div>
       </section>
       <h4 className="app-setting-group">{L("多设备同步", "On your other devices")}</h4>
       <section className="app-setting-card app-setting-lines">
@@ -1631,3 +1676,56 @@ function ChatBgLine() {
   );
 }
 
+
+/** What pages may use of this computer (myco.os), as the person allowed it
+ *  in the App's dialogs: kept ("always"), for this run, refused; each can be
+ *  taken back (the page asks again next time). */
+function AppPermissionsSection({ hubs }: { hubs: Hub[] }) {
+  const [rows, setRows] = useState<OsGrantRow[] | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const load = useCallback(() => { appApi.osGrants().then(setRows, (e) => { setError(e); setRows([]); }); }, []);
+  useEffect(load, [load]);
+  const hubName = (id: string) => hubs.find((h) => h.id === id)?.name || "";
+  const revoke = (r: OsGrantRow, group = "") => { appApi.osRevoke(r.hub, r.page, group).then(load, setError); };
+  if (!rows) return <section className="app-setting-card"><div className="app-empty-note">{L("正在读取…", "Loading…")}</div></section>;
+  return (
+    <section className="app-setting-card app-setting-lines" data-setting="app-permissions">
+      {error ? <ErrorText error={error} /> : null}
+      {!rows.length && <div className="app-empty-note">{L("还没有应用用过这台电脑。应用第一次要读文件、录音、联网这些时，App 会先问你。", "No app has used this computer yet. The first time one wants to read files, record, use the network and the like, the App asks you.")}</div>}
+      {rows.map((r) => {
+        const items: { key: string; group: string; host?: string; note: string; denied?: boolean }[] = [
+          ...(r.always || []).map((g) => ({ key: `a${g}`, group: g, note: L("一直允许", "Always") })),
+          ...(r.once || []).filter((g) => !(r.always || []).includes(g)).map((g) => ({ key: `o${g}`, group: g, note: L("这次允许，App 关掉就失效", "This time, until the App quits") })),
+          ...(r.hosts || []).map((h) => ({ key: `h${h}`, group: "network", host: h, note: L("允许", "Allowed") })),
+          ...(r.denied || []).map((g) => ({ key: `d${g}`, group: g, note: L("不允许", "Refused"), denied: true })),
+        ];
+        return (
+          <div key={`${r.hub}/${r.page}`} className="app-perm-page">
+            <div className="app-setting-line">
+              <div className="app-setting-line-text">
+                <b>{r.name || r.page}</b>
+                <span>{[hubName(r.hub), r.page].filter(Boolean).join(" · ")}</span>
+              </div>
+              <button type="button" className="app-btn app-btn-small" onClick={() => revoke(r)}>{L("全部收回", "Take all back")}</button>
+            </div>
+            {items.map((it) => {
+              const w = osWant(it.group, it.host);
+              return (
+                <div key={it.key} className="app-setting-line app-perm-item">
+                  <div className="app-setting-line-text">
+                    <b>{L(w.zh, w.en)}</b>
+                    <span>{it.note}</span>
+                  </div>
+                  <button type="button" className="app-btn app-btn-small" onClick={() => revoke(r, it.group)}
+                    title={L("收回以后，这个应用下次要用时会再问你", "Once taken back, the app asks you again next time")}>
+                    {it.denied ? L("不再拒绝", "Stop refusing") : L("收回", "Take back")}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+    </section>
+  );
+}

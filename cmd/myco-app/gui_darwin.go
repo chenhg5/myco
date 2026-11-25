@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os/exec"
 	"strings"
 	"sync"
@@ -59,6 +60,7 @@ func runGUI(h http.Handler, onLink func(string), setRelaunch func(func())) error
 
 	// Links from the pages open in the default browser.
 	openURL = func(u string) error { return app.Browser.OpenURL(u) }
+	openPageWindow = newPageWindows(app).show
 
 	// A face is chosen with the system's own panel, pictures only: the web
 	// view's panel for <input type=file> shows every file.
@@ -154,7 +156,18 @@ func runGUI(h http.Handler, onLink func(string), setRelaunch func(func())) error
 	// myco://add-hub?link=… (an app link's "open in the app" button): the
 	// UI picks it up and offers to add the hub.
 	app.Event.OnApplicationEvent(events.Common.ApplicationLaunchedWithUrl, func(e *application.ApplicationEvent) {
-		if u := e.Context().URL(); strings.HasPrefix(u, "myco://") {
+		u := e.Context().URL()
+		// myco://app?hub=&page=&name= (an installed app's launcher): that
+		// page in its own window, not the App's. (From a goroutine: the
+		// window is made on the main thread, where this may run.)
+		if strings.HasPrefix(u, "myco://app?") {
+			if l, err := url.Parse(u); err == nil {
+				q := l.Query()
+				go func() { _ = openPageWindow(q.Get("hub"), q.Get("page"), q.Get("name")) }()
+			}
+			return
+		}
+		if strings.HasPrefix(u, "myco://") {
 			onLink(u)
 			show()
 		}

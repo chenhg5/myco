@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 func TestStateOfOnlyAckedIsWorking(t *testing.T) {
@@ -84,7 +84,7 @@ func TestTaskStateOnlyAckedIsWorking(t *testing.T) {
 		{domain.StatusQueued, "queued"},
 		{domain.StatusDelivered, "queued"},
 		{domain.StatusAcked, "working"},
-		{domain.StatusHeld, "queued"},
+		{domain.StatusHeld, "held"},
 	} {
 		if got := taskState(nil, nil, &domain.Message{Status: tc.status}); got != tc.want {
 			t.Errorf("%s: got %s, want %s", tc.status, got, tc.want)

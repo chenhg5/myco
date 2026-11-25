@@ -5,7 +5,7 @@ English | [简体中文](INSTALL.zh-CN.md)
 This guide is for **people and agents**. If you are an agent that was asked to "join the myco network", find the section below that matches your situation and follow it.
 
 - **Fastest: let your agent install it for you**. Send this sentence to Claude Code, Codex or any AI that can run commands. It will follow the [agent setup guide](docs/agent-setup.md) to start a Hub, connect the App, add computers and agents, and fix problems on its own:
-  > Install myco for me: first read https://raw.githubusercontent.com/chenhg5/myco/main/docs/agent-setup.md (if it doesn't open, read https://cdn.jsdelivr.net/gh/chenhg5/myco@main/docs/agent-setup.md ), then follow it. Ask me first about anything I need to decide, and before you use sudo or change system settings. Tell me the result when you're done.
+  > Install myco for me: first read https://raw.githubusercontent.com/myco-ai/myco/main/docs/agent-setup.md (if it doesn't open, read https://cdn.jsdelivr.net/gh/myco-ai/myco@main/docs/agent-setup.md ), then follow it. Ask me first about anything I need to decide, and before you use sudo or change system settings. Tell me the result when you're done.
 - **Recommended: start with the App (Mac / Windows / Linux)** → [next section](#recommended-start-with-the-app-mac--windows--linux). Download it, open it, and one click gives you your own Hub. Claude Code and Codex sessions on this computer join with one click. No commands to type.
 - **Machines without a desktop (servers, cloud agents): join links** → [section 0](#0-the-simplest-way-join-links). Paste one command.
 - **Server (Hub)**: deploy it once, on a Linux machine with a public IP → [section 1](#1-server-deploy-the-hub). No VPS? Run it on your own computer and expose it with Cloudflare or Tailscale → [section 1.1](#11-no-vps-run-the-hub-on-your-own-computer)
@@ -21,18 +21,20 @@ In this guide, `<HUB_URL>` is the Hub's address, for example `https://1-2-3-4.ss
 > - Check the exit code of every command (see [section 6](#6-command-reference)). On an error, follow the `suggestion` in the JSON error. Do not guess.
 > - If you are unsure of something (for example, you can't find the session ID), report that plainly. **Do not make things up.**
 
+The optional **Web automation** application uses a dedicated local Chrome profile (Windows falls back to Edge). Open it in the desktop App and choose **Install browser component**; the App asks before downloading the separate, SHA256-verified component. It never uses your everyday Chrome profile or downloads a browser. See [browser component setup and limits](docs/browser-component.md).
+
 ---
 
 ## Recommended: start with the App (Mac / Windows / Linux)
 
 Most people start with the App: no server to deploy, no commands to remember.
 
-1. **Download** ([latest release](https://github.com/chenhg5/myco/releases/latest)):
+1. **Download** ([latest release](https://github.com/myco-ai/myco/releases/latest)):
    - **Mac**: `myco.dmg` (universal for Apple silicon and Intel, signed and notarized by Apple). Open it and drag the app into "Applications".
    - **Windows (preview)**: `myco-app-windows-amd64.exe` (`-arm64` for ARM computers). Download and run it. It is not code-signed yet; when SmartScreen warns you, click "More info → Run anyway".
    - **Linux**: `myco-app-linux-amd64` (`-arm64` for ARM). The App opens in your default browser and works on X11 and Wayland. After the first run, myco is in your "Applications" menu:
      ```bash
-     mkdir -p ~/.local/bin && curl -fL -o ~/.local/bin/myco-app https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-amd64 && chmod +x ~/.local/bin/myco-app && ~/.local/bin/myco-app
+     mkdir -p ~/.local/bin && curl -fL -o ~/.local/bin/myco-app https://github.com/myco-ai/myco/releases/latest/download/myco-app-linux-amd64 && chmod +x ~/.local/bin/myco-app && ~/.local/bin/myco-app
      ```
 2. **The first time you open it**, choose one:
    - **Start on this computer**: one click starts a Hub on this computer, and this computer joins as the first machine.
@@ -62,7 +64,7 @@ curl -fsSL <join link> | bash
 ```
 It installs or upgrades myco (checking SHA256) → registers this machine (the credential is stored in `~/.myco/machine.yaml`, readable only by you) → installs the background runner service. You can run it again; running it again on the same machine does not use up the link. Agents on this machine automatically get the label `machine=<machine name>`.
 
-**Native Windows**: install in PowerShell with `irm https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.ps1 | iex` (it installs to `%LOCALAPPDATA%\Programs\myco` and adds that to your user PATH). In Git Bash, the `curl … | bash` line above also works (Claude Code on Windows runs commands in Git Bash). Join links work in both: in Git Bash use `curl -fsSL <link> | bash`, in PowerShell use `irm '<link>?format=ps1' | iex`. The background runner uses the current user's login startup entry (`HKCU\…\Run`, no admin rights needed): it starts in the background right after install, and then at every login. `myco runner service status/restart/uninstall` work as usual, and the log is at `%USERPROFILE%\.myco\runner.log`. On Windows, exec nodes and shell nodes run commands in PowerShell by default (write commands in PowerShell syntax).
+**Native Windows**: install in PowerShell with `irm https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-client.ps1 | iex` (it installs to `%LOCALAPPDATA%\Programs\myco` and adds that to your user PATH). In Git Bash, the `curl … | bash` line above also works (Claude Code on Windows runs commands in Git Bash). Join links work in both: in Git Bash use `curl -fsSL <link> | bash`, in PowerShell use `irm '<link>?format=ps1' | iex`. The background runner uses the current user's login startup entry (`HKCU\…\Run`, no admin rights needed): it starts in the background right after install, and then at every login. `myco runner service status/restart/uninstall` work as usual, and the log is at `%USERPROFILE%\.myco\runner.log`. On Windows, exec nodes and shell nodes run commands in PowerShell by default (write commands in PowerShell syntax).
 
 **In each AI session**: in a Claude Code or Codex session, say "Join myco: <join link>". Or, on a machine that is already registered, run:
 ```bash
@@ -96,7 +98,7 @@ The link is a key: anyone who has it can add machines. Do not post it anywhere p
 **Requirements**: a Linux server with systemd and root access.
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-hub.sh
+curl -fsSLO https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-hub.sh
 less install-hub.sh                      # read it before you run it
 sudo bash install-hub.sh                 # asks which method to use
 ```
@@ -285,7 +287,7 @@ Push delivery modes (`webhook`, `claude_routine`, `github_dispatch`, `github_iss
 myco is a single binary with no dependencies. One command installs or upgrades it: it detects your OS and architecture, checks SHA256, installs into the directory of your existing myco (or `~/.local/bin` if there is none), and finishes by running `myco doctor --all`.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.sh | bash
+curl -fsSL https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-client.sh | bash
 ```
 
 You can also install by hand:
@@ -294,7 +296,7 @@ You can also install by hand:
 # Pick for your system: linux-amd64 | linux-arm64 | darwin-arm64 (Apple silicon) | darwin-amd64
 OS=$(uname -s | tr A-Z a-z); ARCH=$(uname -m); [ "$ARCH" = x86_64 ] && ARCH=amd64; [ "$ARCH" = aarch64 ] && ARCH=arm64
 mkdir -p ~/.local/bin
-curl -fsSL "https://github.com/chenhg5/myco/releases/latest/download/myco-$OS-$ARCH" -o ~/.local/bin/myco
+curl -fsSL "https://github.com/myco-ai/myco/releases/latest/download/myco-$OS-$ARCH" -o ~/.local/bin/myco
 chmod +x ~/.local/bin/myco
 myco version
 ```
@@ -330,7 +332,7 @@ In myco, **an agent is one specific session** (a session of some harness, in som
 
 A person sets up the environment once (session title bar → cloud environment → Edit):
 - Environment variables: `MYCO_HUB`, `MYCO_ENROLL_TOKEN` (the one created with `--harness claude-cloud`)
-- Add one line to the setup script: `curl -fsSL https://github.com/chenhg5/myco/releases/latest/download/myco-linux-amd64 -o /usr/local/bin/myco && chmod +x /usr/local/bin/myco`
+- Add one line to the setup script: `curl -fsSL https://github.com/myco-ai/myco/releases/latest/download/myco-linux-amd64 -o /usr/local/bin/myco && chmod +x /usr/local/bin/myco`
 - If network access is Limited, add the Hub's domain to Allowed domains
 
 The agent runs this in the session:
@@ -456,7 +458,7 @@ myco runner start --all                       # runs in the foreground; newly en
 myco runner start --all --max-concurrent 2    # run at most 2 CLIs at the same time
 ```
 
-The default is 3 at once (`myco runner service install --max-concurrent <n>` changes it for the service). A task for an agent whose CLI can't start yet waits its turn; the agent stays online while it waits. If several agents on one computer work on long tasks, raise the number so the others are not kept waiting (a waiting task shows as "starting" in the App). Command nodes and the computer's own node (upgrades, starting agents) don't count toward it and never wait.
+The default is 3 at once (`myco runner service install --max-concurrent <n>` changes it for the service). A task for an agent whose CLI can't start yet waits its turn; the agent stays online while it waits. The App shows waiting tasks as “Queued: this computer has 3/3 slots in use, position 2”; computer details show the shared limit and waiting count. Increase the limit if the computer can handle more long tasks. Workspaces (including separate `/w/` URLs on one Hub) share free slots fairly: a waiting workspace with no running task gets priority, then admission rotates between waiting workspaces, keeping FIFO order within each. Running tasks are not interrupted; with fewer slots than active workspaces, they take turns as slots become free. One workspace can use all idle slots when no others are waiting. Queue positions are current admission estimates and may change as workspaces join or tasks end. Counts cover this runner process, not other independently started runners. New runner, Hub and App versions are needed for queue visibility; older Hubs continue to accept runtime reports without the optional slot fields. Command nodes and the computer's own node (upgrades, starting agents) don't count toward it and never wait.
 
 **Run it in the background for good (recommended)**: one command installs it as a system service that starts at boot or login and restarts if it crashes. It uses launchd on macOS and a systemd user service on Linux:
 ```bash
@@ -1044,6 +1046,8 @@ myco upgrade --version v0.16.5        # install a specific version (also works f
 ```
 - It downloads the release file for your OS and architecture and checks it against the release's `SHA256SUMS`. If the check fails, nothing is changed. The replacement is atomic.
 - When run inside an agent's turn (a session woken by the runner), it only replaces the binary and doesn't restart services, so the turn doesn't interrupt itself. It tells you to run `myco runner service restart` later.
+- Runner restarts cancel current work promptly rather than waiting up to ten minutes. Cleanup is bounded to 20 seconds, with a 30-second service stop limit (Windows requests graceful shutdown, then force-stops after 25 seconds). Interrupted agent tasks are recovered once after restart; interrupted command-node tasks are not replayed because their commands may have run in part. Completed results saved locally are delivered without rerunning the task.
+- Before a managed restart, nodes and computers briefly show **Updating**. A new runner clears this automatically; if it never returns, the update indication expires after 90 seconds. Older Hubs remain usable, with a best-effort status fallback. Reinstalling an older service preserves its arguments and environment while updating the stop policy.
 - To skip restarting services: add `--no-restart`.
 - The Hub and each machine are upgraded separately: on the Hub's machine run `sudo myco upgrade` (or `myco upgrade` if it was started with `hub up`), and on each machine run `myco upgrade`. Versions before v0.16.6 don't have this command yet; the first time, upgrade with the original install script.
 - **Upgrading in the App** (since v0.20.29, no terminal needed):
@@ -1077,7 +1081,7 @@ On a new server after the old one is lost: install the Hub with `install-hub.sh`
 
 One App (a window on Mac and Windows; opens in the browser on Linux) manages several Hubs at once: see all nodes and machines, rename, change allow-from, kick off, delete, start new sessions on machines (add nodes), make join commands (add machines), and start a local Hub right on this Mac.
 
-- **Download** ([latest release](https://github.com/chenhg5/myco/releases/latest)):
+- **Download** ([latest release](https://github.com/myco-ai/myco/releases/latest)):
   - Mac: `myco.dmg`, one package for both Apple silicon and Intel, signed with a Developer ID and notarized by Apple. Double-click to open it and drag the app into "Applications". Later, update in one click under "Settings → About" in the App.
   - Windows (preview): `myco-app-windows-amd64.exe` (`-arm64` for ARM computers). Download and run it. It isn't code-signed yet, so SmartScreen warns you on the first run; click "More info → Run anyway". Since v0.18.6 it can update in one click under "Settings → About": it replaces the running exe and reopens it (a download cut off midway resumes; if the new version does not start, for example because an antivirus blocks it, the current one is put back and keeps running), and also upgrades the myco command-line tool on this computer (v0.18.5 and earlier need one manual download of the new version). `myco://` links are not supported yet. The myco command-line tool the App uses can be installed under "Settings → Hub".
     - **The window stays black**: usually Windows' WebView2 component (the part that draws the window's contents) can't start on this computer (for example, WebView2 157 in a Remote Desktop session with Defender on, where its sandbox fails to start and keeps crashing). Since v0.21.4, if the window shows nothing after 25 seconds, the App shows a dialog: "Yes" opens myco in your browser (it works as usual); "No" restarts in compatibility mode (turns off the WebView2 sandbox for myco only, recorded in `%APPDATA%\myco\app-compat`; delete that file to undo). Don't use the user-level `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` environment variable: it affects every program on this computer that uses WebView2.
@@ -1089,6 +1093,8 @@ One App (a window on Mac and Windows; opens in the browser on Linux) manages sev
     - **Local Hub**: on machines without `systemd --user` (some WSL, containers), the App runs the local Hub itself. The runner can't be installed as a service there either, so run `myco runner start --all` in a terminal.
     - Not supported yet: voice and dictation (Mac only), `myco://` links (as on Windows, paste links into the App).
 - **Building it yourself**: on a Mac, `make app` produces `bin/myco.app` (needs Go and the Xcode command-line tools), and `scripts/mac-sign.sh` produces the signed, notarized universal build and DMG. For Windows, `GOOS=windows go build ./cmd/myco-app` is enough (no cgo needed); for Linux, `go build ./cmd/myco-app` likewise.
+
+Source builds need Python 3 to prepare the official apps pinned by `apps.lock.json`. Run `make build` (CLI/Hub) or `make app` (macOS); before a direct Windows/Linux desktop Go build, run `make prepare-apps`. To build offline, populate the verified cache first, then use `make build APPS_PREPARE_FLAGS=--offline`. See [building from source](docs/building.md) for local artifacts, pin updates and tests.
 - **The first time you open it**: two choices.
   - **Start on this computer**: one click starts a Hub on this computer (by default reachable only from this computer and the local network). The App connects to it automatically, and this computer joins as the first machine, so you can start new sessions on it right away. If you started a local Hub before but this computer isn't on the "Machines" page yet, the App adds it when it opens (since v0.18.11; it doesn't restart a running runner). If the local workspace or runner service is installed but stopped (other than by clicking "Stop" in the App, which removes the service), the App notices and restarts it with the original settings. When you update the App, the myco command line on this computer is upgraded too (the background service switches to the new version on its next restart; click "Fix it" in the add agent dialog to restart it right away).
   - **Connect to an existing Hub**: paste an **App connect link** (`https://<hub>/c/<token>`, which carries both the Hub address and a console token). `install-hub.sh` prints one on first install; make more later on the Hub machine:
@@ -1116,7 +1122,7 @@ One App (a window on Mac and Windows; opens in the browser on Linux) manages sev
 - **Settings**: click the Hub switcher at the bottom of the sidebar and choose "Settings", or press ⌘, (Ctrl+, on Windows).
 - **Find anything**: press ⌘K (Ctrl+K on Windows) or click "Search" at the top of the sidebar to find members, projects and computers in all workspaces, and messages in your own conversations. Inside a conversation, ⌘F searches only that conversation.
 - **Keyboard shortcuts**: press ⌘/ (Ctrl+/ on Windows) or see all of them under "Settings › Keyboard shortcuts" (they can't be customized yet). Common ones: ⌥↑ / ⌥↓ switch to the previous / next conversation in the sidebar, ⌘N creates a project, ⌘\ collapses the sidebar, ⌘U adds a file, ⌘= / ⌘- / ⌘0 change the text size, ⌘⇧L switches between light and dark.
-- **Voice chat** (Mac App, since v0.19.11): in a conversation with an agent, when the input box is empty, click the round button (waveform icon) to its right to talk with the agent as if on a phone call (like voice in ChatGPT and Claude; one per conversation). What you say is recognized by Apple's speech recognition (on the device when possible), and a fast text model reads the conversation and talks with you. Ask about progress and it answers itself. Ask for something to be done and it passes it straight to this agent (added to the current work if the agent has some, otherwise sent as a new task, the same as pressing Enter, with no confirmation). That message in the conversation carries a "By voice" mark, and hovering shows your original words. When the agent replies or asks you something, it picks a quiet moment to tell you in a sentence or two; for long ones it says it's in the conversation. When it's talking and you start speaking, it stops and listens. Recording uses the system's voice processing (echo cancellation, noise reduction, automatic gain). The voice bar sits above the input box, with mute and hang up. Switching to another conversation or page doesn't hang up: the call moves into a small pill at the right of the top bar; click the name to go back to that conversation. Only one call at a time; starting voice with another agent hangs up the first. This button appears only after you set it up under Settings › Voice: the model for voice (any OpenAI-compatible API; if left empty, the one in "Translation" is used) and speech synthesis (choose a service; currently there is Doubao Speech: enable speech synthesis under "Doubao Speech" in the Volcano Engine console, create an API key and enter it; choose a voice from the list, grouped by language, and click "Try it" to hear a sentence first; for a cloned voice choose "Other" and enter the ID starting with S_). The key is stored in the system keychain on this computer. These settings follow the person: by default they are saved, key included, to the workspaces you're connected to (Hub, since v0.19.15), so your phone and other computers don't need them entered again, and the latest change wins. The bottom of the settings page lists which workspaces they are saved to; turn it off there if you don't want the key to leave this computer (the admin of the machine the Hub runs on can read its database). Small talk on the voice bar stays only on this computer, and recordings are not saved.
+- **Voice chat** (Mac App, since v0.19.11): in a conversation with an agent, when the input box is empty, click the round button (waveform icon) to its right to talk with the agent as if on a phone call (like voice in ChatGPT and Claude; one per conversation). What you say is recognized by Apple's speech recognition (on the device when possible), and it is the agent itself who answers: a fast text model reads the conversation and talks with you as the agent, in the first person ("I'll fix that", "let me check"). Once connected, it says hello first. Ask about progress and it answers. Ask for something to be done and it takes it on (added to the current work if it has some, otherwise started as a new task, the same as pressing Enter, with no confirmation). That message in the conversation carries a "By voice" mark, and hovering shows your original words. When it is done or has a question for you, it picks a quiet moment to tell you in a sentence or two; for long ones it says the rest is in the conversation. When it's talking and you start speaking, it stops and listens. Recording uses the system's voice processing (echo cancellation, noise reduction, automatic gain). The voice bar sits above the input box, with mute and hang up. Switching to another conversation or page doesn't hang up: the call moves into a small pill at the right of the top bar; click the name to go back to that conversation. Only one call at a time; starting voice with another agent hangs up the first. This button appears only after you set it up under Settings › Voice: the model for voice (any OpenAI-compatible API; if left empty, the one in "Translation" is used) and speech synthesis (choose a service; currently there is Doubao Speech: enable speech synthesis under "Doubao Speech" in the Volcano Engine console, create an API key and enter it; choose a voice from the list, grouped by language, and click "Try it" to hear a sentence first; for a cloned voice choose "Other" and enter the ID starting with S_). The key is stored in the system keychain on this computer. These settings follow the person: by default they are saved, key included, to the workspaces you're connected to (Hub, since v0.19.15), so your phone and other computers don't need them entered again, and the latest change wins. The bottom of the settings page lists which workspaces they are saved to; turn it off there if you don't want the key to leave this computer (the admin of the machine the Hub runs on can read its database). Small talk on the voice bar stays only on this computer, and recordings are not saved.
 - **Translation**: "Translate" next to the time of an agent's reply translates that message into the App's language. Settings › Translation can turn on "Translate automatically" (off by default: when on, messages to translate are sent to the translation service) and choose a service: DeepL, Google Translate, or an OpenAI-compatible API. All need an API key (until one is entered, there is no "Translate" next to messages). The key is stored in the system keychain and is never written to files or logs.
 - **Switching Hubs**: at the bottom of the sidebar, together with the connection status. You can see a summary of all Hubs, or just one.
 - The features above need a Hub on v0.17.0 or later.
@@ -1343,3 +1349,60 @@ Token numbers come from each CLI. Costs are present only when that CLI reports
 them: Claude Code uses Anthropic pricing, so figures for compatible proxies or
 other models are reference estimates, not invoices. Missing costs may appear as
 zero. Set `MYCO_NO_USAGE=1` in the runner/session environment to disable reporting.
+
+
+### Invite an agent as a project coordinator
+
+A coordinator can invite an AI session without asking a person to copy a workspace
+join link: `myco project invite-agent --name website --display-name Reviewer --note review --wait 10m`.
+Send the returned `Join myco: ...` sentence privately to the new session. Each link
+lasts 24 hours, admits one ordinary agent and automatically adds it to that project,
+owned by the project owner. It grants no member-management or invitation rights.
+
+Project details → Members has **Coordinators may invite agents to this project**,
+off by default. The project owner or an administrator can enable it. When off,
+each request produces an approval card and notification for the project owner;
+approving only permits that invitation. Without `--wait`, or after a timeout,
+resume with `myco project invite-agent --name website --request <id> --wait 10m`.
+The link is shown once; if lost, request a fresh invitation. Old Hubs/CLIs need
+upgrading. The new agent should save its own resume command for later recovery.
+
+
+### Let project coordinators schedule tasks
+
+Project details → Members → **Coordinator permissions** groups computer access,
+agent invitations and scheduling. Scheduling is off by default: creating, changing,
+pausing or deleting a task asks the project owner to approve that specific change.
+When enabled, coordinators can apply changes directly; tasks still belong to the
+project owner. Use your own agent credential with `myco automation create --project
+website --name "Release check" --to reviewer --body "Check release status" --cron
+"0 9 * * *" --tz Asia/Shanghai --starts 2026-11-26 --ends 2026-11-28` (one line).
+Targets must be ordinary project agent members, or enabled workflows owned by the
+project owner in this project. `--once` consumes the first execution attempt,
+including failure; busy skips do not count. Bounds accept RFC3339 or UTC dates,
+with a date-only end including that whole day. Bounds do not replace a schedule.
+The App editor uses local times and lists the active dates, one-shot setting and
+disabled reason. Upgrade older Hubs to use these fields.
+
+### Project storage limits
+
+Inline text documents (up to 64 KiB, read with the project by agents) keep their own 100-document limit. Other files (images, videos, archives and larger text files) default to 1,000 per project. All project file content together defaults to **2 GiB of logical bytes**, including inline text; each file remains limited to **20 MiB**. Existing files are retained and recounted automatically on upgrade.
+
+Set Hub defaults in its service environment (server installations use `/etc/myco/hub.env`; restart the service afterward), or pass the corresponding `myco hub serve` flags:
+
+| Environment variable | Flag | Default |
+| --- | --- | --- |
+| `MYCO_PROJECT_FILES_MAX` | `--project-files-max` | `1000` |
+| `MYCO_PROJECT_BYTES_MAX` | `--project-bytes-max` | `2147483648` (2 GiB) |
+| `MYCO_DISK_MIN_FREE_BYTES` | `--disk-min-free-bytes` | `2147483648` (2 GiB) |
+| `MYCO_DISK_MIN_FREE_PERCENT` | `--disk-min-free-percent` | `5` |
+
+Workspace owners and admins can change individual projects under **Settings → Workspaces → Project storage**, or restore the workspace defaults there. Project owners and agents cannot raise quotas. Hard protection caps are 10,000 files and 20 GiB per project. `myco project show --name <project>` reports current usage. The Hub refuses project uploads if the pending write would leave less than the larger of the configured absolute disk reserve and percentage reserve, checking both database and file-storage volumes; free space on the Hub and retry. Disk checks use space available to the server process. Lowering limits never removes files; reading and deletion remain available.
+
+Page-owned files are separate from project documents. Each static page defaults to
+1000 files / 2 GiB total, with a fixed 20 MiB per-file limit. Configure the Hub with
+`MYCO_PAGE_FILES_MAX` (`--page-files-max`, maximum 10000) and
+`MYCO_PAGE_BYTES_MAX` (`--page-bytes-max`, maximum 21474836480). Project upload disk
+reserves also protect page uploads. Page files follow page permissions and are
+removed with the page; they never enter project pull or agent project context.
+See [the page file API](docs/api.md#page-owned-files) for migration and CLI commands.

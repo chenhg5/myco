@@ -1,5 +1,8 @@
 # Reader
 
+Application source paths and Node test commands below refer to the separate [myco-ai/apps](https://github.com/myco-ai/apps) checkout. Host bridge implementation remains in myco-ai/myco.
+
+
 Reader is a personal bookshelf for PDF and TXT files. Add the official Reader
 app, then choose **Import books**, or drop files onto the shelf. The optional
 sample shelf contains three original short essays, so you can try reading

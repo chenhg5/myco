@@ -38,7 +38,9 @@ const (
 //   - only with pull delivery (no URLs/secrets the hub would call);
 //   - recover only agents that were created through the same enrollment.
 type Enrollment struct {
-	ID           string
+	ID string
+	// InvitationID restricts this credential to one ordinary project agent.
+	InvitationID string
 	TokenHash    string
 	NamePrefix   string
 	Harness      string
@@ -234,7 +236,7 @@ func ParseMachineName(s string) (string, error) {
 	}
 	if out == "" {
 		return "", Errf(CodeInvalidArgument, "invalid machine name %q", s).
-			WithSuggestion("pass --machine with letters and digits, e.g. --machine glenn-mac")
+			WithSuggestion("pass --machine with letters and digits, e.g. --machine alice-mac")
 	}
 	return out, nil
 }

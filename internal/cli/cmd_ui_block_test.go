@@ -6,9 +6,68 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/myco-ai/myco/internal/uispec"
+	"github.com/myco-ai/myco/skill"
 )
 
 const goodBlock = `{"type":"Card","props":{"title":"Release"},"children":[{"type":"Metric","props":{"label":"Tests","value":"412"}}]}`
+
+func TestSessionUIHintExampleValid(t *testing.T) {
+	_, rest, found := strings.Cut(skill.StructuredUIHint, "Example ui.json: `")
+	example, _, closed := strings.Cut(rest, "`")
+	if !found || !closed {
+		t.Fatal("session hint lacks its minimal JSON example")
+	}
+	if _, problems := uispec.Check([]byte(example)); len(problems) > 0 {
+		t.Fatalf("session hint example is invalid: %v", problems)
+	}
+}
+
+func TestMessageUIHelpExamplesValidate(t *testing.T) {
+	h := &harnessT{t, map[string]string{"MYCO_CONFIG": filepath.Join(t.TempDir(), "c.yaml")}}
+	for _, name := range []string{"reply", "progress"} {
+		code, out, e := h.run("message", name, "--help")
+		if code != 0 {
+			t.Fatalf("%s help: %d %s", name, code, e)
+		}
+		found := false
+		for _, line := range strings.Split(out, "\n") {
+			_, example, ok := strings.Cut(line, ".json: ")
+			if !ok {
+				continue
+			}
+			found = true
+			if _, problems := uispec.Check([]byte(example)); len(problems) > 0 {
+				t.Errorf("%s example is invalid: %v", name, problems)
+			}
+		}
+		if !found || !strings.Contains(out, "--ui") {
+			t.Errorf("%s help lacks a --ui example with its JSON", name)
+		}
+	}
+}
+
+func TestUICheckExplainsJSONErrors(t *testing.T) {
+	h := &harnessT{t, map[string]string{"MYCO_CONFIG": filepath.Join(t.TempDir(), "c.yaml")}}
+	for _, tc := range []struct{ input, want string }{
+		{"```myco-ui\n{}\n```", "remove the opening and closing fence lines"},
+		{"{\n\"type\":\"Card\",\n}", "line 3, column 1"},
+	} {
+		file := filepath.Join(t.TempDir(), "ui.json")
+		if err := os.WriteFile(file, []byte(tc.input), 0600); err != nil {
+			t.Fatal(err)
+		}
+		code, _, output := h.run("ui", "check", "--file", file)
+		var ce Error
+		if code != ExitUsage || json.Unmarshal([]byte(output), &ce) != nil || !strings.Contains(ce.Message, tc.want) {
+			t.Fatalf("expected actionable JSON error %q: %d %s", tc.want, code, output)
+		}
+		if len(ce.Details) != 1 || !strings.Contains(ce.Details[0].Message, tc.want) || !strings.Contains(ce.Suggestion, "myco ui schema --format text") {
+			t.Fatalf("missing details or reference: %+v", ce)
+		}
+	}
+}
 
 func TestUISchema(t *testing.T) {
 	h := &harnessT{t, map[string]string{"MYCO_CONFIG": filepath.Join(t.TempDir(), "c.yaml")}}

@@ -18,12 +18,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/console"
-	"github.com/chenhg5/myco/internal/hubserver"
-	"github.com/chenhg5/myco/internal/osutil"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/console"
+	"github.com/myco-ai/myco/internal/hubserver"
+	"github.com/myco-ai/myco/internal/osutil"
 	"github.com/zalando/go-keyring"
 )
 
@@ -284,12 +284,12 @@ func TestKeychainRoundTrip(t *testing.T) {
 func TestBackendMachinesAndLinks(t *testing.T) {
 	r := newRig(t)
 	ctx := context.Background()
-	reg, err := r.admin.Register(ctx, api.RegisterRequest{Name: "mac-claude", Binding: api.Binding{Harness: "claude", Environment: "glenn-mac"}}, false)
+	reg, err := r.admin.Register(ctx, api.RegisterRequest{Name: "mac-claude", Binding: api.Binding{Harness: "claude", Environment: "alice-mac"}}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	wc, _ := client.New(r.hubURL, reg.Token)
-	if err := wc.ReportMachine(ctx, api.MachineReport{Fingerprint: strings.Repeat("ef", 16), Name: "glenn-mac", OS: "darwin"}); err != nil {
+	if err := wc.ReportMachine(ctx, api.MachineReport{Fingerprint: strings.Repeat("ef", 16), Name: "alice-mac", OS: "darwin"}); err != nil {
 		t.Fatal(err)
 	}
 	ms, err := r.admin.Machines(ctx)
@@ -302,7 +302,7 @@ func TestBackendMachinesAndLinks(t *testing.T) {
 	}
 	id := m["id"].(string)
 
-	if code, m, _ := r.do("PATCH", "/app/hubs/"+id+"/machines/"+ms[0].ID, map[string]string{"name": "Glenn 的 Mac"}); code != 200 || m["name"] != "Glenn 的 Mac" {
+	if code, m, _ := r.do("PATCH", "/app/hubs/"+id+"/machines/"+ms[0].ID, map[string]string{"name": "Alice 的 Mac"}); code != 200 || m["name"] != "Alice 的 Mac" {
 		t.Fatalf("rename: %d %v", code, m)
 	}
 	// No machine node on it: the hub's reason and suggestion come through.

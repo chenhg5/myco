@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/chenhg5/myco/internal/app"
+	"github.com/myco-ai/myco/internal/app"
 )
 
 // ParseAppLink reads an app link — https://<hub>/c/<console token>, or

@@ -1,37 +1,22 @@
-// Package templates holds myco's official templates (templates.md): pages
-// the hub offers in every workspace's library, made with the same parts as
-// anyone's (myco.json, the page, agent.md, sample.json). Their sources are
-// in templates/ (React, bundled with Vite: make templates), built into
-// official/.
-//
-// The binary carries only the Builtin ones, compressed (builtin.zip, made
-// from official/ by make templates): a hub fetches all of them from the
-// "apps" release (Catalog) and keeps what it fetched, so the rest only
-// wait for its first fetch. Carrying all of them made every download of
-// myco (and the Mac app, twice) 40 MB bigger.
+// Package templates loads official apps from verified release bundles.
+// Sources, the page SDK and app tests live in github.com/myco-ai/apps.
+// Production builds prepare a locked builtin.zip and generated embed file;
+// unprepared developer builds have no bundled apps and may fetch the catalog.
 package templates
 
 import (
-	"archive/zip"
-	"bytes"
-	"compress/flate"
-	_ "embed"
 	"fmt"
-	"io"
 	"io/fs"
-	"path"
 	"sort"
 
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
-// Builtin are the official apps the binary carries: the everyday ones, so
-// a new hub that cannot reach GitHub still has a useful library.
-var Builtin = []string{"table", "base", "doc", "slides", "meeting", "scheduling", "issues", "todo", "notes", "whiteboard", "mindmap"}
-
-//go:embed builtin.zip
+// builtinZip is populated only by the ignored generated production embed file.
+// Test fixtures are loaded explicitly through hub options, never embedded here.
 var builtinZip []byte
+var bundledVersion string
 
 // Order is how the library lists the apps it knows within a shelf (as a
 // person would reach for them); shelves come first (domain.TemplateCategories).
@@ -40,7 +25,7 @@ var Order = []string{
 	"myco/database", "myco/code", "myco/issues", "myco/devtools",
 	"myco/todo", "myco/notes", "myco/disk", "myco/stocks", "myco/proxy-console", "myco/server-console", "myco/remote-desktop",
 	"myco/ledger", "myco/habit", "myco/reader", "myco/price-compare", "myco/cinema", "myco/podcast", "myco/personality",
-	"myco/palette", "myco/aigc-canvas", "myco/design-studio", "myco/logo-studio", "myco/whiteboard", "myco/mindmap", "myco/recorder", "myco/video", "myco/motion", "myco/photo",
+	"myco/palette", "myco/aigc-canvas", "myco/design-studio", "myco/logo-studio", "myco/whiteboard", "myco/mindmap", "myco/recorder", "myco/video", "myco/motion", "myco/photo", "myco/media-kit",
 	"myco/arcade", "myco/ocean", "myco/gomoku", "myco/sudoku",
 }
 
@@ -53,8 +38,11 @@ func rank(id string) int {
 	return len(Order)
 }
 
-// Official returns the official templates the binary carries (Builtin).
+// Official returns the official templates the binary carries, or none in an unprepared checkout.
 func Official() ([]app.OfficialTemplate, error) {
+	if len(builtinZip) == 0 {
+		return nil, nil
+	}
 	out, err := (&Catalog{}).read(builtinZip)
 	if err != nil {
 		return nil, err
@@ -64,7 +52,7 @@ func Official() ([]app.OfficialTemplate, error) {
 }
 
 // FromDir reads official templates from a folder holding one folder an app
-// (official/ in the source tree): every one, for checks and tools.
+// (for example, dist/official in the apps repository), for checks and tools.
 func FromDir(fsys fs.FS) ([]app.OfficialTemplate, error) {
 	entries, err := fs.ReadDir(fsys, ".")
 	if err != nil {
@@ -100,52 +88,6 @@ func FromDir(fsys fs.FS) ([]app.OfficialTemplate, error) {
 	}
 	sortOfficial(out)
 	return out, nil
-}
-
-// PackBuiltin makes builtin.zip from official/ (fsys): the Builtin apps,
-// one folder each as in the "apps" release, compressed as far as deflate
-// goes, and the same bytes for the same files (sorted, no times), so the
-// committed archive changes only when an app does.
-func PackBuiltin(fsys fs.FS) ([]byte, error) {
-	var names []string
-	for _, a := range Builtin {
-		if _, err := fs.Stat(fsys, path.Join(a, "myco.json")); err != nil {
-			return nil, fmt.Errorf("builtin app %s: %w", a, err)
-		}
-		err := fs.WalkDir(fsys, a, func(p string, d fs.DirEntry, err error) error {
-			if err != nil || d.IsDir() || path.Base(p)[0] == '.' {
-				return err
-			}
-			names = append(names, p)
-			return nil
-		})
-		if err != nil {
-			return nil, err
-		}
-	}
-	sort.Strings(names)
-	var buf bytes.Buffer
-	w := zip.NewWriter(&buf)
-	w.RegisterCompressor(zip.Deflate, func(out io.Writer) (io.WriteCloser, error) {
-		return flate.NewWriter(out, flate.BestCompression)
-	})
-	for _, n := range names {
-		b, err := fs.ReadFile(fsys, n)
-		if err != nil {
-			return nil, err
-		}
-		f, err := w.CreateHeader(&zip.FileHeader{Name: n, Method: zip.Deflate})
-		if err != nil {
-			return nil, err
-		}
-		if _, err := f.Write(b); err != nil {
-			return nil, err
-		}
-	}
-	if err := w.Close(); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
 }
 
 // sortOfficial puts them in the library's order: by shelf, then as Order

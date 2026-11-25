@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // The App renders shared pages for agents (page.export, api/actions.go):
@@ -167,7 +167,23 @@ func (b *Backend) pageRenderRoutes(m *http.ServeMux) {
 		if rid := q.Get("id"); rid != "" {
 			v, err = j.c.PageRecord(j.ctx, j.PageID, q.Get("collection"), rid)
 		} else {
-			v, err = j.c.PageRecords(j.ctx, j.PageID, q.Get("collection"))
+			if api.HasPageQuery(q) {
+				var in api.PageQuery
+				in, err = api.ParsePageQuery(q)
+				if err != nil {
+					writeErr(w, &client.Error{Status: 400, Code: "invalid_argument", Message: err.Error()})
+					return
+				}
+				var result *api.PageRecords
+				result, err = j.c.QueryPageRecords(j.ctx, j.PageID, q.Get("collection"), in)
+				if result != nil && result.Count != nil {
+					v = api.PageRecordCount{Count: *result.Count, Seq: result.Seq, QueryVersion: result.QueryVersion}
+				} else {
+					v = result
+				}
+			} else {
+				v, err = j.c.PageRecords(j.ctx, j.PageID, q.Get("collection"))
+			}
 		}
 		if err != nil {
 			writeErr(w, err)

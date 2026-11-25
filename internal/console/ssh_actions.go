@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/sshcap"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/sshcap"
 )
 
 var sshActionList = func() []api.ActionDescriptor {
@@ -69,9 +69,26 @@ func (b *Backend) hostSSH(ctx context.Context, h Hub, p sshcap.Profile) time.Dur
 	if err != nil {
 		return 5 * time.Minute
 	} // old hubs fail closed: no unscoped fallback
+	return pollSSHHost(ctx, c, host, p, m, h.ID)
+}
+
+func pollSSHHost(ctx context.Context, c *client.Client, host *api.ActionHost, p sshcap.Profile, m *sshcap.Manager, hub string) time.Duration {
+	policyChanged := false
+	defer func() {
+		// Retaking after a transient poll error must preserve existing grants.
+		if !policyChanged && ctx.Err() == nil {
+			return
+		}
+		// The loop's context is already cancelled on opt-out: withdrawal needs a
+		// short independent context. Native execution has stopped/refuses first.
+		end, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = c.UnregisterActionHost(end, host.ID, host.Generation)
+	}()
 	for ctx.Err() == nil {
 		current, err := m.Get(p.ID)
-		if err != nil || !current.AgentEnabled || current.AgentHub != h.ID || current.Binding != p.Binding {
+		if err != nil || !current.AgentEnabled || current.AgentHub != hub || current.Binding != p.Binding {
+			policyChanged = true
 			break
 		}
 		jobs, err := c.ActionHostJobs(ctx, host.ID, actionHostPoll)
@@ -82,7 +99,7 @@ func (b *Backend) hostSSH(ctx context.Context, h Hub, p sshcap.Profile) time.Dur
 			return actionHostRetake
 		}
 		for _, j := range jobs {
-			done := runSSHJob(ctx, c, host, j, m, h.ID)
+			done := runSSHJob(ctx, c, host, j, m, hub)
 			done.HostID, done.Generation = host.ID, host.Generation
 			end, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 			_, _ = c.CompleteActionJob(end, j.Job.ID, done)

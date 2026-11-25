@@ -3,10 +3,12 @@ package service
 import (
 	"fmt"
 	"html"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Launchd manages a per-user LaunchAgent on macOS.
@@ -31,6 +33,10 @@ func (l *Launchd) service() string { return l.domain() + "/" + l.label() }
 // Plist renders the LaunchAgent definition.
 func (l *Launchd) Plist(s Spec) string {
 	x := html.EscapeString
+	stop := "600"
+	if l.ID.orDefault() == RunnerID {
+		stop = "30"
+	}
 	var b strings.Builder
 	b.WriteString(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -50,7 +56,7 @@ func (l *Launchd) Plist(s Spec) string {
 	b.WriteString(`  </dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
-  <key>ExitTimeOut</key><integer>600</integer>
+  <key>ExitTimeOut</key><integer>` + stop + `</integer>
   <key>StandardOutPath</key><string>` + x(s.LogPath) + `</string>
   <key>StandardErrorPath</key><string>` + x(s.LogPath) + `</string>
 </dict>
@@ -60,13 +66,18 @@ func (l *Launchd) Plist(s Spec) string {
 }
 
 func (l *Launchd) PlanInstall(s Spec) (Plan, error) {
+	commands := [][]string{{"-launchctl", "bootout", l.service()}, {"launchctl", "bootstrap", l.domain(), l.file()}}
+	// A loaded legacy job keeps its old 600s timeout even after its plist
+	// is rewritten. Terminate that generation before bootout, once only.
+	if l.ID.orDefault() == RunnerID {
+		if b, err := os.ReadFile(l.file()); err == nil && strings.Contains(string(b), "<integer>600</integer>") {
+			commands = append([][]string{{"-launchctl", "kill", "SIGKILL", l.service()}}, commands...)
+		}
+	}
 	return Plan{
 		Manager: l.Name(), File: l.file(), Content: l.Plist(s),
-		Commands: [][]string{
-			{"-launchctl", "bootout", l.service()},
-			{"launchctl", "bootstrap", l.domain(), l.file()},
-		},
-		Notes: []string{"starts now and at every login; restarts automatically if it exits"},
+		Commands: commands,
+		Notes:    []string{"starts now and at every login; restarts automatically if it exits"},
 	}, nil
 }
 
@@ -104,6 +115,53 @@ func (l *Launchd) Start() error {
 }
 
 func (l *Launchd) Restart() error {
+	if l.ID.orDefault() == RunnerID {
+		// Request cancellation explicitly, rather than depending on -k's
+		// termination policy (or a loaded legacy plist's 600s timeout).
+		// Signals target the old PID, never a replacement that KeepAlive started.
+		before, err := l.Status()
+		if err != nil {
+			return err
+		}
+		if before.PID > 0 {
+			if _, err := l.R.Run("kill", "-TERM", strconv.Itoa(before.PID)); err != nil {
+				after, _ := l.Status()
+				if after.PID == before.PID {
+					return err
+				}
+				if after.PID > 0 {
+					return nil
+				}
+			}
+			deadline := time.Now().Add(launchdRestartGrace)
+			for time.Now().Before(deadline) {
+				after, _ := l.Status()
+				if after.PID > 0 && after.PID != before.PID {
+					return nil
+				}
+				if after.PID == 0 {
+					break
+				}
+				time.Sleep(launchdRestartPoll)
+			}
+			after, _ := l.Status()
+			if after.PID == before.PID {
+				if _, err := l.R.Run("kill", "-KILL", strconv.Itoa(before.PID)); err != nil {
+					after, _ := l.Status()
+					if after.PID == before.PID {
+						return err
+					}
+				}
+			}
+		}
+		_, err = l.R.Run("launchctl", "kickstart", l.service())
+		return err
+	}
 	_, err := l.R.Run("launchctl", "kickstart", "-k", l.service())
 	return err
 }
+
+var (
+	launchdRestartGrace = 25 * time.Second
+	launchdRestartPoll  = 100 * time.Millisecond
+)

@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // NoticeService keeps what each person should hear about (domain.Notice).

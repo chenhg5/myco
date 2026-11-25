@@ -1,5 +1,8 @@
 # 应用用这台电脑：`myco.os`
 
+Application source paths and Node test commands below refer to the separate [myco-ai/apps](https://github.com/myco-ai/apps) checkout. Host bridge implementation remains in myco-ai/myco.
+
+
 在 myco App 里打开的网页（应用、agent 做的网页），可以用 App 所在的这台电脑：
 
 - 看系统和磁盘；
@@ -13,9 +16,25 @@
 
 App 版本里有了这一项，桥的 `myco.features` 里会有 `"os"`。
 
-> **现在没有任何限制**：任何在 App 里打开的网页都能用这些能力，不会先问人。这一版先把能力做出来，授权和分级下一步再加。每次调用都记在 `~/.myco/logs/app-os.jsonl` 里（哪个网页、调了什么、结果怎样；参数仅记字节数，不记录内容）。
+> **先问人**（App v0.22.2 起）：网页第一次用某一组能力（见下表）时，App 会弹窗问：「不允许」「这次允许」「一直允许」。没问过之前，调用会先得到 `consent_required`，App 问完再替网页重试，网页看到的就是成功或者 `permission_denied`。
+> - 「一直允许」记在本机的 `~/.myco/app-grants.json`（按工作区和网页），设置 → 应用权限里能看到、能收回；「这次允许」到 App 退出为止。
+> - 允许只对网页当前的代码有效（App v0.22.11 起）：网页重新发布、或者它的应用升级以后，用到时重新问；「不允许」对所有版本都有效。之前存下的「一直允许」没有记版本，升级后会再问一次。
+> - `exec`（跑命令、结束进程、用别的程序打开文件）、`files.delete`、`screen` 只能「这次允许」。
+> - 人自己选的文件（`fs.pick`、`fs.saveAs` 给的路径，以及选的文件夹里面的）读写不用再问。
+> - 写剪贴板不用问。
+> - `net.fetch`：清单 `"net"` 里写了的域名，允许联网就能访问；没写的，一个一个问；清单写了 `"net"` 的应用，访问没写到的本机或局域网地址会被拒绝。
 >
-> **先在 myco.json 里声明**（Hub v0.22.1 起认得）：`"os"` 列出用到的能力组，`"net"` 列出要访问的域名。接下来的 App 会在第一次用某一组时问人，没声明的拒绝：
+> 每次调用都记在 `~/.myco/logs/app-os.jsonl` 里（哪个网页、调了什么、结果怎样；参数仅记字节数，不记录内容）。
+>
+> **在 myco.json 里声明**（Hub v0.22.1 起认得）：`"os"` 列出用到的能力组，`"net"` 列出要访问的域名。
+>
+> **没声明的直接拒绝**（Hub 和 App v0.22.9 起）：页面是从应用做出来的，而 Hub 说明了清单里的就是全部（页面的 `template.declares`），那么 `"os"` 里没有的能力组直接回 `permission_denied`，提示在 `myco.json` 的 `"os"` 里加上哪一组，不再问人。人自己选的文件也不例外：没声明 `files` 就不能用 `fs.pick`。`myco.send`、`myco.download` 同样：`"permissions"` 里没写就拒绝（桌面、iOS、Android 都一样）。
+> - 没有清单的普通页面（agent 直接发布的）没法声明，照旧每次问。
+> - 旧 Hub 不说 `declares`，App 照旧只提醒「这个应用没有声明要用这一项」。
+> - `net`：声明了 `network` 的应用，访问 `"net"` 里没写的公网域名仍然一个一个问（播客的订阅源、观影的片源、股票的网关都是用户自己填的，没法提前写进清单）；没写的本机和局域网地址直接拒绝。
+> - 官方应用的旧页面（v0.22.11 起）：官方应用补齐声明的版本（2026 年 11 月下旬发布）之前做出来的页面，存的还是旧清单（一个 `"os"` 都没写），Hub 对这种页面不说 `declares`，所以照旧问人，直到能管理它的人点「升级」换成新清单。官方应用的新版本和第三方应用一样，没声明就拒绝。
+>
+> 能力组：
 >
 > | 组 | 包括 |
 > | --- | --- |
@@ -465,3 +484,45 @@ in stored functions. MongoDB aggregation rejects `$out` and `$merge`.
 ## Disk usage accounting
 
 `system.disks` reports byte counts from the OS; displayed GB/GiB units do not change them. `fs.scan` keeps logical file length in `size` and allocated storage in `disk`. New Windows builds query allocation information, including compressed/sparse storage; older Windows builds approximate `disk` with logical length. Zero allocation is valid. Filesystem query failures may fall back to logical length. See [Disk usage and capacity units](disk.md) for system comparison limits and Space cleaner's local unit selector.
+
+## Page-owned files
+
+The optional desktop feature `"page-files"` provides `myco.pageFiles`. Check
+`(await myco.ready).pageFiles` as well: it is true only when both this desktop
+host and the current Hub support page attachments. Native iOS and Android bridges
+are separate capabilities and may not provide it.
+
+| Method | Result |
+| --- | --- |
+| `info()` | `{files_used, files_max, bytes_used, bytes_max, max_file_bytes}` |
+| `list({limit?, after?})` | `{attachments_version, attachments, usage, next?}` |
+| `put(collection, name, blob, {key?})` | Metadata including `file_id`, `size` and `sha256` |
+| `resolve(oldName)` | Metadata for a migrated legacy filename |
+| `get(file)` | Original bytes as a Blob |
+| `download(file)` | Saves the original in Downloads; returns true |
+| `remove(file)` | Removes an unreferenced original; returns true |
+
+`file` is an ID or an object containing `file_id`. The host always derives the
+page from the trusted open frame; a renderer cannot choose another page or project.
+Writes follow the named collection's permissions, and view-only frames cannot
+upload or remove files. Templates using the managed Downloads action must declare
+`"permissions": ["download"]`. Content proxies preserve Range requests, 206/416
+responses, and cancellation; downloads verify size and SHA256 before saving.
+
+Save the upload metadata in a declared `file` field within 24 hours. Unassociated
+uploads expire; associated originals survive application upgrades and page version
+rollback. Delete record references before removing the attachment. Files follow
+page permissions and are cleaned up with the page, and never enter project files,
+project pull or agent project context. Defaults are 1000 files / 2 GiB per page,
+20 MiB per file. Read actual limits from `info()`.
+
+### Legacy Media Kit compatibility
+
+The older scoped `myco.projectFiles` methods remain readable. On a new Hub, the
+desktop host redirects old uploads into page attachments, binds their old filenames,
+and returns page quota information. GET/download resolve migrated names first;
+not-yet-migrated originals can still read through the old project route. No legacy
+upload falls back to project storage. On old Hubs the new desktop host makes these
+pages view-only and shows an update notice. New apps must use `pageFiles`, not the
+legacy names. See [Page-owned files](api.md#page-owned-files) for HTTP migration,
+CLI commands, and Hub configuration.

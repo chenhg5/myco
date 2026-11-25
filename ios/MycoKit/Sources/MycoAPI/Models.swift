@@ -893,13 +893,35 @@ public struct PageTemplate: Codable, Sendable, Hashable {
     public var version: String?
     /// The app's newer version, when there is one (hubs from v0.20.7).
     public var latest: String?
+    /// What it declares it uses: "send", "download" (and the computer's
+    /// capabilities, in os).
+    public var permissions: [String]?
+    public var os: [String]?
+    /// Hubs from v0.22.9: permissions and os are all it declares, so what
+    /// they leave out is refused. Official: one of myco's own apps.
+    public var declares: Bool?
+    public var official: Bool?
 
-    public init(id: String? = nil, slug: String? = nil, name: String? = nil, version: String? = nil, latest: String? = nil) {
+    public init(
+        id: String? = nil, slug: String? = nil, name: String? = nil, version: String? = nil, latest: String? = nil,
+        permissions: [String]? = nil, os: [String]? = nil, declares: Bool? = nil, official: Bool? = nil
+    ) {
         self.id = id
         self.slug = slug
         self.name = name
         self.version = version
         self.latest = latest
+        self.permissions = permissions
+        self.os = os
+        self.declares = declares
+        self.official = official
+    }
+
+    /// Whether the app may use a permission ("send", "download"): from hubs
+    /// that say so, only what it declares. (Hubs do not say it for a page of
+    /// myco's own apps kept from before declarations, until it is upgraded.)
+    public func allows(_ permission: String) -> Bool {
+        declares != true || (permissions ?? []).contains(permission)
     }
 }
 

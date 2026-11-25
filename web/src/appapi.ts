@@ -1,5 +1,5 @@
 import type { UsageResponse } from "@/lib/usage";
-import type { Page, PageChanges, PageOpen, PageRecord, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Backup, Backups, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, MCPServer, ToolSkill, ToolPlugin, SuperagentState, Approval, ActionGrant, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, NoticeFeed, NoticePrefs, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
+import type { PageAttachment, PageAttachmentList, Page, PageChanges, PageOpen, PageRecord, PageRecordQuery, PageRecordList, PageRecordCount, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Backup, Backups, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, MCPServer, ToolSkill, ToolPlugin, SuperagentState, Approval, ActionGrant, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, NoticeFeed, NoticePrefs, Overview, Peer, RuntimeAccess, Whoami, Trace, Watch, WatchList } from "@/api";
 import { L } from "@/lib/i18n";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
@@ -10,6 +10,16 @@ export interface NoticeState {
   hubs: Record<string, { supported: boolean; badge: number; error?: string }>;
   badge: number;
 }
+/** The optional local browser component, without credentials or profile paths. */
+export interface BrowserProfileSettings { proxy: {server: string; bypass: string[]; username: string; has_password: boolean} | null; user_agent: string; lang: string; args: string[] }
+export interface BrowserProfileSettingsInput { proxy: {server: string; bypass: string[]; username: string; password?: string} | null; user_agent: string; lang: string; args: string[] }
+export interface BrowserProfile { kind?: "agent"; id: string; name: string; running: boolean; agents: boolean; settings?: BrowserProfileSettings }
+export interface BrowserRecording { id: string; profile: string; url: string; started_at: string; origin: "browser" | "page" }
+export interface BrowserStatus { features?: string[]; recordings?: BrowserRecording[]; update_available?: boolean; protocol: number; version: string; installed: boolean; supported: boolean; reason?: string; browsers: string[]; machine: string; profiles: BrowserProfile[] }
+
+export interface BrowserApproval { script_id: string; version: number; digest: string; profile: string; approved_at: string; name: string }
+export interface BrowserApprovalReview { script_id: string; version: number; profile: string; profile_name: string; name: string; digest: string; urls: string[]; code: {script: string; node: string; type: string; code: string}[]; children: string[]; script: unknown; scripts: Record<string, unknown> }
+
 export interface Hub {
   id: string;
   name: string;
@@ -31,6 +41,9 @@ export interface VoiceConfig {
   tts_speaker?: string;
   /** how fast it talks, -50..100 (0 = normal) */
   tts_rate?: number;
+  /** words speech recognition should listen for (calls and dictation), one
+   *  per line, optionally with how they are misheard: "Claude = 克劳德, cloud" */
+  words?: string[];
 }
 /** A speech service this App can speak with: the settings page draws these. */
 export interface VoiceTTSProvider {
@@ -125,6 +138,18 @@ export interface HubOverview {
 /** Said on window when an agent's profile was saved from this App. */
 export const AGENT_UPDATED = "myco-agent-updated";
 export interface AgentUpdated { hubId: string; agent: Agent }
+/** Said on window when a project was changed from this App (made, edited,
+ *  a member added or taken out): the project as the hub returned it, so
+ *  every list shows it at once instead of at the next refresh. */
+export const PROJECT_UPDATED = "myco-project-updated";
+export interface ProjectUpdated { hubId: string; project: Project }
+async function announced(hubId: string, made: Promise<Project>): Promise<Project> {
+  const project = await made;
+  if (project && typeof project === "object" && project.name) {
+    window.dispatchEvent(new CustomEvent<ProjectUpdated>(PROJECT_UPDATED, { detail: { hubId, project } }));
+  }
+  return project;
+}
 
 export interface AppOverview {
   generated_at: string;
@@ -299,8 +324,8 @@ export interface RecentItem {
   /** the newest task not finished yet: can be older than task (one stuck
    *  behind a newer task that finished). Hubs before v0.18.40 leave it out. */
   open?: Message;
-  /** queued | working | done | failed, or "" without a task */
-  state?: "queued" | "working" | "done" | "failed" | "";
+  /** queued | held | working | done | failed, or "" without a task */
+  state?: "queued" | "held" | "working" | "done" | "failed" | "";
   /** the project the thread belongs to */
   project?: string;
 }
@@ -350,7 +375,13 @@ export interface AppInfo {
   open_url?: boolean;
   /** the desktop app puts its window in full screen (PUT /app/window/fullscreen) */
   fullscreen?: boolean;
+  /** the desktop app opens a page in a window of its own (POST app/hubs/{id}/pages/{pid}/window) */
+  page_windows?: boolean;
+  /** the desktop app installs a page as an app (a launcher; macOS) */
+  install_apps?: boolean;
 }
+/** A page installed as an app on this computer. */
+export interface InstalledApp { hub: string; page: string; name: string; path: string; at: number }
 /** Everything the boot probe needs to decide the mode and lay out the shell. */
 export interface AppBootstrap { hubs: Hub[]; info: AppInfo }
 
@@ -421,6 +452,11 @@ export interface OsList {
 }
 /** The page that uses them (for the App's log). */
 export interface OsPage { hub: string; id: string; name: string }
+/** A page asking for a group of the computer's capabilities the person has not allowed (consent_required). */
+export interface OsConsent { group: string; host?: string; declared: boolean; once_only: boolean }
+export type OsAnswer = "once" | "always" | "deny";
+/** What the person allowed a page: always (kept), once (this run), denied, and hosts beyond its declared ones. */
+export interface OsGrantRow { hub: string; page: string; name?: string; always?: string[]; once?: string[]; denied?: string[]; hosts?: string[] }
 /** What a job (fs.scan, exec.spawn) sent since the last read, and its end. */
 export interface OsBatch {
   events: { n: number; type: string; data?: unknown }[] | null;
@@ -436,8 +472,12 @@ export class ApiError extends Error {
   status: number;
   /** what a conflict answers with (a page's latest state) */
   latest?: unknown;
+  /** consent_required: what to ask the person for (myco.os) */
+  consent?: OsConsent;
   code?: string;
   suggestion?: string;
+  /** Safe browser profile recovery reason, when available. */
+  reason?: string;
   constructor(message: string, status: number, code?: string, suggestion?: string) {
     super(message);
     this.name = "ApiError";
@@ -542,8 +582,8 @@ export interface ConnectJob {
  *  not cut short: some take minutes (a session starting, an upload). */
 const READ_TIMEOUT_MS = 60_000;
 
-async function request<T>(method: string, path: string, body?: unknown, signal?: AbortSignal, timeoutMs?: number): Promise<T> {
-  const headers: Record<string, string> = { Accept: "application/json" };
+async function request<T>(method: string, path: string, body?: unknown, signal?: AbortSignal, timeoutMs?: number, extraHeaders?: Record<string, string>): Promise<T> {
+  const headers: Record<string, string> = { Accept: "application/json", ...extraHeaders };
   const raw = body instanceof Blob;
   if (body !== undefined) headers["Content-Type"] = raw ? (body.type || "application/octet-stream") : "application/json";
   const limit = timeoutMs ?? (method === "GET" ? READ_TIMEOUT_MS : 0);
@@ -576,10 +616,11 @@ async function request<T>(method: string, path: string, body?: unknown, signal?:
   let data: unknown = null;
   try { data = text ? JSON.parse(text) : null; } catch { /* non-JSON */ }
   if (!r.ok) {
-    const e = (data ?? {}) as { error?: string; message?: string; suggestion?: string; latest?: unknown };
+    const e = (data ?? {}) as { error?: string; message?: string; suggestion?: string; latest?: unknown; reason?: string; group?: string; host?: string; declared?: boolean; once_only?: boolean };
     // A gateway's own page (no JSON) still says why: keep its first words for 详细信息.
     const page = data === null && r.status >= 500 ? text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 300) : "";
-    throw Object.assign(new ApiError(e.message || page || `HTTP ${r.status}`, r.status, typeof e.error === "string" ? e.error : undefined, e.suggestion), e.latest ? { latest: e.latest } : {});
+    throw Object.assign(new ApiError(e.message || page || `HTTP ${r.status}`, r.status, typeof e.error === "string" ? e.error : undefined, e.suggestion), e.latest ? { latest: e.latest } : {}, typeof e.reason === "string" ? { reason: e.reason } : {},
+      e.error === "consent_required" && e.group ? { consent: { group: e.group, host: e.host || undefined, declared: !!e.declared, once_only: !!e.once_only } } : {});
   }
   return data as T;
 }
@@ -631,10 +672,10 @@ export interface AppUpdate {
 export interface CacheStats { enabled: boolean; entries: number; bytes: number }
 
 export const appApi = {
-  usage: (hubId: string, range: { from: string; to: string; project?: string }) => {
+  usage: (hubId: string, range: { from: string; to: string; project?: string }, signal?: AbortSignal) => {
     const query = new URLSearchParams({ from: range.from, to: range.to });
     if (range.project) query.set("project", range.project);
-    return request<UsageResponse>("GET", `app/hubs/${enc(hubId)}/usage?${query}`);
+    return request<UsageResponse>("GET", `app/hubs/${enc(hubId)}/usage?${query}`, undefined, signal);
   },
   cacheStats: () => request<CacheStats>("GET", "app/cache/stats"),
   info: () => request<AppInfo>("GET", "app/info"),
@@ -718,7 +759,11 @@ export const appApi = {
     if (query.group) q.set("group", query.group);
     if (query.side) q.set("side", query.side);
     const qs = q.toString();
-    return request<RecentList>("GET", `app/hubs/${enc(hubId)}/recent${qs ? `?${qs}` : ""}`);
+    return request<RecentList>("GET", `app/hubs/${enc(hubId)}/recent${qs ? `?${qs}` : ""}`).then((result) => ({
+      ...result,
+      items: result.items.map((item): RecentItem =>
+        (item.open || item.task)?.status === "held" ? { ...item, state: "held" } : item),
+    }));
   },
   /** Sends a task from this console; without thread_id it starts a conversation. */
   sendMessage: (hubId: string, input: SendMessageInput) =>
@@ -776,25 +821,63 @@ export const appApi = {
   projects: (hubId: string) => request<{ projects: Project[] }>("GET", `app/hubs/${enc(hubId)}/projects`),
   project: (hubId: string, name: string, bodies = false) =>
     request<Project>("GET", `app/hubs/${enc(hubId)}/projects/${enc(name)}${bodies ? "?docs=body" : ""}`),
+  projectStorage: (hubId: string, name: string) => request<import("@/api").ProjectStorage>("GET", `app/hubs/${enc(hubId)}/projects/${enc(name)}/storage`),
+  setProjectStorage: (hubId: string, name: string, files_max: number, bytes_max: number) => request<import("@/api").ProjectStorage>("PUT", `app/hubs/${enc(hubId)}/projects/${enc(name)}/storage`, { files_max, bytes_max }),
   createProject: (hubId: string, input: { name: string; title?: string; goal?: string; visibility?: "members" | "team" }) =>
-    request<Project>("POST", `app/hubs/${enc(hubId)}/projects`, input),
+    announced(hubId, request<Project>("POST", `app/hubs/${enc(hubId)}/projects`, input)),
   updateProject: (hubId: string, name: string, input: { title?: string; goal?: string; brief?: string; links?: ProjectLink[]; visibility?: "members" | "team"; archived?: boolean;
     /** the groups in order (hubs from v0.21.34: send only when the project has `groups`) */ groups?: string[];
     /** who goes in which group ("": none) */ member_groups?: Record<string, string> }) =>
-    request<Project>("PATCH", `app/hubs/${enc(hubId)}/projects/${enc(name)}`, input),
+    announced(hubId, request<Project>("PATCH", `app/hubs/${enc(hubId)}/projects/${enc(name)}`, input)),
   deleteProject: (hubId: string, name: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/projects/${enc(name)}`),
   /** lets the project's coordinators start agents on a computer, or no longer (hubs from v0.21.2) */
+  setProjectCoordinatorAutomations: (hubId: string, name: string, allowed: boolean) =>
+    announced(hubId, request<Project>("PUT", `app/hubs/${enc(hubId)}/projects/${enc(name)}/automation-permission`, { allowed })),
+  setProjectCoordinatorInvites: (hubId: string, name: string, allowed: boolean) =>
+    announced(hubId, request<Project>("PUT", `app/hubs/${enc(hubId)}/projects/${enc(name)}/agent-invites`, { allowed })),
   setProjectMachine: (hubId: string, name: string, machine: string, allow: boolean) =>
-    request<Project>(allow ? "PUT" : "DELETE", `app/hubs/${enc(hubId)}/projects/${enc(name)}/machines/${enc(machine)}`),
+    announced(hubId, request<Project>(allow ? "PUT" : "DELETE", `app/hubs/${enc(hubId)}/projects/${enc(name)}/machines/${enc(machine)}`)),
   putProjectMember: (hubId: string, name: string, agent: string, input: { role?: "member" | "coordinator"; note?: string } = {}) =>
-    request<Project>("PUT", `app/hubs/${enc(hubId)}/projects/${enc(name)}/members/${enc(agent)}`, input),
+    announced(hubId, request<Project>("PUT", `app/hubs/${enc(hubId)}/projects/${enc(name)}/members/${enc(agent)}`, input)),
   removeProjectMember: (hubId: string, name: string, agent: string) =>
-    request<Project>("DELETE", `app/hubs/${enc(hubId)}/projects/${enc(name)}/members/${enc(agent)}`),
+    announced(hubId, request<Project>("DELETE", `app/hubs/${enc(hubId)}/projects/${enc(name)}/members/${enc(agent)}`)),
+  pageAttachments: (hubId: string, page: string, options: {limit?: number; after?: string} = {}) => {
+    const q = new URLSearchParams();
+    if (options.limit !== undefined) q.set("limit", String(options.limit));
+    if (options.after) q.set("after", options.after);
+    return request<PageAttachmentList>("GET", `app/hubs/${enc(hubId)}/pages/${enc(page)}/attachments?${q}`);
+  },
+  resolvePageAttachment: (hubId: string, page: string, name: string) =>
+    request<PageAttachment>("GET", `app/hubs/${enc(hubId)}/pages/${enc(page)}/attachments?name=${enc(name)}`),
+  uploadPageAttachment: (hubId: string, page: string, collection: string, name: string, blob: Blob, key: string, legacyName?: string) => {
+    const q = new URLSearchParams({ collection, name });
+    if (legacyName) q.set("legacy_name", legacyName);
+    return request<PageAttachment>("POST", `app/hubs/${enc(hubId)}/pages/${enc(page)}/attachments?${q}`, blob, undefined, 300000, { "Idempotency-Key": key });
+  },
+  readPageAttachment: async (hubId: string, page: string, file: string): Promise<Blob> => {
+    const response = await fetch(`app/hubs/${enc(hubId)}/pages/${enc(page)}/attachments/${enc(file)}/content`, { credentials: "same-origin" });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({})) as {message?: string; error?: string};
+      throw new ApiError(error.message || `HTTP ${response.status}`, response.status, error.error);
+    }
+    return response.blob();
+  },
+  savePageAttachment: (hubId: string, page: string, file: string) => request<{path:string}>("POST", `app/hubs/${enc(hubId)}/pages/${enc(page)}/attachments/${enc(file)}/save`),
+  removePageAttachment: (hubId: string, page: string, file: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/pages/${enc(page)}/attachments/${enc(file)}`),
   /** Uploads a file into a project (any kind, up to 20 MB). */
   uploadProjectFile: (hubId: string, name: string, file: File, as?: string) =>
     request<ProjectDoc>("PUT", `app/hubs/${enc(hubId)}/projects/${enc(name)}/files/${enc(as || file.name)}`, file),
   /** A project file's URL (for a browser download or an image preview). */
   projectFileURL: (hubId: string, name: string, file: string) => `app/hubs/${enc(hubId)}/projects/${enc(name)}/files/${enc(file)}`,
+  /** Reads an authenticated project file for an authorized page bridge. */
+  readProjectFile: async (hubId: string, name: string, file: string): Promise<Blob> => {
+    const response = await fetch(`app/hubs/${enc(hubId)}/projects/${enc(name)}/files/${enc(file)}`, { credentials: "same-origin" });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({})) as { message?: string; error?: string };
+      throw new ApiError(error.message || `HTTP ${response.status}`, response.status, error.error);
+    }
+    return response.blob();
+  },
   /** Saves a project file to this computer's Downloads folder and shows it there. */
   saveProjectFile: (hubId: string, name: string, file: string) =>
     request<{ path: string }>("POST", `app/hubs/${enc(hubId)}/projects/${enc(name)}/files/${enc(file)}/save`),
@@ -961,8 +1044,7 @@ export const appApi = {
   useTemplate: (hubId: string, id: string, input: { name?: string; project?: string; sample?: boolean }) =>
     request<{ page: Page; template: Template }>("POST", `app/hubs/${enc(hubId)}/templates/${enc(id)}/use`, input),
   // A page's records and change feed (hubs from v0.20.5), for the bridge.
-  pageRecords: (hubId: string, id: string, collection?: string) =>
-    request<{ records: PageRecord[]; seq: number }>("GET", `app/hubs/${enc(hubId)}/pages/${enc(id)}/data${collection ? `?collection=${enc(collection)}` : ""}`),
+  pageRecords: listPageRecords,
   pageRecord: (hubId: string, id: string, collection: string, rid: string) =>
     request<PageRecord>("GET", `app/hubs/${enc(hubId)}/pages/${enc(id)}/data/${enc(collection)}/${enc(rid)}`),
   /** A record written; on a conflict the error carries the latest. */
@@ -979,16 +1061,36 @@ export const appApi = {
       bytes instanceof Blob ? bytes : new Blob([bytes as BlobPart], { type: type || "application/octet-stream" })),
   // What a page (an app) uses of this computer: myco.os.* (App backend
   // oscalls.go; only an App with a local install answers).
+  browserConfirm: (hubId: string, page: string, instance: string, action: string, args: unknown) =>
+    request<{ confirmation: string }>("POST", `app/hubs/${enc(hubId)}/browser/confirm`, { page, instance, action, args }, undefined, 30_000, { "X-Myco-Browser-Owner": "1" }),
+  browserCall: <T = unknown>(hubId: string, page: string, instance: string, action: string, args: unknown = {}, confirmation = "") =>
+    request<T>("POST", `app/hubs/${enc(hubId)}/browser`, { page, instance, action, args, confirmation }, undefined, (action === "install" || action === "approvals.request") ? 600_000 : action === "pick" ? 150_000 : 45_000),
   remoteCall: <T = unknown>(hubId: string, page: string, action: string, args: unknown = {}, instance: string = "") =>
     request<T>("POST", `app/hubs/${enc(hubId)}/remote`, {page, instance, action, args}, undefined, action === "install" ? 600_000 : 30_000),
   osList: () => request<OsList>("GET", "app/os"),
   osCall: (name: string, args: unknown, page: OsPage) =>
     request<{ value: unknown }>("POST", "app/os/call", { name, args, page }).then((r) => r.value),
   osStart: (name: string, args: unknown, page: OsPage) => request<{ id: string }>("POST", "app/os/jobs", { name, args, page }).then((r) => r.id),
+  // What the person allowed pages (App backend osgrants.go): the answer to a
+  // consent_required, the list for settings, and taking one back.
+  osGrants: () => request<{ grants: OsGrantRow[] }>("GET", "app/os/grants").then((r) => r.grants || []),
+  osGrant: (page: OsPage, group: string, answer: OsAnswer, host?: string) =>
+    request<{ group: string; answer: OsAnswer }>("POST", "app/os/grants", { hub: page.hub, page: page.id, name: page.name, group, host: host || "", answer }),
+  osRevoke: (hub: string, page: string, group = "") =>
+    request<void>("DELETE", `app/os/grants?hub=${enc(hub)}&page=${enc(page)}&group=${enc(group)}`),
   osJob: (id: string, after: number, waitMs: number) =>
     request<OsBatch>("GET", `app/os/jobs/${enc(id)}?after=${after}&wait=${waitMs}`, undefined, undefined, waitMs + 15_000),
   osInput: (id: string, data: string, close: boolean) => request<{ ok: boolean }>("POST", `app/os/jobs/${enc(id)}/input`, { data, close }),
   osCancel: (id: string) => request<{ ok: boolean }>("DELETE", `app/os/jobs/${enc(id)}`),
+  // Watches (myco watch; older hubs answer 404): what agents wait for in
+  // the background. state: active (default) or all (ended ones too).
+  watches: (hubId: string, q: { agent?: string; project?: string; state?: "active" | "all" } = {}) =>
+    request<WatchList>("GET", `app/hubs/${enc(hubId)}/watches?${new URLSearchParams(Object.entries(q).filter(([, v]) => !!v) as [string, string][]).toString()}`),
+  stopWatch: (hubId: string, id: string, reason?: string) =>
+    request<Watch>("POST", `app/hubs/${enc(hubId)}/watches/${enc(id)}/stop`, reason ? { reason } : {}),
+  /** from now, at most 24 hours after it started */
+  extendWatch: (hubId: string, id: string, forSec: number) =>
+    request<Watch>("POST", `app/hubs/${enc(hubId)}/watches/${enc(id)}/extend`, { for_sec: forSec }),
   // Pins (hubs from v0.20.3; older ones answer 404): what a conversation
   // keeps at hand, for both its parties. a: the first party (default you).
   pins: (hubId: string, withWhom: string, a?: string) =>
@@ -1003,8 +1105,16 @@ export const appApi = {
   // Pages (hubs from v0.19.24; older ones answer 404): agents' web pages
   pages: (hubId: string, project?: string) => request<{ pages: Page[] }>("GET", `app/hubs/${enc(hubId)}/pages${project ? `?project=${enc(project)}` : ""}`),
   page: (hubId: string, id: string) => request<Page>("GET", `app/hubs/${enc(hubId)}/pages/${enc(id)}`),
-  openPage: (hubId: string, id: string, version?: number) => request<PageOpen>("POST", `app/hubs/${enc(hubId)}/pages/${enc(id)}/open`, version ? { version } : {}),
+  openPage: (hubId: string, id: string, version?: number, render = false) => request<PageOpen>("POST", `app/hubs/${enc(hubId)}/pages/${enc(id)}/open`, { ...(version ? { version } : {}), ...(render ? { render } : {}) }),
+  openPageStorageRecovery: () => request<{ url: string }>("POST", "app/page-storage-recovery", {}),
+  installs: () => request<{ supported: boolean; installs: InstalledApp[] }>("GET", "app/installs"),
+  installPage: (hubId: string, id: string, name: string, icon: string) => request<InstalledApp>("POST", `app/hubs/${enc(hubId)}/pages/${enc(id)}/install`, { name, icon }),
+  uninstallPage: (hubId: string, id: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/pages/${enc(id)}/install`),
+  openPageWindow: (hubId: string, id: string, name: string) => request<{ ok: boolean }>("POST", `app/hubs/${enc(hubId)}/pages/${enc(id)}/window`, { name }),
+  closePage: (hubId: string, id: string, lease: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/pages/${enc(id)}/open/${enc(lease)}`),
   deletePage: (hubId: string, id: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/pages/${enc(id)}`),
+  /** who may change a page's records: everyone who sees it, or those who manage it (hubs from v0.22.2) */
+  setPageEditors: (hubId: string, id: string, editors: "everyone" | "managers") => request<Page>("PATCH", `app/hubs/${enc(hubId)}/pages/${enc(id)}`, { editors }),
   pageState: (hubId: string, id: string) => request<PageState>("GET", `app/hubs/${enc(hubId)}/pages/${enc(id)}/state`),
   // Pages rendered for agents (page.export): the next export the backend
   // wants this window to make (null: none came in time), and its file.
@@ -1013,8 +1123,8 @@ export const appApi = {
   // While one renders: the page's state and records, through the job (refused once it may no longer run),
   // and a wait that answers {stop: true} as soon as it may not.
   pageRenderState: (id: string) => request<PageState>("GET", `app/page-render/${enc(id)}/state`),
-  pageRenderData: (id: string, collection: string, rid?: string) =>
-    request<unknown>("GET", `app/page-render/${enc(id)}/data?collection=${enc(collection)}${rid ? `&id=${enc(rid)}` : ""}`),
+  pageRenderData: (id: string, collection: string, rid?: string, query?: PageRecordQuery) =>
+    request<unknown>("GET", `app/page-render/${enc(id)}/data?${pageQueryParams(collection, query)}${rid ? `&id=${enc(rid)}` : ""}`),
   pageRenderWait: (id: string, signal?: AbortSignal) => request<{ stop: boolean }>("GET", `app/page-render/${enc(id)}/wait`, undefined, signal, 40_000),
   /** Writes a page's shared state based on version; when someone wrote
    *  first, ok is false and the latest comes back. */
@@ -1063,7 +1173,7 @@ export const appApi = {
   clearSuperagent: (hubId: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/superagent`),
   approvals: (hubId: string, status = "pending") =>
     request<{ approvals: Approval[] }>("GET", `app/hubs/${enc(hubId)}/approvals${status ? `?status=${enc(status)}` : ""}`),
-  decideApproval: (hubId: string, id: string, approve: boolean, narrow?: { permissions?: string[]; ttl_seconds?: number }) =>
+  decideApproval: (hubId: string, id: string, approve: boolean, narrow?: { permissions?: string[]; ttl_seconds?: number; hosts?: string[] }) =>
     request<Approval>("POST", `app/hubs/${enc(hubId)}/approvals/${enc(id)}/${approve ? "approve" : "deny"}`, narrow || {}),
   /** What agents may do on computers you decide for (v0.21.21 hubs). */
   actionGrants: (hubId: string, state = "active") =>
@@ -1155,3 +1265,41 @@ export type TranslateConfig = { provider: "deepl" | "google" | "openai"; base_ur
 export interface PageRenderJob { id: string; hub_id: string; page_id: string; action: string; version: number; args?: Record<string, unknown> }
 /** Its file (base64), or why not. */
 export interface PageRenderResult { media_type?: string; data?: string; width?: number; height?: number; pages?: number; error?: { code: string; message: string; retryable?: boolean } }
+
+// Keep unfiltered legacy calls typed as full lists, while count queries
+// explicitly return a count-only response.
+function listPageRecords(hubId: string, id: string, collection?: string): Promise<PageRecordList>;
+function listPageRecords(hubId: string, id: string, collection: string | undefined, query: PageRecordQuery | undefined): Promise<PageRecordList | PageRecordCount>;
+function listPageRecords(hubId: string, id: string, collection?: string, query?: PageRecordQuery): Promise<PageRecordList | PageRecordCount> {
+  return request("GET", `app/hubs/${enc(hubId)}/pages/${enc(id)}/data?${pageQueryParams(collection, query)}`);
+}
+export function pageQueryParams(collection?: string, query?: PageRecordQuery): URLSearchParams {
+  const p = new URLSearchParams();
+  if (collection) p.set("collection", collection);
+  const invalid = (message: string) => Object.assign(new Error(message), { code: "invalid_argument" });
+  if (query !== undefined) {
+    if (!query || typeof query !== "object" || Array.isArray(query)) throw invalid("query must be an object");
+    p.set("query_version", "1");
+    for (const key of ["fields", "where", "sort"] as const) {
+      const value = query[key];
+      if (value === undefined) continue;
+      if (typeof value !== "string" && !(Array.isArray(value) && value.every(x => typeof x === "string"))) throw invalid(`${key} must be a string or string array`);
+      if (key === "where") {
+        for (const condition of typeof value === "string" ? [value] : value) p.append(key, condition);
+      } else p.set(key, typeof value === "string" ? value : value.join(","));
+    }
+    if (query.limit !== undefined) {
+      if (!Number.isInteger(query.limit)) throw invalid("limit must be an integer");
+      p.set("limit", String(query.limit));
+    }
+    if (query.after !== undefined) {
+      if (typeof query.after !== "string") throw invalid("after must be a cursor string");
+      p.set("after", query.after);
+    }
+    if (query.count !== undefined) {
+      if (typeof query.count !== "boolean") throw invalid("count must be boolean");
+      p.set("count", String(query.count));
+    }
+  }
+  return p;
+}

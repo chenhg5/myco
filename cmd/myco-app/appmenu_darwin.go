@@ -86,9 +86,9 @@ func appMenu(app *application.App, zh trayText, send func(cmd string)) *applicat
 	help.Add(zh.s("myco 使用文档", "myco User Guide")).OnClick(do("help"))
 	help.Add(zh.s("键盘快捷键", "Keyboard Shortcuts")).SetAccelerator("CmdOrCtrl+/").OnClick(do("shortcuts"))
 	help.AddSeparator()
-	help.Add(zh.s("使用文档", "Documentation")).OnClick(open(zh.s("https://github.com/chenhg5/myco/blob/main/INSTALL.zh-CN.md", "https://github.com/chenhg5/myco/blob/main/INSTALL.md")))
-	help.Add(zh.s("更新记录", "Release Notes")).OnClick(open("https://github.com/chenhg5/myco/releases"))
+	help.Add(zh.s("使用文档", "Documentation")).OnClick(open(zh.s("https://github.com/myco-ai/myco/blob/main/INSTALL.zh-CN.md", "https://github.com/myco-ai/myco/blob/main/INSTALL.md")))
+	help.Add(zh.s("更新记录", "Release Notes")).OnClick(open("https://github.com/myco-ai/myco/releases"))
 	help.AddSeparator()
-	help.Add(zh.s("反馈问题…", "Report an Issue…")).OnClick(open("https://github.com/chenhg5/myco/issues/new"))
+	help.Add(zh.s("反馈问题…", "Report an Issue…")).OnClick(open("https://github.com/myco-ai/myco/issues/new"))
 	return m
 }

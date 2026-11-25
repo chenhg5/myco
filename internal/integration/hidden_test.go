@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/app"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/app"
 )
 
 // A person takes messages out of their own view: every device of theirs
@@ -26,19 +26,19 @@ func TestHiddenMessagesPerPerson(t *testing.T) {
 		t.Fatalf("hide: %v %+v", err, got)
 	}
 	// Another person has a list of their own.
-	inv, err := admin.InviteMember(c, api.InviteRequest{Name: "laohu"})
+	inv, err := admin.InviteMember(c, api.InviteRequest{Name: "bob"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	paired, err := h.client("").Pair(c, inv.Link[strings.Index(inv.Link, "/c/")+3:], "laohu-mac")
+	paired, err := h.client("").Pair(c, inv.Link[strings.Index(inv.Link, "/c/")+3:], "bob-mac")
 	if err != nil {
 		t.Fatal(err)
 	}
-	laohu := h.client(paired.Token)
-	if l, err := laohu.Hidden(c); err != nil || len(l.IDs) != 0 {
+	bob := h.client(paired.Token)
+	if l, err := bob.Hidden(c); err != nil || len(l.IDs) != 0 {
 		t.Fatalf("someone else's list: %v %+v", err, l)
 	}
-	if _, err := laohu.UpdateHidden(c, api.HiddenUpdate{Hide: []string{"msg_c"}}); err != nil {
+	if _, err := bob.UpdateHidden(c, api.HiddenUpdate{Hide: []string{"msg_c"}}); err != nil {
 		t.Fatal(err)
 	}
 	// Shown again: gone from the list; the other person's list is untouched.
@@ -46,8 +46,8 @@ func TestHiddenMessagesPerPerson(t *testing.T) {
 	if err != nil || strings.Join(got.IDs, ",") != "msg_b" {
 		t.Fatalf("show: %v %+v", err, got)
 	}
-	if l, _ := laohu.Hidden(c); strings.Join(l.IDs, ",") != "msg_c" {
-		t.Fatalf("laohu's list: %+v", l)
+	if l, _ := bob.Hidden(c); strings.Join(l.IDs, ",") != "msg_c" {
+		t.Fatalf("bob's list: %+v", l)
 	}
 	// Too many at once is refused.
 	many := make([]string, 501)

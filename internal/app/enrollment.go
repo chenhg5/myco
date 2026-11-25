@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // EnrollTokenPrefix marks enrollment tokens so they are never confused with
@@ -15,14 +15,15 @@ const EnrollTokenPrefix = "myco_enroll_"
 
 // EnrollmentService lets sessions join the network with a limited token.
 type EnrollmentService struct {
-	enrollments domain.EnrollmentRepository
-	agents      domain.AgentRepository
-	tokens      TokenIssuer
-	ids         IDGenerator
-	clock       Clock
-	aliases     domain.AliasRepository
-	visibility  func(ctx context.Context, owner string) domain.Visibility
-	superagent  func(ctx context.Context, owner string, agent domain.AgentName) error
+	enrollments    domain.EnrollmentRepository
+	agents         domain.AgentRepository
+	tokens         TokenIssuer
+	ids            IDGenerator
+	clock          Clock
+	aliases        domain.AliasRepository
+	visibility     func(ctx context.Context, owner string) domain.Visibility
+	projectInvites *ProjectInvitationService
+	superagent     func(ctx context.Context, owner string, agent domain.AgentName) error
 }
 
 // SetDefaultVisibility decides the visibility of enrolled agents from their
@@ -120,6 +121,15 @@ func (s *EnrollmentService) PeekLink(ctx context.Context, token string) (*domain
 	if err != nil {
 		return nil, err
 	}
+	if e.InvitationID != "" {
+		if s.projectInvites == nil {
+			return nil, domain.Errf(domain.CodeUnsupported, "project invitations unavailable")
+		}
+		if _, err := s.projectInvites.forEnrollment(ctx, e); err != nil {
+			return nil, err
+		}
+		return e, e.Usable(s.clock.Now(), true)
+	}
 	if e.Kind != domain.EnrollmentLink {
 		return nil, domain.Errf(domain.CodeInvalidArgument, "not a join link")
 	}
@@ -134,6 +144,9 @@ func (s *EnrollmentService) Join(ctx context.Context, linkToken string, in JoinI
 	link, err := s.PeekLink(ctx, linkToken)
 	if err != nil {
 		return nil, err
+	}
+	if link.InvitationID != "" {
+		return nil, domain.Errf(domain.CodePermissionDenied, "this link invites one agent session, not a computer").WithSuggestion("read the link with ?format=md and use myco join in the invited session")
 	}
 	machine, err := domain.ParseMachineName(in.Machine)
 	if err != nil {
@@ -263,6 +276,22 @@ func (s *EnrollmentService) Enroll(ctx context.Context, enrollToken string, in E
 	if err != nil {
 		return nil, err
 	}
+	var invitation *domain.ProjectInvitation
+	if e.InvitationID != "" {
+		if s.projectInvites == nil {
+			return nil, domain.Errf(domain.CodeUnsupported, "project invitations unavailable")
+		}
+		invitation, err = s.projectInvites.forEnrollment(ctx, e)
+		if err != nil {
+			return nil, err
+		}
+		if invitation.DisplayName != "" {
+			in.DisplayName = invitation.DisplayName
+		}
+		if invitation.Description != "" {
+			in.Description = invitation.Description
+		}
+	}
 	if err := e.Admit(in.Binding); err != nil {
 		return nil, err
 	}
@@ -348,11 +377,29 @@ func (s *EnrollmentService) Enroll(ctx context.Context, enrollToken string, in E
 	}
 	a.EnrolledBy = e.ID
 	a.Owner = e.Owner
+	if invitation != nil {
+		a.InvitedBy = string(invitation.Requester)
+		if a.Kind() != domain.KindAgent {
+			return nil, domain.Errf(domain.CodePermissionDenied, "project invitations admit ordinary agent sessions only")
+		}
+	}
 	if s.visibility != nil {
 		a.Visibility = s.visibility(ctx, a.Owner)
 	}
 	if in.DryRun {
 		return &RegisterOutput{Agent: a, Created: true}, nil
+	}
+	if invitation != nil {
+		plain, hash, err := s.tokens.Issue()
+		if err != nil {
+			return nil, err
+		}
+		a.RotateToken(hash)
+		if err = s.projectInvites.repo.Use(ctx, invitation.ID, a, now); err != nil {
+			return nil, err
+		}
+		s.projectInvites.audit.Record(ctx, Actor{Agent: a}, "project.invitation.use", invitation.Project, "invited_by="+string(invitation.Requester)+" invitation="+invitation.ID)
+		return &RegisterOutput{Agent: a, Token: plain, Created: true}, nil
 	}
 	if err := s.enrollments.ConsumeUse(ctx, e.ID); err != nil {
 		return nil, err

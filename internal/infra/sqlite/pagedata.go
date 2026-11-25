@@ -6,7 +6,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // PageDataRepo implements domain.PageDataRepository.
@@ -101,6 +101,9 @@ func (r *PageDataRepo) Put(ctx context.Context, rec *domain.PageRecord, ifVersio
 	if err != nil {
 		return nil, internal(err)
 	}
+	if err := syncPageAttachmentRefs(ctx, tx, rec); err != nil {
+		return nil, err
+	}
 	ch := &domain.PageChange{Page: rec.Page, Collection: rec.Collection, Record: rec.ID, Op: "put", Data: rec.Data, Version: rec.Version, By: rec.UpdatedBy, At: rec.UpdatedAt}
 	if err := addChange(ctx, tx, ch); err != nil {
 		return nil, err
@@ -126,6 +129,9 @@ func (r *PageDataRepo) Remove(ctx context.Context, page, collection, id string, 
 		return nil, conflict(collection, id, ifVersion)
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM page_records WHERE page=? AND collection=? AND id=?`, page, collection, id); err != nil {
+		return nil, internal(err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM page_attachment_refs WHERE page=? AND collection=? AND record=?`, page, collection, id); err != nil {
 		return nil, internal(err)
 	}
 	ch := &domain.PageChange{Page: page, Collection: collection, Record: id, Op: "delete", Version: cur + 1, By: by, At: at}
@@ -190,9 +196,15 @@ func (r *PageDataRepo) Trim(ctx context.Context, page string, keep int) error {
 }
 
 func (r *PageDataRepo) DeletePage(ctx context.Context, page string) error {
-	if _, err := r.db.ExecContext(ctx, `DELETE FROM page_records WHERE page=?`, page); err != nil {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
 		return internal(err)
 	}
-	_, err := r.db.ExecContext(ctx, `DELETE FROM page_changes WHERE page=?`, page)
-	return internal(err)
+	defer tx.Rollback()
+	for _, table := range []string{"page_records", "page_changes", "page_attachment_refs"} {
+		if _, err = tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE page=?", page); err != nil {
+			return internal(err)
+		}
+	}
+	return internal(tx.Commit())
 }

@@ -228,7 +228,7 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
     const a = p.members.find((m) => m.name === n)?.agent;
     return a ? nodeName(a, hub) : n;
   };
-  const stateLabel: Record<string, string> = { queued: L("排队中", "Queued"), working: L("处理中", "Working"), failed: L("失败", "Failed"), done: L("已完成", "Done") };
+  const stateLabel: Record<string, string> = { queued: L("排队中", "Queued"), held: L("暂挂", "On hold"), working: L("处理中", "Working"), failed: L("失败", "Failed"), done: L("已完成", "Done") };
   const hub = hubRows[0]?.hub;
   // Nodes this person may add: theirs (or all, when they manage the hub).
   const addable = hubRows
@@ -431,11 +431,47 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
         </div>
       </section>
 
+      {(p.machines || p.coordinator_invites !== undefined || p.coordinator_automations !== undefined) && <div data-testid="coordinator-permissions">
+      <div className="app-group-title"><span className="name">{L("协调者的权限", "Coordinator permissions")}</span></div>
+      {p.coordinator_automations !== undefined && (
+        <section className="app-group" data-testid="project-automation-permission">
+          <div className="app-row">
+            <span className="app-row-main">
+              <span className="app-row-title">{L("协调者可以给本项目的 agent 建定时任务", "Coordinators may schedule tasks for project agents")}</span>
+              <span className="app-row-sub">{L("关闭时，每次创建、修改、暂停或删除都需要项目主人批准。", "When off, creating, changing, pausing or deleting a task needs the project owner's approval.")}</span>
+            </span>
+            {p.can_manage ? <button type="button" role="switch" aria-checked={p.coordinator_automations}
+              aria-label={L("协调者可以给本项目的 agent 建定时任务", "Coordinators may schedule tasks for project agents")}
+              className={cn("app-switch", p.coordinator_automations && "is-on")} disabled={busy || p.archived}
+              onClick={() => void run(() => appApi.setProjectCoordinatorAutomations(target.hubId, p.name, !p.coordinator_automations), false)}><span className="app-switch-knob" /></button>
+              : <span className="app-label">{p.coordinator_automations ? L("允许", "Allowed") : L("需要批准", "Approval required")}</span>}
+          </div>
+          <div className="app-small-note">{L("只能发给本项目的成员 agent，或启动本项目的工作流。任务归项目主人所有，可设起止日期和只跑一次。", "Targets are limited to project agents and workflows. Tasks belong to the project owner, with optional date bounds and a single run.")}</div>
+        </section>
+      )}
+      {p.coordinator_invites !== undefined && (
+        <section className="app-group" data-testid="project-agent-invites">
+          <div className="app-group-title"><span className="name">{L("邀请 agent", "Agent invitations")}</span></div>
+          <div className="app-row">
+            <span className="app-row-main">
+              <span className="app-row-title">{L("协调者可以邀请 agent 加入本项目", "Coordinators may invite agents to this project")}</span>
+              <span className="app-row-sub">{L("关闭时，每次邀请都需要项目主人批准。", "When off, each invitation needs the project owner's approval.")}</span>
+            </span>
+            {p.can_manage ? <button type="button" role="switch" aria-checked={p.coordinator_invites}
+              aria-label={L("协调者可以邀请 agent 加入本项目", "Coordinators may invite agents to this project")}
+              className={cn("app-switch", p.coordinator_invites && "is-on")} disabled={busy || p.archived}
+              onClick={() => void run(() => appApi.setProjectCoordinatorInvites(target.hubId, p.name, !p.coordinator_invites), false)}><span className="app-switch-knob" /></button>
+              : <span className="app-label">{p.coordinator_invites ? L("允许", "Allowed") : L("需要批准", "Approval required")}</span>}
+          </div>
+          <div className="app-small-note">{L("邀请链接 24 小时内有效，只能加入一个普通 agent。它归项目主人所有，自动加入本项目，不能管理成员或继续邀请。", "Each link lasts 24 hours and admits one ordinary agent. It belongs to the project owner, joins this project automatically, and cannot manage members or invite others.")}</div>
+        </section>
+      )}
       {p.machines && (
         <ProjectMachines project={p} machines={hub ? machinesOfHub(hub).filter((m) => !m.legacy && m.os !== "cloud") : []} busy={busy}
           onSet={(id, allow) => void run(() => appApi.setProjectMachine(target.hubId, p.name, id, allow), false)} />
       )}
-      {p.machines && <ErrorText error={dialog ? null : actionError} />}
+      <ErrorText error={dialog ? null : actionError} />
+      </div>}
       </>)}
 
       {tab === "chats" && (<>
@@ -444,7 +480,7 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
           <span className="muted">{L("还没有这个项目的对话。给成员发个任务，或者让 agent 用 myco message send --project 发。", "No conversations in this project yet. Give a member a task, or have an agent send with myco message send --project.")}</span>
         ) : (
           <>
-            {(["working", "queued", "failed", "done"] as const).map((st) => (
+            {(["working", "queued", "held", "failed", "done"] as const).map((st) => (
               <span key={st} className={cn("app-project-stat", `is-${st}`)}><i />{stateLabel[st]} <b>{count(st)}</b></span>
             ))}
           </>

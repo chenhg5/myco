@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/myco-ai/myco/internal/testutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,24 +12,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/app"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/app"
 )
 
 // The built whiteboard runs in Chromium, while the bridge's data port talks to
 // a real Hub with an ordinary agent token. This checks published collection
 // schemas, CAS versions, freshness and the documented CLI extraction recipe.
 func TestWhiteboardSharedExport(t *testing.T) {
+	root := testutil.AppsRoot(t)
 	node, err := exec.LookPath("node")
 	if err != nil {
 		t.Skip("Node.js is needed for whiteboard browser acceptance")
-	}
-	root, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(root, "templates", "node_modules", "typescript", "package.json")); err != nil {
-		t.Skip("install template dependencies for whiteboard browser acceptance")
 	}
 	c := ctx(t)
 	h := startHub(t, filepath.Join(t.TempDir(), "hub.db"), app.DefaultMessagePolicy())
@@ -54,6 +49,7 @@ func TestWhiteboardSharedExport(t *testing.T) {
 	deadline, cancel := context.WithTimeout(c, 45*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(deadline, node, filepath.Join(root, "templates", "whiteboard-export.integration.mjs"))
+	cmd.Env = testutil.AppsEnv(t)
 	cmd.Dir = root
 	cmd.Stdin = bytes.NewReader(input) // Test credentials never enter argv, env or logs.
 	result, err := cmd.CombinedOutput()

@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
+	"github.com/myco-ai/myco/internal/api"
 )
 
 // Error is a structured API or transport error.
@@ -46,6 +46,8 @@ type Client struct {
 	http  *http.Client
 	// Via marks this client's pulls (e.g. "runner"; see api.PullRequest.Via).
 	Via string
+	// WakeHeld opts a conversational runner into receiving resumptions.
+	WakeHeld bool
 	// Reason goes with each request (X-Myco-Reason): why a superagent asks
 	// for something its owner has to approve.
 	Reason string
@@ -53,6 +55,10 @@ type Client struct {
 	// end-to-end encryption on (see e2e.go).
 	Sealer *Sealer
 }
+
+// CredentialFingerprint binds native account caches to this exact client's
+// credential without storing or exposing the credential itself.
+func (c *Client) CredentialFingerprint() [32]byte { return sha256.Sum256([]byte(c.token)) }
 
 // New returns a client for hub base URL authenticated with token.
 func New(base, token string) (*Client, error) {
@@ -482,6 +488,25 @@ func (c *Client) Transition(ctx context.Context, id, verb string, dry bool) (*ap
 	return &out.Message, c.do(ctx, http.MethodPost, "/v1/messages/"+esc(id)+"/"+verb, dryQuery(dry), nil, &out)
 }
 
+// Hold records a deliberate manual hold or a dependency on another task.
+// The new endpoint is intentionally distinct so old hubs reject an
+// explicit dependency rather than silently creating an indefinite hold.
+func (c *Client) Hold(ctx context.Context, id, until string, dry bool) (*api.Message, error) {
+	query := dryQuery(dry)
+	path := "/v1/messages/" + esc(id)
+	var out api.MessageResult
+	if until != "" {
+		err := c.do(ctx, http.MethodPost, path+"/hold-until", query, api.HoldUntilRequest{Until: until}, &out)
+		return &out.Message, err
+	}
+	if query == nil {
+		query = url.Values{}
+	}
+	query.Set("manual", "1")
+	err := c.do(ctx, http.MethodPost, path+"/hold", query, nil, &out)
+	return &out.Message, err
+}
+
 // Ack acknowledges a pulled message.
 func (c *Client) Ack(ctx context.Context, id string) error {
 	_, err := c.Transition(ctx, id, "ack", false)
@@ -588,7 +613,11 @@ func (c *Client) Pull(ctx context.Context, limit int, wait time.Duration) ([]api
 // PullTypes is Pull restricted to message types (nil = all).
 func (c *Client) PullTypes(ctx context.Context, limit int, wait time.Duration, types []string) ([]api.Message, error) {
 	var out api.MessageList
-	err := c.do(ctx, http.MethodPost, "/v1/inbox/pull", nil, api.PullRequest{Limit: limit, WaitSeconds: int(wait.Seconds()), Types: types, Via: c.Via}, &out)
+	var q url.Values
+	if c.Via == "runner" && c.WakeHeld {
+		q = url.Values{"wake_held": {"1"}}
+	}
+	err := c.do(ctx, http.MethodPost, "/v1/inbox/pull", q, api.PullRequest{Limit: limit, WaitSeconds: int(wait.Seconds()), Types: types, Via: c.Via}, &out)
 	c.openAll(ctx, out.Messages)
 	return out.Messages, err
 }
@@ -899,23 +928,35 @@ func (c *Client) ReportRuntime(ctx context.Context, r api.Runtime) error {
 			}
 		}
 	}
-	err := c.do(ctx, http.MethodPut, "/v1/me/runtime", nil, r, nil)
-	// Older hubs reject unknown JSON fields. Retry only that specific schema
-	// rejection, leaving authentication and other validation failures intact.
-	var apiErr *Error
-	if (r.ProviderHost != "" || r.Providers != nil) && errors.As(err, &apiErr) && apiErr.Status == http.StatusBadRequest && (strings.Contains(apiErr.Message, `unknown field "provider_host"`) || strings.Contains(apiErr.Message, `unknown field "providers"`)) {
-		if strings.Contains(apiErr.Message, `unknown field "provider_host"`) {
-			r.ProviderHost = ""
+	var err error
+	for attempt := 0; attempt < 5; attempt++ {
+		err = c.do(ctx, http.MethodPut, "/v1/me/runtime", nil, r, nil)
+		// Older hubs reject unknown JSON fields. Retry only that specific schema
+		// rejection, leaving authentication and other validation failures intact.
+		var apiErr *Error
+		if (r.RunnerInstance != "" || !r.RestartingUntil.IsZero()) && errors.As(err, &apiErr) && apiErr.Status == http.StatusBadRequest && (strings.Contains(apiErr.Message, `unknown field "runner_instance"`) || strings.Contains(apiErr.Message, `unknown field "restarting_until"`)) {
+			r.RunnerInstance, r.RestartingUntil = "", time.Time{}
+			continue
 		}
-		r.Providers = nil
-		features := make([]string, 0, len(r.Features))
-		for _, f := range r.Features {
-			if f != "remote_provider" {
-				features = append(features, f)
+		if r.RunnerSlots != nil && errors.As(err, &apiErr) && apiErr.Status == http.StatusBadRequest && strings.Contains(apiErr.Message, `unknown field "runner_slots"`) {
+			r.RunnerSlots = nil
+			continue
+		}
+		if (r.ProviderHost != "" || r.Providers != nil) && errors.As(err, &apiErr) && apiErr.Status == http.StatusBadRequest && (strings.Contains(apiErr.Message, `unknown field "provider_host"`) || strings.Contains(apiErr.Message, `unknown field "providers"`)) {
+			if strings.Contains(apiErr.Message, `unknown field "provider_host"`) {
+				r.ProviderHost = ""
 			}
+			r.Providers = nil
+			features := make([]string, 0, len(r.Features))
+			for _, f := range r.Features {
+				if f != "remote_provider" {
+					features = append(features, f)
+				}
+			}
+			r.Features = features
+			continue
 		}
-		r.Features = features
-		return c.do(ctx, http.MethodPut, "/v1/me/runtime", nil, r, nil)
+		break
 	}
 	return err
 }

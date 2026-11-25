@@ -20,7 +20,7 @@
 
 ## 第 1 步：下载安装 App
 
-下载 **[myco.dmg](https://github.com/chenhg5/myco/releases/latest/download/myco.dmg)**（Apple 芯片和 Intel 通用，已签名公证），打开后把 myco 拖进「应用程序」，再打开它。
+下载 **[myco.dmg](https://github.com/myco-ai/myco/releases/latest/download/myco.dmg)**（Apple 芯片和 Intel 通用，已签名公证），打开后把 myco 拖进「应用程序」，再打开它。
 
 Windows 和 Linux 的下载在 [README 的下载表](../README.zh-CN.md#下载)里。
 

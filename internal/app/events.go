@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // EventBus hands the hub's events (domain.Event) to whoever subscribed.
@@ -91,6 +91,20 @@ func (o *observedMessages) Mutate(ctx context.Context, id string, fn domain.Muta
 		o.bus.Publish(ctx, domain.MessageCreated{Message: c})
 	}
 	return m, nil
+}
+
+func (o *observedMessages) WakeHeld(ctx context.Context, recipient domain.AgentName, now, cutoff time.Time, limit int, recovery func(*domain.Message) *domain.Message) ([]*domain.Message, []*domain.Message, error) {
+	changed, created, err := o.MessageRepository.WakeHeld(ctx, recipient, now, cutoff, limit, recovery)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, m := range changed {
+		o.bus.Publish(ctx, domain.MessageChanged{Message: m})
+	}
+	for _, m := range created {
+		o.bus.Publish(ctx, domain.MessageCreated{Message: m})
+	}
+	return changed, created, nil
 }
 
 func (o *observedMessages) ClaimDue(ctx context.Context, recipient domain.AgentName, now time.Time, limit int, types []domain.MessageType, claim func(*domain.Message) bool) ([]*domain.Message, error) {

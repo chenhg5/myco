@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // touchTask records that a task's recipient is working on it: at once in

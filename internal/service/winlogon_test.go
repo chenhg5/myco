@@ -1,22 +1,24 @@
 package service
 
 import (
+	"os/exec"
+	"runtime"
 	"strings"
 	"testing"
 )
 
 func TestWindowsLogonPlan(t *testing.T) {
-	w := &WindowsLogon{Home: `C:\Users\Glenn O'Neil`, R: &fakeRunner{}}
-	sp := Spec{Binary: `C:\Users\Glenn O'Neil\AppData\Local\Programs\myco\myco.exe`, Args: []string{"runner", "start", "--all", "--max-concurrent", "3"},
-		Env: map[string]string{"PATH": `C:\Program Files\nodejs;C:\Windows`}, LogPath: `C:\Users\Glenn O'Neil\.myco\runner.log`}
+	w := &WindowsLogon{Home: `C:\Users\Alice O'Neil`, R: &fakeRunner{}}
+	sp := Spec{Binary: `C:\Users\Alice O'Neil\AppData\Local\Programs\myco\myco.exe`, Args: []string{"runner", "start", "--all", "--max-concurrent", "3"},
+		Env: map[string]string{"PATH": `C:\Program Files\nodejs;C:\Windows`}, LogPath: `C:\Users\Alice O'Neil\.myco\runner.log`}
 	p, err := w.PlanInstall(sp)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
 		`$env:PATH = 'C:\Program Files\nodejs;C:\Windows'`,
-		`Start-Process -WindowStyle Hidden -FilePath 'C:\Users\Glenn O''Neil\AppData\Local\Programs\myco\myco.exe'`,
-		`-ArgumentList 'runner start --all --max-concurrent 3 --log-file "C:\Users\Glenn O''Neil\.myco\runner.log"'`,
+		`Start-Process -WindowStyle Hidden -FilePath 'C:\Users\Alice O''Neil\AppData\Local\Programs\myco\myco.exe'`,
+		`-ArgumentList 'runner start --all --max-concurrent 3 --log-file "C:\Users\Alice O''Neil\.myco\runner.log"'`,
 		`if (Get-CimInstance Win32_Process -Filter "Name='myco.exe'" | Where-Object { $_.CommandLine -like '*runner start --all*' }) { exit 0 }`,
 	} {
 		if !strings.Contains(p.Content, want) {
@@ -57,5 +59,19 @@ func TestWindowsLogonStatus(t *testing.T) {
 	st, err := w.Status()
 	if err != nil || !st.Running || st.PID != 4242 {
 		t.Fatalf("status %+v %v", st, err)
+	}
+}
+
+// Parse the generated stop protocol on native Windows without stopping any process.
+func TestWindowsStopScriptParses(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell parser is Windows-only")
+	}
+	w := &WindowsLogon{Home: t.TempDir()}
+	script := w.stop()
+	body := script[len(script)-1]
+	out, err := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", "[void][scriptblock]::Create("+psq(body)+")").CombinedOutput()
+	if err != nil {
+		t.Fatalf("stop script syntax: %v %s", err, out)
 	}
 }

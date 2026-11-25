@@ -1,3 +1,5 @@
+import { runnerUpdating, machineUpdating } from "@/lib/runner-state";
+import { currentSlots } from "@/app/RunnerQueue";
 import { useEffect, useState } from "react";
 import { useContextMenu } from "@/app/ContextMenu";
 import { useNavSub } from "@/app/nav";
@@ -87,6 +89,7 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, on
   const machines = hubs.flatMap((h) => machinesOfHub(h).map((m) => ({ m, hub: h, key: `${h.id}/${m.id}` })))
     .sort((a, b) => Number(isHere(b.m)) - Number(isHere(a.m)) || Number(b.m.online) - Number(a.m.online) || a.m.name.localeCompare(b.m.name));
   const onIt = (hubId: string, m: Machine) => rows.filter((r) => r.hub.id === hubId && r.st.agent.machine_id === m.id);
+  const updating = (m: Machine) => machineUpdating(m, rows.map((r) => r.st.agent));
   const byState = (a: AgentRow, b: AgentRow) => Number(a.st.state === "offline") - Number(b.st.state === "offline") || nodeName(a.st.agent, a.hub).localeCompare(nodeName(b.st.agent, b.hub));
   const split = (hubId: string, m: Machine) => {
     const all = onIt(hubId, m);
@@ -105,13 +108,13 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, on
     const a = r.st.agent;
     const ps = projectsOf(r, projects);
     return (
-      <div key={`${r.hub.id}/${a.name}`} className={cn("pc-row pc-term", r.st.state === "offline" && "is-away")}>
+      <div key={`${r.hub.id}/${a.name}`} className={cn("pc-row pc-term", r.st.state === "offline" && !runnerUpdating(a) && "is-away")}>
         <Avatar agent={a} size={28} state={r.st.state} />
         <button type="button" className="pc-row-main" onClick={() => onProfile(r)}>
           <span className="pc-row-name mono">{a.binding.workdir ? shortDir(a.binding.workdir) : nodeName(a, r.hub)}</span>
           <span className="pc-row-sub">
             {ps.length > 0 ? <span>{L(`在「${ps.map((p) => p.title || p.name).join("」「")}」里`, `In ${ps.map((p) => p.title || p.name).join(", ")}`)}</span> : <span>{L("不在项目里", "In no project")}</span>}
-            {r.st.state === "offline" && <span>{L("不在线", "Away")}</span>}
+            {runnerUpdating(a) ? <span>{L("正在更新", "Updating")}</span> : r.st.state === "offline" && <span>{L("不在线", "Away")}</span>}
           </span>
         </button>
         <button type="button" className="app-btn app-btn-small" onClick={() => onOpen(r)}>{L("打开", "Open")}</button>
@@ -124,13 +127,13 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, on
     const ps = projectsOf(r, projects);
     const quota = agentQuotaHint(a);
     return (
-      <button key={`${r.hub.id}/${a.name}`} type="button" className={cn("pc-row pcd-agent", r.st.state === "offline" && "is-away")} onClick={() => onProfile(r)}
+      <button key={`${r.hub.id}/${a.name}`} type="button" className={cn("pc-row pcd-agent", r.st.state === "offline" && !runnerUpdating(a) && "is-away")} onClick={() => onProfile(r)}
         title={a.binding.workdir || undefined}>
         <Avatar agent={a} size={28} state={r.st.state} />
         <span className="pc-row-main">
           <span className="pc-row-name">{nodeName(a, r.hub)}</span>
           <span className="pc-row-sub">
-            <span>{stateWords(r.st.state, a.status_text)}</span>
+            <span>{stateWords(r.st.state, a.status_text, runnerUpdating(a))}</span>
             {a.binding.workdir && <span className="mono">{shortDir(a.binding.workdir)}</span>}
             {ps.length > 0 && <span>{L(`在「${ps.map((p) => p.title || p.name).join("」「")}」里`, `In ${ps.map((p) => p.title || p.name).join(", ")}`)}</span>}
             {quota && <span className={cn("pc-quota", quota.level === "spent" && "is-spent")} title={quota.title}>{quota.text}</span>}
@@ -148,6 +151,7 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, on
   if (opened) {
     const { m, hub } = opened;
     const { agents, terminals } = split(hub.id, m);
+    const slots = onIt(hub.id,m).map((r) => currentSlots(r.st.agent)).filter((s) => !!s).sort((a,b) => Date.parse(b.at)-Date.parse(a.at))[0];
     const tabs: { key: PcTab; label: string; n?: number }[] = [
       { key: "work", label: L("Agent 和终端", "Agents and terminals"), n: agents.length + terminals.length },
       { key: "access", label: L("权限", "Access") },
@@ -156,7 +160,7 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, on
     ];
     return (
       <div className="pc pcd aud" data-testid="pc-detail">
-        <header className={cn("pcd-head", !m.online && "is-away")}>
+        <header className={cn("pcd-head", !m.online && !updating(m) && "is-away")}>
           <div className="pcd-titles">
             {renaming ? (
               <RenameComputer hubId={hub.id} machine={m} taken={machines.filter((x) => x.hub.id === hub.id && x.m.id !== m.id).map((x) => x.m.name)}
@@ -168,7 +172,7 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, on
               </h1>
             )}
             <p className="pcd-sub">
-              <span className={cn("pc-online", m.online && "is-on")}>{m.online ? L("在线", "Online") : L("不在线", "Away")}</span>
+              <span className={cn("pc-online", m.online && "is-on")}>{updating(m) ? L("正在更新", "Updating") : m.online ? L("在线", "Online") : L("不在线", "Away")}</span>
               <span>{osInfo(m.os).label}{m.arch ? ` · ${m.arch}` : ""}</span>
               {m.hostname && <span className="mono">{m.hostname}</span>}
               {m.myco_version && <span>myco {ver(m.myco_version)}</span>}
@@ -198,6 +202,10 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, on
         </div>
 
         {tab === "work" && (<>
+          {m.online && slots && <div className="app-note" data-testid="computer-runner-slots">
+            <div>{L(`并行任务：${slots.in_use}/${slots.max_concurrent} 在忙，${slots.waiting} 个排队中`, `Parallel tasks: ${slots.in_use}/${slots.max_concurrent} in use, ${slots.waiting} waiting`)}</div>
+            <div>{L("在这台电脑上调整名额：", "Change the limit on this computer:")} <code>myco runner service install --max-concurrent N</code></div>
+          </div>}
           <SectionHead title="Agent" count={agents.length} />
           {agents.length ? <div className="pc-list">{agents.map(agentRow)}</div> : (
             <div className="pcd-empty">
@@ -258,13 +266,13 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, on
             const Icon = osInfo(m.os).icon;
             const quota = computerQuotaHint(m.id, hub.id, rows);
             return (
-              <button key={key} type="button" className={cn("pc-card", !m.online && "is-away")} data-testid="pc-card" onClick={() => openComputer(key)}>
+              <button key={key} type="button" className={cn("pc-card", !m.online && !updating(m) && "is-away")} data-testid="pc-card" onClick={() => openComputer(key)}>
                 <span className="pc-card-top">
                   <span className="tp-icon"><Icon /></span>
                   <span className="pc-card-text">
                     <span className="pc-card-name"><span>{m.name}</span>{isHere(m) && <span className="pc-machine-tag">{L("这台电脑", "This computer")}</span>}</span>
                     <span className="pc-card-sub">
-                      <span className={cn("pc-online", m.online && "is-on")}>{m.online ? L("在线", "Online") : L("不在线", "Away")}</span>
+                      <span className={cn("pc-online", m.online && "is-on")}>{updating(m) ? L("正在更新", "Updating") : m.online ? L("在线", "Online") : L("不在线", "Away")}</span>
                       <span>{osInfo(m.os).label}</span>
                       {m.myco_version && <span>myco {ver(m.myco_version)}</span>}
                     </span>

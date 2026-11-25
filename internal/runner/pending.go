@@ -3,12 +3,13 @@ package runner
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
 
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/harness"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/harness"
 )
 
 type pendingRun struct {
@@ -25,9 +26,32 @@ type pendingRun struct {
 	Requeued bool `json:"requeued,omitempty"`
 }
 
+// RunSuccess records successful local CLI use, without task or credential data.
+type RunSuccess struct {
+	CLI string    `json:"cli"`
+	At  time.Time `json:"at"`
+}
+
+// ReadSuccess reads only success metadata. Older runner files have none.
+func ReadSuccess(path string) *RunSuccess {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	var st struct {
+		Success *RunSuccess `json:"success"`
+	}
+	if json.NewDecoder(io.LimitReader(f, 8<<20)).Decode(&st) != nil {
+		return nil
+	}
+	return st.Success
+}
+
 type runnerState struct {
-	Runs  map[string]int64      `json:"runs"`
-	Tasks map[string]pendingRun `json:"tasks"`
+	Success *RunSuccess           `json:"success,omitempty"`
+	Runs    map[string]int64      `json:"runs"`
+	Tasks   map[string]pendingRun `json:"tasks"`
 }
 
 func loadPending(path string) map[string]pendingRun {
@@ -52,7 +76,7 @@ func (r *Runner) saveState() {
 	if r.opts.StatePath == "" {
 		return
 	}
-	st := runnerState{Runs: map[string]int64{}, Tasks: r.pending}
+	st := runnerState{Runs: map[string]int64{}, Tasks: r.pending, Success: r.lastSuccess}
 	for k, v := range r.ownRunEnd {
 		st.Runs[k] = v.UnixMilli()
 	}
@@ -132,14 +156,17 @@ func (r *Runner) finishPending(ctx context.Context, onlyKept bool) {
 	r.mu.Lock()
 	items := make([]pendingRun, 0, len(r.pending))
 	for _, v := range r.pending {
-		if !onlyKept || v.Finish != "" {
+		if !onlyKept || (v.Finish != "" && !r.finishing[v.MessageID]) {
 			items = append(items, v)
 		}
 	}
 	r.mu.Unlock()
 	for _, item := range items {
+		if ctx.Err() != nil {
+			return
+		}
 		log := r.log.With("message_id", item.MessageID, "agent", item.Agent, "started_at", item.StartedAt)
-		finishCtx, cancel := r.finishContext(ctx)
+		finishCtx, cancel := context.WithTimeout(ctx, r.finishTimeout)
 		var status string
 		err, exhausted := r.retryFinish(finishCtx, log, "recover get message", func(c context.Context) error {
 			m, err := r.hub.GetMessage(c, item.MessageID)

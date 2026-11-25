@@ -1,12 +1,13 @@
+import { runnerUpdating } from "@/lib/runner-state";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { activePaneId } from "@/app/ChatSearch";
 import { IntroCard, introOf } from "@/app/Onboard";
-import { Activity, ArrowLeft, ArrowUp, ChevronDown, AudioLines, Columns2, FileText, Loader2, MoreHorizontal, PanelRightClose, PanelRightOpen, Plus, Users } from "lucide-react";
+import { Activity, ArrowLeft, ArrowUp, ChevronDown, AudioLines, Eye, Columns2, FileText, Loader2, MoreHorizontal, PanelRightClose, PanelRightOpen, Plus, Users } from "lucide-react";
 import { appApi, errorMessage, type RecentItem } from "@/appapi";
 import { GroupNameDialog, GroupedMembers, inGroupOrder, moveItems, useGroupStyle, type GroupStyle, type GroupsCtl } from "@/app/MemberGroups";
 import type { Message, Project } from "@/api";
 import type { AgentRow } from "@/app/types";
-import { agentKind, isMe, nodeName } from "@/app/nodes";
+import { agentKind, heldTaskLabel, isMe, nodeName } from "@/app/nodes";
 import { keepSent, keptSent, useInputHistory } from "@/app/inputHistory";
 import { DictateButton } from "@/app/Dictate";
 import { callWhenOpened, useVoiceCall, useVoiceReady } from "@/app/VoiceBar";
@@ -36,7 +37,7 @@ export function isLoose(s: SpaceRef): s is { hubId: string; loose: true } {
 }
 
 /** What the right pane shows: a member's work, or a computer's terminal. */
-type Side = { agent: string; peer?: string; focus?: string; also?: string[] };
+type Side = { agent: string; peer?: string; focus?: string; also?: string[]; back?: Side };
 
 /** The last request to open a chat (AppMode's openChat.n) that was done. */
 let openedChatN = 0;
@@ -78,7 +79,7 @@ type View =
   | { kind: "activity" }
   | { kind: "chat"; agent: string; peer?: string; focus?: string; also?: string[] }
   | { kind: "thread"; threadId: string; agent: string }
-  | { kind: "pair"; agent: string; peer: string; focus?: string };
+  | { kind: "pair"; agent: string; peer: string; focus?: string; back?: View };
 
 const POLL_MS = 4000;
 
@@ -509,8 +510,10 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
   const [groupTick, setGroupTick] = useState(0);
   useEffect(() => {
     if (!groupEdit || !project) return;
+    // (a save still on its way holds it however long the hub takes)
+    if (groupSaves.current.inflight > 0) return;
     if (Date.now() > groupEdit.until) { setGroupEdit(null); return; }
-    if (groupSaves.current.inflight > 0 || (project.updated_at || "") < groupSaves.current.at) return;
+    if (Date.parse(project.updated_at || "") < Date.parse(groupSaves.current.at || "")) return;
     const sameList = !groupEdit.list || JSON.stringify(groupEdit.list) === JSON.stringify(project.groups || []);
     const left = Object.fromEntries(Object.entries(groupEdit.of).filter(([a, g]) => (project.members.find((m) => m.name === a)?.group || "") !== g));
     if (sameList && !Object.keys(left).length) setGroupEdit(null);
@@ -537,7 +540,8 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
         groupSaves.current.inflight++;
         try {
           const p = await appApi.updateProject(hubId, project.name, { groups, ...(members ? { member_groups: members } : {}) });
-          if ((p?.updated_at || "") > groupSaves.current.at) groupSaves.current.at = p.updated_at;
+          // (as times: the hub drops trailing zeros, so "15.4Z" is not after "15.45Z" as text)
+          if (!groupSaves.current.at || Date.parse(p?.updated_at || "") > Date.parse(groupSaves.current.at)) groupSaves.current.at = p?.updated_at || groupSaves.current.at;
         } catch (e) {
           setGroupEdit(null);
           setGroupErr(errorMessage(e));
@@ -595,12 +599,15 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
             rows={rows}
             now={now}
             showBack
-            backLabel={loose ? L("返回", "Back") : L(`返回「${project?.title || project?.name}」`, `Back to ${project?.title || project?.name}`)}
-            onBack={() => setView({ kind: "home" })}
+            backLabel={view.kind === "pair" && view.back
+              ? (() => { const b = view.back; const who = b.kind === "chat" || b.kind === "pair" || b.kind === "thread" ? nameOf(b.agent) : ""; return who ? L(`返回和 ${who} 的对话`, `Back to ${who}`) : L("返回", "Back"); })()
+              : loose ? L("返回", "Back") : L(`返回「${project?.title || project?.name}」`, `Back to ${project?.title || project?.name}`)}
+            // (a conversation opened from a card in another: back to that one)
+            onBack={() => setView(view.kind === "pair" && view.back ? view.back : { kind: "home" })}
             role={view.kind === "chat" && view.agent === coordinator ? L("协调者", "Coordinator") : undefined}
             onNewConversation={(_h, agent) => void chatWith(agent)}
-            onOpen={(_h, agent, peer) => (peer ? setView({ kind: "pair", agent, peer }) : void chatWith(agent))}
-            onOpenExchange={(agent, other, focus) => setView({ kind: "pair", agent, peer: other, focus })}
+            onOpen={(_h, agent, peer) => (peer ? setView({ kind: "pair", agent, peer, back: view }) : void chatWith(agent))}
+            onOpenExchange={(agent, other, focus) => setView({ kind: "pair", agent, peer: other, focus, back: view })}
             onRefresh={onRefresh}
             headActions={actions}
           />
@@ -684,12 +691,14 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
             target={{ hubId, hubName, threadId: "", agent: side.agent, peer: side.peer, project: project?.name, focus: side.focus, also: side.also }}
             rows={rows}
             now={now}
-            showBack={false}
-            onBack={() => closeSide(side.id)}
+            showBack={!!side.back}
+            backLabel={side.back ? L(`返回和 ${nameOf(side.back.agent)} 的对话`, `Back to ${nameOf(side.back.agent)}`) : undefined}
+            // (opened from a card in this pane: back to what was here)
+            onBack={() => (side.back ? updateSide(side.id, (x) => ({ ...x.back!, id: x.id })) : closeSide(side.id))}
             headActions={actions}
             onNewConversation={(_h, agent) => void chatWith(agent)}
             onOpen={(_h, agent) => void chatWith(agent)}
-            onOpenExchange={(agent, other, focus) => updateSide(side.id, (x) => ({ id: x.id, agent, peer: other, focus }))}
+            onOpenExchange={(agent, other, focus) => updateSide(side.id, (x) => ({ id: x.id, agent, peer: other, focus, back: { agent: x.agent, peer: x.peer, focus: x.focus, also: x.also, back: x.back } }))}
             onRefresh={onRefresh}
           />
       ),
@@ -1133,7 +1142,7 @@ function Composer({ hubId, project, agents, onSending, onSent, onCall }: {
   const [sent, setSent] = useState(() => keptSent(sentKey));
   const history = useInputHistory(sent, draft, setDraft);
   // Files going with the task (pasted, dropped or picked).
-  const att = useAttachments(hubId);
+  const att = useAttachments(hubId, groupDraftKey(hubId, project?.name));
   const menu = useContextMenu();
   const input = useRef<HTMLTextAreaElement>(null);
   // Grows with what is typed, as chat apps do; past COMPOSE_MAX it scrolls.
@@ -1253,6 +1262,7 @@ function Composer({ hubId, project, agents, onSending, onSent, onCall }: {
 /** What a member is doing now, in a line, and since when and for whom. */
 function liveLine(r: AgentRow, nameOf: (n: string) => string, now: number): { text: string; meta?: string } {
   const a = r.st.agent;
+  if (runnerUpdating(a, now)) return { text: L("正在更新", "Updating") };
   if (r.st.state === "offline") return { text: L("不在线", "Away"), meta: a.last_seen_at ? timeAgo(a.last_seen_at, now) : undefined };
   const open = (r.st.current || []).filter((m) => m.to === a.name && m.type === "task");
   // Working means the node acknowledged a task. A task it only pulled
@@ -1272,6 +1282,10 @@ function liveLine(r: AgentRow, nameOf: (n: string) => string, now: number): { te
     return { text, meta: meta ? meta + queued : queued.replace(/^ · /, "") || undefined };
   }
   if (r.st.queued > 0) return { text: L(`${r.st.queued} 个活在排队`, `${r.st.queued} queued`) };
+  if (r.st.held > 0) {
+    const held = r.st.current?.find((m) => m.status === "held");
+    return { text: held ? heldTaskLabel(held, nameOf(held.from)) : L("暂挂中，没人在做", "On hold · no one is working on it") };
+  }
   return { text: a.description || stateWords(r.st.state) };
 }
 
@@ -1448,6 +1462,11 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
           <span className="sp-member-name">
             <span className="sp-member-name-text">{nodeName(a, r.hub)}</span>
             {a.name === coordinator && <span className="sp-role">{L("协调者", "Coordinator")}</span>}
+            {(r.st.watching || 0) > 0 && (
+              <span className="sp-watch-tag" title={L("在后台盯着几件事（myco watch）", "Watching for things in the background (myco watch)")}>
+                <Eye />{L(`盯着 ${r.st.watching}`, `watching ${r.st.watching}`)}
+              </span>
+            )}
           </span>
           {ws ? <span className="sp-member-sub">{whereOf(r)}</span> : (() => {
             const line = liveLine(r, nameOf, now);

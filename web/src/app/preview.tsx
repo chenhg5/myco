@@ -152,7 +152,7 @@ const keepFull = (on: boolean) => { try { localStorage.setItem(FULL_KEY, on ? "1
  * the chat: scroll it, write, send), over the App when narrow or full
  * screen. Its left edge drags it wider; one panel at a time.
  */
-export function DockPanel({ open, onOpenChange, onClose, closeLabel, keepMounted, title, about, head, tools, bodyClass, className, children }: {
+export function DockPanel({ open, onOpenChange, onClose, closeLabel, keepMounted, title, titleHint, about, head, tools, bodyClass, className, keepOpenOn, children }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** its × does this instead of onOpenChange(false) (Esc and a click
@@ -162,6 +162,7 @@ export function DockPanel({ open, onOpenChange, onClose, closeLabel, keepMounted
   /** closed, it stays (hidden): what it shows keeps going (pages) */
   keepMounted?: boolean;
   title: string;
+  titleHint?: string;
   about?: React.ReactNode;
   /** beside the titles (e.g. what to show it as) */
   head?: React.ReactNode;
@@ -169,6 +170,7 @@ export function DockPanel({ open, onOpenChange, onClose, closeLabel, keepMounted
   tools?: React.ReactNode;
   bodyClass?: string;
   className?: string;
+  keepOpenOn?: string;
   children: React.ReactNode;
 }) {
   const [full, setFull] = useState(keptFull);
@@ -262,7 +264,7 @@ export function DockPanel({ open, onOpenChange, onClose, closeLabel, keepMounted
           style={!full && width ? { width: `min(${width}px, calc(100% - 32px))` } : docked ? { width: dockWidth } : undefined}
           // Beside the chat, working in the chat does not close it; Esc
           // does, from the panel only (in the chat's box it is the box's).
-          onInteractOutside={(e) => { if (docked) e.preventDefault(); }}
+          onInteractOutside={(e) => { if (docked || (keepOpenOn && e.target instanceof Element && e.target.closest(keepOpenOn))) e.preventDefault(); }}
           // (a picture opened from it, full size, takes Esc for itself)
           onEscapeKeyDown={(e) => { if ((docked && !panel.current?.contains(document.activeElement)) || document.querySelector(".lightbox")) e.preventDefault(); }}>
           {!full && (
@@ -271,7 +273,7 @@ export function DockPanel({ open, onOpenChange, onClose, closeLabel, keepMounted
           )}
           <div className="fp-head" onDoubleClick={(e) => { if (!(e.target as HTMLElement).closest("button")) toggleFull(); }}>
             <div className="fp-titles">
-              <Dialog.Title asChild><h3 title={title}>{title}</h3></Dialog.Title>
+              <div className="fp-title-line"><Dialog.Title asChild><h3 title={title}>{title}</h3></Dialog.Title>{titleHint && <span className="fp-title-hint" role="img" aria-label={titleHint} title={titleHint} />}</div>
               <Dialog.Description asChild><p>{about}</p></Dialog.Description>
             </div>
             {head}

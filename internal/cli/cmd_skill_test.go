@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chenhg5/myco/skill"
+	"github.com/myco-ai/myco/skill"
 )
 
 func TestEmbeddedSkill(t *testing.T) {

@@ -39,6 +39,15 @@
     handlers.preferences.slice().forEach(function(f){ f(p); });
   }
   window.__mycoPreferences = applyPreferences;
+  applyPreferences(preferences);
+  if (!document.documentElement) {
+    var rootReady = new MutationObserver(function () {
+      if (!document.documentElement) return;
+      rootReady.disconnect();
+      applyPreferences(preferences);
+    });
+    rootReady.observe(document, { childList: true, subtree: true });
+  }
   window.__mycoEvent = function (d) {
     if (!d || typeof d !== "object") return;
     if (d.myco === "remote-disconnect") {
@@ -99,11 +108,18 @@
       },
     },
     download: function (name, content, type) {
+      var limit = 20 * 1024 * 1024;
+      function tooLarge() { var e = new Error(preferences.language === "zh" ? "文件不能超过 20 MiB" : "Files can be up to 20 MiB"); e.code = "too_large"; return e; }
+      if (content instanceof Blob && content.size > limit) return Promise.reject(tooLarge());
       return Promise.resolve(content instanceof Blob ? content.arrayBuffer() : content).then(function (c) {
-        var bytes = typeof c === "string" ? new TextEncoder().encode(c) : c instanceof ArrayBuffer ? new Uint8Array(c) : new Uint8Array(c.buffer || c);
+        if (!(typeof c === "string" || c instanceof ArrayBuffer || ArrayBuffer.isView(c) || Array.isArray(c))) {
+          var invalid = new Error(preferences.language === "zh" ? "文件内容读不出来" : "The file could not be read"); invalid.code = "invalid_argument"; throw invalid;
+        }
+        var bytes = typeof c === "string" ? new TextEncoder().encode(c) : c instanceof ArrayBuffer ? new Uint8Array(c) : ArrayBuffer.isView(c) ? new Uint8Array(c.buffer, c.byteOffset, c.byteLength) : new Uint8Array(c);
+        if (bytes.byteLength > limit) throw tooLarge();
         var bin = "";
         for (var i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-        return call("download", { name: String(name), type: type || "", base64: btoa(bin) }, 60000);
+        return call("download", { name: String(name), type: type || "", base64: btoa(bin) }, 600000);
       });
     },
     storage: {

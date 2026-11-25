@@ -2,11 +2,12 @@ package console
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // Superagents (hubs from v0.21.1), passed to the hub as the person signed in
@@ -16,7 +17,7 @@ import (
 //	PUT    /app/hubs/{id}/superagent                     {agent} → {agent}
 //	DELETE /app/hubs/{id}/superagent
 //	GET    /app/hubs/{id}/approvals?status=pending       {approvals}
-//	POST   /app/hubs/{id}/approvals/{aid}/approve|deny   → the approval ({permissions?, ttl_seconds?} narrows an action_grant)
+//	POST   /app/hubs/{id}/approvals/{aid}/approve|deny   → the approval ({permissions?, ttl_seconds?, hosts?} narrows an action_grant)
 //	GET    /app/hubs/{id}/action-grants?state=active     {grants}
 //	POST   /app/hubs/{id}/action-grants/{gid}/revoke     → the grant
 func (b *Backend) superagentRoutes(m *http.ServeMux) {
@@ -65,12 +66,16 @@ func (b *Backend) superagentRoutes(m *http.ServeMux) {
 			return
 		}
 		// Approving an agent's request to act on a computer may allow less
-		// than it asked ({permissions?, ttl_seconds?}).
+		// than it asked ({permissions?, ttl_seconds?, hosts?}).
 		var narrow api.ActionGrantNarrow
-		_ = json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&narrow)
+		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10))
+		if err := dec.Decode(&narrow); !errors.Is(err, io.EOF) && (err != nil || dec.Decode(new(any)) != io.EOF) {
+			writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument", Message: "invalid approval body"})
+			return
+		}
 		var out *api.Approval
 		var err error
-		if action == "approve" && (len(narrow.Permissions) > 0 || narrow.TTLSeconds > 0) {
+		if action == "approve" && (len(narrow.Permissions) > 0 || narrow.TTLSeconds > 0 || narrow.Hosts != nil) {
 			out, err = c.DecideActionGrant(r.Context(), r.PathValue("aid"), narrow)
 		} else {
 			out, err = c.DecideApproval(r.Context(), r.PathValue("aid"), action == "approve")

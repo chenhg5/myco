@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
+	"github.com/myco-ai/myco/internal/api"
 )
 
 // A hub that keeps one person's voice settings, as the real one does
@@ -161,6 +161,28 @@ func TestVoiceSettingsFromBeforeSharing(t *testing.T) {
 	srv2 := httptestServer(t, b2)
 	if _, body := srv2("POST", "/app/voice/sync", ""); !strings.Contains(body, `"llm_model":"from-the-phone"`) || keys2.m[voiceLLMSecret] != "sk-phone" {
 		t.Fatalf("a hub that has them: %s %v", body, keys2.m)
+	}
+}
+
+// A synchronous settings mutation must not start an unowned second sync
+// merely to render its response (which could rewrite files after teardown).
+func TestVoiceMutationResponseDoesNotStartBackgroundSync(t *testing.T) {
+	for _, route := range []struct{ method, path, body string }{
+		{"POST", "/app/voice/sync", ""},
+		{"PUT", "/app/voice/config", `{}`},
+	} {
+		t.Run(route.path, func(t *testing.T) {
+			b := &Backend{Secrets: &memKeys{m: map[string]string{}}}
+			srv := httptestServer(t, b)
+			if code, body := srv(route.method, route.path, route.body); code != http.StatusOK {
+				t.Fatalf("response: %d %s", code, body)
+			}
+			unused := false
+			b.voiceState().sync.once.Do(func() { unused = true })
+			if !unused {
+				t.Fatal("rendering a mutation response started the initial background sync")
+			}
+		})
 	}
 }
 

@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/hubserver"
-	"github.com/chenhg5/myco/internal/remotedesktop"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/hubserver"
+	"github.com/myco-ai/myco/internal/remotedesktop"
 )
 
 type fakeDesktop struct {
@@ -48,7 +48,7 @@ func TestDesktopJobsObserveAndStopOnRevoke(t *testing.T) {
 	hs := httptest.NewServer(h.Handler)
 	defer func() { hs.Close(); h.Close() }()
 	admin, _ := client.New(hs.URL, "admin-token-123456")
-	ct, err := admin.CreateConsoleToken(ctx, "glenn-mac")
+	ct, err := admin.CreateConsoleToken(ctx, "alice-mac")
 	if err != nil {
 		t.Fatal(err)
 	}

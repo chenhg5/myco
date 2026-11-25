@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // Projects: a project groups nodes around a goal with a shared brief,
@@ -21,6 +21,8 @@ import (
 func (s *Server) routeProjects(m *http.ServeMux) {
 	m.HandleFunc("GET /v1/projects", s.projectCaller(s.listProjects))
 	m.HandleFunc("POST /v1/projects", s.projectCaller(s.createProject))
+	m.HandleFunc("GET /v1/projects/{name}/storage", s.projectCaller(s.getProjectStorage))
+	m.HandleFunc("PUT /v1/projects/{name}/storage", s.projectCaller(s.setProjectStorage))
 	m.HandleFunc("GET /v1/projects/{name}", s.projectCaller(s.getProject))
 	m.HandleFunc("PATCH /v1/projects/{name}", s.projectCaller(s.updateProject))
 	m.HandleFunc("DELETE /v1/projects/{name}", s.projectCaller(s.deleteProject))
@@ -34,6 +36,8 @@ func (s *Server) routeProjects(m *http.ServeMux) {
 	m.HandleFunc("GET /v1/projects/{name}/files/{file}", s.projectCaller(s.getProjectFile))
 	m.HandleFunc("DELETE /v1/projects/{name}/files/{file}", s.projectCaller(s.deleteProjectDoc))
 	s.projectMachineRoutes(m)
+	s.projectInvitationRoutes(m)
+	s.projectAutomationRoutes(m)
 }
 
 // projectCall is who calls: a person (console/admin token) or an agent.
@@ -74,8 +78,33 @@ func (s *Server) recordAs(r *http.Request, by app.Actor, action, target, detail 
 }
 
 func (s *Server) projectDTO(r *http.Request, c projectCall, v *app.ProjectView, bodies bool) api.Project {
+	return s.projectDTOs(r, c, []*app.ProjectView{v}, bodies)[0]
+}
+
+// projectDTOs maps projects, their members' agents enriched in one go:
+// enrich reads every agent's state, so once per member (23 members, a few
+// projects) made a project read take over 20 seconds on a busy hub, past
+// the App's 12-second limit for a call.
+func (s *Server) projectDTOs(r *http.Request, c projectCall, views []*app.ProjectView, bodies bool) []api.Project {
+	out := make([]api.Project, 0, len(views))
+	var agents []*api.Agent
+	for _, v := range views {
+		p, a := s.projectDTOBare(r, c, v, bodies)
+		out = append(out, p)
+		agents = append(agents, a...)
+	}
+	if len(agents) > 0 {
+		s.enrich(r.Context(), agents...)
+	}
+	return out
+}
+
+// projectDTOBare maps a project, leaving its members' agents for the
+// caller to enrich (returned).
+func (s *Server) projectDTOBare(r *http.Request, c projectCall, v *app.ProjectView, bodies bool) (api.Project, []*api.Agent) {
+	var agents []*api.Agent
 	p := v.Project
-	out := api.Project{Name: p.Name, Title: p.Title, Goal: p.Goal, Brief: p.Brief, Visibility: string(p.Visibility),
+	out := api.Project{CoordinatorInvites: p.CoordinatorInvites, CoordinatorAutomations: p.CoordinatorAutomations, Name: p.Name, Title: p.Title, Goal: p.Goal, Brief: p.Brief, Visibility: string(p.Visibility),
 		OwnerID: p.Owner, Archived: p.Archived, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt, Machines: append([]string{}, p.Machines...),
 		Groups: append([]string{}, p.Groups...),
 		Links:  make([]api.ProjectLink, 0, len(p.Links)), Members: make([]api.ProjectMember, 0, len(v.Members)), Docs: make([]api.ProjectDoc, 0, len(v.Docs))}
@@ -91,8 +120,8 @@ func (s *Server) projectDTO(r *http.Request, c projectCall, v *app.ProjectView, 
 		pm := api.ProjectMember{Name: string(m.Agent), Role: string(m.Role), Note: m.Note, Group: m.Group, AddedBy: m.AddedBy, AddedAt: m.AddedAt}
 		if a, err := s.agents.Get(r.Context(), string(m.Agent)); err == nil && c.viewer.Sees(a) {
 			dto := s.agentDTO(a)
-			s.enrich(r.Context(), &dto)
 			pm.Agent = &dto
+			agents = append(agents, &dto)
 		}
 		out.Members = append(out.Members, pm)
 	}
@@ -103,8 +132,9 @@ func (s *Server) projectDTO(r *http.Request, c projectCall, v *app.ProjectView, 
 		}
 		out.Docs = append(out.Docs, doc)
 	}
+	out.ProjectStorage = s.projectStorageDTO(c, v)
 	out.CanEdit, out.CanManage = s.projects.Rights(c.by, v)
-	return out
+	return out, agents
 }
 
 func (s *Server) listProjects(w http.ResponseWriter, r *http.Request, c projectCall) {
@@ -113,11 +143,7 @@ func (s *Server) listProjects(w http.ResponseWriter, r *http.Request, c projectC
 		writeError(w, err)
 		return
 	}
-	out := api.ProjectList{Projects: make([]api.Project, 0, len(list))}
-	for _, v := range list {
-		out.Projects = append(out.Projects, s.projectDTO(r, c, v, false))
-	}
-	writeJSON(w, http.StatusOK, out)
+	writeJSON(w, http.StatusOK, api.ProjectList{Projects: s.projectDTOs(r, c, list, false)})
 }
 
 func (s *Server) createProject(w http.ResponseWriter, r *http.Request, c projectCall) {
@@ -310,6 +336,22 @@ func (s *Server) putProjectFile(w http.ResponseWriter, r *http.Request, c projec
 // getProjectFile serves a file's content.
 func (s *Server) getProjectFile(w http.ResponseWriter, r *http.Request, c projectCall) {
 	d, rc, err := s.projects.OpenFile(r.Context(), c.by, r.PathValue("name"), r.PathValue("file"))
+	if domain.IsCode(err, domain.CodeNotFound) && s.pageAttachments != nil {
+		a, reader, e := s.pageAttachments.LegacyOpen(r.Context(), c.by, r.PathValue("name"), r.PathValue("file"))
+		if e == nil {
+			defer reader.Close()
+			w.Header().Set("Content-Type", a.ContentType)
+			w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": a.Name}))
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+			w.Header().Set("Cache-Control", "private, no-store")
+			io.Copy(w, reader)
+			return
+		}
+		if !domain.IsCode(e, domain.CodeNotFound) {
+			writeError(w, e)
+			return
+		}
+	}
 	if err != nil {
 		writeError(w, err)
 		return
@@ -366,4 +408,30 @@ func (s *Server) deleteProjectDoc(w http.ResponseWriter, r *http.Request, c proj
 	}
 	s.recordAs(r, c.by, "project.doc_remove", r.PathValue("name"), doc)
 	writeJSON(w, http.StatusOK, map[string]any{"deleted": true})
+}
+
+func (s *Server) projectStorageDTO(c projectCall, v *app.ProjectView) api.ProjectStorage {
+	u := s.projects.Storage(v)
+	return api.ProjectStorage{FilesUsed: u.FilesUsed, FilesMax: u.FilesMax, BytesUsed: u.BytesUsed, BytesMax: u.BytesMax, DocsUsed: u.DocsUsed, DocsMax: domain.MaxProjectDocs, FilesMaxOverride: v.Project.FilesMax, BytesMaxOverride: v.Project.BytesMax, CanManageStorage: c.by.Manages() && c.by.Agent == nil && c.by.Via == nil}
+}
+func (s *Server) getProjectStorage(w http.ResponseWriter, r *http.Request, c projectCall) {
+	v, err := s.projects.Get(r.Context(), c.by, r.PathValue("name"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.projectStorageDTO(c, v))
+}
+func (s *Server) setProjectStorage(w http.ResponseWriter, r *http.Request, c projectCall) {
+	var in api.ProjectStorageRequest
+	if !decode(w, r, &in) {
+		return
+	}
+	v, err := s.projects.SetStorageLimits(r.Context(), c.by, r.PathValue("name"), in.FilesMax, in.BytesMax)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	s.recordAs(r, c.by, "project.storage", v.Project.Name, fmt.Sprintf("files=%d bytes=%d", in.FilesMax, in.BytesMax))
+	writeJSON(w, http.StatusOK, s.projectStorageDTO(c, v))
 }

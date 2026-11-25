@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // ConsoleSenderPrefix marks messages the hub's administrator sends from the
@@ -465,7 +465,9 @@ func pairItem(p domain.PairRef, msgs []*domain.Message) RecentItem {
 // taskState is the row's state from its newest task and any still open.
 func taskState(task, answer, open *domain.Message) string {
 	switch {
-	case open != nil && (open.Status == domain.StatusQueued || open.Status == domain.StatusDelivered || open.Status == domain.StatusHeld):
+	case open != nil && open.Status == domain.StatusHeld:
+		return "held"
+	case open != nil && (open.Status == domain.StatusQueued || open.Status == domain.StatusDelivered):
 		return "queued"
 	case open != nil:
 		return "working"

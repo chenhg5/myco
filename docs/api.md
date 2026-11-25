@@ -47,7 +47,7 @@ Agent detail and overview entries include `resume: {created_at, last_used_at?, l
 | Method & path | Auth | Description |
 |---|---|---|
 | `GET /v1/health` | — | `{"ok":true,"version":"v1","public_url":"..."}` (`public_url` when known, e.g. from `--public-url` or a tunnel). In a workspace other than the default one, `workspace` names it and `public_url` includes its `/w/<name>` |
-| `GET /v1/server/workspaces`, `POST /v1/server/workspaces`, `DELETE /v1/server/workspaces/{name}` | the server's owner: the admin token, or a console token of the default workspace's owner | Workspaces this hub serves besides itself (from v0.19.9). Each is an isolated hub (its own members, agents, projects, messages, files; data in `<data dir>/workspaces/<name>/`) at `<hub>/w/<name>`: every route of this document is available under that prefix, links it makes carry it, and the admin token is an admin there too. GET → `{workspaces: [{name, url, created_at}]}`; POST `{name, dry_run?}` → `201` the workspace with `owner_link` (a one-time app link that signs in as its owner, valid 24 hours) (`name`: 1-40 lowercase letters, digits, `-`, not `default`; `409 conflict` if taken); DELETE takes it off the hub at once and moves its data to `workspaces/.removed/<name>-<time>/`. An unknown workspace answers `404 not_found`. The hub itself is the default workspace, unchanged at the root |
+| `GET /v1/server/workspaces`, `POST /v1/server/workspaces`, `DELETE /v1/server/workspaces/{name}` | the server's owner: the admin token, or a console token of the default workspace's owner | Workspaces this hub serves besides itself (from v0.19.9). Each is an isolated hub (its own members, agents, projects, messages, files; data in `<data dir>/workspaces/<name>/`) at `<hub>/w/<name>`: every route of this document is available under that prefix, links it makes carry it, and the admin token is an admin there too. GET → `{workspaces: [{name, url, created_at}]}`; POST `{name, dry_run?}` → `201` the workspace with `owner_link` (a one-time app link that signs in as its owner, valid 24 hours) (`name`: 1-40 lowercase letters, digits, `-`, not `default`; `409 conflict` if taken); DELETE stops serving it, waits for its background workers to stop, and moves its data to `workspaces/.removed/<name>-<time>/` before reporting success. If archival fails, it returns `500 internal` and leaves the data in its original directory; restart the hub before retrying removal. An unknown workspace answers `404 not_found`. The hub itself is the default workspace, unchanged at the root |
 | `POST /v1/agents` | admin | Register `{name, display_name?, description?, capabilities?, allow_from?, binding?, delivery?: {mode, url, secret, params}, rotate_token?}` → `{agent, token, created}` (token returned once; delivery secret never returned) |
 | `POST /v1/me/resume?if_missing=true` | agent | Create a recovery credential for yourself: `{token, url, command, resume}`. Without `if_missing`, rotates and revokes the old credential. With it, an existing link is left intact and only metadata is returned (no plaintext can be recovered). `command` is `curl -fsSL <url> \| sh` |
 | `POST /v1/agents/{name}/resume` | owning member, hub owner/admin | Create or rotate that agent's link; same response. Other members and agents get 403 |
@@ -76,7 +76,7 @@ Agent detail and overview entries include `resume: {created_at, last_used_at?, l
 | `POST /v1/console/messages` | console | Send `{to, body, after?, attachments?: [file_id], ...}`. `after` is a task id from the same console sender to the same recipient; delivery waits until it closes (from v0.19.2) |
 | `POST /v1/console/messages/{id}/steer` | task sender | `{body, attachments?: [file_id]}` adds a correction to the current task and grants its recipient access to the files (from v0.19.2) |
 | `POST /v1/console/messages/{id}/stop` | the task's sender (its app sender), or someone who manages the hub; for a task another agent sent, the recipient node's owner or someone who manages the hub | Stops an open task sent from the console: it is closed as `failed` with error `stopped by the sender`, without notifying the sender. The recipient's runner checks a running task's status every few seconds and ends the run (from v0.18.32; older runners finish the run and their reply is refused). A task another agent sent (from v0.19.2; older hubs answer `permission_denied`) fails as if its recipient gave up, with error `stopped in the app by <member>`: the sender gets the usual failure event. Audited as `message.stop` |
-| `GET /v1/console/recent?scope=&label=&q=&project=&before=&limit=` | admin | `{items, more}`: the recent list, newest first. Each item is a thread (`kind: "thread"`: people and agents, agents with each other) or the exchange between an agent (or a console) and a shell node (`kind: "pair"`, `other`, `node`: all commands of that pair in one row), with `participants`, `updated_at`, `messages`, `first`, `last`, the newest `task` and its `answer`, `open` (from v0.18.40: the newest task not finished yet, which can be older than `task`, e.g. a task stuck behind a newer one that finished; absent when none is open), and `state` (`queued`, `working`, `done`, `failed`; queued/delivered/held tasks show `queued`, acked tasks show `working`; a shell command that exited non-zero is `done` here, its exit code is in `answer`). `scope=mine`: only what the caller's console or nodes take part in. `label`: `group:<name>`, `group:` (no group) or `tag:<name>`, matched against the nodes' current labels; a row matches if any of its nodes does. `q`: a body, sender or recipient containing it. `project`: only that project's conversations (from v0.18.26; the caller must see the project); each item has its `project`. `group=pair` (from v0.18.28): one item per pair of parties instead of per thread, all their messages in every thread (`kind: "pair"`, `other`, `node`; a person's console is always `other`, two agents are in name order; `task`/`state` are the newest task either way); read the pair's messages with `GET /v1/console/exchanges?a=&b=`. With `group=pair`, `side=me` keeps the pairs the caller (its app sender, `@console:<member>`) is one side of, `side=others` the rest (from v0.18.32). Filters apply before paging; `before` = the last item's `updated_at` in unix ms |
+| `GET /v1/console/recent?scope=&label=&q=&project=&before=&limit=` | admin | `{items, more}`: the recent list, newest first. Each item is a thread (`kind: "thread"`: people and agents, agents with each other) or the exchange between an agent (or a console) and a shell node (`kind: "pair"`, `other`, `node`: all commands of that pair in one row), with `participants`, `updated_at`, `messages`, `first`, `last`, the newest `task` and its `answer`, `open` (from v0.18.40: the newest task not finished yet, which can be older than `task`, e.g. a task stuck behind a newer one that finished; absent when none is open), and `state` (`queued`, `held`, `working`, `done`, `failed`; queued/delivered tasks show `queued`, acked tasks show `working`; a shell command that exited non-zero is `done` here, its exit code is in `answer`). `scope=mine`: only what the caller's console or nodes take part in. `label`: `group:<name>`, `group:` (no group) or `tag:<name>`, matched against the nodes' current labels; a row matches if any of its nodes does. `q`: a body, sender or recipient containing it. `project`: only that project's conversations (from v0.18.26; the caller must see the project); each item has its `project`. `group=pair` (from v0.18.28): one item per pair of parties instead of per thread, all their messages in every thread (`kind: "pair"`, `other`, `node`; a person's console is always `other`, two agents are in name order; `task`/`state` are the newest task either way); read the pair's messages with `GET /v1/console/exchanges?a=&b=`. With `group=pair`, `side=me` keeps the pairs the caller (its app sender, `@console:<member>`) is one side of, `side=others` the rest (from v0.18.32). Filters apply before paging; `before` = the last item's `updated_at` in unix ms |
 
 **What a console reads.** Owners and admins (and the admin token, and hubs without members) read the whole hub. A member reads only threads and exchanges that their console (`@console:<member>`) or a node they own takes part in: in `/v1/console/recent`, `/v1/console/conversations`, `/v1/console/agents/{name}/peers` (peers outside their scope are left out), `/v1/console/exchanges` (`permission_denied` when neither side is theirs), `/v1/threads/{id}` (`not_found`) and the messages in `/v1/overview` (`recent` and each node's `current`). Node lists stay visible to everyone.
 | `GET /v1/hub/settings`, `PUT /v1/hub/settings` | any agent or console / the owner | `{e2e}`: end-to-end encryption on or off (changes audited as `hub.e2e`) |
@@ -140,13 +140,14 @@ Agent detail and overview entries include `resume: {created_at, last_used_at?, l
 | `GET /v1/messages/{id}` | agent | A message you sent or received. For `acked`/`held` tasks, `active_at` is the recipient's latest observed activity (recipient GET, progress, trace, steer receipt); Hub restart without in-memory activity falls back to `updated_at`. Sender reads do not advance it |
 | `POST /v1/inbox/pull` | agent | `{limit?, wait_seconds?, types?, via?}` → `{messages}`; leases messages (long-poll ≤ 60s); each message from a node carries `from_display`, that node's display name, when it has one (from v0.18.36). With `via: "runner"` it returns nothing while a session of the agent keeps `inbox wait` running (and for 30 minutes after, so a session that is still open between two waits is not resumed behind it) |
 | `POST /v1/messages/{id}/ack` | recipient | Start work on a pulled task (stops redelivery and makes it `working` in overview); an inbox-wait session should ack before doing the work |
-| `POST /v1/messages/{id}/hold` | recipient | Accept, answer later |
+| `POST /v1/messages/{id}/hold` | recipient | Legacy hold. With `?manual=1`, mark an intentional hold outside a runner. |
+| `POST /v1/messages/{id}/hold-until` | recipient | `{until}`: hold the task until the delegated task ends. The caller must have sent that task to another agent. The held message reports `held_for: "reply"`. Supports `dry_run`. |
 | `POST /v1/messages/{id}/done` | recipient | Close without reply; also works on a queued message (drop it without pulling) |
 | `POST /v1/messages/{id}/reply` | recipient | `{body, attachments?, result?}` → `{message: <reply>}`; closes the original. `result` (v0.21+): a JSON object, the structured result a workflow step reads (at most 64 KiB; not end-to-end encrypted, the hub reads it). Older hubs refuse the field: the CLI then puts it at the end of the body as a `` ```json `` block, which workflows read the same way |
 | `POST /v1/messages/{id}/release` | recipient | `{delay_seconds, reason?}` (≤ 3600) — hand back for redelivery later; not counted as a failed attempt. `reason: "in_use"` marks the agent's session as in use, shown in the console |
 | `POST /v1/messages/{id}/fail` | recipient | `{reason}`; for tasks the sender gets an `event` |
 | `GET /v1/messages/{id}/reply?wait_seconds=&progress_since=` | sender | Long-poll for the reply → `{reply, timed_out}`; a returned reply is marked done. With `progress_since` (RFC 3339, or `0`) it also returns as soon as there are newer progress updates → `{reply, progress, timed_out}` |
-| `POST /v1/messages/{id}/progress` | recipient | `{body, attachments?, ask?}` → interim update on an open task (type `progress`, stored closed: never pulled, never wakes the sender). `attachments` are ids of files the recipient uploaded (a screenshot, a draft); the task's sender may read them. Hubs before this keep the text and drop the files (the answer has no `attachments`; the CLI says so) |
+| `POST /v1/messages/{id}/progress` | recipient | `{body, attachments?, ask?}` → interim update on an open task (type `progress`, stored closed: never pulled, never wakes the sender). With `ask: true` it is a question that holds the task until the sender answers (`myco message answer`); when the sender is an agent (not a person in the app) the question is stored `queued` instead, so it lands in that agent's inbox and wakes its session or runner (from v0.22.1). `attachments` are ids of files the recipient uploaded (a screenshot, a draft); the task's sender may read them. Hubs before this keep the text and drop the files (the answer has no `attachments`; the CLI says so) |
 | `POST /v1/messages/{id}/suggest` | recipient | `{text}` → the task (`message`) with `suggest`: what its sender may want to say next, one short line (the CLI cuts it at 80 characters; `myco message suggest`, `myco message reply --suggest`); `""` clears it. The app offers it in the empty input and Tab fills it in. Sealed for the sender like a body when end-to-end encryption is on. Older hubs answer 404 (the CLI then replies without it) |
 | `POST /v1/messages/{id}/progress` with `ask: true` | recipient | A question for the task's sender (`myco message ask`): the update has `ask: true`, its body is the question then the choices as a numbered list (`1. label — detail`); the task is held and its `asking` names the question. Whatever the sender says next (a steer) answers it: the steer has `answers` (the question's id) and the task's `asking` is cleared; the recipient's runner resumes the held task's session with it. Agents count such tasks as `asking` (also in `held`). Older hubs refuse the field (the CLI then sends plain progress and holds the task) |
 | `POST /v1/messages/{id}/steer` | sender | `{body, attachments?: [file_id]}` → correction for an open task (type `steer`, delivered to the recipient; runners interrupt and resume the task with it) |
@@ -154,6 +155,11 @@ Agent detail and overview entries include `resume: {created_at, last_used_at?, l
 | `POST /v1/messages/{id}/stop?dry_run=` | sender | Stop a task you sent, including queued or running tasks → `{message,dry_run}`; task becomes failed with `error: "stopped by the sender"`. Another agent gets 403 |
 | `PUT /v1/me/status` | agent | `{text}` → public one-line status (`""` clears); agents carry `status_text`, `status_at`, `state` (working/pending/idle/offline), `queued`, `in_progress`, `held` |
 | `GET /v1/threads/{id}` | participant / admin | `{messages}` in order. For a console, `updated_since` (unix ms, from v0.18.35): only the messages that changed after it, and `since` echoes it |
+
+Runner pulls with `via: "runner"` and query `wake_held=1` requeue a held task
+when its delegated task completes or its sender answers its question. The
+pull response includes `hold_wake` (the triggering message ID, or `recovered`
+for a legacy hold past 30 minutes). Older hubs ignore the query parameter.
 
 ## Projects
 
@@ -164,6 +170,8 @@ A project groups the nodes that work on one thing, with a shared goal, a brief, 
 | `GET /v1/projects?mine=true` | anyone | `{projects: [project]}`: the projects you can see (`mine`: only those you or your nodes are in). A project: `{name, title, goal, brief, links: [{title, url}], visibility, owner, owner_id, archived, created_at, updated_at, members: [{name, role, note, added_by, added_at, agent?}], docs: [{name, size, updated_by, updated_at}], can_edit, can_manage, machines, groups}`; `agent` is the node's card when you can see it; `machines` (v0.21.2+) are the computers (ids) its coordinators may start agents on; `groups` (v0.21.34+) are the groups its members are sorted into, in display order, always present (`[]` when none; absent from older hubs, which have no groups), and a member's `group` is its group in this project (absent: ungrouped) |
 | `POST /v1/projects` | people (not agents) | `{name, title?, goal?, visibility?}`; `name` is a short lowercase address; you become its owner |
 | `GET /v1/projects/{name}?docs=body` | who can see it | One project; `docs=body` includes the documents' text. From v0.21.10 it also has `memory`: the project's memory document with its body (`{name: "memory", body: ""}` while nobody has added to it; absent from older hubs) |
+| `GET /v1/projects/{name}/storage` | who can see the project | Usage without file metadata: `files_used`, `files_max`, `bytes_used`, `bytes_max`, `docs_used`, `docs_max` (100), `files_max_override`, `bytes_max_override`, `can_manage_storage`. The project response includes the same fields. `files_used` counts non-context/Blob files; bytes count all logical content, including UTF-8 inline text. Zero overrides inherit Hub defaults; absent effective `files_max` identifies an older Hub |
+| `PUT /v1/projects/{name}/storage` | workspace owner/admin (people or admin token; not project owners, agents, or delegated superagents) | `{files_max, bytes_max}` sets project overrides, 0 restores inheritance. Protection caps: 10,000 files and 21,474,836,480 bytes (20 GiB). Returns storage usage; audited as `project.storage`. Existing files remain readable/deletable if a new limit is below usage; uploads must fit both count and byte limits |
 | `PATCH /v1/projects/{name}` | editors: its owner, the hub's owner/admins, its coordinators | `{title?, goal?, brief?, links?, groups?, member_groups?}`; the brief is up to 16,000 characters (8 KB before v0.21.10). `visibility` (`members`\|`team`) and `archived`: its owner and hub owner/admins only. From v0.21.34 (older hubs reject them): `groups` replaces the list of groups (up to 30 unique names of 1-40 characters, trimmed; members of a group left out become ungrouped, which is how a group is deleted); `member_groups` (`{agent: group}`, `""` = ungrouped) moves members of the project into groups of the resulting list; anything else is `invalid_argument`. Both are applied together in one transaction (rename: the new list plus moving the old group's members). Audited as `project.groups` |
 | `DELETE /v1/projects/{name}` | its owner, hub owner/admins | Deletes members, documents and links; nodes stay |
 | `PUT /v1/projects/{name}/members/{agent}` | see below | `{role?, note?, group?}`. Adding: a person adds nodes they own (admins any), an agent adds itself, a coordinator adds nodes of its own owner. `role` (`member`\|`coordinator`): its owner and hub owner/admins only. `note` (what it does here): editors or the node's owner. `group` (v0.21.34+): one of the project's `groups`, `""` = ungrouped (else `invalid_argument`; create a group with `PATCH` first): editors |
@@ -173,7 +181,7 @@ A project groups the nodes that work on one thing, with a shared goal, a brief, 
 | `DELETE /v1/projects/{name}/members/{agent}` | editors, the node's owner | A coordinator cannot remove another coordinator |
 | `GET/PUT/DELETE /v1/projects/{name}/docs/{doc}` | read: who can see it; write: editors | `{body}` (Markdown, up to 64 KB) — documents written as text |
 | `POST /v1/projects/{name}/memory` | member nodes, people who see it, editors (archived: who manages it) | `{text}` (one entry, up to 1000 characters; whitespace is folded into one line) → the memory document with its body (from v0.21.10). The entry is appended to the document `memory` as `- text (who, date)`; editors change or tidy it with `PUT …/docs/memory`. The runner gives member agents the memory with the project (the newest 8,000 characters) and gives the project again when it or its memory changed. Audited as `project.memory` |
-| `PUT /v1/projects/{name}/files/{file}` | anyone involved (member agents, people whose nodes are in it, editors); replacing someone else's file: editors | Upload a file (from v0.18.29): the body is its content, `Content-Type` its type; up to 20 MB, 100 files a project. Text up to 64 KB (Markdown, txt, json, …) comes with the project like a document (`body`, read by agents); anything else has `binary: true`. Names are plain file names (no folders) |
+| `PUT /v1/projects/{name}/files/{file}` | anyone involved (member agents, people whose nodes are in it, editors); replacing someone else's file: editors | Upload a file (from v0.18.29): the body is its content, `Content-Type` its type; up to 20 MiB per file. Inline context text documents are limited to 100; other files default to 1,000 per project, with 2 GiB total logical bytes (including documents). Text up to 64 KB (Markdown, txt, json, …) comes with the project like a document (`body`, read by agents); anything else has `binary: true`. Names are plain file names (no folders) |
 | `GET /v1/projects/{name}/files/{file}` | who can see it | The file's content (any file, documents too) |
 | `DELETE /v1/projects/{name}/files/{file}` | its uploader, or editors | Remove it |
 
@@ -196,6 +204,7 @@ From v0.19.24: web pages agents (or people) publish for the App to open in its p
 | `GET /v1/pages?project=` | anyone | `{pages: [...]}` the caller may see, newest first |
 | `GET /v1/pages/{id}` | who sees it | The page and its versions. For a page made from an official app, a hub whose last look for newer apps is over an hour old looks first (waiting up to 4 seconds), so `template.latest` shows an update published since |
 | `GET /v1/pages/{id}/v/{n}/{path}` | who sees it | A file of version `n` (`latest` for the newest; an empty path is its entry file), with its type from its extension, `X-Content-Type-Options: nosniff`, `Content-Security-Policy: sandbox …` (opened straight from the hub, it runs in a sandbox of its own), `ETag`, `X-Myco-Page-Version`. A numbered version is cached for good; `latest` is revalidated |
+| `PATCH /v1/pages/{id}` | its managers | `{editors: "everyone" \| "managers"}` → the page (from v0.22.2): who may change its records and shared state, everyone who sees it (the default) or only those who manage it. A page answers `editors` (`managers`, or absent) and, to whom it is read-only, `read_only: true`; their writes answer `403 permission_denied` |
 | `DELETE /v1/pages/{id}` | its managers | `204`; all its versions go |
 | `POST /v1/pages/live?name=&project=&port=&page=` | an agent | A **live page**: a server on the agent's computer (`port` there, e.g. a dev server), forwarded while its tunnel is open. Without `page` a new one (`name` required); with `page`, one of its own again (same address; `port` may change). The page has `live: true`, `port`, `online` (forwarded now) and no versions or files. Refused on hubs with end-to-end encryption |
 | `GET /v1/pages/{id}/tunnel` | the agent that publishes it | A WebSocket (binary) carrying [yamux](https://github.com/hashicorp/yamux): the hub opens a stream for each connection to the page's server, and the agent joins it to `localhost:<port>`. A newer tunnel replaces an older one. (`myco page serve` does this.) A proxy in front of the hub must pass WebSockets |
@@ -236,9 +245,19 @@ A **Notice** is `{seq, id, kind, tier, key, ref?, target?, project?, actor?, sub
 
 **Preferences** are `{off?, tiers?, quiet?, paused_until?, mutes?, updated_at?}`. `tiers` overrides the defaults (`needs_you` on; `results` and `activity` off). `quiet` is `{from, to, zone}`: minutes from midnight in an IANA zone, a `from` later than `to` spanning the night; nothing is announced then, whatever the tier. `mutes` maps a scope (a notice's target without its query, `project:<name>`, or `agent:<actor>`) to when the mute ends (the zero time: never).
 
+### Desktop page origins and local recovery
+
+The desktop console opens each static page on a stable loopback port in the local App profile, scoped by workspace, member and page. The console's `POST /app/hubs/{id}/pages/{page}/open` returns a current-process opening ticket in `lease`, its `url`, and `isolated: true` for the interactive panel. The panel releases the ticket with `DELETE /app/hubs/{id}/pages/{page}/open/{lease}`. Close the other app and retry if the saved address is occupied. The App releases idle listeners beyond the most recent 32, keeping the port reservations and allowing up to 128 static listeners. Hidden exports open a separate origin. The bridge exposes desktop interactive isolation in `myco.ready.isolation`. Apps that need it declare `requires.isolation: true` in `myco.json` and check the bridge before opening sensitive UI on older clients. When publishing to older Hubs, set `requires.hub` to the first Hub that accepts the new manifest field.
+
+From App v0.22.11 the desktop App also opens a page in a window of its own: `POST /app/hubs/{id}/pages/{page}/window` with `{name}` (the window's title) opens or brings forward that page's window, which shows the page alone with the same bridge, consent and origin as the panel. `/app/info` says `page_windows: true` where the App can; elsewhere the call answers `501 unsupported`.
+
+IndexedDB, Web Storage and CacheStorage are keyed by origin. Cookies are shared across ports on the loopback hostname. Page hosts and their bridge never use cookies for state or authority. Use IndexedDB for app data on this device or page records for data that belongs on the Hub. Keep secrets out of shared records. Hostname-level cookie separation is a future option after both desktop WebViews support the same loopback name resolution.
+
+The App keeps the old shared origin's browser storage. The desktop panel checks the retired origin asynchronously with a host-owned frame. Only supported templates with pending items show **Recover older local files** in the page title menu. The viewer uses the same retired origin and opens on the current app. Export an original from Video Editor, Photo, Motion or Reader and import it in its app. After importing a saved copy, mark the item recovered. The App remembers confirmations in its own profile and hides the entry when that app has no pending items. Original records stay in place and downloads may be retried before confirmation. Legacy origin keys lacked authenticated ownership, so records are not copied into new pages by inference. Reader settings and earlier bridge preferences can be exported as JSON for reference. New bridge preferences for isolated pages use an account-specific key.
+
 ## Page records and templates
 
-From v0.20.5. A page's data can be **records**: JSON objects in named collections (`[a-z][a-z0-9_-]*`), each written on its own with a version, at most 64 KB a record and 20000 a page. Every write goes into the page's **change feed**. Whoever may see the page reads and writes its records (agent and console tokens alike). A page made from a template checks each record against the template's fields (no unknown fields; each of its type; `null` clears one; a field its template dropped in an upgrade may be written back unchanged where the record already has it); a `single` collection holds one record, `main`. Older hubs answer 404.
+From v0.20.5. A page's data can be **records**: JSON objects in named collections (`[a-z][a-z0-9_-]*`), each written on its own with a version, at most 64 KB a record and 20000 a page. Every write goes into the page's **change feed**. Whoever may see the page reads its records and, unless its `editors` are `managers` or the collection's `write` is `managers` (from v0.22.2), writes them (agent and console tokens alike). A page made from a template checks each record against the template's fields (no unknown fields; each of its type; `null` clears one; a field its template dropped in an upgrade may be written back unchanged where the record already has it); a `single` collection holds one record, `main`. Older hubs answer 404.
 
 | Endpoint | What |
 | --- | --- |
@@ -249,7 +268,67 @@ From v0.20.5. A page's data can be **records**: JSON objects in named collection
 | `DELETE /v1/pages/{id}/data/{collection}/{record}?if_version=` | `204` |
 | `GET /v1/pages/{id}/changes?after=&wait=` | `{changes: [{seq, collection, record, op: put\|delete, data?, version, by, at}], seq, reset?}` after `after`, oldest first; with `wait` (seconds, up to 60) it waits for one. The newest 5000 are kept: `reset` means list the records again (a page hears it as `myco.on("reset")`, bridge feature `data-reset`) |
 
-**Templates**: a folder with `myco.json` (its manifest: `id` as `author/name`, `name`, `version` as `x.y.z`, `kind`, `category` (from v0.20.6: `office`, `dev`, `tools`, `life`, `creative`, `game` or `other`; the App's shelves), `icon` (from v0.20.7: an `.svg` in the template, at most 16 KB; the App shows its shape), `requires` (from v0.20.7: `{"hub": "0.20.7"}`; an older hub refuses it, saying which version it needs), `description`, `entry`, `data` (collections → `{fields: {name: type}, single?}`; types `text, markdown, number, bool, date, datetime, person, select, multi, url, file, json`), `permissions` (`send`, `download`), `os` (from v0.22.1: the groups of `myco.os` capabilities it uses: `files`, `files.write`, `files.delete`, `exec`, `screen`, `microphone`, `speech`, `clipboard`, `notify`, `system`, `network`, `ssh`, `database`, `proxy`; see docs/app-os.md), `net` (from v0.22.1: the hosts `net.fetch` may reach, as `host`, `host:port` or `*.domain`; needs `network` in `os`), `export`, `agent` (default `agent.md`), `sample` (default `sample.json`)), its page files, the agent's guide and sample data (`{collection: [records…]}`). Everyone in the workspace sees the library and uses its templates; whoever published one (a person, or agents of the same owner) and the workspace's managers publish its versions and delete it. A page made from a template keeps its own copy of the files and the manifest.
+### Record queries
+
+The records GET endpoint accepts optional `fields`, repeatable `where`, `sort`,
+`limit`, `after` and `count` parameters. Existing requests retain their unlimited
+list behavior. Successful query-capable responses include `query_version: 1`;
+clients may send `query_version=1` to negotiate. Older Hubs silently ignore these
+GET parameters and omit the response marker: the current CLI and desktop detect
+that and apply the same query locally to the returned records. The CLI warns to
+upgrade the Hub. Authentication and validation failures never trigger fallback.
+
+| Parameter | Behavior |
+| --- | --- |
+| `fields=n,title,status` | Projects only `data`. The record envelope, including `id` and `version`, remains. |
+| `where=status:progress` | Equality; repeat conditions to AND them. |
+| `where=status:ne:done` | Not equal; `!=` is an alias. Missing fields do not match. |
+| `where=status:in:todo,progress` | Membership; a JSON scalar array (`n:in:[1,2,3]`) also works. 1–100 values. |
+| `where=assignee:exists` | Field is present, including JSON null. `exists:false` finds missing fields. |
+| `where=n:gte:10` | Numeric range. `gt`, `lt`, `gte`, `lte` and `>`, `<`, `>=`, `<=` work. |
+| `where=created:>=:2026-11-25T00:00:00Z` | ISO date / RFC3339 instant range, millisecond precision; invalid dates do not match. |
+| `sort=-n,created` | Ascending by default, `-` descending; missing fields always last. Stable ties use collection, record position, ID. |
+| `limit=100` | 1–1000 records; unset or 0 is unlimited. A nonempty `next` response cursor means more records. |
+| `after=<next>` | Repeat the same page, collection, fields, filters and sort. Page size may change. |
+| `count=true` | Only `{count, seq, query_version:1}`; total matching records, ignores projection/sort/limit. Cannot combine with after. |
+
+Field names address flat `data` keys: `[A-Za-z_][A-Za-z0-9_]{0,63}`. Nested paths
+and SQL syntax are rejected. At most 64 projected fields, 8 sort fields and 32
+conditions (4096 bytes each) are allowed. Values are bound SQL parameters, never
+interpolated into SQL. Scalars use JSON types, or unquoted strings; quote strings
+that look like JSON (`status:eq:"null"`). Equality is type-strict (numbers compare
+numerically; booleans are distinct). Missing fields fail all comparisons except
+`exists:false`. Ranges accept only numbers or dates; equivalent timezone-offset
+instants compare chronologically in ranges, whereas equality remains literal.
+Sorting uses SQLite scalar order: null, numbers/booleans, then text; array/object
+values use compact JSON text. Use consistent field types and normalized UTC date
+strings when sorting. Useful collection indexes cover position, issue number,
+status and assignee/status; other fields remain queryable without fixed schemas.
+
+Cursors are opaque, scoped to the query and the page's change sequence. Any page
+record mutation invalidates them with `409 conflict`; restart without `after`.
+Malformed or cross-query cursors return `400 invalid_argument`. A query reads its
+sequence and records in one SQLite snapshot. Projection is not a complete record:
+get the full record before a replacing `put`, and use its version for CAS writes.
+
+CLI examples (text mode renders a table; JSON remains structured):
+
+```sh
+myco page data list --page pg_id --collection issues --fields n --sort -n --limit 1
+myco page data list --page pg_id --collection issues --where assignee:alex --where status:progress
+myco page data list --page pg_id --collection issues --where status:in:todo,progress --count
+```
+
+The desktop page bridge exposes the same options as
+`myco.data.list(collection, {fields, where, sort, limit, after, count})`. Fields and
+sort accept a comma-separated string or string array; where accepts a string or
+string array. Check feature **`data-query`** first: older native hosts, including
+mobile versions without this feature, may ignore extra arguments. Query reads do
+not advance the editor's shared watch cursor; an ordinary unfiltered list keeps
+its existing watch initialization behavior. SDK examples and types live in the
+[apps query guide](https://github.com/myco-ai/apps/blob/main/docs/page-data-queries.md).
+
+**Templates**: a folder with `myco.json` (its manifest: `id` as `author/name`, `name`, `version` as `x.y.z`, `kind`, `category` (from v0.20.6: `office`, `dev`, `tools`, `life`, `creative`, `game` or `other`; the App's shelves), `icon` (from v0.20.7: an `.svg` in the template, at most 16 KB; the App shows its shape), `requires` (from v0.20.7: `{"hub": "0.20.7"}`; an older hub refuses it, saying which version it needs), `description`, `entry`, `data` (collections → `{fields: {name: type}, single?, write?}` (`write: "managers"`, from v0.22.2: only those who manage the page change that collection); types `text, markdown, number, bool, date, datetime, person, select, multi, url, file, json`), `permissions` (`send`, `download`), `os` (from v0.22.1: the groups of `myco.os` capabilities it uses: `files`, `files.write`, `files.delete`, `exec`, `screen`, `microphone`, `speech`, `clipboard`, `notify`, `system`, `network`, `ssh`, `database`, `proxy`; see docs/app-os.md), `net` (from v0.22.1: the hosts `net.fetch` may reach, as `host`, `host:port` or `*.domain`; needs `network` in `os`), `export`, `agent` (default `agent.md`), `sample` (default `sample.json`)), its page files, the agent's guide and sample data (`{collection: [records…]}`). Everyone in the workspace sees the library and uses its templates; whoever published one (a person, or agents of the same owner) and the workspace's managers publish its versions and delete it. A page made from a template keeps its own copy of the files and the manifest.
 
 | Endpoint | What |
 | --- | --- |
@@ -260,7 +339,7 @@ From v0.20.5. A page's data can be **records**: JSON objects in named collection
 | `DELETE /v1/templates/{id}` | `204`; pages made from it stay |
 | `POST /v1/templates/sync` | From v0.20.7: fetch myco's official apps now (the hub does once a day; at most once a minute) → `{apps, updated?, source, fetched_at?, error?}` |
 | `POST /v1/pages/{id}/upgrade` | From v0.20.7: a page made from an app takes the app's newest version (new files, new data structure; its records stay) → the page; `409` when it is already at it. A page's `template.latest` says when there is one |
-| `POST /v1/templates/{id}/use` | `{name?, project?, version?, sample?}` → `201 {page, template}`: a page made from it (its `template` says which: `{id, slug, name, version, data, permissions}`), with the sample data when asked |
+| `POST /v1/templates/{id}/use` | `{name?, project?, version?, sample?}` → `201 {page, template}`: a page made from it (its `template` says which: `{id, slug, name, version, data, permissions, os, net}`; from v0.22.9 also `declares: true`, meaning `permissions` and `os` are all the app declares, so Apps refuse what they leave out, and `official` for one of myco's own apps), with the sample data when asked |
 
 ## Automations
 
@@ -283,7 +362,7 @@ An automation:
 
 ```json
 {
-  "id": "aut_...", "name": "Daily report", "owner": "glenn", "from": "@console:glenn", "to": "pm",
+  "id": "aut_...", "name": "Daily report", "owner": "alice", "from": "@console:alice", "to": "pm",
   "project": "", "body": "Write today's daily report",
   "schedule": {"cron": "0 9 * * 1-5", "tz": "Asia/Shanghai"},
   "webhook": true, "webhook_url": "https://hub.example.com/hooks/aut_...",
@@ -392,7 +471,7 @@ A run:
 {
   "id": "run_...", "workflow_id": "wf_...", "name": "write-review-fix", "version": 2, "project": "myco",
   "status": "running|waiting|succeeded|failed|cancelled", "inputs": {"task": "Add an export button"},
-  "owner": "glenn", "by": "glenn", "trigger": "manual|agent|automation", "error": "",
+  "owner": "alice", "by": "alice", "trigger": "manual|agent|automation", "error": "",
   "current": ["review"],
   "steps": [{"id": "rs_...", "step": "write", "title": "", "kind": "agent", "attempt": 1, "status": "done",
              "target": "coder", "message_id": "msg_...", "input": "…the task as sent…", "payload": {"task": "Add an export button"},
@@ -407,7 +486,7 @@ A run:
 
 ## Superagents
 
-A person's own agent with the App's powers in its workspace (v0.21.1+). Only the person names it; it uses its **own agent token** on the App's routes, and the hub acts as that person, marked as through it (the audit log names it: `glenn（经 superagent shroom）`, the hub's Chinese for "glenn (via superagent shroom)"). Each route the App uses is listed in `internal/transport/httpapi/superagent.go`:
+A person's own agent with the App's powers in its workspace (v0.21.1+). Only the person names it; it uses its **own agent token** on the App's routes, and the hub acts as that person, marked as through it (the audit log names it: `alice（经 superagent shroom）`, the hub's Chinese for "alice (via superagent shroom)"). Each route the App uses is listed in `internal/transport/httpapi/superagent.go`:
 
 - **allowed**: reading what its owner sees (overview, conversations, traces, machines, members, audit, projects), and things that harm nothing that exists: creating projects and putting agents in them, project docs and files, starting an agent on its owner's computers (`POST /v1/machines/{id}/spawn`), run settings, running an automation once, renaming a computer;
 - **held for approval**: deleting or removing anything (projects, members of projects, docs, files, agents, computers), visibility and ownership, new or changed automations, stopping a task, upgrades and hub settings. The hub answers `409 {error: "approval_pending", message}` and keeps the request (with `X-Myco-Reason`, its why); the owner approves or denies it, and an approved one is carried out once, as it came. The agent gets a note from its owner either way. Pending ones lapse after 24 hours;
@@ -426,7 +505,7 @@ A route not listed treats it as the ordinary agent it also is. Nothing widens wh
 | `GET /v1/me/superagent` | agent | `{superagent, owner?}` |
 | `GET /v1/me/approvals` | agent | what it asked for |
 
-Approvals also carry `kind` and `payload` (v0.21.21): an empty `kind` is a superagent's held request as above; `kind: "action_grant"` is any agent asking to act on a computer (see [Agent actions](#agent-actions)), with `payload: {grant_id}`. Approving one may send `{permissions?, ttl_seconds?}` to allow less than was asked (never more); an empty body allows all of it.
+Approvals also carry `kind` and `payload` (v0.21.21): an empty `kind` is a superagent's held request as above; `kind: "action_grant"` is any agent asking to act on a computer (see [Agent actions](#agent-actions)), with `payload: {grant_id}`. Approving one may send `{permissions?, ttl_seconds?, hosts?}` to allow less than was asked (never more); an empty body allows all of it.
 
 ## Agent actions
 
@@ -437,7 +516,7 @@ From v0.21.21, an agent can act on a computer through a provider that computer's
 | Route | Who | |
 |---|---|---|
 | `POST /v1/me/action-grants` | agent | `{target: {kind: "machine", id}, permissions, reason, message_id?, page_id?, ttl_seconds?}` → `201` a pending grant `{id, agent, owner, target, target_name, permissions, requested, reason, message_id?, approval_id, state, end_reason?, created_at, expires_at?, ended_at?}`; the target's owner gets an `action_grant` approval. `id` may be the computer's name. Permissions: `remote.desktop.view`, `remote.desktop.control` (control includes view). TTL 5 minutes by default, 30 at most. With `message_id`, the grant ends when that task ends. `?dry_run=1` checks only |
-| `GET /v1/me/action-targets` | agent | `{targets: [{kind:"machine",id,resource:{provider:"server.ssh",id,binding,name,summary}}]}`: enabled SSH resources belonging to the agent's own person in this workspace. Discovery is not permission to execute. Older hubs return 404 |
+| `GET /v1/me/action-targets` | agent | `{targets: [{kind:"machine",id,resource:{provider:"server.ssh"|"browser",id,binding,name,summary}}]}`: enabled private profile resources belonging to the agent's own person in this workspace. Discovery is not permission to execute. Older hubs return 404 |
 | `GET /v1/me/action-grants` | agent | `{grants: [...]}`, its own |
 | `GET /v1/me/action-grants/{id}?wait_seconds=30` | agent | the grant; waits while it is pending (`wait=30s` works too; 60 seconds at most) |
 | `POST /v1/me/action-grants/{id}/end` | agent | ends it → the grant |
@@ -445,16 +524,153 @@ From v0.21.21, an agent can act on a computer through a provider that computer's
 | `POST /v1/me/action-jobs` | agent | `{grant_id, action, version, args, idempotency_key}` → `201 {id, grant_id, action, version, state, result?, error?: {code, message, retryable}, artifacts?, cancel_requested?, created_at, finished_at?}`. The same key and body returns the first job; a different body is `409`. `unsupported` when the computer does not offer that action now |
 | `GET /v1/me/action-jobs/{id}?wait_seconds=30` | agent | the job; waits until it ends. `state`: queued running succeeded failed cancelled |
 | `POST /v1/me/action-jobs/{id}/cancel` | agent | cancels a queued job; asks a running one to stop (what it did stays done) |
-| `GET /v1/me/action-artifacts/{id}` | agent (the grant's) | the file (a screenshot), `Cache-Control: no-store`; `410` once its grant ends or it expires (10 minutes at most) |
+| `GET /v1/me/action-artifacts/{id}` | agent (the grant's) | the file (a screenshot), `Cache-Control: no-store`; `410` when it expires (usually within 10 minutes or when the grant ends, except live browser screenshots below) |
 | `GET /v1/console/action-grants?state=active` | console | `{grants}` the caller decides (all, for owners and admins) |
 | `POST /v1/console/action-grants/{id}/revoke` | console | ends it at once: queued jobs are cancelled, a running job's late result is dropped, artifacts are gone |
 | `POST /v1/console/action-hosts` | console (the computer's owner) | the trusted App offers a provider there: `{machine_id, provider, generation, actions}` (a page renderer: `provider: "page"`, no `machine_id`) → `201 {id, machine_id, provider, generation, last_seen_at}`. Registering a computer's provider again replaces its host (its running jobs fail as `host_restarted`). A person may run several page renderers (one per App); a new one replaces only theirs that stopped polling (45 s). A host not seen for 10 minutes is dropped. After `404`/`409` on its job poll, an App waits 30 s before registering again |
+| `DELETE /v1/console/action-hosts/{id}?generation=...` | console | `204`; actual host owner only, including on an administrated Hub. Exact generation required (`409` if changed). Withdraws the host and revokes active and pending grants for the same machine/provider/profile id across bindings. Queued/running jobs are cancelled with `error.code: revoked`; a running action may already have side effects and must not be blindly retried. Existing outcome/error details are preserved. Local execution must stop/refuse first; this request uses a fresh bounded context. Missing/older Hub `404` never permits local execution or unbound fallback |
 | `GET /v1/console/action-hosts/{id}/jobs?wait_seconds=30` | console | `{jobs: [{job, args, grant}]}`: queued jobs for that computer, now running. A host quiet for 45 seconds ends the grants it ran |
 | `GET /v1/console/action-jobs/{id}?host_id=&generation=&wait_seconds=30` | console | `{job, grant_state, grant_expires_at?, stop}` for a job the host runs. `stop` turns true when the agent cancels it, its grant ends (revoked, expired, its task ended) or it is no longer running; with `wait_seconds` it answers as soon as it does. The host asks right before anything native happens and keeps asking while it runs |
 | `POST /v1/console/action-jobs/{id}/artifacts?host_id=&generation=` | console | the raw file (`Content-Type` image/*, application/pdf, Office (OOXML), text/plain, text/csv, text/markdown, text/html or application/json; 4 MB at most; the agent downloads it as an attachment, nosniff and sandboxed) → `201 {id, media_type, bytes, expires_at}` |
 | `POST /v1/console/action-jobs/{id}/complete` | console | `{host_id, generation, state, result?, error?, artifact_ids?}` → the job. A wrong generation is `409`; a finished job cannot change |
 
 The CLI: `myco action grant request|list|get|end`, `myco action list`, `myco action run` (waits, and saves screenshots to files), `myco action job`, `myco action cancel`.
+
+### Bound browser profiles
+
+The trusted desktop App can host `browser` for a dedicated local browser profile
+that its owner explicitly enabled for agents **in this workspace**. Discovery via
+`GET /v1/me/action-targets` returns `{kind:"machine",id:machine_id,
+resource:{provider:"browser",id:profile_id,binding,name,summary}}`. The opaque
+`binding` identifies the local authorization policy generation. The owner must
+approve a short-lived grant to this exact target; knowing its id grants no access.
+Unopened profiles, stale bindings, mixed providers and machine-wide browser grants
+are rejected. The host must belong to the computer's actual owner. These actions
+are unavailable in end-to-end encrypted workspaces.
+
+M2 offers five v1 actions. `browser.view` and `browser.run` are independent
+permissions; request both when needed. The Hub fixes the action-to-permission
+mapping, and the host registers only capabilities its installed component supports.
+
+| Action | Permission | Arguments |
+|---|---|---|
+| `browser.profiles.list` | `browser.view` | `{}`; only the bound, enabled profile is disclosed |
+| `browser.script.run` | `browser.run` | `{script_id,version,page_id?,params?,headless?}` |
+| `browser.run.status` | `browser.view` | `{run_id}` |
+| `browser.run.resume` | `browser.run` | `{run_id,choice?}` |
+| `browser.run.cancel` | `browser.run` | `{run_id}` |
+
+Live browser control adds six v1 actions when the component advertises
+`agent_control`. They require the independently approved `browser.control`
+permission on the exact machine and browser profile. Grants last at most 30
+minutes. The browser opens visibly so the owner can watch and stop it.
+
+A request without a target resource defaults to the selected machine’s
+dedicated agent profile (`kind:"agent"`). The desktop creates this clean
+profile when live control first becomes available. An explicit profile
+resource must include its current binding. The approval identifies the
+profile and warns about existing sign-ins when using a personal profile.
+
+A control request can include `hosts` (CLI `--host`, repeat it for each domain).
+Entries are exact hostnames or subdomain patterns such as `*.example.com`.
+The wildcard does not include the parent hostname. Omitting the list permits
+all domains. The owner can approve a subset by sending `hosts` in the approval
+body. To allow none, deny the request. The approved list applies to top-level
+navigation, including redirects and new tabs. A blocked navigation returns
+`host_not_allowed` and is audited. Scoped requests require support in the Hub
+and in the controller App.
+
+| Action | Arguments | Result |
+|---|---|---|
+| `browser.page.open` | `{profile,url?}` | `session,active_tab,tabs,snapshot,expires_at,idle_expires_at,start_url` |
+| `browser.page.snapshot` | `{session,tab?,mode?,max_nodes?,include_screenshot?}` | A snapshot with `snapshot_id,frames,node_count,truncated` and accessibility nodes or text |
+| `browser.page.act` | `{session,op,tab?,ref?,value?,key?,url?,dy?,wait?,choice?,timeout_ms?,clear?}` | `active_tab,tabs,new_tab?,step_ids,snapshot?,snapshot_error?` |
+| `browser.page.extract` | `{session,tab?,ref,what,attr?}` | Extracted text |
+| `browser.page.screenshot` | `{session,tab?,ref?,clip?,full?}` | Screenshot metadata and a private job artifact |
+| `browser.page.close` | `{session}` | `steps,removed,next,done:true,reason:"closed"` |
+
+Operations are limited to `navigate`, `click`, `dblclick`, `hover`, `type`, `select`,
+`press`, `scroll`, `back`, `forward`, `reload`, `switch_tab`, `close_tab`,
+`wait`, and `dialog`. Extra fields and URL schemes other than HTTP(S) are
+rejected. A wait uses `wait:"element"` with `ref`, `wait:"url"` with `value`,
+or `wait:"network"`. The maximum operation timeout is 30 seconds. Screenshot
+targets `ref`, `clip` and `full` are mutually exclusive. Each image is kept
+as a private job artifact up to 4 MiB. A successful live browser job retains
+its screenshot for seven days. Only the initiating agent and the computer's
+owner can download it, including after the grant ends. The Hub deletes
+expired screenshots and excludes them from workspace backups and archives.
+
+- The initiating agent downloads a screenshot at `GET /v1/me/action-artifacts/{id}`.
+- The computer owner signs in directly and lists their 100 most recent
+  available screenshots at `GET /v1/console/action-artifacts` (`{artifacts}`).
+  The owner downloads one at `GET /v1/console/action-artifacts/{id}`.
+
+
+Refs are scoped to a session, tab, frame and document. A stale ref returns
+`stale_ref`. Take a fresh snapshot before retrying. A successful operation
+with a failed follow-up snapshot still succeeds and returns `snapshot_error`.
+An `outcome_unknown` error calls for observing the page before another action.
+The component limits a draft to 200 steps and 192 KiB. Close explicitly to
+retrieve the draft. Idle sessions end after five minutes. Grant expiry,
+revocation, or owner stop ends the session and discards its draft. Subsequent
+calls on an owner-stopped grant return `session_closed` with
+`reason:"stopped_by_owner"`.
+
+When completing a live browser job, the trusted desktop can send the optional
+`browser_host` field containing only the observed hostname or IP address.
+The Hub audits the action, host and time once per job. The detail records
+`host_not_allowed` for a blocked host or `screenshot` when a screenshot
+was retained. Request arguments, page contents and image bytes stay out of
+the audit log.
+
+Shared page records are **not** approval. The desktop executes only the immutable
+script version and child-script snapshots the computer's owner reviewed and
+approved locally for that profile. An absent, revoked or mismatching version is
+`permission_denied`; the host never fetches a newer shared script as a fallback.
+Runs and their cancellation/resumption remain bound to the originating agent,
+grant and profile. Revoking a script approval or disabling agent access changes
+the policy binding, ends old grants and cancels their running jobs. Results and
+screenshots use private job artifacts; they are not automatically published in
+shared page data. A paused confirmation is reported to the caller, never approved
+by merely changing a shared record.
+
+`script.run` and `run.resume` keep their job running until the native run finishes
+or pauses. A paused result is a successful action job with `result.state:"paused"`
+and `run_id`; it is not a completed script. Results contain `run_id`, `state`,
+`node`, masked `output`, optional `question` / error details, and an optional
+`screenshot` private artifact descriptor. Supply `page_id` to disambiguate script
+ids; omitting it only works for a unique locally approved id/version. Resume uses
+the original grant, agent and profile, with `choice:"ok"` or `"cancel"`. Stop a
+running script by cancelling its action job; `run.cancel` handles paused runs.
+Paused native sessions are cancelled at the earlier of grant expiry and 15
+minutes after pausing. A revoked grant cannot resume, even before local cleanup.
+
+Agent arguments cannot carry executable scripts, child snapshots, nodes, uploads,
+secrets, `start_at` or breakpoints. `params` accepts only declared non-secret
+fields. All executable `code` fields must be fixed text: `${...}` is rejected as
+`invalid_graph` with its node, for both human and agent runs. Dynamic text/URL
+fields remain supported. Unsupported graph nodes fail before the browser opens;
+the current 0.1.0 component supports connected acyclic sequences, not subflows.
+A failed or cancelled run may already have changed a website. Inspect the result
+before retrying; the host never automatically repeats an uncertain operation.
+
+Live `browser.page.snapshot`, `browser.page.act` and `browser.control` are reserved
+for M3 and are not offered in M2. Hard calls return `unsupported`. Future control
+approval must explicitly warn that it can read all websites signed in through the
+profile. An unsupported component capability or older Hub must not trigger an
+unbound or more privileged fallback.
+
+Example (copy the ids and binding from discovery):
+
+```sh
+myco action targets
+myco action grant request --machine COMPUTER --browser-profile PROFILE --binding BINDING \
+  --permission browser.view --permission browser.run --reason "Run the approved report" --wait 5m
+myco action list --grant GRANT
+myco action run --grant GRANT --action browser.script.run \
+  --args '{"script_id":"report","version":3,"page_id":"pg_reports","params":{"month":"2026-11"}}'
+myco action grant end --id GRANT
+```
 
 ### Bound SSH resources
 
@@ -688,6 +904,15 @@ responses use the existing desktop `net.fetch` shape documented in
 this feature; embedded apps must show an update hint instead of assuming that
 all platforms provide desktop computer access.
 
+### Local CLI readiness
+
+`GET /app/local/agents` retains its existing `missing`, `signed_out`, `ready`
+and `unknown` state values. `unknown` means installed with opaque sign-in;
+it is not a signed-out result. CodeBuddy/Qoder local credentials and a matching
+active local profile's successful CLI task within24 hours can establish
+readiness. No model requests or credential values enter this response. See
+[Local CLI sign-in detection](cli-auth-detection.md) for paths and limitations.
+
 ### Local model-provider selection
 
 `GET/PUT /app/local/agents/{name}/provider?hub_id={id}` is an App-local
@@ -809,3 +1034,298 @@ not fail inbox waiting. Runner-owned subprocesses skip session accounting to
 avoid duplication. For multi-workspace sessions, the previous receiving identity
 is used once, not once per workspace. Codex rollout-session collection is not yet
 supported (runner Codex usage events remain supported).
+
+
+### Project coordinator invitations
+
+`Project.coordinator_invites` is a boolean (default false; absent on older Hubs).
+`PUT /v1/projects/{name}/agent-invites` takes `{ "allowed": true|false }` and
+returns the updated Project. Only its human owner and workspace administrators
+may change it; agent credentials cannot, including a coordinator's.
+
+A project coordinator calls `POST /v1/projects/{name}/invite-agent` with
+`{ "display_name"?: string, "description"?: string, "note"?: string }`.
+Limits follow agent profiles (80 bytes for display name, 2000 for description)
+and project notes (one line, 200 characters). `?dry_run=true` validates without
+creating an invitation or approval. A normal member is refused. Archived projects
+and projects without a human owner cannot issue invitations.
+
+Response: `{id, approval_id?, link, sentence, expires_at, status}`. If enabled,
+status is `ready` and `link`/`sentence` reveal a credential **once**. Otherwise HTTP
+202/status `pending` returns an empty link and creates a `project_invite` typed
+approval for the project owner. Its non-secret payload contains invitation_id,
+project, project_title, display_name, description and note. Existing console
+approval endpoints approve/deny it; ordinary approval notifications and events
+apply. Approval does not enable the project setting.
+
+The same coordinator polls `GET /v1/projects/{name}/invite-agent/{id}` for status
+and, once `approved`, calls `POST /v1/projects/{name}/invite-agent/{id}/claim` to
+receive the link once. Other agents cannot inspect or claim the request. Polling
+never reveals credentials. Status values are pending, approved, ready, used,
+denied and expired. Pending requests expire after 24 hours; issued links expire
+24 hours after issuance. A lost issuance response requires a fresh invitation:
+tokens are hashed, never stored in recoverable form. Request/approval IDs can be
+stored or included in messages; links cannot be included in audit/events.
+
+The existing `/j/{token}` page, Markdown guide and install scripts handle these
+session-only enrollments. They install the CLI and use `MYCO_ENROLL_TOKEN` with
+`myco join --invitation --hub ...`, ignoring existing computer enrollment defaults.
+They never create a machine membership. `POST /v1/join` refuses these tokens.
+`POST /v1/enroll` consumes one exactly once (even same-session reuse is refused),
+creates an ordinary agent owned by the **project owner**, and adds it to that
+project as `member` with the supplied note in one transaction. The inviter is
+recorded in `Agent.invited_by`, and pre-filled display name/description are applied.
+No superagent, shell or machine privileges are granted. Coordinator membership,
+project owner, archive state, expiry and credential revocation are checked again
+on use. Later recovery uses the agent's own resume link, not the invitation.
+
+Audit actions: project.invitation.setting/create/issue/approve/deny/use. The use
+entry identifies both the joined agent and inviter. All invitation responses and
+join pages disable caching. The App proxies the setting through
+`PUT /app/hubs/{id}/projects/{name}/agent-invites` with the selected Hub's console
+credentials. The CLI translates an old Hub's HTTP 404 into an upgrade hint.
+
+### Runner admission and queue visibility
+
+`PUT /v1/me/runtime` and agent runtime responses optionally include
+`runner_slots: {max_concurrent, in_use, waiting, at, queue?: [{message_id, position}]}`.
+The counts describe the reporting runner **process** across all its workspaces;
+`queue` contains only the reporting agent's waiting task IDs, never another
+workspace's IDs or address. `at` is the snapshot's RFC3339 time. Counts are
+nonnegative, `max_concurrent` is positive, `in_use` cannot exceed it, and queue
+positions are positive and no greater than `waiting` (at most 256 entries).
+Admissions and cancellations update snapshots; a running runner refreshes them
+at least every 20 seconds. On admission the task disappears from `queue`.
+Apps ignore stopped or older-than-90-second snapshots and ignore queue metadata
+on finished tasks. Queue metadata remains visible with execution tracing off;
+it contains no task body or execution details. A stopped task is rechecked
+before admission starts a CLI.
+
+The runtime JSON is stored with the existing agent runtime; no migration is
+needed. Older clients ignore the optional property. Against a strict older Hub,
+new clients retry without `runner_slots` **only** for that field's unknown-field
+400 error; authentication and other validation errors are never downgraded.
+Single-agent runners with no shared limit omit the field. Independent runner
+processes are separate pools; one `runner start --all` is required for fairness
+across that computer's workspaces.
+
+### Project coordinator scheduling and automation date bounds
+
+Projects expose `coordinator_automations: false` by default. A human project owner
+or workspace administrator can change it with
+`PUT /v1/projects/{name}/automation-permission` and `{ "allowed": true|false }`.
+The App proxies this as `PUT /app/hubs/{id}/projects/{name}/automation-permission`.
+The Members tab groups this switch, invitation access and computer access under
+**Coordinator permissions**. An absent field means an older Hub.
+
+Coordinator agents use their own agent credential on these routes:
+
+| Method and route | Result |
+| --- | --- |
+| `GET /v1/projects/{name}/automations` | `{automations:[Automation]}` for the project owner's schedule-only tasks tagged with this project (webhooks and their request payloads are excluded); read access does not require a mutation approval |
+| `POST /v1/projects/{name}/automations` | Create a scheduled task, using `AutomationRequest` |
+| `PATCH /v1/projects/{name}/automations/{id}` | Change a scheduled task; `{enabled:false}` pauses it |
+| `DELETE /v1/projects/{name}/automations/{id}` | Remove a task and its run history |
+
+Only an active project's `coordinator` may call these routes. `project` is fixed by
+the URL, `to` resolves to a current ordinary agent member, and workflow targets
+must be enabled workflows belonging to the same project and project owner.
+Targets are resolved before approval and checked again before dispatch. The
+result belongs to the project owner, even if the coordinator belongs to someone
+else. A changed/archived project, missing target membership, or a workflow moved
+out of scope stops future dispatches with `disabled_reason: "project_scope_changed"`.
+The project interface manages schedules only: it cannot create/rotate webhook
+secrets or manage webhook-based configurations. Existing console endpoints retain
+human credential behavior.
+
+With permission enabled, a mutation returns `200` with
+`{status:"applied",automation?:Automation,removed?:id}`. With permission off, it
+returns `202 {status:"pending",approval_id}`. Nothing changes until the project
+owner approves the `project_automation` card using the existing approval API.
+The approval holds that exact request; an owner/target/configuration change
+invalidates it. Approval permits only this change and leaves the switch off.
+Approval reserves the action durably before executing it, preventing repeated
+clicks from creating duplicate tasks. If a process dies during execution the
+approval may remain `executing`; inspect the project's task list before asking
+again, since that action is never automatically replayed. Approval outcomes name
+the task ID in the coordinator's notification. Requests, approval/denial, settings
+and applied changes are audited, including the acting agent and approving person.
+`Automation.created_by` and `approved_by` provide attribution.
+
+Both console and project automation requests additionally accept:
+
+- `starts_at?: string`: RFC3339 timestamp, inclusive; empty string clears it.
+- `ends_at?: string`: RFC3339 timestamp, exclusive; empty string clears it.
+- `once?: boolean`: disable before the first execution attempt; skips due to a
+  busy preceding task do not consume it. A failed attempt still consumes it.
+
+When both dates are present, start must be earlier than end. Date bounds apply
+to schedule, webhook and manual runs; they do not create a trigger themselves.
+Date bounds stop future dispatches; they do not cancel tasks or workflows already sent.
+Dates are persisted in UTC. `Automation` returns optional timestamp fields,
+`once` (always present on supporting Hubs), and `disabled_reason` (`expired`,
+`once`, or `project_scope_changed`). The scheduler disables expired tasks even
+when they have no next cron run, and skips windows missed entirely during
+Hub downtime. An explicit `{enabled:true}` resets the reason and allows a fresh
+one-shot attempt, subject to date bounds. Repeated concurrent callbacks reload
+the task under the dispatch lock and cannot dispatch a consumed one-shot again.
+
+CLI agents use `myco automation create/update/list/remove --project <name>`.
+`--starts/--ends` accept RFC3339 or `YYYY-MM-DD` in UTC; a date-only `--ends`
+includes the whole named day. Example:
+
+```sh
+myco automation create --project release --name "Daily release check" \
+  --to reviewer --body "Check the release status" --cron "0 9 * * *" \
+  --tz Asia/Shanghai --starts 2026-11-26 --ends 2026-11-28
+myco automation update --project release --id aut_example --once
+myco automation update --project release --id aut_example --disabled
+```
+
+Without explicit human credentials the CLI uses the agent's own token and
+requires `--project`; it never borrows App credentials for a coordinator action.
+A missing project route or a strictly rejected new date field gives an upgrade
+Hub hint. Older clients can continue using the unchanged console routes and
+ignore the new response fields.
+
+## Desktop browser automation bridge
+
+The optional local browser component uses protocol 1 and its own loopback listener; it is not a Hub endpoint. Application manifests may request `permissions.os: [browser]`. Supported desktop hosts advertise the `browser` feature so pages can present the installer; `myco.browser.status()` distinguishes supported and installed states. The bridge provides local profiles, recording, linear runs, controls, locator inspection, and image snapshots. Installation and enabling an agent preference require a separate, one-use host confirmation. Agent actions and cross-machine browser providers are outside M0/M1. See [component and bridge contract](browser-component.md#page-bridge-protocol-1).
+
+### Browser screenshot regions
+
+The component's `GET /status` and `myco.browser.status()` advertise optional
+`features:["screenshot_clip"]`. Absence means region screenshots are unsupported;
+pages hide the region selector and refuse runs containing clip nodes. The host
+also checks the same component process before dispatching a run, including child
+script snapshots, and returns `unsupported_node` without posting to an old engine.
+
+A `screenshot` node can contain `clip:{x,y,width,height}` in top-level viewport CSS
+pixels. Every coordinate must be finite, x/y nonnegative, and width/height positive.
+`clip` cannot be null or combined with `target` or `full`. Out-of-viewport regions
+are rejected at capture time. The result and the step's screenshot both contain
+only the selected pixels, in the private artifact store; there is no full-page
+thumbnail fallback. Secret-bearing runs and sensitive pages refuse region capture.
+See [component contract](browser-component.md#recording-inside-chrome).
+
+### Local browser profile settings
+
+`myco.browser.profiles.configure?(id, settings)` is an optional protocol-1
+page-bridge method. It requires the native owner's one-use confirmation of the
+exact profile and settings. Agents and Hub browser actions cannot configure
+profiles. The local component receives authenticated
+`PATCH /profiles/{id}` with `{"settings":settings}` and returns a public profile;
+`GET /status` profiles include `settings` on components supporting this feature.
+
+Settings input is `{proxy, user_agent, lang, args}`. `proxy` is `null` or
+`{server,bypass,username,password?}`; `server` accepts only HTTP, HTTPS or SOCKS5
+with an explicit host and port. An omitted password preserves the saved secret only if server and username are
+unchanged; changing either clears the old secret unless a new password is
+explicitly supplied. An empty password clears it, and a null proxy clears all
+proxy credentials.
+Output replaces `password` with `has_password`. The password is never returned
+by a status, configuration response or confirmation. Only the local private
+0600 profile index stores it; page data and Hub records do not.
+
+Changes apply on the next browser-session start. No running browser is
+restarted automatically. Arguments use the documented allowlist; invalid flags
+or settings return `invalid_argument`. See
+[network, UA and launch settings](browser-component.md#per-profile-network-and-launch-settings)
+for validation and forwarding semantics. These methods do not change component
+protocol 1 or broaden any agent grant.
+
+### Local browser recording discovery
+
+Newer desktop hosts optionally expose `myco.browser.record.active()`, returning
+`[{id, profile, url, started_at, origin:"browser"|"page"}]` from the current
+component session scope. Component `GET /status` includes the same `recordings`
+metadata. Browser-started recordings remain discoverable until the first valid
+`record.events` call claims them, including recordings already stopped. Known
+IDs can be replayed from cursor 0. `record.events` adds `removed:string[]`; apply
+these deletions by step ID, continue with the opaque `next` cursor, and finish on
+`done:true`. Deleted steps not yet sent are omitted. The browser's isolated panel
+can start/stop, delete, and capture text/attribute/HTML extracts; these are local
+human controls, not Hub or agent actions. See [recorder contract](browser-component.md#recording-inside-chrome).
+
+## Planned runner restarts
+
+`PUT /v1/me/runtime` accepts optional `runner_instance` (one opaque ID per process),
+`away: "updating"`, and `restarting_until` (RFC3339). The Hub caps a restart
+lease at 90 seconds. Further reports from the stopping instance preserve the
+lease; a healthy report from a new instance clears it. Late goodbyes from an
+older instance cannot replace the new process's runtime. These fields live in
+existing runtime JSON; no schema migration is needed.
+
+Agent and machine responses include optional `updating: true` while the lease
+is active. This is a temporary display state, not readiness: the existing
+`state`, `online`, and `can_spawn` contract is unchanged. Apps display Updating
+before other presence labels and expire cached leases locally too. A failed
+restart therefore returns to ordinary offline status rather than appearing to
+update forever. Runners clear the lease in their first runtime report, before
+slow CLI version discovery.
+
+Older Hubs may reject unknown fields. On only that specific 400 schema error,
+the client retries without the new fields, retaining existing runtime metadata
+and `away`; authentication and other validation errors are not retried. Apps
+can bound this legacy updating indication using `last_seen_at + 90 seconds`.
+
+The local optional browser component (not a Hub route) may return
+`{ "error": "profile_locked", "reason": "leftover_unverified" }` when a profile's
+persisted process group cannot be verified. Other safe recovery reasons are
+`cleanup_pending` and `cleanup_failed`. The desktop page bridge preserves the
+optional `reason` on its rejected Error; older Apps omit it. See
+[the browser component contract](browser-component.md#browser-process-groups-and-recovery-unix).
+
+### Page-owned files
+
+Static pages advertise `attachments_version: 1` in their page DTO. Absence means
+unsupported: clients must not substitute project-file uploads. Attachments inherit
+the page's read permissions and the named collection's write permissions. They do
+not appear in project files, project pull, or agents' project context. Deleting a
+page removes its attachment metadata and schedules its independent blobs for cleanup;
+application upgrades and version rollback leave attachments intact.
+
+| Method | Path | Result |
+| --- | --- | --- |
+| GET | `/v1/pages/{id}/attachments?limit=100&after=...` | `{attachments_version:1, attachments:[...], usage:{files_used,files_max,bytes_used,bytes_max,max_file_bytes}, next?}` |
+| POST | `/v1/pages/{id}/attachments?collection=assets&name=picture.png` | Upload raw body; `Content-Type` and `Idempotency-Key` required; returns attachment metadata |
+| GET | `/v1/pages/{id}/attachments/{file_id}` | Attachment metadata |
+| GET | `/v1/pages/{id}/attachments/{file_id}/content` | Original bytes; supports HTTP Range, 206 and 416 |
+| DELETE | `/v1/pages/{id}/attachments/{file_id}` | 204; refuses while a record references the attachment |
+| GET | `/v1/pages/{id}/attachments?name=old-name.png` | Resolve a legacy project-file name within this page |
+| POST | `/v1/page-attachments/migrate` | Workspace owner/admin only; body `{project?,dry_run?,limit?}`; migration report |
+
+Metadata contains `file_id`, `page`, `collection`, `name`, `size`, `sha256`,
+`content_type`, `by`, `state`, `created_at`, and pending `expires_at`. Uploads count
+against quota immediately. Save `{file_id: "paf_..."}` (optionally with the other
+metadata) in a declared `file` field to associate the upload with a record. Unlinked
+uploads expire after 24 hours. Associated files remain until explicitly removed or
+the page is deleted. Remove all record references before removing a file. A repeated
+upload key with identical inputs returns the same ID; different inputs conflict.
+List limits are 1–1000; `next` is an attachment ID cursor. File responses are marked
+as downloads, `nosniff`, and private/no-store.
+
+Defaults per page: 1000 files, 2 GiB total, 20 MiB per file. Hub flags
+`--page-files-max` / `MYCO_PAGE_FILES_MAX` and `--page-bytes-max` /
+`MYCO_PAGE_BYTES_MAX` configure defaults (at most 10000 files / 20 GiB). The same
+Hub disk-reserve settings as project uploads apply. Existing files remain readable
+when limits are lowered; migration preserves pre-existing content even over quota.
+
+The Hub automatically migrates project files referenced by declared page `file`
+fields or a legacy text field named `file`, only within the page's own project.
+It copies and verifies independent page blobs before transactionally saving aliases,
+record associations, and removing project entries. Record data and versions do not
+change. Shared originals get independent copies per page. Missing, ambiguous, changed,
+or unreadable sources stay in place and appear in the migration report. The old
+project-file GET route resolves migrated names subject to the current page ACL;
+legacy aliases never reappear in project listings. Migration batch size is 1–100
+(default 25). Administrators can preview or resume with:
+
+```sh
+myco page file migrate --project demo --dry-run
+myco page file migrate --project demo
+myco page file put --page pg_demo --collection assets --path picture.png
+myco page file list --page pg_demo
+myco page file get --page pg_demo --file paf_example --out picture.png
+myco page file remove --page pg_demo --file paf_example --dry-run
+```

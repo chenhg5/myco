@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 func TestRunSettings(t *testing.T) {

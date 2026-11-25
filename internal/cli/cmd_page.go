@@ -19,9 +19,9 @@ import (
 
 	"github.com/hashicorp/yamux"
 
-	"github.com/chenhg5/myco/internal/api"
-	. "github.com/chenhg5/myco/internal/cli/cmdkit"
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/api"
+	. "github.com/myco-ai/myco/internal/cli/cmdkit"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // pageCommands publish web pages to the hub for people to open in the App.
@@ -203,6 +203,44 @@ the same records. Hubs from v0.20.7.`,
 			})
 		}),
 	}
+	set := &Command{
+		Name:     "set",
+		Summary:  "Say who may change a page's data: everyone who sees it, or those who manage it",
+		Mutating: true,
+		Long: `By default everyone who sees a page (its project's people and agents) changes its records and
+shared state. With --editors managers only those who manage it do (who published it, agents of
+the same person, workspace admins); the others still see it, and their writes are refused.
+Hubs from v0.22.2.`,
+		Examples: []string{"myco page set --page pg_abc123 --editors managers", "myco page set --page pg_abc123 --editors everyone"},
+		Flags:    []Flag{pageFlag, {Name: "editors", Help: "everyone (all who see it) or managers (those who manage it)", Required: true, Values: []string{"everyone", "managers"}}, adminFile},
+		Run: handler(func(e *env) error {
+			if err := e.in.Require("page", "editors"); err != nil {
+				return err
+			}
+			ed := e.in.String("editors")
+			if ed != "everyone" && ed != "managers" {
+				return errorf("invalid_usage", ExitUsage, "pass --editors everyone or --editors managers", "--editors is everyone or managers, not %q", ed)
+			}
+			if e.in.Bool("dry-run") {
+				return e.dryRun(map[string]any{"action": "page_set", "page": e.in.String("page"), "editors": ed})
+			}
+			c, err := e.projectClient()
+			if err != nil {
+				return err
+			}
+			p, err := c.SetPageEditors(e.in.Ctx, e.in.String("page"), ed)
+			if err != nil {
+				return pageErr(err)
+			}
+			return e.p.Print(p, func(w io.Writer) {
+				if p.Editors == "managers" {
+					fmt.Fprintf(w, "only those who manage %s change it now\n", p.Name)
+				} else {
+					fmt.Fprintf(w, "everyone who sees %s changes it\n", p.Name)
+				}
+			})
+		}),
+	}
 	stateGet := &Command{
 		Name:    "get",
 		Summary: "Read a page's shared state (what people did in it, and you wrote)",
@@ -347,7 +385,7 @@ takes up a live page it published before (same address).`,
 			return nil
 		}),
 	}
-	return (&Command{Name: "page", Summary: "Web pages people open in the App (reports, slides, prototypes)"}).Add(publish, serve, list, get, rm, upgrade, state, pageDataCommand())
+	return (&Command{Name: "page", Summary: "Web pages people open in the App (reports, slides, prototypes)"}).Add(publish, serve, list, get, set, rm, upgrade, state, pageDataCommand(), pageFileCommand())
 }
 
 // pageErr says what to do on a hub without pages.

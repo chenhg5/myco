@@ -10,9 +10,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/chenhg5/myco/internal/api"
-	. "github.com/chenhg5/myco/internal/cli/cmdkit"
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/api"
+	. "github.com/myco-ai/myco/internal/cli/cmdkit"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // projectClient: an agent's own token when this is an agent (its projects,
@@ -159,7 +159,7 @@ the project no longer has are left alone.`,
 		Name: "update", Summary: "Change a project's title, goal, brief or links (its owner and coordinators); visibility and archiving (people)", Mutating: true,
 		Examples: []string{
 			`myco project update --name myco --brief-file BRIEF.md`,
-			`myco project update --name myco --link "repo=https://github.com/chenhg5/myco" --link "spec=https://example.com/spec"`,
+			`myco project update --name myco --link "repo=https://github.com/myco-ai/myco" --link "spec=https://example.com/spec"`,
 			`myco project update --name myco --visibility team`,
 		},
 		Flags: []Flag{nameFlag, {Name: "title", Kind: String, Help: "Display title"}, {Name: "goal", Kind: String, Help: "Goal"},
@@ -504,8 +504,8 @@ sentences; myco adds who wrote it and the date. Members are given the memory whe
 project; it is the document "memory" (memory.md after myco project pull), which the project's
 owner and coordinators edit or tidy like any document.`,
 		Examples: []string{
-			`myco project memory add --name myco --text "Release only when glenn asks; VERSION and CHANGELOG go in one commit"`,
-			`myco project memory add --name myco --text "glenn wants progress reports in Chinese, at most three bullets"`,
+			`myco project memory add --name myco --text "Release only when alice asks; VERSION and CHANGELOG go in one commit"`,
+			`myco project memory add --name myco --text "alice wants progress reports in Chinese, at most three bullets"`,
 		},
 		Flags: []Flag{nameFlag, {Name: "text", Kind: String, Required: true, Help: "The entry: one or two sentences, up to 1000 characters"}, adminFile},
 		Run: handler(func(e *env) error {
@@ -560,7 +560,7 @@ owner and coordinators edit or tidy like any document.`,
 	file := (&Command{Name: "file", Summary: "A project's files: upload, download, remove"}).Add(filePut, fileGet, fileRemove)
 	machines, machine := projectMachineCommands()
 	return (&Command{Name: "project", Summary: "Projects: nodes working together on a goal, with a shared brief and files"}).
-		Add(list, show, pull, create, update, memberCmd("add"), memberCmd("remove"), memory, file, doc, machines, machine, del)
+		Add(projectInviteCommand(), list, show, pull, create, update, memberCmd("add"), memberCmd("remove"), memory, file, doc, machines, machine, del)
 }
 
 // memoryUpgradeHint: hubs before v0.21.10 have no project memory.
@@ -590,6 +590,9 @@ func projectMarkdown(p *api.Project, forFile bool) string {
 		b.WriteString(" Archived.")
 	}
 	b.WriteString("\n\n")
+	if !forFile && p.FilesMax > 0 {
+		fmt.Fprintf(&b, "**Storage:** %d/%d files, %d/%d bytes; %d/%d context documents.\n\n", p.FilesUsed, p.FilesMax, p.BytesUsed, p.BytesMax, p.DocsUsed, p.DocsMax)
+	}
 	if p.Brief != "" {
 		fmt.Fprintf(&b, "## Brief\n\n%s\n\n", p.Brief)
 	}

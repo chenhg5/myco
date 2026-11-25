@@ -3,14 +3,14 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
-	"github.com/chenhg5/myco/internal/e2e"
+	"github.com/myco-ai/myco/internal/e2e"
 	"net/http"
 	"slices"
 	"strconv"
 	"strings"
 
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // setAgentRunSettings: PUT /v1/agents/{name}/run-settings from the console.

@@ -5,7 +5,7 @@ import (
 	"io"
 	"time"
 
-	. "github.com/chenhg5/myco/internal/cli/cmdkit"
+	. "github.com/myco-ai/myco/internal/cli/cmdkit"
 )
 
 // consoleCommands manage console tokens: per-device admin credentials for
@@ -20,11 +20,11 @@ func consoleCommands() *Command {
 console app, which keeps it in the system keychain. A console token can do what the admin token
 does, except manage console tokens; revoke it on its own if the device is lost.`,
 		Examples: []string{
-			"sudo myco console token create --name glenn-mac   # on a server installed with install-hub.sh",
-			"myco console token create --name glenn-mac        # on a machine running `myco hub up`",
+			"sudo myco console token create --name alice-mac   # on a server installed with install-hub.sh",
+			"myco console token create --name alice-mac        # on a machine running `myco hub up`",
 		},
 		Flags: []Flag{
-			{Name: "name", Kind: String, Required: true, Help: "Device name, e.g. glenn-mac"},
+			{Name: "name", Kind: String, Required: true, Help: "Device name, e.g. alice-mac"},
 			adminFlag,
 		},
 		Run: handler(func(e *env) error {

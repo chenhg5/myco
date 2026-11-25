@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
+	"github.com/myco-ai/myco/internal/api"
 )
 
 // CreateHandoverLink makes a one-time take-over link for agent name (its

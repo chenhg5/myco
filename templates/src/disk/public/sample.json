@@ -1,6 +1,0 @@
-{
-  "cleanups": [
-    { "id": "c1", "at": "2026-11-12T09:20:00Z", "computer": "glenn-mbp", "disk": "Macintosh HD", "freed": 18400000000, "count": 6, "by": "glenn" },
-    { "id": "c2", "at": "2026-11-18T14:05:00Z", "computer": "glenn-mbp", "disk": "Macintosh HD", "freed": 7300000000, "count": 3, "by": "glenn" }
-  ]
-}

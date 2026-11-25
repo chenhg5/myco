@@ -2,13 +2,13 @@
 package builtin
 
 import (
-	"github.com/chenhg5/myco/internal/harness"
-	"github.com/chenhg5/myco/internal/harness/acp"
-	"github.com/chenhg5/myco/internal/harness/claude"
-	"github.com/chenhg5/myco/internal/harness/codex"
-	"github.com/chenhg5/myco/internal/harness/execnode"
-	"github.com/chenhg5/myco/internal/harness/shell"
-	"github.com/chenhg5/myco/internal/harness/template"
+	"github.com/myco-ai/myco/internal/harness"
+	"github.com/myco-ai/myco/internal/harness/acp"
+	"github.com/myco-ai/myco/internal/harness/claude"
+	"github.com/myco-ai/myco/internal/harness/codex"
+	"github.com/myco-ai/myco/internal/harness/execnode"
+	"github.com/myco-ai/myco/internal/harness/shell"
+	"github.com/myco-ai/myco/internal/harness/template"
 )
 
 // Registry returns every harness shipped with myco: native adapters

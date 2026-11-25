@@ -1,7 +1,7 @@
 # Install or upgrade the myco CLI on Windows (PowerShell 5.1 or 7), then run a
 # health check. In Git Bash, WSL, macOS or Linux use install-client.sh.
 #
-#   irm https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.ps1 | iex
+#   irm https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-client.ps1 | iex
 #
 # Options (environment variables):
 #   MYCO_VERSION=v0.18.26   install a specific release (default: latest)
@@ -14,7 +14,7 @@
   $ProgressPreference = 'SilentlyContinue'   # Invoke-WebRequest is much faster without it
   [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
-  $repo = 'chenhg5/myco'
+  $repo = 'myco-ai/myco'
   $version = if ($env:MYCO_VERSION) { $env:MYCO_VERSION } else { 'latest' }
   $cpu = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
   $arch = switch ($cpu) { 'AMD64' { 'amd64' } 'ARM64' { 'arm64' } default { throw "unsupported architecture: $cpu" } }

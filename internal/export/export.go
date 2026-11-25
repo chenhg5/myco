@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
+	"github.com/myco-ai/myco/internal/api"
 )
 
 // Step is one thing an agent did for a task: a tool it ran and on what.

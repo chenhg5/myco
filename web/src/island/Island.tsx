@@ -52,7 +52,9 @@ function busyOf(ov: AppOverview, before: Busy[] = []): Busy[] {
     }
     for (const st of h.overview.agents || []) {
       const k = agentKind(st.agent);
-      if (st.state !== "working" || (k !== "agent" && k !== "shell")) continue;
+      // Agents only: a workspace (shell node) running commands is not
+      // someone at work.
+      if (st.state !== "working" || k !== "agent") continue;
       // An older hub calls tasks left open "working" too: only live ones.
       if (st.stale === undefined && st.in_progress <= stuckCounts(st, Date.now()).in_progress) continue;
       const stale = new Set(st.stale_tasks || []);

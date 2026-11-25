@@ -101,7 +101,7 @@ public enum Scenario: Sendable {
                 name: "myco-ios", title: "myco 手机端", goal: "做出 iOS 第一版，上 TestFlight",
                 brief: "## 规则\n- 先跑通关键路径，再接真实数据。\n- 每一步都在真机上看。",
                 createdAt: ago(12 * 86_400),
-                links: [ProjectLink(title: "仓库", url: "https://github.com/chenhg5/myco")],
+                links: [ProjectLink(title: "仓库", url: "https://github.com/myco-ai/myco")],
                 members: [
                     ProjectMember(name: lead.name, role: "coordinator", note: "协调", addedAt: ago(12 * 86_400)),
                     ProjectMember(name: backend.name, note: "推送接口", addedAt: ago(11 * 86_400), group: "后端"),
@@ -199,7 +199,7 @@ public enum Scenario: Sendable {
             <li><label><input type="checkbox" checked> 聊天滚动</label></li>
             <li><label><input type="checkbox"> 导航返回</label></li>
             <li><label><input type="checkbox"> 运行中补充和停止</label></li></ul>
-            <p><a href="https://github.com/chenhg5/myco">仓库</a></p>
+            <p><a href="https://github.com/myco-ai/myco">仓库</a></p>
             <script src="app.js"></script></body></html>
             """),
             "style.css": ("text/css; charset=utf-8", "body{font:17px/1.6 -apple-system,sans-serif;margin:24px;color:#1c1c21}h1{font-size:24px}li{list-style:none;margin:10px 0}ul{padding:0}.v{color:#85858d}#n{color:#2f8a68}"),
@@ -208,7 +208,7 @@ public enum Scenario: Sendable {
         // The coordinator's conversation keeps the repository and the
         // first decision at hand.
         world.pins[lead.name] = [
-            Pin(id: "pin_repo", kind: "link", title: "仓库", target: "https://github.com/chenhg5/myco", addedBy: lead.name, at: ago(2_000)),
+            Pin(id: "pin_repo", kind: "link", title: "仓库", target: "https://github.com/myco-ai/myco", addedBy: lead.name, at: ago(2_000)),
             Pin(id: "pin_nav", kind: "message", title: "定了：底部三个 Tab", target: "m2", addedBy: me, at: ago(1_900)),
         ]
         // Two of myco's apps: a checklist kept as records (the bridge's
@@ -280,20 +280,20 @@ public enum Scenario: Sendable {
                 step("ok", "合并吗", "human", me, "done", summary: "合并", at: 88_000),
             ], durationMs: 2_400_000, createdAt: ago(90_000), updatedAt: ago(87_000), endedAt: ago(87_000))
         world.workflows = [Workflow(
-            id: "wf_wri", name: "写-审-改", description: "一个写、一个审，审过了问我要不要合并", project: project, owner: "glenn", version: 2,
+            id: "wf_wri", name: "写-审-改", description: "一个写、一个审，审过了问我要不要合并", project: project, owner: "alice", version: 2,
             steps: 3, active: 1, lastRun: waiting, definition: definition, createdAt: ago(200_000), updatedAt: ago(100_000))]
         world.runs = [waiting, done]
         // Two automations, except where the page with none is looked at.
         if self != .waiting {
             world.automations = [
                 Automation(
-                    id: "aut_morning", name: "每天早上汇总", owner: "glenn", to: lead.name,
+                    id: "aut_morning", name: "每天早上汇总", owner: "alice", to: lead.name,
                     body: "看一下昨天新开的 issue 和 PR，挑出要紧的，在这里回我一份清单。",
                     schedule: AutomationSchedule(cron: "0 9 * * 1-5", tz: TimeZone.current.identifier), skipIfBusy: true, enabled: true,
                     nextRunAt: ago(-50_000),
                     lastRun: AutomationRun(id: "arun_1", automationId: "aut_morning", at: ago(36_000), trigger: "schedule", outcome: "sent", messageId: "m1")),
                 Automation(
-                    id: "aut_ci", name: "CI 失败时排查", owner: "glenn", to: backend.name,
+                    id: "aut_ci", name: "CI 失败时排查", owner: "alice", to: backend.name,
                     body: "CI 构建失败了，看一下日志找出原因，能修就修，修不了告诉我卡在哪：\n{{payload}}",
                     webhook: true, webhookUrl: "https://demo.myco.example/hooks/aut_ci", skipIfBusy: true, enabled: false,
                     lastRun: AutomationRun(
@@ -323,7 +323,7 @@ public enum Scenario: Sendable {
             // its subscription ran out, and a session on the Studio Mac
             // took over.
             world.handovers = [Handover(
-                id: "hov_demo1", agent: backend.name, at: ago(172_900), by: "glenn", note: "原来的订阅到期了",
+                id: "hov_demo1", agent: backend.name, at: ago(172_900), by: "alice", note: "原来的订阅到期了",
                 from: HandoverSide(binding: Binding(harness: "claude-cloud", sessionId: "sess_before"), runtime: Runtime(cli: "claude-cloud")),
                 to: HandoverSide(binding: backend.binding, machineId: "mach_studio", machineName: "Studio Mac", runtime: backend.runtime),
                 state: "done", doneAt: ago(172_800), openTasks: [])]

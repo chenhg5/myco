@@ -15,10 +15,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/config"
-	"github.com/chenhg5/myco/internal/harness"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/config"
+	"github.com/myco-ai/myco/internal/harness"
+	"github.com/myco-ai/myco/internal/runner"
 )
 
 func TestCLIConfigModel(t *testing.T) {
@@ -135,4 +136,47 @@ func TestRuntimeProviderReportsOnlyHost(t *testing.T) {
 	if !seen.Load() {
 		t.Fatal("no runtime sent")
 	}
+}
+
+func TestRuntimeReporterSendsQueueAndAdmission(t *testing.T) {
+	reports := make(chan api.Runtime, 16)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var rt api.Runtime
+		if err := json.NewDecoder(r.Body).Decode(&rt); err != nil {
+			t.Error(err)
+		}
+		reports <- rt
+		w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+	c, _ := client.New(srv.URL, "test")
+	rep := &runtimeReporter{c: c, log: slog.New(slog.NewTextHandler(io.Discard, nil)), base: &api.Runtime{CLI: "codex", Model: "example"}}
+	pool := runner.NewSlotPool(1)
+	a := pool.Request("a", "a", "a")
+	b := pool.Request("b", runner.SlotOwner("b", "same"), "queued")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go rep.watchSlots(ctx, pool, runner.SlotOwner("b", "same"))
+	wait := func(queued bool) {
+		t.Helper()
+		deadline := time.After(3 * time.Second)
+		for {
+			select {
+			case rt := <-reports:
+				if rt.CLI != "codex" || rt.Model != "example" {
+					t.Fatal("lost base runtime")
+				}
+				if rt.RunnerSlots != nil && (len(rt.RunnerSlots.Queue) > 0) == queued {
+					return
+				}
+			case <-deadline:
+				t.Fatal("runtime queue update not sent")
+				return
+			}
+		}
+	}
+	wait(true)
+	a.Done()
+	wait(false)
+	b.Done()
 }

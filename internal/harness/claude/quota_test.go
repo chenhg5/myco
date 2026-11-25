@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/harness"
+	"github.com/myco-ai/myco/internal/harness"
 )
 
 // A rate_limit_event line as Claude Code 2.1 prints it in stream-json.

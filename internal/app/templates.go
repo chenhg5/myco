@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // TemplateService: the workspace's library of templates (templates.md).
@@ -87,6 +87,13 @@ func (s *TemplateService) officialOf(idOrSlug string) *OfficialTemplate {
 		}
 	}
 	return nil
+}
+
+// IsOfficial says whether a template id is one of myco's own (offered by
+// this hub, not a workspace's).
+func (s *TemplateService) IsOfficial(id string) bool {
+	o := s.officialOf(id)
+	return o != nil && officialID(o.Manifest) == id
 }
 
 func (s *TemplateService) officialView(o *OfficialTemplate) *TemplateView {

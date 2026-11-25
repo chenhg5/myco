@@ -1,8 +1,8 @@
 package builtin
 
 import (
-	"github.com/chenhg5/myco/internal/harness"
-	"github.com/chenhg5/myco/internal/harness/acp"
+	"github.com/myco-ai/myco/internal/harness"
+	"github.com/myco-ai/myco/internal/harness/acp"
 )
 
 // Presets are TemplateSpecs for CLIs without a dedicated adapter. pi and

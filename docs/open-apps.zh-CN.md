@@ -68,7 +68,7 @@ agent 改变了这件事。今天，一个人带着几个 agent，就能把一�
 |---|---|
 | 已上架 | 26 / 100 |
 | 分类 | 创意设计 7 · 办公套件 5 · 编程开发 3 · 效率工具 6 · 生活 3 · 游戏 2 |
-| 下一批 | 在 [Discussions](https://github.com/chenhg5/myco/discussions) 里由大家提名和投票 |
+| 下一批 | 在 [Discussions](https://github.com/myco-ai/myco/discussions) 里由大家提名和投票 |
 
 ## 你可以怎么参与
 
@@ -76,23 +76,23 @@ agent 改变了这件事。今天，一个人带着几个 agent，就能把一�
 
 | 平台 | 下载 |
 |---|---|
-| **Mac** | [myco.dmg](https://github.com/chenhg5/myco/releases/latest/download/myco.dmg)：Apple 芯片和 Intel 通用，已签名公证，会自动更新 |
-| **Windows**（预览） | [myco-app-windows-amd64.exe](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-amd64.exe)（[ARM 版](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-arm64.exe)）。还没有代码签名，第一次运行选「更多信息 → 仍要运行」 |
-| **Linux** | [myco-app-linux-amd64](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-amd64)（[ARM 版](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-arm64)），在浏览器里打开 App |
+| **Mac** | [myco.dmg](https://github.com/myco-ai/myco/releases/latest/download/myco.dmg)：Apple 芯片和 Intel 通用，已签名公证，会自动更新 |
+| **Windows**（预览） | [myco-app-windows-amd64.exe](https://github.com/myco-ai/myco/releases/latest/download/myco-app-windows-amd64.exe)（[ARM 版](https://github.com/myco-ai/myco/releases/latest/download/myco-app-windows-arm64.exe)）。还没有代码签名，第一次运行选「更多信息 → 仍要运行」 |
+| **Linux** | [myco-app-linux-amd64](https://github.com/myco-ai/myco/releases/latest/download/myco-app-linux-amd64)（[ARM 版](https://github.com/myco-ai/myco/releases/latest/download/myco-app-linux-arm64)），在浏览器里打开 App |
 
 打开 App，跟着第一屏在本机开一个 Hub，然后在侧边栏的 **应用** 里就能看到全部应用。
 
 已经在用 Claude Code、Codex 这类能跑命令的 agent？把下面这句话发给它，它会帮你装好：
 
 ```text
-帮我装好 myco：先读 https://raw.githubusercontent.com/chenhg5/myco/main/docs/agent-setup.md （打不开就读 https://cdn.jsdelivr.net/gh/chenhg5/myco@main/docs/agent-setup.md ），照着做。要我决定的先问我，用 sudo 或改系统设置前也先问我，装完告诉我结果。
+帮我装好 myco：先读 https://raw.githubusercontent.com/myco-ai/myco/main/docs/agent-setup.md （打不开就读 https://cdn.jsdelivr.net/gh/myco-ai/myco@main/docs/agent-setup.md ），照着做。要我决定的先问我，用 sudo 或改系统设置前也先问我，装完告诉我结果。
 ```
 
 更多装法见 [安装指南](../INSTALL.zh-CN.md) 和 [使用教程](tutorial.zh-CN.md)。
 
 ### 2. 提名下一个应用
 
-到 [Discussions](https://github.com/chenhg5/myco/discussions) 发一帖，写清楚三件事：
+到 [Discussions](https://github.com/myco-ai/myco/discussions) 发一帖，写清楚三件事：
 
 - **哪个应用**，你平时拿它做什么；
 - **它好用在哪里**：最离不开的两三个功能；
@@ -102,9 +102,11 @@ agent 改变了这件事。今天，一个人带着几个 agent，就能把一�
 
 ### 3. 用了告诉我们哪里不好
 
-到 [Issues](https://github.com/chenhg5/myco/issues) 提。写上应用名、`myco version` 的输出、系统，以及怎么复现；能附截图更好。安全问题请走 [SECURITY.md](../SECURITY.md)，不要公开发。
+到 [Issues](https://github.com/myco-ai/myco/issues) 提。写上应用名、`myco version` 的输出、系统，以及怎么复现；能附截图更好。安全问题请走 [SECURITY.md](../SECURITY.md)，不要公开发。
 
 ### 4. 自己做一个应用
+
+应用开发已迁到独立仓库 [myco-ai/apps](https://github.com/myco-ai/apps)，独立检查和发布。应用改动请提交到 apps；主程序按 `apps.lock.json` 嵌入经过校验的发布包（[构建说明](building.md)）。
 
 每个应用就是 `templates/src/` 下的一个文件夹：一个 React 页面，加上 `public/` 里的几份文件。
 
@@ -122,10 +124,10 @@ agent 改变了这件事。今天，一个人带着几个 agent，就能把一�
 **最快的起步：** 照着一个现成的改，比如 `templates/src/todo`（待办清单）。
 
 ```bash
-git clone https://github.com/chenhg5/myco && cd myco
+git clone https://github.com/myco-ai/apps && cd apps
 cd templates && npm ci
 cp -r src/todo src/my-app        # 从一个现成的应用起步，再改掉 public/myco.json 里的 id、名字和字段
-npm run build                    # 类型检查并生成到 internal/templates/official/
+npm run build                    # 类型检查并生成到 dist/official/
 node shots.mjs my-app && node build.mjs   # 生成截图
 cd .. && make check              # 提交前跑一遍全部检查
 ```
@@ -133,16 +135,16 @@ cd .. && make check              # 提交前跑一遍全部检查
 **让你的 agent 来做：** 在仓库目录里打开 Claude Code 或 Codex，告诉它：
 
 ```text
-读一下 AGENTS.md 和 templates/README.md，参考 templates/src/todo，在 templates/src/ 下做一个新的 myco 应用：<你要做的应用和它的核心功能>。界面按 docs/design/app-ui.md，数据用 myco.data，写好 agent.md 和 sample.json，跑通 npm run build、截图和 make check。
+读一下 AGENTS.md 和 templates/README.md，参考 templates/src/todo，在 templates/src/ 下做一个新的 myco 应用：<你要做的应用和它的核心功能>。界面按 AGENTS.md 链接的 myco App 界面规范，数据用 myco.data，写好 agent.md 和 sample.json，跑通 npm run build、截图和 make check。
 ```
 
-做好后提一个 PR，规则见 [CONTRIBUTING.md](../CONTRIBUTING.md)：一个 PR 只做一件事，带上生成好的 `internal/templates/official/<应用名>`，不要改 `VERSION`。大一点的应用，先开 issue 或在 Discussions 里说一声，免得撞车。
+做好后到 [myco-ai/apps](https://github.com/myco-ai/apps) 提一个 PR：一个 PR 只做一件事，跑通 `make pack`，不要提交生成的 `dist/`。检查与宿主兼容要求见该仓库 AGENTS.md。大一点的应用，先开 issue 或在 Discussions 里说一声，免得撞车。
 
 所有贡献都按 [MIT 许可证](../LICENSE) 开放。
 
 ### 5. 让更多人知道
 
-给 [仓库](https://github.com/chenhg5/myco) 点个 star，把你最喜欢的一个应用分享给需要它的朋友。
+给 [仓库](https://github.com/myco-ai/myco) 点个 star，把你最喜欢的一个应用分享给需要它的朋友。
 
 ---
 

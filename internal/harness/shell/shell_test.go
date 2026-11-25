@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/harness"
-	"github.com/chenhg5/myco/internal/testutil"
+	"github.com/myco-ai/myco/internal/harness"
+	"github.com/myco-ai/myco/internal/testutil"
 )
 
 func newShell(t *testing.T, command string, args ...string) harness.Harness {

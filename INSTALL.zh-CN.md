@@ -5,7 +5,7 @@
 这份文档写给**人和 agent**。如果你是被要求"接入 myco 网络"的 agent，按下面的目录找到和你情况对应的那一节，照着执行即可。
 
 - **最快：让你的 agent 帮你装**。把这句话发给 Claude Code、Codex 或任何能跑命令的 AI，它会照着[给 agent 的安装指南](docs/agent-setup.md)开 Hub、连 App、加电脑和 agent，并自己排查问题：
-  > 帮我装好 myco：先读 https://raw.githubusercontent.com/chenhg5/myco/main/docs/agent-setup.md （打不开就读 https://cdn.jsdelivr.net/gh/chenhg5/myco@main/docs/agent-setup.md ），照着做。要我决定的先问我，用 sudo 或改系统设置前也先问我，装完告诉我结果。
+  > 帮我装好 myco：先读 https://raw.githubusercontent.com/myco-ai/myco/main/docs/agent-setup.md （打不开就读 https://cdn.jsdelivr.net/gh/myco-ai/myco@main/docs/agent-setup.md ），照着做。要我决定的先问我，用 sudo 或改系统设置前也先问我，装完告诉我结果。
 - **推荐：先装 App（Mac / Windows / Linux）**→ [下一节](#推荐先装-appmac--windows--linux)。下载、打开、点一下就有自己的 Hub，本机的 Claude Code、Codex 会话点一下就能加入，不用敲命令。
 - **没有图形界面的机器（服务器、云端 agent）：入网链接** → [第 0 节](#0-最简单的方式入网链接)，粘贴一行命令。
 - **服务端（Hub）**：部署一次，放在一台有公网 IP 的 Linux 机器上 → [第 1 节](#1-服务端部署-hub)；没有 VPS 时放在自己电脑上，用 Cloudflare 或 Tailscale 穿透 → [1.1 节](#11-没有-vps在自己的电脑上开-hub)
@@ -21,18 +21,20 @@
 > - 每条命令都看退出码（见[第 6 节](#6-命令速查)）。出错时按 JSON 错误里的 `suggestion` 处理，不要猜。
 > - 不确定的东西（比如找不到会话 ID）就如实报告，**不要编造**。
 
+可选的「网页自动化」应用使用本机专用 Chrome 资料（Windows 无 Chrome 时使用 Edge）。在桌面 App 内打开应用并点「安装浏览器组件」，App 确认后才下载单独组件并校验 SHA256；不会访问日常 Chrome 资料，也不会下载浏览器。详见[浏览器组件的安装与限制](docs/browser-component.md)。
+
 ---
 
 ## 推荐：先装 App（Mac / Windows / Linux）
 
 大多数人从 App 开始：不用部署服务器，也不用记命令。
 
-1. **下载**（[最新发布](https://github.com/chenhg5/myco/releases/latest)）：
+1. **下载**（[最新发布](https://github.com/myco-ai/myco/releases/latest)）：
    - **Mac**：`myco.dmg`（Apple 芯片和 Intel 通用，已签名并经 Apple 公证），打开后拖进「应用程序」。
    - **Windows（预览）**：`myco-app-windows-amd64.exe`（ARM 电脑用 `-arm64`），下载后直接运行；还没有代码签名，SmartScreen 提示时点「更多信息 → 仍要运行」。
    - **Linux**：`myco-app-linux-amd64`（ARM 用 `-arm64`）。App 在默认浏览器里打开，X11、Wayland 都能用；第一次运行后「应用程序」菜单里就有 myco：
      ```bash
-     mkdir -p ~/.local/bin && curl -fL -o ~/.local/bin/myco-app https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-amd64 && chmod +x ~/.local/bin/myco-app && ~/.local/bin/myco-app
+     mkdir -p ~/.local/bin && curl -fL -o ~/.local/bin/myco-app https://github.com/myco-ai/myco/releases/latest/download/myco-app-linux-amd64 && chmod +x ~/.local/bin/myco-app && ~/.local/bin/myco-app
      ```
 2. **第一次打开**，二选一：
    - **在这台电脑上开始**：一键在本机开一个 Hub，这台电脑自动作为第一台机器加入。
@@ -52,7 +54,7 @@
 **服务端**装好后（[第 1 节](#1-服务端部署-hub)，一条命令），会打印一个入网链接，形如 `https://1-2-3-4.sslip.io/j/myco_enroll_...`。以后随时可以在服务器上再生成：
 ```bash
 sudo /usr/local/bin/myco link create                                  # 默认 7 天内有效，最多 10 台机器
-sudo /usr/local/bin/myco link create --uses 1 --expires 24h --note "Glenn 的笔记本"
+sudo /usr/local/bin/myco link create --uses 1 --expires 24h --note "Alice 的笔记本"
 sudo /usr/local/bin/myco link create --expires 0 --uses 0 --note claude.ai   # 长期有效，给云端环境的安装脚本用
 ```
 
@@ -62,7 +64,7 @@ curl -fsSL <入网链接> | bash
 ```
 它会：安装或升级 myco（校验 SHA256）→ 登记这台机器（凭据存在 `~/.myco/machine.yaml`，只有你能读）→ 安装后台 runner 服务。可以重复执行；同一台机器再执行不会消耗链接的次数。这台机器上的 agent 会自动带上 `machine=<机器名>` 标签。
 
-**原生 Windows**：在 PowerShell 里执行 `irm https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.ps1 | iex` 安装（装到 `%LOCALAPPDATA%\Programs\myco`，并加进用户 PATH）；Git Bash 里也可以用上面那行 `curl … | bash`（Windows 上的 Claude Code 就是在 Git Bash 里执行命令）。入网链接两种都支持：Git Bash 用 `curl -fsSL <链接> | bash`，PowerShell 用 `irm '<链接>?format=ps1' | iex`。后台 runner 用当前用户的登录启动项（`HKCU\…\Run`，不需要管理员权限）：安装后立即在后台启动，之后每次登录自动启动；`myco runner service status/restart/uninstall` 照常可用，日志在 `%USERPROFILE%\.myco\runner.log`。exec 节点和 shell 节点在 Windows 上默认用 PowerShell 执行命令（命令要写 PowerShell 语法）。
+**原生 Windows**：在 PowerShell 里执行 `irm https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-client.ps1 | iex` 安装（装到 `%LOCALAPPDATA%\Programs\myco`，并加进用户 PATH）；Git Bash 里也可以用上面那行 `curl … | bash`（Windows 上的 Claude Code 就是在 Git Bash 里执行命令）。入网链接两种都支持：Git Bash 用 `curl -fsSL <链接> | bash`，PowerShell 用 `irm '<链接>?format=ps1' | iex`。后台 runner 用当前用户的登录启动项（`HKCU\…\Run`，不需要管理员权限）：安装后立即在后台启动，之后每次登录自动启动；`myco runner service status/restart/uninstall` 照常可用，日志在 `%USERPROFILE%\.myco\runner.log`。exec 节点和 shell 节点在 Windows 上默认用 PowerShell 执行命令（命令要写 PowerShell 语法）。
 
 **每个 AI 会话**：在 Claude Code 或 Codex 会话里说一句"接入 myco：<入网链接>"，或者在已登记的机器上直接执行：
 ```bash
@@ -96,7 +98,7 @@ sudo /usr/local/bin/myco link revoke --id enr_xxx --force  # 作废链接；已�
 **要求**：一台 Linux 服务器，有 systemd 和 root 权限。
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-hub.sh
+curl -fsSLO https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-hub.sh
 less install-hub.sh                      # 先看一遍再执行
 sudo bash install-hub.sh                 # 会问你用哪种方式
 ```
@@ -220,7 +222,7 @@ sudo bash -c 'set -a; . /etc/myco/hub.env; set +a; /usr/local/bin/myco <命令> 
 
 **控制台令牌（给 Mac 控制台 App 用）**：管理员令牌只留在 Hub 机器上，每台要管理网络的设备单独签发一把控制台令牌，丢了就单独作废：
 ```bash
-sudo /usr/local/bin/myco console token create --name glenn-mac   # 只显示这一次，同时打印 Hub 的公网地址
+sudo /usr/local/bin/myco console token create --name alice-mac   # 只显示这一次，同时打印 Hub 的公网地址
 sudo /usr/local/bin/myco console token list                      # 每把令牌最近一次使用的时间
 sudo /usr/local/bin/myco console token revoke --id con_xxx       # 作废，立即生效
 ```
@@ -236,7 +238,7 @@ sudo /usr/local/bin/myco console token revoke --id con_xxx       # 作废，立�
 
 推荐**按机器或环境建**。比如你自己的电脑建一个不限 harness 的令牌，这台电脑上的 Claude Code、Codex 都用它：
 ```bash
-myco enrollment create --name-prefix mac- --note "Glenn 的 Mac（任意 harness）"
+myco enrollment create --name-prefix mac- --note "Alice 的 Mac（任意 harness）"
 ```
 也可以按类型建，并限定 harness：
 ```bash
@@ -268,7 +270,7 @@ myco enrollment revoke --id enr_xxx --force      # 已入网的 agent 不受影�
 适合人类用户，或者有特殊投递方式（webhook、GitHub 等）的 agent：
 
 ```bash
-myco agent register --name glenn --description "人类：Glenn"
+myco agent register --name alice --description "人类：Alice"
 myco agent register --name x --harness claude --session-id <id> --no-save --format text   # 打印 token，交给对应的 agent
 myco agent register --name x --rotate-token --no-save                                      # 换发 token，旧的立即失效；其他字段只改你传了的
 # 把换发的 token 存到 agent 所在的机器上（会按绑定的会话生成身份文件）：
@@ -285,7 +287,7 @@ myco agent remove --name x --force
 myco 是单个二进制文件，没有任何依赖。一条命令完成安装或升级：自动识别系统和架构、校验 SHA256、装到已有 myco 所在的目录（没有就装到 `~/.local/bin`），最后执行一次 `myco doctor --all`。
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.sh | bash
+curl -fsSL https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-client.sh | bash
 ```
 
 也可以手动安装：
@@ -294,7 +296,7 @@ curl -fsSL https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-cl
 # 根据系统选择：linux-amd64 | linux-arm64 | darwin-arm64（Apple 芯片）| darwin-amd64
 OS=$(uname -s | tr A-Z a-z); ARCH=$(uname -m); [ "$ARCH" = x86_64 ] && ARCH=amd64; [ "$ARCH" = aarch64 ] && ARCH=arm64
 mkdir -p ~/.local/bin
-curl -fsSL "https://github.com/chenhg5/myco/releases/latest/download/myco-$OS-$ARCH" -o ~/.local/bin/myco
+curl -fsSL "https://github.com/myco-ai/myco/releases/latest/download/myco-$OS-$ARCH" -o ~/.local/bin/myco
 chmod +x ~/.local/bin/myco
 myco version
 ```
@@ -330,7 +332,7 @@ myco version
 
 人类先配置一次环境（会话标题栏 → 云端环境 → Edit）：
 - 环境变量：`MYCO_HUB`、`MYCO_ENROLL_TOKEN`（用 `--harness claude-cloud` 创建的那个）
-- 安装脚本加一行：`curl -fsSL https://github.com/chenhg5/myco/releases/latest/download/myco-linux-amd64 -o /usr/local/bin/myco && chmod +x /usr/local/bin/myco`
+- 安装脚本加一行：`curl -fsSL https://github.com/myco-ai/myco/releases/latest/download/myco-linux-amd64 -o /usr/local/bin/myco && chmod +x /usr/local/bin/myco`
 - 网络权限如果是 Limited，把 Hub 的域名加到 Allowed domains
 
 agent 在 session 里执行：
@@ -456,7 +458,7 @@ myco runner start --all                       # 前台运行；新入网的 agen
 myco runner start --all --max-concurrent 2    # 同时最多跑 2 个 CLI
 ```
 
-默认同时最多 3 个（服务用 `myco runner service install --max-concurrent <n>` 改）。超出的 agent 收到任务会排队等空位，等的时候仍显示在线。一台电脑上有好几个 agent 都在做长任务时，把这个数调大，别的 agent 就不用一直等（排队的任务在 App 里显示「正在启动」）。命令节点和这台电脑自己的节点（升级、启动 agent）不占这个名额，不用等。
+默认同时最多 3 个（服务用 `myco runner service install --max-concurrent <n>` 改）。超出的 agent 收到任务会排队等空位，等的时候仍显示在线。App 会显示「排队中：这台电脑 3/3 在忙，排第 2」，电脑详情显示共享名额和排队数。电脑资源够用时可以调大名额。不同工作区（包括同一个 Hub 下不同的 `/w/` 地址）公平共享空位：优先给还没占到名额、正在等待的工作区，之后在等待的工作区之间轮流分配，工作区内按先来后到。不会中断已经运行的任务；名额少于活跃工作区时，随空位释放轮流开工。没有其他工作区等待时，一个工作区仍可用满所有空位。排队位置是当前预计顺序，新工作区加入或任务结束后可能变化。名额统计只覆盖这个 runner 进程，不包括另行启动的 runner。排队展示需要新版 runner、Hub 和 App；旧 Hub 会继续接收去掉可选名额字段的运行信息。命令节点和这台电脑自己的节点（升级、启动 agent）不占这个名额，不用等。
 
 **放到后台长期运行（推荐）**：一条命令装成系统服务，开机或登录后自动启动，崩溃了会自动重启。macOS 用 launchd，Linux 用 systemd 的用户服务：
 ```bash
@@ -695,7 +697,7 @@ myco agent spawn --on wsl --dir ~/code/app --prompt "先读 README.md，总结�
 **三条规则都在那台机器上检查**，Hub 说了不算：
 | | 默认 | 怎么改 |
 |---|---|---|
-| 谁能在这台机器上开会话 | 继承入网链接的 allow-from；链接没设就是 Hub 上任何 agent。另外，项目可以单独设置「可以开 agent 的电脑」：勾上的电脑，项目的协调者能在上面开会话（和项目里有没有这台电脑的终端无关） | 管理员：`myco agent update --name wsl-machine --allow-from cloud-1,glenn`；或者在项目资料里勾上这台电脑（`myco project machine allow --project 项目 --machine wsl`） |
+| 谁能在这台机器上开会话 | 继承入网链接的 allow-from；链接没设就是 Hub 上任何 agent。另外，项目可以单独设置「可以开 agent 的电脑」：勾上的电脑，项目的协调者能在上面开会话（和项目里有没有这台电脑的终端无关） | 管理员：`myco agent update --name wsl-machine --allow-from cloud-1,alice`；或者在项目资料里勾上这台电脑（`myco project machine allow --project 项目 --machine wsl`） |
 | 允许的目录 | 家目录下（解析符号链接后判断；`~/.ssh`、`~/.aws`、`~/.gnupg`、`~/.myco` 一律拒绝） | 在那台机器上运行 `myco machine dirs --add ~/code/项目`（`--remove` 去掉一个，不带参数列出来），也就是改它 `~/.myco/machine.yaml` 的 `spawn.dirs`；App 的电脑页「它允许什么」里也能加减：这台电脑，或 App 用 SSH / WSL 连上的电脑，直接改；别的电脑给出要在它上面运行的命令。工作区本身改不了。下一个新建的会话就按新的来，不用重启 |
 | 新会话的权限 | `workspace`，上限也是 `workspace` | 在那台机器的 `machine.yaml` 里设 `spawn.max_access`；`full` 只能这样在本机打开 |
 
@@ -788,7 +790,7 @@ myco agent handover-link --name docs-claude
 一个 Hub 可以有好几个人，每个人在自己的 App 里用自己的身份：
 - **成员**只存在于这个 Hub 里，没有注册和密码。升级后的 Hub 自动有一个所有者（名字叫 `owner`，在 App 的"设置 → 成员"里改成你的名字），原来的节点和机器都归他。
 - **你的名字**：每个 Hub 上各起各的名字。第一次打开自己建的 Hub（名字还是 `owner`）时，App 会问"你在这个 Hub 上叫什么？"；通过邀请加入别人的 Hub 时也会问一次。之后在"设置 → 成员 → 改名"里改。
-- **邀请**：设置 → 成员 → 邀请成员，填用户名、选角色，把生成的链接私下发给对方。命令行：`myco member invite --name laohu`。对方二选一：
+- **邀请**：设置 → 成员 → 邀请成员，填用户名、选角色，把生成的链接私下发给对方。命令行：`myco member invite --name bob`。对方二选一：
   - **不用装 App**：让自己电脑上的 Claude Code 或 Codex 执行 `curl -fsSL <邀请链接> | bash`（或者直接对它说"接入 myco：<邀请链接>"）。这一条命令会装好 myco、以对方的身份加入、把这台电脑加成对方的机器、装好后台 runner，并把执行命令的那个 agent 会话也接进来，都归对方管。对方的凭据存在 `~/.myco/machine.yaml`（权限 600），之后在这台电脑上：别的会话里 `myco join` 接入（同样归对方）；`myco agent …` 管理自己的节点；想用 App 了，`myco member pair` 打印一个一次性的 App 链接。
   - **用 App**：在 myco App 里"添加 Hub"时粘贴链接。
 - **链接只用一次**：邀请链接和 `myco console link` 打印的链接都是一次性的，24 小时内有效，App 和命令行二选一。App（或命令行）用它换一个属于这台设备的凭据，链接随即作废，之后泄露也没用。命令行加入的电脑也会出现在"我的设备"里。
@@ -910,7 +912,7 @@ myco superagent guide                  # superagent 自己读的说明
 
 - 它用自己的 agent 令牌调用 App 的接口，Hub 按每个接口登记的级别放行：直接做、要你点头、不能做（令牌、邀请、成员角色、认定 superagent 等）。没登记的接口它还是普通 agent。
 - 要你点头的请求 Hub 先存下，24 小时没人处理就作废；同意后 Hub 替它执行一次，并告诉它结果。它调用时用 `MYCO_APPROVAL_REASON` 写一句为什么，卡片上会显示。
-- 审计里它做的事记成「glenn（经 superagent shroom）」。
+- 审计里它做的事记成「alice（经 superagent shroom）」。
 
 接口和权限表见 [docs/api.md](docs/api.md#superagents)。
 
@@ -955,12 +957,12 @@ myco pin rm --with @console:ann --pin pin_xxx
 
 需要 Hub v0.20.5 或更新。App 里叫「应用」，命令行和 API 里叫 template（模板），是同一个东西。一个应用是一个文件夹：网页文件 + `myco.json`（名字、版本、数据有哪些集合和字段）+ `agent.md`（告诉 agent 怎么填）+ `sample.json`（示例数据）。用应用新建出来的就是一个网页，人在 App 里打开、改，agent 用命令行读写同一份数据，两边都能马上看到对方改了什么。
 ```bash
-myco template init --dir ./weekly --name 周报 --id glenn/weekly   # 起一个能用的模板：一张能编辑的表
+myco template init --dir ./weekly --name 周报 --id alice/weekly   # 起一个能用的模板：一张能编辑的表
 myco template publish --dir ./weekly                              # 发布到工作区的模板库（改了 version 再发就是新版本）
 myco template list [--category life] [--query 记账]               # 一个应用一行：叫什么、做什么用、分类（--full 全部字段）
-myco template get --template glenn/weekly                         # 数据结构、版本、给 agent 的说明
-myco template use --template glenn/weekly --name "周报 · 第 47 周" [--project growth] [--sample]
-myco template rm --template glenn/weekly                          # 已经做好的网页不受影响
+myco template get --template alice/weekly                         # 数据结构、版本、给 agent 的说明
+myco template use --template alice/weekly --name "周报 · 第 47 周" [--project growth] [--sample]
+myco template rm --template alice/weekly                          # 已经做好的网页不受影响
 
 myco page data list --page pg_xxx [--collection rows]
 myco page data put --page pg_xxx --collection rows --json '{"title": "发版", "status": "待办"}'
@@ -1044,6 +1046,8 @@ myco upgrade --version v0.16.5        # 安装指定版本（也可以用来回�
 ```
 - 下载对应系统和架构的发布文件，用发布附带的 `SHA256SUMS` 校验，校验不过不会改动任何东西；替换是原子的。
 - 在 agent 的一轮任务里执行时（runner 唤醒的会话），只替换程序、不重启服务，避免把这一轮任务自己中断；它会提示你稍后执行 `myco runner service restart`。
+- runner 重启会尽快取消当前任务，不再等十分钟排空。清理最多等待 20 秒，服务停止上限 30 秒（Windows 先请求正常退出，25 秒后强制终止）。被中断的 agent 任务重启后最多自动恢复一次；命令节点的任务不自动重放，因为命令可能已执行了一部分。已在本机保存的完成结果会直接补发，不重复执行任务。
+- 通过 myco 重启服务时，节点和电脑短暂显示「正在更新」。新 runner 上线后自动清除；没有恢复时，更新提示在 90 秒后到期。旧 Hub 仍可使用，状态提示会尽力兼容。旧服务更新停止策略时保留原有参数和环境配置。
 - 不想重启服务：加 `--no-restart`。
 - Hub 和各台机器分别升级：Hub 所在机器执行 `sudo myco upgrade`（或 `myco upgrade`，如果是 `hub up` 开的），每台机器执行 `myco upgrade`。v0.16.6 之前的版本还没有这个命令，第一次请用原来的安装脚本升级。
 - **在 App 里升级**（v0.20.29 起，不用打开终端）：
@@ -1077,7 +1081,7 @@ sudo myco hub restore --from myco-backup-hub-20261121-093000.tar.gz --db /var/li
 
 一个 App（Mac、Windows 是窗口，Linux 在浏览器里打开），可以同时管理多个 Hub：查看所有节点和机器、改名、改 allow-from、踢下线、删除，在机器上开新会话（添加节点），生成入网命令（添加机器），还能在这台 Mac 上直接开一个本机 Hub。
 
-- **下载**（[最新发布](https://github.com/chenhg5/myco/releases/latest)）：
+- **下载**（[最新发布](https://github.com/myco-ai/myco/releases/latest)）：
   - Mac：`myco.dmg`，一个包同时支持 Apple 芯片和 Intel，已用 Developer ID 签名并经 Apple 公证，双击打开后拖进「应用程序」即可。以后在 App 的「设置 → 关于」里一键更新。
   - Windows（预览）：`myco-app-windows-amd64.exe`（ARM 电脑用 `-arm64`），下载后直接运行。还没有代码签名，第一次运行 SmartScreen 会提示，点「更多信息 → 仍要运行」。v0.18.6 起支持在「设置 → 关于」里一键更新：替换正在运行的 exe 并重新打开（下载中断会接着下；新版本起不来，比如被杀毒软件拦住，会换回当前版本继续用），这台电脑上的 myco 命令行工具也一起升级（v0.18.5 及之前的版本要手动下载一次新版）。还不支持 `myco://` 链接。App 用到的 myco 命令行工具可以在「设置 → Hub」里安装。
     - **窗口一直是黑的**：通常是 Windows 的 WebView2 组件（显示窗口内容的部分）在这台电脑上起不来（比如 WebView2 157 在开了 Defender 的远程桌面里，它的沙箱初始化失败、反复崩溃）。v0.21.4 起，窗口 25 秒还没显示出内容，App 会弹框：「是」在浏览器里打开 myco（照常能用）；「否」用兼容模式重启（只对 myco 关掉 WebView2 的沙箱，记在 `%APPDATA%\myco\app-compat`，删掉这个文件就恢复）。不要用用户级的 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` 环境变量，它会影响这台电脑上所有用 WebView2 的程序。
@@ -1089,6 +1093,8 @@ sudo myco hub restore --from myco-backup-hub-20261121-093000.tar.gz --db /var/li
     - **本机 Hub**：没有 `systemd --user` 的机器（部分 WSL、容器），App 自己运行本机 Hub；这时 runner 也没法装成服务，要在终端里运行 `myco runner start --all`。
     - 还不支持：语音、听写（只有 Mac 有），`myco://` 链接（和 Windows 一样，把链接粘贴进 App）。
 - **自己构建**：Mac 上 `make app` 生成 `bin/myco.app`（需要 Go 和 Xcode 命令行工具），`scripts/mac-sign.sh` 生成签名、公证后的通用版和 DMG；Windows 版 `GOOS=windows go build ./cmd/myco-app` 即可（不需要 cgo），Linux 版 `go build ./cmd/myco-app` 也一样。
+
+源码构建需要 Python 3，按 `apps.lock.json` 准备官方应用包。CLI/Hub 使用 `make build`，macOS 使用 `make app`；直接用 Go 构建 Windows/Linux 桌面端前先执行 `make prepare-apps`。离线构建先预热校验缓存，再运行 `make build APPS_PREPARE_FLAGS=--offline`。本地包、更新锁定版本与测试见[源码构建说明](docs/building.md)。
 - **第一次打开**：两个选择。
   - **在这台电脑上开始**：一键在本机启动 Hub（默认只在本机和局域网可用），App 自动接入它，这台电脑也作为第一台机器加入，可以直接在上面开新会话。之前已经启动过本机 Hub、但这台电脑还不在「机器」页的，v0.18.11 起 App 打开时会自动补上（不会重启正在运行的 runner）。本机的工作区或 runner 服务装着却停了（不是在 App 里点「停止」停的，那会把服务删掉），App 发现后会把它重新启动，用原来的设置；更新 App 时，这台电脑上的 myco 命令行也会一起升级（后台服务下次重启时换成新版，可以在添加 agent 弹窗里点「修复」马上重启）。
   - **连接已有的 Hub**：粘贴 **App 连接链接**（`https://<hub>/c/<令牌>`，同时带了 Hub 地址和控制台令牌）。`install-hub.sh` 首次安装时会打印一条；以后在 Hub 机器上再生成：
@@ -1116,7 +1122,7 @@ sudo myco hub restore --from myco-backup-hub-20261121-093000.tar.gz --db /var/li
 - **设置**：点侧边栏底部的 Hub 切换器，选「设置」，或者按 ⌘,（Windows 上 Ctrl+,）。
 - **找任何东西**：按 ⌘K（Windows 上 Ctrl+K）或点侧边栏顶上的「搜索」，找所有工作区里的成员、项目、电脑和你自己对话里的消息；在一段对话里按 ⌘F 只在这段里找。
 - **快捷键**：按 ⌘/（Windows 上 Ctrl+/）或在「设置 › 快捷键」查看全部快捷键（暂时不能自定义）。常用的有：⌥↑ / ⌥↓ 切换到边栏里上一个 / 下一个对话，⌘N 新建项目，⌘\ 收起边栏，⌘U 添加文件，⌘= / ⌘- / ⌘0 调文字大小，⌘⇧L 切换浅色 / 深色。
-- **语音聊天**（Mac 版 App，v0.19.11 起）：在某个 agent 的对话里，框里空着时点输入框右边的圆按钮（波形图标），就和这个 agent 像打电话一样说话（和 ChatGPT、Claude 的语音一样，一个对话一个）。你说的话由苹果的语音识别听（能在本机就在本机），一个快的文本模型读着这段对话和你聊：问进展它自己答；要它做事就直接转给这个 agent（它手上有活就补充进去，空着就发成新任务，和按 Enter 一样，不用确认），对话里那条消息带「经语音」标记，鼠标放上去能看原话；agent 回复了或在问你时，它挑安静的时候用一两句话告诉你，长的就说放在对话里了。它说话时你一开口它就停下来听。录音用系统的语音处理（回声消除、降噪、自动增益）。语音条停在输入框上方，可以静音、挂断；切到别的对话或页面不会挂断，通话收到顶栏右边的小胶囊里，点名字回到那段对话。同一时间只有一通，和另一个 agent 开语音会先挂断前一通。这个按钮要先在 设置 › 语音 里配好才出现：语音用的模型（任意 OpenAI 兼容接口，不填就用「翻译」里的那个）和语音合成（选一个服务，现在有豆包语音：火山引擎控制台「豆包语音」里开通语音合成、创建 API Key 填进去；音色从列表里选，按语种分组，选好点「试听」先听一句，复刻的声音选「其他」填 S_ 开头的 ID）。密钥在这台电脑上存在系统钥匙串里。这些设置跟着人走：默认会连同密钥存到你连着的工作区（Hub，v0.19.15 起），手机和别的电脑不用再填一遍，谁后改的算数；设置页最下面写着存到了哪些工作区，不想让密钥离开这台电脑就在那里关掉（Hub 所在机器的管理员读得到它的数据库）。语音条上的闲聊只留在这台电脑上，录音不保存。
+- **语音聊天**（Mac 版 App，v0.19.11 起）：在某个 agent 的对话里，框里空着时点输入框右边的圆按钮（波形图标），就和这个 agent 像打电话一样说话（和 ChatGPT、Claude 的语音一样，一个对话一个）。你说的话由苹果的语音识别听（能在本机就在本机），接电话的就是这个 agent 本人：一个快的文本模型读着这段对话，以它的身份用第一人称和你聊（「我去改」「我看一下」）；接通后它先开口打招呼；问进展它直接答；要它做事它就接下来（手上有活就补充进去，空着就作为新任务，和按 Enter 一样，不用确认），对话里那条消息带「经语音」标记，鼠标放上去能看原话；做完了或有问题要问你时，它挑安静的时候用一两句话告诉你，长的就说详细的写在对话里了。它说话时你一开口它就停下来听。录音用系统的语音处理（回声消除、降噪、自动增益）。语音条停在输入框上方，可以静音、挂断；切到别的对话或页面不会挂断，通话收到顶栏右边的小胶囊里，点名字回到那段对话。同一时间只有一通，和另一个 agent 开语音会先挂断前一通。这个按钮要先在 设置 › 语音 里配好才出现：语音用的模型（任意 OpenAI 兼容接口，不填就用「翻译」里的那个）和语音合成（选一个服务，现在有豆包语音：火山引擎控制台「豆包语音」里开通语音合成、创建 API Key 填进去；音色从列表里选，按语种分组，选好点「试听」先听一句，复刻的声音选「其他」填 S_ 开头的 ID）。密钥在这台电脑上存在系统钥匙串里。这些设置跟着人走：默认会连同密钥存到你连着的工作区（Hub，v0.19.15 起），手机和别的电脑不用再填一遍，谁后改的算数；设置页最下面写着存到了哪些工作区，不想让密钥离开这台电脑就在那里关掉（Hub 所在机器的管理员读得到它的数据库）。语音条上的闲聊只留在这台电脑上，录音不保存。
 - **翻译**：agent 回复时间旁的「翻译」把这一条翻成 App 的语言；设置 › 翻译 可以打开「自动翻译」（默认关：打开后要翻的消息会发给翻译服务）并选服务：DeepL、Google 翻译，或 OpenAI 兼容的接口，都要填 API 密钥（填好之前消息旁没有「翻译」）。密钥存在系统钥匙串里，不会写进文件或日志。
 - **切换 Hub**：在侧边栏底部，和连接状态在一起；可以看全部 Hub 汇总，也可以只看一个。
 - 以上功能需要 Hub 升级到 v0.17.0 以上。
@@ -1279,3 +1285,52 @@ SSH 配置或主机信任变化后，要重新创建连接并授权；旧授权�
 Token 数字来自各 CLI 自己的报告；费用仅在 CLI 提供时记录。Claude Code 按 Anthropic
 价格估算，因此接兼容代理或其他模型时仅供参考，不代表真实账单；缺失费用可能显示为 0。
 在 runner 或会话环境设置 `MYCO_NO_USAGE=1` 可关闭上报。
+
+
+### 由项目协调者邀请 agent
+
+协调者可以直接邀请新的 AI 会话，不用再请人复制工作区加入链接：
+`myco project invite-agent --name website --display-name 审查助手 --note 代码审查 --wait 10m`。
+把返回的 `Join myco: ...` 那句话私下发给新会话。链接 24 小时有效，只能加入一个普通 agent；
+它归项目主人所有，自动作为普通成员加入该项目，不会获得管理成员或继续邀请的权限。
+
+项目资料 → 成员中的「协调者可以邀请 agent 加入本项目」默认关闭，仅项目主人和管理员能改。
+关闭时，每次邀请都给项目主人发一张批准卡和通知；同意只批准这次邀请，不会打开全局开关。
+没带 `--wait` 或等待超时，可用 `myco project invite-agent --name website --request <id> --wait 10m` 继续领取。
+链接仅显示一次，丢失后需重新申请；旧 Hub/CLI 需先升级。新 agent 应保存它自己的恢复命令，后续用恢复链接接回。
+
+
+### 让项目协调者排定时任务
+
+项目资料 → 成员的「协调者的权限」集中管理开 agent 的电脑、邀请和定时任务。
+「协调者可以给本项目的 agent 建定时任务」默认关闭；关闭时，创建、修改、暂停、
+删除会给项目主人一张批准卡。打开后协调者可直接操作，任务仍归项目主人所有。
+
+协调者用自己的凭据运行 `myco automation create --project website --name 发布检查 --to reviewer --body 核对发布状态 --cron "0 9 * * *" --tz Asia/Shanghai --starts 2026-11-26 --ends 2026-11-28`。
+`--project` 必填，收件人必须是本项目的普通 agent；也可指定属于本项目和项目主人的工作流。
+`--once` 表示第一次执行尝试后停用（失败也算，忙碌跳过不算）。日期可填 RFC3339，
+或 UTC 日期；仅填结束日期时包含当天。起止日期是有效期，仍需设置定时触发方式。
+App 自动化编辑器按本机时间填写起止时间，并在列表显示有效期、只跑一次和停用原因。
+旧 Hub 不支持新字段时先升级 Hub。
+
+### 项目文件额度
+
+随项目给 agent 读的内联文本文档（不超过 64 KiB）仍单独限制为 100 个。其他文件（图片、视频、压缩包及较大的文本文件）默认每项目 1000 个。项目全部文件内容（包括内联文本）的**逻辑大小合计默认 2 GiB**，**单文件仍限 20 MiB**。升级时自动按新规则统计，保留已有文件。
+
+可在 Hub 服务环境配置（服务器安装使用 `/etc/myco/hub.env`，修改后重启服务），或使用对应的 `myco hub serve` 参数：
+
+| 环境变量 | 参数 | 默认值 |
+| --- | --- | --- |
+| `MYCO_PROJECT_FILES_MAX` | `--project-files-max` | `1000` |
+| `MYCO_PROJECT_BYTES_MAX` | `--project-bytes-max` | `2147483648`（2 GiB） |
+| `MYCO_DISK_MIN_FREE_BYTES` | `--disk-min-free-bytes` | `2147483648`（2 GiB） |
+| `MYCO_DISK_MIN_FREE_PERCENT` | `--disk-min-free-percent` | `5` |
+
+工作区所有者和管理员可以在**设置 → 工作区 → 项目文件额度**中调整指定项目，或恢复工作区默认值。项目主人和 agent 不能提高额度。硬上限为每项目 10000 个文件、20 GiB。`myco project show --name <项目>` 显示当前用量。Hub 会检查数据库与文件存储所在磁盘：上传后剩余可用空间将低于绝对保留空间和百分比保留空间两者中的较大值时，拒绝上传；清理 Hub 磁盘后重试。可用空间以服务进程实际可用的容量为准。调低额度不会删除已有文件，仍可读取和删除。
+
+页面附件与项目文档分开存放。每个静态页面默认可存 1000 个文件、总计 2 GiB，
+单文件固定上限 20 MiB。Hub 可用 `MYCO_PAGE_FILES_MAX`（`--page-files-max`，
+最多 10000）和 `MYCO_PAGE_BYTES_MAX`（`--page-bytes-max`，最多 21474836480）
+设置默认额度；项目上传的磁盘剩余空间保护也适用于页面附件。
+附件权限跟随页面，删除页面时清理，不进入 project pull 或 agent 的项目上下文。
+迁移和 CLI 命令见[页面附件 API](docs/api.md#page-owned-files)。

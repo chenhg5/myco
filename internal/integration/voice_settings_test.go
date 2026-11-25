@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/app"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/app"
 )
 
 // A person's voice chat settings live on the hub: every device of theirs
@@ -67,16 +67,16 @@ func TestVoiceSettingsPerPerson(t *testing.T) {
 		t.Fatalf("after the phone changed it: %+v", got)
 	}
 	// Someone else has settings of their own.
-	inv, err := admin.InviteMember(c, api.InviteRequest{Name: "laohu"})
+	inv, err := admin.InviteMember(c, api.InviteRequest{Name: "bob"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	theirs, err := h.client("").Pair(c, inv.Link[strings.Index(inv.Link, "/c/")+3:], "laohu-mac")
+	theirs, err := h.client("").Pair(c, inv.Link[strings.Index(inv.Link, "/c/")+3:], "bob-mac")
 	if err != nil {
 		t.Fatal(err)
 	}
-	laohu := h.client(theirs.Token)
-	if got, err := laohu.VoiceSettings(c); err != nil || !got.UpdatedAt.IsZero() || got.LLMKey != "" {
+	bob := h.client(theirs.Token)
+	if got, err := bob.VoiceSettings(c); err != nil || !got.UpdatedAt.IsZero() || got.LLMKey != "" {
 		t.Fatalf("someone else's settings: %v %+v", err, got)
 	}
 	// What cannot be kept is refused; a clock far ahead does not win for ever.

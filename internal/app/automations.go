@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // AutomationService keeps automations and runs them: on their schedule
@@ -25,7 +25,8 @@ type AutomationService struct {
 	// One run at a time per automation (a webhook racing the schedule).
 	mu sync.Mutex
 	// workflows starts the workflows automations run (nil: none).
-	workflows *WorkflowService
+	workflows    *WorkflowService
+	projectGuard func(context.Context, *domain.Automation) error
 }
 
 // SetWorkflows lets automations start workflows.
@@ -50,7 +51,9 @@ type Caller struct {
 	Manages  bool
 	// Agent is set when an agent asks (with its own token) on its
 	// person's behalf.
-	Agent domain.AgentName
+	ProjectScope string
+	ApprovedBy   string
+	Agent        domain.AgentName
 }
 
 func (c Caller) owns(a *domain.Automation) bool {
@@ -65,21 +68,24 @@ func (c Caller) owns(a *domain.Automation) bool {
 
 // AutomationInput is what people set (nil: unchanged on update).
 type AutomationInput struct {
-	Name          *string
-	To            *string
-	Project       *string
-	Body          *string
-	Cron          *string
-	TZ            *string
-	ClearSchedule bool
-	Webhook       *bool
-	RotateSecret  bool
-	SkipIfBusy    *bool
-	Enabled       *bool
+	Name          *string `json:"name,omitempty"`
+	To            *string `json:"to,omitempty"`
+	Project       *string `json:"project,omitempty"`
+	Body          *string `json:"body,omitempty"`
+	Cron          *string `json:"cron,omitempty"`
+	TZ            *string `json:"tz,omitempty"`
+	ClearSchedule bool    `json:"clear_schedule,omitempty"`
+	Webhook       *bool   `json:"webhook,omitempty"`
+	RotateSecret  bool    `json:"rotate_secret,omitempty"`
+	SkipIfBusy    *bool   `json:"skip_if_busy,omitempty"`
+	Enabled       *bool   `json:"enabled,omitempty"`
 	// Workflow (its id or name; "" = send a task instead) and the run's
 	// inputs (templates over {{payload}}).
-	Workflow *string
-	Inputs   map[string]string
+	Workflow *string           `json:"workflow,omitempty"`
+	Inputs   map[string]string `json:"inputs,omitempty"`
+	StartsAt *string           `json:"starts_at,omitempty"`
+	EndsAt   *string           `json:"ends_at,omitempty"`
+	Once     *bool             `json:"once,omitempty"`
 }
 
 // AutomationOut is an automation and, when one was just made, its webhook
@@ -128,6 +134,27 @@ func (s *AutomationService) apply(a *domain.Automation, in AutomationInput) (sec
 	if in.Enabled != nil {
 		a.Enabled = *in.Enabled
 	}
+	for _, v := range []struct {
+		in  *string
+		out *time.Time
+	}{{in.StartsAt, &a.StartsAt}, {in.EndsAt, &a.EndsAt}} {
+		if v.in != nil {
+			*v.out = time.Time{}
+			if *v.in != "" {
+				parsed, e := time.Parse(time.RFC3339, *v.in)
+				if e != nil {
+					return "", domain.Errf(domain.CodeInvalidArgument, "dates must be RFC3339 timestamps (or empty to clear)")
+				}
+				*v.out = parsed.UTC()
+			}
+		}
+	}
+	if in.Once != nil {
+		a.Once = *in.Once
+	}
+	if in.Enabled != nil && *in.Enabled {
+		a.DisabledReason = ""
+	}
 	newSecret := in.RotateSecret && a.WebhookHash != ""
 	if in.Webhook != nil {
 		switch {
@@ -150,17 +177,33 @@ func (s *AutomationService) apply(a *domain.Automation, in AutomationInput) (sec
 // schedule sets the next run from now (none when disabled or unscheduled).
 func (s *AutomationService) schedule(a *domain.Automation, now time.Time) {
 	a.NextRunAt = time.Time{}
+	if a.Enabled && !a.EndsAt.IsZero() && !now.Before(a.EndsAt) {
+		a.Enabled = false
+		a.DisabledReason = "expired"
+	}
 	if !a.Enabled || a.Cron == "" {
 		return
 	}
 	if sc, err := domain.ParseSchedule(a.Cron, a.TZ); err == nil {
-		a.NextRunAt = sc.Next(now)
+		after := now
+		if a.StartsAt.After(now) {
+			after = a.StartsAt.Add(-time.Nanosecond)
+		}
+		a.NextRunAt = sc.Next(after)
+		if !a.EndsAt.IsZero() && !a.NextRunAt.Before(a.EndsAt) {
+			a.NextRunAt = time.Time{}
+		}
 	}
 }
 
 // Create makes an automation owned by the caller, sending from their
 // console address.
 func (s *AutomationService) Create(ctx context.Context, c Caller, in AutomationInput) (*AutomationOut, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.create(ctx, c, in)
+}
+func (s *AutomationService) create(ctx context.Context, c Caller, in AutomationInput) (*AutomationOut, error) {
 	if n, err := s.repo.Count(ctx); err != nil {
 		return nil, err
 	} else if n >= domain.MaxAutomations {
@@ -169,7 +212,7 @@ func (s *AutomationService) Create(ctx context.Context, c Caller, in AutomationI
 	}
 	now := s.clock.Now()
 	a := &domain.Automation{ID: s.ids.New("aut"), Owner: c.Name, OwnerID: c.MemberID, From: ConsoleSender(c.Name),
-		Enabled: true, CreatedAt: now, UpdatedAt: now}
+		Enabled: true, CreatedAt: now, UpdatedAt: now, CreatedBy: string(c.Agent), ApprovedBy: c.ApprovedBy, ProjectScoped: c.ProjectScope != ""}
 	secret, err := s.apply(a, in)
 	if err != nil {
 		return nil, err
@@ -261,6 +304,11 @@ func (s *AutomationService) Get(ctx context.Context, c Caller, id string, runs i
 
 // Update changes what is set in in.
 func (s *AutomationService) Update(ctx context.Context, c Caller, id string, in AutomationInput) (*AutomationOut, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.update(ctx, c, id, in)
+}
+func (s *AutomationService) update(ctx context.Context, c Caller, id string, in AutomationInput) (*AutomationOut, error) {
 	a, err := s.get(ctx, c, id)
 	if err != nil {
 		return nil, err
@@ -279,8 +327,12 @@ func (s *AutomationService) Update(ctx context.Context, c Caller, id string, in 
 		}
 	}
 	now := s.clock.Now()
+	if c.Agent != "" {
+		a.ApprovedBy = c.ApprovedBy
+		a.ProjectScoped = c.ProjectScope != "" || a.ProjectScoped
+	}
 	a.UpdatedAt = now
-	if a.Cron != was.Cron || a.TZ != was.TZ || a.Enabled != was.Enabled || (a.Enabled && a.Cron != "" && a.NextRunAt.IsZero()) {
+	if a.StartsAt != was.StartsAt || a.EndsAt != was.EndsAt || a.Once != was.Once || a.Cron != was.Cron || a.TZ != was.TZ || a.Enabled != was.Enabled || (a.Enabled && a.Cron != "" && a.NextRunAt.IsZero()) {
 		s.schedule(a, now)
 	}
 	if err := s.repo.Save(ctx, a); err != nil {
@@ -295,6 +347,11 @@ func (s *AutomationService) Update(ctx context.Context, c Caller, id string, in 
 
 // Delete removes one and its runs (the messages it sent stay).
 func (s *AutomationService) Delete(ctx context.Context, c Caller, id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.delete(ctx, c, id)
+}
+func (s *AutomationService) delete(ctx context.Context, c Caller, id string) error {
 	if _, err := s.get(ctx, c, id); err != nil {
 		return err
 	}
@@ -379,13 +436,6 @@ func (s *AutomationService) RunDue(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		// Next first: a run that fails never makes it fire again at once.
-		s.schedule(a, now)
-		a.UpdatedAt = a.UpdatedAt.UTC()
-		if err := s.repo.Save(ctx, a); err != nil {
-			s.log.Warn("automations: rescheduling failed", "automation", a.ID, "err", err)
-			continue
-		}
 		if _, err := s.run(ctx, a, domain.TriggerSchedule, nil); err != nil {
 			s.log.Warn("automations: run failed", "automation", a.ID, "err", err)
 		}
@@ -411,10 +461,73 @@ func (s *AutomationService) Run(ctx context.Context, tick time.Duration) {
 func (s *AutomationService) run(ctx context.Context, a *domain.Automation, trigger string, call *domain.WebhookRequest) (*domain.AutomationRun, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if fresh, err := s.repo.Get(ctx, a.ID); err == nil {
-		a.LastTask = fresh.LastTask
+	fresh, err := s.repo.Get(ctx, a.ID)
+	if err != nil {
+		return nil, err
+	}
+	a = fresh
+	now := s.clock.Now()
+	if trigger == domain.TriggerSchedule && (!a.Enabled || (a.NextRunAt.After(now) && (a.EndsAt.IsZero() || now.Before(a.EndsAt)))) {
+		return nil, nil
 	}
 	r := &domain.AutomationRun{ID: s.ids.New("arun"), AutomationID: a.ID, At: s.clock.Now(), Trigger: trigger, Request: call}
+	reason := ""
+	if !a.EndsAt.IsZero() && !now.Before(a.EndsAt) {
+		reason = "expired"
+	} else if a.Once && a.DisabledReason == "once" {
+		reason = "once"
+	} else if !a.StartsAt.IsZero() && now.Before(a.StartsAt) {
+		r.Outcome, r.Error = domain.RunSkipped, "active period has not started"
+	}
+	if reason == "" && a.ProjectScoped && s.projectGuard != nil {
+		if e := s.projectGuard(ctx, a); e != nil {
+			reason = "project_scope_changed"
+		}
+	}
+	if reason != "" {
+		a.Enabled = false
+		a.DisabledReason = reason
+		a.NextRunAt = time.Time{}
+		if e := s.repo.Save(ctx, a); e != nil {
+			return nil, e
+		}
+		r.Outcome, r.Error = domain.RunSkipped, reason
+	}
+	if r.Outcome != "" {
+		return r, s.repo.AddRun(ctx, r, domain.MaxAutomationRuns)
+	}
+	if trigger != domain.TriggerManual && !a.Enabled {
+		return nil, domain.Errf(domain.CodeInvalidState, "automation is disabled")
+	}
+	// A busy skip does not consume once. Claim the execution before dispatch,
+	// so a second webhook or a restart cannot dispatch a one-shot again.
+	busy := false
+	if a.SkipIfBusy && a.LastTask != "" {
+		if a.StartsWorkflow() && s.workflows != nil {
+			if last, e := s.workflows.repo.GetRun(ctx, a.LastTask); e == nil {
+				busy = !domain.FlowOver(last.Status)
+			}
+		} else if last, e := s.msgRepo.Get(ctx, a.LastTask); e == nil {
+			busy = !last.Status.Terminal()
+		}
+	}
+	if busy {
+		r.Outcome, r.Error = domain.RunSkipped, "the last task or workflow is not finished"
+	}
+	if trigger == domain.TriggerSchedule {
+		s.schedule(a, now)
+	}
+	if a.Once && !busy {
+		a.Enabled = false
+		a.DisabledReason = "once"
+		a.NextRunAt = time.Time{}
+	}
+	if e := s.repo.Save(ctx, a); e != nil {
+		return nil, e
+	}
+	if busy {
+		return r, s.repo.AddRun(ctx, r, domain.MaxAutomationRuns)
+	}
 	if a.StartsWorkflow() {
 		s.startWorkflow(ctx, a, r, call)
 		if err := s.repo.AddRun(ctx, r, domain.MaxAutomationRuns); err != nil {
@@ -498,7 +611,10 @@ func (s *AutomationService) startWorkflow(ctx context.Context, a *domain.Automat
 		}
 		inputs[k] = v
 	}
-	owner := Caller{Name: a.Owner, MemberID: a.OwnerID, Manages: true}
+	owner := Caller{Name: a.Owner, MemberID: a.OwnerID, Manages: !a.ProjectScoped}
+	if a.ProjectScoped {
+		owner.ProjectScope = a.Project
+	}
 	d, _, err := s.workflows.Start(ctx, owner, a.Workflow, StartInput{Inputs: inputs, Trigger: domain.FlowByAutomation})
 	if err != nil {
 		r.Outcome, r.Error = domain.RunFailed, errText(err)

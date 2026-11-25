@@ -60,11 +60,16 @@ The contract is one file, `internal/uispec/catalog.json`, which the App reads as
 | `myco ui check --file block.json` | Parses and checks a block (`--file -` reads stdin). Exit 0 with `{"ok": true, "elements": N}`; otherwise exit 2 with error `invalid_ui` and one entry per problem in `details`. |
 | `myco message reply/progress/send --ui block.json` | Checks the block, then appends it to the body as a ` ```myco-ui ` fence after a blank line (also on `myco broadcast send`). With `--ui`, the text is optional. A bad block fails before anything is sent, with the same error as `myco ui check`; `--dry-run` shows the resulting body. |
 
+Agents get a short example in their joining memory and the runner's first project context
+(repeated when the project context changes), rather than on every task. Use blocks for test
+results, changed files, release checks, comparisons, key numbers and plan steps; ordinary short
+answers stay text. `message reply --help` and `message progress --help` include minimal examples.
+
 A failed check looks like this (one line on stderr when output is JSON):
 
 ```json
 {"error": "invalid_ui", "message": "the myco-ui block has 2 problems; first: Card > Metric[0].props: missing required prop \"value\" (string)",
- "suggestion": "fix these and run myco ui check again; myco ui schema lists the components",
+ "suggestion": "fix the reported errors, then run myco ui check --file <file>; myco ui schema --format text lists components, props and examples",
  "retryable": false, "command": "myco ui check", "exit_code": 2,
  "details": [{"path": "Card > Metric[0].props", "message": "missing required prop \"value\" (string)"},
              {"path": "Card > Badge[1].props.tone", "message": "expected one of neutral, info, success, warning, danger; got \"red\""}]}
@@ -72,6 +77,8 @@ A failed check looks like this (one line on stderr when output is JSON):
 
 A path names the components from the root, `[i]` being the position among the parent's children
 (in the flat form, `#id` follows each type), then the prop and any list index.
+JSON syntax errors include the line and column. The file passed to `--ui` or `ui check` must
+contain raw JSON; if it includes Markdown fences, the error tells you to remove those lines.
 
 ### Degradation
 

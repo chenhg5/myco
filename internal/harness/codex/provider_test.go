@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chenhg5/myco/internal/harness"
-	"github.com/chenhg5/myco/internal/provider"
+	"github.com/myco-ai/myco/internal/harness"
+	"github.com/myco-ai/myco/internal/provider"
 )
 
 func TestPinnedProviderOverridesLocalArgs(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/chenhg5/myco/internal/api"
+	"github.com/myco-ai/myco/internal/api"
 )
 
 // Automations lists the automations the caller may see (a console token:

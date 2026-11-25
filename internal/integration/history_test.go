@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // Changes to a node's card are applied at once, by the agent or by people,
@@ -16,12 +16,12 @@ import (
 func TestNodeHistory(t *testing.T) {
 	c := ctx(t)
 	h := startHub(t, filepath.Join(t.TempDir(), "hub.db"), app.DefaultMessagePolicy())
-	glenn := h.admin()
-	if _, err := glenn.UpdateMember(c, "owner", api.MemberUpdateRequest{Name: "glenn"}); err != nil {
+	alice := h.admin()
+	if _, err := alice.UpdateMember(c, "owner", api.MemberUpdateRequest{Name: "alice"}); err != nil {
 		t.Fatal(err)
 	}
 	member := func(name string) *client.Client {
-		inv, err := glenn.InviteMember(c, api.InviteRequest{Name: name})
+		inv, err := alice.InviteMember(c, api.InviteRequest{Name: name})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -31,12 +31,12 @@ func TestNodeHistory(t *testing.T) {
 		}
 		return h.client(p.Token)
 	}
-	laohu, matthew := member("laohu"), member("matthew")
-	enr, err := laohu.CreateEnrollment(c, api.CreateEnrollmentRequest{NamePrefix: "laohu-", MaxUses: 1}, false)
+	bob, carol := member("bob"), member("carol")
+	enr, err := bob.CreateEnrollment(c, api.CreateEnrollmentRequest{NamePrefix: "bob-", MaxUses: 1}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, err := h.client(enr.Token).Enroll(c, api.EnrollRequest{Name: "laohu-claude", Binding: api.Binding{Harness: "claude", SessionID: "s1"}}, false)
+	res, err := h.client(enr.Token).Enroll(c, api.EnrollRequest{Name: "bob-claude", Binding: api.Binding{Harness: "claude", SessionID: "s1"}}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,17 +58,17 @@ func TestNodeHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Its owner edits it too, and makes it visible to the team.
-	if _, err := laohu.UpdateProfile(c, "laohu-claude", api.ProfileRequest{DisplayName: str("iOS 助手")}); err != nil {
+	if _, err := bob.UpdateProfile(c, "bob-claude", api.ProfileRequest{DisplayName: str("iOS 助手")}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := laohu.SetSkills(c, "laohu-claude", []api.Skill{{Name: "ios-release", Summary: "Build and upload TestFlight builds"}, {Name: "crash-triage"}}); err != nil {
+	if _, err := bob.SetSkills(c, "bob-claude", []api.Skill{{Name: "ios-release", Summary: "Build and upload TestFlight builds"}, {Name: "crash-triage"}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := laohu.SetVisibility(c, "laohu-claude", "team"); err != nil {
+	if _, err := bob.SetVisibility(c, "bob-claude", "team"); err != nil {
 		t.Fatal(err)
 	}
 
-	hist, err := laohu.AgentHistory(c, "laohu-claude", 0)
+	hist, err := bob.AgentHistory(c, "bob-claude", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,21 +77,21 @@ func TestNodeHistory(t *testing.T) {
 		got = append(got, e.ActorKind+" "+e.Actor+" "+e.Action+" | "+e.Detail)
 	}
 	want := []string{
-		"member laohu agent.visibility | team",
-		"member laohu agent.edit | skills: +crash-triage ~ios-release",
-		"member laohu agent.edit | display_name: — → iOS 助手",
-		"agent laohu-claude agent.edit | skills: +ios-release",
-		"agent laohu-claude agent.edit | labels: +group=ios",
-		"agent laohu-claude agent.edit | description: Builds the iOS app",
+		"member bob agent.visibility | team",
+		"member bob agent.edit | skills: +crash-triage ~ios-release",
+		"member bob agent.edit | display_name: — → iOS 助手",
+		"agent bob-claude agent.edit | skills: +ios-release",
+		"agent bob-claude agent.edit | labels: +group=ios",
+		"agent bob-claude agent.edit | description: Builds the iOS app",
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("history:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 	// The hub's owner reads it; another member does not.
-	if hist, err := glenn.AgentHistory(c, "laohu-claude", 2); err != nil || len(hist) != 2 {
+	if hist, err := alice.AgentHistory(c, "bob-claude", 2); err != nil || len(hist) != 2 {
 		t.Fatalf("owner reads: %v %d", err, len(hist))
 	}
-	if _, err := matthew.AgentHistory(c, "laohu-claude", 0); err == nil {
-		t.Fatal("another member read laohu's node history")
+	if _, err := carol.AgentHistory(c, "bob-claude", 0); err == nil {
+		t.Fatal("another member read bob's node history")
 	}
 }

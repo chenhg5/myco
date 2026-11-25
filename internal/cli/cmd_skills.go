@@ -6,9 +6,9 @@ import (
 	"io"
 	"strings"
 
-	"github.com/chenhg5/myco/internal/api"
-	. "github.com/chenhg5/myco/internal/cli/cmdkit"
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/api"
+	. "github.com/myco-ai/myco/internal/cli/cmdkit"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // agentSkillsCommands: what an agent can be asked to do (myco agent skills).
@@ -194,8 +194,8 @@ func agentVisibilityCommand() *Command {
 	return &Command{
 		Name: "visibility", Summary: "Make a node visible to the team or private to its owner", Mutating: true,
 		Examples: []string{
-			"myco agent visibility --name laohu-claude --visibility private",
-			"myco agent visibility --name laohu-claude --visibility team",
+			"myco agent visibility --name bob-claude --visibility private",
+			"myco agent visibility --name bob-claude --visibility team",
 		},
 		Flags: []Flag{
 			{Name: "name", Kind: String, Required: true, Help: "The node"},

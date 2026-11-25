@@ -6,8 +6,8 @@ import (
 	"io"
 	"os"
 
-	. "github.com/chenhg5/myco/internal/cli/cmdkit"
-	"github.com/chenhg5/myco/internal/config"
+	. "github.com/myco-ai/myco/internal/cli/cmdkit"
+	"github.com/myco-ai/myco/internal/config"
 )
 
 // machineDirsCommand lists, adds and removes the folders new sessions may
@@ -22,7 +22,7 @@ folders and the folders inside them: spawn.dirs in ~/.myco/machine.yaml. None wr
 home folder. --add allows a folder (one already inside an allowed folder is not added again); --remove
 stops allowing one (the last one stays: none would mean all of home). The folder must exist. A change
 applies to the next session started; sessions already running keep going.`,
-		Examples: []string{"myco machine dirs", "myco machine dirs --add ~/code/tapnow", "myco machine dirs --remove ~/code/old --dry-run"},
+		Examples: []string{"myco machine dirs", "myco machine dirs --add ~/code/acme", "myco machine dirs --remove ~/code/old --dry-run"},
 		Flags: []Flag{
 			{Name: "add", Kind: List, Help: "A folder to allow (~/folder or a full path; repeatable)"},
 			{Name: "remove", Kind: List, Help: "A folder to stop allowing (repeatable)"},

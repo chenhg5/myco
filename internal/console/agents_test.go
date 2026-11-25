@@ -11,8 +11,9 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
-	"github.com/chenhg5/myco/internal/console"
+	"github.com/myco-ai/myco/internal/console"
 )
 
 // fakeAgents makes a home with the given agent CLIs installed in ~/bin and a
@@ -159,4 +160,42 @@ func npmCmd(pkg string) string {
 		return "npm install -g " + pkg
 	}
 	return `npm install -g --prefix "$HOME/.local" ` + pkg
+}
+
+func TestLocalAgentOpaqueAuthUsesRecentSuccess(t *testing.T) {
+	t.Setenv("QODER_CONFIG_DIR", "")
+	t.Setenv("QODER_PERSONAL_ACCESS_TOKEN", "")
+	l, home := fakeAgents(t, []string{"qodercli"}, func(_ string, args ...string) ([]byte, error) {
+		if len(args) == 1 && args[0] == "--version" {
+			return []byte("1.0.0"), nil
+		}
+		t.Fatal("readiness must not invoke a model or sign-in command")
+		return nil, errors.New("unexpected command")
+	})
+	dir := filepath.Join(home, ".myco")
+	if err := os.MkdirAll(filepath.Join(dir, "agents"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "state"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "agents", "demo.yaml"), []byte("agent: demo\nrunner:\n  harness: auto\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if got := byCLI(l.LocalAgents(context.Background()))["qoder"].State; got != "unknown" {
+		t.Fatalf("no proof: %s", got)
+	}
+	b, _ := json.Marshal(map[string]any{"success": map[string]any{"cli": "qoder", "at": time.Now().Add(-time.Minute)}})
+	if err := os.WriteFile(filepath.Join(dir, "state", "demo.json"), b, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if got := byCLI(l.LocalAgents(context.Background()))["qoder"].State; got != "ready" {
+		t.Fatalf("success proof: %s", got)
+	}
+	if err := os.Remove(filepath.Join(home, "bin", "qodercli")); err != nil {
+		t.Fatal(err)
+	}
+	if got := byCLI(l.LocalAgents(context.Background()))["qoder"].State; got != "missing" {
+		t.Fatalf("success cannot resurrect a missing CLI: %s", got)
+	}
 }

@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/domain"
-	"github.com/chenhg5/myco/internal/infra/security"
-	"github.com/chenhg5/myco/internal/infra/sqlite"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/infra/security"
+	"github.com/myco-ai/myco/internal/infra/sqlite"
 )
 
 type stepClock struct{ now time.Time }
@@ -31,7 +31,7 @@ func TestConsoleServiceTouchesAtMostOncePerMinute(t *testing.T) {
 	if _, _, err := svc.Create(ctx, "  "); !domain.IsCode(err, domain.CodeInvalidArgument) {
 		t.Fatalf("blank name: %v", err)
 	}
-	tok, plain, err := svc.Create(ctx, "glenn-mac")
+	tok, plain, err := svc.Create(ctx, "alice-mac")
 	if err != nil || !strings.HasPrefix(plain, app.ConsoleTokenPrefix) || tok.TokenHash == "" || strings.Contains(tok.TokenHash, plain) {
 		t.Fatalf("create: %v %+v", err, tok)
 	}

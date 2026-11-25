@@ -19,8 +19,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/harness"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/harness"
 )
 
 // Name is the registry key.

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"log/slog"
 	"os"
@@ -13,22 +14,26 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/agenttools"
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/config"
-	"github.com/chenhg5/myco/internal/harness"
-	"github.com/chenhg5/myco/internal/harness/codex"
-	"github.com/chenhg5/myco/internal/machineid"
+	"github.com/myco-ai/myco/internal/agenttools"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/config"
+	"github.com/myco-ai/myco/internal/harness"
+	"github.com/myco-ai/myco/internal/harness/codex"
+	"github.com/myco-ai/myco/internal/machineid"
+	"github.com/myco-ai/myco/internal/runner"
 )
+
+var runnerInstance = rand.Text()
 
 // runtimeReporter tells the hub, in the background and best effort, which
 // CLI, model and provider an agent runs with; it reports again whenever the
 // provider changes (e.g. picked in the console, or switched in cc-switch).
 type runtimeReporter struct {
-	c   *client.Client
-	log *slog.Logger
-	cfg string // runner.model, if set
+	c           *client.Client
+	log         *slog.Logger
+	restartPath string
+	cfg         string // runner.model, if set
 
 	mu     sync.Mutex
 	base   *api.Runtime // nil until the CLI version is known
@@ -36,12 +41,14 @@ type runtimeReporter struct {
 	model  string // the agent's run settings from the hub ("" = none)
 	effort string
 	access string
+	slots  *api.RunnerSlots
 	quota  *api.Quota // the account's limits, as the CLI last reported them
 	// maxAccess is the machine's spawn.max_access as last read, when it has
 	// changed since the start ("" = as at the start).
 	maxAccess string
 	last      api.Runtime
 	sending   bool
+	stopped   bool
 	// models lists the models the CLI offers, read again for each report
 	// (its list changes as the CLI updates); nil when it does not say.
 	models func() []api.RuntimeModel
@@ -50,7 +57,11 @@ type runtimeReporter struct {
 // reportToHub reports this machine (once) and the agent's runtime, and
 // returns the reporter for later provider changes.
 func (e *env) reportToHub(c *client.Client, me *api.Agent, h harness.Harness, rc config.Runner, access, maxAccess harness.Access, choice providerChoice, workdir string, log *slog.Logger) *runtimeReporter {
-	rep := &runtimeReporter{c: c, log: log, cfg: rc.Model, choice: choice, models: cliModels(h.Name())}
+	// Capacity reports must not wait for CLI version/tool discovery (which
+	// may take seconds on a busy computer). Enrich the same base later.
+	base := api.Runtime{RunnerInstance: runnerInstance, CLI: h.Name(), Access: string(access), MaxAccess: string(maxAccess), Features: runnerFeatures(h), Env: runnerEnv()}
+	rep := &runtimeReporter{restartPath: runnerRestartPath(e.defaultPath), c: c, log: log, cfg: rc.Model, choice: choice, models: cliModels(h.Name()), base: &base}
+	rep.flushLater() // clear any prior restart lease before slow CLI/tool discovery
 	go func() {
 		ctx, cancel := context.WithTimeout(e.in.Ctx, 30*time.Second)
 		defer cancel()
@@ -65,7 +76,7 @@ func (e *env) reportToHub(c *client.Client, me *api.Agent, h harness.Harness, rc
 				log.Debug("machine report failed (older hub?)", "err", err)
 			}
 		}
-		rt := api.Runtime{CLI: h.Name(), Access: string(access), MaxAccess: string(maxAccess), Features: runnerFeatures(h), Env: runnerEnv()}
+		rt := base
 		if h.Name() == "claude" || h.Name() == "codex" {
 			tools := agenttools.Scan(h.Name(), agenttools.Options{Project: workdir, ClaudeConfigDir: e.in.Getenv("CLAUDE_CONFIG_DIR"), CodexHome: e.in.Getenv("CODEX_HOME")}).ProjectOnly(workdir)
 			rt.MCP, rt.Skills, rt.Plugins, rt.ToolWarnings = tools.MCP, tools.Skills, tools.Plugins, tools.Warnings
@@ -184,60 +195,64 @@ func (r *runtimeReporter) Provider(ch providerChoice) {
 }
 
 func (r *runtimeReporter) flush(ctx context.Context) {
-	r.mu.Lock()
-	if r.base == nil || r.sending {
+	for {
+		r.mu.Lock()
+		if r.base == nil || r.sending || r.stopped {
+			r.mu.Unlock()
+			return
+		}
+		base := *r.base
+		rt := base
+		if supportsRemoteProvider(rt.CLI) {
+			options := localProviderOptions(rt.CLI)
+			rt.Providers = &options
+		}
+		if r.models != nil {
+			rt.Models = r.models()
+		}
+		ch := r.choice
+		switch {
+		case r.cfg != "":
+			rt.Model, rt.ModelSource = r.cfg, "configured"
+		case ch.model != "" && ch.settings != nil:
+			rt.Model, rt.ModelSource = ch.model, "provider"
+		}
+		rt.Provider, rt.ProviderSource, rt.ProviderHost = ch.name, ch.source, ch.host
+		// Chosen in the app: wins over the machine's settings for every run.
+		if r.model != "" {
+			rt.Model, rt.ModelSource = r.model, "app"
+		}
+		if r.effort != "" {
+			rt.Effort, rt.EffortSource = r.effort, "app"
+		}
+		if r.access != "" {
+			rt.Access = r.access
+		}
+		rt.Quota = r.quota
+		rt.RunnerSlots = r.slots
+		if r.maxAccess != "" {
+			rt.MaxAccess = r.maxAccess
+		}
+		if reflect.DeepEqual(rt, r.last) {
+			r.mu.Unlock()
+			return
+		}
+		r.sending = true
 		r.mu.Unlock()
-		return
-	}
-	rt := *r.base
-	if supportsRemoteProvider(rt.CLI) {
-		options := localProviderOptions(rt.CLI)
-		rt.Providers = &options
-	}
-	if r.models != nil {
-		rt.Models = r.models()
-	}
-	ch := r.choice
-	switch {
-	case r.cfg != "":
-		rt.Model, rt.ModelSource = r.cfg, "configured"
-	case ch.model != "" && ch.settings != nil:
-		rt.Model, rt.ModelSource = ch.model, "provider"
-	}
-	rt.Provider, rt.ProviderSource, rt.ProviderHost = ch.name, ch.source, ch.host
-	// Chosen in the app: wins over the machine's settings for every run.
-	if r.model != "" {
-		rt.Model, rt.ModelSource = r.model, "app"
-	}
-	if r.effort != "" {
-		rt.Effort, rt.EffortSource = r.effort, "app"
-	}
-	if r.access != "" {
-		rt.Access = r.access
-	}
-	rt.Quota = r.quota
-	if r.maxAccess != "" {
-		rt.MaxAccess = r.maxAccess
-	}
-	if reflect.DeepEqual(rt, r.last) {
+		err := r.c.ReportRuntime(ctx, rt)
+		r.mu.Lock()
+		r.sending = false
+		if err == nil {
+			r.last = rt
+		}
+		again := err == nil && (!reflect.DeepEqual(*r.base, base) || r.choice.name != ch.name || r.choice.host != ch.host || r.choice.source != ch.source || r.choice.model != ch.model || !reflect.DeepEqual(r.slots, rt.RunnerSlots))
 		r.mu.Unlock()
-		return
-	}
-	r.sending = true
-	r.mu.Unlock()
-	err := r.c.ReportRuntime(ctx, rt)
-	r.mu.Lock()
-	r.sending = false
-	if err == nil {
-		r.last = rt
-	}
-	again := err == nil && (r.choice.name != ch.name || r.choice.host != ch.host || r.choice.source != ch.source || r.choice.model != ch.model)
-	r.mu.Unlock()
-	if err != nil {
-		r.log.Debug("runtime report failed (older hub?)", "err", err)
-	}
-	if again {
-		r.flush(ctx)
+		if err != nil {
+			r.log.Debug("runtime report failed (older hub?)", "err", err)
+		}
+		if !again {
+			return
+		}
 	}
 }
 
@@ -329,6 +344,7 @@ func (r *runtimeReporter) Goodbye() {
 		return
 	}
 	r.mu.Lock()
+	r.stopped = true
 	if r.base == nil {
 		r.mu.Unlock()
 		return
@@ -339,6 +355,10 @@ func (r *runtimeReporter) Goodbye() {
 	}
 	r.mu.Unlock()
 	rt.Away = "stopped"
+	if until := runnerRestartUntil(r.restartPath); !until.IsZero() {
+		rt.Away, rt.RestartingUntil = "updating", until
+	}
+	rt.RunnerSlots = nil
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	if err := r.c.ReportRuntime(ctx, rt); err != nil {
@@ -356,4 +376,43 @@ func runnerEnv() string {
 		return "wsl"
 	}
 	return ""
+}
+
+// Slots always receives a fresh immutable snapshot. No other workspace's
+// message IDs or names are included in a runtime report.
+func (r *runtimeReporter) Slots(s *api.RunnerSlots) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	if r.slots != nil && s.At.Before(r.slots.At) {
+		r.mu.Unlock()
+		return
+	}
+	r.slots = s
+	r.mu.Unlock()
+	r.flushLater()
+}
+func (r *runtimeReporter) watchSlots(ctx context.Context, p *runner.SlotPool, owner string) {
+	changes, stop := p.Subscribe()
+	defer stop()
+	tick := time.NewTicker(20 * time.Second)
+	defer tick.Stop()
+	r.Slots(p.Snapshot(owner))
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-changes:
+			// Coalesce machine-wide admissions instead of making one HTTP request
+			// per release per agent during a burst.
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(100 * time.Millisecond):
+			}
+		case <-tick.C:
+		}
+		r.Slots(p.Snapshot(owner))
+	}
 }

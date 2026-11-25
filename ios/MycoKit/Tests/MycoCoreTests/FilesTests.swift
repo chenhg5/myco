@@ -188,12 +188,12 @@ struct FilesTests {
 
     @Test func aSealedMessageShowsNoFiles() {
         var sealed = Message(
-            id: "m1", from: "@console:glenn", to: "coder", body: "myco-e2e:v1:abc", status: "done",
+            id: "m1", from: "@console:alice", to: "coder", body: "myco-e2e:v1:abc", status: "done",
             attachments: [Attachment(fileId: "f1", name: "encrypted", size: 10)])
         sealed.e2e = true
         #expect(ConversationBuilder.files(of: sealed).isEmpty)
         let plain = Message(
-            id: "m2", from: "@console:glenn", to: "coder", body: "看图", status: "done",
+            id: "m2", from: "@console:alice", to: "coder", body: "看图", status: "done",
             attachments: [Attachment(fileId: "f2", name: "a.png", size: 10, contentType: "image/png")])
         #expect(ConversationBuilder.files(of: plain).count == 1)
     }

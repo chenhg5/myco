@@ -48,7 +48,17 @@ export interface RuntimeModel { id: string; name?: string; efforts?: string[] }
 export interface MCPServer { name: string; transport: string; host?: string; scope: "user" | "project" | "plugin"; enabled?: boolean }
 export interface ToolSkill { name: string; description?: string; scope: "user" | "project"; managed_by?: string }
 export interface ToolPlugin { name: string; marketplace?: string; enabled: boolean }
+export interface RunnerSlots {
+  max_concurrent: number;
+  in_use: number;
+  waiting: number;
+  at: string;
+  queue?: { message_id: string; position: number }[];
+}
 export interface Runtime {
+  runner_instance?: string;
+  restarting_until?: string;
+  runner_slots?: RunnerSlots;
   cli: string;
   cli_version?: string;
   model?: string;
@@ -84,7 +94,12 @@ export interface Runtime {
 export interface Skill { name: string; summary?: string; examples?: string[] }
 
 /** A project: nodes working together on a goal (hubs from v0.18.25). */
-export interface Project {
+export interface ProjectStorage {
+ files_used?: number; files_max?: number; bytes_used?: number; bytes_max?: number;
+ docs_used?: number; docs_max?: number; files_max_override?: number; bytes_max_override?: number;
+ can_manage_storage?: boolean;
+}
+export interface Project extends ProjectStorage {
   name: string; title: string; goal?: string; brief?: string;
   links: ProjectLink[];
   visibility: "members" | "team";
@@ -100,6 +115,9 @@ export interface Project {
   /** the computers (ids) its coordinators may start agents on (hubs from
    *  v0.21.2; absent before) */
   machines?: string[];
+  /** Absent on older workspaces; only people managing the project may change it. */
+  coordinator_invites?: boolean;
+  coordinator_automations?: boolean;
   /** the project's memory document, with its body (hubs from v0.21.10;
    *  absent before): what members learned and all keep in mind */
   memory?: ProjectDoc;
@@ -130,6 +148,9 @@ export interface ProjectDoc {
   binary?: boolean;
 }
 export interface Agent {
+  updating?: boolean;
+  /** what it is watching for in the background (myco watch); absent on older hubs */
+  watching?: number;
   id: string; name: string; display_name?: string; aliases?: string[]; description: string;
   /** the face people chose: "look:c3-p1-f2-s1" (a drawn one) or "pic:<hash>"
    *  (a picture: GET /v1/agents/{name}/avatar); absent = drawn from the id */
@@ -142,7 +163,7 @@ export interface Agent {
   /** team (everyone on the hub) or private (only its owner and their agents); absent = team */
   visibility?: "team" | "private";
   labels: string[];
-  binding: Binding; delivery: Delivery; allow_from: string[]; enrolled_by?: string;
+  binding: Binding; delivery: Delivery; allow_from: string[]; enrolled_by?: string; invited_by?: string;
   online: boolean; created_at: string; last_seen_at?: string;
   kind?: AgentKind; machine_id?: string; runtime?: Runtime;
   /** the model and effort chosen for this node in the App ("" = follow the
@@ -164,6 +185,7 @@ export interface AgentResume {
 }
 /** A real computer (or server) that runs nodes. Cloud sessions are not machines. */
 export interface Machine {
+  updating?: boolean;
   id: string; name: string; hostname: string;
   os: "darwin" | "linux" | "windows" | "cloud";
   arch?: string; myco_version?: string;
@@ -196,14 +218,19 @@ export interface WebhookRequest { content_type?: string; headers?: Record<string
  *  files, in versions, opened in the App's page panel. */
 export interface PageVersion { n: number; entry: string; files: number; size: number; sha256: string; by: string; at: string }
 export interface Page {
+  attachments_version?: number;
   id: string; name: string; project?: string; publisher: string; version: number; entry: string; url: string;
   versions: PageVersion[]; created_at: string; updated_at: string; can_manage: boolean;
+  /** who may change its records (hubs from v0.22.2): "managers", or everyone who sees it (absent); read_only: not you */
+  editors?: "managers"; read_only?: boolean;
   /** a server on its publisher's computer (port there), forwarded while
    *  `myco page serve` runs; online: forwarded now */
   live?: boolean; port?: number; online?: boolean;
   /** the template it was made from (hubs from v0.20.5) */
   /** the app it was made from; latest: the app's newer version (hubs from v0.20.7) */
-  template?: { id: string; slug: string; name: string; version: string; permissions?: string[]; os?: string[]; net?: string[]; latest?: string };
+  template?: { id: string; slug: string; name: string; version: string; permissions?: string[]; os?: string[]; net?: string[]; latest?: string; requires_isolation?: boolean;
+    /** hubs from v0.22.9: permissions and os are all it declares (the App refuses the rest; not said for a page of myco's own apps kept from before declarations); official: one of myco's own */
+    declares?: boolean; official?: boolean };
 }
 /** A template in the workspace's library (hubs from v0.20.5): official
  *  ones (myco's own) first. */
@@ -214,7 +241,7 @@ export interface Template {
   category?: string;
   /** its icon, SVG markup (hubs from v0.20.7): shown as a mask, tinted */
   icon?: string;
-  official?: boolean; can_manage: boolean; guide?: string; permissions?: string[]; os?: string[]; net?: string[]; export?: string[];
+  official?: boolean; requires_isolation?: boolean; can_manage: boolean; guide?: string; permissions?: string[]; os?: string[]; net?: string[]; export?: string[];
   /** its screenshots (hubs from v0.21.5): paths in its folder, a dark one
    *  beside when there is one; a workspace's own list them when got alone */
   shots?: { src: string; dark?: string }[];
@@ -224,7 +251,7 @@ export interface Template {
 }
 /** What opening a page gives: where its files are served (a loopback origin
  *  of the App's own), for which version. */
-export interface PageOpen { url: string; version: number; latest: number; name: string; entry: string; live?: boolean; online?: boolean; port?: number }
+export interface PageOpen { url: string; lease?: string; isolated?: boolean; recovery?: boolean; storage_scope?: string; version: number; latest: number; name: string; entry: string; live?: boolean; online?: boolean; port?: number }
 /** A page's shared state (the bridge's myco.update): null before anyone wrote. */
 export interface PageState { state: unknown; version: number; updated_by?: string; updated_at?: string }
 
@@ -292,6 +319,13 @@ export interface Pin {
 }
 export interface PinList { a: string; with: string; pins: Pin[]; max: number }
 /** A page's records (hubs from v0.20.5). */
+/** Record queries require the host's data-query feature. Fields/sort accept CSV or arrays. */
+export interface PageRecordQuery {
+ fields?: string | string[]; where?: string | string[]; sort?: string | string[];
+ limit?: number; after?: string; count?: boolean;
+}
+export interface PageRecordList { records: PageRecord[]; seq: number; next?: string; query_version?: number }
+export interface PageRecordCount { count: number; seq: number; query_version: number }
 export interface PageRecord { collection: string; id: string; data: Record<string, unknown>; version: number; updated_by?: string; updated_at: string }
 export interface PageChange { seq: number; collection: string; record: string; op: "put" | "delete"; data?: Record<string, unknown>; version: number; by?: string; at: string }
 export interface PageChanges { changes: PageChange[]; seq: number; reset?: boolean }
@@ -299,6 +333,7 @@ export interface PinCreate { a?: string; with: string; kind: Pin["kind"]; title?
 
 export interface Automation {
   id: string; name: string; owner: string; from: string; to: string; project?: string; body: string;
+  starts_at?: string; ends_at?: string; once?: boolean; disabled_reason?: string; created_by?: string; approved_by?: string;
   schedule?: AutomationSchedule; webhook: boolean; webhook_url?: string; skip_if_busy: boolean; enabled: boolean;
   created_at: string; updated_at: string; next_run_at?: string; last_run?: AutomationRun;
   /** It starts this workflow instead of sending a task (hubs from v0.21). */
@@ -306,6 +341,7 @@ export interface Automation {
 }
 export interface AutomationRequest {
   name?: string; to?: string; project?: string; body?: string;
+  starts_at?: string; ends_at?: string; once?: boolean;
   schedule?: AutomationSchedule; clear_schedule?: boolean;
   webhook?: boolean; rotate_secret?: boolean; skip_if_busy?: boolean; enabled?: boolean;
   workflow?: string; inputs?: Record<string, string>;
@@ -438,6 +474,8 @@ export interface Message {
   ask?: boolean;
   /** on a task: the question it waits on */
   asking?: string;
+  /** A held task waiting for a delegated reply. */
+  held_for?: "reply";
   /** On a task: what its recipient thinks you may want to say next (v0.19.15+); the input offers it, Tab takes it. */
   suggest?: string;
   /** on a steer: the question it answers */
@@ -455,6 +493,9 @@ export interface Message {
 export interface Peer { agent: string; messages: number; last?: Message }
 export type State = "working" | "pending" | "idle" | "offline";
 export interface AgentStatus { agent: Agent; state: State; queued: number; in_progress: number; held: number;
+  /** what it is watching for in the background (myco watch; absent on
+   *  older hubs): counted apart from held and queued */
+  watching?: number;
   /** held tasks waiting on a question to their sender (absent on older hubs) */
   asking?: number;
   /** acked tasks that show no life (the agent is away, or none was touched
@@ -512,16 +553,18 @@ export interface AuditEntry { id: string; at: string; actor: string; actor_kind:
 export interface SuperagentState { agent?: Agent; pending?: number }
 export interface Approval {
   id: string; agent: string; what: string; reason?: string; method: string; path: string; body?: string;
-  status: "pending" | "done" | "denied" | "expired" | "withdrew"; result?: number; result_body?: string; decided_by?: string;
+  status: "pending" | "executing" | "done" | "denied" | "expired" | "withdrew"; result?: number; result_body?: string; decided_by?: string;
   created_at: string; expires_at: string; decided_at?: string;
   /** "" (absent): a superagent's held request; "action_grant": an agent asks to act on a computer
-   *  (payload {grant_id}; approving may send {permissions?, ttl_seconds?} to allow less). v0.21.21 */
+   *  (payload {grant_id}; approving may send {permissions?, ttl_seconds?, hosts?} to allow less). v0.21.21 */
   kind?: string; payload?: { grant_id?: string } & Record<string, unknown>;
 }
 
 /** What an agent may do on a computer, approved by its owner (agent actions, v0.21.21). */
+// Disabling a profile withdraws its native host with exact-generation DELETE;
+// all grants for this provider/profile id end, including older policy bindings.
 export interface ActionResource {
-  provider: "server.ssh"; id: string; binding: string; name?: string; summary?: string;
+  provider: "server.ssh" | "browser"; id: string; binding: string; name?: string; summary?: string; kind?: "agent";
 }
 export interface ActionTarget { kind: "machine" | "page"; id: string; resource?: ActionResource }
 export interface ActionTargetList { targets: ActionTarget[] }
@@ -530,9 +573,11 @@ export interface SSHProfile {
   binding: string; agent_enabled: boolean; agent_hub?: string;
 }
 export interface SSHResult { stdout: string; stderr: string; exit_code: number; truncated: boolean; duration_ms: number }
+export type BrowserActionPermission = "browser.view" | "browser.run" | "browser.control";
+
 export interface ActionGrant {
   id: string; agent: string; owner: string; target: ActionTarget; target_name?: string;
-  permissions: string[]; requested?: string[]; reason?: string; message_id?: string; approval_id: string;
+  permissions: string[]; requested?: string[]; hosts?: string[]; reason?: string; message_id?: string; approval_id: string;
   state: "pending" | "active" | "denied" | "expired" | "revoked" | "ended"; end_reason?: string;
   created_at: string; expires_at?: string; ended_at?: string;
 }
@@ -542,3 +587,22 @@ export type RemoteDevice = {machine:string; name:string; os:string; control:bool
 export type RemoteDescription = {type:"offer"|"answer"; sdp:string};
 export type RemoteOffer = {description:RemoteDescription; pairing_code?:string; control:boolean};
 export type RemoteSession = {id:string; machine:string; state:"pending"|"connected"|"failed"|"closed"; answer?:RemoteDescription; error?:string};
+
+export interface ProjectInviteResponse { id: string; approval_id?: string; link: string; sentence: string; expires_at: string; status: "pending" | "approved" | "ready" | "used" | "denied" | "expired" }
+
+export interface ProjectAutomationResponse { status: "pending"|"applied"|"dry_run"; approval_id?: string; automation?: Automation; removed?: string }
+
+/** Page-owned files have page permissions and no message-file TTL. */
+export interface PageAttachment {
+ file_id: string; page: string; collection: string; name: string; size: number;
+ sha256: string; content_type: string; by: string; state: "uploading" | "pending" | "ready";
+ legacy_name?: string; created_at: string; expires_at?: string;
+}
+export interface PageAttachmentUsage { files_used: number; files_max: number; bytes_used: number; bytes_max: number; max_file_bytes: number }
+export interface PageAttachmentList { attachments_version: number; attachments: PageAttachment[]; usage: PageAttachmentUsage; next?: string }
+
+/** Something an agent waits for in the background (myco watch): a reply,
+ *  a task, a workflow run. The hub checks it and wakes the agent when it is
+ *  met, or when the time is up. (web/src/lib/watch.ts, shared with the
+ *  backend's contract) */
+export type { Watch, WatchList, WatchStartRequest } from "@/lib/watch";

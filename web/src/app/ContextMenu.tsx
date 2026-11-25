@@ -41,8 +41,8 @@ function scales(): { zoom: number; ev: number; rect: number } {
 
 /** A right-click menu for a row: call open(event, items) from onContextMenu
  * and render `element` once anywhere in the page. It closes on a click
- * elsewhere, Escape, scrolling, resizing or the window losing focus. */
-export function useContextMenu(): {
+ * elsewhere, Escape, its source scrolling, resizing or the window losing focus. */
+export function useContextMenu(className?: string): {
   open: (e: MouseEvent, items: MenuItem[]) => void;
   /** The same menu dropped under a button, right edges aligned. */
   openUnder: (el: Element, items: MenuItem[]) => void;
@@ -53,6 +53,7 @@ export function useContextMenu(): {
 } {
   const [menu, setMenuState] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const last = useRef<{ x: number; y: number } | null>(null);
+  const anchor = useRef<Element | null>(null);
   const setMenu = (m: { x: number; y: number; items: MenuItem[] } | null) => {
     if (m) last.current = { x: m.x, y: m.y };
     setMenuState(m);
@@ -61,24 +62,31 @@ export function useContextMenu(): {
   useEffect(() => {
     if (!menu) return;
     const close = () => setMenu(null);
+    // Background chats scroll as replies stream in. Only scrolling that
+    // moves this menu's source invalidates its position. The menu itself
+    // may scroll too (including when keyboard focus moves between items).
+    const onScroll = (e: Event) => {
+      if (e.target instanceof Node && e.target.contains(anchor.current)) close();
+    };
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
     window.addEventListener("mousedown", close);
     window.addEventListener("keydown", onKey);
     window.addEventListener("blur", close);
     window.addEventListener("resize", close);
-    document.addEventListener("scroll", close, true);
+    document.addEventListener("scroll", onScroll, true);
     return () => {
       window.removeEventListener("mousedown", close);
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("blur", close);
       window.removeEventListener("resize", close);
-      document.removeEventListener("scroll", close, true);
+      document.removeEventListener("scroll", onScroll, true);
     };
   }, [menu]);
 
   const open = useCallback((e: MouseEvent, items: MenuItem[]) => {
     e.preventDefault();
     if (items.length === 0) return;
+    anchor.current = e.currentTarget;
     // Everything below is in pixels of `left`/`top`.
     const k = scales();
     const vw = window.innerWidth / k.zoom, vh = window.innerHeight / k.zoom;
@@ -91,6 +99,7 @@ export function useContextMenu(): {
   }, []);
 
   const openUnder = useCallback((el: Element, items: MenuItem[]) => {
+    anchor.current = el;
     const k = scales();
     const box = el.getBoundingClientRect();
     const r = { top: box.top / k.rect, right: box.right / k.rect, bottom: box.bottom / k.rect };
@@ -116,7 +125,7 @@ export function useContextMenu(): {
   const element = menu
     ? createPortal(
       <div
-        className="app-portal conv-menu"
+        className={cn("app-portal conv-menu", className)}
         role="menu"
         style={{ left: menu.x, top: menu.y, minWidth: WIDTH }}
         onMouseDown={(e) => e.stopPropagation()}

@@ -10,7 +10,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 const schema = `
@@ -405,6 +405,11 @@ CREATE TABLE IF NOT EXISTS page_records (
   pos        INTEGER NOT NULL,
   PRIMARY KEY (page, collection, id)
 );
+-- Forward-only, idempotent indexes for record order and common task queries.
+CREATE INDEX IF NOT EXISTS idx_page_records_order ON page_records(page, collection, pos, id);
+CREATE INDEX IF NOT EXISTS idx_page_records_n ON page_records(page, collection, (json_type(data,'$.n') IS NULL), json_extract(data,'$.n') DESC, pos, id);
+CREATE INDEX IF NOT EXISTS idx_page_records_status ON page_records(page, collection, json_extract(data,'$.status'));
+CREATE INDEX IF NOT EXISTS idx_page_records_assignee_status ON page_records(page, collection, json_extract(data,'$.assignee'), json_extract(data,'$.status'));
 CREATE TABLE IF NOT EXISTS page_changes (
   seq        INTEGER PRIMARY KEY AUTOINCREMENT,
   page       TEXT NOT NULL,
@@ -480,7 +485,7 @@ func Open(path string) (*sql.DB, error) {
 	// A single writer connection serializes transactions and keeps
 	// ":memory:" databases shared across the pool.
 	db.SetMaxOpenConns(1)
-	if _, err := db.Exec(schema + usageSchema); err != nil {
+	if _, err := db.Exec(schema + usageSchema + projectInvitationSchema + pageAttachmentSchema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
@@ -492,7 +497,7 @@ func Open(path string) (*sql.DB, error) {
 		{"kind", "TEXT NOT NULL DEFAULT ''"}, {"parent_id", "TEXT NOT NULL DEFAULT ''"}, {"machine", "TEXT NOT NULL DEFAULT ''"},
 		{"owner", "TEXT NOT NULL DEFAULT ''"},
 		// A link whose agent becomes its owner's superagent (v0.21.5).
-		{"superagent", "INTEGER NOT NULL DEFAULT 0"}}); err != nil {
+		{"superagent", "INTEGER NOT NULL DEFAULT 0"}, {"invitation_id", "TEXT NOT NULL DEFAULT ''"}}); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
@@ -503,7 +508,9 @@ func Open(path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 	if err := addColumns(db, "pages", [][2]string{{"live", "INTEGER NOT NULL DEFAULT 0"}, {"port", "INTEGER NOT NULL DEFAULT 0"},
-		{"template", "TEXT NOT NULL DEFAULT ''"}, {"template_version", "TEXT NOT NULL DEFAULT ''"}, {"manifest", "TEXT NOT NULL DEFAULT ''"}}); err != nil {
+		{"template", "TEXT NOT NULL DEFAULT ''"}, {"template_version", "TEXT NOT NULL DEFAULT ''"}, {"manifest", "TEXT NOT NULL DEFAULT ''"},
+		// Who may change its records ('' everyone who sees it, managers; v0.22.2).
+		{"editors", "TEXT NOT NULL DEFAULT ''"}}); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
@@ -512,6 +519,7 @@ func Open(path string) (*sql.DB, error) {
 		// Questions to a task's sender: the question, the task waiting on it,
 		// the steer answering it.
 		{"ask", "INTEGER NOT NULL DEFAULT 0"}, {"asking", "TEXT NOT NULL DEFAULT ''"}, {"answers", "TEXT NOT NULL DEFAULT ''"},
+		{"hold_until", "TEXT NOT NULL DEFAULT ''"}, {"hold_wake", "TEXT NOT NULL DEFAULT ''"}, {"hold_recovered", "INTEGER NOT NULL DEFAULT 0"},
 		// What a task's recipient suggests its sender says next.
 		{"suggest", "TEXT NOT NULL DEFAULT ''"},
 		// When its recipient last showed it is working on it (ms).
@@ -530,7 +538,7 @@ func Open(path string) (*sql.DB, error) {
 		"machines": {{"owner", "TEXT NOT NULL DEFAULT ''"}},
 		// The computers a project's coordinators may start agents on (v0.21.2).
 		// Member groups (JSON list, in display order; v0.21.34).
-		"projects": {{"machines", "TEXT NOT NULL DEFAULT '[]'"}, {"member_groups", "TEXT NOT NULL DEFAULT '[]'"}},
+		"projects": {{"files_max", "INTEGER NOT NULL DEFAULT 0"}, {"bytes_max", "INTEGER NOT NULL DEFAULT 0"}, {"coordinator_automations", "INTEGER NOT NULL DEFAULT 0"}, {"coordinator_invites", "INTEGER NOT NULL DEFAULT 0"}, {"machines", "TEXT NOT NULL DEFAULT '[]'"}, {"member_groups", "TEXT NOT NULL DEFAULT '[]'"}},
 		// A member's group in its project ('' = ungrouped).
 		"project_members": {{"group_name", "TEXT NOT NULL DEFAULT ''"}},
 		"console_tokens":  {{"member_id", "TEXT NOT NULL DEFAULT ''"}},
@@ -546,7 +554,7 @@ func Open(path string) (*sql.DB, error) {
 			// Send-backs, the tasks sent, and what they cost (v0.21.1).
 			{"bounces", "INTEGER NOT NULL DEFAULT 0"}, {"tasks", "TEXT NOT NULL DEFAULT ''"}, {"usage", "TEXT NOT NULL DEFAULT ''"}},
 		// A workflow an automation starts, and the run's inputs (v0.21).
-		"automations": {{"workflow", "TEXT NOT NULL DEFAULT ''"}, {"inputs", "TEXT NOT NULL DEFAULT ''"}},
+		"automations": {{"project_scoped", "INTEGER NOT NULL DEFAULT 0"}, {"starts_at", "INTEGER NOT NULL DEFAULT 0"}, {"ends_at", "INTEGER NOT NULL DEFAULT 0"}, {"once_only", "INTEGER NOT NULL DEFAULT 0"}, {"disabled_reason", "TEXT NOT NULL DEFAULT ''"}, {"created_by", "TEXT NOT NULL DEFAULT ''"}, {"approved_by", "TEXT NOT NULL DEFAULT ''"}, {"workflow", "TEXT NOT NULL DEFAULT ''"}, {"inputs", "TEXT NOT NULL DEFAULT ''"}},
 	} {
 		if err := addColumns(db, table, cols); err != nil {
 			db.Close()
@@ -609,6 +617,7 @@ var agentColumnsV2 = [][2]string{
 	{"avatar_data", "BLOB"},
 	// The model and reasoning effort chosen for the agent's runner (v0.19.5).
 	{"run_settings", "TEXT NOT NULL DEFAULT '{}'"},
+	{"invited_by", "TEXT NOT NULL DEFAULT ''"},
 }
 
 // addColumns adds missing columns (idempotent, forward-only migrations).

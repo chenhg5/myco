@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/app"
-	clipkg "github.com/chenhg5/myco/internal/cli"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/app"
+	clipkg "github.com/myco-ai/myco/internal/cli"
 )
 
 // A workflow saved with the CLI, started by an agent with its own token:

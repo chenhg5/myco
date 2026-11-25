@@ -1,7 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { AppWindow, Check, Copy, ExternalLink, Link2, Monitor, PanelRight, PanelRightClose, Pin as PinIcon, PinOff, Radio, RotateCw, X } from "lucide-react";
+import { AppWindow, Check, Copy, Download, ExternalLink, Link2, Lock, Monitor, MoreHorizontal, PanelRight, PanelRightClose, Pin as PinIcon, PinOff, Radio, RotateCw, Trash2, Users, X } from "lucide-react";
+import { canInstall, installApp, installed, isInstalled, uninstallApp } from "@/app/install";
 import type { Page, PageOpen } from "@/api";
-import { ApiError, appApi, isOldHub } from "@/appapi";
+import { ApiError, appApi, isOldHub, type OsAnswer, type OsConsent, type BrowserStatus, type BrowserApprovalReview, type BrowserProfileSettingsInput } from "@/appapi";
 import { copyText } from "@/app/copy";
 import { useContextMenu, type MenuItem } from "@/app/ContextMenu";
 import { DockPanel } from "@/app/preview";
@@ -9,6 +10,10 @@ import { looksOf, MushroomFace } from "@/app/persona";
 import { Modal } from "@/app/dialogs";
 import { openOutside, setInAppLinks } from "@/app/links";
 import { L } from "@/lib/i18n";
+import { BrowserProfileSettingsDetails, browserSettingsReview, type BrowserSettingsReview } from "./browser-profile-settings";
+import { answerProjectFiles, projectFileScope } from "./page-project-files";
+import { answerPageFiles, pageFileScope, pageFilesUpgrade } from "./page-files";
+import { canRecoverTemplate, PageRecovery, recoveryLabel } from "./page-recovery";
 import { usePagePreferences, localizedPageURL } from "./page-preferences";
 import { parsePageLink, pageFragmentURL, type PageLink } from "@/lib/page-links";
 import { cn, timeAgo } from "@/lib/utils";
@@ -110,8 +115,12 @@ const sends = new Map<string, number[]>();
 // A page's own storage (myco.storage), kept by the App: pages cannot see
 // each other's.
 const storeKey = (hubId: string, id: string) => `myco-page-store:${hubId}:${id}`;
-function storeOf(hubId: string, id: string): Record<string, unknown> {
-  try { return JSON.parse(localStorage.getItem(storeKey(hubId, id)) || "{}") as Record<string, unknown>; } catch { return {}; }
+function storeOf(key: string): Record<string, unknown> {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(key) || "{}");
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed as Record<string, unknown>;
+  } catch { /* unavailable or invalid */ }
+  return {};
 }
 
 // The panel as the top bar's toggle sees it (PageToggle), and the toggle
@@ -169,6 +178,8 @@ export function PageCards({ body }: { body: string }) {
 export function PageCard({ hubId, id, url }: { hubId: string; id: string; url: string }) {
   const [page, setPage] = useState<Page | null>(null);
   const [gone, setGone] = useState(false);
+  const [inst, setInst] = useState(false);
+  useEffect(() => { if (canInstall()) void isInstalled(hubId, id).then(setInst); }, [hubId, id]);
   const pins = useContext(PagePinsContext);
   const menu = useContextMenu();
   useEffect(() => {
@@ -181,12 +192,24 @@ export function PageCard({ hubId, id, url }: { hubId: string; id: string; url: s
   const who = page ? nameOf(hubId, page.publisher) : "";
   const about = !page ? ""
     : page.live ? L(`${who} 电脑上的 ${page.port} 端口`, `Port ${page.port} on ${who}'s computer`)
-      : [page.version > 1 ? L(`第 ${page.version} 版`, `Version ${page.version}`) : "", L(`${who} 发布`, `by ${who}`), timeAgo(page.updated_at)].filter(Boolean).join(" · ");
+      : [page.version > 1 ? L(`第 ${page.version} 版`, `Version ${page.version}`) : "", L(`${who} 发布`, `by ${who}`), timeAgo(page.updated_at),
+        page.editors === "managers" ? (page.read_only ? L("你只能看", "View only for you") : L("只有管理者能改", "Only managers edit")) : ""].filter(Boolean).join(" · ");
   // Right-click: open, pin it above the conversation (or unpin), copy its link.
   const pinned = !!pins?.pinned(id);
+  const managersOnly = page?.editors === "managers";
+  const setEditors = (editors: "everyone" | "managers") => {
+    appApi.setPageEditors(hubId, id, editors).then((p) => { known.set(`${hubId}/${id}`, Promise.resolve(p)); setPage(p); }, () => undefined);
+  };
   const items: MenuItem[] = [
     { label: L("打开", "Open"), icon: PanelRight, onSelect: () => openPage({ kind: "page", hubId, id, fragment: pageLinkOf(url)?.fragment }) },
+    ...(pageWindows && !page?.live ? [{ label: L("在单独窗口打开", "Open in its own window"), icon: AppWindow, onSelect: () => openPageWindow(hubId, id, page?.name || "") }] : []),
+    ...(canInstall() && page && !page.live ? [inst
+      ? { label: L("从「应用程序」里移除", "Remove from Applications"), icon: Trash2, onSelect: () => { uninstallApp(hubId, id).then(() => setInst(false), (e) => console.error(e)); } }
+      : { label: L("装成应用", "Install as app"), icon: Download, onSelect: () => { installApp(hubId, id, page.name, page.template?.id).then(() => { setInst(true); openPageWindow(hubId, id, page.name); }, (e) => console.error(e)); } }] : []),
     ...(pins ? [{ label: pinned ? L("取消置顶", "Unpin") : L("置顶到对话上方", "Pin above the chat"), icon: pinned ? PinOff : PinIcon, onSelect: () => pins.toggle({ id, url, name: page?.name || L("网页", "Page") }) }] : []),
+    ...(page?.can_manage && !page.live ? [managersOnly
+      ? { label: L("让能看到的人都能改", "Let everyone who sees it edit"), icon: Users, onSelect: () => setEditors("everyone") }
+      : { label: L("只让管理者改", "Only managers may edit"), icon: Lock, onSelect: () => setEditors("managers") }] : []),
     "sep",
     { label: L("复制链接", "Copy the link"), icon: Copy, onSelect: () => void copyText(url) },
   ];
@@ -214,7 +237,7 @@ export function PageCard({ hubId, id, url }: { hubId: string; id: string; url: s
 /** The page panel: one, for the whole App; links and cards open it. */
 type Tab = { key: string; target: PageTarget; reload: number; meta: PageMeta };
 /** What a tab says about itself, for the panel's head and its tab. */
-type PageMeta = { title: string; about: string; icon: "page" | "live" | "local"; copyUrl?: string; localUrl?: string; loaded: boolean };
+export type PageMeta = { title: string; about: string; icon: "page" | "live" | "local"; copyUrl?: string; localUrl?: string; loaded: boolean; recover?: string; exportPreferences?: boolean };
 const keyOf = (t: PageTarget) => (t.kind === "page" ? `${t.hubId}/${t.id}` : t.url);
 const MAX_TABS = 8;
 
@@ -225,6 +248,13 @@ export function PageHost() {
   const [active, setActive] = useState("");
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [recovery, setRecovery] = useState("");
+  const [available, setAvailable] = useState<string[]>([]);
+  const recoveryMenu = useContextMenu("pg-recovery-menu");
+  const preferences = usePagePreferences();
+  const [inst, setInst] = useState<Set<string>>(new Set());
+  const refreshInstalled = () => { if (canInstall()) void installed().then(setInst); };
+  useEffect(refreshInstalled, [tabs.length]);
   useEffect(() => {
     const on = (e: Event) => {
       const t = (e as CustomEvent<PageTarget>).detail;
@@ -272,7 +302,7 @@ export function PageHost() {
   // Tucked away (收起, Esc, a click beside it): the pages stay open, a
   // small button brings them back. Closed (×): they go.
   const setPanel = (o: boolean) => setOpen(o);
-  const closeAll = () => { setOpen(false); setTabs([]); setActive(""); };
+  const closeAll = () => { setOpen(false); setTabs([]); setActive(""); setRecovery(""); setAvailable([]); };
   const close = (k: string) => {
     const at = tabs.findIndex((x) => x.key === k);
     const rest = tabs.filter((x) => x.key !== k);
@@ -294,6 +324,32 @@ export function PageHost() {
   if (!tabs.length) return null;
   const cur = tabs.find((x) => x.key === active) || tabs[0];
   const m = cur.meta;
+  const recoverable = !!m.recover && available.includes(m.recover);
+  const items: MenuItem[] = [];
+  if (pageWindows && cur.target.kind === "page" && m.icon === "page") {
+    const t = cur.target;
+    items.push({ label: L("在单独窗口打开", "Open in its own window"), onSelect: () => { openPageWindow(t.hubId, t.id, m.title); close(cur.key); } });
+  }
+  if (canInstall() && cur.target.kind === "page" && m.icon === "page") {
+    const t = cur.target;
+    items.push(inst.has(`${t.hubId}/${t.id}`)
+      ? { label: L("从「应用程序」里移除", "Remove from Applications"), onSelect: () => { uninstallApp(t.hubId, t.id).then(refreshInstalled, (e) => console.error(e)); } }
+      : { label: L("装成应用", "Install as app"), onSelect: () => {
+        void pageOf(t.hubId, t.id).then((p) => installApp(t.hubId, t.id, p.name, p.template?.id)).then(() => { refreshInstalled(); openPageWindow(t.hubId, t.id, m.title); close(cur.key); }, (e) => console.error(e));
+      } });
+  }
+  if (recoverable) items.push({ label: recoveryLabel(), onSelect: () => setRecovery(cur.key) });
+  if (m.exportPreferences && cur.target.kind === "page") {
+    const previous = storeOf(storeKey(cur.target.hubId, cur.target.id));
+    items.push({ label: L("导出旧页面设置", "Export older page settings"), onSelect: () => {
+      const url = URL.createObjectURL(new Blob([JSON.stringify(previous, null, 2)], { type: "application/json" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "myco-older-page-settings.json";
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 30000);
+    } });
+  }
   const copy = async () => {
     if (!m.copyUrl) return;
     await copyText(m.copyUrl);
@@ -303,11 +359,14 @@ export function PageHost() {
   const tabIcon = (x: Tab) => (x.meta.icon === "live" ? <Radio /> : x.meta.icon === "local" ? <Monitor /> : <AppWindow />);
   return (
     <>
-    <DockPanel open={open} onOpenChange={setPanel} onClose={closeAll} keepMounted
+    <DockPanel open={open} onOpenChange={setPanel} onClose={closeAll} keepMounted keepOpenOn=".pg-recovery-menu, .pg-recovery-dialog"
       closeLabel={tabs.length > 1 ? L(`关闭全部 ${tabs.length} 个网页`, `Close all ${tabs.length} pages`) : L("关闭", "Close")}
-      title={m.title || L("网页", "Page")} about={m.about} className="pg-panel" bodyClass="is-page pg-body"
+      title={m.title || L("网页", "Page")} titleHint={recoverable ? recoveryLabel() : undefined} about={m.about} className="pg-panel" bodyClass="is-page pg-body"
       tools={(
         <>
+          {items.length > 0 && <button type="button" className="app-btn app-btn-plain" aria-haspopup="menu"
+            title={L("更多页面操作", "More page actions")} aria-label={L("更多页面操作", "More page actions")}
+            onClick={(event) => recoveryMenu.openUnder(event.currentTarget, items)}><MoreHorizontal /></button>}
           <button type="button" className="app-btn app-btn-plain" onClick={() => setOpen(false)}
             title={L("收起（网页保留，点顶栏右边的「网页」展开）", "Tuck away (the pages stay; Pages at the top right brings them back)")} aria-label={L("收起", "Tuck away")}><PanelRightClose /></button>
           <button type="button" className="app-btn app-btn-plain" onClick={() => setTabs((list) => list.map((x) => (x.key === cur.key ? { ...x, reload: x.reload + 1 } : x)))} disabled={!m.loaded}
@@ -342,8 +401,24 @@ export function PageHost() {
         <PageView key={x.key} target={x.target} open={open} active={x.key === cur.key} reload={x.reload} onMeta={(mm) => meta(x.key, mm)} />
       ))}
     </DockPanel>
+    {recoveryMenu.element}
+    <PageRecovery enabled={open && !!m.recover} template={m.recover} language={preferences.language}
+      showing={open && recovery === cur.key} onClose={() => setRecovery("")} onAvailable={setAvailable} />
     </>
   );
+}
+
+// Whether this App opens pages in windows of their own (the desktop App).
+let pageWindows = false;
+export function setPageWindows(on: boolean) { pageWindows = on; }
+/** Opens a page in a window of its own (the desktop App). */
+export function openPageWindow(hubId: string, id: string, name: string) {
+  void appApi.openPageWindow(hubId, id, name).catch(() => openPage({ kind: "page", hubId, id }));
+}
+
+/** A page alone, filling a window of its own (PageWindow.tsx). */
+export function PageWindowView({ target, onMeta }: { target: PageTarget; onMeta: (m: PageMeta) => void }) {
+  return <PageView target={target} open active reload={0} onMeta={onMeta} />;
 }
 
 /** One page in the panel (a tab): its frame, its bridge, its notices. It
@@ -359,15 +434,40 @@ function PageView({ target, open, active, reload, onMeta }: {
   const [loadedKey, setLoadedKey] = useState("");
   const key = target.kind === "page" ? `${target.hubId}/${target.id}` : target.url;
 
+  const loadGeneration = useRef(0);
+  useEffect(() => () => { loadGeneration.current++; }, [key]);
+  const lease = opened?.lease;
+  useEffect(() => {
+    if (target.kind !== "page" || !lease) return;
+    const { hubId, id } = target;
+    return () => { void appApi.closePage(hubId, id, lease).catch(() => undefined); };
+  }, [key, lease]);
+
   const load = async (version?: number) => {
     if (target.kind !== "page") return;
+    const loadID = ++loadGeneration.current;
     setError("");
     try {
-      const [o, p] = await Promise.all([appApi.openPage(target.hubId, target.id, version), pageOf(target.hubId, target.id, true)]);
+      const p = await pageOf(target.hubId, target.id, true);
+      if (loadGeneration.current !== loadID) return;
+      const o = await appApi.openPage(target.hubId, target.id, version);
+      if (loadGeneration.current !== loadID) {
+        if (o.lease) void appApi.closePage(target.hubId, target.id, o.lease).catch(() => undefined);
+        return;
+      }
+      if (p.template?.requires_isolation && !o.isolated) {
+        if (o.lease) void appApi.closePage(target.hubId, target.id, o.lease).catch(() => undefined);
+        setOpened(null); setPage(p);
+        setError(L("这个应用需要独立的页面存储，请升级 myco App。", "This app requires isolated page storage. Update the myco App."));
+        return;
+      }
       setOpened(o); setPage(p);
     } catch (e) {
+      if (loadGeneration.current !== loadID) return;
       setOpened(null);
-      setError(isOldHub(e) || (e instanceof ApiError && /not enabled/.test(e.message))
+      setError(e instanceof ApiError && e.code === "page_origin_unavailable"
+        ? L("这个页面正在另一个 myco App 里打开，请先退出另一个 App 再试。", "This page is open in another myco App. Quit that App, then try again.")
+        : isOldHub(e) || (e instanceof ApiError && /not enabled/.test(e.message))
         ? L("这个工作区的 Hub 还不支持网页：在服务器上运行 sudo myco upgrade，升级到 v0.19.24 或更新。", "This workspace's hub has no pages yet: upgrade it to v0.19.24 or later (sudo myco upgrade on the server).")
         : e instanceof ApiError && e.status === 404
           ? L("这个网页已经删除了，或者你没有权限看。", "This page was deleted, or you may not see it.")
@@ -400,7 +500,10 @@ function PageView({ target, open, active, reload, onMeta }: {
   const dataWatch = useRef(false);
   const dataSeq = useRef(0);
   const [asking, setAsking] = useState<{ text: string; to: string; answer: (ok: boolean) => void } | null>(null);
-  const [remoteAsking, setRemoteAsking] = useState<{text:string; answer:(ok:boolean)=>void} | null>(null);
+  // a page wanting a group of the computer's capabilities the person has not allowed yet
+  const [consent, setConsent] = useState<(OsConsent & { name: string; answer: (a: OsAnswer) => void }) | null>(null);
+  const [remoteAsking, setRemoteAsking] = useState<{text:string; title?:string; review?:BrowserApprovalReview; settingsReview?:BrowserSettingsReview; answer:(ok:boolean)=>void} | null>(null);
+  const [settingsRead, setSettingsRead] = useState<BrowserSettingsReview | null>(null);
   const remoteConsent = useRef<((ok:boolean)=>void) | null>(null);
   // (while the page is there: tucked away, it still runs and is answered,
   // and what it started on the computer goes on)
@@ -413,24 +516,27 @@ function PageView({ target, open, active, reload, onMeta }: {
       const win = frame.current?.contentWindow;
       if (!win || e.source !== win) return;
       const d = e.data as { myco?: string; url?: string; id?: number; method?: string; args?: Record<string, unknown> } | null;
-      if (d?.myco === "open-url" && typeof d.url === "string" && /^(https?:|mailto:)/i.test(d.url)) { openOutside(d.url); return; }
-      if (d?.myco !== "call" || typeof d.id !== "number") return;
       const origin = (() => { try { return new URL(frame.current?.src || "").origin; } catch { return ""; } })();
       if (!origin || e.origin !== origin) return;
-      const reply = (value: unknown, error?: string, code?: string, latest?: unknown) => {
+      if (d?.myco === "open-url" && typeof d.url === "string" && /^(https?:|mailto:)/i.test(d.url)) { openOutside(d.url); return; }
+      if (d?.myco !== "call" || typeof d.id !== "number") return;
+      const reply = (value: unknown, error?: string, code?: string, latest?: unknown, reason?: string) => {
         if (closed) return;
-        win.postMessage(error ? { myco: "result", id: d.id, error, code, ...(latest ? { latest } : {}) } : { myco: "result", id: d.id, value }, origin);
+        win.postMessage(error ? { myco: "result", id: d.id, error, code, ...(latest ? { latest } : {}), ...(reason ? { reason } : {}) } : { myco: "result", id: d.id, value }, origin);
       };
       if (target.kind !== "page") { reply(null, L("这个网页不在 myco 上，没有桥", "This page is not on myco: no bridge"), "not_a_page"); return; }
-      void answer(target, d.method || "", d.args || {}).then((v) => reply(v), (err: unknown) => reply(null, (err as Error).message || "error", (err as ApiError).code, (err as ApiError).latest));
+      void answer(target, d.method || "", d.args || {}).then((v) => reply(v), (err: unknown) => reply(null, (err as Error).message || "error", (err as ApiError).code, (err as ApiError).latest, (err as ApiError).reason));
     };
     // The page's records (hubs from v0.20.5) and files it saves.
     const answerData = async (t: { hubId: string; id: string }, method: string, args: Record<string, unknown>): Promise<unknown> => {
       const coll = String(args.collection || "");
       switch (method) {
         case "data.list": {
-          const r = await appApi.pageRecords(t.hubId, t.id, coll || undefined);
-          dataSeq.current = Math.max(dataSeq.current, r.seq);
+          const query = args.query as import("@/api").PageRecordQuery | undefined;
+          const r = await appApi.pageRecords(t.hubId, t.id, coll || undefined, query);
+          // Partial/count reads must not skip changes the editing Store has
+          // not consumed. Only the historical full list initializes watch.
+          if (query === undefined) dataSeq.current = Math.max(dataSeq.current, r.seq);
           return r;
         }
         case "data.get":
@@ -459,12 +565,16 @@ function PageView({ target, open, active, reload, onMeta }: {
     };
     const answer = async (t: { hubId: string; id: string }, method: string, args: Record<string, unknown>): Promise<unknown> => {
       const { page: p, opened: o } = live.current;
+      const legacyFilesReadOnly = !!projectFileScope(p) && !pageFileScope(p);
+      if (legacyFilesReadOnly && ["data.put", "data.remove", "update"].includes(method)) throw pageFilesUpgrade();
       switch (method) {
         case "ready": {
           const st = await appApi.pageState(t.hubId, t.id);
           known.current = st.version;
           bridged.current = true;
-          return { page: { id: t.id, url: p?.url || "", name: o?.name || p?.name || "", version: o?.version || 0 }, me: { name: meOf(t.hubId) }, state: st.state, version: st.version, preferences: live.current.preferences };
+          const projectFiles = !!projectFileScope(p);
+          // (can_edit: false when only those who manage it change it, and not you)
+          return { page: { id: t.id, url: p?.url || "", name: o?.name || p?.name || "", version: o?.version || 0 }, me: { name: meOf(t.hubId), can_edit: !p?.read_only && !legacyFilesReadOnly, can_manage: !!p?.can_manage }, state: st.state, version: st.version, preferences: live.current.preferences, isolation: o?.isolated === true, pageFiles: !!pageFileScope(p), projectFiles, projectMedia: projectFiles };
         }
         case "update": {
           const r = await appApi.putPageState(t.hubId, t.id, args.state ?? null, Number(args.version) || 0);
@@ -494,21 +604,68 @@ function PageView({ target, open, active, reload, onMeta }: {
           });
           return { id: m.id };
         }
-        case "storage.get": {
-          const all = storeOf(t.hubId, t.id);
-          return all[String(args.key)] ?? null;
-        }
+        case "storage.get":
         case "storage.set": {
-          const all = storeOf(t.hubId, t.id);
+          const storageKey = o?.storage_scope ? `myco-page-store-isolated:${o.storage_scope}` : storeKey(t.hubId, t.id);
+          const all = storeOf(storageKey);
+          if (method === "storage.get") return all[String(args.key)] ?? null;
           if (args.value === null || args.value === undefined) delete all[String(args.key)];
           else all[String(args.key)] = args.value;
           const raw = JSON.stringify(all);
           if (raw.length > 1 << 20) throw Object.assign(new Error(L("这个网页的存储满了（1 MB）", "This page's storage is full (1 MB)")), { code: "too_large" });
-          try { localStorage.setItem(storeKey(t.hubId, t.id), raw); } catch { throw new Error(L("存不下", "Could not store it")); }
+          try { localStorage.setItem(storageKey, raw); } catch { throw new Error(L("存不下", "Could not store it")); }
           return true;
         }
       }
+      if (method.startsWith("pageFiles.")) return answerPageFiles(t.hubId, p, method, args);
+      if (method.startsWith("projectFiles.")) return answerProjectFiles(t.hubId, p, method, args);
       if (method.startsWith("data.") || method === "download") return answerData(t, method, args);
+      if (method === "browser.call") {
+        const action = String(args.action || "");
+        const input = (args.args && typeof args.args === "object" ? args.args : {}) as Record<string, unknown>;
+        const who = { hub: t.hubId, id: t.id, name: o?.name || p?.name || "" };
+        if (action === "install" || action === "approvals.request" || action === "profiles.configure" || (action === "profiles.allowAgents" && input.allowed === true)) {
+          let review: BrowserApprovalReview | undefined;
+          let settingsReview: BrowserSettingsReview | undefined;
+          let confirmedInput = JSON.parse(JSON.stringify(input)) as Record<string,unknown>;
+          let text = L("安装浏览器组件，用 myco 专用的浏览器资料录制和回放网页操作。它不使用你日常的 Chrome 资料，也不会自动开放 agent 控制。", "Install the browser component to record and replay web actions in a dedicated myco browser profile. It does not use your everyday Chrome profile or enable agent control automatically.");
+          if (action === "profiles.allowAgents") {
+            const status = await withConsent(who, () => appApi.browserCall<BrowserStatus>(t.hubId, t.id, remoteInstance, "status"));
+            const profile = status.profiles.find(item => item.id === String(input.id || ""));
+            if (!profile) throw Object.assign(new Error(L("找不到这个浏览器资料", "Browser profile not found")), { code: "not_found" });
+            text = L(`允许 agent 在当前工作区申请使用「${profile.name}」浏览器资料？它们仍需你批准短期授权，并且只能运行你在本机批准的脚本版本。`, `Allow agents in this workspace to request access to “${profile.name}”? They still need your approval for a short-lived grant and can run only script versions you approved on this computer.`);
+          }
+          if (action === "profiles.configure") {
+            const status = await withConsent(who, () => appApi.browserCall<BrowserStatus>(t.hubId, t.id, remoteInstance, "status"));
+            const profile = status.profiles.find(item => item.id === String(confirmedInput.id || ""));
+            if (!profile) throw Object.assign(new Error(L("找不到这个浏览器资料", "Browser profile not found")), {code:"not_found"});
+            if (!profile.settings) throw Object.assign(new Error(L("请先更新浏览器组件", "Update the browser component first")), {code:"unsupported"});
+            settingsReview = browserSettingsReview(profile, confirmedInput.settings as BrowserProfileSettingsInput);
+            text = L("更改这个浏览器资料的网络与启动设置？", "Change this browser profile’s network and launch settings?");
+          }
+          if (action === "approvals.request") {
+            review = await withConsent(who, () => appApi.browserCall<BrowserApprovalReview>(t.hubId, t.id, remoteInstance, "approvals.review", input));
+            confirmedInput = {script_id: review.script_id, version: review.version, profile: review.profile, script: review.script, scripts: review.scripts};
+            text = L("允许 agent 使用此浏览器资料的登录状态运行这个脚本版本？批准会结束该资料现有的 agent 授权；后续运行仍需你批准新的短期授权。", "Allow agents to run this script version using this profile’s sign-ins? Approving ends its current agent grants. Future runs still require a new short-lived grant approved by you.");
+          }
+          if (closed) throw Object.assign(new Error("cancelled"), { code: "cancelled" });
+          if (remoteConsent.current) throw Object.assign(new Error(L("请先处理当前的授权请求", "Finish the current permission request first")), { code: "busy" });
+          const accepted = await new Promise<boolean>(resolve => {
+            remoteConsent.current = resolve;
+            setRemoteAsking({ text, title: L("浏览器自动化授权", "Browser automation permission"), review, settingsReview, answer: resolve });
+          });
+          remoteConsent.current = null;
+          setRemoteAsking(null);
+          if (!accepted || closed) throw Object.assign(new Error(L("已取消", "Cancelled")), { code: "cancelled" });
+          // Minted after the host modal, never supplied by or returned to the child.
+          const approved = await appApi.browserConfirm(t.hubId, t.id, remoteInstance, action, confirmedInput);
+          if (closed) throw Object.assign(new Error("cancelled"), { code: "cancelled" });
+          return withConsent(who, () => appApi.browserCall(t.hubId, t.id, remoteInstance, action, confirmedInput, approved.confirmation));
+        }
+        const result = await withConsent(who, () => appApi.browserCall(t.hubId, t.id, remoteInstance, action, input));
+        if (closed) throw Object.assign(new Error("cancelled"), { code: "cancelled" });
+        return result;
+      }
       if (method === "remote.call") {
         const action = String(args.action || "");
         const remoteArgs = (args.args || {}) as Record<string, unknown>;
@@ -559,7 +716,12 @@ function PageView({ target, open, active, reload, onMeta }: {
     const warned = new Set<string>();
     const undeclared = (perm: "send" | "download") => {
       const tp = live.current.page?.template;
-      if (!tp || (tp.permissions || []).includes(perm) || warned.has(perm)) return;
+      if (!tp || (tp.permissions || []).includes(perm)) return;
+      // From hubs that say so, what an app does not declare it may not use
+      // (they do not for pages of myco's own apps kept from before declarations).
+      if (tp.declares)
+        throw Object.assign(new Error(L(`这个应用没有在 myco.json 的 "permissions" 里写 "${perm}"，不能用`, `This app does not declare "${perm}" in myco.json's "permissions"`)), { code: "permission_denied" });
+      if (warned.has(perm)) return;
       warned.add(perm);
       toPage({ myco: "warn", text: `myco: this app uses ${perm} without declaring it in myco.json ("permissions": ["${perm}"]); a later myco App will refuse it` });
     };
@@ -589,6 +751,32 @@ function PageView({ target, open, active, reload, onMeta }: {
       }
       jobs.delete(id);
     };
+    // The person's say before a page uses the computer (consent_required):
+    // one question at a time; calls waiting on the same thing share it.
+    const asks = new Map<string, Promise<OsAnswer>>();
+    let askChain: Promise<unknown> = Promise.resolve();
+    const withConsent = async <T,>(who: { hub: string; id: string; name: string }, run: () => Promise<T>): Promise<T> => {
+      try {
+        return await run();
+      } catch (err) {
+        const c = (err as ApiError).consent;
+        if (!c || closed) throw err;
+        const k = `${c.group}/${c.host || ""}`;
+        let a = asks.get(k);
+        if (!a) {
+          a = (askChain = askChain.then(() => new Promise<OsAnswer>((resolve) => setConsent({ ...c, name: who.name, answer: resolve }))))
+            .then(async (answer) => {
+              setConsent(null);
+              await appApi.osGrant(who, c.group, answer as OsAnswer, c.host);
+              return answer as OsAnswer;
+            })
+            .finally(() => asks.delete(k)) as Promise<OsAnswer>;
+          asks.set(k, a);
+        }
+        if ((await a) === "deny") throw Object.assign(new Error(L("你没有允许这个应用这样用这台电脑", "You did not let this app do that on this computer")), { code: "permission_denied" });
+        return run();
+      }
+    };
     const answerOS = async (t: { hubId: string; id: string }, method: string, args: Record<string, unknown>): Promise<unknown> => {
       const { page: p, opened: o } = live.current;
       const who = { hub: t.hubId, id: t.id, name: o?.name || p?.name || "" };
@@ -596,9 +784,9 @@ function PageView({ target, open, active, reload, onMeta }: {
         case "os.list":
           return appApi.osList();
         case "os.call":
-          return appApi.osCall(String(args.name || ""), args.args ?? {}, who);
+          return withConsent(who, () => appApi.osCall(String(args.name || ""), args.args ?? {}, who));
         case "os.start": {
-          const id = await appApi.osStart(String(args.name || ""), args.args ?? {}, who);
+          const id = await withConsent(who, () => appApi.osStart(String(args.name || ""), args.args ?? {}, who));
           jobs.add(id);
           // (after the page has the id: its job is waiting for these)
           window.setTimeout(() => void pump(id), 0);
@@ -617,6 +805,7 @@ function PageView({ target, open, active, reload, onMeta }: {
       closed = true;
       remoteConsent.current?.(false);remoteConsent.current = null;
       const t = target.kind === "page" ? target : null;
+      if (t) void appApi.browserCall(t.hubId, t.id, remoteInstance, "close").catch(() => undefined);
       if (t && remoteUsed) void appApi.remoteCall(t.hubId, t.id, "close", {}, remoteInstance).catch(() => undefined);
       for (const id of jobs) void appApi.osCancel(id).catch(() => undefined);
     };
@@ -689,10 +878,13 @@ function PageView({ target, open, active, reload, onMeta }: {
   const newer = opened && page && page.version > opened.version ? page.version : 0;
   // Until the page has loaded: a loading scene over it, not a blank frame.
   const [upgrading, setUpgrading] = useState(false);
+  const oldPreferences = !!opened?.storage_scope && target.kind === "page" && Object.keys(storeOf(storeKey(target.hubId, target.id))).length > 0;
+  const template = page?.template?.id;
+  const recover = opened?.recovery && loadedKey === frameKey && canRecoverTemplate(template) ? template : undefined;
   const icon: PageMeta["icon"] = local ? "local" : opened?.live || page?.live ? "live" : "page";
   useEffect(() => {
-    onMeta({ title, about, icon, copyUrl: page?.url ? pageFragmentURL(page.url, target.kind === "page" ? target.fragment : undefined) : undefined, localUrl: target.kind === "local" ? target.url : undefined, loaded: !!src });
-  }, [title, about, icon, page?.url, local, target, src, onMeta]);
+    onMeta({ title, about, icon, copyUrl: page?.url ? pageFragmentURL(page.url, target.kind === "page" ? target.fragment : undefined) : undefined, localUrl: target.kind === "local" ? target.url : undefined, loaded: !!src, recover, exportPreferences: oldPreferences });
+  }, [title, about, icon, page?.url, local, target, src, recover, oldPreferences, onMeta]);
   return (
     <div className={cn("pg-view", !active && "is-hidden")} role="tabpanel" aria-hidden={!active}>
       {newer > 0 && (
@@ -710,6 +902,7 @@ function PageView({ target, open, active, reload, onMeta }: {
           }}>{upgrading ? L("正在升级…", "Upgrading…") : L("升级", "Upgrade")}</button>
         </div>
       )}
+      {projectFileScope(page) && !pageFileScope(page) && <div className="pg-local-note" role="status">{L("当前只能查看。请更新工作区后使用页面附件。", "View only. Update this workspace to use page attachments.")}</div>}
       {local && <div className="pg-local-note"><Monitor />{L("这台电脑上正在运行的网页。是空白的话，可能这个端口没有在跑。", "A server running on this computer. Blank? Nothing may be running on this port.")}</div>}
       {error ? <p className="fp-note">{error}</p> : (
         <div className="pg-stage">
@@ -718,15 +911,30 @@ function PageView({ target, open, active, reload, onMeta }: {
             sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads allow-same-origin" referrerPolicy="no-referrer"
             allow="clipboard-write; fullscreen" onLoad={() => { setLoadedKey(frameKey); sendPreferences(); }} />}
           {loadedKey !== frameKey && (
-            <PageLoading key={frameKey} name={title} seed={page?.publisher || (target.kind === "local" ? target.url : target.hubId)} who={page && target.kind === "page" ? nameOf(target.hubId, page.publisher) : ""} />
+            <PageLoading key={`loading:${frameKey}`} name={title} seed={page?.publisher || (target.kind === "local" ? target.url : target.hubId)} who={page && target.kind === "page" ? nameOf(target.hubId, page.publisher) : ""} />
           )}
         </div>
       )}
-    <Modal className="pg-remote-ask" open={!!remoteAsking} onOpenChange={(o) => {if (!o) remoteAsking?.answer(false);}}
-      title={L(`允许「${opened?.name || page?.name || "此应用"}」使用远程桌面？`, `Allow “${opened?.name || page?.name || "this app"}” to use Remote Desktop?`)} description={remoteAsking?.text || ""}>
+    <Modal className={cn("pg-remote-ask", remoteAsking?.settingsReview && "pg-browser-settings-dialog")} wide={!!remoteAsking?.review || !!remoteAsking?.settingsReview} open={!!remoteAsking} onOpenChange={(o) => {if (!o) remoteAsking?.answer(false);}}
+      title={remoteAsking?.title || L(`允许「${opened?.name || page?.name || "此应用"}」使用远程桌面？`, `Allow “${opened?.name || page?.name || "this app"}” to use Remote Desktop?`)} description={remoteAsking?.text || ""}>
+      {remoteAsking?.review && <BrowserApprovalDetails review={remoteAsking.review} />}
+      {remoteAsking?.settingsReview && <BrowserProfileSettingsDetails review={remoteAsking.settingsReview} onRead={setSettingsRead} />}
+      {remoteAsking?.settingsReview && <p className="pg-browser-settings-hint" style={{visibility: settingsRead === remoteAsking.settingsReview ? "hidden" : undefined}} role="status">{L("请滚动查看完整设置，再允许。", "Scroll through all settings before allowing.")}</p>}
       <div className="app-modal-actions">
         <button type="button" className="app-btn" onClick={() => remoteAsking?.answer(false)}>{L("不允许", "Don't allow")}</button>
-        <button type="button" className="app-btn app-btn-primary" onClick={() => remoteAsking?.answer(true)}>{L("允许", "Allow")}</button>
+        <button type="button" className="app-btn app-btn-primary" disabled={!!remoteAsking?.settingsReview && settingsRead !== remoteAsking.settingsReview} onClick={() => remoteAsking?.answer(true)}>{L("允许", "Allow")}</button>
+      </div>
+    </Modal>
+    <Modal open={!!consent} onOpenChange={(o) => { if (!o) consent?.answer("deny"); }} className="pg-ask"
+      title={consent ? L(`允许「${consent.name || "这个应用"}」${osWant(consent.group, consent.host).zh}吗？`, `Let "${consent.name || "this app"}" ${osWant(consent.group, consent.host).en}?`) : ""}
+      description={consent ? [
+        consent.declared ? "" : L("这个应用没有在说明里声明要用这一项。", "This app does not declare that it uses this."),
+        consent.once_only ? L("这一项只能这次允许：下次打开 App 会再问你。", "This can only be allowed for now: the App asks again next time.") : L("「一直允许」可以在设置 → 应用权限里收回。", "You can take back \"Always\" in Settings → App permissions."),
+      ].filter(Boolean).join(" ") : ""}>
+      <div className="app-modal-actions">
+        <button type="button" className="app-btn" onClick={() => consent?.answer("deny")}>{L("不允许", "Don't allow")}</button>
+        {consent && !consent.once_only && <button type="button" className="app-btn" onClick={() => consent?.answer("once")}>{L("这次允许", "Allow this time")}</button>}
+        <button type="button" className="app-btn app-btn-primary" onClick={() => consent?.answer(consent.once_only ? "once" : "always")}>{consent?.once_only ? L("允许", "Allow") : L("一直允许", "Always allow")}</button>
       </div>
     </Modal>
     <Modal open={!!asking} onOpenChange={(o) => { if (!o) asking?.answer(false); }} className="pg-ask"
@@ -776,3 +984,39 @@ function PageLoading({ name, seed, who }: { name: string; seed: string; who: str
   );
 }
 
+
+/** What a group of the computer's capabilities lets a page do, said plainly. */
+export function osWant(group: string, host?: string): { zh: string; en: string } {
+  switch (group) {
+    case "files": return { zh: "读这台电脑上的文件", en: "read files on this computer" };
+    case "files.write": return { zh: "在这台电脑上新建和修改文件", en: "create and change files on this computer" };
+    case "files.delete": return { zh: "删除这台电脑上的文件", en: "delete files on this computer" };
+    case "exec": return { zh: "在这台电脑上运行命令和程序", en: "run commands and programs on this computer" };
+    case "screen": return { zh: "截取或录制屏幕", en: "capture or record the screen" };
+    case "microphone": return { zh: "录下麦克风和电脑里的声音", en: "record the microphone and the computer's sound" };
+    case "speech": return { zh: "在这台电脑上把语音转成文字", en: "turn speech into text on this computer" };
+    case "clipboard": return { zh: "读取剪贴板", en: "read the clipboard" };
+    case "notify": return { zh: "发系统通知", en: "show system notifications" };
+    case "network": return host ? { zh: `访问 ${host}`, en: `reach ${host}` } : { zh: "联网", en: "use the network" };
+    case "ssh": return { zh: "连接你保存的服务器", en: "connect to servers you saved" };
+    case "database": return { zh: "连接你保存的数据库", en: "connect to databases you saved" };
+    case "browser": return { zh: "在 myco 专用浏览器资料中录制和运行网页操作", en: "record and run web actions in dedicated myco browser profiles" };
+    case "proxy": return { zh: "控制这台电脑上的代理", en: "control this computer's proxy" };
+    default: return { zh: "查看这台电脑的信息（系统、磁盘、进程、已装的应用）", en: "see this computer's details (system, disks, processes, apps)" };
+  }
+}
+
+function BrowserApprovalDetails({review}: {review: BrowserApprovalReview}) {
+  return <div className="pg-browser-approval" data-testid="browser-script-review">
+    <div className="pg-browser-approval-title">{review.name} · v{review.version}</div>
+    <div>{L("浏览器资料", "Browser profile")}: {review.profile_name}</div>
+    <p>{L("仅批准此版本及列出的子流程。脚本会使用这个资料的登录状态，请检查地址和代码；带变量的地址由运行参数决定。", "Only this version and the listed child snapshots are approved. The script uses this profile’s sign-ins: review its addresses and code. Variable addresses depend on run parameters.")}</p>
+    <h4>{L("地址概览", "Addresses")}</h4>
+    <ul>{review.urls.map((url,i)=><li key={i}><code>{url}</code></li>)}</ul>
+    <h4>{L("JavaScript 与表达式", "JavaScript and expressions")}</h4>
+    {review.code.length ? review.code.map((item,i)=><div key={i}><div className="app-muted">{item.script} / {item.node} · {item.type}</div><pre>{item.code}</pre></div>) : <div className="app-muted">{L("没有代码步骤", "No code steps")}</div>}
+    <h4>{L("子流程快照", "Child snapshots")}</h4>
+    <div>{review.children.length ? review.children.join(", ") : L("无", "None")}</div>
+    <details><summary>{L("完整脚本快照", "Full script snapshots")}</summary><pre>{JSON.stringify({script:review.script,scripts:review.scripts},null,2)}</pre></details>
+  </div>;
+}

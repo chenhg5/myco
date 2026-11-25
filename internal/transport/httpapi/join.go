@@ -8,7 +8,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // joinView is what the join script, page and agent guide are rendered from.
@@ -58,6 +58,10 @@ func (s *Server) joinPage(w http.ResponseWriter, r *http.Request) {
 		v.PSCommand = "irm '" + v.Link + "?format=ps1&shell=1' | iex"
 	}
 	link, err := s.enroll.PeekLink(r.Context(), tok)
+	if err == nil && link.InvitationID != "" {
+		s.projectInvitationPage(w, r, link, tok)
+		return
+	}
 	if err == nil {
 		err = link.Usable(s.agents.Now(), true)
 	}
@@ -207,7 +211,7 @@ export MYCO_JOIN_TOKEN={{shq .Token}}
 echo "==> installing myco"
 MYCO_INSTALLED_FILE="$(mktemp)"
 export MYCO_INSTALLED_FILE
-curl -fsSL --retry 5 --retry-delay 2 https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.sh | MYCO_NO_DOCTOR=1 MYCO_ADD_PATH=1 bash
+curl -fsSL --retry 5 --retry-delay 2 https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-client.sh | MYCO_NO_DOCTOR=1 MYCO_ADD_PATH=1 bash
 MYCO="$(cat "$MYCO_INSTALLED_FILE" 2>/dev/null || true)"
 rm -f "$MYCO_INSTALLED_FILE"
 [ -n "$MYCO" ] && [ -x "$MYCO" ] || MYCO="$(command -v myco 2>/dev/null || true)"
@@ -271,7 +275,7 @@ var joinPowerShell = template.Must(template.New("ps1").Funcs(template.FuncMap{"p
   $env:MYCO_NO_DOCTOR = '1'
   try {
     Write-Host '==> installing myco'
-    Invoke-RestMethod 'https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.ps1' | Invoke-Expression
+    Invoke-RestMethod 'https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-client.ps1' | Invoke-Expression
     $myco = (Get-Command myco.exe -ErrorAction SilentlyContinue).Source
     if (-not $myco) { $myco = Join-Path $env:LOCALAPPDATA 'Programs\myco\myco.exe' }
     & $myco machine join --format text{{if .Shell}} --allow-shell{{end}}{{if .Exec}} --workdir (Get-Location).Path{{end}}

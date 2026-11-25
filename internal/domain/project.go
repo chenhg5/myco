@@ -28,6 +28,12 @@ type Project struct {
 	// agent sessions on: a permission of its own, set by its owner, apart
 	// from the terminals it has (v0.21.2).
 	Machines []string
+	// CoordinatorInvites allows coordinators to invite ordinary agents without approval.
+	CoordinatorInvites     bool
+	CoordinatorAutomations bool
+	// Zero storage overrides inherit the Hub defaults.
+	FilesMax int
+	BytesMax int64
 	// Groups are the groups its members are sorted into (e.g. frontend,
 	// backend), in display order; each member is in at most one.
 	Groups    []string
@@ -378,6 +384,8 @@ func AppendMemory(body, text, by string, now time.Time) (string, error) {
 type ProjectRepository interface {
 	Create(ctx context.Context, p *Project) error
 	Save(ctx context.Context, p *Project) error
+	// SaveStorage updates quota overrides without replacing ordinary project fields.
+	SaveStorage(ctx context.Context, p *Project) error
 	Get(ctx context.Context, name string) (*Project, error)
 	List(ctx context.Context) ([]*Project, error)
 	Delete(ctx context.Context, id string) error

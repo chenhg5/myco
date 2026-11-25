@@ -6,7 +6,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/chenhg5/myco/internal/api"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/skill"
 )
 
 // DefaultPrompt frames incoming messages for an agent CLI. Owner is the
@@ -69,8 +70,8 @@ func (p DefaultPrompt) Build(self string, m api.Message, files []LocalFile) stri
 			"add a screenshot: `--attach shot.png`. Optionally publish a one-line status for everyone with `myco agent status set --text \"...\"`.\n" +
 			"When there is an obvious next step for them, suggest it before you finish: `myco message suggest --text \"...\"` " +
 			"(one short line in their language; the app puts it in their input).\n" +
-			"If you need to delegate and answer later, run `myco message hold --id " + m.ID + "` now, " +
-			"send sub-tasks with `myco message send`, and later answer with `myco message reply --id " + m.ID + "`.\n" +
+			"If you need another agent's result, first send its task, then run `myco message hold --id " + m.ID + " --until <delegated task ID>`. " +
+			"The original task resumes with the result. Stay in the foreground while waiting for tests, CI, or time to pass.\n" +
 			"If the sender really has to decide (a direction, something costly or hard to undo), ask with " +
 			"`myco message ask --question \"...\" --option \"...\" --option \"...\"` and end your turn: their answer comes back here.\n")
 	case "steer":
@@ -193,6 +194,7 @@ func projectSection(self string, p *api.Project) string {
 		fmt.Fprintf(&b, " (%s)", p.Title)
 	}
 	b.WriteString(". What you send in this thread stays in the project.\n")
+	b.WriteString(skill.StructuredUIHint + "\n")
 	if p.Goal != "" {
 		fmt.Fprintf(&b, "Goal: %s\n", p.Goal)
 	}
@@ -234,7 +236,12 @@ func projectSection(self string, p *api.Project) string {
 			"`myco project memory add --name %s --text \"...\"`. Do not repeat what the brief or memory already says, and leave out task details and secrets.\n", p.Name)
 	}
 	names := make([]string, 0, len(p.Docs))
+	otherFiles := 0
 	for _, d := range p.Docs {
+		if d.Binary {
+			otherFiles++
+			continue
+		}
 		if p.Memory != nil && d.Name == p.Memory.Name {
 			continue
 		}
@@ -242,6 +249,9 @@ func projectSection(self string, p *api.Project) string {
 	}
 	if len(names) > 0 {
 		fmt.Fprintf(&b, "Shared documents: %s. `myco project pull --name %s` writes them to .myco/projects/%s/.\n", strings.Join(names, ", "), p.Name, p.Name)
+	}
+	if otherFiles > 0 {
+		fmt.Fprintf(&b, "Other shared files: %d. `myco project show --name %s` lists them; `myco project file get --name %s --file <name>` downloads one.\n", otherFiles, p.Name, p.Name)
 	}
 	return b.String()
 }

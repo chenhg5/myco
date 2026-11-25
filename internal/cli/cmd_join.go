@@ -17,14 +17,14 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/chenhg5/myco/internal/api"
-	. "github.com/chenhg5/myco/internal/cli/cmdkit"
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/config"
-	"github.com/chenhg5/myco/internal/harness"
-	"github.com/chenhg5/myco/internal/harness/builtin"
-	"github.com/chenhg5/myco/internal/harness/execnode"
-	"github.com/chenhg5/myco/internal/osutil"
+	"github.com/myco-ai/myco/internal/api"
+	. "github.com/myco-ai/myco/internal/cli/cmdkit"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/config"
+	"github.com/myco-ai/myco/internal/harness"
+	"github.com/myco-ai/myco/internal/harness/builtin"
+	"github.com/myco-ai/myco/internal/harness/execnode"
+	"github.com/myco-ai/myco/internal/osutil"
 )
 
 // The join flow, for people who should not have to copy tokens around:
@@ -47,7 +47,7 @@ machines that already joined. With --exec, machines that join become exec nodes 
 --allow-from run there as shell commands).`,
 		Examples: []string{
 			"myco link create",
-			`myco link create --uses 1 --expires 24h --note "Glenn's laptop"`,
+			`myco link create --uses 1 --expires 24h --note "Alice's laptop"`,
 			"myco link create --expires 0 --uses 0 --note claude.ai   # for a cloud environment's setup script",
 			"myco link create --exec --allow-from cloud-1 --uses 1    # one exec node",
 		},
@@ -210,7 +210,7 @@ node right away. --allow-shell also lets agents open a terminal (shell node) her
 		Examples: []string{
 			"curl -fsSL https://hub.example.com/j/<token> | bash      # the usual way",
 			"myco machine join --link https://hub.example.com/j/<token>",
-			"myco machine join --link https://hub.example.com/j/<token> --machine glenn-mac --no-service",
+			"myco machine join --link https://hub.example.com/j/<token> --machine alice-mac --no-service",
 			"myco machine join --link https://hub.example.com/j/<token> --allow-shell",
 		},
 		Flags: []Flag{
@@ -465,6 +465,7 @@ Safe to re-run: the same session gets the same agent back.`,
 			{Name: "fork", Kind: Bool, Help: "Join a copy of the session (keeps its context; the original stays yours and untouched). Claude Code and Codex"},
 			{Name: "no-memory", Kind: Bool, Help: "Do not add the myco lines to ~/.claude/CLAUDE.md and ~/.codex/AGENTS.md (see myco skill memory)"},
 			{Name: "no-env", Kind: Bool, Help: "Do not pass this session's provider variables (API keys, base URLs, CODEX_HOME, proxies) on to the runner (they go to the agent's private env file)"},
+			{Name: "invitation", Kind: Bool, Help: "Join only this session with MYCO_ENROLL_TOKEN, ignoring existing computer memberships"},
 			{Name: "same-session", Kind: Bool, Help: "When this session is already an agent of another workspace, join it as it is instead of a copy (default: a copy, so each workspace has its own session)"},
 			{Name: "project", Kind: String, Help: "Then join this project (one you can see, e.g. one its owner sent you the link for)"},
 			{Name: "take-over", Kind: String, Help: "Take a node over with a link from myco agent handover-link (its /h/ URL or token; default: MYCO_TAKEOVER, which keeps it out of the process list)"},
@@ -480,7 +481,7 @@ Safe to re-run: the same session gets the same agent back.`,
 			// The membership to use: --hub, else MYCO_HUB when it is one of
 			// this machine's hubs, else the primary one.
 			var m *config.MachineHub
-			if mf != nil {
+			if mf != nil && !e.in.Bool("invitation") {
 				want := e.in.String("hub")
 				if want == "" {
 					want = e.in.Getenv(config.EnvHub)
@@ -516,6 +517,9 @@ Safe to re-run: the same session gets the same agent back.`,
 			}
 			if h := e.in.Getenv(config.EnvHub); h != "" && !chosen && (m == nil || tok != m.EnrollToken) {
 				hub = h
+			}
+			if e.in.Bool("invitation") && e.in.String("hub") != "" {
+				hub = e.in.String("hub")
 			}
 			if hub == "" || tok == "" {
 				return errorf("not_configured", ExitUsage, "add this machine first: run the join link's command (curl -fsSL <link> | bash), or ask your admin for one (myco link create)",

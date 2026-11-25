@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/backup"
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/backup"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // DefaultBackups is how many backups a hub keeps of its own data.

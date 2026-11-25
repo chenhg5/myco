@@ -7,7 +7,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // AutomationRepo implements domain.AutomationRepository.
@@ -18,12 +18,12 @@ func NewAutomationRepo(db *sql.DB) *AutomationRepo { return &AutomationRepo{db: 
 
 var _ domain.AutomationRepository = (*AutomationRepo)(nil)
 
-const autCols = `id, name, owner, owner_id, from_agent, to_agent, project, body, cron, tz, webhook_hash, skip_if_busy, enabled, created_at, updated_at, next_run_at, last_task, workflow, inputs`
+const autCols = `id, name, owner, owner_id, from_agent, to_agent, project, body, cron, tz, webhook_hash, skip_if_busy, enabled, created_at, updated_at, next_run_at, last_task, workflow, inputs, starts_at, ends_at, once_only, disabled_reason, created_by, approved_by, project_scoped`
 
 func (r *AutomationRepo) Create(ctx context.Context, a *domain.Automation) error {
-	_, err := r.db.ExecContext(ctx, `INSERT INTO automations (`+autCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err := r.db.ExecContext(ctx, `INSERT INTO automations (`+autCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		a.ID, a.Name, a.Owner, a.OwnerID, a.From, a.To, a.Project, a.Body, a.Cron, a.TZ, a.WebhookHash, a.SkipIfBusy, a.Enabled,
-		ms(a.CreatedAt), ms(a.UpdatedAt), ms(a.NextRunAt), a.LastTask, a.Workflow, inputsJSON(a.Inputs))
+		ms(a.CreatedAt), ms(a.UpdatedAt), ms(a.NextRunAt), a.LastTask, a.Workflow, inputsJSON(a.Inputs), ms(a.StartsAt), ms(a.EndsAt), a.Once, a.DisabledReason, a.CreatedBy, a.ApprovedBy, a.ProjectScoped)
 	if isUniqueViolation(err) {
 		return domain.Errf(domain.CodeConflict, "automation %s exists", a.ID)
 	}
@@ -32,9 +32,9 @@ func (r *AutomationRepo) Create(ctx context.Context, a *domain.Automation) error
 
 func (r *AutomationRepo) Save(ctx context.Context, a *domain.Automation) error {
 	res, err := r.db.ExecContext(ctx, `UPDATE automations SET name=?, to_agent=?, project=?, body=?, cron=?, tz=?, webhook_hash=?,
-		skip_if_busy=?, enabled=?, updated_at=?, next_run_at=?, last_task=?, workflow=?, inputs=? WHERE id=?`,
+		skip_if_busy=?, enabled=?, updated_at=?, next_run_at=?, last_task=?, workflow=?, inputs=?, starts_at=?, ends_at=?, once_only=?, disabled_reason=?, created_by=?, approved_by=?, project_scoped=? WHERE id=?`,
 		a.Name, a.To, a.Project, a.Body, a.Cron, a.TZ, a.WebhookHash, a.SkipIfBusy, a.Enabled, ms(a.UpdatedAt), ms(a.NextRunAt), a.LastTask,
-		a.Workflow, inputsJSON(a.Inputs), a.ID)
+		a.Workflow, inputsJSON(a.Inputs), ms(a.StartsAt), ms(a.EndsAt), a.Once, a.DisabledReason, a.CreatedBy, a.ApprovedBy, a.ProjectScoped, a.ID)
 	if err != nil {
 		return internal(err)
 	}
@@ -48,10 +48,11 @@ func scanAutomation(s scanner) (*domain.Automation, error) {
 	var (
 		a                      domain.Automation
 		created, updated, next int64
+		starts, ends           int64
 		inputs                 string
 	)
 	err := s.Scan(&a.ID, &a.Name, &a.Owner, &a.OwnerID, &a.From, &a.To, &a.Project, &a.Body, &a.Cron, &a.TZ, &a.WebhookHash,
-		&a.SkipIfBusy, &a.Enabled, &created, &updated, &next, &a.LastTask, &a.Workflow, &inputs)
+		&a.SkipIfBusy, &a.Enabled, &created, &updated, &next, &a.LastTask, &a.Workflow, &inputs, &starts, &ends, &a.Once, &a.DisabledReason, &a.CreatedBy, &a.ApprovedBy, &a.ProjectScoped)
 	if err != nil {
 		return nil, err
 	}
@@ -59,6 +60,7 @@ func scanAutomation(s scanner) (*domain.Automation, error) {
 		_ = json.Unmarshal([]byte(inputs), &a.Inputs)
 	}
 	a.CreatedAt, a.UpdatedAt, a.NextRunAt = fromMS(created), fromMS(updated), fromMS(next)
+	a.StartsAt, a.EndsAt = fromMS(starts), fromMS(ends)
 	return &a, nil
 }
 
@@ -95,7 +97,7 @@ func (r *AutomationRepo) List(ctx context.Context) ([]*domain.Automation, error)
 }
 
 func (r *AutomationRepo) Due(ctx context.Context, now time.Time) ([]*domain.Automation, error) {
-	return r.list(ctx, `SELECT `+autCols+` FROM automations WHERE enabled = 1 AND next_run_at > 0 AND next_run_at <= ? ORDER BY next_run_at`, ms(now))
+	return r.list(ctx, `SELECT `+autCols+` FROM automations WHERE enabled = 1 AND ((next_run_at > 0 AND next_run_at <= ?) OR (ends_at > 0 AND ends_at <= ?)) ORDER BY next_run_at`, ms(now), ms(now))
 }
 
 func (r *AutomationRepo) Count(ctx context.Context) (int, error) {

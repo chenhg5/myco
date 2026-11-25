@@ -4,7 +4,7 @@ import (
 	"context"
 	"sort"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // aliasResolver resolves agent names and aliases (shared by services).

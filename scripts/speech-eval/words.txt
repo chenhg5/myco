@@ -1,0 +1,4 @@
+# Stand-ins for a workspace's names (agents, projects, members): listened
+# for and corrected to, as the App does with the real ones.
+Kettu
+前端小王

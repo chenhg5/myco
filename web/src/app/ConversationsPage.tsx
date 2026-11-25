@@ -10,7 +10,7 @@ import type { Project } from "@/api";
 import type { ProjectRef } from "@/app/ProjectPage";
 import { ErrorText } from "@/app/dialogs";
 import type { AgentRow } from "@/app/types";
-import { groupsOf, isMe, possiblyStuck, tagsOf, nodeName } from "@/app/nodes";
+import { heldTaskLabel, groupsOf, isMe, possiblyStuck, tagsOf, nodeName } from "@/app/nodes";
 import { parseExecResult } from "@/app/Markdown";
 import { cn, timeAgo } from "@/lib/utils";
 import { summarize } from "@/app/summary";
@@ -79,8 +79,9 @@ function fromConversation(c: Conversation): RecentItem {
   if (c.last.type === "event" || c.last.status === "failed") state = "failed";
   else if (c.last.type === "reply" || (c.last.type === "task" && c.last.status === "done")) state = "done";
   // Only a task the node acknowledged is work: queued, pulled-but-not-acked
-  // (delivered) and held all wait.
-  else if (c.last.type === "task") state = c.last.status === "queued" || c.last.status === "delivered" || c.last.status === "held" ? "queued" : "working";
+  // (delivered) tasks are queued.
+  else if (c.last.status === "held" && task) state = "held";
+  else if (task) state = task.status === "queued" || task.status === "delivered" ? "queued" : "working";
   return { kind: "thread", thread_id: c.thread_id, participants: [c.first.from, c.agent || c.first.to], updated_at: c.updated_at,
     messages: c.messages, first: c.first, last: c.last, task, state };
 }
@@ -101,7 +102,7 @@ function matchesState(it: RecentItem, f: StateFilter, stuck = false): boolean {
   if (f === "all") return true;
   // A task that may have lost its result is not in progress any more.
   if (stuck) return false;
-  if (f === "open") return it.state === "queued" || it.state === "working";
+  if (f === "open") return it.state === "queued" || it.state === "held" || it.state === "working";
   return it.state === f;
 }
 
@@ -595,7 +596,11 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, onInspe
           {shown.map((row) => {
             const it = row.item;
             const stuck = stuckOf(row);
-            const tag = stateTag(it.state, stuck);
+            const task = it.open || it.task;
+            const displayState = task?.status === "held" ? "held" : it.state;
+            const tag = displayState === "held" && task
+              ? { label: heldTaskLabel(task, task.from.replace(/^@console:/, "")) }
+              : stateTag(displayState, stuck);
             const shell = shellRow(row);
             const Icon = shell ? IconPrompt : it.participants.some((p) => p.startsWith(CONSOLE)) ? IconChat : IconExchange;
             const key = rowKey(row);
@@ -614,7 +619,7 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, onInspe
               >
                 <span className={cn("conv-row-icon", shell && "is-shell")}>
                   <Icon aria-hidden />
-                  {it.state !== "done" && tag.label && <span className={cn("conv-row-state", stuck ? "is-stuck" : `is-${it.state}`)} role="img" aria-label={tag.label} />}
+                  {it.state !== "done" && tag.label && <span className={cn("conv-row-state", stuck ? "is-stuck" : `is-${displayState}`)} role="img" aria-label={tag.label} />}
                 </span>
                 <span className="conv-row-main">
                   <span className="conv-row-top">

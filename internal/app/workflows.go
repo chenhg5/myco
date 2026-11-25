@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // WorkflowService keeps workflows and walks their runs. Each agent step is
@@ -218,6 +218,9 @@ func (s *WorkflowService) find(ctx context.Context, c Caller, ref string) (*doma
 	}
 	if err != nil {
 		return nil, err
+	}
+	if c.ProjectScope != "" && w.Project != c.ProjectScope {
+		return nil, domain.Errf(domain.CodePermissionDenied, "workflow left the scheduled project")
 	}
 	if !ownsBy(c, w.Owner, w.OwnerID) {
 		return nil, domain.Errf(domain.CodeNotFound, "workflow %s not found", ref)

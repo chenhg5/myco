@@ -4,30 +4,24 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"os"
+	"github.com/myco-ai/myco/internal/testutil"
 	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/app"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/app"
 )
 
 // Cross-language contract check: the actual TypeScript SDK talks to the real
 // HTTP adapter and SQLite-backed Hub, with a simulated App provider. Native
 // capture/input still requires separate component and device acceptance.
 func TestAgentActionsSDK(t *testing.T) {
+	root := testutil.AppsRoot(t)
 	node, err := exec.LookPath("node")
 	if err != nil {
 		t.Skip("Node.js is needed for the optional SDK integration test")
-	}
-	root, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(root, "templates", "node_modules", "typescript", "package.json")); err != nil {
-		t.Skip("install template dependencies to run the SDK integration test")
 	}
 	c := ctx(t)
 	h := startHub(t, filepath.Join(t.TempDir(), "hub.db"), app.DefaultMessagePolicy())
@@ -57,6 +51,7 @@ func TestAgentActionsSDK(t *testing.T) {
 	deadline, cancel := context.WithTimeout(c, 20*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(deadline, node, filepath.Join(root, "templates", "actions.integration.mjs"))
+	cmd.Env = testutil.AppsEnv(t)
 	cmd.Dir = root
 	// Temporary test credentials stay in memory/stdin, not command arguments,
 	// environment, disk fixtures or test output.

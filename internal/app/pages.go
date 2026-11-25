@@ -10,8 +10,9 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // PageService: web pages published to the hub ().
@@ -22,11 +23,12 @@ import (
 // Its owner, its owner's agents and the hub's managers publish new versions
 // and delete it.
 type PageService struct {
-	pages    domain.PageRepository
-	blobs    domain.BlobStore
-	projects *ProjectService
-	ids      IDGenerator
-	clock    Clock
+	attachmentMu *sync.Mutex
+	pages        domain.PageRepository
+	blobs        domain.BlobStore
+	projects     *ProjectService
+	ids          IDGenerator
+	clock        Clock
 	// encrypted reports whether the hub keeps end-to-end encrypted content
 	// (pages would be in plain text: refused).
 	encrypted func(context.Context) bool
@@ -392,6 +394,10 @@ func (c closeBoth) Close() error {
 
 // Delete removes a page and all its versions.
 func (s *PageService) Delete(ctx context.Context, by Actor, id string) (*domain.Page, error) {
+	if s.attachmentMu != nil {
+		s.attachmentMu.Lock()
+		defer s.attachmentMu.Unlock()
+	}
 	pv, err := s.Get(ctx, by, id)
 	if err != nil {
 		return nil, err
@@ -412,6 +418,55 @@ func (s *PageService) Delete(ctx context.Context, by Actor, id string) (*domain.
 // Manages reports whether by may publish versions of p and delete it.
 func (s *PageService) Manages(by Actor, p *domain.Page) bool { return s.manages(by, p) }
 
+// CanEdit says whether by may change the page's records (of collection, ""
+// for the page as a whole) and its shared state: everyone who sees it,
+// unless the page, or the collection in its template, is for its managers.
+func (s *PageService) CanEdit(by Actor, p *domain.Page, collection string) bool {
+	if s.manages(by, p) {
+		return true
+	}
+	if p.Editors == domain.PageEditorsManagers {
+		return false
+	}
+	if collection != "" {
+		if sc := schema(p); sc != nil && sc[collection].Write == domain.PageEditorsManagers {
+			return false
+		}
+	}
+	return true
+}
+
+func readOnly(p *domain.Page, collection string) error {
+	if collection != "" && p.Editors != domain.PageEditorsManagers {
+		return domain.Errf(domain.CodePermissionDenied, "only those who manage page %s change its %s", p.ID, collection).
+			WithSuggestion("ask its owner (who published it, or a workspace admin)")
+	}
+	return domain.Errf(domain.CodePermissionDenied, "only those who manage page %s change it", p.ID).
+		WithSuggestion("ask its owner to let everyone edit it (myco page set --editors everyone)")
+}
+
+// SetEditors says who may change a page's records: everyone who sees it,
+// or those who manage it. Only they may say.
+func (s *PageService) SetEditors(ctx context.Context, by Actor, id, editors string) (*PageView, error) {
+	ed, err := domain.ParsePageEditors(editors)
+	if err != nil {
+		return nil, err
+	}
+	pv, err := s.Get(ctx, by, id)
+	if err != nil {
+		return nil, err
+	}
+	if !s.manages(by, pv.Page) {
+		return nil, domain.Errf(domain.CodePermissionDenied, "only those who manage page %s say who changes it", id)
+	}
+	pv.Page.Editors = ed
+	pv.Page.UpdatedAt = s.clock.Now()
+	if err := s.pages.Save(ctx, pv.Page); err != nil {
+		return nil, err
+	}
+	return pv, nil
+}
+
 // State returns a page's shared state, for whoever may see the page.
 func (s *PageService) State(ctx context.Context, by Actor, id string) (*domain.PageState, error) {
 	if _, err := s.Get(ctx, by, id); err != nil {
@@ -423,8 +478,12 @@ func (s *PageService) State(ctx context.Context, by Actor, id string) (*domain.P
 // PutState writes a page's shared state (JSON) when it is still at
 // ifVersion; whoever may see the page may. A conflict returns the latest.
 func (s *PageService) PutState(ctx context.Context, by Actor, id, state string, ifVersion int, byName string) (*domain.PageState, error) {
-	if _, err := s.Get(ctx, by, id); err != nil {
+	pv, err := s.Get(ctx, by, id)
+	if err != nil {
 		return nil, err
+	}
+	if !s.CanEdit(by, pv.Page, "") {
+		return nil, readOnly(pv.Page, "")
 	}
 	if len(state) > domain.MaxPageState {
 		return nil, domain.Errf(domain.CodeInvalidArgument, "the state is larger than %d KB", domain.MaxPageState>>10).

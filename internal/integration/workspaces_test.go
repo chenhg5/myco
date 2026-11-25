@@ -6,21 +6,23 @@ import (
 	"io"
 	"log/slog"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/hubserver"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/hubserver"
+	"github.com/myco-ai/myco/internal/testutil"
 )
 
 // startServer runs a hub with its workspaces, as `myco hub serve` does.
 func startServer(t *testing.T, db string) (url string, stop func()) {
 	t.Helper()
-	o := hubserver.Options{DBPath: db, AdminToken: adminToken, Policy: app.DefaultMessagePolicy(),
+	o := hubserver.Options{DBPath: db, OfficialDir: testutil.OfficialDir(t), AdminToken: adminToken, Policy: app.DefaultMessagePolicy(),
 		OnlineWindow: time.Minute, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	h, err := hubserver.Build(o)
 	if err != nil {
@@ -146,6 +148,12 @@ func TestWorkspacesOnOneHub(t *testing.T) {
 	if err := mk(url, homeOwner.Token).RemoveWorkspace(c, "team-c"); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := os.Stat(filepath.Join(hubserver.WorkspacesDir(db), "team-c")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("removed workspace directory must be gone before success: %v", err)
+	}
+	if matches, _ := filepath.Glob(filepath.Join(hubserver.WorkspacesDir(db), ".removed", "team-c-*", "hub.db")); len(matches) != 1 {
+		t.Fatalf("removed workspace data should be archived before success: %v", matches)
+	}
 
 	// A restart brings it back as it was.
 	stop()
@@ -167,5 +175,32 @@ func TestWorkspacesOnOneHub(t *testing.T) {
 	}
 	if matches, _ := filepath.Glob(filepath.Join(hubserver.WorkspacesDir(db), ".removed", "team-b-*", "hub.db")); len(matches) != 1 {
 		t.Fatalf("removed workspace data should be kept aside: %v", matches)
+	}
+}
+
+func TestWorkspaceRemovalReportsArchiveFailure(t *testing.T) {
+	c := ctx(t)
+	db := filepath.Join(t.TempDir(), "hub.db")
+	url, stop := startServer(t, db)
+	defer stop()
+	admin, err := client.New(url, adminToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := admin.CreateWorkspace(c, "demo", false); err != nil {
+		t.Fatal(err)
+	}
+	// A file where the archive directory should be makes archival fail on
+	// every platform, without depending on permissions or file lock timing.
+	if err := os.WriteFile(filepath.Join(hubserver.WorkspacesDir(db), ".removed"), []byte("blocked"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	err = admin.RemoveWorkspace(c, "demo")
+	var ce *client.Error
+	if !errors.As(err, &ce) || ce.Code != "internal" {
+		t.Fatalf("archive failure must not report successful removal: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(hubserver.WorkspacesDir(db), "demo", "hub.db")); err != nil {
+		t.Fatalf("archive failure must preserve the original data: %v", err)
 	}
 }

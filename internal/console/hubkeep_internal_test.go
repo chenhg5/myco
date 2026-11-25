@@ -3,7 +3,7 @@ package console
 import (
 	"testing"
 
-	"github.com/chenhg5/myco/internal/service"
+	"github.com/myco-ai/myco/internal/service"
 )
 
 type fakeHubService struct {

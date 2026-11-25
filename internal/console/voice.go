@@ -13,13 +13,14 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/chenhg5/myco/internal/client"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // Talking with an agent by voice, in the person's
 // chat with it: the App hears the person (speech recognition), a fast text
-// model reads the chat and talks with them, passing what they want done to
-// the agent as they would type it (a new task, or an addition to the one at
+// model reads the chat and talks with them as the agent itself (in the
+// first person: the voice and the agent are one), taking on what they want
+// done as they would type it (a new task, or an addition to the one at
 // work), and answers out loud (Doubao speech synthesis), all streaming. It
 // stops talking as soon as the person speaks, and tells them, in a pause,
 // when the agent has answered or is asking something.
@@ -29,7 +30,7 @@ import (
 // voice is not heard as the person's and background noise is held down).
 //
 //	GET  /app/voice                 {available, ready, config, has_llm_key, has_tts_key, tts_providers, share, sync, session}
-//	PUT  /app/voice/config          {llm_base_url, llm_model, llm_key?, tts_provider, tts_speaker, tts_key?, share?, clear_*}
+//	PUT  /app/voice/config          {llm_base_url, llm_model, llm_key?, tts_provider, tts_speaker, words?, tts_key?, share?, clear_*}
 //	POST /app/voice/preview         {tts_provider, tts_speaker, tts_rate, tts_key?, lang?}  a line in that voice (audio/wav)
 //	POST /app/voice/sync            looks at the hubs for newer settings, then answers as GET
 //	POST /app/voice/start           {hub_id, agent, peer?, lang}  starts a call with one agent
@@ -62,6 +63,13 @@ type VoiceEvents interface {
 	Ended(err string)
 }
 
+// VoiceHints is what a call (VoiceEvents) also says when the platform asks:
+// the words its recognizer should listen for (names, terms; Apple's
+// contextualStrings).
+type VoiceHints interface {
+	Hints() []string
+}
+
 // VoiceConfig is what the person chose for voice (no keys).
 type VoiceConfig struct {
 	LLMBaseURL string `json:"llm_base_url,omitempty"`
@@ -72,6 +80,10 @@ type VoiceConfig struct {
 	TTSSpeaker  string `json:"tts_speaker,omitempty"`
 	// TTSRate: how fast it talks, -50..100 (0 = normal).
 	TTSRate int `json:"tts_rate,omitempty"`
+	// Words: what speech recognition should listen for (voice calls and
+	// dictation), one per line, optionally with how it is misheard:
+	// "Claude = 克劳德, cloud" (speech_words.go).
+	Words []string `json:"words,omitempty"`
 	// Share: keep these settings (keys too) on the hubs this App is signed
 	// in to, so the person's other devices have them. On unless turned off.
 	Share *bool `json:"share,omitempty"`
@@ -346,6 +358,24 @@ func (b *Backend) effectiveVoiceConfig() VoiceConfig {
 
 func (b *Backend) getVoice(w http.ResponseWriter, r *http.Request) {
 	v := b.voiceState()
+	// The first look at the hubs for the settings kept there, in the
+	// background: a device set up elsewhere becomes ready by itself.
+	v.sync.once.Do(func() {
+		v.sync.background.Add(1)
+		go func() {
+			defer v.sync.background.Done()
+			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+			defer cancel()
+			b.syncVoice(ctx)
+		}()
+	})
+	b.voiceResponse(w, r)
+}
+
+// Mutation routes already synchronized their settings. Rendering their response
+// must not launch another sync after the request has finished.
+func (b *Backend) voiceResponse(w http.ResponseWriter, r *http.Request) {
+	v := b.voiceState()
 	c := b.effectiveVoiceConfig()
 	llm, tts := b.voiceKeys(c)
 	v.mu.Lock()
@@ -359,15 +389,6 @@ func (b *Backend) getVoice(w http.ResponseWriter, r *http.Request) {
 	// ready: a call can start (this App has a microphone, and the model and
 	// the voice are set up); the App shows the way in only then.
 	ready := b.Voice != nil && c.LLMBaseURL != "" && c.LLMModel != "" && llm != "" && tts != ""
-	// The first look at the hubs for the settings kept there, in the
-	// background: a device set up elsewhere becomes ready by itself.
-	v.sync.once.Do(func() {
-		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-			defer cancel()
-			b.syncVoice(ctx)
-		}()
-	})
 	writeJSON(w, http.StatusOK, map[string]any{
 		"available": b.Voice != nil, "ready": ready, "config": c, "has_llm_key": llm != "", "has_tts_key": tts != "",
 		"session": session,
@@ -410,6 +431,10 @@ func (b *Backend) putVoiceConfig(w http.ResponseWriter, r *http.Request) {
 	if c.Share == nil {
 		c.Share = was.Share
 	}
+	// An App or phone that does not know the words leaves them as they are.
+	if c.Words == nil {
+		c.Words = was.Words
+	}
 	// Later than what it replaces, also within the same second: the
 	// hubs keep the newer by this time.
 	c.UpdatedAt = time.Now().UTC().Truncate(time.Second)
@@ -439,7 +464,7 @@ func (b *Backend) putVoiceConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	// The person's other devices get it from the hubs.
 	b.syncVoiceLocked(r.Context())
-	b.getVoice(w, r)
+	b.voiceResponse(w, r)
 }
 
 func (b *Backend) startVoice(w http.ResponseWriter, r *http.Request) {
@@ -475,18 +500,27 @@ func (b *Backend) startVoice(w http.ResponseWriter, r *http.Request) {
 		llmKey, ttsKey = b.voiceKeys(c)
 	}
 	provider := ttsProviderOf(c.TTSProvider)
+	// The hints follow the call's language (zh-CN unless it is English).
+	en := strings.HasPrefix(strings.TrimSpace(in.Lang), "en")
+	hint := func(zh, en2 string) string {
+		if en {
+			return en2
+		}
+		return zh
+	}
 	if c.LLMBaseURL == "" || c.LLMModel == "" || llmKey == "" {
 		writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "not_configured", Message: "choose the model the voice assistant talks with",
-			Suggestion: "设置 › 语音：填 OpenAI 兼容接口的地址、模型和密钥（或在「翻译」里配好 OpenAI 兼容接口）"})
+			Suggestion: hint("设置 › 语音：填 OpenAI 兼容接口的地址、模型和密钥（或在「翻译」里配好 OpenAI 兼容接口）",
+				"Settings › Voice: fill in the address, model and key of an OpenAI-compatible API (or set one up under Translation)")})
 		return
 	}
 	if provider == nil || ttsKey == "" {
 		name := c.TTSProvider
 		if provider != nil {
-			name = provider.Name
+			name = hint(provider.Name, provider.NameEn)
 		}
 		writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "not_configured", Message: "add the speech service's key (" + c.TTSProvider + ")",
-			Suggestion: "设置 › 语音：填语音合成（" + name + "）的 API Key"})
+			Suggestion: hint("设置 › 语音：填语音合成（"+name+"）的 API Key", "Settings › Voice: add the API key for speech ("+name+")")})
 		return
 	}
 	hc, err := b.client(hub)
@@ -512,12 +546,17 @@ func (b *Backend) startVoice(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, &client.Error{Status: http.StatusConflict, Code: "conflict", Message: "a voice call is already on"})
 		return
 	}
+	// What recognition listens for, and corrects to.
+	words, aliases := b.speechVocab(r.Context())
 	call := newVoiceCall(v, voiceDeps{
 		audio: b.Voice,
 		model: &openAIModel{base: c.LLMBaseURL, model: c.LLMModel, key: llmKey, session: "myco-voice-" + requestID()},
 		tts:   provider.speech(ttsKey, c),
-		hub:   &hubActions{hubID: hub.ID, agent: in.Agent, peer: peer, c: hc},
+		hub:   &hubActions{hubID: hub.ID, agent: in.Agent, peer: peer, c: hc, en: strings.HasPrefix(lang, "en")},
 		lang:  lang,
+		greet: true,
+		hints: words,
+		fix:   newSpeechFixer(lang, words, aliases),
 		memo:  memoPrompt(lang, v.memo(memoKey(hub.ID, in.Agent))),
 		ended: func(history []chatMsg) { v.keepMemo(memoKey(hub.ID, in.Agent), history) },
 	})
@@ -532,7 +571,7 @@ func (b *Backend) startVoice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	call.begin()
-	b.getVoice(w, r)
+	b.voiceResponse(w, r)
 }
 
 // consoleAddress: the person's own address in a workspace (what their
@@ -559,7 +598,7 @@ func (b *Backend) stopVoice(w http.ResponseWriter, r *http.Request) {
 	if call != nil {
 		call.hangUp()
 	}
-	b.getVoice(w, r)
+	b.voiceResponse(w, r)
 }
 
 func (b *Backend) muteVoice(w http.ResponseWriter, r *http.Request) {
@@ -576,7 +615,7 @@ func (b *Backend) muteVoice(w http.ResponseWriter, r *http.Request) {
 	}
 	v.wakeLocked()
 	v.mu.Unlock()
-	b.getVoice(w, r)
+	b.voiceResponse(w, r)
 }
 
 // voiceEvents: the lines after `after`, waiting up to 25 seconds for one.

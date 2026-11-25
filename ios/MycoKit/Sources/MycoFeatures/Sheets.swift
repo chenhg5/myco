@@ -604,8 +604,8 @@ struct VoiceSettingsScreen: View {
             } header: {
                 Text(L("快模型（OpenAI 兼容接口）", "Fast model (OpenAI-compatible API)"))
             } footer: {
-                Text(missing ?? L("它听你说话、把话转给 agent、再把进展说给你听，所以要选反应快的模型。",
-                                  "It hears you, passes things on to the agent and tells you how it goes, so pick a fast one."))
+                Text(missing ?? L("选反应快的模型：它替这个 agent 在电话里开口，真正的活仍在 agent 自己的会话里做。",
+                                  "Pick a fast model: it speaks for this agent on the call, while the agent does the work in its own session."))
                     .foregroundStyle(missing == nil ? MycoColor.muted : MycoColor.amber)
             }
             Section {

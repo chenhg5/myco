@@ -34,7 +34,8 @@ type Flag struct {
 	Required   bool     `json:"required"`
 	Values     []string `json:"enum,omitempty"`
 	Env        string   `json:"env,omitempty"`
-	Persistent bool     `json:"-"` // inherited by subcommands
+	NoSplit    bool     `json:"preserve_commas,omitempty"` // list values are complete expressions
+	Persistent bool     `json:"-"`                         // inherited by subcommands
 }
 
 // Command is a node in the command tree.
@@ -237,7 +238,9 @@ func Resolve(root *Command, args []string) (*Command, map[string][]string, []str
 		if err := validate(f, val); err != nil {
 			return cmd, nil, nil, &UsageError{Message: err.Error(), Suggestion: fmt.Sprintf("--%s expects %s", name, valueHint(f)), Command: cmd.Path()}
 		}
-		if f.Kind == List {
+		if f.Kind == List && f.NoSplit {
+			values[name] = append(values[name], val)
+		} else if f.Kind == List {
 			for _, part := range strings.Split(val, ",") {
 				if p := strings.TrimSpace(part); p != "" {
 					values[name] = append(values[name], p)
@@ -292,6 +295,9 @@ func valueHint(f Flag) string {
 	case Duration:
 		return "duration, e.g. 30s, 5m"
 	case List:
+		if f.NoSplit {
+			return "expression (repeatable)"
+		}
 		return "value[,value...]"
 	}
 	return string(f.Kind)
@@ -339,6 +345,9 @@ func (in *Invocation) List(name string) []string {
 		return v
 	}
 	if d := in.raw(name); d != "" {
+		if f, _ := in.Cmd.flag(name); f.NoSplit {
+			return []string{d}
+		}
 		return strings.Split(d, ",")
 	}
 	return nil

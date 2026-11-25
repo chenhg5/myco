@@ -140,7 +140,7 @@ type fakeHub struct {
 
 func (h *fakeHub) Name() string { return "后端" }
 func (h *fakeHub) Context(context.Context) (string, error) {
-	return "这个 agent：backend（后端），修 bug\n- 10:00 你（任务）：看看登录页", nil
+	return "你是：backend（后端），修 bug\n- 10:00 对方（任务）：看看登录页", nil
 }
 func (h *fakeHub) Tell(_ context.Context, body string) (VoiceTaskRef, bool, error) {
 	h.mu.Lock()
@@ -203,20 +203,20 @@ func has(v *voice, kind, sub string) bool {
 
 func TestVoiceCallPassesWorkOnAndSaysSo(t *testing.T) {
 	send := toolCall{ID: "c1", Type: "function"}
-	send.Function.Name = "tell_agent"
+	send.Function.Name = "do_work"
 	send.Function.Arguments = `{"text":"修好登录页的 bug，修完跑一遍测试","what":"修登录 bug","their_words":"把登录那个 bug 修了"}`
 	m := &scriptModel{replies: []chatMsg{
 		{Role: "assistant", ToolCalls: []toolCall{send}},
-		{Role: "assistant", Content: "好，交给后端了，修好我告诉你。"},
+		{Role: "assistant", Content: "好，我去修，修好告诉你。"},
 	}}
 	h := &fakeHub{}
 	v, c, a := newTestCall(t, m, h)
 
 	c.Heard("把登录那个", false)
 	c.Heard("把登录那个 bug 修了", true)
-	waitFor(t, "the answer", func() bool { return has(v, vAssistant, "交给后端了") })
+	waitFor(t, "the answer", func() bool { return has(v, vAssistant, "我去修") })
 	// It said a few words before it acted, not only after.
-	if !has(v, vAssistant, "好，我跟它说。好，交给后端了") {
+	if !has(v, vAssistant, "好，我这就去做。好，我去修") {
 		t.Fatalf("no word before acting: %+v", lines(v))
 	}
 	h.mu.Lock()
@@ -225,7 +225,7 @@ func TestVoiceCallPassesWorkOnAndSaysSo(t *testing.T) {
 	if len(told) != 1 || !strings.HasPrefix(told[0], "修好登录页的 bug") || !strings.Contains(told[0], "经语音转述") || !strings.Contains(told[0], "原话：把登录那个 bug 修了") {
 		t.Fatalf("told: %v", told)
 	}
-	if !has(v, vUser, "把登录那个 bug 修了") || !has(v, vAction, "交给 后端：修登录 bug") {
+	if !has(v, vUser, "把登录那个 bug 修了") || !has(v, vAction, "开始做：修登录 bug") {
 		t.Fatalf("lines: %+v", lines(v))
 	}
 	for _, e := range lines(v) {
@@ -284,7 +284,7 @@ func TestVoiceCallStopsWhenThePersonSpeaks(t *testing.T) {
 
 func TestVoiceCallAddsToTheTaskAtWork(t *testing.T) {
 	add := toolCall{ID: "c1", Type: "function"}
-	add.Function.Name = "tell_agent"
+	add.Function.Name = "do_work"
 	add.Function.Arguments = `{"text":"顺便把注册页也看一下","what":"也看注册页"}`
 	m := &scriptModel{replies: []chatMsg{
 		{Role: "assistant", ToolCalls: []toolCall{add}},
@@ -294,24 +294,24 @@ func TestVoiceCallAddsToTheTaskAtWork(t *testing.T) {
 	v, c, _ := newTestCall(t, m, h)
 	c.Heard("顺便把注册页也看一下", true)
 	waitFor(t, "the answer", func() bool { return has(v, vAssistant, "跟它说了") })
-	if !has(v, vAction, "补充给 后端：也看注册页") {
+	if !has(v, vAction, "加到手上的活里：也看注册页") {
 		t.Fatalf("lines: %+v", lines(v))
 	}
 }
 
 func TestVoiceCallTellsNewsInAPause(t *testing.T) {
 	send := toolCall{ID: "c1", Type: "function"}
-	send.Function.Name = "tell_agent"
+	send.Function.Name = "do_work"
 	send.Function.Arguments = `{"text":"跑测试","what":"跑测试"}`
 	m := &scriptModel{replies: []chatMsg{
 		{Role: "assistant", ToolCalls: []toolCall{send}},
-		{Role: "assistant", Content: "交给后端了。"},
-		{Role: "assistant", Content: "后端那边测试都过了。"},
+		{Role: "assistant", Content: "好，我去跑测试。"},
+		{Role: "assistant", Content: "我跑完了，测试都过了。"},
 	}}
 	h := &fakeHub{}
 	v, c, _ := newTestCall(t, m, h)
 	c.Heard("跑一下测试", true)
-	waitFor(t, "handed out", func() bool { return has(v, vAssistant, "交给后端了") })
+	waitFor(t, "handed out", func() bool { return has(v, vAssistant, "我去跑测试") })
 	c.Played()
 	h.mu.Lock()
 	h.news = taskNews{Finished: true, Summary: "全部 42 个测试通过"}
@@ -376,7 +376,14 @@ func TestVoiceSettingsKeepKeysOutOfSight(t *testing.T) {
 func httptestServer(t *testing.T, b *Backend) func(method, path, body string) (int, string) {
 	t.Helper()
 	s := httptest.NewServer(b.Handler())
-	t.Cleanup(s.Close)
+	t.Cleanup(func() {
+		s.Close()
+		// Server.Close joins handlers, but not the initial settings sync they
+		// launch. Join it before the hubs and TempDirs are removed.
+		v := b.voiceState()
+		v.sync.once.Do(func() {})
+		v.sync.background.Wait()
+	})
 	return func(method, path, body string) (int, string) {
 		req, _ := http.NewRequest(method, s.URL+path, strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
@@ -462,19 +469,19 @@ func TestVoiceListAndPreview(t *testing.T) {
 // Words the model says before a tool are enough: no second line is added.
 func TestVoiceCallAckOnlyWhenSilent(t *testing.T) {
 	send := toolCall{ID: "c1", Type: "function"}
-	send.Function.Name = "tell_agent"
+	send.Function.Name = "do_work"
 	send.Function.Arguments = `{"text":"加一个暗色模式"}`
 	m := &scriptModel{replies: []chatMsg{
-		{Role: "assistant", Content: "好，让它加暗色模式。", ToolCalls: []toolCall{send}},
-		{Role: "assistant", Content: "转过去了。"},
+		{Role: "assistant", Content: "好，我来加暗色模式。", ToolCalls: []toolCall{send}},
+		{Role: "assistant", Content: "加上了。"},
 	}}
 	v, c, _ := newTestCall(t, m, &fakeHub{})
 	c.Heard("加个暗色模式", true)
-	waitFor(t, "the answer", func() bool { return has(v, vAssistant, "转过去了") })
-	if has(v, vAssistant, "我跟它说") {
+	waitFor(t, "the answer", func() bool { return has(v, vAssistant, "加上了") })
+	if has(v, vAssistant, "我这就去做") {
 		t.Fatalf("an ack on top of the model's own words: %+v", lines(v))
 	}
-	if toolAck("en-US", "stop_agent") != "OK, I'll stop it. " || toolAck("zh-CN", "check_agent") != "我看一眼。" {
+	if toolAck("en-US", "stop_work") != "OK, I'll stop. " || toolAck("zh-CN", "check_work") != "我看一下。" {
 		t.Fatal("toolAck")
 	}
 }
@@ -483,16 +490,16 @@ func TestVoiceCallAckOnlyWhenSilent(t *testing.T) {
 // still going, with its newest progress note (told once).
 func TestVoiceCallSaysALongTaskIsStillGoing(t *testing.T) {
 	send := toolCall{ID: "c1", Type: "function"}
-	send.Function.Name = "tell_agent"
+	send.Function.Name = "do_work"
 	send.Function.Arguments = `{"text":"把整个项目的测试跑一遍","what":"跑全部测试"}`
 	m := &scriptModel{replies: []chatMsg{
 		{Role: "assistant", ToolCalls: []toolCall{send}},
-		{Role: "assistant", Content: "转过去了。"},
+		{Role: "assistant", Content: "加上了。"},
 	}}
 	h := &fakeHub{news: taskNews{Status: "acked", Since: time.Now().Add(-6 * time.Minute), Progress: "在跑集成测试"}}
 	v, c, _ := newTestCall(t, m, h, func(d *voiceDeps) { d.stillWorkingEvery = 300 * time.Millisecond })
 	c.Heard("把测试都跑一遍", true)
-	waitFor(t, "the answer", func() bool { return has(v, vAssistant, "转过去了") })
+	waitFor(t, "the answer", func() bool { return has(v, vAssistant, "加上了") })
 	c.Played()
 	notice := func() []string {
 		m.mu.Lock()
@@ -500,7 +507,7 @@ func TestVoiceCallSaysALongTaskIsStillGoing(t *testing.T) {
 		var out []string
 		for _, msgs := range m.seen {
 			for _, x := range msgs {
-				if x.Role == "system" && strings.Contains(x.Content, "还在进行") && !contains(out, x.Content) {
+				if x.Role == "system" && strings.Contains(x.Content, "你还在做") && !contains(out, x.Content) {
 					out = append(out, x.Content)
 				}
 			}
@@ -596,5 +603,107 @@ func TestVoiceMemoCarriesTheLastCallOver(t *testing.T) {
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("the call's end was not handed over")
+	}
+}
+
+// The voice is the agent itself: what the model reads (instructions, tools,
+// receipts) and what the call says for it speak of the work as its own, in
+// the first person, never of "the agent" or "it" as someone else.
+func TestVoiceSpeaksAsTheAgent(t *testing.T) {
+	for _, lang := range []string{"zh-CN", "en-US"} {
+		p := voiceSystemPrompt(lang, "后端", "")
+		for _, bad := range []string{"tell_agent", "stop_agent", "check_agent", "pass on to the agent", "You do not do the work", "转过去", "你自己不干活", "这段对话的语音"} {
+			if strings.Contains(p, bad) {
+				t.Errorf("%s prompt has %q", lang, bad)
+			}
+		}
+		for _, good := range []string{"do_work", "stop_work", "check_work"} {
+			if !strings.Contains(p, good) {
+				t.Errorf("%s prompt lacks %q", lang, good)
+			}
+		}
+		for _, tool := range []string{"do_work", "stop_work", "check_work"} {
+			if a := toolAck(lang, tool); strings.Contains(a, "它") || strings.Contains(a, "tell it") || strings.Contains(a, "stop it") {
+				t.Errorf("%s ack for %s speaks of someone else: %q", lang, tool, a)
+			}
+		}
+	}
+	if !strings.Contains(voiceSystemPrompt("zh-CN", "后端", ""), "你就是 myco 里的 AI agent「后端」") ||
+		!strings.Contains(voiceSystemPrompt("en-US", "backend", ""), `You are "backend", an AI agent in myco`) {
+		t.Fatal("the prompt should say the voice is the agent")
+	}
+	for _, tl := range voiceTools {
+		d := tl.Function.Description
+		if strings.Contains(d, "the agent") || strings.Contains(d, " it is doing") {
+			t.Errorf("tool %s speaks of the agent as someone else: %q", tl.Function.Name, d)
+		}
+	}
+}
+
+// What the call shows and tells the model about work is said as its own,
+// in the call's language.
+func TestVoiceReceiptsAreFirstPerson(t *testing.T) {
+	for _, tc := range []struct{ lang, newWork, added, stopped string }{
+		{"zh-CN", "开始做：修登录 bug", "加到手上的活里：也看注册页", "停下了手上的活"},
+		{"en-US", "On it: 修登录 bug", "Added to what I'm doing: 也看注册页", "Stopped what I was doing"},
+	} {
+		h := &fakeHub{}
+		v, c, _ := newTestCall(t, &scriptModel{}, h, func(d *voiceDeps) { d.lang = tc.lang })
+		run := func(name, args string) string {
+			call := toolCall{ID: "c", Type: "function"}
+			call.Function.Name, call.Function.Arguments = name, args
+			return c.runTool(context.Background(), call)
+		}
+		if out := run("do_work", `{"text":"修好登录页","what":"修登录 bug"}`); out != "started: you are working on it now" {
+			t.Fatalf("%s new work: %q", tc.lang, out)
+		}
+		h.mu.Lock()
+		h.working = true
+		h.mu.Unlock()
+		if out := run("do_work", `{"text":"也看注册页","what":"也看注册页"}`); out != "added to what you are working on" {
+			t.Fatalf("%s addition: %q", tc.lang, out)
+		}
+		run("stop_work", `{}`)
+		for _, want := range []string{tc.newWork, tc.added, tc.stopped} {
+			if !has(v, vAction, want) {
+				t.Errorf("%s: no action %q in %+v", tc.lang, want, lines(v))
+			}
+		}
+	}
+}
+
+// What the call tells the person about the microphone follows its language.
+func TestVoiceMicNoticesFollowTheLanguage(t *testing.T) {
+	if got := micError(true, "mic-denied"); !strings.HasPrefix(got, "No microphone access") {
+		t.Fatalf("en: %q", got)
+	}
+	if got := micError(false, "mic-denied"); !strings.HasPrefix(got, "没有麦克风权限") {
+		t.Fatalf("zh: %q", got)
+	}
+	if got := micError(true, "boom"); got != "The microphone stopped: boom" {
+		t.Fatalf("en other: %q", got)
+	}
+}
+
+// The agent speaks first once the call is on, in the call's language.
+func TestVoiceCallGreetsFirst(t *testing.T) {
+	for _, tc := range []struct{ lang, hello, lead string }{
+		{"zh-CN", "我在，有什么要我做的？", "电话刚接通"},
+		{"en-US", "Hi, I'm here. What can I do for you?", "The call has just connected"},
+	} {
+		m := &scriptModel{replies: []chatMsg{{Role: "assistant", Content: tc.hello}}}
+		v, _, _ := newTestCall(t, m, &fakeHub{}, func(d *voiceDeps) { d.greet, d.lang = true, tc.lang })
+		waitFor(t, "the hello", func() bool { return has(v, vAssistant, tc.hello) })
+		m.mu.Lock()
+		first := m.seen[0]
+		m.mu.Unlock()
+		if s := first[len(first)-1]; s.Role != "system" || !strings.Contains(s.Content, tc.lead) {
+			t.Fatalf("%s: the model should be asked to say hello: %+v", tc.lang, s)
+		}
+		for _, e := range lines(v) {
+			if e.Kind == vUser {
+				t.Fatalf("%s: a hello is not the person's line: %+v", tc.lang, lines(v))
+			}
+		}
 	}
 }

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chenhg5/myco/internal/console"
+	"github.com/myco-ai/myco/internal/console"
 	"github.com/zalando/go-keyring"
 )
 
@@ -58,5 +58,30 @@ func TestServeGuard(t *testing.T) {
 	}
 	if rec := req("localhost:4242", "/app/hubs", rec.Result().Cookies()[0]); rec.Code != 200 || rec.Body.String() != "ok" {
 		t.Fatalf("with the cookie: %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestServeGuardRejectsRequestsFromOtherPageOrigins(t *testing.T) {
+	g := guarded(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}), 4242, "test-key")
+	for _, tc := range []struct {
+		site, origin string
+		status       int
+	}{
+		{"same-origin", "http://127.0.0.1:4242", http.StatusNoContent},
+		{"same-site", "http://127.0.0.1:4243", http.StatusForbidden},
+		{"", "http://127.0.0.1:4243", http.StatusForbidden},
+		{"same-site", "", http.StatusForbidden},
+	} {
+		r := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:4242/app/page-storage-recovery", nil)
+		r.AddCookie(&http.Cookie{Name: serveCookie, Value: "test-key"})
+		r.Header.Set("Sec-Fetch-Site", tc.site)
+		r.Header.Set("Origin", tc.origin)
+		w := httptest.NewRecorder()
+		g.ServeHTTP(w, r)
+		if w.Code != tc.status {
+			t.Errorf("site %q origin %q: got %d want %d", tc.site, tc.origin, w.Code, tc.status)
+		}
 	}
 }

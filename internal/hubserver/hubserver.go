@@ -6,7 +6,8 @@ import (
 	"bufio"
 	"context"
 	"errors"
-	"github.com/chenhg5/myco/internal/templates"
+	"fmt"
+	"github.com/myco-ai/myco/internal/templates"
 	"log/slog"
 	"math/rand/v2"
 	"net"
@@ -16,19 +17,20 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/domain"
-	"github.com/chenhg5/myco/internal/infra/blob"
-	"github.com/chenhg5/myco/internal/infra/jsonschema"
-	"github.com/chenhg5/myco/internal/infra/notify"
-	"github.com/chenhg5/myco/internal/infra/security"
-	"github.com/chenhg5/myco/internal/infra/sqlite"
-	"github.com/chenhg5/myco/internal/infra/tunnel"
-	"github.com/chenhg5/myco/internal/infra/wake"
-	"github.com/chenhg5/myco/internal/release"
-	"github.com/chenhg5/myco/internal/transport/httpapi"
-	"github.com/chenhg5/myco/internal/transport/ingress"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/infra/blob"
+	"github.com/myco-ai/myco/internal/infra/diskspace"
+	"github.com/myco-ai/myco/internal/infra/jsonschema"
+	"github.com/myco-ai/myco/internal/infra/notify"
+	"github.com/myco-ai/myco/internal/infra/security"
+	"github.com/myco-ai/myco/internal/infra/sqlite"
+	"github.com/myco-ai/myco/internal/infra/tunnel"
+	"github.com/myco-ai/myco/internal/infra/wake"
+	"github.com/myco-ai/myco/internal/release"
+	"github.com/myco-ai/myco/internal/transport/httpapi"
+	"github.com/myco-ai/myco/internal/transport/ingress"
 	// Automations run in their own time zone, also where the system has
 	// no zone database (Windows).
 	_ "time/tzdata"
@@ -45,7 +47,9 @@ type Options struct {
 	// FilesDir stores attachment contents (default: <db dir>/files).
 	FilesDir string
 	// Files bounds uploads (zero value: DefaultFilePolicy).
-	Files app.FilePolicy
+	ProjectStorage  *app.ProjectStoragePolicy
+	PageAttachments *app.PageAttachmentPolicy
+	Files           app.FilePolicy
 	// GitHubWebhookSecret enables POST /v1/ingress/github.
 	GitHubWebhookSecret string
 	// GitHubReplyFrom restricts which GitHub logins can answer messages.
@@ -66,7 +70,7 @@ type Options struct {
 	// ones the binary carries.
 	Apps *templates.Catalog
 	// OfficialDir, when Apps is not set, reads every official app from this
-	// folder (internal/templates/official in the source tree) instead of
+	// unpacked folder (for example, an explicitly downloaded apps release) instead of
 	// the few the binary carries: for tests and development.
 	OfficialDir string
 	// PathPrefix is where this hub is served under another's address
@@ -90,7 +94,9 @@ const WorkflowTick = app.WorkflowTick
 
 // Hub is an assembled hub: the HTTP handler plus background workers.
 type Hub struct {
-	Handler http.Handler
+	PageAttachments *app.PageAttachmentService
+	Actions         *app.ActionService
+	Handler         http.Handler
 	// Server is the HTTP adapter (Handler), for the workspace router.
 	Server     *httpapi.Server
 	Dispatcher *app.Dispatcher
@@ -106,7 +112,8 @@ type Hub struct {
 	// SetLAN makes links created from this machine use its LAN address.
 	SetLAN func(bool)
 	// RunBackups makes the daily backups until ctx ends (nil: none).
-	RunBackups func(ctx context.Context)
+	RunBackups             func(ctx context.Context)
+	browserScreenshotsPath string
 }
 
 // DefaultWakers are the push delivery modes shipped with myco.
@@ -116,6 +123,20 @@ func DefaultWakers() app.Wakers {
 
 // Build assembles the hub. Call hub.Dispatcher.Run in the background.
 func Build(o Options) (*Hub, error) {
+	storage := app.DefaultProjectStoragePolicy()
+	if o.ProjectStorage != nil {
+		storage = *o.ProjectStorage
+	}
+	if err := storage.Validate(); err != nil {
+		return nil, err
+	}
+	pagePolicy := app.DefaultPageAttachmentPolicy()
+	if o.PageAttachments != nil {
+		pagePolicy = *o.PageAttachments
+	}
+	if err := pagePolicy.Validate(); err != nil {
+		return nil, err
+	}
 	db, err := sqlite.Open(o.DBPath)
 	if err != nil {
 		return nil, err
@@ -232,11 +253,17 @@ func Build(o Options) (*Hub, error) {
 	messages.SetProjects(projectRepo)
 	projectSvc := app.NewProjectService(projectRepo, agentsRepo, ids, clock)
 	projectSvc.SetBlobs(blob.FS{Dir: filesDir})
+	if err := projectSvc.SetStoragePolicy(storage, diskspace.Guard([]string{filepath.Dir(o.DBPath), filesDir}, storage.DiskMinFreeBytes, storage.DiskMinFreePercent)); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 	projectSvc.SetSuperagents(func(ctx context.Context, n domain.AgentName) bool {
 		m, err := superagents.OwnerOf(ctx, n)
 		return err == nil && m != nil
 	})
 	srv.SetProjects(projectSvc)
+	projectInvites := app.NewProjectInvitationService(sqlite.NewProjectInvitationRepo(db), projectSvc, sqlite.NewMemberRepo(db), superagents, enroll, audit, ids, clock)
+	srv.SetProjectInvitations(projectInvites)
 	enroll.SetDefaultVisibility(defaultVisibility)
 	srv.SetHidden(app.NewHiddenService(sqlite.NewSettingRepo(db)))
 	srv.SetPins(app.NewPinService(sqlite.NewSettingRepo(db), ids, clock))
@@ -257,6 +284,7 @@ func Build(o Options) (*Hub, error) {
 	srv.SetTraces(traces)
 	automations := app.NewAutomationService(sqlite.NewAutomationRepo(db), messages, msgRepo, security.Tokens{}, ids, clock, o.Log)
 	srv.SetAutomations(automations)
+	srv.SetProjectAutomations(app.NewProjectAutomationService(projectInvites, automations))
 	domain.CompleteContracts = jsonschema.New()
 	workflowRepo := app.ObserveWorkflows(sqlite.NewWorkflowRepo(db), bus)
 	workflows := app.NewWorkflowService(workflowRepo, messages, msgRepo, ids, clock, o.Log)
@@ -297,6 +325,8 @@ func Build(o Options) (*Hub, error) {
 	actionSvc.SetPages(pages)
 	pages.SetEncrypted(e2e.Enabled)
 	srv.SetPages(pages)
+	pageAttachments := app.NewPageAttachmentService(pages, sqlite.NewPageAttachmentRepo(db), blob.FS{Dir: filesDir}, ids, clock, pagePolicy, diskspace.Guard([]string{filepath.Dir(o.DBPath), filesDir}, storage.DiskMinFreeBytes, storage.DiskMinFreePercent))
+	srv.SetPageAttachments(pageAttachments)
 	pageData := app.NewPageDataService(pages, sqlite.NewPageDataRepo(db), ids, clock)
 	srv.SetPageData(pageData)
 	templateSvc := app.NewTemplateService(sqlite.NewTemplateRepo(db), blob.FS{Dir: filesDir}, pages, pageData, ids, clock)
@@ -328,8 +358,18 @@ func Build(o Options) (*Hub, error) {
 	handovers.SetContext(projectRepo, sqlite.NewMachineRepo(db), messages)
 	srv.SetHandovers(handovers)
 	messages.SetCredentialCheck(handovers.StillCurrent)
-	h := &Hub{Handler: srv, Server: srv, Dispatcher: dispatcher, Files: files, Traces: traces, Automations: automations, Workflows: workflows,
-		Close: db.Close, SetPublicURL: srv.SetPublicURL, SetLAN: srv.SetLAN}
+	screenshotPath := ":memory:"
+	if o.DBPath != ":memory:" {
+		screenshotPath = filepath.Join(o.DBPath+".private", "browser-screenshots.sqlite")
+	}
+	screenshots, err := sqlite.OpenBrowserScreenshots(screenshotPath)
+	if err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("open private browser screenshots: %w", err)
+	}
+	actionSvc.SetBrowserScreenshots(screenshots)
+	h := &Hub{PageAttachments: pageAttachments, Actions: actionSvc, Handler: srv, Server: srv, Dispatcher: dispatcher, Files: files, Traces: traces, Automations: automations, Workflows: workflows,
+		browserScreenshotsPath: screenshotPath, Close: func() error { return errors.Join(screenshots.Close(), db.Close()) }, SetPublicURL: srv.SetPublicURL, SetLAN: srv.SetLAN}
 	if bk != nil {
 		// The first a few minutes after start, spread so that the
 		// workspaces of a server do not all copy at once.
@@ -356,6 +396,8 @@ func Run(ctx context.Context, o Options) error {
 	if o.Apps != nil {
 		go o.Apps.Run(ctx)
 	}
+	go hub.PageAttachments.Run(ctx, o.Log)
+	go hub.Actions.RunBrowserScreenshotPrune(ctx, o.Log)
 	go hub.Files.Run(ctx, time.Hour)
 	go hub.Traces.Run(ctx, time.Hour)
 	go hub.Automations.Run(ctx, AutomationTick)

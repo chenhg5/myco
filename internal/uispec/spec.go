@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 // Spec is a myco-ui block in the flat form: elements by id, and the id of
@@ -82,10 +84,24 @@ func (s *Spec) Len() int { return len(s.Elements) }
 // element) is returned as a Problems error; whether the components and
 // props are right is Validate's job.
 func Parse(data []byte) (*Spec, error) {
+	trimmed := bytes.TrimSpace(data)
+	if bytes.HasPrefix(trimmed, []byte("```")) || bytes.HasPrefix(trimmed, []byte("~~~")) {
+		return nil, Problems{{Message: "not valid JSON: expected raw JSON without Markdown fences; remove the opening and closing fence lines"}}
+	}
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.UseNumber()
 	var top any
 	if err := dec.Decode(&top); err != nil {
+		if syntax, ok := err.(*json.SyntaxError); ok {
+			offset := max(0, min(int(syntax.Offset)-1, len(data)))
+			line := bytes.Count(data[:offset], []byte("\n")) + 1
+			start := bytes.LastIndexByte(data[:offset], '\n') + 1
+			column := utf8.RuneCount(data[start:offset]) + 1
+			return nil, Problems{{Message: fmt.Sprintf("not valid JSON at line %d, column %d: %s", line, column, err)}}
+		}
+		if err == io.ErrUnexpectedEOF {
+			return nil, Problems{{Message: "not valid JSON: unexpected EOF; check for missing closing braces, brackets or quotes"}}
+		}
 		return nil, Problems{{Message: "not valid JSON: " + err.Error()}}
 	}
 	if dec.More() {

@@ -7,15 +7,15 @@ import (
 	"os"
 	"strings"
 
-	. "github.com/chenhg5/myco/internal/cli/cmdkit"
-	"github.com/chenhg5/myco/internal/uispec"
+	. "github.com/myco-ai/myco/internal/cli/cmdkit"
+	"github.com/myco-ai/myco/internal/uispec"
 )
 
 // uiFlag adds a checked myco-ui block to a message body.
 var uiFlag = Flag{Name: "ui", Kind: String,
 	Help: "Append a myco-ui block (structured UI the app draws) from this JSON file ('-' = stdin); checked first, see myco ui schema"}
 
-const uiSuggestion = "fix these and run myco ui check again; myco ui schema lists the components"
+const uiSuggestion = "fix the reported errors, then run myco ui check --file <file>; myco ui schema --format text lists components, props and examples"
 
 func uiSchemaCommand() *Command {
 	return &Command{

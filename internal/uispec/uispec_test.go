@@ -112,6 +112,11 @@ func TestParseArray(t *testing.T) {
 func TestParseErrors(t *testing.T) {
 	for _, tc := range []struct{ name, in, want string }{
 		{"not json", `{"type":`, "not valid JSON"},
+		{"fenced JSON", "```myco-ui\n{\"type\":\"Card\"}\n```", "expected raw JSON without Markdown fences; remove the opening and closing fence lines"},
+		{"tilde fence", "  ~~~myco-ui\n{}\n~~~", "remove the opening and closing fence lines"},
+		{"missing comma", "{\n  \"type\": \"Card\"\n  \"props\": {}\n}", "line 3, column 3"},
+		{"unicode column", "{\"type\":\"你好\" \"props\":{}}", "line 1, column 14"},
+		{"incomplete JSON", `{"type":"Card"`, "check for missing closing braces, brackets or quotes"},
 		{"two values", `{"type":"Text"} {}`, "more than one value"},
 		{"scalar", `42`, "expected a JSON object or array"},
 		{"neither", `{"title":"x"}`, "expected an element"},

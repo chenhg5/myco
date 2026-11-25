@@ -6,11 +6,12 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // SetPageData enables pages' records (/v1/pages/{id}/data, /changes).
@@ -84,13 +85,22 @@ func recordDTO(r *domain.PageRecord) api.PageRecord {
 }
 
 func (s *Server) listRecords(w http.ResponseWriter, r *http.Request, c pageCall) {
-	recs, seq, err := s.pageData.Records(r.Context(), c.by, r.PathValue("id"), r.URL.Query().Get("collection"))
+	in, err := api.ParsePageQuery(r.URL.Query())
+	if err != nil {
+		writeError(w, domain.Errf(domain.CodeInvalidArgument, "%v", err))
+		return
+	}
+	result, err := s.pageData.QueryRecords(r.Context(), c.by, r.PathValue("id"), r.URL.Query().Get("collection"), domain.PageQueryInput{Fields: in.Fields, Where: in.Where, Sort: in.Sort, Limit: in.Limit, After: in.After, Count: in.Count})
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	out := api.PageRecords{Records: make([]api.PageRecord, 0, len(recs)), Seq: seq}
-	for _, x := range recs {
+	if result.Count != nil {
+		writeJSON(w, http.StatusOK, api.PageRecordCount{Count: *result.Count, Seq: result.Seq, QueryVersion: 1})
+		return
+	}
+	out := api.PageRecords{Records: make([]api.PageRecord, 0, len(result.Records)), Seq: result.Seq, Next: result.Next, QueryVersion: 1}
+	for _, x := range result.Records {
 		out.Records = append(out.Records, recordDTO(x))
 	}
 	writeJSON(w, http.StatusOK, out)
@@ -181,7 +191,7 @@ func collectionsDTO(m map[string]domain.ManifestCollection) map[string]api.Templ
 	}
 	out := make(map[string]api.TemplateCollection, len(m))
 	for k, v := range m {
-		out[k] = api.TemplateCollection{Fields: v.Fields, Single: v.Single}
+		out[k] = api.TemplateCollection{Fields: v.Fields, Single: v.Single, Write: v.Write}
 	}
 	return out
 }
@@ -191,11 +201,37 @@ func collectionsDTO(m map[string]domain.ManifestCollection) map[string]api.Templ
 func (s *Server) pageTemplate(ctx context.Context, p *domain.Page) *api.PageTemplate {
 	t := pageTemplateDTO(p)
 	if t != nil && s.templates != nil {
+		t.Official = s.templates.IsOfficial(p.Template)
 		if l := s.templates.LatestOf(ctx, p.Template); l != "" && domain.CompareVersions(l, t.Version) > 0 {
 			t.Latest = l
 		}
 	}
+	if t != nil {
+		// What it does not list in os and permissions it does not declare
+		// (Apps refuse it), except a page of one of myco's own apps that
+		// kept a manifest from before apps declared: it is asked as
+		// before, until it is upgraded to a version that declares.
+		t.Declares = declaresAll(t, p.Manifest)
+	}
 	return t
+}
+
+// declaresAll: whether a page's app declares all it uses (os, permissions),
+// so that Apps refuse what it leaves out. Not a page of one of myco's own
+// apps whose manifest declares no os and is older than its app's newest
+// version, or than declarations: it is asked as before until upgraded.
+func declaresAll(t *api.PageTemplate, manifest string) bool {
+	return !(t.Official && len(t.OS) == 0 && (t.Latest != "" || predatesDeclarations(manifest)))
+}
+
+// predatesDeclarations: a manifest written before apps declared the
+// computer's capabilities they use (os and net came with hubs v0.22.1).
+func predatesDeclarations(manifest string) bool {
+	m, err := domain.ParseManifest([]byte(manifest))
+	if err != nil {
+		return true
+	}
+	return m.Requires == nil || m.Requires.Hub == "" || domain.CompareVersions(strings.TrimPrefix(m.Requires.Hub, "v"), "0.22.1") < 0
 }
 
 // upgradePage: POST /v1/pages/{id}/upgrade: the page takes its app's
@@ -222,7 +258,7 @@ func pageTemplateDTO(p *domain.Page) *api.PageTemplate {
 	if err != nil {
 		return nil
 	}
-	return &api.PageTemplate{ID: p.Template, Slug: m.ID, Name: m.Name, Version: p.TemplateVersion, Data: collectionsDTO(m.Data), Permissions: m.Permissions, OS: m.OS, Net: m.Net}
+	return &api.PageTemplate{ID: p.Template, Slug: m.ID, Name: m.Name, Version: p.TemplateVersion, Data: collectionsDTO(m.Data), Permissions: m.Permissions, OS: m.OS, Net: m.Net, RequiresIsolation: m.Requires != nil && m.Requires.Isolation}
 }
 
 func (s *Server) templateDTO(by app.Actor, tv *app.TemplateView) api.Template {
@@ -240,6 +276,7 @@ func (s *Server) templateDTO(by app.Actor, tv *app.TemplateView) api.Template {
 		out.Data, out.Permissions, out.Export = collectionsDTO(tv.Manifest.Data), tv.Manifest.Permissions, tv.Manifest.Export
 		out.OS, out.Net = tv.Manifest.OS, tv.Manifest.Net
 		out.Category = tv.Manifest.Category
+		out.RequiresIsolation = tv.Manifest.Requires != nil && tv.Manifest.Requires.Isolation
 	}
 	for _, sh := range tv.Shots {
 		out.Shots = append(out.Shots, api.TemplateShot{Src: sh.Src, Dark: sh.Dark})

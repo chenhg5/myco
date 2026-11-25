@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/chenhg5/myco/internal/harness"
+	"github.com/myco-ai/myco/internal/harness"
 )
 
 // A session that receives in its own conversation (myco inbox wait) wakes

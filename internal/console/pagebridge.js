@@ -88,6 +88,7 @@
       if (d.error) {
         var err = new Error(d.error);
         err.code = d.code;
+        if (typeof d.reason === "string") err.reason = d.reason;
         if (d.latest) err.latest = d.latest;
         w.reject(err);
       } else w.resolve(d.value);
@@ -167,6 +168,7 @@
       if (d.error) {
         var err = new Error(d.error);
         err.code = d.code;
+        if (typeof d.reason === "string") err.reason = d.reason;
         reject(err);
       } else resolve(d.value);
     };
@@ -276,7 +278,7 @@
     // "download-media": myco.download saves video and sound too (mp4, …);
     // "os": myco.os (this computer: files, commands, the screen…).
     // "net-media": myco.media.url plays a public audio or video address.
-    features: ["download-media", "os", "ssh", "preferences", "remote", "page-actions", "net-media", "data-reset"],
+    features: ["download-media", "os", "ssh", "preferences", "remote", "page-actions", "net-media", "data-reset", "data-query", "page-files"] /*__MYCO_BROWSER_FEATURE__*/,
     // An address for <audio> / <video> of a public http(s) file (a podcast
     // episode): the App streams it, with seeking, since the page itself
     // cannot load media from the internet. Private addresses are refused.
@@ -288,6 +290,44 @@
     },
     os: os,
     // Remote sessions are separate from local OS calls and need App consent.
+    browser: (function () {
+      function invoke(action, args) {
+        return ready.then(function () { return call("browser.call", {action:action,args:args||{}}, (action === "install" || action === "approvals.request" || action === "profiles.configure") ? 600000 : action === "pick" ? 150000 : 45000); });
+      }
+      return {
+        status:function(){return invoke("status");},
+        install:function(){return invoke("install");},
+        profiles:{
+          create:function(name){return invoke("profiles.create",{name:String(name)});},
+          open:function(id){return invoke("profiles.open",{id:String(id)});},
+          allowAgents:function(id,allowed){return invoke("profiles.allowAgents",{id:String(id),allowed:allowed===true});},
+          configure:function(id,settings){return invoke("profiles.configure",{id:String(id),settings:settings});}
+        },
+        record:{
+          active:function(){return invoke("record.active");},
+          start:function(options){return invoke("record.start",options);},
+          events:function(id,after){return invoke("record.events",{id:String(id),after:after});},
+          stop:function(id){return invoke("record.stop",{id:String(id)});}
+        },
+        runs:{
+          start:function(options){return invoke("runs.start",options);},
+          get:function(id,after){return invoke("runs.get",{id:String(id),after:after});},
+          control:function(id,action,choice){return invoke("runs.control",{id:String(id),action:action,choice:choice});}
+        },
+        approvals:{
+          list:function(){return invoke("approvals.list");},
+          request:function(options){return invoke("approvals.request",options);},
+          revoke:function(script_id,version){return invoke("approvals.revoke",{script_id:String(script_id),version:version});}
+        },
+        locate:function(options){return invoke("locate",options);},
+        pick:function(options){return invoke("pick",options);},
+        snapshot:function(id){return invoke("snapshot",{id:String(id)}).then(function(r){
+          var data=atob(r.base64),bytes=new Uint8Array(data.length);
+          for(var i=0;i<data.length;i++)bytes[i]=data.charCodeAt(i);
+          return new Blob([bytes],{type:r.type});
+        });}
+      };
+    })(),
     remote: {call: function(action, args) {
       return ready.then(function() { return call("remote.call", {action:action, args:args || {}}, action === "install" ? 600000 : 30000); });
     }},
@@ -330,7 +370,11 @@
     // new one; with opts.ifVersion it is refused (err.code "conflict",
     // err.latest the record now) if someone changed it since.
     data: {
-      list: function (collection) { return call("data.list", { collection: collection || "" }); },
+      list: function (collection, options) {
+        var args = { collection: collection || "" };
+        if (options !== undefined) args.query = options;
+        return call("data.list", args);
+      },
       get: function (collection, id) { return call("data.get", { collection: collection, id: id }); },
       put: function (collection, data, opts) {
         opts = opts || {};
@@ -355,6 +399,21 @@
       var blob = content instanceof Blob ? content
         : new Blob([typeof content === "string" ? content : content instanceof ArrayBuffer ? new Uint8Array(content) : content], { type: type || "" });
       return call("download", { name: String(name), type: type || blob.type || "", blob: blob }, 600000);
+    },
+    pageFiles: {
+      info: function () { return call("pageFiles.info", {}); },
+      list: function (options) { return call("pageFiles.list", options || {}); },
+      put: function (collection, name, blob, options) { return call("pageFiles.put", { collection: collection, name: name, blob: blob, key: options && options.key }, 300000); },
+      resolve: function (name) { return call("pageFiles.resolve", { name: name }); },
+      get: function (file) { return call("pageFiles.get", { file: file }, 300000); },
+      download: function (file) { return call("pageFiles.download", { file: file }, 300000); },
+      remove: function (file) { return call("pageFiles.remove", { file: file }); },
+    },
+    projectFiles: {
+      info: function () { return call("projectFiles.info", {}); },
+      put: function (name, blob) { return call("projectFiles.put", { name: name, blob: blob }, 300000); },
+      get: function (name) { return call("projectFiles.get", { name: name }, 300000); },
+      download: function (name) { return call("projectFiles.download", { name: name }, 300000); },
     },
     storage: {
       get: function (key) { return call("storage.get", { key: String(key) }); },

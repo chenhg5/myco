@@ -3,7 +3,7 @@ package app
 import (
 	"testing"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // A template made for a newer hub is left out by older ones; builds whose

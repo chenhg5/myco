@@ -1,11 +1,13 @@
+import { runnerUpdating } from "@/lib/runner-state";
 import {
   IconAsterisk, IconBot, IconCloud, IconCode, IconLaptop, IconMachine, IconPerson, IconPointer, IconPrompt,
   IconServer, IconStar, IconTerminal, type IconType,
 } from "@/components/icons";
-import type { Agent, AgentStatus, Machine, ModelSource, RuntimeAccess } from "@/api";
+import type { Agent, AgentStatus, Machine, Message, ModelSource, RuntimeAccess } from "@/api";
 import type { AgentRow, NodeKind } from "@/app/types";
 import type { HubOverview } from "@/appapi";
 import { L } from "@/lib/i18n";
+import { currentSlots } from "@/app/RunnerQueue";
 import { isSuperagent, SHROOM } from "@/app/superagentMark";
 
 /** `machine` nodes (`xxx-machine`) are not nodes in the UI. */
@@ -249,7 +251,8 @@ export function sessionBusy(st: { state: string; session_in_use?: boolean; recei
 }
 
 /** The state shown for a node: a busy session reads as such, not "Working". */
-export function stateLabel(st: { state: string; session_in_use?: boolean; receiving?: string }, label: string): { dot: string; label: string } {
+export function stateLabel(st: { agent?: Agent; state: string; session_in_use?: boolean; receiving?: string }, label: string): { dot: string; label: string } {
+  if (st.agent && runnerUpdating(st.agent)) return { dot: "pending", label: L("正在更新", "Updating") };
   return sessionBusy(st) ? { dot: "pending", label: L("会话被占用", "Session in use") } : { dot: st.state, label };
 }
 
@@ -284,23 +287,29 @@ export function receivesInSession(a?: Agent, receiving?: string): boolean {
 
 /**
  * An accepted task whose result may never come back. It was picked up (acked)
- * or held, and nothing has happened to it for longer than its node can
+ * and nothing has happened to it for longer than its node can
  * reasonably take: ten minutes when a runner wakes the node, thirty when only
  * a session of its own receives. A node that is offline is a signal too: it
  * cannot finish the task while it is away.
  */
 export function possiblyStuck(
-  m: { status: string; active_at?: string; updated_at: string; asking?: string },
+  m: { id?: string; status: string; active_at?: string; updated_at: string; asking?: string },
   node: { agent?: Agent; receiving?: string; offline?: boolean; seenAt?: number } | undefined,
   now: number,
 ): boolean {
-  if (m.status !== "acked" && m.status !== "held") return false;
-  // Held on a question to its sender: it waits for an answer, it is not stuck.
-  if (m.status === "held" && m.asking) return false;
+  if (m.status !== "acked") return false;
+  if (node?.agent && runnerUpdating(node.agent, now)) return false;
   if (node?.offline) return true;
+  if (m.id && currentSlots(node?.agent, now)?.queue?.some((q) => q.message_id === m.id)) return false;
   const wait = receivesInSession(node?.agent, node?.receiving) ? STUCK_AFTER_SESSION_MS : STUCK_AFTER_MS;
   const at = lastActivityAt(m);
   return Number.isFinite(at) && seenNow(now, node?.seenAt) - at >= wait;
+}
+
+export function heldTaskLabel(m: Pick<Message, "asking" | "held_for">, sender: string): string {
+  if (m.asking) return L(`暂挂：在等 ${sender} 回答`, `On hold: waiting for ${sender} to answer`);
+  if (m.held_for === "reply") return L("暂挂：在等其他 agent 回复", "On hold: waiting for another agent to reply");
+  return L("暂挂中，没人在做", "On hold · no one is working on it");
 }
 
 /** How far what is shown reaches: now, or, when the last answer (seenAt)
@@ -314,15 +323,13 @@ export function seenNow(now: number, seenAt?: number): number {
 
 /** Possibly-stuck tasks among a node's current work, split as its counts are.
  *  seenAt: when they were fetched (the workspace's seen_at). */
-export function stuckCounts(st: AgentStatus, now: number, seenAt?: number): { in_progress: number; held: number; total: number } {
+export function stuckCounts(st: AgentStatus, now: number, seenAt?: number): { in_progress: number; total: number } {
   let in_progress = 0;
-  let held = 0;
   for (const m of st.current || []) {
     if (!possiblyStuck(m, { agent: st.agent, receiving: st.receiving, offline: st.state === "offline", seenAt }, now)) continue;
-    if (m.status === "held") held += 1;
-    else in_progress += 1;
+    in_progress += 1;
   }
-  return { in_progress, held, total: in_progress + held };
+  return { in_progress, total: in_progress };
 }
 
 /**
@@ -338,7 +345,7 @@ export function nodeName(a: Agent, hub?: HubOverview): string {
   const kind = agentKind(a);
   if (kind !== "agent" && kind !== "shell") return a.name;
   const machine = hub && a.machine_id ? machinesOfHub(hub).find((m) => m.id === a.machine_id) : undefined;
-  // A name someone chose ("mac-exec", "docs-claude") stays; one made up
+  // A name someone chose ("demo-shell", "docs-claude") stays; one made up
   // when the node joined (host name, CLI, a random suffix) is replaced by
   // what it is in plain words: an agent by the folder it works in ("myco
   // 助手"), a computer by which one and the folder ("Studio Mac · myco").

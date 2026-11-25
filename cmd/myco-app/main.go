@@ -22,11 +22,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chenhg5/myco/internal/console"
-	"github.com/chenhg5/myco/internal/console/notices"
-	"github.com/chenhg5/myco/internal/release"
-	"github.com/chenhg5/myco/internal/service"
-	"github.com/chenhg5/myco/internal/web"
+	"github.com/myco-ai/myco/internal/console"
+	"github.com/myco-ai/myco/internal/console/notices"
+	"github.com/myco-ai/myco/internal/release"
+	"github.com/myco-ai/myco/internal/service"
+	"github.com/myco-ai/myco/internal/web"
 )
 
 // version is set at build time (-ldflags "-X main.version=...").
@@ -117,6 +117,15 @@ func main() {
 		setFullscreen(on)
 		return nil
 	}
+	// A page in a window of its own (an app opened apart from the App).
+	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
+		b.OpenPageWindow = func(hub, page, title string) error {
+			if openPageWindow == nil {
+				return fmt.Errorf("not ready")
+			}
+			return openPageWindow(hub, page, title)
+		}
+	}
 	// The pages' language changed: the tray menu (when there is one) follows.
 	b.OnUILang = func(l string) {
 		if f := uiLangHook; f != nil {
@@ -156,6 +165,10 @@ var pickImage func() (string, error)
 
 // openURL opens a link in the default browser (set by runGUI).
 var openURL func(string) error
+
+// openPageWindow opens a page (an app) in a window of its own (set by runGUI
+// where windows can be made).
+var openPageWindow func(hub, page, title string) error
 
 // setFullscreen puts the window in full screen or takes it out (set by
 // runGUI where the window can).
@@ -216,11 +229,11 @@ func appExe() string {
 }
 
 // deviceName names this computer in console tokens: its host name,
-// lower-cased, without ".local", e.g. "glenns-macbook-pro".
+// lower-cased, without ".local", e.g. "alices-macbook-pro".
 func deviceName() string {
 	h, err := os.Hostname()
 	// On a Mac the host name can be whatever the network handed out (an IP
-	// address, "192.168.1.210"): the name set in System Settings is better.
+	// address, "192.168.1.42"): the name set in System Settings is better.
 	if runtime.GOOS == "darwin" {
 		if out, err2 := exec.Command("scutil", "--get", "LocalHostName").Output(); err2 == nil && strings.TrimSpace(string(out)) != "" {
 			h, err = strings.TrimSpace(string(out)), nil
@@ -282,6 +295,17 @@ func guarded(h http.Handler, port int, k string) http.Handler {
 			http.Error(w, "forbidden host", http.StatusForbidden)
 			return
 		}
+		// A page origin shares this loopback hostname with the browser
+		// console. Reject requests from a different origin even if the
+		// browser attaches the console's HttpOnly cookie.
+		if strings.HasPrefix(r.URL.Path, "/app/") {
+			site := r.Header.Get("Sec-Fetch-Site")
+			origin := r.Header.Get("Origin")
+			if (site != "" && site != "same-origin" && site != "none") || (origin != "" && origin != "http://"+r.Host) {
+				http.Error(w, "forbidden origin", http.StatusForbidden)
+				return
+			}
+		}
 		if q := r.URL.Query().Get("key"); q != "" {
 			if subtle.ConstantTimeCompare([]byte(q), []byte(k)) != 1 {
 				http.Error(w, "invalid key", http.StatusForbidden)
@@ -295,7 +319,7 @@ func guarded(h http.Handler, port int, k string) http.Handler {
 			http.Error(w, "open the console with the URL printed by myco-app --serve (it contains a one-time key)", http.StatusUnauthorized)
 			return
 		}
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; frame-src http://127.0.0.1:* http://localhost:*")
 		h.ServeHTTP(w, r)
 	})
 }

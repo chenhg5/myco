@@ -30,6 +30,20 @@ function keepLive(key: string, events: TraceEvent[]) {
 const POLL_MS = 1500;
 const isOpen = (s: string) => s === "queued" || s === "pending" || s === "delivered" || s === "acked" || s === "held";
 
+/** Whether you opened a run's whole process: kept while the page is open,
+ *  so a run you opened does not fold again when its answer arrives. */
+const processOpen = new Map<string, boolean>();
+
+/** "12 分钟": how long the run took, from its own report or the clock. */
+function tookLine(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) ms = 0;
+  const s = Math.round(ms / 1000);
+  if (s < 60) return L(`${s} 秒`, `${s}s`);
+  const m = Math.floor(s / 60);
+  if (m < 60) return L(`${m} 分钟`, `${m} min`);
+  return L(`${Math.floor(m / 60)} 小时 ${m % 60} 分`, `${Math.floor(m / 60)}h ${m % 60}m`);
+}
+
 /** A tool call with its result, or another step. */
 type Row =
   | { kind: "tool"; key: string; at?: string; call: TraceStep; result?: TraceStep }
@@ -280,9 +294,13 @@ function usageLine(u?: TraceStep): string {
  * as one line that opens, as the runner reported them. Live while the task
  * runs: the newest steps say what it is doing now.
  */
-export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaused, onActivity, until, borrow, said, steers, onUsage, answers, canAnswer, onAnswer, cli, onStatus }: {
+export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaused, onActivity, from, until, borrow, said, steers, onUsage, answers, canAnswer, onAnswer, cli, onStatus, queueText, onPlan }: {
   hubId: string; task: Message; onGrow?: () => void;
+  /** told the plan this run is working through (and when it was written),
+   *  for the bar at the top of the chat (PlanBar); null when it has none */
+  onPlan?: (key: string, taskId: string, plan: { items: PlanItem[]; at: string } | null) => void;
   cli?: string;
+  queueText?: string;
   onStatus?: (taskId: string, status: string) => void;
   /** where the finished run's time, tokens and cost go (next to the
    *  answer's time and copy); without it they end the run */
@@ -310,6 +328,9 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
   onActivity?: (taskId: string, at: number, ended: boolean) => void;
   /** your next message: steps after it show under that one, not here */
   until?: string;
+  /** shown under something you added later (drawn where it was sent): only
+   *  this run's steps from then on (the ones before are above it) */
+  from?: string;
   /** earlier tasks still open whose steps since this one was sent (since)
    *  show here (an agent in one long session goes on under the first) */
   borrow?: { ids: string[]; since: string; label?: string };
@@ -336,6 +357,10 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
     return kept ? kept.filter((e, i, all) => all.findIndex((x) => x.seq === e.seq) === i) : null;
   });
   const [gone, setGone] = useState(false);
+  // The whole process in one line: open while it works, folded once the
+  // answer is in; once you click, your choice holds for this run.
+  const [chosen, setChosen] = useState<boolean | undefined>(() => processOpen.get(task.id));
+  const [showAll, setShowAll] = useState(false);
   const [traceStatus, setTraceStatus] = useState<string>();
   const last = useRef(rawEvents?.length ? rawEvents[rawEvents.length - 1].seq : 0);
   const finalLoaded = useRef(!running && rawEvents !== null);
@@ -380,12 +405,13 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
   const events = useMemo(() => {
     if (!ownEvents) return ownEvents;
     const u = msOf(until) || Infinity;
-    const own = until ? ownEvents.filter((e) => !e.at || msOf(e.at) < u) : ownEvents;
+    const f = from ? msOf(from) : 0;
+    const own = until || from ? ownEvents.filter((e) => (!e.at ? !from : msOf(e.at) < u && msOf(e.at) >= f)) : ownEvents;
     const more = extra.filter((e) => msOf(e.at) < u);
     if (!more.length) return own;
     // (in time, numbered anew: steps of two runs do not share numbers)
     return [...own, ...more].sort((a, b) => msOf(a.at) - msOf(b.at) || a.seq - b.seq).map((e, i) => ({ ...e, seq: i + 1 }));
-  }, [ownEvents, extra, until]);
+  }, [ownEvents, extra, until, from]);
   const body = useRef<HTMLDivElement>(null);
   // New steps while live: follow them, inside the block and in the chat.
   useEffect(() => {
@@ -465,7 +491,7 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
     const last = all[all.length - 1]?.data.kind;
     onActivity(task.id, at, (traceStatus || task.status) === "held" || last === "turn_end" || last === "usage");
   }, [onActivity, task.id, running, ownEvents, extra, traceStatus, task.status]);
-  const verb = useVerb(running && !quiet && !paused && !footed);
+  const verb = useVerb(running && !queueText && !quiet && !paused && !footed);
   // 只看进度 (Settings): only what it reported, not its steps.
   const onlyReports = useReportsOnly();
   // Still open, but not the newest at work: no loading, a quiet line.
@@ -490,6 +516,9 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
   const withSteers = (node: React.ReactNode) => (steerList.length
     ? <>{steerList.map((m) => <SteerBubble key={m.id} hubId={hubId} msg={m} />)}{node}</>
     : node);
+  if (running && isOpen(traceStatus || task.status) && queueText) return withSteers(
+    <div className="trace" data-testid="runner-queue"><div className="trace-head trace-wait"><span className="trace-title">{queueText}</span></div></div>
+  );
   if (running && (traceStatus || task.status) !== "acked" && (traceStatus || task.status) !== "held" && !events?.length && !reports.length) {
     // (said under your message, not as a line here: ConversationDetail)
     return withSteers(null);
@@ -507,6 +536,7 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
     let t = new Date(task.created_at).getTime() || 0;
     const later = (iso?: string) => { const v = iso ? new Date(iso).getTime() : 0; if (v > t) t = v; };
     for (const m of steers || []) later(m.created_at);
+    later(from);
     const evs = events || [];
     for (let k = evs.length - 1; k >= 0; k--) {
       if (evs[k].data.kind === "turn_end") { later(evs[k + 1]?.at); break; }
@@ -636,54 +666,156 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
   // Not started on this one yet: what is here goes on with the one before
   // (shown after your message, in time), and says so.
   const carryOn = !!borrow?.label && !ownEvents?.length && extra.length > 0;
+
+  // The whole process folds into one line: "过程 · 6 步 · 1 分钟". Open
+  // while it works (the newest few things, the rest behind one line),
+  // folded once the answer is in. A click either way holds for this run.
+  const foldable = !onlyReports && steps > 0;
+  const open = !foldable || (chosen ?? running);
+  const toggleOpen = () => {
+    const next = !open;
+    processOpen.set(task.id, next);
+    setChosen(next);
+  };
+  // Steps and thoughts, once each; what it is still writing is not a step.
+  const stepCount = rows.filter((r) => r.kind !== "text").length;
+  // The time: what it reported, or how long it has been at it.
+  const began = new Date(turnSince).getTime() || 0;
+  let ended: number;
+  if (usage?.duration_ms) ended = began + usage.duration_ms;
+  else if (!running && events?.length) ended = msOf(events[events.length - 1].at) || new Date(task.updated_at).getTime();
+  else ended = running ? Date.now() : new Date(task.updated_at).getTime();
+  const took = tookLine(ended - began);
+  // While it runs, only the newest few things show; earlier ones fold into
+  // one line above them. A question it waits on is never behind that line.
+  const KEEP = 3;
+  let keep: Set<number> | null = null;
+  if (foldable && open && running && !showAll && segments.length > KEEP) {
+    keep = new Set<number>();
+    for (let i = Math.max(0, segments.length - KEEP); i < segments.length; i++) keep.add(i);
+    segments.forEach((s, i) => {
+      if (asking && s.kind === "ask" && task.asking === s.msg.id) keep!.add(i);
+    });
+  }
+  const hidden = keep ? segments.length - keep.size : 0;
+  // Waiting on you: the card stays out even if the rest is folded.
+  const waitAsk = asking
+    ? segments.filter((s): s is Extract<Segment, { kind: "ask" }> => s.kind === "ask" && task.asking === s.msg.id)
+    : [];
+
   return (
     <div className={cn("trace is-flow", movingHere && !asking && "is-live")} ref={body}>
       {carryOn && <div className="trace-carry">{L(`接着做上一件：${borrow!.label}`, `Still on the one before: ${borrow!.label}`)}</div>}
+      {/* The plan is not part of the process: it stays at the top, always
+          out, whether the steps below it are folded or not. */}
       {plan && <PlanCard items={plan.items} live={moving} />}
-      {segments.map((seg, i) => seg.kind === "say" ? (
-        <div key={seg.key} className={cn("trace-say", seg.delta && "trace-delta")}>
-          {/* What it says while you watch grows in; what was there, is. */}
-          {/* (something newer after it: all of it at once) */}
-          {seg.delta ? <Reveal body={seg.text} foldId={seg.key} streaming intervalMs={POLL_MS} onGrow={onGrow} cursor={movingHere} finish={i < segments.length - 1 || !movingHere} /> : !seg.streamed && sayGrows(seg.key) ? <Reveal body={seg.text} foldId={seg.key} finish={i < segments.length - 1} onDone={() => grown.add(seg.key)} /> : <TranslatableBody id={seg.key} body={seg.text} />}
-        </div>
-      ) : seg.kind === "steer" ? (
-        <SteerBubble key={seg.msg.id} hubId={hubId} msg={seg.msg} />
-      ) : seg.kind === "ask" ? (
+      {onPlan && <PlanReport id={`${task.id}\u0000${from || ""}`} taskId={task.id} plan={plan} onPlan={onPlan} />}
+      {foldable && (
+        <button type="button" className="trace-head trace-fold" onClick={toggleOpen} aria-expanded={open}>
+          {/* Folded, its own line shows it is still working; open, the steps do. */}
+          {movingHere && !asking && !open ? <Mushroom /> : <ChevronRight className="trace-chev" />}
+          <span className="trace-title">{stepCount > 0
+            ? L(`过程 · ${stepCount} 步 · ${took}`, `Steps · ${stepCount} · ${took}`)
+            : L(`过程 · ${took}`, `Steps · ${took}`)}</span>
+        </button>
+      )}
+      {!open && waitAsk.map((seg) => (
         <AskCard key={seg.msg.id} hubId={hubId} ask={seg.msg} answer={answers?.get(seg.msg.id)}
-          open={asking && task.asking === seg.msg.id} canAnswer={!!canAnswer} onAnswer={onAnswer} />
-      ) : seg.kind === "reports" ? (
-        // What it reported (myco message progress): a small timeline of its
-        // own, quieter than the answer, each with when.
-        <ol key={seg.items[0].key} className="trace-reports" aria-label={L("进展", "Progress")}>
-          {seg.items.map((r, j) => (
-            <li key={r.key} className={cn("trace-report", movingHere && i === segments.length - 1 && j === seg.items.length - 1 && "is-latest")}>
-              <span className="trace-report-dot" aria-hidden />
-              <div className="trace-report-text">
-                <TranslatableBody id={r.key} body={r.text} files={filesFor(hubId, r.files)} />
-                {/* What it showed along the way: a screenshot, a draft
-                    (less those its text already shows). */}
-                {(() => {
-                  const rest = filesBelow(r.text, filesFor(hubId, r.files));
-                  return rest.length > 0 ? <div className="trace-report-files"><MessageAttachments hubId={hubId} items={rest} /></div> : null;
-                })()}
-                <PageCards body={r.text} />
-              </div>
-              {r.when && <time className="trace-report-time" dateTime={r.when}>{clock(r.when)}</time>}
-            </li>
-          ))}
-        </ol>
-      ) : (
-        <StepGroup key={seg.rows[0].key} onGrow={onGrow} rows={seg.rows} live={movingHere && i === segments.length - 1} since={turnSince} />
+          open canAnswer={!!canAnswer} onAnswer={onAnswer} />
       ))}
-      {movingHere && !asking && endsWithSay && (
-        <div className="trace-head trace-wait">
-          <Mushroom />
-          <span key={verb} className="trace-title is-shimmer is-verb">{verb}</span>
-          <Elapsed since={turnSince} className="trace-usage" />
-        </div>
+      {open && (
+        <>
+          {hidden > 0 && (
+            <button type="button" className="trace-head trace-more" onClick={() => setShowAll(true)} aria-expanded={false}>
+              <ChevronRight className="trace-chev" />
+              <span className="trace-title">{L(`更早的 ${hidden} 段`, `${hidden} earlier`)}</span>
+            </button>
+          )}
+          {segments.map((seg, i) => (!keep || keep.has(i)) && (seg.kind === "say" ? (
+            <Said key={seg.key} text={seg.text} delta={!!seg.delta} live={!!seg.delta && movingHere}>
+              {/* What it says while you watch grows in; what was there, is. */}
+              {/* (something newer after it: all of it at once) */}
+              {seg.delta ? <Reveal body={seg.text} foldId={seg.key} streaming intervalMs={POLL_MS} onGrow={onGrow} cursor={movingHere} finish={i < segments.length - 1 || !movingHere} /> : !seg.streamed && sayGrows(seg.key) ? <Reveal body={seg.text} foldId={seg.key} finish={i < segments.length - 1} onDone={() => grown.add(seg.key)} /> : <TranslatableBody id={seg.key} body={seg.text} />}
+            </Said>
+          ) : seg.kind === "steer" ? (
+            <SteerBubble key={seg.msg.id} hubId={hubId} msg={seg.msg} />
+          ) : seg.kind === "ask" ? (
+            <AskCard key={seg.msg.id} hubId={hubId} ask={seg.msg} answer={answers?.get(seg.msg.id)}
+              open={asking && task.asking === seg.msg.id} canAnswer={!!canAnswer} onAnswer={onAnswer} />
+          ) : seg.kind === "reports" ? (
+            // What it reported (myco message progress): a small timeline of its
+            // own, quieter than the answer, each with when.
+            <ol key={seg.items[0].key} className="trace-reports" aria-label={L("进展", "Progress")}>
+              {seg.items.map((r, j) => (
+                <li key={r.key} className={cn("trace-report", movingHere && i === segments.length - 1 && j === seg.items.length - 1 && "is-latest")}>
+                  <span className="trace-report-dot" aria-hidden />
+                  <div className="trace-report-text">
+                    <TranslatableBody id={r.key} body={r.text} files={filesFor(hubId, r.files)} />
+                    {/* What it showed along the way: a screenshot, a draft
+                        (less those its text already shows). */}
+                    {(() => {
+                      const rest = filesBelow(r.text, filesFor(hubId, r.files));
+                      return rest.length > 0 ? <div className="trace-report-files"><MessageAttachments hubId={hubId} items={rest} /></div> : null;
+                    })()}
+                    <PageCards body={r.text} />
+                  </div>
+                  {r.when && <time className="trace-report-time" dateTime={r.when}>{clock(r.when)}</time>}
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <StepGroup key={seg.rows[0].key} onGrow={onGrow} rows={seg.rows} live={movingHere && i === segments.length - 1} since={turnSince} />
+          )))}
+          {movingHere && !asking && endsWithSay && (
+            <div className="trace-head trace-wait">
+              <Mushroom />
+              <span key={verb} className="trace-title is-shimmer is-verb">{verb}</span>
+              <Elapsed since={turnSince} className="trace-usage" />
+            </div>
+          )}
+        </>
       )}
       {usageText && !onUsage && <div className="trace-foot">{usageText}</div>}
     </div>
+  );
+}
+
+/** What it said between its steps: markdown. A long one shows its first
+ *  lines, fading out, with 展开全文 under it; it is held short only when it
+ *  really runs past (measured, not counted in newlines: a cut with nothing
+ *  to say so read as text lost). Thinking reads the same way. */
+function Said({ text, delta, live, children }: {
+  text: string; delta: boolean; live: boolean; children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const [over, setOver] = useState(true);
+  const box = useRef<HTMLDivElement>(null);
+  const long = text.trim().split("\n").length > 6 || text.length > 480;
+  const held = long && !live && !open;
+  useEffect(() => {
+    const el = box.current;
+    if (!held || !el) return;
+    const check = () => setOver(el.scrollHeight > el.clientHeight + 2);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    for (const c of Array.from(el.children)) ro.observe(c);
+    return () => ro.disconnect();
+  }, [held, text]);
+  const clamp = held && over;
+  return (
+    <>
+      <div ref={box} className={cn("trace-say", delta && "trace-delta", held && "is-long", clamp && "is-clamped")}
+        title={clamp ? L("点开看全文", "Show all of it") : undefined}
+        onClick={clamp ? () => setOpen(true) : undefined}>
+        {children}
+      </div>
+      {clamp && (
+        <button type="button" className="trace-say-more" onClick={() => setOpen(true)}>
+          {L("展开全文", "Show all")}<ChevronRight />
+        </button>
+      )}
+    </>
   );
 }
 
@@ -778,9 +910,23 @@ function TraceRow({ row, live, onGrow }: { row: Row; live: boolean; onGrow?: () 
   );
 }
 
+/** Tells the chat the plan shown here (and that it is gone, when this run
+ *  is no longer drawn). */
+function PlanReport({ id, taskId, plan, onPlan }: {
+  id: string; taskId: string; plan: { items: PlanItem[]; at: string } | null;
+  onPlan: (key: string, taskId: string, plan: { items: PlanItem[]; at: string } | null) => void;
+}) {
+  const sig = plan ? JSON.stringify(plan) : "";
+  const cb = useRef(onPlan);
+  cb.current = onPlan;
+  useEffect(() => { cb.current(id, taskId, sig ? JSON.parse(sig) : null); }, [id, taskId, sig]);
+  useEffect(() => () => cb.current(id, taskId, null), [id, taskId]);
+  return null;
+}
+
 /** The plan: a short list being ticked off. Done items are checked and
  *  struck through; the one in hand is marked while it runs. */
-function PlanCard({ items, live }: { items: PlanItem[]; live: boolean }) {
+export function PlanCard({ items, live }: { items: PlanItem[]; live: boolean }) {
   const done = items.filter((x) => x.state === "done").length;
   return (
     <div className="trace-plan">

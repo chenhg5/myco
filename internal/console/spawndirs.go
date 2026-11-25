@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/config"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/config"
 )
 
 // Which folders agents may start in on a computer (spawn.dirs in its

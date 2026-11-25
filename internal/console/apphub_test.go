@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/console"
+	"github.com/myco-ai/myco/internal/console"
 )
 
 // Without a service manager (Windows), starting the local hub installs the

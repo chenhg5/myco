@@ -7,9 +7,9 @@ final class ConversationTests: XCTestCase {
     static let lastReply = "这是最后一条回复。"
 
     @MainActor
-    private func launch(_ arguments: [String]) -> XCUIApplication {
+    private func launch(_ arguments: [String], language: String = "en") -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-myco-lang", "en", "-myco-appearance", "light"] + (arguments.contains("-myco-start") ? arguments : ["-myco-start", "demo"] + arguments)
+        app.launchArguments = ["-myco-lang", language, "-myco-appearance", "light"] + (arguments.contains("-myco-start") ? arguments : ["-myco-start", "demo"] + arguments)
         app.launch()
         return app
     }
@@ -159,8 +159,11 @@ final class ConversationTests: XCTestCase {
             XCTAssertGreaterThanOrEqual(control.frame.height, 44, "tall enough to hit")
         }
 
-        // A question about progress is answered by the voice itself.
-        let answer = app.descendants(matching: .any).matching(identifier: "voice.line.voice").firstMatch
+        // The agent says hello first, then answers about its own work.
+        let greeting = app.descendants(matching: .any).matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "voice.line.voice", "Hi, I'm here.")).firstMatch
+        XCTAssertTrue(greeting.waitForExistence(timeout: 5))
+        XCTAssertTrue(greeting.label.contains("翻译"), "the caption is the agent's, not another speaker")
+        let answer = app.descendants(matching: .any).matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "voice.line.voice", "I'm checking the links")).firstMatch
         XCTAssertTrue(answer.waitForExistence(timeout: 10), "the voice answers")
         expectation(for: NSPredicate(format: "label CONTAINS %@", "checking the links"), evaluatedWith: answer)
         waitForExpectations(timeout: 10)
@@ -168,7 +171,9 @@ final class ConversationTests: XCTestCase {
 
         // What is wanted goes to the agent as if typed, marked as said.
         let action = app.descendants(matching: .any).matching(identifier: "voice.line.action").firstMatch
-        XCTAssertTrue(action.waitForExistence(timeout: 25), "the bar says what it passed on")
+        XCTAssertTrue(action.waitForExistence(timeout: 25), "the bar says what I started")
+        XCTAssertTrue(action.label.contains("On it:"), action.label)
+        XCTAssertFalse(action.label.contains("Handed to"), action.label)
         let mark = app.buttons["voice.mark"].firstMatch
         XCTAssertTrue(mark.waitForExistence(timeout: 10), "the message in the conversation carries the voice mark")
         XCTAssertTrue(app.staticTexts["顺便把标题也改短一点"].exists, "and reads as what was asked, without the note under it")
@@ -186,6 +191,23 @@ final class ConversationTests: XCTestCase {
         expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: bar)
         waitForExpectations(timeout: 5)
         XCTAssertTrue(app.buttons["composer.mic"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    func testAChineseVoiceGreetsAndTakesOnItsOwnWork() {
+        let app = launch(["-myco-route", "agent:studio-codex-e07b", "-myco-voice", "scripted"], language: "zh")
+        let submit = app.descendants(matching: .any)["composer.submit"]
+        XCTAssertTrue(submit.waitForExistence(timeout: 20))
+        submit.tap()
+        let greeting = app.descendants(matching: .any).matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "voice.line.voice", "我在")).firstMatch
+        XCTAssertTrue(greeting.waitForExistence(timeout: 5))
+        XCTAssertTrue(greeting.label.contains("翻译"))
+        let action = app.descendants(matching: .any).matching(identifier: "voice.line.action").firstMatch
+        XCTAssertTrue(action.waitForExistence(timeout: 25))
+        XCTAssertTrue(action.label.contains("开始做："), action.label)
+        XCTAssertFalse(action.label.contains("交给"), action.label)
+        snap("voice-identity-zh")
+        app.buttons["voice.hangup"].tap()
     }
 
     @MainActor

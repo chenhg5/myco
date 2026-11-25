@@ -28,12 +28,12 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/client"
-	"github.com/chenhg5/myco/internal/console/notices"
-	"github.com/chenhg5/myco/internal/harness/execnode"
-	"github.com/chenhg5/myco/internal/release"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/console/notices"
+	"github.com/myco-ai/myco/internal/harness/execnode"
+	"github.com/myco-ai/myco/internal/release"
 )
 
 // maxAttachUpload caps a file the app uploads to attach (read into memory
@@ -160,6 +160,7 @@ func randomHex(n int) string {
 type Backend struct {
 	backupLoop    sync.Once // the hourly copy of backups to this computer
 	remoteDesktop remoteDesktop
+	browser       browserState
 	actionHosts   actionHosts // agent actions on this computer (action_host.go)
 	pageRender    pageRender  // pages rendered for agents (page_render.go)
 	// connects are computers being connected over SSH or WSL.
@@ -199,6 +200,12 @@ type Backend struct {
 	// desktop app, for 专注模式). Nil elsewhere: a browser page uses the
 	// browser's own full screen.
 	Fullscreen func(on bool) error
+	// OpenPageWindow opens a page (an app) in a window of its own (the
+	// desktop App): POST /app/hubs/{id}/pages/{pid}/window. Nil elsewhere.
+	OpenPageWindow func(hub, page, title string) error
+
+	installsOnce sync.Once
+	installed    *installs
 	// Update, when set, enables /app/update (the app updating itself).
 	Update *Updater
 	// Cache, when set, keeps what the pages fetched across restarts
@@ -222,7 +229,9 @@ type Backend struct {
 	pages     *pageServer
 	// the voice assistant (voice.go)
 	voiceOnce sync.Once
-	voice     *voice
+	// The workspace's names, for speech recognition (speech_words.go).
+	vocab vocabCache
+	voice *voice
 	// the pages' language (uilang.go)
 	uiLang uiLang
 	// notices shown on this computer (notices.go; nil in a browser)
@@ -242,6 +251,10 @@ func (b *Backend) client(h Hub) (*client.Client, error) {
 		return nil, &client.Error{Code: "not_configured", Message: "no console token for hub " + h.Name + " in the keychain",
 			Suggestion: "remove the hub and add it again with a console token"}
 	}
+	return b.clientForToken(h, tok)
+}
+
+func (b *Backend) clientForToken(h Hub, tok string) (*client.Client, error) {
 	nc := b.NewClient
 	if nc == nil {
 		nc = client.New
@@ -260,7 +273,7 @@ func (b *Backend) Handler() http.Handler {
 	b.pageRenderRoutes(m)
 	b.backupRoutes(m)
 	m.HandleFunc("GET /app/info", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{"version": b.Version, "shell": orStr(b.Shell, "browser"), "dictation": b.Dictate != nil || b.Listen != nil, "pick_image": b.PickImage != nil, "open_url": b.OpenURL != nil, "fullscreen": b.Fullscreen != nil})
+		writeJSON(w, http.StatusOK, map[string]any{"version": b.Version, "shell": orStr(b.Shell, "browser"), "dictation": b.Dictate != nil || b.Listen != nil, "pick_image": b.PickImage != nil, "open_url": b.OpenURL != nil, "fullscreen": b.Fullscreen != nil, "page_windows": b.OpenPageWindow != nil, "install_apps": b.launcherDir() != ""})
 	})
 	if b.Update != nil {
 		m.HandleFunc("GET /app/update", b.getUpdate)
@@ -278,6 +291,9 @@ func (b *Backend) Handler() http.Handler {
 		m.HandleFunc("POST /app/local/shell-access", b.postShellAccess)
 		// (pages using this computer: only an App on it)
 		b.osRoutes(m)
+		b.browserRoutes(m)
+		b.grantRoutes(m)
+		b.installRoutes(m)
 		m.HandleFunc("GET /app/local/agents", b.getLocalAgents)
 		b.remoteRoutes(m)
 		m.HandleFunc("GET /app/local/claude-auth", b.getClaudeAuth)
@@ -303,6 +319,7 @@ func (b *Backend) Handler() http.Handler {
 	b.superagentRoutes(m)
 	b.usageRoutes(m)
 	b.pageRoutes(m)
+	b.pageAttachmentRoutes(m)
 	b.handoverRoutes(m)
 	m.HandleFunc("POST /app/hubs", b.addHub)
 	m.HandleFunc("DELETE /app/hubs/{id}", b.removeHub)
@@ -431,7 +448,7 @@ func (b *Backend) Handler() http.Handler {
 		writeJSON(w, http.StatusOK, out)
 	}))
 	// Projects of a hub (proxied as they are).
-	m.HandleFunc("GET /app/hubs/{id}/projects", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+	m.HandleFunc("GET /app/hubs/{id}/projects", b.withHubTimeout(projectWriteTimeout, func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		list, err := c.ListProjects(r.Context(), r.URL.Query().Get("mine") == "true")
 		if err != nil {
 			writeErr(w, err)
@@ -439,7 +456,7 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, api.ProjectList{Projects: list})
 	}))
-	m.HandleFunc("POST /app/hubs/{id}/projects", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+	m.HandleFunc("POST /app/hubs/{id}/projects", b.withHubTimeout(projectWriteTimeout, func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		var in api.CreateProjectRequest
 		if !decode(w, r, &in) {
 			return
@@ -459,7 +476,7 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, p)
 	}))
-	m.HandleFunc("PATCH /app/hubs/{id}/projects/{name}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+	m.HandleFunc("PATCH /app/hubs/{id}/projects/{name}", b.withHubTimeout(projectWriteTimeout, func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		var in api.UpdateProjectRequest
 		if !decode(w, r, &in) {
 			return
@@ -478,7 +495,7 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, map[string]bool{"deleted": true})
 	}))
-	m.HandleFunc("PUT /app/hubs/{id}/projects/{name}/members/{agent}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+	m.HandleFunc("PUT /app/hubs/{id}/projects/{name}/members/{agent}", b.withHubTimeout(projectWriteTimeout, func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		var in api.ProjectMemberRequest
 		if !decode(w, r, &in) {
 			return
@@ -490,13 +507,41 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, p)
 	}))
-	m.HandleFunc("DELETE /app/hubs/{id}/projects/{name}/members/{agent}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+	m.HandleFunc("DELETE /app/hubs/{id}/projects/{name}/members/{agent}", b.withHubTimeout(projectWriteTimeout, func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		p, err := c.RemoveProjectMember(r.Context(), r.PathValue("name"), r.PathValue("agent"))
 		if err != nil {
 			writeErr(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, p)
+	}))
+	m.HandleFunc("PUT /app/hubs/{id}/projects/{name}/agent-invites", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in struct {
+			Allowed bool `json:"allowed"`
+		}
+		if !decode(w, r, &in) {
+			return
+		}
+		out, err := c.SetProjectCoordinatorInvites(r.Context(), r.PathValue("name"), in.Allowed)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, 200, out)
+	}))
+	m.HandleFunc("PUT /app/hubs/{id}/projects/{name}/automation-permission", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in struct {
+			Allowed bool `json:"allowed"`
+		}
+		if !decode(w, r, &in) {
+			return
+		}
+		out, err := c.SetProjectCoordinatorAutomations(r.Context(), r.PathValue("name"), in.Allowed)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, 200, out)
 	}))
 	// Which computers the project's coordinators may start agents on (hubs
 	// from v0.21.2): set with PUT, taken back with DELETE.
@@ -678,6 +723,26 @@ func (b *Backend) Handler() http.Handler {
 		revealExport(path)
 		writeJSON(w, http.StatusOK, map[string]string{"path": path})
 	})
+	m.HandleFunc("GET /app/hubs/{id}/projects/{name}/storage", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		out, err := c.ProjectStorage(r.Context(), r.PathValue("name"))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+	}))
+	m.HandleFunc("PUT /app/hubs/{id}/projects/{name}/storage", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in api.ProjectStorageRequest
+		if !decode(w, r, &in) {
+			return
+		}
+		out, err := c.SetProjectStorage(r.Context(), r.PathValue("name"), in)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+	}))
 	m.HandleFunc("PUT /app/hubs/{id}/projects/{name}/files/{file}", b.withHubTimeout(5*time.Minute, func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		d, err := c.PutProjectFile(r.Context(), r.PathValue("name"), r.PathValue("file"), r.Header.Get("Content-Type"), r.Body, r.ContentLength)
 		if err != nil {
@@ -1277,6 +1342,13 @@ func (b *Backend) withHubAndHubTimeout(d time.Duration, h func(http.ResponseWrit
 
 // withHubTimeout is withHub with its own bound (starting a session takes
 // minutes).
+// projectWriteTimeout bounds reading a hub's projects and changing one
+// (made, edited, a member added or moved). The hub answers with whole
+// projects, which older hubs took over 20 seconds to put together when a
+// project had many members: past the 12-second default a change looked
+// failed (and went back in the App), and a new project did not show.
+const projectWriteTimeout = time.Minute
+
 func (b *Backend) withHubTimeout(d time.Duration, h func(http.ResponseWriter, *http.Request, *client.Client)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		hub, err := b.find(r.PathValue("id"))
@@ -1661,6 +1733,10 @@ func writeErr(w http.ResponseWriter, err error) {
 		default: // transport errors: the hub could not be reached
 			status = http.StatusBadGateway
 		}
+	}
+	var reason interface{ BrowserReason() string }
+	if errors.As(err, &reason) {
+		body["reason"] = reason.BrowserReason()
 	}
 	writeJSON(w, status, body)
 }

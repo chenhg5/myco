@@ -1984,10 +1984,12 @@ textarea.app-input {
 }
 
 /* The menu opens upward from the sidebar and downward from the pill. */
+/* Tall enough for a few workspaces and every item below them without
+   scrolling; a short window still caps it (and then it scrolls). */
 .app-hub-menu {
   position: absolute;
   z-index: 40;
-  max-height: 320px;
+  max-height: min(560px, calc(100vh - 110px));
   overflow-y: auto;
   padding: 5px;
   border-radius: 10px;
@@ -2601,6 +2603,10 @@ textarea.app-input {
 .app-settings-tab.active svg {
   color: var(--fg-2);
 }
+/* A row that leaves Settings (使用文档): a small arrow says so. */
+.app-settings-link > span { flex: 1; }
+.app-settings-tab svg.app-settings-link-arrow { width: 13px; height: 13px; color: var(--faint); }
+.app-settings-link:hover svg.app-settings-link-arrow { color: var(--muted); }
 .app-settings-body {
   flex: 1;
   min-width: 0;
@@ -2686,6 +2692,19 @@ textarea.app-input {
 }
 .app-setting-line + .app-setting-line {
   border-top: 1px solid var(--line-2);
+}
+/* Settings › 应用权限: a page's row, then what it may do, set in a little. */
+.app-perm-page + .app-perm-page {
+  border-top: 1px solid var(--line-2);
+}
+.app-perm-item {
+  padding: 7px 0 7px 16px;
+}
+.app-perm-item + .app-perm-item {
+  border-top: 0;
+}
+.app-perm-item .app-setting-line-text b {
+  font-weight: 400;
 }
 .app-setting-line-text {
   flex: 1;
@@ -2999,6 +3018,9 @@ textarea.app-input {
 }
 .conv-row-state.is-queued {
   background: var(--faint);
+}
+.conv-row-state.is-held {
+  background: var(--amber);
 }
 .conv-row-state.is-failed {
   background: var(--red);
@@ -3770,6 +3792,34 @@ button.conv-quote:hover {
   background: var(--faint);
   transform: translateY(-2px);
 }
+/* What you decided on an agent's request: one quiet centred line. */
+.conv-decision {
+  align-self: center;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: min(560px, 100%);
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--nav-hover);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.conv-decision svg {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  margin-top: 2.5px;
+  color: var(--green);
+}
+.conv-decision.is-denied svg,
+.conv-decision.is-failed svg {
+  color: var(--muted);
+}
+.conv-decision-fail {
+  color: var(--red);
+}
 .conv-event {
   align-self: stretch;
   display: flex;
@@ -4137,6 +4187,8 @@ html.fp-docked .app-main .sp-side {
   flex: 1;
   min-width: 0;
 }
+.fp-title-line { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.fp-title-hint { flex: none; width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .6; }
 .fp-titles h3 {
   margin: 0;
   font-size: 13.5px;
@@ -4327,6 +4379,13 @@ html.fp-docked .app-main .sp-side {
 .conv-compose > .sa-approvals,
 .conv-compose > .app-error-text,
 .conv-compose-box {
+  max-width: calc(var(--conv-col) - var(--conv-pad) - var(--conv-pad-l));
+  margin-left: auto;
+  margin-right: auto;
+}
+/* The connection notices ("网络不太好", a message not sent) set their own
+   margin (space.css), so they are held to the column here, more firmly. */
+.conv-compose > .conv-trouble {
   max-width: calc(var(--conv-col) - var(--conv-pad) - var(--conv-pad-l));
   margin-left: auto;
   margin-right: auto;
@@ -5875,6 +5934,7 @@ button.app-label:hover { filter: brightness(0.95); }
 .app-msg-status.held { color: var(--warn, #c48a1a); }
 .app-msg-status.is-stuck { color: var(--amber); }
 .app-counts .is-stuck, .app-counts .is-stuck b { color: var(--amber); }
+.app-counts .is-watching, .app-counts .is-watching b { color: var(--accent); }
 
 /* Exchange view: load earlier, and a divider where a new thread starts. */
 .conv-older {
@@ -6874,6 +6934,7 @@ body.is-resizing {
 /* The same colours as a node's dot and a conversation's: working is green,
    queued faint, failed red, done the quiet grey. */
 .app-project-stat.is-working i { background: var(--green); }
+.app-project-stat.is-held i { background: var(--amber); }
 .app-project-stat.is-failed i { background: var(--red); }
 .app-project-stat.is-done i { background: var(--muted); }
 .app-project-stat b { font-weight: 600; color: var(--fg); }
@@ -7682,6 +7743,79 @@ body.is-resizing {
   font-size: 12.5px;
   color: var(--muted);
 }
+/* Searching, nothing found yet: the mushroom with its magnifying glass
+   paces along a little track, stops at each end to peer about, turns. */
+.cp-seek {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 22px 12px 18px;
+  font-size: 12.5px;
+}
+.seek-track {
+  position: relative;
+  width: 220px;
+  height: 48px;
+  border-bottom: 1px dashed var(--line);
+}
+.seek-walker {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  display: block;
+  width: 63px;
+  height: 48px;
+  animation: seek-walk 6.4s ease-in-out infinite;
+}
+.seek-walker .seek-sprite {
+  display: block;
+  width: 63px;
+  height: 48px;
+  animation: seek-turn 6.4s steps(1) infinite;
+}
+@keyframes seek-walk {
+  0%, 8% { transform: translateX(0); }
+  42%, 58% { transform: translateX(157px); }
+  92%, 100% { transform: translateX(0); }
+}
+/* facing the way it walks */
+@keyframes seek-turn {
+  0% { transform: scaleX(1); }
+  50% { transform: scaleX(-1); }
+}
+.seek-sprite .is-rim { fill: var(--work-eye); }
+.seek-sprite .is-handle { fill: #8a6b45; }
+.seek-sprite .is-lens { fill: rgba(120, 180, 240, 0.35); }
+.dark .seek-sprite .is-rim { fill: #cfc4b0; }
+.seek-sprite .seek-glint {
+  fill: #fff;
+  animation: seek-glint 1.6s steps(1) infinite;
+}
+/* At each end it lifts the glass and peers. */
+.seek-lens {
+  animation: seek-peer 6.4s ease-in-out infinite;
+}
+@keyframes seek-peer {
+  0%, 2%, 12%, 38%, 62%, 88%, 100% { transform: translateY(0); }
+  5%, 9%, 45%, 55% { transform: translateY(-2px); }
+}
+@keyframes seek-glint {
+  0% { opacity: 0; }
+  60% { opacity: 1; }
+}
+.cp-seek-line {
+  max-width: 100%;
+  text-align: center;
+}
+@media (prefers-reduced-motion: reduce) {
+  .seek-walker,
+  .seek-walker .seek-sprite,
+  .seek-lens,
+  .seek-sprite .seek-glint {
+    animation: none;
+  }
+}
 .cp-foot {
   flex: none;
   padding: 7px 14px;
@@ -7740,7 +7874,12 @@ body.is-resizing {
 /* Who said it in a column of its own, so what was said starts in one place
    (你 and 语音 differ in width); what it did and notices line up with it. */
 .vc-line { display: grid; grid-template-columns: 30px minmax(0, 1fr); align-items: baseline; font-size: 13px; line-height: 1.5; color: var(--fg); white-space: pre-wrap; overflow-wrap: anywhere; }
+.vs-words { width: 100%; min-height: 84px; resize: vertical; font-size: 12px; line-height: 1.5; }
 .vc-line-who { font-size: 11px; color: var(--faint); white-space: nowrap; }
+/* The voice is the agent: its lines carry its face (16px, level with the
+   first line of text; the column keeps every line starting in one place). */
+.vc-line-who.is-face { display: flex; align-self: start; padding-top: 2px; }
+.vc-line-who.is-face .pa { flex: none; }
 .vc-line.is-hearing, .vc-line.is-cut { color: var(--muted); }
 .vc-line.is-cut::after { content: " …"; }
 .vc-action, .vc-notice { padding-left: 30px; font-size: 12px; line-height: 1.5; color: var(--muted); overflow-wrap: anywhere; }
@@ -7809,10 +7948,36 @@ body.is-resizing {
   font-size: 10.5px;
   line-height: 17px;
 }
-.handoff-state.is-done { color: var(--green); background: color-mix(in srgb, var(--green) 12%, transparent); }
+/* Only what is being worked on stands out (with a dot that breathes);
+   done, handed back, waiting on a reply and queued are grey, and a
+   finished card's words go quiet too. Trouble keeps its colour. */
 .handoff-state.is-failed { color: var(--red); background: var(--red-soft); }
-.handoff-state.is-working { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
-.handoff-state.is-waiting { color: var(--amber); background: var(--amber-soft); }
+.handoff-state.is-working {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  font-weight: 500;
+}
+.handoff-state.is-working::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: handoff-breathe 1.6s ease-in-out infinite;
+}
+@keyframes handoff-breathe {
+  50% { opacity: 0.3; }
+}
+.handoff.is-settled .handoff-text,
+.handoff.is-settled .handoff-result {
+  color: var(--muted);
+}
+@media (prefers-reduced-motion: reduce) {
+  .handoff-state.is-working::before { animation: none; }
+}
 .handoff-time {
   flex: none;
   font-size: 10.5px;
@@ -8381,6 +8546,225 @@ body.is-resizing {
 .pin-chip.is-add { width: 24px; padding: 0; justify-content: center; background: none; }
 .pin-chip.is-add:hover { background: var(--nav-hover); }
 .pin-bar-error { padding: 4px 16px 0; }
+/* 盯着 (Watches.tsx): what the agent waits for in the background, under
+   the title (below the plan), the clock moving; grey lines in the chat
+   where one ended. */
+.watch-bar {
+  flex: none;
+  padding: 4px 8px 4px 12px;
+  border-bottom: 1px solid var(--line-2);
+  animation: app-fade 0.2s ease-out;
+}
+.watch-line, .watch-item-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.watch-toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--fg-2);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.watch-toggle:hover { background: var(--nav-hover); }
+.watch-eye { flex: none; width: 14px; height: 14px; color: var(--accent); }
+.watch-what {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--fg);
+  font-weight: 500;
+}
+.watch-time {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.watch-chev {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--faint);
+  transition: transform 0.15s ease;
+}
+.watch-bar.is-open .watch-line .watch-chev { transform: rotate(180deg); }
+.watch-actions { flex: none; display: flex; gap: 2px; }
+.watch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.watch-btn:hover:not(:disabled) { background: var(--nav-hover); color: var(--fg); }
+.watch-btn:disabled { opacity: 0.5; cursor: default; }
+.watch-btn svg { width: 13px; height: 13px; }
+.watch-detail { padding: 2px 6px 6px 28px; font-size: 12px; color: var(--muted); }
+.watch-result { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+.watch-result > span { flex: none; }
+.watch-result code {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 11.5px;
+  color: var(--fg-2);
+}
+.watch-times { margin-top: 2px; font-variant-numeric: tabular-nums; }
+.watch-list { margin: 0; padding: 2px 0 4px; list-style: none; }
+.watch-item { padding: 4px 6px 0 28px; }
+.watch-item .watch-detail { padding-left: 0; }
+.watch-item .watch-what { font-size: 12.5px; }
+.watch-item .watch-time { font-size: 12px; }
+.watch-error { padding: 0 6px 4px 28px; }
+.watch-ended {
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: min(560px, 100%);
+  padding: 2px 10px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.watch-ended svg { flex: none; width: 13px; height: 13px; color: var(--faint); }
+.watch-ended > span:first-of-type { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.watch-ended.is-met svg { color: var(--green); }
+.watch-ended-time { flex: none; font-size: 10.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.app-shell.is-focus .conv-detail > .watch-bar { padding-left: 2px; padding-right: 2px; }
+@media (max-width: 560px) {
+  .watch-btn-label { display: none; }
+  .watch-btn { padding: 0 6px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .watch-bar { animation: none; }
+}
+/* The plan of the task at work, pinned under the title (PlanBar.tsx): one
+   line, opened to the list; it stays while the chat scrolls. */
+.plan-bar {
+  flex: none;
+  padding: 4px 8px 4px 12px;
+  border-bottom: 1px solid var(--line-2);
+  animation: app-fade 0.2s ease-out;
+}
+.plan-bar-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.plan-bar-toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--fg-2);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.plan-bar-toggle:hover { background: var(--nav-hover); }
+.plan-bar-icon { flex: none; width: 14px; height: 14px; color: var(--muted); }
+.plan-bar-count {
+  flex: none;
+  font-weight: 500;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+.plan-bar-now {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--muted);
+}
+.plan-bar.is-done .plan-bar-now { color: var(--green); }
+.plan-bar-track {
+  flex: none;
+  position: relative;
+  width: 64px;
+  height: 3px;
+  border-radius: 99px;
+  background: var(--line);
+  overflow: hidden;
+}
+.plan-bar-track > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: var(--fg-2);
+  transition: width 0.3s ease;
+}
+.plan-bar.is-done .plan-bar-track > span { background: var(--green); }
+.plan-bar-chev {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--faint);
+  transition: transform 0.15s ease;
+}
+.plan-bar.is-open .plan-bar-chev { transform: rotate(180deg); }
+.plan-bar-close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--faint);
+  cursor: pointer;
+}
+.plan-bar-close:hover { background: var(--nav-hover); color: var(--fg-2); }
+.plan-bar-close svg { width: 14px; height: 14px; }
+.plan-bar-body {
+  max-height: 40vh;
+  overflow-y: auto;
+  padding: 2px 6px 6px;
+}
+.plan-bar-body .trace-plan { margin: 0; }
+@media (max-width: 560px) {
+  .plan-bar-track { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .plan-bar { animation: none; }
+  .plan-bar-track > span { transition: none; }
+}
 .pin-edit { display: flex; flex-direction: column; gap: 12px; }
 .conv-msg-pin.is-on { color: var(--accent); }
 
@@ -8523,6 +8907,7 @@ body.is-resizing {
 .la-line > .app-pill, .la-line > .app-btn { margin-top: 2px; flex: none; }
 /* The status tag sits level with the button beside it (28px high). */
 .la-line > .app-pill { margin-top: 6.5px; }
+.la-line > .app-linklike { margin-top: 6.5px; flex: none; font-size: 12px; }
 .la-icon {
   flex: none;
   width: 28px;
@@ -9604,6 +9989,8 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
    its line and its edges end where the box's do, not 90px further out. */
 .app-shell.is-focus .conv-detail > .conv-head,
 .app-shell.is-focus .conv-detail > .pin-bar,
+.app-shell.is-focus .conv-detail > .plan-bar,
+.app-shell.is-focus .conv-detail > .watch-bar,
 .app-shell.is-focus .conv-detail > .shell-stuck {
   --conv-box: min(calc(var(--conv-col) - var(--conv-pad) - var(--conv-pad-l)), calc(100% - var(--conv-pad) - var(--conv-pad-l)));
   margin-left: calc(var(--conv-pad-l) + (100% - var(--conv-pad) - var(--conv-pad-l) - var(--conv-box)) / 2);
@@ -9611,6 +9998,7 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
 }
 .app-shell.is-focus .conv-detail > .conv-head { padding: 0 2px; }
 .app-shell.is-focus .conv-detail > .pin-bar { padding-left: 2px; }
+.app-shell.is-focus .conv-detail > .plan-bar { padding-left: 2px; padding-right: 2px; }
 /* The search in the chat ends where the column does. */
 .app-shell.is-focus .conv-body > .conv-search {
   right: calc(var(--conv-pad) + (100% - var(--conv-pad) - var(--conv-pad-l) - min(calc(var(--conv-col) - var(--conv-pad) - var(--conv-pad-l)), calc(100% - var(--conv-pad) - var(--conv-pad-l)))) / 2);
@@ -9941,3 +10329,35 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
 .nt-time { flex: none; padding-top: 2px; font-size: 11.5px; color: var(--muted); }
 .nt-foot { display: flex; align-items: center; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line-2); }
 .nt-hint { flex: 1; font-size: 11.5px; line-height: 1.5; color: var(--muted); }
+
+.pg-recovery-source { display: flex; gap: 8px; align-items: center; margin: 12px 0; }
+.pg-recovery-source select { width: auto; max-width: 100%; }
+.pg-recovery-files { list-style: none; padding: 0; margin: 0; max-height: 42vh; overflow: auto; }
+.pg-recovery-files li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 0; }
+.pg-recovery-files li + li { border-top: 1px solid var(--line-2); }
+.pg-recovery-files li > span { min-width: 0; overflow-wrap: anywhere; }
+.pg-recovery-files li > :last-child { flex-shrink: 0; }
+
+/* The trusted host reviews the exact local browser snapshot, outside its iframe. */
+.pg-browser-approval { max-height: 48vh; overflow: auto; margin-top: 12px; font-size: 12px; overflow-wrap: anywhere; }
+.pg-browser-approval-title { font-weight: 600; }
+.pg-browser-approval h4 { margin: 14px 0 6px; font-size: 12px; font-weight: 600; }
+.pg-browser-approval ul { padding-left: 18px; margin: 6px 0; }
+.pg-browser-approval pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; padding: 8px; background: var(--pill); border-radius: 6px; }
+.pg-browser-approval details { margin-top: 14px; }
+.pg-browser-settings-dialog { display: flex; flex-direction: column; overflow: hidden; }
+.pg-browser-settings-dialog > h3, .pg-browser-settings-dialog > p, .pg-browser-settings-dialog .app-modal-actions { flex-shrink: 0; }
+.pg-browser-settings { min-height: 0; scrollbar-gutter: stable; }
+.pg-browser-settings-hint { color: var(--muted); font-size: 11px; margin: 8px 0 0; }
+.pg-browser-settings dl { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 8px 16px; margin: 14px 0; }
+.pg-browser-settings dt { color: var(--muted); font-size: 11px; padding-top: 2px; }
+.pg-browser-settings dd { min-width: 0; margin: 0; font-size: 12.5px; }
+.pg-browser-settings-mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+.pg-browser-settings dd pre { margin: 0; font-size: 12px; }
+@media (max-width: 760px) {
+  .pg-browser-settings dl { grid-template-columns: minmax(0, 1fr); row-gap: 3px; }
+  .pg-browser-settings dd { margin-bottom: 8px; }
+}
+
+/* A page (an app) in a window of its own (PageWindow.tsx): the page fills it. */
+.pg-window { position: fixed; inset: 0; display: flex; flex-direction: column; background: hsl(var(--background)); }

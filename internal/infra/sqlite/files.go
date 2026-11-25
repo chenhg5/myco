@@ -6,7 +6,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // FileRepo implements domain.FileRepository.

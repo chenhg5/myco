@@ -23,7 +23,7 @@ The top of Settings › People says "You are <name> (<role>)".
 First make sure they can reach the workspace: a local workspace is only reachable on your local network at first, so if they are not nearby, [open it to the internet](#help/public).
 
 1. Open **Settings › People** and click **Invite a member**.
-2. Fill in a **Handle** (lowercase letters, digits and the like, e.g. `laohu`) and a **Name** (optional, e.g. "Lao Hu"), and pick a **Role**: Member or Admin.
+2. Fill in a **Handle** (lowercase letters, digits and the like, e.g. `bob`) and a **Name** (optional, e.g. "Bob"), and pick a **Role**: Member or Admin.
 3. Click **Create invite link** and send it to them **privately**.
 
 They have two ways in:

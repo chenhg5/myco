@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chenhg5/myco/internal/console"
+	"github.com/myco-ai/myco/internal/console"
 )
 
 func osPost(t *testing.T, url string, body any) (int, map[string]any) {
@@ -27,6 +27,17 @@ func osPost(t *testing.T, url string, body any) (int, map[string]any) {
 	raw, _ := io.ReadAll(r.Body)
 	_ = json.Unmarshal(raw, &m)
 	return r.StatusCode, m
+}
+
+// osAllow says yes, for this run, to every group of the computer's
+// capabilities for a page (as the person would in the App's dialog).
+func osAllow(t *testing.T, url, hub, page string) {
+	t.Helper()
+	for _, g := range []string{"files", "files.write", "files.delete", "exec", "screen", "microphone", "speech", "clipboard", "notify", "system", "network", "ssh", "database", "proxy"} {
+		if code, m := osPost(t, url+"/app/os/grants", map[string]string{"hub": hub, "page": page, "group": g, "answer": "once"}); code != 200 {
+			t.Fatalf("allow %s: %d %v", g, code, m)
+		}
+	}
 }
 
 func TestPagesUseThisComputer(t *testing.T) {
@@ -54,6 +65,7 @@ func TestPagesUseThisComputer(t *testing.T) {
 	}
 
 	page := map[string]string{"hub": "h1", "id": "pg_1", "name": "空间清理"}
+	osAllow(t, app.URL, "h1", "pg_1")
 	// a call: write a file, read it back ("~" is the person's home)
 	code, m := osPost(t, app.URL+"/app/os/call", map[string]any{"name": "fs.write", "args": map[string]string{"path": "~/x/a.txt", "content": "hello"}, "page": page})
 	if code != 200 {
@@ -145,6 +157,7 @@ func TestPageProxyProfilesStayLocalAndSeparate(t *testing.T) {
 	app := httptest.NewServer((&console.Backend{Local: &console.Local{Home: home}, Secrets: secrets}).Handler())
 	defer app.Close()
 	page := map[string]string{"hub": "hub-a", "id": "page-a"}
+	osAllow(t, app.URL, "hub-a", "page-a")
 	code, out := osPost(t, app.URL+"/app/os/call", map[string]any{"name": "proxy.profile", "page": page, "args": map[string]string{"action": "save", "endpoint": "http://127.0.0.1:9090", "engine": "mihomo", "secret": "page-private-secret"}})
 	if code != 200 {
 		t.Fatal(code, out)
@@ -154,6 +167,7 @@ func TestPageProxyProfilesStayLocalAndSeparate(t *testing.T) {
 		t.Fatal("profile exposed credential")
 	}
 	for _, p := range []map[string]string{{"hub": "hub-a", "id": "page-b"}, {"hub": "hub-b", "id": "page-a"}} {
+		osAllow(t, app.URL, p["hub"], p["id"])
 		code, out = osPost(t, app.URL+"/app/os/call", map[string]any{"name": "proxy.profile", "page": p, "args": map[string]string{"action": "get"}})
 		if code != 404 {
 			t.Fatal("profile crossed page/workspace boundary", code, out)
@@ -162,6 +176,11 @@ func TestPageProxyProfilesStayLocalAndSeparate(t *testing.T) {
 	// A new backend (App restart) reuses the local credential store.
 	app2 := httptest.NewServer((&console.Backend{Local: &console.Local{Home: home}, Secrets: secrets}).Handler())
 	defer app2.Close()
+	// ("this time" ends with the App: the person says yes again)
+	if code, _ := osPost(t, app2.URL+"/app/os/call", map[string]any{"name": "proxy.profile", "page": page, "args": map[string]string{"action": "get"}}); code != 403 {
+		t.Fatal("a new run asks again", code)
+	}
+	osAllow(t, app2.URL, "hub-a", "page-a")
 	code, out = osPost(t, app2.URL+"/app/os/call", map[string]any{"name": "proxy.profile", "page": page, "args": map[string]string{"action": "get"}})
 	if code != 200 {
 		t.Fatal("profile lost on restart", code, out)

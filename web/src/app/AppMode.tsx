@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Gauge, ArrowUpDown, Bell, ChevronLeft, ChevronRight, LayoutGrid, Minimize2, Monitor, MoreHorizontal, Pin, Plus, Search, WifiOff, Workflow, X, Zap } from "lucide-react";
+import { ArrowUpDown, Bell, ChevronLeft, ChevronRight, LayoutGrid, Minimize2, Monitor, MoreHorizontal, Pin, Plus, Search, WifiOff, Workflow, X, Zap } from "lucide-react";
 import { ComputerSettings } from "@/app/ComputerSettings";
 import { UsagePage } from "@/app/Usage";
 import { AutomationsPage } from "@/app/Automations";
@@ -7,7 +7,7 @@ import { WorkflowsPage } from "@/app/Workflows";
 import { TemplatesPage } from "@/app/Templates";
 import "@/app/app.css";
 import "@/app/space.css";
-import { AGENT_UPDATED, appApi, errorMessage, type AgentUpdated, type AppInfo, type AppOverview, type Hub, type LocalState, type WorkspaceState } from "@/appapi";
+import { AGENT_UPDATED, PROJECT_UPDATED, appApi, errorMessage, type AgentUpdated, type ProjectUpdated, type AppInfo, type AppOverview, type Hub, type LocalState, type WorkspaceState } from "@/appapi";
 import type { AgentRow } from "@/app/types";
 import type { Project } from "@/api";
 import { ConnectHubDialog } from "@/app/ConnectHubDialog";
@@ -51,7 +51,8 @@ import { setSystemDictation } from "@/app/Dictate";
 import { setSystemPicker } from "@/app/AvatarPicker";
 import { handleLinkClick, setOpenLinksViaApp } from "@/app/links";
 import { CommandPalette } from "@/app/CommandPalette";
-import { PageHost, PageToggle, setPageHubs, setPageMe, setPageNames } from "@/app/pages";
+import { PageHost, PageToggle, setPageHubs, setPageMe, setPageNames, setPageWindows } from "@/app/pages";
+import { setInstallSupport } from "@/app/install";
 import { PageRenderer } from "@/app/PageRenderer";
 import { VoiceChip } from "@/app/VoiceBar";
 import { modKey } from "@/app/ConversationDetail";
@@ -247,8 +248,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
     window.addEventListener("myco-open-settings", on);
     return () => window.removeEventListener("myco-open-settings", on);
   }, []);
-  // 使用文档, from anywhere (Help.tsx openHelp): the workspace menu,
-  // Settings, the 上手清单, the Mac's Help menu.
+  // 使用文档, from anywhere (Help.tsx openHelp): Settings (its nav and About),
+  // the 上手清单, the Mac's Help menu.
   const [helpStart, setHelpStart] = useState<{ doc?: HelpId; n: number }>({ n: 0 });
   useEffect(() => {
     const on = (e: Event) => {
@@ -321,15 +322,31 @@ export default function AppMode({ initialHubs, initialInfo }: {
   }, []);
 
   const refreshing = useRef(false);
+  // Removing a workspace invalidates reads begun while it still existed.
+  const workspaceRevision = useRef(0);
   // Projects of the workspaces that answer are fetched again; a workspace that
   // did not answer this time (a network blip) keeps the projects it had, so
   // they do not vanish and the App does not ask for a first project.
+  // A project changed here (made, a member added...) keeps what the hub
+  // answered when a read that began before the change comes back without
+  // it; a read begun after it has the hub's word.
+  const justMade = useRef(new Map<string, { hubId: string; p: Project; at: number }>());
   const loadProjects = useCallback(async (okIds: string[], allIds: string[] = okIds) => {
+    const began = Date.now();
+    const revision = workspaceRevision.current;
     const lists = await Promise.all(okIds.map((id) =>
       appApi.projects(id).then((r) => r.projects.map((p) => ({ hubId: id, p }))).catch(() => null)));
     setProjects((prev) => {
+      if (revision !== workspaceRevision.current) return prev;
       const keep = (id: string) => (prev || []).filter((x) => x.hubId === id);
-      return remember("projects", allIds.flatMap((id) => { const i = okIds.indexOf(id); return (i >= 0 ? lists[i] : null) ?? keep(id); }));
+      const next = allIds.flatMap((id) => { const i = okIds.indexOf(id); return (i >= 0 ? lists[i] : null) ?? keep(id); });
+      for (const [k, m] of justMade.current) {
+        if (Date.now() - m.at > 60_000) { justMade.current.delete(k); continue; }
+        if (m.at <= began || !allIds.includes(m.hubId)) continue;
+        const i = next.findIndex((x) => x.hubId === m.hubId && x.p.name === m.p.name);
+        if (i >= 0) next[i] = { hubId: m.hubId, p: m.p }; else next.push({ hubId: m.hubId, p: m.p });
+      }
+      return remember("projects", next);
     });
   }, []);
   // Asked for while one runs (after a save, say): once more when it ends,
@@ -339,9 +356,11 @@ export default function AppMode({ initialHubs, initialInfo }: {
     if (refreshing.current) { refreshAgain.current = true; return; }
     refreshing.current = true;
     refreshAgain.current = false;
+    const revision = workspaceRevision.current;
     try {
       const [h, o, pending, l] = await Promise.all([appApi.hubs(), appApi.overview(), readPendingLink(),
         appApi.local().catch(() => null)]);
+      if (revision !== workspaceRevision.current) return;
       setHubs(h);
       if (l) setLocal(l);
       // The overview says what is on each hub; the hub list says which
@@ -367,6 +386,39 @@ export default function AppMode({ initialHubs, initialInfo }: {
       if (refreshAgain.current) void refresh();
     }
   }, [loadProjects]);
+  // A project changed from anywhere in this App (appApi announces it):
+  // shown at once, its workspace's projects read again behind.
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<ProjectUpdated>).detail;
+      if (!d?.project?.name) return;
+      justMade.current.set(`${d.hubId}\u0000${d.project.name}`, { hubId: d.hubId, p: d.project, at: Date.now() });
+      setProjects((prev) => {
+        const list = prev || [];
+        const i = list.findIndex((x) => x.hubId === d.hubId && x.p.name === d.project.name);
+        const next = i >= 0 ? list.map((x, j) => (j === i ? { hubId: d.hubId, p: d.project } : x)) : [...list, { hubId: d.hubId, p: d.project }];
+        return remember("projects", next);
+      });
+    };
+    window.addEventListener(PROJECT_UPDATED, on);
+    return () => window.removeEventListener(PROJECT_UPDATED, on);
+  }, []);
+  // A workspace removed in Settings goes at once: from the list, what it
+  // said and its projects; the space and chat shown in it close (the next
+  // workspace shows), so no page goes on asking one this App no longer
+  // has. The full refresh (every workspace, slow when one is far) follows
+  // in the background instead of holding the dialog open.
+  const dropHub = useCallback((id: string) => {
+    workspaceRevision.current += 1;
+    setHubs((h) => h.filter((x) => x.id !== id));
+    setOv((o) => (o ? remember("overview", { ...o, hubs: o.hubs.filter((x) => x.id !== id) }) : o));
+    setProjects((p) => (p ? remember("projects", p.filter((x) => x.hubId !== id)) : p));
+    delete places.current[id];
+    setSpaceState((s) => (s?.hubId === id ? null : s));
+    setChatWith((c) => (c?.space.hubId === id ? null : c));
+    setProfile((p) => (p && p.hubId === id ? null : p));
+    void refresh();
+  }, [refresh]);
   // A profile saved here (appApi.updateProfile): its name and face show
   // everywhere at once, not at the next refresh.
   useEffect(() => {
@@ -558,12 +610,26 @@ export default function AppMode({ initialHubs, initialInfo }: {
     setChatWith(null);
     setSpaceTap((t) => ({ ...t, [spaceKey(s)]: (t[spaceKey(s)] || 0) + 1 }));
   };
-  const projectCreated = (ref: { hubId: string; name: string }) => {
+  // A project just made shows at once: in the sidebar from what the hub
+  // answered, and opened, with its first step (bringing agents in). Only
+  // its own workspace's projects are read again, behind: waiting for every
+  // workspace (one far away or not answering) kept it out of the sidebar
+  // for up to a minute.
+  const projectCreated = (ref: { hubId: string; name: string; project?: Project }) => {
     setNewProjectOpen(false);
-    void loadProjects(hubs.map((h) => h.id)).then(() => {
-      openSpace(ref);
-      // A new project's first step: bring agents in.
-      setAddAgent(ref);
+    const at = { hubId: ref.hubId, name: ref.name };
+    if (ref.project) {
+      const made = ref.project;
+      justMade.current.set(`${at.hubId}\u0000${made.name}`, { hubId: at.hubId, p: made, at: Date.now() });
+      setProjects((prev) => remember("projects", [...(prev || []).filter((x) => !(x.hubId === at.hubId && x.p.name === made.name)), { hubId: at.hubId, p: made }]));
+      openSpace(at);
+      setAddAgent(at);
+      void loadProjects([at.hubId], hubs.map((h) => h.id));
+      return;
+    }
+    void loadProjects([at.hubId], hubs.map((h) => h.id)).then(() => {
+      openSpace(at);
+      setAddAgent(at);
     });
   };
   // A member's chat opens in a project it is in (else among the loose).
@@ -1020,6 +1086,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
   });
   const dragStyle = { "--wails-draggable": "drag" } as React.CSSProperties;
   const isMac = info?.shell === "mac";
+  setPageWindows(!!info?.page_windows);
+  setInstallSupport(!!info?.install_apps);
   // On the page's root too: what opens over the window (a picture, a file in
   // full screen) keeps clear of the traffic lights.
   useEffect(() => { document.documentElement.classList.toggle("shell-mac", isMac); }, [isMac]);
@@ -1188,10 +1256,6 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 <Workflow /><span className="app-nav-label">{L("工作流", "Workflows")}</span>
                 {decisionCount > 0 && <span className="wf-nav-badge" title={L(`${decisionCount} 个决定在等你`, `${decisionCount} decisions wait for you`)}>{decisionCount}</span>}
               </button>
-              <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-usage", page === "usage" && "active")} aria-current={page === "usage" ? "page" : undefined}
-                onClick={() => { setNavChat(null); toPage("usage"); }}>
-                <Gauge /><span className="app-nav-label">{L("用量", "Usage")}</span>
-              </button>
               <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-templates", page === "templates" && "active")} aria-current={page === "templates" ? "page" : undefined}
                 onClick={() => { setNavChat(null); toPage("templates"); }}>
                 <LayoutGrid /><span className="app-nav-label">{L("应用", "Apps")}</span>
@@ -1210,7 +1274,9 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 const ref = { hubId: x.hubId, name: x.p.name };
                 const active = page === "space" && !!shown && spaceKey(shown) === spaceKey(ref);
                 const names = new Set(x.p.members.map((m) => m.name));
-                const dot = workDot(rows.filter((r) => r.hub.id === x.hubId && names.has(r.st.agent.name)));
+                // Only its agents: a workspace (shell node) running commands
+                // for them is not the project at work.
+                const dot = workDot(rows.filter((r) => r.hub.id === x.hubId && names.has(r.st.agent.name) && agentKind(r.st.agent) === "agent"));
                 return (
                   <button key={`${x.hubId}/${x.p.name}`} type="button" {...projectSort.bind(x.p.name)}
                     className={cn("app-nav-item sp-nav", active && "active", projectSort.dragging === x.p.name && "is-dragging")}
@@ -1360,7 +1426,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 onSuperagent={onSuperagent}
                 superagentKey={isMac ? "⌘⇧Space" : undefined}
                 superagent={sa?.state ? { name: sa.state.agent?.name, pending: sa.approvals.filter((a) => a.status === "pending" && a.agent === sa.state?.agent?.name).length } : undefined}
-                onSettings={() => setPage("settings")} onGuide={() => openHelp()} />
+                onUsage={() => { setNavChat(null); toPage("usage"); }} usageOpen={page === "usage"}
+                onSettings={() => setPage("settings")} />
             </div>
           </div>
         </aside>
@@ -1514,6 +1581,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
               onLangChoice={chooseLang}
               refreshKey={localTick}
               onRefresh={refresh}
+              onRemoved={dropHub}
               onAddHub={() => setConnectOpen(true)}
             />
           </SettingsDialog>

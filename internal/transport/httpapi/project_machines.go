@@ -7,8 +7,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // Which computers a project's coordinators may start agents on: a setting

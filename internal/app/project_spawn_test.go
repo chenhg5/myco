@@ -5,11 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chenhg5/myco/internal/app"
-	"github.com/chenhg5/myco/internal/domain"
-	"github.com/chenhg5/myco/internal/infra/notify"
-	"github.com/chenhg5/myco/internal/infra/security"
-	"github.com/chenhg5/myco/internal/infra/sqlite"
+	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/infra/notify"
+	"github.com/myco-ai/myco/internal/infra/security"
+	"github.com/myco-ai/myco/internal/infra/sqlite"
 )
 
 // A project lets its coordinators ask the computers it allows for new
@@ -45,7 +45,7 @@ func TestProjectMachinesLetCoordinatorsSpawn(t *testing.T) {
 		}
 		return a
 	}
-	reg("wsl-machine", "machine", "m_wsl", "glenn-bot")
+	reg("wsl-machine", "machine", "m_wsl", "alice-bot")
 	reg("wsl-shell", "exec", "m_wsl", "coord")
 	coord := reg("coord", "claude", "")
 	helper := reg("helper", "claude", "")

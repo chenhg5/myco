@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install a myco hub on a Linux server (systemd), and make it reachable.
 #
-#   curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-hub.sh
+#   curl -fsSLO https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-hub.sh
 #   less install-hub.sh                       # read it first
 #   sudo bash install-hub.sh                  # asks a few questions
 #
@@ -18,7 +18,7 @@
 # Re-running is safe: the existing admin token and database are kept.
 set -euo pipefail
 
-REPO="chenhg5/myco"
+REPO="myco-ai/myco"
 VERSION="latest"
 DOMAIN=""
 PORT=""
@@ -1304,4 +1304,4 @@ echo "  sudo /usr/local/bin/myco link create ${HUB_NAME_ARGS[*]}"
 echo
 echo "Next, your own agent (Claude Code, Codex…) can add computers and agents for you. Tell it:"
 echo "Next, your agent can add computers and agents for you. Send it this sentence:"
-echo "  Add my computers and agents to this myco workspace: read https://raw.githubusercontent.com/chenhg5/myco/main/docs/agent-setup.md and follow it; ask me first about anything I need to decide."
+echo "  Add my computers and agents to this myco workspace: read https://raw.githubusercontent.com/myco-ai/myco/main/docs/agent-setup.md and follow it; ask me first about anything I need to decide."

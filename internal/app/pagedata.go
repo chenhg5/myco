@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chenhg5/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // PageDataService: a page's records (templates.md). Whoever may see a page
@@ -101,6 +101,9 @@ func (s *PageDataService) Put(ctx context.Context, by Actor, page string, in Put
 	if err != nil {
 		return nil, err
 	}
+	if !s.pages.CanEdit(by, p, coll) {
+		return nil, readOnly(p, coll)
+	}
 	if len(in.Data) > domain.MaxPageRecord {
 		return nil, domain.Errf(domain.CodeInvalidArgument, "the record is larger than %d KB", domain.MaxPageRecord>>10).
 			WithSuggestion("keep files as attachments and put their ids in the record")
@@ -174,8 +177,12 @@ func (s *PageDataService) Put(ctx context.Context, by Actor, page string, in Put
 
 // Remove deletes a record (ifVersion as for Put).
 func (s *PageDataService) Remove(ctx context.Context, by Actor, page, collection, id string, ifVersion int, byName string) error {
-	if _, err := s.page(ctx, by, page); err != nil {
+	p, err := s.page(ctx, by, page)
+	if err != nil {
 		return err
+	}
+	if !s.pages.CanEdit(by, p, collection) {
+		return readOnly(p, collection)
 	}
 	ch, err := s.data.Remove(ctx, page, collection, id, ifVersion, byName, s.clock.Now())
 	if err != nil {
@@ -295,4 +302,31 @@ func (s *PageDataService) Seed(ctx context.Context, by Actor, page string, sampl
 		}
 	}
 	return nil
+}
+
+// QueryRecords retains the ordinary page authorization boundary for every
+// query, including projections and count-only requests.
+func (s *PageDataService) QueryRecords(ctx context.Context, by Actor, page, collection string, in domain.PageQueryInput) (domain.RecordQueryResult, error) {
+	if _, err := s.page(ctx, by, page); err != nil {
+		return domain.RecordQueryResult{}, err
+	}
+	if collection != "" {
+		if _, err := domain.ParseCollection(collection); err != nil {
+			return domain.RecordQueryResult{}, err
+		}
+	}
+	q, err := domain.ParsePageQuery(in)
+	if err != nil {
+		return domain.RecordQueryResult{}, err
+	}
+	if repo, ok := s.data.(interface {
+		Query(context.Context, string, string, domain.PageQuery) (domain.RecordQueryResult, error)
+	}); ok {
+		return repo.Query(ctx, page, collection, q)
+	}
+	recs, seq, err := s.Records(ctx, by, page, collection)
+	if err != nil {
+		return domain.RecordQueryResult{}, err
+	}
+	return domain.ApplyPageQuery(recs, page, collection, seq, q)
 }

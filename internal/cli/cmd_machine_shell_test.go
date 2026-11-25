@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chenhg5/myco/internal/config"
+	"github.com/myco-ai/myco/internal/config"
 )
 
 // A computer lets agents open a terminal only by its own choice, made on it.

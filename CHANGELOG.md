@@ -4,6 +4,276 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.22.15
+
+- After a separate grant (up to 30 minutes), an agent can operate the browser directly in a dedicated clean agent profile, optionally restricted to the domains you allow; the panel shows the agent is operating and you can stop it at any time.
+- Actions an agent performs in the browser are recorded into a draft script you can review, edit and run later; an interrupted session discards unfinished drafts, and private screenshots stay on your machine.
+- Live browser control needs browser component 0.5.0, and the App prompts you to update the component; older component versions remain usable for existing recording and playback.
+
+**中文**
+
+- 在你单独授权后（最长 30 分钟），agent 可以直接操作浏览器：默认使用 agent 专用的干净配置，可限定域名；面板会显示 agent 正在操作，并可随时停止。
+- agent 在浏览器里的操作会录成草稿脚本，你可以查看、修改后再运行；会话中断会丢弃未完成的草稿，截图等私有产物只保存在本机。
+- 实时浏览器控制需要浏览器组件 0.5.0，App 会提示更新组件；旧版组件仍可用于原有的录制与回放。
+
+## v0.22.14
+
+- **The Windows App icon is the mushroom alone**: on Windows the icon now fills its square edge to edge — the mushroom with a thin cream rim, drawn as the tray icon is — instead of a small mushroom on a cream tile that vanished on light taskbars. The Mac icon keeps its tile.
+- **An interrupted request no longer takes away an agent's automation permissions**: if reading a permission request was cancelled (for example while leaving a page or switching to something else), the agent's automation grants could be revoked as if it had lost access. A cancelled read now abandons only that request and leaves the grants, and the files they use, alone.
+
+Upgrade: update the App.
+
+**中文**
+
+- **Windows 版的应用图标换成蘑菇本身**：Windows 上图标现在铺满整个方形——带一圈细奶油边的蘑菇，和托盘图标一致——不再是奶油色方块上缩小一截的蘑菇（在浅色任务栏上方块会看不见）。Mac 图标保留原来的方块。
+- **被打断的请求不会再收走 agent 的自动化权限**：如果读取权限请求的过程被取消（比如离开页面或切换到别的内容），agent 的自动化授权可能被当成失去访问权限而收回。现在取消的读取只放弃这一次请求，不动授权和授权用到的文件。
+
+升级：更新应用即可。
+
+## v0.22.13
+
+- **The recorder looks and works like BrowserWing, and can capture one part of the page**: actions are listed in recording order with a status line for the latest one, deleting a step asks inside the panel, hovering outlines top-level elements, and **Extract data** offers text, HTML or an attribute — also by right-clicking an element. **Region screenshot** lets you drag a rectangle in the page; the panel and highlights hide while you do, and that drag never becomes a recorded step. This needs browser component 0.4.0, which the App offers to install or update; an installed 0.3.x keeps working until you update, without region screenshots.
+- **Recording no longer treats ad or embedded-frame jumps as steps**: only navigations you start in the top-level page are recorded, so redirects inside iframes (ads, widgets) no longer add steps of their own.
+- **A page open in another myco App says so**: opening a page that another copy of the App is using now says "This page is open in another myco App. Quit that App, then try again" instead of a generic error. Quit that App rather than only closing its page or window, since the page's local address stays in use.
+- **CodeBuddy, Qoder and Qwen sign-in is detected properly**: when a configured account can be seen, the CLI shows as ready; when the sign-in cannot be told, it now shows **Installed** with an optional **Go to sign in** instead of guessing "Sign in", so a CLI that already works needs nothing. A local agent that finished a task successfully in the last 24 hours also counts as available.
+- **A task on hold resumes when what it waited for is done**: inside a runner, an agent can hold a task until a delegated task ends (`myco message hold --until`), and it resumes with that task's reply or failure. A hold left over from before an upgrade or restart is requeued once after 30 minutes with a progress note; intentional manual holds and tasks waiting on a question stay put. The App now shows held tasks separately as **Held**.
+- **The plan of the task at work is pinned at the top of the chat**: while a task has a plan (Claude Code's to-do list, Codex's plan, a checklist), a bar under the title shows "Plan 2/5 · Doing: …" with how far it is; a click opens the whole list, and × unpins it for that task. Once everything is done it says so for a moment and goes.
+- **Handoff cards are quieter**: on cards for work between agents, only **Working** keeps the accent (with a small breathing dot); Done, Handed back, Waiting and Queued are grey and a finished card's words go quiet, while Trouble keeps its colour. An exchange opened from a card in a chat gets a back button to that chat.
+- **Pages can keep their own files on the Hub**: a page can now store attachments of its own, separate from project files, following the page's permissions; they do not appear in project files, project pull or an agent's project context. Unlinked uploads expire after 24 hours; defaults are 1,000 files, 2 GiB in total and 20 MiB each per page. The CLI has `myco page file put/list/get/remove/migrate`, and the Hub automatically migrates project files that page records reference. This needs a Hub upgrade to use; an App with an older Hub works as before, and the media kit switches over later.
+
+- **Voice calls and dictation know the words to listen for**: the workspace's agents, projects and members, common words (Claude, Codex, GitHub, PR, CI, DeepSeek…) and your own, added under Settings › Voice › Words to hear right, are passed to the recognizer as hints, and only those words are corrected afterwards — casing ("github" → "GitHub"), words said apart ("Deep Seek"), and how a Chinese recognizer writes them ("克劳德", a lone "cloud" → "Claude"); English words next to other English are left alone.
+- **Agents learn structured replies as they join**: an agent's joining notes and the runner's first project context now show when to reply with a myco-ui block — test results, changed files, release checks, comparisons, key numbers, plan steps — and that ordinary short answers stay text, so the App gets cards instead of a wall of text.
+- **A workspace removed during a refresh no longer comes back**: removing a workspace closes its views at once and reads that were already running cannot restore it; leaving the usage page, switching workspaces or changing its filters cancels the outstanding usage request.
+Upgrade: update the App. The recorder changes need browser component 0.4.0, which the App offers to install or update. Page attachments need a Hub upgrade to use; nothing breaks without it.
+
+**中文**
+
+- **录制面板改成 BrowserWing 的样子，还能只截页面的一部分**：动作按录制顺序列出，最新一步有一行状态提示；删除步骤会在面板里再确认；鼠标悬停会框出顶层元素；「提取数据」可以取文字、HTML 或某个属性，右键元素也能选。**区域截图**可以在页面里拖一个矩形，选择时面板和框选提示会隐藏，这次拖动也不会变成录制步骤。这需要浏览器组件 0.4.0，应用会提示安装或更新；已安装的 0.3.x 在更新前继续可用，只是没有区域截图。
+- **录制不再把广告和嵌入框的跳转记成步骤**：只记录你在顶层页面发起的导航，iframe（广告、挂件）里的跳转不再单独产生步骤。
+- **页面在另一个 myco App 里打开时会说清楚**：如果另一个 App 副本正占着这个页面，现在会提示「这个页面正在另一个 myco App 里打开，请先退出另一个 App 再试」，而不是笼统报错。请退出那个 App，只关它的页面或窗口不行，因为页面的本机地址仍被占用。
+- **CodeBuddy、Qoder、Qwen 的登录状态能正确识别**：能看到已配置的账号时显示为可用；看不出登录状态时显示「已安装」，可选「去登录」，不再误显示成「登录」，本来就能用的不用做任何事。本机 agent 在最近 24 小时内成功跑过任务也算可用。
+- **暂挂的任务会在等的条件满足后自动恢复**：在 runner 里，agent 可以先把活派给别的 agent，再用 `myco message hold --until` 暂挂原任务，等那个任务结束（成功或失败）后带着结果恢复。升级或重启前留下的旧暂挂，30 分钟后会带一条进展说明重新排队一次；人为的手动暂挂和还在等答复的任务不会动。App 里把暂挂任务单独显示成「暂挂」。
+- **在做的任务的计划固定在聊天顶部**：任务有计划时（Claude Code 的待办、Codex 的计划、清单），标题下方用一行显示「计划 2/5 · 正在：……」，带一条进度细线；点击展开完整列表，× 可以对该任务取消固定。全部完成后会提示一下就收起。
+- **交接卡片安静下来了**：agent 之间的工作卡片上，只有「进行中」保留强调色（带一个轻微呼吸的小点）；「完成」「已交回」「等待」「排队」都是灰色，完成卡片的文字也变淡，「出问题」保留原来的颜色。从聊天里的卡片打开往来记录时，多了一个返回那个聊天的按钮。
+- **页面可以在 Hub 上存自己的文件**：页面现在能存自己的附件，和项目文件分开，权限跟随页面；不会出现在项目文件、项目拉取或 agent 的项目上下文里。没被记录引用的上传 24 小时后过期；默认每页 1,000 个文件、总共 2 GiB、单个 20 MiB。CLI 有 `myco page file put/list/get/remove/migrate`，Hub 会自动把页面记录引用到的项目文件迁移过来。这需要升级 Hub 才能用；旧 Hub 上应用照常工作，素材库之后切换。
+
+- **语音通话和听写知道该听哪些词**：工作区里的 agent、项目和成员，常用词（Claude、Codex、GitHub、PR、CI、DeepSeek……）以及你自己在「设置 › 语音 › 要听对的词」里加的词，会作为提示交给识别器，之后只对这些词做纠正——大小写（「github」→「GitHub」）、分开说的词（「Deep Seek」），以及中文识别器写出来的样子（「克劳德」、单独一个「cloud」→「Claude」）；和其他英文连在一起的英文保持原样。
+- **agent 加入时就知道怎么发结构化回复**：agent 的加入说明和 runner 第一次给的项目上下文里，现在会说明什么时候该用 myco-ui 块回复——测试结果、改动的文件、发版检查、对比、关键数字、计划步骤——以及普通的简短回答继续用文字，这样应用里看到的是卡片而不是一大段文字。
+- **刷新期间删除的工作区不会再回来**：删除工作区会立刻关掉它的各个视图，删除前已经开始的读取也无法把它恢复；离开用量页、切换工作区或改它的筛选条件时，会取消还没返回的用量请求。
+升级：更新应用即可。录制改动需要浏览器组件 0.4.0，应用会提示安装或更新。页面附件需要升级 Hub 才能用，不升级也不影响现有功能。
+
+## v0.22.12
+
+- **Recording no longer picks up scrolling you did not make**: the browser recorder adds a scroll step only after a deliberate wheel gesture, a page-navigation key (Page Up/Down, Home/End, space) or a scrollbar drag in that area, and waits for a short quiet moment after other actions. Clicking, typing, focusing, layout changes and scrolling done by the page itself no longer create steps of their own, so a recording replays the scrolls you actually made.
+- **Closing a browser stops all of it, and a crash no longer keeps the profile locked**: on macOS and Linux every browser myco opens runs in its own process group, so closing it — or quitting the App — stops the whole group instead of leaving helper processes behind with the profile. After a crash, the next start verifies the leftover processes and cleans them up before opening the profile again, and never signals a process it cannot verify as its own.
+- **A profile that is still in use says why**: when a previous browser still holds a profile, the page now receives a specific reason — a leftover it could not verify, cleanup still running, or cleanup failed — and can tell you to close the earlier window and try again, or restart the computer, instead of showing a generic error.
+
+Upgrade: this App release needs no Hub upgrade. The recorder change needs browser component 0.3.1, which the App offers to install or update; an installed 0.3.0 keeps working until you update.
+
+**中文**
+
+- **录制不再带上你没做的滚动**：浏览器录制只在你有明确意图时才加滚动步骤——滚轮、翻页键（Page Up/Down、Home/End、空格），或在那个区域拖动滚动条，并且会等其他动作安静一小会儿再记。点击、输入、聚焦、页面布局变化和网页自己触发的滚动都不再单独产生步骤，回放的就是你真正做过的滚动。
+- **关浏览器会把整组进程都停掉，崩溃后也不再占着配置**：macOS 和 Linux 上，myco 打开的每个浏览器都在自己的进程组里运行，关闭它（或退出应用）会停掉整组进程，不再留下占着配置的辅助进程。崩溃后，下次启动会先核对残留进程并清理，再打开配置；核对不了的进程一律不动。
+- **配置还被占用时会说明原因**：之前的浏览器还占着配置时，网页现在会收到具体原因——无法核对的残留、正在清理、清理失败——可以据此提示你先关掉之前的窗口再试，或重启电脑，而不是只给一个笼统的错误。
+
+升级：本次应用发布不需要升级 Hub。录制改动需要浏览器组件 0.3.1，应用会提示安装或更新；已安装的 0.3.0 在更新前继续可用。
+
+## v0.22.11
+
+- **Record a browser workflow inside Chrome**: every browser myco opens for a profile now shows a small recorder in the page corner. Start recording, review the recent steps, delete any of them, or capture an element's text, an attribute or its HTML as an extract step; the panel hides itself while a run or a debugging action uses the browser. A recording started in the panel is also listed for the app, so Web automation can pick it up and continue from the page. This needs browser component 0.3.0, which the App offers to install or update; an installed 0.2.0 keeps working until you update.
+- **A page opens in a window of its own, and installs as an app on macOS**: a page's menu can open it in a separate window that shows only that page; on macOS you can also install it, which adds a launcher with the page's icon to `~/Applications/myco 应用`, so Launchpad, Spotlight and the Dock start it like an app.
+- **The voice call is the agent itself**: it now speaks in the first person — "Sure, I'm on it", not "I'll tell it" — and its caption lines show its small face instead of a "Voice" label. The microphone, speech-recognition, cut-off and setup notices follow the call's language.
+- **A voice call starts with the agent saying hello**: when the call connects, the agent speaks first with a short line, mentioning work in progress or a question it is waiting on; speaking over it cuts it off like any turn.
+- **Chrome no longer shows an unsupported-flag warning**: myco's browsers start without experimental Blink switches, so the warning bar above the page is gone. Chrome keeps its native user agent, with no stealth scripts; sites can still ask a person to interact.
+- **A capability allowed for a page now follows its code**: when a page is republished or its app is upgraded, the new code is asked again before it can use what you allowed earlier. A "no" still holds for every version, and allows saved before this release are asked once more.
+- **Official apps declare the computer capabilities they use**: the bundled apps are updated to versions whose manifests list their computer capabilities, so a Hub that holds apps to their declarations lets them use those capabilities without asking each time.
+- **A runner upgrade no longer makes the computer look offline for minutes**: restarting the runner, for example during `myco upgrade`, now stops within about 30 seconds instead of up to ten minutes; while it restarts the App shows **Updating** instead of **Away**, and a task it was running is queued again once.
+- **A long thing an agent says in a run fades out instead of being cut**: text between steps now fades at the bottom with **Show all** under it, and is held short only when it actually runs past the visible area, so it no longer looks like text was lost.
+- **Files picked for a chat stay with that chat**: a picture or file added to a chat's box but not sent yet stays with that chat (or the group box) while the App runs, as typed words do; switching to another page and back no longer loses it, and one still uploading finishes.
+- **Requests waiting for your OK are decided one at a time**: approving one no longer greys out the others until the workspace answers; a decided card goes at once, the list is read again behind, and errors show on the card they belong to.
+- **Your decision shows in the chat as one quiet line**: the note the hub sends an agent about your approval now reads in words, such as "You approved: create the scheduled task "x" in project "p"", instead of the raw code-like text.
+
+Upgrade: this App release needs no Hub upgrade. The browser recorder needs browser component 0.3.0, which the App offers to install or update.
+
+**中文**
+
+- **可以直接在 Chrome 里录制浏览器流程**：myco 为某个资料打开的浏览器，页面角落会出现一个小录制面板。可以开始录制、查看最近的步骤、删除任意一步，或把某个元素的文字、属性或 HTML 捕获成 extract 步骤；运行或原生调试占用浏览器时面板会自动隐藏。在面板里开始的录制，网页自动化页面也能发现，并可以直接接上继续处理。这需要浏览器组件 0.3.0，应用会提示安装或更新；已安装的 0.2.0 在更新前继续可用。
+- **页面可以单独开一个窗口，macOS 上还能装成应用**：页面菜单里可以把页面放到单独窗口里只显示它；macOS 上还可以安装，在 `~/Applications/myco 应用` 里生成带页面图标的启动器，Launchpad、聚焦和程序坞都能像应用一样打开。
+- **语音通话里说话的就是 agent 本人**：现在用第一人称说话——「好，我这就去做」，而不是「我去告诉它」；字幕行前面显示它的小头像，不再是「语音」标签。麦克风、语音识别、被打断和设置提示都跟着通话语言。
+- **语音通话接通后 agent 先打招呼**：电话接通时，agent 先用一句简短的话开口，说说手上的活或正在等的问题；你直接开口就会像普通对话一样打断它。
+- **Chrome 顶部不再出现不支持参数的警告**：myco 打开的浏览器不再带实验性 Blink 参数启动，页面上方的警告条没有了。Chrome 仍使用原生 UA，没有伪装脚本；网站仍可能要求人手动操作。
+- **给网页的能力允许现在只对当时的代码有效**：网页重新发布、或者它的应用升级以后，新代码再用到你之前允许的能力时会重新询问。「不允许」对所有版本都有效；这次发布之前保存的允许会再问一次。
+- **官方应用补上了会用到的电脑能力声明**：内置应用更新到在清单里声明电脑能力的版本；对按声明校验应用的 Hub，这些应用使用已声明的能力时不再逐次询问。
+- **runner 升级时电脑不再离线好几分钟**：重启 runner（比如 `myco upgrade` 时）现在约 30 秒就停好，不再可能卡到十分钟；重启期间应用显示「正在更新」而不是「不在线」，正在跑的任务会重新排队一次。
+- **agent 在运行过程中说的一长段话改成淡出，不再硬截断**：步骤之间的文字现在在底部淡出，下面有「展开全文」，而且只有内容真的超出可视区域时才收起，不会再看起来像丢了文字。
+- **放进聊天输入框的文件会留在那个聊天里**：为某个聊天（或群聊框）选好但还没发送的图片或文件，在应用运行期间会一直留在那里，和打好的字一样；切到别的页面再回来不会丢，正在上传的也会传完。
+- **待你确认的请求现在逐个处理**：批准一个请求后，其余请求不会一起变灰等后台回应；已处理的卡片会立即消失，列表在后台重新读取，出错时错误显示在对应的卡片上。
+- **你的决定在聊天里显示成一句安静的话**：Hub 告诉 agent 你批准了哪件事的那条提示，现在用一句话显示，例如「你同意了：创建项目「p」的定时任务「x」」，不再是带编号的原始文本。
+
+升级：本次应用发布不需要升级 Hub。浏览器录制需要浏览器组件 0.3.0，应用会提示安装或更新。
+
+## v0.22.10
+
+- **A browser settings change is allowed only after the whole list is read**: the confirmation now shows every proxy, bypass rule, user agent, language and launch argument in a monospace layout that also fits narrow windows, and **Allow** stays disabled until all of them have been scrolled into view. Declining or closing the dialog changes nothing.
+- **An Android preview APK is attached to the release**: `myco-android-debug.apk` is the Android app's CI debug build, provided next to the desktop downloads. It is a preview for trying the Android app, not a signed store release: it is debug-signed, its signature can differ between releases, so uninstall an older APK before installing a new one.
+
+Upgrade: this App release needs no Hub upgrade. Update the App, and for browser profile settings use browser component 0.2.0, which the App offers to install or update.
+
+**中文**
+
+- **浏览器设置的确认框要看完才能允许**：确认框会列出代理地址、不走代理的地址、User-Agent、语言和每个启动参数，这些值用等宽字体显示，窄窗口下也能完整排版；在所有内容都滚动显示过之前，「允许」按钮保持不可用。拒绝或关闭确认框不会有任何改动。
+- **发布中附带 Android 预览 APK**：`myco-android-debug.apk` 是 CI 构建的 Android 应用 debug 版，和桌面版安装包一起提供。它只是用来试用 Android 应用的预览版，不是签名的商店版本：它使用 debug 签名，不同版本之间的签名可能不同，安装新版本前请先卸载旧的 APK。
+
+升级：本次应用发布不需要升级 Hub。更新应用即可；使用浏览器资料设置需要浏览器组件 0.2.0，应用会提示安装或更新。
+
+## v0.22.9
+
+- **A browser profile can use a proxy, custom user agent, language and launch arguments**: Web automation can ask to change these for a profile, and the App shows its own confirmation with the exact proxy, bypass list, user agent, language and arguments before anything changes; a proxy password is never displayed, and a saved one is kept only when the server and user stay the same. Settings apply the next time the browser starts and do not restart a browser that is open. This needs browser component 0.2.0, which the App offers to install.
+- **An installed browser component now shows when it can be updated**: the browser status a page sees reports a compatible but older component, so Web automation shows "Update component" on a computer still running 0.1.1 or 0.1.0 instead of only reporting the component as installed.
+- **Project storage is counted and limited separately**: a project's files and total size no longer share the context-document allowance (still 100 documents), and a workspace owner or admin can set a project's own limits in Settings → Workspaces — 1 to 10,000 files, up to 20 GiB, defaults 1,000 files and 2 GiB — or return it to the workspace defaults. Lowering a limit never hides or deletes existing files; new uploads must fit. This part needs Hub 0.22.9 on the server, which also runs a database migration on upgrade.
+- **Apps may only use what they declare**: on a Hub that says an app's manifest is complete, an operating-system capability the app does not declare in `myco.json`, or `myco.send`/`myco.download` without the matching permission, is refused with the group to add instead of asking the person each time; a file the person picks is no exception. Public network hosts outside the app's `net` list are still asked one by one, and pages with no app, myco's own apps that declare nothing yet, and older Hubs keep the previous behaviour. This part needs Hub 0.22.9.
+
+Upgrade: update the Hub on the server to 0.22.9 (`sudo myco upgrade`) for project storage limits and app-declaration enforcement. The browser changes only need the new browser component, which the App installs or offers to update.
+
+**中文**
+
+- **浏览器资料可以使用代理、自定义 User-Agent、语言和启动参数**：网页自动化可以申请修改某个资料的这些设置，应用会先用自己的确认框列出确切的代理地址、不走代理的列表、UA、语言和每个启动参数，确认后才生效；代理密码从不显示，只有服务器和账号都没变时才保留已保存的密码。设置在下次启动浏览器时生效，不会重启已经打开的浏览器。这需要浏览器组件 0.2.0，应用会提示安装。
+- **装了旧版浏览器组件时页面会提示更新**：页面看到的浏览器状态会说明装的是可兼容但较旧的组件，还停留在 0.1.1 或 0.1.0 的电脑上，网页自动化会显示「更新组件」，而不只是显示已安装。
+- **项目存储单独计算、上限可配置**：项目的文件数和总大小不再占用上下文文档的额度（文档仍限 100 个），工作区所有者或管理员可以在「设置 → 工作区」里为单个项目设置上限——1 到 10,000 个文件、最多 20 GiB，默认 1,000 个文件和 2 GiB——也可以恢复为工作区默认值。调低上限不会隐藏或删除已有文件，只影响新的上传。这部分需要服务器上的 Hub 0.22.9，升级时会执行数据库迁移。
+- **应用只能使用声明过的能力**：如果 Hub 说明某个应用的清单就是它的全部声明，那么 `myco.json` 的 `"os"` 里没有的操作系统能力，或 `"permissions"` 里没有的 `myco.send`/`myco.download`，会直接拒绝并提示要补哪一组，不再每次询问；人自己选的文件也不例外。应用 `"net"` 之外的公网地址仍会逐个询问；没有清单的普通页面、暂时没写声明的 myco 官方应用和旧 Hub 保持原来的行为。这部分需要 Hub 0.22.9。
+
+升级：为了让项目存储额度和应用声明拦截生效，请把服务器上的 Hub 升级到 0.22.9（`sudo myco upgrade`）。浏览器相关的改动只需要新的浏览器组件，应用会安装或提示更新。
+
+## v0.22.8
+
+- **Web automation records inside cross-origin frames**: clicks and typing in a page's cross-site iframes, including frames nested inside them, are recorded with a selector path that replays on the right frame. Pages whose verification widget loads in a nested frame, such as Cloudflare Turnstile on V2EX, no longer stay stuck while the recorder attaches.
+- **Browser component 0.1.1**: the app now installs the new component. A component already installed as 0.1.0 keeps working until you choose "Update component" in the app; the update is verified before the old process stops, so a failed download or checksum check leaves the current component, its browser sessions and profiles untouched. Updating does interrupt sessions still using the old process, so finish recording or playback first.
+- **Agents' browser scripts are approved where they run**: when an agent asks to run a script, the computer's owner sees the exact version, every URL it visits, its executable code, its sub-scripts and the full snapshot before allowing. Approval belongs to that App setup, workspace, account, page and browser profile, and the agent still needs its own short-lived grant. A paused run waits at most 15 minutes and never past the grant, and results and screenshots stay private files.
+- **A resumed browser run keeps reporting**: after you confirm or start a paused run it goes on reporting steps and results instead of stopping at the first acknowledgement, and a pause with no new events no longer ends the job.
+- **Search shows the mushroom looking**: while ⌘K has not found anything yet, the pixel mushroom paces with a magnifying glass and names the words being searched; message search also no longer starts over on every overview refresh, which could keep it searching forever on a slow network.
+- **Context menus stay open while another pane scrolls**: a background chat scroll or scrolling inside the menu no longer closes it; only scrolling the pane the menu came from does.
+
+Upgrade: this App release needs no Hub upgrade. Agents using a computer's browser through the Hub still need Hub 0.22.7 on the server: run `sudo myco upgrade` there.
+
+**中文**
+
+- **网页自动化可以录制跨源 frame**：页面里跨站的 iframe（包括嵌套在其中的 frame）中的点击和输入也会被录下来，选择器路径能在正确的 frame 上回放。验证组件加载在嵌套 frame 里的页面，例如 V2EX 的 Cloudflare Turnstile，不会再因为录制器附加而卡住。
+- **浏览器组件 0.1.1**：应用会安装新的组件。已经装了 0.1.0 的照常可用，在应用里点「更新组件」即可升级；更新会先校验再停掉旧进程，下载或校验失败时现有组件、浏览器会话和资料都不受影响。更新会中断仍在使用旧进程的会话，请先结束录制或回放。
+- **agent 的浏览器脚本在运行它的电脑上批准**：agent 申请运行脚本时，电脑主人会先看到确切的版本、它访问的每个网址、可执行代码、子脚本和完整快照，然后再决定是否允许。批准只属于这个 App 的配置、工作区、账号、页面和浏览器资料，agent 仍需单独申请短期授权。暂停的运行最多等 15 分钟，且不会超过授权到期；结果和截图只作为私有文件返回。
+- **恢复后的浏览器运行继续上报**：确认或启动暂停的运行后，它会继续上报步骤和结果，不再在收到第一条确认后就停下；没有新事件的暂停心跳也不会结束任务。
+- **搜索时有蘑菇在找**：⌘K 还没搜到结果时，像素蘑菇拿着放大镜来回找，并显示正在搜索的词；消息搜索也不再随每次总览刷新重新开始，慢网络下不会一直搜不完。
+- **别的面板滚动时右键菜单不会关闭**：后台聊天自动滚动或在菜单内部滚动不再关掉菜单，只有菜单来源所在的面板滚动才会关闭。
+
+升级：这个 App 版本本身不需要升级 Hub。让 agent 通过 Hub 使用某台电脑的浏览器仍需要服务器上的 Hub 0.22.7（`sudo myco upgrade`）。
+
+## v0.22.7
+
+- **Web automation records and replays a workflow in a dedicated browser profile**: the official Web automation app can record the clicks, typing and navigation you make in a visible browser window, then replay that sequence step by step or in one run, with a breakpoint or a confirmation before anything consequential. It needs the optional browser component, which the app installs from its own dialog on Mac (Apple silicon and Intel) and Windows; the component never downloads a browser or uses your everyday profile, and profiles, cookies, passwords and downloads stay on this computer.
+- **Agents can use a computer's browser through the Hub**: a computer's owner can approve a short-lived grant for a dedicated browser profile, and an agent can then list that profile, run a script version the owner reviewed, and check, pause or cancel the run (`browser.profiles.list`, `browser.script.run`, `browser.run.status/resume/cancel`). Passwords and other secret parameters are supplied for each run; screenshots and results come back as private files. This needs the Hub at 0.22.7.
+- **Older local files appear only when there is something to recover**: the page recovery entry is shown only for an app that actually has old data, instead of on every page.
+- **Page records can be queried on the Hub**: the CLI and the page bridge can ask for a filtered, paged view of a page's collection instead of loading every record; an older Hub keeps answering with the full collection and the client filters it itself.
+- **Replies type out as they are written**: text and thinking arrive piece by piece with a caret; a run's whole process folds into one line (process · 32 steps · 12 minutes), opens while it runs and folds once the answer is in; plan items fade in as they are added; Enter adds to your newest open task.
+- **The App guide links to Telegram and Discord**: the README and the in-app guide's Community page now list the Telegram and Discord groups.
+- **Android**: appearance settings persist across restarts, and a page can save its downloads to the device with the system save dialog.
+
+Upgrade: this App release needs no Hub upgrade for recording and replaying, the recovery entry, page queries or the interface changes. Agents driving a computer's browser through the Hub need Hub 0.22.7: on the server run `sudo myco upgrade`, then update the runner/CLI on each computer.
+
+**中文**
+
+- **网页自动化在专用浏览器资料里录制和回放**：官方「网页自动化」应用可以在一个看得见的浏览器窗口里录制你的点击、输入和跳转，然后逐步或整段回放这个流程；在提交等有后果的步骤前可以加断点或确认。它需要可选的浏览器组件，应用会从自己的确认对话框里安装（Mac 的 Apple 芯片和 Intel、Windows）；组件不会下载浏览器，也不会使用你日常的资料，资料、Cookie、密码和下载文件都留在这台电脑上。
+- **agent 可以通过 Hub 使用某台电脑的浏览器**：电脑主人可以为专用的浏览器资料批准一个短期授权，agent 随后可以列出这个资料、运行主人审阅过的脚本版本，并查看、暂停或取消这次运行（`browser.profiles.list`、`browser.script.run`、`browser.run.status/resume/cancel`）。密码等秘密参数在每次运行时单独提供；截图和结果作为私有文件返回。这项功能需要 Hub 0.22.7。
+- **旧本机文件只在确实有可恢复数据时出现**：页面恢复入口只对存在旧数据的应用显示，不再出现在每个页面上。
+- **页面记录可以在 Hub 上查询**：CLI 和页面桥可以按条件、分页读取一个页面的集合，不必把全部记录都加载下来；旧 Hub 仍返回完整集合，由客户端自己筛选。
+- **回复随写随出**：文字和思考会带着光标一段段出现；一次运行的全部过程折叠成一行（过程 · 32 步 · 12 分钟），运行中展开、拿到回答后折叠；计划项加入时淡入；回车会追加到你最新的未完成任务的下面。
+- **App 指南加了 Telegram 和 Discord**：README 和 App 内指南的「社区」页现在列出 Telegram 和 Discord 群。
+- **Android**：外观设置（如主题）重启后保留，页面可以用系统的保存对话框把下载文件存到本机。
+
+升级：这个 App 版本本身不需要升级 Hub 就能录制回放、使用恢复入口、页面查询和界面改动。让 agent 通过 Hub 使用某台电脑的浏览器需要 Hub 0.22.7：在服务器上运行 `sudo myco upgrade`，然后更新每台电脑上的 runner/CLI。
+
+## v0.22.6
+
+- **Each page keeps its own local storage**: in the desktop App every workspace, account and page now opens on its own local address, so what a page saves (a draft, a sign-in, an app's data) is no longer visible to another page or another workspace. A page keeps that address across App restarts, so it reopens with its data.
+- **Older local page data is not lost**: the previous shared address now opens a read-only "Older local files" page that lists what old pages left behind; "Save copy" downloads a file, and older page settings can be exported. Nothing is deleted.
+- **Apps can keep an encrypted vault in the App**: an app that needs isolated page storage, such as Password Vault 1.2.0 from the apps catalog, opens only on its own page origin and shows "Update the myco App" on an older App or a shared address, with no password field.
+- **Project coordinators can invite agents**: a coordinator can create a join link for one ordinary agent (`myco project invite-agent`), valid for 24 hours; the agent joins the project owned by the project owner and gets no member-management or invitation rights. Whether coordinators may invite is a per-project switch, off by default: until the owner enables it, each request arrives as an approval card.
+- **Project coordinators can schedule tasks**: a coordinator can create cron automations bounded by start and end dates (`myco automation create --project ... --cron ... --starts ... --ends ...`, or `--once`). Scheduling is off by default, so creating, changing, pausing or deleting a task asks the project owner to approve that change; with it on, coordinators apply changes directly and the tasks still belong to the owner. The App editor uses local times and shows the active dates and why a task is disabled.
+- **Waiting tasks are visible**: the App shows “Queued: this computer has 3/3 slots in use, position 2”, and computer details show the limit and the waiting count. Workspaces share free slots fairly instead of one busy workspace taking every new slot; running tasks are never interrupted.
+- **A line added to a running task is answered under it**: the steps, progress and loading that follow your message now appear below that line, not above it.
+- **Working counts follow agents**: project dots, the notch island and the menu bar's working line count agents only; a shell node running commands no longer lights whole projects and keeps its own dot under Computers.
+
+Upgrade: this release needs the Hub updated as well. On the server run `sudo myco upgrade`, then update the App and the runner/CLI on each computer. Invitations, scheduling and the queue view are Hub-side features, and the isolated page addresses and the vault need Hub 0.22.6 with this App. Older Hubs keep accepting runners, but these features stay unavailable until the Hub is upgraded.
+
+**中文**
+
+- **每个页面有自己的本机存储**：桌面 App 里每个工作区、账号和页面现在都在各自的本机地址上打开，一个页面保存的内容（草稿、登录状态、应用数据）不会再被另一个页面或另一个工作区看到。App 重启后页面仍用同一个地址，所以数据还在。
+- **旧的页面数据不会丢**：原来的共享地址现在打开一个只读的「旧本机文件」页面，列出旧页面留下的文件；「保存副本」可以下载文件，「导出旧页面设置」可以导出设置。不会删除任何东西。
+- **应用可以把加密密码库放在 App 里**：需要独立页面存储的应用（例如应用目录里的密码库 1.2.0）只在自己的页面来源上打开；旧版 App 或共享地址会显示「请升级 myco App」，不显示密码输入框。
+- **项目协调者可以邀请 agent**：协调者可以为一个普通 agent 生成加入链接（`myco project invite-agent`），24 小时内有效；agent 以项目所有者名下的普通成员加入，没有成员管理或邀请权限。是否允许协调者邀请是每个项目的开关，默认关闭：所有者打开前，每次请求都会变成一张审批卡。
+- **项目协调者可以安排定时任务**：协调者可以创建带起止日期的 cron 自动化（`myco automation create --project ... --cron ... --starts ... --ends ...`，或 `--once`）。定时默认关闭，所以新建、修改、暂停或删除任务都要项目所有者批准这次改动；打开后协调者可以直接改，任务仍归所有者。App 编辑器用本地时间，并显示生效日期和任务被停用的原因。
+- **等待中的任务看得见**：App 显示「排队中：这台电脑 3/3 个位置都在用，排第 2 位」，电脑详情显示上限和等待数量。多个工作区公平分享空出的位置，不再让一个忙的工作区占走所有新位置；正在跑的任务不会被打断。
+- **在运行中的任务里插一句话，回复显示在它下面**：你发消息之后 agent 做的步骤、进度和加载现在显示在这句话下面，而不是上面。
+- **“正在工作”只算 agent**：项目圆点、刘海岛和菜单栏的工作行只统计 agent；执行命令的 shell 节点不再点亮整个项目，而是在「电脑」下面保留自己的圆点。
+
+升级：这个版本需要同时升级 Hub。在服务器上运行 `sudo myco upgrade`，然后更新 App 和每台电脑上的 runner/CLI。邀请、定时任务和排队显示是 Hub 侧的功能，独立页面地址和密码库需要 Hub 0.22.6 配这个 App。旧 Hub 仍接受 runner 连接，但升级前这些功能不可用。
+
+## v0.22.5
+
+- **Project changes show at once**: adding an agent to a project, or changing a project's name, members or computers, appears in the App immediately instead of waiting for every workspace to be read again; a new project opens and joins the sidebar the same way.
+- **The connection notice lines up with the input box**: "网络不太好" and an unsent message now keep to the chat's column, as wide as the message box, instead of running across a wide window.
+- **Official apps moved to github.com/myco-ai/apps**: application source, the page SDK and app releases now live in that repository. Each myco release bundles a pinned set of official apps whose bytes are checked against `apps.lock.json`; a Hub still fetches the rolling catalog from myco-ai/apps, and older Hubs keep receiving the identical apps from the old address through the compatibility mirror. Existing workspaces, pages and apps need no change.
+- Upgrade: update the App for the two interface fixes. No hub upgrade is needed for the app move; older Hubs keep working through the mirror.
+
+**中文**
+
+- **项目改动立即显示**：往项目里加 agent，或修改项目名称、成员、电脑，App 立即显示，不再等把所有工作区重新读一遍；新建项目也会马上出现在侧栏并打开。
+- **网络提示与输入框对齐**：「网络不太好」和没发出去的消息现在和消息框同宽、同列，不会在大窗口里横跨整个面板。
+- **官方应用搬到 github.com/myco-ai/apps**：应用源码、网页 SDK 和应用发布现在都在这个仓库。每个 myco 版本会内置一组固定版本的官方应用，字节与 `apps.lock.json` 里的 SHA256 核对；Hub 仍从 myco-ai/apps 拉取滚动目录，旧 Hub 通过兼容镜像从老地址拿到完全相同的应用。已有的工作区、页面和应用不需要任何改动。
+- 升级：更新 App 即可获得两处界面修复。应用搬家不需要升级 Hub；旧 Hub 通过镜像照常工作。
+
+## v0.22.4
+
+- **The repository moved to github.com/myco-ai/myco**: the old github.com/chenhg5/myco address redirects automatically, so existing App connections, update checks and `myco upgrade` on older versions keep working; new links and downloads use the new address.
+- **Removing a workspace is instant**: the dialog closes as soon as this App has forgotten the workspace; it leaves the list, the overview and the projects at once, and a space or chat shown in it closes (the next workspace shows) instead of pages going on asking the removed one and showing errors. The full refresh runs behind.
+- Upgrade: update the App for instant removal. Nothing else is needed for the move: the old address redirects and existing installs upgrade as before.
+
+**中文**
+
+- **仓库搬到 github.com/myco-ai/myco**：旧的 github.com/chenhg5/myco 地址会自动跳转，已有的 App 连接、更新检查和旧版本上的 `myco upgrade` 都照常工作；新的链接和下载使用新地址。
+- **移除工作区是即时的**：只要这个 App 忘掉了该工作区，对话框就关闭；它同时从列表、概览和项目里消失，正在显示它的空间或对话也会关闭（切换到下一个工作区），不会再出现页面去问已移除的工作区而报错。完整刷新在后台进行。
+- 升级：更新 App 即可获得即时移除。仓库迁移不需要其他操作：老地址会自动跳转，已有安装照常升级。
+
+## v0.22.3
+
+- **素材库 finds the right picture, and opens it large**: filter the library by language, theme, platform and orientation, alone or together with the search box; click a picture to see it larger and step through the set. Uploading now asks for a one-line description, language and theme for each file, which is what the filters and search use.
+- Upgrade: the official apps reach the workspace by themselves (or `myco template sync` fetches them now), and an existing 素材库 page takes the new version with `myco page upgrade`. No hub or CLI upgrade is needed.
+
+**中文**
+
+- **素材库更好找图，也能看大图**：可以按语言、主题、平台和横竖方向筛选，也可以和搜索框一起用；点开图片看大图，并能在当前套图里前后翻。上传时每个文件会要求填一句画面描述、语言和主题，筛选和搜索用的就是这些信息。
+- 升级：官方应用会自动同步到工作区（也可以用 `myco template sync` 立即获取），已有的素材库页面用 `myco page upgrade` 升级到新版本。不需要升级 Hub 或 myco。
+
+## v0.22.2
+
+- **A page asks before it uses your computer**: the first time a page calls a group of capabilities (files, writing files, deleting files, commands, the screen, the microphone, speech, the clipboard, notifications, the system, the network, SSH, databases, the proxy), the App asks you: don't allow, allow this time, or always allow. Commands, deleting files and the screen are only ever allowed this time; files you picked and writing the clipboard need no question. A page reaches the network hosts its app declares with the network's consent and is asked for any other host one by one. The answer is kept per workspace and page.
+- **A page can be read-only for everyone else**: its managers choose in the page card's menu, or with `myco page set --page <id> --editors managers`, whether everyone who sees it may change its records and shared state (as before) or only the publisher, their agents and the workspace's managers. Others see "you can only view"; a template can make one collection managers-only too.
+- **A task's question reaches an agent sender**: when the task came from an agent, `myco message ask` now queues the question to its inbox instead of storing it as a closed progress update, so a session waiting there or its runner wakes and answers, and the task no longer sits held.
+- **New app: 素材库 (Media Kit)**: screenshots, video files and links, with Chinese and English copy organized by feature, the originals and each entry's release status shared with the team and agents.
+- **Usage moved into the workspace menu**: it is looked at now and then, so it leaves the top of the sidebar and joins the workspace menu at the bottom, marked while its page is open; that menu now grows to fit its workspaces and items without scrolling.
+- **The user guide moved into Settings**: it leaves the workspace menu and becomes the last row of Settings' navigation (Settings › About still opens it too).
+- **iOS**: the phone gets the desktop changes to list screens, Markdown and UI blocks; media streaming is verified end to end.
+- Upgrade: update the hub to v0.22.2 for page editors and for questions reaching agent senders; update myco on computers that run `myco page set` or send `myco message ask`; update the App for the consent prompts, view-only pages, the new app and the moved Usage and user guide.
+
+**中文**
+
+- **网页用电脑之前先问你**：网页第一次调用某一组能力（读文件、写文件、删文件、执行命令、屏幕、麦克风、语音、剪贴板、通知、系统、网络、SSH、数据库、代理）时，App 会先问：「不允许」「这次允许」「一直允许」。执行命令、删文件和屏幕只能「这次允许」；你自己选的文件和写入剪贴板不用问。网页访问应用声明的网络主机时随网络这一组一起允许，其他主机逐个询问。回答按工作区和网页分别记住。
+- **网页可以对其他人只读**：网页的管理者可以在页面卡片的菜单里，或运行 `myco page set --page <id> --editors managers`，决定是所有能看到的人都能改它的记录和共享状态（和以前一样），还是只有发布者、其名下的 agent 和工作区管理员能改。其他人会看到「只能查看」；模板也可以让某一个集合只有管理者能改。
+- **任务的提问能叫醒 agent 发起方**：任务由 agent 发出时，`myco message ask` 现在把提问放进它的收件箱，而不是存成一条已关闭的进度；在那里等待的会话或它的 runner 会被叫醒并回答，任务不会再一直挂起。
+- **新应用：素材库**：按功能整理截图、视频文件和链接，配上中英文配文，原图和每条的发布状态与团队及 agent 共享。
+- **用量入口移到工作区菜单**：用量只是偶尔看，所以从侧栏顶部移到工作区菜单底部，打开它的页面时旁边有标记；这个菜单现在会随工作区和条目变高，不用滚动。
+- **使用文档移到设置里**：它从工作区菜单移出，成为设置导航的最后一项（设置 › 关于 里也仍然能打开）。
+- **iOS**：手机上也跟上了桌面的列表页、Markdown 和 UI 块改动；媒体串流已完成端到端验证。
+- 升级：把 Hub 升级到 v0.22.2 才能设置网页编辑权限、让提问送达 agent 发起方；需要运行 `myco page set` 或发送 `myco message ask` 的电脑更新 myco；更新 App 才能看到授权弹窗、只读提示、新应用，以及移动后的用量和使用文档入口。
+
 ## v0.22.1
 
 - **Updates come from GitHub or Gitee, whichever is faster**: `myco upgrade`, the hub's self-upgrade and the App's update time both sources first and download from the faster one; if a copy is missing (Gitee keeps only the newest release's binaries) or fails its checksum, the other is used. The version check does the same: GitHub's API, then the Gitee mirror, then the release page. `MYCO_RELEASE_DOWNLOAD` and `MYCO_RELEASE_API` still pin a single source.
@@ -158,7 +428,7 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 ## v0.21.26
 
-- **A member's chat leaves terminal commands out**: since v0.21.24 a member's chat in a project showed its exchanges with everyone, which brought each command it ran on a terminal (`ls`, `cat` on mac-exec) in as a card. Only its exchanges with other AIs show now; a terminal still shows when the project lists it.
+- **A member's chat leaves terminal commands out**: since v0.21.24 a member's chat in a project showed its exchanges with everyone, which brought each command it ran on a terminal (`ls`, `cat` on demo-shell) in as a card. Only its exchanges with other AIs show now; a terminal still shows when the project lists it.
 - **Pages play public audio and video**: a page can play a podcast or a video from a public address through the App, streamed as it plays (seeking works), instead of downloading it whole first.
 - **New apps**: Voyage (航海), a 3D sea to explore by boat, with a lifelike sea, sky and weather; a podcast globe to discover and listen to public podcasts by region; a shopping comparison where an agent finds offers with their sources.
 - Cinema's full screen works in the Mac desktop App, without corner overlays.
@@ -167,7 +437,7 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 **中文**
 
-- **成员对话里不再出现终端命令**：从 v0.21.24 起，项目里成员的对话会显示它和所有人的往来，结果它在终端上跑的每条命令（比如在 mac-exec 上的 `ls`、`cat`）也成了一张卡片。现在只显示它和其他 AI 的往来；项目里本来就列着的终端照常显示。
+- **成员对话里不再出现终端命令**：从 v0.21.24 起，项目里成员的对话会显示它和所有人的往来，结果它在终端上跑的每条命令（比如在 demo-shell 上的 `ls`、`cat`）也成了一张卡片。现在只显示它和其他 AI 的往来；项目里本来就列着的终端照常显示。
 - **页面可以播放公开的音频和视频**：页面能通过 App 播放公开地址上的播客或视频，边播边传（可以拖进度），不用先整个下载下来。
 - **新应用**：航海（坐船在 3D 海面上航行，海、天空和天气都很逼真）；播客地球（按地区发现并收听公开播客）；比价购物（agent 帮你找报价，并附上来源）。
 - 影视在 Mac 桌面 App 里可以正常全屏，四角也不再有遮挡。
@@ -805,7 +1075,7 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 - **New Codex agents no longer fail with "not in a trusted directory"**: Codex used to refuse to start when the new folder wasn't a git repository.
 - **Open to the internet in one click**: the default is "One click (recommended)", which uses a temporary Cloudflare address and needs no account. If cloudflared isn't installed, the App downloads it (on a Mac through Homebrew if you have it, otherwise from Cloudflare's official releases, with the download verified). The address changes after this computer restarts; just click again.
 - **A freshly copied session no longer says "in use" right away**: when a session is briefly busy, the App first retries in place a few times, and only goes back to the queue if it really is in use.
-- **The name on a Mac is the computer name**: before, it could be the IP address your router assigned (like `192-168-1-210-…`); now it is the computer name from System Settings.
+- **The name on a Mac is the computer name**: before, it could be the IP address your router assigned (like `192-168-1-42-…`); now it is the computer name from System Settings.
 - Sent messages no longer appear twice.
 - "Meet your workspace" is ticked off as soon as you open Settings › Workspace.
 
@@ -814,7 +1084,7 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 - **新开 Codex 不再报「不在受信任的目录」**：新建的文件夹不是 git 仓库时，Codex 以前会拒绝启动。
 - **开放到公网一键完成**：默认是「一键开放（推荐）」，用 Cloudflare 临时地址，不用账号。没装 cloudflared 时 App 会自己下载（Mac 上有 Homebrew 就用它，否则从 Cloudflare 的官方发布下载并校验）。这台电脑重启后地址会变，再点一次就行。
 - **刚复制的会话不再马上说「被占用」**：会话短暂被占用时先原地重试几次，真被占用才退回排队。
-- **Mac 上的名字用电脑名**：以前可能用的是路由器分的 IP（比如 `192-168-1-210-…`），现在用「系统设置」里的电脑名。
+- **Mac 上的名字用电脑名**：以前可能用的是路由器分的 IP（比如 `192-168-1-42-…`），现在用「系统设置」里的电脑名。
 - 发出去的消息不再出现两次。
 - 「认识你的工作区」打开设置 › 工作区就打勾。
 

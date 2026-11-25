@@ -41,8 +41,8 @@ First check whether it is already installed: `myco version`. If it is, skip to s
 
 | System | Command |
 |---|---|
-| macOS, Linux, WSL | `curl -fsSL https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.sh \| bash` |
-| Windows (PowerShell) | `irm https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.ps1 \| iex` |
+| macOS, Linux, WSL | `curl -fsSL https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-client.sh \| bash` |
+| Windows (PowerShell) | `irm https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-client.ps1 \| iex` |
 
 - After installing, run `myco version` to confirm. If the command is not found, the install directory is not on PATH:
   - macOS, Linux: it is `~/.local/bin` by default. Run the installer again with `MYCO_ADD_PATH=1`, or tell the user to add it to PATH.
@@ -50,10 +50,10 @@ First check whether it is already installed: `myco version`. If it is, skip to s
 - **Downloading from GitHub fails** (timeout, `Connection reset`, 504):
   1. Retry once first; the script itself retries through GitHub's Release API address.
   2. If the user has a proxy, run it again through the proxy, for example `HTTPS_PROXY=http://127.0.0.1:7890 bash -c '<the command above>'`. Ask the user for the port; do not guess.
-  3. If `raw.githubusercontent.com` cannot be reached, the script can be fetched from `https://cdn.jsdelivr.net/gh/chenhg5/myco@main/deploy/install-client.sh`. Note that the program it downloads still comes from GitHub.
+  3. If `raw.githubusercontent.com` cannot be reached, the script can be fetched from `https://cdn.jsdelivr.net/gh/myco-ai/myco@main/deploy/install-client.sh`. Note that the program it downloads still comes from GitHub.
 - **Desktop App** (the user installs it themselves):
-  - Mac: <https://github.com/chenhg5/myco/releases/latest/download/myco.dmg>; open it and drag the app into "Applications".
-  - Windows (preview): <https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-amd64.exe>; on first run, choose "More info → Run anyway".
+  - Mac: <https://github.com/myco-ai/myco/releases/latest/download/myco.dmg>; open it and drag the app into "Applications".
+  - Windows (preview): <https://github.com/myco-ai/myco/releases/latest/download/myco-app-windows-amd64.exe>; on first run, choose "More info → Run anyway".
 - The App can also start a Hub on this computer by itself ("Start on this computer" on its welcome page). **On Windows, to start a Hub on this computer, ask the user to click that button in the App**: `myco hub up` only supports macOS and Linux.
 
 ---
@@ -116,7 +116,7 @@ Run without arguments, the script asks questions interactively, but that needs a
 | Internal network only, or testing | `--http --port 7777` (plain text; explain this to the user first) |
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-hub.sh
+curl -fsSLO https://raw.githubusercontent.com/myco-ai/myco/main/deploy/install-hub.sh
 sudo bash install-hub.sh <the arguments chosen from the table above>
 sudo bash install-hub.sh --check        # self-check at any time: does it work, and if not, which layer is stuck
 ```

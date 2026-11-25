@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chenhg5/myco/internal/harness"
-	"github.com/chenhg5/myco/internal/testutil"
+	"github.com/myco-ai/myco/internal/harness"
+	"github.com/myco-ai/myco/internal/testutil"
 )
 
 // fakeCLI writes a script that records its argv and prints canned output.

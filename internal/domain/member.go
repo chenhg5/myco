@@ -37,7 +37,7 @@ func (r Role) Manages() bool { return r == RoleOwner || r == RoleAdmin }
 type Member struct {
 	ID string
 	// Name is the member's handle, shown as the sender of what they send
-	// ("@glenn"); same rules as agent names. DisplayName is cosmetic.
+	// ("@alice"); same rules as agent names. DisplayName is cosmetic.
 	Name        string
 	DisplayName string
 	Role        Role
@@ -61,7 +61,7 @@ func ParseMemberName(s string) (string, error) {
 	n, err := ParseAgentName(strings.ToLower(strings.TrimSpace(s)))
 	if err != nil {
 		return "", Errf(CodeInvalidArgument, "invalid member name %q", s).
-			WithSuggestion("use 1-63 chars of lowercase letters, digits, '.', '_' or '-', e.g. glenn")
+			WithSuggestion("use 1-63 chars of lowercase letters, digits, '.', '_' or '-', e.g. alice")
 	}
 	return string(n), nil
 }

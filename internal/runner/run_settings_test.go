@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/chenhg5/myco/internal/api"
-	"github.com/chenhg5/myco/internal/harness"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/harness"
 )
 
 // settingsHub answers GET /v1/me with run settings, and records traces.
