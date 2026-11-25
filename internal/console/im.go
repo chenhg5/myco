@@ -23,6 +23,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -75,8 +76,20 @@ type imScan struct {
 
 var imScans sync.Map // id → *imScan
 
+// imRun runs myco im …; a myco from before chat apps says so plainly.
+func (b *Backend) imRun(ctx context.Context, args ...string) ([]byte, error) {
+	out, err := b.Local.run(ctx, append([]string{"im"}, args...)...)
+	var ce *client.Error
+	if err != nil && errors.As(err, &ce) && strings.Contains(ce.Message, `unknown command "im"`) {
+		return out, &client.Error{Status: http.StatusConflict, Code: "cli_too_old",
+			Message:    "this computer's myco command is too old for chat apps",
+			Suggestion: "update myco on this computer (Settings › About), then come back"}
+	}
+	return out, err
+}
+
 func (b *Backend) imList(ctx context.Context) ([]IMBridge, error) {
-	out, err := b.Local.run(ctx, "im", "list")
+	out, err := b.imRun(ctx, "list")
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +163,7 @@ func (b *Backend) imConnect(ctx context.Context, hub string, args []string, secr
 		return nil, err
 	}
 	defer os.RemoveAll(dir)
-	full := append([]string{"im", "connect"}, args...)
+	full := append([]string{"connect"}, args...)
 	for flag, v := range secrets {
 		p := filepath.Join(dir, strings.TrimSuffix(flag, "-file"))
 		if err := os.WriteFile(p, []byte(v), 0o600); err != nil {
@@ -161,7 +174,7 @@ func (b *Backend) imConnect(ctx context.Context, hub string, args []string, secr
 	if hub != "" {
 		full = append(full, "--hub", hub)
 	}
-	out, err := b.Local.run(ctx, full...)
+	out, err := b.imRun(ctx, full...)
 	if err != nil {
 		return nil, err
 	}
@@ -311,7 +324,7 @@ func (b *Backend) putIM(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument", Message: "invalid bridge name"})
 		return
 	}
-	if _, err := b.Local.run(r.Context(), "im", "set", "--name", name, "--agent", in.Agent); err != nil {
+	if _, err := b.imRun(r.Context(), "set", "--name", name, "--agent", in.Agent); err != nil {
 		writeErr(w, err)
 		return
 	}
@@ -324,7 +337,7 @@ func (b *Backend) deleteIM(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument", Message: "invalid bridge name"})
 		return
 	}
-	if _, err := b.Local.run(r.Context(), "im", "remove", "--name", name); err != nil {
+	if _, err := b.imRun(r.Context(), "remove", "--name", name); err != nil {
 		writeErr(w, err)
 		return
 	}
