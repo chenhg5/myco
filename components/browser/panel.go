@@ -185,6 +185,27 @@ func (s *session) panelCommand(sid proto.TargetSessionID, frame proto.PageFrameI
 			rec.selected = &captured{node: node{Target: in.Target}, page: p, frame: frame}
 		}
 		rec.mu.Unlock()
+	case "extract-target":
+		// A top-frame trusted context-menu choice supplies its own target. Keep
+		// target, format and variable in one command rather than racing a pick
+		// acknowledgement against a second extraction command.
+		if rec == nil || p == nil || in.Target == nil || !recordable(node{Type: "click", Target: in.Target}) || (in.What != "text" && in.What != "attribute" && in.What != "html") || len(in.Attr) > 160 || (in.What == "attribute" && in.Attr == "") || (in.Into != "" && !panelVariable.MatchString(in.Into)) {
+			err = errors.New("invalid_argument")
+			break
+		}
+		rec.mu.Lock()
+		active := !rec.closing && !rec.done && !rec.picking
+		if active {
+			rec.extractCount++
+			if in.Into == "" {
+				in.Into = "data" + strconv.Itoa(rec.extractCount)
+			}
+			rec.selected = nil
+		}
+		rec.mu.Unlock()
+		if active {
+			rec.enqueueFrame(node{Type: "extract", Target: in.Target, What: in.What, Attr: in.Attr, Into: in.Into}, p, frame)
+		}
 	case "extract":
 		if rec == nil || !panelVariable.MatchString(in.Into) || (in.What != "text" && in.What != "attribute" && in.What != "html") || len(in.Attr) > 160 || (in.What == "attribute" && in.Attr == "") {
 			err = errors.New("invalid_argument")

@@ -7,6 +7,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/proto"
 )
 
 func panelRecording() *recording {
@@ -82,5 +85,51 @@ func TestHeadlessCollectorOmitsPanelSource(t *testing.T) {
 	s.headless = false
 	if !strings.Contains(s.collectorScript(), "__myco_recording_panel__") {
 		t.Fatal("headed collector omitted panel source")
+	}
+}
+
+func TestPanelContextExtractionIsBoundAndValidated(t *testing.T) {
+	r := panelRecording()
+	r.id = "rec_fixture"
+	r.queue = make(chan captured, 8)
+	s := &session{ctx: context.Background(), recorder: r,
+		targets: map[proto.TargetSessionID]proto.TargetTargetID{"sid": "page", "child-sid": "iframe"},
+		pages:   map[proto.TargetTargetID]*rod.Page{"page": {TargetID: "page"}},
+		frames:  map[proto.PageFrameID]frameInfo{"top": {}, "child": {Parent: "top"}},
+	}
+	elementTarget := &target{Locators: []locator{{Kind: "css", Value: "#article"}}}
+	call := func(sid proto.TargetSessionID, frame proto.PageFrameID, recordID, what, attr, into string, elementTarget *target) {
+		t.Helper()
+		raw, err := json.Marshal(map[string]any{"action": "extract-target", "recording_id": recordID, "what": what, "attr": attr, "into": into, "target": elementTarget})
+		if err != nil {
+			t.Fatal(err)
+		}
+		s.panelCommand(sid, frame, string(raw))
+	}
+	call("sid", "top", "old", "text", "", "", elementTarget)
+	call("child-sid", "child", r.id, "text", "", "", elementTarget)
+	call("sid", "top", r.id, "js", "", "", elementTarget)
+	call("sid", "top", r.id, "attribute", "", "", elementTarget)
+	call("sid", "top", r.id, "text", "", "bad variable", elementTarget)
+	call("sid", "top", r.id, "text", "", "", nil)
+	if len(r.queue) != 0 {
+		t.Fatal("invalid or unbound context extraction accepted")
+	}
+	call("sid", "top", r.id, "text", "", "", elementTarget)
+	first := <-r.queue
+	if first.node.Type != "extract" || first.node.What != "text" || first.node.Into != "data1" || first.frame != "top" {
+		t.Fatalf("wrong context node: %+v", first)
+	}
+	call("sid", "top", r.id, "attribute", "href", "link", elementTarget)
+	if n := (<-r.queue).node; n.Attr != "href" || n.Into != "link" {
+		t.Fatalf("wrong attribute: %+v", n)
+	}
+	r.picking = true
+	call("sid", "top", r.id, "html", "", "", elementTarget)
+	r.picking = false
+	r.done = true
+	call("sid", "top", r.id, "html", "", "", elementTarget)
+	if len(r.queue) != 0 {
+		t.Fatal("selection or stopped recording accepted a context extraction")
 	}
 }

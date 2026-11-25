@@ -25,4 +25,8 @@ for name, module in sorted(modules.items()):
     notices.append("\n" + "=" * 72 + "\n" + name + " " + module.get("Version", "") + "\n")
     for file in sorted(files):
         notices.append(file.read_text(encoding="utf-8", errors="replace") + "\n")
+# The recorder UI is adapted from BrowserWing, independently of Go modules.
+# Existing component packaging already includes this combined notice on every OS.
+notices.append("\n" + "=" * 72 + "\nBrowserWing recorder UI (MIT)\n")
+notices.append((module_root / "NOTICE-BrowserWing.txt").read_text(encoding="utf-8"))
 pathlib.Path(sys.argv[1]).write_text("".join(notices), encoding="utf-8")
