@@ -68,7 +68,11 @@ func TestNativeChromeProfileSettingsAndBypass(t *testing.T) {
 		t.Fatal(err)
 	}
 	foundPolicy := false
-	for _, arg := range s.cmd.Args {
+	actualArgs, argsErr := browserCommandArguments(s.cmd)
+	if argsErr != nil {
+		t.Fatal(argsErr)
+	}
+	for _, arg := range actualArgs {
 		foundPolicy = foundPolicy || arg == "--force-webrtc-ip-handling-policy=disable_non_proxied_udp"
 	}
 	if !foundPolicy {
@@ -137,7 +141,11 @@ func TestNativeChromeProfileSettingsAndBypass(t *testing.T) {
 	if err != nil || value.Value.Get("language").Str() != "en-US" || !strings.Contains(value.Value.Get("header").Str(), "en-US") {
 		t.Fatal("new session did not apply saved language", err)
 	}
-	for _, arg := range s.cmd.Args {
+	actualArgs, argsErr = browserCommandArguments(s.cmd)
+	if argsErr != nil {
+		t.Fatal(argsErr)
+	}
+	for _, arg := range actualArgs {
 		if strings.Contains(arg, password) || strings.Contains(arg, localProxy) {
 			t.Fatal("old proxy settings leaked into new process")
 		}

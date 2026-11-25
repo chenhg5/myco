@@ -52,3 +52,7 @@ assert.deepEqual(JSON.parse(JSON.stringify(await api.record.active())),metadata)
 assert.deepEqual(JSON.parse(JSON.stringify(await api.record.events('rec_browser',8))),{steps:[],removed:['n_deleted'],next:9,done:true});
 assert.equal(sent.at(-2).args.action,'record.active');
 console.log('browser bridge: active browser recordings and removed steps preserved');
+
+parent.postMessage=function(message){queueMicrotask(()=>handlers.message({source:parent,data:{myco:'result',id:message.id,error:'Close the previous browser and retry.',code:'profile_locked',reason:'leftover_unverified'}}));};
+await assert.rejects(api.profiles.open('p_fixture'),e=>e.code==='profile_locked'&&e.reason==='leftover_unverified');
+console.log('browser bridge: profile recovery reason preserved');

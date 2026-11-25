@@ -24,6 +24,23 @@ import (
 // handshake/EOF/environment boundaries on native Windows as well as macOS.
 func TestMain(m *testing.M) {
 	if filepath.Base(os.Args[0]) == program("myco-browser") {
+		if len(os.Args) == 2 && os.Args[1] == "--cleanup-browser-groups" {
+			var cfg struct {
+				Dir      string `json:"data_dir"`
+				OwnerPID int    `json:"owner_pid"`
+			}
+			dec := json.NewDecoder(os.Stdin)
+			dec.DisallowUnknownFields()
+			if dec.Decode(&cfg) != nil || !filepath.IsAbs(cfg.Dir) || os.Getenv("BROWSER_FIXTURE_PRIVATE") != "" {
+				os.Exit(6)
+			}
+			raw, _ := json.Marshal(cfg)
+			if os.WriteFile(filepath.Join(cfg.Dir, fmt.Sprintf("cleanup-%d.json", cfg.OwnerPID)), raw, 0600) != nil {
+				os.Exit(7)
+			}
+			os.Exit(0)
+		}
+
 		var cfg struct {
 			Secret string `json:"secret"`
 			Dir    string `json:"data_dir"`
@@ -46,9 +63,13 @@ func TestMain(m *testing.M) {
 				http.Error(w, "denied", 401)
 				return
 			}
-			json.NewEncoder(w).Encode(map[string]any{"protocol": Protocol, "version": fixtureVersion, "environment_clean": os.Getenv("BROWSER_FIXTURE_PRIVATE") == ""})
+			json.NewEncoder(w).Encode(map[string]any{"protocol": Protocol, "version": fixtureVersion, "environment_clean": os.Getenv("BROWSER_FIXTURE_PRIVATE") == "", "display": os.Getenv("DISPLAY"), "wayland": os.Getenv("WAYLAND_DISPLAY"), "xauthority": os.Getenv("XAUTHORITY"), "runtime_dir": os.Getenv("XDG_RUNTIME_DIR")})
 		})}
-		json.NewEncoder(os.Stdout).Encode(map[string]any{"address": listener.Addr().String(), "protocol": Protocol})
+		groupProtocol := 1
+		if _, err := os.Stat(filepath.Join(cfg.Dir, "legacy-group-protocol")); err == nil {
+			groupProtocol = 0
+		}
+		json.NewEncoder(os.Stdout).Encode(map[string]any{"address": listener.Addr().String(), "protocol": Protocol, "process_groups": groupProtocol})
 		go func() { io.Copy(io.Discard, reader); server.Close() }()
 		server.Serve(listener)
 		os.Exit(0)

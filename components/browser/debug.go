@@ -158,7 +158,7 @@ func (e *engine) debugRoutes(m *http.ServeMux) {
 		defer cancel()
 		out, err := temp.act(ctx, n)
 		if err != nil {
-			fail(w, publicError(err), 409)
+			failProfileProcess(w, err)
 			return
 		}
 		jsonReply(w, map[string]any{"value": out})

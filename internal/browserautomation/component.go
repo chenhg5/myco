@@ -279,9 +279,18 @@ func (c *Component) Start(ctx context.Context) (ComponentStatus, error) {
 	cfg := map[string]any{"secret": secret, "data_dir": filepath.Join(c.Home, ".myco", "browser")}
 	// The component is a child with no Hub credentials and no auto-start service.
 	dir, selectedVersion, _ := c.installedComponent()
-	cmd := exec.Command(filepath.Join(dir, program("myco-browser")))
+	binary := filepath.Join(dir, program("myco-browser"))
+	dataDir := filepath.Join(c.Home, ".myco", "browser")
+	// A failed recovery blocks only its profile; the engine checks each lease
+	// and record again before opening it. Other profiles remain available.
+	_ = cleanupRecordedBrowserGroups(binary, dataDir, 0)
+	protectedProfiles, groupErr := hasRecordedBrowserGroups(dataDir)
+	if groupErr != nil {
+		return c.statusLocked(), groupErr
+	}
+	cmd := exec.Command(binary)
 	hideComponent(cmd)
-	for _, key := range []string{"HOME", "USERPROFILE", "LOCALAPPDATA", "APPDATA", "ProgramFiles", "ProgramFiles(x86)", "SystemRoot", "WINDIR", "TMP", "TEMP", "TMPDIR", "PATH", "LANG", "LC_ALL"} {
+	for _, key := range browserEnvironmentKeys() {
 		if v := os.Getenv(key); v != "" {
 			cmd.Env = append(cmd.Env, key+"="+v)
 		}
@@ -299,12 +308,16 @@ func (c *Component) Start(ctx context.Context) (ComponentStatus, error) {
 		stdin.Close()
 		return c.statusLocked(), e
 	}
-	cleanup, e := guardComponent(cmd)
+	processCleanup, e := guardComponent(cmd)
 	if e != nil {
 		stdin.Close()
 		_ = cmd.Process.Kill()
 		_ = cmd.Wait()
 		return c.statusLocked(), e
+	}
+	var cleanupOnce sync.Once
+	cleanup := func() {
+		cleanupOnce.Do(func() { processCleanup(); _ = cleanupRecordedBrowserGroups(binary, dataDir, cmd.Process.Pid) })
 	}
 	done := make(chan struct{})
 	go func() { _ = cmd.Wait(); cleanup(); close(done) }()
@@ -321,8 +334,9 @@ func (c *Component) Start(ctx context.Context) (ComponentStatus, error) {
 		return c.statusLocked(), e
 	}
 	type hello struct {
-		Address  string `json:"address"`
-		Protocol int    `json:"protocol"`
+		Address       string `json:"address"`
+		Protocol      int    `json:"protocol"`
+		ProcessGroups int    `json:"process_groups"`
 	}
 	result := make(chan hello, 1)
 	go func() {
@@ -337,6 +351,9 @@ func (c *Component) Start(ctx context.Context) (ComponentStatus, error) {
 		return c.statusLocked(), ctx.Err()
 	case <-time.After(10 * time.Second):
 		return c.statusLocked(), errors.New("component_start_timeout")
+	}
+	if protectedProfiles && h.ProcessGroups != 1 {
+		return c.statusLocked(), errors.New("incompatible_component")
 	}
 	host, _, e := net.SplitHostPort(h.Address)
 	if e != nil || host != "127.0.0.1" || h.Protocol != Protocol {
@@ -404,11 +421,15 @@ func (c *Component) Call(ctx context.Context, scope, method, path string, in, ou
 	defer res.Body.Close()
 	if res.StatusCode >= 400 {
 		var v struct {
-			Error string `json:"error"`
+			Error  string `json:"error"`
+			Reason string `json:"reason"`
 		}
 		_ = json.NewDecoder(io.LimitReader(res.Body, 4096)).Decode(&v)
 		if v.Error == "" {
 			v.Error = "component_failed"
+		}
+		if v.Error == "profile_locked" && v.Reason != "" {
+			return &ProfileError{Reason: v.Reason}
 		}
 		return errors.New(v.Error)
 	}
@@ -429,7 +450,7 @@ func (c *Component) stopLocked() {
 	_ = c.input.Close()
 	select {
 	case <-c.done:
-	case <-time.After(3 * time.Second):
+	case <-time.After(componentStopGrace()):
 		if c.cleanup != nil {
 			c.cleanup()
 		}
@@ -515,4 +536,18 @@ func (c *Component) Artifact(ctx context.Context, scope, id string) ([]byte, str
 		return nil, "", errors.New("artifact_too_large")
 	}
 	return data, kind, nil
+}
+
+// ProfileError preserves the component's safe recovery reason without paths,
+// process IDs, command lines, or other private process metadata.
+type ProfileError struct{ Reason string }
+
+func (e *ProfileError) Error() string { return "profile_locked" }
+
+func browserEnvironmentKeys() []string {
+	keys := []string{"HOME", "USERPROFILE", "LOCALAPPDATA", "APPDATA", "ProgramFiles", "ProgramFiles(x86)", "SystemRoot", "WINDIR", "TMP", "TEMP", "TMPDIR", "PATH", "LANG", "LC_ALL"}
+	if runtime.GOOS == "linux" {
+		keys = append(keys, "DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY", "XDG_RUNTIME_DIR")
+	}
+	return keys
 }

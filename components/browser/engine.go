@@ -37,6 +37,9 @@ type artifact struct {
 }
 
 func newEngine(ctx context.Context, dir string) (*engine, error) {
+	if err := adoptBrowserChildren(); err != nil {
+		return nil, err
+	}
 	e := &engine{ctx: ctx, dir: dir, last: time.Now(), profiles: map[string]profile{}, passwords: map[string]string{}, sessions: map[string]*session{}, recordings: map[string]*recording{}, runs: map[string]*playRun{}, artifacts: map[string]artifact{}}
 	raw, err := os.ReadFile(filepath.Join(dir, "profiles.json"))
 	if err == nil {
@@ -73,6 +76,7 @@ func newEngine(ctx context.Context, dir string) (*engine, error) {
 		return nil, err
 	}
 	e.dir = canonical
+	recoverAllBrowserGroups(e.dir)
 	if err = e.loadArtifacts(); err != nil {
 		return nil, err
 	}
@@ -218,7 +222,7 @@ func (e *engine) handler() http.Handler {
 		}
 		s, err := e.openSession(r.Context(), scope(r), in.Profile, in.Headless)
 		if err != nil {
-			fail(w, publicError(err), 409)
+			failProfileProcess(w, err)
 			return
 		}
 		jsonReply(w, map[string]string{"id": s.id})
@@ -233,7 +237,10 @@ func (e *engine) handler() http.Handler {
 		}
 		e.mu.Unlock()
 		for _, s := range owned {
-			s.close()
+			if err := s.close(); err != nil {
+				failProfileProcess(w, err)
+				return
+			}
 		}
 		jsonReply(w, true)
 	})
@@ -243,7 +250,10 @@ func (e *engine) handler() http.Handler {
 			fail(w, "not_found", 404)
 			return
 		}
-		s.close()
+		if err := s.close(); err != nil {
+			failProfileProcess(w, err)
+			return
+		}
 		jsonReply(w, true)
 	})
 	e.recordRoutes(m)
@@ -285,4 +295,15 @@ func publicError(err error) string {
 		return "timeout"
 	}
 	return "browser_failed"
+}
+
+func failProfileProcess(w http.ResponseWriter, err error) {
+	var pe *profileProcessError
+	if errors.As(err, &pe) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(409)
+		_ = json.NewEncoder(w).Encode(map[string]string{"code": "profile_locked", "error": "profile_locked", "reason": pe.Reason})
+		return
+	}
+	fail(w, publicError(err), 409)
 }

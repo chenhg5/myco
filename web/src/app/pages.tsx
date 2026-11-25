@@ -517,12 +517,12 @@ function PageView({ target, open, active, reload, onMeta }: {
       if (!origin || e.origin !== origin) return;
       if (d?.myco === "open-url" && typeof d.url === "string" && /^(https?:|mailto:)/i.test(d.url)) { openOutside(d.url); return; }
       if (d?.myco !== "call" || typeof d.id !== "number") return;
-      const reply = (value: unknown, error?: string, code?: string, latest?: unknown) => {
+      const reply = (value: unknown, error?: string, code?: string, latest?: unknown, reason?: string) => {
         if (closed) return;
-        win.postMessage(error ? { myco: "result", id: d.id, error, code, ...(latest ? { latest } : {}) } : { myco: "result", id: d.id, value }, origin);
+        win.postMessage(error ? { myco: "result", id: d.id, error, code, ...(latest ? { latest } : {}), ...(reason ? { reason } : {}) } : { myco: "result", id: d.id, value }, origin);
       };
       if (target.kind !== "page") { reply(null, L("这个网页不在 myco 上，没有桥", "This page is not on myco: no bridge"), "not_a_page"); return; }
-      void answer(target, d.method || "", d.args || {}).then((v) => reply(v), (err: unknown) => reply(null, (err as Error).message || "error", (err as ApiError).code, (err as ApiError).latest));
+      void answer(target, d.method || "", d.args || {}).then((v) => reply(v), (err: unknown) => reply(null, (err as Error).message || "error", (err as ApiError).code, (err as ApiError).latest, (err as ApiError).reason));
     };
     // The page's records (hubs from v0.20.5) and files it saves.
     const answerData = async (t: { hubId: string; id: string }, method: string, args: Record<string, unknown>): Promise<unknown> => {

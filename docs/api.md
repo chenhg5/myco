@@ -1174,3 +1174,10 @@ Older Hubs may reject unknown fields. On only that specific 400 schema error,
 the client retries without the new fields, retaining existing runtime metadata
 and `away`; authentication and other validation errors are not retried. Apps
 can bound this legacy updating indication using `last_seen_at + 90 seconds`.
+
+The local optional browser component (not a Hub route) may return
+`{ "error": "profile_locked", "reason": "leftover_unverified" }` when a profile's
+persisted process group cannot be verified. Other safe recovery reasons are
+`cleanup_pending` and `cleanup_failed`. The desktop page bridge preserves the
+optional `reason` on its rejected Error; older Apps omit it. See
+[the browser component contract](browser-component.md#browser-process-groups-and-recovery-unix).

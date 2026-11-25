@@ -21,7 +21,7 @@ Create a profile, record actions, stop recording, and review the resulting seque
 
 - Only generated profiles under `~/.myco/browser/profiles/<id>/` may be opened. The data directory is passed by the App, never by a page. Profile paths and symlinks are checked and profiles have an OS file lock.
 - The component receives a random secret through stdin and returns `{address, protocol:1}`. Its HTTP listener binds only IPv4 loopback. Every request needs Bearer authentication and a page/instance scope; browser `Origin` headers and non-loopback Host values are rejected. Hub credentials are not passed to Chrome.
-- Closing a page or revoking its browser permission stops its sessions. Closing stdin stops the component; it exits after two idle minutes without sessions. The App owns a private process group/job; only processes it started are terminated. The component never sends `Browser.close` or terminates processes by name.
+- Closing a page or revoking its browser permission stops its sessions. Closing stdin stops the component; it exits after two idle minutes without sessions. The App owns the component process group/job; Unix browsers use separately recorded groups recovered by the component. Only verified owned processes are terminated. The component never sends `Browser.close` or terminates processes by name.
 - Profiles, cookies, passwords, secret parameters, screenshots, structural DOM snapshots, and downloaded files stay on this machine. Shared scripts contain locator metadata and opaque artifact IDs, not artifact bytes or local file paths.
 - Password fields record `${password}`, not their value. Accepted prompt input records `${dialog_input}`. Declare those parameters as `secret` and supply them for each run. Secret-bearing runs omit automatic screenshots and redact secret values from returned output. Sensitive recording steps omit screenshots; pages with password/OTP/sensitive fields or inaccessible frames also omit snapshots. Structural DOM evidence contains bounded tag/role/parent relationships, not text, attributes, values or HTML.
 - Artifacts are private files, limited to 4 MiB each and 192 MiB/1,024 entries per component store. Where capture succeeds, images have local index references to a page thumbnail and structural DOM evidence. The page bridge retrieves images only. Downloads remain under the browser data directory; run output contains the filename only.
@@ -232,3 +232,35 @@ key, or scrollbar drag on that scroll container. It waits for a 400 ms quiet int
 after other recording actions. Focus, typing, clicks, layout changes, and programmatic
 scrolling do not independently create scroll steps. Recorder-panel controls and their
 scrolling are excluded. Scroll positions remain absolute replay destinations.
+
+### Browser process groups and recovery (Unix)
+
+Each managed browser starts in its own process group. A private launcher writes a
+0600 record in that profile before executing the locally selected Chrome/Edge;
+no arbitrary executable is accepted. Records contain a generation, component
+identity, and process start fingerprints, never browser credentials. Member
+snapshots refresh every ten seconds and immediately before shutdown.
+
+Shutdown sends SIGTERM to the verified group, waits up to five seconds, then
+uses SIGKILL if needed. The profile lease and record remain until the kernel
+reports that the entire group is gone. Linux adopts and reaps orphaned helpers.
+Windows continues to use its existing job object.
+
+After a component crash, the App invokes the same component's private recovery
+entry point. The next component startup also checks records, taking each profile
+lease before cleanup. Empty groups are discarded; surviving groups require a
+matching process fingerprint or an exact `--user-data-dir` argument for that
+profile. An unverified group is never signalled. A conflicting live lease is
+left alone. Profiles with unresolved records cannot be opened with an older
+component that lacks the `process_groups: 1` startup capability.
+
+Private entry points `--launch-browser` and `--cleanup-browser-groups` accept
+bounded JSON only on stdin; they are not page, Hub, or agent actions. The latter
+accepts `data_dir` and an optional `owner_pid` filter. These are implementation
+interfaces used by the App, not general-purpose process management commands.
+
+Component errors may add a safe `reason` to `profile_locked`:
+`leftover_unverified`, `cleanup_pending`, or `cleanup_failed`. The App preserves
+this optional field as `error.reason` on the page bridge. Close the profile's
+previous browser and retry, or restart the computer. Error responses never
+expose process IDs, filesystem paths, or command lines.

@@ -48,7 +48,7 @@ func run(ctx context.Context, input io.Reader, output io.Writer) error {
 	}
 	server := &http.Server{Handler: secure(cfg.Secret, e.handler()), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 << 10}
 	defer server.Close()
-	if err = json.NewEncoder(output).Encode(map[string]any{"address": listener.Addr().String(), "protocol": protocol}); err != nil {
+	if err = json.NewEncoder(output).Encode(map[string]any{"address": listener.Addr().String(), "protocol": protocol, "process_groups": browserGroupProtocol()}); err != nil {
 		listener.Close()
 		return err
 	}
@@ -111,6 +111,13 @@ func secure(secret string, next http.Handler) http.Handler {
 	})
 }
 func main() {
+	if handled, err := browserInternalMode(os.Args, os.Stdin); handled {
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "myco-browser: private cleanup/launch failed")
+			os.Exit(1)
+		}
+		return
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	if err := run(ctx, os.Stdin, os.Stdout); err != nil {

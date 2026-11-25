@@ -88,6 +88,7 @@
       if (d.error) {
         var err = new Error(d.error);
         err.code = d.code;
+        if (typeof d.reason === "string") err.reason = d.reason;
         if (d.latest) err.latest = d.latest;
         w.reject(err);
       } else w.resolve(d.value);
@@ -167,6 +168,7 @@
       if (d.error) {
         var err = new Error(d.error);
         err.code = d.code;
+        if (typeof d.reason === "string") err.reason = d.reason;
         reject(err);
       } else resolve(d.value);
     };

@@ -433,7 +433,7 @@ func (e *engine) runRoutes(m *http.ServeMux) {
 		}
 		s, err := e.openSession(req.Context(), scope(req), options.Profile, options.Headless)
 		if err != nil {
-			fail(w, publicError(err), 409)
+			failProfileProcess(w, err)
 			return
 		}
 		ctx, cancel := context.WithCancel(s.ctx)
@@ -494,7 +494,7 @@ func (e *engine) runRoutes(m *http.ServeMux) {
 		}
 		out, err := r.events(req.Context(), after)
 		if err != nil {
-			fail(w, publicError(err), 409)
+			failProfileProcess(w, err)
 			return
 		}
 		jsonReply(w, out)
@@ -514,7 +514,7 @@ func (e *engine) runRoutes(m *http.ServeMux) {
 			return
 		}
 		if err := r.control(req.PathValue("action"), in.Choice); err != nil {
-			fail(w, publicError(err), 409)
+			failProfileProcess(w, err)
 			return
 		}
 		jsonReply(w, true)

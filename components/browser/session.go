@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"io"
 	"net"
 	"net/url"
 	"os"
@@ -52,8 +51,9 @@ type session struct {
 	cmd                 *exec.Cmd
 	done                chan struct{}
 	lock                *os.File
-	guard               func()
-	once                sync.Once
+	guard               func() error
+	closeMu             sync.Mutex
+	closeComplete       bool
 	mu                  sync.Mutex
 	pages               map[proto.TargetTargetID]*rod.Page
 	current             proto.TargetTargetID
@@ -121,7 +121,10 @@ func (e *engine) openSession(ctx context.Context, owner, id string, headless boo
 			return nil, errors.New("busy")
 		}
 		if old.ctx.Err() != nil {
-			return nil, errors.New("busy")
+			if err := old.close(); err != nil {
+				return nil, err
+			}
+			return e.openSession(ctx, owner, id, headless)
 		}
 		if old.scope != owner || old.headless != headless {
 			return nil, errors.New("busy")
@@ -155,6 +158,11 @@ func (e *engine) openSession(ctx context.Context, owner, id string, headless boo
 	if err != nil {
 		e.mu.Unlock()
 		return nil, errors.New("profile_locked")
+	}
+	if err := recoverProfileProcesses(dir, nil); err != nil {
+		lock.Close()
+		e.mu.Unlock()
+		return nil, err
 	}
 	run, cancel := context.WithCancel(e.ctx)
 	s := &session{headless: headless, ready: make(chan struct{}), installs: map[proto.TargetTargetID]*targetInstall{}, e: e, id: id, scope: owner, ctx: run, cancel: cancel, done: make(chan struct{}), lock: lock, pages: map[proto.TargetTargetID]*rod.Page{}, frames: map[proto.PageFrameID]frameInfo{}, contexts: map[string]map[proto.RuntimeExecutionContextID]proto.PageFrameID{}, targets: map[proto.TargetSessionID]proto.TargetTargetID{}}
@@ -191,15 +199,17 @@ func (e *engine) openSession(ctx context.Context, owner, id string, headless boo
 	if headless {
 		args = append([]string{"--headless=new"}, args...)
 	}
-	cmd := exec.Command(binary, args...)
-	for _, key := range []string{"HOME", "USERPROFILE", "LOCALAPPDATA", "APPDATA", "ProgramFiles", "ProgramFiles(x86)", "SystemRoot", "WINDIR", "TMP", "TEMP", "TMPDIR", "PATH", "LANG", "LC_ALL"} {
+	cmd, err := newBrowserCommand(binary, args, dir, lock)
+	if err != nil {
+		return nil, err
+	}
+	for _, key := range browserEnvironmentKeys() {
 		if value := os.Getenv(key); value != "" {
 			cmd.Env = append(cmd.Env, key+"="+value)
 		}
 	}
-	cmd.Stdin = nil
-	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
+	// Nil output connects directly to the null device; descendants cannot
+	// hold os/exec copy pipes open after the group leader exits.
 	// Environment is inherited from the component, whose App launcher keeps
 	// only OS paths and locale. No Hub/provider credentials reach Chrome.
 	s.mu.Lock()
@@ -216,10 +226,11 @@ func (e *engine) openSession(ctx context.Context, owner, id string, headless boo
 	s.cmd = cmd
 	s.mu.Unlock()
 	go func() { _ = cmd.Wait(); close(s.done); s.cancel() }()
-	guard, err := guardBrowser(cmd)
+	guard, err := guardBrowser(cmd, dir)
 	if err != nil {
-		_ = cmd.Process.Kill()
-		<-s.done
+		s.mu.Lock()
+		s.guard = func() error { return recoverFailedBrowserCommand(cmd, dir) }
+		s.mu.Unlock()
 		return nil, err
 	}
 	s.mu.Lock()
@@ -292,44 +303,48 @@ func (e *engine) openSession(ctx context.Context, owner, id string, headless boo
 	go func() { <-run.Done(); s.close() }()
 	return s, nil
 }
-func (s *session) close() {
-	s.once.Do(func() {
-		s.cancel()
-		s.mu.Lock()
-		s.closed = true
-		rec := s.recorder
-		cmd := s.cmd
-		guard := s.guard
-		proxy := s.proxy
-		s.mu.Unlock()
-		if proxy != nil {
-			proxy.Close()
-		}
-		if rec != nil {
-			rec.finish()
-		}
-		if cmd != nil {
-			if guard != nil {
-				guard()
-			} else {
-				_ = cmd.Process.Kill()
+func (s *session) close() error {
+	s.closeMu.Lock()
+	defer s.closeMu.Unlock()
+	if s.closeComplete {
+		return nil
+	}
+	s.cancel()
+	s.mu.Lock()
+	s.closed = true
+	rec, cmd, guard, proxy := s.recorder, s.cmd, s.guard, s.proxy
+	s.mu.Unlock()
+	if proxy != nil {
+		proxy.Close()
+	}
+	if rec != nil {
+		rec.finish()
+	}
+	if cmd != nil {
+		if guard != nil {
+			if err := guard(); err != nil {
+				return err
 			}
-			select {
-			case <-s.done:
-			case <-time.After(3 * time.Second):
-				_ = cmd.Process.Kill()
-				<-s.done
-			}
+		} else {
+			_ = cmd.Process.Kill()
 		}
-		if s.lock != nil {
-			_ = s.lock.Close()
+		select {
+		case <-s.done:
+		case <-time.After(3 * time.Second):
+			return groupError("cleanup_pending")
 		}
-		s.e.mu.Lock()
-		if s.e.sessions[s.id] == s {
-			delete(s.e.sessions, s.id)
-		}
-		s.e.mu.Unlock()
-	})
+	}
+	if s.lock != nil {
+		_ = s.lock.Close()
+		s.lock = nil
+	}
+	s.e.mu.Lock()
+	if s.e.sessions[s.id] == s {
+		delete(s.e.sessions, s.id)
+	}
+	s.e.mu.Unlock()
+	s.closeComplete = true
+	return nil
 }
 func (e *engine) session(owner, id string) (*session, error) {
 	e.mu.Lock()
@@ -413,4 +428,12 @@ func (s *session) commands(ctx context.Context) func() {
 // display an unsupported-command-line warning over the recording controls.
 func defaultChromeArgs(dir string) []string {
 	return []string{"--user-data-dir=" + dir, "--remote-debugging-port=0", "--remote-debugging-address=127.0.0.1", "--no-first-run", "--no-default-browser-check", "--disable-sync", "--window-size=1280,900", "about:blank"}
+}
+
+func browserEnvironmentKeys() []string {
+	keys := []string{"HOME", "USERPROFILE", "LOCALAPPDATA", "APPDATA", "ProgramFiles", "ProgramFiles(x86)", "SystemRoot", "WINDIR", "TMP", "TEMP", "TMPDIR", "PATH", "LANG", "LC_ALL"}
+	if runtime.GOOS == "linux" {
+		keys = append(keys, "DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY", "XDG_RUNTIME_DIR")
+	}
+	return keys
 }

@@ -2,13 +2,14 @@ package main
 
 import (
 	"golang.org/x/sys/windows"
+	"io"
 	"os"
 	"os/exec"
 	"sync"
 	"unsafe"
 )
 
-func guardBrowser(cmd *exec.Cmd) (func(), error) {
+func guardBrowser(cmd *exec.Cmd, _ string) (func() error, error) {
 	job, err := windows.CreateJobObject(nil, nil)
 	if err != nil {
 		return nil, err
@@ -30,7 +31,7 @@ func guardBrowser(cmd *exec.Cmd) (func(), error) {
 		return nil, err
 	}
 	var once sync.Once
-	return func() { once.Do(func() { _ = windows.CloseHandle(job) }) }, nil
+	return func() error { once.Do(func() { _ = windows.CloseHandle(job) }); return nil }, nil
 }
 func lockProfile(path string) (*os.File, error) {
 	name, err := windows.UTF16PtrFromString(path)
@@ -43,3 +44,23 @@ func lockProfile(path string) (*os.File, error) {
 	}
 	return os.NewFile(uintptr(h), path), nil
 }
+
+func newBrowserCommand(binary string, args []string, _ string, _ *os.File) (*exec.Cmd, error) {
+	return exec.Command(binary, args...), nil
+}
+func recoverProfileProcesses(string, any) error             { return nil }
+func adoptBrowserChildren() error                           { return nil }
+func browserInternalMode([]string, io.Reader) (bool, error) { return false, nil }
+
+type profileProcessError struct{ Reason string }
+
+func (e *profileProcessError) Error() string { return "profile_locked: " + e.Reason }
+func groupError(reason string) error         { return &profileProcessError{Reason: reason} }
+
+func recoverAllBrowserGroups(string) {}
+
+func browserGroupProtocol() int { return 0 }
+
+func browserCommandArguments(cmd *exec.Cmd) ([]string, error) { return cmd.Args, nil }
+
+func recoverFailedBrowserCommand(cmd *exec.Cmd, _ string) error { _ = cmd.Process.Kill(); return nil }

@@ -260,7 +260,7 @@ func (b *Backend) browserCall(ctx context.Context, c *client.Client, h Hub, in b
 		return nil, &browserNeedsConsent{consent}
 	}
 	if err = comp.EnsureRunning(ctx); err != nil {
-		return nil, browserFailure(browserError(err), 409)
+		return nil, browserComponentFailure(err)
 	}
 	method, path, body := "POST", "", any(in.Args)
 	var args map[string]json.RawMessage
@@ -275,7 +275,7 @@ func (b *Backend) browserCall(ctx context.Context, c *client.Client, h Hub, in b
 	case "status":
 		var out api.BrowserStatus
 		if err = comp.Call(ctx, scope, "GET", "/status", nil, &out); err != nil {
-			return nil, browserFailure(browserError(err), 409)
+			return nil, browserComponentFailure(err)
 		}
 		// Human browser use remains available to legacy/admin credentials;
 		// only a resolved native console account can expose agent opt-ins.
@@ -327,7 +327,7 @@ func (b *Backend) browserCall(ctx context.Context, c *client.Client, h Hub, in b
 		}
 		var profile api.BrowserProfile
 		if e = comp.Call(ctx, scope, "PATCH", "/profiles/"+url.PathEscape(inSettings.ID), map[string]any{"settings": inSettings.Settings}, &profile); e != nil {
-			return nil, browserFailure(browserError(e), 409)
+			return nil, browserComponentFailure(e)
 		}
 		if profile.ID != inSettings.ID {
 			return nil, browserFailure("incompatible_component", 409)
@@ -381,7 +381,7 @@ func (b *Backend) browserCall(ctx context.Context, c *client.Client, h Hub, in b
 			Recordings []api.BrowserRecording `json:"recordings"`
 		}
 		if err := comp.Call(ctx, scope, "GET", "/status", nil, &out); err != nil {
-			return nil, browserFailure(browserError(err), 409)
+			return nil, browserComponentFailure(err)
 		}
 		if out.Recordings == nil {
 			out.Recordings = []api.BrowserRecording{}
@@ -445,7 +445,7 @@ func (b *Backend) browserCall(ctx context.Context, c *client.Client, h Hub, in b
 	case "snapshot":
 		data, kind, err := comp.Artifact(ctx, scope, text("id"))
 		if err != nil {
-			return nil, browserFailure(browserError(err), 409)
+			return nil, browserComponentFailure(err)
 		}
 		return map[string]string{"base64": base64.StdEncoding.EncodeToString(data), "type": kind}, nil
 	default:
@@ -453,7 +453,7 @@ func (b *Backend) browserCall(ctx context.Context, c *client.Client, h Hub, in b
 	}
 	var out any
 	if err = comp.Call(ctx, scope, method, path, body, &out); err != nil {
-		return nil, browserFailure(browserError(err), 409)
+		return nil, browserComponentFailure(err)
 	}
 	if in.Action == "profiles.allowAgents" {
 		owner, err := b.browserOwner(ctx, c, h, in.Page)
@@ -552,4 +552,26 @@ func (b *Backend) browserPageScript() string {
 		addition = `.concat(["browser"])`
 	}
 	return strings.Replace(pageHelperJS, "/*__MYCO_BROWSER_FEATURE__*/", addition, 1)
+}
+
+type browserReasonError struct {
+	cause  *client.Error
+	reason string
+}
+
+func (e *browserReasonError) Error() string         { return e.cause.Error() }
+func (e *browserReasonError) Unwrap() error         { return e.cause }
+func (e *browserReasonError) BrowserReason() string { return e.reason }
+func browserComponentFailure(err error) error {
+	var pe *browserautomation.ProfileError
+	if errors.As(err, &pe) {
+		reason := pe.Reason
+		switch reason {
+		case "leftover_unverified", "cleanup_pending", "cleanup_failed":
+		default:
+			reason = "leftover_unverified"
+		}
+		return &browserReasonError{cause: &client.Error{Code: "profile_locked", Status: 409, Message: "This profile's previous browser is still running. Close it and retry, or restart your computer."}, reason: reason}
+	}
+	return browserFailure(browserError(err), 409)
 }

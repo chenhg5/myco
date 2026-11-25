@@ -200,12 +200,12 @@ func (e *engine) recordRoutes(m *http.ServeMux) {
 		}
 		s, err := e.openSession(r.Context(), scope(r), in.Profile, in.Headless)
 		if err != nil {
-			fail(w, publicError(err), 409)
+			failProfileProcess(w, err)
 			return
 		}
 		rec, err := e.startRecording(r.Context(), s, nil, in.URL, "page")
 		if err != nil {
-			fail(w, publicError(err), 409)
+			failProfileProcess(w, err)
 			return
 		}
 		jsonReply(w, map[string]string{"id": rec.id})
@@ -233,7 +233,7 @@ func (e *engine) recordRoutes(m *http.ServeMux) {
 		rec.mu.Unlock()
 		out, err := rec.events(r.Context(), after)
 		if err != nil {
-			fail(w, publicError(err), 409)
+			failProfileProcess(w, err)
 			return
 		}
 		jsonReply(w, out)

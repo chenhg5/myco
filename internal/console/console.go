@@ -1731,6 +1731,10 @@ func writeErr(w http.ResponseWriter, err error) {
 			status = http.StatusBadGateway
 		}
 	}
+	var reason interface{ BrowserReason() string }
+	if errors.As(err, &reason) {
+		body["reason"] = reason.BrowserReason()
+	}
 	writeJSON(w, status, body)
 }
 
