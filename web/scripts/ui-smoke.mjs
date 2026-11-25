@@ -2612,6 +2612,26 @@ async function runMatrix(browser, size, scheme) {
         return wait >= 0 && wait < say;
       });
       if (wrongOrder) throw new Error("“捣鼓中”应在进展下面");
+      // The plan of the task at work is pinned at the top of the chat, by
+      // itself: one line with how far it is, opened to the list, folded
+      // back, and closed for this task.
+      const bar = page.locator(".conv-detail [data-testid=plan-bar]");
+      await bar.waitFor({ timeout: 10_000 });
+      await page.waitForFunction(() => /计划 2\/3/.test(document.querySelector(".conv-detail [data-testid=plan-bar]")?.textContent || ""), null, { timeout: 10_000 });
+      if (!/正在：跑测试/.test(await bar.innerText())) throw new Error(`置顶的计划应说正在做哪一步，实际「${await bar.innerText()}」`);
+      const barTop = await bar.evaluate((el) => el.getBoundingClientRect().top);
+      const scrollTop = await page.locator(".conv-detail .conv-scroll").evaluate((el) => el.getBoundingClientRect().top);
+      if (barTop > scrollTop) throw new Error("置顶的计划应在聊天内容上面，不随聊天滚动");
+      await bar.locator(".plan-bar-toggle").click();
+      await bar.locator(".trace-plan-item", { hasText: "动手改" }).waitFor({ timeout: 5_000 });
+      await settle(page, 300);
+      await shot(page, size, scheme, "chat-plan-bar");
+      await bar.locator(".plan-bar-toggle").click();
+      await bar.locator(".trace-plan").waitFor({ state: "detached", timeout: 5_000 });
+      await bar.locator(".plan-bar-close").click();
+      await bar.waitFor({ state: "detached", timeout: 5_000 });
+      await page.waitForTimeout(2500);
+      if (await page.locator(".conv-detail [data-testid=plan-bar]").count()) throw new Error("关掉的计划不该再置顶回来");
       await clickVisible(page, page.locator(".conv-head button").first());
     });
 

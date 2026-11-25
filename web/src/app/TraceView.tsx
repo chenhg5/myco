@@ -294,8 +294,11 @@ function usageLine(u?: TraceStep): string {
  * as one line that opens, as the runner reported them. Live while the task
  * runs: the newest steps say what it is doing now.
  */
-export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaused, onActivity, from, until, borrow, said, steers, onUsage, answers, canAnswer, onAnswer, cli, onStatus, queueText }: {
+export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaused, onActivity, from, until, borrow, said, steers, onUsage, answers, canAnswer, onAnswer, cli, onStatus, queueText, onPlan }: {
   hubId: string; task: Message; onGrow?: () => void;
+  /** told the plan this run is working through (and when it was written),
+   *  for the bar at the top of the chat (PlanBar); null when it has none */
+  onPlan?: (key: string, taskId: string, plan: { items: PlanItem[]; at: string } | null) => void;
   cli?: string;
   queueText?: string;
   onStatus?: (taskId: string, status: string) => void;
@@ -706,6 +709,7 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
       {/* The plan is not part of the process: it stays at the top, always
           out, whether the steps below it are folded or not. */}
       {plan && <PlanCard items={plan.items} live={moving} />}
+      {onPlan && <PlanReport id={`${task.id}\u0000${from || ""}`} taskId={task.id} plan={plan} onPlan={onPlan} />}
       {foldable && (
         <button type="button" className="trace-head trace-fold" onClick={toggleOpen} aria-expanded={open}>
           {/* Folded, its own line shows it is still working; open, the steps do. */}
@@ -906,9 +910,23 @@ function TraceRow({ row, live, onGrow }: { row: Row; live: boolean; onGrow?: () 
   );
 }
 
+/** Tells the chat the plan shown here (and that it is gone, when this run
+ *  is no longer drawn). */
+function PlanReport({ id, taskId, plan, onPlan }: {
+  id: string; taskId: string; plan: { items: PlanItem[]; at: string } | null;
+  onPlan: (key: string, taskId: string, plan: { items: PlanItem[]; at: string } | null) => void;
+}) {
+  const sig = plan ? JSON.stringify(plan) : "";
+  const cb = useRef(onPlan);
+  cb.current = onPlan;
+  useEffect(() => { cb.current(id, taskId, sig ? JSON.parse(sig) : null); }, [id, taskId, sig]);
+  useEffect(() => () => cb.current(id, taskId, null), [id, taskId]);
+  return null;
+}
+
 /** The plan: a short list being ticked off. Done items are checked and
  *  struck through; the one in hand is marked while it runs. */
-function PlanCard({ items, live }: { items: PlanItem[]; live: boolean }) {
+export function PlanCard({ items, live }: { items: PlanItem[]; live: boolean }) {
   const done = items.filter((x) => x.state === "done").length;
   return (
     <div className="trace-plan">

@@ -11,7 +11,7 @@ import { MessageContent, filesBelow, filesFor, inlineAttachmentIds, type InlineF
 import { UI_REPLY } from "@/app/ui/UiBlock";
 import { PromptSign, STOPPED, Terminal } from "@/app/Terminal";
 import { runnerQueueText } from "@/app/RunnerQueue";
-import { TraceView } from "@/app/TraceView";
+import { TraceView, type PlanItem } from "@/app/TraceView";
 import { WorkingLine } from "@/app/Working";
 import { AccessPill, RunPill } from "@/app/RunSettings";
 import { forkAgent } from "@/app/Fork";
@@ -43,6 +43,7 @@ import { takePendingFind } from "@/app/CommandPalette";
 import { setHidden, useHidden } from "@/app/hidden";
 import { noteChat } from "@/app/recentChats";
 import { PinBar, pinThing, pinsChanged, titleOfMessage, usePins } from "@/app/pins";
+import { PlanBar } from "@/app/PlanBar";
 import { useContextMenu, type MenuItem } from "@/app/ContextMenu";
 import { isPicture } from "@/app/attachments";
 
@@ -778,6 +779,16 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       return o && o.at === at && o.ended === ended ? s : new Map(s).set(taskId, { at, ended });
     });
   }, []);
+  // The plans the runs drawn here work through (PlanReport), by who drew
+  // them: a run cut at your addition and its part below it each say theirs.
+  const [runPlans, setRunPlans] = useState<ReadonlyMap<string, { taskId: string; items: PlanItem[]; at: string }>>(() => new Map());
+  const onPlan = useCallback((key: string, taskId: string, plan: { items: PlanItem[]; at: string } | null) =>
+    setRunPlans((s) => {
+      const o = s.get(key);
+      if (!plan) { if (!o) return s; const n = new Map(s); n.delete(key); return n; }
+      if (o && o.at === plan.at && JSON.stringify(o.items) === JSON.stringify(plan.items)) return s;
+      return new Map(s).set(key, { taskId, ...plan });
+    }), []);
   const [runPaused, setRunPaused] = useState<ReadonlyMap<string, boolean>>(() => new Map());
   const onPaused = useCallback((taskId: string, paused: boolean) =>
     setRunPaused((s) => (s.get(taskId) === paused ? s : new Map(s).set(taskId, paused))), []);
@@ -1418,6 +1429,17 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const liveId = footLive ? "" : liveRun?.id || "";
   // The one at work, wherever its loading is (another waits behind it).
   const atWorkId = liveId || (footLive && working ? working.task.id : "");
+  // Its plan, pinned at the top (PlanBar): the newest any of its parts
+  // drew. Kept a moment once it stops, to say all is done.
+  const planOf = (taskId: string) => {
+    let best: { items: PlanItem[]; at: string } | null = null;
+    for (const p of runPlans.values()) if (p.taskId === taskId && (!best || p.at >= best.at)) best = p;
+    return best;
+  };
+  const [planTask, setPlanTask] = useState("");
+  const atWorkPlan = atWorkId ? planOf(atWorkId) : null;
+  useEffect(() => { if (atWorkId && atWorkPlan) setPlanTask(atWorkId); }, [atWorkId, !!atWorkPlan]);
+  const pinnedPlan = planTask ? planOf(planTask) : null;
   // A task of yours not opened yet, or set aside: a few words under it,
   // like a receipt, not a line of its own (it is a message, not a state).
   // Gone once it starts; nothing is said while it works or after it stops.
@@ -2256,7 +2278,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           const live = w.last && !w.until;
           const said = (progressOf.get(t.id) || []).filter((x) => x.created_at >= w.from && (!w.until || x.created_at < w.until));
           return (
-            <TraceView hubId={target.hubId} task={t} cli={rowOf(t.to)?.st.agent.runtime?.cli} onStatus={live ? onTraceStatus : undefined} onGrow={followBottom}
+            <TraceView hubId={target.hubId} task={t} cli={rowOf(t.to)?.st.agent.runtime?.cli} onStatus={live ? onTraceStatus : undefined} onGrow={followBottom} onPlan={onPlan}
               answered={answerOf.has(t.id)} quiet={!live || t.id !== liveId} footed={live && t.id === liveId && liveFoot}
               onPaused={live ? onPaused : undefined} onActivity={live ? onActivity : undefined}
               from={w.from} until={w.until} said={said.length ? said : undefined}
@@ -2267,7 +2289,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           <>
             {/* (its run stays: what it did and said; the line about being
                 stuck goes under it) */}
-            <TraceView hubId={target.hubId} task={m} cli={rowOf(m.to)?.st.agent.runtime?.cli} queueText={runnerQueueText(rowOf(m.to)?.st.agent, m.id)} onStatus={onTraceStatus} onGrow={followBottom} answered={answerOf.has(m.id)} quiet={m.id !== liveId || goesOnBelow(m.id)} footed={m.id === liveId && liveFoot} onPaused={goesOnBelow(m.id) ? undefined : onPaused} onActivity={goesOnBelow(m.id) ? undefined : onActivity} until={cutOf(m.id)} borrow={borrowOf.get(m.id)} steers={runSteers.get(m.id)} said={saidIn(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined}
+            <TraceView hubId={target.hubId} task={m} cli={rowOf(m.to)?.st.agent.runtime?.cli} queueText={runnerQueueText(rowOf(m.to)?.st.agent, m.id)} onStatus={onTraceStatus} onGrow={followBottom} onPlan={onPlan} answered={answerOf.has(m.id)} quiet={m.id !== liveId || goesOnBelow(m.id)} footed={m.id === liveId && liveFoot} onPaused={goesOnBelow(m.id) ? undefined : onPaused} onActivity={goesOnBelow(m.id) ? undefined : onActivity} until={cutOf(m.id)} borrow={borrowOf.get(m.id)} steers={runSteers.get(m.id)} said={saidIn(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined}
           answers={answerTo} canAnswer={isMe(m.from, row?.hub)} onAnswer={answerAsk(m)} />
             {isStuck(m) && (<div className="conv-stuck" data-stuck={m.id}>
             <span className="dot pending" aria-hidden />
@@ -2295,7 +2317,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         )}
         {/* What it did for a task someone else gave it, the same way. */}
         {m.type === "task" && !m.e2e && fromOther && m.to === target.agent && (
-          <TraceView hubId={target.hubId} task={m} cli={rowOf(m.to)?.st.agent.runtime?.cli} queueText={runnerQueueText(rowOf(m.to)?.st.agent, m.id)} onStatus={onTraceStatus} onGrow={followBottom} answered={answerOf.has(m.id)} quiet={m.id !== liveId} footed={m.id === liveId && liveFoot} onPaused={onPaused} steers={runSteers.get(m.id)} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined} answers={answerTo} />
+          <TraceView hubId={target.hubId} task={m} cli={rowOf(m.to)?.st.agent.runtime?.cli} queueText={runnerQueueText(rowOf(m.to)?.st.agent, m.id)} onStatus={onTraceStatus} onGrow={followBottom} onPlan={onPlan} answered={answerOf.has(m.id)} quiet={m.id !== liveId} footed={m.id === liveId && liveFoot} onPaused={onPaused} steers={runSteers.get(m.id)} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined} answers={answerTo} />
         )}
         </Fragment>
       );
@@ -2417,6 +2439,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         <PinBar hubId={target.hubId} withWhom={target.agent} a={target.peer} pins={pins} setPins={(p) => pinState.setPins(p)}
           onJump={(id) => setSeek({ id, tries: 0 })} adding={pinAdding} onAdding={setPinAdding} />
       )}
+      {pinnedPlan && <PlanBar key={planTask} taskId={planTask} items={pinnedPlan.items} live={planTask === atWorkId} />}
       {pinMenu.element}
       {headMenu.element}
       {!termMode && <ChatBgDialog open={bgOpen} onClose={() => setBgOpen(false)} chat={chatKey(target.hubId, target.agent)} name={agentName} />}
