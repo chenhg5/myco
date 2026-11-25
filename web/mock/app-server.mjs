@@ -1741,6 +1741,26 @@ function execHistory(agent) {
 // Ids of messages closed with "dismiss" (/app/hubs/{id}/messages/{mid}/dismiss).
 const dismissed = new Set();
 
+// 盯着 (myco watch): what agents wait for in the background, per hub. The
+// studio hub has legacy-codex watching one thing (and three that ended:
+// met, the time up, stopped) and Myco (Grok) watching two.
+const watchStore = new Map();
+function watchesOf(h) {
+  if (!watchStore.has(h.id)) {
+    const min = (n) => n * 60;
+    const w = (o) => ({ checks: 0, kind: "reply", ...o });
+    watchStore.set(h.id, h.id !== "hub_studio" ? [] : [
+      w({ id: "wat_mac2", agent: "legacy-codex", project: "", task: "msg_watch_task", what: "mac2 的回复", target: "msg_mac2_q", started_at: iso(min(12)), deadline: new Date(Date.now() + 18 * 60_000).toISOString(), last_check_at: iso(30), last_result: "还没回复：mac2 的任务仍在处理中", checks: 24, state: "watching" }),
+      w({ id: "wat_release", agent: "legacy-codex", what: "Release 的发布说明", started_at: iso(min(140)), deadline: iso(min(110)), ended_at: iso(min(122)), state: "met", checks: 36, outcome: "Release 回复了：发布说明写好了" }),
+      w({ id: "wat_ci", agent: "legacy-codex", what: "CI 跑完", kind: "workflow", started_at: iso(min(200)), deadline: iso(min(170)), ended_at: iso(min(170)), state: "expired", checks: 60, outcome: "30 分钟没等到" }),
+      w({ id: "wat_review", agent: "legacy-codex", what: "Review 的审查意见", started_at: iso(min(95)), deadline: iso(min(35)), ended_at: iso(min(80)), state: "stopped", ended_by: CONSOLE, checks: 30, outcome: "你停止了" }),
+      w({ id: "wat_pm", agent: "grok-agent-7c2e", what: "PM (Codex) 的答复", started_at: iso(min(6)), deadline: new Date(Date.now() + 24 * 60_000).toISOString(), last_check_at: iso(12), checks: 12, state: "watching" }),
+      w({ id: "wat_build", agent: "grok-agent-7c2e", what: "构建流水线跑完", kind: "workflow", started_at: iso(min(3)), deadline: new Date(Date.now() + 57 * 60_000).toISOString(), last_check_at: iso(45), last_result: "第 3/5 步：跑测试", checks: 4, state: "watching" }),
+    ]);
+  }
+  return watchStore.get(h.id);
+}
+
 function agentStatus(a) {
   // The legacy node has a task it picked up and never reported back on.
   const stuck = stuckCurrent.get(a.name);
@@ -1801,7 +1821,7 @@ function overviewFor(h) {
     viewer: { kind: "admin" },
     online_window_seconds: 120,
     totals: totals(h.agents),
-    agents: h.agents.map(agentStatus),
+    agents: h.agents.map((a) => { const st = agentStatus(a); const n = watchesOf(h).filter((w) => w.agent === a.name && w.state === "watching").length; return n ? { ...st, watching: n } : st; }),
     // Real machines only; cloud sessions are not machines.
     machines: (h.machines || []).map((m) => ({
       ...m,
@@ -4115,6 +4135,32 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { messages: hub.threads[parts[4]] || [] });
     }
 
+    // /app/hubs/{id}/watches — what agents wait for in the background
+    // (myco watch; MOCK_OLD_HUB: none). stop / extend change one.
+    if (parts[3] === "watches") {
+      if (process.env.MOCK_OLD_HUB) return fail(res, 404, "", "404 page not found");
+      if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
+      const list = watchesOf(hub);
+      if (parts.length === 4 && method === "GET") {
+        const agent = url.searchParams.get("agent"), state = url.searchParams.get("state") || "active";
+        return send(res, 200, { watches: list.filter((w) => (!agent || w.agent === agent) && (state === "all" || w.state === "watching")) });
+      }
+      const w = list.find((x) => x.id === parts[4]);
+      if (!w) return fail(res, 404, "not_found", "no such watch");
+      if (parts.length === 6 && method === "POST" && parts[5] === "stop") {
+        if (w.state !== "watching") return fail(res, 409, "conflict", `already ${w.state}`);
+        Object.assign(w, { state: "stopped", ended_at: iso(0), ended_by: CONSOLE, outcome: "你停止了" });
+        return send(res, 200, w);
+      }
+      if (parts.length === 6 && method === "POST" && parts[5] === "extend") {
+        const body = await readBody(req);
+        if (w.state !== "watching") return fail(res, 409, "conflict", `already ${w.state}`);
+        const cap = new Date(w.started_at).getTime() + 24 * 3600_000;
+        w.deadline = new Date(Math.min(cap, Date.now() + (Number(body?.for_sec) || 1800) * 1000)).toISOString();
+        return send(res, 200, w);
+      }
+      return fail(res, 404, "not_found", "no such route");
+    }
     // /app/hubs/{id}/pins — what a conversation keeps at hand (置顶), the
     // same list for both its parties (hubs from v0.20.2; MOCK_OLD_HUB: none).
     if (parts[3] === "pins" && (parts.length === 4 || parts.length === 5)) {

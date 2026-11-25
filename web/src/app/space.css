@@ -766,6 +766,20 @@
   font-size: 10px;
   line-height: 16px;
 }
+/* 盯着 N: what it waits for in the background, beside its name. */
+.sp-watch-tag {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--pill);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 16px;
+}
+.sp-watch-tag svg { width: 10px; height: 10px; }
 .sp-member-sub.is-working {
   color: var(--fg-2);
 }

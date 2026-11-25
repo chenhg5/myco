@@ -491,6 +491,9 @@ export interface Message {
 export interface Peer { agent: string; messages: number; last?: Message }
 export type State = "working" | "pending" | "idle" | "offline";
 export interface AgentStatus { agent: Agent; state: State; queued: number; in_progress: number; held: number;
+  /** what it is watching for in the background (myco watch; absent on
+   *  older hubs): counted apart from held and queued */
+  watching?: number;
   /** held tasks waiting on a question to their sender (absent on older hubs) */
   asking?: number;
   /** acked tasks that show no life (the agent is away, or none was touched
@@ -595,3 +598,34 @@ export interface PageAttachment {
 }
 export interface PageAttachmentUsage { files_used: number; files_max: number; bytes_used: number; bytes_max: number; max_file_bytes: number }
 export interface PageAttachmentList { attachments_version: number; attachments: PageAttachment[]; usage: PageAttachmentUsage; next?: string }
+
+/** Something an agent waits for in the background (myco watch): a reply,
+ *  a task, a workflow run, later a command's output. The hub checks it
+ *  and wakes the agent when it is met, or when the time is up. */
+export interface Watch {
+  id: string;
+  /** who is watching */
+  agent: string;
+  project?: string;
+  /** the task it set aside to wait (held) */
+  task?: string;
+  /** for people: "mac2 的回复" */
+  what: string;
+  kind: "reply" | "task" | "workflow" | "command";
+  target?: string;
+  command?: string;
+  match?: string;
+  every_sec?: number;
+  started_at: string;
+  deadline: string;
+  last_check_at?: string;
+  /** the last check, one line (at most 200 characters, redacted) */
+  last_result?: string;
+  checks: number;
+  state: "watching" | "met" | "expired" | "stopped";
+  ended_at?: string;
+  ended_by?: string;
+  /** what came of it: met, timed out, stopped */
+  outcome?: string;
+}
+export interface WatchList { watches: Watch[] }

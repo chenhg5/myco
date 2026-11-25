@@ -44,6 +44,7 @@ import { setHidden, useHidden } from "@/app/hidden";
 import { noteChat } from "@/app/recentChats";
 import { PinBar, pinThing, pinsChanged, titleOfMessage, usePins } from "@/app/pins";
 import { PlanBar } from "@/app/PlanBar";
+import { useWatches, WatchBar, WatchEnded } from "@/app/Watches";
 import { useContextMenu, type MenuItem } from "@/app/ContextMenu";
 import { isPicture } from "@/app/attachments";
 
@@ -411,6 +412,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const [, setRevealedTick] = useState(0);
   const [loadError, setLoadError] = useState<unknown>(null);
   const [sendError, setSendError] = useState<unknown>(null);
+  // What it waits for in the background (myco watch): at the top while it
+  // watches, a grey line in the chat once that ends.
+  const watches = useWatches(target.hubId, target.agent);
   // What was typed and not sent stays with the conversation (drafts.ts).
   const draftKey = chatDraftKey(target.hubId, target.agent);
   const [draft, setDraft] = useState(() => draftOf(draftKey));
@@ -1297,7 +1301,12 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const handoverLines = row ? handovers.filter((h) => h.state === "done").map((h) => ({
     id: "ho_" + h.id, at: h.done_at || h.at, node: <HandoverDivider h={h} hub={row.hub} />,
   })) : [];
-  const allInserts = handoverLines.length ? [...(baseInserts || []), ...handoverLines] : baseInserts;
+  // What it watched for and how that ended (met, the time up, stopped):
+  // one grey line where it ended.
+  const watchLines = watches.ended.map((w) => ({
+    id: "wat_" + w.id, at: w.ended_at!, node: <WatchEnded w={w} nameOf={(n) => (isMe(n, row?.hub) ? L("你", "You") : nameOf(n))} />,
+  }));
+  const allInserts = handoverLines.length || watchLines.length ? [...(baseInserts || []), ...handoverLines, ...watchLines] : baseInserts;
 
   // What each task got, by the task's id. Answers and progress updates
   // point at their task (reply_to). One without it (older runners) answers
@@ -2441,6 +2450,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           onJump={(id) => setSeek({ id, tries: 0 })} adding={pinAdding} onAdding={setPinAdding} />
       )}
       {pinnedPlan && <PlanBar key={planTask} taskId={planTask} items={pinnedPlan.items} live={planTask === atWorkId} />}
+      <WatchBar hubId={target.hubId} watches={watches.active} onChanged={watches.put} />
       {pinMenu.element}
       {headMenu.element}
       {!termMode && <ChatBgDialog open={bgOpen} onClose={() => setBgOpen(false)} chat={chatKey(target.hubId, target.agent)} name={agentName} />}

@@ -1246,6 +1246,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
                 <span>{L("处理中", "In progress")}<b>{Math.max(0, row.st.in_progress - stuck.in_progress)}</b></span>
                 <span>{L("待处理", "Queued")}<b>{row.st.queued}</b></span>
                 <span>{L("暂挂", "On hold")}<b>{row.st.held}</b></span>
+                {(row.st.watching || 0) > 0 && <span className="is-watching">{L("盯着", "Watching")}<b>{row.st.watching}</b></span>}
                 {stuck.total > 0 && <span className="is-stuck">{L("可能卡住", "May be stuck")}<b>{stuck.total}</b></span>}
               </div>
               {current.length === 0 && <div className="app-empty-note">{row.st.queued + row.st.in_progress + row.st.held > 0

@@ -4179,6 +4179,53 @@ async function runMatrix(browser, size, scheme) {
       if (await page.locator(".conv-detail .trace-say-more").count()) throw new Error("展开以后「展开全文」应收起来");
     });
 
+    // 盯着 (myco watch): what an agent waits for in the background is at the
+    // top of its chat, the clock moving, with 延长 and 停止; how earlier
+    // ones ended is a grey line each; members show 盯着 N.
+    await step("单聊 · 盯着", async () => {
+      await openMember(page, narrow, "聊天", "legacy-codex");
+      const bar = page.locator(".conv-detail [data-testid=watch-bar]");
+      await bar.waitFor({ timeout: 10_000 });
+      const first = (await bar.locator(".watch-line").innerText()).replace(/\s+/g, "");
+      if (!/正在盯：mac2的回复/.test(first) || !/已12分钟/.test(first) || !/剩1[78]分钟/.test(first) || !/秒前看过/.test(first)) throw new Error(`盯着的那条不对：「${first}」`);
+      await page.waitForTimeout(2200);
+      if ((await bar.locator(".watch-line").innerText()).replace(/\s+/g, "") === first) throw new Error("「多久前看过」应每秒在走");
+      // Its last check and times, opened.
+      await bar.locator(".watch-toggle").click();
+      await bar.locator(".watch-result", { hasText: "mac2 的任务仍在处理中" }).waitFor({ timeout: 5_000 });
+      if (!/开始.*截止/.test(await bar.locator(".watch-times").innerText())) throw new Error("展开后应有开始和截止时间");
+      await settle(page, 300);
+      await shot(page, size, scheme, "chat-watching");
+      // Longer: from now, an hour.
+      await bar.getByRole("button", { name: "延长" }).click();
+      await page.locator(".conv-menu").getByRole("menuitem", { name: "1 小时" }).click();
+      await page.waitForFunction(() => /剩(1小时|59分钟)/.test((document.querySelector(".conv-detail [data-testid=watch-bar] .watch-line")?.textContent || "").replace(/\s+/g, "")), null, { timeout: 5_000 });
+      // How the ones before ended: met, the time up, stopped.
+      for (const t of ["盯到了：Release 的发布说明", "没等到：CI 跑完", "你停止了盯：Review 的审查意见"]) {
+        if (!(await page.locator(".conv-detail .watch-ended", { hasText: t }).count())) throw new Error(`会话里应有一行「${t}」`);
+      }
+      // Stopped, after asking: the bar goes, a grey line stays.
+      await bar.getByRole("button", { name: "停止" }).click();
+      const ask = page.locator(".app-confirm");
+      await ask.waitFor({ timeout: 5_000 });
+      await ask.getByRole("button", { name: "停止", exact: true }).click();
+      await bar.waitFor({ state: "detached", timeout: 5_000 });
+      await page.locator(".conv-detail .watch-ended", { hasText: "你停止了盯：mac2 的回复" }).waitFor({ timeout: 5_000 });
+      // Members: 盯着 2 beside Myco (Grok); its chat says 正在盯 2 件事.
+      const grok = page.locator(".sp-side .sp-member", { hasText: "Myco (Grok)" }).first();
+      if (!narrow) {
+        await grok.locator(".sp-watch-tag", { hasText: "盯着 2" }).waitFor({ timeout: 10_000 });
+      }
+      await openMember(page, narrow, "聊天", "Myco (Grok)");
+      const two = page.locator(".conv-detail [data-testid=watch-bar]");
+      await two.locator(".watch-what", { hasText: "正在盯 2 件事" }).waitFor({ timeout: 10_000 });
+      await two.locator(".watch-toggle").click();
+      await two.locator(".watch-item", { hasText: "构建流水线跑完" }).waitFor({ timeout: 5_000 });
+      if ((await two.locator(".watch-item").count()) !== 2) throw new Error("展开后应列出两件");
+      await settle(page, 300);
+      await shot(page, size, scheme, "chat-watching-two");
+    });
+
     // A task the node accepted long ago and went quiet on may have lost its
     // result: the chat says so instead of spinning, and one click stops it
     // and sends the same message again.
