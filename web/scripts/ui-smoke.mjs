@@ -2267,6 +2267,11 @@ async function runMatrix(browser, size, scheme) {
       if (grants.grants.find(g => g.approval_id === approval.id)?.hosts?.join() !== "*.docs.example.com") {
         throw new Error("批准后仍包含已取消的域名");
       }
+      // (taken back again, so the next step starts with no grant active)
+      const scopedGrant = page.locator(".sp-home [data-testid=action-grants] .sa-grant", { hasText: "可以操作浏览器" });
+      await scopedGrant.waitFor({ timeout: 15_000 });
+      await clickVisible(page, scopedGrant.getByRole("button", { name: "收回", exact: true }));
+      await scopedGrant.waitFor({ state: "detached", timeout: 10_000 });
     });
 
     // An agent asks to act on one of your computers (agent actions,
@@ -2287,7 +2292,7 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "action-grant-request");
       await clickVisible(page, card.getByRole("button", { name: "只让它看", exact: true }));
       await card.waitFor({ state: "hidden", timeout: 10_000 });
-      const grant = page.locator(".sp-home [data-testid=action-grants] .sa-grant");
+      const grant = page.locator(".sp-home [data-testid=action-grants] .sa-grant", { hasText: "可以看 Studio Mac" });
       await grant.waitFor({ timeout: 10_000 });
       const g = compactText(await grant.innerText());
       if (!g.includes("可以看 Studio Mac") || g.includes("操作")) throw new Error(`只让它看以后，应写「可以看 Studio Mac 的屏幕」，实际「${g}」`);
