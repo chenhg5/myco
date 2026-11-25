@@ -1,5 +1,9 @@
-"""Release gates must reject missing/skipped jobs and use the latest retry."""
+"""Regression checks for release source selection and the inline tag gate."""
 import importlib.util
+import os
+import subprocess
+import tempfile
+import textwrap
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -61,6 +65,90 @@ class SourceResolution(unittest.TestCase):
     def test_source_change_cannot_inherit_parent_ci(self):
         with self.assertRaises(ValueError):
             self.resolve(["VERSION", "CHANGELOG.md", "internal/app/changed.go"])
+
+
+WORKFLOW = Path(__file__).resolve().parents[1] / ".github/workflows/release.yml"
+CHECK = textwrap.dedent(WORKFLOW.read_text().split(
+    "          # BEGIN release tag check", 1
+)[1].split("          # END release tag check.", 1)[0].split("\n", 1)[1])
+
+
+class ReleaseTags(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.repo = self.root / "source"
+        self.remote = self.root / "remote.git"
+        self.repo.mkdir()
+        self.git("init", "--bare", str(self.remote))
+        self.git("init")
+        self.git("config", "user.name", "Example Developer")
+        self.git("config", "user.email", "developer@example.com")
+        self.git("remote", "add", "origin", str(self.remote))
+        self.git("commit", "--allow-empty", "-m", "First")
+        self.first = self.git("rev-parse", "HEAD").strip()
+        self.git("commit", "--allow-empty", "-m", "Release")
+        self.sha = self.git("rev-parse", "HEAD").strip()
+
+    def git(self, *args):
+        return subprocess.check_output(["git", *args], cwd=self.repo, text=True, stderr=subprocess.DEVNULL)
+
+    def tag(self, name, sha, annotated=False):
+        args = ["tag"]
+        if annotated:
+            args += ["-a", "-m", "Release"]
+        self.git(*args, name, sha)
+        self.git("push", "origin", "refs/tags/" + name)
+
+    def check(self, **env):
+        return subprocess.run(["bash", "-euo", "pipefail", "-c", CHECK], cwd=self.repo,
+                              env={**os.environ, "v": "v1.2.3", "RELEASE_SHA": self.sha, **env},
+                              capture_output=True, text=True)
+
+    def test_absent_tag_and_similarly_named_tag(self):
+        self.tag("v1.2.30", self.first)
+        result = self.check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_matching_lightweight_and_annotated_tags(self):
+        for annotated in (False, True):
+            with self.subTest(annotated=annotated):
+                name = "v1.2." + str(4 + annotated)
+                self.tag(name, self.sha, annotated)
+                result = self.check(v=name)
+                self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_conflicting_lightweight_and_annotated_tags(self):
+        for annotated in (False, True):
+            with self.subTest(annotated=annotated):
+                name = "v1.2." + str(4 + annotated)
+                self.tag(name, self.first, annotated)
+                result = self.check(v=name)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("tag already points to a different commit", result.stdout)
+
+    def test_unreachable_remote_fails_closed(self):
+        self.git("remote", "set-url", "origin", str(self.root / "missing.git"))
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("could not query release tag", result.stdout)
+
+    def test_query_error_body_is_never_a_tag(self):
+        # The original gh query captured HTTP error JSON on stdout despite
+        # failure. Also reject malformed output even if a query exits zero.
+        bin_dir = self.root / "bin"
+        bin_dir.mkdir()
+        git = bin_dir / "git"
+        for status in (1, 0):
+            with self.subTest(status=status):
+                git.write_text('#!/bin/sh\nprintf \'{"message":"failure","status":422}\\n\'\nexit ' + str(status) + '\n')
+                git.chmod(0o755)
+                result = self.check(PATH=str(bin_dir) + os.pathsep + os.environ["PATH"])
+                self.assertNotEqual(result.returncode, 0)
+                expected = "could not query release tag" if status else "invalid release tag query result"
+                self.assertIn(expected, result.stdout)
+                self.assertNotIn("tag already points", result.stdout)
 
 
 if __name__ == "__main__":

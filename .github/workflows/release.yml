@@ -248,12 +248,27 @@ jobs:
         run: |
           v="${{ needs.version.outputs.version }}"
           scripts/changelog-section.sh "$v" > notes.md
-          # A pre-existing tag must never publish bytes built from another commit.
-          tag_sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$v" --jq .sha 2>/dev/null || true)
+          # BEGIN release tag check (kept inline for older release_ref checkouts).
+          # Query exact refs; an absent tag is success with no output. Transport
+          # errors must fail, and annotated tags compare their peeled commit.
+          tag_ref="refs/tags/$v"
+          if ! tag_refs=$(git ls-remote --tags origin "$tag_ref" "$tag_ref^{}"); then
+            echo "::error::could not query release tag"
+            exit 1
+          fi
+          tag_sha=$(printf '%s\n' "$tag_refs" | awk -v ref="$tag_ref^{}" '$2 == ref {print $1}')
+          if [ -z "$tag_sha" ]; then
+            tag_sha=$(printf '%s\n' "$tag_refs" | awk -v ref="$tag_ref" '$2 == ref {print $1}')
+          fi
+          if [ -n "$tag_refs" ] && ! [[ "$tag_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::invalid release tag query result"
+            exit 1
+          fi
           if [ -n "$tag_sha" ] && [ "$tag_sha" != "$RELEASE_SHA" ]; then
             echo "::error::tag already points to a different commit"
             exit 1
           fi
+          # END release tag check.
           if [ -s notes.md ]; then
             gh release create "$v" bin/* --target "$RELEASE_SHA" --notes-file notes.md
           else
