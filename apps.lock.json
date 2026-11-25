@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "repository": "myco-ai/apps",
-  "commit": "932a0d9a0ef8476f0268d2175b2dd812404914b5",
-  "tag": "apps-932a0d9a0ef8476f0268d2175b2dd812404914b5",
+  "commit": "f0a2e50c56695edac0b3c7c266c483aaa0dec9a9",
+  "tag": "apps-f0a2e50c56695edac0b3c7c266c483aaa0dec9a9",
   "builtin": [
     "table",
     "base",
@@ -18,13 +18,13 @@
   ],
   "artifacts": {
     "apps.zip": {
-      "sha256": "b1476467cb22a3ec9d078d21a2d50f86adef740c0769d25a9b1ac5d861bae8a2"
+      "sha256": "a4c4a6bf02cce7ef417c554e3635b8e3f7c3937e332c04735a438087a3c17355"
     },
     "builtin.zip": {
-      "sha256": "2ed10b7a34df3298c13f8da9f4c641a1dce90c019585ba7e9d0b4b75b9018255"
+      "sha256": "716ea9d4dd12773a3bbb4b3643bbe20cdfd8c63ed37a1c2d5922503d51442ea8"
     },
     "app-locales.json": {
-      "sha256": "2cb543a29a96eaa2a666b67e980d285b0686ead909ee5bf5cbed477939c7d718"
+      "sha256": "4cc507b9053ea05fac9e4cacc05b5fac9953f7261800fa104ba0b6c9ada926d7"
     },
     "builtin.json": {
       "sha256": "2020e7b056137ded84c7283be35218348aeaee0e8e0276f76289500e85df0932"

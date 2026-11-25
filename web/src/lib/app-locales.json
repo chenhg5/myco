@@ -1,232 +1,12 @@
 {
-  "myco/base": {
+  "myco/aigc-canvas": {
     "en": {
-      "name": "Database",
-      "description": "One shared dataset with table, board, calendar, gallery and form views. Typed fields, filters, sorting, record details and Excel export."
+      "name": "AIGC Canvas",
+      "description": "Connect notes, text, images, and videos into workflows, run them with your own provider keys, and share nodes and results."
     },
     "zh": {
-      "name": "多维表格",
-      "description": "像飞书多维表格：同一份记录，表格、看板、日历、画廊、表单几种视图，点一条在右侧展开；字段有类型，筛选、排序，导出 Excel。"
-    }
-  },
-  "myco/table": {
-    "en": {
-      "name": "Table",
-      "description": "A collaborative spreadsheet with typed columns, multi-cell copy and paste, fill down, sorting, filtering, search, and Excel or CSV export."
-    },
-    "zh": {
-      "name": "表格",
-      "description": "像飞书表格一样一起填：列有类型（单选标签、日期、人员…），框选复制、从 Excel 粘贴、下拉填充，筛选、排序、搜索，导出 Excel 和 CSV。"
-    }
-  },
-  "myco/doc": {
-    "en": {
-      "name": "Document",
-      "description": "Write together with headings, lists, tasks, tables and code blocks. Each paragraph saves independently. Export Markdown or a web page."
-    },
-    "zh": {
-      "name": "文档",
-      "description": "像飞书文档一样一起写：「/」插入标题、列表、待办、表格、代码块，选中文字改格式，拖动调整段落；每段单独保存，导出 Markdown 和网页。"
-    }
-  },
-  "myco/slides": {
-    "en": {
-      "name": "Slides",
-      "description": "Agents write content; the page arranges covers, points, charts, cards, tables and quotes. Co-edit and present; compatible Apps let agents export editable PowerPoint files and Markdown outlines."
-    },
-    "zh": {
-      "name": "幻灯片",
-      "description": "agent 写内容，网页按版式和主题排好：封面、要点、图表、数字卡片、表格和引言。共同编辑、放映；agent 可通过新版 App 导出可继续编辑的 PowerPoint 和 Markdown。"
-    }
-  },
-  "myco/meeting": {
-    "en": {
-      "name": "Meeting notes",
-      "description": "Record your microphone and meeting audio separately, transcribe locally and identify speakers. Edit, search, replay and export transcripts; ask an agent for summaries, decisions and action items."
-    },
-    "zh": {
-      "name": "会议记录",
-      "description": "录下在 Zoom、腾讯会议、飞书里开的会：你的麦克风和别人的声音分开录，会后在这台电脑上转成文字（不上传），自动分出不同的人；点一句从那里播放，改字、改名字、搜索、导出；让 agent 写纪要（总结、决定、待办、章节）。录音只存在这台电脑上，要在 myco App 里录音。"
-    }
-  },
-  "myco/tutor": {
-    "en": {
-      "name": "Learning workspace",
-      "description": "Import a textbook, ask your tutor to teach at your level, and explore interactive diagrams and quick checks with source citations."
-    },
-    "zh": {
-      "name": "学习工作台",
-      "description": "导入教材，按学习基础听导师分层讲解，边看原文引用、边操作交互图和做小题。"
-    }
-  },
-  "myco/code": {
-    "en": {
-      "name": "Code editor",
-      "description": "A VS Code-style editor with a file tree, tabs, syntax highlighting, find and replace, multiple cursors and a minimap. Preview HTML or Markdown and download the project as a ZIP."
-    },
-    "zh": {
-      "name": "代码编辑器",
-      "description": "VS Code 同款的编辑器：文件树、多标签、语法高亮、查找替换、多光标、小地图；agent 直接写文件，你在里面改；HTML 和 Markdown 能直接预览，整个项目能下载成 zip。"
-    }
-  },
-  "myco/issues": {
-    "en": {
-      "name": "Issue tracker",
-      "description": "Track issues and projects with IDs, statuses, priorities, assignees and labels. Use list or board views and keyboard commands; assign work to agents and see their updates."
-    },
-    "zh": {
-      "name": "任务追踪",
-      "description": "像 Linear 那样管问题和项目：编号、状态、优先级、负责人、标签，列表和看板，键盘就能操作；问题可以指给 agent，它改状态、写评论，你这边马上看到。"
-    }
-  },
-  "myco/devtools": {
-    "en": {
-      "name": "Developer toolbox",
-      "description": "JSON, Base64, URL encoding, hashes, timestamps, UUIDs, JWT inspection, regex, text diff, naming, number bases and colors. Everything runs locally; saved tools are shared."
-    },
-    "zh": {
-      "name": "开发者工具箱",
-      "description": "常用小工具一页搞定：JSON 格式化、Base64、URL 编解码、MD5 和 SHA、时间戳、UUID、JWT 解析、正则测试、文本对比、命名、进制和颜色转换；全在本地算，收藏的大家都能用。"
-    }
-  },
-  "myco/todo": {
-    "en": {
-      "name": "To-do list",
-      "description": "A shared list with due dates, assignees, notes, importance and drag ordering. Add tasks with Enter or ask an agent to organize your action items."
-    },
-    "zh": {
-      "name": "待办清单",
-      "description": "一起记的待办：回车就加，认得「明天」「周五」「@名字」「!」；打勾完成，截止、负责人、备注，拖动排序；agent 能把会议里的待办整理进来。"
-    }
-  },
-  "myco/notes": {
-    "en": {
-      "name": "Notes",
-      "description": "Nested pages with rich text, icons, covers, favorites, search and trash. Write with slash commands, organize your ideas and work with agents on shared pages."
-    },
-    "zh": {
-      "name": "笔记",
-      "description": "像 Notion 一样记笔记：左边是一层层的页面，每页有图标、封面和标题，「/」插入标题、列表、待办、表格、代码块；搜索、收藏、回收站；agent 能建页面、往页面里写东西，你这边实时看到。"
-    }
-  },
-  "myco/disk": {
-    "en": {
-      "name": "Disk cleanup",
-      "description": "Explore disk and folder usage, find large files and move selected items to Trash. Scans run on this computer; files can be restored until Trash is emptied."
-    },
-    "zh": {
-      "name": "空间清理",
-      "description": "看清这台电脑的磁盘被谁占了：一圈一圈的占用图，旁边是按大小排的清单，点进文件夹一层层往下看；把不要的拖进「待清理」，看一眼再移进废纸篓，放错了还能放回去。要在 myco App 里打开。"
-    }
-  },
-  "myco/stocks": {
-    "en": {
-      "name": "Stock watch",
-      "description": "Follow A-shares, Hong Kong and US stocks in one workspace. Share watchlists and notes, inspect candlesticks, volume and moving averages, and switch market data providers or use your own gateway."
-    },
-    "zh": {
-      "name": "行情工作台",
-      "description": "在同一个工作台关注 A 股、港股、美股：共享自选与观察笔记，查看日周月 K 线、成交量和均线，导出行情。数据源可切换，支持接入自己的行情网关；行情由打开应用的电脑获取。"
-    }
-  },
-  "myco/proxy-console": {
-    "en": {
-      "name": "Proxy console",
-      "description": "Manage an existing local Mihomo or sing-box core: traffic, policies, node delay, connections and configuration summaries. Credentials stay local. Requires Clash API and a desktop App with proxy controller support."
-    },
-    "zh": {
-      "name": "代理工作台",
-      "description": "管理本机 Mihomo 与 sing-box：实时流量、策略组切换、节点测速、连接查看与断开、运行配置摘要。控制密钥留在本机，不与工作区共享。需启用内核 Clash API，并使用支持 proxy.profile 的桌面 App。"
-    }
-  },
-  "myco/ledger": {
-    "en": {
-      "name": "Budget book",
-      "description": "Track income, expenses, balance and monthly budgets together. Review categories and daily entries, or ask an agent to organize your bills."
-    },
-    "zh": {
-      "name": "记账本",
-      "description": "记收入和支出：每月支出、收入、结余和预算剩余，按分类看钱花在哪，按天列出每一笔；家里或小团队一起记，agent 能把账单整理进来。"
-    }
-  },
-  "myco/habit": {
-    "en": {
-      "name": "Habit tracker",
-      "description": "Build habits together. Check in each day, follow weekly progress and streaks, and see how family or teammates are doing."
-    },
-    "zh": {
-      "name": "习惯打卡",
-      "description": "一起养成好习惯：每人给自己打卡，看这周打了几天、连续了几天、别人打了没；家人、团队一起坚持，agent 能帮你提醒和统计。"
-    }
-  },
-  "myco/logo-studio": {
-    "en": {
-      "name": "Logo Studio",
-      "description": "Turn a brand brief into original geometric marks with your agent. Compare concepts, inspect guides, edit vector layers and export SVG."
-    },
-    "zh": {
-      "name": "标志工坊",
-      "description": "输入品牌需求，请 agent 设计原创几何标志。比较不同方案、查看构图辅助线、微调矢量图层，再导出 SVG。"
-    }
-  },
-  "myco/design-studio": {
-    "en": {
-      "name": "Design studio",
-      "description": "Design websites, interfaces, posters and dashboards with agents. Edit canvases and layers, preview HTML, collect feedback and save versions; compatible Apps let agents export shared SVG, PNG, HTML or JSON files."
-    },
-    "zh": {
-      "name": "设计工作台",
-      "description": "和 agent 一起设计网页、界面、海报和数据看板。可编辑画布与图层，预览 HTML，收集反馈并保存版本；agent 可通过新版 App 导出共享作品的 SVG、PNG、HTML 或 JSON。"
-    }
-  },
-  "myco/whiteboard": {
-    "en": {
-      "name": "Whiteboard",
-      "description": "An infinite canvas with sticky notes, text, shapes and connectors. Co-edit with agents and export SVG/PNG; compatible Apps let agents export shared boards in the background."
-    },
-    "zh": {
-      "name": "白板",
-      "description": "一块无限大的画布：便签、文字、形状和连线。和 agent 共同编辑，导出 SVG/PNG；兼容新版 App 时，agent 可在后台导出共享白板。"
-    }
-  },
-  "myco/mindmap": {
-    "en": {
-      "name": "Mind map",
-      "description": "Organize ideas as topics and branches. Edit, fold, reorder and drag topics, collaborate with agents, and export an outline or image."
-    },
-    "zh": {
-      "name": "思维导图",
-      "description": "agent 写一份大纲，网页画成思维导图；Tab 加子主题、Enter 加同级、拖动换位置、折叠分支，导出 Markdown 大纲。"
-    }
-  },
-  "myco/video": {
-    "en": {
-      "name": "Video editor",
-      "description": "Import video, split and trim clips, change speed, add text and mask faces or number plates. Export MP4 locally. Media stays on this computer; the edit plan is shared with people and agents."
-    },
-    "zh": {
-      "name": "视频剪辑",
-      "description": "导入 mp4，在时间线上分割、裁剪、调顺序、变速，加文字，给人脸和车牌打模糊或马赛克，在本机导出 mp4。视频只存在打开它的电脑上，剪辑方案大家共用，agent 按备注帮你剪。"
-    }
-  },
-  "myco/motion": {
-    "en": {
-      "name": "Motion video",
-      "description": "Make product promos, data stories and vertical shorts with motion: start from a template and change the words, pictures and colours, or ask an agent to write every scene (HTML with animation). Leave notes on moments for the agent, or have it remake a reference video; add music and voice, cut on the beat, turn speech into captions, save templates for everyone, and export an MP4 on this computer."
-    },
-    "zh": {
-      "name": "动效视频",
-      "description": "做产品宣传、数据快报、竖版短视频这类动效视频：从模板开始改文字、图片和配色，或者说一句话让 agent 写好每个场景（HTML 加动画）；在时间点上批注让 agent 改，照一段参考视频重做；配上音乐和配音，场景切换对上节拍，配音转成字幕；存成模板给大家用；在本机导出 mp4。"
-    }
-  },
-  "myco/photo": {
-    "en": {
-      "name": "Photo editor",
-      "description": "Crop, adjust colors, filter, retouch, add text or stickers, draw, mask and frame your photos. Originals stay local; share edit instructions and undo any change."
-    },
-    "zh": {
-      "name": "修图",
-      "description": "快速修照片：裁剪旋转、调色、十几种滤镜、磨皮美白、文字、贴纸、涂鸦、马赛克、边框，按住对比原图，导出 JPG 或 PNG。改了随时能退回去；照片只存在打开它的电脑上，修了什么大家都看得到，agent 也能按你说的帮你调。"
+      "name": "AIGC 画布",
+      "description": "把便签、文本、图片和视频连成工作流，使用自己的生成服务密钥，与协作者共享节点和结果。"
     }
   },
   "myco/arcade": {
@@ -239,54 +19,14 @@
       "description": "导入本机 NES 卡带或玩 CHIP-8 游戏，支持触屏手柄。桌面 App 还可调用 MAME 校验并运行街机 ROM ZIP。"
     }
   },
-  "myco/ocean": {
+  "myco/base": {
     "en": {
-      "name": "Voyage",
-      "description": "Take a small boat out on a lifelike 3D sea and explore freely: waves, shallows, reefs and islands are drawn live on this computer. Islands are page data that people and agents can add, so the map keeps growing."
+      "name": "Database",
+      "description": "One shared dataset with table, board, calendar, gallery and form views. Typed fields, filters, sorting, record details and Excel export."
     },
     "zh": {
-      "name": "航海",
-      "description": "开一条小船，在逼真的 3D 海上自由探索：浪、浅滩、礁石和海岛都在本机实时画出来。岛是页面里的数据，人和 agent 都能加，地图可以一直往外扩。"
-    }
-  },
-  "myco/gomoku": {
-    "en": {
-      "name": "Gomoku",
-      "description": "Play five-in-a-row with another person or an agent. Choose black or white, take turns, undo moves, resign or start a new round."
-    },
-    "zh": {
-      "name": "五子棋",
-      "description": "和同事或 agent 下一局五子棋：谁执黑谁执白随便坐，网页管轮次、判输赢，能悔棋、认输、再来一局。"
-    }
-  },
-  "myco/sudoku": {
-    "en": {
-      "name": "Sudoku",
-      "description": "Solve a puzzle together. Each cell saves separately with the player's color, conflicts are highlighted, and easy, medium or hard puzzles have one solution."
-    },
-    "zh": {
-      "name": "数独",
-      "description": "大家一起填一道数独：每格单独保存，谁填的显示谁的颜色，冲突标红；简单、中等、困难三档新题，每道只有一个答案。"
-    }
-  },
-  "myco/remote-desktop": {
-    "en": {
-      "name": "Remote Desktop",
-      "description": "View and control your Mac and Windows computers from a computer or iPhone. Phone touchpad and keyboard, optional hosting component and temporary pairing codes. Direct LAN or Tailscale; no audio, lock screens or public relay yet."
-    },
-    "zh": {
-      "name": "远程桌面",
-      "description": "从电脑或 iPhone 连接同一工作区的 Mac 与 Windows，实时查看画面、操作键鼠。手机支持触控板和键盘；远控组件按需安装，默认关闭。局域网或 Tailscale 直连，暂不含声音、锁屏登录和公网中继。"
-    }
-  },
-  "myco/recorder": {
-    "en": {
-      "name": "Recording studio",
-      "description": "Record your screen, trim and split clips, add text and focus zooms, then export MP4 locally. Footage stays on your computer; agents can help with the edit."
-    },
-    "zh": {
-      "name": "录屏工作台",
-      "description": "录下屏幕，直接裁剪、分割、加文字和重点放大，在本机导出 MP4。视频留在本机，剪辑方案可以交给 agent 协作。"
+      "name": "多维表格",
+      "description": "像飞书多维表格：同一份记录，表格、看板、日历、画廊、表单几种视图，点一条在右侧展开；字段有类型，筛选、排序，导出 Excel。"
     }
   },
   "myco/cinema": {
@@ -299,14 +39,204 @@
       "description": "用自己的影视源搜索电影与剧集、选集播放，收藏待看清单；观看进度保存在这台电脑，支持续播、倍速和跳过片头片尾。不内置影视源。"
     }
   },
-  "myco/scheduling": {
+  "myco/code": {
     "en": {
-      "name": "Calendar",
-      "description": "Plan work and life in month, week and day views. Click to create events, drag to reschedule, add all-day and recurring events, search and export calendars with agents. Appointment booking is a secondary tool."
+      "name": "Code editor",
+      "description": "A VS Code-style editor with a file tree, tabs, syntax highlighting, find and replace, multiple cursors and a minimap. Preview HTML or Markdown and download the project as a ZIP."
     },
     "zh": {
-      "name": "日历",
-      "description": "管理自己的工作与生活日程：月、周、日视图，点击日期新建，拖动改期，全天与重复日程，搜索和日历导出。与 agent 一起安排；预约管理放在次级入口。"
+      "name": "代码编辑器",
+      "description": "VS Code 同款的编辑器：文件树、多标签、语法高亮、查找替换、多光标、小地图；agent 直接写文件，你在里面改；HTML 和 Markdown 能直接预览，整个项目能下载成 zip。"
+    }
+  },
+  "myco/dashboards": {
+    "en": {
+      "name": "Dashboards",
+      "description": "Build dashboards from data collected by agents. View snapshots as line, bar and donut charts, number cards, and tables."
+    },
+    "zh": {
+      "name": "数据仪表盘",
+      "description": "把 Agent 收集的数据做成多个仪表盘。用折线、柱形、环形、指标卡和表格查看数据快照。"
+    }
+  },
+  "myco/database": {
+    "en": {
+      "name": "Database studio",
+      "description": "Manage local MySQL, PostgreSQL, SQLite and MongoDB connections. Browse schemas, edit records, run SQL or Extended JSON, and share query drafts with agents. Requires a desktop App with database capabilities; credentials and results stay on this computer."
+    },
+    "zh": {
+      "name": "数据库工作台",
+      "description": "连接 MySQL、PostgreSQL、SQLite 与 MongoDB，管理本机连接、浏览结构、增删改查及执行 SQL 或 Extended JSON。可与 agent 共享查询草稿；凭证与结果留在本机，需支持数据库能力的桌面 App。"
+    }
+  },
+  "myco/design-studio": {
+    "en": {
+      "name": "Design studio",
+      "description": "Design websites, interfaces, posters and dashboards with agents. Edit canvases and layers, preview HTML, collect feedback and save versions; compatible Apps let agents export shared SVG, PNG, HTML or JSON files."
+    },
+    "zh": {
+      "name": "设计工作台",
+      "description": "和 agent 一起设计网页、界面、海报和数据看板。可编辑画布与图层，预览 HTML，收集反馈并保存版本；agent 可通过新版 App 导出共享作品的 SVG、PNG、HTML 或 JSON。"
+    }
+  },
+  "myco/devtools": {
+    "en": {
+      "name": "Developer toolbox",
+      "description": "JSON, Base64, URL encoding, hashes, timestamps, UUIDs, JWT inspection, regex, text diff, naming, number bases and colors. Everything runs locally; saved tools are shared."
+    },
+    "zh": {
+      "name": "开发者工具箱",
+      "description": "常用小工具一页搞定：JSON 格式化、Base64、URL 编解码、MD5 和 SHA、时间戳、UUID、JWT 解析、正则测试、文本对比、命名、进制和颜色转换；全在本地算，收藏的大家都能用。"
+    }
+  },
+  "myco/disk": {
+    "en": {
+      "name": "Disk cleanup",
+      "description": "Explore disk and folder usage, find large files and move selected items to Trash. Scans run on this computer; files can be restored until Trash is emptied."
+    },
+    "zh": {
+      "name": "空间清理",
+      "description": "看清这台电脑的磁盘被谁占了：一圈一圈的占用图，旁边是按大小排的清单，点进文件夹一层层往下看；把不要的拖进「待清理」，看一眼再移进废纸篓，放错了还能放回去。要在 myco App 里打开。"
+    }
+  },
+  "myco/doc": {
+    "en": {
+      "name": "Document",
+      "description": "Write together with headings, lists, tasks, tables and code blocks. Each paragraph saves independently. Export Markdown or a web page."
+    },
+    "zh": {
+      "name": "文档",
+      "description": "像飞书文档一样一起写：「/」插入标题、列表、待办、表格、代码块，选中文字改格式，拖动调整段落；每段单独保存，导出 Markdown 和网页。"
+    }
+  },
+  "myco/gomoku": {
+    "en": {
+      "name": "Gomoku",
+      "description": "Play five-in-a-row with another person or an agent. Choose black or white, take turns, undo moves, resign or start a new round."
+    },
+    "zh": {
+      "name": "五子棋",
+      "description": "和同事或 agent 下一局五子棋：谁执黑谁执白随便坐，网页管轮次、判输赢，能悔棋、认输、再来一局。"
+    }
+  },
+  "myco/habit": {
+    "en": {
+      "name": "Habit tracker",
+      "description": "Build habits together. Check in each day, follow weekly progress and streaks, and see how family or teammates are doing."
+    },
+    "zh": {
+      "name": "习惯打卡",
+      "description": "一起养成好习惯：每人给自己打卡，看这周打了几天、连续了几天、别人打了没；家人、团队一起坚持，agent 能帮你提醒和统计。"
+    }
+  },
+  "myco/issues": {
+    "en": {
+      "name": "Issue tracker",
+      "description": "Track issues and projects with IDs, statuses, priorities, assignees and labels. Use list or board views and keyboard commands; assign work to agents and see their updates."
+    },
+    "zh": {
+      "name": "任务追踪",
+      "description": "像 Linear 那样管问题和项目：编号、状态、优先级、负责人、标签，列表和看板，键盘就能操作；问题可以指给 agent，它改状态、写评论，你这边马上看到。"
+    }
+  },
+  "myco/ledger": {
+    "en": {
+      "name": "Budget book",
+      "description": "Track income, expenses, balance and monthly budgets together. Review categories and daily entries, or ask an agent to organize your bills."
+    },
+    "zh": {
+      "name": "记账本",
+      "description": "记收入和支出：每月支出、收入、结余和预算剩余，按分类看钱花在哪，按天列出每一笔；家里或小团队一起记，agent 能把账单整理进来。"
+    }
+  },
+  "myco/logo-studio": {
+    "en": {
+      "name": "Logo Studio",
+      "description": "Turn a brand brief into original geometric marks with your agent. Compare concepts, inspect guides, edit vector layers and export SVG."
+    },
+    "zh": {
+      "name": "标志工坊",
+      "description": "输入品牌需求，请 agent 设计原创几何标志。比较不同方案、查看构图辅助线、微调矢量图层，再导出 SVG。"
+    }
+  },
+  "myco/media-kit": {
+    "en": {
+      "name": "Media Kit",
+      "description": "Organize launch screenshots and bilingual copy by feature. Share originals and publication status with your team and agents."
+    },
+    "zh": {
+      "name": "素材库",
+      "description": "按功能整理截图和中英文配文，和团队及 agent 共享原图与发布进度。"
+    }
+  },
+  "myco/meeting": {
+    "en": {
+      "name": "Meeting notes",
+      "description": "Record your microphone and meeting audio separately, transcribe locally and identify speakers. Edit, search, replay and export transcripts; ask an agent for summaries, decisions and action items."
+    },
+    "zh": {
+      "name": "会议记录",
+      "description": "录下在 Zoom、腾讯会议、飞书里开的会：你的麦克风和别人的声音分开录，会后在这台电脑上转成文字（不上传），自动分出不同的人；点一句从那里播放，改字、改名字、搜索、导出；让 agent 写纪要（总结、决定、待办、章节）。录音只存在这台电脑上，要在 myco App 里录音。"
+    }
+  },
+  "myco/mindmap": {
+    "en": {
+      "name": "Mind map",
+      "description": "Organize ideas as topics and branches. Edit, fold, reorder and drag topics, collaborate with agents, and export an outline or image."
+    },
+    "zh": {
+      "name": "思维导图",
+      "description": "agent 写一份大纲，网页画成思维导图；Tab 加子主题、Enter 加同级、拖动换位置、折叠分支，导出 Markdown 大纲。"
+    }
+  },
+  "myco/motion": {
+    "en": {
+      "name": "Motion video",
+      "description": "Make product promos, data stories and vertical shorts with motion: start from a template and change the words, pictures and colours, or ask an agent to write every scene (HTML with animation). Leave notes on moments for the agent, or have it remake a reference video; add music and voice, cut on the beat, turn speech into captions, save templates for everyone, and export an MP4 on this computer."
+    },
+    "zh": {
+      "name": "动效视频",
+      "description": "做产品宣传、数据快报、竖版短视频这类动效视频：从模板开始改文字、图片和配色，或者说一句话让 agent 写好每个场景（HTML 加动画）；在时间点上批注让 agent 改，照一段参考视频重做；配上音乐和配音，场景切换对上节拍，配音转成字幕；存成模板给大家用；在本机导出 mp4。"
+    }
+  },
+  "myco/notes": {
+    "en": {
+      "name": "Notes",
+      "description": "Nested pages with rich text, icons, covers, favorites, search and trash. Write with slash commands, organize your ideas and work with agents on shared pages."
+    },
+    "zh": {
+      "name": "笔记",
+      "description": "像 Notion 一样记笔记：左边是一层层的页面，每页有图标、封面和标题，「/」插入标题、列表、待办、表格、代码块；搜索、收藏、回收站；agent 能建页面、往页面里写东西，你这边实时看到。"
+    }
+  },
+  "myco/ocean": {
+    "en": {
+      "name": "Voyage",
+      "description": "Take a small boat out on a lifelike 3D sea and explore freely: waves, shallows, reefs and islands are drawn live on this computer. Islands are page data that people and agents can add, so the map keeps growing."
+    },
+    "zh": {
+      "name": "航海",
+      "description": "开一条小船，在逼真的 3D 海上自由探索：浪、浅滩、礁石和海岛都在本机实时画出来。岛是页面里的数据，人和 agent 都能加，地图可以一直往外扩。"
+    }
+  },
+  "myco/palette": {
+    "en": {
+      "name": "Color studio",
+      "description": "Extract colors from images, create and save palettes, explore color harmonies, and check text contrast. Share design notes with your team and agent; export SVG, CSS and JSON."
+    },
+    "zh": {
+      "name": "配色助手",
+      "description": "从图片提色，生成、调整与收藏配色方案，分析文字对比度，预览实际设计搭配。与团队和 agent 共享色卡及设计笔记，支持 SVG、CSS、JSON 导出。"
+    }
+  },
+  "myco/password-vault": {
+    "en": {
+      "name": "Password Vault",
+      "description": "Manage encrypted logins, generate passwords, and back up your vault in the myco App."
+    },
+    "zh": {
+      "name": "密码库",
+      "description": "在 myco App 内加密管理登录信息、生成密码和备份。"
     }
   },
   "myco/personality": {
@@ -319,14 +249,14 @@
       "description": "用 32 个原创小问题探索四维人格偏好，阅读 16 种可能，写下自我反思。答案仅留在本机，主动分享摘要后可与 agent 一起讨论。非官方 MBTI® 测评。"
     }
   },
-  "myco/reader": {
+  "myco/photo": {
     "en": {
-      "name": "Reader",
-      "description": "A local bookshelf for PDF and TXT books. Choose page transitions, paper themes and typography; keep your place with contents, search and bookmarks. Original files stay on this device."
+      "name": "Photo editor",
+      "description": "Crop, adjust colors, filter, retouch, add text or stickers, draw, mask and frame your photos. Originals stay local; share edit instructions and undo any change."
     },
     "zh": {
-      "name": "阅读",
-      "description": "你的本机书架：导入 PDF 和 TXT，享受多种翻页效果、阅读主题与自由排版。目录、搜索、书签和阅读进度随手可用；原书保存在本机。"
+      "name": "修图",
+      "description": "快速修照片：裁剪旋转、调色、十几种滤镜、磨皮美白、文字、贴纸、涂鸦、马赛克、边框，按住对比原图，导出 JPG 或 PNG。改了随时能退回去；照片只存在打开它的电脑上，修了什么大家都看得到，agent 也能按你说的帮你调。"
     }
   },
   "myco/podcast": {
@@ -349,34 +279,54 @@
       "description": "对接买手商品 API，由 agent 直接查询报价、优惠与购买链接，保留来源和查询时间。支持收藏与购买笔记；需在执行端配置自己的买手授权凭证，开通后使用。"
     }
   },
-  "myco/aigc-canvas": {
+  "myco/proxy-console": {
     "en": {
-      "name": "AIGC Canvas",
-      "description": "Connect notes, text, images, and videos into workflows, run them with your own provider keys, and share nodes and results."
+      "name": "Proxy console",
+      "description": "Manage an existing local Mihomo or sing-box core: traffic, policies, node delay, connections and configuration summaries. Credentials stay local. Requires Clash API and a desktop App with proxy controller support."
     },
     "zh": {
-      "name": "AIGC 画布",
-      "description": "把便签、文本、图片和视频连成工作流，使用自己的生成服务密钥，与协作者共享节点和结果。"
+      "name": "代理工作台",
+      "description": "管理本机 Mihomo 与 sing-box：实时流量、策略组切换、节点测速、连接查看与断开、运行配置摘要。控制密钥留在本机，不与工作区共享。需启用内核 Clash API，并使用支持 proxy.profile 的桌面 App。"
     }
   },
-  "myco/palette": {
+  "myco/reader": {
     "en": {
-      "name": "Color studio",
-      "description": "Extract colors from images, create and save palettes, explore color harmonies, and check text contrast. Share design notes with your team and agent; export SVG, CSS and JSON."
+      "name": "Reader",
+      "description": "A local bookshelf for PDF and TXT books. Choose page transitions, paper themes and typography; keep your place with contents, search and bookmarks. Original files stay on this device."
     },
     "zh": {
-      "name": "配色助手",
-      "description": "从图片提色，生成、调整与收藏配色方案，分析文字对比度，预览实际设计搭配。与团队和 agent 共享色卡及设计笔记，支持 SVG、CSS、JSON 导出。"
+      "name": "阅读",
+      "description": "你的本机书架：导入 PDF 和 TXT，享受多种翻页效果、阅读主题与自由排版。目录、搜索、书签和阅读进度随手可用；原书保存在本机。"
     }
   },
-  "myco/database": {
+  "myco/recorder": {
     "en": {
-      "name": "Database studio",
-      "description": "Manage local MySQL, PostgreSQL, SQLite and MongoDB connections. Browse schemas, edit records, run SQL or Extended JSON, and share query drafts with agents. Requires a desktop App with database capabilities; credentials and results stay on this computer."
+      "name": "Recording studio",
+      "description": "Record your screen, trim and split clips, add text and focus zooms, then export MP4 locally. Footage stays on your computer; agents can help with the edit."
     },
     "zh": {
-      "name": "数据库工作台",
-      "description": "连接 MySQL、PostgreSQL、SQLite 与 MongoDB，管理本机连接、浏览结构、增删改查及执行 SQL 或 Extended JSON。可与 agent 共享查询草稿；凭证与结果留在本机，需支持数据库能力的桌面 App。"
+      "name": "录屏工作台",
+      "description": "录下屏幕，直接裁剪、分割、加文字和重点放大，在本机导出 MP4。视频留在本机，剪辑方案可以交给 agent 协作。"
+    }
+  },
+  "myco/remote-desktop": {
+    "en": {
+      "name": "Remote Desktop",
+      "description": "View and control your Mac and Windows computers from a computer or iPhone. Phone touchpad and keyboard, optional hosting component and temporary pairing codes. Direct LAN or Tailscale; no audio, lock screens or public relay yet."
+    },
+    "zh": {
+      "name": "远程桌面",
+      "description": "从电脑或 iPhone 连接同一工作区的 Mac 与 Windows，实时查看画面、操作键鼠。手机支持触控板和键盘；远控组件按需安装，默认关闭。局域网或 Tailscale 直连，暂不含声音、锁屏登录和公网中继。"
+    }
+  },
+  "myco/scheduling": {
+    "en": {
+      "name": "Calendar",
+      "description": "Plan work and life in month, week and day views. Click to create events, drag to reschedule, add all-day and recurring events, search and export calendars with agents. Appointment booking is a secondary tool."
+    },
+    "zh": {
+      "name": "日历",
+      "description": "管理自己的工作与生活日程：月、周、日视图，点击日期新建，拖动改期，全天与重复日程，搜索和日历导出。与 agent 一起安排；预约管理放在次级入口。"
     }
   },
   "myco/server-console": {
@@ -389,14 +339,94 @@
       "description": "通过本机 SSH 管理 Linux 主机：查看资源、系统服务与 Docker 容器，读取日志并确认启停操作。支持绑定具体主机的 Agent 限时授权。连接信息与命令结果不写入共享页面，需支持 SSH 的桌面 App。"
     }
   },
-  "myco/media-kit": {
+  "myco/slides": {
     "en": {
-      "name": "Media Kit",
-      "description": "Organize launch screenshots and bilingual copy by feature. Share originals and publication status with your team and agents."
+      "name": "Slides",
+      "description": "Agents write content; the page arranges covers, points, charts, cards, tables and quotes. Co-edit and present; compatible Apps let agents export editable PowerPoint files and Markdown outlines."
     },
     "zh": {
-      "name": "素材库",
-      "description": "按功能整理截图和中英文配文，和团队及 agent 共享原图与发布进度。"
+      "name": "幻灯片",
+      "description": "agent 写内容，网页按版式和主题排好：封面、要点、图表、数字卡片、表格和引言。共同编辑、放映；agent 可通过新版 App 导出可继续编辑的 PowerPoint 和 Markdown。"
+    }
+  },
+  "myco/stocks": {
+    "en": {
+      "name": "Stock watch",
+      "description": "Follow A-shares, Hong Kong and US stocks in one workspace. Share watchlists and notes, inspect candlesticks, volume and moving averages, and switch market data providers or use your own gateway."
+    },
+    "zh": {
+      "name": "行情工作台",
+      "description": "在同一个工作台关注 A 股、港股、美股：共享自选与观察笔记，查看日周月 K 线、成交量和均线，导出行情。数据源可切换，支持接入自己的行情网关；行情由打开应用的电脑获取。"
+    }
+  },
+  "myco/sudoku": {
+    "en": {
+      "name": "Sudoku",
+      "description": "Solve a puzzle together. Each cell saves separately with the player's color, conflicts are highlighted, and easy, medium or hard puzzles have one solution."
+    },
+    "zh": {
+      "name": "数独",
+      "description": "大家一起填一道数独：每格单独保存，谁填的显示谁的颜色，冲突标红；简单、中等、困难三档新题，每道只有一个答案。"
+    }
+  },
+  "myco/table": {
+    "en": {
+      "name": "Table",
+      "description": "A collaborative spreadsheet with typed columns, multi-cell copy and paste, fill down, sorting, filtering, search, and Excel or CSV export."
+    },
+    "zh": {
+      "name": "表格",
+      "description": "像飞书表格一样一起填：列有类型（单选标签、日期、人员…），框选复制、从 Excel 粘贴、下拉填充，筛选、排序、搜索，导出 Excel 和 CSV。"
+    }
+  },
+  "myco/todo": {
+    "en": {
+      "name": "To-do list",
+      "description": "A shared list with due dates, assignees, notes, importance and drag ordering. Add tasks with Enter or ask an agent to organize your action items."
+    },
+    "zh": {
+      "name": "待办清单",
+      "description": "一起记的待办：回车就加，认得「明天」「周五」「@名字」「!」；打勾完成，截止、负责人、备注，拖动排序；agent 能把会议里的待办整理进来。"
+    }
+  },
+  "myco/tutor": {
+    "en": {
+      "name": "Learning workspace",
+      "description": "Import a textbook, ask your tutor to teach at your level, and explore interactive diagrams and quick checks with source citations."
+    },
+    "zh": {
+      "name": "学习工作台",
+      "description": "导入教材，按学习基础听导师分层讲解，边看原文引用、边操作交互图和做小题。"
+    }
+  },
+  "myco/video": {
+    "en": {
+      "name": "Video editor",
+      "description": "Import video, split and trim clips, change speed, add text and mask faces or number plates. Export MP4 locally. Media stays on this computer; the edit plan is shared with people and agents."
+    },
+    "zh": {
+      "name": "视频剪辑",
+      "description": "导入 mp4，在时间线上分割、裁剪、调顺序、变速，加文字，给人脸和车牌打模糊或马赛克，在本机导出 mp4。视频只存在打开它的电脑上，剪辑方案大家共用，agent 按备注帮你剪。"
+    }
+  },
+  "myco/web-automation": {
+    "en": {
+      "name": "Web Automation",
+      "description": "Arrange web actions on a canvas: click, type, wait, extract, branch and loop, with several locators per step. Scripts and runs are shared with agents; recording and replay need a newer App with the browser component and use myco's own browser profiles."
+    },
+    "zh": {
+      "name": "网页自动化",
+      "description": "在画布上编排网页操作：点击、输入、等待、提取、分支和循环，每一步有多组定位器。脚本和运行记录共享给 agent 读写；录制和回放需要支持浏览器组件的新版 App，使用 myco 专用的浏览器 profile。"
+    }
+  },
+  "myco/whiteboard": {
+    "en": {
+      "name": "Whiteboard",
+      "description": "An infinite canvas with sticky notes, text, shapes and connectors. Co-edit with agents and export SVG/PNG; compatible Apps let agents export shared boards in the background."
+    },
+    "zh": {
+      "name": "白板",
+      "description": "一块无限大的画布：便签、文字、形状和连线。和 agent 共同编辑，导出 SVG/PNG；兼容新版 App 时，agent 可在后台导出共享白板。"
     }
   }
 }
