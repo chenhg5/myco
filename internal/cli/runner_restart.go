@@ -46,7 +46,7 @@ func (e *env) announceRunnerRestart() {
 	defer cancel()
 	var wg sync.WaitGroup
 	for _, p := range profiles {
-		if p.Config.Replaced != "" || p.Config.Harness == "inbox" {
+		if p.Config.Replaced != "" || p.Config.Harness == "inbox" || (runnerHarnessFor(p.Config.Harness) == "" && p.Config.Runner.Harness == "") {
 			continue
 		}
 		wg.Add(1)
