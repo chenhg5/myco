@@ -246,8 +246,12 @@ func TestPageAttachmentGenericMigrationAndIndependentOwners(t *testing.T) {
 	if err = f.service.Cleanup(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = f.store.Open(ctx, two.Blob); err != nil {
+	kept, err := f.store.Open(ctx, two.Blob)
+	if err != nil {
 		t.Fatal("deleting one page damaged another", err)
+	}
+	if err = kept.Close(); err != nil {
+		t.Fatal(err)
 	}
 }
 
