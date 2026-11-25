@@ -86,4 +86,12 @@ func TestIMBridges(t *testing.T) {
 	if code, _, raw := r.do("DELETE", "/app/im/feishu", nil); code != 200 {
 		t.Fatalf("remove: %d %s", code, raw)
 	}
+
+	// A myco from before chat apps.
+	b.Local.Run = func(context.Context, []string, string, ...string) ([]byte, error) {
+		return []byte(`{"error":"invalid_usage","message":"unknown command \"im\" for myco"}`), errors.New("exit status 2")
+	}
+	if code, m, _ := r.do("GET", "/app/im?hub_id="+hubID, nil); code != 409 || m["error"] != "cli_too_old" {
+		t.Fatalf("old cli: %d %v", code, m)
+	}
 }
