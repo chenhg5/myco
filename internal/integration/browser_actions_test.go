@@ -259,6 +259,9 @@ func TestLiveBrowserGrantValidatesAuditsAndStops(t *testing.T) {
 	if _, err := run("page.act", "bad-op", `{"session":"session","op":"eval","value":"0"}`); err == nil {
 		t.Fatal("unknown action operation was accepted")
 	}
+	if _, err := run("page.act", "template", `{"session":"session","op":"type","ref":"e1","value":"${example}"}`); err == nil {
+		t.Fatal("a live action accepted a draft parameter")
+	}
 	job, err := run("page.act", "safe-act", `{"session":"session","op":"type","ref":"e1","value":"not-for-audit"}`)
 	if err != nil {
 		t.Fatal(err)

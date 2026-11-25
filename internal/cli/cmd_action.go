@@ -30,8 +30,9 @@ For an enabled SSH profile, use action targets to get --machine, --ssh-profile a
 server.ssh.read inspects Linux status/logs; server.ssh.manage also starts/stops/restarts services
 and containers. The owner approves the resolved SSH endpoint; no arbitrary shell is offered.
 For an enabled browser profile, action targets gives --machine, --browser-profile and --binding.
-browser.view reads status/results; browser.run runs owner-approved saved scripts. Permissions are
-independent. Live browser control is not offered in this version.
+browser.view reads status/results, browser.run runs owner-approved saved scripts, and
+browser.control allows visible live control of the approved profile. Permissions are
+independent. The actions offered depend on the installed browser component.
 A shared page you can see (--page) needs no approval: page.export lets its app make a file of it
 (an SVG, PNG or what the app offers), run by the App of a person who sees the page.`,
 		Examples: []string{
@@ -46,7 +47,7 @@ A shared page you can see (--page) needs no approval: page.export lets its app m
 			{Name: "browser-profile", Kind: String, Help: "An enabled browser profile id from action targets (requires --machine and --binding)"},
 			{Name: "binding", Kind: String, Help: "The profile policy binding from action targets"},
 			{Name: "page", Kind: String, Help: "A shared page (pg_...) instead of a computer"},
-			{Name: "permission", Kind: List, Required: true, Help: "remote.desktop.view or remote.desktop.control for a computer; server.ssh.read/manage for a bound SSH profile; browser.view/run for a bound browser profile; page.export for a page (repeatable)"},
+			{Name: "permission", Kind: List, Required: true, Help: "remote.desktop.view or remote.desktop.control for a computer; server.ssh.read/manage for a bound SSH profile; browser.view/run/control for a bound browser profile; page.export for a page (repeatable)"},
 			{Name: "reason", Kind: String, Required: true, Help: "Why: its owner reads this before approving"},
 			{Name: "ttl", Kind: Duration, Default: "5m", Help: "How long you need it (at most 30m; its owner may give less)"},
 			{Name: "task", Kind: String, Help: "The task it is for (msg_...): the grant ends with it"},
