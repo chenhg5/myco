@@ -2813,6 +2813,9 @@ const server = http.createServer(async (req, res) => {
       v.on = true; v.st = "listening"; v.muted = false; v.hubId = hub.id; v.agent = agent.name;
       const name = agent.display_name || agent.name;
       const at = (ms, f) => v.timers.push(setTimeout(f, ms));
+      // It speaks first, as when picking up the phone.
+      at(150, () => { v.st = "speaking"; line("assistant", "我在，有什么要我做的？"); });
+      at(450, () => { v.st = "listening"; });
       at(600, () => line("hearing", "帮我看一下"));
       at(1100, () => line("hearing", "帮我看一下下载页的链接对不对"));
       at(1500, () => { line("user", "帮我看一下下载页的链接对不对"); v.st = "thinking"; });

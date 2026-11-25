@@ -684,3 +684,26 @@ func TestVoiceMicNoticesFollowTheLanguage(t *testing.T) {
 		t.Fatalf("en other: %q", got)
 	}
 }
+
+// The agent speaks first once the call is on, in the call's language.
+func TestVoiceCallGreetsFirst(t *testing.T) {
+	for _, tc := range []struct{ lang, hello, lead string }{
+		{"zh-CN", "我在，有什么要我做的？", "电话刚接通"},
+		{"en-US", "Hi, I'm here. What can I do for you?", "The call has just connected"},
+	} {
+		m := &scriptModel{replies: []chatMsg{{Role: "assistant", Content: tc.hello}}}
+		v, _, _ := newTestCall(t, m, &fakeHub{}, func(d *voiceDeps) { d.greet, d.lang = true, tc.lang })
+		waitFor(t, "the hello", func() bool { return has(v, vAssistant, tc.hello) })
+		m.mu.Lock()
+		first := m.seen[0]
+		m.mu.Unlock()
+		if s := first[len(first)-1]; s.Role != "system" || !strings.Contains(s.Content, tc.lead) {
+			t.Fatalf("%s: the model should be asked to say hello: %+v", tc.lang, s)
+		}
+		for _, e := range lines(v) {
+			if e.Kind == vUser {
+				t.Fatalf("%s: a hello is not the person's line: %+v", tc.lang, lines(v))
+			}
+		}
+	}
+}

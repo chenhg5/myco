@@ -39,6 +39,9 @@ type voiceDeps struct {
 	// ended gets what was said in this one when it ends.
 	memo  string
 	ended func(history []chatMsg)
+	// greet: the agent speaks first once the call is on, as one does
+	// picking up the phone (off in tests unless they ask for it).
+	greet bool
 }
 
 type voiceCall struct {
@@ -110,6 +113,9 @@ func (c *voiceCall) begin() {
 	c.v.setState(stListening)
 	go c.loop()
 	go c.watch()
+	if c.d.greet {
+		c.do(c.greetTurn)
+	}
 	// What the agent is doing already: its answer is news too.
 	go func() {
 		if ref, err := c.d.hub.Current(c.ctx); err == nil && ref != nil {
@@ -314,6 +320,21 @@ func (c *voiceCall) finishUtterance() {
 	c.v.add(VoiceEvent{Kind: vUser, Text: text})
 	c.v.mu.Unlock()
 	c.history = append(c.history, chatMsg{Role: "user", Content: text})
+	c.startTurn()
+}
+
+// greetTurn: the call is on; the agent says hello first, in a few words,
+// and mentions what it has at work or is waiting on, if anything. The
+// person speaking first cuts it off like any other turn.
+func (c *voiceCall) greetTurn() {
+	if c.turn != nil || c.partial != "" || len(c.history) > 0 {
+		return // they spoke first
+	}
+	lead := "（系统消息，不是对方说的）电话刚接通，你先开口：用一句很短的话打招呼，像接起电话那样，用第一人称（比如「我在，有什么要我做的？」）。你手上有活在做、或者在等对方回答，就顺带用半句话提一下；没有就不提。别说你是语音助手，别念对话原文。"
+	if c.en() {
+		lead = "(System message, not said by the person.) The call has just connected and you speak first: one short sentence of hello, as when picking up the phone, in the first person (e.g. \"Hi, I'm here. What can I do for you?\"). If you have work in progress or are waiting on their answer, mention it in half a sentence; otherwise do not. Do not call yourself a voice assistant, and do not read out the chat."
+	}
+	c.history = append(c.history, chatMsg{Role: "system", Content: lead})
 	c.startTurn()
 }
 

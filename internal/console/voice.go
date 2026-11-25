@@ -537,6 +537,7 @@ func (b *Backend) startVoice(w http.ResponseWriter, r *http.Request) {
 		tts:   provider.speech(ttsKey, c),
 		hub:   &hubActions{hubID: hub.ID, agent: in.Agent, peer: peer, c: hc, en: strings.HasPrefix(lang, "en")},
 		lang:  lang,
+		greet: true,
 		memo:  memoPrompt(lang, v.memo(memoKey(hub.ID, in.Agent))),
 		ended: func(history []chatMsg) { v.keepMemo(memoKey(hub.ID, in.Agent), history) },
 	})

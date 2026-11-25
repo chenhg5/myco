@@ -37,6 +37,7 @@ When this computer has no speech recognition the App can use (in a browser that 
 
 Voice chat is like a call with this agent itself (as in ChatGPT and Claude: one chat, one call). It is the agent who answers, saying "I'll fix that" or "let me check": on the call it speaks through a quick model, while the real work happens in its own session.
 
+- once connected, it says hello first, mentioning any work in progress or a question it is waiting on;
 - ask how things are going and it answers;
 - ask for something to be done and it takes it on: as an addition if it is busy, as a new task if it is free, just as pressing Enter would, with no extra confirmation;
 - when it is done or has a question for you, it tells you in a sentence or two at a quiet moment, or says the rest is in the chat when it is long;
