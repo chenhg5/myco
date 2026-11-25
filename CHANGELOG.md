@@ -4,6 +4,20 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.22.14
+
+- **The Windows App icon is the mushroom alone**: on Windows the icon now fills its square edge to edge — the mushroom with a thin cream rim, drawn as the tray icon is — instead of a small mushroom on a cream tile that vanished on light taskbars. The Mac icon keeps its tile.
+- **An interrupted request no longer takes away an agent's automation permissions**: if reading a permission request was cancelled (for example while leaving a page or switching to something else), the agent's automation grants could be revoked as if it had lost access. A cancelled read now abandons only that request and leaves the grants, and the files they use, alone.
+
+Upgrade: update the App.
+
+**中文**
+
+- **Windows 版的应用图标换成蘑菇本身**：Windows 上图标现在铺满整个方形——带一圈细奶油边的蘑菇，和托盘图标一致——不再是奶油色方块上缩小一截的蘑菇（在浅色任务栏上方块会看不见）。Mac 图标保留原来的方块。
+- **被打断的请求不会再收走 agent 的自动化权限**：如果读取权限请求的过程被取消（比如离开页面或切换到别的内容），agent 的自动化授权可能被当成失去访问权限而收回。现在取消的读取只放弃这一次请求，不动授权和授权用到的文件。
+
+升级：更新应用即可。
+
 ## v0.22.13
 
 - **The recorder looks and works like BrowserWing, and can capture one part of the page**: actions are listed in recording order with a status line for the latest one, deleting a step asks inside the panel, hovering outlines top-level elements, and **Extract data** offers text, HTML or an attribute — also by right-clicking an element. **Region screenshot** lets you drag a rectangle in the page; the panel and highlights hide while you do, and that drag never becomes a recorded step. This needs browser component 0.4.0, which the App offers to install or update; an installed 0.3.x keeps working until you update, without region screenshots.
