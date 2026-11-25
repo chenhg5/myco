@@ -157,6 +157,9 @@ func messageDTO(m *domain.Message) api.Message {
 		FromOwner: m.FromOwner, E2E: domain.IsSealed(m.Body),
 		Ask: m.Ask, Asking: m.Asking, Answers: m.Answers, Suggest: m.Suggest, Automation: m.Automation, Workflow: m.Workflow, GrantedBy: m.GrantedBy,
 	}
+	if m.Status == domain.StatusHeld && m.HoldUntil != "" && m.HoldUntil != domain.ManualHold {
+		out.HeldFor = "reply"
+	}
 	if m.Status == domain.StatusDelivered {
 		out.LeaseUntil = timePtr(m.LeaseUntil)
 	}

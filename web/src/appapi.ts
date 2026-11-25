@@ -321,8 +321,8 @@ export interface RecentItem {
   /** the newest task not finished yet: can be older than task (one stuck
    *  behind a newer task that finished). Hubs before v0.18.40 leave it out. */
   open?: Message;
-  /** queued | working | done | failed, or "" without a task */
-  state?: "queued" | "working" | "done" | "failed" | "";
+  /** queued | held | working | done | failed, or "" without a task */
+  state?: "queued" | "held" | "working" | "done" | "failed" | "";
   /** the project the thread belongs to */
   project?: string;
 }
@@ -756,7 +756,11 @@ export const appApi = {
     if (query.group) q.set("group", query.group);
     if (query.side) q.set("side", query.side);
     const qs = q.toString();
-    return request<RecentList>("GET", `app/hubs/${enc(hubId)}/recent${qs ? `?${qs}` : ""}`);
+    return request<RecentList>("GET", `app/hubs/${enc(hubId)}/recent${qs ? `?${qs}` : ""}`).then((result) => ({
+      ...result,
+      items: result.items.map((item): RecentItem =>
+        (item.open || item.task)?.status === "held" ? { ...item, state: "held" } : item),
+    }));
   },
   /** Sends a task from this console; without thread_id it starts a conversation. */
   sendMessage: (hubId: string, input: SendMessageInput) =>

@@ -488,13 +488,13 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		log.Info("exec node ignores non-task message")
 		return
 	}
+	key := r.sessionKey(m)
+	unlock := r.lockThread(key)
+	defer unlock()
 	if m.Type == "task" && !executor {
 		r.trackTask(m.ID)
 		defer r.untrackTask(m.ID)
 	}
-	key := r.sessionKey(m)
-	unlock := r.lockThread(key)
-	defer unlock()
 
 	sessionID := r.sessions.Get(key)
 	// A copied node's first run makes the copy: it runs on the source
@@ -557,6 +557,11 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 	project := ""
 	if !executor {
 		project = r.superagentContext(ctx, key, sessionID) + r.projectContext(ctx, log, key, sessionID, m)
+		if m.HoldWake != "" {
+			section, dirs := r.heldWakeContext(ctx, log, m.HoldWake)
+			project += section
+			extraDirs = append(extraDirs, dirs...)
+		}
 	}
 	if rerun {
 		project += rerunNote
@@ -618,6 +623,9 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 			Env: append(r.env(),
 				"MYCO_MESSAGE_ID="+m.ID, "MYCO_THREAD_ID="+m.ThreadID, "MYCO_FROM="+m.From, "MYCO_MESSAGE_TYPE="+m.Type,
 				"MYCO_PROJECT="+m.Project),
+		}
+		if !executor {
+			req.Env = append(req.Env, "MYCO_RUNNER_HOLD=1")
 		}
 		// Every step the harness reports counts as activity: a long run that
 		// keeps working is not cut off, a silent one is.

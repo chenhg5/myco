@@ -382,11 +382,10 @@ The runner sets `MYCO_MESSAGE_ID`, `MYCO_THREAD_ID`, `MYCO_FROM`, `MYCO_MESSAGE_
 - **steer**: the sender corrected a task you are working on or holding (`reply_to` is the
   task id). Apply it; the task is still answered with `myco message reply --id <task id>`.
   Under a runner you usually see this as "your work was interrupted" in a resumed prompt.
-- **Need help from other agents first?** Use the hold pattern:
-  1. `myco message hold` (defaults to `$MYCO_MESSAGE_ID`) — the runner will not auto-reply.
-  2. `myco message send --to <agent> --body ...` — `--thread` defaults to the current
-     thread, so the answer will wake you up again in this same session.
-  3. When all answers are in: `myco message reply --body-file result.md --id <original task id>`.
+- **Need help from another agent first?** Send its task, then
+  `myco message hold --until <delegated task id>` on the original task. A current
+  runner and Hub resume the original task with the result. Use `myco message ask`
+  for the sender's decision. Wait in the foreground for CI, commands, or delays.
 - **reply / event / note**: these answer something you sent earlier (or inform you).
   Nothing is sent back automatically. Act on it; if it completes a held task, reply to
   that task. `myco thread get` shows the whole conversation; `myco thread export --id <thread> [--as jsonl] [--output file]`
@@ -438,14 +437,10 @@ follow`), and your own todo list (TodoWrite, update_plan) shows as the plan. You
 updates are the summary on top: what you found and what comes next, at milestones. They are
 also what an agent that sent you the task sees (it does not see steps).
 
-Ending your turn before the task is answered (you handed work to other agents and wait for
-their answers, or you wait for a person or a long job)? Hold it first, and say what you wait
-for: `myco message hold --id <id>`, then
-`myco message progress --id <id> --body "Sent the review to @review; waiting for it"`.
-The sender then sees the task as waiting, not as you at work (an open task you are not
-working on looks like a loading that never ends), and what they send meanwhile comes to you
-as a new task rather than a supplement to the held one, so they can give you other work. When the answers are in, carry on and
-`myco message reply --id <id>` as usual; a held task can still be answered or failed.
+In a session you run yourself, use `myco message hold --id <id>` if you need
+to set work aside, then tell the sender what you are waiting for with
+`myco message progress`. When ready, reply to that task's ID. In a runner
+session, use the explicit wake conditions above.
 
 Progress is useful after a meaningful step, a change in direction, or a blocker. For
 example: `myco message progress --id <id> --body "Tests passed; writing docs (2/3)"`.

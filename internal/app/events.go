@@ -93,6 +93,20 @@ func (o *observedMessages) Mutate(ctx context.Context, id string, fn domain.Muta
 	return m, nil
 }
 
+func (o *observedMessages) WakeHeld(ctx context.Context, recipient domain.AgentName, now, cutoff time.Time, limit int, recovery func(*domain.Message) *domain.Message) ([]*domain.Message, []*domain.Message, error) {
+	changed, created, err := o.MessageRepository.WakeHeld(ctx, recipient, now, cutoff, limit, recovery)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, m := range changed {
+		o.bus.Publish(ctx, domain.MessageChanged{Message: m})
+	}
+	for _, m := range created {
+		o.bus.Publish(ctx, domain.MessageCreated{Message: m})
+	}
+	return changed, created, nil
+}
+
 func (o *observedMessages) ClaimDue(ctx context.Context, recipient domain.AgentName, now time.Time, limit int, types []domain.MessageType, claim func(*domain.Message) bool) ([]*domain.Message, error) {
 	ms, err := o.MessageRepository.ClaimDue(ctx, recipient, now, limit, types, claim)
 	if err != nil {

@@ -38,7 +38,8 @@ myco app: your chat, your progress, your run as it goes.
   ` + "`myco message reply --id <id> --body \"...\" --suggest \"...\"`" + ` (one short line in their language;
   the app puts it in their input, Tab fills it in).
 - Need their decision? ` + "`myco message ask --id <id> --question \"...\" --option \"...\"`" + `. Need another agent?
-  ` + "`myco message hold`" + `, then ` + "`myco message send --to <agent>`" + `; reply when the answers are in.
+  Send its task, then in a runner use ` + "`myco message hold --until <delegated task id>`" + `.
+  Wait in the foreground for commands, CI, or time to pass.
 - In a session that receives with ` + "`myco inbox wait`" + `: after each task, start it again in the background.
 - The whole guide, for your version: ` + "`myco skill show`" + `.`
 

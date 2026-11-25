@@ -321,7 +321,7 @@ func (s *MessageService) checkProject(ctx context.Context, sender *domain.Agent,
 
 // Pull leases up to limit due messages for agent, long-polling up to wait.
 func (s *MessageService) Pull(ctx context.Context, agent *domain.Agent, limit int, waitFor time.Duration, types ...domain.MessageType) ([]*domain.Message, error) {
-	return s.pull(ctx, agent, limit, waitFor, nil, types)
+	return s.pull(ctx, agent, limit, waitFor, nil, false, types)
 }
 
 // PullForRunner is Pull for an agent's runner: while a session of the agent
@@ -329,16 +329,26 @@ func (s *MessageService) Pull(ctx context.Context, agent *domain.Agent, limit in
 // not wake a session that is already receiving by itself. It still waits out
 // waitFor so the runner's loop stays a slow long-poll.
 func (s *MessageService) PullForRunner(ctx context.Context, agent *domain.Agent, limit int, waitFor time.Duration, types ...domain.MessageType) ([]*domain.Message, error) {
-	if s.presence == nil {
-		return s.Pull(ctx, agent, limit, waitFor, types...)
+	return s.pullRunner(ctx, agent, limit, waitFor, false, types)
+}
+
+func (s *MessageService) PullWakingHeld(ctx context.Context, agent *domain.Agent, limit int, waitFor time.Duration, types ...domain.MessageType) ([]*domain.Message, error) {
+	wake := agent.Binding.Harness != domain.HarnessExec && agent.Binding.Harness != domain.HarnessMachine
+	return s.pullRunner(ctx, agent, limit, waitFor, wake, types)
+}
+
+func (s *MessageService) pullRunner(ctx context.Context, agent *domain.Agent, limit int, waitFor time.Duration, wakeHeld bool, types []domain.MessageType) ([]*domain.Message, error) {
+	var yield func() bool
+	if s.presence != nil {
+		s.presence.RunnerPulled(agent.Name)
+		yield = func() bool { return s.presence.Live(agent.Name) }
 	}
-	s.presence.RunnerPulled(agent.Name)
-	return s.pull(ctx, agent, limit, waitFor, func() bool { return s.presence.Live(agent.Name) }, types)
+	return s.pull(ctx, agent, limit, waitFor, yield, wakeHeld, types)
 }
 
 // pull leases due messages; when yield reports true it claims nothing and
 // sleeps until the deadline instead.
-func (s *MessageService) pull(ctx context.Context, agent *domain.Agent, limit int, waitFor time.Duration, yield func() bool, types []domain.MessageType) ([]*domain.Message, error) {
+func (s *MessageService) pull(ctx context.Context, agent *domain.Agent, limit int, waitFor time.Duration, yield func() bool, wakeHeld bool, types []domain.MessageType) ([]*domain.Message, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 10
 	}
@@ -352,7 +362,7 @@ func (s *MessageService) pull(ctx context.Context, agent *domain.Agent, limit in
 		}
 		ch, cancel := s.notifier.Subscribe(inboxTopic(string(agent.Name)))
 		now := s.clock.Now()
-		msgs, err := s.claimDue(ctx, agent.Name, now, limit, types)
+		msgs, err := s.claimDue(ctx, agent.Name, now, limit, types, wakeHeld)
 		if err != nil || len(msgs) > 0 {
 			cancel()
 			return msgs, err
@@ -380,12 +390,27 @@ func (s *MessageService) pull(ctx context.Context, agent *domain.Agent, limit in
 				return nil, nil
 			}
 			now := s.clock.Now()
-			return s.claimDue(ctx, agent.Name, now, limit, types)
+			return s.claimDue(ctx, agent.Name, now, limit, types, wakeHeld)
 		}
 	}
 }
 
-func (s *MessageService) claimDue(ctx context.Context, recipient domain.AgentName, now time.Time, limit int, types []domain.MessageType) ([]*domain.Message, error) {
+func (s *MessageService) claimDue(ctx context.Context, recipient domain.AgentName, now time.Time, limit int, types []domain.MessageType, wakeHeld bool) ([]*domain.Message, error) {
+	if wakeHeld {
+		changed, created, err := s.messages.WakeHeld(ctx, recipient, now, now.Add(-30*time.Minute), limit, func(m *domain.Message) *domain.Message {
+			p, _ := m.Progress(recipient, s.ids.New("msg"), "自动唤醒：暂挂后没有能叫醒你的回复或回答。\nAutomatically resumed: this task was held without a reply or answer that could wake it.", now)
+			return p
+		})
+		if err != nil {
+			return nil, err
+		}
+		if len(changed) > 0 {
+			s.notifier.Publish(inboxTopic(string(recipient)))
+		}
+		for _, p := range created {
+			s.notifier.Publish(replyTopic(p.ReplyTo))
+		}
+	}
 	var expired []string
 	msgs, err := s.messages.ClaimDue(ctx, recipient, now, limit, types, func(m *domain.Message) bool {
 		if m.Claim(now, s.policy.Lease, s.policy.MaxAttempts) {
@@ -440,6 +465,44 @@ func (s *MessageService) Transition(ctx context.Context, agent *domain.Agent, id
 		s.workflowEnded(m.Workflow)
 	}
 	return m, err
+}
+
+// HoldUntil records an explicit dependency for a runner, or an intentional
+// manual hold outside one. Legacy clients can still use TransitionHold.
+func (s *MessageService) HoldUntil(ctx context.Context, agent *domain.Agent, id, until string, dry bool) (*domain.Message, error) {
+	var child *domain.Message
+	if until != "" {
+		var err error
+		child, err = s.messages.Get(ctx, until)
+		if err != nil && !domain.IsCode(err, domain.CodeNotFound) {
+			return nil, err
+		}
+		if child == nil || child.From != agent.Name || child.Type != domain.TypeTask || child.ID == id || child.To == agent.Name || child.After == id {
+			return nil, domain.Errf(domain.CodeInvalidArgument, "hold must wait for a task you sent to another agent that can finish independently").
+				WithSuggestion("send a task to another agent and pass its ID to --until")
+		}
+	} else {
+		until = domain.ManualHold
+	}
+	var task *domain.Message
+	err := s.mutateOrPreview(ctx, id, dry, func(m *domain.Message) ([]*domain.Message, error) {
+		if m.To != agent.Name {
+			return nil, domain.Errf(domain.CodePermissionDenied, "only the recipient may hold this task")
+		}
+		if m.Type != domain.TypeTask {
+			return nil, domain.Errf(domain.CodeInvalidArgument, "only tasks can be held")
+		}
+		if m.Status == domain.StatusHeld && (m.Asking != "" || m.HoldUntil != until) {
+			return nil, domain.Errf(domain.CodeInvalidState, "this task is already held for another reason")
+		}
+		if err := m.Hold(agent.Name, s.clock.Now()); err != nil {
+			return nil, err
+		}
+		m.HoldUntil = until
+		task = m
+		return nil, nil
+	})
+	return task, err
 }
 
 // Release defers message id (addressed to agent) for redelivery after delay

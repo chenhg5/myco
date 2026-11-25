@@ -69,6 +69,9 @@ func (s Status) Terminal() bool { return s == StatusDone || s == StatusFailed }
 const MaxBodyBytes = 256 * 1024
 
 // Message is the aggregate root for a single unit of communication.
+const ManualHold = "manual"
+const RecoveredHold = "recovered"
+
 type Message struct {
 	ID             string
 	From           AgentName
@@ -99,6 +102,11 @@ type Message struct {
 	// Asking, on a task, is the id of its question still waiting for an
 	// answer ("" when none).
 	Asking string
+	// HoldUntil is the task whose completion can resume this one, or ManualHold.
+	HoldUntil string
+	// HoldWake is the message that resumed this task, or RecoveredHold.
+	HoldWake      string
+	HoldRecovered bool
 	// Answers, on a steer, is the id of the question it answers.
 	Answers string
 	// Suggest, on a task, is what its recipient thinks the sender may want
@@ -230,6 +238,7 @@ func (m *Message) Hold(by AgentName, now time.Time) error {
 		return err
 	}
 	m.Status, m.UpdatedAt = StatusHeld, now
+	m.HoldUntil, m.HoldWake = "", ""
 	return nil
 }
 
@@ -352,6 +361,7 @@ func (m *Message) AskSender(by AgentName, id, body string, now time.Time) (*Mess
 		}
 	}
 	m.Asking, m.UpdatedAt = p.ID, now
+	m.HoldUntil, m.HoldWake = "", ""
 	return p, nil
 }
 
@@ -363,6 +373,7 @@ func (m *Message) Steer(by AgentName, id, body string, now time.Time) (*Message,
 	if err == nil && m.Asking != "" {
 		st.Answers = m.Asking
 		m.Asking, m.UpdatedAt = "", now
+		m.HoldWake = st.ID
 	}
 	return st, err
 }

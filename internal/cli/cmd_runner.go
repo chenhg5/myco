@@ -215,6 +215,8 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 			return nil, errorf("invalid_argument", ExitUsage, "available harnesses: "+strings.Join(sh.registry.Names(), ", "), "%v", err)
 		}
 	}
+	_, commandExecutor := h.(harness.CommandExecutor)
+	c.WakeHeld = !commandExecutor
 	// The provider (runner.provider, or provider variables in the env file)
 	// is resolved again before every run, like the env file itself.
 	currentProvider := func() providerChoice {

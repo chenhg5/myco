@@ -6,7 +6,7 @@ import { appApi, isTransient } from "@/appapi";
 import type { Agent, Message } from "@/api";
 import { SHROOM, useIsSuperagent } from "@/app/superagentMark";
 import type { AgentRow } from "@/app/types";
-import { agentKind, canManage, isInbox, isMe, lastActivityAt, machineOfRow, personLabel, possiblyStuck, quietFor, runnerAway, SEEN_SLACK_MS, seenNow, sessionBusy, nodeName } from "@/app/nodes";
+import { heldTaskLabel, agentKind, canManage, isInbox, isMe, lastActivityAt, machineOfRow, personLabel, possiblyStuck, quietFor, runnerAway, SEEN_SLACK_MS, seenNow, sessionBusy, nodeName } from "@/app/nodes";
 import { MessageContent, filesBelow, filesFor, inlineAttachmentIds, type InlineFiles } from "@/app/Markdown";
 import { UI_REPLY } from "@/app/ui/UiBlock";
 import { PromptSign, STOPPED, Terminal } from "@/app/Terminal";
@@ -1344,7 +1344,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     if (termMode || !shown) return null;
     // (one that has gone quiet may be stuck: the lists say so; no mushroom)
     const open = shown.filter((m) => {
-      if (m.type !== "task" || isMe(m.from, row?.hub) || !isOpen(m.status) || answerOf.has(m.id)) return false;
+      if (m.type !== "task" || isMe(m.from, row?.hub) || !isOpen(m.status) || m.status === "held" || answerOf.has(m.id)) return false;
       // A task someone else gave the member shown here has its own line of
       // work under it (with the mushroom): not a second one at the bottom.
       if (!observed && alsoSet.has(m.from) && m.to === target.agent) return false;
@@ -1354,7 +1354,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     });
     if (!open.length) return null;
     // Only an acknowledged task is at work: queued, pulled-but-not-acked
-    // (delivered) and held all wait.
+    // (delivered) tasks wait for a turn.
     const task = open.find((m) => m.status === "acked") || open[0];
     const said = progressOf.get(task.id);
     return {
@@ -1444,10 +1444,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // like a receipt, not a line of its own (it is a message, not a state).
   // Gone once it starts; nothing is said while it works or after it stops.
   const receiptOf = (m: Message): { text: string; title?: string } | null => {
-    if (m.type !== "task" || m.e2e || !isMe(m.from, row?.hub) || !isOpen(m.status) || answerOf.has(m.id) || m.asking || isStuck(m)) return null;
-    const st = traceStatuses.get(m.id) || m.status;
+    if (m.type !== "task" || m.e2e || !isMe(m.from, row?.hub) || !isOpen(m.status) || answerOf.has(m.id) || isStuck(m)) return null;
+    const st = m.status === "held" ? m.status : traceStatuses.get(m.id) || m.status;
+    if (st === "held") return { text: heldTaskLabel(m, nameOf(m.from)) };
+    if (m.asking) return null;
     if (runnerQueueText(rowOf(m.to)?.st.agent,m.id)) return null;
-    if (st === "held") return { text: L("稍后回复", "Will answer later") };
     if (st === "acked" || progressOf.get(m.id)?.length) return null;
     if (waitingShort) return { text: waitingShort, title: waitingReason };
     if (atWorkId && atWorkId !== m.id) return { text: L("排在后面", "Queued behind the current one"), title: L("它做完手上这件就看这条", "It reads this once it is done with the one at hand") };

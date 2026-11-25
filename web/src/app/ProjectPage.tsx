@@ -228,7 +228,7 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
     const a = p.members.find((m) => m.name === n)?.agent;
     return a ? nodeName(a, hub) : n;
   };
-  const stateLabel: Record<string, string> = { queued: L("排队中", "Queued"), working: L("处理中", "Working"), failed: L("失败", "Failed"), done: L("已完成", "Done") };
+  const stateLabel: Record<string, string> = { queued: L("排队中", "Queued"), held: L("暂挂", "On hold"), working: L("处理中", "Working"), failed: L("失败", "Failed"), done: L("已完成", "Done") };
   const hub = hubRows[0]?.hub;
   // Nodes this person may add: theirs (or all, when they manage the hub).
   const addable = hubRows
@@ -480,7 +480,7 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
           <span className="muted">{L("还没有这个项目的对话。给成员发个任务，或者让 agent 用 myco message send --project 发。", "No conversations in this project yet. Give a member a task, or have an agent send with myco message send --project.")}</span>
         ) : (
           <>
-            {(["working", "queued", "failed", "done"] as const).map((st) => (
+            {(["working", "queued", "held", "failed", "done"] as const).map((st) => (
               <span key={st} className={cn("app-project-stat", `is-${st}`)}><i />{stateLabel[st]} <b>{count(st)}</b></span>
             ))}
           </>

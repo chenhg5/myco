@@ -3019,6 +3019,9 @@ textarea.app-input {
 .conv-row-state.is-queued {
   background: var(--faint);
 }
+.conv-row-state.is-held {
+  background: var(--amber);
+}
 .conv-row-state.is-failed {
   background: var(--red);
 }
@@ -6930,6 +6933,7 @@ body.is-resizing {
 /* The same colours as a node's dot and a conversation's: working is green,
    queued faint, failed red, done the quiet grey. */
 .app-project-stat.is-working i { background: var(--green); }
+.app-project-stat.is-held i { background: var(--amber); }
 .app-project-stat.is-failed i { background: var(--red); }
 .app-project-stat.is-done i { background: var(--muted); }
 .app-project-stat b { font-weight: 600; color: var(--fg); }

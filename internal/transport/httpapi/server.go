@@ -316,6 +316,7 @@ func (s *Server) routes() {
 	m.HandleFunc("GET /v1/messages/{id}/steers", s.agent(s.getSteers))
 	m.HandleFunc("POST /v1/messages/{id}/ack", s.agent(s.transition(app.TransitionAck)))
 	m.HandleFunc("POST /v1/messages/{id}/hold", s.agent(s.transition(app.TransitionHold)))
+	m.HandleFunc("POST /v1/messages/{id}/hold-until", s.agent(s.holdUntil))
 	m.HandleFunc("POST /v1/messages/{id}/done", s.agent(s.transition(app.TransitionComplete)))
 	m.HandleFunc("POST /v1/messages/{id}/reply", s.agent(s.reply))
 	m.HandleFunc("POST /v1/messages/{id}/progress", s.agent(s.followUp("progress")))
@@ -1416,13 +1417,37 @@ func (s *Server) getSteers(w http.ResponseWriter, r *http.Request, a *domain.Age
 func (s *Server) transition(t app.Transition) func(http.ResponseWriter, *http.Request, *domain.Agent) {
 	return func(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
 		dry := dryRun(r)
-		m, err := s.messages.Transition(r.Context(), a, r.PathValue("id"), t, dry)
+		var m *domain.Message
+		var err error
+		if t == app.TransitionHold && r.URL.Query().Get("manual") == "1" {
+			m, err = s.messages.HoldUntil(r.Context(), a, r.PathValue("id"), "", dry)
+		} else {
+			m, err = s.messages.Transition(r.Context(), a, r.PathValue("id"), t, dry)
+		}
 		if err != nil {
 			writeError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, api.MessageResult{Message: s.messageDTO(m), DryRun: dry})
 	}
+}
+
+func (s *Server) holdUntil(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
+	var req api.HoldUntilRequest
+	if !decode(w, r, &req) {
+		return
+	}
+	if req.Until == "" {
+		writeError(w, domain.Errf(domain.CodeInvalidArgument, "until is required"))
+		return
+	}
+	dry := dryRun(r)
+	m, err := s.messages.HoldUntil(r.Context(), a, r.PathValue("id"), req.Until, dry)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, api.MessageResult{Message: s.messageDTO(m), DryRun: dry})
 }
 
 func (s *Server) reply(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
@@ -1577,6 +1602,9 @@ func (s *Server) pull(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
 	pull := s.messages.Pull
 	if req.Via == "runner" {
 		pull = s.messages.PullForRunner
+		if r.URL.Query().Get("wake_held") == "1" {
+			pull = s.messages.PullWakingHeld
+		}
 	}
 	msgs, err := pull(r.Context(), a, req.Limit, time.Duration(req.WaitSeconds)*time.Second, types...)
 	if err != nil {
@@ -1591,6 +1619,9 @@ func (s *Server) pull(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
 	// app calls it.
 	names := map[string]string{}
 	for i := range out.Messages {
+		if req.Via == "runner" && r.URL.Query().Get("wake_held") == "1" {
+			out.Messages[i].HoldWake = msgs[i].HoldWake
+		}
 		from := out.Messages[i].From
 		if strings.HasPrefix(from, "@") {
 			continue

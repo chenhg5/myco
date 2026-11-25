@@ -69,8 +69,8 @@ func (p DefaultPrompt) Build(self string, m api.Message, files []LocalFile) stri
 			"add a screenshot: `--attach shot.png`. Optionally publish a one-line status for everyone with `myco agent status set --text \"...\"`.\n" +
 			"When there is an obvious next step for them, suggest it before you finish: `myco message suggest --text \"...\"` " +
 			"(one short line in their language; the app puts it in their input).\n" +
-			"If you need to delegate and answer later, run `myco message hold --id " + m.ID + "` now, " +
-			"send sub-tasks with `myco message send`, and later answer with `myco message reply --id " + m.ID + "`.\n" +
+			"If you need another agent's result, first send its task, then run `myco message hold --id " + m.ID + " --until <delegated task ID>`. " +
+			"The original task resumes with the result. Stay in the foreground while waiting for tests, CI, or time to pass.\n" +
 			"If the sender really has to decide (a direction, something costly or hard to undo), ask with " +
 			"`myco message ask --question \"...\" --option \"...\" --option \"...\"` and end your turn: their answer comes back here.\n")
 	case "steer":

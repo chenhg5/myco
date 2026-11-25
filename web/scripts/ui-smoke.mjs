@@ -3078,7 +3078,7 @@ async function runMatrix(browser, size, scheme) {
       await settle(page, 300);
       const lines = await page.locator(".conv-detail .trace").last().innerText();
       if (/在等|还没做完|先放着/.test(lines)) throw new Error(`它这一轮停了，不该再挂一行状态，实际有「${compactText(lines)}」`);
-      if (await page.locator(".conv-detail .conv-msg.is-me .conv-receipt").count()) throw new Error("开始做之后，消息下面不该还有「还没开始看」");
+      await page.locator(".conv-detail .conv-msg.is-me .conv-receipt", { hasText: "暂挂：在等其他 agent 回复" }).last().waitFor({ timeout: 15_000 });
       // It stopped: the box is a plain one again (a new message, nothing to stop).
       const ph = await page.locator(".conv-detail .conv-compose-input").getAttribute("placeholder");
       if ((ph || "").startsWith("补充给")) throw new Error(`它这一轮停了，输入框不该还是「补充给…」，实际「${ph}」`);
@@ -3367,7 +3367,7 @@ async function runMatrix(browser, size, scheme) {
 
     // Set aside as the skill says (hold, then a progress saying what it
     // waits for), still in its session: waiting, not at work — no loading,
-    // 稍后回复 under your message, a plain box.
+    // a waiting receipt under your message and a plain compose box.
     await step("单聊 · 挂起后说明在等", async () => {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");
       await noRound(page);
@@ -3375,7 +3375,7 @@ async function runMatrix(browser, size, scheme) {
       await box.fill(`挂起说明：定时和 Webhook 先做第一步（${size.width}-${scheme}）`);
       await box.press("Enter");
       await page.locator(".conv-detail .trace-report", { hasText: "已派给 release" }).last().waitFor({ timeout: 15_000 });
-      await page.locator(".conv-detail .conv-receipt", { hasText: "稍后回复" }).last().waitFor({ timeout: 10_000 });
+      await page.locator(".conv-detail .conv-receipt", { hasText: "暂挂：在等其他 agent 回复" }).last().waitFor({ timeout: 10_000 });
       await page.waitForTimeout(2500);
       if (await page.locator(".conv-detail .work-sprite").count()) throw new Error("挂起后只是说明在等什么，不该一直显示 loading");
       const ph = await box.getAttribute("placeholder");
@@ -3397,7 +3397,7 @@ async function runMatrix(browser, size, scheme) {
       await box.fill(`长会话：先查授权（${tag}）`);
       await box.press("Enter");
       await page.locator(".conv-detail .trace-say", { hasText: "需要你在会话里允许授权" }).last().waitFor({ timeout: 15_000 });
-      await page.locator(".conv-detail .conv-receipt", { hasText: "稍后回复" }).last().waitFor({ timeout: 15_000 });
+      await page.locator(".conv-detail .conv-receipt", { hasText: "暂挂中，没人在做" }).last().waitFor({ timeout: 15_000 });
       await box.fill(`长会话：接着拉群消息（${tag}）`);
       await box.press("Enter");
       const second = page.locator(".conv-detail .conv-msg.is-me", { hasText: `长会话：接着拉群消息（${tag}）` }).last();

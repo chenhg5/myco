@@ -6,7 +6,7 @@ import { IconChat } from "@/components/icons";
 import { appApi, isOldHub, type AgentProvider, type ManualProvider, type ProviderList, type MachineInfo, type WireAPI } from "@/appapi";
 import type { AgentRow } from "@/app/types";
 import type { AuditEntry, Member, Peer, Project, Runtime, Skill } from "@/api";
-import {
+import { heldTaskLabel,
   agentKind, cliName, cliVersion, cloudLabel, isCloud, isInbox, kindLabel, machineLabel,
   canManage, cleanLabel, groupsOf, isMe, machineOfRow, nodeIcon, personLabel, tagsOf,
   sessionBusy, stateLabel, stuckCounts, possiblyStuck, nodeName } from "@/app/nodes";
@@ -546,7 +546,7 @@ function openStatusLabel(status: string, stuck = false): string {
   if (stuck) return L("可能卡住", "May be stuck");
   // delivered: the node pulled it but has not acknowledged it yet.
   if (status === "queued" || status === "delivered") return L("待处理", "Queued");
-  if (status === "held") return L("已挂起", "Held");
+  if (status === "held") return L("暂挂", "On hold");
   return L("处理中", "In progress");
 }
 
@@ -1245,7 +1245,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
               <div className="app-counts">
                 <span>{L("处理中", "In progress")}<b>{Math.max(0, row.st.in_progress - stuck.in_progress)}</b></span>
                 <span>{L("待处理", "Queued")}<b>{row.st.queued}</b></span>
-                <span>{L("已挂起", "Held")}<b>{Math.max(0, row.st.held - stuck.held)}</b></span>
+                <span>{L("暂挂", "On hold")}<b>{row.st.held}</b></span>
                 {stuck.total > 0 && <span className="is-stuck">{L("可能卡住", "May be stuck")}<b>{stuck.total}</b></span>}
               </div>
               {current.length === 0 && <div className="app-empty-note">{row.st.queued + row.st.in_progress + row.st.held > 0
@@ -1255,8 +1255,8 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
                 <div key={m.id} className="app-msg-wrap">
                   <button type="button" className="app-msg" onClick={() => onThread(hubId, m.thread_id, ag.name)}>
                     <span className="meta">
-                      <span className={cn("app-msg-status", m.status, isStuck(m) && "is-stuck")}>{m.status === "held" && m.asking
-                        ? L(`在等 ${nodeLabel(m.from)} 回答`, `Waiting on ${nodeLabel(m.from)}'s answer`)
+                      <span className={cn("app-msg-status", m.status, isStuck(m) && "is-stuck")}>{m.status === "held"
+                        ? heldTaskLabel(m, nodeLabel(m.from))
                         : (row.st.stale_tasks || []).includes(m.id) ? L("没收尾", "Left open") : openStatusLabel(m.status, isStuck(m))}</span>
                       <span className="who">{nodeLabel(m.from)}</span>→<span className="who">{nodeLabel(m.to)}</span>
                       <span className="time">{timeAgo(m.active_at || m.updated_at, now)}</span>

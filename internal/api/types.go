@@ -343,6 +343,10 @@ type Message struct {
 	Ask     bool   `json:"ask,omitempty"`
 	Asking  string `json:"asking,omitempty"`
 	Answers string `json:"answers,omitempty"`
+	// HeldFor is "reply" when an agent is waiting for another agent.
+	HeldFor string `json:"held_for,omitempty"`
+	// HoldWake is the reply, answer or recovery marker returned to runners.
+	HoldWake string `json:"hold_wake,omitempty"`
 	// Suggest, on a task: what its recipient thinks the sender may want to
 	// say next (POST /v1/messages/{id}/suggest, v0.19.15+); the app offers
 	// it in the input and Tab takes it.
@@ -557,6 +561,11 @@ type PullRequest struct {
 	// Via is "runner" when an agent's runner pulls; such pulls get nothing
 	// while a session of the agent keeps `inbox wait` running.
 	Via string `json:"via,omitempty"`
+}
+
+// HoldUntilRequest identifies the delegated task whose completion resumes this task.
+type HoldUntilRequest struct {
+	Until string `json:"until"`
 }
 
 // MessageList wraps a list of messages.
@@ -1081,7 +1090,7 @@ type RecentItem struct {
 	// (a task stuck behind a newer one that finished). Hubs before v0.18.40
 	// leave it out.
 	Open *Message `json:"open,omitempty"`
-	// State: "queued", "working", "done", "failed" or "" (no task). A shell
+	// State: "queued", "held", "working", "done", "failed" or "" (no task). A shell
 	// command that exited non-zero is "done" here; its exit code is in
 	// Answer's body.
 	State string `json:"state,omitempty"`

@@ -7,7 +7,7 @@ import { appApi, errorMessage, type RecentItem } from "@/appapi";
 import { GroupNameDialog, GroupedMembers, inGroupOrder, moveItems, useGroupStyle, type GroupStyle, type GroupsCtl } from "@/app/MemberGroups";
 import type { Message, Project } from "@/api";
 import type { AgentRow } from "@/app/types";
-import { agentKind, isMe, nodeName } from "@/app/nodes";
+import { agentKind, heldTaskLabel, isMe, nodeName } from "@/app/nodes";
 import { keepSent, keptSent, useInputHistory } from "@/app/inputHistory";
 import { DictateButton } from "@/app/Dictate";
 import { callWhenOpened, useVoiceCall, useVoiceReady } from "@/app/VoiceBar";
@@ -1282,6 +1282,10 @@ function liveLine(r: AgentRow, nameOf: (n: string) => string, now: number): { te
     return { text, meta: meta ? meta + queued : queued.replace(/^ · /, "") || undefined };
   }
   if (r.st.queued > 0) return { text: L(`${r.st.queued} 个活在排队`, `${r.st.queued} queued`) };
+  if (r.st.held > 0) {
+    const held = r.st.current?.find((m) => m.status === "held");
+    return { text: held ? heldTaskLabel(held, nameOf(held.from)) : L("暂挂中，没人在做", "On hold · no one is working on it") };
+  }
   return { text: a.description || stateWords(r.st.state) };
 }
 

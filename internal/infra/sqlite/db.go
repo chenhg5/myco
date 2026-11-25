@@ -519,6 +519,7 @@ func Open(path string) (*sql.DB, error) {
 		// Questions to a task's sender: the question, the task waiting on it,
 		// the steer answering it.
 		{"ask", "INTEGER NOT NULL DEFAULT 0"}, {"asking", "TEXT NOT NULL DEFAULT ''"}, {"answers", "TEXT NOT NULL DEFAULT ''"},
+		{"hold_until", "TEXT NOT NULL DEFAULT ''"}, {"hold_wake", "TEXT NOT NULL DEFAULT ''"}, {"hold_recovered", "INTEGER NOT NULL DEFAULT 0"},
 		// What a task's recipient suggests its sender says next.
 		{"suggest", "TEXT NOT NULL DEFAULT ''"},
 		// When its recipient last showed it is working on it (ms).

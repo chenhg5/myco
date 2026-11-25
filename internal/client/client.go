@@ -46,6 +46,8 @@ type Client struct {
 	http  *http.Client
 	// Via marks this client's pulls (e.g. "runner"; see api.PullRequest.Via).
 	Via string
+	// WakeHeld opts a conversational runner into receiving resumptions.
+	WakeHeld bool
 	// Reason goes with each request (X-Myco-Reason): why a superagent asks
 	// for something its owner has to approve.
 	Reason string
@@ -486,6 +488,25 @@ func (c *Client) Transition(ctx context.Context, id, verb string, dry bool) (*ap
 	return &out.Message, c.do(ctx, http.MethodPost, "/v1/messages/"+esc(id)+"/"+verb, dryQuery(dry), nil, &out)
 }
 
+// Hold records a deliberate manual hold or a dependency on another task.
+// The new endpoint is intentionally distinct so old hubs reject an
+// explicit dependency rather than silently creating an indefinite hold.
+func (c *Client) Hold(ctx context.Context, id, until string, dry bool) (*api.Message, error) {
+	query := dryQuery(dry)
+	path := "/v1/messages/" + esc(id)
+	var out api.MessageResult
+	if until != "" {
+		err := c.do(ctx, http.MethodPost, path+"/hold-until", query, api.HoldUntilRequest{Until: until}, &out)
+		return &out.Message, err
+	}
+	if query == nil {
+		query = url.Values{}
+	}
+	query.Set("manual", "1")
+	err := c.do(ctx, http.MethodPost, path+"/hold", query, nil, &out)
+	return &out.Message, err
+}
+
 // Ack acknowledges a pulled message.
 func (c *Client) Ack(ctx context.Context, id string) error {
 	_, err := c.Transition(ctx, id, "ack", false)
@@ -592,7 +613,11 @@ func (c *Client) Pull(ctx context.Context, limit int, wait time.Duration) ([]api
 // PullTypes is Pull restricted to message types (nil = all).
 func (c *Client) PullTypes(ctx context.Context, limit int, wait time.Duration, types []string) ([]api.Message, error) {
 	var out api.MessageList
-	err := c.do(ctx, http.MethodPost, "/v1/inbox/pull", nil, api.PullRequest{Limit: limit, WaitSeconds: int(wait.Seconds()), Types: types, Via: c.Via}, &out)
+	var q url.Values
+	if c.Via == "runner" && c.WakeHeld {
+		q = url.Values{"wake_held": {"1"}}
+	}
+	err := c.do(ctx, http.MethodPost, "/v1/inbox/pull", q, api.PullRequest{Limit: limit, WaitSeconds: int(wait.Seconds()), Types: types, Via: c.Via}, &out)
 	c.openAll(ctx, out.Messages)
 	return out.Messages, err
 }

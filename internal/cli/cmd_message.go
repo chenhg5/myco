@@ -308,18 +308,35 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 	}
 
 	transition := func(verb, summary, example string) *Command {
+		flags := []Flag{idFlag}
+		if verb == "hold" {
+			flags = append(flags, Flag{Name: "until", Kind: String, Help: "Task you sent to another agent; resume when it ends"})
+		}
 		return &Command{
-			Name: verb, Summary: summary, Mutating: true, Examples: []string{example}, Flags: []Flag{idFlag},
+			Name: verb, Summary: summary, Mutating: true, Examples: []string{example}, Flags: flags,
 			Run: handler(func(e *env) error {
 				if err := e.in.Require("id"); err != nil {
 					return err
+				}
+				until := e.in.String("until")
+				if verb == "hold" && e.in.Getenv("MYCO_MESSAGE_ID") != "" && (until == "" || e.in.Getenv("MYCO_RUNNER_HOLD") != "1") {
+					return errorf("invalid_state", ExitConflict, "wait in the foreground, use myco message ask to ask the sender, or use --until TASK_ID with an updated runner to wait for another agent", "runner sessions cannot hold without a supported wake condition")
 				}
 				c, err := e.agentClient()
 				if err != nil {
 					return err
 				}
 				dry := e.in.Bool("dry-run")
-				m, err := c.Transition(e.in.Ctx, e.in.String("id"), verb, dry)
+				var m *api.Message
+				if verb == "hold" {
+					m, err = c.Hold(e.in.Ctx, e.in.String("id"), until, dry)
+					if ce, ok := client.AsError(err); until != "" && ok && ce.Status == 404 && ce.Code != "not_found" {
+						return errorf("invalid_state", ExitConflict, "update the hub or wait in the foreground", "this hub does not support hold --until")
+					}
+				} else {
+					m, err = c.Transition(e.in.Ctx, e.in.String("id"), verb, dry)
+				}
+
 				if err != nil {
 					return err
 				}
@@ -587,7 +604,7 @@ choices by number; --body says it in words (or adds to the choice).`,
 	return (&Command{Name: "message", Summary: "Send, answer and track messages"}).Add(
 		send, get, wait, progress, ask, answer, steer, reply, suggest, fail, release, stopMessageCommand(),
 		transition("ack", "Start work on a pulled message (stops redelivery)", "myco message ack --id msg_abc123"),
-		transition("hold", "Accept a task but answer later (runner will not auto-reply)", "myco message hold --id $MYCO_MESSAGE_ID"),
+		transition("hold", "Set a task aside; a runner requires --until for a delegated task", "myco message hold --until msg_delegated"),
 		transition("done", "Close a message without replying (also one still queued, to drop it unread)", "myco message done --id msg_abc123"),
 	)
 }
@@ -771,9 +788,9 @@ func openHint(open []openTask) string {
 const ackHint = `Now send your plan as a checklist: myco message progress --id <id> --body $'- [~] first step\n- [ ] next step'. Then send progress at least every 2 minutes of work and after each step (what you found, what is next); the sender sees it live.`
 
 // ackHintLive: for a session whose steps already show live (trace follow).
-const ackHintLive = `Your steps (thoughts, commands, results) show to the sender live, read from this session's file, and your own todo list shows as the plan. At milestones (cause found, change of direction, blocked, a big step done) send one line of progress: myco message progress --id <id> --body "found X; next Y". If you end your turn before answering (waiting for agents you handed work to), hold it first: myco message hold --id <id>, so the sender sees it waiting, not at work.`
+const ackHintLive = `Your steps (thoughts, commands, results) show to the sender live, read from this session's file, and your own todo list shows as the plan. At milestones (cause found, change of direction, blocked, a big step done) send one line of progress: myco message progress --id <id> --body "found X; next Y". If you run your own inbox session, myco message hold --id <id> sets work aside. In a runner, send the delegated task first and use myco message hold --until <delegated task id>.`
 
-const taskProgressHint = `For each task: start with myco message ack --id <id>; while working, share findings and next steps with myco message progress --id <id> --body "..." (the sender follows you live in the myco app; add --attach shot.png when they would want to see it: a page, a chart, a draft); for work with several steps, keep a plan (your CLI's own todo list shows as the plan in Claude Code and Codex; elsewhere send it as a checklist the same way: "- [x] done", "- [~] doing", "- [ ] next"); if the sender has to decide something, ask with myco message ask --id <id> --question "..." --option "..."; if you end your turn before answering (waiting for others), hold it first: myco message hold --id <id>; finish with myco message reply --id <id> (add --suggest "..." when there is an obvious next step for them: one short line the app puts in their input). Skip progress for a one-line answer. More: myco skill show.`
+const taskProgressHint = `For each task: start with myco message ack --id <id>; while working, share findings and next steps with myco message progress --id <id> --body "..." (the sender follows you live in the myco app; add --attach shot.png when they would want to see it: a page, a chart, a draft); for work with several steps, keep a plan (your CLI's own todo list shows as the plan in Claude Code and Codex; elsewhere send it as a checklist the same way: "- [x] done", "- [~] doing", "- [ ] next"); if the sender has to decide something, ask with myco message ask --id <id> --question "..." --option "..."; to wait for a delegated task in a runner, send it first, then use myco message hold --id <id> --until <delegated task id>; finish with myco message reply --id <id> (add --suggest "..." when there is an obvious next step for them: one short line the app puts in their input). Skip progress for a one-line answer. More: myco skill show.`
 
 func inboxTaskHint(msgs []api.Message) string {
 	var task, steer, project bool

@@ -1322,7 +1322,7 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
     ].map((d, i) => ({ ...d, at: new Date(t0 + i * 250).toISOString() }));
     preview.trace_pace = 250;
     later(300, () => { if (["queued", "delivered"].includes(preview.status)) Object.assign(preview, { status: "acked", updated_at: iso(0) }); });
-    later(1100, () => { if (preview.status === "acked") Object.assign(preview, { status: "held", updated_at: iso(0) }); });
+    later(1100, () => { if (preview.status === "acked") Object.assign(preview, { status: "held", held_for: "reply", updated_at: iso(0) }); });
     later(1600, () => {
       msgs.push(makeMessage({ thread_id: threadId, from: agent, to: asker, type: "progress", status: "done", reply_to: taskId, body: "已派给 release，等它做完再汇总给你。", created_at: iso(0), updated_at: iso(0) }));
     });
@@ -1439,6 +1439,7 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
         sub = makeMessage({ thread_id: threadId, from: agent, to: helper, type: "task", status: "acked", body: "核对一下下载页的链接，三个系统的包都要能下到。", created_at: iso(0), updated_at: iso(0) });
         msgs.push(sub);
       });
+      later(4000, () => { if (task.status === "acked" && sub) Object.assign(task, { status: "held", held_for: "reply", updated_at: iso(0) }); });
       later(9000, () => {
         const msgs = hub.threads[threadId];
         if (!msgs || !sub) return;
@@ -3761,7 +3762,8 @@ const server = http.createServer(async (req, res) => {
         const open = tasks.find((m) => !["done", "failed"].includes(m.status));
         let state = "done";
         // delivered: pulled but not acknowledged, so still queued.
-        if (open) state = open.status === "queued" || open.status === "delivered" ? "queued" : "working";
+        if (open?.status === "held") state = "held";
+        else if (open) state = open.status === "queued" || open.status === "delivered" ? "queued" : "working";
         else if (task.status === "failed" || answer?.type === "event") state = "failed";
         else if (node && answer) { try { if (JSON.parse(answer.body).exit_code) state = "failed"; } catch { /* not json */ } }
         return { state, task, answer, ...(open ? { open } : {}) };
