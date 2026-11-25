@@ -295,6 +295,7 @@ func (b *Backend) Handler() http.Handler {
 		b.grantRoutes(m)
 		b.installRoutes(m)
 		m.HandleFunc("GET /app/local/agents", b.getLocalAgents)
+		b.imRoutes(m)
 		b.remoteRoutes(m)
 		m.HandleFunc("GET /app/local/claude-auth", b.getClaudeAuth)
 		m.HandleFunc("POST /app/local/claude-auth", b.postClaudeAuth)

@@ -2027,6 +2027,15 @@ const localAgents = [
     install: "curl -fsSL https://opencode.ai/install | bash", install_mirror: "npm install -g opencode-ai" + npmMirror, login: "opencode auth login" },
 ];
 
+let imBridges = [{ name: "feishu", platform: "feishu", agent: "", has_owner: true, node: "studio-im-feishu", online: true }];
+let imScan = null;
+// A QR-code-looking placeholder (the real App gets a PNG from Feishu's link).
+const MOCK_QR = "data:image/svg+xml;base64," + Buffer.from(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 21 21" shape-rendering="crispEdges"><rect width="21" height="21" fill="#fff"/>' +
+  Array.from({ length: 21 * 21 }, (_, i) => { const x = i % 21, y = Math.floor(i / 21); const f = (x < 7 && y < 7) || (x > 13 && y < 7) || (x < 7 && y > 13);
+    const on = f ? (x % 14 === 0 || x % 14 === 6 || y % 14 === 0 || y % 14 === 6 || (x % 14 >= 2 && x % 14 <= 4 && y % 14 >= 2 && y % 14 <= 4)) : ((x * 7 + y * 13 + x * y) % 3 === 0);
+    return on ? `<rect x="${x}" y="${y}" width="1" height="1"/>` : ""; }).join("") + "</svg>").toString("base64");
+
 function send(res, status, data) {
   const body = data === undefined ? "" : JSON.stringify(data);
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
@@ -3080,6 +3089,42 @@ const server = http.createServer(async (req, res) => {
   }
 
   // /app/local[...]
+  // /app/im: chat-app bots (ChatApps.tsx).
+  if (parts[0] === "app" && parts[1] === "im") {
+    if (parts.length === 2 && method === "GET") {
+      return send(res, 200, { bridges: imBridges, slack_create_url: "https://api.slack.com/apps?new_app=1&manifest_json=%7B%7D" });
+    }
+    if (parts.length === 3 && parts[2] === "feishu" && method === "POST") {
+      const body = await readBody(req);
+      imScan = { id: "scan1", agent: body.agent, polls: 0 };
+      return send(res, 200, { id: "scan1", url: "https://open.feishu.cn/page/launcher?user_code=DEMO-CODE", qr: MOCK_QR });
+    }
+    if (parts.length === 4 && parts[2] === "feishu" && method === "GET") {
+      if (!imScan) return send(res, 404, { error: "not_found", message: "no such QR code (it expired)" });
+      return send(res, 200, { state: "waiting" });
+    }
+    if (parts.length === 4 && parts[2] === "feishu" && method === "DELETE") {
+      imScan = null;
+      return send(res, 200, { stopped: true });
+    }
+    if (parts.length === 3 && parts[2] === "slack" && method === "POST") {
+      const body = await readBody(req);
+      const b = { name: "slack", platform: "slack", agent: body.agent, has_owner: false, claim: "3f9a1c2e", node: "studio-im-slack", online: true };
+      imBridges.push(b);
+      return send(res, 200, { bridge: b });
+    }
+    if (parts.length === 3 && method === "PUT") {
+      const body = await readBody(req);
+      const b = imBridges.find((x) => x.name === parts[2]);
+      if (b) b.agent = body.agent;
+      return send(res, 200, { name: parts[2], agent: body.agent });
+    }
+    if (parts.length === 3 && method === "DELETE") {
+      imBridges = imBridges.filter((x) => x.name !== parts[2]);
+      return send(res, 200, { removed: parts[2] });
+    }
+  }
+
   if (parts[0] === "app" && parts[1] === "local") {
     if (parts.length === 2 && method === "GET") return send(res, 200, local);
     if (parts.length === 3 && parts[2] === "shell-access" && method === "POST") {
