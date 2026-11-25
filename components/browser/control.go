@@ -131,6 +131,8 @@ type controlSession struct {
 	lastAction       string
 	lastHost         string
 	hostRecovered    map[proto.TargetTargetID]bool
+	hostScheduled    bool
+	hostDirty        bool
 	// A trusted input may cause one top-level navigation and one popup. Reserve
 	// both before dispatch, coalesce redirects, and never record iframe traffic.
 	navigationUntil           time.Time
@@ -465,6 +467,9 @@ func (c *controlSession) watch() {
 				_ = c.browser.close()
 				return
 			}
+			// Reconcile browser-level URL changes even when a renderer event
+			// is absent during a cross-process history restoration.
+			c.enforceHostsSoon()
 		}
 	}
 }

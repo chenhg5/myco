@@ -171,10 +171,35 @@ func (c *controlSession) enforceHostsSoon() {
 	if len(c.hosts) == 0 {
 		return
 	}
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return
+	}
+	c.hostDirty = true
+	if c.hostScheduled {
+		c.mu.Unlock()
+		return
+	}
+	c.hostScheduled = true
+	c.mu.Unlock()
 	go func() {
-		ctx, cancel := context.WithTimeout(context.WithValue(c.ctx, engineInternal{}, true), 3*time.Second)
-		defer cancel()
-		c.enforceHosts(ctx)
+		for {
+			c.mu.Lock()
+			c.hostDirty = false
+			closed := c.closed
+			c.mu.Unlock()
+			if !closed {
+				c.enforceHosts(c.ctx)
+			}
+			c.mu.Lock()
+			if c.closed || !c.hostDirty {
+				c.hostScheduled = false
+				c.mu.Unlock()
+				return
+			}
+			c.mu.Unlock()
+		}
 	}()
 }
 func (c *controlSession) takeHostViolation() *controlError {
