@@ -4,6 +4,40 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.22.11
+
+- **Record a browser workflow inside Chrome**: every browser myco opens for a profile now shows a small recorder in the page corner. Start recording, review the recent steps, delete any of them, or capture an element's text, an attribute or its HTML as an extract step; the panel hides itself while a run or a debugging action uses the browser. A recording started in the panel is also listed for the app, so Web automation can pick it up and continue from the page. This needs browser component 0.3.0, which the App offers to install or update; an installed 0.2.0 keeps working until you update.
+- **A page opens in a window of its own, and installs as an app on macOS**: a page's menu can open it in a separate window that shows only that page; on macOS you can also install it, which adds a launcher with the page's icon to `~/Applications/myco 应用`, so Launchpad, Spotlight and the Dock start it like an app.
+- **The voice call is the agent itself**: it now speaks in the first person — "Sure, I'm on it", not "I'll tell it" — and its caption lines show its small face instead of a "Voice" label. The microphone, speech-recognition, cut-off and setup notices follow the call's language.
+- **A voice call starts with the agent saying hello**: when the call connects, the agent speaks first with a short line, mentioning work in progress or a question it is waiting on; speaking over it cuts it off like any turn.
+- **Chrome no longer shows an unsupported-flag warning**: myco's browsers start without experimental Blink switches, so the warning bar above the page is gone. Chrome keeps its native user agent, with no stealth scripts; sites can still ask a person to interact.
+- **A capability allowed for a page now follows its code**: when a page is republished or its app is upgraded, the new code is asked again before it can use what you allowed earlier. A "no" still holds for every version, and allows saved before this release are asked once more.
+- **Official apps declare the computer capabilities they use**: the bundled apps are updated to versions whose manifests list their computer capabilities, so a Hub that holds apps to their declarations lets them use those capabilities without asking each time.
+- **A runner upgrade no longer makes the computer look offline for minutes**: restarting the runner, for example during `myco upgrade`, now stops within about 30 seconds instead of up to ten minutes; while it restarts the App shows **Updating** instead of **Away**, and a task it was running is queued again once.
+- **A long thing an agent says in a run fades out instead of being cut**: text between steps now fades at the bottom with **Show all** under it, and is held short only when it actually runs past the visible area, so it no longer looks like text was lost.
+- **Files picked for a chat stay with that chat**: a picture or file added to a chat's box but not sent yet stays with that chat (or the group box) while the App runs, as typed words do; switching to another page and back no longer loses it, and one still uploading finishes.
+- **Requests waiting for your OK are decided one at a time**: approving one no longer greys out the others until the workspace answers; a decided card goes at once, the list is read again behind, and errors show on the card they belong to.
+- **Your decision shows in the chat as one quiet line**: the note the hub sends an agent about your approval now reads in words, such as "You approved: create the scheduled task "x" in project "p"", instead of the raw code-like text.
+
+Upgrade: this App release needs no Hub upgrade. The browser recorder needs browser component 0.3.0, which the App offers to install or update.
+
+**中文**
+
+- **可以直接在 Chrome 里录制浏览器流程**：myco 为某个资料打开的浏览器，页面角落会出现一个小录制面板。可以开始录制、查看最近的步骤、删除任意一步，或把某个元素的文字、属性或 HTML 捕获成 extract 步骤；运行或原生调试占用浏览器时面板会自动隐藏。在面板里开始的录制，网页自动化页面也能发现，并可以直接接上继续处理。这需要浏览器组件 0.3.0，应用会提示安装或更新；已安装的 0.2.0 在更新前继续可用。
+- **页面可以单独开一个窗口，macOS 上还能装成应用**：页面菜单里可以把页面放到单独窗口里只显示它；macOS 上还可以安装，在 `~/Applications/myco 应用` 里生成带页面图标的启动器，Launchpad、聚焦和程序坞都能像应用一样打开。
+- **语音通话里说话的就是 agent 本人**：现在用第一人称说话——「好，我这就去做」，而不是「我去告诉它」；字幕行前面显示它的小头像，不再是「语音」标签。麦克风、语音识别、被打断和设置提示都跟着通话语言。
+- **语音通话接通后 agent 先打招呼**：电话接通时，agent 先用一句简短的话开口，说说手上的活或正在等的问题；你直接开口就会像普通对话一样打断它。
+- **Chrome 顶部不再出现不支持参数的警告**：myco 打开的浏览器不再带实验性 Blink 参数启动，页面上方的警告条没有了。Chrome 仍使用原生 UA，没有伪装脚本；网站仍可能要求人手动操作。
+- **给网页的能力允许现在只对当时的代码有效**：网页重新发布、或者它的应用升级以后，新代码再用到你之前允许的能力时会重新询问。「不允许」对所有版本都有效；这次发布之前保存的允许会再问一次。
+- **官方应用补上了会用到的电脑能力声明**：内置应用更新到在清单里声明电脑能力的版本；对按声明校验应用的 Hub，这些应用使用已声明的能力时不再逐次询问。
+- **runner 升级时电脑不再离线好几分钟**：重启 runner（比如 `myco upgrade` 时）现在约 30 秒就停好，不再可能卡到十分钟；重启期间应用显示「正在更新」而不是「不在线」，正在跑的任务会重新排队一次。
+- **agent 在运行过程中说的一长段话改成淡出，不再硬截断**：步骤之间的文字现在在底部淡出，下面有「展开全文」，而且只有内容真的超出可视区域时才收起，不会再看起来像丢了文字。
+- **放进聊天输入框的文件会留在那个聊天里**：为某个聊天（或群聊框）选好但还没发送的图片或文件，在应用运行期间会一直留在那里，和打好的字一样；切到别的页面再回来不会丢，正在上传的也会传完。
+- **待你确认的请求现在逐个处理**：批准一个请求后，其余请求不会一起变灰等后台回应；已处理的卡片会立即消失，列表在后台重新读取，出错时错误显示在对应的卡片上。
+- **你的决定在聊天里显示成一句安静的话**：Hub 告诉 agent 你批准了哪件事的那条提示，现在用一句话显示，例如「你同意了：创建项目「p」的定时任务「x」」，不再是带编号的原始文本。
+
+升级：本次应用发布不需要升级 Hub。浏览器录制需要浏览器组件 0.3.0，应用会提示安装或更新。
+
 ## v0.22.10
 
 - **A browser settings change is allowed only after the whole list is read**: the confirmation now shows every proxy, bypass rule, user agent, language and launch argument in a monospace layout that also fits narrow windows, and **Allow** stays disabled until all of them have been scrolled into view. Declining or closing the dialog changes nothing.
