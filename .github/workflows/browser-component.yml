@@ -49,8 +49,8 @@ jobs:
           cd components/browser
           go vet ./...
           for round in $(seq 1 12); do
-            echo "Native panel stability round $round/12"
-            go test -v -count=1 -failfast -timeout 7m -run '^TestNativeChromeRecorderPanel$' ./... -args -browser-smoke
+            echo "Native startup diagnostic round $round/12"
+            go test -v -count=1 -failfast -timeout 7m -run '^TestNativeChrome(CrashGroupRecovery|NestedIframeRecording)$' ./... -args -browser-smoke
           done
           go test -v -count=1 -failfast -timeout 7m ./... -args -browser-smoke
           go build -trimpath -ldflags='-s -w' -o "../../component-out/myco-browser${suffix}" .

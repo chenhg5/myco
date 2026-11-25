@@ -16,6 +16,7 @@ import (
 )
 
 type engine struct {
+	launchLog  *os.File                   // Temporary native fixture diagnostics: direct file, never a pipe.
 	trace      func(string, string, bool) // Optional test diagnostics; never exposed over HTTP.
 	ctx        context.Context
 	dir        string

@@ -206,6 +206,7 @@ func (e *engine) openSession(ctx context.Context, owner, id string, headless boo
 	if err != nil {
 		return nil, err
 	}
+	cmd.Stderr = e.launchLog
 	for _, key := range browserEnvironmentKeys() {
 		if value := os.Getenv(key); value != "" {
 			cmd.Env = append(cmd.Env, key+"="+value)
@@ -228,7 +229,14 @@ func (e *engine) openSession(ctx context.Context, owner, id string, headless boo
 	s.trace("stage:process-start", "", true)
 	s.cmd = cmd
 	s.mu.Unlock()
-	go func() { _ = cmd.Wait(); close(s.done); s.cancel() }()
+	go func() {
+		_ = cmd.Wait()
+		if cmd.ProcessState != nil {
+			s.trace("stage:process-exit:"+strconv.Itoa(cmd.ProcessState.ExitCode()), "", true)
+		}
+		close(s.done)
+		s.cancel()
+	}()
 	guard, err := guardBrowser(cmd, dir)
 	if err != nil {
 		s.mu.Lock()

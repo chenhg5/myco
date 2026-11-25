@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -44,7 +45,22 @@ func TestNativeChromeNestedIframeRecording(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer e.close()
-	diagnose := nativeDiagnostics(t, e)
+	launchLog, err := os.CreateTemp(t.TempDir(), "launch-*.log")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { launchLog.Close() })
+	e.launchLog = launchLog
+	stages := nativeDiagnostics(t, e)
+	diagnose := func() {
+		stages()
+		raw, _ := os.ReadFile(launchLog.Name())
+		for _, line := range strings.Split(string(raw), "\n") {
+			if strings.HasPrefix(line, "private helper failed:") {
+				t.Log(line)
+			}
+		}
+	}
 	invoke := func(method, path string, in, out any) {
 		t.Helper()
 		raw, _ := json.Marshal(in)
