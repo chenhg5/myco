@@ -134,3 +134,13 @@ its `apps` prerelease, preserving old Hub URLs including the former owner URL's
 GitHub redirect. It needs only the main repository's workflow token. Keep it
 for at least 90 days after cutover and two stable host releases; stopping it
 requires a maintenance decision.
+
+
+## Version labels from source
+
+The default Make version uses the committed `VERSION` as its release base.
+An exact matching tag produces that version; other Git checkouts append a
+commit count and hash, plus `-dirty` for tracked changes. This also works when
+the published tag is on a release branch rather than an ancestor of main.
+A source archive without Git uses `VERSION` directly. Explicit `make ...
+VERSION=vX.Y.Z` overrides this label, as the publishing workflow does.

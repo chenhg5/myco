@@ -1,4 +1,4 @@
-VERSION ?= $(shell git describe --tags --match 'v*' --always --dirty 2>/dev/null || echo dev)
+VERSION ?= $(shell sh scripts/build-version.sh)
 LDFLAGS := -s -w -X github.com/myco-ai/myco/internal/cli.Version=$(VERSION)
 
 .PHONY: build test test-integration smoke check vet cross clean web prepare-apps app
