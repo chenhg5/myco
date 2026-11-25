@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -46,7 +47,7 @@ func TestInstallAPageAsAnApp(t *testing.T) {
 	if !strings.Contains(string(script), "exec /usr/bin/open 'myco://app?hub="+h.ID+"&name=") || !strings.Contains(string(script), "&page=pg_a'") {
 		t.Fatalf("launch: %s", script)
 	}
-	if st, err := os.Stat(filepath.Join(want, "Contents", "MacOS", "launch")); err != nil || st.Mode()&0o100 == 0 {
+	if st, err := os.Stat(filepath.Join(want, "Contents", "MacOS", "launch")); err != nil || (runtime.GOOS != "windows" && st.Mode()&0o100 == 0) {
 		t.Fatalf("launch is not executable: %v %v", st, err)
 	}
 	plist, _ := os.ReadFile(filepath.Join(want, "Contents", "Info.plist"))
