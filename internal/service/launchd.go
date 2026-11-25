@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Launchd manages a per-user LaunchAgent on macOS.
@@ -114,6 +115,53 @@ func (l *Launchd) Start() error {
 }
 
 func (l *Launchd) Restart() error {
+	if l.ID.orDefault() == RunnerID {
+		// Request cancellation explicitly, rather than depending on -k's
+		// termination policy (or a loaded legacy plist's 600s timeout).
+		// Signals target the old PID, never a replacement that KeepAlive started.
+		before, err := l.Status()
+		if err != nil {
+			return err
+		}
+		if before.PID > 0 {
+			if _, err := l.R.Run("kill", "-TERM", strconv.Itoa(before.PID)); err != nil {
+				after, _ := l.Status()
+				if after.PID == before.PID {
+					return err
+				}
+				if after.PID > 0 {
+					return nil
+				}
+			}
+			deadline := time.Now().Add(launchdRestartGrace)
+			for time.Now().Before(deadline) {
+				after, _ := l.Status()
+				if after.PID > 0 && after.PID != before.PID {
+					return nil
+				}
+				if after.PID == 0 {
+					break
+				}
+				time.Sleep(launchdRestartPoll)
+			}
+			after, _ := l.Status()
+			if after.PID == before.PID {
+				if _, err := l.R.Run("kill", "-KILL", strconv.Itoa(before.PID)); err != nil {
+					after, _ := l.Status()
+					if after.PID == before.PID {
+						return err
+					}
+				}
+			}
+		}
+		_, err = l.R.Run("launchctl", "kickstart", l.service())
+		return err
+	}
 	_, err := l.R.Run("launchctl", "kickstart", "-k", l.service())
 	return err
 }
+
+var (
+	launchdRestartGrace = 25 * time.Second
+	launchdRestartPoll  = 100 * time.Millisecond
+)

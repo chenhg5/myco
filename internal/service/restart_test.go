@@ -1,10 +1,12 @@
 package service
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRunnerStopBoundsPreserveHubPolicy(t *testing.T) {
@@ -72,5 +74,95 @@ func TestLaunchdInstallDoesNotDrainLegacyRunnerForTenMinutes(t *testing.T) {
 	p, _ = l.PlanInstall(spec)
 	if p.Commands[0][1] != "bootout" {
 		t.Fatal("new runner should be allowed its bounded cleanup")
+	}
+}
+
+type launchdRestartRunner struct {
+	calls       [][]string
+	term        bool
+	ignoreTerm  bool
+	replacement bool
+	goneOnTerm  bool
+}
+
+func (r *launchdRestartRunner) Run(name string, args ...string) (string, error) {
+	r.calls = append(r.calls, append([]string{name}, args...))
+	if name == "kill" && len(args) > 0 && args[0] == "-TERM" {
+		r.term = true
+		if r.goneOnTerm {
+			return "", errors.New("process exited")
+		}
+	}
+	if len(args) > 0 && args[0] == "print" {
+		if r.term && r.replacement {
+			return "state = running\npid = 43\n", nil
+		}
+		if r.term && !r.ignoreTerm {
+			return "state = waiting\n", nil
+		}
+		return "state = running\npid = 42\n", nil
+	}
+	return "", nil
+}
+func TestLaunchdRestartCancelsThenStartsWithoutKillingReplacement(t *testing.T) {
+	r := &launchdRestartRunner{}
+	l := &Launchd{Home: t.TempDir(), UID: 501, R: r}
+	if err := l.Restart(); err != nil {
+		t.Fatal(err)
+	}
+	joined := ""
+	for _, c := range r.calls {
+		joined += strings.Join(c, " ") + "\n"
+	}
+	if !strings.Contains(joined, "kill -TERM 42") || strings.Contains(joined, "kill -KILL") || strings.Contains(joined, "kickstart -k") {
+		t.Fatalf("graceful restart: %s", joined)
+	}
+	if got := strings.Join(r.calls[len(r.calls)-1], " "); got != "launchctl kickstart gui/501/ai.myco.runner" {
+		t.Fatal(got)
+	}
+}
+func TestLaunchdRestartBoundsLegacyUnresponsiveProcess(t *testing.T) {
+	oldGrace, oldPoll := launchdRestartGrace, launchdRestartPoll
+	launchdRestartGrace, launchdRestartPoll = 5*time.Millisecond, time.Millisecond
+	defer func() { launchdRestartGrace, launchdRestartPoll = oldGrace, oldPoll }()
+	r := &launchdRestartRunner{ignoreTerm: true}
+	l := &Launchd{Home: t.TempDir(), UID: 501, R: r}
+	if err := l.Restart(); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, c := range r.calls {
+		if strings.Join(c, " ") == "kill -KILL 42" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("legacy runner was allowed to wait for 600 seconds")
+	}
+}
+
+func TestLaunchdRestartLeavesNewPIDAlone(t *testing.T) {
+	r := &launchdRestartRunner{replacement: true}
+	l := &Launchd{Home: t.TempDir(), UID: 501, R: r}
+	if err := l.Restart(); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range r.calls {
+		if c[0] == "kill" && c[1] != "-TERM" {
+			t.Fatalf("signalled replacement: %v", r.calls)
+		}
+		if c[0] == "launchctl" && c[1] == "kickstart" {
+			t.Fatalf("restarted replacement: %v", r.calls)
+		}
+	}
+}
+func TestLaunchdRestartAcceptsOldPIDExitingBeforeSignal(t *testing.T) {
+	r := &launchdRestartRunner{goneOnTerm: true}
+	l := &Launchd{Home: t.TempDir(), UID: 501, R: r}
+	if err := l.Restart(); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(r.calls[len(r.calls)-1], " "); got != "launchctl kickstart gui/501/ai.myco.runner" {
+		t.Fatal(got)
 	}
 }
