@@ -200,7 +200,7 @@ func TestInstallChecksDigestAndKeepsPrivateProfiles(t *testing.T) {
 // Exercise the real child handshake, download and process replacement on every
 // CI platform; Install's public platform gate remains Mac/Windows-only.
 func TestUpdateCompatibleComponent(t *testing.T) {
-	for _, oldVersion := range []string{"0.1.0", "0.1.1", "0.2.0"} {
+	for _, oldVersion := range []string{"0.1.0", "0.1.1", "0.2.0", "0.3.0"} {
 		for _, valid := range []bool{false, true} {
 			t.Run(oldVersion+"/"+fmt.Sprint(valid), func(t *testing.T) {
 				c := &Component{Home: t.TempDir()}
@@ -242,7 +242,7 @@ func TestUpdateCompatibleComponent(t *testing.T) {
 				requests := 0
 				c.HTTP = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 					requests++
-					if !strings.HasPrefix(r.URL.String(), ComponentRelease+"/") || !strings.Contains(r.URL.Path, "/browser-v0.3.0/") {
+					if !strings.HasPrefix(r.URL.String(), ComponentRelease+"/") || !strings.Contains(r.URL.Path, "/browser-v0.3.1/") {
 						t.Errorf("wrong release: %s", r.URL)
 					}
 					if !c.Status().Running {
@@ -294,7 +294,7 @@ func TestUpdateCompatibleComponent(t *testing.T) {
 }
 
 func TestCompatibleComponentVersions(t *testing.T) {
-	for version, want := range map[string]bool{"0.1.0": true, "0.1.1": true, "0.2.0": true, "0.3.0": true, "0.1.2": false, "": false} {
+	for version, want := range map[string]bool{"0.1.0": true, "0.1.1": true, "0.2.0": true, "0.3.0": true, "0.3.1": true, "0.1.2": false, "": false} {
 		if CompatibleComponentVersion(version) != want {
 			t.Errorf("version %q compatibility", version)
 		}
