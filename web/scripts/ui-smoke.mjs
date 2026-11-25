@@ -3135,7 +3135,14 @@ async function runMatrix(browser, size, scheme) {
       const onReq = (req) => { const m = /\/app\/hubs\/([^/]+)\/recent/.exec(req.url()); if (m) asked.add(decodeURIComponent(m[1])); };
       page.on("request", onReq);
       // (a slow search: the mushroom with its magnifying glass, not a bare line)
-      const slow = async (route) => { await new Promise((ok) => setTimeout(ok, 1500)); await route.continue(); };
+      const slow = async (route) => {
+        await new Promise((ok) => setTimeout(ok, 1500));
+        try { await route.continue(); }
+        catch (error) {
+          // A cancelled search may have completed this route while delayed.
+          if (!String(error).includes("Route is already handled!")) throw error;
+        }
+      };
       await page.route("**/app/hubs/*/recent*", slow);
       await cp.locator("input").fill("芒果布丁");
       const seek = cp.locator(".cp-seek");
