@@ -13,6 +13,7 @@ type ComponentStatus = api.BrowserComponentStatus
 type ComponentError struct {
 	Code    string
 	Reason  string
+	Host    string
 	Applied *int
 }
 

@@ -430,13 +430,14 @@ func (c *Component) Call(ctx context.Context, scope, method, path string, in, ou
 			Code    string `json:"code"`
 			Reason  string `json:"reason"`
 			Applied *int   `json:"applied"`
+			Host    string `json:"host"`
 		}
 		_ = json.NewDecoder(io.LimitReader(res.Body, 4096)).Decode(&v)
 		if v.Code != "" || strings.HasPrefix(path, "/control/") && v.Error != "" {
 			if v.Code == "" {
 				v.Code = v.Error
 			}
-			return &ComponentError{Code: v.Code, Reason: v.Reason, Applied: v.Applied}
+			return &ComponentError{Code: v.Code, Reason: v.Reason, Applied: v.Applied, Host: v.Host}
 		}
 		if v.Error == "" {
 			v.Error = "component_failed"

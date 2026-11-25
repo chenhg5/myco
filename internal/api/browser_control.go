@@ -151,6 +151,11 @@ func containsBrowserField(fields, field string) bool {
 }
 
 func (a BrowserControlArgs) validateOperation(op string) error {
+	for _, field := range []string{"value", "url", "key"} {
+		if strings.Contains(a.String(field), "${") {
+			return fmt.Errorf("use a literal %s and add parameters to the draft after closing", field)
+		}
+	}
 	if raw := a["url"]; len(raw) > 0 && !browserControlURL(a.String("url")) {
 		return fmt.Errorf("url must be an absolute HTTP or HTTPS URL without user information")
 	}

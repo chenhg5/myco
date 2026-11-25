@@ -25,6 +25,7 @@ type controlFixtureComponent struct {
 	mu        sync.Mutex
 	openCount int
 	stopped   bool
+	forced    chan string
 }
 
 func (f *controlFixtureComponent) Call(_ context.Context, scope, method, path string, in, out any) error {
@@ -46,7 +47,7 @@ func (f *controlFixtureComponent) Call(_ context.Context, scope, method, path st
 			return errors.New("host sent invalid native authorization")
 		}
 		f.openCount++
-		value = map[string]any{"session": fmt.Sprintf("session%d", f.openCount), "active_tab": "tab1", "start_url": "https://example.com/", "snapshot": map[string]any{"snapshot_id": "snapshot1"}}
+		value = map[string]any{"session": fmt.Sprintf("session%d", f.openCount), "active_tab": "tab1", "start_url": "https://start.example.com/", "snapshot": map[string]any{"snapshot_id": "snapshot1", "url": "https://example.com/redirected"}}
 	case method == "GET" && strings.HasPrefix(path, "/control/events?"):
 		value = api.BrowserControlEvents{Next: 1, Events: []api.BrowserControlEvent{{Host: "example.com"}}}
 		if f.stopped {
@@ -68,6 +69,10 @@ func (f *controlFixtureComponent) Call(_ context.Context, scope, method, path st
 	case method == "POST" && path == "/control/screenshot":
 		value = map[string]any{"screenshot": map[string]string{"id": "a_fixture"}, "image": map[string]int{"width": 800, "height": 600}}
 	case method == "POST" && path == "/control/close":
+		if fields, ok := in.(map[string]string); ok {
+			f.forced <- fields["reason"]
+			break
+		}
 		value = map[string]any{"steps": []map[string]string{{"id": "step1", "type": "click"}}, "removed": []string{}, "next": 1, "done": true, "reason": "closed"}
 	default:
 		return fmt.Errorf("unexpected native call: %s %s", method, path)
@@ -114,7 +119,7 @@ func TestBrowserControlHostLifecycle(t *testing.T) {
 	h := Hub{ID: "hub", URL: hub.URL}
 	c, _ := client.New(h.URL, "fixture")
 	b := &Backend{Store: NewStore(filepath.Join(t.TempDir(), "hubs.json")), Secrets: &policyFixtureSecrets{token: "fixture"}}
-	comp := &controlFixtureComponent{}
+	comp := &controlFixtureComponent{forced: make(chan string, 1)}
 	b.browser.component = comp
 	scope := browserpolicy.Scope{Workspace: h.URL, Owner: "owner"}
 	b.browser.identities = map[string]browserOwnerIdentity{h.ID: {URL: h.URL, Owner: scope.Owner, Credential: c.CredentialFingerprint()}}
@@ -183,6 +188,14 @@ func TestBrowserControlHostLifecycle(t *testing.T) {
 	case <-second.ctx.Done():
 	case <-time.After(8 * time.Second):
 		t.Fatal("idle control session did not expire")
+	}
+	select {
+	case reason := <-comp.forced:
+		if reason != "idle_timeout" {
+			t.Fatalf("unexpected forced close reason %q", reason)
+		}
+	case <-time.After(8 * time.Second):
+		t.Fatal("idle session was not discarded by the component")
 	}
 	wantCode(call("snapshot", `{"session":"session2"}`, grant), "session_expired")
 	if done := call("open", open, grant); done.State != api.JobSucceeded {

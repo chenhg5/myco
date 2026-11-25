@@ -135,15 +135,22 @@ func (s *browserControlSession) markClosed(reason string) (string, bool) {
 func (b *Backend) closeBrowserControl(s *browserControlSession, reason string, nativeAlreadyClosed bool) {
 	id, changed := s.markClosed(reason)
 	if changed && id != "" && !nativeAlreadyClosed {
-		b.closeBrowserControlNative(s.scope, id)
+		b.closeBrowserControlNative(s.scope, id, reason)
 	}
 }
 
-func (b *Backend) closeBrowserControlNative(scope, id string) {
+func (b *Backend) closeBrowserControlNative(scope, id, reason string) {
+	switch reason {
+	case "grant_expired":
+		reason = "grant_ended"
+	case "grant_ended", "profile_disabled", "idle_timeout":
+	default:
+		reason = "host_closed"
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = b.browserComponent().Call(ctx, scope, http.MethodPost, "/control/close", map[string]string{
-		"session": id, "request_id": "close-" + rand.Text(),
+		"session": id, "request_id": "close-" + rand.Text(), "reason": reason,
 	}, nil)
 }
 
@@ -179,9 +186,12 @@ func browserControlFailure(err error, effectful bool) api.ActionJobComplete {
 		case "invalid_argument", "unsupported", "permission_denied", "not_found", "busy", "conflict",
 			"stale_ref", "target_not_found", "target_not_interactable", "sensitive_field", "sensitive_snapshot",
 			"session_closed", "session_expired", "cancelled", "timeout", "recording_limit", "artifact_too_large",
-			"artifact_limit", "component_unavailable", "storage_failed", "outcome_unknown":
+			"artifact_limit", "component_unavailable", "storage_failed", "outcome_unknown", "host_not_allowed":
 			out := actionFailure(native.Code, "browser control: "+strings.ReplaceAll(native.Code, "_", " "), false, native.Applied)
 			out.Error.Reason = browserControlReason(native.Reason)
+			if api.ValidBrowserAuditHost(native.Host) {
+				out.BrowserHost = native.Host
+			}
 			return out
 		}
 	}
@@ -331,7 +341,9 @@ func (b *Backend) runBrowserControlJob(hostCtx context.Context, c *client.Client
 	err = b.browserComponent().Call(ctx, s.scope, http.MethodPost, "/control/"+op, args, &result)
 	if err != nil {
 		done := browserControlFailure(err, op == "act" || op == "close")
-		done.BrowserHost = auditHost
+		if done.BrowserHost == "" {
+			done.BrowserHost = auditHost
+		}
 		if done.Error.Code == "session_closed" || done.Error.Code == "session_expired" {
 			reason := done.Error.Reason
 			if reason == "" {
@@ -398,7 +410,8 @@ func (b *Backend) openBrowserControl(hostCtx, jobCtx context.Context, c *client.
 	book.mu.Lock()
 	delete(book.controls, key)
 	s.mu.Lock()
-	aborted := s.reason != "" || ctx.Err() != nil
+	reason := s.reason
+	aborted := reason != "" || ctx.Err() != nil
 	if err == nil && jsonErr == nil && opened.Session != "" && book.controls[opened.Session] == nil && !aborted {
 		s.id = opened.Session
 		s.lastActive = time.Now()
@@ -409,7 +422,7 @@ func (b *Backend) openBrowserControl(hostCtx, jobCtx context.Context, c *client.
 	book.mu.Unlock()
 	if id == "" {
 		if opened.Session != "" && aborted {
-			b.closeBrowserControlNative(s.scope, opened.Session)
+			b.closeBrowserControlNative(s.scope, opened.Session, reason)
 		}
 		b.closeBrowserControl(s, "closed", true)
 		if err != nil {
@@ -476,7 +489,6 @@ func browserControlResultHost(raw json.RawMessage) string {
 	var result struct {
 		Host     string          `json:"host"`
 		URL      string          `json:"url"`
-		StartURL string          `json:"start_url"`
 		Snapshot json.RawMessage `json:"snapshot"`
 	}
 	if json.Unmarshal(raw, &result) != nil {
@@ -485,10 +497,8 @@ func browserControlResultHost(raw json.RawMessage) string {
 	if result.Host != "" && api.ValidBrowserAuditHost(result.Host) {
 		return result.Host
 	}
-	for _, value := range []string{result.URL, result.StartURL} {
-		if parsed, err := url.Parse(value); err == nil && parsed.Hostname() != "" && api.ValidBrowserAuditHost(parsed.Hostname()) {
-			return parsed.Hostname()
-		}
+	if parsed, err := url.Parse(result.URL); err == nil && parsed.Hostname() != "" && api.ValidBrowserAuditHost(parsed.Hostname()) {
+		return parsed.Hostname()
 	}
 	if len(result.Snapshot) > 0 {
 		return browserControlResultHost(result.Snapshot)
