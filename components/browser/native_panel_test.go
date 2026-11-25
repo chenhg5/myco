@@ -393,10 +393,25 @@ func TestNativeChromeRecorderPanel(t *testing.T) {
 				t.Fatal(err)
 			}
 			wait(func() bool { return len(nodesOfType("type")) == 1 })
-			// Real document scrolling is recorded even when Chrome scrolls to
-			// reveal/focus an element. A scroll inside our controls is not.
+			// Neither panel scrolling nor programmatic focus/layout scrolling is user intent.
 			nodeEval("ol", `function(){this.scrollTop=this.scrollHeight}`)
-			if _, err = child.Eval(`()=>{scrollTo(0,0);scrollTo(0,200);return scrollY}`); err != nil {
+			if _, err = child.Eval(`()=>{scrollTo(0,200);document.body.tabIndex=-1;document.body.focus();scrollTo(0,0)}`); err != nil {
+				t.Fatal(err)
+			}
+			// Allow the collector's 400ms quiet window and 180ms debounce to elapse.
+			time.Sleep(650 * time.Millisecond)
+			if got := nodesOfType("scroll"); len(got) != 0 {
+				t.Fatalf("automatic scrolling was recorded: %+v", got)
+			}
+			point, err := iframe.Eval(`function(){const r=this.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}}`)
+			if err != nil {
+				t.Fatal(err)
+			}
+			x, y := point.Value.Get("x").Num(), point.Value.Get("y").Num()
+			if err = s.call(sid, "Input.dispatchMouseEvent", map[string]any{"type": "mouseMoved", "x": x, "y": y}, nil); err != nil {
+				t.Fatal(err)
+			}
+			if err = s.call(sid, "Input.dispatchMouseEvent", map[string]any{"type": "mouseWheel", "x": x, "y": y, "deltaX": 0, "deltaY": 200}, nil); err != nil {
 				t.Fatal(err)
 			}
 			wait(func() bool {
@@ -407,6 +422,20 @@ func TestNativeChromeRecorderPanel(t *testing.T) {
 				}
 				return false
 			})
+			beforeKeys := len(nodesOfType("scroll"))
+			if _, err = child.Eval(`()=>document.body.focus()`); err != nil {
+				t.Fatal(err)
+			}
+			time.Sleep(450 * time.Millisecond) // Focus is an action; wait for the quiet window.
+			for _, kind := range []string{"keyDown", "keyUp"} {
+				if err = s.call(sid, "Input.dispatchKeyEvent", map[string]any{"type": kind, "key": "Home", "code": "Home", "windowsVirtualKeyCode": 36}, nil); err != nil {
+					t.Fatal(err)
+				}
+			}
+			wait(func() bool { return len(nodesOfType("scroll")) > beforeKeys })
+			if got := nodesOfType("press"); len(got) != 0 {
+				t.Fatalf("page navigation recorded both key and scroll: %+v", got)
+			}
 			for _, scheme := range []string{"light", "dark"} {
 				if err := s.call(sid, "Emulation.setEmulatedMedia", map[string]any{"features": []map[string]string{{"name": "prefers-color-scheme", "value": scheme}}}, nil); err != nil {
 					t.Fatal(err)
