@@ -9,7 +9,6 @@ import (
 	"github.com/go-rod/rod/lib/proto"
 	"image"
 	_ "image/png"
-	"regexp"
 	"strconv"
 	"strings"
 )
@@ -63,7 +62,7 @@ func (c *controlSession) screenshot(ctx context.Context, p *rod.Page, in control
 // CDP pierces closed shadow roots. Missing documents fail closed.
 func (c *controlSession) safeScreenshot(ctx context.Context, p *rod.Page) error {
 	frames := c.framesFor(p)
-	if len(frames) == 0 {
+	if len(frames) == 0 || len(c.unavailableFrames(p, frames)) > 0 {
 		return errors.New("sensitive_snapshot")
 	}
 	seen := map[proto.PageFrameID]bool{}
@@ -111,12 +110,13 @@ func (c *controlSession) safeScreenshot(ctx context.Context, p *rod.Page) error 
 			if attrs["id"] == "__myco_recording_panel__" {
 				return true
 			}
-			if attrs["type"] == "password" || strings.Contains(attrs["autocomplete"], "one-time") || controlSecretName.MatchString(attrs["name"]) {
+			if (n.NodeName == "IFRAME" || n.NodeName == "FRAME") && n.FrameID != "" && !seen[n.FrameID] {
 				return false
 			}
-			if _, exists := attrs["data-sensitive"]; exists {
+			if sensitiveAttributes(attrs) {
 				return false
 			}
+
 			for _, child := range n.Children {
 				if !safe(child) {
 					return false
@@ -233,5 +233,3 @@ func (s *session) setControlPanelHidden(ctx context.Context) error {
 	}
 	return nil
 }
-
-var controlSecretName = regexp.MustCompile(`(?i)^(?:otp|one.?time(?:.?code)?|verification.?code|security.?code)$`)

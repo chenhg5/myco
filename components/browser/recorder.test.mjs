@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
+const policySource=readFileSync(new URL('./dom_sensitive.js',import.meta.url),'utf8').replaceAll('__MYCO_SENSITIVE_CONFIG__',readFileSync(new URL('./dom_sensitive.json',import.meta.url),'utf8'));
+const recorderSource=readFileSync(new URL('./recorder.js',import.meta.url),'utf8').replaceAll('__MYCO_SENSITIVE_POLICY__',policySource);
+
 const handlers={},sent=[];
 const document={addEventListener(type,f){handlers[type]=f},getElementById(){return null}};
 const window={addEventListener(){},__mycoBrowserEvent(raw){sent.push(JSON.parse(raw))}};window.top=window;
-vm.runInNewContext(readFileSync(new URL('./recorder.js',import.meta.url),'utf8'),{window,document,CSS:{escape:s=>s},setTimeout(){return 1},clearTimeout(){}});
+vm.runInNewContext(recorderSource,{window,document,CSS:{escape:s=>s},setTimeout(){return 1},clearTimeout(){}});
 window.__mycoRecorder.enabled=true;
 let valueRead=false;
 const password={nodeType:1,localName:'input',tagName:'INPUT',id:'password',type:'password',autocomplete:'current-password',labels:[],parentElement:null,hasAttribute(){return false},getAttribute(){return ''},getRootNode(){return document},get value(){valueRead=true;throw Error('password read')}};
@@ -61,7 +64,7 @@ function scrollFixture(){
   const target=el('content',root);target.closest=selector=>/input,textarea/.test(selector)?null:target;
   const win={top:null,addEventListener(){},__mycoBrowserEvent(raw){output.push(JSON.parse(raw))}};win.top=win;
   const set=(fn,ms)=>{const id=++sequence;timers.set(id,{fn,at:now+ms});return id};
-  vm.runInNewContext(readFileSync(new URL('./recorder.js',import.meta.url),'utf8'),{window:win,document:doc,CSS:{escape:s=>s},Date:{now:()=>now},WeakMap,innerWidth:110,innerHeight:110,getComputedStyle(){return{overflowY:'auto'}},setTimeout:set,clearTimeout:id=>timers.delete(id)});
+  vm.runInNewContext(recorderSource,{window:win,document:doc,CSS:{escape:s=>s},Date:{now:()=>now},WeakMap,innerWidth:110,innerHeight:110,getComputedStyle(){return{overflowY:'auto'}},setTimeout:set,clearTimeout:id=>timers.delete(id)});
   win.__mycoRecorder.enabled=true;win.__mycoRecorder.ignoreEvent=e=>!!e.panel;
   const advance=ms=>{const end=now+ms;for(;;){const next=[...timers].filter(([,v])=>v.at<=end).sort((a,b)=>a[1].at-b[1].at)[0];if(!next)break;now=next[1].at;timers.delete(next[0]);next[1].fn()}now=end};
   const event=(name,e=target,extra={})=>{const ev={type:name,target:e,isTrusted:true,button:0,buttons:1,pointerId:1,clientX:50,clientY:50,deltaY:80,composedPath(){return[e,doc]},...extra};for(const fn of events[name]||[])fn(ev)};
@@ -105,3 +108,13 @@ function scrollFixture(){
  const f=scrollFixture();f.event('wheel');f.event('keydown',f.target,{panel:true,key:'PageDown'});f.scroll(80);f.advance(500);assert.equal(f.steps().length,0,'panel key retained page scroll intent');
 }
 console.log('recorder: explicit container intent, quiet window, scrollbar/key paths and side-effect exclusions passed');
+
+// All privacy paths use the shared classifier, including displayed passwords
+// and common OTP aliases. The recorder must never read their values.
+window.__mycoRecorder.enabled=true;
+for(const fields of [{type:'text',autocomplete:'current-password'},{type:'text',autocomplete:'',name:'otp_code'},{type:'text',autocomplete:'',name:'sms_otp'}]){
+ const field=Object.assign(Object.create(password),fields);const before=sent.length;
+ handlers.input({isTrusted:true,composedPath(){return[field]}});window.__mycoRecorder.flush();
+ assert.equal(sent.length,before+1);assert.equal(sent.at(-1).sensitive,true);assert.equal(sent.at(-1).value,'${password}');
+}
+assert.equal(valueRead,false,'sensitive alias value read');

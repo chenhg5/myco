@@ -80,7 +80,7 @@ func TestNativeChromeControlRefAndDraft(t *testing.T) {
 	_, p := call("/profiles", map[string]any{"name": "Demo agent"})
 	id := p["id"].(string)
 	call("/profiles/"+id+"/agents", map[string]any{"allowed": true})
-	code, opened := call("/control/open", map[string]any{"request_id": "open", "profile": id, "url": fixture.URL, "grant_id": "demo-grant", "actor": map[string]any{"id": "demo-agent", "name": "Demo agent"}, "expires_at": time.Now().Add(time.Hour)})
+	code, opened := call("/control/open", map[string]any{"request_id": "open", "profile": id, "url": fixture.URL, "grant_id": "demo-grant", "actor": map[string]any{"id": "demo-agent", "name": "Demo agent"}, "expires_at": time.Now().Add(15 * time.Minute)})
 	if code != 200 {
 		diagnose()
 		t.Fatal(opened)
@@ -184,7 +184,7 @@ func TestNativeChromeControlFramesSecretsAndStop(t *testing.T) {
 		case "/next":
 			fmt.Fprint(w, `<!doctype html><h1>Article</h1>`)
 		default:
-			fmt.Fprintf(w, `<!doctype html><button id="root">Root action</button><a href="/next">Next article</a><label>Public title<input id="public"></label><label>Password<input type="password" value="demo-secret-value"></label><main><p>Visible text</p><p data-sensitive>demo-hidden-data</p></main><iframe id="same" src="/child"></iframe><iframe id="cross" src="%s/child"></iframe>`, strings.Replace(base, "127.0.0.1", "ads.localhost", 1))
+			fmt.Fprintf(w, `<!doctype html><button id="root">Root action</button><a href="/next">Next article</a><label>Public title<input id="public"></label><label>Password<input type="password" value="demo-secret-value"></label><main><p>Visible text</p><p data-sensitive>demo-hidden-data</p></main><a href="#private">Your code <b data-sensitive>protected-947261</b></a><button>Continue <span data-sensitive>protected-836152</span></button><h2>Review <b data-sensitive>protected-725043</b></h2><table><tr><td>Status <b data-sensitive>protected-614932</b></td></tr></table><label>Shown password<input type="text" autocomplete="current-password" value="shown-password-secret"></label><label>OTP alias<input name="otp_code" value="alias-otp-secret"></label><label>SMS alias<input name="sms_otp" value="sms-otp-secret"></label><iframe id="same" src="/child"></iframe><iframe id="cross" src="%s/child"></iframe>`, strings.Replace(base, "127.0.0.1", "ads.localhost", 1))
 		}
 	}))
 	defer fixture.Close()
@@ -210,7 +210,7 @@ func TestNativeChromeControlFramesSecretsAndStop(t *testing.T) {
 	_, profile := call("/profiles", map[string]any{"name": "Demo frames"})
 	id := profile["id"].(string)
 	call("/profiles/"+id+"/agents", map[string]any{"allowed": true})
-	code, out := call("/control/open", map[string]any{"request_id": "open", "profile": id, "url": base, "grant_id": "demo-grant", "actor": map[string]any{"id": "demo-agent", "name": "Demo agent"}, "expires_at": time.Now().Add(time.Hour)})
+	code, out := call("/control/open", map[string]any{"request_id": "open", "profile": id, "url": base, "grant_id": "demo-grant", "actor": map[string]any{"id": "demo-agent", "name": "Demo agent"}, "expires_at": time.Now().Add(15 * time.Minute)})
 	if code != 200 {
 		t.Fatal(code, out)
 	}
@@ -240,13 +240,23 @@ func TestNativeChromeControlFramesSecretsAndStop(t *testing.T) {
 		}
 	}
 	raw, _ := json.Marshal(snapshot)
-	for _, secret := range []string{"demo-secret-text", "123456", "demo-secret-value", "demo-hidden-data"} {
+	for _, secret := range []string{"demo-secret-text", "123456", "demo-secret-value", "demo-hidden-data", "protected-947261", "protected-836152", "protected-725043", "protected-614932", "shown-password-secret", "alias-otp-secret", "sms-otp-secret"} {
 		if strings.Contains(string(raw), secret) {
 			t.Fatal("snapshot leaked sensitive data", secret)
 		}
 	}
+	textCode, textSnapshot := call("/control/snapshot", map[string]any{"request_id": "text-mode", "session": session, "mode": "text"})
+	if textCode != 200 {
+		t.Fatal(textCode, textSnapshot)
+	}
+	encodedText, _ := json.Marshal(textSnapshot)
+	for _, secret := range []string{"protected-947261", "protected-836152", "protected-725043", "protected-614932", "shown-password-secret", "alias-otp-secret", "sms-otp-secret"} {
+		if strings.Contains(string(encodedText), secret) {
+			t.Fatal("text snapshot leaked descendant or alias", secret)
+		}
+	}
 	frameRefs := []string{}
-	var password, public, article, main string
+	var password, public, article, main, privateButton string
 	for _, item := range snapshot["nodes"].([]any) {
 		n := item.(map[string]any)
 		name, _ := n["name"].(string)
@@ -262,6 +272,9 @@ func TestNativeChromeControlFramesSecretsAndStop(t *testing.T) {
 		if name == "Next article" && n["role"] == "link" {
 			article = n["ref"].(string)
 		}
+		if n["role"] == "button" && n["redacted"] == true {
+			privateButton = n["ref"].(string)
+		}
 		if n["role"] == "main" {
 			main = n["ref"].(string)
 		}
@@ -274,6 +287,34 @@ func TestNativeChromeControlFramesSecretsAndStop(t *testing.T) {
 		if code != 200 {
 			t.Fatal("frame click", code, out)
 		}
+	}
+	code, out = call("/control/act", map[string]any{"request_id": "private-button", "session": session, "op": "click", "ref": privateButton})
+	if code != 200 {
+		t.Fatal("redacted button click", code, out)
+	}
+	e.mu.Lock()
+	privacyControl := e.controls[session]
+	e.mu.Unlock()
+	privacyControl.mu.Lock()
+	draftJSON, _ := json.Marshal(privacyControl.steps)
+	privacyControl.mu.Unlock()
+	if strings.Contains(string(draftJSON), "protected-") {
+		t.Fatal("draft locator leaked a sensitive descendant")
+	}
+	privacyPage, _ := privacyControl.browser.page()
+	if _, err := privacyPage.Context(ctx).Eval(`()=>document.querySelectorAll('iframe').forEach(frame=>frame.setAttribute('data-sensitive',''))`); err != nil {
+		t.Fatal(err)
+	}
+	for _, ref := range frameRefs {
+		code, out = call("/control/extract", map[string]any{"request_id": randID(), "session": session, "ref": ref, "what": "text"})
+		if code != 200 || out["text"] != "[redacted]" {
+			t.Fatal("sensitive iframe owner not inherited", code, out)
+		}
+	}
+	code, protectedSnapshot := call("/control/snapshot", map[string]any{"request_id": "protected-frames", "session": session})
+	protectedJSON, _ := json.Marshal(protectedSnapshot)
+	if code != 200 || strings.Contains(string(protectedJSON), "Frame clicked") {
+		t.Fatal("sensitive iframe snapshot not redacted", code)
 	}
 	code, out = call("/control/act", map[string]any{"request_id": "secret", "session": session, "op": "type", "ref": password, "value": "must-not-type"})
 	if code != 403 || out["code"] != "sensitive_field" {
@@ -429,10 +470,17 @@ func TestNativeChromeControlHostsAndForcedEnd(t *testing.T) {
 	fixture := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		switch r.URL.Path {
+		case "/slow-redirect":
+			select {
+			case <-r.Context().Done():
+				return
+			case <-time.After(2200 * time.Millisecond):
+			}
+			http.Redirect(w, r, strings.Replace(base, "127.0.0.1", "ads.localhost", 1)+"/blocked", 302)
 		case "/redirect":
 			http.Redirect(w, r, strings.Replace(base, "127.0.0.1", "ads.localhost", 1)+"/blocked", 302)
 		default:
-			fmt.Fprint(w, `<!doctype html><title>Domain fixture</title><a href="/redirect">Redirect outside</a><a target="_blank" href="http://ads.localhost:`+strings.Split(base, ":")[2]+`/blocked">Popup outside</a><button id="count" onclick="this.dataset.count=String(+(this.dataset.count||0)+1)">Count</button>`)
+			fmt.Fprint(w, `<!doctype html><title>Domain fixture</title><a href="/redirect">Redirect outside</a><a href="/slow-redirect">Slow redirect</a><a target="_blank" href="/slow-redirect">Slow popup</a><a href="#waiting" onclick="setTimeout(()=>location.href='/redirect',600)">Delayed script</a><a target="_blank" href="http://ads.localhost:`+strings.Split(base, ":")[2]+`/blocked">Popup outside</a><button id="count" onclick="this.dataset.count=String(+(this.dataset.count||0)+1)">Count</button>`)
 		}
 	}))
 	defer fixture.Close()
@@ -462,7 +510,7 @@ func TestNativeChromeControlHostsAndForcedEnd(t *testing.T) {
 	}
 	id := profile["id"].(string)
 	call("/profiles/"+id+"/agents", map[string]any{"allowed": true})
-	code, out := call("/control/open", map[string]any{"request_id": "open", "profile": id, "url": base, "hosts": []string{"127.0.0.1"}, "grant_id": "demo-grant", "actor": map[string]any{"id": "demo-agent", "name": "Demo agent"}, "expires_at": time.Now().Add(time.Hour)})
+	code, out := call("/control/open", map[string]any{"request_id": "open", "profile": id, "url": base, "hosts": []string{"127.0.0.1"}, "grant_id": "demo-grant", "actor": map[string]any{"id": "demo-agent", "name": "Demo agent"}, "expires_at": time.Now().Add(15 * time.Minute)})
 	if code != 200 {
 		t.Fatal(code, out)
 	}
@@ -496,6 +544,24 @@ func TestNativeChromeControlHostsAndForcedEnd(t *testing.T) {
 	page, _ := c.browser.page()
 	if !c.waitAllowed(ctx, page) {
 		t.Fatal("outside tab not restored")
+	}
+	for _, name := range []string{"Slow redirect", "Delayed script", "Slow popup"} {
+		c.mu.Lock()
+		before := len(c.steps)
+		c.mu.Unlock()
+		code, out = call("/control/act", map[string]any{"request_id": randID(), "session": session, "op": "click", "ref": find(name)})
+		if code != 403 || out["code"] != "host_not_allowed" {
+			t.Fatal("late navigation escaped originating act", name, code, out)
+		}
+		c.mu.Lock()
+		after := len(c.steps)
+		c.mu.Unlock()
+		if after != before {
+			t.Fatal("failed late navigation entered draft", name)
+		}
+		if !c.waitAllowed(ctx, page) {
+			t.Fatal("late navigation not restored", name)
+		}
 	}
 	code, out = call("/control/act", map[string]any{"request_id": "popup", "session": session, "op": "click", "ref": find("Popup outside")})
 	if code != 403 || out["code"] != "host_not_allowed" {
@@ -560,7 +626,7 @@ func TestNativeChromeControlOperationsAndReplay(t *testing.T) {
 	_, profile := call("/profiles", map[string]any{"name": "Demo operations"})
 	id := profile["id"].(string)
 	call("/profiles/"+id+"/agents", map[string]any{"allowed": true})
-	code, out := call("/control/open", map[string]any{"request_id": "open", "profile": id, "url": fixture.URL, "grant_id": "demo-grant", "actor": map[string]any{"id": "demo-agent", "name": "Demo agent"}, "expires_at": time.Now().Add(time.Hour)})
+	code, out := call("/control/open", map[string]any{"request_id": "open", "profile": id, "url": fixture.URL, "grant_id": "demo-grant", "actor": map[string]any{"id": "demo-agent", "name": "Demo agent"}, "expires_at": time.Now().Add(15 * time.Minute)})
 	if code != 200 {
 		t.Fatal(code, out)
 	}
@@ -648,5 +714,121 @@ func TestNativeChromeControlOperationsAndReplay(t *testing.T) {
 	}
 	if _, err = linearOrder(script, ""); err != nil {
 		t.Fatal("draft not replayable", err)
+	}
+}
+
+func TestControlRetryDigestIgnoresObjectKeyOrder(t *testing.T) {
+	samples := []string{`{"request_id":"j","profile":"p","actor":{"id":"demo","name":"Demo"},"grant_id":"g","expires_at":"2026-01-01T00:00:00Z"}`, `{"expires_at":"2026-01-01T00:00:00Z","profile":"p","request_id":"j","grant_id":"g","actor":{"name":"Demo","id":"demo"}}`}
+	var previous []byte
+	for _, sample := range samples {
+		r := httptest.NewRequest("POST", "/control/open", strings.NewReader(sample))
+		_, canonical, err := controlDecode(r, "open")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if previous != nil && !bytes.Equal(previous, canonical) {
+			t.Fatal("nested object order changed retry digest")
+		}
+		previous = canonical
+	}
+}
+
+func TestControlClosedSessionsExpireWithoutLifetimeQuota(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	e, err := newEngine(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer e.close()
+	e.controls = map[string]*controlSession{}
+	e.controlRequests = map[string]*controlRequest{}
+	requests := 0
+	for round := 0; round < 30; round++ {
+		life, stop := context.WithCancel(ctx)
+		id := fmt.Sprint("demo", round)
+		c := &controlSession{e: e, id: id, scope: "demo/cache", ctx: life, cancel: stop, expires: time.Now().Add(15 * time.Minute), last: time.Now(), wake: make(chan struct{}), browser: &session{e: e, id: "p_demo", closeComplete: true}, steps: []node{}}
+		e.mu.Lock()
+		e.controls[id] = c
+		e.mu.Unlock()
+		for n := 0; n < 170; n++ {
+			input, _ := json.Marshal(map[string]any{"request_id": fmt.Sprint("request", requests), "session": id})
+			r := httptest.NewRequest("POST", "/control/close", bytes.NewReader(input))
+			r.Header.Set("X-Myco-Scope", c.scope)
+			w := httptest.NewRecorder()
+			e.handler().ServeHTTP(w, r)
+			if w.Code != 200 {
+				t.Fatalf("round %d request %d: %d %s", round, requests, w.Code, w.Body.String())
+			}
+			requests++
+		}
+		e.pruneControls(time.Now())
+		if e.controls[id] == nil {
+			t.Fatal("retry window was not retained")
+		}
+		e.pruneControls(time.Now().Add(controlRetryWindow + time.Second))
+		if len(e.controls) != 0 || len(e.controlRequests) != 0 || e.controlCacheBytes != 0 {
+			t.Fatalf("expired cache retained resources: %d %d %d", len(e.controls), len(e.controlRequests), e.controlCacheBytes)
+		}
+	}
+	if requests < 5000 {
+		t.Fatal("insufficient lifetime requests")
+	}
+}
+func TestControlEmptyHostScopeIsRejected(t *testing.T) {
+	r := httptest.NewRequest("POST", "/control/open", strings.NewReader(`{"request_id":"j","profile":"p","hosts":[]}`))
+	if _, _, err := controlDecode(r, "open"); err == nil {
+		t.Fatal("empty hosts became unrestricted")
+	}
+	r = httptest.NewRequest("POST", "/control/open", strings.NewReader(`{"request_id":"j","profile":"p"}`))
+	if _, _, err := controlDecode(r, "open"); err != nil {
+		t.Fatal("omitted hosts must remain unrestricted", err)
+	}
+}
+
+func TestControlRecordedURLNeverIntroducesParameters(t *testing.T) {
+	for _, raw := range []string{"https://example.com/path#${x}", "https://example.com/path#%24%7Bx%7D", "https://example.com/%24%7Bx%7D#section"} {
+		value := recordedControlURL(raw)
+		if strings.Contains(value, "${") {
+			t.Fatalf("recorded parameter: %s", value)
+		}
+	}
+	if value := recordedControlURL("https://example.com/path#section"); value != "#section" {
+		t.Fatal("ordinary hash navigation changed", value)
+	}
+}
+
+func TestSensitiveFieldPolicyAliases(t *testing.T) {
+	for _, attrs := range []map[string]string{{"type": "password"}, {"type": "text", "autocomplete": "current-password"}, {"type": "text", "autocomplete": "new-password"}, {"name": "otp_code"}, {"name": "sms_otp"}, {"name": "verification_code"}, {"data-sensitive": ""}} {
+		if !sensitiveAttributes(attrs) {
+			t.Fatal("sensitive alias accepted", attrs)
+		}
+	}
+	if sensitiveAttributes(map[string]string{"name": "title", "type": "text"}) {
+		t.Fatal("ordinary text marked sensitive")
+	}
+}
+
+func TestControlNavigationReserveUsesEncodedSubstringBound(t *testing.T) {
+	raw := "https://example.com/path/" + strings.Repeat("&", 5000)
+	value := recordedControlURL(raw)
+	encoded, _ := json.Marshal(value)
+	if len(encoded) > navigationWaitValueLimit || !strings.Contains(raw, value) {
+		t.Fatal("invalid bounded URL wait", len(encoded))
+	}
+	reserve, _ := json.Marshal(reservedNavigationValue())
+	if len(encoded) > len(reserve) {
+		t.Fatal("URL wait exceeded reserved bytes")
+	}
+	if recordedControlURL("https://example.com/path#a%20b") != "#a%20b" {
+		t.Fatal("escaped fragment changed")
+	}
+}
+
+func TestControlRejectsOverlongGrantBeforeOpening(t *testing.T) {
+	e := &engine{}
+	_, err := e.controlOpen(context.Background(), "demo/scope", controlInput{Profile: "demo", GrantID: "grant", Actor: controlActor{ID: "demo-agent"}, ExpiresAt: time.Now().Add(31 * time.Minute)})
+	if err == nil || err.Code != "invalid_argument" {
+		t.Fatal("overlong grant accepted", err)
 	}
 }

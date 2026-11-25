@@ -20,8 +20,12 @@ func (c *controlSession) describe(ctx context.Context, r controlRef) (*target, e
 		return nil, err
 	}
 	defer c.call(ctx, r.sid, "Runtime.releaseObject", map[string]any{"objectId": id}, nil)
+	info, err := c.inspect(ctx, r)
+	if err != nil {
+		return nil, err
+	}
 	var t target
-	if err = c.function(ctx, r.sid, id, "describe", nil, &t); err != nil || len(t.Locators) == 0 {
+	if err = c.function(ctx, r.sid, id, "describe", map[string]bool{"private": info.Sensitive || info.SensitiveDescendants}, &t); err != nil || len(t.Locators) == 0 {
 		return nil, errors.New("target_not_found")
 	}
 	t.Snapshot = ""
@@ -131,13 +135,13 @@ func (c *controlSession) act(ctx context.Context, p *rod.Page, in controlInput) 
 	}
 	// Reserve the largest possible derived wait/popup before input. Redirects
 	// update that one wait, rather than spending unbounded recording steps.
-	derived := in.Op == "click" || in.Op == "dblclick" || in.Op == "press" && (in.Key == "Enter" || strings.HasSuffix(in.Key, "+Enter"))
+	derived := in.Op != "wait"
 	reserve := []node{n}
 	if prefix != nil {
 		reserve = append(reserve, *prefix)
 	}
 	if derived {
-		reserve = append(reserve, node{ID: "n_reserved", Type: "wait", Wait: "url", Value: strings.Repeat("<", 8192)}, node{ID: "n_reserved", Type: "tab", Tab: "popup"})
+		reserve = append(reserve, node{ID: "n_reserved", Type: "wait", Wait: "url", Value: reservedNavigationValue()}, node{ID: "n_reserved", Type: "tab", Tab: "popup"})
 	}
 	c.mu.Lock()
 	c.reservedWait = false
@@ -149,6 +153,10 @@ func (c *controlSession) act(ctx context.Context, p *rod.Page, in controlInput) 
 	}
 	c.mu.Lock()
 	c.navigationUntil = time.Time{}
+	c.navigationPending = false
+	c.navigationLoads = map[proto.TargetTargetID]bool{}
+	c.navigationTracked = map[proto.TargetTargetID]bool{p.TargetID: true}
+	c.pendingPopupURL = ""
 	c.pendingURL = ""
 	c.pendingPopup = false
 	c.navigationNode = ""
@@ -156,7 +164,6 @@ func (c *controlSession) act(ctx context.Context, p *rod.Page, in controlInput) 
 	c.pending = true
 	if derived {
 		c.reservedWait, c.reservedPopup = true, true
-		c.navigationUntil = time.Now().Add(2 * time.Second)
 		c.navigationTab = p.TargetID
 	}
 	c.mu.Unlock()
@@ -171,12 +178,20 @@ func (c *controlSession) act(ctx context.Context, p *rod.Page, in controlInput) 
 			c.mu.Unlock()
 		}
 	}()
+	startEffects := func() {
+		if derived {
+			c.mu.Lock()
+			c.navigationUntil = time.Now().Add(2 * time.Second)
+			c.mu.Unlock()
+		}
+	}
 	dispatched := false
 	interruptedByDialog := false
 	do := func(method string, args any) error {
 		if interruptedByDialog && strings.HasPrefix(method, "Input.") {
 			return nil
 		}
+		startEffects()
 		dispatched = true
 		if strings.HasPrefix(method, "Input.") {
 			var err error
@@ -189,6 +204,7 @@ func (c *controlSession) act(ctx context.Context, p *rod.Page, in controlInput) 
 		if in.Ref == "" {
 			return nil
 		}
+		startEffects()
 		return c.call(ctx, r.sid, "DOM.focus", map[string]any{"backendNodeId": r.backend}, nil)
 	}
 	if prefix != nil {
@@ -204,6 +220,7 @@ func (c *controlSession) act(ctx context.Context, p *rod.Page, in controlInput) 
 	}
 	switch in.Op {
 	case "navigate":
+		startEffects()
 		dispatched = true
 		err = p.Context(ctx).Navigate(in.URL)
 	case "back", "forward":
@@ -295,6 +312,7 @@ func (c *controlSession) act(ctx context.Context, p *rod.Page, in controlInput) 
 			id, err = c.resolve(ctx, r)
 			if err == nil {
 				var result map[string]any
+				startEffects()
 				dispatched = true
 				err = c.function(ctx, r.sid, id, "select", in.Value, &result)
 				_ = c.call(ctx, r.sid, "Runtime.releaseObject", map[string]any{"objectId": id}, nil)
@@ -309,11 +327,13 @@ func (c *controlSession) act(ctx context.Context, p *rod.Page, in controlInput) 
 			id, err = c.resolve(ctx, r)
 			if err == nil {
 				var result any
+				startEffects()
 				dispatched = true
 				err = c.function(ctx, r.sid, id, "scroll", in.DY, &result)
 				_ = c.call(ctx, r.sid, "Runtime.releaseObject", map[string]any{"objectId": id}, nil)
 			}
 		} else {
+			startEffects()
 			dispatched = true
 			_, err = p.Context(ctx).Eval(`y=>{window.scrollBy(0,y);return true}`, in.DY)
 		}
@@ -355,6 +375,7 @@ func (c *controlSession) act(ctx context.Context, p *rod.Page, in controlInput) 
 			}
 		}
 	case "switch_tab":
+		startEffects()
 		dispatched = true
 		_, err = p.Context(ctx).Activate()
 		if err == nil {
@@ -381,6 +402,7 @@ func (c *controlSession) act(ctx context.Context, p *rod.Page, in controlInput) 
 		if previous == "" {
 			return nil, errors.New("target_not_found")
 		}
+		startEffects()
 		dispatched = true
 		err = p.Context(ctx).Close()
 		if err == nil {
@@ -388,6 +410,13 @@ func (c *controlSession) act(ctx context.Context, p *rod.Page, in controlInput) 
 			c.browser.current = previous
 			p = c.browser.pages[previous]
 			c.browser.mu.Unlock()
+			c.mu.Lock()
+			c.navigationTab = previous
+			c.navigationTracked[previous] = true
+			c.navigationPending = false
+			c.navigationLoads = map[proto.TargetTargetID]bool{}
+			c.pendingURL = ""
+			c.mu.Unlock()
 			if p != nil {
 				_, err = p.Context(ctx).Activate()
 			} else {
@@ -411,31 +440,16 @@ func (c *controlSession) act(ctx context.Context, p *rod.Page, in controlInput) 
 	if c.hasHostViolation() {
 		return nil, errors.New("host_not_allowed")
 	}
-	if in.Op == "click" || in.Op == "dblclick" || in.Op == "press" {
-		if !c.dialogOpen() {
-			if syncErr := c.barrier(ctx, p); syncErr == nil {
-				c.mu.Lock()
-				hasPopup := c.pendingPopup
-				c.mu.Unlock()
-				if hasPopup {
-					event, e := c.browser.waitObserved(ctx, after, func(evt observation) bool { return evt.Kind == "target" && !oldTabs[evt.Target] })
-					if e == nil {
-						e = c.waitPopup(ctx, event.Target)
-					}
-					if e != nil {
-						if c.hasHostViolation() {
-							return nil, errors.New("host_not_allowed")
-						}
-						return nil, errors.New("outcome_unknown")
-					}
-				}
-			}
+	if dispatched {
+		if err = c.waitEffects(ctx, p, after, oldTabs); err != nil {
+			return nil, err
 		}
 	}
 	c.enforceHosts(ctx)
 	if c.hasHostViolation() {
 		return nil, errors.New("host_not_allowed")
 	}
+
 	if err = c.appendStep(n); err != nil {
 		return nil, err
 	}
@@ -443,8 +457,12 @@ func (c *controlSession) act(ctx context.Context, p *rod.Page, in controlInput) 
 	c.mu.Lock()
 	c.pending = false
 	pendingURL, popup := c.pendingURL, c.pendingPopup
+	c.captureNavigationLocked(p.TargetID, pendingURL, false)
+	if popup {
+		c.captureNavigationLocked(p.TargetID, "", true)
+	}
 	c.mu.Unlock()
-	c.captureNavigation(p.TargetID, pendingURL, popup)
+
 	ids := []string{}
 	if prefix != nil {
 		ids = append(ids, prefix.ID)
@@ -485,7 +503,7 @@ func (c *controlSession) checkFocus(ctx context.Context, p *rod.Page) error {
 		var out struct {
 			Result proto.RuntimeRemoteObject `json:"result"`
 		}
-		err := c.call(ctx, frame.sid, "Runtime.evaluate", map[string]any{"expression": `(()=>{let a=document.activeElement;while(a?.shadowRoot?.activeElement)a=a.shadowRoot.activeElement;for(let n=a;n;n=n.parentElement||n.getRootNode?.().host){if(n.matches?.('input[type="password"],[data-sensitive],[autocomplete="one-time-code"]')||/otp|one.?time|verification.?code/i.test(n.name||''))return true}return false})()`, "contextId": frame.context, "returnByValue": true}, &out)
+		err := c.call(ctx, frame.sid, "Runtime.evaluate", map[string]any{"expression": withSensitivePolicy(`(()=>{const sensitive=__MYCO_SENSITIVE_POLICY__;let a=document.activeElement;while(a?.shadowRoot?.activeElement)a=a.shadowRoot.activeElement;return sensitive(a)})()`), "contextId": frame.context, "returnByValue": true}, &out)
 		if err != nil {
 			return errors.New("sensitive_field")
 		}
@@ -603,7 +621,7 @@ func (c *controlSession) extract(ctx context.Context, p *rod.Page, in controlInp
 	if in.Ref == "" || in.What != "text" && in.What != "html" && in.What != "attribute" || in.What == "attribute" && (in.Attr == "" || len(in.Attr) > 160) {
 		return nil, errors.New("invalid_argument")
 	}
-	r, _, err := c.lookup(ctx, p, in.Ref)
+	r, protected, err := c.lookup(ctx, p, in.Ref)
 	if err != nil {
 		return nil, err
 	}
@@ -627,7 +645,11 @@ func (c *controlSession) extract(ctx context.Context, p *rod.Page, in controlInp
 		Text  string `json:"text"`
 		Error string `json:"error"`
 	}
-	err = c.function(ctx, r.sid, id, "extract", map[string]any{"what": in.What, "attr": in.Attr}, &out)
+	if protected.Sensitive {
+		out.Text = "[redacted]"
+	} else {
+		err = c.function(ctx, r.sid, id, "extract", map[string]any{"what": in.What, "attr": in.Attr}, &out)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -823,8 +845,63 @@ func (c *controlSession) inputCall(ctx context.Context, sid proto.TargetSessionI
 }
 
 func (c *controlSession) waitPopup(ctx context.Context, id proto.TargetTargetID) error {
+	ready := make(chan error, 1)
+	go func() { _, err := c.browser.waitPage(ctx, id); ready <- err }()
+	for {
+		c.mu.Lock()
+		wake := c.wake
+		blocked := c.violation != nil
+		c.mu.Unlock()
+		if blocked {
+			return errors.New("host_not_allowed")
+		}
+		select {
+		case err := <-ready:
+			if err != nil {
+				return err
+			}
+			return c.waitPopupDocument(ctx, id)
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-wake:
+		}
+	}
+}
+func (c *controlSession) waitPopupDocument(ctx context.Context, id proto.TargetTargetID) error {
+	c.browser.mu.Lock()
+	p := c.browser.pages[id]
+	c.browser.mu.Unlock()
+	if p == nil {
+		return errors.New("target_not_found")
+	}
+	c.mu.Lock()
+	expected := c.pendingPopupURL
+	c.mu.Unlock()
+	waitingForURL := checkedURL(expected) == nil
+	tick := time.NewTicker(20 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		c.enforceHosts(ctx)
+		if c.hasHostViolation() {
+			return errors.New("host_not_allowed")
+		}
+		info, err := p.Context(ctx).Info()
+		if err != nil {
+			return err
+		}
+		if !waitingForURL || info.URL != "about:blank" && info.URL != "" {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-tick.C:
+		}
+	}
+	observation, cancel := context.WithCancel(ctx)
+	defer cancel()
 	done := make(chan error, 1)
-	go func() { _, err := c.browser.waitPage(ctx, id); done <- err }()
+	go func() { done <- c.waitReady(observation, p) }()
 	for {
 		c.mu.Lock()
 		wake := c.wake

@@ -8,6 +8,7 @@ import (
 	"image/png"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 	"time"
 
@@ -79,7 +80,7 @@ func TestNativeChromeClipUsesViewportPixelsAndNeverFullPageEvidence(t *testing.T
 		Features []string `json:"features"`
 	}
 	json.Unmarshal(call("GET", "/status", nil).Body.Bytes(), &status)
-	if len(status.Features) != 1 || status.Features[0] != "screenshot_clip" {
+	if !slices.Contains(status.Features, "screenshot_clip") || !slices.Contains(status.Features, "agent_control") {
 		t.Fatal("clip not negotiated", status)
 	}
 	run := func(secret bool) runUpdate {

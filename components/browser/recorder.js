@@ -121,7 +121,7 @@
     if(!state.enabled || !ev.isTrusted || ignored(ev) || state.picking)return;
     activity();const e=element(ev);if(!e || e.tagName==='SELECT' || ['file','checkbox','radio'].includes(e.type))return;
     if(state.pending && state.pendingElement!==e)flush();
-    const sensitive=e.type==='password' || /password/i.test(e.autocomplete||'') || e.hasAttribute('data-sensitive');
+    const sensitive=(__MYCO_SENSITIVE_POLICY__)(e);
     state.pendingElement=e;
     state.pending={type:'type',target:window.__mycoDescribe(e),clear:true,sensitive,value:sensitive?'${password}':cut(e.isContentEditable?e.innerText:e.value,16000)};
     clearTimeout(state.timer);state.timer=setTimeout(flush,250);

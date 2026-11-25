@@ -3,13 +3,15 @@ package main
 import (
 	"context"
 	"strconv"
+	"strings"
 
 	"github.com/go-rod/rod/lib/proto"
 )
 
 type controlLayout struct {
-	visible bool
-	pointer bool
+	visible   bool
+	pointer   bool
+	sensitive bool
 }
 
 // Computed cursor and click listeners supplement the accessibility tree for
@@ -30,6 +32,22 @@ func (c *controlSession) layout(ctx context.Context, frame controlFrame, snapsho
 	for _, doc := range snapshot.Documents {
 		if doc == nil || doc.Nodes == nil || doc.Layout == nil || int(doc.FrameID) >= len(snapshot.Strings) || snapshot.Strings[doc.FrameID] != string(frame.id) {
 			continue
+		}
+		for index, id := range doc.Nodes.BackendNodeID {
+			if index >= len(doc.Nodes.Attributes) {
+				continue
+			}
+			attrs := map[string]string{}
+			pairs := doc.Nodes.Attributes[index]
+			for j := 0; j+1 < len(pairs); j += 2 {
+				a, b := int(pairs[j]), int(pairs[j+1])
+				if a >= 0 && b >= 0 && a < len(snapshot.Strings) && b < len(snapshot.Strings) {
+					attrs[strings.ToLower(snapshot.Strings[a])] = snapshot.Strings[b]
+				}
+			}
+			if sensitiveAttributes(attrs) {
+				out[id] = controlLayout{sensitive: true}
+			}
 		}
 		clickable := map[int]bool{}
 		if doc.Nodes.IsClickable != nil {
@@ -53,7 +71,10 @@ func (c *controlSession) layout(ctx context.Context, frame controlFrame, snapsho
 				}
 			}
 			id := doc.Nodes.BackendNodeID[index]
-			out[id] = controlLayout{visible: box[2] > 0 && box[3] > 0 && box[0]+box[2] > x && box[1]+box[3] > y && box[0] < x+width && box[1] < y+height, pointer: pointer}
+			meta := out[id]
+			meta.visible = box[2] > 0 && box[3] > 0 && box[0]+box[2] > x && box[1]+box[3] > y && box[0] < x+width && box[1] < y+height
+			meta.pointer = pointer
+			out[id] = meta
 		}
 	}
 	return out
