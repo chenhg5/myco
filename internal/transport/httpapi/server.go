@@ -29,6 +29,8 @@ import (
 
 // Server is the hub's HTTP adapter.
 type Server struct {
+	watches *app.WatchService
+
 	projectInvites *app.ProjectInvitationService
 	projectAutos   *app.ProjectAutomationService
 	usage          *app.UsageService
@@ -249,6 +251,7 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /v1/join", s.join)
 	s.automationRoutes(m)
 	s.workflowRoutes(m)
+	s.watchRoutes(m)
 	s.superagentRoutes(m)
 	s.actionRoutes(m)
 	s.pageRoutes(m)
@@ -1262,8 +1265,9 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 		if !see.Sees(a.Agent) {
 			continue
 		}
-		st := api.AgentStatus{Agent: s.agentDTO(a.Agent), State: string(a.State), Queued: a.Queued, InProgress: a.InProgress, Held: a.Held, Asking: a.Asking,
+		st := api.AgentStatus{Agent: s.agentDTO(a.Agent), State: string(a.State), Queued: a.Queued, InProgress: a.InProgress, Held: a.Held, Watching: a.Watching, Asking: a.Asking,
 			Stale: a.Stale, StaleTasks: a.StaleIDs}
+		st.Agent.Watching = a.Watching
 		if viewer != nil {
 			if viewer.Name == a.Agent.Name && s.resume != nil {
 				if c, err := s.resume.Get(r.Context(), a.Agent.Name); err == nil {

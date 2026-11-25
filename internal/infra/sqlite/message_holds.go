@@ -24,8 +24,9 @@ func (r *MessageRepo) WakeHeld(ctx context.Context, recipient domain.AgentName, 
     AND child.from_agent=messages.to_agent AND child.status IN ('done','failed')`
 	rows, err := tx.QueryContext(ctx, `SELECT id, COALESCE((`+answer+`), ''), COALESCE((`+ready+`), '')
     FROM messages WHERE to_agent=? AND status='held' AND type='task' AND asking='' AND
+    NOT EXISTS (SELECT 1 FROM watches w WHERE w.task=messages.id AND w.state='watching' AND w.deadline<=?) AND
     (EXISTS(`+answer+`) OR EXISTS(`+ready+`) OR (hold_until='' AND hold_recovered=0 AND updated_at<=?))
-    ORDER BY updated_at, id LIMIT ?`, recipient, ms(cutoff), limit)
+    ORDER BY updated_at, id LIMIT ?`, recipient, ms(now), ms(cutoff), limit)
 	if err != nil {
 		return nil, nil, internal(err)
 	}
@@ -86,6 +87,13 @@ func (r *MessageRepo) WakeHeld(ctx context.Context, recipient domain.AgentName, 
 		}
 		task.HoldWake, task.HoldUntil = wakeID, ""
 		if err := updateMessage(ctx, tx, task); err != nil {
+			return nil, nil, err
+		}
+		state := domain.WatchStopped
+		if item.child != "" {
+			state = domain.WatchMet
+		}
+		if err := finishHeldWatches(ctx, tx, task.ID, state, now); err != nil {
 			return nil, nil, err
 		}
 		changed = append(changed, task)
