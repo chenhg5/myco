@@ -25,7 +25,6 @@ type Hub interface {
 	Pull(ctx context.Context, wait time.Duration) ([]api.Message, error)
 	Close(ctx context.Context, id string) error
 	Reply(ctx context.Context, id, body string) error
-	Online(ctx context.Context) ([]api.Agent, error)
 }
 
 // ClientHub is a Hub backed by a myco client.
@@ -60,9 +59,6 @@ func (h ClientHub) Reply(ctx context.Context, id, body string) error {
 	_, err := h.C.Reply(ctx, id, body, false)
 	return err
 }
-func (h ClientHub) Online(ctx context.Context) ([]api.Agent, error) {
-	return h.C.ListAgents(ctx, "", true)
-}
 
 // Bridge passes messages between one chat-app bot and myco.
 type Bridge struct {
@@ -88,7 +84,7 @@ type Bridge struct {
 
 // New makes a bridge; dir is where its state is kept ("" keeps it in memory).
 func New(cfg Config, ad Adapter, hub Hub, dir string, log *slog.Logger) (*Bridge, error) {
-	st := &state{Convs: map[string]*conversation{}, Agents: map[string]string{}}
+	st := &state{Convs: map[string]*conversation{}}
 	if dir != "" {
 		var err error
 		if st, err = loadState(dir, cfg.Name); err != nil {
@@ -193,31 +189,15 @@ func (b *Bridge) process(ctx context.Context, in Inbound) {
 		}
 		return
 	}
+	agent := b.cfg.Agent
 	cmd := parseCommand(in.Text)
-	agent := ""
 	switch cmd.name {
 	case "help":
-		b.say(ctx, ref, b.t("help", orText(b.defaultAgent(in.ChatID), b.t("none"))))
+		b.say(ctx, ref, b.t("help", agent))
 		return
 	case "whoami":
 		b.say(ctx, ref, b.t("whoami", in.UserID))
 		return
-	case "agents":
-		b.say(ctx, ref, b.onlineAgents(ctx))
-		return
-	case "agent":
-		if cmd.arg == "" {
-			b.say(ctx, ref, b.t("help", orText(b.defaultAgent(in.ChatID), b.t("none"))))
-			return
-		}
-		b.st.mu.Lock()
-		b.st.Agents[in.ChatID] = cmd.arg
-		_ = b.st.save()
-		b.st.mu.Unlock()
-		b.say(ctx, ref, b.t("agent_set", cmd.arg))
-		if cmd.rest == "" {
-			return
-		}
 	case "new":
 		b.st.mu.Lock()
 		delete(b.st.Convs, in.ThreadKey)
@@ -234,17 +214,19 @@ func (b *Bridge) process(ctx context.Context, in Inbound) {
 			return
 		}
 		if err := b.hub.Stop(ctx, known.Task); err != nil {
-			b.say(ctx, ref, b.t("send_failed", known.Agent, err.Error()))
+			b.say(ctx, ref, b.t("send_failed", agent, err.Error()))
 			return
 		}
-		b.say(ctx, ref, b.t("stopped", known.Agent))
+		b.say(ctx, ref, b.t("stopped", agent))
 		return
-	case "to":
-		agent = cmd.arg
 	}
 	text := strings.TrimSpace(cmd.rest)
 	if text == "" {
-		b.say(ctx, ref, b.t("help", orText(b.defaultAgent(in.ChatID), b.t("none"))))
+		b.say(ctx, ref, b.t("help", agent))
+		return
+	}
+	if agent == "" {
+		b.say(ctx, ref, b.t("no_agent"))
 		return
 	}
 	who := in.UserName
@@ -254,28 +236,17 @@ func (b *Bridge) process(ctx context.Context, in Inbound) {
 	body := text + "\n\n——\n" + b.t("via", platformName(b.cfg.Platform, b.lang), orText(who, in.UserID))
 
 	// An open task: what they say is added to it (and answers its question).
-	if known != nil && known.Task != "" && (agent == "" || agent == known.Agent) {
+	if known != nil && known.Task != "" {
 		err := b.hub.Steer(ctx, known.Task, body)
 		if err == nil {
-			b.say(ctx, ref, b.t("steered", known.Agent))
+			b.say(ctx, ref, b.t("steered", agent))
 			return
 		}
 		if !closedTask(err) {
-			b.say(ctx, ref, b.t("send_failed", known.Agent, err.Error()))
+			b.say(ctx, ref, b.t("send_failed", agent, err.Error()))
 			return
 		}
 		// It closed meanwhile: a new task in the same thread.
-	}
-	if agent == "" {
-		if known != nil && known.Agent != "" && cmd.name != "agent" {
-			agent = known.Agent
-		} else {
-			agent = b.defaultAgent(in.ChatID)
-		}
-	}
-	if agent == "" {
-		b.say(ctx, ref, b.t("no_agent"))
-		return
 	}
 	req := api.SendRequest{To: agent, Type: "task", Body: body,
 		IdempotencyKey: "im:" + b.cfg.Name + ":" + in.MessageID}
@@ -333,43 +304,6 @@ func (b *Bridge) claim(ctx context.Context, in Inbound, ref Ref) bool {
 	b.cfg = cfg
 	b.say(ctx, ref, b.t("claimed"))
 	return true
-}
-
-func (b *Bridge) defaultAgent(chat string) string {
-	b.st.mu.Lock()
-	defer b.st.mu.Unlock()
-	if a := b.st.Agents[chat]; a != "" {
-		return a
-	}
-	return b.cfg.Agent
-}
-
-func (b *Bridge) onlineAgents(ctx context.Context) string {
-	agents, err := b.hub.Online(ctx)
-	if err != nil {
-		return err.Error()
-	}
-	var lines []string
-	for _, a := range agents {
-		if a.Kind != "" && a.Kind != "agent" {
-			continue
-		}
-		line := "- " + a.Name
-		if a.DisplayName != "" && a.DisplayName != a.Name {
-			line += "（" + a.DisplayName + "）"
-		}
-		if a.Description != "" {
-			line += "：" + clip(a.Description, 60)
-		}
-		lines = append(lines, line)
-		if len(lines) == 30 {
-			break
-		}
-	}
-	if len(lines) == 0 {
-		return b.t("no_agents")
-	}
-	return b.t("agents", strings.Join(lines, "\n"))
 }
 
 // watch follows a task until it closes: progress and questions update its

@@ -119,7 +119,7 @@ export interface ServerMachine {
   can_spawn: boolean;
 }
 
-/** A chat-app bot on this computer (Settings › Chat apps; no secrets). */
+/** An agent's chat-app bot on this computer (its details; no secrets). */
 export interface IMBridge {
   name: string;
   platform: "feishu" | "lark" | "slack" | string;
@@ -1014,15 +1014,14 @@ export const appApi = {
   },
 
   local: () => request<LocalState>("GET", "app/local"),
-  /** Chat-app bots (Feishu/Lark, Slack) this computer runs for a workspace. */
-  imBridges: (hubId: string) => request<{ bridges: IMBridge[]; slack_create_url: string }>("GET", `app/im?hub_id=${enc(hubId)}`),
+  /** An agent's chat-app bots (Feishu/Lark, Slack) this computer runs. */
+  imBridges: (hubId: string, agent: string) => request<{ bridges: IMBridge[]; slack_create_url: string }>("GET", `app/im?hub_id=${enc(hubId)}&agent=${enc(agent)}`),
   /** A Feishu QR code to scan: makes the bot and connects it. */
   startFeishuScan: (hubId: string, agent: string) => request<{ id: string; url: string; qr: string }>("POST", "app/im/feishu", { hub_id: hubId, agent }),
   feishuScan: (id: string) => request<{ state: "waiting" | "connecting" | "done" | "failed"; error?: string; bridge?: IMBridge }>("GET", `app/im/feishu/${enc(id)}`),
   stopFeishuScan: (id: string) => request<{ stopped: boolean }>("DELETE", `app/im/feishu/${enc(id)}`),
   connectSlack: (hubId: string, agent: string, botToken: string, appToken: string) =>
     request<{ bridge: IMBridge }>("POST", "app/im/slack", { hub_id: hubId, agent, bot_token: botToken, app_token: appToken }),
-  setIMBridge: (name: string, agent: string) => request<{ name: string; agent: string }>("PUT", `app/im/${enc(name)}`, { agent }),
   removeIMBridge: (name: string) => request<{ removed: string }>("DELETE", `app/im/${enc(name)}`),
   /** The agent CLIs on this computer: installed, signed in (from v0.20.12). */
   localAgents: () => request<{ agents: LocalAgent[] }>("GET", "app/local/agents"),
