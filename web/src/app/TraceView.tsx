@@ -776,20 +776,42 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
   );
 }
 
-/** What it said between its steps: markdown, and past six lines only the
- *  first six until clicked (thinking reads the same way). */
+/** What it said between its steps: markdown. A long one shows its first
+ *  lines, fading out, with 展开全文 under it; it is held short only when it
+ *  really runs past (measured, not counted in newlines: a cut with nothing
+ *  to say so read as text lost). Thinking reads the same way. */
 function Said({ text, delta, live, children }: {
   text: string; delta: boolean; live: boolean; children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
-  const long = text.trim().split("\n").length > 6;
-  const clamp = long && !live && !open;
+  const [over, setOver] = useState(true);
+  const box = useRef<HTMLDivElement>(null);
+  const long = text.trim().split("\n").length > 6 || text.length > 480;
+  const held = long && !live && !open;
+  useEffect(() => {
+    const el = box.current;
+    if (!held || !el) return;
+    const check = () => setOver(el.scrollHeight > el.clientHeight + 2);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    for (const c of Array.from(el.children)) ro.observe(c);
+    return () => ro.disconnect();
+  }, [held, text]);
+  const clamp = held && over;
   return (
-    <div className={cn("trace-say", delta && "trace-delta", clamp && "is-long is-clamped")}
-      title={clamp ? L("点开看全文", "Show all of it") : undefined}
-      onClick={clamp ? () => setOpen(true) : undefined}>
-      {children}
-    </div>
+    <>
+      <div ref={box} className={cn("trace-say", delta && "trace-delta", held && "is-long", clamp && "is-clamped")}
+        title={clamp ? L("点开看全文", "Show all of it") : undefined}
+        onClick={clamp ? () => setOpen(true) : undefined}>
+        {children}
+      </div>
+      {clamp && (
+        <button type="button" className="trace-say-more" onClick={() => setOpen(true)}>
+          {L("展开全文", "Show all")}<ChevronRight />
+        </button>
+      )}
+    </>
   );
 }
 

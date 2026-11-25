@@ -4015,6 +4015,29 @@ const server = http.createServer(async (req, res) => {
         { kind: "tool_result", id: "c5", output: "smoke: all steps passed" },
         { kind: "usage", input_tokens: 18400, output_tokens: 2100, cost_usd: 0.08, duration_ms: 84000 },
       ];
+      // "长段汇总": a long thing said between steps (a heading, paragraphs,
+      // a list), held short in the process until opened.
+      if (/长段汇总/.test(m.body || "")) steps.splice(0, steps.length,
+        { kind: "text", text: [
+          "先说结论：三个循环里两个正常，一个可能卡住了。",
+          "",
+          "#207（runner 日志清理）跑了 40 分钟，花费没有再动过（大约 $2.21），可能卡住了，也可能只是汇报慢。我在它结束时，或者半小时后还在跑时再看一次。",
+          "",
+          "#209（语音飞轮）",
+          "",
+          "PR 审查队列第二轮找到 3 个新的阻塞问题，说之前的 4 个已经解决。我把这 3 个转给了负责的 agent，等它们改完再审。",
+          "",
+          "- 阻塞一：录音中断后没有重连",
+          "- 阻塞二：转写结果没有去重",
+          "- 阻塞三：设置页文案缺英文",
+          "",
+          "#211（发布说明）已经写好，等你看一眼。",
+          "",
+          "最后一行：其余都在按计划走。",
+        ].join("\n") },
+        { kind: "tool", tool: "Bash", id: "l1", input: "myco message list --status open" },
+        { kind: "tool_result", id: "l1", output: "3 open" },
+        { kind: "usage", input_tokens: 5200, output_tokens: 640, duration_ms: 12000 });
       // "Just say 收到": a run with no thinking or tools.
       if (/收到/.test(m.body || "")) steps.splice(0, steps.length, { kind: "text", text: "收到" }, { kind: "usage", input_tokens: 900, output_tokens: 3, duration_ms: 2100 });
       const running = ["queued", "delivered", "acked", "held"].includes(m.status);
