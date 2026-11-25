@@ -475,7 +475,7 @@ func TestNativeChromeRecorderPanel(t *testing.T) {
 				switch n.Type {
 				case "extract", "click", "type":
 				case "scroll":
-					if n.Target == nil || len(n.Target.Shadow) != 0 {
+					if n.Target == nil || len(n.Target.Shadow) != 0 || len(n.Target.Frame) != 1 || n.Target.Frame[0] != "#child" {
 						t.Fatalf("not a page scroll: %+v", n)
 					}
 					pageScroller := false
@@ -494,7 +494,7 @@ func TestNativeChromeRecorderPanel(t *testing.T) {
 					t.Fatalf("unexpected recorded action: %+v", n)
 				}
 			}
-			if counts["extract"] != 4 || counts["click"] != 1 || counts["type"] != 1 || counts["scroll"] < 1 {
+			if counts["extract"] != 4 || counts["click"] != 1 || counts["type"] != 1 || counts["scroll"] != 2 {
 				t.Fatalf("wrong recorded actions: %v", counts)
 			}
 			var fromPage struct {
