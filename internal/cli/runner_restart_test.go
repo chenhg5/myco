@@ -39,6 +39,11 @@ func TestRunnerRestartAnnouncesAllLocalProfilesAndGoodbye(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	for _, name := range []string{"inbox", "claude-cloud"} {
+		if err := config.Save(config.ProfilePath(file, name), &config.Config{Agent: name, Hub: srv.URL, Token: "test-token", Harness: name}); err != nil {
+			t.Fatal(err)
+		}
+	}
 	e := &env{defaultPath: file}
 	e.announceRunnerRestart()
 	if runnerRestartUntil(runnerRestartPath(file)).IsZero() {
