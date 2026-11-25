@@ -465,6 +465,7 @@ function PageView({ target, open, active, reload, onMeta }: {
   // a page wanting a group of the computer's capabilities the person has not allowed yet
   const [consent, setConsent] = useState<(OsConsent & { name: string; answer: (a: OsAnswer) => void }) | null>(null);
   const [remoteAsking, setRemoteAsking] = useState<{text:string; title?:string; review?:BrowserApprovalReview; settingsReview?:BrowserSettingsReview; answer:(ok:boolean)=>void} | null>(null);
+  const [settingsRead, setSettingsRead] = useState<BrowserSettingsReview | null>(null);
   const remoteConsent = useRef<((ok:boolean)=>void) | null>(null);
   // (while the page is there: tucked away, it still runs and is answered,
   // and what it started on the computer goes on)
@@ -872,13 +873,14 @@ function PageView({ target, open, active, reload, onMeta }: {
           )}
         </div>
       )}
-    <Modal className="pg-remote-ask" wide={!!remoteAsking?.review || !!remoteAsking?.settingsReview} open={!!remoteAsking} onOpenChange={(o) => {if (!o) remoteAsking?.answer(false);}}
+    <Modal className={cn("pg-remote-ask", remoteAsking?.settingsReview && "pg-browser-settings-dialog")} wide={!!remoteAsking?.review || !!remoteAsking?.settingsReview} open={!!remoteAsking} onOpenChange={(o) => {if (!o) remoteAsking?.answer(false);}}
       title={remoteAsking?.title || L(`允许「${opened?.name || page?.name || "此应用"}」使用远程桌面？`, `Allow “${opened?.name || page?.name || "this app"}” to use Remote Desktop?`)} description={remoteAsking?.text || ""}>
       {remoteAsking?.review && <BrowserApprovalDetails review={remoteAsking.review} />}
-      {remoteAsking?.settingsReview && <BrowserProfileSettingsDetails review={remoteAsking.settingsReview} />}
+      {remoteAsking?.settingsReview && <BrowserProfileSettingsDetails review={remoteAsking.settingsReview} onRead={setSettingsRead} />}
+      {remoteAsking?.settingsReview && <p className="pg-browser-settings-hint" style={{visibility: settingsRead === remoteAsking.settingsReview ? "hidden" : undefined}} role="status">{L("请滚动查看完整设置，再允许。", "Scroll through all settings before allowing.")}</p>}
       <div className="app-modal-actions">
         <button type="button" className="app-btn" onClick={() => remoteAsking?.answer(false)}>{L("不允许", "Don't allow")}</button>
-        <button type="button" className="app-btn app-btn-primary" onClick={() => remoteAsking?.answer(true)}>{L("允许", "Allow")}</button>
+        <button type="button" className="app-btn app-btn-primary" disabled={!!remoteAsking?.settingsReview && settingsRead !== remoteAsking.settingsReview} onClick={() => remoteAsking?.answer(true)}>{L("允许", "Allow")}</button>
       </div>
     </Modal>
     <Modal open={!!consent} onOpenChange={(o) => { if (!o) consent?.answer("deny"); }} className="pg-ask"

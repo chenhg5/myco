@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type { BrowserProfile, BrowserProfileSettingsInput } from "@/appapi";
 import { L } from "@/lib/i18n";
 
@@ -23,9 +24,23 @@ export function browserSettingsReview(profile: BrowserProfile, settings: Browser
   };
 }
 export type BrowserSettingsReview = SettingsReview;
-export function BrowserProfileSettingsDetails({review}: {review: SettingsReview}) {
+export function BrowserProfileSettingsDetails({review, onRead}: {review: SettingsReview; onRead: (review: SettingsReview) => void}) {
+  const content = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = content.current;
+    if (!el) return;
+    el.scrollTop = 0;
+    const check = () => {
+      if (el.clientHeight > 0 && el.scrollTop + el.clientHeight >= el.scrollHeight - 2) onRead(review);
+    };
+    const observer = new ResizeObserver(check);
+    observer.observe(el);
+    el.addEventListener("scroll", check);
+    check();
+    return () => { observer.disconnect(); el.removeEventListener("scroll", check); };
+  }, [review, onRead]);
   const password = review.password === "set" ? L("设置新密码（不显示）", "Set a new password (hidden)") : review.password === "keep" ? L("保留已保存的密码", "Keep the saved password") : review.password === "clear" ? L("清除已保存的密码", "Clear the saved password") : L("无", "None");
-  return <div className="pg-browser-approval pg-browser-settings" data-testid="browser-settings-review">
+  return <div ref={content} tabIndex={0} aria-label={L("浏览器设置清单", "Browser settings review")} className="pg-browser-approval pg-browser-settings" data-testid="browser-settings-review">
     <div className="pg-browser-approval-title">{review.name}</div>
     <p>{L("代理服务器可以看到这个资料经过它的网络流量。设置在下次启动浏览器时生效，不会重启当前浏览器。", "The proxy server can see this profile’s traffic passing through it. Settings apply the next time the browser starts; the current browser will stay open.")}</p>
     <dl>

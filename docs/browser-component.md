@@ -117,7 +117,9 @@ On desktop hosts that expose `myco.browser.profiles.configure`, Web Automation
 can ask to change a profile's proxy, user agent, language and launch arguments.
 The App shows its own confirmation listing the proxy address and bypass rules,
 whether credentials are present, the user agent, language and every argument.
-Passwords are never displayed. Declining changes nothing. The confirmation is
+The review scrolls independently of the buttons. When its contents overflow,
+Allow stays disabled until the owner scrolls to the end; each new request requires
+a fresh review. Passwords are never displayed. Declining changes nothing. The confirmation is
 single-use and bound to the exact profile and settings, including a write-only
 password change. This is a local human capability, not an agent or Hub action.
 Older Apps omit the optional method; older components omit profile `settings`.

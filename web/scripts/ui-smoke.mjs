@@ -952,12 +952,40 @@ async function runMatrix(browser, size, scheme) {
       const text=await review.innerText();
       for(const value of ["proxy.example:8080","*.local","Mozilla/5.0 Fixture/1.0","zh-CN","--window-size=1280,900","--disable-gpu"])if(!text.includes(value))throw new Error("Settings review omitted "+value);
       if(text.includes("write-only-fixture"))throw new Error("Settings modal disclosed proxy password");
-      await shot(page,size,scheme,"browser-profile-settings-owner-review");
+      const allow=modal.getByRole("button",{name:"允许",exact:true});
+      const readAll=async()=>{
+        await review.evaluate(el=>{el.scrollTop=el.scrollHeight;});
+        await allow.waitFor({state:"visible"});
+        await page.waitForFunction(()=>!document.querySelector('.pg-remote-ask .app-btn-primary')?.disabled);
+      };
+      await modal.evaluate(el=>Promise.all(el.getAnimations().map(a=>a.finished)));
+      const actionsInitial=await modal.locator('.app-modal-actions').boundingBox();
+      const overflow=await review.evaluate(el=>el.scrollHeight>el.clientHeight+2);
+      if(overflow && !await allow.isDisabled())throw new Error("Overflowing settings can be allowed before reading");
+      await readAll();
+      // Check geometry inside the scroll viewport: locator visibility alone does
+      // not detect content clipped by a scroll container.
+      const visible=await review.evaluate(el=>{
+        const box=el.getBoundingClientRect();
+        const args=el.querySelector('dd:last-of-type').getBoundingClientRect();
+        const warning=el.querySelector('p:last-child').getBoundingClientRect();
+        return args.top>=box.top && args.bottom<=box.bottom+1 && warning.bottom<=box.bottom+1;
+      });
+      if(!visible)throw new Error("Launch arguments or UA warning cannot be scrolled into view");
+      const actionsBefore=await modal.locator('.app-modal-actions').boundingBox();
+      if(Math.abs(actionsInitial.y-actionsBefore.y)>1)throw new Error("Reading settings shifted approval buttons");
+      await review.evaluate(el=>{el.scrollTop=0;});
+      const actionsAfter=await modal.locator('.app-modal-actions').boundingBox();
+      if(Math.abs(actionsBefore.y-actionsAfter.y)>1)throw new Error("Review scrolling moved approval buttons");
+      await readAll();
+      await shot(page,size,scheme,"browser-profile-settings-owner-review-bottom");
       await clickVisible(page,modal.getByRole("button",{name:"不允许",exact:true}));await modal.waitFor({state:"hidden"});
       let result=await frame.locator("body").evaluate(async()=>{for(let i=0;i<100&&!window.__browserSettingsResult;i++)await new Promise(r=>setTimeout(r,20));return window.__browserSettingsResult;});
       if(result?.error!=="cancelled")throw new Error("Declined settings were not cancelled");
       const before=await frame.locator("body").evaluate(()=>window.myco.browser.status());if(before.profiles[0].settings.proxy)throw new Error("Decline changed profile settings");
-      await ask();await modal.waitFor();await clickVisible(page,modal.getByRole("button",{name:"允许",exact:true}));await modal.waitFor({state:"hidden"});
+      await ask();await modal.waitFor();
+      if(overflow && !await allow.isDisabled())throw new Error("New settings review did not reset the read requirement");
+      await readAll();await clickVisible(page,allow);await modal.waitFor({state:"hidden"});
       result=await frame.locator("body").evaluate(async()=>{for(let i=0;i<100&&!window.__browserSettingsResult;i++)await new Promise(r=>setTimeout(r,20));return window.__browserSettingsResult;});
       if(!result?.value?.settings?.proxy?.has_password||JSON.stringify(result).includes("write-only-fixture")||"confirmation" in result.value)throw new Error("Configured profile returned private credentials");
       const {password:_password,...storedProxy}=settings.proxy;
