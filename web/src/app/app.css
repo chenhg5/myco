@@ -10058,3 +10058,12 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
 .pg-browser-approval ul { padding-left: 18px; margin: 6px 0; }
 .pg-browser-approval pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; padding: 8px; background: var(--pill); border-radius: 6px; }
 .pg-browser-approval details { margin-top: 14px; }
+.pg-browser-settings dl { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 8px 16px; margin: 14px 0; }
+.pg-browser-settings dt { color: var(--muted); font-size: 11px; padding-top: 2px; }
+.pg-browser-settings dd { min-width: 0; margin: 0; font-size: 12.5px; }
+.pg-browser-settings-mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+.pg-browser-settings dd pre { margin: 0; font-size: 12px; }
+@media (max-width: 760px) {
+  .pg-browser-settings dl { grid-template-columns: minmax(0, 1fr); row-gap: 3px; }
+  .pg-browser-settings dd { margin-bottom: 8px; }
+}

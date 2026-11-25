@@ -25,17 +25,17 @@ export function browserSettingsReview(profile: BrowserProfile, settings: Browser
 export type BrowserSettingsReview = SettingsReview;
 export function BrowserProfileSettingsDetails({review}: {review: SettingsReview}) {
   const password = review.password === "set" ? L("设置新密码（不显示）", "Set a new password (hidden)") : review.password === "keep" ? L("保留已保存的密码", "Keep the saved password") : review.password === "clear" ? L("清除已保存的密码", "Clear the saved password") : L("无", "None");
-  return <div className="pg-browser-approval" data-testid="browser-settings-review">
+  return <div className="pg-browser-approval pg-browser-settings" data-testid="browser-settings-review">
     <div className="pg-browser-approval-title">{review.name}</div>
     <p>{L("代理服务器可以看到这个资料经过它的网络流量。设置在下次启动浏览器时生效，不会重启当前浏览器。", "The proxy server can see this profile’s traffic passing through it. Settings apply the next time the browser starts; the current browser will stay open.")}</p>
     <dl>
-      <dt>{L("代理服务器", "Proxy server")}</dt><dd>{review.proxy || L("不使用代理", "No proxy")}</dd>
+      <dt>{L("代理服务器", "Proxy server")}</dt><dd className="pg-browser-settings-mono">{review.proxy || L("不使用代理", "No proxy")}</dd>
       <dt>{L("不走代理的地址", "Proxy bypass")}</dt><dd>{review.bypass.join("; ") || L("无", "None")}</dd>
       <dt>{L("代理账号", "Proxy username")}</dt><dd>{review.username ? L("已填写", "Provided") : L("无", "None")}</dd>
       <dt>{L("代理密码", "Proxy password")}</dt><dd>{password}</dd>
       <dt>User-Agent</dt><dd>{review.userAgent || L("Chrome 自带", "Chrome default")}</dd>
       <dt>{L("语言", "Language")}</dt><dd>{review.lang || L("系统默认", "System default")}</dd>
-      <dt>{L("启动参数", "Launch arguments")}</dt><dd>{review.args.length ? <pre>{review.args.join("\n")}</pre> : L("无", "None")}</dd>
+      <dt>{L("启动参数", "Launch arguments")}</dt><dd className="pg-browser-settings-mono">{review.args.length ? <pre>{review.args.join("\n")}</pre> : L("无", "None")}</dd>
     </dl>
     {review.userAgent && <p>{L("自定义 UA 可能与浏览器版本不一致，增加被网站识别的风险。", "A custom user agent may disagree with the browser version and make detection more likely.")}</p>}
   </div>;
