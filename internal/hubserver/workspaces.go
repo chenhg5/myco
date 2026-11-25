@@ -152,6 +152,7 @@ func (ws *workspaces) open(name string) (*workspaceHub, error) {
 	w.run(ctx, func(ctx context.Context) { h.Traces.Run(ctx, time.Hour) })
 	w.run(ctx, func(ctx context.Context) { h.Automations.Run(ctx, AutomationTick) })
 	w.run(ctx, func(ctx context.Context) { h.Workflows.Run(ctx, WorkflowTick) })
+	w.run(ctx, h.Watches.Run)
 	if h.RunBackups != nil {
 		w.run(ctx, h.RunBackups)
 	}

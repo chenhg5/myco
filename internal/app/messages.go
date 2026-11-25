@@ -28,6 +28,8 @@ func DefaultMessagePolicy() MessagePolicy {
 
 // MessageService implements messaging use cases for an authenticated agent.
 type MessageService struct {
+	watches *WatchService
+
 	agents   domain.AgentRepository
 	messages domain.MessageRepository
 	notifier Notifier
@@ -467,6 +469,8 @@ func (s *MessageService) Transition(ctx context.Context, agent *domain.Agent, id
 	return m, err
 }
 
+func (s *MessageService) SetWatches(w *WatchService) { s.watches = w }
+
 // HoldUntil records an explicit dependency for a runner, or an intentional
 // manual hold outside one. Legacy clients can still use TransitionHold.
 func (s *MessageService) HoldUntil(ctx context.Context, agent *domain.Agent, id, until string, dry bool) (*domain.Message, error) {
@@ -485,7 +489,7 @@ func (s *MessageService) HoldUntil(ctx context.Context, agent *domain.Agent, id,
 		until = domain.ManualHold
 	}
 	var task *domain.Message
-	err := s.mutateOrPreview(ctx, id, dry, func(m *domain.Message) ([]*domain.Message, error) {
+	apply := func(m *domain.Message) ([]*domain.Message, error) {
 		if m.To != agent.Name {
 			return nil, domain.Errf(domain.CodePermissionDenied, "only the recipient may hold this task")
 		}
@@ -501,7 +505,11 @@ func (s *MessageService) HoldUntil(ctx context.Context, agent *domain.Agent, id,
 		m.HoldUntil = until
 		task = m
 		return nil, nil
-	})
+	}
+	if !dry && child != nil && s.watches != nil {
+		return s.watches.Hold(ctx, agent, id, child, func(m *domain.Message) error { _, err := apply(m); return err })
+	}
+	err := s.mutateOrPreview(ctx, id, dry, apply)
 	return task, err
 }
 

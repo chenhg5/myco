@@ -115,6 +115,7 @@ func (s *Server) enrich(ctx context.Context, dtos ...*api.Agent) {
 	if states, err := s.overview.States(ctx); err == nil {
 		for _, d := range dtos {
 			if st, ok := states[domain.AgentName(d.Name)]; ok {
+				d.Watching = st.Watching
 				d.State, d.Queued, d.InProgress, d.Held, d.Asking = string(st.State), st.Queued, st.InProgress, st.Held, st.Asking
 			}
 		}

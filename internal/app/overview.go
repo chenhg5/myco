@@ -33,6 +33,7 @@ type AgentOverview struct {
 	Stale    int
 	StaleIDs []string
 	Held     int
+	Watching int
 	// Asking counts held tasks waiting on a question to their sender (they
 	// are in Held too).
 	Asking int
@@ -51,6 +52,8 @@ type Overview struct {
 
 // OverviewService builds dashboard snapshots.
 type OverviewService struct {
+	watches domain.WatchRepository
+
 	agents       domain.AgentRepository
 	messages     domain.MessageRepository
 	clock        Clock
@@ -85,6 +88,22 @@ func NewOverviewService(agents domain.AgentRepository, messages domain.MessageRe
 	return &OverviewService{agents: agents, messages: messages, clock: clock, onlineWindow: onlineWindow}
 }
 
+func (s *OverviewService) SetWatches(w domain.WatchRepository) { s.watches = w }
+func (s *OverviewService) watchCounts(ctx context.Context) (map[string]int, error) {
+	out := map[string]int{}
+	if s.watches == nil {
+		return out, nil
+	}
+	ws, err := s.watches.List(ctx, true)
+	if err != nil {
+		return nil, err
+	}
+	for _, w := range ws {
+		out[w.Agent]++
+	}
+	return out, nil
+}
+
 // States returns every agent's live state and counters, without message
 // contents (for agent listings).
 func (s *OverviewService) States(ctx context.Context) (map[domain.AgentName]AgentOverview, error) {
@@ -100,10 +119,16 @@ func (s *OverviewService) States(ctx context.Context) (map[domain.AgentName]Agen
 	if err != nil {
 		return nil, err
 	}
+	watching, err := s.watchCounts(ctx)
+	if err != nil {
+		return nil, err
+	}
 	now := s.clock.Now()
 	out := make(map[domain.AgentName]AgentOverview, len(agents))
 	for _, a := range agents {
-		out[a.Name] = s.stateOf(a, counts[a.Name], acts[a.Name], now)
+		v := s.stateOf(a, counts[a.Name], acts[a.Name], now)
+		v.Watching = watching[string(a.Name)]
+		out[a.Name] = v
 	}
 	return out, nil
 }
@@ -155,10 +180,15 @@ func (s *OverviewService) Snapshot(ctx context.Context, viewer *domain.Agent, re
 	if err != nil {
 		return nil, err
 	}
+	watching, err := s.watchCounts(ctx)
+	if err != nil {
+		return nil, err
+	}
 	now := s.clock.Now()
 	ov := &Overview{GeneratedAt: now}
 	for _, a := range agents {
 		o := s.stateOf(a, counts[a.Name], acts[a.Name], now)
+		o.Watching = watching[string(a.Name)]
 		if (viewer == nil || viewer.Name == a.Name) && o.InProgress+o.Stale+o.Held+o.Queued > 0 {
 			if o.Current, err = s.messages.ListOpen(ctx, a.Name, 10); err != nil {
 				return nil, err

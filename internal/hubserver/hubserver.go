@@ -106,6 +106,7 @@ type Hub struct {
 	Automations *app.AutomationService
 	// Workflows walks the workspace's workflow runs (Run).
 	Workflows *app.WorkflowService
+	Watches   *app.WatchService
 	Close     func() error
 	// SetPublicURL changes the URL used in join links (e.g. a tunnel's).
 	SetPublicURL func(string)
@@ -290,6 +291,10 @@ func Build(o Options) (*Hub, error) {
 	workflows := app.NewWorkflowService(workflowRepo, messages, msgRepo, ids, clock, o.Log)
 	workflows.SetTraces(sqlite.NewTraceRepo(db))
 	srv.SetWorkflows(workflows)
+	watches := app.NewWatchService(sqlite.NewWatchRepo(db), agentsRepo, messages, projectSvc, workflows, audit, bus, ids, clock)
+	messages.SetWatches(watches)
+	overview.SetWatches(sqlite.NewWatchRepo(db))
+	srv.SetWatches(watches)
 	// Notices: what each person should hear about. Sources read the
 	// features' events; sinks (a push relay, chat apps) are added here.
 	person := func(ctx context.Context, name string) string {
@@ -368,7 +373,7 @@ func Build(o Options) (*Hub, error) {
 		return nil, fmt.Errorf("open private browser screenshots: %w", err)
 	}
 	actionSvc.SetBrowserScreenshots(screenshots)
-	h := &Hub{PageAttachments: pageAttachments, Actions: actionSvc, Handler: srv, Server: srv, Dispatcher: dispatcher, Files: files, Traces: traces, Automations: automations, Workflows: workflows,
+	h := &Hub{PageAttachments: pageAttachments, Actions: actionSvc, Handler: srv, Server: srv, Dispatcher: dispatcher, Files: files, Traces: traces, Automations: automations, Workflows: workflows, Watches: watches,
 		browserScreenshotsPath: screenshotPath, Close: func() error { return errors.Join(screenshots.Close(), db.Close()) }, SetPublicURL: srv.SetPublicURL, SetLAN: srv.SetLAN}
 	if bk != nil {
 		// The first a few minutes after start, spread so that the
@@ -402,6 +407,7 @@ func Run(ctx context.Context, o Options) error {
 	go hub.Traces.Run(ctx, time.Hour)
 	go hub.Automations.Run(ctx, AutomationTick)
 	go hub.Workflows.Run(ctx, WorkflowTick)
+	go hub.Watches.Run(ctx)
 	if hub.RunBackups != nil {
 		go hub.RunBackups(ctx)
 	}
