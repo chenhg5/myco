@@ -201,9 +201,15 @@ func TestOSUndeclaredRefused(t *testing.T) {
 	if !asks("plain", "exec.run", map[string]string{"cmd": "ls"}) {
 		t.Fatal("a page with no app is asked")
 	}
+	// a page of myco's own apps kept from before declarations: the hub does
+	// not say it declares all (httpapi declaresAll), so it is asked
+	set("legacy", osDecl{app: true, official: true})
+	if !asks("legacy", "fs.scan", map[string]string{"path": "~"}) {
+		t.Fatal("an official page from before declarations is asked")
+	}
 	set("official", osDecl{app: true, declares: true, official: true})
-	if !asks("official", "fs.scan", map[string]string{"path": "~"}) {
-		t.Fatal("myco's own app that declares nothing yet is asked for now")
+	if !refused("official", "fs.scan", map[string]string{"path": "~"}) {
+		t.Fatal("myco's own app is held to what it declares, nothing included")
 	}
 	set("official2", osDecl{app: true, declares: true, official: true, os: []string{"files"}})
 	if !refused("official2", "exec.run", map[string]string{"cmd": "ls"}) {

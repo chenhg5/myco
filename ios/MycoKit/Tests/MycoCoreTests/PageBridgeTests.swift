@@ -142,10 +142,11 @@ struct PageBridgeTests {
         }
         #expect(saved.saved.isEmpty)
         _ = try await strict.answer("send", ["text": "看一下"])
-        // An older hub does not say; myco's own apps that declare nothing yet may, for now.
+        // An older hub does not say, nor a hub for a page of myco's own apps
+        // kept from before declarations: as before.
         for template in [
             PageTemplate(id: "tp_a", slug: "alice/a", permissions: ["send"]),
-            PageTemplate(id: "tp_myco_doc", slug: "myco/doc", declares: true, official: true),
+            PageTemplate(id: "tp_myco_doc", slug: "myco/doc", latest: "2.2.0", official: true),
         ] {
             let (one, doors) = bridge(template)
             _ = try await one.answer("download", file)

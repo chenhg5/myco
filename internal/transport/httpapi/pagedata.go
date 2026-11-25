@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/myco-ai/myco/internal/api"
@@ -199,17 +200,38 @@ func collectionsDTO(m map[string]domain.ManifestCollection) map[string]api.Templ
 // app's newer version when there is one.
 func (s *Server) pageTemplate(ctx context.Context, p *domain.Page) *api.PageTemplate {
 	t := pageTemplateDTO(p)
-	if t != nil {
-		// what it does not list in os and permissions it does not declare
-		t.Declares = true
-	}
 	if t != nil && s.templates != nil {
 		t.Official = s.templates.IsOfficial(p.Template)
 		if l := s.templates.LatestOf(ctx, p.Template); l != "" && domain.CompareVersions(l, t.Version) > 0 {
 			t.Latest = l
 		}
 	}
+	if t != nil {
+		// What it does not list in os and permissions it does not declare
+		// (Apps refuse it), except a page of one of myco's own apps that
+		// kept a manifest from before apps declared: it is asked as
+		// before, until it is upgraded to a version that declares.
+		t.Declares = declaresAll(t, p.Manifest)
+	}
 	return t
+}
+
+// declaresAll: whether a page's app declares all it uses (os, permissions),
+// so that Apps refuse what it leaves out. Not a page of one of myco's own
+// apps whose manifest declares no os and is older than its app's newest
+// version, or than declarations: it is asked as before until upgraded.
+func declaresAll(t *api.PageTemplate, manifest string) bool {
+	return !(t.Official && len(t.OS) == 0 && (t.Latest != "" || predatesDeclarations(manifest)))
+}
+
+// predatesDeclarations: a manifest written before apps declared the
+// computer's capabilities they use (os and net came with hubs v0.22.1).
+func predatesDeclarations(manifest string) bool {
+	m, err := domain.ParseManifest([]byte(manifest))
+	if err != nil {
+		return true
+	}
+	return m.Requires == nil || m.Requires.Hub == "" || domain.CompareVersions(strings.TrimPrefix(m.Requires.Hub, "v"), "0.22.1") < 0
 }
 
 // upgradePage: POST /v1/pages/{id}/upgrade: the page takes its app's

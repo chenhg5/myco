@@ -15,11 +15,13 @@ class PagePermissionsTest {
         assertFalse(pageAllows(strict, "download"))
         val refusal = assertThrows(DownloadRefusal::class.java) { requireDeclared(strict, "download") }
         assertEquals("permission_denied", refusal.code)
-        // No app, an older hub, myco's own app that declares nothing yet: as before.
+        // No app, an older hub, a page of myco's own apps kept from before declarations
+        // (the hub does not say declares): as before.
         assertTrue(pageAllows(page(null), "download"))
         assertTrue(pageAllows(page("""{"id":"tp_a"}"""), "download"))
-        assertTrue(pageAllows(page("""{"id":"tp_myco_doc","declares":true,"official":true}"""), "download"))
-        // myco's own app that declares is held to it.
+        assertTrue(pageAllows(page("""{"id":"tp_myco_doc","latest":"2.2.0","official":true}"""), "download"))
+        // myco's own apps are held to what they declare.
+        assertFalse(pageAllows(page("""{"id":"tp_myco_doc","declares":true,"official":true}"""), "download"))
         assertFalse(pageAllows(page("""{"id":"tp_myco_disk","os":["files"],"declares":true,"official":true}"""), "download"))
     }
 }

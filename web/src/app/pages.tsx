@@ -712,8 +712,8 @@ function PageView({ target, open, active, reload, onMeta }: {
       const tp = live.current.page?.template;
       if (!tp || (tp.permissions || []).includes(perm)) return;
       // From hubs that say so, what an app does not declare it may not use
-      // (for now, myco's own apps that declare nothing yet only get the warning).
-      if (tp.declares && !(tp.official && !(tp.os || []).length))
+      // (they do not for pages of myco's own apps kept from before declarations).
+      if (tp.declares)
         throw Object.assign(new Error(L(`这个应用没有在 myco.json 的 "permissions" 里写 "${perm}"，不能用`, `This app does not declare "${perm}" in myco.json's "permissions"`)), { code: "permission_denied" });
       if (warned.has(perm)) return;
       warned.add(perm);

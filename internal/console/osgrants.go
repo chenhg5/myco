@@ -139,10 +139,11 @@ type osDecl struct {
 }
 
 // strict: what the app does not declare is refused, not asked. Pages with
-// no app have nothing to declare in, and older hubs do not say; for a
-// while, myco's own apps that declare nothing yet are asked as before.
+// no app have nothing to declare in; older hubs do not say, and hubs say
+// no for a page of myco's own apps kept from before declarations (until
+// it is upgraded).
 func (d osDecl) strict() bool {
-	return d.app && d.declares && !(d.official && len(d.os) == 0)
+	return d.app && d.declares
 }
 
 func osKey(hub, page string) string { return hub + "\x00" + page }

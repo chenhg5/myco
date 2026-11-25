@@ -918,11 +918,10 @@ public struct PageTemplate: Codable, Sendable, Hashable {
     }
 
     /// Whether the app may use a permission ("send", "download"): from hubs
-    /// that say so, only what it declares (myco's own apps that declare
-    /// nothing yet may still, for now).
+    /// that say so, only what it declares. (Hubs do not say it for a page of
+    /// myco's own apps kept from before declarations, until it is upgraded.)
     public func allows(_ permission: String) -> Bool {
-        guard declares == true, !(permissions ?? []).contains(permission) else { return true }
-        return official == true && (os ?? []).isEmpty
+        declares != true || (permissions ?? []).contains(permission)
     }
 }
 
