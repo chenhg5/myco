@@ -3788,3 +3788,52 @@ body.is-resizing-rows { cursor: row-resize; user-select: none; }
 .mg-chip.is-slot-before { box-shadow: -3px 0 0 -1px var(--fg-2); }
 .mg-chip.is-slot-after { box-shadow: 3px 0 0 -1px var(--fg-2); }
 .sa-approval-content { margin: 6px 0 0; max-height: 180px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+
+/* ---------- 清爽 (ui-clean, lib/uiStyle.ts): the same App without the
+   decoration. Faces leave the lists and titles (in the members column
+   only the state dot stays where the face was), chats have no picture
+   behind them, the walking mushroom is a quiet dot, intro cards are put
+   away, and small coloured tags become faint words. ---------- */
+.ui-clean .app-sidebar .app-nav-item > .pa,
+.ui-clean .conv-head-faces,
+.ui-clean .handoff-who .pa,
+.ui-clean .conv-bg,
+.ui-clean .ob-intro {
+  display: none !important;
+}
+.ui-clean .sp-member > .pa {
+  width: 10px !important;
+  height: 10px !important;
+  flex: none;
+  background: none !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  overflow: visible;
+}
+.ui-clean .sp-member > .pa > :not(.pa-state) { display: none !important; }
+.ui-clean .sp-member > .pa > .pa-state { position: static; width: 8px; height: 8px; box-shadow: none; }
+.ui-clean .sp-role,
+.ui-clean .sp-watch-tag {
+  padding: 0;
+  background: none;
+  color: var(--faint);
+}
+.ui-clean .sp-watch-tag svg { display: none; }
+/* the mushroom at work: a dot breathing in its place */
+.ui-clean svg.work-sprite {
+  width: 8px !important;
+  height: 8px !important;
+  margin: 0 4px !important;
+  border-radius: 50%;
+  background: var(--accent);
+  overflow: hidden;
+  animation: ui-clean-breathe 1.6s ease-in-out infinite;
+}
+.ui-clean svg.work-sprite > * { display: none; }
+.ui-clean svg.work-sprite.is-idle { background: var(--faint); animation: none; }
+@keyframes ui-clean-breathe {
+  50% { opacity: 0.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ui-clean svg.work-sprite { animation: none; }
+}

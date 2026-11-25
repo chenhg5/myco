@@ -4231,6 +4231,44 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "chat-watching-two");
     });
 
+    // 清爽 (界面风格): Settings → Appearance turns the decoration off at once
+    // for the whole App: no faces in the lists and titles, no chat picture,
+    // a dot for the walking mushroom; back to 标准 puts them back.
+    await step("设置 · 清爽模式", async () => {
+      const style = async (label) => {
+        await go(page, "设置", narrow);
+        await page.locator(".app-settings-search input").fill("界面风格");
+        await page.locator(".app-settings-search input").press("Enter");
+        const row = page.locator('[data-setting="ui-style"]');
+        await row.waitFor({ timeout: 5_000 });
+        await row.getByRole("tab", { name: label, exact: true }).click();
+        await closeSettings(page);
+      };
+      await style("清爽");
+      if (!(await page.evaluate(() => document.documentElement.classList.contains("ui-clean")))) throw new Error("选了清爽，界面应马上变");
+      await go(page, "官网改版", narrow);
+      await page.locator(".sp-home .conv-detail").waitFor({ timeout: 10_000 });
+      const look = await page.evaluate(() => {
+        const shown = (el) => !!el && el.getClientRects().length > 0 && getComputedStyle(el).display !== "none";
+        return {
+          sideFaces: [...document.querySelectorAll(".app-sidebar .app-nav-item > .pa")].filter(shown).length,
+          headFaces: [...document.querySelectorAll(".conv-head-faces")].filter(shown).length,
+          memberFace: Math.max(0, ...[...document.querySelectorAll(".sp-side .sp-member > .pa")].map((e) => e.getBoundingClientRect().width)),
+          mushrooms: [...document.querySelectorAll("svg.work-sprite")].filter((e) => e.getBoundingClientRect().width > 12).length,
+        };
+      });
+      if (look.sideFaces) throw new Error("清爽模式下侧栏不该有头像");
+      if (look.headFaces) throw new Error("清爽模式下会话标题不该有头像");
+      if (look.memberFace > 12) throw new Error(`清爽模式下成员栏只留状态点，实际宽 ${look.memberFace}px`);
+      if (look.mushrooms) throw new Error("清爽模式下不该有走路的小蘑菇");
+      await settle(page, 300);
+      await shot(page, size, scheme, "clean-mode");
+      await style("标准");
+      if (await page.evaluate(() => document.documentElement.classList.contains("ui-clean"))) throw new Error("换回标准，装饰应回来");
+      await go(page, "官网改版", narrow);
+      if (!narrow) await page.locator(".app-sidebar .app-nav-item > .pa").first().waitFor({ timeout: 5_000 });
+    });
+
     // A task the node accepted long ago and went quiet on may have lost its
     // result: the chat says so instead of spinning, and one click stops it
     // and sends the same message again.
