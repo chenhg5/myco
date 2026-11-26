@@ -63,11 +63,12 @@ func TestElementEvidenceUsesPassiveCDPWithoutWaitingForRAF(t *testing.T) {
 // Reject any access to Rod's shared window/helper machinery. A recorder's
 // background evidence must remain passive even while its actor navigates.
 type recordingEvidenceClient struct {
+	events chan *cdp.Event
 	calls  []string
 	target bool
 }
 
-func (c *recordingEvidenceClient) Event() <-chan *cdp.Event { return nil }
+func (c *recordingEvidenceClient) Event() <-chan *cdp.Event { return c.events }
 func (c *recordingEvidenceClient) Call(_ context.Context, _ string, method string, params any) ([]byte, error) {
 	c.calls = append(c.calls, method)
 	switch method {
@@ -102,7 +103,8 @@ func (c *recordingEvidenceClient) Call(_ context.Context, _ string, method strin
 func TestRecordingEvidenceDoesNotUseRodJSContextOrHelpers(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	wire := &recordingEvidenceClient{}
+	wire := &recordingEvidenceClient{events: make(chan *cdp.Event)}
+	defer close(wire.events)
 	browser := rod.New().Context(ctx).ControlURL("").Client(wire).NoDefaultDevice()
 	if err := browser.Connect(); err != nil {
 		t.Fatal(err)
