@@ -38,7 +38,7 @@ const Name = "machine"
 // SpawnableCLIs are the agent CLIs a machine node can start (they all keep
 // sessions, so the new agent resumes the same conversation every time).
 var SpawnableCLIs = []string{"claude", "codex", "pi", "kiro", "cursor", "gemini", "opencode",
-	"qoder", "qwen", "kimi", "goose", "copilot", "auggie", "codebuddy", "kilo", "cline", "grok", "antigravity"}
+	"qoder", "qwen", "kimi", "goose", "copilot", "auggie", "codebuddy", "kilo", "cline", "grok", "antigravity", "atomcode"}
 
 // ExecCLI adds a shell node (harness exec): each message from its allowed
 // senders is a command run in its folder. It has no session.
