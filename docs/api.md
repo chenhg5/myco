@@ -561,7 +561,7 @@ mapping, and the host registers only capabilities its installed component suppor
 | `browser.run.cancel` | `browser.run` | `{run_id}` |
 
 Live browser control adds six v1 actions when the component advertises
-`agent_control`. They require the independently approved `browser.control`
+`agent_control`, plus replay when it also advertises `agent_replay`. They require the independently approved `browser.control`
 permission on the exact machine and browser profile. Grants last at most 30
 minutes. The browser opens visibly so the owner can watch and stop it.
 
@@ -588,6 +588,55 @@ and in the controller App.
 | `browser.page.extract` | `{session,tab?,ref,what,attr?}` | Extracted text |
 | `browser.page.screenshot` | `{session,tab?,ref?,clip?,full?}` | Screenshot metadata and a private job artifact |
 | `browser.page.close` | `{session}` | `steps,removed,next,done:true,reason:"closed"` |
+| `browser.page.run` | `{session,graph:{nodes,edges},tab?,timeout_ms?}` | `ok,state,error_node?,error?,steps,output,url,tabs` |
+
+`browser.page.run` verifies a literal draft in the same live session, under the
+same grant, profile, agent and allowed hosts. It does not need an approved M2
+script version. Both the App and component must support replay; older components
+keep the original six actions. Replaying does not add steps to the manual draft,
+and invalidates earlier refs before and after execution. To test a closed draft,
+open a new session, prepend a `navigate` node with the returned `start_url`, and
+connect the unchanged returned steps in linear order.
+
+A replay graph has 1–200 unique nodes, at most 192 KiB of JSON, one linear start,
+and no disconnected nodes, cycles or branches. Node fields `pos`, `title`,
+`timeout_ms` and `on_error` are accepted. `on_error` permits `stop`, `skip` or
+`retry:1` through `retry:5`; ambiguous outcomes and scope/session failures always
+stop. Retrying a website operation can repeat its effects: use it deliberately.
+Allowed node types are `navigate`, `back`, `forward`, `reload`, `click`, `type`,
+`select`, `press`, `hover`, `scroll`, `wait`, `assert`, `extract`, `screenshot`,
+`tab`, `dialog` and `note`. Locators use `testid`, `role`, `label`, `placeholder`,
+`text`, `css` or `xpath`, with the draft's frame/shadow paths. Clicks use the left
+button with optional count 2. Assertions support visible/hidden/text/URL;
+extraction supports text/attribute/HTML/table with sensitive content redacted.
+Waits support element/network/URL/time (1–60000 milliseconds), not downloads.
+Tabs support popup/new/opener/index/close. JavaScript, expression assertions,
+uploads, child flows, loops, branches, confirms, parameters, `code` fields and
+any decoded `${` in keys or values are refused before any node executes.
+
+The default total replay deadline is 300000 milliseconds; `timeout_ms` may
+shorten it, and the job/grant deadline always wins. Per-node timeouts and retries
+remain inside that deadline. A running replay counts as activity for the
+five-minute idle timer; owner stop and grant expiry still cancel it. Other
+session operations return `busy` during replay. Sensitive typing, disallowed
+navigation/popups/redirects and screenshot masking follow live control rules.
+
+An executed replay returns `state:"succeeded"` or `state:"failed"`, with
+`steps:[{node,state:"ok"|"failed"|"skipped",ms,error?}]`. A failed node includes
+`error_node` and a safe `error:{code,message,retryable,reason?}`; earlier effects
+may already have happened. The outer job succeeds when this confirmed envelope
+is received. Preflight, authorization and session errors use the usual failed-job
+path; validation can include optional `error_node` in the HTTP/CLI error too.
+A transport loss becomes `outcome_unknown`: inspect the page, and do not submit
+the same graph under a fresh idempotency key automatically. The native component
+retains same-request outcomes while the session remains valid.
+
+`output` contains values named by nodes' `into`, bounded to 16 KiB, with strings
+clipped to 2000 characters and `truncated:true` when entries cannot fit. A screenshot
+node with `into` returns `{artifact_id,image}` and adds that private artifact to
+the job's `artifacts`; it never exposes a component artifact ID or public URL.
+Screenshot nodes without `into` have no output value. The action argument envelope
+allows 256 KiB for replay only; the graph's 192 KiB limit still applies.
 
 Operations are limited to `navigate`, `click`, `dblclick`, `hover`, `type`, `select`,
 `press`, `scroll`, `back`, `forward`, `reload`, `switch_tab`, `close_tab`,
@@ -623,7 +672,7 @@ The Hub audits the action, host and time once per job. The detail records
 was retained. Request arguments, page contents and image bytes stay out of
 the audit log.
 
-Shared page records are **not** approval. The desktop executes only the immutable
+For `browser.script.run`, shared page records are **not** approval. The desktop executes only the immutable
 script version and child-script snapshots the computer's owner reviewed and
 approved locally for that profile. An absent, revoked or mismatching version is
 `permission_denied`; the host never fetches a newer shared script as a fallback.

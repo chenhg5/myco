@@ -8,7 +8,7 @@ func BrowserActionPermission(name string) string {
 		return "browser.view"
 	case "browser.script.run", "browser.run.resume", "browser.run.cancel":
 		return "browser.run"
-	case "browser.page.open", "browser.page.snapshot", "browser.page.act", "browser.page.extract", "browser.page.screenshot", "browser.page.close":
+	case "browser.page.open", "browser.page.snapshot", "browser.page.act", "browser.page.extract", "browser.page.screenshot", "browser.page.close", "browser.page.run":
 		return BrowserControlPermission
 	default:
 		return ""

@@ -100,6 +100,28 @@ The six operation bodies and their additional fields are:
 | `screenshot` | `session`, `tab?`, at most one of `ref`, `clip`, `full` |
 | `close` | `session`, desktop-only `reason?` |
 
+Components additionally advertising `agent_replay` offer `POST /control/run`.
+The body is `{request_id,session,graph:{nodes,edges},tab?,timeout_ms?}`. The
+trusted desktop advertises `browser.page.run` only with both features present.
+Protocol remains 1. Replay accepts literal recorded node JSON with common
+`pos`, `title`, `timeout_ms` and `on_error` fields; it preflights the entire graph
+before any browser operation. Limits are 200 nodes, 192 KiB, a single linear
+connected path, a 300000 ms total deadline capped by the grant, and 16 KiB output.
+See [the public action contract](../../docs/api.md#agent-actions) for the allowed
+node/locator variants and error policies. Executable nodes/locators, uploads,
+parameters, download waits and any `code` field or `${` string are refused.
+
+Replay uses the active control session, host enforcement, sensitive-field
+inspection and private screenshot masking. Only one operation may run at a time.
+It suppresses both manual and derived recording, invalidates earlier refs at
+entry/exit, and refreshes idle activity while running; owner stop or grant expiry
+still discards the draft and cancels execution. Same-request retries reuse the
+retained response. It returns `{ok,state,error_node?,error?,steps,output,url,tabs}`;
+confirmed node failures return HTTP 200 with `ok:false`. Preflight failures use
+HTTP 400 with optional `error_node`. Screenshot output named by `into` contains
+the usual native `screenshot` descriptor; the App replaces it with a private
+job `artifact_id` before returning to the agent. It never publishes image URLs.
+
 Unknown fields are rejected, including fields irrelevant to the selected
 operation. The `act` whitelist is:
 

@@ -1835,6 +1835,9 @@ func writeErr(w http.ResponseWriter, err error) {
 	var ce *client.Error
 	if errors.As(err, &ce) {
 		body = map[string]string{"error": ce.Code, "message": ce.Message}
+		if ce.ErrorNode != "" {
+			body["error_node"] = ce.ErrorNode
+		}
 		if ce.Suggestion != "" {
 			body["suggestion"] = ce.Suggestion
 		}

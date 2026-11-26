@@ -52,6 +52,7 @@ function(op,arg) {
     if(!option)return {error:'target_not_found'};
     el.value=option.value;el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));return {ok:true};
   }
+  if(op==='scroll_position')return {y:el.scrollTop};
   if(op==='scroll'){el.scrollBy(0,arg);return {ok:true};}
   if(op==='safe_document') {
     const scan=root=>{for(const n of root.querySelectorAll('*')){if(n.id==='__myco_recording_panel__')continue;if(sensitive(n))return false;if(n.shadowRoot&&!scan(n.shadowRoot))return false;}return true;};
@@ -68,10 +69,28 @@ function(op,arg) {
     const clone=original.cloneNode(true);
     for(const n of descendants(clone)) {
       if(n.nodeType!==1)continue;
-      if(sensitive(n)||n.id==='__myco_recording_panel__'){n.replaceWith(document.createTextNode('[redacted]'));continue;}
+      if(sensitive(n)||n.id==='__myco_recording_panel__'){
+        if(arg.what==='table'&&n.matches('td,th')){n.replaceChildren(document.createTextNode('[redacted]'));for(const a of [...n.attributes])n.removeAttribute(a.name);}
+        else n.replaceWith(document.createTextNode('[redacted]'));
+        continue;
+      }
       if(n.matches('script,style,iframe,object,embed')){n.remove();continue;}
       if(n.matches('input,textarea,select')){n.removeAttribute('value');n.textContent='';}
       for(const a of [...n.attributes])if(/^(?:on.*|srcdoc|value)$/i.test(a.name))n.removeAttribute(a.name);
+    }
+    if(arg.what==='table'){
+      const data=[],encoder=new TextEncoder();let budget=12000,full=false;
+      for(const row of [...clone.querySelectorAll('tr')].slice(0,200)){
+        const cells=[];
+        for(const cell of [...row.querySelectorAll('th,td')].slice(0,100)){
+          let text=(cell.textContent||'').slice(0,2000),cost=encoder.encode(JSON.stringify(text)).length+2;
+          if(cost>budget){text='[truncated]';cost=15;full=true;}
+          if(cost<=budget){cells.push(text);budget-=cost;}
+          if(full)break;
+        }
+        data.push(cells);if(full||budget<16)break;
+      }
+      return {data};
     }
     return {text:String(arg.what==='html'?(clone.outerHTML||clone.textContent):clone.textContent||'').slice(0,49152)};
   }

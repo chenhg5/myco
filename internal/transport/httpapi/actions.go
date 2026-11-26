@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
@@ -145,6 +146,17 @@ func (s *Server) runAction(w http.ResponseWriter, r *http.Request, a *domain.Age
 		return
 	}
 	if dryRun(r) {
+		if inv.Action == "browser.page.run" {
+			if _, err := api.DecodeBrowserControlArgs(inv.Action, inv.Args); err != nil {
+				failure := domain.Errf(domain.CodeInvalidArgument, "%s", err.Error())
+				var graphError *api.BrowserReplayValidationError
+				if errors.As(err, &graphError) {
+					failure = failure.WithErrorNode(graphError.Node)
+				}
+				writeError(w, failure)
+				return
+			}
+		}
 		writeJSON(w, http.StatusOK, map[string]any{"dry_run": true, "invocation": inv})
 		return
 	}

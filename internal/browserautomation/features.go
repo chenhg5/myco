@@ -96,6 +96,9 @@ func requireBrowserFeatures(ctx context.Context, hc *http.Client, address, secre
 // Keep the preflight tied to the very same process endpoint/credential as the
 // run POST; checking c.Call recursively could race a component replacement.
 func browserRunPreflight(method, path string, raw []byte) []string {
+	if method == http.MethodPost && path == "/control/run" {
+		return []string{"agent_control", "agent_replay"}
+	}
 	if method != http.MethodPost || path != "/runs" || len(bytes.TrimSpace(raw)) == 0 {
 		return nil
 	}

@@ -24,6 +24,7 @@ import (
 
 // Error is a structured API or transport error.
 type Error struct {
+	ErrorNode  string
 	Status     int    // HTTP status; 0 for transport errors
 	Code       string // api error code, or "unavailable"/"timeout"
 	Message    string
@@ -194,7 +195,7 @@ func decodeError(status int, data []byte) error {
 			Suggestion: "the hub or its proxy may be restarting; retry shortly"}
 	}
 	return &Error{Status: status, Code: ae.Code, Message: ae.Message, Suggestion: ae.Suggestion,
-		Retryable: ae.Retryable || status >= 500}
+		Retryable: ae.Retryable || status >= 500, ErrorNode: ae.ErrorNode}
 }
 
 func dryQuery(dry bool) url.Values {
