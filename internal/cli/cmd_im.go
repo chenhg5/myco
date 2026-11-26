@@ -3,8 +3,6 @@ package cli
 import (
 	"bufio"
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"log/slog"
@@ -40,7 +38,7 @@ The bot speaks as a node of yours on the hub (im-<name>, receiving through its
 inbox). It connects out to the chat app (Feishu long connection, Slack Socket
 Mode): no public address is needed. This machine's runner service serves the
 bridges configured here; myco im serve runs them in the foreground.`}
-	g.Add(imConnectCommand(), imServeCommand(), imListCommand(), imAllowCommand(), imSetCommand(), imRemoveCommand())
+	g.Add(imConnectCommand(), imServeCommand(), imListCommand(), imAllowCommand(), imSetCommand(), imClaimCommand(), imRemoveCommand())
 	return g
 }
 
@@ -162,7 +160,7 @@ func imConnectCommand() *Command {
 				check = imslack.New(bot, app, nil).Check
 			}
 			if cfg.Owner == "" {
-				cfg.Claim = newClaimCode()
+				cfg.NewClaim(time.Now())
 			}
 			cctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 			botName, err := check(cctx)
@@ -258,12 +256,6 @@ func readSecretFile(path, flag string) (string, error) {
 		return "", errorf("not_found", ExitNotFound, "", "reading %s: %v", flag, err)
 	}
 	return strings.TrimSpace(string(b)), nil
-}
-
-func newClaimCode() string {
-	b := make([]byte, 4)
-	_, _ = rand.Read(b)
-	return hex.EncodeToString(b)
 }
 
 // bridgeNode creates (or reuses) the node a bridge speaks as and returns its
@@ -592,6 +584,35 @@ func imSetCommand() *Command {
 			}
 			return e.p.Print(c.Redacted(), func(w io.Writer) {
 				fmt.Fprintf(w, "%s: project=%s lang=%s (a running bridge picks this up within seconds)\n", c.Name, orDash(c.Project), orDash(c.Lang))
+			})
+		}),
+	}
+}
+
+func imClaimCommand() *Command {
+	return &Command{Name: "claim", Summary: "Make a new claim code for a bot that has no owner yet (the old one stops working)", Mutating: true,
+		Long: `A bot connected without a QR scan (Slack, or Feishu with --app-id) gets its
+owner by "/claim <code>" sent to it in a direct message. A code lasts 24 hours
+and allows 5 wrong tries; this makes a new one.`,
+		Examples: []string{"myco im claim --name slack-coder"},
+		Flags:    []Flag{{Name: "name", Kind: String, Required: true, Help: "Bridge name"}},
+		Run: handler(func(e *env) error {
+			c, err := e.loadBridge()
+			if err != nil {
+				return err
+			}
+			if c.Owner != "" {
+				return errorf("conflict", ExitConflict, "remove the bridge and connect it again to change its owner", "bridge %s already has an owner", c.Name)
+			}
+			if e.in.Bool("dry-run") {
+				return e.dryRun(map[string]any{"action": "im claim", "bridge": c.Name})
+			}
+			code := c.NewClaim(time.Now())
+			if err := im.Save(e.imDir(), c); err != nil {
+				return err
+			}
+			return e.p.Print(map[string]any{"name": c.Name, "claim": code, "expires_at": c.ClaimExpires}, func(w io.Writer) {
+				fmt.Fprintf(w, "send this to the bot in a direct message within 24 hours: /claim %s\n", code)
 			})
 		}),
 	}

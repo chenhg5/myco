@@ -1,6 +1,8 @@
 package im
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +11,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 )
 
 // Config is one bridge: a bot on one chat app, and the myco node it speaks as.
@@ -36,8 +39,11 @@ type Config struct {
 	// Profile is the myco config file of the node it speaks as.
 	Profile string `json:"profile"`
 	// Claim, while there is no owner, is the code that makes whoever sends
-	// "/claim <code>" to the bot its owner.
-	Claim string `json:"claim,omitempty"`
+	// "/claim <code>" to the bot its owner: until ClaimExpires, and only
+	// while fewer than MaxClaimFails wrong codes were tried.
+	Claim        string    `json:"claim,omitempty"`
+	ClaimExpires time.Time `json:"claim_expires,omitempty"`
+	ClaimFails   int       `json:"claim_fails,omitempty"`
 	// Lang is the language the bot speaks: zh or en (default by platform).
 	Lang string `json:"lang,omitempty"`
 }
@@ -47,9 +53,30 @@ func (c Config) Redacted() map[string]any {
 	set := func(s string) bool { return s != "" }
 	return map[string]any{
 		"name": c.Name, "platform": c.Platform, "app_id": c.AppID, "owner": c.Owner,
-		"allow_from": c.AllowFrom, "agent": c.Agent, "lang": c.Lang, "claim_pending": c.Owner == "" && c.Claim != "", "project": c.Project, "profile": c.Profile,
+		"allow_from": c.AllowFrom, "agent": c.Agent, "lang": c.Lang, "claim_pending": c.ClaimUsable(time.Now()), "claim_expired": c.Owner == "" && !c.ClaimUsable(time.Now()), "project": c.Project, "profile": c.Profile,
 		"has_app_secret": set(c.AppSecret), "has_bot_token": set(c.BotToken), "has_app_token": set(c.AppToken),
 	}
+}
+
+// A claim code lasts a day and allows a few wrong tries.
+const (
+	ClaimTTL      = 24 * time.Hour
+	MaxClaimFails = 5
+)
+
+// NewClaim gives the bridge a fresh claim code (no owner yet, or a lost one
+// to be claimed again), valid for ClaimTTL.
+func (c *Config) NewClaim(now time.Time) string {
+	b := make([]byte, 5)
+	_, _ = rand.Read(b)
+	c.Claim, c.ClaimExpires, c.ClaimFails = hex.EncodeToString(b), now.Add(ClaimTTL), 0
+	return c.Claim
+}
+
+// ClaimUsable says whether the claim code still works.
+func (c Config) ClaimUsable(now time.Time) bool {
+	return c.Owner == "" && c.Claim != "" && c.ClaimFails < MaxClaimFails &&
+		(c.ClaimExpires.IsZero() || now.Before(c.ClaimExpires))
 }
 
 // Allowed says whether a chat-app user may give tasks through the bridge.

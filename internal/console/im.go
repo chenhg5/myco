@@ -15,6 +15,7 @@ package console
 //	GET    /app/im/feishu/{id}        {state: waiting|connecting|done|failed, error?, bridge?}
 //	DELETE /app/im/feishu/{id}        stop waiting for the scan
 //	POST   /app/im/slack              {hub_id, agent, bot_token, app_token} → {bridge}
+//	POST   /app/im/{name}/claim       a new claim code (the old one stops working) → {claim}
 //	DELETE /app/im/{name}
 
 import (
@@ -47,6 +48,7 @@ func (b *Backend) imRoutes(m *http.ServeMux) {
 	m.HandleFunc("GET /app/im/feishu/{id}", b.getIMFeishu)
 	m.HandleFunc("DELETE /app/im/feishu/{id}", b.deleteIMFeishu)
 	m.HandleFunc("POST /app/im/slack", b.postIMSlack)
+	m.HandleFunc("POST /app/im/{name}/claim", b.postIMClaim)
 	m.HandleFunc("DELETE /app/im/{name}", b.deleteIM)
 }
 
@@ -57,10 +59,12 @@ type IMBridge struct {
 	Agent    string `json:"agent,omitempty"`
 	Owner    bool   `json:"has_owner"`
 	// Claim: no owner yet; send "/claim <code>" to the bot to become it.
-	Claim  string `json:"claim,omitempty"`
-	Node   string `json:"node,omitempty"`
-	Hub    string `json:"hub,omitempty"`
-	Online bool   `json:"online"`
+	// ClaimExpired: no owner, and its code no longer works (make a new one).
+	Claim        string `json:"claim,omitempty"`
+	ClaimExpired bool   `json:"claim_expired,omitempty"`
+	Node         string `json:"node,omitempty"`
+	Hub          string `json:"hub,omitempty"`
+	Online       bool   `json:"online"`
 }
 
 // imScan is a QR code being scanned.
@@ -99,6 +103,7 @@ func (b *Backend) imList(ctx context.Context) ([]IMBridge, error) {
 			Agent    string `json:"agent"`
 			Owner    string `json:"owner"`
 			Claim    bool   `json:"claim_pending"`
+			Expired  bool   `json:"claim_expired"`
 			Node     string `json:"node"`
 			Hub      string `json:"hub"`
 			Online   bool   `json:"online"`
@@ -111,7 +116,7 @@ func (b *Backend) imList(ctx context.Context) ([]IMBridge, error) {
 	}
 	var list []IMBridge
 	for _, r := range res.Bridges {
-		br := IMBridge{Name: r.Name, Platform: r.Platform, Agent: r.Agent, Owner: r.Owner != "", Node: r.Node, Hub: r.Hub, Online: r.Online}
+		br := IMBridge{Name: r.Name, Platform: r.Platform, Agent: r.Agent, Owner: r.Owner != "", Node: r.Node, Hub: r.Hub, Online: r.Online, ClaimExpired: r.Expired}
 		if r.Claim && res.Dir != "" {
 			// The code is on this computer only, for its owner to send.
 			if c, err := im.Load(res.Dir, r.Name); err == nil {
@@ -296,6 +301,24 @@ func (b *Backend) postIMSlack(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"bridge": br})
+}
+
+func (b *Backend) postIMClaim(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if !im.ValidName(name) {
+		writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument", Message: "invalid bridge name"})
+		return
+	}
+	out, err := b.imRun(r.Context(), "claim", "--name", name)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	var res struct {
+		Claim string `json:"claim"`
+	}
+	_ = json.Unmarshal(out, &res)
+	writeJSON(w, http.StatusOK, map[string]any{"name": name, "claim": res.Claim})
 }
 
 func (b *Backend) deleteIM(w http.ResponseWriter, r *http.Request) {

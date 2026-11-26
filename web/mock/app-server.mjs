@@ -3166,6 +3166,11 @@ const server = http.createServer(async (req, res) => {
       imBridges.push(b);
       return send(res, 200, { bridge: b });
     }
+    if (parts.length === 4 && parts[3] === "claim" && method === "POST") {
+      const b = imBridges.find((x) => x.name === parts[2]);
+      if (b) { b.claim = "5e6f7a8b9c"; b.claim_expired = false; }
+      return send(res, 200, { name: parts[2], claim: "5e6f7a8b9c" });
+    }
     if (parts.length === 3 && method === "DELETE") {
       imBridges = imBridges.filter((x) => x.name !== parts[2]);
       return send(res, 200, { removed: parts[2] });

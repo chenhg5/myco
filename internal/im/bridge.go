@@ -2,6 +2,7 @@ package im
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"log/slog"
 	"strings"
@@ -289,12 +290,28 @@ func (b *Bridge) claim(ctx context.Context, in Inbound, ref Ref) bool {
 		b.say(ctx, ref, b.t("unclaimed"))
 		return true
 	}
-	if b.cfg.Claim == "" || cmd.arg != b.cfg.Claim {
-		b.say(ctx, ref, b.t("bad_claim"))
+	if !b.cfg.ClaimUsable(time.Now()) {
+		b.say(ctx, ref, b.t("claim_gone"))
+		return true
+	}
+	if subtle.ConstantTimeCompare([]byte(cmd.arg), []byte(b.cfg.Claim)) != 1 {
+		cfg := b.cfg
+		cfg.ClaimFails++
+		if b.OnConfig != nil {
+			if err := b.OnConfig(cfg); err != nil {
+				b.log.Warn("im: saving a failed claim", "err", err)
+			}
+		}
+		b.cfg = cfg
+		if cfg.ClaimUsable(time.Now()) {
+			b.say(ctx, ref, b.t("bad_claim"))
+		} else {
+			b.say(ctx, ref, b.t("claim_gone"))
+		}
 		return true
 	}
 	cfg := b.cfg
-	cfg.Owner, cfg.Claim = in.UserID, ""
+	cfg.Owner, cfg.Claim, cfg.ClaimExpires, cfg.ClaimFails = in.UserID, "", time.Time{}, 0
 	if b.OnConfig != nil {
 		if err := b.OnConfig(cfg); err != nil {
 			b.say(ctx, ref, b.t("send_failed", "config", err.Error()))

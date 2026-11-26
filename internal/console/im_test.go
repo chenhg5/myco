@@ -39,6 +39,8 @@ func TestIMBridges(t *testing.T) {
 			}
 			secret = string(b)
 			return []byte(`{"bridge":{"name":"slack-coder","platform":"slack","agent":"coder","owner":""}}`), nil
+		case cmd == "im claim --name slack-coder":
+			return []byte(`{"name":"slack-coder","claim":"0a1b2c3d4e"}`), nil
 		case strings.HasPrefix(cmd, "im remove"):
 			return []byte(`{}`), nil
 		}
@@ -80,6 +82,9 @@ func TestIMBridges(t *testing.T) {
 	}
 	if code, _, _ := r.do("POST", "/app/im/slack", map[string]string{"hub_id": hubID, "bot_token": "xoxb-1", "app_token": "xapp-1"}); code != 400 {
 		t.Fatalf("no agent: %d", code)
+	}
+	if code, m, raw := r.do("POST", "/app/im/slack-coder/claim", nil); code != 200 || m["claim"] != "0a1b2c3d4e" {
+		t.Fatalf("new claim: %d %s", code, raw)
 	}
 	if code, _, _ := r.do("DELETE", "/app/im/Bad..Name", nil); code != 400 {
 		t.Fatalf("bad name: %d", code)
