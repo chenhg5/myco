@@ -112,6 +112,10 @@ func (c *timedConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.
 	return &timedTx{Tx: tx, t: c.t, name: statementName("COMMIT")}, nil
 }
 
+// clock times statements (tests replace it: Windows' clock can be too
+// coarse to see a fast statement take any time).
+var clock = time.Now
+
 // statementHook, set by tests, sees each statement a timed connection runs.
 var statementHook func(query string, args []driver.NamedValue)
 
@@ -119,9 +123,9 @@ func (c *timedConn) ExecContext(ctx context.Context, query string, args []driver
 	if statementHook != nil {
 		statementHook(query, args)
 	}
-	start := time.Now()
+	start := clock()
 	res, err := c.Conn.(driver.ExecerContext).ExecContext(ctx, query, args)
-	c.t.exec(query, time.Since(start), res, err)
+	c.t.exec(query, clock().Sub(start), res, err)
 	return res, err
 }
 
@@ -129,9 +133,9 @@ func (c *timedConn) QueryContext(ctx context.Context, query string, args []drive
 	if statementHook != nil {
 		statementHook(query, args)
 	}
-	start := time.Now()
+	start := clock()
 	rows, err := c.Conn.(driver.QueryerContext).QueryContext(ctx, query, args)
-	return c.t.rows(query, time.Since(start), rows, err)
+	return c.t.rows(query, clock().Sub(start), rows, err)
 }
 
 func (c *timedConn) Ping(ctx context.Context) error { return c.Conn.(driver.Pinger).Ping(ctx) }
@@ -164,16 +168,16 @@ type timedStmt struct {
 }
 
 func (s *timedStmt) ExecContext(ctx context.Context, args []driver.NamedValue) (driver.Result, error) {
-	start := time.Now()
+	start := clock()
 	res, err := s.Stmt.(driver.StmtExecContext).ExecContext(ctx, args)
-	s.t.exec(s.query, time.Since(start), res, err)
+	s.t.exec(s.query, clock().Sub(start), res, err)
 	return res, err
 }
 
 func (s *timedStmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driver.Rows, error) {
-	start := time.Now()
+	start := clock()
 	rows, err := s.Stmt.(driver.StmtQueryContext).QueryContext(ctx, args)
-	return s.t.rows(s.query, time.Since(start), rows, err)
+	return s.t.rows(s.query, clock().Sub(start), rows, err)
 }
 
 type timedTx struct {
@@ -183,9 +187,9 @@ type timedTx struct {
 }
 
 func (x *timedTx) Commit() error {
-	start := time.Now()
+	start := clock()
 	err := x.Tx.Commit()
-	x.t.done(x.name, time.Since(start), 0)
+	x.t.done(x.name, clock().Sub(start), 0)
 	return err
 }
 
@@ -201,9 +205,9 @@ type timedRows struct {
 }
 
 func (r *timedRows) Next(dest []driver.Value) error {
-	start := time.Now()
+	start := clock()
 	err := r.Rows.Next(dest)
-	r.d += time.Since(start)
+	r.d += clock().Sub(start)
 	if err == nil {
 		r.n++
 	}
