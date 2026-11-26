@@ -570,6 +570,42 @@ async function runMatrix(browser, size, scheme) {
       }
       await settle(page);
       await shot(page, size, scheme, "project-home");
+      // A card right after your own message keeps clear of the time and
+      // buttons that float under your bubble while the pointer is on it.
+      // (A card as it would come there: a copy of one, put after your last
+      // message, then taken out again.)
+      const placed = await page.evaluate(() => {
+        const tl = document.querySelector(".sp-home .conv-timeline");
+        // (one whose time floats: shown only with the pointer on it)
+        const me = [...(tl?.querySelectorAll(":scope > .conv-msg.is-me") || [])].filter((m) => m.querySelector(":scope > .conv-msg-meta:not(.is-shown)")).pop();
+        const card = tl?.querySelector(":scope > .handoff");
+        if (!me || !card) return false;
+        const copy = card.cloneNode(true);
+        copy.setAttribute("data-smoke-copy", "1");
+        me.after(copy);
+        me.setAttribute("data-smoke-me", "1");
+        return true;
+      });
+      if (placed) {
+        try {
+          const me = page.locator(".sp-home [data-smoke-me] .conv-bubble").first();
+          await me.scrollIntoViewIfNeeded();
+          await me.hover();
+          await settle(page, 250);
+          const clear = await page.evaluate(() => {
+            const meta = document.querySelector(".sp-home [data-smoke-me] .conv-msg-meta");
+            const card = document.querySelector(".sp-home [data-smoke-copy]");
+            return meta && card ? Math.round(card.getBoundingClientRect().top - meta.getBoundingClientRect().bottom) : null;
+          });
+          if (clear === null || clear < 6) throw new Error(`你的消息后面紧跟卡片时，时间和按钮下面应留出空隙，实际只有 ${clear}px`);
+        } finally {
+          await page.evaluate(() => {
+            document.querySelector(".sp-home [data-smoke-copy]")?.remove();
+            document.querySelector(".sp-home [data-smoke-me]")?.removeAttribute("data-smoke-me");
+          });
+          await page.mouse.move(0, 0);
+        }
+      }
     });
 
     // A link in a chat opens in the default browser (the desktop app's web
