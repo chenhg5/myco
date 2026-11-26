@@ -269,6 +269,8 @@ function watchPage(page, size, scheme) {
     // On purpose: Claude on this computer cannot sign in until a way is
     // picked (添加 agent: the sign-in card, then it starts).
     if (msg.text().includes("502") && where.includes("/machines/m_studio/spawn")) return;
+    // On purpose: 设置 · 模型供应商 tests a wrong key (the vendor says 401).
+    if (msg.text().includes("502") && /\/providers\/test$/.test(where.replace(/:\d+:\d+$/, ""))) return;
     // On purpose: 单聊 · 网络不好 cuts the chat's polls off.
     if (msg.text().includes("ERR_FAILED") && /\/(exchanges|thread)\b/.test(where)) return;
     // On purpose: a page asks before it uses this computer (网页 · 用电脑前先问:
@@ -5193,6 +5195,106 @@ async function runMatrix(browser, size, scheme) {
         if (!(await row.innerText()).includes("升级它那台电脑上的 myco")) throw new Error("老 runner 应提示升级那台电脑上的 myco");
         await page.keyboard.press("Escape");
       }
+    });
+
+    // 模型供应商 (i115): kept in the workspace, keys sealed for the member's
+    // own devices; added and tested in Settings, given to an agent from its
+    // provider row, a new key pushed, and deleted with what that means.
+    await step("设置 · 模型供应商", async () => {
+      const mock = `http://${HOST}:${mockPort()}`;
+      const setE2E = (on) => fetch(`${mock}/app/hubs/hub_studio/settings`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ e2e: on }) });
+      const openSection = async () => {
+        await go(page, "设置", narrow);
+        await clickVisible(page, page.locator(".app-settings-tab", { hasText: "模型供应商" }));
+        await page.locator("[data-testid=providers]").waitFor({ timeout: 10_000 });
+      };
+      await setE2E(false);
+      await openSection();
+      await page.locator("[data-testid=providers-e2e-off]").waitFor({ timeout: 10_000 });
+      if (!(await page.locator("[data-testid=providers-add]").isDisabled())) throw new Error("没开端到端加密时不该能新增");
+      await settle(page, 200);
+      await shot(page, size, scheme, "settings-providers-e2e-off");
+      await setE2E(true);
+      await go(page, "成员", narrow);
+      await openSection();
+      await page.locator("[data-testid=providers-e2e-off]").waitFor({ state: "hidden", timeout: 10_000 });
+      await clickVisible(page, page.locator("[data-testid=providers-add]"));
+      const dlg = page.locator(".app-modal", { has: page.locator("[data-testid=provider-vendors]") });
+      await dlg.waitFor({ timeout: 5_000 });
+      if (!(await dlg.locator("[data-testid=provider-vendors]").innerText()).includes("OpenCode Go")) throw new Error("应列出内置的供应商");
+      await dlg.locator("[data-testid=provider-api-key]").fill("mm-test-key-wrong-1234");
+      await clickVisible(page, dlg.locator("[data-testid=provider-test]"));
+      await dlg.locator(".app-error-text", { hasText: "HTTP 401" }).first().waitFor({ timeout: 5_000 });
+      await dlg.locator("[data-testid=provider-api-key]").fill("mm-test-key-1234abcd");
+      await clickVisible(page, dlg.locator("[data-testid=provider-test]"));
+      await dlg.locator("[data-testid=provider-tested]", { hasText: "读到 2 个模型" }).waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "settings-provider-add");
+      await clickVisible(page, dlg.locator("[data-testid=provider-save-workspace]"));
+      await dlg.waitFor({ state: "hidden", timeout: 5_000 });
+      const row = page.locator("[data-testid^=provider-prv_]").first();
+      await row.waitFor({ timeout: 5_000 });
+      if (!(await row.innerText()).includes("key ···abcd")) throw new Error(`应显示 key 的末四位，实际「${await row.innerText()}」`);
+      await clickVisible(page, row.getByRole("button", { name: "测试" }));
+      await page.locator("[data-testid=providers] .app-small-note", { hasText: "读到 2 个模型" }).waitFor({ timeout: 5_000 });
+      const pid = (await row.getAttribute("data-testid")).slice("provider-".length);
+      await settle(page, 200);
+      await shot(page, size, scheme, "settings-providers");
+
+      // An agent on another computer takes it, with one of its models.
+      await go(page, "成员", narrow);
+      await clickVisible(page, page.locator(".mb-card", { hasText: "MCP Claude" }).first());
+      await page.locator(".ms").waitFor({ timeout: 10_000 });
+      await clickVisible(page, page.locator(".ms .ms-fold"));
+      const prow = page.locator(".ms .app-kv", { has: page.locator(".app-kv-label", { hasText: /^服务商$/ }) });
+      await prow.waitFor({ timeout: 10_000 });
+      await clickVisible(page, prow.locator("[data-testid=provider-open]"));
+      const pdlg = page.locator(".app-modal", { has: page.locator("[data-testid=provider-options]") });
+      await pdlg.waitFor({ timeout: 5_000 });
+      await clickVisible(page, pdlg.locator(`[data-testid=provider-mine-${pid}]`));
+      await pdlg.locator("[data-testid=provider-mine-model] select").selectOption("MiniMax-M2");
+      await settle(page, 200);
+      await shot(page, size, scheme, "provider-mine");
+      await clickVisible(page, pdlg.locator("[data-testid=provider-save]"));
+      await pdlg.waitFor({ state: "hidden", timeout: 5_000 });
+      const sent = await (await fetch(`${mock}/app/mock/run-settings`)).json();
+      if (sent.last?.agent !== "mcp-claude" || sent.last.body.workspace !== pid || sent.last.body.model !== "MiniMax-M2") throw new Error(`应把供应商和模型发给它，实际 ${JSON.stringify(sent.last)}`);
+      await page.waitForFunction(() => (document.querySelector(".ms [data-testid=provider-open]")?.textContent || "").includes("MiniMax"), null, { timeout: 10_000 });
+      await page.keyboard.press("Escape");
+
+      // A new key: the agent has the older one; pushed from Settings.
+      await openSection();
+      await clickVisible(page, page.locator(`[data-testid=provider-${pid}]`).getByRole("button", { name: "编辑" }));
+      await dlg.waitFor({ timeout: 5_000 });
+      await dlg.locator("[data-testid=provider-api-key]").fill("mm-test-key-second-wxyz");
+      await clickVisible(page, dlg.locator("[data-testid=provider-save-workspace]"));
+      await dlg.waitFor({ state: "hidden", timeout: 5_000 });
+      await page.waitForTimeout(6_000); // the App reads the agents again on its next refresh
+      await openSection();
+      const pushBtn = page.locator(`[data-testid=provider-${pid}] [data-testid=provider-push]`);
+      await pushBtn.waitFor({ timeout: 15_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "settings-provider-push");
+      await clickVisible(page, pushBtn);
+      await page.locator("[data-testid=providers] .app-small-note", { hasText: "新 key 已发给 1 个 agent" }).waitFor({ timeout: 5_000 });
+
+      // Deleted: said how many agents use it first; the agent says so after.
+      await clickVisible(page, page.locator(`[data-testid=provider-${pid}]`).getByRole("button", { name: "删除" }));
+      const confirm = page.locator(".app-modal", { hasText: "1 个 agent 在用它" });
+      await confirm.waitFor({ timeout: 5_000 });
+      await clickVisible(page, confirm.getByRole("button", { name: "删除" }));
+      await page.locator(`[data-testid=provider-${pid}]`).waitFor({ state: "hidden", timeout: 5_000 });
+      await go(page, "成员", narrow);
+      await clickVisible(page, page.locator(".mb-card", { hasText: "MCP Claude" }).first());
+      await page.locator(".ms").waitFor({ timeout: 10_000 });
+      await clickVisible(page, page.locator(".ms .ms-fold"));
+      await page.locator(".ms [data-testid=provider-deleted]").waitFor({ timeout: 10_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "provider-deleted");
+      await page.keyboard.press("Escape");
+      // (the demo as it was, for the steps after)
+      await setE2E(false);
+      await fetch(`${mock}/app/mock/run-settings`, { method: "POST" });
     });
 
     await step("成员", async () => {

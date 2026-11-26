@@ -24,6 +24,7 @@ import { localWorkspaceOf } from "@/app/localHubs";
 import type { RuntimeAccess } from "@/api";
 import { L } from "@/lib/i18n";
 import { bytes, cn, timeAgo } from "@/lib/utils";
+import { useModelProviders, vendorName } from "@/app/ModelProviders";
 import { isSuperagent } from "@/app/superagentMark";
 
 /**
@@ -865,9 +866,15 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
   const [access, setAccess] = useState<RuntimeAccess>("workspace");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
+  // One of the member's model providers (i115): its key is sealed for that
+  // computer here, and its models are offered.
+  const [providerId, setProviderId] = useState("");
+  const mine = useModelProviders(hubId);
+  const myProviders = (mine.list?.e2e ? mine.list.providers : []).filter((p) => p.key_readable && (cli === "claude" ? p.anthropic_base : cli === "codex" ? p.openai_base : false));
+  const chosenProvider = myProviders.find((p) => p.id === providerId);
   useEffect(() => { if (open) setError(null); }, [open, machine.id]);
   // A model or effort picked for one CLI means nothing to another.
-  useEffect(() => { setModel(""); setEffort(""); }, [cli]);
+  useEffect(() => { setModel(""); setEffort(""); setProviderId(""); }, [cli]);
   // Folders allowed from here (AllowFolder) show at once.
   const [allowed, setAllowed] = useState<string[] | null>(null);
   useEffect(() => setAllowed(null), [machine.id]);
@@ -907,7 +914,8 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
     setError(null);
     try {
       const where = dir.trim() || autoFolder(role, cli, base);
-      const r = await appApi.spawn(hubId, machine.id, { cli, dir: where, access, ...(role.trim() ? { display_name: role.trim() } : {}) });
+      const r = await appApi.spawn(hubId, machine.id, { cli, dir: where, access, ...(role.trim() ? { display_name: role.trim() } : {}),
+        ...(chosenProvider ? { provider: chosenProvider.id, ...(model ? { model } : {}) } : {}) });
       // Model and effort go in its run settings, as the conversation's own
       // controls set them; an older workspace without them just keeps the defaults.
       if (model || effort) await appApi.setRunSettings(hubId, r.agent, { model, effort }).catch(() => undefined);
@@ -961,6 +969,24 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
           </div>
         </div>
       )}
+      {myProviders.length > 0 && (
+        <label className="app-field" data-testid="new-agent-provider">
+          <span className="app-field-label">{L("用哪个模型供应商", "Which model provider")}</span>
+          <select className="app-select-field" value={providerId} onChange={(e) => { setProviderId(e.target.value); setModel(""); }} disabled={!!busy}>
+            <option value="">{L(`「${machine.name}」自己的设置`, `“${machine.name}”'s own setting`)}</option>
+            {myProviders.map((p) => <option key={p.id} value={p.id}>{`${p.name} · ${vendorName(p.vendor)}`}</option>)}
+          </select>
+          {chosenProvider && (
+            <>
+              <select className="app-select-field" value={model} onChange={(e) => setModel(e.target.value)} disabled={!!busy} data-testid="new-agent-provider-model" style={{ marginTop: 6 }}>
+                <option value="">{L("它默认的模型", "Its default model")}</option>
+                {(chosenProvider.models || []).map((m) => <option key={m.id} value={m.id}>{m.name ? `${m.name} (${m.id})` : m.id}</option>)}
+              </select>
+              <span className="app-field-hint">{L(`key 在这台电脑上解开后再加密，只有「${machine.name}」能解开，写进那个 agent 自己的配置。`, `The key is opened here and sealed again for “${machine.name}” alone, which writes it to the new agent's own settings.`)}</span>
+            </>
+          )}
+        </label>
+      )}
       <label className="app-field">
         <span className="app-field-label">{autoDir ? L("在哪个文件夹干活（可以不填）", "Which folder it works in (optional)") : L("在哪个文件夹干活", "Which folder it works in")}</span>
         <input className="app-input mono" value={dir} onChange={(e) => setDir(e.target.value)} disabled={!!busy} required={!autoDir}
@@ -990,7 +1016,7 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
       <details className="app-advanced">
         <summary>{L("更多选项：模型、思考强度、权限", "More: model, effort, access")}<ChevronDown /></summary>
         <div className="app-advanced-body">
-          {(MODELS[cli] || offered?.length) && (
+          {!chosenProvider && (MODELS[cli] || offered?.length) && (
             <label className="app-field">
               <span className="app-field-label">{L("模型", "Model")}</span>
               <input className="app-input mono" list={`models-${cli}`} value={model} onChange={(e) => setModel(e.target.value.trim())} disabled={!!busy}
