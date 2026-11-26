@@ -209,6 +209,9 @@ removed. Iframes and subresources are outside this top-level scope.
 
 The draft budget is 200 steps and 192 KiB for serialized `steps`; operations
 reserve their logical step and any derived navigation or popup before dispatch.
+Approved `js` and `extract`-`js` script bodies can use `await`; Rod waits for
+their returned Promise. Syntax and runtime exceptions return `script_error`
+without the exception text or page content.
 Successful extraction and screenshots allocate shared `data1`, `data2`, ...
 variables. A voluntary close returns `steps`, `removed`, `next`, `done: true`,
 `reason: "closed"`, `profile` and `start_url`, and closes the browser process.
