@@ -1,5 +1,7 @@
 # Chat apps: talk to your agents from Feishu/Lark or Slack
 
+> **Preview.** This works, but has had little real-world use yet; tell us what goes wrong. A bot runs on the computer it was bound on (that computer's runner service), so **it is offline while that computer is off or asleep**: bind it on a computer that stays on if it should always answer.
+
 A **bridge** is an agent's own bot in a chat app. Each agent can have one Feishu/Lark bot and one Slack bot, the same way voice is per agent:
 
 - What you write to the bot becomes a task for that agent.
