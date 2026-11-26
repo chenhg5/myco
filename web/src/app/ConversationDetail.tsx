@@ -826,7 +826,24 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       h = nh;
     });
     ro.observe(el);
-    return () => { ro.disconnect(); el.removeEventListener("click", onClick, true); };
+    // The chat itself shorter or taller (a goal or watch bar, a notice or
+    // the plan coming at the top, the box you write in growing): what you
+    // read stays where it was, as far from the bottom as before, instead
+    // of being pushed up by what appeared above it.
+    let ch = sc.clientHeight;
+    let gap = sc.scrollHeight - sc.scrollTop - sc.clientHeight;
+    const onScroll = () => { gap = sc.scrollHeight - sc.scrollTop - sc.clientHeight; };
+    sc.addEventListener("scroll", onScroll, { passive: true });
+    const box = new ResizeObserver(() => {
+      const nc = sc.clientHeight;
+      if (nc === ch) return;
+      ch = nc;
+      if (restoring()) putBack(sc);
+      else if (atBottom.current) sc.scrollTop = sc.scrollHeight;
+      else sc.scrollTop = Math.max(0, sc.scrollHeight - sc.clientHeight - gap);
+    });
+    box.observe(sc);
+    return () => { ro.disconnect(); box.disconnect(); sc.removeEventListener("scroll", onScroll); el.removeEventListener("click", onClick, true); };
   }, [messages === null]);
 
   // Finding a message (ChatSearch): ⌘F in the chat last clicked in.
