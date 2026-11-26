@@ -348,7 +348,9 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, l)
 	}))
-	m.HandleFunc("GET /app/hubs/{id}/threads/{tid}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+	// (a chat's messages: more time than other reads, a far hub under load
+	// answers slowly rather than not at all)
+	m.HandleFunc("GET /app/hubs/{id}/threads/{tid}", b.withHubTimeout(chatReadTimeout, func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		if since, _ := strconv.ParseInt(r.URL.Query().Get("updated_since"), 10, 64); since > 0 {
 			// Only what changed (the hub says since when it could).
 			l, err := c.ThreadSince(r.Context(), r.PathValue("tid"), since)
@@ -1219,7 +1221,7 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, api.PeerList{Peers: ps})
 	}))
-	m.HandleFunc("GET /app/hubs/{id}/exchanges", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+	m.HandleFunc("GET /app/hubs/{id}/exchanges", b.withHubTimeout(chatReadTimeout, func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		q := r.URL.Query()
 		if since, _ := strconv.ParseInt(q.Get("updated_since"), 10, 64); since > 0 {
 			ex, err := c.ExchangesSince(r.Context(), q.Get("a"), q.Get("b"), since)
@@ -1462,6 +1464,11 @@ func (b *Backend) withHubAndHubTimeout(d time.Duration, h func(http.ResponseWrit
 // project had many members: past the 12-second default a change looked
 // failed (and went back in the App), and a new project did not show.
 const projectWriteTimeout = time.Minute
+
+// chatReadTimeout bounds reading a chat's messages (a page of an exchange,
+// a thread): longer than other reads, since the chat is what the person
+// opened and waits for.
+const chatReadTimeout = 30 * time.Second
 
 func (b *Backend) withHubTimeout(d time.Duration, h func(http.ResponseWriter, *http.Request, *client.Client)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

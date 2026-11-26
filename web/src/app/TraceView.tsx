@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Brain, Check, ChevronRight, FileText, Globe, Loader2, Pencil, Search, SquareTerminal, Wrench, X } from "lucide-react";
 import { appApi, isOldHub } from "@/appapi";
 import type { Attachment, Message, TraceEvent, TraceStep } from "@/api";
@@ -294,6 +294,29 @@ function usageLine(u?: TraceStep): string {
  * as one line that opens, as the runner reported them. Live while the task
  * runs: the newest steps say what it is doing now.
  */
+/** Whether an element has come near the chat's view (within a screen or
+ *  so of it, in its scroll box): a finished run's steps are fetched only
+ *  then, so opening a long chat asks the hub for the page, not for every
+ *  run on it. Once near, it stays so. */
+function useNear(): [(el: Element | null) => void, boolean] {
+  const [near, setNear] = useState(false);
+  const io = useRef<IntersectionObserver | null>(null);
+  const ref = useCallback((el: Element | null) => {
+    io.current?.disconnect();
+    io.current = null;
+    if (!el || near) return;
+    if (typeof IntersectionObserver === "undefined") { setNear(true); return; }
+    const root = el.closest(".conv-scroll");
+    const o = new IntersectionObserver((es) => {
+      if (es.some((e) => e.isIntersecting)) { setNear(true); o.disconnect(); }
+    }, { root, rootMargin: "600px 0px" });
+    o.observe(el);
+    io.current = o;
+  }, [near]);
+  useEffect(() => () => io.current?.disconnect(), []);
+  return [ref, near];
+}
+
 export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaused, onActivity, from, until, borrow, said, steers, onUsage, answers, canAnswer, onAnswer, cli, onStatus, queueText, onPlan }: {
   hubId: string; task: Message; onGrow?: () => void;
   /** told the plan this run is working through (and when it was written),
@@ -364,6 +387,9 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
   const [traceStatus, setTraceStatus] = useState<string>();
   const last = useRef(rawEvents?.length ? rawEvents[rawEvents.length - 1].seq : 0);
   const finalLoaded = useRef(!running && rawEvents !== null);
+  // (a finished run's steps: fetched once it comes near the view)
+  const [nearRef, nearView] = useNear();
+  const wanted = running || nearView;
   // (without the turns it woke for only to keep listening)
   const ownEvents = useMemo(() => rawEvents && withoutChores(rawEvents), [rawEvents]);
   // An agent in one long session (it receives in its conversation) picks up
@@ -374,7 +400,7 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
   const borrowKey = borrow ? borrow.ids.join(",") : "";
   const [borrowed, setBorrowed] = useState<Record<string, TraceEvent[]>>({});
   useEffect(() => {
-    if (!borrow || !borrow.ids.length) return;
+    if (!borrow || !borrow.ids.length || !wanted) return;
     let off = false;
     const after: Record<string, number> = {};
     const load = async () => {
@@ -396,7 +422,7 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
     const t = window.setInterval(() => void load(), POLL_MS);
     return () => { off = true; window.clearInterval(t); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hubId, borrowKey, running]);
+  }, [hubId, borrowKey, running, wanted]);
   const since = borrow?.since;
   const extra = useMemo(() => {
     const s = msOf(since);
@@ -425,7 +451,7 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
   // Loaded while it runs (polled) and once when it has finished, folded or
   // not: whether there is anything to show depends on it.
   useEffect(() => {
-    if (gone || (!running && finalLoaded.current)) return;
+    if (gone || (!running && finalLoaded.current) || !wanted) return;
     let off = false;
     let loading = false;
     const load = async () => {
@@ -469,7 +495,7 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
     if (!running) return () => { off = true; };
     const t = window.setInterval(() => void load(), POLL_MS);
     return () => { off = true; window.clearInterval(t); };
-  }, [hubId, task.id, running, gone, onStatus]);
+  }, [hubId, task.id, running, gone, onStatus, wanted]);
   // While nothing says what it is doing: a playful verb (the pixel mushroom
   // is at work).
   // Stopped (its turn over, set aside, or silent after it spoke): no
@@ -513,9 +539,13 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
   const steerList = steers || [];
   // Where the run has nothing else to show, what you added still shows,
   // before its state.
-  const withSteers = (node: React.ReactNode) => (steerList.length
-    ? <>{steerList.map((m) => <SteerBubble key={m.id} hubId={hubId} msg={m} />)}{node}</>
+  // Until the run comes near the view, a mark to watch for (its steps are
+  // fetched then); what it reported shows meanwhile.
+  const mark = wanted ? null : <span ref={nearRef} className="trace-lazy" aria-hidden />;
+  const withSteers = (node: React.ReactNode) => (steerList.length || mark
+    ? <>{mark}{steerList.map((m) => <SteerBubble key={m.id} hubId={hubId} msg={m} />)}{node}</>
     : node);
+  if (!wanted && rawEvents === null && !reports.length) return withSteers(null);
   if (running && isOpen(traceStatus || task.status) && queueText) return withSteers(
     <div className="trace" data-testid="runner-queue"><div className="trace-head trace-wait"><span className="trace-title">{queueText}</span></div></div>
   );
@@ -705,6 +735,7 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
 
   return (
     <div className={cn("trace is-flow", movingHere && !asking && "is-live")} ref={body}>
+      {mark}
       {carryOn && <div className="trace-carry">{L(`接着做上一件：${borrow!.label}`, `Still on the one before: ${borrow!.label}`)}</div>}
       {/* The plan is not part of the process: it stays at the top, always
           out, whether the steps below it are folded or not. */}

@@ -7865,6 +7865,18 @@ body.is-resizing {
   0% { opacity: 0; }
   60% { opacity: 1; }
 }
+/* A file being fetched for its preview (preview.tsx): the searching
+   mushroom pacing, a line that changes. */
+.fp-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 48px 16px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.fp-loading-line { max-width: 100%; text-align: center; }
 .cp-seek-line {
   max-width: 100%;
   text-align: center;
@@ -10587,3 +10599,6 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
 .im-steps { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 10px; font-size: 12.5px; color: var(--fg-2); }
 .im-steps .app-input { display: block; width: 100%; margin-top: 6px; }
 .im-steps a { color: var(--accent); }
+/* where a run's steps will show once it comes near the view (TraceView) */
+.trace-lazy { display: block; height: 1px; }
+

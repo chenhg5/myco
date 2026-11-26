@@ -369,7 +369,7 @@ function rememberActivity(taskId: string, a: { at: number; ended: boolean }) {
   if (knownActivity.size > 400) knownActivity.delete(knownActivity.keys().next().value as string);
 }
 
-export function ConversationDetail({ target, rows, now, onBack, onNewConversation, onOpen, onOpenExchange, onRefresh, showBack = true, backLabel, role, inserts, headActions, projectTitle, bare }: {
+export function ConversationDetail({ target, rows, now, onBack, onNewConversation, onOpen, onOpenExchange, onRefresh, showBack = true, backLabel, role, inserts, headActions, projectTitle, bare, moreRef }: {
   target: ConversationTarget;
   /** the project this chat is the home of (its coordinator's): the empty
    *  chat asks about it */
@@ -379,6 +379,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   /** no header: the page around it already says who this is (the
    *  project's home, with its coordinator) */
   bare?: boolean;
+  /** bare (a project's home, whose header is the project's): where to put
+   *  the opener of this chat's ⋯ menu, so the header can show it */
+  moreRef?: React.MutableRefObject<((anchor: HTMLElement) => void) | null>;
   /** what it is in the project (e.g. coordinator), before its description */
   role?: string;
   /** small things placed in the timeline by time (e.g. a task the agent
@@ -2393,11 +2396,15 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     // 设定目标 (myco goal): woken on schedule to push it, until it is done.
     ...(!termMode && !observed && goals.supported && !goals.current && agent && agentKind(agent) === "agent"
       ? [{ label: L("设定目标…", "Set a goal…"), icon: Target, onSelect: () => setGoalOpen(true) }] : []),
+    // (bare: the header has no find button, so find is here)
+    ...(bare && !termMode ? [{ label: L("在这段对话里找", "Find in this chat"), icon: Search, hint: `${mod}F`, onSelect: () => setSearching(true) }] : []),
     // 专注模式 (AppMode): this chat alone, full screen, centred.
     { label: L("专注模式", "Focus mode"), icon: FocusIcon, hint: focusKey(), onSelect: () => toggleFocus(rootRef.current) },
     ...(hoEntry.show ? [{ label: hoEntry.why ? L("换一个来接着做（现在不行）", "Hand over (not now)") : L("换一个来接着做", "Hand over to another session"), icon: ArrowRightLeft, disabled: !!hoEntry.why, onSelect: () => openHandover({ hubId: target.hubId, name: target.agent }) }] : []),
     ...(!observed && (shown?.length || 0) > 0 ? [{ label: L("导出这段对话", "Export this conversation"), icon: Download, onSelect: () => setExporting(true) }] : []),
   ].filter((it, i, all) => it !== "sep" || i < all.length - 1);
+  // A project's home shows this chat's ⋯ menu in its own header.
+  if (moreRef) moreRef.current = (anchor: HTMLElement) => headMenu.openUnder(anchor, headMore);
   // Everything sent in the chat so far (what is loaded), for 文件和应用:
   // files, and the apps (pages) linked in its messages.
   const chatFiles: ChatFile[] = filesOpen ? (shown || []).flatMap((m) => [
