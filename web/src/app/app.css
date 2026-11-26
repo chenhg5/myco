@@ -7943,6 +7943,9 @@ body.is-resizing {
 .vc-line-who.is-face .pa { flex: none; }
 .vc-line.is-hearing, .vc-line.is-cut { color: var(--muted); }
 .vc-line.is-cut::after { content: " …"; }
+/* A line whose names were corrected: a small tag; a click shows it as heard. */
+.vc-fixed { margin-left: 6px; padding: 0 5px; border-radius: 6px; font-size: 10.5px; line-height: 16px; color: var(--muted); background: var(--hover); white-space: nowrap; vertical-align: 1px; }
+.vc-fixed.is-off { background: transparent; text-decoration: underline; }
 .vc-action, .vc-notice { padding-left: 30px; font-size: 12px; line-height: 1.5; color: var(--muted); overflow-wrap: anywhere; }
 .vc-hint { padding-left: 2px; }
 .vc-bar-lines > .app-error-text, .vc-bar-lines > .app-btn { margin-left: 30px; }

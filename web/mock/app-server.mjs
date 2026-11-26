@@ -2936,7 +2936,7 @@ const server = http.createServer(async (req, res) => {
     if (parts[2] === "config" && method === "PUT") {
       const b = await readBody(req);
       if (b?.tts_provider && b.tts_provider !== "doubao") return fail(res, 400, "invalid_argument", "unknown speech service " + b.tts_provider);
-      for (const k of ["llm_base_url", "llm_model", "tts_provider", "tts_speaker", "tts_rate", "words"]) if (b?.[k] !== undefined) v.cfg[k] = b[k];
+      for (const k of ["llm_base_url", "llm_model", "tts_provider", "tts_speaker", "tts_rate", "words", "polish"]) if (b?.[k] !== undefined) v.cfg[k] = b[k];
       if (typeof b?.share === "boolean") v.share = b.share;
       if (b?.llm_key) v.llmKey = true;
       if (b?.tts_key) v.ttsKey = true;
@@ -2974,6 +2974,11 @@ const server = http.createServer(async (req, res) => {
       at(600, () => line("hearing", "帮我看一下"));
       at(1100, () => line("hearing", "帮我看一下下载页的链接对不对"));
       at(1500, () => { line("user", "帮我看一下下载页的链接对不对"); v.st = "thinking"; });
+      // A name corrected in the background (speech_polish.go): marked, undoable.
+      at(1800, () => {
+        const u = v.lines.findLast((x) => x.kind === "user" && x.text === "帮我看一下下载页的链接对不对");
+        if (u) { v.seq += 1; u.seq = v.seq; u.corrected = "帮我看一下下载业的链接对不对"; }
+      });
       at(2100, () => {
         // What it passed on is in the chat, as if typed, with the mark.
         const threadId = `th_c_${state.counter += 1}`;
@@ -3047,6 +3052,13 @@ const server = http.createServer(async (req, res) => {
     await new Promise((r) => setTimeout(r, 400));
     const n = Math.min(h.words.length, Math.floor((Date.now() - h.at) / 400));
     const done = h.stopped || n >= h.words.length;
+    // MOCK_POLISH=1: a correction of names follows the end (speech_polish.go).
+    if (done && process.env.MOCK_POLISH) {
+      const heard = h.words[h.words.length - 1];
+      h.polls = (h.polls || 0) + 1;
+      const fixedText = heard.replace("下载页", "GitHub 页").replace("download page", "GitHub page");
+      return send(res, 200, { seq: n + h.polls, text: heard, final: true, done: true, polishing: h.polls < 2, ...(h.polls >= 2 ? { corrected: { from: heard, to: fixedText } } : {}) });
+    }
     return send(res, 200, { seq: Math.max(seq + 1, n + (done ? 1 : 0)), text: n ? h.words[n - 1] : "", final: done, done });
   }
 

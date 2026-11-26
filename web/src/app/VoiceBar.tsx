@@ -162,6 +162,8 @@ function stateText(l: Live): string {
  *  its face, not a "Voice" label. */
 export function VoiceBar({ agent }: { agent?: Agent }) {
   const { call: c, live: l } = useVoiceCall();
+  // Lines whose corrected names were undone, shown as heard.
+  const [heardAsIs, setHeardAsIs] = useState<Set<number>>(() => new Set());
   useEffect(() => {
     barsShown++;
     emit();
@@ -198,7 +200,14 @@ export function VoiceBar({ agent }: { agent?: Agent }) {
             ) : (
               <span className="vc-line-who">{x.kind === "assistant" ? c.agentName : L("你", "You")}</span>
             )}
-            {x.text || "…"}
+            <span>{x.corrected && heardAsIs.has(x.id) ? x.corrected : x.text || "…"}
+            {x.corrected && (
+              <button type="button" className={cn("vc-fixed", heardAsIs.has(x.id) && "is-off")}
+                title={heardAsIs.has(x.id) ? L("显示纠正后的", "Show the corrected line") : L(`听到的是：${x.corrected}`, `Heard as: ${x.corrected}`)}
+                onClick={() => setHeardAsIs((s) => { const n = new Set(s); if (n.has(x.id)) n.delete(x.id); else n.add(x.id); return n; })}>
+                {heardAsIs.has(x.id) ? L("原话", "As heard") : L("已纠正", "Corrected")}
+              </button>
+            )}</span>
           </div>
         ))}
         <ErrorText error={l.error} />

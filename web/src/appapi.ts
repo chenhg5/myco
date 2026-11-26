@@ -45,6 +45,8 @@ export interface VoiceConfig {
   /** words speech recognition should listen for (calls and dictation), one
    *  per line, optionally with how they are misheard: "Claude = 克劳德, cloud" */
   words?: string[];
+  /** correct names in what was heard with the model, in the background (on unless false) */
+  polish?: boolean;
 }
 /** A speech service this App can speak with: the settings page draws these. */
 export interface VoiceTTSProvider {
@@ -87,6 +89,8 @@ export interface VoiceLine {
   kind: "user" | "hearing" | "assistant" | "action" | "notice";
   text: string;
   interrupted?: boolean;
+  /** what was heard before names in it were corrected (text is corrected) */
+  corrected?: string;
   task?: { hub_id: string; id: string; agent?: string; thread_id?: string };
   at: string;
 }
@@ -686,7 +690,9 @@ export const appApi = {
   startDictation: (lang: string) => request<{ mode: "system" | "listen"; id?: string }>("POST", "app/dictation", { lang }),
   /** What a listening heard after seq (waits a few seconds for more). */
   dictationState: (id: string, seq: number) =>
-    request<{ seq: number; text: string; final?: boolean; done?: boolean; error?: string }>("GET", `app/dictation/${enc(id)}?seq=${seq}`),
+    request<{ seq: number; text: string; final?: boolean; done?: boolean; error?: string;
+      /** a correction of names is under way; corrected is the last one */
+      polishing?: boolean; corrected?: { from: string; to: string } }>("GET", `app/dictation/${enc(id)}?seq=${seq}`),
   stopDictation: (id: string) => request<void>("DELETE", `app/dictation/${enc(id)}`),
   // Translating messages (console translate.go): keys stay in the keychain.
   /** Messages taken out of your own view (删除), kept on the workspace. */
