@@ -2773,7 +2773,8 @@ async function runMatrix(browser, size, scheme) {
       const bar = page.locator(".conv-detail [data-testid=plan-bar]");
       await bar.waitFor({ timeout: 10_000 });
       await page.waitForFunction(() => /计划 2\/3/.test(document.querySelector(".conv-detail [data-testid=plan-bar]")?.textContent || ""), null, { timeout: 10_000 });
-      if (!/正在：跑测试/.test(await bar.innerText())) throw new Error(`置顶的计划应说正在做哪一步，实际「${await bar.innerText()}」`);
+      // (正在 while it runs; 下一步 once the mock's short task is over)
+      if (!/(正在|下一步)：跑测试/.test(await bar.innerText())) throw new Error(`置顶的计划应说做到哪一步，实际「${await bar.innerText()}」`);
       const barTop = await bar.evaluate((el) => el.getBoundingClientRect().top);
       const scrollTop = await page.locator(".conv-detail .conv-scroll").evaluate((el) => el.getBoundingClientRect().top);
       if (barTop > scrollTop) throw new Error("置顶的计划应在聊天内容上面，不随聊天滚动");
@@ -2783,6 +2784,12 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "chat-plan-bar");
       await bar.locator(".plan-bar-toggle").click();
       await bar.locator(".trace-plan").waitFor({ state: "detached", timeout: 5_000 });
+      // Once the task is over with a step still open, the plan stays
+      // pinned, saying what is next (a coordinator's board outlives a task).
+      await page.waitForFunction(() => /下一步：跑测试/.test(document.querySelector(".conv-detail [data-testid=plan-bar]")?.textContent || ""), null, { timeout: 20_000 })
+        .catch(() => { throw new Error("任务结束后还有没做完的计划，应继续置顶并写「下一步：…」"); });
+      await page.waitForTimeout(9000);
+      if (!(await bar.count())) throw new Error("没做完的计划不该自己消失");
       await bar.locator(".plan-bar-close").click();
       await bar.waitFor({ state: "detached", timeout: 5_000 });
       await page.waitForTimeout(2500);
@@ -3873,8 +3880,9 @@ async function runMatrix(browser, size, scheme) {
 
     // 只看进度: runs show what the agent reported, not its steps.
     // Before a page uses this computer the App asks the person (one
-    // question; 一直允许 is kept); Settings › 应用权限 lists what pages may
-    // do and takes it back, after which the page is asked again.
+    // question; 始终允许 is kept, and the screen may be allowed always while
+    // commands are only ever for this run); Settings › 应用权限 lists what
+    // pages may do and takes it back, after which the page is asked again.
     await step("网页 · 用电脑前先问", async () => {
       await go(page, "官网改版", narrow);
       await page.evaluate(() => window.dispatchEvent(new CustomEvent("myco-open-page", { detail: { kind: "page", hubId: "hub_studio", id: "pg_consent" } })));
@@ -3889,13 +3897,30 @@ async function runMatrix(browser, size, scheme) {
       if (!(await ask.innerText()).includes("「提醒我」")) throw new Error(`应写明是哪个应用要用：${await ask.innerText()}`);
       if (!(await ask.getByRole("button", { name: "这次允许" }).count())) throw new Error("应能只允许这一次");
       await settle(page, 200);
+      if (!(await ask.innerText()).includes("以后这个应用不再问")) throw new Error(`应说明始终允许以后不再问：${await ask.innerText()}`);
       await shot(page, size, scheme, "page-os-consent");
-      await ask.getByRole("button", { name: "一直允许" }).click();
+      await ask.getByRole("button", { name: "始终允许" }).click();
       await frame.locator("#out", { hasText: "已提醒" }).waitFor({ timeout: 10_000 });
       // the second time: no question
       await frame.locator("#go").dispatchEvent("click");
       await settle(page, 400);
-      if (await ask.count()) throw new Error("一直允许后不该再问");
+      if (await ask.count()) throw new Error("始终允许后不该再问");
+      // the screen: may be allowed always
+      await frame.locator("#shot").dispatchEvent("click");
+      const askScreen = page.locator(".pg-ask", { hasText: "截取或录制屏幕" });
+      await askScreen.waitFor({ timeout: 10_000 });
+      await askScreen.getByRole("button", { name: "始终允许" }).click();
+      await frame.locator("#shot-out", { hasText: "已截屏" }).waitFor({ timeout: 10_000 });
+      // commands: only this run, and the dialog says why
+      await frame.locator("#run").dispatchEvent("click");
+      const askRun = page.locator(".pg-ask", { hasText: "运行命令" });
+      await askRun.waitFor({ timeout: 10_000 });
+      if (await askRun.getByRole("button", { name: "始终允许" }).count()) throw new Error("运行命令不该有始终允许");
+      if (!(await askRun.innerText()).includes("撤不回")) throw new Error(`应说明为什么没有始终允许：${await askRun.innerText()}`);
+      await settle(page, 200);
+      await shot(page, size, scheme, "page-os-consent-once");
+      await askRun.getByRole("button", { name: "这次允许" }).click();
+      await frame.locator("#run-out", { hasText: "已运行" }).waitFor({ timeout: 10_000 });
       // (the page panel goes away first: in a narrow window it covers the sidebar)
       const panel = page.locator(".pg-panel:visible");
       if (await panel.count()) {
@@ -3907,11 +3932,16 @@ async function runMatrix(browser, size, scheme) {
       const card = page.locator(".app-setting-card[data-setting='app-permissions']");
       const row = card.locator(".app-perm-page", { hasText: "提醒我" });
       await row.waitFor({ timeout: 10_000 });
-      if (!(await row.innerText()).includes("发系统通知") || !(await row.innerText()).includes("一直允许")) throw new Error(`应用权限应列出它：${await row.innerText()}`);
-      if (!(await card.locator(".app-perm-page", { hasText: "空间清理" }).innerText()).includes("这次允许")) throw new Error("应分清一直允许和这次允许");
+      const rowText = await row.innerText();
+      if (!rowText.includes("发系统通知") || !rowText.includes("始终允许") || !rowText.includes("截取或录制屏幕")) throw new Error(`应用权限应列出它：${rowText}`);
+      if (!/运行命令[^\n]*\n[^\n]*这次允许/.test(rowText)) throw new Error(`运行命令应是这次允许：${rowText}`);
+      if (!(await card.locator(".app-perm-page", { hasText: "空间清理" }).innerText()).includes("这次允许")) throw new Error("应分清始终允许和这次允许");
       await settle(page, 200);
       await shot(page, size, scheme, "settings-app-permissions");
-      await row.locator(".app-perm-item", { hasText: "发系统通知" }).getByRole("button", { name: "收回" }).click();
+      for (const what of ["发系统通知", "截取或录制屏幕", "运行命令"]) {
+        await row.locator(".app-perm-item", { hasText: what }).getByRole("button", { name: "收回" }).click();
+        await row.locator(".app-perm-item", { hasText: what }).waitFor({ state: "detached", timeout: 5_000 });
+      }
       await row.waitFor({ state: "detached", timeout: 5_000 });
     });
 
@@ -4253,6 +4283,7 @@ async function runMatrix(browser, size, scheme) {
       await two.locator(".watch-what", { hasText: "正在盯 2 件事" }).waitFor({ timeout: 10_000 });
       await two.locator(".watch-toggle").click();
       await two.locator(".watch-item", { hasText: "构建流水线跑完" }).waitFor({ timeout: 5_000 });
+      await two.locator(".watch-item", { hasText: "构建流水线跑完" }).locator(".watch-result code", { hasText: "build: pending" }).waitFor({ timeout: 5_000 });
       if ((await two.locator(".watch-item").count()) !== 2) throw new Error("展开后应列出两件");
       await settle(page, 300);
       await shot(page, size, scheme, "chat-watching-two");
@@ -4262,6 +4293,10 @@ async function runMatrix(browser, size, scheme) {
     // next wake-up, how long), with 暂停/继续, 改间隔 and 停止; opened, what
     // done means and every round; ended ones are a grey line; ⋯ sets one.
     await step("单聊 · 目标", async () => {
+      // The mock's goals are timed from their first read; start them again
+      // so 还有 11–12 分钟 and 已进行 1 小时 hold however long the steps before took.
+      const reset = await fetch(`http://${HOST}:${mockPort()}/app/mock/goals-reset`, { method: "POST" });
+      if (!reset.ok) throw new Error(`重置目标失败：HTTP ${reset.status}`);
       await openMember(page, narrow, "聊天", "legacy-codex");
       const bar = page.locator(".conv-detail [data-testid=goal-bar]");
       await bar.waitFor({ timeout: 10_000 });
@@ -4783,6 +4818,44 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".ms").waitFor({ state: "hidden" });
     });
 
+    // An agent's own chat-app bots (ChatApps.tsx), in its details: PM has a
+    // Feishu bot; binding Slack pastes two tokens and shows the /claim line;
+    // binding Feishu shows a QR code; unbinding asks first.
+    await step("成员 · 聊天软件机器人", async () => {
+      await go(page, "成员", narrow);
+      const pm = page.locator(".mb-card", { hasText: "PM (Codex)" });
+      await pm.scrollIntoViewIfNeeded();
+      await pm.click();
+      await page.locator(".ms").waitFor({ timeout: 10_000 });
+      await clickVisible(page, page.locator(".ms .ms-fold"));
+      await clickVisible(page, page.locator(".ms [data-testid=ms-tabs] [data-tab=identity]"));
+      const row = page.locator('.ms [data-testid="chat-apps-row"]');
+      await row.locator('.im-bot[data-bridge="feishu-pm-codex"] .dot.working').waitFor({ timeout: 5_000 });
+      await row.scrollIntoViewIfNeeded();
+      await row.getByRole("button", { name: "绑定 Slack" }).click();
+      const form = page.locator('.app-modal [data-testid="slack-form"]');
+      await form.locator('input[placeholder="xoxb-…"]').fill("xoxb-1-2-3");
+      await form.locator('input[placeholder="xapp-…"]').fill("xapp-1-2-3");
+      await settle(page, 200);
+      await shot(page, size, scheme, "member-chat-apps-slack");
+      await form.getByRole("button", { name: "连接" }).click();
+      await row.locator(".im-claim code", { hasText: "/claim" }).waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "member-chat-apps");
+      // Unbind Feishu, then bind it again with a QR code.
+      await row.locator('.im-bot[data-bridge="feishu-pm-codex"]').getByRole("button", { name: "解绑" }).click();
+      const confirm = page.locator(".app-modal.app-confirm");
+      await confirm.getByRole("button", { name: "解绑" }).click();
+      await row.locator('.im-bot[data-bridge="feishu-pm-codex"]').waitFor({ state: "detached", timeout: 5_000 });
+      await row.getByRole("button", { name: "绑定飞书" }).click();
+      await page.locator('.app-modal [data-testid="feishu-scan"] img.im-qr').waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "member-chat-apps-feishu");
+      await page.locator('.app-modal [data-testid="feishu-scan"]').getByRole("button", { name: "取消" }).click();
+      await page.keyboard.press("Escape");
+      await page.locator(".ms").waitFor({ state: "hidden" });
+    });
+
     // 「换一个来接着做」: PM was taken over from a claude.ai session; its card
     // lists that, with a way back, and the dialog offers a new session on a
     // computer (old computers need an update first) or a one-time command.
@@ -4834,8 +4907,10 @@ async function runMatrix(browser, size, scheme) {
 
     await step("成员 · 模型和额度", async () => {
       // A manager picks a model and an effort: each goes to the App backend
-      // at once with both fields. The quota rows say how much each window
-      // used and when it resets; a nearly-used one is amber.
+      // at once with both fields. The quota rows say whose usage it is
+      // (provider · plan · computer), how much each window has left and
+      // when it resets; a nearly-used one is amber. The member cards carry
+      // the tightest window; a login to fix and a failed read say so.
       const lastBody = async (pred, what) => {
         for (let i = 0; i < 50; i++) {
           const r = await fetch(`http://${HOST}:${mockPort()}/app/mock/run-settings`);
@@ -4859,6 +4934,14 @@ async function runMatrix(browser, size, scheme) {
 
       const pm = page.locator(".mb-card", { hasText: "PM (Codex)" });
       await pm.scrollIntoViewIfNeeded();
+      const pmTag = pm.locator(".app-quota-tag");
+      await pmTag.waitFor({ timeout: 5_000 });
+      if ((await pmTag.locator(".app-quota-tag-text").innerText()).trim() !== "剩 5%" || (await pmTag.getAttribute("data-quota")) !== "tight") throw new Error(`成员卡片应写剩 5%（琥珀色），实际是「${await pmTag.innerText()}」`);
+      const pmTitle = await pmTag.getAttribute("title") || "";
+      if (!pmTitle.includes("Codex · ChatGPT 订阅 · Studio Mac") || !pmTitle.includes("小时后重置")) throw new Error(`悬停应写来源和重置：${pmTitle}`);
+      const mcpTag = page.locator(".mb-card", { hasText: "MCP Claude" }).locator(".app-quota-tag");
+      if (await page.locator(".mb-card", { hasText: "Release (Claude 云端)" }).locator(".app-quota-tag").count()) throw new Error("没有可读额度的连接不该显示额度标记");
+      if ((await mcpTag.locator(".app-quota-tag-text").innerText()).trim() !== "需重新登录") throw new Error(`登录过期应写需重新登录，实际是「${await mcpTag.innerText()}」`);
       await pm.click();
       await page.locator(".ms").waitFor({ timeout: 10_000 });
       await clickVisible(page, page.locator(".ms .ms-fold"));
@@ -4884,17 +4967,19 @@ async function runMatrix(browser, size, scheme) {
       const five = body.locator(".app-quota", { hasText: "5 小时" });
       await five.waitFor({ timeout: 5_000 });
       const fiveText = compactText(await five.innerText());
-      if (!fiveText.includes("95%") || !fiveText.includes("重置")) {
-        throw new Error(`5 小时窗口应写已用 95% 和重置时间，实际是「${fiveText}」`);
+      if (!fiveText.includes("剩 5%") || !fiveText.includes("小时后重置")) {
+        throw new Error(`5 小时窗口应写剩 5% 和几小时后重置，实际是「${fiveText}」`);
       }
+      const source = compactText(await body.locator(".app-quota-source").innerText());
+      if (!source.includes("Codex · ChatGPT 订阅 · Studio Mac")) throw new Error(`应写来源 · 套餐 · 电脑，实际是「${source}」`);
       if (!(await five.getAttribute("class") || "").includes("is-tight")) {
         throw new Error("用了 95% 的窗口应标成琥珀色");
       }
       const amber = await color("--amber");
       const fiveColor = await five.locator(".app-kv-value").evaluate((el) => getComputedStyle(el).color);
       if (fiveColor !== amber) throw new Error(`用了 95% 的窗口应显示成琥珀色，实际是 ${fiveColor}`);
-      const sevenText = compactText(await body.locator(".app-quota", { hasText: "7 天" }).innerText());
-      if (!sevenText.includes("62%")) throw new Error(`7 天窗口应写已用 62%，实际是「${sevenText}」`);
+      const sevenText = compactText(await body.locator(".app-quota", { hasText: "每周" }).innerText());
+      if (!sevenText.includes("剩 38%")) throw new Error(`每周窗口应写剩 38%，实际是「${sevenText}」`);
       await five.scrollIntoViewIfNeeded();
       await settle(page, 200);
       await shot(page, size, scheme, "member-run");
@@ -4914,9 +4999,45 @@ async function runMatrix(browser, size, scheme) {
       const red = await color("--red");
       const spentColor = await spent.locator(".app-kv-value").evaluate((el) => getComputedStyle(el).color);
       if (spentColor !== red) throw new Error(`用完的窗口应显示成红色，实际是 ${spentColor}`);
-      await page.locator(".ms .ms-fold-body .app-quota-stale", { hasText: "的数据" }).waitFor({ timeout: 5_000 });
+      await page.locator(".ms .ms-fold-body .app-quota-stale", { hasText: "取到的数据" }).waitFor({ timeout: 5_000 });
+      await page.locator(".ms .ms-fold-body .app-quota-status", { hasText: "获取失败" }).waitFor({ timeout: 5_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "member-quota-spent");
+      await page.keyboard.press("Escape");
+      await page.locator(".ms").waitFor({ state: "hidden" });
+
+      // A sign-in that expired: told to sign in again, the last numbers
+      // kept and marked old (never shown as a full quota).
+      const mcp = page.locator(".mb-card", { hasText: "MCP Claude" });
+      await mcp.scrollIntoViewIfNeeded();
+      await mcp.click();
+      await page.locator(".ms").waitFor({ timeout: 10_000 });
+      await clickVisible(page, page.locator(".ms .ms-fold"));
+      const mcpBody = page.locator(".ms .ms-fold-body");
+      await mcpBody.locator(".app-quota-status.is-action", { hasText: "需要在 CLI 重新登录" }).waitFor({ timeout: 5_000 });
+      const mcpWeek = compactText(await mcpBody.locator(".app-quota", { hasText: "每周" }).innerText());
+      if (!mcpWeek.includes("剩 45%")) throw new Error(`登录过期时应保留上次的数字，实际是「${mcpWeek}」`);
+      if (!(await mcpBody.locator(".app-quota", { hasText: "每周" }).getAttribute("class") || "").includes("is-stale")) throw new Error("保留的旧数字应标成旧的");
+      await mcpBody.locator(".app-quota-stale", { hasText: "取到的数据" }).waitFor({ timeout: 5_000 });
+      await mcpBody.locator(".app-quota-status").scrollIntoViewIfNeeded();
+      await settle(page, 200);
+      await shot(page, size, scheme, "member-quota-login");
+      await page.keyboard.press("Escape");
+      await page.locator(".ms").waitFor({ state: "hidden" });
+
+      // A model's own bucket folds under the windows.
+      const docs = page.locator(".mb-card", { hasText: "docs-claude" });
+      await docs.scrollIntoViewIfNeeded();
+      await docs.click();
+      await page.locator(".ms").waitFor({ timeout: 10_000 });
+      await clickVisible(page, page.locator(".ms .ms-fold"));
+      const docsBody = page.locator(".ms .ms-fold-body");
+      const fold = docsBody.locator(".app-quota-more", { hasText: "按模型的 1 个窗口" });
+      await fold.waitFor({ timeout: 5_000 });
+      if (await docsBody.locator(".app-quota", { hasText: "Opus" }).count()) throw new Error("按模型的窗口应先收起");
+      await fold.click();
+      const opus = compactText(await docsBody.locator(".app-quota", { hasText: "每周（Opus）" }).innerText());
+      if (!opus.includes("剩 29%")) throw new Error(`展开后应看到 Opus 的窗口，实际是「${opus}」`);
       await page.keyboard.press("Escape");
       await page.locator(".ms").waitFor({ state: "hidden" });
 
@@ -5060,9 +5181,9 @@ async function runMatrix(browser, size, scheme) {
       await go(page, "电脑", narrow);
       // A card each: what it is, whether it is on, what runs there.
       await page.locator(".pc-card").first().waitFor({ timeout: 20_000 });
-      // An agent on that computer has nearly used its quota: its card says
-      // so, quietly.
-      await page.locator(".pc-card .pc-quota", { hasText: "额度 95%" }).first().waitFor({ timeout: 10_000 });
+      // An agent on that computer must sign in again to read its quota:
+      // its card says so, quietly (before another's nearly used window).
+      await page.locator(".pc-card", { hasText: "Studio Mac" }).locator(".pc-quota", { hasText: "需重新登录" }).waitFor({ timeout: 10_000 });
       await settle(page);
       await shot(page, size, scheme, "computers");
       const back = () => navBackClick(page);

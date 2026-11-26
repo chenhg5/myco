@@ -119,7 +119,7 @@ func (s *Server) projectDTOBare(r *http.Request, c projectCall, v *app.ProjectVi
 	for _, m := range v.Members {
 		pm := api.ProjectMember{Name: string(m.Agent), Role: string(m.Role), Note: m.Note, Group: m.Group, AddedBy: m.AddedBy, AddedAt: m.AddedAt}
 		if a, err := s.agents.Get(r.Context(), string(m.Agent)); err == nil && c.viewer.Sees(a) {
-			dto := s.agentDTO(a)
+			dto := s.agentDTO(r, a)
 			pm.Agent = &dto
 			agents = append(agents, &dto)
 		}

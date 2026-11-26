@@ -32,7 +32,7 @@ func skillsFromAPI(in []api.Skill) []domain.Skill {
 	return out
 }
 
-func (s *Server) agentDTO(a *domain.Agent) api.Agent {
+func (s *Server) agentDTO(r *http.Request, a *domain.Agent) api.Agent {
 	out := api.Agent{
 		Updating: a.Runtime.Updating(s.agents.Now()), ID: a.ID, Name: string(a.Name), DisplayName: a.DisplayName, Avatar: a.Avatar, Description: a.Description,
 		Capabilities: nonNil(a.Capabilities),
@@ -56,7 +56,7 @@ func (s *Server) agentDTO(a *domain.Agent) api.Agent {
 	out.OwnerID, out.Owner = a.Owner, s.ownerName(a.Owner)
 	if rt := a.Runtime; rt != (domain.Runtime{}) {
 		out.Runtime = &api.Runtime{CLI: rt.CLI, CLIVersion: rt.CLIVersion, Model: rt.Model, ModelSource: rt.ModelSource, Access: rt.Access,
-			Provider: rt.Provider, ProviderSource: rt.ProviderSource, ProviderHost: rt.ProviderHost, Effort: rt.Effort, EffortSource: rt.EffortSource, MaxAccess: rt.MaxAccess, Quota: quotaDTO(rt.Quota),
+			Provider: rt.Provider, ProviderSource: rt.ProviderSource, ProviderHost: rt.ProviderHost, Effort: rt.Effort, EffortSource: rt.EffortSource, MaxAccess: rt.MaxAccess, Quota: s.visibleQuota(r, a),
 			RunnerInstance: rt.RunnerInstance, RestartingUntil: rt.RestartingUntil, Features: rt.FeatureList(), Away: rt.Away, Env: rt.Env, Models: modelsDTO(rt.ModelList())}
 		if rt.RunnerSlots != "" {
 			var slots api.RunnerSlots
@@ -116,6 +116,7 @@ func (s *Server) enrich(ctx context.Context, dtos ...*api.Agent) {
 		for _, d := range dtos {
 			if st, ok := states[domain.AgentName(d.Name)]; ok {
 				d.Watching = st.Watching
+				d.Goal = goalBrief(st.Goal)
 				d.State, d.Queued, d.InProgress, d.Held, d.Asking = string(st.State), st.Queued, st.InProgress, st.Held, st.Asking
 			}
 		}
@@ -224,7 +225,7 @@ func writeError(w http.ResponseWriter, err error) {
 		status = http.StatusInternalServerError
 	}
 	writeJSON(w, status, api.Error{
-		Code: string(de.Code), Message: de.Message, Suggestion: de.Suggestion,
+		Code: string(de.Code), Message: de.Message, Suggestion: de.Suggestion, ErrorNode: de.ErrorNode,
 		Retryable: de.Code == domain.CodeInternal || de.Code == domain.CodeRateLimited,
 	})
 }
@@ -233,9 +234,9 @@ func quotaDTO(q *domain.Quota) *api.Quota {
 	if q == nil {
 		return nil
 	}
-	out := &api.Quota{Source: q.Source, At: q.At, Windows: []api.QuotaWindow{}}
+	out := &api.Quota{Source: q.Source, At: q.At, Provider: q.Provider, ProfileRef: q.ProfileRef, MachineID: q.MachineID, SourceKind: q.SourceKind, Status: q.Status, CheckedAt: q.CheckedAt, ErrorCode: q.ErrorCode, Plan: q.Plan, Windows: []api.QuotaWindow{}}
 	for _, w := range q.Windows {
-		out.Windows = append(out.Windows, api.QuotaWindow{Name: w.Name, Label: w.Label, Used: w.Used, ResetsAt: w.ResetsAt, Status: w.Status})
+		out.Windows = append(out.Windows, api.QuotaWindow{Name: w.Name, Label: w.Label, Used: w.Used, DurationSec: w.DurationSec, ModelScope: w.ModelScope, ResetsAt: w.ResetsAt, Status: w.Status})
 	}
 	return out
 }
@@ -244,12 +245,9 @@ func quotaFromAPI(q *api.Quota) *domain.Quota {
 	if q == nil {
 		return nil
 	}
-	out := &domain.Quota{Source: q.Source, At: q.At}
-	for i, w := range q.Windows {
-		if i == 8 { // a handful of windows at most
-			break
-		}
-		out.Windows = append(out.Windows, domain.QuotaWindow{Name: w.Name, Label: w.Label, Used: w.Used, ResetsAt: w.ResetsAt, Status: w.Status})
+	out := &domain.Quota{Source: q.Source, At: q.At, Provider: q.Provider, ProfileRef: q.ProfileRef, MachineID: q.MachineID, SourceKind: q.SourceKind, Status: q.Status, CheckedAt: q.CheckedAt, ErrorCode: q.ErrorCode, Plan: q.Plan}
+	for _, w := range q.Windows {
+		out.Windows = append(out.Windows, domain.QuotaWindow{Name: w.Name, Label: w.Label, Used: w.Used, DurationSec: w.DurationSec, ModelScope: w.ModelScope, ResetsAt: w.ResetsAt, Status: w.Status})
 	}
 	return out
 }
@@ -268,4 +266,44 @@ func modelsDTO(in []domain.RuntimeModel) []api.RuntimeModel {
 		out = append(out, api.RuntimeModel{ID: m.ID, Name: m.Name, Efforts: m.Efforts})
 	}
 	return out
+}
+
+func goalBrief(g *domain.Goal) *api.GoalBrief {
+	if g == nil {
+		return nil
+	}
+	objective := []rune(g.Objective)
+	if len(objective) > 200 {
+		objective = objective[:200]
+	}
+	return &api.GoalBrief{ID: g.ID, Objective: string(objective), Round: g.Round, MaxRounds: g.MaxRounds, NextWakeAt: g.NextWakeAt, State: g.State}
+}
+
+// visibleQuota deliberately does not use Actor.Owns: an administrator or
+// project coordinator is not automatically the owner of a paid account.
+func (s *Server) visibleQuota(r *http.Request, a *domain.Agent) *api.Quota {
+	if a.Runtime.Quota == nil {
+		return nil
+	}
+	owner := a.Owner
+	if s.machines != nil {
+		owner = s.machines.QuotaOwner(r.Context(), a)
+	}
+	if caller, ok := r.Context().Value(callerAgentKey{}).(*domain.Agent); ok {
+		if caller.Name != a.Name || owner == "" || a.Owner != owner {
+			return nil
+		}
+	} else if s.isMasterAdmin(r) {
+		// The explicitly configured master credential retains recovery access.
+	} else {
+		actor := s.actorOf(r)
+		if actor.Member == nil || owner == "" || actor.Member.ID != owner {
+			return nil
+		}
+	}
+	q := a.Runtime.Quota
+	if s.machines != nil {
+		q = s.machines.AccountQuota(r.Context(), a)
+	}
+	return quotaDTO(q)
 }

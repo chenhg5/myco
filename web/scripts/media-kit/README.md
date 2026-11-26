@@ -31,7 +31,7 @@ node web/scripts/media-kit-shots.mjs --out ../media-kit-check --scene coedit --l
 # Rerender one failed case without losing the other completed shots.
 node web/scripts/media-kit-shots.mjs --out ../media-kit-output --scene motion --lang en --resume
 # Optional local videos of the scenes that have interaction actions.
-# Requires ffmpeg; WebM clips capped at 18 seconds stay on disk and are never uploaded.
+# Requires ffmpeg; WebM clips default to 18 seconds and stay on disk without uploading. A scene may set `videoSeconds` (for example, 28 for a launch demo).
 node web/scripts/media-kit-shots.mjs --out ../media-kit-video --scene teamwork,progress,terminal,workflow,automation,focus-mode --video
 ```
 
@@ -96,3 +96,9 @@ CLI capacity, in both languages, using the mock admission fixture:
 ```sh
 APPS_TEST_ROOT=/path/to/apps node web/scripts/media-kit-shots.mjs --out ../runner-queue-shots --scene runner-queue
 ```
+
+The `web-automation-launch` scene pairs a cloud-agent conversation with the
+actual Web Automation official app's run history. All orders, machines and run
+updates are synthetic; the browser bridge advertises in-memory status only.
+It does not connect to a real workspace or drive a native browser. Capture both
+languages with `--scene web-automation-launch --video`; its clip is 28 seconds.

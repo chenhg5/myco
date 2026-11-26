@@ -45,6 +45,8 @@ export interface VoiceConfig {
   /** words speech recognition should listen for (calls and dictation), one
    *  per line, optionally with how they are misheard: "Claude = 克劳德, cloud" */
   words?: string[];
+  /** correct names in what was heard with the model, in the background (on unless false) */
+  polish?: boolean;
 }
 /** A speech service this App can speak with: the settings page draws these. */
 export interface VoiceTTSProvider {
@@ -87,6 +89,8 @@ export interface VoiceLine {
   kind: "user" | "hearing" | "assistant" | "action" | "notice";
   text: string;
   interrupted?: boolean;
+  /** what was heard before names in it were corrected (text is corrected) */
+  corrected?: string;
   task?: { hub_id: string; id: string; agent?: string; thread_id?: string };
   at: string;
 }
@@ -113,6 +117,21 @@ export interface ServerMachine {
   os?: string;
   online: boolean;
   can_spawn: boolean;
+}
+
+/** An agent's chat-app bot on this computer (its details; no secrets). */
+export interface IMBridge {
+  name: string;
+  platform: "feishu" | "lark" | "slack" | string;
+  agent?: string;
+  has_owner: boolean;
+  /** no owner yet: "/claim <code>" sent to the bot makes the sender it */
+  claim?: string;
+  /** no owner, and its claim code no longer works (expired or too many wrong tries) */
+  claim_expired?: boolean;
+  node?: string;
+  hub?: string;
+  online: boolean;
 }
 
 export interface HubOverview {
@@ -470,6 +489,7 @@ export interface OsBatch {
 
 /** An error returned by the App backend or a hub (same shape as the hub API). */
 export class ApiError extends Error {
+  error_node?: string;
   status: number;
   /** what a conflict answers with (a page's latest state) */
   latest?: unknown;
@@ -617,10 +637,10 @@ async function request<T>(method: string, path: string, body?: unknown, signal?:
   let data: unknown = null;
   try { data = text ? JSON.parse(text) : null; } catch { /* non-JSON */ }
   if (!r.ok) {
-    const e = (data ?? {}) as { error?: string; message?: string; suggestion?: string; latest?: unknown; reason?: string; group?: string; host?: string; declared?: boolean; once_only?: boolean };
+    const e = (data ?? {}) as { error?: string; message?: string; suggestion?: string; latest?: unknown; reason?: string; error_node?: string; group?: string; host?: string; declared?: boolean; once_only?: boolean };
     // A gateway's own page (no JSON) still says why: keep its first words for 详细信息.
     const page = data === null && r.status >= 500 ? text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 300) : "";
-    throw Object.assign(new ApiError(e.message || page || `HTTP ${r.status}`, r.status, typeof e.error === "string" ? e.error : undefined, e.suggestion), e.latest ? { latest: e.latest } : {}, typeof e.reason === "string" ? { reason: e.reason } : {},
+    throw Object.assign(new ApiError(e.message || page || `HTTP ${r.status}`, r.status, typeof e.error === "string" ? e.error : undefined, e.suggestion), e.latest ? { latest: e.latest } : {}, typeof e.reason === "string" ? { reason: e.reason } : {}, typeof e.error_node === "string" ? { error_node: e.error_node } : {},
       e.error === "consent_required" && e.group ? { consent: { group: e.group, host: e.host || undefined, declared: !!e.declared, once_only: !!e.once_only } } : {});
   }
   return data as T;
@@ -685,7 +705,9 @@ export const appApi = {
   startDictation: (lang: string) => request<{ mode: "system" | "listen"; id?: string }>("POST", "app/dictation", { lang }),
   /** What a listening heard after seq (waits a few seconds for more). */
   dictationState: (id: string, seq: number) =>
-    request<{ seq: number; text: string; final?: boolean; done?: boolean; error?: string }>("GET", `app/dictation/${enc(id)}?seq=${seq}`),
+    request<{ seq: number; text: string; final?: boolean; done?: boolean; error?: string;
+      /** a correction of names is under way; corrected is the last one */
+      polishing?: boolean; corrected?: { from: string; to: string } }>("GET", `app/dictation/${enc(id)}?seq=${seq}`),
   stopDictation: (id: string) => request<void>("DELETE", `app/dictation/${enc(id)}`),
   // Translating messages (console translate.go): keys stay in the keychain.
   /** Messages taken out of your own view (删除), kept on the workspace. */
@@ -994,6 +1016,17 @@ export const appApi = {
   },
 
   local: () => request<LocalState>("GET", "app/local"),
+  /** An agent's chat-app bots (Feishu/Lark, Slack) this computer runs. */
+  imBridges: (hubId: string, agent: string) => request<{ bridges: IMBridge[]; slack_create_url: string }>("GET", `app/im?hub_id=${enc(hubId)}&agent=${enc(agent)}`),
+  /** A Feishu QR code to scan: makes the bot and connects it. */
+  startFeishuScan: (hubId: string, agent: string) => request<{ id: string; url: string; qr: string }>("POST", "app/im/feishu", { hub_id: hubId, agent }),
+  feishuScan: (id: string) => request<{ state: "waiting" | "connecting" | "done" | "failed"; error?: string; bridge?: IMBridge }>("GET", `app/im/feishu/${enc(id)}`),
+  stopFeishuScan: (id: string) => request<{ stopped: boolean }>("DELETE", `app/im/feishu/${enc(id)}`),
+  connectSlack: (hubId: string, agent: string, botToken: string, appToken: string) =>
+    request<{ bridge: IMBridge }>("POST", "app/im/slack", { hub_id: hubId, agent, bot_token: botToken, app_token: appToken }),
+  /** A new claim code for a bot without an owner (the old one stops working). */
+  renewIMClaim: (name: string) => request<{ name: string; claim: string }>("POST", `app/im/${enc(name)}/claim`),
+  removeIMBridge: (name: string) => request<{ removed: string }>("DELETE", `app/im/${enc(name)}`),
   /** The agent CLIs on this computer: installed, signed in (from v0.20.12). */
   localAgents: () => request<{ agents: LocalAgent[] }>("GET", "app/local/agents"),
   /** Opens a terminal that installs or signs in to an agent CLI; opened:false → show command. */

@@ -1,0 +1,44 @@
+[
+  {
+    "id": "control1",
+    "language": "zh-CN",
+    "input": "这里加一个句号",
+    "expected": "这里加一个句号",
+    "reason": "句号是标点名称，不应替成 GitHub。"
+  },
+  {
+    "id": "control2",
+    "language": "en-US",
+    "input": "The cloud server is running",
+    "expected": "The cloud server is running",
+    "reason": "cloud/server 是普通词，不应替成 Claude/Cursor。"
+  },
+  {
+    "id": "control3",
+    "language": "en-US",
+    "input": "Open Michael and check the report",
+    "expected": "Open Michael and check the report",
+    "reason": "Michael 是中性示例人名，不应替成 myco 或 Mac。"
+  },
+  {
+    "id": "control4",
+    "language": "zh-CN",
+    "input": "先准备一下妹妹的作业",
+    "expected": "先准备一下妹妹的作业",
+    "reason": "妹妹是亲属称谓，不应把妹替成 main。"
+  },
+  {
+    "id": "control5",
+    "language": "en-US",
+    "input": "The cat sat on the mat",
+    "expected": "The cat sat on the mat",
+    "reason": "cat 是动物名，不应替成 Kettu。"
+  },
+  {
+    "id": "control6",
+    "language": "en-US",
+    "input": "Give me half of the result",
+    "expected": "Give me half of the result",
+    "reason": "half/result 是普通词，不应替成 Hub/React。"
+  }
+]

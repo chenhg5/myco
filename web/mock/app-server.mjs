@@ -169,6 +169,41 @@ const studioThread = process.env.MOCK_E2E
 // only when it has one of these messages.
 const CONSOLE = `@console:${"alice-mac"}`;
 
+// MOCK_LONG_CHAT=<agent>:<tasks> (e.g. pm-codex:400): a very long chat
+// between you and that agent, like a coordinator's after weeks: each task
+// its own thread with progress, two in three answered (some with a
+// myco-ui block or a file), the rest still open. For measuring how a long
+// chat opens; never in the smoke's own data.
+const longChatThreads = (() => {
+  const spec = process.env.MOCK_LONG_CHAT;
+  if (!spec) return {};
+  const [agent, n] = spec.split(":");
+  const out = {};
+  const count = Number(n) || 300;
+  for (let i = 0; i < count; i++) {
+    const ago = (count - i) * 600 + 120;
+    const th = `th_long_${i}`;
+    const open = i % 3 === 0 && i < count - 1;
+    const task = makeMessage({ thread_id: th, from: CONSOLE, to: agent, type: "task", status: open ? "acked" : "done",
+      body: `#${i} 看一下第 ${i} 个问题：${"把这块的行为、边界条件和测试都过一遍，有问题直接改，改完说一声。".repeat(3)}`,
+      created_at: iso(ago), updated_at: iso(open ? ago - 60 : ago - 300) });
+    const msgs = [task];
+    for (let p = 0; p < 6; p++) {
+      msgs.push(makeMessage({ thread_id: th, from: agent, to: CONSOLE, type: "progress", status: "done", reply_to: task.id,
+        body: `- [x] 第 ${p} 步：${"读代码、跑测试".repeat(4)}\n- [~] 正在改\n- [ ] 收尾`, created_at: iso(ago - 20 - p * 30), updated_at: iso(ago - 20 - p * 30) }));
+    }
+    if (!open) {
+      const ui = i % 10 === 5 ? ["", "```myco-ui", JSON.stringify({ type: "Table", props: { columns: ["项", "结果"], rows: [["测试", "通过"], ["vet", "通过"]] } }), "```"].join("\n") : "";
+      msgs.push(makeMessage({ thread_id: th, from: agent, to: CONSOLE, type: "reply", status: "done", reply_to: task.id,
+        body: `做完了 #${i}。${"改了两处，补了测试。".repeat(5)}${ui}`,
+        attachments: i % 7 === 3 ? [{ file_id: `f_long_${i}`, name: `report-${i}.log`, size: 2048, sha256: "", content_type: "text/plain" }] : undefined,
+        created_at: iso(ago - 300), updated_at: iso(ago - 300) }));
+    }
+    out[th] = msgs;
+  }
+  return out;
+})();
+
 // A task the node picked up and then went quiet on: long enough ago that its
 // result may never come back. Kept in the node's current work and its chat,
 // so the App can say "may be stuck" and offer to send it again.
@@ -257,7 +292,7 @@ const shotsOf = (names) => {
   const out = light.map((src) => ({ src, ...(names.includes(src.replace(/(\.[a-z]+)$/i, ".dark$1")) ? { dark: src.replace(/(\.[a-z]+)$/i, ".dark$1") } : {}) }));
   return out.length ? out : undefined;
 };
-const officialOrder = ["table", "base", "doc", "slides", "meeting", "tutor", "scheduling", "database", "code", "issues", "devtools", "todo", "notes", "disk", "stocks", "proxy-console", "server-console", "remote-desktop", "ledger", "habit", "reader", "price-compare", "cinema", "podcast", "personality", "palette", "aigc-canvas", "design-studio", "logo-studio", "whiteboard", "mindmap", "video", "motion", "photo", "media-kit", "arcade", "ocean", "gomoku", "sudoku"];
+const officialOrder = ["table", "base", "doc", "slides", "meeting", "tutor", "scheduling", "database", "code", "issues", "devtools", "todo", "notes", "disk", "stocks", "proxy-console", "server-console", "remote-desktop", "ledger", "habit", "reader", "price-compare", "cinema", "podcast", "personality", "palette", "aigc-canvas", "design-studio", "logo-studio", "whiteboard", "mindmap", "video", "motion", "photo", "media-kit", "arcade", "ocean", "gomoku", "sudoku", ...(process.env.MOCK_MEDIA_KIT === "1" ? ["web-automation"] : [])];
 const mockTemplates = officialOrder.filter((name) => existsSync(new URL(`${name}/myco.json`, officialRoot))).map((name) => {
   const files = officialFiles(name);
   const m = JSON.parse(files["myco.json"]);
@@ -283,11 +318,24 @@ if (OS_URL) madeFiles.set("pg_os", { "index.html": readFileSync(new URL("./os-pa
 madeFiles.set("pg_consent", { "index.html": `<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>提醒我</title></head>
 <body style="font:14px -apple-system,sans-serif;padding:48px 64px">
 <button id="go" type="button">提醒我</button> <span id="out"></span>
+<p><button id="shot" type="button">截屏</button> <span id="shot-out"></span></p>
+<p><button id="run" type="button">运行命令</button> <span id="run-out"></span></p>
 <script>
 document.getElementById("go").onclick = async () => {
   const out = document.getElementById("out");
   try { await window.myco.os.notify({ title: "到点了" }); out.textContent = "已提醒"; }
   catch (e) { out.textContent = "没提醒：" + (e.code || e.message); }
+};
+// the screen may be allowed always; commands only for this run
+document.getElementById("shot").onclick = async () => {
+  const out = document.getElementById("shot-out");
+  try { await window.myco.os.screen.capture({}); out.textContent = "已截屏"; }
+  catch (e) { out.textContent = "没截屏：" + (e.code || e.message); }
+};
+document.getElementById("run").onclick = async () => {
+  const out = document.getElementById("run-out");
+  try { await window.myco.os.exec.run({ shell: "ls" }); out.textContent = "已运行"; }
+  catch (e) { out.textContent = "没运行：" + (e.code || e.message); }
 };
 </script></body></html>` });
 const pageFilesOf = (id, n) => madeFiles.has(id) ? madeFiles.get(id) : (id === "pg_live" ? { "index.html": livePage } : id === "pg_checklist" ? { "index.html": checklistPage, "style.css": checklistCss, "app.js": checklistJs } : id === "pg_table" ? tableFiles : pageFiles(n));
@@ -555,7 +603,9 @@ const deletableAgents = () => [
   makeAgent({
     name: "temp-codex", owner: "alice", owner_id: "mem_alice", display_name: "临时 Codex",
     description: "临时机器上的 Codex，用来演示删除机器。", kind: "agent", machine_id: "m_delete",
-    runtime: { cli: "codex", cli_version: "0.52.0", model: "gpt-6-sol", access: "workspace", max_access: "full" },
+    // A provider key it can't find: no numbers at all (never a full quota).
+    runtime: { cli: "codex", cli_version: "0.52.0", model: "gpt-6-sol", access: "workspace", max_access: "full",
+      quota: { source: "minimax", provider: "minimax", plan: "coding_plan", machine_id: "m_delete", status: "no_credentials", at: "0001-01-01T00:00:00Z", checked_at: iso(120), windows: [] } },
     binding: { harness: "codex", environment: "macOS 26.1", workdir: "~/code/temp" },
     labels: ["machine=temp-mac"],
   }),
@@ -732,7 +782,7 @@ const state = {
       ok: true,
       hub_version: "0.19.23",
       update_available: true,
-      threads: { th_release: studioThread, th_coord: coordThread, th_dispatch_docs: dispatchDocs, th_dispatch_release: dispatchRelease, th_member_note: memberNote, ...consoleThreads },
+      threads: { th_release: studioThread, th_coord: coordThread, th_dispatch_docs: dispatchDocs, th_dispatch_release: dispatchRelease, th_member_note: memberNote, ...consoleThreads, ...longChatThreads },
       machines: [
         {
           id: "m_studio", name: "Studio Mac", hostname: "studio.local", os: "darwin", arch: "arm64",
@@ -760,10 +810,11 @@ const state = {
             // a custom address (Settings: 自定义地址)
             provider: "api.example-llm.com", provider_host: "api.example-llm.com", provider_source: "env_file",
             quota: {
-              source: "codex", at: iso(120),
+              source: "codex", provider: "codex", plan: "chatgpt_subscription", machine_id: "m_studio", source_kind: "native",
+              status: "ok", at: iso(120), checked_at: iso(120),
               windows: [
-                { name: "five_hour", used: 0.95, resets_at: iso(-(3 * 3600 + 40 * 60)) },
-                { name: "seven_day", used: 0.62, resets_at: iso(-(3 * 86_400)) },
+                { name: "primary", duration_sec: 18_000, used: 0.95, resets_at: iso(-(3 * 3600 + 40 * 60)) },
+                { name: "secondary", duration_sec: 604_800, used: 0.62, resets_at: iso(-(3 * 86_400)) },
               ],
             },
           },
@@ -787,6 +838,16 @@ const state = {
           // Its runner lets the App switch its provider from here (remote_provider)
           // and lists the cc-switch providers on its computer (never a key).
           runtime: { cli: "claude", cli_version: "2.1.240", model: "sonnet", access: "workspace", max_access: "workspace", features: ["mcp_tools", "remote_provider"],
+            // Its Claude sign-in expired: the last numbers stay, marked old,
+            // and the person is told to sign in again.
+            quota: {
+              source: "claude", provider: "claude", plan: "claude_subscription", machine_id: "m_studio", source_kind: "cache",
+              status: "auth_required", error_code: "oauth_expired", at: iso(26 * 3600), checked_at: iso(300),
+              windows: [
+                { name: "five_hour", duration_sec: 18_000, used: 0.3 },
+                { name: "seven_day", duration_sec: 604_800, used: 0.55, resets_at: iso(-(4 * 86_400)) },
+              ],
+            },
             provider: "DeepSeek", provider_host: "api.deepseek.com", provider_source: "machine",
             providers: [
               { ref: "cc-switch:deepseek", name: "DeepSeek", host: "api.deepseek.com", model: "deepseek-v4" },
@@ -819,11 +880,14 @@ const state = {
             // follows this computer, which sends it through a local gateway
             effort: "low", effort_source: "app", access: "readonly", max_access: "workspace", provider: "magpie 网关", provider_host: "127.0.0.1:3425", provider_source: "machine", features: ["mcp_tools"],
             away: "stopped",
+            // a weekly bucket of its own for Opus (folded under the windows)
             quota: {
-              source: "claude", at: iso(600),
+              source: "claude", provider: "claude", plan: "claude_subscription", machine_id: "m_studio", source_kind: "event",
+              status: "ok", at: iso(600), checked_at: iso(600),
               windows: [
-                { name: "five_hour", used: 0.4, resets_at: iso(-(2 * 3600)) },
-                { name: "seven_day", used: 0.18, resets_at: iso(-(2 * 86_400)) },
+                { name: "five_hour", duration_sec: 18_000, used: 0.4, resets_at: iso(-(2 * 3600)) },
+                { name: "seven_day", duration_sec: 604_800, used: 0.18, resets_at: iso(-(2 * 86_400)) },
+                { name: "seven_day_opus", duration_sec: 604_800, model_scope: "opus", used: 0.71, resets_at: iso(-(2 * 86_400)) },
               ],
             },
           },
@@ -855,7 +919,9 @@ const state = {
         makeAgent({
           name: "release-cloud", owner: "alice", owner_id: "mem_alice", display_name: "Release (Claude 云端)", description: "在 claude.ai 上整理发布说明。",
           // It has not said which model it runs on (an older myco in that session).
-          kind: "agent", runtime: { cli: "claude-cloud", access: "readonly" },
+          // No supported usage source on its connection: lists say nothing.
+          kind: "agent", runtime: { cli: "claude-cloud", access: "readonly",
+            quota: { source: "claude", provider: "unknown", status: "unsupported", at: "0001-01-01T00:00:00Z", checked_at: iso(300), windows: [] } },
           status_text: "正在整理发布说明", status_at: iso(60),
           labels: ["group=release"], binding: { harness: "claude-cloud", environment: "claude.ai" },
         }),
@@ -864,9 +930,11 @@ const state = {
           kind: "agent",
           runtime: {
             cli: "codex-cloud", model: "gpt-6-sol", model_source: "observed", access: "readonly",
-            // Out of quota two hours ago: red, and the numbers are stale.
+            // Out of quota two hours ago, and reading it since failed: red,
+            // the numbers kept with their age.
             quota: {
-              source: "codex", at: iso(2 * 3600),
+              source: "codex", provider: "codex", plan: "chatgpt_subscription", status: "transient_error",
+              at: iso(2 * 3600), checked_at: iso(60),
               windows: [{ name: "five_hour", used: 1, resets_at: iso(-(40 * 60)), status: "rejected" }],
             },
           },
@@ -1767,7 +1835,7 @@ function watchesOf(h) {
       w({ id: "wat_ci", agent: "legacy-codex", what: "CI 跑完", kind: "workflow", started_at: iso(min(200)), deadline: iso(min(170)), ended_at: iso(min(170)), state: "expired", checks: 60, outcome: "30 分钟没等到" }),
       w({ id: "wat_review", agent: "legacy-codex", what: "Review 的审查意见", started_at: iso(min(95)), deadline: iso(min(35)), ended_at: iso(min(80)), state: "stopped", ended_by: CONSOLE, checks: 30, outcome: "你停止了" }),
       w({ id: "wat_pm", agent: "grok-agent-7c2e", what: "PM (Codex) 的答复", started_at: iso(min(6)), deadline: new Date(Date.now() + 24 * 60_000).toISOString(), last_check_at: iso(12), checks: 12, state: "watching" }),
-      w({ id: "wat_build", agent: "grok-agent-7c2e", what: "构建流水线跑完", kind: "workflow", started_at: iso(min(3)), deadline: new Date(Date.now() + 57 * 60_000).toISOString(), last_check_at: iso(45), last_result: "第 3/5 步：跑测试", checks: 4, state: "watching" }),
+      w({ id: "wat_build", agent: "grok-agent-7c2e", what: "构建流水线跑完", kind: "command", command: "echo pending", match: "^success$", every_sec: 30, started_at: iso(min(3)), deadline: new Date(Date.now() + 57 * 60_000).toISOString(), last_check_at: iso(45), last_result: "build: pending", checks: 4, state: "watching" }),
     ]);
   }
   return watchStore.get(h.id);
@@ -1993,6 +2061,15 @@ const localAgents = [
   { cli: "opencode", name: "opencode", state: "missing",
     install: "curl -fsSL https://opencode.ai/install | bash", install_mirror: "npm install -g opencode-ai" + npmMirror, login: "opencode auth login" },
 ];
+
+let imBridges = [{ name: "feishu-pm-codex", platform: "feishu", agent: "pm-codex", has_owner: true, node: "studio-im-feishu-pm-codex", online: true }];
+let imScan = null;
+// A QR-code-looking placeholder (the real App gets a PNG from Feishu's link).
+const MOCK_QR = "data:image/svg+xml;base64," + Buffer.from(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 21 21" shape-rendering="crispEdges"><rect width="21" height="21" fill="#fff"/>' +
+  Array.from({ length: 21 * 21 }, (_, i) => { const x = i % 21, y = Math.floor(i / 21); const f = (x < 7 && y < 7) || (x > 13 && y < 7) || (x < 7 && y > 13);
+    const on = f ? (x % 14 === 0 || x % 14 === 6 || y % 14 === 0 || y % 14 === 6 || (x % 14 >= 2 && x % 14 <= 4 && y % 14 >= 2 && y % 14 <= 4)) : ((x * 7 + y * 13 + x * y) % 3 === 0);
+    return on ? `<rect x="${x}" y="${y}" width="1" height="1"/>` : ""; }).join("") + "</svg>").toString("base64");
 
 function send(res, status, data) {
   const body = data === undefined ? "" : JSON.stringify(data);
@@ -2233,6 +2310,44 @@ const server = http.createServer(async (req, res) => {
     return send(res,200,{ok:true});
   }
 
+  // Synthetic cross-machine browser demo; no native browser or model is used.
+  if (process.env.MOCK_MEDIA_KIT === "1" && parts.join("/") === "app/mock/media-web-automation" && method === "POST") {
+    const b = await readBody(req), hub = state.hubs[0], T = (zh, en) => b.lang === "en" ? en : zh;
+    const agent = hub.agents.find(a => a.name === "build-backend");
+    agent.display_name = T("云端助手（Codex）", "Cloud assistant (Codex)");
+    agent.status_text = T("云端规划 · 公司电脑执行", "Cloud planning · Office computer execution");
+    agent.description = T("在云端安排任务，交给你的电脑执行。", "Plan in the cloud. Execute on your computer.");
+    goalStore.set(hub.id, []); watchStore.set(hub.id, []);
+    for (const [id, messages] of Object.entries(hub.threads)) if (id !== "th_api" && messages.some(m=>m.from===agent.name || m.to===agent.name)) delete hub.threads[id];
+    agent.current_thread = "th_api"; agent.current_from = CONSOLE; agent.current_id = "msg_browser_demo"; agent.queued = 0;
+    if (b.phase !== "running") agent.status_text = "";
+    const task = makeMessage({id:"msg_browser_demo",thread_id:"th_api",from:CONSOLE,to:agent.name,type:"task",status:b.phase === "done" ? "done" : "acked",trace:[],body:T("帮我去「公司电脑」的后台，把本周订单导出成表格。", "Export this week's orders from the admin site on my Office computer."),created_at:iso(24),updated_at:iso(24)});
+    const progress = makeMessage({id:"msg_browser_progress",thread_id:"th_api",from:agent.name,to:CONSOLE,type:"progress",status:"done",reply_to:task.id,body:T("已连接公司电脑。正在运行你批准的订单导出脚本。\n\n云端负责安排，网页操作在公司电脑上完成。", "Connected to Office computer. Running your approved order export script.\n\nI coordinate in the cloud; the browser runs on your Office computer."),created_at:iso(15),updated_at:iso(15)});
+    const reply = makeMessage({id:"msg_browser_result",thread_id:"th_api",from:agent.name,to:CONSOLE,type:"reply",status:"done",reply_to:task.id,body:T("已完成：导出 128 笔订单。\n\n**orders-this-week.csv**\n保存在公司电脑上，脚本可再次运行。", "Done: exported 128 orders.\n\n**orders-this-week.csv**\nSaved on Office computer. The script is ready to reuse."),created_at:iso(0),updated_at:iso(0)});
+    const ready = makeMessage({id:"msg_browser_ready",thread_id:"th_api",from:agent.name,to:CONSOLE,type:"note",status:"done",body:T("公司电脑在线，订单导出脚本已就绪。", "Office computer is online. The order export script is ready."),created_at:iso(120),updated_at:iso(120)});
+    const thread = b.phase === "ready" ? [ready] : b.phase === "done" ? [ready, task, progress, reply] : [ready, task, progress];
+    hub.threads.th_api = thread;
+    hub.recent = hub.recent.filter(m => m.thread_id !== "th_api" && m.from !== agent.name && m.to !== agent.name).concat(thread).sort((a,b)=>b.updated_at.localeCompare(a.updated_at));
+    return send(res,200,{ok:true});
+  }
+
+  // Synthetic self-test demo: the scene supplies the whole thread (demo forum
+  // data only); no native browser, grant or model request is involved.
+  if (process.env.MOCK_MEDIA_KIT === "1" && parts.join("/") === "app/mock/media-web-selftest" && method === "POST") {
+    const b = await readBody(req), hub = state.hubs[0];
+    const agent = hub.agents.find(a => a.name === "build-backend");
+    agent.display_name = b.display_name; agent.description = b.description; agent.status_text = b.status_text || "";
+    goalStore.set(hub.id, []); watchStore.set(hub.id, []);
+    for (const [id, messages] of Object.entries(hub.threads)) if (id !== "th_api" && messages.some(m=>m.from===agent.name || m.to===agent.name)) delete hub.threads[id];
+    const n = (b.messages || []).length;
+    const thread = (b.messages || []).map((m, i) => makeMessage({id:m.id,thread_id:"th_api",from:m.from === "me" ? CONSOLE : agent.name,to:m.from === "me" ? agent.name : CONSOLE,type:m.type,status:m.status || "done",reply_to:m.reply_to,trace:[],body:m.body,created_at:iso(n - i),updated_at:iso(n - i)}));
+    const task = thread.find(m => m.type === "task");
+    agent.current_thread = "th_api"; agent.current_from = CONSOLE; agent.current_id = task ? task.id : ""; agent.queued = 0;
+    hub.threads.th_api = thread;
+    hub.recent = hub.recent.filter(m => m.thread_id !== "th_api" && m.from !== agent.name && m.to !== agent.name).concat(thread).sort((a,b)=>b.updated_at.localeCompare(a.updated_at));
+    return send(res,200,{ok:true});
+  }
+
   // Isolated promotional scenes: never enabled in the real App backend.
   if (process.env.MOCK_MEDIA_KIT === "1" && parts.join("/") === "app/mock/media-message" && method === "POST") {
     const b = await readBody(req), hub = state.hubs[0];
@@ -2241,6 +2356,12 @@ const server = http.createServer(async (req, res) => {
       type: "reply", status: "done", body: String(b.body || ""), reply_to: thread[0].id, created_at: iso(0), updated_at: iso(0) });
     thread.push(m); hub.recent.unshift(m);
     return send(res, 201, m);
+  }
+
+  // /app/mock/goals-reset — seeds the goals again from now (as watches-reset).
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "goals-reset" && parts.length === 3 && method === "POST") {
+    goalStore.clear();
+    return send(res, 200, { ok: true });
   }
 
   // /app/mock/watches-reset — seeds the watches again from now, so a test
@@ -2549,7 +2670,7 @@ const server = http.createServer(async (req, res) => {
       const b = await readBody(req);
       let g = osGrants.find((x) => x.hub === b.hub && x.page === b.page);
       if (!g) osGrants.push(g = { hub: b.hub, page: b.page, name: b.name, always: [], once: [], denied: [], hosts: [] });
-      const answer = b.answer === "always" && ["exec", "files.delete", "screen"].includes(b.group) ? "once" : b.answer;
+      const answer = b.answer === "always" && ["exec", "files.delete"].includes(b.group) ? "once" : b.answer;
       for (const k of ["always", "once", "denied"]) g[k] = (g[k] || []).filter((x) => x !== b.group);
       g[answer === "deny" ? "denied" : answer].push(b.group);
       return send(res, 200, { group: b.group, answer });
@@ -2565,11 +2686,12 @@ const server = http.createServer(async (req, res) => {
     // a notification (提醒我): asked for first, as the App backend does
     if (parts[2] === "call" && method === "POST") {
       const b = await readBody(req);
-      if (b.name === "notify") {
+      const group = b.name === "notify" ? "notify" : b.name?.startsWith("screen.") ? "screen" : b.name?.startsWith("exec.") ? "exec" : "";
+      if (group) {
         const g = osGrants.find((x) => x.hub === b.page?.hub && x.page === b.page?.id) || {};
-        if ((g.denied || []).includes("notify")) return fail(res, 403, "permission_denied", "the person did not allow this app: notify");
-        if ([...(g.always || []), ...(g.once || [])].includes("notify")) return send(res, 200, { value: true });
-        return send(res, 403, { error: "consent_required", message: "ask the person first", group: "notify", declared: true, once_only: false });
+        if ((g.denied || []).includes(group)) return fail(res, 403, "permission_denied", "the person did not allow this app: " + group);
+        if ([...(g.always || []), ...(g.once || [])].includes(group)) return send(res, 200, { value: true });
+        return send(res, 403, { error: "consent_required", message: "ask the person first", group, declared: true, once_only: group === "exec" });
       }
     }
     return fail(res, 501, "unsupported", "the mock App does not use this computer");
@@ -2875,7 +2997,7 @@ const server = http.createServer(async (req, res) => {
     if (parts[2] === "config" && method === "PUT") {
       const b = await readBody(req);
       if (b?.tts_provider && b.tts_provider !== "doubao") return fail(res, 400, "invalid_argument", "unknown speech service " + b.tts_provider);
-      for (const k of ["llm_base_url", "llm_model", "tts_provider", "tts_speaker", "tts_rate", "words"]) if (b?.[k] !== undefined) v.cfg[k] = b[k];
+      for (const k of ["llm_base_url", "llm_model", "tts_provider", "tts_speaker", "tts_rate", "words", "polish"]) if (b?.[k] !== undefined) v.cfg[k] = b[k];
       if (typeof b?.share === "boolean") v.share = b.share;
       if (b?.llm_key) v.llmKey = true;
       if (b?.tts_key) v.ttsKey = true;
@@ -2913,6 +3035,11 @@ const server = http.createServer(async (req, res) => {
       at(600, () => line("hearing", "帮我看一下"));
       at(1100, () => line("hearing", "帮我看一下下载页的链接对不对"));
       at(1500, () => { line("user", "帮我看一下下载页的链接对不对"); v.st = "thinking"; });
+      // A name corrected in the background (speech_polish.go): marked, undoable.
+      at(1800, () => {
+        const u = v.lines.findLast((x) => x.kind === "user" && x.text === "帮我看一下下载页的链接对不对");
+        if (u) { v.seq += 1; u.seq = v.seq; u.corrected = "帮我看一下下载业的链接对不对"; }
+      });
       at(2100, () => {
         // What it passed on is in the chat, as if typed, with the mark.
         const threadId = `th_c_${state.counter += 1}`;
@@ -2986,6 +3113,13 @@ const server = http.createServer(async (req, res) => {
     await new Promise((r) => setTimeout(r, 400));
     const n = Math.min(h.words.length, Math.floor((Date.now() - h.at) / 400));
     const done = h.stopped || n >= h.words.length;
+    // MOCK_POLISH=1: a correction of names follows the end (speech_polish.go).
+    if (done && process.env.MOCK_POLISH) {
+      const heard = h.words[h.words.length - 1];
+      h.polls = (h.polls || 0) + 1;
+      const fixedText = heard.replace("下载页", "GitHub 页").replace("download page", "GitHub page");
+      return send(res, 200, { seq: n + h.polls, text: heard, final: true, done: true, polishing: h.polls < 2, ...(h.polls >= 2 ? { corrected: { from: heard, to: fixedText } } : {}) });
+    }
     return send(res, 200, { seq: Math.max(seq + 1, n + (done ? 1 : 0)), text: n ? h.words[n - 1] : "", final: done, done });
   }
 
@@ -3007,6 +3141,42 @@ const server = http.createServer(async (req, res) => {
   }
 
   // /app/local[...]
+  // /app/im: chat-app bots (ChatApps.tsx).
+  if (parts[0] === "app" && parts[1] === "im") {
+    if (parts.length === 2 && method === "GET") {
+      const agent = url.searchParams.get("agent");
+      return send(res, 200, { bridges: imBridges.filter((b) => !agent || b.agent === agent), slack_create_url: "https://api.slack.com/apps?new_app=1&manifest_json=%7B%7D" });
+    }
+    if (parts.length === 3 && parts[2] === "feishu" && method === "POST") {
+      const body = await readBody(req);
+      imScan = { id: "scan1", agent: body.agent, polls: 0 };
+      return send(res, 200, { id: "scan1", url: "https://open.feishu.cn/page/launcher?user_code=DEMO-CODE", qr: MOCK_QR });
+    }
+    if (parts.length === 4 && parts[2] === "feishu" && method === "GET") {
+      if (!imScan) return send(res, 404, { error: "not_found", message: "no such QR code (it expired)" });
+      return send(res, 200, { state: "waiting" });
+    }
+    if (parts.length === 4 && parts[2] === "feishu" && method === "DELETE") {
+      imScan = null;
+      return send(res, 200, { stopped: true });
+    }
+    if (parts.length === 3 && parts[2] === "slack" && method === "POST") {
+      const body = await readBody(req);
+      const b = { name: `slack-${body.agent}`, platform: "slack", agent: body.agent, has_owner: false, claim: "3f9a1c2e", node: "studio-im-slack", online: true };
+      imBridges.push(b);
+      return send(res, 200, { bridge: b });
+    }
+    if (parts.length === 4 && parts[3] === "claim" && method === "POST") {
+      const b = imBridges.find((x) => x.name === parts[2]);
+      if (b) { b.claim = "5e6f7a8b9c"; b.claim_expired = false; }
+      return send(res, 200, { name: parts[2], claim: "5e6f7a8b9c" });
+    }
+    if (parts.length === 3 && method === "DELETE") {
+      imBridges = imBridges.filter((x) => x.name !== parts[2]);
+      return send(res, 200, { removed: parts[2] });
+    }
+  }
+
   if (parts[0] === "app" && parts[1] === "local") {
     if (parts.length === 2 && method === "GET") return send(res, 200, local);
     if (parts.length === 3 && parts[2] === "shell-access" && method === "POST") {

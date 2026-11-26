@@ -294,6 +294,9 @@ func (c *controlSession) captureNavigationLocked(tab proto.TargetTargetID, raw s
 		c.signalEffectsLocked()
 		return
 	}
+	if c.replaying {
+		return
+	}
 	if popup {
 		if c.popupNode != "" {
 			return

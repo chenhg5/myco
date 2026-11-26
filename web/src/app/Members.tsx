@@ -1,4 +1,5 @@
 import { runnerUpdating } from "@/lib/runner-state";
+import { QuotaTag } from "@/app/QuotaTag";
 import { useEffect, useMemo, useState } from "react";
 import type { LocalSession, LocalState, RecentItem } from "@/appapi";
 import { Camera, MessageCircle, Plus, Search, X } from "lucide-react";
@@ -103,6 +104,7 @@ function Section({ title, rows, projects, now, onOpen }: { title?: string; rows:
                 <span className="mb-card-foot">
                   {ps.length > 0 ? ps.slice(0, 2).map((p) => <span key={p.name} className="mb-chip">{p.title || p.name}</span>) : <span className="mb-chip is-none">{L("还没进项目", "No project yet")}</span>}
                   {ps.length > 2 && <span className="mb-chip">+{ps.length - 2}</span>}
+                  <QuotaTag row={r} now={now} />
                   {r.st.state === "offline" && !runnerUpdating(a) && <span className="mb-seen">{timeAgo(a.last_seen_at || a.created_at, now)}{L("在线", " online")}</span>}
                 </span>
               </span>

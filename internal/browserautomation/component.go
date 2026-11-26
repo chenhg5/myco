@@ -24,13 +24,18 @@ import (
 	"time"
 )
 
-const ComponentVersion = "0.5.0"
+const ComponentVersion = "0.6.1"
 const ComponentRelease = "https://github.com/myco-ai/myco/releases/download/browser-v" + ComponentVersion
 
 // Component owns only the optional process and its private directory. A new
 // engine can implement the same HTTP protocol without changing the App or Hub.
 type Component struct {
-	Home            string
+	Home string
+	// Preview is set only in preview builds of the App (version "…-preview").
+	// They prefer a component built from the same commit in PreviewDir, so a
+	// fix can be tried before it is released. Release builds never read it,
+	// and the shared release directories are never written for a preview.
+	Preview         bool
 	HTTP            *http.Client
 	mu              sync.Mutex
 	installing      bool
@@ -49,7 +54,7 @@ func (c *Component) dir() string {
 // arbitrary version directories, copy old binaries into a new version, or
 // download an unreviewed release just because the App has been upgraded.
 func compatibleComponentVersions() []string {
-	return []string{ComponentVersion, "0.4.0", "0.3.1", "0.3.0", "0.2.0", "0.1.1", "0.1.0"}
+	return []string{ComponentVersion, "0.6.0", "0.5.0", "0.4.0", "0.3.1", "0.3.0", "0.2.0", "0.1.1", "0.1.0"}
 }
 
 // CompatibleComponentVersion is the explicit protocol-1 allowlist shared by
@@ -63,7 +68,21 @@ func CompatibleComponentVersion(version string) bool {
 	return false
 }
 
+// PreviewDir holds a preview App's unreleased component, outside the
+// release version directories that the installed App uses.
+func PreviewDir(home string) string {
+	return filepath.Join(home, ".myco", "components", "browser-preview")
+}
+
 func (c *Component) installedComponent() (string, string, bool) {
+	if c.Preview {
+		dir := PreviewDir(c.Home)
+		if engine, err := os.Stat(filepath.Join(dir, program("myco-browser"))); err == nil && engine.Mode().IsRegular() {
+			// Built from the App's own commit, so it reports ComponentVersion;
+			// the start handshake still checks that exact version.
+			return dir, ComponentVersion, true
+		}
+	}
 	for _, version := range compatibleComponentVersions() {
 		dir := filepath.Join(c.Home, ".myco", "components", "browser", version)
 		engine, a := os.Stat(filepath.Join(dir, program("myco-browser")))
@@ -403,6 +422,9 @@ func (c *Component) Call(ctx context.Context, scope, method, path string, in, ou
 	if path == "/pick" {
 		timeout = 150 * time.Second
 	}
+	if path == "/control/run" {
+		timeout = 305 * time.Second
+	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	req, e := http.NewRequestWithContext(ctx, method, "http://"+address+path, bytes.NewReader(b))
@@ -426,18 +448,19 @@ func (c *Component) Call(ctx context.Context, scope, method, path string, in, ou
 	defer res.Body.Close()
 	if res.StatusCode >= 400 {
 		var v struct {
-			Error   string `json:"error"`
-			Code    string `json:"code"`
-			Reason  string `json:"reason"`
-			Applied *int   `json:"applied"`
-			Host    string `json:"host"`
+			Error     string `json:"error"`
+			Code      string `json:"code"`
+			Reason    string `json:"reason"`
+			Applied   *int   `json:"applied"`
+			Host      string `json:"host"`
+			ErrorNode string `json:"error_node"`
 		}
 		_ = json.NewDecoder(io.LimitReader(res.Body, 4096)).Decode(&v)
 		if v.Code != "" || strings.HasPrefix(path, "/control/") && v.Error != "" {
 			if v.Code == "" {
 				v.Code = v.Error
 			}
-			return &ComponentError{Code: v.Code, Reason: v.Reason, Applied: v.Applied, Host: v.Host}
+			return &ComponentError{Code: v.Code, Reason: v.Reason, Applied: v.Applied, Host: v.Host, ErrorNode: v.ErrorNode}
 		}
 		if v.Error == "" {
 			v.Error = "component_failed"

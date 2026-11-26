@@ -23,7 +23,10 @@ function(op,arg) {
   const descendants=n=>[n,...(n.querySelectorAll?.('*')||[])];
   let axisAligned=true;
   for(let n=el;n;n=parent(n)){const m=getComputedStyle(n).transform;if(m&&m!=='none'){const t=new DOMMatrix(m);if(Math.abs(t.b)>0.0001||Math.abs(t.c)>0.0001||t.a<=0||t.d<=0)axisAligned=false;}}
-  const info={sensitive_descendants:sensitive(el,true),generation,node_type:original.nodeType,scale_x:rect&&el.offsetWidth?rect.width/el.offsetWidth:1,scale_y:rect&&el.offsetHeight?rect.height/el.offsetHeight:1,axis_aligned:axisAligned,border_x:el?.clientLeft||0,border_y:el?.clientTop||0,connected,panel,sensitive:secret,disabled,interactive,visible,in_viewport:visible&&rect.bottom>0&&rect.right>0&&rect.top<innerHeight&&rect.left<innerWidth,rect:rect?{x:rect.x,y:rect.y,width:rect.width,height:rect.height}:null,value:!secret&&'value'in(el||{})?String(el.value):''};
+  // Inline links have one painted rectangle per line. Their union's center
+  // can fall in line spacing or after a short line, outside the actual link.
+  const clientRects=op==='inspect'&&arg?.client_rects?[...(el?.getClientRects?.()||[])].map(r=>({x:Math.max(0,r.left),y:Math.max(0,r.top),width:Math.min(innerWidth,r.right)-Math.max(0,r.left),height:Math.min(innerHeight,r.bottom)-Math.max(0,r.top)})).filter(r=>r.width>0&&r.height>0).slice(0,64):[];
+  const info={client_rects:clientRects,sensitive_descendants:sensitive(el,true),generation,node_type:original.nodeType,scale_x:rect&&el.offsetWidth?rect.width/el.offsetWidth:1,scale_y:rect&&el.offsetHeight?rect.height/el.offsetHeight:1,axis_aligned:axisAligned,border_x:el?.clientLeft||0,border_y:el?.clientTop||0,connected,panel,sensitive:secret,disabled,interactive,visible,in_viewport:visible&&rect.bottom>0&&rect.right>0&&rect.top<innerHeight&&rect.left<innerWidth,rect:rect?{x:rect.x,y:rect.y,width:rect.width,height:rect.height}:null,value:!secret&&'value'in(el||{})?String(el.value):''};
   if(op==='inspect')return info;
   if(op==='verify_focus'){
     const root=el?.getRootNode();let active=root?.activeElement;
@@ -52,6 +55,7 @@ function(op,arg) {
     if(!option)return {error:'target_not_found'};
     el.value=option.value;el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));return {ok:true};
   }
+  if(op==='scroll_position')return {y:el.scrollTop};
   if(op==='scroll'){el.scrollBy(0,arg);return {ok:true};}
   if(op==='safe_document') {
     const scan=root=>{for(const n of root.querySelectorAll('*')){if(n.id==='__myco_recording_panel__')continue;if(sensitive(n))return false;if(n.shadowRoot&&!scan(n.shadowRoot))return false;}return true;};
@@ -68,10 +72,28 @@ function(op,arg) {
     const clone=original.cloneNode(true);
     for(const n of descendants(clone)) {
       if(n.nodeType!==1)continue;
-      if(sensitive(n)||n.id==='__myco_recording_panel__'){n.replaceWith(document.createTextNode('[redacted]'));continue;}
+      if(sensitive(n)||n.id==='__myco_recording_panel__'){
+        if(arg.what==='table'&&n.matches('td,th')){n.replaceChildren(document.createTextNode('[redacted]'));for(const a of [...n.attributes])n.removeAttribute(a.name);}
+        else n.replaceWith(document.createTextNode('[redacted]'));
+        continue;
+      }
       if(n.matches('script,style,iframe,object,embed')){n.remove();continue;}
       if(n.matches('input,textarea,select')){n.removeAttribute('value');n.textContent='';}
       for(const a of [...n.attributes])if(/^(?:on.*|srcdoc|value)$/i.test(a.name))n.removeAttribute(a.name);
+    }
+    if(arg.what==='table'){
+      const data=[],encoder=new TextEncoder();let budget=12000,full=false;
+      for(const row of [...clone.querySelectorAll('tr')].slice(0,200)){
+        const cells=[];
+        for(const cell of [...row.querySelectorAll('th,td')].slice(0,100)){
+          let text=(cell.textContent||'').slice(0,2000),cost=encoder.encode(JSON.stringify(text)).length+2;
+          if(cost>budget){text='[truncated]';cost=15;full=true;}
+          if(cost<=budget){cells.push(text);budget-=cost;}
+          if(full)break;
+        }
+        data.push(cells);if(full||budget<16)break;
+      }
+      return {data};
     }
     return {text:String(arg.what==='html'?(clone.outerHTML||clone.textContent):clone.textContent||'').slice(0,49152)};
   }

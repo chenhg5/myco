@@ -14,6 +14,16 @@ import (
 )
 
 const schema = `
+-- Account quota snapshots are scoped to the agent owner and authenticated machine.
+CREATE TABLE IF NOT EXISTS account_quotas (
+ owner TEXT NOT NULL,
+ machine TEXT NOT NULL,
+ provider TEXT NOT NULL,
+ profile TEXT NOT NULL,
+ snapshot TEXT NOT NULL,
+ PRIMARY KEY(owner,machine,provider,profile)
+);
+
 CREATE TABLE IF NOT EXISTS agents (
   id           TEXT PRIMARY KEY,
   name         TEXT NOT NULL UNIQUE,
@@ -485,7 +495,7 @@ func Open(path string) (*sql.DB, error) {
 	// A single writer connection serializes transactions and keeps
 	// ":memory:" databases shared across the pool.
 	db.SetMaxOpenConns(1)
-	if _, err := db.Exec(schema + usageSchema + projectInvitationSchema + pageAttachmentSchema + watchSchema); err != nil {
+	if _, err := db.Exec(schema + usageSchema + projectInvitationSchema + pageAttachmentSchema + watchSchema + goalSchema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}

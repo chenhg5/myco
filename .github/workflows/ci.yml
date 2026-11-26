@@ -17,7 +17,11 @@ permissions:
 # releases.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # On main a running check finishes (a newer push waits, and only the newest
+  # waiting one runs next): with many pushes an hour, cancelling left main
+  # with no commit fully checked, and releases freeze the latest green one.
+  # Other branches still cancel the older run.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   # What changed, so the slow UI smoke runs only when the UI did.

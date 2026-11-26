@@ -87,6 +87,9 @@ func (c *controlSession) recordHostViolation(x *controlError) {
 		return
 	}
 	c.violation = x
+	if c.replayAbort != nil {
+		c.replayAbort()
+	}
 	c.events = append(c.events, controlEvent{Host: x.Host, Action: "host_not_allowed", Code: "host_not_allowed", Time: time.Now().UTC()})
 	close(c.wake)
 	c.wake = make(chan struct{})
@@ -122,6 +125,12 @@ func (c *controlSession) enforceHosts(ctx context.Context) *controlError {
 		x := c.hostViolation(info.URL)
 		denied = x
 		c.recordHostViolation(x)
+		// Target info can expose a redirect's destination before its document
+		// commits. Cancel that pending navigation before restoring history;
+		// otherwise a same-entry history restore can be a no-op and the late
+		// redirect replaces the restored page, forcing the blank fallback.
+		sid := c.browser.primarySession(p.TargetID)
+		_ = c.call(ctx, sid, "Page.stopLoading", nil, nil)
 		c.mu.Lock()
 		previous := c.allowedURLs[p.TargetID]
 		if c.hostRecovered == nil {
@@ -140,7 +149,6 @@ func (c *controlSession) enforceHosts(ctx context.Context) *controlError {
 			}
 			continue
 		}
-		sid := c.browser.primarySession(p.TargetID)
 		var history proto.PageGetNavigationHistoryResult
 		restored := false
 		if c.call(ctx, sid, "Page.getNavigationHistory", nil, &history) == nil {

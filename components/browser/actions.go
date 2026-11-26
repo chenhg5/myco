@@ -191,7 +191,7 @@ func (r *playRun) act(ctx context.Context, n node) (any, error) {
 			}
 		case "expr":
 			result, e := p.Eval("()=>Boolean(" + n.Code + ")")
-			err = e
+			err = scriptEvalError(e)
 			if e == nil && !result.Value.Bool() {
 				err = errors.New("assertion_failed")
 			}
@@ -230,18 +230,18 @@ func (r *playRun) act(ctx context.Context, n node) (any, error) {
 			}
 			return result.Value.Val(), nil
 		case "js":
-			result, e := el.Eval("function(){" + n.Code + "}")
+			result, e := el.Eval("async function(){" + n.Code + "}")
 			if e != nil {
-				return nil, e
+				return nil, scriptEvalError(e)
 			}
 			return result.Value.Val(), nil
 		default:
 			return el.Text()
 		}
 	case "js":
-		result, e := p.Eval("()=>{" + n.Code + "}")
+		result, e := p.Eval("async ()=>{" + n.Code + "}")
 		if e != nil {
-			return nil, e
+			return nil, scriptEvalError(e)
 		}
 		return result.Value.Val(), nil
 	case "screenshot":
@@ -267,6 +267,17 @@ func (r *playRun) act(ctx context.Context, n node) (any, error) {
 	}
 	return nil, err
 }
+
+// Rod's EvalError contains the script exception text, which can include page
+// data or secrets. Keep only its type when reporting an author script failure.
+func scriptEvalError(err error) error {
+	var evaluation *rod.EvalError
+	if errors.As(err, &evaluation) {
+		return errors.New("script_error")
+	}
+	return err
+}
+
 func keyEvents(text string) (*proto.InputDispatchKeyEvent, *proto.InputDispatchKeyEvent, error) {
 	parts := strings.Split(text, "+")
 	key := parts[len(parts)-1]

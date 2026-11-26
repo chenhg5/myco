@@ -20,8 +20,9 @@ import (
 )
 
 const (
-	browserControlIdle = 5 * time.Minute
-	browserControlPoll = 2 * time.Second
+	browserControlIdle       = 5 * time.Minute
+	browserControlPoll       = 2 * time.Second
+	browserControlGrantGrace = 30 * time.Second
 )
 
 type browserControlSession struct {
@@ -38,6 +39,7 @@ type browserControlSession struct {
 	id, reason, host string
 	closeRequestID   string
 	lastActive       time.Time
+	replaying        bool
 }
 
 func (b *Backend) registerBrowserHost(ctx context.Context, c *client.Client, machine string, p browserHostPolicy) (*api.ActionHost, error) {
@@ -47,10 +49,19 @@ func (b *Backend) registerBrowserHost(ctx context.Context, c *client.Client, mac
 		Actions:  browserActionList,
 	}
 	if b.browserControlAvailable(ctx, "control-discovery") {
-		req.Actions = append(slices.Clone(req.Actions), api.BrowserControlDescriptors()...)
+		descriptors := api.BrowserControlDescriptors()
+		if !b.browserControlAvailable(ctx, "control-discovery", api.BrowserControlFeature, api.BrowserReplayFeature) {
+			descriptors = slices.DeleteFunc(descriptors, func(d api.ActionDescriptor) bool { return d.Name == "browser.page.run" })
+		}
+		req.Actions = append(slices.Clone(req.Actions), descriptors...)
 		req.BrowserHostScope = true
 		host, err := c.RegisterActionHost(ctx, req)
 		ce, ok := client.AsError(err)
+		if ok && ce.Code == "invalid_argument" && strings.Contains(ce.Message, "browser.page.run") {
+			req.Actions = slices.DeleteFunc(req.Actions, func(d api.ActionDescriptor) bool { return d.Name == "browser.page.run" })
+			host, err = c.RegisterActionHost(ctx, req)
+			ce, ok = client.AsError(err)
+		}
 		if !ok || ce.Code != "invalid_argument" || !strings.Contains(ce.Message, "browser.page.") {
 			return host, err
 		}
@@ -139,14 +150,24 @@ func (b *Backend) resolveBrowserAgentProfile(ctx context.Context, native browser
 	return canonical, ids, nil
 }
 
-func (b *Backend) browserControlAvailable(ctx context.Context, scope string) bool {
+func (b *Backend) browserControlAvailable(ctx context.Context, scope string, required ...string) bool {
 	comp := b.browserComponent()
 	if comp.EnsureRunning(ctx) != nil {
 		return false
 	}
 	var status api.BrowserStatus
-	return comp.Call(ctx, scope, http.MethodGet, "/status", nil, &status) == nil &&
-		status.Protocol == 1 && slices.Contains(status.Features, api.BrowserControlFeature)
+	if len(required) == 0 {
+		required = []string{api.BrowserControlFeature}
+	}
+	if comp.Call(ctx, scope, http.MethodGet, "/status", nil, &status) != nil || status.Protocol != 1 {
+		return false
+	}
+	for _, feature := range required {
+		if !slices.Contains(status.Features, feature) {
+			return false
+		}
+	}
+	return true
 }
 
 // controlBusy and reserveBrowserControl share the run-book lock with M2.
@@ -267,11 +288,14 @@ func browserControlFailure(err error, effectful bool) api.ActionJobComplete {
 	if errors.As(err, &native) {
 		switch native.Code {
 		case "invalid_argument", "unsupported", "permission_denied", "not_found", "busy", "conflict",
-			"stale_ref", "target_not_found", "target_not_interactable", "sensitive_field", "sensitive_snapshot",
+			"assertion_failed", "stale_ref", "target_not_found", "target_not_interactable", "sensitive_field", "sensitive_snapshot",
 			"session_closed", "session_expired", "cancelled", "timeout", "recording_limit", "artifact_too_large",
 			"artifact_limit", "component_unavailable", "storage_failed", "outcome_unknown", "host_not_allowed":
 			out := actionFailure(native.Code, "browser control: "+strings.ReplaceAll(native.Code, "_", " "), false, native.Applied)
 			out.Error.Reason = browserControlReason(native.Reason)
+			if validBrowserID(native.ErrorNode, "", 80) {
+				out.Error.ErrorNode = native.ErrorNode
+			}
 			if out.Error.Reason == "owner_window_open" {
 				out.Error.Message = "Close this profile's browser window before opening agent control."
 			}
@@ -289,8 +313,9 @@ func browserControlFailure(err error, effectful bool) api.ActionJobComplete {
 
 func browserControlReason(reason string) string {
 	switch reason {
-	case "closed", api.BrowserControlOwnerStopped, "idle_timeout", "grant_expired", "grant_ended",
-		"expired", "profile_disabled", "owner_window_open", "profile_in_use", "profile_starting", "host_closed", "app_exit", "browser_closed", "cleanup_pending", "component_unavailable", "cancelled":
+	case "closed", api.BrowserControlOwnerStopped, "idle_timeout", "grant_expired", "grant_ended", "grant_check_failed",
+		"expired", "profile_disabled", "owner_window_open", "profile_in_use", "profile_starting", "host_closed", "app_exit", "browser_closed", "cleanup_pending", "component_unavailable", "cancelled",
+		"protected_content", "privacy_unavailable", "frame_unavailable", "privacy_changed":
 		return reason
 	default:
 		return ""
@@ -299,6 +324,7 @@ func browserControlReason(reason string) string {
 
 func (b *Backend) watchBrowserControl(c *client.Client, s *browserControlSession, id string) {
 	ctx := s.ctx
+	grantCheck := browserControlGrantCheck{}
 	tick := time.NewTicker(browserControlPoll)
 	defer tick.Stop()
 	after := 0
@@ -347,22 +373,65 @@ func (b *Backend) watchBrowserControl(c *client.Client, s *browserControlSession
 			return
 		}
 		check, cancel = context.WithTimeout(ctx, 5*time.Second)
-		grants, err := c.OwnerActionGrants(check, api.GrantActive)
+		// A session outlives host generations and completed jobs. Existing
+		// Hubs expose owner grants only as a list; inspect this grant's ID,
+		// including terminal states, independently of any host/job identity.
+		grants, err := c.OwnerActionGrants(check, "")
 		cancel()
-		if err != nil || !slices.ContainsFunc(grants, func(g api.ActionGrant) bool {
-			return g.ID == s.grant && g.ExpiresAt != nil && time.Now().Before(*g.ExpiresAt)
-		}) {
-			b.closeBrowserControl(s, "grant_ended", false)
+		if reason := grantCheck.reason(time.Now(), s.grant, s.expires, grants, err); reason != "" {
+			b.closeBrowserControl(s, reason, false)
 			return
 		}
 		s.mu.Lock()
-		idle := time.Since(s.lastActive) >= browserControlIdle
+		idle := !s.replaying && time.Since(s.lastActive) >= browserControlIdle
 		s.mu.Unlock()
 		if idle {
 			b.closeBrowserControl(s, "idle_timeout", false)
 			return
 		}
 	}
+}
+
+type browserControlGrantCheck struct {
+	failedSince time.Time
+}
+
+func (g *browserControlGrantCheck) reason(now time.Time, id string, expires time.Time, grants []api.ActionGrant, err error) string {
+	// The local grant deadline always wins, even during a Hub outage.
+	if !now.Before(expires) {
+		return "grant_expired"
+	}
+	if err == nil {
+		for _, grant := range grants {
+			if grant.ID != id {
+				continue
+			}
+			switch grant.State {
+			case api.GrantExpired:
+				return "grant_expired"
+			case api.GrantRevoked, api.GrantEnded, api.GrantDenied:
+				return "grant_ended"
+			case api.GrantActive:
+				if grant.ExpiresAt != nil {
+					if !now.Before(*grant.ExpiresAt) {
+						return "grant_expired"
+					}
+					g.failedSince = time.Time{}
+					return ""
+				}
+			}
+			break
+		}
+	}
+	// Absence, malformed data and HTTP failures are not proof of revocation.
+	// Bound consecutive uncertainty; a successful check resets this window.
+	if g.failedSince.IsZero() {
+		g.failedSince = now
+	}
+	if now.Sub(g.failedSince) >= browserControlGrantGrace {
+		return "grant_check_failed"
+	}
+	return ""
 }
 
 func (b *Backend) revokeStoppedBrowserControl(c *client.Client, grant string, expires time.Time) {
@@ -389,7 +458,12 @@ func (b *Backend) runBrowserControlJob(hostCtx context.Context, c *client.Client
 	g := hj.Grant
 	args, err := api.DecodeBrowserControlArgs(hj.Job.Action, hj.Args)
 	if err != nil {
-		return actionFailure("invalid_argument", err.Error(), false, nil)
+		out := actionFailure("invalid_argument", err.Error(), false, nil)
+		var invalid *api.BrowserReplayValidationError
+		if errors.As(err, &invalid) {
+			out.Error.ErrorNode = invalid.Node
+		}
+		return out
 	}
 	op := strings.TrimPrefix(hj.Job.Action, "browser.page.")
 	if op == "open" && args.String("profile") != p.Policy.Profile {
@@ -434,9 +508,31 @@ func (b *Backend) runBrowserControlJob(hostCtx context.Context, c *client.Client
 	}
 	args["request_id"], _ = json.Marshal(requestID)
 
+	if op == "run" {
+		if !b.browserControlAvailable(ctx, s.scope, api.BrowserControlFeature, api.BrowserReplayFeature) {
+			return actionFailure("unsupported", "the browser component does not offer agent replay", false, nil)
+		}
+		s.mu.Lock()
+		s.replaying = true
+		s.lastActive = time.Now()
+		s.mu.Unlock()
+		defer func() { s.mu.Lock(); s.replaying = false; s.lastActive = time.Now(); s.mu.Unlock() }()
+	}
+
 	var result json.RawMessage
 	err = b.browserComponent().Call(ctx, s.scope, http.MethodPost, "/control/"+op, args, &result)
 	if err != nil {
+		if op == "run" {
+			s.mu.Lock()
+			reason := s.reason
+			s.mu.Unlock()
+			if reason != "" {
+				return browserControlClosed(reason)
+			}
+			if !time.Now().Before(s.expires) {
+				return browserControlClosed("grant_expired")
+			}
+		}
 		var native *browserautomation.ComponentError
 		if op == "close" && errors.As(err, &native) && native.Code != "outcome_unknown" {
 			// A definite native error (for example busy or cleanup_pending)
@@ -448,7 +544,7 @@ func (b *Backend) runBrowserControlJob(hostCtx context.Context, c *client.Client
 			}
 			s.mu.Unlock()
 		}
-		done := browserControlFailure(err, op == "act" || op == "close")
+		done := browserControlFailure(err, op == "act" || op == "close" || op == "run")
 		if done.BrowserHost == "" {
 			done.BrowserHost = auditHost
 		}
@@ -559,6 +655,48 @@ func (b *Backend) browserControlResult(ctx context.Context, c *client.Client, ho
 		failure := actionFailure(code, message, false, nil)
 		failure.BrowserHost = auditHost
 		return failure
+	}
+	if op == "run" {
+		var fields map[string]json.RawMessage
+		if json.Unmarshal(raw, &fields) != nil {
+			return fail("component_unavailable", "the component returned an invalid replay result")
+		}
+		var output map[string]json.RawMessage
+		if json.Unmarshal(fields["output"], &output) != nil {
+			return fail("component_unavailable", "the component returned invalid replay output")
+		}
+		keys := make([]string, 0, len(output))
+		for key := range output {
+			keys = append(keys, key)
+		}
+		slices.Sort(keys)
+		for _, key := range keys {
+			var image struct {
+				Screenshot *struct {
+					ID string `json:"id"`
+				} `json:"screenshot"`
+			}
+			if json.Unmarshal(output[key], &image) != nil || image.Screenshot == nil {
+				continue
+			}
+			if !validBrowserID(image.Screenshot.ID, "a_", 80) {
+				return fail("component_unavailable", "the component returned an invalid private image")
+			}
+			uploaded := b.browserControlResult(ctx, c, host, job, scope, "screenshot", output[key], auditHost)
+			if uploaded.State != api.JobSucceeded {
+				return uploaded
+			}
+			var value map[string]json.RawMessage
+			if len(uploaded.ArtifactIDs) != 1 || json.Unmarshal(uploaded.Result, &value) != nil {
+				return fail("storage_failed", "could not store replay screenshot")
+			}
+			value["artifact_id"], _ = json.Marshal(uploaded.ArtifactIDs[0])
+			output[key], _ = json.Marshal(value)
+			out.ArtifactIDs = append(out.ArtifactIDs, uploaded.ArtifactIDs...)
+		}
+		fields["output"], _ = json.Marshal(output)
+		out.Result, _ = json.Marshal(fields)
+		return out
 	}
 	var result struct {
 		Screenshot *struct {

@@ -13,17 +13,39 @@ export type ProviderSource = "pinned" | "machine" | "env_file" | "missing";
 export interface QuotaWindow {
   name: string;
   label?: string;
-  /** 0..1 */
+  /** share used, 0..1 (remaining is 1 - used) */
   used: number;
-  resets_at: string;
+  /** absent when the source does not say */
+  resets_at?: string;
   /** "allowed" while there is room; anything else means the window is spent. */
   status?: string;
+  /** the window's length (5 hours: 18000; a week: 604800) */
+  duration_sec?: number;
+  /** the models it counts, when it is one model's bucket (e.g. "opus") */
+  model_scope?: string;
 }
-/** A CLI's own usage report (Claude or Codex), as its local files hold it. */
+/** Why the last read failed (or "ok"); absent from older hubs. */
+export type QuotaStatus = "ok" | "unsupported" | "no_credentials" | "auth_required" | "throttled" | "transient_error" | "schema_changed";
 export interface Quota {
-  source: "claude" | "codex";
+  source: "claude" | "codex" | string;
+  /** the last successful read; zero (year 1) when there never was one */
   at: string;
+  /** empty when there never was a successful read */
   windows: QuotaWindow[];
+  /** whose usage: codex, claude, opencode_go, minimax; unknown: no supported source on this connection */
+  provider?: string;
+  /** an opaque reference to the login on that computer (no path, account or token) */
+  profile_ref?: string;
+  /** the computer it was read on */
+  machine_id?: string;
+  /** how it was read: native, event, cache, official_api */
+  source_kind?: string;
+  status?: QuotaStatus | string;
+  /** when it was last tried (at is the last success) */
+  checked_at?: string;
+  error_code?: string;
+  /** chatgpt_subscription, claude_subscription, go, coding_plan */
+  plan?: string;
 }
 /** What the node runs unless told otherwise; absent on nodes reported by old runners. */
 export interface EncryptedProvider { id: string; from: string; body: string }
@@ -151,6 +173,7 @@ export interface Agent {
   updating?: boolean;
   /** what it is watching for in the background (myco watch); absent on older hubs */
   watching?: number;
+  goal?: GoalBrief;
   id: string; name: string; display_name?: string; aliases?: string[]; description: string;
   /** the face people chose: "look:c3-p1-f2-s1" (a drawn one) or "pic:<hash>"
    *  (a picture: GET /v1/agents/{name}/avatar); absent = drawn from the id */
@@ -610,3 +633,12 @@ export interface PageAttachmentList { attachments_version: number; attachments: 
 export type { Watch, WatchList, WatchStartRequest } from "@/lib/watch";
 export type { Goal, GoalRound, GoalList, GoalStartRequest, GoalPatchRequest, GoalBrief } from "@/lib/goal";
 import type { GoalBrief } from "@/lib/goal";
+
+/** Agent-only replay within an existing browser.control session. */
+export interface BrowserReplayGraph { nodes: Record<string, unknown>[]; edges: [string,string][] }
+export interface BrowserReplayResult {
+ ok: boolean; state: "succeeded"|"failed"; error_node?: string;
+ error?: {code:string; message:string; retryable:boolean; reason?:string; error_node?:string};
+ steps: {node:string;state:"ok"|"failed"|"skipped";ms:number;error?:string}[];
+ output: Record<string, unknown>;url:string;tabs:{id:string;url:string;title:string;active:boolean}[];
+}

@@ -141,7 +141,7 @@ func (s *Server) setRunSettings(w http.ResponseWriter, r *http.Request, name dom
 		detail += " provider=updated"
 	}
 	s.recordAs(r, actor, "agent.run_settings", string(name), detail)
-	writeJSON(w, http.StatusOK, s.agentDTO(a))
+	writeJSON(w, http.StatusOK, s.agentDTO(r, a))
 }
 
 // ownsComputer: the member who owns agent a (or, for a node nobody owns,

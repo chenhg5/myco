@@ -826,7 +826,24 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       h = nh;
     });
     ro.observe(el);
-    return () => { ro.disconnect(); el.removeEventListener("click", onClick, true); };
+    // The chat itself shorter or taller (a goal or watch bar, a notice or
+    // the plan coming at the top, the box you write in growing): what you
+    // read stays where it was, as far from the bottom as before, instead
+    // of being pushed up by what appeared above it.
+    let ch = sc.clientHeight;
+    let gap = sc.scrollHeight - sc.scrollTop - sc.clientHeight;
+    const onScroll = () => { gap = sc.scrollHeight - sc.scrollTop - sc.clientHeight; };
+    sc.addEventListener("scroll", onScroll, { passive: true });
+    const box = new ResizeObserver(() => {
+      const nc = sc.clientHeight;
+      if (nc === ch) return;
+      ch = nc;
+      if (restoring()) putBack(sc);
+      else if (atBottom.current) sc.scrollTop = sc.scrollHeight;
+      else sc.scrollTop = Math.max(0, sc.scrollHeight - sc.clientHeight - gap);
+    });
+    box.observe(sc);
+    return () => { ro.disconnect(); box.disconnect(); sc.removeEventListener("scroll", onScroll); el.removeEventListener("click", onClick, true); };
   }, [messages === null]);
 
   // Finding a message (ChatSearch): ⌘F in the chat last clicked in.
@@ -1452,9 +1469,15 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     for (const p of runPlans.values()) if (p.taskId === taskId && (!best || p.at >= best.at)) best = p;
     return best;
   };
-  const [planTask, setPlanTask] = useState("");
-  const atWorkPlan = atWorkId ? planOf(atWorkId) : null;
-  useEffect(() => { if (atWorkId && atWorkPlan) setPlanTask(atWorkId); }, [atWorkId, !!atWorkPlan]);
+  // With nothing at work: the newest plan written in the chat (a
+  // coordinator's board of what is left outlives the task that wrote it);
+  // PlanBar lets one that is all done go.
+  const newestPlanTask = (() => {
+    let best: { taskId: string; at: string } | null = null;
+    for (const p of runPlans.values()) if (!best || p.at > best.at) best = p;
+    return best?.taskId || "";
+  })();
+  const planTask = atWorkId && planOf(atWorkId) ? atWorkId : newestPlanTask;
   const pinnedPlan = planTask ? planOf(planTask) : null;
   // A task of yours not opened yet, or set aside: a few words under it,
   // like a receipt, not a line of its own (it is a message, not a state).
@@ -2459,9 +2482,13 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         <PinBar hubId={target.hubId} withWhom={target.agent} a={target.peer} pins={pins} setPins={(p) => pinState.setPins(p)}
           onJump={(id) => setSeek({ id, tries: 0 })} adding={pinAdding} onAdding={setPinAdding} />
       )}
-      {pinnedPlan && <PlanBar key={planTask} taskId={planTask} items={pinnedPlan.items} live={planTask === atWorkId} />}
-      <GoalBar hubId={target.hubId} goal={goals.current} onChanged={goals.put} />
-      <WatchBar hubId={target.hubId} watches={watches.active} onChanged={watches.put} />
+      {/* What the agent is on while the chat scrolls (plan, goal, watches):
+          one block on its own surface, apart from the messages. */}
+      <div className="conv-tops" data-testid="conv-tops">
+        {pinnedPlan && <PlanBar key={planTask} taskId={planTask} items={pinnedPlan.items} live={planTask === atWorkId} />}
+        <GoalBar hubId={target.hubId} goal={goals.current} onChanged={goals.put} />
+        <WatchBar hubId={target.hubId} watches={watches.active} onChanged={watches.put} />
+      </div>
       {pinMenu.element}
       {headMenu.element}
       <GoalDialog open={goalOpen} onOpenChange={setGoalOpen} hubId={target.hubId} agent={target.agent} name={agentName}

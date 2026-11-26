@@ -33,6 +33,7 @@ Output: JSON on stdout when not a TTY (or --format json); logs and errors on std
 
 // Error is the CLI's structured error (printed as JSON to stderr).
 type Error struct {
+	ErrorNode  string         `json:"error_node,omitempty"`
 	Code       string         `json:"error"`
 	Message    string         `json:"message"`
 	Suggestion string         `json:"suggestion,omitempty"`
@@ -96,7 +97,7 @@ func toError(err error, cmd string) *Error {
 		if !ok {
 			exit = ExitError
 		}
-		return &Error{Code: ae.Code, Message: ae.Message, Suggestion: ae.Suggestion, Retryable: ae.Retryable, Command: cmd, Exit: exit}
+		return &Error{Code: ae.Code, Message: ae.Message, Suggestion: ae.Suggestion, Retryable: ae.Retryable, Command: cmd, Exit: exit, ErrorNode: ae.ErrorNode}
 	}
 	return &Error{Code: "error", Message: err.Error(), Command: cmd, Exit: ExitError}
 }

@@ -12,7 +12,7 @@ import (
 
 const protocol = 1
 
-var version = "0.5.0"
+var version = "0.6.1"
 var variableName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,39}$`)
 var idPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,80}$`)
 

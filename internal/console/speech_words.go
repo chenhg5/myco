@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 	"unicode"
+	"unicode/utf8"
 )
 
 // Speech recognition hears names it does not know poorly, above all English
@@ -33,16 +34,48 @@ var commonSpeechWords = []string{
 }
 
 // speechAliases: how recognizers write some common words (Chinese ones
-// mostly hear them by sound). Only words in the vocabulary are corrected.
+// mostly hear them by sound). Only forms nobody says for anything else:
+// no real words ("cloud", "codecs", "cat", "句号"), which would change what
+// people mean (the negative set in speech_words_test.go keeps it so).
+// Letters said apart ("P R", "A P I") and casing are rules, not aliases.
 var speechAliases = map[string][]string{
-	"Claude":   {"克劳德", "克劳迪", "克洛德", "克劳的", "可劳德", "克老德", "Claud", "Clod", "Clode", "Cloud"},
-	"Codex":    {"扣德克斯", "口德克斯", "寇德克斯", "科德克斯", "抠得克斯", "code x", "Codecs", "Kodex"},
-	"myco":     {"my co", "麦扣", "迈扣"},
+	"Claude":   {"克劳德", "克劳迪", "克洛德", "可劳德", "克老德", "Claud", "Clode"},
+	"Codex":    {"扣德克斯", "口德克斯", "寇德克斯", "科德克斯", "抠得克斯", "Kodex"},
+	"myco":     {"麦扣", "迈扣"},
 	"DeepSeek": {"迪普西克", "迪普seek"},
-	"GitHub":   {"吉特哈布", "git hub"},
-	"PR":       {"p r"},
-	"CI":       {"c i"},
+	"GitHub":   {"吉特哈布"},
 }
+
+// unsafeAlias says why a person's alias is not used: one character, or a
+// word people say for other things (it would change what they mean).
+func unsafeAlias(a string) string {
+	a = strings.TrimSpace(a)
+	switch {
+	case utf8.RuneCountInString(a) < 2:
+		return "too short"
+	case isLatin(a) && len(a) < 3:
+		return "too short"
+	case commonWords[strings.ToLower(a)]:
+		return "a common word"
+	}
+	return ""
+}
+
+// commonWords: everyday words an alias must not be (a recognizer writes
+// these when people mean them).
+var commonWords = func() map[string]bool {
+	m := map[string]bool{}
+	for _, w := range strings.Fields(`
+		句号 逗号 问号 妹妹 姐姐 哥哥 弟弟 妈妈 爸爸 宝宝 朋友 同事 老板 老师 我们 你们 他们 她们 它们 这个 那个 一个 什么 怎么 为什么 可以 没有 知道 觉得 现在 今天 明天 昨天
+		时候 东西 事情 问题 工作 公司 项目 代码 电脑 手机 包裹 包子 口袋 扣子 克拉 卡通 猫咪 小猫 小狗 冰箱 蛋糕 咖啡 米饭 面条 苹果 香蕉 西瓜 云端 云朵 天气 下雨 开会 吃饭 睡觉 回家
+		hub cursor windows python react docker opus sonnet haiku gemini markdown token bug tag branch release
+		half cat dog cloud clouds code codes codec codecs cool cold call cloth close clock club deep seek sick sip dip git get hub hug pub up my co go do me be we see sea you ok okay yes no
+		the and for are but not all any can had her was one our out day has him his how man new now old see two way who boy did its let put say she too use make like time just know take people year good some them other than then look only come over think also back after work first well even want because these give most
+	`) {
+		m[w] = true
+	}
+	return m
+}()
 
 // maxSpeechWords: Apple suggests keeping contextual strings to about a
 // hundred.
@@ -67,7 +100,7 @@ func parseSpeechWords(lines []string) ([]string, map[string][]string) {
 		words = append(words, word)
 		if has {
 			for _, a := range strings.FieldsFunc(rest, func(r rune) bool { return r == ',' || r == '，' || r == '、' || r == ';' || r == '；' }) {
-				if a = strings.TrimSpace(a); a != "" && a != word {
+				if a = strings.TrimSpace(a); a != "" && a != word && unsafeAlias(a) == "" {
 					aliases[word] = append(aliases[word], a)
 				}
 			}
@@ -252,11 +285,22 @@ func newSpeechFixer(lang string, words []string, extra map[string][]string) *spe
 		// Its casing, and its parts said apart ("Deep Seek", "Git Hub").
 		// In English a capitalised word may be a plain one ("cursor",
 		// "windows"): only odd casings ("GitHub", "macOS", "PR") are fixed.
-		if w != strings.ToLower(w) && (zh || !titleCase(w)) {
+		// Nor an everyday word ("hub", "python") in any language.
+		if w != strings.ToLower(w) && (zh || !titleCase(w)) && !commonWords[strings.ToLower(w)] {
 			latinRule(w, w)
 		}
 		if parts := camelParts(w); len(parts) > 1 {
 			latinRule(strings.Join(parts, " "), w)
+		}
+		// In capitals, as some recognizers write all English ("PUSH",
+		// "IOS", "CLAUDE CODE"): the word as it is written.
+		if up := strings.ToUpper(w); up != w {
+			pat := `(^|[^` + latinEdge + `])` + spaced(regexp.QuoteMeta(up)) + `($|[^` + latinEdge + `])`
+			f.rules = append(f.rules, fixRule{regexp.MustCompile(pat), "${1}" + w + "${2}"})
+		}
+		// Letters said one by one: "P R", "A P I", "c.i." → the word.
+		if spelled := spelledLetters(w); spelled != nil {
+			f.rules = append(f.rules, fixRule{spelled, "${1}" + w + "${2}"})
 		}
 	}
 	aliasesOf := func(w string) []string {
@@ -367,4 +411,20 @@ func consonantRun(s string) int {
 		}
 	}
 	return most
+}
+
+// spelledLetters matches an all-capitals word of 2 to 5 letters said one
+// letter at a time ("P R", "a p i", "C.I."), standing alone.
+func spelledLetters(w string) *regexp.Regexp {
+	if n := len(w); n < 2 || n > 5 || w != strings.ToUpper(w) || !isLatin(w) {
+		return nil
+	}
+	var parts []string
+	for _, r := range w {
+		if r < 'A' || r > 'Z' {
+			return nil
+		}
+		parts = append(parts, string(r))
+	}
+	return regexp.MustCompile(`(?i)(^|[^` + latinEdge + `])` + strings.Join(parts, `[\s.]+`) + `\.?($|[^` + latinEdge + `])`)
 }

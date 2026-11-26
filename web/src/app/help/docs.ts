@@ -29,6 +29,8 @@ import zh_faq from "./zh/faq.md?raw";
 import en_faq from "./en/faq.md?raw";
 import zh_voice from "./zh/voice.md?raw";
 import en_voice from "./en/voice.md?raw";
+import zh_chatapps from "./zh/chat-apps.md?raw";
+import en_chatapps from "./en/chat-apps.md?raw";
 import zh_panes from "./zh/panes.md?raw";
 import en_panes from "./en/panes.md?raw";
 import zh_public from "./zh/public.md?raw";
@@ -46,7 +48,7 @@ import { L } from "@/lib/i18n";
  * as [text](#help/<id>).
  */
 
-export type HelpId = "start" | "public" | "proxy" | "agents" | "chat" | "projects" | "members" | "superagent" | "computers" | "terminals" | "automations" | "workflows" | "apps" | "workspaces" | "shortcuts" | "faq" | "voice" | "panes" | "community";
+export type HelpId = "start" | "public" | "proxy" | "agents" | "chat" | "projects" | "members" | "superagent" | "computers" | "terminals" | "automations" | "workflows" | "apps" | "workspaces" | "shortcuts" | "faq" | "voice" | "chat-apps" | "panes" | "community";
 
 type Doc = { id: HelpId; zh: string; en: string };
 const DOCS: Doc[] = [
@@ -65,6 +67,7 @@ const DOCS: Doc[] = [
   { id: "shortcuts", zh: zh_shortcuts, en: en_shortcuts },
   { id: "faq", zh: zh_faq, en: en_faq },
   { id: "voice", zh: zh_voice, en: en_voice },
+  { id: "chat-apps", zh: zh_chatapps, en: en_chatapps },
   { id: "panes", zh: zh_panes, en: en_panes },
   { id: "community", zh: zh_community, en: en_community },
   { id: "public", zh: zh_public, en: en_public },
@@ -78,7 +81,7 @@ export const HELP_GROUPS: { title: () => string; ids: HelpId[] }[] = [
   { title: () => L("一起干活", "Working together"), ids: ["projects", "superagent"] },
   { title: () => L("电脑和终端", "Computers and terminals"), ids: ["computers", "terminals"] },
   { title: () => L("自动化", "Automation"), ids: ["automations", "workflows", "apps"] },
-  { title: () => L("用得更顺手", "Getting more out of it"), ids: ["voice", "panes", "shortcuts"] },
+  { title: () => L("用得更顺手", "Getting more out of it"), ids: ["voice", "chat-apps", "panes", "shortcuts"] },
   { title: () => L("更多", "More"), ids: ["community", "faq"] },
 ];
 

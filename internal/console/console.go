@@ -295,6 +295,7 @@ func (b *Backend) Handler() http.Handler {
 		b.grantRoutes(m)
 		b.installRoutes(m)
 		m.HandleFunc("GET /app/local/agents", b.getLocalAgents)
+		b.imRoutes(m)
 		b.remoteRoutes(m)
 		m.HandleFunc("GET /app/local/claude-auth", b.getClaudeAuth)
 		m.HandleFunc("POST /app/local/claude-auth", b.postClaudeAuth)
@@ -441,6 +442,73 @@ func (b *Backend) Handler() http.Handler {
 	}))
 	m.HandleFunc("DELETE /app/hubs/{id}/aliases/{alias}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		out, err := c.RemoveAlias(r.Context(), r.PathValue("alias"), r.URL.Query().Get("dry_run") == "true")
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+	}))
+	// Goals (myco goal): a goal set on a chat, its agent woken on a schedule
+	// (hubs without goals answer 404; the App shows nothing).
+	m.HandleFunc("GET /app/hubs/{id}/goals", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		q := r.URL.Query()
+		list, err := c.Goals(r.Context(), q.Get("agent"), q.Get("project"), q.Get("state") == "all")
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		if list == nil {
+			list = []api.Goal{}
+		}
+		writeJSON(w, http.StatusOK, api.GoalList{Goals: list})
+	}))
+	m.HandleFunc("POST /app/hubs/{id}/goals", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in api.GoalCreateRequest
+		if !decode(w, r, &in) {
+			return
+		}
+		out, err := c.CreateGoal(r.Context(), in, false)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, out)
+	}))
+	m.HandleFunc("GET /app/hubs/{id}/goals/{gid}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		out, err := c.Goal(r.Context(), r.PathValue("gid"))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+	}))
+	m.HandleFunc("PATCH /app/hubs/{id}/goals/{gid}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in api.GoalUpdateRequest
+		if !decode(w, r, &in) {
+			return
+		}
+		out, err := c.UpdateGoal(r.Context(), r.PathValue("gid"), in, false)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+	}))
+	m.HandleFunc("POST /app/hubs/{id}/goals/{gid}/{action}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in struct {
+			Reason string `json:"reason"`
+		}
+		if !decode(w, r, &in) {
+			return
+		}
+		do := map[string]func(context.Context, string, string, bool) (*api.Goal, error){
+			"pause": c.PauseGoal, "resume": c.ResumeGoal, "stop": c.StopGoal,
+		}[r.PathValue("action")]
+		if do == nil {
+			writeErr(w, &client.Error{Status: http.StatusNotFound, Code: "not_found", Message: "no such goal action"})
+			return
+		}
+		out, err := do(r.Context(), r.PathValue("gid"), in.Reason, false)
 		if err != nil {
 			writeErr(w, err)
 			return
@@ -1768,6 +1836,9 @@ func writeErr(w http.ResponseWriter, err error) {
 	var ce *client.Error
 	if errors.As(err, &ce) {
 		body = map[string]string{"error": ce.Code, "message": ce.Message}
+		if ce.ErrorNode != "" {
+			body["error_node"] = ce.ErrorNode
+		}
 		if ce.Suggestion != "" {
 			body["suggestion"] = ce.Suggestion
 		}

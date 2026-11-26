@@ -20,6 +20,7 @@ import (
 	"github.com/myco-ai/myco/internal/harness/builtin"
 	"github.com/myco-ai/myco/internal/harness/execnode"
 	"github.com/myco-ai/myco/internal/harness/machinenode"
+	"github.com/myco-ai/myco/internal/quota"
 	"github.com/myco-ai/myco/internal/runner"
 )
 
@@ -315,6 +316,22 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 		}
 		return append(extra, env...) // myco's own variables win
 	}
+	if rep != nil && e.in.Getenv("CLAUDE_CODE_REMOTE_SESSION_ID") == "" && !strings.HasPrefix(me.Binding.Environment, "claude-cloud") && (h.Name() == "claude" || h.Name() == "codex" || h.Name() == "opencode") {
+		home, _ := os.UserHomeDir()
+		rep.startQuota(e.in.Ctx, config.Dir(e.defaultPath), func(ch providerChoice) quota.Input {
+			env := quotaEnvironment(envFunc())
+			var overrides map[string]string
+			pinned := false
+			if ch.settings != nil {
+				overrides = ch.settings.Env
+				for k, v := range overrides {
+					env[k] = v
+				}
+				pinned = strings.Contains(strings.Join(ch.settings.ConfigArgs, " "), "model_provider")
+			}
+			return quota.Input{CLI: h.Name(), Workdir: workdir, Binary: first(ov.binary, rc.Binary), Home: home, Host: ch.host, Model: first(rep.quotaModel(), ov.model, rc.Model), Env: env, Overrides: overrides, Pinned: pinned, UnmodeledLaunch: len(args) > 0}
+		}, currentProvider)
+	}
 	if execSpec != nil {
 		allow := "any command"
 		if len(execSpec.Allow) > 0 {
@@ -360,6 +377,11 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 		OnStop:                rep.Goodbye,
 		Access:                access,
 		MaxAccess:             maxAccess,
+		CommandRunnerID:       runnerInstance,
+		CommandEnvironment:    host,
+		CommandWatchAllowed: func() bool {
+			return name != execnode.Name && name != machinenode.Name && e.machineMaxAccess() == harness.AccessFull
+		},
 	}, alog), nil
 }
 
@@ -470,6 +492,11 @@ func (e *env) runAll(sh runnerShared, log *slog.Logger) error {
 		return len(profiles)
 	}
 	n := scan()
+	if !sh.once {
+		// Chat-app bots configured here (myco im connect) run with the
+		// agents, so connecting one needs no other service.
+		go e.serveBridges(e.in.Ctx, log)
+	}
 	if n == 0 && sh.once {
 		return errorf("not_found", ExitNotFound, "enroll an agent first: myco agent enroll", "no agent profiles in %s", dir)
 	}

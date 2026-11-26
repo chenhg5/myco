@@ -327,7 +327,7 @@ func (s *Server) takeOver(w http.ResponseWriter, r *http.Request) {
 		brief = "" // taken either way; `myco handover show` reads it again
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, http.StatusOK, api.TakeOverResponse{Agent: s.agentDTO(a), Token: token, Handover: s.handoverDTO(r.Context(), h), Brief: brief})
+	writeJSON(w, http.StatusOK, api.TakeOverResponse{Agent: s.agentDTO(r, a), Token: token, Handover: s.handoverDTO(r.Context(), h), Brief: brief})
 }
 
 // handoverPage serves a take-over link: a script that installs myco and

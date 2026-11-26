@@ -297,11 +297,11 @@ try {
                 [
                   "-y",
                   "-sseof",
-                  "-18",
+                  `-${scene.videoSeconds || 18}`,
                   "-i",
                   raw,
                   "-t",
-                  "18",
+                  String(scene.videoSeconds || 18),
                   "-vf",
                   "fps=15",
                   "-c:v",

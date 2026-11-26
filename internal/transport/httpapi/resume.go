@@ -115,7 +115,7 @@ func (s *Server) useResume(w http.ResponseWriter, r *http.Request) {
 	}
 	s.recordAs(r, app.Actor{Agent: a}, "agent.resume.use", string(a.Name), "")
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, http.StatusOK, api.RegisterResponse{Agent: s.agentDTO(a), Token: newToken})
+	writeJSON(w, http.StatusOK, api.RegisterResponse{Agent: s.agentDTO(r, a), Token: newToken})
 }
 
 func (s *Server) resumePage(w http.ResponseWriter, r *http.Request) {

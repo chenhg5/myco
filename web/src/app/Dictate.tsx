@@ -68,6 +68,17 @@ export function DictateButton({ input, value, onText, disabled }: {
 }) {
   const [listening, setListening] = useState(false);
   const [note, setNote] = useState("");
+  // Names corrected after you spoke (speech_polish.go): undo puts back
+  // what was heard, while the box still has the corrected text.
+  const [fixed, setFixed] = useState<{ heard: string; box: string } | null>(null);
+  useEffect(() => {
+    if (fixed && value !== fixed.box) setFixed(null);
+  }, [value, fixed]);
+  useEffect(() => {
+    if (!fixed) return;
+    const t = window.setTimeout(() => setFixed(null), 12_000);
+    return () => window.clearTimeout(t);
+  }, [fixed]);
   // The current listening: how to stop it, and the text it last wrote (any
   // other change means you took over).
   // (the last few texts it wrote: two can be written before the box shows
@@ -135,7 +146,7 @@ export function DictateButton({ input, value, onText, disabled }: {
         const r = await appApi.startDictation(speechLang());
         if (r.mode !== "listen" || !r.id) return; // the system types it in itself
         focusEnd(input.current);
-        const { write } = begin();
+        const { base, write } = begin();
         let ended = false;
         live.current = { wrote: [value], stop: () => { if (!ended) void appApi.stopDictation(r.id!).catch(() => undefined); } };
         setListening(true);
@@ -149,6 +160,20 @@ export function DictateButton({ input, value, onText, disabled }: {
             if (st.error) setNote(reasonOf(st.error));
             break;
           }
+        }
+        // A correction of names may still come: the text is in the box
+        // already; it changes only if the box still has what was heard.
+        live.current = null;
+        setListening(false);
+        let last = await appApi.dictationState(r.id, seq).catch(() => null);
+        for (let i = 0; last?.polishing && i < 4; i++) {
+          last = await appApi.dictationState(r.id, last.seq).catch(() => null);
+        }
+        const fix = last?.corrected;
+        const box = input.current?.value ?? "";
+        if (fix && box === base + fix.from) {
+          onText(base + fix.to);
+          setFixed({ heard: base + fix.from, box: base + fix.to });
         }
       } catch (e) {
         setNote((e as Error)?.message || L("没能开始听", "Could not start listening"));
@@ -209,11 +234,19 @@ export function DictateButton({ input, value, onText, disabled }: {
     || (listening ? L("正在听…再点一下停止", "Listening… click to stop")
       : L(`语音输入（${lang() === "zh" ? "中文" : "English"}，跟 App 的语言；按住 ${holdKey} 说话）`, `Dictate (${lang() === "zh" ? "Chinese" : "English"}, the app's language; hold ${holdKeyEn} to talk)`));
   return (
+    <>
+    {fixed && (
+      <span className="dictate-fixed" role="status">
+        {L("已纠正名字", "Names corrected")}
+        <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { onText(fixed.heard); setFixed(null); }}>{L("撤回", "Undo")}</button>
+      </span>
+    )}
     <button type="button" className={cn("att-btn dictate-btn", listening && "is-listening", note && "is-note")} disabled={disabled}
       onMouseDown={(e) => e.preventDefault() /* keep the caret in the box */}
       onClick={(e) => { e.stopPropagation(); void start(); }}
       title={title} aria-label={title} aria-pressed={listening}>
       <Mic />
     </button>
+    </>
   );
 }

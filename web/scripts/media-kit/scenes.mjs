@@ -1,5 +1,5 @@
 import { interactionScenes } from "./interactions.mjs";
-import { coedit, design, motion, disk, servers } from "./apps.mjs";
+import { coedit, design, motion, disk, servers, webAutomationLaunch, webAutomationLaunchVideo, webAutomationSelftest, webAutomationSelftestVideo } from "./apps.mjs";
 const click = async (x) => {
   await x.first().click();
 };
@@ -17,6 +17,30 @@ const member = async (page, T) => {
 };
 const home = async () => {};
 export const scenes = [
+  {
+    id: "web-automation-selftest",
+    title: "Agent 录完自己验证 / Agents check their own recordings",
+    zh: "Agent 录下网页操作，再自己回放一遍、核对数据，确认能用才把草稿交给你。",
+    en: "An agent records browser steps, replays them itself and checks the data before handing you the draft.",
+    tags: ["应用", "自动化", "网页自动化"], themes: ["light"],
+    description: "myco 里和云端 Agent 的对话：录制、自测回放逐步打勾、数据一致，右侧是网页自动化的草稿；演示论坛数据",
+    boundary: "Synthetic UI demonstration with demo forum data; no real workspace, native browser, grant or model request.",
+    prepare: webAutomationSelftest,
+    video: webAutomationSelftestVideo,
+    videoSeconds: 30,
+  },
+  {
+    id: "web-automation-launch",
+    title: "跨电脑网页自动化 / Browser automation across computers",
+    zh: "云端 Agent 安排任务，公司电脑执行网页脚本；每一步和结果在 myco 里看得见。",
+    en: "A cloud agent coordinates; your office computer runs the browser script. Follow every step and result in myco.",
+    tags: ["应用", "自动化", "协作"], themes: ["light"],
+    description: "myco 侧边栏、云端 Agent 对话与网页自动化官方应用分屏，展示公司电脑上的订单导出步骤；纯演示数据",
+    boundary: "Synthetic UI demonstration; no real workspace, native browser, model request or order export.",
+    prepare: webAutomationLaunch,
+    video: webAutomationLaunchVideo,
+    videoSeconds: 28,
+  },
   {
     id: "project-storage",
     title: "项目文件独立额度 / Project storage limits",
@@ -396,6 +420,30 @@ export const scenes = [
       });
       await page.reload();
       await page.locator(".sa-approval").first().waitFor();
+    },
+  },
+
+  {
+    id: "watch-command",
+    title: "命令盯着 / Local command watches",
+    zh: "不用反复叫醒模型，后台定时检查命令；会话里能看到已脱敏的最近结果，并随时停止或延长。",
+    en: "Check a command in the background without repeated model calls, with a redacted latest result and Stop or Extend controls.",
+    tags: ["协作", "自动化"], themes: ["light", "dark"],
+    description: "Agent会话顶部展开的命令盯着条，显示最近检查的脱敏结果、检查次数、起止时间及延长和停止按钮",
+    prepare: async ({ page, T }) => {
+      await page.route("**/app/hubs/*/watches*", async route => {
+        if (route.request().method() !== "GET") return route.continue();
+        const response = await route.fetch(), data = await response.json();
+        for (const w of data.watches || []) if (w.agent === "build-backend" && w.state === "watching") {
+          Object.assign(w, {kind:"command",what:T("构建部署成功", "Build deployment succeeds"),command:"echo pending",match:"^success$",every_sec:30,last_result:"build: pending [redacted]",checks:8});
+        }
+        await route.fulfill({response,json:data});
+      });
+      await member(page, T);
+      const bar = page.locator(".conv-detail:visible [data-testid=watch-bar]").last();
+      await bar.waitFor();
+      await bar.locator(".watch-toggle").click();
+      await bar.locator(".watch-result",{hasText:"build: pending [redacted]"}).waitFor();
     },
   },
 

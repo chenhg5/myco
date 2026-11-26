@@ -20,6 +20,7 @@ import { L, lang, locale } from "@/lib/i18n";
 import { RowsSkeleton } from "@/app/Skeleton";
 import { Avatar } from "@/app/persona";
 import { ResumeRow } from "@/app/ResumeRow";
+import { ChatAppsRow } from "@/app/ChatApps";
 import { RunRows } from "@/app/RunSettings";
 import { fetchMachineInfo, cachedMachineInfo } from "@/app/machineInfoCache";
 import { machineTellsInfo } from "@/app/hubVersion";
@@ -1192,7 +1193,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
       );
   // The card's 设置 tab: how it runs (model, effort, access, quota,
   // provider, how it receives), then whose it is and who sees it.
-  const hasQuota = !!rt?.quota?.windows?.length && !isInbox(ag);
+  const hasQuota = !!rt?.quota && !isInbox(ag);
   const sec_run = (
         <>
           <section className="app-group">
@@ -1358,6 +1359,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
               <AliasRow row={row} mayManage={mayManage} onRefresh={onRefresh} />
               <div className="app-kv"><span className="app-kv-label">{L("谁能给它派活", "Who can send it tasks")}</span><span className="app-kv-value">{ag.allow_from.length && !ag.allow_from.includes("*") ? ag.allow_from.join(", ") : L("任何 agent", "Any node")}</span></div>
               <ResumeRow row={row} now={now} mayManage={mayManage} onRefresh={onRefresh} />
+              <ChatAppsRow row={row} mayManage={mayManage} />
             </div>
           </section>
           <section className="app-group">

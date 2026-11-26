@@ -228,7 +228,7 @@ func (s *Server) superagentOut(r *http.Request, a *domain.Agent) api.Superagent 
 	if a == nil {
 		return api.Superagent{}
 	}
-	ag := s.agentDTO(a)
+	ag := s.agentDTO(r, a)
 	return api.Superagent{Agent: &ag}
 }
 

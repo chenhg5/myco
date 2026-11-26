@@ -104,6 +104,8 @@ type Event struct {
 
 // Quota is a CLI account's usage limits.
 type Quota struct {
+	At time.Time // the observation time; zero for old event sources
+
 	Source  string
 	Windows []QuotaWindow
 }
@@ -111,6 +113,7 @@ type Quota struct {
 // QuotaWindow is one limit; Used is the share used (0..1).
 type QuotaWindow struct {
 	Name, Label string
+	DurationSec int
 	Used        float64
 	ResetsAt    time.Time // zero if unknown
 	Status      string

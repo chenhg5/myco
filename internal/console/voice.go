@@ -84,12 +84,18 @@ type VoiceConfig struct {
 	// dictation), one per line, optionally with how it is misheard:
 	// "Claude = 克劳德, cloud" (speech_words.go).
 	Words []string `json:"words,omitempty"`
+	// Polish: correct names in what was heard with the model, in the
+	// background (speech_polish.go). On unless turned off.
+	Polish *bool `json:"polish,omitempty"`
 	// Share: keep these settings (keys too) on the hubs this App is signed
 	// in to, so the person's other devices have them. On unless turned off.
 	Share *bool `json:"share,omitempty"`
 	// UpdatedAt: when the person last changed them (on any device).
 	UpdatedAt time.Time `json:"updated_at"`
 }
+
+// polishes says whether names in what was heard are corrected by the model.
+func (c VoiceConfig) polishes() bool { return c.Polish == nil || *c.Polish }
 
 // shares says whether the settings are kept on the hubs.
 func (c VoiceConfig) shares() bool { return c.Share == nil || *c.Share }
@@ -119,6 +125,9 @@ type VoiceEvent struct {
 	Text string `json:"text"`
 	// Interrupted: the assistant was cut off; Text is what it got to say.
 	Interrupted bool `json:"interrupted,omitempty"`
+	// Corrected: what was heard before names in it were corrected
+	// (speech_polish.go); Text is the corrected line.
+	Corrected string `json:"corrected,omitempty"`
 	// Task links an action to the task it made or touched.
 	Task *VoiceTaskRef `json:"task,omitempty"`
 	At   time.Time     `json:"at"`
@@ -300,6 +309,23 @@ func (v *voice) update(id int, text string, interrupted bool) {
 	}
 }
 
+// correct puts a line's corrected text in place, keeping what was heard.
+// Holds v.mu.
+func (v *voice) correct(id int, text, heard string) {
+	for i := len(v.events) - 1; i >= 0; i-- {
+		if v.events[i].ID == id {
+			v.seq++
+			e := v.events[i]
+			e.Text, e.Corrected, e.Seq = text, heard, v.seq
+			v.events = append(v.events[:i], v.events[i+1:]...)
+			v.events = append(v.events, e)
+			v.saveLog()
+			v.wakeLocked()
+			return
+		}
+	}
+}
+
 func (v *voice) setState(s string) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
@@ -435,6 +461,9 @@ func (b *Backend) putVoiceConfig(w http.ResponseWriter, r *http.Request) {
 	if c.Words == nil {
 		c.Words = was.Words
 	}
+	if c.Polish == nil {
+		c.Polish = was.Polish
+	}
 	// Later than what it replaces, also within the same second: the
 	// hubs keep the newer by this time.
 	c.UpdatedAt = time.Now().UTC().Truncate(time.Second)
@@ -549,16 +578,17 @@ func (b *Backend) startVoice(w http.ResponseWriter, r *http.Request) {
 	// What recognition listens for, and corrects to.
 	words, aliases := b.speechVocab(r.Context())
 	call := newVoiceCall(v, voiceDeps{
-		audio: b.Voice,
-		model: &openAIModel{base: c.LLMBaseURL, model: c.LLMModel, key: llmKey, session: "myco-voice-" + requestID()},
-		tts:   provider.speech(ttsKey, c),
-		hub:   &hubActions{hubID: hub.ID, agent: in.Agent, peer: peer, c: hc, en: strings.HasPrefix(lang, "en")},
-		lang:  lang,
-		greet: true,
-		hints: words,
-		fix:   newSpeechFixer(lang, words, aliases),
-		memo:  memoPrompt(lang, v.memo(memoKey(hub.ID, in.Agent))),
-		ended: func(history []chatMsg) { v.keepMemo(memoKey(hub.ID, in.Agent), history) },
+		audio:  b.Voice,
+		model:  &openAIModel{base: c.LLMBaseURL, model: c.LLMModel, key: llmKey, session: "myco-voice-" + requestID()},
+		tts:    provider.speech(ttsKey, c),
+		hub:    &hubActions{hubID: hub.ID, agent: in.Agent, peer: peer, c: hc, en: strings.HasPrefix(lang, "en")},
+		lang:   lang,
+		greet:  true,
+		hints:  words,
+		fix:    newSpeechFixer(lang, words, aliases),
+		polish: b.speechPolisher(lang, words),
+		memo:   memoPrompt(lang, v.memo(memoKey(hub.ID, in.Agent))),
+		ended:  func(history []chatMsg) { v.keepMemo(memoKey(hub.ID, in.Agent), history) },
 	})
 	v.call = call
 	v.with = voiceWith{HubID: hub.ID, Agent: in.Agent}

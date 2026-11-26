@@ -10,6 +10,16 @@ export interface Watch {
   command?: string;
   match?: string;
   every_sec?: number;
+  machine_id?: string;
+  environment?: string;
+  workdir?: string;
+  revision?: number;
+  claim_id?: string;
+  claim_runner?: string;
+  claim_until?: string;
+  next_check_at?: string;
+  last_check_id?: string;
+  history?: WatchCheck[];
   started_at: string;
   deadline: string;
   last_check_at?: string;
@@ -22,10 +32,17 @@ export interface Watch {
 }
 export interface WatchStartRequest {
   what: string;
-  kind: "reply" | "task" | "workflow";
-  target: string;
+  kind: "reply" | "task" | "workflow" | "command";
+  target?: string;
+  command?: string;
+  match?: string;
+  every_sec?: number;
   project?: string;
   task?: string;
   for_sec?: number;
 }
 export interface WatchList { watches: Watch[] }
+
+export interface WatchCheck { at: string; result: string; matched: boolean; exit_code: number }
+export interface WatchClaimRequest { runner: string }
+export interface WatchCheckRequest { runner: string; check_id: string; result: string; matched: boolean; exit_code: number }

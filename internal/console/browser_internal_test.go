@@ -92,8 +92,11 @@ func TestBrowserFeatureAdvertisesInstallerOnSupportedDesktop(t *testing.T) {
 	}
 
 }
-func TestBrowserGroupIsSeparateAndOnceOnly(t *testing.T) {
-	if osGroupOf("browser.call") != "browser" || !osOnceOnly["browser"] {
+
+// The browser is its own group, and may be allowed always (taken back in
+// Settings → App permissions).
+func TestBrowserGroupIsSeparate(t *testing.T) {
+	if osGroupOf("browser.call") != "browser" || osOnceOnly["browser"] {
 		t.Fatal("browser capability consent")
 	}
 }

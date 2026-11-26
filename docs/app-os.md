@@ -16,10 +16,11 @@ Application source paths and Node test commands below refer to the separate [myc
 
 App 版本里有了这一项，桥的 `myco.features` 里会有 `"os"`。
 
-> **先问人**（App v0.22.2 起）：网页第一次用某一组能力（见下表）时，App 会弹窗问：「不允许」「这次允许」「一直允许」。没问过之前，调用会先得到 `consent_required`，App 问完再替网页重试，网页看到的就是成功或者 `permission_denied`。
-> - 「一直允许」记在本机的 `~/.myco/app-grants.json`（按工作区和网页），设置 → 应用权限里能看到、能收回；「这次允许」到 App 退出为止。
-> - 允许只对网页当前的代码有效（App v0.22.11 起）：网页重新发布、或者它的应用升级以后，用到时重新问；「不允许」对所有版本都有效。之前存下的「一直允许」没有记版本，升级后会再问一次。
-> - `exec`（跑命令、结束进程、用别的程序打开文件）、`files.delete`、`screen` 只能「这次允许」。
+> **先问人**（App v0.22.2 起）：网页第一次用某一组能力（见下表）时，App 会弹窗问：「不允许」「这次允许」「始终允许」。没问过之前，调用会先得到 `consent_required`，App 问完再替网页重试，网页看到的就是成功或者 `permission_denied`。
+> - 「始终允许」记在本机的 `~/.myco/app-grants.json`（按工作区和网页），以后这个应用不再问；设置 → 应用权限里能看到每一项、能收回。「这次允许」到 App 退出为止。
+> - 应用升级（新版本或重新发布）以后，已经允许的能力组和域名照旧有效，只要新版本的清单里还声明着；新版本「新增」的能力组、`"net"` 里新增的域名，用到时才问；清单里去掉的就不再算允许。「不允许」对所有版本都有效（App v0.22.11 起记版本；之前存下的「始终允许」没有记版本，会再问一次）。
+> - 没有清单的普通页面（agent 直接发布的）说不清新代码要用什么：重新发布以后，用到时重新问。
+> - `exec`（跑命令、结束进程、用别的程序打开文件）和 `files.delete` 只能「这次允许」：命令和删除做了就撤不回，所以每次打开 App 后第一次用都要问，弹窗里写明了原因；应用升级以后也会重新问。`screen`（截屏、录屏）和 `browser` 可以「始终允许」。
 > - 人自己选的文件（`fs.pick`、`fs.saveAs` 给的路径，以及选的文件夹里面的）读写不用再问。
 > - 写剪贴板不用问。
 > - `net.fetch`：清单 `"net"` 里写了的域名，允许联网就能访问；没写的，一个一个问；清单写了 `"net"` 的应用，访问没写到的本机或局域网地址会被拒绝。
@@ -83,6 +84,8 @@ p.write("y\n"); p.end();                      // 写给它的标准输入
   - `cancelled`
   - `too_large`
   - `failed`
+  - `no_credentials`：要用的云端服务在 App 里没有 key（`speech.transcribe` 的 `engine: "doubao"`）
+  - `service_not_enabled`：有 key，但这个账号没开通要用的服务；`message` 里写着去火山引擎控制台开通哪个
 - 不在上面的能力，用 `os.call(name, args)` 调，任务用 `os.start(name, args)` 起。新版 App 可能多出新的能力。
 - 关掉网页时，它起的任务都会停掉。
 - 类型定义在 `templates/src/_lib/myco.ts` 的 `MycoOS` 里。
@@ -151,9 +154,9 @@ agent 写的普通网页不打包，直接用 `window.myco.os`，用法见上一
 | `net.fetch` | 从 App 发 HTTP 请求（网页自己不能上网）；文本回文字，其他回 base64 | 同 | 同 | 同 |
 | `audio.sources` | 能录的声音：麦克风（`mic`）、电脑放出的声音（`system`）、某个出过声音的应用（`app:…`） | 麦克风；macOS 14.2 起有电脑的声音和各个应用（Core Audio 的进程列表） | 还没有 | PulseAudio / PipeWire：默认麦克风、默认输出的 monitor、正在放声音的流 |
 | `audio.record`（任务） | 录音：每个来源一条音轨，各存一个 16 kHz 单声道 WAV（`~/.myco/recordings/<时间>/<轨>.wav`），每 100 毫秒推一次音量；写入 `pause`、`resume`、`stop` 来暂停、继续、结束 | 要在 myco App 里：麦克风用 AVAudioEngine，电脑的声音用 Core Audio process tap（macOS 14.2+，第一次会问「系统录音」权限） | 还没有 | `parec` |
-| `speech.status` `speech.install`（任务） | 本机转写的引擎和模型：sherpa-onnx 官方编好的程序（约 20 MB）和 SenseVoice 模型（约 160 MB，中英粤日韩），第一次用时下载到 `~/.myco/speech`（`MYCO_SPEECH_MIRROR` 换下载地址） | arm64、x64 | x64 | x64 |
+| `speech.status` `speech.install`（任务） | 本机转写的引擎和模型：sherpa-onnx 官方编好的程序（约 20 MB）和 SenseVoice 模型（约 160 MB，中英粤日韩），第一次用时下载到 `~/.myco/speech`（`MYCO_SPEECH_MIRROR` 换下载地址）。`speech.status` 还回 `cloud`：云端引擎能不能用，如 `{"doubao": {"ready": false, "code": "no_credentials", "message": "…"}}` | arm64、x64 | x64 | x64 |
 | `speech.diarize`（任务） | 分出录音里的不同说话人：一段段「谁在什么时候说话」（说话人按第一次开口的顺序编号）；知道几个人时给 `speakers` 更准。模型（pyannote 切分和 3D-Speaker 声纹，约 35 MB）随 `speech.install` 下载 | 同上 | 同上 | 同上 |
-| `speech.transcribe`（任务） | 把录音转成文字：一句一段，带开始和结束时间，边转边推 `segment`；长录音按四分钟左右在最安静处切开转 | WAV；别的格式用 `afconvert` 转 | WAV；装了 ffmpeg 时别的格式也行 | 同 Windows |
+| `speech.transcribe`（任务） | 把录音转成文字：一句一段，带开始和结束时间，边转边推 `segment`；长录音按四分钟左右在最安静处切开转。`engine: "doubao"`（App 起）改用豆包大模型语音识别（火山引擎「录音文件识别极速版」），中英混说更准，并把要听准的词（常用词、工作区里 agent、项目、成员的名字、设置 › 语音里加的词）作为热词；用设置 › 语音里豆包语音的 key（只在 App 里用，网页拿不到），录音会发到火山引擎。没 key 回 `no_credentials`，没开通回 `service_not_enabled`；结果里 `engine` 写着用的哪个 | WAV；别的格式用 `afconvert` 转 | WAV；装了 ffmpeg 时别的格式也行 | 同 Windows |
 
 命令在 App 那边跑，环境和登录 shell 一样（PATH 里有 Homebrew、nvm 等），起点是个人文件夹，环境变量里没有 myco 的令牌。
 

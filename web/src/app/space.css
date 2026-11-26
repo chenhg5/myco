@@ -2503,12 +2503,18 @@ body.is-resizing {
 /* Speaking instead of typing (Dictate.tsx): while the page listens the
    microphone is red and breathes; a problem shows as its tip. */
 /* Beside Send, on the right of the bar. */
-.conv-compose-bar > .dictate-btn {
+.conv-compose-bar > /* Names corrected after dictation: a quiet note with Undo, beside the mic. */
+.dictate-fixed { display: inline-flex; align-items: center; gap: 4px; margin-right: 4px; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.dictate-fixed button { padding: 0 4px; border-radius: 6px; color: var(--fg); text-decoration: underline; text-underline-offset: 2px; }
+.dictate-fixed button:hover { background: var(--hover); }
+.dictate-btn {
   margin-left: auto;
 }
 .conv-compose-bar > .dictate-btn + .conv-send {
   margin-left: 0;
 }
+.conv-compose-bar > .dictate-fixed { margin-left: auto; }
+.conv-compose-bar > .dictate-fixed + .dictate-btn { margin-left: 0; }
 .dictate-btn {
   width: 30px;
   height: 30px;

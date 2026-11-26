@@ -185,3 +185,38 @@ func TestRuntimeRestartFieldsFallBackOnlyForOlderSchema(t *testing.T) {
 		})
 	}
 }
+
+func TestPrivateQuotaDoesNotDowngradeToOlderPublicRuntime(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		var old struct {
+			CLI   string `json:"cli"`
+			Quota *struct {
+				Source  string            `json:"source"`
+				At      time.Time         `json:"at"`
+				Windows []api.QuotaWindow `json:"windows"`
+			} `json:"quota"`
+		}
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields()
+		w.Header().Set("Content-Type", "application/json")
+		if e := dec.Decode(&old); e != nil {
+			w.WriteHeader(400)
+			json.NewEncoder(w).Encode(api.Error{Code: "invalid_argument", Message: e.Error()})
+			return
+		}
+		if old.Quota != nil {
+			t.Fatal("private snapshot downgraded to public legacy field")
+		}
+		w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+	c, _ := New(srv.URL, "test-token")
+	if e := c.ReportRuntime(context.Background(), api.Runtime{CLI: "codex", Quota: &api.Quota{Source: "codex", Provider: "codex", ProfileRef: "opaque-ref", At: time.Now(), Windows: []api.QuotaWindow{{Name: "primary", Used: .82}}}}); e != nil {
+		t.Fatal(e)
+	}
+	if calls.Load() != 2 {
+		t.Fatalf("expected one schema fallback, got %d", calls.Load())
+	}
+}

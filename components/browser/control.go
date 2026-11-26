@@ -28,6 +28,7 @@ type controlActor struct {
 	Name string `json:"name"`
 }
 type controlInput struct {
+	Graph             json.RawMessage `json:"graph,omitempty"`
 	Hosts             []string        `json:"hosts"`
 	Reason            string          `json:"reason"`
 	RequestID         string          `json:"request_id"`
@@ -56,12 +57,13 @@ type controlInput struct {
 	Full              bool            `json:"full"`
 }
 type controlError struct {
-	Host    string `json:"host,omitempty"`
-	Message string `json:"message,omitempty"`
-	Code    string `json:"code"`
-	Error   string `json:"error"`
-	Reason  string `json:"reason,omitempty"`
-	Applied *int   `json:"applied,omitempty"`
+	ErrorNode string `json:"error_node,omitempty"`
+	Host      string `json:"host,omitempty"`
+	Message   string `json:"message,omitempty"`
+	Code      string `json:"code"`
+	Error     string `json:"error"`
+	Reason    string `json:"reason,omitempty"`
+	Applied   *int   `json:"applied,omitempty"`
 }
 
 func (x *controlError) ErrorMessage() string { return x.Code }
@@ -112,6 +114,8 @@ type controlSession struct {
 	ctx              context.Context
 	cancel           context.CancelFunc
 	opMu             sync.Mutex
+	replaying        bool
+	replayAbort      context.CancelFunc
 	mu               sync.Mutex
 	expires, last    time.Time
 	closed           bool
@@ -151,7 +155,7 @@ type controlSession struct {
 }
 
 func (e *engine) controlRoutes(m *http.ServeMux) {
-	for _, method := range []string{"open", "snapshot", "act", "extract", "screenshot", "close"} {
+	for _, method := range []string{"open", "snapshot", "act", "extract", "screenshot", "close", "run"} {
 		m.HandleFunc("POST /control/"+method, func(w http.ResponseWriter, r *http.Request) { e.controlCall(w, r, method) })
 	}
 	m.HandleFunc("GET /control/events", e.controlEvents)
@@ -183,6 +187,8 @@ func controlDecode(r *http.Request, method string) (controlInput, []byte, error)
 		allowed += " tab ref what attr"
 	case "screenshot":
 		allowed += " tab ref clip full"
+	case "run":
+		allowed += " graph tab timeout_ms"
 	case "act":
 		allowed += " tab op timeout_ms"
 		switch in.Op {
@@ -243,7 +249,14 @@ func controlDecode(r *http.Request, method string) (controlInput, []byte, error)
 	if strings.Contains(in.Value, "${") || strings.Contains(in.URL, "${") || strings.Contains(in.Key, "${") {
 		return in, nil, errors.New("literal_required")
 	}
-	if in.RequestID == "" || len(in.RequestID) > 160 || in.TimeoutMS < 0 || in.TimeoutMS > 30000 || len(in.Value) > 16000 || len(in.Key) > 160 || len(in.Ref) > 80 || len(in.Tab) > 80 {
+	maxTimeout := 30000
+	if method == "run" {
+		maxTimeout = 300000
+	}
+	if method == "run" && fields["timeout_ms"] != nil && in.TimeoutMS == 0 {
+		return in, nil, errors.New("invalid_argument")
+	}
+	if in.RequestID == "" || len(in.RequestID) > 160 || in.TimeoutMS < 0 || in.TimeoutMS > maxTimeout || len(in.Value) > 16000 || len(in.Key) > 160 || len(in.Ref) > 80 || len(in.Tab) > 80 {
 		return in, nil, errors.New("invalid_argument")
 	}
 	if method != "open" && in.Session == "" {
@@ -256,6 +269,17 @@ func controlDecode(r *http.Request, method string) (controlInput, []byte, error)
 	}
 	if method == "snapshot" && (in.MaxNodes < 0 || in.MaxNodes > 400 || (in.Mode != "" && in.Mode != "a11y" && in.Mode != "text")) {
 		return in, nil, errors.New("invalid_argument")
+	}
+	// Normalize nested graph objects as well as the request envelope. A retry
+	// from another JSON encoder must not change the request digest.
+	if len(in.Graph) != 0 {
+		decoder := json.NewDecoder(bytes.NewReader(in.Graph))
+		decoder.UseNumber()
+		var graph any
+		if decoder.Decode(&graph) != nil {
+			return in, nil, errors.New("invalid_argument")
+		}
+		in.Graph, _ = json.Marshal(graph)
 	}
 	// Normalize key ordering for retries from different JSON encoders.
 	canonical, _ := json.Marshal(in)
@@ -402,7 +426,7 @@ func (c *controlSession) check(closing bool) *controlError {
 	c.mu.Lock()
 	closed, code, reason := c.closed, c.code, c.reason
 	expired := !time.Now().Before(c.expires)
-	idle := time.Since(c.last) >= controlIdle
+	idle := !c.replaying && time.Since(c.last) >= controlIdle
 	c.mu.Unlock()
 	if closed {
 		if closing && reason == "closed" {
@@ -511,10 +535,20 @@ func (e *engine) controlExecute(ctx context.Context, owner, method string, in co
 		return map[string]any{"host": c.lastHost, "session": c.id, "profile": c.browser.id, "start_url": c.startURL, "steps": steps, "removed": []string{}, "next": len(steps), "done": true, "reason": "closed"}, nil
 	}
 	limit := 10 * time.Second
+	if method == "run" {
+		if err := ValidateBrowserReplayGraph(in.Graph); err != nil {
+			return nil, controlNativeError(err)
+		}
+		limit = 5 * time.Minute
+	}
 	if in.TimeoutMS != 0 {
 		limit = time.Duration(in.TimeoutMS) * time.Millisecond
 	}
-	call, stop := context.WithTimeout(c.ctx, limit)
+	deadline := time.Now().Add(limit)
+	if method == "run" && c.expires.Before(deadline) {
+		deadline = c.expires
+	}
+	call, stop := context.WithDeadline(c.ctx, deadline)
 	defer stop()
 	stopCaller := context.AfterFunc(ctx, stop)
 	defer stopCaller()
@@ -537,11 +571,13 @@ func (e *engine) controlExecute(ctx context.Context, owner, method string, in co
 		c.takeHostViolation()
 		return nil, x
 	}
-	if c.dialogOpen() && (method != "act" || in.Op != "dialog") {
+	if c.dialogOpen() && method != "run" && (method != "act" || in.Op != "dialog") {
 		return nil, controlFailure("target_not_interactable", "dialog_open")
 	}
 	var out map[string]any
 	switch method {
+	case "run":
+		out, err = c.replay(call, p, in)
 	case "snapshot":
 		out, err = c.snapshot(call, p, in.Mode, in.MaxNodes, (64<<10)-512)
 		if err == nil && in.IncludeScreenshot {
@@ -565,7 +601,7 @@ func (e *engine) controlExecute(ctx context.Context, owner, method string, in co
 	// A completed logical action stays successful if a later background
 	// navigation crosses the scope while its brief snapshot is being built.
 	// The pending violation belongs to the next call in that case.
-	if method != "act" || err != nil {
+	if method != "act" && method != "run" || err != nil {
 		if denied := c.takeHostViolation(); denied != nil {
 			return nil, denied
 		}
@@ -577,6 +613,15 @@ func (e *engine) controlExecute(ctx context.Context, owner, method string, in co
 	if info, e := p.Context(call).Info(); e == nil {
 		if u, e := url.Parse(info.URL); e == nil {
 			host = u.Hostname()
+		}
+	}
+	if method == "run" {
+		if denied, _ := out["host"].(string); denied != "" {
+			host = denied
+		} else if raw, _ := out["url"].(string); raw != "" {
+			if final, err := url.Parse(raw); err == nil {
+				host = final.Hostname()
+			}
 		}
 	}
 	out["session"] = c.id
@@ -595,15 +640,26 @@ func (e *engine) controlExecute(ctx context.Context, owner, method string, in co
 	return out, nil
 }
 func controlNativeError(err error) *controlError {
+	var privacy screenshotPrivacyError
+	if errors.As(err, &privacy) {
+		return controlFailure("sensitive_snapshot", string(privacy))
+	}
+	var invalid *BrowserReplayValidationError
+	if errors.As(err, &invalid) {
+		out := controlFailure("invalid_argument", "")
+		out.ErrorNode = invalid.Node
+		return out
+	}
 	code := err.Error()
 	switch code {
-	case "host_not_allowed", "invalid_argument", "unsupported", "permission_denied", "not_found", "busy", "conflict", "stale_ref", "target_not_found", "target_not_interactable", "sensitive_field", "sensitive_snapshot", "session_closed", "session_expired", "cancelled", "timeout", "recording_limit", "artifact_too_large", "artifact_limit", "component_unavailable", "storage_failed", "outcome_unknown":
+	case "assertion_failed", "host_not_allowed", "invalid_argument", "unsupported", "permission_denied", "not_found", "busy", "conflict", "stale_ref", "target_not_found", "target_not_interactable", "sensitive_field", "sensitive_snapshot", "session_closed", "session_expired", "cancelled", "timeout", "recording_limit", "artifact_too_large", "artifact_limit", "component_unavailable", "storage_failed", "outcome_unknown":
 	default:
 		if errors.Is(err, context.DeadlineExceeded) {
 			code = "timeout"
 		} else if errors.Is(err, context.Canceled) {
 			code = "cancelled"
 		} else {
+			controlDiagnostic("control_error_fallback", err)
 			code = "component_unavailable"
 		}
 	}
@@ -787,6 +843,9 @@ func (c *controlSession) budgetLocked(nodes ...node) error {
 	if c.closed {
 		return errors.New("session_closed")
 	}
+	if c.replaying {
+		return nil
+	}
 	all := append(append([]node{}, c.steps...), nodes...)
 	if time.Now().Before(c.navigationUntil) {
 		if c.reservedWait {
@@ -811,7 +870,9 @@ func (c *controlSession) appendStep(n node) error {
 	if err := c.budgetLocked(n); err != nil {
 		return err
 	}
-	c.steps = append(c.steps, n)
+	if !c.replaying {
+		c.steps = append(c.steps, n)
+	}
 	return nil
 }
 func (e *engine) controlEvents(w http.ResponseWriter, r *http.Request) {

@@ -43,6 +43,37 @@ func TestScreenshotMasksUseClipOriginAndPixelScale(t *testing.T) {
 	}
 }
 
+func TestScreenshotPrivacyIgnoresFragmentNavigation(t *testing.T) {
+	root := proto.PageFrameID("root")
+	before := screenshotPrivacyPlan{Documents: map[proto.PageFrameID]string{root: "https://example.com/t/123#reply11"}, Epochs: map[proto.PageFrameID]uint64{root: 7}}
+	after := screenshotPrivacyPlan{Documents: map[proto.PageFrameID]string{root: "https://example.com/t/123#reply12"}, Epochs: map[proto.PageFrameID]uint64{root: 7}}
+	if !sameScreenshotPrivacy(before, after) {
+		t.Fatal("same-document fragment navigation rejected a safe screenshot")
+	}
+	after.Documents[root] = "https://example.com/t/124#reply12"
+	if sameScreenshotPrivacy(before, after) {
+		t.Fatal("different document accepted")
+	}
+	after.Documents[root] = before.Documents[root]
+	after.Epochs[root]++
+	if sameScreenshotPrivacy(before, after) {
+		t.Fatal("replaced frame epoch accepted")
+	}
+}
+
+func TestScreenshotPrivacyReasonSurvivesReplayError(t *testing.T) {
+	for _, reason := range []screenshotPrivacyError{"protected_content", "privacy_unavailable", "frame_unavailable", "privacy_changed"} {
+		failure := controlNativeError(reason)
+		if failure.Code != "sensitive_snapshot" || failure.Reason != string(reason) {
+			t.Fatalf("reason %s lost from component error: %+v", reason, failure)
+		}
+		result := replayErrorDTO(failure)
+		if result.Code != "sensitive_snapshot" || result.Reason != string(reason) {
+			t.Fatalf("reason %s lost from replay error: %+v", reason, result)
+		}
+	}
+}
+
 func TestNativeChromeUnavailableFramesAreMaskedBeforeArtifactStorage(t *testing.T) {
 	if !*browserSmoke {
 		t.Skip("enable -browser-smoke with installed Chrome")
@@ -93,6 +124,50 @@ func TestNativeChromeUnavailableFramesAreMaskedBeforeArtifactStorage(t *testing.
 	e.mu.Unlock()
 	p, _ := c.browser.page()
 	p = p.Context(ctx)
+	// Keep the historical child worlds across a real document navigation.
+	// Destroyed iframe events can arrive after a capture has copied the map.
+	c.browser.mu.Lock()
+	historical := map[string]map[proto.RuntimeExecutionContextID]proto.PageFrameID{}
+	root := c.browser.installs[p.TargetID].rootFrame
+	topSID := c.browser.installs[p.TargetID].sid
+	c.browser.contexts[string(topSID)][1000001] = root
+	for sid, worlds := range c.browser.contexts {
+		historical[sid] = map[proto.RuntimeExecutionContextID]proto.PageFrameID{}
+		for id, frame := range worlds {
+			if frame != root {
+				historical[sid][id] = frame
+			}
+		}
+	}
+	c.browser.mu.Unlock()
+	if err = c.browser.setControlPanelHidden(ctx, p); err != nil {
+		t.Fatal("stale top context vetoed a healthy collector", err)
+	}
+	c.browser.mu.Lock()
+	delete(c.browser.contexts[string(topSID)], 1000001)
+	topWorlds := map[proto.RuntimeExecutionContextID]proto.PageFrameID{}
+	for id, frame := range c.browser.contexts[string(topSID)] {
+		if frame == root {
+			topWorlds[id] = frame
+			delete(c.browser.contexts[string(topSID)], id)
+		}
+	}
+	c.browser.mu.Unlock()
+	missingTopErr := c.browser.setControlPanelHidden(ctx, p)
+	c.browser.mu.Lock()
+	for id, frame := range topWorlds {
+		c.browser.contexts[string(topSID)][id] = frame
+	}
+	c.browser.mu.Unlock()
+	if missingTopErr == nil {
+		t.Fatal("capture accepted no live top collector")
+	}
+	if err = p.Navigate(base + "/after-navigation"); err != nil {
+		t.Fatal(err)
+	}
+	if err = c.waitReady(ctx, p); err != nil {
+		t.Fatal(err)
+	}
 	if err = (proto.EmulationSetDeviceMetricsOverride{Width: 800, Height: 600, DeviceScaleFactor: 2, Mobile: false}).Call(p); err != nil {
 		t.Fatal(err)
 	}
@@ -141,6 +216,18 @@ func TestNativeChromeUnavailableFramesAreMaskedBeforeArtifactStorage(t *testing.
 			}
 		}
 	}
+	for sid, worlds := range historical {
+		if c.browser.contexts[sid] == nil {
+			c.browser.contexts[sid] = map[proto.RuntimeExecutionContextID]proto.PageFrameID{}
+		}
+		for id, frame := range worlds {
+			if frame != child {
+				c.browser.contexts[sid][id] = frame
+			}
+		}
+	}
+	// A removed OOPIF renderer must never veto top-frame panel hiding.
+	c.browser.contexts["detached-ad-session"] = map[proto.RuntimeExecutionContextID]proto.PageFrameID{1000000: "detached-ad"}
 	c.browser.frames["detached-ad"] = frameInfo{Parent: tree.FrameTree.Frame.ID, URL: "https://ads.example/old"}
 	c.browser.mu.Unlock()
 	capture := func(name string, fields map[string]any) {

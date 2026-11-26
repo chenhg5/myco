@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -99,5 +100,36 @@ func TestBrowserControlErrorPreservesStableCode(t *testing.T) {
 	var native *ComponentError
 	if !errors.As(err, &native) || native.Code != "session_closed" || native.Reason != "stopped_by_owner" || err.Error() != "session_closed" {
 		t.Fatalf("unexpected native error: %v", err)
+	}
+}
+
+func TestReplayPreflightRequiresBothFeaturesAndKeepsNode(t *testing.T) {
+	for _, features := range []string{`[]`, `["agent_control"]`, `["agent_replay"]`, `["agent_control","agent_replay"]`} {
+		t.Run(features, func(t *testing.T) {
+			posts := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Header.Get("Authorization") != "Bearer fixture" || r.Header.Get("X-Myco-Scope") != "scope" {
+					t.Error("lost native scope")
+				}
+				if r.URL.Path == "/status" {
+					fmt.Fprintf(w, `{"protocol":1,"features":%s}`, features)
+					return
+				}
+				posts++
+				w.WriteHeader(400)
+				w.Write([]byte(`{"code":"invalid_argument","error_node":"blocked","error":"private input"}`))
+			}))
+			defer server.Close()
+			c := &Component{address: strings.TrimPrefix(server.URL, "http://"), secret: "fixture"}
+			err := c.Call(context.Background(), "scope", "POST", "/control/run", json.RawMessage(`{"session":"demo","graph":{"nodes":[],"edges":[]}}`), nil)
+			if features == `["agent_control","agent_replay"]` {
+				var failure *ComponentError
+				if posts != 1 || !errors.As(err, &failure) || failure.Code != "invalid_argument" || failure.ErrorNode != "blocked" || failure.Error() != "invalid_argument" {
+					t.Fatal(posts, err)
+				}
+			} else if posts != 0 || err == nil || err.Error() != "unsupported_node" {
+				t.Fatal(posts, err)
+			}
+		})
 	}
 }

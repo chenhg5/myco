@@ -53,6 +53,8 @@ type openAIModel struct {
 	// (opencode's Go plan refuses requests without x-opencode-session).
 	session string
 	http    *http.Client
+	// cold: no sampling (temperature 0), for correcting rather than talking.
+	cold bool
 }
 
 func (m *openAIModel) Stream(ctx context.Context, msgs []chatMsg, tools []toolDef, onText func(string), onTool func(string)) (chatMsg, error) {
@@ -62,9 +64,15 @@ func (m *openAIModel) Stream(ctx context.Context, msgs []chatMsg, tools []toolDe
 	}
 	// The whole endpoint pasted in works too.
 	base = strings.TrimSuffix(base, "/chat/completions")
-	body, _ := json.Marshal(map[string]any{
-		"model": m.model, "messages": msgs, "tools": tools, "stream": true, "temperature": 0.7,
-	})
+	temp := 0.7
+	if m.cold {
+		temp = 0
+	}
+	params := map[string]any{"model": m.model, "messages": msgs, "stream": true, "temperature": temp}
+	if len(tools) > 0 {
+		params["tools"] = tools
+	}
+	body, _ := json.Marshal(params)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
 		return chatMsg{}, err

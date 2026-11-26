@@ -88,7 +88,7 @@ func TestBrowserBoundProfileGrantJob(t *testing.T) {
 	if err != nil || len(acts) != 1 || acts[0].Name != "browser.run.status" {
 		t.Fatalf("actions: %+v %v", acts, err)
 	}
-	for _, action := range []string{"browser.script.run", "browser.page.act"} {
+	for _, action := range []string{"browser.script.run", "browser.page.act", "browser.page.run"} {
 		if _, err := agent.RunAction(c, api.ActionInvocation{GrantID: grant.ID, Action: action, Version: 1, IdempotencyKey: action}); err == nil {
 			t.Fatal("view grant escalated")
 		}
@@ -257,12 +257,62 @@ func TestLiveBrowserGrantValidatesAuditsAndStops(t *testing.T) {
 		t.Fatalf("grant: %+v %v", grant, err)
 	}
 	actions, err := agent.GrantActions(c, grant.ID)
-	if err != nil || len(actions) != 6 {
-		t.Fatalf("expected six control-only actions: %+v %v", actions, err)
+	if err != nil || len(actions) != 7 {
+		t.Fatalf("expected seven control-only actions: %+v %v", actions, err)
 	}
 	run := func(action, key, args string) (*api.ActionJob, error) {
 		return agent.RunAction(c, api.ActionInvocation{GrantID: grant.ID, Action: "browser." + action,
 			Version: 1, Args: json.RawMessage(args), IdempotencyKey: key})
+	}
+
+	// A replay graph has its own larger transport budget. Validation must still
+	// finish before the trusted host can claim any website operation.
+	badGraph := `{"session":"session","graph":{"nodes":[{"id":"forbidden","type":"js","code":""}],"edges":[]}}`
+	if _, err := run("page.run", "invalid-replay", badGraph); err == nil {
+		t.Fatal("executable graph queued")
+	} else if failure, ok := client.AsError(err); !ok || failure.Code != "invalid_argument" || failure.ErrorNode != "forbidden" {
+		t.Fatalf("preflight node did not cross HTTP/client: %+v %v", failure, err)
+	}
+	largeGraph := map[string]any{"nodes": []any{map[string]any{"id": "note", "type": "note", "note": strings.Repeat("public fixture ", 6000)}}, "edges": [][]string{}}
+	replayArgs, _ := json.Marshal(map[string]any{"session": "session", "graph": largeGraph})
+	replayJob, err := run("page.run", "large-replay", string(replayArgs))
+	if err != nil {
+		t.Fatal("graph larger than the generic 64 KiB budget was rejected", err)
+	}
+	replayJobs, err := owner.ActionHostJobs(c, host.ID, 0)
+	if err != nil || len(replayJobs) != 1 || replayJobs[0].Job.ID != replayJob.ID || !bytes.Equal(replayJobs[0].Args, replayArgs) {
+		t.Fatalf("replay queue: %+v %v", replayJobs, err)
+	}
+	if _, err = owner.CompleteActionJob(c, replayJob.ID, api.ActionJobComplete{HostID: host.ID, Generation: host.Generation, State: api.JobSucceeded, Result: json.RawMessage(`{"ok":true,"state":"succeeded","steps":[{"node":"note","state":"ok","ms":0}],"output":{},"url":"https://docs.example.com/","tabs":[]}`)}); err != nil {
+		t.Fatal(err)
+	}
+	// Host generations are registration leases, not live-session grants.
+	// Re-registering the same profile invalidates old job credentials while
+	// the owner's grant list must still confirm this active grant.
+	previousHost := host
+	reg.Generation = "control-refreshed"
+	host, err = owner.RegisterActionHost(c, reg)
+	if err != nil || host.Generation == previousHost.Generation {
+		t.Fatalf("host replacement: %+v %v", host, err)
+	}
+	if _, err := owner.ActionHostJob(c, replayJob.ID, previousHost.ID, previousHost.Generation, 0); err == nil {
+		t.Fatal("replaced host generation inspected completed job")
+	}
+	ownerGrants, err := owner.OwnerActionGrants(c, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	confirmed := false
+	for _, current := range ownerGrants {
+		confirmed = confirmed || current.ID == grant.ID && current.State == api.GrantActive && current.ExpiresAt != nil
+	}
+	if !confirmed {
+		t.Fatal("host replacement hid or ended the live grant")
+	}
+	largeGraph["nodes"] = []any{map[string]any{"id": "large", "type": "note", "note": strings.Repeat("x", api.BrowserReplayGraphMax)}}
+	tooLarge, _ := json.Marshal(map[string]any{"session": "session", "graph": largeGraph})
+	if _, err = run("page.run", "too-large-replay", string(tooLarge)); err == nil {
+		t.Fatal("graph exceeded its 192 KiB cap")
 	}
 	for _, args := range []string{`{"profile":"other"}`, `{"profile":"work","headless":true}`, `{"profile":"work","actor":"someone-else"}`} {
 		if _, err := run("page.open", args, args); err == nil {

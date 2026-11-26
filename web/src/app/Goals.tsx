@@ -166,11 +166,11 @@ export function GoalBar({ hubId, goal, onChanged }: { hubId: string; goal: Goal 
           {!!goal.rounds?.length && (
             <ol className="goal-rounds">
               {[...goal.rounds].reverse().map((r) => (
-                <li key={r.round} className={cn("goal-round", !r.progressed && "is-stuck", r.blocked && "is-blocked")}>
+                <li key={r.round} className={cn("goal-round", !r.ended_at ? "is-now" : !r.progressed && "is-stuck", r.blocked && "is-blocked")}>
                   <span className="goal-round-n">{L(`第 ${r.round} 轮`, `Round ${r.round}`)}</span>
                   <span className="goal-round-time">{clock(r.started_at)}</span>
-                  <span className="goal-round-tag">{r.blocked ? L("遇阻", "Blocked") : r.progressed ? L("有进展", "Progress") : L("没进展", "No progress")}</span>
-                  <span className="goal-round-text">{r.summary}</span>
+                  <span className="goal-round-tag">{!r.ended_at ? L("进行中", "Running") : r.blocked ? L("遇阻", "Blocked") : r.progressed ? L("有进展", "Progress") : L("没进展", "No progress")}</span>
+                  <span className="goal-round-text">{r.summary || (!r.ended_at ? L("这一轮还没报告", "Not reported yet") : "")}</span>
                 </li>
               ))}
             </ol>

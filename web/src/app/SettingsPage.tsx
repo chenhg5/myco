@@ -1525,7 +1525,7 @@ function VoiceSection() {
     }, setError);
     return () => { off = true; };
   }, []);
-  const save = async (extra: { clear_llm_key?: boolean; clear_tts_key?: boolean; share?: boolean } = {}) => {
+  const save = async (extra: { clear_llm_key?: boolean; clear_tts_key?: boolean; share?: boolean; polish?: boolean } = {}) => {
     setBusy(true); setError(null); setSaved(false);
     try {
       const v = await appApi.putVoiceConfig({
@@ -1548,6 +1548,7 @@ function VoiceSection() {
   // The key shown as kept is the chosen service's.
   const hasTtsKey = info.tts_providers ? svc.has_key : info.has_tts_key;
   const share = info.share !== false;
+  const polish = info.config.polish !== false;
   const sync = info.sync || [];
   const behind = sync.filter((h) => h.state === "unsupported");
   const away = sync.filter((h) => h.state === "unreachable");
@@ -1639,16 +1640,30 @@ function VoiceSection() {
       <h4 className="app-setting-group">{L("要听准的词", "Words to hear right")}</h4>
       <section className="app-setting-card app-setting-lines" data-setting="voice-words">
         <div className="app-setting-line">
-          <p className="tr-note">{L("语音聊天和语音输入都会留意这些词，听成别的也会改回来。agent、项目和成员的名字，还有 Claude、Codex、GitHub 这些常用词已经自动加上了。一行一个；常被听错的写成「Claude = 克劳德, cloud」。",
-            "Voice chat and dictation listen for these words, and fix them when they are heard as something else. The names of agents, projects and members, and common words such as Claude, Codex and GitHub, are already included. One per line; for one often misheard, write \"Claude = clod, cloud\".")}</p>
+          <p className="tr-note">{L("语音聊天和语音输入都会留意这些词，听成别的也会改回来。agent、项目和成员的名字，还有 Claude、Codex、GitHub 这些常用词已经自动加上了。一行一个；常被听错的写成「Claude = 克劳德, CLOU」（常用词不会被当成别名，免得改错你的话）。",
+            "Voice chat and dictation listen for these words, and fix them when they are heard as something else. The names of agents, projects and members, and common words such as Claude, Codex and GitHub, are already included. One per line; for one often misheard, write \"Claude = CLOU, Claud\" (everyday words are not taken as aliases, so nothing you mean is changed).")}</p>
         </div>
         <div className="app-setting-line">
           <textarea className="app-input mono vs-words" rows={4} value={words} onChange={(e) => { setWords(e.target.value); setSaved(false); }} spellCheck={false}
-            aria-label={L("要听准的词", "Words to hear right")} placeholder={L("Kettu\n前端小王\nClaude = 克劳德, cloud", "Kettu\nFrontend Wang\nClaude = clod, cloud")} />
+            aria-label={L("要听准的词", "Words to hear right")} placeholder={L("Kettu\n前端小王\nClaude = 克劳德, CLOU", "Kettu\nFrontend Wang\nClaude = CLOU, Claud")} />
         </div>
         <div className="app-setting-line tr-actions">
           <button type="button" className="app-btn app-btn-primary" disabled={busy} onClick={() => void save()}>{L("保存", "Save")}</button>
           {saved && <span className="tr-tried"><Check />{L("已保存", "Saved")}</span>}
+        </div>
+        <div data-setting="voice-polish" className="app-setting-line">
+          <div className="app-setting-line-text">
+            <b>{L("用模型纠正听错的名字", "Fix misheard names with the model")}</b>
+            <span>{L("说完的话照常立刻出来、照常发送；上面的模型在后台把听错的名字（只限这些词）改过来，标「已纠正」，可以撤回。两秒内没结果就保持原样。会把识别出的文字发给这个模型。",
+              "What you said comes out and is sent at once, as usual; the model above then fixes names it misheard (only these words) in the background, marked Corrected, with Undo. With no answer within two seconds it stays as heard. The recognized text goes to that model.")}</span>
+          </div>
+          <div className="seg" role="tablist" aria-label={L("用模型纠正听错的名字", "Fix misheard names with the model")}>
+            {[false, true].map((on) => (
+              <button key={String(on)} type="button" role="tab" aria-selected={polish === on} disabled={busy} className={cn("seg-btn", polish === on && "active")} onClick={() => { if (polish !== on) void save({ polish: on }); }}>
+                {on ? L("开", "On") : L("关", "Off")}
+              </button>
+            ))}
+          </div>
         </div>
       </section>
       <h4 className="app-setting-group">{L("多设备同步", "On your other devices")}</h4>
@@ -1712,7 +1727,7 @@ function AppPermissionsSection({ hubs }: { hubs: Hub[] }) {
       {!rows.length && <div className="app-empty-note">{L("还没有应用用过这台电脑。应用第一次要读文件、录音、联网这些时，App 会先问你。", "No app has used this computer yet. The first time one wants to read files, record, use the network and the like, the App asks you.")}</div>}
       {rows.map((r) => {
         const items: { key: string; group: string; host?: string; note: string; denied?: boolean }[] = [
-          ...(r.always || []).map((g) => ({ key: `a${g}`, group: g, note: L("一直允许", "Always") })),
+          ...(r.always || []).map((g) => ({ key: `a${g}`, group: g, note: L("始终允许，以后不再问", "Always allowed: not asked again") })),
           ...(r.once || []).filter((g) => !(r.always || []).includes(g)).map((g) => ({ key: `o${g}`, group: g, note: L("这次允许，App 关掉就失效", "This time, until the App quits") })),
           ...(r.hosts || []).map((h) => ({ key: `h${h}`, group: "network", host: h, note: L("允许", "Allowed") })),
           ...(r.denied || []).map((g) => ({ key: `d${g}`, group: g, note: L("不允许", "Refused"), denied: true })),

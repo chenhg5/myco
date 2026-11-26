@@ -4,6 +4,52 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.22.18
+
+- Browser control: a blocked navigation is stopped before the page returns to the allowed one, background recording no longer disturbs the page you are driving, and the bundled browser component is 0.6.1.
+- Quotas: private account usage is collected and bound to agent runtimes, transferred agents no longer count against the computer's quota, and the App names the OpenCode Go and MiniMax windows.
+- Speech recognition: safer word rules, with names corrected by the model in the background.
+
+**中文**
+
+- 浏览器控制：被拦截的跳转会先停止再回到允许的页面，后台录制不再干扰正在操作的页面，内置浏览器组件升级到 0.6.1。
+- 额度：采集个人账号用量并绑定到 agent 运行时，转交的 agent 不再占用电脑账号额度，App 标出 OpenCode Go 与 MiniMax 的窗口名称。
+- 语音识别：更安全的用词规则，专有名称由模型在后台修正。
+
+## v0.22.17
+
+- Browser control: screenshots, multiline clicks and long sessions keep working after the browser reconnects.
+- App quota: shows what is left and whose it is, explains failed reads, and stays quiet when there is no usage to read.
+- Voice input can use Doubao speech recognition, with hot words for names and terms.
+- App layout: pins get their own row, and the bars above a chat are set apart from its messages.
+- App permissions survive app upgrades, and screen and browser access can be allowed permanently.
+
+**中文**
+
+- 浏览器控制：修复截图与多行点击，浏览器重连后长会话仍可继续控制。
+- 额度：显示剩余额度及归属，说明读取失败原因，无可读用量时不再占位。
+- 语音输入支持豆包识别，可配置热词提升专有名词准确率。
+- 界面：置顶项独立成行，聊天上方工具条与消息区分开。
+- 权限在应用升级后保留，屏幕与浏览器权限可设为始终允许。
+
+## v0.22.16
+
+- Goals: set a bounded goal on a chat and the agent takes it up on idle turns instead of waiting for your next message.
+- Watching: a chat shows a bar at the top for a watch (a bounded command wait on a permitted local runner) and its ended lines, and the bar fits a narrow pane.
+- A new clean (清爽) appearance in Settings → Appearance, which also hides the workspace's face in the bottom-left corner.
+- Chat layout: a chat keeps your place when bars appear above it, and the newest unfinished plan stays pinned when nothing is running.
+- Browser control: replay a literal draft inside a live control session without recording again; close receipts are kept, unreadable screenshots are redacted, and profile lifecycle and scoped navigation feedback are fixed.
+- Live browser features in this release need browser component 0.6.0, and the App prompts you to update it.
+
+**中文**
+
+- 目标：在聊天里设定一个有边界的目标，agent 会在空闲轮次里继续推进，而不是等你的下一条消息。
+- 盯着：聊天气泡顶部会显示监视条——在被允许的本地执行器上等待一条有界命令——以及已结束的记录，窄窗口下也能正常显示。
+- 设置 → 外观新增「清爽」风格，左下角的工作区头像也会一并隐藏。
+- 聊天界面：上方出现条栏时不会跳走你的位置；没有任务在跑时，最新的未完成计划会固定显示。
+- 浏览器控制：在实时会话里可直接回放字面量草稿，不必重新录制；保留关闭回执，无法读取的截图会被隐去，并修复配置档生命周期与限定域导航的反馈。
+- 本次发布的实时浏览器功能需要浏览器组件 0.6.0，App 会提示更新。
+
 ## v0.22.15
 
 - After a separate grant (up to 30 minutes), an agent can operate the browser directly in a dedicated clean agent profile, optionally restricted to the domains you allow; the panel shows the agent is operating and you can stop it at any time.

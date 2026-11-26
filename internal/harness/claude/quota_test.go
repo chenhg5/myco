@@ -116,3 +116,15 @@ func TestMCPToolsAllowConfiguredServersOnlyWhenEnabled(t *testing.T) {
 		})
 	}
 }
+
+func TestSingleWindowQuotaNeedsAnExplicitFraction(t *testing.T) {
+	unknown := []byte(`{"type":"rate_limit_event","rate_limit_info":{"rateLimitType":"five_hour","status":"allowed"}}`)
+	if events := lineEvents(unknown); len(events) != 0 {
+		t.Fatal("missing utilization became full allowance")
+	}
+	measured := []byte(`{"type":"rate_limit_event","rate_limit_info":{"rateLimitType":"five_hour","status":"allowed_warning","utilization":0.8}}`)
+	events := lineEvents(measured)
+	if len(events) != 1 || events[0].Quota == nil || events[0].Quota.Windows[0].Used != .8 {
+		t.Fatal("single-window measurement was lost")
+	}
+}

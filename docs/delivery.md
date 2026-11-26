@@ -169,5 +169,98 @@ not cancel the delegated task or workflow itself.
 `task:` matches a terminal delegated task, `reply:` matches its reply/failure
 event, and `run:` matches a terminal workflow run. New watch commands on an
 older Hub report that the Hub must be upgraded; the existing hold commands
-keep their previous compatibility rules. Command checks are reserved for a
-later step and are not executed by these endpoints.
+keep their previous compatibility rules. Command watches additionally require a
+current local runner, as described below.
+
+### Checking a command in the background
+
+A full-access agent on a shell-enabled computer can wait on a local command without
+starting a model for each check:
+
+```sh
+myco watch start --what "Build completes" --cmd "gh run view 123 --json conclusion --jq .conclusion" --match "^success$" --every 30s --for 30m
+```
+
+Without `--match`, exit code 0 meets the condition. With it, the Go/RE2 expression
+matches bounded stdout/stderr. The check runs in that agent's saved working directory
+on its original computer. Readonly/workspace agents and exec/machine nodes are refused;
+this feature does not bypass a CLI sandbox or an exec allowlist. Upgrade the Hub and
+runner first. Full access and full shell permission must already be reported by that runner.
+
+The runner checks without using a model slot, at most two commands per agent at once.
+Each command has half the interval to finish (at most 60 seconds), with bounded output
+and process-tree cancellation. Hub summaries redact token/key-shaped values and keep
+only the latest line and five recent checks. Do not put credentials in the command.
+Use read-only, idempotent checks: a process interrupted by restart may be retried after
+its short lease expires. A completed report is safe to resend and wakes the agent once.
+
+The Hub still expires the watch if the runner goes offline or an older runner does not
+support commands. `--task <open-task-id>` uses the same atomic hold/resume as other
+watches; otherwise completion or expiry sends the agent one event. `watch stop` and
+`watch extend` use the existing owner/coordinator controls. The App shows the latest
+check result and time in the existing watch bar.
+
+## Goal turns
+
+A person or project coordinator may set a bounded goal for an agent. The Hub
+creates the first task as soon as the agent is idle, then waits for each round
+task to finish before scheduling another. Ordinary queued work gets priority;
+delivered or acknowledged tasks defer a wake. The runner handles an ordinary task
+in the existing session and thread, so older runners remain compatible.
+
+```bash
+myco goal start --agent worker --objective "Prepare the reviewed patch" \
+  --done-when "Tests pass and the reviewer accepts" --every 30m --for 8h --max-rounds 16
+myco goal list --agent worker
+myco goal get --id gol_example
+# Inside its round, before replying to the wake task:
+myco goal report --id gol_example --summary "Implemented validation and passed tests" \
+  --next "Ask the reviewer" --progressed
+myco goal report --id gol_example --summary "Reviewer accepted" --progressed \
+  --achieved --reason "All success criteria met"
+# Owner/coordinator controls:
+myco goal pause --id gol_example --reason "Wait for a decision"
+myco goal resume --id gol_example
+myco goal set --id gol_example --every 60m --max-rounds 8
+myco goal stop --id gol_example --reason "Priorities changed"
+```
+
+Report binds to `MYCO_MESSAGE_ID`, or explicit `--message <wake-task-id>` outside a
+runner. Use exactly one of `--progressed`/`--no-progress`; use `--blocked` when human
+help is needed, or `--abandoned --reason ...` when the objective is impossible.
+Do not substitute a task reply for a goal report. The Hub counts missing reports
+as no progress, backs off after two, and pauses after four. Pauses and all endings
+send a short summary to the creator. Goals do not authorize additional actions:
+ask for human confirmation where the original task requires it. CLI mutations
+support `--dry-run`; `myco schema` describes every command. Older Hubs require an
+upgrade to use goals.
+
+## Account quota collection
+
+Long-running local runners collect account quota independently of task arrivals
+for Codex, Claude Code and supported providers used through OpenCode. Sampling
+uses no model turn and does not wake an agent. Agents using the same login on
+one computer share a private local snapshot and a cross-process acquisition lock.
+Their Hub runtimes refer to the same owner/machine/provider/login snapshot.
+Provider or login changes select a new opaque reference, and late samples cannot
+become the replacement login's values.
+
+Codex uses its native `app-server` account protocol and existing transcript quota
+events. Claude uses native rate-limit events and matching local usage caches;
+the runner neither calls Claude's private OAuth usage endpoint nor runs `/usage`
+to refresh credentials. An old cache retains its actual observation time.
+
+OpenCode Go and MiniMax use their own official quota endpoints with the current
+provider's key. Runners reuse selected cc-switch settings, saved provider env
+files or native CLI settings. They do not create an additional plaintext key
+store. An unconfigured supported provider reports `no_credentials`; configure
+its provider key using the existing provider settings. Missing native login is
+`auth_required`; log in through the CLI itself. Unrecognized gateways, project-level account overrides, or custom launch
+arguments whose effective account cannot be determined are `unsupported`, and their keys are never sent to a different quota provider.
+
+Sampling normally occurs at most once per five minutes per local account;
+Claude caches are re-read once per minute. Errors are cached for fifteen minutes,
+with a longer `Retry-After` respected on HTTP 429. HTTP redirects are not followed.
+Only normalized numbers, window times and safe status codes are uploaded; tokens,
+account IDs, emails and credential file paths remain on the computer. No reminder,
+automatic account switch, credit purchase, or quota-based scheduling is performed.

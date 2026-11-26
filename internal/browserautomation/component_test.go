@@ -242,7 +242,7 @@ func TestUpdateCompatibleComponent(t *testing.T) {
 				requests := 0
 				c.HTTP = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 					requests++
-					if !strings.HasPrefix(r.URL.String(), ComponentRelease+"/") || !strings.Contains(r.URL.Path, "/browser-v0.5.0/") {
+					if !strings.HasPrefix(r.URL.String(), ComponentRelease+"/") || !strings.Contains(r.URL.Path, "/browser-v0.6.1/") {
 						t.Errorf("wrong release: %s", r.URL)
 					}
 					if !c.Status().Running {
@@ -294,9 +294,39 @@ func TestUpdateCompatibleComponent(t *testing.T) {
 }
 
 func TestCompatibleComponentVersions(t *testing.T) {
-	for version, want := range map[string]bool{"0.1.0": true, "0.1.1": true, "0.2.0": true, "0.3.0": true, "0.3.1": true, "0.4.0": true, "0.5.0": true, "0.1.2": false, "": false} {
+	for version, want := range map[string]bool{"0.1.0": true, "0.1.1": true, "0.2.0": true, "0.3.0": true, "0.3.1": true, "0.4.0": true, "0.5.0": true, "0.6.0": true, "0.6.1": true, "0.1.2": false, "": false} {
 		if CompatibleComponentVersion(version) != want {
 			t.Errorf("version %q compatibility", version)
 		}
+	}
+}
+
+func TestPreviewComponentOnlyForPreviewBuilds(t *testing.T) {
+	home := t.TempDir()
+	preview := PreviewDir(home)
+	if err := os.MkdirAll(preview, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(preview, program("myco-browser")), []byte("x"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	release := &Component{Home: home}
+	if dir, _, installed := release.installedComponent(); installed || dir == preview {
+		t.Fatalf("release build used the preview component: %s %v", dir, installed)
+	}
+	c := &Component{Home: home, Preview: true}
+	dir, version, installed := c.installedComponent()
+	if !installed || dir != preview || version != ComponentVersion {
+		t.Fatalf("preview build: %s %s %v", dir, version, installed)
+	}
+	if s := c.Status(); !s.Installed || s.UpdateAvailable || s.Version != ComponentVersion {
+		t.Fatalf("preview status: %+v", s)
+	}
+	// Removing release installations leaves the preview component alone.
+	if err := c.Remove(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(preview, program("myco-browser"))); err != nil {
+		t.Fatalf("preview component removed: %v", err)
 	}
 }

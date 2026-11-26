@@ -81,8 +81,11 @@ func osGroupOf(name string) string {
 // The person picking a file is their say for these: no need to ask.
 var pickFree = map[string]bool{"fs.pick": true, "fs.saveAs": true}
 
-// Groups that may only be allowed for this run of the App, never always.
-var osOnceOnly = map[string]bool{"exec": true, "files.delete": true, "screen": true, "browser": true}
+// Groups that may only be allowed for this run of the App, never always:
+// running commands and deleting files can do harm no later look undoes.
+// (The screen and the browser may be allowed always, and taken back in
+// Settings.)
+var osOnceOnly = map[string]bool{"exec": true, "files.delete": true}
 
 type osGrant struct {
 	Hub    string   `json:"hub"`
@@ -90,10 +93,14 @@ type osGrant struct {
 	Name   string   `json:"name,omitempty"` // the page's name when allowed, to show
 	Groups []string `json:"groups"`
 	Hosts  []string `json:"hosts,omitempty"` // network: hosts allowed beyond its manifest's
-	// Version: the page's code these were allowed for (osDecl.ver); a
-	// newer one is asked again. Grants kept before v0.22.11 have none.
+	// Version: the page's code these were allowed for (osDecl.ver). A
+	// newer version of an app keeps what its manifest still declares;
+	// grants kept before v0.22.11 have none and are asked again.
 	Version string `json:"version,omitempty"`
-	At      int64  `json:"at"`
+	// Net: the hosts its manifest declared when the network was allowed;
+	// hosts a newer version adds are asked for.
+	Net []string `json:"net,omitempty"`
+	At  int64    `json:"at"`
 }
 
 type osPerm struct {
@@ -103,19 +110,42 @@ type osPerm struct {
 	name                 string
 	// ver: the page's code its allows are for; denials hold for every version
 	ver string
+	// net: the declared hosts the network's allow covers (nil: not known
+	// yet, it covers what the manifest declares now)
+	net []string
 }
 
-// forVersion keeps the allows only for the code they were given for: a
-// page republished, or its app upgraded, is asked again (as Claude's
-// installed apps are). Says whether anything was dropped.
-func (p *osPerm) forVersion(ver string) bool {
-	if p.ver == ver {
+// forVersion moves the allows to the code the page runs now. An app's new
+// version keeps the groups (and hosts) the person allowed that its manifest
+// still declares: only what it adds is asked for. A page with no manifest
+// (nothing says what its new code uses) is asked again, and so are
+// once-only groups. Denials hold for every version. Says whether it
+// changed anything (to save).
+func (p *osPerm) forVersion(d osDecl) bool {
+	if p.ver == d.ver {
 		return false
 	}
-	dropped := len(p.once)+len(p.always)+len(p.hosts)+len(p.onceHosts) > 0
-	p.once, p.always, p.hosts, p.onceHosts = map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}
-	p.ver = ver
-	return dropped
+	keep := func(m map[string]bool) {
+		for gr := range m {
+			if !d.app || p.ver == "" || osOnceOnly[gr] || !hasString(d.os, gr) {
+				delete(m, gr)
+			}
+		}
+	}
+	keep(p.once)
+	keep(p.always)
+	if !p.once["network"] && !p.always["network"] {
+		p.hosts, p.onceHosts, p.net = map[string]bool{}, map[string]bool{}, nil
+	}
+	p.ver = d.ver
+	return true
+}
+
+// netAllowed records which declared hosts an allow of the network covers.
+func (p *osPerm) netAllowed(d osDecl) {
+	if p.net == nil {
+		p.net = append([]string{}, d.net...)
+	}
 }
 
 type osGrants struct {
@@ -182,6 +212,9 @@ func (g *osGrants) load() {
 	for _, e := range list {
 		p := g.perm(e.Hub, e.Page)
 		p.name, p.ver = e.Name, e.Version
+		if e.Net != nil {
+			p.net = e.Net
+		}
 		for _, gr := range e.Groups {
 			if !osOnceOnly[gr] {
 				p.always[gr] = true
@@ -202,6 +235,9 @@ func (g *osGrants) saveLocked() {
 	for k, p := range g.pages {
 		hub, page, _ := strings.Cut(k, "\x00")
 		e := osGrant{Hub: hub, Page: page, Name: p.name, Version: p.ver, At: time.Now().Unix()}
+		if p.always["network"] {
+			e.Net = p.net
+		}
 		for gr := range p.always {
 			e.Groups = append(e.Groups, gr)
 		}
@@ -293,9 +329,13 @@ func (b *Backend) osCheck(ctx context.Context, in osCallIn) (*osConsent, error) 
 	if in.Page.Name != "" {
 		p.name = in.Page.Name
 	}
-	if p.forVersion(d.ver) {
+	if p.forVersion(d) {
 		g.saveLocked()
 	}
+	if (p.once["network"] || p.always["network"]) && p.net == nil {
+		p.netAllowed(d) // (allowed before hosts were kept: what it declares now)
+	}
+	netCovered := append([]string(nil), p.net...)
 	picked := append([]string(nil), p.picked...)
 	denied, allowed := p.denied[group], p.once[group] || p.always[group]
 	g.mu.Unlock()
@@ -319,15 +359,16 @@ func (b *Backend) osCheck(ctx context.Context, in osCallIn) (*osConsent, error) 
 		hostOK := p.hosts[host] || p.onceHosts[host]
 		g.mu.Unlock()
 		switch {
-		case hostMatches(d.net, host):
-			// declared hosts: the group's consent is enough
-		case isPrivateHost(host) && d.app && len(d.net) > 0:
+		case hostMatches(d.net, host) && (!allowed || hostMatches(netCovered, host)):
+			// declared hosts: the group's consent is enough (a host a newer
+			// version adds is asked for, below)
+		case !hostMatches(d.net, host) && isPrivateHost(host) && d.app && len(d.net) > 0:
 			return nil, &osRefusal{Code: "permission_denied", Message: "this app may not reach " + host + ": a private address it does not declare in myco.json's \"net\""}
 		case !hostOK:
 			if denied {
 				return nil, &osRefusal{Code: "permission_denied", Message: "the person did not allow this app to use the network"}
 			}
-			return &osConsent{Error: "consent_required", Message: "ask the person first", Group: group, Host: host, Declared: declared && len(d.net) == 0, OnceOnly: false}, nil
+			return &osConsent{Error: "consent_required", Message: "ask the person first", Group: group, Host: host, Declared: declared && (len(d.net) == 0 || hostMatches(d.net, host)), OnceOnly: false}, nil
 		}
 	}
 	if denied {
@@ -545,7 +586,7 @@ func (b *Backend) grantRoutes(m *http.ServeMux) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_argument", "message": "hub, page, group and answer (once, always or deny)"})
 			return
 		}
-		ver := b.declared(r.Context(), in.Hub, in.Page).ver
+		d := b.declared(r.Context(), in.Hub, in.Page)
 		g := b.grants()
 		g.mu.Lock()
 		defer g.mu.Unlock()
@@ -554,7 +595,7 @@ func (b *Backend) grantRoutes(m *http.ServeMux) {
 			p.name = in.Name
 		}
 		// (an answer is for the code the page runs now)
-		p.forVersion(ver)
+		p.forVersion(d)
 		answer := in.Answer
 		if answer == "always" && osOnceOnly[in.Group] {
 			answer = "once"
@@ -572,6 +613,7 @@ func (b *Backend) grantRoutes(m *http.ServeMux) {
 				p.onceHosts[in.Host] = true
 				p.once[in.Group] = true
 			}
+			p.netAllowed(d)
 			delete(p.denied, in.Group)
 		case answer == "always":
 			p.always[in.Group] = true
@@ -579,6 +621,9 @@ func (b *Backend) grantRoutes(m *http.ServeMux) {
 		default:
 			p.once[in.Group] = true
 			delete(p.denied, in.Group)
+		}
+		if in.Group == "network" && answer != "deny" {
+			p.netAllowed(d)
 		}
 		if answer == "always" {
 			g.saveLocked()
@@ -602,7 +647,7 @@ func (b *Backend) grantRoutes(m *http.ServeMux) {
 				delete(p.once, group)
 				delete(p.denied, group)
 				if group == "network" {
-					p.hosts, p.onceHosts = map[string]bool{}, map[string]bool{}
+					p.hosts, p.onceHosts, p.net = map[string]bool{}, map[string]bool{}, nil
 				}
 			}
 			g.saveLocked()

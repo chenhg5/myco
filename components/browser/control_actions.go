@@ -36,6 +36,9 @@ func (c *controlSession) describe(ctx context.Context, r controlRef) (*target, e
 	return &t, nil
 }
 func (c *controlSession) act(ctx context.Context, p *rod.Page, in controlInput) (map[string]any, error) {
+	c.mu.Lock()
+	replaying := c.replaying
+	c.mu.Unlock()
 	n := node{ID: "n_" + randID(), Type: in.Op, URL: in.URL, Value: in.Value, Key: in.Key, DY: in.DY, Wait: in.Wait, TimeoutMS: in.TimeoutMS}
 	after := c.browser.cursor()
 	c.browser.mu.Lock()
@@ -72,9 +75,11 @@ func (c *controlSession) act(ctx context.Context, p *rod.Page, in controlInput) 
 		if err != nil {
 			return nil, err
 		}
-		n.Target, err = c.describe(ctx, r)
-		if err != nil {
-			return nil, err
+		if !replaying {
+			n.Target, err = c.describe(ctx, r)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	switch in.Op {
@@ -485,6 +490,9 @@ func (c *controlSession) act(ctx context.Context, p *rod.Page, in controlInput) 
 		p = active
 	}
 	result := map[string]any{"ok": true, "step_ids": ids, "active_tab": c.activeTab(), "tabs": c.tabs(ctx), "new_tab": newTab}
+	if replaying {
+		return result, nil
+	}
 	var snap map[string]any
 	var snapErr error
 	if c.dialogOpen() {
@@ -559,14 +567,19 @@ func (c *controlSession) elementPoint(ctx context.Context, p *rod.Page, r contro
 			return nil, err
 		}
 	}
-	info, err := c.inspect(ctx, r)
+	info, err := c.inspect(ctx, r, scroll)
 	if err != nil {
 		return nil, err
 	}
 	if !info.Visible || info.Rect == nil {
 		return nil, errors.New("target_not_interactable")
 	}
-	x, y := info.Rect.X+info.Rect.Width/2, info.Rect.Y+info.Rect.Height/2
+	hitRect := info.Rect
+	if scroll && len(info.ClientRects) > 0 {
+		hitRect = &info.ClientRects[0]
+	}
+	x, y := hitRect.X+hitRect.Width/2, hitRect.Y+hitRect.Height/2
+	localX, localY := x, y
 	frame := r.frame
 	sid := r.sid
 	for depth := 0; depth < 32; depth++ {
@@ -615,7 +628,7 @@ func (c *controlSession) elementPoint(ctx context.Context, p *rod.Page, r contro
 	}
 	_ = sid
 	if scroll {
-		if err = c.hitTest(ctx, r); err != nil {
+		if err = c.hitTestAt(ctx, r, map[string]float64{"x": localX, "y": localY}); err != nil {
 			return nil, err
 		}
 	}

@@ -5,6 +5,8 @@
   --bg: #f8f8fa;
   --card: #ffffff;
   --chrome: #ebebef;
+  --tops-bg: color-mix(in srgb, var(--pill) 55%, var(--bg));
+  --tops-shadow: 0 6px 14px -10px rgba(0, 0, 0, 0.28);
   --focus: rgba(20, 22, 30, 0.34);
   --btn: #26262c;
   --btn-hover: #37373f;
@@ -46,6 +48,8 @@
   --bg: #1b1b1f;
   --card: #232327;
   --chrome: #121215;
+  --tops-bg: color-mix(in srgb, var(--card) 70%, var(--pill));
+  --tops-shadow: 0 8px 16px -8px rgba(0, 0, 0, 0.7);
   --focus: rgba(255, 255, 255, 0.36);
   --btn: #e8e8ed;
   --btn-hover: #ffffff;
@@ -6840,6 +6844,63 @@ body.is-resizing {
   font-size: 11.5px;
   color: var(--muted);
 }
+/* Kept from before a failed read: the numbers are not fresh. */
+.app-quota.is-stale .app-kv-value { opacity: .7; }
+.app-quota-source .app-kv-value { color: var(--muted); }
+/* Why the last read failed; a login or key to fix is amber. */
+.app-quota-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 4px 12px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--pill);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.app-quota-status svg { flex: none; width: 13px; height: 13px; margin-top: 2px; }
+.app-quota-status.is-action { color: var(--amber); }
+/* A model's own buckets, folded. */
+.app-quota-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 2px 8px;
+  padding: 3px 4px;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.app-quota-more:hover { color: var(--fg); background: var(--pill-hover); }
+.app-quota-more svg { width: 12px; height: 12px; transition: transform .15s; }
+.app-quota-more svg.is-open { transform: rotate(90deg); }
+/* A member's quota in a list: the tightest window left. */
+.app-quota-tag {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--pill);
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 17px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.app-quota-tag svg { width: 10px; height: 10px; }
+.app-quota-tag.is-tight { color: var(--amber); }
+.app-quota-tag.is-spent { color: var(--red); }
+.app-quota-tag.is-action { color: var(--amber); }
+.app-quota-tag.is-stale:not(.is-action) { opacity: .75; }
+.sp-member-meta:has(.sp-member-quota) { display: flex; align-items: center; gap: 6px; }
+.sp-member-meta .sp-member-quota { margin-left: auto; }
+.sp-member-meta-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-clean .app-quota-tag { padding: 0; background: none; }
+.ui-clean .app-quota-tag svg { display: none; }
 
 /* Node details: changes to its card */
 .app-history {
@@ -7882,6 +7943,9 @@ body.is-resizing {
 .vc-line-who.is-face .pa { flex: none; }
 .vc-line.is-hearing, .vc-line.is-cut { color: var(--muted); }
 .vc-line.is-cut::after { content: " …"; }
+/* A line whose names were corrected: a small tag; a click shows it as heard. */
+.vc-fixed { margin-left: 6px; padding: 0 5px; border-radius: 6px; font-size: 10.5px; line-height: 16px; color: var(--muted); background: var(--hover); white-space: nowrap; vertical-align: 1px; }
+.vc-fixed.is-off { background: transparent; text-decoration: underline; }
 .vc-action, .vc-notice { padding-left: 30px; font-size: 12px; line-height: 1.5; color: var(--muted); overflow-wrap: anywhere; }
 .vc-hint { padding-left: 2px; }
 .vc-bar-lines > .app-error-text, .vc-bar-lines > .app-btn { margin-left: 30px; }
@@ -8498,6 +8562,23 @@ body.is-resizing {
 
 /* 置顶 (pins.tsx): what the conversation keeps at hand, a row of small
    tabs under its header; drag to order, right-click to rename or unpin. */
+/* The bars that stay on top of a chat (plan, goal, watches; the pins
+   keep their own plain row above): one
+   block on a surface of its own, a hairline between its rows, and a soft
+   shadow over the messages that scroll beneath it. */
+.conv-tops {
+  flex: none;
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  background: var(--tops-bg);
+  border-bottom: 1px solid var(--line);
+  box-shadow: var(--tops-shadow);
+}
+.conv-tops:empty { display: none; }
+.conv-tops > * { border-bottom: 1px solid var(--line-2) !important; }
+.conv-tops > :last-child { border-bottom: 0 !important; }
 .pin-bar {
   flex: none;
   display: flex;
@@ -8725,6 +8806,7 @@ body.is-resizing {
   white-space: nowrap;
 }
 .goal-round.is-stuck .goal-round-tag { background: var(--pill); color: var(--muted); }
+.goal-round.is-now .goal-round-tag { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
 .goal-round.is-blocked .goal-round-tag { background: var(--amber-soft); color: var(--amber); }
 .goal-round-text { min-width: 0; color: var(--fg-2); overflow-wrap: anywhere; }
 .goal-ended { align-self: center; max-width: min(560px, 100%); }
@@ -10461,3 +10543,19 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
 
 /* A page (an app) in a window of its own (PageWindow.tsx): the page fills it. */
 .pg-window { position: fixed; inset: 0; display: flex; flex-direction: column; background: hsl(var(--background)); }
+
+/* An agent's chat-app bots, in its details (ChatApps.tsx) */
+.im-bot { display: inline-flex; align-items: center; gap: 6px; }
+.im-bot .app-kv-note { margin-left: 2px; }
+.im-claim { display: block; flex-basis: 100%; margin-top: 6px; font-size: 12px; color: var(--fg-2); }
+.im-claim .app-command { margin-top: 6px; }
+.im-scan { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.im-qr-box { padding: 10px; border-radius: 12px; background: #fff; border: 1px solid var(--line); }
+.im-qr { display: block; width: 184px; height: 184px; image-rendering: pixelated; }
+.im-qr-empty { background: repeating-linear-gradient(45deg, #f2f2f2 0 8px, #fafafa 8px 16px); }
+.im-scan-note { margin: 0; font-size: 12.5px; color: var(--muted); text-align: center; }
+.im-scan .app-modal-actions { align-self: stretch; }
+.im-slack { display: flex; flex-direction: column; gap: 10px; }
+.im-steps { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 10px; font-size: 12.5px; color: var(--fg-2); }
+.im-steps .app-input { display: block; width: 100%; margin-top: 6px; }
+.im-steps a { color: var(--accent); }

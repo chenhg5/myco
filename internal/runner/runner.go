@@ -54,6 +54,11 @@ type Options struct {
 	// (spawn.max_access); the higher of the two caps the hub's choice.
 	Access    harness.Access
 	MaxAccess harness.Access
+	// CommandWatchAllowed is the live local machine permission, independent of
+	// Hub-reported capabilities. Nil disables raw command watches.
+	CommandWatchAllowed func() bool
+	CommandRunnerID     string
+	CommandEnvironment  string
 	// OnQuota hears the account's usage limits whenever a run reports them.
 	OnQuota func(harness.Quota)
 	// OnStop runs once when Run returns because its context ended (the
@@ -132,6 +137,7 @@ type Runner struct {
 	finishRetryMin time.Duration // first retry after a post-run Hub failure; shorter in tests
 	finishTimeout  time.Duration // total time to deliver a run's result
 	idleCheck      time.Duration // how often a run's last activity is checked
+	commandPoll    time.Duration // bounded command watch polling; shorter in tests
 }
 
 // activeTask is a task between ack and completion in this runner.
@@ -339,6 +345,9 @@ func (r *Runner) Run(ctx context.Context) error {
 	r.recoverPending(ctx)
 	keptCtx, stopKept := context.WithCancel(ctx)
 	defer stopKept()
+	commandDone := make(chan struct{})
+	go func() { defer close(commandDone); r.runCommandWatches(keptCtx) }()
+	defer func() { stopKept(); <-commandDone }()
 	go func() {
 		t := time.NewTicker(retryUndeliveredEvery)
 		defer t.Stop()

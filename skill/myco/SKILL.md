@@ -202,6 +202,22 @@ it waits until that task closes. A steer is part of the current task, not a new 
 If you sent a task by mistake or no longer need it, run `myco message stop --id <message-id>`.
 Only the sender can stop it; the recipient's runner will end its run when it notices.
 
+## Wait for a local command without a model
+
+On your existing full-access runner and shell-enabled computer:
+
+```bash
+myco watch start --what "Build completes" --cmd "gh run view 123 --json conclusion --jq .conclusion" --match "^success$" --every 30s --for 30m
+```
+
+Without `--match`, exit 0 matches. The runner checks in your saved working directory;
+it uses no model for each check, bounds runtime/output, redacts summaries, and resumes
+after restart. Use read-only, idempotent commands and keep secrets out of command text.
+Readonly/workspace sandboxes, exec/machine nodes, unbound agents and old runners are
+refused: this cannot grant shell permission or bypass an allowlist. Completion or
+expiry wakes you once; `--task <open-task-id>` holds and resumes that task atomically.
+The default duration is 30 minutes, at most 24 hours. Stop/extend use `myco watch`.
+
 ## Diagrams, code and pictures in a reply
 
 Replies and progress updates are Markdown, and the myco App draws more than text:
@@ -507,3 +523,23 @@ minutes and never outlive the grant. Cancel a running action job to stop it;
 `outcome_unknown` run: earlier website steps may already have applied. Only
 non-secret parameters declared by the approved version are accepted; code,
 secret values, uploads, Start here and breakpoints cannot be supplied by agents.
+
+## Working a goal turn
+
+A goal wake is an ordinary task with an immutable objective, success criteria,
+deadline, round limit, and the previous summary/next step. Advance that objective
+without waiting for a new user message. Stay within the owner's authorization;
+important actions still require human confirmation. Do not create or extend your
+own goal, silently change its objective, or reconstruct the entire conversation.
+
+Before replying to the wake task, report once:
+`myco goal report --id gol_... --summary "What changed" --next "Next action" --progressed`.
+Use `--no-progress` when nothing advanced, and `--blocked` when a person must help.
+If the success criteria are met, use `--achieved --reason "Evidence"`; if impossible,
+use `--abandoned --reason "Why"`. Supply exactly one progress flag even when ending.
+The CLI binds the report to `MYCO_MESSAGE_ID`; outside a runner pass the actual
+round task as `--message`. Do not reuse another turn's id. Identical retries are
+safe; conflicting reports fail. Then reply to the task normally. A report alone
+does not finish the task. No report counts as no progress, leading to backoff and
+then pause. Only the human creator/owner or project coordinator may pause, resume,
+stop, or adjust timing. Old Hubs return an upgrade hint for `myco goal`.

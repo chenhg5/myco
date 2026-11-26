@@ -31,7 +31,9 @@ recording target. The native fixture verifies both kinds and replays them.
 Native navigation assertions wait for the new document's readiness, then verify
 the complete recording after stop has flushed the collector and drained its
 evidence queue. A navigation commit alone does not mean screenshots and panel
-updates for preceding steps have finished.
+updates for preceding steps have finished. Background recording evidence reads the DOM
+and locators directly through CDP, preserving target crops and privacy checks
+without changing the foreground actor's Rod JS context or helper cache.
 
 Run `go test -race ./...` and `go vet ./...` in this directory. On a machine with
 an installed Chrome or Edge, enable the existing native fixture flag:
@@ -100,6 +102,28 @@ The six operation bodies and their additional fields are:
 | `screenshot` | `session`, `tab?`, at most one of `ref`, `clip`, `full` |
 | `close` | `session`, desktop-only `reason?` |
 
+Components additionally advertising `agent_replay` offer `POST /control/run`.
+The body is `{request_id,session,graph:{nodes,edges},tab?,timeout_ms?}`. The
+trusted desktop advertises `browser.page.run` only with both features present.
+Protocol remains 1. Replay accepts literal recorded node JSON with common
+`pos`, `title`, `timeout_ms` and `on_error` fields; it preflights the entire graph
+before any browser operation. Limits are 200 nodes, 192 KiB, a single linear
+connected path, a 300000 ms total deadline capped by the grant, and 16 KiB output.
+See [the public action contract](../../docs/api.md#agent-actions) for the allowed
+node/locator variants and error policies. Executable nodes/locators, uploads,
+parameters, download waits and any `code` field or `${` string are refused.
+
+Replay uses the active control session, host enforcement, sensitive-field
+inspection and private screenshot masking. Only one operation may run at a time.
+It suppresses both manual and derived recording, invalidates earlier refs at
+entry/exit, and refreshes idle activity while running; owner stop or grant expiry
+still discards the draft and cancels execution. Same-request retries reuse the
+retained response. It returns `{ok,state,error_node?,error?,steps,output,url,tabs}`;
+confirmed node failures return HTTP 200 with `ok:false`. Preflight failures use
+HTTP 400 with optional `error_node`. Screenshot output named by `into` contains
+the usual native `screenshot` descriptor; the App replaces it with a private
+job `artifact_id` before returning to the agent. It never publishes image URLs.
+
 Unknown fields are rejected, including fields irrelevant to the selected
 operation. The `act` whitelist is:
 
@@ -140,7 +164,11 @@ redacted; typing into a sensitive field is refused. HTML and text extraction
 sanitize sensitive descendants. Screenshots redact unreadable iframe rectangles to opaque black before storing
 artifacts. Readable documents containing sensitive elements, including closed
 shadow roots, still refuse screenshots. A frame that cannot be located, or a
-layout/document change during capture, also refuses the screenshot.
+layout/document change during capture, also refuses the screenshot. A
+same-document URL fragment change does not count as a document replacement.
+Refusals retain the `sensitive_snapshot` code and include a fixed `reason`:
+`protected_content`, `privacy_unavailable`, `frame_unavailable`, or
+`privacy_changed`. Reasons never contain page content or URLs.
 The owner's control panel is excluded from snapshots, screenshots and drafts.
 
 Screenshot `clip` coordinates are relative to the top viewport in CSS pixels.
@@ -163,7 +191,9 @@ A wildcard excludes its bare parent domain. Ports do not change hostname matchin
 An omitted list means unrestricted domains; an explicit empty list is rejected.
 Explicit navigation is
 checked before dispatch. A top-level redirect or link crossing the scope is
-rolled back; a new disallowed tab is closed. The response and event use
+rolled back after its pending navigation is cancelled; a new disallowed tab is
+closed. Cancelling first prevents an uncommitted redirect from replacing the
+restored history entry. The response and event use
 `host_not_allowed` on the originating action, before it enters the draft.
 Input, scroll and hover return immediately after the event barrier when no
 navigation is pending. Operations likely to navigate observe an additional
@@ -179,6 +209,9 @@ removed. Iframes and subresources are outside this top-level scope.
 
 The draft budget is 200 steps and 192 KiB for serialized `steps`; operations
 reserve their logical step and any derived navigation or popup before dispatch.
+Approved `js` and `extract`-`js` script bodies can use `await`; Rod waits for
+their returned Promise. Syntax and runtime exceptions return `script_error`
+without the exception text or page content.
 Successful extraction and screenshots allocate shared `data1`, `data2`, ...
 variables. A voluntary close returns `steps`, `removed`, `next`, `done: true`,
 `reason: "closed"`, `profile` and `start_url`, and closes the browser process.
@@ -206,3 +239,15 @@ Owner confirmation and workspace-local approval cleanup belong to the App.
 `/control/open` uses `busy.reason: "owner_window_open"` for a profile window
 opened by the person, `profile_in_use` for another controller and
 `profile_starting` for an existing startup reservation.
+
+Control fallback diagnostics are written privately to
+`~/.myco/browser/component-diagnostic.log` (0600, bounded to 1 MiB). Entries contain
+only static event names, error types and numeric CDP codes; page text, URLs,
+arguments and raw native errors are excluded. Screenshot panel hiding requires
+an acknowledged current top-frame collector; removed iframe worlds cannot veto
+capture. A lost top collector still fails closed.
+
+Native clicks and hover use the first visible painted client rectangle rather
+than the center of an inline element's union box. Hit testing uses that same
+frame-local point before translating through iframe owners; covered links still
+refuse input. Element screenshots keep the full bounding box.

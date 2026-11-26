@@ -8,7 +8,7 @@ Click **Computers** at the top of the sidebar. Three numbers sit at the top: how
 
 - Its system icon and name; the one you are using carries a small "This computer" tag.
 - Whether it is online, its system and its myco version. A computer that is away is faded.
-- Along the bottom, small avatars of its agents and a count of agents and terminals. When an agent is close to its quota, an amber "95% quota" shows at the bottom right.
+- Along the bottom, small avatars of its agents and a count of agents and terminals. When an agent is close to its quota, an amber "5% left" shows at the bottom right; when its CLI needs signing in again to read the quota, it says "Sign in again". Only you see your own accounts' quota.
 
 When some computers are behind on myco, a note above the list names them, and **Upgrade all** upgrades them together (see "Upgrading myco" below).
 

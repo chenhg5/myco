@@ -561,7 +561,7 @@ mapping, and the host registers only capabilities its installed component suppor
 | `browser.run.cancel` | `browser.run` | `{run_id}` |
 
 Live browser control adds six v1 actions when the component advertises
-`agent_control`. They require the independently approved `browser.control`
+`agent_control`, plus replay when it also advertises `agent_replay`. They require the independently approved `browser.control`
 permission on the exact machine and browser profile. Grants last at most 30
 minutes. The browser opens visibly so the owner can watch and stop it.
 
@@ -588,6 +588,62 @@ and in the controller App.
 | `browser.page.extract` | `{session,tab?,ref,what,attr?}` | Extracted text |
 | `browser.page.screenshot` | `{session,tab?,ref?,clip?,full?}` | Screenshot metadata and a private job artifact |
 | `browser.page.close` | `{session}` | `steps,removed,next,done:true,reason:"closed"` |
+| `browser.page.run` | `{session,graph:{nodes,edges},tab?,timeout_ms?}` | `ok,state,error_node?,error?,steps,output,url,tabs` |
+
+A screenshot denied with `sensitive_snapshot` can include a fixed `reason`:
+`protected_content` (a sensitive field was found), `privacy_unavailable`
+(the document could not be checked), `frame_unavailable` (an unreadable frame
+could not be safely masked), or `privacy_changed` (the checked document or
+frame state changed during capture). The same reason appears in a failed
+`browser.page.run` screenshot node's `error`. No reason contains page content.
+
+`browser.page.run` verifies a literal draft in the same live session, under the
+same grant, profile, agent and allowed hosts. It does not need an approved M2
+script version. Both the App and component must support replay; older components
+keep the original six actions. Replaying does not add steps to the manual draft,
+and invalidates earlier refs before and after execution. To test a closed draft,
+open a new session, prepend a `navigate` node with the returned `start_url`, and
+connect the unchanged returned steps in linear order.
+
+A replay graph has 1–200 unique nodes, at most 192 KiB of JSON, one linear start,
+and no disconnected nodes, cycles or branches. Node fields `pos`, `title`,
+`timeout_ms` and `on_error` are accepted. `on_error` permits `stop`, `skip` or
+`retry:1` through `retry:5`; ambiguous outcomes and scope/session failures always
+stop. Retrying a website operation can repeat its effects: use it deliberately.
+Allowed node types are `navigate`, `back`, `forward`, `reload`, `click`, `type`,
+`select`, `press`, `hover`, `scroll`, `wait`, `assert`, `extract`, `screenshot`,
+`tab`, `dialog` and `note`. Locators use `testid`, `role`, `label`, `placeholder`,
+`text`, `css` or `xpath`, with the draft's frame/shadow paths. Clicks use the left
+button with optional count 2. Assertions support visible/hidden/text/URL;
+extraction supports text/attribute/HTML/table with sensitive content redacted.
+Waits support element/network/URL/time (1–60000 milliseconds), not downloads.
+Tabs support popup/new/opener/index/close. JavaScript, expression assertions,
+uploads, child flows, loops, branches, confirms, parameters, `code` fields and
+any decoded `${` in keys or values are refused before any node executes.
+
+The default total replay deadline is 300000 milliseconds; `timeout_ms` may
+shorten it, and the job/grant deadline always wins. Per-node timeouts and retries
+remain inside that deadline. A running replay counts as activity for the
+five-minute idle timer; owner stop and grant expiry still cancel it. Other
+session operations return `busy` during replay. Sensitive typing, disallowed
+navigation/popups/redirects and screenshot masking follow live control rules.
+
+An executed replay returns `state:"succeeded"` or `state:"failed"`, with
+`steps:[{node,state:"ok"|"failed"|"skipped",ms,error?}]`. A failed node includes
+`error_node` and a safe `error:{code,message,retryable,reason?}`; earlier effects
+may already have happened. The outer job succeeds when this confirmed envelope
+is received. Preflight, authorization and session errors use the usual failed-job
+path; validation can include optional `error_node` in the HTTP/CLI error too.
+A transport loss becomes `outcome_unknown`: inspect the page, and do not submit
+the same graph under a fresh idempotency key automatically. The native component
+retains same-request outcomes while the session remains valid.
+
+`output` contains values named by nodes' `into`, bounded to 16 KiB, with strings
+clipped to 2000 characters and `truncated:true` when entries cannot fit. A screenshot
+node with `into` returns `{artifact_id,image}` and adds that private artifact to
+the job's `artifacts`; it never exposes a component artifact ID or public URL.
+Screenshot nodes without `into` have no output value. The action argument envelope
+allows 256 KiB for replay only; the graph's 192 KiB limit still applies.
 
 Operations are limited to `navigate`, `click`, `dblclick`, `hover`, `type`, `select`,
 `press`, `scroll`, `back`, `forward`, `reload`, `switch_tab`, `close_tab`,
@@ -623,7 +679,7 @@ The Hub audits the action, host and time once per job. The detail records
 was retained. Request arguments, page contents and image bytes stay out of
 the audit log.
 
-Shared page records are **not** approval. The desktop executes only the immutable
+For `browser.script.run`, shared page records are **not** approval. The desktop executes only the immutable
 script version and child-script snapshots the computer's owner reviewed and
 approved locally for that profile. An absent, revoked or mismatching version is
 `permission_denied`; the host never fetches a newer shared script as a fallback.
@@ -1332,16 +1388,16 @@ myco page file remove --page pg_demo --file paf_example --dry-run
 
 ### Durable watches
 
-A watch is a Hub-side, bounded wait for a reply, task completion, or workflow
-run. It does not run a model or execute commands. Watch records survive Hub
+A watch is a durable, bounded wait for a reply, task completion, local command, or workflow
+run. Checks do not run a model; command checks execute on the initiating agent's
+permitted local runner, never on the Hub. Watch records survive Hub
 restarts. Agent profiles and overview entries include `watching`, the number
 of records in `watching` state; this is separate from `held` and `queued`.
 Older Hubs omit this counter and do not provide the watch endpoints.
 
 - `POST /v1/watches` (agent token): `{what, kind, target, project?, task?, for_sec?}`.
-  `kind` is `reply`, `task`, or `workflow`; `command` is reserved and returns
-  `unsupported` in this version. `target` is a task message ID, or a workflow
-  run ID. The caller must be able to read the target. A reply watch targets a
+  `kind` is `reply`, `task`, `workflow`, or `command`. For reply/task/workflow,
+  `target` is a task message ID or workflow run ID. The caller must be able to read the target. A reply watch targets a
   task the caller sent. When specified, `project` must contain the agent and
   match the target and associated task. `task` is a delivered/acked/held task addressed to
   the caller; starting with `task` atomically holds it and creates the watch.
@@ -1370,8 +1426,45 @@ A Watch contains `id` (`wat_…`), `agent`, optional `project` and `task`, `what
 `last_result` (a status summary, never the target's content), `checks`, `state`,
 and optional `ended_at`, `ended_by`, `outcome`. Dates are RFC3339 timestamps.
 States are `watching`, `met`, `expired`, `stopped`; terminal states cannot be
-reopened. `command`, `match`, `every_sec` are reserved/optional fields;
-per-check command reporting is not available in this step.
+reopened. Command watches also carry `command`, optional `match`, `every_sec`,
+immutable execution `machine_id`, `environment`, `workdir`, and a `history` of at most
+five `{at, result, matched, exit_code}` summaries. `revision` fences concurrent updates.
+
+#### Command checks
+
+Start with `{what, kind:"command", command, match?, every_sec?, project?, task?, for_sec?}`;
+`target` must be absent. `command` is 1–8192 bytes without NUL, `match` is a Go/RE2
+regular expression (max 2048 bytes), and `every_sec` defaults to 30 (1–86400).
+The initiating agent must have a machine-bound, current runner advertising
+`command_watch`, full agent access and a machine allowing full shell access.
+Readonly/workspace agents, exec/machine nodes, and unbound or unsupported runners
+receive `permission_denied`. This does not grant a sandboxed agent unrestricted shell access.
+
+- `POST /v1/watches/{id}/claim` takes `{runner}` (the runtime runner instance).
+  Only the initiating agent can claim a due command check on its original machine,
+  environment and directory. The returned Watch contains `claim_id`, `claim_runner`,
+  `claim_until`, and `next_check_at`. A live lease or a not-yet-due check returns `conflict`.
+- `POST /v1/watches/{id}/checks` takes `{check_id, runner, result, matched, exit_code}`.
+  A report must own the current lease; a repeated check ID is idempotent. For watches
+  without `match`, exit code 0 determines success; with `match`, the runner evaluates
+  the regex against bounded stdout/stderr. Timeout never counts as a match. Reports
+  received after the deadline cannot meet the condition. Terminal watches stay terminal.
+
+The runner executes without a model in the saved working directory, with a minimal
+shell environment excluding myco credentials. Timeout is half the interval, capped
+at 60 seconds; process-tree cleanup may take up to another seven seconds. Captured
+stdout and stderr are capped at 32 KiB each; regex evaluation uses this bounded output
+with surrounding whitespace removed. The latest printable line is reported, even
+when captured output was truncated. Both runner and Hub redact credential-shaped
+strings before retaining at most 1024 bytes of that line. History holds only the most
+recent five summaries, never full output. Use existing CLI credential stores rather
+than literal secrets in `command` or `what`.
+
+A runner restart resumes the saved schedule. An abandoned lease can be claimed again;
+a crash during a process can therefore cause that check to run again: use read-only,
+idempotent commands. Only the final state and wake are committed once. An old or
+absent runner never prevents Hub expiration. Stop/deadline/policy cancellation ends
+an in-flight process when observed by the runner; it cannot undo command side effects.
 
 The Hub evaluates conditions in the background. `task` means done or failed;
 `reply` means a reply/failure event exists; `workflow` means succeeded, failed,
@@ -1409,3 +1502,115 @@ The public bridge preserves these reasons without exposing process paths.
 Deleting the last dedicated agent profile also disables its automatic recreation
 on this App configuration. Create a new personal profile and explicitly allow
 agent access if you want to use browser actions again.
+
+## Goals: bounded work on an objective
+
+Goals are plaintext objectives set by a person or project coordinator for an agent.
+Only its owner, creator, Hub administrators, or its current project coordinator
+may create/manage a goal; the target agent may read it and report its own turns,
+but cannot grant itself more time, resume, or change the objective. An unrelated
+agent and another agent sharing the target's owner do not inherit human authority.
+Shell/exec and machine nodes cannot be goal targets.
+One active or paused goal is allowed per agent. The objective and success criteria
+are immutable. Existing Hubs return 404; existing runners need no new protocol.
+
+| Method | Path | Body / response |
+|---|---|---|
+| POST | `/v1/goals` | `{agent,objective,done_when,project?,thread?,every_sec?,max_rounds?,for_sec?}` → Goal |
+| GET | `/v1/goals?agent=&project=&state=active\|all` | `{goals: Goal[]}`; active includes paused goals |
+| GET | `/v1/goals/{id}` | `{goal: Goal, rounds: GoalRound[]}` |
+| POST | `/v1/goals/{id}/pause`, `/resume`, `/stop` | `{reason?}` → Goal |
+| PATCH | `/v1/goals/{id}` | `{every_sec?,max_rounds?,for_sec?}` → Goal |
+| POST | `/v1/goals/{id}/rounds` | `{message,summary,progressed,next_step?,blocked?,achieved?,abandoned?,reason?}` → Goal |
+
+Mutations support `?dry_run=true` without persistence, wakes, or audit side effects.
+Defaults: 1800 seconds, 16 turns, 28800 seconds. Base intervals are 900/1800/3600
+seconds; turn limits are 1–256. Deadlines, including patches calculated from now,
+must remain within eight hours of the original start. Resume preserves the deadline,
+round count, and no-progress count. Paused goals still expire. `round_limit` ends
+in state `stopped`. Other states are `active`, `paused`, `achieved`, `abandoned`,
+`expired`, and `stopped`. All timestamps are RFC3339.
+
+Goal fields are `id` (`gol_...`), `agent`, `project?`, `thread`, `objective`,
+`done_when`, `every_sec`, `base_every_sec`, `max_rounds`, `deadline`, `round`,
+`no_progress`, `last_summary?`, `next_step?`, `next_wake_at?`, `state`, `started_at`,
+`ended_at?`, `ended_by?`, `outcome?`, and `created_by`. A round contains `goal`,
+`round`, `started_at`, `ended_at?`, `summary`, `next_step`, `progressed`, `blocked`,
+and its wake-task `message`. Dispatch increments `round`. A report's `ended_at`
+marks report completion; scheduling additionally waits for its task to finish.
+
+Reports require the current acknowledged round's `message` and explicit boolean
+`progressed`. A duplicate identical report is idempotent; conflicting or stale
+reports are rejected. Achieved/abandoned require a reason. Two consecutive turns
+without progress double the interval, subsequent unsuccessful turns double it
+again (maximum four hours); four unsuccessful turns or `blocked` pause and notify
+the creator. Progress resets the interval. A terminal task without a report counts
+as no progress. No next turn is dispatched while its predecessor is open.
+
+Task creation, round state, pause/terminal notification are committed atomically.
+Pausing/ending removes a wake which is only queued or delivered; an already
+acknowledged/held task is not interrupted. Any later report cannot revive an ended
+goal. Human notifications return to their console thread; agent coordinators get
+a note in the goal thread. Goal creation/control/report operations are audited.
+Agent lists and overview include optional `goal: {id,objective,round,max_rounds,
+next_wake_at?,state}`; objective is truncated to 200 characters. This is independent
+of `watching`, `held`, and `queued`.
+
+### Live browser grant monitoring
+
+The desktop monitors the session's grant by ID through the owner's grant list,
+independently of host re-registration, host generations and completed job retention.
+An explicit terminal grant stops the session immediately. A transient HTTP failure,
+missing grant or malformed response starts a bounded 30-second verification grace
+period; a confirmed active grant resets it. Continuous failures end the native
+session with `reason:"grant_check_failed"`, which does not claim revocation. The
+session's local grant deadline remains enforced throughout this grace period.
+Expiry and confirmed terminal grants retain `grant_expired` and `grant_ended`
+respectively.
+
+### Private account quota snapshots
+
+`PUT /v1/me/runtime` accepts an optional extended `quota`. Agent list, agent
+get and overview responses resolve the agent's current account binding under
+`runtime.quota`; clients do not need an additional request. Existing `source`,
+`at` and `windows` remain supported. New optional fields are:
+
+| Field | Meaning |
+| --- | --- |
+| `provider` | `codex`, `claude`, `opencode_go`, `minimax`, or `unknown` |
+| `profile_ref` | Opaque machine-local login reference, not a path or account identifier |
+| `machine_id` | Assigned by the Hub from the authenticated agent, never trusted from input |
+| `plan` | `chatgpt_subscription`, `claude_subscription`, `go`, or `coding_plan` |
+| `source_kind` | `native`, `event`, `cache`, or `official_api` |
+| `status` | `ok`, `unsupported`, `no_credentials`, `auth_required`, `throttled`, `transient_error`, or `schema_changed` |
+| `checked_at` | Time of the latest actual acquisition attempt |
+| `error_code` | Safe constant reason; never a raw HTTP body, token, or process error |
+
+Windows add optional `duration_sec` and `model_scope`. `used` remains the share
+used, in `[0,1]`; remaining is `1-used`. A missing window or reset is unknown,
+not a full allowance. In particular, `primary` is not necessarily a five-hour
+window. When native events update individual windows, `at` is the oldest included
+observation, so an untouched weekly window is never made fresh by a five-hour
+update. Missing numeric measurements are omitted, never reported as zero used.
+An unsuccessful check
+preserves the previous numbers and their original time. No successful sample
+means an empty `windows` array and zero `at`; do not display numeric remaining
+quota in that case. Show the original data time when a sample is old (for
+example, over 15 minutes) or a subsequent check failed.
+
+The Hub stores one snapshot per owner, machine, provider and login reference.
+Each agent's runtime stores its current reference. New bindings do not inherit
+old profile values, and a pending association does not overwrite an existing
+successful shared sample. Snapshot updates and binding updates are transactional.
+The default reader is the computer owner's console or the reporting agent itself
+while that agent still belongs to the same owner. Runtime write responses apply
+the same filtering as reads.
+Transferring an agent does not transfer its former computer owner's account data.
+Other agents, project coordinators and administrative member roles do not inherit
+account visibility. The explicitly configured Hub master credential retains
+recovery access. Unauthorized responses omit the entire `quota`, including its
+reference. Legacy runner quotas receive the same private response filtering.
+
+New runners connecting to older Hubs with strict schemas omit the extended quota
+on a schema rejection, rather than downgrade private values to legacy public
+runtime fields. Other runtime fields continue to report normally.

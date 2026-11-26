@@ -45,12 +45,13 @@ type Agent struct {
 	// State is working (has a task in progress or held), pending (tasks
 	// queued, none started), idle or offline; Queued/InProgress/Held count
 	// open messages addressed to it.
-	State      string `json:"state,omitempty"`
-	Queued     int    `json:"queued"`
-	InProgress int    `json:"in_progress"`
-	Held       int    `json:"held"`
-	Watching   int    `json:"watching"`
-	Asking     int    `json:"asking,omitempty"`
+	State      string     `json:"state,omitempty"`
+	Queued     int        `json:"queued"`
+	InProgress int        `json:"in_progress"`
+	Held       int        `json:"held"`
+	Watching   int        `json:"watching"`
+	Goal       *GoalBrief `json:"goal,omitempty"`
+	Asking     int        `json:"asking,omitempty"`
 	// StatusText is the agent's public progress line (myco agent status set).
 	StatusText  string     `json:"status_text,omitempty"`
 	StatusAt    *time.Time `json:"status_at,omitempty"`
@@ -222,6 +223,15 @@ type RuntimeModel struct {
 
 // Quota is a CLI account's usage limits at one moment (from v0.19.5).
 type Quota struct {
+	Provider   string    `json:"provider,omitempty"`
+	ProfileRef string    `json:"profile_ref,omitempty"`
+	MachineID  string    `json:"machine_id,omitempty"`
+	SourceKind string    `json:"source_kind,omitempty"`
+	Status     string    `json:"status,omitempty"`
+	CheckedAt  time.Time `json:"checked_at,omitzero"`
+	ErrorCode  string    `json:"error_code,omitempty"`
+	Plan       string    `json:"plan,omitempty"`
+
 	// Source: claude or codex.
 	Source  string        `json:"source"`
 	At      time.Time     `json:"at"`
@@ -230,6 +240,8 @@ type Quota struct {
 
 // QuotaWindow is one limit: Used is the share used (0..1).
 type QuotaWindow struct {
+	DurationSec int    `json:"duration_sec,omitempty"`
+	ModelScope  string `json:"model_scope,omitempty"`
 	// Name: five_hour, seven_day (Claude Code), primary, secondary (Codex).
 	Name     string     `json:"name"`
 	Label    string     `json:"label,omitempty"`
@@ -632,6 +644,7 @@ type WaitResponse struct {
 
 // Error is the JSON error body for every non-2xx response.
 type Error struct {
+	ErrorNode  string `json:"error_node,omitempty"`
 	Code       string `json:"error"`
 	Message    string `json:"message"`
 	Suggestion string `json:"suggestion,omitempty"`
@@ -752,12 +765,13 @@ type Viewer struct {
 
 // AgentStatus is one agent with live counters (GET /v1/overview).
 type AgentStatus struct {
-	Agent      Agent  `json:"agent"`
-	State      string `json:"state"` // working | pending | idle | offline
-	Queued     int    `json:"queued"`
-	InProgress int    `json:"in_progress"`
-	Held       int    `json:"held"`
-	Watching   int    `json:"watching"`
+	Agent      Agent      `json:"agent"`
+	State      string     `json:"state"` // working | pending | idle | offline
+	Queued     int        `json:"queued"`
+	InProgress int        `json:"in_progress"`
+	Held       int        `json:"held"`
+	Watching   int        `json:"watching"`
+	Goal       *GoalBrief `json:"goal,omitempty"`
 	// Asking counts held tasks waiting on a question to their sender
 	// (myco message ask); they are in Held too. Absent on older hubs.
 	Asking int `json:"asking,omitempty"`

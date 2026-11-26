@@ -43,6 +43,9 @@ type voiceDeps struct {
 	// heard for those words (speech_words.go).
 	hints []string
 	fix   *speechFixer
+	// polish corrects names with the model, after the line is out (nil:
+	// not at all).
+	polish *speechPolish
 	// greet: the agent speaks first once the call is on, as one does
 	// picking up the phone (off in tests unless they ask for it).
 	greet bool
@@ -324,10 +327,11 @@ func (c *voiceCall) finishUtterance() {
 		return
 	}
 	c.v.mu.Lock()
-	c.v.add(VoiceEvent{Kind: vUser, Text: text})
+	line := c.v.add(VoiceEvent{Kind: vUser, Text: text})
 	c.v.mu.Unlock()
 	c.history = append(c.history, chatMsg{Role: "user", Content: text})
 	c.startTurn()
+	c.polishLine(line.ID, text)
 }
 
 // greetTurn: the call is on; the agent says hello first, in a few words,
@@ -343,6 +347,32 @@ func (c *voiceCall) greetTurn() {
 	}
 	c.history = append(c.history, chatMsg{Role: "system", Content: lead})
 	c.startTurn()
+}
+
+// polishLine corrects names in a line the person said, in the background:
+// the answer does not wait for it; when it comes in time, the caption shows
+// it (marked) and the conversation has it from then on.
+func (c *voiceCall) polishLine(id int, heard string) {
+	if c.d.polish == nil {
+		return
+	}
+	go func() {
+		fixed, ok := c.d.polish.Fix(c.ctx, heard)
+		if !ok {
+			return
+		}
+		c.do(func() {
+			c.v.mu.Lock()
+			c.v.correct(id, fixed, heard)
+			c.v.mu.Unlock()
+			for i := len(c.history) - 1; i >= 0; i-- {
+				if c.history[i].Role == "user" && c.history[i].Content == heard {
+					c.history[i].Content = fixed
+					break
+				}
+			}
+		})
+	}()
 }
 
 // maybeTellNews: in a quiet moment, news about handed-out tasks becomes a
@@ -373,7 +403,8 @@ func (c *voiceCall) startTurn() {
 	t := &voiceTurn{cancel: cancel, id: ev.ID, said: &strings.Builder{}, done: make(chan struct{})}
 	c.turn = t
 	c.v.setState(stThinking)
-	go c.runTurn(ctx, t, trimHistory(c.history))
+	// (a copy: a correction can change a line on the loop meanwhile)
+	go c.runTurn(ctx, t, append([]chatMsg(nil), trimHistory(c.history)...))
 }
 
 // trimHistory keeps the conversation to its last messages, starting at a

@@ -35,6 +35,13 @@ func TestSessionQuotaReadsTheLastRateLimits(t *testing.T) {
 	if w.Name != "primary" || w.Label != "7d" || w.Used != 0.07 || !w.ResetsAt.Equal(time.Unix(1794735584, 0)) {
 		t.Fatalf("window: %+v", w)
 	}
+	missingTime := strings.Replace(tokenCountLine, `"timestamp":"2026-11-13T09:00:00.000Z",`, "", 1)
+	if err := os.WriteFile(filepath.Join(dir, "rollout-2026-11-13T09-00-00-sess-1.jsonl"), []byte(missingTime), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if sessionQuota("sess-1") != nil {
+		t.Fatal("an undated old transcript was treated as a new observation")
+	}
 	if sessionQuota("missing") != nil {
 		t.Fatal("no file, no quota")
 	}
@@ -43,7 +50,8 @@ func TestSessionQuotaReadsTheLastRateLimits(t *testing.T) {
 func TestOlderCodexResetsInSeconds(t *testing.T) {
 	at := time.Date(2026, 11, 13, 9, 0, 0, 0, time.UTC)
 	reached := "primary"
-	q := (&rateLimits{Primary: &rateWindow{UsedPercent: 100, WindowMinutes: 300, ResetsInSeconds: 600}, ReachedType: &reached}).quota(at)
+	used := 100.0
+	q := (&rateLimits{Primary: &rateWindow{UsedPercent: &used, WindowMinutes: 300, ResetsInSeconds: 600}, ReachedType: &reached}).quota(at)
 	if q == nil || q.Windows[0].Label != "5h" || !q.Windows[0].ResetsAt.Equal(at.Add(10*time.Minute)) || q.Windows[0].Status != "primary" {
 		t.Fatalf("quota: %+v", q)
 	}
@@ -78,5 +86,11 @@ func TestRunPassesModelAndEffort(t *testing.T) {
 	}
 	if strings.LastIndex(joined, `model_reasoning_effort="high"`) < strings.Index(joined, "model_reasoning_effort=medium") {
 		t.Fatalf("the app's effort must come last: %v", args)
+	}
+}
+
+func TestMissingQuotaPercentIsNotZero(t *testing.T) {
+	if q := (&rateLimits{Primary: &rateWindow{WindowMinutes: 300}}).quota(time.Now()); q != nil {
+		t.Fatal("missing percent became full allowance")
 	}
 }

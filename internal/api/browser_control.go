@@ -19,7 +19,7 @@ const browserPagePrefix = "browser.page."
 // BrowserControlDescriptors is the fixed version-one action surface.
 func BrowserControlDescriptors() []ActionDescriptor {
 	var out []ActionDescriptor
-	for _, op := range []string{"open", "snapshot", "act", "extract", "screenshot", "close"} {
+	for _, op := range []string{"open", "snapshot", "act", "extract", "screenshot", "close", "run"} {
 		spec := browserControlSpecs[op]
 		properties := make(map[string]any)
 		for _, field := range strings.Fields(spec.required + " " + spec.optional) {
@@ -44,6 +44,7 @@ var browserControlSpecs = map[string]browserControlSpec{
 	"extract":    {"session ref what", "tab attr"},
 	"screenshot": {"session", "tab ref clip full"},
 	"close":      {"session", ""},
+	"run":        {"session graph", "tab timeout_ms"},
 }
 
 var browserActSpecs = map[string]browserControlSpec{
@@ -72,7 +73,7 @@ func browserControlFieldType(field string) string {
 		return "number"
 	case "include_screenshot", "full", "clear":
 		return "boolean"
-	case "clip":
+	case "clip", "graph":
 		return "object"
 	default:
 		return "string"
@@ -160,6 +161,11 @@ func (a BrowserControlArgs) validateOperation(op string) error {
 		return fmt.Errorf("url must be an absolute HTTP or HTTPS URL without user information")
 	}
 	switch op {
+	case "run":
+		if !a.boundedInt("timeout_ms", 300000) {
+			return fmt.Errorf("timeout_ms must be between 1 and 300000")
+		}
+		return ValidateBrowserReplayGraph(a["graph"])
 	case "act":
 		action := a.String("op")
 		spec, ok := browserActSpecs[action]

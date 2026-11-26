@@ -41,6 +41,18 @@ type Hearing struct {
 	// them when it starts); fix corrects what it heard for those words.
 	Hints []string
 	fix   *speechFixer
+	// polish corrects names in a final text with the model, in the
+	// background; polishing counts those under way; corrected is the last
+	// correction (speech_polish.go).
+	polish    *speechPolish
+	polishing int
+	corrected *HearingFix
+}
+
+// HearingFix is a correction: the text as heard, and as corrected.
+type HearingFix struct {
+	From string `json:"from"`
+	To   string `json:"to"`
 }
 
 func newHearing() *Hearing { return &Hearing{changed: make(chan struct{}), at: time.Now()} }
@@ -51,6 +63,24 @@ func (h *Hearing) Heard(text string, final bool) {
 	defer h.mu.Unlock()
 	h.seq++
 	h.text, h.final = h.fix.Fix(text), final
+	h.wake()
+	if final && h.polish != nil {
+		h.polishing++
+		go h.polishText(h.text)
+	}
+}
+
+// polishText: the model's correction of a final text, when it comes in
+// time; what was heard is out already and stays if it does not.
+func (h *Hearing) polishText(heard string) {
+	fixed, ok := h.polish.Fix(context.Background(), heard)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.polishing--
+	if ok {
+		h.corrected = &HearingFix{From: heard, To: fixed}
+	}
+	h.seq++
 	h.wake()
 }
 
@@ -78,10 +108,14 @@ type HearingState struct {
 	Final bool   `json:"final,omitempty"`
 	Done  bool   `json:"done,omitempty"`
 	Error string `json:"error,omitempty"`
+	// Polishing: a correction of names is under way (the page may wait a
+	// moment for it after done); Corrected: the last one.
+	Polishing bool        `json:"polishing,omitempty"`
+	Corrected *HearingFix `json:"corrected,omitempty"`
 }
 
 func (h *Hearing) state() HearingState {
-	return HearingState{Seq: h.seq, Text: h.text, Final: h.final, Done: h.done, Error: h.err}
+	return HearingState{Seq: h.seq, Text: h.text, Final: h.final, Done: h.done, Error: h.err, Polishing: h.polishing > 0, Corrected: h.corrected}
 }
 
 // wait returns the state once it is newer than seq, or after d.
@@ -90,7 +124,8 @@ func (h *Hearing) wait(ctx context.Context, seq int, d time.Duration) HearingSta
 	defer t.Stop()
 	for {
 		h.mu.Lock()
-		if h.seq > seq || h.done {
+		// (after the end, a correction under way is still waited for)
+		if h.seq > seq || (h.done && h.polishing == 0) {
 			st := h.state()
 			h.mu.Unlock()
 			return st
@@ -134,6 +169,7 @@ func (b *Backend) dictationRoutes(m *http.ServeMux) {
 			var aliases map[string][]string
 			h.Hints, aliases = b.speechVocab(r.Context())
 			h.fix = newSpeechFixer(lang, h.Hints, aliases)
+			h.polish = b.speechPolisher(lang, h.Hints)
 			hs.mu.Lock()
 			for id, old := range hs.all {
 				// One at a time: the one before stops; the finished ones go.
