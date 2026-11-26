@@ -4263,6 +4263,10 @@ async function runMatrix(browser, size, scheme) {
     // next wake-up, how long), with 暂停/继续, 改间隔 and 停止; opened, what
     // done means and every round; ended ones are a grey line; ⋯ sets one.
     await step("单聊 · 目标", async () => {
+      // The mock's goals are timed from their first read; start them again
+      // so 还有 11–12 分钟 and 已进行 1 小时 hold however long the steps before took.
+      const reset = await fetch(`http://${HOST}:${mockPort()}/app/mock/goals-reset`, { method: "POST" });
+      if (!reset.ok) throw new Error(`重置目标失败：HTTP ${reset.status}`);
       await openMember(page, narrow, "聊天", "legacy-codex");
       const bar = page.locator(".conv-detail [data-testid=goal-bar]");
       await bar.waitFor({ timeout: 10_000 });

@@ -2243,6 +2243,12 @@ const server = http.createServer(async (req, res) => {
     return send(res, 201, m);
   }
 
+  // /app/mock/goals-reset — seeds the goals again from now (as watches-reset).
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "goals-reset" && parts.length === 3 && method === "POST") {
+    goalStore.clear();
+    return send(res, 200, { ok: true });
+  }
+
   // /app/mock/watches-reset — seeds the watches again from now, so a test
   // reads the same times however long the run before it took.
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "watches-reset" && parts.length === 3 && method === "POST") {
