@@ -613,8 +613,10 @@ final class WalkthroughTests: XCTestCase {
         XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "等 CI 跑完再发版")).firstMatch.exists)
         shot("work-watch")
         app.buttons["work.watch.more"].tap()
-        app.buttons["Stop"].tap()
-        let confirm = app.buttons["Stop"].firstMatch
+        let stop = app.buttons["work.watch.stop"]
+        XCTAssertTrue(stop.waitForExistence(timeout: 5))
+        stop.tap()
+        let confirm = app.buttons["work.watch.stop.confirm"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
         confirm.tap()
         XCTAssertTrue(app.descendants(matching: .any)["work.ended"].waitForExistence(timeout: 20))

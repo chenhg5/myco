@@ -39,6 +39,7 @@ struct WorkBars: View {
                 Button(L("停止", "Stop"), role: .destructive) {
                     if let watch = stopping { Task { await model.stop(watch) } }
                 }
+                .accessibilityIdentifier("work.watch.stop.confirm")
             } message: {
                 Text(stopping?.what ?? "")
             }
@@ -178,6 +179,7 @@ struct WorkBars: View {
                     Button(L("2 小时", "2 hours")) { Task { await model.extend(watch, seconds: 7_200) } }
                 }
                 Button(L("停止", "Stop"), systemImage: "stop", role: .destructive) { stopping = watch }
+                    .accessibilityIdentifier("work.watch.stop")
             } label: {
                 Image(systemName: "ellipsis").font(.subheadline).foregroundStyle(MycoColor.muted).frame(width: 32, height: 28)
             }
