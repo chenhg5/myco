@@ -956,6 +956,12 @@ func (c *Client) ReportRuntime(ctx context.Context, r api.Runtime) error {
 			r.RunnerSlots = nil
 			continue
 		}
+		// Hubs before provider model lists: the models stay, without where
+		// they came from.
+		if (r.ModelsFrom != "" || r.ModelsAt != nil) && errors.As(err, &apiErr) && apiErr.Status == http.StatusBadRequest && (strings.Contains(apiErr.Message, `unknown field "models_from"`) || strings.Contains(apiErr.Message, `unknown field "models_at"`)) {
+			r.ModelsFrom, r.ModelsAt = "", nil
+			continue
+		}
 		if (r.ProviderHost != "" || r.Providers != nil) && errors.As(err, &apiErr) && apiErr.Status == http.StatusBadRequest && (strings.Contains(apiErr.Message, `unknown field "provider_host"`) || strings.Contains(apiErr.Message, `unknown field "providers"`)) {
 			if strings.Contains(apiErr.Message, `unknown field "provider_host"`) {
 				r.ProviderHost = ""
