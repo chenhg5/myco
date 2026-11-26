@@ -24,10 +24,11 @@ final class ConversationTests: XCTestCase {
     /// Swipes from the left edge to the right: the system's "back".
     @MainActor
     private func swipeBack(_ app: XCUIApplication) {
-        let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5))
-        // (A quick flick: newer simulators read a slow drag from the edge
-        // as holding the page, not going back.)
-        from.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5)),
+        // (From a little way in: on iOS 26 a page goes back from a swipe
+        // anywhere on it, and a synthetic touch at the very edge is not
+        // always taken for one.)
+        let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.5))
+        from.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)),
                    withVelocity: .fast, thenHoldForDuration: 0)
     }
 
