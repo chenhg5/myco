@@ -1548,3 +1548,12 @@ a note in the goal thread. Goal creation/control/report operations are audited.
 Agent lists and overview include optional `goal: {id,objective,round,max_rounds,
 next_wake_at?,state}`; objective is truncated to 200 characters. This is independent
 of `watching`, `held`, and `queued`.
+
+### Live browser grant monitoring
+
+The desktop monitors the grant on the session's original owned open job, even
+once that job has completed. A job's `stop:true` alone is not grant revocation.
+`session_closed` with `reason:"grant_check_failed"` means authorization could not
+be verified; it does not claim that the Hub grant was revoked. Verification
+failures still stop the native session. Expiry and confirmed terminal grants
+retain `grant_expired` and `grant_ended` respectively.

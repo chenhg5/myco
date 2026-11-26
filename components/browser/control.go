@@ -655,6 +655,7 @@ func controlNativeError(err error) *controlError {
 		} else if errors.Is(err, context.Canceled) {
 			code = "cancelled"
 		} else {
+			controlDiagnostic("control_error_fallback", err)
 			code = "component_unavailable"
 		}
 	}

@@ -312,7 +312,7 @@ func browserControlFailure(err error, effectful bool) api.ActionJobComplete {
 
 func browserControlReason(reason string) string {
 	switch reason {
-	case "closed", api.BrowserControlOwnerStopped, "idle_timeout", "grant_expired", "grant_ended",
+	case "closed", api.BrowserControlOwnerStopped, "idle_timeout", "grant_expired", "grant_ended", "grant_check_failed",
 		"expired", "profile_disabled", "owner_window_open", "profile_in_use", "profile_starting", "host_closed", "app_exit", "browser_closed", "cleanup_pending", "component_unavailable", "cancelled":
 		return reason
 	default:
@@ -320,7 +320,7 @@ func browserControlReason(reason string) string {
 	}
 }
 
-func (b *Backend) watchBrowserControl(c *client.Client, s *browserControlSession, id string) {
+func (b *Backend) watchBrowserControl(c *client.Client, s *browserControlSession, id string, host *api.ActionHost, openJob string) {
 	ctx := s.ctx
 	tick := time.NewTicker(browserControlPoll)
 	defer tick.Stop()
@@ -370,12 +370,14 @@ func (b *Backend) watchBrowserControl(c *client.Client, s *browserControlSession
 			return
 		}
 		check, cancel = context.WithTimeout(ctx, 5*time.Second)
-		grants, err := c.OwnerActionGrants(check, api.GrantActive)
+		// Check only this session's grant through its original owned job.
+		// OwnerActionGrants refreshes every grant: an unrelated stale target or
+		// a list timeout must not be mistaken for this grant being revoked.
+		// Stop describes the completed OPEN JOB, not the live session grant.
+		state, err := c.ActionHostJob(check, openJob, host.ID, host.Generation, 0)
 		cancel()
-		if err != nil || !slices.ContainsFunc(grants, func(g api.ActionGrant) bool {
-			return g.ID == s.grant && g.ExpiresAt != nil && time.Now().Before(*g.ExpiresAt)
-		}) {
-			b.closeBrowserControl(s, "grant_ended", false)
+		if reason := browserControlGrantReason(state, err); reason != "" {
+			b.closeBrowserControl(s, reason, false)
 			return
 		}
 		s.mu.Lock()
@@ -386,6 +388,26 @@ func (b *Backend) watchBrowserControl(c *client.Client, s *browserControlSession
 			return
 		}
 	}
+}
+
+// A transport/permission error is fail-closed, but is not evidence of revocation.
+func browserControlGrantReason(state *api.ActionHostJobState, err error) string {
+	if err != nil || state == nil {
+		return "grant_check_failed"
+	}
+	if state.GrantState == api.GrantExpired {
+		return "grant_expired"
+	}
+	if state.GrantState != api.GrantActive {
+		return "grant_ended"
+	}
+	if state.GrantExpiresAt == nil {
+		return "grant_check_failed"
+	}
+	if !time.Now().Before(*state.GrantExpiresAt) {
+		return "grant_expired"
+	}
+	return ""
 }
 
 func (b *Backend) revokeStoppedBrowserControl(c *client.Client, grant string, expires time.Time) {
@@ -430,7 +452,7 @@ func (b *Backend) runBrowserControlJob(hostCtx context.Context, c *client.Client
 	defer stop()
 
 	if op == "open" {
-		return b.openBrowserControl(hostCtx, jobCtx, c, hj, h, p, args)
+		return b.openBrowserControl(hostCtx, jobCtx, c, host, hj, h, p, args)
 	}
 	s := b.ownedBrowserControl(args.String("session"), h.ID, g.Agent, g.ID, p.Policy.Profile, p.Policy.Binding)
 	if s == nil {
@@ -530,7 +552,7 @@ func (b *Backend) runBrowserControlJob(hostCtx context.Context, c *client.Client
 	return done
 }
 
-func (b *Backend) openBrowserControl(hostCtx, jobCtx context.Context, c *client.Client, hj api.ActionHostJob, h Hub, p browserHostPolicy, args api.BrowserControlArgs) api.ActionJobComplete {
+func (b *Backend) openBrowserControl(hostCtx, jobCtx context.Context, c *client.Client, host *api.ActionHost, hj api.ActionHostJob, h Hub, p browserHostPolicy, args api.BrowserControlArgs) api.ActionJobComplete {
 	g := hj.Grant
 	key := "pending:" + hj.Job.ID
 	s := b.reserveBrowserControl(hostCtx, h, p, g, key)
@@ -595,7 +617,7 @@ func (b *Backend) openBrowserControl(hostCtx, jobCtx context.Context, c *client.
 	s.mu.Lock()
 	s.host = auditHost
 	s.mu.Unlock()
-	go b.watchBrowserControl(c, s, id)
+	go b.watchBrowserControl(c, s, id, host, hj.Job.ID)
 	return api.ActionJobComplete{State: api.JobSucceeded, Result: result, BrowserHost: auditHost}
 }
 

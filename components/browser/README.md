@@ -228,3 +228,15 @@ Owner confirmation and workspace-local approval cleanup belong to the App.
 `/control/open` uses `busy.reason: "owner_window_open"` for a profile window
 opened by the person, `profile_in_use` for another controller and
 `profile_starting` for an existing startup reservation.
+
+Control fallback diagnostics are written privately to
+`~/.myco/browser/component-diagnostic.log` (0600, bounded to 1 MiB). Entries contain
+only static event names, error types and numeric CDP codes; page text, URLs,
+arguments and raw native errors are excluded. Screenshot panel hiding requires
+an acknowledged current top-frame collector; removed iframe worlds cannot veto
+capture. A lost top collector still fails closed.
+
+Native clicks and hover use the first visible painted client rectangle rather
+than the center of an inline element's union box. Hit testing uses that same
+frame-local point before translating through iframe owners; covered links still
+refuse input. Element screenshots keep the full bounding box.

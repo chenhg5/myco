@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -38,7 +39,7 @@ func (f *controlFixtureComponent) Call(ctx context.Context, scope, method, path 
 	var value any
 	switch {
 	case method == "GET" && path == "/status":
-		value = map[string]any{"protocol": 1, "features": []string{"agent_control"}}
+		value = map[string]any{"protocol": 1, "features": []string{"agent_control", "agent_replay"}}
 	case method == "POST" && path == "/control/open":
 		args := in.(api.BrowserControlArgs)
 		var actor api.BrowserControlActor
@@ -65,6 +66,8 @@ func (f *controlFixtureComponent) Call(ctx context.Context, scope, method, path 
 			return &browserautomation.ComponentError{Code: "outcome_unknown"}
 		}
 		value = map[string]any{"active_tab": "tab1", "step_ids": []string{"step1"}, "snapshot_error": map[string]string{"code": "timeout"}}
+	case method == "POST" && path == "/control/run":
+		value = map[string]any{"ok": true, "state": "succeeded", "steps": []any{}, "output": map[string]any{}, "url": "https://example.com/", "tabs": []any{}}
 	case method == "POST" && path == "/control/extract":
 		value = map[string]string{"text": "Sample"}
 	case method == "POST" && path == "/control/screenshot":
@@ -100,6 +103,9 @@ func (f *controlFixtureComponent) Artifact(_ context.Context, scope, id string) 
 func TestBrowserControlHostLifecycle(t *testing.T) {
 	expiry := time.Now().Add(time.Minute)
 	revoked := make(chan api.ActionGrantRevoke, 1)
+	var openCompleted atomic.Bool
+	watchedGrant := make(chan struct{}, 1)
+
 	hub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/revoke"):
@@ -110,13 +116,24 @@ func TestBrowserControlHostLifecycle(t *testing.T) {
 		case strings.HasSuffix(r.URL.Path, "/artifacts"):
 			_ = json.NewEncoder(w).Encode(api.ActionArtifact{ID: "art_fixture", MediaType: "image/png", ExpiresAt: expiry})
 		case strings.HasSuffix(r.URL.Path, "/action-grants"):
-			_ = json.NewEncoder(w).Encode(api.ActionGrantList{Grants: []api.ActionGrant{{ID: "grant", State: api.GrantActive, ExpiresAt: &expiry}}})
+			// Another grant's failed refresh used to abort the entire list and
+			// incorrectly end this still-active control session.
+			t.Error("control watcher requested the global grant list")
+			w.WriteHeader(http.StatusInternalServerError)
+
 		default:
 			if r.URL.Query().Get("wait") == "30" {
 				<-r.Context().Done()
 				return
 			}
-			_ = json.NewEncoder(w).Encode(api.ActionHostJobState{GrantState: api.GrantActive, GrantExpiresAt: &expiry})
+			stopped := strings.HasSuffix(r.URL.Path, "/action-jobs/job1") && openCompleted.Load()
+			if stopped {
+				select {
+				case watchedGrant <- struct{}{}:
+				default:
+				}
+			}
+			_ = json.NewEncoder(w).Encode(api.ActionHostJobState{Job: api.ActionJob{State: api.JobSucceeded}, Stop: stopped, GrantState: api.GrantActive, GrantExpiresAt: &expiry})
 		}
 	}))
 	defer hub.Close()
@@ -157,6 +174,20 @@ func TestBrowserControlHostLifecycle(t *testing.T) {
 	session := `{"session":"session1"}`
 	if done := call("open", open, grant); done.State != api.JobSucceeded || done.BrowserHost != "example.com" {
 		t.Fatalf("open = %+v", done)
+	}
+	openCompleted.Store(true)
+	replayArgs := `{"session":"session1","graph":{"nodes":[{"id":"note","type":"note"}],"edges":[]}}`
+	if done := call("run", replayArgs, grant); done.State != api.JobSucceeded {
+		t.Fatal("replay failed", done)
+	}
+	select {
+	case <-watchedGrant:
+	case <-time.After(8 * time.Second):
+		t.Fatal("grant watcher did not check completed open job")
+	}
+	// A completed job's Stop:true never means that its grant has ended.
+	if done := call("screenshot", session, grant); done.State != api.JobSucceeded {
+		t.Fatal("successful replay ended the session", done)
 	}
 	wantCode(call("open", open, grant), "busy")
 	other := grant
