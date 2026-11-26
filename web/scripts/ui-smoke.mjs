@@ -3087,6 +3087,28 @@ async function runMatrix(browser, size, scheme) {
       await noRound(page);
     });
 
+    // An agent's own name in a message (cloud-7, review-cloud) reads as its
+    // name for people and opens its chat; not in a path or in code.
+    await step("单聊 · agent 名字变成链接", async () => {
+      await openMember(page, narrow, "聊天", "Myco (Grok)");
+      const anchor = await page.locator(".conv-detail .conv-msg[data-msg]").last().getAttribute("data-msg");
+      const note = await sendFromElsewhere("hub_studio", "grok-agent-7c2e", "请交给 review-cloud 看看，@pm-codex 也看一下。路径 ~/code/review-cloud/x 和 `review-cloud` 保持原样。", { type: "note", of: anchor });
+      const bubble = page.locator(`.conv-detail [data-msg="${note.id}"]`);
+      await bubble.waitFor({ timeout: 15_000 });
+      const links = bubble.locator("a.md-agent");
+      await links.first().waitFor({ timeout: 10_000 });
+      const got = await links.evaluateAll((els) => els.map((a) => [a.textContent, a.getAttribute("title")]));
+      if (JSON.stringify(got) !== JSON.stringify([["Review (Codex 云端)", "review-cloud"], ["PM (Codex)", "pm-codex"]])) throw new Error(`正文里的 agent 名字应换成它的名字并做成链接，实际 ${JSON.stringify(got)}`);
+      const text = await bubble.innerText();
+      if (!text.includes("~/code/review-cloud/x")) throw new Error(`路径里的名字不该替换，实际「${text}」`);
+      if ((await bubble.locator("code").innerText()) !== "review-cloud") throw new Error("代码里的名字不该替换");
+      if (text.includes("@pm-codex") || text.includes("@PM")) throw new Error(`@名字应整个换成链接，实际「${text}」`);
+      await settle(page, 200);
+      await shot(page, size, scheme, "chat-agent-name-links");
+      await links.first().click();
+      await page.locator(".conv-detail .conv-head", { hasText: "Review (Codex 云端)" }).first().waitFor({ timeout: 15_000 });
+    });
+
     await step("单聊 · 发文件", async () => {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");
       const box = page.locator(".conv-compose-box");

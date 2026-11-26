@@ -36,6 +36,7 @@ import { NewWorkspaceDialog } from "@/app/NewWorkspaceDialog";
 import { ComputersPage } from "@/app/Computers";
 import { Avatar, isWorkspace, rememberAgentHubs, rememberMachines, whereOf } from "@/app/persona";
 import { agentKind, isMe, machinesOfHub, nodeName, stuckCounts } from "@/app/nodes";
+import { setAgentNames } from "@/lib/agentNames";
 import { prefetchMachineInfos } from "@/app/machineInfoCache";
 import { LogoWordmark } from "@/components/brand";
 import { IconSidebar } from "@/components/icons";
@@ -500,6 +501,18 @@ export default function AppMode({ initialHubs, initialInfo }: {
     return () => { off = true; };
   }, [hubId, hubUrl, hubIsLocal]);
   const rows = useMemo(() => allRows.filter((r) => r.hub.id === hubId), [allRows, hubId]);
+  // Agents' own names (cloud-7) in messages read as their names for
+  // people, links to their chats (Markdown): this workspace's agents.
+  useEffect(() => {
+    if (!hubId) { setAgentNames(null); return; }
+    const names = new Map<string, string>();
+    for (const r of rows) {
+      const a = r.st.agent;
+      const kind = agentKind(a);
+      if (kind === "agent" || kind === "shell") names.set(a.name, nodeName(a, r.hub));
+    }
+    setAgentNames({ hubId, names });
+  }, [rows, hubId]);
   // Ask this workspace's computers what they have ahead of need (at most
   // once a minute each): adding an agent then shows their sessions at once.
   const hubMachines = rows.find((r) => r.hub.id === hubId)?.hub;
