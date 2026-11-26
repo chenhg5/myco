@@ -175,6 +175,8 @@ curl -sS <HUB_URL>/v1/health        # 正常返回 {"ok":true,"version":"v1"}
 
 服务管理：`systemctl status myco-hub caddy`，日志用 `journalctl -u myco-hub -f`。Hub 会把每个耗时一秒及以上的请求记成 `slow request`（方法、路径、状态码、耗时、字节数；长轮询不算），把每个在 Hub 这边失败的请求（5xx）记成 `request failed`，并带上它返回的错误：`journalctl -u myco-hub --since today | grep -E "slow request|request failed"` 就能看到哪里慢、哪里坏。阈值用 `myco hub serve --slow-request 500ms` 调（`0s` 关掉）。在自己电脑上跑的 Hub，同样的内容写在 `~/.myco/hub/hub.log`。
 
+日志保留多久：装在自己电脑上的 Hub 和 runner（`hub.log`、`runner.log`）每天、或者超过 20 MB 时，把日志另存成 `hub.log.YYYYMMDD` 再清空，超过 14 天的旧文件自动删掉。服务器上的 Hub 日志在 journald 里，它按大小裁剪；想按两周保留，在 `/etc/systemd/journald.conf` 里设 `MaxRetentionSec=14day`，再 `sudo systemctl restart systemd-journald`（或者手动清一次：`sudo journalctl --vacuum-time=14d`）。
+
 ### 1.1 没有 VPS：在自己的电脑上开 Hub
 
 Hub 也可以跑在你自己的电脑上（Mac、Linux、家里的小主机），通过内网穿透得到一个公网 HTTPS 地址。一条命令装好，并装成开机自启的后台服务：

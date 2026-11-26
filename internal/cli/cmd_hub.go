@@ -15,6 +15,7 @@ import (
 	"github.com/myco-ai/myco/internal/config"
 	"github.com/myco-ai/myco/internal/hubserver"
 	"github.com/myco-ai/myco/internal/infra/tunnel"
+	"github.com/myco-ai/myco/internal/logkeep"
 	"github.com/myco-ai/myco/internal/release"
 	"github.com/myco-ai/myco/internal/templates"
 )
@@ -102,6 +103,11 @@ func hubCommands() *Command {
 			// service manager starts the new binary): as on SIGTERM.
 			ctx, stop := context.WithCancel(in.Ctx)
 			defer stop()
+			// Installed as a service, its log is hub.log beside the database:
+			// kept to two weeks, trimmed daily or past 20 MB (logkeep).
+			if lp := filepath.Join(filepath.Dir(in.String("db")), "hub.log"); logkeep.IsStderr(lp) {
+				go logkeep.Run(lp, logkeep.Policy{}, ctx.Done())
+			}
 			storage, err := projectStoragePolicy(in)
 			if err != nil {
 				return err
