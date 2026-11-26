@@ -2,7 +2,7 @@ import { runnerUpdating } from "@/lib/runner-state";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { activePaneId } from "@/app/ChatSearch";
 import { IntroCard, introOf } from "@/app/Onboard";
-import { Activity, ArrowLeft, ArrowUp, ChevronDown, AudioLines, Eye, Columns2, FileText, Loader2, MoreHorizontal, PanelRightClose, PanelRightOpen, Plus, Users } from "lucide-react";
+import { Activity, ArrowLeft, ArrowUp, ChevronDown, AudioLines, Eye, Target, Columns2, FileText, Loader2, MoreHorizontal, PanelRightClose, PanelRightOpen, Plus, Users } from "lucide-react";
 import { appApi, errorMessage, type RecentItem } from "@/appapi";
 import { GroupNameDialog, GroupedMembers, inGroupOrder, moveItems, useGroupStyle, type GroupStyle, type GroupsCtl } from "@/app/MemberGroups";
 import type { Message, Project } from "@/api";
@@ -1462,9 +1462,14 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
           <span className="sp-member-name">
             <span className="sp-member-name-text">{nodeName(a, r.hub)}</span>
             {a.name === coordinator && <span className="sp-role">{L("协调者", "Coordinator")}</span>}
+            {r.st.goal && (
+              <span className="sp-watch-tag sp-goal-tag" title={L(`目标：${r.st.goal.objective}`, `Goal: ${r.st.goal.objective}`)}>
+                <Target /><span className="app-sr-only">{r.st.goal.state === "paused" ? L("目标暂停", "goal paused") : L("目标中", "on a goal")}</span>
+              </span>
+            )}
             {(r.st.watching || 0) > 0 && (
-              <span className="sp-watch-tag" title={L("在后台盯着几件事（myco watch）", "Watching for things in the background (myco watch)")}>
-                <Eye />{L(`盯着 ${r.st.watching}`, `watching ${r.st.watching}`)}
+              <span className="sp-watch-tag" title={L(`在后台盯着 ${r.st.watching} 件事（myco watch）`, `Watching for ${r.st.watching} things in the background (myco watch)`)}>
+                <Eye />{r.st.watching}<span className="app-sr-only">{L(`盯着 ${r.st.watching}`, `watching ${r.st.watching}`)}</span>
               </span>
             )}
           </span>

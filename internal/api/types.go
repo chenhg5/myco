@@ -49,6 +49,7 @@ type Agent struct {
 	Queued     int    `json:"queued"`
 	InProgress int    `json:"in_progress"`
 	Held       int    `json:"held"`
+	Watching   int    `json:"watching"`
 	Asking     int    `json:"asking,omitempty"`
 	// StatusText is the agent's public progress line (myco agent status set).
 	StatusText  string     `json:"status_text,omitempty"`
@@ -756,6 +757,7 @@ type AgentStatus struct {
 	Queued     int    `json:"queued"`
 	InProgress int    `json:"in_progress"`
 	Held       int    `json:"held"`
+	Watching   int    `json:"watching"`
 	// Asking counts held tasks waiting on a question to their sender
 	// (myco message ask); they are in Held too. Absent on older hubs.
 	Asking int `json:"asking,omitempty"`

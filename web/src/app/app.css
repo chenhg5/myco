@@ -8551,6 +8551,7 @@ body.is-resizing {
    where one ended. */
 .watch-bar {
   flex: none;
+  container-type: inline-size;
   padding: 4px 8px 4px 12px;
   border-bottom: 1px solid var(--line-2);
   animation: app-fade 0.2s ease-out;
@@ -8582,7 +8583,7 @@ body.is-resizing {
 .watch-eye { flex: none; width: 14px; height: 14px; color: var(--accent); }
 .watch-what {
   flex: 0 1 auto;
-  min-width: 0;
+  min-width: 6em;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -8658,13 +8659,111 @@ body.is-resizing {
 .watch-ended.is-met svg { color: var(--green); }
 .watch-ended-time { flex: none; font-size: 10.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
 .app-shell.is-focus .conv-detail > .watch-bar { padding-left: 2px; padding-right: 2px; }
-@media (max-width: 560px) {
+/* A narrow chat (a phone, a pane beside another): the buttons keep their
+   icons, so what it watches and the clock keep the room. */
+@container (max-width: 700px) {
   .watch-btn-label { display: none; }
   .watch-btn { padding: 0 6px; }
+}
+@container (max-width: 520px) {
+  .watch-line .watch-toggle { flex-wrap: wrap; height: auto; min-height: 28px; padding: 4px 6px; row-gap: 0; }
+  .watch-line .watch-chev { order: 2; }
+  .watch-line .watch-time { order: 3; flex-basis: 100%; padding-left: 22px; font-size: 12px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .watch-bar { animation: none; }
 }
+/* 目标 (Goals.tsx): the goal bar is the watch bar's look, with its own
+   notes (paused and waiting for you: amber; waiting longer after rounds
+   without progress: muted) and, opened, the facts and every round. */
+.goal-bar .goal-icon { color: var(--accent); }
+.goal-bar.is-paused .goal-icon { color: var(--amber); }
+.watch-bar + .watch-bar { border-top: 0; }
+.goal-note {
+  margin: 0 6px 4px 28px;
+  padding: 4px 8px;
+  border-radius: 7px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.goal-note.is-paused { background: var(--amber-soft); color: var(--amber); }
+.goal-note.is-backoff { background: var(--pill); color: var(--muted); }
+.goal-detail { padding: 2px 6px 8px 28px; font-size: 12.5px; }
+.goal-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 12px;
+  margin: 0 0 8px;
+}
+.goal-facts dt { color: var(--muted); white-space: nowrap; }
+.goal-facts dd { margin: 0; color: var(--fg-2); overflow-wrap: anywhere; }
+.goal-rounds {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 30vh;
+  overflow-y: auto;
+  border-top: 1px solid var(--line-2);
+}
+.goal-round {
+  display: grid;
+  grid-template-columns: auto auto auto 1fr;
+  gap: 8px;
+  align-items: baseline;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line-2);
+  font-size: 12px;
+}
+.goal-round-n { color: var(--fg-2); font-weight: 500; white-space: nowrap; }
+.goal-round-time { color: var(--faint); font-variant-numeric: tabular-nums; }
+.goal-round-tag {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--green) 12%, transparent);
+  color: var(--green);
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+.goal-round.is-stuck .goal-round-tag { background: var(--pill); color: var(--muted); }
+.goal-round.is-blocked .goal-round-tag { background: var(--amber-soft); color: var(--amber); }
+.goal-round-text { min-width: 0; color: var(--fg-2); overflow-wrap: anywhere; }
+.goal-ended { align-self: center; max-width: min(560px, 100%); }
+.goal-ended-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 2px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.goal-ended-line:hover { background: var(--nav-hover); }
+.goal-ended-line svg { flex: none; width: 13px; height: 13px; color: var(--faint); }
+.goal-ended.is-achieved .goal-ended-line svg { color: var(--green); }
+.goal-ended-line > span:first-of-type { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.goal-ended-detail { padding: 2px 10px 4px 29px; font-size: 12px; color: var(--muted); }
+.goal-ended-detail p { margin: 2px 0; }
+.goal-textarea { resize: vertical; min-height: 44px; font: inherit; line-height: 1.5; }
+.goal-limits { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.goal-hint { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+.app-goal-now {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 8px 0 4px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: var(--pill);
+  font-size: 12.5px;
+}
+.app-goal-now > span { color: var(--muted); font-size: 11.5px; }
+.app-goal-now > b { font-weight: 500; overflow-wrap: anywhere; }
+.app-goal-now > small { color: var(--muted); }
 /* The plan of the task at work, pinned under the title (PlanBar.tsx): one
    line, opened to the list; it stays while the chat scrolls. */
 .plan-bar {
@@ -9991,6 +10090,7 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
 .app-shell.is-focus .conv-detail > .pin-bar,
 .app-shell.is-focus .conv-detail > .plan-bar,
 .app-shell.is-focus .conv-detail > .watch-bar,
+.app-shell.is-focus .conv-detail > .goal-bar,
 .app-shell.is-focus .conv-detail > .shell-stuck {
   --conv-box: min(calc(var(--conv-col) - var(--conv-pad) - var(--conv-pad-l)), calc(100% - var(--conv-pad) - var(--conv-pad-l)));
   margin-left: calc(var(--conv-pad-l) + (100% - var(--conv-pad) - var(--conv-pad-l) - var(--conv-box)) / 2);

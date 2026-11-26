@@ -129,3 +129,45 @@ sudo bash -c 'set -a; . /etc/myco/hub.env; set +a; /usr/local/bin/myco enrollmen
 Limit uses and lifetime with `--max-uses` and `--expires`; manage tokens with `myco enrollment list` and `myco enrollment revoke --id … --force`. After revoking, agents that already enrolled keep working, but no new ones can be created and none can be got back.
 
 All sessions in one environment share one enrollment token, so **the environment is the trust boundary**: anyone who has the token can register their own sessions into the network. Put it only in environments you trust.
+
+## Visible, bounded waits (`watch`)
+
+Use a watch when an agent needs the Hub to keep track of a reply, delegated
+task or workflow run without spending model time checking it:
+
+```sh
+myco watch start --what "Reviewer's reply" --until reply:msg_example --for 30m
+myco watch start --what "Build workflow" --until run:wrun_example --project demo
+myco watch list
+myco watch list --agent reviewer --all
+myco watch extend --id wat_example --for 30m
+myco watch stop --id wat_example --reason "No longer needed"
+```
+
+Add `--task msg_parent` to atomically hold your delivered/acked task and
+associate it with the watch (including workflow watches).
+
+The default duration is 30 minutes; no deadline can exceed 24 hours from
+start. Extending sets a new deadline from the current time. The initiating
+agent, its owner and the relevant project coordinator can stop or extend a
+watch. Owner/admin CLI calls may use `--admin-token-file`. Commands produce
+JSON when piped, have structured errors and support `--dry-run`.
+
+`myco message hold --until msg_child` automatically registers a watch for
+that dependency. The original hold behaviour remains compatible with older
+runners: a single transaction updates the watch, consumes the dependency's
+reply, and restores the original task with `hold_wake` context. A background
+Hub worker also evaluates the condition when no runner is polling. Restarting
+the Hub preserves the record and cannot send the same wake twice.
+
+When a deadline passes, the watch becomes `expired` and the agent receives an
+explicit message asking what to do next. A linked held task is resumed with
+that message as its context; otherwise a normal event wakes the agent.
+Stopping a watch resumes a linked held task with the stop reason. It does
+not cancel the delegated task or workflow itself.
+
+`task:` matches a terminal delegated task, `reply:` matches its reply/failure
+event, and `run:` matches a terminal workflow run. New watch commands on an
+older Hub report that the Hub must be upgraded; the existing hold commands
+keep their previous compatibility rules. Command checks are reserved for a
+later step and are not executed by these endpoints.

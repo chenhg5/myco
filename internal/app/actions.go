@@ -301,7 +301,7 @@ func (s *ActionService) RequestGrant(ctx context.Context, agent *domain.Agent, r
 		approvalPayload["browser_control"] = true
 	}
 	payload, _ := json.Marshal(approvalPayload)
-	ap, err := s.approvals.AskTyped(ctx, owner, agent.Name, domain.ApprovalKindActionGrant, grantWhat(g.Agent, targetName, perms, ttl), reason, string(payload))
+	ap, err := s.approvals.AskTyped(ctx, owner, agent.Name, domain.ApprovalKindActionGrant, grantWhat(g.Agent, targetName, perms, ttl, hosts...), reason, string(payload))
 	if err != nil {
 		return nil, err
 	}
@@ -404,7 +404,7 @@ func (s *ActionService) machineByIDOrName(ctx context.Context, idOrName string) 
 
 // grantWhat says in words what a grant lets its agent do (the approval's
 // title).
-func grantWhat(agent, machine string, perms []string, ttl time.Duration) string {
+func grantWhat(agent, machine string, perms []string, ttl time.Duration, hosts ...string) string {
 	do := "看电脑 " + machine + " 的屏幕"
 	for _, p := range perms {
 		if p == "server.ssh.read" {
@@ -432,7 +432,11 @@ func grantWhat(agent, machine string, perms []string, ttl time.Duration) string 
 		}
 	}
 	if contains(perms, api.BrowserControlPermission) {
-		do = "操作浏览器 " + machine + "。agent 能看到并操作这个 profile 登录的所有网站，操作会显示在你的屏幕上，你随时可以停止"
+		sites := "这个 profile 登录的所有网站"
+		if len(hosts) > 0 {
+			sites = "限定网站（" + strings.Join(hosts, "、") + "）中这个 profile 的登录状态"
+		}
+		do = "操作浏览器 " + machine + "。agent 能看到并操作" + sites + "，操作会显示在你的屏幕上，你随时可以停止"
 	}
 	_ = agent // (the card says who asks)
 	return fmt.Sprintf("%s，%d 分钟", do, int(ttl.Round(time.Minute)/time.Minute))

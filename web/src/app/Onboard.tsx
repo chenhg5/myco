@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Check, ChevronDown, X } from "lucide-react";
 import { L } from "@/lib/i18n";
+import { isClean } from "@/lib/uiStyle";
 import { cn } from "@/lib/utils";
 
 /*
@@ -59,7 +60,8 @@ export type ChecklistStep = { key: string; title: string; hint: string; done: bo
  *  its progress, open to the steps. Gone once put away. */
 export function Checklist({ steps }: { steps: ChecklistStep[] }) {
   useTick();
-  const [open, setOpen] = useState(() => get(LIST_OPEN) !== "0");
+  // (in the clean style it starts folded, unless you opened it)
+  const [open, setOpen] = useState(() => { const v = get(LIST_OPEN); return v ? v !== "0" : !isClean(); });
   if (get(NEW) !== "1" || get(LIST_OFF) === "1" || !steps.length) return null;
   const read = [...(get(SEEN) || "").split(","), ...(get(DID) || "").split(",")];
   steps = steps.map((s) => (s.seen && read.includes(s.seen) ? { ...s, done: true } : s));

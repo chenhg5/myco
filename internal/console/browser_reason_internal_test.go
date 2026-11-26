@@ -25,3 +25,18 @@ func TestBrowserProfileRecoveryReasonReachesPageError(t *testing.T) {
 		}
 	}
 }
+
+func TestBrowserOwnerWindowBusyReasonReachesAgentAndPage(t *testing.T) {
+	err := &browserautomation.ComponentError{Code: "busy", Reason: "owner_window_open"}
+	out := browserControlFailure(err, false)
+	if out.Error.Reason != "owner_window_open" || out.Error.Message != "Close this profile's browser window before opening agent control." {
+		t.Fatal(out)
+	}
+	w := httptest.NewRecorder()
+	writeErr(w, browserComponentFailure(err))
+	var body map[string]string
+	json.Unmarshal(w.Body.Bytes(), &body)
+	if body["reason"] != "owner_window_open" || body["error"] != "busy" {
+		t.Fatal(body)
+	}
+}

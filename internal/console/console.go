@@ -447,6 +447,52 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, out)
 	}))
+	// Watches (myco watch): what agents wait for in the background, as the
+	// hub has them (hubs without watches answer 404; the App shows nothing).
+	m.HandleFunc("GET /app/hubs/{id}/watches", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		q := r.URL.Query()
+		list, err := c.Watches(r.Context(), q.Get("agent"), q.Get("project"), q.Get("state") == "all")
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		if list == nil {
+			list = []api.Watch{}
+		}
+		writeJSON(w, http.StatusOK, api.WatchList{Watches: list})
+	}))
+	m.HandleFunc("GET /app/hubs/{id}/watches/{wid}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		out, err := c.Watch(r.Context(), r.PathValue("wid"))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+	}))
+	m.HandleFunc("POST /app/hubs/{id}/watches/{wid}/stop", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in api.WatchStopRequest
+		if !decode(w, r, &in) {
+			return
+		}
+		out, err := c.StopWatch(r.Context(), r.PathValue("wid"), in.Reason, false)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+	}))
+	m.HandleFunc("POST /app/hubs/{id}/watches/{wid}/extend", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in api.WatchExtendRequest
+		if !decode(w, r, &in) {
+			return
+		}
+		out, err := c.ExtendWatch(r.Context(), r.PathValue("wid"), in.ForSec, false)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+	}))
 	// Projects of a hub (proxied as they are).
 	m.HandleFunc("GET /app/hubs/{id}/projects", b.withHubTimeout(projectWriteTimeout, func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		list, err := c.ListProjects(r.Context(), r.URL.Query().Get("mine") == "true")

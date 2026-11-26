@@ -1039,6 +1039,18 @@ async function runMatrix(browser, size, scheme) {
         if(!summary.includes(retains?"保留已保存的密码":"清除已保存的密码"))throw new Error("Wrong saved-password review for "+kind);
         await clickVisible(page,modal.getByRole("button",{name:"不允许",exact:true}));await modal.waitFor({state:"hidden"});
       }
+      const remove=()=>frame.locator("body").evaluate(()=>{window.__browserRemoval=null;window.myco.browser.profiles.remove("profile_work").then(value=>window.__browserRemoval={value},error=>window.__browserRemoval={error:error.code});});
+      await remove();await modal.waitFor();
+      const deletionText=await modal.innerText();
+      for(const part of ["永久删除","工作资料","登录状态","本机下载","所有工作区","不能恢复"])if(!deletionText.includes(part))throw new Error("Deletion review omitted "+part);
+      await shot(page,size,scheme,"browser-profile-delete-owner-review");
+      await clickVisible(page,modal.getByRole("button",{name:"不允许",exact:true}));await modal.waitFor({state:"hidden"});
+      let removal=await frame.locator("body").evaluate(async()=>{for(let i=0;i<100&&!window.__browserRemoval;i++)await new Promise(r=>setTimeout(r,20));return window.__browserRemoval;});
+      if(removal?.error!=="cancelled")throw new Error("Declined profile deletion was not cancelled");
+      if(!(await frame.locator("body").evaluate(()=>window.myco.browser.status())).profiles.length)throw new Error("Decline deleted a profile");
+      await remove();await modal.waitFor();await clickVisible(page,modal.getByRole("button",{name:"允许",exact:true}));await modal.waitFor({state:"hidden"});
+      removal=await frame.locator("body").evaluate(async()=>{for(let i=0;i<100&&!window.__browserRemoval;i++)await new Promise(r=>setTimeout(r,20));return window.__browserRemoval;});
+      if(removal?.value!==true || (await frame.locator("body").evaluate(()=>window.myco.browser.status())).profiles.length)throw new Error("Confirmed deletion did not remove the profile");
       await clickVisible(page,page.locator(".pg-panel").getByRole("button",{name:"关闭",exact:true}));
     });
 
@@ -2239,11 +2251,22 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, card.getByRole("button", { name: "不同意", exact: true }));
       await card.waitFor({ state: "hidden", timeout: 10_000 });
 
+      const limitedPersonal = await fetch(`http://${HOST}:${mockPort()}/app/mock/superagent-ask`, {
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({agent:"pm-codex",kind:"action_grant",permissions:["browser.control"],
+          resource:{provider:"browser",id:"profile_sample",binding:"policy-2",name:"示例浏览器"},hosts:["example.com"],reason:"检查示例站点。"}),
+      });
+      if(!limitedPersonal.ok)throw new Error("Scoped personal-profile request failed");
+      await card.waitFor();
+      const limitedText=await card.innerText();
+      if(!limitedText.includes("只能在所选网站（example.com）中看到并使用这个配置的登录状态") || limitedText.includes("agent 能看到并操作这些网站"))throw new Error("Personal-profile warning broadened the allowed hosts: "+limitedText);
+      await clickVisible(page,card.getByRole("button",{name:"不同意",exact:true}));await card.waitFor({state:"hidden"});
+
       const dedicated = await fetch(`http://${HOST}:${mockPort()}/app/mock/superagent-ask`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ agent: "pm-codex", kind: "action_grant", permissions: ["browser.control"],
           resource: { provider: "browser", id: "p_agent", binding: "policy-agent", name: "agent 专用", kind: "agent" },
-          hosts: ["example.com", "*.docs.example.com"], reason: "检查公开文档。" }),
+          machine: "Studio Mac / agent 专用", hosts: ["example.com", "*.docs.example.com"], reason: "检查公开文档。" }),
       });
       if (!dedicated.ok) throw new Error(`专用浏览器申请失败：HTTP ${dedicated.status}`);
       const approval = await dedicated.json();
@@ -2267,6 +2290,11 @@ async function runMatrix(browser, size, scheme) {
       if (grants.grants.find(g => g.approval_id === approval.id)?.hosts?.join() !== "*.docs.example.com") {
         throw new Error("批准后仍包含已取消的域名");
       }
+      // (taken back again, so the next step starts with no grant active)
+      const scopedGrant = page.locator(".sp-home [data-testid=action-grants] .sa-grant", { hasText: "可以操作浏览器" });
+      await scopedGrant.waitFor({ timeout: 15_000 });
+      await clickVisible(page, scopedGrant.getByRole("button", { name: "收回", exact: true }));
+      await scopedGrant.waitFor({ state: "detached", timeout: 10_000 });
     });
 
     // An agent asks to act on one of your computers (agent actions,
@@ -2287,7 +2315,7 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "action-grant-request");
       await clickVisible(page, card.getByRole("button", { name: "只让它看", exact: true }));
       await card.waitFor({ state: "hidden", timeout: 10_000 });
-      const grant = page.locator(".sp-home [data-testid=action-grants] .sa-grant");
+      const grant = page.locator(".sp-home [data-testid=action-grants] .sa-grant", { hasText: "可以看 Studio Mac" });
       await grant.waitFor({ timeout: 10_000 });
       const g = compactText(await grant.innerText());
       if (!g.includes("可以看 Studio Mac") || g.includes("操作")) throw new Error(`只让它看以后，应写「可以看 Studio Mac 的屏幕」，实际「${g}」`);
@@ -4183,6 +4211,10 @@ async function runMatrix(browser, size, scheme) {
     // top of its chat, the clock moving, with 延长 and 停止; how earlier
     // ones ended is a grey line each; members show 盯着 N.
     await step("单聊 · 盯着", async () => {
+      // The mock's watches are timed from their first read; start them again
+      // so 已12分钟 holds however long the steps before took.
+      const reset = await fetch(`http://${HOST}:${mockPort()}/app/mock/watches-reset`, { method: "POST" });
+      if (!reset.ok) throw new Error(`重置盯着失败：HTTP ${reset.status}`);
       await openMember(page, narrow, "聊天", "legacy-codex");
       const bar = page.locator(".conv-detail [data-testid=watch-bar]");
       await bar.waitFor({ timeout: 10_000 });
@@ -4224,6 +4256,105 @@ async function runMatrix(browser, size, scheme) {
       if ((await two.locator(".watch-item").count()) !== 2) throw new Error("展开后应列出两件");
       await settle(page, 300);
       await shot(page, size, scheme, "chat-watching-two");
+    });
+
+    // 目标 (myco goal): a goal set on a chat is a bar at the top (round,
+    // next wake-up, how long), with 暂停/继续, 改间隔 and 停止; opened, what
+    // done means and every round; ended ones are a grey line; ⋯ sets one.
+    await step("单聊 · 目标", async () => {
+      await openMember(page, narrow, "聊天", "legacy-codex");
+      const bar = page.locator(".conv-detail [data-testid=goal-bar]");
+      await bar.waitFor({ timeout: 10_000 });
+      const line = (await bar.locator(".watch-line").innerText()).replace(/\s+/g, "");
+      for (const t of ["目标：把旧版runner的日志格式", "第3/16轮", "下次唤醒", "还有1", "已进行1小时"]) if (!line.includes(t)) throw new Error(`目标条应有「${t}」，实际「${line}」`);
+      await bar.locator(".watch-toggle").click();
+      await bar.locator(".goal-facts dd", { hasText: "文档覆盖全部 3 种日志格式" }).waitFor({ timeout: 5_000 });
+      if ((await bar.locator(".goal-round").count()) !== 3) throw new Error("展开后应列出 3 轮");
+      if (!(await bar.locator(".goal-round.is-stuck", { hasText: "没进展" }).count())) throw new Error("没进展的那轮应标出来");
+      await settle(page, 300);
+      await shot(page, size, scheme, "chat-goal");
+      // An earlier goal, achieved: a grey line that opens to how it ended.
+      const done = page.locator(".conv-detail .goal-ended", { hasText: "目标达成：把 runner 的启动脚本改成能重入" });
+      await done.waitFor({ timeout: 5_000 });
+      await done.locator(".goal-ended-line").click();
+      await done.locator(".goal-ended-detail", { hasText: "重复启动只会留一个进程" }).waitFor({ timeout: 5_000 });
+      // Every hour now; paused, then on again.
+      await bar.getByRole("button", { name: "改间隔" }).click();
+      await page.locator(".conv-menu").getByRole("menuitem", { name: "1 小时" }).click();
+      await page.waitForFunction(() => /还有(1小时|59分钟)/.test((document.querySelector(".conv-detail [data-testid=goal-bar] .watch-line")?.textContent || "").replace(/\s+/g, "")), null, { timeout: 5_000 });
+      await bar.getByRole("button", { name: "暂停" }).click();
+      await bar.locator(".goal-note.is-paused").waitFor({ timeout: 5_000 });
+      await bar.getByRole("button", { name: "继续" }).click();
+      await bar.locator(".goal-note").waitFor({ state: "detached", timeout: 5_000 });
+      // Stopped, after asking: the bar goes, a grey line stays.
+      await bar.getByRole("button", { name: "停止" }).click();
+      const ask = page.locator(".app-confirm");
+      await ask.waitFor({ timeout: 5_000 });
+      await ask.getByRole("button", { name: "停止", exact: true }).click();
+      await bar.waitFor({ state: "detached", timeout: 5_000 });
+      await page.locator(".conv-detail .goal-ended", { hasText: "你停止了目标" }).waitFor({ timeout: 5_000 });
+      // A new one from the chat's ⋯.
+      await page.locator(".conv-head").getByRole("button", { name: "更多" }).click();
+      await page.locator(".conv-menu").getByRole("menuitem", { name: "设定目标…" }).click();
+      const dlg = page.locator(".goal-dialog");
+      await dlg.waitFor({ timeout: 5_000 });
+      const start = dlg.getByRole("button", { name: "开始", exact: true });
+      if (await start.isEnabled()) throw new Error("没填目标和终止条件不该能开始");
+      await dlg.locator("textarea").nth(0).fill("把第三种日志格式也整理进去");
+      await dlg.locator("textarea").nth(1).fill("docs/legacy.md 里有第三种格式和示例");
+      await dlg.getByRole("tab", { name: "15 分钟" }).click();
+      await settle(page, 200);
+      await shot(page, size, scheme, "chat-goal-set");
+      await start.click();
+      await dlg.waitFor({ state: "detached", timeout: 5_000 });
+      await bar.locator(".watch-what", { hasText: "目标：把第三种日志格式也整理进去" }).waitFor({ timeout: 10_000 });
+      // Paused to ask you, and waiting longer after rounds without progress.
+      await openMember(page, narrow, "聊天", "Myco (Grok)");
+      await page.locator(".conv-detail [data-testid=goal-bar] .goal-note.is-paused", { hasText: "等你决定" }).waitFor({ timeout: 10_000 });
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await page.locator(".conv-detail [data-testid=goal-bar] .goal-note.is-backoff", { hasText: "间隔放宽到 1 小时" }).waitFor({ timeout: 10_000 });
+      if (!narrow) {
+        await page.locator(".sp-side .sp-member", { hasText: "Myco (Grok)" }).locator(".sp-goal-tag", { hasText: "目标暂停" }).waitFor({ timeout: 10_000 });
+        await page.locator(".sp-side .sp-member", { hasText: "Review (Codex 云端)" }).locator(".sp-goal-tag", { hasText: "目标中" }).waitFor({ timeout: 10_000 });
+      }
+    });
+
+    // 清爽 (界面风格): Settings → Appearance turns the decoration off at once
+    // for the whole App: no faces in the lists and titles, no chat picture,
+    // a dot for the walking mushroom; back to 标准 puts them back.
+    await step("设置 · 清爽模式", async () => {
+      const style = async (label) => {
+        await go(page, "设置", narrow);
+        await page.locator(".app-settings-search input").fill("界面风格");
+        await page.locator(".app-settings-search input").press("Enter");
+        const row = page.locator('[data-setting="ui-style"]');
+        await row.waitFor({ timeout: 5_000 });
+        await row.getByRole("tab", { name: label, exact: true }).click();
+        await closeSettings(page);
+      };
+      await style("清爽");
+      if (!(await page.evaluate(() => document.documentElement.classList.contains("ui-clean")))) throw new Error("选了清爽，界面应马上变");
+      await go(page, "官网改版", narrow);
+      await page.locator(".sp-home .conv-detail").waitFor({ timeout: 10_000 });
+      const look = await page.evaluate(() => {
+        const shown = (el) => !!el && el.getClientRects().length > 0 && getComputedStyle(el).display !== "none";
+        return {
+          sideFaces: [...document.querySelectorAll(".app-sidebar .app-nav-item > .pa, .app-hub-switch .app-hub-avatar")].filter(shown).length,
+          headFaces: [...document.querySelectorAll(".conv-head-faces")].filter(shown).length,
+          memberFace: Math.max(0, ...[...document.querySelectorAll(".sp-side .sp-member > .pa")].map((e) => e.getBoundingClientRect().width)),
+          mushrooms: [...document.querySelectorAll("svg.work-sprite")].filter((e) => e.getBoundingClientRect().width > 12).length,
+        };
+      });
+      if (look.sideFaces) throw new Error("清爽模式下侧栏（含左下工作区）不该有头像");
+      if (look.headFaces) throw new Error("清爽模式下会话标题不该有头像");
+      if (look.memberFace > 12) throw new Error(`清爽模式下成员栏只留状态点，实际宽 ${look.memberFace}px`);
+      if (look.mushrooms) throw new Error("清爽模式下不该有走路的小蘑菇");
+      await settle(page, 300);
+      await shot(page, size, scheme, "clean-mode");
+      await style("标准");
+      if (await page.evaluate(() => document.documentElement.classList.contains("ui-clean"))) throw new Error("换回标准，装饰应回来");
+      await go(page, "官网改版", narrow);
+      if (!narrow) await page.locator(".app-sidebar .app-nav-item > .pa").first().waitFor({ timeout: 5_000 });
     });
 
     // A task the node accepted long ago and went quiet on may have lost its

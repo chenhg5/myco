@@ -23,6 +23,7 @@ import { AuditSection, MembersSection, MyDevices } from "@/app/MembersSection";
 import { osWant } from "@/app/pages";
 import { LocalAgentsSection } from "@/app/LocalAgents";
 import { setSimpleMode, useSimpleMode } from "@/app/simpleMode";
+import { useUiStyle } from "@/lib/uiStyle";
 import type { TextSize, ThemeMode } from "@/lib/theme";
 import { setReportsOnly, useReportsOnly } from "@/app/quietRuns";
 import { appTo, setAutoTranslate, setTranslateReady, useAutoTranslate, useTranslateReady } from "@/app/translate";
@@ -226,6 +227,7 @@ const SECTION_ABOUT: Record<Section, () => string> = {
 const FINDABLE: { section: Section; key?: string; title: () => string; words: string }[] = [
   { section: "appearance", key: "theme", title: () => L("外观（浅色 / 深色）", "Appearance (light / dark)"), words: "外观 主题 浅色 深色 跟随系统 theme dark light appearance" },
   { section: "appearance", key: "simple-mode", title: () => L("简单模式", "Simple mode"), words: "简单模式 完整 simple mode" },
+  { section: "appearance", key: "ui-style", title: () => L("界面风格（标准 / 清爽）", "Style (standard / clean)"), words: "界面风格 清爽 简洁 干净 头像 装饰 标准 style clean minimal avatars decoration" },
   { section: "appearance", key: "text-size", title: () => L("文字大小", "Text size"), words: "文字大小 字号 缩放 放大 text size zoom font" },
   { section: "appearance", key: "steps", title: () => L("对话里的过程（只看进度）", "Steps in chats"), words: "对话里的过程 只看进度 思考 命令 steps progress" },
   { section: "appearance", key: "chat-bg", title: () => L("聊天背景", "Chat background"), words: "聊天背景 壁纸 背景图 chat background wallpaper" },
@@ -341,6 +343,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
   titleId?: string;
 }) {
   const simple = useSimpleMode();
+  const [uiStyle, setUiStyle] = useUiStyle();
   const [section, setSection] = useState<Section>(() => takeSettingsSection() ?? langSwitchSection ?? (simpleModeNow() ? "agents" : "hubs"));
   const askedFor = useRef<Section | null>(takeSettingsSection());
   useEffect(() => { nextSettingsSection = null; }, []);
@@ -755,6 +758,21 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
                       onClick={() => onTheme(t.mode)}
                     >
                       {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div data-setting="ui-style" className="app-setting-line">
+                <div className="app-setting-line-text">
+                  <b>{L("界面风格", "Style")}</b>
+                  <span>{L("清爽：列表和标题里不显示头像，没有聊天背景和走路的小蘑菇，界面更干净；功能都还在。马上生效，整个 App 都用这一种。",
+                    "Clean: no faces in the lists and titles, no chat backgrounds or walking mushroom, a quieter window; everything still works. Applies at once, to the whole App.")}</span>
+                </div>
+                <div className="seg" role="tablist" aria-label={L("界面风格", "Style")}>
+                  {([["standard", L("标准", "Standard")], ["clean", L("清爽", "Clean")]] as const).map(([v, label]) => (
+                    <button key={v} type="button" role="tab" aria-selected={uiStyle === v}
+                      className={cn("seg-btn", uiStyle === v && "active")} onClick={() => setUiStyle(v)}>
+                      {label}
                     </button>
                   ))}
                 </div>

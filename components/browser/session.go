@@ -135,6 +135,10 @@ func (e *engine) openSession(ctx context.Context, owner, id string, headless boo
 		}
 		return old, nil
 	}
+	if e.profileDeleting[id] {
+		e.mu.Unlock()
+		return nil, errors.New("busy")
+	}
 	if _, ok := e.profiles[id]; !ok || !idPattern.MatchString(id) {
 		e.mu.Unlock()
 		return nil, errors.New("not_found")

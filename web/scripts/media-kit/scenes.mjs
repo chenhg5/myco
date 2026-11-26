@@ -399,6 +399,36 @@ export const scenes = [
     },
   },
 
+  {
+    id: "watch",
+    title: "后台盯着，一眼看到 / Watching in the background",
+    zh: "Agent 在后台等回复、等流水线时，会话顶部写着在等什么、还剩多久，可以延长或停止。",
+    en: "While an agent waits for a reply or a pipeline, its chat says what it is waiting for and for how long, with Extend and Stop.",
+    tags: ["可见性", "协作"], themes: ["light", "dark"],
+    description: "Agent 会话顶部的「正在盯」条（展开：最近一次检查、起止时间），会话里结束的灰字，成员栏的「盯着 N」",
+    prepare: async ({ page, T }) => {
+      await member(page, T);
+      const bar = page.locator(".conv-detail:visible [data-testid=watch-bar]").last();
+      await bar.waitFor();
+      await bar.locator(".watch-toggle").click();
+      await bar.locator(".watch-result").waitFor();
+    },
+  },
+  {
+    id: "goal",
+    title: "给会话一个目标 / A goal for a chat",
+    zh: "设定一个目标和完成标准，Agent 空闲时按节奏被唤醒，一轮一轮往前推，每轮做了什么都看得到。",
+    en: "Set a goal and when it counts as done; the agent is woken on schedule while idle and pushes it forward round by round, every round on record.",
+    tags: ["自动化", "可见性"], themes: ["light", "dark"],
+    description: "Agent 会话顶部的目标条（第几轮、下次唤醒、已进行多久，展开：终止条件、上一轮、下一步、每轮记录），以及成员栏的「目标中」",
+    prepare: async ({ page, T }) => {
+      await member(page, T);
+      const bar = page.locator(".conv-detail:visible [data-testid=goal-bar]").last();
+      await bar.waitFor();
+      await bar.locator(".watch-toggle").click();
+      await bar.locator(".goal-round").first().waitFor();
+    },
+  },
 ];
 
 scenes.push(...interactionScenes);

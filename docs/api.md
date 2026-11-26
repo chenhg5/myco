@@ -1329,3 +1329,83 @@ myco page file list --page pg_demo
 myco page file get --page pg_demo --file paf_example --out picture.png
 myco page file remove --page pg_demo --file paf_example --dry-run
 ```
+
+### Durable watches
+
+A watch is a Hub-side, bounded wait for a reply, task completion, or workflow
+run. It does not run a model or execute commands. Watch records survive Hub
+restarts. Agent profiles and overview entries include `watching`, the number
+of records in `watching` state; this is separate from `held` and `queued`.
+Older Hubs omit this counter and do not provide the watch endpoints.
+
+- `POST /v1/watches` (agent token): `{what, kind, target, project?, task?, for_sec?}`.
+  `kind` is `reply`, `task`, or `workflow`; `command` is reserved and returns
+  `unsupported` in this version. `target` is a task message ID, or a workflow
+  run ID. The caller must be able to read the target. A reply watch targets a
+  task the caller sent. When specified, `project` must contain the agent and
+  match the target and associated task. `task` is a delivered/acked/held task addressed to
+  the caller; starting with `task` atomically holds it and creates the watch.
+  At most one active watch may be associated with a task.
+  `what` is a single line of 1–200 characters. `for_sec` defaults to 1800
+  and is 1–86400. Returns the Watch (201; 200 for a dry run).
+- `GET /v1/watches?agent=&project=&state=active|all` returns `{watches: []}`,
+  filtered to records the viewer may manage. The default state is `active`
+  (`watching`); `all` includes terminal records.
+- `GET /v1/watches/{id}` returns one Watch.
+- `POST /v1/watches/{id}/stop` takes `{reason?}` (at most 200 characters).
+- `POST /v1/watches/{id}/extend` takes `{for_sec}` (1–86400), setting the
+  deadline **from now**, within 24 hours of the original start. Ended or
+  already overdue watches cannot be extended.
+
+Creation is agent-only. Reading, stopping and extending are allowed to the
+initiating agent, its owner, Hub administrators, and the current coordinator
+of the watch's project while the watched agent remains a project member.
+A coordinator cannot manage unscoped watches or watches in another project.
+Stop/extend accept `?dry_run=true`; they validate without persisting or
+sending a wake. Successful changes record the actor and time in the audit log.
+Concurrent changes can return `conflict`; read the record again before retrying.
+
+A Watch contains `id` (`wat_…`), `agent`, optional `project` and `task`, `what`,
+`kind`, `target`, `started_at`, `deadline`, optional `last_check_at`,
+`last_result` (a status summary, never the target's content), `checks`, `state`,
+and optional `ended_at`, `ended_by`, `outcome`. Dates are RFC3339 timestamps.
+States are `watching`, `met`, `expired`, `stopped`; terminal states cannot be
+reopened. `command`, `match`, `every_sec` are reserved/optional fields;
+per-check command reporting is not available in this step.
+
+The Hub evaluates conditions in the background. `task` means done or failed;
+`reply` means a reply/failure event exists; `workflow` means succeeded, failed,
+or cancelled. When evaluation happens after a restart, a target that finished
+before the deadline still matches; later completion expires the watch.
+Completion, expiration, or stop changes the watch and restores
+its associated held task atomically. The wake explanation is provided through
+existing `hold_wake`, rather than dispatching a second session. With no held
+task, the agent receives a normal event. Expiration explicitly asks the agent
+to decide what to do next. Stopping also resumes an associated held task with
+the reason. An already completed associated task stops its watch without a
+new wake. Automatic hold watches retain legacy cross-project hold semantics;
+their label does not copy a delegated task's content across project boundaries.
+
+### Local browser profile deletion
+
+`myco.browser.profiles.remove?(id)` accepts `BrowserProfileRemoveInput` (`{id}`)
+at the local browser-call endpoint and returns `true`. It is optional and
+requires both the page's browser consent and a one-use, exact-profile owner
+confirmation from the trusted App UI. Agents cannot request this confirmation.
+The component advertises `profile_delete` and receives authenticated
+`DELETE /profiles/{id}`. Older components return `unsupported` through the App.
+Deletion removes that profile's local browser data, local downloads and proxy
+credentials, and the App removes its local script approvals in every workspace.
+A browser window, active recording/run/control, startup reservation or live
+process lease makes deletion return `busy`; it never stops a browser to delete it.
+Native dedicated agent profile identity is reused across workspaces. Each
+workspace/account still has independent enablement, bindings and approvals.
+
+`browser.control.open` can return `busy` with `reason: "owner_window_open"`:
+ask the owner to close this profile's browser window first. `profile_in_use`
+and `profile_starting` identify other live controllers and startup reservations.
+The public bridge preserves these reasons without exposing process paths.
+
+Deleting the last dedicated agent profile also disables its automatic recreation
+on this App configuration. Create a new personal profile and explicitly allow
+agent access if you want to use browser actions again.

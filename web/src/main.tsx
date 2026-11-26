@@ -2,6 +2,10 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./index.css";
+import { applyUiStyle } from "@/lib/uiStyle";
+
+// 界面风格 (standard / clean), as chosen on this computer, before the first paint.
+applyUiStyle();
 
 // Scrollbars: a Mac shows its own thin ones only while scrolling; elsewhere
 // (Windows) the system's are always there, wide and with arrows, so they

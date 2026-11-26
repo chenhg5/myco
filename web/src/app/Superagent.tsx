@@ -366,7 +366,7 @@ function invitationWhat(a: Approval, grants?: ActionGrant[]): string {
     const permissions = grant.requested || [];
     const minutes = /，(\d+) 分钟$/.exec(a.what)?.[1];
     const ttl = minutes ? L(`，${minutes} 分钟`, `, for ${minutes} minutes`) : "";
-    if (permissions.includes("browser.control")) return L(`操作浏览器配置「${profile}」`, `Control browser profile “${profile}”`) + ttl;
+    if (permissions.includes("browser.control")) return L(`操作浏览器配置「${profile}」`, `Control browser profile “${profile}”`) + (grant.hosts?.length ? L(`，限定网站：${grant.hosts.join("、")}`, `, limited to: ${grant.hosts.join(", ")}`) : "") + ttl;
     if (permissions.includes("browser.run")) return (permissions.includes("browser.view")
       ? L(`在「${profile}」上查看状态与运行结果，并运行主人批准的脚本`, `View status and run results, and run owner-approved scripts in “${profile}”`)
       : L(`运行「${profile}」中主人批准的脚本`, `Run owner-approved scripts in “${profile}”`)) + ttl;
@@ -434,7 +434,7 @@ export function ApprovalStrip({ hubId, agent, name }: { hubId: string; agent: st
             {a.kind === "project_invite" && <div className="sa-approval-why">{L("仅这一次邀请：链接 24 小时有效，只能用一次。新 agent 归项目主人所有，只加入为普通成员。", "This invitation only: the link lasts 24 hours and works once. The new agent belongs to the project owner and joins as an ordinary member.")}</div>}
             {control && <div className="sa-approval-why">
               {grant && grant.target.resource?.kind !== "agent" && (
-                <div><strong>{L("这个配置里可能有你的登录状态，agent 能看到并操作这些网站。", "This profile may have sites you’re signed in to. The agent can see and interact with those sites.")}</strong></div>
+                <div><strong>{scoped.length ? L(`agent 只能在所选网站（${hosts.join("、")}）中看到并使用这个配置的登录状态。`, `The agent can use this profile’s sign-ins only on the selected sites (${hosts.join(", ")}).`) : L("这个配置里可能有你的登录状态，agent 能看到并操作这些网站。", "This profile may have sites you’re signed in to. The agent can see and interact with those sites.")}</strong></div>
               )}
               <div>{L("操作会显示在你的屏幕上，你随时可以停止。", "Actions appear on your screen. You can stop control at any time.")}</div>
               {grant && (scoped.length ? <fieldset className="sa-approval-hosts">
