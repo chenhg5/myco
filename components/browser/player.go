@@ -12,10 +12,13 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 type runEvent struct{ Step *runStep }
 type playRun struct {
+	// outputCut: cleanOutput left something out (read and reset by its callers).
+	outputCut       bool
 	applyDialog     func(context.Context, node, observation) error
 	after           uint64
 	anchorTarget    proto.TargetTargetID
@@ -109,15 +112,28 @@ func (r *playRun) mask(s string) string {
 }
 func (r *playRun) cleanOutput(value any, depth int) any {
 	if depth > 4 {
+		r.outputCut = true
 		return nil
 	}
 	switch v := value.(type) {
 	case string:
+		// Scripts often return JSON.stringify(list): keep its items, not
+		// its first characters.
+		if t := strings.TrimSpace(v); len(t) > 1 && len(t) <= 4<<20 && (t[0] == '[' || t[0] == '{') {
+			var decoded any
+			if json.Unmarshal([]byte(t), &decoded) == nil {
+				return r.cleanOutput(decoded, depth)
+			}
+		}
+		if utf8.RuneCountInString(v) > 2000 {
+			r.outputCut = true
+		}
 		return r.mask(v)
 	case []any:
 		out := []any{}
 		for i, item := range v {
 			if i >= 200 {
+				r.outputCut = true
 				break
 			}
 			out = append(out, r.cleanOutput(item, depth+1))
@@ -127,6 +143,7 @@ func (r *playRun) cleanOutput(value any, depth int) any {
 		out := map[string]any{}
 		for key, item := range v {
 			if len(out) >= 100 {
+				r.outputCut = true
 				break
 			}
 			out[r.mask(key)] = r.cleanOutput(item, depth+1)
@@ -325,12 +342,16 @@ func (r *playRun) play(seq []node, onError string) {
 		step := &runStep{Node: n.ID, State: state, Error: code, MS: time.Since(started).Milliseconds(), Shot: shot}
 		r.mu.Lock()
 		if err == nil && n.Into != "" && variableName.MatchString(n.Into) {
+			r.outputCut = false
 			safe := r.cleanOutput(value, 0)
 			candidate := map[string]any{}
 			for key, value := range r.update.Output {
 				candidate[key] = value
 			}
 			candidate[n.Into] = safe
+			if r.outputCut {
+				candidate["truncated"] = true
+			}
 			if raw, e := json.Marshal(candidate); e == nil && len(raw) <= 16<<10 {
 				r.update.Output = candidate
 				if text, ok := safe.(string); ok {

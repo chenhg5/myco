@@ -24,7 +24,7 @@ import (
 	"time"
 )
 
-const ComponentVersion = "0.6.1"
+const ComponentVersion = "0.6.2"
 const ComponentRelease = "https://github.com/myco-ai/myco/releases/download/browser-v" + ComponentVersion
 
 // Component owns only the optional process and its private directory. A new
@@ -54,7 +54,7 @@ func (c *Component) dir() string {
 // arbitrary version directories, copy old binaries into a new version, or
 // download an unreviewed release just because the App has been upgraded.
 func compatibleComponentVersions() []string {
-	return []string{ComponentVersion, "0.6.0", "0.5.0", "0.4.0", "0.3.1", "0.3.0", "0.2.0", "0.1.1", "0.1.0"}
+	return []string{ComponentVersion, "0.6.1", "0.6.0", "0.5.0", "0.4.0", "0.3.1", "0.3.0", "0.2.0", "0.1.1", "0.1.0"}
 }
 
 // CompatibleComponentVersion is the explicit protocol-1 allowlist shared by

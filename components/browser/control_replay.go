@@ -164,7 +164,11 @@ func (c *controlSession) replay(ctx context.Context, p *rod.Page, in controlInpu
 			for key, item := range output {
 				candidate[key] = item
 			}
+			runner.outputCut = false
 			candidate[n.Into] = runner.cleanOutput(value, 0)
+			if runner.outputCut {
+				candidate["truncated"] = true
+			}
 			if raw, err := json.Marshal(candidate); err == nil && len(raw) <= (16<<10)-32 {
 				output = candidate
 				result["output"] = output
