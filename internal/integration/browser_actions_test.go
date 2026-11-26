@@ -286,6 +286,29 @@ func TestLiveBrowserGrantValidatesAuditsAndStops(t *testing.T) {
 	if _, err = owner.CompleteActionJob(c, replayJob.ID, api.ActionJobComplete{HostID: host.ID, Generation: host.Generation, State: api.JobSucceeded, Result: json.RawMessage(`{"ok":true,"state":"succeeded","steps":[{"node":"note","state":"ok","ms":0}],"output":{},"url":"https://docs.example.com/","tabs":[]}`)}); err != nil {
 		t.Fatal(err)
 	}
+	// Host generations are registration leases, not live-session grants.
+	// Re-registering the same profile invalidates old job credentials while
+	// the owner's grant list must still confirm this active grant.
+	previousHost := host
+	reg.Generation = "control-refreshed"
+	host, err = owner.RegisterActionHost(c, reg)
+	if err != nil || host.Generation == previousHost.Generation {
+		t.Fatalf("host replacement: %+v %v", host, err)
+	}
+	if _, err := owner.ActionHostJob(c, replayJob.ID, previousHost.ID, previousHost.Generation, 0); err == nil {
+		t.Fatal("replaced host generation inspected completed job")
+	}
+	ownerGrants, err := owner.OwnerActionGrants(c, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	confirmed := false
+	for _, current := range ownerGrants {
+		confirmed = confirmed || current.ID == grant.ID && current.State == api.GrantActive && current.ExpiresAt != nil
+	}
+	if !confirmed {
+		t.Fatal("host replacement hid or ended the live grant")
+	}
 	largeGraph["nodes"] = []any{map[string]any{"id": "large", "type": "note", "note": strings.Repeat("x", api.BrowserReplayGraphMax)}}
 	tooLarge, _ := json.Marshal(map[string]any{"session": "session", "graph": largeGraph})
 	if _, err = run("page.run", "too-large-replay", string(tooLarge)); err == nil {

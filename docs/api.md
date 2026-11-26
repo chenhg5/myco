@@ -1551,9 +1551,12 @@ of `watching`, `held`, and `queued`.
 
 ### Live browser grant monitoring
 
-The desktop monitors the grant on the session's original owned open job, even
-once that job has completed. A job's `stop:true` alone is not grant revocation.
-`session_closed` with `reason:"grant_check_failed"` means authorization could not
-be verified; it does not claim that the Hub grant was revoked. Verification
-failures still stop the native session. Expiry and confirmed terminal grants
-retain `grant_expired` and `grant_ended` respectively.
+The desktop monitors the session's grant by ID through the owner's grant list,
+independently of host re-registration, host generations and completed job retention.
+An explicit terminal grant stops the session immediately. A transient HTTP failure,
+missing grant or malformed response starts a bounded 30-second verification grace
+period; a confirmed active grant resets it. Continuous failures end the native
+session with `reason:"grant_check_failed"`, which does not claim revocation. The
+session's local grant deadline remains enforced throughout this grace period.
+Expiry and confirmed terminal grants retain `grant_expired` and `grant_ended`
+respectively.
