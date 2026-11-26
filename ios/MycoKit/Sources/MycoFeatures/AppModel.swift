@@ -833,6 +833,7 @@ struct RootView: View {
             case .handover(let agent, let back): HandoverSheet(agent: agent, backID: back)
             case .files(let agent, let project): ChatFilesSheet(agent: agent, project: project)
             case .pinAddress(let agent): PinAddressSheet(agent: agent)
+            case .goal(let agent, let project): GoalSheet(agent: agent, project: project)
             case .background(let key): ChatBackgroundSheet(key: key)
             }
         }

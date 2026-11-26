@@ -35,6 +35,11 @@ struct AgentScreen: View {
                         Button(L("文件和应用", "Files and apps"), systemImage: "photo.on.rectangle") {
                             router.sheet = .files(agent: name, project: nil)
                         }
+                        if !session.workState(of: name).unsupported, session.workState(of: name).goal == nil {
+                            Button(L("设定目标…", "Set a goal…"), systemImage: "target") {
+                                router.sheet = .goal(agent: name, project: nil)
+                            }
+                        }
                         if session.pins(with: name).supported {
                             Button(L("置顶一个网址", "Pin an address"), systemImage: "pin") {
                                 router.sheet = .pinAddress(agent: name)
@@ -279,6 +284,8 @@ struct ConversationBody: View {
     /// The conversation stays at its end as it grows. Only the person
     /// scrolling away lets go of it; content getting taller does not.
     @State private var pinned = true
+    /// The pinned plan closed here (a new plan shows again).
+    @State private var closedPlan: String?
     /// A finger moved the conversation a moment ago.
     @State private var touched = false
     /// How tall the part of the conversation on screen is.
@@ -590,6 +597,24 @@ struct ConversationBody: View {
                         if model.items.contains(where: { $0.id == id }) { jumpTo = id }
                     })
                 }
+                // The plan still going, the newest first.
+                if !model.readOnly, let plan = model.pinnedPlan, plan.id != closedPlan {
+                    PlanBar(items: plan.items) { closedPlan = plan.id }
+                }
+                // Its goal and what it waits for in the background.
+                if !model.readOnly {
+                    WorkBars(model: session.workState(of: model.agent))
+                }
+            }
+        }
+        // (read now and every so often while it is in front)
+        .task(id: model.agent) {
+            guard !model.readOnly else { return }
+            let work = session.workState(of: model.agent)
+            while !Task.isCancelled {
+                await work.load()
+                if work.unsupported { return }
+                try? await Task.sleep(for: .seconds(15))
             }
         }
         // (and read again now and then: what the agent pins comes later)
@@ -1187,8 +1212,10 @@ struct ConversationBody: View {
     private var runAside: AnyView? {
         let access = session.accessChoice(of: model.agent)
         let run = session.runChoice(of: model.agent)
-        guard access != nil || run != nil else { return nil }
-        return AnyView(HStack(spacing: 0) {
+        let quota = session.agent(model.agent)?.runtime?.quota.flatMap { QuotaWords.hasNumbers($0) ? $0 : nil }
+        guard access != nil || run != nil || quota != nil else { return nil }
+        return AnyView(HStack(spacing: 4) {
+            if let quota { QuotaPill(quota: quota) }
             if let access { AccessButton(agent: model.agent, choice: access) }
             if let run { RunChoiceButton(agent: model.agent, choice: run) }
         })
@@ -1226,6 +1253,13 @@ struct ConversationBody: View {
                     actions: [.init(L("查看并处理", "See and handle")) { router.sheet = .memberCard(model.agent) }])
                     .padding(.horizontal, Space.page).padding(.top, Space.s)
                     .accessibilityIdentifier("conversation.elsewhere")
+            }
+            // Its account is out: what is sent now may wait (sending is
+            // not stopped).
+            if let quota = session.agent(model.agent)?.runtime?.quota, let note = QuotaWords.outNote(quota) {
+                NoticeLine(.attention, note)
+                    .padding(.horizontal, Space.page).padding(.top, Space.s)
+                    .accessibilityIdentifier("composer.quotaOut")
             }
             // Only while it is at work: a conversation that has ended has
             // nothing to wait for, whatever the network.

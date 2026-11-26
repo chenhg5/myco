@@ -152,8 +152,9 @@ jobs:
     if: needs.changes.outputs.ui == 'true'
     runs-on: ubuntu-latest
     # A hung download (apt, Playwright's Chromium) must not hold the run for
-    # GitHub's 6 hours: a release waits for main's ci to finish.
-    timeout-minutes: 20
+    # GitHub's 6 hours: a release waits for main's ci to finish. The smoke
+    # itself takes about 12 minutes, the install up to 15 on a slow mirror.
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -178,18 +179,19 @@ jobs:
       - name: Prepare pinned app UI fixtures
         run: python3 scripts/prepare-apps.py --apps-dir .cache/apps-source/dist/official
       - name: Dependencies, Playwright and Chromium (with CJK fonts)
-        timeout-minutes: 6
+        timeout-minutes: 15
         run: |
           cd web && npm ci
           npm install -g playwright@1
-          # Now and then a runner's apt or download stalls: give each try two
-          # minutes and try three times rather than wait out the step.
+          # Now and then a runner's apt or download stalls: give each try four
+          # minutes (slow apt mirrors need more than two) and try three times
+          # rather than wait out the step.
           # A try that timed out can leave its apt-get running and holding the
           # dpkg lock; apt then waits for that lock rather than failing at once.
           echo 'DPkg::Lock::Timeout "180";' | sudo tee /etc/apt/apt.conf.d/99myco-lock-timeout >/dev/null
           for try in 1 2 3; do
-            timeout 120 node "$(npm root -g)/playwright/cli.js" install --with-deps chromium &&
-              timeout 120 sudo apt-get install -y -q fonts-noto-cjk >/dev/null && break
+            timeout 240 node "$(npm root -g)/playwright/cli.js" install --with-deps chromium &&
+              timeout 240 sudo apt-get install -y -q fonts-noto-cjk >/dev/null && break
             echo "::warning::Playwright / font install try $try stalled or failed; trying again"
             [ "$try" = 3 ] && exit 1
           done

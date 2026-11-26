@@ -193,6 +193,24 @@ public protocol HubAPI: Sendable {
     /// `GET /v1/console/approvals?status=pending`
     func approvals() async throws -> [Approval]
 
+    // Watches and goals (v0.22+; older workspaces answer 404)
+    /// `GET /v1/watches?agent=&state=active|all`
+    func watches(agent: String, all: Bool) async throws -> [Watch]
+    /// `POST /v1/watches/{id}/stop`
+    func stopWatch(_ id: String) async throws -> Watch
+    /// `POST /v1/watches/{id}/extend`: the deadline `seconds` from now.
+    func extendWatch(_ id: String, seconds: Int) async throws -> Watch
+    /// `GET /v1/goals?agent=&state=active|all`
+    func goals(agent: String, all: Bool) async throws -> [Goal]
+    /// `GET /v1/goals/{id}`: the goal and its rounds.
+    func goal(_ id: String) async throws -> (goal: Goal, rounds: [GoalRound])
+    /// `POST /v1/goals`
+    func startGoal(_ request: GoalRequest) async throws -> Goal
+    /// `POST /v1/goals/{id}/pause`, `/resume` or `/stop`.
+    func controlGoal(_ id: String, _ action: String) async throws -> Goal
+    /// `PATCH /v1/goals/{id}`: how often it is woken.
+    func setGoalInterval(_ id: String, seconds: Int) async throws -> Goal
+
     // Notices (v0.21.21+) and usage (v0.21.34+); older workspaces answer 404
     /// `GET /v1/console/notices?after=&limit=`: what this person should
     /// hear about, oldest first.

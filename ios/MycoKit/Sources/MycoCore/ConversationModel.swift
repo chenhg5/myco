@@ -973,6 +973,18 @@ public final class ConversationModel {
 
     // MARK: For a voice call (ConversationVoice)
 
+    /// The plan pinned above the chat (the desktop's plan bar): the plan
+    /// of the task at work, else the newest one written here that still
+    /// has things left. Nil when there is none, or all of it is done.
+    public var pinnedPlan: (id: String, items: [PlanItem], live: Bool)? {
+        for item in items.reversed() {
+            guard case .plan(let plan, let live) = item.kind else { continue }
+            guard plan.contains(where: { $0.state != .done }) else { return nil }
+            return (item.id, plan, live)
+        }
+        return nil
+    }
+
     /// Every message between me and the agent seen so far, oldest first.
     /// The web pages (apps) linked in what is loaded here, once each,
     /// newest first, with the message that linked each last.

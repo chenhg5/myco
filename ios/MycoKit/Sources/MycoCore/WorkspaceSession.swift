@@ -99,6 +99,16 @@ public final class WorkspaceSession {
         return model
     }
 
+    @ObservationIgnored private var workStates: [String: WorkStateModel] = [:]
+
+    /// An agent's goal and background waits (the bars above its chat).
+    public func workState(of agent: String) -> WorkStateModel {
+        if let model = workStates[agent] { return model }
+        let model = WorkStateModel(hub: hub, agent: agent)
+        workStates[agent] = model
+        return model
+    }
+
     @ObservationIgnored private var waitingModel: NoticesModel?
     @ObservationIgnored private var usageModel: UsageModel?
 
