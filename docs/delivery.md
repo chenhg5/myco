@@ -258,6 +258,19 @@ its provider key using the existing provider settings. Missing native login is
 `auth_required`; log in through the CLI itself. Unrecognized gateways, project-level account overrides, or custom launch
 arguments whose effective account cannot be determined are `unsupported`, and their keys are never sent to a different quota provider.
 
+An agent in its own Claude Code session with no runner (a claude.ai cloud session
+that receives with `myco inbox wait`) has no runner to collect for it. Its
+session knows its limits: each turn's `rate_limit_event` in the session's event
+stream carries the five-hour and seven-day use and reset times, and
+`myco agent runtime quota --file <json|->` reports them (an event, a list of
+events of which the newest is used, or its `rate_limit_info`; `--dry-run`
+shows what would be sent). The myco skill has a cloud session do this when it
+finishes each task. When the session's transcript records that a limit was
+reached (an API error's `rate_limit_info`), `myco inbox wait` reports that window
+as used up until it resets, without a model turn. Such quota is marked
+`source_kind: cloud_session`; it never replaces a runner's own collection or a
+newer report, and only numbers, times and statuses are sent.
+
 Sampling normally occurs at most once per five minutes per local account;
 Claude caches are re-read once per minute. Errors are cached for fifteen minutes,
 with a longer `Retry-After` respected on HTTP 429. HTTP redirects are not followed.
