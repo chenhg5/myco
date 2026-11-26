@@ -9,7 +9,7 @@ export async function appScene(c, slug, sample) {
       encodeURIComponent("myco/" + slug) +
       "/use",
     "POST",
-    { name: T("演示 · ", "Demo · ") + slug, sample: false, project: "website" },
+    { name: c.scenePageName || T("演示 · ", "Demo · ") + slug, sample: false, project: "website" },
   );
   const data =
     sample ||
@@ -281,4 +281,74 @@ export async function servers(c) {
     })
     .evaluate((el) => el.click());
   await frame.locator(".sv-metrics").waitFor();
+}
+
+// A real official app, driven only by synthetic shared records. No OS calls.
+const launchScenes = new WeakMap();
+export async function webAutomationLaunch(c) {
+  const { page, context, api, T, lang } = c;
+  await api("/app/mock/media-web-automation", "POST", {lang, phase:"running"});
+  // Only the in-memory browser status is advertised. Native actions remain
+  // unavailable, and every request is still confined to loopback by the runner.
+  await context.addInitScript(({machine, profile}) => {
+    if (!location.pathname.startsWith("/p/")) return;
+    let bridge;
+    Object.defineProperty(window, "myco", {configurable:true, get:()=>bridge, set:value=>{
+      bridge=value;
+      if (value) {
+        value.features=[...(value.features || []), "browser"];
+        value.browser={status:async()=>({protocol:1,version:"0.5.0",installed:true,supported:true,browsers:["chrome"],machine,profiles:[{id:"profile_demo",name:profile,running:true,agents:true}]}),
+          approvals:{list:async()=>[]},record:{active:async()=>[]}};
+      }
+    }});
+  }, {machine:T("公司电脑", "Office computer"),profile:T("订单后台", "Orders admin")});
+  await page.reload();
+  await page.locator(".app-shell").waitFor();
+  await page.getByText(T("官网改版", "Website redesign"),{exact:true}).first().click();
+  await page.locator(".sp-side .sp-member:visible",{hasText:T("云端助手（Codex）", "Cloud assistant (Codex)")}).click();
+  const chat=page.locator(".conv-detail:visible").last();
+  await chat.getByRole("button",{name:T("只看这一栏", "Show only this pane"),exact:true}).click();
+  const title=T("本周订单导出", "Weekly order export");
+  const titles=[T("打开订单后台", "Open orders admin"),T("筛选本周订单", "Filter this week"),T("导出订单表格", "Export orders"),T("等待文件下载", "Wait for download")];
+  const nodes=[
+    {id:"open",type:"navigate",url:"https://orders.example.com/admin",pos:[0,0],title:titles[0]},
+    {id:"filter",type:"select",target:{locators:[{kind:"label",value:T("日期范围", "Date range")}]},value:"this-week",pos:[0,128],title:titles[1]},
+    {id:"export",type:"click",target:{locators:[{kind:"role",role:"button",name:T("导出 CSV", "Export CSV")}]},pos:[0,256],title:titles[2]},
+    {id:"download",type:"wait",wait:"download",into:"orders_file",pos:[0,384],title:titles[3]},
+  ];
+  const script={name:title,description:T("在公司电脑上导出本周订单", "Export this week's orders on Office computer"),start_url:"https://orders.example.com/admin",profile:T("订单后台", "Orders admin"),params:[],on_error:"stop",source:"agent",graph:{nodes,edges:[["open","filter"],["filter","export"],["export","download"]]}};
+  const run={script_id:"weekly_orders",script_version:1,script_name:title,state:"running",node:"export",by:"cloud-assistant",by_kind:"agent",machine:T("公司电脑", "Office computer"),profile:script.profile,started_at:new Date(Date.now()-12000).toISOString(),steps:[{node:"open",state:"ok",ms:1200},{node:"filter",state:"ok",ms:800},{node:"export",state:"running"}],output:{}};
+  const {frame,id}=await appScene({...c,scenePageName:T("网页自动化", "Web Automation")},"web-automation",{scripts:[{id:"weekly_orders",...script}],runs:[{id:"orders_run",...run}],drafts:[]});
+  await frame.getByRole("tab",{name:T("运行记录", "Runs"),exact:true}).evaluate(el=>el.click());
+  await frame.locator(".wa-run .wa-step-state.is-running").waitFor();
+  launchScenes.set(page,{...c,id,frame,run,nodes});
+}
+export async function webAutomationLaunchVideo({page}) {
+  const c=launchScenes.get(page), {api,lang,T,id,nodes}=c;
+  const put=async(data)=>api(`/app/hubs/hub_studio/pages/${id}/data/runs/orders_run`,"PUT",{data});
+  await api("/app/mock/media-web-automation","POST",{lang,phase:"ready"});
+  await put({...c.run,state:"queued",node:"",steps:[]});
+  // Reopen the conversation so its incremental message cache starts empty.
+  await page.reload();
+  await page.locator(".app-shell").waitFor();
+  await page.getByText(T("官网改版", "Website redesign"),{exact:true}).first().click();
+  await page.locator(".sp-side .sp-member:visible",{hasText:T("云端助手（Codex）", "Cloud assistant (Codex)")}).click();
+  await page.locator(".conv-detail:visible").last().getByRole("button",{name:T("只看这一栏", "Show only this pane"),exact:true}).click();
+  await page.evaluate(id=>window.dispatchEvent(new CustomEvent("myco-open-page",{detail:{kind:"page",hubId:"hub_studio",id}})),id);
+  const frame=await page.locator("iframe:visible").last().contentFrame();
+  await frame.getByRole("tab",{name:T("运行记录", "Runs"),exact:true}).evaluate(el=>el.click());
+  const input=page.locator(".conv-detail:visible .conv-compose-input").last();
+  await input.fill(T("帮我去「公司电脑」的后台，把本周订单导出成表格。", "Export this week's orders from the admin site on my Office computer."));
+  await page.waitForTimeout(1700);
+  await input.fill("");
+  await api("/app/mock/media-web-automation","POST",{lang,phase:"running"});
+  for (let i=0;i<nodes.length;i++) {
+    await put({...c.run,started_at:new Date(Date.now()-i*2400).toISOString(),node:nodes[i].id,steps:nodes.slice(0,i+1).map((n,j)=>({node:n.id,state:j===i?"running":"ok",...(j<i?{ms:800+j*300}:{})}))});
+    await frame.locator(".wa-step-state.is-running").waitFor();
+    await page.waitForTimeout(2400);
+  }
+  await put({...c.run,state:"succeeded",node:"download",ended_at:new Date().toISOString(),steps:nodes.map((n,i)=>({node:n.id,state:"ok",ms:800+i*300})),output:{orders_file:"orders-this-week.csv",orders:128}});
+  await api("/app/mock/media-web-automation","POST",{lang,phase:"done"});
+  await frame.getByText("orders-this-week.csv",{exact:false}).waitFor();
+  await page.waitForTimeout(1400);
 }

@@ -1,5 +1,5 @@
 import { interactionScenes } from "./interactions.mjs";
-import { coedit, design, motion, disk, servers } from "./apps.mjs";
+import { coedit, design, motion, disk, servers, webAutomationLaunch, webAutomationLaunchVideo } from "./apps.mjs";
 const click = async (x) => {
   await x.first().click();
 };
@@ -17,6 +17,18 @@ const member = async (page, T) => {
 };
 const home = async () => {};
 export const scenes = [
+  {
+    id: "web-automation-launch",
+    title: "跨电脑网页自动化 / Browser automation across computers",
+    zh: "云端 Agent 安排任务，公司电脑执行网页脚本；每一步和结果在 myco 里看得见。",
+    en: "A cloud agent coordinates; your office computer runs the browser script. Follow every step and result in myco.",
+    tags: ["应用", "自动化", "协作"], themes: ["light"],
+    description: "myco 侧边栏、云端 Agent 对话与网页自动化官方应用分屏，展示公司电脑上的订单导出步骤；纯演示数据",
+    boundary: "Synthetic UI demonstration; no real workspace, native browser, model request or order export.",
+    prepare: webAutomationLaunch,
+    video: webAutomationLaunchVideo,
+    videoSeconds: 28,
+  },
   {
     id: "project-storage",
     title: "项目文件独立额度 / Project storage limits",

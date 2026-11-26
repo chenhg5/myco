@@ -257,7 +257,7 @@ const shotsOf = (names) => {
   const out = light.map((src) => ({ src, ...(names.includes(src.replace(/(\.[a-z]+)$/i, ".dark$1")) ? { dark: src.replace(/(\.[a-z]+)$/i, ".dark$1") } : {}) }));
   return out.length ? out : undefined;
 };
-const officialOrder = ["table", "base", "doc", "slides", "meeting", "tutor", "scheduling", "database", "code", "issues", "devtools", "todo", "notes", "disk", "stocks", "proxy-console", "server-console", "remote-desktop", "ledger", "habit", "reader", "price-compare", "cinema", "podcast", "personality", "palette", "aigc-canvas", "design-studio", "logo-studio", "whiteboard", "mindmap", "video", "motion", "photo", "media-kit", "arcade", "ocean", "gomoku", "sudoku"];
+const officialOrder = ["table", "base", "doc", "slides", "meeting", "tutor", "scheduling", "database", "code", "issues", "devtools", "todo", "notes", "disk", "stocks", "proxy-console", "server-console", "remote-desktop", "ledger", "habit", "reader", "price-compare", "cinema", "podcast", "personality", "palette", "aigc-canvas", "design-studio", "logo-studio", "whiteboard", "mindmap", "video", "motion", "photo", "media-kit", "arcade", "ocean", "gomoku", "sudoku", ...(process.env.MOCK_MEDIA_KIT === "1" ? ["web-automation"] : [])];
 const mockTemplates = officialOrder.filter((name) => existsSync(new URL(`${name}/myco.json`, officialRoot))).map((name) => {
   const files = officialFiles(name);
   const m = JSON.parse(files["myco.json"]);
@@ -2230,6 +2230,27 @@ const server = http.createServer(async (req, res) => {
     const backend = hub.agents.find(a=>a.name==="build-backend");
     delete backend.current_thread;delete backend.current_from;delete backend.current_id;backend.queued=0;backend.status_text=T("随时可以接着做", "Ready for the next step");
     hub.threads.th_api=thread;hub.recent=hub.recent.filter(m=>m.thread_id!=="th_api").concat(thread).sort((a,b)=>b.updated_at.localeCompare(a.updated_at));
+    return send(res,200,{ok:true});
+  }
+
+  // Synthetic cross-machine browser demo; no native browser or model is used.
+  if (process.env.MOCK_MEDIA_KIT === "1" && parts.join("/") === "app/mock/media-web-automation" && method === "POST") {
+    const b = await readBody(req), hub = state.hubs[0], T = (zh, en) => b.lang === "en" ? en : zh;
+    const agent = hub.agents.find(a => a.name === "build-backend");
+    agent.display_name = T("云端助手（Codex）", "Cloud assistant (Codex)");
+    agent.status_text = T("云端规划 · 公司电脑执行", "Cloud planning · Office computer execution");
+    agent.description = T("在云端安排任务，交给你的电脑执行。", "Plan in the cloud. Execute on your computer.");
+    goalStore.set(hub.id, []); watchStore.set(hub.id, []);
+    for (const [id, messages] of Object.entries(hub.threads)) if (id !== "th_api" && messages.some(m=>m.from===agent.name || m.to===agent.name)) delete hub.threads[id];
+    agent.current_thread = "th_api"; agent.current_from = CONSOLE; agent.current_id = "msg_browser_demo"; agent.queued = 0;
+    if (b.phase !== "running") agent.status_text = "";
+    const task = makeMessage({id:"msg_browser_demo",thread_id:"th_api",from:CONSOLE,to:agent.name,type:"task",status:b.phase === "done" ? "done" : "acked",trace:[],body:T("帮我去「公司电脑」的后台，把本周订单导出成表格。", "Export this week's orders from the admin site on my Office computer."),created_at:iso(24),updated_at:iso(24)});
+    const progress = makeMessage({id:"msg_browser_progress",thread_id:"th_api",from:agent.name,to:CONSOLE,type:"progress",status:"done",reply_to:task.id,body:T("已连接公司电脑。正在运行你批准的订单导出脚本。\n\n云端负责安排，网页操作在公司电脑上完成。", "Connected to Office computer. Running your approved order export script.\n\nI coordinate in the cloud; the browser runs on your Office computer."),created_at:iso(15),updated_at:iso(15)});
+    const reply = makeMessage({id:"msg_browser_result",thread_id:"th_api",from:agent.name,to:CONSOLE,type:"reply",status:"done",reply_to:task.id,body:T("已完成：导出 128 笔订单。\n\n**orders-this-week.csv**\n保存在公司电脑上，脚本可再次运行。", "Done: exported 128 orders.\n\n**orders-this-week.csv**\nSaved on Office computer. The script is ready to reuse."),created_at:iso(0),updated_at:iso(0)});
+    const ready = makeMessage({id:"msg_browser_ready",thread_id:"th_api",from:agent.name,to:CONSOLE,type:"note",status:"done",body:T("公司电脑在线，订单导出脚本已就绪。", "Office computer is online. The order export script is ready."),created_at:iso(120),updated_at:iso(120)});
+    const thread = b.phase === "ready" ? [ready] : b.phase === "done" ? [ready, task, progress, reply] : [ready, task, progress];
+    hub.threads.th_api = thread;
+    hub.recent = hub.recent.filter(m => m.thread_id !== "th_api" && m.from !== agent.name && m.to !== agent.name).concat(thread).sort((a,b)=>b.updated_at.localeCompare(a.updated_at));
     return send(res,200,{ok:true});
   }
 
