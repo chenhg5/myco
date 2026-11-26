@@ -2506,6 +2506,38 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".conv-detail .conv-compose-input").fill("");
     });
 
+    // The composer carries the account's tightest quota window beside the
+    // model: amber under 20% left; a click shows every window, whose it is
+    // and when it was read. Out of quota, a line above the box says so
+    // before a send (and does not stop it).
+    await step("单聊 · 输入框的额度", async () => {
+      // (the project's home is the chat with its coordinator, PM)
+      await go(page, "官网改版", narrow);
+      await page.locator(".sp-home .conv-detail").waitFor({ timeout: 20_000 });
+      const pill = page.locator(".sp-home .conv-detail [data-testid=quota-pill]");
+      await pill.waitFor({ timeout: 10_000 });
+      const text = compactText(await pill.innerText());
+      if (text !== "5h 剩 5%") throw new Error(`输入框的额度应写最紧的窗口「5h 剩 5%」，实际是「${text}」`);
+      if (!(await pill.getAttribute("class") || "").includes("is-low")) throw new Error("剩不到 20% 应变黄");
+      await pill.click();
+      const menu = page.locator(".sp-home .quota-pill-menu");
+      await menu.waitFor({ timeout: 5_000 });
+      const all = compactText(await menu.innerText());
+      if (!all.includes("每周") || !all.includes("剩 38%") || !all.includes("Studio Mac") || !all.includes("读取")) throw new Error(`点开应列出全部窗口、来源和读取时间，实际是「${all}」`);
+      await settle(page, 200);
+      await shot(page, size, scheme, "chat-quota-pill");
+      await page.keyboard.press("Escape");
+      await page.locator(".sp-home .run-pill-scrim").click({ force: true }).catch(() => {});
+      if (await page.locator(".sp-home .conv-quota-out").count()) throw new Error("没用完时不该提示");
+      // Review's account is out: said above the box, the box still sends.
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      const out = page.locator(".conv-detail .conv-quota-out");
+      await out.waitFor({ timeout: 10_000 });
+      if (!(await out.innerText()).includes("已用完")) throw new Error(`用完时应提示，实际是「${await out.innerText()}」`);
+      if (await page.locator(".conv-detail .conv-compose-input").isDisabled()) throw new Error("用完也不该拦着发");
+      if (!(await page.locator(".conv-detail [data-testid=quota-pill]").getAttribute("class") || "").includes("is-out")) throw new Error("用完应变红");
+    });
+
     await step("单聊 · 空对话", async () => {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");
       const ask = compactText(await page.locator(".conv-empty h3").innerText({ timeout: 20_000 }));

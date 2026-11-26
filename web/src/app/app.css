@@ -8133,6 +8133,27 @@ body.is-resizing {
   inset: 0;
   z-index: 40;
 }
+/* The composer's quota pill (QuotaTag.tsx): the tightest window; grey,
+   amber under 20% left, red under 5% or spent; old data a little faded. */
+.quota-pill { gap: 4px; font-variant-numeric: tabular-nums; }
+.quota-pill-icon { width: 12px; height: 12px; flex: none; }
+.quota-pill.is-low { color: var(--amber); }
+.quota-pill.is-out { color: var(--red); }
+.quota-pill.is-stale { opacity: .75; }
+.quota-pill-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 8px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.quota-pill-row > span:last-child { color: var(--muted); text-align: right; }
+.quota-pill-row.is-low > span:last-child { color: var(--amber); }
+.quota-pill-row.is-out > span:last-child { color: var(--red); }
+.quota-pill-status { color: var(--amber); }
+/* Out of quota: said above the box before a send (it is not stopped). */
+.dot.over { background: var(--red); }
 .run-pill-menu {
   position: absolute;
   bottom: calc(100% + 6px);
