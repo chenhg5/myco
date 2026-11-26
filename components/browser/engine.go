@@ -170,7 +170,7 @@ func (e *engine) handler() http.Handler {
 		}
 		sort.Strings(browsers)
 		machine, _ := os.Hostname()
-		jsonReply(w, map[string]any{"protocol": protocol, "version": version, "features": []string{"screenshot_clip", "agent_control", "profile_delete"}, "browsers": browsers, "machine": machine, "profiles": profiles, "recordings": e.activeRecordings(scope(r)), "agent_actions": []string{}})
+		jsonReply(w, map[string]any{"protocol": protocol, "version": version, "features": []string{"screenshot_clip", "agent_control", "profile_delete", "agent_replay"}, "browsers": browsers, "machine": machine, "profiles": profiles, "recordings": e.activeRecordings(scope(r)), "agent_actions": []string{}})
 	})
 	m.HandleFunc("POST /profiles", func(w http.ResponseWriter, r *http.Request) {
 		var in struct {

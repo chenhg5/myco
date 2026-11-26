@@ -29,6 +29,7 @@ const (
 
 // Error is a domain error carrying a code and an optional recovery hint.
 type Error struct {
+	ErrorNode  string
 	Code       ErrorCode
 	Message    string
 	Suggestion string
@@ -42,6 +43,9 @@ func (e *Error) WithSuggestion(format string, args ...any) *Error {
 	c.Suggestion = fmt.Sprintf(format, args...)
 	return &c
 }
+
+// WithErrorNode identifies a statically invalid browser graph node.
+func (e *Error) WithErrorNode(id string) *Error { c := *e; c.ErrorNode = id; return &c }
 
 // Errf builds a domain error.
 func Errf(code ErrorCode, format string, args ...any) *Error {

@@ -127,6 +127,7 @@ const (
 // may not have happened (observe before going on); Applied is how many of
 // an input's events the computer confirmed before it failed.
 type ActionError struct {
+	ErrorNode string `json:"error_node,omitempty"`
 	Code      string `json:"code"`
 	Message   string `json:"message"`
 	Retryable bool   `json:"retryable"`

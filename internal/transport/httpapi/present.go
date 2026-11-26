@@ -224,7 +224,7 @@ func writeError(w http.ResponseWriter, err error) {
 		status = http.StatusInternalServerError
 	}
 	writeJSON(w, status, api.Error{
-		Code: string(de.Code), Message: de.Message, Suggestion: de.Suggestion,
+		Code: string(de.Code), Message: de.Message, Suggestion: de.Suggestion, ErrorNode: de.ErrorNode,
 		Retryable: de.Code == domain.CodeInternal || de.Code == domain.CodeRateLimited,
 	})
 }

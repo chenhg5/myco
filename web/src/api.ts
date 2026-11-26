@@ -610,3 +610,12 @@ export interface PageAttachmentList { attachments_version: number; attachments: 
 export type { Watch, WatchList, WatchStartRequest } from "@/lib/watch";
 export type { Goal, GoalRound, GoalList, GoalStartRequest, GoalPatchRequest, GoalBrief } from "@/lib/goal";
 import type { GoalBrief } from "@/lib/goal";
+
+/** Agent-only replay within an existing browser.control session. */
+export interface BrowserReplayGraph { nodes: Record<string, unknown>[]; edges: [string,string][] }
+export interface BrowserReplayResult {
+ ok: boolean; state: "succeeded"|"failed"; error_node?: string;
+ error?: {code:string; message:string; retryable:boolean; reason?:string; error_node?:string};
+ steps: {node:string;state:"ok"|"failed"|"skipped";ms:number;error?:string}[];
+ output: Record<string, unknown>;url:string;tabs:{id:string;url:string;title:string;active:boolean}[];
+}

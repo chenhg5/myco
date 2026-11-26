@@ -632,6 +632,7 @@ type WaitResponse struct {
 
 // Error is the JSON error body for every non-2xx response.
 type Error struct {
+	ErrorNode  string `json:"error_node,omitempty"`
 	Code       string `json:"error"`
 	Message    string `json:"message"`
 	Suggestion string `json:"suggestion,omitempty"`

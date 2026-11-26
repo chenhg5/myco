@@ -403,6 +403,9 @@ func (c *Component) Call(ctx context.Context, scope, method, path string, in, ou
 	if path == "/pick" {
 		timeout = 150 * time.Second
 	}
+	if path == "/control/run" {
+		timeout = 305 * time.Second
+	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	req, e := http.NewRequestWithContext(ctx, method, "http://"+address+path, bytes.NewReader(b))
@@ -426,18 +429,19 @@ func (c *Component) Call(ctx context.Context, scope, method, path string, in, ou
 	defer res.Body.Close()
 	if res.StatusCode >= 400 {
 		var v struct {
-			Error   string `json:"error"`
-			Code    string `json:"code"`
-			Reason  string `json:"reason"`
-			Applied *int   `json:"applied"`
-			Host    string `json:"host"`
+			Error     string `json:"error"`
+			Code      string `json:"code"`
+			Reason    string `json:"reason"`
+			Applied   *int   `json:"applied"`
+			Host      string `json:"host"`
+			ErrorNode string `json:"error_node"`
 		}
 		_ = json.NewDecoder(io.LimitReader(res.Body, 4096)).Decode(&v)
 		if v.Code != "" || strings.HasPrefix(path, "/control/") && v.Error != "" {
 			if v.Code == "" {
 				v.Code = v.Error
 			}
-			return &ComponentError{Code: v.Code, Reason: v.Reason, Applied: v.Applied, Host: v.Host}
+			return &ComponentError{Code: v.Code, Reason: v.Reason, Applied: v.Applied, Host: v.Host, ErrorNode: v.ErrorNode}
 		}
 		if v.Error == "" {
 			v.Error = "component_failed"

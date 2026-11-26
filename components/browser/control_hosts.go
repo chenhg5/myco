@@ -87,6 +87,9 @@ func (c *controlSession) recordHostViolation(x *controlError) {
 		return
 	}
 	c.violation = x
+	if c.replayAbort != nil {
+		c.replayAbort()
+	}
 	c.events = append(c.events, controlEvent{Host: x.Host, Action: "host_not_allowed", Code: "host_not_allowed", Time: time.Now().UTC()})
 	close(c.wake)
 	c.wake = make(chan struct{})

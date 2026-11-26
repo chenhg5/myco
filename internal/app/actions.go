@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -1301,6 +1302,16 @@ func (s *ActionService) CompleteJob(ctx context.Context, by Actor, jobID string,
 		if c.Error != nil && c.Error.Code == "host_not_allowed" {
 			auditDetail = "host_not_allowed"
 		}
+		if j.Action == "browser.page.run" {
+			var replay struct {
+				Error *struct {
+					Code string `json:"code"`
+				} `json:"error"`
+			}
+			if json.Unmarshal(c.Result, &replay) == nil && replay.Error != nil && replay.Error.Code == "host_not_allowed" {
+				auditDetail = "host_not_allowed"
+			}
+		}
 	}
 	if g == nil || g.State != api.GrantActive {
 		j.State = api.JobCancelled
@@ -1359,8 +1370,12 @@ func (s *ActionService) RunAction(ctx context.Context, agent *domain.Agent, inv 
 	if key == "" || len(key) > 128 {
 		return nil, domain.Errf(domain.CodeInvalidArgument, "idempotency_key is required (up to 128 characters, unique per action within the grant)")
 	}
-	if len(inv.Args) > actionArgsMax {
-		return nil, domain.Errf(domain.CodeInvalidArgument, "args are over %d KB", actionArgsMax>>10)
+	argsMax := actionArgsMax
+	if inv.Action == "browser.page.run" {
+		argsMax = 256 << 10
+	}
+	if len(inv.Args) > argsMax {
+		return nil, domain.Errf(domain.CodeInvalidArgument, "args are over %d KB", argsMax>>10)
 	}
 	args := inv.Args
 	if len(bytes.TrimSpace(args)) == 0 {
@@ -1391,7 +1406,12 @@ func (s *ActionService) RunAction(ctx context.Context, agent *domain.Agent, inv 
 		}
 		fields, err := api.DecodeBrowserControlArgs(inv.Action, args)
 		if err != nil {
-			return nil, domain.Errf(domain.CodeInvalidArgument, "%s", err)
+			failure := domain.Errf(domain.CodeInvalidArgument, "%s", err)
+			var validation *api.BrowserReplayValidationError
+			if errors.As(err, &validation) {
+				failure = failure.WithErrorNode(validation.Node)
+			}
+			return nil, failure
 		}
 		if inv.Action == "browser.page.open" && g.Target.Resource != nil && fields.String("profile") != g.Target.Resource.ID {
 			return nil, domain.Errf(domain.CodePermissionDenied, "profile is outside the grant")

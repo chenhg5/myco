@@ -470,6 +470,7 @@ export interface OsBatch {
 
 /** An error returned by the App backend or a hub (same shape as the hub API). */
 export class ApiError extends Error {
+  error_node?: string;
   status: number;
   /** what a conflict answers with (a page's latest state) */
   latest?: unknown;
@@ -617,10 +618,10 @@ async function request<T>(method: string, path: string, body?: unknown, signal?:
   let data: unknown = null;
   try { data = text ? JSON.parse(text) : null; } catch { /* non-JSON */ }
   if (!r.ok) {
-    const e = (data ?? {}) as { error?: string; message?: string; suggestion?: string; latest?: unknown; reason?: string; group?: string; host?: string; declared?: boolean; once_only?: boolean };
+    const e = (data ?? {}) as { error?: string; message?: string; suggestion?: string; latest?: unknown; reason?: string; error_node?: string; group?: string; host?: string; declared?: boolean; once_only?: boolean };
     // A gateway's own page (no JSON) still says why: keep its first words for 详细信息.
     const page = data === null && r.status >= 500 ? text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 300) : "";
-    throw Object.assign(new ApiError(e.message || page || `HTTP ${r.status}`, r.status, typeof e.error === "string" ? e.error : undefined, e.suggestion), e.latest ? { latest: e.latest } : {}, typeof e.reason === "string" ? { reason: e.reason } : {},
+    throw Object.assign(new ApiError(e.message || page || `HTTP ${r.status}`, r.status, typeof e.error === "string" ? e.error : undefined, e.suggestion), e.latest ? { latest: e.latest } : {}, typeof e.reason === "string" ? { reason: e.reason } : {}, typeof e.error_node === "string" ? { error_node: e.error_node } : {},
       e.error === "consent_required" && e.group ? { consent: { group: e.group, host: e.host || undefined, declared: !!e.declared, once_only: !!e.once_only } } : {});
   }
   return data as T;
