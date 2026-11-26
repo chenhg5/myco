@@ -15,6 +15,7 @@ const (
 	StateWorking AgentState = "working" // has acked messages that show life
 	StatePending AgentState = "pending" // has queued, delivered, or held messages
 	StateIdle    AgentState = "idle"    // online, nothing to do
+	StateStandby AgentState = "standby" // offline, recently seen and configured for push wake
 	StateOffline AgentState = "offline" // not seen within the online window
 )
 
@@ -61,6 +62,7 @@ type OverviewService struct {
 	clock        Clock
 	onlineWindow time.Duration
 	presence     *Presence
+	wakers       Wakers
 }
 
 // How long an acked task may go without a sign of life before it no
@@ -72,8 +74,14 @@ const (
 	StaleSession = 30 * time.Minute
 )
 
-// SetPresence lets the overview tell runners (quick to show life) from
-// sessions.
+// StandbyWindow bounds how long an absent push node is considered wakeable.
+const StandbyWindow = 7 * 24 * time.Hour
+
+// SetWakers uses the same registry and configuration validation as delivery.
+// An overview never sends a wake signal.
+func (s *OverviewService) SetWakers(w Wakers) { s.wakers = w }
+
+// SetPresence lets the overview tell runners (quick to show life) from sessions.
 func (s *OverviewService) SetPresence(p *Presence) { s.presence = p }
 
 func (s *OverviewService) staleAfter(a *domain.Agent) time.Duration {
@@ -175,6 +183,11 @@ func (s *OverviewService) stateOf(a *domain.Agent, c map[domain.Status]int, acts
 		o.Stale = len(o.StaleIDs)
 	}
 	switch {
+	case !o.Online && a.Delivery.IsPush():
+		o.State = StateOffline
+		if !a.LastSeenAt.IsZero() && now.Sub(a.LastSeenAt) <= StandbyWindow && s.wakers.Validate(a) == nil {
+			o.State = StateStandby
+		}
 	case o.InProgress > 0:
 		o.State = StateWorking
 	case o.Queued+o.Held > 0:
@@ -224,7 +237,7 @@ func (s *OverviewService) Snapshot(ctx context.Context, viewer *domain.Agent, re
 		}
 		ov.Agents = append(ov.Agents, o)
 	}
-	order := map[AgentState]int{StateWorking: 0, StatePending: 1, StateIdle: 2, StateOffline: 3}
+	order := map[AgentState]int{StateWorking: 0, StatePending: 1, StateIdle: 2, StateStandby: 3, StateOffline: 4}
 	sort.SliceStable(ov.Agents, func(i, j int) bool {
 		if oi, oj := order[ov.Agents[i].State], order[ov.Agents[j].State]; oi != oj {
 			return oi < oj

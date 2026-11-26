@@ -45,7 +45,10 @@ type Agent struct {
 	// State is working (has a task in progress or held), pending (tasks
 	// queued, none started), idle or offline; Queued/InProgress/Held count
 	// open messages addressed to it.
-	State      string     `json:"state,omitempty"`
+	State string `json:"state,omitempty"`
+	// Standby refines offline: a recently seen node with validated push delivery.
+	// State stays offline so older clients keep their existing behavior.
+	Standby    bool       `json:"standby,omitempty"`
 	Queued     int        `json:"queued"`
 	InProgress int        `json:"in_progress"`
 	Held       int        `json:"held"`
@@ -754,7 +757,8 @@ type Viewer struct {
 // AgentStatus is one agent with live counters (GET /v1/overview).
 type AgentStatus struct {
 	Agent      Agent      `json:"agent"`
-	State      string     `json:"state"` // working | pending | idle | offline
+	State      string     `json:"state"`             // working | pending | idle | offline
+	Standby    bool       `json:"standby,omitempty"` // refines offline; see Agent.Standby
 	Queued     int        `json:"queued"`
 	InProgress int        `json:"in_progress"`
 	Held       int        `json:"held"`

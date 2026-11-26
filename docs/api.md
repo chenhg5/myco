@@ -1499,3 +1499,11 @@ a note in the goal thread. Goal creation/control/report operations are audited.
 Agent lists and overview include optional `goal: {id,objective,round,max_rounds,
 next_wake_at?,state}`; objective is truncated to 200 characters. This is independent
 of `watching`, `held`, and `queued`.
+
+### Standby presence
+
+Agent listings and overview rows may include `standby: true` while `state` remains `offline` and `online` remains `false`. This additive flag lets older clients keep showing offline. New clients display Standby between idle and offline. Overview `totals.offline` includes standby nodes.
+
+Standby requires a non-pull delivery mode registered in the Hub, configuration accepted by that waker, and a last check-in within seven days. It describes configured automatic delivery, not a successful live connectivity probe; delivery errors still apply. Online nodes keep their normal state. Missing, invalid, unsupported, never-seen or older configurations are not standby, even with queued tasks.
+
+A `claude-cloud` session using `pull` cannot be woken by a myco message. If it was seen before and is now offline, the App explains that an idle cloud container may have been reclaimed and asks the user to reopen the session at claude.ai. It never labels that session as automatically wakeable.

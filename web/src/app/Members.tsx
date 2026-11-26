@@ -1,3 +1,4 @@
+import { standbyHint, sleepingCloudSession } from "@/lib/presence";
 import { runnerUpdating } from "@/lib/runner-state";
 import { useEffect, useMemo, useState } from "react";
 import type { LocalSession, LocalState, RecentItem } from "@/appapi";
@@ -83,7 +84,7 @@ export function MembersPage({ rows, projects, now, onOpen }: {
 }
 
 function rank(r: AgentRow): number {
-  return r.st.state === "working" ? 0 : r.st.state === "pending" ? 1 : r.st.state === "offline" ? 3 : 2;
+  return r.st.state === "working" ? 0 : r.st.state === "pending" ? 1 : r.st.state === "offline" ? 4 : r.st.state === "standby" ? 3 : 2;
 }
 
 function Section({ title, rows, projects, now, onOpen }: { title?: string; rows: AgentRow[]; projects: Projects; now: number; onOpen: (r: AgentRow) => void }) {
@@ -103,6 +104,7 @@ function Section({ title, rows, projects, now, onOpen }: { title?: string; rows:
                 <span className="mb-card-foot">
                   {ps.length > 0 ? ps.slice(0, 2).map((p) => <span key={p.name} className="mb-chip">{p.title || p.name}</span>) : <span className="mb-chip is-none">{L("还没进项目", "No project yet")}</span>}
                   {ps.length > 2 && <span className="mb-chip">+{ps.length - 2}</span>}
+                  {r.st.state === "standby" && <span className="presence-standby" title={standbyHint()}><span className="dot standby" />{stateWords("standby")}</span>}
                   {r.st.state === "offline" && !runnerUpdating(a) && <span className="mb-seen">{timeAgo(a.last_seen_at || a.created_at, now)}{L("在线", " online")}</span>}
                 </span>
               </span>
@@ -195,14 +197,14 @@ export function MemberSheet({ row, details, projects, rows, now, onClose, onChat
         <input className="ms-desc" value={desc} title={desc} onChange={(e) => setDesc(e.target.value)}
           placeholder={ws ? L("这个文件夹是做什么的", "What this folder is for") : L("它负责什么？比如 维护后端接口和数据库", "What does it do? e.g. Looks after the backend and the database")} aria-label={L("分工", "What it does")} />
         {a.invited_by && <div className="ms-state" data-testid="member-invited-by">{L(`由 ${a.invited_by} 邀请`, `Invited by ${a.invited_by}`)}</div>}
-        <div className="ms-state">{runnerUpdating(a) ? stateWords(row.st.state, undefined, true) : ws ? whereOf(row) : stateWords(row.st.state, a.status_text, runnerUpdating(a))}</div>
+        <div className={cn("ms-state", row.st.state === "standby" && "presence-standby")} title={row.st.state === "standby" ? standbyHint() : undefined}>{runnerUpdating(a) ? stateWords(row.st.state, undefined, true) : row.st.state === "standby" ? stateWords("standby") : ws ? whereOf(row) : stateWords(row.st.state, a.status_text, runnerUpdating(a))}</div>
         {dirty && <div className="ms-save"><button type="button" className="app-btn app-btn-primary app-btn-small" disabled={busy || !name.trim()} onClick={() => void save()}>{L("保存", "Save")}</button></div>}
 
         <button type="button" className="app-btn ms-chat" onClick={() => onChat(row)}>
           <MessageCircle />{ws ? L("打开终端", "Open terminal") : L("单聊", "Chat")}
         </button>
 
-        {row.st.state !== "offline" && row.st.session_in_use && row.st.receiving !== "session" && (
+        {row.st.state !== "offline" && row.st.state !== "standby" && row.st.session_in_use && row.st.receiving !== "session" && (
           <div className="ms-inuse"><span className="dot pending" />{L("它的会话正开着，新消息先排队，过一会儿再送（详细信息里有办法）。", "Its session is open: new messages wait and are retried (see Details for a fix).")}</div>
         )}
         <WhoItIs row={row} now={now} />
@@ -226,7 +228,7 @@ export function MemberSheet({ row, details, projects, rows, now, onClose, onChat
             </div>
           ))}
         </div>
-        {row.st.state === "offline" && <div className="ms-alert"><OfflineCard row={row} now={now} onRefresh={onRefresh} /></div>}
+        {(row.st.state === "offline" || sleepingCloudSession(a)) && <div className="ms-alert"><OfflineCard row={row} now={now} onRefresh={onRefresh} /></div>}
         <ErrorText error={error} />
         <Inspector embedded openDetails={details} row={row} now={now} projects={projects} onClose={onClose} onRefresh={onRefresh}
           onThread={() => onChat(row)} onPeer={() => undefined} onMessage={onChat}

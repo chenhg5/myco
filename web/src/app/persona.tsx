@@ -207,7 +207,7 @@ export function isWorkspace(a: Agent): boolean {
 
 /**
  * An agent's or a workspace's face. With state, a small dot says whether it
- * is at work (green), waiting (amber) or away (grey); idle shows none.
+ * is at work (green), waiting (amber), standby (accent) or away (grey); idle shows none.
  */
 /** A superagent's crown: pixel gold, like the mushrooms, worn on the tile. */
 function Crown() {
@@ -291,6 +291,7 @@ export function stateWords(state: string, statusText?: string, updating = false)
   if (updating) return L("正在更新", "Updating");
   if (state === "working") return statusText || L("在干活", "Working");
   if (state === "pending") return L("等着接活", "About to start");
+  if (state === "standby") return L("待命", "Standby");
   if (state === "offline") return L("不在线", "Away");
   return L("空闲", "Free");
 }

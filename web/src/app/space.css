@@ -119,6 +119,9 @@
 .pa-state.is-pending {
   background: var(--amber);
 }
+.pa-state.is-standby {
+  background: var(--accent);
+}
 .pa-state.is-offline {
   background: var(--faint);
 }

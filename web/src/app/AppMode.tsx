@@ -1,3 +1,4 @@
+import { withPresence } from "@/lib/presence";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowUpDown, Bell, ChevronLeft, ChevronRight, LayoutGrid, Minimize2, Monitor, MoreHorizontal, Pin, Plus, Search, WifiOff, Workflow, X, Zap } from "lucide-react";
 import { ComputerSettings } from "@/app/ComputerSettings";
@@ -468,7 +469,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const namedHubs = useMemo(() => hubs.map((h) => ({ ...h, name: nameOf(h) })), [hubs, nameOf]);
   const hubsRef = useRef(namedHubs);
   hubsRef.current = namedHubs;
-  const namedOv = useMemo(() => ov && { ...ov, hubs: ov.hubs.map((h) => ({ ...h, name: nameOf(h) })) }, [ov, nameOf]);
+  const namedOv = useMemo(() => ov && { ...ov, hubs: ov.hubs.map((h) => ({ ...h, name: nameOf(h), overview: h.overview && { ...h.overview, agents: h.overview.agents.map(withPresence) } })) }, [ov, nameOf]);
   const allRows = useMemo<AgentRow[]>(() => {
     if (!namedOv) return [];
     rememberMachines(namedOv.hubs.flatMap((h) => h.overview?.machines || []));
@@ -572,7 +573,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const chatRows = useMemo(() => {
     const at = new Map(recentChats().filter((c) => c.hubId === hubId).map((c) => [c.agent, c.at]));
     const name = (r: AgentRow) => nodeName(r.st.agent, r.hub);
-    const busy = (r: AgentRow) => ((r.st.asking || 0) > 0 ? 0 : r.st.state === "working" ? 1 : r.st.state === "offline" ? 3 : 2);
+    const busy = (r: AgentRow) => ((r.st.asking || 0) > 0 ? 0 : r.st.state === "working" ? 1 : r.st.state === "offline" ? 4 : r.st.state === "standby" ? 3 : 2);
     const pin = (r: AgentRow) => { const i = pinned.indexOf(r.st.agent.name); return i < 0 ? Infinity : i; };
     return people.filter((r) => r.st.agent.name !== saName).sort((a, b) => (pin(a) === pin(b) ? 0 : pin(a) < pin(b) ? -1 : 1) || (chatSort === "name" ? name(a).localeCompare(name(b))
       : chatSort === "busy" ? busy(a) - busy(b) || name(a).localeCompare(name(b))

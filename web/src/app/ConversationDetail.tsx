@@ -1,3 +1,4 @@
+import { standbyHint, sleepingCloudSession, cloudSleepHint } from "@/lib/presence";
 import { runnerUpdating } from "@/lib/runner-state";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Focus as FocusIcon, AlertTriangle, ArrowDown, ArrowLeft, ArrowRightLeft, ArrowUp, ArrowUpRight, Check, ChevronRight, Copy, AudioLines, Download, Images, Loader2, Lock, MoreHorizontal, Paintbrush, Pin as PinIcon, PinOff, Search, Settings2, Square, Target, Trash2, WifiOff, X } from "lucide-react";
@@ -2436,6 +2437,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         {/* No running state here (已完成, 在干活…): the foot of the chat
             shows that. Only a task that may be stuck is called out, and
             this takes you to it. */}
+        {!observed && row?.st.state === "standby" && <span className="conv-head-state presence-standby" title={standbyHint()} data-testid="conversation-standby"><span className="dot standby" />{L("待命", "Standby")}</span>}
+        {!observed && row && sleepingCloudSession(row.st.agent) && <span className="conv-head-state" title={cloudSleepHint()} data-testid="conversation-asleep">{L("已休眠", "Asleep")}</span>}
         {!observed && firstStuck && (
           <button type="button" className="conv-head-state is-link" onClick={toStuck} title={L("跳到可能卡住的任务", "Go to the task that may be stuck")}>
             <span className={cn("dot", state.dot)} />

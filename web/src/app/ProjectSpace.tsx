@@ -1,3 +1,4 @@
+import { standbyHint } from "@/lib/presence";
 import { runnerUpdating } from "@/lib/runner-state";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { activePaneId } from "@/app/ChatSearch";
@@ -1263,6 +1264,7 @@ function Composer({ hubId, project, agents, onSending, onSent, onCall }: {
 function liveLine(r: AgentRow, nameOf: (n: string) => string, now: number): { text: string; meta?: string } {
   const a = r.st.agent;
   if (runnerUpdating(a, now)) return { text: L("正在更新", "Updating") };
+  if (r.st.state === "standby") return { text: L("待命", "Standby"), meta: standbyHint() };
   if (r.st.state === "offline") return { text: L("不在线", "Away"), meta: a.last_seen_at ? timeAgo(a.last_seen_at, now) : undefined };
   const open = (r.st.current || []).filter((m) => m.to === a.name && m.type === "task");
   // Working means the node acknowledged a task. A task it only pulled
@@ -1303,8 +1305,9 @@ export function orderMembers(agents: AgentRow[], coordinator?: string, lastIn?: 
   };
   const rank = (r: AgentRow) => r.st.agent.name === coordinator ? 0
     : r.st.state === "working" ? 1
-    : r.st.queued > 0 ? 2
-    : r.st.state === "offline" ? 4 : 3;
+    : r.st.state === "standby" ? 4
+    : r.st.state === "offline" ? 5
+    : r.st.queued > 0 ? 2 : 3;
   const ms = (t?: string) => (t ? new Date(t).getTime() || 0 : 0);
   const activeAt = (r: AgentRow) => Math.max(
     startedAt(r), ms(r.st.agent.status_at), lastIn?.get(r.st.agent.name) || 0,

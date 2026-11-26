@@ -658,3 +658,9 @@ List each requested domain as a checked option the owner can remove. Disable
 approval if all requested domains are removed. When the request has no domain
 scope, show “No domain restriction.” The UI smoke scene checks both profile
 types and verifies that only the selected domain is sent when approving.
+
+### Standby and sleeping cloud sessions
+
+A recently seen, offline node with validated push delivery shows **Standby / 待命**, using the accent color and a static dot. Sort it after idle and before offline. The member card, profile and conversation header explain that messages trigger its configured wake route. The Hub sends this as an additive `standby` flag with legacy `state: offline`, so older Apps keep showing offline.
+
+A previously seen `claude-cloud` session using `pull` remains offline. Its profile and conversation header explain that an idle cloud container was reclaimed, myco messages cannot wake it, and reopening the session at claude.ai restores it. Never infer automatic wake from the cloud harness alone.

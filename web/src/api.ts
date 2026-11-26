@@ -149,6 +149,9 @@ export interface ProjectDoc {
 }
 export interface Agent {
   updating?: boolean;
+  /** Offline refinement for a recently seen node with validated push delivery. */
+  standby?: boolean;
+  state?: State;
   /** what it is watching for in the background (myco watch); absent on older hubs */
   watching?: number;
   goal?: GoalBrief;
@@ -492,8 +495,8 @@ export interface Message {
 }
 /** Another node a node exchanged messages with. */
 export interface Peer { agent: string; messages: number; last?: Message }
-export type State = "working" | "pending" | "idle" | "offline";
-export interface AgentStatus { agent: Agent; state: State; queued: number; in_progress: number; held: number;
+export type State = "working" | "pending" | "idle" | "standby" | "offline";
+export interface AgentStatus { standby?: boolean; agent: Agent; state: State; queued: number; in_progress: number; held: number;
   /** what it is watching for in the background (myco watch; absent on
    *  older hubs): counted apart from held and queued */
   watching?: number;

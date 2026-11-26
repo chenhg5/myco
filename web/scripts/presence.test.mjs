@@ -1,0 +1,13 @@
+import assert from "node:assert/strict";
+import { build } from "esbuild";
+const result = await build({entryPoints:[new URL("../src/lib/presence.ts",import.meta.url).pathname],bundle:true,write:false,format:"esm",platform:"node"});
+const {withPresence,sleepingCloudSession}=await import(`data:text/javascript;base64,${Buffer.from(result.outputFiles[0].text).toString("base64")}`);
+const cloud={online:false,binding:{harness:"claude-cloud"},delivery:{mode:"pull"},last_seen_at:"2026-01-01T00:00:00Z"};
+assert.equal(sleepingCloudSession(cloud),true);
+for(const a of [{...cloud,online:true},{...cloud,last_seen_at:undefined},{...cloud,last_seen_at:"invalid"},{...cloud,binding:{harness:"claude"}},{...cloud,delivery:{mode:"claude_routine"}}]) assert.equal(sleepingCloudSession(a),false);
+const offline={state:"offline",agent:cloud};
+assert.equal(withPresence(offline).state,"offline","cloud harness alone is not wakeable");
+assert.equal(withPresence({...offline,standby:true}).state,"standby");
+assert.equal(withPresence({...offline,standby:true,agent:{...cloud,online:true}}).state,"offline","conflicting online state must not be standby");
+assert.equal(withPresence({...offline,state:"working",standby:true}).state,"working");
+console.log("presence: wire compatibility and cloud sleep predicates passed");

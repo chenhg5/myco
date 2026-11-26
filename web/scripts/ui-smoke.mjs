@@ -24,6 +24,7 @@ import { spawn, spawnSync, execFileSync } from "node:child_process";
 import { createServer } from "node:net";
 import http from "node:http";
 import ts from "typescript";
+import "./presence.test.mjs";
 import { appsPath } from "../apps-paths.mjs";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { mkdir, access, readFile } from "node:fs/promises";
@@ -4515,6 +4516,60 @@ async function runMatrix(browser, size, scheme) {
         await change("expired");
         await computer.locator(".pc-online").filter({hasText:"不在线"}).waitFor({timeout:15000});
       } finally { await change(""); }
+    });
+
+    await step("成员 · 待命和云端休眠", async () => {
+      await go(page, "成员", narrow);
+      const worker = page.locator(".mb-card", { hasText: "Wake worker" });
+      await worker.locator(".presence-standby").getByText("待命", { exact: true }).waitFor();
+      const hint = await worker.locator(".presence-standby").getAttribute("title");
+      if (!hint?.includes("有消息会自动唤醒")) throw Error("validated push node must explain automatic wake");
+      // Idle members precede standby, which precedes ordinary offline members.
+      const cards = await page.locator(".mb-card").allTextContents();
+      const wi = cards.findIndex(t => t.includes("Wake worker"));
+      const si = cards.findIndex(t => t.includes("Sleeping cloud"));
+      if (wi < 0 || si <= wi) throw Error("standby must precede offline members");
+      await shot(page, size, scheme, "members-standby");
+      await clickVisible(page, worker);
+      await page.locator(".ms .ms-state.presence-standby").getByText("待命", {exact:true}).waitFor();
+      if (await page.locator(".ms .app-offline").count()) throw Error("standby must not show runner recovery instructions");
+      await shot(page, size, scheme, "member-standby");
+      await clickVisible(page, page.locator(".ms .ms-chat"));
+      await page.locator('[data-testid="conversation-standby"]').waitFor();
+      await shot(page, size, scheme, "conversation-standby");
+      await go(page, "成员", narrow);
+      await clickVisible(page, page.locator(".mb-card", { hasText: "Sleeping cloud" }));
+      const why = page.locator('[data-testid="cloud-session-asleep"]');
+      await why.waitFor();
+      const text = await why.innerText();
+      if (!text.includes("myco 消息唤不醒") || !text.includes("claude.ai")) throw Error("pull cloud session must explain manual recovery");
+      if (await page.locator(".ms .presence-standby").count()) throw Error("pull cloud session must never promise automatic wake");
+      await shot(page, size, scheme, "member-cloud-asleep");
+      await page.keyboard.press("Escape");
+      // Shareable profile crops: independent, translated mock copy at 2x.
+      for (const language of ["zh", "en"]) {
+        const context = await page.context().browser().newContext({ viewport: size, deviceScaleFactor: 2, colorScheme: scheme,
+          storageState: await page.context().storageState() });
+        try {
+          await context.route("**/app/overview", async route => {
+            const response = await route.fetch(), data = await response.json();
+            for (const hub of data.hubs || []) for (const st of hub.overview?.agents || []) {
+              if (st.agent.name === "wake-worker") st.agent.description = language === "en" ? "Build tasks started by incoming messages." : "按消息启动的构建任务。";
+            }
+            await route.fulfill({response, json:data});
+          });
+          const profile = await context.newPage();
+          const url = new URL(page.url()); url.searchParams.set("lang", language);
+          await profile.goto(url.href);
+          await profile.locator(".app-shell").waitFor();
+          await sidebar(profile, true);
+          await clickVisible(profile, profile.locator(".sp-nav-chat-sort"));
+          await clickVisible(profile, profile.locator(".conv-menu").getByRole("menuitem", {name: language === "en" ? "Manage members" : "管理成员"}));
+          await clickVisible(profile, profile.locator(".mb-card", {hasText:"Wake worker"}));
+          await profile.locator(".ms .presence-standby").getByText(language === "en" ? "Standby" : "待命", {exact:true}).waitFor();
+          await profile.locator(".ms").screenshot({path:path.join(OUT,`${size.width}x${size.height}-${scheme}-standby-profile-${language}-2x.png`)});
+        } finally { await context.close(); }
+      }
     });
 
     await step("成员 · 离线原因", async () => {

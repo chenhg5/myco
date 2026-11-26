@@ -1269,6 +1269,8 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 		}
 		st := api.AgentStatus{Agent: s.agentDTO(a.Agent), State: string(a.State), Queued: a.Queued, InProgress: a.InProgress, Held: a.Held, Watching: a.Watching, Asking: a.Asking,
 			Stale: a.Stale, StaleTasks: a.StaleIDs}
+		st.State, st.Standby = agentStateDTO(a.State)
+		st.Agent.State, st.Agent.Standby = st.State, st.Standby
 		st.Agent.Watching = a.Watching
 		st.Goal = goalBrief(a.Goal)
 		st.Agent.Goal = st.Goal

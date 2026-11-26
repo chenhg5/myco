@@ -874,6 +874,11 @@ textarea.app-input {
 .dot.idle {
   background: var(--muted);
 }
+.dot.standby {
+  background: var(--accent);
+}
+.presence-standby { color: var(--accent); }
+.mb-card-foot .presence-standby { display: inline-flex; align-items: center; gap: 5px; }
 .dot.offline {
   background: var(--faint);
 }

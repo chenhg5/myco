@@ -117,7 +117,8 @@ func (s *Server) enrich(ctx context.Context, dtos ...*api.Agent) {
 			if st, ok := states[domain.AgentName(d.Name)]; ok {
 				d.Watching = st.Watching
 				d.Goal = goalBrief(st.Goal)
-				d.State, d.Queued, d.InProgress, d.Held, d.Asking = string(st.State), st.Queued, st.InProgress, st.Held, st.Asking
+				d.State, d.Standby = agentStateDTO(st.State)
+				d.Queued, d.InProgress, d.Held, d.Asking = st.Queued, st.InProgress, st.Held, st.Asking
 			}
 		}
 	}
@@ -280,4 +281,12 @@ func goalBrief(g *domain.Goal) *api.GoalBrief {
 		objective = objective[:200]
 	}
 	return &api.GoalBrief{ID: g.ID, Objective: string(objective), Round: g.Round, MaxRounds: g.MaxRounds, NextWakeAt: g.NextWakeAt, State: g.State}
+}
+
+// Keep the established state vocabulary for clients that predate standby.
+func agentStateDTO(state app.AgentState) (string, bool) {
+	if state == app.StateStandby {
+		return string(app.StateOffline), true
+	}
+	return string(state), false
 }

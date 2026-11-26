@@ -842,6 +842,17 @@ const state = {
           delivery: { mode: "webhook", url: "http://bench-01:7790/hook", has_secret: true },
         }),
         makeAgent({
+          name: "wake-worker", display_name: "Wake worker", description: "按消息启动的构建任务。",
+          online: false, standby: true, last_seen_at: iso(3600), status_text: "",
+          binding: { harness: "claude-cloud" },
+          delivery: { mode: "claude_routine", url: "https://example.com/wake", has_secret: true },
+        }),
+        makeAgent({
+          name: "sleeping-cloud", display_name: "Sleeping cloud", description: "需在 claude.ai 恢复的会话。",
+          online: false, last_seen_at: iso(7200), status_text: "",
+          binding: { harness: "claude-cloud" }, delivery: { mode: "pull" },
+        }),
+        makeAgent({
           name: "demo-shell", owner: "alice", owner_id: "mem_alice", description: "在 Studio Mac 上执行命令。",
           kind: "shell", machine_id: "m_studio", runtime: { cli: "exec" },
           labels: ["machine=studio"], binding: { harness: "exec", environment: "macOS", workdir: "~" },
@@ -1872,7 +1883,7 @@ function overviewFor(h) {
     online_window_seconds: 120,
     totals: totals(h.agents),
     agents: h.agents.map((a) => {
-      const st = agentStatus(a);
+      const st = { ...agentStatus(a), ...(a.standby ? { standby: true } : {}) };
       const n = watchesOf(h).filter((w) => w.agent === a.name && w.state === "watching").length;
       const g = goalsOf(h).find((x) => x.agent === a.name && (x.state === "active" || x.state === "paused"));
       return { ...st, ...(n ? { watching: n } : {}), ...(g ? { goal: { id: g.id, objective: g.objective, round: g.round, max_rounds: g.max_rounds, next_wake_at: g.next_wake_at, state: g.state } } : {}) };

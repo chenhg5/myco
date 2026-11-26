@@ -247,7 +247,7 @@ export function canManage(hub: HubOverview | undefined, ownerId?: string): boole
 /** The runner found the node's session open elsewhere (a terminal, an editor,
  *  a desktop app) and leaves it alone: its messages wait. */
 export function sessionBusy(st: { state: string; session_in_use?: boolean; receiving?: string }): boolean {
-  return st.state !== "offline" && !!st.session_in_use && st.receiving !== "session";
+  return st.state !== "offline" && st.state !== "standby" && !!st.session_in_use && st.receiving !== "session";
 }
 
 /** The state shown for a node: a busy session reads as such, not "Working". */

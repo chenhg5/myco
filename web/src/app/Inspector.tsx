@@ -1,3 +1,4 @@
+import { sleepingCloudSession, cloudSleepHint, standbyHint } from "@/lib/presence";
 import { runnerUpdating } from "@/lib/runner-state";
 import { useEffect, useState } from "react";
 import { useCached } from "@/lib/memo";
@@ -647,6 +648,10 @@ export function OfflineCard({ row, now, onRefresh }: { row: AgentRow; now: numbe
 
   if (runnerUpdating(ag, now)) return <section className="app-notice" data-testid="runner-updating">
     <span className="app-spinner" /><div><b>{L("正在更新", "Updating")}</b><p>{L("更新完成后会自动恢复，任务状态会随后刷新。", "It returns automatically after updating; task status refreshes when it reconnects.")}</p></div>
+  </section>;
+  if (sleepingCloudSession(ag)) return <section className="app-offline" data-testid="cloud-session-asleep">
+    <div className="app-offline-head"><span className="dot offline" /><b>{L("离线", "Offline")}</b></div>
+    <p>{cloudSleepHint()}</p>
   </section>;
   const seen = ag.last_seen_at ? timeAgo(ag.last_seen_at, now) : "";
   // An inbox node has no runner behind it: it comes back when its session
@@ -1458,7 +1463,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
           <div className="titles">
             <h2 title={ag.name}>{nodeName(ag, row.hub)}</h2>
           </div>
-          <span className={cn("app-pill", sessionBusy(row.st) ? pillClass.pending : pillClass[row.st.state])}>
+          <span title={row.st.state === "standby" ? standbyHint() : undefined} className={cn("app-pill", row.st.state === "standby" && "presence-standby", sessionBusy(row.st) ? pillClass.pending : pillClass[row.st.state])}>
             <span className={cn("dot", stateLabel(row.st, state.label).dot)} />{stateLabel(row.st, state.label).label}
           </span>
           <button type="button" className="app-btn app-btn-plain" onClick={onClose} aria-label={L("关闭", "Close")}>

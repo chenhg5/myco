@@ -7,6 +7,7 @@ export const stateMeta: Record<State, { label: string; dot: string; text: string
   working: { get label() { return L("工作中", "Working"); }, dot: "bg-working", text: "text-working" },
   pending: { get label() { return L("有待办", "Pending"); }, dot: "bg-pending", text: "text-pending" },
   idle: { get label() { return L("空闲", "Idle"); }, dot: "bg-idle", text: "text-idle" },
+  standby: { get label() { return L("待命", "Standby"); }, dot: "bg-primary", text: "text-primary" },
   offline: { get label() { return L("离线", "Offline"); }, dot: "bg-offline", text: "text-offline" },
 };
 
