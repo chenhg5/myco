@@ -1738,6 +1738,37 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".sp-home").waitFor({ timeout: 10_000 });
     });
 
+    // A restart on a slow network: what was there last time shows at once
+    // from the App's own saved cache (the sidebar's projects and chats, the
+    // project's chat), and is refreshed when the workspace answers.
+    await step("启动 · 先显示上次的数据", async () => {
+      await page.waitForTimeout(2000); // (the cache is saved a moment after a change)
+      await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+      await page.waitForTimeout(500);
+      const slow = async (route) => {
+        const u = route.request().url();
+        // (what goes to a workspace: its overview, anything of one hub;
+        // the App's own list of workspaces is on this computer)
+        if (/\/app\/(overview\b|hubs\/[^/?]+\/)/.test(u)) await new Promise((ok) => setTimeout(ok, 8000));
+        await route.continue().catch(() => {});
+      };
+      await page.route("**/app/**", slow);
+      try {
+        const t0 = Date.now();
+        await page.reload({ waitUntil: "domcontentloaded" });
+        if (narrow) await sidebar(page, true);
+        await page.locator(".app-sidebar").getByText("官网改版", { exact: true }).first().waitFor({ timeout: 4_000 });
+        await page.locator(".app-sidebar").getByText("PM (Codex)", { exact: true }).first().waitFor({ timeout: 2_000 });
+        const ms = Date.now() - t0;
+        if (ms > 5_000) throw new Error(`重启后应先显示上次的项目和会话，实际等了 ${ms} 毫秒`);
+        await settle(page, 200);
+        await shot(page, size, scheme, "start-from-cache");
+      } finally {
+        await page.unroute("**/app/**", slow);
+      }
+      if (narrow) await sidebar(page, false);
+    });
+
     // A member opens on the right; either pane can take the whole width.
     await step("项目 · 单聊", async () => {
       if (narrow) await clickVisible(page, page.locator(".sp-strip-face:not(.is-add)").nth(1));
