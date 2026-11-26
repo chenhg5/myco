@@ -46,6 +46,10 @@ const (
 	CodeCancelled   = "cancelled"
 	CodeTooLarge    = "too_large"
 	CodeFailed      = "failed"
+	// A cloud service has no key here, or the key's account has not turned
+	// the service on (speech.transcribe with a cloud engine).
+	CodeNoCredentials     = "no_credentials"
+	CodeServiceNotEnabled = "service_not_enabled"
 )
 
 func errf(code, format string, a ...any) *Error {
@@ -117,6 +121,21 @@ type Env struct {
 	// Path is the PATH commands run with (a GUI app's own is minimal: the
 	// login shell's, from the App). "" keeps the process's.
 	Path func() string
+	// CloudSpeech: speech to text by a cloud service with the App's own key
+	// (speech.transcribe with engine "doubao"); nil where the App has none.
+	CloudSpeech CloudSpeech
+}
+
+// CloudSpeech is speech recognition by a cloud service, set up in the App
+// (its key never reaches the page).
+type CloudSpeech interface {
+	// Status says whether the engine can be used: "" when it can, else an
+	// error code (CodeNoCredentials, CodeUnsupported) and why.
+	Status(engine string) (code, why string)
+	// Transcribe recognizes a 16 kHz mono 16-bit WAV (a few minutes at
+	// most) in lang ("" for Chinese with English mixed in); times are
+	// seconds from its start.
+	Transcribe(ctx context.Context, engine string, wav []byte, lang string) ([]Segment, error)
 }
 
 // NewEnv is an Env for this person.

@@ -48,6 +48,8 @@ func (b *Backend) osInit() (*oscap.Env, *oscap.Jobs) {
 		}
 		s.env = oscap.NewEnv(path)
 		s.env.Secrets = b.Secrets
+		// Speech recognition by Doubao with the voice settings' key.
+		s.env.CloudSpeech = appCloudSpeech{b}
 		if b.Local != nil && b.Local.Home != "" {
 			s.env.Home = b.Local.Home
 			s.env.SSH.Home = b.Local.Home

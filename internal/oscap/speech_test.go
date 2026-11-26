@@ -1,6 +1,7 @@
 package oscap
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -157,5 +158,75 @@ func TestTurns(t *testing.T) {
 		if tt.Speaker != want[i] {
 			t.Fatalf("%+v", got)
 		}
+	}
+}
+
+// fakeCloud stands in for the App's cloud speech.
+type fakeCloud struct {
+	code, why string
+	parts     int
+	err       error
+}
+
+func (f *fakeCloud) Status(engine string) (string, string) { return f.code, f.why }
+func (f *fakeCloud) Transcribe(ctx context.Context, engine string, wav []byte, lang string) ([]Segment, error) {
+	f.parts++
+	if f.err != nil {
+		return nil, f.err
+	}
+	if len(wav) < 44 || string(wav[:4]) != "RIFF" {
+		return nil, errf(CodeInvalid, "not a WAV")
+	}
+	return []Segment{{Start: 0.5, End: 1.25, Text: "让 Claude 看一下"}}, nil
+}
+
+func TestSpeechTranscribeCloud(t *testing.T) {
+	dir := t.TempDir()
+	wav := filepath.Join(dir, "a.wav")
+	if err := writePCM16(wav, make([]int16, 3*RecordRate)); err != nil {
+		t.Fatal(err)
+	}
+	args, _ := json.Marshal(map[string]any{"path": wav, "engine": "doubao", "offset": 10})
+	var segs []any
+	emit := func(kind string, data any) {
+		if kind == "segment" {
+			segs = append(segs, data)
+		}
+	}
+	// No App: not here.
+	if _, err := speechTranscribe(context.Background(), &Env{Home: dir}, args, emit); AsError(err).Code != CodeUnsupported {
+		t.Fatalf("without the App: %v", err)
+	}
+	// No key: says so, with the code.
+	env := &Env{Home: dir, CloudSpeech: &fakeCloud{code: CodeNoCredentials, why: "add the key"}}
+	if _, err := speechTranscribe(context.Background(), env, args, emit); AsError(err).Code != CodeNoCredentials {
+		t.Fatalf("without a key: %v", err)
+	}
+	// The service not on: its code comes through.
+	env.CloudSpeech = &fakeCloud{err: errf(CodeServiceNotEnabled, "turn it on")}
+	if _, err := speechTranscribe(context.Background(), env, args, emit); AsError(err).Code != CodeServiceNotEnabled {
+		t.Fatalf("not turned on: %v", err)
+	}
+	// Recognized: segments with the offset, as this computer's are.
+	fc := &fakeCloud{}
+	env.CloudSpeech = fc
+	out, err := speechTranscribe(context.Background(), env, args, emit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res := out.(map[string]any)
+	got := res["segments"].([]Segment)
+	if len(got) != 1 || got[0].Start != 10.5 || got[0].End != 11.25 || res["engine"] != "doubao" || fc.parts != 1 || len(segs) != 1 {
+		t.Fatalf("result: %+v parts=%d", res, fc.parts)
+	}
+	// An unknown engine.
+	bad, _ := json.Marshal(map[string]any{"path": wav, "engine": "whisper"})
+	if _, err := speechTranscribe(context.Background(), env, bad, emit); AsError(err).Code != CodeInvalid {
+		t.Fatalf("unknown engine: %v", err)
+	}
+	// speech.status lists it.
+	st, _ := speechStatus(context.Background(), env, nil, emit)
+	if c := st.(map[string]any)["cloud"].(map[string]any)["doubao"].(map[string]any); c["ready"] != true {
+		t.Fatalf("status: %v", c)
 	}
 }
