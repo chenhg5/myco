@@ -3564,7 +3564,8 @@ async function runMatrix(browser, size, scheme) {
         try { await route.continue(); }
         catch (error) {
           // A cancelled search may have completed this route while delayed.
-          if (!String(error).includes("Route is already handled!")) throw error;
+          // (Playwright words it with or without a "!" across versions.)
+          if (!/Route is already handled/i.test(String(error))) throw error;
         }
       };
       await page.route("**/app/hubs/*/recent*", slow);
