@@ -468,10 +468,15 @@ func (c *ModelCache) Lookup(ctx context.Context, e Endpoint, force bool) (ModelL
 	delete(c.failed, ref)
 	c.mu.Unlock()
 	keep := cached{At: now.UTC(), Models: ms}
+	// (one runner serves several agents: each write goes through its own
+	// temporary file)
 	if b, err := json.Marshal(keep); err == nil && os.MkdirAll(c.Dir, 0o700) == nil {
-		tmp := path + ".tmp"
-		if os.WriteFile(tmp, b, 0o600) == nil {
-			_ = os.Rename(tmp, path)
+		if f, err := os.CreateTemp(c.Dir, ref+".*.tmp"); err == nil {
+			_, werr := f.Write(b)
+			if cerr := f.Close(); werr == nil && cerr == nil && os.Rename(f.Name(), path) == nil {
+				return ModelList{Models: ms, From: "provider", At: keep.At}, true
+			}
+			_ = os.Remove(f.Name())
 		}
 	}
 	return ModelList{Models: ms, From: "provider", At: keep.At}, true

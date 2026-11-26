@@ -1621,3 +1621,33 @@ reference. Legacy runner quotas receive the same private response filtering.
 New runners connecting to older Hubs with strict schemas omit the extended quota
 on a schema rejection, rather than downgrade private values to legacy public
 runtime fields. Other runtime fields continue to report normally.
+
+## Provider model lists
+
+`PUT /v1/me/runtime` accepts optional `models_from` and `models_at` next to
+`models`. `models_from` says where `models` came from: `provider` (the vendor
+of the API key the agent uses listed them, at `models_at`), `catalog` (myco's
+built-in list for that vendor: it could not be asked yet; no `models_at`) or
+`cli` (the CLI's own list, e.g. Codex's models cache). The Hub keeps only those
+three values, and only with models; `models_at` in the future is dropped. Agent
+responses carry both in `runtime`. Older runners send neither and older Hubs drop
+them; `models` keeps its meaning. A runtime keeps at most 100 models (was 40).
+
+Runners from this version list an API-key vendor's models on their own computer:
+Claude Code from `ANTHROPIC_BASE_URL` with `ANTHROPIC_AUTH_TOKEN`/`ANTHROPIC_API_KEY`
+(the environment, then `settings.json`, then a pinned provider), Codex from the
+active `model_providers` entry (a pinned provider's `-c` options, then
+`config.toml`). They `GET <base>/v1/models` (or `<base>/models` for a versioned
+base), then the vendor's other interface on the same host when it is in the
+built-in catalogue (OpenCode Go, DeepSeek, Kimi, MiniMax, Zhipu, Qwen, Doubao,
+OpenRouter). The key goes only to that host (redirects elsewhere are refused);
+errors name the host and status only. Lists are cached for 45 minutes in
+`~/.myco/state/models/` without keys. Anthropic, ChatGPT and cloud-platform
+logins are not asked.
+
+`PUT /v1/agents/{name}/run-settings` (and the App proxy, as a patch) accepts an
+optional `models_refresh`: a new value (the App sends the time, at most 40
+characters, no line breaks) asks the runner to list the provider's models again;
+it is stored in `run_settings.models_refresh` and nothing else changes. Runners
+that read it report `runtime.features: ["models_refresh"]`; they read it within
+a minute while their agent uses another vendor. Older Hubs ignore the field.
