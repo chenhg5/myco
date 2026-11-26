@@ -583,7 +583,10 @@ final class ConversationTests: XCTestCase {
         let title = app.buttons["conversation.title"]
         XCTAssertTrue(title.waitForExistence(timeout: 5), "the member's page is on top")
 
+        snap("swipe-before")
         swipeBack(app)
+        Thread.sleep(forTimeInterval: 1)
+        snap("swipe-after")
         XCTAssertTrue(member.waitForExistence(timeout: 5), "one swipe: back on the project")
         XCTAssertFalse(title.exists, "the member's page is gone")
 
