@@ -4,6 +4,16 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.23.0
+
+- App: an addition to an older open task no longer cuts the run that shows its steps.
+- App: the composer's pill menus stay inside the chat column.
+
+**中文**
+
+- 桌面应用：给较早的未完成任务补充内容时，不会再中断展示其步骤的运行。
+- 桌面应用：输入框的胶囊菜单不会再超出聊天栏。
+
 ## v0.22.21
 
 - Hub: much faster on large workspaces. The overview, agent list, conversations and per-pair views no longer scan every message (on 100,000 messages, conversations went from 40–70 ms to under 1 ms), and long chats open without asking the hub for every run.
