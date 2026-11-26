@@ -33,6 +33,11 @@ export function quotaWindowLabel(w: QuotaWindow): string {
   else if (w.name === "seven_day" || w.name === "seven_day_opus" || w.name === "seven_day_sonnet") base = L("每周", "Weekly");
   else if (w.name === "primary") base = w.label || L("主要窗口", "Primary window");
   else if (w.name === "secondary") base = w.label || L("次要窗口", "Secondary window");
+  else if (w.name === "monthly") base = L("每月", "Monthly");
+  else if (w.name === "weekly") base = L("每周", "Weekly");
+  else if (w.name === "daily") base = L("每天", "Daily");
+  else if (w.name === "rolling") base = L("滚动窗口", "Rolling window");
+  else if (/^limit_\d+$/.test(w.name)) { const n = Number(w.name.slice(6)) + 1; base = L(`额度 ${n}`, `Limit ${n}`); }
   else base = w.label || w.name;
   const scope = w.model_scope || (w.name === "seven_day_opus" ? "opus" : w.name === "seven_day_sonnet" ? "sonnet" : "");
   return scope ? L(`${base}（${scopeName(scope)}）`, `${base} (${scopeName(scope)})`) : base;
