@@ -76,8 +76,10 @@ func TestAccountQuotaSharedBindingOwnerPrivacyAndRestart(t *testing.T) {
 	if get(a, "one") == nil {
 		t.Fatal("agent cannot see its own quota")
 	}
-	if get(a, "two") != nil || get(outsider, "one") != nil {
-		t.Fatal("another agent read private account quota")
+	// An agent its owner owns reads that owner's accounts (the owner's
+	// coordinator plans their use); an agent with another owner does not.
+	if get(a, "two") == nil || get(b, "one") == nil {
+		t.Fatal("an agent could not read its own owner's account quota")
 	}
 	inv, e := admin.InviteMember(c, api.InviteRequest{Name: "viewer"})
 	if e != nil {
@@ -93,6 +95,12 @@ func TestAccountQuotaSharedBindingOwnerPrivacyAndRestart(t *testing.T) {
 	}
 	if get(viewer, "one") != nil {
 		t.Fatal("admin role exposed another member's paid account")
+	}
+	if _, e = admin.SetAgentOwner(c, "other", "viewer"); e != nil {
+		t.Fatal(e)
+	}
+	if get(outsider, "one") != nil {
+		t.Fatal("another owner's agent read private account quota")
 	}
 	for _, cl := range []*client.Client{viewer, outsider} {
 		list, e := cl.ListAgents(c, "", false)
