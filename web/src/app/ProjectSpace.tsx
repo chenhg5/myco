@@ -9,6 +9,7 @@ import type { Message, Project } from "@/api";
 import type { AgentRow } from "@/app/types";
 import { agentKind, heldTaskLabel, isMe, nodeName } from "@/app/nodes";
 import { QuotaTag } from "@/app/QuotaTag";
+import { quotaUnreadable } from "@/app/quota";
 import { keepSent, keptSent, useInputHistory } from "@/app/inputHistory";
 import { DictateButton } from "@/app/Dictate";
 import { callWhenOpened, useVoiceCall, useVoiceReady } from "@/app/VoiceBar";
@@ -1479,7 +1480,7 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
             return (
               <>
                 <span className={cn("sp-member-sub", r.st.state === "working" && "is-working")}>{line.text}</span>
-                {(line.meta || a.runtime?.quota) && (
+                {(line.meta || (a.runtime?.quota && !quotaUnreadable(a.runtime.quota))) && (
                   <span className="sp-member-meta">{line.meta && <span className="sp-member-meta-text">{line.meta}</span>}{a.runtime?.quota && <QuotaTag row={r} now={now} className="sp-member-quota" />}</span>
                 )}
               </>

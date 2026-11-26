@@ -32,7 +32,7 @@ export interface Quota {
   at: string;
   /** empty when there never was a successful read */
   windows: QuotaWindow[];
-  /** whose usage: codex, claude, opencode_go, minimax */
+  /** whose usage: codex, claude, opencode_go, minimax; unknown: no supported source on this connection */
   provider?: string;
   /** an opaque reference to the login on that computer (no path, account or token) */
   profile_ref?: string;

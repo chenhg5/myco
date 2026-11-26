@@ -884,7 +884,9 @@ const state = {
         makeAgent({
           name: "release-cloud", owner: "alice", owner_id: "mem_alice", display_name: "Release (Claude 云端)", description: "在 claude.ai 上整理发布说明。",
           // It has not said which model it runs on (an older myco in that session).
-          kind: "agent", runtime: { cli: "claude-cloud", access: "readonly" },
+          // No supported usage source on its connection: lists say nothing.
+          kind: "agent", runtime: { cli: "claude-cloud", access: "readonly",
+            quota: { source: "claude", provider: "unknown", status: "unsupported", at: "0001-01-01T00:00:00Z", checked_at: iso(300), windows: [] } },
           status_text: "正在整理发布说明", status_at: iso(60),
           labels: ["group=release"], binding: { harness: "claude-cloud", environment: "claude.ai" },
         }),

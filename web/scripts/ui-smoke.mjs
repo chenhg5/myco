@@ -4902,6 +4902,7 @@ async function runMatrix(browser, size, scheme) {
       const pmTitle = await pmTag.getAttribute("title") || "";
       if (!pmTitle.includes("Codex · ChatGPT 订阅 · Studio Mac") || !pmTitle.includes("小时后重置")) throw new Error(`悬停应写来源和重置：${pmTitle}`);
       const mcpTag = page.locator(".mb-card", { hasText: "MCP Claude" }).locator(".app-quota-tag");
+      if (await page.locator(".mb-card", { hasText: "Release (Claude 云端)" }).locator(".app-quota-tag").count()) throw new Error("没有可读额度的连接不该显示额度标记");
       if ((await mcpTag.locator(".app-quota-tag-text").innerText()).trim() !== "需重新登录") throw new Error(`登录过期应写需重新登录，实际是「${await mcpTag.innerText()}」`);
       await pm.click();
       await page.locator(".ms").waitFor({ timeout: 10_000 });

@@ -117,11 +117,13 @@ export function quotaStatusText(q: Quota): string {
   switch (q.status) {
     case "no_credentials": return L("需要配置 key", "Needs an API key");
     case "auth_required": return L("需要在 CLI 重新登录", "Sign in again in the CLI");
-    case "unsupported": return L("这个账号不报额度", "This account doesn't report usage");
+    case "unsupported": return q.provider === "unknown" ? L("这个连接没有能读的额度", "This connection has no usage to read") : L("这个账号不报额度", "This account doesn't report usage");
     case "throttled": return L("查得太勤，稍后再取", "Checked too often; tries again later");
     case "schema_changed": return L("额度格式变了，需要更新 myco", "The usage format changed; update myco");
     case "transient_error": return L("获取失败，稍后再试", "Couldn't fetch; tries again later");
-    default: return q.status && q.status !== "ok" ? L("获取失败", "Couldn't fetch") : "";
+    default:
+      if (q.provider === "unknown") return L("这个连接没有能读的额度", "This connection has no usage to read");
+      return q.status && q.status !== "ok" ? L("获取失败", "Couldn't fetch") : "";
   }
 }
 
@@ -154,7 +156,8 @@ function planName(plan: string): string {
 /** "Codex · ChatGPT 订阅 · Studio Mac": whose usage, on which plan and
  *  computer. */
 export function quotaSourceText(q: Quota, machines: Machine[] = []): string {
-  const who = providerNames[q.provider || q.source] || q.provider || q.source || "";
+  const p = q.provider === "unknown" ? "" : q.provider || q.source;
+  const who = providerNames[p] || p || "";
   const machine = q.machine_id ? machines.find((m) => m.id === q.machine_id)?.name : undefined;
   return [who, q.plan ? planName(q.plan) : "", machine || ""].filter(Boolean).join(" · ");
 }
@@ -196,11 +199,17 @@ export function quotaSummary(q: Quota, machines: Machine[] = [], now = Date.now(
   };
 }
 
+/** Nothing to read here at all (no supported source, or an account that
+ *  reports none): lists say nothing; the details say why. */
+export function quotaUnreadable(q: Quota): boolean {
+  return (q.provider === "unknown" || q.status === "unsupported") && !quotaHasNumbers(q);
+}
+
 /** A node with a window nearly (or fully) used, or a login to fix: the
  *  quiet hint other pages show. The worst window decides. */
 export function agentQuotaHint(a: Agent, now = Date.now()): { level: "tight" | "spent"; text: string; title: string } | undefined {
   const quota = a.runtime?.quota;
-  if (!quota) return undefined;
+  if (!quota || quotaUnreadable(quota)) return undefined;
   const s = quotaSummary(quota, [], now);
   if (s.level === "ok" || s.level === "failed") return undefined;
   return { level: s.level === "tight" ? "tight" : "spent", text: s.short, title: s.line };
