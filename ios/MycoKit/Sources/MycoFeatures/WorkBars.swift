@@ -164,6 +164,7 @@ struct WorkBars: View {
             Image(systemName: "eye").font(.subheadline).foregroundStyle(MycoColor.accent).padding(.top, 1)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.subheadline.weight(.medium)).foregroundStyle(MycoColor.fg).lineLimit(1)
+                    .accessibilityIdentifier("work.watch")
                 Text(WorkStateModel.watchLine(watch, now: now)).font(.caption.monospacedDigit()).foregroundStyle(MycoColor.muted).lineLimit(1)
                 if let result = watch.lastResult, !result.isEmpty {
                     Text(result).font(.caption).foregroundStyle(MycoColor.fg2).lineLimit(1)
@@ -184,7 +185,6 @@ struct WorkBars: View {
             .accessibilityIdentifier("work.watch.more")
         }
         .padding(.vertical, 8)
-        .accessibilityIdentifier("work.watch")
     }
 }
 
