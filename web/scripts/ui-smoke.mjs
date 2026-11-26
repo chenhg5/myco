@@ -4211,6 +4211,10 @@ async function runMatrix(browser, size, scheme) {
     // top of its chat, the clock moving, with 延长 and 停止; how earlier
     // ones ended is a grey line each; members show 盯着 N.
     await step("单聊 · 盯着", async () => {
+      // The mock's watches are timed from their first read; start them again
+      // so 已12分钟 holds however long the steps before took.
+      const reset = await fetch(`http://${HOST}:${mockPort()}/app/mock/watches-reset`, { method: "POST" });
+      if (!reset.ok) throw new Error(`重置盯着失败：HTTP ${reset.status}`);
       await openMember(page, narrow, "聊天", "legacy-codex");
       const bar = page.locator(".conv-detail [data-testid=watch-bar]");
       await bar.waitFor({ timeout: 10_000 });

@@ -2243,6 +2243,13 @@ const server = http.createServer(async (req, res) => {
     return send(res, 201, m);
   }
 
+  // /app/mock/watches-reset — seeds the watches again from now, so a test
+  // reads the same times however long the run before it took.
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "watches-reset" && parts.length === 3 && method === "POST") {
+    watchStore.clear();
+    return send(res, 200, { ok: true });
+  }
+
   // /app/mock/superagent-ask — the superagent asks to do something that
   // needs your approval (body: { hub, what, reason }); DELETE: none again.
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "superagent-ask" && parts.length === 3) {
