@@ -2062,6 +2062,15 @@ const localAgents = [
     install: "curl -fsSL https://opencode.ai/install | bash", install_mirror: "npm install -g opencode-ai" + npmMirror, login: "opencode auth login" },
 ];
 
+let imBridges = [{ name: "feishu-pm-codex", platform: "feishu", agent: "pm-codex", has_owner: true, node: "studio-im-feishu-pm-codex", online: true }];
+let imScan = null;
+// A QR-code-looking placeholder (the real App gets a PNG from Feishu's link).
+const MOCK_QR = "data:image/svg+xml;base64," + Buffer.from(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 21 21" shape-rendering="crispEdges"><rect width="21" height="21" fill="#fff"/>' +
+  Array.from({ length: 21 * 21 }, (_, i) => { const x = i % 21, y = Math.floor(i / 21); const f = (x < 7 && y < 7) || (x > 13 && y < 7) || (x < 7 && y > 13);
+    const on = f ? (x % 14 === 0 || x % 14 === 6 || y % 14 === 0 || y % 14 === 6 || (x % 14 >= 2 && x % 14 <= 4 && y % 14 >= 2 && y % 14 <= 4)) : ((x * 7 + y * 13 + x * y) % 3 === 0);
+    return on ? `<rect x="${x}" y="${y}" width="1" height="1"/>` : ""; }).join("") + "</svg>").toString("base64");
+
 function send(res, status, data) {
   const body = data === undefined ? "" : JSON.stringify(data);
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
@@ -2317,6 +2326,23 @@ const server = http.createServer(async (req, res) => {
     const reply = makeMessage({id:"msg_browser_result",thread_id:"th_api",from:agent.name,to:CONSOLE,type:"reply",status:"done",reply_to:task.id,body:T("已完成：导出 128 笔订单。\n\n**orders-this-week.csv**\n保存在公司电脑上，脚本可再次运行。", "Done: exported 128 orders.\n\n**orders-this-week.csv**\nSaved on Office computer. The script is ready to reuse."),created_at:iso(0),updated_at:iso(0)});
     const ready = makeMessage({id:"msg_browser_ready",thread_id:"th_api",from:agent.name,to:CONSOLE,type:"note",status:"done",body:T("公司电脑在线，订单导出脚本已就绪。", "Office computer is online. The order export script is ready."),created_at:iso(120),updated_at:iso(120)});
     const thread = b.phase === "ready" ? [ready] : b.phase === "done" ? [ready, task, progress, reply] : [ready, task, progress];
+    hub.threads.th_api = thread;
+    hub.recent = hub.recent.filter(m => m.thread_id !== "th_api" && m.from !== agent.name && m.to !== agent.name).concat(thread).sort((a,b)=>b.updated_at.localeCompare(a.updated_at));
+    return send(res,200,{ok:true});
+  }
+
+  // Synthetic self-test demo: the scene supplies the whole thread (demo forum
+  // data only); no native browser, grant or model request is involved.
+  if (process.env.MOCK_MEDIA_KIT === "1" && parts.join("/") === "app/mock/media-web-selftest" && method === "POST") {
+    const b = await readBody(req), hub = state.hubs[0];
+    const agent = hub.agents.find(a => a.name === "build-backend");
+    agent.display_name = b.display_name; agent.description = b.description; agent.status_text = b.status_text || "";
+    goalStore.set(hub.id, []); watchStore.set(hub.id, []);
+    for (const [id, messages] of Object.entries(hub.threads)) if (id !== "th_api" && messages.some(m=>m.from===agent.name || m.to===agent.name)) delete hub.threads[id];
+    const n = (b.messages || []).length;
+    const thread = (b.messages || []).map((m, i) => makeMessage({id:m.id,thread_id:"th_api",from:m.from === "me" ? CONSOLE : agent.name,to:m.from === "me" ? agent.name : CONSOLE,type:m.type,status:m.status || "done",reply_to:m.reply_to,trace:[],body:m.body,created_at:iso(n - i),updated_at:iso(n - i)}));
+    const task = thread.find(m => m.type === "task");
+    agent.current_thread = "th_api"; agent.current_from = CONSOLE; agent.current_id = task ? task.id : ""; agent.queued = 0;
     hub.threads.th_api = thread;
     hub.recent = hub.recent.filter(m => m.thread_id !== "th_api" && m.from !== agent.name && m.to !== agent.name).concat(thread).sort((a,b)=>b.updated_at.localeCompare(a.updated_at));
     return send(res,200,{ok:true});
@@ -3115,6 +3141,42 @@ const server = http.createServer(async (req, res) => {
   }
 
   // /app/local[...]
+  // /app/im: chat-app bots (ChatApps.tsx).
+  if (parts[0] === "app" && parts[1] === "im") {
+    if (parts.length === 2 && method === "GET") {
+      const agent = url.searchParams.get("agent");
+      return send(res, 200, { bridges: imBridges.filter((b) => !agent || b.agent === agent), slack_create_url: "https://api.slack.com/apps?new_app=1&manifest_json=%7B%7D" });
+    }
+    if (parts.length === 3 && parts[2] === "feishu" && method === "POST") {
+      const body = await readBody(req);
+      imScan = { id: "scan1", agent: body.agent, polls: 0 };
+      return send(res, 200, { id: "scan1", url: "https://open.feishu.cn/page/launcher?user_code=DEMO-CODE", qr: MOCK_QR });
+    }
+    if (parts.length === 4 && parts[2] === "feishu" && method === "GET") {
+      if (!imScan) return send(res, 404, { error: "not_found", message: "no such QR code (it expired)" });
+      return send(res, 200, { state: "waiting" });
+    }
+    if (parts.length === 4 && parts[2] === "feishu" && method === "DELETE") {
+      imScan = null;
+      return send(res, 200, { stopped: true });
+    }
+    if (parts.length === 3 && parts[2] === "slack" && method === "POST") {
+      const body = await readBody(req);
+      const b = { name: `slack-${body.agent}`, platform: "slack", agent: body.agent, has_owner: false, claim: "3f9a1c2e", node: "studio-im-slack", online: true };
+      imBridges.push(b);
+      return send(res, 200, { bridge: b });
+    }
+    if (parts.length === 4 && parts[3] === "claim" && method === "POST") {
+      const b = imBridges.find((x) => x.name === parts[2]);
+      if (b) { b.claim = "5e6f7a8b9c"; b.claim_expired = false; }
+      return send(res, 200, { name: parts[2], claim: "5e6f7a8b9c" });
+    }
+    if (parts.length === 3 && method === "DELETE") {
+      imBridges = imBridges.filter((x) => x.name !== parts[2]);
+      return send(res, 200, { removed: parts[2] });
+    }
+  }
+
   if (parts[0] === "app" && parts[1] === "local") {
     if (parts.length === 2 && method === "GET") return send(res, 200, local);
     if (parts.length === 3 && parts[2] === "shell-access" && method === "POST") {

@@ -1,5 +1,5 @@
 import { interactionScenes } from "./interactions.mjs";
-import { coedit, design, motion, disk, servers, webAutomationLaunch, webAutomationLaunchVideo } from "./apps.mjs";
+import { coedit, design, motion, disk, servers, webAutomationLaunch, webAutomationLaunchVideo, webAutomationSelftest, webAutomationSelftestVideo } from "./apps.mjs";
 const click = async (x) => {
   await x.first().click();
 };
@@ -17,6 +17,18 @@ const member = async (page, T) => {
 };
 const home = async () => {};
 export const scenes = [
+  {
+    id: "web-automation-selftest",
+    title: "Agent 录完自己验证 / Agents check their own recordings",
+    zh: "Agent 录下网页操作，再自己回放一遍、核对数据，确认能用才把草稿交给你。",
+    en: "An agent records browser steps, replays them itself and checks the data before handing you the draft.",
+    tags: ["应用", "自动化", "网页自动化"], themes: ["light"],
+    description: "myco 里和云端 Agent 的对话：录制、自测回放逐步打勾、数据一致，右侧是网页自动化的草稿；演示论坛数据",
+    boundary: "Synthetic UI demonstration with demo forum data; no real workspace, native browser, grant or model request.",
+    prepare: webAutomationSelftest,
+    video: webAutomationSelftestVideo,
+    videoSeconds: 30,
+  },
   {
     id: "web-automation-launch",
     title: "跨电脑网页自动化 / Browser automation across computers",
