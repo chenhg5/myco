@@ -22,6 +22,7 @@ func TestHotMessageQueriesUseIndexes(t *testing.T) {
 		{"after recipients (every reply, done, fail)", afterRecipientsSQL, "idx_messages_after", []any{"msg_x"}},
 		{"due recipients (dispatcher sweep)", dueRecipientsSQL, "idx_messages_open", []any{1}},
 		{"open counts (agent list, overview)", openCountsSQL, "idx_messages_open", nil},
+		{"acked activity (agent list, overview)", ackedActivitySQL, "idx_messages_open", nil},
 		{"due for one agent (every pull)", `SELECT id FROM messages ` + dueForWhere + ` ORDER BY created_at, id LIMIT ?`, "idx_messages_open", []any{"a", 1, 20}},
 		{"open for one agent (overview)", `SELECT id FROM messages ` + listOpenWhere, "idx_messages_open", []any{"a", 10}},
 		{"recent (overview)", `SELECT id FROM messages ` + listRecentAllWhere, "idx_messages_updated", []any{50}},
