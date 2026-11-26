@@ -171,25 +171,44 @@ func (h *hist) quantile(q float64) time.Duration {
 
 type routeKey struct{}
 
+type requestInfo struct {
+	route   string
+	waiting bool
+}
+
 // WithRoute gives the request's context a place for the route pattern that
 // matched it, filled by SetRoute deeper in, read back with Route.
 func WithRoute(ctx context.Context) context.Context {
-	return context.WithValue(ctx, routeKey{}, new(string))
+	return context.WithValue(ctx, routeKey{}, new(requestInfo))
 }
 
 // SetRoute records the pattern that matched (no-op without WithRoute).
 func SetRoute(ctx context.Context, pattern string) {
-	if p, ok := ctx.Value(routeKey{}).(*string); ok && pattern != "" {
-		*p = pattern
+	if p, ok := ctx.Value(routeKey{}).(*requestInfo); ok && pattern != "" {
+		p.route = pattern
 	}
 }
 
 // Route is the pattern SetRoute recorded, or "".
 func Route(ctx context.Context) string {
-	if p, ok := ctx.Value(routeKey{}).(*string); ok {
-		return *p
+	if p, ok := ctx.Value(routeKey{}).(*requestInfo); ok {
+		return p.route
 	}
 	return ""
+}
+
+// MarkWaiting marks a request that waits on purpose after its handler has
+// decoded wait parameters (which may be in the body, not the URL).
+func MarkWaiting(ctx context.Context) {
+	if p, ok := ctx.Value(routeKey{}).(*requestInfo); ok {
+		p.waiting = true
+	}
+}
+
+// Waiting reports the handler's explicit long-poll marker.
+func Waiting(ctx context.Context) bool {
+	p, ok := ctx.Value(routeKey{}).(*requestInfo)
+	return ok && p.waiting
 }
 
 // Timings is what a hub keeps: its requests (by route) and its database

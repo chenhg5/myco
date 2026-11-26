@@ -375,16 +375,13 @@ func excludes(names []domain.AgentName) bool { return names != nil && len(names)
 
 // ListRecentThreads lists threads by their newest message, newest first.
 //
-// Without a filter that narrows to some threads (who takes part, a
-// project), it reads messages newest first from idx_messages_updated and
-// stops once it has the page: a GROUP BY over all messages would read the
-// whole table on every refresh. With one, it groups the messages of the
-// threads that filter selects (found through indexes).
+// Walk a covering index newest first, stopping when the page is full.
+// Thread-wide filters collect only covering index metadata, never message
+// bodies. Membership sets also avoid rechecking a long thread for each row.
 func (r *MessageRepo) ListRecentThreads(ctx context.Context, f domain.RecentFilter) ([]domain.ThreadRef, error) {
 	if excludes(f.Involve) || excludes(f.Match) {
 		return nil, nil
 	}
-	narrow := f.Involve != nil || f.Match != nil || f.Project != ""
 	var conds, having string
 	var args, havingArgs []any
 	inThreads := func(not bool, cond string, a ...any) {
@@ -392,16 +389,15 @@ func (r *MessageRepo) ListRecentThreads(ctx context.Context, f domain.RecentFilt
 		if not {
 			op = " NOT IN "
 		}
-		conds += ` AND thread_id` + op + `(SELECT thread_id FROM messages WHERE ` + cond + `)`
+		conds += ` AND thread_id` + op + `(SELECT thread_id FROM messages INDEXED BY idx_messages_thread_parties WHERE ` + cond + `)`
 		args = append(args, a...)
 	}
 	if f.SenderPrefix != "" {
-		// Checked in each thread (through idx_messages_thread), not
-		// collected: most threads may have one. A range, not LIKE, so that
-		// it is answered from the index entries (names compare as bytes).
+		// Materialize the matching thread ids once. A correlated check
+		// repeated for every row of a long nonmatching thread is quadratic.
 		lo, hi := f.SenderPrefix, prefixEnd(f.SenderPrefix)
-		having = ` AND EXISTS (SELECT 1 FROM messages p WHERE p.thread_id=messages.thread_id AND
-			((p.from_agent >= ? AND p.from_agent < ?) OR (p.to_agent >= ? AND p.to_agent < ?)))`
+		having = ` AND thread_id IN (SELECT thread_id FROM messages INDEXED BY idx_messages_thread_parties WHERE
+			((from_agent >= ? AND from_agent < ?) OR (to_agent >= ? AND to_agent < ?)))`
 		havingArgs = []any{lo, hi, lo, hi}
 	}
 	if skip := append(append([]domain.AgentName{}, f.Nodes...), f.Skip...); len(skip) > 0 {
@@ -420,48 +416,18 @@ func (r *MessageRepo) ListRecentThreads(ctx context.Context, f domain.RecentFilt
 	if f.Query != "" {
 		// (reads every message's body: a search, not a refresh)
 		like := "%" + escapeLike(f.Query) + "%"
-		inThreads(false, `body LIKE ? ESCAPE '\' OR from_agent LIKE ? ESCAPE '\' OR to_agent LIKE ? ESCAPE '\'`, like, like, like)
+		conds += ` AND thread_id IN (SELECT thread_id FROM messages WHERE body LIKE ? ESCAPE '\' OR from_agent LIKE ? ESCAPE '\' OR to_agent LIKE ? ESCAPE '\')`
+		args = append(args, like, like, like)
 	}
 	limit := recentLimit(f.Limit)
-	if narrow {
-		// (the sender check once per thread, after grouping)
-		return r.recentThreadsGrouped(ctx, conds, args, having, havingArgs, f.Before, limit)
-	}
 	return r.recentThreadsByUpdate(ctx, conds+having, append(args, havingArgs...), f.Before, limit)
-}
-
-// recentThreadsGrouped: the threads conds selects, grouped.
-func (r *MessageRepo) recentThreadsGrouped(ctx context.Context, conds string, args []any, having string, havingArgs []any, before int64, limit int) ([]domain.ThreadRef, error) {
-	q := `SELECT thread_id, MAX(updated_at) AS u FROM messages WHERE 1=1` + conds + ` GROUP BY thread_id HAVING 1=1` + having
-	args = append(args, havingArgs...)
-	if before > 0 {
-		q += ` AND u < ?`
-		args = append(args, before)
-	}
-	q += ` ORDER BY u DESC LIMIT ?`
-	args = append(args, limit)
-	rows, err := r.db.QueryContext(ctx, q, args...)
-	if err != nil {
-		return nil, internal(err)
-	}
-	defer rows.Close()
-	var out []domain.ThreadRef
-	for rows.Next() {
-		var id string
-		var u int64
-		if err := rows.Scan(&id, &u); err != nil {
-			return nil, internal(err)
-		}
-		out = append(out, domain.ThreadRef{ID: id, UpdatedAt: fromMS(u)})
-	}
-	return out, internal(rows.Err())
 }
 
 // recentThreadsByUpdate reads messages newest first; a thread's first row is
 // its newest. Paging back (before) keeps threads whose newest message is
 // older than before: a thread updated since is left for the newer page.
 func (r *MessageRepo) recentThreadsByUpdate(ctx context.Context, conds string, args []any, before int64, limit int) ([]domain.ThreadRef, error) {
-	q := `SELECT thread_id, updated_at FROM messages INDEXED BY idx_messages_updated WHERE 1=1`
+	q := `SELECT thread_id, updated_at FROM messages INDEXED BY idx_messages_recent WHERE 1=1`
 	var a []any
 	if before > 0 {
 		q += ` AND updated_at < ? AND NOT EXISTS (SELECT 1 FROM messages newer WHERE newer.thread_id=messages.thread_id AND newer.updated_at >= ?)`
@@ -513,7 +479,7 @@ func (r *MessageRepo) ListRecentPairs(ctx context.Context, f domain.RecentFilter
 	q := `SELECT CASE WHEN to_agent` + nodes + ` THEN from_agent ELSE to_agent END AS other,
 		CASE WHEN to_agent` + nodes + ` THEN to_agent ELSE from_agent END AS node,
 		COUNT(*), MAX(updated_at) AS u
-		FROM messages WHERE (to_agent` + nodes + ` OR from_agent` + nodes + `) AND from_agent != to_agent`
+		FROM messages INDEXED BY idx_messages_recent WHERE (to_agent` + nodes + ` OR from_agent` + nodes + `) AND from_agent != to_agent`
 	args := append(append(append(append([]any{}, na...), na...), na...), na...)
 	for _, names := range [][]domain.AgentName{f.Involve, f.Match} {
 		if names != nil {
@@ -558,7 +524,7 @@ func (r *MessageRepo) ListRecentPairs(ctx context.Context, f domain.RecentFilter
 
 // listAllPairs lists every pair of names that exchanged messages, newest
 // first: A is the alphabetically first name, B the other. Messages are
-// read newest first from idx_messages_updated until the page is full (a
+// read newest first from idx_messages_recent until the page is full (a
 // pair's first message met is its newest; paging back, pairs met at or
 // after before were on a newer page), then each pair is counted from
 // idx_messages_from. A GROUP BY of the pairs would read every message.
@@ -614,7 +580,7 @@ func (r *MessageRepo) listAllPairs(ctx context.Context, f domain.RecentFilter) (
 }
 
 func (r *MessageRepo) newestPairs(ctx context.Context, conds string, args []any, before int64, limit int) ([]domain.PairRef, error) {
-	rows, err := r.db.QueryContext(ctx, `SELECT from_agent, to_agent, updated_at FROM messages INDEXED BY idx_messages_updated
+	rows, err := r.db.QueryContext(ctx, `SELECT from_agent, to_agent, updated_at FROM messages INDEXED BY idx_messages_recent
 		WHERE from_agent != to_agent`+conds+` ORDER BY updated_at DESC, id`, args...)
 	if err != nil {
 		return nil, internal(err)
