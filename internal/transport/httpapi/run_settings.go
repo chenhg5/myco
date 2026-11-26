@@ -40,6 +40,7 @@ func (s *Server) setRunSettings(w http.ResponseWriter, r *http.Request, name dom
 		Provider          *string                   `json:"provider"`
 		ProviderEncrypted *domain.EncryptedProvider `json:"provider_encrypted"`
 		ModelsRefresh     *string                   `json:"models_refresh"`
+		ProviderRef       *domain.ProviderRef       `json:"provider_ref"`
 	}
 	if !decode(w, r, &in) {
 		return
@@ -120,6 +121,35 @@ func (s *Server) setRunSettings(w http.ResponseWriter, r *http.Request, name dom
 			return
 		}
 		rs.Provider, rs.ProviderEncrypted = in.Provider, in.ProviderEncrypted
+		// Another provider: no longer the model provider's (unless said).
+		if in.ProviderRef == nil && (in.Provider == nil || *in.Provider != "custom") {
+			rs.ProviderRef = domain.ProviderRef{}
+		}
+	}
+	if in.ProviderRef != nil && *in.ProviderRef != cur.RunSettings.ProviderRef {
+		// Which of the owner's model providers it came from (i115): theirs only.
+		if actor.Via != nil || !ownsComputer(actor, cur) {
+			writeError(w, domain.Errf(domain.CodePermissionDenied, "only the agent owner may change its provider"))
+			return
+		}
+		ref := *in.ProviderRef
+		if ref.ID != "" {
+			_, member := s.consoleIdentity(r)
+			if s.modelProviders == nil || member == "" {
+				writeError(w, domain.Errf(domain.CodeInvalidArgument, "unknown model provider"))
+				return
+			}
+			p, err := s.modelProviders.Owned(r.Context(), member, ref.ID)
+			if err != nil {
+				writeError(w, err)
+				return
+			}
+			if ref.KeyVersion < 1 || ref.KeyVersion > p.KeyVersion {
+				writeError(w, domain.Errf(domain.CodeInvalidArgument, "provider_ref.key_version must be 1 to %d", p.KeyVersion))
+				return
+			}
+		}
+		rs.ProviderRef = ref
 	}
 
 	if in.Access != nil && strings.TrimSpace(*in.Access) != cur.RunSettings.Access {

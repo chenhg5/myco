@@ -52,6 +52,16 @@ var Vendors = []Vendor{
 		Models: []string{"deepseek/deepseek-chat", "moonshotai/kimi-k2", "z-ai/glm-4.6", "qwen/qwen3-coder"}},
 }
 
+// VendorByID is the catalogue's vendor with this id.
+func VendorByID(id string) (Vendor, bool) {
+	for _, v := range Vendors {
+		if v.ID == id {
+			return v, true
+		}
+	}
+	return Vendor{}, false
+}
+
 // VendorOf is the catalogue's vendor at base, if any.
 func VendorOf(base string) (Vendor, bool) {
 	u, err := url.Parse(strings.TrimSpace(base))

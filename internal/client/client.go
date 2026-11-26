@@ -924,7 +924,7 @@ func (c *Client) ReportMachine(ctx context.Context, r api.MachineReport) error {
 func (c *Client) ReportRuntime(ctx context.Context, r api.Runtime) error {
 	if c.Sealer != nil && c.Sealer.ID != nil {
 		for _, f := range r.Features {
-			if f == "remote_provider" {
+			if f == "remote_provider" || f == "sealed_spawn" {
 				_ = c.RegisterKeys(ctx)
 				break
 			}

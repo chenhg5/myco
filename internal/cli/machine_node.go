@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/url"
@@ -21,6 +22,7 @@ import (
 	"github.com/myco-ai/myco/internal/harness/execnode"
 	"github.com/myco-ai/myco/internal/harness/machinenode"
 	"github.com/myco-ai/myco/internal/osutil"
+	"github.com/myco-ai/myco/internal/provider"
 	"github.com/myco-ai/myco/internal/runner"
 )
 
@@ -283,6 +285,15 @@ func (e *env) machineNode(hub string, me *api.Agent, c *client.Client, sh runner
 				if p.CLI == machinenode.ExecCLI {
 					rc = config.Runner{Harness: p.CLI, Workdir: p.Workdir}
 				}
+				if len(p.ProviderVars) > 0 {
+					// A provider sent sealed for this machine (i115): the new
+					// agent's own env file, with what the machine's has besides.
+					file, err := spawnedEnvFile(e.defaultPath, res.Agent.Name, rc.EnvFile, p.ProviderVars)
+					if err != nil {
+						return "", err
+					}
+					rc.EnvFile, rc.Provider, rc.ProviderApplied = file, "", p.ProviderID
+				}
 				if err := saveProfile(e.defaultPath, m.Hub, res.Agent.Name, res.Token, b, rc); err != nil {
 					return "", err
 				}
@@ -306,6 +317,19 @@ func (e *env) machineNode(hub string, me *api.Agent, c *client.Client, sh runner
 				}
 				markSpawnedRun(e.defaultPath, res.Agent.Name, sessionID, p.CLI)
 				return res.Agent.Name, nil
+			},
+			SealedProvider: func(ctx context.Context, cli string, p api.EncryptedProvider) (map[string]string, *harness.ProviderSettings, error) {
+				raw, err := c.OpenProvider(ctx, p)
+				if err != nil {
+					return nil, nil, errors.New("cannot decrypt it")
+				}
+				var man provider.Manual
+				if json.Unmarshal(raw, &man) != nil || man.Validate(cli) != nil {
+					return nil, nil, errors.New("its settings are not valid for " + cli)
+				}
+				vars := man.Variables(cli)
+				ps, _, _ := providerFromVars(cli, vars)
+				return vars, ps, nil
 			},
 			ProviderFor: func(cli string) *harness.ProviderSettings {
 				cfg, err := config.Load(config.ProfilePath(e.defaultPath, me.Name))
@@ -402,4 +426,26 @@ func markSpawnedRun(defaultPath, agent, sessionID, cli string) {
 // runnerStatePath is where an agent's runner keeps its state.
 func runnerStatePath(defaultPath, agent string) string {
 	return filepath.Join(config.Dir(defaultPath), "state", agent+".json")
+}
+
+// spawnedEnvFile writes a new agent's env file: the machine node's (its
+// proxy and the like) with the provider variables sent for this agent over
+// it. Private (0600); the key is never printed.
+func spawnedEnvFile(defaultPath, agent, machineFile string, vars map[string]string) (string, error) {
+	profile := config.ProfilePath(defaultPath, agent)
+	file := filepath.Join(filepath.Dir(filepath.Dir(profile)), "env", filepath.Base(profile)+".env")
+	if err := os.MkdirAll(filepath.Dir(file), 0o700); err != nil {
+		return "", err
+	}
+	if machineFile != "" {
+		if b, err := os.ReadFile(machineFile); err == nil {
+			if err := os.WriteFile(file, b, 0o600); err != nil {
+				return "", err
+			}
+		}
+	}
+	if err := provider.WriteEnv(file, agent, vars); err != nil {
+		return "", errors.New("cannot save the new agent's provider settings")
+	}
+	return file, nil
 }
