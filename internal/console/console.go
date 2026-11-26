@@ -447,6 +447,73 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, out)
 	}))
+	// Goals (myco goal): a goal set on a chat, its agent woken on a schedule
+	// (hubs without goals answer 404; the App shows nothing).
+	m.HandleFunc("GET /app/hubs/{id}/goals", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		q := r.URL.Query()
+		list, err := c.Goals(r.Context(), q.Get("agent"), q.Get("project"), q.Get("state") == "all")
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		if list == nil {
+			list = []api.Goal{}
+		}
+		writeJSON(w, http.StatusOK, api.GoalList{Goals: list})
+	}))
+	m.HandleFunc("POST /app/hubs/{id}/goals", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in api.GoalCreateRequest
+		if !decode(w, r, &in) {
+			return
+		}
+		out, err := c.CreateGoal(r.Context(), in, false)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, out)
+	}))
+	m.HandleFunc("GET /app/hubs/{id}/goals/{gid}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		out, err := c.Goal(r.Context(), r.PathValue("gid"))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+	}))
+	m.HandleFunc("PATCH /app/hubs/{id}/goals/{gid}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in api.GoalUpdateRequest
+		if !decode(w, r, &in) {
+			return
+		}
+		out, err := c.UpdateGoal(r.Context(), r.PathValue("gid"), in, false)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+	}))
+	m.HandleFunc("POST /app/hubs/{id}/goals/{gid}/{action}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in struct {
+			Reason string `json:"reason"`
+		}
+		if !decode(w, r, &in) {
+			return
+		}
+		do := map[string]func(context.Context, string, string, bool) (*api.Goal, error){
+			"pause": c.PauseGoal, "resume": c.ResumeGoal, "stop": c.StopGoal,
+		}[r.PathValue("action")]
+		if do == nil {
+			writeErr(w, &client.Error{Status: http.StatusNotFound, Code: "not_found", Message: "no such goal action"})
+			return
+		}
+		out, err := do(r.Context(), r.PathValue("gid"), in.Reason, false)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+	}))
 	// Watches (myco watch): what agents wait for in the background, as the
 	// hub has them (hubs without watches answer 404; the App shows nothing).
 	m.HandleFunc("GET /app/hubs/{id}/watches", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {

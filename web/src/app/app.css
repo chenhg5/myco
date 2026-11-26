@@ -8725,6 +8725,7 @@ body.is-resizing {
   white-space: nowrap;
 }
 .goal-round.is-stuck .goal-round-tag { background: var(--pill); color: var(--muted); }
+.goal-round.is-now .goal-round-tag { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
 .goal-round.is-blocked .goal-round-tag { background: var(--amber-soft); color: var(--amber); }
 .goal-round-text { min-width: 0; color: var(--fg-2); overflow-wrap: anywhere; }
 .goal-ended { align-self: center; max-width: min(560px, 100%); }
