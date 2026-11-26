@@ -35,6 +35,8 @@ func run(ctx context.Context, input io.Reader, output io.Writer) error {
 	if err := os.MkdirAll(cfg.DataDir, 0700); err != nil {
 		return errors.New("private data directory unavailable")
 	}
+	closeDiagnostic := openControlDiagnostic(cfg.DataDir)
+	defer closeDiagnostic()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	e, err := newEngine(ctx, cfg.DataDir)

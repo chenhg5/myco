@@ -291,6 +291,12 @@ func (s *session) event(msg *rod.Message) {
 		active := s.recorder != nil
 		s.mu.Unlock()
 		go s.setContextRecording(msg.SessionID, evt.Context.ID, active)
+	case "Runtime.executionContextDestroyed":
+		var evt proto.RuntimeExecutionContextDestroyed
+		msg.Load(&evt)
+		s.mu.Lock()
+		delete(s.contexts[string(msg.SessionID)], evt.ExecutionContextID)
+		s.mu.Unlock()
 	case "Runtime.executionContextsCleared":
 		s.mu.Lock()
 		delete(s.contexts, string(msg.SessionID))
