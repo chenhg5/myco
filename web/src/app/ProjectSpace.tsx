@@ -2,13 +2,14 @@ import { runnerUpdating } from "@/lib/runner-state";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { activePaneId } from "@/app/ChatSearch";
 import { IntroCard, introOf } from "@/app/Onboard";
-import { Activity, ArrowLeft, ArrowUp, ChevronDown, AudioLines, Eye, Target, Columns2, FileText, Loader2, MoreHorizontal, PanelRightClose, PanelRightOpen, Plus, Users } from "lucide-react";
+import { Activity, ArrowLeft, ArrowUp, ChevronDown, AudioLines, Eye, Target, Columns2, FileText, MoreHorizontal, PanelRightClose, PanelRightOpen, Plus, Users } from "lucide-react";
 import { appApi, errorMessage, type RecentItem } from "@/appapi";
 import { GroupNameDialog, GroupedMembers, inGroupOrder, moveItems, useGroupStyle, type GroupStyle, type GroupsCtl } from "@/app/MemberGroups";
 import type { Message, Project } from "@/api";
 import type { AgentRow } from "@/app/types";
 import { agentKind, heldTaskLabel, isMe, nodeName } from "@/app/nodes";
 import { QuotaTag } from "@/app/QuotaTag";
+import { SendingMark } from "@/app/ConversationDetail";
 import { quotaUnreadable } from "@/app/quota";
 import { keepSent, keptSent, useInputHistory } from "@/app/inputHistory";
 import { DictateButton } from "@/app/Dictate";
@@ -1022,7 +1023,7 @@ function GroupView({ hubId, project, loose, title, agents, memberNames, rowOf, n
                 <Who row={rowOf(pending.to)} name={nameOf(pending.to)} />
               </div>
               <div className="sp-card-body"><ClampText text={pending.body} lines={4} /></div>
-              <div className="sp-card-foot"><span className="sp-card-state"><Loader2 className="spin" />{L("发送中…", "Sending…")}</span></div>
+              <div className="sp-card-foot"><span className="sp-card-state"><SendingMark /></span></div>
             </div>
           )}
         </div>

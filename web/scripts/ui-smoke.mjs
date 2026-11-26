@@ -2563,6 +2563,48 @@ async function runMatrix(browser, size, scheme) {
       if (!(await page.locator(".conv-detail [data-testid=quota-pill]").getAttribute("class") || "").includes("is-out")) throw new Error("用完应变红");
     });
 
+    // A message on its way: a turning ring and dots under the faint
+    // bubble. When a refresh brings it back before the send answers (a
+    // slow workspace), it shows once, not twice.
+    await step("单聊 · 发送中", async () => {
+      // (one at rest: what you send is a new message, not an addition)
+      await openMember(page, narrow, "聊天", "MCP Claude");
+      const box0 = page.locator(".conv-detail .conv-compose-input");
+      // (a chat with something in it, the agent done with it: the next one
+      // is a new message, sent while the chat refreshes)
+      if (!(await page.locator(".conv-detail .conv-msg.is-me").count())) {
+        await box0.fill("先打个招呼");
+        await box0.press("Enter");
+        await page.locator(".conv-detail .conv-msg.is-me", { hasText: "先打个招呼" }).first().waitFor({ timeout: 15_000 });
+      }
+      await page.waitForFunction(() => !/排到下一条/.test(document.querySelector(".conv-detail .conv-compose-input")?.getAttribute("placeholder") || ""), null, { timeout: 60_000 });
+      const text = `发送中只出现一次 ${size.width} ${scheme}`;
+      const slowSend = async (route) => {
+        if (route.request().method() !== "POST") return route.continue();
+        const resp = await route.fetch();
+        await new Promise((ok) => setTimeout(ok, 7000));
+        await route.fulfill({ response: resp }).catch(() => {});
+      };
+      await page.route("**/app/hubs/*/messages", slowSend);
+      const box = page.locator(".conv-detail .conv-compose-input");
+      await box.fill(text);
+      await box.press("Enter");
+      const sending = page.locator(".conv-detail [data-testid=chat-sending]");
+      await sending.waitFor({ timeout: 5_000 });
+      if (!(await sending.locator(".send-ring").count())) throw new Error("发送中应有转圈");
+      await settle(page, 300);
+      await shot(page, size, scheme, "chat-sending");
+      // The refresh brings it (the send has not answered yet): one bubble.
+      await page.locator(".conv-detail .conv-msg.is-me", { hasText: text }).first().waitFor({ timeout: 10_000 });
+      for (let i = 0; i < 4; i++) {
+        const n = await page.locator(".conv-detail .conv-msg", { hasText: text }).count();
+        if (n !== 1) throw new Error(`同一条消息应只出现一次，实际 ${n} 次`);
+        await page.waitForTimeout(500);
+      }
+      await page.waitForFunction(() => !document.querySelector(".conv-detail [data-testid=chat-sending]"), null, { timeout: 15_000 });
+      await page.unroute("**/app/hubs/*/messages", slowSend);
+    });
+
     await step("单聊 · 空对话", async () => {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");
       const ask = compactText(await page.locator(".conv-empty h3").innerText({ timeout: 20_000 }));

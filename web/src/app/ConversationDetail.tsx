@@ -1,6 +1,6 @@
 import { runnerUpdating } from "@/lib/runner-state";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Focus as FocusIcon, AlertTriangle, ArrowDown, ArrowLeft, ArrowRightLeft, ArrowUp, ArrowUpRight, Check, ChevronRight, Copy, AudioLines, Download, Images, Loader2, Lock, MoreHorizontal, Paintbrush, Pin as PinIcon, PinOff, Search, Settings2, Square, Target, Trash2, WifiOff, X } from "lucide-react";
+import { Focus as FocusIcon, AlertTriangle, ArrowDown, ArrowLeft, ArrowRightLeft, ArrowUp, ArrowUpRight, Check, ChevronRight, Copy, AudioLines, Download, Images, Lock, MoreHorizontal, Paintbrush, Pin as PinIcon, PinOff, Search, Settings2, Square, Target, Trash2, WifiOff, X } from "lucide-react";
 import { ExportChat } from "@/app/ExportChat";
 import { appApi, isTransient } from "@/appapi";
 import type { Agent, Message } from "@/api";
@@ -442,7 +442,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // with 发送中, and the box empty again; the hub's copy takes its place.
   // (One put after the running round, ⌘↩, shows in the queue above the box
   // at once instead: it is queued, not sending.)
-  const [pending, setPending] = useState<{ body: string; files: { id: string; name: string; size: number; preview?: string }[]; queued?: boolean } | null>(null);
+  const [pending, setPending] = useState<{ body: string; files: { id: string; name: string; size: number; preview?: string }[]; queued?: boolean; at?: number } | null>(null);
   // Files going with the next message (pasted, dropped or picked).
   const att = useAttachments(target.hubId, draftKey);
   // Messages put after the running one, while the workspace cannot hold
@@ -1625,7 +1625,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     // for an older hub) shows in the queue instead.
     const files = att.take();
     const localQueued = queuedNext && !queueOnHub;
-    if (!localQueued && !shellMode) setPending({ body: typed, files, queued: queuedNext });
+    if (!localQueued && !shellMode) setPending({ body: typed, files, queued: queuedNext, at: startedAt });
     writeDraft("");
     histPos.current = -1;
     atBottom.current = true;
@@ -2416,6 +2416,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     ...(steersOf.get(m.id) || []).flatMap((x) => (x.unreadable ? [] : pageLinksIn(x.body || "").map((p) => ({ ...p, msg: m.id, from: x.from, at: x.created_at })))),
   ]) : [];
 
+  // What you are sending may come back with a refresh before the send
+  // itself answers: then it is shown once, as the message it now is.
+  const pendingLanded = !!pending && !!pending.body && [...older, ...(messages || [])].some((m) =>
+    isMe(m.from, row?.hub) && (m.body || "").trim().startsWith(pending.body.trim()) && new Date(m.created_at).getTime() >= (pending.at || 0) - 5_000);
   return (
     <VersionsContext.Provider value={versions}>
     <PagePinsContext.Provider value={pagePins}>
@@ -2599,7 +2603,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             ) : (
               <LoadingSkeleton shell={isExecNode(target.agent) || isExecNode(target.peer)} />
             )
-          ) : shown.length === 0 && !shellMode && trailing.length === 0 ? (
+          ) : shown.length === 0 && !shellMode && trailing.length === 0 && !(pending && !pending.queued) ? (
             observed
               ? <div className="app-empty-note">{L("它们还没说过话。", "They haven't talked yet.")}</div>
               : isSa ? <SuperagentIntro agent={agent} />
@@ -2670,13 +2674,13 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {!shellMode && !execNode && trailing}
             {/* What you just sent, until the workspace has it: drawn as
                 yours, but not one of yours yet (not .is-me). */}
-            {pending && !pending.queued && (
+            {pending && !pending.queued && !pendingLanded && (
               <div className="conv-msg is-pending" data-testid="chat-sending">
                 <div className="conv-bubble">
                   {pending.body && <MessageContent body={pending.body} />}
                   {pending.files.length > 0 && <MessageAttachments hubId={target.hubId} items={pending.files.map((f) => ({ file_id: f.id, name: f.name, size: f.size, sha256: "" }))} />}
                 </div>
-                <div className="conv-msg-meta is-shown conv-sending"><Loader2 size={11} className="spin" />{L("发送中…", "Sending…")}</div>
+                <div className="conv-msg-meta is-shown conv-sending"><SendingMark /></div>
               </div>
             )}
             {/* The run at work, when messages sit under it. */}
@@ -2951,3 +2955,16 @@ export function decisionOf(body: string): { who: string; ok: boolean; what: stri
     : raw.trim();
   return { who, ok: verb === "同意了", what, failed: /^但没做成/.test(rest.trim()) };
 }
+
+/** 发送中: a ring turning in the accent colour and dots that come one by
+ *  one (still in reduced motion: the words alone). */
+export function SendingMark() {
+  return (
+    <span className="send-mark" role="status">
+      <span className="send-ring" aria-hidden />
+      <span>{L("发送中", "Sending")}</span>
+      <span className="send-dots" aria-hidden><i>.</i><i>.</i><i>.</i></span>
+    </span>
+  );
+}
+
