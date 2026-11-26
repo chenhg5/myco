@@ -50,6 +50,8 @@ type Local struct {
 	// Dirs are searched after PATH (default: ~/.local/bin, Homebrew's and
 	// /usr/local/bin).
 	Dirs []string
+	// BundledAgentPaths overrides desktop agent bundle discovery (tests).
+	BundledAgentPaths func(string) []string
 	// Bundled is the myco CLI shipped inside the app ("" = none): used when
 	// no other is installed, and installed into ~/.local/bin by EnsureCLI.
 	Bundled string

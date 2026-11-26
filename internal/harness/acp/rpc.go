@@ -68,6 +68,10 @@ func (c *conn) read(r io.Reader) {
 			break
 		}
 	}
+	c.shutdown()
+}
+
+func (c *conn) shutdown() {
 	c.mu.Lock()
 	c.closed = true
 	for id, ch := range c.pending {
@@ -76,7 +80,6 @@ func (c *conn) read(r io.Reader) {
 	}
 	c.mu.Unlock()
 }
-
 func (c *conn) dispatch(line []byte) {
 	var m message
 	if json.Unmarshal(line, &m) != nil {

@@ -31,7 +31,7 @@ func fakeAgents(t *testing.T, installed []string, run func(name string, args ...
 	for _, n := range installed {
 		os.WriteFile(filepath.Join(bin, n), []byte("#!/bin/sh\n"), 0o755)
 	}
-	return &console.Local{Home: home, Dirs: []string{bin},
+	return &console.Local{Home: home, Dirs: []string{bin}, BundledAgentPaths: func(string) []string { return nil },
 		LookPath: func(string) (string, error) { return "", errors.New("not on PATH") },
 		Run: func(ctx context.Context, env []string, name string, args ...string) ([]byte, error) {
 			return run(filepath.Base(name), args...)
@@ -197,5 +197,36 @@ func TestLocalAgentOpaqueAuthUsesRecentSuccess(t *testing.T) {
 	}
 	if got := byCLI(l.LocalAgents(context.Background()))["qoder"].State; got != "missing" {
 		t.Fatalf("success cannot resurrect a missing CLI: %s", got)
+	}
+}
+
+func TestWorkBuddyBundleFallback(t *testing.T) {
+	l, home := fakeAgents(t, nil, func(name string, args ...string) ([]byte, error) { return []byte("2.106.4"), nil })
+	bundled := filepath.Join(home, "WorkBuddy bundle", "codebuddy")
+	if err := os.MkdirAll(filepath.Dir(bundled), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(bundled, []byte("#!/usr/bin/env node\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	l.BundledAgentPaths = func(binary string) []string {
+		if binary != "codebuddy" {
+			t.Fatalf("unexpected bundle lookup %s", binary)
+		}
+		return []string{bundled}
+	}
+	got := byCLI(l.LocalAgents(context.Background()))["codebuddy"]
+	if got.Path != bundled || got.State == "missing" || got.Version != "2.106.4" {
+		t.Fatalf("bundle not discovered: %+v", got)
+	}
+	// Explicit PATH entries still take priority over the desktop bundle.
+	l.LookPath = func(binary string) (string, error) {
+		if binary == "codebuddy" {
+			return filepath.Join(home, "path-cli"), nil
+		}
+		return "", errors.New("missing")
+	}
+	if got := byCLI(l.LocalAgents(context.Background()))["codebuddy"]; got.Path == bundled {
+		t.Fatal("bundle shadowed PATH")
 	}
 }

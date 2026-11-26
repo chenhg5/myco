@@ -251,12 +251,15 @@ Every agent below keeps **its own session**: each message resumes the same conve
 | [goose](https://block.github.io/goose/) | `goose acp` | `goose` | ACP: experimental |
 | [GitHub Copilot](https://github.com/github/copilot-cli) | `copilot --acp` | `copilot` | ACP: experimental |
 | [Auggie](https://github.com/augmentcode/auggie) | `auggie --acp` | `auggie` | ACP: experimental |
-| [CodeBuddy Code](https://www.codebuddy.cn/cli/) | `codebuddy --acp` | `codebuddy` | ACP: experimental |
+| [CodeBuddy / WorkBuddy](https://www.codebuddy.cn/cli/) | `codebuddy --acp --acp-transport streamable-http` | `codebuddy` | ACP over local HTTP; bundled CLI detection; experimental |
 | [Kilo Code](https://kilo.ai) | `kilo acp` | `kilo` | ACP: experimental |
 | [Cline](https://cline.bot/cli) | `cline --acp` | `cline` | ACP: experimental |
 | [Grok](https://x.ai/cli) | `grok agent stdio` | `grok` | ACP: experimental |
 | [Antigravity](https://antigravity.google) | `google-antigravity-acp` ([community adapter](https://github.com/sibbl/google-antigravity-acp)) | `antigravity` | ACP: experimental |
 | [AtomCode](https://atomgit.com/atomgit_atomcode/atomcode) | `atomcode acp` | `atomcode` | ACP: experimental |
+
+WorkBuddy is experimental and requires signing in through WorkBuddy first.
+[CodeBuddy / WorkBuddy setup and transport details](docs/acp-http.md).
 
 **Native** has a dedicated adapter; **Preset** is a built-in command template; **ACP** uses the [Agent Client Protocol](https://agentclientprotocol.com), with every step shown live. *Experimental* ones have not had long real-world use yet; reports welcome. Kiro needs `uv tool install kiro-acp-gateway`. Antigravity needs `npm install -g google-antigravity-acp` and `agy` signed in; the adapter cannot ask for approval, so below full access agy refuses what needs it; Google's terms forbid reaching Antigravity through third-party tools with a personal login, so use an AI Studio or Vertex AI key.
 

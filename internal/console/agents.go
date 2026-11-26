@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/harness"
 )
 
 // LocalAgent is an agent CLI on this computer: whether it is installed and
@@ -122,6 +123,9 @@ func (l *Local) localAgent(ctx context.Context, a agentCLI) LocalAgent {
 	if la.Path == "" {
 		return la
 	}
+	if a.cli == "codebuddy" && filepath.IsAbs(la.Path) {
+		la.Login = bundledAgentLogin(la.Path)
+	}
 	la.Version = l.version(ctx, la.Path)
 	la.State = l.signedIn(ctx, a.cli, la.Path)
 	if la.State == "unknown" && l.recentAgentSuccess(a.cli, time.Now()) {
@@ -195,9 +199,12 @@ func (l *Local) findAgent(binary string) string {
 				return p
 			}
 		}
-		return ""
+		return l.findBundledAgent(binary)
 	}
-	return l.find(binary, l.in(dirs, binary)...)
+	if p := l.find(binary, l.in(dirs, binary)...); p != "" {
+		return p
+	}
+	return l.findBundledAgent(binary)
 }
 
 func (l *Local) inExt(dirs []string, name, ext string) []string {
@@ -213,6 +220,7 @@ func (l *Local) runAgent(ctx context.Context, bin string, args ...string) ([]byt
 	if run == nil {
 		run = runCommand
 	}
+	bin, args = harness.CodeBuddyCommand(bin, args)
 	return run(ctx, l.env(), bin, args...)
 }
 
@@ -366,6 +374,11 @@ func (b *Backend) postAgentTerminal(w http.ResponseWriter, r *http.Request) {
 	}
 	install, mirror, _ := a.commands()
 	cmd := map[string]string{"install": install, "install_mirror": mirror, "login": a.login}[in.Action]
+	if in.Action == "login" && a.cli == "codebuddy" {
+		if path := b.Local.findAgent(a.binary); path != "" && filepath.IsAbs(path) {
+			cmd = bundledAgentLogin(path)
+		}
+	}
 	if cmd == "" {
 		writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument", Message: "action must be install, install_mirror or login"})
 		return
@@ -376,4 +389,15 @@ func (b *Backend) postAgentTerminal(w http.ResponseWriter, r *http.Request) {
 	}
 	err := open(cmd, b.Local.env())
 	writeJSON(w, http.StatusOK, map[string]any{"opened": err == nil, "command": cmd})
+}
+
+func (l *Local) findBundledAgent(binary string) string {
+	if binary != "codebuddy" {
+		return ""
+	}
+	paths := harness.WorkBuddyBinaries(l.Home)
+	if l.BundledAgentPaths != nil {
+		paths = l.BundledAgentPaths(binary)
+	}
+	return l.find(binary, paths...)
 }

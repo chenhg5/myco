@@ -1,7 +1,8 @@
 // Package acp drives agent CLIs that speak the Agent Client Protocol
 // (https://agentclientprotocol.com): JSON-RPC over the CLI's stdin and
-// stdout. One process per run: initialize, load (or start) the session, send
-// the prompt, follow its updates, then shut the process down. Gemini CLI
+// stdout (or CodeBuddy-compatible streamable HTTP). One process per run:
+// initialize, load (or start) the session, send the prompt, follow its updates,
+// then shut the process down. Gemini CLI
 // (`gemini --acp`) is a preset; any other ACP agent works with
 // harness: acp, binary and args.
 package acp
@@ -34,9 +35,12 @@ var ClientVersion = "dev"
 // access and directory arguments, then Sub (a subcommand that must come
 // after the options, as in `cursor-agent --model m acp`).
 type Spec struct {
-	Binary string
-	Args   []string
-	Sub    []string
+	// Transport defaults to stdio. streamable-http uses the CodeBuddy local
+	// connect endpoint, POST responses and GET notifications over SSE.
+	Transport string
+	Binary    string
+	Args      []string
+	Sub       []string
 	// ModelArgs select a model, e.g. ["-m", "{model}"]. ModelConfig instead
 	// names the session config option that holds the model (set with
 	// session/set_config_option once the session is open).
@@ -67,7 +71,10 @@ func New(opts harness.Options) (harness.Harness, error) {
 	if opts.Binary == "" {
 		return nil, errors.New("acp: set runner.binary to the agent's command (and runner.args, e.g. [acp])")
 	}
-	return &agent{name: Name, spec: Spec{Binary: opts.Binary, Args: opts.Args}, opts: opts}, nil
+	if err := checkTransport(opts.ACPTransport); err != nil {
+		return nil, err
+	}
+	return &agent{name: Name, spec: Spec{Binary: opts.Binary, Args: opts.Args, Transport: opts.ACPTransport}, opts: opts}, nil
 }
 
 // Preset returns the factory for a known ACP agent; runner.binary replaces
@@ -77,6 +84,13 @@ func Preset(name string, spec Spec) harness.Factory {
 		s := spec
 		if opts.Binary != "" {
 			s.Binary = opts.Binary
+		}
+		s.Binary = harness.ResolveAgentBinary(s.Binary)
+		if opts.ACPTransport != "" {
+			s.Transport = opts.ACPTransport
+		}
+		if err := checkTransport(s.Transport); err != nil {
+			return nil, err
 		}
 		s.Args = append(append([]string{}, spec.Args...), opts.Args...)
 		return &agent{name: name, spec: s, opts: opts}, nil
@@ -91,7 +105,10 @@ func (a *agent) Check(ctx context.Context) harness.Check {
 	if len(v) == 0 {
 		v = []string{"--version"}
 	}
-	return harness.CheckBinary(ctx, a.spec.Binary, v...)
+	binary, args := harness.CodeBuddyCommand(a.spec.Binary, v)
+	c := harness.CheckBinary(ctx, binary, args...)
+	c.Binary = a.spec.Binary
+	return c
 }
 
 func (a *agent) args(req harness.Request) []string {
@@ -134,36 +151,11 @@ func (a *agent) Run(ctx context.Context, req harness.Request) (harness.Result, e
 	procCtx, kill := context.WithCancel(context.WithoutCancel(ctx))
 	defer kill()
 	env := append(append([]string{}, a.spec.AccessEnv[req.AccessOr(a.opts.Access)]...), req.Env...)
-	cmd := harness.Command(procCtx, harness.Process{Binary: a.spec.Binary, Args: a.args(req), Workdir: req.Workdir, Env: env})
-	stdin, err := cmd.StdinPipe()
+	c, stderr, cleanup, err := a.startConnection(ctx, procCtx, kill, req, env)
 	if err != nil {
 		return harness.Result{}, err
 	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return harness.Result{}, err
-	}
-	stderr := &tailBuffer{max: 64 << 10}
-	cmd.Stderr = stderr
-	if err := cmd.Start(); err != nil {
-		return harness.Result{}, fmt.Errorf("%s: %w", a.spec.Binary, err)
-	}
-	exited := make(chan struct{})
-	c := newConn(stdin)
-	go func() {
-		c.read(stdout)
-		_ = cmd.Wait()
-		close(exited)
-	}()
-	defer func() {
-		_ = stdin.Close()
-		select {
-		case <-exited:
-		case <-time.After(exitTimeout):
-			kill() // interrupt, then kill the process group
-			<-exited
-		}
-	}()
+	defer cleanup()
 
 	st := newStream(req.OnEvent, cwd)
 	var refused []string // read after the turn (the reader is done by then)
@@ -398,4 +390,49 @@ func accessName(a harness.Access) string {
 		return "default: read only"
 	}
 	return string(a)
+}
+
+func checkTransport(t string) error {
+	if t != "" && t != "stdio" && t != "streamable-http" {
+		return fmt.Errorf("acp: unsupported transport %q", t)
+	}
+	return nil
+}
+
+func (a *agent) startConnection(ctx, procCtx context.Context, kill context.CancelFunc, req harness.Request, env []string) (*conn, *tailBuffer, func(), error) {
+	if a.spec.Transport == "streamable-http" {
+		return a.startHTTP(ctx, procCtx, kill, req, env)
+	}
+	cmd := harness.Command(procCtx, harness.Process{Binary: a.spec.Binary, Args: a.args(req), Workdir: req.Workdir, Env: env})
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	stderr := &tailBuffer{max: 64 << 10}
+	cmd.Stderr = stderr
+	if err := cmd.Start(); err != nil {
+		return nil, nil, nil, fmt.Errorf("%s: %w", a.spec.Binary, err)
+	}
+	exited := make(chan struct{})
+	c := newConn(stdin)
+	go func() {
+		c.read(stdout)
+		_ = cmd.Wait()
+		close(exited)
+	}()
+	cleanup := func() {
+		_ = stdin.Close()
+		select {
+		case <-exited:
+		case <-time.After(exitTimeout):
+			kill() // interrupt, then kill the process group
+			<-exited
+		}
+	}
+
+	return c, stderr, cleanup, nil
 }
