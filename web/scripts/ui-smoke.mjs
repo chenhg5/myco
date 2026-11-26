@@ -6027,11 +6027,22 @@ async function runMatrix(browser, size, scheme) {
     // ⌃Tab still switches; Esc puts everything back.
     await step("专注模式", async () => {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");
-      if (narrow) await sidebar(page, false);
+      // (narrow: the sidebar slides away first; a click on ⋯ while it
+      // still covers the chat does not reach the button)
+      if (narrow) {
+        await sidebar(page, false);
+        await page.locator(".app-sidebar").waitFor({ state: "hidden", timeout: 5_000 });
+      }
       const conv = page.locator(".conv-detail:visible").last();
-      await clickVisible(page, conv.getByRole("button", { name: "更多" }).first());
       const item = page.locator(".conv-menu").getByRole("menuitem", { name: /专注模式/ });
-      await item.waitFor({ timeout: 5_000 });
+      // The menu is open when its item shows; a click that landed while
+      // the chat was still settling opens nothing, so it is tried again.
+      for (let i = 0; ; i++) {
+        await clickVisible(page, conv.getByRole("button", { name: "更多" }).first());
+        if (await item.waitFor({ timeout: 3_000 }).then(() => true, () => false)) break;
+        if (i === 2) throw new Error("⋯ 菜单点了三次都没打开");
+        await page.keyboard.press("Escape");
+      }
       if (!/⌘⇧F|Ctrl\+Shift\+F/.test(await item.innerText())) throw new Error("菜单里应写着专注模式的快捷键");
       await item.click();
       await page.locator(".app-shell.is-focus").waitFor({ timeout: 5_000 });
