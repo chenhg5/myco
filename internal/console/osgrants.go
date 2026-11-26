@@ -122,8 +122,13 @@ type osPerm struct {
 // once-only groups. Denials hold for every version. Says whether it
 // changed anything (to save).
 func (p *osPerm) forVersion(d osDecl) bool {
-	if p.ver == d.ver {
+	if !d.known || p.ver == d.ver {
 		return false
+	}
+	if p.ver == osVerPending {
+		// (allowed while the hub did not answer: those answers are for this code)
+		p.ver = d.ver
+		return true
 	}
 	keep := func(m map[string]bool) {
 		for gr := range m {
@@ -141,6 +146,9 @@ func (p *osPerm) forVersion(d osDecl) bool {
 	return true
 }
 
+// osVerPending marks allows answered while the page's version was unknown.
+const osVerPending = "\x00pending"
+
 // netAllowed records which declared hosts an allow of the network covers.
 func (p *osPerm) netAllowed(d osDecl) {
 	if p.net == nil {
@@ -157,6 +165,9 @@ type osGrants struct {
 
 // osDecl is what a page's app declares (from the hub), kept a minute.
 type osDecl struct {
+	// known: the hub answered (or there is no hub to ask). An unknown
+	// declaration (a slow or failed request) changes no one's allows.
+	known   bool
 	app     bool // made from an app (a template): it can declare
 	os, net []string
 	at      time.Time
@@ -268,8 +279,10 @@ func (b *Backend) declared(ctx context.Context, hub, page string) osDecl {
 	if ok && time.Since(d.at) < time.Minute {
 		return d
 	}
+	last := d
 	d = osDecl{at: time.Now()}
 	if b.Store == nil {
+		d.known = true
 		return d // (no hubs: nothing declared; the person is asked as for any page)
 	}
 	if h, err := b.find(hub); err == nil {
@@ -282,6 +295,14 @@ func (b *Backend) declared(ctx context.Context, hub, page string) osDecl {
 			}
 		}
 	}
+	if !d.known {
+		// A slow or failed request is not a new version of the page: keep
+		// what the hub said last (asked again in a minute), or nothing known.
+		if ok && last.known {
+			d = last
+		}
+		d.at = time.Now()
+	}
 	g.mu.Lock()
 	g.decl[k] = d
 	g.mu.Unlock()
@@ -289,7 +310,7 @@ func (b *Backend) declared(ctx context.Context, hub, page string) osDecl {
 }
 
 func declOf(p *api.Page) osDecl {
-	d := osDecl{at: time.Now()}
+	d := osDecl{at: time.Now(), known: true}
 	if p.Template != nil {
 		d.app = true
 		d.os, d.net = p.Template.OS, p.Template.Net
@@ -596,6 +617,9 @@ func (b *Backend) grantRoutes(m *http.ServeMux) {
 		}
 		// (an answer is for the code the page runs now)
 		p.forVersion(d)
+		if !d.known && p.ver == "" {
+			p.ver = osVerPending
+		}
 		answer := in.Answer
 		if answer == "always" && osOnceOnly[in.Group] {
 			answer = "once"
