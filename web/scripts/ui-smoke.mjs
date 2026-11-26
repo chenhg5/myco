@@ -2866,6 +2866,33 @@ async function runMatrix(browser, size, scheme) {
       }, ["再检查旧任务的链接", reply.id]);
       if (!below) throw new Error("新任务回答之后才补充的话，应排在那条回答下面");
       await shot(page, size, scheme, "conversation-supplement-older-open");
+      // What the older task does after that (a long session goes on filing
+      // its steps under it) goes on under what you added, never back up
+      // above it, in the newer task's run (where it showed before).
+      const after = new Date(Date.now() + 500).toISOString();
+      const traceURL = `**/app/hubs/hub_studio/messages/${older.id}/trace*`;
+      await page.route(traceURL, async (route) => {
+        const response = await route.fetch();
+        const json = await response.json();
+        const seq = Math.max(0, ...(json.events || []).map((e) => e.seq)) + 1;
+        json.events = [...(json.events || []),
+          { seq, kind: "step", at: after, data: { kind: "text", text: "补充之后接着查旧任务的链接" } },
+          { seq: seq + 1, kind: "step", at: after, data: { kind: "tool", tool: "Bash", id: "after-steer", input: "curl -I https://example.com" } }];
+        await route.fulfill({ response, json });
+      });
+      try {
+        const later = page.locator(".conv-detail .trace-say", { hasText: "补充之后接着查旧任务的链接" });
+        await later.first().waitFor({ timeout: 15_000 });
+        const order = await page.evaluate(([a]) => {
+          const add = [...document.querySelectorAll(".conv-detail .conv-msg.is-me")].filter((e) => e.textContent.includes(a)).pop();
+          const says = [...document.querySelectorAll(".conv-detail .trace-say")].filter((e) => e.textContent.includes("补充之后接着查旧任务的链接"));
+          return { n: says.length, below: !!add && says.every((x) => !!(add.compareDocumentPosition(x) & Node.DOCUMENT_POSITION_FOLLOWING)) };
+        }, ["再检查旧任务的链接"]);
+        if (order.n !== 1 || !order.below) throw new Error(`补充之后旧任务做的事应接在补充下面，只出现一处（实际 ${order.n} 处，${order.below ? "在下面" : "有在上面的"}）`);
+        await shot(page, size, scheme, "conversation-supplement-older-goes-on");
+      } finally {
+        await page.unroute(traceURL);
+      }
       await fetch(`http://${HOST}:${mockPort()}/app/hubs/hub_studio/messages/${older.id}/stop`, { method: "POST" });
       await noRound(page);
       await clickVisible(page, page.locator(".conv-head button").first());
