@@ -236,12 +236,12 @@ export function GoalDialog({ open, onOpenChange, hubId, agent, name, project, on
       </div>
       <div className="goal-limits">
         <label className="app-field">
-          <span className="app-field-label">{L("最长（小时）", "At most (hours)")}</span>
-          <input className="app-input" type="number" min={1} max={72} value={hours} onChange={(e) => setHours(Number(e.target.value) || 0)} />
+          <span className="app-field-label">{L("最长（小时，最多 8）", "At most (hours, up to 8)")}</span>
+          <input className="app-input" type="number" min={1} max={8} value={hours} onChange={(e) => setHours(Math.min(8, Number(e.target.value) || 0))} />
         </label>
         <label className="app-field">
           <span className="app-field-label">{L("最多几轮", "At most (rounds)")}</span>
-          <input className="app-input" type="number" min={1} max={100} value={rounds} onChange={(e) => setRounds(Number(e.target.value) || 0)} />
+          <input className="app-input" type="number" min={1} max={256} value={rounds} onChange={(e) => setRounds(Math.min(256, Number(e.target.value) || 0))} />
         </label>
       </div>
       <p className="goal-hint">{L("连续 2 轮没进展，间隔会自动放宽；连续 4 轮没进展或遇阻，会暂停来问你。", "After 2 rounds without progress it waits longer; after 4, or when blocked, it pauses and asks you.")}</p>
@@ -262,7 +262,8 @@ export function GoalEnded({ g, nameOf }: { g: Goal; nameOf: (n: string) => strin
   const what = short(g.objective, 40);
   const text = g.state === "achieved" ? L(`目标达成：${what}`, `Goal achieved: ${what}`)
     : g.state === "abandoned" ? L(`目标放弃了：${what}`, `Goal given up: ${what}`)
-    : g.state === "expired" ? (g.round >= g.max_rounds ? L(`目标轮次用完了：${what}`, `Goal out of rounds: ${what}`) : L(`目标到期了：${what}`, `Goal out of time: ${what}`))
+    : g.outcome === "round_limit" || (g.state === "expired" && g.round >= g.max_rounds) ? L(`目标轮次用完了：${what}`, `Goal out of rounds: ${what}`)
+    : g.state === "expired" ? L(`目标到期了：${what}`, `Goal out of time: ${what}`)
     : L(`${g.ended_by ? nameOf(g.ended_by) : "有人"}停止了目标：${what}`, `${g.ended_by ? nameOf(g.ended_by) : "Someone"} stopped the goal: ${what}`);
   return (
     <div className={cn("goal-ended", `is-${g.state}`, open && "is-open")} data-goal={g.id}>
@@ -273,7 +274,7 @@ export function GoalEnded({ g, nameOf }: { g: Goal; nameOf: (n: string) => strin
       </button>
       {open && (
         <div className="goal-ended-detail">
-          {g.outcome && <p>{g.outcome}</p>}
+          {g.outcome && g.outcome !== "round_limit" && <p>{g.outcome}</p>}
           {g.last_summary && <p className="goal-ended-summary">{L("最后一轮：", "Last round: ")}{g.last_summary}</p>}
         </div>
       )}

@@ -1087,7 +1087,11 @@ export const appApi = {
   // agent woken on a schedule to push it until it is done.
   goals: (hubId: string, q: { agent?: string; project?: string; state?: "active" | "all" } = {}) =>
     request<GoalList>("GET", `app/hubs/${enc(hubId)}/goals?${new URLSearchParams(Object.entries(q).filter(([, v]) => !!v) as [string, string][]).toString()}`),
-  goal: (hubId: string, id: string) => request<Goal>("GET", `app/hubs/${enc(hubId)}/goals/${enc(id)}`),
+  /** a goal with its rounds (the hub answers { goal, rounds }) */
+  goal: async (hubId: string, id: string): Promise<Goal> => {
+    const r = await request<Goal | { goal: Goal; rounds?: Goal["rounds"] }>("GET", `app/hubs/${enc(hubId)}/goals/${enc(id)}`);
+    return "goal" in r && r.goal ? { ...r.goal, rounds: r.rounds || [] } : (r as Goal);
+  },
   startGoal: (hubId: string, input: GoalStartRequest) => request<Goal>("POST", `app/hubs/${enc(hubId)}/goals`, input),
   goalAction: (hubId: string, id: string, action: "pause" | "resume" | "stop", reason?: string) =>
     request<Goal>("POST", `app/hubs/${enc(hubId)}/goals/${enc(id)}/${action}`, reason ? { reason } : {}),

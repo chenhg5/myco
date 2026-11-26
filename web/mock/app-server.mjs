@@ -4225,7 +4225,7 @@ const server = http.createServer(async (req, res) => {
       }
       const g = list.find((x) => x.id === parts[4]);
       if (!g) return fail(res, 404, "not_found", "no such goal");
-      if (parts.length === 5 && method === "GET") return send(res, 200, { rounds: [], ...g });
+      if (parts.length === 5 && method === "GET") { const { rounds, ...goal } = g; return send(res, 200, { goal, rounds: rounds || [] }); }
       if (parts.length === 5 && method === "PATCH") {
         const body = await readBody(req);
         if (!live(g)) return fail(res, 409, "conflict", `already ${g.state}`);
@@ -4236,7 +4236,8 @@ const server = http.createServer(async (req, res) => {
       if (parts.length === 6 && method === "POST" && ["pause", "resume", "stop"].includes(parts[5])) {
         if (!live(g)) return fail(res, 409, "conflict", `already ${g.state}`);
         if (parts[5] === "pause") Object.assign(g, { state: "paused", outcome: "你暂停了" });
-        if (parts[5] === "resume") Object.assign(g, { state: "active", no_progress: 0, every_sec: g.base_every_sec, outcome: undefined, next_wake_at: new Date(Date.now() + 60_000).toISOString() });
+        // (as the hub: resuming keeps the deadline, rounds and no-progress count)
+        if (parts[5] === "resume") Object.assign(g, { state: "active", outcome: undefined, next_wake_at: new Date(Date.now() + 60_000).toISOString() });
         if (parts[5] === "stop") Object.assign(g, { state: "stopped", ended_at: iso(0), ended_by: CONSOLE, outcome: "你停止了", next_wake_at: undefined });
         return send(res, 200, g);
       }
