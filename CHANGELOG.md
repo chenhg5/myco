@@ -4,14 +4,28 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.23.1
+
+- Runner: list an API-key provider's models on the runner's computer.
+- WorkBuddy (its bundled CodeBuddy, over local ACP HTTP) and AtomCode now work as agent CLIs over ACP.
+- App: a note you send cuts the run it lands in, so what follows shows under your note.
+- App: a card right after your message no longer overlaps its time.
+
+**中文**
+
+- 任务执行器：可以在运行任务的电脑上列出 API Key 供应商的模型。
+- WorkBuddy（内置 CodeBuddy，走本地 ACP HTTP）和 AtomCode 现在可以作为基于 ACP 的 agent 命令行使用。
+- 桌面应用：你发出的 note 会截断它进入的那次运行，之后的内容显示在你的 note 下面。
+- 桌面应用：紧跟在消息后面的卡片不再压住它的时间。
+
 ## v0.23.0
 
-- App: when you add to an older task that is still open, what the agent does after that now shows under your addition. Before, those steps kept growing above it, or did not show at all.
+- App: an addition to an older open task no longer cuts the run that shows its steps.
 - App: the composer's pill menus stay inside the chat column.
 
 **中文**
 
-- 桌面应用：给较早的、还没结束的任务补充内容后，agent 之后做的步骤会显示在你的补充下面。以前这些步骤会继续长在补充上方，或者干脆不显示。
+- 桌面应用：给较早的未完成任务补充内容时，不会再中断展示其步骤的运行。
 - 桌面应用：输入框的胶囊菜单不会再超出聊天栏。
 
 ## v0.22.21
@@ -42,14 +56,14 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 ## v0.22.19
 
-- Chat apps (preview): give an agent its own Feishu/Lark bot by scanning a QR code, or a Slack bot, from the agent's details (Name and access › Chat apps), and talk to it there; a bot is offline while its computer sleeps.
+- Chat apps (preview): connect Feishu/Lark and Slack bots from Settings > Chat apps and talk to agents there, one bot per agent, with a clear offline note while its computer sleeps.
 - Quota: a quota pill in the composer with a note when the account runs out, agents reading their owner's account quotas, and cloud sessions reporting their Claude quota.
 - App: choose which entries the sidebar shows, the chat's ... menu on a project's home, livelier file loading, and long chats that open without asking the hub for every run.
 - Browser automation: script results are awaited and exceptions classified, and screenshots explain why privacy blocked them instead of treating a URL fragment change as a new page.
 
 **中文**
 
-- 聊天软件（预览）：在 agent 资料的「名字和接入 › 聊天软件」里，扫码给它绑定飞书 / Lark 机器人，或绑定 Slack 机器人，然后直接在聊天里找它；电脑休眠时机器人离线。
+- 聊天应用（预览）：在「设置 › 聊天应用」连接飞书/Lark 与 Slack 机器人，在聊天里直接和 agent 对话；每个 agent 一个机器人，电脑休眠时明确显示机器人离线。
 - 额度：输入框显示额度状态，账号用尽时给出提示；agent 读取所属成员的账号额度，云端会话上报 Claude 额度。
 - 桌面应用：侧边栏可自选显示项，项目主页有聊天「⋯」菜单，文件加载更顺滑，长聊天打开时不再逐次向 Hub 查询。
 - 网页自动化：等待脚本结果并区分异常类型；截图被隐私检查拒绝时说明原因，同一页面仅片段变化不再当作新页面。
