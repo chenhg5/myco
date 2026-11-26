@@ -4171,6 +4171,10 @@ async function runMatrix(browser, size, scheme) {
       await box.fill(t);
       await box.press("Enter");
       await page.locator(".conv-msg.is-me", { hasText: t }).last().waitFor({ timeout: 20_000 });
+      // ⌘↩ queues only while that one is at work (the box then offers to
+      // queue the next one); before the agent takes it up, it would just
+      // send. Wait for that, not for a fixed time.
+      await page.waitForFunction(() => /排到下一条/.test(document.querySelector(".conv-detail .conv-compose-input")?.getAttribute("placeholder") || ""), null, { timeout: 20_000 });
       const gone = "这条先撤掉";
       const a = "第一条排队：改首页标题";
       const b = "第二条排队：改下载页按钮";
