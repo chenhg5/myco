@@ -8559,7 +8559,8 @@ body.is-resizing {
 
 /* 置顶 (pins.tsx): what the conversation keeps at hand, a row of small
    tabs under its header; drag to order, right-click to rename or unpin. */
-/* The bars that stay on top of a chat (pins, plan, goal, watches): one
+/* The bars that stay on top of a chat (plan, goal, watches; the pins
+   keep their own plain row above): one
    block on a surface of its own, a hairline between its rows, and a soft
    shadow over the messages that scroll beneath it. */
 .conv-tops {
@@ -8575,11 +8576,6 @@ body.is-resizing {
 .conv-tops:empty { display: none; }
 .conv-tops > * { border-bottom: 1px solid var(--line-2) !important; }
 .conv-tops > :last-child { border-bottom: 0 !important; }
-/* chips on this surface: a step up so they still read as chips */
-.conv-tops .pin-chip { background: var(--card); box-shadow: 0 0 0 1px var(--line-2); }
-.conv-tops .pin-chip:hover { background: var(--pill-hover); }
-.conv-tops .pin-chip.is-add { background: none; box-shadow: none; }
-.conv-tops .pin-chip.is-add:hover { background: var(--nav-hover); }
 .pin-bar {
   flex: none;
   display: flex;
