@@ -62,3 +62,21 @@ func TestControlDiagnosticsKeepRecentEntriesAtLimit(t *testing.T) {
 		t.Fatal("log limit discarded all future diagnostics", info.Size(), err)
 	}
 }
+
+func TestDelayedDestroyedContextCannotRemoveReusedID(t *testing.T) {
+	session, _, send := navigationFixture(t)
+	session.contextKeys = map[string]map[proto.RuntimeExecutionContextID]string{"sid": {1: "current-world"}}
+	send(&proto.RuntimeExecutionContextDestroyed{ExecutionContextID: 1, ExecutionContextUniqueID: "old-world"})
+	session.mu.Lock()
+	count := len(session.contexts["sid"])
+	session.mu.Unlock()
+	if count != 1 {
+		t.Fatal("delayed destruction removed reused context")
+	}
+	send(&proto.RuntimeExecutionContextDestroyed{ExecutionContextID: 1, ExecutionContextUniqueID: "current-world"})
+	session.mu.Lock()
+	defer session.mu.Unlock()
+	if len(session.contexts["sid"]) != 0 || len(session.contextKeys["sid"]) != 0 {
+		t.Fatal("live destruction not cleaned")
+	}
+}
