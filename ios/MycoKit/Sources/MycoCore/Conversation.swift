@@ -279,6 +279,13 @@ public enum ConversationBuilder {
                     if !close, let task = m.replyTo.flatMap({ byID[$0] }) { item.quote = RunWindows.title(of: task) }
                     if let task = m.replyTo { owner[m.id] = task }
                     items.append(item)
+                    // What its task did since goes on under it.
+                    if processes.contains(m.id) {
+                        items.append(.init(
+                            id: m.id + ".process", at: m.createdAt.addingTimeInterval(0.001),
+                            kind: .process(taskID: m.id, live: m.replyTo.flatMap { byID[$0] }?.isOpen ?? false)))
+                        if let task = m.replyTo { owner[m.id + ".process"] = task }
+                    }
                 }
             case "reply":
                 if !asked {
@@ -353,7 +360,24 @@ public enum ConversationBuilder {
             if case .status(.working, _) = kind { return 0 }
             return 1
         }
-        let lines = myOpen.compactMap { open in standing(open).map { (task: open.task, kind: $0) } }
+        var lines = myOpen.compactMap { open in standing(open).map { (task: open.task, kind: $0) } }
+        // An older task that may be stuck says so under itself, before what
+        // I sent next (as the desktop app does), not at the bottom: there,
+        // the newest task is the one to speak of, at work or waiting.
+        if let newest = myOpen.map(\.task).max(by: { $0.createdAt < $1.createdAt }) {
+            for line in lines where line.task.id != newest.id {
+                guard case .status(.maybeStuck, _) = line.kind else { continue }
+                let next = messages
+                    .filter { $0.from == me && ["task", "note", "steer"].contains($0.type) && $0.createdAt > line.task.createdAt }
+                    .map(\.createdAt).min()
+                let under = max(line.task.createdAt.addingTimeInterval(0.002), (newestUpdate[line.task.id]?.at ?? .distantPast).addingTimeInterval(0.001))
+                items.append(.init(id: line.task.id + ".status", at: next.map { max(under, $0.addingTimeInterval(-0.001)) } ?? under, kind: line.kind))
+            }
+            lines.removeAll { line in
+                guard line.task.id != newest.id, case .status(.maybeStuck, _) = line.kind else { return false }
+                return true
+            }
+        }
         let leading = lines.min { a, b in
             (rank(a.kind), b.task.createdAt) < (rank(b.kind), a.task.createdAt)
         }
@@ -488,6 +512,13 @@ public enum ConversationBuilder {
             out += cards.map(\.card)
         }
         return out.sorted { ($0.at, $0.id) < ($1.at, $1.id) }
+    }
+
+    /// Cards from two sources, once each: the first's kept where both have
+    /// one, the second's added where they are new.
+    public static func merged(_ first: [Handoff], _ second: [Handoff]) -> [Handoff] {
+        let known = Set(first.map(\.id))
+        return (first + second.filter { !known.contains($0.id) }).sorted { ($0.at, $0.id) < ($1.at, $1.id) }
     }
 
     /// The cards on a project's page, from its threads: the work the

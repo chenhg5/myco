@@ -191,6 +191,11 @@ public enum ClosedPlans {
         defaults.set(all, forKey: defaultsKey)
     }
 
+    /// Forgets every closed plan (tests start from what the demo shows).
+    public static func forgetAll(defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: defaultsKey)
+    }
+
     /// The key of a chat: the workspace, the agent and the project.
     public static func chat(workspace: String, agent: String, project: String?) -> String {
         [workspace, agent, project ?? ""].joined(separator: "|")

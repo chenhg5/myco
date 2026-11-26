@@ -88,6 +88,13 @@ public struct HubClient: HubAPI {
         return MessagePage(messages: envelope.messages, more: envelope.more ?? false)
     }
 
+    public func peers(of agent: String) async throws -> [String] {
+        struct Peer: Decodable { var agent: String }
+        struct Envelope: Decodable { var peers: [Peer]? }
+        let envelope: Envelope = try await get("/v1/console/agents/\(Self.segment(agent))/peers", [:], timeout: Self.pollTimeout)
+        return (envelope.peers ?? []).map(\.agent)
+    }
+
     public func trace(of messageID: String, after seq: Int) async throws -> Trace {
         try await get("/v1/console/messages/\(messageID)/trace", ["after": String(seq)])
     }
@@ -312,6 +319,12 @@ public struct HubClient: HubAPI {
         var body = ["model": model, "effort": effort]
         if let access { body["access"] = access }
         let data = try await call("PUT", "/v1/agents/\(safe)/run-settings", body: HubJSON.encoder().encode(body))
+        return try Self.decode(Agent.self, from: data)
+    }
+
+    public func listModelsAgain(of agent: String) async throws -> Agent {
+        let body = ["models_refresh": ISO8601DateFormatter().string(from: Date())]
+        let data = try await call("PUT", "/v1/agents/\(Self.segment(agent))/run-settings", body: HubJSON.encoder().encode(body))
         return try Self.decode(Agent.self, from: data)
     }
 

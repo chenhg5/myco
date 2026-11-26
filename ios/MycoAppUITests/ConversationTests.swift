@@ -684,6 +684,35 @@ final class ConversationTests: XCTestCase {
     }
 
     @MainActor
+    func testAnAgentOnAnotherVendorOffersThatVendorsModelsAndListsThemAgain() {
+        // The tester runs Claude Code on DeepSeek with an API key: its
+        // runner listed DeepSeek's models ten minutes ago.
+        let app = launch(["-myco-route", "agent:studio-claude-55d0"])
+        let run = app.descendants(matching: .any)["composer.run"].firstMatch
+        XCTAssertTrue(run.waitForExistence(timeout: 20))
+        run.tap()
+        let source = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", "Models as DeepSeek lists them")).firstMatch
+        XCTAssertTrue(source.waitForExistence(timeout: 5), "the menu says where the models came from")
+        XCTAssertTrue(source.label.contains("10 min ago"), source.label)
+        let again = app.buttons["composer.run.listAgain"].firstMatch
+        XCTAssertTrue(again.exists, "and offers to list them again")
+        snap("provider-models-menu")
+        let models = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Model")).firstMatch
+        models.tap()
+        XCTAssertTrue(app.buttons["DeepSeek V4 Flash"].waitForExistence(timeout: 5), "DeepSeek's models, by the names it gave")
+        XCTAssertFalse(app.buttons["Fable"].exists, "not Claude's own names")
+        snap("provider-models-list")
+        app.buttons["DeepSeek V4 Flash"].tap()
+        // Listed again: just now.
+        run.tap()
+        XCTAssertTrue(app.buttons["composer.run.listAgain"].firstMatch.waitForExistence(timeout: 5))
+        app.buttons["composer.run.listAgain"].firstMatch.tap()
+        run.tap()
+        let fresh = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "just now")).firstMatch
+        XCTAssertTrue(fresh.waitForExistence(timeout: 10), "listed again just now")
+    }
+
+    @MainActor
     func testAPageAnAgentPublishedIsACardThatOpensInTheApp() {
         // The tester made its checklist a web page and says where it is.
         let app = launch(["-myco-start", "session", "-myco-route", "agent:studio-claude-55d0"])
@@ -851,7 +880,7 @@ final class ConversationTests: XCTestCase {
     @MainActor
     func testAClosedPlanStaysClosedWhenTheChatIsOpenedAgain() {
         // The notes helper's plan is still going: pinned above the chat.
-        let app = launch(["-myco-route", "agent:studio-claude-c41f"])
+        let app = launch(["-myco-route", "agent:studio-claude-c41f", "-myco-forget-closed-plans", "YES"])
         let plan = app.buttons["work.plan"]
         XCTAssertTrue(plan.waitForExistence(timeout: 20))
         app.buttons["work.plan.close"].tap()

@@ -842,7 +842,11 @@ const state = {
           kind: "agent", machine_id: "m_studio",
           // Its runner lets the App switch its provider from here (remote_provider)
           // and lists the cc-switch providers on its computer (never a key).
-          runtime: { cli: "claude", cli_version: "2.1.240", model: "sonnet", access: "workspace", max_access: "workspace", features: ["mcp_tools", "remote_provider"],
+          runtime: { cli: "claude", cli_version: "2.1.240", model: "sonnet", access: "workspace", max_access: "workspace", features: ["mcp_tools", "remote_provider", "models_refresh"],
+            // On DeepSeek with an API key: its runner lists DeepSeek's models
+            // with that key on its computer (10 minutes ago).
+            models: [{ id: "deepseek-v4", name: "DeepSeek V4" }, { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash" }, { id: "deepseek-reasoner" }],
+            models_from: "provider", models_at: iso(600),
             // Its Claude sign-in expired: the last numbers stay, marked old,
             // and the person is told to sign in again.
             quota: {
@@ -4965,6 +4969,7 @@ const server = http.createServer(async (req, res) => {
         }
         const keptProvider = agent.run_settings?.provider;
         const keptManual = agent.run_settings?.provider_encrypted;
+        const keptRefresh = agent.run_settings?.models_refresh;
         agent.run_settings = {};
         if (body.provider !== undefined) {
           if (!rt.features?.includes("remote_provider")) return fail(res, 409, "unsupported", "this agent's runner cannot switch providers from the App; upgrade myco on its computer");
@@ -4981,6 +4986,11 @@ const server = http.createServer(async (req, res) => {
         }
         if (access) agent.run_settings.access = access;
         if (mcpTools) agent.run_settings.mcp_tools = true;
+        // Asked to list its provider's models again: kept, and the runner
+        // (here at once) lists them again.
+        const refresh = body.models_refresh === undefined ? keptRefresh : body.models_refresh;
+        if (refresh) agent.run_settings.models_refresh = refresh;
+        if (body.models_refresh && rt.features?.includes("models_refresh") && rt.models_from) rt.models_at = new Date().toISOString();
         if (body.model) agent.run_settings.model = body.model;
         if (body.effort) agent.run_settings.effort = body.effort;
         // What the runtime now reports, as a real hub's runner would.

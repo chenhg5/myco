@@ -41,6 +41,19 @@ struct RunChoiceButton: View {
                     Section {
                         Text(choice.note)
                     }
+                    // On another vendor: where the models came from, and
+                    // its runner asked to list them again.
+                    if let source = choice.source {
+                        Section {
+                            Text(source)
+                            if choice.canListAgain {
+                                Button(action: listAgain) {
+                                    Label(L("重新读取模型列表", "List models again"), systemImage: "arrow.clockwise")
+                                }
+                                .accessibilityIdentifier("composer.run.listAgain")
+                            }
+                        }
+                    }
                 } label: {
                     label
                 }
@@ -98,6 +111,15 @@ struct RunChoiceButton: View {
 
     private var effort: SwiftUI.Binding<String> {
         SwiftUI.Binding(get: { choice.chosenEffort }, set: { picked in save(model: choice.chosenModel, effort: picked) })
+    }
+
+    private func listAgain() {
+        guard !saving else { return }
+        saving = true
+        Task {
+            problem = await session.listModelsAgain(of: agent)
+            saving = false
+        }
     }
 
     private func save(model: String, effort: String) {

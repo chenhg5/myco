@@ -60,6 +60,16 @@ public struct Runtime: Codable, Sendable, Hashable {
     /// The models its CLI offers on that computer, in the CLI's order
     /// (Codex; runners from v0.21.1). Absent: use the known names.
     public var models: [RuntimeModel]?
+    /// Where `models` came from: provider (the vendor of the API key it
+    /// uses listed them, at `modelsAt`), catalog (myco's own list: the
+    /// vendor could not be asked yet) or cli. Absent from older runners.
+    public var modelsFrom: String? = nil
+    public var modelsAt: Date? = nil
+    /// The model provider's name (never its key), e.g. "DeepSeek".
+    public var provider: String? = nil
+    /// What its runner supports beyond the basics ("models_refresh": its
+    /// models can be listed again from here).
+    public var features: [String]? = nil
     /// The account's usage limits, as last reported (only its owner sees
     /// them).
     public var quota: Quota? = nil

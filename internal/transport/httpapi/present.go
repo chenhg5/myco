@@ -57,7 +57,7 @@ func (s *Server) agentDTO(r *http.Request, a *domain.Agent) api.Agent {
 	if rt := a.Runtime; rt != (domain.Runtime{}) {
 		out.Runtime = &api.Runtime{CLI: rt.CLI, CLIVersion: rt.CLIVersion, Model: rt.Model, ModelSource: rt.ModelSource, Access: rt.Access,
 			Provider: rt.Provider, ProviderSource: rt.ProviderSource, ProviderHost: rt.ProviderHost, Effort: rt.Effort, EffortSource: rt.EffortSource, MaxAccess: rt.MaxAccess, Quota: s.visibleQuota(r, a),
-			RunnerInstance: rt.RunnerInstance, RestartingUntil: rt.RestartingUntil, Features: rt.FeatureList(), Away: rt.Away, Env: rt.Env, Models: modelsDTO(rt.ModelList())}
+			RunnerInstance: rt.RunnerInstance, RestartingUntil: rt.RestartingUntil, Features: rt.FeatureList(), Away: rt.Away, Env: rt.Env, Models: modelsDTO(rt.ModelList()), ModelsFrom: rt.ModelsFrom, ModelsAt: timePtr(rt.ModelsAt)}
 		if rt.RunnerSlots != "" {
 			var slots api.RunnerSlots
 			if json.Unmarshal([]byte(rt.RunnerSlots), &slots) == nil {
@@ -80,7 +80,7 @@ func (s *Server) agentDTO(r *http.Request, a *domain.Agent) api.Agent {
 		_ = json.Unmarshal([]byte(a.Runtime.Providers), &out.Runtime.Providers)
 	}
 	if rs := a.RunSettings; rs != (domain.RunSettings{}) {
-		out.RunSettings = &api.RunSettings{Model: rs.Model, Effort: rs.Effort, Access: rs.Access, MCPTools: &rs.MCPTools, Provider: rs.Provider}
+		out.RunSettings = &api.RunSettings{Model: rs.Model, Effort: rs.Effort, Access: rs.Access, MCPTools: &rs.MCPTools, Provider: rs.Provider, ModelsRefresh: rs.ModelsRefresh}
 		if rs.ProviderEncrypted != nil {
 			e := rs.ProviderEncrypted
 			out.RunSettings.ProviderEncrypted = &api.EncryptedProvider{ID: e.ID, From: e.From, Body: e.Body}
@@ -312,4 +312,24 @@ func (s *Server) visibleQuota(r *http.Request, a *domain.Agent) *api.Quota {
 		q = s.machines.AccountQuota(r.Context(), a)
 	}
 	return quotaDTO(q)
+}
+
+// modelsFrom keeps a runner's word for where its models came from, when
+// it is one the apps know and there are models.
+func modelsFrom(from string, models []api.RuntimeModel) string {
+	switch from {
+	case "provider", "catalog", "cli":
+		if len(models) > 0 {
+			return from
+		}
+	}
+	return ""
+}
+
+// modelsAt is when the provider listed the models (not in the future).
+func modelsAt(at *time.Time, models []api.RuntimeModel) time.Time {
+	if at == nil || len(models) == 0 || at.After(time.Now().Add(time.Minute)) {
+		return time.Time{}
+	}
+	return at.UTC()
 }

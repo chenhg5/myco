@@ -32,7 +32,7 @@ public enum RunState: Sendable, Hashable {
         case "acked":
             let last = task.activeAt ?? task.updatedAt
             let offline = recipient.map { $0.state == "offline" || !$0.agent.online } ?? false
-            let limit = recipient?.receiving == "session" ? stuckAfterInSession : stuckAfter
+            let limit = receivesInSession(recipient) ? stuckAfterInSession : stuckAfter
             if offline || now.timeIntervalSince(last) > limit {
                 return .maybeStuck(quietSince: last)
             }
@@ -40,6 +40,17 @@ public enum RunState: Sendable, Hashable {
         default:
             return .queued
         }
+    }
+
+    /// It handles messages only while a session of its own runs: it says
+    /// so (receiving "session"), or it is an inbox node or a cloud session.
+    /// The desktop app's `receivesInSession`.
+    public static func receivesInSession(_ status: AgentStatus?) -> Bool {
+        guard let status else { return false }
+        if status.receiving == "session" { return true }
+        let agent = status.agent
+        let cli = agent.runtime?.cli ?? agent.binding.harness ?? ""
+        return cli == "inbox" || ((agent.machineId ?? "").isEmpty && cli.hasSuffix("-cloud"))
     }
 
     /// Still open: the input speaks to this task.

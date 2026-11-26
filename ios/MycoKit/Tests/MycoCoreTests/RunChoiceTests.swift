@@ -119,3 +119,48 @@ struct RunChoiceTests {
         #expect(session.runChoice(of: "studio-codex-7f3a")?.kind == .workspaceTooOld)
     }
 }
+
+/// An agent on another vendor: its provider's models, where they came
+/// from, and its runner asked to list them again.
+@MainActor
+struct ProviderModelsTests {
+    @Test func theProvidersModelsSayWhereTheyCameFrom() {
+        AppLanguage.$forced.withValue(.zh) {
+            let now = Date()
+            var runtime = Runtime(cli: "claude", model: "deepseek-v4", models: [RuntimeModel(id: "deepseek-v4", name: "DeepSeek V4"), RuntimeModel(id: "deepseek-reasoner")])
+            runtime.provider = "DeepSeek"
+            runtime.modelsFrom = "provider"
+            runtime.modelsAt = now.addingTimeInterval(-600)
+            runtime.features = ["models_refresh"]
+            let agent = Agent(id: "agt_1", name: "coder", binding: Binding(harness: "claude"), kind: "agent", machineId: "mach_1", runtime: runtime)
+            let choice = RunChoice.of(agent, manages: true, now: now)
+            #expect(choice?.models == ["deepseek-v4", "deepseek-reasoner"])
+            #expect(choice?.name(of: "deepseek-v4") == "DeepSeek V4")
+            #expect(choice?.source == "模型列表从 DeepSeek 读取 · 10 分钟前")
+            #expect(choice?.canListAgain == true)
+            // Not mine: no list, no line.
+            #expect(RunChoice.of(agent, manages: false, now: now)?.source == nil)
+            // The built-in list, before the vendor could be asked.
+            var catalog = agent
+            catalog.runtime?.modelsFrom = "catalog"
+            catalog.runtime?.modelsAt = nil
+            #expect(RunChoice.of(catalog, manages: true, now: now)?.source == "内置列表：还没能从 DeepSeek 读取")
+            // An older runner: no line, and nothing to ask.
+            var old = agent
+            old.runtime?.features = nil
+            #expect(RunChoice.of(old, manages: true, now: now)?.canListAgain == false)
+            // Codex's own list says nothing.
+            var codex = agent
+            codex.runtime?.modelsFrom = "cli"
+            #expect(RunChoice.of(codex, manages: true, now: now)?.source == nil)
+        }
+    }
+
+    @Test func listingAgainAsksItsRunner() async throws {
+        let hub = FakeHub(scenario: .team)
+        // (the demo's list is ten minutes old; listed again, it is new)
+        let agent = try await hub.listModelsAgain(of: "studio-claude-55d0")
+        #expect(agent.runtime?.modelsFrom == "provider")
+        #expect((agent.runtime?.modelsAt ?? .distantPast) > Date().addingTimeInterval(-60))
+    }
+}

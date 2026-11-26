@@ -593,6 +593,8 @@ Before you commit, look through the screenshots yourself and check at least:
 
 How the interface really looks on the Mac (traffic-light alignment, fonts, right-click menu position) has to be checked with a preview build; maintainers build one with the myco-preview skill in their internal repository.
 
+Under the run settings' model, a node whose runner lists its API-key provider's models has one quiet help line saying where the list came from and when ("Models as DeepSeek lists them · 10 min ago", or "Built-in list: DeepSeek could not be asked yet"), with an inline "List again" (`.app-kv-link`) for those who may change its model, on runners with the `models_refresh` feature; it reads "Listing…" until a new list comes or about 90 seconds pass. The phone shows the same line and a "List models again" item at the bottom of the model menu.
+
 The "Allow MCP tools" item in the run settings is shown only to people who own the node, and only when its runner reports the `mcp_tools` feature; it is off by default. With full access it shows as on but cannot be changed, with an explanation that MCP tools are already allowed.
 # Tool inventory
 

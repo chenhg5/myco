@@ -183,6 +183,12 @@ type Runtime struct {
 	// say (Claude Code: its aliases are fixed) or the runner predates it
 	// (v0.21.1).
 	Models []RuntimeModel `json:"models,omitempty"`
+	// ModelsFrom says where Models came from: provider (the vendor of the
+	// API key the agent uses listed them, at ModelsAt), catalog (myco's
+	// built-in list: the vendor could not be asked yet) or cli (the CLI's
+	// own list). Absent from runners that predate it.
+	ModelsFrom string     `json:"models_from,omitempty"`
+	ModelsAt   *time.Time `json:"models_at,omitempty"`
 	// Project-level tool inventory only; user-level tools come from MachineAI.
 	MCP          []MCPServer  `json:"mcp,omitempty"`
 	Skills       []ToolSkill  `json:"skills,omitempty"`
@@ -264,6 +270,10 @@ type RunSettings struct {
 	// Access: readonly, workspace or full ("" follows the machine). Only the
 	// agent's owner may change it; left out of a request, it stays as it is.
 	Access string `json:"access,omitempty"`
+	// ModelsRefresh asks the runner to list the provider's models again:
+	// the App sets it to a new value (the time) and the runner asks when
+	// it changes. Runners with the "models_refresh" feature only.
+	ModelsRefresh string `json:"models_refresh,omitempty"`
 }
 
 // RunSettingsPatch preserves every field omitted by an App update.
@@ -274,6 +284,7 @@ type RunSettingsPatch struct {
 	MCPTools          *bool              `json:"mcp_tools,omitempty"`
 	Provider          *string            `json:"provider,omitempty"`
 	ProviderEncrypted *EncryptedProvider `json:"provider_encrypted,omitempty"`
+	ModelsRefresh     *string            `json:"models_refresh,omitempty"`
 }
 
 // Machine is a computer, server or cloud environment agents run on.

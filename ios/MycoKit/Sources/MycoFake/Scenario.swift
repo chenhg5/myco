@@ -73,7 +73,15 @@ public enum Scenario: Sendable {
         let lead = agent("agt_lead0001", "cloud-lead", "协调者", "拆任务、派活、审查合入", cli: "claude-cloud", dir: "/home/user/myco", days: 12)
         let backend = agent("agt_back0002", "studio-codex-7f3a", "后端工程师", "改 Go：Hub、CLI 和 runner", cli: "codex", dir: "~/code/myco", days: 11)
         let frontend = agent("agt_front003", "studio-claude-2b9c", "前端工程师", "App 界面和构建验证", cli: "claude", dir: "~/code/myco/web", days: 10)
-        let tester = agent("agt_test0004", "studio-claude-55d0", "测试", "写测试、跑冒烟、看 CI", cli: "claude", dir: "~/code/myco", days: 9)
+        var tester = agent("agt_test0004", "studio-claude-55d0", "测试", "写测试、跑冒烟、看 CI", cli: "claude", dir: "~/code/myco", days: 9)
+        // Claude Code on DeepSeek with an API key: its runner lists
+        // DeepSeek's models with that key on its computer.
+        tester.runtime?.model = "deepseek-v4"
+        tester.runtime?.provider = "DeepSeek"
+        tester.runtime?.features = ["models_refresh"]
+        tester.runtime?.models = [RuntimeModel(id: "deepseek-v4", name: "DeepSeek V4"), RuntimeModel(id: "deepseek-v4-flash", name: "DeepSeek V4 Flash"), RuntimeModel(id: "deepseek-reasoner")]
+        tester.runtime?.modelsFrom = "provider"
+        tester.runtime?.modelsAt = ago(600)
         var writer = agent("agt_docs0005", "laptop-claude-a1e2", "文档", "README 和 docs", cli: "claude", dir: "~/code/myco/docs", days: 8)
         writer.online = false
         let ops = agent("agt_ops00006", "vps-codex-90aa", "运维", "看着服务器和发版", cli: "codex", dir: "/srv/myco", days: 7)

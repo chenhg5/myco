@@ -31,6 +31,17 @@ struct RunStateTests {
             Issue.record("a session node quiet for 11 minutes is still working")
             return
         }
+        // So does a cloud session or an inbox node, whatever it reports
+        // (the desktop app's receivesInSession).
+        let cloud = AgentStatus(agent: Agent(id: "c", name: "cloud-lead", binding: Binding(harness: "claude-cloud")), state: "working")
+        let inbox = AgentStatus(agent: Agent(id: "i", name: "inbox", binding: Binding(harness: "inbox"), machineId: "mach_1"), state: "working")
+        for node in [cloud, inbox] {
+            guard case .working = RunState.of(task("acked", quietFor: elevenMinutes), recipient: node, now: now) else {
+                Issue.record("\(node.agent.name) quiet for 11 minutes is still working")
+                return
+            }
+        }
+        #expect(RunState.of(task("acked", quietFor: 31 * 60), recipient: cloud, now: now) == .maybeStuck(quietSince: now.addingTimeInterval(-31 * 60)))
         // Away: at once.
         guard case .maybeStuck = RunState.of(task("acked"), recipient: coder("offline"), now: now) else {
             Issue.record("an acked task on a node that is away may be stuck")
@@ -453,6 +464,49 @@ struct ConversationBuilderTests {
         #expect(kinds([held], paused: []) == [.status(.working(since: at(-200)), taskID: "t1")])
     }
 
+    /// Glenn's case: an older task quiet for hours, a newer one its session
+    /// worked on and stopped to wait. The bottom speaks of the newer one
+    /// (nothing, it waits); the older one's line is under it.
+    @Test func anOlderStuckTaskSaysSoUnderItselfNotAtTheBottom() {
+        let older = Message(id: "t1", from: "me", to: "lead", body: "再发个新版本吧", status: "acked", createdAt: at(-8_000), updatedAt: at(-7_500), activeAt: at(-7_500))
+        let newer = Message(id: "t2", from: "me", to: "lead", body: "不阻塞你发布 0.22.21 吧", status: "acked", createdAt: at(-1_200), updatedAt: at(-600), activeAt: at(-600))
+        let lead = AgentStatus(agent: Agent(id: "a", name: "lead", binding: Binding(harness: "claude-cloud")), state: "working")
+        let items = ConversationBuilder.items(
+            me: "me", agent: "lead", messages: [older, newer], paused: ["t2"], activity: ["t2": at(-560)], ended: ["t2"],
+            status: { _ in lead }, now: now)
+        let line = items.first { $0.id == "t1.status" }
+        guard case .status(.maybeStuck, "t1")? = line?.kind else {
+            Issue.record("the older task may be stuck: \(String(describing: line?.kind))")
+            return
+        }
+        #expect(line!.at < newer.createdAt)
+        #expect(items.last?.id != "t1.status", "the bottom does not speak of the older task")
+        #expect(!items.contains { $0.at == .distantFuture })
+    }
+
+    /// What I added to a task with other messages since starts a run of
+    /// its own: what the task did after it shows under it.
+    @Test func anAdditionCarriesItsTasksRunOn() {
+        let task = Message(id: "t1", from: "me", to: "lead", body: "ship it", status: "acked", createdAt: at(-900))
+        let added = Message(id: "s1", from: "me", to: "lead", threadId: "t1", replyTo: "t1", type: "steer", body: "and the notes", status: "done", createdAt: at(-300))
+        let windows = RunWindows(tasks: [task], additions: [added], answered: [], reported: [])
+        #expect(windows.windows["s1"]?.lenders == ["t1"])
+        #expect(windows.windows["t1"]?.until == added.createdAt)
+        #expect(windows.home(of: "t1", at: at(-200)) == "s1")
+        #expect(windows.home(of: "t1", at: at(-600)) == "t1")
+        // (it said something in between: the addition is drawn where I sent it)
+        let said = Message(id: "n1", from: "lead", to: "me", threadId: "t1", type: "note", body: "on it", status: "done", createdAt: at(-600))
+        #expect(!ConversationBuilder.steerIsInItsRun(added, among: [task, said, added]))
+        let items = ConversationBuilder.items(
+            me: "me", agent: "lead", messages: [task, said, added], processes: ["t1", "s1"], status: { _ in nil }, now: now)
+        let ids = items.map(\.id)
+        guard let steer = ids.firstIndex(of: "s1"), let run = ids.firstIndex(of: "s1.process") else {
+            Issue.record("the addition's run is missing: \(ids)")
+            return
+        }
+        #expect(run == steer + 1)
+    }
+
     @Test func whatWaitsBehindAnOpenTaskIsNotInTheConversation() {
         let messages = [
             Message(id: "t1", from: "me", to: "coder", body: "first", status: "acked", createdAt: at(-100), updatedAt: at(-5)),
@@ -523,5 +577,23 @@ struct ConversationBuilderTests {
         let items = said(ConversationBuilder.items(me: "me", agent: "coder", messages: messages, status: { _ in nil }, now: now))
         #expect(items.map(\.kind) == [.mine(text: "x", steer: false, by: nil), .stopped])
         #expect(ConversationBuilder.openTask(me: "me", messages: messages) == nil)
+    }
+}
+
+/// A project's page shows the coordinator's work from the project's
+/// threads and from its exchanges with each agent it worked with, once.
+@MainActor
+struct ProjectCardsTests {
+    @Test func cardsFromBothSourcesShowOnce() {
+        let now = Date()
+        let task = Message(id: "m1", from: "lead", to: "release", type: "task", body: "发 0.22.21", status: "acked", createdAt: now.addingTimeInterval(-60))
+        let unmarked = Message(id: "m2", from: "lead", to: "devx", type: "task", body: "看看为啥离线", status: "acked", createdAt: now.addingTimeInterval(-30))
+        let fromFeed = ConversationBuilder.handoffs(between: [task], and: "lead")
+        let exchanged = ConversationBuilder.handoffs(between: [task, unmarked], and: "lead")
+        let cards = ConversationBuilder.merged(fromFeed, exchanged)
+        let ids = cards.map { $0.id }
+        let outgoing = cards.filter { $0.outgoing }.count
+        #expect(ids == ["m1", "m2"])
+        #expect(outgoing == 2)
     }
 }

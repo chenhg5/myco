@@ -22,6 +22,7 @@ import (
 	"github.com/myco-ai/myco/internal/harness"
 	"github.com/myco-ai/myco/internal/harness/codex"
 	"github.com/myco-ai/myco/internal/machineid"
+	"github.com/myco-ai/myco/internal/provider"
 	"github.com/myco-ai/myco/internal/quota"
 	"github.com/myco-ai/myco/internal/runner"
 )
@@ -61,6 +62,15 @@ type runtimeReporter struct {
 	// models lists the models the CLI offers, read again for each report
 	// (its list changes as the CLI updates); nil when it does not say.
 	models func() []api.RuntimeModel
+	// provModels is the list of the provider the agent uses with an API
+	// key (startModels), target where that provider is; refresh* follow
+	// the App's requests to list again.
+	provModels  *provider.ModelList
+	target      providerTarget
+	hasTarget   bool
+	refresh     chan struct{}
+	refreshSeen bool
+	refreshLast string
 }
 
 // reportToHub reports this machine (once) and the agent's runtime, and
@@ -251,8 +261,12 @@ func (r *runtimeReporter) flush(ctx context.Context) {
 			options := localProviderOptions(rt.CLI)
 			rt.Providers = &options
 		}
-		if r.models != nil {
-			rt.Models = r.models()
+		if ms, from, at, ok := r.providerModelsLocked(); ok {
+			rt.Models, rt.ModelsFrom, rt.ModelsAt = ms, from, at
+		} else if r.models != nil {
+			if rt.Models = r.models(); len(rt.Models) > 0 {
+				rt.ModelsFrom = "cli"
+			}
 		}
 		ch := r.choice
 		switch {
@@ -372,10 +386,10 @@ func runnerFeatures(h harness.Harness) []string {
 	// Codex MCP calls are not controlled by its shell sandbox flag, so this
 	// capability is advertised only for the harness whose flag we change.
 	if h.Name() == "claude" {
-		return []string{"mcp_tools", "remote_provider", "usage", "command_watch"}
+		return []string{"mcp_tools", "remote_provider", "usage", "command_watch", "models_refresh"}
 	}
 	if h.Name() == "codex" {
-		return []string{"remote_provider", "usage", "command_watch"}
+		return []string{"remote_provider", "usage", "command_watch", "models_refresh"}
 	}
 	if h.Name() != "exec" && h.Name() != "machine" {
 		return []string{"usage", "command_watch"}

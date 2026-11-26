@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -46,6 +47,13 @@ type Options struct {
 	// pinned model provider (nil = the machine's own setting).
 	Provider              func() *harness.ProviderSettings
 	ApplyProviderSettings func(context.Context, api.RunSettings) error
+	// ModelEnv, when set, gives variables for a run on model ("" = the
+	// CLI's own): Claude Code's model tiers on another vendor. The
+	// provider's own variables and the env file win over them.
+	ModelEnv func(model string) map[string]string
+	// OnModelsRefresh hears the App's request to list models again (the
+	// run settings' models_refresh), each time it is read.
+	OnModelsRefresh func(string)
 	// OnRunSettings hears the model, effort and access each run is started
 	// with (the agent's run settings from the hub; "" = the machine's own).
 	OnRunSettings func(model, effort, access string)
@@ -668,6 +676,9 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 				}
 			}
 		}
+		if r.opts.ModelEnv != nil && !executor {
+			withModelEnv(&req, r.opts.ModelEnv(req.Model))
+		}
 		res, runErr = r.harness.Run(runCtx, req)
 		// A session busy for a moment (just copied, or another program
 		// glancing at it) is retried here a few times before the task goes
@@ -1113,7 +1124,41 @@ func (r *Runner) runSettings(ctx context.Context, log *slog.Logger) api.RunSetti
 	if r.opts.OnRunSettings != nil {
 		r.opts.OnRunSettings(rs.Model, rs.Effort, rs.Access)
 	}
+	if r.opts.OnModelsRefresh != nil {
+		r.opts.OnModelsRefresh(rs.ModelsRefresh)
+	}
 	return rs
+}
+
+// withModelEnv adds vars to a run: under a pinned provider's variables
+// (which Claude Code takes through --settings, where the environment's
+// would be blanked), else before the environment, whose values win.
+func withModelEnv(req *harness.Request, vars map[string]string) {
+	if len(vars) == 0 {
+		return
+	}
+	if req.Provider != nil {
+		p := *req.Provider
+		p.Env = make(map[string]string, len(vars)+len(req.Provider.Env))
+		for k, v := range vars {
+			p.Env[k] = v
+		}
+		for k, v := range req.Provider.Env {
+			p.Env[k] = v
+		}
+		req.Provider = &p
+		return
+	}
+	keys := make([]string, 0, len(vars))
+	for k := range vars {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	env := make([]string, 0, len(vars)+len(req.Env))
+	for _, k := range keys {
+		env = append(env, k+"="+vars[k])
+	}
+	req.Env = append(env, req.Env...)
 }
 
 // accessLimit is the highest access the hub may choose for this agent: the

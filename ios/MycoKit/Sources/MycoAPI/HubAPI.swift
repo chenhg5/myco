@@ -130,6 +130,10 @@ public protocol HubAPI: Sendable {
     /// every thread, newest first, a page at a time. `before`: only those
     /// older than this (to page back); nil is the newest page.
     func exchanges(between a: String, and b: String, before: Date?) async throws -> MessagePage
+    /// `GET /v1/console/agents/{name}/peers`: the nodes an agent exchanged
+    /// messages with (not the console), most recent first; for a member,
+    /// those in their scope.
+    func peers(of agent: String) async throws -> [String]
     /// `GET /v1/console/messages/{id}/trace`
     func trace(of messageID: String, after seq: Int) async throws -> Trace
     /// `POST /v1/console/messages`
@@ -245,6 +249,10 @@ public protocol HubAPI: Sendable {
     /// workspace from before v0.19.5 answers `not_found`.
     /// `access` nil: left as it is.
     func setRunSettings(of agent: String, model: String, effort: String, access: String?) async throws -> Agent
+    /// The same, asking its runner to list its provider's models again
+    /// (`models_refresh`); nothing else changes. Runners with the
+    /// "models_refresh" feature read it within a minute.
+    func listModelsAgain(of agent: String) async throws -> Agent
     /// `GET /v1/agents/{name}/handovers`: the times another session took
     /// this agent over, newest first. For whoever owns it or manages the
     /// workspace. A workspace from before v0.19.23 answers `not_found`.

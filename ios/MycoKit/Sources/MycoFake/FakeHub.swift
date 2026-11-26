@@ -471,6 +471,16 @@ public actor FakeHub: HubAPI {
         return MessagePage(messages: Array(all.prefix(Self.pageSize)), more: all.count > Self.pageSize)
     }
 
+    public func peers(of agent: String) async throws -> [String] {
+        try await check()
+        var out: [String] = []
+        for message in messages.sorted(by: { $0.createdAt > $1.createdAt }) where message.from == agent || message.to == agent {
+            let other = message.from == agent ? message.to : message.from
+            if !other.hasPrefix("@"), other != Self.me, !out.contains(other) { out.append(other) }
+        }
+        return out
+    }
+
     /// Something an agent says to me out of the blue (for tests of what is unread).
     public func deliver(from agent: String, body: String) {
         messages.append(Message(id: nextID(), from: agent, to: Self.me, type: "note", body: body, status: "done", createdAt: Date()))
@@ -891,6 +901,17 @@ public actor FakeHub: HubAPI {
         let keep = access ?? agents[index].agent.runSettings?.access ?? ""
         agents[index].agent.runSettings = model.isEmpty && effort.isEmpty && keep.isEmpty
             ? nil : RunSettings(model: model, effort: effort, access: keep.isEmpty ? nil : keep)
+        return agents[index].agent
+    }
+
+    /// Its runner lists the models again at once (a real one within a minute).
+    public func listModelsAgain(of agent: String) async throws -> Agent {
+        try await check()
+        if tooOldForRunSettings { throw HubError(error: "not_found", message: "not found") }
+        guard let index = agents.firstIndex(where: { $0.agent.name == agent }) else {
+            throw HubError(error: "not_found", message: "agent \(agent) not found")
+        }
+        if agents[index].agent.runtime?.modelsFrom != nil { agents[index].agent.runtime?.modelsAt = Date() }
         return agents[index].agent
     }
 
