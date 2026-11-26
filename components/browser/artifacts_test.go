@@ -113,7 +113,11 @@ func TestRecordingEvidenceDoesNotUseRodJSContextOrHelpers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := &engine{dir: t.TempDir(), artifacts: map[string]artifact{}}
+	e, err := newEngine(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer e.close()
 	id, err := e.snapshot("fixture", page, &target{Locators: []locator{{Kind: "css", Value: "a"}}, Frame: []string{"#child"}})
 	if err != nil {
 		t.Fatal(err)
