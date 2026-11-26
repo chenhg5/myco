@@ -137,6 +137,8 @@ struct ProviderModelsTests {
             #expect(choice?.models == ["deepseek-v4", "deepseek-reasoner"])
             #expect(choice?.name(of: "deepseek-v4") == "DeepSeek V4")
             #expect(choice?.source == "模型列表从 DeepSeek 读取 · 10 分钟前")
+            // What it runs on now, by the name its provider gave it.
+            #expect(choice?.inUse == "DeepSeek V4")
             #expect(choice?.canListAgain == true)
             // Not mine: no list, no line.
             #expect(RunChoice.of(agent, manages: false, now: now)?.source == nil)
