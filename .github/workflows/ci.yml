@@ -184,6 +184,9 @@ jobs:
           npm install -g playwright@1
           # Now and then a runner's apt or download stalls: give each try two
           # minutes and try three times rather than wait out the step.
+          # A try that timed out can leave its apt-get running and holding the
+          # dpkg lock; apt then waits for that lock rather than failing at once.
+          echo 'DPkg::Lock::Timeout "180";' | sudo tee /etc/apt/apt.conf.d/99myco-lock-timeout >/dev/null
           for try in 1 2 3; do
             timeout 120 node "$(npm root -g)/playwright/cli.js" install --with-deps chromium &&
               timeout 120 sudo apt-get install -y -q fonts-noto-cjk >/dev/null && break
