@@ -106,7 +106,7 @@ func TestAgentRecentIndexesUpgradeAndBoundEachSide(t *testing.T) {
 		t.Fatal(e)
 	}
 	// Simulate a pre-upgrade database; reopening must add both indexes.
-	for _, name := range []string{"idx_messages_from_updated", "idx_messages_to_updated"} {
+	for _, name := range []string{"idx_messages_from_updated", "idx_messages_to_updated", "idx_messages_recent", "idx_messages_thread_parties"} {
 		if _, err = db.Exec("DROP INDEX " + name); err != nil {
 			t.Fatal(err)
 		}
@@ -117,6 +117,12 @@ func TestAgentRecentIndexesUpgradeAndBoundEachSide(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
+	for _, name := range []string{"idx_messages_recent", "idx_messages_thread_parties"} {
+		var count int
+		if e := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name=?`, name).Scan(&count); e != nil || count != 1 {
+			t.Fatalf("upgrade missing %s: count=%d err=%v", name, count, e)
+		}
+	}
 	kept, e := NewMessageRepo(db).ListRecent(t.Context(), "target", 20)
 	if e != nil || len(kept) != 1 || kept[0].ID != "existing" || kept[0].Body != "kept data" {
 		t.Fatalf("upgrade lost existing data: rows=%d err=%v", len(kept), e)

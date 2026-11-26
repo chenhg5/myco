@@ -1,5 +1,5 @@
 name: release
-run-name: ${{ inputs.sign_only && 'sign-only' || 'release' }} ${{ inputs.release_ref || github.sha }}
+run-name: ${{ inputs.sign_only && 'sign-only' || inputs.dry_run && 'release-check' || 'release' }} ${{ inputs.release_ref || github.sha }}
 
 # Bump VERSION on main to publish a release (tag + binaries). Pushing a v* tag
 # or dispatching an immutable release_ref works too.
@@ -11,11 +11,19 @@ on:
   workflow_dispatch:
     inputs:
       release_ref:
-        description: "Full commit SHA to build (a green main commit plus VERSION/CHANGELOG only)"
+        description: "Full commit SHA to build (main source plus VERSION/CHANGELOG only)"
         type: string
         default: ""
       sign_only:
         description: "Only build and sign the Mac app (checks the signing secrets; publishes nothing)"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Check and build all artifacts without creating a tag or release"
+        type: boolean
+        default: false
+      force_checks:
+        description: "Run fresh complete checks even when this exact source has passed"
         type: boolean
         default: false
 
@@ -25,7 +33,7 @@ permissions:
 
 # Publishing two versions at once can race tags and the latest release pointer.
 concurrency:
-  group: release-${{ inputs.sign_only && github.run_id || 'publish' }}
+  group: release-${{ (inputs.sign_only || inputs.dry_run) && github.run_id || 'publish' }}
   cancel-in-progress: false
 
 jobs:
@@ -35,6 +43,8 @@ jobs:
       version: ${{ steps.v.outputs.version }}
       sha: ${{ steps.v.outputs.sha }}
       skip: ${{ steps.exists.outputs.skip }}
+      base: ${{ steps.source.outputs.base }}
+      ci_run: ${{ steps.source.outputs.ci_run }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -55,19 +65,50 @@ jobs:
           python3 scripts/release-source.py --ref "$RELEASE_REF" --sign-only --output "$GITHUB_OUTPUT"
       - name: Skip if already released
         id: exists
+        if: ${{ !inputs.dry_run }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           if gh release view "${{ steps.v.outputs.version }}" >/dev/null 2>&1; then echo "skip=true" >> "$GITHUB_OUTPUT"; fi
 
-      - name: Require green source before building
+      - name: Validate frozen source and look for complete checks
+        id: source
         if: steps.exists.outputs.skip != 'true' && !inputs.sign_only
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_SHA: ${{ steps.v.outputs.sha }}
+          FORCE_CHECKS: ${{ inputs.force_checks || false }}
         run: |
-          python3 scripts/release-source.py --ref "$RELEASE_SHA"
-          echo "Release source: $RELEASE_SHA (immutable; later main pushes are excluded)" >> "$GITHUB_STEP_SUMMARY"
+          flags=()
+          if [ "$FORCE_CHECKS" = true ]; then flags+=(--force-ci); fi
+          python3 scripts/release-source.py --ref "$RELEASE_SHA" --full-ci --defer-ci "${flags[@]}" --output "$GITHUB_OUTPUT"
+          echo "Release source: $RELEASE_SHA (immutable; complete checks and packaging run concurrently)" >> "$GITHUB_STEP_SUMMARY"
+
+  qualify:
+    needs: version
+    if: needs.version.outputs.skip != 'true' && !inputs.sign_only && needs.version.outputs.ci_run == ''
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+    with:
+      source_sha: ${{ needs.version.outputs.base }}
+      force_full: true
+
+  quality_gate:
+    needs: [version, qualify]
+    if: always() && needs.version.result == 'success' && needs.version.outputs.skip != 'true' && !inputs.sign_only
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require existing complete proof or successful frozen-source checks
+        env:
+          CI_RUN: ${{ needs.version.outputs.ci_run }}
+          QUALIFICATION: ${{ needs.qualify.result }}
+        run: |
+          if [ -z "$CI_RUN" ] && [ "$QUALIFICATION" != success ]; then
+            echo "::error::Frozen-source qualification did not pass: $QUALIFICATION"
+            exit 1
+          fi
+          echo "Complete source checks passed; main's later pushes cannot invalidate this frozen source." >> "$GITHUB_STEP_SUMMARY"
 
   # The Mac app for both architectures, zipped (ad-hoc signed), and with the
   # signing secrets also the signed, notarized universal app and DMG.
@@ -102,10 +143,7 @@ jobs:
         run: unzip -q out/myco-app-darwin-arm64.zip -d check && check/myco.app/Contents/MacOS/myco-app --version
       - name: sign, notarize, DMG (universal)
         if: env.SIGN == 'true'
-        # A failure here (Apple down, an expired certificate) still lets the
-        # release out, without myco.dmg; a Mac then signs it (the maintainers' release runbook).
-        # A sign-only run is the check, so there it fails the job.
-        continue-on-error: ${{ !inputs.sign_only }}
+        # A failed signing or notarization must not publish incomplete artifacts.
         env:
           MAC_CERT_P12_BASE64: ${{ secrets.MAC_CERT_P12_BASE64 }}
           MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
@@ -174,7 +212,7 @@ jobs:
 
   cross:
     # The CLI for every platform and the Windows console app, at the same
-    # time as the Mac app (tests already ran in ci on this commit): one
+    # time as the Mac app and source qualification: one
     # runner per OS, each building its two architectures.
     needs: version
     if: needs.version.outputs.skip != 'true' && !inputs.sign_only
@@ -222,10 +260,8 @@ jobs:
           path: bin/myco-*
 
   release:
-    needs: [version, app, cross]
-    # The Mac job may never get a runner (GitHub's macOS queue): publish the
-    # rest anyway, and a Mac adds the app afterwards (the maintainers' release runbook).
-    if: always() && needs.version.result == 'success' && needs.version.outputs.skip != 'true' && !inputs.sign_only && needs.cross.result == 'success'
+    needs: [version, quality_gate, app, cross]
+    if: always() && needs.version.result == 'success' && needs.version.outputs.skip != 'true' && !inputs.sign_only && needs.quality_gate.result == 'success' && needs.app.result == 'success' && needs.cross.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -237,12 +273,29 @@ jobs:
           merge-multiple: true
           path: bin
       - uses: actions/download-artifact@v4
-        continue-on-error: true # no Mac build this time
         with:
           name: app
           path: bin
-      - run: cd bin && sha256sum myco-* $([ -f myco.dmg ] && echo myco.dmg) > SHA256SUMS && cat SHA256SUMS
-      - env:
+      - name: Validate complete artifacts before creating any tag
+        run: |
+          for os in linux darwin windows; do
+            for arch in amd64 arm64; do
+              suffix=""; [ "$os" != windows ] || suffix=.exe
+              test -s "bin/myco-$os-$arch$suffix"
+            done
+          done
+          for arch in amd64 arm64; do
+            test -s "bin/myco-app-linux-$arch"
+            test -s "bin/myco-app-windows-$arch.exe"
+            test -s "bin/myco-app-darwin-$arch.zip"
+          done
+          test -s bin/myco.dmg
+          test -s bin/myco-app-darwin-universal.zip
+          for archive in bin/*.zip; do unzip -tq "$archive"; done
+          (cd bin && sha256sum myco-* myco.dmg > SHA256SUMS && sha256sum -c SHA256SUMS)
+      - name: Create release only after checks and artifact validation
+        if: ${{ !inputs.dry_run }}
+        env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_SHA: ${{ needs.version.outputs.sha }}
         run: |

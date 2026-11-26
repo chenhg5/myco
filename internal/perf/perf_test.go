@@ -64,3 +64,16 @@ func TestRoute(t *testing.T) {
 		t.Fatal("no route without WithRoute")
 	}
 }
+
+func TestWaitingMarkerFollowsDerivedContextOnly(t *testing.T) {
+	ctx := WithRoute(context.Background())
+	child := context.WithValue(ctx, struct{}{}, true)
+	MarkWaiting(child)
+	if !Waiting(ctx) || !Waiting(child) {
+		t.Fatal("handler marker was lost across derived contexts")
+	}
+	if Waiting(WithRoute(ctx)) || Waiting(context.Background()) {
+		t.Fatal("marker leaked into another request")
+	}
+	MarkWaiting(context.Background()) // no observation middleware: no-op
+}

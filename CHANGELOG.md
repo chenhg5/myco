@@ -4,6 +4,22 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.23.1
+
+- Runner: when an agent uses a vendor's API key, the model list comes from that vendor on the runner's computer; the App shows where the list came from and can ask for a refresh.
+- WorkBuddy (its bundled CodeBuddy, over local ACP HTTP) and AtomCode now work as agent CLIs over ACP.
+- Hub: faster on large workspaces. An agent's recent messages, filtered conversation lists and per-agent session lists now read from covering indexes instead of loading message bodies, and long-poll waits no longer count as slow requests in `myco hub perf`. Upgrade the hub (`sudo myco upgrade`); the new indexes are built once when it starts.
+- App: a note you send cuts the run it comes into.
+- App: a card right after your message keeps clear of its time.
+
+**中文**
+
+- 任务执行器：agent 使用某供应商的 API Key 时，模型列表由运行电脑上的该供应商提供；桌面应用会显示列表来源，并可请求刷新。
+- WorkBuddy（内置 CodeBuddy，走本地 ACP HTTP）和 AtomCode 现在可以作为基于 ACP 的 agent 命令行使用。
+- Hub：大工作区更快了。agent 最近的消息、按条件筛选的对话列表和每个 agent 的会话列表，现在直接走覆盖索引，不再加载消息正文；长轮询的等待也不再算进 `myco hub perf` 的慢请求。需要升级 Hub（`sudo myco upgrade`），新索引在第一次启动时建一次。
+- 桌面应用：你发出的 note 会截断它进入的那次运行。
+- 桌面应用：紧跟在消息后面的卡片与它的时间保持距离，不再重叠。
+
 ## v0.23.0
 
 - App: when you add to an older task that is still open, what the agent does after that now shows under your addition. Before, those steps kept growing above it, or did not show at all.

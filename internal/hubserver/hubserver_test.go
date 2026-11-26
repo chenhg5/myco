@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/myco-ai/myco/internal/perf"
 )
 
 func TestRequestLogRedactsRecoveryCredential(t *testing.T) {
@@ -61,5 +63,47 @@ func TestRequestLogSlowAndFailed(t *testing.T) {
 	}
 	if !strings.Contains(out, `msg="request failed"`) || !strings.Contains(out, "database is locked") || !strings.Contains(out, "status=500") {
 		t.Fatalf("a failed request is logged with its error: %s", out)
+	}
+}
+
+// The handler marks a decoded body wait without the middleware reading or
+// consuming the body. Both logging and the request histogram honor it;
+// an immediate pull is still measured, and server failures are still logged.
+func TestBodyWaitExcludedFromSlowLogAndMetrics(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		wait   bool
+		status int
+	}{
+		{"waiting", true, 200}, {"immediate", false, 200}, {"failed wait", true, 500},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			log := slog.New(slog.NewTextHandler(&out, nil))
+			rec := perf.New()
+			h := logRequests(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				perf.SetRoute(r.Context(), "POST /v1/inbox/pull")
+				if tc.wait {
+					perf.MarkWaiting(r.Context())
+				}
+				time.Sleep(2 * time.Millisecond)
+				w.WriteHeader(tc.status)
+			}), log, time.Millisecond, rec)
+			// Workspace routing does not change whether the handler waited.
+			h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("POST", "/w/demo/v1/inbox/pull", strings.NewReader(`{"wait_seconds":30}`)))
+			stats := rec.Report(time.Minute, 0)
+			if tc.wait && len(stats) != 0 {
+				t.Fatalf("long poll in metrics: %v", stats)
+			}
+			if !tc.wait && (len(stats) != 1 || stats[0].Count != 1) {
+				t.Fatalf("immediate pull not measured: %v", stats)
+			}
+			if strings.Contains(out.String(), `msg="slow request"`) == tc.wait {
+				t.Fatalf("incorrect slow log: %s", out.String())
+			}
+			if (tc.status == 500) != strings.Contains(out.String(), `msg="request failed"`) {
+				t.Fatalf("incorrect server error log: %s", out.String())
+			}
+		})
 	}
 }
