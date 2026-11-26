@@ -567,14 +567,19 @@ func (c *controlSession) elementPoint(ctx context.Context, p *rod.Page, r contro
 			return nil, err
 		}
 	}
-	info, err := c.inspect(ctx, r)
+	info, err := c.inspect(ctx, r, scroll)
 	if err != nil {
 		return nil, err
 	}
 	if !info.Visible || info.Rect == nil {
 		return nil, errors.New("target_not_interactable")
 	}
-	x, y := info.Rect.X+info.Rect.Width/2, info.Rect.Y+info.Rect.Height/2
+	hitRect := info.Rect
+	if scroll && len(info.ClientRects) > 0 {
+		hitRect = &info.ClientRects[0]
+	}
+	x, y := hitRect.X+hitRect.Width/2, hitRect.Y+hitRect.Height/2
+	localX, localY := x, y
 	frame := r.frame
 	sid := r.sid
 	for depth := 0; depth < 32; depth++ {
@@ -623,7 +628,7 @@ func (c *controlSession) elementPoint(ctx context.Context, p *rod.Page, r contro
 	}
 	_ = sid
 	if scroll {
-		if err = c.hitTest(ctx, r); err != nil {
+		if err = c.hitTestAt(ctx, r, map[string]float64{"x": localX, "y": localY}); err != nil {
 			return nil, err
 		}
 	}

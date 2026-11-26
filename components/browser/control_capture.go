@@ -111,7 +111,7 @@ func (c *controlSession) captureImage(ctx context.Context, p *rod.Page, in contr
 	if clip.X < 0 || clip.Y < 0 || clip.Width <= 0 || clip.Height <= 0 || clip.Width*clip.Height > 32<<20 {
 		return nil, errors.New("artifact_too_large")
 	}
-	if err := c.browser.setControlPanelHidden(ctx); err != nil {
+	if err := c.browser.setControlPanelHidden(ctx, p); err != nil {
 		return nil, err
 	}
 	defer func() { go c.browser.updatePanel("") }()
@@ -140,7 +140,10 @@ func (c *controlSession) captureImage(ctx context.Context, p *rod.Page, in contr
 	}
 	return map[string]any{"screenshot": map[string]any{"id": id, "type": "image/png", "size": len(shot.Data)}, "image": map[string]any{"width": config.Width, "height": config.Height, "scale": float64(config.Width) / clip.Width}}, nil
 }
-func (s *session) setControlPanelHidden(ctx context.Context) error {
+
+// Only the captured page's top collector owns a panel. Dead advertising
+// worlds and collectors in other tabs must not veto a private screenshot.
+func (s *session) setControlPanelHidden(ctx context.Context, p *rod.Page) error {
 	state := s.recordingPanelState("")
 	state.Hide = true
 	raw, err := json.Marshal(state)
@@ -148,20 +151,37 @@ func (s *session) setControlPanelHidden(ctx context.Context) error {
 		return err
 	}
 	s.mu.Lock()
-	worlds := map[proto.TargetSessionID][]proto.RuntimeExecutionContextID{}
-	for sid, ids := range s.contexts {
-		for id := range ids {
-			worlds[proto.TargetSessionID(sid)] = append(worlds[proto.TargetSessionID(sid)], id)
+	installed := s.installs[p.TargetID]
+	var sid proto.TargetSessionID
+	var root proto.PageFrameID
+	if installed != nil {
+		sid, root = installed.sid, installed.rootFrame
+	}
+	ids := []proto.RuntimeExecutionContextID{}
+	for id, frame := range s.contexts[string(sid)] {
+		if frame == root && root != "" {
+			ids = append(ids, id)
 		}
 	}
 	s.mu.Unlock()
-	for sid, ids := range worlds {
-		for _, id := range ids {
-			_, err := s.browser.Call(ctx, string(sid), "Runtime.evaluate", map[string]any{"expression": "if(window.__mycoRecorder)window.__mycoRecorder.updatePanel(" + string(raw) + ")", "contextId": id})
-			if err != nil {
-				return err
-			}
+	hidden := false
+	for _, id := range ids {
+		data, err := s.browser.Call(ctx, string(sid), "Runtime.evaluate", map[string]any{
+			"expression": "(()=>{if(!window.__mycoRecorder)return false;window.__mycoRecorder.updatePanel(" + string(raw) + ");return !document.getElementById('__myco_recording_panel__')})()",
+			"contextId":  id, "returnByValue": true,
+		})
+		if err != nil {
+			controlDiagnostic("screenshot_panel_context", err)
+			continue
 		}
+		var result proto.RuntimeEvaluateResult
+		if json.Unmarshal(data, &result) == nil && result.ExceptionDetails == nil && result.Result != nil && result.Result.Value.Bool() {
+			hidden = true
+		}
+	}
+	if !hidden {
+		controlDiagnostic("screenshot_panel_unavailable", nil)
+		return errors.New("component_unavailable")
 	}
 	return nil
 }

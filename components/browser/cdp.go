@@ -288,12 +288,32 @@ func (s *session) event(msg *rod.Message) {
 			s.contexts[string(msg.SessionID)] = map[proto.RuntimeExecutionContextID]proto.PageFrameID{}
 		}
 		s.contexts[string(msg.SessionID)][evt.Context.ID] = frame
+		if s.contextKeys == nil {
+			s.contextKeys = map[string]map[proto.RuntimeExecutionContextID]string{}
+		}
+		if s.contextKeys[string(msg.SessionID)] == nil {
+			s.contextKeys[string(msg.SessionID)] = map[proto.RuntimeExecutionContextID]string{}
+		}
+		s.contextKeys[string(msg.SessionID)][evt.Context.ID] = evt.Context.UniqueID
 		active := s.recorder != nil
 		s.mu.Unlock()
 		go s.setContextRecording(msg.SessionID, evt.Context.ID, active)
+	case "Runtime.executionContextDestroyed":
+		var evt proto.RuntimeExecutionContextDestroyed
+		msg.Load(&evt)
+		s.mu.Lock()
+		// Numeric IDs can be reused after a renderer swap. A delayed old
+		// destruction must not remove the new world's current entry.
+		key := s.contextKeys[string(msg.SessionID)][evt.ExecutionContextID]
+		if key == "" || evt.ExecutionContextUniqueID == "" || key == evt.ExecutionContextUniqueID {
+			delete(s.contexts[string(msg.SessionID)], evt.ExecutionContextID)
+			delete(s.contextKeys[string(msg.SessionID)], evt.ExecutionContextID)
+		}
+		s.mu.Unlock()
 	case "Runtime.executionContextsCleared":
 		s.mu.Lock()
 		delete(s.contexts, string(msg.SessionID))
+		delete(s.contextKeys, string(msg.SessionID))
 		s.mu.Unlock()
 	case "Runtime.bindingCalled":
 		var evt proto.RuntimeBindingCalled

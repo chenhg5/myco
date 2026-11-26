@@ -148,10 +148,25 @@ func speechStatus(_ context.Context, env *Env, _ json.RawMessage, _ Emit) (any, 
 	if !diarize {
 		size += diarizeMB
 	}
-	return map[string]any{
+	out := map[string]any{
 		"ready": engine && vad && ready, "engine": engine, "engine_version": sherpaVersion, "vad": vad,
 		"models": models, "dir": speechDir(env), "engine_size_mb": size, "diarize": diarize,
-	}, nil
+	}
+	// Cloud engines the App can use instead (speech.transcribe's engine).
+	cloud := map[string]any{}
+	for _, e := range cloudEngines {
+		st := map[string]any{"ready": false, "code": CodeUnsupported}
+		if env.CloudSpeech != nil {
+			if code, why := env.CloudSpeech.Status(e); code == "" {
+				st = map[string]any{"ready": true}
+			} else {
+				st = map[string]any{"ready": false, "code": code, "message": why}
+			}
+		}
+		cloud[e] = st
+	}
+	out["cloud"] = cloud
+	return out, nil
 }
 
 func releaseURL(path string) string {
@@ -392,6 +407,9 @@ const speechPart = 4 * 60
 
 var segLine = regexp.MustCompile(`^\s*(\d+(?:\.\d+)?)\s*--\s*(\d+(?:\.\d+)?)\s*:\s*(.*)$`)
 
+// cloudEngines: speech.transcribe's engines other than this computer's.
+var cloudEngines = []string{"doubao"}
+
 func speechTranscribe(ctx context.Context, env *Env, args json.RawMessage, emit Emit) (any, error) {
 	var in struct {
 		Path     string `json:"path"`
@@ -399,6 +417,8 @@ func speechTranscribe(ctx context.Context, env *Env, args json.RawMessage, emit 
 		Language string `json:"language"`
 		// Offset: seconds to add to every time (a part of a longer recording).
 		Offset float64 `json:"offset"`
+		// Engine: "" (this computer's) or a cloud one ("doubao").
+		Engine string `json:"engine"`
 	}
 	if err := decode(args, &in); err != nil {
 		return nil, err
@@ -406,6 +426,13 @@ func speechTranscribe(ctx context.Context, env *Env, args json.RawMessage, emit 
 	p, err := env.abs(in.Path)
 	if err != nil {
 		return nil, err
+	}
+	switch in.Engine {
+	case "", "local", "sensevoice":
+	case "doubao":
+		return cloudTranscribe(ctx, env, in.Engine, p, in.Language, in.Offset, emit)
+	default:
+		return nil, errf(CodeInvalid, "no such engine: %s (\"\" for this computer's, or doubao)", in.Engine)
 	}
 	m, ok := speechModelOf(in.Model)
 	if !ok {
@@ -794,4 +821,61 @@ func renumber(turns []Turn) []Turn {
 		turns[i].Speaker = k
 	}
 	return turns
+}
+
+// cloudTranscribe: the recording, as 16 kHz WAV in parts of a few minutes
+// (cut where it is quietest), recognized by a cloud engine through the App
+// (env.CloudSpeech), with segments as they come, as for this computer's.
+func cloudTranscribe(ctx context.Context, env *Env, engine, p, lang string, offset float64, emit Emit) (any, error) {
+	if env.CloudSpeech == nil {
+		return nil, errf(CodeUnsupported, "%s speech recognition is not available here (it needs the myco App)", engine)
+	}
+	if code, why := env.CloudSpeech.Status(engine); code != "" {
+		return nil, errf(code, "%s", why)
+	}
+	work, err := os.MkdirTemp("", "myco-speech-*")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(work)
+	wav, err := asWAV16k(ctx, env, p, work)
+	if err != nil {
+		return nil, err
+	}
+	samples, err := readPCM16(wav)
+	if err != nil {
+		return nil, err
+	}
+	total := float64(len(samples)) / RecordRate
+	start := time.Now()
+	all := []Segment{}
+	emit("progress", map[string]any{"done": 0, "total": round3(total)})
+	for _, part := range splitQuiet(samples, speechPart*RecordRate) {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		chunk := filepath.Join(work, "part.wav")
+		if err := writePCM16(chunk, samples[part[0]:part[1]]); err != nil {
+			return nil, err
+		}
+		b, err := os.ReadFile(chunk)
+		if err != nil {
+			return nil, err
+		}
+		segs, err := env.CloudSpeech.Transcribe(ctx, engine, b, lang)
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			return nil, AsError(err)
+		}
+		off := float64(part[0])/RecordRate + offset
+		for _, s := range segs {
+			s.Start, s.End = round3(s.Start+off), round3(s.End+off)
+			all = append(all, s)
+			emit("segment", s)
+		}
+		emit("progress", map[string]any{"done": round3(float64(part[1]) / RecordRate), "total": round3(total)})
+	}
+	return map[string]any{"segments": all, "seconds": round3(total), "ms": time.Since(start).Milliseconds(), "engine": engine}, nil
 }

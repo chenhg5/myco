@@ -41,25 +41,26 @@ type controlNode struct {
 	InViewport  bool         `json:"in_viewport"`
 }
 type controlDOMInfo struct {
-	SensitiveDescendants bool         `json:"sensitive_descendants"`
-	Generation           uint64       `json:"generation"`
-	NodeType             int          `json:"node_type"`
-	ScaleX               float64      `json:"scale_x"`
-	ScaleY               float64      `json:"scale_y"`
-	AxisAligned          bool         `json:"axis_aligned"`
-	BorderX              float64      `json:"border_x"`
-	BorderY              float64      `json:"border_y"`
-	Connected            bool         `json:"connected"`
-	Panel                bool         `json:"panel"`
-	Sensitive            bool         `json:"sensitive"`
-	Unsafe               bool         `json:"unsafe"`
-	Disabled             bool         `json:"disabled"`
-	Visible              bool         `json:"visible"`
-	InViewport           bool         `json:"in_viewport"`
-	Interactive          bool         `json:"interactive"`
-	Rect                 *controlRect `json:"rect"`
-	Text                 string       `json:"text"`
-	Value                string       `json:"value"`
+	ClientRects          []controlRect `json:"client_rects"`
+	SensitiveDescendants bool          `json:"sensitive_descendants"`
+	Generation           uint64        `json:"generation"`
+	NodeType             int           `json:"node_type"`
+	ScaleX               float64       `json:"scale_x"`
+	ScaleY               float64       `json:"scale_y"`
+	AxisAligned          bool          `json:"axis_aligned"`
+	BorderX              float64       `json:"border_x"`
+	BorderY              float64       `json:"border_y"`
+	Connected            bool          `json:"connected"`
+	Panel                bool          `json:"panel"`
+	Sensitive            bool          `json:"sensitive"`
+	Unsafe               bool          `json:"unsafe"`
+	Disabled             bool          `json:"disabled"`
+	Visible              bool          `json:"visible"`
+	InViewport           bool          `json:"in_viewport"`
+	Interactive          bool          `json:"interactive"`
+	Rect                 *controlRect  `json:"rect"`
+	Text                 string        `json:"text"`
+	Value                string        `json:"value"`
 }
 type controlFrame struct {
 	id      proto.PageFrameID
@@ -164,14 +165,18 @@ func (c *controlSession) function(ctx context.Context, sid proto.TargetSessionID
 	raw, _ := json.Marshal(reply.Result.Value.Val())
 	return json.Unmarshal(raw, out)
 }
-func (c *controlSession) inspect(ctx context.Context, r controlRef) (controlDOMInfo, error) {
+func (c *controlSession) inspect(ctx context.Context, r controlRef, clientRects ...bool) (controlDOMInfo, error) {
 	var info controlDOMInfo
 	id, err := c.resolve(ctx, r)
 	if err != nil {
 		return info, err
 	}
 	defer c.call(ctx, r.sid, "Runtime.releaseObject", map[string]any{"objectId": id}, nil)
-	err = c.function(ctx, r.sid, id, "inspect", nil, &info)
+	var options any
+	if len(clientRects) > 0 && clientRects[0] {
+		options = map[string]bool{"client_rects": true}
+	}
+	err = c.function(ctx, r.sid, id, "inspect", options, &info)
 	if err == nil && info.Connected && !info.Panel && !info.Sensitive {
 		c.browser.mu.Lock()
 		parent := c.browser.frames[r.frame].Parent

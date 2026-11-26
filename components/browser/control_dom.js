@@ -23,7 +23,10 @@ function(op,arg) {
   const descendants=n=>[n,...(n.querySelectorAll?.('*')||[])];
   let axisAligned=true;
   for(let n=el;n;n=parent(n)){const m=getComputedStyle(n).transform;if(m&&m!=='none'){const t=new DOMMatrix(m);if(Math.abs(t.b)>0.0001||Math.abs(t.c)>0.0001||t.a<=0||t.d<=0)axisAligned=false;}}
-  const info={sensitive_descendants:sensitive(el,true),generation,node_type:original.nodeType,scale_x:rect&&el.offsetWidth?rect.width/el.offsetWidth:1,scale_y:rect&&el.offsetHeight?rect.height/el.offsetHeight:1,axis_aligned:axisAligned,border_x:el?.clientLeft||0,border_y:el?.clientTop||0,connected,panel,sensitive:secret,disabled,interactive,visible,in_viewport:visible&&rect.bottom>0&&rect.right>0&&rect.top<innerHeight&&rect.left<innerWidth,rect:rect?{x:rect.x,y:rect.y,width:rect.width,height:rect.height}:null,value:!secret&&'value'in(el||{})?String(el.value):''};
+  // Inline links have one painted rectangle per line. Their union's center
+  // can fall in line spacing or after a short line, outside the actual link.
+  const clientRects=op==='inspect'&&arg?.client_rects?[...(el?.getClientRects?.()||[])].map(r=>({x:Math.max(0,r.left),y:Math.max(0,r.top),width:Math.min(innerWidth,r.right)-Math.max(0,r.left),height:Math.min(innerHeight,r.bottom)-Math.max(0,r.top)})).filter(r=>r.width>0&&r.height>0).slice(0,64):[];
+  const info={client_rects:clientRects,sensitive_descendants:sensitive(el,true),generation,node_type:original.nodeType,scale_x:rect&&el.offsetWidth?rect.width/el.offsetWidth:1,scale_y:rect&&el.offsetHeight?rect.height/el.offsetHeight:1,axis_aligned:axisAligned,border_x:el?.clientLeft||0,border_y:el?.clientTop||0,connected,panel,sensitive:secret,disabled,interactive,visible,in_viewport:visible&&rect.bottom>0&&rect.right>0&&rect.top<innerHeight&&rect.left<innerWidth,rect:rect?{x:rect.x,y:rect.y,width:rect.width,height:rect.height}:null,value:!secret&&'value'in(el||{})?String(el.value):''};
   if(op==='inspect')return info;
   if(op==='verify_focus'){
     const root=el?.getRootNode();let active=root?.activeElement;

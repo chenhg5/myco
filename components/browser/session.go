@@ -63,6 +63,7 @@ type session struct {
 	recorder            *recording
 	control             *controlSession
 	frames              map[proto.PageFrameID]frameInfo
+	contextKeys         map[string]map[proto.RuntimeExecutionContextID]string
 	contexts            map[string]map[proto.RuntimeExecutionContextID]proto.PageFrameID
 	targets             map[proto.TargetSessionID]proto.TargetTargetID
 	rendererNavigations map[proto.PageFrameID]recordedNavigationRequest
