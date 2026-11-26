@@ -66,7 +66,7 @@ func (b *Backend) browserComponent() browserComponentAPI {
 		if b.Local != nil && b.Local.Home != "" {
 			home = b.Local.Home
 		}
-		b.browser.component = &browserautomation.Component{Home: home}
+		b.browser.component = &browserautomation.Component{Home: home, Preview: strings.HasSuffix(b.Version, "-preview")}
 	}
 	return b.browser.component
 }

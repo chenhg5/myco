@@ -300,3 +300,33 @@ func TestCompatibleComponentVersions(t *testing.T) {
 		}
 	}
 }
+
+func TestPreviewComponentOnlyForPreviewBuilds(t *testing.T) {
+	home := t.TempDir()
+	preview := PreviewDir(home)
+	if err := os.MkdirAll(preview, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(preview, program("myco-browser")), []byte("x"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	release := &Component{Home: home}
+	if dir, _, installed := release.installedComponent(); installed || dir == preview {
+		t.Fatalf("release build used the preview component: %s %v", dir, installed)
+	}
+	c := &Component{Home: home, Preview: true}
+	dir, version, installed := c.installedComponent()
+	if !installed || dir != preview || version != ComponentVersion {
+		t.Fatalf("preview build: %s %s %v", dir, version, installed)
+	}
+	if s := c.Status(); !s.Installed || s.UpdateAvailable || s.Version != ComponentVersion {
+		t.Fatalf("preview status: %+v", s)
+	}
+	// Removing release installations leaves the preview component alone.
+	if err := c.Remove(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(preview, program("myco-browser"))); err != nil {
+		t.Fatalf("preview component removed: %v", err)
+	}
+}

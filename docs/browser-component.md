@@ -78,6 +78,8 @@ The optional native fixture records a local form with an iframe and shadow root,
 
 For website acceptance, use the official application with a fresh dedicated visible profile. On both the CSDN article editor and V2EX post form: record once, omit submission, replay ten times, and report successful/attempted runs separately with screenshots and failure details. Also exercise single-step, a breakpoint, and Start here. Do not publish a post. Authentication, CAPTCHA, editor differences and site changes may require manual handling. If the browser cannot start, record **not run**, not a zero-percent trial result.
 
+A preview build of the App (version ending in `-preview`) prefers a component in `~/.myco/components/browser-preview/`, built from the same commit, so a fix can be tried before a component release. Release builds never read that directory, and removing the component leaves it alone. The preview component must report the App's `ComponentVersion`; the start handshake still checks it.
+
 `browser-component.yml` runs Go tests and native Chrome/Edge fixtures on macOS arm64/x64 and Windows x64, and builds three zip archives with dependency notices. `browser-component-release.yml` takes a successful main build run, checks its provenance, signs/notarizes Mac binaries, and stages a **draft** `browser-v*` prerelease with `SHA256SUMS`. Published releases are immutable. A release owner must verify acceptance and publish the draft before installation works. This process does not change the main `VERSION`.
 
 
