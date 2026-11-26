@@ -121,6 +121,9 @@ struct MycoApp: App {
         // to see what loading looks like on a slow connection.
         let latency = Duration.milliseconds(UserDefaults.standard.integer(forKey: "myco-latency"))
         let hub = FakeHub(scenario: scenario, latency: latency)
+        // `-myco-forget-closed-plans YES`: the plans closed on this device
+        // are forgotten, so a test starts from what the demo shows.
+        if UserDefaults.standard.bool(forKey: "myco-forget-closed-plans") { ClosedPlans.forgetAll() }
         // (the demo's superagent asks for something once it is named)
         Task { await hub.setDemoApprovals(true) }
         // `-myco-trouble links`: the demo's first join link fails as a

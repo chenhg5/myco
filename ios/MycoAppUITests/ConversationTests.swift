@@ -880,7 +880,7 @@ final class ConversationTests: XCTestCase {
     @MainActor
     func testAClosedPlanStaysClosedWhenTheChatIsOpenedAgain() {
         // The notes helper's plan is still going: pinned above the chat.
-        let app = launch(["-myco-route", "agent:studio-claude-c41f"])
+        let app = launch(["-myco-route", "agent:studio-claude-c41f", "-myco-forget-closed-plans", "YES"])
         let plan = app.buttons["work.plan"]
         XCTAssertTrue(plan.waitForExistence(timeout: 20))
         app.buttons["work.plan.close"].tap()
