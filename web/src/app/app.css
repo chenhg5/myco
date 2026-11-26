@@ -10587,3 +10587,6 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
 .im-steps { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 10px; font-size: 12.5px; color: var(--fg-2); }
 .im-steps .app-input { display: block; width: 100%; margin-top: 6px; }
 .im-steps a { color: var(--accent); }
+/* where a run's steps will show once it comes near the view (TraceView) */
+.trace-lazy { display: block; height: 1px; }
+

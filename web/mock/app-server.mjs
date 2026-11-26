@@ -180,26 +180,31 @@ const longChatThreads = (() => {
   const [agent, n] = spec.split(":");
   const out = {};
   const count = Number(n) || 300;
+  // Shaped like a real coordinator chat: ~1 progress a task, about one
+  // message in ten with a screenshot, a few long (12 KB) answers, one task
+  // still open; a thread now and then holds a few tasks in a row.
   for (let i = 0; i < count; i++) {
     const ago = (count - i) * 600 + 120;
-    const th = `th_long_${i}`;
-    const open = i % 3 === 0 && i < count - 1;
+    const th = `th_long_${Math.floor(i / 2)}`;
+    const open = i === count - 1;
     const task = makeMessage({ thread_id: th, from: CONSOLE, to: agent, type: "task", status: open ? "acked" : "done",
       body: `#${i} 看一下第 ${i} 个问题：${"把这块的行为、边界条件和测试都过一遍，有问题直接改，改完说一声。".repeat(3)}`,
+      attachments: i % 9 === 4 ? [{ file_id: `f_demo_shot_long_${i}`, name: `截图-${i}.png`, size: DEMO_PNG.length, sha256: "", content_type: "image/png" }] : undefined,
       created_at: iso(ago), updated_at: iso(open ? ago - 60 : ago - 300) });
     const msgs = [task];
-    for (let p = 0; p < 6; p++) {
+    if (i % 4 !== 3) {
       msgs.push(makeMessage({ thread_id: th, from: agent, to: CONSOLE, type: "progress", status: "done", reply_to: task.id,
-        body: `- [x] 第 ${p} 步：${"读代码、跑测试".repeat(4)}\n- [~] 正在改\n- [ ] 收尾`, created_at: iso(ago - 20 - p * 30), updated_at: iso(ago - 20 - p * 30) }));
+        body: `- [x] 读代码、跑测试\n- [~] 正在改 #${i}\n- [ ] 收尾`, created_at: iso(ago - 40), updated_at: iso(ago - 40) }));
     }
     if (!open) {
       const ui = i % 10 === 5 ? ["", "```myco-ui", JSON.stringify({ type: "Table", props: { columns: ["项", "结果"], rows: [["测试", "通过"], ["vet", "通过"]] } }), "```"].join("\n") : "";
+      const long = i % 60 === 7 ? "\n\n" + "这是一段很长的说明，带清单、代码和链接。".repeat(300) : "";
       msgs.push(makeMessage({ thread_id: th, from: agent, to: CONSOLE, type: "reply", status: "done", reply_to: task.id,
-        body: `做完了 #${i}。${"改了两处，补了测试。".repeat(5)}${ui}`,
-        attachments: i % 7 === 3 ? [{ file_id: `f_long_${i}`, name: `report-${i}.log`, size: 2048, sha256: "", content_type: "text/plain" }] : undefined,
+        body: `做完了 #${i}。${"改了两处，补了测试。".repeat(5)}${ui}${long}`,
+        attachments: i % 9 === 7 ? [{ file_id: `f_demo_shot_reply_${i}`, name: `结果-${i}.png`, size: DEMO_PNG.length, sha256: "", content_type: "image/png" }] : undefined,
         created_at: iso(ago - 300), updated_at: iso(ago - 300) }));
     }
-    out[th] = msgs;
+    out[th] = [...(out[th] || []), ...msgs];
   }
   return out;
 })();
