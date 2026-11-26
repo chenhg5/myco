@@ -2149,6 +2149,16 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // The newest message shown: one above it still growing in finishes at
   // once (it would read out of order).
   const newestId = visible[visible.length - 1]?.id;
+  // Your newest task sent before a message (for a supplement: whether the
+  // task it went to is the one you were on).
+  const latestTaskBefore = (m: Message): string | undefined => {
+    let best: Message | undefined;
+    for (const x of shown || []) {
+      if (x.type !== "task" || !isMe(x.from, row?.hub) || x.created_at > m.created_at) continue;
+      if (!best || x.created_at > best.created_at) best = x;
+    }
+    return best?.id;
+  };
   const renderMessage = (m: Message, showName = true) => {
       if (m.type === "progress") {
         const line = (
@@ -2206,8 +2216,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       // it is never an answer to nothing. Watching two nodes, its progress
       // folds under it (in your own chats it is in the run).
       const answers = taskOfAnswer.get(m.id);
-      // A supplement drawn where it was sent quotes its task the same way.
-      const quoted = answers || (m.type === "steer" && !m.answers ? m.reply_to : undefined);
+      // A supplement drawn where it was sent quotes its task only when that
+      // could be mistaken: it went to an older task than your latest one
+      // before it. Added to the one you are on, it needs no quote.
+      const quoted = answers || (m.type === "steer" && !m.answers && m.reply_to && latestTaskBefore(m) !== m.reply_to ? m.reply_to : undefined);
       const asked = quoted ? shown?.find((x) => x.id === quoted) : undefined;
       // (an answer naming a message not loaded here quotes "an earlier one")
       const quote = !!quoted && prevShown.get(m.id) !== quoted && (!!asked || !!m.reply_to);
