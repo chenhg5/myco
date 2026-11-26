@@ -4,6 +4,14 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.23.2
+
+- Runner: when the hub predates the model-source fields, the runtime report now drops just those fields and keeps the models, instead of being refused.
+
+**中文**
+
+- 任务执行器：Hub 还没有模型来源字段时，运行报告只去掉这两个字段、保留模型列表，不再整份被拒收。
+
 ## v0.23.1
 
 - Runner: when an agent uses a vendor's API key, the model list comes from that vendor on the runner's computer; the App shows where the list came from and can ask for a refresh.
